@@ -4,6 +4,7 @@ import (
 	"github.com/cryptopunkscc/astrald/astral"
 	"github.com/cryptopunkscc/astrald/astral/channel"
 	"github.com/cryptopunkscc/astrald/lib/routing"
+	"github.com/cryptopunkscc/astrald/mod/auth"
 	"github.com/cryptopunkscc/astrald/mod/user"
 )
 
@@ -12,22 +13,18 @@ type opInfoArgs struct {
 }
 
 // OpInfo returns identity and contract metadata for this node's active contract.
-// Accessible only to the contract issuer or a current swarm member; rejects all others.
+// Requires an active contract (code 2 otherwise - the setup-mode probe); the
+// caller must be authorized for user.InfoAction (code 4 otherwise) - the user
+// and swarm members always are, other identities via authorizers.
 func (mod *Module) OpInfo(ctx *astral.Context, q *routing.IncomingQuery, args opInfoArgs) (err error) {
 	ac := mod.ActiveContract()
 	if ac == nil {
 		return q.RejectWithCode(2)
 	}
 
-	var foundInSwarm bool
-	for _, swarm := range mod.LocalSwarm() {
-		if swarm.IsEqual(q.Caller()) {
-			foundInSwarm = true
-		}
-	}
-
-	if !foundInSwarm && !q.Caller().IsEqual(ac.Issuer) {
-		return q.Reject()
+	info := &user.InfoAction{Action: auth.NewAction(q.Caller())}
+	if !mod.Auth.Authorize(ctx, info) {
+		return q.RejectWithCode(4)
 	}
 
 	ch := q.Accept(channel.WithOutputFormat(args.Out))

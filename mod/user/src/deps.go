@@ -13,6 +13,7 @@ import (
 	"github.com/cryptopunkscc/astrald/mod/scheduler"
 	"github.com/cryptopunkscc/astrald/mod/shell"
 	"github.com/cryptopunkscc/astrald/mod/tree"
+	"github.com/cryptopunkscc/astrald/mod/user"
 )
 
 type Deps struct {
@@ -42,6 +43,9 @@ func (mod *Module) LoadDependencies(ctx *astral.Context) (err error) {
 
 	mod.Auth.Add(auth.Func[*nodes.RelayForAction](mod.AuthorizeRelayFor))
 	mod.Auth.Add(auth.Func[*objects.ReadObjectAction](mod.AuthorizeReadObject))
+	mod.Auth.Add(auth.Func[*user.ExpelAction](mod.AuthorizeExpel))
+	mod.Auth.Add(auth.Func[*user.AdoptAction](mod.AuthorizeAdopt))
+	mod.Auth.Add(auth.Func[*user.InfoAction](mod.AuthorizeInfo))
 
 	// add localswarm filter
 	mod.Dir.SetFilter("localswarm", func(identity *astral.Identity) bool {
