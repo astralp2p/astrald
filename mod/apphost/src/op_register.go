@@ -22,10 +22,17 @@ type opRegisterArgs struct {
 // OpRegister provisions a brand-new identity: generates a key pair, issues a signed app contract, and returns an access token.
 // The caller receives a ready-to-use guest identity without providing any pre-existing credentials.
 func (mod *Module) OpRegister(ctx *astral.Context, query *routing.IncomingQuery, args opRegisterArgs) (err error) {
-	// why: read the registering web origin before accepting - EnRouteQueryExtra
+	// why: read the registering web origin before accepting - EnRouteQueryExtras
 	// only resolves while the query is en route, and Accept removes that entry.
-	webOrigin, _ := mod.EnRouteQueryExtra(query.Nonce(), "origin-web")
-	origin, _ := webOrigin.(string)
+	extras := mod.EnRouteQueryExtras(query.Nonce())
+	origin, _ := extras["origin-web"].(string)
+
+	// a trusted web source adds its permit template to the registration
+	permits := mod.GetWebOriginPermits(origin)
+
+	if !mod.GetAppRegisterPolicy()(origin, permits) {
+		return query.RejectWithCode(1)
+	}
 
 	ch := query.Accept(channel.WithFormats(args.In, args.Out))
 	defer ch.Close()
@@ -50,10 +57,6 @@ func (mod *Module) OpRegister(ctx *astral.Context, query *routing.IncomingQuery,
 		return ch.Send(astral.Err(err))
 	}
 
-	// grant the permit template for the registering web origin (read above,
-	// before Accept). A non-browser (IPC) caller has no origin-web.
-	contract.Permits = append(contract.Permits, mod.permitsForOrigin(origin)...)
-
 	signed := &auth.SignedContract{Contract: contract}
 	if err = mod.Auth.SignContract(ctx, signed); err != nil {
 		return ch.Send(astral.Err(err))
@@ -66,6 +69,29 @@ func (mod *Module) OpRegister(ctx *astral.Context, query *routing.IncomingQuery,
 	contractID, err := mod.Objects.Store(ctx, mod.Objects.WriteDefault(), signed)
 	if err != nil {
 		return ch.Send(astral.Err(err))
+	}
+
+	// render the trusted-source permits as a node→app contract, so the app's
+	// authority for the permitted actions chains back through the node
+	if len(permits) > 0 {
+		signedPermits := &auth.SignedContract{Contract: &auth.Contract{
+			Issuer:    mod.node.Identity(),
+			Subject:   guestID,
+			Permits:   permits,
+			ExpiresAt: astral.Time(time.Now().Add(RegisterDuration)),
+		}}
+
+		if err = mod.Auth.SignContract(ctx, signedPermits); err != nil {
+			return ch.Send(astral.Err(err))
+		}
+
+		if err = mod.Auth.IndexContract(ctx, signedPermits); err != nil {
+			return ch.Send(astral.Err(err))
+		}
+
+		if _, err = mod.Objects.Store(ctx, mod.Objects.WriteDefault(), signedPermits); err != nil {
+			return ch.Send(astral.Err(err))
+		}
 	}
 
 	// generate an access token for the guest
