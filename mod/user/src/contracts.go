@@ -135,7 +135,8 @@ func (mod *Module) IssueMembership(ctx *astral.Context, nodeID *astral.Identity)
 		return nil, user.ErrExpelled
 	}
 
-	contract, err := user.NewNodeContract(ac.Issuer, nodeID, defaultContractValidity)
+	// adopted and requesting nodes join as plain members without management permits
+	contract, err := user.NewNodeContract(ac.Issuer, nodeID, false, defaultContractValidity)
 	if err != nil {
 		return nil, err
 	}

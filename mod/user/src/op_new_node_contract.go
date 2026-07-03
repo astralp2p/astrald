@@ -56,7 +56,8 @@ func (mod *Module) OpNewNodeContract(ctx *astral.Context, query *routing.Incomin
 		}
 	}
 
-	contract, err := user.NewNodeContract(userID, nodeID, duration)
+	// the setup ceremony provisions the user's primary node, which manages the swarm
+	contract, err := user.NewNodeContract(userID, nodeID, true, duration)
 	if err != nil {
 		return ch.Send(astral.Err(err))
 	}
