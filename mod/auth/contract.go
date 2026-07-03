@@ -21,6 +21,7 @@ type Contract struct {
 type Permit struct {
 	Action      astral.String8 // object type of an action
 	Constraints *astral.Bundle // list of constraints
+	Delegation  astral.Uint8   // hops allowed below a link carrying this permit; 0 = non-delegable
 }
 
 var _ astral.Object = &Permit{}
@@ -34,21 +35,16 @@ func (p *Permit) ReadFrom(r io.Reader) (int64, error) { return astral.Objectify(
 func (p Permit) MarshalJSON() ([]byte, error)  { return astral.Objectify(&p).MarshalJSON() }
 func (p *Permit) UnmarshalJSON(b []byte) error { return astral.Objectify(p).UnmarshalJSON(b) }
 
-// Allows reports whether any permit in the contract matches the action.
-// Actions not implementing Constrainable pass constraint checks automatically.
-func (c *Contract) Allows(action ActionObject) bool {
-	if c.Permits == nil {
+// Allows reports whether p permits the action: the action type must match and,
+// for Constrainable actions, the permit's constraints must pass.
+func (p *Permit) Allows(action ActionObject) bool {
+	if string(p.Action) != action.ObjectType() {
 		return false
 	}
-	for _, p := range c.Permits {
-		if ca, ok := action.(Constrainable); ok {
-			if !ca.ApplyConstraints(p.Constraints) {
-				continue
-			}
-		}
-		return true
+	if ca, ok := action.(Constrainable); ok {
+		return ca.ApplyConstraints(p.Constraints)
 	}
-	return false
+	return true
 }
 
 // HasPermit returns all permits in this contract that match the given action type.
@@ -84,9 +80,10 @@ func (c *Contract) SignableHash() []byte {
 
 func (c *Contract) SignableText() string {
 	return fmt.Sprintf(
-		"%s grants %s permissions until %s",
+		"%s grants %s permits (%d) until %s",
 		c.Issuer.String(),
 		c.Subject.String(),
+		len(c.Permits),
 		c.ExpiresAt.Time().Format("2006-01-02 15:04:05"),
 	)
 }
