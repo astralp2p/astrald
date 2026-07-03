@@ -30,12 +30,12 @@ func closedChan() chan struct{} {
 }
 
 func TestIsSetupOp(t *testing.T) {
-	for _, op := range []string{"user.info", "tree.set", "apphost.register"} {
+	for _, op := range []string{"user.info", "tree.set", "coldcard.scan"} {
 		if !isSetupOp(op) {
 			t.Errorf("%q should be a setup op", op)
 		}
 	}
-	for _, op := range []string{"apphost.list_tokens", "user.adopt", "apphost.create_token"} {
+	for _, op := range []string{"apphost.list_tokens", "user.adopt", "apphost.create_token", "apphost.register"} {
 		if isSetupOp(op) {
 			t.Errorf("%q should not be a setup op", op)
 		}

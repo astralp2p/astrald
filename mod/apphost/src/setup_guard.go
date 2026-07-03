@@ -16,12 +16,12 @@ var setupOps = []string{
 	"bip137sig.mnemonic",
 	"bip137sig.seed",
 	"bip137sig.derive_key",
+	"coldcard.scan",
 	"crypto.public_key",
 	"objects.store",
 	"user.new_node_contract",
 	"auth.sign_contract",
 	"tree.set",
-	"apphost.register",
 }
 
 func isSetupOp(op string) bool {
