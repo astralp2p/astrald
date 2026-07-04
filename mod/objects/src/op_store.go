@@ -28,13 +28,16 @@ func (mod *Module) OpStore(ctx *astral.Context, q *routing.IncomingQuery, args o
 		}
 	}
 
-	return ch.Collect(func(object astral.Object) error {
-		objectID, err := mod.Store(ctx, repo, object)
-		if err != nil {
-			return ch.Send(astral.NewError(err.Error()))
-		}
+	return ch.Switch(
+		func(object astral.Object) error {
+			objectID, err := mod.Store(ctx, repo, object)
+			if err != nil {
+				return ch.Send(astral.NewError(err.Error()))
+			}
 
-		return ch.Send(objectID)
-	})
-
+			return ch.Send(objectID)
+		},
+		channel.BreakOnEOS,
+		channel.WithContext(ctx),
+	)
 }

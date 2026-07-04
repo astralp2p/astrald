@@ -19,16 +19,20 @@ func (mod *Module) OpPush(ctx *astral.Context, q *routing.IncomingQuery, args op
 	ch := channel.New(q.AcceptRaw(), channel.WithFormats(args.In, args.Out))
 	defer ch.Close()
 
-	return ch.Collect(func(o astral.Object) (err error) {
-		objectID, _ := astral.ResolveObjectID(o)
+	return ch.Switch(
+		func(o astral.Object) (err error) {
+			objectID, _ := astral.ResolveObjectID(o)
 
-		var ok = astral.Bool(mod.receive(q.Caller(), o))
-		if ok {
-			mod.log.Logv(1, "received %v (%v) from %v", o.ObjectType(), objectID, q.Caller())
-		} else {
-			mod.log.Logv(1, "rejected %v (%v) from %v", o.ObjectType(), objectID, q.Caller())
-		}
-		err = ch.Send(&ok)
-		return
-	})
+			var ok = astral.Bool(mod.receive(q.Caller(), o))
+			if ok {
+				mod.log.Logv(1, "received %v (%v) from %v", o.ObjectType(), objectID, q.Caller())
+			} else {
+				mod.log.Logv(1, "rejected %v (%v) from %v", o.ObjectType(), objectID, q.Caller())
+			}
+			err = ch.Send(&ok)
+			return
+		},
+		channel.BreakOnEOS,
+		channel.WithContext(ctx),
+	)
 }
