@@ -104,6 +104,5 @@ func (mod *Module) OpRegister(ctx *astral.Context, query *routing.IncomingQuery,
 	tv.Layout = views.LongTimeLayout
 
 	mod.log.Logv(1, "registered guest %v until %v (%v)", token.Identity, tv, contractID)
-
 	return ch.Send(token)
 }
