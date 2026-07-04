@@ -26,7 +26,9 @@ func (mod *Module) OpSignContract(ctx *astral.Context, q *routing.IncomingQuery,
 		}
 
 		return ch.Send(signed)
-	})
+	},
+		channel.BreakOnEOS,
+	)
 	if err != nil {
 		_ = ch.Send(astral.Err(err))
 	}
