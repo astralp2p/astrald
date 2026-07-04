@@ -58,6 +58,15 @@ func (mod *Module) setActiveContract(signed *auth.SignedContract) error {
 
 	mod.log.Info("hello, %v!", signed.Issuer)
 	mod.activeContract = signed
+
+	// Authorization resolves contracts through the auth index, not the config
+	// tree; an active-but-unindexed contract would break every delegation chain
+	// that terminates at the user.
+	err := mod.Auth.IndexContract(mod.ctx, signed)
+	if err != nil {
+		mod.log.Error("error indexing active contract: %v", err)
+	}
+
 	mod.Nearby.Broadcast()
 	return nil
 }
