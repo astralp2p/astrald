@@ -29,19 +29,6 @@ func closedChan() chan struct{} {
 	return c
 }
 
-func TestIsSetupOp(t *testing.T) {
-	for _, op := range []string{"user.info", "tree.set", "coldcard.scan"} {
-		if !isSetupOp(op) {
-			t.Errorf("%q should be a setup op", op)
-		}
-	}
-	for _, op := range []string{"apphost.list_tokens", "user.adopt", "apphost.create_token", "apphost.register"} {
-		if isSetupOp(op) {
-			t.Errorf("%q should not be a setup op", op)
-		}
-	}
-}
-
 func TestInSetupMode(t *testing.T) {
 	ctx := astral.NewContext(nil)
 
@@ -74,35 +61,56 @@ func TestInSetupMode(t *testing.T) {
 	}
 }
 
-func TestSetupModeBlocks(t *testing.T) {
+func withAllowlist(m *Module) *Module {
+	m.config.AnonymousWebAllowlist = AnonymousWebAllowlist{
+		Unclaimed: []string{"user.info", "tree.set"},
+		Claimed:   []string{"apphost.register"},
+	}
+	return m
+}
+
+func TestBlocksAnonymousWeb(t *testing.T) {
 	ctx := astral.NewContext(nil)
 
-	noUser := &Module{}
-	noUser.User = &stubUser{id: nil, ready: closedChan()}
+	unclaimed := withAllowlist(&Module{})
+	unclaimed.User = &stubUser{id: nil, ready: closedChan()}
 
-	hasUser := &Module{}
-	hasUser.User = &stubUser{id: astral.GenerateIdentity(), ready: closedChan()}
+	claimed := withAllowlist(&Module{})
+	claimed.User = &stubUser{id: astral.GenerateIdentity(), ready: closedChan()}
 
+	const origin = "https://settings.astrald.app"
 	q := func(s string) *astral.Query { return &astral.Query{QueryString: s} }
 
 	cases := []struct {
-		name      string
-		mod       *Module
-		webOrigin string
-		query     string
-		want      bool
+		name          string
+		mod           *Module
+		webOrigin     string
+		authenticated bool
+		query         string
+		want          bool
 	}{
-		{"IPC guest (no origin), no user, non-setup op", noUser, "", "apphost.list_tokens", false},
-		{"web guest, has user", hasUser, "https://settings.astrald.app", "apphost.list_tokens", false},
-		{"web guest, no user, setup op", noUser, "https://settings.astrald.app", "user.info", false},
-		{"web guest, no user, setup op with params", noUser, "https://settings.astrald.app", "user.info?in=json", false},
-		{"web guest, no user, non-setup op", noUser, "https://settings.astrald.app", "apphost.list_tokens", true},
+		// IPC (empty origin) is never gated, in either claim state
+		{"IPC, unclaimed, non-listed op", unclaimed, "", false, "apphost.list_tokens", false},
+		{"IPC, claimed, non-listed op", claimed, "", false, "user.expel", false},
+
+		// authenticated web guest is not restricted
+		{"web, authenticated, non-listed op", claimed, origin, true, "user.expel", false},
+
+		// unclaimed: confined to the unclaimed list
+		{"web, unclaimed, listed op", unclaimed, origin, false, "user.info", false},
+		{"web, unclaimed, listed op with params", unclaimed, origin, false, "user.info?in=json", false},
+		{"web, unclaimed, non-listed op", unclaimed, origin, false, "apphost.list_tokens", true},
+
+		// claimed: confined to the claimed list - former setup ops now refused
+		{"web, claimed, listed op", claimed, origin, false, "apphost.register", false},
+		{"web, claimed, unclaimed-only op refused", claimed, origin, false, "user.info", true},
+		{"web, claimed, non-listed op", claimed, origin, false, "apphost.list_tokens", true},
 	}
 
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			if got := c.mod.setupModeBlocks(ctx, c.webOrigin, q(c.query)); got != c.want {
-				t.Fatalf("setupModeBlocks = %v; want %v", got, c.want)
+			if got := c.mod.blocksAnonymousWeb(ctx, c.webOrigin, c.authenticated, q(c.query)); got != c.want {
+				t.Fatalf("blocksAnonymousWeb = %v; want %v", got, c.want)
 			}
 		})
 	}

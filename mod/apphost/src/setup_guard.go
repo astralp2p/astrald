@@ -7,30 +7,10 @@ import (
 	"github.com/cryptopunkscc/astrald/lib/query"
 )
 
-// setupOps are the operations a web guest may run before the node has a user.
-// note: contents unverified against a live setup run — a missing entry silently
-// breaks onboarding.
-var setupOps = []string{
-	"user.info", // state detection (rejects code 2 when no user)
-	"bip137sig.new_entropy",
-	"bip137sig.mnemonic",
-	"bip137sig.seed",
-	"bip137sig.derive_key",
-	"coldcard.scan",
-	"crypto.public_key",
-	"objects.store",
-	"user.new_node_contract",
-	"auth.sign_contract",
-	"tree.set",
-}
-
-func isSetupOp(op string) bool {
-	return slices.Contains(setupOps, op)
-}
-
-// inSetupMode reports whether the node has no active user. It waits for the user
-// module to finish initializing so a query during startup on a configured node
-// is not wrongly restricted; on ctx cancellation it errs toward setup mode.
+// inSetupMode reports whether the node has no active user - i.e. is unclaimed.
+// It waits for the user module to finish initializing so a query during startup
+// on a claimed node is not wrongly restricted; on ctx cancellation it errs
+// toward setup mode.
 func (mod *Module) inSetupMode(ctx *astral.Context) bool {
 	if mod.User == nil {
 		return true
@@ -43,19 +23,23 @@ func (mod *Module) inSetupMode(ctx *astral.Context) bool {
 	}
 }
 
-// setupModeBlocks reports whether q must be refused because the node has no user
-// yet. Only web guests are restricted, and only to ops outside the setup
-// allowlist. A web guest's Network zone is stripped, so no target check is
-// needed - it cannot reach a peer pre-user regardless.
-func (mod *Module) setupModeBlocks(ctx *astral.Context, webOrigin string, q *astral.Query) bool {
-	// only browser guests are restricted; native/IPC callers are trusted
-	if webOrigin == "" {
+// blocksAnonymousWeb reports whether q must be refused. Only unauthenticated
+// browser guests are gated: IPC callers (empty origin) and token-authenticated
+// guests are trusted with the full op surface. A gated guest is confined to the
+// anonymous_web_allowlist for the node's claim state - the unclaimed list while
+// no user owns the node, the claimed list afterwards. An op absent from the
+// active list is refused. A web guest's Network zone is stripped, so no target
+// check is needed - it cannot reach a peer regardless.
+func (mod *Module) blocksAnonymousWeb(ctx *astral.Context, webOrigin string, authenticated bool, q *astral.Query) bool {
+	if webOrigin == "" || authenticated {
 		return false
 	}
-	// only while the node has no active user
-	if !mod.inSetupMode(ctx) {
-		return false
+
+	allowlist := mod.config.AnonymousWebAllowlist.Claimed
+	if mod.inSetupMode(ctx) {
+		allowlist = mod.config.AnonymousWebAllowlist.Unclaimed
 	}
+
 	opPath, _ := query.Parse(q.QueryString)
-	return !isSetupOp(opPath)
+	return !slices.Contains(allowlist, opPath)
 }

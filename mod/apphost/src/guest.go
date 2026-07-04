@@ -198,8 +198,9 @@ func (guest *Guest) onRouteQueryMsg(ctx *astral.Context, msg *apphost.RouteQuery
 		QueryString: guest.prepareQueryString(string(msg.Query)),
 	}
 
-	// Before the node has a user, a web guest may only run setup ops.
-	if guest.mod.setupModeBlocks(ctx, guest.webOrigin, q) {
+	// An unauthenticated web guest is confined to the anonymous_web_allowlist
+	// for the node's claim state.
+	if guest.mod.blocksAnonymousWeb(ctx, guest.webOrigin, guest.isAuthenticated(), q) {
 		return guest.Send(&apphost.ErrorMsg{Code: apphost.ErrCodeDenied})
 	}
 
