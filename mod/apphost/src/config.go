@@ -53,7 +53,7 @@ var defaultConfig = Config{
 	Workers:        32,
 	AllowAnonymous: true,
 	TrustedWebSources: map[string][]PermitConfig{
-		"https://settings.astrald.app": {
+		"http://127.0.0.1:5173": {
 			{Action: user.InfoAction{}.ObjectType()},
 			{Action: user.ExpelAction{}.ObjectType()},
 			{Action: user.AdoptAction{}.ObjectType()},
@@ -71,9 +71,10 @@ var defaultConfig = Config{
 			"objects.store",
 			"user.new_node_contract",
 			"auth.sign_contract",
-			"tree.set",
+			"user.accept_contract", // guarded active-contract write (replaces tree.set)
 		},
 		Claimed: []string{
+			"user.info",
 			"apphost.register",
 		},
 	},
