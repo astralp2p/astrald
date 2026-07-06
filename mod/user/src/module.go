@@ -5,7 +5,6 @@ import (
 	"github.com/cryptopunkscc/astrald/astral/log"
 	"github.com/cryptopunkscc/astrald/core/assets"
 	"github.com/cryptopunkscc/astrald/lib/routing"
-	"github.com/cryptopunkscc/astrald/mod/auth"
 	"github.com/cryptopunkscc/astrald/mod/user"
 	"github.com/cryptopunkscc/astrald/sig"
 )
@@ -22,8 +21,7 @@ type Module struct {
 	db     *DB
 	router routing.OpRouter
 
-	activeContract *auth.SignedContract
-	ready          chan struct{}
+	ready chan struct{}
 
 	sibs sig.Map[string, Sibling]
 }
@@ -33,15 +31,14 @@ func (mod *Module) Run(ctx *astral.Context) error {
 	<-mod.Scheduler.Ready()
 
 	activeContractFollow := mod.config.ActiveContract.Follow(ctx)
-	mod.setActiveContract(<-activeContractFollow)
+	mod.onActiveContractChanged(<-activeContractFollow)
 	close(mod.ready)
 	go func() {
 		for contract := range activeContractFollow {
-			mod.setActiveContract(contract)
+			mod.onActiveContractChanged(contract)
 		}
 	}()
 
-	mod.runSiblingLinker()
 	<-ctx.Done()
 
 	return nil
