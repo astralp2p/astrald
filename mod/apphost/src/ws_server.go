@@ -95,7 +95,7 @@ func (srv *HTTPServer) negotiateWS(writer http.ResponseWriter, request *http.Req
 
 	// Accept any Origin. The endpoint is already loopback-only at the network
 	// layer (isLoopback above); per-caller origin filtering for web pages is
-	// done at the op level via the "origin-web" key added to each query's Extra
+	// done at the op level via the ExtraOriginWeb key added to each query's Extra
 	// (see Guest.onRouteQueryMsg).
 	c, err := websocket.Accept(writer, request, &websocket.AcceptOptions{
 		Subprotocols:       []string{SubprotocolBinary, SubprotocolJSON},

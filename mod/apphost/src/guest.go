@@ -241,7 +241,15 @@ func (guest *Guest) onRouteQueryMsg(ctx *astral.Context, msg *apphost.RouteQuery
 	// Carry the browser Origin for queries arriving over the WebSocket endpoint
 	// so ops can apply their own per-origin authorization.
 	if guest.webOrigin != "" {
-		inFlight.Extra.Set("origin-web", guest.webOrigin)
+		inFlight.Extra.Set(apphost.ExtraOriginWeb, guest.webOrigin)
+	}
+
+	// Flag queries from a token-less session - IPC or WebSocket alike - so ops
+	// can tell an anonymous caller from the node itself once the core router
+	// rewrites a nil caller to the node identity. Set only when true; absence
+	// means the session was authenticated.
+	if !guest.isAuthenticated() {
+		inFlight.Extra.Set(apphost.ExtraAnonymous, true)
 	}
 
 	enRoute := &queryEnRoute{query: inFlight, cancel: cancelQuery}

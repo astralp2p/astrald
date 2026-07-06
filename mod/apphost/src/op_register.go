@@ -25,7 +25,7 @@ func (mod *Module) OpRegister(ctx *astral.Context, query *routing.IncomingQuery,
 	// why: read the registering web origin before accepting - EnRouteQueryExtras
 	// only resolves while the query is en route, and Accept removes that entry.
 	extras := mod.EnRouteQueryExtras(query.Nonce())
-	origin, _ := extras["origin-web"].(string)
+	origin, _ := extras[apphost.ExtraOriginWeb].(string)
 
 	// a trusted web source adds its permit template to the registration
 	permits := mod.GetWebOriginPermits(origin)
