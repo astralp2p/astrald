@@ -53,7 +53,7 @@ var defaultConfig = Config{
 	Workers:        32,
 	AllowAnonymous: true,
 	TrustedWebSources: map[string][]PermitConfig{
-		"http://127.0.0.1:5173": {
+		"https://settings.astrald.app": {
 			{Action: user.InfoAction{}.ObjectType()},
 			{Action: user.ExpelAction{}.ObjectType()},
 			{Action: user.AdoptAction{}.ObjectType()},
