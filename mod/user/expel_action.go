@@ -3,8 +3,8 @@ package user
 import (
 	"io"
 
+	"github.com/cryptopunkscc/astral-go/api/auth"
 	"github.com/cryptopunkscc/astral-go/astral"
-	"github.com/cryptopunkscc/astrald/mod/auth"
 )
 
 // ExpelAction requests permission for Actor to expel Subject from the user's swarm.

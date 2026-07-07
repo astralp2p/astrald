@@ -3,8 +3,8 @@ package objects
 import (
 	"io"
 
+	"github.com/cryptopunkscc/astral-go/api/auth"
 	"github.com/cryptopunkscc/astral-go/astral"
-	"github.com/cryptopunkscc/astrald/mod/auth"
 )
 
 type CreateObjectAction struct {

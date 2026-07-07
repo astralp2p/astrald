@@ -3,8 +3,8 @@ package user
 import (
 	"io"
 
+	"github.com/cryptopunkscc/astral-go/api/auth"
 	"github.com/cryptopunkscc/astral-go/astral"
-	"github.com/cryptopunkscc/astrald/mod/auth"
 )
 
 // InfoAction requests permission for Actor to read the active contract's metadata (user.info).

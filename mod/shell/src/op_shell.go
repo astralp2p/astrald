@@ -2,11 +2,12 @@ package shell
 
 import (
 	"errors"
+	authmod "github.com/cryptopunkscc/astrald/mod/auth"
 	"io"
 
+	"github.com/cryptopunkscc/astral-go/api/auth"
 	"github.com/cryptopunkscc/astral-go/astral"
 	"github.com/cryptopunkscc/astrald/lib/routing"
-	"github.com/cryptopunkscc/astrald/mod/auth"
 )
 
 type opShellArgs struct {
@@ -21,7 +22,7 @@ func (mod *Module) OpShell(ctx *astral.Context, q *routing.IncomingQuery, args o
 			return err
 		}
 
-		if !mod.Auth.Authorize(ctx, &auth.SudoAction{Action: auth.NewAction(q.Caller()), AsID: asID}) {
+		if !mod.Auth.Authorize(ctx, &authmod.SudoAction{Action: auth.NewAction(q.Caller()), AsID: asID}) {
 			return astral.NewError("access denied")
 		}
 

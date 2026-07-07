@@ -3,8 +3,8 @@ package objects
 import (
 	"io"
 
+	"github.com/cryptopunkscc/astral-go/api/auth"
 	"github.com/cryptopunkscc/astral-go/astral"
-	"github.com/cryptopunkscc/astrald/mod/auth"
 )
 
 // ReadObjectAction requests permission to read the object identified by ObjectID.

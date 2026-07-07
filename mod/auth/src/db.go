@@ -2,10 +2,11 @@ package auth
 
 import (
 	"fmt"
+	authmod "github.com/cryptopunkscc/astrald/mod/auth"
 	"time"
 
+	"github.com/cryptopunkscc/astral-go/api/auth"
 	"github.com/cryptopunkscc/astral-go/astral"
-	"github.com/cryptopunkscc/astrald/mod/auth"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 )
@@ -28,9 +29,9 @@ func (db *DB) findActiveContracts(q *contractQuery) ([]*dbContract, error) {
 
 	if len(q.actions) > 0 {
 		gq = gq.
-			Joins("JOIN "+auth.DBPrefix+"contract_permits ON "+auth.DBPrefix+"contract_permits.object_id = "+auth.DBPrefix+"contracts.object_id").
-			Where(auth.DBPrefix+"contract_permits.name IN ?", q.actions).
-			Distinct(auth.DBPrefix + "contracts.*")
+			Joins("JOIN "+authmod.DBPrefix+"contract_permits ON "+authmod.DBPrefix+"contract_permits.object_id = "+authmod.DBPrefix+"contracts.object_id").
+			Where(authmod.DBPrefix+"contract_permits.name IN ?", q.actions).
+			Distinct(authmod.DBPrefix + "contracts.*")
 	}
 
 	var rows []*dbContract

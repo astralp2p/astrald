@@ -1,8 +1,8 @@
 package auth
 
 import (
+	"github.com/cryptopunkscc/astral-go/api/auth"
 	"github.com/cryptopunkscc/astral-go/astral"
-	"github.com/cryptopunkscc/astrald/mod/auth"
 )
 
 // Authorize checks whether the action is permitted: directly by a registered

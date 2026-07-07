@@ -1,10 +1,10 @@
 package auth
 
 import (
+	"github.com/cryptopunkscc/astral-go/api/auth"
 	"github.com/cryptopunkscc/astral-go/astral"
 	"github.com/cryptopunkscc/astral-go/astral/channel"
 	"github.com/cryptopunkscc/astrald/lib/query"
-	"github.com/cryptopunkscc/astrald/mod/auth"
 )
 
 func (c *Client) IndexContract(ctx *astral.Context, objectID *astral.ObjectID) error {

@@ -4,17 +4,18 @@ import (
 	"context"
 	"errors"
 	apphostmod "github.com/cryptopunkscc/astrald/mod/apphost"
+	authmod "github.com/cryptopunkscc/astrald/mod/auth"
 	"io"
 	"net"
 	"strings"
 	"sync/atomic"
 
 	"github.com/cryptopunkscc/astral-go/api/apphost"
+	"github.com/cryptopunkscc/astral-go/api/auth"
 	"github.com/cryptopunkscc/astral-go/astral"
 	"github.com/cryptopunkscc/astral-go/astral/channel"
 	"github.com/cryptopunkscc/astral-go/astral/streams"
 	"github.com/cryptopunkscc/astrald/lib/query"
-	"github.com/cryptopunkscc/astrald/mod/auth"
 )
 
 // Mode is the wire format used by a Guest connection.
@@ -139,7 +140,7 @@ func (guest *Guest) onRegisterHandlerMsg(ctx *astral.Context, msg *apphost.Regis
 
 	// if requested identity is different from the authenticated identity, check authorization
 	if !msg.Identity.IsEqual(guest.guestID) {
-		if !guest.mod.Auth.Authorize(ctx, &auth.SudoAction{Action: auth.NewAction(guest.guestID), AsID: msg.Identity}) {
+		if !guest.mod.Auth.Authorize(ctx, &authmod.SudoAction{Action: auth.NewAction(guest.guestID), AsID: msg.Identity}) {
 			return guest.Send(&apphost.ErrorMsg{Code: apphost.ErrCodeDenied})
 		}
 	}
@@ -210,7 +211,7 @@ func (guest *Guest) onRouteQueryMsg(ctx *astral.Context, msg *apphost.RouteQuery
 	case q.Caller.IsZero():
 	case q.Caller.IsEqual(guest.guestID):
 	default:
-		if !guest.mod.Auth.Authorize(ctx, &auth.SudoAction{Action: auth.NewAction(guest.guestID), AsID: q.Caller}) {
+		if !guest.mod.Auth.Authorize(ctx, &authmod.SudoAction{Action: auth.NewAction(guest.guestID), AsID: q.Caller}) {
 			return guest.Send(&apphost.ErrorMsg{Code: apphost.ErrCodeDenied})
 		}
 	}
@@ -313,7 +314,7 @@ func (guest *Guest) onRegisterServiceMsg(ctx *astral.Context, msg *apphost.Regis
 	}
 
 	if !msg.Identity.IsEqual(guest.guestID) {
-		if !guest.mod.Auth.Authorize(ctx, &auth.SudoAction{Action: auth.NewAction(guest.guestID), AsID: msg.Identity}) {
+		if !guest.mod.Auth.Authorize(ctx, &authmod.SudoAction{Action: auth.NewAction(guest.guestID), AsID: msg.Identity}) {
 			return guest.Send(&apphost.ErrorMsg{Code: apphost.ErrCodeDenied})
 		}
 	}

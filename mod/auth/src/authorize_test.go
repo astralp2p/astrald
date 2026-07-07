@@ -5,10 +5,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cryptopunkscc/astral-go/api/auth"
 	"github.com/cryptopunkscc/astral-go/api/crypto"
 	"github.com/cryptopunkscc/astral-go/astral"
 	"github.com/cryptopunkscc/astral-go/astral/log"
-	"github.com/cryptopunkscc/astrald/mod/auth"
 	"github.com/glebarez/sqlite"
 	"gorm.io/gorm"
 )

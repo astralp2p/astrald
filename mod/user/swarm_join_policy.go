@@ -1,8 +1,8 @@
 package user
 
 import (
+	"github.com/cryptopunkscc/astral-go/api/auth"
 	"github.com/cryptopunkscc/astral-go/astral"
-	"github.com/cryptopunkscc/astrald/mod/auth"
 )
 
 // SwarmJoinRequestPolicy decides whether to accept an unsolicited join request

@@ -3,9 +3,10 @@ package auth
 import (
 	"bytes"
 	"fmt"
+	authmod "github.com/cryptopunkscc/astrald/mod/auth"
 
+	"github.com/cryptopunkscc/astral-go/api/auth"
 	"github.com/cryptopunkscc/astral-go/astral"
-	"github.com/cryptopunkscc/astrald/mod/auth"
 	"github.com/cryptopunkscc/astrald/mod/objects"
 )
 
@@ -65,7 +66,7 @@ func (mod *Module) indexer(ctx *astral.Context) {
 	mod.log.Logv(1, "auth indexer finished")
 }
 
-func (mod *Module) SignedContracts() auth.ContractQueryBuilder {
+func (mod *Module) SignedContracts() authmod.ContractQueryBuilder {
 	return &contractQuery{DB: mod.db}
 }
 

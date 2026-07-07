@@ -1,8 +1,8 @@
 package apphost
 
 import (
+	"github.com/cryptopunkscc/astral-go/api/auth"
 	"github.com/cryptopunkscc/astral-go/astral"
-	"github.com/cryptopunkscc/astrald/mod/auth"
 )
 
 // GetWebOriginPermits returns the permits configured for a trusted web

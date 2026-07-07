@@ -2,10 +2,11 @@ package auth
 
 import (
 	"fmt"
+	authmod "github.com/cryptopunkscc/astrald/mod/auth"
 
+	"github.com/cryptopunkscc/astral-go/api/auth"
 	"github.com/cryptopunkscc/astral-go/api/crypto"
 	"github.com/cryptopunkscc/astral-go/astral"
-	"github.com/cryptopunkscc/astrald/mod/auth"
 )
 
 type contractQuery struct {
@@ -15,17 +16,17 @@ type contractQuery struct {
 	actions []string
 }
 
-func (q *contractQuery) WithIssuer(id *astral.Identity) auth.ContractQueryBuilder {
+func (q *contractQuery) WithIssuer(id *astral.Identity) authmod.ContractQueryBuilder {
 	q.issuer = id
 	return q
 }
 
-func (q *contractQuery) WithSubject(id *astral.Identity) auth.ContractQueryBuilder {
+func (q *contractQuery) WithSubject(id *astral.Identity) authmod.ContractQueryBuilder {
 	q.subject = id
 	return q
 }
 
-func (q *contractQuery) WithAction(actions ...astral.Object) auth.ContractQueryBuilder {
+func (q *contractQuery) WithAction(actions ...astral.Object) authmod.ContractQueryBuilder {
 	for _, a := range actions {
 		q.actions = append(q.actions, a.ObjectType())
 	}

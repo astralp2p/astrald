@@ -1,9 +1,9 @@
 package auth
 
 import (
+	"github.com/cryptopunkscc/astral-go/api/auth"
 	"github.com/cryptopunkscc/astral-go/astral"
 	"github.com/cryptopunkscc/astral-go/astral/channel"
-	"github.com/cryptopunkscc/astrald/mod/auth"
 )
 
 // SignContract submits contract for remote signing; the contract is sent after the channel is

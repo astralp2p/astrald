@@ -2,10 +2,10 @@ package apphost
 
 import (
 	"github.com/cryptopunkscc/astral-go/api/apphost"
+	"github.com/cryptopunkscc/astral-go/api/auth"
 	"github.com/cryptopunkscc/astral-go/astral"
 	"github.com/cryptopunkscc/astral-go/astral/channel"
 	"github.com/cryptopunkscc/astrald/lib/query"
-	"github.com/cryptopunkscc/astrald/mod/auth"
 )
 
 func NewAppContract(ctx *astral.Context, id *astral.Identity, duration astral.Duration) (*auth.Contract, error) {

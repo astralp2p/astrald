@@ -3,8 +3,8 @@ package nodes
 import (
 	"io"
 
+	"github.com/cryptopunkscc/astral-go/api/auth"
 	"github.com/cryptopunkscc/astral-go/astral"
-	"github.com/cryptopunkscc/astrald/mod/auth"
 )
 
 // RelayForAction requests permission for Actor to relay traffic for ForID.
