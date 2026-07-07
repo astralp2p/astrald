@@ -20,7 +20,9 @@ It centralises the two halves every verifier shares:
     port), falling back to the lockstep Go `astral-query` CLI -- same JSON,
     parsed with astral-py's from_json_envelope -- whenever the client can't
     serve an op (pinned in SHELL_OPS, or it raised). Both paths return the same
-    list[AstralObject], so the interrogators below are transport-agnostic.
+    list[AstralObject], so Node's typed accessors (user_info, links, ...) decode
+    astral-py protocol records (LinkInfo, UserInfo, SwarmMember, SignedExpulsion,
+    EndpointWithTTL) identically on either path.
 
 astral-py is the submodule at _lib/astral-py (package under src/); imported without
 pip. $ASTRALPY_SRC overrides the src dir for local dev against another checkout.
@@ -47,6 +49,12 @@ if not os.path.isdir(os.path.join(_ASTRALPY_SRC, "astral")):
 sys.path.insert(0, _ASTRALPY_SRC)
 import astral  # noqa: E402
 from astral.encoding import from_json_envelope  # noqa: E402
+from astral.protocols.nodes import EndpointWithTTL, LinkInfo  # noqa: E402
+from astral.protocols.user import (  # noqa: E402
+    SignedExpulsion,
+    SwarmMember,
+    UserInfo,
+)
 
 # apphost WebSocket port inside each VM (binds 0.0.0.0; reachable via ssh -L).
 WS_PORT = 8624
@@ -139,6 +147,15 @@ def _wait_port(port, timeout=10.0):
     return False
 
 
+def records(objs, record):
+    """Decode the dict-valued objects into astral-py ``record`` instances.
+
+    error_message and scalar entries are skipped -- verification asserts on the
+    extracted content and reports errors via error_messages().
+    """
+    return [record.from_value(o.value) for o in objs if isinstance(o.value, dict)]
+
+
 class Node:
     """A handle to one VM's apphost: .call(op, ...) -> list[AstralObject]."""
 
@@ -172,6 +189,30 @@ class Node:
             # why: anonymous WS sessions and any client error fall back to the
             # lockstep astral-query so verification still runs.
             return self._via_shell(op, args, target)
+
+    # --- typed accessors: astral-py records over either query path ----------
+    def user_info(self):
+        """The node's UserInfo, or None (rejected / no contract)."""
+        infos = records(self.call("user.info"), UserInfo)
+        return infos[0] if infos else None
+
+    def swarm_members(self):
+        """The swarm roster as SwarmMember records (user.swarm_status)."""
+        return records(self.call("user.swarm_status"), SwarmMember)
+
+    def links(self):
+        """The active links as LinkInfo records (nodes.links)."""
+        return records(self.call("nodes.links"), LinkInfo)
+
+    def endpoints(self, identity):
+        """The known endpoints of <identity> as EndpointWithTTL records."""
+        return records(
+            self.call("nodes.resolve_endpoints", {"id": identity}), EndpointWithTTL
+        )
+
+    def expulsions(self):
+        """The swarm's bans as SignedExpulsion records (user.list_expelled)."""
+        return records(self.call("user.list_expelled"), SignedExpulsion)
 
 
 @contextlib.contextmanager
@@ -224,61 +265,7 @@ def connect(vm, token=None):
                 tunnel.kill()
 
 
-# --- interrogators: list[AstralObject] -> extracted value --------------------
-def _values(objs):
-    # note: interrogators below test isinstance(v, dict), so eos/error values are skipped
-    return [o.value for o in objs]
-
-
-def contract(objs):
-    """(Issuer, Subject) of the active contract from a user.info result."""
-    for v in _values(objs):
-        if isinstance(v, dict) and isinstance(v.get("Contract"), dict):
-            c = v["Contract"].get("Contract", {})
-            return c.get("Issuer"), c.get("Subject")
-    return None, None
-
-
-def linked_sibling(objs):
-    """Identity of the first Linked sibling in a user.swarm_status result."""
-    for v in _values(objs):
-        if isinstance(v, dict) and v.get("Linked"):
-            return v.get("Identity")
-    return None
-
-
-def swarm_identities(objs):
-    """Set of node identities in a user.swarm_status result."""
-    ids = set()
-    for v in _values(objs):
-        if isinstance(v, dict) and v.get("Identity"):
-            ids.add(v["Identity"])
-    return ids
-
-
-def has_link_to(objs, ident):
-    """True if a nodes.links result holds an active link to <ident>."""
-    return any(isinstance(v, dict) and v.get("RemoteIdentity") == ident
-               for v in _values(objs))
-
-
-def _contains_identity(value, ident):
-    # why: expulsion records nest the Subject at varying depth; recurse the dict/list tree
-    if isinstance(value, str):
-        return value == ident
-    if isinstance(value, dict):
-        return any(_contains_identity(v, ident) for v in value.values())
-    if isinstance(value, list):
-        return any(_contains_identity(v, ident) for v in value)
-    return False
-
-
-def is_expelled(objs, ident):
-    """True if a user.list_expelled result bans <ident> (nested Subject match)."""
-    return any(_contains_identity(o.value, ident) for o in objs
-               if o.type not in ("eos", "error_message"))
-
-
+# --- stream utilities: list[AstralObject] -> extracted value -----------------
 def loaded_payload(objs):
     """The decoded string payload from an objects.load result, or None."""
     for o in objs:
@@ -292,54 +279,3 @@ def loaded_payload(objs):
 def error_messages(objs):
     """The error_message strings in a result stream."""
     return [o.value for o in objs if o.type == "error_message"]
-
-
-def endpoint_addr(ep):
-    """Address string of an exonet.Endpoint (bare or {Type,Object})."""
-    if isinstance(ep, str):
-        return ep
-    if isinstance(ep, dict):
-        o = ep.get("Object")
-        return o if isinstance(o, str) else ""
-    return ""
-
-
-def tor_links(objs):
-    """(RemoteIdentity, endpoint-address) for links whose Network == 'tor'."""
-    out = []
-    for v in _values(objs):
-        if isinstance(v, dict) and str(v.get("Network")) == "tor":
-            out.append((str(v.get("RemoteIdentity", "")),
-                        endpoint_addr(v.get("RemoteEndpoint"))))
-    return out
-
-
-def links_by_network(objs, network):
-    """(RemoteIdentity, endpoint-address) for links whose Network == <network>."""
-    out = []
-    for v in _values(objs):
-        if isinstance(v, dict) and str(v.get("Network")) == network:
-            out.append((str(v.get("RemoteIdentity", "")),
-                        endpoint_addr(v.get("RemoteEndpoint"))))
-    return out
-
-
-def kcp_links(objs):
-    """(RemoteIdentity, endpoint-address) for links whose Network == 'kcp'.
-
-    A 'kcp' link is the unique signal of a completed NAT hole-punch: mod/nodes'
-    NATLinkStrategy is the only path that dials a kcp.Endpoint (BasicLinkStrategy
-    dials only tcp, and kcp endpoints are never advertised for an ordinary peer
-    dial), so a kcp link to a sibling means the punch succeeded and was promoted
-    to a direct link. Mirrors tor_links(); cf. links_by_network(objs, "kcp")."""
-    return links_by_network(objs, "kcp")
-
-
-def resolve_onion(objs):
-    """The .onion address from a nodes.resolve_endpoints result, or None."""
-    for v in _values(objs):
-        if isinstance(v, dict):
-            a = endpoint_addr(v.get("Endpoint"))
-            if ".onion" in a:
-                return a
-    return None

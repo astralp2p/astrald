@@ -14,7 +14,6 @@ to tcp:127.0.0.1:8625, which is netns-local). Uses the Go CLI over ssh, not the 
 WS client (the WS port is netns-local too).
 """
 import argparse
-import json
 import os
 import sys
 
@@ -27,25 +26,18 @@ import astralapi  # noqa: E402
 def node_id(vm):
     """The node's own identity hex via apphost.whoami (inside its netns)."""
     raw = astralapi.ssh(vm, "ip netns exec priv astral-query apphost.whoami -out json") or ""
-    for ln in raw.splitlines():
-        ln = ln.strip()
-        if not ln:
-            continue
-        try:
-            o = json.loads(ln)
-        except json.JSONDecodeError:
-            continue
-        v = o.get("Object")
-        if isinstance(v, str) and len(v) >= 64:
-            return v
-        if isinstance(v, dict) and isinstance(v.get("Identity"), str):
-            return v["Identity"]
+    for o in astralapi.parse_cli(raw):
+        if isinstance(o.value, str) and len(o.value) >= 64:
+            return o.value
+        if isinstance(o.value, dict) and isinstance(o.value.get("Identity"), str):
+            return o.value["Identity"]
     return ""
 
 
 def links(vm):
-    return astralapi.parse_cli(
+    objs = astralapi.parse_cli(
         astralapi.ssh(vm, "ip netns exec priv astral-query nodes.links -out json") or "")
+    return astralapi.records(objs, astralapi.LinkInfo)
 
 
 def main():
@@ -63,9 +55,9 @@ def main():
         if not sib_id:
             failed.append(f"{p}: could not resolve sibling {sib} identity")
             continue
-        objs = links(p)
-        kcp = astralapi.kcp_links(objs)                 # [(RemoteIdentity, endpoint)]
-        tcp = astralapi.links_by_network(objs, "tcp")
+        all_links = links(p)
+        kcp = [(l.remote_identity, l.remote_address) for l in all_links if l.network == "kcp"]
+        tcp = [(l.remote_identity, l.remote_address) for l in all_links if l.network == "tcp"]
         # positive: a direct kcp link to the sibling (the promoted punch)
         if not any(rid == sib_id for rid, _ in kcp):
             failed.append(f"{p}: no kcp link to {sib} -- punch not promoted (kcp={kcp})")

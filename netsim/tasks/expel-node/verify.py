@@ -45,15 +45,15 @@ def main():
     expelled_id = sib_ids[0] if sib_ids else None
 
     with astralapi.connect(vm1, token=token) as n1:
-        n1_expelled = n1.call("user.list_expelled")
-        members = astralapi.swarm_identities(n1.call("user.swarm_status"))
+        bans = n1.expulsions()
+        members = {m.identity for m in n1.swarm_members() if m.identity}
 
     errs = []
     if not U:
         errs.append("no user_id in node1's user.json")
     if not expelled_id:
         errs.append("no sibling_ids in node1's siblings.json -- can't identify the expelled node")
-    if expelled_id and not astralapi.is_expelled(n1_expelled, expelled_id):
+    if expelled_id and not any(b.bans(expelled_id) for b in bans):
         errs.append(f"node2 {expelled_id} is NOT in node1's user.list_expelled "
                     "(expulsion was never issued -- agent did not expel the node)")
     if expelled_id and expelled_id in members:

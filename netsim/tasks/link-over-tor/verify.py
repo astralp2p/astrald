@@ -32,7 +32,7 @@ def main():
 
     # Decisive: an actual link over Tor from node1 (to the only sibling, the peer).
     with astralapi.connect(args.vm) as node:
-        links = astralapi.tor_links(node.call("nodes.links"))
+        links = [l for l in node.links() if l.network == "tor"]
 
     notes = []
     if net != "tor":
@@ -41,7 +41,7 @@ def main():
         notes.append("agent recorded no peer_onion")
 
     if links:
-        ep = links[0][1] or "(inbound, no remote onion)"
+        ep = links[0].remote_address or "(inbound, no remote onion)"
         print(f"link-over-tor OK: {args.vm} holds a link to {args.peer} over Tor (endpoint {ep}).")
         for n in notes:
             sys.stderr.write(f"  note: {n}\n")

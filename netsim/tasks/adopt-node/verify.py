@@ -31,14 +31,16 @@ def main():
     # node1 acts as the User (token from bootstrap-user-software-key); node2 answers
     # under its node identity (it holds the contract after the adoption).
     with astralapi.connect(vm1, token=token) as n1:
-        i1, s1 = astralapi.contract(n1.call("user.info"))
-        sib = astralapi.linked_sibling(n1.call("user.swarm_status"))
+        ui1 = n1.user_info()
+        i1, s1 = (ui1.contract_issuer, ui1.contract_subject) if ui1 else (None, None)
+        sib = next((m.identity for m in n1.swarm_members() if m.linked), None)
     # node2's own swarm view: swarm_status derives from node2's active contract,
     # not the caller, so no token is needed; post-#348 it must list node1 too.
     with astralapi.connect(vm2) as n2:
-        i2, s2 = astralapi.contract(n2.call("user.info"))
-        linkback = astralapi.has_link_to(n2.call("nodes.links"), s1)
-        n2_sib = astralapi.linked_sibling(n2.call("user.swarm_status"))
+        ui2 = n2.user_info()
+        i2, s2 = (ui2.contract_issuer, ui2.contract_subject) if ui2 else (None, None)
+        linkback = any(l.remote_identity == s1 for l in n2.links())
+        n2_sib = next((m.identity for m in n2.swarm_members() if m.linked), None)
 
     errs = []
     if not U:

@@ -32,7 +32,8 @@ def main():
         tor_active = astralapi.ssh(vm, "systemctl is-active tor 2>/dev/null").strip() == "active"
         file_onion = str(astralapi.read_json(vm, "/root/tor.json").get("onion", ""))
         with astralapi.connect(vm) as node:
-            live = astralapi.resolve_onion(node.call("nodes.resolve_endpoints", {"id": "localnode"}))
+            live = next((e.address for e in node.endpoints("localnode")
+                         if ".onion" in e.address), None)
 
         errs = []
         if not tor_active:

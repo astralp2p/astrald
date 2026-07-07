@@ -1,10 +1,12 @@
 """Offline tests for astralapi -- no VM, no live astrald.
 
-Exercises the interrogators against synthetic AstralObjects, parse_cli's
-stream handling, and the Go-CLI fallback command construction. Run with:
+Exercises the typed accessors (astral-py records over the CLI path), the
+stream utilities, parse_cli's stream handling, and the Go-CLI fallback command
+construction. Run with:
 
     python3 -m unittest -v        # from this directory
 """
+import json
 import os
 import sys
 import unittest
@@ -18,52 +20,108 @@ def O(type, value=None):
     return astral.obj(type, value)
 
 
-class InterrogatorTests(unittest.TestCase):
-    def test_contract(self):
-        objs = [O("mod.user.contract",
-                  {"Contract": {"Contract": {"Issuer": "02aa", "Subject": "03bb"}}})]
-        self.assertEqual(astralapi.contract(objs), ("02aa", "03bb"))
-        self.assertEqual(astralapi.contract([O("x", {})]), (None, None))
+def lines(*objs):
+    """Render (type, value) pairs as astral-query -out json output."""
+    out = [json.dumps({"Type": t, "Object": v}) for t, v in objs]
+    out.append(json.dumps({"Type": "eos", "Object": None}))
+    return "\n".join(out) + "\n"
 
-    def test_linked_sibling_and_identities(self):
-        objs = [O("s", {"Identity": "03bb", "Linked": True}),
-                O("s", {"Identity": "03cc", "Linked": False})]
-        self.assertEqual(astralapi.linked_sibling(objs), "03bb")
-        self.assertEqual(astralapi.swarm_identities(objs), {"03bb", "03cc"})
-        self.assertIsNone(astralapi.linked_sibling([O("s", {"Identity": "03cc", "Linked": False})]))
 
-    def test_has_link_to(self):
-        objs = [O("l", {"RemoteIdentity": "03bb", "Network": "tcp"})]
-        self.assertTrue(astralapi.has_link_to(objs, "03bb"))
-        self.assertFalse(astralapi.has_link_to(objs, "03cc"))
+class FakeSsh:
+    """Patches astralapi.ssh with per-op canned CLI output."""
 
-    def test_is_expelled_nested(self):
-        objs = [O("mod.user.signed_expulsion", {"Expulsion": {"Subject": "03bb"}})]
-        self.assertTrue(astralapi.is_expelled(objs, "03bb"))
-        self.assertFalse(astralapi.is_expelled(objs, "03cc"))
-        # an error_message naming the id must not count as an expulsion record
-        self.assertFalse(astralapi.is_expelled([O("error_message", "03bb not found")], "03bb"))
+    def __init__(self, by_op):
+        self.by_op = by_op
+        self.calls = []
 
+    def __enter__(self):
+        self._orig = astralapi.ssh
+        astralapi.ssh = self
+        return self
+
+    def __exit__(self, *exc):
+        astralapi.ssh = self._orig
+        return False
+
+    def __call__(self, vm, remote):
+        self.calls.append((vm, remote))
+        for op, raw in self.by_op.items():
+            if op in remote:
+                return raw
+        return ""
+
+
+class TypedAccessorTests(unittest.TestCase):
+    """Node's typed accessors decode records identically over the CLI path."""
+
+    def test_user_info(self):
+        raw = lines(("mod.user.info", {
+            "NodeAlias": "node1", "UserAlias": "alice",
+            "ContractID": "data1c",
+            "Contract": {"Contract": {"Issuer": "02aa", "Subject": "03bb"}}}))
+        with FakeSsh({"user.info": raw}):
+            info = astralapi.Node("node1", None, "").user_info()
+        self.assertEqual(info.contract_issuer, "02aa")
+        self.assertEqual(info.contract_subject, "03bb")
+        self.assertEqual(info.node_alias, "node1")
+
+    def test_user_info_none_on_reject(self):
+        with FakeSsh({"user.info": ""}):
+            self.assertIsNone(astralapi.Node("node1", None, "").user_info())
+
+    def test_swarm_members(self):
+        raw = lines(("mod.users.swarm_member", {"Identity": "03bb", "Linked": True}),
+                    ("mod.users.swarm_member", {"Identity": "03cc", "Linked": False}))
+        with FakeSsh({"user.swarm_status": raw}):
+            members = astralapi.Node("node1", None, "").swarm_members()
+        self.assertEqual([m.identity for m in members], ["03bb", "03cc"])
+        linked = next((m.identity for m in members if m.linked), None)
+        self.assertEqual(linked, "03bb")
+
+    def test_links(self):
+        raw = lines(("mod.nodes.link_info",
+                     {"Network": "tor", "RemoteIdentity": "03bb",
+                      "RemoteEndpoint": {"Object": "abc.onion:1791"}}),
+                    ("mod.nodes.link_info",
+                     {"Network": "tcp", "RemoteIdentity": "03cc"}))
+        with FakeSsh({"nodes.links": raw}):
+            links = astralapi.Node("node1", None, "").links()
+        tor = [l for l in links if l.network == "tor"]
+        self.assertEqual(tor[0].remote_identity, "03bb")
+        self.assertEqual(tor[0].remote_address, "abc.onion:1791")
+        self.assertTrue(any(l.remote_identity == "03cc" for l in links))
+
+    def test_endpoints(self):
+        raw = lines(("mod.nodes.endpoint_with_ttl", {"Endpoint": "10.0.0.1:1791"}),
+                    ("mod.nodes.endpoint_with_ttl",
+                     {"Endpoint": {"Object": "abc.onion:1791"}}))
+        with FakeSsh({"nodes.resolve_endpoints": raw}):
+            eps = astralapi.Node("node1", None, "").endpoints("localnode")
+        onion = next((e.address for e in eps if ".onion" in e.address), None)
+        self.assertEqual(onion, "abc.onion:1791")
+
+    def test_expulsions_nested_subject(self):
+        raw = lines(("mod.user.signed_expulsion",
+                     {"Expulsion": {"Subject": "03bb"}}))
+        with FakeSsh({"user.list_expelled": raw}):
+            bans = astralapi.Node("node1", None, "").expulsions()
+        self.assertTrue(any(b.bans("03bb") for b in bans))
+        self.assertFalse(any(b.bans("03cc") for b in bans))
+
+    def test_records_skip_errors_and_scalars(self):
+        objs = [O("error_message", "boom"), O("string8", "hi"),
+                O("mod.nodes.link_info", {"Network": "tcp"})]
+        links = astralapi.records(objs, astralapi.LinkInfo)
+        self.assertEqual(len(links), 1)
+        self.assertEqual(links[0].network, "tcp")
+
+
+class StreamUtilityTests(unittest.TestCase):
     def test_loaded_payload_and_errors(self):
         objs = [O("error_message", "boom"), O("string8", "hello")]
         self.assertEqual(astralapi.loaded_payload(objs), "hello")
         self.assertEqual(astralapi.error_messages(objs), ["boom"])
         self.assertIsNone(astralapi.loaded_payload([O("error_message", "boom")]))
-
-    def test_tor_links_and_endpoint(self):
-        objs = [O("l", {"Network": "tor", "RemoteIdentity": "03bb",
-                        "RemoteEndpoint": {"Object": "abc.onion:1791"}}),
-                O("l", {"Network": "tcp", "RemoteIdentity": "03cc"})]
-        self.assertEqual(astralapi.tor_links(objs), [("03bb", "abc.onion:1791")])
-        self.assertEqual(astralapi.endpoint_addr("x.onion"), "x.onion")
-        self.assertEqual(astralapi.endpoint_addr({"Object": "y.onion"}), "y.onion")
-        self.assertEqual(astralapi.endpoint_addr(None), "")
-
-    def test_resolve_onion(self):
-        objs = [O("e", {"Endpoint": "10.0.0.1:1791"}),
-                O("e", {"Endpoint": {"Object": "abc.onion:1791"}})]
-        self.assertEqual(astralapi.resolve_onion(objs), "abc.onion:1791")
-        self.assertIsNone(astralapi.resolve_onion([O("e", {"Endpoint": "10.0.0.1:1791"})]))
 
 
 class ParseCliTests(unittest.TestCase):
