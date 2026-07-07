@@ -6,7 +6,7 @@ import (
 
 	"github.com/cryptopunkscc/astral-go/api/apphost"
 	"github.com/cryptopunkscc/astral-go/astral"
-	"github.com/cryptopunkscc/astral-go/astral/sig"
+	"github.com/cryptopunkscc/astral-go/sig"
 )
 
 func (mod *Module) ListAccessTokens() ([]*apphost.AccessToken, error) {

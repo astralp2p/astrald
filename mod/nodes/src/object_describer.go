@@ -6,7 +6,7 @@ import (
 	"github.com/cryptopunkscc/astral-go/api/objects"
 	objectscli "github.com/cryptopunkscc/astral-go/api/objects/client"
 	"github.com/cryptopunkscc/astral-go/astral"
-	"github.com/cryptopunkscc/astral-go/astral/sig"
+	"github.com/cryptopunkscc/astral-go/sig"
 )
 
 // DescribeObject fans out to every provider returned by FindObject and merges their

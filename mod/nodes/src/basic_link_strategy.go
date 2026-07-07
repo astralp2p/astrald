@@ -7,7 +7,7 @@ import (
 
 	"github.com/cryptopunkscc/astral-go/api/nodes"
 	"github.com/cryptopunkscc/astral-go/astral"
-	"github.com/cryptopunkscc/astral-go/astral/sig"
+	"github.com/cryptopunkscc/astral-go/sig"
 )
 
 // BasicLinkStrategy dials all known endpoints of the target node in parallel

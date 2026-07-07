@@ -3,7 +3,7 @@ package tree
 import (
 	"github.com/cryptopunkscc/astral-go/api/tree"
 	"github.com/cryptopunkscc/astral-go/astral"
-	"github.com/cryptopunkscc/astral-go/astral/sig"
+	"github.com/cryptopunkscc/astral-go/sig"
 )
 
 // NilNode returns ErrUnsupported for all operations. Embed it in your node to

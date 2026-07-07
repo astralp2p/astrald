@@ -6,8 +6,8 @@ import (
 
 	shell2 "bitbucket.org/creachadair/shell"
 	"github.com/cryptopunkscc/astral-go/astral"
-	"github.com/cryptopunkscc/astral-go/astral/streams"
 	"github.com/cryptopunkscc/astral-go/lib/query"
+	"github.com/cryptopunkscc/astral-go/streams"
 	"github.com/cryptopunkscc/astrald/mod/shell"
 )
 
