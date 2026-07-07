@@ -3,10 +3,10 @@ package dir
 import (
 	"strings"
 
+	"github.com/cryptopunkscc/astral-go/api/dir"
 	"github.com/cryptopunkscc/astral-go/astral"
 	"github.com/cryptopunkscc/astral-go/astral/channel"
 	"github.com/cryptopunkscc/astrald/lib/query"
-	"github.com/cryptopunkscc/astrald/mod/dir"
 )
 
 func ApplyFilters(ctx *astral.Context, identity *astral.Identity, filters ...string) (bool, error) {

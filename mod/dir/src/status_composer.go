@@ -1,7 +1,7 @@
 package dir
 
 import (
-	"github.com/cryptopunkscc/astrald/mod/dir"
+	"github.com/cryptopunkscc/astral-go/api/dir"
 	"github.com/cryptopunkscc/astrald/mod/nearby"
 )
 

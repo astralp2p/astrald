@@ -1,10 +1,10 @@
 package dir
 
 import (
+	"github.com/cryptopunkscc/astral-go/api/dir"
 	"github.com/cryptopunkscc/astral-go/astral"
 	"github.com/cryptopunkscc/astral-go/astral/channel"
 	"github.com/cryptopunkscc/astrald/lib/query"
-	"github.com/cryptopunkscc/astrald/mod/dir"
 )
 
 func SetAlias(ctx *astral.Context, identity *astral.Identity, alias string) error {
