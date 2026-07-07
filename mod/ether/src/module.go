@@ -8,11 +8,11 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/cryptopunkscc/astral-go/api/ip"
 	"github.com/cryptopunkscc/astral-go/astral"
 	"github.com/cryptopunkscc/astral-go/astral/log"
 	"github.com/cryptopunkscc/astral-go/astral/sig"
 	"github.com/cryptopunkscc/astrald/mod/ether"
-	"github.com/cryptopunkscc/astrald/mod/ip"
 	"github.com/cryptopunkscc/astrald/mod/secp256k1"
 	"github.com/cryptopunkscc/astrald/resources"
 )

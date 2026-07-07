@@ -9,8 +9,8 @@ import (
 	"strconv"
 
 	"github.com/cryptopunkscc/astral-go/api/exonet"
+	"github.com/cryptopunkscc/astral-go/api/ip"
 	"github.com/cryptopunkscc/astral-go/astral"
-	"github.com/cryptopunkscc/astrald/mod/ip"
 )
 
 var _ exonet.Endpoint = &Endpoint{}

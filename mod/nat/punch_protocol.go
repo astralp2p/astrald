@@ -4,9 +4,9 @@ import (
 	"bytes"
 	"fmt"
 
+	"github.com/cryptopunkscc/astral-go/api/ip"
 	"github.com/cryptopunkscc/astral-go/astral"
 	"github.com/cryptopunkscc/astral-go/astral/channel"
-	"github.com/cryptopunkscc/astrald/mod/ip"
 )
 
 // PunchProtocol is a pure state machine for NAT traversal protocol.

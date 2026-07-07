@@ -3,8 +3,8 @@ package nat
 import (
 	"context"
 
+	"github.com/cryptopunkscc/astral-go/api/ip"
 	"github.com/cryptopunkscc/astral-go/astral"
-	"github.com/cryptopunkscc/astrald/mod/ip"
 )
 
 // Puncher is a minimal abstraction for UDP NAT hole punching.

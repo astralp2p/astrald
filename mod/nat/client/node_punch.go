@@ -1,10 +1,10 @@
 package nat
 
 import (
+	"github.com/cryptopunkscc/astral-go/api/ip"
 	"github.com/cryptopunkscc/astral-go/astral"
 	"github.com/cryptopunkscc/astral-go/astral/channel"
 	"github.com/cryptopunkscc/astrald/lib/query"
-	"github.com/cryptopunkscc/astrald/mod/ip"
 	"github.com/cryptopunkscc/astrald/mod/nat"
 )
 

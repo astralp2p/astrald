@@ -2,11 +2,12 @@ package ip
 
 import (
 	"fmt"
+	ipmod "github.com/cryptopunkscc/astrald/mod/ip"
 	"os/exec"
 	"runtime"
 	"strings"
 
-	"github.com/cryptopunkscc/astrald/mod/ip"
+	"github.com/cryptopunkscc/astral-go/api/ip"
 )
 
 func (mod *Module) DefaultGateway() (ip.IP, error) {
@@ -43,7 +44,7 @@ func (mod *Module) defaultGatewayLinux() (ip.IP, error) {
 			}
 		}
 	}
-	return nil, ip.ErrDefaultGatewayNotFound
+	return nil, ipmod.ErrDefaultGatewayNotFound
 }
 
 func (mod *Module) defaultGatewayDarwin() (ip.IP, error) {
@@ -67,7 +68,7 @@ func (mod *Module) defaultGatewayDarwin() (ip.IP, error) {
 			}
 		}
 	}
-	return nil, ip.ErrDefaultGatewayNotFound
+	return nil, ipmod.ErrDefaultGatewayNotFound
 }
 
 func (mod *Module) defaultGatewayWindows() (ip.IP, error) {
@@ -91,5 +92,5 @@ func (mod *Module) defaultGatewayWindows() (ip.IP, error) {
 			}
 		}
 	}
-	return nil, ip.ErrDefaultGatewayNotFound
+	return nil, ipmod.ErrDefaultGatewayNotFound
 }

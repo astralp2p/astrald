@@ -4,8 +4,8 @@ import (
 	"encoding/json"
 	"io"
 
+	"github.com/cryptopunkscc/astral-go/api/ip"
 	"github.com/cryptopunkscc/astral-go/astral"
-	"github.com/cryptopunkscc/astrald/mod/ip"
 )
 
 // PunchSignalTypeOffer and friends define the five-step punch handshake order:

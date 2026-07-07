@@ -7,8 +7,8 @@ import (
 	"net"
 	"strconv"
 
+	"github.com/cryptopunkscc/astral-go/api/ip"
 	"github.com/cryptopunkscc/astral-go/astral"
-	"github.com/cryptopunkscc/astrald/mod/ip"
 )
 
 // Endpoint represents a single NAT UDP endpoint.
