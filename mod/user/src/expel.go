@@ -5,9 +5,9 @@ import (
 	"time"
 
 	"github.com/cryptopunkscc/astral-go/api/secp256k1"
+	"github.com/cryptopunkscc/astral-go/api/user"
 	"github.com/cryptopunkscc/astral-go/astral"
 	"github.com/cryptopunkscc/astrald/mod/objects"
-	"github.com/cryptopunkscc/astrald/mod/user"
 )
 
 // Expel permanently bans nodeID from the active swarm. Only the swarm's user (the

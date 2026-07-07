@@ -1,6 +1,6 @@
 package apphost
 
-import "github.com/cryptopunkscc/astrald/mod/user"
+import "github.com/cryptopunkscc/astral-go/api/user"
 
 type Config struct {
 	// Listen on these addresses

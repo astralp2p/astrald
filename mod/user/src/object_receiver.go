@@ -5,10 +5,10 @@ import (
 
 	"github.com/cryptopunkscc/astral-go/api/auth"
 	"github.com/cryptopunkscc/astral-go/api/nodes"
+	"github.com/cryptopunkscc/astral-go/api/user"
 	"github.com/cryptopunkscc/astral-go/astral"
 	"github.com/cryptopunkscc/astrald/mod/events"
 	"github.com/cryptopunkscc/astrald/mod/objects"
-	"github.com/cryptopunkscc/astrald/mod/user"
 )
 
 var _ objects.Receiver = &Module{}

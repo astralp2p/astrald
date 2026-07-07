@@ -6,9 +6,9 @@ import (
 	"time"
 
 	"github.com/cryptopunkscc/astral-go/api/auth"
+	"github.com/cryptopunkscc/astral-go/api/user"
 	"github.com/cryptopunkscc/astral-go/astral"
 	"github.com/cryptopunkscc/astrald/mod/nearby"
-	"github.com/cryptopunkscc/astrald/mod/user"
 	userClient "github.com/cryptopunkscc/astrald/mod/user/client"
 )
 

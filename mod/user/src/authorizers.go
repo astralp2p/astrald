@@ -3,8 +3,8 @@ package user
 import (
 	"github.com/cryptopunkscc/astral-go/api/nodes"
 	"github.com/cryptopunkscc/astral-go/api/objects"
+	"github.com/cryptopunkscc/astral-go/api/user"
 	"github.com/cryptopunkscc/astral-go/astral"
-	"github.com/cryptopunkscc/astrald/mod/user"
 )
 
 // AuthorizeExpel allows the swarm's user to expel nodes.

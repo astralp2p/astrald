@@ -1,24 +1,25 @@
 package apphost
 
 import (
+	usermod "github.com/cryptopunkscc/astrald/mod/user"
 	"testing"
 
+	"github.com/cryptopunkscc/astral-go/api/user"
 	"github.com/cryptopunkscc/astral-go/astral"
-	"github.com/cryptopunkscc/astrald/mod/user"
 )
 
-// stubUser satisfies user.Module; only Ready and Identity are exercised.
+// stubUser satisfies usermod.Module; only Ready and Identity are exercised.
 type stubUser struct {
 	id    *astral.Identity
 	ready chan struct{}
 }
 
-func (s *stubUser) Ready() <-chan struct{}                                     { return s.ready }
-func (s *stubUser) Identity() *astral.Identity                                 { return s.id }
-func (s *stubUser) LocalSwarm() []*astral.Identity                             { return nil }
-func (s *stubUser) NewMaintainLinkTask(*astral.Identity) user.MaintainLinkTask { return nil }
-func (s *stubUser) NewSyncNodesTask(*astral.Identity) user.SyncNodesAction     { return nil }
-func (s *stubUser) PushToLocalSwarm(*astral.Context, astral.Object)            {}
+func (s *stubUser) Ready() <-chan struct{}                                        { return s.ready }
+func (s *stubUser) Identity() *astral.Identity                                    { return s.id }
+func (s *stubUser) LocalSwarm() []*astral.Identity                                { return nil }
+func (s *stubUser) NewMaintainLinkTask(*astral.Identity) usermod.MaintainLinkTask { return nil }
+func (s *stubUser) NewSyncNodesTask(*astral.Identity) usermod.SyncNodesAction     { return nil }
+func (s *stubUser) PushToLocalSwarm(*astral.Context, astral.Object)               {}
 func (s *stubUser) Expel(*astral.Context, *astral.Identity) (*user.SignedExpulsion, error) {
 	return nil, nil
 }

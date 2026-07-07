@@ -5,10 +5,10 @@ import (
 
 	"github.com/cryptopunkscc/astral-go/api/auth"
 	"github.com/cryptopunkscc/astral-go/api/crypto"
+	"github.com/cryptopunkscc/astral-go/api/user"
 	"github.com/cryptopunkscc/astral-go/astral"
 	"github.com/cryptopunkscc/astral-go/astral/channel"
 	"github.com/cryptopunkscc/astrald/lib/routing"
-	"github.com/cryptopunkscc/astrald/mod/user"
 )
 
 type opAcceptMembershipArgs struct {

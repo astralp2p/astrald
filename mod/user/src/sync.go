@@ -4,9 +4,9 @@ import (
 	"fmt"
 
 	"github.com/cryptopunkscc/astral-go/api/tree"
+	"github.com/cryptopunkscc/astral-go/api/user"
 	"github.com/cryptopunkscc/astral-go/astral"
 	"github.com/cryptopunkscc/astrald/lib/query"
-	"github.com/cryptopunkscc/astrald/mod/user"
 )
 
 // NOTE: Legacy methods below are result of lack of universal solution to
