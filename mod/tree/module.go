@@ -17,24 +17,16 @@ path in the tree.
 package tree
 
 import (
+	"github.com/cryptopunkscc/astral-go/api/tree"
 	"github.com/cryptopunkscc/astral-go/astral"
 )
 
 const ModuleName = "tree"
 const DBPrefix = "tree__"
 
-const (
-	MethodGet         = "tree.get"
-	MethodSet         = "tree.set"
-	MethodDelete      = "tree.delete"
-	MethodList        = "tree.list"
-	MethodMountRemote = "tree.mount_remote"
-	MethodUnmount     = "tree.unmount"
-)
-
 type Module interface {
 	// Root returns the root node of the tree
-	Root() Node
+	Root() tree.Node
 
 	// Set sets the object held by the node
 	Set(ctx *astral.Context, path string, object astral.Object) error
@@ -46,7 +38,7 @@ type Module interface {
 	Delete(ctx *astral.Context, path string) error
 
 	// Mount mounts a node at the given path. This node will be returned whenever a traversal reaches this path.
-	Mount(path string, node Node) error
+	Mount(path string, node tree.Node) error
 
 	// Unmount unmounts a node mounted at the given path.
 	Unmount(path string) error

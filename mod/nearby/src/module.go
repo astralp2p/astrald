@@ -4,13 +4,13 @@ import (
 	"time"
 
 	"github.com/cryptopunkscc/astral-go/api/ip"
+	"github.com/cryptopunkscc/astral-go/api/tree"
 	"github.com/cryptopunkscc/astral-go/astral"
 	"github.com/cryptopunkscc/astral-go/astral/log"
 	"github.com/cryptopunkscc/astral-go/astral/sig"
 	"github.com/cryptopunkscc/astrald/lib/routing"
 	"github.com/cryptopunkscc/astrald/mod/nearby"
 	_ "github.com/cryptopunkscc/astrald/mod/nearby/views"
-	"github.com/cryptopunkscc/astrald/mod/tree"
 )
 
 var _ nearby.Module = &Module{}

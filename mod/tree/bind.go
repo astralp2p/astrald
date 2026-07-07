@@ -3,6 +3,7 @@ package tree
 import (
 	"errors"
 	"fmt"
+	"github.com/cryptopunkscc/astral-go/api/tree"
 	"reflect"
 	"strings"
 
@@ -11,7 +12,7 @@ import (
 )
 
 // Bind binds Value fields in struct s to the node
-func Bind(ctx *astral.Context, s any, node Node) error {
+func Bind(ctx *astral.Context, s any, node tree.Node) error {
 	var v = reflect.ValueOf(s)
 
 	if v.Kind() != reflect.Ptr {
@@ -57,7 +58,7 @@ func Bind(ctx *astral.Context, s any, node Node) error {
 		// find the bind method
 		bind, found := findBindMethod(field)
 		if found {
-			fieldNode, err := Query(ctx, node, keyName, true)
+			fieldNode, err := tree.Query(ctx, node, keyName, true)
 			if err != nil {
 				return err
 			}
@@ -71,7 +72,7 @@ func Bind(ctx *astral.Context, s any, node Node) error {
 			continue
 		}
 
-		subNode, err := Query(ctx, node, keyName, true)
+		subNode, err := tree.Query(ctx, node, keyName, true)
 		if err != nil {
 			return err
 		}
@@ -86,8 +87,8 @@ func Bind(ctx *astral.Context, s any, node Node) error {
 }
 
 // BindPath is a convenience function that queries the node and calls Bind.
-func BindPath(ctx *astral.Context, s any, node Node, path string, create bool) (err error) {
-	node, err = Query(ctx, node, path, create)
+func BindPath(ctx *astral.Context, s any, node tree.Node, path string, create bool) (err error) {
+	node, err = tree.Query(ctx, node, path, create)
 	if err != nil {
 		return err
 	}
@@ -113,7 +114,7 @@ func findBindMethod(field reflect.Value) (reflect.Value, bool) {
 			continue
 		case mType.Type.In(1).Elem() != reflect.TypeOf((*astral.Context)(nil)).Elem():
 			continue
-		case mType.Type.In(2) != reflect.TypeOf((*Node)(nil)).Elem():
+		case mType.Type.In(2) != reflect.TypeOf((*tree.Node)(nil)).Elem():
 			continue
 		case mType.Type.NumOut() != 1:
 			continue

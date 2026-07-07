@@ -2,15 +2,16 @@ package indexing
 
 import (
 	"context"
+	treemod "github.com/cryptopunkscc/astrald/mod/tree"
 	"sync"
 
+	"github.com/cryptopunkscc/astral-go/api/tree"
 	"github.com/cryptopunkscc/astral-go/astral"
 	"github.com/cryptopunkscc/astral-go/astral/log"
 	"github.com/cryptopunkscc/astral-go/astral/sig"
 	"github.com/cryptopunkscc/astrald/lib/routing"
 	"github.com/cryptopunkscc/astrald/mod/indexing"
 	"github.com/cryptopunkscc/astrald/mod/objects"
-	"github.com/cryptopunkscc/astrald/mod/tree"
 	"github.com/cryptopunkscc/astrald/resources"
 )
 
@@ -18,7 +19,7 @@ var _ indexing.Module = &Module{}
 
 type Deps struct {
 	Objects objects.Module
-	Tree    tree.Module
+	Tree    treemod.Module
 }
 
 type Module struct {

@@ -1,9 +1,9 @@
 package indexing
 
 import (
+	"github.com/cryptopunkscc/astral-go/api/tree"
 	"github.com/cryptopunkscc/astral-go/astral"
 	"github.com/cryptopunkscc/astrald/core"
-	"github.com/cryptopunkscc/astrald/mod/tree"
 )
 
 func (mod *Module) LoadDependencies(ctx *astral.Context) (err error) {

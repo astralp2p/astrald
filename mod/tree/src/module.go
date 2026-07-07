@@ -4,15 +4,16 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	treemod "github.com/cryptopunkscc/astrald/mod/tree"
 	"strings"
 	"sync"
 
+	"github.com/cryptopunkscc/astral-go/api/tree"
 	"github.com/cryptopunkscc/astral-go/astral"
 	"github.com/cryptopunkscc/astral-go/astral/log"
 	"github.com/cryptopunkscc/astral-go/astral/sig"
 	"github.com/cryptopunkscc/astrald/lib/routing"
 	"github.com/cryptopunkscc/astrald/mod/dir"
-	"github.com/cryptopunkscc/astrald/mod/tree"
 	treecli "github.com/cryptopunkscc/astrald/mod/tree/client"
 	"github.com/cryptopunkscc/astrald/resources"
 )
@@ -39,7 +40,7 @@ type Module struct {
 	nodeValueMu sync.Mutex
 }
 
-var _ tree.Module = &Module{}
+var _ treemod.Module = &Module{}
 
 func (mod *Module) Run(ctx *astral.Context) error {
 	mod.ctx = ctx.WithZone(astral.ZoneNetwork)
@@ -150,7 +151,7 @@ func (mod *Module) Router() astral.Router {
 }
 
 func (mod *Module) String() string {
-	return tree.ModuleName
+	return treemod.ModuleName
 }
 
 // getMount returns the mounted node for the given path or nil if nothing is mounted.

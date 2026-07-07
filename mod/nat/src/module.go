@@ -2,11 +2,13 @@ package nat
 
 import (
 	ipmod "github.com/cryptopunkscc/astrald/mod/ip"
+	treemod "github.com/cryptopunkscc/astrald/mod/tree"
 	"net"
 	"sync"
 	"sync/atomic"
 
 	"github.com/cryptopunkscc/astral-go/api/ip"
+	"github.com/cryptopunkscc/astral-go/api/tree"
 	"github.com/cryptopunkscc/astral-go/astral"
 	"github.com/cryptopunkscc/astral-go/astral/log"
 	"github.com/cryptopunkscc/astrald/lib/routing"
@@ -14,7 +16,6 @@ import (
 	"github.com/cryptopunkscc/astrald/mod/events"
 	"github.com/cryptopunkscc/astrald/mod/nat"
 	"github.com/cryptopunkscc/astrald/mod/objects"
-	"github.com/cryptopunkscc/astrald/mod/tree"
 	"github.com/cryptopunkscc/astrald/resources"
 )
 
@@ -26,7 +27,7 @@ type Deps struct {
 	Dir     dir.Module
 	Objects objects.Module
 	IP      ipmod.Module
-	Tree    tree.Module
+	Tree    treemod.Module
 	Events  events.Module
 }
 

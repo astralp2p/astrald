@@ -3,8 +3,8 @@ package tree
 import (
 	"strings"
 
+	"github.com/cryptopunkscc/astral-go/api/tree"
 	"github.com/cryptopunkscc/astral-go/astral"
-	"github.com/cryptopunkscc/astrald/mod/tree"
 )
 
 // NodeWrapper wraps a tree.Node and replaces returned Node values with nodes mounted at those paths.

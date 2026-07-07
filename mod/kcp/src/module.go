@@ -6,13 +6,13 @@ import (
 	"sync"
 
 	"github.com/cryptopunkscc/astral-go/api/exonet"
+	"github.com/cryptopunkscc/astral-go/api/tree"
 	"github.com/cryptopunkscc/astral-go/astral"
 	"github.com/cryptopunkscc/astral-go/astral/log"
 	"github.com/cryptopunkscc/astral-go/astral/sig"
 	"github.com/cryptopunkscc/astrald/core/assets"
 	"github.com/cryptopunkscc/astrald/lib/routing"
 	"github.com/cryptopunkscc/astrald/mod/kcp"
-	"github.com/cryptopunkscc/astrald/mod/tree"
 )
 
 type Settings struct {

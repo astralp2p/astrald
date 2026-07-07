@@ -3,9 +3,9 @@ package indexing
 import (
 	"errors"
 
+	"github.com/cryptopunkscc/astral-go/api/tree"
 	"github.com/cryptopunkscc/astral-go/astral"
 	"github.com/cryptopunkscc/astrald/mod/indexing"
-	"github.com/cryptopunkscc/astrald/mod/tree"
 )
 
 // indexerHandle is the in-memory view of a registered indexer.
