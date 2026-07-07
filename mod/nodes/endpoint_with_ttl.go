@@ -4,8 +4,8 @@ import (
 	"io"
 	"time"
 
+	"github.com/cryptopunkscc/astral-go/api/exonet"
 	"github.com/cryptopunkscc/astral-go/astral"
-	"github.com/cryptopunkscc/astrald/mod/exonet"
 )
 
 var _ exonet.Endpoint = &EndpointWithTTL{}

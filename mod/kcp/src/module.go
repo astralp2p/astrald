@@ -2,14 +2,15 @@ package kcp
 
 import (
 	"context"
+	exonetmod "github.com/cryptopunkscc/astrald/mod/exonet"
 	"sync"
 
+	"github.com/cryptopunkscc/astral-go/api/exonet"
 	"github.com/cryptopunkscc/astral-go/astral"
 	"github.com/cryptopunkscc/astral-go/astral/log"
 	"github.com/cryptopunkscc/astral-go/astral/sig"
 	"github.com/cryptopunkscc/astrald/core/assets"
 	"github.com/cryptopunkscc/astrald/lib/routing"
-	"github.com/cryptopunkscc/astrald/mod/exonet"
 	"github.com/cryptopunkscc/astrald/mod/kcp"
 	"github.com/cryptopunkscc/astrald/mod/tree"
 )
@@ -33,7 +34,7 @@ type Module struct {
 
 	mu                    sync.Mutex
 	configEndpoints       []exonet.Endpoint
-	ephemeralListeners    sig.Map[astral.Uint16, exonet.EphemeralListener]
+	ephemeralListeners    sig.Map[astral.Uint16, exonetmod.EphemeralListener]
 	ephemeralPortMappings sig.Map[astral.String8, astral.Uint16]
 
 	server sig.Switch
@@ -87,7 +88,7 @@ func (mod *Module) loadSettings(ctx *astral.Context) error {
 	return nil
 }
 
-func (mod *Module) acceptAll(ctx context.Context, conn exonet.Conn) (shouldStop bool, err error) {
+func (mod *Module) acceptAll(ctx context.Context, conn exonetmod.Conn) (shouldStop bool, err error) {
 	err = mod.Nodes.EstablishInboundLink(ctx, conn)
 	if err != nil {
 		return false, err

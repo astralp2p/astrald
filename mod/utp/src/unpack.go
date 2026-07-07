@@ -2,19 +2,19 @@ package utp
 
 import (
 	"bytes"
+	exonetmod "github.com/cryptopunkscc/astrald/mod/exonet"
 
-	"github.com/cryptopunkscc/astrald/mod/exonet"
-
+	"github.com/cryptopunkscc/astral-go/api/exonet"
 	"github.com/cryptopunkscc/astrald/mod/utp"
 )
 
-var _ exonet.Unpacker = &Module{}
+var _ exonetmod.Unpacker = &Module{}
 
 func (mod *Module) Unpack(network string, data []byte) (exonet.Endpoint, error) {
 	switch network {
 	case "utp":
 	default:
-		return nil, exonet.ErrUnsupportedNetwork
+		return nil, exonetmod.ErrUnsupportedNetwork
 	}
 	return Unpack(data)
 }

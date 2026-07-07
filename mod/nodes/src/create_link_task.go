@@ -1,8 +1,8 @@
 package nodes
 
 import (
+	"github.com/cryptopunkscc/astral-go/api/exonet"
 	"github.com/cryptopunkscc/astral-go/astral"
-	"github.com/cryptopunkscc/astrald/mod/exonet"
 	"github.com/cryptopunkscc/astrald/mod/nodes"
 	"github.com/cryptopunkscc/astrald/mod/scheduler"
 )

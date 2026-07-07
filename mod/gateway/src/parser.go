@@ -3,19 +3,20 @@ package gateway
 import (
 	"errors"
 	"fmt"
+	exonetmod "github.com/cryptopunkscc/astrald/mod/exonet"
 	"strings"
 
-	"github.com/cryptopunkscc/astrald/mod/exonet"
+	"github.com/cryptopunkscc/astral-go/api/exonet"
 	"github.com/cryptopunkscc/astrald/mod/gateway"
 )
 
-var _ exonet.Parser = &Module{}
+var _ exonetmod.Parser = &Module{}
 
 // Parse decodes a "gatewayID:targetID" address string into a gateway Endpoint.
 // Returns an error if either identity is unresolvable or if gatewayID equals targetID.
 func (mod *Module) Parse(network string, address string) (exonet.Endpoint, error) {
 	if network != NetworkName {
-		return nil, exonet.ErrUnsupportedNetwork
+		return nil, exonetmod.ErrUnsupportedNetwork
 	}
 
 	var ids = strings.SplitN(address, ":", 2)

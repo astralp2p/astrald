@@ -1,16 +1,17 @@
 package noise
 
 import (
+	"github.com/cryptopunkscc/astral-go/api/exonet"
 	"github.com/cryptopunkscc/astral-go/astral"
 	"github.com/cryptopunkscc/astrald/brontide"
-	"github.com/cryptopunkscc/astrald/mod/exonet"
+	exonetmod "github.com/cryptopunkscc/astrald/mod/exonet"
 )
 
-var _ exonet.Conn = &Conn{}
+var _ exonetmod.Conn = &Conn{}
 
 // Conn is a net.SecureConn authenticated and ecrypted via the noise_xk protocol
 type Conn struct {
-	conn     exonet.Conn
+	conn     exonetmod.Conn
 	brontide *brontide.Conn
 }
 

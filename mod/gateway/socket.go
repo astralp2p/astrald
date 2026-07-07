@@ -3,8 +3,8 @@ package gateway
 import (
 	"io"
 
+	"github.com/cryptopunkscc/astral-go/api/exonet"
 	"github.com/cryptopunkscc/astral-go/astral"
-	"github.com/cryptopunkscc/astrald/mod/exonet"
 )
 
 // Socket describes a raw connection point at the gateway. The recipient opens

@@ -1,12 +1,13 @@
 package tcp
 
 import (
+	exonetmod "github.com/cryptopunkscc/astrald/mod/exonet"
 	"net"
 
-	"github.com/cryptopunkscc/astrald/mod/exonet"
+	"github.com/cryptopunkscc/astral-go/api/exonet"
 )
 
-var _ exonet.Conn = Conn{}
+var _ exonetmod.Conn = Conn{}
 
 // Conn is an exonet.Conn that wraps a net.Conn.
 type Conn struct {

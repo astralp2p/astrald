@@ -2,16 +2,17 @@ package nodes
 
 import (
 	"errors"
+	exonetmod "github.com/cryptopunkscc/astrald/mod/exonet"
 	"io"
 	"math/rand"
 	"sync"
 	"sync/atomic"
 	"time"
 
+	"github.com/cryptopunkscc/astral-go/api/exonet"
 	"github.com/cryptopunkscc/astral-go/astral"
 	"github.com/cryptopunkscc/astral-go/astral/channel"
 	"github.com/cryptopunkscc/astral-go/astral/sig"
-	"github.com/cryptopunkscc/astrald/mod/exonet"
 	"github.com/cryptopunkscc/astrald/mod/nodes/frames"
 )
 
@@ -95,7 +96,7 @@ func (s *Link) Close() error {
 }
 
 func (s *Link) Network() string {
-	if c, ok := s.conn.(exonet.Conn); ok {
+	if c, ok := s.conn.(exonetmod.Conn); ok {
 		if e := c.RemoteEndpoint(); e != nil {
 			return e.Network()
 		}
@@ -107,14 +108,14 @@ func (s *Link) Network() string {
 }
 
 func (s *Link) LocalEndpoint() exonet.Endpoint {
-	if c, ok := s.conn.(exonet.Conn); ok {
+	if c, ok := s.conn.(exonetmod.Conn); ok {
 		return c.LocalEndpoint()
 	}
 	return nil
 }
 
 func (s *Link) RemoteEndpoint() exonet.Endpoint {
-	if c, ok := s.conn.(exonet.Conn); ok {
+	if c, ok := s.conn.(exonetmod.Conn); ok {
 		return c.RemoteEndpoint()
 	}
 

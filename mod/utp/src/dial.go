@@ -2,22 +2,23 @@ package utp
 
 import (
 	"fmt"
+	exonetmod "github.com/cryptopunkscc/astrald/mod/exonet"
 
+	"github.com/cryptopunkscc/astral-go/api/exonet"
 	"github.com/cryptopunkscc/astral-go/astral"
-	"github.com/cryptopunkscc/astrald/mod/exonet"
 	utpmod "github.com/cryptopunkscc/astrald/mod/utp"
 	"github.com/cryptopunkscc/utp"
 )
 
-var _ exonet.Dialer = &Module{}
+var _ exonetmod.Dialer = &Module{}
 
 // Dial establishes a reliable (utp) connection and wraps it as an exonet.Conn.
 func (mod *Module) Dial(ctx *astral.Context, endpoint exonet.Endpoint) (
-	c exonet.Conn, err error) {
+	c exonetmod.Conn, err error) {
 	switch endpoint.Network() {
 	case "utp":
 	default:
-		return nil, exonet.ErrUnsupportedNetwork
+		return nil, exonetmod.ErrUnsupportedNetwork
 	}
 
 	dialer := utp.Dialer{Timeout: mod.config.DialTimeout}

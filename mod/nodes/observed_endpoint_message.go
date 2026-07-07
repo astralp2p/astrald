@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"io"
 
+	"github.com/cryptopunkscc/astral-go/api/exonet"
 	"github.com/cryptopunkscc/astral-go/astral"
-	"github.com/cryptopunkscc/astrald/mod/exonet"
 )
 
 type ObservedEndpointMessage struct {

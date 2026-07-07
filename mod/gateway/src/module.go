@@ -3,15 +3,16 @@ package gateway
 import (
 	"context"
 	"fmt"
+	exonetmod "github.com/cryptopunkscc/astrald/mod/exonet"
 	"time"
 
+	"github.com/cryptopunkscc/astral-go/api/exonet"
 	"github.com/cryptopunkscc/astral-go/astral"
 	"github.com/cryptopunkscc/astral-go/astral/log"
 	"github.com/cryptopunkscc/astral-go/astral/sig"
 	"github.com/cryptopunkscc/astrald/lib/astrald"
 	"github.com/cryptopunkscc/astrald/lib/routing"
 	"github.com/cryptopunkscc/astrald/mod/dir"
-	"github.com/cryptopunkscc/astrald/mod/exonet"
 	"github.com/cryptopunkscc/astrald/mod/gateway"
 	gatewayClient "github.com/cryptopunkscc/astrald/mod/gateway/client"
 	"github.com/cryptopunkscc/astrald/mod/ip"
@@ -38,7 +39,7 @@ const (
 
 type Deps struct {
 	Dir       dir.Module
-	Exonet    exonet.Module
+	Exonet    exonetmod.Module
 	Nearby    nearby.Module
 	Nodes     nodes.Module
 	Scheduler scheduler.Module

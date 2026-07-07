@@ -7,8 +7,8 @@ import (
 	"io"
 	"strings"
 
+	"github.com/cryptopunkscc/astral-go/api/exonet"
 	"github.com/cryptopunkscc/astral-go/astral"
-	"github.com/cryptopunkscc/astrald/mod/exonet"
 )
 
 // Endpoint identifies a routable destination through a specific gateway node:

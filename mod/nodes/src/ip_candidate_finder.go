@@ -3,7 +3,7 @@ package nodes
 import (
 	"time"
 
-	"github.com/cryptopunkscc/astrald/mod/exonet"
+	"github.com/cryptopunkscc/astral-go/api/exonet"
 	"github.com/cryptopunkscc/astrald/mod/ip"
 	"github.com/cryptopunkscc/astrald/mod/nodes"
 )

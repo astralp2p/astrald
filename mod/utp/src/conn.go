@@ -1,7 +1,8 @@
 package utp
 
 import (
-	"github.com/cryptopunkscc/astrald/mod/exonet"
+	"github.com/cryptopunkscc/astral-go/api/exonet"
+	exonetmod "github.com/cryptopunkscc/astrald/mod/exonet"
 	"github.com/cryptopunkscc/utp"
 )
 
@@ -30,7 +31,7 @@ func WrapUtpConn(
 	conn *utp.Conn,
 	remote exonet.Endpoint,
 	local exonet.Endpoint,
-	outbound bool) exonet.Conn {
+	outbound bool) exonetmod.Conn {
 	return WrappedConn{
 		outbound: outbound,
 		Conn:     conn,

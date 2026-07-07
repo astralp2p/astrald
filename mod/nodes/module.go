@@ -2,10 +2,11 @@ package nodes
 
 import (
 	"context"
+	exonetmod "github.com/cryptopunkscc/astrald/mod/exonet"
 	"time"
 
+	"github.com/cryptopunkscc/astral-go/api/exonet"
 	"github.com/cryptopunkscc/astral-go/astral"
-	"github.com/cryptopunkscc/astrald/mod/exonet"
 )
 
 const (
@@ -41,8 +42,8 @@ const (
 // Module manages encrypted links between nodes: establishing them, resolving
 // peer endpoints, and tracking liveness.
 type Module interface {
-	EstablishInboundLink(ctx context.Context, conn exonet.Conn) error
-	EstablishOutboundLink(ctx context.Context, remoteID *astral.Identity, conn exonet.Conn) (Link, error)
+	EstablishInboundLink(ctx context.Context, conn exonetmod.Conn) error
+	EstablishOutboundLink(ctx context.Context, remoteID *astral.Identity, conn exonetmod.Conn) (Link, error)
 
 	AddEndpoint(*astral.Identity, *EndpointWithTTL) error
 	RemoveEndpoint(*astral.Identity, exonet.Endpoint) error

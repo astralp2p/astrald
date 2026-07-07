@@ -2,14 +2,15 @@ package tcp
 
 import (
 	"context"
+	exonetmod "github.com/cryptopunkscc/astrald/mod/exonet"
 	"sync"
 	"time"
 
+	"github.com/cryptopunkscc/astral-go/api/exonet"
 	"github.com/cryptopunkscc/astral-go/astral"
 	"github.com/cryptopunkscc/astral-go/astral/log"
 	"github.com/cryptopunkscc/astral-go/astral/sig"
 	"github.com/cryptopunkscc/astrald/lib/routing"
-	"github.com/cryptopunkscc/astrald/mod/exonet"
 	"github.com/cryptopunkscc/astrald/mod/nodes"
 	"github.com/cryptopunkscc/astrald/mod/tcp"
 	"github.com/cryptopunkscc/astrald/mod/tree"
@@ -31,7 +32,7 @@ type Module struct {
 	mu sync.Mutex
 
 	server             sig.Switch
-	ephemeralListeners sig.Map[astral.Uint16, exonet.EphemeralListener]
+	ephemeralListeners sig.Map[astral.Uint16, exonetmod.EphemeralListener]
 }
 
 // Settings holds live, tree-bound toggles for the module; values may change at runtime
@@ -49,7 +50,7 @@ func (mod *Module) String() string {
 	return tcp.ModuleName
 }
 
-func (mod *Module) acceptAll(ctx context.Context, conn exonet.Conn) (shouldStop bool, err error) {
+func (mod *Module) acceptAll(ctx context.Context, conn exonetmod.Conn) (shouldStop bool, err error) {
 	err = mod.Nodes.EstablishInboundLink(ctx, conn)
 	if err != nil {
 		return false, err
