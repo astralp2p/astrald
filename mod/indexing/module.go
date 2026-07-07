@@ -5,12 +5,6 @@ import "github.com/cryptopunkscc/astral-go/astral"
 const ModuleName = "indexing"
 const DBPrefix = "indexing__"
 
-const (
-	MethodRegisterIndexer = "indexing.register_indexer"
-	MethodSubscribe       = "indexing.subscribe"
-	MethodRemoveIndex     = "indexing.remove_index"
-)
-
 // Module manages indexers that track object membership across named repositories.
 // RegisterIndexer binds a named indexer and returns a nonce used to identify it in subsequent calls.
 // UpdateIndexerState advances the acknowledged version for a repository, signalling sync progress.

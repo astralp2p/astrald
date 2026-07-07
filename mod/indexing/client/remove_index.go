@@ -1,10 +1,10 @@
 package indexing
 
 import (
+	"github.com/cryptopunkscc/astral-go/api/indexing"
 	"github.com/cryptopunkscc/astral-go/astral"
 	"github.com/cryptopunkscc/astral-go/astral/channel"
 	"github.com/cryptopunkscc/astrald/lib/query"
-	"github.com/cryptopunkscc/astrald/mod/indexing"
 )
 
 func (c *Client) RemoveIndex(ctx *astral.Context, nonce astral.Nonce) error {

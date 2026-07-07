@@ -3,10 +3,10 @@ package indexing
 import (
 	"fmt"
 
+	"github.com/cryptopunkscc/astral-go/api/indexing"
 	"github.com/cryptopunkscc/astral-go/astral"
 	"github.com/cryptopunkscc/astral-go/astral/channel"
 	"github.com/cryptopunkscc/astrald/lib/query"
-	"github.com/cryptopunkscc/astrald/mod/indexing"
 )
 
 func (c *Client) RegisterIndexer(ctx *astral.Context, name string) (astral.Nonce, error) {
