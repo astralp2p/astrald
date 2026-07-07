@@ -1,6 +1,7 @@
 package tor
 
 import (
+	"github.com/cryptopunkscc/astral-go/api/tor"
 	"github.com/cryptopunkscc/astral-go/api/tree"
 	"github.com/cryptopunkscc/astral-go/astral"
 	"github.com/cryptopunkscc/astral-go/astral/log"
@@ -9,7 +10,6 @@ import (
 	"github.com/cryptopunkscc/astrald/mod/exonet"
 	"github.com/cryptopunkscc/astrald/mod/nearby"
 	"github.com/cryptopunkscc/astrald/mod/nodes"
-	"github.com/cryptopunkscc/astrald/mod/tor"
 	treemod "github.com/cryptopunkscc/astrald/mod/tree"
 	"golang.org/x/net/proxy"
 )

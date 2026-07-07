@@ -5,9 +5,9 @@ import (
 	"errors"
 	"fmt"
 	"github.com/cryptopunkscc/astral-go/api/exonet"
+	"github.com/cryptopunkscc/astral-go/api/tor"
 	"github.com/cryptopunkscc/astral-go/astral"
 	exonetmod "github.com/cryptopunkscc/astrald/mod/exonet"
-	"github.com/cryptopunkscc/astrald/mod/tor"
 	"strconv"
 	"strings"
 )

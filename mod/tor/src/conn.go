@@ -5,7 +5,7 @@ import (
 	"net"
 
 	"github.com/cryptopunkscc/astral-go/api/exonet"
-	"github.com/cryptopunkscc/astrald/mod/tor"
+	"github.com/cryptopunkscc/astral-go/api/tor"
 )
 
 // Type check
