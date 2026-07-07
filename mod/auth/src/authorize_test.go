@@ -1,6 +1,7 @@
 package auth
 
 import (
+	authmod "github.com/cryptopunkscc/astrald/mod/auth"
 	"io"
 	"testing"
 	"time"
@@ -51,7 +52,7 @@ func testModule(t *testing.T) *Module {
 
 // allowRoot registers a direct rule allowing only root to perform testAction.
 func allowRoot(mod *Module, root *astral.Identity) {
-	mod.Add(auth.Func[*testAction](func(ctx *astral.Context, a *testAction) bool {
+	mod.Add(authmod.Func[*testAction](func(ctx *astral.Context, a *testAction) bool {
 		return a.Actor().IsEqual(root)
 	}))
 }
