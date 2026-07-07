@@ -1,12 +1,13 @@
 package nodes
 
 import (
+	nodesmod "github.com/cryptopunkscc/astrald/mod/nodes"
 	"slices"
 	"sync"
 
+	"github.com/cryptopunkscc/astral-go/api/nodes"
 	"github.com/cryptopunkscc/astral-go/astral"
 	"github.com/cryptopunkscc/astral-go/astral/sig"
-	"github.com/cryptopunkscc/astrald/mod/nodes"
 )
 
 // BasicLinkStrategy dials all known endpoints of the target node in parallel
@@ -20,9 +21,9 @@ type BasicLinkStrategy struct {
 	activeDone chan struct{}
 }
 
-var _ nodes.LinkStrategy = &BasicLinkStrategy{}
+var _ nodesmod.LinkStrategy = &BasicLinkStrategy{}
 
-func (s *BasicLinkStrategy) Name() string { return nodes.StrategyBasic }
+func (s *BasicLinkStrategy) Name() string { return nodesmod.StrategyBasic }
 
 // Signal starts a dialing round in the background; concurrent calls while a round
 // is still active are ignored. The first successful link wins, the rest are closed.
@@ -79,7 +80,7 @@ func (s *BasicLinkStrategy) Signal(ctx *astral.Context) {
 							if _, ok := winner.Swap(nil, link); ok {
 								cancel()
 							} else {
-								link.CloseWithError(nodes.ErrExcessLink)
+								link.CloseWithError(nodesmod.ErrExcessLink)
 							}
 
 							return
@@ -98,7 +99,7 @@ func (s *BasicLinkStrategy) Signal(ctx *astral.Context) {
 
 		name := s.Name()
 		if !s.mod.linkPool.notifyLinkWatchers(link, &name) {
-			link.CloseWithError(nodes.ErrExcessLink)
+			link.CloseWithError(nodesmod.ErrExcessLink)
 		}
 	}()
 }
@@ -140,9 +141,9 @@ type BasicLinkStrategyFactory struct {
 	networks []string
 }
 
-var _ nodes.StrategyFactory = &BasicLinkStrategyFactory{}
+var _ nodesmod.StrategyFactory = &BasicLinkStrategyFactory{}
 
-func (f *BasicLinkStrategyFactory) Build(target *astral.Identity) nodes.LinkStrategy {
+func (f *BasicLinkStrategyFactory) Build(target *astral.Identity) nodesmod.LinkStrategy {
 	return &BasicLinkStrategy{
 		mod:      f.mod,
 		networks: f.networks,

@@ -1,12 +1,13 @@
 package utp
 
 import (
+	"github.com/cryptopunkscc/astral-go/api/nodes"
 	"github.com/cryptopunkscc/astral-go/astral"
 	"github.com/cryptopunkscc/astral-go/astral/sig"
-	"github.com/cryptopunkscc/astrald/mod/nodes"
+	nodesmod "github.com/cryptopunkscc/astrald/mod/nodes"
 )
 
-var _ nodes.EndpointResolver = &Module{}
+var _ nodesmod.EndpointResolver = &Module{}
 
 // ResolveEndpoints returns the local node's own uTP endpoints; yields an empty
 // channel for any other identity.

@@ -1,13 +1,14 @@
 package nodes
 
 import (
+	nodesmod "github.com/cryptopunkscc/astrald/mod/nodes"
 	"sync"
 	"time"
 
+	"github.com/cryptopunkscc/astral-go/api/nodes"
 	"github.com/cryptopunkscc/astral-go/astral"
 	"github.com/cryptopunkscc/astral-go/astral/log"
 	"github.com/cryptopunkscc/astral-go/astral/sig"
-	"github.com/cryptopunkscc/astrald/mod/nodes"
 )
 
 // TorLinkStrategy tries to connect with retries. After quickTimeout it
@@ -28,9 +29,9 @@ type TorLinkStrategy struct {
 	done chan struct{}
 }
 
-var _ nodes.LinkStrategy = &TorLinkStrategy{}
+var _ nodesmod.LinkStrategy = &TorLinkStrategy{}
 
-func (s *TorLinkStrategy) Name() string { return nodes.StrategyTor }
+func (s *TorLinkStrategy) Name() string { return nodesmod.StrategyTor }
 
 // Signal kicks off a connection attempt; idempotent while one is in flight.
 func (s *TorLinkStrategy) Signal(ctx *astral.Context) {
@@ -123,7 +124,7 @@ func (s *TorLinkStrategy) deliverLink(link *Link) {
 
 	name := s.Name()
 	if !s.mod.linkPool.notifyLinkWatchers(link, &name) {
-		link.CloseWithError(nodes.ErrExcessLink)
+		link.CloseWithError(nodesmod.ErrExcessLink)
 	}
 }
 
@@ -232,9 +233,9 @@ type TorLinkStrategyFactory struct {
 	config  TorLinkStrategyConfig
 }
 
-var _ nodes.StrategyFactory = &TorLinkStrategyFactory{}
+var _ nodesmod.StrategyFactory = &TorLinkStrategyFactory{}
 
-func (f *TorLinkStrategyFactory) Build(target *astral.Identity) nodes.LinkStrategy {
+func (f *TorLinkStrategyFactory) Build(target *astral.Identity) nodesmod.LinkStrategy {
 	return &TorLinkStrategy{
 		mod:               f.mod,
 		log:               f.mod.log.AppendTag(log.Tag("tor")),

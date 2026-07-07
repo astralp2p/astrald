@@ -2,13 +2,14 @@ package nodes
 
 import (
 	"github.com/cryptopunkscc/astral-go/api/exonet"
+	"github.com/cryptopunkscc/astral-go/api/nodes"
 	"github.com/cryptopunkscc/astral-go/astral"
-	"github.com/cryptopunkscc/astrald/mod/nodes"
+	nodesmod "github.com/cryptopunkscc/astrald/mod/nodes"
 	"github.com/cryptopunkscc/astrald/mod/scheduler"
 )
 
 var _ scheduler.Task = &CreateLinkTask{}
-var _ nodes.CreateLinkTask = &CreateLinkTask{}
+var _ nodesmod.CreateLinkTask = &CreateLinkTask{}
 
 type CreateLinkTask struct {
 	mod      *Module
@@ -18,7 +19,7 @@ type CreateLinkTask struct {
 	Err      error
 }
 
-func (m *Module) NewCreateLinkTask(target *astral.Identity, endpoint exonet.Endpoint) nodes.CreateLinkTask {
+func (m *Module) NewCreateLinkTask(target *astral.Identity, endpoint exonet.Endpoint) nodesmod.CreateLinkTask {
 	return &CreateLinkTask{
 		mod:      m,
 		Target:   target,

@@ -1,9 +1,9 @@
 package nodes
 
 import (
+	"github.com/cryptopunkscc/astral-go/api/nodes"
 	"github.com/cryptopunkscc/astral-go/astral/fmt"
 	"github.com/cryptopunkscc/astral-go/astral/log/theme"
-	"github.com/cryptopunkscc/astrald/mod/nodes"
 )
 
 type EndpointView struct {

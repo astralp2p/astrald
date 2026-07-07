@@ -4,8 +4,8 @@ import (
 	"time"
 
 	"github.com/cryptopunkscc/astral-go/api/auth"
+	"github.com/cryptopunkscc/astral-go/api/nodes"
 	"github.com/cryptopunkscc/astral-go/astral"
-	"github.com/cryptopunkscc/astrald/mod/nodes"
 )
 
 // NewAppContract creates an app contract granting RelayForAction from app to node.

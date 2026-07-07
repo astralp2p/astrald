@@ -5,7 +5,7 @@ import (
 
 	"github.com/cryptopunkscc/astral-go/api/exonet"
 	"github.com/cryptopunkscc/astral-go/api/ip"
-	"github.com/cryptopunkscc/astrald/mod/nodes"
+	"github.com/cryptopunkscc/astral-go/api/nodes"
 )
 
 const ipCacheSize = 8

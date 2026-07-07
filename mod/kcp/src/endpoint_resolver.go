@@ -1,15 +1,16 @@
 package kcp
 
 import (
+	nodesmod "github.com/cryptopunkscc/astrald/mod/nodes"
 	"time"
 
 	"github.com/cryptopunkscc/astral-go/api/kcp"
+	"github.com/cryptopunkscc/astral-go/api/nodes"
 	"github.com/cryptopunkscc/astral-go/astral"
 	"github.com/cryptopunkscc/astral-go/astral/sig"
-	"github.com/cryptopunkscc/astrald/mod/nodes"
 )
 
-var _ nodes.EndpointResolver = &Module{}
+var _ nodesmod.EndpointResolver = &Module{}
 
 // ResolveEndpoints returns KCP endpoints only for the local node identity;
 // requests for any other identity yield an empty channel.

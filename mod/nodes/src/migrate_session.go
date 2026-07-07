@@ -1,9 +1,9 @@
 package nodes
 
 import (
+	"github.com/cryptopunkscc/astral-go/api/nodes"
 	"github.com/cryptopunkscc/astral-go/astral"
 	"github.com/cryptopunkscc/astrald/lib/astrald"
-	"github.com/cryptopunkscc/astrald/mod/nodes"
 	nodesClient "github.com/cryptopunkscc/astrald/mod/nodes/client"
 )
 
