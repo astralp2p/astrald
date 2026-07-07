@@ -7,7 +7,7 @@ import (
 	"github.com/cryptopunkscc/astral-go/api/kcp"
 	"github.com/cryptopunkscc/astral-go/api/nodes"
 	"github.com/cryptopunkscc/astral-go/astral"
-	"github.com/cryptopunkscc/astral-go/astral/sig"
+	"github.com/cryptopunkscc/astral-go/sig"
 )
 
 var _ nodesmod.EndpointResolver = &Module{}

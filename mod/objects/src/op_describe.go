@@ -7,8 +7,8 @@ import (
 
 	"github.com/cryptopunkscc/astral-go/astral"
 	"github.com/cryptopunkscc/astral-go/astral/channel"
-	"github.com/cryptopunkscc/astral-go/astral/sig"
 	"github.com/cryptopunkscc/astral-go/lib/routing"
+	"github.com/cryptopunkscc/astral-go/sig"
 )
 
 type opDescribeArgs struct {

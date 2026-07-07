@@ -6,7 +6,7 @@ import (
 
 	"github.com/cryptopunkscc/astral-go/api/objects"
 	"github.com/cryptopunkscc/astral-go/astral"
-	"github.com/cryptopunkscc/astral-go/astral/sig"
+	"github.com/cryptopunkscc/astral-go/sig"
 )
 
 // Find fans the query out to all registered finders in parallel and merges the

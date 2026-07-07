@@ -4,7 +4,7 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/cryptopunkscc/astral-go/astral/sig"
+	"github.com/cryptopunkscc/astral-go/sig"
 )
 
 func TestPathUnder(t *testing.T) {

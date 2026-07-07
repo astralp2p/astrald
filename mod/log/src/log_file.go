@@ -9,7 +9,7 @@ import (
 
 	"github.com/cryptopunkscc/astral-go/astral/channel"
 	"github.com/cryptopunkscc/astral-go/astral/log"
-	"github.com/cryptopunkscc/astral-go/astral/streams"
+	"github.com/cryptopunkscc/astral-go/streams"
 )
 
 type LogFile struct {

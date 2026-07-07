@@ -3,7 +3,7 @@ package scheduler
 import (
 	"sync"
 
-	"github.com/cryptopunkscc/astral-go/astral/sig"
+	"github.com/cryptopunkscc/astral-go/sig"
 )
 
 // PoolLocker is a scheduler dependency that locks and releases items in a sig.Pool

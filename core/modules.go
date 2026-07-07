@@ -11,7 +11,7 @@ import (
 
 	"github.com/cryptopunkscc/astral-go/astral"
 	log2 "github.com/cryptopunkscc/astral-go/astral/log"
-	"github.com/cryptopunkscc/astral-go/astral/sig"
+	"github.com/cryptopunkscc/astral-go/sig"
 	"github.com/cryptopunkscc/astrald/core/assets"
 	"github.com/cryptopunkscc/astrald/debug"
 )

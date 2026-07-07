@@ -5,7 +5,7 @@ import (
 	"io"
 
 	"github.com/cryptopunkscc/astral-go/astral"
-	"github.com/cryptopunkscc/astral-go/astral/streams"
+	"github.com/cryptopunkscc/astral-go/streams"
 )
 
 var _ astral.Object = &Broadcast{}

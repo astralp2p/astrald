@@ -11,7 +11,7 @@ import (
 
 	"github.com/cryptopunkscc/astral-go/api/objects"
 	"github.com/cryptopunkscc/astral-go/astral"
-	"github.com/cryptopunkscc/astral-go/astral/sig"
+	"github.com/cryptopunkscc/astral-go/sig"
 	"github.com/cryptopunkscc/astrald/lib/paths"
 	"github.com/cryptopunkscc/astrald/mod/fs"
 )
