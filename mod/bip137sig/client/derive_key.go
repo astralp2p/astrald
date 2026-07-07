@@ -1,11 +1,11 @@
 package bip137sig
 
 import (
+	"github.com/cryptopunkscc/astral-go/api/bip137sig"
 	"github.com/cryptopunkscc/astral-go/api/crypto"
 	"github.com/cryptopunkscc/astral-go/astral"
 	"github.com/cryptopunkscc/astral-go/astral/channel"
 	"github.com/cryptopunkscc/astrald/lib/query"
-	"github.com/cryptopunkscc/astrald/mod/bip137sig"
 )
 
 func (client *Client) DeriveKey(ctx *astral.Context, path string, seed *bip137sig.Seed) (privateKey *crypto.PrivateKey, err error) {

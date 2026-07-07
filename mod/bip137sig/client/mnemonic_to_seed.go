@@ -3,10 +3,10 @@ package bip137sig
 import (
 	"strings"
 
+	"github.com/cryptopunkscc/astral-go/api/bip137sig"
 	"github.com/cryptopunkscc/astral-go/astral"
 	"github.com/cryptopunkscc/astral-go/astral/channel"
 	"github.com/cryptopunkscc/astrald/lib/query"
-	"github.com/cryptopunkscc/astrald/mod/bip137sig"
 )
 
 func (client *Client) MnemonicToSeed(ctx *astral.Context, mnemonic []string, passphrase string) (seed *bip137sig.Seed, err error) {
