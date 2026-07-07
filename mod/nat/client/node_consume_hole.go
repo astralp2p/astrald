@@ -1,10 +1,10 @@
 package nat
 
 import (
+	"github.com/cryptopunkscc/astral-go/api/nat"
 	"github.com/cryptopunkscc/astral-go/astral"
 	"github.com/cryptopunkscc/astral-go/astral/channel"
 	"github.com/cryptopunkscc/astrald/lib/query"
-	"github.com/cryptopunkscc/astrald/mod/nat"
 )
 
 // NodeConsumeHole claims a hole identified by pair; when target is nil the caller acts as responder and drives

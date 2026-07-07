@@ -1,10 +1,10 @@
 package nat
 
 import (
+	"github.com/cryptopunkscc/astral-go/api/nat"
 	"github.com/cryptopunkscc/astral-go/astral"
 	"github.com/cryptopunkscc/astral-go/astral/channel"
 	"github.com/cryptopunkscc/astrald/lib/query"
-	"github.com/cryptopunkscc/astrald/mod/nat"
 )
 
 // ListHoles returns known NAT holes, optionally filtered to those involving the peer identity string with.

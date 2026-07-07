@@ -1,10 +1,10 @@
 package nat
 
 import (
+	"github.com/cryptopunkscc/astral-go/api/nat"
 	"github.com/cryptopunkscc/astral-go/astral"
 	"github.com/cryptopunkscc/astral-go/astral/channel"
 	"github.com/cryptopunkscc/astrald/lib/query"
-	"github.com/cryptopunkscc/astrald/mod/nat"
 )
 
 func (client *Client) SetEnabled(ctx *astral.Context, enabled bool) error {

@@ -7,9 +7,8 @@ import (
 	"time"
 
 	"github.com/cryptopunkscc/astral-go/api/ip"
+	"github.com/cryptopunkscc/astral-go/api/nat"
 	"github.com/cryptopunkscc/astral-go/astral"
-	"github.com/cryptopunkscc/astrald/mod/nat"
-
 	"github.com/stretchr/testify/require"
 )
 
