@@ -1,46 +1,12 @@
 package objects
 
 import (
+	"github.com/cryptopunkscc/astral-go/api/objects"
 	"github.com/cryptopunkscc/astral-go/astral"
 )
 
 const (
-	ModuleName   = "objects"
-	DBPrefix     = "objects__"
-	MethodCreate = "objects.create"
-
-	MethodNew               = "objects.new"
-	MethodLoad              = "objects.load"
-	MethodStore             = "objects.store"
-	MethodDelete            = "objects.delete"
-	MethodPurge             = "objects.purge"
-	MethodContains          = "objects.contains"
-	MethodScan              = "objects.scan"
-	MethodSearch            = "objects.search"
-	MethodDescribe          = "objects.describe"
-	MethodFind              = "objects.find"
-	MethodRegisterSearcher  = "objects.register_searcher"
-	MethodRegisterDescriber = "objects.register_describer"
-	MethodRegisterFinder    = "objects.register_finder"
-	MethodRegisterBlueprint = "objects.register_blueprint"
-	MethodProbe             = "objects.probe"
-	MethodRead              = "objects.read"
-	MethodGetType           = "objects.get_type"
-	MethodPush              = "objects.push"
-	MethodNewMem            = "objects.new_mem"
-	MethodRepositories      = "objects.repositories"
-	MethodRemoveRepository  = "objects.remove_repository"
-	MethodBlueprints        = "objects.blueprints"
-	MethodEcho              = "objects.echo"
-
-	RepoMain      = "main"      // everything
-	RepoDevice    = "device"    // device: memory, local, removable
-	RepoMemory    = "memory"    // memcache repos
-	RepoLocal     = "local"     // local storage
-	RepoRemovable = "removable" // removable storage
-	RepoVirtual   = "virtual"   // virtual repos (archives, encryption, chunks)
-	RepoNetwork   = "network"   // network repos
-	RepoSystem    = "system"
+	DBPrefix = "objects__"
 )
 
 // MaxObjectSize is the maximum size of an object that can be loaded into memory
@@ -77,14 +43,14 @@ type Module interface {
 	// Store stores an object in a repository
 	Store(*astral.Context, Repository, astral.Object) (*astral.ObjectID, error)
 
-	AddDescriber(Describer) error
-	Describe(*astral.Context, *astral.ObjectID) (<-chan *Descriptor, error)
+	AddDescriber(objects.Describer) error
+	Describe(*astral.Context, *astral.ObjectID) (<-chan *objects.Descriptor, error)
 
-	Search(ctx *astral.Context, query SearchQuery) (<-chan *SearchResult, error)
-	AddSearcher(Searcher) error
-	AddSearchPreprocessor(SearchPreprocessor) error
+	Search(ctx *astral.Context, query objects.SearchQuery) (<-chan *objects.SearchResult, error)
+	AddSearcher(objects.Searcher) error
+	AddSearchPreprocessor(objects.SearchPreprocessor) error
 
-	AddFinder(Finder) error
+	AddFinder(objects.Finder) error
 	Find(*astral.Context, *astral.ObjectID) (<-chan *astral.Identity, error)
 
 	AddHolder(Holder) error
@@ -96,7 +62,7 @@ type Module interface {
 	Push(ctx *astral.Context, target *astral.Identity, obj astral.Object) error
 
 	// Probe probes the object (checks type and latency)
-	Probe(ctx *astral.Context, repo Repository, objectID *astral.ObjectID) (probe *Probe, err error)
+	Probe(ctx *astral.Context, repo Repository, objectID *astral.ObjectID) (probe *objects.Probe, err error)
 
 	// Deprecated: Use Probe instead.
 	GetType(ctx *astral.Context, objectID *astral.ObjectID) (objectType string, err error)
@@ -115,10 +81,6 @@ type Drop interface {
 	SenderID() *astral.Identity
 	Object() astral.Object
 	Accept(save bool) error
-}
-
-type Describer interface {
-	DescribeObject(*astral.Context, *astral.ObjectID) (<-chan *Descriptor, error)
 }
 
 type Holder interface {

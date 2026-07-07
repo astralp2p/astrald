@@ -1,15 +1,16 @@
 package archives
 
 import (
+	"github.com/cryptopunkscc/astral-go/api/objects"
 	"github.com/cryptopunkscc/astral-go/astral"
 	"github.com/cryptopunkscc/astrald/core"
 	"github.com/cryptopunkscc/astrald/mod/auth"
-	"github.com/cryptopunkscc/astrald/mod/objects"
+	objectsmod "github.com/cryptopunkscc/astrald/mod/objects"
 )
 
 type Deps struct {
 	Auth    auth.Module
-	Objects objects.Module
+	Objects objectsmod.Module
 }
 
 func (mod *Module) LoadDependencies(*astral.Context) (err error) {

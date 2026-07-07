@@ -3,12 +3,12 @@ package objects
 import (
 	stdfmt "fmt"
 
+	"github.com/cryptopunkscc/astral-go/api/objects"
 	"github.com/cryptopunkscc/astral-go/astral"
 	"github.com/cryptopunkscc/astral-go/astral/fmt"
 	"github.com/cryptopunkscc/astral-go/astral/log/styles"
 	"github.com/cryptopunkscc/astral-go/astral/log/theme"
 	"github.com/cryptopunkscc/astrald/mod/log/views"
-	"github.com/cryptopunkscc/astrald/mod/objects"
 )
 
 type RepositoryInfoView struct {

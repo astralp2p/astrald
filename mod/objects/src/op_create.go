@@ -1,10 +1,11 @@
 package objects
 
 import (
+	"github.com/cryptopunkscc/astral-go/api/objects"
 	"github.com/cryptopunkscc/astral-go/astral"
 	"github.com/cryptopunkscc/astral-go/astral/channel"
 	"github.com/cryptopunkscc/astrald/lib/routing"
-	"github.com/cryptopunkscc/astrald/mod/objects"
+	objectsmod "github.com/cryptopunkscc/astrald/mod/objects"
 )
 
 type opCreateArgs struct {
@@ -32,7 +33,7 @@ func (mod *Module) OpCreate(ctx *astral.Context, q *routing.IncomingQuery, args 
 	}
 
 	// create a new object in the repo
-	w, err := repo.Create(ctx, &objects.CreateOpts{Alloc: int(args.Alloc)})
+	w, err := repo.Create(ctx, &objectsmod.CreateOpts{Alloc: int(args.Alloc)})
 	if err != nil {
 		return ch.Send(astral.NewError(err.Error()))
 	}

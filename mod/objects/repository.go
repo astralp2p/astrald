@@ -1,6 +1,7 @@
 package objects
 
 import (
+	"github.com/cryptopunkscc/astral-go/api/objects"
 	"github.com/cryptopunkscc/astral-go/astral"
 )
 
@@ -10,7 +11,7 @@ type Repository interface {
 	Label() string
 
 	// Create creates an object in the repository.
-	Create(ctx *astral.Context, opts *CreateOpts) (Writer, error)
+	Create(ctx *astral.Context, opts *CreateOpts) (objects.Writer, error)
 
 	// Contains checks if the repository contains the specified object.
 	Contains(ctx *astral.Context, objectID *astral.ObjectID) (bool, error)

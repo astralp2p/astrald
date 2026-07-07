@@ -3,9 +3,9 @@ package archives
 import (
 	"errors"
 
+	"github.com/cryptopunkscc/astral-go/api/objects"
 	"github.com/cryptopunkscc/astral-go/astral"
 	"github.com/cryptopunkscc/astrald/mod/archives"
-	"github.com/cryptopunkscc/astrald/mod/objects"
 )
 
 var _ objects.Describer = &Module{}

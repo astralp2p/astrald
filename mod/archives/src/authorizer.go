@@ -2,8 +2,8 @@ package archives
 
 import (
 	"github.com/cryptopunkscc/astral-go/api/auth"
+	"github.com/cryptopunkscc/astral-go/api/objects"
 	"github.com/cryptopunkscc/astral-go/astral"
-	"github.com/cryptopunkscc/astrald/mod/objects"
 )
 
 // AuthorizeObjectsRead grants read access to an archive entry by recursively

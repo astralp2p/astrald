@@ -1,12 +1,13 @@
 package objects
 
 import (
+	objectsmod "github.com/cryptopunkscc/astrald/mod/objects"
 	"sync"
 
+	"github.com/cryptopunkscc/astral-go/api/objects"
 	"github.com/cryptopunkscc/astral-go/astral"
 	"github.com/cryptopunkscc/astral-go/astral/sig"
 	"github.com/cryptopunkscc/astrald/lib/astrald"
-	"github.com/cryptopunkscc/astrald/mod/objects"
 	objectscli "github.com/cryptopunkscc/astrald/mod/objects/client"
 )
 
@@ -109,7 +110,7 @@ func (mod *Module) Search(ctx *astral.Context, query objects.SearchQuery) (<-cha
 
 // AddSearcher registers a searcher, deduplicating by source identity so each source is added at most once.
 func (mod *Module) AddSearcher(searcher objects.Searcher) error {
-	source, ok, err := objects.SourceIdentity(searcher)
+	source, ok, err := objectsmod.SourceIdentity(searcher)
 	if err != nil {
 		return err
 	}

@@ -2,6 +2,7 @@ package user
 
 import (
 	"github.com/cryptopunkscc/astral-go/api/nodes"
+	"github.com/cryptopunkscc/astral-go/api/objects"
 	"github.com/cryptopunkscc/astral-go/astral"
 	"github.com/cryptopunkscc/astrald/core"
 	"github.com/cryptopunkscc/astrald/mod/apphost"
@@ -10,7 +11,7 @@ import (
 	"github.com/cryptopunkscc/astrald/mod/dir"
 	"github.com/cryptopunkscc/astrald/mod/nearby"
 	nodesmod "github.com/cryptopunkscc/astrald/mod/nodes"
-	"github.com/cryptopunkscc/astrald/mod/objects"
+	objectsmod "github.com/cryptopunkscc/astrald/mod/objects"
 	"github.com/cryptopunkscc/astrald/mod/scheduler"
 	"github.com/cryptopunkscc/astrald/mod/shell"
 	"github.com/cryptopunkscc/astrald/mod/tree"
@@ -22,7 +23,7 @@ type Deps struct {
 	Auth      auth.Module
 	Crypto    crypto.Module
 	Dir       dir.Module
-	Objects   objects.Module
+	Objects   objectsmod.Module
 	Nodes     nodesmod.Module
 	Scheduler scheduler.Module
 	Shell     shell.Module

@@ -1,18 +1,19 @@
 package fs
 
 import (
+	"github.com/cryptopunkscc/astral-go/api/objects"
 	"github.com/cryptopunkscc/astral-go/astral"
 	"github.com/cryptopunkscc/astrald/core"
 	"github.com/cryptopunkscc/astrald/mod/auth"
 	"github.com/cryptopunkscc/astrald/mod/dir"
-	"github.com/cryptopunkscc/astrald/mod/objects"
+	objectsmod "github.com/cryptopunkscc/astrald/mod/objects"
 	"github.com/cryptopunkscc/astrald/mod/shell"
 )
 
 type Deps struct {
 	Auth    auth.Module
 	Dir     dir.Module
-	Objects objects.Module
+	Objects objectsmod.Module
 	Shell   shell.Module
 }
 
@@ -27,7 +28,7 @@ func (mod *Module) LoadDependencies(*astral.Context) (err error) {
 
 	// configure repositories from the config file
 	for name, cfg := range mod.config.Repos {
-		var repo objects.Repository
+		var repo objectsmod.Repository
 
 		if cfg.Writable {
 			repo = NewRepository(mod, cfg.Label, cfg.Path)

@@ -1,11 +1,12 @@
 package objects
 
 import (
+	objectsmod "github.com/cryptopunkscc/astrald/mod/objects"
 	"sync"
 
+	"github.com/cryptopunkscc/astral-go/api/objects"
 	"github.com/cryptopunkscc/astral-go/astral"
 	"github.com/cryptopunkscc/astral-go/astral/sig"
-	"github.com/cryptopunkscc/astrald/mod/objects"
 )
 
 // Find fans the query out to all registered finders in parallel and merges the
@@ -56,7 +57,7 @@ func (mod *Module) Find(ctx *astral.Context, objectID *astral.ObjectID) (<-chan 
 // AddFinder registers a finder, skipping it if one with the same source
 // identity is already registered.
 func (mod *Module) AddFinder(finder objects.Finder) error {
-	source, ok, err := objects.SourceIdentity(finder)
+	source, ok, err := objectsmod.SourceIdentity(finder)
 	if err != nil {
 		return err
 	}

@@ -1,11 +1,12 @@
 package objects
 
 import (
+	objectsmod "github.com/cryptopunkscc/astrald/mod/objects"
 	"sync"
 
+	"github.com/cryptopunkscc/astral-go/api/objects"
 	"github.com/cryptopunkscc/astral-go/astral"
 	"github.com/cryptopunkscc/astral-go/astral/sig"
-	"github.com/cryptopunkscc/astrald/mod/objects"
 )
 
 // Describe fans the query out to all registered describers in parallel and
@@ -56,7 +57,7 @@ func (mod *Module) Describe(ctx *astral.Context, objectID *astral.ObjectID) (<-c
 // AddDescriber registers a describer, skipping it if one with the same source
 // identity is already registered.
 func (mod *Module) AddDescriber(describer objects.Describer) error {
-	source, ok, err := objects.SourceIdentity(describer)
+	source, ok, err := objectsmod.SourceIdentity(describer)
 	if err != nil {
 		return err
 	}

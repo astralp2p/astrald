@@ -3,9 +3,9 @@ package objects
 import (
 	"io"
 
+	"github.com/cryptopunkscc/astral-go/api/objects"
 	"github.com/cryptopunkscc/astral-go/astral"
 	"github.com/cryptopunkscc/astrald/lib/query"
-	"github.com/cryptopunkscc/astrald/mod/objects"
 )
 
 // Read returns a stream of the object's bytes from offset; caller must Close it.

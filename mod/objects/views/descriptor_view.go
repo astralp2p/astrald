@@ -1,8 +1,8 @@
 package objects
 
 import (
+	"github.com/cryptopunkscc/astral-go/api/objects"
 	"github.com/cryptopunkscc/astral-go/astral/fmt"
-	"github.com/cryptopunkscc/astrald/mod/objects"
 )
 
 type DescriptorView struct {

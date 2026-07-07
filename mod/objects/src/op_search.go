@@ -2,13 +2,14 @@ package objects
 
 import (
 	"fmt"
+	objectsmod "github.com/cryptopunkscc/astrald/mod/objects"
 	"time"
 
+	"github.com/cryptopunkscc/astral-go/api/objects"
 	"github.com/cryptopunkscc/astral-go/astral"
 	"github.com/cryptopunkscc/astral-go/astral/channel"
 	"github.com/cryptopunkscc/astral-go/astral/sig"
 	"github.com/cryptopunkscc/astrald/lib/routing"
-	"github.com/cryptopunkscc/astrald/mod/objects"
 )
 
 type SearchArgs struct {
@@ -28,7 +29,7 @@ func (mod *Module) OpSearch(ctx *astral.Context, q *routing.IncomingQuery, args 
 	defer ch.Close()
 
 	// find repo if provided
-	var repo objects.Repository
+	var repo objectsmod.Repository
 	if len(args.Repo) > 0 {
 		repo = mod.GetRepository(args.Repo)
 		if repo == nil {

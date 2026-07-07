@@ -2,11 +2,12 @@ package mobile
 
 import (
 	"errors"
+	objectsmod "github.com/cryptopunkscc/astrald/mod/objects"
 	"io"
 
+	"github.com/cryptopunkscc/astral-go/api/objects"
 	"github.com/cryptopunkscc/astral-go/astral"
 	"github.com/cryptopunkscc/astrald/core"
-	"github.com/cryptopunkscc/astrald/mod/objects"
 )
 
 // OpenObject opens the object's data through the node's objects module,
@@ -31,7 +32,7 @@ func (n *Node) OpenObject(objectID string, offset int64) (*ObjectReader, error) 
 		return nil, err
 	}
 
-	mod, err := core.Load[objects.Module](cnode, objects.ModuleName)
+	mod, err := core.Load[objectsmod.Module](cnode, objects.ModuleName)
 	if err != nil {
 		return nil, err
 	}
@@ -61,14 +62,14 @@ func (n *Node) CreateObject() (*ObjectWriter, error) {
 		return nil, errors.New("node not running")
 	}
 
-	mod, err := core.Load[objects.Module](cnode, objects.ModuleName)
+	mod, err := core.Load[objectsmod.Module](cnode, objects.ModuleName)
 	if err != nil {
 		return nil, err
 	}
 
 	ctx := astral.NewContext(nil).WithIdentity(cnode.Identity())
 
-	w, err := mod.WriteDefault().Create(ctx, &objects.CreateOpts{})
+	w, err := mod.WriteDefault().Create(ctx, &objectsmod.CreateOpts{})
 	if err != nil {
 		return nil, err
 	}
