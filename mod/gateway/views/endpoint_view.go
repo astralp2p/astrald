@@ -1,9 +1,9 @@
 package gateway
 
 import (
+	"github.com/cryptopunkscc/astral-go/api/gateway"
 	"github.com/cryptopunkscc/astral-go/astral/fmt"
 	"github.com/cryptopunkscc/astral-go/astral/log/theme"
-	"github.com/cryptopunkscc/astrald/mod/gateway"
 )
 
 type EndpointView struct {

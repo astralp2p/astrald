@@ -1,12 +1,13 @@
 package gateway
 
 import (
+	gatewaymod "github.com/cryptopunkscc/astrald/mod/gateway"
 	"time"
 
+	"github.com/cryptopunkscc/astral-go/api/gateway"
 	"github.com/cryptopunkscc/astral-go/astral"
 	"github.com/cryptopunkscc/astral-go/astral/sig"
 	"github.com/cryptopunkscc/astrald/mod/exonet"
-	"github.com/cryptopunkscc/astrald/mod/gateway"
 )
 
 // ConnPool maintains minIdleConns idle socket connections to a gateway.
@@ -52,7 +53,7 @@ func (p *ConnPool) Run() error {
 						return p.ctx.Err()
 					case count := <-retry.Retry():
 						if count >= maxDialFails {
-							return gateway.ErrSocketUnreachable
+							return gatewaymod.ErrSocketUnreachable
 						}
 					}
 					continue

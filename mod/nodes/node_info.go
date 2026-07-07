@@ -6,12 +6,12 @@ import (
 	"io"
 
 	"github.com/cryptopunkscc/astral-go/api/exonet"
+	"github.com/cryptopunkscc/astral-go/api/gateway"
 	"github.com/cryptopunkscc/astral-go/api/tcp"
 	"github.com/cryptopunkscc/astral-go/api/tor"
 	"github.com/cryptopunkscc/astral-go/api/utp"
 	"github.com/cryptopunkscc/astral-go/astral"
 	"github.com/cryptopunkscc/astral-go/astral/streams"
-	"github.com/cryptopunkscc/astrald/mod/gateway"
 	"github.com/jxskiss/base62"
 )
 

@@ -1,10 +1,10 @@
 package gateway
 
 import (
+	gw "github.com/cryptopunkscc/astral-go/api/gateway"
 	"github.com/cryptopunkscc/astral-go/astral"
 	"github.com/cryptopunkscc/astral-go/astral/channel"
 	"github.com/cryptopunkscc/astrald/lib/query"
-	gw "github.com/cryptopunkscc/astrald/mod/gateway"
 )
 
 // Register announces this node to the gateway with the given visibility and returns the Socket that represents the registration.

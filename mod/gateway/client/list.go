@@ -1,10 +1,10 @@
 package gateway
 
 import (
+	gw "github.com/cryptopunkscc/astral-go/api/gateway"
 	"github.com/cryptopunkscc/astral-go/astral"
 	"github.com/cryptopunkscc/astral-go/astral/channel"
 	"github.com/cryptopunkscc/astrald/lib/query"
-	gw "github.com/cryptopunkscc/astrald/mod/gateway"
 )
 
 func (c *Client) List(ctx *astral.Context) ([]*astral.Identity, error) {

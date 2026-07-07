@@ -1,15 +1,16 @@
 package gateway
 
 import (
+	gatewaymod "github.com/cryptopunkscc/astrald/mod/gateway"
 	"time"
 
+	"github.com/cryptopunkscc/astral-go/api/gateway"
 	"github.com/cryptopunkscc/astral-go/astral"
-	"github.com/cryptopunkscc/astrald/mod/gateway"
 )
 
 func (mod *Module) reserveConn(caller *astral.Identity, target *astral.Identity, network string) (gateway.Socket, error) {
 	if !mod.canGateway(caller) {
-		return gateway.Socket{}, gateway.ErrGatewayDenied
+		return gateway.Socket{}, gatewaymod.ErrGatewayDenied
 	}
 
 	endpoint, err := mod.getGatewayEndpoint(network)
@@ -19,12 +20,12 @@ func (mod *Module) reserveConn(caller *astral.Identity, target *astral.Identity,
 
 	node, ok := mod.registeredNodeByIdentity(target)
 	if !ok {
-		return gateway.Socket{}, gateway.ErrTargetNotReachable
+		return gateway.Socket{}, gatewaymod.ErrTargetNotReachable
 	}
 
 	reserved, ok := node.claimConn()
 	if !ok {
-		return gateway.Socket{}, gateway.ErrTargetNotReachable
+		return gateway.Socket{}, gatewaymod.ErrTargetNotReachable
 	}
 
 	c := &connector{

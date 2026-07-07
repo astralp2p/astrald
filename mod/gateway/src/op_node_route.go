@@ -3,10 +3,10 @@ package gateway
 import (
 	"context"
 
+	"github.com/cryptopunkscc/astral-go/api/gateway"
 	"github.com/cryptopunkscc/astral-go/astral"
 	"github.com/cryptopunkscc/astrald/lib/query"
 	"github.com/cryptopunkscc/astrald/lib/routing"
-	"github.com/cryptopunkscc/astrald/mod/gateway"
 )
 
 type opNodeRouteArgs struct {

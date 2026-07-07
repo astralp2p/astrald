@@ -7,7 +7,7 @@ import (
 	"strings"
 
 	"github.com/cryptopunkscc/astral-go/api/exonet"
-	"github.com/cryptopunkscc/astrald/mod/gateway"
+	"github.com/cryptopunkscc/astral-go/api/gateway"
 )
 
 var _ exonetmod.Parser = &Module{}

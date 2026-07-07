@@ -2,12 +2,13 @@ package gateway
 
 import (
 	"github.com/cryptopunkscc/astral-go/api/exonet"
+	"github.com/cryptopunkscc/astral-go/api/gateway"
 	"github.com/cryptopunkscc/astral-go/astral"
 	"github.com/cryptopunkscc/astral-go/astral/channel"
 	"github.com/cryptopunkscc/astrald/lib/astrald"
 	"github.com/cryptopunkscc/astrald/lib/query"
 	exonetmod "github.com/cryptopunkscc/astrald/mod/exonet"
-	"github.com/cryptopunkscc/astrald/mod/gateway"
+	gatewaymod "github.com/cryptopunkscc/astrald/mod/gateway"
 	gatewayClient "github.com/cryptopunkscc/astrald/mod/gateway/client"
 )
 
@@ -27,7 +28,7 @@ func (mod *Module) Dial(ctx *astral.Context, endpoint exonet.Endpoint) (exonetmo
 	}
 
 	if gwEndpoint.GatewayID.IsEqual(mod.node.Identity()) {
-		return nil, gateway.ErrInvalidGateway
+		return nil, gatewaymod.ErrInvalidGateway
 	}
 
 	ctx = ctx.IncludeZone(astral.ZoneNetwork)
