@@ -2,8 +2,8 @@ package utp
 
 import (
 	"github.com/cryptopunkscc/astral-go/api/exonet"
+	"github.com/cryptopunkscc/astral-go/api/utp"
 	exonetmod "github.com/cryptopunkscc/astrald/mod/exonet"
-	"github.com/cryptopunkscc/astrald/mod/utp"
 )
 
 func (mod *Module) Parse(network string, address string) (exonet.Endpoint, error) {

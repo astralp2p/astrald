@@ -5,7 +5,7 @@ import (
 	exonetmod "github.com/cryptopunkscc/astrald/mod/exonet"
 
 	"github.com/cryptopunkscc/astral-go/api/exonet"
-	"github.com/cryptopunkscc/astrald/mod/utp"
+	"github.com/cryptopunkscc/astral-go/api/utp"
 )
 
 var _ exonetmod.Unpacker = &Module{}

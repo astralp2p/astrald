@@ -1,9 +1,9 @@
 package utp
 
 import (
+	"github.com/cryptopunkscc/astral-go/api/utp"
 	"github.com/cryptopunkscc/astral-go/astral/fmt"
 	"github.com/cryptopunkscc/astral-go/astral/log/theme"
-	"github.com/cryptopunkscc/astrald/mod/utp"
 )
 
 type EndpointView struct {

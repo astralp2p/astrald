@@ -7,11 +7,11 @@ import (
 
 	"github.com/cryptopunkscc/astral-go/api/exonet"
 	"github.com/cryptopunkscc/astral-go/api/tor"
+	"github.com/cryptopunkscc/astral-go/api/utp"
 	"github.com/cryptopunkscc/astral-go/astral"
 	"github.com/cryptopunkscc/astral-go/astral/streams"
 	"github.com/cryptopunkscc/astrald/mod/gateway"
 	"github.com/cryptopunkscc/astrald/mod/tcp"
-	"github.com/cryptopunkscc/astrald/mod/utp"
 	"github.com/jxskiss/base62"
 )
 
