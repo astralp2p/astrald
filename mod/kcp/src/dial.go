@@ -3,11 +3,12 @@ package kcp
 import (
 	"fmt"
 	exonetmod "github.com/cryptopunkscc/astrald/mod/exonet"
+	kcpmod "github.com/cryptopunkscc/astrald/mod/kcp"
 	"net"
 
 	"github.com/cryptopunkscc/astral-go/api/exonet"
+	"github.com/cryptopunkscc/astral-go/api/kcp"
 	"github.com/cryptopunkscc/astral-go/astral"
-	"github.com/cryptopunkscc/astrald/mod/kcp"
 	"github.com/pkg/errors"
 	kcpgo "github.com/xtaci/kcp-go/v5"
 )
@@ -67,7 +68,7 @@ func (mod *Module) SetEndpointLocalSocket(endpoint kcp.Endpoint, localSocket ast
 
 	_, ok := mod.ephemeralPortMappings.Set(address, localSocket)
 	if !ok {
-		return fmt.Errorf("%w: address %s", kcp.ErrEndpointLocalSocketExists, address)
+		return fmt.Errorf("%w: address %s", kcpmod.ErrEndpointLocalSocketExists, address)
 	}
 
 	return nil

@@ -1,9 +1,9 @@
 package kcp
 
 import (
+	"github.com/cryptopunkscc/astral-go/api/kcp"
 	"github.com/cryptopunkscc/astral-go/astral/fmt"
 	"github.com/cryptopunkscc/astral-go/astral/log/theme"
-	"github.com/cryptopunkscc/astrald/mod/kcp"
 )
 
 type EndpointView struct {

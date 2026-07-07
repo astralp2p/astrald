@@ -5,7 +5,7 @@ import (
 	exonetmod "github.com/cryptopunkscc/astrald/mod/exonet"
 
 	"github.com/cryptopunkscc/astral-go/api/exonet"
-	kcpmod "github.com/cryptopunkscc/astrald/mod/kcp"
+	kcpmod "github.com/cryptopunkscc/astral-go/api/kcp"
 )
 
 var _ exonetmod.Unpacker = &Module{}

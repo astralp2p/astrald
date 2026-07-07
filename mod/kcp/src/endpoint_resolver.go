@@ -3,9 +3,9 @@ package kcp
 import (
 	"time"
 
+	"github.com/cryptopunkscc/astral-go/api/kcp"
 	"github.com/cryptopunkscc/astral-go/astral"
 	"github.com/cryptopunkscc/astral-go/astral/sig"
-	"github.com/cryptopunkscc/astrald/mod/kcp"
 	"github.com/cryptopunkscc/astrald/mod/nodes"
 )
 
