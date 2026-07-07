@@ -11,9 +11,9 @@ import (
 	"sync"
 	"sync/atomic"
 
+	"github.com/cryptopunkscc/astral-go/api/crypto"
 	"github.com/cryptopunkscc/astral-go/astral"
 	"github.com/cryptopunkscc/astrald/core"
-	"github.com/cryptopunkscc/astrald/mod/crypto"
 	"github.com/cryptopunkscc/astrald/mod/dir"
 	"github.com/cryptopunkscc/astrald/mod/ether"
 	ipsrc "github.com/cryptopunkscc/astrald/mod/ip/src"

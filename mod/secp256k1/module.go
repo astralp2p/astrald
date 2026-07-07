@@ -6,8 +6,8 @@ It supports secp256k1 keys, asn1 hash signing, and bip137 message signing.
 package secp256k1
 
 import (
+	"github.com/cryptopunkscc/astral-go/api/crypto"
 	"github.com/cryptopunkscc/astral-go/astral"
-	"github.com/cryptopunkscc/astrald/mod/crypto"
 	"github.com/decred/dcrd/dcrec/secp256k1/v4"
 )
 

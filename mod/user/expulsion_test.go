@@ -5,8 +5,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cryptopunkscc/astral-go/api/crypto"
 	"github.com/cryptopunkscc/astral-go/astral"
-	"github.com/cryptopunkscc/astrald/mod/crypto"
 )
 
 // timeWithNanos is a fixed instant carrying sub-second precision, used to prove

@@ -1,8 +1,9 @@
 package crypto
 
 import (
+	"github.com/cryptopunkscc/astral-go/api/crypto"
 	"github.com/cryptopunkscc/astral-go/astral"
-	"github.com/cryptopunkscc/astrald/mod/crypto"
+	cryptomod "github.com/cryptopunkscc/astrald/mod/crypto"
 )
 
 type TextObjectSigner struct {
@@ -11,7 +12,7 @@ type TextObjectSigner struct {
 	key    *crypto.PublicKey
 }
 
-var _ crypto.TextObjectSigner = &TextObjectSigner{}
+var _ cryptomod.TextObjectSigner = &TextObjectSigner{}
 
 func (s *TextObjectSigner) SignTextObject(ctx *astral.Context, object crypto.SignableTextObject) (*crypto.Signature, error) {
 	signer, err := s.mod.NewTextSigner(s.key, s.scheme)

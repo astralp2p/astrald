@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"io"
 
+	"github.com/cryptopunkscc/astral-go/api/crypto"
 	"github.com/cryptopunkscc/astral-go/astral"
-	"github.com/cryptopunkscc/astrald/mod/crypto"
 )
 
 // Expulsion is the unsigned body of a swarm ban: Issuer permanently bans Subject
