@@ -4,15 +4,16 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	cryptomod "github.com/cryptopunkscc/astrald/mod/crypto"
 
-	"github.com/cryptopunkscc/astrald/astral"
-	"github.com/cryptopunkscc/astrald/astral/log"
+	"github.com/cryptopunkscc/astral-go/api/crypto"
+	"github.com/cryptopunkscc/astral-go/astral"
+	"github.com/cryptopunkscc/astral-go/astral/log"
+	"github.com/cryptopunkscc/astral-go/astral/sig"
+	"github.com/cryptopunkscc/astral-go/lib/routing"
 	"github.com/cryptopunkscc/astrald/core/assets"
-	"github.com/cryptopunkscc/astrald/lib/routing"
-	"github.com/cryptopunkscc/astrald/mod/crypto"
 	"github.com/cryptopunkscc/astrald/mod/dir"
 	"github.com/cryptopunkscc/astrald/mod/objects"
-	"github.com/cryptopunkscc/astrald/sig"
 )
 
 type Deps struct {
@@ -31,10 +32,10 @@ type Module struct {
 	router  routing.OpRouter
 	ctx     *astral.Context
 
-	engines sig.Set[crypto.Engine]
+	engines sig.Set[cryptomod.Engine]
 }
 
-var _ crypto.Module = &Module{}
+var _ cryptomod.Module = &Module{}
 
 func (mod *Module) Run(ctx *astral.Context) error {
 	mod.ctx = ctx
@@ -96,18 +97,18 @@ func (mod *Module) PrivateKey(ctx *astral.Context, key *crypto.PublicKey) (*cryp
 }
 
 func (mod *Module) DerivePublicKey(ctx *astral.Context, key *crypto.PrivateKey) (*crypto.PublicKey, error) {
-	return dispatchResult[crypto.PublicKeyDeriver, *crypto.PublicKey](
+	return dispatchResult[cryptomod.PublicKeyDeriver, *crypto.PublicKey](
 		mod.engines.Clone(),
-		func(d crypto.PublicKeyDeriver) (*crypto.PublicKey, error) {
+		func(d cryptomod.PublicKeyDeriver) (*crypto.PublicKey, error) {
 			return d.DerivePublicKey(ctx, key)
 		},
 	)
 }
 
-func (mod *Module) NewHashSigner(key *crypto.PublicKey, scheme string) (crypto.HashSigner, error) {
-	return dispatchResult[crypto.HashSignerProvider, crypto.HashSigner](
+func (mod *Module) NewHashSigner(key *crypto.PublicKey, scheme string) (cryptomod.HashSigner, error) {
+	return dispatchResult[cryptomod.HashSignerProvider, cryptomod.HashSigner](
 		mod.engines.Clone(),
-		func(p crypto.HashSignerProvider) (crypto.HashSigner, error) {
+		func(p cryptomod.HashSignerProvider) (cryptomod.HashSigner, error) {
 			return p.NewHashSigner(key, scheme)
 		},
 	)
@@ -115,7 +116,7 @@ func (mod *Module) NewHashSigner(key *crypto.PublicKey, scheme string) (crypto.H
 
 // NodeSigner returns a signer for the node's own secp256k1 key.
 // Panics if no engine can provide one.
-func (mod *Module) NodeSigner() crypto.HashSigner {
+func (mod *Module) NodeSigner() cryptomod.HashSigner {
 	signer, err := mod.NewHashSigner(&crypto.PublicKey{
 		Type: "secp256k1",
 		Key:  mod.node.Identity().PublicKey().SerializeCompressed(),
@@ -145,18 +146,18 @@ func (mod *Module) VerifyHashSignature(key *crypto.PublicKey, sig *crypto.Signat
 		return errors.New("hash is empty")
 	}
 
-	return dispatchVerify[crypto.HashVerifier](
+	return dispatchVerify[cryptomod.HashVerifier](
 		mod.engines.Clone(),
-		func(v crypto.HashVerifier) error {
+		func(v cryptomod.HashVerifier) error {
 			return v.VerifyHashSignature(key, sig, hash)
 		},
 	)
 }
 
-func (mod *Module) NewTextSigner(key *crypto.PublicKey, scheme string) (crypto.TextSigner, error) {
-	return dispatchResult[crypto.TextSignerProvider, crypto.TextSigner](
+func (mod *Module) NewTextSigner(key *crypto.PublicKey, scheme string) (cryptomod.TextSigner, error) {
+	return dispatchResult[cryptomod.TextSignerProvider, cryptomod.TextSigner](
 		mod.engines.Clone(),
-		func(p crypto.TextSignerProvider) (crypto.TextSigner, error) {
+		func(p cryptomod.TextSignerProvider) (cryptomod.TextSigner, error) {
 			return p.NewTextSigner(key, scheme)
 		},
 	)
@@ -180,15 +181,15 @@ func (mod *Module) VerifyTextSignature(key *crypto.PublicKey, sig *crypto.Signat
 		return errors.New("message is empty")
 	}
 
-	return dispatchVerify[crypto.TextVerifier](
+	return dispatchVerify[cryptomod.TextVerifier](
 		mod.engines.Clone(),
-		func(v crypto.TextVerifier) error {
+		func(v cryptomod.TextVerifier) error {
 			return v.VerifyTextSignature(key, sig, msg)
 		},
 	)
 }
 
-func (mod *Module) ObjectSigner(key *crypto.PublicKey) (crypto.ObjectSigner, error) {
+func (mod *Module) ObjectSigner(key *crypto.PublicKey) (cryptomod.ObjectSigner, error) {
 	return &ObjectSigner{
 		mod:    mod,
 		scheme: crypto.SchemeASN1,
@@ -200,7 +201,7 @@ func (mod *Module) VerifyObjectSignature(key *crypto.PublicKey, signature *crypt
 	return mod.VerifyHashSignature(key, signature, object.SignableHash())
 }
 
-func (mod *Module) TextObjectSigner(key *crypto.PublicKey) (crypto.TextObjectSigner, error) {
+func (mod *Module) TextObjectSigner(key *crypto.PublicKey) (cryptomod.TextObjectSigner, error) {
 	return &TextObjectSigner{
 		mod:    mod,
 		scheme: crypto.SchemeBIP137,
@@ -329,7 +330,7 @@ func (mod *Module) AddToIndex(object astral.Object) error {
 	return astral.NewErrUnexpectedObject(object)
 }
 
-func (mod *Module) AddEngine(engine crypto.Engine) {
+func (mod *Module) AddEngine(engine cryptomod.Engine) {
 	mod.engines.Add(engine)
 }
 
@@ -338,5 +339,5 @@ func (mod *Module) Router() astral.Router {
 }
 
 func (mod *Module) String() string {
-	return crypto.ModuleName
+	return cryptomod.ModuleName
 }

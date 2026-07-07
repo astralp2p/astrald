@@ -3,8 +3,8 @@ package user
 import (
 	"context"
 
-	"github.com/cryptopunkscc/astrald/astral"
-	"github.com/cryptopunkscc/astrald/mod/user"
+	"github.com/cryptopunkscc/astral-go/api/user"
+	"github.com/cryptopunkscc/astral-go/astral"
 )
 
 // Sibling is a link-maintenance entry for one swarm peer: the tracked node plus

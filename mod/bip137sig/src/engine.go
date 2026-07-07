@@ -3,11 +3,12 @@ package src
 import (
 	"encoding/base64"
 	"fmt"
+	cryptomod "github.com/cryptopunkscc/astrald/mod/crypto"
 
 	"github.com/btcsuite/btcd/btcec/v2"
-	"github.com/cryptopunkscc/astrald/astral"
-	"github.com/cryptopunkscc/astrald/mod/crypto"
-	"github.com/cryptopunkscc/astrald/mod/secp256k1"
+	"github.com/cryptopunkscc/astral-go/api/crypto"
+	"github.com/cryptopunkscc/astral-go/api/secp256k1"
+	"github.com/cryptopunkscc/astral-go/astral"
 	"github.com/cryptopunkscc/bip-0137/verify"
 	secp "github.com/decred/dcrd/dcrec/secp256k1/v4"
 )
@@ -18,12 +19,12 @@ type Engine struct {
 
 // NewTextSigner returns a BIP-137 signer for the key.
 // Only the BIP137 scheme and secp256k1 key type are supported.
-func (e Engine) NewTextSigner(key *crypto.PublicKey, scheme string) (crypto.TextSigner, error) {
+func (e Engine) NewTextSigner(key *crypto.PublicKey, scheme string) (cryptomod.TextSigner, error) {
 	switch {
 	case scheme != crypto.SchemeBIP137:
-		return nil, crypto.ErrUnsupportedScheme
+		return nil, cryptomod.ErrUnsupportedScheme
 	case key.Type != secp256k1.KeyType:
-		return nil, crypto.ErrUnsupportedKeyType
+		return nil, cryptomod.ErrUnsupportedKeyType
 	}
 
 	privateKey, err := e.mod.Crypto.PrivateKey(astral.NewContext(nil), key)
@@ -47,24 +48,24 @@ func (e Engine) NewTextSigner(key *crypto.PublicKey, scheme string) (crypto.Text
 func (e Engine) VerifyTextSignature(key *crypto.PublicKey, sig *crypto.Signature, msg string) error {
 	switch {
 	case key.Type != secp256k1.KeyType:
-		return crypto.ErrUnsupportedKeyType
+		return cryptomod.ErrUnsupportedKeyType
 	case sig.Scheme != crypto.SchemeBIP137:
-		return crypto.ErrUnsupportedScheme
+		return cryptomod.ErrUnsupportedScheme
 	}
 
 	publicKey, err := secp.ParsePubKey(key.Key)
 	if err != nil {
-		return fmt.Errorf("%w: %w", crypto.ErrInvalidSignature, err)
+		return fmt.Errorf("%w: %w", cryptomod.ErrInvalidSignature, err)
 	}
 
 	sigBase64 := base64.StdEncoding.EncodeToString(sig.Data)
 
 	ok, err := verify.VerifyWithPubKey(publicKey, msg, sigBase64)
 	if err != nil {
-		return fmt.Errorf("%w: %w", crypto.ErrInvalidSignature, err)
+		return fmt.Errorf("%w: %w", cryptomod.ErrInvalidSignature, err)
 	}
 	if !ok {
-		return crypto.ErrInvalidSignature
+		return cryptomod.ErrInvalidSignature
 	}
 
 	return nil

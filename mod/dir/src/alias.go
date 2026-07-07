@@ -1,8 +1,8 @@
 package dir
 
 import (
-	"github.com/cryptopunkscc/astrald/astral"
-	"github.com/cryptopunkscc/astrald/mod/dir"
+	"github.com/cryptopunkscc/astral-go/api/dir"
+	"github.com/cryptopunkscc/astral-go/astral"
 )
 
 // SetAlias sets the alias for the identity. Set an empty alias to unset.

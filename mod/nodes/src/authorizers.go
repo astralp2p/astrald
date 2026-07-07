@@ -1,8 +1,8 @@
 package nodes
 
 import (
-	"github.com/cryptopunkscc/astrald/astral"
-	"github.com/cryptopunkscc/astrald/mod/nodes"
+	"github.com/cryptopunkscc/astral-go/api/nodes"
+	"github.com/cryptopunkscc/astral-go/astral"
 )
 
 // AuthorizeRelayFor grants relaying only when the actor relays for its own identity.

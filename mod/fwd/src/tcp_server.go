@@ -5,7 +5,7 @@ import (
 	_net "net"
 	"strings"
 
-	"github.com/cryptopunkscc/astrald/astral"
+	"github.com/cryptopunkscc/astral-go/astral"
 )
 
 var _ Server = &TCPServer{}

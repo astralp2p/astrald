@@ -4,8 +4,10 @@ import (
 	"crypto/ecdsa"
 	"crypto/rand"
 	"fmt"
+	secp256k1api "github.com/cryptopunkscc/astral-go/api/secp256k1"
+	cryptomod "github.com/cryptopunkscc/astrald/mod/crypto"
 
-	"github.com/cryptopunkscc/astrald/mod/crypto"
+	"github.com/cryptopunkscc/astral-go/api/crypto"
 	"github.com/decred/dcrd/dcrec/secp256k1/v4"
 )
 
@@ -13,8 +15,8 @@ import (
 // Rejects keys whose type is not KeyType.
 func SignASN1(key *crypto.PrivateKey, hash []byte) (*crypto.Signature, error) {
 	switch {
-	case key.Type != KeyType:
-		return nil, crypto.ErrUnsupportedKeyType
+	case key.Type != secp256k1api.KeyType:
+		return nil, cryptomod.ErrUnsupportedKeyType
 	}
 
 	sig, err := ecdsa.SignASN1(
@@ -36,16 +38,16 @@ func SignASN1(key *crypto.PrivateKey, hash []byte) (*crypto.Signature, error) {
 // Accepts only KeyType keys and the "asn1" scheme; returns ErrInvalidSignature on mismatch.
 func VerifyASN1(key *crypto.PublicKey, hash []byte, sig *crypto.Signature) error {
 	switch {
-	case key.Type != KeyType:
-		return crypto.ErrUnsupportedKeyType
+	case key.Type != secp256k1api.KeyType:
+		return cryptomod.ErrUnsupportedKeyType
 	case sig.Scheme != "asn1":
-		return crypto.ErrUnsupportedScheme
+		return cryptomod.ErrUnsupportedScheme
 	}
 
 	// parse the key
 	pkey, err := secp256k1.ParsePubKey(key.Key)
 	if err != nil {
-		return fmt.Errorf("%w: %w", crypto.ErrInvalidSignature, err)
+		return fmt.Errorf("%w: %w", cryptomod.ErrInvalidSignature, err)
 	}
 
 	// verify sig
@@ -53,5 +55,5 @@ func VerifyASN1(key *crypto.PublicKey, hash []byte, sig *crypto.Signature) error
 		return nil
 	}
 
-	return crypto.ErrInvalidSignature
+	return cryptomod.ErrInvalidSignature
 }

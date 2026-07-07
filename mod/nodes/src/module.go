@@ -2,19 +2,20 @@ package nodes
 
 import (
 	"errors"
+	nodesmod "github.com/cryptopunkscc/astrald/mod/nodes"
 	"time"
 
-	"github.com/cryptopunkscc/astrald/astral"
-	"github.com/cryptopunkscc/astrald/astral/channel"
-	"github.com/cryptopunkscc/astrald/astral/log"
-	"github.com/cryptopunkscc/astrald/lib/routing"
-	"github.com/cryptopunkscc/astrald/mod/crypto"
-	"github.com/cryptopunkscc/astrald/mod/exonet"
-	"github.com/cryptopunkscc/astrald/mod/gateway"
-	"github.com/cryptopunkscc/astrald/mod/nodes"
-	modsecp256k1 "github.com/cryptopunkscc/astrald/mod/secp256k1"
+	"github.com/cryptopunkscc/astral-go/api/crypto"
+	"github.com/cryptopunkscc/astral-go/api/exonet"
+	"github.com/cryptopunkscc/astral-go/api/gateway"
+	"github.com/cryptopunkscc/astral-go/api/nodes"
+	modsecp256k1 "github.com/cryptopunkscc/astral-go/api/secp256k1"
+	"github.com/cryptopunkscc/astral-go/astral"
+	"github.com/cryptopunkscc/astral-go/astral/channel"
+	"github.com/cryptopunkscc/astral-go/astral/log"
+	"github.com/cryptopunkscc/astral-go/astral/sig"
+	"github.com/cryptopunkscc/astral-go/lib/routing"
 	"github.com/cryptopunkscc/astrald/resources"
-	"github.com/cryptopunkscc/astrald/sig"
 )
 
 const DefaultWorkerCount = 8
@@ -24,7 +25,7 @@ const defaultPingTimeout = time.Second * 30
 const activeInterval = 1 * time.Second
 const pingJitter = 1 * time.Second
 
-var _ nodes.Module = &Module{}
+var _ nodesmod.Module = &Module{}
 
 type Module struct {
 	Deps
@@ -37,13 +38,13 @@ type Module struct {
 	router routing.OpRouter
 
 	dbResolver *DBEndpointResolver
-	resolvers  sig.Set[nodes.EndpointResolver]
+	resolvers  sig.Set[nodesmod.EndpointResolver]
 
 	observedEndpoints sig.Map[string, ObservedEndpoint] // key is IP string
 
 	linkPool *LinkPool
 
-	strategyFactories sig.Map[string, nodes.StrategyFactory]
+	strategyFactories sig.Map[string, nodesmod.StrategyFactory]
 	upgraders         sig.Map[string, *sig.Switch]
 
 	searchCache sig.Map[string, *astral.Identity]
@@ -84,7 +85,7 @@ func (mod *Module) CloseLink(id astral.Nonce) error {
 		}
 	}
 
-	return nodes.ErrLinkNotFound
+	return nodesmod.ErrLinkNotFound
 }
 
 // CloseLinks closes all open links with the given identity.
@@ -103,16 +104,16 @@ func (mod *Module) Router() astral.Router {
 }
 
 func (mod *Module) String() string {
-	return nodes.ModuleName
+	return nodesmod.ModuleName
 }
 
-func (mod *Module) AddResolver(resolver nodes.EndpointResolver) {
+func (mod *Module) AddResolver(resolver nodesmod.EndpointResolver) {
 	if resolver != nil {
 		mod.resolvers.Add(resolver)
 	}
 }
 
-func (mod *Module) RegisterLinkStrategy(network string, factory nodes.StrategyFactory) {
+func (mod *Module) RegisterLinkStrategy(network string, factory nodesmod.StrategyFactory) {
 	mod.strategyFactories.Set(network, factory)
 }
 

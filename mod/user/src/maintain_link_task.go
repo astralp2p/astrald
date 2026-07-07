@@ -1,15 +1,16 @@
 package user
 
 import (
+	nodesmod "github.com/cryptopunkscc/astrald/mod/nodes"
 	"sync/atomic"
 	"time"
 
-	"github.com/cryptopunkscc/astrald/astral"
+	"github.com/cryptopunkscc/astral-go/api/nodes"
+	"github.com/cryptopunkscc/astral-go/astral"
+	"github.com/cryptopunkscc/astral-go/astral/sig"
 	"github.com/cryptopunkscc/astrald/mod/events"
-	"github.com/cryptopunkscc/astrald/mod/nodes"
 	"github.com/cryptopunkscc/astrald/mod/scheduler"
 	"github.com/cryptopunkscc/astrald/mod/user"
-	"github.com/cryptopunkscc/astrald/sig"
 )
 
 var _ scheduler.EventReceiver = &MaintainLinkTask{}
@@ -61,7 +62,7 @@ func (a *MaintainLinkTask) Run(ctx *astral.Context) error {
 			a.mod.log.Log("still trying to reconnect to %v (attempt %v)", a.Target, count)
 		}
 
-		task := a.mod.Nodes.NewEnsureLinkTask(a.Target, []string{nodes.StrategyBasic, nodes.StrategyTor}, nil, false)
+		task := a.mod.Nodes.NewEnsureLinkTask(a.Target, []string{nodesmod.StrategyBasic, nodesmod.StrategyTor}, nil, false)
 		scheduled, err := a.mod.Scheduler.Schedule(task)
 		if err != nil {
 			return err

@@ -4,10 +4,10 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/cryptopunkscc/astrald/astral"
-	"github.com/cryptopunkscc/astrald/mod/auth"
-	"github.com/cryptopunkscc/astrald/mod/crypto"
-	"github.com/cryptopunkscc/astrald/mod/secp256k1"
+	"github.com/cryptopunkscc/astral-go/api/auth"
+	"github.com/cryptopunkscc/astral-go/api/crypto"
+	"github.com/cryptopunkscc/astral-go/api/secp256k1"
+	"github.com/cryptopunkscc/astral-go/astral"
 )
 
 // SignIssuer signs the contract as the issuer; returns auth.ErrAlreadySigned if IssuerSig is already set.

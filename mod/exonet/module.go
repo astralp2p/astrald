@@ -2,8 +2,9 @@ package exonet
 
 import (
 	"context"
+	"github.com/cryptopunkscc/astral-go/api/exonet"
 
-	"github.com/cryptopunkscc/astrald/astral"
+	"github.com/cryptopunkscc/astral-go/astral"
 )
 
 const ModuleName = "exonet"
@@ -13,33 +14,25 @@ const ModuleName = "exonet"
 // the target network. SetDialer/SetUnpacker/SetParser replace any existing
 // registration for that network name.
 type Module interface {
-	Dial(*astral.Context, Endpoint) (conn Conn, err error)
-	Unpack(network string, data []byte) (Endpoint, error)
-	Parse(network string, address string) (Endpoint, error)
+	Dial(*astral.Context, exonet.Endpoint) (conn Conn, err error)
+	Unpack(network string, data []byte) (exonet.Endpoint, error)
+	Parse(network string, address string) (exonet.Endpoint, error)
 
 	SetDialer(network string, dialer Dialer)
 	SetUnpacker(network string, unpacker Unpacker)
 	SetParser(network string, parser Parser)
 }
 
-// Endpoint represents a dialable address on a network (such as an IP address with port number)
-type Endpoint interface {
-	astral.Object
-	Network() string // network name
-	Address() string // text representation of the address
-	Pack() []byte    // binary representation of the address
-}
-
 type Dialer interface {
-	Dial(*astral.Context, Endpoint) (Conn, error)
+	Dial(*astral.Context, exonet.Endpoint) (Conn, error)
 }
 
 type Unpacker interface {
-	Unpack(network string, data []byte) (Endpoint, error)
+	Unpack(network string, data []byte) (exonet.Endpoint, error)
 }
 
 type Parser interface {
-	Parse(network string, address string) (Endpoint, error)
+	Parse(network string, address string) (exonet.Endpoint, error)
 }
 
 // EphemeralHandler processes a single inbound connection; returning stopListener=true

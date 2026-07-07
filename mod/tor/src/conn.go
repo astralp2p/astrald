@@ -1,14 +1,15 @@
 package tor
 
 import (
+	exonetmod "github.com/cryptopunkscc/astrald/mod/exonet"
 	"net"
 
-	"github.com/cryptopunkscc/astrald/mod/exonet"
-	"github.com/cryptopunkscc/astrald/mod/tor"
+	"github.com/cryptopunkscc/astral-go/api/exonet"
+	"github.com/cryptopunkscc/astral-go/api/tor"
 )
 
 // Type check
-var _ exonet.Conn = &Conn{}
+var _ exonetmod.Conn = &Conn{}
 
 // Conn represents a network connection over Tor
 type Conn struct {
@@ -37,7 +38,7 @@ func (conn *Conn) Outbound() bool {
 }
 
 // newConn wraps a standard net.Conn into a astral's net.Conn with the addition of boundness
-func newConn(conn net.Conn, remoteEndpoint *tor.Endpoint, outbound bool) exonet.Conn {
+func newConn(conn net.Conn, remoteEndpoint *tor.Endpoint, outbound bool) exonetmod.Conn {
 	return &Conn{
 		Conn:           conn,
 		remoteEndpoint: remoteEndpoint,

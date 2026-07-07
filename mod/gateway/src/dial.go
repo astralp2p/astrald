@@ -1,32 +1,34 @@
 package gateway
 
 import (
-	"github.com/cryptopunkscc/astrald/astral"
-	"github.com/cryptopunkscc/astrald/astral/channel"
-	"github.com/cryptopunkscc/astrald/lib/astrald"
-	"github.com/cryptopunkscc/astrald/lib/query"
-	"github.com/cryptopunkscc/astrald/mod/exonet"
-	"github.com/cryptopunkscc/astrald/mod/gateway"
-	gatewayClient "github.com/cryptopunkscc/astrald/mod/gateway/client"
+	"github.com/cryptopunkscc/astral-go/api/exonet"
+	"github.com/cryptopunkscc/astral-go/api/gateway"
+	gatewayClient "github.com/cryptopunkscc/astral-go/api/gateway/client"
+	"github.com/cryptopunkscc/astral-go/astral"
+	"github.com/cryptopunkscc/astral-go/astral/channel"
+	"github.com/cryptopunkscc/astral-go/lib/astrald"
+	"github.com/cryptopunkscc/astral-go/lib/query"
+	exonetmod "github.com/cryptopunkscc/astrald/mod/exonet"
+	gatewaymod "github.com/cryptopunkscc/astrald/mod/gateway"
 )
 
-var _ exonet.Dialer = &Module{}
+var _ exonetmod.Dialer = &Module{}
 
 // Dial connects to a gateway endpoint by first attempting the fast socket path
 // (reserve an idle connection via the gateway's Connect RPC, then dial the raw
 // socket), and falling back to the slower link-routed path if either step fails.
-func (mod *Module) Dial(ctx *astral.Context, endpoint exonet.Endpoint) (exonet.Conn, error) {
+func (mod *Module) Dial(ctx *astral.Context, endpoint exonet.Endpoint) (exonetmod.Conn, error) {
 	if endpoint.Network() != NetworkName {
-		return nil, exonet.ErrUnsupportedNetwork
+		return nil, exonetmod.ErrUnsupportedNetwork
 	}
 
 	gwEndpoint, ok := endpoint.(*gateway.Endpoint)
 	if !ok {
-		return nil, exonet.ErrUnsupportedNetwork
+		return nil, exonetmod.ErrUnsupportedNetwork
 	}
 
 	if gwEndpoint.GatewayID.IsEqual(mod.node.Identity()) {
-		return nil, gateway.ErrInvalidGateway
+		return nil, gatewaymod.ErrInvalidGateway
 	}
 
 	ctx = ctx.IncludeZone(astral.ZoneNetwork)
@@ -57,7 +59,7 @@ func (mod *Module) Dial(ctx *astral.Context, endpoint exonet.Endpoint) (exonet.C
 	}, nil
 }
 
-func (mod *Module) route(ctx *astral.Context, gwEndpoint *gateway.Endpoint) (exonet.Conn, error) {
+func (mod *Module) route(ctx *astral.Context, gwEndpoint *gateway.Endpoint) (exonetmod.Conn, error) {
 	mod.log.Logv(1, "socket path unavailable, trying link path to %v via %v", gwEndpoint.TargetID, gwEndpoint.GatewayID)
 
 	q := query.New(mod.node.Identity(), gwEndpoint.GatewayID, gateway.MethodNodeRoute, query.Args{"target": gwEndpoint.TargetID})

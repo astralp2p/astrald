@@ -3,8 +3,8 @@ package ether
 import (
 	"io"
 
-	"github.com/cryptopunkscc/astrald/astral"
-	"github.com/cryptopunkscc/astrald/mod/crypto"
+	"github.com/cryptopunkscc/astral-go/api/crypto"
+	"github.com/cryptopunkscc/astral-go/astral"
 )
 
 var _ astral.Object = &SignedBroadcast{}

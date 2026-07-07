@@ -2,7 +2,8 @@ package objects
 
 import (
 	"errors"
-	"github.com/cryptopunkscc/astrald/astral"
+	"github.com/cryptopunkscc/astral-go/api/objects"
+	"github.com/cryptopunkscc/astral-go/astral"
 	"io"
 )
 
@@ -10,7 +11,7 @@ import (
 type NilRepository struct {
 }
 
-func (n NilRepository) Create(ctx *astral.Context, opts *CreateOpts) (Writer, error) {
+func (n NilRepository) Create(ctx *astral.Context, opts *CreateOpts) (objects.Writer, error) {
 	return nil, errors.ErrUnsupported
 }
 

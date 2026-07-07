@@ -1,23 +1,24 @@
 package apphost
 
 import (
+	apphostmod "github.com/cryptopunkscc/astrald/mod/apphost"
 	"net"
 	"sync"
 
-	"github.com/cryptopunkscc/astrald/astral"
-	"github.com/cryptopunkscc/astrald/astral/log"
+	"github.com/cryptopunkscc/astral-go/api/apphost"
+	"github.com/cryptopunkscc/astral-go/astral"
+	"github.com/cryptopunkscc/astral-go/astral/log"
+	"github.com/cryptopunkscc/astral-go/astral/sig"
+	"github.com/cryptopunkscc/astral-go/lib/routing"
 	"github.com/cryptopunkscc/astrald/debug"
-	"github.com/cryptopunkscc/astrald/lib/routing"
-	"github.com/cryptopunkscc/astrald/mod/apphost"
 	"github.com/cryptopunkscc/astrald/mod/auth"
 	"github.com/cryptopunkscc/astrald/mod/crypto"
 	"github.com/cryptopunkscc/astrald/mod/dir"
 	"github.com/cryptopunkscc/astrald/mod/objects"
 	"github.com/cryptopunkscc/astrald/mod/user"
-	"github.com/cryptopunkscc/astrald/sig"
 )
 
-var _ apphost.Module = &Module{}
+var _ apphostmod.Module = &Module{}
 
 type Deps struct {
 	Auth    auth.Module
@@ -107,7 +108,7 @@ func (mod *Module) EnRouteQueryExtras(nonce astral.Nonce) map[string]any {
 }
 
 func (mod *Module) String() string {
-	return apphost.ModuleName
+	return apphostmod.ModuleName
 }
 
 func (mod *Module) RoutingPriority() int {

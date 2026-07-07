@@ -9,11 +9,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cryptopunkscc/astrald/astral"
-	"github.com/cryptopunkscc/astrald/astral/channel"
-	"github.com/cryptopunkscc/astrald/astral/log"
-	"github.com/cryptopunkscc/astrald/lib/query"
-	"github.com/cryptopunkscc/astrald/mod/apphost"
+	"github.com/cryptopunkscc/astral-go/api/apphost"
+	"github.com/cryptopunkscc/astral-go/astral"
+	"github.com/cryptopunkscc/astral-go/astral/channel"
+	"github.com/cryptopunkscc/astral-go/astral/log"
+	"github.com/cryptopunkscc/astral-go/lib/query"
 )
 
 // inboundTestRig builds a Module + WSHandler pair backed by a net.Pipe so the test

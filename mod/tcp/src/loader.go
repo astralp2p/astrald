@@ -2,13 +2,14 @@ package tcp
 
 import (
 	"fmt"
+	tcpmod "github.com/cryptopunkscc/astrald/mod/tcp"
 	"strings"
 
-	"github.com/cryptopunkscc/astrald/astral"
-	"github.com/cryptopunkscc/astrald/astral/log"
+	"github.com/cryptopunkscc/astral-go/api/tcp"
+	"github.com/cryptopunkscc/astral-go/astral"
+	"github.com/cryptopunkscc/astral-go/astral/log"
 	"github.com/cryptopunkscc/astrald/core"
 	"github.com/cryptopunkscc/astrald/core/assets"
-	"github.com/cryptopunkscc/astrald/mod/tcp"
 )
 
 type Loader struct{}
@@ -20,12 +21,12 @@ func (Loader) Load(node astral.Node, assets assets.Assets, l *log.Logger) (core.
 		config: defaultConfig,
 	}
 
-	_ = assets.LoadYAML(tcp.ModuleName, &mod.config)
+	_ = assets.LoadYAML(tcpmod.ModuleName, &mod.config)
 
 	mod.router.AddStructPrefix(mod, "Op")
 
 	for _, addr := range mod.config.Endpoints {
-		addr, _ = strings.CutPrefix(addr, fmt.Sprintf("%s:", tcp.ModuleName))
+		addr, _ = strings.CutPrefix(addr, fmt.Sprintf("%s:", tcpmod.ModuleName))
 
 		endpoint, err := tcp.ParseEndpoint(addr)
 		if err != nil {
@@ -39,7 +40,7 @@ func (Loader) Load(node astral.Node, assets assets.Assets, l *log.Logger) (core.
 }
 
 func init() {
-	if err := core.RegisterModule(tcp.ModuleName, Loader{}); err != nil {
+	if err := core.RegisterModule(tcpmod.ModuleName, Loader{}); err != nil {
 		panic(err)
 	}
 }

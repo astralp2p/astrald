@@ -2,20 +2,21 @@ package ip
 
 import (
 	"context"
+	ipmod "github.com/cryptopunkscc/astrald/mod/ip"
 	"net"
 	"strings"
 	"time"
 
-	"github.com/cryptopunkscc/astrald/astral"
-	"github.com/cryptopunkscc/astrald/astral/log"
-	"github.com/cryptopunkscc/astrald/lib/routing"
-	"github.com/cryptopunkscc/astrald/mod/ip"
+	"github.com/cryptopunkscc/astral-go/api/ip"
+	"github.com/cryptopunkscc/astral-go/astral"
+	"github.com/cryptopunkscc/astral-go/astral/log"
+	"github.com/cryptopunkscc/astral-go/astral/sig"
+	"github.com/cryptopunkscc/astral-go/lib/routing"
 	"github.com/cryptopunkscc/astrald/mod/objects"
 	"github.com/cryptopunkscc/astrald/resources"
-	"github.com/cryptopunkscc/astrald/sig"
 )
 
-var _ ip.Module = &Module{}
+var _ ipmod.Module = &Module{}
 
 type Deps struct {
 	Objects objects.Module
@@ -28,7 +29,7 @@ type Module struct {
 	assets resources.Resources
 	router routing.OpRouter
 
-	providers sig.Set[ip.PublicIPCandidateProvider]
+	providers sig.Set[ipmod.PublicIPCandidateProvider]
 }
 
 func (mod *Module) Run(ctx *astral.Context) error {
@@ -113,7 +114,7 @@ func (mod *Module) Router() astral.Router {
 }
 
 func (mod *Module) String() string {
-	return ip.ModuleName
+	return ipmod.ModuleName
 }
 
 func joinIPs(xs []ip.IP) string {

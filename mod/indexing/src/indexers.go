@@ -2,10 +2,11 @@ package indexing
 
 import (
 	"errors"
+	indexingmod "github.com/cryptopunkscc/astrald/mod/indexing"
 
-	"github.com/cryptopunkscc/astrald/astral"
-	"github.com/cryptopunkscc/astrald/mod/indexing"
-	"github.com/cryptopunkscc/astrald/mod/tree"
+	"github.com/cryptopunkscc/astral-go/api/indexing"
+	"github.com/cryptopunkscc/astral-go/api/tree"
+	"github.com/cryptopunkscc/astral-go/astral"
 )
 
 // indexerHandle is the in-memory view of a registered indexer.
@@ -44,7 +45,7 @@ func (i *indexerHandle) setState(ctx *astral.Context, repoName string, version u
 		return err
 	}
 	if version != current+1 {
-		return indexing.ErrInvalidIndexHeight
+		return indexingmod.ErrInvalidIndexHeight
 	}
 
 	sub, err := tree.Query(ctx, i.node, repoName, true)

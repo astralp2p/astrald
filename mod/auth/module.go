@@ -1,15 +1,14 @@
 package auth
 
 import (
-	"github.com/cryptopunkscc/astrald/astral"
-	"github.com/cryptopunkscc/astrald/mod/crypto"
+	"github.com/cryptopunkscc/astral-go/api/auth"
+	"github.com/cryptopunkscc/astral-go/api/crypto"
+	"github.com/cryptopunkscc/astral-go/astral"
 )
 
 const (
-	ModuleName         = "auth"
-	DBPrefix           = "auth__"
-	MethodIndex        = "auth.index"
-	MethodSignContract = "auth.sign_contract"
+	ModuleName = "auth"
+	DBPrefix   = "auth__"
 )
 
 // ContractQueryBuilder builds and executes queries for active signed contracts.
@@ -18,36 +17,36 @@ type ContractQueryBuilder interface {
 	WithIssuer(*astral.Identity) ContractQueryBuilder
 	WithSubject(*astral.Identity) ContractQueryBuilder
 	WithAction(...astral.Object) ContractQueryBuilder
-	Find(*astral.Context) ([]*SignedContract, error)
+	Find(*astral.Context) ([]*auth.SignedContract, error)
 }
 
 type Module interface {
 	// Authorize checks whether the action is permitted.
-	Authorize(ctx *astral.Context, action ActionObject) bool
+	Authorize(ctx *astral.Context, action auth.ActionObject) bool
 
 	// Add registers typed handlers; the action type is inferred from each handler.
 	Add(handlers ...TypedHandler)
 
 	// VerifyContract verifies both signatures on a signed contract.
-	VerifyContract(sc *SignedContract) error
+	VerifyContract(sc *auth.SignedContract) error
 
 	// VerifyIssuer verifies only the issuer signature on a signed contract.
-	VerifyIssuer(sc *SignedContract) error
+	VerifyIssuer(sc *auth.SignedContract) error
 
 	// VerifySubject verifies only the subject signature on a signed contract.
-	VerifySubject(sc *SignedContract) error
+	VerifySubject(sc *auth.SignedContract) error
 
 	// SignIssuer signs the contract with the issuer's private key if needed.
-	SignIssuer(ctx *astral.Context, contract *SignedContract) (*crypto.Signature, error)
+	SignIssuer(ctx *astral.Context, contract *auth.SignedContract) (*crypto.Signature, error)
 
 	// SignSubject signs the contract with the subject's private key if needed.
-	SignSubject(ctx *astral.Context, contract *SignedContract) (*crypto.Signature, error)
+	SignSubject(ctx *astral.Context, contract *auth.SignedContract) (*crypto.Signature, error)
 
 	// SignContract signs the contract with both issuer and subject private keys if needed.
-	SignContract(ctx *astral.Context, contract *SignedContract) error
+	SignContract(ctx *astral.Context, contract *auth.SignedContract) error
 
 	// IndexContract verifies and adds a signed contract to the auth index.
-	IndexContract(ctx *astral.Context, contract *SignedContract) error
+	IndexContract(ctx *astral.Context, contract *auth.SignedContract) error
 
 	// SignedContracts returns a query builder for finding active signed contracts.
 	SignedContracts() ContractQueryBuilder

@@ -1,7 +1,7 @@
 package resources
 
 import (
-	"github.com/cryptopunkscc/astrald/sig"
+	"github.com/cryptopunkscc/astral-go/astral/sig"
 )
 
 var _ Resources = &MemResources{}

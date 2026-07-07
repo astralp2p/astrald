@@ -2,7 +2,7 @@ package assets
 
 import (
 	"errors"
-	log2 "github.com/cryptopunkscc/astrald/astral/log"
+	log2 "github.com/cryptopunkscc/astral-go/astral/log"
 	"github.com/cryptopunkscc/astrald/resources"
 	"gopkg.in/yaml.v2"
 	"gorm.io/gorm"

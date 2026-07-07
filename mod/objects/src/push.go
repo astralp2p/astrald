@@ -1,8 +1,8 @@
 package objects
 
 import (
-	"github.com/cryptopunkscc/astrald/astral"
-	objectscli "github.com/cryptopunkscc/astrald/mod/objects/client"
+	objectscli "github.com/cryptopunkscc/astral-go/api/objects/client"
+	"github.com/cryptopunkscc/astral-go/astral"
 )
 
 // Push pushes the object to the target node. The sender node is derived from the context.

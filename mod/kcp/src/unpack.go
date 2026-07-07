@@ -2,18 +2,19 @@ package kcp
 
 import (
 	"bytes"
+	exonetmod "github.com/cryptopunkscc/astrald/mod/exonet"
 
-	"github.com/cryptopunkscc/astrald/mod/exonet"
-	kcpmod "github.com/cryptopunkscc/astrald/mod/kcp"
+	"github.com/cryptopunkscc/astral-go/api/exonet"
+	kcpmod "github.com/cryptopunkscc/astral-go/api/kcp"
 )
 
-var _ exonet.Unpacker = &Module{}
+var _ exonetmod.Unpacker = &Module{}
 
 func (mod *Module) Unpack(network string, data []byte) (exonet.Endpoint, error) {
 	switch network {
 	case "kcp":
 	default:
-		return nil, exonet.ErrUnsupportedNetwork
+		return nil, exonetmod.ErrUnsupportedNetwork
 	}
 	return Unpack(data)
 }

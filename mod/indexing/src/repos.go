@@ -3,9 +3,10 @@ package indexing
 import (
 	"errors"
 	"fmt"
+	modindexingmod "github.com/cryptopunkscc/astrald/mod/indexing"
 
-	"github.com/cryptopunkscc/astrald/astral"
-	modindexing "github.com/cryptopunkscc/astrald/mod/indexing"
+	modindexing "github.com/cryptopunkscc/astral-go/api/indexing"
+	"github.com/cryptopunkscc/astral-go/astral"
 )
 
 // EnableRepo persists repoName in the tree and launches its sync goroutine.
@@ -47,7 +48,7 @@ func (mod *Module) startRepoSync(repoName string) error {
 	_, ok := mod.syncing.Set(repoName, cancel)
 	if !ok {
 		cancel()
-		return modindexing.ErrRepoAlreadySyncing
+		return modindexingmod.ErrRepoAlreadySyncing
 	}
 
 	go func() {
@@ -66,7 +67,7 @@ func (mod *Module) startRepoSync(repoName string) error {
 func (mod *Module) stopRepoSync(repoName string) error {
 	cancel, ok := mod.syncing.Delete(repoName)
 	if !ok {
-		return modindexing.ErrRepoNotSyncing
+		return modindexingmod.ErrRepoNotSyncing
 	}
 	cancel()
 	return nil
@@ -161,7 +162,7 @@ snapshot:
 
 		err = mod.db.addToRepo(repoName, objectID)
 		if err != nil {
-			if errors.Is(err, modindexing.ErrObjectAlreadyAdded) {
+			if errors.Is(err, modindexingmod.ErrObjectAlreadyAdded) {
 				continue
 			}
 			mod.log.Logv(1, "db error adding to repo: %v", err)

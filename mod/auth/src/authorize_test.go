@@ -1,14 +1,15 @@
 package auth
 
 import (
+	authmod "github.com/cryptopunkscc/astrald/mod/auth"
 	"io"
 	"testing"
 	"time"
 
-	"github.com/cryptopunkscc/astrald/astral"
-	"github.com/cryptopunkscc/astrald/astral/log"
-	"github.com/cryptopunkscc/astrald/mod/auth"
-	"github.com/cryptopunkscc/astrald/mod/crypto"
+	"github.com/cryptopunkscc/astral-go/api/auth"
+	"github.com/cryptopunkscc/astral-go/api/crypto"
+	"github.com/cryptopunkscc/astral-go/astral"
+	"github.com/cryptopunkscc/astral-go/astral/log"
 	"github.com/glebarez/sqlite"
 	"gorm.io/gorm"
 )
@@ -51,7 +52,7 @@ func testModule(t *testing.T) *Module {
 
 // allowRoot registers a direct rule allowing only root to perform testAction.
 func allowRoot(mod *Module, root *astral.Identity) {
-	mod.Add(auth.Func[*testAction](func(ctx *astral.Context, a *testAction) bool {
+	mod.Add(authmod.Func[*testAction](func(ctx *astral.Context, a *testAction) bool {
 		return a.Actor().IsEqual(root)
 	}))
 }

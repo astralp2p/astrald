@@ -3,13 +3,14 @@ package nat
 import (
 	"bytes"
 	"context"
+	natmod "github.com/cryptopunkscc/astrald/mod/nat"
 	"net"
 	"sync/atomic"
 	"time"
 
-	"github.com/cryptopunkscc/astrald/astral"
-	"github.com/cryptopunkscc/astrald/mod/nat"
-	"github.com/cryptopunkscc/astrald/sig"
+	"github.com/cryptopunkscc/astral-go/api/nat"
+	"github.com/cryptopunkscc/astral-go/astral"
+	"github.com/cryptopunkscc/astral-go/astral/sig"
 )
 
 const (
@@ -350,7 +351,7 @@ func (h *Hole) WaitLocked(ctx context.Context) error {
 		if HoleState(h.state.Load()) == StateLocked {
 			return nil
 		}
-		return nat.ErrHoleCantLock
+		return natmod.ErrHoleCantLock
 	}
 }
 

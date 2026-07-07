@@ -1,15 +1,16 @@
 package auth
 
 import (
+	"github.com/cryptopunkscc/astral-go/api/auth"
 	"io"
 
-	"github.com/cryptopunkscc/astrald/astral"
+	"github.com/cryptopunkscc/astral-go/astral"
 )
 
 // SudoAction requests permission to act as AsID.
 // ActorID (from base) is the requesting identity; AsID is the target identity.
 type SudoAction struct {
-	Action
+	auth.Action
 	AsID *astral.Identity
 }
 

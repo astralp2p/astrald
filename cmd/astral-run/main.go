@@ -8,13 +8,13 @@ import (
 	"strings"
 	"syscall"
 
-	"github.com/cryptopunkscc/astrald/lib/apphost"
-	"github.com/cryptopunkscc/astrald/lib/astrald"
-	apphostClient "github.com/cryptopunkscc/astrald/mod/apphost/client"
-	dirClient "github.com/cryptopunkscc/astrald/mod/dir/client"
-	objectsClient "github.com/cryptopunkscc/astrald/mod/objects/client"
-	"github.com/cryptopunkscc/astrald/mod/secp256k1"
-	secp256k1Client "github.com/cryptopunkscc/astrald/mod/secp256k1/client"
+	apphostClient "github.com/cryptopunkscc/astral-go/api/apphost/client"
+	dirClient "github.com/cryptopunkscc/astral-go/api/dir/client"
+	objectsClient "github.com/cryptopunkscc/astral-go/api/objects/client"
+	"github.com/cryptopunkscc/astral-go/api/secp256k1"
+	secp256k1Client "github.com/cryptopunkscc/astral-go/api/secp256k1/client"
+	"github.com/cryptopunkscc/astral-go/lib/apphost"
+	"github.com/cryptopunkscc/astral-go/lib/astrald"
 )
 
 func main() {

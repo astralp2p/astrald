@@ -3,9 +3,9 @@ package views
 import (
 	"sort"
 
-	"github.com/cryptopunkscc/astrald/astral"
-	"github.com/cryptopunkscc/astrald/astral/fmt"
-	"github.com/cryptopunkscc/astrald/mod/log/styles"
+	"github.com/cryptopunkscc/astral-go/astral"
+	"github.com/cryptopunkscc/astral-go/astral/fmt"
+	"github.com/cryptopunkscc/astral-go/astral/log/styles"
 )
 
 // RuntimeMapView renders a blueprint-backed map as map[key: value, key: value], delegating both

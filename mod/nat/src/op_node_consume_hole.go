@@ -1,14 +1,15 @@
 package nat
 
 import (
+	natmod "github.com/cryptopunkscc/astrald/mod/nat"
 	"time"
 
-	"github.com/cryptopunkscc/astrald/astral"
-	"github.com/cryptopunkscc/astrald/astral/channel"
-	"github.com/cryptopunkscc/astrald/lib/astrald"
-	"github.com/cryptopunkscc/astrald/lib/routing"
-	"github.com/cryptopunkscc/astrald/mod/nat"
-	natclient "github.com/cryptopunkscc/astrald/mod/nat/client"
+	"github.com/cryptopunkscc/astral-go/api/nat"
+	natclient "github.com/cryptopunkscc/astral-go/api/nat/client"
+	"github.com/cryptopunkscc/astral-go/astral"
+	"github.com/cryptopunkscc/astral-go/astral/channel"
+	"github.com/cryptopunkscc/astral-go/lib/astrald"
+	"github.com/cryptopunkscc/astral-go/lib/routing"
 )
 
 const takeExchangeTimeout = 5 * time.Second
@@ -44,7 +45,7 @@ func (mod *Module) OpNodeConsumeHole(ctx *astral.Context, q *routing.IncomingQue
 		defer cancel()
 
 		if !hole.BeginLock() {
-			return ch.Send(astral.Err(nat.ErrHoleBusy))
+			return ch.Send(astral.Err(natmod.ErrHoleBusy))
 		}
 
 		natClient := natclient.New(target, astrald.Default())
@@ -78,8 +79,8 @@ func (mod *Module) OpNodeConsumeHole(ctx *astral.Context, q *routing.IncomingQue
 	}
 
 	if !hole.BeginLock() {
-		_ = ch.Send(&nat.ConsumeHoleSignal{Signal: nat.ConsumeHoleSignalTypeLocked, Pair: holeNonce, Ok: false, Error: astral.String8(nat.ErrHoleBusy.Error())})
-		return ch.Send(astral.Err(nat.ErrHoleBusy))
+		_ = ch.Send(&nat.ConsumeHoleSignal{Signal: nat.ConsumeHoleSignalTypeLocked, Pair: holeNonce, Ok: false, Error: astral.String8(natmod.ErrHoleBusy.Error())})
+		return ch.Send(astral.Err(natmod.ErrHoleBusy))
 	}
 
 	if err := hole.WaitLocked(opCtx); err != nil {

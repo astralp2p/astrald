@@ -2,12 +2,13 @@ package nodes
 
 import (
 	"context"
+	nodesmod "github.com/cryptopunkscc/astrald/mod/nodes"
 	"slices"
 	"time"
 
-	"github.com/cryptopunkscc/astrald/astral"
-	"github.com/cryptopunkscc/astrald/mod/nodes"
-	"github.com/cryptopunkscc/astrald/sig"
+	"github.com/cryptopunkscc/astral-go/api/nodes"
+	"github.com/cryptopunkscc/astral-go/astral"
+	"github.com/cryptopunkscc/astral-go/astral/sig"
 )
 
 const upgradeTimeout = 3 * time.Minute
@@ -47,7 +48,7 @@ func (mod *Module) connectivityUpgrade(e *nodes.LinkPressureEvent) {
 
 			mod.log.Log("connectivity upgrade: starting NAT traversal with %v", e.RemoteIdentity)
 			result := <-mod.linkPool.RetrieveLink(ctx, e.RemoteIdentity,
-				WithForceNew(), WithStrategies(nodes.StrategyNAT))
+				WithForceNew(), WithStrategies(nodesmod.StrategyNAT))
 
 			if result.Err != nil {
 				mod.log.Log("connectivity upgrade with %v failed: %v", e.RemoteIdentity, result.Err)

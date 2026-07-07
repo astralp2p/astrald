@@ -1,14 +1,15 @@
 package tor
 
 import (
+	nodesmod "github.com/cryptopunkscc/astrald/mod/nodes"
 	"time"
 
-	"github.com/cryptopunkscc/astrald/astral"
-	"github.com/cryptopunkscc/astrald/mod/nodes"
-	"github.com/cryptopunkscc/astrald/sig"
+	"github.com/cryptopunkscc/astral-go/api/nodes"
+	"github.com/cryptopunkscc/astral-go/astral"
+	"github.com/cryptopunkscc/astral-go/astral/sig"
 )
 
-var _ nodes.EndpointResolver = &Module{}
+var _ nodesmod.EndpointResolver = &Module{}
 
 // ResolveEndpoints returns the local node's onion endpoint with a ~90-day TTL.
 // Returns an empty channel for any identity other than the local node, or when listening is disabled or the server has no endpoint yet.

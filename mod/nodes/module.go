@@ -2,10 +2,12 @@ package nodes
 
 import (
 	"context"
+	"github.com/cryptopunkscc/astral-go/api/nodes"
+	exonetmod "github.com/cryptopunkscc/astrald/mod/exonet"
 	"time"
 
-	"github.com/cryptopunkscc/astrald/astral"
-	"github.com/cryptopunkscc/astrald/mod/exonet"
+	"github.com/cryptopunkscc/astral-go/api/exonet"
+	"github.com/cryptopunkscc/astral-go/astral"
 )
 
 const (
@@ -27,12 +29,6 @@ const (
 	ExtraRelayVia      = "relay_via"
 	ExtraRoutingPolicy = "routing_policy"
 
-	// MethodResolveEndpoints is the query route for resolving endpoints of a node.
-	MethodResolveEndpoints = "nodes.resolve_endpoints"
-
-	// MethodMigrateSession is the query route for session migration.
-	MethodMigrateSession = "nodes.migrate_session"
-
 	// DefaultBufferSize is the default buffer size for session I/O.
 	DefaultBufferSize = 4 * 1024 * 1024
 	MaxDataFrameSize  = 8192
@@ -41,14 +37,14 @@ const (
 // Module manages encrypted links between nodes: establishing them, resolving
 // peer endpoints, and tracking liveness.
 type Module interface {
-	EstablishInboundLink(ctx context.Context, conn exonet.Conn) error
-	EstablishOutboundLink(ctx context.Context, remoteID *astral.Identity, conn exonet.Conn) (Link, error)
+	EstablishInboundLink(ctx context.Context, conn exonetmod.Conn) error
+	EstablishOutboundLink(ctx context.Context, remoteID *astral.Identity, conn exonetmod.Conn) (Link, error)
 
-	AddEndpoint(*astral.Identity, *EndpointWithTTL) error
+	AddEndpoint(*astral.Identity, *nodes.EndpointWithTTL) error
 	RemoveEndpoint(*astral.Identity, exonet.Endpoint) error
 
 	UpdateNodeEndpoints(ctx *astral.Context, resolver *astral.Identity, identity *astral.Identity) error
-	ResolveEndpoints(*astral.Context, *astral.Identity) (<-chan *EndpointWithTTL, error)
+	ResolveEndpoints(*astral.Context, *astral.Identity) (<-chan *nodes.EndpointWithTTL, error)
 	AddResolver(resolver EndpointResolver)
 
 	IsLinked(*astral.Identity) bool
@@ -73,7 +69,7 @@ type Link interface {
 
 // EndpointResolver resolves the network endpoints at which an identity can be reached.
 type EndpointResolver interface {
-	ResolveEndpoints(*astral.Context, *astral.Identity) (<-chan *EndpointWithTTL, error)
+	ResolveEndpoints(*astral.Context, *astral.Identity) (<-chan *nodes.EndpointWithTTL, error)
 }
 
 // LinkStrategy drives one approach to establishing a link (e.g. direct, NAT, Tor);

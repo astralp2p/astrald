@@ -1,9 +1,9 @@
 package nat
 
 import (
-	"github.com/cryptopunkscc/astrald/astral"
+	"github.com/cryptopunkscc/astral-go/api/services"
+	"github.com/cryptopunkscc/astral-go/astral"
 	"github.com/cryptopunkscc/astrald/mod/nat"
-	"github.com/cryptopunkscc/astrald/mod/services"
 )
 
 // DiscoverServices sends the current enabled state immediately, then streams updates on every enabled change.

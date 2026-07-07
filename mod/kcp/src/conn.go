@@ -1,15 +1,16 @@
 package kcp
 
 import (
+	exonetmod "github.com/cryptopunkscc/astrald/mod/exonet"
 	"sync/atomic"
 	"time"
 
-	"github.com/cryptopunkscc/astrald/mod/exonet"
+	"github.com/cryptopunkscc/astral-go/api/exonet"
 	kcpgo "github.com/xtaci/kcp-go/v5"
 )
 
 // Ensure *WrappedConn implements exonet.Conn
-var _ exonet.Conn = (*WrappedConn)(nil)
+var _ exonetmod.Conn = (*WrappedConn)(nil)
 
 // WrappedConn wraps a KCP session and provides
 // connection-like semantics at the exonet layer.
@@ -78,7 +79,7 @@ func WrapKCPConn(
 	local exonet.Endpoint,
 	outbound bool,
 	dialTimeout time.Duration,
-) exonet.Conn {
+) exonetmod.Conn {
 	return &WrappedConn{
 		UDPSession:  sess,
 		remote:      remote,

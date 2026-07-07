@@ -1,20 +1,11 @@
 package dir
 
 import (
-	"github.com/cryptopunkscc/astrald/astral"
+	"github.com/cryptopunkscc/astral-go/astral"
 )
 
 const ModuleName = "dir"
 const DBPrefix = "dir__"
-
-const (
-	MethodAliasMap     = "dir.alias_map"
-	MethodApplyFilters = "dir.apply_filters"
-	MethodFilters      = "dir.filters"
-	MethodGetAlias     = "dir.get_alias"
-	MethodResolve      = "dir.resolve"
-	MethodSetAlias     = "dir.set_alias"
-)
 
 // Module is the directory service: it maps identities to human-readable aliases,
 // resolves names to identities, and applies named identity filters.

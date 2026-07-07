@@ -1,6 +1,6 @@
 package archives
 
-import "github.com/cryptopunkscc/astrald/astral"
+import "github.com/cryptopunkscc/astral-go/astral"
 
 type Config struct {
 	AutoIndexZones string

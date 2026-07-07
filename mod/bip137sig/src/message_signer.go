@@ -2,11 +2,12 @@ package src
 
 import (
 	"crypto/sha256"
+	cryptomod "github.com/cryptopunkscc/astrald/mod/crypto"
 
 	"github.com/btcsuite/btcd/btcec/v2"
 	"github.com/btcsuite/btcd/btcec/v2/ecdsa"
-	"github.com/cryptopunkscc/astrald/astral"
-	"github.com/cryptopunkscc/astrald/mod/crypto"
+	"github.com/cryptopunkscc/astral-go/api/crypto"
+	"github.com/cryptopunkscc/astral-go/astral"
 )
 
 type MessageSigner struct {
@@ -14,7 +15,7 @@ type MessageSigner struct {
 	compressed bool
 }
 
-var _ crypto.TextSigner = &MessageSigner{}
+var _ cryptomod.TextSigner = &MessageSigner{}
 
 func (m MessageSigner) SignText(ctx *astral.Context, msg string) (*crypto.Signature, error) {
 	hash := hashBitcoinMessage(msg)

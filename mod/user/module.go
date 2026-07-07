@@ -1,29 +1,12 @@
 package user
 
 import (
-	"github.com/cryptopunkscc/astrald/astral"
+	"github.com/cryptopunkscc/astral-go/api/user"
+	"github.com/cryptopunkscc/astral-go/astral"
 )
 
 const ModuleName = "user"
 const DBPrefix = "users__"
-
-const (
-	OpSyncAssets        = "user.sync_assets"
-	OpInfo              = "user.info"
-	OpAddAsset          = "user.add_asset"
-	OpRemoveAsset       = "user.remove_asset"
-	OpAcceptMembership  = "user.accept_membership"
-	OpAcceptContract    = "user.accept_contract"
-	OpAdopt             = "user.adopt"
-	OpRequestMembership = "user.request_membership"
-	OpSwarmStatus       = "user.swarm_status"
-	OpListSiblings      = "user.list_siblings"
-	OpAssets            = "user.assets"
-	OpNewNodeContract   = "user.new_node_contract"
-	OpSyncWith          = "user.sync_with"
-	OpExpel             = "user.expel"
-	OpListExpelled      = "user.list_expelled"
-)
 
 type Module interface {
 	// Ready returns a channel that is closed once the module has applied the
@@ -40,5 +23,5 @@ type Module interface {
 	PushToLocalSwarm(ctx *astral.Context, obj astral.Object)
 	// Expel permanently bans nodeID from the swarm. Only the active contract's
 	// issuer may expel and the ban is irreversible.
-	Expel(ctx *astral.Context, nodeID *astral.Identity) (*SignedExpulsion, error)
+	Expel(ctx *astral.Context, nodeID *astral.Identity) (*user.SignedExpulsion, error)
 }

@@ -3,9 +3,10 @@ package auth
 import (
 	"bytes"
 	"fmt"
+	authmod "github.com/cryptopunkscc/astrald/mod/auth"
 
-	"github.com/cryptopunkscc/astrald/astral"
-	"github.com/cryptopunkscc/astrald/mod/auth"
+	"github.com/cryptopunkscc/astral-go/api/auth"
+	"github.com/cryptopunkscc/astral-go/astral"
 )
 
 type dbContractPermit struct {
@@ -15,7 +16,7 @@ type dbContractPermit struct {
 	Data     []byte
 }
 
-func (dbContractPermit) TableName() string { return auth.DBPrefix + "contract_permits" }
+func (dbContractPermit) TableName() string { return authmod.DBPrefix + "contract_permits" }
 
 func toPermit(row *dbContractPermit) (*auth.Permit, error) {
 	return astral.DecodeAs[*auth.Permit](row.Data)

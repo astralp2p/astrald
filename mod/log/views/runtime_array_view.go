@@ -3,9 +3,9 @@ package views
 import (
 	"strconv"
 
-	"github.com/cryptopunkscc/astrald/astral"
-	"github.com/cryptopunkscc/astrald/astral/fmt"
-	"github.com/cryptopunkscc/astrald/mod/log/styles"
+	"github.com/cryptopunkscc/astral-go/astral"
+	"github.com/cryptopunkscc/astral-go/astral/fmt"
+	"github.com/cryptopunkscc/astral-go/astral/log/styles"
 )
 
 // RuntimeArrayView renders a blueprint-backed fixed-length array as [N]{elem, elem, ...},

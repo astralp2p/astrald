@@ -1,8 +1,9 @@
 package nodes
 
 import (
-	"github.com/cryptopunkscc/astrald/astral"
-	"github.com/cryptopunkscc/astrald/mod/nodes"
+	"github.com/cryptopunkscc/astral-go/api/nodes"
+	"github.com/cryptopunkscc/astral-go/astral"
+	nodesmod "github.com/cryptopunkscc/astrald/mod/nodes"
 	"github.com/cryptopunkscc/astrald/mod/scheduler"
 )
 
@@ -24,7 +25,7 @@ func (m *Module) NewEnsureLinkTask(
 	strategies []string,
 	networks []string,
 	forceNew bool,
-) nodes.EnsureLinkTask {
+) nodesmod.EnsureLinkTask {
 	return &EnsureLinkTask{
 		mod:        m,
 		Target:     target,

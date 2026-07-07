@@ -3,8 +3,8 @@ package archives
 import (
 	"strings"
 
-	"github.com/cryptopunkscc/astrald/astral"
-	"github.com/cryptopunkscc/astrald/mod/objects"
+	"github.com/cryptopunkscc/astral-go/api/objects"
+	"github.com/cryptopunkscc/astral-go/astral"
 )
 
 // SearchObject performs a case-insensitive path substring search over indexed

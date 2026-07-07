@@ -2,12 +2,13 @@ package nodes
 
 import (
 	"fmt"
+	nodesmod "github.com/cryptopunkscc/astrald/mod/nodes"
 	"sync"
 
-	"github.com/cryptopunkscc/astrald/astral"
-	"github.com/cryptopunkscc/astrald/lib/astrald"
-	"github.com/cryptopunkscc/astrald/mod/nodes"
-	nodescli "github.com/cryptopunkscc/astrald/mod/nodes/client"
+	"github.com/cryptopunkscc/astral-go/api/nodes"
+	nodescli "github.com/cryptopunkscc/astral-go/api/nodes/client"
+	"github.com/cryptopunkscc/astral-go/astral"
+	"github.com/cryptopunkscc/astral-go/lib/astrald"
 )
 
 // ResolveEndpoints fans out to all registered resolvers and merges their results
@@ -36,7 +37,7 @@ func (mod *Module) ResolveEndpoints(ctx *astral.Context, nodeID *astral.Identity
 	return ch, nil
 }
 
-func (mod *Module) runResolver(ctx *astral.Context, r nodes.EndpointResolver, nodeID *astral.Identity, out chan<- *nodes.EndpointWithTTL) {
+func (mod *Module) runResolver(ctx *astral.Context, r nodesmod.EndpointResolver, nodeID *astral.Identity, out chan<- *nodes.EndpointWithTTL) {
 	ch, err := r.ResolveEndpoints(ctx, nodeID)
 	if err != nil {
 		return

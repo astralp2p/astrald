@@ -4,16 +4,15 @@ go 1.25.0
 
 require (
 	bitbucket.org/creachadair/shell v0.0.7
-	github.com/akutz/memconn v0.1.0
 	github.com/btcsuite/btcd v0.24.2
 	github.com/btcsuite/btcd/btcutil v1.1.6
 	github.com/charmbracelet/lipgloss v1.1.0
 	github.com/coder/websocket v1.8.14
+	github.com/cryptopunkscc/astral-go v0.0.0-20260707122723-064584370901
 	github.com/cryptopunkscc/bip-0137 v0.0.0-20260118232723-438bbbb8fe46
 	github.com/cryptopunkscc/utp v0.0.0-20251010115525-2f03809eff3d
 	github.com/fsnotify/fsnotify v1.7.0
 	github.com/glebarez/sqlite v1.9.0
-	github.com/jxskiss/base62 v1.1.0
 	github.com/muesli/termenv v0.16.0
 	github.com/pkg/errors v0.9.1
 	github.com/stretchr/testify v1.10.0
@@ -29,6 +28,7 @@ require (
 )
 
 require (
+	github.com/akutz/memconn v0.1.0 // indirect
 	github.com/aymanbagabas/go-osc52/v2 v2.0.1 // indirect
 	github.com/bitonicnl/verify-signed-message v0.7.4 // indirect
 	github.com/btcsuite/btcd/chaincfg/chainhash v1.1.0 // indirect
@@ -44,6 +44,7 @@ require (
 	github.com/google/uuid v1.3.1 // indirect
 	github.com/jinzhu/inflection v1.0.0 // indirect
 	github.com/jinzhu/now v1.1.5 // indirect
+	github.com/jxskiss/base62 v1.1.0 // indirect
 	github.com/klauspost/cpuid/v2 v2.2.10 // indirect
 	github.com/klauspost/reedsolomon v1.12.5 // indirect
 	github.com/lucasb-eyer/go-colorful v1.2.0 // indirect

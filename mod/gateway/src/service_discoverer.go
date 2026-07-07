@@ -1,12 +1,13 @@
 package gateway
 
 import (
-	"github.com/cryptopunkscc/astrald/astral"
+	"github.com/cryptopunkscc/astral-go/api/services"
+	"github.com/cryptopunkscc/astral-go/astral"
 	"github.com/cryptopunkscc/astrald/mod/gateway"
-	"github.com/cryptopunkscc/astrald/mod/services"
+	servicesmod "github.com/cryptopunkscc/astrald/mod/services"
 )
 
-var _ services.Discoverer = &Module{}
+var _ servicesmod.Discoverer = &Module{}
 
 // DiscoverServices advertises the gateway service when enabled.
 // If follow is true, the channel stays open (with a nil sentinel after the initial update) until ctx is done.

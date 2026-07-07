@@ -1,9 +1,9 @@
 package tree
 
 import (
-	"github.com/cryptopunkscc/astrald/astral"
-	"github.com/cryptopunkscc/astrald/lib/routing"
-	treecli "github.com/cryptopunkscc/astrald/mod/tree/client"
+	treecli "github.com/cryptopunkscc/astral-go/api/tree/client"
+	"github.com/cryptopunkscc/astral-go/astral"
+	"github.com/cryptopunkscc/astral-go/lib/routing"
 )
 
 func (mod *Module) OpGet(ctx *astral.Context, q *routing.IncomingQuery, args treecli.GetArgs) (err error) {

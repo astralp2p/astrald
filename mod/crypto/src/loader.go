@@ -3,12 +3,13 @@ package crypto
 import (
 	"bytes"
 	"errors"
+	cryptomod "github.com/cryptopunkscc/astrald/mod/crypto"
 
-	"github.com/cryptopunkscc/astrald/astral"
-	"github.com/cryptopunkscc/astrald/astral/log"
+	"github.com/cryptopunkscc/astral-go/api/crypto"
+	"github.com/cryptopunkscc/astral-go/astral"
+	"github.com/cryptopunkscc/astral-go/astral/log"
 	"github.com/cryptopunkscc/astrald/core"
 	"github.com/cryptopunkscc/astrald/core/assets"
-	"github.com/cryptopunkscc/astrald/mod/crypto"
 	"github.com/cryptopunkscc/astrald/resources"
 )
 
@@ -23,7 +24,7 @@ func (Loader) Load(node astral.Node, assets assets.Assets, log *log.Logger) (cor
 		assets: assets,
 	}
 
-	_ = assets.LoadYAML(crypto.ModuleName, &mod.config)
+	_ = assets.LoadYAML(cryptomod.ModuleName, &mod.config)
 
 	mod.router.AddStructPrefix(mod, "Op")
 
@@ -61,7 +62,7 @@ func (mod *Module) loadNodeKey(res resources.Resources) (*crypto.PrivateKey, err
 }
 
 func init() {
-	if err := core.RegisterModule(crypto.ModuleName, Loader{}); err != nil {
+	if err := core.RegisterModule(cryptomod.ModuleName, Loader{}); err != nil {
 		panic(err)
 	}
 }

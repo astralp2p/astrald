@@ -2,26 +2,28 @@ package kcp
 
 import (
 	"fmt"
+	exonetmod "github.com/cryptopunkscc/astrald/mod/exonet"
+	kcpmod "github.com/cryptopunkscc/astrald/mod/kcp"
 	"net"
 
-	"github.com/cryptopunkscc/astrald/astral"
-	"github.com/cryptopunkscc/astrald/mod/exonet"
-	"github.com/cryptopunkscc/astrald/mod/kcp"
+	"github.com/cryptopunkscc/astral-go/api/exonet"
+	"github.com/cryptopunkscc/astral-go/api/kcp"
+	"github.com/cryptopunkscc/astral-go/astral"
 	"github.com/pkg/errors"
 	kcpgo "github.com/xtaci/kcp-go/v5"
 )
 
-var _ exonet.Dialer = &Module{}
+var _ exonetmod.Dialer = &Module{}
 
 // Dial establishes a KCP session and wraps it as an exonet.Conn.
 func (mod *Module) Dial(ctx *astral.Context, endpoint exonet.Endpoint) (
-	c exonet.Conn, err error) {
+	c exonetmod.Conn, err error) {
 	if endpoint.Network() != "kcp" {
-		return nil, exonet.ErrUnsupportedNetwork
+		return nil, exonetmod.ErrUnsupportedNetwork
 	}
 
 	if dial := mod.settings.Dial.Get(); dial != nil && !*dial {
-		return nil, exonet.ErrDisabledNetwork
+		return nil, exonetmod.ErrDisabledNetwork
 	}
 
 	remoteEndpoint, ok := endpoint.(*kcp.Endpoint)
@@ -66,7 +68,7 @@ func (mod *Module) SetEndpointLocalSocket(endpoint kcp.Endpoint, localSocket ast
 
 	_, ok := mod.ephemeralPortMappings.Set(address, localSocket)
 	if !ok {
-		return fmt.Errorf("%w: address %s", kcp.ErrEndpointLocalSocketExists, address)
+		return fmt.Errorf("%w: address %s", kcpmod.ErrEndpointLocalSocketExists, address)
 	}
 
 	return nil

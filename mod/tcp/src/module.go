@@ -2,20 +2,22 @@ package tcp
 
 import (
 	"context"
+	exonetmod "github.com/cryptopunkscc/astrald/mod/exonet"
+	tcpmod "github.com/cryptopunkscc/astrald/mod/tcp"
 	"sync"
 	"time"
 
-	"github.com/cryptopunkscc/astrald/astral"
-	"github.com/cryptopunkscc/astrald/astral/log"
-	"github.com/cryptopunkscc/astrald/lib/routing"
-	"github.com/cryptopunkscc/astrald/mod/exonet"
-	"github.com/cryptopunkscc/astrald/mod/nodes"
-	"github.com/cryptopunkscc/astrald/mod/tcp"
-	"github.com/cryptopunkscc/astrald/mod/tree"
-	"github.com/cryptopunkscc/astrald/sig"
+	"github.com/cryptopunkscc/astral-go/api/exonet"
+	"github.com/cryptopunkscc/astral-go/api/nodes"
+	"github.com/cryptopunkscc/astral-go/api/tcp"
+	"github.com/cryptopunkscc/astral-go/api/tree"
+	"github.com/cryptopunkscc/astral-go/astral"
+	"github.com/cryptopunkscc/astral-go/astral/log"
+	"github.com/cryptopunkscc/astral-go/astral/sig"
+	"github.com/cryptopunkscc/astral-go/lib/routing"
 )
 
-var _ tcp.Module = &Module{}
+var _ tcpmod.Module = &Module{}
 
 type Module struct {
 	Deps
@@ -31,7 +33,7 @@ type Module struct {
 	mu sync.Mutex
 
 	server             sig.Switch
-	ephemeralListeners sig.Map[astral.Uint16, exonet.EphemeralListener]
+	ephemeralListeners sig.Map[astral.Uint16, exonetmod.EphemeralListener]
 }
 
 // Settings holds live, tree-bound toggles for the module; values may change at runtime
@@ -46,10 +48,10 @@ func (mod *Module) Router() astral.Router {
 }
 
 func (mod *Module) String() string {
-	return tcp.ModuleName
+	return tcpmod.ModuleName
 }
 
-func (mod *Module) acceptAll(ctx context.Context, conn exonet.Conn) (shouldStop bool, err error) {
+func (mod *Module) acceptAll(ctx context.Context, conn exonetmod.Conn) (shouldStop bool, err error) {
 	err = mod.Nodes.EstablishInboundLink(ctx, conn)
 	if err != nil {
 		return false, err

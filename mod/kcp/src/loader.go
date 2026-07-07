@@ -2,13 +2,14 @@ package kcp
 
 import (
 	"fmt"
+	kcpmod "github.com/cryptopunkscc/astrald/mod/kcp"
 	"strings"
 
-	"github.com/cryptopunkscc/astrald/astral"
-	"github.com/cryptopunkscc/astrald/astral/log"
+	"github.com/cryptopunkscc/astral-go/api/kcp"
+	"github.com/cryptopunkscc/astral-go/astral"
+	"github.com/cryptopunkscc/astral-go/astral/log"
 	"github.com/cryptopunkscc/astrald/core"
 	"github.com/cryptopunkscc/astrald/core/assets"
-	"github.com/cryptopunkscc/astrald/mod/kcp"
 )
 
 type Loader struct{}
@@ -22,12 +23,12 @@ func (Loader) Load(node astral.Node, assets assets.Assets, l *log.Logger) (core.
 		config: defaultConfig,
 	}
 
-	_ = assets.LoadYAML(kcp.ModuleName, &mod.config)
+	_ = assets.LoadYAML(kcpmod.ModuleName, &mod.config)
 
 	mod.router.AddStructPrefix(mod, "Op")
 
 	for _, addr := range mod.config.Endpoints {
-		addr, _ = strings.CutPrefix(addr, fmt.Sprintf("%s:", kcp.ModuleName))
+		addr, _ = strings.CutPrefix(addr, fmt.Sprintf("%s:", kcpmod.ModuleName))
 
 		endpoint, err := kcp.ParseEndpoint(addr)
 		if err != nil {
@@ -41,7 +42,7 @@ func (Loader) Load(node astral.Node, assets assets.Assets, l *log.Logger) (core.
 }
 
 func init() {
-	if err := core.RegisterModule(kcp.ModuleName, Loader{}); err != nil {
+	if err := core.RegisterModule(kcpmod.ModuleName, Loader{}); err != nil {
 		panic(err)
 	}
 }

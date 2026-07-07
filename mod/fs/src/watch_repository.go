@@ -4,19 +4,20 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	objectsmod "github.com/cryptopunkscc/astrald/mod/objects"
 	"io"
 	"os"
 	"path/filepath"
 
-	"github.com/cryptopunkscc/astrald/astral"
+	"github.com/cryptopunkscc/astral-go/api/objects"
+	"github.com/cryptopunkscc/astral-go/astral"
+	"github.com/cryptopunkscc/astral-go/astral/sig"
 	"github.com/cryptopunkscc/astrald/lib/paths"
 	"github.com/cryptopunkscc/astrald/mod/fs"
-	"github.com/cryptopunkscc/astrald/mod/objects"
-	"github.com/cryptopunkscc/astrald/sig"
 )
 
-var _ objects.Repository = &WatchRepository{}
-var _ objects.AfterRemovedCallback = &WatchRepository{}
+var _ objectsmod.Repository = &WatchRepository{}
+var _ objectsmod.AfterRemovedCallback = &WatchRepository{}
 
 // WatchRepository is a read-only, database-indexed repository that watches a directory tree for
 // filesystem events and keeps the index up to date via the module's indexer.
@@ -75,7 +76,7 @@ func NewWatchRepository(mod *Module, root string, label string) (repo *WatchRepo
 	return
 }
 
-var _ objects.Repository = &WatchRepository{}
+var _ objectsmod.Repository = &WatchRepository{}
 
 // Contains checks the database index rather than the filesystem directly.
 func (repo *WatchRepository) Contains(ctx *astral.Context, objectID *astral.ObjectID) (bool, error) {
@@ -139,13 +140,13 @@ func (repo *WatchRepository) Scan(ctx *astral.Context, follow bool) (<-chan *ast
 
 // Read resolves the object to a filesystem path via the database index and tries each candidate
 // in order, returning the first file that opens and seeks successfully.
-func (repo *WatchRepository) Read(ctx *astral.Context, objectID *astral.ObjectID, offset int64, limit int64) (objects.Reader, error) {
+func (repo *WatchRepository) Read(ctx *astral.Context, objectID *astral.ObjectID, offset int64, limit int64) (objectsmod.Reader, error) {
 	rows, err := repo.mod.db.FindObject(repo.root, objectID)
 	if err != nil {
 		return nil, err
 	}
 	if len(rows) == 0 {
-		return nil, objects.ErrNotFound
+		return nil, objectsmod.ErrNotFound
 	}
 	if limit == 0 {
 		limit = int64(objectID.Size)
@@ -168,11 +169,11 @@ func (repo *WatchRepository) Read(ctx *astral.Context, objectID *astral.ObjectID
 		return NewReader(f, row.Path, limit, repo), nil
 	}
 
-	return nil, objects.ErrNotFound
+	return nil, objectsmod.ErrNotFound
 }
 
 // Create is not supported; WatchRepository is read-only.
-func (repo *WatchRepository) Create(ctx *astral.Context, opts *objects.CreateOpts) (objects.Writer, error) {
+func (repo *WatchRepository) Create(ctx *astral.Context, opts *objectsmod.CreateOpts) (objects.Writer, error) {
 	return nil, errors.ErrUnsupported
 }
 

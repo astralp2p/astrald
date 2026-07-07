@@ -1,8 +1,8 @@
 package gateway
 
 import (
-	"github.com/cryptopunkscc/astrald/astral"
-	"github.com/cryptopunkscc/astrald/mod/gateway"
+	"github.com/cryptopunkscc/astral-go/api/gateway"
+	"github.com/cryptopunkscc/astral-go/astral"
 )
 
 const defaultGateway = "node1f3AwbE1gJAgAqEx98FMipokcaE9ZapIphzDUkAceE7Pmw8ghmFV19QKCATeC7uyoLszQA"

@@ -3,10 +3,11 @@ package auth
 import (
 	"bytes"
 	"fmt"
+	authmod "github.com/cryptopunkscc/astrald/mod/auth"
 
-	"github.com/cryptopunkscc/astrald/astral"
-	"github.com/cryptopunkscc/astrald/mod/auth"
-	"github.com/cryptopunkscc/astrald/mod/objects"
+	"github.com/cryptopunkscc/astral-go/api/auth"
+	"github.com/cryptopunkscc/astral-go/api/objects"
+	"github.com/cryptopunkscc/astral-go/astral"
 )
 
 // IndexContract verifies and stores sc in the local DB; skips silently if already indexed.
@@ -65,7 +66,7 @@ func (mod *Module) indexer(ctx *astral.Context) {
 	mod.log.Logv(1, "auth indexer finished")
 }
 
-func (mod *Module) SignedContracts() auth.ContractQueryBuilder {
+func (mod *Module) SignedContracts() authmod.ContractQueryBuilder {
 	return &contractQuery{DB: mod.db}
 }
 

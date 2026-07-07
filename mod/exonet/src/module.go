@@ -1,15 +1,16 @@
 package exonet
 
 import (
-	"github.com/cryptopunkscc/astrald/astral"
-	"github.com/cryptopunkscc/astrald/astral/log"
+	"github.com/cryptopunkscc/astral-go/api/exonet"
+	"github.com/cryptopunkscc/astral-go/astral"
+	"github.com/cryptopunkscc/astral-go/astral/log"
+	"github.com/cryptopunkscc/astral-go/astral/sig"
 	"github.com/cryptopunkscc/astrald/mod/dir"
-	"github.com/cryptopunkscc/astrald/mod/exonet"
+	exonetmod "github.com/cryptopunkscc/astrald/mod/exonet"
 	"github.com/cryptopunkscc/astrald/resources"
-	"github.com/cryptopunkscc/astrald/sig"
 )
 
-var _ exonet.Module = &Module{}
+var _ exonetmod.Module = &Module{}
 
 type Deps struct {
 	Dir dir.Module
@@ -22,9 +23,9 @@ type Module struct {
 	log    *log.Logger
 	assets resources.Resources
 
-	dialers   sig.Map[string, exonet.Dialer]
-	unpackers sig.Map[string, exonet.Unpacker]
-	parser    sig.Map[string, exonet.Parser]
+	dialers   sig.Map[string, exonetmod.Dialer]
+	unpackers sig.Map[string, exonetmod.Unpacker]
+	parser    sig.Map[string, exonetmod.Parser]
 }
 
 func (mod *Module) Run(ctx *astral.Context) error {
@@ -34,13 +35,13 @@ func (mod *Module) Run(ctx *astral.Context) error {
 }
 
 // Dial dispatches to the dialer registered for the endpoint's network; returns ErrUnsupportedNetwork if none is registered.
-func (mod *Module) Dial(ctx *astral.Context, endpoint exonet.Endpoint) (conn exonet.Conn, err error) {
+func (mod *Module) Dial(ctx *astral.Context, endpoint exonet.Endpoint) (conn exonetmod.Conn, err error) {
 	d, found := mod.dialers.Get(endpoint.Network())
 	if found {
 		return d.Dial(ctx, endpoint)
 	}
 
-	return nil, exonet.ErrUnsupportedNetwork
+	return nil, exonetmod.ErrUnsupportedNetwork
 }
 
 // Unpack dispatches to the unpacker registered for the given network; returns ErrUnsupportedNetwork if none is registered.
@@ -50,7 +51,7 @@ func (mod *Module) Unpack(network string, data []byte) (exonet.Endpoint, error) 
 		return u.Unpack(network, data)
 	}
 
-	return nil, exonet.ErrUnsupportedNetwork
+	return nil, exonetmod.ErrUnsupportedNetwork
 }
 
 // Parse dispatches to the parser registered for the given network; returns ErrUnsupportedNetwork if none is registered.
@@ -60,18 +61,18 @@ func (mod *Module) Parse(network string, address string) (exonet.Endpoint, error
 		return p.Parse(network, address)
 	}
 
-	return nil, exonet.ErrUnsupportedNetwork
+	return nil, exonetmod.ErrUnsupportedNetwork
 
 }
 
-func (mod *Module) SetDialer(network string, dialer exonet.Dialer) {
+func (mod *Module) SetDialer(network string, dialer exonetmod.Dialer) {
 	mod.dialers.Replace(network, dialer)
 }
 
-func (mod *Module) SetUnpacker(network string, unpacker exonet.Unpacker) {
+func (mod *Module) SetUnpacker(network string, unpacker exonetmod.Unpacker) {
 	mod.unpackers.Replace(network, unpacker)
 }
 
-func (mod *Module) SetParser(network string, parser exonet.Parser) {
+func (mod *Module) SetParser(network string, parser exonetmod.Parser) {
 	mod.parser.Replace(network, parser)
 }

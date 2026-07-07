@@ -3,8 +3,8 @@ package fs
 import (
 	"strings"
 
-	"github.com/cryptopunkscc/astrald/astral"
-	"github.com/cryptopunkscc/astrald/mod/objects"
+	"github.com/cryptopunkscc/astral-go/api/objects"
+	"github.com/cryptopunkscc/astral-go/astral"
 )
 
 // SearchObject performs a case-insensitive path substring search; requires the "path" tag and ZoneDevice zone.

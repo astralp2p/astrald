@@ -2,8 +2,9 @@ package mem
 
 import (
 	"bytes"
-	"github.com/cryptopunkscc/astrald/astral"
-	"github.com/cryptopunkscc/astrald/mod/objects"
+	"github.com/cryptopunkscc/astral-go/api/objects"
+	"github.com/cryptopunkscc/astral-go/astral"
+	objectsmod "github.com/cryptopunkscc/astrald/mod/objects"
 	"sync/atomic"
 )
 
@@ -24,11 +25,11 @@ func NewWriter(memStore *Repository) *Writer {
 
 func (w *Writer) Write(p []byte) (n int, err error) {
 	if w.closed.Load() {
-		return 0, objects.ErrClosedPipe
+		return 0, objectsmod.ErrClosedPipe
 	}
 
 	if int64(len(p)) > w.free() {
-		return 0, objects.ErrNoSpaceLeft
+		return 0, objectsmod.ErrNoSpaceLeft
 	}
 	n, err = w.buf.Write(p)
 	w.used.Add(int64(n))
@@ -39,7 +40,7 @@ func (w *Writer) Write(p []byte) (n int, err error) {
 // Idempotent: only the first call succeeds; later calls return ErrClosedPipe.
 func (w *Writer) Commit() (*astral.ObjectID, error) {
 	if !w.closed.CompareAndSwap(false, true) {
-		return nil, objects.ErrClosedPipe
+		return nil, objectsmod.ErrClosedPipe
 	}
 
 	var buf = w.buf.Bytes()

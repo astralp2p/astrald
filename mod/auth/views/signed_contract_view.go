@@ -1,10 +1,10 @@
 package auth
 
 import (
-	"github.com/cryptopunkscc/astrald/astral/fmt"
-	"github.com/cryptopunkscc/astrald/mod/auth"
-	"github.com/cryptopunkscc/astrald/mod/log/styles"
-	"github.com/cryptopunkscc/astrald/mod/log/theme"
+	"github.com/cryptopunkscc/astral-go/api/auth"
+	"github.com/cryptopunkscc/astral-go/astral/fmt"
+	"github.com/cryptopunkscc/astral-go/astral/log/styles"
+	"github.com/cryptopunkscc/astral-go/astral/log/theme"
 	"github.com/cryptopunkscc/astrald/mod/log/views"
 )
 

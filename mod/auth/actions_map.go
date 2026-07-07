@@ -1,15 +1,16 @@
 package auth
 
 import (
+	"github.com/cryptopunkscc/astral-go/api/auth"
 	"reflect"
 
-	"github.com/cryptopunkscc/astrald/astral"
+	"github.com/cryptopunkscc/astral-go/astral"
 )
 
 // Handler authorizes a typed action object.
 // The action object carries the actor identity — no separate identity argument.
 type Handler interface {
-	Authorize(*astral.Context, ActionObject) bool
+	Authorize(*astral.Context, auth.ActionObject) bool
 }
 
 // TypedHandler is a Handler that also knows its action ObjectType string.
@@ -21,9 +22,9 @@ type TypedHandler interface {
 // Func is a generic adapter implementing TypedHandler for a specific action type T.
 // It type-asserts the incoming action object to T before dispatching.
 // T must be an ActionObject (i.e. a concrete action type embedding auth.Action).
-type Func[T ActionObject] func(*astral.Context, T) bool
+type Func[T auth.ActionObject] func(*astral.Context, T) bool
 
-func (f Func[T]) Authorize(ctx *astral.Context, action ActionObject) bool {
+func (f Func[T]) Authorize(ctx *astral.Context, action auth.ActionObject) bool {
 	if t, ok := action.(T); ok {
 		return f(ctx, t)
 	}
@@ -35,5 +36,5 @@ func (Func[T]) ActionType() string {
 	if t.Kind() == reflect.Ptr {
 		t = t.Elem()
 	}
-	return reflect.New(t).Interface().(ActionObject).ObjectType()
+	return reflect.New(t).Interface().(auth.ActionObject).ObjectType()
 }

@@ -3,17 +3,19 @@ package src
 import (
 	"github.com/btcsuite/btcd/btcutil/hdkeychain"
 	"github.com/btcsuite/btcd/chaincfg"
-	"github.com/cryptopunkscc/astrald/astral"
-	"github.com/cryptopunkscc/astrald/astral/log"
+	"github.com/cryptopunkscc/astral-go/api/bip137sig"
+	"github.com/cryptopunkscc/astral-go/api/crypto"
+	"github.com/cryptopunkscc/astral-go/api/secp256k1"
+	"github.com/cryptopunkscc/astral-go/astral"
+	"github.com/cryptopunkscc/astral-go/astral/log"
+	"github.com/cryptopunkscc/astral-go/lib/routing"
 	"github.com/cryptopunkscc/astrald/core/assets"
-	"github.com/cryptopunkscc/astrald/lib/routing"
-	"github.com/cryptopunkscc/astrald/mod/bip137sig"
-	"github.com/cryptopunkscc/astrald/mod/crypto"
-	"github.com/cryptopunkscc/astrald/mod/secp256k1"
+	bip137sigmod "github.com/cryptopunkscc/astrald/mod/bip137sig"
+	cryptomod "github.com/cryptopunkscc/astrald/mod/crypto"
 )
 
 type Deps struct {
-	Crypto crypto.Module
+	Crypto cryptomod.Module
 }
 
 type Module struct {
@@ -24,7 +26,7 @@ type Module struct {
 	router routing.OpRouter
 }
 
-var _ bip137sig.Module = &Module{}
+var _ bip137sigmod.Module = &Module{}
 
 func (mod *Module) Run(ctx *astral.Context) error {
 	<-ctx.Done()
@@ -35,12 +37,12 @@ func (mod *Module) Router() astral.Router {
 	return &mod.router
 }
 
-func (mod *Module) CryptoEngine() crypto.Engine {
+func (mod *Module) CryptoEngine() cryptomod.Engine {
 	return &Engine{mod: mod}
 }
 
 func (mod *Module) String() string {
-	return bip137sig.ModuleName
+	return bip137sigmod.ModuleName
 }
 
 // DeriveKey derives a secp256k1 private key from seed along the BIP-32 path on mainnet.

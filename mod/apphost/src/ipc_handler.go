@@ -4,11 +4,11 @@ import (
 	"errors"
 	"io"
 
-	"github.com/cryptopunkscc/astrald/astral"
-	"github.com/cryptopunkscc/astrald/astral/channel"
-	"github.com/cryptopunkscc/astrald/lib/ipc"
-	"github.com/cryptopunkscc/astrald/lib/query"
-	"github.com/cryptopunkscc/astrald/mod/apphost"
+	"github.com/cryptopunkscc/astral-go/api/apphost"
+	"github.com/cryptopunkscc/astral-go/astral"
+	"github.com/cryptopunkscc/astral-go/astral/channel"
+	"github.com/cryptopunkscc/astral-go/lib/ipc"
+	"github.com/cryptopunkscc/astral-go/lib/query"
 )
 
 // IPCHandler routes queries to a registered IPC endpoint.

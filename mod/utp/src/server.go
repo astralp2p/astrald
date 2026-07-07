@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"net"
 
-	"github.com/cryptopunkscc/astrald/astral"
-	utpmod "github.com/cryptopunkscc/astrald/mod/utp"
+	utpmod "github.com/cryptopunkscc/astral-go/api/utp"
+	"github.com/cryptopunkscc/astral-go/astral"
 	"github.com/cryptopunkscc/utp"
 )
 

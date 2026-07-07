@@ -9,11 +9,11 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/cryptopunkscc/astrald/astral"
-	log2 "github.com/cryptopunkscc/astrald/astral/log"
+	"github.com/cryptopunkscc/astral-go/astral"
+	log2 "github.com/cryptopunkscc/astral-go/astral/log"
+	"github.com/cryptopunkscc/astral-go/astral/sig"
 	"github.com/cryptopunkscc/astrald/core/assets"
 	"github.com/cryptopunkscc/astrald/debug"
-	"github.com/cryptopunkscc/astrald/sig"
 )
 
 type Modules struct {

@@ -1,18 +1,19 @@
 package tor
 
 import (
-	"github.com/cryptopunkscc/astrald/astral"
-	"github.com/cryptopunkscc/astrald/mod/exonet"
-	"github.com/cryptopunkscc/astrald/mod/tor"
+	"github.com/cryptopunkscc/astral-go/api/exonet"
+	"github.com/cryptopunkscc/astral-go/api/tor"
+	"github.com/cryptopunkscc/astral-go/astral"
+	exonetmod "github.com/cryptopunkscc/astrald/mod/exonet"
 	"net"
 )
 
-var _ exonet.Dialer = &Module{}
+var _ exonetmod.Dialer = &Module{}
 
 // Dial tries to establish a Tor connection to the provided address
-func (mod *Module) Dial(ctx *astral.Context, endpoint exonet.Endpoint) (conn exonet.Conn, err error) {
+func (mod *Module) Dial(ctx *astral.Context, endpoint exonet.Endpoint) (conn exonetmod.Conn, err error) {
 	if dial := mod.settings.Dial.Get(); dial != nil && !*dial {
-		return nil, exonet.ErrDisabledNetwork
+		return nil, exonetmod.ErrDisabledNetwork
 	}
 
 	endpoint, err = mod.Unpack(endpoint.Network(), endpoint.Pack())

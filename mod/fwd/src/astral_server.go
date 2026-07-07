@@ -5,7 +5,7 @@ import (
 	"io"
 	"strings"
 
-	"github.com/cryptopunkscc/astrald/astral"
+	"github.com/cryptopunkscc/astral-go/astral"
 )
 
 // AstralServer listens on an astral service name and forwards queries to a target router.

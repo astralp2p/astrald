@@ -1,9 +1,9 @@
 package tor
 
 import (
-	"github.com/cryptopunkscc/astrald/astral/fmt"
-	"github.com/cryptopunkscc/astrald/mod/log/theme"
-	"github.com/cryptopunkscc/astrald/mod/tor"
+	"github.com/cryptopunkscc/astral-go/api/tor"
+	"github.com/cryptopunkscc/astral-go/astral/fmt"
+	"github.com/cryptopunkscc/astral-go/astral/log/theme"
 )
 
 type EndpointView struct {

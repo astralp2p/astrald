@@ -3,17 +3,19 @@ package apphost
 import (
 	"context"
 	"errors"
+	apphostmod "github.com/cryptopunkscc/astrald/mod/apphost"
+	authmod "github.com/cryptopunkscc/astrald/mod/auth"
 	"io"
 	"net"
 	"strings"
 	"sync/atomic"
 
-	"github.com/cryptopunkscc/astrald/astral"
-	"github.com/cryptopunkscc/astrald/astral/channel"
-	"github.com/cryptopunkscc/astrald/lib/query"
-	"github.com/cryptopunkscc/astrald/mod/apphost"
-	"github.com/cryptopunkscc/astrald/mod/auth"
-	"github.com/cryptopunkscc/astrald/streams"
+	"github.com/cryptopunkscc/astral-go/api/apphost"
+	"github.com/cryptopunkscc/astral-go/api/auth"
+	"github.com/cryptopunkscc/astral-go/astral"
+	"github.com/cryptopunkscc/astral-go/astral/channel"
+	"github.com/cryptopunkscc/astral-go/astral/streams"
+	"github.com/cryptopunkscc/astral-go/lib/query"
 )
 
 // Mode is the wire format used by a Guest connection.
@@ -138,7 +140,7 @@ func (guest *Guest) onRegisterHandlerMsg(ctx *astral.Context, msg *apphost.Regis
 
 	// if requested identity is different from the authenticated identity, check authorization
 	if !msg.Identity.IsEqual(guest.guestID) {
-		if !guest.mod.Auth.Authorize(ctx, &auth.SudoAction{Action: auth.NewAction(guest.guestID), AsID: msg.Identity}) {
+		if !guest.mod.Auth.Authorize(ctx, &authmod.SudoAction{Action: auth.NewAction(guest.guestID), AsID: msg.Identity}) {
 			return guest.Send(&apphost.ErrorMsg{Code: apphost.ErrCodeDenied})
 		}
 	}
@@ -209,7 +211,7 @@ func (guest *Guest) onRouteQueryMsg(ctx *astral.Context, msg *apphost.RouteQuery
 	case q.Caller.IsZero():
 	case q.Caller.IsEqual(guest.guestID):
 	default:
-		if !guest.mod.Auth.Authorize(ctx, &auth.SudoAction{Action: auth.NewAction(guest.guestID), AsID: q.Caller}) {
+		if !guest.mod.Auth.Authorize(ctx, &authmod.SudoAction{Action: auth.NewAction(guest.guestID), AsID: q.Caller}) {
 			return guest.Send(&apphost.ErrorMsg{Code: apphost.ErrCodeDenied})
 		}
 	}
@@ -241,7 +243,7 @@ func (guest *Guest) onRouteQueryMsg(ctx *astral.Context, msg *apphost.RouteQuery
 	// Carry the browser Origin for queries arriving over the WebSocket endpoint
 	// so ops can apply their own per-origin authorization.
 	if guest.webOrigin != "" {
-		inFlight.Extra.Set(apphost.ExtraOriginWeb, guest.webOrigin)
+		inFlight.Extra.Set(apphostmod.ExtraOriginWeb, guest.webOrigin)
 	}
 
 	// Flag queries from a token-less session - IPC or WebSocket alike - so ops
@@ -249,7 +251,7 @@ func (guest *Guest) onRouteQueryMsg(ctx *astral.Context, msg *apphost.RouteQuery
 	// rewrites a nil caller to the node identity. Set only when true; absence
 	// means the session was authenticated.
 	if !guest.isAuthenticated() {
-		inFlight.Extra.Set(apphost.ExtraAnonymous, true)
+		inFlight.Extra.Set(apphostmod.ExtraAnonymous, true)
 	}
 
 	enRoute := &queryEnRoute{query: inFlight, cancel: cancelQuery}
@@ -312,7 +314,7 @@ func (guest *Guest) onRegisterServiceMsg(ctx *astral.Context, msg *apphost.Regis
 	}
 
 	if !msg.Identity.IsEqual(guest.guestID) {
-		if !guest.mod.Auth.Authorize(ctx, &auth.SudoAction{Action: auth.NewAction(guest.guestID), AsID: msg.Identity}) {
+		if !guest.mod.Auth.Authorize(ctx, &authmod.SudoAction{Action: auth.NewAction(guest.guestID), AsID: msg.Identity}) {
 			return guest.Send(&apphost.ErrorMsg{Code: apphost.ErrCodeDenied})
 		}
 	}

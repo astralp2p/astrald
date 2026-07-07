@@ -3,9 +3,9 @@ package user
 import (
 	"errors"
 
-	"github.com/cryptopunkscc/astrald/astral"
-	"github.com/cryptopunkscc/astrald/mod/crypto"
-	"github.com/cryptopunkscc/astrald/mod/user"
+	"github.com/cryptopunkscc/astral-go/api/crypto"
+	"github.com/cryptopunkscc/astral-go/api/user"
+	"github.com/cryptopunkscc/astral-go/astral"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 )

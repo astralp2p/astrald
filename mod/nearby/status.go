@@ -3,7 +3,7 @@ package nearby
 import (
 	"io"
 
-	"github.com/cryptopunkscc/astrald/astral"
+	"github.com/cryptopunkscc/astral-go/astral"
 )
 
 // Status is a resolved broadcast: the sender's identity has been determined and is paired

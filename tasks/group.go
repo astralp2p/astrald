@@ -1,7 +1,7 @@
 package tasks
 
 import (
-	"github.com/cryptopunkscc/astrald/astral"
+	"github.com/cryptopunkscc/astral-go/astral"
 )
 
 type GroupRunner struct {

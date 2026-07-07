@@ -2,13 +2,14 @@ package utp
 
 import (
 	"fmt"
+	utpmod "github.com/cryptopunkscc/astrald/mod/utp"
 	"strings"
 
-	"github.com/cryptopunkscc/astrald/astral"
-	"github.com/cryptopunkscc/astrald/astral/log"
+	"github.com/cryptopunkscc/astral-go/api/utp"
+	"github.com/cryptopunkscc/astral-go/astral"
+	"github.com/cryptopunkscc/astral-go/astral/log"
 	"github.com/cryptopunkscc/astrald/core"
 	"github.com/cryptopunkscc/astrald/core/assets"
-	"github.com/cryptopunkscc/astrald/mod/utp"
 )
 
 type Loader struct{}
@@ -22,10 +23,10 @@ func (Loader) Load(node astral.Node, assets assets.Assets, l *log.Logger) (core.
 		config: defaultConfig,
 	}
 
-	_ = assets.LoadYAML(utp.ModuleName, &mod.config)
+	_ = assets.LoadYAML(utpmod.ModuleName, &mod.config)
 
 	for _, addr := range mod.config.Endpoints {
-		addr, _ = strings.CutPrefix(addr, fmt.Sprintf("%s:", utp.ModuleName))
+		addr, _ = strings.CutPrefix(addr, fmt.Sprintf("%s:", utpmod.ModuleName))
 
 		endpoint, err := utp.ParseEndpoint(addr)
 		if err != nil {
@@ -39,7 +40,7 @@ func (Loader) Load(node astral.Node, assets assets.Assets, l *log.Logger) (core.
 }
 
 func init() {
-	if err := core.RegisterModule(utp.ModuleName, Loader{}); err != nil {
+	if err := core.RegisterModule(utpmod.ModuleName, Loader{}); err != nil {
 		panic(err)
 	}
 }

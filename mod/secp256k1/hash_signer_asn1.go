@@ -3,9 +3,10 @@ package secp256k1
 import (
 	"crypto/ecdsa"
 	"crypto/rand"
+	cryptomod "github.com/cryptopunkscc/astrald/mod/crypto"
 
-	"github.com/cryptopunkscc/astrald/astral"
-	"github.com/cryptopunkscc/astrald/mod/crypto"
+	"github.com/cryptopunkscc/astral-go/api/crypto"
+	"github.com/cryptopunkscc/astral-go/astral"
 	"github.com/decred/dcrd/dcrec/secp256k1/v4"
 )
 
@@ -15,7 +16,7 @@ type HashSignerASN1 struct {
 	key *ecdsa.PrivateKey
 }
 
-var _ crypto.HashSigner = &HashSignerASN1{}
+var _ cryptomod.HashSigner = &HashSignerASN1{}
 
 func NewHashSignerASN1(key *crypto.PrivateKey) *HashSignerASN1 {
 	signer := &HashSignerASN1{

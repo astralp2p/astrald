@@ -1,16 +1,11 @@
 package tcp
 
 import (
-	"github.com/cryptopunkscc/astrald/astral"
+	"github.com/cryptopunkscc/astral-go/astral"
 	"github.com/cryptopunkscc/astrald/mod/exonet"
 )
 
 const ModuleName = "tcp"
-
-const (
-	MethodNewEphemeralListener   = "tcp.new_ephemeral_listener"
-	MethodCloseEphemeralListener = "tcp.close_ephemeral_listener"
-)
 
 // Module is the public contract for the TCP transport.
 type Module interface {

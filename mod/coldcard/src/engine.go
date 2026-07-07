@@ -3,11 +3,12 @@ package coldcard
 import (
 	"encoding/base64"
 	"encoding/hex"
+	cryptomod "github.com/cryptopunkscc/astrald/mod/crypto"
 
-	"github.com/cryptopunkscc/astrald/astral"
+	"github.com/cryptopunkscc/astral-go/api/crypto"
+	"github.com/cryptopunkscc/astral-go/astral"
 	"github.com/cryptopunkscc/astrald/mod/coldcard"
 	"github.com/cryptopunkscc/astrald/mod/coldcard/ckcc"
-	"github.com/cryptopunkscc/astrald/mod/crypto"
 )
 
 type Engine struct {
@@ -16,12 +17,12 @@ type Engine struct {
 
 // NewTextSigner returns a BIP137 signer only for a secp256k1 key whose pubkey
 // matches a currently-connected ColdCard; otherwise ErrUnsupported.
-func (e *Engine) NewTextSigner(key *crypto.PublicKey, scheme string) (crypto.TextSigner, error) {
+func (e *Engine) NewTextSigner(key *crypto.PublicKey, scheme string) (cryptomod.TextSigner, error) {
 	switch {
 	case scheme != "bip137":
-		return nil, crypto.ErrUnsupportedScheme
+		return nil, cryptomod.ErrUnsupportedScheme
 	case key.Type != "secp256k1":
-		return nil, crypto.ErrUnsupportedKeyType
+		return nil, cryptomod.ErrUnsupportedKeyType
 	}
 
 	pubKeyHex := hex.EncodeToString(key.Key)
@@ -31,7 +32,7 @@ func (e *Engine) NewTextSigner(key *crypto.PublicKey, scheme string) (crypto.Tex
 		return &MessageSigner{dev: device, path: coldcard.BIP44Path}, nil
 	}
 
-	return nil, crypto.ErrUnsupported
+	return nil, cryptomod.ErrUnsupported
 }
 
 type MessageSigner struct {

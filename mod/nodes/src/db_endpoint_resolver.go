@@ -1,13 +1,14 @@
 package nodes
 
 import (
+	nodesmod "github.com/cryptopunkscc/astrald/mod/nodes"
 	"time"
 
-	"github.com/cryptopunkscc/astrald/astral"
-	"github.com/cryptopunkscc/astrald/mod/nodes"
+	"github.com/cryptopunkscc/astral-go/api/nodes"
+	"github.com/cryptopunkscc/astral-go/astral"
 )
 
-var _ nodes.EndpointResolver = &DBEndpointResolver{}
+var _ nodesmod.EndpointResolver = &DBEndpointResolver{}
 
 type DBEndpointResolver struct {
 	mod *Module

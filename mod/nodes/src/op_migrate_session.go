@@ -1,10 +1,11 @@
 package nodes
 
 import (
-	"github.com/cryptopunkscc/astrald/astral"
-	"github.com/cryptopunkscc/astrald/astral/channel"
-	"github.com/cryptopunkscc/astrald/lib/routing"
-	"github.com/cryptopunkscc/astrald/mod/nodes"
+	"github.com/cryptopunkscc/astral-go/api/nodes"
+	"github.com/cryptopunkscc/astral-go/astral"
+	"github.com/cryptopunkscc/astral-go/astral/channel"
+	"github.com/cryptopunkscc/astral-go/lib/routing"
+	nodesmod "github.com/cryptopunkscc/astrald/mod/nodes"
 )
 
 type opMigrateSessionArgs struct {
@@ -23,24 +24,24 @@ func (mod *Module) OpMigrateSession(ctx *astral.Context, q *routing.IncomingQuer
 
 	session, ok := mod.getSession(args.SessionID)
 	if !ok {
-		return ch.Send(astral.Err(nodes.ErrSessionNotFound))
+		return ch.Send(astral.Err(nodesmod.ErrSessionNotFound))
 	}
 	if !session.IsOpen() {
-		return ch.Send(astral.Err(nodes.ErrInvalidSessionState))
+		return ch.Send(astral.Err(nodesmod.ErrInvalidSessionState))
 	}
 
 	targetLink := mod.getLinkByID(args.LinkID)
 	if targetLink == nil {
-		return ch.Send(astral.Err(nodes.ErrLinkNotFound))
+		return ch.Send(astral.Err(nodesmod.ErrLinkNotFound))
 	}
 
 	link := mod.getSessionLink(session.Nonce)
 	if link == nil {
-		return ch.Send(astral.Err(nodes.ErrLinkNotFound))
+		return ch.Send(astral.Err(nodesmod.ErrLinkNotFound))
 	}
 
 	if link.id == targetLink.id {
-		return ch.Send(astral.Err(nodes.ErrSessionAlreadyOnLink))
+		return ch.Send(astral.Err(nodesmod.ErrSessionAlreadyOnLink))
 	}
 
 	if args.Start {
