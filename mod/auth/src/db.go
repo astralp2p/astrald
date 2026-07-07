@@ -13,7 +13,7 @@ import (
 type DB struct{ *gorm.DB }
 
 func (db *DB) findActiveContracts(q *contractQuery) ([]*dbContract, error) {
-	now := time.Now()
+	now := time.Now().UTC()
 	gq := db.DB.
 		Where("starts_at <= ?", now).
 		Where("expires_at > ?", now)
@@ -49,7 +49,7 @@ func (db *DB) contractExists(objectID *astral.ObjectID) bool {
 }
 
 func (db *DB) activeContractExists(objectID *astral.ObjectID) (exists bool, err error) {
-	now := time.Now()
+	now := time.Now().UTC()
 	err = db.
 		Model(&dbContract{}).
 		Where("object_id = ?", objectID).

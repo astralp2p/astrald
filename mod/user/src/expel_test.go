@@ -13,10 +13,14 @@ import (
 // the active contract's issuer so IssueMembership's expelled guard can run.
 func banModule(t *testing.T, issuer *astral.Identity) *Module {
 	t.Helper()
-	return &Module{
-		db:             testDB(t),
-		activeContract: &auth.SignedContract{Contract: &auth.Contract{Issuer: issuer}},
+	mod := &Module{db: testDB(t)}
+	// seed the active-contract store directly; the tree.Value is unbound in tests,
+	// so Set updates its local cache and ActiveContract() reads it back.
+	err := mod.config.ActiveContract.Set(nil, &auth.SignedContract{Contract: &auth.Contract{Issuer: issuer}})
+	if err != nil {
+		t.Fatalf("seed active contract: %v", err)
 	}
+	return mod
 }
 
 // TestModule_isExpelled covers the guard's decision: a subject reads as expelled

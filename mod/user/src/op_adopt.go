@@ -4,6 +4,8 @@ import (
 	"github.com/cryptopunkscc/astrald/astral"
 	"github.com/cryptopunkscc/astrald/astral/channel"
 	"github.com/cryptopunkscc/astrald/lib/routing"
+	"github.com/cryptopunkscc/astrald/mod/auth"
+	"github.com/cryptopunkscc/astrald/mod/user"
 )
 
 type opAdoptArgs struct {
@@ -13,26 +15,27 @@ type opAdoptArgs struct {
 }
 
 // OpAdopt adopts a target node into the active contract and indexes the signed result.
-// Requires an active contract; caller must be the contract issuer (code 3 otherwise).
+// Requires an active contract; the caller must be authorized for user.AdoptAction
+// (code 4 otherwise) - the user always is, other identities via authorizers.
 // Pushes the signed contract to the local swarm asynchronously after indexing.
 func (mod *Module) OpAdopt(ctx *astral.Context, q *routing.IncomingQuery, args opAdoptArgs) (err error) {
-	// get the active contract
-	ac := mod.ActiveContract()
-	if ac == nil {
+	if mod.ActiveContract() == nil {
 		return q.RejectWithCode(2)
 	}
 
-	if !q.Caller().IsEqual(ac.Issuer) {
+	// resolve before authorization - the adopt action carries the target
+	nodeID, err := mod.Dir.ResolveIdentity(args.Target)
+	if err != nil {
 		return q.RejectWithCode(3)
+	}
+
+	adopt := &user.AdoptAction{Action: auth.NewAction(q.Caller()), Subject: nodeID}
+	if !mod.Auth.Authorize(ctx, adopt) {
+		return q.RejectWithCode(4)
 	}
 
 	ch := q.Accept(channel.WithFormats(args.In, args.Out))
 	defer ch.Close()
-
-	nodeID, err := mod.Dir.ResolveIdentity(args.Target)
-	if err != nil {
-		return ch.Send(astral.Err(err))
-	}
 
 	// issue a membership contract for the node
 	signed, err := mod.IssueMembership(ctx, nodeID)

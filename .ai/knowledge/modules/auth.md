@@ -14,7 +14,7 @@ Decides whether an identity may perform a typed action, using local action handl
 ## Flows
 
 - Direct authorization: `Authorize(ctx, action)` runs every handler registered for `action.ObjectType()` -> first `true` grants.
-- Contract authorization: no local handler granted -> `SignedContracts().WithSubject(actor).WithAction(action).Find` -> for each active contract, `action.SetActor(sc.Issuer)` and re-run local handlers -> first `true` grants. The contract path does NOT consult `Contract.Allows` or `Constrainable.ApplyConstraints`; permit matching happens at the DB join in `findActiveContracts`.
+- Contract authorization: no local handler granted -> recursive walk over `SignedContracts().WithSubject(actor).WithAction(action).Find` -> for each matching permit require `Delegation >= hopsBelow` and `Permit.Allows(action)` (constraints narrow at every link) -> `action.SetActor(sc.Issuer)`, recurse with `hopsBelow+1` under a `visited` cycle guard -> first `true` grants. Authority attenuates: each issuer on the path bounds the delegation depth allowed below it.
 - Register handler: `Add(handlers...)` reads `TypedHandler.ActionType()` per handler -> appends to the `sig.Map` slot for that type via `handlers.Replace`.
 - Sudo handler: loader registers `auth.Func[*auth.SudoAction](AuthorizeSudo)`; grants only when `action.Actor().IsEqual(action.AsID)`.
 - Sign contract op (`auth.sign_contract`): receive `*auth.Contract` on the channel -> wrap in `SignedContract` -> `SignContract` (`SignIssuer` then `SignSubject`) -> send the signed object or `astral.Err`.

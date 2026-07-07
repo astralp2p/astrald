@@ -12,27 +12,43 @@ import (
 	userClient "github.com/cryptopunkscc/astrald/mod/user/client"
 )
 
-// SetActiveContract sets the contract under which the node operates
-func (mod *Module) SetActiveContract(signed *auth.SignedContract) (err error) {
-	if err = mod.Auth.VerifyContract(signed); err != nil {
-		return
-	}
-
-	mod.config.ActiveContract.Set(mod.ctx, signed)
-
-	// synchronize siblings & broadcast
-	err = mod.Nearby.Broadcast()
+// validateActiveContract enforces the invariant of the active-contract slot:
+// both signatures valid, this node is the subject, not expired, and it grants
+// swarm membership. Source-independent - the same gate for local setup,
+// cold-card, and remote membership.
+func (mod *Module) validateActiveContract(signed *auth.SignedContract) error {
+	err := mod.Auth.VerifyContract(signed)
 	if err != nil {
-		mod.log.Error("error broadcasting presence after setting contract: %v", err)
+		return fmt.Errorf("verify: %w", err)
 	}
-
-	mod.runSiblingLinker()
-	return
+	if !signed.Subject.IsEqual(mod.node.Identity()) {
+		return errors.New("local node is not the subject of the contract")
+	}
+	if signed.ExpiresAt.Time().Before(time.Now()) {
+		return auth.ErrContractExpired
+	}
+	if !user.IsNodeContract(signed.Contract) {
+		return errors.New("contract does not grant swarm membership")
+	}
+	return nil
 }
 
-// ActiveContract returns the active contract
+// SetActiveContract writes the contract to the durable tree store. It validates
+// up front for a synchronous error and to keep an invalid contract out of the
+// store; the store is the source of truth and onActiveContractChanged reacts.
+func (mod *Module) SetActiveContract(signed *auth.SignedContract) error {
+	err := mod.validateActiveContract(signed)
+	if err != nil {
+		return err
+	}
+
+	return mod.config.ActiveContract.Set(mod.ctx, signed)
+}
+
+// ActiveContract returns the active contract from the tree store - the single
+// source of truth. Nil when the node is unclaimed.
 func (mod *Module) ActiveContract() *auth.SignedContract {
-	return mod.activeContract
+	return mod.config.ActiveContract.Get()
 }
 
 // Identity returns the user identity (the issuer of the active contract), not the local node identity.
@@ -44,22 +60,38 @@ func (mod *Module) Identity() *astral.Identity {
 	return ac.Issuer
 }
 
-func (mod *Module) setActiveContract(signed *auth.SignedContract) error {
-	switch {
-	case signed.IsNil():
-		mod.activeContract = nil
+// onActiveContractChanged reacts to a change of the active-contract store,
+// driven by Follow at startup and on every write. It keeps no copy - readers
+// use ActiveContract(). A stored value that fails validation (stale, corrupt,
+// or a stray write) is scrubbed so it never stays live.
+func (mod *Module) onActiveContractChanged(signed *auth.SignedContract) {
+	if signed.IsNil() {
 		go mod.Nearby.SetMode(mod.ctx, nearby.ModeVisible)
-		return nil
-	case signed.ExpiresAt.Time().Before(time.Now()):
-		return auth.ErrContractExpired
-	case !signed.Subject.IsEqual(mod.node.Identity()):
-		return errors.New("local node is not the subject of the contract")
+		return
+	}
+
+	err := mod.validateActiveContract(signed)
+	if err != nil {
+		mod.log.Error("invalid active contract in store, clearing: %v", err)
+		clearErr := mod.config.ActiveContract.Clear(mod.ctx)
+		if clearErr != nil {
+			mod.log.Error("error clearing invalid active contract: %v", clearErr)
+		}
+		return
 	}
 
 	mod.log.Info("hello, %v!", signed.Issuer)
-	mod.activeContract = signed
+
+	// Authorization resolves contracts through the auth index, not the config
+	// tree; an active-but-unindexed contract would break every delegation chain
+	// that terminates at the user.
+	err = mod.Auth.IndexContract(mod.ctx, signed)
+	if err != nil {
+		mod.log.Error("error indexing active contract: %v", err)
+	}
+
 	mod.Nearby.Broadcast()
-	return nil
+	mod.runSiblingLinker()
 }
 
 // ActiveNodeContracts returns all active swarm-membership contracts issued by userID,
@@ -135,7 +167,8 @@ func (mod *Module) IssueMembership(ctx *astral.Context, nodeID *astral.Identity)
 		return nil, user.ErrExpelled
 	}
 
-	contract, err := user.NewNodeContract(ac.Issuer, nodeID, defaultContractValidity)
+	// adopted and requesting nodes join as plain members without management permits
+	contract, err := user.NewNodeContract(ac.Issuer, nodeID, false, defaultContractValidity)
 	if err != nil {
 		return nil, err
 	}
