@@ -1,9 +1,9 @@
 package apphost
 
 import (
+	"github.com/cryptopunkscc/astral-go/api/apphost"
 	"github.com/cryptopunkscc/astral-go/astral"
 	"github.com/cryptopunkscc/astral-go/astral/channel"
-	"github.com/cryptopunkscc/astrald/mod/apphost"
 	"github.com/cryptopunkscc/astrald/mod/auth"
 )
 

@@ -1,10 +1,10 @@
 package apphost
 
 import (
+	"github.com/cryptopunkscc/astral-go/api/apphost"
 	"github.com/cryptopunkscc/astral-go/astral"
 	"github.com/cryptopunkscc/astral-go/astral/channel"
 	"github.com/cryptopunkscc/astrald/lib/query"
-	"github.com/cryptopunkscc/astrald/mod/apphost"
 )
 
 func CreateToken(ctx *astral.Context, identity *astral.Identity) (*apphost.AccessToken, error) {

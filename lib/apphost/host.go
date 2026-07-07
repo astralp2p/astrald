@@ -3,10 +3,10 @@ package apphost
 import (
 	"fmt"
 
+	"github.com/cryptopunkscc/astral-go/api/apphost"
 	"github.com/cryptopunkscc/astral-go/astral"
 	"github.com/cryptopunkscc/astral-go/astral/channel"
 	"github.com/cryptopunkscc/astrald/lib/ipc"
-	"github.com/cryptopunkscc/astrald/mod/apphost"
 )
 
 // Host represents an authenticated session with an apphost node, providing

@@ -3,16 +3,17 @@ package apphost
 import (
 	"context"
 	"errors"
+	apphostmod "github.com/cryptopunkscc/astrald/mod/apphost"
 	"io"
 	"net"
 	"strings"
 	"sync/atomic"
 
+	"github.com/cryptopunkscc/astral-go/api/apphost"
 	"github.com/cryptopunkscc/astral-go/astral"
 	"github.com/cryptopunkscc/astral-go/astral/channel"
 	"github.com/cryptopunkscc/astral-go/astral/streams"
 	"github.com/cryptopunkscc/astrald/lib/query"
-	"github.com/cryptopunkscc/astrald/mod/apphost"
 	"github.com/cryptopunkscc/astrald/mod/auth"
 )
 
@@ -241,7 +242,7 @@ func (guest *Guest) onRouteQueryMsg(ctx *astral.Context, msg *apphost.RouteQuery
 	// Carry the browser Origin for queries arriving over the WebSocket endpoint
 	// so ops can apply their own per-origin authorization.
 	if guest.webOrigin != "" {
-		inFlight.Extra.Set(apphost.ExtraOriginWeb, guest.webOrigin)
+		inFlight.Extra.Set(apphostmod.ExtraOriginWeb, guest.webOrigin)
 	}
 
 	// Flag queries from a token-less session - IPC or WebSocket alike - so ops
@@ -249,7 +250,7 @@ func (guest *Guest) onRouteQueryMsg(ctx *astral.Context, msg *apphost.RouteQuery
 	// rewrites a nil caller to the node identity. Set only when true; absence
 	// means the session was authenticated.
 	if !guest.isAuthenticated() {
-		inFlight.Extra.Set(apphost.ExtraAnonymous, true)
+		inFlight.Extra.Set(apphostmod.ExtraAnonymous, true)
 	}
 
 	enRoute := &queryEnRoute{query: inFlight, cancel: cancelQuery}

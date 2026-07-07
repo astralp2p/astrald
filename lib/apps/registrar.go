@@ -1,11 +1,11 @@
 package apps
 
 import (
+	"github.com/cryptopunkscc/astral-go/api/apphost"
 	"github.com/cryptopunkscc/astral-go/astral"
 	"github.com/cryptopunkscc/astral-go/astral/channel"
 	"github.com/cryptopunkscc/astral-go/astral/sig"
 	libastrald "github.com/cryptopunkscc/astrald/lib/astrald"
-	"github.com/cryptopunkscc/astrald/mod/apphost"
 	apphostclient "github.com/cryptopunkscc/astrald/mod/apphost/client"
 )
 

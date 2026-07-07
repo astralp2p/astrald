@@ -5,9 +5,9 @@ import (
 	"os"
 	"strings"
 
+	"github.com/cryptopunkscc/astral-go/api/apphost"
 	"github.com/cryptopunkscc/astral-go/astral"
 	"github.com/cryptopunkscc/astrald/lib/query"
-	"github.com/cryptopunkscc/astrald/mod/apphost"
 )
 
 // Router manages connections to an apphost endpoint, caching resolved identities
