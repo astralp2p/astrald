@@ -2,9 +2,9 @@ package secp256k1
 
 import (
 	"github.com/cryptopunkscc/astral-go/api/crypto"
+	"github.com/cryptopunkscc/astral-go/api/secp256k1"
 	"github.com/cryptopunkscc/astral-go/astral"
 	"github.com/cryptopunkscc/astral-go/astral/channel"
-	"github.com/cryptopunkscc/astrald/mod/secp256k1"
 )
 
 func (c *Client) NewKey(ctx *astral.Context) (key *crypto.PrivateKey, err error) {

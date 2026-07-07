@@ -4,9 +4,9 @@ import (
 	"errors"
 	"time"
 
+	"github.com/cryptopunkscc/astral-go/api/secp256k1"
 	"github.com/cryptopunkscc/astral-go/astral"
 	"github.com/cryptopunkscc/astrald/mod/objects"
-	"github.com/cryptopunkscc/astrald/mod/secp256k1"
 	"github.com/cryptopunkscc/astrald/mod/user"
 )
 

@@ -12,12 +12,12 @@ import (
 	"sync/atomic"
 
 	"github.com/cryptopunkscc/astral-go/api/crypto"
+	"github.com/cryptopunkscc/astral-go/api/secp256k1"
 	"github.com/cryptopunkscc/astral-go/astral"
 	"github.com/cryptopunkscc/astrald/core"
 	"github.com/cryptopunkscc/astrald/mod/dir"
 	"github.com/cryptopunkscc/astrald/mod/ether"
 	ipsrc "github.com/cryptopunkscc/astrald/mod/ip/src"
-	"github.com/cryptopunkscc/astrald/mod/secp256k1"
 	"github.com/cryptopunkscc/astrald/resources"
 
 	_ "github.com/cryptopunkscc/astrald/mod/all"

@@ -4,10 +4,11 @@ import (
 	"crypto/ecdsa"
 	"fmt"
 	cryptomod "github.com/cryptopunkscc/astrald/mod/crypto"
+	modSecp256k1mod "github.com/cryptopunkscc/astrald/mod/secp256k1"
 
 	"github.com/cryptopunkscc/astral-go/api/crypto"
+	modSecp256k1 "github.com/cryptopunkscc/astral-go/api/secp256k1"
 	"github.com/cryptopunkscc/astral-go/astral"
-	modSecp256k1 "github.com/cryptopunkscc/astrald/mod/secp256k1"
 	"github.com/decred/dcrd/dcrec/secp256k1/v4"
 )
 
@@ -33,7 +34,7 @@ func (e Engine) NewHashSigner(key *crypto.PublicKey, scheme string) (cryptomod.H
 		return nil, fmt.Errorf("failed to get private key: %w", err)
 	}
 
-	return modSecp256k1.NewHashSignerASN1(privateKey), nil
+	return modSecp256k1mod.NewHashSignerASN1(privateKey), nil
 }
 
 func (e Engine) VerifyHashSignature(key *crypto.PublicKey, sig *crypto.Signature, hash []byte) error {
