@@ -6,9 +6,9 @@ import (
 	"sync"
 
 	"github.com/cryptopunkscc/astral-go/api/nodes"
+	nodescli "github.com/cryptopunkscc/astral-go/api/nodes/client"
 	"github.com/cryptopunkscc/astral-go/astral"
 	"github.com/cryptopunkscc/astral-go/lib/astrald"
-	nodescli "github.com/cryptopunkscc/astrald/mod/nodes/client"
 )
 
 // ResolveEndpoints fans out to all registered resolvers and merges their results

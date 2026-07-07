@@ -4,9 +4,9 @@ import (
 	"sync"
 
 	"github.com/cryptopunkscc/astral-go/api/objects"
+	objectscli "github.com/cryptopunkscc/astral-go/api/objects/client"
 	"github.com/cryptopunkscc/astral-go/astral"
 	"github.com/cryptopunkscc/astral-go/astral/sig"
-	objectscli "github.com/cryptopunkscc/astrald/mod/objects/client"
 )
 
 // DescribeObject fans out to every provider returned by FindObject and merges their

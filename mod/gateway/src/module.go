@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/cryptopunkscc/astral-go/api/exonet"
+	gatewayClient "github.com/cryptopunkscc/astral-go/api/gateway/client"
 	"github.com/cryptopunkscc/astral-go/api/tcp"
 	"github.com/cryptopunkscc/astral-go/astral"
 	"github.com/cryptopunkscc/astral-go/astral/log"
@@ -16,7 +17,6 @@ import (
 	"github.com/cryptopunkscc/astral-go/lib/routing"
 	"github.com/cryptopunkscc/astrald/mod/dir"
 	"github.com/cryptopunkscc/astrald/mod/gateway"
-	gatewayClient "github.com/cryptopunkscc/astrald/mod/gateway/client"
 	"github.com/cryptopunkscc/astrald/mod/ip"
 	"github.com/cryptopunkscc/astrald/mod/nearby"
 	"github.com/cryptopunkscc/astrald/mod/nodes"

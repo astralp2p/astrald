@@ -7,9 +7,9 @@ import (
 
 	"github.com/cryptopunkscc/astral-go/api/auth"
 	"github.com/cryptopunkscc/astral-go/api/user"
+	userClient "github.com/cryptopunkscc/astral-go/api/user/client"
 	"github.com/cryptopunkscc/astral-go/astral"
 	"github.com/cryptopunkscc/astrald/mod/nearby"
-	userClient "github.com/cryptopunkscc/astrald/mod/user/client"
 )
 
 // validateActiveContract enforces the invariant of the active-contract slot:
