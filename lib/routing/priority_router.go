@@ -5,9 +5,9 @@ import (
 	"errors"
 	"io"
 
-	"github.com/cryptopunkscc/astrald/astral"
+	"github.com/cryptopunkscc/astral-go/astral"
+	"github.com/cryptopunkscc/astral-go/astral/sig"
 	"github.com/cryptopunkscc/astrald/lib/query"
-	"github.com/cryptopunkscc/astrald/sig"
 )
 
 var _ astral.Router = &PriorityRouter{}

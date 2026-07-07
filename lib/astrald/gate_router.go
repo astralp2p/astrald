@@ -1,6 +1,6 @@
 package astrald
 
-import "github.com/cryptopunkscc/astrald/astral"
+import "github.com/cryptopunkscc/astral-go/astral"
 
 // ReadyGate Ready() returns a channel that is closed when the gate is open and replaced
 // with a new open channel when the gate closes (session dropped).

@@ -5,8 +5,9 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/cryptopunkscc/astrald/astral"
-	"github.com/cryptopunkscc/astrald/astral/log"
+	"github.com/cryptopunkscc/astral-go/astral"
+	"github.com/cryptopunkscc/astral-go/astral/log"
+	"github.com/cryptopunkscc/astral-go/astral/sig"
 	"github.com/cryptopunkscc/astrald/lib/astrald"
 	"github.com/cryptopunkscc/astrald/lib/routing"
 	"github.com/cryptopunkscc/astrald/mod/dir"
@@ -19,7 +20,6 @@ import (
 	"github.com/cryptopunkscc/astrald/mod/scheduler"
 	"github.com/cryptopunkscc/astrald/mod/services"
 	"github.com/cryptopunkscc/astrald/mod/tcp"
-	"github.com/cryptopunkscc/astrald/sig"
 )
 
 const NetworkName = "gw"

@@ -3,7 +3,7 @@ package apps
 import (
 	"io"
 
-	"github.com/cryptopunkscc/astrald/astral"
+	"github.com/cryptopunkscc/astral-go/astral"
 	libastrald "github.com/cryptopunkscc/astrald/lib/astrald"
 )
 

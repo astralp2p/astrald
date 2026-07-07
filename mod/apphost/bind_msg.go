@@ -3,7 +3,7 @@ package apphost
 import (
 	"io"
 
-	"github.com/cryptopunkscc/astrald/astral"
+	"github.com/cryptopunkscc/astral-go/astral"
 )
 
 // BindMsg associates a set of handler registrations with a nonce token so the

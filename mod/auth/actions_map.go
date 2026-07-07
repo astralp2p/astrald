@@ -3,7 +3,7 @@ package auth
 import (
 	"reflect"
 
-	"github.com/cryptopunkscc/astrald/astral"
+	"github.com/cryptopunkscc/astral-go/astral"
 )
 
 // Handler authorizes a typed action object.

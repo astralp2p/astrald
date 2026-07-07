@@ -3,7 +3,7 @@ package apphost
 import (
 	"io"
 
-	"github.com/cryptopunkscc/astrald/astral"
+	"github.com/cryptopunkscc/astral-go/astral"
 )
 
 // AttachQueryMsg attaches a freshly-opened per-query WS to a pending inbound query

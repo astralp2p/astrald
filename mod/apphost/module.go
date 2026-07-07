@@ -3,7 +3,7 @@ package apphost
 import (
 	"errors"
 
-	"github.com/cryptopunkscc/astrald/astral"
+	"github.com/cryptopunkscc/astral-go/astral"
 )
 
 const ModuleName = "apphost"

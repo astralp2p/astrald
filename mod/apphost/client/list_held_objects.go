@@ -1,10 +1,10 @@
 package apphost
 
 import (
-	"github.com/cryptopunkscc/astrald/astral"
-	"github.com/cryptopunkscc/astrald/astral/channel"
+	"github.com/cryptopunkscc/astral-go/astral"
+	"github.com/cryptopunkscc/astral-go/astral/channel"
+	"github.com/cryptopunkscc/astral-go/astral/sig"
 	"github.com/cryptopunkscc/astrald/mod/apphost"
-	"github.com/cryptopunkscc/astrald/sig"
 )
 
 // ListHeldObjects streams held object IDs asynchronously; the error pointer is populated only after the channel closes.

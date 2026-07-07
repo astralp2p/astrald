@@ -53,6 +53,8 @@ github.com/client9/misspell v0.3.4/go.mod h1:qj6jICC3Q7zFZvVWo7KLAzC3yx5G7kyvSDk
 github.com/cncf/udpa/go v0.0.0-20191209042840-269d4d468f6f/go.mod h1:M8M6+tZqaGXZJjfX53e64911xZQV5JYwmTeXPW+k8Sc=
 github.com/coder/websocket v1.8.14 h1:9L0p0iKiNOibykf283eHkKUHHrpG7f65OE3BhhO7v9g=
 github.com/coder/websocket v1.8.14/go.mod h1:NX3SzP+inril6yawo5CQXx8+fk145lPDC6pumgx0mVg=
+github.com/cryptopunkscc/astral-go v0.0.0-20260707102320-ea97de5aada8 h1:KoIHA1puW1aRDiQUek/8oaRVnOghZ+pq5WKLovkiCik=
+github.com/cryptopunkscc/astral-go v0.0.0-20260707102320-ea97de5aada8/go.mod h1:rdfE7ywt1N/Tq5E1XDqUJ9ibzR4D7LP5OfA/ny4VjZI=
 github.com/cryptopunkscc/bip-0137 v0.0.0-20260118232723-438bbbb8fe46 h1:ACHkKEMJ9jX3g0vZ/ck9XXy3Qh/aHf1idjcWkY9ZZ7A=
 github.com/cryptopunkscc/bip-0137 v0.0.0-20260118232723-438bbbb8fe46/go.mod h1:/dhiF6QcnbnpTZ+3XTtAvrfDeLDoQzm5j0aiXXRniiY=
 github.com/cryptopunkscc/utp v0.0.0-20251010115525-2f03809eff3d h1:mj/jUJQzlrDuQaLhsDCxDuXbqBEfEbAfjEHh63I7uOM=

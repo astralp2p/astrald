@@ -1,10 +1,10 @@
 package fs
 
 import (
-	"github.com/cryptopunkscc/astrald/astral/fmt"
+	"github.com/cryptopunkscc/astral-go/astral/fmt"
+	"github.com/cryptopunkscc/astral-go/astral/log/styles"
+	"github.com/cryptopunkscc/astral-go/astral/log/theme"
 	"github.com/cryptopunkscc/astrald/mod/fs"
-	"github.com/cryptopunkscc/astrald/mod/log/styles"
-	"github.com/cryptopunkscc/astrald/mod/log/theme"
 )
 
 type FileLocationView struct {

@@ -1,7 +1,7 @@
 package main
 
 import (
-	"github.com/cryptopunkscc/astrald/astral"
+	"github.com/cryptopunkscc/astral-go/astral"
 	dircli "github.com/cryptopunkscc/astrald/mod/dir/client"
 	"github.com/cryptopunkscc/astrald/mod/log/views"
 )

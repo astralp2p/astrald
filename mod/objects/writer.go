@@ -1,6 +1,6 @@
 package objects
 
-import "github.com/cryptopunkscc/astrald/astral"
+import "github.com/cryptopunkscc/astral-go/astral"
 
 // Writer writes to objects created by Create(). Either Commit() or Discard() must be called at the end.
 type Writer interface {

@@ -3,7 +3,7 @@ package tree
 import (
 	"testing"
 
-	"github.com/cryptopunkscc/astrald/astral"
+	"github.com/cryptopunkscc/astral-go/astral"
 )
 
 // TestValue_Clear covers the unbound clear path: Clear resets the cached value to

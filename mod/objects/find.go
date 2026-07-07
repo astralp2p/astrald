@@ -1,7 +1,7 @@
 package objects
 
 import (
-	"github.com/cryptopunkscc/astrald/astral"
+	"github.com/cryptopunkscc/astral-go/astral"
 )
 
 // Finder is used to figure out which identities can provide access to an object

@@ -11,10 +11,10 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/cryptopunkscc/astrald/astral"
+	"github.com/cryptopunkscc/astral-go/astral"
+	"github.com/cryptopunkscc/astral-go/astral/sig"
 	"github.com/cryptopunkscc/astrald/mod/ip"
 	"github.com/cryptopunkscc/astrald/mod/nat"
-	"github.com/cryptopunkscc/astrald/sig"
 )
 
 // Ensure conePuncher implements the public Puncher interface from the root package.

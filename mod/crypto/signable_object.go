@@ -1,6 +1,6 @@
 package crypto
 
-import "github.com/cryptopunkscc/astrald/astral"
+import "github.com/cryptopunkscc/astral-go/astral"
 
 // SignableObject is a base interface for all contracts
 type SignableObject interface {

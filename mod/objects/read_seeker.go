@@ -2,7 +2,7 @@ package objects
 
 import (
 	"errors"
-	"github.com/cryptopunkscc/astrald/astral"
+	"github.com/cryptopunkscc/astral-go/astral"
 	"io"
 	"sync"
 )

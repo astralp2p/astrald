@@ -5,7 +5,7 @@ import (
 	"io"
 	"testing"
 
-	"github.com/cryptopunkscc/astrald/astral"
+	"github.com/cryptopunkscc/astral-go/astral"
 )
 
 // aliasModeProto is a test stand-in for app-level types like nearby.Mode: a Uint8 newtype

@@ -5,16 +5,16 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/cryptopunkscc/astrald/astral"
-	"github.com/cryptopunkscc/astrald/astral/log"
+	"github.com/cryptopunkscc/astral-go/astral"
+	"github.com/cryptopunkscc/astral-go/astral/log"
+	"github.com/cryptopunkscc/astral-go/astral/log/styles"
+	"github.com/cryptopunkscc/astral-go/astral/log/theme"
+	"github.com/cryptopunkscc/astral-go/astral/sig"
 	"github.com/cryptopunkscc/astrald/lib/aliasgen"
 	"github.com/cryptopunkscc/astrald/lib/routing"
 	"github.com/cryptopunkscc/astrald/mod/dir"
-	"github.com/cryptopunkscc/astrald/mod/log/styles"
-	"github.com/cryptopunkscc/astrald/mod/log/theme"
 	"github.com/cryptopunkscc/astrald/mod/nearby"
 	"github.com/cryptopunkscc/astrald/resources"
-	"github.com/cryptopunkscc/astrald/sig"
 	"gorm.io/gorm"
 )
 

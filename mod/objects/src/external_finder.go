@@ -4,11 +4,11 @@ import (
 	"errors"
 	"time"
 
-	"github.com/cryptopunkscc/astrald/astral"
-	log "github.com/cryptopunkscc/astrald/astral/log"
+	"github.com/cryptopunkscc/astral-go/astral"
+	log "github.com/cryptopunkscc/astral-go/astral/log"
+	"github.com/cryptopunkscc/astral-go/astral/sig"
 	"github.com/cryptopunkscc/astrald/lib/astrald"
 	objectscli "github.com/cryptopunkscc/astrald/mod/objects/client"
-	"github.com/cryptopunkscc/astrald/sig"
 )
 
 type ExternalFinder struct {

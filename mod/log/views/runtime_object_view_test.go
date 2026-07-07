@@ -5,8 +5,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/cryptopunkscc/astrald/astral"
-	"github.com/cryptopunkscc/astrald/astral/fmt"
+	"github.com/cryptopunkscc/astral-go/astral"
+	"github.com/cryptopunkscc/astral-go/astral/fmt"
 )
 
 // ansi strips lipgloss color escapes so assertions compare on rendered text alone.

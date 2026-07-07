@@ -5,7 +5,7 @@ import (
 	"io"
 	"net"
 
-	"github.com/cryptopunkscc/astrald/astral"
+	"github.com/cryptopunkscc/astral-go/astral"
 )
 
 // Hole represents a pair of connected endpoints resulting from a successful nat.punch operation.

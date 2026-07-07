@@ -5,7 +5,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/cryptopunkscc/astrald/astral"
+	"github.com/cryptopunkscc/astral-go/astral"
 )
 
 // DefaultArgKey is the map key used for positional (non-flagged) arguments.

@@ -1,7 +1,7 @@
 package objects
 
 import (
-	"github.com/cryptopunkscc/astrald/astral"
+	"github.com/cryptopunkscc/astral-go/astral"
 )
 
 // Repository is an interface for creating new data objects in storage

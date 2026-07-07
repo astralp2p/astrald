@@ -4,7 +4,7 @@ import (
 	"crypto/ecdsa"
 	"fmt"
 
-	"github.com/cryptopunkscc/astrald/astral"
+	"github.com/cryptopunkscc/astral-go/astral"
 	"github.com/cryptopunkscc/astrald/mod/crypto"
 	modSecp256k1 "github.com/cryptopunkscc/astrald/mod/secp256k1"
 	"github.com/decred/dcrd/dcrec/secp256k1/v4"

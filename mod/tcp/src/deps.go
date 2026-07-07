@@ -3,7 +3,7 @@ package tcp
 import (
 	"fmt"
 
-	"github.com/cryptopunkscc/astrald/astral"
+	"github.com/cryptopunkscc/astral-go/astral"
 	"github.com/cryptopunkscc/astrald/core"
 	"github.com/cryptopunkscc/astrald/mod/exonet"
 	ipmod "github.com/cryptopunkscc/astrald/mod/ip"

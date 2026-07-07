@@ -6,7 +6,7 @@ import (
 	"io"
 	"strings"
 
-	"github.com/cryptopunkscc/astrald/astral"
+	"github.com/cryptopunkscc/astral-go/astral"
 )
 
 // Signature is a generic container for a signature

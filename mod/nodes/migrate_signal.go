@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/cryptopunkscc/astrald/astral"
-	"github.com/cryptopunkscc/astrald/astral/channel"
+	"github.com/cryptopunkscc/astral-go/astral"
+	"github.com/cryptopunkscc/astral-go/astral/channel"
 )
 
 // MigrateSignal is exchanged over the signalling channel during session migration.

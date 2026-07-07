@@ -3,7 +3,7 @@ package astrald
 import (
 	"sync/atomic"
 
-	"github.com/cryptopunkscc/astrald/astral"
+	"github.com/cryptopunkscc/astral-go/astral"
 )
 
 // ConnMonitor wraps an astral.Conn to track transferred bytes and fire optional callbacks on close or I/O errors.

@@ -1,8 +1,8 @@
 package astrald
 
 import (
+	"github.com/cryptopunkscc/astral-go/astral/sig"
 	libapphost "github.com/cryptopunkscc/astrald/lib/apphost"
-	"github.com/cryptopunkscc/astrald/sig"
 )
 
 // SetRetry wraps the default client's router in a RetryRouter with the given retry policy.

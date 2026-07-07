@@ -4,9 +4,10 @@ import (
 	"errors"
 	"time"
 
-	"github.com/cryptopunkscc/astrald/astral"
-	"github.com/cryptopunkscc/astrald/astral/channel"
-	"github.com/cryptopunkscc/astrald/astral/log"
+	"github.com/cryptopunkscc/astral-go/astral"
+	"github.com/cryptopunkscc/astral-go/astral/channel"
+	"github.com/cryptopunkscc/astral-go/astral/log"
+	"github.com/cryptopunkscc/astral-go/astral/sig"
 	"github.com/cryptopunkscc/astrald/lib/routing"
 	"github.com/cryptopunkscc/astrald/mod/crypto"
 	"github.com/cryptopunkscc/astrald/mod/exonet"
@@ -14,7 +15,6 @@ import (
 	"github.com/cryptopunkscc/astrald/mod/nodes"
 	modsecp256k1 "github.com/cryptopunkscc/astrald/mod/secp256k1"
 	"github.com/cryptopunkscc/astrald/resources"
-	"github.com/cryptopunkscc/astrald/sig"
 )
 
 const DefaultWorkerCount = 8

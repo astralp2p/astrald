@@ -1,6 +1,6 @@
 package events
 
-import "github.com/cryptopunkscc/astrald/astral"
+import "github.com/cryptopunkscc/astral-go/astral"
 
 const ModuleName = "events"
 

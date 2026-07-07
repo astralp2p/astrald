@@ -7,10 +7,10 @@ import (
 	"net"
 	"strings"
 
-	"github.com/cryptopunkscc/astrald/astral"
+	"github.com/cryptopunkscc/astral-go/astral"
+	"github.com/cryptopunkscc/astral-go/astral/sig"
 	"github.com/cryptopunkscc/astrald/mod/tor"
 	"github.com/cryptopunkscc/astrald/mod/tor/tc"
-	"github.com/cryptopunkscc/astrald/sig"
 )
 
 // Server manages the Tor hidden-service lifecycle for the module, including its advertised onion endpoint.

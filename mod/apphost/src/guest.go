@@ -8,12 +8,12 @@ import (
 	"strings"
 	"sync/atomic"
 
-	"github.com/cryptopunkscc/astrald/astral"
-	"github.com/cryptopunkscc/astrald/astral/channel"
+	"github.com/cryptopunkscc/astral-go/astral"
+	"github.com/cryptopunkscc/astral-go/astral/channel"
+	"github.com/cryptopunkscc/astral-go/astral/streams"
 	"github.com/cryptopunkscc/astrald/lib/query"
 	"github.com/cryptopunkscc/astrald/mod/apphost"
 	"github.com/cryptopunkscc/astrald/mod/auth"
-	"github.com/cryptopunkscc/astrald/streams"
 )
 
 // Mode is the wire format used by a Guest connection.

@@ -5,10 +5,10 @@ import (
 	"io"
 
 	shell2 "bitbucket.org/creachadair/shell"
-	"github.com/cryptopunkscc/astrald/astral"
+	"github.com/cryptopunkscc/astral-go/astral"
+	"github.com/cryptopunkscc/astral-go/astral/streams"
 	"github.com/cryptopunkscc/astrald/lib/query"
 	"github.com/cryptopunkscc/astrald/mod/shell"
-	"github.com/cryptopunkscc/astrald/streams"
 )
 
 type Session struct {

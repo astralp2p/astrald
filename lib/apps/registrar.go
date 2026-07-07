@@ -1,12 +1,12 @@
 package apps
 
 import (
-	"github.com/cryptopunkscc/astrald/astral"
-	"github.com/cryptopunkscc/astrald/astral/channel"
+	"github.com/cryptopunkscc/astral-go/astral"
+	"github.com/cryptopunkscc/astral-go/astral/channel"
+	"github.com/cryptopunkscc/astral-go/astral/sig"
 	libastrald "github.com/cryptopunkscc/astrald/lib/astrald"
 	"github.com/cryptopunkscc/astrald/mod/apphost"
 	apphostclient "github.com/cryptopunkscc/astrald/mod/apphost/client"
-	"github.com/cryptopunkscc/astrald/sig"
 )
 
 // Registrar registers an IPC endpoint with the node.

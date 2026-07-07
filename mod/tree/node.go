@@ -4,7 +4,7 @@ import (
 	"errors"
 	"strings"
 
-	"github.com/cryptopunkscc/astrald/astral"
+	"github.com/cryptopunkscc/astral-go/astral"
 )
 
 // Node defines the interface of a tree node.

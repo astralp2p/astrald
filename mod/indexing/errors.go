@@ -3,7 +3,7 @@ package indexing
 import (
 	"errors"
 
-	"github.com/cryptopunkscc/astrald/astral"
+	"github.com/cryptopunkscc/astral-go/astral"
 )
 
 var ErrObjectAlreadyAdded = errors.New("object already added")

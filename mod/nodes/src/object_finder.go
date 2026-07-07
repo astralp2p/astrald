@@ -1,7 +1,7 @@
 package nodes
 
 import (
-	"github.com/cryptopunkscc/astrald/astral"
+	"github.com/cryptopunkscc/astral-go/astral"
 )
 
 // FindObject returns providers for an object from the local search cache only; it

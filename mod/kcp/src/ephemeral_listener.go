@@ -3,7 +3,7 @@ package kcp
 import (
 	"fmt"
 
-	"github.com/cryptopunkscc/astrald/astral"
+	"github.com/cryptopunkscc/astral-go/astral"
 	"github.com/cryptopunkscc/astrald/mod/kcp"
 )
 

@@ -3,7 +3,7 @@ package frames
 import (
 	"fmt"
 
-	"github.com/cryptopunkscc/astrald/astral"
+	"github.com/cryptopunkscc/astral-go/astral"
 )
 
 // Frame is a message exchanged over a node link.

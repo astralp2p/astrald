@@ -1,9 +1,9 @@
 package log
 
 import (
-	"github.com/cryptopunkscc/astrald/astral"
-	"github.com/cryptopunkscc/astrald/astral/fmt"
-	alog "github.com/cryptopunkscc/astrald/astral/log"
+	"github.com/cryptopunkscc/astral-go/astral"
+	"github.com/cryptopunkscc/astral-go/astral/fmt"
+	alog "github.com/cryptopunkscc/astral-go/astral/log"
 	"github.com/cryptopunkscc/astrald/core"
 	"github.com/cryptopunkscc/astrald/core/assets"
 	modlog "github.com/cryptopunkscc/astrald/mod/log"

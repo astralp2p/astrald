@@ -4,7 +4,7 @@ Package crypto provides a module with cryptographic operations and objects.
 package crypto
 
 import (
-	"github.com/cryptopunkscc/astrald/astral"
+	"github.com/cryptopunkscc/astral-go/astral"
 )
 
 const ModuleName = "crypto"

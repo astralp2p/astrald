@@ -5,9 +5,9 @@ import (
 	"io"
 	"strings"
 
-	"github.com/cryptopunkscc/astrald/astral"
+	"github.com/cryptopunkscc/astral-go/astral"
+	"github.com/cryptopunkscc/astral-go/astral/sig"
 	"github.com/cryptopunkscc/astrald/lib/query"
-	"github.com/cryptopunkscc/astrald/sig"
 )
 
 // ScopeRouter dispatches queries whose first path segment matches a registered

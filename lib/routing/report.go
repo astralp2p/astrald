@@ -3,7 +3,7 @@ package routing
 import (
 	"time"
 
-	"github.com/cryptopunkscc/astrald/astral"
+	"github.com/cryptopunkscc/astral-go/astral"
 )
 
 // Report holds information about a finished op call

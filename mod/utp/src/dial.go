@@ -3,7 +3,7 @@ package utp
 import (
 	"fmt"
 
-	"github.com/cryptopunkscc/astrald/astral"
+	"github.com/cryptopunkscc/astral-go/astral"
 	"github.com/cryptopunkscc/astrald/mod/exonet"
 	utpmod "github.com/cryptopunkscc/astrald/mod/utp"
 	"github.com/cryptopunkscc/utp"

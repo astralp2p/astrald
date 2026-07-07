@@ -1,6 +1,6 @@
 package indexing
 
-import "github.com/cryptopunkscc/astrald/astral"
+import "github.com/cryptopunkscc/astral-go/astral"
 
 const ModuleName = "indexing"
 const DBPrefix = "indexing__"

@@ -7,7 +7,7 @@ import (
 	"io"
 	"strings"
 
-	"github.com/cryptopunkscc/astrald/astral"
+	"github.com/cryptopunkscc/astral-go/astral"
 )
 
 type AccessToken struct {

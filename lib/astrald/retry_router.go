@@ -3,9 +3,9 @@ package astrald
 import (
 	"errors"
 
-	"github.com/cryptopunkscc/astrald/astral"
+	"github.com/cryptopunkscc/astral-go/astral"
+	"github.com/cryptopunkscc/astral-go/astral/sig"
 	libapphost "github.com/cryptopunkscc/astrald/lib/apphost"
-	"github.com/cryptopunkscc/astrald/sig"
 )
 
 // RetryRouter wraps a Router and retries queries that fail with ErrNodeUnavailable,

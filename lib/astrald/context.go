@@ -1,6 +1,6 @@
 package astrald
 
-import "github.com/cryptopunkscc/astrald/astral"
+import "github.com/cryptopunkscc/astral-go/astral"
 
 // NewContext returns a context pre-populated with the default client's guest identity and ZoneAll,
 // suitable for outbound queries without additional configuration.

@@ -4,7 +4,7 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 
-	"github.com/cryptopunkscc/astrald/astral"
+	"github.com/cryptopunkscc/astral-go/astral"
 	"github.com/cryptopunkscc/astrald/mod/coldcard"
 	"github.com/cryptopunkscc/astrald/mod/coldcard/ckcc"
 	"github.com/cryptopunkscc/astrald/mod/crypto"

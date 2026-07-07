@@ -3,7 +3,7 @@ package routing
 import (
 	"io"
 
-	"github.com/cryptopunkscc/astrald/astral"
+	"github.com/cryptopunkscc/astral-go/astral"
 )
 
 // Conn is a basic implementation of an astral.Conn over a Reader and a WriteCloser.

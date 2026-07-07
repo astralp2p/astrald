@@ -3,10 +3,10 @@ package apps
 import (
 	"time"
 
-	"github.com/cryptopunkscc/astrald/astral"
-	"github.com/cryptopunkscc/astrald/astral/channel"
+	"github.com/cryptopunkscc/astral-go/astral"
+	"github.com/cryptopunkscc/astral-go/astral/channel"
+	"github.com/cryptopunkscc/astral-go/astral/sig"
 	apphostclient "github.com/cryptopunkscc/astrald/mod/apphost/client"
-	"github.com/cryptopunkscc/astrald/sig"
 )
 
 // NodeBind opens a bind channel to the node.

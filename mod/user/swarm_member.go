@@ -3,7 +3,7 @@ package user
 import (
 	"io"
 
-	"github.com/cryptopunkscc/astrald/astral"
+	"github.com/cryptopunkscc/astral-go/astral"
 )
 
 var _ astral.Object = &SwarmMember{}

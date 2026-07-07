@@ -6,7 +6,7 @@ import (
 	"io"
 	"os"
 
-	"github.com/cryptopunkscc/astrald/astral"
+	"github.com/cryptopunkscc/astral-go/astral"
 	"github.com/cryptopunkscc/astrald/lib/apps"
 	libastrald "github.com/cryptopunkscc/astrald/lib/astrald"
 	dircli "github.com/cryptopunkscc/astrald/mod/dir/client"

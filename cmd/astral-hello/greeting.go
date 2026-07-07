@@ -3,7 +3,7 @@ package main
 import (
 	"io"
 
-	"github.com/cryptopunkscc/astrald/astral"
+	"github.com/cryptopunkscc/astral-go/astral"
 )
 
 // Greeting is an app-defined astral Object used to verify blueprint sync:

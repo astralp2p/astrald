@@ -6,8 +6,8 @@ import (
 	"reflect"
 	"strings"
 
-	"github.com/cryptopunkscc/astrald/astral"
-	"github.com/cryptopunkscc/astrald/astral/log"
+	"github.com/cryptopunkscc/astral-go/astral"
+	"github.com/cryptopunkscc/astral-go/astral/log"
 )
 
 // Bind binds Value fields in struct s to the node

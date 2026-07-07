@@ -1,7 +1,7 @@
 package crypto
 
 import (
-	"github.com/cryptopunkscc/astrald/astral"
+	"github.com/cryptopunkscc/astral-go/astral"
 	"gorm.io/gorm"
 )
 

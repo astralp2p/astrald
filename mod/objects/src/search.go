@@ -3,11 +3,11 @@ package objects
 import (
 	"sync"
 
-	"github.com/cryptopunkscc/astrald/astral"
+	"github.com/cryptopunkscc/astral-go/astral"
+	"github.com/cryptopunkscc/astral-go/astral/sig"
 	"github.com/cryptopunkscc/astrald/lib/astrald"
 	"github.com/cryptopunkscc/astrald/mod/objects"
 	objectscli "github.com/cryptopunkscc/astrald/mod/objects/client"
-	"github.com/cryptopunkscc/astrald/sig"
 )
 
 // Search runs all local searchers, and network searchers when the context zone permits, merging their results into one channel.

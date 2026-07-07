@@ -5,7 +5,7 @@ import (
 	"io"
 	"strings"
 
-	"github.com/cryptopunkscc/astrald/astral"
+	"github.com/cryptopunkscc/astral-go/astral"
 )
 
 func (mod *Module) worker(ctx *astral.Context) error {

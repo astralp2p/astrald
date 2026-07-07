@@ -1,7 +1,7 @@
 package tree
 
 import (
-	"github.com/cryptopunkscc/astrald/astral"
+	"github.com/cryptopunkscc/astral-go/astral"
 	"github.com/cryptopunkscc/astrald/lib/routing"
 	treecli "github.com/cryptopunkscc/astrald/mod/tree/client"
 )

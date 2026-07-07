@@ -4,9 +4,9 @@ import (
 	"slices"
 	"sync"
 
-	"github.com/cryptopunkscc/astrald/astral"
+	"github.com/cryptopunkscc/astral-go/astral"
+	"github.com/cryptopunkscc/astral-go/astral/sig"
 	"github.com/cryptopunkscc/astrald/mod/nodes"
-	"github.com/cryptopunkscc/astrald/sig"
 )
 
 // BasicLinkStrategy dials all known endpoints of the target node in parallel

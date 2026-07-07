@@ -1,6 +1,6 @@
 package services
 
-import "github.com/cryptopunkscc/astrald/astral"
+import "github.com/cryptopunkscc/astral-go/astral"
 
 const ModuleName = "services"
 const DBPrefix = "services__"
