@@ -3,13 +3,14 @@ package tcp
 import (
 	"context"
 	"fmt"
+	tcpmod "github.com/cryptopunkscc/astrald/mod/tcp"
 	"net"
 	"sync/atomic"
 	"time"
 
+	"github.com/cryptopunkscc/astral-go/api/tcp"
 	"github.com/cryptopunkscc/astral-go/astral"
 	"github.com/cryptopunkscc/astrald/mod/exonet"
-	"github.com/cryptopunkscc/astrald/mod/tcp"
 )
 
 var _ exonet.EphemeralListener = &Server{}
@@ -71,7 +72,7 @@ func (s *Server) Run(ctx *astral.Context) error {
 			tc.SetKeepAlivePeriod(30 * time.Second)
 		}
 
-		conn := tcp.WrapConn(rawConn, false)
+		conn := tcpmod.WrapConn(rawConn, false)
 		go func() {
 			stopListener, err := s.onAccept(ctx, conn)
 			if err != nil {

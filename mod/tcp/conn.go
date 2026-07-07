@@ -1,6 +1,7 @@
 package tcp
 
 import (
+	"github.com/cryptopunkscc/astral-go/api/tcp"
 	exonetmod "github.com/cryptopunkscc/astrald/mod/exonet"
 	"net"
 
@@ -13,8 +14,8 @@ var _ exonetmod.Conn = Conn{}
 type Conn struct {
 	net.Conn
 	outbound       bool
-	localEndpoint  *Endpoint
-	remoteEndpoint *Endpoint
+	localEndpoint  *tcp.Endpoint
+	remoteEndpoint *tcp.Endpoint
 }
 
 // WrapConn returns an instance of Conn that wraps the given net.Conn.
@@ -24,8 +25,8 @@ func WrapConn(conn net.Conn, outbound bool) *Conn {
 		outbound: outbound,
 	}
 
-	c.localEndpoint, _ = ParseEndpoint(conn.LocalAddr().String())
-	c.remoteEndpoint, _ = ParseEndpoint(conn.RemoteAddr().String())
+	c.localEndpoint, _ = tcp.ParseEndpoint(conn.LocalAddr().String())
+	c.remoteEndpoint, _ = tcp.ParseEndpoint(conn.RemoteAddr().String())
 
 	return c
 }

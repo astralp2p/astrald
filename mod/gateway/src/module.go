@@ -4,9 +4,11 @@ import (
 	"context"
 	"fmt"
 	exonetmod "github.com/cryptopunkscc/astrald/mod/exonet"
+	tcpmod "github.com/cryptopunkscc/astrald/mod/tcp"
 	"time"
 
 	"github.com/cryptopunkscc/astral-go/api/exonet"
+	"github.com/cryptopunkscc/astral-go/api/tcp"
 	"github.com/cryptopunkscc/astral-go/astral"
 	"github.com/cryptopunkscc/astral-go/astral/log"
 	"github.com/cryptopunkscc/astral-go/astral/sig"
@@ -20,7 +22,6 @@ import (
 	"github.com/cryptopunkscc/astrald/mod/nodes"
 	"github.com/cryptopunkscc/astrald/mod/scheduler"
 	"github.com/cryptopunkscc/astrald/mod/services"
-	"github.com/cryptopunkscc/astrald/mod/tcp"
 )
 
 const NetworkName = "gw"
@@ -44,7 +45,7 @@ type Deps struct {
 	Nodes     nodes.Module
 	Scheduler scheduler.Module
 	Services  services.Module
-	TCP       tcp.Module
+	TCP       tcpmod.Module
 	IP        ip.Module
 }
 

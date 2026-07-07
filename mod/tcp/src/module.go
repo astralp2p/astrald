@@ -3,20 +3,21 @@ package tcp
 import (
 	"context"
 	exonetmod "github.com/cryptopunkscc/astrald/mod/exonet"
+	tcpmod "github.com/cryptopunkscc/astrald/mod/tcp"
 	"sync"
 	"time"
 
 	"github.com/cryptopunkscc/astral-go/api/exonet"
+	"github.com/cryptopunkscc/astral-go/api/tcp"
 	"github.com/cryptopunkscc/astral-go/api/tree"
 	"github.com/cryptopunkscc/astral-go/astral"
 	"github.com/cryptopunkscc/astral-go/astral/log"
 	"github.com/cryptopunkscc/astral-go/astral/sig"
 	"github.com/cryptopunkscc/astrald/lib/routing"
 	"github.com/cryptopunkscc/astrald/mod/nodes"
-	"github.com/cryptopunkscc/astrald/mod/tcp"
 )
 
-var _ tcp.Module = &Module{}
+var _ tcpmod.Module = &Module{}
 
 type Module struct {
 	Deps
@@ -47,7 +48,7 @@ func (mod *Module) Router() astral.Router {
 }
 
 func (mod *Module) String() string {
-	return tcp.ModuleName
+	return tcpmod.ModuleName
 }
 
 func (mod *Module) acceptAll(ctx context.Context, conn exonetmod.Conn) (shouldStop bool, err error) {

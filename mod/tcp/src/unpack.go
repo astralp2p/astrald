@@ -3,8 +3,8 @@ package tcp
 import (
 	"bytes"
 	"github.com/cryptopunkscc/astral-go/api/exonet"
+	"github.com/cryptopunkscc/astral-go/api/tcp"
 	exonetmod "github.com/cryptopunkscc/astrald/mod/exonet"
-	"github.com/cryptopunkscc/astrald/mod/tcp"
 )
 
 var _ exonetmod.Unpacker = &Module{}
