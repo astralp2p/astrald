@@ -3,8 +3,8 @@ package nat
 import (
 	"github.com/cryptopunkscc/astral-go/astral"
 	"github.com/cryptopunkscc/astral-go/astral/channel"
-	"github.com/cryptopunkscc/astrald/lib/astrald"
-	"github.com/cryptopunkscc/astrald/lib/routing"
+	"github.com/cryptopunkscc/astral-go/lib/astrald"
+	"github.com/cryptopunkscc/astral-go/lib/routing"
 	natclient "github.com/cryptopunkscc/astrald/mod/nat/client"
 )
 

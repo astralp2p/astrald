@@ -4,7 +4,7 @@ import (
 	"github.com/cryptopunkscc/astral-go/api/nodes"
 	"github.com/cryptopunkscc/astral-go/astral"
 	"github.com/cryptopunkscc/astral-go/astral/channel"
-	"github.com/cryptopunkscc/astrald/lib/query"
+	"github.com/cryptopunkscc/astral-go/lib/query"
 )
 
 func (client *Client) ResolveEndpoints(ctx *astral.Context, identity *astral.Identity) ([]*nodes.EndpointWithTTL, error) {

@@ -4,7 +4,7 @@ import (
 	"github.com/cryptopunkscc/astral-go/api/bip137sig"
 	"github.com/cryptopunkscc/astral-go/astral"
 	"github.com/cryptopunkscc/astral-go/astral/channel"
-	"github.com/cryptopunkscc/astrald/lib/query"
+	"github.com/cryptopunkscc/astral-go/lib/query"
 )
 
 func (client *Client) NewEntropy(ctx *astral.Context, bits int) (entropy *bip137sig.Entropy, err error) {

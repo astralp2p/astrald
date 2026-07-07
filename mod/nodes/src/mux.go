@@ -12,7 +12,7 @@ import (
 	"github.com/cryptopunkscc/astral-go/astral"
 	"github.com/cryptopunkscc/astral-go/astral/channel"
 	"github.com/cryptopunkscc/astral-go/astral/sig"
-	"github.com/cryptopunkscc/astrald/lib/query"
+	"github.com/cryptopunkscc/astral-go/lib/query"
 	"github.com/cryptopunkscc/astrald/mod/nodes/frames"
 )
 

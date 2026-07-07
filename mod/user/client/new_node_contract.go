@@ -5,7 +5,7 @@ import (
 	"github.com/cryptopunkscc/astral-go/api/user"
 	"github.com/cryptopunkscc/astral-go/astral"
 	"github.com/cryptopunkscc/astral-go/astral/channel"
-	"github.com/cryptopunkscc/astrald/lib/query"
+	"github.com/cryptopunkscc/astral-go/lib/query"
 )
 
 // NewContract requests a new node-binding contract for the user identified by alias from the remote user module.

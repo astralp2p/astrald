@@ -5,7 +5,7 @@ import (
 	"github.com/cryptopunkscc/astral-go/api/nat"
 	"github.com/cryptopunkscc/astral-go/astral"
 	"github.com/cryptopunkscc/astral-go/astral/channel"
-	"github.com/cryptopunkscc/astrald/lib/query"
+	"github.com/cryptopunkscc/astral-go/lib/query"
 )
 
 // NodePunch coordinates the offer/answer/ready/go signalling exchange with the NAT module, then delegates

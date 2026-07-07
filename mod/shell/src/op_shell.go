@@ -7,7 +7,7 @@ import (
 
 	"github.com/cryptopunkscc/astral-go/api/auth"
 	"github.com/cryptopunkscc/astral-go/astral"
-	"github.com/cryptopunkscc/astrald/lib/routing"
+	"github.com/cryptopunkscc/astral-go/lib/routing"
 )
 
 type opShellArgs struct {

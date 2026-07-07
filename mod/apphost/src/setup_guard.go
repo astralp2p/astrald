@@ -4,7 +4,7 @@ import (
 	"slices"
 
 	"github.com/cryptopunkscc/astral-go/astral"
-	"github.com/cryptopunkscc/astrald/lib/query"
+	"github.com/cryptopunkscc/astral-go/lib/query"
 )
 
 // inSetupMode reports whether the node has no active user - i.e. is unclaimed.

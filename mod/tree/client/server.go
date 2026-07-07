@@ -7,7 +7,7 @@ import (
 	"github.com/cryptopunkscc/astral-go/api/tree"
 	"github.com/cryptopunkscc/astral-go/astral"
 	"github.com/cryptopunkscc/astral-go/astral/channel"
-	"github.com/cryptopunkscc/astrald/lib/routing"
+	"github.com/cryptopunkscc/astral-go/lib/routing"
 )
 
 // NodeOps is a set of tree node operations that can be used with lib/routing

@@ -7,8 +7,8 @@ import (
 	"github.com/cryptopunkscc/astral-go/api/services"
 	"github.com/cryptopunkscc/astral-go/astral"
 	"github.com/cryptopunkscc/astral-go/astral/channel"
-	"github.com/cryptopunkscc/astrald/lib/astrald"
-	"github.com/cryptopunkscc/astrald/lib/query"
+	"github.com/cryptopunkscc/astral-go/lib/astrald"
+	"github.com/cryptopunkscc/astral-go/lib/query"
 )
 
 type Client struct {

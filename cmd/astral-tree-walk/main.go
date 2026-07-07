@@ -9,7 +9,7 @@ import (
 
 	"github.com/cryptopunkscc/astral-go/api/tree"
 	"github.com/cryptopunkscc/astral-go/astral"
-	"github.com/cryptopunkscc/astrald/lib/astrald"
+	"github.com/cryptopunkscc/astral-go/lib/astrald"
 	dircli "github.com/cryptopunkscc/astrald/mod/dir/client"
 	treecli "github.com/cryptopunkscc/astrald/mod/tree/client"
 )

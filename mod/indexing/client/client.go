@@ -3,7 +3,7 @@ package indexing
 import (
 	"github.com/cryptopunkscc/astral-go/astral"
 	"github.com/cryptopunkscc/astral-go/astral/channel"
-	"github.com/cryptopunkscc/astrald/lib/astrald"
+	"github.com/cryptopunkscc/astral-go/lib/astrald"
 )
 
 // Client is an RPC client for the indexing module. A nil targetID routes

@@ -5,7 +5,7 @@ import (
 	"github.com/cryptopunkscc/astral-go/api/auth"
 	"github.com/cryptopunkscc/astral-go/astral"
 	"github.com/cryptopunkscc/astral-go/astral/channel"
-	"github.com/cryptopunkscc/astrald/lib/query"
+	"github.com/cryptopunkscc/astral-go/lib/query"
 )
 
 func NewAppContract(ctx *astral.Context, id *astral.Identity, duration astral.Duration) (*auth.Contract, error) {

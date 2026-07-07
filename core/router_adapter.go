@@ -2,8 +2,8 @@ package core
 
 import (
 	"github.com/cryptopunkscc/astral-go/astral"
-	"github.com/cryptopunkscc/astrald/lib/astrald"
-	"github.com/cryptopunkscc/astrald/lib/query"
+	"github.com/cryptopunkscc/astral-go/lib/astrald"
+	"github.com/cryptopunkscc/astral-go/lib/query"
 )
 
 // routerAdapter is an adapter that allows lib/astrald client libraries to use an astral.Router directly

@@ -4,7 +4,7 @@ import (
 	"github.com/cryptopunkscc/astral-go/api/dir"
 	"github.com/cryptopunkscc/astral-go/astral"
 	"github.com/cryptopunkscc/astral-go/astral/channel"
-	"github.com/cryptopunkscc/astrald/lib/query"
+	"github.com/cryptopunkscc/astral-go/lib/query"
 )
 
 // ResolveIdentity resolves a name to an Identity: tries direct public-key parse first,

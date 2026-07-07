@@ -8,9 +8,9 @@ import (
 	"strings"
 
 	"github.com/cryptopunkscc/astral-go/astral"
+	"github.com/cryptopunkscc/astral-go/lib/astrald"
+	"github.com/cryptopunkscc/astral-go/lib/query"
 	"github.com/cryptopunkscc/astrald/lib/arl"
-	"github.com/cryptopunkscc/astrald/lib/astrald"
-	"github.com/cryptopunkscc/astrald/lib/query"
 	dircli "github.com/cryptopunkscc/astrald/mod/dir/client"
 )
 

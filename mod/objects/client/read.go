@@ -5,7 +5,7 @@ import (
 
 	"github.com/cryptopunkscc/astral-go/api/objects"
 	"github.com/cryptopunkscc/astral-go/astral"
-	"github.com/cryptopunkscc/astrald/lib/query"
+	"github.com/cryptopunkscc/astral-go/lib/query"
 )
 
 // Read returns a stream of the object's bytes from offset; caller must Close it.

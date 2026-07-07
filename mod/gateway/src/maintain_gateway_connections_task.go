@@ -7,7 +7,7 @@ import (
 	"github.com/cryptopunkscc/astral-go/api/ip"
 	"github.com/cryptopunkscc/astral-go/astral"
 	"github.com/cryptopunkscc/astral-go/astral/sig"
-	"github.com/cryptopunkscc/astrald/lib/astrald"
+	"github.com/cryptopunkscc/astral-go/lib/astrald"
 	"github.com/cryptopunkscc/astrald/mod/events"
 	gatewayClient "github.com/cryptopunkscc/astrald/mod/gateway/client"
 	"github.com/cryptopunkscc/astrald/mod/scheduler"

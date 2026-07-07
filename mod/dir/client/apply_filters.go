@@ -6,7 +6,7 @@ import (
 	"github.com/cryptopunkscc/astral-go/api/dir"
 	"github.com/cryptopunkscc/astral-go/astral"
 	"github.com/cryptopunkscc/astral-go/astral/channel"
-	"github.com/cryptopunkscc/astrald/lib/query"
+	"github.com/cryptopunkscc/astral-go/lib/query"
 )
 
 func ApplyFilters(ctx *astral.Context, identity *astral.Identity, filters ...string) (bool, error) {

@@ -5,7 +5,7 @@ import (
 
 	"github.com/cryptopunkscc/astral-go/api/exonet"
 	"github.com/cryptopunkscc/astral-go/astral"
-	"github.com/cryptopunkscc/astrald/lib/query"
+	"github.com/cryptopunkscc/astral-go/lib/query"
 	"github.com/cryptopunkscc/astrald/mod/tor"
 )
 

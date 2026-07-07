@@ -8,7 +8,7 @@ import (
 	"github.com/cryptopunkscc/astral-go/api/kcp"
 	"github.com/cryptopunkscc/astral-go/astral"
 	"github.com/cryptopunkscc/astral-go/astral/log"
-	"github.com/cryptopunkscc/astrald/lib/astrald"
+	"github.com/cryptopunkscc/astral-go/lib/astrald"
 	kcpclient "github.com/cryptopunkscc/astrald/mod/kcp/client"
 	"github.com/cryptopunkscc/astrald/mod/nat"
 	natclient "github.com/cryptopunkscc/astrald/mod/nat/client"

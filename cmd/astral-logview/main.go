@@ -12,7 +12,7 @@ import (
 	"github.com/cryptopunkscc/astral-go/astral/channel"
 	fmt2 "github.com/cryptopunkscc/astral-go/astral/fmt"
 	"github.com/cryptopunkscc/astral-go/astral/log"
-	"github.com/cryptopunkscc/astrald/lib/astrald"
+	"github.com/cryptopunkscc/astral-go/lib/astrald"
 	_ "github.com/cryptopunkscc/astrald/mod/all/pub"
 	_ "github.com/cryptopunkscc/astrald/mod/all/views"
 	"github.com/cryptopunkscc/astrald/mod/log/views"

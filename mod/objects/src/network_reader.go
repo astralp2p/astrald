@@ -5,8 +5,8 @@ import (
 	"time"
 
 	"github.com/cryptopunkscc/astral-go/astral"
+	"github.com/cryptopunkscc/astral-go/lib/query"
 	"github.com/cryptopunkscc/astrald/core"
-	"github.com/cryptopunkscc/astrald/lib/query"
 )
 
 // NetworkReader streams an object from a remote provider. Seeking reopens the

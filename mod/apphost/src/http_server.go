@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/cryptopunkscc/astral-go/astral"
-	"github.com/cryptopunkscc/astrald/lib/ipc"
+	"github.com/cryptopunkscc/astral-go/lib/ipc"
 	"github.com/cryptopunkscc/astrald/mod/objects/fs"
 )
 

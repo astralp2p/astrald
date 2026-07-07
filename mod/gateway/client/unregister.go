@@ -4,7 +4,7 @@ import (
 	gw "github.com/cryptopunkscc/astral-go/api/gateway"
 	"github.com/cryptopunkscc/astral-go/astral"
 	"github.com/cryptopunkscc/astral-go/astral/channel"
-	"github.com/cryptopunkscc/astrald/lib/query"
+	"github.com/cryptopunkscc/astral-go/lib/query"
 )
 
 func (c *Client) Unregister(ctx *astral.Context) error {

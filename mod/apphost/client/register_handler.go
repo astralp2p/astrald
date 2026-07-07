@@ -4,7 +4,7 @@ import (
 	"github.com/cryptopunkscc/astral-go/api/apphost"
 	"github.com/cryptopunkscc/astral-go/astral"
 	"github.com/cryptopunkscc/astral-go/astral/channel"
-	"github.com/cryptopunkscc/astrald/lib/query"
+	"github.com/cryptopunkscc/astral-go/lib/query"
 )
 
 // RegisterHandler registers a new handler for incoming queries.
