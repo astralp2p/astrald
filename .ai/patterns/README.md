@@ -14,5 +14,5 @@ Load only files that match the task.
 
 ## Boundary
 
-- File references in pattern docs are authoritative.
-- Verify against source before copying a pattern into new code.
+* File references in pattern docs are authoritative.
+* Verify against source before copying a pattern into new code.
