@@ -28,14 +28,15 @@ Adds TCP/IP connectivity for exonet links, including persistent inbound listenin
 
 ## Source
 
-- `mod/tcp/module.go`, `endpoint.go`, `conn.go`, `errors.go` - public module interface, endpoint object, connection wrapper, and listener errors.
+- `mod/tcp/module.go`, `conn.go`, `errors.go` - public module interface, connection wrapper, and listener errors.
 - `mod/tcp/src/loader.go`, `module.go`, `deps.go`, `config.go` - construction, runtime settings, dependency registration, and YAML sync.
 - `mod/tcp/src/server.go`, `dial.go`, `ephemeral_listener.go` - persistent accept loop, outbound dialing, and ephemeral listener lifecycle.
 - `mod/tcp/src/endpoint_resolver.go`, `status_composer.go`, `ip_candidate_finder.go` - endpoint publication to nodes, nearby, and IP discovery.
 - `mod/tcp/src/parse.go`, `unpack.go` - text and packed endpoint decoding.
 - `mod/tcp/src/op_*.go` - query handlers for ephemeral listener management.
-- `mod/tcp/client/` - typed client wrappers for TCP ops.
 - `mod/tcp/views/endpoint_view.go` - endpoint renderer.
+
+The endpoint wire type, op-name constants, and typed client wrappers now live in astral-go `api/tcp` (see astral-go .ai/knowledge/api/tcp.md).
 
 ## Surface
 

@@ -18,16 +18,15 @@ Aggregates service advertisements from registered discoverers into a local strea
 - Discover operation: `services.discover` accepts a channel -> calls `DiscoverServices` with caller and follow flag -> sends each `*services.Update` -> converts nil separator to `EOS` -> sends final `EOS`.
 - Sync operation: `services.sync` resolves provider ID -> runs under a network-zone child context -> any inbound message cancels the sync -> `syncServices` pulls remote updates -> sends `Ack` or an error object.
 - Remote sync storage: `syncServices` opens `services.discover` on the provider -> deletes all cached rows for that provider -> creates rows for available updates and deletes rows for unavailable updates.
-- Client discovery: `client.Discover` collects snapshot updates until `EOS`; when following, it emits nil to the caller after the separator and then forwards live updates.
+- The `client.Discover` snapshot/`EOS`/nil-separator/follow semantics live in astral-go `api/services/client` (see astral-go .ai/knowledge/api/services.md).
 
 ## Source
 
-- `mod/services/module.go`, `mod/services/update.go` - public interfaces, method names, database prefix, and update wire object.
+- `mod/services/module.go` - public interfaces (`Module`, `Discoverer`), `ModuleName`, and `DBPrefix`. The `Update` wire object and `Method*` op-name constants live in astral-go `api/services/` (see astral-go .ai/knowledge/api/services.md).
 - `mod/services/src/loader.go`, `mod/services/src/deps.go`, `mod/services/src/module.go` - database setup, router setup, discoverer auto-registration, and sync entry point.
 - `mod/services/src/discover_services.go` - fan-in of snapshot and follow streams from registered discoverers.
 - `mod/services/src/op_discover.go`, `mod/services/src/op_sync.go` - query handlers for discovery and remote sync.
 - `mod/services/src/db.go`, `mod/services/src/db_service.go` - database model and provider service create, delete, and lookup helpers.
-- `mod/services/client/services.go` - typed discovery client and snapshot/follow channel handling.
 
 ## Surface
 

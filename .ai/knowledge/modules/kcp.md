@@ -25,18 +25,17 @@ Implements the `kcp` exonet transport by dialing and accepting reliable KCP sess
 - NAT local-port mapping: `kcp.set_endpoint_local_port` parses the remote endpoint and records the local UDP port; `Replace=false` fails on collision, while `Replace=true` overwrites; `kcp.remove_endpoint_local_port` deletes the mapping.
 - Mapping list: `kcp.list_endpoint_local_mappings` streams `EndpointLocalMapping` objects from the current mapping clone and ends with `EOS`.
 - Endpoint resolution and nearby status: `ResolveEndpoints(local identity)` emits one `kcp.Endpoint` per `IP.LocalIPs()` using `ListenPort` and a seven-day TTL; `ComposeStatus` attaches the same local endpoints only in visible nearby mode.
-- Endpoint codec: `Parse` accepts only network `kcp` and parses `host:port`; `Unpack` reads a binary `Endpoint` object; the public endpoint type also supports text and JSON string forms.
+- Endpoint codec: `Parse` accepts only network `kcp` and delegates `host:port` parsing to astral-go `api/kcp.ParseEndpoint`; `Unpack` accepts only network `kcp` and reads a binary `kcp.Endpoint` via `Endpoint.ReadFrom`. The endpoint's text/JSON string forms live with the wire object in astral-go `api/kcp` (see astral-go .ai/knowledge/api/kcp.md).
 
 ## Source
 
-- `mod/kcp/module.go`, `mod/kcp/endpoint.go`, `mod/kcp/endpoint_local_mapping.go`, `mod/kcp/errors.go` - public interface, endpoint object, mapping object, method names, and errors.
+- `mod/kcp/module.go`, `mod/kcp/errors.go` - the public `Module` interface (`exonet.Dialer`+`Unpacker`+`Parser`+`ListenPort`), `ModuleName`, and node-side sentinels. The `Endpoint`/`EndpointLocalMapping` wire objects, `Method*` op-name constants, and typed client live in astral-go `api/kcp` (see astral-go .ai/knowledge/api/kcp.md).
 - `mod/kcp/src/config.go`, `mod/kcp/src/loader.go`, `mod/kcp/src/deps.go`, `mod/kcp/src/module.go` - YAML config, endpoint parsing, dependency registration, settings binding, and listen switch.
 - `mod/kcp/src/server.go`, `mod/kcp/src/ephemeral_listener.go` - persistent and ephemeral KCP listener lifecycle.
 - `mod/kcp/src/dial.go`, `mod/kcp/src/conn.go` - outbound UDP binding, KCP dial, local-port mapping, and wrapped connection deadlines.
 - `mod/kcp/src/parse.go`, `mod/kcp/src/unpack.go` - exonet endpoint text and binary codecs.
 - `mod/kcp/src/endpoint_resolver.go`, `mod/kcp/src/status_composer.go` - node endpoint resolution and nearby status composition.
 - `mod/kcp/src/op_new_ephemeral_listener.go`, `mod/kcp/src/op_close_ephemeral_listener.go`, `mod/kcp/src/op_set_endpoint_local_port.go`, `mod/kcp/src/op_remove_endpoint_local_port.go`, `mod/kcp/src/op_list_endpoint_local_mappings.go` - query operation handlers.
-- `mod/kcp/client/` - typed client wrappers for KCP ops.
 - `mod/kcp/views/endpoint_view.go` - terminal rendering for KCP endpoints.
 - `mod/nodes/src/nat_link_strategy.go` - main NAT consumer of ephemeral listeners and local-port mappings.
 
@@ -48,7 +47,7 @@ Implements the `kcp` exonet transport by dialing and accepting reliable KCP sess
 | `kcp.new_ephemeral_listener`, `kcp.close_ephemeral_listener` | create and remove temporary UDP listeners used by NAT strategies |
 | `kcp.set_endpoint_local_port`, `kcp.remove_endpoint_local_port`, `kcp.list_endpoint_local_mappings` | manage the local UDP port reused when dialing a known remote endpoint |
 | `/mod/kcp/settings` | runtime listen and dial switches bound through `tree` |
-| `kcp.Endpoint` | exonet endpoint object for IP and UDP port |
+| `kcp.Endpoint` | exonet endpoint object for IP and UDP port; the type is defined in astral-go `api/kcp` |
 
 ## Invariants
 

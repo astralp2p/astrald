@@ -1,6 +1,6 @@
 # mod/ip
 
-Maintains the node's view of IP-layer reachability: local interface addresses, public IP candidates supplied by other modules, and the OS default gateway. Owns the `IP` object type, IP query ops, provider aggregation, and network-address-change events.
+Maintains the node's view of IP-layer reachability: local interface addresses, public IP candidates supplied by other modules, and the OS default gateway. Owns the IP query ops, provider aggregation, and network-address-change emission; the `IP` object type and `EventNetworkAddressChanged` are defined in astral-go `api/ip`.
 
 ## Dependencies
 
@@ -21,7 +21,7 @@ Maintains the node's view of IP-layer reachability: local interface addresses, p
 
 ## Source
 
-- `mod/ip/module.go`, `mod/ip/ip.go`, `mod/ip/event_network_address_changed.go` - public interface, IP object encoding, and address-change event object.
+- `mod/ip/module.go` - public interface (`Module`, `PublicIPCandidateProvider`, `ErrDefaultGatewayNotFound`); the `IP` object and `EventNetworkAddressChanged` types live in astral-go `api/ip`.
 - `mod/ip/src/loader.go`, `mod/ip/src/deps.go` - module construction, op router setup, dependency injection, and provider auto-discovery.
 - `mod/ip/src/module.go` - `Run`, `LocalIPs`, local address filtering, polling watcher, event emission, and router access.
 - `mod/ip/src/net.go`, `mod/ip/src/public_ip_candidates.go`, `mod/ip/src/default_gateway.go` - interface shim, public candidate aggregation, and OS gateway parsers.
@@ -38,7 +38,7 @@ Maintains the node's view of IP-layer reachability: local interface addresses, p
 | `ip.default_gateway` | reports the OS default gateway or an error object |
 | `ip.PublicIPCandidateProvider` | extension interface for modules that can publish public IP candidates |
 | `EventNetworkAddressChanged` | local polling event consumed by modules that need to react to address changes |
-| `mod.ip.ip_address` | object type used for IP values in ops, events, and endpoint objects |
+| `mod.ip.ip_address` | object type used for IP values in ops, events, and endpoint objects; the Go type lives in astral-go `api/ip` (encoding specified under `.ai/system/protocols/ip/types`) |
 
 ## Invariants
 

@@ -40,8 +40,8 @@ Bridges local apps into the node over IPC, an HTTP object/query gateway, and a l
 
 ## Source
 
-- `mod/apphost/module.go`, `contract.go`, `access_token.go`, `app.go` - public interface, method-name constants, contract builder, token/app objects.
-- `mod/apphost/*_msg.go` - wire messages: `HostInfoMsg`, `AuthTokenMsg`, `AuthSuccessMsg`, `ErrorMsg`, `RouteQueryMsg`, `QueryAcceptedMsg`, `QueryRejectedMsg`, `RegisterHandlerMsg`, `BindMsg`, `HandleQueryMsg`, `RegisterServiceMsg`, `IncomingQueryMsg`, `AttachQueryMsg`, `RejectIncomingMsg`, `PingMsg`.
+- `mod/apphost/module.go`, `contract.go`, `register_policy.go` - public `Module` interface, `ExtraOriginWeb`/`ExtraAnonymous` extra keys, and the `NewAppContract` contract builder.
+- Wire messages (`HostInfoMsg` ... `PingMsg`), the `AccessToken`/`App` object types, `Method*` op-name constants, and the typed clients live in astral-go `api/apphost/` (see astral-go .ai/knowledge/api/apphost.md).
 - `mod/apphost/src/loader.go`, `module.go`, `deps.go`, `prepare.go`, `config.go` - config, DB setup, dependency injection, static-token sync, IPC listener and worker startup, HTTP/WS startup.
 - `mod/apphost/src/listen.go`, `worker.go`, `guest.go` - IPC listener fan-in, worker loop, guest protocol (handshake, route, register, attach, reject).
 - `mod/apphost/src/http_server.go`, `http_object_handler.go`, `http_query_handler.go` - bearer-auth HTTP bridge and object server.
@@ -49,7 +49,6 @@ Bridges local apps into the node over IPC, an HTTP object/query gateway, and a l
 - `mod/apphost/src/query_router.go`, `ipc_handler.go`, `query_preprocessor.go` - inbound dispatch (IPC then WS) and relay-contract preprocessing.
 - `mod/apphost/src/op_*.go` - query operation handlers: `create_token`, `list_tokens`, `register_handler`, `register` (self-register), `bind`, `cancel`, `whoami`, `new_app_contract`, `sign_app_contract`, `install_app`, `hold_object`, `unhold_object`, `list_held_objects`.
 - `mod/apphost/src/access_tokens.go`, `db.go`, `db_access_token.go`, `db_local_app.go`, `db_object_hold.go`, `object_holder.go` - token, local-app, and object-hold persistence, lookups, and the `objects.Holder` adapter.
-- `mod/apphost/client/` - typed client wrappers (`create_token`, `list_tokens`, `register_handler`, `bind`, `new_app_contract`, `sign_app_contract`, `hold_object`, `unhold_object`, `list_held_objects`).
 
 ## Surface
 

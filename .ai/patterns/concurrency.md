@@ -19,7 +19,7 @@ func (m *Module) Add(key string, t *Thing) { m.mu.Lock(); defer m.mu.Unlock(); m
 func (m *Module) Find(key string) *Thing   { m.mu.RLock(); defer m.mu.RUnlock(); return m.items[key] }
 ```
 
-Source: `sig/map.go`, `core/conn.go`
+Source: `core/conn.go`
 
 ## Atomic
 
@@ -50,11 +50,11 @@ Source: `core/conn.go`, `mod/nodes/src/session.go`, `mod/nat/src/hole.go`
 - Call `.Wait()` inside a `for` loop.
 
 ```go
-c.wcond.L.Lock()
-defer c.wcond.L.Unlock()
-for c.wsize == 0 {
-    c.wcond.Wait()
+s.cond.L.Lock()
+for s.paused && !s.closed {
+    s.cond.Wait()
 }
+s.cond.L.Unlock()
 ```
 
 Source: `mod/nodes/src/session.go`
@@ -96,34 +96,18 @@ go func() {
 ```
 
 - Buffer error channels with capacity at least equal to the number of senders.
-- Use `sig` helpers for context-aware channel operations.
+- Use `sig` helpers (`RecvErr`, `Recv`, `Send`) for context-aware channel
+  operations instead of hand-written `select` on `ctx.Done()`.
 
-```go
-err := sig.RecvErr(ctx, errc)
-v, err := sig.Recv[T](ctx, ch)
-err = sig.Send(ctx, ch, value)
-```
+The `sig` package now lives in `github.com/cryptopunkscc/astral-go/sig`; see
+astral-go `.ai/patterns/concurrency.md` for the helper signatures and
+semantics.
 
-Source: `sig/signal.go`, `sig/chan.go`, `core/run.go`
+Source: `core/run.go`
 
 ## sig Collections
 
-Prefer `sig.Map`, `sig.Set`, and `sig.Queue` over raw mutex plus map/slice for
-shared mutable state.
-
-```go
-m := sig.Map[string, *Thing]{}
-m.Set("key", thing)
-v, ok := m.Get("key")
-all := m.Clone()
-
-s := sig.Set[*Thing]{}
-s.Add(thing)
-s.Remove(thing)
-
-q := sig.Queue[*Event]{}
-q.Push(event)
-event := q.Next()
-```
-
-Source: `sig/`
+Prefer `sig.Map`, `sig.Set`, and `sig.Queue` from
+`github.com/cryptopunkscc/astral-go/sig` over raw mutex plus map/slice for
+shared mutable state. See astral-go `.ai/patterns/concurrency.md` for the
+collection APIs.

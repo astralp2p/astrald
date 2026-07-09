@@ -34,7 +34,7 @@ Establishes and maintains authenticated encrypted links to peer nodes, then mult
 
 ## Source
 
-- `mod/nodes/module.go`, `mod/nodes/errors.go`, `mod/nodes/tasks.go`, `mod/nodes/relay_for_action.go`, `mod/nodes/migrate_signal.go`, `mod/nodes/endpoint_with_ttl.go`, `mod/nodes/link_info.go`, `mod/nodes/session_info.go`, `mod/nodes/node_info.go` - public API, constants, task interfaces, auth action, and info objects.
+- `mod/nodes/module.go`, `mod/nodes/errors.go`, `mod/nodes/tasks.go` - public API, constants, and task interfaces. The `RelayForAction` auth action, `MigrateSignal`, and the info/event objects (`EndpointWithTTL`, `LinkInfo`, `SessionInfo`, `NodeInfo`, link lifecycle/pressure events) live in astral-go `api/nodes`.
 - `mod/nodes/frames/frame.go`, `mod/nodes/frames/ping.go`, `mod/nodes/frames/query.go`, `mod/nodes/frames/relay_query.go`, `mod/nodes/frames/read.go`, `mod/nodes/frames/response.go`, `mod/nodes/frames/data.go`, `mod/nodes/frames/migrate.go`, `mod/nodes/frames/reset.go`, `mod/nodes/frames/errors.go` - mux frame registry and wire encoders.
 - `mod/nodes/src/loader.go`, `mod/nodes/src/deps.go`, `mod/nodes/src/module.go`, `mod/nodes/src/config.go` - config, database setup, strategy registration, resolver registration, and dependency hooks.
 - `mod/nodes/src/link.go`, `mod/nodes/src/link_negotiator.go`, `mod/nodes/src/link_pool.go`, `mod/nodes/src/node_linker.go`, `mod/nodes/src/noise/handshake.go`, `mod/nodes/src/noise/conn.go` - link lifecycle, Noise handshake, negotiation, pooling, and strategy activation.
@@ -44,7 +44,7 @@ Establishes and maintains authenticated encrypted links to peer nodes, then mult
 - `mod/nodes/src/object_receiver.go`, `mod/nodes/src/object_describer.go`, `mod/nodes/src/object_finder.go`, `mod/nodes/src/ip_candidate_finder.go`, `mod/nodes/src/endpoint_resolver.go` - objects integration and endpoint discovery helpers.
 - `mod/nodes/src/db.go`, `mod/nodes/src/db_endpoint.go`, `mod/nodes/src/db_endpoint_resolver.go`, `mod/nodes/src/cleanup_endpoints_task.go`, `mod/nodes/src/authorizers.go`, `mod/nodes/src/create_link_task.go`, `mod/nodes/src/ensure_link_task.go` - endpoint persistence, tasks, and relay authorizer.
 - `mod/nodes/src/op_*.go` - query handlers for links, sessions, endpoints, link creation, close, and migration.
-- `mod/nodes/client/client.go`, `mod/nodes/client/resolve_endpoints.go`, `mod/nodes/client/migrate_session.go` - typed clients used by strategies and migration flows.
+- Typed clients used by the strategies and migration flows live in astral-go `api/nodes/client`.
 
 ## Surface
 

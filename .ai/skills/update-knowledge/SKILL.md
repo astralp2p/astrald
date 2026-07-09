@@ -46,7 +46,7 @@ description: >-
 | Action | Targets |
 |---|---|
 | Writes | `.ai/knowledge/modules/<name>.md`, `.ai/knowledge/concepts/<name>.md`, `.ai/knowledge/README.md` (the index) |
-| Reads as truth | `mod/<name>/` source, `.ai/system/`, `.ai/rules.md`, `.ai/decisions/` |
+| Reads as truth | `mod/<name>/` source, `.ai/system/`, `.ai/rules.md` |
 | Reads to calibrate | `.ai/knowledge/modules/README.md`, `.ai/knowledge/concepts/README.md`, `.ai/patterns/` |
 | Never touches | code, `.ai/system/`, `.ai/rules.md`, the two recipe READMEs, git history |
 
@@ -68,6 +68,12 @@ Placement rules:
   note.
 * A Go-implementation binding belongs in knowledge. A protocol, wire, or
   domain truth belongs in `system/`; the note links to it.
+* Primitives, wire types, op-name constants, and protocol clients live in the
+  astral-go SDK, not in astrald. SDK-implementation facts belong in
+  astral-go's own `.ai/knowledge`; an astrald note cross-references them by
+  package name (e.g. "op-name constants live in astral-go `api/dir`") and
+  never documents them. A cross-repo reference is plain text, never a `../`
+  markdown link.
 * A reusable "how to write a new one" recipe belongs in `patterns/`.
 * A note whose content is jointly covered by `system/` and a sibling module
   note is deleted, with its links fixed. Span-trimmed husks are not left
@@ -121,8 +127,11 @@ if it exists; skip steps that do not apply. A non-standard module (e.g. the
 aggregator `mod/all/` with no `module.go` or `src/`) gets a short bundle note,
 not a forced template, and is reported as non-standard.
 
-1. `module.go` — `ModuleName`, `Method*` constants, `DBPrefix` (persisting
-   modules only), the public `Module` interface.
+1. `mod/<name>/module.go` — `DBPrefix` (persisting modules only) and the
+   public `Module` interface; `ModuleName` for the modules that still define
+   it. Op-name constants (the `Method*` set, and `ModuleName` for the modules
+   that moved it) live in astral-go `api/<name>/module.go`; read them there for
+   the op inventory. The astrald `module.go` imports that package.
 2. `src/loader.go` — `Load`, `assets.LoadYAML`, `assets.Database()`
    migrations, `router.AddStructPrefix`, `init()` registration.
 3. `src/module.go` — the struct (embeds `routing.OpRouter`), `Run(ctx)`,
@@ -136,8 +145,9 @@ not a forced template, and is reported as non-standard.
    `<prefix>__<table>`. Persistence flows and Surface store rows.
 8. Listeners, `*_handler.go`, holders, preprocessors — each registered
    extension point is a flow and possibly a Surface or Invariant row.
-9. `client/` — confirms op signatures only. Client code is never mirrored
-   into a note.
+9. astral-go `api/<name>/client/` (out-of-repo) — confirms op signatures
+   only. Protocol clients live in the SDK, not astrald; client code is never
+   mirrored into a note.
 
 Cross into a dependency's note and into `.ai/system/` for protocol truth as
 needed. Both are read-only.

@@ -53,7 +53,7 @@ description: >-
 | Action | Targets |
 |---|---|
 | Writes | `.ai/artifacts/protocols/<protocol>/`, `.ai/artifacts/analysis/protocols-update.md`, `.ai/artifacts/protocols-state.json` |
-| Reads as truth | `mod/<name>/` source, `.ai/system/protocols/` (baseline and format spec), `.ai/system/common-types/`, `.ai/system/topics/*-encoding.md`, `.ai/rules.md` |
+| Reads as truth | `mod/<name>/` source, `.ai/system/protocols/` (baseline and format spec), `.ai/system/primitive-types/`, `.ai/system/topics/*-encoding.md`, `.ai/rules.md` |
 | Never touches | code, `.ai/system/`, `.ai/knowledge/`, git history |
 
 * The worklist is source-driven: modules under `mod/` that define ops.
@@ -80,8 +80,9 @@ A staged package mirrors the astral-docs layout exactly:
   the move deletes it upstream. Provenance records the removal.
 * A baseline type doc with no matching source struct is kept verbatim and
   reported. Type docs also describe wire messages outside the op surface.
-* Common types (`string8`, `error_message`, `ack`, ...) are linked by name,
-  never re-documented. Only types defined by the module get a `types/` page.
+* Primitive types (`string8`, `error_message`, `ack`, ...) are linked by
+  name, never re-documented. Only types defined by the module get a `types/`
+  page.
 
 ## Format spec
 
@@ -226,8 +227,9 @@ state file and writes nothing.
 
 1. **Drift gate.** A read-only agent compares the baseline package against
    source. Op inventory comes from the exported `Op*` methods (wire name
-   per the Traversal recipe), not file names alone; `Method*` constants
-   confirm it when present. Each op and each type is classified `missing`,
+   per the Traversal recipe), not file names alone; the `Method*` constants
+   in astral-go `api/<protocol>/module.go` confirm it when present. Each op
+   and each type is classified `missing`,
    `drifted`, or `clean`; the gate also reports orphaned op docs and README
    staleness. The orphan sweep is explicit: the gate lists every baseline
    `ops/*.md` and reports each file whose op does not exist in source — an
@@ -273,10 +275,13 @@ the main way a fabricated argument survives.
 Read in this order per op. Stop once the behavior visible on the wire is
 covered — internals stay out of protocol docs.
 
-1. `module.go` — `ModuleName`, the public `Module` interface, and the
-   `Method*` constants. The wire name of an op is
+1. `mod/<name>/module.go` — the public `Module` interface, and `ModuleName`
+   for the modules that still define it. The op-name constants (the `Method*`
+   set, and `ModuleName` for the modules that moved it) live in astral-go
+   `api/<protocol>/module.go`; read them there. The wire name of an op is
    `<ModuleName>.<snake_case of the Op* method name without the prefix>`
-   (`lib/routing/op_router.go` `AddStructPrefix`). A `Method*` constant
+   (astral-go `lib/routing/op_router.go` `AddStructPrefix`, imported as
+   `github.com/cryptopunkscc/astral-go/lib/routing`). A `Method*` constant
    states the wire name explicitly when present; some modules define none.
 2. `src/op_<name>.go` — the unit of truth for one op:
    * `op<Pascal>Args`: fields → arguments; `query:"required"` → required;
@@ -285,10 +290,13 @@ covered — internals stay out of protocol docs.
      channel reads → the `(stream)` bullet; every `ch.Send(...)` → a
      returned object (`astral.Err` → `error_message`, `&astral.Ack{}` →
      `ack`, `&astral.EOS{}` → `eos` terminator); raw writes → prose.
-3. Module root package (`mod/<name>/*.go`) — structs with `ObjectType()`
-   that the op accepts or returns; their fields and astral field types.
-4. `client/` — confirms op names and signatures only; never documented.
-5. `.ai/system/common-types/` and `topics/{json,text,binary}-encoding.md` —
+3. astral-go `api/<name>/` (out-of-repo) — the wire-type structs with
+   `ObjectType()` that the op accepts or returns; their fields and astral
+   field types. A few node-only object types remain in the astrald module
+   root package (`mod/<name>/*.go`); read those there.
+4. astral-go `api/<name>/client/` (out-of-repo) — confirms op names and
+   signatures only; never documented.
+5. `.ai/system/primitive-types/` and `topics/{json,text,binary}-encoding.md` —
    the vocabulary for argument types, field types, and example forms.
 
 An op gated by an auth action (e.g. a `mod.auth.action` subtype) names the
@@ -335,7 +343,7 @@ Form — against the corpus:
 * Examples are ```shellsession blocks; commands use only documented
   arguments; outputs match documented forms; the JSON envelope is
   `{"Type":...,"Object":...}`.
-* No content re-documents `common-types/` or restates `topics/`.
+* No content re-documents `primitive-types/` or restates `topics/`.
 * Prose follows Documentation Style: declarative, one fact per sentence,
   no hedging, no meta-commentary.
 
@@ -367,8 +375,8 @@ Completeness — against the package:
   not matching the returned type's documented form.
 * Captured-looking examples — examples are synthesized; an example never
   claims node-specific state that source cannot support.
-* Re-documenting common types — `string8` belongs to `common-types/`; link
-  by name, never restate.
+* Re-documenting primitive types — `string8` belongs to `primitive-types/`;
+  link by name, never restate.
 * Blind regeneration — clobbering hand-written baseline prose on a drifted
   doc. Updates are diff-aware.
 * Hyphen for en dash — argument and field bullets use `–`.

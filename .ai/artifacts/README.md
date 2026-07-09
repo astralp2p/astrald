@@ -9,5 +9,5 @@ Artifacts are not default context. Load only when:
 - authoritative workspace file points here
 - task is summarize, clean up, or promote artifacts
 
-Artifacts are provisional. They do not override code, `system/`, `decisions/`,
+Artifacts are provisional. They do not override code, `system/`,
 `rules.md`, `knowledge/`, or `patterns/`.

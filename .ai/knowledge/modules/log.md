@@ -1,12 +1,12 @@
 # mod/log
 
-Centralizes node logging by filtering `astral/log` output, writing log entries to a per-run file, exposing live log streaming, and registering terminal renderers for common astral types. Owns log-level config, the file sink, the `log.listen` query op, and view setup for identities, queries, and entries.
+Centralizes node logging by filtering astral-go `astral/log` output, writing log entries to a per-run file, exposing live log streaming, and registering terminal renderers for common astral types. Owns log-level config, the file sink, the `log.listen` query op, and view setup for identities, queries, and entries.
 
 ## Dependencies
 
 | Module | Why |
 |---|---|
-| `astral/log.Logger` | installs `LogEntryFilter`, adds the file sink, and adds or removes per-listen forwarders |
+| astral-go `astral/log.Logger` | installs `LogEntryFilter`, adds the file sink, and adds or removes per-listen forwarders |
 | `dir` | supplies the identity display-name resolver used by log views |
 | `tree` | binds `Config` at `/mod/log/config` so log level can be read dynamically |
 | `astral.Node` | supplies the local identity for highlighted identity views and `views.HideOrigin` |
@@ -18,7 +18,7 @@ Centralizes node logging by filtering `astral/log` output, writing log entries t
 - Level gate: logger calls `LogEntryFilter` -> read `Config.Level` -> default to `DefaultLogLevel=2` when unset -> allow entries with `entry.Level <= level`.
 - File sink: `CreateLogFile` creates `~/.config/astrald/logs/astrald.log.<timestamp>` when the home directory is available -> `LogFile.LogEntry` serializes writes through a mutex and sends entries through a channel wrapper.
 - Live stream: `log.listen` accepts the raw query stream -> creates a channel with optional input and output formats -> adds `logForwarder` -> waits until the client closes by reading from the channel -> deferred removal stops forwarding.
-- Rendering: package init and loader-installed view functions render primitives, identities, queries, and entries with module theme colors; identity rendering falls back to fingerprint when no resolver is available.
+- Rendering: package init and loader-installed view functions render primitives, identities, queries, and entries with astral-go `astral/log/theme` colors; identity rendering falls back to fingerprint when no resolver is available.
 - External-type rendering: blueprint-backed `astral.RuntimeObject` values have no compile-time view; `RuntimeObjectView` registers via `fmt.SetFallbackView` and renders `Type{Field: value, ...}` (struct) or `Type(value)` (alias), delegating each field to `fmt.ViewFor`. Runtime container carriers (`RuntimeSlice`/`RuntimeArray`/`RuntimeMap`) register per-type under their constant `ObjectType` (`slice`/`array`/`map`). Replaces the prior raw `%v` Go dump. See issue #337.
 
 ## Source
@@ -29,7 +29,7 @@ Centralizes node logging by filtering `astral/log` output, writing log entries t
 - `mod/log/src/log_file.go` - per-run log file creation and serialized entry writes.
 - `mod/log/src/op_listen.go` - `log.listen` handler and live forwarding logger.
 - `mod/log/views/` - terminal renderers and opt-in view registration functions; `runtime_object_view.go` (external-type fallback) and `runtime_{slice,array,map}_view.go` (container carriers).
-- `mod/log/styles/`, `mod/log/theme/` - reusable color, gradient, and style helpers for views.
+- Style and theme helpers now live in astral-go `astral/log/{styles,theme}` (reusable color, gradient, and style helpers), imported by `mod/log/views`.
 
 ## Surface
 

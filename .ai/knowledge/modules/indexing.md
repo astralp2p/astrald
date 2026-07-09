@@ -10,9 +10,9 @@ Tracks object membership in named object repositories as an append-only, version
 | `tree` | enabled repos persist as children of `/mod/indexing/repos`; indexer registrations and per-repo cursors persist under `/mod/indexing/indexers/<name>` |
 | `core/assets` | `LoadYAML` reads config and `Database()` backs the `indexing__repo_entries` table |
 | `gorm` | `DB` migrates and serves the per-repo append-only changelog used to compute next pending changes |
-| `lib/routing` | `OpRouter.AddStructPrefix` exposes `OpRegisterIndexer`, `OpSubscribe`, `OpRemoveIndex`, `OpEnableRepo` |
-| `astral/channel` | subscribe streams `IndexMsg`/`UnindexMsg` and expects `ChangeAckMsg` or temporary failure on the same channel |
-| `sig` | `sig.Map` tracks per-repo sync cancel funcs; `sig.NewRetry` paces retries on unacked changes |
+| astral-go `lib/routing` | `OpRouter.AddStructPrefix` exposes `OpRegisterIndexer`, `OpSubscribe`, `OpRemoveIndex`, `OpEnableRepo` |
+| astral-go `astral/channel` | subscribe streams `IndexMsg`/`UnindexMsg` and expects `ChangeAckMsg` or temporary failure on the same channel |
+| astral-go `sig` | `sig.Map` tracks per-repo sync cancel funcs; `sig.NewRetry` paces retries on unacked changes |
 
 ## Flows
 
@@ -26,13 +26,13 @@ Tracks object membership in named object repositories as an append-only, version
 
 ## Source
 
-- `mod/indexing/module.go`, `errors.go`, `indexer.go`, `messages.go` - public interface, sentinels, wire message types.
+- `mod/indexing/module.go`, `errors.go`, `indexer.go` - public `Module` interface, `ModuleName`/`DBPrefix`, node-side sentinels, and the `Indexer` interface. Wire messages (`IndexMsg`/`UnindexMsg`/`ChangeAckMsg`), op-name constants (`Method*`), and ack-related sentinels live in astral-go `api/indexing` (see astral-go .ai/knowledge/api/indexing.md).
 - `mod/indexing/src/loader.go`, `module.go`, `deps.go`, `config.go` - construction, tree-node wiring, dependency injection, lifecycle.
 - `mod/indexing/src/repos.go` - enable/disable, sync goroutine, snapshot-boundary handling, change broadcast.
 - `mod/indexing/src/indexers.go` - indexer handles, per-repo cursors, change picker.
 - `mod/indexing/src/db.go`, `db_repo_entry.go` - append-only changelog, latest-state queries, `nextChange`.
 - `mod/indexing/src/op_register_indexer.go`, `op_subscribe.go`, `op_remove_index.go`, `op_enable_repo.go` - query handlers.
-- `mod/indexing/client/client.go`, `register_indexer.go`, `subscribe.go`, `remove_index.go` - client wrapper and `Subscription` with `Next`/`Ack`/`Fail`.
+- The typed client wrapper and the `Subscription` handle (`Next`/`Ack`/`Fail`) live in astral-go `api/indexing/client` (see astral-go .ai/knowledge/api/indexing.md).
 
 ## Surface
 
@@ -40,7 +40,7 @@ Tracks object membership in named object repositories as an append-only, version
 |---|---|
 | `indexing.register_indexer`, `indexing.remove_index` | stable nonce lifecycle for external indexers |
 | `indexing.subscribe` | one-change-at-a-time stream with explicit ack and temporary-failure retry |
-| `indexing.IndexMsg`, `indexing.UnindexMsg`, `indexing.ChangeAckMsg` | wire format for change delivery and acknowledgement |
+| `indexing.IndexMsg`, `indexing.UnindexMsg`, `indexing.ChangeAckMsg` | wire format for change delivery and acknowledgement; the Go types live in astral-go `api/indexing` and their encoding is specified under [system/protocols/indexing/types](../../system/protocols/indexing/types) |
 | `/mod/indexing/repos`, `/mod/indexing/indexers/<name>` | persisted enabled-repo set and per-indexer cursor tree |
 | `indexing__repo_entries` | append-only changelog with monotonic `Version` per repo |
 

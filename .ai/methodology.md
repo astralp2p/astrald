@@ -10,7 +10,6 @@ Use `artifacts/` for temporary work. Promote only stable reusable insight.
 ## Promotion
 
 - Artifact -> working note
-- Decision -> accepted tradeoff
 - Rule -> broad hard constraint
 - Pattern -> repeatable source-grounded recipe
 - Knowledge -> repo implementation fact
@@ -18,7 +17,7 @@ Use `artifacts/` for temporary work. Promote only stable reusable insight.
 
 ## Boundaries
 
-- `README.md`, `methodology.md`, `rules.md`, `decisions/`: cautious
+- `README.md`, `methodology.md`, `rules.md`: cautious
 - `patterns/`, `knowledge/`, `skills/`: update for reusable facts/recipes
 - `artifacts/`: free to write, ignored by default
 

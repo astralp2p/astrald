@@ -8,14 +8,13 @@ Concept pages explain cross-module ideas. Read `concepts/README.md` before creat
 
 | Keywords | Read |
 |---|---|
-| Identity, secp256k1, Anyone, User, Swarm, node identity | `concepts/identity.md` |
+| Identity, User, Swarm, node identity | `concepts/identity.md` |
 | App, AppContract, GuestID, AccessToken, apphost IPC, Guest, handshake | `concepts/app.md` |
-| Zone, ZoneNetwork, ZoneDevice, ZoneVirtual, network access, zone enforcement | `concepts/zone.md` |
-| Query, Router, RouteQuery, RouteNotFound, Reject, Accept, Session, Preprocessor, Gateway, routing pipeline | `concepts/query.md` |
+| Zone, ZoneNetwork, network access, zone enforcement | `concepts/zone.md` |
+| Query, Router, PriorityRouter, Reject, Accept, Session, Preprocessor, Gateway, routing pipeline | `concepts/query.md` |
 | Auth, Authorize, Action, ActionSudo, ActionRelayFor, auth handler, authorization | `concepts/auth.md` |
-| lib/astrald, lib/apphost, lib/routing, lib/apps, lib/ipc, lib/query, astrald.Default, OpRouter, IncomingQuery, Serve, AppRegistrar, client library | `concepts/lib.md` |
-| Object, ObjectID, Repository, Receiver, Describer, Searcher, Finder, Holder, objects.Load, objects.Save, objects.purge, object holds, repo group | `concepts/objects.md` |
-| Op, operation, op_*.go, OpName, args struct, ops.Set, method name, query method string | `concepts/operations.md` |
+| Object, ObjectID, Repository, Receiver, Describer, Searcher, Finder, Holder, objects.Load, objects.purge, object holds, repo group | `concepts/objects.md` |
+| Op, operation, op_*.go, args struct, method name, query method string | `concepts/operations.md` |
 | Node, module lifecycle, Load Inject LoadDependencies Prepare Run, Scheduler, core.Inject, core.Node | `concepts/node.md` |
 | Transport, exonet, Stream, Link, link strategy, TCP, KCP, Tor, layer stack | `concepts/transport.md` |
 | Link, LinkPool, LinkStrategy, LinkPressure, LinkCreatedEvent, LinkClosedEvent | `concepts/links.md` |
@@ -24,9 +23,7 @@ Concept pages explain cross-module ideas. Read `concepts/README.md` before creat
 | crypto, signing, Engine, EngineProvider, hash signing, text signing, BIP137, hardware wallet, Coldcard | `concepts/crypto.md` |
 | Engine fan-out, EngineProvider, key claim, signer delegation, hardware-backed signing, mod/crypto dispatch | `concepts/crypto-engines.md` |
 | Relay, third-party forwarder, RelayQuery frame, RelayForAction, SourceIdentity, relay vs gateway, query-layer relay | `concepts/relay.md` |
-| Serialization, wire format, Objectify, WriteTo, ReadFrom, canonical encoding, ObjectType, astral primitives | `concepts/wire.md` |
-| Channel, Switch, Handle, Collect, EOS, astral.Err, channel.Expect, channel helpers | `concepts/channels.md` |
-| tree, tree.Value, Follow, live binding, settings, Mount, MountRemote, tree path, runtime config | `concepts/tree.md` |
+| tree, live binding, settings, Mount, MountRemote, tree path, runtime config | `concepts/tree.md` |
 | Presence, nearby, StatusMessage, Composer, Composition, stealth, broadcast, endpoint resolution | `concepts/presence.md` |
 
 ## Rules and Patterns
@@ -72,4 +69,3 @@ Read the module guide when entering that module's source.
 | `mod/log/`, logging, log level, OpListen, View, LogFile | `modules/log.md` |
 | `mod/archives/`, zip archive, archive entry, Index, Forget, ArchiveDescriptor, EventArchiveIndexed | `modules/archives.md` |
 | `mod/utp/`, uTP, UDP transport, utp.Endpoint, ListenPort, exonet dialer | `modules/utp.md` |
-| `mod/all/`, aggregator, blank imports, mods.go, pub, views, core.RegisterModule, astral.Add, fmt.SetView, portal | `modules/all.md` |

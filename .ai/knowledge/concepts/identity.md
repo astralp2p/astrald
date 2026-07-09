@@ -2,16 +2,10 @@
 
 ## Representation
 
-`astral.Identity` is a compressed secp256k1 public key — see [common-types/identity](../../system/common-types/identity.md).
-
-Invariants:
-
-* Binary form: 33 bytes (all zero when zero).
-* String form: 66 hex characters; the string `"anyone"` is also accepted on
-  parse and is emitted by JSON marshaling of the zero value.
-* `Anyone`: zero value; anonymous or wildcard identity.
-* `IsZero()` is true for nil receivers and for empty public keys.
-* `IsEqual` treats two zero identities as equal.
+`astral.Identity` is a compressed secp256k1 public key; its binary/hex/JSON
+encoding, the `Anyone` zero value, and comparison helpers are provided by
+astral-go — see astral-go .ai/knowledge/concepts/identity.md and the spec
+[primitive-types/identity](../../system/primitive-types/identity.md).
 
 ## Addressing
 

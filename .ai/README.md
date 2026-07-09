@@ -15,8 +15,7 @@ Then use indexes. Load scoped files only when relevant:
 
 - `.ai/knowledge/README.md` - repo implementation
 - `.ai/patterns/README.md` - code recipes
-- `.ai/system/docs/README.md` - domain/protocol truth
-- `.ai/decisions/README.md` - accepted decisions
+- `.ai/system/README.md` - domain/protocol truth
 - `.ai/artifacts/` - ignored unless explicitly referenced
 
 ## Authority
@@ -24,11 +23,10 @@ Then use indexes. Load scoped files only when relevant:
 1. User instruction
 2. Code/tests
 3. `.ai/system/`
-4. `.ai/decisions/`
-5. `.ai/rules.md`, `.ai/comments.md`
-6. `.ai/knowledge/`
-7. `.ai/patterns/`
-8. Referenced `.ai/artifacts/`
+4. `.ai/rules.md`, `.ai/comments.md`
+5. `.ai/knowledge/`
+6. `.ai/patterns/`
+7. Referenced `.ai/artifacts/`
 
 Call out conflicts.
 
@@ -40,6 +38,5 @@ Call out conflicts.
 - `patterns/` - source-grounded recipes
 - `knowledge/` - repo implementation notes
 - `system/` - domain/system knowledge
-- `decisions/` - accepted decisions
 - `skills/` - project tool notes
 - `artifacts/` - working notes, ignored by default

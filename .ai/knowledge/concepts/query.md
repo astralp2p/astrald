@@ -3,20 +3,17 @@
 A `Query` requests a bidirectional `Session` with a named service on a target
 `Identity`. It is the base communication operation.
 
-## Types
-
-* `Query{Nonce, Caller, Target, QueryString}` is the wire object.
-* `InFlightQuery` wraps a `Query` with `Extra sig.Map[string, any]`.
-* `OriginLocal` and `OriginNetwork` are values for `Extra["origin"]`.
-* `IsLocal()` and `IsNetwork()` test that key.
+The `Query`/`InFlightQuery` wire types, the `Origin*` values, and the
+`RouteQuery`/`ErrRouteNotFound` routing contract are provided by astral-go —
+see astral-go .ai/knowledge/concepts/query.md.
 
 ## Routing
 
-* `Router.RouteQuery(ctx, *InFlightQuery, w) (io.WriteCloser, error)`.
-* Node runs registered routers in priority order.
-* Outcomes: accept opens the session, reject stops routing, not found tries
-  the next router.
-* `ErrRouteNotFound` is now an empty struct; matchers use `errors.Is`.
+* `core/router.go`'s `Router` wraps `routing.PriorityRouter` from astral-go
+  `lib/routing` and tracks live connections.
+* The node runs registered routers in priority order.
+* Outcomes: accept opens the session, reject stops routing, not found falls
+  through to the next router.
 
 ## Preprocessors
 

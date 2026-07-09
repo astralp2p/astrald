@@ -27,13 +27,15 @@ Adapts Tor hidden services into the exonet transport layer so the node can dial 
 
 ## Source
 
-- `mod/tor/module.go`, `endpoint.go`, `digest.go` - public module interface and onion endpoint representation.
+- `mod/tor/module.go` - public module interface.
 - `mod/tor/src/loader.go`, `module.go`, `deps.go`, `config.go` - config, SOCKS5 proxy setup, tree settings, dependency registration, and lifecycle.
 - `mod/tor/src/dial.go`, `server.go`, `conn.go`, `parse.go`, `unpack.go` - outbound dialing, hidden-service server, connection wrapper, and endpoint decoding.
 - `mod/tor/src/private_key.go` - `tor.key` loading, generation, and persistence.
 - `mod/tor/src/endpoint_resolver.go`, `status_composer.go` - node endpoint resolution and nearby advertisement.
 - `mod/tor/tc/` - Tor control protocol client, authentication, protocol info, and onion management.
 - `mod/tor/views/endpoint_view.go` - endpoint renderer.
+
+The onion endpoint object and its digest now live in astral-go `api/tor` (see astral-go .ai/knowledge/api/tor.md).
 
 ## Surface
 

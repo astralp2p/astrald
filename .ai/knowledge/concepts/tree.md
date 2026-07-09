@@ -14,19 +14,11 @@ the node's shared runtime state layer, not only as local config.
 
 ## Live Config Binding
 
-Modules bind settings to tree paths with `tree.Value[T]`.
-
-`tree.Value[T]` is a typed, persistent, observable cell:
-
-* It holds the current value.
-* It survives restarts through the DB.
-* It notifies watchers on change.
-
-### Read APIs
-
-* `Get()` performs a one-shot read of the current value.
-* `Follow(ctx)` returns a channel subscription. It delivers the current value
-  immediately, then every future change.
+Modules bind settings to tree paths with `tree.Value[T]` via `mod/tree`
+`Bind`/`BindPath`. The `tree.Value[T]` cell itself — a typed, observable cell
+with `Get`/`Follow` read APIs — now lives in astral-go `api/tree` (see astral-go
+.ai/knowledge/concepts/tree.md); `mod/tree` only consumes it. On the default
+DB-backed tree node a bound value survives restarts through the DB.
 
 Use `Follow(ctx)` when module behavior must react continuously. For example,
 `mod/tcp` toggles its listener goroutine on or off as `settings.Listen`
@@ -41,5 +33,7 @@ changes.
 
 * Use `/mod/<name>/config` for persistent config.
 * Use `/mod/<name>/settings` for runtime-togglable state.
-* `Bind()` wires a struct's `tree.Value` fields automatically, using field
-  names as path segments.
+* `Bind()` wires a struct's `tree.Value` fields automatically, using snake-cased
+  field names as path segments, overridable per field with the `tree` struct tag.
+* `BindPath()` queries the node for a path (optionally creating it) and then
+  calls `Bind`.

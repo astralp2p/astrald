@@ -11,11 +11,11 @@ be called locally, remotely, or by an App.
 
 ## Structure
 
-* Signature: `func(*astral.Context, *Query) error`, optionally with an args
-  struct as a third parameter (`lib/routing.NewOp`).
-* Mark optional fields with `query:"optional"`.
-* `routing.OpRouter.AddStructPrefix(mod, "Op")` discovers `Op*` methods and
-  registers them.
+Op discovery, signature validation, arg-struct parsing (via `query` struct
+tags), and required-arg rejection are provided by astral-go
+`github.com/cryptopunkscc/astral-go/lib/routing` (`NewOp`,
+`OpRouter.AddStructPrefix`) and `lib/query` — see astral-go
+.ai/knowledge/concepts/operations.md.
 
 ## Flow
 
@@ -24,5 +24,3 @@ be called locally, remotely, or by an App.
 * Read or compute data.
 * Stream typed Objects.
 * End with `EOS` or `Ack`.
-
-Missing required args reject before the handler runs.

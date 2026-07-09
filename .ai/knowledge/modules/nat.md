@@ -28,13 +28,12 @@ Establishes direct UDP paths between nodes behind cone NATs and exposes the resu
 
 ## Source
 
-- `mod/nat/module.go`, `mod/nat/hole.go`, `mod/nat/endpoint.go`, `mod/nat/puncher.go`, `mod/nat/punch_protocol.go`, `mod/nat/punch_signal.go`, `mod/nat/consume_hole_signal.go`, `mod/nat/errors.go` - public methods, wire objects, protocol signals, and sentinel errors.
+- `mod/nat/module.go`, `mod/nat/errors.go` - `ModuleName`, the (empty) public `Module` interface, node-side sentinels, and the `init()` that registers the `nat.PunchSignal` / `nat.ConsumeHoleSignal` blueprints via `astral.Add`. The `Hole`/`Endpoint` wire objects, `PunchSignal`/`ConsumeHoleSignal` protocol signals, puncher/punch-protocol types, `Method*` op-name constants, and typed clients live in astral-go `api/nat` (see astral-go .ai/knowledge/api/nat.md).
 - `mod/nat/src/loader.go`, `mod/nat/src/deps.go`, `mod/nat/src/module.go` - loader, settings binding, enablement evaluation, router setup, hole creation.
 - `mod/nat/src/hole.go`, `mod/nat/src/hole_pool.go` - runtime hole state machine and one-consumer pool semantics.
 - `mod/nat/src/cone_nat_puncher.go`, `mod/nat/src/frames.go` - UDP probe loop, receiver filtering, ping and probe codecs.
 - `mod/nat/src/op_punch.go`, `mod/nat/src/op_node_punch.go`, `mod/nat/src/op_node_consume_hole.go`, `mod/nat/src/op_list_holes.go`, `mod/nat/src/op_enable.go` - query handlers.
 - `mod/nat/src/object_receiver.go`, `mod/nat/src/service_discoverer.go` - observed endpoint event handling and service advertisement.
-- `mod/nat/client/client.go`, `mod/nat/client/traverse.go`, `mod/nat/client/node_punch.go`, `mod/nat/client/node_consume_hole.go`, `mod/nat/client/list_holes.go`, `mod/nat/client/set_enabled.go` - typed clients for punch and consume flows.
 - `mod/nat/views/endpoint_view.go` - endpoint presentation.
 - `mod/nodes/src/nat_link_strategy.go` - primary consumer that turns holes into KCP-backed node links.
 

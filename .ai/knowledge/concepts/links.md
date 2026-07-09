@@ -3,7 +3,7 @@
 ## Link
 
 * A `Link` is one authenticated, brontide-encrypted (Noise XK) connection
-  between two `Identity` values — see [core-primitives/link](../../system/core-primitives/link.md).
+  between two `Identity` values — see [core-definitions/link](../../system/core-definitions/link.md).
 * `Link` embeds `*channel.Channel`; reads and writes go through that channel
   with `WithLockedWrites()` so the mux can share the writer.
 * `Link` implements `astral.Router` by delegating `RouteQuery` to its `Mux`.

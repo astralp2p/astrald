@@ -32,13 +32,15 @@
 ## Authorization
 
 * `RelayForAction` is the typed auth action; `Actor` is the link peer
-  requesting to relay, `ForID` is the original `CallerID`.
+  requesting to relay, `ForID` is the original `CallerID`. The type is defined
+  in astral-go `api/nodes` (astrald keeps the `ActionRelayFor` action-name
+  constant in `mod/nodes/module.go`); its fields and `Constrainable`/`ApplyConstraints`
+  behavior are specified at
+  [mod.nodes.relay_for_action](../../system/protocols/nodes/types/mod.nodes.relay_for_action.md).
 * `ActionRelayFor = "mod.nodes.relay_for_action"`.
 * `Mux.handleRelayQuery` checks `Auth.Authorize(RelayForAction)` whenever
   `RelayQuery.CallerID` differs from the link's remote identity.
 * `AuthorizeRelayFor` grants when `Actor == ForID`.
-* `RelayForAction` implements `Constrainable`; `ApplyConstraints` returns
-  true when the bundle is nil or empty.
 * Rejected relay queries get a `Response` frame with `CodeRejected` and no
   session is launched.
 

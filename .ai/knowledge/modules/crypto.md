@@ -8,7 +8,7 @@ Signs and verifies hashes and text through pluggable crypto engines, and indexes
 | --- | --- |
 | `objects` | stores the node key in the system repository, loads indexed private keys through `ReadDefault`, scans configured repositories for private-key objects, and exposes private-key object holds for purge |
 | `dir` (opt) | injected in `Deps`; current crypto code does not call it |
-| `secp256k1` | `secp256k1.FromIdentity(q.Caller())` builds the default signer key in `sign_hash`/`sign_text` ops |
+| `secp256k1` | the engine arrives via `EngineProvider` (`mod/secp256k1`); `secp256k1.FromIdentity(q.Caller())` — the astral-go `api/secp256k1` package helper, not a module call — builds the default signer key in `sign_hash`/`sign_text` ops |
 | `core` | `core.EachLoadedModule` discovers `EngineProvider`s during `LoadDependencies` and registers their engines |
 | `core/assets` | `LoadYAML` reads crypto config, `Database()` backs `crypto__private_keys`, and `Res().Read("node_key")` loads the local node private key |
 
@@ -30,13 +30,12 @@ Signs and verifies hashes and text through pluggable crypto engines, and indexes
 ## Source
 
 - `mod/crypto/module.go`, `engine.go`, `errors.go` - public module interface, engine capability contracts (`PublicKeyDeriver`, `HashSignerProvider`, `HashVerifier`, `TextSignerProvider`, `TextVerifier`), and sentinels.
-- `mod/crypto/private_key.go`, `public_key.go`, `signature.go`, `hash.go`, `signable_object.go` - crypto object types, text encodings, and signable object contracts.
+- Crypto object types (`PrivateKey`, `PublicKey`, `Signature`, `Hash`, `SignableObject`), `Method*` op-name constants, `Scheme` constants (`asn1`/`bip137`), and the typed client live in astral-go `api/crypto/` (see astral-go .ai/knowledge/api/crypto.md).
 - `mod/crypto/src/loader.go`, `module.go`, `deps.go`, `config.go` - registration, node key loading, dependency injection, engine fan-out wiring, and indexing lifecycle.
 - `mod/crypto/src/dispatch.go` - generic `dispatchResult` and `dispatchVerify` helpers used by every public method.
 - `mod/crypto/src/db.go`, `db_private_key.go`, `object_holder.go` - private-key index schema, lookup helpers, and cleanup hold hook.
 - `mod/crypto/src/object_signer.go`, `text_object_signer.go` - object and text-object signing adapters.
 - `mod/crypto/src/op_public_key.go`, `op_sign_hash.go`, `op_sign_text.go`, `op_verify_hash_signature.go`, `op_verify_text_signature.go` - query operation handlers.
-- `mod/crypto/client/` - typed client wrappers for crypto operations.
 
 ## Surface
 

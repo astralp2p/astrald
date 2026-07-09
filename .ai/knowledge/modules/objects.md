@@ -8,7 +8,7 @@ Hosts the node's content-addressed object layer behind a uniform query and repos
 |---|---|
 | `auth` | `OpRead` authorizes `ReadObjectAction` before serving object bytes |
 | `dir` | `fetchARL` parses `astral://` ARLs with `arl.Parse` and resolves them through the directory |
-| `nodes` (opt) | injected for module integration; outbound network object calls go through `objects/client` via `astrald.Default()` |
+| `nodes` (opt) | injected for module integration; outbound network object calls go through astral-go `api/objects/client` via `lib/astrald` `astrald.Default()` |
 | `core/assets` | loads `objects.yaml`, supplies the gorm DB that backs the `objects__objects` tracking table, and creates the default in-memory `mem0` and `system` repositories |
 | `core.Node` | `LoadDependencies` walks `Modules().Loaded()` to auto-register object extension interfaces |
 
@@ -34,17 +34,17 @@ Hosts the node's content-addressed object layer behind a uniform query and repos
 
 ## Source
 
-- `mod/objects/module.go`, `mod/objects/repository.go`, `mod/objects/writer.go`, `mod/objects/reader.go`, `mod/objects/read_seeker.go`, `mod/objects/errors.go` - public module, repository, reader, writer contracts and sentinels.
-- `mod/objects/descriptor.go`, `mod/objects/search.go`, `mod/objects/search_query.go`, `mod/objects/search_result.go`, `mod/objects/find.go`, `mod/objects/probe.go`, `mod/objects/type_spec.go`, `mod/objects/source_identifier.go`, `mod/objects/read_object_action.go`, `mod/objects/create_object_action.go` - extension types, query data, probes, source-identity helper, and auth actions.
+- `mod/objects/module.go`, `mod/objects/repository.go`, `mod/objects/reader.go`, `mod/objects/read_seeker.go`, `mod/objects/errors.go` - public module, repository, and reader contracts and sentinels.
+- `mod/objects/source_identifier.go` - source-identity helper. The extension/wire types (`Writer`, `Descriptor`, `Search`, `SearchQuery`, `SearchResult`, `Find`, `Probe`), the `ReadObjectAction`/`CreateObjectAction` auth actions, and the typed clients live in astral-go `api/objects/` (see astral-go .ai/knowledge/api/objects.md).
 - `mod/objects/src/loader.go`, `mod/objects/src/deps.go`, `mod/objects/src/module.go`, `mod/objects/src/config.go` - default repo layout, dependency injection with extension auto-registration, lifecycle.
 - `mod/objects/src/db.go`, `mod/objects/src/db_object.go`, `mod/objects/src/objects_reads_journal.go` - `dbObject` tracking row, keyset cursor for purge order, and the in-memory reads journal.
 - `mod/objects/src/repositories.go`, `mod/objects/src/repo_group.go` - repository registry, group operations (read, create, contains, delete, scan, free).
 - `mod/objects/src/drop.go`, `mod/objects/src/receive.go`, `mod/objects/src/push.go`, `mod/objects/src/fetch.go`, `mod/objects/src/network_reader.go` - object receive, save-on-accept, push, fetch, and routed network reads.
 - `mod/objects/src/describe.go`, `mod/objects/src/search.go`, `mod/objects/src/find.go`, `mod/objects/src/holding.go` - local extension dispatch and holder aggregation.
-- `mod/objects/src/external_describer.go`, `mod/objects/src/external_finder.go`, `mod/objects/src/external_searcher.go` - typed `objects/client` adapters used by the external-registration ops.
+- `mod/objects/src/external_describer.go`, `mod/objects/src/external_finder.go`, `mod/objects/src/external_searcher.go` - node-side adapters (over astral-go `api/objects/client`) used by the external-registration ops.
 - `mod/objects/src/purge.go`, `mod/objects/src/op_purge.go` - read-order purge driver and op handler.
-- `mod/objects/src/op_*.go` - query handlers for object storage, reads, scans, search, describe, find, repo management, probes, type lookup, push, echo, spec, and external registration.
-- `mod/objects/client/` - typed remote clients used by push, search, create, read, scan, purge, repository management, and external registration calls.
+- `mod/objects/src/op_*.go` - query handlers for object storage, reads, scans, search, describe, find, repo management, probes, type lookup, push, echo, and external registration.
+- The typed remote clients used by push, search, create, read, scan, purge, repository management, and external registration calls live in astral-go `api/objects/client/` (see astral-go .ai/knowledge/api/objects.md).
 - `mod/objects/mem/`, `mod/objects/fs/`, `mod/objects/views/` - in-memory repo, filesystem adapter, and presentation helpers.
 
 ## Surface
@@ -52,11 +52,11 @@ Hosts the node's content-addressed object layer behind a uniform query and repos
 | What | Why it matters |
 |---|---|
 | `objects.new`, `objects.load`, `objects.store`, `objects.create`, `objects.read`, `objects.delete`, `objects.purge`, `objects.contains` | core object storage and byte streaming operations |
-| `objects.scan`, `objects.search`, `objects.describe`, `objects.find`, `objects.probe`, `objects.get_type`, `objects.spec` | discovery, metadata, type, and inspection operations |
+| `objects.scan`, `objects.search`, `objects.describe`, `objects.find`, `objects.probe`, `objects.get_type` | discovery, metadata, type, and inspection operations |
 | `objects.push`, `objects.echo` | object delivery and connectivity helpers |
 | `objects.repositories`, `objects.remove_repository`, `objects.new_mem` | repository management |
 | `objects.register_describer`, `objects.register_finder`, `objects.register_searcher` | external (caller-hosted) discovery registration |
-| `objects.register_blueprint`, `objects.blueprints` | runtime type registration (struct-kind and alias-kind Blueprints through one op) and type-name listing; backs `apps.WithBlueprintSync` |
+| `objects.register_blueprint`, `objects.blueprints`, `objects.get_blueprint` | runtime type registration (struct-kind and alias-kind Blueprints through one op), type-name listing, and single-type Blueprint lookup (`OpGetBlueprint`); backs the astral-go `apps.WithBlueprintSync` flow (see astral-go .ai/knowledge/concepts/blueprints.md) |
 | `Receiver`, `Describer`, `Searcher`, `SearchPreprocessor`, `Finder`, `Holder` | extension points auto-discovered from loaded modules |
 | `main`, `device`, `memory`, `local`, `removable`, `virtual`, `network`, `system` | default repository groups and built-in repositories |
 | `objects__objects` | tracking row (height, id, type, created_at, read_at) used by purge order and lazy type lookups |
@@ -79,7 +79,6 @@ Hosts the node's content-addressed object layer behind a uniform query and repos
 - `OpRegisterDescriber`/`OpRegisterFinder`/`OpRegisterSearcher` reject `OriginNetwork` and the node's own identity.
 - `ReadDefault` is `main`; `WriteDefault` is `local`.
 - `OpBlueprints` (`objects.blueprints`) streams names from `DefaultBlueprints().OrderedBlueprints()` as `String8`: compile-time prototypes first (alpha-sorted), then aliases (alpha-sorted, leaves), then runtime Blueprints topo-sorted by reference; terminated with `EOS`. Aliases precede runtime Blueprints so a Blueprint's RefSpec to an alias resolves when peers replay in order.
-- `OpRegisterBlueprint` (`objects.register_blueprint`) runs in batch mode: it reads `*astral.Blueprint` values (struct kind or alias kind) until `EOS` or EOF, registers each via `Module.Register` → `Blueprints.Register`, and answers each input with the `ObjectID` or a wire-error before a final `EOS`. Name collision returns `astral.ErrAlreadyRegistered` as a wire-error; the client wrapper at `mod/objects/client/register.go` recognises the wire-string prefix and returns the in-process sentinel so callers can `errors.Is(err, astral.ErrAlreadyRegistered)`.
-- Aliases are alias-kind `*astral.Blueprint` values (`Underlying` set, no `Fields`). Runtime Blueprints and compile-time prototypes share one registry map (`Blueprints.entries`); each name maps to exactly one entry, and `RegisterBlueprint` returns `ErrAlreadyRegistered` against any prior holder of the same name. A compile-time prototype declares itself an alias by implementing `astral.PrimitiveAlias` (`UnderlyingPrimitive() string`); `BlueprintOf` derives the alias-kind Blueprint for sync without storing it, so `New` keeps returning the typed Go value locally while remote peers materialize a `*RuntimeObject`.
-- `apps.WithBlueprintSync` is the SDK entry point: `SyncBlueprints` lists remote names via `objectsClient.Blueprints`, then pushes only missing local Blueprints — aliases first, in `AllBlueprints` order — through `objectsClient.Register`; the local Blueprint cache is built once per process (`sync.Once`), and the remote diff runs on every (re)connect.
+- `OpRegisterBlueprint` (`objects.register_blueprint`) runs in batch mode: it reads `*astral.Blueprint` values (struct kind or alias kind) until `EOS` or EOF, registers each via `Module.Register` → `Blueprints.Register`, and answers each input with the `ObjectID` or a wire-error before a final `EOS`. Name collision returns `astral.ErrAlreadyRegistered` as a wire-error; the client-side wire-string-to-sentinel translation lives in astral-go `api/objects/client` (see astral-go .ai/knowledge/api/objects.md).
+- Blueprint/alias registry internals (the shared `Blueprints.entries` registry map, `RegisterBlueprint` `ErrAlreadyRegistered` semantics, `PrimitiveAlias`/`UnderlyingPrimitive`, `BlueprintOf` derivation, `New` returning typed Go values vs a `*RuntimeObject`) and the `apps.WithBlueprintSync`/`SyncBlueprints` diff-and-push flow live in astral-go — see astral-go .ai/knowledge/concepts/blueprints.md.
 - todo(security): neither `objects.blueprints` nor `objects.register_blueprint` is gated by caller identity; any peer can squat a type name or enumerate the registry.

@@ -6,9 +6,9 @@ Decides whether an identity may perform a typed action, using local action handl
 
 | Module | Why |
 | --- | --- |
-| `crypto` | `ObjectSigner`/`TextObjectSigner` for contract signing; `VerifyObjectSignature`/`VerityTextObjectSignature` for `SchemeASN1`/`SchemeBIP137` verification |
+| `crypto` | `ObjectSigner`/`TextObjectSigner` for contract signing; `VerifyObjectSignature`/`VerifyTextObjectSignature` for `SchemeASN1`/`SchemeBIP137` verification |
 | `objects` | `Load` resolves indexed object IDs in `OpIndex`; `RepoLocal.Scan` feeds the startup indexer; `objects.Holder` is implemented to retain active contracts during purge |
-| `secp256k1` | `FromIdentity` derives the public key used for signing and verifying contract signatures |
+| `secp256k1` | key derivation for signing/verifying contract signatures uses the astral-go `api/secp256k1` package helper `FromIdentity` (imported directly in `src/signing.go`, not injected as a module dependency); the secp256k1 signing engine itself is still provided by `mod/secp256k1` |
 | `core/assets` | `Database()` backs `auth__contracts` and `auth__contract_permits`; `LoadYAML` loads the (empty) `auth` config |
 
 ## Flows
@@ -27,14 +27,14 @@ Decides whether an identity may perform a typed action, using local action handl
 
 ## Source
 
-- `mod/auth/module.go`, `action.go`, `actions_map.go`, `contract.go`, `signed_contract.go`, `sudo_action.go`, `errors.go` - public `Module` and `ContractQueryBuilder` interfaces, action/handler types, contract/permit/signed-contract types, sudo action, and sentinels.
+- `mod/auth/module.go`, `actions_map.go`, `sudo_action.go` - public `Module` and `ContractQueryBuilder` interfaces, typed handler registry, and sudo action. The action base type, contract/permit/signed-contract wire types, and sentinels live in astral-go `api/auth`.
 - `mod/auth/src/loader.go`, `module.go`, `deps.go`, `config.go`, `prepare.go` - module construction, router setup, dependency injection, DB migration, and lifecycle.
 - `mod/auth/src/authorize.go`, `authorizers.go` - dispatch loop, contract fallback, and built-in sudo authorizer.
 - `mod/auth/src/signing.go` - `SignIssuer`/`SignSubject`/`SignContract` and per-scheme verification.
 - `mod/auth/src/contracts.go`, `contract_query.go`, `object_holder.go` - `IndexContract`, repository indexer, active-contract query builder, and `HoldObject` hook.
 - `mod/auth/src/op_sign_contract.go`, `op_index.go` - query operation handlers.
 - `mod/auth/src/db.go`, `db_contract.go`, `db_contract_permit.go` - GORM rows, active-contract lookup, upsert with conditional permit insert, and permit encode/decode.
-- `mod/auth/client/`, `mod/auth/views/` - typed client wrappers and signed-contract view helpers.
+- `mod/auth/views/` - signed-contract view helpers. Typed client wrappers live in astral-go `api/auth/client`.
 
 ## Surface
 

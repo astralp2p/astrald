@@ -1,6 +1,6 @@
 # mod/exonet
 
-Registers raw network transports so modules can dial, parse, and unpack endpoints by network name without depending on a specific transport. Owns the raw `Conn` and `Endpoint` contracts and the per-network dialer, parser, and unpacker maps.
+Registers raw network transports so modules can dial, parse, and unpack endpoints by network name without depending on a specific transport. Owns the raw `Conn` contract and the per-network dialer, parser, and unpacker maps. The `Endpoint` interface is defined in astral-go `api/exonet` (see astral-go .ai/knowledge/api/exonet.md).
 
 ## Dependencies
 
@@ -18,7 +18,7 @@ Registers raw network transports so modules can dial, parse, and unpack endpoint
 
 ## Source
 
-- `mod/exonet/module.go`, `conn.go`, `errors.go` - public registry interface, endpoint and raw connection contracts, ephemeral listener shapes, and sentinels.
+- `mod/exonet/module.go`, `conn.go`, `errors.go` - public registry interface, raw connection contract, ephemeral listener shapes, and sentinels.
 - `mod/exonet/src/loader.go`, `module.go`, `deps.go`, `config.go`, `prepare.go` - module registration, dependency injection, registry maps, dispatch, setters, and lifecycle.
 - `mod/tcp/src/deps.go`, `mod/kcp/src/deps.go`, `mod/utp/src/deps.go`, `mod/tor/src/deps.go`, `mod/gateway/src/deps.go` - examples of transport modules registering exonet handlers.
 
@@ -28,7 +28,7 @@ Registers raw network transports so modules can dial, parse, and unpack endpoint
 | --- | --- |
 | `Module.Dial`, `Parse`, and `Unpack` | unified raw-network operations used by callers that only know a network name or endpoint |
 | `SetDialer`, `SetParser`, and `SetUnpacker` | extension points for transport modules |
-| `Endpoint` | transport-specific address object that can be displayed and packed |
+| `Endpoint` | transport-specific address object that can be displayed and packed; defined in astral-go `api/exonet` |
 | `Conn` | raw unauthenticated byte stream with endpoint metadata |
 | `ErrUnsupportedNetwork` and `ErrDisabledNetwork` | shared sentinel errors for missing or disabled transport support |
 

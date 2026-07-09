@@ -8,7 +8,6 @@ Disseminates signed objects to peers on the local network over UDP and delivers 
 |---|---|
 | `crypto` | signs outbound broadcast hashes with `NodeSigner().SignHash`; verifies inbound signatures with `VerifyHashSignature` |
 | `objects` | receives `EventBroadcastReceived` as the local node and then receives the inner object as `Broadcast.Source` |
-| `secp256k1` | derives the inbound verification public key from `Broadcast.Source` |
 | `core/assets` | `LoadYAML` reads `udp_port` from `ether.yaml` |
 
 ## Flows
@@ -18,7 +17,7 @@ Disseminates signed objects to peers on the local network over UDP and delivers 
 - Outbound broadcast: `Push` -> `makePacket` wraps object with timestamp and source -> hash signed broadcast payload with local node signer -> encode packet -> `broadcast`.
 - Broadcast targets: `broadcast` reads `NetInterfaces()` -> keep up, broadcast-capable, non-loopback interfaces -> compute broadcast address for each CIDR -> skip duplicate and link-local addresses -> write one UDP datagram per target.
 - Outbound unicast: `PushToIP` -> `makePacket` -> `writeToIP` sends one datagram to the requested IP on `udp_port`.
-- Inbound read: `broadcastReceiver` loops on `readBroadcast` -> decode `SignedBroadcast` from UDP datagram -> ignore self-originating packets and unsigned packets -> verify signature with public key from `Broadcast.Source`.
+- Inbound read: `broadcastReceiver` loops on `readBroadcast` -> decode `SignedBroadcast` from UDP datagram -> ignore self-originating packets and unsigned packets -> verify signature with the public key derived from `Broadcast.Source` via astral-go `api/secp256k1.FromIdentity`.
 - Inbound delivery: verified packet -> build `EventBroadcastReceived` with source IP and inner object -> `Objects.Receive(event, localID)` -> `Objects.Receive(inner object, Broadcast.Source)` -> log object ID when the inner receive succeeds.
 
 ## Source

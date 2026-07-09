@@ -37,7 +37,7 @@ Represents the human operator across their nodes by binding the local node to a 
 
 ## Source
 
-- `mod/user/module.go`, `contract.go`, `swarm_membership_action.go`, `swarm_member.go`, `swarm_join_policy.go`, `maintain_link_task.go`, `sync_nodes_action.go`, `info.go`, `notification.go`, `created_user_info.go`, `errors.go` - public module interface, contract helpers, swarm objects, policy types, task interfaces, and errors.
+- `mod/user/module.go`, `swarm_join_policy.go`, `maintain_link_task.go`, `sync_nodes_action.go` - public module interface, swarm-join policy, and task interfaces. The contract helpers, swarm objects, info/notification objects, wire types, and errors live in astral-go `api/user`.
 - `mod/user/src/loader.go`, `module.go`, `deps.go`, `config.go` - construction, dependency injection (including registering `RelayForAction`/`ReadObjectAction` authorizers and `localswarm`/`localuser` dir filters), lifecycle, and constants (`minimalContractLength`, `defaultContractValidity`).
 - `mod/user/src/contracts.go`, `siblings.go` - active-contract state, `LocalSwarm`/`ActiveNodes`/`ActiveNodeContracts`, `IssueMembership`, sibling registry, and sibling notifications.
 - `mod/user/src/maintain_link_task.go`, `sync_nodes_action.go`, `sync.go` - per-sibling link maintenance and the sibling sync orchestration (`syncAlias`, `pushActiveContract`, `syncSiblings`, `syncApps`, `syncAssets`, `PushToLocalSwarm`).
@@ -45,7 +45,7 @@ Represents the human operator across their nodes by binding the local node to a 
 - `mod/user/src/authorizers.go`, `query_preprocessor.go`, `search_preprocessor.go`, `status_composer.go`, `swarm_policy.go` - relay/read-object auth hooks, query/search preprocessing, nearby composition, and default-accept-all policies.
 - `mod/user/src/db.go`, `db_asset.go`, `assets.go` - asset row persistence and height accounting.
 - `mod/user/src/op_*.go` - query operation handlers (`OpAcceptMembership`, `OpAdopt`, `OpRequestMembership`, `OpNewNodeContract`, `OpInfo`, `OpSwarmStatus`, `OpListSiblings`, `OpAssets`, `OpAddAsset`, `OpRemoveAsset`, `OpSyncAssets`, `OpSyncWith`).
-- `mod/user/client/` - typed user client wrappers.
+- Typed user client wrappers live in astral-go `api/user/client`.
 
 ## Surface
 
@@ -70,4 +70,3 @@ Represents the human operator across their nodes by binding the local node to a 
 - Asset rows are nonce-addressed and height-ordered; duplicate nonces are silently ignored on inbound sync.
 - `HoldObject` reports true only for non-removed asset rows; removed assets no longer block purge.
 - `user.assets`, `user.list_siblings`, and `user.swarm_status` stream results and terminate with `EOS`.
-- `OpCreate = "user.create"` is declared but has no handler in this module.

@@ -50,9 +50,9 @@
 ## Project APIs
 
 - Use `astral.Objectify` for `WriteTo`/`ReadFrom`.
-- Objectify fields must be astral primitives; plain Go fields are not handled.
-- Use `astral.Adapt(v)` to wrap a native Go value into an astral `Object`; do not hand-roll switch ladders. Pass-through for `Object`, `nil`→`&Nil{}`, `error`→`NewError`. Default widths: `int`/`uint`→`Int64`/`Uint64`, `string`→`String32`. When the spec dictates a narrower width (e.g. `uint16`, `string16`), Adapt is the wrong tool — dispatch on the spec first.
-- Use `objects.Save`/`objects.Load`, not raw `WriteTo`.
+- Objectify handles sized Go kinds via reflection; only platform-width `int`/`uint` are rejected. Prefer sized types (`int64`/`uint64`).
+- Use `astral.Adapt(v)` to wrap a native Go value into an astral `Object`; do not hand-roll switch ladders. When the spec dictates a narrower width, dispatch on the spec first. Adapt is astral-go `astral`; its native-type mapping semantics live in astral-go `.ai/rules.md`.
+- Use `objects.Load` (mod/objects) to read + decode + type-assert an object from a `Repository`; write through `Repository.Create` and the returned `objects.Writer`, not raw `WriteTo`.
 - Inject dependencies with `core.Inject(node, &mod.Deps)` in `LoadDependencies`.
 - Prefer `sig.Map`/`sig.Set`/`sig.Queue` over mutex + map/slice.
 - Use `sig.RecvErr`/`sig.Recv`/`sig.Send` for context-aware channel ops.

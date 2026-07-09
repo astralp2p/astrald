@@ -27,14 +27,13 @@ Maps human-readable names to identities and back, using a persistent alias table
 
 ## Source
 
-- `mod/dir/module.go`, `alias.go`, `alias_map.go` - public module interface and wire objects.
+- `mod/dir/module.go` - public module interface (`Module`, `Resolver`). Wire objects (`Alias`, `AliasMap`), `Method*` op-name constants, and the typed client live in astral-go `api/dir/` (see astral-go .ai/knowledge/api/dir.md).
 - `mod/dir/src/loader.go`, `module.go`, `deps.go`, `config.go`, `prepare.go` - registration, dependency injection, default filters, resolver setup, and lifecycle.
 - `mod/dir/src/alias.go`, `db.go` - alias CRUD and `dir__aliases` schema.
 - `mod/dir/src/dns.go` - DNS resolver and domain validation.
 - `mod/dir/src/query_preprocessor.go`, `status_composer.go` - target filter gate and nearby alias attachment.
 - `mod/dir/src/op_get_alias.go`, `op_set_alias.go`, `op_alias_map.go`, `op_resolve.go`, `op_filters.go`, `op_apply_filters.go` - query operation handlers.
-- `mod/dir/client/` - typed client wrappers; see invariant about `apply_filters`.
-- `astral/context.go`, `core/router.go`, `core/modules.go` - filter propagation and query-preprocessor wiring.
+- `core/router.go`, `core/modules.go` - query-preprocessor wiring; filter propagation lives in astral-go `astral/context.go`.
 
 ## Surface
 
@@ -56,4 +55,3 @@ Maps human-readable names to identities and back, using a persistent alias table
 - Empty `q.Extra["filters"]` falls back to `DefaultFilters()`; empty default allows.
 - DNS resolver rejects input not matching `domainRegex` (lowercase domain shape).
 - `AliasMap()` returns nil and logs verbose on DB failure.
-- Client `apply_filters.go` queries `dir.MethodSetAlias` instead of `dir.MethodApplyFilters`; the op is broken via the client until the code is fixed.

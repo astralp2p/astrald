@@ -23,6 +23,11 @@ Session (logical, many)
 Opening many services to the same peer uses one brontide handshake, not one per
 session.
 
+The nodes mux (`mod/nodes/src/link.go`, `link_negotiator.go`) and the apphost ws
+server (`mod/apphost/src/ws_server.go`) construct their shared channels with
+`channel.WithLockedWrites`. The `channel` package and its helpers now live in
+astral-go `astral/channel` (see astral-go .ai/knowledge/concepts/channels.md).
+
 ## Multiplexing Invariants
 
 - **Cost**: reuse one Link per identity to amortize handshake, NAT hole-punch, and Tor

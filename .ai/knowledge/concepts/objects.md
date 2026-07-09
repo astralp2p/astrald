@@ -4,21 +4,23 @@
 
 ### Object
 
-* Immutable typed payload.
-* Declares a type string via `ObjectType()`.
-* Serializes to and from bytes through `WriteTo`/`ReadFrom` (typically backed by `astral.Objectify`).
-* Unknown types decode as opaque `*astral.Blob` only when the astral magic stamp is absent; other decode failures propagate.
+* Immutable typed payload declaring a type string via `ObjectType()` — see
+  [object](../../system/core-definitions/object.md) and
+  [object-type](../../system/core-definitions/object-type.md).
+* Serialization (`WriteTo`/`ReadFrom`, `astral.Objectify`) is provided by
+  astral-go — see astral-go `.ai/knowledge/concepts/wire.md`.
+* Unknown types decode as opaque `*astral.Blob` only when the astral magic stamp is absent; other decode failures propagate (`mod/objects/src/module.go` `Load`).
 
 ### ObjectID
 
 * Content address over the canonical encoding of an object.
-* Wire and string encoding: see [object_id.sha256](../../system/common-types/object_id.sha256.md).
+* Wire and string encoding: see [object_id.sha256](../../system/primitive-types/object_id.sha256.md).
 * Nodes compute ObjectIDs locally during `Commit`.
 
 ### Repository
 
 * Stores raw bytes by ObjectID.
-* `Create` returns a `Writer`; every writer must end in exactly one `Commit` or `Discard`.
+* `Create` returns a `Writer`; every writer must end in exactly one `Commit` or `Discard`. The `Writer` type is defined in astral-go `api/objects` (see astral-go `.ai/knowledge/api/objects.md`); `Repository.Create` returns it.
 * `Scan(ctx, follow)` emits ObjectIDs; in follow mode it must emit exactly one nil between snapshot and live updates.
 * `Read(ctx, id, offset, limit)` returns a `Reader`; `Delete`, `Contains`, and `Free` complete the surface.
 * `RepoGroup` is a `Repository` plus `Add`/`Remove`/`List`; group reads run sequentially or concurrently, group scans collapse member snapshot boundaries into one.
@@ -59,7 +61,11 @@
 Modules implement these interfaces; the objects module discovers implementations
 through type assertions in `LoadDependencies`. External (caller-hosted)
 discoverers register at runtime through `objects.register_*` ops and are
-deduplicated by `SourceIdentity`.
+deduplicated by `SourceIdentity`. The `Describer`, `Searcher`,
+`SearchPreprocessor`, and `Finder` interface definitions now live in astral-go
+`api/objects` (see astral-go `.ai/knowledge/api/objects.md`); `Receiver`,
+`Holder`, and `SourceIdentifier` stay in astrald `mod/objects`, and the
+node-side discovery/dispatch above stays in `mod/objects`.
 
 | Interface | Trigger |
 |---|---|

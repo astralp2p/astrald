@@ -32,8 +32,8 @@ Relays node links through a public gateway so nodes behind NAT can remain reacha
 
 ## Source
 
-- `mod/gateway/module.go`, `mod/gateway/endpoint.go`, `mod/gateway/socket.go`, `mod/gateway/visibility.go`, `mod/gateway/errors.go`, `mod/gateway/maintain_binding_task.go` - public module API, endpoint/socket objects, visibility, errors, and task type.
-- `mod/gateway/client/` - typed clients for register, connect, list, and unregister ops.
+- `mod/gateway/module.go`, `mod/gateway/errors.go`, `mod/gateway/maintain_binding_task.go` - public module API, errors, and task type. The endpoint/socket/visibility wire objects live in astral-go `api/gateway`.
+- Typed clients for register, connect, list, and unregister ops (called by the maintain task and dial path) live in astral-go `api/gateway/client`.
 - `mod/gateway/src/loader.go`, `mod/gateway/src/module.go`, `mod/gateway/src/deps.go`, `mod/gateway/src/config.go`, `mod/gateway/src/server.go` - config, dependency registration, gateway listeners, and runtime cleanup.
 - `mod/gateway/src/op_node_register.go`, `mod/gateway/src/op_node_connect.go`, `mod/gateway/src/op_node_list.go`, `mod/gateway/src/op_node_route.go`, `mod/gateway/src/op_node_unregister.go` - query operation handlers.
 - `mod/gateway/src/accept.go`, `mod/gateway/src/registered_node.go`, `mod/gateway/src/connector.go`, `mod/gateway/src/connect.go`, `mod/gateway/src/idle_conn.go`, `mod/gateway/src/pool.go`, `mod/gateway/src/frames.go` - registration, idle-connection, connector, and handoff state machine.
