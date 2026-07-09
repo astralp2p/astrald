@@ -1,8 +1,7 @@
 # Node
 
-`astral.Node` is `Router + Identity()`. `core.Node` implements it and embeds
-`*core.Router` (a `PriorityRouter` plus query preprocessors and a session
-map). It owns the `Modules` manager and node assets.
+`core.Node` owns the `Modules` manager and node assets and runs the module
+lifecycle below.
 
 Encrypted links to peers are provided by `mod/nodes`, not the core node.
 
@@ -11,7 +10,7 @@ Encrypted links to peers are provided by `mod/nodes`, not the core node.
 Load -> Inject -> LoadDependencies -> Prepare -> Run
 
 * Load: instantiate the module. Do not access other modules.
-* Inject: `core` registers each module that implements `astral.Router` or
+* Inject: `core` auto-registers each module that implements `astral.Router` or
   `QueryPreprocessor` with the node.
 * LoadDependencies: fill Deps structs with `core.Inject`; register resolvers
   and filters.
@@ -20,5 +19,5 @@ Load -> Inject -> LoadDependencies -> Prepare -> Run
 
 ## Scheduler
 
-`mod/scheduler` runs tasks after all declared dependencies signal Done. It is
-a module, not part of `core.Node`.
+`mod/scheduler` runs tasks only after all declared dependencies signal Done. It
+is a module, not part of `core.Node`.

@@ -250,7 +250,7 @@ const SPEC = `## Ground rules
 * Write only under \`${STAGE}/\`. Never write under \`${BASE}\` (read-only submodule).
 * Never run astrald, astral-query, or any op. Examples are synthesized, never captured: command flags only from documented arguments, output matching the returned type's documented text/JSON form, plausible placeholder values in corpus style.
 * Prose is minimal English: declarative present tense, one fact per sentence or bullet, no motivation, hedging, or meta-commentary; repeat the subject, do not chain pronouns; backtick code identifiers; state defaults, limits, and terminators explicitly.
-* Common types (\`string8\`, \`error_message\`, \`ack\`, \`eos\`, ...) belong to \`.ai/system/common-types/\` — link by name, never re-document. Encoding vocabulary: \`.ai/system/topics/{json,text,binary}-encoding.md\`.
+* Primitive types (\`string8\`, \`error_message\`, \`ack\`, \`eos\`, ...) belong to \`.ai/system/primitive-types/\` — link by name, never re-document. Encoding vocabulary: \`.ai/system/topics/{json,text,binary}-encoding.md\`.
 
 ## Op doc — \`ops/<protocol>.<op>.md\`
 
@@ -328,10 +328,10 @@ Exemplars under \`${BASE}/\` — consult one only when a template above leaves t
 
 const TRAVERSAL = `## Traversal recipe — read per op, in order; stop once wire-visible behavior is covered
 
-1. \`module.go\` — \`ModuleName\` and the \`Method*\` constants. The wire name of an op is \`<ModuleName>.<snake_case of the Op* method name without the prefix>\` (\`lib/routing/op_router.go\` \`AddStructPrefix\`); a \`Method*\` constant states it explicitly when present.
+1. \`mod/<name>/module.go\` — the public \`Module\` interface, and \`ModuleName\` for the modules that still define it. The op-name constants (the \`Method*\` set, and \`ModuleName\` for the modules that moved it) live in astral-go \`api/<protocol>/module.go\`; read them there. The wire name of an op is \`<ModuleName>.<snake_case of the Op* method name without the prefix>\` (astral-go \`lib/routing/op_router.go\` \`AddStructPrefix\`, imported as \`github.com/cryptopunkscc/astral-go/lib/routing\`); a \`Method*\` constant states it explicitly when present.
 2. \`src/op_<name>.go\` — the unit of truth for one op: \`op<Pascal>Args\` fields → arguments; \`query:"required"\` → required; \`In\`/\`Out\` fields → implicit encoding params; defaults from code. The body: \`q.Accept\`/\`q.Reject\` → acceptance and rejection conditions; channel reads → the \`(stream)\` bullet; every \`ch.Send(...)\` → a returned object (\`astral.Err\` → \`error_message\`, \`&astral.Ack{}\` → \`ack\`, \`&astral.EOS{}\` → \`eos\` terminator); raw writes → prose.
-3. Module root package (\`mod/<name>/*.go\`) — structs with \`ObjectType()\` the op accepts or returns; their fields and astral field types.
-4. \`client/\` — confirms op names and signatures only; never documented.
+3. astral-go \`api/<name>/\` (out-of-repo) — the wire-type structs with \`ObjectType()\` the op accepts or returns; their fields and astral field types. A few node-only object types remain in the astrald module root package (\`mod/<name>/*.go\`); read those there.
+4. astral-go \`api/<name>/client/\` (out-of-repo) — confirms op names and signatures only; never documented.
 
 An op gated by an auth action (e.g. a \`mod.auth.action\` subtype) names the action type in its intro sentence.`
 
@@ -355,7 +355,7 @@ Form — against the corpus:
 * Argument bullets use \`* name (type[, required]) – ...\` with the en dash.
 * Typed responses use the "The operation returns one of:" lead-in; raw responses use prose.
 * Examples are \`\`\`shellsession blocks; commands use only documented arguments; outputs match documented forms; the JSON envelope is \`{"Type":...,"Object":...}\`.
-* No content re-documents \`common-types/\` or restates \`topics/\`.
+* No content re-documents \`primitive-types/\` or restates \`topics/\`.
 * Prose is declarative, one fact per sentence, no hedging, no meta-commentary.
 
 Completeness — against the package:
@@ -368,7 +368,7 @@ Completeness — against the package:
 
 function gatePrompt(m) {
   return `Read-only drift gate for the protocol docs of \`mod/${m.name}/\` — do NOT edit anything. If \`mod/${m.name}/\` does not exist or defines no ops, return clean=true with one finding saying so.
-Enumerate the source op inventory from the exported \`Op*\` methods under \`mod/${m.name}/src/\` (one \`src/op_*.go\` per op by convention). The wire name of an op is \`<ModuleName>.<snake_case of the method name without the Op prefix>\` (see \`lib/routing/op_router.go\` \`AddStructPrefix\`); \`Method*\` constants in \`mod/${m.name}/module.go\` state it explicitly when present — report a mismatch between a constant and a derived name as a finding. Enumerate module-defined types: structs in the module root package \`mod/${m.name}/*.go\` with an \`ObjectType()\` method that ops accept or return.
+Enumerate the source op inventory from the exported \`Op*\` methods under \`mod/${m.name}/src/\` (one \`src/op_*.go\` per op by convention). The wire name of an op is \`<ModuleName>.<snake_case of the method name without the Op prefix>\` (see astral-go \`lib/routing/op_router.go\` \`AddStructPrefix\`); the \`Method*\` op-name constants in astral-go \`api/${m.name}/module.go\` state it explicitly when present — report a mismatch between a constant and a derived name as a finding. Enumerate module-defined types: the wire-type structs with \`ObjectType()\` that ops accept or return live in astral-go \`api/${m.name}/\`; a few node-only object types remain in the astrald module root package \`mod/${m.name}/*.go\`.
 Compare against the baseline package \`${BASE}/${m.name}/\` (if the directory does not exist, every op and type is "missing", readmeStale=true, and clean=false):
 - ops: each source op is "missing" (no \`ops/<protocol>.<op>.md\`), "drifted" (doc disagrees with the \`op<Pascal>Args\` struct on argument names/required flags/defaults, or with the body's \`ch.Send\`/reject paths on returned objects or stream protocol), or "clean". The implicit \`in\`/\`out\` parameters are NEVER drift, whether listed or omitted.
 - orphanedOpDocs: \`ls ${BASE}/${m.name}/ops/\` and check every file against the source op inventory; each file whose op does not exist in source goes in orphanedOpDocs. Do not skip this sweep — an unreported orphan blocks the package downstream.

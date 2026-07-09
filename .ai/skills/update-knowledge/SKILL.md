@@ -46,7 +46,7 @@ description: >-
 | Action | Targets |
 |---|---|
 | Writes | `.ai/knowledge/modules/<name>.md`, `.ai/knowledge/concepts/<name>.md`, `.ai/knowledge/README.md` (the index) |
-| Reads as truth | `mod/<name>/` source, `.ai/system/`, `.ai/rules.md`, `.ai/decisions/` |
+| Reads as truth | `mod/<name>/` source, `.ai/system/`, `.ai/rules.md` |
 | Reads to calibrate | `.ai/knowledge/modules/README.md`, `.ai/knowledge/concepts/README.md`, `.ai/patterns/` |
 | Never touches | code, `.ai/system/`, `.ai/rules.md`, the two recipe READMEs, git history |
 
@@ -68,6 +68,12 @@ Placement rules:
   note.
 * A Go-implementation binding belongs in knowledge. A protocol, wire, or
   domain truth belongs in `system/`; the note links to it.
+* Primitives, wire types, op-name constants, and protocol clients live in the
+  astral-go SDK, not in astrald. SDK-implementation facts belong in
+  astral-go's own `.ai/knowledge`; an astrald note cross-references them by
+  package name (e.g. "op-name constants live in astral-go `api/dir`") and
+  never documents them. A cross-repo reference is plain text, never a `../`
+  markdown link.
 * A reusable "how to write a new one" recipe belongs in `patterns/`.
 * A note whose content is jointly covered by `system/` and a sibling module
   note is deleted, with its links fixed. Span-trimmed husks are not left
@@ -92,7 +98,8 @@ phase; the drift gate detects a missing note itself.
 **Phase 1 — Per-module chain.**
 
 1. **Drift gate.** A read-only agent checks the note against source: dead
-   citations, op-set mismatch, missing index row. A clean module stops here.
+   citations, invariants that no longer match the code, missing index row. A
+   clean module stops here.
    A `new` module is stale by definition and needs no gate agent.
 2. **Author.** Fed the drift findings. Traverses the module per the recipe
    below, then edits the note diff-aware: replaces stale text in place,
@@ -121,8 +128,11 @@ if it exists; skip steps that do not apply. A non-standard module (e.g. the
 aggregator `mod/all/` with no `module.go` or `src/`) gets a short bundle note,
 not a forced template, and is reported as non-standard.
 
-1. `module.go` — `ModuleName`, `Method*` constants, `DBPrefix` (persisting
-   modules only), the public `Module` interface.
+1. `mod/<name>/module.go` — `DBPrefix` (persisting modules only) and the
+   public `Module` interface; `ModuleName` for the modules that still define
+   it. Op-name constants (the `Method*` set, and `ModuleName` for the modules
+   that moved it) live in astral-go `api/<name>/module.go`; read them there for
+   the op inventory. The astrald `module.go` imports that package.
 2. `src/loader.go` — `Load`, `assets.LoadYAML`, `assets.Database()`
    migrations, `router.AddStructPrefix`, `init()` registration.
 3. `src/module.go` — the struct (embeds `routing.OpRouter`), `Run(ctx)`,
@@ -130,14 +140,16 @@ not a forced template, and is reported as non-standard.
 4. `src/deps.go` — `Deps` + `LoadDependencies` (`core.Inject`, `mod:alias`
    tags). Each `Why` in `## Dependencies` names a concrete call into that dep.
 5. `src/config.go` — `Config` fields. Feeds cross-cutting `## Invariants`.
-6. `src/op_*.go` — one per operation (`OpPascalCase` → `snake_case`). Flow
-   entry points and `## Surface` op rows; collapsed to a glob in `## Source`.
+6. `src/op_*.go` — one per operation (`OpPascalCase` → `snake_case`). Read for
+   ordering and invariants; note an op only when its behavior carries a
+   non-obvious contract. Do not inventory the op set.
 7. `src/db.go`, `src/db_*.go` (persisting modules only) — one per
-   `<prefix>__<table>`. Persistence flows and Surface store rows.
+   `<prefix>__<table>`. Persistence and conflict invariants.
 8. Listeners, `*_handler.go`, holders, preprocessors — each registered
-   extension point is a flow and possibly a Surface or Invariant row.
-9. `client/` — confirms op signatures only. Client code is never mirrored
-   into a note.
+   extension point is a cross-module contract and usually an invariant.
+9. astral-go `api/<name>/client/` (out-of-repo) — confirms op signatures
+   only. Protocol clients live in the SDK, not astrald; client code is never
+   mirrored into a note.
 
 Cross into a dependency's note and into `.ai/system/` for protocol truth as
 needed. Both are read-only.
@@ -170,10 +182,9 @@ needed. Both are read-only.
 
 A note ships only if every check holds against current source:
 
-* Every path and glob in `## Source` and every file named in `## Flows`
-  exists.
-* The set of `op_*.go` files matches the ops named in `## Surface` and
-  `## Flows`.
+* Every file, method, or path the note cites (in `## Flows`, `## Invariants`,
+  or `## Dependencies`) exists.
+* The note carries no `## Source` inventory and no `## Surface` op table.
 * Every `## Dependencies` `Why` names a concrete call, interface, data, or
   lifecycle hook — never "used by X".
 * Every `## Invariants` bullet traces to a line that enforces it.

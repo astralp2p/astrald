@@ -3,43 +3,15 @@
 Use these patterns when defining typed payloads, storing objects, or integrating
 with `objects` module extension points.
 
+In the Describer, Searcher, and Finder snippets below, `objects` is
+`github.com/cryptopunkscc/astral-go/api/objects` (the extension-point types);
+in the Receiver and Holder snippets, `objects` is astrald's local `mod/objects`
+package.
+
 ## Object Definition
 
-Define a typed payload with:
-
-* An `ObjectType` method.
-* `WriteTo` and `ReadFrom` methods backed by `astral.Objectify`.
-* Registration in `init`.
-
-```go
-type MyMsg struct {
-    Token astral.Nonce
-    Name  astral.String8
-}
-
-func (MyMsg) ObjectType() string { return "mod.mymodule.my_msg" }
-
-func (msg MyMsg) WriteTo(w io.Writer) (int64, error) {
-    return astral.Objectify(&msg).WriteTo(w)
-}
-
-func (msg *MyMsg) ReadFrom(r io.Reader) (int64, error) {
-    return astral.Objectify(msg).ReadFrom(r)
-}
-
-func init() { _ = astral.Add(&MyMsg{}) }
-```
-
-Source: `mod/apphost/bind_msg.go`
-
-Add JSON support only when needed:
-
-```go
-func (msg MyMsg) MarshalJSON() ([]byte, error)  { return astral.Objectify(&msg).MarshalJSON() }
-func (msg *MyMsg) UnmarshalJSON(b []byte) error { return astral.Objectify(msg).UnmarshalJSON(b) }
-```
-
-Field type reference: `.ai/knowledge/concepts/wire.md`.
+The wire-type recipe (`ObjectType`/`WriteTo`/`Objectify`/`astral.Add`) lives in
+astral-go `api/objects`.
 
 ## Receiver
 

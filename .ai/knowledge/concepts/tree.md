@@ -1,45 +1,20 @@
 # Tree
 
-`mod/tree` is a hierarchical key-value store.
+`mod/tree` binds Go struct fields to a path-addressed namespace of astral objects and persists the bound values across restarts.
 
-* Every node can hold an `astral.Object`.
-* Every node can have named children.
-* Paths use the `/segment/segment` convention.
-* `Mount` can replace any subtree with a custom `Node` implementation.
-* `MountRemote` can mount a remote node from another Astral identity.
+* `MountRemote` makes a tree network-addressable: an operator on another machine can write values into a peer's tree over an encrypted Astral connection. Treat a tree as the node's shared runtime state, not only local config.
 
-The tree is network-addressable. An operator on another machine can write
-values into a peer's tree over an encrypted Astral connection. Treat the tree as
-the node's shared runtime state layer, not only as local config.
+## Binding
 
-## Live Config Binding
-
-Modules bind settings to tree paths with `tree.Value[T]`.
-
-`tree.Value[T]` is a typed, persistent, observable cell:
-
-* It holds the current value.
-* It survives restarts through the DB.
-* It notifies watchers on change.
-
-### Read APIs
-
-* `Get()` performs a one-shot read of the current value.
-* `Follow(ctx)` returns a channel subscription. It delivers the current value
-  immediately, then every future change.
-
-Use `Follow(ctx)` when module behavior must react continuously. For example,
-`mod/tcp` toggles its listener goroutine on or off as `settings.Listen`
-changes.
+* `Bind()` wires a struct's `tree.Value` fields, mapping each field to its snake_case path segment, overridable per field with the `tree` struct tag.
+* `BindPath()` queries the node for a path (optionally creating it) and then calls `Bind`.
+* A bound value on the default DB-backed node survives restarts through the DB.
 
 ### Invariants
 
-* A module cannot refuse a new value from `Follow(ctx)`.
-* A module reacts to whatever value arrives.
+* A module cannot refuse a new value from `Follow(ctx)`; it must react to whatever value arrives.
 
 ### Paths
 
-* Use `/mod/<name>/config` for persistent config.
-* Use `/mod/<name>/settings` for runtime-togglable state.
-* `Bind()` wires a struct's `tree.Value` fields automatically, using field
-  names as path segments.
+* `/mod/<name>/config` — persistent config.
+* `/mod/<name>/settings` — runtime-togglable state.

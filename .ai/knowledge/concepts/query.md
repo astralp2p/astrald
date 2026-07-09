@@ -1,22 +1,14 @@
 # Query
 
-A `Query` requests a bidirectional `Session` with a named service on a target
-`Identity`. It is the base communication operation.
-
-## Types
-
-* `Query{Nonce, Caller, Target, QueryString}` is the wire object.
-* `InFlightQuery` wraps a `Query` with `Extra sig.Map[string, any]`.
-* `OriginLocal` and `OriginNetwork` are values for `Extra["origin"]`.
-* `IsLocal()` and `IsNetwork()` test that key.
+Node-side routing pipeline. The `Query`/`Session`/`Origin*` wire types and the
+`RouteQuery`/`ErrRouteNotFound` routing contract live in astral-go; routing
+outcomes are in the spec. This note holds the daemon-side pipeline contracts.
 
 ## Routing
 
-* `Router.RouteQuery(ctx, *InFlightQuery, w) (io.WriteCloser, error)`.
-* Node runs registered routers in priority order.
-* Outcomes: accept opens the session, reject stops routing, not found tries
-  the next router.
-* `ErrRouteNotFound` is now an empty struct; matchers use `errors.Is`.
+* `core/router.go`'s `Router` wraps `routing.PriorityRouter` from astral-go
+  `lib/routing` and tracks live connections.
+* The node runs registered routers in priority order.
 
 ## Preprocessors
 
@@ -24,8 +16,3 @@ A `Query` requests a bidirectional `Session` with a named service on a target
 * They may attach metadata, add `relay_via` hints, or block the query.
 * `core` discovers them via `injectLoaded`. apphost uses one to attach
   AppContracts.
-
-## Gateway
-
-Gateway relays for nodes unreachable directly (NAT, firewall). The
-application sees a normal session.
