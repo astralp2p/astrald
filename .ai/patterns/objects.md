@@ -10,33 +10,8 @@ package.
 
 ## Object Definition
 
-Astrald modules define local object types (raw wire payloads that stay
-node-side) with an `ObjectType` method, `WriteTo`/`ReadFrom` backed by
-`astral.Objectify`, and registration via `astral.Add` in `init`.
-
-```go
-type StatusMessage struct {
-    Attachments *astral.Bundle
-}
-
-func (p *StatusMessage) ObjectType() string { return "mod.nearby.status_message" }
-
-func (p StatusMessage) WriteTo(w io.Writer) (n int64, err error) {
-    return astral.Objectify(&p).WriteTo(w)
-}
-
-func (p *StatusMessage) ReadFrom(r io.Reader) (n int64, err error) {
-    return astral.Objectify(p).ReadFrom(r)
-}
-
-func init() { _ = astral.Add(&StatusMessage{}) }
-```
-
-Source: `mod/nearby/status_message.go`
-
-The full `ObjectType`/`WriteTo`/`Objectify`/`astral.Add` recipe (field-type
-rules, optional JSON support, `pub.go` registration) lives in astral-go — see
-astral-go `.ai/patterns/objects.md`.
+The wire-type recipe (`ObjectType`/`WriteTo`/`Objectify`/`astral.Add`) lives in
+astral-go `api/objects`.
 
 ## Receiver
 

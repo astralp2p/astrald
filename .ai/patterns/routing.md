@@ -6,8 +6,8 @@ Use when implementing routers, forwarding queries, or enforcing zone scope.
 
 Gate all network operations with `ZoneNetwork`.
 
-- A hop may narrow zones.
-- A hop must not expand zones.
+* A hop may narrow zones.
+* A hop must not expand zones.
 
 ```go
 if !ctx.Zone().Is(astral.ZoneNetwork) {
@@ -50,7 +50,5 @@ func (r *MyRouter) RouteQuery(ctx *astral.Context, q *astral.InFlightQuery, w io
 }
 ```
 
-The `astral.Router` interface (the `RouteQuery` signature and contract) and the
-`query` helpers (`RouteNotFound`, `Reject`, `RejectWithCode`, `Accept`) are
-imported from astral-go — see astral-go `.ai/patterns/routing.md` for the full
-return-value contract.
+The `astral.Router` interface and the `query` helpers (`RouteNotFound`, `Reject`,
+`RejectWithCode`, `Accept`) are imported from astral-go.

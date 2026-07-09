@@ -10,7 +10,6 @@ Load only files that match the task.
 | operation, op handler, Op*, query args, args struct, call boundary | `operations.md` |
 | RouteQuery, Router, zone scope, ZoneNetwork | `routing.md` |
 | ObjectType, Objectify, Receiver, Describer, Searcher, Finder, Holder | `objects.md` |
-| mutex, atomic, sync.Cond, WaitGroup, done channel, sig.Map, sig.Set, sig.Queue | `concurrency.md` |
 | scheduler, task, recurring background work, task dependency | `scheduler.md` |
 
 ## Boundary
