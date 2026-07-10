@@ -1,3 +1,6 @@
 [submodule ".ai/system"]
 	path = .ai/system
 	url = git@github.com:cryptopunkscc/astral-docs.git
+[submodule "netsim/tasks/_lib/astral-py"]
+	path = netsim/tasks/_lib/astral-py
+	url = ssh://git@git.satforge.dev/satforge/astral-py.git

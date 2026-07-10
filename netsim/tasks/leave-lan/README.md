@@ -1,0 +1,3 @@
+# leave-lan
+
+On the host, seeds `--peer` (node1) with `--vm` (node2)'s onion (`nodes.resolve_endpoints` → `nodes.add_endpoint`) while the LAN is still up, then makes node2 **leave** the LAN by withdrawing its own 10.77 address (`ip addr flush`, which also drops the connected route; the NIC is taken down too). astrald polls `net.InterfaceAddrs()` and advertises one tcp endpoint per address, so the withdrawal is what it observes as a network change — it drops the 10.77 endpoint and the swarm link re-forms over Tor. SSH/management rides the separate WAN NIC, so it stays up. verify.py asserts (blind, deterministic) that node2 no longer holds a 10.77 LAN address or route; the Tor re-link is asserted by link-over-tor.
