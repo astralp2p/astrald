@@ -27,22 +27,12 @@ here=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 prompt=$(sed "s|__PEER__|$PEER|g" "$here/prompt.md")   # alias is [a-z0-9] — sed-safe
 prompt_b64=$(printf '%s' "$prompt" | base64 -w0)
 
-REMOTE_BODY=$(cat <<'EOS'
-set -eu
-d=/home/tester/.netsim
-mkdir -p "$d"
-printf '%s' "$prompt_b64" | base64 -d > "$d/read-remote-object.prompt"
-chown -R tester:tester "$d"
-
-su - tester -c 'qwen -y "$(cat /home/tester/.netsim/read-remote-object.prompt)"' \
-   > "$d/read-remote-object.log" 2>&1 || {
-     echo "qwen run failed on $(hostname); tail of log:" >&2
-     tail -n 40 "$d/read-remote-object.log" >&2
-     exit 1
-   }
+# shared Qwen dispatch: decode prompt -> qwen -y as tester -> log-tail (_lib/agent.sh)
+. "$(dirname -- "$here")/_lib/agent.sh"
 
 # Cheap smoke-check; verify.py does the authoritative, independent check. The agent
 # records what it read in $HOME/read.json under object_remote.
+SMOKE=$(cat <<'EOS'
 rem=$(python3 -c 'import json;print(json.load(open("/home/tester/read.json")).get("object_remote",""))' 2>/dev/null || true)
 [ -n "$rem" ] || { echo "agent recorded no object_remote in /home/tester/read.json on $(hostname)" >&2; exit 1; }
 echo "read-remote-object: agent finished on $(hostname); read back from peer"
@@ -51,5 +41,6 @@ EOS
 
 echo "read-remote-object: driving Qwen operator on $VM to read from $PEER ..."
 # shellcheck disable=SC2029
-netsim ssh "$VM" -- "prompt_b64='$prompt_b64'; $REMOTE_BODY"
+netsim ssh "$VM" -- "prompt_b64='$prompt_b64'; $(agent_run_body read-remote-object)
+$SMOKE"
 echo "read-remote-object: done on $VM"

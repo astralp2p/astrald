@@ -24,26 +24,13 @@ here=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 [ -f "$here/prompt.md" ] || { echo "missing $here/prompt.md" >&2; exit 1; }
 prompt_b64=$(base64 -w0 "$here/prompt.md")   # GNU coreutils; -w0 = single line
 
-REMOTE_BODY=$(cat <<'EOS'
-set -eu
-d=/home/tester/.netsim
-mkdir -p "$d"
-printf '%s' "$prompt_b64" | base64 -d > "$d/adopt-node.prompt"
-chown -R tester:tester "$d"
-
-# Run the agent as `tester` (qwen is installed for that user), non-interactively.
-# Invocation matches what was validated for bootstrap-user-software-key: one-shot positional
-# prompt + `-y` (auto-approve).
-su - tester -c 'qwen -y "$(cat /home/tester/.netsim/adopt-node.prompt)"' \
-   > "$d/adopt-node.log" 2>&1 || {
-     echo "qwen run failed on $(hostname); tail of log:" >&2
-     tail -n 40 "$d/adopt-node.log" >&2
-     exit 1
-   }
+# shared Qwen dispatch: decode prompt -> qwen -y as tester -> log-tail (_lib/agent.sh)
+. "$(dirname -- "$here")/_lib/agent.sh"
 
 # Soft smoke-check only (verify.sh is the authoritative, independent check). node1
 # holds the User token in $HOME/user.json, so we can peek at the swarm here; don't
 # fail the run on a shape mismatch — leave the verdict to verify.sh.
+SMOKE=$(cat <<'EOS'
 if [ -n "$(python3 -c 'import json;print(len(json.load(open("/home/tester/siblings.json")).get("sibling_ids") or []))' 2>/dev/null | grep -v '^0$')" ]; then
   echo "adopt-node: $(hostname) recorded swarm siblings in siblings.json"
 else
@@ -65,7 +52,8 @@ EOS
 echo "adopt-node: driving Qwen operator on $VM ..."
 # assignment prefix carries the prompt to the guest; body re-parses it
 # shellcheck disable=SC2029
-netsim ssh "$VM" -- "prompt_b64='$prompt_b64'; $REMOTE_BODY"
+netsim ssh "$VM" -- "prompt_b64='$prompt_b64'; $(agent_run_body adopt-node)
+$SMOKE"
 
 # Register friendly node aliases (node1/node2) on BOTH nodes so later tasks can
 # address nodes by name (object-store --target node2, read of <node1>:..., etc.).

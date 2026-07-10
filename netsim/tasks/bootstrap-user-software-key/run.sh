@@ -26,27 +26,12 @@ here=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 [ -f "$here/prompt.md" ] || { echo "missing $here/prompt.md" >&2; exit 1; }
 prompt_b64=$(base64 -w0 "$here/prompt.md")   # GNU coreutils; -w0 = single line
 
-REMOTE_BODY=$(cat <<'EOS'
-set -eu
-d=/home/tester/.netsim
-mkdir -p "$d"
-printf '%s' "$prompt_b64" | base64 -d > "$d/bootstrap-user-software-key.prompt"
-chown -R tester:tester "$d"
-
-# Run the agent as `tester` (qwen is installed for that user), non-interactively.
-# Invocation matches what was validated against the live lab: one-shot positional
-# prompt + `-y` (auto-approve). The prompt is passed positionally via command
-# substitution; the substituted text is used literally (not re-scanned), so the
-# backticks and $-signs inside it are safe.
-su - tester -c 'qwen -y "$(cat /home/tester/.netsim/bootstrap-user-software-key.prompt)"' \
-   > "$d/bootstrap-user-software-key.log" 2>&1 || {
-     echo "qwen run failed on $(hostname); tail of log:" >&2
-     tail -n 40 "$d/bootstrap-user-software-key.log" >&2
-     exit 1
-   }
+# shared Qwen dispatch: decode prompt -> qwen -y as tester -> log-tail (_lib/agent.sh)
+. "$(dirname -- "$here")/_lib/agent.sh"
 
 # Cheap smoke-check; verify.sh does the authoritative, independent check. The agent
 # records its outputs in $HOME/user.json (/home/tester/user.json).
+SMOKE=$(cat <<'EOS'
 uid=$(python3 -c 'import json;print(json.load(open("/home/tester/user.json")).get("user_id",""))' 2>/dev/null || true)
 [ -n "$uid" ] || { echo "agent recorded no user_id in /home/tester/user.json on $(hostname)" >&2; exit 1; }
 echo "bootstrap-user-software-key: agent finished on $(hostname); User id $uid"
@@ -56,5 +41,6 @@ EOS
 echo "bootstrap-user-software-key: driving Qwen operator on $VM ..."
 # assignment prefix carries the prompt to the guest; body re-parses it
 # shellcheck disable=SC2029
-netsim ssh "$VM" -- "prompt_b64='$prompt_b64'; $REMOTE_BODY"
+netsim ssh "$VM" -- "prompt_b64='$prompt_b64'; $(agent_run_body bootstrap-user-software-key)
+$SMOKE"
 echo "bootstrap-user-software-key: done on $VM"
