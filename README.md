@@ -3,7 +3,7 @@ astrald
 
 ## Overview
 
-**The Astral Network** is an abstract, general-purpose peer-to-peer network layer that runs on top of multiple transports. **astrald** is a daemon that provides easy access to the network via local interface. It provides connectivity, identity, authentication, encryption and a set of core protocols apps and agents can use to easily interact over the network. The full documentation is [here](https://github.com/cryptopunkscc/astral-docs/blob/master/README.md).
+**The Astral Network** is an abstract, general-purpose peer-to-peer network layer that runs on top of multiple transports. **astrald** is a daemon that provides easy access to the network via local interface. It provides connectivity, identity, authentication, encryption and a set of core protocols apps and agents can use to easily interact over the network. The full documentation is [here](https://github.com/astralp2p/astral-docs/blob/master/README.md).
 
 ## Network architecture
 
@@ -66,7 +66,7 @@ $ ASTRALD_APPHOST_TOKEN=Kaz3No8nYVTufIBZ6ViQsypc93SiYWJf astral-query apphost.wh
 {"Type":"identity","Object":"026923d06a51098170093fe989d30a432283f56d89d307176fd6f947c3a9d285ff"}
 ```
 
-Or over any of the supported transports (native or [HTTP](https://github.com/cryptopunkscc/astral-docs/blob/master/topics/http-transport.md)).
+Or over any of the supported transports (native or [HTTP](https://github.com/astralp2p/astral-docs/blob/master/topics/http-transport.md)).
 
 ## Hardware identity
 
