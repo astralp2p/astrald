@@ -24,8 +24,8 @@ def main():
 
     info1 = astralapi.home_json(vm1, "user.json")
     siblings = astralapi.home_json(vm1, "siblings.json")  # adopt-node agent: swarm sibling ids
-    sib_ids = ["".join(str(x).split()) for x in (siblings.get("sibling_ids") or []) if x]
-    U = "".join(str(info1.get("user_id", "")).split())
+    sib_ids = [astralapi.normalize_id(x) for x in (siblings.get("sibling_ids") or []) if x]
+    U = astralapi.normalize_id(info1.get("user_id", ""))
     token = info1.get("user_token", "")
 
     # node1 acts as the User (token from bootstrap-user-software-key); node2 answers
@@ -64,10 +64,7 @@ def main():
         errs.append(f"node1's recorded sibling_ids {sib_ids} do not include adopted node {s2}")
 
     if errs:
-        sys.stderr.write("adopt-node verify FAILED:\n")
-        for e in errs:
-            sys.stderr.write(f"  - {e}\n")
-        return 1
+        return astralapi.report_errors(errs, "adopt-node")
 
     print(f"swarm OK: User {U[:8]}.. ; node1 {s1[:8]}.. <-link-> node2 {s2[:8]}.. ; "
           f"both under one User; each lists the other as a Linked sibling (symmetric roster)")

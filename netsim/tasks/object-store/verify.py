@@ -30,7 +30,7 @@ def main():
     args, _ = ap.parse_known_args()
     holder = args.node2 if args.target == args.node2 else args.vm
 
-    ID = "".join(str(astralapi.home_json(args.vm, "object.json").get("object_id", "")).split())
+    ID = astralapi.normalize_id(astralapi.home_json(args.vm, "object.json").get("object_id", ""))
     # Canonical input: the exact bytes the agent was handed to store (run.sh shipped
     # payload.txt to the operator's home). Ground truth -- we don't trust the agent's
     # own account of what it stored.

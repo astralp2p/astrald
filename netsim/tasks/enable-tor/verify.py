@@ -44,11 +44,8 @@ def main():
         if file_onion and live and file_onion != live:
             errs.append(f"saved onion {file_onion} != live onion {live}")
 
-        if errs:
+        if astralapi.report_errors(errs, f"enable-tor on {vm}"):
             bad = True
-            sys.stderr.write(f"enable-tor verify FAILED on {vm}:\n")
-            for e in errs:
-                sys.stderr.write(f"  - {e}\n")
         else:
             print(f"enable-tor OK: {vm} runs tor and saved its onion {file_onion} to /root/tor.json")
     return 1 if bad else 0

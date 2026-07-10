@@ -34,14 +34,14 @@ def main():
     # node1 acts as the User (token from bootstrap); list_expelled / swarm_status
     # require the caller to be the contract issuer, so they run under that token.
     info1 = astralapi.home_json(vm1, "user.json")
-    U = "".join(str(info1.get("user_id", "")).split())
+    U = astralapi.normalize_id(info1.get("user_id", ""))
     token = info1.get("user_token", "")
 
     # node2's identity from node1's siblings.json (recorded by adopt-node) -- a
     # stable source. The expelled node itself can't be queried (post-ban node2
     # rejects user.info).
     sibs = astralapi.home_json(vm1, "siblings.json")
-    sib_ids = ["".join(str(x).split()) for x in (sibs.get("sibling_ids") or []) if x]
+    sib_ids = [astralapi.normalize_id(x) for x in (sibs.get("sibling_ids") or []) if x]
     expelled_id = sib_ids[0] if sib_ids else None
 
     with astralapi.connect(vm1, token=token) as n1:
@@ -61,10 +61,7 @@ def main():
                     "(roster not reduced -- expelledSet filter did not drop it)")
 
     if errs:
-        sys.stderr.write("expel-node verify FAILED:\n")
-        for e in errs:
-            sys.stderr.write(f"  - {e}\n")
-        return 1
+        return astralapi.report_errors(errs, "expel-node")
 
     print(f"expel OK: User {U[:8]}.. banned node2 {expelled_id[:8]}.. -- recorded in "
           f"user.list_expelled and dropped from user.swarm_status "

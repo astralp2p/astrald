@@ -335,6 +335,23 @@ def error_messages(objs):
     return [o.value for o in objs if o.type == "error_message"]
 
 
+def identity_of(objs):
+    """Identity hex from an apphost.whoami result.
+
+    whoami yields a bare identity string over both transports; some CLI shapes
+    wrap it as ``{"Identity": ...}``. Tolerates both; ``""`` if none present.
+    """
+    for o in objs:
+        if o.type in ("eos", "error_message", "ack"):
+            continue
+        v = o.value
+        if isinstance(v, str) and len(v) >= 64:
+            return v
+        if isinstance(v, dict) and isinstance(v.get("Identity"), str):
+            return v["Identity"]
+    return ""
+
+
 def endpoint_addr(ep):
     """Address string of an exonet.Endpoint.
 
@@ -390,3 +407,27 @@ def resolve_onion(objs):
             if ".onion" in a:
                 return a
     return None
+
+
+# --- verify-report helpers ---------------------------------------------------
+def normalize_id(value):
+    """Strip all whitespace from an identity / object-id string.
+
+    Agent-written JSON artifacts sometimes wrap or space-pad ids; verifiers
+    compare them verbatim, so squeeze whitespace before use.
+    """
+    return "".join(str(value or "").split())
+
+
+def report_errors(errors, task):
+    """Write a ``<task> verify FAILED:`` bullet report for ``errors``.
+
+    Returns ``1`` when there are errors (so ``return report_errors(errs, task)``
+    is the verifier's failure idiom) and ``0`` when the list is empty.
+    """
+    if not errors:
+        return 0
+    sys.stderr.write(f"{task} verify FAILED:\n")
+    for e in errors:
+        sys.stderr.write(f"  - {e}\n")
+    return 1

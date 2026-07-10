@@ -14,7 +14,6 @@ to tcp:127.0.0.1:8625, which is netns-local). Uses the Go CLI over ssh, not the 
 WS client (the WS port is netns-local too).
 """
 import argparse
-import json
 import os
 import sys
 
@@ -26,21 +25,8 @@ import astralapi  # noqa: E402
 
 def node_id(vm):
     """The node's own identity hex via apphost.whoami (inside its netns)."""
-    raw = astralapi.ssh(vm, "ip netns exec priv astral-query apphost.whoami -out json") or ""
-    for ln in raw.splitlines():
-        ln = ln.strip()
-        if not ln:
-            continue
-        try:
-            o = json.loads(ln)
-        except json.JSONDecodeError:
-            continue
-        v = o.get("Object")
-        if isinstance(v, str) and len(v) >= 64:
-            return v
-        if isinstance(v, dict) and isinstance(v.get("Identity"), str):
-            return v["Identity"]
-    return ""
+    return astralapi.identity_of(astralapi.parse_cli(astralapi.ssh(
+        vm, "ip netns exec priv astral-query apphost.whoami -out json") or ""))
 
 
 def links(vm):

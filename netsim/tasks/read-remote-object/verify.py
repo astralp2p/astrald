@@ -33,7 +33,7 @@ def main():
     obj = astralapi.home_json(args.vm, "object.json")    # object-store: object_id
     user = astralapi.home_json(args.vm, "user.json")     # bootstrap/import: user_token
     rd = astralapi.home_json(args.vm, "read.json")       # this task's agent: object_remote
-    ID = "".join(str(obj.get("object_id", "")).split())
+    ID = astralapi.normalize_id(obj.get("object_id", ""))
     # Ground-truth bytes: the fixed payload.txt that object-store shipped to the
     # operator (node1), not the agent's account of what was stored.
     PAY = astralapi.read_file(args.vm, "/home/tester/payload.txt")
