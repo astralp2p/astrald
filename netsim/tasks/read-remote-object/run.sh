@@ -1,14 +1,10 @@
 #!/bin/sh
-# read-remote-object: have node1's agent read an astral object that lives on the
-# peer (node2), over astral. The object's id is in node1's ~/object.json (object_id,
-# written by object-store --target node2). Driven by the Qwen Code agent on node1 —
-# the read is issued AS THE USER (authenticated), which routes to the peer (an
-# anonymous read would not). The agent addresses the peer by its alias (registered
-# by adopt-node).
+# read-remote-object: node1's agent reads over astral an object that lives on the peer.
+# Object id is in node1's /home/tester/object.json, written by object-store --target node2.
+# Agent addresses the peer by its alias (registered by adopt-node).
 #   read-remote-object [--vm <host>] [--peer <alias>]   (default: node1, node2)
-#
-# Runs ON THE HOST. Tiny script, thin prompt, intelligence in the astral-agent skill.
-# verify.py then INDEPENDENTLY re-reads the peer's object as the User and asserts.
+# Runs on the host. verify.py independently re-reads the peer's object as the User and asserts.
+# why: read is issued as the User (authenticated) — an anonymous read would not route to the peer.
 set -eu
 
 VM="node1"; PEER="node2"
@@ -20,18 +16,17 @@ while [ $# -gt 0 ]; do
   esac
 done
 
-# CDPATH= is an intentional one-shot env prefix for cd, not an assignment
+# CDPATH= is a one-shot env prefix for cd, not an assignment
 # shellcheck disable=SC1007
 here=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 [ -f "$here/prompt.md" ] || { echo "missing $here/prompt.md" >&2; exit 1; }
-prompt=$(sed "s|__PEER__|$PEER|g" "$here/prompt.md")   # alias is [a-z0-9] — sed-safe
+prompt=$(sed "s|__PEER__|$PEER|g" "$here/prompt.md")   # note: alias is [a-z0-9], sed-safe
 prompt_b64=$(printf '%s' "$prompt" | base64 -w0)
 
-# shared Qwen dispatch: decode prompt -> qwen -y as tester -> log-tail (_lib/agent.sh)
+# shared Qwen dispatch: decode prompt -> qwen -y as tester -> log-tail
 . "$(dirname -- "$here")/_lib/agent.sh"
 
-# Cheap smoke-check; verify.py does the authoritative, independent check. The agent
-# records what it read in $HOME/read.json under object_remote.
+# note: cheap smoke-check only; verify.py is authoritative. Agent records object_remote in /home/tester/read.json.
 SMOKE=$(cat <<'EOS'
 rem=$(python3 -c 'import json;print(json.load(open("/home/tester/read.json")).get("object_remote",""))' 2>/dev/null || true)
 [ -n "$rem" ] || { echo "agent recorded no object_remote in /home/tester/read.json on $(hostname)" >&2; exit 1; }

@@ -1,17 +1,14 @@
 #!/usr/bin/env python3
 """Host-side astral-query JSON extractors shared by the netsim run.sh scripts.
 
-Reads `astral-query <op> -out json` output on stdin (produced inside a VM and
-piped back over `netsim ssh`) and prints one extracted value, using the SAME
-astral-py typed interrogators the verifiers use (astralapi) rather than a
-bespoke inline `python3 -c` parser per call site. Host-side only (imports
-astral-py); the in-VM Go astral-query stays as-is.
-
-Usage (each reads the piped JSON on stdin):
-  ... apphost.whoami -out json          | python3 astralq.py identity
-  ... nodes.resolve_endpoints ... json  | python3 astralq.py onion
-  ... nodes.links -out json             | python3 astralq.py remote-id
-  ... nodes.links -out json             | python3 astralq.py has-link <network> <identity>
+Reads `astral-query <op> -out json` (produced in a VM, piped back over `netsim
+ssh`) on stdin and prints one extracted value via the same astral-py typed
+interrogators the verifiers use (astralapi). Host-side only; the in-VM Go
+astral-query stays as-is. Usage (JSON on stdin):
+  ... apphost.whoami          | python3 astralq.py identity
+  ... nodes.resolve_endpoints | python3 astralq.py onion
+  ... nodes.links             | python3 astralq.py remote-id
+  ... nodes.links             | python3 astralq.py has-link <network> <identity>
 """
 import os
 import sys

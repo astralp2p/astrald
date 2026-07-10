@@ -1,18 +1,14 @@
 #!/usr/bin/env python3
 """verify enable-tor: each target VM runs Tor and saved its own onion endpoint.
 
-Independent host-side check (does not trust run.sh): on each VM the tor service is
-active, /root/tor.json holds an onion endpoint, and that saved onion matches what
-astrald actually advertises now (nodes.resolve_endpoints -id localnode).
-
-Queries reach each VM's apphost through the shared astral-py client
-(tasks/_lib/astralapi.py), CLI fallback for anything it can't serve.
+Host-side check, independent of run.sh: tor service active, /root/tor.json holds an onion,
+and that saved onion matches what astrald advertises now (nodes.resolve_endpoints -id localnode).
 """
 import argparse
 import os
 import sys
 
-# why: realpath crosses netsim's per-task symlink to reach the sibling tasks/_lib
+# why: realpath crosses netsim's per-task symlink to reach sibling tasks/_lib
 sys.path.insert(0, os.path.join(
     os.path.dirname(os.path.dirname(os.path.realpath(__file__))), "_lib"))
 import astralapi  # noqa: E402

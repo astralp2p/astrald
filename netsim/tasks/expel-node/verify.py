@@ -1,24 +1,15 @@
 #!/usr/bin/env python3
 """verify expel-node: node1 (the User) permanently banned node2 from the swarm.
 
-Independent check (does not trust run.sh). Asserts node2 is recorded in
-user.list_expelled and is gone from node1's user.swarm_status roster
-(user.OpSwarmStatus -> ActiveNodes filters the expelledSet). Link state is not
-asserted.
-
-node2's identity comes from node1's siblings.json (recorded by adopt-node), NOT
-from node2 itself: once expelled, node2 rejects user.info (query rejected (2)
-untokened, auth_failed with the User token -- it no longer accepts the User it
-was banned from), so it is not a usable identity source.
-
-Queries reach node1's apphost through the shared astral-py client
-(tasks/_lib/astralapi.py), CLI fallback for anything it can't serve.
+Check, independent of run.sh: node2 is recorded in user.list_expelled and gone from node1's
+user.swarm_status roster (user.OpSwarmStatus -> ActiveNodes filters the expelledSet). Link state not asserted.
+# why: node2's identity comes from node1's siblings.json, not node2 itself -- once expelled, node2 rejects user.info (untokened and under the User token), so it is not a usable identity source
 """
 import argparse
 import os
 import sys
 
-# why: realpath crosses netsim's per-task symlink to reach the sibling tasks/_lib
+# why: realpath crosses netsim's per-task symlink to reach sibling tasks/_lib
 sys.path.insert(0, os.path.join(
     os.path.dirname(os.path.dirname(os.path.realpath(__file__))), "_lib"))
 import astralapi  # noqa: E402
@@ -31,15 +22,12 @@ def main():
     args, _ = ap.parse_known_args()
     vm1 = args.node1
 
-    # node1 acts as the User (token from bootstrap); list_expelled / swarm_status
-    # require the caller to be the contract issuer, so they run under that token.
+    # why: list_expelled / swarm_status require the caller to be the contract issuer, so node1 runs under the User token
     info1 = astralapi.home_json(vm1, "user.json")
     U = astralapi.normalize_id(info1.get("user_id", ""))
     token = info1.get("user_token", "")
 
-    # node2's identity from node1's siblings.json (recorded by adopt-node) -- a
-    # stable source. The expelled node itself can't be queried (post-ban node2
-    # rejects user.info).
+    # why: node2's identity from node1's siblings.json (recorded by adopt-node) -- the expelled node itself can't be queried post-ban
     sibs = astralapi.home_json(vm1, "siblings.json")
     sib_ids = [astralapi.normalize_id(x) for x in (sibs.get("sibling_ids") or []) if x]
     expelled_id = sib_ids[0] if sib_ids else None

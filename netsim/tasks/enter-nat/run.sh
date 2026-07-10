@@ -1,29 +1,20 @@
 #!/bin/sh
-# enter-nat: put a node's astrald behind its own (symmetric, true-masquerade) NAT.
-#
-# The leave-lan analog: relocating astrald into a private network namespace severs its
-# direct 10.77 LAN path, so the swarm link maintainer re-links the pair over Tor -- and
-# the node is now a genuine NAT'd peer. On each --vm:
-#   * create netns "priv" (192.168.99.2) wired to the VM by a veth pair;
-#   * port-preserving SNAT of 192.168.99.0/24 to a per-node public TEST-NET alias
-#     198.51.100.<lan-octet> on the LAN NIC (validated as endpoint-independent/cone by
-#     nat-eim-probe), plus an inbound DNAT of that alias back into the netns so the box is a
-#     real cone-NAT gateway (without it inbound punch packets hit the local INPUT and the
-#     punch never completes -- see the nat table section below);
-#   * relaunch astrald INSIDE the netns (same -root, so same identity) via a systemd
-#     drop-in (NetworkNamespacePath -- joins only the NET ns; the -root/apphost files stay
-#     in the shared mount ns).
-#
-# Reaching the netns'd astrald: `astral-query` defaults to tcp:127.0.0.1:8625
-# (lib/apphost DefaultEndpoint; only the TOKEN is env-overridable, not the endpoint), and
-# once astrald is in "priv" that 127.0.0.1 is the NETNS loopback -- unreachable from the
-# root ns. So EVERY astral-query against a NAT'd node must run inside the netns:
-# `ip netns exec priv astral-query ...` (see add-reflector / verify / configure-nat-tor).
-#
-# astrald cannot see its own public alias -- that is what masquerade means -- so its nat
-# module stays disabled until the reflector node reflects that endpoint back (see
-# add-reflector). This task only builds the NAT; it does NOT punch.
+# enter-nat: put a node's astrald behind its own symmetric true-masquerade NAT. Builds the
+# NAT only; it does NOT punch.
 #   enter-nat [--vm <host>]...      (default: node1 node2; one call NATs each peer)
+#
+# why: relocating astrald into netns priv severs its direct 10.77 LAN path, so the swarm
+#   link maintainer re-links the pair over Tor -- the node is now a genuine NAT'd peer.
+# note: per --vm: netns priv (192.168.99.2) via veth pair; port-preserving SNAT of
+#   192.168.99.0/24 to public alias 198.51.100.<oct>; inbound DNAT of that alias into the
+#   netns (else punch packets hit local INPUT and never complete, see nat table section);
+#   astrald relaunched inside the netns via a systemd drop-in (same -root -> same identity).
+# note: astral-query defaults to tcp:127.0.0.1:8625 (lib/apphost DefaultEndpoint; only the
+#   TOKEN is env-overridable, not the endpoint); in netns priv that 127.0.0.1 is the netns
+#   loopback, so EVERY astral-query against a NAT'd node must run inside the netns:
+#   `ip netns exec priv astral-query ...` (see add-reflector / verify / configure-nat-tor).
+# note: astrald can't see its own public alias (masquerade), so its nat module stays disabled
+#   until the reflector reflects that endpoint back (add-reflector).
 set -eu
 
 VMS=""
@@ -117,7 +108,7 @@ echo "enter-nat: $(hostname) astrald behind NAT (priv 192.168.99.2 -> public $pu
 EOS
 )
 
-# $VMS is a space-separated list -> intentional word-splitting
+# why: $VMS is a space-separated list -> word-splitting is intentional
 # shellcheck disable=SC2086
 for vm in $VMS; do
   echo "enter-nat: putting $vm behind its NAT ..."

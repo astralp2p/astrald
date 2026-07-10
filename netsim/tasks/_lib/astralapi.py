@@ -1,29 +1,17 @@
-"""Shared host-side verify library for the netsim astral scenarios.
+"""Host-side verify library shared by the netsim astral scenarios.
 
-Each task's verify.py reaches this through a realpath shim that crosses netsim's
-per-task symlink:
+Reached from each verify.py via a realpath shim (crosses netsim's per-task
+symlink): `import astralapi`. Two halves:
+  transport -- ssh() / file readers / all_running_vms() / peer_lan_ip(): read
+    agent artifacts and probe a VM over subprocess.
+  queries -- connect(vm, token=...) -> Node; node.call(op, ...) -> a
+    list[astral.AstralObject], via the astral-py client over an ssh -L forward of
+    the VM WebSocket apphost, falling back to the Go astral-query CLI (same JSON)
+    when the client can't serve an op. Both paths return the same list, so the
+    interrogators are transport-agnostic.
 
-    import os, sys
-    sys.path.insert(0, os.path.join(
-        os.path.dirname(os.path.dirname(os.path.realpath(__file__))), "_lib"))
-    import astralapi
-
-It centralises the two halves every verifier shares:
-
-  * transport -- ssh()/file readers/all_running_vms()/peer_lan_ip(): unchanged
-    subprocess plumbing for reading the agent's recorded artifacts and probing
-    inside a VM.
-
-  * queries -- connect(vm, token=...) yields a Node whose .call(op, ...) returns
-    a list of astral.AstralObject. Queries go through the astral-py typed client
-    (reached host-side over an ssh -L forward of the VM's WebSocket apphost
-    port), falling back to the lockstep Go `astral-query` CLI -- same JSON,
-    parsed with astral-py's from_json_envelope -- whenever the client can't
-    serve an op (pinned in SHELL_OPS, or it raised). Both paths return the same
-    list[AstralObject], so the interrogators below are transport-agnostic.
-
-astral-py is the submodule at _lib/astral-py (package under src/); imported without
-pip. $ASTRALPY_SRC overrides the src dir for local dev against another checkout.
+astral-py is the submodule at _lib/astral-py (package under src/); $ASTRALPY_SRC
+overrides the src dir for local dev.
 """
 import contextlib
 import json
@@ -35,8 +23,7 @@ import sys
 import time
 
 # --- astral-py (submodule at _lib/astral-py; pip-free) -----------------------
-# why: realpath resolves _lib through netsim's per-task symlink; the submodule's
-# package lives under src/. $ASTRALPY_SRC overrides for local dev.
+# why: realpath resolves _lib through netsim's per-task symlink; package under src/.
 _ASTRALPY_SRC = os.environ.get("ASTRALPY_SRC") or os.path.join(
     os.path.dirname(os.path.realpath(__file__)), "astral-py", "src")
 if not os.path.isdir(os.path.join(_ASTRALPY_SRC, "astral")):
@@ -46,9 +33,9 @@ if not os.path.isdir(os.path.join(_ASTRALPY_SRC, "astral")):
         "(or set $ASTRALPY_SRC to an astral-py checkout's src/)")
 sys.path.insert(0, _ASTRALPY_SRC)
 import astral  # noqa: E402
-import astral.api  # noqa: E402,F401  -- importing the aggregator fires every protocol's
-# @register decorators, so record_for() below resolves the wire types to typed
-# Record classes (importing `astral` alone registers nothing).
+# why: importing the aggregator fires every protocol's @register, so record_for()
+#   resolves wire types to Record classes (importing `astral` alone registers nothing).
+import astral.api  # noqa: E402,F401
 from astral.encoding import from_json_envelope  # noqa: E402
 from astral.registry import record_for  # noqa: E402
 from astral.api.nodes import EndpointWithTTL, LinkInfo  # noqa: E402
@@ -57,10 +44,8 @@ from astral.api.user import SignedExpulsion, SwarmMember, UserInfo  # noqa: E402
 # apphost WebSocket port inside each VM (binds 0.0.0.0; reachable via ssh -L).
 WS_PORT = 8624
 
-# Ops to keep on the Go astral-query CLI instead of the astral-py client.
-# Populated by the smoke-test triage when the client disagrees with the CLI on a
-# specific op (a silent mismatch the auto-fallback can't catch). Empty => every
-# op tries the client first.
+# note: ops pinned to the Go astral-query CLI instead of the client (a client/CLI
+#   mismatch the auto-fallback can't catch). Empty => every op tries the client first.
 SHELL_OPS = set()
 
 
@@ -231,15 +216,13 @@ def connect(vm, token=None):
 
 
 # --- interrogators: list[AstralObject] -> extracted value --------------------
-# The interrogators read astral-py's typed Record attributes (member.identity,
-# link.remote_identity, expulsion.subject, ...) instead of hardcoded wire keys.
-# _typed() promotes each result object to its registered Record; it works over
-# BOTH transport paths (the astral-py client and the Go astral-query CLI
-# fallback) because both hand back AstralObjects whose .value is the raw JSON
-# Object, which Record.from_value accepts. A verifier must never crash on an
-# unexpected wire shape, so a decode failure degrades to the raw value -- the
-# isinstance() checks below then skip it, and the two shape-sensitive
-# interrogators (contract / is_expelled) keep an explicit dict fallback.
+# note: interrogators read astral-py Record attributes (member.identity,
+#   link.remote_identity, ...), not wire keys. _typed() promotes each object to its
+#   registered Record; works over both the client and CLI-fallback paths (both hand
+#   back AstralObjects whose .value is the raw JSON Object that from_value accepts).
+# why: a verifier must never crash on an unexpected wire shape -- a decode failure
+#   degrades to the raw value; the isinstance() checks skip it, and contract /
+#   is_expelled keep an explicit dict fallback.
 def _typed(objs):
     out = []
     for o in objs:

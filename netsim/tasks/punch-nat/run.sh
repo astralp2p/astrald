@@ -1,20 +1,19 @@
 #!/bin/sh
-# punch-nat: trigger astrald's NAT hole-punch between two NAT'd peers, leaving them with a
-# direct kcp link. Final step of the nat-punch line (sibling of link-over-tor).
-#
-# Preconditions (the nat-punch story order): both peers behind a symmetric true-masquerade
-# NAT (enter-nat: astrald in netns priv, port-preserving SNAT to 198.51.100.<oct>), nat-armed
-# by reflection (add-reflector), and Tor relocated INTO the netns with WAN egress
-# (configure-nat-tor). The punch's nat.node_punch signaling + peerSupportsNAT discovery route
-# over a Tor link node1<->node2 (source-verified: tcp-only Basic strategy can't form for
-# symmetric NAT, and the punch client sets no relay hint -> Tor is the sole mutual transport).
-# On success the punch is promoted to a direct kcp link on BOTH peers (verify.py asserts it).
-#
-# Trigger is `nodes.new_link -strategies nat` (drives NATLinkStrategy end-to-end), NOT
-# `nat.punch` (which only registers a Hole and yields no kcp link). Every astral-query targets
-# a NAT'd node -> runs inside its netns (astral-query defaults to tcp:127.0.0.1:8625, which is
-# netns-local; see enter-nat's header).
+# punch-nat: trigger astrald's NAT hole-punch between two NAT'd peers, leaving them a direct
+# kcp link. Final step of the nat-punch line (sibling of link-over-tor).
 #   punch-nat [--vm <initiator>] [--peer <target>]   (default: node1 punches to node2)
+#
+# note: preconditions in order -- both peers behind a symmetric true-masquerade NAT (enter-nat:
+#   astrald in netns priv, port-preserving SNAT to 198.51.100.<oct>), nat-armed by reflection
+#   (add-reflector), Tor relocated into the netns with WAN egress (configure-nat-tor).
+# why: nat.node_punch signaling + peerSupportsNAT discovery route over a Tor link node1<->node2
+#   -- the tcp-only Basic strategy can't form for symmetric NAT and the punch client sets no
+#   relay hint, so Tor is the sole mutual transport. On success the punch promotes to a direct
+#   kcp link on BOTH peers (verify.py asserts it).
+# why: trigger is nodes.new_link -strategies nat (drives NATLinkStrategy end-to-end), not
+#   nat.punch (registers a Hole only, yields no kcp link).
+# note: every astral-query targets a NAT'd node -> runs inside its netns (astral-query defaults
+#   to tcp:127.0.0.1:8625, netns-local; see enter-nat's header).
 set -eu
 
 VM=node1; PEER=node2
@@ -27,13 +26,13 @@ while [ $# -gt 0 ]; do
 done
 
 # resolve _lib two dirs up from this script (as the verifiers do)
-# CDPATH= is an intentional one-shot env prefix for cd, not an assignment
+# why: CDPATH= is a one-shot env prefix for cd, not an assignment
 # shellcheck disable=SC1007
 here=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 LIB="$(dirname -- "$here")/_lib"
 
-# --- host-side helpers (astral-query runs in the target's netns; parsed on the host
-# via _lib/astralq.py -> the same astral-py interrogators the verifiers use) ------
+# host-side helpers: astral-query runs in the target's netns, parsed on the host via
+# _lib/astralq.py (the same interrogators the verifiers use)
 nid() {  # a node's own identity hex (>=64 hex) via apphost.whoami
   netsim ssh "$1" -- "ip netns exec priv astral-query apphost.whoami -out json" 2>/dev/null \
     | python3 "$LIB/astralq.py" identity
@@ -64,7 +63,8 @@ echo "punch-nat: resolving identities ($VM initiator -> $PEER target) ..."
 VMID=$(nid "$VM");     [ -n "$VMID" ]   || { echo "punch-nat: could not resolve $VM identity" >&2; exit 1; }
 PEERID=$(nid "$PEER"); [ -n "$PEERID" ] || { echo "punch-nat: could not resolve $PEER identity" >&2; exit 1; }
 
-# 1) ensure mutual onion knowledge (host-brokered; do NOT trust auto-sync -- risk per doc)
+# 1) ensure mutual onion knowledge (host-brokered)
+# why: do NOT trust auto-sync -- risk per doc
 O_PEER=$(onion_of "$PEER"); O_VM=$(onion_of "$VM")
 [ -n "$O_PEER" ] || { echo "punch-nat: $PEER published no onion (Tor-in-netns down? run configure-nat-tor)" >&2; diag; exit 1; }
 [ -n "$O_VM" ]   || { echo "punch-nat: $VM published no onion (Tor-in-netns down? run configure-nat-tor)" >&2; diag; exit 1; }

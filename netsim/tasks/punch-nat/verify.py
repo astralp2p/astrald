@@ -1,30 +1,28 @@
 #!/usr/bin/env python3
-"""verify punch-nat: both NAT'd peers hold a direct kcp link to each other -- the hole-punch
-completed and was promoted to a real link -- and NOT a direct/LAN tcp link (the NAT was
-genuinely entered).
+"""verify punch-nat: both NAT'd peers hold a direct kcp link to each other and no direct/LAN
+tcp link.
 
-A kcp link is the unique signal of a completed+promoted punch: only NATLinkStrategy dials
-kcp, and kcp endpoints are never advertised for an ordinary peer dial. Assert on
-Network+RemoteIdentity, NOT the endpoint address (the passive/inbound side has swapped
-endpoints). Negatives: no tcp link to the sibling, and none at a 10.77 LAN address (the only
-tcp links present should be to the reflector at 198.51.100.<refl-oct>).
-
-astrald is in netns "priv" on both peers -> astral-query runs inside the netns (it defaults
-to tcp:127.0.0.1:8625, which is netns-local). Uses the Go CLI over ssh, not the astral-py
-WS client (the WS port is netns-local too).
+# why: a kcp link is the unique signal of a completed+promoted punch -- only NATLinkStrategy
+#      dials kcp, never advertised for an ordinary peer dial.
+# why: assert Network+RemoteIdentity, not the endpoint -- the passive/inbound side has swapped
+#      endpoints.
+# note: negatives prove the NAT was entered -- no tcp link to the sibling, none at a 10.77 LAN
+#       address (only tcp links present go to the reflector at 198.51.100.<refl-oct>).
+# note: astrald runs in netns "priv" -> astral-query runs inside the netns over the Go CLI,
+#       not the astral-py WS client; both defaults (tcp:127.0.0.1:8625, WS port) are netns-local.
 """
 import argparse
 import os
 import sys
 
-# why: realpath crosses netsim's per-task symlink to reach the sibling tasks/_lib
+# why: realpath crosses netsim's per-task symlink to reach sibling tasks/_lib
 sys.path.insert(0, os.path.join(
     os.path.dirname(os.path.dirname(os.path.realpath(__file__))), "_lib"))
 import astralapi  # noqa: E402
 
 
 def node_id(vm):
-    """The node's own identity hex via apphost.whoami (inside its netns)."""
+    """Node's own identity hex via apphost.whoami inside its netns."""
     return astralapi.identity_of(astralapi.parse_cli(astralapi.ssh(
         vm, "ip netns exec priv astral-query apphost.whoami -out json") or ""))
 
@@ -52,16 +50,16 @@ def main():
         objs = links(p)
         kcp = astralapi.kcp_links(objs)                 # [(RemoteIdentity, endpoint)]
         tcp = astralapi.links_by_network(objs, "tcp")
-        # positive: a direct kcp link to the sibling (the promoted punch)
+        # positive: a direct kcp link to the sibling -- the promoted punch
         if not any(rid == sib_id for rid, _ in kcp):
             failed.append(f"{p}: no kcp link to {sib} -- punch not promoted (kcp={kcp})")
             sys.stderr.write(f"  {p} tcp links: {tcp}\n")
             continue
-        # negative: the sibling must be reachable ONLY via the punch, never a direct tcp link
+        # negative: sibling reachable only via the punch, never a direct tcp link
         if any(rid == sib_id for rid, _ in tcp):
             failed.append(f"{p}: has a direct tcp link to {sib} -- not a NAT traversal")
             continue
-        # negative: no LAN (10.77) tcp link at all -- the NAT must be genuinely entered
+        # negative: no LAN (10.77) tcp link -- the NAT must be genuinely entered
         if any("10.77." in str(addr) for _rid, addr in tcp):
             failed.append(f"{p}: has a 10.77 LAN tcp link -- NAT not genuinely entered (tcp={tcp})")
             continue

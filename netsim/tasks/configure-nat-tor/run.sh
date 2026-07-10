@@ -1,22 +1,16 @@
 #!/bin/sh
-# configure-nat-tor: relocate a NAT'd node's Tor into its private netns so astrald
-# (moved into netns "priv" by enter-nat) regains full Tor -- inbound AND outbound onion.
-#
-# Why a dedicated task (not folded into enter-nat): astrald's tor module reaches Tor at
-# 127.0.0.1:9050 (SOCKS) / 127.0.0.1:9051 (control), AND its onion service's local
-# listener is hardcoded 127.0.0.1:0 (mod/tor/src/server.go) which Tor dials on inbound.
-# Once enter-nat moves astrald into netns "priv", that 127.0.0.1 is the netns loopback, so
-# a root-ns Tor can neither be reached for SOCKS/control nor deliver inbound onion. Fix
-# (no astrald change): run Tor INSIDE the same netns, and give the netns internet egress
-# (WAN masquerade) so Tor can still reach the real Tor network. On each --vm:
-#   * WAN masquerade for 192.168.99.0/24 (Tor's internet path). enter-nat's LAN SNAT to
-#     198.51.100.x still handles peer traffic -- routing splits by destination.
-#   * move tor@default.service into netns "priv" via a systemd drop-in, restart it there;
-#   * restart astrald (already in the netns) so its tor module re-inits against the now
-#     netns-local control port, then confirm it re-publishes its onion (end-to-end proof).
-#
-# Run AFTER enable-tor (Tor installed + control port) and enter-nat (netns + astrald in it).
+# configure-nat-tor: relocate a NAT'd node's Tor into its netns priv so astrald regains
+# full Tor -- inbound AND outbound onion -- after enter-nat moved it into that netns.
 #   configure-nat-tor [--vm <host>]...     (default: node1 node2)
+#
+# why: astrald's tor module reaches Tor at 127.0.0.1:9050 (SOCKS) / 127.0.0.1:9051 (control),
+#   and its onion listener is hardcoded 127.0.0.1:0 (mod/tor/src/server.go) that Tor dials
+#   inbound; once astrald is in netns priv that 127.0.0.1 is the netns loopback, so root-ns
+#   Tor can neither be reached for SOCKS/control nor deliver inbound onion. Fix (no astrald
+#   change): run Tor inside the same netns, give the netns WAN egress to reach the Tor network.
+# note: WAN masquerade carries only Tor's internet path (192.168.99.0/24); enter-nat's LAN
+#   SNAT to 198.51.100.x still handles peer traffic -- routing splits by destination.
+# note: run AFTER enable-tor (Tor + control port) and enter-nat (netns + astrald in it).
 set -eu
 
 VMS=""
@@ -106,7 +100,7 @@ echo "configure-nat-tor: $(hostname) Tor now in netns priv (onion=$onion, wan=$w
 EOS
 )
 
-# $VMS is a space-separated list -> intentional word-splitting
+# why: $VMS is a space-separated list -> word-splitting is intentional
 # shellcheck disable=SC2086
 for vm in $VMS; do
   echo "configure-nat-tor: relocating Tor into $vm's netns ..."

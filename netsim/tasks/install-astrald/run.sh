@@ -1,15 +1,13 @@
 #!/bin/sh
 # install-astrald: build astrald from source, install it as a systemd service on VMs.
-#   install-astrald [--vm <host>]... [--ref <git-ref>]
-# No --vm  ->  every running VM in the simulation.
+#   install-astrald [--vm <host>]... [--ref <git-ref>]     (no --vm -> every running VM)
 #
-# Runs ON THE HOST (cwd = simulation root). Reaches each VM with a single
-# `netsim ssh <host> -- <one-argv>` call: the whole remote script travels as ONE
-# argument (assignment prefix + single-quoted heredoc body, so host-side $... are
-# left for the guest to expand). ssh lands as root on the guest.
+# note: runs on the host; ssh lands as root on the guest. The whole remote script travels
+#   as ONE argv (assignment prefix + single-quoted heredoc body -> host-side $... are left
+#   for the guest to expand).
 set -eu
 REPO="https://github.com/cryptopunkscc/astrald"
-GO_VERSION="1.25.1"          # must be >= 1.25.0 (astrald go.mod); pin to current 1.25.x
+GO_VERSION="1.25.1"          # why: must be >= 1.25.0 (astrald go.mod); pin to current 1.25.x
 REF=""
 
 VMS=""
@@ -117,7 +115,7 @@ echo "astrald installed, verified, and left running on $(hostname)"
 EOS
 )
 
-# $VMS is a space-separated list -> intentional word-splitting
+# why: $VMS is a space-separated list -> word-splitting is intentional
 # shellcheck disable=SC2086
 for vm in $VMS; do
   echo "installing astrald on $vm ..."

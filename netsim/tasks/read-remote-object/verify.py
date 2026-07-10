@@ -1,24 +1,15 @@
 #!/usr/bin/env python3
 """verify read-remote-object: node1 read the peer's object over astral.
 
-object-store --target node2 put the object on the peer (node2) and recorded
-object_id in node1's object.json (the bytes are the fixed payload.txt it shipped
-to node1); read-remote-object's agent (on node1, as the User) read it back from
-the peer and recorded object_remote in read.json.
-
-Independent host-side check: re-read the peer's object AS THE USER (node1 holds
-the token) via <peer>:objects.load and assert the bytes equal the stored payload
--- this is the authenticated, routable direction. Also cross-checks the agent's
-recorded read.
-
-Queries reach node1's apphost through the shared astral-py client
-(tasks/_lib/astralapi.py), CLI fallback for anything it can't serve.
+Re-read the peer's object as the User via <peer>:objects.load and match the stored payload.
+# why: read as the User (node1 holds the token) -- authenticated, so the query keeps the
+#      network zone and routes to the peer.
 """
 import argparse
 import os
 import sys
 
-# why: realpath crosses netsim's per-task symlink to reach the sibling tasks/_lib
+# why: realpath crosses netsim's per-task symlink to reach sibling tasks/_lib
 sys.path.insert(0, os.path.join(
     os.path.dirname(os.path.dirname(os.path.realpath(__file__))), "_lib"))
 import astralapi  # noqa: E402
@@ -27,21 +18,20 @@ import astralapi  # noqa: E402
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--vm", default="node1")      # operator; reads as the User
-    ap.add_argument("--peer", default="node2")    # the node holding the object (alias)
+    ap.add_argument("--peer", default="node2")    # node holding the object (alias)
     args, _ = ap.parse_known_args()
 
     obj = astralapi.home_json(args.vm, "object.json")    # object-store: object_id
     user = astralapi.home_json(args.vm, "user.json")     # bootstrap/import: user_token
     rd = astralapi.home_json(args.vm, "read.json")       # this task's agent: object_remote
     ID = astralapi.normalize_id(obj.get("object_id", ""))
-    # Ground-truth bytes: the fixed payload.txt that object-store shipped to the
-    # operator (node1), not the agent's account of what was stored.
+    # note: ground-truth bytes -- the fixed payload.txt object-store shipped to the operator,
+    #       not the agent's account of what was stored.
     PAY = astralapi.read_file(args.vm, "/home/tester/payload.txt")
     REMOTE = str(rd.get("object_remote", ""))
     token = user.get("user_token", "")
 
-    # Independent: node1, as the User, reads the peer's object over astral. This is
-    # authenticated (token), so the query keeps the network zone and routes to the peer.
+    # decisive: node1, as the User, reads the peer's object over astral
     with astralapi.connect(args.vm, token=token) as n1:
         out = n1.call("objects.load", {"id": ID}, target=args.peer)
     got = astralapi.loaded_payload(out)

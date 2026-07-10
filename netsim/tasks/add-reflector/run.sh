@@ -1,19 +1,12 @@
 #!/bin/sh
-# add-reflector: wire the public reflector node so both NAT'd peers learn their own
-# public endpoint by reflection, arming each peer's `nat` module.
-#
-# Symmetric-masquerade NAT hides a node's public address from itself (it only exists as a
-# conntrack translation), so astrald can only learn it when a directly-reachable peer
-# observes the SNAT'd source and reflects it back (`reflectLink` -> ObservedEndpointMessage,
-# accepted only for a public tcp/utp endpoint). Two masqueraded peers can't reflect each
-# other before the punch, so a non-NAT'd reflector does it. The reflector VM itself is made
-# by add-vm + install-astrald; this task does the reflector-specific wiring:
-#   1. give the reflector a public TEST-NET alias 198.51.100.<lan-octet> and read its id;
-#   2. on each peer: register that endpoint and force a tcp link to it -> the reflector
-#      observes the peer's 198.51.100.<oct> source and reflects it -> the peer's nat arms.
-# Run AFTER enter-nat (the peer must already be behind its NAT so the reflected source is
-# its public alias, not its private 192.168.99.2).
+# add-reflector: arm each NAT'd peer's nat module by reflecting its public endpoint.
 #   add-reflector [--reflector <host>] [--vm <peer>]...   (default: reflector; peers node1 node2)
+#
+# why: masquerade NAT hides a node's public address from itself; astrald learns it only
+#   when a directly-reachable peer observes the SNAT'd source and reflects it back
+#   (reflectLink -> ObservedEndpointMessage, accepted only for a public tcp/utp endpoint).
+# why: two masqueraded peers can't reflect each other pre-punch, so a non-NAT'd reflector does.
+# note: run AFTER enter-nat, so the reflected source is the peer's public alias, not private 192.168.99.2.
 set -eu
 
 REFL="reflector"; PEERS=""
@@ -28,6 +21,7 @@ done
 
 # 1) give the reflector a public alias and read its node identity
 REFL_SETUP=$(cat <<'EOS'
+
 set -eu
 lan=$(ip -o -4 addr show | awk '$4 ~ /^10\.77\./ {print $2; exit}')
 [ -n "$lan" ] || { echo "add-reflector: no 10.77 LAN nic on $(hostname)" >&2; exit 1; }
@@ -58,11 +52,11 @@ case "$REFL_PUB" in 198.51.100.*) : ;; *) echo "add-reflector: bad reflector pub
 echo "add-reflector: reflector '$REFL' at tcp:$REFL_PUB:1791  id=$REFL_ID" >&2
 
 # 2) seed each peer with the reflector endpoint and force a tcp link so it gets reflected
+# note: force link -> reflector observes peer's public source -> peer's nat arms
 for p in $PEERS; do
   echo "add-reflector: linking $p -> reflector (for endpoint reflection) ..." >&2
   # shellcheck disable=SC2029
-  # the peer's astrald is in netns "priv" (enter-nat); astral-query defaults to
-  # tcp:127.0.0.1:8625 which is netns-local, so run it inside the netns.
+  # why: peer's astrald is in netns priv; astral-query defaults to tcp:127.0.0.1:8625 (netns-local), so run it inside the netns
   netsim ssh "$p" -- "
     ip netns exec priv astral-query nodes.add_endpoint -id '$REFL_ID' -endpoint 'tcp:$REFL_PUB:1791' >/dev/null 2>&1 || true
     ip netns exec priv astral-query dir.set_alias   -id '$REFL_ID' -alias reflector             >/dev/null 2>&1 || true

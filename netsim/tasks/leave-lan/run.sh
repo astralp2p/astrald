@@ -1,20 +1,16 @@
 #!/bin/sh
-# leave-lan: make <vm> (node2, the node that "leaves") genuinely leave the 10.77 LAN, so
-# astrald's tor module + the swarm link maintainer re-link to <peer> (node1) over Tor.
-#
-# Two steps, both on the host:
-#   1. Seed <peer> with <vm>'s onion WHILE THE LAN IS STILL UP — once the LAN is gone the
-#      peer can no longer ask <vm> for its address, so it needs the .onion cached first.
-#   2. Withdraw <vm>'s own 10.77 LAN address (ip addr flush). astrald has no carrier/
-#      operstate monitor: it polls net.InterfaceAddrs() every 3s and advertises one tcp
-#      endpoint per assigned IP, so removing the address is what it observes as "left the
-#      network" — it drops the 10.77 endpoint and re-links over Tor. (A packet-filter DROP,
-#      or even a link/carrier down, leaves the IPv4 address in place and is invisible to
-#      that monitor.) SSH/management rides the separate WAN NIC and is untouched.
+# leave-lan: make <vm> genuinely leave the 10.77 LAN so astrald re-links to <peer> over Tor.
 #   leave-lan [--vm <host>] [--peer <host>]    (default: node2 leaves, peer node1)
 #
-# Both nodes must have Tor up (enable-tor) and the alias <vm> must resolve on <peer>
-# (adopt-node). astral-query ops here (resolve_endpoints / add_endpoint) are ungated.
+# why: seed <peer> with <vm>'s onion while the LAN is up; once it's gone the peer can no
+#   longer ask <vm> for its address, so it needs the .onion cached first.
+# why: withdraw <vm>'s own 10.77 address (ip addr flush) to leave. astrald has no carrier
+#   monitor: it polls net.InterfaceAddrs() every 3s, one tcp endpoint per assigned IP, so
+#   removing the address is what it observes as "left the network" -> drops the 10.77
+#   endpoint, re-links over Tor. A DROP or link-down leaves the IPv4 address, invisible to it.
+# note: SSH/management rides the separate WAN NIC, untouched.
+# note: both nodes need Tor up (enable-tor) and <vm> must resolve on <peer> (adopt-node);
+#   the astral-query ops here (resolve_endpoints / add_endpoint) are ungated.
 set -eu
 
 VM="node2"; PEER="node1"
@@ -57,10 +53,9 @@ echo "leave-lan: seeding $PEER with $VM's onion ..."
 # shellcheck disable=SC2029
 netsim ssh "$PEER" -- "leaver='$VM'; $SEED_BODY"
 
-# 2) make <vm> leave the LAN: withdraw its own 10.77 address (and drop the NIC for realism).
-#    Removing the address takes its connected /24 route with it, so <vm> has no address on
-#    and no route to the LAN — it has genuinely left at the IP layer, which is exactly what
-#    astrald observes (see the header). No peer IP needed: <vm> drops its own membership.
+# 2) make <vm> leave the LAN: withdraw its own 10.77 address (drop the NIC too, for realism)
+# why: flushing the address takes its connected /24 route with it -> <vm> has no LAN address
+#   or route, genuinely gone at the IP layer, which is what astrald observes (see header).
 CUT_BODY=$(cat <<'EOS'
 set -eu
 # the NIC holding the 10.77 LAN address is nic2; SSH rides the separate WAN NIC, untouched.

@@ -1,13 +1,8 @@
 #!/bin/sh
-# adopt-node: adopt the second node into the User's swarm, driven by the Qwen
-# Code agent running INSIDE node1 (which is already a User node from
-# bootstrap-user-software-key — default starting stage: one-node).
+# adopt-node: adopt the second node into the User's swarm, via the Qwen agent in node1.
 #   adopt-node [--vm <host>]      (default: node1 — the VM carrying Qwen)
-#
-# Runs ON THE HOST (cwd = simulation root). Same mechanic as bootstrap-user-software-key:
-# tiny script, thin prompt, intelligence in the agent's astral-agent skill. The
-# whole remote program travels as ONE argv to `netsim ssh`; the prompt rides
-# along base64-encoded so a multi-line file never fights shell quoting.
+# Runs on the host; cwd = simulation root. Starting stage: one-node.
+# why: whole remote program travels as one argv to `netsim ssh`; prompt rides base64-encoded to survive multi-line shell quoting.
 set -eu
 
 VM="node1"
@@ -18,18 +13,17 @@ while [ $# -gt 0 ]; do
   esac
 done
 
-# CDPATH= is an intentional one-shot env prefix for cd, not an assignment
+# CDPATH= is a one-shot env prefix for cd, not an assignment
 # shellcheck disable=SC1007
 here=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 [ -f "$here/prompt.md" ] || { echo "missing $here/prompt.md" >&2; exit 1; }
-prompt_b64=$(base64 -w0 "$here/prompt.md")   # GNU coreutils; -w0 = single line
+prompt_b64=$(base64 -w0 "$here/prompt.md")   # note: GNU coreutils -w0 = single line
 
-# shared Qwen dispatch: decode prompt -> qwen -y as tester -> log-tail (_lib/agent.sh)
+# shared Qwen dispatch: decode prompt -> qwen -y as tester -> log-tail
 . "$(dirname -- "$here")/_lib/agent.sh"
 
-# Soft smoke-check only (verify.sh is the authoritative, independent check). node1
-# holds the User token in $HOME/user.json, so we can peek at the swarm here; don't
-# fail the run on a shape mismatch — leave the verdict to verify.sh.
+# note: soft smoke-check only; verify.sh is authoritative. Peek at the swarm via node1's token in /home/tester/user.json.
+# why: never fail the run on a shape mismatch — verify.sh decides.
 SMOKE=$(cat <<'EOS'
 if [ -n "$(python3 -c 'import json;print(len(json.load(open("/home/tester/siblings.json")).get("sibling_ids") or []))' 2>/dev/null | grep -v '^0$')" ]; then
   echo "adopt-node: $(hostname) recorded swarm siblings in siblings.json"
@@ -50,15 +44,13 @@ EOS
 )
 
 echo "adopt-node: driving Qwen operator on $VM ..."
-# assignment prefix carries the prompt to the guest; body re-parses it
+# note: assignment prefix carries the prompt to the guest; body re-parses it
 # shellcheck disable=SC2029
 netsim ssh "$VM" -- "prompt_b64='$prompt_b64'; $(agent_run_body adopt-node)
 $SMOKE"
 
-# Register friendly node aliases (node1/node2) on BOTH nodes so later tasks can
-# address nodes by name (object-store --target node2, read of <node1>:..., etc.).
-# Host-side; identities resolved from the mutual link (anonymous nodes.links).
-# CONFIRM (live): dir.set_alias works for the anonymous host-side caller.
+# Register node aliases (node1/node2) on both nodes so later tasks can address nodes by name.
+# note: identities resolved from the mutual link (anonymous nodes.links).
 PEER="node2"
 LIB="$(dirname -- "$here")/_lib"
 _remote_id() {  # $1 = vm; prints the first RemoteIdentity from its nodes.links

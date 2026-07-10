@@ -1,15 +1,12 @@
 #!/bin/sh
-# enable-tor: bring up an astrald node with a Tor endpoint. Three steps per node:
-#   1. install Tor and enable its control port (astrald's tor module uses SOCKS
-#      127.0.0.1:9050 + control 127.0.0.1:9051 with cookie auth; stock Debian tor gives
-#      SOCKS but leaves the control port off);
-#   2. restart astrald so its tor module re-initializes against the now-present control
-#      port (it connects only at start, with no retry) and publishes an onion service;
-#   3. read the node's own Tor endpoint and save it to /root/tor.json.
+# enable-tor: bring up an astrald node with a Tor endpoint.
 #   enable-tor [--vm <host>]...     (no --vm -> every running VM)
 #
-# Runs ON THE HOST (cwd = sim root); ssh lands as root. astrald runs as root, so it can
-# read Tor's control cookie regardless of its mode.
+# why: astrald's tor module uses SOCKS 127.0.0.1:9050 + control 127.0.0.1:9051 (cookie auth);
+#   stock Debian tor gives SOCKS but leaves the control port off, so enable it.
+# why: astrald's tor module connects to the control port only at start, no retry -> restart
+#   astrald after the port opens so it re-inits and publishes an onion.
+# note: runs on the host; ssh lands as root. astrald runs as root -> can read Tor's control cookie.
 set -eu
 
 VMS=""
@@ -79,7 +76,7 @@ echo "enable-tor: $(hostname) tor up; onion=$onion (saved /root/tor.json)"
 EOS
 )
 
-# $VMS is a space-separated list -> intentional word-splitting
+# why: $VMS is a space-separated list -> word-splitting is intentional
 # shellcheck disable=SC2086
 for vm in $VMS; do
   echo "enable-tor: bringing up Tor on $vm ..."

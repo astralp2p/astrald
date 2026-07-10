@@ -1,13 +1,8 @@
 #!/bin/sh
-# expel-node: the User (node1's Qwen operator) permanently bans the peer node from
-# the swarm, driven by the Qwen Code agent running INSIDE node1. node1 is already a
-# User node with node2 adopted into its swarm (default starting stage: two-nodes).
+# expel-node: the User permanently bans the peer node from the swarm, via the Qwen agent in node1.
 #   expel-node [--vm <host>]      (default: node1 — the VM carrying Qwen)
-#
-# Runs ON THE HOST (cwd = simulation root). Same mechanic as adopt-node: tiny script,
-# thin prompt, intelligence in the agent's astral-agent skill. The whole remote
-# program travels as ONE argv to `netsim ssh`; the prompt rides along base64-encoded
-# so a multi-line file never fights shell quoting.
+# Runs on the host; cwd = simulation root. Starting stage: two-nodes.
+# why: whole remote program travels as one argv to `netsim ssh`; prompt rides base64-encoded to survive multi-line shell quoting.
 set -eu
 
 VM="node1"
@@ -18,18 +13,17 @@ while [ $# -gt 0 ]; do
   esac
 done
 
-# CDPATH= is an intentional one-shot env prefix for cd, not an assignment
+# CDPATH= is a one-shot env prefix for cd, not an assignment
 # shellcheck disable=SC1007
 here=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 [ -f "$here/prompt.md" ] || { echo "missing $here/prompt.md" >&2; exit 1; }
-prompt_b64=$(base64 -w0 "$here/prompt.md")   # GNU coreutils; -w0 = single line
+prompt_b64=$(base64 -w0 "$here/prompt.md")   # note: GNU coreutils -w0 = single line
 
-# shared Qwen dispatch: decode prompt -> qwen -y as tester -> log-tail (_lib/agent.sh)
+# shared Qwen dispatch: decode prompt -> qwen -y as tester -> log-tail
 . "$(dirname -- "$here")/_lib/agent.sh"
 
-# Soft smoke-check only (verify.py is the authoritative, independent check). node1
-# holds the User token in $HOME/user.json, so we can peek at the swarm here; don't
-# fail the run on a shape mismatch — leave the verdict to verify.py.
+# note: soft smoke-check only; verify.py is authoritative. Peek at the swarm via node1's token in /home/tester/user.json.
+# why: never fail the run on a shape mismatch — verify.py decides.
 SMOKE=$(cat <<'EOS'
 ASTRALD_APPHOST_TOKEN=$(python3 -c 'import json;print(json.load(open("/home/tester/user.json")).get("user_token",""))' 2>/dev/null || true)
 if [ -n "$ASTRALD_APPHOST_TOKEN" ]; then
@@ -45,7 +39,7 @@ EOS
 )
 
 echo "expel-node: driving Qwen operator on $VM ..."
-# assignment prefix carries the prompt to the guest; body re-parses it
+# note: assignment prefix carries the prompt to the guest; body re-parses it
 # shellcheck disable=SC2029
 netsim ssh "$VM" -- "prompt_b64='$prompt_b64'; $(agent_run_body expel-node)
 $SMOKE"

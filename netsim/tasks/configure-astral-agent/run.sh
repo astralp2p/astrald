@@ -1,23 +1,13 @@
 #!/bin/sh
-# configure-astral-agent: install the astral-agent skill into the Qwen Code
-# operator by having the VM clone the (private) satforge/skills repo with an
-# injected deploy key and run the linker itself.
-#   configure-astral-agent [--vm <host>] [--user <name>]
-# Default: --vm node1 --user tester (the operator created by install-qwen-code).
+# configure-astral-agent: install the astral-agent skill into the Qwen Code operator; the
+# VM clones the private satforge/skills repo with an injected deploy key and runs the linker.
+#   configure-astral-agent [--vm <host>] [--user <name>]   (default: --vm node1 --user tester)
 #
-# The HOST owns the deploy key; the VM never needs git credentials of its own.
-# run.sh reads the private key path from $SATFORGE_SKILLS_DEPLOY_KEY, base64-ships
-# it in over a single `netsim ssh` argv, and the guest then:
-#   1. installs the key for the operator and clones
-#      ssh://git@git.satforge.dev/satforge/skills.git over SSH via the deploy key
-#      (submodules resolve per the repo's .gitmodules),
-#   2. builds the satforge-skills linker (Go is already on the node from
-#      install-astrald),
-#   3. runs `link astral-agent --target qwen` -> ~<user>/.qwen/skills/astral-agent.
-#
-# NOTE: for now the deploy key is LEFT in the VM (simpler; lets the operator
-# re-clone/pull skills later), which means it also lives in the saved snapshot.
-# We may switch to wiping the key before the snapshot if that exposure matters.
+# why: the host owns the deploy key so the VM never needs git credentials of its own; run.sh
+#   base64-ships the key from $SATFORGE_SKILLS_DEPLOY_KEY over a single netsim ssh argv, then
+#   the guest installs it, clones over SSH, builds the linker, and links astral-agent for qwen.
+# note: the deploy key is LEFT in the VM (lets the operator re-clone/pull later), so it also
+#   lives in the saved snapshot. May switch to wiping it pre-snapshot if that exposure matters.
 set -eu
 
 VM=node1
@@ -31,7 +21,7 @@ while [ $# -gt 0 ]; do
 done
 
 REPO=${SATFORGE_SKILLS_REPO:-ssh://git@git.satforge.dev/satforge/skills.git}
-REF=${SATFORGE_SKILLS_REF:-}      # optional branch/tag/sha to check out (default: clone's default branch)
+REF=${SATFORGE_SKILLS_REF:-}      # note: optional branch/tag/sha; default is clone's default branch
 KEY=${SATFORGE_SKILLS_DEPLOY_KEY:-}
 [ -n "$KEY" ] || { echo "set SATFORGE_SKILLS_DEPLOY_KEY to the deploy key path for $REPO" >&2; exit 1; }
 [ -r "$KEY" ] || { echo "deploy key not readable: $KEY" >&2; exit 1; }
