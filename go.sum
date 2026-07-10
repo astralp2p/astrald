@@ -5,6 +5,8 @@ github.com/BurntSushi/toml v0.3.1/go.mod h1:xHWCNGjB5oqiDr8zfno3MHue2Ht5sIBksp03
 github.com/aead/siphash v1.0.1/go.mod h1:Nywa3cDsYNNK3gaciGTWPwHt0wlpNV15vwmswBAUSII=
 github.com/akutz/memconn v0.1.0 h1:NawI0TORU4hcOMsMr11g7vwlCdkYeLKXBcxWu2W/P8A=
 github.com/akutz/memconn v0.1.0/go.mod h1:Jo8rI7m0NieZyLI5e2CDlRdRqRRB4S7Xp77ukDjH+Fw=
+github.com/astralp2p/astral-go v0.0.0-20260710143855-57b522547044 h1:PgFux/yixKZ0uc574VUQ+tUImf5gpaCE8w/pyExoJ0g=
+github.com/astralp2p/astral-go v0.0.0-20260710143855-57b522547044/go.mod h1:WE+P8hMP2bwP92KkcLgWnaqXdQ6dOxsiJJKLLlLorWA=
 github.com/aymanbagabas/go-osc52/v2 v2.0.1 h1:HwpRHbFMcZLEVr42D4p7XBqjyuxQH5SMiErDT4WkJ2k=
 github.com/aymanbagabas/go-osc52/v2 v2.0.1/go.mod h1:uYgXzlJ7ZpABp8OJ+exZzJJhRNQ2ASbcXHWsFqH8hp8=
 github.com/bitonicnl/verify-signed-message v0.7.4 h1:qHLngHOLkyjKRLejnTCj33vqbL7gudLagoAZmW3HTjY=
@@ -53,8 +55,6 @@ github.com/client9/misspell v0.3.4/go.mod h1:qj6jICC3Q7zFZvVWo7KLAzC3yx5G7kyvSDk
 github.com/cncf/udpa/go v0.0.0-20191209042840-269d4d468f6f/go.mod h1:M8M6+tZqaGXZJjfX53e64911xZQV5JYwmTeXPW+k8Sc=
 github.com/coder/websocket v1.8.14 h1:9L0p0iKiNOibykf283eHkKUHHrpG7f65OE3BhhO7v9g=
 github.com/coder/websocket v1.8.14/go.mod h1:NX3SzP+inril6yawo5CQXx8+fk145lPDC6pumgx0mVg=
-github.com/cryptopunkscc/astral-go v0.0.0-20260708131549-393955a6da59 h1:fzosb0V/lL5dzEhDlsMxpIjPaOeDVoKr6HdHz7JMrPA=
-github.com/cryptopunkscc/astral-go v0.0.0-20260708131549-393955a6da59/go.mod h1:WE+P8hMP2bwP92KkcLgWnaqXdQ6dOxsiJJKLLlLorWA=
 github.com/cryptopunkscc/bip-0137 v0.0.0-20260118232723-438bbbb8fe46 h1:ACHkKEMJ9jX3g0vZ/ck9XXy3Qh/aHf1idjcWkY9ZZ7A=
 github.com/cryptopunkscc/bip-0137 v0.0.0-20260118232723-438bbbb8fe46/go.mod h1:/dhiF6QcnbnpTZ+3XTtAvrfDeLDoQzm5j0aiXXRniiY=
 github.com/davecgh/go-spew v0.0.0-20171005155431-ecdeabc65495/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=

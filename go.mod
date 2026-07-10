@@ -8,7 +8,7 @@ require (
 	github.com/btcsuite/btcd/btcutil v1.1.6
 	github.com/charmbracelet/lipgloss v1.1.0
 	github.com/coder/websocket v1.8.14
-	github.com/cryptopunkscc/astral-go v0.0.0-20260708131549-393955a6da59
+	github.com/cryptopunkscc/astral-go v0.0.0-20260710143855-57b522547044
 	github.com/cryptopunkscc/bip-0137 v0.0.0-20260118232723-438bbbb8fe46
 	github.com/fsnotify/fsnotify v1.7.0
 	github.com/glebarez/sqlite v1.9.0
@@ -73,3 +73,5 @@ require (
 	github.com/decred/dcrd/dcrec/secp256k1/v4 v4.3.0
 	gopkg.in/check.v1 v1.0.0-20201130134442-10cb98267c6c // indirect
 )
+
+replace github.com/cryptopunkscc/astral-go => github.com/astralp2p/astral-go v0.0.0-20260710143855-57b522547044
