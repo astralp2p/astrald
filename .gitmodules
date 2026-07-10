@@ -3,4 +3,4 @@
 	url = https://github.com/astralp2p/astral-docs.git
 [submodule "netsim/tasks/_lib/astral-py"]
 	path = netsim/tasks/_lib/astral-py
-	url = ssh://git@git.satforge.dev/satforge/astral-py.git
+	url = https://github.com/astralp2p/astral-py.git
