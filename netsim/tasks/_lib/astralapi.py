@@ -46,7 +46,13 @@ if not os.path.isdir(os.path.join(_ASTRALPY_SRC, "astral")):
         "(or set $ASTRALPY_SRC to an astral-py checkout's src/)")
 sys.path.insert(0, _ASTRALPY_SRC)
 import astral  # noqa: E402
+import astral.api  # noqa: E402,F401  -- importing the aggregator fires every protocol's
+# @register decorators, so record_for() below resolves the wire types to typed
+# Record classes (importing `astral` alone registers nothing).
 from astral.encoding import from_json_envelope  # noqa: E402
+from astral.registry import record_for  # noqa: E402
+from astral.api.nodes import EndpointWithTTL, LinkInfo  # noqa: E402
+from astral.api.user import SignedExpulsion, SwarmMember, UserInfo  # noqa: E402
 
 # apphost WebSocket port inside each VM (binds 0.0.0.0; reachable via ssh -L).
 WS_PORT = 8624
@@ -225,41 +231,63 @@ def connect(vm, token=None):
 
 
 # --- interrogators: list[AstralObject] -> extracted value --------------------
-def _values(objs):
-    # note: interrogators below test isinstance(v, dict), so eos/error values are skipped
-    return [o.value for o in objs]
+# The interrogators read astral-py's typed Record attributes (member.identity,
+# link.remote_identity, expulsion.subject, ...) instead of hardcoded wire keys.
+# _typed() promotes each result object to its registered Record; it works over
+# BOTH transport paths (the astral-py client and the Go astral-query CLI
+# fallback) because both hand back AstralObjects whose .value is the raw JSON
+# Object, which Record.from_value accepts. A verifier must never crash on an
+# unexpected wire shape, so a decode failure degrades to the raw value -- the
+# isinstance() checks below then skip it, and the two shape-sensitive
+# interrogators (contract / is_expelled) keep an explicit dict fallback.
+def _typed(objs):
+    out = []
+    for o in objs:
+        if o.type in ("eos", "error_message", "ack"):
+            continue
+        cls = record_for(o.type)
+        if cls is None:
+            out.append(o.value)
+            continue
+        try:
+            out.append(cls.from_value(o.value))
+        except Exception:
+            out.append(o.value)
+    return out
 
 
 def contract(objs):
     """(Issuer, Subject) of the active contract from a user.info result."""
-    for v in _values(objs):
-        if isinstance(v, dict) and isinstance(v.get("Contract"), dict):
-            c = v["Contract"].get("Contract", {})
+    for rec in _typed(objs):
+        if isinstance(rec, UserInfo):
+            sc = rec.contract  # nullable SignedContract
+            if sc is not None and sc.contract is not None:
+                return sc.contract.issuer, sc.contract.subject
+        elif isinstance(rec, dict) and isinstance(rec.get("Contract"), dict):
+            # fallback: UserInfo did not decode; read the nested dict as before.
+            c = rec["Contract"].get("Contract", {})
             return c.get("Issuer"), c.get("Subject")
     return None, None
 
 
 def linked_sibling(objs):
     """Identity of the first Linked sibling in a user.swarm_status result."""
-    for v in _values(objs):
-        if isinstance(v, dict) and v.get("Linked"):
-            return v.get("Identity")
+    for m in _typed(objs):
+        if isinstance(m, SwarmMember) and m.linked:
+            return m.identity
     return None
 
 
 def swarm_identities(objs):
     """Set of node identities in a user.swarm_status result."""
-    ids = set()
-    for v in _values(objs):
-        if isinstance(v, dict) and v.get("Identity"):
-            ids.add(v["Identity"])
-    return ids
+    return {m.identity for m in _typed(objs)
+            if isinstance(m, SwarmMember) and m.identity}
 
 
 def has_link_to(objs, ident):
     """True if a nodes.links result holds an active link to <ident>."""
-    return any(isinstance(v, dict) and v.get("RemoteIdentity") == ident
-               for v in _values(objs))
+    return any(isinstance(l, LinkInfo) and l.remote_identity == ident
+               for l in _typed(objs))
 
 
 def _contains_identity(value, ident):
@@ -274,7 +302,20 @@ def _contains_identity(value, ident):
 
 
 def is_expelled(objs, ident):
-    """True if a user.list_expelled result bans <ident> (nested Subject match)."""
+    """True if a user.list_expelled result bans <ident>.
+
+    Prefers the typed ``SignedExpulsion.subject``; if the bans did not decode
+    (unexpected wire shape), falls back to the defensive recursive Subject
+    search, since expulsion records may nest the Subject at varying depth.
+    """
+    found_typed = False
+    for e in _typed(objs):
+        if isinstance(e, SignedExpulsion):
+            found_typed = True
+            if e.subject == ident:
+                return True
+    if found_typed:
+        return False
     return any(_contains_identity(o.value, ident) for o in objs
                if o.type not in ("eos", "error_message"))
 
@@ -295,7 +336,18 @@ def error_messages(objs):
 
 
 def endpoint_addr(ep):
-    """Address string of an exonet.Endpoint (bare or {Type,Object})."""
+    """Address string of an exonet.Endpoint.
+
+    Handles the three shapes an endpoint arrives in: a typed AstralObject
+    wrapping a Tcp/Tor/GatewayEndpoint (the record codec's polymorphic
+    ("object", ...) decode -> .value.address), astral-go's JSONAdapter
+    {"Type", "Object": "<addr>"} dict, and a bare address string.
+    """
+    if isinstance(ep, astral.AstralObject):
+        addr = getattr(ep.value, "address", None)
+        if addr:
+            return addr
+        return ep.value if isinstance(ep.value, str) else ""
     if isinstance(ep, str):
         return ep
     if isinstance(ep, dict):
@@ -306,21 +358,16 @@ def endpoint_addr(ep):
 
 def tor_links(objs):
     """(RemoteIdentity, endpoint-address) for links whose Network == 'tor'."""
-    out = []
-    for v in _values(objs):
-        if isinstance(v, dict) and str(v.get("Network")) == "tor":
-            out.append((str(v.get("RemoteIdentity", "")),
-                        endpoint_addr(v.get("RemoteEndpoint"))))
-    return out
+    return links_by_network(objs, "tor")
 
 
 def links_by_network(objs, network):
     """(RemoteIdentity, endpoint-address) for links whose Network == <network>."""
     out = []
-    for v in _values(objs):
-        if isinstance(v, dict) and str(v.get("Network")) == network:
-            out.append((str(v.get("RemoteIdentity", "")),
-                        endpoint_addr(v.get("RemoteEndpoint"))))
+    for l in _typed(objs):
+        if isinstance(l, LinkInfo) and str(l.network) == network:
+            out.append((str(l.remote_identity or ""),
+                        endpoint_addr(l.remote_endpoint)))
     return out
 
 
@@ -337,9 +384,9 @@ def kcp_links(objs):
 
 def resolve_onion(objs):
     """The .onion address from a nodes.resolve_endpoints result, or None."""
-    for v in _values(objs):
-        if isinstance(v, dict):
-            a = endpoint_addr(v.get("Endpoint"))
+    for ewt in _typed(objs):
+        if isinstance(ewt, EndpointWithTTL):
+            a = endpoint_addr(ewt.endpoint)
             if ".onion" in a:
                 return a
     return None
