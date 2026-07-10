@@ -30,5 +30,4 @@ import (
 	_ "github.com/cryptopunkscc/astrald/mod/tor"
 	_ "github.com/cryptopunkscc/astrald/mod/tree"
 	_ "github.com/cryptopunkscc/astrald/mod/user"
-	_ "github.com/cryptopunkscc/astrald/mod/utp"
 )

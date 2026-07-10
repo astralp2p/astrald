@@ -6,7 +6,6 @@ import (
 	"github.com/cryptopunkscc/astral-go/api/ip"
 	"github.com/cryptopunkscc/astral-go/api/nodes"
 	"github.com/cryptopunkscc/astral-go/api/tcp"
-	"github.com/cryptopunkscc/astral-go/api/utp"
 	"github.com/cryptopunkscc/astral-go/astral"
 	"github.com/cryptopunkscc/astrald/mod/events"
 	"github.com/cryptopunkscc/astrald/mod/objects"
@@ -54,8 +53,6 @@ func (mod *Module) receiveObservedEndpointMessage(source *astral.Identity, event
 	var i ip.IP
 	switch e := endpoint.(type) {
 	case *tcp.Endpoint:
-		i = e.IP
-	case *utp.Endpoint:
 		i = e.IP
 	default:
 		// unknown endpoint type

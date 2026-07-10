@@ -12,5 +12,4 @@ import (
 	_ "github.com/cryptopunkscc/astrald/mod/objects/views"
 	_ "github.com/cryptopunkscc/astrald/mod/tcp/views"
 	_ "github.com/cryptopunkscc/astrald/mod/tor/views"
-	_ "github.com/cryptopunkscc/astrald/mod/utp/views"
 )

@@ -69,7 +69,6 @@ Default transports bind all interfaces.
 |---|---|---|
 | 1791 | TCP | node links |
 | 1792 | UDP | KCP transport |
-| 1791 | UDP | UTP transport |
 | 8822 | UDP | `ether` LAN discovery |
 | 8625 | TCP 127.0.0.1 | local apphost API |
 | 8624 | TCP 0.0.0.0 | apphost HTTP API |

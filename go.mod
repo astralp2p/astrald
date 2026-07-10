@@ -10,7 +10,6 @@ require (
 	github.com/coder/websocket v1.8.14
 	github.com/cryptopunkscc/astral-go v0.0.0-20260708131549-393955a6da59
 	github.com/cryptopunkscc/bip-0137 v0.0.0-20260118232723-438bbbb8fe46
-	github.com/cryptopunkscc/utp v0.0.0-20251010115525-2f03809eff3d
 	github.com/fsnotify/fsnotify v1.7.0
 	github.com/glebarez/sqlite v1.9.0
 	github.com/muesli/termenv v0.16.0
