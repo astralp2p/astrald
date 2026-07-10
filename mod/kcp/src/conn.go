@@ -1,11 +1,11 @@
 package kcp
 
 import (
-	exonetmod "github.com/cryptopunkscc/astrald/mod/exonet"
+	exonetmod "github.com/astralp2p/astrald/mod/exonet"
 	"sync/atomic"
 	"time"
 
-	"github.com/cryptopunkscc/astral-go/api/exonet"
+	"github.com/astralp2p/astral-go/api/exonet"
 	kcpgo "github.com/xtaci/kcp-go/v5"
 )
 

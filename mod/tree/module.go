@@ -17,8 +17,8 @@ path in the tree.
 package tree
 
 import (
-	"github.com/cryptopunkscc/astral-go/api/tree"
-	"github.com/cryptopunkscc/astral-go/astral"
+	"github.com/astralp2p/astral-go/api/tree"
+	"github.com/astralp2p/astral-go/astral"
 )
 
 const ModuleName = "tree"

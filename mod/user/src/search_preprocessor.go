@@ -1,6 +1,6 @@
 package user
 
-import "github.com/cryptopunkscc/astral-go/api/objects"
+import "github.com/astralp2p/astral-go/api/objects"
 
 // PreprocessSearch injects linked siblings as additional search sources when the caller is the active contract issuer.
 func (mod *Module) PreprocessSearch(search *objects.Search) {

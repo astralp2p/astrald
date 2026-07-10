@@ -3,8 +3,8 @@ package fwd
 import (
 	"context"
 	"fmt"
-	"github.com/cryptopunkscc/astral-go/astral"
-	"github.com/cryptopunkscc/astrald/tasks"
+	"github.com/astralp2p/astral-go/astral"
+	"github.com/astralp2p/astrald/tasks"
 	"time"
 )
 

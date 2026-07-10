@@ -2,12 +2,12 @@ package nodes
 
 import (
 	"context"
-	"github.com/cryptopunkscc/astral-go/api/nodes"
-	exonetmod "github.com/cryptopunkscc/astrald/mod/exonet"
+	"github.com/astralp2p/astral-go/api/nodes"
+	exonetmod "github.com/astralp2p/astrald/mod/exonet"
 	"time"
 
-	"github.com/cryptopunkscc/astral-go/api/exonet"
-	"github.com/cryptopunkscc/astral-go/astral"
+	"github.com/astralp2p/astral-go/api/exonet"
+	"github.com/astralp2p/astral-go/astral"
 )
 
 const (

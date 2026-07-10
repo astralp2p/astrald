@@ -3,8 +3,8 @@ package apphost
 import (
 	"slices"
 
-	"github.com/cryptopunkscc/astral-go/astral"
-	"github.com/cryptopunkscc/astral-go/lib/query"
+	"github.com/astralp2p/astral-go/astral"
+	"github.com/astralp2p/astral-go/lib/query"
 )
 
 // inSetupMode reports whether the node has no active user - i.e. is unclaimed.

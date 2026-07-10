@@ -2,13 +2,13 @@ package nodes
 
 import (
 	"fmt"
-	nodesmod "github.com/cryptopunkscc/astrald/mod/nodes"
+	nodesmod "github.com/astralp2p/astrald/mod/nodes"
 	"sync"
 
-	"github.com/cryptopunkscc/astral-go/api/nodes"
-	nodescli "github.com/cryptopunkscc/astral-go/api/nodes/client"
-	"github.com/cryptopunkscc/astral-go/astral"
-	"github.com/cryptopunkscc/astral-go/lib/astrald"
+	"github.com/astralp2p/astral-go/api/nodes"
+	nodescli "github.com/astralp2p/astral-go/api/nodes/client"
+	"github.com/astralp2p/astral-go/astral"
+	"github.com/astralp2p/astral-go/lib/astrald"
 )
 
 // ResolveEndpoints fans out to all registered resolvers and merges their results

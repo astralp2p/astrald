@@ -7,9 +7,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/cryptopunkscc/astral-go/astral"
-	"github.com/cryptopunkscc/astral-go/lib/ipc"
-	"github.com/cryptopunkscc/astrald/mod/objects/fs"
+	"github.com/astralp2p/astral-go/astral"
+	"github.com/astralp2p/astral-go/lib/ipc"
+	"github.com/astralp2p/astrald/mod/objects/fs"
 )
 
 // HTTPAuthTokenHeader is the request header carrying the bearer token for HTTP clients.

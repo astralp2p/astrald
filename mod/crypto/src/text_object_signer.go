@@ -1,9 +1,9 @@
 package crypto
 
 import (
-	"github.com/cryptopunkscc/astral-go/api/crypto"
-	"github.com/cryptopunkscc/astral-go/astral"
-	cryptomod "github.com/cryptopunkscc/astrald/mod/crypto"
+	"github.com/astralp2p/astral-go/api/crypto"
+	"github.com/astralp2p/astral-go/astral"
+	cryptomod "github.com/astralp2p/astrald/mod/crypto"
 )
 
 type TextObjectSigner struct {

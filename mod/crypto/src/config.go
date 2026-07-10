@@ -1,6 +1,6 @@
 package crypto
 
-import "github.com/cryptopunkscc/astral-go/api/objects"
+import "github.com/astralp2p/astral-go/api/objects"
 
 const maxObjectSize = 4096
 

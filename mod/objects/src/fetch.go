@@ -7,10 +7,10 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/cryptopunkscc/astral-go/astral"
-	"github.com/cryptopunkscc/astral-go/lib/query"
-	"github.com/cryptopunkscc/astrald/lib/arl"
-	"github.com/cryptopunkscc/astrald/mod/objects"
+	"github.com/astralp2p/astral-go/astral"
+	"github.com/astralp2p/astral-go/lib/query"
+	"github.com/astralp2p/astrald/lib/arl"
+	"github.com/astralp2p/astrald/mod/objects"
 )
 
 func (mod *Module) fetch(addr string) (objectID *astral.ObjectID, err error) {

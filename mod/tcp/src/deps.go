@@ -3,15 +3,15 @@ package tcp
 import (
 	"fmt"
 
-	"github.com/cryptopunkscc/astral-go/astral"
-	"github.com/cryptopunkscc/astrald/core"
-	"github.com/cryptopunkscc/astrald/mod/exonet"
-	ipmod "github.com/cryptopunkscc/astrald/mod/ip"
-	"github.com/cryptopunkscc/astrald/mod/nearby"
-	"github.com/cryptopunkscc/astrald/mod/nodes"
-	"github.com/cryptopunkscc/astrald/mod/objects"
-	"github.com/cryptopunkscc/astrald/mod/tcp"
-	"github.com/cryptopunkscc/astrald/mod/tree"
+	"github.com/astralp2p/astral-go/astral"
+	"github.com/astralp2p/astrald/core"
+	"github.com/astralp2p/astrald/mod/exonet"
+	ipmod "github.com/astralp2p/astrald/mod/ip"
+	"github.com/astralp2p/astrald/mod/nearby"
+	"github.com/astralp2p/astrald/mod/nodes"
+	"github.com/astralp2p/astrald/mod/objects"
+	"github.com/astralp2p/astrald/mod/tcp"
+	"github.com/astralp2p/astrald/mod/tree"
 )
 
 type Deps struct {

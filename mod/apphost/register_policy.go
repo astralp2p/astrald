@@ -1,6 +1,6 @@
 package apphost
 
-import "github.com/cryptopunkscc/astral-go/api/auth"
+import "github.com/astralp2p/astral-go/api/auth"
 
 // AppRegisterPolicy decides whether apphost.register may provision a new app
 // identity with the given permits. origin is the caller's web origin, empty

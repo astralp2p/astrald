@@ -1,6 +1,6 @@
 package objects
 
-import "github.com/cryptopunkscc/astral-go/astral"
+import "github.com/astralp2p/astral-go/astral"
 
 // SourceIdentifier marks discovery adapters by their source identity;
 // "external" may be the better conceptual name.

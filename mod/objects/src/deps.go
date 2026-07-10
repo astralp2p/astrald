@@ -1,10 +1,10 @@
 package objects
 
 import (
-	"github.com/cryptopunkscc/astral-go/api/objects"
-	"github.com/cryptopunkscc/astral-go/astral"
-	"github.com/cryptopunkscc/astrald/core"
-	objectsmod "github.com/cryptopunkscc/astrald/mod/objects"
+	"github.com/astralp2p/astral-go/api/objects"
+	"github.com/astralp2p/astral-go/astral"
+	"github.com/astralp2p/astrald/core"
+	objectsmod "github.com/astralp2p/astrald/mod/objects"
 )
 
 // LoadDependencies injects core deps, then scans every other loaded module and

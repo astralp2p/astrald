@@ -1,14 +1,14 @@
 package gateway
 
 import (
-	gatewaymod "github.com/cryptopunkscc/astrald/mod/gateway"
+	gatewaymod "github.com/astralp2p/astrald/mod/gateway"
 	"sync"
 
-	"github.com/cryptopunkscc/astral-go/api/gateway"
-	"github.com/cryptopunkscc/astral-go/astral"
-	"github.com/cryptopunkscc/astral-go/astral/log"
-	"github.com/cryptopunkscc/astral-go/sig"
-	"github.com/cryptopunkscc/astrald/mod/exonet"
+	"github.com/astralp2p/astral-go/api/gateway"
+	"github.com/astralp2p/astral-go/astral"
+	"github.com/astralp2p/astral-go/astral/log"
+	"github.com/astralp2p/astral-go/sig"
+	"github.com/astralp2p/astrald/mod/exonet"
 )
 
 // registeredNode represents a node registered as reachable through the gateway.

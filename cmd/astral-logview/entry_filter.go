@@ -1,6 +1,6 @@
 package main
 
-import "github.com/cryptopunkscc/astral-go/astral/log"
+import "github.com/astralp2p/astral-go/astral/log"
 
 type EntryFilter struct {
 	Tag   string

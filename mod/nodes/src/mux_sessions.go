@@ -3,9 +3,9 @@ package nodes
 import (
 	"errors"
 
-	"github.com/cryptopunkscc/astral-go/astral"
-	"github.com/cryptopunkscc/astrald/mod/nodes"
-	"github.com/cryptopunkscc/astrald/mod/nodes/frames"
+	"github.com/astralp2p/astral-go/astral"
+	"github.com/astralp2p/astrald/mod/nodes"
+	"github.com/astralp2p/astrald/mod/nodes/frames"
 )
 
 func (mux *Mux) removeSession(nonce astral.Nonce) (*session, error) {

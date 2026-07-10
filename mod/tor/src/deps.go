@@ -3,10 +3,10 @@ package tor
 import (
 	"fmt"
 
-	"github.com/cryptopunkscc/astral-go/api/tor"
-	"github.com/cryptopunkscc/astral-go/astral"
-	"github.com/cryptopunkscc/astrald/core"
-	"github.com/cryptopunkscc/astrald/mod/tree"
+	"github.com/astralp2p/astral-go/api/tor"
+	"github.com/astralp2p/astral-go/astral"
+	"github.com/astralp2p/astrald/core"
+	"github.com/astralp2p/astrald/mod/tree"
 )
 
 func (mod *Module) LoadDependencies(ctx *astral.Context) (err error) {

@@ -1,10 +1,10 @@
 package tcp
 
 import (
-	"github.com/cryptopunkscc/astral-go/api/nodes"
-	"github.com/cryptopunkscc/astral-go/astral"
-	"github.com/cryptopunkscc/astral-go/sig"
-	nodesmod "github.com/cryptopunkscc/astrald/mod/nodes"
+	"github.com/astralp2p/astral-go/api/nodes"
+	"github.com/astralp2p/astral-go/astral"
+	"github.com/astralp2p/astral-go/sig"
+	nodesmod "github.com/astralp2p/astrald/mod/nodes"
 )
 
 var _ nodesmod.EndpointResolver = &Module{}

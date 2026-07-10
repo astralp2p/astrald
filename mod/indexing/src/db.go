@@ -3,8 +3,8 @@ package indexing
 import (
 	"errors"
 
-	"github.com/cryptopunkscc/astral-go/astral"
-	"github.com/cryptopunkscc/astrald/mod/indexing"
+	"github.com/astralp2p/astral-go/astral"
+	"github.com/astralp2p/astrald/mod/indexing"
 	"gorm.io/gorm"
 )
 

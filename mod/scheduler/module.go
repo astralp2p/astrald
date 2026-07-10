@@ -3,8 +3,8 @@ package scheduler
 import (
 	"fmt"
 
-	"github.com/cryptopunkscc/astral-go/astral"
-	"github.com/cryptopunkscc/astrald/mod/events"
+	"github.com/astralp2p/astral-go/astral"
+	"github.com/astralp2p/astrald/mod/events"
 )
 
 const ModuleName = "scheduler"

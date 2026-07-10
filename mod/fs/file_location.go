@@ -7,7 +7,7 @@ import (
 	"io"
 	"strings"
 
-	"github.com/cryptopunkscc/astral-go/astral"
+	"github.com/astralp2p/astral-go/astral"
 )
 
 type FileLocation struct {

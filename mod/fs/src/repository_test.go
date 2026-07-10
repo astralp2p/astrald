@@ -6,8 +6,8 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/cryptopunkscc/astral-go/astral"
-	"github.com/cryptopunkscc/astrald/mod/objects"
+	"github.com/astralp2p/astral-go/astral"
+	"github.com/astralp2p/astrald/mod/objects"
 )
 
 // Delete maps a missing-file os.Remove error to objects.ErrNotFound so purge skips the leaf.

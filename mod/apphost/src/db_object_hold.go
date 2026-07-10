@@ -3,8 +3,8 @@ package apphost
 import (
 	"time"
 
-	"github.com/cryptopunkscc/astral-go/astral"
-	"github.com/cryptopunkscc/astrald/mod/apphost"
+	"github.com/astralp2p/astral-go/astral"
+	"github.com/astralp2p/astrald/mod/apphost"
 )
 
 type dbObjectHold struct {

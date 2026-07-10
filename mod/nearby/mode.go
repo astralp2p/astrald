@@ -3,7 +3,7 @@ package nearby
 import (
 	"io"
 
-	"github.com/cryptopunkscc/astral-go/astral"
+	"github.com/astralp2p/astral-go/astral"
 )
 
 // Mode describes how a node broadcasts its presence in the local network.

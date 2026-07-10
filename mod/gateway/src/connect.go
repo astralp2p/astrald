@@ -1,11 +1,11 @@
 package gateway
 
 import (
-	gatewaymod "github.com/cryptopunkscc/astrald/mod/gateway"
+	gatewaymod "github.com/astralp2p/astrald/mod/gateway"
 	"time"
 
-	"github.com/cryptopunkscc/astral-go/api/gateway"
-	"github.com/cryptopunkscc/astral-go/astral"
+	"github.com/astralp2p/astral-go/api/gateway"
+	"github.com/astralp2p/astral-go/astral"
 )
 
 func (mod *Module) reserveConn(caller *astral.Identity, target *astral.Identity, network string) (gateway.Socket, error) {

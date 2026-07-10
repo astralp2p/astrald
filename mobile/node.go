@@ -11,17 +11,17 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"github.com/cryptopunkscc/astral-go/api/crypto"
-	"github.com/cryptopunkscc/astral-go/api/secp256k1"
-	"github.com/cryptopunkscc/astral-go/astral"
-	"github.com/cryptopunkscc/astrald/core"
-	"github.com/cryptopunkscc/astrald/mod/dir"
-	"github.com/cryptopunkscc/astrald/mod/ether"
-	ipsrc "github.com/cryptopunkscc/astrald/mod/ip/src"
-	"github.com/cryptopunkscc/astrald/resources"
+	"github.com/astralp2p/astral-go/api/crypto"
+	"github.com/astralp2p/astral-go/api/secp256k1"
+	"github.com/astralp2p/astral-go/astral"
+	"github.com/astralp2p/astrald/core"
+	"github.com/astralp2p/astrald/mod/dir"
+	"github.com/astralp2p/astrald/mod/ether"
+	ipsrc "github.com/astralp2p/astrald/mod/ip/src"
+	"github.com/astralp2p/astrald/resources"
 
-	_ "github.com/cryptopunkscc/astrald/mod/all"
-	_ "github.com/cryptopunkscc/astrald/mod/all/views"
+	_ "github.com/astralp2p/astrald/mod/all"
+	_ "github.com/astralp2p/astrald/mod/all/views"
 )
 
 // Default WebSocket bind address — matches mod/apphost/src/config.go.

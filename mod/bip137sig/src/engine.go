@@ -3,12 +3,12 @@ package src
 import (
 	"encoding/base64"
 	"fmt"
-	cryptomod "github.com/cryptopunkscc/astrald/mod/crypto"
+	cryptomod "github.com/astralp2p/astrald/mod/crypto"
 
 	"github.com/btcsuite/btcd/btcec/v2"
-	"github.com/cryptopunkscc/astral-go/api/crypto"
-	"github.com/cryptopunkscc/astral-go/api/secp256k1"
-	"github.com/cryptopunkscc/astral-go/astral"
+	"github.com/astralp2p/astral-go/api/crypto"
+	"github.com/astralp2p/astral-go/api/secp256k1"
+	"github.com/astralp2p/astral-go/astral"
 	"github.com/cryptopunkscc/bip-0137/verify"
 	secp "github.com/decred/dcrd/dcrec/secp256k1/v4"
 )

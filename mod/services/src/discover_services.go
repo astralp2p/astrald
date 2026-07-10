@@ -3,8 +3,8 @@ package services
 import (
 	"sync"
 
-	"github.com/cryptopunkscc/astral-go/api/services"
-	"github.com/cryptopunkscc/astral-go/astral"
+	"github.com/astralp2p/astral-go/api/services"
+	"github.com/astralp2p/astral-go/astral"
 )
 
 // DiscoverServices runs all registered ServiceDiscoverers with the provided options and merges

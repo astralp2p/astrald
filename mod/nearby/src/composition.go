@@ -1,8 +1,8 @@
 package nearby
 
 import (
-	"github.com/cryptopunkscc/astral-go/astral"
-	"github.com/cryptopunkscc/astrald/mod/nearby"
+	"github.com/astralp2p/astral-go/astral"
+	"github.com/astralp2p/astrald/mod/nearby"
 )
 
 const MaxAttachmentSize = 4 * 1024 // 4 KiB

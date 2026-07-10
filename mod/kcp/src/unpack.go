@@ -2,10 +2,10 @@ package kcp
 
 import (
 	"bytes"
-	exonetmod "github.com/cryptopunkscc/astrald/mod/exonet"
+	exonetmod "github.com/astralp2p/astrald/mod/exonet"
 
-	"github.com/cryptopunkscc/astral-go/api/exonet"
-	kcpmod "github.com/cryptopunkscc/astral-go/api/kcp"
+	"github.com/astralp2p/astral-go/api/exonet"
+	kcpmod "github.com/astralp2p/astral-go/api/kcp"
 )
 
 var _ exonetmod.Unpacker = &Module{}

@@ -17,8 +17,8 @@ Install the daemon and the tooling:
 
 ```shellsession
 go install \
-  github.com/cryptopunkscc/astrald/cmd/astrald@latest \
-  github.com/cryptopunkscc/astrald/cmd/astral-query@latest
+  github.com/astralp2p/astrald/cmd/astrald@latest \
+  github.com/astralp2p/astrald/cmd/astral-query@latest
 ```
 
 Run the daemon:

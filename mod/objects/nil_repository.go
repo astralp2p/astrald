@@ -2,8 +2,8 @@ package objects
 
 import (
 	"errors"
-	"github.com/cryptopunkscc/astral-go/api/objects"
-	"github.com/cryptopunkscc/astral-go/astral"
+	"github.com/astralp2p/astral-go/api/objects"
+	"github.com/astralp2p/astral-go/astral"
 	"io"
 )
 

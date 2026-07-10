@@ -2,9 +2,9 @@ package exonet
 
 import (
 	"context"
-	"github.com/cryptopunkscc/astral-go/api/exonet"
+	"github.com/astralp2p/astral-go/api/exonet"
 
-	"github.com/cryptopunkscc/astral-go/astral"
+	"github.com/astralp2p/astral-go/astral"
 )
 
 const ModuleName = "exonet"

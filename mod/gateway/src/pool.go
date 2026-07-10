@@ -1,13 +1,13 @@
 package gateway
 
 import (
-	gatewaymod "github.com/cryptopunkscc/astrald/mod/gateway"
+	gatewaymod "github.com/astralp2p/astrald/mod/gateway"
 	"time"
 
-	"github.com/cryptopunkscc/astral-go/api/gateway"
-	"github.com/cryptopunkscc/astral-go/astral"
-	"github.com/cryptopunkscc/astral-go/sig"
-	"github.com/cryptopunkscc/astrald/mod/exonet"
+	"github.com/astralp2p/astral-go/api/gateway"
+	"github.com/astralp2p/astral-go/astral"
+	"github.com/astralp2p/astral-go/sig"
+	"github.com/astralp2p/astrald/mod/exonet"
 )
 
 // ConnPool maintains minIdleConns idle socket connections to a gateway.

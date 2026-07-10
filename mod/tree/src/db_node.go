@@ -3,7 +3,7 @@ package tree
 import (
 	"time"
 
-	"github.com/cryptopunkscc/astrald/mod/tree"
+	"github.com/astralp2p/astrald/mod/tree"
 )
 
 type dbNode struct {

@@ -4,10 +4,10 @@ import (
 	"crypto/ecdsa"
 	"crypto/rand"
 	"fmt"
-	secp256k1api "github.com/cryptopunkscc/astral-go/api/secp256k1"
-	cryptomod "github.com/cryptopunkscc/astrald/mod/crypto"
+	secp256k1api "github.com/astralp2p/astral-go/api/secp256k1"
+	cryptomod "github.com/astralp2p/astrald/mod/crypto"
 
-	"github.com/cryptopunkscc/astral-go/api/crypto"
+	"github.com/astralp2p/astral-go/api/crypto"
 	"github.com/decred/dcrd/dcrec/secp256k1/v4"
 )
 

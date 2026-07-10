@@ -4,9 +4,9 @@ import (
 	"errors"
 	"math/rand"
 
-	"github.com/cryptopunkscc/astral-go/api/apphost"
-	"github.com/cryptopunkscc/astral-go/astral"
-	"github.com/cryptopunkscc/astral-go/sig"
+	"github.com/astralp2p/astral-go/api/apphost"
+	"github.com/astralp2p/astral-go/astral"
+	"github.com/astralp2p/astral-go/sig"
 )
 
 func (mod *Module) ListAccessTokens() ([]*apphost.AccessToken, error) {

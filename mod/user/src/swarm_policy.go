@@ -1,9 +1,9 @@
 package user
 
 import (
-	"github.com/cryptopunkscc/astral-go/api/auth"
-	"github.com/cryptopunkscc/astral-go/astral"
-	"github.com/cryptopunkscc/astrald/mod/user"
+	"github.com/astralp2p/astral-go/api/auth"
+	"github.com/astralp2p/astral-go/astral"
+	"github.com/astralp2p/astrald/mod/user"
 )
 
 func (mod *Module) GetSwarmJoinRequestPolicy() user.SwarmJoinRequestPolicy {

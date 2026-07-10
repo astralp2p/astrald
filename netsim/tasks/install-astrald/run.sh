@@ -6,7 +6,7 @@
 #   as ONE argv (assignment prefix + single-quoted heredoc body -> host-side $... are left
 #   for the guest to expand).
 set -eu
-REPO="https://github.com/cryptopunkscc/astrald"
+REPO="https://github.com/astralp2p/astrald"
 GO_VERSION="1.25.1"          # why: must be >= 1.25.0 (astrald go.mod); pin to current 1.25.x
 REF=""
 

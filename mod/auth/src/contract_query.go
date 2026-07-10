@@ -2,11 +2,11 @@ package auth
 
 import (
 	"fmt"
-	authmod "github.com/cryptopunkscc/astrald/mod/auth"
+	authmod "github.com/astralp2p/astrald/mod/auth"
 
-	"github.com/cryptopunkscc/astral-go/api/auth"
-	"github.com/cryptopunkscc/astral-go/api/crypto"
-	"github.com/cryptopunkscc/astral-go/astral"
+	"github.com/astralp2p/astral-go/api/auth"
+	"github.com/astralp2p/astral-go/api/crypto"
+	"github.com/astralp2p/astral-go/astral"
 )
 
 type contractQuery struct {

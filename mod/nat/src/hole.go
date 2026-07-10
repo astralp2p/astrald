@@ -3,14 +3,14 @@ package nat
 import (
 	"bytes"
 	"context"
-	natmod "github.com/cryptopunkscc/astrald/mod/nat"
+	natmod "github.com/astralp2p/astrald/mod/nat"
 	"net"
 	"sync/atomic"
 	"time"
 
-	"github.com/cryptopunkscc/astral-go/api/nat"
-	"github.com/cryptopunkscc/astral-go/astral"
-	"github.com/cryptopunkscc/astral-go/sig"
+	"github.com/astralp2p/astral-go/api/nat"
+	"github.com/astralp2p/astral-go/astral"
+	"github.com/astralp2p/astral-go/sig"
 )
 
 const (

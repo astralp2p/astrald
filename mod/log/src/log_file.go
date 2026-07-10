@@ -7,9 +7,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/cryptopunkscc/astral-go/astral/channel"
-	"github.com/cryptopunkscc/astral-go/astral/log"
-	"github.com/cryptopunkscc/astral-go/streams"
+	"github.com/astralp2p/astral-go/astral/channel"
+	"github.com/astralp2p/astral-go/astral/log"
+	"github.com/astralp2p/astral-go/streams"
 )
 
 type LogFile struct {

@@ -3,12 +3,12 @@ package nodes
 import (
 	"slices"
 
-	"github.com/cryptopunkscc/astral-go/api/ip"
-	"github.com/cryptopunkscc/astral-go/api/nodes"
-	"github.com/cryptopunkscc/astral-go/api/tcp"
-	"github.com/cryptopunkscc/astral-go/astral"
-	"github.com/cryptopunkscc/astrald/mod/events"
-	"github.com/cryptopunkscc/astrald/mod/objects"
+	"github.com/astralp2p/astral-go/api/ip"
+	"github.com/astralp2p/astral-go/api/nodes"
+	"github.com/astralp2p/astral-go/api/tcp"
+	"github.com/astralp2p/astral-go/astral"
+	"github.com/astralp2p/astrald/mod/events"
+	"github.com/astralp2p/astrald/mod/objects"
 )
 
 // ReceiveObject dispatches an inbound object by type, accepting observed-endpoint

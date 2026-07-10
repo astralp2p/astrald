@@ -1,12 +1,12 @@
 package services
 
 import (
-	servicescli "github.com/cryptopunkscc/astral-go/api/services/client"
-	"github.com/cryptopunkscc/astral-go/astral"
-	"github.com/cryptopunkscc/astral-go/astral/log"
-	"github.com/cryptopunkscc/astral-go/lib/routing"
-	"github.com/cryptopunkscc/astral-go/sig"
-	"github.com/cryptopunkscc/astrald/mod/services"
+	servicescli "github.com/astralp2p/astral-go/api/services/client"
+	"github.com/astralp2p/astral-go/astral"
+	"github.com/astralp2p/astral-go/astral/log"
+	"github.com/astralp2p/astral-go/lib/routing"
+	"github.com/astralp2p/astral-go/sig"
+	"github.com/astralp2p/astrald/mod/services"
 )
 
 const ModuleName = "services"

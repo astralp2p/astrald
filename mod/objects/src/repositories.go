@@ -4,7 +4,7 @@ import (
 	"fmt"
 
 	"errors"
-	"github.com/cryptopunkscc/astrald/mod/objects"
+	"github.com/astralp2p/astrald/mod/objects"
 )
 
 func (mod *Module) AddRepository(name string, repo objects.Repository) error {

@@ -1,11 +1,11 @@
 package nat
 
 import (
-	natclient "github.com/cryptopunkscc/astral-go/api/nat/client"
-	"github.com/cryptopunkscc/astral-go/astral"
-	"github.com/cryptopunkscc/astral-go/astral/channel"
-	"github.com/cryptopunkscc/astral-go/lib/astrald"
-	"github.com/cryptopunkscc/astral-go/lib/routing"
+	natclient "github.com/astralp2p/astral-go/api/nat/client"
+	"github.com/astralp2p/astral-go/astral"
+	"github.com/astralp2p/astral-go/astral/channel"
+	"github.com/astralp2p/astral-go/lib/astrald"
+	"github.com/astralp2p/astral-go/lib/routing"
 )
 
 type opPunchArgs struct {

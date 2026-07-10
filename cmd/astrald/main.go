@@ -7,8 +7,8 @@ import (
 	"os/signal"
 	"syscall"
 
-	_ "github.com/cryptopunkscc/astrald/mod/all"
-	_ "github.com/cryptopunkscc/astrald/mod/all/views"
+	_ "github.com/astralp2p/astrald/mod/all"
+	_ "github.com/astralp2p/astrald/mod/all/views"
 )
 
 // Exit statuses

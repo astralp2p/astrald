@@ -2,7 +2,7 @@ package fs
 
 import (
 	"errors"
-	"github.com/cryptopunkscc/astral-go/sig"
+	"github.com/astralp2p/astral-go/sig"
 	"github.com/fsnotify/fsnotify"
 	"os"
 	"path/filepath"

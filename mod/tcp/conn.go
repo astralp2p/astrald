@@ -1,11 +1,11 @@
 package tcp
 
 import (
-	"github.com/cryptopunkscc/astral-go/api/tcp"
-	exonetmod "github.com/cryptopunkscc/astrald/mod/exonet"
+	"github.com/astralp2p/astral-go/api/tcp"
+	exonetmod "github.com/astralp2p/astrald/mod/exonet"
 	"net"
 
-	"github.com/cryptopunkscc/astral-go/api/exonet"
+	"github.com/astralp2p/astral-go/api/exonet"
 )
 
 var _ exonetmod.Conn = Conn{}

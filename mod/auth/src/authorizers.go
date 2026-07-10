@@ -1,8 +1,8 @@
 package auth
 
 import (
-	"github.com/cryptopunkscc/astral-go/astral"
-	"github.com/cryptopunkscc/astrald/mod/auth"
+	"github.com/astralp2p/astral-go/astral"
+	"github.com/astralp2p/astrald/mod/auth"
 )
 
 func (mod *Module) AuthorizeSudo(ctx *astral.Context, a *auth.SudoAction) bool {

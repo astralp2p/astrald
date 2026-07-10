@@ -1,6 +1,6 @@
 package apphost
 
-import "github.com/cryptopunkscc/astral-go/astral"
+import "github.com/astralp2p/astral-go/astral"
 
 // HoldObject reports whether the given object is currently held by any app.
 // Returns true on DB error to prevent premature garbage collection (fail-closed).

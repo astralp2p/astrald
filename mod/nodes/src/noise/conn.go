@@ -1,10 +1,10 @@
 package noise
 
 import (
-	"github.com/cryptopunkscc/astral-go/api/exonet"
-	"github.com/cryptopunkscc/astral-go/astral"
-	"github.com/cryptopunkscc/astrald/brontide"
-	exonetmod "github.com/cryptopunkscc/astrald/mod/exonet"
+	"github.com/astralp2p/astral-go/api/exonet"
+	"github.com/astralp2p/astral-go/astral"
+	"github.com/astralp2p/astrald/brontide"
+	exonetmod "github.com/astralp2p/astrald/mod/exonet"
 )
 
 var _ exonetmod.Conn = &Conn{}

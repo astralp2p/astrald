@@ -1,8 +1,8 @@
 package bip137sig
 
-import "github.com/cryptopunkscc/astral-go/api/crypto"
+import "github.com/astralp2p/astral-go/api/crypto"
 import (
-	"github.com/cryptopunkscc/astral-go/api/bip137sig"
+	"github.com/astralp2p/astral-go/api/bip137sig"
 )
 
 const ModuleName = "bip137sig"

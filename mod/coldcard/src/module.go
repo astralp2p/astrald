@@ -1,14 +1,14 @@
 package coldcard
 
 import (
-	"github.com/cryptopunkscc/astral-go/astral"
-	"github.com/cryptopunkscc/astral-go/astral/log"
-	"github.com/cryptopunkscc/astral-go/lib/routing"
-	"github.com/cryptopunkscc/astral-go/sig"
-	"github.com/cryptopunkscc/astrald/mod/coldcard"
-	"github.com/cryptopunkscc/astrald/mod/coldcard/ckcc"
-	"github.com/cryptopunkscc/astrald/mod/crypto"
-	"github.com/cryptopunkscc/astrald/resources"
+	"github.com/astralp2p/astral-go/astral"
+	"github.com/astralp2p/astral-go/astral/log"
+	"github.com/astralp2p/astral-go/lib/routing"
+	"github.com/astralp2p/astral-go/sig"
+	"github.com/astralp2p/astrald/mod/coldcard"
+	"github.com/astralp2p/astrald/mod/coldcard/ckcc"
+	"github.com/astralp2p/astrald/mod/crypto"
+	"github.com/astralp2p/astrald/resources"
 )
 
 type Deps struct {

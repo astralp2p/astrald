@@ -5,5 +5,5 @@
   "main": "index.js",
   "description": "JavaScript client for the astrald apphost WebSocket protocol.",
   "license": "MIT",
-  "repository": "https://github.com/cryptopunkscc/astrald"
+  "repository": "https://github.com/astralp2p/astrald"
 }

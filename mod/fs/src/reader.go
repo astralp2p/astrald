@@ -4,7 +4,7 @@ import (
 	"io"
 	"os"
 
-	"github.com/cryptopunkscc/astrald/mod/objects"
+	"github.com/astralp2p/astrald/mod/objects"
 )
 
 // Reader wraps a file with an optional byte limit and a back-reference to the owning repository.

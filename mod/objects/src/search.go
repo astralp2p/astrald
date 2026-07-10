@@ -1,14 +1,14 @@
 package objects
 
 import (
-	objectsmod "github.com/cryptopunkscc/astrald/mod/objects"
+	objectsmod "github.com/astralp2p/astrald/mod/objects"
 	"sync"
 
-	"github.com/cryptopunkscc/astral-go/api/objects"
-	objectscli "github.com/cryptopunkscc/astral-go/api/objects/client"
-	"github.com/cryptopunkscc/astral-go/astral"
-	"github.com/cryptopunkscc/astral-go/lib/astrald"
-	"github.com/cryptopunkscc/astral-go/sig"
+	"github.com/astralp2p/astral-go/api/objects"
+	objectscli "github.com/astralp2p/astral-go/api/objects/client"
+	"github.com/astralp2p/astral-go/astral"
+	"github.com/astralp2p/astral-go/lib/astrald"
+	"github.com/astralp2p/astral-go/sig"
 )
 
 // Search runs all local searchers, and network searchers when the context zone permits, merging their results into one channel.

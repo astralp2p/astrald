@@ -3,10 +3,10 @@ package user
 import (
 	"fmt"
 
-	"github.com/cryptopunkscc/astral-go/api/tree"
-	"github.com/cryptopunkscc/astral-go/api/user"
-	"github.com/cryptopunkscc/astral-go/astral"
-	"github.com/cryptopunkscc/astral-go/lib/query"
+	"github.com/astralp2p/astral-go/api/tree"
+	"github.com/astralp2p/astral-go/api/user"
+	"github.com/astralp2p/astral-go/astral"
+	"github.com/astralp2p/astral-go/lib/query"
 )
 
 // NOTE: Legacy methods below are result of lack of universal solution to

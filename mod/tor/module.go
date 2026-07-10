@@ -1,7 +1,7 @@
 package tor
 
 import (
-	"github.com/cryptopunkscc/astrald/mod/exonet"
+	"github.com/astralp2p/astrald/mod/exonet"
 )
 
 // Module is the contract a Tor integration must satisfy: it can dial outbound connections,

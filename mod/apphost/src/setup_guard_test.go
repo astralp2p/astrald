@@ -1,11 +1,11 @@
 package apphost
 
 import (
-	usermod "github.com/cryptopunkscc/astrald/mod/user"
+	usermod "github.com/astralp2p/astrald/mod/user"
 	"testing"
 
-	"github.com/cryptopunkscc/astral-go/api/user"
-	"github.com/cryptopunkscc/astral-go/astral"
+	"github.com/astralp2p/astral-go/api/user"
+	"github.com/astralp2p/astral-go/astral"
 )
 
 // stubUser satisfies usermod.Module; only Ready and Identity are exercised.

@@ -1,8 +1,8 @@
 package nodes
 
-import "github.com/cryptopunkscc/astrald/mod/scheduler"
+import "github.com/astralp2p/astrald/mod/scheduler"
 import (
-	"github.com/cryptopunkscc/astral-go/api/nodes"
+	"github.com/astralp2p/astral-go/api/nodes"
 )
 
 // LinkProducerTask is a scheduler task whose Result is valid only after the task completes.

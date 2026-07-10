@@ -1,8 +1,8 @@
 package tcp
 
 import (
-	"github.com/cryptopunkscc/astral-go/api/ip"
-	"github.com/cryptopunkscc/astral-go/api/tcp"
+	"github.com/astralp2p/astral-go/api/ip"
+	"github.com/astralp2p/astral-go/api/tcp"
 )
 
 func (mod *Module) PublicIPCandidates() (list []ip.IP) {

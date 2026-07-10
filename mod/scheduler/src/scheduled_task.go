@@ -5,8 +5,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/cryptopunkscc/astral-go/astral"
-	"github.com/cryptopunkscc/astrald/mod/scheduler"
+	"github.com/astralp2p/astral-go/astral"
+	"github.com/astralp2p/astrald/mod/scheduler"
 )
 
 type ScheduledTask struct {

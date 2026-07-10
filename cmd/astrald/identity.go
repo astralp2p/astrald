@@ -3,10 +3,10 @@ package main
 import (
 	"bytes"
 
-	"github.com/cryptopunkscc/astral-go/api/crypto"
-	"github.com/cryptopunkscc/astral-go/api/secp256k1"
-	"github.com/cryptopunkscc/astral-go/astral"
-	"github.com/cryptopunkscc/astrald/resources"
+	"github.com/astralp2p/astral-go/api/crypto"
+	"github.com/astralp2p/astral-go/api/secp256k1"
+	"github.com/astralp2p/astral-go/astral"
+	"github.com/astralp2p/astrald/resources"
 )
 
 // loadNodeIdentity loads node's identity from resources. Generates a new identity if we don't have one yet.

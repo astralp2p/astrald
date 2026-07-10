@@ -4,11 +4,11 @@ import (
 	"errors"
 	"net"
 
-	"github.com/cryptopunkscc/astral-go/api/tor"
-	"github.com/cryptopunkscc/astral-go/astral"
-	"github.com/cryptopunkscc/astral-go/astral/log"
-	"github.com/cryptopunkscc/astrald/core"
-	"github.com/cryptopunkscc/astrald/core/assets"
+	"github.com/astralp2p/astral-go/api/tor"
+	"github.com/astralp2p/astral-go/astral"
+	"github.com/astralp2p/astral-go/astral/log"
+	"github.com/astralp2p/astrald/core"
+	"github.com/astralp2p/astrald/core/assets"
 	"golang.org/x/net/proxy"
 )
 

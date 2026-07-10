@@ -2,13 +2,13 @@ package kcp
 
 import (
 	"fmt"
-	exonetmod "github.com/cryptopunkscc/astrald/mod/exonet"
-	kcpmod "github.com/cryptopunkscc/astrald/mod/kcp"
+	exonetmod "github.com/astralp2p/astrald/mod/exonet"
+	kcpmod "github.com/astralp2p/astrald/mod/kcp"
 	"net"
 
-	"github.com/cryptopunkscc/astral-go/api/exonet"
-	"github.com/cryptopunkscc/astral-go/api/kcp"
-	"github.com/cryptopunkscc/astral-go/astral"
+	"github.com/astralp2p/astral-go/api/exonet"
+	"github.com/astralp2p/astral-go/api/kcp"
+	"github.com/astralp2p/astral-go/astral"
 	"github.com/pkg/errors"
 	kcpgo "github.com/xtaci/kcp-go/v5"
 )

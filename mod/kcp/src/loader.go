@@ -2,14 +2,14 @@ package kcp
 
 import (
 	"fmt"
-	kcpmod "github.com/cryptopunkscc/astrald/mod/kcp"
+	kcpmod "github.com/astralp2p/astrald/mod/kcp"
 	"strings"
 
-	"github.com/cryptopunkscc/astral-go/api/kcp"
-	"github.com/cryptopunkscc/astral-go/astral"
-	"github.com/cryptopunkscc/astral-go/astral/log"
-	"github.com/cryptopunkscc/astrald/core"
-	"github.com/cryptopunkscc/astrald/core/assets"
+	"github.com/astralp2p/astral-go/api/kcp"
+	"github.com/astralp2p/astral-go/astral"
+	"github.com/astralp2p/astral-go/astral/log"
+	"github.com/astralp2p/astrald/core"
+	"github.com/astralp2p/astrald/core/assets"
 )
 
 type Loader struct{}

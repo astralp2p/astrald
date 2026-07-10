@@ -1,8 +1,8 @@
 package dir
 
 import (
-	"github.com/cryptopunkscc/astral-go/api/dir"
-	"github.com/cryptopunkscc/astrald/mod/nearby"
+	"github.com/astralp2p/astral-go/api/dir"
+	"github.com/astralp2p/astrald/mod/nearby"
 )
 
 var _ nearby.Composer = &Module{}

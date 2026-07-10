@@ -2,14 +2,14 @@ package objects
 
 import (
 	"fmt"
-	objectsmod "github.com/cryptopunkscc/astrald/mod/objects"
+	objectsmod "github.com/astralp2p/astrald/mod/objects"
 	"time"
 
-	"github.com/cryptopunkscc/astral-go/api/objects"
-	"github.com/cryptopunkscc/astral-go/astral"
-	"github.com/cryptopunkscc/astral-go/astral/channel"
-	"github.com/cryptopunkscc/astral-go/lib/routing"
-	"github.com/cryptopunkscc/astral-go/sig"
+	"github.com/astralp2p/astral-go/api/objects"
+	"github.com/astralp2p/astral-go/astral"
+	"github.com/astralp2p/astral-go/astral/channel"
+	"github.com/astralp2p/astral-go/lib/routing"
+	"github.com/astralp2p/astral-go/sig"
 )
 
 type SearchArgs struct {

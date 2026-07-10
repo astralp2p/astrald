@@ -1,9 +1,9 @@
 package views
 
 import (
-	"github.com/cryptopunkscc/astral-go/astral"
-	"github.com/cryptopunkscc/astral-go/astral/log/theme"
-	"github.com/cryptopunkscc/astral-go/lib/query"
+	"github.com/astralp2p/astral-go/astral"
+	"github.com/astralp2p/astral-go/astral/log/theme"
+	"github.com/astralp2p/astral-go/lib/query"
 )
 
 type QueryStringView struct {

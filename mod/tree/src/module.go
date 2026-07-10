@@ -4,18 +4,18 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	treemod "github.com/cryptopunkscc/astrald/mod/tree"
+	treemod "github.com/astralp2p/astrald/mod/tree"
 	"strings"
 	"sync"
 
-	"github.com/cryptopunkscc/astral-go/api/tree"
-	treecli "github.com/cryptopunkscc/astral-go/api/tree/client"
-	"github.com/cryptopunkscc/astral-go/astral"
-	"github.com/cryptopunkscc/astral-go/astral/log"
-	"github.com/cryptopunkscc/astral-go/lib/routing"
-	"github.com/cryptopunkscc/astral-go/sig"
-	"github.com/cryptopunkscc/astrald/mod/dir"
-	"github.com/cryptopunkscc/astrald/resources"
+	"github.com/astralp2p/astral-go/api/tree"
+	treecli "github.com/astralp2p/astral-go/api/tree/client"
+	"github.com/astralp2p/astral-go/astral"
+	"github.com/astralp2p/astral-go/astral/log"
+	"github.com/astralp2p/astral-go/lib/routing"
+	"github.com/astralp2p/astral-go/sig"
+	"github.com/astralp2p/astrald/mod/dir"
+	"github.com/astralp2p/astrald/resources"
 )
 
 type Deps struct {

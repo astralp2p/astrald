@@ -2,12 +2,12 @@ package shell
 
 import (
 	"errors"
-	authmod "github.com/cryptopunkscc/astrald/mod/auth"
+	authmod "github.com/astralp2p/astrald/mod/auth"
 	"io"
 
-	"github.com/cryptopunkscc/astral-go/api/auth"
-	"github.com/cryptopunkscc/astral-go/astral"
-	"github.com/cryptopunkscc/astral-go/lib/routing"
+	"github.com/astralp2p/astral-go/api/auth"
+	"github.com/astralp2p/astral-go/astral"
+	"github.com/astralp2p/astral-go/lib/routing"
 )
 
 type opShellArgs struct {

@@ -3,11 +3,11 @@ package auth
 import (
 	"bytes"
 	"fmt"
-	authmod "github.com/cryptopunkscc/astrald/mod/auth"
+	authmod "github.com/astralp2p/astrald/mod/auth"
 
-	"github.com/cryptopunkscc/astral-go/api/auth"
-	"github.com/cryptopunkscc/astral-go/api/objects"
-	"github.com/cryptopunkscc/astral-go/astral"
+	"github.com/astralp2p/astral-go/api/auth"
+	"github.com/astralp2p/astral-go/api/objects"
+	"github.com/astralp2p/astral-go/astral"
 )
 
 // IndexContract verifies and stores sc in the local DB; skips silently if already indexed.

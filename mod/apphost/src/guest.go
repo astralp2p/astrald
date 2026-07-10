@@ -3,19 +3,19 @@ package apphost
 import (
 	"context"
 	"errors"
-	apphostmod "github.com/cryptopunkscc/astrald/mod/apphost"
-	authmod "github.com/cryptopunkscc/astrald/mod/auth"
+	apphostmod "github.com/astralp2p/astrald/mod/apphost"
+	authmod "github.com/astralp2p/astrald/mod/auth"
 	"io"
 	"net"
 	"strings"
 	"sync/atomic"
 
-	"github.com/cryptopunkscc/astral-go/api/apphost"
-	"github.com/cryptopunkscc/astral-go/api/auth"
-	"github.com/cryptopunkscc/astral-go/astral"
-	"github.com/cryptopunkscc/astral-go/astral/channel"
-	"github.com/cryptopunkscc/astral-go/lib/query"
-	"github.com/cryptopunkscc/astral-go/streams"
+	"github.com/astralp2p/astral-go/api/apphost"
+	"github.com/astralp2p/astral-go/api/auth"
+	"github.com/astralp2p/astral-go/astral"
+	"github.com/astralp2p/astral-go/astral/channel"
+	"github.com/astralp2p/astral-go/lib/query"
+	"github.com/astralp2p/astral-go/streams"
 )
 
 // Mode is the wire format used by a Guest connection.

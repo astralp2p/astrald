@@ -2,11 +2,11 @@ package indexing
 
 import (
 	"errors"
-	indexingmod "github.com/cryptopunkscc/astrald/mod/indexing"
+	indexingmod "github.com/astralp2p/astrald/mod/indexing"
 
-	"github.com/cryptopunkscc/astral-go/api/indexing"
-	"github.com/cryptopunkscc/astral-go/api/tree"
-	"github.com/cryptopunkscc/astral-go/astral"
+	"github.com/astralp2p/astral-go/api/indexing"
+	"github.com/astralp2p/astral-go/api/tree"
+	"github.com/astralp2p/astral-go/astral"
 )
 
 // indexerHandle is the in-memory view of a registered indexer.

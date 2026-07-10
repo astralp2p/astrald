@@ -3,7 +3,7 @@ package crypto
 import (
 	"errors"
 
-	"github.com/cryptopunkscc/astrald/mod/crypto"
+	"github.com/astralp2p/astrald/mod/crypto"
 )
 
 // dispatchResult returns the first engine that implements Cap and succeeds.

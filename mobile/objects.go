@@ -2,12 +2,12 @@ package mobile
 
 import (
 	"errors"
-	objectsmod "github.com/cryptopunkscc/astrald/mod/objects"
+	objectsmod "github.com/astralp2p/astrald/mod/objects"
 	"io"
 
-	"github.com/cryptopunkscc/astral-go/api/objects"
-	"github.com/cryptopunkscc/astral-go/astral"
-	"github.com/cryptopunkscc/astrald/core"
+	"github.com/astralp2p/astral-go/api/objects"
+	"github.com/astralp2p/astral-go/astral"
+	"github.com/astralp2p/astrald/core"
 )
 
 // OpenObject opens the object's data through the node's objects module,

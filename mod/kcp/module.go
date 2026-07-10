@@ -1,7 +1,7 @@
 package kcp
 
 import (
-	"github.com/cryptopunkscc/astrald/mod/exonet"
+	"github.com/astralp2p/astrald/mod/exonet"
 )
 
 const ModuleName = "kcp"

@@ -2,12 +2,12 @@ package ip
 
 import (
 	"fmt"
-	ipmod "github.com/cryptopunkscc/astrald/mod/ip"
+	ipmod "github.com/astralp2p/astrald/mod/ip"
 	"os/exec"
 	"runtime"
 	"strings"
 
-	"github.com/cryptopunkscc/astral-go/api/ip"
+	"github.com/astralp2p/astral-go/api/ip"
 )
 
 func (mod *Module) DefaultGateway() (ip.IP, error) {

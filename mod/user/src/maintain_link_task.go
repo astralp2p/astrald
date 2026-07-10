@@ -1,16 +1,16 @@
 package user
 
 import (
-	nodesmod "github.com/cryptopunkscc/astrald/mod/nodes"
+	nodesmod "github.com/astralp2p/astrald/mod/nodes"
 	"sync/atomic"
 	"time"
 
-	"github.com/cryptopunkscc/astral-go/api/nodes"
-	"github.com/cryptopunkscc/astral-go/astral"
-	"github.com/cryptopunkscc/astral-go/sig"
-	"github.com/cryptopunkscc/astrald/mod/events"
-	"github.com/cryptopunkscc/astrald/mod/scheduler"
-	"github.com/cryptopunkscc/astrald/mod/user"
+	"github.com/astralp2p/astral-go/api/nodes"
+	"github.com/astralp2p/astral-go/astral"
+	"github.com/astralp2p/astral-go/sig"
+	"github.com/astralp2p/astrald/mod/events"
+	"github.com/astralp2p/astrald/mod/scheduler"
+	"github.com/astralp2p/astrald/mod/user"
 )
 
 var _ scheduler.EventReceiver = &MaintainLinkTask{}

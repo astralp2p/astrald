@@ -1,6 +1,6 @@
 package user
 
-import "github.com/cryptopunkscc/astrald/mod/scheduler"
+import "github.com/astralp2p/astrald/mod/scheduler"
 
 // SyncNodesAction reconciles local node membership with a remote identity,
 // exchanging swarm member lists and contracts.

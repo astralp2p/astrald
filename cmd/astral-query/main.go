@@ -7,11 +7,11 @@ import (
 	"os"
 	"strings"
 
-	dircli "github.com/cryptopunkscc/astral-go/api/dir/client"
-	"github.com/cryptopunkscc/astral-go/astral"
-	"github.com/cryptopunkscc/astral-go/lib/astrald"
-	"github.com/cryptopunkscc/astral-go/lib/query"
-	"github.com/cryptopunkscc/astrald/lib/arl"
+	dircli "github.com/astralp2p/astral-go/api/dir/client"
+	"github.com/astralp2p/astral-go/astral"
+	"github.com/astralp2p/astral-go/lib/astrald"
+	"github.com/astralp2p/astral-go/lib/query"
+	"github.com/astralp2p/astrald/lib/arl"
 )
 
 const (

@@ -4,16 +4,16 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	objectsmod "github.com/cryptopunkscc/astrald/mod/objects"
+	objectsmod "github.com/astralp2p/astrald/mod/objects"
 	"io"
 	"os"
 	"path/filepath"
 
-	"github.com/cryptopunkscc/astral-go/api/objects"
-	"github.com/cryptopunkscc/astral-go/astral"
-	"github.com/cryptopunkscc/astral-go/sig"
-	"github.com/cryptopunkscc/astrald/lib/paths"
-	"github.com/cryptopunkscc/astrald/mod/fs"
+	"github.com/astralp2p/astral-go/api/objects"
+	"github.com/astralp2p/astral-go/astral"
+	"github.com/astralp2p/astral-go/sig"
+	"github.com/astralp2p/astrald/lib/paths"
+	"github.com/astralp2p/astrald/mod/fs"
 )
 
 var _ objectsmod.Repository = &WatchRepository{}

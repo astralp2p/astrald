@@ -1,11 +1,11 @@
 package auth
 
 import (
-	"github.com/cryptopunkscc/astral-go/api/auth"
-	"github.com/cryptopunkscc/astral-go/astral/fmt"
-	"github.com/cryptopunkscc/astral-go/astral/log/styles"
-	"github.com/cryptopunkscc/astral-go/astral/log/theme"
-	"github.com/cryptopunkscc/astrald/mod/log/views"
+	"github.com/astralp2p/astral-go/api/auth"
+	"github.com/astralp2p/astral-go/astral/fmt"
+	"github.com/astralp2p/astral-go/astral/log/styles"
+	"github.com/astralp2p/astral-go/astral/log/theme"
+	"github.com/astralp2p/astrald/mod/log/views"
 )
 
 type SignedContractView struct {

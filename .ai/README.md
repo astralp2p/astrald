@@ -6,7 +6,7 @@ Queries open bidirectional Sessions over encrypted Links, and Objects are
 immutable and content-addressed. Go 1.25+.
 
 Astrald imports its primitives, wire types (`api/`), and client libraries from
-`github.com/cryptopunkscc/astral-go`; it never defines them. Protocol, wire,
+`github.com/astralp2p/astral-go`; it never defines them. Protocol, wire,
 and domain truth lives in the spec at `.ai/system/` (the astral-docs
 submodule). These notes cover only node-side daemon internals.
 

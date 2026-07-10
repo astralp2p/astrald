@@ -1,10 +1,10 @@
 package auth
 
 import (
-	"github.com/cryptopunkscc/astral-go/api/auth"
+	"github.com/astralp2p/astral-go/api/auth"
 	"reflect"
 
-	"github.com/cryptopunkscc/astral-go/astral"
+	"github.com/astralp2p/astral-go/astral"
 )
 
 // Handler authorizes a typed action object.

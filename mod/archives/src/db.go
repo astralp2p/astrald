@@ -1,8 +1,8 @@
 package archives
 
 import (
-	"github.com/cryptopunkscc/astral-go/astral"
-	"github.com/cryptopunkscc/astrald/mod/archives"
+	"github.com/astralp2p/astral-go/astral"
+	"github.com/astralp2p/astrald/mod/archives"
 	"time"
 )
 

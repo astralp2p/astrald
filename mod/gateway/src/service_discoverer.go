@@ -1,10 +1,10 @@
 package gateway
 
 import (
-	"github.com/cryptopunkscc/astral-go/api/services"
-	"github.com/cryptopunkscc/astral-go/astral"
-	"github.com/cryptopunkscc/astrald/mod/gateway"
-	servicesmod "github.com/cryptopunkscc/astrald/mod/services"
+	"github.com/astralp2p/astral-go/api/services"
+	"github.com/astralp2p/astral-go/astral"
+	"github.com/astralp2p/astrald/mod/gateway"
+	servicesmod "github.com/astralp2p/astrald/mod/services"
 )
 
 var _ servicesmod.Discoverer = &Module{}

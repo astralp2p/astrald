@@ -3,10 +3,10 @@ package indexing
 import (
 	"errors"
 	"fmt"
-	modindexingmod "github.com/cryptopunkscc/astrald/mod/indexing"
+	modindexingmod "github.com/astralp2p/astrald/mod/indexing"
 
-	modindexing "github.com/cryptopunkscc/astral-go/api/indexing"
-	"github.com/cryptopunkscc/astral-go/astral"
+	modindexing "github.com/astralp2p/astral-go/api/indexing"
+	"github.com/astralp2p/astral-go/astral"
 )
 
 // EnableRepo persists repoName in the tree and launches its sync goroutine.

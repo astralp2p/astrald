@@ -1,9 +1,9 @@
 package apphost
 
 import (
-	"github.com/cryptopunkscc/astral-go/api/nodes"
-	"github.com/cryptopunkscc/astral-go/astral"
-	"github.com/cryptopunkscc/astrald/core"
+	"github.com/astralp2p/astral-go/api/nodes"
+	"github.com/astralp2p/astral-go/astral"
+	"github.com/astralp2p/astrald/core"
 )
 
 var _ core.QueryPreprocessor = &Module{}

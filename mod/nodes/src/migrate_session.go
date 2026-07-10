@@ -1,10 +1,10 @@
 package nodes
 
 import (
-	"github.com/cryptopunkscc/astral-go/api/nodes"
-	nodesClient "github.com/cryptopunkscc/astral-go/api/nodes/client"
-	"github.com/cryptopunkscc/astral-go/astral"
-	"github.com/cryptopunkscc/astral-go/lib/astrald"
+	"github.com/astralp2p/astral-go/api/nodes"
+	nodesClient "github.com/astralp2p/astral-go/api/nodes/client"
+	"github.com/astralp2p/astral-go/astral"
+	"github.com/astralp2p/astral-go/lib/astrald"
 )
 
 // migrateSession migrates single session (initiator side).

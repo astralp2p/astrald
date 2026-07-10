@@ -9,11 +9,11 @@ import (
 	"sync"
 	"time"
 
-	"github.com/cryptopunkscc/astral-go/astral"
-	"github.com/cryptopunkscc/astral-go/astral/log"
-	"github.com/cryptopunkscc/astral-go/sig"
-	"github.com/cryptopunkscc/astrald/lib/paths"
-	"github.com/cryptopunkscc/astrald/mod/fs"
+	"github.com/astralp2p/astral-go/astral"
+	"github.com/astralp2p/astral-go/astral/log"
+	"github.com/astralp2p/astral-go/sig"
+	"github.com/astralp2p/astrald/lib/paths"
+	"github.com/astralp2p/astrald/mod/fs"
 	"golang.org/x/time/rate"
 )
 

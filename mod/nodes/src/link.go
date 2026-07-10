@@ -2,18 +2,18 @@ package nodes
 
 import (
 	"errors"
-	exonetmod "github.com/cryptopunkscc/astrald/mod/exonet"
+	exonetmod "github.com/astralp2p/astrald/mod/exonet"
 	"io"
 	"math/rand"
 	"sync"
 	"sync/atomic"
 	"time"
 
-	"github.com/cryptopunkscc/astral-go/api/exonet"
-	"github.com/cryptopunkscc/astral-go/astral"
-	"github.com/cryptopunkscc/astral-go/astral/channel"
-	"github.com/cryptopunkscc/astral-go/sig"
-	"github.com/cryptopunkscc/astrald/mod/nodes/frames"
+	"github.com/astralp2p/astral-go/api/exonet"
+	"github.com/astralp2p/astral-go/astral"
+	"github.com/astralp2p/astral-go/astral/channel"
+	"github.com/astralp2p/astral-go/sig"
+	"github.com/astralp2p/astrald/mod/nodes/frames"
 )
 
 type Ping struct {

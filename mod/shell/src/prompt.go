@@ -3,8 +3,8 @@ package shell
 import (
 	"io"
 
-	"github.com/cryptopunkscc/astral-go/astral"
-	"github.com/cryptopunkscc/astral-go/astral/fmt"
+	"github.com/astralp2p/astral-go/astral"
+	"github.com/astralp2p/astral-go/astral/fmt"
 )
 
 type Prompt struct {

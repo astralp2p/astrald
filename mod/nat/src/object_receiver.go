@@ -1,9 +1,9 @@
 package nat
 
 import (
-	"github.com/cryptopunkscc/astral-go/api/nodes"
-	"github.com/cryptopunkscc/astrald/mod/events"
-	"github.com/cryptopunkscc/astrald/mod/objects"
+	"github.com/astralp2p/astral-go/api/nodes"
+	"github.com/astralp2p/astrald/mod/events"
+	"github.com/astralp2p/astrald/mod/objects"
 )
 
 // ReceiveObject re-evaluates the enabled state when a new observed endpoint event arrives.

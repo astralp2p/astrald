@@ -3,14 +3,14 @@ package tcp
 import (
 	"context"
 	"fmt"
-	tcpmod "github.com/cryptopunkscc/astrald/mod/tcp"
+	tcpmod "github.com/astralp2p/astrald/mod/tcp"
 	"net"
 	"sync/atomic"
 	"time"
 
-	"github.com/cryptopunkscc/astral-go/api/tcp"
-	"github.com/cryptopunkscc/astral-go/astral"
-	"github.com/cryptopunkscc/astrald/mod/exonet"
+	"github.com/astralp2p/astral-go/api/tcp"
+	"github.com/astralp2p/astral-go/astral"
+	"github.com/astralp2p/astrald/mod/exonet"
 )
 
 var _ exonet.EphemeralListener = &Server{}

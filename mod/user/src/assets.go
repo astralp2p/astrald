@@ -1,6 +1,6 @@
 package user
 
-import "github.com/cryptopunkscc/astral-go/astral"
+import "github.com/astralp2p/astral-go/astral"
 
 // AddAsset adds an object to user's assets
 func (mod *Module) AddAsset(objectID *astral.ObjectID) (err error) {

@@ -4,7 +4,7 @@ Use these patterns when defining typed payloads, storing objects, or integrating
 with `objects` module extension points.
 
 In the Describer, Searcher, and Finder snippets below, `objects` is
-`github.com/cryptopunkscc/astral-go/api/objects` (the extension-point types);
+`github.com/astralp2p/astral-go/api/objects` (the extension-point types);
 in the Receiver and Holder snippets, `objects` is astrald's local `mod/objects`
 package.
 

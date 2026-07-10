@@ -4,8 +4,8 @@ import (
 	"bytes"
 	"io"
 
-	"github.com/cryptopunkscc/astral-go/astral"
-	"github.com/cryptopunkscc/astral-go/streams"
+	"github.com/astralp2p/astral-go/astral"
+	"github.com/astralp2p/astral-go/streams"
 )
 
 var _ astral.Object = &Broadcast{}

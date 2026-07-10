@@ -19,7 +19,7 @@
 // To produce an AAR for Android:
 //
 //	gomobile bind -target=android -o astrald.aar
-//	    github.com/cryptopunkscc/astrald/mobile
+//	    github.com/astralp2p/astrald/mobile
 //
 // All public types and methods in this package are bindable by gomobile:
 // only string, int, bool, []byte, error, interfaces with bindable methods,

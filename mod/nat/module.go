@@ -1,8 +1,8 @@
 package nat
 
-import "github.com/cryptopunkscc/astral-go/astral"
+import "github.com/astralp2p/astral-go/astral"
 import (
-	"github.com/cryptopunkscc/astral-go/api/nat"
+	"github.com/astralp2p/astral-go/api/nat"
 )
 
 const ModuleName = "nat"

@@ -1,6 +1,6 @@
 package scheduler
 
-import "github.com/cryptopunkscc/astral-go/astral"
+import "github.com/astralp2p/astral-go/astral"
 
 // TaskFunc is a function that can be scheduled using Func()
 //

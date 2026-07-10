@@ -1,9 +1,9 @@
 package tcp
 
 import (
-	"github.com/cryptopunkscc/astral-go/api/tcp"
-	"github.com/cryptopunkscc/astral-go/astral/fmt"
-	"github.com/cryptopunkscc/astral-go/astral/log/theme"
+	"github.com/astralp2p/astral-go/api/tcp"
+	"github.com/astralp2p/astral-go/astral/fmt"
+	"github.com/astralp2p/astral-go/astral/log/theme"
 )
 
 type EndpointView struct {

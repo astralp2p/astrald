@@ -2,11 +2,11 @@ package nearby
 
 import (
 	"errors"
-	dirmod "github.com/cryptopunkscc/astrald/mod/dir"
+	dirmod "github.com/astralp2p/astrald/mod/dir"
 	"strings"
 
-	"github.com/cryptopunkscc/astral-go/api/dir"
-	"github.com/cryptopunkscc/astral-go/astral"
+	"github.com/astralp2p/astral-go/api/dir"
+	"github.com/astralp2p/astral-go/astral"
 )
 
 var _ dirmod.Resolver = &Module{}

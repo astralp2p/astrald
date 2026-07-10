@@ -1,8 +1,8 @@
 package crypto
 
 import (
-	"github.com/cryptopunkscc/astral-go/api/crypto"
-	"github.com/cryptopunkscc/astral-go/astral"
+	"github.com/astralp2p/astral-go/api/crypto"
+	"github.com/astralp2p/astral-go/astral"
 )
 
 // Engine is a marker for an opaque cryptographic engine value. An engine is any

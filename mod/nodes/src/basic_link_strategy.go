@@ -1,13 +1,13 @@
 package nodes
 
 import (
-	nodesmod "github.com/cryptopunkscc/astrald/mod/nodes"
+	nodesmod "github.com/astralp2p/astrald/mod/nodes"
 	"slices"
 	"sync"
 
-	"github.com/cryptopunkscc/astral-go/api/nodes"
-	"github.com/cryptopunkscc/astral-go/astral"
-	"github.com/cryptopunkscc/astral-go/sig"
+	"github.com/astralp2p/astral-go/api/nodes"
+	"github.com/astralp2p/astral-go/astral"
+	"github.com/astralp2p/astral-go/sig"
 )
 
 // BasicLinkStrategy dials all known endpoints of the target node in parallel

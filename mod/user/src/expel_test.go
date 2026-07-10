@@ -4,9 +4,9 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/cryptopunkscc/astral-go/api/auth"
-	"github.com/cryptopunkscc/astral-go/api/user"
-	"github.com/cryptopunkscc/astral-go/astral"
+	"github.com/astralp2p/astral-go/api/auth"
+	"github.com/astralp2p/astral-go/api/user"
+	"github.com/astralp2p/astral-go/astral"
 )
 
 // banModule builds a Module backed by an in-memory ban store, with issuer set as

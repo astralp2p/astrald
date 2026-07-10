@@ -6,7 +6,7 @@ import (
 	"io"
 	_log "log"
 
-	"github.com/cryptopunkscc/astral-go/astral/log"
+	"github.com/astralp2p/astral-go/astral/log"
 )
 
 const maxAdapterBuffer = 1 << 16 // 64kb

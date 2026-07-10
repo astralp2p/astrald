@@ -3,12 +3,12 @@ package nearby
 import (
 	"strconv"
 
-	"github.com/cryptopunkscc/astral-go/api/dir"
-	"github.com/cryptopunkscc/astral-go/api/nodes"
-	"github.com/cryptopunkscc/astral-go/astral/fmt"
-	"github.com/cryptopunkscc/astral-go/astral/log/styles"
-	"github.com/cryptopunkscc/astral-go/astral/log/theme"
-	"github.com/cryptopunkscc/astrald/mod/nearby"
+	"github.com/astralp2p/astral-go/api/dir"
+	"github.com/astralp2p/astral-go/api/nodes"
+	"github.com/astralp2p/astral-go/astral/fmt"
+	"github.com/astralp2p/astral-go/astral/log/styles"
+	"github.com/astralp2p/astral-go/astral/log/theme"
+	"github.com/astralp2p/astrald/mod/nearby"
 )
 
 type StatusView struct {

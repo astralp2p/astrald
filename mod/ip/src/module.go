@@ -2,18 +2,18 @@ package ip
 
 import (
 	"context"
-	ipmod "github.com/cryptopunkscc/astrald/mod/ip"
+	ipmod "github.com/astralp2p/astrald/mod/ip"
 	"net"
 	"strings"
 	"time"
 
-	"github.com/cryptopunkscc/astral-go/api/ip"
-	"github.com/cryptopunkscc/astral-go/astral"
-	"github.com/cryptopunkscc/astral-go/astral/log"
-	"github.com/cryptopunkscc/astral-go/lib/routing"
-	"github.com/cryptopunkscc/astral-go/sig"
-	"github.com/cryptopunkscc/astrald/mod/objects"
-	"github.com/cryptopunkscc/astrald/resources"
+	"github.com/astralp2p/astral-go/api/ip"
+	"github.com/astralp2p/astral-go/astral"
+	"github.com/astralp2p/astral-go/astral/log"
+	"github.com/astralp2p/astral-go/lib/routing"
+	"github.com/astralp2p/astral-go/sig"
+	"github.com/astralp2p/astrald/mod/objects"
+	"github.com/astralp2p/astrald/resources"
 )
 
 var _ ipmod.Module = &Module{}

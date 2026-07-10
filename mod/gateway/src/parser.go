@@ -3,11 +3,11 @@ package gateway
 import (
 	"errors"
 	"fmt"
-	exonetmod "github.com/cryptopunkscc/astrald/mod/exonet"
+	exonetmod "github.com/astralp2p/astrald/mod/exonet"
 	"strings"
 
-	"github.com/cryptopunkscc/astral-go/api/exonet"
-	"github.com/cryptopunkscc/astral-go/api/gateway"
+	"github.com/astralp2p/astral-go/api/exonet"
+	"github.com/astralp2p/astral-go/api/gateway"
 )
 
 var _ exonetmod.Parser = &Module{}

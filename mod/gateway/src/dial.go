@@ -1,15 +1,15 @@
 package gateway
 
 import (
-	"github.com/cryptopunkscc/astral-go/api/exonet"
-	"github.com/cryptopunkscc/astral-go/api/gateway"
-	gatewayClient "github.com/cryptopunkscc/astral-go/api/gateway/client"
-	"github.com/cryptopunkscc/astral-go/astral"
-	"github.com/cryptopunkscc/astral-go/astral/channel"
-	"github.com/cryptopunkscc/astral-go/lib/astrald"
-	"github.com/cryptopunkscc/astral-go/lib/query"
-	exonetmod "github.com/cryptopunkscc/astrald/mod/exonet"
-	gatewaymod "github.com/cryptopunkscc/astrald/mod/gateway"
+	"github.com/astralp2p/astral-go/api/exonet"
+	"github.com/astralp2p/astral-go/api/gateway"
+	gatewayClient "github.com/astralp2p/astral-go/api/gateway/client"
+	"github.com/astralp2p/astral-go/astral"
+	"github.com/astralp2p/astral-go/astral/channel"
+	"github.com/astralp2p/astral-go/lib/astrald"
+	"github.com/astralp2p/astral-go/lib/query"
+	exonetmod "github.com/astralp2p/astrald/mod/exonet"
+	gatewaymod "github.com/astralp2p/astrald/mod/gateway"
 )
 
 var _ exonetmod.Dialer = &Module{}

@@ -1,13 +1,13 @@
 package log
 
 import (
-	"github.com/cryptopunkscc/astral-go/astral"
-	"github.com/cryptopunkscc/astral-go/astral/fmt"
-	alog "github.com/cryptopunkscc/astral-go/astral/log"
-	"github.com/cryptopunkscc/astrald/core"
-	"github.com/cryptopunkscc/astrald/core/assets"
-	modlog "github.com/cryptopunkscc/astrald/mod/log"
-	"github.com/cryptopunkscc/astrald/mod/log/views"
+	"github.com/astralp2p/astral-go/astral"
+	"github.com/astralp2p/astral-go/astral/fmt"
+	alog "github.com/astralp2p/astral-go/astral/log"
+	"github.com/astralp2p/astrald/core"
+	"github.com/astralp2p/astrald/core/assets"
+	modlog "github.com/astralp2p/astrald/mod/log"
+	"github.com/astralp2p/astrald/mod/log/views"
 )
 
 type Loader struct{}

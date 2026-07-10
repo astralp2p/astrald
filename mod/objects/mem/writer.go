@@ -2,9 +2,9 @@ package mem
 
 import (
 	"bytes"
-	"github.com/cryptopunkscc/astral-go/api/objects"
-	"github.com/cryptopunkscc/astral-go/astral"
-	objectsmod "github.com/cryptopunkscc/astrald/mod/objects"
+	"github.com/astralp2p/astral-go/api/objects"
+	"github.com/astralp2p/astral-go/astral"
+	objectsmod "github.com/astralp2p/astrald/mod/objects"
 	"sync/atomic"
 )
 

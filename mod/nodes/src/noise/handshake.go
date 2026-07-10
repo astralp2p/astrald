@@ -4,8 +4,8 @@ import (
 	"context"
 	"errors"
 
-	"github.com/cryptopunkscc/astrald/brontide"
-	"github.com/cryptopunkscc/astrald/mod/exonet"
+	"github.com/astralp2p/astrald/brontide"
+	"github.com/astralp2p/astrald/mod/exonet"
 	"github.com/decred/dcrd/dcrec/secp256k1/v4"
 )
 

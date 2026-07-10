@@ -1,21 +1,21 @@
 package user
 
 import (
-	"github.com/cryptopunkscc/astral-go/api/nodes"
-	"github.com/cryptopunkscc/astral-go/api/objects"
-	"github.com/cryptopunkscc/astral-go/api/user"
-	"github.com/cryptopunkscc/astral-go/astral"
-	"github.com/cryptopunkscc/astrald/core"
-	"github.com/cryptopunkscc/astrald/mod/apphost"
-	"github.com/cryptopunkscc/astrald/mod/auth"
-	"github.com/cryptopunkscc/astrald/mod/crypto"
-	"github.com/cryptopunkscc/astrald/mod/dir"
-	"github.com/cryptopunkscc/astrald/mod/nearby"
-	nodesmod "github.com/cryptopunkscc/astrald/mod/nodes"
-	objectsmod "github.com/cryptopunkscc/astrald/mod/objects"
-	"github.com/cryptopunkscc/astrald/mod/scheduler"
-	"github.com/cryptopunkscc/astrald/mod/shell"
-	"github.com/cryptopunkscc/astrald/mod/tree"
+	"github.com/astralp2p/astral-go/api/nodes"
+	"github.com/astralp2p/astral-go/api/objects"
+	"github.com/astralp2p/astral-go/api/user"
+	"github.com/astralp2p/astral-go/astral"
+	"github.com/astralp2p/astrald/core"
+	"github.com/astralp2p/astrald/mod/apphost"
+	"github.com/astralp2p/astrald/mod/auth"
+	"github.com/astralp2p/astrald/mod/crypto"
+	"github.com/astralp2p/astrald/mod/dir"
+	"github.com/astralp2p/astrald/mod/nearby"
+	nodesmod "github.com/astralp2p/astrald/mod/nodes"
+	objectsmod "github.com/astralp2p/astrald/mod/objects"
+	"github.com/astralp2p/astrald/mod/scheduler"
+	"github.com/astralp2p/astrald/mod/shell"
+	"github.com/astralp2p/astrald/mod/tree"
 )
 
 type Deps struct {

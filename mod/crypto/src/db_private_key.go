@@ -1,8 +1,8 @@
 package crypto
 
 import (
-	"github.com/cryptopunkscc/astral-go/astral"
-	"github.com/cryptopunkscc/astrald/mod/crypto"
+	"github.com/astralp2p/astral-go/astral"
+	"github.com/astralp2p/astrald/mod/crypto"
 )
 
 type dbPrivateKey struct {

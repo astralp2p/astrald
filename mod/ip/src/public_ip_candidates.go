@@ -1,8 +1,8 @@
 package ip
 
 import (
-	"github.com/cryptopunkscc/astral-go/api/ip"
-	ipmod "github.com/cryptopunkscc/astrald/mod/ip"
+	"github.com/astralp2p/astral-go/api/ip"
+	ipmod "github.com/astralp2p/astrald/mod/ip"
 )
 
 func (mod *Module) AddPublicIPCandidateProvider(provider ipmod.PublicIPCandidateProvider) error {

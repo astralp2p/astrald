@@ -1,7 +1,7 @@
 package exonet
 
 import (
-	"github.com/cryptopunkscc/astral-go/api/exonet"
+	"github.com/astralp2p/astral-go/api/exonet"
 	"io"
 )
 

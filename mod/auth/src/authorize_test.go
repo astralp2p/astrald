@@ -1,15 +1,15 @@
 package auth
 
 import (
-	authmod "github.com/cryptopunkscc/astrald/mod/auth"
+	authmod "github.com/astralp2p/astrald/mod/auth"
 	"io"
 	"testing"
 	"time"
 
-	"github.com/cryptopunkscc/astral-go/api/auth"
-	"github.com/cryptopunkscc/astral-go/api/crypto"
-	"github.com/cryptopunkscc/astral-go/astral"
-	"github.com/cryptopunkscc/astral-go/astral/log"
+	"github.com/astralp2p/astral-go/api/auth"
+	"github.com/astralp2p/astral-go/api/crypto"
+	"github.com/astralp2p/astral-go/astral"
+	"github.com/astralp2p/astral-go/astral/log"
 	"github.com/glebarez/sqlite"
 	"gorm.io/gorm"
 )

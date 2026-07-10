@@ -1,8 +1,8 @@
 package scheduler
 
 import (
-	"github.com/cryptopunkscc/astral-go/astral"
-	"github.com/cryptopunkscc/astrald/core"
+	"github.com/astralp2p/astral-go/astral"
+	"github.com/astralp2p/astrald/core"
 )
 
 // Deps are injected by the core injector (placeholder for future module deps).

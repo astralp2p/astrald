@@ -2,7 +2,7 @@ package ip
 
 import "errors"
 import (
-	"github.com/cryptopunkscc/astral-go/api/ip"
+	"github.com/astralp2p/astral-go/api/ip"
 )
 
 const ModuleName = "ip"

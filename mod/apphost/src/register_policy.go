@@ -1,8 +1,8 @@
 package apphost
 
 import (
-	"github.com/cryptopunkscc/astral-go/api/auth"
-	"github.com/cryptopunkscc/astrald/mod/apphost"
+	"github.com/astralp2p/astral-go/api/auth"
+	"github.com/astralp2p/astrald/mod/apphost"
 )
 
 func (mod *Module) GetAppRegisterPolicy() apphost.AppRegisterPolicy {

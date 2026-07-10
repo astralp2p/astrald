@@ -3,8 +3,8 @@ package indexing
 import (
 	"time"
 
-	"github.com/cryptopunkscc/astral-go/astral"
-	"github.com/cryptopunkscc/astrald/mod/indexing"
+	"github.com/astralp2p/astral-go/astral"
+	"github.com/astralp2p/astrald/mod/indexing"
 )
 
 // dbRepoEntry is one row in a repo's append-only changelog.

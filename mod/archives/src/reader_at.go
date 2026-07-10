@@ -3,8 +3,8 @@ package archives
 import (
 	"time"
 
-	"github.com/cryptopunkscc/astral-go/astral"
-	"github.com/cryptopunkscc/astrald/mod/objects"
+	"github.com/astralp2p/astral-go/astral"
+	"github.com/astralp2p/astrald/mod/objects"
 )
 
 const openTimeout = 15 * time.Second

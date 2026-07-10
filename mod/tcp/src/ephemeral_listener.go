@@ -3,9 +3,9 @@ package tcp
 import (
 	"fmt"
 
-	"github.com/cryptopunkscc/astral-go/astral"
-	"github.com/cryptopunkscc/astrald/mod/exonet"
-	"github.com/cryptopunkscc/astrald/mod/tcp"
+	"github.com/astralp2p/astral-go/astral"
+	"github.com/astralp2p/astrald/mod/exonet"
+	"github.com/astralp2p/astrald/mod/tcp"
 )
 
 // CreateEphemeralListener starts a TCP server on port and registers it in the ephemeral listener map.

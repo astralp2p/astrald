@@ -3,12 +3,12 @@ package secp256k1
 import (
 	"crypto/ecdsa"
 	"fmt"
-	cryptomod "github.com/cryptopunkscc/astrald/mod/crypto"
-	modSecp256k1mod "github.com/cryptopunkscc/astrald/mod/secp256k1"
+	cryptomod "github.com/astralp2p/astrald/mod/crypto"
+	modSecp256k1mod "github.com/astralp2p/astrald/mod/secp256k1"
 
-	"github.com/cryptopunkscc/astral-go/api/crypto"
-	modSecp256k1 "github.com/cryptopunkscc/astral-go/api/secp256k1"
-	"github.com/cryptopunkscc/astral-go/astral"
+	"github.com/astralp2p/astral-go/api/crypto"
+	modSecp256k1 "github.com/astralp2p/astral-go/api/secp256k1"
+	"github.com/astralp2p/astral-go/astral"
 	"github.com/decred/dcrd/dcrec/secp256k1/v4"
 )
 

@@ -1,7 +1,7 @@
 package user
 
 import (
-	"github.com/cryptopunkscc/astral-go/astral"
+	"github.com/astralp2p/astral-go/astral"
 )
 
 // FindObject streams the identities of all currently-linked sibling nodes as candidate holders for any object.

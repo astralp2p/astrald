@@ -1,11 +1,11 @@
 package archives
 
 import (
-	"github.com/cryptopunkscc/astral-go/api/objects"
-	"github.com/cryptopunkscc/astral-go/astral"
-	"github.com/cryptopunkscc/astrald/core"
-	"github.com/cryptopunkscc/astrald/mod/auth"
-	objectsmod "github.com/cryptopunkscc/astrald/mod/objects"
+	"github.com/astralp2p/astral-go/api/objects"
+	"github.com/astralp2p/astral-go/astral"
+	"github.com/astralp2p/astrald/core"
+	"github.com/astralp2p/astrald/mod/auth"
+	objectsmod "github.com/astralp2p/astrald/mod/objects"
 )
 
 type Deps struct {

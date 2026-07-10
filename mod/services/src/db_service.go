@@ -3,8 +3,8 @@ package services
 import (
 	"time"
 
-	"github.com/cryptopunkscc/astral-go/astral"
-	"github.com/cryptopunkscc/astrald/mod/services"
+	"github.com/astralp2p/astral-go/astral"
+	"github.com/astralp2p/astrald/mod/services"
 )
 
 // dbService represents discovered service of a specific identity cached in the database

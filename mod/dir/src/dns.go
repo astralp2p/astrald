@@ -2,8 +2,8 @@ package dir
 
 import (
 	"fmt"
-	"github.com/cryptopunkscc/astral-go/astral"
-	"github.com/cryptopunkscc/astrald/mod/dir"
+	"github.com/astralp2p/astral-go/astral"
+	"github.com/astralp2p/astrald/mod/dir"
 	"net"
 	"regexp"
 	"strings"

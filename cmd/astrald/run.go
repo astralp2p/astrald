@@ -7,9 +7,9 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/cryptopunkscc/astrald/core"
-	"github.com/cryptopunkscc/astrald/debug"
-	"github.com/cryptopunkscc/astrald/resources"
+	"github.com/astralp2p/astrald/core"
+	"github.com/astralp2p/astrald/debug"
+	"github.com/astralp2p/astrald/resources"
 )
 
 const resNodeKey = "node_key"

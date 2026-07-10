@@ -1,8 +1,8 @@
 package ether
 
 import (
-	"github.com/cryptopunkscc/astral-go/api/ip"
-	"github.com/cryptopunkscc/astral-go/astral"
+	"github.com/astralp2p/astral-go/api/ip"
+	"github.com/astralp2p/astral-go/astral"
 )
 
 const ModuleName = "ether"

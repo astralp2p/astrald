@@ -3,7 +3,7 @@ package gateway
 import (
 	"io"
 
-	"github.com/cryptopunkscc/astral-go/astral"
+	"github.com/astralp2p/astral-go/astral"
 )
 
 var _ astral.Object = &Ping{}

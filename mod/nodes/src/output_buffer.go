@@ -4,7 +4,7 @@ import (
 	"io"
 	"sync"
 
-	"github.com/cryptopunkscc/astrald/mod/nodes"
+	"github.com/astralp2p/astrald/mod/nodes"
 )
 
 var _ io.WriteCloser = &OutputBuffer{}

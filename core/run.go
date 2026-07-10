@@ -6,8 +6,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/cryptopunkscc/astral-go/astral"
-	"github.com/cryptopunkscc/astral-go/lib/astrald"
+	"github.com/astralp2p/astral-go/astral"
+	"github.com/astralp2p/astral-go/lib/astrald"
 )
 
 // Run starts the node, waits for it to finish and returns an error if any

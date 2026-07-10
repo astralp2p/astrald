@@ -3,10 +3,10 @@ package nodes
 import (
 	"sync"
 
-	"github.com/cryptopunkscc/astral-go/api/objects"
-	objectscli "github.com/cryptopunkscc/astral-go/api/objects/client"
-	"github.com/cryptopunkscc/astral-go/astral"
-	"github.com/cryptopunkscc/astral-go/sig"
+	"github.com/astralp2p/astral-go/api/objects"
+	objectscli "github.com/astralp2p/astral-go/api/objects/client"
+	"github.com/astralp2p/astral-go/astral"
+	"github.com/astralp2p/astral-go/sig"
 )
 
 // DescribeObject fans out to every provider returned by FindObject and merges their

@@ -1,11 +1,11 @@
 package nodes
 
 import (
-	nodesmod "github.com/cryptopunkscc/astrald/mod/nodes"
+	nodesmod "github.com/astralp2p/astrald/mod/nodes"
 	"time"
 
-	"github.com/cryptopunkscc/astral-go/api/nodes"
-	"github.com/cryptopunkscc/astral-go/astral"
+	"github.com/astralp2p/astral-go/api/nodes"
+	"github.com/astralp2p/astral-go/astral"
 )
 
 var _ nodesmod.EndpointResolver = &DBEndpointResolver{}

@@ -1,10 +1,10 @@
 package auth
 
 import (
-	"github.com/cryptopunkscc/astral-go/api/auth"
+	"github.com/astralp2p/astral-go/api/auth"
 	"io"
 
-	"github.com/cryptopunkscc/astral-go/astral"
+	"github.com/astralp2p/astral-go/astral"
 )
 
 // SudoAction requests permission to act as AsID.

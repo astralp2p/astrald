@@ -3,7 +3,7 @@ package nearby
 import (
 	"io"
 
-	"github.com/cryptopunkscc/astral-go/astral"
+	"github.com/astralp2p/astral-go/astral"
 )
 
 // StatusMessage is the raw broadcast payload received over the wire; the sender's identity

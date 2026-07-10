@@ -8,14 +8,14 @@ import (
 	"os"
 	"time"
 
-	"github.com/cryptopunkscc/astral-go/astral"
-	"github.com/cryptopunkscc/astral-go/astral/channel"
-	fmt2 "github.com/cryptopunkscc/astral-go/astral/fmt"
-	"github.com/cryptopunkscc/astral-go/astral/log"
-	"github.com/cryptopunkscc/astral-go/lib/astrald"
-	_ "github.com/cryptopunkscc/astrald/mod/all/pub"
-	_ "github.com/cryptopunkscc/astrald/mod/all/views"
-	"github.com/cryptopunkscc/astrald/mod/log/views"
+	"github.com/astralp2p/astral-go/astral"
+	"github.com/astralp2p/astral-go/astral/channel"
+	fmt2 "github.com/astralp2p/astral-go/astral/fmt"
+	"github.com/astralp2p/astral-go/astral/log"
+	"github.com/astralp2p/astral-go/lib/astrald"
+	_ "github.com/astralp2p/astrald/mod/all/pub"
+	_ "github.com/astralp2p/astrald/mod/all/views"
+	"github.com/astralp2p/astrald/mod/log/views"
 )
 
 func main() {

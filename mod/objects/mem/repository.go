@@ -1,13 +1,13 @@
 package mem
 
 import (
-	objectsmod "github.com/cryptopunkscc/astrald/mod/objects"
+	objectsmod "github.com/astralp2p/astrald/mod/objects"
 	"slices"
 	"sync/atomic"
 
-	"github.com/cryptopunkscc/astral-go/api/objects"
-	"github.com/cryptopunkscc/astral-go/astral"
-	"github.com/cryptopunkscc/astral-go/sig"
+	"github.com/astralp2p/astral-go/api/objects"
+	"github.com/astralp2p/astral-go/astral"
+	"github.com/astralp2p/astral-go/sig"
 )
 
 var _ objectsmod.Repository = &Repository{}

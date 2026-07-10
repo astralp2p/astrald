@@ -2,19 +2,19 @@ package tcp
 
 import (
 	"context"
-	exonetmod "github.com/cryptopunkscc/astrald/mod/exonet"
-	tcpmod "github.com/cryptopunkscc/astrald/mod/tcp"
+	exonetmod "github.com/astralp2p/astrald/mod/exonet"
+	tcpmod "github.com/astralp2p/astrald/mod/tcp"
 	"sync"
 	"time"
 
-	"github.com/cryptopunkscc/astral-go/api/exonet"
-	"github.com/cryptopunkscc/astral-go/api/nodes"
-	"github.com/cryptopunkscc/astral-go/api/tcp"
-	"github.com/cryptopunkscc/astral-go/api/tree"
-	"github.com/cryptopunkscc/astral-go/astral"
-	"github.com/cryptopunkscc/astral-go/astral/log"
-	"github.com/cryptopunkscc/astral-go/lib/routing"
-	"github.com/cryptopunkscc/astral-go/sig"
+	"github.com/astralp2p/astral-go/api/exonet"
+	"github.com/astralp2p/astral-go/api/nodes"
+	"github.com/astralp2p/astral-go/api/tcp"
+	"github.com/astralp2p/astral-go/api/tree"
+	"github.com/astralp2p/astral-go/astral"
+	"github.com/astralp2p/astral-go/astral/log"
+	"github.com/astralp2p/astral-go/lib/routing"
+	"github.com/astralp2p/astral-go/sig"
 )
 
 var _ tcpmod.Module = &Module{}

@@ -3,7 +3,7 @@ package gateway
 import (
 	"sync"
 
-	"github.com/cryptopunkscc/astral-go/astral"
+	"github.com/astralp2p/astral-go/astral"
 )
 
 // connector represents a pending connection request from a node that wants

@@ -3,9 +3,9 @@ package gateway
 import (
 	"time"
 
-	"github.com/cryptopunkscc/astral-go/api/gateway"
-	"github.com/cryptopunkscc/astral-go/api/nodes"
-	"github.com/cryptopunkscc/astrald/mod/nearby"
+	"github.com/astralp2p/astral-go/api/gateway"
+	"github.com/astralp2p/astral-go/api/nodes"
+	"github.com/astralp2p/astrald/mod/nearby"
 )
 
 var _ nearby.Composer = &Module{}

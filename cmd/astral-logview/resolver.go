@@ -2,10 +2,10 @@ package main
 
 import (
 	"errors"
-	dirmod "github.com/cryptopunkscc/astrald/mod/dir"
+	dirmod "github.com/astralp2p/astrald/mod/dir"
 
-	"github.com/cryptopunkscc/astral-go/api/dir"
-	"github.com/cryptopunkscc/astral-go/astral"
+	"github.com/astralp2p/astral-go/api/dir"
+	"github.com/astralp2p/astral-go/astral"
 )
 
 // resolver implements dir.Resolver from cache

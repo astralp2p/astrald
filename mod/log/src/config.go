@@ -1,8 +1,8 @@
 package log
 
 import (
-	"github.com/cryptopunkscc/astral-go/api/tree"
-	"github.com/cryptopunkscc/astral-go/astral"
+	"github.com/astralp2p/astral-go/api/tree"
+	"github.com/astralp2p/astral-go/astral"
 )
 
 const DefaultLogLevel = 2

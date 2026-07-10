@@ -2,12 +2,12 @@ package src
 
 import (
 	"crypto/sha256"
-	cryptomod "github.com/cryptopunkscc/astrald/mod/crypto"
+	cryptomod "github.com/astralp2p/astrald/mod/crypto"
 
 	"github.com/btcsuite/btcd/btcec/v2"
 	"github.com/btcsuite/btcd/btcec/v2/ecdsa"
-	"github.com/cryptopunkscc/astral-go/api/crypto"
-	"github.com/cryptopunkscc/astral-go/astral"
+	"github.com/astralp2p/astral-go/api/crypto"
+	"github.com/astralp2p/astral-go/astral"
 )
 
 type MessageSigner struct {

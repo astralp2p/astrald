@@ -1,7 +1,7 @@
 package gateway
 
 import (
-	"github.com/cryptopunkscc/astral-go/astral"
+	"github.com/astralp2p/astral-go/astral"
 )
 
 func (mod *Module) startServers(ctx *astral.Context) {

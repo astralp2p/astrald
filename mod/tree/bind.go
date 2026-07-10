@@ -3,12 +3,12 @@ package tree
 import (
 	"errors"
 	"fmt"
-	"github.com/cryptopunkscc/astral-go/api/tree"
+	"github.com/astralp2p/astral-go/api/tree"
 	"reflect"
 	"strings"
 
-	"github.com/cryptopunkscc/astral-go/astral"
-	"github.com/cryptopunkscc/astral-go/astral/log"
+	"github.com/astralp2p/astral-go/astral"
+	"github.com/astralp2p/astral-go/astral/log"
 )
 
 // Bind binds Value fields in struct s to the node

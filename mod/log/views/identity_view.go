@@ -1,11 +1,11 @@
 package views
 
 import (
-	"github.com/cryptopunkscc/astral-go/astral"
-	"github.com/cryptopunkscc/astral-go/astral/fmt"
-	"github.com/cryptopunkscc/astral-go/astral/log/theme"
-	"github.com/cryptopunkscc/astral-go/sig"
-	"github.com/cryptopunkscc/astrald/mod/dir"
+	"github.com/astralp2p/astral-go/astral"
+	"github.com/astralp2p/astral-go/astral/fmt"
+	"github.com/astralp2p/astral-go/astral/log/theme"
+	"github.com/astralp2p/astral-go/sig"
+	"github.com/astralp2p/astrald/mod/dir"
 )
 
 var IdentityResolver sig.Value[dir.Resolver]

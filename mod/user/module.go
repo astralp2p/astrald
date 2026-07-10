@@ -1,8 +1,8 @@
 package user
 
 import (
-	"github.com/cryptopunkscc/astral-go/api/user"
-	"github.com/cryptopunkscc/astral-go/astral"
+	"github.com/astralp2p/astral-go/api/user"
+	"github.com/astralp2p/astral-go/astral"
 )
 
 const ModuleName = "user"

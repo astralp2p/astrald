@@ -1,23 +1,23 @@
 package nat
 
 import (
-	ipmod "github.com/cryptopunkscc/astrald/mod/ip"
-	natmod "github.com/cryptopunkscc/astrald/mod/nat"
-	treemod "github.com/cryptopunkscc/astrald/mod/tree"
+	ipmod "github.com/astralp2p/astrald/mod/ip"
+	natmod "github.com/astralp2p/astrald/mod/nat"
+	treemod "github.com/astralp2p/astrald/mod/tree"
 	"net"
 	"sync"
 	"sync/atomic"
 
-	"github.com/cryptopunkscc/astral-go/api/ip"
-	"github.com/cryptopunkscc/astral-go/api/nat"
-	"github.com/cryptopunkscc/astral-go/api/tree"
-	"github.com/cryptopunkscc/astral-go/astral"
-	"github.com/cryptopunkscc/astral-go/astral/log"
-	"github.com/cryptopunkscc/astral-go/lib/routing"
-	"github.com/cryptopunkscc/astrald/mod/dir"
-	"github.com/cryptopunkscc/astrald/mod/events"
-	"github.com/cryptopunkscc/astrald/mod/objects"
-	"github.com/cryptopunkscc/astrald/resources"
+	"github.com/astralp2p/astral-go/api/ip"
+	"github.com/astralp2p/astral-go/api/nat"
+	"github.com/astralp2p/astral-go/api/tree"
+	"github.com/astralp2p/astral-go/astral"
+	"github.com/astralp2p/astral-go/astral/log"
+	"github.com/astralp2p/astral-go/lib/routing"
+	"github.com/astralp2p/astrald/mod/dir"
+	"github.com/astralp2p/astrald/mod/events"
+	"github.com/astralp2p/astrald/mod/objects"
+	"github.com/astralp2p/astrald/resources"
 )
 
 // Ensure Module struct implements the public nat.Module interface

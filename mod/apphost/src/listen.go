@@ -2,7 +2,7 @@ package apphost
 
 import (
 	"context"
-	"github.com/cryptopunkscc/astral-go/lib/ipc"
+	"github.com/astralp2p/astral-go/lib/ipc"
 	"net"
 	"strings"
 	"sync"

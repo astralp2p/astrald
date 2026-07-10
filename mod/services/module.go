@@ -1,8 +1,8 @@
 package services
 
-import "github.com/cryptopunkscc/astral-go/astral"
+import "github.com/astralp2p/astral-go/astral"
 import (
-	"github.com/cryptopunkscc/astral-go/api/services"
+	"github.com/astralp2p/astral-go/api/services"
 )
 
 const ModuleName = "services"

@@ -1,7 +1,7 @@
 package assets
 
 import (
-	"github.com/cryptopunkscc/astrald/resources"
+	"github.com/astralp2p/astrald/resources"
 	"gorm.io/gorm"
 )
 

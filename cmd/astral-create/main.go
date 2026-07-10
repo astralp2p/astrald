@@ -6,9 +6,9 @@ import (
 	"io"
 	"os"
 
-	dircli "github.com/cryptopunkscc/astral-go/api/dir/client"
-	objectscli "github.com/cryptopunkscc/astral-go/api/objects/client"
-	"github.com/cryptopunkscc/astral-go/lib/astrald"
+	dircli "github.com/astralp2p/astral-go/api/dir/client"
+	objectscli "github.com/astralp2p/astral-go/api/objects/client"
+	"github.com/astralp2p/astral-go/lib/astrald"
 )
 
 const blockSize = 2 << 14

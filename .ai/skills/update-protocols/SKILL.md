@@ -281,7 +281,7 @@ covered — internals stay out of protocol docs.
    `api/<protocol>/module.go`; read them there. The wire name of an op is
    `<ModuleName>.<snake_case of the Op* method name without the prefix>`
    (astral-go `lib/routing/op_router.go` `AddStructPrefix`, imported as
-   `github.com/cryptopunkscc/astral-go/lib/routing`). A `Method*` constant
+   `github.com/astralp2p/astral-go/lib/routing`). A `Method*` constant
    states the wire name explicitly when present; some modules define none.
 2. `src/op_<name>.go` — the unit of truth for one op:
    * `op<Pascal>Args`: fields → arguments; `query:"required"` → required;

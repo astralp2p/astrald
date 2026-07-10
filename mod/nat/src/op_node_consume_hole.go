@@ -1,15 +1,15 @@
 package nat
 
 import (
-	natmod "github.com/cryptopunkscc/astrald/mod/nat"
+	natmod "github.com/astralp2p/astrald/mod/nat"
 	"time"
 
-	"github.com/cryptopunkscc/astral-go/api/nat"
-	natclient "github.com/cryptopunkscc/astral-go/api/nat/client"
-	"github.com/cryptopunkscc/astral-go/astral"
-	"github.com/cryptopunkscc/astral-go/astral/channel"
-	"github.com/cryptopunkscc/astral-go/lib/astrald"
-	"github.com/cryptopunkscc/astral-go/lib/routing"
+	"github.com/astralp2p/astral-go/api/nat"
+	natclient "github.com/astralp2p/astral-go/api/nat/client"
+	"github.com/astralp2p/astral-go/astral"
+	"github.com/astralp2p/astral-go/astral/channel"
+	"github.com/astralp2p/astral-go/lib/astrald"
+	"github.com/astralp2p/astral-go/lib/routing"
 )
 
 const takeExchangeTimeout = 5 * time.Second

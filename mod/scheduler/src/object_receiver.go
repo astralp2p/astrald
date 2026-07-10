@@ -1,9 +1,9 @@
 package scheduler
 
 import (
-	"github.com/cryptopunkscc/astrald/mod/events"
-	"github.com/cryptopunkscc/astrald/mod/objects"
-	"github.com/cryptopunkscc/astrald/mod/scheduler"
+	"github.com/astralp2p/astrald/mod/events"
+	"github.com/astralp2p/astrald/mod/objects"
+	"github.com/astralp2p/astrald/mod/scheduler"
 )
 
 // ReceiveObject fans out incoming event objects to all currently running tasks that implement EventReceiver.

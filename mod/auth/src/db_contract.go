@@ -3,8 +3,8 @@ package auth
 import (
 	"time"
 
-	"github.com/cryptopunkscc/astral-go/astral"
-	"github.com/cryptopunkscc/astrald/mod/auth"
+	"github.com/astralp2p/astral-go/astral"
+	"github.com/astralp2p/astrald/mod/auth"
 )
 
 type dbContract struct {

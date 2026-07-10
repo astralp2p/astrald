@@ -2,9 +2,9 @@ package tor
 
 import (
 	"bytes"
-	"github.com/cryptopunkscc/astral-go/api/exonet"
-	"github.com/cryptopunkscc/astral-go/api/tor"
-	exonetmod "github.com/cryptopunkscc/astrald/mod/exonet"
+	"github.com/astralp2p/astral-go/api/exonet"
+	"github.com/astralp2p/astral-go/api/tor"
+	exonetmod "github.com/astralp2p/astrald/mod/exonet"
 )
 
 const addrVersion = 3
