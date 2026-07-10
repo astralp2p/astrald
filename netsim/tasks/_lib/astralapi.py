@@ -290,6 +290,12 @@ def has_link_to(objs, ident):
                for l in _typed(objs))
 
 
+def link_remote_identities(objs):
+    """RemoteIdentity of each link in a nodes.links result (creation order)."""
+    return [l.remote_identity for l in _typed(objs)
+            if isinstance(l, LinkInfo) and l.remote_identity]
+
+
 def _contains_identity(value, ident):
     # why: expulsion records nest the Subject at varying depth; recurse the dict/list tree
     if isinstance(value, str):

@@ -26,46 +26,25 @@ while [ $# -gt 0 ]; do
   esac
 done
 
-# --- host-side helpers (astral-query runs in the target's netns; parse on the host) ------
+# resolve _lib two dirs up from this script (as the verifiers do)
+# CDPATH= is an intentional one-shot env prefix for cd, not an assignment
+# shellcheck disable=SC1007
+here=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+LIB="$(dirname -- "$here")/_lib"
+
+# --- host-side helpers (astral-query runs in the target's netns; parsed on the host
+# via _lib/astralq.py -> the same astral-py interrogators the verifiers use) ------
 nid() {  # a node's own identity hex (>=64 hex) via apphost.whoami
-  netsim ssh "$1" -- "ip netns exec priv astral-query apphost.whoami -out json" 2>/dev/null | python3 -c '
-import json,sys
-for ln in sys.stdin:
-    ln=ln.strip()
-    if not ln: continue
-    try: o=json.loads(ln)
-    except Exception: continue
-    v=o.get("Object")
-    if isinstance(v,str) and len(v)>=64: print(v); break
-    if isinstance(v,dict) and isinstance(v.get("Identity"),str): print(v["Identity"]); break'
+  netsim ssh "$1" -- "ip netns exec priv astral-query apphost.whoami -out json" 2>/dev/null \
+    | python3 "$LIB/astralq.py" identity
 }
 onion_of() {  # a node's own .onion via resolve_endpoints localnode
-  netsim ssh "$1" -- "ip netns exec priv astral-query nodes.resolve_endpoints -id localnode -out json" 2>/dev/null | python3 -c '
-import json,sys
-def addr(ep):
-    if isinstance(ep,str): return ep
-    if isinstance(ep,dict):
-        o=ep.get("Object"); return o if isinstance(o,str) else ""
-    return ""
-for ln in sys.stdin:
-    ln=ln.strip()
-    if not ln: continue
-    try: o=json.loads(ln)
-    except Exception: continue
-    a=addr((o.get("Object") or {}).get("Endpoint"))
-    if ".onion" in a: print(a); break'
+  netsim ssh "$1" -- "ip netns exec priv astral-query nodes.resolve_endpoints -id localnode -out json" 2>/dev/null \
+    | python3 "$LIB/astralq.py" onion
 }
 has_link() {  # <vm> <network> <identity> -> prints "yes" if that link exists
-  netsim ssh "$1" -- "ip netns exec priv astral-query nodes.links -out json" 2>/dev/null | python3 -c '
-import json,sys
-net,want=sys.argv[1],sys.argv[2]
-for ln in sys.stdin:
-    ln=ln.strip()
-    if not ln: continue
-    try: o=json.loads(ln)
-    except Exception: continue
-    v=o.get("Object") or {}
-    if str(v.get("Network"))==net and str(v.get("RemoteIdentity",""))==want: print("yes"); break' "$2" "$3"
+  netsim ssh "$1" -- "ip netns exec priv astral-query nodes.links -out json" 2>/dev/null \
+    | python3 "$LIB/astralq.py" has-link "$2" "$3"
 }
 diag() {  # per-peer failure diagnosis (see the task doc "live_diagnostics")
   for v in "$VM" "$PEER"; do

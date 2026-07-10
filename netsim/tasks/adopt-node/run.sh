@@ -60,17 +60,10 @@ $SMOKE"
 # Host-side; identities resolved from the mutual link (anonymous nodes.links).
 # CONFIRM (live): dir.set_alias works for the anonymous host-side caller.
 PEER="node2"
+LIB="$(dirname -- "$here")/_lib"
 _remote_id() {  # $1 = vm; prints the first RemoteIdentity from its nodes.links
-  netsim ssh "$1" -- "astral-query nodes.links -out json" 2>/dev/null | python3 -c '
-import json,sys
-for ln in sys.stdin:
-    ln=ln.strip()
-    if not ln: continue
-    try: o=json.loads(ln)
-    except Exception: continue
-    ob=o.get("Object")
-    if isinstance(ob,dict) and ob.get("RemoteIdentity"):
-        print(ob["RemoteIdentity"]); break'
+  netsim ssh "$1" -- "astral-query nodes.links -out json" 2>/dev/null \
+    | python3 "$LIB/astralq.py" remote-id
 }
 node2_id=$(_remote_id "$VM" || true)     # node1's link -> node2
 node1_id=$(_remote_id "$PEER" || true)   # node2's link -> node1
