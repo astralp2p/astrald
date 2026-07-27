@@ -37,6 +37,12 @@ func (mod *Module) CreateAccessToken(identity *astral.Identity, d astral.Duratio
 	}, nil
 }
 
+// DeleteAccessToken removes an access token so it no longer authenticates.
+// Returns gorm.ErrRecordNotFound when the token does not exist.
+func (mod *Module) DeleteAccessToken(token string) error {
+	return mod.db.DeleteAccessToken(token)
+}
+
 // AuthenticateToken resolves a bearer token to the identity it was issued for.
 // Any lookup or expiry failure is collapsed into a single opaque error to avoid leaking token existence.
 func (mod *Module) AuthenticateToken(token string) (*astral.Identity, error) {

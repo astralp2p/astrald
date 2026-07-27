@@ -30,11 +30,30 @@ func (db *DB) ListAccessTokens() (list []dbAccessToken, _ error) {
 	return list, db.Find(&list).Error
 }
 
+// FindAccessToken returns the unexpired access token row for token.
+// Expired rows are invisible here — authentication treats them as absent —
+// but remain listable until deleted.
 func (db *DB) FindAccessToken(token string) (at *dbAccessToken, err error) {
 	err = db.
 		Where("token = ?", token).
+		Where("expires_at > ?", time.Now()).
 		First(&at).Error
 	return
+}
+
+// DeleteAccessToken removes an access token so it no longer authenticates.
+// Returns gorm.ErrRecordNotFound when no row matches.
+func (db *DB) DeleteAccessToken(token string) error {
+	tx := db.
+		Where("token = ?", token).
+		Delete(&dbAccessToken{})
+	if tx.Error != nil {
+		return tx.Error
+	}
+	if tx.RowsAffected == 0 {
+		return gorm.ErrRecordNotFound
+	}
+	return nil
 }
 
 func (db *DB) CreateLocalApp(appID, hostID *astral.Identity) error {

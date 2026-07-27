@@ -2,7 +2,10 @@ package apphost
 
 import (
 	"context"
+	"errors"
 	"time"
+
+	"gorm.io/gorm"
 )
 
 // Prepare seeds fixed access tokens from the module config into the database.
@@ -17,12 +20,20 @@ func (mod *Module) Prepare(ctx context.Context) error {
 			continue
 		}
 
-		mod.db.Model(&dbAccessToken{}).Delete("token = ?", token)
-		mod.db.Create(&dbAccessToken{
+		err = mod.db.DeleteAccessToken(token)
+		if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+			mod.log.Error("config: cannot delete token for '%v': %v", name, err)
+			continue
+		}
+
+		err = mod.db.Create(&dbAccessToken{
 			Identity:  identity,
 			Token:     token,
 			ExpiresAt: time.Now().Add(time.Hour * 24 * 365 * 100),
-		})
+		}).Error
+		if err != nil {
+			mod.log.Error("config: cannot create token for '%v': %v", name, err)
+		}
 	}
 
 	return nil
