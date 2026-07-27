@@ -44,7 +44,8 @@ func CreateLogFile() (*LogFile, error) {
 	return f, nil
 }
 
-func (l LogFile) LogEntry(entry *log.Entry) {
+// LogEntry has a pointer receiver so l.mu is the shared mutex, not a per-call copy.
+func (l *LogFile) LogEntry(entry *log.Entry) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
