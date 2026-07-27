@@ -40,4 +40,5 @@ A Hold is a row in `apphost__object_holds` keyed by `(AppID, ObjectID)`. While a
 
 * `apphost.hold_object` inserts a hold for the caller with `OnConflict{DoNothing}`, so repeated holds are idempotent; `Duration` is optional (`nil` -> no expiry).
 * `apphost.unhold_object` deletes only the caller's row for the object.
+* Both hold ops are single+batch hybrids: without `id` they read object IDs from the channel until EOS, reply one `Ack`/`ErrorMessage` per input, and end with EOS; a failed input does not stop the batch, and `hold_object` applies the query-level `Duration` to every input.
 * Hold ops reject network origin and require a non-zero caller. Many apps may hold the same object.

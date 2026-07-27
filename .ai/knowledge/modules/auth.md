@@ -14,7 +14,7 @@ Decides whether an identity may perform a typed action, using local action handl
 ## Flows
 
 * Contract authorization: no local handler granted -> recursive walk over `SignedContracts().WithSubject(actor).WithAction(action).Find` -> for each matching permit require `Delegation >= hopsBelow` and `Permit.Allows(action)` -> `action.SetActor(sc.Issuer)`, recurse with `hopsBelow+1` under a `visited` cycle guard -> first `true` grants. Authority attenuates: each issuer on the path bounds the delegation depth allowed below it.
-* Index (`auth.index`): `Objects.Load` the ID -> require `*auth.SignedContract` (else `ErrInvalidContract`) -> `IndexContract` -> `Ack`.
+* Index (`auth.index`): per ID, `Objects.Load` -> require `*auth.SignedContract` (else `ErrInvalidContract`) -> `IndexContract` -> `Ack`. Single mode with an `id` arg; without `id` the op reads object IDs from the channel until EOS (batch), replies one `Ack`/`ErrorMessage` per input, and ends with EOS — a failed input does not stop the batch.
 * `IndexContract`: hold `indexMu` -> `db.contractExists` short-circuits when both signatures are already stored -> `VerifyContract` -> `db.storeSignedContract` upserts the contract row and inserts permits only when no permits exist for that row yet.
 * Startup indexer: `Run` -> `indexer(ctx)` with `ZoneNetwork` excluded -> `Objects.GetRepository(RepoLocal).Scan` -> `Objects.Load` each ID -> ignore non-`*SignedContract` -> `IndexContract`.
 
