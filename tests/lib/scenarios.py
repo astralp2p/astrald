@@ -1,0 +1,74 @@
+"""Scenario manifests (scenario.toml) and start/saves chain resolution."""
+import tomllib
+from dataclasses import dataclass
+from pathlib import Path
+
+
+@dataclass
+class Scenario:
+    name: str
+    dir: Path
+    start: str
+    saves: str | None
+    nodes: list
+    drivers: list
+    timeout: int
+
+
+def load_all(scenarios_dir: Path) -> dict:
+    out = {}
+    for mf in sorted(scenarios_dir.glob("*/scenario.toml")):
+        raw = tomllib.loads(mf.read_text())
+        name = mf.parent.name
+        out[name] = Scenario(
+            name=name, dir=mf.parent,
+            start=raw.get("start", "null"),
+            saves=raw.get("saves") or None,
+            nodes=list(raw.get("nodes", [])),
+            drivers=list(raw.get("drivers", ["script"])),
+            timeout=int(raw.get("timeout", 120)),
+        )
+    return out
+
+
+def _depths(all: dict) -> dict:
+    producers = {s.saves: s for s in all.values() if s.saves}
+    depths = {}
+
+    def depth_of(state: str, seen=()) -> int:
+        if state == "null":
+            return 0
+        if state in seen:
+            raise ValueError(f"start/saves cycle at state {state!r}")
+        if state not in producers:
+            raise ValueError(f"no scenario saves state {state!r}")
+        s = producers[state]
+        return 1 + depth_of(s.start, seen + (state,))
+
+    for s in all.values():
+        depths[s.name] = depth_of(s.start) if s.start != "null" else 0
+    return depths, producers
+
+
+def resolve(all: dict, only) -> list:
+    depths, producers = _depths(all)
+    if only is None:
+        selected = set(all)
+    else:
+        unknown = [n for n in only if n not in all]
+        if unknown:
+            raise ValueError(f"unknown scenario(s): {', '.join(unknown)}")
+        selected = set(only)
+
+    needed = set(selected)
+    frontier = list(selected)
+    while frontier:
+        s = all[frontier.pop()]
+        if s.start != "null":
+            dep = producers[s.start].name
+            if dep not in needed:
+                needed.add(dep)
+                frontier.append(dep)
+
+    ordered = sorted(needed, key=lambda n: (depths[n], n))
+    return [(all[n], "test" if n in selected else "fixture") for n in ordered]
