@@ -13,7 +13,7 @@
 ## Global Constraints
 
 - The migration criterion (Task 10) moves `netsim/` INTO `tests/` — `git mv` + path fixes only, no task-internal rewrites. Beyond that move, changes stay inside `tests/`; no unrelated repo files touched (doc path references to the old `netsim/` location are part of the move).
-- Only dependency: `astral-ipc` (astral-py 0.2.0b1), installed into `tests/.venv` from the sibling checkout (config key `astral_py.path`, default `~/work/astralp2p/astral-py/master`). The entry script itself imports stdlib only until it re-execs into the venv.
+- Only dependency: `astral-ipc` (astral-py 0.2.0b1) — a zero-runtime-dependency package imported DIRECTLY from the sibling checkout via sys.path (config key `astral_py.path`, default `~/work/astralp2p/astral-py/master`). No venv, no pip — the host lacks ensurepip (confirmed 2026-07-29). Everything runs on system python3; `tests/run` is stdlib plus that path injection.
 - Manifest format is TOML (`scenario.toml`, `config.toml`) via stdlib `tomllib` — the design doc says YAML; PyYAML would be a second dependency. Flag this deviation in the PR description for a doc sync.
 - Two astrald instances on one host collide on five defaults — apphost tcp `8625`, http `8624`, `unix:~/.apphost.sock`, tcp `listen_port` 1791, ether udp `8822`. Every node gets ALL of these overridden per-root (http disabled, unix socket omitted).
 - Every opened astral-py `Client`/`Stream` MUST be `async with`-managed: a leak permanently burns one of astrald's 32 apphost workers.
@@ -35,9 +35,9 @@
 
 ```
 tests/
-├── run                        # stdlib entry: venv bootstrap + re-exec, then lib.runner.main()
+├── run                        # stdlib entry: astral-py sys.path injection, then lib.runner.main()
 ├── config.toml                # ports.base, astral_py.path, build.package
-├── .gitignore                 # .venv/ .cache/ results/
+├── .gitignore                 # .cache/ results/ __pycache__/
 ├── lib/
 │   ├── __init__.py            # empty
 │   ├── results.py             # PURE: RunResults writer, schema, exit code
@@ -67,13 +67,13 @@ Post-migration (Task 10) the tree additionally holds: `tests/net/` (tasks incl. 
 
 ---
 
-### Task 1: Scaffold + entry point with venv re-exec
+### Task 1: Scaffold + entry point with astral-py path injection
 
 **Files:**
 - Create: `tests/run` (mode 755), `tests/config.toml`, `tests/.gitignore`, `tests/lib/__init__.py`, `tests/selftest/__init__.py`
 
 **Interfaces:**
-- Produces: `tests/run [--lane node] [--only NAME ...] [--keep]`; env `ASTRAL_TESTS_IN_VENV=1` marks the re-exec'd process. `lib.runner.main(args) -> int` is the post-re-exec entry (stub until Task 7).
+- Produces: `tests/run [--lane node] [--only NAME ...] [--keep]`; env `ASTRAL_TESTS_PYPATH` (tests dir + astral-py `src`, os.pathsep-joined) exported for scenario subprocesses. `lib.runner.main(args) -> int` (stub until Task 7).
 
 - [ ] **Step 1: Write the files**
 
@@ -102,49 +102,42 @@ package = "./cmd/astrald"
 #!/usr/bin/env python3
 """tests/run — entry point of the integration test system (M1: node lane only).
 
-Stdlib until the re-exec: bootstraps tests/.venv with astral-py, then re-execs
-itself inside it so lib/ can import `astral` directly.
+Stdlib only. astral-py is a zero-dependency package, so it is imported
+straight from its checkout (config.toml astral_py.path) via sys.path —
+no venv, no pip (the host lacks ensurepip).
 """
 import argparse
 import os
-import subprocess
 import sys
 import tomllib
-import venv
 from pathlib import Path
 
 TESTS = Path(__file__).resolve().parent
 
 
-def ensure_venv() -> Path:
-    py = TESTS / ".venv" / "bin" / "python3"
-    if not py.exists():
-        print("run: creating venv + installing astral-py ...", file=sys.stderr)
-        venv.create(TESTS / ".venv", with_pip=True)
-        cfg = tomllib.loads((TESTS / "config.toml").read_text())
-        src = Path(os.path.expanduser(cfg["astral_py"]["path"]))
-        if not src.exists():
-            sys.exit(f"run: astral-py checkout not found at {src} (config.toml astral_py.path)")
-        subprocess.run([str(py), "-m", "pip", "install", "--quiet", str(src)], check=True)
-    return py
+def astral_src() -> Path:
+    cfg = tomllib.loads((TESTS / "config.toml").read_text())
+    src = Path(os.path.expanduser(cfg["astral_py"]["path"])) / "src"
+    if not (src / "astral" / "__init__.py").exists():
+        sys.exit(f"run: astral-py not found at {src} (config.toml astral_py.path)")
+    return src
 
 
 def main() -> int:
     ap = argparse.ArgumentParser(prog="tests/run")
     ap.add_argument("--lane", choices=["node"], default="node")
     ap.add_argument("--only", nargs="*", default=None, metavar="SCENARIO")
-    ap.add_argument("--keep", action="store_true", help="keep session dirs on failure")
+    ap.add_argument("--keep", action="store_true", help="leave the daemons running")
     args = ap.parse_args()
 
     if sys.version_info < (3, 11):
         sys.exit("run: Python >= 3.11 required")
 
-    if os.environ.get("ASTRAL_TESTS_IN_VENV") != "1":
-        py = ensure_venv()
-        os.environ["ASTRAL_TESTS_IN_VENV"] = "1"
-        os.execv(str(py), [str(py), str(TESTS / "run")] + sys.argv[1:])
-
+    src = astral_src()
+    sys.path.insert(0, str(src))
     sys.path.insert(0, str(TESTS))
+    os.environ["ASTRAL_TESTS_PYPATH"] = f"{TESTS}{os.pathsep}{src}"
+
     from lib import runner
     return runner.main(args)
 
@@ -165,10 +158,12 @@ def main(args) -> int:
     return 0
 ```
 
-- [ ] **Step 2: Verify the skeleton runs and re-execs**
+- [ ] **Step 2: Verify the skeleton runs and astral imports via the path**
 
 Run: `cd /home/intern0/work/astralp2p/astrald/dev--tests-m1-skeleton && chmod +x tests/run && ./tests/run --lane node`
-Expected: first run prints `run: creating venv + installing astral-py ...` then `runner stub: lane=node only=None keep=False`; second run skips the venv message. `tests/.venv/bin/python3 -c "import astral; print(astral.__name__)"` prints `astral`.
+Expected: `runner stub: lane=node only=None keep=False`.
+Then: `PYTHONPATH="$HOME/work/astralp2p/astral-py/master/src" python3 -c "import astral; print('astral import OK')"`
+Expected: `astral import OK`.
 
 - [ ] **Step 3: Commit**
 
@@ -750,10 +745,12 @@ class LocalNode:
 
 Run (from the worktree root):
 ```bash
-tests/.venv/bin/python3 - <<'EOF'
-import asyncio, sys, tempfile
+python3 - <<'EOF'
+import asyncio, os, sys, tempfile, tomllib
 from pathlib import Path
 sys.path.insert(0, "tests")
+_src = Path(os.path.expanduser(tomllib.loads(Path("tests/config.toml").read_text())["astral_py"]["path"])) / "src"
+sys.path.insert(0, str(_src))
 from lib.build import ensure_binary
 from lib.localnode import LocalNode
 from lib.nodeconfig import ports_for
@@ -875,10 +872,12 @@ class Session:
 - [ ] **Step 2: Live-verify — two nodes concurrently, distinct identities**
 
 ```bash
-tests/.venv/bin/python3 - <<'EOF'
-import asyncio, json, sys, tempfile
+python3 - <<'EOF'
+import asyncio, json, os, sys, tempfile, tomllib
 from pathlib import Path
 sys.path.insert(0, "tests")
+_src = Path(os.path.expanduser(tomllib.loads(Path("tests/config.toml").read_text())["astral_py"]["path"])) / "src"
+sys.path.insert(0, str(_src))
 from lib.build import ensure_binary
 from lib.session import Session
 
@@ -1041,9 +1040,9 @@ def main(args) -> int:
         return 2
 
     session = Session(run_dir / "session", binary, cfg["ports"]["base"])
-    py = str(TESTS / ".venv" / "bin" / "python3")
+    py = sys.executable
     base_env = dict(os.environ,
-                    PYTHONPATH=str(TESTS),
+                    PYTHONPATH=os.environ.get("ASTRAL_TESTS_PYPATH", str(TESTS)),
                     ASTRAL_TESTS_SESSION=str(session.session_json_path))
 
     failed_states = set()
@@ -1578,7 +1577,8 @@ recipes) — same netsim workflow, new home; register with
   (schema in `lib/results.py`) plus per-scenario driver/oracle logs and
   each node's astrald log under `results/<stamp>/session/`.
 - Requirements: Python ≥ 3.11, Go toolchain, an astral-py checkout
-  (path in `config.toml`). First run bootstraps `tests/.venv`.
+  (path in `config.toml`) — imported directly from its `src/` (the package
+  has zero dependencies); no venv or pip involved.
 
 Manifest format note: TOML (stdlib), not YAML as the design doc sketches —
 one fewer dependency; to be reconciled in the doc.
