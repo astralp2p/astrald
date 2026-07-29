@@ -7,7 +7,7 @@ import (
 )
 
 type opCloseLinkArgs struct {
-	ID  astral.Nonce
+	ID  astral.Nonce `query:"required"`
 	Out string
 }
 

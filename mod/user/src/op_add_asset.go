@@ -7,7 +7,7 @@ import (
 )
 
 type opAddAssetArgs struct {
-	ID  *astral.ObjectID
+	ID  *astral.ObjectID `query:"required"`
 	Out string
 }
 

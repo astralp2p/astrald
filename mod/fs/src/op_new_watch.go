@@ -8,8 +8,8 @@ import (
 )
 
 type opNewWatchArgs struct {
-	Path  string
-	Name  string
+	Path  string `query:"required"`
+	Name  string `query:"required"`
 	Label string
 	In    string
 	Out   string

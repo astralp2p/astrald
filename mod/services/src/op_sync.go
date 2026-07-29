@@ -7,7 +7,7 @@ import (
 )
 
 type opSyncArgs struct {
-	ID     string
+	ID     string `query:"required"`
 	Follow bool
 	In     string
 	Out    string

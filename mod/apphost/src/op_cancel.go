@@ -11,7 +11,7 @@ import (
 )
 
 type opCancelArgs struct {
-	ID    astral.Nonce
+	ID    astral.Nonce `query:"required"`
 	Cause *string
 	Out   string
 }

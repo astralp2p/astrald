@@ -10,7 +10,7 @@ import (
 )
 
 type opDeleteTokenArgs struct {
-	Token astral.String8
+	Token astral.String8 `query:"required"`
 	Out   string
 }
 

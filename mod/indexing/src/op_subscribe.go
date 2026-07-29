@@ -11,7 +11,7 @@ import (
 )
 
 type opSubscribeArgs struct {
-	Nonce astral.Nonce
+	Nonce astral.Nonce `query:"required"`
 	In    string
 	Out   string
 }

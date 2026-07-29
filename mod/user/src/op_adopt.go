@@ -9,7 +9,7 @@ import (
 )
 
 type opAdoptArgs struct {
-	Target string
+	Target string `query:"required"`
 	In     string
 	Out    string
 }

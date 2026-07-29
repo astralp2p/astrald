@@ -7,8 +7,8 @@ import (
 )
 
 type opRegisterHandlerArgs struct {
-	Endpoint string
-	Token    astral.Nonce
+	Endpoint string       `query:"required"`
+	Token    astral.Nonce `query:"required"`
 	In       string
 	Out      string
 }

@@ -7,7 +7,7 @@ import (
 )
 
 type opResolveEndpointsArgs struct {
-	ID  string
+	ID  string `query:"required"`
 	Out string
 }
 

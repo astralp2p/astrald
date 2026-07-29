@@ -9,7 +9,7 @@ import (
 )
 
 type opPunchArgs struct {
-	Target string
+	Target string `query:"required"`
 	In     string
 	Out    string
 }

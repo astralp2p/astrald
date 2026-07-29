@@ -8,7 +8,7 @@ import (
 )
 
 type opNewAppContractArgs struct {
-	ID       *astral.Identity
+	ID       *astral.Identity `query:"required"`
 	Duration astral.Duration
 	Out      string
 }

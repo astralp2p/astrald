@@ -7,7 +7,7 @@ import (
 )
 
 type opNodeConnectArgs struct {
-	Target *astral.Identity
+	Target *astral.Identity `query:"required"`
 	In     string
 	Out    string
 }

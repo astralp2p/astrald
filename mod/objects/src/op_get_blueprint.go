@@ -7,7 +7,7 @@ import (
 )
 
 type opGetBlueprintArgs struct {
-	Type string
+	Type string `query:"required"`
 	Out  string
 }
 

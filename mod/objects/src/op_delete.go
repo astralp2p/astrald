@@ -8,7 +8,7 @@ import (
 
 type opDeleteArgs struct {
 	ID   *astral.ObjectID
-	Repo string
+	Repo string `query:"required"`
 	Out  string
 	Zone *astral.Zone
 }

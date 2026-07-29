@@ -7,7 +7,7 @@ import (
 )
 
 type opNewArgs struct {
-	Type string
+	Type string `query:"required"`
 	In   string
 	Out  string
 }

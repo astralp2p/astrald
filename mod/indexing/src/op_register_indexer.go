@@ -7,7 +7,7 @@ import (
 )
 
 type opRegisterIndexerArgs struct {
-	Name string
+	Name string `query:"required"`
 	In   string
 	Out  string
 }

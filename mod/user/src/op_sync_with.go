@@ -7,7 +7,7 @@ import (
 )
 
 type opSyncWithArgs struct {
-	Node  *astral.Identity
+	Node  *astral.Identity `query:"required"`
 	Start astral.Uint64
 	Out   string
 }

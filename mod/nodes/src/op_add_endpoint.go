@@ -12,8 +12,8 @@ import (
 )
 
 type opAddEndpointArgs struct {
-	ID       *astral.Identity
-	Endpoint string
+	ID       *astral.Identity `query:"required"`
+	Endpoint string           `query:"required"`
 	In       string
 	Out      string
 }

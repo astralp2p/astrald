@@ -8,7 +8,7 @@ import (
 )
 
 type opEnableRepoArgs struct {
-	Repo    string
+	Repo    string `query:"required"`
 	Disable bool
 	In      string
 	Out     string

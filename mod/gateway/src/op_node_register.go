@@ -8,7 +8,7 @@ import (
 )
 
 type opNodeRegisterArgs struct {
-	Visibility gateway.Visibility
+	Visibility gateway.Visibility `query:"required"`
 	In         string
 	Out        string
 }

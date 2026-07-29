@@ -12,7 +12,7 @@ const DefaultTokenDuration = astral.Duration(time.Hour * 24 * 365)       // 1 ye
 const DefaultAppContractDuration = astral.Duration(time.Hour * 24 * 365) // 1 year
 
 type opCreateTokenArgs struct {
-	ID       *astral.Identity
+	ID       *astral.Identity `query:"required"`
 	Duration astral.Duration
 	Out      string
 }

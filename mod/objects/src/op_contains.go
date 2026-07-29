@@ -7,7 +7,7 @@ import (
 )
 
 type opContainsArgs struct {
-	Repo string
+	Repo string `query:"required"`
 	ID   *astral.ObjectID
 	In   string
 	Out  string

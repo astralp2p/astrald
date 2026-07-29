@@ -12,7 +12,7 @@ import (
 )
 
 type opDescribeArgs struct {
-	ID     *astral.ObjectID
+	ID     *astral.ObjectID `query:"required"`
 	Out    string
 	Zone   astral.Zone
 	Only   *string

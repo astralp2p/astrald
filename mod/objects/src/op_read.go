@@ -10,7 +10,7 @@ import (
 )
 
 type opReadArgs struct {
-	ID     *astral.ObjectID
+	ID     *astral.ObjectID `query:"required"`
 	Offset astral.Uint64
 	Limit  astral.Uint64
 	Zone   astral.Zone

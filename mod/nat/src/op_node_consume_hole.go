@@ -15,7 +15,7 @@ import (
 const takeExchangeTimeout = 5 * time.Second
 
 type opNodeConsumeHoleArgs struct {
-	Pair   astral.Nonce
+	Pair   astral.Nonce `query:"required"`
 	Target string
 
 	In  string

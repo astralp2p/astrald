@@ -7,7 +7,7 @@ import (
 )
 
 type opPurgeArgs struct {
-	Repo string
+	Repo string `query:"required"`
 	Out  string
 	Zone *astral.Zone
 }

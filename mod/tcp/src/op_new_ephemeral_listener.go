@@ -7,7 +7,7 @@ import (
 )
 
 type opNewEphemeralListenerArgs struct {
-	Port astral.Uint16
+	Port astral.Uint16 `query:"required"`
 	In   string
 	Out  string
 }

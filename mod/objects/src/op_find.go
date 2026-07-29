@@ -11,7 +11,7 @@ import (
 )
 
 type opFindArgs struct {
-	ID   *astral.ObjectID
+	ID   *astral.ObjectID `query:"required"`
 	Zone astral.Zone
 	Out  string
 }

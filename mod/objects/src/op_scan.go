@@ -7,7 +7,7 @@ import (
 )
 
 type opScanArgs struct {
-	Repo   string
+	Repo   string `query:"required"`
 	Follow bool
 	Zone   *astral.Zone
 	Out    string

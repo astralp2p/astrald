@@ -9,7 +9,7 @@ import (
 )
 
 type opNewMemArgs struct {
-	Name string
+	Name string `query:"required"`
 	Size string
 	In   string
 	Out  string
