@@ -79,7 +79,6 @@ Post-migration (Task 10) the tree additionally holds: `tests/net/` (tasks incl. 
 
 `tests/.gitignore`:
 ```gitignore
-.venv/
 .cache/
 results/
 __pycache__/
@@ -169,7 +168,7 @@ Expected: `astral import OK`.
 
 ```bash
 git add tests/run tests/config.toml tests/.gitignore tests/lib/__init__.py tests/selftest/__init__.py tests/lib/runner.py
-git commit -m "feat(tests): M1 scaffold — entry point with venv bootstrap and re-exec"
+git commit -m "feat(tests): M1 scaffold — entry point with astral-py path injection"
 ```
 
 ---
