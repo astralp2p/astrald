@@ -5,8 +5,8 @@ github.com/BurntSushi/toml v0.3.1/go.mod h1:xHWCNGjB5oqiDr8zfno3MHue2Ht5sIBksp03
 github.com/aead/siphash v1.0.1/go.mod h1:Nywa3cDsYNNK3gaciGTWPwHt0wlpNV15vwmswBAUSII=
 github.com/akutz/memconn v0.1.0 h1:NawI0TORU4hcOMsMr11g7vwlCdkYeLKXBcxWu2W/P8A=
 github.com/akutz/memconn v0.1.0/go.mod h1:Jo8rI7m0NieZyLI5e2CDlRdRqRRB4S7Xp77ukDjH+Fw=
-github.com/astralp2p/astral-go v0.0.0-20260727173322-9cb0fa43ccef h1:7ZcAJmQuaMim32FfinECYRT8xnd4nKpJTSHn5j++720=
-github.com/astralp2p/astral-go v0.0.0-20260727173322-9cb0fa43ccef/go.mod h1:sfLR08LTvLL+csjJQcLa1ML0ZO9OWN0I1nM99jduK5Q=
+github.com/astralp2p/astral-go v0.0.0-20260728100014-0a15afbaee4c h1:nGWUOzZy7hY0dedPdZu9PqgIZ76AUG5uC1MpkW6S/jg=
+github.com/astralp2p/astral-go v0.0.0-20260728100014-0a15afbaee4c/go.mod h1:sfLR08LTvLL+csjJQcLa1ML0ZO9OWN0I1nM99jduK5Q=
 github.com/aymanbagabas/go-osc52/v2 v2.0.1 h1:HwpRHbFMcZLEVr42D4p7XBqjyuxQH5SMiErDT4WkJ2k=
 github.com/aymanbagabas/go-osc52/v2 v2.0.1/go.mod h1:uYgXzlJ7ZpABp8OJ+exZzJJhRNQ2ASbcXHWsFqH8hp8=
 github.com/bitonicnl/verify-signed-message v0.7.4 h1:qHLngHOLkyjKRLejnTCj33vqbL7gudLagoAZmW3HTjY=
