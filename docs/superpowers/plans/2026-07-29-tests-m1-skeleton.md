@@ -419,6 +419,31 @@ class TestScenarios(unittest.TestCase):
         with self.assertRaises(ValueError):
             resolve(bad, only=["orphan"])
 
+    def test_unrelated_broken_scenario_does_not_break_selection(self):
+        write_scenario(self.tmp.name, "broken", """
+            start = "missing-state"
+            nodes = ["node1"]
+        """)
+        all2 = load_all(Path(self.tmp.name))
+        plan = resolve(all2, only=["smoke"])
+        self.assertEqual([(s.name, k) for s, k in plan], [("smoke", "test")])
+        with self.assertRaises(ValueError):
+            resolve(all2, only=["broken"])
+
+    def test_cycle_detected(self):
+        write_scenario(self.tmp.name, "cyc-a", """
+            start = "state-b"
+            saves = "state-a"
+            nodes = ["node1"]
+        """)
+        write_scenario(self.tmp.name, "cyc-b", """
+            start = "state-a"
+            saves = "state-b"
+            nodes = ["node1"]
+        """)
+        with self.assertRaises(ValueError):
+            resolve(load_all(Path(self.tmp.name)), only=["cyc-a"])
+
 
 if __name__ == "__main__":
     unittest.main()
@@ -466,9 +491,11 @@ def load_all(scenarios_dir: Path) -> dict:
     return out
 
 
-def _depths(all: dict) -> dict:
+def resolve(all: dict, only) -> list:
+    """Execution plan for a selection. Validation is scoped to the scenarios
+    the selection actually reaches — an unrelated broken manifest must never
+    break a targeted --only run."""
     producers = {s.saves: s for s in all.values() if s.saves}
-    depths = {}
 
     def depth_of(state: str, seen=()) -> int:
         if state == "null":
@@ -477,16 +504,8 @@ def _depths(all: dict) -> dict:
             raise ValueError(f"start/saves cycle at state {state!r}")
         if state not in producers:
             raise ValueError(f"no scenario saves state {state!r}")
-        s = producers[state]
-        return 1 + depth_of(s.start, seen + (state,))
+        return 1 + depth_of(producers[state].start, seen + (state,))
 
-    for s in all.values():
-        depths[s.name] = depth_of(s.start) if s.start != "null" else 0
-    return depths, producers
-
-
-def resolve(all: dict, only) -> list:
-    depths, producers = _depths(all)
     if only is None:
         selected = set(all)
     else:
@@ -497,8 +516,10 @@ def resolve(all: dict, only) -> list:
 
     needed = set(selected)
     frontier = list(selected)
+    depths = {}
     while frontier:
         s = all[frontier.pop()]
+        depths[s.name] = depth_of(s.start)
         if s.start != "null":
             dep = producers[s.start].name
             if dep not in needed:
@@ -512,7 +533,7 @@ def resolve(all: dict, only) -> list:
 - [ ] **Step 4: Run to verify it passes**
 
 Run: `PYTHONPATH=tests python3 -m unittest selftest.test_scenarios -v`
-Expected: `OK` (4 tests)
+Expected: `OK` (6 tests)
 
 - [ ] **Step 5: Commit**
 
