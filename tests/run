@@ -1,0 +1,52 @@
+#!/usr/bin/env python3
+"""tests/run — entry point of the integration test system (M1: node lane only).
+
+Stdlib until the re-exec: bootstraps tests/.venv with astral-py, then re-execs
+itself inside it so lib/ can import `astral` directly.
+"""
+import argparse
+import os
+import subprocess
+import sys
+import tomllib
+import venv
+from pathlib import Path
+
+TESTS = Path(__file__).resolve().parent
+
+
+def ensure_venv() -> Path:
+    py = TESTS / ".venv" / "bin" / "python3"
+    if not py.exists():
+        print("run: creating venv + installing astral-py ...", file=sys.stderr)
+        venv.create(TESTS / ".venv", with_pip=True)
+        cfg = tomllib.loads((TESTS / "config.toml").read_text())
+        src = Path(os.path.expanduser(cfg["astral_py"]["path"]))
+        if not src.exists():
+            sys.exit(f"run: astral-py checkout not found at {src} (config.toml astral_py.path)")
+        subprocess.run([str(py), "-m", "pip", "install", "--quiet", str(src)], check=True)
+    return py
+
+
+def main() -> int:
+    ap = argparse.ArgumentParser(prog="tests/run")
+    ap.add_argument("--lane", choices=["node"], default="node")
+    ap.add_argument("--only", nargs="*", default=None, metavar="SCENARIO")
+    ap.add_argument("--keep", action="store_true", help="keep session dirs on failure")
+    args = ap.parse_args()
+
+    if sys.version_info < (3, 11):
+        sys.exit("run: Python >= 3.11 required")
+
+    if os.environ.get("ASTRAL_TESTS_IN_VENV") != "1":
+        py = ensure_venv()
+        os.environ["ASTRAL_TESTS_IN_VENV"] = "1"
+        os.execv(str(py), [str(py), str(TESTS / "run")] + sys.argv[1:])
+
+    sys.path.insert(0, str(TESTS))
+    from lib import runner
+    return runner.main(args)
+
+
+if __name__ == "__main__":
+    sys.exit(main())

@@ -1,0 +1,8 @@
+[ports]
+base = 20800            # node N uses base+10N+0 apphost, +1 astral tcp, +2 ether udp
+
+[astral_py]
+path = "~/work/astralp2p/astral-py/master"
+
+[build]
+package = "./cmd/astrald"
