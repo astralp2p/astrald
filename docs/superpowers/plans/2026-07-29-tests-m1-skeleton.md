@@ -1095,7 +1095,6 @@ def main(args) -> int:
                     ASTRAL_TESTS_SESSION=str(session.session_json_path))
 
     failed_states = set()
-    any_failed = False
     try:
         for s, kind in plan:
             art = run_dir / "node" / s.name
@@ -1128,15 +1127,14 @@ def main(args) -> int:
                                    art / "verify.log", env, s.timeout)
                     if rc != 0:
                         status, fk = "fail", "verify"
-                if status == "fail" and session.dead_nodes():
-                    fk = "environment"   # a dead daemon outranks any other blame
+                if session.dead_nodes():
+                    status, fk = "fail", "environment"   # a dead daemon voids
+                    # any verdict — even a nominal pass over a dead world
 
             results.record(**entry, status=status, failure_kind=fk,
                            duration_s=time.monotonic() - t0)
-            if status != "pass":
-                any_failed = True
-                if s.saves:
-                    failed_states.add(s.saves)
+            if status != "pass" and s.saves:
+                failed_states.add(s.saves)
     finally:
         if args.keep:
             print(f"run: --keep, nodes left running under {session.dir}",
