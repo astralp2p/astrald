@@ -11,9 +11,9 @@ import (
 type opNewRepoArgs struct {
 	Path  string
 	Name  string
-	Label string `query:"optional"`
-	In    string `query:"optional"`
-	Out   string `query:"optional"`
+	Label string
+	In    string
+	Out   string
 }
 
 // OpNewRepo registers a new writable repository at the given path and adds it to the local group.

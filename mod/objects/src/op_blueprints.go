@@ -7,7 +7,7 @@ import (
 )
 
 type opBlueprintsArgs struct {
-	Out string `query:"optional"`
+	Out string
 }
 
 // OpBlueprints streams every registered type name in dependency order

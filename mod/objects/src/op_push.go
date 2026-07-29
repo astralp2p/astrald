@@ -9,8 +9,8 @@ import (
 const maxPushSize = 32 * 1024
 
 type opPushArgs struct {
-	In  string `query:"optional"`
-	Out string `query:"optional"`
+	In  string
+	Out string
 }
 
 // OpPush receives pushed objects from the caller and replies with a Bool

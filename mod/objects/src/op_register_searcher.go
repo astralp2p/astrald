@@ -8,8 +8,8 @@ import (
 )
 
 type opRegisterSearcherArgs struct {
-	In  string `query:"optional"`
-	Out string `query:"optional"`
+	In  string
+	Out string
 }
 
 // OpRegisterSearcher registers the caller as an external searcher.

@@ -8,8 +8,8 @@ import (
 
 type opNewEphemeralListenerArgs struct {
 	Port astral.Uint16
-	In   string `query:"optional"`
-	Out  string `query:"optional"`
+	In   string
+	Out  string
 }
 
 // OpNewEphemeralListener handles a remote request to open an ephemeral TCP listener on the given port,

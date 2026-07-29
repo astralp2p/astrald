@@ -8,8 +8,8 @@ import (
 )
 
 type opAcceptContractArgs struct {
-	In  string `query:"optional"`
-	Out string `query:"optional"`
+	In  string
+	Out string
 }
 
 // OpAcceptContract activates a fully-signed node contract as the node's active

@@ -9,8 +9,8 @@ import (
 
 type opDeriveKeyArgs struct {
 	Path string
-	In   string `query:"optional"`
-	Out  string `query:"optional"`
+	In   string
+	Out  string
 }
 
 // OpDeriveKey receives a Seed over the channel and replies with the key derived along Path.

@@ -10,8 +10,8 @@ import (
 )
 
 type opMnemonicArgs struct {
-	In  string `query:"optional"`
-	Out string `query:"optional"`
+	In  string
+	Out string
 }
 
 // OpMnemonic receives Entropy over the channel and replies with the space-joined mnemonic words.

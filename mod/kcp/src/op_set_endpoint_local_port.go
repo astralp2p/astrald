@@ -10,9 +10,9 @@ import (
 type opSetEndpointLocalPort struct {
 	Endpoint  string
 	LocalPort astral.Uint16
-	Replace   astral.Bool `query:"optional"`
-	In        string      `query:"optional"`
-	Out       string      `query:"optional"`
+	Replace   astral.Bool
+	In        string
+	Out       string
 }
 
 func (mod *Module) OpSetEndpointLocalPort(ctx *astral.Context, q *routing.IncomingQuery, args opSetEndpointLocalPort) (err error) {

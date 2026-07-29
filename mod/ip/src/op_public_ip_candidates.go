@@ -7,7 +7,7 @@ import (
 )
 
 type opPublicIPCandidatesArgs struct {
-	Out string `query:"optional"`
+	Out string
 }
 
 func (mod *Module) OpPublicIPCandidates(ctx *astral.Context, q *routing.IncomingQuery, args opPublicIPCandidatesArgs) (err error) {

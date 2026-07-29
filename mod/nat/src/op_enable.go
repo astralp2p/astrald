@@ -7,9 +7,9 @@ import (
 )
 
 type opSetEnabledArgs struct {
-	Arg bool   `query:"optional"`
-	In  string `query:"optional"`
-	Out string `query:"optional"`
+	Arg bool
+	In  string
+	Out string
 }
 
 func (mod *Module) OpSetEnabled(ctx *astral.Context, q *routing.IncomingQuery, args opSetEnabledArgs) (err error) {

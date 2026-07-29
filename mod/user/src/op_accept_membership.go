@@ -12,8 +12,8 @@ import (
 )
 
 type opAcceptMembershipArgs struct {
-	In  string `query:"optional"`
-	Out string `query:"optional"`
+	In  string
+	Out string
 }
 
 // OpAcceptMembership handles the node side of the contract signing ceremony.

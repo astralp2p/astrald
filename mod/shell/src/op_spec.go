@@ -10,9 +10,9 @@ import (
 )
 
 type opArgsArgs struct {
-	Op  string `query:"optional"`
-	In  string `query:"optional"`
-	Out string `query:"optional"`
+	Op  string
+	In  string
+	Out string
 }
 
 func (mod *Module) OpSpec(ctx *astral.Context, q *routing.IncomingQuery, args opArgsArgs) (err error) {

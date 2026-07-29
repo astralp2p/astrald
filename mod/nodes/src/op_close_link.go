@@ -8,7 +8,7 @@ import (
 
 type opCloseLinkArgs struct {
 	ID  astral.Nonce
-	Out string `query:"optional"`
+	Out string
 }
 
 // OpCloseLink closes a link with the given id.

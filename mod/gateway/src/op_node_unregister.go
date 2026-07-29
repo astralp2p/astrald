@@ -7,7 +7,7 @@ import (
 )
 
 type opNodeUnregister struct {
-	Out string `query:"optional"`
+	Out string
 }
 
 func (mod *Module) OpNodeUnregister(

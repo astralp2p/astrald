@@ -9,7 +9,7 @@ import (
 )
 
 type opInfoArgs struct {
-	Out string `query:"optional"`
+	Out string
 }
 
 // OpInfo returns identity and contract metadata for this node's active contract.

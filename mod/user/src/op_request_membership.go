@@ -8,8 +8,8 @@ import (
 )
 
 type opRequestMembershipArgs struct {
-	In  string `query:"optional"`
-	Out string `query:"optional"`
+	In  string
+	Out string
 }
 
 // OpRequestMembership allows a caller node to request membership in this node's swarm.

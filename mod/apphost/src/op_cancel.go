@@ -12,8 +12,8 @@ import (
 
 type opCancelArgs struct {
 	ID    astral.Nonce
-	Cause *string `query:"optional"`
-	Out   string  `query:"optional"`
+	Cause *string
+	Out   string
 }
 
 func (mod *Module) OpCancel(ctx *astral.Context, q *routing.IncomingQuery, args opCancelArgs) (err error) {

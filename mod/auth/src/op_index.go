@@ -8,9 +8,9 @@ import (
 )
 
 type opIndexArgs struct {
-	ID  *astral.ObjectID `query:"optional"` // batch mode when omitted
-	In  string           `query:"optional"`
-	Out string           `query:"optional"`
+	ID  *astral.ObjectID // batch mode when omitted
+	In  string
+	Out string
 }
 
 // OpIndex handles the index remote operation. With args.ID set it loads that

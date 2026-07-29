@@ -8,7 +8,7 @@ import (
 )
 
 type opListArgs struct {
-	Out string `query:"optional"`
+	Out string
 }
 
 // OpNodeList streams the identities of all publicly visible registered nodes, terminated by EOS.

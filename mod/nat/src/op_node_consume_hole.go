@@ -16,10 +16,10 @@ const takeExchangeTimeout = 5 * time.Second
 
 type opNodeConsumeHoleArgs struct {
 	Pair   astral.Nonce
-	Target string `query:"optional"`
+	Target string
 
-	In  string `query:"optional"`
-	Out string `query:"optional"`
+	In  string
+	Out string
 }
 
 // OpNodeConsumeHole coordinates a two-phase lock-then-take exchange to hand a hole out of the pool.

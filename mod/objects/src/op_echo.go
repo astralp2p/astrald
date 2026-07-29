@@ -12,12 +12,12 @@ import (
 )
 
 type opEchoArgs struct {
-	Only   *string `query:"optional"` // only echo these object types (comma separated)
-	Except *string `query:"optional"` // do not echo these object types (comma separated)
-	Stop   string  `query:"optional"` // close the channel when this object type is received (like EOS)
-	Strict bool    `query:"optional"` // fail-fast on objects whose blueprint isn't registered (probes wire-schema understanding)
-	In     string  `query:"optional"`
-	Out    string  `query:"optional"`
+	Only   *string // only echo these object types (comma separated)
+	Except *string // do not echo these object types (comma separated)
+	Stop   string  // close the channel when this object type is received (like EOS)
+	Strict bool    // fail-fast on objects whose blueprint isn't registered (probes wire-schema understanding)
+	In     string
+	Out    string
 }
 
 // OpEcho relays received objects back, optionally filtered by Only/Except and

@@ -8,9 +8,9 @@ import (
 
 type opScanArgs struct {
 	Repo   string
-	Follow bool         `query:"optional"`
-	Zone   *astral.Zone `query:"optional"`
-	Out    string       `query:"optional"`
+	Follow bool
+	Zone   *astral.Zone
+	Out    string
 }
 
 // OpScan sends a list of object ids in a repository

@@ -9,8 +9,8 @@ import (
 type opRegisterHandlerArgs struct {
 	Endpoint string
 	Token    astral.Nonce
-	In       string `query:"optional"`
-	Out      string `query:"optional"`
+	In       string
+	Out      string
 }
 
 func (mod *Module) OpRegisterHandler(ctx *astral.Context, q *routing.IncomingQuery, args opRegisterHandlerArgs) (err error) {

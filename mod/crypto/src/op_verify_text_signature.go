@@ -9,10 +9,10 @@ import (
 )
 
 type opVerifyTextSignatureArgs struct {
-	Text string `query:"optional"`
-	Key  string `query:"optional"`
-	In   string `query:"optional"`
-	Out  string `query:"optional"`
+	Text string
+	Key  string
+	In   string
+	Out  string
 }
 
 // OpVerifyTextSignature accepts a raw channel and verifies a text signature.

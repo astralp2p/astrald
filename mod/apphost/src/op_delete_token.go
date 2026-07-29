@@ -11,7 +11,7 @@ import (
 
 type opDeleteTokenArgs struct {
 	Token astral.String8
-	Out   string `query:"optional"`
+	Out   string
 }
 
 // OpDeleteToken deletes an access token so it no longer authenticates

@@ -12,8 +12,8 @@ import (
 
 type opSubscribeArgs struct {
 	Nonce astral.Nonce
-	In    string `query:"optional"`
-	Out   string `query:"optional"`
+	In    string
+	Out   string
 }
 
 // OpSubscribe streams pending index/unindex changes to the caller in version

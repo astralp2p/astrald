@@ -7,7 +7,7 @@ import (
 )
 
 type opListExpelledArgs struct {
-	Out string `query:"optional"`
+	Out string
 }
 
 // OpListExpelled streams the signed bans issued by the active swarm user, terminated by EOS.

@@ -9,8 +9,8 @@ import (
 
 type opRemoveEndpointLocalPort struct {
 	Endpoint astral.String8
-	In       string `query:"optional"`
-	Out      string `query:"optional"`
+	In       string
+	Out      string
 }
 
 func (mod *Module) OpRemoveEndpointLocalPort(ctx *astral.Context, q *routing.IncomingQuery, args opRemoveEndpointLocalPort) (err error) {

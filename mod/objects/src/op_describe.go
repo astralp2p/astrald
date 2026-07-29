@@ -13,10 +13,10 @@ import (
 
 type opDescribeArgs struct {
 	ID     *astral.ObjectID
-	Out    string      `query:"optional"`
-	Zone   astral.Zone `query:"optional"`
-	Only   *string     `query:"optional"`
-	Except *string     `query:"optional"`
+	Out    string
+	Zone   astral.Zone
+	Only   *string
+	Except *string
 }
 
 // OpDescribe streams an object's descriptors, filtered by the Only/Except type

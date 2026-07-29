@@ -7,8 +7,8 @@ import (
 )
 
 type opListSiblingsArgs struct {
-	Out  string      `query:"optional"`
-	Zone astral.Zone `query:"optional"`
+	Out  string
+	Zone astral.Zone
 }
 
 // OpListSiblings streams the identities of all currently linked sibling nodes.

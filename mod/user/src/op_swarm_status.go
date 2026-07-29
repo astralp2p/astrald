@@ -8,8 +8,8 @@ import (
 )
 
 type opSwarmStatusArgs struct {
-	In  string `query:"optional"`
-	Out string `query:"optional"`
+	In  string
+	Out string
 }
 
 // OpSwarmStatus streams the status of every active node in the issuer's swarm.

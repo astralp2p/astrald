@@ -7,7 +7,7 @@ import (
 )
 
 type opBroadcastArgs struct {
-	Out string `query:"optional"`
+	Out string
 }
 
 func (mod *Module) OpBroadcast(ctx *astral.Context, q *routing.IncomingQuery, args opBroadcastArgs) (err error) {

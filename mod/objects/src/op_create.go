@@ -9,10 +9,10 @@ import (
 )
 
 type opCreateArgs struct {
-	Alloc uint64 `query:"optional"`
-	Repo  string `query:"optional"`
-	In    string `query:"optional"`
-	Out   string `query:"optional"`
+	Alloc uint64
+	Repo  string
+	In    string
+	Out   string
 }
 
 // OpCreate creates a new object in the repository. It expects a stream of Blob objects followed by objects.Commit.

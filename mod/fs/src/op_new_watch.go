@@ -10,9 +10,9 @@ import (
 type opNewWatchArgs struct {
 	Path  string
 	Name  string
-	Label string `query:"optional"`
-	In    string `query:"optional"`
-	Out   string `query:"optional"`
+	Label string
+	In    string
+	Out   string
 }
 
 // OpNewWatch registers a new watched repository at the given path, starts an async background scan,

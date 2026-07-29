@@ -10,8 +10,8 @@ import (
 
 type opExpelArgs struct {
 	Target string
-	In     string `query:"optional"`
-	Out    string `query:"optional"`
+	In     string
+	Out    string
 }
 
 // OpExpel permanently bans the target node from the swarm and returns the signed ban.

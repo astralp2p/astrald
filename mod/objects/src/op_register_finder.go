@@ -8,8 +8,8 @@ import (
 )
 
 type opRegisterFinderArgs struct {
-	In  string `query:"optional"`
-	Out string `query:"optional"`
+	In  string
+	Out string
 }
 
 // OpRegisterFinder registers the caller as an external finder.

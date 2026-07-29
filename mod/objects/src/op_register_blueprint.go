@@ -7,8 +7,8 @@ import (
 )
 
 type opRegisterBlueprintArgs struct {
-	In  string `query:"optional"`
-	Out string `query:"optional"`
+	In  string
+	Out string
 }
 
 // OpRegisterBlueprint runs in batch mode: reads runtime *astral.Blueprint descriptors

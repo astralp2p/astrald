@@ -10,7 +10,7 @@ import (
 )
 
 type opLinksArgs struct {
-	Out string `query:"optional"`
+	Out string
 }
 
 // OpLinks lists all links.

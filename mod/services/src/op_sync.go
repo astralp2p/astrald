@@ -8,9 +8,9 @@ import (
 
 type opSyncArgs struct {
 	ID     string
-	Follow bool   `query:"optional"`
-	In     string `query:"optional"`
-	Out    string `query:"optional"`
+	Follow bool
+	In     string
+	Out    string
 }
 
 // OpSync fetches and caches services for the requested identity over ZoneNetwork.

@@ -9,8 +9,8 @@ import (
 )
 
 type opPublicKeyArgs struct {
-	In  string `query:"optional"`
-	Out string `query:"optional"`
+	In  string
+	Out string
 }
 
 func (mod *Module) OpPublicKey(ctx *astral.Context, q *routing.IncomingQuery, args opPublicKeyArgs) (err error) {

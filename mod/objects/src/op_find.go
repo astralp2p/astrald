@@ -12,8 +12,8 @@ import (
 
 type opFindArgs struct {
 	ID   *astral.ObjectID
-	Zone astral.Zone `query:"optional"`
-	Out  string      `query:"optional"`
+	Zone astral.Zone
+	Out  string
 }
 
 func (mod *Module) OpFind(ctx *astral.Context, q *routing.IncomingQuery, args opFindArgs) error {

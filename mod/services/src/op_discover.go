@@ -7,10 +7,10 @@ import (
 )
 
 type opDiscoverArgs struct {
-	Follow bool `query:"optional"`
+	Follow bool
 
-	In  string `query:"optional"`
-	Out string `query:"optional"`
+	In  string
+	Out string
 }
 
 // OpDiscover handles the discover query: streams service updates to the caller,

@@ -8,8 +8,8 @@ import (
 
 type opPurgeArgs struct {
 	Repo string
-	Out  string       `query:"optional"`
-	Zone *astral.Zone `query:"optional"`
+	Out  string
+	Zone *astral.Zone
 }
 
 // OpPurge deletes unheld objects from a repository, streaming each purged ObjectID

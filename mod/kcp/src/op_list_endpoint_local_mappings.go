@@ -8,8 +8,8 @@ import (
 )
 
 type opListEndpointLocalMappingsArgs struct {
-	In  string `query:"optional"`
-	Out string `query:"optional"`
+	In  string
+	Out string
 }
 
 func (mod *Module) OpListEndpointLocalMappings(ctx *astral.Context, q *routing.IncomingQuery, args opListEndpointLocalMappingsArgs) (err error) {

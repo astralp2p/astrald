@@ -10,8 +10,8 @@ import (
 
 type opAdoptArgs struct {
 	Target string
-	In     string `query:"optional"`
-	Out    string `query:"optional"`
+	In     string
+	Out    string
 }
 
 // OpAdopt adopts a target node into the active contract and indexes the signed result.

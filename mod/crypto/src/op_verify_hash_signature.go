@@ -11,10 +11,10 @@ import (
 )
 
 type opVerifyHashSignatureArgs struct {
-	Hash string `query:"optional"`
-	Key  string `query:"optional"`
-	In   string `query:"optional"`
-	Out  string `query:"optional"`
+	Hash string
+	Key  string
+	In   string
+	Out  string
 }
 
 func (mod *Module) OpVerifyHashSignature(ctx *astral.Context, q *routing.IncomingQuery, args opVerifyHashSignatureArgs) (err error) {

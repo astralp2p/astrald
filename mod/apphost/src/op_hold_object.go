@@ -8,10 +8,10 @@ import (
 )
 
 type opHoldObjectArgs struct {
-	ID       *astral.ObjectID `query:"optional"` // batch mode when omitted
-	Duration *astral.Duration `query:"optional"`
-	In       string           `query:"optional"`
-	Out      string           `query:"optional"`
+	ID       *astral.ObjectID // batch mode when omitted
+	Duration *astral.Duration
+	In       string
+	Out      string
 }
 
 // OpHoldObject handles the hold_object operation. With args.ID set it places

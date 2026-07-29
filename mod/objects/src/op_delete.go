@@ -7,10 +7,10 @@ import (
 )
 
 type opDeleteArgs struct {
-	ID   *astral.ObjectID `query:"optional"`
+	ID   *astral.ObjectID
 	Repo string
-	Out  string       `query:"optional"`
-	Zone *astral.Zone `query:"optional"`
+	Out  string
+	Zone *astral.Zone
 }
 
 // OpDelete deletes one object (ID arg) or a stream of objects read from the

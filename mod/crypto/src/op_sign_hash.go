@@ -11,11 +11,11 @@ import (
 )
 
 type opSignHashArgs struct {
-	Hash   string `query:"optional"`
-	Key    string `query:"optional"`
-	Scheme string `query:"optional"`
-	In     string `query:"optional"`
-	Out    string `query:"optional"`
+	Hash   string
+	Key    string
+	Scheme string
+	In     string
+	Out    string
 }
 
 func (mod *Module) OpSignHash(ctx *astral.Context, q *routing.IncomingQuery, args opSignHashArgs) (err error) {

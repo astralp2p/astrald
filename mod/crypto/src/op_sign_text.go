@@ -9,11 +9,11 @@ import (
 )
 
 type opSignTextArgs struct {
-	Text   string `query:"optional"`
-	Key    string `query:"optional"`
-	Scheme string `query:"optional"`
-	In     string `query:"optional"`
-	Out    string `query:"optional"`
+	Text   string
+	Key    string
+	Scheme string
+	In     string
+	Out    string
 }
 
 func (mod *Module) OpSignText(ctx *astral.Context, q *routing.IncomingQuery, args opSignTextArgs) (err error) {

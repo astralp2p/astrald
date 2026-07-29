@@ -8,8 +8,8 @@ import (
 
 type opRemoveIndexArgs struct {
 	Nonce astral.Nonce
-	In    string `query:"optional"`
-	Out   string `query:"optional"`
+	In    string
+	Out   string
 }
 
 func (mod *Module) OpRemoveIndex(ctx *astral.Context, q *routing.IncomingQuery, args opRemoveIndexArgs) error {

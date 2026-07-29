@@ -7,8 +7,8 @@ import (
 )
 
 type opScanArgs struct {
-	In  string `query:"optional"`
-	Out string `query:"optional"`
+	In  string
+	Out string
 }
 
 // OpScan triggers a device rescan and replies over the channel with an Ack on

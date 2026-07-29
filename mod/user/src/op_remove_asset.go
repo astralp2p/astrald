@@ -8,7 +8,7 @@ import (
 
 type opRemoveAssetArgs struct {
 	ID  *astral.ObjectID
-	Out string `query:"optional"`
+	Out string
 }
 
 // OpRemoveAsset removes an asset by object ID.

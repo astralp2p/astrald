@@ -10,8 +10,8 @@ import (
 
 type opPunchArgs struct {
 	Target string
-	In     string `query:"optional"`
-	Out    string `query:"optional"`
+	In     string
+	Out    string
 }
 
 // OpPunch drives the initiator side of the NAT punch protocol and registers the resulting hole.

@@ -8,7 +8,7 @@ import (
 )
 
 type opNodePunchArgs struct {
-	Out string `query:"optional"`
+	Out string
 }
 
 // OpNodePunch runs the passive (participant) side of the NAT punch protocol, responding to an initiator's offer.

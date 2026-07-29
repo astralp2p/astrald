@@ -7,11 +7,11 @@ import (
 )
 
 type opLoadArgs struct {
-	ID       *astral.ObjectID `query:"optional"`
-	Unparsed bool             `query:"optional"`
-	Repo     string           `query:"optional"`
-	Zone     *astral.Zone     `query:"optional"`
-	Out      string           `query:"optional"`
+	ID       *astral.ObjectID
+	Unparsed bool
+	Repo     string
+	Zone     *astral.Zone
+	Out      string
 }
 
 // OpLoad loads an object into memory and writes it to the output. OpLoad verifies the object hash.

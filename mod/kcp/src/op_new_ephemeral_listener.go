@@ -8,8 +8,8 @@ import (
 
 type opNewEphemeralListenerArgs struct {
 	Port astral.Uint16
-	In   string `query:"optional"`
-	Out  string `query:"optional"`
+	In   string
+	Out  string
 }
 
 func (mod *Module) OpNewEphemeralListener(ctx *astral.Context, q *routing.IncomingQuery, args opNewEphemeralListenerArgs) (err error) {

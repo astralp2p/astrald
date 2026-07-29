@@ -11,10 +11,10 @@ import (
 
 type opReadArgs struct {
 	ID     *astral.ObjectID
-	Offset astral.Uint64 `query:"optional"`
-	Limit  astral.Uint64 `query:"optional"`
-	Zone   astral.Zone   `query:"optional"`
-	Repo   string        `query:"optional"`
+	Offset astral.Uint64
+	Limit  astral.Uint64
+	Zone   astral.Zone
+	Repo   string
 }
 
 // OpRead authorizes the caller, then streams raw object bytes over the accepted

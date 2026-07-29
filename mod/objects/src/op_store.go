@@ -7,9 +7,9 @@ import (
 )
 
 type opStoreArgs struct {
-	Repo string `query:"optional"`
-	In   string `query:"optional"`
-	Out  string `query:"optional"`
+	Repo string
+	In   string
+	Out  string
 }
 
 func (mod *Module) OpStore(ctx *astral.Context, q *routing.IncomingQuery, args opStoreArgs) error {

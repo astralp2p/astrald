@@ -8,7 +8,7 @@ import (
 )
 
 type opRepositoriesArgs struct {
-	Out string `query:"optional"`
+	Out string
 }
 
 func (mod *Module) OpRepositories(ctx *astral.Context, q *routing.IncomingQuery, args opRepositoriesArgs) (err error) {

@@ -7,10 +7,10 @@ import (
 )
 
 type opProbeArgs struct {
-	ID   *astral.ObjectID `query:"optional"`
-	Repo string           `query:"optional"`
-	In   string           `query:"optional"`
-	Out  string           `query:"optional"`
+	ID   *astral.ObjectID
+	Repo string
+	In   string
+	Out  string
 }
 
 // OpProbe probes a single object when args.ID is set, otherwise streams probes

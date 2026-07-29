@@ -9,8 +9,8 @@ import (
 
 type opNodeRegisterArgs struct {
 	Visibility gateway.Visibility
-	In         string `query:"optional"`
-	Out        string `query:"optional"`
+	In         string
+	Out        string
 }
 
 // OpNodeRegister registers the caller as a gateway-reachable node and returns the socket (nonce + TCP endpoint) the caller must listen on.

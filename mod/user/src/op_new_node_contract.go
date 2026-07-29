@@ -10,11 +10,11 @@ import (
 )
 
 type opNewNodeContractArgs struct {
-	User     string `query:"optional"`
-	Node     string `query:"optional"`
-	Duration string `query:"optional"`
-	In       string `query:"optional"`
-	Out      string `query:"optional"`
+	User     string
+	Node     string
+	Duration string
+	In       string
+	Out      string
 }
 
 // OpNewNodeContract constructs and returns an unsigned node contract.

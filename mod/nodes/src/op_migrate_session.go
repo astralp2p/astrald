@@ -11,8 +11,8 @@ import (
 type opMigrateSessionArgs struct {
 	SessionID astral.Nonce `query:"required"`
 	LinkID    astral.Nonce `query:"required"`
-	Start     astral.Bool  `query:"optional"`
-	Out       string       `query:"optional"`
+	Start     astral.Bool
+	Out       string
 }
 
 // OpMigrateSession moves an open session onto another link. With Start set it drives

@@ -7,7 +7,7 @@ import (
 )
 
 type opDefaultGatewayArgs struct {
-	Out string `query:"optional"`
+	Out string
 }
 
 func (mod *Module) OpDefaultGateway(ctx *astral.Context, q *routing.IncomingQuery, args opDefaultGatewayArgs) (err error) {

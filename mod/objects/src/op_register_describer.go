@@ -8,8 +8,8 @@ import (
 )
 
 type opRegisterDescriberArgs struct {
-	In  string `query:"optional"`
-	Out string `query:"optional"`
+	In  string
+	Out string
 }
 
 // OpRegisterDescriber registers the caller as an external describer.

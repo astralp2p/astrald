@@ -8,7 +8,7 @@ import (
 )
 
 type opListArgs struct {
-	Out string `query:"optional"`
+	Out string
 }
 
 func (mod *Module) OpList(ctx *astral.Context, q *routing.IncomingQuery, args opListArgs) (err error) {

@@ -8,7 +8,7 @@ import (
 
 type opAddAssetArgs struct {
 	ID  *astral.ObjectID
-	Out string `query:"optional"`
+	Out string
 }
 
 func (mod *Module) OpAddAsset(ctx *astral.Context, q *routing.IncomingQuery, args opAddAssetArgs) (err error) {

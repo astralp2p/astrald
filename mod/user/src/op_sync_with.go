@@ -8,8 +8,8 @@ import (
 
 type opSyncWithArgs struct {
 	Node  *astral.Identity
-	Start astral.Uint64 `query:"optional"`
-	Out   string        `query:"optional"`
+	Start astral.Uint64
+	Out   string
 }
 
 // OpSyncWith triggers an outbound asset sync with the specified node over the network zone.

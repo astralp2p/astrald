@@ -11,7 +11,7 @@ import (
 )
 
 type opShellArgs struct {
-	As astral.String8 `query:"optional"`
+	As astral.String8
 }
 
 func (mod *Module) OpShell(ctx *astral.Context, q *routing.IncomingQuery, args opShellArgs) (err error) {

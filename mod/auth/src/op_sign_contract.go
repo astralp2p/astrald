@@ -8,8 +8,8 @@ import (
 )
 
 type opSignContractArgs struct {
-	In  string `query:"optional"`
-	Out string `query:"optional"`
+	In  string
+	Out string
 }
 
 // OpSignContract handles the sign-contract remote operation: reads a Contract from the

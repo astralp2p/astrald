@@ -8,9 +8,9 @@ import (
 )
 
 type opNewEntropyArgs struct {
-	Bits int    `query:"optional"`
-	In   string `query:"optional"`
-	Out  string `query:"optional"`
+	Bits int
+	In   string
+	Out  string
 }
 
 // OpNewEntropy replies with fresh entropy of Bits length, defaulting to DefaultEntropyBits.

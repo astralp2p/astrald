@@ -7,7 +7,7 @@ import (
 )
 
 type opAssetsArgs struct {
-	Out string `query:"optional"`
+	Out string
 }
 
 // OpAssets streams all module assets to the caller, terminating with EOS.

@@ -8,8 +8,8 @@ import (
 
 type opNodeConnectArgs struct {
 	Target *astral.Identity
-	In     string `query:"optional"`
-	Out    string `query:"optional"`
+	In     string
+	Out    string
 }
 
 // OpNodeConnect handles the NodeConnect RPC: it reserves a pre-established idle

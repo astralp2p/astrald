@@ -8,7 +8,7 @@ import (
 
 type opGetBlueprintArgs struct {
 	Type string
-	Out  string `query:"optional"`
+	Out  string
 }
 
 // OpGetBlueprint sends the Blueprint for a single type name. Referenced types are not

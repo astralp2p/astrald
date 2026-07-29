@@ -8,7 +8,7 @@ import (
 
 type opResolveEndpointsArgs struct {
 	ID  string
-	Out string `query:"optional"`
+	Out string
 }
 
 func (mod *Module) OpResolveEndpoints(ctx *astral.Context, q *routing.IncomingQuery, args opResolveEndpointsArgs) (err error) {

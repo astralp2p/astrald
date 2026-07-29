@@ -8,8 +8,8 @@ import (
 )
 
 type opNewArgs struct {
-	In  string `query:"optional"`
-	Out string `query:"optional"`
+	In  string
+	Out string
 }
 
 // OpNew generates a fresh secp256k1 key and sends it over the accepted channel.

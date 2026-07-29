@@ -7,8 +7,8 @@ import (
 )
 
 type opWhoamiArgs struct {
-	In  string `query:"optional"`
-	Out string `query:"optional"`
+	In  string
+	Out string
 }
 
 func (mod *Module) OpWhoami(ctx *astral.Context, query *routing.IncomingQuery, args opWhoamiArgs) (err error) {

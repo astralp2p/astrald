@@ -8,9 +8,9 @@ import (
 
 type opContainsArgs struct {
 	Repo string
-	ID   *astral.ObjectID `query:"optional"`
-	In   string           `query:"optional"`
-	Out  string           `query:"optional"`
+	ID   *astral.ObjectID
+	In   string
+	Out  string
 }
 
 // OpContains reports whether a repository holds an object. With the ID arg it

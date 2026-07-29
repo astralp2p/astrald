@@ -9,8 +9,8 @@ import (
 )
 
 type opSyncAssetsArgs struct {
-	Start astral.Uint64 `query:"optional"`
-	Out   string        `query:"optional"`
+	Start astral.Uint64
+	Out   string
 }
 
 // OpSyncAssets streams asset delta records from the given DB height and replies with the next unread height.

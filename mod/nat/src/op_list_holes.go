@@ -7,8 +7,8 @@ import (
 )
 
 type opListHolesArgs struct {
-	With string `query:"optional"`
-	Out  string `query:"optional"`
+	With string
+	Out  string
 }
 
 func (mod *Module) OpListHoles(ctx *astral.Context, q *routing.IncomingQuery, args opListHolesArgs) (err error) {

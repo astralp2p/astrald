@@ -10,9 +10,9 @@ import (
 
 type opNewMemArgs struct {
 	Name string
-	Size string `query:"optional"`
-	In   string `query:"optional"`
-	Out  string `query:"optional"`
+	Size string
+	In   string
+	Out  string
 }
 
 func (mod *Module) OpNewMem(ctx *astral.Context, q *routing.IncomingQuery, args opNewMemArgs) (err error) {

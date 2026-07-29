@@ -8,8 +8,8 @@ import (
 )
 
 type opSignAppContractArgs struct {
-	In  string `query:"optional"`
-	Out string `query:"optional"`
+	In  string
+	Out string
 }
 
 func (mod *Module) OpSignAppContract(ctx *astral.Context, q *routing.IncomingQuery, args opSignAppContractArgs) error {

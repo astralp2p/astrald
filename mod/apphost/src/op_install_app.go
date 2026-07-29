@@ -10,8 +10,8 @@ import (
 
 type opInstallAppArgs struct {
 	ID       *astral.Identity
-	Duration astral.Duration `query:"optional"`
-	Out      string          `query:"optional"`
+	Duration astral.Duration
+	Out      string
 }
 
 // OpInstallApp creates, signs, and indexes an app contract for an existing identity, then records it as a local app.

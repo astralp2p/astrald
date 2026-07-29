@@ -10,9 +10,9 @@ import (
 )
 
 type opSeedArgs struct {
-	Passphrase string `query:"optional"`
-	In         string `query:"optional"`
-	Out        string `query:"optional"`
+	Passphrase string
+	In         string
+	Out        string
 }
 
 // OpSeed receives a whitespace-separated mnemonic and replies with the seed derived under Passphrase.

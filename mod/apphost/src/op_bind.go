@@ -8,7 +8,7 @@ import (
 )
 
 type opBindArgs struct {
-	Out string `query:"optional"`
+	Out string
 }
 
 // OpBind keeps a session alive so the caller can associate cleanup actions (handler removal) with its lifetime.

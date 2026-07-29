@@ -11,7 +11,7 @@ import (
 )
 
 type opSessionsArgs struct {
-	Out string `query:"optional"`
+	Out string
 }
 
 // OpSessions lists all active sessions.

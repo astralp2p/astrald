@@ -13,10 +13,10 @@ import (
 )
 
 type SearchArgs struct {
-	Query string      `query:"key:q"`
-	Repo  string      `query:"optional"` // return only objects that this repo contains
-	Zone  astral.Zone `query:"optional"`
-	Out   string      `query:"optional"`
+	Query string `query:"key:q"`
+	Repo  string // return only objects that this repo contains
+	Zone  astral.Zone
+	Out   string
 }
 
 // OpSearch streams matches for the query, deduplicated by ObjectID and

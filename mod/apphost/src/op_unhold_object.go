@@ -8,9 +8,9 @@ import (
 )
 
 type opUnholdObjectArgs struct {
-	ID  *astral.ObjectID `query:"optional"` // batch mode when omitted
-	In  string           `query:"optional"`
-	Out string           `query:"optional"`
+	ID  *astral.ObjectID // batch mode when omitted
+	In  string
+	Out string
 }
 
 // OpUnholdObject handles the unhold_object operation. With args.ID set it

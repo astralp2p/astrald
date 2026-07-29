@@ -13,8 +13,8 @@ const DefaultAppContractDuration = astral.Duration(time.Hour * 24 * 365) // 1 ye
 
 type opCreateTokenArgs struct {
 	ID       *astral.Identity
-	Duration astral.Duration `query:"optional"`
-	Out      string          `query:"optional"`
+	Duration astral.Duration
+	Out      string
 }
 
 func (mod *Module) OpCreateToken(ctx *astral.Context, q *routing.IncomingQuery, args opCreateTokenArgs) (err error) {

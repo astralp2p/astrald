@@ -8,8 +8,8 @@ import (
 
 type opRemoveRepositoryArgs struct {
 	Name string
-	In   string `query:"optional"`
-	Out  string `query:"optional"`
+	In   string
+	Out  string
 }
 
 func (mod *Module) OpRemoveRepository(ctx *astral.Context, q *routing.IncomingQuery, args opRemoveRepositoryArgs) (err error) {

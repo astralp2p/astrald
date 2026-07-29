@@ -10,8 +10,8 @@ import (
 )
 
 type opListTokensArgs struct {
-	ID  *astral.Identity `query:"optional"`
-	Out string           `query:"optional"`
+	ID  *astral.Identity
+	Out string
 }
 
 // OpListTokens lists all access tokens of an identity

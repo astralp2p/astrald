@@ -8,7 +8,7 @@ import (
 )
 
 type opListHeldObjectsArgs struct {
-	Out string `query:"optional"`
+	Out string
 }
 
 func (mod *Module) OpListHeldObjects(ctx *astral.Context, q *routing.IncomingQuery, args opListHeldObjectsArgs) error {

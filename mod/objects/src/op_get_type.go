@@ -8,7 +8,7 @@ import (
 
 type opGetTypeArgs struct {
 	ID  *astral.ObjectID
-	Out string `query:"optional"`
+	Out string
 }
 
 func (mod *Module) OpGetType(ctx *astral.Context, q *routing.IncomingQuery, args opGetTypeArgs) (err error) {

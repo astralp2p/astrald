@@ -9,8 +9,8 @@ import (
 
 type opNewAppContractArgs struct {
 	ID       *astral.Identity
-	Duration astral.Duration `query:"optional"`
-	Out      string          `query:"optional"`
+	Duration astral.Duration
+	Out      string
 }
 
 // OpNewAppContract creates an unsigned app contract for the given identity.

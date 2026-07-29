@@ -14,8 +14,8 @@ import (
 type opAddEndpointArgs struct {
 	ID       *astral.Identity
 	Endpoint string
-	In       string `query:"optional"`
-	Out      string `query:"optional"`
+	In       string
+	Out      string
 }
 
 // OpAddEndpoint parses "network:address" and registers it for the identity with a

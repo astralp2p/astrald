@@ -9,9 +9,9 @@ import (
 
 type opEnableRepoArgs struct {
 	Repo    string
-	Disable bool   `query:"optional"`
-	In      string `query:"optional"`
-	Out     string `query:"optional"`
+	Disable bool
+	In      string
+	Out     string
 }
 
 // OpEnableRepo toggles repo indexing on or off; set Disable=true in args to
