@@ -1493,7 +1493,8 @@ Expected: path now `tests/net/tasks/_lib/astral-py`; status resolves (git mv rew
 
 - [ ] **Step 4: Fix path references**
 
-Run: `grep -rn "netsim/" tests/net tests/stages docs README.md AGENTS.md 2>/dev/null | grep -v "_lib/astral-py" | head -40`
+Run: `grep -rn "netsim/" tests/net tests/stages docs README.md AGENTS.md 2>/dev/null | head -40`
+(No exclusion filters: a filter on `_lib/astral-py` blinds the sweep to stale references that merely CONTAIN that substring — e.g. an instructional `git submodule update --init netsim/tasks/_lib/astral-py` string. Judge each hit on its own.)
 For each hit: rewrite `netsim/tasks/...` → `tests/net/tasks/...`, `netsim/scenarios/<stage-builder>` → `tests/stages/<...>`, other `netsim/scenarios/...` → `tests/net/scenarios/...`, story invocation examples accordingly. `link.sh` resolves its tasks dir relative to `$0` — verify it still finds `tests/net/tasks/*` (fix only if it hardcodes the old path). Do NOT edit task internals (`run.sh`/`verify.py` use `$0`-relative `_lib` paths that move intact).
 
 - [ ] **Step 5: Criterion-6 verify — workflow works from the new home**
