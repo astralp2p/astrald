@@ -15,7 +15,7 @@
 - The migration criterion (Task 10) moves `netsim/` INTO `tests/` — `git mv` + path fixes only, no task-internal rewrites. Beyond that move, changes stay inside `tests/`; no unrelated repo files touched (doc path references to the old `netsim/` location are part of the move).
 - Only dependency: `astral-ipc` (astral-py 0.2.0b1) — a zero-runtime-dependency package imported DIRECTLY from the sibling checkout via sys.path (config key `astral_py.path`, default `~/work/astralp2p/astral-py/master`). No venv, no pip — the host lacks ensurepip (confirmed 2026-07-29). Everything runs on system python3; `tests/run` is stdlib plus that path injection.
 - Manifest format is TOML (`scenario.toml`, `config.toml`) via stdlib `tomllib` — the design doc says YAML; PyYAML would be a second dependency. Flag this deviation in the PR description for a doc sync.
-- Two astrald instances on one host collide on five defaults — apphost tcp `8625`, http `8624`, `unix:~/.apphost.sock`, tcp `listen_port` 1791, ether udp `8822`. Every node gets ALL of these overridden per-root (http disabled, unix socket omitted).
+- Two astrald instances on one host collide on five defaults — apphost tcp `8625`, http `8624`, `unix:~/.apphost.sock`, tcp `listen_port` 1791, ether udp `8822`, kcp `listen_port` 1792. Every node gets ALL of these overridden per-root (http disabled, unix socket omitted).
 - Every opened astral-py `Client`/`Stream` MUST be `async with`-managed: a leak permanently burns one of astrald's 32 apphost workers.
 - Commit after every task. Branch `intern0/dev/tests-m1-skeleton`; never push to master.
 - Definition of done = the six goal criteria (five runtime checks + the structural migration), executed on this host in Tasks 10–11, output quoted in the Outline task Log.
@@ -551,7 +551,7 @@ git commit -m "feat(tests): scenario manifests and start/saves chain resolution"
 - Test: `tests/selftest/test_nodeconfig.py`
 
 **Interfaces:**
-- Produces: `NodePorts` dataclass `(apphost: int, tcp: int, ether: int)`; `ports_for(base: int, index: int) -> NodePorts` (`base+10*index+{0,1,2}`); `render(root: Path, ports: NodePorts, token: str) -> None` — writes `<root>/config/{apphost.yaml,tcp.yaml,ether.yaml}`. No `astral` import (pure).
+- Produces: `NodePorts` dataclass `(apphost: int, tcp: int, ether: int, kcp: int)`; `ports_for(base: int, index: int) -> NodePorts` (`base+10*index+{0,1,2,3}`); `render(root: Path, ports: NodePorts, token: str) -> None` — writes `<root>/config/{apphost.yaml,tcp.yaml,ether.yaml,kcp.yaml}`. No `astral` import (pure). kcp's default `listen_port` 1792 (mod/kcp/src/config.go:22) collides on a shared host exactly like tcp's 1791 — it is parameterized for the same reason.
 - Consumed by: Task 5 `LocalNode`.
 
 - [ ] **Step 1: Write the failing test**
@@ -568,11 +568,13 @@ from lib.nodeconfig import NodePorts, ports_for, render
 class TestNodeConfig(unittest.TestCase):
     def test_ports_for(self):
         p = ports_for(20800, 1)
-        self.assertEqual((p.apphost, p.tcp, p.ether), (20810, 20811, 20812))
+        self.assertEqual((p.apphost, p.tcp, p.ether, p.kcp),
+                         (20810, 20811, 20812, 20813))
 
     def test_render(self):
         with tempfile.TemporaryDirectory() as tmp:
-            render(Path(tmp), NodePorts(20800, 20801, 20802), token="sekrit")
+            render(Path(tmp), NodePorts(20800, 20801, 20802, 20803),
+                   token="sekrit")
             cfg = Path(tmp) / "config"
             apphost = (cfg / "apphost.yaml").read_text()
             self.assertIn('- "tcp:127.0.0.1:20800"', apphost)
@@ -581,6 +583,7 @@ class TestNodeConfig(unittest.TestCase):
             self.assertNotIn("unix:", apphost)      # no socket-path collisions
             self.assertIn("listen_port: 20801", (cfg / "tcp.yaml").read_text())
             self.assertIn("udp_port: 20802", (cfg / "ether.yaml").read_text())
+            self.assertIn("listen_port: 20803", (cfg / "kcp.yaml").read_text())
 
 
 if __name__ == "__main__":
@@ -600,8 +603,9 @@ Expected: `ModuleNotFoundError: No module named 'lib.nodeconfig'`
 
 Every default that two instances would fight over is overridden here:
 apphost tcp 8625 / http 8624 / unix socket, tcp listen_port 1791, ether udp
-8822. ether gets a distinct port instead of a modules: allowlist — the
-allowlist would need every module named and silently rot as astrald grows.
+8822, kcp listen_port 1792. ether/kcp get distinct ports instead of a
+modules: allowlist — the allowlist would need every module named and
+silently rot as astrald grows.
 """
 from dataclasses import dataclass
 from pathlib import Path
@@ -622,17 +626,22 @@ ETHER_YAML = """\
 udp_port: {ether}
 """
 
+KCP_YAML = """\
+listen_port: {kcp}
+"""
+
 
 @dataclass
 class NodePorts:
     apphost: int
     tcp: int
     ether: int
+    kcp: int
 
 
 def ports_for(base: int, index: int) -> NodePorts:
     p = base + 10 * index
-    return NodePorts(apphost=p, tcp=p + 1, ether=p + 2)
+    return NodePorts(apphost=p, tcp=p + 1, ether=p + 2, kcp=p + 3)
 
 
 def render(root: Path, ports: NodePorts, token: str) -> None:
@@ -642,6 +651,7 @@ def render(root: Path, ports: NodePorts, token: str) -> None:
         APPHOST_YAML.format(apphost=ports.apphost, token=token))
     (cfg / "tcp.yaml").write_text(TCP_YAML.format(tcp=ports.tcp))
     (cfg / "ether.yaml").write_text(ETHER_YAML.format(ether=ports.ether))
+    (cfg / "kcp.yaml").write_text(KCP_YAML.format(kcp=ports.kcp))
 ```
 
 - [ ] **Step 4: Run to verify it passes**
