@@ -1344,16 +1344,19 @@ async def main():
     ep1 = f"tcp:127.0.0.1:{n1['tcp_port']}"
     ep2 = f"tcp:127.0.0.1:{n2['tcp_port']}"
 
-    # each node learns the other's endpoint (link-back after adoption)
+    # each node learns the other's endpoint (link-back after adoption).
+    # nodes.* is Tier-3 gated in astral-py: experimental=True per call.
     async with await astral.connect(n1["endpoint"], token=n1["token"]) as c:
-        await c.call("nodes.add_endpoint", id=n2["identity"], endpoint=ep2)
+        await c.nodes.add_endpoint(n2["identity"], ep2, experimental=True)
     async with await astral.connect(n2["endpoint"], token=n2["token"]) as c:
-        await c.call("nodes.add_endpoint", id=n1["identity"], endpoint=ep1)
+        await c.nodes.add_endpoint(n1["identity"], ep1, experimental=True)
 
-    # as the User on node1: explicit link, then adopt
+    # as the User on node1: explicit link, then adopt. new_link is RR and can
+    # be slow — the caller's own timeout bounds it, so set one explicitly.
     async with await astral.connect(n1["endpoint"], token=user_token) as c:
-        await c.call("nodes.new_link", target=n2["identity"], endpoint=ep2,
-                     strategies="basic")
+        await c.nodes.new_link(n2["identity"], endpoint=ep2,
+                               strategies="basic", experimental=True,
+                               timeout=60.0)
         await c.user.adopt(n2["identity"])
         await c.dir.set_alias(n1["identity"], "node1")
         await c.dir.set_alias(n2["identity"], "node2")
@@ -1410,8 +1413,9 @@ async def main():
         assert sib2 == n1["identity"], (
             f"node2 linked sibling {sib2} != node1 {n1['identity']} "
             "(symmetric-roster regression)")
-        links = await c.call("nodes.links")
-        remotes = {str(l.remote_identity) for l in links}
+        links = await c.nodes.links(experimental=True)
+        remotes = {str(l.remote_identity) for l in links
+                   if l.remote_identity is not None}
         assert n1["identity"] in remotes, f"no link back to node1 in {remotes}"
 
     print("oracle: symmetric roster, same issuer, linkback present")
