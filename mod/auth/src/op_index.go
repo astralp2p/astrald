@@ -22,7 +22,9 @@ func (mod *Module) OpIndex(ctx *astral.Context, q *routing.IncomingQuery, args o
 	defer ch.Close()
 
 	if args.ID == nil {
-		return mod.indexBatch(ctx, ch)
+		return channel.Batch(ch, func(id *astral.ObjectID) astral.Object {
+			return mod.indexOne(ctx, id)
+		}, channel.WithContext(ctx))
 	}
 
 	return ch.Send(mod.indexOne(ctx, args.ID))
@@ -46,31 +48,4 @@ func (mod *Module) indexOne(ctx *astral.Context, id *astral.ObjectID) astral.Obj
 	}
 
 	return &astral.Ack{}
-}
-
-// indexBatch reads object IDs from ch until EOS/EOF and indexes each one; a
-// failed input does not stop the batch. An explicit EOS is answered with an
-// EOS reply.
-func (mod *Module) indexBatch(ctx *astral.Context, ch *channel.Channel) error {
-	var sawEOS bool
-	err := ch.Switch(
-		func(id *astral.ObjectID) error {
-			return ch.Send(mod.indexOne(ctx, id))
-		},
-		// why: a composed upstream op reports a failed item as a wrong-typed
-		// object in the stream; reply in-band and keep the batch alive.
-		func(obj astral.Object) error {
-			return ch.Send(astral.Err(astral.NewErrUnexpectedObject(obj)))
-		},
-		func(*astral.EOS) error {
-			sawEOS = true
-			return channel.ErrBreak
-		},
-		channel.WithContext(ctx),
-	)
-	// why: no EOS reply after EOF — the caller is gone and Conn closes on read error.
-	if err != nil || !sawEOS {
-		return err
-	}
-	return ch.Send(&astral.EOS{})
 }

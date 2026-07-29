@@ -13,8 +13,8 @@ type opRegisterBlueprintArgs struct {
 
 // OpRegisterBlueprint runs in batch mode: reads runtime *astral.Blueprint descriptors
 // (struct kind or alias kind) from the channel until EOS or EOF, performs registration for
-// each, sends the resulting ObjectID or an error per input, then emits a final EOS marker
-// before closing.
+// each, sends the resulting ObjectID or an error per input. An explicit EOS
+// input is answered with a final EOS; a stream ended by EOF is not.
 //
 // todo(security): gate by caller identity before mutating DefaultBlueprints. Any peer can
 // currently (a) squat a victim type name to permanently block legitimate registration,
@@ -24,24 +24,11 @@ func (mod *Module) OpRegisterBlueprint(ctx *astral.Context, q *routing.IncomingQ
 	ch := channel.New(q.AcceptRaw(), channel.WithFormats(args.In, args.Out))
 	defer ch.Close()
 
-	register := func(o astral.Object) error {
-		id, regErr := mod.Register(o)
+	return channel.Batch(ch, func(bp *astral.Blueprint) astral.Object {
+		id, regErr := mod.Register(bp)
 		if regErr != nil {
-			return ch.Send(astral.NewError(regErr.Error()))
+			return astral.NewError(regErr.Error())
 		}
-		return ch.Send(id)
-	}
-
-	err := ch.Switch(
-		func(bp *astral.Blueprint) error { return register(bp) },
-		channel.BreakOnEOS,
-		func(other astral.Object) error {
-			return ch.Send(astral.NewError("expected astral.Blueprint"))
-		},
-	)
-	if err != nil {
-		return err
-	}
-	_ = ch.Send(&astral.EOS{})
-	return nil
+		return id
+	})
 }

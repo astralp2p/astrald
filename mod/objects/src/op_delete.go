@@ -43,24 +43,11 @@ func (mod *Module) OpDelete(ctx *astral.Context, q *routing.IncomingQuery, args 
 		return ch.Send(&astral.Ack{})
 	}
 
-	// otherwise read objects ids from the channel
-	return ch.Handle(ctx, func(object astral.Object) {
-		switch object := object.(type) {
-		case *astral.ObjectID:
-			err := repo.Delete(ctx, object)
-			if err != nil {
-				ch.Send(astral.NewError(err.Error()))
-			} else {
-				ch.Send(&astral.Ack{})
-			}
-
-		case *astral.Ack,
-			*astral.EOS:
-
-		default: // protocol error
-			ch.Send(astral.NewError("protocol error"))
-			ch.Close()
+	// otherwise read object ids from the channel
+	return channel.Batch(ch, func(id *astral.ObjectID) astral.Object {
+		if err := repo.Delete(ctx, id); err != nil {
+			return astral.NewError(err.Error())
 		}
-	})
-
+		return &astral.Ack{}
+	}, channel.WithContext(ctx))
 }

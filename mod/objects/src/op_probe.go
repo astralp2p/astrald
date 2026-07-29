@@ -36,18 +36,11 @@ func (mod *Module) OpProbe(ctx *astral.Context, q *routing.IncomingQuery, args o
 		return ch.Send(probe)
 	}
 
-	return ch.Handle(ctx, func(object astral.Object) {
-		switch msg := object.(type) {
-		case *astral.ObjectID:
-			probe, err := mod.Probe(ctx, repo, msg)
-			if err != nil {
-				ch.Send(astral.NewError(err.Error()))
-			} else {
-				ch.Send(probe)
-			}
-
-		case *astral.EOS:
-			ch.Close()
+	return channel.Batch(ch, func(id *astral.ObjectID) astral.Object {
+		probe, err := mod.Probe(ctx, repo, id)
+		if err != nil {
+			return astral.NewError(err.Error())
 		}
-	})
+		return probe
+	}, channel.WithContext(ctx))
 }

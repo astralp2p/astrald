@@ -43,21 +43,11 @@ func (mod *Module) OpLoad(ctx *astral.Context, q *routing.IncomingQuery, args op
 		return ch.Send(o)
 	}
 
-	return ch.Handle(ctx, func(object astral.Object) {
-		switch object := object.(type) {
-		case *astral.ObjectID:
-			o, err := mod.Load(ctx, repo, object)
-			if err != nil {
-				ch.Send(astral.NewError(err.Error()))
-			} else {
-				ch.Send(o)
-			}
-
-		case *astral.EOS:
-			//ignore
-
-		default:
-			ch.Send(astral.NewErrUnexpectedObject(object))
+	return channel.Batch(ch, func(id *astral.ObjectID) astral.Object {
+		o, err := mod.Load(ctx, repo, id)
+		if err != nil {
+			return astral.NewError(err.Error())
 		}
-	})
+		return o
+	}, channel.WithContext(ctx))
 }

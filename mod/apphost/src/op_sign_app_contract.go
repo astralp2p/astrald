@@ -16,30 +16,23 @@ func (mod *Module) OpSignAppContract(ctx *astral.Context, q *routing.IncomingQue
 	ch := q.Accept(channel.WithFormats(args.In, args.Out))
 	defer ch.Close()
 
-	err := ch.Switch(func(c *auth.Contract) error {
+	return channel.Batch(ch, func(c *auth.Contract) astral.Object {
 		signed := &auth.SignedContract{Contract: c}
-		err := mod.Auth.SignContract(ctx, signed)
-		if err != nil {
-			return ch.Send(astral.Err(err))
+		if err := mod.Auth.SignContract(ctx, signed); err != nil {
+			return astral.Err(err)
 		}
 
-		err = mod.Auth.IndexContract(ctx, signed)
-		if err != nil {
-			return ch.Send(astral.Err(err))
+		if err := mod.Auth.IndexContract(ctx, signed); err != nil {
+			return astral.Err(err)
 		}
 
-		_, err = mod.Objects.Store(ctx, mod.Objects.WriteDefault(), signed)
-		if err != nil {
-			return ch.Send(astral.Err(err))
+		if _, err := mod.Objects.Store(ctx, mod.Objects.WriteDefault(), signed); err != nil {
+			return astral.Err(err)
 		}
 
 		go mod.User.PushToLocalSwarm(mod.ctx, signed)
 
 		mod.log.Logv(1, "signed app contract (%v)", signed.Issuer)
-		return ch.Send(signed)
+		return signed
 	})
-	if err != nil {
-		_ = ch.Send(astral.Err(err))
-	}
-	return err
 }

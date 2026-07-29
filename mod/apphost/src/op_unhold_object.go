@@ -30,37 +30,12 @@ func (mod *Module) OpUnholdObject(ctx *astral.Context, q *routing.IncomingQuery,
 	}
 
 	if args.ID == nil {
-		return mod.unholdObjectBatch(ctx, ch, q.Caller())
+		return channel.Batch(ch, func(id *astral.ObjectID) astral.Object {
+			return mod.unholdOne(q.Caller(), id)
+		}, channel.WithContext(ctx))
 	}
 
 	return ch.Send(mod.unholdOne(q.Caller(), args.ID))
-}
-
-// unholdObjectBatch reads object IDs from ch until EOS/EOF and releases each
-// hold for caller; a failed input does not stop the batch. An explicit EOS is
-// answered with an EOS reply.
-func (mod *Module) unholdObjectBatch(ctx *astral.Context, ch *channel.Channel, caller *astral.Identity) error {
-	var sawEOS bool
-	err := ch.Switch(
-		func(id *astral.ObjectID) error {
-			return ch.Send(mod.unholdOne(caller, id))
-		},
-		// why: a composed upstream op reports a failed item as a wrong-typed
-		// object in the stream; reply in-band and keep the batch alive.
-		func(obj astral.Object) error {
-			return ch.Send(astral.Err(astral.NewErrUnexpectedObject(obj)))
-		},
-		func(*astral.EOS) error {
-			sawEOS = true
-			return channel.ErrBreak
-		},
-		channel.WithContext(ctx),
-	)
-	// why: no EOS reply after EOF — the caller is gone and Conn closes on read error.
-	if err != nil || !sawEOS {
-		return err
-	}
-	return ch.Send(&astral.EOS{})
 }
 
 // unholdOne releases one hold and returns the reply object — Ack on success,
