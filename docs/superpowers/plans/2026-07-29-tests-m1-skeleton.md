@@ -702,8 +702,9 @@ import astral
 
 from lib.nodeconfig import NodePorts, render
 
-# startup line: "astral node <alias> (<66-hex>) starting..."
-_IDENT_RE = re.compile(r"\(([0-9a-f]{66})\)")
+# startup line prints the identity in parens; astrald's earliest lines are
+# raw %v dumps, so the hex can carry internal padding: "( <66-hex> )"
+_IDENT_RE = re.compile(r"\(\s*([0-9a-f]{66})\s*\)")
 
 
 class NodeError(Exception):
@@ -795,9 +796,11 @@ async def main():
     with tempfile.TemporaryDirectory() as tmp:
         n = LocalNode("probe", Path(tmp) / "probe", binary, ports_for(21800, 0))
         n.start()
-        await n.wait_ready()
-        print("READY identity:", n.identity, "endpoint:", n.endpoint)
-        n.stop()
+        try:
+            await n.wait_ready()
+            print("READY identity:", n.identity, "endpoint:", n.endpoint)
+        finally:
+            n.stop()          # never leak the daemon, even on a failed wait
     print("STOPPED cleanly")
 
 asyncio.run(main())
@@ -919,13 +922,15 @@ async def main():
     binary, _ = ensure_binary(Path("."))
     with tempfile.TemporaryDirectory() as tmp:
         s = Session(Path(tmp), binary, 21900)
-        await s.ensure(["node1", "node2"])
-        doc = json.loads(s.session_json_path.read_text())
-        ids = {v["identity"] for v in doc["nodes"].values()}
-        assert len(ids) == 2 and all(i and len(i) == 66 for i in ids), ids
-        assert s.dead_nodes() == []
-        print("TWO NODES READY", ids)
-        s.teardown()
+        try:
+            await s.ensure(["node1", "node2"])
+            doc = json.loads(s.session_json_path.read_text())
+            ids = {v["identity"] for v in doc["nodes"].values()}
+            assert len(ids) == 2 and all(i and len(i) == 66 for i in ids), ids
+            assert s.dead_nodes() == []
+            print("TWO NODES READY", ids)
+        finally:
+            s.teardown()
 
 asyncio.run(main())
 EOF
