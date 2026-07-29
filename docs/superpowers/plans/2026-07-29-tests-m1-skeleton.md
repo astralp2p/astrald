@@ -883,8 +883,8 @@ class Session:
             node = LocalNode(name, self.dir / name, self.binary,
                              ports_for(self.port_base, idx))
             node.start()
-            await node.wait_ready()
-            self.nodes[name] = node
+            self.nodes[name] = node   # track BEFORE readiness — a node that
+            await node.wait_ready()   # fails wait_ready must stay stoppable
         self.write_session_json()
 
     @property
