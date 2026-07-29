@@ -29,7 +29,7 @@ _ASTRALPY_SRC = os.environ.get("ASTRALPY_SRC") or os.path.join(
 if not os.path.isdir(os.path.join(_ASTRALPY_SRC, "astral")):
     raise ImportError(
         f"astral-py not found at {_ASTRALPY_SRC} -- run "
-        "`git submodule update --init netsim/tasks/_lib/astral-py` "
+        "`git submodule update --init tests/net/tasks/_lib/astral-py` "
         "(or set $ASTRALPY_SRC to an astral-py checkout's src/)")
 sys.path.insert(0, _ASTRALPY_SRC)
 import astral  # noqa: E402
