@@ -10,8 +10,9 @@ import astral
 
 from lib.nodeconfig import NodePorts, render
 
-# startup line: "astral node <alias> (<66-hex>) starting..."
-_IDENT_RE = re.compile(r"\(([0-9a-f]{66})\)")
+# startup line prints the identity in parens; astrald's earliest lines are
+# raw %v dumps, so the hex can carry internal padding: "( <66-hex> )"
+_IDENT_RE = re.compile(r"\(\s*([0-9a-f]{66})\s*\)")
 
 
 class NodeError(Exception):
