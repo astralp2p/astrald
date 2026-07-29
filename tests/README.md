@@ -29,3 +29,12 @@ recipes) — same netsim workflow, new home; register with
 
 Manifest format note: TOML (stdlib), not YAML as the design doc sketches —
 one fewer dependency; to be reconciled in the doc.
+
+## Known issue
+
+`bootstrap-user-software-key` can intermittently fail with
+`auth.sign_contract: sign as issuer: unsupported` — a pre-existing astrald
+race (the crypto module indexes a stored private key asynchronously; a
+`sign_contract` arriving before the index lands finds no signer). Observed
+losing by ~26 ms roughly half the time on this host. Not introduced by this
+branch (zero daemon changes); re-run until the daemon-side fix lands.

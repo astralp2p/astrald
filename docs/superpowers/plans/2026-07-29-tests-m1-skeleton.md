@@ -1177,6 +1177,14 @@ git commit -m "feat(tests): runner orchestration + smoke scenario — spine clos
 
 ### Task 8: bootstrap-user-software-key scenario
 
+> **Amended in execution:** astral-py's generic `call_one`/`call_with` do not
+> accept op-arguments as Python kwargs (those collide with the transport-only
+> keyword surface), and `str()` on a `PublicKey` yields a type-prefixed form,
+> not 66-hex. The shipped `script.py` therefore uses the typed helpers
+> (`c.bip137sig.*`, `c.user.new_node_contract`, `c.auth.sign_contract`) and
+> `str(public_key_to_identity(user_pub))`. The listing below predates that
+> discovery; the shipped file is authoritative.
+
 **Files:**
 - Create: `tests/node/scenarios/bootstrap-user-software-key/{scenario.toml,script.py,verify.py,README.md}`
 
