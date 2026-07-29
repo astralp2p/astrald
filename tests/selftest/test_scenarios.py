@@ -70,6 +70,31 @@ class TestScenarios(unittest.TestCase):
         with self.assertRaises(ValueError):
             resolve(bad, only=["orphan"])
 
+    def test_unrelated_broken_scenario_does_not_break_selection(self):
+        write_scenario(self.tmp.name, "broken", """
+            start = "missing-state"
+            nodes = ["node1"]
+        """)
+        all2 = load_all(Path(self.tmp.name))
+        plan = resolve(all2, only=["smoke"])
+        self.assertEqual([(s.name, k) for s, k in plan], [("smoke", "test")])
+        with self.assertRaises(ValueError):
+            resolve(all2, only=["broken"])
+
+    def test_cycle_detected(self):
+        write_scenario(self.tmp.name, "cyc-a", """
+            start = "state-b"
+            saves = "state-a"
+            nodes = ["node1"]
+        """)
+        write_scenario(self.tmp.name, "cyc-b", """
+            start = "state-a"
+            saves = "state-b"
+            nodes = ["node1"]
+        """)
+        with self.assertRaises(ValueError):
+            resolve(load_all(Path(self.tmp.name)), only=["cyc-a"])
+
 
 if __name__ == "__main__":
     unittest.main()

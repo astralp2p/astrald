@@ -31,9 +31,11 @@ def load_all(scenarios_dir: Path) -> dict:
     return out
 
 
-def _depths(all: dict) -> dict:
+def resolve(all: dict, only) -> list:
+    """Execution plan for a selection. Validation is scoped to the scenarios
+    the selection actually reaches — an unrelated broken manifest must never
+    break a targeted --only run."""
     producers = {s.saves: s for s in all.values() if s.saves}
-    depths = {}
 
     def depth_of(state: str, seen=()) -> int:
         if state == "null":
@@ -42,16 +44,8 @@ def _depths(all: dict) -> dict:
             raise ValueError(f"start/saves cycle at state {state!r}")
         if state not in producers:
             raise ValueError(f"no scenario saves state {state!r}")
-        s = producers[state]
-        return 1 + depth_of(s.start, seen + (state,))
+        return 1 + depth_of(producers[state].start, seen + (state,))
 
-    for s in all.values():
-        depths[s.name] = depth_of(s.start) if s.start != "null" else 0
-    return depths, producers
-
-
-def resolve(all: dict, only) -> list:
-    depths, producers = _depths(all)
     if only is None:
         selected = set(all)
     else:
@@ -62,8 +56,10 @@ def resolve(all: dict, only) -> list:
 
     needed = set(selected)
     frontier = list(selected)
+    depths = {}
     while frontier:
         s = all[frontier.pop()]
+        depths[s.name] = depth_of(s.start)
         if s.start != "null":
             dep = producers[s.start].name
             if dep not in needed:
