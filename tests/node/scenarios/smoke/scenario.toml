@@ -1,0 +1,4 @@
+start = "null"
+nodes = ["node1"]
+drivers = ["script"]
+timeout = 60
