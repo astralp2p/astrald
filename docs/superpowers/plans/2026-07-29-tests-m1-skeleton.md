@@ -1102,10 +1102,6 @@ def main(args) -> int:
             art.mkdir(parents=True, exist_ok=True)
             entry = dict(test=f"node/{s.name}", kind=kind, lane="node",
                          driver="script", artifacts=f"node/{s.name}/")
-            if s.start in failed_states or (any_failed and kind == "test"
-                                            and s.start != "null"
-                                            and s.start in failed_states):
-                pass  # covered by the first condition; kept for clarity
             if s.start in failed_states:
                 results.record(**entry, status="skipped", duration_s=0.0)
                 if s.saves:
@@ -1142,33 +1138,18 @@ def main(args) -> int:
                 if s.saves:
                     failed_states.add(s.saves)
     finally:
-        if args.keep or any_failed:
-            print(f"run: session kept at {session.dir}", file=sys.stderr)
+        if args.keep:
+            print(f"run: --keep, nodes left running under {session.dir}",
+                  file=sys.stderr)
         else:
             session.teardown()
-        if not (args.keep or any_failed):
-            pass
-        else:
-            session.teardown() if False else None  # nodes keep running only with --keep
 
     code = results.finalize()
     print(f"run: results at {run_dir / 'results.json'}")
     return code
 ```
 
-Wait — the teardown block above is convoluted. Use exactly this instead (final form):
-
-```python
-    finally:
-        keep_procs = args.keep
-        if not keep_procs:
-            session.teardown()
-        else:
-            print(f"run: --keep, nodes left running under {session.dir}",
-                  file=sys.stderr)
-```
-
-(Node logs and roots stay on disk under `results/<stamp>/session/` either way — `teardown()` stops processes, it never deletes files. `--keep` additionally leaves the daemons running for interactive poking.)
+Node logs and roots stay on disk under `results/<stamp>/session/` either way — `teardown()` stops processes, it never deletes files. `--keep` additionally leaves the daemons running for interactive poking.
 
 - [ ] **Step 3: Live-verify — the spine end-to-end**
 
