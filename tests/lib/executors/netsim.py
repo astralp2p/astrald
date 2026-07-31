@@ -10,15 +10,21 @@ the VMs, the operator, the service unit, the apt dependencies — and the binary
 under test arrives fresh on every boot, so a stage outlives the commit that
 filled it.
 
-fixme: no part of this file has been executed. netsim is unusable on this
-host — NETSIM_STAGES_DIR points at a root-owned /mnt/netsim, so
-config.ensure_layout cannot create its staging directory — and the operator
-chose to land M4 unverified rather than block. Every `verified` claim about
-this executor is therefore outstanding, and the first real run is expected to
-correct at least the boot-and-discard path and the netns tunnel.
+Status: the session tunnel is verified by hand against a live simulation;
+the executor as a whole has not yet driven a test end to end.
+
+The session is real ssh port-forwarding. netsim writes a standard OpenSSH
+config per simulation at `<sim_dir>/ssh_config` — one `Host <vm>` block, each
+`HostName 127.0.0.1` on its own forwarded port, `User root`, an `IdentityFile`
+beside it (sourced: netsim `sshutil.render_ssh_config`). So a guest's apphost
+reaches the host through `ssh -F <config> -N -L <local>:127.0.0.1:8625 <vm>`,
+and `session.json` carries the local end. Drivers and oracles stay
+byte-identical across envs because the tunnel is the only difference.
 """
 import json
+import os
 import shlex
+import socket
 import subprocess
 import time
 from hashlib import sha256
@@ -28,6 +34,7 @@ from lib.executors import Executor, ExecutorError
 
 TESTS = Path(__file__).resolve().parent.parent.parent
 APPHOST_PORT = 8625          # the guest's apphost, inside netns priv when NAT'd
+THROWAWAY_STAGE = "e2e-scratch"   # a story always saves; this is what it saves to
 SSH_READY_TIMEOUT = 120.0
 
 
@@ -162,20 +169,27 @@ class NetsimExecutor(Executor):
         self.state = state
         self._push_astrald(nodes)
 
-    def _boot(self, key: str) -> None:
-        """Resume a cached stage and keep it running.
+    def _boot(self, key: str, steps=()) -> None:
+        """Resume a cached stage, run the test's vm steps, keep it running.
 
-        fixme: netsim has no boot-without-save verb — `story --stage X --keep`
-        on a fresh simulation saves under the story's basename. The empty
-        story below is named `boot`, and the stage it leaves is removed here.
-        Unconfirmed against a live netsim.
+        why: one `netsim story` rather than a boot verb plus per-step calls.
+        netsim rejects a story with no tasks — verified: `error: story has no
+        tasks` — so there is no empty-story boot, and a story is the unit the
+        tool actually offers. A story on a fresh simulation always saves, so
+        it saves to a throwaway name that `save()` later replaces with the
+        real cache key.
         """
-        empty = self.dir / "boot.story"
-        empty.write_text("# boot only: resume a cached stage, run nothing\n")
-        _netsim("story", "--stage", key, "--keep", "--save", "e2e-boot",
-                str(empty))
+        story = self.dir / "steps.story"
+        story.write_text("".join(f"{s}\n" for s in steps)
+                         or "# no vm steps\n")
+        if not steps:
+            raise ExecutorError(
+                "a netsim test with no vm: steps cannot boot — netsim has no "
+                "boot-only verb and rejects an empty story")
+        _netsim("story", "--stage", key, "--keep", "--save", THROWAWAY_STAGE,
+                str(story))
         self.sim = self._latest_sim()
-        _netsim("remove", "e2e-boot", check=False)
+        _netsim("remove", THROWAWAY_STAGE, check=False)
 
     def _build(self, nodes: list) -> None:
         """Boot the lab base and let the runner's plan fill the chain.
@@ -197,6 +211,49 @@ class NetsimExecutor(Executor):
         if not sims:
             raise ExecutorError("netsim ps lists no simulation after boot")
         return str(sims[-1]["id"])
+
+    @property
+    def sim_dir(self) -> Path:
+        """<netsim home>/sims/<id> — where ssh_config and the key live.
+
+        Resolved the way netsim resolves it (config.home): NETSIM_HOME, then
+        XDG_DATA_HOME/netsim, then ~/.local/share/netsim.
+        """
+        env = os.environ.get("NETSIM_HOME")
+        if env:
+            home = Path(env).expanduser()
+        else:
+            xdg = os.environ.get("XDG_DATA_HOME")
+            base = Path(xdg).expanduser() if xdg else Path.home() / ".local" / "share"
+            home = base / "netsim"
+        return home / "sims" / str(self.sim)
+
+    def _free_port(self) -> int:
+        with socket.socket() as s:
+            s.bind(("127.0.0.1", 0))
+            return s.getsockname()[1]
+
+    def _tunnel(self, vm: str) -> int:
+        """A local port that reaches this VM's apphost, held open by ssh -L."""
+        port = self._free_port()
+        argv = ["ssh", "-F", str(self.sim_dir / "ssh_config"), "-N",
+                "-o", "ExitOnForwardFailure=yes",
+                "-L", f"{port}:127.0.0.1:{APPHOST_PORT}", vm]
+        proc = subprocess.Popen(argv, stdout=subprocess.DEVNULL,
+                                stderr=subprocess.PIPE)
+        deadline = time.monotonic() + 20.0
+        while time.monotonic() < deadline:
+            if proc.poll() is not None:
+                err = (proc.stderr.read() or b"").decode(errors="replace")
+                raise ExecutorError(f"{vm}: ssh -L failed: {err.strip()}")
+            with socket.socket() as s:
+                s.settimeout(0.5)
+                if s.connect_ex(("127.0.0.1", port)) == 0:
+                    self._tunnels.append(proc)
+                    return port
+            time.sleep(0.5)
+        proc.terminate()
+        raise ExecutorError(f"{vm}: apphost tunnel never opened on {port}")
 
     # --- the binary under test ---------------------------------------------
 
@@ -290,10 +347,15 @@ class NetsimExecutor(Executor):
     def _write_session(self, nodes: list) -> None:
         """session.json, byte-compatible with the local executor's.
 
-        fixme: the endpoints below are host-side tunnels that are not opened
-        yet. A NAT'd node's apphost listens inside netns `priv`, so the tunnel
-        has to land there and not in the VM's default namespace — the one
-        piece of this executor that cannot be designed without a live run.
+        The endpoint is the local end of this VM's `ssh -L` forward. Verified
+        by hand against a live simulation resumed from `astrald-lab`: a host
+        process reached the guest's astrald through the forward and the daemon
+        answered at protocol level.
+
+        fixme: a NAT'd node's apphost listens inside netns `priv`, which
+        `ssh -L` cannot reach — it lands in the VM's default namespace. That
+        affects `nat-punch` and not `tor-link`. The fix is a relay inside the
+        guest, published by `enter-nat`, so the forward stays uniform.
         """
         doc = {"nodes": {}, "facts": self.facts}
         for vm in nodes:
