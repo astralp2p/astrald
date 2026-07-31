@@ -1,4 +1,17 @@
-# netsim scenarios for astrald
+# netsim scenarios for astrald — transitional
+
+**Absorbed-pending.** M2 moved the three nouns of the unified test system into
+`tests/e2e/`, `tests/suites/` and `tests/fixtures/`; see `tests/README.md`.
+This tree is the pre-unification residue: the story catalog and the flow
+tasks the stories drive. It stays story-runnable exactly as documented below
+until M4 lands the netsim executor and retires it. Nothing here is the
+system's author-facing surface any more — a new test is a directory under
+`tests/e2e/`, never a story.
+
+The five world operations (`enter-nat`, `leave-lan`, `enable-tor`,
+`configure-nat-tor`, `add-reflector`) already moved to
+`tests/fixtures/vmops/`, and `lab.story` to `tests/fixtures/lab/`.
+`./tests/net/link.sh` registers both trees with netsim.
 
 Test scaffolding that drives `netsim` to build and run `astrald` on a simulated
 LAN. It contains no astrald Go source and modifies none.
@@ -13,6 +26,10 @@ tasks in one simulation and saves a named *stage*. `lab.story` builds the
 
 ```
 tests/
+  fixtures/                            # the unified system's fixtures (M2)
+    vmops/                               # named VM operations, run as a netsim test's steps
+      enter-nat/ leave-lan/ enable-tor/ configure-nat-tor/ add-reflector/
+    lab/                                 # null           -> astrald-lab           (fixture)
   net/                                 # this file's home: tasks + remaining scenarios
     tasks/                               # each task: run.sh (+ verify.sh / verify.py) + README.md
       install-astrald/                   # build + run astrald as a service on each node
@@ -32,10 +49,9 @@ tests/
       expel-node/                        # two-nodes      -> two-nodes-expel
       tor-link/                          # two-nodes      -> two-nodes-tor         (re-link over Tor)
       nat-punch/                         # two-nodes      -> two-nodes-nat         (NAT hole-punch)
-    link.sh                          # register tasks with netsim (idempotent; re-run anytime)
+    link.sh                          # register vmops + tasks with netsim (idempotent)
     README.md
   stages/                              # stage-builder scenarios: shared fixtures for the wider suite
-    lab/                               # null           -> astrald-lab           (fixture)
     bootstrap-user-software-key/       # astrald-lab    -> one-node              (fixture)
     adopt-node/                        # one-node       -> two-nodes             (fixture)
 ```
@@ -43,13 +59,13 @@ tests/
 ## Registering tasks
 
 `netsim` discovers tasks only under `~/.local/share/netsim/tasks/`. `link.sh`
-symlinks every task under `tasks/` — each folder containing a `run.sh` — there.
-It is idempotent; re-run it after adding a task. The symlinks leave netsim's
-shipped builtins intact.
+symlinks every folder containing a `run.sh` there, from both
+`tests/fixtures/vmops/` and this tree's `tasks/`. It is idempotent; re-run it
+after adding one. The symlinks leave netsim's shipped builtins intact.
 
 ```sh
 ./tests/net/link.sh
-netsim tasks        # confirm: install-astrald is listed as a user task
+netsim tasks        # confirm: install-astrald and enter-nat are user tasks
 ```
 
 ## Verifier library
@@ -115,7 +131,7 @@ then build the lab:
 ```sh
 ./tests/net/link.sh
 export SATFORGE_SKILLS_DEPLOY_KEY=~/.ssh/satforge_skills_deploy   # see tasks/configure-astral-agent
-netsim story --stage null --save astrald-lab tests/stages/lab/lab.story
+netsim story --stage null --save astrald-lab tests/fixtures/lab/lab.story
 ```
 
 The result is the stage `astrald-lab`: `node1` and `node2` running astrald, with a
