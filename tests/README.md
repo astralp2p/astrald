@@ -7,6 +7,7 @@ One command, real daemons, deterministic verdicts:
     ./tests/run adopt-node          # one test + the fixture prefix it needs
     ./tests/run smoke adopt-node    # several tests
     ./tests/run adopt-node --keep   # leave the world running afterwards
+    ./tests/run smoke --target attach   # judge a daemon that is already up
 
 Design: https://wiki.satforge.dev/doc/integration-testing-system-tAKjyvbcHo
 
@@ -88,6 +89,35 @@ Every story of the catalog, in the cheapest env that can falsify it:
 pristine node, and env `node` runs one live session, so the chain cannot go
 back to an unclaimed node1 mid-suite.
 
+## Where the machines come from
+
+`--target` is orthogonal to `env` and to `--driver`:
+
+- `fresh` (default) — spawn per run. Hermetic.
+- `stage:<name>` — boot one simulation and run the whole selection against
+  it. Needs the netsim executor.
+- `attach` — no spawning: run against a daemon that is already up, resolved
+  the way astral-py resolves one (`ASTRAL_ENDPOINT`, `ASTRALD_APPHOST_TOKEN`
+  and friends). The code-and-debug loop: point a test at the daemon you are
+  hacking on and let the standard oracle judge it.
+
+Under `attach` the run is not hermetic, so the header carries
+`hermetic: false` and the ambient endpoint and token are deliberately left in
+the driver environment. Two guards make it safe to use on a daemon you care
+about: a start state is **checked, never built** — a selection that would
+need a fixture prefix is refused rather than run at your daemon — and a
+`mutates` test prints a warning naming itself before anything happens.
+Attach has one daemon, so a test with a multi-node roster is refused too.
+
+## Scripted and AI-driven
+
+A test declares its drivers, and the same oracle judges every one of them.
+That is what makes the split useful: **script red means astrald broke; agent
+red while script is green means the operator or its skill broke.** A driver
+failure and an oracle failure are already distinct in the results
+(`failure_kind` `driver` versus `verify`), so a run says which of the three
+went wrong without anyone reading a log.
+
 ## Requirements
 
 Python ≥ 3.11, a Go toolchain, and an astral-py checkout (path in
@@ -96,10 +126,17 @@ zero dependencies. No venv, no pip.
 
 ## Milestone state
 
-M2 shipped the shape and M3 the env-node coverage: env `node`,
-`--target fresh`, `--driver script`. The rest of the surface parses and
-reports where it arrives — `--driver agent` and `--target attach` in M5,
-`--target stage:<name>` and env `netsim` in M4.
+Working today: env `node`, `--driver script`, `--target fresh` and
+`--target attach`.
+
+Not working, and the runner says so rather than guessing: env `netsim`,
+`--target stage:<name>` and `--driver agent`. All three need VMs, and netsim
+does not run on this host — `NETSIM_STAGES_DIR` points at a root-owned
+`/mnt/netsim`, so netsim cannot create its staging directory. The netsim
+executor exists (`lib/executors/netsim.py`) but its `session.json` carries no
+working endpoints: a NAT'd node's apphost is netns-local, and the host-side
+tunnel that reaches it cannot be designed without a live netsim. Seven tests
+already ship the `prompt.md` the agent driver will use.
 
 `net/` and `stages/` are pre-unification residue, absorbed-pending: the
 netsim stories and flow tasks still run under `netsim story`, and M4

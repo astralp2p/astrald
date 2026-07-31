@@ -15,6 +15,24 @@ KINDS = {"test", "fixture"}
 ENVS = {"node", "netsim"}
 
 
+def fresh_run_dir(results: Path) -> Path:
+    """A directory this run owns alone.
+
+    why: the stamp has one-second resolution, so two runs started in the same
+    second shared a directory — results.json was overwritten and events.jsonl,
+    opened for append, interleaved both runs into one file.
+    """
+    stamp = time.strftime("%Y%m%dT%H%M%SZ", time.gmtime())
+    for suffix in ("", *(f"-{n}" for n in range(1, 100))):
+        run_dir = Path(results) / f"{stamp}{suffix}"
+        try:
+            run_dir.mkdir(parents=True)
+            return run_dir
+        except FileExistsError:
+            continue
+    raise RuntimeError(f"{results}: 100 runs in one second")
+
+
 @dataclass
 class RunHeader:
     """What the run was, independent of any single test."""

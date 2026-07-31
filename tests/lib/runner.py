@@ -12,8 +12,9 @@ from astral.client import ENDPOINT_VARS, TOKEN_VARS
 from lib import manifest, suites
 from lib.build import ensure_binary, git_ref
 from lib.executors import ExecutorError
+from lib.executors.attach import AttachExecutor
 from lib.executors.local import LocalExecutor
-from lib.results import RunHeader, RunResults
+from lib.results import RunHeader, RunResults, fresh_run_dir
 
 TESTS = Path(__file__).resolve().parent.parent
 REPO = TESTS.parent
@@ -68,12 +69,28 @@ def plan_for(tests: dict, selection: list) -> list:
 
 
 def _reject_unbuilt(args, plan: list) -> str | None:
-    """The M2 surface: everything else parses and says where it arrives."""
+    """What the runner cannot do yet, and why — never a silent wrong verdict."""
     if args.driver == "agent":
-        return "--driver agent arrives in M5"
-    if args.target != "fresh":
-        where = "M4" if args.target.startswith("stage:") else "M5"
-        return f"--target {args.target} arrives in {where}"
+        # fixme: the agent driver needs an AI operator with the astral-agent
+        # skill. Env netsim would supply the lab-baked one and env node the
+        # disposable VM sandbox; both are VMs, and netsim does not run on this
+        # host. prompt.md ships with seven tests, ready for it.
+        return ("--driver agent needs an operator VM: netsim does not run on "
+                "this host (NETSIM_STAGES_DIR -> root-owned /mnt/netsim)")
+    if args.target == "attach":
+        # why: attach runs against the operator's own daemon. Building a
+        # fixture prefix there means running bootstrap's flow at it — which
+        # stores a private key object and attempts a contract on a live node.
+        # The design says attach CHECKS a start state; it does not build one.
+        built = [t.name for t, kind in plan if kind == "fixture"]
+        if built:
+            return (f"--target attach would have to build {built[0]!r} on the "
+                    "attached daemon. Attach checks a start state, it never "
+                    "builds one — select a test whose start the daemon "
+                    "already stands at.")
+    if args.target.startswith("stage:"):
+        return (f"--target {args.target} needs the netsim executor, which is "
+                "not wired to the runner (see lib/executors/netsim.py)")
     other = sorted({t.env for t, _ in plan} - {"node"})
     if other:
         # fixme: lib/executors/netsim.py exists but is not reachable from here.
@@ -90,6 +107,13 @@ def _reject_unbuilt(args, plan: list) -> str | None:
     return None
 
 
+def _executor(args, dir, binary, port_base):
+    """Where the machines come from — orthogonal to env and driver."""
+    if args.target == "attach":
+        return AttachExecutor(dir)
+    return LocalExecutor(dir, binary, port_base)
+
+
 def main(args) -> int:
     cfg = tomllib.loads((TESTS / "config.toml").read_text())
 
@@ -104,9 +128,11 @@ def main(args) -> int:
         print(f"run: {unbuilt}", file=sys.stderr)
         return 2
 
-    binary, ref = ensure_binary(REPO)
-    stamp = time.strftime("%Y%m%dT%H%M%SZ", time.gmtime())
-    run_dir = TESTS / "results" / stamp
+    if args.target == "attach":
+        binary, ref = None, git_ref(REPO)     # the daemon is already running
+    else:
+        binary, ref = ensure_binary(REPO)
+    run_dir = fresh_run_dir(TESTS / "results")
     results = RunResults(run_dir, RunHeader(
         astrald_ref=ref,
         astral_py_ref=git_ref(Path(os.path.expanduser(
@@ -114,9 +140,14 @@ def main(args) -> int:
         host=platform.node(), sandbox="host",
         hermetic=args.target == "fresh"))
 
-    ex = LocalExecutor(run_dir / "session", binary, cfg["ports"]["base"])
+    ex = _executor(args, run_dir / "session", binary, cfg["ports"]["base"])
     py = sys.executable
     base_env = driver_env(ex.session_json_path, results.header["hermetic"])
+
+    mutators = [t.name for t, _ in plan if t.mutates]
+    if args.target != "fresh" and mutators:
+        print(f"run: --target {args.target}: {', '.join(mutators)} really "
+              "mutates this world — it is not a throwaway", file=sys.stderr)
 
     broken_states = set()
     try:
