@@ -14,6 +14,7 @@ from lib.build import ensure_binary, git_ref
 from lib.executors import ExecutorError
 from lib.executors.attach import AttachExecutor
 from lib.executors.local import LocalExecutor
+from lib.executors.netsim import NetsimExecutor
 from lib.results import RunHeader, RunResults, fresh_run_dir
 
 TESTS = Path(__file__).resolve().parent.parent
@@ -71,12 +72,10 @@ def plan_for(tests: dict, selection: list) -> list:
 def _reject_unbuilt(args, plan: list) -> str | None:
     """What the runner cannot do yet, and why — never a silent wrong verdict."""
     if args.driver == "agent":
-        # fixme: the agent driver needs an AI operator with the astral-agent
-        # skill. Env netsim would supply the lab-baked one and env node the
-        # disposable VM sandbox; both are VMs, and netsim does not run on this
-        # host. prompt.md ships with seven tests, ready for it.
-        return ("--driver agent needs an operator VM: netsim does not run on "
-                "this host (NETSIM_STAGES_DIR -> root-owned /mnt/netsim)")
+        # fixme: the agent driver needs an AI operator carrying the
+        # astral-agent skill — the lab-baked one under env netsim, a
+        # disposable VM sandbox under env node. Neither is built.
+        return "--driver agent has no operator to drive: not built yet"
     if args.target == "attach":
         # why: attach runs against the operator's own daemon. Building a
         # fixture prefix there means running bootstrap's flow at it — which
@@ -91,26 +90,33 @@ def _reject_unbuilt(args, plan: list) -> str | None:
     if args.target.startswith("stage:"):
         return (f"--target {args.target} needs the netsim executor, which is "
                 "not wired to the runner (see lib/executors/netsim.py)")
-    other = sorted({t.env for t, _ in plan} - {"node"})
-    if other:
-        # fixme: lib/executors/netsim.py exists but is not reachable from here.
-        # Its session.json carries no working endpoints yet — a guest apphost
-        # is netns-local once a node is NAT'd, and the host-side tunnel that
-        # reaches it cannot be designed without a live netsim. netsim does not
-        # run on this host (NETSIM_STAGES_DIR -> root-owned /mnt/netsim).
-        return (f"env {other[0]} is not wired to the runner: the netsim "
-                "executor's session tunnel is unbuilt (see "
-                "lib/executors/netsim.py)")
+    if args.target == "attach" and run_env(plan) == "netsim":
+        return "--target attach has no simulation to attach to"
     undeclared = [t.name for t, _ in plan if args.driver not in t.drivers]
     if undeclared:
         return f"{undeclared[0]} declares no {args.driver} driver"
     return None
 
 
-def _executor(args, dir, binary, port_base):
+def run_env(plan: list) -> str:
+    """The env this run executes in: netsim as soon as any selected test needs it.
+
+    why: a netsim test's fixture prefix is env-node tests, and they must build
+    their states in the SAME world the netsim test will run in. Running them
+    on loopback would build a state the VMs never see. This is the env lift
+    the design promises — the same files, driven against VMs instead of
+    processes, with nothing in them aware of the difference.
+    """
+    selected = [t for t, kind in plan if kind == "test"]
+    return "netsim" if any(t.env == "netsim" for t in selected) else "node"
+
+
+def _executor(args, plan, dir, binary, port_base, ref):
     """Where the machines come from — orthogonal to env and driver."""
     if args.target == "attach":
         return AttachExecutor(dir)
+    if run_env(plan) == "netsim":
+        return NetsimExecutor(dir, binary, ref)
     return LocalExecutor(dir, binary, port_base)
 
 
@@ -140,7 +146,8 @@ def main(args) -> int:
         host=platform.node(), sandbox="host",
         hermetic=args.target == "fresh"))
 
-    ex = _executor(args, run_dir / "session", binary, cfg["ports"]["base"])
+    ex = _executor(args, plan, run_dir / "session", binary,
+                   cfg["ports"]["base"], ref)
     py = sys.executable
     base_env = driver_env(ex.session_json_path, results.header["hermetic"])
 
