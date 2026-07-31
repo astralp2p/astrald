@@ -1,43 +1,63 @@
-"""results.json / events.jsonl writer — the system's one stable output."""
+"""results.json / events.jsonl writer — the system's one stable output (v2).
+
+v2 vs M1: `env` replaces `lane` on every record, the header drops `lanes`
+and gains `astral_py_ref`, and `hermetic` is set by the run's --target
+rather than hard-coded.
+"""
 import json
 import time
+from dataclasses import dataclass
 from pathlib import Path
 
 STATUSES = {"pass", "fail", "skipped"}
 FAILURE_KINDS = {"driver", "verify", "environment"}
 KINDS = {"test", "fixture"}
+ENVS = {"node", "netsim"}
+
+
+@dataclass
+class RunHeader:
+    """What the run was, independent of any single test."""
+    astrald_ref: str
+    astral_py_ref: str
+    host: str
+    sandbox: str
+    hermetic: bool = True
 
 
 class RunResults:
-    def __init__(self, dir: Path, astrald_ref: str, host: str,
-                 sandbox: str, lanes: list):
+    def __init__(self, dir: Path, header: RunHeader):
         self.dir = Path(dir)
         self.dir.mkdir(parents=True, exist_ok=True)
         self._t0 = time.monotonic()
         self.header = {
-            "astrald_ref": astrald_ref,
-            "host": host,
-            "sandbox": sandbox,
-            "lanes": list(lanes),
-            "hermetic": True,
+            "astrald_ref": header.astrald_ref,
+            # why: the astral-py checkout is mutable (config.toml path), so a
+            # result is only reproducible if the run pins what it imported.
+            "astral_py_ref": header.astral_py_ref,
+            "host": header.host,
+            "sandbox": header.sandbox,
+            "hermetic": header.hermetic,
             "started": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
             "wall_time_s": 0.0,
         }
         self.entries = []
 
-    def record(self, *, test: str, kind: str, lane: str, driver: str,
+    def record(self, *, test: str, kind: str, env: str, driver: str,
                status: str, duration_s: float, artifacts: str,
                failure_kind: str | None = None) -> None:
         if status not in STATUSES:
             raise ValueError(f"bad status {status!r}")
         if kind not in KINDS:
             raise ValueError(f"bad kind {kind!r}")
+        if env not in ENVS:
+            raise ValueError(f"bad env {env!r}")
         if status == "fail":
             if failure_kind not in FAILURE_KINDS:
                 raise ValueError(f"fail requires failure_kind, got {failure_kind!r}")
         elif failure_kind is not None:
             raise ValueError("failure_kind only valid on fail")
-        entry = {"test": test, "kind": kind, "lane": lane, "driver": driver,
+        entry = {"test": test, "kind": kind, "env": env, "driver": driver,
                  "status": status, "duration_s": round(duration_s, 3),
                  "artifacts": artifacts}
         if failure_kind:
