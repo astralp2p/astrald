@@ -23,4 +23,4 @@ On each `--vm` (default `node1 node2`), run **after** `enable-tor` and `enter-na
 Self-validating: waits for the control port inside the netns, then confirms astrald
 **re-publishes its onion** — the end-to-end proof that bootstrap (via the WAN masquerade),
 control, and the netns-local onion listener all work. **No astrald source/config change.**
-Host-driven. Used by the NAT-punch story after `enable-tor` + `enter-nat`.
+Host-driven. Used by the `nat-punch` test after `enable-tor` + `enter-nat`.

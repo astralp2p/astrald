@@ -1,7 +1,7 @@
 # enter-nat
 
 Puts a node's astrald behind its own **symmetric, true-masquerade NAT** — the `leave-lan`
-analog for the NAT scenario.
+analog for the NAT tests.
 
 On each `--vm` (default `node1 node2`):
 

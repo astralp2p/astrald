@@ -7,4 +7,8 @@ Builds the shared test lab: two astrald nodes plus an AI operator.
 - **Steps:** add-vm · install-astrald · install-qwen-code · configure-astral-agent
 - **Run:** `netsim story --stage null --save astrald-lab tests/fixtures/lab/lab.story`
 
-Creates two virtual machines and installs astrald on each so they can work together over a network. It also sets up Qwen Code, an AI assistant, on the first machine with a skill for talking to astrald. This baseline is the foundation every other scenario starts from.
+M2 moved this fixture out of `stages/`; it is still a netsim story. M4 turns
+it into the base recipe the netsim executor bakes — VMs and the operator
+baked, astrald pushed fresh, never baked.
+
+Creates two virtual machines and installs astrald on each so they can work together over a network. It also sets up Qwen Code, an AI assistant, on the first machine with a skill for talking to astrald. This baseline is the foundation every other test starts from.
