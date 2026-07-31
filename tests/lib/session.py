@@ -40,6 +40,11 @@ class Session:
                 "identity": n.identity,
                 "root": str(n.root),
                 "tcp_port": n.ports.tcp,
+                # why: the address a PEER dials, which is not the address the
+                # host dials. On loopback they coincide; in VMs they do not,
+                # and a driver that composes 127.0.0.1 from tcp_port is not
+                # env-blind however hard the design says it is.
+                "lan_endpoint": f"tcp:127.0.0.1:{n.ports.tcp}",
             }
         self.session_json_path.write_text(json.dumps(doc, indent=2) + "\n")
 
