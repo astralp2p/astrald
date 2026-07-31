@@ -76,7 +76,14 @@ def _reject_unbuilt(args, plan: list) -> str | None:
         return f"--target {args.target} arrives in {where}"
     other = sorted({t.env for t, _ in plan} - {"node"})
     if other:
-        return f"env {other[0]} arrives in M4"
+        # fixme: lib/executors/netsim.py exists but is not reachable from here.
+        # Its session.json carries no working endpoints yet — a guest apphost
+        # is netns-local once a node is NAT'd, and the host-side tunnel that
+        # reaches it cannot be designed without a live netsim. netsim does not
+        # run on this host (NETSIM_STAGES_DIR -> root-owned /mnt/netsim).
+        return (f"env {other[0]} is not wired to the runner: the netsim "
+                "executor's session tunnel is unbuilt (see "
+                "lib/executors/netsim.py)")
     undeclared = [t.name for t, _ in plan if args.driver not in t.drivers]
     if undeclared:
         return f"{undeclared[0]} declares no {args.driver} driver"

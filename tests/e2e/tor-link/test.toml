@@ -1,0 +1,9 @@
+env     = "netsim"
+start   = "two-nodes"
+saves   = "two-nodes-tor"
+nodes   = ["node1", "node2"]
+steps   = ["vm:enable-tor node1 node2",
+           "vm:leave-lan node2 --peer node1",
+           "driver"]
+drivers = ["script"]
+timeout = 600

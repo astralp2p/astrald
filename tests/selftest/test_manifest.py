@@ -193,9 +193,23 @@ class TestWalk(ManifestCase):
                                   "adopt-node"])
 
     def test_misordered_suite_is_rejected(self):
-        with self.assertRaisesRegex(ValueError, "not reachable"):
+        # the walk seeds at adopt-node's start, so what catches this order is
+        # bootstrap re-producing a one-node the walk already stands on
+        with self.assertRaisesRegex(ValueError, "already built"):
             validate_order(self.all, ["adopt-node",
                                       "bootstrap-user-software-key"])
+
+    def test_a_suite_may_open_partway_up_the_chain(self):
+        # substrate.suite opens at two-nodes: the netsim executor materializes
+        # that state from its stage cache instead of building it
+        self.branch()
+        validate_order(self.all, ["object-store"])
+        validate_order(self.all, ["object-store", "expel-node"])
+
+    def test_a_producer_may_not_rebuild_a_state_the_walk_stands_on(self):
+        self.branch()
+        with self.assertRaisesRegex(ValueError, "already built"):
+            validate_order(self.all, ["object-store", "adopt-node"])
 
     def test_ancestor_start_is_placeable(self):
         # expel-node starts at two-nodes while the walk stands at

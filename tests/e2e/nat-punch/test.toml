@@ -1,0 +1,11 @@
+env     = "netsim"
+start   = "two-nodes"
+saves   = "two-nodes-nat"
+nodes   = ["node1", "node2"]
+steps   = ["vm:enable-tor node1 node2",
+           "vm:enter-nat node1 node2",
+           "vm:configure-nat-tor node1 node2",
+           "vm:add-reflector node1 node2 --reflector reflector",
+           "driver"]
+drivers = ["script"]
+timeout = 900

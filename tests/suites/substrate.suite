@@ -1,0 +1,3 @@
+# substrate.suite — the netsim tests: VMs are the point, not the cost.
+nat-punch
+tor-link

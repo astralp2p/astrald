@@ -171,7 +171,11 @@ def validate_order(all: dict, names: list) -> None:
     if unknown:
         raise ValueError(f"unknown test(s): {', '.join(unknown)}")
 
-    state, fence, mutator = NULL, None, None
+    # why: the walk seeds at the first test's start, not at null. A suite may
+    # legitimately begin partway up the chain — substrate.suite opens at
+    # two-nodes, which the netsim executor materializes from its stage cache
+    # rather than builds. Seeding at null would reject it.
+    state, fence, mutator = all[names[0]].start, None, None
     for name in names:
         t = all[name]
         if fence is TERMINAL:
@@ -185,6 +189,14 @@ def validate_order(all: dict, names: list) -> None:
         if not _reaches(t.start, state, producers):
             raise ValueError(
                 f"{name}: start {t.start!r} is not reachable from {state!r} — "
+                f"this suite order cannot satisfy the chain")
+        # why: an ancestor start is legal, but re-running a producer is not.
+        # This is what catches a misordered suite now that the walk no longer
+        # seeds at null: adopt-node before bootstrap-user-software-key leaves
+        # bootstrap saving a one-node the walk already stands on.
+        if t.saves and _reaches(t.saves, state, producers):
+            raise ValueError(
+                f"{name}: state {t.saves!r} is already built at this point — "
                 f"this suite order cannot satisfy the chain")
         if t.mutates:
             fence, mutator = t.saves or TERMINAL, name
