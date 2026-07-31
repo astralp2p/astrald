@@ -38,7 +38,11 @@ APPHOST_PORT = 8625          # the guest's apphost, inside netns priv when NAT'd
 THROWAWAY_STAGE = "e2e-scratch"   # a fresh sim always saves; this is what it saves to
 LAB_STAGE = "astrald-lab"         # the recipe's canonical output
 GUEST_ROOT = "/var/lib/astrald"   # install-astrald's -root (its systemd unit)
+GUEST_TCP_PORT = 1791             # astrald's default tcp listener in the lab
 SSH_READY_TIMEOUT = 120.0
+# why: a guest that just lost its data regenerates its node key and bootstraps
+# a fresh onion before apphost listens — minutes on a 1-vCPU VM, not seconds.
+APPHOST_READY_TIMEOUT = 300.0
 
 
 def _netsim(*args, check=True, capture=True) -> str:
@@ -140,8 +144,12 @@ class NetsimExecutor(Executor):
             sims = json.loads(_netsim("ps", "--json") or "[]")
         except ExecutorError:
             return []
-        live = {s["sim_id"] for s in sims if s.get("status") == "LIVE"}
-        return [] if str(self.sim) in live else sorted(self._nodes)
+        # why: STALE means netsim lost the process that owned the simulation,
+        # not that the world died — an adopted simulation is always STALE and
+        # its VMs are still running. A world is broken when netsim no longer
+        # lists it, or lists it with no VMs.
+        alive = {s["sim_id"] for s in sims if s.get("vms")}
+        return [] if str(self.sim) in alive else sorted(self._nodes)
 
     def teardown(self, keep: bool) -> None:
         for p in self._tunnels:
@@ -242,11 +250,15 @@ class NetsimExecutor(Executor):
             s.bind(("127.0.0.1", 0))
             return s.getsockname()[1]
 
-    def _tunnel(self, vm: str) -> int:
+    def _tunnel(self, vm: str) -> tuple:
         """A local port that reaches this VM's apphost, held open by ssh -L."""
         port = self._free_port()
         argv = ["ssh", "-F", str(self.sim_dir / "ssh_config"), "-N",
                 "-o", "ExitOnForwardFailure=yes",
+                # why: a guest under load (an astrald restart on one vCPU)
+                # can stall long enough for ssh to give up, and a dead
+                # forward looks to a driver like a refused connection.
+                "-o", "ServerAliveInterval=15", "-o", "ServerAliveCountMax=8",
                 "-L", f"{port}:127.0.0.1:{APPHOST_PORT}", vm]
         proc = subprocess.Popen(argv, stdout=subprocess.DEVNULL,
                                 stderr=subprocess.PIPE)
@@ -259,7 +271,7 @@ class NetsimExecutor(Executor):
                 s.settimeout(0.5)
                 if s.connect_ex(("127.0.0.1", port)) == 0:
                     self._tunnels.append(proc)
-                    return port
+                    return port, proc
             time.sleep(0.5)
         proc.terminate()
         raise ExecutorError(f"{vm}: apphost tunnel never opened on {port}")
@@ -274,6 +286,10 @@ class NetsimExecutor(Executor):
         ref in the results header. The apphost config is written here too, so
         the token in session.json is one the harness chose rather than one it
         had to discover.
+
+        why: the value beside a token is the identity it authenticates as, not
+        a label. `localnode` is the node itself — an invented name resolves to
+        nothing and every call comes back `auth_failed`.
         """
         for vm in nodes:
             token = sha256(f"{vm}:{self.astrald_ref}".encode()).hexdigest()[:32]
@@ -285,7 +301,7 @@ listen:
   - "tcp:127.0.0.1:{APPHOST_PORT}"
 bind_http: ""
 tokens:
-  "{token}": e2e
+  "{token}": localnode
 EOF
 systemctl restart astrald""")
             self._nodes[vm] = {"token": token}
@@ -297,7 +313,7 @@ systemctl restart astrald""")
         import astral
 
         async def identity_of(port, token):
-            deadline = time.monotonic() + 90.0
+            deadline = time.monotonic() + APPHOST_READY_TIMEOUT
             last = None
             while time.monotonic() < deadline:
                 try:
@@ -313,8 +329,13 @@ systemctl restart astrald""")
 
         for vm in nodes:
             info = self._nodes[vm]
+            # why: reopen a forward whose ssh has exited. session.json is
+            # rewritten per test, so a stale port there is a driver failure
+            # that has nothing to do with the test.
+            if info.get("ssh") is not None and info["ssh"].poll() is not None:
+                info.pop("port", None)
             if "port" not in info:
-                info["port"] = self._tunnel(vm)
+                info["port"], info["ssh"] = self._tunnel(vm)
             if not info.get("identity"):
                 info["identity"] = asyncio.run(
                     identity_of(info["port"], info["token"]))
@@ -359,6 +380,14 @@ systemctl restart astrald""")
         if p.returncode != 0:
             raise ExecutorError(f"{vm}: pushing {src.name}: {p.stderr}")
 
+    def _lan_ip(self, vm: str) -> str:
+        """The VM's address on the simulated LAN, from the sim manifest."""
+        manifest = json.loads((self.sim_dir / "manifest.json").read_text())
+        for entry in manifest.get("vms", []):
+            if entry.get("hostname") == vm:
+                return entry["ip"]
+        raise ExecutorError(f"{vm}: no address in the simulation manifest")
+
     def _write_session(self, nodes: list) -> None:
         """session.json — byte-compatible with the local executor's.
 
@@ -380,6 +409,7 @@ systemctl restart astrald""")
                 "token": info.get("token", ""),
                 "identity": info.get("identity", ""),
                 "root": f"netsim:{self.sim}:{vm}",
-                "tcp_port": 1791,
+                "tcp_port": GUEST_TCP_PORT,
+                "lan_endpoint": f"tcp:{self._lan_ip(vm)}:{GUEST_TCP_PORT}",
             }
         self.session_json_path.write_text(json.dumps(doc, indent=2) + "\n")
