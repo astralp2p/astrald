@@ -66,6 +66,28 @@ A hermetic run strips astral-py's ambient endpoint and token variables from
 the driver environment: an `ASTRALD_APPHOST_TOKEN` in the shell otherwise
 answers for a test's anonymous connect and the test node refuses it.
 
+## Coverage
+
+Every story of the catalog, in the cheapest env that can falsify it:
+
+| Story | Test | Env | States |
+|-------|------|-----|--------|
+| 0001 | `bootstrap-user-software-key` | node | `null` → `one-node` |
+| 0002 | `import-user-software-key` | node | `null` → — (runs alone) |
+| 0003 | `adopt-node` | node | `one-node` → `two-nodes` |
+| 0004 | `tor-link` | netsim | `two-nodes` → `two-nodes-tor` |
+| 0005 | `nat-punch` | netsim | `two-nodes` → `two-nodes-nat` |
+| 0006 | `object-store` | node | `two-nodes` → `two-nodes-data` |
+| 0007 | `object-store-peer` | node | `two-nodes` → `two-nodes-data-peer` |
+| 0008 | `read-remote-peer` | node | `two-nodes-data-peer` → `two-nodes-data-read` |
+| 0009 | `expel-node` | node | `two-nodes` → `two-nodes-expel` |
+| — | `smoke` | node | `null` → — |
+
+`main.suite` is the env-node chain, seven tests in about twelve seconds.
+`import-user-software-key` stays out of it: `start = "null"` means a
+pristine node, and env `node` runs one live session, so the chain cannot go
+back to an unclaimed node1 mid-suite.
+
 ## Requirements
 
 Python ≥ 3.11, a Go toolchain, and an astral-py checkout (path in
@@ -74,9 +96,10 @@ zero dependencies. No venv, no pip.
 
 ## Milestone state
 
-M2 ships the shape: env `node`, `--target fresh`, `--driver script`. The
-rest of the surface parses and reports where it arrives — `--driver agent`
-and `--target attach` in M5, `--target stage:<name>` and env `netsim` in M4.
+M2 shipped the shape and M3 the env-node coverage: env `node`,
+`--target fresh`, `--driver script`. The rest of the surface parses and
+reports where it arrives — `--driver agent` and `--target attach` in M5,
+`--target stage:<name>` and env `netsim` in M4.
 
 `net/` and `stages/` are pre-unification residue, absorbed-pending: the
 netsim stories and flow tasks still run under `netsim story`, and M4
@@ -87,9 +110,15 @@ Manifests are TOML (stdlib), which the design document also writes.
 
 ## Known issue
 
-`bootstrap-user-software-key` intermittently fails with
-`auth.sign_contract: sign as issuer: unsupported` — a pre-existing astrald
-race: the crypto module indexes a stored private key asynchronously, and a
-`sign_contract` arriving before the index lands finds no signer. Observed
-on roughly half of the bootstraps on this host. Re-run until the
-daemon-side fix lands.
+Two pre-existing astrald startup races flake the chain root. Neither is
+introduced here — this tree changes no daemon code — and the runner does not
+retry, because a retry would hide them. Re-run until the daemon-side fixes
+land.
+
+- `auth.sign_contract: sign as issuer: unsupported` — the crypto module
+  indexes a stored private key asynchronously, and a `sign_contract`
+  arriving before the index lands finds no signer.
+- `panic: database is locked (5) (SQLITE_BUSY)` — modules load concurrently
+  and contend on the node's own sqlite file. The DSN
+  (`core/assets/core_assets.go:117-122`) sets no `busy_timeout`, so there is
+  no configuration the harness could supply to absorb it.

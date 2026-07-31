@@ -2,3 +2,7 @@
 smoke
 bootstrap-user-software-key
 adopt-node
+object-store
+object-store-peer
+read-remote-peer
+expel-node                     # mutates two-nodes: nothing may follow it
