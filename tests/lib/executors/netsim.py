@@ -21,6 +21,7 @@ reaches the host through `ssh -F <config> -N -L <local>:127.0.0.1:8625 <vm>`,
 and `session.json` carries the local end. Drivers and oracles stay
 byte-identical across envs because the tunnel is the only difference.
 """
+import asyncio
 import json
 import os
 import shlex
@@ -34,7 +35,9 @@ from lib.executors import Executor, ExecutorError
 
 TESTS = Path(__file__).resolve().parent.parent.parent
 APPHOST_PORT = 8625          # the guest's apphost, inside netns priv when NAT'd
-THROWAWAY_STAGE = "e2e-scratch"   # a story always saves; this is what it saves to
+THROWAWAY_STAGE = "e2e-scratch"   # a fresh sim always saves; this is what it saves to
+LAB_STAGE = "astrald-lab"         # the recipe's canonical output
+GUEST_ROOT = "/var/lib/astrald"   # install-astrald's -root (its systemd unit)
 SSH_READY_TIMEOUT = 120.0
 
 
@@ -90,21 +93,22 @@ class NetsimExecutor(Executor):
         return self.dir / "session.json"
 
     def prepare(self, test) -> None:
-        if not test.steps:
-            raise ExecutorError(
-                f"{test.name}: an env netsim test declares its steps")
-        if test.steps[-1] != "driver":
-            # why: the runner owns the driver, so the executor can only run the
-            # steps that precede it. Every shipped netsim test ends with
-            # `driver`; a step after it would silently never run.
-            raise ExecutorError(
-                f"{test.name}: `driver` must be the last step, got "
-                f"{test.steps[-1]!r}")
-
+        if test.env == "netsim":
+            if not test.steps:
+                raise ExecutorError(
+                    f"{test.name}: an env netsim test declares its steps")
+            if test.steps[-1] != "driver":
+                raise ExecutorError(
+                    f"{test.name}: `driver` must be the last step, got "
+                    f"{test.steps[-1]!r}")
         self._materialize(test.start, test.nodes)
+        # why: the roster grows along the chain — bootstrap wants node1,
+        # adopt-node wants node1 and node2. Push and tunnel per test, not per
+        # boot, or the second node runs the lab's stale astrald with no token.
+        self._push_astrald([n for n in test.nodes if n not in self._nodes])
         for step in test.steps[:-1]:
             self._step(step)
-        self._write_session(test.nodes)
+        self._open_session(test.nodes)
 
     def merge_facts(self, path: Path) -> None:
         if Path(path).exists():
@@ -125,16 +129,19 @@ class NetsimExecutor(Executor):
         self.state = state
 
     def broken(self) -> list:
-        """VMs that stopped answering. A verdict over a dead VM is void."""
+        """The roster, if the simulation itself died. A verdict over a dead
+        world is void — but a CLI hiccup is not a dead world, so anything
+        short of the simulation being gone reports nothing broken and lets
+        the oracle speak.
+        """
         if self.sim is None:
             return []
         try:
-            vms = json.loads(_netsim("vm", "ls", "--json", "--sim", self.sim))
+            sims = json.loads(_netsim("ps", "--json") or "[]")
         except ExecutorError:
-            return sorted(self._nodes)
-        return sorted(v["hostname"] for v in vms
-                      if v.get("hostname") in self._nodes
-                      and v.get("state") != "running")
+            return []
+        live = {s["sim_id"] for s in sims if s.get("status") == "LIVE"}
+        return [] if str(self.sim) in live else sorted(self._nodes)
 
     def teardown(self, keep: bool) -> None:
         for p in self._tunnels:
@@ -147,70 +154,72 @@ class NetsimExecutor(Executor):
     # --- materialization ---------------------------------------------------
 
     def _stages(self) -> set:
-        return {s["name"] if isinstance(s, dict) else str(s)
-                for s in json.loads(_netsim("stages", "--json") or "[]")}
+        # netsim names a stage by `slug` (verified: netsim stages --json)
+        return {s["slug"] for s in
+                json.loads(_netsim("stages", "--json") or "[]")
+                if isinstance(s, dict) and s.get("slug")}
 
     def _materialize(self, state: str, nodes: list) -> None:
-        """Bring up a simulation standing at `state`, from cache when possible."""
-        if self.sim is not None and self.state == state:
+        """Stand the world up at `state`, from cache when there is one.
+
+        The chain advances inside one simulation, exactly as it advances
+        inside one live session on loopback: once a simulation is up, the
+        producer tests in the plan carry it forward and nothing re-boots.
+        """
+        if self.sim is not None:
+            self.state = state
+            return
+        # why: a boot costs minutes and gigabytes. NETSIM_E2E_SIM adopts a
+        # simulation that is already up, which is what makes iterating on this
+        # executor affordable. A debug affordance: it asserts nothing about
+        # what state that simulation stands at.
+        adopted = os.environ.get("NETSIM_E2E_SIM")
+        if adopted:
+            self.sim = adopted
+            self.state = state
             return
         key = stage_key(state, self.recipe, self.astrald_ref)
         if key in self._stages():
             self._boot(key)
-        elif state == "null":
-            self._build(nodes)
         else:
-            # The plan's producer for this state was expected to run first and
-            # call save(). Reaching here means the selection skipped it.
-            raise ExecutorError(
-                f"no cached stage {key!r} and no producer ran for state "
-                f"{state!r} — run the test that saves it, or the suite that "
-                "lists it, so the chain gets built")
+            self._boot(self._base_stage())
         self.state = state
-        self._push_astrald(nodes)
 
-    def _boot(self, key: str, steps=()) -> None:
-        """Resume a cached stage, run the test's vm steps, keep it running.
+    def _base_stage(self) -> str:
+        """The lab every chain starts from.
 
-        why: one `netsim story` rather than a boot verb plus per-step calls.
-        netsim rejects a story with no tasks — verified: `error: story has no
-        tasks` — so there is no empty-story boot, and a story is the unit the
-        tool actually offers. A story on a fresh simulation always saves, so
-        it saves to a throwaway name that `save()` later replaces with the
-        real cache key.
+        why: prefer the stage the operator already has. The recipe-keyed name
+        is what a fresh bake produces, but an existing `astrald-lab` is the
+        same world and costs a resume instead of a twenty-minute build.
         """
-        story = self.dir / "steps.story"
-        story.write_text("".join(f"{s}\n" for s in steps)
-                         or "# no vm steps\n")
-        if not steps:
-            raise ExecutorError(
-                "a netsim test with no vm: steps cannot boot — netsim has no "
-                "boot-only verb and rejects an empty story")
-        _netsim("story", "--stage", key, "--keep", "--save", THROWAWAY_STAGE,
-                str(story))
+        stages = self._stages()
+        for name in (f"e2e-lab-r{recipe_hash(self.recipe)}", LAB_STAGE):
+            if name in stages:
+                return name
+        _netsim("story", "--stage", "null", "--save", LAB_STAGE,
+                str(self.recipe), capture=False)
+        return LAB_STAGE
+
+    def _boot(self, stage: str) -> None:
+        """Resume a stage into a simulation and keep it running.
+
+        why: netsim starts a simulation only through `task` or `story`, and
+        both need something to run — an empty story is refused outright
+        (verified: `error: story has no tasks`). `noop` is the harness's boot
+        verb. A fresh simulation always saves, so it saves to a throwaway
+        name that `save()` later replaces with the real cache key.
+        """
+        _netsim("task", "--stage", stage, "--keep", "--save", THROWAWAY_STAGE,
+                "noop", capture=False)
         self.sim = self._latest_sim()
         _netsim("remove", THROWAWAY_STAGE, check=False)
 
-    def _build(self, nodes: list) -> None:
-        """Boot the lab base and let the runner's plan fill the chain.
-
-        why: the executor never walks the chain itself. The runner already
-        resolved the producer tests into the plan and calls `save` after each
-        one, so a cache miss only has to supply an empty world of the right
-        shape — the same e2e tests that build `two-nodes` on loopback build it
-        here, which is what keeps one definition of a state across both envs.
-        """
-        base = f"e2e-lab-r{recipe_hash(self.recipe)}"
-        if base not in self._stages():
-            _netsim("story", "--stage", "null", "--save", base,
-                    str(self.recipe))
-        self._boot(base)
-
     def _latest_sim(self) -> str:
+        # netsim keys a simulation by `sim_id` (verified: netsim ps --json)
         sims = json.loads(_netsim("ps", "--json") or "[]")
         if not sims:
             raise ExecutorError("netsim ps lists no simulation after boot")
-        return str(sims[-1]["id"])
+        return str(sims[-1]["sim_id"])
 
     @property
     def sim_dir(self) -> Path:
@@ -258,38 +267,58 @@ class NetsimExecutor(Executor):
     # --- the binary under test ---------------------------------------------
 
     def _push_astrald(self, nodes: list) -> None:
-        """Replace the guest's astrald with the host-built one and restart it.
+        """Replace each guest's astrald with the host-built one and restart it.
 
         Guests match the host architecture, so the binary the node-env tests
         ran against is the binary the VM tests run against — one build, one
-        ref in the results header.
+        ref in the results header. The apphost config is written here too, so
+        the token in session.json is one the harness chose rather than one it
+        had to discover.
         """
         for vm in nodes:
             token = sha256(f"{vm}:{self.astrald_ref}".encode()).hexdigest()[:32]
             self._scp(vm, self.binary, "/usr/local/bin/astrald")
-            self._ssh(vm, "mkdir -p /root/.config/astrald && "
-                          "cat > /root/.config/astrald/apphost.yaml <<'EOF'\n"
-                          "listen:\n"
-                          f'  - "tcp:127.0.0.1:{APPHOST_PORT}"\n'
-                          'bind_http: ""\n'
-                          "tokens:\n"
-                          f'  "{token}": e2e\n'
-                          "EOF\n"
-                          "systemctl restart astrald")
+            self._ssh(vm, f"""set -e
+mkdir -p {GUEST_ROOT}/config
+cat > {GUEST_ROOT}/config/apphost.yaml <<'EOF'
+listen:
+  - "tcp:127.0.0.1:{APPHOST_PORT}"
+bind_http: ""
+tokens:
+  "{token}": e2e
+EOF
+systemctl restart astrald""")
             self._nodes[vm] = {"token": token}
-        for vm in nodes:
-            self._wait_ready(vm)
 
-    def _wait_ready(self, vm: str) -> None:
-        deadline = time.monotonic() + SSH_READY_TIMEOUT
-        while time.monotonic() < deadline:
-            out = self._ssh(vm, "astral-query localnode:.spec >/dev/null 2>&1 "
-                                "&& echo ready", check=False)
-            if "ready" in out:
-                return
-            time.sleep(2)
-        raise ExecutorError(f"{vm}: astrald did not answer after "
-                            f"{SSH_READY_TIMEOUT}s")
+    # --- the session drivers and oracles see ---------------------------------
+
+    def _open_session(self, nodes: list) -> None:
+        """Tunnel to each guest's apphost, learn its identity, write session.json."""
+        import astral
+
+        async def identity_of(port, token):
+            deadline = time.monotonic() + 90.0
+            last = None
+            while time.monotonic() < deadline:
+                try:
+                    async with await astral.connect(
+                            f"tcp:127.0.0.1:{port}", token=token,
+                            connect_timeout=3.0) as c:
+                        return str(await c.apphost.whoami())
+                except Exception as e:               # noqa: BLE001
+                    last = e
+                    await asyncio.sleep(2)
+            raise ExecutorError(f"apphost on 127.0.0.1:{port} never answered "
+                                f"(last error: {last})")
+
+        for vm in nodes:
+            info = self._nodes[vm]
+            if "port" not in info:
+                info["port"] = self._tunnel(vm)
+            if not info.get("identity"):
+                info["identity"] = asyncio.run(
+                    identity_of(info["port"], info["token"]))
+        self._write_session(nodes)
 
     # --- steps --------------------------------------------------------------
 
@@ -316,20 +345,6 @@ class NetsimExecutor(Executor):
                 self._vmop(opdir / verifier, argv, f"{op}:{verifier}")
                 break
 
-    def _vmop(self, script: Path, argv: list, label: str) -> None:
-        cmd = [str(script), *argv]
-        if script.suffix == ".py":
-            cmd.insert(0, "python3")
-        p = subprocess.run(cmd, text=True, capture_output=True,
-                           env=self._sim_env())
-        if p.returncode != 0:
-            raise ExecutorError(
-                f"{label}: exit {p.returncode}\n{p.stdout}\n{p.stderr}")
-
-    def _sim_env(self) -> dict:
-        import os
-        return dict(os.environ, NETSIM_SIM_ID=str(self.sim))
-
     # --- the session drivers and oracles see --------------------------------
 
     def _ssh(self, vm: str, script: str, check=True) -> str:
@@ -345,7 +360,7 @@ class NetsimExecutor(Executor):
             raise ExecutorError(f"{vm}: pushing {src.name}: {p.stderr}")
 
     def _write_session(self, nodes: list) -> None:
-        """session.json, byte-compatible with the local executor's.
+        """session.json — byte-compatible with the local executor's.
 
         The endpoint is the local end of this VM's `ssh -L` forward. Verified
         by hand against a live simulation resumed from `astrald-lab`: a host
