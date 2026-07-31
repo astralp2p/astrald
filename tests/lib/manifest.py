@@ -139,6 +139,21 @@ def resolve(all: dict, only) -> list:
     return [(all[n], "test" if n in selected else "fixture") for n in ordered]
 
 
+def blocked_by(all: dict, start: str, broken: set) -> str | None:
+    """The broken state `start` stands on, if any.
+
+    why: a failure mid-suite skips only what depended on it, and dependence
+    is the whole ancestry — a test starting at two-nodes is just as dead as
+    one starting at one-node when one-node never got built.
+    """
+    if not broken:
+        return None
+    for state in _ancestry(start, _producers(all)):
+        if state in broken:
+            return state
+    return None
+
+
 def validate_order(all: dict, names: list) -> None:
     """Reject a suite whose order cannot satisfy the chain.
 
