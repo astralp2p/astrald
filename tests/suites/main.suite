@@ -1,0 +1,4 @@
+# main.suite — the env-node chain, cheapest env first.
+smoke
+bootstrap-user-software-key
+adopt-node

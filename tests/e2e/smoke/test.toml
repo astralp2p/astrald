@@ -1,4 +1,5 @@
-start = "null"
-nodes = ["node1"]
+env     = "node"
+start   = "null"
+nodes   = ["node1"]
 drivers = ["script"]
 timeout = 60
