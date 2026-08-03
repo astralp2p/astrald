@@ -19,6 +19,7 @@ type Module struct {
 	router routing.OpRouter
 	db     *DB
 
+	external    *externalServices
 	discoverers sig.Set[services.Discoverer]
 }
 
