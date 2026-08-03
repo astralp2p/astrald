@@ -15,9 +15,14 @@ type DB struct {
 func (db *DB) CreateAccessToken(identity *astral.Identity, d astral.Duration) (token *dbAccessToken, err error) {
 	var expiresAt = (astral.Time)(time.Now().Add(time.Duration(d)))
 
+	value, err := randomString(32)
+	if err != nil {
+		return nil, err
+	}
+
 	token = &dbAccessToken{
 		Identity:  identity,
-		Token:     randomString(32),
+		Token:     value,
 		ExpiresAt: time.Time(expiresAt),
 	}
 

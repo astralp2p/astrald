@@ -1,8 +1,8 @@
 package apphost
 
 import (
+	"crypto/rand"
 	"errors"
-	"math/rand"
 
 	"github.com/astralp2p/astral-go/api/apphost"
 	"github.com/astralp2p/astral-go/astral"
@@ -54,11 +54,35 @@ func (mod *Module) AuthenticateToken(token string) (*astral.Identity, error) {
 	return dbToken.Identity, nil
 }
 
-func randomString(length int) (s string) {
+// randomString returns length characters drawn uniformly from charset,
+// sourced from crypto/rand.
+func randomString(length int) (string, error) {
 	const charset = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_"
-	var name = make([]byte, length)
-	for i := 0; i < len(name); i++ {
-		name[i] = charset[rand.Intn(len(charset))]
+
+	// why: 63 does not divide 256, so folding every byte into the charset would
+	// make the first four characters likelier than the rest. Bytes at or above
+	// the last whole multiple of 63 are discarded instead.
+	const limit = 256 - 256%len(charset)
+
+	var (
+		out = make([]byte, 0, length)
+		buf = make([]byte, length)
+	)
+
+	for len(out) < length {
+		if _, err := rand.Read(buf); err != nil {
+			return "", err
+		}
+
+		for _, b := range buf {
+			if len(out) == length {
+				break
+			}
+			if int(b) < limit {
+				out = append(out, charset[int(b)%len(charset)])
+			}
+		}
 	}
-	return string(name[:])
+
+	return string(out), nil
 }
