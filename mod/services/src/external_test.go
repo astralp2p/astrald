@@ -103,10 +103,8 @@ func TestChangedInfoKeepsTheServiceAvailable(t *testing.T) {
 	}
 
 	// and it replaced rather than accumulated
-	e.mu.RLock()
-	defer e.mu.RUnlock()
-	if len(e.ads) != 1 {
-		t.Fatalf("expected one advertisement, found %d", len(e.ads))
+	if n := e.ads.Len(); n != 1 {
+		t.Fatalf("expected one advertisement, found %d", n)
 	}
 }
 
