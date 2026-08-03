@@ -1,41 +1,34 @@
 package services
 
 import (
-	"sync"
-
 	"github.com/astralp2p/astral-go/api/services"
 	"github.com/astralp2p/astral-go/astral"
+	"github.com/astralp2p/astral-go/sig"
 	servicesmod "github.com/astralp2p/astrald/mod/services"
 )
 
 var _ servicesmod.Discoverer = &externalServices{}
 
-// externalServices holds the services advertised by apps rather than by modules
-// compiled into the node. An advertisement lives in memory for as long as the
-// channel that raised it, so a departed app leaves nothing behind: there is no
-// stored copy to go stale, which is the failure a directory entry has and this
-// does not.
+// externalServices holds the services advertised by apps rather than by
+// modules compiled into the node. An advertisement lives for as long as the
+// channel that raised it, so a departed app leaves no stored copy to go stale.
 type externalServices struct {
-	mu      sync.RWMutex
-	ads     map[string]*services.Update
-	watches map[chan *services.Update]struct{}
+	ads     sig.Map[string, *services.Update]
+	watches sig.Set[chan *services.Update]
 }
 
 func newExternalServices() *externalServices {
-	return &externalServices{
-		ads:     map[string]*services.Update{},
-		watches: map[chan *services.Update]struct{}{},
-	}
+	return &externalServices{}
 }
 
 func adKey(providerID *astral.Identity, name string) string {
 	return providerID.String() + "\x00" + name
 }
 
-// advertise records a service as available and tells every follower. Calling it
-// again for the same provider and name replaces the info in place: the service
-// never goes unavailable in between, so a follower sees an amended
-// advertisement rather than a withdrawal chased by a fresh one.
+// advertise records a service as available and tells every follower. Repeating
+// it for the same provider and name replaces the info in place: the service
+// stays available, so a follower sees an amended advertisement rather than a
+// withdrawal and a fresh one.
 func (e *externalServices) advertise(providerID *astral.Identity, name string, info *astral.Bundle) {
 	update := &services.Update{
 		Available:  true,
@@ -44,23 +37,14 @@ func (e *externalServices) advertise(providerID *astral.Identity, name string, i
 		Info:       info,
 	}
 
-	e.mu.Lock()
-	e.ads[adKey(providerID, name)] = update
-	e.mu.Unlock()
-
+	e.ads.Replace(adKey(providerID, name), update)
 	e.notify(update)
 }
 
 // withdraw drops an advertisement and tells every follower it is gone.
+// Withdrawing what is already gone tells nobody anything.
 func (e *externalServices) withdraw(providerID *astral.Identity, name string) {
-	key := adKey(providerID, name)
-
-	e.mu.Lock()
-	_, found := e.ads[key]
-	delete(e.ads, key)
-	e.mu.Unlock()
-
-	if !found {
+	if _, found := e.ads.Delete(adKey(providerID, name)); !found {
 		return
 	}
 
@@ -71,13 +55,10 @@ func (e *externalServices) withdraw(providerID *astral.Identity, name string) {
 	})
 }
 
-// notify delivers an update to every follower, dropping it for any whose buffer
-// is full: a follower that has stopped reading holds up nobody else.
+// notify delivers an update to every follower, dropping it for any whose
+// buffer is full: a follower that stopped reading holds up nobody else.
 func (e *externalServices) notify(update *services.Update) {
-	e.mu.RLock()
-	defer e.mu.RUnlock()
-
-	for watch := range e.watches {
+	for _, watch := range e.watches.Clone() {
 		select {
 		case watch <- update:
 		default:
@@ -85,20 +66,22 @@ func (e *externalServices) notify(update *services.Update) {
 	}
 }
 
-// DiscoverServices streams the advertisements an app has raised. Network-origin
-// callers are served nothing: an app extends the node hosting it, and what it
-// advertises is that node's business until someone decides otherwise.
+func (e *externalServices) snapshot() []*services.Update {
+	var out []*services.Update
+	for _, update := range e.ads.Clone() {
+		out = append(out, update)
+	}
+	return out
+}
+
+// DiscoverServices streams the advertisements apps have raised. Network-origin
+// callers are served nothing: an app extends the node hosting it.
 func (e *externalServices) DiscoverServices(
 	ctx *astral.Context,
 	caller *astral.Identity,
 	follow bool,
 ) (<-chan *services.Update, error) {
-	e.mu.RLock()
-	var snapshot = make([]*services.Update, 0, len(e.ads))
-	for _, update := range e.ads {
-		snapshot = append(snapshot, update)
-	}
-	e.mu.RUnlock()
+	snapshot := e.snapshot()
 
 	if !follow {
 		var ch = make(chan *services.Update, len(snapshot))
@@ -110,46 +93,32 @@ func (e *externalServices) DiscoverServices(
 	}
 
 	var watch = make(chan *services.Update, 16)
-
-	e.mu.Lock()
-	e.watches[watch] = struct{}{}
-	e.mu.Unlock()
+	_ = e.watches.Add(watch)
 
 	var out = make(chan *services.Update)
 
 	go func() {
 		defer close(out)
-		defer func() {
-			e.mu.Lock()
-			delete(e.watches, watch)
-			e.mu.Unlock()
-		}()
+		defer e.watches.Remove(watch)
 
 		for _, update := range snapshot {
-			select {
-			case <-ctx.Done():
+			if err := sig.Send(ctx, out, update); err != nil {
 				return
-			case out <- update:
 			}
 		}
 
 		// the separator between the snapshot and what follows it
-		select {
-		case <-ctx.Done():
+		if err := sig.Send(ctx, out, nil); err != nil {
 			return
-		case out <- nil:
 		}
 
 		for {
-			select {
-			case <-ctx.Done():
+			update, err := sig.Recv(ctx, watch)
+			if err != nil {
 				return
-			case update := <-watch:
-				select {
-				case <-ctx.Done():
-					return
-				case out <- update:
-				}
+			}
+			if err = sig.Send(ctx, out, update); err != nil {
+				return
 			}
 		}
 	}()
