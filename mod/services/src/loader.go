@@ -17,8 +17,13 @@ func (Loader) Load(node astral.Node, assets assets.Assets, log *log.Logger) (cor
 	}
 
 	mod.db = &DB{db: assets.Database()}
+	mod.external = newExternalServices()
 
 	if err := mod.db.Migrate(); err != nil {
+		return nil, err
+	}
+
+	if err := mod.AddDiscoverer(mod.external); err != nil {
 		return nil, err
 	}
 
