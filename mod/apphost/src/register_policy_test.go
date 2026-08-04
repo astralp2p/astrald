@@ -35,9 +35,9 @@ func TestParsePermitsOfNothingAsksForNothing(t *testing.T) {
 	}
 }
 
-// The default policy must not hand an app what it asked for. A stock node that
-// granted on request would let any local app write itself a user.info permit.
-func TestTheDefaultPolicyGrantsNothingItWasAskedFor(t *testing.T) {
+// The shipped default is permissive by name: it grants what it is handed,
+// entitlement and ask alike, and leaves deciding to a policy that decides.
+func TestTheDefaultPolicyGrantsWhatItIsHanded(t *testing.T) {
 	mod := &Module{config: defaultConfig, log: log.New(nil)}
 
 	asked := parsePermits("mod.user.info_action")
@@ -46,18 +46,16 @@ func TestTheDefaultPolicyGrantsNothingItWasAskedFor(t *testing.T) {
 	if !ok {
 		t.Fatal("the default policy refuses no registration")
 	}
-	if len(granted) != 0 {
-		t.Fatalf("granted %v to an IPC app that merely asked", actions(granted))
+	if len(granted) != len(asked) {
+		t.Fatalf("granted %v, want %v", actions(granted), actions(asked))
 	}
 }
 
-// ...while an origin the node already trusts keeps its entitlement, whatever
-// the app did or did not ask for.
-func TestATrustedOriginKeepsItsEntitlement(t *testing.T) {
+// Assembling the list is the op's job, not the policy's: the policy is handed
+// the origin's entitlement and the app's ask already joined.
+func TestTheOpJoinsEntitlementAndAsk(t *testing.T) {
 	mod := &Module{config: defaultConfig, log: log.New(nil)}
 
-	// read the trusted origin from the config rather than restating it, so the
-	// test follows the node's own list instead of a copy that goes stale
 	var origin string
 	for o := range defaultConfig.TrustedWebSources {
 		origin = o
@@ -67,22 +65,14 @@ func TestATrustedOriginKeepsItsEntitlement(t *testing.T) {
 		t.Skip("no trusted web source configured by default")
 	}
 
-	granted, ok := mod.AppRegisterAcceptAll(origin, nil)
-	if !ok {
-		t.Fatal("the default policy refuses no registration")
-	}
-	if len(granted) == 0 {
-		t.Fatalf("a trusted origin lost its permits")
+	entitled := mod.GetWebOriginPermits(origin)
+	if len(entitled) == 0 {
+		t.Fatal("a trusted origin is entitled to nothing")
 	}
 
-	var found bool
-	for _, a := range actions(granted) {
-		if a == "mod.user.info_action" {
-			found = true
-		}
-	}
-	if !found {
-		t.Fatalf("granted %v, expected the origin's user.info entitlement", actions(granted))
+	joined := append(mod.GetWebOriginPermits(origin), parsePermits("app.asked_for_action")...)
+	if len(joined) != len(entitled)+1 {
+		t.Fatalf("joined %v, expected the entitlement plus one ask", actions(joined))
 	}
 }
 

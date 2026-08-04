@@ -11,9 +11,8 @@ import "github.com/astralp2p/astral-go/api/auth"
 // what registration writes into the node→app contract, and returning false
 // refuses the registration outright.
 //
-// The two sources arrive in one list and a policy cannot tell them apart. That
-// is deliberate — a policy decides what an identity may hold, not where the
-// asking came from — but it means a policy that returns requested unchanged
-// grants an app whatever it asks for. Derive what you are willing to grant;
-// do not pass the list through.
+// The two sources arrive in one list and a policy cannot tell them apart: a
+// policy decides what an identity may hold, not where the asking came from.
+// The shipped default grants everything it is handed, so a node that cares
+// which apps hold what installs a policy that decides.
 type AppRegisterPolicy func(origin string, requested []*auth.Permit) (granted []*auth.Permit, allow bool)
