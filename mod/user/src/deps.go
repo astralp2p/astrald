@@ -49,6 +49,12 @@ func (mod *Module) LoadDependencies(ctx *astral.Context) (err error) {
 	mod.Auth.Add(auth.Func[*user.AdoptAction](mod.AuthorizeAdopt))
 	mod.Auth.Add(auth.Func[*user.InfoAction](mod.AuthorizeInfo))
 
+	// why: localuser as a name, to match localuser as a filter
+	err = mod.Dir.AddResolver(mod)
+	if err != nil {
+		return
+	}
+
 	// add localswarm filter
 	mod.Dir.SetFilter("localswarm", func(identity *astral.Identity) bool {
 		if identity.IsZero() {

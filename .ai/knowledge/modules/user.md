@@ -11,7 +11,7 @@ Represents the human operator across their nodes by binding the local node to a 
 | `objects` | `Store`/`Push` for signed contracts and sibling notifications; implements `Receiver`/`Holder`/`Finder` and registers the `ReadObjectAction` authorizer; `Search` preprocessor adds sibling sources |
 | `scheduler` | `Ready()` gates `Run`; `Schedule` runs `MaintainLinkTask` per sibling and `SyncNodesAction` on first inbound sibling link |
 | `tree` | binds `/mod/user/config` (holds `ActiveContract`) and persists per-sibling sync height at `/mod/user/assets/<node>/next_height` |
-| `dir` | `ResolveIdentity`, `DisplayName`, `GetAlias`/`SetAlias`; registers `localswarm` and `localuser` filters |
+| `dir` | `ResolveIdentity`, `DisplayName`, `GetAlias`/`SetAlias`; registers `localswarm` and `localuser` filters, and registers itself as a `dir.Resolver` for the `localuser` name |
 | `nearby` | `Broadcast` on active-contract change; `Mode` drives `ComposeStatus` |
 | `apphost` | `LocalApps` enumerates apps whose contracts are pushed to siblings during sync |
 | `crypto` | `crypto.Signature` carried through the membership-handshake wire protocol |
@@ -27,6 +27,7 @@ Represents the human operator across their nodes by binding the local node to a 
 ## Invariants
 
 * `Identity()` is nil until an active contract is accepted; it returns `ActiveContract().Issuer` (read from the tree-backed store), never the node identity.
+* `ResolveIdentity` answers only `LocalUser = "localuser"` and returns `user.ErrNoActiveContract` while the node is unclaimed; every other name errors so `dir`'s chain continues. `DisplayName` is always empty, so the resolver never shadows the alias table or `dir`'s fingerprint fallback.
 * `LocalSwarm()` is computed from indexed `SwarmMembershipAction` contracts in `auth` (via `ActiveNodes(ac.Issuer)`); it includes the local node itself and is filtered out by `runSiblingLinker`.
 * `user.accept_membership` is accepted only while there is no active contract; accepted contracts must have a non-zero subject equal to the local node and at least `minimalContractLength = 1h` remaining. `user.accept_contract` shares the no-active-contract guard but validates a fully-signed contract via `validateActiveContract` (both signatures, subject equals local node, not expired, grants swarm membership).
 * Default new-node contract validity is `defaultContractValidity = 365 * 24h`.
