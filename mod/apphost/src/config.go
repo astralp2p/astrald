@@ -53,7 +53,7 @@ var defaultConfig = Config{
 	Workers:        32,
 	AllowAnonymous: true,
 	TrustedWebSources: map[string][]PermitConfig{
-		"https://settings.astrald.app": {
+		"https://settings.test.satforge.dev": {
 			{Action: user.InfoAction{}.ObjectType()},
 			{Action: user.ExpelAction{}.ObjectType()},
 			{Action: user.AdoptAction{}.ObjectType()},
