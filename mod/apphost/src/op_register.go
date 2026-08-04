@@ -15,6 +15,12 @@ import (
 const RegisterDuration = 10 * 365 * 24 * time.Hour
 
 type opRegisterArgs struct {
+	// Permits names the actions the app asks to hold, comma-separated. An
+	// action name carries no comma, so the joining is unambiguous. Asking is
+	// not receiving: the node's policy decides, and the default grants none of
+	// them.
+	Permits string
+
 	In  string
 	Out string
 }
@@ -27,10 +33,13 @@ func (mod *Module) OpRegister(ctx *astral.Context, query *routing.IncomingQuery,
 	extras := mod.EnRouteQueryExtras(query.Nonce())
 	origin, _ := extras[apphost.ExtraOriginWeb].(string)
 
-	// a trusted web source adds its permit template to the registration
-	permits := mod.GetWebOriginPermits(origin)
+	// a trusted web source adds its permit template to the registration, and
+	// the app appends what it is asking for; the policy decides what, if any,
+	// of that the new identity actually holds
+	requested := append(mod.GetWebOriginPermits(origin), parsePermits(args.Permits)...)
 
-	if !mod.GetAppRegisterPolicy()(origin, permits) {
+	permits, ok := mod.GetAppRegisterPolicy()(origin, requested)
+	if !ok {
 		return query.RejectWithCode(1)
 	}
 

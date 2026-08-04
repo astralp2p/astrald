@@ -11,7 +11,15 @@ func (mod *Module) GetAppRegisterPolicy() apphost.AppRegisterPolicy {
 
 var _ apphost.AppRegisterPolicy = (*Module)(nil).AppRegisterAcceptAll
 
-func (mod *Module) AppRegisterAcceptAll(origin string, permits []*auth.Permit) bool {
-	mod.log.Info("accepting registration from origin %v with %v permits", origin, len(permits))
-	return true
+// AppRegisterAcceptAll admits every registration and grants only what the
+// caller's origin is already entitled to. An app may ask for more; nothing
+// here says yes. Granting a request needs a policy that decides to, which is
+// where a node asks its user.
+func (mod *Module) AppRegisterAcceptAll(origin string, requested []*auth.Permit) ([]*auth.Permit, bool) {
+	granted := mod.GetWebOriginPermits(origin)
+
+	mod.log.Info("accepting registration from origin %v: %v permits considered, %v granted",
+		origin, len(requested), len(granted))
+
+	return granted, true
 }
