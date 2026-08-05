@@ -8,7 +8,7 @@ import (
 )
 
 type opDeriveKeyArgs struct {
-	Path string `query:"required"`
+	Path string
 	In   string
 	Out  string
 }
