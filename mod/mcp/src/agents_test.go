@@ -1,0 +1,187 @@
+package mcp
+
+import (
+	"errors"
+	"testing"
+	"time"
+
+	"github.com/astralp2p/astral-go/astral"
+	apphostmod "github.com/astralp2p/astrald/mod/apphost"
+	dirmod "github.com/astralp2p/astrald/mod/dir"
+	"github.com/glebarez/sqlite"
+	"gorm.io/gorm"
+)
+
+type stubApphost struct {
+	apphostmod.Module
+	tokens  map[string]*astral.Identity
+	deleted []string
+}
+
+func (s *stubApphost) DeleteAccessToken(token string) error {
+	s.deleted = append(s.deleted, token)
+	return nil
+}
+
+func (s *stubApphost) AuthenticateToken(token string) (*astral.Identity, error) {
+	if id, ok := s.tokens[token]; ok {
+		return id, nil
+	}
+	return nil, errors.New("invalid token")
+}
+
+type stubDir struct {
+	dirmod.Module
+	aliases map[string]*astral.Identity
+}
+
+func (s *stubDir) SetAlias(id *astral.Identity, alias string) error {
+	if alias == "" {
+		for k, v := range s.aliases {
+			if v.IsEqual(id) {
+				delete(s.aliases, k)
+			}
+		}
+		return nil
+	}
+	s.aliases[alias] = id
+	return nil
+}
+
+func (s *stubDir) ResolveIdentity(name string) (*astral.Identity, error) {
+	if id, ok := s.aliases[name]; ok {
+		return id, nil
+	}
+	return nil, errors.New("not found")
+}
+
+func (s *stubDir) GetAlias(id *astral.Identity) (string, error) {
+	for alias, aid := range s.aliases {
+		if aid.IsEqual(id) {
+			return alias, nil
+		}
+	}
+	return "", errors.New("not found")
+}
+
+func (s *stubDir) DisplayName(id *astral.Identity) string {
+	alias, _ := s.GetAlias(id)
+	return alias
+}
+
+func testAgentModule(t *testing.T) (*Module, *stubApphost, *stubDir) {
+	t.Helper()
+
+	gdb, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	if err != nil {
+		t.Fatalf("open db: %v", err)
+	}
+
+	db := &DB{DB: gdb}
+	if err := db.AutoMigrate(&dbAgent{}); err != nil {
+		t.Fatalf("migrate: %v", err)
+	}
+
+	apphost := &stubApphost{}
+	dir := &stubDir{aliases: map[string]*astral.Identity{}}
+
+	mod := &Module{db: db, config: defaultConfig}
+	mod.Apphost = apphost
+	mod.Dir = dir
+
+	return mod, apphost, dir
+}
+
+func TestAssignAliasExplicit(t *testing.T) {
+	mod, _, dir := testAgentModule(t)
+	agentID := astral.GenerateIdentity()
+
+	alias, err := mod.assignAlias(agentID, "my-agent")
+	if err != nil {
+		t.Fatalf("assign: %v", err)
+	}
+	if alias != "my-agent" {
+		t.Fatalf("assigned %v, want my-agent", alias)
+	}
+	if !dir.aliases["my-agent"].IsEqual(agentID) {
+		t.Fatal("alias not bound to agent")
+	}
+}
+
+func TestAssignAliasTaken(t *testing.T) {
+	mod, _, dir := testAgentModule(t)
+	dir.aliases["my-agent"] = astral.GenerateIdentity()
+
+	if _, err := mod.assignAlias(astral.GenerateIdentity(), "my-agent"); err == nil {
+		t.Fatal("assign succeeded on a taken alias")
+	}
+}
+
+func TestAssignAliasGenerated(t *testing.T) {
+	mod, _, dir := testAgentModule(t)
+	agentID := astral.GenerateIdentity()
+
+	alias, err := mod.assignAlias(agentID, "")
+	if err != nil {
+		t.Fatalf("assign: %v", err)
+	}
+	if alias == "" {
+		t.Fatal("empty generated alias")
+	}
+	if !dir.aliases[alias].IsEqual(agentID) {
+		t.Fatal("alias not bound to agent")
+	}
+}
+
+func TestDeleteAgent(t *testing.T) {
+	mod, apphost, dir := testAgentModule(t)
+	agentID := astral.GenerateIdentity()
+
+	err := mod.db.CreateAgent(agentID, "my-agent", "token123", time.Now().Add(time.Hour))
+	if err != nil {
+		t.Fatalf("create agent: %v", err)
+	}
+	dir.aliases["my-agent"] = agentID
+
+	row, err := mod.db.FindAgent(agentID)
+	if err != nil {
+		t.Fatalf("find agent: %v", err)
+	}
+
+	if err = mod.deleteAgent(row); err != nil {
+		t.Fatalf("delete agent: %v", err)
+	}
+
+	if len(apphost.deleted) != 1 || apphost.deleted[0] != "token123" {
+		t.Fatalf("revoked tokens %v, want [token123]", apphost.deleted)
+	}
+	if _, ok := dir.aliases["my-agent"]; ok {
+		t.Fatal("alias still set after delete")
+	}
+	if _, err = mod.db.FindAgent(agentID); err == nil {
+		t.Fatal("agent row still present after delete")
+	}
+}
+
+func TestDBAgentRoundTrip(t *testing.T) {
+	mod, _, _ := testAgentModule(t)
+	agentID := astral.GenerateIdentity()
+
+	err := mod.db.CreateAgent(agentID, "a1", "t1", time.Now().Add(time.Hour))
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+
+	list, err := mod.db.ListAgents()
+	if err != nil || len(list) != 1 {
+		t.Fatalf("list: %v, %v rows", err, len(list))
+	}
+
+	if err = mod.db.DeleteAgent(agentID); err != nil {
+		t.Fatalf("delete: %v", err)
+	}
+
+	if err = mod.db.DeleteAgent(agentID); !errors.Is(err, gorm.ErrRecordNotFound) {
+		t.Fatalf("second delete: got %v, want gorm.ErrRecordNotFound", err)
+	}
+}

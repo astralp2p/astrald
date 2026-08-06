@@ -43,6 +43,7 @@ Read the module guide when entering that module's source.
 | `mod/gateway/`, relay socket, binder, connector, gateway relay | `modules/gateway.md` |
 | `mod/nat/`, hole punch, ConePuncher, UDP traversal, nat.Hole | `modules/nat.md` |
 | `mod/kcp/`, KCP, UDP transport, local-port mapping, ephemeral listener | `modules/kcp.md` |
+| `mod/mcp/`, MCP, AI agent, PAT, bearer token, create_agent, astral-listen, astral-send, dialog session, mcp__agents | `modules/mcp.md` |
 | `mod/user/`, user identity, Swarm member, MaintainLinkTask, node contract, asset object holder, user setup, node bootstrap, swarm join, invite flow, request invite, active contract, first node | `modules/user.md` |
 | `mod/nearby/`, local discovery, broadcast, Stealth, Visible, UDP discovery | `modules/nearby.md` |
 | `mod/scheduler/`, schedule task, run task, PoolLocker, Releaser, FuncAdapter | `modules/scheduler.md` |

@@ -22,6 +22,7 @@ import (
 	//_ "github.com/astralp2p/astrald/mod/kcp/src"
 	_ "github.com/astralp2p/astrald/mod/kcp/src"
 	_ "github.com/astralp2p/astrald/mod/log/src"
+	_ "github.com/astralp2p/astrald/mod/mcp/src"
 	_ "github.com/astralp2p/astrald/mod/nat/src"
 	_ "github.com/astralp2p/astrald/mod/nearby/src"
 	_ "github.com/astralp2p/astrald/mod/nodes/src"

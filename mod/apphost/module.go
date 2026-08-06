@@ -20,6 +20,8 @@ const (
 // Module is the public API surface of the apphost module.
 type Module interface {
 	CreateAccessToken(*astral.Identity, astral.Duration) (*apphost.AccessToken, error)
+	AuthenticateToken(string) (*astral.Identity, error)
+	DeleteAccessToken(string) error
 	LocalApps() ([]*apphost.App, error)
 }
 
