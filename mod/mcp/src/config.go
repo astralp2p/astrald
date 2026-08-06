@@ -23,9 +23,12 @@ type Config struct {
 	// send and receive.
 	SessionTTL time.Duration `yaml:"session_ttl,omitempty"`
 
-	// ListenGrace is how long an inbound query for a registered agent waits
-	// for a listener to park before route-not-found bridges nothing.
-	ListenGrace time.Duration `yaml:"listen_grace,omitempty"`
+	// PendingTTL is how long an inbound query for a registered agent waits in
+	// the pending queue for the agent's next astral-listen call.
+	PendingTTL time.Duration `yaml:"pending_ttl,omitempty"`
+
+	// MaxPending caps the queued inbound queries per agent.
+	MaxPending int `yaml:"max_pending,omitempty"`
 
 	// PayloadReadWindow is how long astral-listen waits for request bytes
 	// after accepting an inbound query.
@@ -44,9 +47,11 @@ var defaultConfig = Config{
 	// quiet listen returns a clean timeout result instead of a client error.
 	ListenTimeout: 55 * time.Second,
 	SessionTTL:    5 * time.Minute,
-	// why: agents poll astral-listen, leaving gaps between calls while the
-	// model thinks; callers wait out those gaps instead of failing.
-	ListenGrace:        4 * time.Second,
+	// why: agents call astral-listen in gaps while their model thinks; queuing
+	// the query means the caller waits instead of failing, and the agent need
+	// not be parked at the exact moment the query lands.
+	PendingTTL:         30 * time.Second,
+	MaxPending:         8,
 	PayloadReadWindow:  time.Second,
 	MaxResponseBytes:   64 << 10,
 	MaxResponseObjects: 64,

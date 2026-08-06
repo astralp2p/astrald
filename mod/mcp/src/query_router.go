@@ -14,15 +14,14 @@ import (
 func (mod *Module) RouteQuery(ctx *astral.Context, q *astral.InFlightQuery, w io.WriteCloser) (io.WriteCloser, error) {
 	// why: popping the listener atomically makes exactly one query win it;
 	// the next astral-listen call parks a fresh one.
-	ch, ok := mod.popListener(q.Target)
-	if !ok {
-		// why: only registered agents get the listen grace — every other
-		// target must fall through to the other routers immediately.
-		if !mod.agentIDs.Contains(q.Target.String()) || mod.config.ListenGrace <= 0 {
+	ch, listening := mod.popListener(q.Target)
+	if !listening {
+		// why: only registered agents queue — every other target must fall
+		// through to the other routers immediately.
+		if !mod.agentIDs.Contains(q.Target.String()) {
 			return query.RouteNotFound()
 		}
-		ch, ok = mod.awaitListener(ctx, q.Target, mod.config.ListenGrace)
-		if !ok {
+		if mod.config.MaxPending <= 0 || mod.pendingCount(q.Target) >= mod.config.MaxPending {
 			return query.RouteNotFound()
 		}
 	}
@@ -44,7 +43,12 @@ func (mod *Module) RouteQuery(ctx *astral.Context, q *astral.InFlightQuery, w io
 		msgs, _, _ := s.receive(mod.ctx, mod.config.PayloadReadWindow, mod.config.MaxPayloadBytes, cap(s.ch))
 		s.payload = bytes.Join(msgs, nil)
 
-		// note: ch is buffered and exclusively ours — this never blocks
-		ch <- s
+		if listening {
+			// note: ch is buffered and exclusively ours — this never blocks
+			ch <- s
+			return
+		}
+
+		mod.enqueuePending(q.Target, s)
 	})
 }

@@ -27,12 +27,14 @@ func (mod *Module) addTools(s *mcpsdk.Server, agentID *astral.Identity) {
 
 	mcpsdk.AddTool(s, &mcpsdk.Tool{
 		Name: "astral-listen",
-		Description: "Wait for an incoming query addressed to your identity. " +
+		Description: "Wait for one incoming query addressed to your identity. " +
 			"Returns the caller, query and request payload plus a session_id " +
-			"for answering via astral-send and reading more via astral-receive. " +
-			"On {status: timeout} simply call it again to keep listening, and " +
-			"call it again promptly after handling a query — callers are only " +
-			"held for a few seconds while you are between calls.",
+			"for answering via astral-send and reading more via astral-receive, " +
+			"or {status: timeout} when none arrived. Queries that arrive while " +
+			"you are not listening are queued and delivered on your next call, " +
+			"so you need not listen continuously and nothing is lost between " +
+			"calls. Each call handles at most one query: report what happened " +
+			"rather than looping indefinitely, unless asked to keep serving.",
 	}, mod.listenTool(agentID))
 
 	mcpsdk.AddTool(s, &mcpsdk.Tool{

@@ -32,25 +32,28 @@ func (mod *Module) listenTool(agentID *astral.Identity) mcpsdk.ToolHandlerFor[li
 			}
 		}
 
+		if s, ok := mod.takePending(agentID); ok {
+			return nil, queryResult(mod, s), nil
+		}
+
 		ch, err := mod.parkListener(agentID)
 		if err != nil {
 			return nil, out, err
 		}
 		defer mod.unparkListener(agentID, ch)
 
+		// why: a query may have queued between the drain above and the park,
+		// which would otherwise sit until this call times out.
+		if s, ok := mod.takePending(agentID); ok {
+			return nil, queryResult(mod, s), nil
+		}
+
 		timer := time.NewTimer(timeout)
 		defer timer.Stop()
 
 		select {
 		case s := <-ch:
-			out.Status = "query"
-			out.SessionID = s.id
-			out.Caller = s.caller.String()
-			out.CallerAlias = mod.Dir.DisplayName(s.caller)
-			out.Path = s.path
-			out.Params = s.params
-			out.Payload, out.Encoding = encodePayload(s.payload)
-			return nil, out, nil
+			return nil, queryResult(mod, s), nil
 		case <-timer.C:
 			out.Status = "timeout"
 			return nil, out, nil
@@ -58,4 +61,15 @@ func (mod *Module) listenTool(agentID *astral.Identity) mcpsdk.ToolHandlerFor[li
 			return nil, out, ctx.Err()
 		}
 	}
+}
+
+func queryResult(mod *Module, s *session) (out listenOut) {
+	out.Status = "query"
+	out.SessionID = s.id
+	out.Caller = s.caller.String()
+	out.CallerAlias = mod.Dir.DisplayName(s.caller)
+	out.Path = s.path
+	out.Params = s.params
+	out.Payload, out.Encoding = encodePayload(s.payload)
+	return
 }

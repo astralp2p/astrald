@@ -25,7 +25,8 @@ to live astral connections.
 * A session belongs to one agent; tools refuse session handles of other agents.
 * One parked `astral-listen` per identity; a second concurrent listen fails.
 * `RouteQuery` pops the parked listener atomically — exactly one query wins it — and accepts synchronously via `query.Accept`; the agent replies later through the session.
-* An inbound query for a registered agent with no parked listener waits up to `listen_grace` for one; unregistered targets fall through to other routers immediately.
+* An inbound query for a registered agent with no parked listener is accepted and queued for the agent's next `astral-listen`, up to `max_pending` per agent and `pending_ttl` each; unregistered targets and a full queue fall through to other routers immediately.
+* `astral-listen` drains the pending queue before parking, and again right after parking to close the enqueue race.
 * `astral-query` single-shot auto-detects the response: framed objects when the bytes decode cleanly, plain payload otherwise; `format` forces `raw` or `objects`.
 * A session's pump goroutine owns all conn reads; per-session format (`raw` or `objects`) is fixed at creation. Dialog sessions default to `raw` on both sides.
 * Sessions expire after an idle `session_ttl`, refreshed on every send/receive; expiry and `astral-send close:true` close the conn.
@@ -35,5 +36,5 @@ to live astral connections.
 ## Flows
 
 * Create agent: mint key → `Objects.Store` + `Crypto.AddToIndex` → sign + index node→agent relay contract → alias (given or `aliasgen`) → `Apphost.CreateAccessToken` → `mcp__agents` row → send `mcp.Agent`.
-* Inbound dialog: caller queries the agent identity → `RouteQuery` pops the parked listener → accept → session pump starts → payload read within `payload_read_window` → session delivered to `astral-listen` → agent answers with `astral-send` / reads more with `astral-receive` → `close:true` ends.
+* Inbound dialog: caller queries the agent identity → `RouteQuery` pops the parked listener, or queues when none is parked → accept → session pump starts → payload read within `payload_read_window` → session delivered to `astral-listen` → agent answers with `astral-send` / reads more with `astral-receive` → `close:true` ends.
 * Outbound dialog: `astral-query` with `session:true` routes as the agent, registers the open conn as a session and returns the handle instead of collecting a response.

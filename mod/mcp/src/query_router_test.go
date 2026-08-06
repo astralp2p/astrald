@@ -36,7 +36,8 @@ func testRouterModule(t *testing.T) *Module {
 		config: Config{
 			SessionTTL:         time.Second,
 			PayloadReadWindow:  50 * time.Millisecond,
-			ListenGrace:        200 * time.Millisecond,
+			PendingTTL:         500 * time.Millisecond,
+			MaxPending:         2,
 			MaxPayloadBytes:    64 << 10,
 			MaxResponseBytes:   64 << 10,
 			MaxResponseObjects: 64,
@@ -140,61 +141,103 @@ func TestUnparkClosesLateSession(t *testing.T) {
 	}
 }
 
-func TestRouteQueryGraceDeliversAfterPark(t *testing.T) {
-	mod := testRouterModule(t)
-	agentID := astral.GenerateIdentity()
-	_ = mod.agentIDs.Add(agentID.String())
-
-	done := make(chan error, 1)
-	go func() {
-		_, err := mod.RouteQuery(mod.ctx, inFlight(agentID, "chat"), &bufWriteCloser{})
-		done <- err
-	}()
-
-	time.Sleep(50 * time.Millisecond)
-	ch, err := mod.parkListener(agentID)
-	if err != nil {
-		t.Fatalf("park: %v", err)
-	}
-	defer mod.unparkListener(agentID, ch)
-
-	if err = <-done; err != nil {
-		t.Fatalf("route during grace: %v", err)
-	}
-
-	select {
-	case s := <-ch:
-		mod.closeSession(s.id)
-	case <-time.After(time.Second):
-		t.Fatal("no session delivered to the late listener")
+// waitPending blocks until the agent has n queued queries.
+func waitPending(t *testing.T, mod *Module, agentID *astral.Identity, n int) {
+	t.Helper()
+	deadline := time.After(2 * time.Second)
+	for {
+		if mod.pendingCount(agentID) == n {
+			return
+		}
+		select {
+		case <-deadline:
+			t.Fatalf("pending count %v, want %v", mod.pendingCount(agentID), n)
+		case <-time.After(10 * time.Millisecond):
+		}
 	}
 }
 
-func TestRouteQueryGraceExpires(t *testing.T) {
+func TestRouteQueryQueuesForLateListener(t *testing.T) {
 	mod := testRouterModule(t)
 	agentID := astral.GenerateIdentity()
 	_ = mod.agentIDs.Add(agentID.String())
 
-	start := time.Now()
+	// no listener parked — the query is accepted and queued
+	w := &bufWriteCloser{}
+	wc, err := mod.RouteQuery(mod.ctx, inFlight(agentID, "chat?topic=test"), w)
+	if err != nil {
+		t.Fatalf("route with no listener: %v", err)
+	}
+	wc.Write([]byte("hello"))
+
+	waitPending(t, mod, agentID, 1)
+
+	s, ok := mod.takePending(agentID)
+	if !ok {
+		t.Fatal("pending query not delivered")
+	}
+	if s.path != "chat" || string(s.payload) != "hello" {
+		t.Fatalf("path %q payload %q", s.path, s.payload)
+	}
+
+	if _, err = s.send([]byte("answer")); err != nil {
+		t.Fatalf("answer: %v", err)
+	}
+	if w.String() != "answer" {
+		t.Fatalf("caller read %q", w.String())
+	}
+	mod.closeSession(s.id)
+}
+
+func TestPendingExpires(t *testing.T) {
+	mod := testRouterModule(t)
+	agentID := astral.GenerateIdentity()
+	_ = mod.agentIDs.Add(agentID.String())
+
+	if _, err := mod.RouteQuery(mod.ctx, inFlight(agentID, "chat"), &bufWriteCloser{}); err != nil {
+		t.Fatalf("route: %v", err)
+	}
+	waitPending(t, mod, agentID, 1)
+
+	time.Sleep(700 * time.Millisecond)
+
+	if _, ok := mod.takePending(agentID); ok {
+		t.Fatal("expired query still queued")
+	}
+	if mod.sessions.Len() != 0 {
+		t.Fatalf("%v sessions left after expiry", mod.sessions.Len())
+	}
+}
+
+func TestPendingQueueFull(t *testing.T) {
+	mod := testRouterModule(t)
+	agentID := astral.GenerateIdentity()
+	_ = mod.agentIDs.Add(agentID.String())
+
+	for i := 0; i < mod.config.MaxPending; i++ {
+		if _, err := mod.RouteQuery(mod.ctx, inFlight(agentID, "chat"), &bufWriteCloser{}); err != nil {
+			t.Fatalf("route %v: %v", i, err)
+		}
+	}
+	waitPending(t, mod, agentID, mod.config.MaxPending)
+
 	_, err := mod.RouteQuery(mod.ctx, inFlight(agentID, "chat"), &bufWriteCloser{})
 	if !errors.Is(err, &astral.ErrRouteNotFound{}) {
-		t.Fatalf("route: got %v, want route not found", err)
+		t.Fatalf("route on full queue: got %v, want route not found", err)
 	}
-	if time.Since(start) < 150*time.Millisecond {
-		t.Fatal("returned before the grace window expired")
+
+	mod.dropPending(agentID)
+	if mod.pendingCount(agentID) != 0 {
+		t.Fatal("queue not dropped")
 	}
 }
 
-func TestRouteQueryNoGraceForUnknownTarget(t *testing.T) {
+func TestRouteQueryNoQueueForUnknownTarget(t *testing.T) {
 	mod := testRouterModule(t)
 
-	start := time.Now()
 	_, err := mod.RouteQuery(mod.ctx, inFlight(astral.GenerateIdentity(), "chat"), &bufWriteCloser{})
 	if !errors.Is(err, &astral.ErrRouteNotFound{}) {
 		t.Fatalf("route: got %v, want route not found", err)
-	}
-	if time.Since(start) > 100*time.Millisecond {
-		t.Fatal("waited the grace window for an unregistered target")
 	}
 }
 

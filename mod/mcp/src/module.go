@@ -23,8 +23,8 @@ type Module struct {
 	router routing.OpRouter
 
 	listenMu  sync.Mutex
-	listeners map[string]chan *session // agent identity -> parked astral-listen; guarded by listenMu
-	parked    chan struct{}            // closed on every park; guarded by listenMu
+	listeners map[string]chan *session   // agent identity -> parked astral-listen; guarded by listenMu
+	pending   map[string][]*pendingQuery // agent identity -> queued queries; guarded by listenMu
 
 	agentIDs sig.Set[string]           // registered agent identities, mirrors mcp__agents
 	sessions sig.Map[string, *session] // session id -> live dialog stream

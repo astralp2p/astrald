@@ -84,6 +84,7 @@ func (mod *Module) deleteAgent(row *dbAgent) error {
 
 	_ = mod.agentIDs.Remove(row.Identity.String())
 	mod.drainListener(row.Identity)
+	mod.dropPending(row.Identity)
 	mod.closeAgentSessions(row.Identity)
 
 	return mod.db.DeleteAgent(row.Identity)
