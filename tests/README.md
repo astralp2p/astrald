@@ -152,7 +152,8 @@ lying about exactly the case the third status exists for.
 Python ≥ 3.11, a Go toolchain, and an astral-py checkout (path in
 `config.toml`) — imported directly from its `src/`, since the package has
 zero dependencies. No venv, no pip. Env `netsim` additionally needs a
-working `netsim` on PATH; `./tests/net/link.sh` registers the vmops it
-dispatches as steps.
+working `netsim` on PATH. `./tests/fixtures/link.sh` registers this tree's
+netsim tasks — the vmops a test dispatches as steps, and the ones `lab.story`
+builds the world with; run it once per checkout.
 
 Manifests are TOML (stdlib), which the design document also writes.

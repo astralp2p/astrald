@@ -10,10 +10,10 @@ import argparse
 import os
 import sys
 
-# why: realpath crosses netsim's per-task symlink to reach sibling tasks/_lib
+# why: realpath crosses netsim's per-task symlink to reach the sibling _lib
 sys.path.insert(0, os.path.join(
     os.path.dirname(os.path.dirname(os.path.realpath(__file__))), "_lib"))
-import astralapi  # noqa: E402
+import vmops  # noqa: E402
 
 
 def main():
@@ -23,9 +23,9 @@ def main():
     args, _ = ap.parse_known_args()
 
     # note: leaver holds no 10.77 LAN address -- the thing astrald keys on
-    lan_ip = astralapi.peer_lan_ip(args.vm)
+    lan_ip = vmops.peer_lan_ip(args.vm)
     # note: and no route into the 10.77 subnet -- the connected route went with the address
-    lan_routes = [ln for ln in (astralapi.ssh(args.vm, "ip -o route show") or "").splitlines()
+    lan_routes = [ln for ln in (vmops.ssh(args.vm, "ip -o route show") or "").splitlines()
                   if "10.77." in ln]
 
     if lan_ip:

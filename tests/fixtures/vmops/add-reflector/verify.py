@@ -9,10 +9,10 @@ import argparse
 import os
 import sys
 
-# why: realpath crosses netsim's per-task symlink to reach sibling tasks/_lib
+# why: realpath crosses netsim's per-task symlink to reach the sibling _lib
 sys.path.insert(0, os.path.join(
     os.path.dirname(os.path.dirname(os.path.realpath(__file__))), "_lib"))
-import astralapi  # noqa: E402
+import vmops  # noqa: E402
 
 
 def main():
@@ -24,14 +24,14 @@ def main():
 
     failed = []
     for p in peers:
-        lan = astralapi.peer_lan_ip(p)
+        lan = vmops.peer_lan_ip(p)
         if not lan:
             failed.append(f"{p}: could not read its 10.77 LAN address")
             continue
         want = "198.51.100." + lan.split(".")[-1]           # peer's public TEST-NET alias
         # why: astral-query defaults to netns-local tcp:127.0.0.1:8625, so run it inside netns "priv"
         # note: local introspection op is ungated, no token needed
-        raw = astralapi.ssh(p, "ip netns exec priv astral-query ip.public_ip_candidates -out json") or ""
+        raw = vmops.query(p, "ip.public_ip_candidates", netns="priv")
         if want in raw:
             print(f"add-reflector OK: {p} nat armed -- public candidate {want} present.")
         else:
