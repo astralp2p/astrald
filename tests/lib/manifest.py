@@ -15,7 +15,7 @@ from pathlib import Path
 ENVS = {"node", "netsim"}
 DRIVERS = {"script", "agent"}
 KEYS = {"env", "start", "saves", "mutates", "nodes", "steps", "drivers",
-        "timeout"}
+        "timeout", "agent_timeout"}
 NULL = "null"
 
 # the walk value after a mutator that saves no state: nothing may follow it
@@ -34,6 +34,7 @@ class Test:
     steps: list
     drivers: list
     timeout: int
+    agent_timeout: int
 
 
 def load_all(e2e_dir: Path) -> dict:
@@ -69,7 +70,13 @@ def _parse(mf: Path) -> Test:
                 saves=raw.get("saves") or None,
                 mutates=bool(raw.get("mutates", False)),
                 nodes=nodes, steps=steps, drivers=drivers,
-                timeout=int(raw.get("timeout", 120)))
+                timeout=int(raw.get("timeout", 120)),
+                # why its own budget: `timeout` bounds a scripted flow, which
+                # takes under a second. An AI operator reads a prompt, plans,
+                # and calls astrald step by step — minutes, and the first call
+                # of a run may also wait for the endpoint to load the model.
+                # Reusing the script budget times out every agent run.
+                agent_timeout=int(raw.get("agent_timeout", 900)))
 
 
 def _producers(all: dict) -> dict:

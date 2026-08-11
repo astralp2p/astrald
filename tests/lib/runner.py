@@ -218,7 +218,7 @@ def main(args) -> int:
                            ASTRAL_TESTS_FACTS_OUT=str(art / "facts.json"))
                 if args.driver == "agent":
                     rc = ex.run_agent(t, art / "driver.log",
-                                      art / "facts.json", t.timeout)
+                                      art / "facts.json", t.agent_timeout)
                 else:
                     rc = _run_step(py, t.dir / "script.py",
                                    art / "driver.log", env, t.timeout)
