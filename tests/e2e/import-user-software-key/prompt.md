@@ -4,5 +4,5 @@ Make this node a User node from the given seed phrase — install its active use
 horse soldier imitate stool square buyer verb party enjoy result jazz rabbit trigger file benefit cloth term change
 ```
 
-Save the user's id and an access token to `~/user.json` (as `user_id` and
-`user_token`).
+Save the user's id and an access token to `~/user.json`, as `import_user_id`
+and `import_user_token`.
