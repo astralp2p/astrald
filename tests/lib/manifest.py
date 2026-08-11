@@ -71,12 +71,13 @@ def _parse(mf: Path) -> Test:
                 mutates=bool(raw.get("mutates", False)),
                 nodes=nodes, steps=steps, drivers=drivers,
                 timeout=int(raw.get("timeout", 120)),
-                # why its own budget: `timeout` bounds a scripted flow, which
-                # takes under a second. An AI operator reads a prompt, plans,
-                # and calls astrald step by step — minutes, and the first call
-                # of a run may also wait for the endpoint to load the model.
-                # Reusing the script budget times out every agent run.
-                agent_timeout=int(raw.get("agent_timeout", 900)))
+                # why its own budget, and why this large: an operator reads a
+                # prompt, plans, and works the node through its own shell. A
+                # measured bootstrap session spent 80 s in the model and 332 s
+                # across 21 shell commands — the VM, not the endpoint, sets
+                # the pace, and it was still going when a 900 s budget cut it
+                # off. The scripted flow it replaces takes under a second.
+                agent_timeout=int(raw.get("agent_timeout", 2400)))
 
 
 def _producers(all: dict) -> dict:

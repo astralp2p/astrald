@@ -34,7 +34,7 @@ nodes   = ["node1", "node2"]
 steps   = []                # env netsim only: vm:<op> … and driver
 drivers = ["script"]        # script, agent, or both
 timeout = 180               # the scripted flow's budget
-agent_timeout = 900         # an operator's; it plans and calls step by step
+agent_timeout = 2400         # an operator plans and works the node through its own shell
 ```
 
 `env` is a minimum, not a prison: drivers and oracles read `session.json`
