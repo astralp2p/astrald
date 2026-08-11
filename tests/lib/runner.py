@@ -9,7 +9,7 @@ from pathlib import Path
 
 from astral.client import ENDPOINT_VARS, TOKEN_VARS
 
-from lib import manifest, suites
+from lib import manifest, report, suites
 from lib.build import ensure_binary, git_ref
 from lib.executors import ExecutorError
 from lib.executors.attach import AttachExecutor
@@ -144,7 +144,9 @@ def main(args) -> int:
         astral_py_ref=git_ref(Path(os.path.expanduser(
             cfg["astral_py"]["path"]))),
         host=platform.node(), sandbox="host",
-        hermetic=args.target == "fresh"))
+        hermetic=args.target == "fresh",
+        selection=" ".join(args.selection) or DEFAULT_SUITE,
+        target=args.target))
 
     ex = _executor(args, plan, run_dir / "session", binary,
                    cfg["ports"]["base"], ref)
@@ -210,5 +212,6 @@ def main(args) -> int:
                   f"{ex.session_json_path.parent}", file=sys.stderr)
 
     code = results.finalize()
-    print(f"run: results at {run_dir / 'results.json'}")
+    print(f"\n{report.summary_line(results.doc)}")
+    print(f"run: report at {run_dir / 'report.md'}")
     return code
