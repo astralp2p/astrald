@@ -26,20 +26,15 @@ done
 SEED_BODY=$(cat <<'EOS'
 set -eu
 torof() {  # read a .onion endpoint address from a resolve_endpoints json stream on stdin
+  # why shape-agnostic: this walked a fixed {"Object":{"Endpoint":{"Object":…}}}
+  # envelope and returned nothing the moment that envelope changed, which
+  # reads as "the node has no onion" — a wire detail reported as a missing
+  # endpoint. The question here is only WHICH onion the node has, so match
+  # the address itself wherever it sits.
   python3 -c '
-import json,sys
-def addr(ep):
-    if isinstance(ep,str): return ep
-    if isinstance(ep,dict):
-        o=ep.get("Object"); return o if isinstance(o,str) else ""
-    return ""
-for ln in sys.stdin:
-    ln=ln.strip()
-    if not ln: continue
-    try: o=json.loads(ln)
-    except Exception: continue
-    a=addr((o.get("Object") or {}).get("Endpoint"))
-    if ".onion" in a: print(a); break'
+import re,sys
+m=re.search(r"[a-z2-7]{16,}\.onion(?::[0-9]+)?", sys.stdin.read())
+print(m.group(0) if m else "", end="")'
 }
 # prefer the local cache (auto-synced over the live link); else ask the leaver directly
 onion=$(astral-query nodes.resolve_endpoints -id "$leaver" -out json 2>/dev/null | torof || true)
