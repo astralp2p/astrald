@@ -480,7 +480,39 @@ systemctl restart astrald""")
                 f"rewrite (got {out!r})")
         self._model_applied = True
 
-    def run_agent(self, test, log: Path, timeout: int) -> int:
+    def _collect_agent_facts(self, facts: Path) -> None:
+        """Turn the operator's artifacts into the facts the oracles read.
+
+        why: every prompt ends by telling the operator where to save what it
+        produced — "save the object id to ~/object.json (as object_id)". That
+        is the agent's write_facts: the scripted driver hands the runner a
+        facts file, and the operator hands it a JSON artifact in its home.
+        Without this the oracle would find no object_id and report `verify` —
+        astrald misbehaved — when nothing about astrald had gone wrong. A
+        wrong layer is worse than a red.
+        """
+        merged = self._ssh(OPERATOR_VM, "\n".join([
+            "python3 - <<'PY'",
+            "import glob, json",
+            "merged = {}",
+            f"for f in sorted(glob.glob('/home/{OPERATOR_USER}/*.json')):",
+            "    try:",
+            "        d = json.load(open(f))",
+            "    except Exception:",
+            "        continue",
+            "    if isinstance(d, dict):",
+            "        merged.update(d)",
+            "print(json.dumps(merged))",
+            "PY",
+        ]), check=False)
+        try:
+            doc = json.loads(merged.strip() or "{}")
+        except json.JSONDecodeError:
+            doc = {}
+        if doc:
+            facts.write_text(json.dumps(doc, indent=2) + "\n")
+
+    def run_agent(self, test, log: Path, facts: Path, timeout: int) -> int:
         """Hand the test's prompt to the lab's operator and let it drive.
 
         why: the operator lives in the world under test, not on the host — it
@@ -520,6 +552,8 @@ systemctl restart astrald""")
             log.write_text(f"[agent] operator exceeded {timeout}s\n")
             return 124
         log.write_text((p.stdout or "") + (p.stderr or ""))
+        if p.returncode == 0:
+            self._collect_agent_facts(facts)
         return p.returncode
 
     def _ssh(self, vm: str, script: str, check=True) -> str:
