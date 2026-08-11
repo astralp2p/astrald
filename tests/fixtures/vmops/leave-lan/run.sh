@@ -23,30 +23,40 @@ while [ $# -gt 0 ]; do
 done
 
 # 1) seed <peer> with <vm>'s onion before the LAN goes away
-SEED_BODY=$(cat <<'EOS'
-set -eu
-torof() {  # read a .onion endpoint address from a resolve_endpoints json stream on stdin
-  # why shape-agnostic: this walked a fixed {"Object":{"Endpoint":{"Object":…}}}
-  # envelope and returned nothing the moment that envelope changed, which
-  # reads as "the node has no onion" — a wire detail reported as a missing
-  # endpoint. The question here is only WHICH onion the node has, so match
-  # the address itself wherever it sits.
-  python3 -c '
-import re,sys
-m=re.search(r"[a-z2-7]{16,}\.onion(?::[0-9]+)?", sys.stdin.read())
-print(m.group(0) if m else "", end="")'
-}
-# prefer the local cache (auto-synced over the live link); else ask the leaver directly
-onion=$(astral-query nodes.resolve_endpoints -id "$leaver" -out json 2>/dev/null | torof || true)
-[ -n "$onion" ] || onion=$(astral-query "$leaver":nodes.resolve_endpoints -id "$leaver" -out json 2>/dev/null | torof || true)
-[ -n "$onion" ] || { echo "leave-lan: $(hostname) could not learn $leaver's onion before the cut" >&2; exit 1; }
-astral-query nodes.add_endpoint -id "$leaver" -endpoint "tor:$onion" >/dev/null 2>&1 || true
-echo "leave-lan: $(hostname) seeded $leaver onion=$onion"
-EOS
-)
+#
+# why host-side: the peer cannot learn the onion for itself. Its endpoint cache
+# holds only the leaver's tcp/kcp addresses (tor endpoints do not sync over the
+# link), and asking the leaver directly — `<leaver>:nodes.resolve_endpoints` —
+# answers `route_not_found`. Both were verified against a live pair. The host
+# runs this vmop and can read either guest, so it fetches the onion from the
+# leaver and hands it to the peer.
+#
+# why the hex identity: nodes.add_endpoint takes `id` of type identity and
+# rejects an alias with `query rejected (1)`, while nodes.resolve_endpoints
+# accepts one — so the alias is resolved through user.swarm_status, which is
+# ungated and does accept it.
 echo "leave-lan: seeding $PEER with $VM's onion ..."
-# shellcheck disable=SC2029
-netsim ssh "$PEER" -- "leaver='$VM'; $SEED_BODY"
+
+onion=$(netsim ssh "$VM" -- "python3 -c \"import json;print(json.load(open('/root/tor.json'))['onion'])\"" 2>/dev/null | tr -d '\r\n')
+[ -n "$onion" ] || { echo "leave-lan: $VM has no onion in /root/tor.json (run enable-tor first)" >&2; exit 1; }
+
+leaver_id=$(netsim ssh "$PEER" -- "astral-query user.swarm_status -out json" 2>/dev/null | python3 -c "
+import json,sys
+alias=sys.argv[1]
+for line in sys.stdin:
+    line=line.strip()
+    if not line: continue
+    try: o=json.loads(line)
+    except Exception: continue
+    m=(o.get('Object') or {})
+    if m.get('Alias')==alias and m.get('Identity'):
+        print(m['Identity']); break
+" "$VM" | tr -d '\r\n')
+[ -n "$leaver_id" ] || { echo "leave-lan: $PEER does not know $VM in its swarm roster" >&2; exit 1; }
+
+netsim ssh "$PEER" -- "astral-query nodes.add_endpoint -id $leaver_id -endpoint 'tor:$onion'" >/dev/null 2>&1 \
+  || { echo "leave-lan: $PEER refused the endpoint for $VM" >&2; exit 1; }
+echo "leave-lan: $PEER seeded $VM ($leaver_id) onion=$onion"
 
 # 2) make <vm> leave the LAN: withdraw its own 10.77 address (drop the NIC too, for realism)
 # why: flushing the address takes its connected /24 route with it -> <vm> has no LAN address
