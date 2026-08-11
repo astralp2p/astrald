@@ -173,7 +173,11 @@ class NetsimExecutor(Executor):
         self._tunnels.clear()
         if keep or self.sim is None:
             return
-        _netsim("kill", "--sim", self.sim, check=False)
+        # note: kill takes the id positionally — `--sim` is a usage error, and
+        # with check=False that failed silently and leaked the simulation. A
+        # leaked simulation is not free: a dead one held 6.7 GiB of this
+        # host's SD card for two weeks.
+        _netsim("kill", self.sim, check=False)
 
     # --- materialization ---------------------------------------------------
 
