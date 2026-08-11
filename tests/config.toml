@@ -6,3 +6,15 @@ path = "~/work/astralp2p/astral-py/master"
 
 [build]
 package = "./cmd/astrald"
+
+[agent]
+# The model the lab's operator drives with under --driver agent. Empty keeps
+# whatever the lab baked.
+#
+# why here rather than in the lab recipe: comparing two models is a normal
+# thing to want, and a recipe change invalidates every cached stage — a
+# twenty-minute rebake to answer a question the operator's config can answer
+# in a second. The executor rewrites the operator's config after boot, so the
+# model is a property of the run, not of the world.
+model = "muse-glimmer-30b-p6"
+base_url = ""

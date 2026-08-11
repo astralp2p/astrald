@@ -158,6 +158,10 @@ def main(args) -> int:
     env_of_run = run_env(plan, args.driver)
     ex = _executor(args, plan, run_dir / "session", binary,
                    cfg["ports"]["base"], ref)
+    if args.driver == "agent":
+        agent_cfg = cfg.get("agent", {})
+        ex.want_model(agent_cfg.get("model", ""), agent_cfg.get("base_url", ""))
+        results.header["agent_model"] = agent_cfg.get("model", "") or "(lab default)"
     py = sys.executable
     base_env = driver_env(ex.session_json_path, results.header["hermetic"])
 

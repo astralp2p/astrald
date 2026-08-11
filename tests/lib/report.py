@@ -50,10 +50,16 @@ def render(doc: dict, run_dir_name: str) -> str:
         tally += f" · {len(skipped)} skipped"
     lines += [f"{tally} · {doc['wall_time_s']:.2f} s · {doc['started']}", ""]
 
+    driver_cell = ", ".join(drivers)
+    # why: when an AI operator drove the run, which model it was is the first
+    # thing a reader asks — a red under one model says nothing about another.
+    if doc.get("agent_model"):
+        driver_cell += f" (`{doc['agent_model']}`)"
+
     lines += _table([
         ["Selection", f"`{doc.get('selection') or 'main.suite'}`"],
         ["Environment", ", ".join(envs)],
-        ["Driver", ", ".join(drivers)],
+        ["Driver", driver_cell],
         ["Target", f"{target} ({'hermetic' if doc['hermetic'] else 'not hermetic'})"],
         ["Host", doc["host"]],
         ["astrald", f"`{doc['astrald_ref']}`"],

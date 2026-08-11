@@ -95,6 +95,9 @@ class NetsimExecutor(Executor):
         self.facts = {}
         self._nodes = {}
         self._tunnels = []
+        self._agent_model = ""
+        self._agent_base_url = ""
+        self._model_applied = False
 
     # --- the runner's interface -------------------------------------------
 
@@ -374,6 +377,63 @@ systemctl restart astrald""")
 
     # --- the session drivers and oracles see --------------------------------
 
+    def want_model(self, model: str, base_url: str = "") -> None:
+        """Record the model this run wants; applied once the world is up."""
+        self._agent_model = model
+        self._agent_base_url = base_url
+
+    def _apply_model(self) -> None:
+        """Point the lab's baked operator at a different model, in place.
+
+        why: the model is baked by the lab recipe, so changing it there costs
+        a full rebake and invalidates every cached stage — far too much to pay
+        for the ordinary act of comparing two models over the same tests.
+        Qwen Code reads its model from ~/.qwen/settings.json and ~/.qwen/.env,
+        so rewriting those two files after boot makes the model a property of
+        the run instead.
+        """
+        model, base_url = self._agent_model, self._agent_base_url
+        if not model or self._model_applied:
+            return
+        home = f"/home/{OPERATOR_USER}"
+        sets = f"{home}/.qwen/settings.json"
+        env = f"{home}/.qwen/.env"
+        url = shlex.quote(base_url) if base_url else ""
+        script = "\n".join([
+            "set -eu",
+            f"m={shlex.quote(model)}",
+            f'python3 - "$m" {url} <<\'PY\'',
+            "import json, re, sys, pathlib",
+            "model = sys.argv[1]",
+            "base = sys.argv[2] if len(sys.argv) > 2 else ''",
+            f"s = pathlib.Path({sets!r})",
+            "doc = json.loads(s.read_text())",
+            "for p in doc.get('modelProviders', {}).get('openai', []):",
+            "    p['id'] = p['name'] = model",
+            "    if base:",
+            "        p['baseUrl'] = base",
+            "doc.setdefault('model', {})['name'] = model",
+            "s.write_text(json.dumps(doc, indent=2))",
+            f"e = pathlib.Path({env!r})",
+            "lines = []",
+            "for line in e.read_text().splitlines():",
+            "    if line.startswith('OPENAI_MODEL='):",
+            "        line = 'OPENAI_MODEL=' + model",
+            "    elif base and line.startswith('OPENAI_BASE_URL='):",
+            "        line = 'OPENAI_BASE_URL=' + base",
+            "    lines.append(line)",
+            "e.write_text('\\n'.join(lines) + '\\n')",
+            "PY",
+            f'chown {OPERATOR_USER}:{OPERATOR_USER} {sets} {env}',
+            f"grep OPENAI_MODEL= {env}",
+        ])
+        out = self._ssh(OPERATOR_VM, script)
+        if f"OPENAI_MODEL={model}" not in out:
+            raise ExecutorError(
+                f"{OPERATOR_VM}: operator model is not {model} after the "
+                f"rewrite (got {out!r})")
+        self._model_applied = True
+
     def run_agent(self, test, log: Path, timeout: int) -> int:
         """Hand the test's prompt to the lab's operator and let it drive.
 
@@ -387,6 +447,7 @@ systemctl restart astrald""")
         if not prompt.exists():
             raise ExecutorError(
                 f"{test.name} declares the agent driver but ships no prompt.md")
+        self._apply_model()
 
         # why: the prompt is prose with quotes and newlines and travels as one
         # ssh argv element, so it goes over as base64 and is decoded guest-side.
