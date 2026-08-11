@@ -86,9 +86,6 @@ def _reject_unbuilt(args, plan: list) -> str | None:
                     "attached daemon. Attach checks a start state, it never "
                     "builds one — select a test whose start the daemon "
                     "already stands at.")
-    if args.target.startswith("stage:"):
-        return (f"--target {args.target} needs the netsim executor, which is "
-                "not wired to the runner (see lib/executors/netsim.py)")
     if args.target == "attach" and run_env(plan, args.driver) == "netsim":
         return "--target attach has no simulation to attach to"
     undeclared = [t.name for t, _ in plan if args.driver not in t.drivers]
@@ -122,6 +119,10 @@ def _executor(args, plan, dir, binary, port_base, ref):
     """Where the machines come from — orthogonal to env and driver."""
     if args.target == "attach":
         return AttachExecutor(dir)
+    if args.target.startswith("stage:"):
+        ex = NetsimExecutor(dir, binary, ref)
+        ex.pinned = args.target.split(":", 1)[1]
+        return ex
     if run_env(plan, args.driver) == "netsim":
         return NetsimExecutor(dir, binary, ref)
     return LocalExecutor(dir, binary, port_base)

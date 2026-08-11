@@ -98,6 +98,7 @@ class NetsimExecutor(Executor):
         self._agent_model = ""
         self._agent_base_url = ""
         self._model_applied = False
+        self.pinned = None
 
     # --- the runner's interface -------------------------------------------
 
@@ -135,6 +136,11 @@ class NetsimExecutor(Executor):
         rather than replacing it, so a blind save grows `-1`, `-2`, … stages
         that no probe will ever match again (migration plan, decision 6).
         """
+        if self.pinned:
+            # why: a pinned run borrows a world the operator named. Writing
+            # new stages out of it would turn a read into a side effect, the
+            # same reason attach never builds a start state.
+            return
         key = stage_key(state, self.recipe, self.astrald_ref)
         if key in self._stages():
             return
@@ -193,6 +199,16 @@ class NetsimExecutor(Executor):
         adopted = os.environ.get("NETSIM_E2E_SIM")
         if adopted:
             self.sim = adopted
+            self.state = state
+            return
+        # why: --target stage:<name> pins the world. The whole selection runs
+        # against one boot of that stage, so the chain is not walked and no
+        # state is materialized per test — the operator asserted the world
+        # already stands where the tests need it, exactly as attach does for
+        # a running daemon.
+        if self.pinned:
+            if self.sim is None:
+                self._boot(self.pinned)
             self.state = state
             return
         key = stage_key(state, self.recipe, self.astrald_ref)
