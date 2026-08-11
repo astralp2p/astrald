@@ -46,8 +46,8 @@ func (c *CreateLinkTask) Run(ctx *astral.Context) error {
 		ID:             link.id,
 		LocalIdentity:  link.LocalIdentity(),
 		RemoteIdentity: link.RemoteIdentity(),
-		LocalEndpoint:  link.LocalEndpoint(),
-		RemoteEndpoint: link.RemoteEndpoint(),
+		LocalEndpoint:  knownEndpoint(link.LocalEndpoint()),
+		RemoteEndpoint: knownEndpoint(link.RemoteEndpoint()),
 		Outbound:       astral.Bool(link.outbound),
 		Network:        astral.String8(link.Network()),
 	}

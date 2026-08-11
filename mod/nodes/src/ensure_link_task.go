@@ -67,8 +67,8 @@ func (c *EnsureLinkTask) Run(ctx *astral.Context) (err error) {
 			ID:             s.id,
 			LocalIdentity:  s.LocalIdentity(),
 			RemoteIdentity: s.RemoteIdentity(),
-			LocalEndpoint:  s.LocalEndpoint(),
-			RemoteEndpoint: s.RemoteEndpoint(),
+			LocalEndpoint:  knownEndpoint(s.LocalEndpoint()),
+			RemoteEndpoint: knownEndpoint(s.RemoteEndpoint()),
 			Outbound:       astral.Bool(s.outbound),
 			Network:        astral.String8(s.Network()),
 		}
