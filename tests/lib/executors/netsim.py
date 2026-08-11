@@ -449,7 +449,7 @@ systemctl restart astrald""")
             "set -eu",
             f"m={shlex.quote(model)}",
             f'python3 - "$m" {url} <<\'PY\'',
-            "import json, re, sys, pathlib",
+            "import json, sys, pathlib",
             "model = sys.argv[1]",
             "base = sys.argv[2] if len(sys.argv) > 2 else ''",
             f"s = pathlib.Path({sets!r})",
