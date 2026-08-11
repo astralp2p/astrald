@@ -16,5 +16,5 @@ package = "./cmd/astrald"
 # twenty-minute rebake to answer a question the operator's config can answer
 # in a second. The executor rewrites the operator's config after boot, so the
 # model is a property of the run, not of the world.
-model = "muse-glimmer-30b-p6"
+model = ""   # baseline run: whatever the lab baked
 base_url = ""

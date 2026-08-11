@@ -549,7 +549,16 @@ systemctl restart astrald""")
             p = subprocess.run(cmd, capture_output=True, text=True,
                                timeout=timeout)
         except subprocess.TimeoutExpired:
-            log.write_text(f"[agent] operator exceeded {timeout}s\n")
+            # why: killing the ssh kills the only copy of the transcript in
+            # flight, and "exceeded 900s" on its own says nothing about
+            # whether the operator was working, stuck, or never started. The
+            # guest still holds the log it was writing, so go and get it.
+            tail = self._ssh(
+                OPERATOR_VM,
+                f"tail -c 4000 /home/{OPERATOR_USER}/.netsim/{test.name}.log "
+                "2>/dev/null || true", check=False)
+            log.write_text(f"[agent] operator exceeded {timeout}s\n"
+                           f"[agent] transcript at the cut:\n{tail}\n")
             return 124
         log.write_text((p.stdout or "") + (p.stderr or ""))
         if p.returncode == 0:
