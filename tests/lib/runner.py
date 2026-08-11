@@ -86,7 +86,7 @@ def _reject_unbuilt(args, plan: list) -> str | None:
                     "attached daemon. Attach checks a start state, it never "
                     "builds one — select a test whose start the daemon "
                     "already stands at.")
-    if args.target == "attach" and run_env(plan, args.driver) == "netsim":
+    if args.target == "attach" and run_env(plan, args.driver, args.target) == "netsim":
         return "--target attach has no simulation to attach to"
     undeclared = [t.name for t, _ in plan if args.driver not in t.drivers]
     if undeclared:
@@ -94,7 +94,8 @@ def _reject_unbuilt(args, plan: list) -> str | None:
     return None
 
 
-def run_env(plan: list, driver: str = "script") -> str:
+def run_env(plan: list, driver: str = "script",
+            target: str = "fresh") -> str:
     """The env this run executes in: netsim as soon as any selected test needs it.
 
     why: a netsim test's fixture prefix is env-node tests, and they must build
@@ -109,7 +110,9 @@ def run_env(plan: list, driver: str = "script") -> str:
     A manifest's env is the cheapest world that can falsify the test, not a
     ceiling.
     """
-    if driver == "agent":
+    # A pinned stage is a simulation by definition, whatever the selected
+    # tests declare — so a node test run against one really did run in VMs.
+    if driver == "agent" or target.startswith("stage:"):
         return "netsim"
     selected = [t for t, kind in plan if kind == "test"]
     return "netsim" if any(t.env == "netsim" for t in selected) else "node"
@@ -123,7 +126,7 @@ def _executor(args, plan, dir, binary, port_base, ref):
         ex = NetsimExecutor(dir, binary, ref)
         ex.pinned = args.target.split(":", 1)[1]
         return ex
-    if run_env(plan, args.driver) == "netsim":
+    if run_env(plan, args.driver, args.target) == "netsim":
         return NetsimExecutor(dir, binary, ref)
     return LocalExecutor(dir, binary, port_base)
 
@@ -167,7 +170,7 @@ def main(args) -> int:
         selection=" ".join(args.selection) or DEFAULT_SUITE,
         target=args.target))
 
-    env_of_run = run_env(plan, args.driver)
+    env_of_run = run_env(plan, args.driver, args.target)
     ex = _executor(args, plan, run_dir / "session", binary,
                    cfg["ports"]["base"], ref)
     if args.driver == "agent":
