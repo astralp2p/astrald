@@ -10,8 +10,9 @@ symlink): `import astralapi`. Two halves:
     when the client can't serve an op. Both paths return the same list, so the
     interrogators are transport-agnostic.
 
-astral-py is the submodule at _lib/astral-py (package under src/); $ASTRALPY_SRC
-overrides the src dir for local dev.
+astral-py comes from $ASTRALPY_SRC, which the netsim executor sets from the
+checkout named in tests/config.toml — the same one the runner imports, so a
+vmop verifier and a test oracle can never disagree about the client.
 """
 import contextlib
 import json
@@ -22,15 +23,13 @@ import subprocess
 import sys
 import time
 
-# --- astral-py (submodule at _lib/astral-py; pip-free) -----------------------
-# why: realpath resolves _lib through netsim's per-task symlink; package under src/.
-_ASTRALPY_SRC = os.environ.get("ASTRALPY_SRC") or os.path.join(
-    os.path.dirname(os.path.realpath(__file__)), "astral-py", "src")
+# --- astral-py (one checkout, named in tests/config.toml; pip-free) ----------
+_ASTRALPY_SRC = os.environ.get("ASTRALPY_SRC", "")
 if not os.path.isdir(os.path.join(_ASTRALPY_SRC, "astral")):
     raise ImportError(
-        f"astral-py not found at {_ASTRALPY_SRC} -- run "
-        "`git submodule update --init tests/net/tasks/_lib/astral-py` "
-        "(or set $ASTRALPY_SRC to an astral-py checkout's src/)")
+        f"astral-py not found at {_ASTRALPY_SRC or '<unset>'} -- vmop "
+        "verifiers are run by the netsim executor, which sets $ASTRALPY_SRC "
+        "from tests/config.toml. Set it yourself to run one by hand.")
 sys.path.insert(0, _ASTRALPY_SRC)
 import astral  # noqa: E402
 # why: importing the aggregator fires every protocol's @register, so record_for()

@@ -27,6 +27,7 @@ import os
 import shlex
 import socket
 import subprocess
+import sys
 import time
 from base64 import b64encode
 from hashlib import sha256
@@ -390,6 +391,31 @@ systemctl restart astrald""")
             if (opdir / verifier).is_file():
                 self._vmop(opdir / verifier, argv, f"{op}:{verifier}")
                 break
+
+    def _vmop(self, script: Path, argv: list, label: str) -> None:
+        """Run one vmop, or its verifier, on the host against this simulation.
+
+        why NETSIM_SIM_DIR: a vmop drives guests from outside — it is a
+        host-side script whose own `netsim ssh` and `netsim vm ls` calls have
+        to land in THIS simulation, not whichever one happens to be newest.
+        That variable is how netsim attaches a command to a simulation (it is
+        what `netsim shell` exports), so the environment carries the sim and
+        no vmop has to learn a --sim flag of its own.
+
+        why ASTRALPY_SRC: a verifier that talks astral imports the client the
+        same way the runner does, from the checkout tests/config.toml names.
+        One client for oracles and vmops, never two.
+        """
+        cmd = ([str(script), *argv] if script.suffix == ".sh"
+               else [sys.executable, str(script), *argv])
+        env = dict(os.environ, NETSIM_SIM_DIR=str(self.sim_dir))
+        pypath = os.environ.get("ASTRAL_TESTS_PYPATH", "")
+        if pypath:
+            env["ASTRALPY_SRC"] = pypath.split(os.pathsep)[-1]
+        p = subprocess.run(cmd, env=env, capture_output=True, text=True)
+        if p.returncode != 0:
+            raise ExecutorError(
+                f"{label}: exit {p.returncode}\n{p.stdout or ''}{p.stderr or ''}")
 
     # --- the session drivers and oracles see --------------------------------
 

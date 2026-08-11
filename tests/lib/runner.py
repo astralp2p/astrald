@@ -137,6 +137,17 @@ def main(args) -> int:
     except ValueError as e:
         print(f"run: {e}", file=sys.stderr)
         return 2
+    if args.target.startswith("stage:"):
+        # why: naming a stage asserts the world already stands where the
+        # selection starts, so building its prefix would rebuild what the
+        # operator just said is there. Attach makes the same assertion and
+        # refuses instead; a stage is disposable, so here the prefix is
+        # simply not run.
+        plan = [(t, kind) for t, kind in plan if kind == "test"]
+        if not plan:
+            print("run: nothing to run against a pinned stage", file=sys.stderr)
+            return 2
+
     unbuilt = _reject_unbuilt(args, plan)
     if unbuilt:
         print(f"run: {unbuilt}", file=sys.stderr)
