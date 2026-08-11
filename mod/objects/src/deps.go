@@ -45,6 +45,10 @@ func (mod *Module) LoadDependencies(*astral.Context) (err error) {
 			if r, ok := m.(objectsmod.Receiver); ok {
 				mod.AddReceiver(r)
 			}
+
+			if i, ok := m.(objectsmod.Indexer); ok {
+				mod.AddIndexer(i)
+			}
 		}
 	}
 

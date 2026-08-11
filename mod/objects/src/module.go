@@ -47,6 +47,7 @@ type Module struct {
 	finders    sig.Set[objects.Finder]
 	receivers  sig.Set[objectsmod.Receiver]
 	holders    sig.Set[objectsmod.Holder]
+	indexers   sig.Set[objectsmod.Indexer]
 	repos      sig.Map[string, objectsmod.Repository]
 
 	externalMu sync.Mutex
@@ -122,6 +123,7 @@ func (mod *Module) Store(ctx *astral.Context, repo objectsmod.Repository, object
 	}
 
 	mod.trackObject(id, object.ObjectType())
+	mod.index(object)
 
 	return id, nil
 }

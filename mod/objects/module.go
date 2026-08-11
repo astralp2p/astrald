@@ -56,6 +56,8 @@ type Module interface {
 	AddHolder(Holder) error
 	Holders(objectID *astral.ObjectID) []Holder
 
+	AddIndexer(Indexer) error
+
 	AddReceiver(Receiver) error
 	Receive(astral.Object, *astral.Identity) error
 
@@ -85,6 +87,17 @@ type Drop interface {
 
 type Holder interface {
 	HoldObject(*astral.ObjectID) bool
+}
+
+// Indexer indexes a stored object before Store returns.
+//
+// why: a repository follower indexes on its own schedule, so an app that
+// stores an object and uses it in the next call can outrun its own index. A
+// module that answers for an object type indexes it at store time instead, so
+// the store reply is the guarantee it reads as. An indexer that does not
+// answer for the type returns astral.ErrUnexpectedObject, which is normal.
+type Indexer interface {
+	AddToIndex(astral.Object) error
 }
 
 // IsOffsetLimitValid reports whether the offset/limit window fits within the object.
