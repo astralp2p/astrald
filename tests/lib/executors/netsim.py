@@ -28,6 +28,7 @@ import shlex
 import socket
 import subprocess
 import time
+from base64 import b64encode
 from hashlib import sha256
 from pathlib import Path
 
@@ -40,6 +41,11 @@ LAB_STAGE = "astrald-lab"         # the recipe's canonical output
 GUEST_ROOT = "/var/lib/astrald"   # install-astrald's -root (its systemd unit)
 GUEST_TCP_PORT = 1791             # astrald's default tcp listener in the lab
 SSH_READY_TIMEOUT = 120.0
+# why: the lab bakes a Qwen Code operator on node1 and installs the
+# astral-agent skill into it (fixtures/lab/lab.story). That is the only
+# machine in the world that can drive a flow from a prompt.
+OPERATOR_VM = "node1"
+OPERATOR_USER = "tester"
 # why: a guest that just lost its data regenerates its node key and bootstraps
 # a fresh onion before apphost listens — minutes on a 1-vCPU VM, not seconds.
 APPHOST_READY_TIMEOUT = 300.0
@@ -367,6 +373,47 @@ systemctl restart astrald""")
                 break
 
     # --- the session drivers and oracles see --------------------------------
+
+    def run_agent(self, test, log: Path, timeout: int) -> int:
+        """Hand the test's prompt to the lab's operator and let it drive.
+
+        why: the operator lives in the world under test, not on the host — it
+        reaches astrald the way an app would, over the guest's own apphost
+        socket. So the prompt travels in and the transcript travels back out;
+        nothing else about the test changes, and verify.py judges the result
+        exactly as it judges a scripted run.
+        """
+        prompt = test.dir / "prompt.md"
+        if not prompt.exists():
+            raise ExecutorError(
+                f"{test.name} declares the agent driver but ships no prompt.md")
+
+        # why: the prompt is prose with quotes and newlines and travels as one
+        # ssh argv element, so it goes over as base64 and is decoded guest-side.
+        payload = b64encode(prompt.read_bytes()).decode()
+        home = f"/home/{OPERATOR_USER}"
+        remote = "\n".join([
+            "set -u",
+            f"d={home}/.netsim",
+            'mkdir -p "$d"',
+            f"printf '%s' '{payload}' | base64 -d > \"$d/{test.name}.prompt\"",
+            f'chown -R {OPERATOR_USER}:{OPERATOR_USER} "$d"',
+            f"if su - {OPERATOR_USER} -c 'qwen -y \"$(cat "
+            f"{home}/.netsim/{test.name}.prompt)\"' "
+            f'> "$d/{test.name}.log" 2>&1; then rc=0; else rc=$?; fi',
+            f'cat "$d/{test.name}.log"',
+            "exit $rc",
+        ])
+
+        cmd = ["netsim", "ssh", "--sim", str(self.sim), OPERATOR_VM, "--", remote]
+        try:
+            p = subprocess.run(cmd, capture_output=True, text=True,
+                               timeout=timeout)
+        except subprocess.TimeoutExpired:
+            log.write_text(f"[agent] operator exceeded {timeout}s\n")
+            return 124
+        log.write_text((p.stdout or "") + (p.stderr or ""))
+        return p.returncode
 
     def _ssh(self, vm: str, script: str, check=True) -> str:
         return _netsim("ssh", "--sim", self.sim, vm, "--", script, check=check)

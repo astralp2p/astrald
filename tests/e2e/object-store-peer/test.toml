@@ -2,5 +2,5 @@ env     = "node"
 start   = "two-nodes"
 saves   = "two-nodes-data-peer"
 nodes   = ["node1", "node2"]
-drivers = ["script"]
+drivers = ["script", "agent"]
 timeout = 120

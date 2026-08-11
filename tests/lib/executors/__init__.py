@@ -37,5 +37,16 @@ class Executor:
         """Machines that died under a test — any verdict over them is void."""
         raise NotImplementedError
 
+    def run_agent(self, test, log: Path, timeout: int) -> int:
+        """Drive the test's flow with an AI operator instead of its script.
+
+        The oracle is untouched: whatever performed the flow, verify.py judges
+        it. An executor with no operator in its world refuses rather than
+        pretending — a driver that cannot run is not a test that failed.
+        """
+        raise ExecutorError(
+            f"{type(self).__name__} has no AI operator: --driver agent needs "
+            "a world that carries one (env netsim bakes it into the lab)")
+
     def teardown(self, keep: bool) -> None:
         raise NotImplementedError

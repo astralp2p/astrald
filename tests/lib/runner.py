@@ -71,11 +71,10 @@ def plan_for(tests: dict, selection: list) -> list:
 
 def _reject_unbuilt(args, plan: list) -> str | None:
     """What the runner cannot do yet, and why — never a silent wrong verdict."""
-    if args.driver == "agent":
-        # fixme: the agent driver needs an AI operator carrying the
-        # astral-agent skill — the lab-baked one under env netsim, a
-        # disposable VM sandbox under env node. Neither is built.
-        return "--driver agent has no operator to drive: not built yet"
+    if args.driver == "agent" and args.target == "attach":
+        # why: the operator lives in the simulated world. Attach has no world
+        # of its own — it borrows a daemon — so there is nobody to drive.
+        return "--driver agent has no operator under --target attach"
     if args.target == "attach":
         # why: attach runs against the operator's own daemon. Building a
         # fixture prefix there means running bootstrap's flow at it — which
@@ -90,7 +89,7 @@ def _reject_unbuilt(args, plan: list) -> str | None:
     if args.target.startswith("stage:"):
         return (f"--target {args.target} needs the netsim executor, which is "
                 "not wired to the runner (see lib/executors/netsim.py)")
-    if args.target == "attach" and run_env(plan) == "netsim":
+    if args.target == "attach" and run_env(plan, args.driver) == "netsim":
         return "--target attach has no simulation to attach to"
     undeclared = [t.name for t, _ in plan if args.driver not in t.drivers]
     if undeclared:
@@ -98,7 +97,7 @@ def _reject_unbuilt(args, plan: list) -> str | None:
     return None
 
 
-def run_env(plan: list) -> str:
+def run_env(plan: list, driver: str = "script") -> str:
     """The env this run executes in: netsim as soon as any selected test needs it.
 
     why: a netsim test's fixture prefix is env-node tests, and they must build
@@ -106,7 +105,15 @@ def run_env(plan: list) -> str:
     on loopback would build a state the VMs never see. This is the env lift
     the design promises — the same files, driven against VMs instead of
     processes, with nothing in them aware of the difference.
+
+    The agent driver lifts a run the same way. An AI operator has to live
+    somewhere and reach astrald as an app would, and the lab bakes exactly one
+    such machine — so `--driver agent` runs in VMs whatever the tests declare.
+    A manifest's env is the cheapest world that can falsify the test, not a
+    ceiling.
     """
+    if driver == "agent":
+        return "netsim"
     selected = [t for t, kind in plan if kind == "test"]
     return "netsim" if any(t.env == "netsim" for t in selected) else "node"
 
@@ -115,7 +122,7 @@ def _executor(args, plan, dir, binary, port_base, ref):
     """Where the machines come from — orthogonal to env and driver."""
     if args.target == "attach":
         return AttachExecutor(dir)
-    if run_env(plan) == "netsim":
+    if run_env(plan, args.driver) == "netsim":
         return NetsimExecutor(dir, binary, ref)
     return LocalExecutor(dir, binary, port_base)
 
@@ -148,6 +155,7 @@ def main(args) -> int:
         selection=" ".join(args.selection) or DEFAULT_SUITE,
         target=args.target))
 
+    env_of_run = run_env(plan, args.driver)
     ex = _executor(args, plan, run_dir / "session", binary,
                    cfg["ports"]["base"], ref)
     py = sys.executable
@@ -163,7 +171,12 @@ def main(args) -> int:
         for t, kind in plan:
             art = run_dir / t.name
             art.mkdir(parents=True, exist_ok=True)
-            entry = dict(test=t.name, kind=kind, env=t.env,
+            # why: a record states the env the test RAN in, not the one its
+            # manifest asks for as a minimum. A node test lifted into VMs —
+            # by a netsim test ahead of it, or by the agent driver — really
+            # ran there, and a record that said otherwise would hide the one
+            # property the design is built on.
+            entry = dict(test=t.name, kind=kind, env=env_of_run,
                          driver=args.driver, artifacts=f"{t.name}/")
             dead = manifest.blocked_by(tests, t.start, broken_states)
             if dead:
@@ -184,8 +197,11 @@ def main(args) -> int:
             else:
                 env = dict(base_env,
                            ASTRAL_TESTS_FACTS_OUT=str(art / "facts.json"))
-                rc = _run_step(py, t.dir / "script.py", art / "driver.log",
-                               env, t.timeout)
+                if args.driver == "agent":
+                    rc = ex.run_agent(t, art / "driver.log", t.timeout)
+                else:
+                    rc = _run_step(py, t.dir / "script.py",
+                                   art / "driver.log", env, t.timeout)
                 if rc != 0:
                     status, fk = "fail", "driver"
                 else:

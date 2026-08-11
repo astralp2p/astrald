@@ -5,5 +5,5 @@ nodes   = ["node1", "node2"]
 steps   = ["vm:enable-tor node1 node2",
            "vm:leave-lan node2 --peer node1",
            "driver"]
-drivers = ["script"]
+drivers = ["script", "agent"]
 timeout = 600
