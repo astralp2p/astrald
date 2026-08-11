@@ -94,8 +94,10 @@ back to an unclaimed node1 mid-suite.
 `--target` is orthogonal to `env` and to `--driver`:
 
 - `fresh` (default) — spawn per run. Hermetic.
-- `stage:<name>` — boot one simulation and run the whole selection against
-  it. Needs the netsim executor.
+- `stage:<name>` — boot that stage once and run the whole selection against
+  it: no chain walk, no per-test state, and nothing saved back. Naming the
+  stage is the assertion that the world already stands where the tests need
+  it, the same bargain attach strikes for a running daemon.
 - `attach` — no spawning: run against a daemon that is already up, resolved
   the way astral-py resolves one (`ASTRAL_ENDPOINT`, `ASTRALD_APPHOST_TOKEN`
   and friends). The code-and-debug loop: point a test at the daemon you are
@@ -118,44 +120,39 @@ failure and an oracle failure are already distinct in the results
 (`failure_kind` `driver` versus `verify`), so a run says which of the three
 went wrong without anyone reading a log.
 
+A test that declares the `agent` driver ships a `prompt.md`: the flow in
+plain words, the way a person would ask for it. `smoke` and `nat-punch`
+declare `script` only — neither is a flow anyone would ask an operator to
+perform.
+
+The operator is the Qwen Code agent the lab bakes into `node1`, equipped
+with the `astral-agent` skill. It reaches astrald over the guest's own
+apphost, the way an app does, so `--driver agent` runs in VMs whatever the
+selected tests declare: a manifest's `env` is the cheapest world that can
+falsify the test, never a ceiling. Which model it drives with is a property
+of the run — `config.toml [agent] model`, rewritten into the operator after
+boot — so comparing two models costs a re-run, not a twenty-minute rebake.
+The report names the model, because a red under one model says nothing
+about another.
+
+## The report
+
+Every run writes `results/<stamp>/report.md`: the verdict, what was run,
+every test with its time, and — when something is red — which of the three
+layers broke, what that means in words, and where its log is. The runner
+prints the one-line verdict and the path. That file is the thing to hand
+someone; `results.json` is for machines.
+
+A run holding a skipped test reports INCOMPLETE, never PASS. A skip carries
+no verdict, and a green-looking document over an unbuilt state would be
+lying about exactly the case the third status exists for.
+
 ## Requirements
 
 Python ≥ 3.11, a Go toolchain, and an astral-py checkout (path in
 `config.toml`) — imported directly from its `src/`, since the package has
-zero dependencies. No venv, no pip.
-
-## Milestone state
-
-Working today: env `node`, `--driver script`, `--target fresh` and
-`--target attach`.
-
-Not working, and the runner says so rather than guessing: env `netsim`,
-`--target stage:<name>` and `--driver agent`. All three need VMs, and netsim
-does not run on this host — `NETSIM_STAGES_DIR` points at a root-owned
-`/mnt/netsim`, so netsim cannot create its staging directory. The netsim
-executor exists (`lib/executors/netsim.py`) but its `session.json` carries no
-working endpoints: a NAT'd node's apphost is netns-local, and the host-side
-tunnel that reaches it cannot be designed without a live netsim. Seven tests
-already ship the `prompt.md` the agent driver will use.
-
-`net/` and `stages/` are pre-unification residue, absorbed-pending: the
-netsim stories and flow tasks still run under `netsim story`, and M4
-retires them as `e2e/` tests. Register them and the vmops with
-`./tests/net/link.sh`.
+zero dependencies. No venv, no pip. Env `netsim` additionally needs a
+working `netsim` on PATH; `./tests/net/link.sh` registers the vmops it
+dispatches as steps.
 
 Manifests are TOML (stdlib), which the design document also writes.
-
-## Known issue
-
-Two pre-existing astrald startup races flake the chain root. Neither is
-introduced here — this tree changes no daemon code — and the runner does not
-retry, because a retry would hide them. Re-run until the daemon-side fixes
-land.
-
-- `auth.sign_contract: sign as issuer: unsupported` — the crypto module
-  indexes a stored private key asynchronously, and a `sign_contract`
-  arriving before the index lands finds no signer.
-- `panic: database is locked (5) (SQLITE_BUSY)` — modules load concurrently
-  and contend on the node's own sqlite file. The DSN
-  (`core/assets/core_assets.go:117-122`) sets no `busy_timeout`, so there is
-  no configuration the harness could supply to absorb it.
