@@ -36,8 +36,13 @@ def main():
             errs.append("no onion in /root/tor.json")
         if not live:
             errs.append("astrald advertises no onion (resolve_endpoints -id localnode)")
-        if file_onion and live and file_onion != live:
-            errs.append(f"saved onion {file_onion} != live onion {live}")
+        # why containment rather than equality: the saved value is a bare
+        # hostname while the advertised one is an endpoint that may carry a
+        # scheme and a port. The question is whether astrald advertises THIS
+        # onion, and an exact match would fail on formatting alone.
+        host = file_onion.split("//")[-1].split(":")[0]
+        if host and live and host not in live:
+            errs.append(f"saved onion {file_onion} not in advertised {live}")
 
         if vmops.report_errors(errs, f"enable-tor on {vm}"):
             bad = True
