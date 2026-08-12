@@ -298,10 +298,10 @@ class NetsimExecutor(Executor):
             return NAT_NETNS_HOST
         return "127.0.0.1"
 
-    def _tunnel(self, vm: str) -> tuple:
+    def _tunnel(self, vm: str, host: str | None = None) -> tuple:
         """A local port that reaches this VM's apphost, held open by ssh -L."""
         port = self._free_port()
-        host = self._apphost_host(vm)
+        host = host or self._apphost_host(vm)
         argv = ["ssh", "-F", str(self.sim_dir / "ssh_config"), "-N",
                 "-o", "ExitOnForwardFailure=yes",
                 # why: a guest under load (an astrald restart on one vCPU)
@@ -383,8 +383,21 @@ systemctl restart astrald""")
             # that has nothing to do with the test.
             if info.get("ssh") is not None and info["ssh"].poll() is not None:
                 info.pop("port", None)
+            # why: and reopen one whose target moved. enter-nat relocates
+            # apphost into netns priv, and the ssh holding the old forward
+            # stays perfectly alive while forwarding to nothing — so liveness
+            # is not the test. A driver then meets "closed before the
+            # greeting", which reads as a broken daemon and is a stale tunnel.
+            want = self._apphost_host(vm)
+            if "port" in info and info.get("apphost_host") != want:
+                if info.get("ssh") is not None:
+                    info["ssh"].terminate()
+                    if info["ssh"] in self._tunnels:
+                        self._tunnels.remove(info["ssh"])
+                info.pop("port", None)
             if "port" not in info:
-                info["port"], info["ssh"] = self._tunnel(vm)
+                info["port"], info["ssh"] = self._tunnel(vm, want)
+                info["apphost_host"] = want
             if not info.get("identity"):
                 info["identity"] = asyncio.run(
                     identity_of(info["port"], info["token"]))
