@@ -1,8 +1,16 @@
 #!/usr/bin/env python3
 """Oracle: symmetric swarm — port of netsim adopt-node/verify.py assertions.
 
-Both-ends check: same User issued both contracts; each node's linked sibling
-is the other; node2 holds a live link back to node1.
+Both-ends check: same User issued both contracts; each node counts the other
+among its linked siblings; node2 holds a live link back to node1.
+
+why membership rather than "the linked sibling": this asked for the FIRST
+linked member and compared it to the peer, which is only the same question in
+a world with exactly two nodes. The lab now also runs a reflector, and an
+operator told to adopt "the other astral node from the local network" quite
+reasonably adopted both — so the first linked sibling was the reflector and a
+correct swarm read as a wrong one. What this test cares about is that node1
+and node2 ended up linked to each other, whoever else is around.
 """
 import asyncio
 
@@ -11,11 +19,10 @@ import astral
 from lib.sessionio import load
 
 
-def linked_sibling(members):
-    for m in members:
-        if m.linked and m.identity is not None:
-            return str(m.identity)
-    return None
+def linked_siblings(members) -> set:
+    """Every sibling this node holds a live link to."""
+    return {str(m.identity) for m in members
+            if m.linked and m.identity is not None}
 
 
 async def main():
@@ -27,16 +34,18 @@ async def main():
     async with await astral.connect(n1["endpoint"], token=user_token) as c:
         i1 = await c.user.info()
         assert str(i1.user_id) == user_id, "node1 contract not issued by User"
-        sib1 = linked_sibling(await c.user.swarm_status())
-        assert sib1 == n2["identity"], (
-            f"node1 linked sibling {sib1} != node2 {n2['identity']}")
+        sibs1 = linked_siblings(await c.user.swarm_status())
+        assert n2["identity"] in sibs1, (
+            f"node1 has no live link to node2 {n2['identity']}; "
+            f"linked siblings: {sorted(sibs1) or 'none'}")
 
     async with await astral.connect(n2["endpoint"]) as c:      # anonymous
         i2 = await c.user.info()
         assert str(i2.user_id) == user_id, "node2 adopted under a different User"
-        sib2 = linked_sibling(await c.user.swarm_status())
-        assert sib2 == n1["identity"], (
-            f"node2 linked sibling {sib2} != node1 {n1['identity']} "
+        sibs2 = linked_siblings(await c.user.swarm_status())
+        assert n1["identity"] in sibs2, (
+            f"node2 has no live link to node1 {n1['identity']}; "
+            f"linked siblings: {sorted(sibs2) or 'none'} "
             "(symmetric-roster regression)")
         links = await c.nodes.links(experimental=True)
         remotes = {str(l.remote_identity) for l in links
