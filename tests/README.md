@@ -11,6 +11,52 @@ One command, real daemons, deterministic verdicts:
 
 Design: https://wiki.satforge.dev/doc/integration-testing-system-tAKjyvbcHo
 
+## Start here: suite, env, driver
+
+Three independent choices. Pick each one separately — they do not constrain
+each other.
+
+**A suite is *what* runs.** A file under `suites/`, listing tests in the order
+they should run. Nothing more.
+
+    ./tests/run main.suite      # the seven-test node chain, ~7 seconds
+    ./tests/run adopt-node      # no suite: one test, and whatever it needs first
+
+| suite | what it is | env | runs in |
+|-------|------------|-----|---------|
+| `main.suite` | the whole node chain, the everyday one | node | seconds |
+| `tor.suite` | two nodes meet on a LAN, one leaves it, Tor holds | netsim | ~37 min |
+| `substrate.suite` | both transport tests: Tor, then NAT hole-punching | netsim | ~1 h |
+| `agent.suite` | the flows an AI operator can drive, one world, in order | netsim | ~1.5 h |
+
+**An env is *where* it runs** — the world the test needs. A manifest field.
+
+| env | the world | costs |
+|-----|-----------|-------|
+| `node` | astrald processes on loopback | seconds |
+| `netsim` | real VMs on a simulated LAN | minutes |
+
+`env` is a floor, not a ceiling. A `node` test runs happily in VMs when
+something else in the run needs them; it never notices, because it reads
+endpoints from `session.json` and cannot tell a process from a VM.
+
+**A driver is *who* performs the flow.**
+
+| driver | who | how |
+|--------|-----|-----|
+| `script` | `script.py` | code, exact and fast |
+| `agent` | an AI operator in the lab | reads `prompt.md` and works it out |
+
+    ./tests/run main.suite --driver agent
+
+Both are judged by the same `verify.py`, and that is the whole point: **script
+red means astrald broke; agent red while script is green means the operator or
+its prompt broke.**
+
+There is a fourth knob, `--target`, for where the machines come from — see
+[Where the machines come from](#where-the-machines-come-from). The default
+spawns a fresh world and is what you want unless you know otherwise.
+
 ## Three nouns
 
 - A **test** is a directory under `e2e/`: `test.toml` (the manifest),
