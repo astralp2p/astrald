@@ -10,7 +10,7 @@ from pathlib import Path
 
 import astral
 
-from lib.sessionio import load
+from lib.sessionio import as_bytes, load
 
 PAYLOAD = Path(__file__).resolve().parent / "payload.txt"
 
@@ -26,8 +26,9 @@ async def main():
                                     token=doc["facts"]["user_token"]) as c:
         got = await c.objects.load(object_id, repo="local")
 
-    assert bytes(got) == payload, (
-        f"node1's local repo returned {bytes(got)!r} != stored {payload!r}")
+    assert as_bytes(got) == payload, (
+        f"node1's local repo returned {as_bytes(got)!r} != "
+        f"stored {payload!r}")
     print(f"oracle: node1's local repo holds {object_id[:16]}… "
           f"with the exact {len(payload)} B")
 
