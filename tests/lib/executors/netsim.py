@@ -10,16 +10,16 @@ the VMs, the operator, the service unit, the apt dependencies — and the binary
 under test arrives fresh on every boot, so a stage outlives the commit that
 filled it.
 
-Status: the session tunnel is verified by hand against a live simulation;
-the executor as a whole has not yet driven a test end to end.
-
 The session is real ssh port-forwarding. netsim writes a standard OpenSSH
 config per simulation at `<sim_dir>/ssh_config` — one `Host <vm>` block, each
 `HostName 127.0.0.1` on its own forwarded port, `User root`, an `IdentityFile`
 beside it (sourced: netsim `sshutil.render_ssh_config`). So a guest's apphost
-reaches the host through `ssh -F <config> -N -L <local>:127.0.0.1:8625 <vm>`,
-and `session.json` carries the local end. Drivers and oracles stay
-byte-identical across envs because the tunnel is the only difference.
+reaches the host through `ssh -F <config> -N -L <local>:<apphost>:8625 <vm>`,
+and `session.json` carries the local end. `<apphost>` is the guest's loopback
+normally and its netns-private address once enter-nat has moved astrald, since
+an ssh forward lands in the root netns and the netns loopback is not that.
+Drivers and oracles stay byte-identical across envs because the tunnel is the
+only difference.
 """
 import asyncio
 import json
@@ -41,6 +41,9 @@ THROWAWAY_STAGE = "e2e-scratch"   # a fresh sim always saves; this is what it sa
 LAB_STAGE = "astrald-lab"         # the recipe's canonical output
 GUEST_ROOT = "/var/lib/astrald"   # install-astrald's -root (its systemd unit)
 GUEST_TCP_PORT = 1791             # astrald's default tcp listener in the lab
+# enter-nat's private host inside netns `priv`, routable from the root netns
+# over the veth pair it creates (fixtures/vmops/enter-nat).
+NAT_NETNS_HOST = "192.168.99.2"
 SSH_READY_TIMEOUT = 120.0
 # why: the lab bakes a Qwen Code operator on node1 and installs the
 # astral-agent skill into it (fixtures/lab/lab.story). That is the only
@@ -280,16 +283,32 @@ class NetsimExecutor(Executor):
             s.bind(("127.0.0.1", 0))
             return s.getsockname()[1]
 
+    def _apphost_host(self, vm: str) -> str:
+        """Where this VM's apphost listens, as seen from the VM's root netns.
+
+        why: enter-nat relocates astrald into netns `priv` (192.168.99.2) so a
+        NAT'd node has no direct LAN path. apphost then listens on the netns
+        loopback, and 127.0.0.1 in the root netns — which is where sshd is, and
+        therefore where an `ssh -L` forward lands — reaches nothing. The veth
+        the netns hangs off is routable from the root netns, so the forward
+        aims at the private address instead and the session survives the move.
+        """
+        out = self._ssh(vm, "ip netns list 2>/dev/null || true", check=False)
+        if "priv" in out.split():
+            return NAT_NETNS_HOST
+        return "127.0.0.1"
+
     def _tunnel(self, vm: str) -> tuple:
         """A local port that reaches this VM's apphost, held open by ssh -L."""
         port = self._free_port()
+        host = self._apphost_host(vm)
         argv = ["ssh", "-F", str(self.sim_dir / "ssh_config"), "-N",
                 "-o", "ExitOnForwardFailure=yes",
                 # why: a guest under load (an astrald restart on one vCPU)
                 # can stall long enough for ssh to give up, and a dead
                 # forward looks to a driver like a refused connection.
                 "-o", "ServerAliveInterval=15", "-o", "ServerAliveCountMax=8",
-                "-L", f"{port}:127.0.0.1:{APPHOST_PORT}", vm]
+                "-L", f"{port}:{host}:{APPHOST_PORT}", vm]
         proc = subprocess.Popen(argv, stdout=subprocess.DEVNULL,
                                 stderr=subprocess.PIPE)
         deadline = time.monotonic() + 20.0
