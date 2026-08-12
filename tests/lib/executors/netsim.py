@@ -226,7 +226,7 @@ class NetsimExecutor(Executor):
         # a running daemon.
         if self.pinned:
             if self.sim is None:
-                self._boot(self.pinned)
+                self._boot(self._resolve_pinned())
             self.state = state
             return
         key = stage_key(state, self.recipe, self.astrald_ref)
@@ -250,6 +250,28 @@ class NetsimExecutor(Executor):
         _netsim("story", "--stage", "null", "--save", LAB_STAGE,
                 str(self.recipe), capture=False)
         return LAB_STAGE
+
+    def _resolve_pinned(self) -> str:
+        """The netsim stage `--target stage:<name>` names.
+
+        why: `<name>` is whatever the operator typed, and the obvious thing to
+        type is the state a manifest names — `two-nodes`. That is not a netsim
+        stage; the stage is `e2e-two-nodes-r<recipe>-g<astrald>`, which nobody
+        can be expected to spell. So a name netsim knows is used as given, and
+        anything else is tried as a state of THIS recipe and THIS astrald —
+        the same key the walk would have built. A state that has never been
+        cached still fails, and says which two names it looked for.
+        """
+        stages = self._stages()
+        if self.pinned in stages:
+            return self.pinned
+        key = stage_key(self.pinned, self.recipe, self.astrald_ref)
+        if key in stages:
+            return key
+        raise ExecutorError(
+            f"no stage {self.pinned!r}, and no cached {key!r} for it — "
+            f"run the chain once to build it, or name a stage from "
+            f"`netsim stages`")
 
     def _boot(self, stage: str) -> None:
         """Resume a stage into a simulation and keep it running.
@@ -451,10 +473,21 @@ systemctl restart astrald""")
         why ASTRALPY_SRC: a verifier that talks astral imports the client the
         same way the runner does, from the checkout tests/config.toml names.
         One client for oracles and vmops, never two.
+
+        why ASTRAL_ID_<vm>: a vmop that needs a node's identity used to hunt
+        for it in a peer's roster by alias — and an alias is set by whoever
+        drove the flow, so `leave-lan` worked under the script driver and died
+        under the agent one ("node1 does not know node2 in its swarm roster")
+        with the roster in fact correct. The harness learns every identity at
+        tunnel time and is the authority on it; an alias is cosmetic and no
+        prompt should have to know the harness wants one.
         """
         cmd = ([str(script), *argv] if script.suffix == ".sh"
                else [sys.executable, str(script), *argv])
         env = dict(os.environ, NETSIM_SIM_DIR=str(self.sim_dir))
+        for vm, info in self._nodes.items():
+            if info.get("identity"):
+                env[f"ASTRAL_ID_{vm}"] = info["identity"]
         pypath = os.environ.get("ASTRAL_TESTS_PYPATH", "")
         if pypath:
             env["ASTRALPY_SRC"] = pypath.split(os.pathsep)[-1]

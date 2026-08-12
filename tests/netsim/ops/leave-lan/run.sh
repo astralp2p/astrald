@@ -32,26 +32,41 @@ done
 # leaver and hands it to the peer.
 #
 # why the hex identity: nodes.add_endpoint takes `id` of type identity and
-# rejects an alias with `query rejected (1)`, while nodes.resolve_endpoints
-# accepts one — so the alias is resolved through user.swarm_status, which is
-# ungated and does accept it.
+# rejects an alias with `query rejected (1)`.
+#
+# why ASTRAL_ID_<vm> first: this used to find the identity by searching the
+# peer's roster for the alias `node2`. Only adopt-node's script.py sets that
+# alias — the agent prompt says nothing about aliases, correctly, because an
+# alias is harness bookkeeping and not a thing a user asks for. So this step
+# passed script-driven and failed agent-driven with "does not know node2 in
+# its swarm roster" while the roster held node2 all along. The harness knows
+# every identity and exports it; the roster is then checked BY IDENTITY, which
+# keeps the real precondition (the peer knows the leaver) without depending on
+# whether anyone bothered to name it.
 echo "leave-lan: seeding $PEER with $VM's onion ..."
 
 onion=$(netsim ssh "$VM" -- "python3 -c \"import json;print(json.load(open('/root/tor.json'))['onion'])\"" 2>/dev/null | tr -d '\r\n')
 [ -n "$onion" ] || { echo "leave-lan: $VM has no onion in /root/tor.json (run enable-tor first)" >&2; exit 1; }
 
-leaver_id=$(netsim ssh "$PEER" -- "astral-query user.swarm_status -out json" 2>/dev/null | python3 -c "
+# the harness's value when it ran us; the alias hunt remains for a hand-run vmop
+eval "leaver_id=\${ASTRAL_ID_$VM:-}"
+roster=$(netsim ssh "$PEER" -- "astral-query user.swarm_status -out json" 2>/dev/null)
+leaver_id=$(printf '%s\n' "$roster" | python3 -c "
 import json,sys
-alias=sys.argv[1]
+want, alias = sys.argv[1], sys.argv[2]
 for line in sys.stdin:
-    line=line.strip()
+    line = line.strip()
     if not line: continue
-    try: o=json.loads(line)
+    try: o = json.loads(line)
     except Exception: continue
-    m=(o.get('Object') or {})
-    if m.get('Alias')==alias and m.get('Identity'):
-        print(m['Identity']); break
-" "$VM" | tr -d '\r\n')
+    m = (o.get('Object') or {})
+    ident = m.get('Identity')
+    if not ident: continue
+    # the harness told us who; this confirms the peer knows them. With no
+    # harness value (a hand-run vmop) fall back to the alias.
+    if (ident == want) if want else (m.get('Alias') == alias):
+        print(ident); break
+" "$leaver_id" "$VM" | tr -d '\r\n')
 [ -n "$leaver_id" ] || { echo "leave-lan: $PEER does not know $VM in its swarm roster" >&2; exit 1; }
 
 netsim ssh "$PEER" -- "astral-query nodes.add_endpoint -id $leaver_id -endpoint 'tor:$onion'" >/dev/null 2>&1 \
