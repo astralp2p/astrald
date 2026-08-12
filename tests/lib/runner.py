@@ -174,9 +174,20 @@ def main(args) -> int:
     ex = _executor(args, plan, run_dir / "session", binary,
                    cfg["ports"]["base"], ref)
     if args.driver == "agent":
+        # why named rather than assumed: the profile IS the operator under
+        # test, so the run records which one drove it. A pass rate that cannot
+        # name its agent is not attributable to anything.
         agent_cfg = cfg.get("agent", {})
-        ex.want_model(agent_cfg.get("model", ""), agent_cfg.get("base_url", ""))
-        results.header["agent_model"] = agent_cfg.get("model", "") or "(lab default)"
+        name = agent_cfg.get("use", "qwen")
+        profile = agent_cfg.get(name)
+        if not isinstance(profile, dict):
+            print(f"run: config.toml selects agent profile {name!r}, but has "
+                  f"no [agent.{name}] section", file=sys.stderr)
+            return 2
+        ex.use_operator(profile)
+        ex.want_model(profile.get("model", ""), profile.get("base_url", ""))
+        results.header["agent_profile"] = name
+        results.header["agent_model"] = profile.get("model", "") or "(lab default)"
     py = sys.executable
     base_env = driver_env(ex.session_json_path, results.header["hermetic"])
 

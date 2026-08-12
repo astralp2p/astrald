@@ -6,12 +6,13 @@ Rendering it here costs nothing and catches exactly that.
 """
 import unittest
 
-from lib.executors.netsim import NetsimExecutor
+from lib.executors.netsim import DEFAULT_OPERATOR, NetsimExecutor
 
 
 def executor(model="muse-glimmer-30b-p6", base_url=""):
     ex = NetsimExecutor.__new__(NetsimExecutor)
     ex._agent_model, ex._agent_base_url, ex._model_applied = model, base_url, False
+    ex.operator = dict(DEFAULT_OPERATOR)
     return ex
 
 
@@ -59,3 +60,30 @@ class TestAgentModel(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestOperatorProfile(unittest.TestCase):
+    """The profile is what makes a second agent a config entry, not a patch."""
+
+    def test_a_profile_overrides_where_and_how(self):
+        ex = executor()
+        ex.use_operator({"vm": "node2", "user": "pilot",
+                         "command": 'claude -p "$(cat {prompt})"'})
+        self.assertEqual(ex.operator["vm"], "node2")
+        self.assertEqual(ex.operator["user"], "pilot")
+        self.assertIn("claude -p", ex.operator["command"])
+
+    def test_a_partial_profile_keeps_the_defaults(self):
+        # why: a profile that only names its command should not have to
+        # restate where the lab puts its operator.
+        ex = executor()
+        ex.use_operator({"command": "aider --message-file {prompt}"})
+        self.assertEqual(ex.operator["vm"], DEFAULT_OPERATOR["vm"])
+        self.assertEqual(ex.operator["user"], DEFAULT_OPERATOR["user"])
+
+    def test_the_prompt_path_is_substituted(self):
+        ex = executor()
+        ex.use_operator({"command": "aider --message-file {prompt}"})
+        rendered = ex.operator["command"].format(prompt="/home/x/.netsim/t.prompt")
+        self.assertEqual(rendered, "aider --message-file /home/x/.netsim/t.prompt")
+        self.assertNotIn("{prompt}", rendered)

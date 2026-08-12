@@ -45,11 +45,20 @@ GUEST_TCP_PORT = 1791             # astrald's default tcp listener in the lab
 # over the veth pair it creates (fixtures/vmops/enter-nat).
 NAT_NETNS_HOST = "192.168.99.2"
 SSH_READY_TIMEOUT = 120.0
-# why: the lab bakes a Qwen Code operator on node1 and installs the
-# astral-agent skill into it (fixtures/lab/lab.story). That is the only
-# machine in the world that can drive a flow from a prompt.
-OPERATOR_VM = "node1"
-OPERATOR_USER = "tester"
+# The operator profile the harness falls back to when config.toml names none.
+# The lab bakes a Qwen Code operator on node1 with the astral-agent skill
+# (fixtures/lab/lab.story), which is the only machine in the world that can
+# drive a flow from a prompt.
+#
+# why a dict rather than constants: which agent drives a run is a property of
+# the run, and the harness needs exactly three things to use one — where it
+# lives, who it runs as, and how to hand it a prompt. Naming those makes a
+# second agent a config entry rather than a patch.
+DEFAULT_OPERATOR = {
+    "vm": "node1",
+    "user": "tester",
+    "command": 'qwen -y "$(cat {prompt})"',
+}
 # why: a guest that just lost its data regenerates its node key and bootstraps
 # a fresh onion before apphost listens — minutes on a 1-vCPU VM, not seconds.
 APPHOST_READY_TIMEOUT = 300.0
@@ -101,6 +110,7 @@ class NetsimExecutor(Executor):
         self._tunnels = []
         self._agent_model = ""
         self._agent_base_url = ""
+        self.operator = dict(DEFAULT_OPERATOR)
         self._model_applied = False
         self.pinned = None
 
@@ -455,6 +465,11 @@ systemctl restart astrald""")
 
     # --- the session drivers and oracles see --------------------------------
 
+    def use_operator(self, profile: dict) -> None:
+        """Adopt an operator profile: where the agent is, and how to run it."""
+        self.operator = {**DEFAULT_OPERATOR,
+                         **{k: v for k, v in profile.items() if v}}
+
     def want_model(self, model: str, base_url: str = "") -> None:
         """Record the model this run wants; applied once the world is up."""
         self._agent_model = model
@@ -473,7 +488,7 @@ systemctl restart astrald""")
         model, base_url = self._agent_model, self._agent_base_url
         if not model or self._model_applied:
             return
-        home = f"/home/{OPERATOR_USER}"
+        home = f"/home/{self.operator['user']}"
         sets = f"{home}/.qwen/settings.json"
         env = f"{home}/.qwen/.env"
         url = shlex.quote(base_url) if base_url else ""
@@ -502,13 +517,14 @@ systemctl restart astrald""")
             "    lines.append(line)",
             "e.write_text('\\n'.join(lines) + '\\n')",
             "PY",
-            f'chown {OPERATOR_USER}:{OPERATOR_USER} {sets} {env}',
+            f"chown {self.operator['user']}:{self.operator['user']} "
+            f"{sets} {env}",
             f"grep OPENAI_MODEL= {env}",
         ])
-        out = self._ssh(OPERATOR_VM, script)
+        out = self._ssh(self.operator['vm'], script)
         if f"OPENAI_MODEL={model}" not in out:
             raise ExecutorError(
-                f"{OPERATOR_VM}: operator model is not {model} after the "
+                f"{self.operator['vm']}: operator model is not {model} after the "
                 f"rewrite (got {out!r})")
         self._model_applied = True
 
@@ -529,15 +545,16 @@ systemctl restart astrald""")
         not, because the operator is not supposed to read the test.
         """
         skip = {"test.toml", "script.py", "verify.py", "prompt.md", "README.md"}
-        home = f"/home/{OPERATOR_USER}"
+        home = f"/home/{self.operator['user']}"
         for f in sorted(test.dir.iterdir()):
             if not f.is_file() or f.name in skip:
                 continue
             payload = b64encode(f.read_bytes()).decode()
-            self._ssh(OPERATOR_VM, "\n".join([
+            self._ssh(self.operator["vm"], "\n".join([
                 "set -eu",
                 f"printf '%s' '{payload}' | base64 -d > {home}/{f.name}",
-                f"chown {OPERATOR_USER}:{OPERATOR_USER} {home}/{f.name}",
+                f"chown {self.operator['user']}:{self.operator['user']} "
+                f"{home}/{f.name}",
             ]))
 
     def _collect_agent_facts(self, facts: Path) -> None:
@@ -551,11 +568,11 @@ systemctl restart astrald""")
         astrald misbehaved — when nothing about astrald had gone wrong. A
         wrong layer is worse than a red.
         """
-        merged = self._ssh(OPERATOR_VM, "\n".join([
+        merged = self._ssh(self.operator["vm"], "\n".join([
             "python3 - <<'PY'",
             "import glob, json",
             "merged = {}",
-            f"for f in sorted(glob.glob('/home/{OPERATOR_USER}/*.json')):",
+            f"for f in sorted(glob.glob('/home/{self.operator['user']}/*.json')):",
             "    try:",
             "        d = json.load(open(f))",
             "    except Exception:",
@@ -591,21 +608,27 @@ systemctl restart astrald""")
         # why: the prompt is prose with quotes and newlines and travels as one
         # ssh argv element, so it goes over as base64 and is decoded guest-side.
         payload = b64encode(prompt.read_bytes()).decode()
-        home = f"/home/{OPERATOR_USER}"
+        user = self.operator["user"]
+        home = f"/home/{user}"
+        # why {prompt}: the profile says how to invoke its agent, and every
+        # agent takes its instruction differently. The one thing the harness
+        # insists on is that the prompt reaches it as a file in the guest.
+        invocation = self.operator["command"].format(
+            prompt=f"{home}/.netsim/{test.name}.prompt")
         remote = "\n".join([
             "set -u",
             f"d={home}/.netsim",
             'mkdir -p "$d"',
             f"printf '%s' '{payload}' | base64 -d > \"$d/{test.name}.prompt\"",
-            f'chown -R {OPERATOR_USER}:{OPERATOR_USER} "$d"',
-            f"if su - {OPERATOR_USER} -c 'qwen -y \"$(cat "
-            f"{home}/.netsim/{test.name}.prompt)\"' "
+            f'chown -R {user}:{user} "$d"',
+            f"if su - {user} -c {shlex.quote(invocation)} "
             f'> "$d/{test.name}.log" 2>&1; then rc=0; else rc=$?; fi',
             f'cat "$d/{test.name}.log"',
             "exit $rc",
         ])
 
-        cmd = ["netsim", "ssh", "--sim", str(self.sim), OPERATOR_VM, "--", remote]
+        cmd = ["netsim", "ssh", "--sim", str(self.sim),
+               self.operator["vm"], "--", remote]
         try:
             p = subprocess.run(cmd, capture_output=True, text=True,
                                timeout=timeout)
@@ -615,8 +638,8 @@ systemctl restart astrald""")
             # whether the operator was working, stuck, or never started. The
             # guest still holds the log it was writing, so go and get it.
             tail = self._ssh(
-                OPERATOR_VM,
-                f"tail -c 4000 /home/{OPERATOR_USER}/.netsim/{test.name}.log "
+                self.operator["vm"],
+                f"tail -c 4000 {home}/.netsim/{test.name}.log "
                 "2>/dev/null || true", check=False)
             log.write_text(f"[agent] operator exceeded {timeout}s\n"
                            f"[agent] transcript at the cut:\n{tail}\n")
