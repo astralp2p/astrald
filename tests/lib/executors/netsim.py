@@ -42,12 +42,12 @@ LAB_STAGE = "astrald-lab"         # the recipe's canonical output
 GUEST_ROOT = "/var/lib/astrald"   # install-astrald's -root (its systemd unit)
 GUEST_TCP_PORT = 1791             # astrald's default tcp listener in the lab
 # enter-nat's private host inside netns `priv`, routable from the root netns
-# over the veth pair it creates (fixtures/vmops/enter-nat).
+# over the veth pair it creates (netsim/ops/enter-nat).
 NAT_NETNS_HOST = "192.168.99.2"
 SSH_READY_TIMEOUT = 120.0
 # The operator profile the harness falls back to when config.toml names none.
 # The lab bakes a Qwen Code operator on node1 with the astral-agent skill
-# (fixtures/lab/lab.story), which is the only machine in the world that can
+# (netsim/labs/two-node/lab.story), which is the only machine in the world that can
 # drive a flow from a prompt.
 #
 # why a dict rather than constants: which agent drives a run is a property of
@@ -102,7 +102,7 @@ class NetsimExecutor(Executor):
         self.dir.mkdir(parents=True, exist_ok=True)
         self.binary = Path(binary)
         self.astrald_ref = astrald_ref
-        self.recipe = TESTS / "fixtures" / "lab" / "lab.story"
+        self.recipe = TESTS / "netsim" / "labs" / "two-node" / "lab.story"
         self.sim = None
         self.state = None
         self.facts = {}
@@ -422,9 +422,9 @@ systemctl restart astrald""")
             raise ExecutorError(f"unknown step {step!r} (vm:<op> … | driver)")
         parts = shlex.split(rest)
         op, args = parts[0], parts[1:]
-        opdir = TESTS / "fixtures" / "vmops" / op
+        opdir = TESTS / "netsim" / "ops" / op
         if not (opdir / "run.sh").is_file():
-            raise ExecutorError(f"no vmop {op!r} under fixtures/vmops")
+            raise ExecutorError(f"no op {op!r} under netsim/ops")
         # A bare word names a VM; anything flag-shaped passes through, so a
         # vmop with its own options (`leave-lan --peer node1`) stays writable.
         argv, passthrough = [], False
@@ -528,7 +528,7 @@ systemctl restart astrald""")
                 f"rewrite (got {out!r})")
         self._model_applied = True
 
-    def _push_fixtures(self, test) -> None:
+    def _push_payloads(self, test) -> None:
         """Put a test's own files where its prompt says they are.
 
         why: a prompt says "the contents of ~/payload.txt", and the scripted
@@ -541,7 +541,7 @@ systemctl restart astrald""")
         went looking on the peer for an object that was never put there.
 
         Everything in the test directory that is not harness machinery is a
-        fixture and travels; the manifest, the two drivers and the prose do
+        payload and travels; the manifest, the two drivers and the prose do
         not, because the operator is not supposed to read the test.
         """
         skip = {"test.toml", "script.py", "verify.py", "prompt.md", "README.md"}
@@ -603,7 +603,7 @@ systemctl restart astrald""")
             raise ExecutorError(
                 f"{test.name} declares the agent driver but ships no prompt.md")
         self._apply_model()
-        self._push_fixtures(test)
+        self._push_payloads(test)
 
         # why: the prompt is prose with quotes and newlines and travels as one
         # ssh argv element, so it goes over as base64 and is decoded guest-side.

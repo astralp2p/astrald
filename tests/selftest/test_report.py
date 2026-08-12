@@ -48,9 +48,9 @@ class TestReport(unittest.TestCase):
     def test_note_column_appears_only_when_there_is_a_note(self):
         green = render(doc(entry("smoke", "pass")), "r")
         self.assertNotIn("| Note |", green)
-        fixture = render(doc(entry("bootstrap", "pass", kind="fixture")), "r")
-        self.assertIn("| Note |", fixture)
-        self.assertIn("_(fixture)_", fixture)
+        prereq = render(doc(entry("bootstrap", "pass", kind="prereq")), "r")
+        self.assertIn("| Note |", prereq)
+        self.assertIn("_(prereq)_", prereq)
 
     def test_header_states_what_was_run(self):
         text = render(dict(HEADER, hermetic=False, target="attach",

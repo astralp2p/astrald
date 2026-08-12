@@ -120,7 +120,7 @@ def _reaches(candidate: str, state: str, producers: dict) -> bool:
 
 def resolve(all: dict, only) -> list:
     """Execution plan for a bare test selection: the selected tests, preceded
-    by the fixture prefix their start states need."""
+    by the prereq prefix their start states need."""
     producers = _producers(all)
 
     if only is None:
@@ -144,7 +144,7 @@ def resolve(all: dict, only) -> list:
                 frontier.append(dep)
 
     ordered = sorted(needed, key=lambda n: (depths[n], n))
-    return [(all[n], "test" if n in selected else "fixture") for n in ordered]
+    return [(all[n], "test" if n in selected else "prereq") for n in ordered]
 
 
 def blocked_by(all: dict, start: str, broken: set) -> str | None:

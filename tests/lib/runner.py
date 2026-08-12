@@ -54,7 +54,7 @@ def driver_env(session_json: Path, hermetic: bool) -> dict:
 
 def plan_for(tests: dict, selection: list) -> list:
     """[(Test, kind)] for what the CLI selected: a suite runs exactly as
-    listed, a bare test selection gets the fixture prefix its starts need."""
+    listed, a bare test selection gets the prereq prefix its starts need."""
     suites_dir = TESTS / "suites"
     if not selection:
         selection = [DEFAULT_SUITE]
@@ -77,10 +77,10 @@ def _reject_unbuilt(args, plan: list) -> str | None:
         return "--driver agent has no operator under --target attach"
     if args.target == "attach":
         # why: attach runs against the operator's own daemon. Building a
-        # fixture prefix there means running bootstrap's flow at it — which
+        # prereq prefix there means running bootstrap's flow at it — which
         # stores a private key object and attempts a contract on a live node.
         # The design says attach CHECKS a start state; it does not build one.
-        built = [t.name for t, kind in plan if kind == "fixture"]
+        built = [t.name for t, kind in plan if kind == "prereq"]
         if built:
             return (f"--target attach would have to build {built[0]!r} on the "
                     "attached daemon. Attach checks a start state, it never "
@@ -98,7 +98,7 @@ def run_env(plan: list, driver: str = "script",
             target: str = "fresh") -> str:
     """The env this run executes in: netsim as soon as any selected test needs it.
 
-    why: a netsim test's fixture prefix is env-node tests, and they must build
+    why: a netsim test's prereq prefix is env-node tests, and they must build
     their states in the SAME world the netsim test will run in. Running them
     on loopback would build a state the VMs never see. This is the env lift
     the design promises — the same files, driven against VMs instead of

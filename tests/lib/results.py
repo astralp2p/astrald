@@ -1,5 +1,9 @@
 """results.json / events.jsonl writer — the system's one stable output (v2).
 
+v2.1 renames the record kind `fixture` to `prereq`: the value names a
+full e2e test — own driver, own oracle — running to build the state another
+test starts from, and "fixture" said none of that.
+
 v2 vs M1: `env` replaces `lane` on every record, the header drops `lanes`
 and gains `astral_py_ref`, and `hermetic` is set by the run's --target
 rather than hard-coded.
@@ -13,7 +17,7 @@ from lib import report
 
 STATUSES = {"pass", "fail", "skipped"}
 FAILURE_KINDS = {"driver", "verify", "environment"}
-KINDS = {"test", "fixture"}
+KINDS = {"test", "prereq"}
 ENVS = {"node", "netsim"}
 
 

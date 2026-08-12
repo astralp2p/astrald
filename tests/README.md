@@ -4,7 +4,7 @@ One command, real daemons, deterministic verdicts:
 
     ./tests/run                     # the default suite (suites/main.suite)
     ./tests/run main.suite          # a named suite, in its listed order
-    ./tests/run adopt-node          # one test + the fixture prefix it needs
+    ./tests/run adopt-node          # one test + the prereq prefix it needs
     ./tests/run smoke adopt-node    # several tests
     ./tests/run adopt-node --keep   # leave the world running afterwards
     ./tests/run smoke --target attach   # judge a daemon that is already up
@@ -57,7 +57,7 @@ There is a fourth knob, `--target`, for where the machines come from — see
 [Where the machines come from](#where-the-machines-come-from). The default
 spawns a fresh world and is what you want unless you know otherwise.
 
-## Three nouns
+## The nouns
 
 - A **test** is a directory under `e2e/`: `test.toml` (the manifest),
   `script.py` (the driver), `verify.py` (the oracle — the only judge),
@@ -65,9 +65,12 @@ spawns a fresh world and is what you want unless you know otherwise.
   field, not a directory.
 - A **suite** is a file under `suites/`: these tests, in this order. A suite
   composes; it never restates what a test needs.
-- A **fixture** builds world state: `fixtures/vmops/` holds the named VM
-  operations a netsim test runs as steps, `fixtures/lab/` the netsim base
-  recipe.
+- A **lab** is a world recipe: `netsim/labs/two-node/` builds the VMs, the
+  daemons and the operator that netsim tests start from.
+- An **op** is a named machine operation: `netsim/ops/` holds every one, both
+  the ops a lab recipe builds with and the ops a test runs as steps. netsim
+  keeps one flat task namespace and cannot tell those apart, so neither does
+  the tree.
 
 ## The manifest
 
@@ -96,7 +99,7 @@ namespace across both envs. A state has at most one producer.
   test's `start`: the start is the walk state or one of its ancestors.
 - A test with `mutates = true` narrows the walk to its own branch; nothing
   downstream may consume the state it invalidated.
-- A bare test selection gets the fixture prefix its start needs, derived
+- A bare test selection gets the prereq prefix its start needs, derived
   from the chain.
 - A failure skips every test whose start stands on the state that broke.
 
@@ -154,7 +157,7 @@ Under `attach` the run is not hermetic, so the header carries
 `hermetic: false` and the ambient endpoint and token are deliberately left in
 the driver environment. Two guards make it safe to use on a daemon you care
 about: a start state is **checked, never built** — a selection that would
-need a fixture prefix is refused rather than run at your daemon — and a
+need a prereq prefix is refused rather than run at your daemon — and a
 `mutates` test prints a warning naming itself before anything happens.
 Attach has one daemon, so a test with a multi-node roster is refused too.
 
@@ -199,8 +202,9 @@ lying about exactly the case the third status exists for.
 Python ≥ 3.11, a Go toolchain, and an astral-py checkout (path in
 `config.toml`) — imported directly from its `src/`, since the package has
 zero dependencies. No venv, no pip. Env `netsim` additionally needs a
-working `netsim` on PATH. `./tests/fixtures/link.sh` registers this tree's
-netsim tasks — the vmops a test dispatches as steps, and the ones `lab.story`
-builds the world with; run it once per checkout.
+working `netsim` on PATH. `./tests/link.sh` registers this tree's
+netsim ops — the ones a test dispatches as steps and the ones a lab recipe
+builds the world with, which live together because netsim cannot tell them
+apart; run it once per checkout.
 
 Manifests are TOML (stdlib), which the design document also writes.

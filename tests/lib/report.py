@@ -71,8 +71,8 @@ def render(doc: dict, run_dir_name: str) -> str:
     rows = []
     for e in entries:
         note = e.get("failure_kind", "")
-        if e["kind"] == "fixture":
-            note = (note + " " if note else "") + "_(fixture)_"
+        if e["kind"] == "prereq":
+            note = (note + " " if note else "") + "_(prereq)_"
         rows.append([e["test"], e["env"], e["driver"],
                      STATUS_MARK[e["status"]], f"{e['duration_s']:.2f} s",
                      note])
