@@ -512,6 +512,34 @@ systemctl restart astrald""")
                 f"rewrite (got {out!r})")
         self._model_applied = True
 
+    def _push_fixtures(self, test) -> None:
+        """Put a test's own files where its prompt says they are.
+
+        why: a prompt says "the contents of ~/payload.txt", and the scripted
+        driver reads that payload out of the test directory. The operator has
+        no such directory — it has a home — so without this it works on
+        whatever ~/payload.txt happens to be lying there. object-store-peer
+        found it the expensive way: it stored the payload object-store had
+        left behind, produced that object's id (ids are content hashes, which
+        is exactly why the two tests ship different payloads), and its oracle
+        went looking on the peer for an object that was never put there.
+
+        Everything in the test directory that is not harness machinery is a
+        fixture and travels; the manifest, the two drivers and the prose do
+        not, because the operator is not supposed to read the test.
+        """
+        skip = {"test.toml", "script.py", "verify.py", "prompt.md", "README.md"}
+        home = f"/home/{OPERATOR_USER}"
+        for f in sorted(test.dir.iterdir()):
+            if not f.is_file() or f.name in skip:
+                continue
+            payload = b64encode(f.read_bytes()).decode()
+            self._ssh(OPERATOR_VM, "\n".join([
+                "set -eu",
+                f"printf '%s' '{payload}' | base64 -d > {home}/{f.name}",
+                f"chown {OPERATOR_USER}:{OPERATOR_USER} {home}/{f.name}",
+            ]))
+
     def _collect_agent_facts(self, facts: Path) -> None:
         """Turn the operator's artifacts into the facts the oracles read.
 
@@ -558,6 +586,7 @@ systemctl restart astrald""")
             raise ExecutorError(
                 f"{test.name} declares the agent driver but ships no prompt.md")
         self._apply_model()
+        self._push_fixtures(test)
 
         # why: the prompt is prose with quotes and newlines and travels as one
         # ssh argv element, so it goes over as base64 and is decoded guest-side.
