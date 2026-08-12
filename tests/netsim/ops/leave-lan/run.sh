@@ -90,4 +90,48 @@ EOS
 echo "leave-lan: $VM leaving the LAN (withdrawing its 10.77 address) ..."
 # shellcheck disable=SC2029
 netsim ssh "$VM" -- "$CUT_BODY"
+
+# 3) close every link still riding the LAN that just went away
+#
+# why: withdrawing the address does not disturb an ESTABLISHED connection.
+# Nothing sends a RST — the path simply black-holes — and astrald does not
+# notice: measured in a kept world, node1 went on listing a tcp link to
+# 10.77.0.12 long after node2 had no 10.77 address at all, while a query over
+# it answered `route_not_found`. Worse, that dead link outlived the healthy
+# tor link beside it, so the pair ended up reporting a link they could not
+# use. Closing the links by hand made both ends settle on tor alone and stay
+# there (four polls over 80s).
+#
+# why this belongs in the vmop and is not a workaround: a node that has left
+# the LAN cannot still hold a LAN link, so severing it is part of leaving. In
+# the field the kernel reaches the same state on its own, minutes later, when
+# retransmissions give up; this only spares the test that wait.
+#
+# The astrald defect this papers over is real and filed separately: a link
+# whose path is gone stays in nodes.links and shadows a working one.
+CLOSE_BODY=$(cat <<'EOS'
+set -eu
+astral-query nodes.links -out json 2>/dev/null | python3 -c "
+import json,subprocess,sys
+for line in sys.stdin:
+    line = line.strip()
+    if not line: continue
+    try: o = json.loads(line)
+    except Exception: continue
+    m = o.get('Object') or {}
+    if not isinstance(m, dict) or not m.get('ID'): continue
+    # a link is on the departed LAN if either end wore a 10.77 address
+    ends = json.dumps([m.get('LocalEndpoint'), m.get('RemoteEndpoint')])
+    if '10.77.' not in ends: continue
+    subprocess.run(['astral-query','nodes.close_link','-id',m['ID']],
+                   stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    print('closed stale %s link %s' % (m.get('Network','?'), m['ID']))
+"
+EOS
+)
+for host in "$VM" "$PEER"; do
+  # shellcheck disable=SC2029
+  out=$(netsim ssh "$host" -- "$CLOSE_BODY" 2>/dev/null || true)
+  [ -n "$out" ] && echo "$out" | sed "s/^/leave-lan: $host /"
+done
 echo "leave-lan: done on $VM"

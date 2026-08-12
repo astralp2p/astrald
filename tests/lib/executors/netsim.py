@@ -134,6 +134,15 @@ class NetsimExecutor(Executor):
         # adopt-node wants node1 and node2. Push and tunnel per test, not per
         # boot, or the second node runs the lab's stale astrald with no token.
         self._push_astrald([n for n in test.nodes if n not in self._nodes])
+        # why open the session before the steps as well as after: a vmop is
+        # given each node's identity (ASTRAL_ID_<vm>), and until this runs
+        # there are no identities to give — leave-lan silently fell back to
+        # its alias hunt and failed with the roster in fact correct. Opening
+        # twice is what the call is already built for: it reuses a live
+        # tunnel, and reopens one whose target moved, which is exactly what
+        # enter-nat does to apphost mid-steps. The second call is what keeps
+        # nat-punch working.
+        self._open_session(test.nodes)
         for step in test.steps[:-1]:
             self._step(step)
         self._open_session(test.nodes)
