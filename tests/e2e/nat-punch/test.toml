@@ -9,6 +9,9 @@ mutates = true
 nodes   = ["node1", "node2"]
 steps   = ["vm:enable-tor node1 node2",
            "vm:enter-nat node1 node2",
+           # the session is an ssh -L forward and ssh lands in the root netns;
+           # enter-nat just moved apphost out of it. This is the door back in.
+           "vm:expose-apphost node1 node2",
            "vm:configure-nat-tor node1 node2",
            "vm:add-reflector node1 node2 --reflector reflector",
            "driver"]
