@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """Oracle: the dropped file is an object, under the id its bytes hash to.
 
-Indexing is eventual. The watcher debounces per-file writes and the indexer
-hashes on a rate-limited background queue, so an instant assertion here is a
-flaky one — this polls to a deadline and only then gives up. What it must never
+Indexing is eventual. The file is in place before the watch, so it is the
+initial background scan that must find it — measured at about 23 ms, and the
+fsnotify debounce this test never triggers is three seconds — but eventual is
+eventual, so this polls to a deadline rather than asserting instantly. What it must never
 do is poll for something the driver told it: the id comes from the payload,
 computed here, so the question asked of node1 is "do you hold these bytes",
 never "do you hold what your indexer decided to call them".
@@ -17,8 +18,9 @@ never built against and the descriptor would arrive undecodable. The schema is
 fetched from the node with `objects.learn` rather than the descriptor being
 read as opaque bytes — a substring check against a raw payload would pass on a
 descriptor that merely mentioned the path somewhere. A learned type arrives as
-a RuntimeRecord whose fields carry their wire names, so they are read through
-`.get("Path")` rather than as Python attributes.
+a RuntimeRecord whose fields carry their wire names; `.get("Path")` reads them
+and answers None for a name the schema does not have, which is what turns a
+schema that drifted into a readable assertion rather than an AttributeError.
 """
 import asyncio
 
@@ -27,14 +29,14 @@ from astral.objectid import object_id_of_bytes
 
 from lib.sessionio import as_bytes, load
 
-DEADLINE = 60.0
+DEADLINE = 20.0
 INTERVAL = 0.5
 LOCATION = "mod.fs.file_location"
 
 
-async def wait_for(c, repo, oid, deadline=DEADLINE):
+async def wait_for(c, repo, oid):
     loop = asyncio.get_running_loop()
-    end = loop.time() + deadline
+    end = loop.time() + DEADLINE
     while True:
         if await c.objects.contains(repo, oid):
             return True

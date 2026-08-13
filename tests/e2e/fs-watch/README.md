@@ -12,8 +12,9 @@ the id its bytes hash to, and `objects.describe` places it at that path.
 `fs.new_watch` registers a directory as an object repository, scans it in the
 background and adds it to the `objects.RepoLocal` group. This is how a user's
 own files enter the object graph — the one path by which astrald holds data
-nobody typed into it — and no test touched `fs.new_repo`, `fs.new_watch`,
-`objects.scan` or `objects.repositories`.
+nobody typed into it. Four ops in this area had no coverage at all —
+`fs.new_repo`, `fs.new_watch`, `objects.scan`, `objects.repositories` — and
+this test closes `fs.new_watch`.
 
 The mechanism works today, so this is a regression guard rather than a bug
 hunt.
@@ -22,7 +23,14 @@ hunt.
 
 A test that registers a watch is telling a daemon to index a path, and the only
 path it has any business indexing is one this run made. The watched directory
-is created under the run's session directory and goes away with it.
+is created under the run's session directory, and stays there afterwards the
+way `astrald.log` does — nothing prunes a results tree.
+
+The registration itself is permanent for the life of the session: there is no
+`objects.remove_repository` call here, so the repository stays in the
+`RepoLocal` group. Nothing downstream is disturbed by it — a watch repository
+refuses `Create`, so the group skips it and later writes land in the real
+`data` repo as before.
 
 ## The file is written before the watch, on purpose
 
@@ -33,9 +41,10 @@ the `file_changed` transition.
 
 ## Timing is the whole difficulty
 
-The watcher debounces per-file writes and the indexer hashes on a rate-limited
-background queue, so indexing is eventual and an instant assertion is a flaky
-one. The oracle polls to a deadline.
+The indexer hashes on a rate-limited background queue, so indexing is eventual
+and an instant assertion is a flaky one. The oracle polls to a deadline. The
+path this test takes — the initial scan — lands in about 23 ms; the three-second
+fsnotify write debounce belongs to the path it deliberately does not take.
 
 What it never does is poll for something the driver told it. The id is computed
 here from the payload, so the question asked of node1 is "do you hold these
@@ -52,8 +61,10 @@ against, and the descriptor would arrive undecodable. The oracle fetches the
 schema from the node with `objects.learn` rather than reading the descriptor as
 opaque bytes: a substring check against a raw payload would pass on a
 descriptor that merely mentioned the path somewhere. A learned type arrives as
-a `RuntimeRecord` whose fields carry their wire names, so they are read through
-`.get("Path")` and `.get("NodeID")` rather than as Python attributes.
+a `RuntimeRecord` whose fields carry their wire names, read through `.get("Path")`
+and `.get("NodeID")`. `.get` answers None for a name the schema does not carry,
+so a schema that drifted fails as a readable assertion rather than as an
+AttributeError.
 
 ## Two claims
 

@@ -37,11 +37,12 @@ async def main():
     n1 = doc["nodes"]["node1"]
 
     session_dir = Path(os.environ["ASTRAL_TESTS_SESSION"]).resolve().parent
+    run_stamp = session_dir.parent.name        # results/<stamp>/session/…
     watch_dir = session_dir / "fs-watch"
     watch_dir.mkdir(parents=True, exist_ok=True)
 
     # Run-unique, so an id from one run can never be mistaken for another's.
-    payload = (f"fs-watch probe in {session_dir.name}: a file dropped into a "
+    payload = (f"fs-watch probe in {run_stamp}: a file dropped into a "
                f"watched directory becomes an object\n").encode()
     target = watch_dir / FILENAME
     target.write_bytes(payload)
