@@ -133,11 +133,17 @@ Every story of the catalog, in the cheapest env that can falsify it:
 | 0008 | `read-remote-peer` | node | `two-nodes-data-peer` → `two-nodes-data-read` |
 | 0009 | `expel-node` | node | `two-nodes` → `two-nodes-expel` |
 | — | `smoke` | node | `null` → — |
+| — | `hold-purge` | node | `two-nodes` → — (mutates) |
 
 `main.suite` is the env-node chain, seven tests in about twelve seconds.
 `import-user-software-key` stays out of it: `start = "null"` means a
 pristine node, and env `node` runs one live session, so the chain cannot go
 back to an unclaimed node1 mid-suite.
+
+`hold-purge` stays out for a different reason: it purges a repository, so it
+is `mutates` with no `saves` — TERMINAL, and nothing may follow it. The chain
+rejects it at either end, after `expel-node` by that test's `two-nodes-expel`
+fence and before it by this one's.
 
 ## Where the machines come from
 
