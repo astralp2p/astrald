@@ -2,6 +2,7 @@
 smoke
 bootstrap-user-software-key
 adopt-node
+fs-watch
 object-store
 object-store-peer
 read-remote-peer
