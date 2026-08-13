@@ -133,11 +133,17 @@ Every story of the catalog, in the cheapest env that can falsify it:
 | 0008 | `read-remote-peer` | node | `two-nodes-data-peer` → `two-nodes-data-read` |
 | 0009 | `expel-node` | node | `two-nodes` → `two-nodes-expel` |
 | — | `smoke` | node | `null` → — |
+| — | `app-contract` | node | `two-nodes` → — |
 
 `main.suite` is the env-node chain, seven tests in about twelve seconds.
 `import-user-software-key` stays out of it: `start = "null"` means a
 pristine node, and env `node` runs one live session, so the chain cannot go
 back to an unclaimed node1 mid-suite.
+
+`app-contract` stays out for a different reason: one of its six acts is red on
+master by design, holding an open question about whether a contract is
+required for an app to be reachable on its own node, and a suite that is always
+red stops reporting regressions. It joins `main.suite` when it goes green.
 
 ## Where the machines come from
 
