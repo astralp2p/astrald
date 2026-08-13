@@ -40,9 +40,28 @@ chain down with it.
 All four probes run before anything is asserted, so the failure names every op
 that leaked rather than the first one.
 
-Delete is judged by its effect: the decoy is still there afterwards, or it is
-not. An op that answers `ack` and does nothing and an op that refuses outright
-are the same verdict here, because the bytes are what survive or do not.
+**A refusal means a query rejection and nothing else.** `objects.read` denies
+by `q.Reject()`, which arrives as `QueryRejected`, and that is the shape the
+other three are expected to grow. Counting any `SessionError` would be a hole
+big enough to walk an op through: `RouteNotFound` is one, so an op that was
+renamed or dropped would answer "no route", read as a refusal, and turn this
+test green having never been exercised. A fix that denies by `error_message`
+instead leaves this test red on purpose — the denial shape is part of what is
+being asserted.
 
-No `payload.txt`: the object id is a content hash, so the User's read proves
-itself against the id it asked for.
+Anything else the stranger gets back is a leak, including a polite one: an op
+that accepts the query and answers `ack`, or answers `False`, has still decided
+the stranger is worth serving. Delete carries a second, independent check — the
+decoy survives or it does not — because an op may refuse and delete anyway.
+
+No `payload.txt`: the object id is a content hash and `object-store` writes an
+untyped blob, so the User's read proves itself against the id it asked for.
+A typed object there would read back framed and break that assertion.
+
+## What it does not cover
+
+The "nor a swarm node" half of the claim has no positive control. The oracle
+proves the User is served and the stranger is not; it never proves node2 still
+is, so an over-fix that refused the whole swarm would pass. Covering it means
+a cross-node routed read inside an authorization test, which buys a second
+failure mode for the thing least likely to regress — left out deliberately.

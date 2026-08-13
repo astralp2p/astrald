@@ -26,6 +26,11 @@ async def main():
 
     async with await astral.connect(n1["endpoint"], token=user_token) as c:
         guest = await c.apphost.register()
+        guest_identity = str(guest.identity) if guest.identity else ""
+        # Checked before the decoy is written: a registration that answered
+        # nothing usable should not leave a stray object behind on its way out.
+        assert guest.token, "apphost.register answered no token"
+        assert guest_identity, "apphost.register answered no identity"
 
         # why: the stranger's delete probe needs its own target. objects.store
         # refuses an untyped blob, so raw bytes go through create + commit —
@@ -33,10 +38,6 @@ async def main():
         async with c.objects.create() as w:
             await w.write(DECOY)
             decoy_id = str(await w.commit())
-
-    guest_identity = str(guest.identity) if guest.identity else ""
-    assert guest.token, "apphost.register answered no token"
-    assert guest_identity, "apphost.register answered no identity"
 
     write_facts({
         "guest_token": guest.token,

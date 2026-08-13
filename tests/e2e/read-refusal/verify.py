@@ -11,15 +11,22 @@ All four probes run before anything is asserted. A stranger that gets through
 two ops and is stopped by a third is one finding, not two runs, and the failure
 should name every op that leaked rather than the first one.
 
-The delete probe is judged by its effect, never by its answer: the decoy is
-still there afterwards, or the stranger deleted it. An op that answers `ack`
-and does nothing and an op that refuses are the same verdict here — the bytes
-survived — and that is the property worth holding.
+**A refusal here means a query rejection and nothing else.** `objects.read`
+denies by `q.Reject()`, which arrives as `QueryRejected`, and that is the shape
+the other three are expected to grow. Counting any `SessionError` would be a
+hole big enough to walk an op through: `RouteNotFound` is a `SessionError`, so
+an op that was renamed or dropped would answer "no route", read as a refusal,
+and turn this test green having never been exercised at all.
+
+Anything else the stranger gets back is a leak, including a polite one. An op
+that accepts the query and answers `ack`, or answers `False`, has still decided
+the stranger is someone worth serving; only the delete probe is additionally
+judged by its effect, because there the bytes are the thing that survives.
 """
 import asyncio
 
 import astral
-from astral.errors import AstralError
+from astral.errors import AstralError, QueryRejected
 from astral.objectid import object_id_of_bytes
 
 from lib.sessionio import load
@@ -28,21 +35,25 @@ OPS = ("objects.read", "objects.load", "objects.contains", "objects.delete")
 
 
 async def probe(coro):
-    """Run one stranger call. Returns None when refused, else what came back."""
-    try:
-        return {"served": await coro}
-    except AstralError as e:
-        return None if _is_refusal(e) else {"served": f"unexpected {e!r}"}
+    """Run one stranger call.
 
+    Returns None when the node rejected the query, else a one-line account of
+    what the stranger got — which is the leak, and is what the failure prints.
 
-def _is_refusal(e: BaseException) -> bool:
-    """A refusal is the node saying no, not the harness failing to ask.
-
-    why: a transport or wire failure would otherwise read as a green refusal —
-    the loudest possible false pass for a test whose whole subject is denial.
+    why the wrapper: `objects.delete` answers `None` on success, so a bare
+    return value cannot tell "deleted it" from "refused". The presence of the
+    account is the signal; its contents are for the reader.
     """
-    from astral.errors import SessionError
-    return isinstance(e, SessionError)
+    try:
+        got = await coro
+    except QueryRejected:
+        return None
+    except AstralError as e:
+        # Not a rejection: a repository error, a transport failure, a wire
+        # fault. None of those is the node deciding this identity may not
+        # look, so none of them earns a pass.
+        return f"{type(e).__name__}: {e}"
+    return f"answered {got!r}" if got is not None else "accepted the query"
 
 
 async def main():
@@ -54,9 +65,11 @@ async def main():
     guest_token = facts["guest_token"]
     user_token = facts["user_token"]
 
-    # The User's own read, first: ground truth that there is something to leak.
-    # The id is a content hash, so the bytes prove themselves — this oracle
-    # needs no payload file and never asks the driver what was stored.
+    # The User's own read, first: ground truth that there is something to leak,
+    # and a control that the op works at all under the same repo argument the
+    # stranger uses. The id is a content hash and object-store writes an
+    # untyped blob, so the bytes prove themselves against the id that asked
+    # for them — this oracle needs no payload file of its own.
     async with await astral.connect(n1["endpoint"], token=user_token) as c:
         mine = await c.objects.read(object_id, repo="local")
     assert mine, f"the User read no bytes for {object_id}"
@@ -64,7 +77,9 @@ async def main():
         f"the User's read of {object_id} hashes to "
         f"{object_id_of_bytes(mine)} — not the object it asked for")
 
-    # The stranger, against all four ops.
+    # The stranger, against all four ops. connect() authenticates eagerly, so a
+    # token the node will not accept raises here rather than being miscounted
+    # as four polite refusals.
     async with await astral.connect(n1["endpoint"], token=guest_token) as c:
         served = {
             "objects.read": await probe(c.objects.read(object_id, repo="local")),
@@ -73,21 +88,20 @@ async def main():
             "objects.delete": await probe(c.objects.delete("local", decoy_id)),
         }
 
-    # Did the delete land? The decoy's survival is the verdict, not the answer.
+    # Did the delete land? The decoy's survival is a second, independent
+    # verdict on that probe — an op may refuse and delete anyway.
     async with await astral.connect(n1["endpoint"], token=user_token) as c:
         decoy_survived = await c.objects.contains("local", decoy_id)
 
-    leaked = [op for op in OPS if served[op] is not None]
+    leaked = [f"{op} ({served[op]})" for op in OPS if served[op] is not None]
     if not decoy_survived:
-        leaked = [op for op in leaked if op != "objects.delete"]
-        leaked.append("objects.delete (the decoy is gone)")
+        leaked.append("objects.delete destroyed the decoy")
 
     assert not leaked, (
-        "a stranger — neither the User nor a swarm node — was served by "
-        + ", ".join(leaked)
-        + f"; only {len(OPS) - len(leaked)} of {len(OPS)} refused it")
+        "a stranger — neither the User nor a swarm node — was not refused by: "
+        + "; ".join(leaked))
 
-    print(f"oracle: the stranger was refused by all {len(OPS)} ops and the "
+    print(f"oracle: the stranger was rejected by all {len(OPS)} ops and the "
           f"decoy survived; the User still reads {object_id[:16]}… "
           f"({len(mine)} B) in full")
 
