@@ -5,4 +5,5 @@ adopt-node
 object-store
 object-store-peer
 read-remote-peer
+blueprints-two-node
 expel-node                     # mutates two-nodes: nothing may follow it
