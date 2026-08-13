@@ -8,15 +8,16 @@ the schema over the link, read it again and succeed. One process, one
 connection, one difference.
 
 Everything is asked through node2, and node2 is never taught the type. Its
-registry is checked before and after, and it is empty both times: nothing
-replicates a blueprint between nodes, and nothing needs to — a routed load is
-relayed rather than decoded by the node in the middle. What has to learn the
-schema is whoever decodes, and here that is this process.
+registry is checked before and after and does not hold the type either time:
+nothing replicates a blueprint between nodes, and nothing needs to — node2
+forwards the query and carries the answer back as opaque bytes, decoding
+neither. What has to learn the schema is whoever decodes, and here that is
+this process.
 """
 import asyncio
 
 import astral
-from astral.errors import BlueprintNotFound, StreamCorrupted
+from astral.errors import BlueprintNotFound
 
 from lib.sessionio import load
 
@@ -28,11 +29,11 @@ async def main():
     doc = load()
     n1, n2 = doc["nodes"]["node1"], doc["nodes"]["node2"]
     facts = doc["facts"]
-    type_name = facts["type"]
-    object_id = facts["object_id"]
+    type_name = facts["probe_type"]
+    object_id = facts["probe_object_id"]
 
-    assert facts["reregistered"].startswith("refused"), (
-        f"registering {type_name} twice was {facts['reregistered']} — a "
+    assert "already registered" in facts["reregistered"], (
+        f"registering {type_name} twice answered {facts['reregistered']!r} — a "
         "registry that takes the second definition lets any caller redefine a "
         "live type's wire shape")
 
@@ -44,10 +45,16 @@ async def main():
 
         # 1. No schema, no reading. This is the negative, and it is this
         #    process's own state that makes it true.
+        # why BlueprintNotFound alone: StreamCorrupted is also what a
+        # genuinely truncated frame raises, so catching it here would swallow a
+        # real framing fault as the expected negative.
         try:
             got = await c2.objects.load(object_id, target=n1["identity"])
-        except (BlueprintNotFound, StreamCorrupted):
-            pass
+        except BlueprintNotFound as e:
+            assert type_name in str(e), (
+                f"the decode failed with {e!r}, which does not name "
+                f"{type_name} — that is a different failure wearing the same "
+                "exception")
         else:
             raise AssertionError(
                 f"decoded {object_id[:16]}… as {got!r} without ever holding a "
@@ -69,10 +76,12 @@ async def main():
 
     assert decoded.ASTRAL_TYPE == type_name, (
         f"{object_id[:16]}… decoded as {decoded.ASTRAL_TYPE}, not {type_name}")
-    assert decoded.get("Label") == facts["label"], (
-        f"Label decoded as {decoded.get('Label')!r}, not {facts['label']!r}")
-    assert int(decoded.get("Serial")) == facts["serial"], (
-        f"Serial decoded as {decoded.get('Serial')!r}, not {facts['serial']}")
+    assert decoded.get("Label") == facts["probe_label"], (
+        f"Label decoded as {decoded.get('Label')!r}, not "
+        f"{facts['probe_label']!r}")
+    assert int(decoded.get("Serial")) == facts["probe_serial"], (
+        f"Serial decoded as {decoded.get('Serial')!r}, not "
+        f"{facts['probe_serial']}")
 
     assert type_name not in after, (
         f"node2 learned {type_name} in the course of relaying it — the object "
@@ -80,7 +89,8 @@ async def main():
 
     print(f"oracle: {type_name} was unreadable here, pulled over the link from "
           f"node1, and then decoded {object_id[:16]}… as "
-          f"{facts['label']!r}/{facts['serial']} — node2 never knew the type")
+          f"{facts['probe_label']!r}/{facts['probe_serial']} — node2 never "
+          "held the type")
 
 
 asyncio.run(main())
