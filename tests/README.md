@@ -134,6 +134,16 @@ Every story of the catalog, in the cheapest env that can falsify it:
 | 0009 | `expel-node` | node | `two-nodes` → `two-nodes-expel` |
 | — | `smoke` | node | `null` → — |
 | — | `app-query` | node | `two-nodes` → — |
+| — | `hold-purge` | node | `two-nodes` → — (mutates) |
+
+`main.suite` is the env-node chain, and it runs in seconds.
+| — | `fs-watch` | node | `one-node` → — |
+| — | `blueprints-two-node` | node | `two-nodes` → — |
+
+`main.suite` is the env-node chain, and it runs in seconds.
+| — | `gateway-relay` | netsim | `two-nodes` → — (mutates) |
+
+`main.suite` is the env-node chain, and it runs in seconds.
 | — | `app-contract` | node | `two-nodes` → — |
 
 `main.suite` is the env-node chain, and it runs in seconds.
@@ -141,6 +151,10 @@ Every story of the catalog, in the cheapest env that can falsify it:
 pristine node, and env `node` runs one live session, so the chain cannot go
 back to an unclaimed node1 mid-suite.
 
+`hold-purge` stays out for a different reason: it purges a repository, so it
+is `mutates` with no `saves` — TERMINAL, and nothing may follow it. The chain
+rejects it at either end, after `expel-node` by that test's `two-nodes-expel`
+fence and before it by this one's.
 `app-contract` stays out for a different reason: one of its six acts is red on
 master by design, holding an open question about whether a contract is
 required for an app to be reachable on its own node, and a suite that is always

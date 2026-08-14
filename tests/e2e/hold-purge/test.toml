@@ -1,0 +1,6 @@
+env     = "node"
+start   = "two-nodes"
+mutates = true
+nodes   = ["node1"]
+drivers = ["script"]
+timeout = 120
