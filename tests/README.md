@@ -141,6 +141,9 @@ Every story of the catalog, in the cheapest env that can falsify it:
 | — | `blueprints-two-node` | node | `two-nodes` → — |
 
 `main.suite` is the env-node chain, and it runs in seconds.
+| — | `gateway-relay` | netsim | `two-nodes` → — (mutates) |
+
+`main.suite` is the env-node chain, and it runs in seconds.
 `import-user-software-key` stays out of it: `start = "null"` means a
 pristine node, and env `node` runs one live session, so the chain cannot go
 back to an unclaimed node1 mid-suite.
