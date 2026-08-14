@@ -137,6 +137,9 @@ Every story of the catalog, in the cheapest env that can falsify it:
 | — | `hold-purge` | node | `two-nodes` → — (mutates) |
 
 `main.suite` is the env-node chain, and it runs in seconds.
+| — | `fs-watch` | node | `one-node` → — |
+
+`main.suite` is the env-node chain, and it runs in seconds.
 `import-user-software-key` stays out of it: `start = "null"` means a
 pristine node, and env `node` runs one live session, so the chain cannot go
 back to an unclaimed node1 mid-suite.
