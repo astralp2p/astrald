@@ -133,6 +133,9 @@ Every story of the catalog, in the cheapest env that can falsify it:
 | 0008 | `read-remote-peer` | node | `two-nodes-data-peer` → `two-nodes-data-read` |
 | 0009 | `expel-node` | node | `two-nodes` → `two-nodes-expel` |
 | — | `smoke` | node | `null` → — |
+| — | `app-query` | node | `two-nodes` → — |
+
+`main.suite` is the env-node chain, and it runs in seconds.
 | — | `blueprints-two-node` | node | `two-nodes` → — |
 
 `main.suite` is the env-node chain, and it runs in seconds.
