@@ -138,6 +138,7 @@ Every story of the catalog, in the cheapest env that can falsify it:
 
 `main.suite` is the env-node chain, and it runs in seconds.
 | — | `fs-watch` | node | `one-node` → — |
+| — | `blueprints-two-node` | node | `two-nodes` → — |
 
 `main.suite` is the env-node chain, and it runs in seconds.
 `import-user-software-key` stays out of it: `start = "null"` means a
