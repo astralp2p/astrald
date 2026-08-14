@@ -6,4 +6,5 @@ fs-watch
 object-store
 object-store-peer
 read-remote-peer
+app-query
 expel-node                     # mutates two-nodes: nothing may follow it
