@@ -61,29 +61,40 @@ node1 holds an ordinary `tcp` link to the gateway itself, so an unfiltered
 would mean a direct path survived and the world was never what the test
 claimed.
 
-## This test does not pass, and what it establishes anyway
+## What it took to make this pass
 
-It is red at `d43def01`, and it is red at a precise place. Five netsim runs and
-one live world took the flow this far:
+Green at `d43def01`, in about thirteen minutes from the cached `two-nodes`
+stage. Getting there took seven netsim runs and one loopback lab, and none of
+the blockers were where they looked:
 
-1. the gateway reads its config and `gateway.enabled` takes effect;
-2. node2 reads its own and starts trying — `[gateway] starting to maintain
-   connections to <gw>` — retrying with backoff, on its own, exactly as the
-   config-driven design says it should;
-3. once the endpoint and the 198.51.100 alias are in place, the dial reaches
-   the gateway: `[gateway] accepting socket connection from tcp:198.51.100.12`;
-4. the link handshake then dies — `tcp server/onAccept error: unexpected EOF`
-   on the gateway, and `gateway.node_register … error (59.999s): route not
-   found` on the client, once per backoff tick.
+- **The gateway opens its own listener on the port it is configured with.**
+  Naming astrald's tcp port (1791) collides: the tcp module loses the bind,
+  inbound links land on the gateway's socket-claim handler instead of the link
+  handshake, and every dial dies as `unexpected EOF`. The relay gets 1795.
+- **`gateway.networks.tcp.endpoint` does nothing.** It is parsed with
+  `Exonet.Parse` during the gateway's own `LoadDependencies`, racing
+  `mod/tcp`'s registration of the `tcp` parser (`core/modules.go` runs them
+  concurrently). The parse fails `unsupported network`, the error is logged and
+  swallowed, and the module falls back to `IP.PublicIPCandidates()`.
+- **That fallback is empty on a lab network,** because `IsPublic()` is
+  `IsGlobalUnicast() && !IsPrivate()` and 10.77 is RFC1918. Every registration
+  is then refused `no public IP available for gateway network tcp` — in band,
+  so the routing layer logs a clean `routed in 152µs` and only the caller ever
+  learns why. The fix is `mod/tcp`'s own `configEndpoints`, carrying a
+  198.51.100 address: TEST-NET-2 is global unicast and not private.
 
-So the socket arrives and the link does not form. Whether that is astrald
-refusing a link from a node outside its swarm, a NAT interaction with the
-handshake, or lab setup still missing, is not established here — and it is
-astrald's question rather than the harness's. Tracked as *astrald: a node
-cannot link to a gateway outside its swarm*.
+None of it was authorization. A node links to a gateway outside its swarm
+without complaint — verified directly on loopback, where a `tcp` link to a
+stranger gateway formed immediately.
 
-The test is written to the specified behaviour, so it goes green when the
-mechanism does. It is in no suite while red.
+## The loopback lab, which is how this was solved
+
+Two bare astrald processes on 127.0.0.1, one configured as a gateway, iterate
+in **seconds**. It reproduced the netsim failure exactly and then took it
+apart; four of the seven netsim runs were spent on questions it answered at
+once. The reason gateway is not simply an env `node` test is a harness gap:
+`lib/nodeconfig.py` renders a fixed set of module configs and nothing lets a
+test add one.
 
 ## Three requirements nothing writes down
 

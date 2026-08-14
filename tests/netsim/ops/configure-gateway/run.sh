@@ -12,10 +12,19 @@
 #   `gateways` — the module then schedules MaintainGatewayConnectionsTask and
 #   registers itself (module.go addPersistentGateway). Neither is reachable
 #   over apphost, so both need a file and a restart.
-# why an explicit endpoint: getGatewayEndpoint falls back to
-#   IP.PublicIPCandidates(), and a 10.77 lab address is not public — the
-#   gateway would answer "no public IP available". networks.tcp.endpoint is
-#   the documented override and is what deps.go parses into configEndpoints.
+# why port 1795 and not 1791: the gateway opens its OWN listener on the port
+#   it is given, so naming astrald's tcp port collides — the tcp module then
+#   loses the bind ("address already in use"), inbound links land on the
+#   gateway's socket-claim handler instead of the link handshake, and every
+#   dial dies as `unexpected EOF`. Measured on loopback.
+# why no `endpoint:` override: it does not work. deps.go parses it with
+#   Exonet.Parse during LoadDependencies, and the tcp parser is registered by
+#   mod/tcp's own LoadDependencies — gateway sorts first, so the parse fails
+#   `unsupported network`, the error is logged and swallowed, and the module
+#   falls back to IP.PublicIPCandidates(). Which is why the 198.51.100 alias
+#   above is load-bearing rather than convenience: a 10.77 address is RFC1918
+#   and IsPublic() rejects it, so without the alias the gateway answers
+#   "no public IP available for gateway network tcp" to every registration.
 # why ASTRAL_ID_<vm>: the harness learns every identity at tunnel time and is
 #   the authority on it. A vmop that hunts for one by alias works under the
 #   script driver and dies under the agent one — the lesson leave-lan already
@@ -60,16 +69,26 @@ netsim ssh "$GW" -- "set -eu
   ip addr add \"198.51.100.\$oct/24\" dev \$lan 2>/dev/null || true"
 echo "configure-gateway: $GW also aliased onto 198.51.100/24 for NAT'd peers"
 
-# 1) the gateway itself: enabled, with an explicit tcp endpoint on the lab LAN.
+# 1) the gateway itself. Two files, and both halves are required.
+#
+# tcp.yaml adds a PUBLIC endpoint to the tcp module's own list. That is what
+# feeds IP.PublicIPCandidates(), which is the only thing getGatewayEndpoint
+# can actually use (the gateway's own `endpoint:` option is inert — see the
+# header). 198.51.100/24 is TEST-NET-2: global unicast and not private, so
+# IsPublic() accepts it where a 10.77 address is rejected as RFC1918.
+# Verified on loopback: with this line node_register answers a socket and the
+# node appears in gateway.node_list; without it, every attempt is refused
+# "no public IP available for gateway network tcp".
 netsim ssh "$GW" -- "set -eu
 mkdir -p /var/lib/astrald/config
+oct=\$(ip -o -4 addr show | awk '\$4 ~ /^10\.77\./ {n=\$4; sub(/\/.*/,\"\",n); split(n,a,\".\"); print a[4]; exit}')
+printf 'listen_port: 1791\nconfigEndpoints:\n  - \"198.51.100.%s:1791\"\n' \"\$oct\" > /var/lib/astrald/config/tcp.yaml
 cat > /var/lib/astrald/config/gateway.yaml <<YAML
 gateway:
   enabled: true
   networks:
     tcp:
-      port: 1791
-      endpoint: \"$GW_ADDR:1791\"
+      port: 1795
 YAML
 systemctl restart astrald"
 

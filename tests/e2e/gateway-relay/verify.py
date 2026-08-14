@@ -60,17 +60,26 @@ async def main():
             f"node1 holds a tcp link to a NAT'd node ({to_node2}) — a direct "
             "path survived and the relay was never the only way")
 
-    # The living check: node2 answers for itself over that link.
+    # The living check: a real query crosses the relay and node2 still sees
+    # node1 as the caller.
+    #
+    # why whoami answers node1: the op reports who is *asking*, as the node
+    # being asked sees them. Routed to node2 over the relay it must come back
+    # as node1's identity — which is the interesting assertion, because it is
+    # exactly what a relay hop is supposed to preserve and exactly what
+    # mux.go's plain-frame branch loses. An answer of node2's own identity
+    # would mean the query never left node1.
     if "gw" in to_node2:
         try:
             async with await astral.connect(n1["endpoint"],
                                             token=n1["token"]) as c1:
-                answered = str(await c1.apphost.whoami(
+                seen_as = str(await c1.apphost.whoami(
                     target=n2["identity"], timeout=60))
-            if answered != n2["identity"]:
+            if seen_as != n1["identity"]:
                 faults.append(
-                    f"a query routed to node2 was answered by "
-                    f"{answered[:16]}…, not node2 ({n2['identity'][:16]}…)")
+                    f"node2 saw the caller as {seen_as[:16]}…, not node1 "
+                    f"({n1['identity'][:16]}…) — the relay did not carry the "
+                    "caller identity across the hop")
         except AstralError as e:
             faults.append(
                 f"node2 did not answer a query over the gw link: "
@@ -80,9 +89,9 @@ async def main():
 
     to_gw = await networks_to(n1["endpoint"], n1["token"], refl["identity"])
     print(f"oracle: node2 is registered with the gateway and unreachable "
-          f"directly; node1 reaches it over {to_node2} and answers as itself. "
-          f"node1's link to the gateway is {to_gw}, which is the hop that "
-          f"carried it")
+          f"directly; node1 reaches it over {to_node2}, and node2 sees the "
+          f"caller as node1 across the hop. node1's link to the gateway is "
+          f"{to_gw}, which is the hop that carried it")
 
 
 asyncio.run(main())
