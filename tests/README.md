@@ -19,7 +19,7 @@ each other.
 **A suite is *what* runs.** A file under `suites/`, listing tests in the order
 they should run. Nothing more.
 
-    ./tests/run main.suite      # the seven-test node chain, ~7 seconds
+    ./tests/run main.suite      # the whole env-node chain, seconds
     ./tests/run adopt-node      # no suite: one test, and whatever it needs first
 
 | suite | what it is | env | runs in |
@@ -133,9 +133,10 @@ Every story of the catalog, in the cheapest env that can falsify it:
 | 0008 | `read-remote-peer` | node | `two-nodes-data-peer` → `two-nodes-data-read` |
 | 0009 | `expel-node` | node | `two-nodes` → `two-nodes-expel` |
 | — | `smoke` | node | `null` → — |
+| — | `app-query` | node | `two-nodes` → — |
 | — | `app-contract` | node | `two-nodes` → — |
 
-`main.suite` is the env-node chain, seven tests in about twelve seconds.
+`main.suite` is the env-node chain, and it runs in seconds.
 `import-user-software-key` stays out of it: `start = "null"` means a
 pristine node, and env `node` runs one live session, so the chain cannot go
 back to an unclaimed node1 mid-suite.
