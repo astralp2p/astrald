@@ -17,7 +17,7 @@ any of them.
 
 The task document expected this test to need a new
 `tests/netsim/labs/three-node/` lab, and called that "likely the larger half of
-the work". It is not needed. The `two-node` lab already builds **three** VMs —
+the work". It is not needed. The lab already builds **three** VMs —
 node1, node2 and the `reflector` that `nat-punch` bounces a public address off
 — and the roster is only the manifest's `nodes` list. Naming `reflector` there
 gives it a pushed astrald, a session and a tunnel like any other node.

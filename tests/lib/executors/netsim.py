@@ -47,7 +47,8 @@ NAT_NETNS_HOST = "192.168.99.2"
 SSH_READY_TIMEOUT = 120.0
 # The operator profile the harness falls back to when config.toml names none.
 # The lab bakes a Qwen Code operator on node1 with the astral-agent skill
-# (netsim/labs/two-node/lab.story), which is the only machine in the world that can
+# (netsim/labs/two-node-plus-external/lab.story), which is the only machine in the
+# world that can
 # drive a flow from a prompt.
 #
 # why a dict rather than constants: which agent drives a run is a property of
@@ -102,7 +103,7 @@ class NetsimExecutor(Executor):
         self.dir.mkdir(parents=True, exist_ok=True)
         self.binary = Path(binary)
         self.astrald_ref = astrald_ref
-        self.recipe = TESTS / "netsim" / "labs" / "two-node" / "lab.story"
+        self.recipe = TESTS / "netsim" / "labs" / "two-node-plus-external" / "lab.story"
         self.sim = None
         self.state = None
         self.facts = {}

@@ -65,8 +65,9 @@ spawns a fresh world and is what you want unless you know otherwise.
   field, not a directory.
 - A **suite** is a file under `suites/`: these tests, in this order. A suite
   composes; it never restates what a test needs.
-- A **lab** is a world recipe: `netsim/labs/two-node/` builds the VMs, the
-  daemons and the operator that netsim tests start from.
+- A **lab** is a world recipe: `netsim/labs/two-node-plus-external/` builds
+  the VMs, the daemons and the operator that netsim tests start from. Its name
+  is its roster: the User's two nodes, plus a third that belongs to no swarm.
 - An **op** is a named machine operation: `netsim/ops/` holds every one, both
   the ops a lab recipe builds with and the ops a test runs as steps. netsim
   keeps one flat task namespace and cannot tell those apart, so neither does

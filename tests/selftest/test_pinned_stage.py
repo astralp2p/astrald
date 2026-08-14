@@ -10,7 +10,8 @@ from pathlib import Path
 
 from lib.executors.netsim import ExecutorError, NetsimExecutor, stage_key
 
-RECIPE = Path(__file__).resolve().parents[1] / "netsim/labs/two-node/lab.story"
+RECIPE = (Path(__file__).resolve().parents[1]
+          / "netsim/labs/two-node-plus-external/lab.story")
 REF = "c0ffee00"
 
 
