@@ -1,8 +1,8 @@
 package user
 
 import (
+	"github.com/astralp2p/astral-go/api/auth"
 	"github.com/astralp2p/astral-go/api/nodes"
-	"github.com/astralp2p/astral-go/api/objects"
 	"github.com/astralp2p/astral-go/api/user"
 	"github.com/astralp2p/astral-go/astral"
 )
@@ -49,8 +49,13 @@ func (mod *Module) AuthorizeRelayFor(ctx *astral.Context, a *nodes.RelayForActio
 	return false
 }
 
-// AuthorizeReadObject grants read access to the user identity itself and to any node in the local swarm.
-func (mod *Module) AuthorizeReadObject(ctx *astral.Context, a *objects.ReadObjectAction) bool {
+// AuthorizeSeeObjects grants object reads to the user identity itself and to any node in the local swarm.
+//
+// why: the policy is carried over unchanged from the ReadObjectAction handler this replaces.
+// SeeObjects covers every read op in mod/objects, not just objects.read, but the eleven ops it
+// adds were unauthorized entirely — so no caller that could read before loses access here, and
+// none gains any. Replacing the policy is stage 2 of the parent task, not this change.
+func (mod *Module) AuthorizeSeeObjects(ctx *astral.Context, a *auth.SeeObjectsAction) bool {
 	if a.Actor().IsEqual(mod.Identity()) {
 		return true
 	}

@@ -21,7 +21,7 @@ Decides whether an identity may perform a typed action, using local action handl
 ## Invariants
 
 * Contracts never grant directly: `Authorize` swaps `action.Actor` to the issuer and re-runs local handlers.
-* The contract code path does not invoke `Contract.Allows` or `Constrainable.ApplyConstraints`; permit selection is purely the SQL join on action `ObjectType`.
+* The contract code path selects permits in two stages: the SQL join on action `ObjectType` narrows the candidates, then `Permit.Allows` runs per link and calls `Constrainable.ApplyConstraints` on the action (`mod/auth/src/authorize.go`, covered by `TestAuthorizeConstraintOnRootLink`). An action that does not implement `Constrainable` is permitted regardless of a permit's constraints.
 * Active-contract window is `starts_at <= now AND expires_at > now`, applied identically by `findActiveContracts` and `activeContractExists`.
 * `db.contractExists` requires both signatures non-empty; rows with a missing signature re-index.
 * `IndexContract` is serialized by `indexMu`.

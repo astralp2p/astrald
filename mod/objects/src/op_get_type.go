@@ -12,6 +12,10 @@ type opGetTypeArgs struct {
 }
 
 func (mod *Module) OpGetType(ctx *astral.Context, q *routing.IncomingQuery, args opGetTypeArgs) (err error) {
+	if !mod.authorizeSeeObjects(ctx, q, args.ID, "") {
+		return q.Reject()
+	}
+
 	ctx = ctx.WithIdentity(q.Caller())
 
 	ch := channel.New(q.AcceptRaw(), channel.WithOutputFormat(args.Out))

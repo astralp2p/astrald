@@ -6,9 +6,9 @@ Represents the human operator across their nodes by binding the local node to a 
 
 | Module | Why |
 |---|---|
-| `auth` | `SignIssuer`/`SignSubject`/`VerifyContract` and `IndexContract` for swarm contracts; `SignedContracts().WithIssuer(...).WithAction(&SwarmMembershipAction{})` looks up active node contracts; registers the `RelayForAction` and `ReadObjectAction` authorizers |
+| `auth` | `SignIssuer`/`SignSubject`/`VerifyContract` and `IndexContract` for swarm contracts; `SignedContracts().WithIssuer(...).WithAction(&SwarmMembershipAction{})` looks up active node contracts; registers the `RelayForAction` and `SeeObjectsAction` authorizers |
 | `nodes` | `IsLinked`/`NewEnsureLinkTask` drive `MaintainLinkTask`; `UpdateNodeEndpoints` after a received node contract; `LinkClosedEvent`/`LinkCreatedEvent` drive link maintenance and sibling sync |
-| `objects` | `Store`/`Push` for signed contracts and sibling notifications; implements `Receiver`/`Holder`/`Finder` and registers the `ReadObjectAction` authorizer; `Search` preprocessor adds sibling sources |
+| `objects` | `Store`/`Push` for signed contracts and sibling notifications; implements `Receiver`/`Holder`/`Finder` and registers the `SeeObjectsAction` authorizer; `Search` preprocessor adds sibling sources |
 | `scheduler` | `Ready()` gates `Run`; `Schedule` runs `MaintainLinkTask` per sibling and `SyncNodesAction` on first inbound sibling link |
 | `tree` | binds `/mod/user/config` (holds `ActiveContract`) and persists per-sibling sync height at `/mod/user/assets/<node>/next_height` |
 | `dir` | `ResolveIdentity`, `DisplayName`, `GetAlias`/`SetAlias`; registers `localswarm` and `localuser` filters, and registers itself as a `dir.Resolver` for the `localuser` name |

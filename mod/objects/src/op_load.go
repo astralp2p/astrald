@@ -16,6 +16,10 @@ type opLoadArgs struct {
 
 // OpLoad loads an object into memory and writes it to the output. OpLoad verifies the object hash.
 func (mod *Module) OpLoad(ctx *astral.Context, q *routing.IncomingQuery, args opLoadArgs) (err error) {
+	if !mod.authorizeSeeObjects(ctx, q, args.ID, args.Repo) {
+		return q.Reject()
+	}
+
 	if args.Zone == nil {
 		ctx = ctx.WithZone(astral.ZoneAll)
 	} else {

@@ -6,13 +6,12 @@ import (
 	"time"
 
 	"github.com/astralp2p/astral-go/api/auth"
-	"github.com/astralp2p/astral-go/api/objects"
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astrald/mod/objects/fs"
 )
 
 // HTTPObjectHandler serves stored objects over HTTP, guarding each request with
-// an objects.ReadObjectAction authorization check before delegating to the embedded file server.
+// an auth.SeeObjectsAction authorization check before delegating to the embedded file server.
 type HTTPObjectHandler struct {
 	*Module
 	Identity   *astral.Identity
@@ -44,7 +43,7 @@ func (srv *HTTPObjectHandler) ServeHTTP(writer http.ResponseWriter, request *htt
 		WithTimeout(5 * time.Second)
 	defer cancel()
 
-	if !srv.Deps.Auth.Authorize(ctx, &objects.ReadObjectAction{Action: auth.NewAction(srv.Identity), ObjectID: objectID}) {
+	if !srv.Deps.Auth.Authorize(ctx, &auth.SeeObjectsAction{Action: auth.NewAction(srv.Identity), ObjectID: objectID}) {
 		writer.WriteHeader(http.StatusForbidden)
 		return
 	}
