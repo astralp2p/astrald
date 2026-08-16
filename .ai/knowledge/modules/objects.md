@@ -10,7 +10,7 @@ search preprocessors, finders, holders, and receivers.
 
 | Module | Why |
 |---|---|
-| `auth` | `OpRead` authorizes reads before serving object bytes; every write op authorizes `auth.StoreObjectsAction` before opening a repository or accepting the query |
+| `auth` | every read op authorizes `auth.SeeObjectsAction` and every write op `auth.StoreObjectsAction`, before opening a repository or accepting the query |
 | `dir` | resolves `astral://` ARLs for `fetch` |
 | `nodes` (opt) | backs outbound network object calls |
 | `core/assets` | loads `objects.yaml`, supplies the gorm DB behind `objects__objects`, and creates the in-memory `mem0` and `system` repositories |
@@ -50,11 +50,15 @@ search preprocessors, finders, holders, and receivers.
   `Discard` as a leak guard.
 * `objects.delete`, `objects.contains`, and `objects.scan` require an explicit
   repository (no default).
+* Twelve read ops — `read` `load` `contains` `get_type` `probe` `describe` `scan`
+  `search` `find` `repositories` `blueprints` `get_blueprint` — authorize
+  `auth.SeeObjectsAction` as their first statement and answer a denial with
+  `q.Reject()`. The action declares the object id and repository name the call
+  touches; both are left unset by an op that names neither.
 * Six write ops — `create` `store` `push` `new_mem` `register_blueprint` `echo` —
-  authorize `auth.StoreObjectsAction` as their first statement and answer a
-  denial with `q.Reject()`. The action declares the repository name the call
-  touches; an op that names no repository, or whose subject arrives on the
-  channel after the decision, leaves the nouns empty.
+  authorize `auth.StoreObjectsAction` the same way. The action declares the
+  repository name the call touches; an op that names no repository, or whose
+  subject arrives on the channel after the decision, leaves the nouns empty.
 * `ReadDefault` is `main`; `WriteDefault` is `local`.
 * `objects.purge` is the cleanup path that honors `Holder`; `objects.delete` is a
   direct repository command and skips holders.

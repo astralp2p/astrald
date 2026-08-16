@@ -6,7 +6,7 @@ Bridges local apps into the node over IPC, an HTTP object/query gateway, and a l
 
 | Module | Why |
 |---|---|
-| `auth` | `Authorize(SudoAction{...})` gates caller override and handler registration; `Authorize(ReadObjectAction{...})` gates HTTP object reads; `SignContract`/`IndexContract` sign and index app contracts; `SignedContracts().Find` supplies relay contracts to the query preprocessor |
+| `auth` | `Authorize(SudoAction{...})` gates caller override and handler registration; `Authorize(SeeObjectsAction{...})` gates HTTP object reads; `SignContract`/`IndexContract` sign and index app contracts; `SignedContracts().Find` supplies relay contracts to the query preprocessor |
 | `crypto` | `AddToIndex` stores the secp256k1 key minted by `apphost.register` so the new guest identity can sign |
 | `dir` | `ResolveIdentity` for configured static tokens and HTTP `@alias/path` targets; formats the host alias in `HostInfoMsg` |
 | `objects` | `Store` persists signed app contracts and the guest key; `ReadDefault()` serves objects through HTTP `/.objects/<id>`; `AddHolder` discovers `Module` as an `objects.Holder` to block purge of held objects |

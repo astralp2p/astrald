@@ -15,6 +15,10 @@ type opScanArgs struct {
 
 // OpScan sends a list of object ids in a repository
 func (mod *Module) OpScan(ctx *astral.Context, q *routing.IncomingQuery, args opScanArgs) (err error) {
+	if !mod.authorizeSeeObjects(ctx, q, nil, args.Repo) {
+		return q.Reject()
+	}
+
 	// prepare the context
 	ctx = ctx.WithIdentity(q.Caller())
 	if args.Zone == nil {

@@ -3,7 +3,6 @@ package user
 import (
 	"github.com/astralp2p/astral-go/api/auth"
 	"github.com/astralp2p/astral-go/api/nodes"
-	"github.com/astralp2p/astral-go/api/objects"
 	"github.com/astralp2p/astral-go/api/user"
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astrald/core"
@@ -45,7 +44,7 @@ func (mod *Module) LoadDependencies(ctx *astral.Context) (err error) {
 	}
 
 	mod.Auth.Add(authmod.Func[*nodes.RelayForAction](mod.AuthorizeRelayFor))
-	mod.Auth.Add(authmod.Func[*objects.ReadObjectAction](mod.AuthorizeReadObject))
+	mod.Auth.Add(authmod.Func[*auth.SeeObjectsAction](mod.AuthorizeSeeObjects))
 	mod.Auth.Add(authmod.Func[*auth.StoreObjectsAction](mod.AuthorizeStoreObjects))
 	mod.Auth.Add(authmod.Func[*user.ExpelAction](mod.AuthorizeExpel))
 	mod.Auth.Add(authmod.Func[*user.AdoptAction](mod.AuthorizeAdopt))

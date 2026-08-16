@@ -12,6 +12,10 @@ type opRepositoriesArgs struct {
 }
 
 func (mod *Module) OpRepositories(ctx *astral.Context, q *routing.IncomingQuery, args opRepositoriesArgs) (err error) {
+	if !mod.authorizeSeeObjects(ctx, q, nil, "") {
+		return q.Reject()
+	}
+
 	ctx = ctx.ExcludeZone(astral.ZoneNetwork)
 
 	ch := q.Accept(channel.WithOutputFormat(args.Out))
