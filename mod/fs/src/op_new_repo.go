@@ -16,10 +16,22 @@ type opNewRepoArgs struct {
 	Out   string
 }
 
-// OpNewRepo registers a new writable repository at the given path and adds it to the local group.
+// OpNewRepo authorizes the caller under AdminObjects, then registers a new writable
+// repository at the given path and adds it to the local group.
 func (mod *Module) OpNewRepo(ctx *astral.Context, q *routing.IncomingQuery, args opNewRepoArgs) (err error) {
+	if !mod.authorizeAdminObjects(ctx, q, args.Name, args.Path) {
+		return q.Reject()
+	}
+
 	ch := q.Accept(channel.WithFormats(args.In, args.Out))
 	defer ch.Close()
+
+	// why: reported over the channel rather than as a rejection — the caller holds a
+	// grant, so it gets the reason its path was refused
+	path, err := validPath(args.Path)
+	if err != nil {
+		return ch.Send(astral.Err(err))
+	}
 
 	if args.Label == "" {
 		args.Label = args.Name
@@ -27,7 +39,7 @@ func (mod *Module) OpNewRepo(ctx *astral.Context, q *routing.IncomingQuery, args
 
 	var repo objectsmod.Repository
 
-	repo = NewRepository(mod, args.Name, args.Path)
+	repo = NewRepository(mod, args.Name, path)
 
 	err = mod.Objects.AddRepository(args.Name, repo)
 	if err != nil {

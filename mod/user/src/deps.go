@@ -46,6 +46,7 @@ func (mod *Module) LoadDependencies(ctx *astral.Context) (err error) {
 	mod.Auth.Add(authmod.Func[*nodes.RelayForAction](mod.AuthorizeRelayFor))
 	mod.Auth.Add(authmod.Func[*auth.SeeObjectsAction](mod.AuthorizeSeeObjects))
 	mod.Auth.Add(authmod.Func[*auth.StoreObjectsAction](mod.AuthorizeStoreObjects))
+	mod.Auth.Add(authmod.Func[*auth.AdminObjectsAction](mod.AuthorizeAdminObjects))
 	mod.Auth.Add(authmod.Func[*user.ExpelAction](mod.AuthorizeExpel))
 	mod.Auth.Add(authmod.Func[*user.AdoptAction](mod.AuthorizeAdopt))
 	mod.Auth.Add(authmod.Func[*user.InfoAction](mod.AuthorizeInfo))

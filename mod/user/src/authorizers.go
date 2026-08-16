@@ -91,3 +91,23 @@ func (mod *Module) AuthorizeStoreObjects(ctx *astral.Context, a *auth.StoreObjec
 
 	return false
 }
+
+// AuthorizeAdminObjects grants destructive object calls to the user identity and to
+// this node itself, and to nobody else.
+//
+// why: narrower than the SeeObjects and StoreObjects handlers, which grant the whole
+// local swarm. A sibling attaching a repository to a host directory is the defect this
+// action was added to close, and a swarm membership is granted on request today, so
+// granting the swarm here would leave that path open. This node's own identity is in
+// the grant because a local caller carrying no identity is promoted to it
+// (core/router.go), which is how the CLI and apphost reach these ops.
+//
+// Widening this to siblings is a decision the node's operator makes, not a default.
+// Replacing the handler with a root rule and contract-issued grants is stage 2.
+func (mod *Module) AuthorizeAdminObjects(ctx *astral.Context, a *auth.AdminObjectsAction) bool {
+	if a.Actor().IsEqual(mod.Identity()) {
+		return true
+	}
+
+	return a.Actor().IsEqual(mod.node.Identity())
+}
