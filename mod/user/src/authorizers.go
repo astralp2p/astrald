@@ -51,7 +51,7 @@ func (mod *Module) AuthorizeRelayFor(ctx *astral.Context, a *nodes.RelayForActio
 
 // AuthorizeSeeObjects grants object reads to the user identity itself and to any node in the local swarm.
 //
-// why: the policy is carried over unchanged from the ReadObjectAction handler this replaces.
+// why: the policy is carried over unchanged from the retired per-object read handler.
 // SeeObjects covers every read op in mod/objects, not just objects.read, but the eleven ops it
 // adds were unauthorized entirely — so no caller that could read before loses access here, and
 // none gains any. Replacing the policy is stage 2 of the parent task, not this change.
