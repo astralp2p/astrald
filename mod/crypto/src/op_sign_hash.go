@@ -18,7 +18,13 @@ type opSignHashArgs struct {
 	Out    string
 }
 
+// OpSignHash signs a hash under the caller's own key. Local callers only; a
+// peer signs on its own node.
 func (mod *Module) OpSignHash(ctx *astral.Context, q *routing.IncomingQuery, args opSignHashArgs) (err error) {
+	if q.Origin() == astral.OriginNetwork {
+		return q.Reject()
+	}
+
 	ch := channel.New(q.AcceptRaw(), channel.WithFormats(args.In, args.Out))
 	defer ch.Close()
 
@@ -39,6 +45,14 @@ func (mod *Module) OpSignHash(ctx *astral.Context, q *routing.IncomingQuery, arg
 	}
 
 	var signAndSend = func(hash []byte) error {
+		// why: the authorization sits here rather than beside the Key argument
+		// because the channel loop below rebinds signerKey mid-stream, so a
+		// check at parse time is bypassed by the second frame. Every signature
+		// passes through this function.
+		if err := mod.authorizeSigner(q.Caller(), signerKey); err != nil {
+			return ch.Send(astral.Err(err))
+		}
+
 		signer, err := mod.NewHashSigner(signerKey, args.Scheme)
 		if err != nil {
 			return ch.Send(astral.NewError(err.Error()))
