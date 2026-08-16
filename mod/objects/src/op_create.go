@@ -19,6 +19,10 @@ type opCreateArgs struct {
 // On successful commit returns an ObjectID, an ErrorMessage otherwise; either response ends the op. Closing the
 // connection before committing will discard the data.
 func (mod *Module) OpCreate(ctx *astral.Context, q *routing.IncomingQuery, args opCreateArgs) (err error) {
+	if !mod.authorizeStoreObjects(ctx, q, args.Repo, "") {
+		return q.Reject()
+	}
+
 	ch := channel.New(q.AcceptRaw(), channel.WithFormats(args.In, args.Out))
 	defer ch.Close()
 

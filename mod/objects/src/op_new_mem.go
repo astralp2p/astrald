@@ -16,6 +16,12 @@ type opNewMemArgs struct {
 }
 
 func (mod *Module) OpNewMem(ctx *astral.Context, q *routing.IncomingQuery, args opNewMemArgs) (err error) {
+	// note: the repository named here does not exist yet — the op creates it. The noun
+	// is the name the caller claims, which is what a constraint would bind to.
+	if !mod.authorizeStoreObjects(ctx, q, args.Name, "") {
+		return q.Reject()
+	}
+
 	ch := channel.New(q.AcceptRaw(), channel.WithFormats(args.In, args.Out))
 	defer ch.Close()
 

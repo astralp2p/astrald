@@ -16,11 +16,19 @@ type opRegisterBlueprintArgs struct {
 // each, sends the resulting ObjectID or an error per input. An explicit EOS
 // input is answered with a final EOS; a stream ended by EOF is not.
 //
-// todo(security): gate by caller identity before mutating DefaultBlueprints. Any peer can
-// currently (a) squat a victim type name to permanently block legitimate registration,
-// and (b) define the wire schema for that name. Needs an authorization hook (allowlist of
-// identities, per-identity quotas, or a capability check) before reaching mod.Register.
+// note: registration mutates DefaultBlueprints for the whole node — the caller squats a
+// type name permanently and defines the wire schema everyone parses it with. StoreObjects
+// is the gate. The type name is not a noun here: the blueprints arrive on the channel,
+// after the authorization decision.
+//
+// todo: a permanent type-name squat is not recoverable the way a stored object is, so a
+// grantor handing out StoreObjects would not expect it. Splitting this op into its own
+// action costs one action type and one call site.
 func (mod *Module) OpRegisterBlueprint(ctx *astral.Context, q *routing.IncomingQuery, args opRegisterBlueprintArgs) error {
+	if !mod.authorizeStoreObjects(ctx, q, "", "") {
+		return q.Reject()
+	}
+
 	ch := channel.New(q.AcceptRaw(), channel.WithFormats(args.In, args.Out))
 	defer ch.Close()
 

@@ -10,6 +10,7 @@ import (
 	"github.com/astralp2p/astral-go/astral/log"
 	"github.com/astralp2p/astral-go/lib/routing"
 	"github.com/astralp2p/astral-go/sig"
+	"github.com/astralp2p/astrald/mod/auth"
 	"github.com/astralp2p/astrald/mod/indexing"
 	"github.com/astralp2p/astrald/mod/objects"
 	"github.com/astralp2p/astrald/resources"
@@ -18,6 +19,7 @@ import (
 var _ indexing.Module = &Module{}
 
 type Deps struct {
+	Auth    auth.Module
 	Objects objects.Module
 	Tree    treemod.Module
 }

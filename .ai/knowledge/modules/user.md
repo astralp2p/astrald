@@ -6,7 +6,7 @@ Represents the human operator across their nodes by binding the local node to a 
 
 | Module | Why |
 |---|---|
-| `auth` | `SignIssuer`/`SignSubject`/`VerifyContract` and `IndexContract` for swarm contracts; `SignedContracts().WithIssuer(...).WithAction(&SwarmMembershipAction{})` looks up active node contracts; registers the `RelayForAction` and `ReadObjectAction` authorizers |
+| `auth` | `SignIssuer`/`SignSubject`/`VerifyContract` and `IndexContract` for swarm contracts; `SignedContracts().WithIssuer(...).WithAction(&SwarmMembershipAction{})` looks up active node contracts; registers the `RelayForAction`, `ReadObjectAction` and `StoreObjectsAction` authorizers |
 | `nodes` | `IsLinked`/`NewEnsureLinkTask` drive `MaintainLinkTask`; `UpdateNodeEndpoints` after a received node contract; `LinkClosedEvent`/`LinkCreatedEvent` drive link maintenance and sibling sync |
 | `objects` | `Store`/`Push` for signed contracts and sibling notifications; implements `Receiver`/`Holder`/`Finder` and registers the `ReadObjectAction` authorizer; `Search` preprocessor adds sibling sources |
 | `scheduler` | `Ready()` gates `Run`; `Schedule` runs `MaintainLinkTask` per sibling and `SyncNodesAction` on first inbound sibling link |

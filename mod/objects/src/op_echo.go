@@ -24,6 +24,10 @@ type opEchoArgs struct {
 // stopped on the Stop type. Strict mode fails on objects whose blueprint isn't
 // registered; lenient mode passes them through unparsed.
 func (mod *Module) OpEcho(ctx *astral.Context, q *routing.IncomingQuery, args opEchoArgs) (err error) {
+	if !mod.authorizeStoreObjects(ctx, q, "", "") {
+		return q.Reject()
+	}
+
 	// why: Strict drops the AllowUnparsed fallback so a missing blueprint surfaces as a
 	// decode error instead of silently re-emitting the original bytes. The default keeps
 	// pass-through behavior used by relay/debug callers.

@@ -17,6 +17,10 @@ type opEnableRepoArgs struct {
 // OpEnableRepo toggles repo indexing on or off; set Disable=true in args to
 // deregister a previously enabled repo.
 func (mod *Module) OpEnableRepo(ctx *astral.Context, q *routing.IncomingQuery, args opEnableRepoArgs) (err error) {
+	if !mod.authorizeStoreObjects(ctx, q, args.Repo) {
+		return q.Reject()
+	}
+
 	ch := q.Accept(channel.WithFormats(args.In, args.Out))
 	defer ch.Close()
 
