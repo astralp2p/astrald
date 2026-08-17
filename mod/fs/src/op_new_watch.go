@@ -1,6 +1,7 @@
 package fs
 
 import (
+	"github.com/astralp2p/astral-go/api/auth"
 	"github.com/astralp2p/astral-go/api/objects"
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astral-go/astral/channel"
@@ -19,7 +20,11 @@ type opNewWatchArgs struct {
 // repository at the given path, starts an async background scan, and adds the
 // repository to both the objects store and the local group.
 func (mod *Module) OpNewWatch(ctx *astral.Context, q *routing.IncomingQuery, args opNewWatchArgs) (err error) {
-	if !mod.authorizeAdminObjects(ctx, q, args.Name, args.Path) {
+	if !mod.Auth.Authorize(ctx, &auth.AdminObjectsAction{
+		Action: auth.NewAction(q.Caller()),
+		Repo:   astral.String8(args.Name),
+		Path:   astral.String8(args.Path),
+	}) {
 		return q.Reject()
 	}
 
