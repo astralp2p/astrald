@@ -16,14 +16,10 @@ func (mod *Module) LoadDependencies(*astral.Context) (err error) {
 	core.Inject(mod.node, &mod.OptionalDeps)
 
 	// why: one line per grantable action, because Func dispatches on the concrete
-	// action type. authorizeGrant itself is generic — see grants.go — so each
-	// entry is an adapter, not a policy. A wildcard authorizer would replace this
-	// list rather than each entry.
-	mod.Auth.Add(authmod.Func[*auth.ServeObjectsAction](
-		func(ctx *astral.Context, a *auth.ServeObjectsAction) bool {
-			return mod.authorizeGrant(ctx, a)
-		},
-	))
+	// action type. Each names a shim in authorizers.go over one generic lookup, so
+	// the list grows by a line and never by a decision. A wildcard authorizer
+	// would replace the list rather than each entry.
+	mod.Auth.Add(authmod.Func[*auth.ServeObjectsAction](mod.AuthorizeServeObjects))
 
 	return
 }
