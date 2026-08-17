@@ -14,12 +14,19 @@ import (
 
 const RegisterDuration = 10 * 365 * 24 * time.Hour
 
+// A permit is the same clause on both rails; what the app names is the record
+// it wants the permit written into. Both lists are comma-separated, and an
+// action name carries no comma, so the joining is unambiguous. Asking is not
+// receiving: the node's policy decides which permits are written, and where.
 type opRegisterArgs struct {
-	// Permits names the actions the app asks to hold, comma-separated. An
-	// action name carries no comma, so the joining is unambiguous. Asking is
-	// not receiving: the node's policy decides, and the default grants none of
-	// them.
-	Permits string
+	// GrantPermits asks the node to record these as node-local grants:
+	// revocable by deleting a row, and worthless off this node.
+	GrantPermits string
+
+	// ContractPermits asks the node to record these in a signed node→app
+	// contract: portable evidence another node verifies, durable until it
+	// expires.
+	ContractPermits string
 
 	In  string
 	Out string
@@ -33,12 +40,15 @@ func (mod *Module) OpRegister(ctx *astral.Context, query *routing.IncomingQuery,
 	extras := mod.EnRouteQueryExtras(query.Nonce())
 	origin, _ := extras[apphost.ExtraOriginWeb].(string)
 
-	// a trusted web source adds its permit template to the registration, and
-	// the app appends what it is asking for; the policy decides what, if any,
-	// of that the new identity actually holds
-	requested := append(mod.GetWebOriginPermits(origin), parsePermits(args.Permits)...)
+	// why: the trusted-source template joins the contract request rather than
+	// the grant one, because a PermitConfig carries Delegation and delegation
+	// means nothing to a grant, which never leaves the node to be delegated.
+	requestedGrantPermits := parsePermits(args.GrantPermits)
+	requestedContractPermits := append(mod.GetWebOriginPermits(origin), parsePermits(args.ContractPermits)...)
 
-	permits, ok := mod.GetAppRegisterPolicy()(origin, requested)
+	grantPermits, contractPermits, ok := mod.GetAppRegisterPolicy()(
+		origin, requestedGrantPermits, requestedContractPermits,
+	)
 	if !ok {
 		return query.RejectWithCode(1)
 	}
@@ -80,14 +90,27 @@ func (mod *Module) OpRegister(ctx *astral.Context, query *routing.IncomingQuery,
 		return ch.Send(astral.Err(err))
 	}
 
-	// render the trusted-source permits as a node→app contract, so the app's
-	// authority for the permitted actions chains back through the node
-	if len(permits) > 0 {
+	// both rails expire with the registration, so an identity's authority ages
+	// with the token that reaches it
+	expiresAt := time.Now().Add(RegisterDuration)
+
+	// record the grant permits on this node. A write failure sends the error
+	// rather than a token, because a token for an identity holding less than
+	// the policy allowed is a registration the app cannot detect went wrong.
+	for _, permit := range grantPermits {
+		if err = mod.Grant(guestID, permit, &expiresAt); err != nil {
+			return ch.Send(astral.Err(err))
+		}
+	}
+
+	// render the contract permits as a node→app contract, so the app's
+	// authority for those actions chains back through the node
+	if len(contractPermits) > 0 {
 		signedPermits := &auth.SignedContract{Contract: &auth.Contract{
 			Issuer:    mod.node.Identity(),
 			Subject:   guestID,
-			Permits:   permits,
-			ExpiresAt: astral.Time(time.Now().Add(RegisterDuration)),
+			Permits:   contractPermits,
+			ExpiresAt: astral.Time(expiresAt),
 		}}
 
 		if err = mod.Auth.SignContract(ctx, signedPermits); err != nil {
