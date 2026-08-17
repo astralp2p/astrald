@@ -31,7 +31,7 @@ func (Loader) Load(node astral.Node, assets assets.Assets, log *log.Logger) (cor
 	// set up the database
 	mod.db = &DB{assets.Database()}
 
-	err = mod.db.AutoMigrate(&dbAccessToken{}, &dbLocalApp{}, &dbObjectHold{})
+	err = mod.db.AutoMigrate(&dbAccessToken{}, &dbLocalApp{}, &dbObjectHold{}, &dbGrant{})
 	if err != nil {
 		return nil, err
 	}

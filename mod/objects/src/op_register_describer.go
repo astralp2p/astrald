@@ -1,6 +1,7 @@
 package objects
 
 import (
+	"github.com/astralp2p/astral-go/api/auth"
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astral-go/astral/channel"
 	"github.com/astralp2p/astral-go/lib/routing"
@@ -12,10 +13,20 @@ type opRegisterDescriberArgs struct {
 	Out string
 }
 
-// OpRegisterDescriber registers the caller as an external describer.
+// OpRegisterDescriber authorizes the caller under ServeObjects for the describer role, then
+// registers it as an external describer.
 // Rejects network-origin callers and self-registration by the node.
 func (mod *Module) OpRegisterDescriber(ctx *astral.Context, q *routing.IncomingQuery, args opRegisterDescriberArgs) error {
-	// Keep this local for now; extract shared external registration validation once the API settles.
+	if !mod.Auth.Authorize(ctx, &auth.ServeObjectsAction{
+		Action: auth.NewAction(q.Caller()),
+		Role:   auth.RoleDescriber,
+	}) {
+		return q.Reject()
+	}
+
+	// why: kept below the grant check, not as the guard. An origin is not an
+	// authorization — a query routed locally by a tool carries no network origin
+	// whatever its caller.
 	if q.Origin() == astral.OriginNetwork {
 		return q.Reject()
 	}
