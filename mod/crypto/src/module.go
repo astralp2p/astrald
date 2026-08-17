@@ -12,11 +12,13 @@ import (
 	"github.com/astralp2p/astral-go/lib/routing"
 	"github.com/astralp2p/astral-go/sig"
 	"github.com/astralp2p/astrald/core/assets"
+	authmod "github.com/astralp2p/astrald/mod/auth"
 	"github.com/astralp2p/astrald/mod/dir"
 	"github.com/astralp2p/astrald/mod/objects"
 )
 
 type Deps struct {
+	Auth    authmod.Module
 	Dir     dir.Module
 	Objects objects.Module
 }

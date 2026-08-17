@@ -35,24 +35,68 @@ func TestParsePermitsOfNothingAsksForNothing(t *testing.T) {
 	}
 }
 
-// The shipped default is permissive by name: it grants what it is handed,
+func sameActions(a, b []*auth.Permit) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i].Action != b[i].Action {
+			return false
+		}
+	}
+	return true
+}
+
+// The shipped default is permissive by name: it writes what it is handed,
 // entitlement and ask alike, and leaves deciding to a policy that decides.
-func TestTheDefaultPolicyGrantsWhatItIsHanded(t *testing.T) {
+func TestTheDefaultPolicyWritesWhatItIsHanded(t *testing.T) {
 	mod := &Module{config: defaultConfig, log: log.New(nil)}
 
-	asked := parsePermits("mod.user.info_action")
+	askedGrant := parsePermits("mod.auth.serve_objects_action")
+	askedContract := parsePermits("mod.nodes.relay_for_action")
 
-	granted, ok := mod.AppRegisterAcceptAll("", asked)
+	grantPermits, contractPermits, ok := mod.AppRegisterAcceptAll("", askedGrant, askedContract)
 	if !ok {
 		t.Fatal("the default policy refuses no registration")
 	}
-	if len(granted) != len(asked) {
-		t.Fatalf("granted %v, want %v", actions(granted), actions(asked))
+	if !sameActions(grantPermits, askedGrant) {
+		t.Fatalf("granted %v, want %v", actions(grantPermits), actions(askedGrant))
+	}
+	if !sameActions(contractPermits, askedContract) {
+		t.Fatalf("contracted %v, want %v", actions(contractPermits), actions(askedContract))
 	}
 }
 
-// Assembling the list is the op's job, not the policy's: the policy is handed
-// the origin's entitlement and the app's ask already joined.
+// The rails do not leak into one another: a permit asked for on one is never
+// written on the other, so an app cannot obtain a signature by asking for a
+// grant, nor a revocable row by asking for a contract.
+func TestTheDefaultPolicyKeepsTheRailsApart(t *testing.T) {
+	mod := &Module{config: defaultConfig, log: log.New(nil)}
+
+	grantPermits, contractPermits, _ := mod.AppRegisterAcceptAll(
+		"", parsePermits("mod.auth.serve_objects_action"), nil,
+	)
+	if len(contractPermits) != 0 {
+		t.Fatalf("a grant request reached the contract rail: %v", actions(contractPermits))
+	}
+	if len(grantPermits) != 1 {
+		t.Fatalf("granted %v, want one permit", actions(grantPermits))
+	}
+
+	grantPermits, contractPermits, _ = mod.AppRegisterAcceptAll(
+		"", nil, parsePermits("mod.nodes.relay_for_action"),
+	)
+	if len(grantPermits) != 0 {
+		t.Fatalf("a contract request reached the grant rail: %v", actions(grantPermits))
+	}
+	if len(contractPermits) != 1 {
+		t.Fatalf("contracted %v, want one permit", actions(contractPermits))
+	}
+}
+
+// Assembling the contract request is the op's job, not the policy's: the policy
+// is handed the origin's entitlement and the app's ask already joined. The
+// entitlement joins the contract rail because a PermitConfig carries Delegation.
 func TestTheOpJoinsEntitlementAndAsk(t *testing.T) {
 	mod := &Module{config: defaultConfig, log: log.New(nil)}
 

@@ -5,18 +5,18 @@ import (
 	"github.com/astralp2p/astrald/mod/scheduler"
 )
 
-var _ scheduler.Task = &LogAction{}
+var _ scheduler.Task = &LogTask{}
 
-type LogAction struct {
+type LogTask struct {
 	mod     *Module
 	message string
 }
 
-func (l LogAction) String() string {
-	return "shell.log_action"
+func (l LogTask) String() string {
+	return "shell.log_task"
 }
 
-func (l LogAction) Run(ctx *astral.Context) error {
+func (l LogTask) Run(ctx *astral.Context) error {
 	select {
 	case <-ctx.Done():
 		return ctx.Err()

@@ -2,8 +2,10 @@ package apphost
 
 import (
 	"errors"
-	"github.com/astralp2p/astral-go/api/apphost"
+	"time"
 
+	"github.com/astralp2p/astral-go/api/apphost"
+	"github.com/astralp2p/astral-go/api/auth"
 	"github.com/astralp2p/astral-go/astral"
 )
 
@@ -21,7 +23,20 @@ const (
 type Module interface {
 	CreateAccessToken(*astral.Identity, astral.Duration) (*apphost.AccessToken, error)
 	LocalApps() ([]*apphost.App, error)
+
+	// Grant records a permit for identity on this node, replacing whatever it
+	// held for the same action. A nil expiresAt grants until revoked. The permit
+	// is recorded, not signed: it authorizes here and travels nowhere.
+	Grant(identity *astral.Identity, permit *auth.Permit, expiresAt *time.Time) error
+
+	// Revoke withdraws identity's grant for action, named by its object type.
+	Revoke(identity *astral.Identity, action string) error
+
+	// Grants returns every permit granted to identity, expired included.
+	Grants(identity *astral.Identity) ([]*auth.Permit, error)
 }
 
 var ErrMissingAppIdentity = errors.New("missing app identity")
 var ErrMissingObjectID = errors.New("missing object id")
+var ErrInvalidIdentity = errors.New("invalid identity")
+var ErrInvalidPermit = errors.New("invalid permit")

@@ -16,7 +16,13 @@ type opSignTextArgs struct {
 	Out    string
 }
 
+// OpSignText signs a message under the caller's own key. Local callers only; a
+// peer signs on its own node.
 func (mod *Module) OpSignText(ctx *astral.Context, q *routing.IncomingQuery, args opSignTextArgs) (err error) {
+	if q.Origin() == astral.OriginNetwork {
+		return q.Reject()
+	}
+
 	ch := channel.New(q.AcceptRaw(), channel.WithFormats(args.In, args.Out))
 	defer ch.Close()
 
@@ -35,13 +41,24 @@ func (mod *Module) OpSignText(ctx *astral.Context, q *routing.IncomingQuery, arg
 		}
 	}
 
-	signer, err := mod.NewTextSigner(signerKey, args.Scheme)
-	if err != nil {
-		return ch.Send(astral.Err(err))
-	}
-
 	// signAndSend signs the text and sends the signature to the channel
 	var signAndSend = func(text string) error {
+		// why: the authorization sits here rather than beside the Key argument
+		// because the channel loop below rebinds signerKey mid-stream, so a
+		// check at parse time is bypassed by the second frame. Every signature
+		// passes through this function.
+		if err := mod.authorizeSigner(ctx, q.Caller(), signerKey); err != nil {
+			return ch.Send(astral.Err(err))
+		}
+
+		// why: the signer is built per signature rather than once before the
+		// loop, so the key the loop acknowledges is the key that signs. Built
+		// once, a mid-stream key was acked and then ignored.
+		signer, err := mod.NewTextSigner(signerKey, args.Scheme)
+		if err != nil {
+			return ch.Send(astral.Err(err))
+		}
+
 		sig, err := signer.SignText(ctx, text)
 		if err != nil {
 			return ch.Send(astral.Err(err))
