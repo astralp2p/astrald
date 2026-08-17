@@ -9,8 +9,8 @@ var (
 	ErrUnsupported        = errors.New("unsupported")
 
 	// ErrForeignKey is returned when a caller asks for a signature under a key
-	// that is not its own identity. A key the node holds is not a key the
-	// caller may spend.
+	// that is neither its own identity nor one it may sudo to. A key the node
+	// holds is not a key the caller may spend.
 	ErrForeignKey = errors.New("cannot sign with another identity's key")
 
 	// ErrNodeKeyNotSignable is returned when a caller asks for a signature

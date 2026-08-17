@@ -1,14 +1,16 @@
 package crypto
 
 import (
+	"github.com/astralp2p/astral-go/api/auth"
 	"github.com/astralp2p/astral-go/api/crypto"
 	"github.com/astralp2p/astral-go/api/secp256k1"
 	"github.com/astralp2p/astral-go/astral"
+	authmod "github.com/astralp2p/astrald/mod/auth"
 	cryptomod "github.com/astralp2p/astrald/mod/crypto"
 )
 
 // authorizeSigner reports whether caller may obtain a signature under signerKey.
-// The rule is one sentence: sign only as the authenticated caller.
+// The rule is one sentence: sign as yourself, or as an identity you may sudo to.
 //
 // why this guard exists: NewHashSigner and NewTextSigner resolve a key to a
 // private key by public-key lookup alone (Module.PrivateKey), so the caller's
@@ -20,31 +22,42 @@ import (
 // survives any later fix, so a forged membership contract, app contract or
 // grant is genuine rather than merely accepted.
 //
-// why the node's own key is refused outright rather than allowed to its own
-// identity: core.Router rewrites a query carrying no caller to the node's
-// identity, so an unauthenticated local caller reaches an op wearing the node's
-// identity and satisfies an equality check. apphost flags such a session with
-// apphost.ExtraAnonymous precisely so an op can tell the two apart, but
-// routing.Op builds the IncomingQuery from the query and its origin alone and
-// drops Extra, so the flag cannot reach an op. Until it can, caller identity is
-// not evidence that the node itself asked. Nothing internal is lost: in-process
-// callers take Module.NodeSigner and never cross the op surface.
-func (mod *Module) authorizeSigner(caller *astral.Identity, signerKey *crypto.PublicKey) error {
+// why SudoAction and not a signing-specific action: an Identity is a secp256k1
+// public key, so signing under another party's key is that party acting, not a
+// capability of its own. SudoAction already states that relation, mod/auth
+// already resolves it through the contract chain, and mod/shell already gates
+// its as= branch this way. Nothing new has to be defined for the grant path to
+// exist: the issuer signs its holder a sudo permit and the chain terminates in
+// AuthorizeSudo, which allows an identity to be itself.
+//
+// why the node's own key is refused on the self branch: core.Router rewrites a
+// query with no caller to the node's identity, so an unauthenticated local
+// caller arrives wearing it and satisfies the self test. apphost flags such a
+// session (apphost.ExtraAnonymous) but routing.Op builds IncomingQuery from the
+// query and its origin alone and drops Extra, so the flag cannot reach an op.
+// The refusal is confined to the self branch on purpose — a caller holding a
+// real sudo permit for the node still signs, because it proved something the
+// router cannot fabricate. Internal callers take Module.NodeSigner and never
+// pass through here.
+func (mod *Module) authorizeSigner(ctx *astral.Context, caller *astral.Identity, signerKey *crypto.PublicKey) error {
 	signerID := secp256k1.Identity(signerKey)
 	if signerID == nil {
 		return cryptomod.ErrForeignKey
 	}
 
-	// checked before the equality rule below, which a promoted anonymous caller
-	// would otherwise satisfy
-	if signerID.IsEqual(mod.node.Identity()) {
-		return cryptomod.ErrNodeKeyNotSignable
+	if signerID.IsEqual(caller) {
+		if signerID.IsEqual(mod.node.Identity()) {
+			return cryptomod.ErrNodeKeyNotSignable
+		}
+		return nil
 	}
 
-	// a zero caller is never equal to a parsed key, so it refuses here
-	if !signerID.IsEqual(caller) {
-		return cryptomod.ErrForeignKey
+	if mod.Auth.Authorize(ctx, &authmod.SudoAction{
+		Action: auth.NewAction(caller),
+		AsID:   signerID,
+	}) {
+		return nil
 	}
 
-	return nil
+	return cryptomod.ErrForeignKey
 }

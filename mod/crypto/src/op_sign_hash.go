@@ -49,7 +49,7 @@ func (mod *Module) OpSignHash(ctx *astral.Context, q *routing.IncomingQuery, arg
 		// because the channel loop below rebinds signerKey mid-stream, so a
 		// check at parse time is bypassed by the second frame. Every signature
 		// passes through this function.
-		if err := mod.authorizeSigner(q.Caller(), signerKey); err != nil {
+		if err := mod.authorizeSigner(ctx, q.Caller(), signerKey); err != nil {
 			return ch.Send(astral.Err(err))
 		}
 
