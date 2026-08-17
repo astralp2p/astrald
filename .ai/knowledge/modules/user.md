@@ -13,7 +13,6 @@ Represents the human operator across their nodes by binding the local node to a 
 | `tree` | binds `/mod/user/config` (holds `ActiveContract`) and persists per-sibling sync height at `/mod/user/assets/<node>/next_height` |
 | `dir` | `ResolveIdentity`, `DisplayName`, `GetAlias`/`SetAlias`; registers `localswarm` and `localuser` filters, and registers itself as a `dir.Resolver` for the `localuser` name |
 | `nearby` | `Broadcast` on active-contract change; `Mode` drives `ComposeStatus` |
-| `apphost` | `LocalApps` enumerates apps whose contracts are pushed to siblings during sync |
 | `crypto` | `crypto.Signature` carried through the membership-handshake wire protocol |
 | `shell` | injected in `Deps`, currently not called |
 | `core/assets` | `LoadYAML` reads the (empty) `user` config; `Database()` backs `users__assets` |

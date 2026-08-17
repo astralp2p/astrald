@@ -5,7 +5,6 @@ import (
 	"net"
 	"sync"
 
-	"github.com/astralp2p/astral-go/api/apphost"
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astral-go/astral/log"
 	"github.com/astralp2p/astral-go/lib/routing"
@@ -82,18 +81,6 @@ func (mod *Module) Run(ctx *astral.Context) error {
 
 func (mod *Module) Router() astral.Router {
 	return &mod.router
-}
-
-func (mod *Module) LocalApps() ([]*apphost.App, error) {
-	rows, err := mod.db.ListLocalApps()
-	if err != nil {
-		return nil, err
-	}
-	list := make([]*apphost.App, len(rows))
-	for i, r := range rows {
-		list[i] = &apphost.App{AppID: r.AppID, HostID: r.HostID, InstalledAt: astral.Time(r.InstalledAt)}
-	}
-	return list, nil
 }
 
 // EnRouteQueryExtras returns a copy of the Extra map of a guest query that is

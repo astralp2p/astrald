@@ -61,15 +61,6 @@ func (db *DB) DeleteAccessToken(token string) error {
 	return nil
 }
 
-func (db *DB) CreateLocalApp(appID, hostID *astral.Identity) error {
-	row := &dbLocalApp{AppID: appID, HostID: hostID, InstalledAt: time.Now()}
-	return db.Clauses(clause.OnConflict{DoNothing: true}).Create(row).Error
-}
-
-func (db *DB) ListLocalApps() (list []*dbLocalApp, err error) {
-	return list, db.Find(&list).Error
-}
-
 // HoldObject records that appID wants objectID retained.
 // A nil duration creates a permanent hold; a non-nil duration sets an expiry.
 // Duplicate holds are silently ignored (ON CONFLICT DO NOTHING).

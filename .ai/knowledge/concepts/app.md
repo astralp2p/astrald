@@ -16,23 +16,20 @@ An `App` is an external process that uses a Host `Node` through the `apphost` mo
 * An App registers an IPC handler or a WS service handler; the Host dispatches each inbound query to it.
 * A handler disappears when its connection disconnects or when `bind` releases its token.
 
-## App record
-
-`App` (`mod.apphost.app`) is the installed-app row `{AppID, HostID, InstalledAt}`. Stored in `apphost__local_apps` by `apphost.install_app` with `OnConflict{DoNothing}`.
-
 ## AppContract
 
 `AppContract` is an `auth.SignedContract` with `Issuer = AppID`, `Subject = HostID` (the node), a permit granting `RelayForAction`, and `ExpiresAt` from the requested duration.
 
 * Relay authorization: the query preprocessor attaches the contract to outbound queries whose `Caller` equals the issuer.
 * Relay hints: the preprocessor adds every non-local subject of a contract issued by `Target` as a relay hop.
-* Identity proof in the local swarm: `User.PushToLocalSwarm` republishes signed contracts after `sign_app_contract` and `install_app`.
+* Identity proof in the local swarm: `User.PushToLocalSwarm` republishes signed contracts after `register` and `sign_app_contract`.
 
-Three ops produce contracts:
+Two ops produce contracts:
 
 * `apphost.new_app_contract` returns an unsigned `Contract`.
 * `apphost.sign_app_contract` signs, indexes, stores, and pushes a caller-supplied `Contract`.
-* `apphost.install_app` builds, signs, indexes, stores, `CreateLocalApp`s, and pushes. Network-origin queries are rejected.
+
+`apphost.register` provisions an identity and issues both contracts itself: the app→node relay contract, and a node→app contract carrying whatever permits the register policy approved.
 
 ## Holds
 

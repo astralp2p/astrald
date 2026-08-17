@@ -22,7 +22,6 @@ const (
 // Module is the public API surface of the apphost module.
 type Module interface {
 	CreateAccessToken(*astral.Identity, astral.Duration) (*apphost.AccessToken, error)
-	LocalApps() ([]*apphost.App, error)
 
 	// Grant records a permit for identity on this node, replacing whatever it
 	// held for the same action. A nil expiresAt grants until revoked. The permit
