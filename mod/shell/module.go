@@ -7,9 +7,9 @@ import (
 const ModuleName = "shell"
 
 type Module interface {
-	NewLogAction(message string) LogAction
+	NewLogTask(message string) LogTask
 }
 
-type LogAction interface {
+type LogTask interface {
 	scheduler.Task
 }

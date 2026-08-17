@@ -28,8 +28,8 @@ func (mod *Module) String() string {
 	return shell.ModuleName
 }
 
-func (mod *Module) NewLogAction(message string) shell.LogAction {
-	return LogAction{
+func (mod *Module) NewLogTask(message string) shell.LogTask {
+	return LogTask{
 		mod:     mod,
 		message: message,
 	}

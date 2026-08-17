@@ -17,7 +17,7 @@ type Module interface {
 	// device, excluding remote-only members.
 	LocalSwarm() (list []*astral.Identity)
 	NewMaintainLinkTask(target *astral.Identity) MaintainLinkTask
-	NewSyncNodesTask(remoteIdentity *astral.Identity) SyncNodesAction
+	NewSyncNodesTask(remoteIdentity *astral.Identity) SyncNodesTask
 	// PushToLocalSwarm broadcasts obj to every local swarm member except the
 	// node itself using ctx; delivery is best-effort and failures are silently ignored.
 	PushToLocalSwarm(ctx *astral.Context, obj astral.Object)
