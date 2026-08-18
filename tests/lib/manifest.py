@@ -15,7 +15,7 @@ from pathlib import Path
 ENVS = {"node", "netsim"}
 DRIVERS = {"script", "agent"}
 KEYS = {"env", "start", "saves", "mutates", "nodes", "steps", "drivers",
-        "timeout"}
+        "timeout", "agent_timeout"}
 NULL = "null"
 
 # the walk value after a mutator that saves no state: nothing may follow it
@@ -34,6 +34,7 @@ class Test:
     steps: list
     drivers: list
     timeout: int
+    agent_timeout: int
 
 
 def load_all(e2e_dir: Path) -> dict:
@@ -69,7 +70,14 @@ def _parse(mf: Path) -> Test:
                 saves=raw.get("saves") or None,
                 mutates=bool(raw.get("mutates", False)),
                 nodes=nodes, steps=steps, drivers=drivers,
-                timeout=int(raw.get("timeout", 120)))
+                timeout=int(raw.get("timeout", 120)),
+                # why its own budget, and why this large: an operator reads a
+                # prompt, plans, and works the node through its own shell. A
+                # measured bootstrap session spent 80 s in the model and 332 s
+                # across 21 shell commands — the VM, not the endpoint, sets
+                # the pace, and it was still going when a 900 s budget cut it
+                # off. The scripted flow it replaces takes under a second.
+                agent_timeout=int(raw.get("agent_timeout", 2400)))
 
 
 def _producers(all: dict) -> dict:
@@ -112,7 +120,7 @@ def _reaches(candidate: str, state: str, producers: dict) -> bool:
 
 def resolve(all: dict, only) -> list:
     """Execution plan for a bare test selection: the selected tests, preceded
-    by the fixture prefix their start states need."""
+    by the prereq prefix their start states need."""
     producers = _producers(all)
 
     if only is None:
@@ -136,7 +144,7 @@ def resolve(all: dict, only) -> list:
                 frontier.append(dep)
 
     ordered = sorted(needed, key=lambda n: (depths[n], n))
-    return [(all[n], "test" if n in selected else "fixture") for n in ordered]
+    return [(all[n], "test" if n in selected else "prereq") for n in ordered]
 
 
 def blocked_by(all: dict, start: str, broken: set) -> str | None:

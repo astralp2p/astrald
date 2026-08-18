@@ -1,5 +1,9 @@
 """results.json / events.jsonl writer — the system's one stable output (v2).
 
+v2.1 renames the record kind `fixture` to `prereq`: the value names a
+full e2e test — own driver, own oracle — running to build the state another
+test starts from, and "fixture" said none of that.
+
 v2 vs M1: `env` replaces `lane` on every record, the header drops `lanes`
 and gains `astral_py_ref`, and `hermetic` is set by the run's --target
 rather than hard-coded.
@@ -9,9 +13,11 @@ import time
 from dataclasses import dataclass
 from pathlib import Path
 
+from lib import report
+
 STATUSES = {"pass", "fail", "skipped"}
 FAILURE_KINDS = {"driver", "verify", "environment"}
-KINDS = {"test", "fixture"}
+KINDS = {"test", "prereq"}
 ENVS = {"node", "netsim"}
 
 
@@ -41,6 +47,10 @@ class RunHeader:
     host: str
     sandbox: str
     hermetic: bool = True
+    # why: the report has to say what was run, not only how it went. These
+    # default so a caller that only cares about the records stays unchanged.
+    selection: str = ""
+    target: str = "fresh"
 
 
 class RunResults:
@@ -56,6 +66,8 @@ class RunResults:
             "host": header.host,
             "sandbox": header.sandbox,
             "hermetic": header.hermetic,
+            "selection": header.selection,
+            "target": header.target,
             "started": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
             "wall_time_s": 0.0,
         }
@@ -88,4 +100,6 @@ class RunResults:
         self.header["wall_time_s"] = round(time.monotonic() - self._t0, 3)
         doc = dict(self.header, entries=self.entries)
         (self.dir / "results.json").write_text(json.dumps(doc, indent=2) + "\n")
+        (self.dir / "report.md").write_text(report.render(doc, self.dir.name))
+        self.doc = doc
         return 0 if all(e["status"] == "pass" for e in self.entries) else 1

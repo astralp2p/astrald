@@ -23,6 +23,10 @@ type opDescribeArgs struct {
 // OpDescribe streams an object's descriptors, filtered by the Only/Except type
 // lists, and terminates the stream with an EOS marker.
 func (mod *Module) OpDescribe(ctx *astral.Context, q *routing.IncomingQuery, args opDescribeArgs) (err error) {
+	if !mod.authorizeSeeObjects(ctx, q, args.ID, "") {
+		return q.Reject()
+	}
+
 	ctx, cancel := ctx.WithIdentity(q.Caller()).IncludeZone(args.Zone).WithTimeout(time.Minute)
 	defer cancel()
 

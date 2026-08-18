@@ -15,6 +15,10 @@ type opGetBlueprintArgs struct {
 // resolved or included — the caller fetches them itself. Primitive types have no
 // blueprint and return an error.
 func (mod *Module) OpGetBlueprint(ctx *astral.Context, q *routing.IncomingQuery, args opGetBlueprintArgs) (err error) {
+	if !mod.authorizeSeeObjects(ctx, q, nil, "") {
+		return q.Reject()
+	}
+
 	ch := channel.New(q.AcceptRaw(), channel.WithOutputFormat(args.Out))
 	defer ch.Close()
 

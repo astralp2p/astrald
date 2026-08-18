@@ -1,0 +1,15 @@
+env     = "netsim"
+start   = "two-nodes"
+# why: enter-nat rewrites the world in place and nothing puts it back, and the
+# gateway config outlives the run on two VMs. Declaring it lets the walk reject
+# a bad order in milliseconds rather than after ten minutes of VM time.
+mutates = true
+nodes   = ["node1", "node2", "reflector"]
+steps   = ["vm:enter-nat node2",
+           # the session is an ssh -L forward into the root netns, and enter-nat
+           # just moved apphost out of it. This is the door back in.
+           "vm:expose-apphost node2",
+           "vm:configure-gateway node2 --gateway reflector --peer node1",
+           "driver"]
+drivers = ["script"]
+timeout = 1500

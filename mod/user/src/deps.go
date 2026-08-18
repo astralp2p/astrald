@@ -1,13 +1,12 @@
 package user
 
 import (
+	"github.com/astralp2p/astral-go/api/auth"
 	"github.com/astralp2p/astral-go/api/nodes"
-	"github.com/astralp2p/astral-go/api/objects"
 	"github.com/astralp2p/astral-go/api/user"
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astrald/core"
-	"github.com/astralp2p/astrald/mod/apphost"
-	"github.com/astralp2p/astrald/mod/auth"
+	authmod "github.com/astralp2p/astrald/mod/auth"
 	"github.com/astralp2p/astrald/mod/crypto"
 	"github.com/astralp2p/astrald/mod/dir"
 	"github.com/astralp2p/astrald/mod/nearby"
@@ -19,8 +18,7 @@ import (
 )
 
 type Deps struct {
-	Apphost   apphost.Module
-	Auth      auth.Module
+	Auth      authmod.Module
 	Crypto    crypto.Module
 	Dir       dir.Module
 	Objects   objectsmod.Module
@@ -43,11 +41,13 @@ func (mod *Module) LoadDependencies(ctx *astral.Context) (err error) {
 		return err
 	}
 
-	mod.Auth.Add(auth.Func[*nodes.RelayForAction](mod.AuthorizeRelayFor))
-	mod.Auth.Add(auth.Func[*objects.ReadObjectAction](mod.AuthorizeReadObject))
-	mod.Auth.Add(auth.Func[*user.ExpelAction](mod.AuthorizeExpel))
-	mod.Auth.Add(auth.Func[*user.AdoptAction](mod.AuthorizeAdopt))
-	mod.Auth.Add(auth.Func[*user.InfoAction](mod.AuthorizeInfo))
+	mod.Auth.Add(authmod.Func[*nodes.RelayForAction](mod.AuthorizeRelayFor))
+	mod.Auth.Add(authmod.Func[*auth.SeeObjectsAction](mod.AuthorizeSeeObjects))
+	mod.Auth.Add(authmod.Func[*auth.StoreObjectsAction](mod.AuthorizeStoreObjects))
+	mod.Auth.Add(authmod.Func[*auth.AdminObjectsAction](mod.AuthorizeAdminObjects))
+	mod.Auth.Add(authmod.Func[*user.ExpelAction](mod.AuthorizeExpel))
+	mod.Auth.Add(authmod.Func[*user.AdoptAction](mod.AuthorizeAdopt))
+	mod.Auth.Add(authmod.Func[*user.InfoAction](mod.AuthorizeInfo))
 
 	// why: localuser as a name, to match localuser as a filter
 	err = mod.Dir.AddResolver(mod)

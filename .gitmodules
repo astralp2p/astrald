@@ -1,6 +1,3 @@
 [submodule ".ai/system"]
 	path = .ai/system
 	url = https://github.com/astralp2p/astral-docs.git
-[submodule "netsim/tasks/_lib/astral-py"]
-	path = tests/net/tasks/_lib/astral-py
-	url = https://github.com/astralp2p/astral-py.git

@@ -1,0 +1,16 @@
+# agent.suite — the flows an AI operator can drive, in one world, in order.
+#
+# Run it with `--driver agent`: one simulation boots, the lab's operator on
+# node1 performs each flow from its prompt.md, and the same oracles that judge
+# the scripted runs judge these. The chain advances in place, so this is one
+# series against one world rather than six separate builds.
+#
+# smoke is absent on purpose: it is a connectivity probe, not a flow anyone
+# would ask an operator to perform, and it declares no agent driver.
+# expel-node is last because it mutates two-nodes and nothing puts it back.
+bootstrap-user-software-key
+adopt-node
+object-store
+object-store-peer
+read-remote-peer
+expel-node

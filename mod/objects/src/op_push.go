@@ -16,6 +16,10 @@ type opPushArgs struct {
 // OpPush receives pushed objects from the caller and replies with a Bool
 // per object indicating whether it was accepted.
 func (mod *Module) OpPush(ctx *astral.Context, q *routing.IncomingQuery, args opPushArgs) (err error) {
+	if !mod.authorizeStoreObjects(ctx, q, "", "") {
+		return q.Reject()
+	}
+
 	ch := channel.New(q.AcceptRaw(), channel.WithFormats(args.In, args.Out))
 	defer ch.Close()
 

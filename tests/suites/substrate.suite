@@ -1,3 +1,8 @@
 # substrate.suite — the netsim tests: VMs are the point, not the cost.
-nat-punch
+#
+# tor-link before nat-punch, and not the other way round: nat-punch mutates
+# two-nodes into two-nodes-nat by moving the roster into a NAT netns, and
+# nothing puts it back, so anything starting from two-nodes has to run first.
+# The walk enforces this; the order is written down so the reason survives.
 tor-link
+nat-punch

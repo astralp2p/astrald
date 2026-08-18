@@ -6,6 +6,7 @@ Tracks object membership in named object repositories as an append-only, version
 
 | Module | Why |
 |---|---|
+| `auth` | `indexing.enable_repo` and `indexing.subscribe` authorize `auth.StoreObjectsAction` before changing what the node indexes |
 | `objects` | `Repository.Scan(follow=true)` provides the snapshot-then-live object stream the sync loop consumes |
 | `tree` | enabled repos persist under `/mod/indexing/repos`; indexer registrations and per-repo cursors persist under `/mod/indexing/indexers/<name>` |
 | `core/assets` | reads config and backs the `indexing__repo_entries` table |
@@ -30,3 +31,4 @@ Tracks object membership in named object repositories as an append-only, version
 * Delivery is exactly-once.
 * One sync goroutine per repo: `EnableRepo` returns `ErrRepoAlreadySyncing` if already running.
 * `RegisterIndexer` returns the existing nonce by name; a concurrent create resolves to the winner's nonce.
+* `indexing.enable_repo` and `indexing.subscribe` authorize `auth.StoreObjectsAction` as their first statement and answer a denial with `q.Reject()`. The nonce selects which indexer's stream is consumed; it is not the credential.

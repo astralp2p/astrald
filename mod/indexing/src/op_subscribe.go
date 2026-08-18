@@ -21,6 +21,13 @@ type opSubscribeArgs struct {
 // errors with exponential back-off and validates ack repo+version against the
 // sent change before committing the cursor.
 func (mod *Module) OpSubscribe(ctx *astral.Context, q *routing.IncomingQuery, args opSubscribeArgs) error {
+	// note: the nonce alone used to be the credential, and tree.get returns it
+	// (mod/indexing/src/indexers.go). StoreObjects is the gate; the nonce stays the
+	// selector for which indexer's stream is consumed.
+	if !mod.authorizeStoreObjects(ctx, q, "") {
+		return q.Reject()
+	}
+
 	ch := q.Accept(channel.WithFormats(args.In, args.Out))
 	defer ch.Close()
 

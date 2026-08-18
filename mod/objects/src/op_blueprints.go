@@ -16,6 +16,10 @@ type opBlueprintsArgs struct {
 // astral.EOS marker so consumers can iterate without relying on channel
 // close to signal end-of-stream.
 func (mod *Module) OpBlueprints(ctx *astral.Context, q *routing.IncomingQuery, args opBlueprintsArgs) (err error) {
+	if !mod.authorizeSeeObjects(ctx, q, nil, "") {
+		return q.Reject()
+	}
+
 	ch := channel.New(q.AcceptRaw(), channel.WithOutputFormat(args.Out))
 	defer ch.Close()
 

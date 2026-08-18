@@ -1,17 +1,17 @@
 # mod/apphost
 
-Bridges local apps into the node over IPC, an HTTP object/query gateway, and a loopback WebSocket. Owns access tokens, installed-app records, app-owned object holds, IPC and WS query handlers, and the relay contracts that let app traffic route through the host.
+Bridges local apps into the node over IPC, an HTTP object/query gateway, and a loopback WebSocket. Owns access tokens, node-local grants, app-owned object holds, IPC and WS query handlers, and the relay contracts that let app traffic route through the host.
 
 ## Dependencies
 
 | Module | Why |
 |---|---|
-| `auth` | `Authorize(SudoAction{...})` gates caller override and handler registration; `Authorize(ReadObjectAction{...})` gates HTTP object reads; `SignContract`/`IndexContract` sign and index app contracts; `SignedContracts().Find` supplies relay contracts to the query preprocessor |
+| `auth` | `Authorize(SudoAction{...})` gates caller override and handler registration; `Authorize(SeeObjectsAction{...})` gates HTTP object reads; `SignContract`/`IndexContract` sign and index app contracts; `SignedContracts().Find` supplies relay contracts to the query preprocessor |
 | `crypto` | `AddToIndex` stores the secp256k1 key minted by `apphost.register` so the new guest identity can sign |
 | `dir` | `ResolveIdentity` for configured static tokens and HTTP `@alias/path` targets; formats the host alias in `HostInfoMsg` |
 | `objects` | `Store` persists signed app contracts and the guest key; `ReadDefault()` serves objects through HTTP `/.objects/<id>`; `AddHolder` discovers `Module` as an `objects.Holder` to block purge of held objects |
-| `user` (opt) | `PushToLocalSwarm` republishes signed app contracts after `sign_app_contract` and `install_app`; current paths call it without a nil guard |
-| `core/assets` | `Database()` backs `apphost__access_tokens`, `apphost__local_apps`, `apphost__object_holds`; `LoadYAML` loads apphost config |
+| `user` (opt) | `PushToLocalSwarm` republishes signed app contracts after `register` and `sign_app_contract`; current paths call it without a nil guard |
+| `core/assets` | `Database()` backs `apphost__access_tokens`, `apphost__grants`, `apphost__object_holds`; `LoadYAML` loads apphost config |
 
 ## Flows
 
@@ -23,13 +23,13 @@ Bridges local apps into the node over IPC, an HTTP object/query gateway, and a l
 
 ## Invariants
 
-* `apphost.install_app`, `apphost.register_handler`, `apphost.bind`, `apphost.hold_object`, `apphost.unhold_object`, and `apphost.list_held_objects` reject network-origin queries.
+* `apphost.register_handler`, `apphost.bind`, `apphost.hold_object`, `apphost.unhold_object`, and `apphost.list_held_objects` reject network-origin queries.
 * Hold ops also require a non-zero caller; an app can list and unhold only its own rows; many apps may hold the same object.
 * Anonymous IPC guests can route only when `allow_anonymous` is true and always lose `ZoneNetwork`.
 * A guest acts as another identity only when `auth.Authorize(SudoAction{Actor:guestID, AsID:target})` grants it; this gate covers `Caller` override in `RouteQueryMsg`, identity in `RegisterHandlerMsg`, and identity in `RegisterServiceMsg`.
 * An unauthenticated web guest (non-empty `origin-web`) may run only the ops on `AnonymousWebAllowlist`, selected by node claim state (`Unclaimed` before a user exists, `Claimed` after); IPC and authenticated guests are unrestricted. The general-purpose write path is deliberately not exposed: node setup activates its contract through `user.accept_contract`, not a raw `tree.set` of `/mod/user/config/active_contract`.
 * The WS endpoint `/.ws` is loopback-only; non-loopback requests receive HTTP 403. WS auth is in-protocol via `AuthTokenMsg`, not the HTTP `Authorization` header (the header only covers `/.objects/...` and the HTTP query bridge).
-* `CreateLocalApp` and `HoldObject` persist with `OnConflict{DoNothing}`: reinstall does not refresh the row, duplicate holds are idempotent, and a hold does not require the object to be present locally.
+* `HoldObject` persists with `OnConflict{DoNothing}`: duplicate holds are idempotent, and a hold does not require the object to be present locally. Grants use `OnConflict` too, but update rather than ignore — re-granting must be able to narrow.
 * `Module.HoldObject(objectID)` returns true on lookup error (fail-safe: purge skips the object).
 * `bind_http` empty disables the HTTP and WS bridges.
 * IPC handler endpoints are removed when `ipc.DialContext` fails during inbound routing; WS handlers are removed when a send on the registration channel fails.

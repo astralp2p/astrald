@@ -51,7 +51,7 @@ class ManifestCase(unittest.TestCase):
         self.tmp.cleanup()
 
     def add(self, name, toml):
-        """Add a test to the fixture tree. A manifest that fails to load is
+        """Add a test to the scratch tree. A manifest that fails to load is
         rolled back, so a rejection test leaves the tree loadable."""
         write_test(self.root, name, toml)
         try:
@@ -118,10 +118,10 @@ class TestResolve(ManifestCase):
                          ["bootstrap-user-software-key", "smoke", "adopt-node"])
         self.assertTrue(all(kind == "test" for _, kind in plan))
 
-    def test_only_builds_fixture_prefix(self):
+    def test_only_builds_prereq_prefix(self):
         plan = resolve(self.all, only=["adopt-node"])
         self.assertEqual([(t.name, k) for t, k in plan],
-                         [("bootstrap-user-software-key", "fixture"),
+                         [("bootstrap-user-software-key", "prereq"),
                           ("adopt-node", "test")])
 
     def test_errors(self):

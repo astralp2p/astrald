@@ -6,3 +6,26 @@ path = "~/work/astralp2p/astral-py/master"
 
 [build]
 package = "./cmd/astrald"
+
+[agent]
+# Which operator profile drives --driver agent.
+use = "qwen"
+
+# An operator profile is everything the harness needs to know about one agent:
+# where it lives, and how to hand it a prompt. `command` gets {prompt} replaced
+# with the path to the prompt file inside the guest.
+#
+# why a profile rather than constants: the harness's contract with an agent is
+# small — reach it, hand it a prompt, read JSON facts out of its home — and
+# everything else was incidental hardcoding. Naming it is what makes a second
+# agent a config entry instead of a patch.
+#
+# note: a profile says how to INVOKE an agent, never how to install one. The
+# named command has to already exist in the world (baked into the lab, or put
+# there by a vmop).
+[agent.qwen]
+vm       = "node1"
+user     = "tester"
+command  = 'qwen -y "$(cat {prompt})"'
+model    = "muse-glimmer-30b-p6"
+base_url = ""

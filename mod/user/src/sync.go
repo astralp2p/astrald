@@ -152,26 +152,6 @@ func (mod *Module) syncExpulsions(ctx *astral.Context, with *astral.Identity) {
 	}
 }
 
-func (mod *Module) syncApps(ctx *astral.Context, with *astral.Identity) {
-	apps, err := mod.Apphost.LocalApps()
-	if err != nil {
-		mod.log.Error("syncApps: error getting local apps: %v", err)
-		return
-	}
-
-	for _, app := range apps {
-		contracts, err := mod.Auth.SignedContracts().WithIssuer(app.AppID).Find(ctx)
-		if err != nil {
-			mod.log.Error("syncApps: error getting contracts: %v", err)
-			return
-		}
-
-		for _, contract := range contracts {
-			mod.Objects.Push(ctx, with, contract)
-		}
-	}
-}
-
 func (mod *Module) pushActiveContract(ctx *astral.Context, remoteIdentity *astral.Identity) {
 	contract := mod.ActiveContract()
 	if contract == nil {

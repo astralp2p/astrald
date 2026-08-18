@@ -11,12 +11,17 @@ func (mod *Module) GetAppRegisterPolicy() apphost.AppRegisterPolicy {
 
 var _ apphost.AppRegisterPolicy = (*Module)(nil).AppRegisterAcceptAll
 
-// AppRegisterAcceptAll admits every registration and grants every permit put
-// in front of it, whether the caller's origin entitled it or the app simply
-// asked. It is the permissive default its name claims to be: a node that
-// cares which apps hold what installs a policy that decides.
-func (mod *Module) AppRegisterAcceptAll(origin string, requested []*auth.Permit) ([]*auth.Permit, bool) {
-	mod.log.Info("accepting registration from origin %v with %v permits", origin, len(requested))
+// AppRegisterAcceptAll admits every registration and writes every permit put in
+// front of it onto the rail it was asked for, whether the caller's origin
+// entitled it or the app simply asked. It is the permissive default its name
+// claims to be: a node that cares which apps hold what installs a policy that
+// decides.
+func (mod *Module) AppRegisterAcceptAll(
+	origin string,
+	requestedGrantPermits, requestedContractPermits []*auth.Permit,
+) ([]*auth.Permit, []*auth.Permit, bool) {
+	mod.log.Info("accepting registration from origin %v with %v grant permits and %v contract permits",
+		origin, len(requestedGrantPermits), len(requestedContractPermits))
 
-	return requested, true
+	return requestedGrantPermits, requestedContractPermits, true
 }

@@ -2,5 +2,5 @@ env     = "node"
 start   = "one-node"
 saves   = "two-nodes"
 nodes   = ["node1", "node2"]
-drivers = ["script"]
+drivers = ["script", "agent"]
 timeout = 180

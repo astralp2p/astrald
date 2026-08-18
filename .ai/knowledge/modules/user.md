@@ -6,14 +6,13 @@ Represents the human operator across their nodes by binding the local node to a 
 
 | Module | Why |
 |---|---|
-| `auth` | `SignIssuer`/`SignSubject`/`VerifyContract` and `IndexContract` for swarm contracts; `SignedContracts().WithIssuer(...).WithAction(&SwarmMembershipAction{})` looks up active node contracts; registers the `RelayForAction` and `ReadObjectAction` authorizers |
+| `auth` | `SignIssuer`/`SignSubject`/`VerifyContract` and `IndexContract` for swarm contracts; `SignedContracts().WithIssuer(...).WithAction(&SwarmMembershipAction{})` looks up active node contracts; registers the `RelayForAction`, `SeeObjectsAction` and `StoreObjectsAction` authorizers |
 | `nodes` | `IsLinked`/`NewEnsureLinkTask` drive `MaintainLinkTask`; `UpdateNodeEndpoints` after a received node contract; `LinkClosedEvent`/`LinkCreatedEvent` drive link maintenance and sibling sync |
-| `objects` | `Store`/`Push` for signed contracts and sibling notifications; implements `Receiver`/`Holder`/`Finder` and registers the `ReadObjectAction` authorizer; `Search` preprocessor adds sibling sources |
-| `scheduler` | `Ready()` gates `Run`; `Schedule` runs `MaintainLinkTask` per sibling and `SyncNodesAction` on first inbound sibling link |
+| `objects` | `Store`/`Push` for signed contracts and sibling notifications; implements `Receiver`/`Holder`/`Finder` and registers the `SeeObjectsAction` authorizer; `Search` preprocessor adds sibling sources |
+| `scheduler` | `Ready()` gates `Run`; `Schedule` runs `MaintainLinkTask` per sibling and `SyncNodesTask` on first inbound sibling link |
 | `tree` | binds `/mod/user/config` (holds `ActiveContract`) and persists per-sibling sync height at `/mod/user/assets/<node>/next_height` |
 | `dir` | `ResolveIdentity`, `DisplayName`, `GetAlias`/`SetAlias`; registers `localswarm` and `localuser` filters, and registers itself as a `dir.Resolver` for the `localuser` name |
 | `nearby` | `Broadcast` on active-contract change; `Mode` drives `ComposeStatus` |
-| `apphost` | `LocalApps` enumerates apps whose contracts are pushed to siblings during sync |
 | `crypto` | `crypto.Signature` carried through the membership-handshake wire protocol |
 | `shell` | injected in `Deps`, currently not called |
 | `core/assets` | `LoadYAML` reads the (empty) `user` config; `Database()` backs `users__assets` |
@@ -22,7 +21,7 @@ Represents the human operator across their nodes by binding the local node to a 
 
 * Active-contract apply gate (`onActiveContractChanged`): nil sets `nearby.ModeVisible`; otherwise `validateActiveContract` (both signatures, subject equals local node, not expired, grants swarm membership) -> a value that fails validation is cleared from the store so it never takes effect -> on success `Auth.IndexContract`, `Nearby.Broadcast`, and `runSiblingLinker`. No in-memory copy is kept: `ActiveContract()` reads the tree-backed value directly.
 * Accept membership (`user.accept_membership`) handshake order: reject if `ActiveContract() != nil` -> receive `*auth.Contract` -> reject zero subject, non-local subject, or expiry within `minimalContractLength = 1h` -> `SwarmInvitePolicy` -> receive `IssuerSig` -> `Auth.VerifyIssuer` -> `Auth.SignSubject` -> send subject signature -> `Auth.IndexContract` -> `Objects.Store` -> `SetActiveContract`.
-* First inbound sibling link: `ReceiveObject` observes a `*nodes.LinkCreatedEvent` with `LinkCount == 1` from a `LocalSwarm` member -> `Scheduler.Schedule(NewSyncNodesTask(remote))` -> `SyncNodesAction.Run` calls `syncAlias`, `pushActiveContract`, `syncSiblings`, `syncApps`, then `syncAssets`.
+* First inbound sibling link: `ReceiveObject` observes a `*nodes.LinkCreatedEvent` with `LinkCount == 1` from a `LocalSwarm` member -> `Scheduler.Schedule(NewSyncNodesTask(remote))` -> `SyncNodesTask.Run` calls `syncAlias`, `pushActiveContract`, `syncSiblings`, `syncApps`, then `syncAssets`.
 
 ## Invariants
 

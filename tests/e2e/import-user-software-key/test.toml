@@ -1,5 +1,5 @@
 env     = "node"
 start   = "null"
 nodes   = ["node1"]
-drivers = ["script"]
+drivers = ["script", "agent"]
 timeout = 120

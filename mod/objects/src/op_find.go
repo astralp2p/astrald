@@ -17,6 +17,10 @@ type opFindArgs struct {
 }
 
 func (mod *Module) OpFind(ctx *astral.Context, q *routing.IncomingQuery, args opFindArgs) error {
+	if !mod.authorizeSeeObjects(ctx, q, args.ID, "") {
+		return q.Reject()
+	}
+
 	ctx, cancel := ctx.WithIdentity(q.Caller()).IncludeZone(args.Zone).WithTimeout(time.Minute)
 	defer cancel()
 

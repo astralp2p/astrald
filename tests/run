@@ -17,7 +17,7 @@ USAGE = """\
 examples:
   ./tests/run                        the default suite (suites/main.suite)
   ./tests/run main.suite             a named suite, in its listed order
-  ./tests/run adopt-node             one test + the fixture prefix it needs
+  ./tests/run adopt-node             one test + the prereq prefix it needs
   ./tests/run smoke adopt-node       several tests
 """
 

@@ -46,7 +46,7 @@ class TestResults(unittest.TestCase):
     def test_fail_and_skip_exit_nonzero(self):
         with tempfile.TemporaryDirectory() as tmp:
             r = self.make(tmp)
-            r.record(test="bootstrap-user-software-key", kind="fixture",
+            r.record(test="bootstrap-user-software-key", kind="prereq",
                      env="node", driver="script", status="fail",
                      failure_kind="verify", duration_s=3.0,
                      artifacts="bootstrap-user-software-key/")

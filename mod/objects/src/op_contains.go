@@ -16,6 +16,10 @@ type opContainsArgs struct {
 // OpContains reports whether a repository holds an object. With the ID arg it
 // answers once; otherwise it streams a Bool per ObjectID read from the channel.
 func (mod *Module) OpContains(ctx *astral.Context, q *routing.IncomingQuery, args opContainsArgs) (err error) {
+	if !mod.authorizeSeeObjects(ctx, q, args.ID, args.Repo) {
+		return q.Reject()
+	}
+
 	ctx = ctx.WithIdentity(q.Caller())
 
 	ch := q.Accept(channel.WithFormats(args.In, args.Out))

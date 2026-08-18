@@ -3,8 +3,6 @@ package objects
 import (
 	"io"
 
-	"github.com/astralp2p/astral-go/api/auth"
-	"github.com/astralp2p/astral-go/api/objects"
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astral-go/lib/routing"
 )
@@ -17,19 +15,17 @@ type opReadArgs struct {
 	Repo   string
 }
 
-// OpRead authorizes the caller, then streams raw object bytes over the accepted
-// connection. Records the access in the reads journal, which feeds purge ordering.
+// OpRead authorizes the caller under SeeObjects, then streams raw object bytes
+// over the accepted connection. Records the access in the reads journal, which
+// feeds purge ordering.
 func (mod *Module) OpRead(ctx *astral.Context, q *routing.IncomingQuery, args opReadArgs) (err error) {
 	ctx = ctx.IncludeZone(args.Zone)
-	repo := mod.ReadDefault()
 
-	allowed := mod.Auth.Authorize(ctx, &objects.ReadObjectAction{
-		Action:   auth.NewAction(q.Caller()),
-		ObjectID: args.ID,
-	})
-	if !allowed {
+	if !mod.authorizeSeeObjects(ctx, q, args.ID, args.Repo) {
 		return q.Reject()
 	}
+
+	repo := mod.ReadDefault()
 
 	if len(args.Repo) > 0 {
 		repo = mod.GetRepository(args.Repo)

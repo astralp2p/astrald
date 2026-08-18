@@ -13,6 +13,10 @@ type opStoreArgs struct {
 }
 
 func (mod *Module) OpStore(ctx *astral.Context, q *routing.IncomingQuery, args opStoreArgs) error {
+	if !mod.authorizeStoreObjects(ctx, q, args.Repo, "") {
+		return q.Reject()
+	}
+
 	ch := channel.New(
 		q.AcceptRaw(),
 		channel.WithFormats(args.In, args.Out),

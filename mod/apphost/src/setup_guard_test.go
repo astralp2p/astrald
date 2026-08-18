@@ -18,7 +18,7 @@ func (s *stubUser) Ready() <-chan struct{}                                      
 func (s *stubUser) Identity() *astral.Identity                                    { return s.id }
 func (s *stubUser) LocalSwarm() []*astral.Identity                                { return nil }
 func (s *stubUser) NewMaintainLinkTask(*astral.Identity) usermod.MaintainLinkTask { return nil }
-func (s *stubUser) NewSyncNodesTask(*astral.Identity) usermod.SyncNodesAction     { return nil }
+func (s *stubUser) NewSyncNodesTask(*astral.Identity) usermod.SyncNodesTask       { return nil }
 func (s *stubUser) PushToLocalSwarm(*astral.Context, astral.Object)               {}
 func (s *stubUser) Expel(*astral.Context, *astral.Identity) (*user.SignedExpulsion, error) {
 	return nil, nil

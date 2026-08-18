@@ -16,8 +16,10 @@ async def main():
     doc = load()
     n1, n2 = doc["nodes"]["node1"], doc["nodes"]["node2"]
     user_token = doc["facts"]["user_token"]
-    ep1 = f"tcp:127.0.0.1:{n1['tcp_port']}"
-    ep2 = f"tcp:127.0.0.1:{n2['tcp_port']}"
+    # why: session.json carries the address a PEER dials. Composing
+    # 127.0.0.1 from tcp_port works only where both nodes share a loopback,
+    # so it is the one thing that stopped this driver being env-blind.
+    ep1, ep2 = n1["lan_endpoint"], n2["lan_endpoint"]
 
     # each node learns the other's endpoint (link-back after adoption).
     # nodes.* is Tier-3 gated in astral-py: experimental=True per call.
