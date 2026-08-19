@@ -11,9 +11,14 @@ type opListSiblingsArgs struct {
 	Zone astral.Zone
 }
 
-// OpListSiblings streams the identities of all currently linked sibling nodes.
-// Derives the context from the caller's identity and the requested zone.
+// OpListSiblings authorizes the caller under SeeSwarm, then streams the
+// identities of all currently linked sibling nodes. Derives the context from the
+// caller's identity and the requested zone.
 func (mod *Module) OpListSiblings(ctx *astral.Context, q *routing.IncomingQuery, args opListSiblingsArgs) (err error) {
+	if !mod.authorizeSeeSwarm(ctx, q) {
+		return q.RejectWithCode(4)
+	}
+
 	ctx, cancel := ctx.WithIdentity(q.Caller()).IncludeZone(args.Zone).WithCancel()
 	defer cancel()
 

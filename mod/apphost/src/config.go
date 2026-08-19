@@ -54,9 +54,8 @@ var defaultConfig = Config{
 	AllowAnonymous: true,
 	TrustedWebSources: map[string][]PermitConfig{
 		"https://settings.test.satforge.dev": {
-			{Action: user.InfoAction{}.ObjectType()},
-			{Action: user.ExpelAction{}.ObjectType()},
-			{Action: user.AdoptAction{}.ObjectType()},
+			{Action: user.SeeSwarmAction{}.ObjectType()},
+			{Action: user.AdminSwarmAction{}.ObjectType()},
 		},
 	},
 	AnonymousWebAllowlist: AnonymousWebAllowlist{

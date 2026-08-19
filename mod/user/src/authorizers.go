@@ -7,20 +7,18 @@ import (
 	"github.com/astralp2p/astral-go/astral"
 )
 
-// AuthorizeExpel allows the swarm's user to expel nodes.
-func (mod *Module) AuthorizeExpel(ctx *astral.Context, a *user.ExpelAction) bool {
-	ac := mod.ActiveContract()
-	return ac != nil && a.Actor().IsEqual(ac.Issuer)
-}
-
-// AuthorizeAdopt allows the swarm's user to adopt nodes.
-func (mod *Module) AuthorizeAdopt(ctx *astral.Context, a *user.AdoptAction) bool {
-	ac := mod.ActiveContract()
-	return ac != nil && a.Actor().IsEqual(ac.Issuer)
-}
-
-// AuthorizeInfo allows the swarm's user and current swarm members to read contract info.
-func (mod *Module) AuthorizeInfo(ctx *astral.Context, a *user.InfoAction) bool {
+// AuthorizeSeeSwarm allows the swarm's user and current swarm members to read
+// the swarm's state.
+//
+// why: the policy is AuthorizeInfo's, carried over unchanged. SeeSwarm covers
+// five reads beside user.info, and those five were unauthorized entirely — so no
+// caller that could read before loses access here, and none gains any.
+//
+// why the whole swarm and not the user alone: a sibling syncing assets routes
+// user.sync_assets as the user (sync.go), and a local caller carrying no
+// identity is promoted to this node's identity (core/router.go), which is a
+// member. Narrowing to the issuer would break both.
+func (mod *Module) AuthorizeSeeSwarm(ctx *astral.Context, a *user.SeeSwarmAction) bool {
 	ac := mod.ActiveContract()
 	if ac == nil {
 		return false
@@ -34,6 +32,27 @@ func (mod *Module) AuthorizeInfo(ctx *astral.Context, a *user.InfoAction) bool {
 		}
 	}
 	return false
+}
+
+// AuthorizeAdminSwarm allows the swarm's user to change what the swarm holds,
+// and nobody else.
+//
+// why: the policy is AuthorizeAdopt's and AuthorizeExpel's, carried over
+// unchanged — the active contract's issuer alone. user.add_asset and
+// user.remove_asset had no authorization at all and tighten to it.
+//
+// why narrower than SeeSwarm, which grants the whole local swarm: membership is
+// granted on request today, so granting the swarm here would let a node it
+// admitted expel every other one.
+//
+// why this node's own identity is not in the grant, unlike AuthorizeAdminObjects:
+// a local caller carrying no identity is promoted to it, so including it would
+// let any unauthenticated local caller adopt and expel. Managing the swarm from
+// the command line requires the user's identity, which is what it required
+// before this change.
+func (mod *Module) AuthorizeAdminSwarm(ctx *astral.Context, a *user.AdminSwarmAction) bool {
+	ac := mod.ActiveContract()
+	return ac != nil && a.Actor().IsEqual(ac.Issuer)
 }
 
 // AuthorizeRelayFor allows a swarm node to relay queries on behalf of the local user.

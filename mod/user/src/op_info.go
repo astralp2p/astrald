@@ -1,7 +1,6 @@
 package user
 
 import (
-	"github.com/astralp2p/astral-go/api/auth"
 	"github.com/astralp2p/astral-go/api/user"
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astral-go/astral/channel"
@@ -14,16 +13,15 @@ type opInfoArgs struct {
 
 // OpInfo returns identity and contract metadata for this node's active contract.
 // Requires an active contract (code 2 otherwise - the setup-mode probe); the
-// caller must be authorized for user.InfoAction (code 4 otherwise) - the user
-// and swarm members always are, other identities via authorizers.
+// caller must be authorized for user.SeeSwarmAction (code 4 otherwise) - the
+// user and swarm members always are, other identities via authorizers.
 func (mod *Module) OpInfo(ctx *astral.Context, q *routing.IncomingQuery, args opInfoArgs) (err error) {
 	ac := mod.ActiveContract()
 	if ac == nil {
 		return q.RejectWithCode(2)
 	}
 
-	info := &user.InfoAction{Action: auth.NewAction(q.Caller())}
-	if !mod.Auth.Authorize(ctx, info) {
+	if !mod.authorizeSeeSwarm(ctx, q) {
 		return q.RejectWithCode(4)
 	}
 

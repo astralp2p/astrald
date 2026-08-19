@@ -11,9 +11,14 @@ type opRemoveAssetArgs struct {
 	Out string
 }
 
-// OpRemoveAsset removes an asset by object ID.
+// OpRemoveAsset authorizes the caller under AdminSwarm, then removes an asset by
+// object ID.
 // Rejects the query with an internal error code if removal fails, before the channel is accepted.
 func (mod *Module) OpRemoveAsset(ctx *astral.Context, q *routing.IncomingQuery, args opRemoveAssetArgs) (err error) {
+	if !mod.authorizeAdminSwarm(ctx, q, nil, args.ID) {
+		return q.RejectWithCode(4)
+	}
+
 	err = mod.RemoveAsset(args.ID)
 
 	if err != nil {

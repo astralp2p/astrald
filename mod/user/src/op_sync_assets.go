@@ -13,9 +13,14 @@ type opSyncAssetsArgs struct {
 	Out   string
 }
 
-// OpSyncAssets streams asset delta records from the given DB height and replies with the next unread height.
+// OpSyncAssets authorizes the caller under SeeSwarm, then streams asset delta
+// records from the given DB height and replies with the next unread height.
 // If no rows are found at or above Start, echoes Start as the height so callers can safely re-poll.
 func (mod *Module) OpSyncAssets(ctx *astral.Context, q *routing.IncomingQuery, args opSyncAssetsArgs) (err error) {
+	if !mod.authorizeSeeSwarm(ctx, q) {
+		return q.RejectWithCode(4)
+	}
+
 	var rows []*dbAsset
 
 	err = mod.db.Where("height >= ?", args.Start).Find(&rows).Error

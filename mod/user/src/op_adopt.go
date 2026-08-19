@@ -1,8 +1,6 @@
 package user
 
 import (
-	"github.com/astralp2p/astral-go/api/auth"
-	"github.com/astralp2p/astral-go/api/user"
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astral-go/astral/channel"
 	"github.com/astralp2p/astral-go/lib/routing"
@@ -15,22 +13,22 @@ type opAdoptArgs struct {
 }
 
 // OpAdopt adopts a target node into the active contract and indexes the signed result.
-// Requires an active contract; the caller must be authorized for user.AdoptAction
-// (code 4 otherwise) - the user always is, other identities via authorizers.
+// Requires an active contract; the caller must be authorized for
+// user.AdminSwarmAction (code 4 otherwise) - the user always is, other
+// identities via authorizers.
 // Pushes the signed contract to the local swarm asynchronously after indexing.
 func (mod *Module) OpAdopt(ctx *astral.Context, q *routing.IncomingQuery, args opAdoptArgs) (err error) {
 	if mod.ActiveContract() == nil {
 		return q.RejectWithCode(2)
 	}
 
-	// resolve before authorization - the adopt action carries the target
+	// resolve before authorization - the action carries the target
 	nodeID, err := mod.Dir.ResolveIdentity(args.Target)
 	if err != nil {
 		return q.RejectWithCode(3)
 	}
 
-	adopt := &user.AdoptAction{Action: auth.NewAction(q.Caller()), Subject: nodeID}
-	if !mod.Auth.Authorize(ctx, adopt) {
+	if !mod.authorizeAdminSwarm(ctx, q, nodeID, nil) {
 		return q.RejectWithCode(4)
 	}
 

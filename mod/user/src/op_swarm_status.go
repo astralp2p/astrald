@@ -12,12 +12,17 @@ type opSwarmStatusArgs struct {
 	Out string
 }
 
-// OpSwarmStatus streams the status of every active node in the issuer's swarm.
+// OpSwarmStatus authorizes the caller under SeeSwarm, then streams the status of
+// every active node in the issuer's swarm.
 // Each entry includes the node identity, its display alias, and whether it is currently linked.
 func (mod *Module) OpSwarmStatus(ctx *astral.Context, q *routing.IncomingQuery, args opSwarmStatusArgs) (err error) {
 	ac := mod.ActiveContract()
 	if ac == nil {
 		return q.RejectWithCode(2)
+	}
+
+	if !mod.authorizeSeeSwarm(ctx, q) {
+		return q.RejectWithCode(4)
 	}
 
 	ch := q.Accept(channel.WithFormats(args.In, args.Out))

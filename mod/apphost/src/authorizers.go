@@ -2,6 +2,7 @@ package apphost
 
 import (
 	"github.com/astralp2p/astral-go/api/auth"
+	"github.com/astralp2p/astral-go/api/user"
 	"github.com/astralp2p/astral-go/astral"
 )
 
@@ -12,6 +13,22 @@ import (
 // concrete action type, so every grantable action needs one of these — the shim
 // carries the type, authorizeGrant carries the decision.
 func (mod *Module) AuthorizeServeObjects(ctx *astral.Context, action *auth.ServeObjectsAction) bool {
+	return mod.authorizeGrant(ctx, action)
+}
+
+// AuthorizeSeeSwarm answers whether this node has granted the actor the right to
+// read the swarm's state.
+//
+// why: a typed shim over the generic lookup, matching AuthorizeServeObjects. The
+// auth registry dispatches on the concrete action type, so every grantable
+// action needs one of these.
+func (mod *Module) AuthorizeSeeSwarm(ctx *astral.Context, action *user.SeeSwarmAction) bool {
+	return mod.authorizeGrant(ctx, action)
+}
+
+// AuthorizeAdminSwarm answers whether this node has granted the actor the right
+// to change what the swarm holds.
+func (mod *Module) AuthorizeAdminSwarm(ctx *astral.Context, action *user.AdminSwarmAction) bool {
 	return mod.authorizeGrant(ctx, action)
 }
 
