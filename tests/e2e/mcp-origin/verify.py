@@ -28,9 +28,24 @@ def main():
     doc = load()
     facts = doc["facts"]
 
-    assert facts["control_agents"] >= 2, (
+    beta, gamma = facts["read_beta"], facts["read_gamma"]
+
+    assert beta.get("exposed") is True, (
+        f"beta reads exposed={beta.get('exposed')!r} after mcp.set_exposed — "
+        "the write did not land, so the exchange below proves nothing")
+    assert gamma.get("exposed") is False, (
+        f"gamma reads exposed={gamma.get('exposed')!r} without anyone opening "
+        "it — a new agent is reachable by default")
+
+    for name, rec in (("beta", beta), ("gamma", gamma)):
+        leaked = [k for k in rec if "token" in k]
+        assert not leaked, (
+            f"mcp.agent answered {leaked} for {name} — the record a caller "
+            "reads about an agent carries its credential")
+
+    assert facts["control_agents"] >= 3, (
         f"mcp.list_agents named {facts['control_agents']} agents over apphost, "
-        "not the two the driver minted — the refusals below are not evidence "
+        "not the three the driver minted — the refusals below are not evidence "
         "about the guard, because the op is unreachable for everyone")
 
     assert "astral-query" in facts["tools"], (
@@ -50,6 +65,14 @@ def main():
             f"{op} failed with {r['detail']}, which names no refusal — a "
             "refusal the caller cannot read is indistinguishable from a fault")
 
+    u = facts["unexposed"]
+    assert u["refused"], (
+        f"a closed agent answered: {u['detail']} — an agent is reachable "
+        "before its account holder opts in")
+    assert not any(m in u["detail"].lower()
+                   for m in (s.lower() for s in NOT_A_REFUSAL)), (
+        f"the closed agent failed without being refused: {u['detail']}")
+
     x = facts["exchange"]
     assert x["beta_status"] == "query", (
         f"beta's listen returned {x['beta_status']!r}, not a query — the guard "
@@ -64,9 +87,9 @@ def main():
         "not come back down the session")
 
     ops = ", ".join(facts["refusals"])
-    print(f"oracle: an agent was refused {ops} while the same node answers "
-          f"mcp.list_agents to apphost, and alpha and beta exchanged "
-          f"{len(facts['ask'])} B both ways")
+    print(f"oracle: an agent was refused {ops} and a closed agent, while the "
+          f"same node answers mcp.list_agents to apphost and alpha and beta "
+          f"exchanged {len(facts['ask'])} B both ways")
 
 
 main()

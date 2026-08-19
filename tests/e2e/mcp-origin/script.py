@@ -7,10 +7,14 @@ module's op router as a scope and answers on the node's own identity — so an
 agent that may query the node may call all of them. mod/mcp marks its queries
 with astral.OriginMCP and mod/shell refuses that origin.
 
-The driver does four things and judges none of them: it mints two agents over
-apphost, tries three node operations as an agent, records what the same
-operation does for a non-agent caller, and runs one agent-to-agent exchange.
-The oracle decides what those four outcomes mean together.
+Reach between agents is its own opt-in. mod/mcp routes to an agent only while
+its record is exposed, so an agent the account holder has not opened is
+unreachable by every other tenant on the node.
+
+The driver acts and judges nothing: it mints three agents over apphost and
+opens one of them, tries node operations as an agent, records what the same
+operation does for a non-agent caller, queries the agent that was left closed,
+and runs one exchange with the agent that was opened.
 
 why the control call: "refused" and "does not exist" leave a caller holding the
 same nothing. Recording mcp.list_agents over apphost, in this same run and on
@@ -71,10 +75,27 @@ async def main():
     async with await astral.connect(n1["endpoint"], token=n1["token"]) as c:
         alpha = await mint(c, "alpha")
         beta = await mint(c, "beta")
+        gamma = await mint(c, "gamma")
+
+        # beta is the agent alpha is allowed to reach. gamma is minted and left
+        # closed, which is what a new agent is until its account holder says
+        # otherwise.
+        await c.call_raw(
+            f"mcp.set_exposed?id={beta['identity']}&exposed=true&out=json")
+
+        # read the flag back rather than trusting the ack: mcp.agent is the op
+        # the dashboard reads per agent, and it must answer without a token.
+        read_beta = _docs(await c.call_raw(
+            f"mcp.agent?id={beta['identity']}&out=json"))[0]
+        read_gamma = _docs(await c.call_raw(
+            f"mcp.agent?id={gamma['identity']}&out=json"))[0]
+
         control = _docs(await c.call_raw("mcp.list_agents?out=json"))
 
     facts = {
         "control_agents": len(control),
+        "read_beta": read_beta,
+        "read_gamma": read_gamma,
         "ask": ASK,
         "answer": ANSWER,
         "refusals": {},
@@ -95,6 +116,18 @@ async def main():
                                          "detail": json.dumps(out)[:400]}
             except ToolError as e:
                 facts["refusals"][op] = {"refused": True, "detail": str(e)[:400]}
+
+        # an agent nobody opted in is unreachable, and unreachable the way an
+        # identity the node never heard of is
+        try:
+            out = agent_alpha.call_tool("astral-query", {
+                "target": gamma["identity"], "path": "chat",
+                "payload": ASK, "timeout_ms": 5000,
+            })
+            facts["unexposed"] = {"refused": False,
+                                  "detail": json.dumps(out)[:400]}
+        except ToolError as e:
+            facts["unexposed"] = {"refused": True, "detail": str(e)[:400]}
 
         opened = agent_alpha.call_tool("astral-query", {
             "target": beta["identity"], "path": "chat",
@@ -125,6 +158,7 @@ async def main():
 
     refused = sum(1 for r in facts["refusals"].values() if r["refused"])
     print(f"driver: {refused}/{len(NODE_OPS)} node ops refused to an agent; "
+          f"closed agent refused={facts['unexposed']['refused']}; "
           f"beta heard {heard.get('payload')!r}, alpha got {got.get('payload')!r}")
 
 

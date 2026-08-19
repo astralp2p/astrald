@@ -117,7 +117,9 @@ func TestAssignAliasTaken(t *testing.T) {
 	}
 }
 
-func TestAssignAliasGenerated(t *testing.T) {
+// An empty alias binds nothing. The node holds many tenants' agents and the
+// alias namespace is one, so a name it invents is a name a tenant may want.
+func TestAssignAliasEmptyBindsNothing(t *testing.T) {
 	mod, _, dir := testAgentModule(t)
 	agentID := astral.GenerateIdentity()
 
@@ -125,11 +127,11 @@ func TestAssignAliasGenerated(t *testing.T) {
 	if err != nil {
 		t.Fatalf("assign: %v", err)
 	}
-	if alias == "" {
-		t.Fatal("empty generated alias")
+	if alias != "" {
+		t.Fatalf("assigned %v, want no alias", alias)
 	}
-	if !dir.aliases[alias].IsEqual(agentID) {
-		t.Fatal("alias not bound to agent")
+	if len(dir.aliases) != 0 {
+		t.Fatalf("bound %v, want nothing", dir.aliases)
 	}
 }
 

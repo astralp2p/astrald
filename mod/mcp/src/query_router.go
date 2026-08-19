@@ -11,7 +11,17 @@ import (
 // RouteQuery claims queries targeting an agent with a parked astral-listen.
 // The query is accepted synchronously — the resolve deadline cannot wait for
 // the agent's model — and the live conn becomes a dialog session.
+//
+// An agent is reachable only while it is exposed. The node holds many tenants'
+// agents and knows no relation between them, so anything short of an explicit
+// opt-in makes every agent answerable to every other one and to the network.
 func (mod *Module) RouteQuery(ctx *astral.Context, q *astral.InFlightQuery, w io.WriteCloser) (io.WriteCloser, error) {
+	// why before the listener lookup: a parked listener is not permission, and
+	// popping one for a query about to be refused would consume it.
+	if !mod.exposed.Contains(q.Target.String()) {
+		return query.RouteNotFound()
+	}
+
 	// why: popping the listener atomically makes exactly one query win it;
 	// the next astral-listen call parks a fresh one.
 	ch, listening := mod.popListener(q.Target)

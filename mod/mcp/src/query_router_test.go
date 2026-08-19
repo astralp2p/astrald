@@ -61,6 +61,7 @@ func TestRouteQueryNoListener(t *testing.T) {
 func TestRouteQueryDeliversSession(t *testing.T) {
 	mod := testRouterModule(t)
 	agentID := astral.GenerateIdentity()
+	_ = mod.exposed.Add(agentID.String())
 
 	ch, err := mod.parkListener(agentID)
 	if err != nil {
@@ -120,6 +121,7 @@ func TestParkListenerTwice(t *testing.T) {
 func TestUnparkClosesLateSession(t *testing.T) {
 	mod := testRouterModule(t)
 	agentID := astral.GenerateIdentity()
+	_ = mod.exposed.Add(agentID.String())
 
 	ch, err := mod.parkListener(agentID)
 	if err != nil {
@@ -161,6 +163,7 @@ func TestRouteQueryQueuesForLateListener(t *testing.T) {
 	mod := testRouterModule(t)
 	agentID := astral.GenerateIdentity()
 	_ = mod.agentIDs.Add(agentID.String())
+	_ = mod.exposed.Add(agentID.String())
 
 	// no listener parked — the query is accepted and queued
 	w := &bufWriteCloser{}
@@ -193,6 +196,7 @@ func TestPendingExpires(t *testing.T) {
 	mod := testRouterModule(t)
 	agentID := astral.GenerateIdentity()
 	_ = mod.agentIDs.Add(agentID.String())
+	_ = mod.exposed.Add(agentID.String())
 
 	if _, err := mod.RouteQuery(mod.ctx, inFlight(agentID, "chat"), &bufWriteCloser{}); err != nil {
 		t.Fatalf("route: %v", err)
@@ -213,6 +217,7 @@ func TestPendingQueueFull(t *testing.T) {
 	mod := testRouterModule(t)
 	agentID := astral.GenerateIdentity()
 	_ = mod.agentIDs.Add(agentID.String())
+	_ = mod.exposed.Add(agentID.String())
 
 	for i := 0; i < mod.config.MaxPending; i++ {
 		if _, err := mod.RouteQuery(mod.ctx, inFlight(agentID, "chat"), &bufWriteCloser{}); err != nil {
@@ -244,6 +249,7 @@ func TestRouteQueryNoQueueForUnknownTarget(t *testing.T) {
 func TestUnparkKeepsFreshListener(t *testing.T) {
 	mod := testRouterModule(t)
 	agentID := astral.GenerateIdentity()
+	_ = mod.exposed.Add(agentID.String())
 
 	ch1, _ := mod.parkListener(agentID)
 
@@ -260,4 +266,44 @@ func TestUnparkKeepsFreshListener(t *testing.T) {
 	if _, ok := mod.popListener(agentID); !ok {
 		t.Fatal("fresh listener was removed by stale unpark")
 	}
+}
+
+// An agent nobody opted in is unreachable, and unreachable the way an absent
+// identity is: RouteNotFound is non-terminal, so the answer does not confirm
+// the agent exists.
+func TestRouteQueryRefusesUnexposedAgent(t *testing.T) {
+	mod := testRouterModule(t)
+	agentID := astral.GenerateIdentity()
+	_ = mod.agentIDs.Add(agentID.String())
+
+	ch, err := mod.parkListener(agentID)
+	if err != nil {
+		t.Fatalf("park: %v", err)
+	}
+	defer mod.unparkListener(agentID, ch)
+
+	_, err = mod.RouteQuery(mod.ctx, inFlight(agentID, "chat"), &bufWriteCloser{})
+	if !errors.Is(err, &astral.ErrRouteNotFound{}) {
+		t.Fatalf("route: got %v, want route not found", err)
+	}
+
+	// the listener survives: a query that never routed must not consume it
+	if _, err = mod.parkListener(agentID); !errors.Is(err, errAlreadyListening) {
+		t.Fatal("the refused query popped the parked listener")
+	}
+}
+
+// Exposure alone routes: registration is what makes an agent queue, and the
+// listener is what makes it answer, but neither is permission.
+func TestRouteQueryAdmitsExposedAgent(t *testing.T) {
+	mod := testRouterModule(t)
+	agentID := astral.GenerateIdentity()
+	_ = mod.agentIDs.Add(agentID.String())
+	_ = mod.exposed.Add(agentID.String())
+
+	wc, err := mod.RouteQuery(mod.ctx, inFlight(agentID, "chat"), &bufWriteCloser{})
+	if err != nil {
+		t.Fatalf("route: %v", err)
+	}
+	wc.Close()
 }

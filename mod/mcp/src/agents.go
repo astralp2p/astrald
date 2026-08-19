@@ -6,7 +6,6 @@ import (
 	authapi "github.com/astralp2p/astral-go/api/auth"
 	"github.com/astralp2p/astral-go/api/secp256k1"
 	"github.com/astralp2p/astral-go/astral"
-	"github.com/astralp2p/astrald/lib/aliasgen"
 	"github.com/astralp2p/astrald/mod/apphost"
 	"gorm.io/gorm"
 )
@@ -48,26 +47,24 @@ func (mod *Module) createAgentIdentity(ctx *astral.Context) (*astral.Identity, e
 	return agentID, nil
 }
 
-// assignAlias binds alias to the agent, generating a free random one when
-// alias is empty. Returns the alias actually set.
+// assignAlias binds alias to the agent when one is given, and binds nothing
+// when it is empty. Returns the alias actually set.
+//
+// why nothing is generated: an alias is node-global, so on a node holding many
+// tenants' agents a generated name contends in a namespace none of them owns,
+// and one tenant loses it silently. A caller that wants an alias passes one; a
+// caller that does not — the dashboard, which carries its own display name —
+// leaves the agent without.
 func (mod *Module) assignAlias(agentID *astral.Identity, alias string) (string, error) {
-	if alias != "" {
-		if _, err := mod.Dir.ResolveIdentity(alias); err == nil {
-			return "", errors.New("alias already taken")
-		}
-		return alias, mod.Dir.SetAlias(agentID, alias)
+	if alias == "" {
+		return "", nil
 	}
 
-	// why: aliasgen's namespace is small; probe for a free name a few times.
-	for i := 0; i < 5; i++ {
-		candidate := aliasgen.New()
-		if _, err := mod.Dir.ResolveIdentity(candidate); err == nil {
-			continue
-		}
-		return candidate, mod.Dir.SetAlias(agentID, candidate)
+	if _, err := mod.Dir.ResolveIdentity(alias); err == nil {
+		return "", errors.New("alias already taken")
 	}
 
-	return "", errors.New("alias generation exhausted")
+	return alias, mod.Dir.SetAlias(agentID, alias)
 }
 
 // deleteAgent revokes the agent's token, unsets its alias and removes its row.
@@ -78,11 +75,14 @@ func (mod *Module) deleteAgent(row *dbAgent) error {
 		return err
 	}
 
-	if err = mod.Dir.SetAlias(row.Identity, ""); err != nil {
-		return err
+	if row.Alias != "" {
+		if err = mod.Dir.SetAlias(row.Identity, ""); err != nil {
+			return err
+		}
 	}
 
 	_ = mod.agentIDs.Remove(row.Identity.String())
+	_ = mod.exposed.Remove(row.Identity.String())
 	mod.drainListener(row.Identity)
 	mod.dropPending(row.Identity)
 	mod.closeAgentSessions(row.Identity)

@@ -38,6 +38,9 @@ func (Loader) Load(node astral.Node, assets assets.Assets, log *log.Logger) (cor
 	}
 	for _, r := range rows {
 		_ = mod.agentIDs.Add(r.Identity.String())
+		if r.Exposed {
+			_ = mod.exposed.Add(r.Identity.String())
+		}
 	}
 
 	return mod, nil

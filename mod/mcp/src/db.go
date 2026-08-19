@@ -26,6 +26,18 @@ func (db *DB) FindAgent(identity *astral.Identity) (row *dbAgent, err error) {
 	return
 }
 
+func (db *DB) SetExposed(identity *astral.Identity, exposed bool) error {
+	tx := db.Model(&dbAgent{}).Where("identity = ?", identity).
+		Update("exposed", exposed)
+	if tx.Error != nil {
+		return tx.Error
+	}
+	if tx.RowsAffected == 0 {
+		return gorm.ErrRecordNotFound
+	}
+	return nil
+}
+
 func (db *DB) DeleteAgent(identity *astral.Identity) error {
 	tx := db.Where("identity = ?", identity).Delete(&dbAgent{})
 	if tx.Error != nil {
