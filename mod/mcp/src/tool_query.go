@@ -56,7 +56,7 @@ func (mod *Module) queryTool(agentID *astral.Identity) mcpsdk.ToolHandlerFor[que
 		qctx, cancel := mod.ctx.WithIdentity(agentID).WithTimeout(timeout)
 		defer cancel()
 
-		conn, err := query.RouteInFlight(qctx, mod.node, astral.Launch(q))
+		conn, err := query.RouteInFlight(qctx, mod.node, launch(q))
 		if err != nil {
 			return nil, out, fmt.Errorf("query failed: %v", err)
 		}
