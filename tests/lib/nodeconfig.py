@@ -29,6 +29,12 @@ KCP_YAML = """\
 listen_port: {kcp}
 """
 
+# why bound at all: the MCP server is off unless bind_mcp names an endpoint
+# (mod/mcp defaults to a single fixed port, which two nodes would fight over).
+MCP_YAML = """\
+bind_mcp: "tcp:127.0.0.1:{mcp}"
+"""
+
 
 @dataclass
 class NodePorts:
@@ -36,11 +42,12 @@ class NodePorts:
     tcp: int
     ether: int
     kcp: int
+    mcp: int
 
 
 def ports_for(base: int, index: int) -> NodePorts:
     p = base + 10 * index
-    return NodePorts(apphost=p, tcp=p + 1, ether=p + 2, kcp=p + 3)
+    return NodePorts(apphost=p, tcp=p + 1, ether=p + 2, kcp=p + 3, mcp=p + 4)
 
 
 def render(root: Path, ports: NodePorts, token: str) -> None:
@@ -51,3 +58,4 @@ def render(root: Path, ports: NodePorts, token: str) -> None:
     (cfg / "tcp.yaml").write_text(TCP_YAML.format(tcp=ports.tcp))
     (cfg / "ether.yaml").write_text(ETHER_YAML.format(ether=ports.ether))
     (cfg / "kcp.yaml").write_text(KCP_YAML.format(kcp=ports.kcp))
+    (cfg / "mcp.yaml").write_text(MCP_YAML.format(mcp=ports.mcp))
