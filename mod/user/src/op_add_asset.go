@@ -11,7 +11,13 @@ type opAddAssetArgs struct {
 	Out string
 }
 
+// OpAddAsset authorizes the caller under AdminSwarm, then adds the object to the
+// user's asset list.
 func (mod *Module) OpAddAsset(ctx *astral.Context, q *routing.IncomingQuery, args opAddAssetArgs) (err error) {
+	if !mod.authorizeAdminSwarm(ctx, q, nil, args.ID) {
+		return q.RejectWithCode(4)
+	}
+
 	err = mod.AddAsset(args.ID)
 	if err != nil {
 		mod.log.Error("error adding asset: %v", err)

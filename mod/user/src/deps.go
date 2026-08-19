@@ -45,9 +45,8 @@ func (mod *Module) LoadDependencies(ctx *astral.Context) (err error) {
 	mod.Auth.Add(authmod.Func[*auth.SeeObjectsAction](mod.AuthorizeSeeObjects))
 	mod.Auth.Add(authmod.Func[*auth.StoreObjectsAction](mod.AuthorizeStoreObjects))
 	mod.Auth.Add(authmod.Func[*auth.AdminObjectsAction](mod.AuthorizeAdminObjects))
-	mod.Auth.Add(authmod.Func[*user.ExpelAction](mod.AuthorizeExpel))
-	mod.Auth.Add(authmod.Func[*user.AdoptAction](mod.AuthorizeAdopt))
-	mod.Auth.Add(authmod.Func[*user.InfoAction](mod.AuthorizeInfo))
+	mod.Auth.Add(authmod.Func[*user.SeeSwarmAction](mod.AuthorizeSeeSwarm))
+	mod.Auth.Add(authmod.Func[*user.AdminSwarmAction](mod.AuthorizeAdminSwarm))
 
 	// why: localuser as a name, to match localuser as a filter
 	err = mod.Dir.AddResolver(mod)
