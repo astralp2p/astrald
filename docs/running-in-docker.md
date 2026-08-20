@@ -1,0 +1,108 @@
+# Running astrald in Docker
+
+`astrald` runs as a container from the image the repository builds. The image is
+not published anywhere; a deployer clones the repository and builds it.
+
+## Build
+
+```shell
+make image
+```
+
+This builds `astrald` and `astral-query` as static binaries (Go >= 1.25.0 in the
+build stage, `CGO_ENABLED=0` — astrald uses pure-Go SQLite) and ships them alone
+on `scratch`, tagged `astrald:<git describe>` and `astrald:latest`. `docker build
+-t astrald .` does the same without the version tag.
+
+## Run
+
+```shell
+docker run -d --name astrald \
+  -v astrald-root:/var/lib/astrald \
+  -p 1791:1791 -p 1792:1792/udp \
+  astrald
+```
+
+The volume is the node. It holds the root directory — config, identity, and
+data — and the identity is the `secp256k1` key at `config/node_key`, generated on
+first start with no interaction. A discarded volume is a new node identity;
+back up the volume, not the container.
+
+`docker stop` shuts the node down gracefully: astrald traps `SIGINT`, not
+`SIGTERM`, and the image sets `STOPSIGNAL SIGINT`.
+
+## Health
+
+The image declares a health check: `astral-query localnode:.spec` every 30
+seconds, exit code 0 meaning the node is up. `docker ps` shows the status; to ask
+directly:
+
+```shell
+docker exec astrald astral-query localnode:.spec
+```
+
+## Ports
+
+Default transports bind all interfaces inside the container; publishing decides
+what the world reaches.
+
+| Port | Proto | Purpose | Behind the bridge |
+|---|---|---|---|
+| 1791 | TCP | node links | publish |
+| 1792 | UDP | KCP transport | publish |
+| 8822 | UDP | `ether` LAN discovery | works only with `--network host` |
+| 8625 | TCP 127.0.0.1 | local apphost API | container-internal; share the socket instead |
+| 8624 | TCP 0.0.0.0 | apphost HTTP API | publish only to expose the HTTP API |
+
+Docker's bridge is a NAT in front of the node: peers reach only what is
+published, and LAN discovery sees the bridge network rather than the LAN. A node
+that should be discoverable on its LAN runs with `--network host`, which makes
+publishing moot.
+
+## Compose
+
+The node as its own compose project. It shares no lifecycle with anything that
+merely uses it — an application stack that consumes this node names the image and
+never contains this service.
+
+```yaml
+name: astrald
+
+services:
+  astrald:
+    image: astrald:latest
+    restart: unless-stopped
+    ports:
+      - "1791:1791"
+      - "1792:1792/udp"
+    volumes:
+      - astrald-root:/var/lib/astrald
+
+volumes:
+  astrald-root:
+```
+
+## Sharing the local API with other containers
+
+The local apphost API listens on `tcp:127.0.0.1:8625` and `unix:~/.apphost.sock`
+by default — both unreachable from outside the container. To hand the API to a
+sibling container or stack, point the apphost listener at a Unix socket on a
+shared mount. In `<root>/config/apphost.yaml` (on the volume):
+
+```yaml
+listen:
+  - "unix:/run/astrald/apphost.sock"
+  - "tcp:127.0.0.1:8625"
+```
+
+The list replaces the default, so it names everything the module listens on.
+Then add the shared mount to the service:
+
+```yaml
+    volumes:
+      - astrald-root:/var/lib/astrald
+      - /run/astrald:/run/astrald
+```
+
+A consumer bind-mounts the same host directory and dials the socket path; the
+call crosses no network.
