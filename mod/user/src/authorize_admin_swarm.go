@@ -14,8 +14,8 @@ import (
 // with code 4 when the answer is no, before it changes any state.
 //
 // subject and objectID declare the nouns the call touches — subject the node a
-// call adopts or expels, objectID the asset it adds or removes. Each is nil for
-// an op that names the other. Nothing evaluates them yet — see
+// call adopts, expels or syncs with, objectID the asset it adds or removes.
+// Each is nil for an op that names the other. Nothing evaluates them yet — see
 // user.AdminSwarmAction.
 func (mod *Module) authorizeAdminSwarm(
 	ctx *astral.Context,

@@ -125,6 +125,11 @@ func swarmModule(t *testing.T, authority authmod.Module, userID *astral.Identity
 // swarmOp is one row of the swarm authorization surface: the op, a query that
 // binds its required arguments, the action it must name, and the nouns the call
 // is expected to declare.
+//
+// wantSubj asserts the action names the node the call targeted. Every row that
+// sets it targets the same identity: user.adopt and user.expel resolve their
+// argument through resolvingDir, and user.sync_with is handed that identity
+// directly, so both arrive at userID.
 type swarmOp struct {
 	name       string
 	op         func(*Module) any
@@ -134,7 +139,7 @@ type swarmOp struct {
 	wantObject *astral.ObjectID
 }
 
-func swarmOps(id *astral.ObjectID) []swarmOp {
+func swarmOps(id *astral.ObjectID, nodeID *astral.Identity) []swarmOp {
 	return []swarmOp{
 		{name: "user.info", op: func(m *Module) any { return m.OpInfo }},
 		{name: "user.assets", op: func(m *Module) any { return m.OpAssets }},
@@ -147,6 +152,7 @@ func swarmOps(id *astral.ObjectID) []swarmOp {
 		{name: "user.expel", op: func(m *Module) any { return m.OpExpel }, args: "?target=anything", admin: true, wantSubj: true},
 		{name: "user.add_asset", op: func(m *Module) any { return m.OpAddAsset }, args: "?id=" + id.String(), admin: true, wantObject: id},
 		{name: "user.remove_asset", op: func(m *Module) any { return m.OpRemoveAsset }, args: "?id=" + id.String(), admin: true, wantObject: id},
+		{name: "user.sync_with", op: func(m *Module) any { return m.OpSyncWith }, args: "?node=" + nodeID.String(), admin: true, wantSubj: true},
 	}
 }
 
@@ -158,7 +164,7 @@ func TestSwarmOpsRefuseCallerWithoutPermits(t *testing.T) {
 	userID := astral.GenerateIdentity()
 	caller := astral.GenerateIdentity()
 
-	for _, op := range swarmOps(id) {
+	for _, op := range swarmOps(id, userID) {
 		t.Run(op.name, func(t *testing.T) {
 			authority := &recordingAuth{verdict: false}
 			mod := swarmModule(t, authority, userID)
