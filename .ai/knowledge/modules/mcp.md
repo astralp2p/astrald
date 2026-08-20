@@ -28,7 +28,8 @@ to live astral connections.
 * One parked `astral-listen` per identity; a second concurrent listen fails.
 * `RouteQuery` pops the parked listener atomically — exactly one query wins it — and accepts synchronously via `query.Accept`; the agent replies later through the session.
 * `RouteQuery` refuses a target whose `exposed` flag is false, before popping the listener; a parked listener is not permission. The refusal is `query.RouteNotFound`, so a closed agent answers as an unknown identity does.
-* `exposed` defaults false. `mcp.set_exposed` writes it and mirrors it into `Module.exposed`; closing an agent drops its pending queue and closes its live sessions.
+* `exposed` defaults false. `mcp.create_agent` takes it as an optional argument and `mcp.set_exposed` writes it later; both mirror it into `Module.exposed`. Closing an agent drops its pending queue and closes its live sessions.
+* Both ops are local-only, so the create-time argument saves a round trip and grants no authority `mcp.set_exposed` does not.
 * `mcp.agent` answers one `mcp.AgentInfo` — identity, alias, exposed, expiry — and never a token. `mcp.list_agents` answers `mcp.Agent` with tokens and stays local-only.
 * An inbound query for a registered and exposed agent with no parked listener is accepted and queued for the agent's next `astral-listen`, up to `max_pending` per agent and `pending_ttl` each; unregistered targets and a full queue fall through to other routers immediately.
 * `astral-listen` drains the pending queue before parking, and again right after parking to close the enqueue race.
@@ -41,6 +42,6 @@ to live astral connections.
 
 ## Flows
 
-* Create agent: mint key → `Objects.Store` + `Crypto.AddToIndex` → sign + index node→agent relay contract → alias when given → `Apphost.CreateAccessToken` → `mcp__agents` row, `exposed` false → send `mcp.Agent`.
+* Create agent: mint key → `Objects.Store` + `Crypto.AddToIndex` → sign + index node→agent relay contract → alias when given → `Apphost.CreateAccessToken` → `registerAgent` writes the `mcp__agents` row with the requested `exposed`, then mirrors it → send `mcp.Agent`.
 * Inbound dialog: caller queries the agent identity → `RouteQuery` refuses a closed agent, else pops the parked listener, or queues when none is parked → accept → session pump starts → payload read within `payload_read_window` → session delivered to `astral-listen` → agent answers with `astral-send` / reads more with `astral-receive` → `close:true` ends.
 * Outbound dialog: `astral-query` with `session:true` routes as the agent, registers the open conn as a session and returns the handle instead of collecting a response.

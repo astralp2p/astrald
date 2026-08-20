@@ -67,6 +67,24 @@ func (mod *Module) assignAlias(agentID *astral.Identity, alias string) (string, 
 	return alias, mod.Dir.SetAlias(agentID, alias)
 }
 
+// registerAgent stores the agent row and mirrors it into the sets the router
+// reads: registration is what lets an agent queue, exposure what lets it route.
+//
+// why the store first: the mirrors are what the router reads, so a mirror ahead
+// of a failed write would route on a decision nothing recorded.
+func (mod *Module) registerAgent(row *dbAgent) error {
+	if err := mod.db.CreateAgent(row); err != nil {
+		return err
+	}
+
+	_ = mod.agentIDs.Add(row.Identity.String())
+	if row.Exposed {
+		_ = mod.exposed.Add(row.Identity.String())
+	}
+
+	return nil
+}
+
 // deleteAgent revokes the agent's token, unsets its alias and removes its row.
 // The signed relay contract stays indexed until it expires.
 func (mod *Module) deleteAgent(row *dbAgent) error {

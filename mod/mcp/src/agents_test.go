@@ -139,7 +139,12 @@ func TestDeleteAgent(t *testing.T) {
 	mod, apphost, dir := testAgentModule(t)
 	agentID := astral.GenerateIdentity()
 
-	err := mod.db.CreateAgent(agentID, "my-agent", "token123", time.Now().Add(time.Hour))
+	err := mod.db.CreateAgent(&dbAgent{
+		Identity:  agentID,
+		Alias:     "my-agent",
+		Token:     "token123",
+		ExpiresAt: time.Now().Add(time.Hour),
+	})
 	if err != nil {
 		t.Fatalf("create agent: %v", err)
 	}
@@ -169,7 +174,12 @@ func TestDBAgentRoundTrip(t *testing.T) {
 	mod, _, _ := testAgentModule(t)
 	agentID := astral.GenerateIdentity()
 
-	err := mod.db.CreateAgent(agentID, "a1", "t1", time.Now().Add(time.Hour))
+	err := mod.db.CreateAgent(&dbAgent{
+		Identity:  agentID,
+		Alias:     "a1",
+		Token:     "t1",
+		ExpiresAt: time.Now().Add(time.Hour),
+	})
 	if err != nil {
 		t.Fatalf("create: %v", err)
 	}

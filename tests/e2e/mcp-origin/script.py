@@ -11,10 +11,11 @@ Reach between agents is its own opt-in. mod/mcp routes to an agent only while
 its record is exposed, so an agent the account holder has not opened is
 unreachable by every other tenant on the node.
 
-The driver acts and judges nothing: it mints three agents over apphost and
-opens one of them, tries node operations as an agent, records what the same
-operation does for a non-agent caller, queries the agent that was left closed,
-and runs one exchange with the agent that was opened.
+The driver acts and judges nothing: it mints four agents over apphost — one
+opened by mcp.set_exposed after the fact, one opened by create_agent in the
+same write, two left closed — tries node operations as an agent, records what
+the same operation does for a non-agent caller, queries an agent that was left
+closed, and runs one exchange with the agent that was opened.
 
 why the control call: "refused" and "does not exist" leave a caller holding the
 same nothing. Recording mcp.list_agents over apphost, in this same run and on
@@ -63,8 +64,16 @@ def _docs(raw: bytes) -> list:
     return out
 
 
-async def mint(client, alias: str) -> dict:
-    raw = await client.call_raw(f"mcp.create_agent?alias={alias}&out=json")
+async def mint(client, alias: str, exposed: bool = False) -> dict:
+    """Mint an agent; exposed asks create_agent to open it in the same write.
+
+    why the argument is omitted rather than passed false: a caller that wants a
+    closed agent sends the query string that existed before the argument did,
+    so this covers the default as well as the flag.
+    """
+    flag = "&exposed=true" if exposed else ""
+    raw = await client.call_raw(
+        f"mcp.create_agent?alias={alias}{flag}&out=json")
     return _docs(raw)[0]
 
 
@@ -76,10 +85,12 @@ async def main():
         alpha = await mint(c, "alpha")
         beta = await mint(c, "beta")
         gamma = await mint(c, "gamma")
+        delta = await mint(c, "delta", exposed=True)
 
         # beta is the agent alpha is allowed to reach. gamma is minted and left
         # closed, which is what a new agent is until its account holder says
-        # otherwise.
+        # otherwise. delta is opened by create_agent itself, which is the same
+        # decision made one call earlier.
         await c.call_raw(
             f"mcp.set_exposed?id={beta['identity']}&exposed=true&out=json")
 
@@ -89,6 +100,8 @@ async def main():
             f"mcp.agent?id={beta['identity']}&out=json"))[0]
         read_gamma = _docs(await c.call_raw(
             f"mcp.agent?id={gamma['identity']}&out=json"))[0]
+        read_delta = _docs(await c.call_raw(
+            f"mcp.agent?id={delta['identity']}&out=json"))[0]
 
         control = _docs(await c.call_raw("mcp.list_agents?out=json"))
 
@@ -96,6 +109,7 @@ async def main():
         "control_agents": len(control),
         "read_beta": read_beta,
         "read_gamma": read_gamma,
+        "read_delta": read_delta,
         "ask": ASK,
         "answer": ANSWER,
         "refusals": {},
@@ -159,6 +173,7 @@ async def main():
     refused = sum(1 for r in facts["refusals"].values() if r["refused"])
     print(f"driver: {refused}/{len(NODE_OPS)} node ops refused to an agent; "
           f"closed agent refused={facts['unexposed']['refused']}; "
+          f"delta minted exposed={read_delta.get('exposed')}; "
           f"beta heard {heard.get('payload')!r}, alpha got {got.get('payload')!r}")
 
 

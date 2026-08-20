@@ -12,11 +12,19 @@ import (
 type opCreateAgentArgs struct {
 	Alias    string
 	Duration astral.Duration
+	Exposed  bool
 	Out      string
 }
 
 // OpCreateAgent mints a new agent: a fresh identity with a signed relay
-// contract, an alias and an access token the agent uses as its PAT.
+// contract, an alias and an access token the agent uses as its PAT. Exposed
+// opens the agent to other callers in the same write; omitted, the agent is
+// closed and mcp.set_exposed opens it later.
+//
+// why the argument grants nothing new: create_agent and set_exposed are both
+// local-only, so the caller that mints an agent may already open it. The
+// argument saves the second call, and its false default leaves a caller that
+// omits it the closed agent it minted before.
 func (mod *Module) OpCreateAgent(ctx *astral.Context, q *routing.IncomingQuery, args opCreateAgentArgs) (err error) {
 	if q.Origin() == astral.OriginNetwork {
 		return q.Reject()
@@ -45,13 +53,18 @@ func (mod *Module) OpCreateAgent(ctx *astral.Context, q *routing.IncomingQuery, 
 		return ch.Send(astral.Err(err))
 	}
 
-	err = mod.db.CreateAgent(agentID, alias, string(token.Token), time.Time(token.ExpiresAt))
+	err = mod.registerAgent(&dbAgent{
+		Identity:  agentID,
+		Alias:     alias,
+		Token:     string(token.Token),
+		ExpiresAt: time.Time(token.ExpiresAt),
+		Exposed:   args.Exposed,
+	})
 	if err != nil {
 		return ch.Send(astral.Err(err))
 	}
-	_ = mod.agentIDs.Add(agentID.String())
 
-	mod.log.Logv(1, "created agent %v (%v)", alias, agentID)
+	mod.log.Logv(1, "created agent %v (%v) exposed=%v", alias, agentID, args.Exposed)
 
 	return ch.Send(&mcp.Agent{
 		Identity:  agentID,

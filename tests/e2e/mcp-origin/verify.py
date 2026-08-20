@@ -1,7 +1,10 @@
 #!/usr/bin/env python3
 """Oracle: the door is shut on operations and open to agents.
 
-Four judgements, and the order matters. The control comes first: if a non-agent
+Five judgements, and the order matters. The exposure flags come first, because
+the exchange below proves nothing about reach if nothing recorded the opt-in
+that admitted it — read back through mcp.agent, not the acks. Then the control:
+if a non-agent
 caller cannot reach mcp.list_agents either, then the refusals below say nothing
 about the guard and this test has proven nothing. Only once the op is known
 reachable does an agent's refusal mean the guard refused it.
@@ -29,6 +32,7 @@ def main():
     facts = doc["facts"]
 
     beta, gamma = facts["read_beta"], facts["read_gamma"]
+    delta = facts["read_delta"]
 
     assert beta.get("exposed") is True, (
         f"beta reads exposed={beta.get('exposed')!r} after mcp.set_exposed — "
@@ -37,15 +41,20 @@ def main():
         f"gamma reads exposed={gamma.get('exposed')!r} without anyone opening "
         "it — a new agent is reachable by default")
 
-    for name, rec in (("beta", beta), ("gamma", gamma)):
+    assert delta.get("exposed") is True, (
+        f"delta reads exposed={delta.get('exposed')!r} after create_agent was "
+        "asked for an open agent — the argument did not reach the row, and the "
+        "caller holds an agent it believes is reachable")
+
+    for name, rec in (("beta", beta), ("gamma", gamma), ("delta", delta)):
         leaked = [k for k in rec if "token" in k]
         assert not leaked, (
             f"mcp.agent answered {leaked} for {name} — the record a caller "
             "reads about an agent carries its credential")
 
-    assert facts["control_agents"] >= 3, (
+    assert facts["control_agents"] >= 4, (
         f"mcp.list_agents named {facts['control_agents']} agents over apphost, "
-        "not the three the driver minted — the refusals below are not evidence "
+        "not the four the driver minted — the refusals below are not evidence "
         "about the guard, because the op is unreachable for everyone")
 
     assert "astral-query" in facts["tools"], (

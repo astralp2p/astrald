@@ -25,6 +25,15 @@ against a node whose operations were all broken.
 The oracle also requires each failure to *read* as a refusal. A timeout, a 401
 or a dead listener would otherwise keep this green while the guard was gone.
 
+## Why an agent is opened twice over
+
+Exposure has two doors: `mcp.set_exposed` on an agent that already exists, and
+the `exposed` argument to `mcp.create_agent`, which is the same decision made
+one call earlier. beta goes through the first, delta through the second, and
+both are read back through `mcp.agent` rather than trusting the ack. gamma is
+minted the way every caller minted an agent before the argument existed, so the
+default is under test with the flag.
+
 ## Why an exchange is in here
 
 A guard that refused everything would satisfy every check above and destroy the

@@ -11,14 +11,11 @@ type DB struct {
 	*gorm.DB
 }
 
-func (db *DB) CreateAgent(identity *astral.Identity, alias, token string, expiresAt time.Time) error {
-	return db.Create(&dbAgent{
-		Identity:  identity,
-		Alias:     alias,
-		Token:     token,
-		ExpiresAt: expiresAt,
-		CreatedAt: time.Now(),
-	}).Error
+// CreateAgent inserts the agent row and stamps its creation time. The caller
+// builds the row, so exposure lands in the same write as the rest of the record.
+func (db *DB) CreateAgent(row *dbAgent) error {
+	row.CreatedAt = time.Now()
+	return db.Create(row).Error
 }
 
 func (db *DB) FindAgent(identity *astral.Identity) (row *dbAgent, err error) {

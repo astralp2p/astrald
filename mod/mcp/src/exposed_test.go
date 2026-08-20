@@ -13,7 +13,12 @@ import (
 func createTestAgent(t *testing.T, mod *Module, alias string) *astral.Identity {
 	t.Helper()
 	id := astral.GenerateIdentity()
-	err := mod.db.CreateAgent(id, alias, "token-"+id.String()[:8], time.Now().Add(time.Hour))
+	err := mod.db.CreateAgent(&dbAgent{
+		Identity:  id,
+		Alias:     alias,
+		Token:     "token-" + id.String()[:8],
+		ExpiresAt: time.Now().Add(time.Hour),
+	})
 	if err != nil {
 		t.Fatalf("create agent: %v", err)
 	}
@@ -32,6 +37,60 @@ func TestNewAgentIsNotExposed(t *testing.T) {
 	}
 	if row.Exposed {
 		t.Fatal("a new agent is exposed")
+	}
+}
+
+// create_agent takes the flag, so an agent is minted open in one write. The
+// router reads the mirror, so the row alone is not reach.
+func TestRegisterAgentExposed(t *testing.T) {
+	mod, _, _ := testAgentModule(t)
+	id := astral.GenerateIdentity()
+
+	err := mod.registerAgent(&dbAgent{
+		Identity:  id,
+		Token:     "token-open",
+		ExpiresAt: time.Now().Add(time.Hour),
+		Exposed:   true,
+	})
+	if err != nil {
+		t.Fatalf("register: %v", err)
+	}
+
+	row, err := mod.db.FindAgent(id)
+	if err != nil {
+		t.Fatalf("find: %v", err)
+	}
+	if !row.Exposed {
+		t.Fatal("the row reads closed after a create that asked for open")
+	}
+	if !mod.exposed.Contains(id.String()) {
+		t.Fatal("the agent is open in the row and closed to the router")
+	}
+	if !mod.agentIDs.Contains(id.String()) {
+		t.Fatal("the agent is not registered")
+	}
+}
+
+// The flag omitted mints the agent every caller minted before this argument
+// existed: registered, and reachable by nobody.
+func TestRegisterAgentClosedByDefault(t *testing.T) {
+	mod, _, _ := testAgentModule(t)
+	id := astral.GenerateIdentity()
+
+	err := mod.registerAgent(&dbAgent{
+		Identity:  id,
+		Token:     "token-closed",
+		ExpiresAt: time.Now().Add(time.Hour),
+	})
+	if err != nil {
+		t.Fatalf("register: %v", err)
+	}
+
+	if mod.exposed.Contains(id.String()) {
+		t.Fatal("an agent minted without the flag is open to the router")
+	}
+	if !mod.agentIDs.Contains(id.String()) {
+		t.Fatal("the agent is not registered")
 	}
 }
 
