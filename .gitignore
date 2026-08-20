@@ -1,5 +1,6 @@
 .idea
 /tmp
+/bin/
 cmd/astrald/astrald
 .devnotes/
 .gocache/
