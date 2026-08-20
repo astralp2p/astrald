@@ -10,8 +10,8 @@ make image
 ```
 
 This builds `astrald` and `astral-query` as static binaries (Go >= 1.25.0 in the
-build stage, `CGO_ENABLED=0` — astrald uses pure-Go SQLite) and ships them alone
-on `scratch`, tagged `astrald:<git describe>` and `astrald:latest`. `docker build
+build stage, `CGO_ENABLED=0` — astrald uses pure-Go SQLite) and ships them on
+`alpine`, tagged `astrald:<git describe>` and `astrald:latest`. `docker build
 -t astrald .` does the same without the version tag.
 
 ## Run
