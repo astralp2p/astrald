@@ -13,6 +13,10 @@ type opRemoveRepositoryArgs struct {
 }
 
 func (mod *Module) OpRemoveRepository(ctx *astral.Context, q *routing.IncomingQuery, args opRemoveRepositoryArgs) (err error) {
+	if !mod.authorizeAdminObjects(ctx, q, nil, args.Name) {
+		return q.Reject()
+	}
+
 	ch := channel.New(q.AcceptRaw(), channel.WithFormats(args.In, args.Out))
 	defer ch.Close()
 
