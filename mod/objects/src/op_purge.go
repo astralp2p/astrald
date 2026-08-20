@@ -15,6 +15,10 @@ type opPurgeArgs struct {
 // OpPurge deletes unheld objects from a repository, streaming each purged ObjectID
 // then a final error or EOS. Defaults to ZoneAll when no zone is given.
 func (mod *Module) OpPurge(ctx *astral.Context, q *routing.IncomingQuery, args opPurgeArgs) error {
+	if !mod.authorizeAdminObjects(ctx, q, nil, args.Repo) {
+		return q.Reject()
+	}
+
 	ctx = ctx.WithIdentity(q.Caller())
 	if args.Zone == nil {
 		ctx = ctx.WithZone(astral.ZoneAll)

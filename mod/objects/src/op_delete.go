@@ -17,6 +17,10 @@ type opDeleteArgs struct {
 // channel. Requires an explicit repository — there is no default, to avoid
 // accidental deletion.
 func (mod *Module) OpDelete(ctx *astral.Context, q *routing.IncomingQuery, args opDeleteArgs) (err error) {
+	if !mod.authorizeAdminObjects(ctx, q, args.ID, args.Repo) {
+		return q.Reject()
+	}
+
 	// prepare the context
 	ctx = ctx.WithIdentity(q.Caller())
 	if args.Zone == nil {
