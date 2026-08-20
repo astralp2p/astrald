@@ -8,8 +8,7 @@ import (
 	"github.com/astralp2p/astral-go/lib/routing"
 )
 
-const DefaultTokenDuration = astral.Duration(time.Hour * 24 * 365)       // 1 year
-const DefaultAppContractDuration = astral.Duration(time.Hour * 24 * 365) // 1 year
+const DefaultTokenDuration = astral.Duration(time.Hour * 24 * 365) // 1 year
 
 type opCreateTokenArgs struct {
 	ID       *astral.Identity `query:"required"`
