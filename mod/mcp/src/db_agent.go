@@ -4,7 +4,7 @@ import (
 	"time"
 
 	"github.com/astralp2p/astral-go/astral"
-	"github.com/astralp2p/astrald/mod/mcp"
+	mcpmod "github.com/astralp2p/astrald/mod/mcp"
 )
 
 type dbAgent struct {
@@ -22,5 +22,5 @@ type dbAgent struct {
 }
 
 func (dbAgent) TableName() string {
-	return mcp.DBPrefix + "agents"
+	return mcpmod.DBPrefix + "agents"
 }

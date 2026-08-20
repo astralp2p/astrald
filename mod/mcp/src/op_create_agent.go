@@ -3,10 +3,10 @@ package mcp
 import (
 	"time"
 
+	"github.com/astralp2p/astral-go/api/mcp"
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astral-go/astral/channel"
 	"github.com/astralp2p/astral-go/lib/routing"
-	"github.com/astralp2p/astrald/mod/mcp"
 )
 
 type opCreateAgentArgs struct {
