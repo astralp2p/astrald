@@ -22,14 +22,11 @@ An `App` is an external process that uses a Host `Node` through the `apphost` mo
 
 * Relay authorization: the query preprocessor attaches the contract to outbound queries whose `Caller` equals the issuer.
 * Relay hints: the preprocessor adds every non-local subject of a contract issued by `Target` as a relay hop.
-* Identity proof in the local swarm: `User.PushToLocalSwarm` republishes signed contracts after `register` and `sign_app_contract`.
+* Identity proof in the local swarm: `User.PushToLocalSwarm` republishes signed contracts after `register`.
 
-Two ops produce contracts:
+One op produces contracts. `apphost.register` provisions an identity and issues both itself: the app→node relay contract, and a node→app contract carrying whatever permits the register policy approved.
 
-* `apphost.new_app_contract` returns an unsigned `Contract`.
-* `apphost.sign_app_contract` signs, indexes, stores, and pushes a caller-supplied `Contract`.
-
-`apphost.register` provisions an identity and issues both contracts itself: the app→node relay contract, and a node→app contract carrying whatever permits the register policy approved.
+`apphost.new_app_contract` and `apphost.sign_app_contract` produced them the long way round and are retired. An app does not bring an `Identity` of its own to a node.
 
 ## Holds
 

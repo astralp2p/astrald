@@ -10,7 +10,7 @@ Bridges local apps into the node over IPC, an HTTP object/query gateway, and a l
 | `crypto` | `AddToIndex` stores the secp256k1 key minted by `apphost.register` so the new guest identity can sign |
 | `dir` | `ResolveIdentity` for configured static tokens and HTTP `@alias/path` targets; formats the host alias in `HostInfoMsg` |
 | `objects` | `Store` persists signed app contracts and the guest key; `ReadDefault()` serves objects through HTTP `/.objects/<id>`; `AddHolder` discovers `Module` as an `objects.Holder` to block purge of held objects |
-| `user` (opt) | `PushToLocalSwarm` republishes signed app contracts after `register` and `sign_app_contract`; current paths call it without a nil guard |
+| `user` (opt) | `PushToLocalSwarm` republishes signed app contracts after `register`; current paths call it without a nil guard |
 | `core/assets` | `Database()` backs `apphost__access_tokens`, `apphost__grants`, `apphost__object_holds`; `LoadYAML` loads apphost config |
 
 ## Flows
