@@ -19,6 +19,13 @@ type opAcceptContractArgs struct {
 // validated (signatures, subject == node, not expired, grants membership)
 // before anything is stored or activated; the active-contract store's follow
 // indexes it for delegation lookups.
+//
+// why: no action gates this op, by decision. Claimed, the code 2 below refuses
+// every caller. Unclaimed, there is no active contract and so no permit any
+// caller could hold — both swarm authorizers refuse on a nil contract, so an
+// action here would refuse everyone in the only window the op acts in. The gate
+// is the artifact: validateActiveContract requires a subject signature made by
+// this node's own key. Revisit when the claim window admits an identity.
 func (mod *Module) OpAcceptContract(ctx *astral.Context, q *routing.IncomingQuery, args opAcceptContractArgs) (err error) {
 	ac := mod.ActiveContract()
 	if ac != nil {
