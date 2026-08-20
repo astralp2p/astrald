@@ -5,7 +5,7 @@ import (
 	"github.com/astralp2p/astral-go/astral/log"
 	"github.com/astralp2p/astrald/core"
 	"github.com/astralp2p/astrald/core/assets"
-	"github.com/astralp2p/astrald/mod/mcp"
+	mcpmod "github.com/astralp2p/astrald/mod/mcp"
 )
 
 type Loader struct{}
@@ -21,7 +21,7 @@ func (Loader) Load(node astral.Node, assets assets.Assets, log *log.Logger) (cor
 		log:    log,
 	}
 
-	_ = assets.LoadYAML(mcp.ModuleName, &mod.config)
+	_ = assets.LoadYAML(mcpmod.ModuleName, &mod.config)
 
 	mod.router.AddStructPrefix(mod, "Op")
 
@@ -47,7 +47,7 @@ func (Loader) Load(node astral.Node, assets assets.Assets, log *log.Logger) (cor
 }
 
 func init() {
-	if err := core.RegisterModule(mcp.ModuleName, Loader{}); err != nil {
+	if err := core.RegisterModule(mcpmod.ModuleName, Loader{}); err != nil {
 		panic(err)
 	}
 }

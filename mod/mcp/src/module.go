@@ -3,6 +3,7 @@ package mcp
 import (
 	"sync"
 
+	"github.com/astralp2p/astral-go/api/mcp"
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astral-go/astral/log"
 	"github.com/astralp2p/astral-go/lib/routing"
@@ -48,14 +49,14 @@ func (mod *Module) Router() astral.Router {
 	return &mod.router
 }
 
-func (mod *Module) Agents() (list []*mcpmod.Agent, err error) {
+func (mod *Module) Agents() (list []*mcp.Agent, err error) {
 	rows, err := mod.db.ListAgents()
 	if err != nil {
 		return nil, err
 	}
-	list = make([]*mcpmod.Agent, len(rows))
+	list = make([]*mcp.Agent, len(rows))
 	for i, r := range rows {
-		list[i] = &mcpmod.Agent{
+		list[i] = &mcp.Agent{
 			Identity:  r.Identity,
 			Alias:     astral.String8(r.Alias),
 			Token:     astral.String8(r.Token),

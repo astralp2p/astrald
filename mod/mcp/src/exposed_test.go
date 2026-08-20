@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/astralp2p/astral-go/api/mcp"
 	"github.com/astralp2p/astral-go/astral"
-	mcpmod "github.com/astralp2p/astrald/mod/mcp"
 )
 
 func createTestAgent(t *testing.T, mod *Module, alias string) *astral.Identity {
@@ -144,7 +144,7 @@ func TestDeleteAgentWithoutAlias(t *testing.T) {
 // The record a caller reads about someone else's agent carries no secret. A
 // field added later that does is what this guards against, not today's shape.
 func TestAgentInfoCarriesNoToken(t *testing.T) {
-	typ := reflect.TypeOf(mcpmod.AgentInfo{})
+	typ := reflect.TypeOf(mcp.AgentInfo{})
 
 	for i := range typ.NumField() {
 		name := typ.Field(i).Name
