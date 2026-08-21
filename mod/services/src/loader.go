@@ -1,11 +1,11 @@
 package services
 
 import (
-	"github.com/cryptopunkscc/astrald/astral"
-	"github.com/cryptopunkscc/astrald/astral/log"
-	"github.com/cryptopunkscc/astrald/core"
-	"github.com/cryptopunkscc/astrald/core/assets"
-	"github.com/cryptopunkscc/astrald/mod/services"
+	"github.com/astralp2p/astral-go/astral"
+	"github.com/astralp2p/astral-go/astral/log"
+	"github.com/astralp2p/astrald/core"
+	"github.com/astralp2p/astrald/core/assets"
+	"github.com/astralp2p/astrald/mod/services"
 )
 
 type Loader struct{}
@@ -17,8 +17,13 @@ func (Loader) Load(node astral.Node, assets assets.Assets, log *log.Logger) (cor
 	}
 
 	mod.db = &DB{db: assets.Database()}
+	mod.external = newExternalServices()
 
 	if err := mod.db.Migrate(); err != nil {
+		return nil, err
+	}
+
+	if err := mod.AddDiscoverer(mod.external); err != nil {
 		return nil, err
 	}
 

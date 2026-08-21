@@ -7,7 +7,7 @@ import (
 	"os/exec"
 	"strings"
 
-	"github.com/cryptopunkscc/astrald/mod/coldcard"
+	"github.com/astralp2p/astrald/mod/coldcard"
 )
 
 type Device struct {

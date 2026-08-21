@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"reflect"
 
-	"github.com/cryptopunkscc/astrald/astral"
+	"github.com/astralp2p/astral-go/astral"
 )
 
 // Load reads an object from repo, decodes it, and type-asserts it to T.

@@ -1,9 +1,10 @@
 package objects
 
 import (
-	"github.com/cryptopunkscc/astrald/astral"
-	"github.com/cryptopunkscc/astrald/core"
-	"github.com/cryptopunkscc/astrald/mod/objects"
+	"github.com/astralp2p/astral-go/api/objects"
+	"github.com/astralp2p/astral-go/astral"
+	"github.com/astralp2p/astrald/core"
+	objectsmod "github.com/astralp2p/astrald/mod/objects"
 )
 
 // LoadDependencies injects core deps, then scans every other loaded module and
@@ -37,12 +38,16 @@ func (mod *Module) LoadDependencies(*astral.Context) (err error) {
 				mod.AddFinder(d)
 			}
 
-			if h, ok := m.(objects.Holder); ok {
+			if h, ok := m.(objectsmod.Holder); ok {
 				mod.AddHolder(h)
 			}
 
-			if r, ok := m.(objects.Receiver); ok {
+			if r, ok := m.(objectsmod.Receiver); ok {
 				mod.AddReceiver(r)
+			}
+
+			if i, ok := m.(objectsmod.Indexer); ok {
+				mod.AddIndexer(i)
 			}
 		}
 	}

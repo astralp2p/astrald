@@ -1,0 +1,6 @@
+env     = "node"
+start   = "two-nodes"
+saves   = "two-nodes-data"
+nodes   = ["node1", "node2"]
+drivers = ["script", "agent"]
+timeout = 120

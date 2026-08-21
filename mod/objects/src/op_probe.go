@@ -1,21 +1,25 @@
 package objects
 
 import (
-	"github.com/cryptopunkscc/astrald/astral"
-	"github.com/cryptopunkscc/astrald/astral/channel"
-	"github.com/cryptopunkscc/astrald/lib/routing"
+	"github.com/astralp2p/astral-go/astral"
+	"github.com/astralp2p/astral-go/astral/channel"
+	"github.com/astralp2p/astral-go/lib/routing"
 )
 
 type opProbeArgs struct {
-	ID   *astral.ObjectID `query:"optional"`
-	Repo string           `query:"optional"`
-	In   string           `query:"optional"`
-	Out  string           `query:"optional"`
+	ID   *astral.ObjectID
+	Repo string
+	In   string
+	Out  string
 }
 
 // OpProbe probes a single object when args.ID is set, otherwise streams probes
 // for ObjectIDs received over the channel until EOS.
 func (mod *Module) OpProbe(ctx *astral.Context, q *routing.IncomingQuery, args opProbeArgs) (err error) {
+	if !mod.authorizeSeeObjects(ctx, q, args.ID, args.Repo) {
+		return q.Reject()
+	}
+
 	ch := channel.New(q.AcceptRaw(), channel.WithFormats(args.In, args.Out))
 	defer ch.Close()
 
@@ -36,18 +40,11 @@ func (mod *Module) OpProbe(ctx *astral.Context, q *routing.IncomingQuery, args o
 		return ch.Send(probe)
 	}
 
-	return ch.Handle(ctx, func(object astral.Object) {
-		switch msg := object.(type) {
-		case *astral.ObjectID:
-			probe, err := mod.Probe(ctx, repo, msg)
-			if err != nil {
-				ch.Send(astral.NewError(err.Error()))
-			} else {
-				ch.Send(probe)
-			}
-
-		case *astral.EOS:
-			ch.Close()
+	return channel.Batch(ch, func(id *astral.ObjectID) astral.Object {
+		probe, err := mod.Probe(ctx, repo, id)
+		if err != nil {
+			return astral.NewError(err.Error())
 		}
-	})
+		return probe
+	}, channel.WithContext(ctx))
 }

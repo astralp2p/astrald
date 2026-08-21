@@ -1,18 +1,18 @@
 package kcp
 
 import (
-	"github.com/cryptopunkscc/astrald/astral"
-	"github.com/cryptopunkscc/astrald/astral/channel"
-	"github.com/cryptopunkscc/astrald/lib/routing"
-	"github.com/cryptopunkscc/astrald/mod/kcp"
+	"github.com/astralp2p/astral-go/api/kcp"
+	"github.com/astralp2p/astral-go/astral"
+	"github.com/astralp2p/astral-go/astral/channel"
+	"github.com/astralp2p/astral-go/lib/routing"
 )
 
 type opSetEndpointLocalPort struct {
 	Endpoint  string
 	LocalPort astral.Uint16
-	Replace   astral.Bool `query:"optional"`
-	In        string      `query:"optional"`
-	Out       string      `query:"optional"`
+	Replace   astral.Bool
+	In        string
+	Out       string
 }
 
 func (mod *Module) OpSetEndpointLocalPort(ctx *astral.Context, q *routing.IncomingQuery, args opSetEndpointLocalPort) (err error) {

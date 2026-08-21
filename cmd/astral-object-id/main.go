@@ -4,7 +4,7 @@ import (
 	"encoding/hex"
 	"flag"
 	"fmt"
-	"github.com/cryptopunkscc/astrald/astral"
+	"github.com/astralp2p/astral-go/astral"
 	"io"
 	"os"
 )

@@ -1,20 +1,24 @@
 package objects
 
 import (
-	"github.com/cryptopunkscc/astrald/astral"
-	"github.com/cryptopunkscc/astrald/astral/channel"
-	"github.com/cryptopunkscc/astrald/lib/routing"
+	"github.com/astralp2p/astral-go/astral"
+	"github.com/astralp2p/astral-go/astral/channel"
+	"github.com/astralp2p/astral-go/lib/routing"
 )
 
 type opScanArgs struct {
-	Repo   string
-	Follow bool         `query:"optional"`
-	Zone   *astral.Zone `query:"optional"`
-	Out    string       `query:"optional"`
+	Repo   string `query:"required"`
+	Follow bool
+	Zone   *astral.Zone
+	Out    string
 }
 
 // OpScan sends a list of object ids in a repository
 func (mod *Module) OpScan(ctx *astral.Context, q *routing.IncomingQuery, args opScanArgs) (err error) {
+	if !mod.authorizeSeeObjects(ctx, q, nil, args.Repo) {
+		return q.Reject()
+	}
+
 	// prepare the context
 	ctx = ctx.WithIdentity(q.Caller())
 	if args.Zone == nil {

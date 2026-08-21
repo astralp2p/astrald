@@ -4,10 +4,10 @@ import (
 	"errors"
 	"time"
 
-	"github.com/cryptopunkscc/astrald/astral"
-	"github.com/cryptopunkscc/astrald/mod/objects"
-	"github.com/cryptopunkscc/astrald/mod/secp256k1"
-	"github.com/cryptopunkscc/astrald/mod/user"
+	"github.com/astralp2p/astral-go/api/secp256k1"
+	"github.com/astralp2p/astral-go/api/user"
+	"github.com/astralp2p/astral-go/astral"
+	"github.com/astralp2p/astrald/mod/objects"
 )
 
 // Expel permanently bans nodeID from the active swarm. Only the swarm's user (the
@@ -45,7 +45,13 @@ func (mod *Module) Expel(ctx *astral.Context, nodeID *astral.Identity) (*user.Si
 	}
 
 	go mod.PushToLocalSwarm(mod.ctx, signed)
-	mod.applyExpulsion(nodeID)
+	// why: PushToLocalSwarm and syncExpulsions both skip the subject, so push the ban
+	// to the expelled node directly — its only trigger to self-enforce via leaveSwarm.
+	go mod.Objects.Push(mod.ctx, nodeID, signed)
+	// why: stop maintaining the link but do not force-close it — that would race the
+	// push above. On delivery the node tears itself down; until then the issuer's
+	// authorizers reject it.
+	mod.removeSibling(nodeID)
 
 	mod.log.Info("expelled %v from swarm", nodeID)
 	return signed, nil
@@ -78,14 +84,46 @@ func (mod *Module) receiveExpulsion(signed *user.SignedExpulsion) error {
 	return nil
 }
 
-// applyExpulsion tears down all live ties to id: it disconnects open links and
-// stops the sibling link-maintenance task. Membership filtering already prevents
-// re-linking once the ban is stored.
+// applyExpulsion enforces a stored ban on id. When id is the local node the ban
+// strips this node's own membership via leaveSwarm; otherwise it severs ties to the
+// banned peer. Membership filtering already prevents re-linking once the ban is stored.
 func (mod *Module) applyExpulsion(id *astral.Identity) {
+	if id.IsEqual(mod.node.Identity()) {
+		mod.leaveSwarm()
+		return
+	}
+
 	if err := mod.Nodes.CloseLinks(id); err != nil {
 		mod.log.Errorv(1, "closing links to expelled %v: %v", id, err)
 	}
 	mod.removeSibling(id)
+}
+
+// leaveSwarm strips this node's own membership after it is expelled from its swarm:
+// it cancels every sibling link-maintenance task, closes the links, and clears the
+// active contract.
+// why: expulsion does not revoke the contract, and MaintainLinkTask never re-checks
+// it, so without this the banned node keeps reconnecting to and syncing with peers
+// that now reject it. Clearing the contract is the only local signal of the ban.
+func (mod *Module) leaveSwarm() {
+	for _, sib := range mod.sibs.Values() {
+		mod.removeSibling(sib.ID)
+		if err := mod.Nodes.CloseLinks(sib.ID); err != nil {
+			mod.log.Errorv(1, "closing link to former sibling %v: %v", sib.ID, err)
+		}
+	}
+
+	if err := mod.config.ActiveContract.Clear(mod.ctx); err != nil {
+		mod.log.Errorv(1, "clearing active contract after expulsion: %v", err)
+	}
+}
+
+// isExpelled reports whether issuer has banned subject. Expulsion is irreversible,
+// so IssueMembership refuses a banned subject rather than minting a fresh contract
+// the membership filter would only hide post-hoc.
+func (mod *Module) isExpelled(issuer, subject *astral.Identity) bool {
+	_, banned := mod.expelledSet(issuer)[subject.String()]
+	return banned
 }
 
 // expelledSet returns the subjects banned by issuer, keyed by identity string for

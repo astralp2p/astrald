@@ -1,9 +1,9 @@
 package ip
 
 import (
-	"github.com/cryptopunkscc/astrald/astral/fmt"
-	"github.com/cryptopunkscc/astrald/mod/ip"
-	"github.com/cryptopunkscc/astrald/mod/log/theme"
+	"github.com/astralp2p/astral-go/api/ip"
+	"github.com/astralp2p/astral-go/astral/fmt"
+	"github.com/astralp2p/astral-go/astral/log/theme"
 )
 
 type IPView struct {

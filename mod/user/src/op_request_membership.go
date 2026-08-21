@@ -1,15 +1,15 @@
 package user
 
 import (
-	"github.com/cryptopunkscc/astrald/astral"
-	"github.com/cryptopunkscc/astrald/astral/channel"
-	"github.com/cryptopunkscc/astrald/lib/routing"
-	"github.com/cryptopunkscc/astrald/mod/user"
+	"github.com/astralp2p/astral-go/api/user"
+	"github.com/astralp2p/astral-go/astral"
+	"github.com/astralp2p/astral-go/astral/channel"
+	"github.com/astralp2p/astral-go/lib/routing"
 )
 
 type opRequestMembershipArgs struct {
-	In  string `query:"optional"`
-	Out string `query:"optional"`
+	In  string
+	Out string
 }
 
 // OpRequestMembership allows a caller node to request membership in this node's swarm.

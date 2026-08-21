@@ -3,33 +3,29 @@ package objects
 import (
 	"io"
 
-	"github.com/cryptopunkscc/astrald/astral"
-	"github.com/cryptopunkscc/astrald/lib/routing"
-	"github.com/cryptopunkscc/astrald/mod/auth"
-	"github.com/cryptopunkscc/astrald/mod/objects"
+	"github.com/astralp2p/astral-go/astral"
+	"github.com/astralp2p/astral-go/lib/routing"
 )
 
 type opReadArgs struct {
-	ID     *astral.ObjectID
-	Offset astral.Uint64 `query:"optional"`
-	Limit  astral.Uint64 `query:"optional"`
-	Zone   astral.Zone   `query:"optional"`
-	Repo   string        `query:"optional"`
+	ID     *astral.ObjectID `query:"required"`
+	Offset astral.Uint64
+	Limit  astral.Uint64
+	Zone   astral.Zone
+	Repo   string
 }
 
-// OpRead authorizes the caller, then streams raw object bytes over the accepted
-// connection. Records the access in the reads journal, which feeds purge ordering.
+// OpRead authorizes the caller under SeeObjects, then streams raw object bytes
+// over the accepted connection. Records the access in the reads journal, which
+// feeds purge ordering.
 func (mod *Module) OpRead(ctx *astral.Context, q *routing.IncomingQuery, args opReadArgs) (err error) {
 	ctx = ctx.IncludeZone(args.Zone)
-	repo := mod.ReadDefault()
 
-	allowed := mod.Auth.Authorize(ctx, &objects.ReadObjectAction{
-		Action:   auth.NewAction(q.Caller()),
-		ObjectID: args.ID,
-	})
-	if !allowed {
+	if !mod.authorizeSeeObjects(ctx, q, args.ID, args.Repo) {
 		return q.Reject()
 	}
+
+	repo := mod.ReadDefault()
 
 	if len(args.Repo) > 0 {
 		repo = mod.GetRepository(args.Repo)

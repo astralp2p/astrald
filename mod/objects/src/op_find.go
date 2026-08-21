@@ -4,19 +4,23 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/cryptopunkscc/astrald/astral"
-	"github.com/cryptopunkscc/astrald/astral/channel"
-	"github.com/cryptopunkscc/astrald/lib/routing"
-	"github.com/cryptopunkscc/astrald/sig"
+	"github.com/astralp2p/astral-go/astral"
+	"github.com/astralp2p/astral-go/astral/channel"
+	"github.com/astralp2p/astral-go/lib/routing"
+	"github.com/astralp2p/astral-go/sig"
 )
 
 type opFindArgs struct {
-	ID   *astral.ObjectID
-	Zone astral.Zone `query:"optional"`
-	Out  string      `query:"optional"`
+	ID   *astral.ObjectID `query:"required"`
+	Zone astral.Zone
+	Out  string
 }
 
 func (mod *Module) OpFind(ctx *astral.Context, q *routing.IncomingQuery, args opFindArgs) error {
+	if !mod.authorizeSeeObjects(ctx, q, args.ID, "") {
+		return q.Reject()
+	}
+
 	ctx, cancel := ctx.WithIdentity(q.Caller()).IncludeZone(args.Zone).WithTimeout(time.Minute)
 	defer cancel()
 

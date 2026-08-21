@@ -1,15 +1,15 @@
 package kcp
 
 import (
-	"github.com/cryptopunkscc/astrald/astral"
-	"github.com/cryptopunkscc/astrald/astral/channel"
-	"github.com/cryptopunkscc/astrald/lib/routing"
+	"github.com/astralp2p/astral-go/astral"
+	"github.com/astralp2p/astral-go/astral/channel"
+	"github.com/astralp2p/astral-go/lib/routing"
 )
 
 type opCloseEphemeralListenerArgs struct {
-	Port astral.Uint16
-	In   string `query:"optional"`
-	Out  string `query:"optional"`
+	Port astral.Uint16 `query:"required"`
+	In   string
+	Out  string
 }
 
 func (mod *Module) OpCloseEphemeralListener(ctx *astral.Context, q *routing.IncomingQuery, args opCloseEphemeralListenerArgs) (err error) {

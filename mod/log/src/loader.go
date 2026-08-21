@@ -1,13 +1,13 @@
 package log
 
 import (
-	"github.com/cryptopunkscc/astrald/astral"
-	"github.com/cryptopunkscc/astrald/astral/fmt"
-	alog "github.com/cryptopunkscc/astrald/astral/log"
-	"github.com/cryptopunkscc/astrald/core"
-	"github.com/cryptopunkscc/astrald/core/assets"
-	modlog "github.com/cryptopunkscc/astrald/mod/log"
-	"github.com/cryptopunkscc/astrald/mod/log/views"
+	"github.com/astralp2p/astral-go/astral"
+	"github.com/astralp2p/astral-go/astral/fmt"
+	alog "github.com/astralp2p/astral-go/astral/log"
+	"github.com/astralp2p/astrald/core"
+	"github.com/astralp2p/astrald/core/assets"
+	modlog "github.com/astralp2p/astrald/mod/log"
+	"github.com/astralp2p/astrald/mod/log/views"
 )
 
 type Loader struct{}
@@ -37,7 +37,7 @@ func (Loader) Load(node astral.Node, assets assets.Assets, log *alog.Logger) (co
 
 	// add a log file to the output list. Failure here (e.g. read-only $HOME on
 	// Android) is non-fatal — the module remains usable without on-disk logs.
-	if logFile, ferr := CreateLogFile(); ferr != nil {
+	if logFile, ferr := CreateLogFile(node.Identity()); ferr != nil {
 		log.Error("cannot create log file: %v", ferr)
 	} else {
 		log.AddLogger(logFile)

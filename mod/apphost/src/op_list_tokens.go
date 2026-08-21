@@ -3,15 +3,15 @@ package apphost
 import (
 	"slices"
 
-	"github.com/cryptopunkscc/astrald/astral"
-	"github.com/cryptopunkscc/astrald/astral/channel"
-	"github.com/cryptopunkscc/astrald/lib/routing"
-	"github.com/cryptopunkscc/astrald/mod/apphost"
+	"github.com/astralp2p/astral-go/api/apphost"
+	"github.com/astralp2p/astral-go/astral"
+	"github.com/astralp2p/astral-go/astral/channel"
+	"github.com/astralp2p/astral-go/lib/routing"
 )
 
 type opListTokensArgs struct {
-	ID  *astral.Identity `query:"optional"`
-	Out string           `query:"optional"`
+	ID  *astral.Identity
+	Out string
 }
 
 // OpListTokens lists all access tokens of an identity

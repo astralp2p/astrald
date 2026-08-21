@@ -1,16 +1,16 @@
 package src
 
 import (
-	"github.com/cryptopunkscc/astrald/astral"
-	"github.com/cryptopunkscc/astrald/astral/channel"
-	"github.com/cryptopunkscc/astrald/lib/routing"
-	"github.com/cryptopunkscc/astrald/mod/bip137sig"
+	"github.com/astralp2p/astral-go/api/bip137sig"
+	"github.com/astralp2p/astral-go/astral"
+	"github.com/astralp2p/astral-go/astral/channel"
+	"github.com/astralp2p/astral-go/lib/routing"
 )
 
 type opDeriveKeyArgs struct {
 	Path string
-	In   string `query:"optional"`
-	Out  string `query:"optional"`
+	In   string
+	Out  string
 }
 
 // OpDeriveKey receives a Seed over the channel and replies with the key derived along Path.

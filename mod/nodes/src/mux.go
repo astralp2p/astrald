@@ -7,13 +7,13 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/cryptopunkscc/astrald/astral"
-	"github.com/cryptopunkscc/astrald/astral/channel"
-	"github.com/cryptopunkscc/astrald/lib/query"
-	"github.com/cryptopunkscc/astrald/mod/auth"
-	"github.com/cryptopunkscc/astrald/mod/nodes"
-	"github.com/cryptopunkscc/astrald/mod/nodes/frames"
-	"github.com/cryptopunkscc/astrald/sig"
+	"github.com/astralp2p/astral-go/api/auth"
+	"github.com/astralp2p/astral-go/api/nodes"
+	"github.com/astralp2p/astral-go/astral"
+	"github.com/astralp2p/astral-go/astral/channel"
+	"github.com/astralp2p/astral-go/lib/query"
+	"github.com/astralp2p/astral-go/sig"
+	"github.com/astralp2p/astrald/mod/nodes/frames"
 )
 
 // Mux multiplexes many query sessions over one link channel, dispatching inbound frames and tracking per-session state.

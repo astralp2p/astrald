@@ -8,13 +8,13 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/cryptopunkscc/astrald/astral"
-	"github.com/cryptopunkscc/astrald/astral/log"
-	"github.com/cryptopunkscc/astrald/mod/ether"
-	"github.com/cryptopunkscc/astrald/mod/ip"
-	"github.com/cryptopunkscc/astrald/mod/secp256k1"
-	"github.com/cryptopunkscc/astrald/resources"
-	"github.com/cryptopunkscc/astrald/sig"
+	"github.com/astralp2p/astral-go/api/ip"
+	"github.com/astralp2p/astral-go/api/secp256k1"
+	"github.com/astralp2p/astral-go/astral"
+	"github.com/astralp2p/astral-go/astral/log"
+	"github.com/astralp2p/astral-go/sig"
+	"github.com/astralp2p/astrald/mod/ether"
+	"github.com/astralp2p/astrald/resources"
 )
 
 const maxBroadcastSize = 1<<16 - 1

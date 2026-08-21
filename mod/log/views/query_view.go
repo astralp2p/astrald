@@ -1,8 +1,8 @@
 package views
 
 import (
-	"github.com/cryptopunkscc/astrald/astral"
-	"github.com/cryptopunkscc/astrald/astral/fmt"
+	"github.com/astralp2p/astral-go/astral"
+	"github.com/astralp2p/astral-go/astral/fmt"
 )
 
 type QueryView struct {

@@ -4,23 +4,24 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	objectsmod "github.com/astralp2p/astrald/mod/objects"
 	"io"
 	"net/http"
 	"strings"
 	"sync"
 	"time"
 
-	"github.com/cryptopunkscc/astrald/astral"
-	"github.com/cryptopunkscc/astrald/astral/log"
-	"github.com/cryptopunkscc/astrald/lib/routing"
-	"github.com/cryptopunkscc/astrald/mod/auth"
-	"github.com/cryptopunkscc/astrald/mod/dir"
-	"github.com/cryptopunkscc/astrald/mod/nodes"
-	"github.com/cryptopunkscc/astrald/mod/objects"
-	"github.com/cryptopunkscc/astrald/sig"
+	"github.com/astralp2p/astral-go/api/objects"
+	"github.com/astralp2p/astral-go/astral"
+	"github.com/astralp2p/astral-go/astral/log"
+	"github.com/astralp2p/astral-go/lib/routing"
+	"github.com/astralp2p/astral-go/sig"
+	"github.com/astralp2p/astrald/mod/auth"
+	"github.com/astralp2p/astrald/mod/dir"
+	"github.com/astralp2p/astrald/mod/nodes"
 )
 
-var _ objects.Module = &Module{}
+var _ objectsmod.Module = &Module{}
 
 const defaultExternalDiscovererTimeout = 15 * time.Second
 
@@ -39,14 +40,15 @@ type Module struct {
 	router routing.OpRouter
 
 	ctx        *astral.Context
-	system     objects.Repository
+	system     objectsmod.Repository
 	describers sig.Set[objects.Describer]
 	searchers  sig.Set[objects.Searcher]
 	searchPre  sig.Set[objects.SearchPreprocessor]
 	finders    sig.Set[objects.Finder]
-	receivers  sig.Set[objects.Receiver]
-	holders    sig.Set[objects.Holder]
-	repos      sig.Map[string, objects.Repository]
+	receivers  sig.Set[objectsmod.Receiver]
+	holders    sig.Set[objectsmod.Holder]
+	indexers   sig.Set[objectsmod.Indexer]
+	repos      sig.Map[string, objectsmod.Repository]
 
 	externalMu sync.Mutex
 
@@ -72,7 +74,7 @@ func (mod *Module) Run(ctx *astral.Context) error {
 // Load reads and decodes an object from repo. Data that isn't a valid astral
 // object is returned as an *astral.Blob rather than an error. Marks the read in
 // the reads journal and tracks the type for decoded objects.
-func (mod *Module) Load(ctx *astral.Context, repo objects.Repository, objectID *astral.ObjectID) (astral.Object, error) {
+func (mod *Module) Load(ctx *astral.Context, repo objectsmod.Repository, objectID *astral.ObjectID) (astral.Object, error) {
 	// read the object data
 	r, err := repo.Read(ctx, objectID, 0, 0)
 	if err != nil {
@@ -104,7 +106,7 @@ func (mod *Module) Load(ctx *astral.Context, repo objects.Repository, objectID *
 	}
 }
 
-func (mod *Module) Store(ctx *astral.Context, repo objects.Repository, object astral.Object) (*astral.ObjectID, error) {
+func (mod *Module) Store(ctx *astral.Context, repo objectsmod.Repository, object astral.Object) (*astral.ObjectID, error) {
 	w, err := repo.Create(ctx, nil)
 	if err != nil {
 		return nil, err
@@ -121,6 +123,7 @@ func (mod *Module) Store(ctx *astral.Context, repo objects.Repository, object as
 	}
 
 	mod.trackObject(id, object.ObjectType())
+	mod.index(object)
 
 	return id, nil
 }
@@ -138,7 +141,7 @@ func (mod *Module) GetType(ctx *astral.Context, objectID *astral.ObjectID) (obje
 	// read first bytes of the object
 	r, err := mod.ReadDefault().Read(ctx, objectID, 0, 260) // max header size: 4 magic bytes + 1 len + 255 type
 	if err != nil {
-		return "", objects.ErrNotFound
+		return "", objectsmod.ErrNotFound
 	}
 	defer r.Close()
 
@@ -164,7 +167,7 @@ func (mod *Module) GetType(ctx *astral.Context, objectID *astral.ObjectID) (obje
 // Probe reads only the object's header and reports its type, MIME, source repo,
 // and read latency without loading the full payload. Tracks the type when the
 // object carries a valid astral stamp.
-func (mod *Module) Probe(ctx *astral.Context, repo objects.Repository, objectID *astral.ObjectID) (probe *objects.Probe, err error) {
+func (mod *Module) Probe(ctx *astral.Context, repo objectsmod.Repository, objectID *astral.ObjectID) (probe *objects.Probe, err error) {
 	probe = &objects.Probe{}
 
 	startAt := time.Now()
@@ -222,7 +225,7 @@ func (mod *Module) trackObject(id *astral.ObjectID, objectType string) {
 }
 
 // getRepoName returns the name of a repository
-func (mod *Module) getRepoName(repo objects.Repository) string {
+func (mod *Module) getRepoName(repo objectsmod.Repository) string {
 	for name, r := range mod.repos.Clone() {
 		if r == repo {
 			return name
@@ -270,7 +273,7 @@ func (mod *Module) String() string {
 
 func containsSourceIdentity[T comparable](set *sig.Set[T], id *astral.Identity) bool {
 	for _, item := range set.Clone() {
-		sourceID, ok, err := objects.SourceIdentity(item)
+		sourceID, ok, err := objectsmod.SourceIdentity(item)
 		if err != nil || !ok {
 			continue
 		}

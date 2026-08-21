@@ -2,17 +2,18 @@ package tor
 
 import (
 	"bytes"
-	"github.com/cryptopunkscc/astrald/mod/exonet"
-	"github.com/cryptopunkscc/astrald/mod/tor"
+	"github.com/astralp2p/astral-go/api/exonet"
+	"github.com/astralp2p/astral-go/api/tor"
+	exonetmod "github.com/astralp2p/astrald/mod/exonet"
 )
 
 const addrVersion = 3
 
-var _ exonet.Unpacker = &Module{}
+var _ exonetmod.Unpacker = &Module{}
 
 func (mod *Module) Unpack(network string, data []byte) (exonet.Endpoint, error) {
 	if network != tor.ModuleName {
-		return nil, exonet.ErrUnsupportedNetwork
+		return nil, exonetmod.ErrUnsupportedNetwork
 	}
 	return Unpack(data)
 }

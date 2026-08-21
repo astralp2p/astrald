@@ -1,18 +1,22 @@
 package objects
 
 import (
-	"github.com/cryptopunkscc/astrald/astral"
-	"github.com/cryptopunkscc/astrald/astral/channel"
-	"github.com/cryptopunkscc/astrald/lib/routing"
+	"github.com/astralp2p/astral-go/astral"
+	"github.com/astralp2p/astral-go/astral/channel"
+	"github.com/astralp2p/astral-go/lib/routing"
 )
 
 type opRemoveRepositoryArgs struct {
-	Name string
-	In   string `query:"optional"`
-	Out  string `query:"optional"`
+	Name string `query:"required"`
+	In   string
+	Out  string
 }
 
 func (mod *Module) OpRemoveRepository(ctx *astral.Context, q *routing.IncomingQuery, args opRemoveRepositoryArgs) (err error) {
+	if !mod.authorizeAdminObjects(ctx, q, nil, args.Name) {
+		return q.Reject()
+	}
+
 	ch := channel.New(q.AcceptRaw(), channel.WithFormats(args.In, args.Out))
 	defer ch.Close()
 

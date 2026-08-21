@@ -2,10 +2,11 @@ package auth
 
 import (
 	"fmt"
+	authmod "github.com/astralp2p/astrald/mod/auth"
 	"time"
 
-	"github.com/cryptopunkscc/astrald/astral"
-	"github.com/cryptopunkscc/astrald/mod/auth"
+	"github.com/astralp2p/astral-go/api/auth"
+	"github.com/astralp2p/astral-go/astral"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 )
@@ -13,7 +14,7 @@ import (
 type DB struct{ *gorm.DB }
 
 func (db *DB) findActiveContracts(q *contractQuery) ([]*dbContract, error) {
-	now := time.Now()
+	now := time.Now().UTC()
 	gq := db.DB.
 		Where("starts_at <= ?", now).
 		Where("expires_at > ?", now)
@@ -28,9 +29,9 @@ func (db *DB) findActiveContracts(q *contractQuery) ([]*dbContract, error) {
 
 	if len(q.actions) > 0 {
 		gq = gq.
-			Joins("JOIN "+auth.DBPrefix+"contract_permits ON "+auth.DBPrefix+"contract_permits.object_id = "+auth.DBPrefix+"contracts.object_id").
-			Where(auth.DBPrefix+"contract_permits.name IN ?", q.actions).
-			Distinct(auth.DBPrefix + "contracts.*")
+			Joins("JOIN "+authmod.DBPrefix+"contract_permits ON "+authmod.DBPrefix+"contract_permits.object_id = "+authmod.DBPrefix+"contracts.object_id").
+			Where(authmod.DBPrefix+"contract_permits.name IN ?", q.actions).
+			Distinct(authmod.DBPrefix + "contracts.*")
 	}
 
 	var rows []*dbContract
@@ -49,7 +50,7 @@ func (db *DB) contractExists(objectID *astral.ObjectID) bool {
 }
 
 func (db *DB) activeContractExists(objectID *astral.ObjectID) (exists bool, err error) {
-	now := time.Now()
+	now := time.Now().UTC()
 	err = db.
 		Model(&dbContract{}).
 		Where("object_id = ?", objectID).

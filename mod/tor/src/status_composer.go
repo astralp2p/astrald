@@ -1,7 +1,7 @@
 package tor
 
 import (
-	"github.com/cryptopunkscc/astrald/mod/nearby"
+	"github.com/astralp2p/astrald/mod/nearby"
 )
 
 var _ nearby.Composer = &Module{}

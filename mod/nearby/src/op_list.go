@@ -1,14 +1,14 @@
 package nearby
 
 import (
-	"github.com/cryptopunkscc/astrald/astral"
-	"github.com/cryptopunkscc/astrald/astral/channel"
-	"github.com/cryptopunkscc/astrald/lib/routing"
-	"github.com/cryptopunkscc/astrald/mod/nearby"
+	"github.com/astralp2p/astral-go/astral"
+	"github.com/astralp2p/astral-go/astral/channel"
+	"github.com/astralp2p/astral-go/lib/routing"
+	"github.com/astralp2p/astrald/mod/nearby"
 )
 
 type opListArgs struct {
-	Out string `query:"optional"`
+	Out string
 }
 
 func (mod *Module) OpList(ctx *astral.Context, q *routing.IncomingQuery, args opListArgs) (err error) {

@@ -3,14 +3,14 @@ package nodes
 import (
 	"slices"
 
-	"github.com/cryptopunkscc/astrald/astral"
-	"github.com/cryptopunkscc/astrald/astral/channel"
-	"github.com/cryptopunkscc/astrald/lib/routing"
-	"github.com/cryptopunkscc/astrald/mod/nodes"
+	"github.com/astralp2p/astral-go/api/nodes"
+	"github.com/astralp2p/astral-go/astral"
+	"github.com/astralp2p/astral-go/astral/channel"
+	"github.com/astralp2p/astral-go/lib/routing"
 )
 
 type opLinksArgs struct {
-	Out string `query:"optional"`
+	Out string
 }
 
 // OpLinks lists all links.
@@ -29,8 +29,8 @@ func (mod *Module) OpLinks(ctx *astral.Context, q *routing.IncomingQuery, args o
 			ID:              s.id,
 			LocalIdentity:   s.LocalIdentity(),
 			RemoteIdentity:  s.RemoteIdentity(),
-			LocalEndpoint:   s.LocalEndpoint(),
-			RemoteEndpoint:  s.RemoteEndpoint(),
+			LocalEndpoint:   knownEndpoint(s.LocalEndpoint()),
+			RemoteEndpoint:  knownEndpoint(s.RemoteEndpoint()),
 			Outbound:        astral.Bool(s.outbound),
 			Network:         astral.String8(s.Network()),
 			HighPressure:    astral.Bool(s.PressureHigh()),

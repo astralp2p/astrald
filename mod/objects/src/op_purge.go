@@ -1,20 +1,24 @@
 package objects
 
 import (
-	"github.com/cryptopunkscc/astrald/astral"
-	"github.com/cryptopunkscc/astrald/astral/channel"
-	"github.com/cryptopunkscc/astrald/lib/routing"
+	"github.com/astralp2p/astral-go/astral"
+	"github.com/astralp2p/astral-go/astral/channel"
+	"github.com/astralp2p/astral-go/lib/routing"
 )
 
 type opPurgeArgs struct {
-	Repo string
-	Out  string       `query:"optional"`
-	Zone *astral.Zone `query:"optional"`
+	Repo string `query:"required"`
+	Out  string
+	Zone *astral.Zone
 }
 
 // OpPurge deletes unheld objects from a repository, streaming each purged ObjectID
 // then a final error or EOS. Defaults to ZoneAll when no zone is given.
 func (mod *Module) OpPurge(ctx *astral.Context, q *routing.IncomingQuery, args opPurgeArgs) error {
+	if !mod.authorizeAdminObjects(ctx, q, nil, args.Repo) {
+		return q.Reject()
+	}
+
 	ctx = ctx.WithIdentity(q.Caller())
 	if args.Zone == nil {
 		ctx = ctx.WithZone(astral.ZoneAll)

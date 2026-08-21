@@ -3,13 +3,12 @@ package nodes
 import (
 	"slices"
 
-	"github.com/cryptopunkscc/astrald/astral"
-	"github.com/cryptopunkscc/astrald/mod/events"
-	"github.com/cryptopunkscc/astrald/mod/ip"
-	"github.com/cryptopunkscc/astrald/mod/nodes"
-	"github.com/cryptopunkscc/astrald/mod/objects"
-	"github.com/cryptopunkscc/astrald/mod/tcp"
-	"github.com/cryptopunkscc/astrald/mod/utp"
+	"github.com/astralp2p/astral-go/api/ip"
+	"github.com/astralp2p/astral-go/api/nodes"
+	"github.com/astralp2p/astral-go/api/tcp"
+	"github.com/astralp2p/astral-go/astral"
+	"github.com/astralp2p/astrald/mod/events"
+	"github.com/astralp2p/astrald/mod/objects"
 )
 
 // ReceiveObject dispatches an inbound object by type, accepting observed-endpoint
@@ -54,8 +53,6 @@ func (mod *Module) receiveObservedEndpointMessage(source *astral.Identity, event
 	var i ip.IP
 	switch e := endpoint.(type) {
 	case *tcp.Endpoint:
-		i = e.IP
-	case *utp.Endpoint:
 		i = e.IP
 	default:
 		// unknown endpoint type

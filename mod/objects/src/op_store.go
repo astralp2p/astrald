@@ -1,18 +1,22 @@
 package objects
 
 import (
-	"github.com/cryptopunkscc/astrald/astral"
-	"github.com/cryptopunkscc/astrald/astral/channel"
-	"github.com/cryptopunkscc/astrald/lib/routing"
+	"github.com/astralp2p/astral-go/astral"
+	"github.com/astralp2p/astral-go/astral/channel"
+	"github.com/astralp2p/astral-go/lib/routing"
 )
 
 type opStoreArgs struct {
-	Repo string `query:"optional"`
-	In   string `query:"optional"`
-	Out  string `query:"optional"`
+	Repo string
+	In   string
+	Out  string
 }
 
 func (mod *Module) OpStore(ctx *astral.Context, q *routing.IncomingQuery, args opStoreArgs) error {
+	if !mod.authorizeStoreObjects(ctx, q, args.Repo, "") {
+		return q.Reject()
+	}
+
 	ch := channel.New(
 		q.AcceptRaw(),
 		channel.WithFormats(args.In, args.Out),
@@ -28,13 +32,11 @@ func (mod *Module) OpStore(ctx *astral.Context, q *routing.IncomingQuery, args o
 		}
 	}
 
-	return ch.Collect(func(object astral.Object) error {
+	return channel.Batch(ch, func(object astral.Object) astral.Object {
 		objectID, err := mod.Store(ctx, repo, object)
 		if err != nil {
-			return ch.Send(astral.NewError(err.Error()))
+			return astral.NewError(err.Error())
 		}
-
-		return ch.Send(objectID)
-	})
-
+		return objectID
+	}, channel.WithContext(ctx))
 }

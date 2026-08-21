@@ -1,14 +1,14 @@
 package apphost
 
 import (
-	"github.com/cryptopunkscc/astrald/astral"
-	"github.com/cryptopunkscc/astrald/astral/channel"
-	"github.com/cryptopunkscc/astrald/lib/routing"
-	"github.com/cryptopunkscc/astrald/mod/apphost"
+	"github.com/astralp2p/astral-go/astral"
+	"github.com/astralp2p/astral-go/astral/channel"
+	"github.com/astralp2p/astral-go/lib/routing"
+	"github.com/astralp2p/astrald/mod/apphost"
 )
 
 type opListHeldObjectsArgs struct {
-	Out string `query:"optional"`
+	Out string
 }
 
 func (mod *Module) OpListHeldObjects(ctx *astral.Context, q *routing.IncomingQuery, args opListHeldObjectsArgs) error {

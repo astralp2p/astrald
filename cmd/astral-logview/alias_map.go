@@ -1,9 +1,9 @@
 package main
 
 import (
-	"github.com/cryptopunkscc/astrald/astral"
-	dircli "github.com/cryptopunkscc/astrald/mod/dir/client"
-	"github.com/cryptopunkscc/astrald/mod/log/views"
+	dircli "github.com/astralp2p/astral-go/api/dir/client"
+	"github.com/astralp2p/astral-go/astral"
+	"github.com/astralp2p/astrald/mod/log/views"
 )
 
 func loadAliasMap(ctx *astral.Context) (err error) {

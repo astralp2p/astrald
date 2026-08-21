@@ -2,13 +2,14 @@ package nearby
 
 import (
 	"errors"
+	dirmod "github.com/astralp2p/astrald/mod/dir"
 	"strings"
 
-	"github.com/cryptopunkscc/astrald/astral"
-	"github.com/cryptopunkscc/astrald/mod/dir"
+	"github.com/astralp2p/astral-go/api/dir"
+	"github.com/astralp2p/astral-go/astral"
 )
 
-var _ dir.Resolver = &Module{}
+var _ dirmod.Resolver = &Module{}
 
 // ResolveIdentity resolves a dot-prefixed alias (e.g. ".phone") by scanning the
 // nearby cache for a matching dir.Alias attachment; returns an error if no peer

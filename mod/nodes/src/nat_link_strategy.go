@@ -5,15 +5,15 @@ import (
 	"sync"
 	"time"
 
-	"github.com/cryptopunkscc/astrald/astral"
-	"github.com/cryptopunkscc/astrald/astral/log"
-	"github.com/cryptopunkscc/astrald/lib/astrald"
-	"github.com/cryptopunkscc/astrald/mod/kcp"
-	kcpclient "github.com/cryptopunkscc/astrald/mod/kcp/client"
-	"github.com/cryptopunkscc/astrald/mod/nat"
-	natclient "github.com/cryptopunkscc/astrald/mod/nat/client"
-	"github.com/cryptopunkscc/astrald/mod/nodes"
-	servicescli "github.com/cryptopunkscc/astrald/mod/services/client"
+	"github.com/astralp2p/astral-go/api/kcp"
+	kcpclient "github.com/astralp2p/astral-go/api/kcp/client"
+	natclient "github.com/astralp2p/astral-go/api/nat/client"
+	servicescli "github.com/astralp2p/astral-go/api/services/client"
+	"github.com/astralp2p/astral-go/astral"
+	"github.com/astralp2p/astral-go/astral/log"
+	"github.com/astralp2p/astral-go/lib/astrald"
+	"github.com/astralp2p/astrald/mod/nat"
+	"github.com/astralp2p/astrald/mod/nodes"
 )
 
 type NATLinkStrategy struct {

@@ -1,6 +1,6 @@
 package nearby
 
-import "github.com/cryptopunkscc/astrald/mod/nearby"
+import "github.com/astralp2p/astrald/mod/nearby"
 
 const aliasPrefix = "."
 

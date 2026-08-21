@@ -7,11 +7,11 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/cryptopunkscc/astrald/astral"
-	"github.com/cryptopunkscc/astrald/lib/astrald"
-	dircli "github.com/cryptopunkscc/astrald/mod/dir/client"
-	"github.com/cryptopunkscc/astrald/mod/tree"
-	treecli "github.com/cryptopunkscc/astrald/mod/tree/client"
+	dircli "github.com/astralp2p/astral-go/api/dir/client"
+	"github.com/astralp2p/astral-go/api/tree"
+	treecli "github.com/astralp2p/astral-go/api/tree/client"
+	"github.com/astralp2p/astral-go/astral"
+	"github.com/astralp2p/astral-go/lib/astrald"
 )
 
 func walk(ctx *astral.Context, node tree.Node, path []string) error {

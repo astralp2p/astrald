@@ -1,7 +1,7 @@
 package nodes
 
 import (
-	"github.com/cryptopunkscc/astrald/mod/nodes/frames"
+	"github.com/astralp2p/astrald/mod/nodes/frames"
 )
 
 type Frame struct {

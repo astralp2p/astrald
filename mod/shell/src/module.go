@@ -1,11 +1,11 @@
 package shell
 
 import (
-	"github.com/cryptopunkscc/astrald/astral"
-	"github.com/cryptopunkscc/astrald/astral/log"
-	"github.com/cryptopunkscc/astrald/lib/routing"
-	"github.com/cryptopunkscc/astrald/mod/shell"
-	"github.com/cryptopunkscc/astrald/resources"
+	"github.com/astralp2p/astral-go/astral"
+	"github.com/astralp2p/astral-go/astral/log"
+	"github.com/astralp2p/astral-go/lib/routing"
+	"github.com/astralp2p/astrald/mod/shell"
+	"github.com/astralp2p/astrald/resources"
 )
 
 var _ shell.Module = &Module{}
@@ -28,8 +28,8 @@ func (mod *Module) String() string {
 	return shell.ModuleName
 }
 
-func (mod *Module) NewLogAction(message string) shell.LogAction {
-	return LogAction{
+func (mod *Module) NewLogTask(message string) shell.LogTask {
+	return LogTask{
 		mod:     mod,
 		message: message,
 	}

@@ -4,8 +4,8 @@ import (
 	"errors"
 	"strings"
 
-	"github.com/cryptopunkscc/astrald/astral"
-	"github.com/cryptopunkscc/astrald/mod/tree"
+	"github.com/astralp2p/astral-go/api/tree"
+	"github.com/astralp2p/astral-go/astral"
 )
 
 // Node implements a tree.Node that stores objects in the database.

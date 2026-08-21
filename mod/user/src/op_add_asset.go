@@ -1,17 +1,23 @@
 package user
 
 import (
-	"github.com/cryptopunkscc/astrald/astral"
-	"github.com/cryptopunkscc/astrald/astral/channel"
-	"github.com/cryptopunkscc/astrald/lib/routing"
+	"github.com/astralp2p/astral-go/astral"
+	"github.com/astralp2p/astral-go/astral/channel"
+	"github.com/astralp2p/astral-go/lib/routing"
 )
 
 type opAddAssetArgs struct {
-	ID  *astral.ObjectID
-	Out string `query:"optional"`
+	ID  *astral.ObjectID `query:"required"`
+	Out string
 }
 
+// OpAddAsset authorizes the caller under AdminSwarm, then adds the object to the
+// user's asset list.
 func (mod *Module) OpAddAsset(ctx *astral.Context, q *routing.IncomingQuery, args opAddAssetArgs) (err error) {
+	if !mod.authorizeAdminSwarm(ctx, q, nil, args.ID) {
+		return q.RejectWithCode(4)
+	}
+
 	err = mod.AddAsset(args.ID)
 	if err != nil {
 		mod.log.Error("error adding asset: %v", err)

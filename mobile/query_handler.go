@@ -7,9 +7,9 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/cryptopunkscc/astrald/astral"
-	"github.com/cryptopunkscc/astrald/core"
-	"github.com/cryptopunkscc/astrald/lib/query"
+	"github.com/astralp2p/astral-go/astral"
+	"github.com/astralp2p/astral-go/lib/query"
+	"github.com/astralp2p/astrald/core"
 )
 
 // acceptTimeout limits how long a QueryHandler may take to resolve an

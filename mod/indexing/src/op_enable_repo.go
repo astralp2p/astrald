@@ -1,22 +1,26 @@
 package indexing
 
 import (
-	"github.com/cryptopunkscc/astrald/astral"
-	"github.com/cryptopunkscc/astrald/astral/channel"
-	"github.com/cryptopunkscc/astrald/lib/routing"
-	modindexing "github.com/cryptopunkscc/astrald/mod/indexing"
+	modindexing "github.com/astralp2p/astral-go/api/indexing"
+	"github.com/astralp2p/astral-go/astral"
+	"github.com/astralp2p/astral-go/astral/channel"
+	"github.com/astralp2p/astral-go/lib/routing"
 )
 
 type opEnableRepoArgs struct {
-	Repo    string
-	Disable bool   `query:"optional"`
-	In      string `query:"optional"`
-	Out     string `query:"optional"`
+	Repo    string `query:"required"`
+	Disable bool
+	In      string
+	Out     string
 }
 
 // OpEnableRepo toggles repo indexing on or off; set Disable=true in args to
 // deregister a previously enabled repo.
 func (mod *Module) OpEnableRepo(ctx *astral.Context, q *routing.IncomingQuery, args opEnableRepoArgs) (err error) {
+	if !mod.authorizeStoreObjects(ctx, q, args.Repo) {
+		return q.Reject()
+	}
+
 	ch := q.Accept(channel.WithFormats(args.In, args.Out))
 	defer ch.Close()
 

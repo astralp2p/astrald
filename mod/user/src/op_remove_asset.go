@@ -1,19 +1,24 @@
 package user
 
 import (
-	"github.com/cryptopunkscc/astrald/astral"
-	"github.com/cryptopunkscc/astrald/astral/channel"
-	"github.com/cryptopunkscc/astrald/lib/routing"
+	"github.com/astralp2p/astral-go/astral"
+	"github.com/astralp2p/astral-go/astral/channel"
+	"github.com/astralp2p/astral-go/lib/routing"
 )
 
 type opRemoveAssetArgs struct {
-	ID  *astral.ObjectID
-	Out string `query:"optional"`
+	ID  *astral.ObjectID `query:"required"`
+	Out string
 }
 
-// OpRemoveAsset removes an asset by object ID.
+// OpRemoveAsset authorizes the caller under AdminSwarm, then removes an asset by
+// object ID.
 // Rejects the query with an internal error code if removal fails, before the channel is accepted.
 func (mod *Module) OpRemoveAsset(ctx *astral.Context, q *routing.IncomingQuery, args opRemoveAssetArgs) (err error) {
+	if !mod.authorizeAdminSwarm(ctx, q, nil, args.ID) {
+		return q.RejectWithCode(4)
+	}
+
 	err = mod.RemoveAsset(args.ID)
 
 	if err != nil {

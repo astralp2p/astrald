@@ -3,22 +3,23 @@ package user
 import (
 	"time"
 
-	"github.com/cryptopunkscc/astrald/astral"
-	"github.com/cryptopunkscc/astrald/astral/channel"
-	"github.com/cryptopunkscc/astrald/lib/routing"
-	"github.com/cryptopunkscc/astrald/mod/auth"
-	"github.com/cryptopunkscc/astrald/mod/crypto"
-	"github.com/cryptopunkscc/astrald/mod/user"
+	"github.com/astralp2p/astral-go/api/auth"
+	"github.com/astralp2p/astral-go/api/crypto"
+	"github.com/astralp2p/astral-go/api/user"
+	"github.com/astralp2p/astral-go/astral"
+	"github.com/astralp2p/astral-go/astral/channel"
+	"github.com/astralp2p/astral-go/lib/routing"
 )
 
 type opAcceptMembershipArgs struct {
-	In  string `query:"optional"`
-	Out string `query:"optional"`
+	In  string
+	Out string
 }
 
 // OpAcceptMembership handles the node side of the contract signing ceremony.
 // Rejects if an active contract already exists (code 2).
 // Validates contract subject, identity match, and minimum remaining validity before applying the invite policy.
+// Self-refuses with user.ErrExpelled if this node holds the issuer's ban on itself.
 // On success, stores the signed contract and sets it as the active contract.
 func (mod *Module) OpAcceptMembership(ctx *astral.Context, q *routing.IncomingQuery, args opAcceptMembershipArgs) (err error) {
 	ac := mod.ActiveContract()
@@ -45,6 +46,13 @@ func (mod *Module) OpAcceptMembership(ctx *astral.Context, q *routing.IncomingQu
 		return ch.Send(astral.Err(auth.ErrInvalidContract))
 	case contract.ExpiresAt.Time().Before(time.Now().Add(minimalContractLength)):
 		return ch.Send(astral.Err(auth.ErrInvalidContract))
+	}
+
+	// why: self-refuse re-entry if this node already holds the issuer's ban on
+	// itself — symmetry with IssueMembership, so a buggy or hostile issuer cannot
+	// re-seat an expelled node. Effective only once the ban has propagated here.
+	if mod.isExpelled(contract.Issuer, contract.Subject) {
+		return ch.Send(user.ErrExpelled)
 	}
 
 	approved := mod.GetSwarmInvitePolicy()(q.Caller(), contract)

@@ -1,20 +1,24 @@
 package objects
 
 import (
-	"github.com/cryptopunkscc/astrald/astral"
-	"github.com/cryptopunkscc/astrald/astral/channel"
-	"github.com/cryptopunkscc/astrald/lib/routing"
+	"github.com/astralp2p/astral-go/astral"
+	"github.com/astralp2p/astral-go/astral/channel"
+	"github.com/astralp2p/astral-go/lib/routing"
 )
 
 type opGetBlueprintArgs struct {
-	Type string
-	Out  string `query:"optional"`
+	Type string `query:"required"`
+	Out  string
 }
 
 // OpGetBlueprint sends the Blueprint for a single type name. Referenced types are not
 // resolved or included — the caller fetches them itself. Primitive types have no
 // blueprint and return an error.
 func (mod *Module) OpGetBlueprint(ctx *astral.Context, q *routing.IncomingQuery, args opGetBlueprintArgs) (err error) {
+	if !mod.authorizeSeeObjects(ctx, q, nil, "") {
+		return q.Reject()
+	}
+
 	ch := channel.New(q.AcceptRaw(), channel.WithOutputFormat(args.Out))
 	defer ch.Close()
 

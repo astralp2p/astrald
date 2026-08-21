@@ -1,17 +1,17 @@
 package nat
 
 import (
-	"github.com/cryptopunkscc/astrald/astral"
-	"github.com/cryptopunkscc/astrald/astral/channel"
-	"github.com/cryptopunkscc/astrald/lib/astrald"
-	"github.com/cryptopunkscc/astrald/lib/routing"
-	natclient "github.com/cryptopunkscc/astrald/mod/nat/client"
+	natclient "github.com/astralp2p/astral-go/api/nat/client"
+	"github.com/astralp2p/astral-go/astral"
+	"github.com/astralp2p/astral-go/astral/channel"
+	"github.com/astralp2p/astral-go/lib/astrald"
+	"github.com/astralp2p/astral-go/lib/routing"
 )
 
 type opPunchArgs struct {
-	Target string
-	In     string `query:"optional"`
-	Out    string `query:"optional"`
+	Target string `query:"required"`
+	In     string
+	Out    string
 }
 
 // OpPunch drives the initiator side of the NAT punch protocol and registers the resulting hole.

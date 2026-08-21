@@ -1,0 +1,11 @@
+# tor.suite — A to Z: two nodes meet on a LAN, one leaves it, and the swarm
+# survives over Tor.
+#
+# Every step is built from nothing in one simulation: the User is bootstrapped,
+# the second node is adopted over the LAN, both nodes raise a hidden service,
+# node2 withdraws its LAN address entirely, and the link has to re-form over
+# the only transport left. Nothing is assumed about the world beforehand,
+# which is what makes the last step mean something.
+bootstrap-user-software-key
+adopt-node
+tor-link

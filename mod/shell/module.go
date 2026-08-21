@@ -1,15 +1,15 @@
 package shell
 
 import (
-	"github.com/cryptopunkscc/astrald/mod/scheduler"
+	"github.com/astralp2p/astrald/mod/scheduler"
 )
 
 const ModuleName = "shell"
 
 type Module interface {
-	NewLogAction(message string) LogAction
+	NewLogTask(message string) LogTask
 }
 
-type LogAction interface {
+type LogTask interface {
 	scheduler.Task
 }

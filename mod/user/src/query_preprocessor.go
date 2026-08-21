@@ -1,7 +1,7 @@
 package user
 
 import (
-	"github.com/cryptopunkscc/astrald/core"
+	"github.com/astralp2p/astrald/core"
 )
 
 var _ core.QueryPreprocessor = &Module{}

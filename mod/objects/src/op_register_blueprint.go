@@ -1,47 +1,42 @@
 package objects
 
 import (
-	"github.com/cryptopunkscc/astrald/astral"
-	"github.com/cryptopunkscc/astrald/astral/channel"
-	"github.com/cryptopunkscc/astrald/lib/routing"
+	"github.com/astralp2p/astral-go/astral"
+	"github.com/astralp2p/astral-go/astral/channel"
+	"github.com/astralp2p/astral-go/lib/routing"
 )
 
 type opRegisterBlueprintArgs struct {
-	In  string `query:"optional"`
-	Out string `query:"optional"`
+	In  string
+	Out string
 }
 
 // OpRegisterBlueprint runs in batch mode: reads runtime *astral.Blueprint descriptors
 // (struct kind or alias kind) from the channel until EOS or EOF, performs registration for
-// each, sends the resulting ObjectID or an error per input, then emits a final EOS marker
-// before closing.
+// each, sends the resulting ObjectID or an error per input. An explicit EOS
+// input is answered with a final EOS; a stream ended by EOF is not.
 //
-// todo(security): gate by caller identity before mutating DefaultBlueprints. Any peer can
-// currently (a) squat a victim type name to permanently block legitimate registration,
-// and (b) define the wire schema for that name. Needs an authorization hook (allowlist of
-// identities, per-identity quotas, or a capability check) before reaching mod.Register.
+// note: registration mutates DefaultBlueprints for the whole node — the caller squats a
+// type name permanently and defines the wire schema everyone parses it with. StoreObjects
+// is the gate. The type name is not a noun here: the blueprints arrive on the channel,
+// after the authorization decision.
+//
+// todo: a permanent type-name squat is not recoverable the way a stored object is, so a
+// grantor handing out StoreObjects would not expect it. Splitting this op into its own
+// action costs one action type and one call site.
 func (mod *Module) OpRegisterBlueprint(ctx *astral.Context, q *routing.IncomingQuery, args opRegisterBlueprintArgs) error {
+	if !mod.authorizeStoreObjects(ctx, q, "", "") {
+		return q.Reject()
+	}
+
 	ch := channel.New(q.AcceptRaw(), channel.WithFormats(args.In, args.Out))
 	defer ch.Close()
 
-	register := func(o astral.Object) error {
-		id, regErr := mod.Register(o)
+	return channel.Batch(ch, func(bp *astral.Blueprint) astral.Object {
+		id, regErr := mod.Register(bp)
 		if regErr != nil {
-			return ch.Send(astral.NewError(regErr.Error()))
+			return astral.NewError(regErr.Error())
 		}
-		return ch.Send(id)
-	}
-
-	err := ch.Switch(
-		func(bp *astral.Blueprint) error { return register(bp) },
-		channel.BreakOnEOS,
-		func(other astral.Object) error {
-			return ch.Send(astral.NewError("expected astral.Blueprint"))
-		},
-	)
-	if err != nil {
-		return err
-	}
-	_ = ch.Send(&astral.EOS{})
-	return nil
+		return id
+	})
 }

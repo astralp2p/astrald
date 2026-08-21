@@ -1,0 +1,19 @@
+env     = "netsim"
+start   = "two-nodes"
+saves   = "two-nodes-nat"
+# why: entering a NAT netns rewrites the world in place and nothing puts it
+# back, so a sibling cannot run from "two-nodes" afterwards. Declaring it lets
+# the walk reject such an order in milliseconds instead of after eight minutes
+# of VM time — which is exactly how substrate.suite was found to be misordered.
+mutates = true
+nodes   = ["node1", "node2"]
+steps   = ["vm:enable-tor node1 node2",
+           "vm:enter-nat node1 node2",
+           # the session is an ssh -L forward and ssh lands in the root netns;
+           # enter-nat just moved apphost out of it. This is the door back in.
+           "vm:expose-apphost node1 node2",
+           "vm:configure-nat-tor node1 node2",
+           "vm:add-reflector node1 node2 --reflector reflector",
+           "driver"]
+drivers = ["script"]
+timeout = 900

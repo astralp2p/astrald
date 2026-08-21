@@ -1,15 +1,15 @@
 package indexing
 
 import (
-	"github.com/cryptopunkscc/astrald/astral"
-	"github.com/cryptopunkscc/astrald/astral/channel"
-	"github.com/cryptopunkscc/astrald/lib/routing"
+	"github.com/astralp2p/astral-go/astral"
+	"github.com/astralp2p/astral-go/astral/channel"
+	"github.com/astralp2p/astral-go/lib/routing"
 )
 
 type opRegisterIndexerArgs struct {
-	Name string
-	In   string `query:"optional"`
-	Out  string `query:"optional"`
+	Name string `query:"required"`
+	In   string
+	Out  string
 }
 
 func (mod *Module) OpRegisterIndexer(ctx *astral.Context, q *routing.IncomingQuery, args opRegisterIndexerArgs) error {

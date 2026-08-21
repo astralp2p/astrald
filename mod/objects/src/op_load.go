@@ -1,21 +1,25 @@
 package objects
 
 import (
-	"github.com/cryptopunkscc/astrald/astral"
-	"github.com/cryptopunkscc/astrald/astral/channel"
-	"github.com/cryptopunkscc/astrald/lib/routing"
+	"github.com/astralp2p/astral-go/astral"
+	"github.com/astralp2p/astral-go/astral/channel"
+	"github.com/astralp2p/astral-go/lib/routing"
 )
 
 type opLoadArgs struct {
-	ID       *astral.ObjectID `query:"optional"`
-	Unparsed bool             `query:"optional"`
-	Repo     string           `query:"optional"`
-	Zone     *astral.Zone     `query:"optional"`
-	Out      string           `query:"optional"`
+	ID       *astral.ObjectID
+	Unparsed bool
+	Repo     string
+	Zone     *astral.Zone
+	Out      string
 }
 
 // OpLoad loads an object into memory and writes it to the output. OpLoad verifies the object hash.
 func (mod *Module) OpLoad(ctx *astral.Context, q *routing.IncomingQuery, args opLoadArgs) (err error) {
+	if !mod.authorizeSeeObjects(ctx, q, args.ID, args.Repo) {
+		return q.Reject()
+	}
+
 	if args.Zone == nil {
 		ctx = ctx.WithZone(astral.ZoneAll)
 	} else {
@@ -43,21 +47,11 @@ func (mod *Module) OpLoad(ctx *astral.Context, q *routing.IncomingQuery, args op
 		return ch.Send(o)
 	}
 
-	return ch.Handle(ctx, func(object astral.Object) {
-		switch object := object.(type) {
-		case *astral.ObjectID:
-			o, err := mod.Load(ctx, repo, object)
-			if err != nil {
-				ch.Send(astral.NewError(err.Error()))
-			} else {
-				ch.Send(o)
-			}
-
-		case *astral.EOS:
-			//ignore
-
-		default:
-			ch.Send(astral.NewErrUnexpectedObject(object))
+	return channel.Batch(ch, func(id *astral.ObjectID) astral.Object {
+		o, err := mod.Load(ctx, repo, id)
+		if err != nil {
+			return astral.NewError(err.Error())
 		}
-	})
+		return o
+	}, channel.WithContext(ctx))
 }

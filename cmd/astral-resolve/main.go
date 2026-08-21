@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/cryptopunkscc/astrald/lib/astrald"
-	dircli "github.com/cryptopunkscc/astrald/mod/dir/client"
+	dircli "github.com/astralp2p/astral-go/api/dir/client"
+	"github.com/astralp2p/astral-go/lib/astrald"
 )
 
 func main() {

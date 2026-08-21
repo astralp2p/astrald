@@ -1,38 +1,51 @@
 package auth
 
 import (
-	"github.com/cryptopunkscc/astrald/astral"
-	"github.com/cryptopunkscc/astrald/astral/channel"
-	"github.com/cryptopunkscc/astrald/lib/routing"
-	"github.com/cryptopunkscc/astrald/mod/auth"
+	"github.com/astralp2p/astral-go/api/auth"
+	"github.com/astralp2p/astral-go/astral"
+	"github.com/astralp2p/astral-go/astral/channel"
+	"github.com/astralp2p/astral-go/lib/routing"
 )
 
 type opIndexArgs struct {
-	ID  *astral.ObjectID `query:"required"`
-	In  string           `query:"optional"`
-	Out string           `query:"optional"`
+	ID  *astral.ObjectID // batch mode when omitted
+	In  string
+	Out string
 }
 
-// OpIndex handles the index remote operation: loads a SignedContract by object ID and
-// indexes it into the local DB, responding with Ack on success or an error frame.
+// OpIndex handles the index remote operation. With args.ID set it loads that
+// SignedContract, indexes it into the local DB and replies Ack or an error
+// frame. Without args.ID the op runs in batch mode: object IDs are read from
+// the channel until EOS and each input gets one Ack/ErrorMessage reply.
 func (mod *Module) OpIndex(ctx *astral.Context, q *routing.IncomingQuery, args opIndexArgs) error {
 	ch := q.Accept(channel.WithFormats(args.In, args.Out))
 	defer ch.Close()
 
-	object, err := mod.Objects.Load(ctx, mod.Objects.ReadDefault(), args.ID)
+	if args.ID == nil {
+		return channel.Batch(ch, func(id *astral.ObjectID) astral.Object {
+			return mod.indexOne(ctx, id)
+		}, channel.WithContext(ctx))
+	}
+
+	return ch.Send(mod.indexOne(ctx, args.ID))
+}
+
+// indexOne loads, verifies and indexes one contract and returns the reply
+// object — Ack on success, ErrorMessage on failure.
+func (mod *Module) indexOne(ctx *astral.Context, id *astral.ObjectID) astral.Object {
+	object, err := mod.Objects.Load(ctx, mod.Objects.ReadDefault(), id)
 	if err != nil {
-		return ch.Send(astral.Err(err))
+		return astral.Err(err)
 	}
 
 	signed, ok := object.(*auth.SignedContract)
 	if !ok {
-		return ch.Send(astral.Err(auth.ErrInvalidContract))
+		return astral.Err(auth.ErrInvalidContract)
 	}
 
-	err = mod.IndexContract(ctx, signed)
-	if err != nil {
-		return ch.Send(astral.Err(err))
+	if err := mod.IndexContract(ctx, signed); err != nil {
+		return astral.Err(err)
 	}
 
-	return ch.Send(&astral.Ack{})
+	return &astral.Ack{}
 }

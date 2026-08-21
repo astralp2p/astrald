@@ -3,14 +3,14 @@ package gateway
 import (
 	"time"
 
-	"github.com/cryptopunkscc/astrald/astral"
-	"github.com/cryptopunkscc/astrald/lib/astrald"
-	"github.com/cryptopunkscc/astrald/mod/events"
-	"github.com/cryptopunkscc/astrald/mod/gateway"
-	gatewayClient "github.com/cryptopunkscc/astrald/mod/gateway/client"
-	"github.com/cryptopunkscc/astrald/mod/ip"
-	"github.com/cryptopunkscc/astrald/mod/scheduler"
-	"github.com/cryptopunkscc/astrald/sig"
+	"github.com/astralp2p/astral-go/api/gateway"
+	gatewayClient "github.com/astralp2p/astral-go/api/gateway/client"
+	"github.com/astralp2p/astral-go/api/ip"
+	"github.com/astralp2p/astral-go/astral"
+	"github.com/astralp2p/astral-go/lib/astrald"
+	"github.com/astralp2p/astral-go/sig"
+	"github.com/astralp2p/astrald/mod/events"
+	"github.com/astralp2p/astrald/mod/scheduler"
 )
 
 var _ scheduler.Task = &MaintainGatewayConnectionsTask{}

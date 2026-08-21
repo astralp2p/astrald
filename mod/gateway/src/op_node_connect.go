@@ -1,15 +1,15 @@
 package gateway
 
 import (
-	"github.com/cryptopunkscc/astrald/astral"
-	"github.com/cryptopunkscc/astrald/astral/channel"
-	"github.com/cryptopunkscc/astrald/lib/routing"
+	"github.com/astralp2p/astral-go/astral"
+	"github.com/astralp2p/astral-go/astral/channel"
+	"github.com/astralp2p/astral-go/lib/routing"
 )
 
 type opNodeConnectArgs struct {
-	Target *astral.Identity
-	In     string `query:"optional"`
-	Out    string `query:"optional"`
+	Target *astral.Identity `query:"required"`
+	In     string
+	Out    string
 }
 
 // OpNodeConnect handles the NodeConnect RPC: it reserves a pre-established idle

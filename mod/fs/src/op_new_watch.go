@@ -1,31 +1,48 @@
 package fs
 
 import (
-	"github.com/cryptopunkscc/astrald/astral"
-	"github.com/cryptopunkscc/astrald/astral/channel"
-	"github.com/cryptopunkscc/astrald/lib/routing"
-	"github.com/cryptopunkscc/astrald/mod/objects"
+	"github.com/astralp2p/astral-go/api/auth"
+	"github.com/astralp2p/astral-go/api/objects"
+	"github.com/astralp2p/astral-go/astral"
+	"github.com/astralp2p/astral-go/astral/channel"
+	"github.com/astralp2p/astral-go/lib/routing"
 )
 
 type opNewWatchArgs struct {
-	Path  string
-	Name  string
-	Label string `query:"optional"`
-	In    string `query:"optional"`
-	Out   string `query:"optional"`
+	Path  string `query:"required"`
+	Name  string `query:"required"`
+	Label string
+	In    string
+	Out   string
 }
 
-// OpNewWatch registers a new watched repository at the given path, starts an async background scan,
-// and adds the repository to both the objects store and the local group.
+// OpNewWatch authorizes the caller under AdminObjects, then registers a new watched
+// repository at the given path, starts an async background scan, and adds the
+// repository to both the objects store and the local group.
 func (mod *Module) OpNewWatch(ctx *astral.Context, q *routing.IncomingQuery, args opNewWatchArgs) (err error) {
+	if !mod.Auth.Authorize(ctx, &auth.AdminObjectsAction{
+		Action: auth.NewAction(q.Caller()),
+		Repo:   astral.String8(args.Name),
+		Path:   astral.String8(args.Path),
+	}) {
+		return q.Reject()
+	}
+
 	ch := q.Accept(channel.WithFormats(args.In, args.Out))
 	defer ch.Close()
+
+	// why: reported over the channel rather than as a rejection — the caller holds a
+	// grant, so it gets the reason its path was refused
+	path, err := validPath(args.Path)
+	if err != nil {
+		return ch.Send(astral.Err(err))
+	}
 
 	if args.Label == "" {
 		args.Label = args.Name
 	}
 
-	repo, err := NewWatchRepository(mod, args.Path, args.Label)
+	repo, err := NewWatchRepository(mod, path, args.Label)
 	if err != nil {
 		return ch.Send(astral.Err(err))
 	}
@@ -34,8 +51,8 @@ func (mod *Module) OpNewWatch(ctx *astral.Context, q *routing.IncomingQuery, arg
 	repo.scanCancel = cancel
 
 	go func() {
-		if err := mod.indexer.scan(scanCtx, args.Path, true); err != nil {
-			mod.log.Error("scan %v: %v", args.Path, err)
+		if err := mod.indexer.scan(scanCtx, path, true); err != nil {
+			mod.log.Error("scan %v: %v", path, err)
 		}
 	}()
 

@@ -1,15 +1,15 @@
 package kcp
 
 import (
-	"github.com/cryptopunkscc/astrald/astral"
-	"github.com/cryptopunkscc/astrald/astral/channel"
-	"github.com/cryptopunkscc/astrald/lib/routing"
-	"github.com/cryptopunkscc/astrald/mod/kcp"
+	"github.com/astralp2p/astral-go/api/kcp"
+	"github.com/astralp2p/astral-go/astral"
+	"github.com/astralp2p/astral-go/astral/channel"
+	"github.com/astralp2p/astral-go/lib/routing"
 )
 
 type opListEndpointLocalMappingsArgs struct {
-	In  string `query:"optional"`
-	Out string `query:"optional"`
+	In  string
+	Out string
 }
 
 func (mod *Module) OpListEndpointLocalMappings(ctx *astral.Context, q *routing.IncomingQuery, args opListEndpointLocalMappingsArgs) (err error) {

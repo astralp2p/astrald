@@ -1,14 +1,14 @@
 package gateway
 
 import (
-	"github.com/cryptopunkscc/astrald/astral"
-	"github.com/cryptopunkscc/astrald/astral/channel"
-	"github.com/cryptopunkscc/astrald/lib/routing"
-	"github.com/cryptopunkscc/astrald/mod/gateway"
+	"github.com/astralp2p/astral-go/api/gateway"
+	"github.com/astralp2p/astral-go/astral"
+	"github.com/astralp2p/astral-go/astral/channel"
+	"github.com/astralp2p/astral-go/lib/routing"
 )
 
 type opListArgs struct {
-	Out string `query:"optional"`
+	Out string
 }
 
 // OpNodeList streams the identities of all publicly visible registered nodes, terminated by EOS.

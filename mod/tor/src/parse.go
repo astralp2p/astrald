@@ -4,16 +4,17 @@ import (
 	"encoding/base32"
 	"errors"
 	"fmt"
-	"github.com/cryptopunkscc/astrald/astral"
-	"github.com/cryptopunkscc/astrald/mod/exonet"
-	"github.com/cryptopunkscc/astrald/mod/tor"
+	"github.com/astralp2p/astral-go/api/exonet"
+	"github.com/astralp2p/astral-go/api/tor"
+	"github.com/astralp2p/astral-go/astral"
+	exonetmod "github.com/astralp2p/astrald/mod/exonet"
 	"strconv"
 	"strings"
 )
 
 const onionSuffix = ".ONION"
 
-var _ exonet.Parser = &Module{}
+var _ exonetmod.Parser = &Module{}
 
 func (mod *Module) Parse(network string, address string) (exonet.Endpoint, error) {
 	return Parse(address)

@@ -3,18 +3,18 @@ package user
 import (
 	"time"
 
-	"github.com/cryptopunkscc/astrald/astral"
-	"github.com/cryptopunkscc/astrald/astral/channel"
-	"github.com/cryptopunkscc/astrald/lib/routing"
-	"github.com/cryptopunkscc/astrald/mod/user"
+	"github.com/astralp2p/astral-go/api/user"
+	"github.com/astralp2p/astral-go/astral"
+	"github.com/astralp2p/astral-go/astral/channel"
+	"github.com/astralp2p/astral-go/lib/routing"
 )
 
 type opNewNodeContractArgs struct {
-	User     string `query:"optional"`
-	Node     string `query:"optional"`
-	Duration string `query:"optional"`
-	In       string `query:"optional"`
-	Out      string `query:"optional"`
+	User     string
+	Node     string
+	Duration string
+	In       string
+	Out      string
 }
 
 // OpNewNodeContract constructs and returns an unsigned node contract.
@@ -56,7 +56,8 @@ func (mod *Module) OpNewNodeContract(ctx *astral.Context, query *routing.Incomin
 		}
 	}
 
-	contract, err := user.NewNodeContract(userID, nodeID, duration)
+	// the setup ceremony provisions the user's primary node, which manages the swarm
+	contract, err := user.NewNodeContract(userID, nodeID, true, duration)
 	if err != nil {
 		return ch.Send(astral.Err(err))
 	}

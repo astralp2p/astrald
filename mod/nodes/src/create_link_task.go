@@ -1,14 +1,15 @@
 package nodes
 
 import (
-	"github.com/cryptopunkscc/astrald/astral"
-	"github.com/cryptopunkscc/astrald/mod/exonet"
-	"github.com/cryptopunkscc/astrald/mod/nodes"
-	"github.com/cryptopunkscc/astrald/mod/scheduler"
+	"github.com/astralp2p/astral-go/api/exonet"
+	"github.com/astralp2p/astral-go/api/nodes"
+	"github.com/astralp2p/astral-go/astral"
+	nodesmod "github.com/astralp2p/astrald/mod/nodes"
+	"github.com/astralp2p/astrald/mod/scheduler"
 )
 
 var _ scheduler.Task = &CreateLinkTask{}
-var _ nodes.CreateLinkTask = &CreateLinkTask{}
+var _ nodesmod.CreateLinkTask = &CreateLinkTask{}
 
 type CreateLinkTask struct {
 	mod      *Module
@@ -18,7 +19,7 @@ type CreateLinkTask struct {
 	Err      error
 }
 
-func (m *Module) NewCreateLinkTask(target *astral.Identity, endpoint exonet.Endpoint) nodes.CreateLinkTask {
+func (m *Module) NewCreateLinkTask(target *astral.Identity, endpoint exonet.Endpoint) nodesmod.CreateLinkTask {
 	return &CreateLinkTask{
 		mod:      m,
 		Target:   target,
@@ -45,8 +46,8 @@ func (c *CreateLinkTask) Run(ctx *astral.Context) error {
 		ID:             link.id,
 		LocalIdentity:  link.LocalIdentity(),
 		RemoteIdentity: link.RemoteIdentity(),
-		LocalEndpoint:  link.LocalEndpoint(),
-		RemoteEndpoint: link.RemoteEndpoint(),
+		LocalEndpoint:  knownEndpoint(link.LocalEndpoint()),
+		RemoteEndpoint: knownEndpoint(link.RemoteEndpoint()),
 		Outbound:       astral.Bool(link.outbound),
 		Network:        astral.String8(link.Network()),
 	}

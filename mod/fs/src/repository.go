@@ -2,16 +2,17 @@ package fs
 
 import (
 	"errors"
+	objectsmod "github.com/astralp2p/astrald/mod/objects"
 	"io"
 	"os"
 	"path/filepath"
 
-	"github.com/cryptopunkscc/astrald/astral"
-	"github.com/cryptopunkscc/astrald/mod/objects"
-	"github.com/cryptopunkscc/astrald/sig"
+	"github.com/astralp2p/astral-go/api/objects"
+	"github.com/astralp2p/astral-go/astral"
+	"github.com/astralp2p/astral-go/sig"
 )
 
-var _ objects.Repository = &Repository{}
+var _ objectsmod.Repository = &Repository{}
 
 // Repository is a filesystem-backed object store rooted at a single directory.
 // addQueue broadcasts newly committed object IDs to active Scan followers.
@@ -22,7 +23,7 @@ type Repository struct {
 	addQueue *sig.Queue[*astral.ObjectID]
 }
 
-var _ objects.Repository = &Repository{}
+var _ objectsmod.Repository = &Repository{}
 
 func NewRepository(mod *Module, label string, path string) *Repository {
 	return &Repository{
@@ -94,7 +95,7 @@ func (repo *Repository) Scan(ctx *astral.Context, follow bool) (<-chan *astral.O
 
 // Read opens the object file for reading, applying the given offset and limit.
 // Rejects requests from outside ZoneDevice to prevent unintended network exposure.
-func (repo *Repository) Read(ctx *astral.Context, objectID *astral.ObjectID, offset int64, limit int64) (objects.Reader, error) {
+func (repo *Repository) Read(ctx *astral.Context, objectID *astral.ObjectID, offset int64, limit int64) (objectsmod.Reader, error) {
 	if !ctx.Zone().Is(astral.ZoneDevice) {
 		return nil, astral.ErrZoneExcluded
 	}
@@ -107,19 +108,19 @@ func (repo *Repository) Read(ctx *astral.Context, objectID *astral.ObjectID, off
 
 	f, err := os.Open(path)
 	if err != nil {
-		return nil, objects.ErrNotFound
+		return nil, objectsmod.ErrNotFound
 	}
 
 	if offset != 0 {
 		pos, err := f.Seek(offset, io.SeekStart)
 		if err != nil {
 			f.Close()
-			return nil, objects.ErrNotFound
+			return nil, objectsmod.ErrNotFound
 		}
 
 		if pos != offset {
 			f.Close()
-			return nil, objects.ErrNotFound
+			return nil, objectsmod.ErrNotFound
 		}
 	}
 
@@ -148,10 +149,10 @@ func (repo *Repository) Label() string {
 }
 
 // Create opens a new object writer, refusing if opts requests more space than is currently free.
-func (repo *Repository) Create(ctx *astral.Context, opts *objects.CreateOpts) (objects.Writer, error) {
+func (repo *Repository) Create(ctx *astral.Context, opts *objectsmod.CreateOpts) (objects.Writer, error) {
 	if free, err := repo.Free(nil); err == nil {
 		if opts != nil && free < int64(opts.Alloc) {
-			return nil, objects.ErrNoSpaceLeft
+			return nil, objectsmod.ErrNoSpaceLeft
 		}
 	}
 
@@ -171,7 +172,12 @@ func (repo *Repository) Free(ctx *astral.Context) (int64, error) {
 
 func (repo *Repository) Delete(ctx *astral.Context, objectID *astral.ObjectID) error {
 	path := filepath.Join(repo.root, objectID.String())
-	return os.Remove(path)
+	err := os.Remove(path)
+	// why: map a missing-file miss to ErrNotFound so purge skips this leaf instead of aborting the whole pass
+	if os.IsNotExist(err) {
+		return objectsmod.ErrNotFound
+	}
+	return err
 }
 
 func (repo *Repository) String() string {

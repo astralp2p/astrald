@@ -1,13 +1,13 @@
 package ip
 
 import (
-	"github.com/cryptopunkscc/astrald/astral"
-	"github.com/cryptopunkscc/astrald/astral/channel"
-	"github.com/cryptopunkscc/astrald/lib/routing"
+	"github.com/astralp2p/astral-go/astral"
+	"github.com/astralp2p/astral-go/astral/channel"
+	"github.com/astralp2p/astral-go/lib/routing"
 )
 
 type opDefaultGatewayArgs struct {
-	Out string `query:"optional"`
+	Out string
 }
 
 func (mod *Module) OpDefaultGateway(ctx *astral.Context, q *routing.IncomingQuery, args opDefaultGatewayArgs) (err error) {

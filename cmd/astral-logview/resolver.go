@@ -2,9 +2,10 @@ package main
 
 import (
 	"errors"
+	dirmod "github.com/astralp2p/astrald/mod/dir"
 
-	"github.com/cryptopunkscc/astrald/astral"
-	"github.com/cryptopunkscc/astrald/mod/dir"
+	"github.com/astralp2p/astral-go/api/dir"
+	"github.com/astralp2p/astral-go/astral"
 )
 
 // resolver implements dir.Resolver from cache
@@ -13,7 +14,7 @@ type resolver struct {
 	revMap   map[string]string
 }
 
-var _ dir.Resolver = &resolver{}
+var _ dirmod.Resolver = &resolver{}
 
 func newResolver(aliasMap *dir.AliasMap) *resolver {
 	r := &resolver{

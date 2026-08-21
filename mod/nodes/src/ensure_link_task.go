@@ -1,9 +1,10 @@
 package nodes
 
 import (
-	"github.com/cryptopunkscc/astrald/astral"
-	"github.com/cryptopunkscc/astrald/mod/nodes"
-	"github.com/cryptopunkscc/astrald/mod/scheduler"
+	"github.com/astralp2p/astral-go/api/nodes"
+	"github.com/astralp2p/astral-go/astral"
+	nodesmod "github.com/astralp2p/astrald/mod/nodes"
+	"github.com/astralp2p/astrald/mod/scheduler"
 )
 
 var _ scheduler.Task = &EnsureLinkTask{}
@@ -24,7 +25,7 @@ func (m *Module) NewEnsureLinkTask(
 	strategies []string,
 	networks []string,
 	forceNew bool,
-) nodes.EnsureLinkTask {
+) nodesmod.EnsureLinkTask {
 	return &EnsureLinkTask{
 		mod:        m,
 		Target:     target,
@@ -66,8 +67,8 @@ func (c *EnsureLinkTask) Run(ctx *astral.Context) (err error) {
 			ID:             s.id,
 			LocalIdentity:  s.LocalIdentity(),
 			RemoteIdentity: s.RemoteIdentity(),
-			LocalEndpoint:  s.LocalEndpoint(),
-			RemoteEndpoint: s.RemoteEndpoint(),
+			LocalEndpoint:  knownEndpoint(s.LocalEndpoint()),
+			RemoteEndpoint: knownEndpoint(s.RemoteEndpoint()),
 			Outbound:       astral.Bool(s.outbound),
 			Network:        astral.String8(s.Network()),
 		}

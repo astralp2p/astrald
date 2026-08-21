@@ -2,17 +2,18 @@ package tcp
 
 import (
 	"bytes"
-	"github.com/cryptopunkscc/astrald/mod/exonet"
-	"github.com/cryptopunkscc/astrald/mod/tcp"
+	"github.com/astralp2p/astral-go/api/exonet"
+	"github.com/astralp2p/astral-go/api/tcp"
+	exonetmod "github.com/astralp2p/astrald/mod/exonet"
 )
 
-var _ exonet.Unpacker = &Module{}
+var _ exonetmod.Unpacker = &Module{}
 
 func (mod *Module) Unpack(network string, data []byte) (exonet.Endpoint, error) {
 	switch network {
 	case "tcp", "inet":
 	default:
-		return nil, exonet.ErrUnsupportedNetwork
+		return nil, exonetmod.ErrUnsupportedNetwork
 	}
 	return Unpack(data)
 }

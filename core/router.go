@@ -4,10 +4,10 @@ import (
 	"io"
 	"time"
 
-	"github.com/cryptopunkscc/astrald/astral"
-	"github.com/cryptopunkscc/astrald/lib/query"
-	"github.com/cryptopunkscc/astrald/lib/routing"
-	"github.com/cryptopunkscc/astrald/sig"
+	"github.com/astralp2p/astral-go/astral"
+	"github.com/astralp2p/astral-go/lib/query"
+	"github.com/astralp2p/astral-go/lib/routing"
+	"github.com/astralp2p/astral-go/sig"
 )
 
 var _ astral.Router = &Router{}

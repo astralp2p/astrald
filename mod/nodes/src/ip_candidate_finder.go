@@ -3,9 +3,9 @@ package nodes
 import (
 	"time"
 
-	"github.com/cryptopunkscc/astrald/mod/exonet"
-	"github.com/cryptopunkscc/astrald/mod/ip"
-	"github.com/cryptopunkscc/astrald/mod/nodes"
+	"github.com/astralp2p/astral-go/api/exonet"
+	"github.com/astralp2p/astral-go/api/ip"
+	"github.com/astralp2p/astral-go/api/nodes"
 )
 
 const ipCacheSize = 8

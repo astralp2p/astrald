@@ -5,9 +5,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cryptopunkscc/astrald/astral"
-	"github.com/cryptopunkscc/astrald/mod/crypto"
-	"github.com/cryptopunkscc/astrald/mod/user"
+	"github.com/astralp2p/astral-go/api/crypto"
+	"github.com/astralp2p/astral-go/api/user"
+	"github.com/astralp2p/astral-go/astral"
 	"github.com/glebarez/sqlite"
 	"gorm.io/gorm"
 )

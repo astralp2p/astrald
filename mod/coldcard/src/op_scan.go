@@ -1,14 +1,14 @@
 package coldcard
 
 import (
-	"github.com/cryptopunkscc/astrald/astral"
-	"github.com/cryptopunkscc/astrald/astral/channel"
-	"github.com/cryptopunkscc/astrald/lib/routing"
+	"github.com/astralp2p/astral-go/astral"
+	"github.com/astralp2p/astral-go/astral/channel"
+	"github.com/astralp2p/astral-go/lib/routing"
 )
 
 type opScanArgs struct {
-	In  string `query:"optional"`
-	Out string `query:"optional"`
+	In  string
+	Out string
 }
 
 // OpScan triggers a device rescan and replies over the channel with an Ack on

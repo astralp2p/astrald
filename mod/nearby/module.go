@@ -1,7 +1,7 @@
 package nearby
 
 import (
-	"github.com/cryptopunkscc/astrald/astral"
+	"github.com/astralp2p/astral-go/astral"
 )
 
 const (

@@ -1,23 +1,28 @@
 package user
 
 import (
-	"github.com/cryptopunkscc/astrald/astral"
-	"github.com/cryptopunkscc/astrald/astral/channel"
-	"github.com/cryptopunkscc/astrald/lib/routing"
-	"github.com/cryptopunkscc/astrald/mod/user"
+	"github.com/astralp2p/astral-go/api/user"
+	"github.com/astralp2p/astral-go/astral"
+	"github.com/astralp2p/astral-go/astral/channel"
+	"github.com/astralp2p/astral-go/lib/routing"
 )
 
 type opSwarmStatusArgs struct {
-	In  string `query:"optional"`
-	Out string `query:"optional"`
+	In  string
+	Out string
 }
 
-// OpSwarmStatus streams the status of every active node in the issuer's swarm.
+// OpSwarmStatus authorizes the caller under SeeSwarm, then streams the status of
+// every active node in the issuer's swarm.
 // Each entry includes the node identity, its display alias, and whether it is currently linked.
 func (mod *Module) OpSwarmStatus(ctx *astral.Context, q *routing.IncomingQuery, args opSwarmStatusArgs) (err error) {
 	ac := mod.ActiveContract()
 	if ac == nil {
 		return q.RejectWithCode(2)
+	}
+
+	if !mod.authorizeSeeSwarm(ctx, q) {
+		return q.RejectWithCode(4)
 	}
 
 	ch := q.Accept(channel.WithFormats(args.In, args.Out))

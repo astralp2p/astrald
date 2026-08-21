@@ -3,17 +3,17 @@ package indexing
 import (
 	"time"
 
-	"github.com/cryptopunkscc/astrald/astral"
-	"github.com/cryptopunkscc/astrald/astral/channel"
-	"github.com/cryptopunkscc/astrald/lib/routing"
-	"github.com/cryptopunkscc/astrald/mod/indexing"
-	"github.com/cryptopunkscc/astrald/sig"
+	"github.com/astralp2p/astral-go/api/indexing"
+	"github.com/astralp2p/astral-go/astral"
+	"github.com/astralp2p/astral-go/astral/channel"
+	"github.com/astralp2p/astral-go/lib/routing"
+	"github.com/astralp2p/astral-go/sig"
 )
 
 type opSubscribeArgs struct {
-	Nonce astral.Nonce
-	In    string `query:"optional"`
-	Out   string `query:"optional"`
+	Nonce astral.Nonce `query:"required"`
+	In    string
+	Out   string
 }
 
 // OpSubscribe streams pending index/unindex changes to the caller in version
@@ -21,6 +21,13 @@ type opSubscribeArgs struct {
 // errors with exponential back-off and validates ack repo+version against the
 // sent change before committing the cursor.
 func (mod *Module) OpSubscribe(ctx *astral.Context, q *routing.IncomingQuery, args opSubscribeArgs) error {
+	// note: the nonce alone used to be the credential, and tree.get returns it
+	// (mod/indexing/src/indexers.go). StoreObjects is the gate; the nonce stays the
+	// selector for which indexer's stream is consumed.
+	if !mod.authorizeStoreObjects(ctx, q, "") {
+		return q.Reject()
+	}
+
 	ch := q.Accept(channel.WithFormats(args.In, args.Out))
 	defer ch.Close()
 

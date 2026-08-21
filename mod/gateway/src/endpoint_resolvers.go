@@ -1,15 +1,16 @@
 package gateway
 
 import (
+	nodesmod "github.com/astralp2p/astrald/mod/nodes"
 	"time"
 
-	"github.com/cryptopunkscc/astrald/astral"
-	"github.com/cryptopunkscc/astrald/mod/gateway"
-	"github.com/cryptopunkscc/astrald/mod/nodes"
-	"github.com/cryptopunkscc/astrald/sig"
+	"github.com/astralp2p/astral-go/api/gateway"
+	"github.com/astralp2p/astral-go/api/nodes"
+	"github.com/astralp2p/astral-go/astral"
+	"github.com/astralp2p/astral-go/sig"
 )
 
-var _ nodes.EndpointResolver = &Module{}
+var _ nodesmod.EndpointResolver = &Module{}
 
 // ResolveEndpoints returns gateway-wrapped endpoints only for this node's own
 // identity; requests for any other node return an empty result immediately.

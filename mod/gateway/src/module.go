@@ -3,23 +3,25 @@ package gateway
 import (
 	"context"
 	"fmt"
+	exonetmod "github.com/astralp2p/astrald/mod/exonet"
+	tcpmod "github.com/astralp2p/astrald/mod/tcp"
 	"time"
 
-	"github.com/cryptopunkscc/astrald/astral"
-	"github.com/cryptopunkscc/astrald/astral/log"
-	"github.com/cryptopunkscc/astrald/lib/astrald"
-	"github.com/cryptopunkscc/astrald/lib/routing"
-	"github.com/cryptopunkscc/astrald/mod/dir"
-	"github.com/cryptopunkscc/astrald/mod/exonet"
-	"github.com/cryptopunkscc/astrald/mod/gateway"
-	gatewayClient "github.com/cryptopunkscc/astrald/mod/gateway/client"
-	"github.com/cryptopunkscc/astrald/mod/ip"
-	"github.com/cryptopunkscc/astrald/mod/nearby"
-	"github.com/cryptopunkscc/astrald/mod/nodes"
-	"github.com/cryptopunkscc/astrald/mod/scheduler"
-	"github.com/cryptopunkscc/astrald/mod/services"
-	"github.com/cryptopunkscc/astrald/mod/tcp"
-	"github.com/cryptopunkscc/astrald/sig"
+	"github.com/astralp2p/astral-go/api/exonet"
+	gatewayClient "github.com/astralp2p/astral-go/api/gateway/client"
+	"github.com/astralp2p/astral-go/api/tcp"
+	"github.com/astralp2p/astral-go/astral"
+	"github.com/astralp2p/astral-go/astral/log"
+	"github.com/astralp2p/astral-go/lib/astrald"
+	"github.com/astralp2p/astral-go/lib/routing"
+	"github.com/astralp2p/astral-go/sig"
+	"github.com/astralp2p/astrald/mod/dir"
+	"github.com/astralp2p/astrald/mod/gateway"
+	"github.com/astralp2p/astrald/mod/ip"
+	"github.com/astralp2p/astrald/mod/nearby"
+	"github.com/astralp2p/astrald/mod/nodes"
+	"github.com/astralp2p/astrald/mod/scheduler"
+	"github.com/astralp2p/astrald/mod/services"
 )
 
 const NetworkName = "gw"
@@ -38,12 +40,12 @@ const (
 
 type Deps struct {
 	Dir       dir.Module
-	Exonet    exonet.Module
+	Exonet    exonetmod.Module
 	Nearby    nearby.Module
 	Nodes     nodes.Module
 	Scheduler scheduler.Module
 	Services  services.Module
-	TCP       tcp.Module
+	TCP       tcpmod.Module
 	IP        ip.Module
 }
 

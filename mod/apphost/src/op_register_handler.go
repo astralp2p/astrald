@@ -1,16 +1,16 @@
 package apphost
 
 import (
-	"github.com/cryptopunkscc/astrald/astral"
-	"github.com/cryptopunkscc/astrald/astral/channel"
-	"github.com/cryptopunkscc/astrald/lib/routing"
+	"github.com/astralp2p/astral-go/astral"
+	"github.com/astralp2p/astral-go/astral/channel"
+	"github.com/astralp2p/astral-go/lib/routing"
 )
 
 type opRegisterHandlerArgs struct {
-	Endpoint string
-	Token    astral.Nonce
-	In       string `query:"optional"`
-	Out      string `query:"optional"`
+	Endpoint string       `query:"required"`
+	Token    astral.Nonce `query:"required"`
+	In       string
+	Out      string
 }
 
 func (mod *Module) OpRegisterHandler(ctx *astral.Context, q *routing.IncomingQuery, args opRegisterHandlerArgs) (err error) {

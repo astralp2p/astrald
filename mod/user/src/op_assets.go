@@ -1,18 +1,23 @@
 package user
 
 import (
-	"github.com/cryptopunkscc/astrald/astral"
-	"github.com/cryptopunkscc/astrald/astral/channel"
-	"github.com/cryptopunkscc/astrald/lib/routing"
+	"github.com/astralp2p/astral-go/astral"
+	"github.com/astralp2p/astral-go/astral/channel"
+	"github.com/astralp2p/astral-go/lib/routing"
 )
 
 type opAssetsArgs struct {
-	Out string `query:"optional"`
+	Out string
 }
 
-// OpAssets streams all module assets to the caller, terminating with EOS.
-// On send failure it attempts to deliver an error frame before returning.
+// OpAssets authorizes the caller under SeeSwarm, then streams all module assets
+// to the caller, terminating with EOS. On send failure it attempts to deliver an
+// error frame before returning.
 func (mod *Module) OpAssets(ctx *astral.Context, q *routing.IncomingQuery, args opAssetsArgs) (err error) {
+	if !mod.authorizeSeeSwarm(ctx, q) {
+		return q.RejectWithCode(4)
+	}
+
 	ch := channel.New(q.AcceptRaw(), channel.WithOutputFormat(args.Out))
 	defer ch.Close()
 

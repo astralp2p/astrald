@@ -6,10 +6,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cryptopunkscc/astrald/astral"
-	"github.com/cryptopunkscc/astrald/mod/ip"
-	"github.com/cryptopunkscc/astrald/mod/nat"
-
+	"github.com/astralp2p/astral-go/api/ip"
+	"github.com/astralp2p/astral-go/api/nat"
+	"github.com/astralp2p/astral-go/astral"
 	"github.com/stretchr/testify/require"
 )
 

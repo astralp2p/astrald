@@ -3,8 +3,8 @@ package user
 import (
 	"time"
 
-	"github.com/cryptopunkscc/astrald/mod/auth"
-	"github.com/cryptopunkscc/astrald/mod/tree"
+	"github.com/astralp2p/astral-go/api/auth"
+	"github.com/astralp2p/astral-go/api/tree"
 )
 
 const (

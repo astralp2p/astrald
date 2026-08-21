@@ -7,8 +7,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/cryptopunkscc/astrald/astral"
-	"github.com/cryptopunkscc/astrald/lib/query"
+	"github.com/astralp2p/astral-go/astral"
+	"github.com/astralp2p/astral-go/lib/query"
 )
 
 type HTTPQueryHandler struct {

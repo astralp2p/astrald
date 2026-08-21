@@ -1,15 +1,15 @@
 package auth
 
 import (
-	"github.com/cryptopunkscc/astrald/astral"
-	"github.com/cryptopunkscc/astrald/astral/channel"
-	"github.com/cryptopunkscc/astrald/lib/routing"
-	"github.com/cryptopunkscc/astrald/mod/auth"
+	"github.com/astralp2p/astral-go/api/auth"
+	"github.com/astralp2p/astral-go/astral"
+	"github.com/astralp2p/astral-go/astral/channel"
+	"github.com/astralp2p/astral-go/lib/routing"
 )
 
 type opSignContractArgs struct {
-	In  string `query:"optional"`
-	Out string `query:"optional"`
+	In  string
+	Out string
 }
 
 // OpSignContract handles the sign-contract remote operation: reads a Contract from the
@@ -18,17 +18,11 @@ func (mod *Module) OpSignContract(ctx *astral.Context, q *routing.IncomingQuery,
 	ch := q.Accept(channel.WithFormats(args.In, args.Out))
 	defer ch.Close()
 
-	err := ch.Switch(func(c *auth.Contract) error {
+	return channel.Batch(ch, func(c *auth.Contract) astral.Object {
 		signed := &auth.SignedContract{Contract: c}
-		err := mod.SignContract(ctx, signed)
-		if err != nil {
-			return ch.Send(astral.Err(err))
+		if err := mod.SignContract(ctx, signed); err != nil {
+			return astral.Err(err)
 		}
-
-		return ch.Send(signed)
+		return signed
 	})
-	if err != nil {
-		_ = ch.Send(astral.Err(err))
-	}
-	return err
 }

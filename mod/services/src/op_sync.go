@@ -1,16 +1,16 @@
 package services
 
 import (
-	"github.com/cryptopunkscc/astrald/astral"
-	"github.com/cryptopunkscc/astrald/astral/channel"
-	"github.com/cryptopunkscc/astrald/lib/routing"
+	"github.com/astralp2p/astral-go/astral"
+	"github.com/astralp2p/astral-go/astral/channel"
+	"github.com/astralp2p/astral-go/lib/routing"
 )
 
 type opSyncArgs struct {
-	ID     string
-	Follow bool   `query:"optional"`
-	In     string `query:"optional"`
-	Out    string `query:"optional"`
+	ID     string `query:"required"`
+	Follow bool
+	In     string
+	Out    string
 }
 
 // OpSync fetches and caches services for the requested identity over ZoneNetwork.

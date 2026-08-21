@@ -60,7 +60,6 @@ src/
 | tcp | TCP networking |
 | tor | Tor integration |
 | user | User management |
-| [utp](../mod/utp/README.md) | uTP protocol transport |
 
 ## Logic extensions 
 

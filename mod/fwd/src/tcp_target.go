@@ -4,8 +4,8 @@ import (
 	"io"
 	_net "net"
 
-	"github.com/cryptopunkscc/astrald/astral"
-	"github.com/cryptopunkscc/astrald/lib/query"
+	"github.com/astralp2p/astral-go/astral"
+	"github.com/astralp2p/astral-go/lib/query"
 )
 
 type TCPTarget struct {

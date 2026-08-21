@@ -3,7 +3,7 @@ package apphost
 import (
 	"time"
 
-	"github.com/cryptopunkscc/astrald/astral"
+	"github.com/astralp2p/astral-go/astral"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 )
@@ -15,9 +15,14 @@ type DB struct {
 func (db *DB) CreateAccessToken(identity *astral.Identity, d astral.Duration) (token *dbAccessToken, err error) {
 	var expiresAt = (astral.Time)(time.Now().Add(time.Duration(d)))
 
+	value, err := randomString(32)
+	if err != nil {
+		return nil, err
+	}
+
 	token = &dbAccessToken{
 		Identity:  identity,
-		Token:     randomString(32),
+		Token:     value,
 		ExpiresAt: time.Time(expiresAt),
 	}
 
@@ -30,20 +35,30 @@ func (db *DB) ListAccessTokens() (list []dbAccessToken, _ error) {
 	return list, db.Find(&list).Error
 }
 
+// FindAccessToken returns the unexpired access token row for token.
+// Expired rows are invisible here — authentication treats them as absent —
+// but remain listable until deleted.
 func (db *DB) FindAccessToken(token string) (at *dbAccessToken, err error) {
 	err = db.
 		Where("token = ?", token).
+		Where("expires_at > ?", time.Now()).
 		First(&at).Error
 	return
 }
 
-func (db *DB) CreateLocalApp(appID, hostID *astral.Identity) error {
-	row := &dbLocalApp{AppID: appID, HostID: hostID, InstalledAt: time.Now()}
-	return db.Clauses(clause.OnConflict{DoNothing: true}).Create(row).Error
-}
-
-func (db *DB) ListLocalApps() (list []*dbLocalApp, err error) {
-	return list, db.Find(&list).Error
+// DeleteAccessToken removes an access token so it no longer authenticates.
+// Returns gorm.ErrRecordNotFound when no row matches.
+func (db *DB) DeleteAccessToken(token string) error {
+	tx := db.
+		Where("token = ?", token).
+		Delete(&dbAccessToken{})
+	if tx.Error != nil {
+		return tx.Error
+	}
+	if tx.RowsAffected == 0 {
+		return gorm.ErrRecordNotFound
+	}
+	return nil
 }
 
 // HoldObject records that appID wants objectID retained.

@@ -6,9 +6,9 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/cryptopunkscc/astrald/astral"
-	"github.com/cryptopunkscc/astrald/mod/exonet"
-	kcpmod "github.com/cryptopunkscc/astrald/mod/kcp"
+	kcpmod "github.com/astralp2p/astral-go/api/kcp"
+	"github.com/astralp2p/astral-go/astral"
+	"github.com/astralp2p/astrald/mod/exonet"
 	kcpgo "github.com/xtaci/kcp-go/v5"
 )
 

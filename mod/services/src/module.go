@@ -1,12 +1,12 @@
 package services
 
 import (
-	"github.com/cryptopunkscc/astrald/astral"
-	"github.com/cryptopunkscc/astrald/astral/log"
-	"github.com/cryptopunkscc/astrald/lib/routing"
-	"github.com/cryptopunkscc/astrald/mod/services"
-	servicescli "github.com/cryptopunkscc/astrald/mod/services/client"
-	"github.com/cryptopunkscc/astrald/sig"
+	servicescli "github.com/astralp2p/astral-go/api/services/client"
+	"github.com/astralp2p/astral-go/astral"
+	"github.com/astralp2p/astral-go/astral/log"
+	"github.com/astralp2p/astral-go/lib/routing"
+	"github.com/astralp2p/astral-go/sig"
+	"github.com/astralp2p/astrald/mod/services"
 )
 
 const ModuleName = "services"
@@ -19,6 +19,7 @@ type Module struct {
 	router routing.OpRouter
 	db     *DB
 
+	external    *externalServices
 	discoverers sig.Set[services.Discoverer]
 }
 

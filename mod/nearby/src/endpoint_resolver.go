@@ -1,12 +1,13 @@
 package nearby
 
 import (
-	"github.com/cryptopunkscc/astrald/astral"
-	"github.com/cryptopunkscc/astrald/mod/nodes"
-	"github.com/cryptopunkscc/astrald/sig"
+	"github.com/astralp2p/astral-go/api/nodes"
+	"github.com/astralp2p/astral-go/astral"
+	"github.com/astralp2p/astral-go/sig"
+	nodesmod "github.com/astralp2p/astrald/mod/nodes"
 )
 
-var _ nodes.EndpointResolver = &Module{}
+var _ nodesmod.EndpointResolver = &Module{}
 
 // ResolveEndpoints returns endpoints for a node by scanning cached nearby status messages
 // for EndpointWithTTL attachments that match the given identity.

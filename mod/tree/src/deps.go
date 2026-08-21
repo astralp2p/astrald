@@ -1,8 +1,8 @@
 package tree
 
 import (
-	"github.com/cryptopunkscc/astrald/astral"
-	"github.com/cryptopunkscc/astrald/core"
+	"github.com/astralp2p/astral-go/astral"
+	"github.com/astralp2p/astrald/core"
 )
 
 func (mod *Module) LoadDependencies(*astral.Context) (err error) {

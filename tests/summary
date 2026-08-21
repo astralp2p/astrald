@@ -1,0 +1,91 @@
+#!/usr/bin/env python3
+"""tests/summary — what has actually passed here, and how long it took.
+
+A report.md answers "how did this run go?". This answers the question you ask
+after a day of them: which tests have ever passed on this host, under which
+driver and model, and at what cost. It reads the results directory and nothing
+else, so it cannot claim a pass that no run recorded.
+
+    ./tests/summary              every test that has ever passed
+    ./tests/summary --all        every test seen, passed or not
+    ./tests/summary --md         markdown, for pasting somewhere
+
+why the newest pass rather than the fastest: a fastest-ever column flatters
+the host and hides regressions. The newest pass is the one you can go and
+reproduce.
+"""
+import json
+import sys
+from pathlib import Path
+
+RESULTS = Path(__file__).resolve().parent / "results"
+
+
+def runs():
+    """Every run directory that finalized, newest first."""
+    out = []
+    for d in sorted(RESULTS.glob("*/"), reverse=True):
+        f = d / "results.json"
+        if not f.is_file():
+            continue
+        try:
+            out.append((d.name, json.loads(f.read_text())))
+        except json.JSONDecodeError:
+            continue          # a run killed mid-write is not a result
+    return out
+
+
+def collect(include_failures: bool):
+    """(test, env, driver, model) -> its newest record."""
+    seen = {}
+    for stamp, doc in runs():
+        model = doc.get("agent_model") or ""
+        for e in doc.get("entries", []):
+            if e["status"] != "pass" and not include_failures:
+                continue
+            key = (e["test"], e["env"], e["driver"], model if e["driver"] == "agent" else "")
+            if key in seen:
+                continue      # runs are newest-first, so the first win stays
+            seen[key] = dict(e, stamp=stamp, model=model)
+    return seen
+
+
+def main() -> int:
+    include = "--all" in sys.argv
+    as_md = "--md" in sys.argv
+    rows = collect(include)
+    if not rows:
+        print("no runs recorded under tests/results/")
+        return 1
+
+    table = []
+    for (test, env, driver, _), e in sorted(rows.items()):
+        model = e["model"] if driver == "agent" else "—"
+        status = e["status"] if e["status"] != "pass" else "pass"
+        if e["status"] == "fail" and e.get("failure_kind"):
+            status = f"fail ({e['failure_kind']})"
+        table.append([test, env, driver, model or "—", status,
+                      f"{e['duration_s']:.2f} s", e["stamp"]])
+
+    head = ["Test", "Env", "Driver", "Model", "Result", "Time", "Run"]
+    if as_md:
+        print("| " + " | ".join(head) + " |")
+        print("|" + "|".join("---" for _ in head) + "|")
+        for r in table:
+            print("| " + " | ".join(r) + " |")
+    else:
+        w = [max(len(str(r[i])) for r in [head] + table) for i in range(len(head))]
+        line = "  ".join(h.ljust(w[i]) for i, h in enumerate(head))
+        print(line)
+        print("  ".join("-" * w[i] for i in range(len(head))))
+        for r in table:
+            print("  ".join(str(c).ljust(w[i]) for i, c in enumerate(r)))
+
+    passed = sum(1 for r in table if r[4] == "pass")
+    print(f"\n{passed} passing test/driver combination(s) across "
+          f"{len(runs())} recorded run(s).")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

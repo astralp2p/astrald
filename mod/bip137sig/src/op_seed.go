@@ -3,16 +3,16 @@ package src
 import (
 	"strings"
 
-	"github.com/cryptopunkscc/astrald/astral"
-	"github.com/cryptopunkscc/astrald/astral/channel"
-	"github.com/cryptopunkscc/astrald/lib/routing"
-	"github.com/cryptopunkscc/astrald/mod/bip137sig"
+	"github.com/astralp2p/astral-go/api/bip137sig"
+	"github.com/astralp2p/astral-go/astral"
+	"github.com/astralp2p/astral-go/astral/channel"
+	"github.com/astralp2p/astral-go/lib/routing"
 )
 
 type opSeedArgs struct {
-	Passphrase string `query:"optional"`
-	In         string `query:"optional"`
-	Out        string `query:"optional"`
+	Passphrase string
+	In         string
+	Out        string
 }
 
 // OpSeed receives a whitespace-separated mnemonic and replies with the seed derived under Passphrase.

@@ -5,17 +5,17 @@ import (
 	"strings"
 	"time"
 
-	"github.com/cryptopunkscc/astrald/astral"
-	"github.com/cryptopunkscc/astrald/astral/channel"
-	"github.com/cryptopunkscc/astrald/lib/routing"
-	"github.com/cryptopunkscc/astrald/mod/nodes"
+	"github.com/astralp2p/astral-go/api/nodes"
+	"github.com/astralp2p/astral-go/astral"
+	"github.com/astralp2p/astral-go/astral/channel"
+	"github.com/astralp2p/astral-go/lib/routing"
 )
 
 type opAddEndpointArgs struct {
-	ID       *astral.Identity
-	Endpoint string
-	In       string `query:"optional"`
-	Out      string `query:"optional"`
+	ID       *astral.Identity `query:"required"`
+	Endpoint string           `query:"required"`
+	In       string
+	Out      string
 }
 
 // OpAddEndpoint parses "network:address" and registers it for the identity with a

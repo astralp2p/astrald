@@ -6,10 +6,10 @@ import (
 	"io"
 	"os"
 
-	"github.com/cryptopunkscc/astrald/astral"
-	"github.com/cryptopunkscc/astrald/lib/apps"
-	libastrald "github.com/cryptopunkscc/astrald/lib/astrald"
-	dircli "github.com/cryptopunkscc/astrald/mod/dir/client"
+	dircli "github.com/astralp2p/astral-go/api/dir/client"
+	"github.com/astralp2p/astral-go/astral"
+	"github.com/astralp2p/astral-go/lib/apps"
+	libastrald "github.com/astralp2p/astral-go/lib/astrald"
 )
 
 func main() {

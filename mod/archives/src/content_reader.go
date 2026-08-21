@@ -2,8 +2,8 @@ package archives
 
 import (
 	"archive/zip"
-	"github.com/cryptopunkscc/astrald/astral"
-	"github.com/cryptopunkscc/astrald/streams"
+	"github.com/astralp2p/astral-go/astral"
+	"github.com/astralp2p/astral-go/streams"
 	"io"
 	"io/fs"
 )

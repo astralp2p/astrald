@@ -1,17 +1,21 @@
 package objects
 
 import (
-	"github.com/cryptopunkscc/astrald/astral"
-	"github.com/cryptopunkscc/astrald/astral/channel"
-	"github.com/cryptopunkscc/astrald/lib/routing"
-	"github.com/cryptopunkscc/astrald/mod/objects"
+	"github.com/astralp2p/astral-go/api/objects"
+	"github.com/astralp2p/astral-go/astral"
+	"github.com/astralp2p/astral-go/astral/channel"
+	"github.com/astralp2p/astral-go/lib/routing"
 )
 
 type opRepositoriesArgs struct {
-	Out string `query:"optional"`
+	Out string
 }
 
 func (mod *Module) OpRepositories(ctx *astral.Context, q *routing.IncomingQuery, args opRepositoriesArgs) (err error) {
+	if !mod.authorizeSeeObjects(ctx, q, nil, "") {
+		return q.Reject()
+	}
+
 	ctx = ctx.ExcludeZone(astral.ZoneNetwork)
 
 	ch := q.Accept(channel.WithOutputFormat(args.Out))

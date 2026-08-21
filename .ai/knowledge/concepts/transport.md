@@ -1,16 +1,7 @@
 # Transport
 
-* Transport modules register under `exonet`.
-* Supported transports: TCP, KCP/UDP, Tor, and gateway relay.
-* Upper layers are transport-agnostic.
-
-## Exonet
-
-* `exonet` is the pluggable transport registry.
-* `Endpoint` is a transport name plus an address string.
-* `Endpoint` is a serializable Object — see [mod.nodes.endpoint_with_ttl](../../system/protocols/nodes/types/mod.nodes.endpoint_with_ttl.md).
-* `exonet.Conn` is a raw unauthenticated byte stream with endpoint metadata.
-* Transport modules register a Dialer, Parser, and Unpacker.
+* Upper layers are transport-agnostic; a transport registers under `exonet` by network name.
+* Link strategies live in [links](links.md).
 
 ## Layer Stack
 
@@ -22,27 +13,15 @@ Session          — one routed Query, flow-controlled
                  └─ exonet.Conn — raw transport bytes (tcp / kcp / tor / gw)
 ```
 
-* `Link` embeds `*channel.Channel`; the channel's binary sender/receiver
-  encodes `frames.Frame` objects on the wire.
-* `Mux` shares the link's channel and serialises sends via
-  `channel.WithLockedWrites()`.
+* `Link` embeds `*channel.Channel`; the channel's binary sender/receiver encodes `frames.Frame` objects on the wire.
+* `Mux` shares the link's channel and serialises sends via `channel.WithLockedWrites()`; that lock is the concurrency contract that keeps one frame send atomic across the shared writer.
 
-## Transports
+## Exonet Registry
 
-| Transport | Protocol | Use |
-|---|---|---|
-| `tcp` | TCP/IP | direct, stable IPs |
-| `kcp` | KCP/UDP | NAT traversal after hole-punch |
-| `tor` | Tor hidden services | anonymity |
-| `gw` | gateway relay | unreachable nodes |
-
-## Link Strategies
-
-* Race strategies in parallel.
-* The first successful brontide handshake wins.
-
-| Strategy | Approach |
-|---|---|
-| Basic | Resolve published endpoints, dial directly |
-| NAT | Coordinate UDP hole-punch via `nat`, then dial KCP |
-| Tor | Dial Tor hidden service endpoint |
+* `exonet` is the pluggable transport registry.
+* A transport registers three interfaces by network name: `exonet.Dialer`, `exonet.Parser`, and `exonet.Unpacker`.
+* `exonet.Conn` is a raw unauthenticated byte stream with endpoint metadata.
+* The `Endpoint` interface (network name + address, a serializable Object) is defined in astral-go `api/exonet` — see [mod.nodes.endpoint_with_ttl](../../system/protocols/nodes/types/mod.nodes.endpoint_with_ttl.md).
+* `Endpoint.Pack()` must round-trip through the matching `Unpacker` for its `Network()`.
+* Registry setters use `Replace`; a later registration overwrites the prior handler for that network.
+* `ErrUnsupportedNetwork` and `ErrDisabledNetwork` are the reject sentinels for missing or disabled transport support.

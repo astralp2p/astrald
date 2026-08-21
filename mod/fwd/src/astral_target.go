@@ -3,7 +3,7 @@ package fwd
 import (
 	"io"
 
-	"github.com/cryptopunkscc/astrald/astral"
+	"github.com/astralp2p/astral-go/astral"
 )
 
 type AstralTarget struct {

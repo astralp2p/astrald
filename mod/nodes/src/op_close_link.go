@@ -1,14 +1,14 @@
 package nodes
 
 import (
-	"github.com/cryptopunkscc/astrald/astral"
-	"github.com/cryptopunkscc/astrald/astral/channel"
-	"github.com/cryptopunkscc/astrald/lib/routing"
+	"github.com/astralp2p/astral-go/astral"
+	"github.com/astralp2p/astral-go/astral/channel"
+	"github.com/astralp2p/astral-go/lib/routing"
 )
 
 type opCloseLinkArgs struct {
-	ID  astral.Nonce
-	Out string `query:"optional"`
+	ID  astral.Nonce `query:"required"`
+	Out string
 }
 
 // OpCloseLink closes a link with the given id.

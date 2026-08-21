@@ -1,6 +1,9 @@
 .idea
 /tmp
+/bin/
 cmd/astrald/astrald
 .devnotes/
 .gocache/
 .ai/artifacts/
+go.work
+go.work.sum

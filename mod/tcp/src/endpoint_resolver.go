@@ -1,12 +1,13 @@
 package tcp
 
 import (
-	"github.com/cryptopunkscc/astrald/astral"
-	"github.com/cryptopunkscc/astrald/mod/nodes"
-	"github.com/cryptopunkscc/astrald/sig"
+	"github.com/astralp2p/astral-go/api/nodes"
+	"github.com/astralp2p/astral-go/astral"
+	"github.com/astralp2p/astral-go/sig"
+	nodesmod "github.com/astralp2p/astrald/mod/nodes"
 )
 
-var _ nodes.EndpointResolver = &Module{}
+var _ nodesmod.EndpointResolver = &Module{}
 
 // ResolveEndpoints returns the module's advertised TCP endpoints only when nodeID matches the local node;
 // all other identities receive an empty channel.

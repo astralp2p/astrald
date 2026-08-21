@@ -3,14 +3,14 @@ package nearby
 import (
 	"time"
 
-	"github.com/cryptopunkscc/astrald/astral"
-	"github.com/cryptopunkscc/astrald/astral/log"
-	"github.com/cryptopunkscc/astrald/lib/routing"
-	"github.com/cryptopunkscc/astrald/mod/ip"
-	"github.com/cryptopunkscc/astrald/mod/nearby"
-	_ "github.com/cryptopunkscc/astrald/mod/nearby/views"
-	"github.com/cryptopunkscc/astrald/mod/tree"
-	"github.com/cryptopunkscc/astrald/sig"
+	"github.com/astralp2p/astral-go/api/ip"
+	"github.com/astralp2p/astral-go/api/tree"
+	"github.com/astralp2p/astral-go/astral"
+	"github.com/astralp2p/astral-go/astral/log"
+	"github.com/astralp2p/astral-go/lib/routing"
+	"github.com/astralp2p/astral-go/sig"
+	"github.com/astralp2p/astrald/mod/nearby"
+	_ "github.com/astralp2p/astrald/mod/nearby/views"
 )
 
 var _ nearby.Module = &Module{}

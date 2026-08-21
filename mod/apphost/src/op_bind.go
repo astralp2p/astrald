@@ -1,14 +1,14 @@
 package apphost
 
 import (
-	"github.com/cryptopunkscc/astrald/astral"
-	"github.com/cryptopunkscc/astrald/astral/channel"
-	"github.com/cryptopunkscc/astrald/lib/routing"
-	"github.com/cryptopunkscc/astrald/mod/apphost"
+	"github.com/astralp2p/astral-go/api/apphost"
+	"github.com/astralp2p/astral-go/astral"
+	"github.com/astralp2p/astral-go/astral/channel"
+	"github.com/astralp2p/astral-go/lib/routing"
 )
 
 type opBindArgs struct {
-	Out string `query:"optional"`
+	Out string
 }
 
 // OpBind keeps a session alive so the caller can associate cleanup actions (handler removal) with its lifetime.

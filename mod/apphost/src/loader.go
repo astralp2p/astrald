@@ -3,11 +3,11 @@ package apphost
 import (
 	"net"
 
-	"github.com/cryptopunkscc/astrald/astral"
-	"github.com/cryptopunkscc/astrald/astral/log"
-	"github.com/cryptopunkscc/astrald/core"
-	"github.com/cryptopunkscc/astrald/core/assets"
-	"github.com/cryptopunkscc/astrald/mod/apphost"
+	"github.com/astralp2p/astral-go/astral"
+	"github.com/astralp2p/astral-go/astral/log"
+	"github.com/astralp2p/astrald/core"
+	"github.com/astralp2p/astrald/core/assets"
+	"github.com/astralp2p/astrald/mod/apphost"
 )
 
 type Loader struct{}
@@ -31,7 +31,7 @@ func (Loader) Load(node astral.Node, assets assets.Assets, log *log.Logger) (cor
 	// set up the database
 	mod.db = &DB{assets.Database()}
 
-	err = mod.db.AutoMigrate(&dbAccessToken{}, &dbLocalApp{}, &dbObjectHold{})
+	err = mod.db.AutoMigrate(&dbAccessToken{}, &dbObjectHold{}, &dbGrant{})
 	if err != nil {
 		return nil, err
 	}

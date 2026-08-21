@@ -1,0 +1,71 @@
+#!/usr/bin/env python3
+"""tests/run — entry point of the integration test system.
+
+Stdlib only. astral-py is a zero-dependency package, so it is imported
+straight from its checkout (config.toml astral_py.path) via sys.path —
+no venv, no pip (the host lacks ensurepip).
+"""
+import argparse
+import os
+import sys
+import tomllib
+from pathlib import Path
+
+TESTS = Path(__file__).resolve().parent
+
+USAGE = """\
+examples:
+  ./tests/run                        the default suite (suites/main.suite)
+  ./tests/run main.suite             a named suite, in its listed order
+  ./tests/run adopt-node             one test + the prereq prefix it needs
+  ./tests/run smoke adopt-node       several tests
+"""
+
+
+def target(value: str) -> str:
+    """--target: where the machines come from, orthogonal to env and driver."""
+    named_stage = value.startswith("stage:") and len(value) > len("stage:")
+    if value in ("fresh", "attach") or named_stage:
+        return value
+    raise argparse.ArgumentTypeError(
+        f"bad target {value!r} (fresh | stage:<name> | attach)")
+
+
+def astral_src() -> Path:
+    cfg = tomllib.loads((TESTS / "config.toml").read_text())
+    src = Path(os.path.expanduser(cfg["astral_py"]["path"])) / "src"
+    if not (src / "astral" / "__init__.py").exists():
+        sys.exit(f"run: astral-py not found at {src} (config.toml astral_py.path)")
+    return src
+
+
+def main() -> int:
+    ap = argparse.ArgumentParser(
+        prog="tests/run", epilog=USAGE,
+        formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("selection", nargs="*", metavar="SUITE|TEST",
+                    help="a suite under suites/, or one or more tests under "
+                         "e2e/ (default: main.suite)")
+    ap.add_argument("--driver", choices=["script", "agent"], default="script",
+                    help="how the flow is performed (default: script)")
+    ap.add_argument("--target", type=target, default="fresh",
+                    metavar="fresh|stage:<name>|attach",
+                    help="where the machines come from (default: fresh)")
+    ap.add_argument("--keep", action="store_true",
+                    help="leave the world running after the run")
+    args = ap.parse_args()
+
+    if sys.version_info < (3, 11):
+        sys.exit("run: Python >= 3.11 required")
+
+    src = astral_src()
+    sys.path.insert(0, str(src))
+    sys.path.insert(0, str(TESTS))
+    os.environ["ASTRAL_TESTS_PYPATH"] = f"{TESTS}{os.pathsep}{src}"
+
+    from lib import runner
+    return runner.main(args)
+
+
+if __name__ == "__main__":
+    sys.exit(main())

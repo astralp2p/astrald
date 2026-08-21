@@ -1,15 +1,16 @@
 package tor
 
 import (
-	"github.com/cryptopunkscc/astrald/astral"
-	"github.com/cryptopunkscc/astrald/astral/log"
-	"github.com/cryptopunkscc/astrald/core/assets"
-	"github.com/cryptopunkscc/astrald/mod/exonet"
-	"github.com/cryptopunkscc/astrald/mod/nearby"
-	"github.com/cryptopunkscc/astrald/mod/nodes"
-	"github.com/cryptopunkscc/astrald/mod/tor"
-	"github.com/cryptopunkscc/astrald/mod/tree"
-	"github.com/cryptopunkscc/astrald/sig"
+	"github.com/astralp2p/astral-go/api/tor"
+	"github.com/astralp2p/astral-go/api/tree"
+	"github.com/astralp2p/astral-go/astral"
+	"github.com/astralp2p/astral-go/astral/log"
+	"github.com/astralp2p/astral-go/sig"
+	"github.com/astralp2p/astrald/core/assets"
+	"github.com/astralp2p/astrald/mod/exonet"
+	"github.com/astralp2p/astrald/mod/nearby"
+	"github.com/astralp2p/astrald/mod/nodes"
+	treemod "github.com/astralp2p/astrald/mod/tree"
 	"golang.org/x/net/proxy"
 )
 
@@ -19,7 +20,7 @@ type Deps struct {
 	Nodes  nodes.Module
 	Exonet exonet.Module
 	Nearby nearby.Module
-	Tree   tree.Module
+	Tree   treemod.Module
 }
 
 type Settings struct {

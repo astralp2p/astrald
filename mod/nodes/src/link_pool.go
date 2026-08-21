@@ -1,11 +1,12 @@
 package nodes
 
 import (
+	nodesmod "github.com/astralp2p/astrald/mod/nodes"
 	"slices"
 
-	"github.com/cryptopunkscc/astrald/astral"
-	"github.com/cryptopunkscc/astrald/mod/nodes"
-	"github.com/cryptopunkscc/astrald/sig"
+	"github.com/astralp2p/astral-go/api/nodes"
+	"github.com/astralp2p/astral-go/astral"
+	"github.com/astralp2p/astral-go/sig"
 )
 
 type linkWatcher struct {
@@ -212,7 +213,7 @@ func (pool *LinkPool) RetrieveLink(
 			case s := <-w.ch:
 				result <- LinkResult{Link: s}
 			default:
-				result <- LinkResult{Err: nodes.ErrLinkNotProduced}
+				result <- LinkResult{Err: nodesmod.ErrLinkNotProduced}
 			}
 		case <-ctx.Done():
 			result <- LinkResult{Err: ctx.Err()}

@@ -2,15 +2,16 @@ package shell
 
 import (
 	"errors"
+	authmod "github.com/astralp2p/astrald/mod/auth"
 	"io"
 
-	"github.com/cryptopunkscc/astrald/astral"
-	"github.com/cryptopunkscc/astrald/lib/routing"
-	"github.com/cryptopunkscc/astrald/mod/auth"
+	"github.com/astralp2p/astral-go/api/auth"
+	"github.com/astralp2p/astral-go/astral"
+	"github.com/astralp2p/astral-go/lib/routing"
 )
 
 type opShellArgs struct {
-	As astral.String8 `query:"optional"`
+	As astral.String8
 }
 
 func (mod *Module) OpShell(ctx *astral.Context, q *routing.IncomingQuery, args opShellArgs) (err error) {
@@ -21,7 +22,7 @@ func (mod *Module) OpShell(ctx *astral.Context, q *routing.IncomingQuery, args o
 			return err
 		}
 
-		if !mod.Auth.Authorize(ctx, &auth.SudoAction{Action: auth.NewAction(q.Caller()), AsID: asID}) {
+		if !mod.Auth.Authorize(ctx, &authmod.SudoAction{Action: auth.NewAction(q.Caller()), AsID: asID}) {
 			return astral.NewError("access denied")
 		}
 

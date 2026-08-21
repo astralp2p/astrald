@@ -8,12 +8,12 @@ import (
 	"sync"
 	"time"
 
-	"github.com/cryptopunkscc/astrald/astral"
-	"github.com/cryptopunkscc/astrald/astral/channel"
-	"github.com/cryptopunkscc/astrald/lib/apps"
-	"github.com/cryptopunkscc/astrald/lib/astrald"
-	"github.com/cryptopunkscc/astrald/lib/routing"
-	objectsClient "github.com/cryptopunkscc/astrald/mod/objects/client"
+	objectsClient "github.com/astralp2p/astral-go/api/objects/client"
+	"github.com/astralp2p/astral-go/astral"
+	"github.com/astralp2p/astral-go/astral/channel"
+	"github.com/astralp2p/astral-go/lib/apps"
+	"github.com/astralp2p/astral-go/lib/astrald"
+	"github.com/astralp2p/astral-go/lib/routing"
 )
 
 type App struct{}

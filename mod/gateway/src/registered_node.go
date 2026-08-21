@@ -1,13 +1,14 @@
 package gateway
 
 import (
+	gatewaymod "github.com/astralp2p/astrald/mod/gateway"
 	"sync"
 
-	"github.com/cryptopunkscc/astrald/astral"
-	"github.com/cryptopunkscc/astrald/astral/log"
-	"github.com/cryptopunkscc/astrald/mod/exonet"
-	"github.com/cryptopunkscc/astrald/mod/gateway"
-	"github.com/cryptopunkscc/astrald/sig"
+	"github.com/astralp2p/astral-go/api/gateway"
+	"github.com/astralp2p/astral-go/astral"
+	"github.com/astralp2p/astral-go/astral/log"
+	"github.com/astralp2p/astral-go/sig"
+	"github.com/astralp2p/astrald/mod/exonet"
 )
 
 // registeredNode represents a node registered as reachable through the gateway.
@@ -65,7 +66,7 @@ func (b *registeredNode) Close() error {
 
 func (mod *Module) register(ctx *astral.Context, identity *astral.Identity, visibility gateway.Visibility, network string) (gateway.Socket, error) {
 	if !mod.canGateway(identity) {
-		return gateway.Socket{}, gateway.ErrGatewayDenied
+		return gateway.Socket{}, gatewaymod.ErrGatewayDenied
 	}
 
 	endpoint, err := mod.getGatewayEndpoint(network)
@@ -99,7 +100,7 @@ func (mod *Module) register(ctx *astral.Context, identity *astral.Identity, visi
 func (mod *Module) unregister(identity *astral.Identity) error {
 	node, ok := mod.registeredNodes.Delete(identity.String())
 	if !ok {
-		return gateway.ErrNodeNotRegistered
+		return gatewaymod.ErrNodeNotRegistered
 	}
 
 	err := node.Close()

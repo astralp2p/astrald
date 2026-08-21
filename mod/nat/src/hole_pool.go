@@ -1,9 +1,9 @@
 package nat
 
 import (
-	"github.com/cryptopunkscc/astrald/astral"
-	"github.com/cryptopunkscc/astrald/mod/nat"
-	"github.com/cryptopunkscc/astrald/sig"
+	"github.com/astralp2p/astral-go/astral"
+	"github.com/astralp2p/astral-go/sig"
+	"github.com/astralp2p/astrald/mod/nat"
 )
 
 // HolePool is a concurrent-safe registry of active NAT holes, keyed by nonce.

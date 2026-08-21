@@ -2,7 +2,7 @@ package fs
 
 import (
 	"errors"
-	"github.com/cryptopunkscc/astrald/astral"
+	"github.com/astralp2p/astral-go/astral"
 	"io"
 	"io/fs"
 )

@@ -1,0 +1,9 @@
+# Untracked working files only. The image is built from the whole tree, and .git
+# stays in so the build stamps vcs.revision.
+.idea
+.devnotes
+.gocache
+.ai/artifacts
+tmp
+bin
+Dockerfile

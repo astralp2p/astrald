@@ -1,31 +1,34 @@
 package nat
 
 import (
+	ipmod "github.com/astralp2p/astrald/mod/ip"
+	natmod "github.com/astralp2p/astrald/mod/nat"
+	treemod "github.com/astralp2p/astrald/mod/tree"
 	"net"
 	"sync"
 	"sync/atomic"
 
-	"github.com/cryptopunkscc/astrald/astral"
-	"github.com/cryptopunkscc/astrald/astral/log"
-	"github.com/cryptopunkscc/astrald/lib/routing"
-	"github.com/cryptopunkscc/astrald/mod/dir"
-	"github.com/cryptopunkscc/astrald/mod/events"
-	"github.com/cryptopunkscc/astrald/mod/ip"
-	"github.com/cryptopunkscc/astrald/mod/nat"
-	"github.com/cryptopunkscc/astrald/mod/objects"
-	"github.com/cryptopunkscc/astrald/mod/tree"
-	"github.com/cryptopunkscc/astrald/resources"
+	"github.com/astralp2p/astral-go/api/ip"
+	"github.com/astralp2p/astral-go/api/nat"
+	"github.com/astralp2p/astral-go/api/tree"
+	"github.com/astralp2p/astral-go/astral"
+	"github.com/astralp2p/astral-go/astral/log"
+	"github.com/astralp2p/astral-go/lib/routing"
+	"github.com/astralp2p/astrald/mod/dir"
+	"github.com/astralp2p/astrald/mod/events"
+	"github.com/astralp2p/astrald/mod/objects"
+	"github.com/astralp2p/astrald/resources"
 )
 
 // Ensure Module struct implements the public nat.Module interface
-var _ nat.Module = &Module{}
+var _ natmod.Module = &Module{}
 
 // Deps are injected by the core injector.
 type Deps struct {
 	Dir     dir.Module
 	Objects objects.Module
-	IP      ip.Module
-	Tree    tree.Module
+	IP      ipmod.Module
+	Tree    treemod.Module
 	Events  events.Module
 }
 
@@ -84,7 +87,7 @@ func (mod *Module) SetEnabled(enabled bool) {
 }
 
 func (mod *Module) String() string {
-	return nat.ModuleName
+	return natmod.ModuleName
 }
 
 func (mod *Module) addHole(hole nat.Hole, active bool) {
@@ -141,5 +144,5 @@ func (mod *Module) getLocalIPv4() (ip.IP, error) {
 			return addr, nil
 		}
 	}
-	return nil, nat.ErrNoSuitableIP
+	return nil, natmod.ErrNoSuitableIP
 }

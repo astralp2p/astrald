@@ -1,15 +1,15 @@
 package objects
 
 import (
-	"github.com/cryptopunkscc/astrald/astral"
-	"github.com/cryptopunkscc/astrald/astral/channel"
-	"github.com/cryptopunkscc/astrald/lib/routing"
+	"github.com/astralp2p/astral-go/astral"
+	"github.com/astralp2p/astral-go/astral/channel"
+	"github.com/astralp2p/astral-go/lib/routing"
 )
 
 type opNewArgs struct {
-	Type string
-	In   string `query:"optional"`
-	Out  string `query:"optional"`
+	Type string `query:"required"`
+	In   string
+	Out  string
 }
 
 func (mod *Module) OpNew(ctx *astral.Context, query *routing.IncomingQuery, args opNewArgs) (err error) {

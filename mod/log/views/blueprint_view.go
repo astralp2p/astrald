@@ -3,10 +3,10 @@ package views
 import (
 	"strconv"
 
-	"github.com/cryptopunkscc/astrald/astral"
-	"github.com/cryptopunkscc/astrald/astral/fmt"
-	"github.com/cryptopunkscc/astrald/mod/log/styles"
-	"github.com/cryptopunkscc/astrald/mod/log/theme"
+	"github.com/astralp2p/astral-go/astral"
+	"github.com/astralp2p/astral-go/astral/fmt"
+	"github.com/astralp2p/astral-go/astral/log/styles"
+	"github.com/astralp2p/astral-go/astral/log/theme"
 )
 
 type BlueprintView struct {

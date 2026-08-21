@@ -1,23 +1,28 @@
 package objects
 
 import (
-	"github.com/cryptopunkscc/astrald/astral"
-	"github.com/cryptopunkscc/astrald/astral/channel"
-	"github.com/cryptopunkscc/astrald/lib/routing"
-	"github.com/cryptopunkscc/astrald/mod/objects"
+	"github.com/astralp2p/astral-go/api/objects"
+	"github.com/astralp2p/astral-go/astral"
+	"github.com/astralp2p/astral-go/astral/channel"
+	"github.com/astralp2p/astral-go/lib/routing"
+	objectsmod "github.com/astralp2p/astrald/mod/objects"
 )
 
 type opCreateArgs struct {
-	Alloc uint64 `query:"optional"`
-	Repo  string `query:"optional"`
-	In    string `query:"optional"`
-	Out   string `query:"optional"`
+	Alloc uint64
+	Repo  string
+	In    string
+	Out   string
 }
 
 // OpCreate creates a new object in the repository. It expects a stream of Blob objects followed by objects.Commit.
-// On successful commit returns an ObjectID, an ErrorMessage otherwise. Closing the connection before committing
-// will discard the data.
+// On successful commit returns an ObjectID, an ErrorMessage otherwise; either response ends the op. Closing the
+// connection before committing will discard the data.
 func (mod *Module) OpCreate(ctx *astral.Context, q *routing.IncomingQuery, args opCreateArgs) (err error) {
+	if !mod.authorizeStoreObjects(ctx, q, args.Repo, "") {
+		return q.Reject()
+	}
+
 	ch := channel.New(q.AcceptRaw(), channel.WithFormats(args.In, args.Out))
 	defer ch.Close()
 
@@ -32,7 +37,7 @@ func (mod *Module) OpCreate(ctx *astral.Context, q *routing.IncomingQuery, args 
 	}
 
 	// create a new object in the repo
-	w, err := repo.Create(ctx, &objects.CreateOpts{Alloc: int(args.Alloc)})
+	w, err := repo.Create(ctx, &objectsmod.CreateOpts{Alloc: int(args.Alloc)})
 	if err != nil {
 		return ch.Send(astral.NewError(err.Error()))
 	}
@@ -44,16 +49,21 @@ func (mod *Module) OpCreate(ctx *astral.Context, q *routing.IncomingQuery, args 
 		return
 	}
 
-	return ch.Collect(func(msg astral.Object) (err error) {
-		switch msg := msg.(type) {
-		case *astral.Blob:
-			_, err = msg.WriteTo(w)
-
-		case *objects.CommitMsg: // commit the object
+	return ch.Switch(
+		func(blob *astral.Blob) (err error) {
+			_, err = blob.WriteTo(w)
+			return
+		},
+		func(*objects.CommitMsg) error {
+			// the commit response ends the op either way - the writer cannot
+			// accept blobs or a second commit past this point
 			objectID, err := w.Commit()
-
 			if err != nil {
-				return ch.Send(astral.NewError(err.Error()))
+				err = ch.Send(astral.NewError(err.Error()))
+				if err != nil {
+					return err
+				}
+				return channel.ErrBreak
 			}
 
 			mod.log.Logv(3, "%v created %v in %v", q.Caller(), objectID, repo)
@@ -67,11 +77,12 @@ func (mod *Module) OpCreate(ctx *astral.Context, q *routing.IncomingQuery, args 
 				mod.log.Logv(3, "OpCreate: probe-seed for %v failed: %v", objectID, perr)
 			}
 
-			return ch.Send(objectID)
-
-		default:
-			return astral.NewErrUnexpectedObject(msg)
-		}
-		return
-	})
+			err = ch.Send(objectID)
+			if err != nil {
+				return err
+			}
+			return channel.ErrBreak
+		},
+		channel.WithContext(ctx),
+	)
 }

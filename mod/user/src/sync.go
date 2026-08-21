@@ -3,10 +3,10 @@ package user
 import (
 	"fmt"
 
-	"github.com/cryptopunkscc/astrald/astral"
-	"github.com/cryptopunkscc/astrald/lib/query"
-	"github.com/cryptopunkscc/astrald/mod/tree"
-	"github.com/cryptopunkscc/astrald/mod/user"
+	"github.com/astralp2p/astral-go/api/tree"
+	"github.com/astralp2p/astral-go/api/user"
+	"github.com/astralp2p/astral-go/astral"
+	"github.com/astralp2p/astral-go/lib/query"
 )
 
 // NOTE: Legacy methods below are result of lack of universal solution to
@@ -149,26 +149,6 @@ func (mod *Module) syncExpulsions(ctx *astral.Context, with *astral.Identity) {
 		}
 
 		mod.Objects.Push(ctx, with, signed)
-	}
-}
-
-func (mod *Module) syncApps(ctx *astral.Context, with *astral.Identity) {
-	apps, err := mod.Apphost.LocalApps()
-	if err != nil {
-		mod.log.Error("syncApps: error getting local apps: %v", err)
-		return
-	}
-
-	for _, app := range apps {
-		contracts, err := mod.Auth.SignedContracts().WithIssuer(app.AppID).Find(ctx)
-		if err != nil {
-			mod.log.Error("syncApps: error getting contracts: %v", err)
-			return
-		}
-
-		for _, contract := range contracts {
-			mod.Objects.Push(ctx, with, contract)
-		}
 	}
 }
 

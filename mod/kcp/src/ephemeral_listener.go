@@ -3,8 +3,8 @@ package kcp
 import (
 	"fmt"
 
-	"github.com/cryptopunkscc/astrald/astral"
-	"github.com/cryptopunkscc/astrald/mod/kcp"
+	"github.com/astralp2p/astral-go/astral"
+	"github.com/astralp2p/astrald/mod/kcp"
 )
 
 // CreateEphemeralListener creates an ephemeral KCP endpoint which will start a server that listens on the specified port and adds it to the ephemeralListeners set.

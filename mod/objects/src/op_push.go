@@ -1,25 +1,29 @@
 package objects
 
 import (
-	"github.com/cryptopunkscc/astrald/astral"
-	"github.com/cryptopunkscc/astrald/astral/channel"
-	"github.com/cryptopunkscc/astrald/lib/routing"
+	"github.com/astralp2p/astral-go/astral"
+	"github.com/astralp2p/astral-go/astral/channel"
+	"github.com/astralp2p/astral-go/lib/routing"
 )
 
 const maxPushSize = 32 * 1024
 
 type opPushArgs struct {
-	In  string `query:"optional"`
-	Out string `query:"optional"`
+	In  string
+	Out string
 }
 
 // OpPush receives pushed objects from the caller and replies with a Bool
 // per object indicating whether it was accepted.
 func (mod *Module) OpPush(ctx *astral.Context, q *routing.IncomingQuery, args opPushArgs) (err error) {
+	if !mod.authorizeStoreObjects(ctx, q, "", "") {
+		return q.Reject()
+	}
+
 	ch := channel.New(q.AcceptRaw(), channel.WithFormats(args.In, args.Out))
 	defer ch.Close()
 
-	return ch.Collect(func(o astral.Object) (err error) {
+	return channel.Batch(ch, func(o astral.Object) astral.Object {
 		objectID, _ := astral.ResolveObjectID(o)
 
 		var ok = astral.Bool(mod.receive(q.Caller(), o))
@@ -28,7 +32,6 @@ func (mod *Module) OpPush(ctx *astral.Context, q *routing.IncomingQuery, args op
 		} else {
 			mod.log.Logv(1, "rejected %v (%v) from %v", o.ObjectType(), objectID, q.Caller())
 		}
-		err = ch.Send(&ok)
-		return
-	})
+		return &ok
+	}, channel.WithContext(ctx))
 }

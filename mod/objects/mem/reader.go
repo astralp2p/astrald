@@ -6,7 +6,7 @@ import (
 	"os"
 	"sync/atomic"
 
-	"github.com/cryptopunkscc/astrald/mod/objects"
+	"github.com/astralp2p/astrald/mod/objects"
 )
 
 type Reader struct {

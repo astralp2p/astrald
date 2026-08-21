@@ -1,21 +1,27 @@
 package objects
 
 import (
-	"github.com/cryptopunkscc/astrald/astral"
-	"github.com/cryptopunkscc/astrald/astral/channel"
-	"github.com/cryptopunkscc/astrald/lib/routing"
-	"github.com/cryptopunkscc/astrald/mod/objects"
-	"github.com/cryptopunkscc/astrald/mod/objects/mem"
+	"github.com/astralp2p/astral-go/api/objects"
+	"github.com/astralp2p/astral-go/astral"
+	"github.com/astralp2p/astral-go/astral/channel"
+	"github.com/astralp2p/astral-go/lib/routing"
+	"github.com/astralp2p/astrald/mod/objects/mem"
 )
 
 type opNewMemArgs struct {
-	Name string
-	Size string `query:"optional"`
-	In   string `query:"optional"`
-	Out  string `query:"optional"`
+	Name string `query:"required"`
+	Size string
+	In   string
+	Out  string
 }
 
 func (mod *Module) OpNewMem(ctx *astral.Context, q *routing.IncomingQuery, args opNewMemArgs) (err error) {
+	// note: the repository named here does not exist yet — the op creates it. The noun
+	// is the name the caller claims, which is what a constraint would bind to.
+	if !mod.authorizeStoreObjects(ctx, q, args.Name, "") {
+		return q.Reject()
+	}
+
 	ch := channel.New(q.AcceptRaw(), channel.WithFormats(args.In, args.Out))
 	defer ch.Close()
 

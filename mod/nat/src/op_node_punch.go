@@ -1,14 +1,14 @@
 package nat
 
 import (
-	"github.com/cryptopunkscc/astrald/astral"
-	"github.com/cryptopunkscc/astrald/astral/channel"
-	"github.com/cryptopunkscc/astrald/lib/routing"
-	"github.com/cryptopunkscc/astrald/mod/nat"
+	"github.com/astralp2p/astral-go/api/nat"
+	"github.com/astralp2p/astral-go/astral"
+	"github.com/astralp2p/astral-go/astral/channel"
+	"github.com/astralp2p/astral-go/lib/routing"
 )
 
 type opNodePunchArgs struct {
-	Out string `query:"optional"`
+	Out string
 }
 
 // OpNodePunch runs the passive (participant) side of the NAT punch protocol, responding to an initiator's offer.

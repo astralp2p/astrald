@@ -2,8 +2,8 @@ package assets
 
 import (
 	"errors"
-	log2 "github.com/cryptopunkscc/astrald/astral/log"
-	"github.com/cryptopunkscc/astrald/resources"
+	log2 "github.com/astralp2p/astral-go/astral/log"
+	"github.com/astralp2p/astrald/resources"
 	"gopkg.in/yaml.v2"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
@@ -15,6 +15,19 @@ import (
 var _ Assets = &CoreAssets{}
 
 var dbOpen func(string) gorm.Dialector
+
+// dbDSN turns a database path into a driver-specific DSN carrying the
+// concurrency pragmas. Set by whichever sqlite build variant is compiled in;
+// the two drivers spell their pragmas differently.
+//
+// why: modules load their dependencies concurrently (core.Modules.
+// loadDependencies runs one goroutine per module), so several of them open and
+// write the same file at once. Without busy_timeout sqlite fails the loser
+// immediately with SQLITE_BUSY instead of waiting, and the module manager
+// panics on it — a node that dies at startup roughly one boot in four under
+// load. WAL lets readers run while a writer holds the file, which is the
+// shape of that contention.
+var dbDSN func(string) string
 
 const defaultDatabaseName = "astrald"
 
@@ -117,7 +130,7 @@ func (assets *CoreAssets) OpenDatabase(name string) (*gorm.DB, error) {
 		var dbPath = filepath.Join(res.DataRoot(), name)
 
 		return gorm.Open(
-			dbOpen(dbPath),
+			dbOpen(dbDSN(dbPath)),
 			cfg,
 		)
 

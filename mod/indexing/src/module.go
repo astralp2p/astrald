@@ -2,23 +2,26 @@ package indexing
 
 import (
 	"context"
+	treemod "github.com/astralp2p/astrald/mod/tree"
 	"sync"
 
-	"github.com/cryptopunkscc/astrald/astral"
-	"github.com/cryptopunkscc/astrald/astral/log"
-	"github.com/cryptopunkscc/astrald/lib/routing"
-	"github.com/cryptopunkscc/astrald/mod/indexing"
-	"github.com/cryptopunkscc/astrald/mod/objects"
-	"github.com/cryptopunkscc/astrald/mod/tree"
-	"github.com/cryptopunkscc/astrald/resources"
-	"github.com/cryptopunkscc/astrald/sig"
+	"github.com/astralp2p/astral-go/api/tree"
+	"github.com/astralp2p/astral-go/astral"
+	"github.com/astralp2p/astral-go/astral/log"
+	"github.com/astralp2p/astral-go/lib/routing"
+	"github.com/astralp2p/astral-go/sig"
+	"github.com/astralp2p/astrald/mod/auth"
+	"github.com/astralp2p/astrald/mod/indexing"
+	"github.com/astralp2p/astrald/mod/objects"
+	"github.com/astralp2p/astrald/resources"
 )
 
 var _ indexing.Module = &Module{}
 
 type Deps struct {
+	Auth    auth.Module
 	Objects objects.Module
-	Tree    tree.Module
+	Tree    treemod.Module
 }
 
 type Module struct {

@@ -1,65 +1,59 @@
 # Objects
 
-## Core Types
+Node-side contract for the content-addressed object layer. The `Object`,
+`ObjectID`, and `Writer` types live in astral-go `api/objects`; protocol meaning
+is in the spec. This note holds the daemon-side invariants that cross modules.
 
-### Object
+## Writer
 
-* Immutable typed payload.
-* Declares a type string via `ObjectType()`.
-* Serializes to and from bytes through `WriteTo`/`ReadFrom` (typically backed by `astral.Objectify`).
-* Unknown types decode as opaque `*astral.Blob` only when the astral magic stamp is absent; other decode failures propagate.
+* Every `Writer` from `Repository.Create` must end in exactly one `Commit` or
+  `Discard`.
+* Nodes compute the `ObjectID` locally during `Commit`.
 
-### ObjectID
+## Scan
 
-* Content address over the canonical encoding of an object.
-* Wire and string encoding: see [object_id.sha256](../../system/common-types/object_id.sha256.md).
-* Nodes compute ObjectIDs locally during `Commit`.
+* `Repository.Scan(ctx, follow)` in follow mode emits exactly one nil between
+  the snapshot and live updates.
+* `RepoGroup` scans collapse member snapshot boundaries into one nil.
 
-### Repository
+## Receive
 
-* Stores raw bytes by ObjectID.
-* `Create` returns a `Writer`; every writer must end in exactly one `Commit` or `Discard`.
-* `Scan(ctx, follow)` emits ObjectIDs; in follow mode it must emit exactly one nil between snapshot and live updates.
-* `Read(ctx, id, offset, limit)` returns a `Reader`; `Delete`, `Contains`, and `Free` complete the surface.
-* `RepoGroup` is a `Repository` plus `Add`/`Remove`/`List`; group reads run sequentially or concurrently, group scans collapse member snapshot boundaries into one.
-* Optional `AfterRemovedCallback` is invoked when a repo is removed from the registry.
+* A `Drop` carries the sender identity, the object, and the save target
+  (`WriteDefault`).
+* `Drop.Accept(save)` acknowledges; `save=true` stores through the module's
+  `Store` at most once even across multiple accepting receivers.
+* Not calling `Accept` passes silently; other receivers still run.
 
-### Receiver
+## Decode
 
-* Side of the receive path. Modules implementing `Receiver` see every locally received or pushed object via a `Drop`.
-
-### Drop
-
-* Carries the sender identity, the object, and the save target (`WriteDefault`).
-* `Accept(save bool)` acknowledges the object; `save=true` stores it through the module's `Store` at most once even across multiple accepting receivers.
-* Not calling `Accept` silently passes; other receivers still run.
+* Unknown types decode as opaque `*astral.Blob` only when the astral magic stamp
+  is absent; other decode failures propagate.
 
 ## Repository Groups
 
-| Group       | Purpose                                                  |
-|-------------|----------------------------------------------------------|
-| `local`     | primary on-disk; default write target (`WriteDefault`)   |
-| `memory`    | in-memory caches (seeded with `mem0` and `system`)       |
-| `removable` | portable/external media                                  |
-| `device`    | combined `memory` + `local` + `removable`                |
-| `virtual`   | computed sources — archives, encryption wrappers         |
-| `network`   | remote peers (requires `ZoneNetwork`)                    |
-| `system`    | internal node data (in-memory by default)                |
-| `main`      | `device` + `virtual` + `network`; default read target    |
+Canonical home for the group-to-zone mapping; `concepts/zone.md` points here.
 
-## Tracking and Purge
+| Group       | Purpose                                                |
+|-------------|--------------------------------------------------------|
+| `local`     | primary on-disk; default write target (`WriteDefault`) |
+| `memory`    | in-memory caches (seeded with `mem0` and `system`)     |
+| `removable` | portable/external media                                |
+| `device`    | `memory` + `local` + `removable`                       |
+| `virtual`   | computed sources — archives, encryption wrappers       |
+| `network`   | remote peers (requires `ZoneNetwork`)                  |
+| `system`    | internal node data (in-memory by default)              |
+| `main`      | `device` + `virtual` + `network`; default read target  |
 
-* `objects__objects` rows pair each known ObjectID with a type, creation time, monotonic `height`, and `read_at`.
-* Rows are seeded by `Store`, `Load`, `Probe`, `GetType`, and `OpCreate` (via `Probe`). Seeding is idempotent and best-effort.
-* A read journal records every qualified read in memory and flushes batched `read_at` UPDATEs to the DB on purge entry and shutdown; first reads do not seed.
-* Purge walks tracked IDs by `(read_at, height)` keyset, oldest-first, asking every `Holder` whether each ID is still in use; unheld IDs are deleted through the requested repository.
+## Discovery Interfaces
 
-## Discovery Extension Points
+`Receiver`, `Holder`, and `SourceIdentifier` stay in astrald `mod/objects`;
+`Describer`, `Searcher`, `SearchPreprocessor`, and `Finder` moved to astral-go
+`api/objects`. Node-side discovery and dispatch stay in `mod/objects`.
 
-Modules implement these interfaces; the objects module discovers implementations
-through type assertions in `LoadDependencies`. External (caller-hosted)
-discoverers register at runtime through `objects.register_*` ops and are
-deduplicated by `SourceIdentity`.
+* Modules implement these interfaces; `mod/objects` discovers implementations
+  through type assertions in `LoadDependencies`.
+* External (caller-hosted) discoverers register at runtime through
+  `objects.register_*` ops and are deduplicated by `SourceIdentity`.
 
 | Interface | Trigger |
 |---|---|
@@ -68,13 +62,15 @@ deduplicated by `SourceIdentity`.
 | `Searcher` | text/tag search over module-owned indexes |
 | `SearchPreprocessor` | mutates `objects.Search` before searchers run |
 | `Finder` | provider lookup by ObjectID |
-| `Holder` | purge-time protection; held objects are skipped by `objects.purge`, not by `objects.delete` |
+| `Holder` | purge-time protection; held objects skipped by `objects.purge`, not by `objects.delete` |
 | `SourceIdentifier` | marks an extension as proxying for an external identity; enables dedup |
 
-`Holder` is a purge-time protection hook. `objects.delete` is a direct repository
-command and does not consult holders. `Holder.HoldObject` returning an error
-should fail closed (return `true`) — losing the cache row is preferable to
-deleting referenced data.
+## Holder
+
+* `Holder` is purge-only. `objects.delete` is a direct repository command and
+  does not consult holders.
+* `Holder.HoldObject` must fail closed: return `true` on error, since losing the
+  cache row beats deleting referenced data.
 
 | Holder provider | Protected objects |
 |---|---|

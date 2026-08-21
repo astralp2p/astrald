@@ -1,9 +1,9 @@
 package nodes
 
 import (
-	"github.com/cryptopunkscc/astrald/astral"
-	"github.com/cryptopunkscc/astrald/mod/nodes"
-	"github.com/cryptopunkscc/astrald/sig"
+	"github.com/astralp2p/astral-go/astral"
+	"github.com/astralp2p/astral-go/sig"
+	"github.com/astralp2p/astrald/mod/nodes"
 )
 
 type NodeLinker struct {

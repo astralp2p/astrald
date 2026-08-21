@@ -1,17 +1,21 @@
 package objects
 
 import (
-	"github.com/cryptopunkscc/astrald/astral"
-	"github.com/cryptopunkscc/astrald/astral/channel"
-	"github.com/cryptopunkscc/astrald/lib/routing"
+	"github.com/astralp2p/astral-go/astral"
+	"github.com/astralp2p/astral-go/astral/channel"
+	"github.com/astralp2p/astral-go/lib/routing"
 )
 
 type opGetTypeArgs struct {
-	ID  *astral.ObjectID
-	Out string `query:"optional"`
+	ID  *astral.ObjectID `query:"required"`
+	Out string
 }
 
 func (mod *Module) OpGetType(ctx *astral.Context, q *routing.IncomingQuery, args opGetTypeArgs) (err error) {
+	if !mod.authorizeSeeObjects(ctx, q, args.ID, "") {
+		return q.Reject()
+	}
+
 	ctx = ctx.WithIdentity(q.Caller())
 
 	ch := channel.New(q.AcceptRaw(), channel.WithOutputFormat(args.Out))

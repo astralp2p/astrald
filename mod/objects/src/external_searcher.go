@@ -4,12 +4,12 @@ import (
 	"errors"
 	"time"
 
-	"github.com/cryptopunkscc/astrald/astral"
-	log "github.com/cryptopunkscc/astrald/astral/log"
-	"github.com/cryptopunkscc/astrald/lib/astrald"
-	"github.com/cryptopunkscc/astrald/mod/objects"
-	objectscli "github.com/cryptopunkscc/astrald/mod/objects/client"
-	"github.com/cryptopunkscc/astrald/sig"
+	"github.com/astralp2p/astral-go/api/objects"
+	objectscli "github.com/astralp2p/astral-go/api/objects/client"
+	"github.com/astralp2p/astral-go/astral"
+	log "github.com/astralp2p/astral-go/astral/log"
+	"github.com/astralp2p/astral-go/lib/astrald"
+	"github.com/astralp2p/astral-go/sig"
 )
 
 type ExternalSearcher struct {

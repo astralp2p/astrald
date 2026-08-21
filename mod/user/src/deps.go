@@ -1,27 +1,28 @@
 package user
 
 import (
-	"github.com/cryptopunkscc/astrald/astral"
-	"github.com/cryptopunkscc/astrald/core"
-	"github.com/cryptopunkscc/astrald/mod/apphost"
-	"github.com/cryptopunkscc/astrald/mod/auth"
-	"github.com/cryptopunkscc/astrald/mod/crypto"
-	"github.com/cryptopunkscc/astrald/mod/dir"
-	"github.com/cryptopunkscc/astrald/mod/nearby"
-	"github.com/cryptopunkscc/astrald/mod/nodes"
-	"github.com/cryptopunkscc/astrald/mod/objects"
-	"github.com/cryptopunkscc/astrald/mod/scheduler"
-	"github.com/cryptopunkscc/astrald/mod/shell"
-	"github.com/cryptopunkscc/astrald/mod/tree"
+	"github.com/astralp2p/astral-go/api/auth"
+	"github.com/astralp2p/astral-go/api/nodes"
+	"github.com/astralp2p/astral-go/api/user"
+	"github.com/astralp2p/astral-go/astral"
+	"github.com/astralp2p/astrald/core"
+	authmod "github.com/astralp2p/astrald/mod/auth"
+	"github.com/astralp2p/astrald/mod/crypto"
+	"github.com/astralp2p/astrald/mod/dir"
+	"github.com/astralp2p/astrald/mod/nearby"
+	nodesmod "github.com/astralp2p/astrald/mod/nodes"
+	objectsmod "github.com/astralp2p/astrald/mod/objects"
+	"github.com/astralp2p/astrald/mod/scheduler"
+	"github.com/astralp2p/astrald/mod/shell"
+	"github.com/astralp2p/astrald/mod/tree"
 )
 
 type Deps struct {
-	Apphost   apphost.Module
-	Auth      auth.Module
+	Auth      authmod.Module
 	Crypto    crypto.Module
 	Dir       dir.Module
-	Objects   objects.Module
-	Nodes     nodes.Module
+	Objects   objectsmod.Module
+	Nodes     nodesmod.Module
 	Scheduler scheduler.Module
 	Shell     shell.Module
 	Nearby    nearby.Module
@@ -40,8 +41,18 @@ func (mod *Module) LoadDependencies(ctx *astral.Context) (err error) {
 		return err
 	}
 
-	mod.Auth.Add(auth.Func[*nodes.RelayForAction](mod.AuthorizeRelayFor))
-	mod.Auth.Add(auth.Func[*objects.ReadObjectAction](mod.AuthorizeReadObject))
+	mod.Auth.Add(authmod.Func[*nodes.RelayForAction](mod.AuthorizeRelayFor))
+	mod.Auth.Add(authmod.Func[*auth.SeeObjectsAction](mod.AuthorizeSeeObjects))
+	mod.Auth.Add(authmod.Func[*auth.StoreObjectsAction](mod.AuthorizeStoreObjects))
+	mod.Auth.Add(authmod.Func[*auth.AdminObjectsAction](mod.AuthorizeAdminObjects))
+	mod.Auth.Add(authmod.Func[*user.SeeSwarmAction](mod.AuthorizeSeeSwarm))
+	mod.Auth.Add(authmod.Func[*user.AdminSwarmAction](mod.AuthorizeAdminSwarm))
+
+	// why: localuser as a name, to match localuser as a filter
+	err = mod.Dir.AddResolver(mod)
+	if err != nil {
+		return
+	}
 
 	// add localswarm filter
 	mod.Dir.SetFilter("localswarm", func(identity *astral.Identity) bool {

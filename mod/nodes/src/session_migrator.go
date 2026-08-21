@@ -3,7 +3,7 @@ package nodes
 import (
 	"context"
 
-	"github.com/cryptopunkscc/astrald/mod/nodes"
+	"github.com/astralp2p/astrald/mod/nodes"
 )
 
 // SessionMigrator moves an open session from one link to another.

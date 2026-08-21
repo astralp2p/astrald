@@ -1,18 +1,18 @@
 package crypto
 
 import (
-	"github.com/cryptopunkscc/astrald/astral"
-	"github.com/cryptopunkscc/astrald/astral/channel"
-	"github.com/cryptopunkscc/astrald/lib/routing"
-	"github.com/cryptopunkscc/astrald/mod/crypto"
-	"github.com/cryptopunkscc/astrald/mod/secp256k1"
+	"github.com/astralp2p/astral-go/api/crypto"
+	"github.com/astralp2p/astral-go/api/secp256k1"
+	"github.com/astralp2p/astral-go/astral"
+	"github.com/astralp2p/astral-go/astral/channel"
+	"github.com/astralp2p/astral-go/lib/routing"
 )
 
 type opVerifyTextSignatureArgs struct {
-	Text string `query:"optional"`
-	Key  string `query:"optional"`
-	In   string `query:"optional"`
-	Out  string `query:"optional"`
+	Text string
+	Key  string
+	In   string
+	Out  string
 }
 
 // OpVerifyTextSignature accepts a raw channel and verifies a text signature.
@@ -34,6 +34,7 @@ func (mod *Module) OpVerifyTextSignature(ctx *astral.Context, q *routing.Incomin
 		}
 	}
 
+	var sawEOS bool
 	err = ch.Switch(
 		func(key *crypto.PublicKey) error {
 			publicKey = key
@@ -61,10 +62,16 @@ func (mod *Module) OpVerifyTextSignature(ctx *astral.Context, q *routing.Incomin
 			}
 			return ch.Send(&astral.Ack{})
 		},
-		channel.BreakOnEOS,
+		// why: a composed upstream op reports a failed item as a wrong-typed
+		// object in the stream; reply in-band and keep the batch alive.
+		func(obj astral.Object) error {
+			return ch.Send(astral.Err(astral.NewErrUnexpectedObject(obj)))
+		},
+		channel.MarkEOS(&sawEOS),
 	)
-	if err != nil {
-		_ = ch.Send(astral.Err(err))
+	// why: no EOS reply after EOF — the caller is gone and Conn closes on read error.
+	if err != nil || !sawEOS {
+		return err
 	}
-	return err
+	return ch.Send(&astral.EOS{})
 }

@@ -1,16 +1,16 @@
 package gateway
 
 import (
-	"github.com/cryptopunkscc/astrald/astral"
-	"github.com/cryptopunkscc/astrald/astral/channel"
-	"github.com/cryptopunkscc/astrald/lib/routing"
-	"github.com/cryptopunkscc/astrald/mod/gateway"
+	"github.com/astralp2p/astral-go/api/gateway"
+	"github.com/astralp2p/astral-go/astral"
+	"github.com/astralp2p/astral-go/astral/channel"
+	"github.com/astralp2p/astral-go/lib/routing"
 )
 
 type opNodeRegisterArgs struct {
-	Visibility gateway.Visibility
-	In         string `query:"optional"`
-	Out        string `query:"optional"`
+	Visibility gateway.Visibility `query:"required"`
+	In         string
+	Out        string
 }
 
 // OpNodeRegister registers the caller as a gateway-reachable node and returns the socket (nonce + TCP endpoint) the caller must listen on.

@@ -1,15 +1,16 @@
 # Operation Patterns
 
-Use this pattern for operations exposed through `astral-query`, `lib/routing`,
-or module client packages.
+Node-side operation handlers exposed through `astral-query`. The op framework
+(`routing.IncomingQuery`, `AddStructPrefix`, `channel`) is imported from `lib/routing`
+and `astral/channel`; this note covers only the astrald `mod/*/src` side.
 
 ## Handler
 
-Invariants:
-
-- Method names use `Op` + PascalCase (registered via `AddStructPrefix(s, "Op")`).
-- Operation names use snake_case (auto-converted by `log.ToSnakeCase`).
-- Handler signature: `func(*astral.Context, *routing.IncomingQuery[, args]) error`.
+* Method names use `Op` + PascalCase, registered via `AddStructPrefix(s, "Op")`.
+* Operation names use snake_case, converted by `log.ToSnakeCase`.
+* Handler signature: `func(*astral.Context, *routing.IncomingQuery[, args]) error`.
+* `q.AcceptRaw()` returns `io.ReadWriteCloser`; pass it to `channel.New(...)`.
+* `q.Accept(cfg...)` is the same flow in one call.
 
 ```go
 func (mod *Module) OpSessions(ctx *astral.Context, q *routing.IncomingQuery, args opSessionsArgs) (err error) {
@@ -25,18 +26,12 @@ func (mod *Module) OpSessions(ctx *astral.Context, q *routing.IncomingQuery, arg
 }
 ```
 
-`q.AcceptRaw()` returns `io.ReadWriteCloser`; pass it to `channel.New(...)`.
-`q.Accept(cfg...)` is the same flow in one call.
-
-Source: `mod/nodes/src/op_sessions.go`, `mod/nodes/src/op_links.go`
-
 ## Args Struct
 
-Args are parsed from the query string into the third handler argument. Fields
-with `query:"required"` are enforced by `Op.invoke` before the handler runs;
-otherwise the field is taken when present and left zero when absent.
-`query:"optional"` is a documentation marker (it is parsed but defaults match
-absence-of-tag).
+Args are parsed from the query string into the third handler argument.
+
+* `query:"required"` fields are enforced before the handler runs.
+* Other fields are taken when present and left zero when absent.
 
 ```go
 type opPunchArgs struct {
@@ -46,8 +41,6 @@ type opPunchArgs struct {
 }
 ```
 
-For strictly required fields use `required`:
-
 ```go
 type findArgs struct {
     ID  *astral.ObjectID `query:"required"`
@@ -55,71 +48,9 @@ type findArgs struct {
 }
 ```
 
-Source: `lib/query/field_tag.go`, `lib/routing/op.go` (required enforcement),
-`mod/nat/src/op_punch.go`
+## Client
 
-## Module Client
-
-Every module with query ops has a `mod/<name>/client/` package mirroring the
-module's `src/op_*.go` files.
-
-```go
-type Client struct {
-    astral   *astrald.Client
-    targetID *astral.Identity
-}
-
-var defaultClient *Client
-
-func New(targetID *astral.Identity, a *astrald.Client) *Client {
-    if a == nil {
-        a = astrald.Default()
-    }
-    return &Client{astral: a, targetID: targetID}
-}
-
-func Default() *Client {
-    if defaultClient == nil {
-        defaultClient = New(nil, astrald.Default())
-    }
-    return defaultClient
-}
-
-func (c *Client) queryCh(ctx *astral.Context, method string, args any, cfg ...channel.ConfigFunc) (*channel.Channel, error) {
-    return c.astral.WithTarget(c.targetID).QueryChannel(ctx, method, args, cfg...)
-}
-```
-
-Source: `mod/nat/client/client.go`, `mod/objects/client/client.go`,
-`mod/auth/client/client.go`
-
-## Client Operation File
-
-Keep one client operation per file.
-
-```go
-func (c *Client) DoThing(ctx *astral.Context, contract *foo.Contract) (result *foo.SignedContract, err error) {
-    ch, err := c.queryCh(ctx, foo.OpDoThing, nil)
-    if err != nil {
-        return
-    }
-    defer ch.Close()
-
-    err = ch.Send(contract)
-    if err != nil {
-        return
-    }
-
-    err = ch.Switch(channel.Expect(&result), channel.PassErrors)
-    return
-}
-
-func DoThing(ctx *astral.Context, contract *foo.Contract) (*foo.SignedContract, error) {
-    return Default().DoThing(ctx, contract)
-}
-```
-
-Source: `mod/objects/client/store.go`, `mod/auth/client/sign_contract.go`
+Protocol clients live in astral-go `api/<p>/client/`.
 
 ## Call Boundary
 
@@ -130,5 +61,3 @@ Choose the call path by caller situation.
 | Module running on same node | Dependency interface, e.g. `mod.Dir.ResolveIdentity(name)` |
 | Operation on a different node | Client with target, e.g. `natclient.New(target, astrald.Default())` |
 | External app with no node access | Default client routed through apphost |
-
-Source: `mod/nat/src/op_punch.go`, `mod/nat/src/op_node_consume_hole.go`

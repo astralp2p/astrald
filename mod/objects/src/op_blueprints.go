@@ -1,13 +1,13 @@
 package objects
 
 import (
-	"github.com/cryptopunkscc/astrald/astral"
-	"github.com/cryptopunkscc/astrald/astral/channel"
-	"github.com/cryptopunkscc/astrald/lib/routing"
+	"github.com/astralp2p/astral-go/astral"
+	"github.com/astralp2p/astral-go/astral/channel"
+	"github.com/astralp2p/astral-go/lib/routing"
 )
 
 type opBlueprintsArgs struct {
-	Out string `query:"optional"`
+	Out string
 }
 
 // OpBlueprints streams every registered type name in dependency order
@@ -16,6 +16,10 @@ type opBlueprintsArgs struct {
 // astral.EOS marker so consumers can iterate without relying on channel
 // close to signal end-of-stream.
 func (mod *Module) OpBlueprints(ctx *astral.Context, q *routing.IncomingQuery, args opBlueprintsArgs) (err error) {
+	if !mod.authorizeSeeObjects(ctx, q, nil, "") {
+		return q.Reject()
+	}
+
 	ch := channel.New(q.AcceptRaw(), channel.WithOutputFormat(args.Out))
 	defer ch.Close()
 

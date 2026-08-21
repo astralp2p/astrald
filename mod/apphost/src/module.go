@@ -1,23 +1,23 @@
 package apphost
 
 import (
+	apphostmod "github.com/astralp2p/astrald/mod/apphost"
 	"net"
 	"sync"
 
-	"github.com/cryptopunkscc/astrald/astral"
-	"github.com/cryptopunkscc/astrald/astral/log"
-	"github.com/cryptopunkscc/astrald/debug"
-	"github.com/cryptopunkscc/astrald/lib/routing"
-	"github.com/cryptopunkscc/astrald/mod/apphost"
-	"github.com/cryptopunkscc/astrald/mod/auth"
-	"github.com/cryptopunkscc/astrald/mod/crypto"
-	"github.com/cryptopunkscc/astrald/mod/dir"
-	"github.com/cryptopunkscc/astrald/mod/objects"
-	"github.com/cryptopunkscc/astrald/mod/user"
-	"github.com/cryptopunkscc/astrald/sig"
+	"github.com/astralp2p/astral-go/astral"
+	"github.com/astralp2p/astral-go/astral/log"
+	"github.com/astralp2p/astral-go/lib/routing"
+	"github.com/astralp2p/astral-go/sig"
+	"github.com/astralp2p/astrald/debug"
+	"github.com/astralp2p/astrald/mod/auth"
+	"github.com/astralp2p/astrald/mod/crypto"
+	"github.com/astralp2p/astrald/mod/dir"
+	"github.com/astralp2p/astrald/mod/objects"
+	"github.com/astralp2p/astrald/mod/user"
 )
 
-var _ apphost.Module = &Module{}
+var _ apphostmod.Module = &Module{}
 
 type Deps struct {
 	Auth    auth.Module
@@ -83,20 +83,19 @@ func (mod *Module) Router() astral.Router {
 	return &mod.router
 }
 
-func (mod *Module) LocalApps() ([]*apphost.App, error) {
-	rows, err := mod.db.ListLocalApps()
-	if err != nil {
-		return nil, err
+// EnRouteQueryExtras returns a copy of the Extra map of a guest query that is
+// still en route (launched but not yet accepted or rejected). Once the query
+// resolves the entry is gone and the result is nil.
+func (mod *Module) EnRouteQueryExtras(nonce astral.Nonce) map[string]any {
+	er, ok := mod.enRoute.Get(nonce)
+	if !ok {
+		return nil
 	}
-	list := make([]*apphost.App, len(rows))
-	for i, r := range rows {
-		list[i] = &apphost.App{AppID: r.AppID, HostID: r.HostID, InstalledAt: astral.Time(r.InstalledAt)}
-	}
-	return list, nil
+	return er.query.Extra.Clone()
 }
 
 func (mod *Module) String() string {
-	return apphost.ModuleName
+	return apphostmod.ModuleName
 }
 
 func (mod *Module) RoutingPriority() int {

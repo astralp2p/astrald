@@ -3,19 +3,24 @@ package user
 import (
 	"io"
 
-	"github.com/cryptopunkscc/astrald/astral"
-	"github.com/cryptopunkscc/astrald/astral/channel"
-	"github.com/cryptopunkscc/astrald/lib/routing"
+	"github.com/astralp2p/astral-go/astral"
+	"github.com/astralp2p/astral-go/astral/channel"
+	"github.com/astralp2p/astral-go/lib/routing"
 )
 
 type opSyncAssetsArgs struct {
-	Start astral.Uint64 `query:"optional"`
-	Out   string        `query:"optional"`
+	Start astral.Uint64
+	Out   string
 }
 
-// OpSyncAssets streams asset delta records from the given DB height and replies with the next unread height.
+// OpSyncAssets authorizes the caller under SeeSwarm, then streams asset delta
+// records from the given DB height and replies with the next unread height.
 // If no rows are found at or above Start, echoes Start as the height so callers can safely re-poll.
 func (mod *Module) OpSyncAssets(ctx *astral.Context, q *routing.IncomingQuery, args opSyncAssetsArgs) (err error) {
+	if !mod.authorizeSeeSwarm(ctx, q) {
+		return q.RejectWithCode(4)
+	}
+
 	var rows []*dbAsset
 
 	err = mod.db.Where("height >= ?", args.Start).Find(&rows).Error

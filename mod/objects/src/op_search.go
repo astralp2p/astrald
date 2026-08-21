@@ -2,25 +2,30 @@ package objects
 
 import (
 	"fmt"
+	objectsmod "github.com/astralp2p/astrald/mod/objects"
 	"time"
 
-	"github.com/cryptopunkscc/astrald/astral"
-	"github.com/cryptopunkscc/astrald/astral/channel"
-	"github.com/cryptopunkscc/astrald/lib/routing"
-	"github.com/cryptopunkscc/astrald/mod/objects"
-	"github.com/cryptopunkscc/astrald/sig"
+	"github.com/astralp2p/astral-go/api/objects"
+	"github.com/astralp2p/astral-go/astral"
+	"github.com/astralp2p/astral-go/astral/channel"
+	"github.com/astralp2p/astral-go/lib/routing"
+	"github.com/astralp2p/astral-go/sig"
 )
 
 type SearchArgs struct {
-	Query string      `query:"key:q"`
-	Repo  string      `query:"optional"` // return only objects that this repo contains
-	Zone  astral.Zone `query:"optional"`
-	Out   string      `query:"optional"`
+	Query string `query:"key:q"`
+	Repo  string // return only objects that this repo contains
+	Zone  astral.Zone
+	Out   string
 }
 
 // OpSearch streams matches for the query, deduplicated by ObjectID and
 // optionally filtered to objects the named repo contains. Bounded to one minute.
 func (mod *Module) OpSearch(ctx *astral.Context, q *routing.IncomingQuery, args SearchArgs) (err error) {
+	if !mod.authorizeSeeObjects(ctx, q, nil, args.Repo) {
+		return q.Reject()
+	}
+
 	ctx, cancel := ctx.WithIdentity(q.Caller()).IncludeZone(args.Zone).WithTimeout(time.Minute)
 	defer cancel()
 
@@ -28,7 +33,7 @@ func (mod *Module) OpSearch(ctx *astral.Context, q *routing.IncomingQuery, args 
 	defer ch.Close()
 
 	// find repo if provided
-	var repo objects.Repository
+	var repo objectsmod.Repository
 	if len(args.Repo) > 0 {
 		repo = mod.GetRepository(args.Repo)
 		if repo == nil {

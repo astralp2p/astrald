@@ -1,8 +1,9 @@
 package crypto
 
 import (
-	"github.com/cryptopunkscc/astrald/astral"
+	"github.com/astralp2p/astral-go/astral"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 type DB struct {
@@ -45,7 +46,10 @@ func (db *DB) createPrivateKey(keyID *astral.ObjectID, typ string, pubKeyID *ast
 		PublicKey:   pubKey,
 	}
 
-	err := db.Create(row).Error
+	// why: the register op indexes its fresh key while the repo follower
+	// auto-indexes the same just-stored object; the loser of that race must
+	// land as a no-op, not a UNIQUE constraint error sent back to the app.
+	err := db.Clauses(clause.OnConflict{DoNothing: true}).Create(row).Error
 
 	return row, err
 }

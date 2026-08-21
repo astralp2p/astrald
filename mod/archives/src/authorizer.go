@@ -1,14 +1,19 @@
 package archives
 
 import (
-	"github.com/cryptopunkscc/astrald/astral"
-	"github.com/cryptopunkscc/astrald/mod/auth"
-	"github.com/cryptopunkscc/astrald/mod/objects"
+	"github.com/astralp2p/astral-go/api/auth"
+	"github.com/astralp2p/astral-go/astral"
 )
 
-// AuthorizeObjectsRead grants read access to an archive entry by recursively
+// AuthorizeSeeObjects grants read access to an archive entry by recursively
 // verifying that the actor can read the parent archive that contains it.
-func (mod *Module) AuthorizeObjectsRead(ctx *astral.Context, action *objects.ReadObjectAction) bool {
+func (mod *Module) AuthorizeSeeObjects(ctx *astral.Context, action *auth.SeeObjectsAction) bool {
+	// note: SeeObjects also covers ops that name no object — enumeration, blueprints,
+	// the repository list. An archive says nothing about those, so it grants nothing.
+	if action.ObjectID == nil {
+		return false
+	}
+
 	var rows []*dbEntry
 
 	var err = mod.db.
@@ -34,7 +39,7 @@ func (mod *Module) AuthorizeObjectsRead(ctx *astral.Context, action *objects.Rea
 		}
 
 		// Recursive check: can the actor read the parent archive?
-		return mod.Auth.Authorize(ctx, &objects.ReadObjectAction{
+		return mod.Auth.Authorize(ctx, &auth.SeeObjectsAction{
 			Action:   auth.NewAction(action.Actor()),
 			ObjectID: zipID,
 		})
