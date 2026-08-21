@@ -68,7 +68,7 @@ func (mod *Module) assignAlias(agentID *astral.Identity, alias string) (string, 
 }
 
 // registerAgent stores the agent row and mirrors it into the sets the router
-// reads: registration is what lets an agent queue, exposure what lets it route.
+// reads: registration is what lets an agent queue, visibility what lets it route.
 //
 // why the store first: the mirrors are what the router reads, so a mirror ahead
 // of a failed write would route on a decision nothing recorded.
@@ -78,8 +78,8 @@ func (mod *Module) registerAgent(row *dbAgent) error {
 	}
 
 	_ = mod.agentIDs.Add(row.Identity.String())
-	if row.Exposed {
-		_ = mod.exposed.Add(row.Identity.String())
+	if row.Visible {
+		_ = mod.visible.Add(row.Identity.String())
 	}
 
 	return nil
@@ -100,7 +100,7 @@ func (mod *Module) deleteAgent(row *dbAgent) error {
 	}
 
 	_ = mod.agentIDs.Remove(row.Identity.String())
-	_ = mod.exposed.Remove(row.Identity.String())
+	_ = mod.visible.Remove(row.Identity.String())
 	mod.drainListener(row.Identity)
 	mod.dropPending(row.Identity)
 	mod.closeAgentSessions(row.Identity)

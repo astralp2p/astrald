@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Oracle: the door is shut on operations and open to agents.
 
-Five judgements, and the order matters. The exposure flags come first, because
+Five judgements, and the order matters. The visibility flags come first, because
 the exchange below proves nothing about reach if nothing recorded the opt-in
 that admitted it — read back through mcp.agent, not the acks. Then the control:
 if a non-agent
@@ -34,15 +34,15 @@ def main():
     beta, gamma = facts["read_beta"], facts["read_gamma"]
     delta = facts["read_delta"]
 
-    assert beta.get("exposed") is True, (
-        f"beta reads exposed={beta.get('exposed')!r} after mcp.set_exposed — "
+    assert beta.get("visible") is True, (
+        f"beta reads visible={beta.get('visible')!r} after mcp.set_visible — "
         "the write did not land, so the exchange below proves nothing")
-    assert gamma.get("exposed") is False, (
-        f"gamma reads exposed={gamma.get('exposed')!r} without anyone opening "
+    assert gamma.get("visible") is False, (
+        f"gamma reads visible={gamma.get('visible')!r} without anyone opening "
         "it — a new agent is reachable by default")
 
-    assert delta.get("exposed") is True, (
-        f"delta reads exposed={delta.get('exposed')!r} after create_agent was "
+    assert delta.get("visible") is True, (
+        f"delta reads visible={delta.get('visible')!r} after create_agent was "
         "asked for an open agent — the argument did not reach the row, and the "
         "caller holds an agent it believes is reachable")
 
@@ -74,7 +74,7 @@ def main():
             f"{op} failed with {r['detail']}, which names no refusal — a "
             "refusal the caller cannot read is indistinguishable from a fault")
 
-    u = facts["unexposed"]
+    u = facts["invisible"]
     assert u["refused"], (
         f"a closed agent answered: {u['detail']} — an agent is reachable "
         "before its account holder opts in")

@@ -10,7 +10,7 @@ import (
 
 type Loader struct{}
 
-// Load instantiates the mcp Module: loads config, auto-migrates the database
+// Load instantiates the mcp Module: loads config, migrates the database
 // schema, and registers Op-prefixed struct methods as router operations.
 func (Loader) Load(node astral.Node, assets assets.Assets, log *log.Logger) (core.Module, error) {
 	var err error
@@ -27,7 +27,7 @@ func (Loader) Load(node astral.Node, assets assets.Assets, log *log.Logger) (cor
 
 	mod.db = &DB{assets.Database()}
 
-	err = mod.db.AutoMigrate(&dbAgent{})
+	err = mod.db.MigrateAgents()
 	if err != nil {
 		return nil, err
 	}
@@ -38,8 +38,8 @@ func (Loader) Load(node astral.Node, assets assets.Assets, log *log.Logger) (cor
 	}
 	for _, r := range rows {
 		_ = mod.agentIDs.Add(r.Identity.String())
-		if r.Exposed {
-			_ = mod.exposed.Add(r.Identity.String())
+		if r.Visible {
+			_ = mod.visible.Add(r.Identity.String())
 		}
 	}
 

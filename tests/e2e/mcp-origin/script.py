@@ -8,11 +8,11 @@ agent that may query the node may call all of them. mod/mcp marks its queries
 with astral.OriginMCP and mod/shell refuses that origin.
 
 Reach between agents is its own opt-in. mod/mcp routes to an agent only while
-its record is exposed, so an agent the account holder has not opened is
+its record is visible, so an agent the account holder has not opened is
 unreachable by every other tenant on the node.
 
 The driver acts and judges nothing: it mints four agents over apphost — one
-opened by mcp.set_exposed after the fact, one opened by create_agent in the
+opened by mcp.set_visible after the fact, one opened by create_agent in the
 same write, two left closed — tries node operations as an agent, records what
 the same operation does for a non-agent caller, queries an agent that was left
 closed, and runs one exchange with the agent that was opened.
@@ -64,14 +64,14 @@ def _docs(raw: bytes) -> list:
     return out
 
 
-async def mint(client, alias: str, exposed: bool = False) -> dict:
-    """Mint an agent; exposed asks create_agent to open it in the same write.
+async def mint(client, alias: str, visible: bool = False) -> dict:
+    """Mint an agent; visible asks create_agent to open it in the same write.
 
     why the argument is omitted rather than passed false: a caller that wants a
     closed agent sends the query string that existed before the argument did,
     so this covers the default as well as the flag.
     """
-    flag = "&exposed=true" if exposed else ""
+    flag = "&visible=true" if visible else ""
     raw = await client.call_raw(
         f"mcp.create_agent?alias={alias}{flag}&out=json")
     return _docs(raw)[0]
@@ -85,14 +85,14 @@ async def main():
         alpha = await mint(c, "alpha")
         beta = await mint(c, "beta")
         gamma = await mint(c, "gamma")
-        delta = await mint(c, "delta", exposed=True)
+        delta = await mint(c, "delta", visible=True)
 
         # beta is the agent alpha is allowed to reach. gamma is minted and left
         # closed, which is what a new agent is until its account holder says
         # otherwise. delta is opened by create_agent itself, which is the same
         # decision made one call earlier.
         await c.call_raw(
-            f"mcp.set_exposed?id={beta['identity']}&exposed=true&out=json")
+            f"mcp.set_visible?id={beta['identity']}&visible=true&out=json")
 
         # read the flag back rather than trusting the ack: mcp.agent is the op
         # the dashboard reads per agent, and it must answer without a token.
@@ -138,10 +138,10 @@ async def main():
                 "target": gamma["identity"], "path": "chat",
                 "payload": ASK, "timeout_ms": 5000,
             })
-            facts["unexposed"] = {"refused": False,
+            facts["invisible"] = {"refused": False,
                                   "detail": json.dumps(out)[:400]}
         except ToolError as e:
-            facts["unexposed"] = {"refused": True, "detail": str(e)[:400]}
+            facts["invisible"] = {"refused": True, "detail": str(e)[:400]}
 
         opened = agent_alpha.call_tool("astral-query", {
             "target": beta["identity"], "path": "chat",
@@ -172,8 +172,8 @@ async def main():
 
     refused = sum(1 for r in facts["refusals"].values() if r["refused"])
     print(f"driver: {refused}/{len(NODE_OPS)} node ops refused to an agent; "
-          f"closed agent refused={facts['unexposed']['refused']}; "
-          f"delta minted exposed={read_delta.get('exposed')}; "
+          f"closed agent refused={facts['invisible']['refused']}; "
+          f"delta minted visible={read_delta.get('visible')}; "
           f"beta heard {heard.get('payload')!r}, alpha got {got.get('payload')!r}")
 
 

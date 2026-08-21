@@ -28,7 +28,7 @@ type Module struct {
 	pending   map[string][]*pendingQuery // agent identity -> queued queries; guarded by listenMu
 
 	agentIDs sig.Set[string]           // registered agent identities, mirrors mcp__agents
-	exposed  sig.Set[string]           // agent identities open to other callers, mirrors mcp__agents.exposed
+	visible  sig.Set[string]           // agent identities open to other callers, mirrors mcp__agents.visible
 	sessions sig.Map[string, *session] // session id -> live dialog stream
 }
 

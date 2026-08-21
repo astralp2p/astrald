@@ -18,7 +18,7 @@ type dbAgent struct {
 	// why false by default: an agent nobody has opted in is unreachable, so a
 	// row written before this column existed, or by code that forgets it,
 	// fails closed. The inverse spelling would fail open.
-	Exposed bool
+	Visible bool
 }
 
 func (dbAgent) TableName() string {

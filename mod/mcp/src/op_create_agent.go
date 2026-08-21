@@ -12,16 +12,16 @@ import (
 type opCreateAgentArgs struct {
 	Alias    string
 	Duration astral.Duration
-	Exposed  bool
+	Visible  bool
 	Out      string
 }
 
 // OpCreateAgent mints a new agent: a fresh identity with a signed relay
-// contract, an alias and an access token the agent uses as its PAT. Exposed
+// contract, an alias and an access token the agent uses as its PAT. Visible
 // opens the agent to other callers in the same write; omitted, the agent is
-// closed and mcp.set_exposed opens it later.
+// closed and mcp.set_visible opens it later.
 //
-// why the argument grants nothing new: create_agent and set_exposed are both
+// why the argument grants nothing new: create_agent and set_visible are both
 // local-only, so the caller that mints an agent may already open it. The
 // argument saves the second call, and its false default leaves a caller that
 // omits it the closed agent it minted before.
@@ -58,13 +58,13 @@ func (mod *Module) OpCreateAgent(ctx *astral.Context, q *routing.IncomingQuery, 
 		Alias:     alias,
 		Token:     string(token.Token),
 		ExpiresAt: time.Time(token.ExpiresAt),
-		Exposed:   args.Exposed,
+		Visible:   args.Visible,
 	})
 	if err != nil {
 		return ch.Send(astral.Err(err))
 	}
 
-	mod.log.Logv(1, "created agent %v (%v) exposed=%v", alias, agentID, args.Exposed)
+	mod.log.Logv(1, "created agent %v (%v) visible=%v", alias, agentID, args.Visible)
 
 	return ch.Send(&mcp.Agent{
 		Identity:  agentID,
