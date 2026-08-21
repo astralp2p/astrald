@@ -80,7 +80,9 @@ func main() {
 	}
 
 	if len(tokens) == 0 {
-		t, err := apphostClient.CreateToken(ctx, identity)
+		// No duration: the token this mints is the node's to time, and apphost
+		// applies its own default when none is named.
+		t, err := apphostClient.CreateToken(ctx, identity, 0)
 		if err != nil {
 			fatal("error: create token: %v", err)
 		}
