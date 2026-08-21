@@ -4,7 +4,7 @@ go 1.25.0
 
 require (
 	bitbucket.org/creachadair/shell v0.0.7
-	github.com/astralp2p/astral-go v0.0.0-20260820212052-8b6e637b692a
+	github.com/astralp2p/astral-go v0.0.0-20260821140943-ecb09d3669be
 	github.com/btcsuite/btcd v0.24.2
 	github.com/btcsuite/btcd/btcutil v1.1.6
 	github.com/charmbracelet/lipgloss v1.1.0

@@ -27,8 +27,8 @@ or a dead listener would otherwise keep this green while the guard was gone.
 
 ## Why an agent is opened twice over
 
-Exposure has two doors: `mcp.set_exposed` on an agent that already exists, and
-the `exposed` argument to `mcp.create_agent`, which is the same decision made
+Visibility has two doors: `mcp.set_visible` on an agent that already exists, and
+the `visible` argument to `mcp.create_agent`, which is the same decision made
 one call earlier. beta goes through the first, delta through the second, and
 both are read back through `mcp.agent` rather than trusting the ack. gamma is
 minted the way every caller minted an agent before the argument existed, so the

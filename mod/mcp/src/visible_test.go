@@ -8,6 +8,8 @@ import (
 
 	"github.com/astralp2p/astral-go/api/mcp"
 	"github.com/astralp2p/astral-go/astral"
+	"github.com/glebarez/sqlite"
+	"gorm.io/gorm"
 )
 
 func createTestAgent(t *testing.T, mod *Module, alias string) *astral.Identity {
@@ -27,7 +29,7 @@ func createTestAgent(t *testing.T, mod *Module, alias string) *astral.Identity {
 
 // A fresh agent is closed. The column's zero value is the safe state, so a row
 // written by anything that does not know about the flag is closed too.
-func TestNewAgentIsNotExposed(t *testing.T) {
+func TestNewAgentIsNotVisible(t *testing.T) {
 	mod, _, _ := testAgentModule(t)
 	id := createTestAgent(t, mod, "")
 
@@ -35,14 +37,14 @@ func TestNewAgentIsNotExposed(t *testing.T) {
 	if err != nil {
 		t.Fatalf("find: %v", err)
 	}
-	if row.Exposed {
-		t.Fatal("a new agent is exposed")
+	if row.Visible {
+		t.Fatal("a new agent is visible")
 	}
 }
 
 // create_agent takes the flag, so an agent is minted open in one write. The
 // router reads the mirror, so the row alone is not reach.
-func TestRegisterAgentExposed(t *testing.T) {
+func TestRegisterAgentVisible(t *testing.T) {
 	mod, _, _ := testAgentModule(t)
 	id := astral.GenerateIdentity()
 
@@ -50,7 +52,7 @@ func TestRegisterAgentExposed(t *testing.T) {
 		Identity:  id,
 		Token:     "token-open",
 		ExpiresAt: time.Now().Add(time.Hour),
-		Exposed:   true,
+		Visible:   true,
 	})
 	if err != nil {
 		t.Fatalf("register: %v", err)
@@ -60,10 +62,10 @@ func TestRegisterAgentExposed(t *testing.T) {
 	if err != nil {
 		t.Fatalf("find: %v", err)
 	}
-	if !row.Exposed {
+	if !row.Visible {
 		t.Fatal("the row reads closed after a create that asked for open")
 	}
-	if !mod.exposed.Contains(id.String()) {
+	if !mod.visible.Contains(id.String()) {
 		t.Fatal("the agent is open in the row and closed to the router")
 	}
 	if !mod.agentIDs.Contains(id.String()) {
@@ -86,7 +88,7 @@ func TestRegisterAgentClosedByDefault(t *testing.T) {
 		t.Fatalf("register: %v", err)
 	}
 
-	if mod.exposed.Contains(id.String()) {
+	if mod.visible.Contains(id.String()) {
 		t.Fatal("an agent minted without the flag is open to the router")
 	}
 	if !mod.agentIDs.Contains(id.String()) {
@@ -94,28 +96,28 @@ func TestRegisterAgentClosedByDefault(t *testing.T) {
 	}
 }
 
-func TestSetExposedRoundTrip(t *testing.T) {
+func TestSetVisibleRoundTrip(t *testing.T) {
 	mod, _, _ := testAgentModule(t)
 	id := createTestAgent(t, mod, "")
 
 	for _, want := range []bool{true, false, true} {
-		if err := mod.db.SetExposed(id, want); err != nil {
+		if err := mod.db.SetVisible(id, want); err != nil {
 			t.Fatalf("set %v: %v", want, err)
 		}
 		row, err := mod.db.FindAgent(id)
 		if err != nil {
 			t.Fatalf("find: %v", err)
 		}
-		if row.Exposed != want {
-			t.Fatalf("exposed reads %v, want %v", row.Exposed, want)
+		if row.Visible != want {
+			t.Fatalf("visible reads %v, want %v", row.Visible, want)
 		}
 	}
 }
 
-func TestSetExposedUnknownAgent(t *testing.T) {
+func TestSetVisibleUnknownAgent(t *testing.T) {
 	mod, _, _ := testAgentModule(t)
 
-	if err := mod.db.SetExposed(astral.GenerateIdentity(), true); err == nil {
+	if err := mod.db.SetVisible(astral.GenerateIdentity(), true); err == nil {
 		t.Fatal("set succeeded on an agent that does not exist")
 	}
 }
@@ -151,5 +153,96 @@ func TestAgentInfoCarriesNoToken(t *testing.T) {
 		if strings.Contains(strings.ToLower(name), "token") {
 			t.Fatalf("AgentInfo carries %v; a record read by non-owners must hold no credential", name)
 		}
+	}
+}
+
+// dbAgentBeforeRename is the agent row as it stood before the rename, so the
+// migration runs against a table GORM created rather than hand-written DDL.
+type dbAgentBeforeRename struct {
+	Identity  *astral.Identity `gorm:"uniqueIndex"`
+	Alias     string
+	Token     string `gorm:"uniqueIndex"`
+	ExpiresAt time.Time
+	CreatedAt time.Time
+	Exposed   bool
+}
+
+func (dbAgentBeforeRename) TableName() string {
+	return dbAgent{}.TableName()
+}
+
+// A node upgraded across the rename keeps every agent's decision: the old
+// `exposed` column is moved rather than left beside a fresh `visible` one,
+// which would read every open agent as closed.
+func TestMigrateAgentsCarriesTheOldColumn(t *testing.T) {
+	gdb, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	if err != nil {
+		t.Fatalf("open db: %v", err)
+	}
+	db := &DB{DB: gdb}
+
+	if err := gdb.AutoMigrate(&dbAgentBeforeRename{}); err != nil {
+		t.Fatalf("create old table: %v", err)
+	}
+	for _, seed := range []struct {
+		alias   string
+		exposed bool
+	}{{"open", true}, {"closed", false}} {
+		row := &dbAgentBeforeRename{
+			Identity:  astral.GenerateIdentity(),
+			Alias:     seed.alias,
+			Token:     "tok-" + seed.alias,
+			ExpiresAt: time.Now().Add(time.Hour),
+			CreatedAt: time.Now(),
+			Exposed:   seed.exposed,
+		}
+		if err := gdb.Create(row).Error; err != nil {
+			t.Fatalf("seed %s: %v", seed.alias, err)
+		}
+	}
+
+	if err := db.MigrateAgents(); err != nil {
+		t.Fatalf("migrate: %v", err)
+	}
+
+	if db.Migrator().HasColumn(&dbAgent{}, "exposed") {
+		t.Fatal("the old column survived the rename")
+	}
+
+	rows, err := db.ListAgents()
+	if err != nil {
+		t.Fatalf("list: %v", err)
+	}
+	if len(rows) != 2 {
+		t.Fatalf("rows: want 2, got %d", len(rows))
+	}
+	got := map[string]bool{}
+	for _, r := range rows {
+		got[r.Alias] = r.Visible
+	}
+	if !got["open"] {
+		t.Error("the open agent came back closed")
+	}
+	if got["closed"] {
+		t.Error("the closed agent came back open")
+	}
+}
+
+// A fresh node has no `exposed` column and the migration is the plain schema
+// creation, run twice to prove it is idempotent.
+func TestMigrateAgentsOnAFreshDatabase(t *testing.T) {
+	gdb, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	if err != nil {
+		t.Fatalf("open db: %v", err)
+	}
+	db := &DB{DB: gdb}
+
+	for i := 0; i < 2; i++ {
+		if err := db.MigrateAgents(); err != nil {
+			t.Fatalf("migrate %d: %v", i, err)
+		}
+	}
+	if !db.Migrator().HasColumn(&dbAgent{}, "visible") {
+		t.Fatal("visible column missing")
 	}
 }
