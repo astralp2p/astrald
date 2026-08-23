@@ -28,18 +28,25 @@ USER 1500:1500
 # <root>/config/node_key, so a discarded volume is a new node.
 VOLUME /var/lib/astrald
 
-# 1791/tcp node links, 1792/udp KCP transport, 8624/tcp apphost HTTP API,
-# 8626/tcp MCP. mod/mcp defaults bind_mcp to tcp:127.0.0.1:8626, so 8626 stays
-# loopback until the config opens it; EXPOSE names it for the stack that does.
-EXPOSE 1791/tcp 1792/udp 8624/tcp 8626/tcp
+# EXPOSE names the ports the image's own defaults bind beyond loopback, because
+# that is what `docker run -P` publishes. 1791/tcp node links, 1792/udp KCP
+# transport, 8624/tcp the apphost HTTP API, which mod/apphost binds on
+# tcp:0.0.0.0:8624. The local apphost API on 8625 and the MCP server on 8626 are
+# both loopback by default — mod/mcp defaults bind_mcp to tcp:127.0.0.1:8626 —
+# so neither is named here: publishing a loopback-bound port maps a port that
+# refuses every connection. A stack that binds one of them to 0.0.0.0 publishes
+# it explicitly — docs/running-in-docker.md, "Ports".
+EXPOSE 1791/tcp 1792/udp 8624/tcp
 
 # astrald traps SIGINT, not SIGTERM.
 STOPSIGNAL SIGINT
 
-# The timing is stated, not defaulted: the runtime's default interval is 30s, so
-# the first check — and any stack that gates start-up on this container turning
-# healthy — waits half a minute. The start period covers key generation and
-# module start on a fresh volume, during which a failure does not count.
+# The timing is stated rather than defaulted, so a stack that gates a dependent
+# service on `condition: service_healthy` waits seconds for this node. The start
+# period covers key generation and module start on a fresh volume, during which a
+# failure counts against nothing. The cost is the interval: at 10s the check
+# spawns astral-query three times as often as the runtime's 30s default would,
+# for the life of the container.
 HEALTHCHECK --interval=10s --timeout=5s --start-period=15s --retries=3 \
   CMD astral-query localnode:.spec
 

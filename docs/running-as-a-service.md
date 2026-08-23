@@ -5,8 +5,8 @@
 ## Build
 
 ```shell
-CGO_ENABLED=0 go build -o /usr/local/bin/astrald      ./cmd/astrald
-CGO_ENABLED=0 go build -o /usr/local/bin/astral-query ./cmd/astral-query
+CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /usr/local/bin/astrald      ./cmd/astrald
+CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /usr/local/bin/astral-query ./cmd/astral-query
 ```
 
 Go >= 1.25.0 is required. astrald uses pure-Go SQLite, so `CGO_ENABLED=0` builds a
@@ -99,6 +99,7 @@ Default transports bind all interfaces.
 | 8822 | UDP | `ether` LAN discovery |
 | 8625 | TCP 127.0.0.1 | local apphost API |
 | 8624 | TCP 0.0.0.0 | apphost HTTP API |
+| 8626 | TCP 127.0.0.1 | MCP server |
 
 ## Imaging and snapshots
 
