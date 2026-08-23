@@ -15,10 +15,10 @@ build stage, `CGO_ENABLED=0` — astrald uses pure-Go SQLite) and ships them on
 -t astrald .` does the same without the version tag.
 
 The binaries are path-trimmed and stripped: `-trimpath` keeps the build
-directory out of the binary, and `-ldflags="-s -w"` drop the symbol table and
-DWARF, roughly a third of the unstripped size. `make build` and the image's
-build stage pass the same flags, so the repository holds one recipe for these
-binaries rather than two.
+directory out of the binary, and `-ldflags="-s -w"` drops the symbol table and
+the DWARF sections, which is about a third of the unstripped size. `make build`
+and the image's build stage pass the same flags, so the repository holds one
+recipe for these binaries rather than two.
 
 ## Run
 
