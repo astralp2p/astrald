@@ -6,8 +6,21 @@ COPY . .
 RUN CGO_ENABLED=0 go build -o /out/astrald ./cmd/astrald \
  && CGO_ENABLED=0 go build -o /out/astral-query ./cmd/astral-query
 
-FROM alpine:3
+FROM alpine:3.22
+
+# astrald holds the node key and needs no privilege, so it runs as a non-root
+# user. The uid is fixed rather than assigned, because a fresh named volume takes
+# the ownership of its mount point in the image: owning both directories here is
+# what makes the volume land on uid 1500 instead of root. /run/astrald is the
+# shared mount a consuming stack uses for the apphost socket.
+RUN addgroup -g 1500 -S astrald \
+ && adduser -u 1500 -S -G astrald -h /var/lib/astrald astrald \
+ && mkdir -p /var/lib/astrald /run/astrald \
+ && chown -R astrald:astrald /var/lib/astrald /run/astrald
+
 COPY --from=build /out/astrald /out/astral-query /usr/local/bin/
+
+USER 1500:1500
 
 # The root directory holds config, identity, and data; the identity is the key at
 # <root>/config/node_key, so a discarded volume is a new node.

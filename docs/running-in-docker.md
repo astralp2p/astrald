@@ -28,6 +28,18 @@ data — and the identity is the `secp256k1` key at `config/node_key`, generated
 first start with no interaction. A discarded volume is a new node identity;
 back up the volume, not the container.
 
+The container runs as uid 1500, gid 1500 — the `astrald` user the image creates —
+not as root. A fresh named volume takes the ownership of its mount point in the
+image, so `astrald-root` belongs to 1500 from first use. A volume that an earlier
+root-running image already wrote does not: it stays root-owned, and the node
+cannot write it. Such a volume needs a one-time chown before the new image
+starts.
+
+```shell
+docker run --rm -v astrald-root:/var/lib/astrald alpine:3.22 \
+  chown -R 1500:1500 /var/lib/astrald
+```
+
 `docker stop` shuts the node down gracefully: astrald traps `SIGINT`, not
 `SIGTERM`, and the image sets `STOPSIGNAL SIGINT`.
 
@@ -106,3 +118,8 @@ Then add the shared mount to the service:
 
 A consumer bind-mounts the same host directory and dials the socket path; the
 call crosses no network.
+
+The image owns `/run/astrald` as uid 1500, so a named volume mounted there
+carries that ownership. A host directory bind-mounted there does not — its
+ownership comes from the host, and the node creates the socket only if the
+directory belongs to 1500.
