@@ -12,12 +12,17 @@ FROM alpine:3.22
 
 # astrald holds the node key and needs no privilege, so it runs as a non-root
 # user. The uid is fixed rather than assigned, because a fresh named volume takes
-# the ownership of its mount point in the image: owning both directories here is
-# what makes the volume land on uid 1500 instead of root. /run/astrald is the
-# shared mount a consuming stack uses for the apphost socket.
+# the ownership of its mount point in the image: owning these directories here is
+# what makes the volume land on uid 1500 instead of root. /var/lib/astrald/config
+# exists in the image so the volume carries that ownership one level down, because
+# a mount target the runtime has to create is created as root: a consuming stack
+# binds its configuration files to /var/lib/astrald/config/*.yaml, and a config
+# directory Docker creates leaves the node unable to write its identity at
+# <root>/config/node_key. /run/astrald is the shared mount a consuming stack uses
+# for the apphost socket.
 RUN addgroup -g 1500 -S astrald \
  && adduser -u 1500 -S -G astrald -h /var/lib/astrald astrald \
- && mkdir -p /var/lib/astrald /run/astrald \
+ && mkdir -p /var/lib/astrald/config /run/astrald \
  && chown -R astrald:astrald /var/lib/astrald /run/astrald
 
 COPY --from=build /out/astrald /out/astral-query /usr/local/bin/
