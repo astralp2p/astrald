@@ -42,7 +42,7 @@ cannot write it. Such a volume needs a one-time chown before the new image
 starts.
 
 ```shell
-docker run --rm -v astrald-root:/var/lib/astrald alpine:3.22 \
+docker run --rm -v astrald-root:/var/lib/astrald alpine \
   chown -R 1500:1500 /var/lib/astrald
 ```
 
