@@ -69,6 +69,7 @@ func (mod *Module) loadSettings(ctx *astral.Context) error {
 	}
 
 	if mod.config.Listen != nil && !*mod.config.Listen {
+		// fixme: writes config.Dial into settings.Listen; config-only listener disablement is broken until this reads *mod.config.Listen
 		val := astral.Bool(*mod.config.Dial)
 		if err := mod.settings.Listen.Set(ctx, &val); err != nil {
 			return err

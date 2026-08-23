@@ -37,6 +37,7 @@ func (p *HolePool) GetAll() []*Hole {
 }
 
 // TakeAny removes and returns the first hole that matches the given peer identity.
+// A taken hole leaves the pool: a hole has exactly one consumer.
 func (p *HolePool) TakeAny(peer *astral.Identity) (*Hole, error) {
 	for _, hole := range p.holes.Values() {
 		if hole.MatchesPeer(peer) {

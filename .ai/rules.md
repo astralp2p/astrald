@@ -11,12 +11,10 @@
 ## Context Discipline
 
 * Keep default context small; keep always-loaded files short.
-* Use indexes before loading scoped files; prefer an index over bulk context.
-* Ignore `.ai/artifacts/` unless explicitly referenced.
-* Treat AI working notes as provisional until promoted.
 * Correct stale `.ai` context when found; replace stale text, do not pile exceptions.
-* Reference source and link between notes; never duplicate a rule or fact across files.
-* A fact about the wire, protocol, or domain lives in `.ai/system/`; a Go binding lives in `.ai/knowledge/`; primitives, wire types, and clients live in astral-go and are cited by package, never restated.
+* Never duplicate a rule or fact across files.
+* A fact about the wire, protocol, or domain lives in `.ai/system/`; a daemon fact lives in the source that implements it; non-obvious decisions live in source as `// why:` comments.
+* Primitives, wire types, and clients live in astral-go and are cited by package, never restated.
 
 ## Engineering Judgment
 
@@ -48,7 +46,7 @@ Comment code as you write it, in the same edit.
 * Four tags, lowercase: `// todo:` deferred work; `// fixme:` a shipped gap, naming the skipped invariant; `// note:` a clarification or what to watch for; `// why:` the reason for a non-obvious decision, not the alternative.
 * Comment intent, not mechanics; one fact per line. Never restate the code (`i++ // increment i`) or write an empty tag.
 * Tag a non-obvious decision with `// why:`; never bury it in prose. Keep tags in sync with the code and remove a `todo`/`fixme` when resolved.
-* Do not comment, reformat, or re-tag code outside the current change. Link to `.ai/...` for context held elsewhere; never duplicate it inline.
+* Do not comment, reformat, or re-tag code outside the current change. Link to the spec or source for context held elsewhere; never duplicate it inline.
 
 ## Documentation Style
 

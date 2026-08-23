@@ -54,7 +54,7 @@ description: >-
 |---|---|
 | Writes | `.ai/artifacts/protocols/<protocol>/`, `.ai/artifacts/analysis/protocols-update.md`, `.ai/artifacts/protocols-state.json` |
 | Reads as truth | `mod/<name>/` source, `.ai/system/protocols/` (baseline and format spec), `.ai/system/primitive-types/`, `.ai/system/topics/*-encoding.md`, `.ai/rules.md` |
-| Never touches | code, `.ai/system/`, `.ai/knowledge/`, git history |
+| Never touches | code, `.ai/system/`, git history |
 
 * The worklist is source-driven: modules under `mod/` that define ops.
 * A protocol documented upstream with no source in this repo (e.g. `lna`)

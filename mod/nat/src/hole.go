@@ -301,6 +301,9 @@ func (h *Hole) finalizeLock() bool {
 	}
 
 	if h.conn != nil {
+		// why: closing the socket frees the punched NAT mapping; the consumer
+		// must rebind the same local port for the hole to stay usable, which is
+		// what makes the nat.node_consume_hole handoff to KCP work
 		_ = h.conn.Close()
 	}
 
