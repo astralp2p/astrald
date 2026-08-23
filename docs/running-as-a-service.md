@@ -52,6 +52,33 @@ flag (config and data then default to `~/.config/astrald` and
 `~/.local/share/astrald`), and run `systemctl --user enable --now astrald`.
 `loginctl enable-linger $USER` keeps it running without an active login session.
 
+## Logs
+
+The node writes to stdout, which systemd collects — `journalctl -u astrald`. It
+also keeps its own copy in a `logs` directory inside the data directory the node
+resolves: `/var/lib/astrald/data/logs` for the unit above, which passes `-root`,
+and `~/.local/share/astrald/logs` for the user service, which does not. A file
+is named `astrald.log.<stamp>`, the second it was opened —
+`astrald.log.2026-08-23_05-41-14` — and gains a three-digit ordinal,
+`astrald.log.2026-08-23_05-41-14.001`, when a roll lands in a second the
+directory already holds. The current file rolls once it passes 50 MB, and the
+five most recent files are kept. Both bounds are the defaults; a node that keeps
+more or larger files sets them in `<root>/config/log.yaml`.
+
+```yaml
+file_max_size: 52428800
+file_max_files: 5
+```
+
+A unit's output is already in the journal, so a node that needs no second copy
+turns it off:
+
+```yaml
+file: false
+```
+
+With `file: false` the node creates no `logs` directory at all.
+
 ## Health check
 
 ```shell

@@ -3,6 +3,8 @@ package log
 import (
 	"fmt"
 	"io"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -11,6 +13,7 @@ import (
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astral-go/astral/channel"
 	alog "github.com/astralp2p/astral-go/astral/log"
+	"github.com/astralp2p/astrald/resources"
 )
 
 // gatedWriter emulates a disk that stopped accepting writes: every Write parks
@@ -154,4 +157,156 @@ func TestLogFileOrderAndDropConservation(t *testing.T) {
 	if reportedDropped == 0 {
 		t.Fatal("queue of 4 absorbed 12 entries without drops: overflow untested")
 	}
+}
+
+// TestLogFileRollsAndKeepsMaxFiles: past the size bound the pump starts a new
+// file, and the logs directory keeps only the most recent ones. Pre-fix
+// nothing bounded the directory at all.
+func TestLogFileRollsAndKeepsMaxFiles(t *testing.T) {
+	const maxFiles = 3
+
+	// why: 200 entries past a 256-byte bound is dozens of rolls, so the
+	// directory is asked to hold far more than it keeps.
+	const total = 200
+
+	root := t.TempDir()
+
+	// why: the directory is read once the pump has finished with every entry,
+	// not once the queue is empty — the queue empties one dequeue before the
+	// roll that entry triggers, so the count would be read mid-roll. The buffer
+	// holds every signal, so the pump never waits on this test.
+	// note: total signals arrive exactly, because the queue's default 1024 caps
+	// nothing here and no entry is dropped.
+	pumped := make(chan struct{}, total)
+	restore := logFilePumped
+	logFilePumped = func() { pumped <- struct{}{} }
+	t.Cleanup(func() { logFilePumped = restore })
+
+	lf, err := CreateLogFile(testIdentity(), root, 256, maxFiles)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for i := 0; i < total; i++ {
+		lf.LogEntry(alog.NewEntry(lf.origin, 0, astral.NewString32(fmt.Sprintf("e%d", i))))
+	}
+
+	deadline := time.After(5 * time.Second)
+	for i := 0; i < total; i++ {
+		select {
+		case <-pumped:
+		case <-deadline:
+			t.Fatalf("the pump handled %d of %d entries", i, total)
+		}
+	}
+
+	dir := filepath.Join(root, logDirName)
+
+	names := logFileNames(t, dir)
+	if len(names) != maxFiles {
+		t.Fatalf("%v holds %d files, want %d: %v", dir, len(names), maxFiles, names)
+	}
+
+	// why: a file that never rolled would hold everything, and the count above
+	// would pass on a directory the node simply never filled.
+	if size := fileSize(t, filepath.Join(dir, names[len(names)-1])); size == 0 {
+		t.Fatal("the newest file is empty: the roll left the sink behind")
+	}
+}
+
+// TestLogFilePruneKeepsTheActiveFile: prune deletes by name, so names it did
+// not write — a stamp from a clock that was ahead, a restored backup — make the
+// file the pump just opened the oldest one in the directory. Pre-fix prune
+// trusted the active file to sort last and deleted it, leaving the pump
+// appending to an unlinked descriptor.
+func TestLogFilePruneKeepsTheActiveFile(t *testing.T) {
+	const maxFiles = 2
+
+	root := t.TempDir()
+	dir := filepath.Join(root, logDirName)
+
+	if err := os.MkdirAll(dir, 0750); err != nil {
+		t.Fatal(err)
+	}
+
+	// why: the year leads the stamp, so these sort after every name this process
+	// can produce, and maxFiles of them put the active file first in the window
+	// prune deletes.
+	for _, name := range []string{"2099-01-01_00-00-00", "2099-01-01_00-00-01"} {
+		if err := os.WriteFile(filepath.Join(dir, logFilePrefix+name), []byte("skewed\n"), 0640); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	lf, err := CreateLogFile(testIdentity(), root, 0, maxFiles)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := os.Stat(lf.path); err != nil {
+		t.Fatalf("prune deleted the file the pump holds open: %v", err)
+	}
+
+	if names := logFileNames(t, dir); len(names) != maxFiles {
+		t.Fatalf("%v holds %d files, want %d: %v", dir, len(names), maxFiles, names)
+	}
+}
+
+// TestLogFileDisabledCreatesNothing: with file off the module touches no disk,
+// so the logs directory does not come into existence.
+func TestLogFileDisabledCreatesNothing(t *testing.T) {
+	root := t.TempDir()
+
+	res, err := resources.NewFileResources(filepath.Join(root, "config"), true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	res.SetDataRoot(filepath.Join(root, "data"))
+
+	var config Config
+	config.setDefaults()
+	config.File = false
+
+	addLogFile(alog.New(testIdentity()), testIdentity(), res, &config)
+
+	dir := filepath.Join(root, "data", logDirName)
+	if _, err := os.Stat(dir); !os.IsNotExist(err) {
+		t.Fatalf("%v exists with file off: %v", dir, err)
+	}
+
+	// why: the same call with the file on must reach the same directory, or
+	// the assertion above holds for the wrong reason.
+	config.File = true
+	addLogFile(alog.New(testIdentity()), testIdentity(), res, &config)
+
+	if names := logFileNames(t, dir); len(names) != 1 {
+		t.Fatalf("%v holds %d files with file on, want 1: %v", dir, len(names), names)
+	}
+}
+
+func logFileNames(t *testing.T, dir string) []string {
+	t.Helper()
+
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var names []string
+	for _, entry := range entries {
+		names = append(names, entry.Name())
+	}
+
+	return names
+}
+
+func fileSize(t *testing.T, path string) int64 {
+	t.Helper()
+
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	return info.Size()
 }

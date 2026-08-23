@@ -49,6 +49,31 @@ docker run --rm -v astrald-root:/var/lib/astrald alpine:3.22 \
 `docker stop` shuts the node down gracefully: astrald traps `SIGINT`, not
 `SIGTERM`, and the image sets `STOPSIGNAL SIGINT`.
 
+## Logs
+
+The node writes to stdout, which the container runtime collects — `docker logs
+astrald`. It also keeps its own copy under `<root>/data/logs`, on the volume. A
+file is named `astrald.log.<stamp>`, the second it was opened —
+`astrald.log.2026-08-23_05-41-14` — and gains a three-digit ordinal,
+`astrald.log.2026-08-23_05-41-14.001`, when a roll lands in a second the
+directory already holds. The current file rolls once it passes 50 MB, and the
+five most recent files are kept. Both bounds are the defaults; a node that keeps
+more or larger files sets them in `<root>/config/log.yaml`.
+
+```yaml
+file_max_size: 52428800
+file_max_files: 5
+```
+
+A node whose stdout is already collected — by the runtime, by a log shipper —
+has no use for that copy and turns it off:
+
+```yaml
+file: false
+```
+
+With `file: false` the node creates no `logs` directory at all.
+
 ## Health
 
 The image declares a health check: `astral-query localnode:.spec` every 10
