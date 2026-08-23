@@ -14,6 +14,12 @@ build stage, `CGO_ENABLED=0` — astrald uses pure-Go SQLite) and ships them on
 `alpine`, tagged `astrald:<git describe>` and `astrald:latest`. `docker build
 -t astrald .` does the same without the version tag.
 
+The binaries are path-trimmed and stripped: `-trimpath` keeps the build
+directory out of the binary, and `-ldflags="-s -w"` drop the symbol table and
+DWARF, roughly a third of the unstripped size. `make build` and the image's
+build stage pass the same flags, so the repository holds one recipe for these
+binaries rather than two.
+
 ## Run
 
 ```shell
@@ -45,9 +51,14 @@ docker run --rm -v astrald-root:/var/lib/astrald alpine:3.22 \
 
 ## Health
 
-The image declares a health check: `astral-query localnode:.spec` every 30
-seconds, exit code 0 meaning the node is up. `docker ps` shows the status; to ask
-directly:
+The image declares a health check: `astral-query localnode:.spec` every 10
+seconds, timing out at 5, with exit code 0 meaning the node is up. Three
+consecutive failures mark the container unhealthy; the first 15 seconds are a
+start period, in which a failure counts against nothing — the node generates its
+key and starts its modules there. The timing is the image's own rather than the
+runtime's 30-second default, so a stack that gates a dependent service on
+`condition: service_healthy` waits seconds for this node, not half a minute.
+`docker ps` shows the status; to ask directly:
 
 ```shell
 docker exec astrald astral-query localnode:.spec
@@ -65,6 +76,7 @@ what the world reaches.
 | 8822 | UDP | `ether` LAN discovery | works only with `--network host` |
 | 8625 | TCP 127.0.0.1 | local apphost API | container-internal; share the socket instead |
 | 8624 | TCP 0.0.0.0 | apphost HTTP API | publish only to expose the HTTP API |
+| 8626 | TCP 127.0.0.1 | MCP server | container-internal until `bind_mcp` binds `0.0.0.0` |
 
 Docker's bridge is a NAT in front of the node: peers reach only what is
 published, and LAN discovery sees the bridge network rather than the LAN. A node

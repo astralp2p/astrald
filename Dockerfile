@@ -1,10 +1,12 @@
 # Pure-Go SQLite makes CGO_ENABLED=0 work; the ./ prefix matters — `go build .`
-# at the repo root builds an empty stub.
+# at the repo root builds an empty stub. The build flags are the Makefile
+# `build` target's: -trimpath keeps the build directory out of the binary, and
+# -s -w drop the symbol table and DWARF. One binary, one recipe.
 FROM golang:1.25 AS build
 WORKDIR /src
 COPY . .
-RUN CGO_ENABLED=0 go build -o /out/astrald ./cmd/astrald \
- && CGO_ENABLED=0 go build -o /out/astral-query ./cmd/astral-query
+RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/astrald ./cmd/astrald \
+ && CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/astral-query ./cmd/astral-query
 
 FROM alpine:3.22
 
@@ -26,12 +28,19 @@ USER 1500:1500
 # <root>/config/node_key, so a discarded volume is a new node.
 VOLUME /var/lib/astrald
 
-# 1791/tcp node links, 1792/udp KCP transport, 8624/tcp apphost HTTP API.
-EXPOSE 1791/tcp 1792/udp 8624/tcp
+# 1791/tcp node links, 1792/udp KCP transport, 8624/tcp apphost HTTP API,
+# 8626/tcp MCP. mod/mcp defaults bind_mcp to tcp:127.0.0.1:8626, so 8626 stays
+# loopback until the config opens it; EXPOSE names it for the stack that does.
+EXPOSE 1791/tcp 1792/udp 8624/tcp 8626/tcp
 
 # astrald traps SIGINT, not SIGTERM.
 STOPSIGNAL SIGINT
 
-HEALTHCHECK CMD astral-query localnode:.spec
+# The timing is stated, not defaulted: the runtime's default interval is 30s, so
+# the first check — and any stack that gates start-up on this container turning
+# healthy — waits half a minute. The start period covers key generation and
+# module start on a fresh volume, during which a failure does not count.
+HEALTHCHECK --interval=10s --timeout=5s --start-period=15s --retries=3 \
+  CMD astral-query localnode:.spec
 
 ENTRYPOINT ["astrald", "-root", "/var/lib/astrald"]
