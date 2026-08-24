@@ -23,6 +23,10 @@ type Module struct {
 	router   routing.OpRouter
 	handlers sig.Map[string, []auth.Handler]
 	indexMu  sync.Mutex
+
+	// external holds at most one authorizer per action type; a second for the
+	// same type is refused where it is added.
+	external sig.Map[string, *ExternalAuthorizer]
 }
 
 func (mod *Module) Router() astral.Router {

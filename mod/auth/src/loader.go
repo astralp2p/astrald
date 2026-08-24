@@ -26,6 +26,12 @@ func (Loader) Load(node astral.Node, assets assets.Assets, log *log.Logger) (cor
 
 	mod.Add(auth.Func[*auth.SudoAction](mod.AuthorizeSudo))
 
+	// note: configuration names these at load. The map is concurrency-safe, so
+	// an op that registers one at runtime adds to the same place.
+	if err = mod.addExternalAuthorizers(mod.config.ExternalAuthorizers); err != nil {
+		return nil, err
+	}
+
 	mod.db = &DB{DB: assets.Database()}
 	if err = mod.db.AutoMigrate(&dbContract{}, &dbContractPermit{}); err != nil {
 		return nil, err
