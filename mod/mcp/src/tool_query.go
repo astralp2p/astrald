@@ -8,6 +8,8 @@ import (
 	"time"
 	"unicode/utf8"
 
+	authapi "github.com/astralp2p/astral-go/api/auth"
+	mcpapi "github.com/astralp2p/astral-go/api/mcp"
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astral-go/astral/channel"
 	"github.com/astralp2p/astral-go/lib/query"
@@ -39,6 +41,20 @@ func (mod *Module) queryTool(agentID *astral.Identity) mcpsdk.ToolHandlerFor[que
 	return func(ctx context.Context, _ *mcpsdk.CallToolRequest, in queryIn) (res *mcpsdk.CallToolResult, out queryOut, err error) {
 		targetID, err := mod.Dir.ResolveIdentity(in.Target)
 		if err != nil {
+			return nil, out, fmt.Errorf("unknown target: %v", in.Target)
+		}
+
+		// Which agents this one may call is its own owner's decision, and the
+		// node does not hold it. What the target permits is a separate question,
+		// asked where the call arrives.
+		//
+		// why the refusal reads as an unresolvable target: an agent learns that
+		// it cannot reach this one, and not whether this one exists — the
+		// property the answering side has, applied to the calling side.
+		if !mod.Auth.Authorize(mod.ctx, &mcpapi.CallAgentAction{
+			Action: authapi.NewAction(agentID),
+			ToID:   targetID,
+		}) {
 			return nil, out, fmt.Errorf("unknown target: %v", in.Target)
 		}
 

@@ -40,7 +40,6 @@ func (mod *Module) OpAgent(ctx *astral.Context, q *routing.IncomingQuery, args o
 	return ch.Send(&mcp.AgentInfo{
 		Identity:  row.Identity,
 		Alias:     astral.String8(row.Alias),
-		Visible:   astral.Bool(row.Visible),
 		ExpiresAt: astral.Time(row.ExpiresAt),
 	})
 }

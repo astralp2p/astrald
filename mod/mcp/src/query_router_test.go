@@ -7,8 +7,27 @@ import (
 	"testing"
 	"time"
 
+	authapi "github.com/astralp2p/astral-go/api/auth"
 	"github.com/astralp2p/astral-go/astral"
+	authmod "github.com/astralp2p/astrald/mod/auth"
 )
+
+// fakeAuth answers Authorize from a field and nothing else.
+//
+// why the interface is embedded rather than implemented: mcp asks auth three
+// questions and a test double for all ten would say the module depends on more
+// than it does. A method this reaches without a stub panics, which is the report
+// that the dependency grew.
+type fakeAuth struct {
+	authmod.Module
+	allow bool
+	asked []authapi.ActionObject
+}
+
+func (f *fakeAuth) Authorize(_ *astral.Context, action authapi.ActionObject) bool {
+	f.asked = append(f.asked, action)
+	return f.allow
+}
 
 type bufWriteCloser struct {
 	mu  sync.Mutex
@@ -31,8 +50,17 @@ func (b *bufWriteCloser) String() string {
 
 func testRouterModule(t *testing.T) *Module {
 	t.Helper()
+	return testRouterModuleWithAuth(t, &fakeAuth{allow: true})
+}
+
+// testRouterModuleWithAuth builds the router over an authority that answers as
+// the test says. Every existing case runs under one that allows, so what they
+// cover is unchanged.
+func testRouterModuleWithAuth(t *testing.T, auth *fakeAuth) *Module {
+	t.Helper()
 	return &Module{
-		ctx: astral.NewContext(nil),
+		Deps: Deps{Auth: auth},
+		ctx:  astral.NewContext(nil),
 		config: Config{
 			SessionTTL:         time.Second,
 			PayloadReadWindow:  50 * time.Millisecond,
@@ -61,7 +89,7 @@ func TestRouteQueryNoListener(t *testing.T) {
 func TestRouteQueryDeliversSession(t *testing.T) {
 	mod := testRouterModule(t)
 	agentID := astral.GenerateIdentity()
-	_ = mod.visible.Add(agentID.String())
+	_ = mod.agentIDs.Add(agentID.String())
 
 	ch, err := mod.parkListener(agentID)
 	if err != nil {
@@ -106,6 +134,7 @@ func TestRouteQueryDeliversSession(t *testing.T) {
 func TestParkListenerTwice(t *testing.T) {
 	mod := testRouterModule(t)
 	agentID := astral.GenerateIdentity()
+	_ = mod.agentIDs.Add(agentID.String())
 
 	ch, err := mod.parkListener(agentID)
 	if err != nil {
@@ -121,7 +150,7 @@ func TestParkListenerTwice(t *testing.T) {
 func TestUnparkClosesLateSession(t *testing.T) {
 	mod := testRouterModule(t)
 	agentID := astral.GenerateIdentity()
-	_ = mod.visible.Add(agentID.String())
+	_ = mod.agentIDs.Add(agentID.String())
 
 	ch, err := mod.parkListener(agentID)
 	if err != nil {
@@ -163,7 +192,6 @@ func TestRouteQueryQueuesForLateListener(t *testing.T) {
 	mod := testRouterModule(t)
 	agentID := astral.GenerateIdentity()
 	_ = mod.agentIDs.Add(agentID.String())
-	_ = mod.visible.Add(agentID.String())
 
 	// no listener parked — the query is accepted and queued
 	w := &bufWriteCloser{}
@@ -196,7 +224,6 @@ func TestPendingExpires(t *testing.T) {
 	mod := testRouterModule(t)
 	agentID := astral.GenerateIdentity()
 	_ = mod.agentIDs.Add(agentID.String())
-	_ = mod.visible.Add(agentID.String())
 
 	if _, err := mod.RouteQuery(mod.ctx, inFlight(agentID, "chat"), &bufWriteCloser{}); err != nil {
 		t.Fatalf("route: %v", err)
@@ -217,7 +244,6 @@ func TestPendingQueueFull(t *testing.T) {
 	mod := testRouterModule(t)
 	agentID := astral.GenerateIdentity()
 	_ = mod.agentIDs.Add(agentID.String())
-	_ = mod.visible.Add(agentID.String())
 
 	for i := 0; i < mod.config.MaxPending; i++ {
 		if _, err := mod.RouteQuery(mod.ctx, inFlight(agentID, "chat"), &bufWriteCloser{}); err != nil {
@@ -249,7 +275,7 @@ func TestRouteQueryNoQueueForUnknownTarget(t *testing.T) {
 func TestUnparkKeepsFreshListener(t *testing.T) {
 	mod := testRouterModule(t)
 	agentID := astral.GenerateIdentity()
-	_ = mod.visible.Add(agentID.String())
+	_ = mod.agentIDs.Add(agentID.String())
 
 	ch1, _ := mod.parkListener(agentID)
 
@@ -270,36 +296,13 @@ func TestUnparkKeepsFreshListener(t *testing.T) {
 
 // An agent nobody opted in is unreachable, and unreachable the way an absent
 // identity is: RouteNotFound is non-terminal, so the answer does not confirm
-// the agent exists.
-func TestRouteQueryRefusesInvisibleAgent(t *testing.T) {
-	mod := testRouterModule(t)
-	agentID := astral.GenerateIdentity()
-	_ = mod.agentIDs.Add(agentID.String())
-
-	ch, err := mod.parkListener(agentID)
-	if err != nil {
-		t.Fatalf("park: %v", err)
-	}
-	defer mod.unparkListener(agentID, ch)
-
-	_, err = mod.RouteQuery(mod.ctx, inFlight(agentID, "chat"), &bufWriteCloser{})
-	if !errors.Is(err, &astral.ErrRouteNotFound{}) {
-		t.Fatalf("route: got %v, want route not found", err)
-	}
-
-	// the listener survives: a query that never routed must not consume it
-	if _, err = mod.parkListener(agentID); !errors.Is(err, errAlreadyListening) {
-		t.Fatal("the refused query popped the parked listener")
-	}
-}
 
 // Visibility alone routes: registration is what makes an agent queue, and the
 // listener is what makes it answer, but neither is permission.
-func TestRouteQueryAdmitsVisibleAgent(t *testing.T) {
+func TestRouteQueryAdmitsRegisteredAgent(t *testing.T) {
 	mod := testRouterModule(t)
 	agentID := astral.GenerateIdentity()
 	_ = mod.agentIDs.Add(agentID.String())
-	_ = mod.visible.Add(agentID.String())
 
 	wc, err := mod.RouteQuery(mod.ctx, inFlight(agentID, "chat"), &bufWriteCloser{})
 	if err != nil {

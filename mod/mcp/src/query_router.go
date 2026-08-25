@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"io"
 
+	authapi "github.com/astralp2p/astral-go/api/auth"
+	mcpapi "github.com/astralp2p/astral-go/api/mcp"
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astral-go/lib/query"
 )
@@ -12,13 +14,28 @@ import (
 // The query is accepted synchronously — the resolve deadline cannot wait for
 // the agent's model — and the live conn becomes a dialog session.
 //
-// An agent is reachable only while it is visible. The node holds many tenants'
-// agents and knows no relation between them, so anything short of an explicit
-// opt-in makes every agent answerable to every other one and to the network.
+// The node holds no reachability of its own. It holds many tenants' agents and
+// knows no relation between them, so which callers an agent answers is asked of
+// auth and never decided here.
 func (mod *Module) RouteQuery(ctx *astral.Context, q *astral.InFlightQuery, w io.WriteCloser) (io.WriteCloser, error) {
+	// why first: only a registered agent is this module's to answer for, and
+	// every other target must fall through to the other routers immediately —
+	// without reaching an authority that has nothing to say about it.
+	if !mod.agentIDs.Contains(q.Target.String()) {
+		return query.RouteNotFound()
+	}
+
 	// why before the listener lookup: a parked listener is not permission, and
 	// popping one for a query about to be refused would consume it.
-	if !mod.visible.Contains(q.Target.String()) {
+	//
+	// why the actor is the target and not the caller: the action names what its
+	// actor does, and answering is this agent's act. auth walks the contracts the
+	// actor is subject to, so naming the caller would search a stranger's
+	// delegations for a permission this agent's side holds.
+	if !mod.Auth.Authorize(ctx, &mcpapi.AnswerAgentAction{
+		Action: authapi.NewAction(q.Target),
+		FromID: q.Caller,
+	}) {
 		return query.RouteNotFound()
 	}
 
@@ -26,11 +43,6 @@ func (mod *Module) RouteQuery(ctx *astral.Context, q *astral.InFlightQuery, w io
 	// the next astral-listen call parks a fresh one.
 	ch, listening := mod.popListener(q.Target)
 	if !listening {
-		// why: only registered agents queue — every other target must fall
-		// through to the other routers immediately.
-		if !mod.agentIDs.Contains(q.Target.String()) {
-			return query.RouteNotFound()
-		}
 		if mod.config.MaxPending <= 0 || mod.pendingCount(q.Target) >= mod.config.MaxPending {
 			return query.RouteNotFound()
 		}

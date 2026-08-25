@@ -78,9 +78,6 @@ func (mod *Module) registerAgent(row *dbAgent) error {
 	}
 
 	_ = mod.agentIDs.Add(row.Identity.String())
-	if row.Visible {
-		_ = mod.visible.Add(row.Identity.String())
-	}
 
 	return nil
 }
@@ -100,7 +97,6 @@ func (mod *Module) deleteAgent(row *dbAgent) error {
 	}
 
 	_ = mod.agentIDs.Remove(row.Identity.String())
-	_ = mod.visible.Remove(row.Identity.String())
 	mod.drainListener(row.Identity)
 	mod.dropPending(row.Identity)
 	mod.closeAgentSessions(row.Identity)

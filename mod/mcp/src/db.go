@@ -13,16 +13,20 @@ type DB struct {
 
 // MigrateAgents brings the agent table to the current schema.
 //
-// why the rename runs first: the column carries the account holder's decision,
-// and AutoMigrate would add `visible` beside the old `exposed` rather than move
-// it, so every agent a node already holds would come back closed. Renaming
-// carries the decision across; a node that never held the old column skips it.
+// why the old columns are dropped rather than left: the node holds no
+// reachability, so a column that once carried it answers nothing and a reader
+// finding one would take it for a decision something still makes.
 func (db *DB) MigrateAgents() error {
 	m := db.Migrator()
-	if m.HasTable(&dbAgent{}) &&
-		m.HasColumn(&dbAgent{}, "exposed") && !m.HasColumn(&dbAgent{}, "visible") {
-		if err := m.RenameColumn(&dbAgent{}, "exposed", "visible"); err != nil {
-			return err
+
+	if m.HasTable(&dbAgent{}) {
+		for _, column := range []string{"visible", "exposed"} {
+			if !m.HasColumn(&dbAgent{}, column) {
+				continue
+			}
+			if err := m.DropColumn(&dbAgent{}, column); err != nil {
+				return err
+			}
 		}
 	}
 
@@ -39,18 +43,6 @@ func (db *DB) CreateAgent(row *dbAgent) error {
 func (db *DB) FindAgent(identity *astral.Identity) (row *dbAgent, err error) {
 	err = db.Where("identity = ?", identity).First(&row).Error
 	return
-}
-
-func (db *DB) SetVisible(identity *astral.Identity, visible bool) error {
-	tx := db.Model(&dbAgent{}).Where("identity = ?", identity).
-		Update("visible", visible)
-	if tx.Error != nil {
-		return tx.Error
-	}
-	if tx.RowsAffected == 0 {
-		return gorm.ErrRecordNotFound
-	}
-	return nil
 }
 
 func (db *DB) DeleteAgent(identity *astral.Identity) error {
