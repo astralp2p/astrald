@@ -23,6 +23,9 @@ type Module struct {
 	db     *DB
 	router routing.OpRouter
 
+	// tools are the deployment's own, read once at load — declared_tools.go.
+	tools []declaredTool
+
 	listenMu  sync.Mutex
 	listeners map[string]chan *session   // agent identity -> parked astral-listen; guarded by listenMu
 	pending   map[string][]*pendingQuery // agent identity -> queued queries; guarded by listenMu

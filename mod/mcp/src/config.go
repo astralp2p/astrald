@@ -37,6 +37,25 @@ type Config struct {
 	MaxResponseBytes   int `yaml:"max_response_bytes,omitempty"`
 	MaxResponseObjects int `yaml:"max_response_objects,omitempty"`
 	MaxPayloadBytes    int `yaml:"max_payload_bytes,omitempty"`
+
+	// Tools are the tools this deployment exposes beside the built-in set.
+	Tools []ToolConfig `yaml:"tools,omitempty"`
+}
+
+// ToolConfig is one tool a deployment exposes to every agent.
+//
+// why the description is configuration: what the tool means is the answering
+// service's, and this module never reads the answer. The deployment that knows
+// what the query returns is the one that describes it.
+type ToolConfig struct {
+	// Name is the tool as the agent calls it. It may not be a built-in name.
+	Name string `yaml:"name"`
+
+	// Description is what the agent's model reads to decide whether to call it.
+	Description string `yaml:"description"`
+
+	// Query is what the tool runs, as astral://<identity-or-alias>:<query>.
+	Query string `yaml:"query"`
 }
 
 var defaultConfig = Config{

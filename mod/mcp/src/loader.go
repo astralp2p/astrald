@@ -23,6 +23,14 @@ func (Loader) Load(node astral.Node, assets assets.Assets, log *log.Logger) (cor
 
 	_ = assets.LoadYAML(mcpmod.ModuleName, &mod.config)
 
+	// why a start fails on a tool it cannot read: a tool the agent never sees
+	// is a deployment that believes it exposed one, and the failure is silent
+	// at every later moment.
+	mod.tools, err = readDeclaredTools(mod.config.Tools)
+	if err != nil {
+		return nil, err
+	}
+
 	mod.router.AddStructPrefix(mod, "Op")
 
 	mod.db = &DB{assets.Database()}

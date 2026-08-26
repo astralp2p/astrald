@@ -12,11 +12,24 @@ import (
 
 var errUnknownSession = errors.New("unknown or expired session")
 
+// The tools this module registers itself. They are the agent's floor, and a
+// declared tool may not take one of these names — a configuration that
+// overrode one would silently repoint it.
+const (
+	toolQuery   = "astral-query"
+	toolListen  = "astral-listen"
+	toolSend    = "astral-send"
+	toolReceive = "astral-receive"
+	toolWhoami  = "astral-whoami"
+)
+
+var builtinTools = []string{toolQuery, toolListen, toolSend, toolReceive, toolWhoami}
+
 // addTools registers the astral tool set on an MCP server. Every handler is
 // bound to the authenticated agent identity by closure.
 func (mod *Module) addTools(s *mcpsdk.Server, agentID *astral.Identity) {
 	mcpsdk.AddTool(s, &mcpsdk.Tool{
-		Name: "astral-query",
+		Name: toolQuery,
 		Description: "Send a query to an identity on the astral network. " +
 			"Node services answer with framed objects, other agents answer with " +
 			"plain text — the response format is auto-detected, so the default " +
@@ -26,7 +39,7 @@ func (mod *Module) addTools(s *mcpsdk.Server, agentID *astral.Identity) {
 	}, mod.queryTool(agentID))
 
 	mcpsdk.AddTool(s, &mcpsdk.Tool{
-		Name: "astral-listen",
+		Name: toolListen,
 		Description: "Wait for one incoming query addressed to your identity. " +
 			"Returns the caller, query and request payload plus a session_id " +
 			"for answering via astral-send and reading more via astral-receive, " +
@@ -38,13 +51,13 @@ func (mod *Module) addTools(s *mcpsdk.Server, agentID *astral.Identity) {
 	}, mod.listenTool(agentID))
 
 	mcpsdk.AddTool(s, &mcpsdk.Tool{
-		Name: "astral-send",
+		Name: toolSend,
 		Description: "Write data to an open session. Set close to end the " +
 			"session after writing; close with empty data just closes it.",
 	}, mod.sendTool(agentID))
 
 	mcpsdk.AddTool(s, &mcpsdk.Tool{
-		Name: "astral-receive",
+		Name: toolReceive,
 		Description: "Read the next data from an open session. Returns " +
 			"{status: timeout} when nothing arrived and {status: closed} when " +
 			"the remote side ended the session. When talking to another agent " +
@@ -52,9 +65,18 @@ func (mod *Module) addTools(s *mcpsdk.Server, agentID *astral.Identity) {
 	}, mod.receiveTool(agentID))
 
 	mcpsdk.AddTool(s, &mcpsdk.Tool{
-		Name:        "astral-whoami",
+		Name:        toolWhoami,
 		Description: "Get your agent identity plus the host node and its user.",
 	}, mod.whoamiTool(agentID))
+
+	// The deployment's own tools, registered after the set above so a name it
+	// cannot take is one this module already holds — see readDeclaredTools.
+	for _, tool := range mod.tools {
+		mcpsdk.AddTool(s, &mcpsdk.Tool{
+			Name:        tool.name,
+			Description: tool.description,
+		}, mod.declaredToolHandler(agentID, tool))
+	}
 }
 
 // agentSession returns the session only if it belongs to the agent.
