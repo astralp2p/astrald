@@ -108,8 +108,8 @@ func TestMCPServerWhoami(t *testing.T) {
 	if err != nil {
 		t.Fatalf("list tools: %v", err)
 	}
-	if len(tools.Tools) != 5 {
-		t.Fatalf("%v tools listed, want 5", len(tools.Tools))
+	if len(tools.Tools) != len(builtinTools) {
+		t.Fatalf("%v tools listed, want %v", len(tools.Tools), len(builtinTools))
 	}
 
 	res, err := cs.CallTool(ctx, &mcpsdk.CallToolParams{Name: "astral-whoami"})

@@ -39,6 +39,14 @@ func (mod *Module) RouteQuery(ctx *astral.Context, q *astral.InFlightQuery, w io
 		return query.RouteNotFound()
 	}
 
+	path, params := query.Parse(q.QueryString)
+
+	// why before the listener: a delivery is a write and not a conversation,
+	// so it must not consume the listener an astral-listen parked.
+	if path == mcpapi.MethodMessage {
+		return mod.acceptMessage(q, w)
+	}
+
 	// why: popping the listener atomically makes exactly one query win it;
 	// the next astral-listen call parks a fresh one.
 	ch, listening := mod.popListener(q.Target)
@@ -47,8 +55,6 @@ func (mod *Module) RouteQuery(ctx *astral.Context, q *astral.InFlightQuery, w io
 			return query.RouteNotFound()
 		}
 	}
-
-	path, params := query.Parse(q.QueryString)
 
 	return query.Accept(q, w, func(conn astral.Conn) {
 		s := mod.newSession(sessionInfo{

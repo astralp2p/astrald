@@ -21,9 +21,17 @@ const (
 	toolSend    = "astral-send"
 	toolReceive = "astral-receive"
 	toolWhoami  = "astral-whoami"
+
+	toolSendMessage = "send_message"
+	toolInbox       = "inbox"
+	toolReadMessage = "read_message"
+	toolReadNext    = "read_next"
 )
 
-var builtinTools = []string{toolQuery, toolListen, toolSend, toolReceive, toolWhoami}
+var builtinTools = []string{
+	toolQuery, toolListen, toolSend, toolReceive, toolWhoami,
+	toolSendMessage, toolInbox, toolReadMessage, toolReadNext,
+}
 
 // addTools registers the astral tool set on an MCP server. Every handler is
 // bound to the authenticated agent identity by closure.
@@ -35,7 +43,9 @@ func (mod *Module) addTools(s *mcpsdk.Server, agentID *astral.Identity) {
 			"plain text — the response format is auto-detected, so the default " +
 			"works for both. For a multi-turn dialog set session:true and " +
 			"continue with astral-send/astral-receive; another agent may take " +
-			"many seconds to answer, so give astral-receive a generous timeout_ms.",
+			"many seconds to answer, so give astral-receive a generous timeout_ms. " +
+			"To reach another agent prefer send_message, which does not need " +
+			"that agent to be listening.",
 	}, mod.queryTool(agentID))
 
 	mcpsdk.AddTool(s, &mcpsdk.Tool{
@@ -47,7 +57,10 @@ func (mod *Module) addTools(s *mcpsdk.Server, agentID *astral.Identity) {
 			"you are not listening are queued and delivered on your next call, " +
 			"so you need not listen continuously and nothing is lost between " +
 			"calls. Each call handles at most one query: report what happened " +
-			"rather than looping indefinitely, unless asked to keep serving.",
+			"rather than looping indefinitely, unless asked to keep serving. " +
+			"Prefer read_next: a message waits in your inbox until you read " +
+			"it, while a query delivered here is lost if you do not call in " +
+			"time.",
 	}, mod.listenTool(agentID))
 
 	mcpsdk.AddTool(s, &mcpsdk.Tool{
@@ -68,6 +81,37 @@ func (mod *Module) addTools(s *mcpsdk.Server, agentID *astral.Identity) {
 		Name:        toolWhoami,
 		Description: "Get your agent identity plus the host node and its user.",
 	}, mod.whoamiTool(agentID))
+
+	mcpsdk.AddTool(s, &mcpsdk.Tool{
+		Name: toolSendMessage,
+		Description: "Send a message to another agent. It lands in that " +
+			"agent's inbox and waits there until read, so the recipient need " +
+			"not be running. Returns the message id. To answer a message you " +
+			"received, send one back to its sender with reply_to set to the " +
+			"id of the message you are answering.",
+	}, mod.sendMessageTool(agentID))
+
+	mcpsdk.AddTool(s, &mcpsdk.Tool{
+		Name: toolInbox,
+		Description: "List the messages waiting for you: sender, topic, " +
+			"arrival and read state, without their bodies. Read one with " +
+			"read_message.",
+	}, mod.inboxTool(agentID))
+
+	mcpsdk.AddTool(s, &mcpsdk.Tool{
+		Name:        toolReadMessage,
+		Description: "Read one message by id and mark it read.",
+	}, mod.readMessageTool(agentID))
+
+	mcpsdk.AddTool(s, &mcpsdk.Tool{
+		Name: toolReadNext,
+		Description: "Wait for your oldest unread message, claim it and " +
+			"return it, or {status: timeout} when none arrived. Nothing is " +
+			"lost between calls: a message that arrives while you are not " +
+			"reading waits in the inbox. Each call takes at most one message: " +
+			"report what happened rather than looping indefinitely, unless " +
+			"asked to keep serving.",
+	}, mod.readNextTool(agentID))
 
 	// The deployment's own tools, registered after the set above so a name it
 	// cannot take is one this module already holds — see readDeclaredTools.

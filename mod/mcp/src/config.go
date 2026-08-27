@@ -19,6 +19,9 @@ type Config struct {
 	// ListenTimeout caps how long astral-listen parks waiting for a query.
 	ListenTimeout time.Duration `yaml:"listen_timeout,omitempty"`
 
+	// ReadTimeout caps how long read_next waits for a message.
+	ReadTimeout time.Duration `yaml:"read_timeout,omitempty"`
+
 	// SessionTTL is the idle timeout of a dialog session, refreshed on every
 	// send and receive.
 	SessionTTL time.Duration `yaml:"session_ttl,omitempty"`
@@ -63,8 +66,10 @@ var defaultConfig = Config{
 	TokenDuration: 365 * 24 * time.Hour,
 	QueryTimeout:  15 * time.Second,
 	// why: common MCP clients cap tool calls near 60s; stay under it so a
-	// quiet listen returns a clean timeout result instead of a client error.
+	// quiet listen or read returns a clean timeout result instead of a client
+	// error.
 	ListenTimeout: 55 * time.Second,
+	ReadTimeout:   55 * time.Second,
 	SessionTTL:    5 * time.Minute,
 	// why: agents call astral-listen in gaps while their model thinks; queuing
 	// the query means the caller waits instead of failing, and the agent need
