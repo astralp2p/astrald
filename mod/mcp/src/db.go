@@ -69,6 +69,10 @@ func (db *DB) ListAgents() (list []dbAgent, _ error) {
 type dbMessage struct {
 	// note: the id is the sender's, minted before delivery, so a delivery that
 	// arrives twice collides here and is stored once.
+	//
+	// fixme: the key is the id alone, so one id space spans every inbox on the
+	// node. A sender re-using an id across two recipients loses the second
+	// delivery. The key an inbox needs is (recipient, id).
 	ID          mcpapi.MessageID `gorm:"primaryKey"`
 	Sender      *astral.Identity `gorm:"index"`
 	Recipient   *astral.Identity `gorm:"index:idx_mcp_messages_inbox,priority:1"`
