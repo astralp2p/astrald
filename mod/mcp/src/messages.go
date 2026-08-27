@@ -2,8 +2,6 @@ package mcp
 
 import (
 	"context"
-	"crypto/rand"
-	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
@@ -18,22 +16,6 @@ import (
 
 // messagePollInterval is how often a waiting read_next looks again.
 const messagePollInterval = 250 * time.Millisecond
-
-// maxMessageIDLen bounds an identifier a sender mints. The identifier is a
-// name, and a sender that sends a body in its place is refused.
-const maxMessageIDLen = 64
-
-// newMessageID mints the identifier a message carries on both sides.
-//
-// why 128 bits: the identifier names the message in every inbox that keeps it
-// and in every reply that answers it, so it competes against every message the
-// node has stored rather than against the ones in flight. 64 bits reaches a
-// one-in-a-million collision at six million messages, which a node outlives.
-func newMessageID() string {
-	var b [16]byte
-	_, _ = rand.Read(b[:])
-	return hex.EncodeToString(b[:])
-}
 
 // deliverMessage puts the message to the recipient and returns once the
 // recipient's node has stored it.
@@ -125,19 +107,19 @@ func (mod *Module) acceptMessage(q *astral.InFlightQuery, w io.WriteCloser) (io.
 // name someone else.
 func (mod *Module) storeMessage(sender, recipient *astral.Identity, msg *mcpapi.Message) error {
 	switch {
-	case msg.ID == "" || len(msg.ID) > maxMessageIDLen:
-		return errors.New("message id")
+	case msg.ID.IsZero():
+		return errors.New("the message names no id")
 	case len(msg.Content) > mod.config.MaxPayloadBytes:
 		return errors.New("message too large")
 	}
 
 	return mod.db.InsertMessage(&dbMessage{
-		ID:        string(msg.ID),
+		ID:        msg.ID,
 		Sender:    sender,
 		Recipient: recipient,
 		Topic:     string(msg.Topic),
 		Content:   string(msg.Content),
-		ReplyTo:   string(msg.ReplyTo),
+		ReplyTo:   msg.ReplyTo,
 	})
 }
 

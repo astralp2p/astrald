@@ -3,6 +3,7 @@ package mcp
 import (
 	"time"
 
+	mcpapi "github.com/astralp2p/astral-go/api/mcp"
 	"github.com/astralp2p/astral-go/astral"
 	mcpmod "github.com/astralp2p/astrald/mod/mcp"
 	"gorm.io/gorm"
@@ -68,12 +69,12 @@ func (db *DB) ListAgents() (list []dbAgent, _ error) {
 type dbMessage struct {
 	// note: the id is the sender's, minted before delivery, so a delivery that
 	// arrives twice collides here and is stored once.
-	ID          string           `gorm:"primaryKey"`
+	ID          mcpapi.MessageID `gorm:"primaryKey"`
 	Sender      *astral.Identity `gorm:"index"`
 	Recipient   *astral.Identity `gorm:"index:idx_mcp_messages_inbox,priority:1"`
 	Topic       string
 	Content     string
-	ReplyTo     string
+	ReplyTo     mcpapi.MessageID
 	DeliveredAt time.Time `gorm:"index:idx_mcp_messages_inbox,priority:2"`
 	ReadAt      *time.Time
 }
@@ -108,7 +109,7 @@ func (db *DB) ListInbox(recipient *astral.Identity, unreadOnly bool, limit int) 
 // read. A message already read is returned as it stands: reading is not a
 // claim, and the stamp records the first read.
 // Returns gorm.ErrRecordNotFound when the recipient holds no such message.
-func (db *DB) ReadMessage(recipient *astral.Identity, id string) (*dbMessage, error) {
+func (db *DB) ReadMessage(recipient *astral.Identity, id mcpapi.MessageID) (*dbMessage, error) {
 	var row dbMessage
 
 	err := db.Where("recipient = ? AND id = ?", recipient, id).First(&row).Error

@@ -45,18 +45,25 @@ func (mod *Module) sendMessageTool(agentID *astral.Identity) mcpsdk.ToolHandlerF
 			return nil, out, fmt.Errorf("content is over %v bytes", mod.config.MaxPayloadBytes)
 		}
 
+		var replyTo mcpapi.MessageID
+		if in.ReplyTo != "" {
+			if replyTo, err = mcpapi.ParseMessageID(in.ReplyTo); err != nil {
+				return nil, out, err
+			}
+		}
+
 		msg := &mcpapi.Message{
-			ID:      astral.String8(newMessageID()),
+			ID:      mcpapi.NewMessageID(),
 			Topic:   astral.String8(in.Topic),
 			Content: astral.String32(in.Content),
-			ReplyTo: astral.String8(in.ReplyTo),
+			ReplyTo: replyTo,
 		}
 
 		if err = mod.deliverMessage(agentID, targetID, msg); err != nil {
 			return nil, out, fmt.Errorf("delivery failed: %v", err)
 		}
 
-		out.ID = string(msg.ID)
+		out.ID = msg.ID.String()
 		return nil, out, nil
 	}
 }

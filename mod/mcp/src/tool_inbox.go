@@ -48,11 +48,11 @@ func (mod *Module) inboxTool(agentID *astral.Identity) mcpsdk.ToolHandlerFor[inb
 		out.Messages = make([]inboxEntry, len(rows))
 		for i, row := range rows {
 			out.Messages[i] = inboxEntry{
-				ID:          row.ID,
+				ID:          row.ID.String(),
 				Sender:      row.Sender.String(),
 				SenderAlias: mod.Dir.DisplayName(row.Sender),
 				Topic:       row.Topic,
-				ReplyTo:     row.ReplyTo,
+				ReplyTo:     replyToText(row.ReplyTo),
 				DeliveredAt: stampMessageTime(row.DeliveredAt),
 				Read:        row.ReadAt != nil,
 			}

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"time"
 
+	mcpapi "github.com/astralp2p/astral-go/api/mcp"
 	"github.com/astralp2p/astral-go/astral"
 	mcpsdk "github.com/modelcontextprotocol/go-sdk/mcp"
 	"gorm.io/gorm"
@@ -31,7 +32,12 @@ type messageOut struct {
 
 func (mod *Module) readMessageTool(agentID *astral.Identity) mcpsdk.ToolHandlerFor[readMessageIn, messageOut] {
 	return func(ctx context.Context, _ *mcpsdk.CallToolRequest, in readMessageIn) (res *mcpsdk.CallToolResult, out messageOut, err error) {
-		row, err := mod.db.ReadMessage(agentID, in.ID)
+		id, err := mcpapi.ParseMessageID(in.ID)
+		if err != nil {
+			return nil, out, err
+		}
+
+		row, err := mod.db.ReadMessage(agentID, id)
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, out, errNoSuchMessage
 		}
@@ -46,14 +52,23 @@ func (mod *Module) readMessageTool(agentID *astral.Identity) mcpsdk.ToolHandlerF
 // messageResult renders a stored message for a tool result.
 func messageResult(mod *Module, row *dbMessage) messageOut {
 	return messageOut{
-		ID:          row.ID,
+		ID:          row.ID.String(),
 		Sender:      row.Sender.String(),
 		SenderAlias: mod.Dir.DisplayName(row.Sender),
 		Topic:       row.Topic,
 		Content:     row.Content,
-		ReplyTo:     row.ReplyTo,
+		ReplyTo:     replyToText(row.ReplyTo),
 		DeliveredAt: stampMessageTime(row.DeliveredAt),
 	}
+}
+
+// replyToText renders the message an answer names. The zero id names none, and
+// a result that carried it as text would name a message nobody sent.
+func replyToText(id mcpapi.MessageID) string {
+	if id.IsZero() {
+		return ""
+	}
+	return id.String()
 }
 
 // stampMessageTime renders a stored timestamp for a tool result.

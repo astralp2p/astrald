@@ -48,13 +48,20 @@ func testMessageModule(t *testing.T) *Module {
 	return mod
 }
 
-func storeOne(t *testing.T, mod *Module, sender, recipient *astral.Identity, id, topic string) {
+// testID makes an identifier a failure can name.
+func testID(n byte) mcpapi.MessageID {
+	var id mcpapi.MessageID
+	id[0] = n
+	return id
+}
+
+func storeOne(t *testing.T, mod *Module, sender, recipient *astral.Identity, id mcpapi.MessageID, topic string) {
 	t.Helper()
 
 	err := mod.storeMessage(sender, recipient, &mcpapi.Message{
-		ID:      astral.String8(id),
+		ID:      id,
 		Topic:   astral.String8(topic),
-		Content: astral.String32("body of " + id),
+		Content: astral.String32("body of " + topic),
 	})
 	if err != nil {
 		t.Fatalf("store %v: %v", id, err)
@@ -71,8 +78,8 @@ func TestInsertMessageStoresOnce(t *testing.T) {
 	mod := testMessageModule(t)
 	sender, recipient := astral.GenerateIdentity(), astral.GenerateIdentity()
 
-	storeOne(t, mod, sender, recipient, "a", "first")
-	storeOne(t, mod, sender, recipient, "a", "second")
+	storeOne(t, mod, sender, recipient, testID(1), "first")
+	storeOne(t, mod, sender, recipient, testID(1), "second")
 
 	rows, err := mod.db.ListInbox(recipient, false, 10)
 	if err != nil {
@@ -90,19 +97,19 @@ func TestListInboxOrdersAndFilters(t *testing.T) {
 	mod := testMessageModule(t)
 	sender, recipient := astral.GenerateIdentity(), astral.GenerateIdentity()
 
-	storeOne(t, mod, sender, recipient, "a", "one")
-	storeOne(t, mod, sender, recipient, "b", "two")
-	storeOne(t, mod, sender, astral.GenerateIdentity(), "c", "elsewhere")
+	storeOne(t, mod, sender, recipient, testID(1), "one")
+	storeOne(t, mod, sender, recipient, testID(2), "two")
+	storeOne(t, mod, sender, astral.GenerateIdentity(), testID(3), "elsewhere")
 
 	rows, err := mod.db.ListInbox(recipient, false, 10)
 	if err != nil {
 		t.Fatalf("list: %v", err)
 	}
-	if len(rows) != 2 || rows[0].ID != "a" || rows[1].ID != "b" {
+	if len(rows) != 2 || rows[0].ID != testID(1) || rows[1].ID != testID(2) {
 		t.Fatalf("listed %v, want a then b", rows)
 	}
 
-	if _, err = mod.db.ReadMessage(recipient, "a"); err != nil {
+	if _, err = mod.db.ReadMessage(recipient, testID(1)); err != nil {
 		t.Fatalf("read: %v", err)
 	}
 
@@ -110,7 +117,7 @@ func TestListInboxOrdersAndFilters(t *testing.T) {
 	if err != nil {
 		t.Fatalf("list unread: %v", err)
 	}
-	if len(rows) != 1 || rows[0].ID != "b" {
+	if len(rows) != 1 || rows[0].ID != testID(2) {
 		t.Fatalf("unread %v, want b alone", rows)
 	}
 }
@@ -121,9 +128,9 @@ func TestReadMessageStampsOnce(t *testing.T) {
 	mod := testMessageModule(t)
 	sender, recipient := astral.GenerateIdentity(), astral.GenerateIdentity()
 
-	storeOne(t, mod, sender, recipient, "a", "one")
+	storeOne(t, mod, sender, recipient, testID(1), "one")
 
-	first, err := mod.db.ReadMessage(recipient, "a")
+	first, err := mod.db.ReadMessage(recipient, testID(1))
 	if err != nil {
 		t.Fatalf("first read: %v", err)
 	}
@@ -133,7 +140,7 @@ func TestReadMessageStampsOnce(t *testing.T) {
 
 	time.Sleep(5 * time.Millisecond)
 
-	second, err := mod.db.ReadMessage(recipient, "a")
+	second, err := mod.db.ReadMessage(recipient, testID(1))
 	if err != nil {
 		t.Fatalf("second read: %v", err)
 	}
@@ -148,9 +155,9 @@ func TestReadMessageScopesToRecipient(t *testing.T) {
 	mod := testMessageModule(t)
 	sender := astral.GenerateIdentity()
 
-	storeOne(t, mod, sender, astral.GenerateIdentity(), "a", "one")
+	storeOne(t, mod, sender, astral.GenerateIdentity(), testID(1), "one")
 
-	_, err := mod.db.ReadMessage(astral.GenerateIdentity(), "a")
+	_, err := mod.db.ReadMessage(astral.GenerateIdentity(), testID(1))
 	if !errors.Is(err, gorm.ErrRecordNotFound) {
 		t.Fatalf("read: got %v, want gorm.ErrRecordNotFound", err)
 	}
@@ -162,10 +169,10 @@ func TestClaimNextTakesEachMessageOnce(t *testing.T) {
 	mod := testMessageModule(t)
 	sender, recipient := astral.GenerateIdentity(), astral.GenerateIdentity()
 
-	storeOne(t, mod, sender, recipient, "a", "one")
-	storeOne(t, mod, sender, recipient, "b", "two")
+	storeOne(t, mod, sender, recipient, testID(1), "one")
+	storeOne(t, mod, sender, recipient, testID(2), "two")
 
-	for _, want := range []string{"a", "b"} {
+	for _, want := range []mcpapi.MessageID{testID(1), testID(2)} {
 		row, err := mod.db.ClaimNext(recipient)
 		if err != nil {
 			t.Fatalf("claim %v: %v", want, err)
@@ -191,15 +198,15 @@ func TestClaimNextWaitsForDelivery(t *testing.T) {
 
 	go func() {
 		time.Sleep(100 * time.Millisecond)
-		storeOne(t, mod, sender, recipient, "a", "late")
+		storeOne(t, mod, sender, recipient, testID(1), "late")
 	}()
 
 	row, err := mod.claimNext(context.Background(), recipient, 3*time.Second)
 	if err != nil {
 		t.Fatalf("claim: %v", err)
 	}
-	if row.ID != "a" {
-		t.Fatalf("claimed %v, want a", row.ID)
+	if row.ID != testID(1) {
+		t.Fatalf("claimed %v, want %v", row.ID, testID(1))
 	}
 }
 
@@ -251,21 +258,21 @@ func TestRouteQueryStoresMessage(t *testing.T) {
 	_ = mod.agentIDs.Add(recipient.String())
 
 	obj := deliverOverRouter(t, mod, recipient, &mcpapi.Message{
-		ID:      astral.String8("a"),
+		ID:      testID(1),
 		Topic:   astral.String8("build"),
 		Content: astral.String32("the index is rebuilt"),
-		ReplyTo: astral.String8("b"),
+		ReplyTo: testID(2),
 	})
 
 	if _, ok := obj.(*astral.Ack); !ok {
 		t.Fatalf("delivery answered %T, want an ack", obj)
 	}
 
-	row, err := mod.db.ReadMessage(recipient, "a")
+	row, err := mod.db.ReadMessage(recipient, testID(1))
 	if err != nil {
 		t.Fatalf("read stored: %v", err)
 	}
-	if row.Topic != "build" || row.Content != "the index is rebuilt" || row.ReplyTo != "b" {
+	if row.Topic != "build" || row.Content != "the index is rebuilt" || row.ReplyTo != testID(2) {
 		t.Fatalf("stored %+v", row)
 	}
 	if mod.sessions.Len() != 0 {
@@ -279,7 +286,7 @@ func TestRouteQueryRefusesOversizeMessage(t *testing.T) {
 	_ = mod.agentIDs.Add(recipient.String())
 
 	obj := deliverOverRouter(t, mod, recipient, &mcpapi.Message{
-		ID:      astral.String8("a"),
+		ID:      testID(1),
 		Content: astral.String32(bytes.Repeat([]byte("x"), mod.config.MaxPayloadBytes+1)),
 	})
 
