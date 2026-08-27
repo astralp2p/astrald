@@ -22,9 +22,9 @@ same nothing. Recording mcp.list_agents over apphost, in this same run and on
 this same node, is what makes the refusals evidence about the guard rather than
 about the op.
 
-why the exchange is sequential: a query for an agent that is not listening is
-accepted and queued (mod/mcp RouteQuery), so beta collects it on its next
-astral-listen. No thread has to hold a listener open.
+why the exchange is sequential: a message is stored in the recipient's inbox by
+the recipient's node (mod/mcp RouteQuery), so beta collects it on its next
+read_next. Neither agent has to be running while the other writes.
 """
 import asyncio
 import json
@@ -134,39 +134,35 @@ async def main():
         # an agent nobody opted in is unreachable, and unreachable the way an
         # identity the node never heard of is
         try:
-            out = agent_alpha.call_tool("astral-query", {
-                "target": gamma["identity"], "path": "chat",
-                "payload": ASK, "timeout_ms": 5000,
+            out = agent_alpha.call_tool("send_message", {
+                "to": gamma["identity"], "content": ASK,
             })
             facts["invisible"] = {"refused": False,
                                   "detail": json.dumps(out)[:400]}
         except ToolError as e:
             facts["invisible"] = {"refused": True, "detail": str(e)[:400]}
 
-        opened = agent_alpha.call_tool("astral-query", {
-            "target": beta["identity"], "path": "chat",
-            "payload": ASK, "session": True, "timeout_ms": 10000,
+        agent_alpha.call_tool("send_message", {
+            "to": beta["identity"], "content": ASK,
         })
-        alpha_session = _structured(opened)["session_id"]
 
         with MCPClient(n1["mcp_url"], beta["token"]) as agent_beta:
             heard = _structured(agent_beta.call_tool(
-                "astral-listen", {"timeout_ms": 10000}))
-            agent_beta.call_tool("astral-send", {
-                "session_id": heard["session_id"],
-                "data": ANSWER, "close": True,
+                "read_next", {"timeout_ms": 10000}))
+            agent_beta.call_tool("send_message", {
+                "to": heard.get("sender", alpha["identity"]),
+                "content": ANSWER,
             })
 
         got = _structured(agent_alpha.call_tool(
-            "astral-receive",
-            {"session_id": alpha_session, "timeout_ms": 10000}))
+            "read_next", {"timeout_ms": 10000}))
 
     facts["exchange"] = {
         "beta_status": heard.get("status"),
-        "beta_heard": heard.get("payload"),
-        "beta_caller": heard.get("caller"),
-        "alpha_caller_expected": alpha["identity"],
-        "alpha_got": got.get("payload"),
+        "beta_heard": heard.get("content"),
+        "beta_sender": heard.get("sender"),
+        "alpha_sender_expected": alpha["identity"],
+        "alpha_got": got.get("content"),
     }
     write_facts(facts)
 
@@ -174,7 +170,7 @@ async def main():
     print(f"driver: {refused}/{len(NODE_OPS)} node ops refused to an agent; "
           f"closed agent refused={facts['invisible']['refused']}; "
           f"delta minted visible={read_delta.get('visible')}; "
-          f"beta heard {heard.get('payload')!r}, alpha got {got.get('payload')!r}")
+          f"beta heard {heard.get('content')!r}, alpha got {got.get('content')!r}")
 
 
 def _structured(result: dict) -> dict:

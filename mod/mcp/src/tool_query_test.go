@@ -9,6 +9,15 @@ import (
 	"github.com/astralp2p/astral-go/astral/channel"
 )
 
+// testConn is a net.Conn wearing the identities an astral.Conn carries.
+type testConn struct {
+	net.Conn
+	local, remote *astral.Identity
+}
+
+func (c testConn) LocalIdentity() *astral.Identity  { return c.local }
+func (c testConn) RemoteIdentity() *astral.Identity { return c.remote }
+
 func collectConn(t *testing.T) (astral.Conn, net.Conn) {
 	t.Helper()
 	local, remote := net.Pipe()
@@ -63,7 +72,7 @@ func TestCollectResponseForcedRaw(t *testing.T) {
 		peer.Close()
 	}()
 
-	out := mod.collectResponse(conn, sessionFormatRaw, time.Second)
+	out := mod.collectResponse(conn, formatRaw, time.Second)
 	if len(out.Objects) != 0 {
 		t.Fatalf("raw mode decoded %v objects", len(out.Objects))
 	}

@@ -3,24 +3,18 @@ package mcp
 import (
 	"encoding/base64"
 	"encoding/json"
-	"errors"
 	"unicode/utf8"
 
 	"github.com/astralp2p/astral-go/astral"
 	mcpsdk "github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
-var errUnknownSession = errors.New("unknown or expired session")
-
 // The tools this module registers itself. They are the agent's floor, and a
 // declared tool may not take one of these names — a configuration that
 // overrode one would silently repoint it.
 const (
-	toolQuery   = "astral-query"
-	toolListen  = "astral-listen"
-	toolSend    = "astral-send"
-	toolReceive = "astral-receive"
-	toolWhoami  = "astral-whoami"
+	toolQuery  = "astral-query"
+	toolWhoami = "astral-whoami"
 
 	toolSendMessage = "send_message"
 	toolInbox       = "inbox"
@@ -29,7 +23,7 @@ const (
 )
 
 var builtinTools = []string{
-	toolQuery, toolListen, toolSend, toolReceive, toolWhoami,
+	toolQuery, toolWhoami,
 	toolSendMessage, toolInbox, toolReadMessage, toolReadNext,
 }
 
@@ -38,44 +32,12 @@ var builtinTools = []string{
 func (mod *Module) addTools(s *mcpsdk.Server, agentID *astral.Identity) {
 	mcpsdk.AddTool(s, &mcpsdk.Tool{
 		Name: toolQuery,
-		Description: "Send a query to an identity on the astral network. " +
-			"Node services answer with framed objects, other agents answer with " +
-			"plain text — the response format is auto-detected, so the default " +
-			"works for both. For a multi-turn dialog set session:true and " +
-			"continue with astral-send/astral-receive; another agent may take " +
-			"many seconds to answer, so give astral-receive a generous timeout_ms. " +
-			"To reach another agent prefer send_message, which does not need " +
-			"that agent to be listening.",
+		Description: "Send a query to a node service on the astral network. " +
+			"Services answer with framed objects and the response format is " +
+			"auto-detected, so the default works. This reaches no agent: an " +
+			"agent answers no query but the one that delivers a message, so " +
+			"write to another agent with send_message.",
 	}, mod.queryTool(agentID))
-
-	mcpsdk.AddTool(s, &mcpsdk.Tool{
-		Name: toolListen,
-		Description: "Wait for one incoming query addressed to your identity. " +
-			"Returns the caller, query and request payload plus a session_id " +
-			"for answering via astral-send and reading more via astral-receive, " +
-			"or {status: timeout} when none arrived. Queries that arrive while " +
-			"you are not listening are queued and delivered on your next call, " +
-			"so you need not listen continuously and nothing is lost between " +
-			"calls. Each call handles at most one query: report what happened " +
-			"rather than looping indefinitely, unless asked to keep serving. " +
-			"Prefer read_next: a message waits in your inbox until you read " +
-			"it, while a query delivered here is lost if you do not call in " +
-			"time.",
-	}, mod.listenTool(agentID))
-
-	mcpsdk.AddTool(s, &mcpsdk.Tool{
-		Name: toolSend,
-		Description: "Write data to an open session. Set close to end the " +
-			"session after writing; close with empty data just closes it.",
-	}, mod.sendTool(agentID))
-
-	mcpsdk.AddTool(s, &mcpsdk.Tool{
-		Name: toolReceive,
-		Description: "Read the next data from an open session. Returns " +
-			"{status: timeout} when nothing arrived and {status: closed} when " +
-			"the remote side ended the session. When talking to another agent " +
-			"give it a generous timeout_ms — their model needs time to answer.",
-	}, mod.receiveTool(agentID))
 
 	mcpsdk.AddTool(s, &mcpsdk.Tool{
 		Name:        toolWhoami,
@@ -119,15 +81,6 @@ func (mod *Module) addTools(s *mcpsdk.Server, agentID *astral.Identity) {
 			Description: tool.description,
 		}, mod.declaredToolHandler(agentID, tool))
 	}
-}
-
-// agentSession returns the session only if it belongs to the agent.
-func (mod *Module) agentSession(agentID *astral.Identity, id string) (*session, error) {
-	s, ok := mod.sessions.Get(id)
-	if !ok || s.agent != agentID.String() {
-		return nil, errUnknownSession
-	}
-	return s, nil
 }
 
 // jsonValue re-parses a JSON document for schema-checked tool output.

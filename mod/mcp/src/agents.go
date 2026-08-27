@@ -83,7 +83,8 @@ func (mod *Module) registerAgent(row *dbAgent) error {
 }
 
 // deleteAgent revokes the agent's token, unsets its alias and removes its row.
-// The signed relay contract stays indexed until it expires.
+// The signed relay contract stays indexed until it expires, and the messages
+// the agent was sent go with the row.
 func (mod *Module) deleteAgent(row *dbAgent) error {
 	err := mod.Apphost.DeleteAccessToken(row.Token)
 	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
@@ -97,9 +98,6 @@ func (mod *Module) deleteAgent(row *dbAgent) error {
 	}
 
 	_ = mod.agentIDs.Remove(row.Identity.String())
-	mod.drainListener(row.Identity)
-	mod.dropPending(row.Identity)
-	mod.closeAgentSessions(row.Identity)
 
 	return mod.db.DeleteAgent(row.Identity)
 }

@@ -272,9 +272,6 @@ func TestRouteQueryStoresMessage(t *testing.T) {
 	if row.Content != "the index is rebuilt" {
 		t.Fatalf("stored %+v", row)
 	}
-	if mod.sessions.Len() != 0 {
-		t.Fatalf("%v sessions opened by a delivery", mod.sessions.Len())
-	}
 }
 
 func TestRouteQueryRefusesOversizeMessage(t *testing.T) {
