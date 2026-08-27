@@ -18,13 +18,11 @@ type inboxIn struct {
 }
 
 // inboxEntry is one message without its body: what the inbox lists is who
-// wrote, about what, and whether it has been read.
+// wrote, when, and whether it has been read.
 type inboxEntry struct {
 	ID          string `json:"id" jsonschema:"pass to read_message to read the body"`
 	Sender      string `json:"sender" jsonschema:"sender identity"`
 	SenderAlias string `json:"sender_alias,omitempty" jsonschema:"sender display name"`
-	Topic       string `json:"topic,omitempty" jsonschema:"what the message is about"`
-	ReplyTo     string `json:"reply_to,omitempty" jsonschema:"id of the message this one answers"`
 	DeliveredAt string `json:"delivered_at" jsonschema:"when the message arrived"`
 	Read        bool   `json:"read" jsonschema:"the message has been read"`
 }
@@ -51,8 +49,6 @@ func (mod *Module) inboxTool(agentID *astral.Identity) mcpsdk.ToolHandlerFor[inb
 				ID:          row.ID.String(),
 				Sender:      row.Sender.String(),
 				SenderAlias: mod.Dir.DisplayName(row.Sender),
-				Topic:       row.Topic,
-				ReplyTo:     replyToText(row.ReplyTo),
 				DeliveredAt: stampMessageTime(row.DeliveredAt),
 				Read:        row.ReadAt != nil,
 			}

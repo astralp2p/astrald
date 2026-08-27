@@ -12,13 +12,11 @@ import (
 
 type sendMessageIn struct {
 	To      string `json:"to" jsonschema:"recipient agent identity or alias"`
-	Topic   string `json:"topic,omitempty" jsonschema:"what the message is about, in a few words"`
 	Content string `json:"content" jsonschema:"the message body"`
-	ReplyTo string `json:"reply_to,omitempty" jsonschema:"id of the message this one answers"`
 }
 
 type sendMessageOut struct {
-	ID string `json:"id" jsonschema:"the message id; a reply to it carries the same value in reply_to"`
+	ID string `json:"id" jsonschema:"the id the message is stored under"`
 }
 
 func (mod *Module) sendMessageTool(agentID *astral.Identity) mcpsdk.ToolHandlerFor[sendMessageIn, sendMessageOut] {
@@ -45,18 +43,9 @@ func (mod *Module) sendMessageTool(agentID *astral.Identity) mcpsdk.ToolHandlerF
 			return nil, out, fmt.Errorf("content is over %v bytes", mod.config.MaxPayloadBytes)
 		}
 
-		var replyTo mcpapi.MessageID
-		if in.ReplyTo != "" {
-			if replyTo, err = mcpapi.ParseMessageID(in.ReplyTo); err != nil {
-				return nil, out, err
-			}
-		}
-
 		msg := &mcpapi.Message{
 			ID:      mcpapi.NewMessageID(),
-			Topic:   astral.String8(in.Topic),
 			Content: astral.String32(in.Content),
-			ReplyTo: replyTo,
 		}
 
 		if err = mod.deliverMessage(agentID, targetID, msg); err != nil {

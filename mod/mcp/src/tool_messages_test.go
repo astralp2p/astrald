@@ -28,7 +28,7 @@ func TestInboxToolListsWithoutBodies(t *testing.T) {
 	}
 
 	first := out.Messages[0]
-	if first.ID != testID(1).String() || first.Topic != "one" {
+	if first.ID != testID(1).String() {
 		t.Fatalf("first entry %+v", first)
 	}
 	if first.Sender != sender.String() || first.SenderAlias != "scout" {
@@ -69,7 +69,7 @@ func TestReadMessageToolReturnsBodyAndMarksRead(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read: %v", err)
 	}
-	if out.Content != "body of one" || out.Sender != sender.String() {
+	if out.Content != "one" || out.Sender != sender.String() {
 		t.Fatalf("read %+v", out)
 	}
 
@@ -105,7 +105,7 @@ func TestReadNextToolClaimsOldest(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read_next: %v", err)
 	}
-	if out.Status != "message" || out.ID != testID(1).String() || out.Content != "body of one" {
+	if out.Status != "message" || out.ID != testID(1).String() || out.Content != "one" {
 		t.Fatalf("read_next %+v", out)
 	}
 }
@@ -191,22 +191,5 @@ func TestReadMessageToolRefusesMalformedID(t *testing.T) {
 		context.Background(), nil, readMessageIn{ID: "not-an-id"})
 	if err == nil || !strings.Contains(err.Error(), "message id") {
 		t.Fatalf("read: got %v, want an invalid id", err)
-	}
-}
-
-func TestSendMessageToolRefusesMalformedReplyTo(t *testing.T) {
-	mod := testMessageModule(t)
-
-	recipient := astral.GenerateIdentity()
-	_ = mod.Dir.SetAlias(recipient, "beta")
-
-	_, _, err := mod.sendMessageTool(astral.GenerateIdentity())(
-		context.Background(), nil, sendMessageIn{
-			To:      "beta",
-			Content: "hello",
-			ReplyTo: "not-an-id",
-		})
-	if err == nil || !strings.Contains(err.Error(), "message id") {
-		t.Fatalf("send: got %v, want an invalid id", err)
 	}
 }

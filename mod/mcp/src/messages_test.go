@@ -55,13 +55,12 @@ func testID(n byte) mcpapi.MessageID {
 	return id
 }
 
-func storeOne(t *testing.T, mod *Module, sender, recipient *astral.Identity, id mcpapi.MessageID, topic string) {
+func storeOne(t *testing.T, mod *Module, sender, recipient *astral.Identity, id mcpapi.MessageID, body string) {
 	t.Helper()
 
 	err := mod.storeMessage(sender, recipient, &mcpapi.Message{
 		ID:      id,
-		Topic:   astral.String8(topic),
-		Content: astral.String32("body of " + topic),
+		Content: astral.String32(body),
 	})
 	if err != nil {
 		t.Fatalf("store %v: %v", id, err)
@@ -88,8 +87,8 @@ func TestInsertMessageStoresOnce(t *testing.T) {
 	if len(rows) != 1 {
 		t.Fatalf("%v messages stored, want 1", len(rows))
 	}
-	if rows[0].Topic != "first" {
-		t.Fatalf("topic %v, want the first delivery to stand", rows[0].Topic)
+	if rows[0].Content != "first" {
+		t.Fatalf("content %v, want the first delivery to stand", rows[0].Content)
 	}
 }
 
@@ -259,9 +258,7 @@ func TestRouteQueryStoresMessage(t *testing.T) {
 
 	obj := deliverOverRouter(t, mod, recipient, &mcpapi.Message{
 		ID:      testID(1),
-		Topic:   astral.String8("build"),
 		Content: astral.String32("the index is rebuilt"),
-		ReplyTo: testID(2),
 	})
 
 	if _, ok := obj.(*astral.Ack); !ok {
@@ -272,7 +269,7 @@ func TestRouteQueryStoresMessage(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read stored: %v", err)
 	}
-	if row.Topic != "build" || row.Content != "the index is rebuilt" || row.ReplyTo != testID(2) {
+	if row.Content != "the index is rebuilt" {
 		t.Fatalf("stored %+v", row)
 	}
 	if mod.sessions.Len() != 0 {

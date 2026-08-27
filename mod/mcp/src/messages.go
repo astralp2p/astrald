@@ -117,9 +117,7 @@ func (mod *Module) storeMessage(sender, recipient *astral.Identity, msg *mcpapi.
 		ID:        msg.ID,
 		Sender:    sender,
 		Recipient: recipient,
-		Topic:     string(msg.Topic),
 		Content:   string(msg.Content),
-		ReplyTo:   msg.ReplyTo,
 	})
 }
 

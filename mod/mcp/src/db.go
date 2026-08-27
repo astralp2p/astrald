@@ -72,9 +72,7 @@ type dbMessage struct {
 	ID          mcpapi.MessageID `gorm:"primaryKey"`
 	Sender      *astral.Identity `gorm:"index"`
 	Recipient   *astral.Identity `gorm:"index:idx_mcp_messages_inbox,priority:1"`
-	Topic       string
 	Content     string
-	ReplyTo     mcpapi.MessageID
 	DeliveredAt time.Time `gorm:"index:idx_mcp_messages_inbox,priority:2"`
 	ReadAt      *time.Time
 }

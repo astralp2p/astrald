@@ -87,15 +87,13 @@ func (mod *Module) addTools(s *mcpsdk.Server, agentID *astral.Identity) {
 		Description: "Send a message to another agent. It lands in that " +
 			"agent's inbox and waits there until read, so the recipient need " +
 			"not be running. Returns the message id. To answer a message you " +
-			"received, send one back to its sender with reply_to set to the " +
-			"id of the message you are answering.",
+			"received, send one back to its sender.",
 	}, mod.sendMessageTool(agentID))
 
 	mcpsdk.AddTool(s, &mcpsdk.Tool{
 		Name: toolInbox,
-		Description: "List the messages waiting for you: sender, topic, " +
-			"arrival and read state, without their bodies. Read one with " +
-			"read_message.",
+		Description: "List the messages waiting for you: sender, arrival and " +
+			"read state, without their bodies. Read one with read_message.",
 	}, mod.inboxTool(agentID))
 
 	mcpsdk.AddTool(s, &mcpsdk.Tool{
