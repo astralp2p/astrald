@@ -2,7 +2,6 @@ package mcp
 
 import (
 	"errors"
-	"net"
 	"testing"
 
 	authapi "github.com/astralp2p/astral-go/api/auth"
@@ -26,21 +25,9 @@ func TestAnswerGateRefusesWhatTheAuthorityRefuses(t *testing.T) {
 	mod := testRouterModuleWithAuth(t, auth)
 	agentID := registeredAgent(mod)
 
-	ch, err := mod.parkListener(agentID)
-	if err != nil {
-		t.Fatalf("park: %v", err)
-	}
-	defer mod.unparkListener(agentID, ch)
-
-	_, err = mod.RouteQuery(mod.ctx, inFlight(agentID, "chat"), &bufWriteCloser{})
+	_, err := mod.RouteQuery(mod.ctx, inFlight(agentID, mcpapi.MethodMessage), &bufWriteCloser{})
 	if !errors.Is(err, &astral.ErrRouteNotFound{}) {
 		t.Fatalf("route: got %v, want route not found", err)
-	}
-
-	// the listener survives: a parked listener is not permission, and a query
-	// about to be refused must not consume one
-	if _, err = mod.parkListener(agentID); !errors.Is(err, errAlreadyListening) {
-		t.Fatal("the refused query popped the parked listener")
 	}
 }
 
@@ -52,7 +39,7 @@ func TestAnswerGateAsksAboutTheCalledAgent(t *testing.T) {
 	mod := testRouterModuleWithAuth(t, auth)
 	agentID := registeredAgent(mod)
 
-	q := inFlight(agentID, "chat")
+	q := inFlight(agentID, mcpapi.MethodMessage)
 	_, _ = mod.RouteQuery(mod.ctx, q, &bufWriteCloser{})
 
 	if len(auth.asked) != 1 {
@@ -78,65 +65,12 @@ func TestAnswerGateIsNotReachedForAnUnregisteredTarget(t *testing.T) {
 	auth := &fakeAuth{allow: true}
 	mod := testRouterModuleWithAuth(t, auth)
 
-	_, err := mod.RouteQuery(mod.ctx, inFlight(astral.GenerateIdentity(), "chat"), &bufWriteCloser{})
+	_, err := mod.RouteQuery(mod.ctx, inFlight(astral.GenerateIdentity(), mcpapi.MethodMessage), &bufWriteCloser{})
 	if !errors.Is(err, &astral.ErrRouteNotFound{}) {
 		t.Fatalf("route: got %v, want route not found", err)
 	}
 	if len(auth.asked) != 0 {
 		t.Fatalf("the authority was asked %d times about a target that is not an agent", len(auth.asked))
-	}
-}
-
-// TestDisconnectAgentEndsLiveTraffic covers what the operation exists for: the
-// conversations close and the queued queries go.
-func TestDisconnectAgentEndsLiveTraffic(t *testing.T) {
-	mod := testRouterModuleWithAuth(t, &fakeAuth{allow: true})
-	agentID := registeredAgent(mod)
-
-	local, remote := net.Pipe()
-	defer remote.Close()
-
-	s := mod.newSession(sessionInfo{
-		agent:  agentID,
-		conn:   testConn{Conn: local, local: agentID, remote: astral.GenerateIdentity()},
-		caller: astral.GenerateIdentity(),
-		format: sessionFormatRaw,
-	})
-
-	mod.enqueuePending(agentID, s)
-
-	if mod.pendingCount(agentID) == 0 {
-		t.Fatal("the query did not queue; the test proves nothing")
-	}
-
-	mod.dropPending(agentID)
-	mod.closeAgentSessions(agentID)
-
-	if mod.pendingCount(agentID) != 0 {
-		t.Fatalf("pending: got %d, want 0", mod.pendingCount(agentID))
-	}
-	if _, live := mod.sessions.Get(s.id); live {
-		t.Fatal("the session survived the disconnect")
-	}
-}
-
-// TestDisconnectAgentLeavesTheParkedListener: a listener is the agent waiting to
-// be called, not a caller it is talking to.
-func TestDisconnectAgentLeavesTheParkedListener(t *testing.T) {
-	mod := testRouterModuleWithAuth(t, &fakeAuth{allow: true})
-	agentID := registeredAgent(mod)
-
-	ch, err := mod.parkListener(agentID)
-	if err != nil {
-		t.Fatalf("park: %v", err)
-	}
-	defer mod.unparkListener(agentID, ch)
-
-	mod.dropPending(agentID)
-	mod.closeAgentSessions(agentID)
-
-	if _, err = mod.parkListener(agentID); !errors.Is(err, errAlreadyListening) {
-		t.Fatal("the disconnect drained the agent's own listener")
 	}
 }
 

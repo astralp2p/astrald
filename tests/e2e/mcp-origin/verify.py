@@ -83,17 +83,17 @@ def main():
         f"the closed agent failed without being refused: {u['detail']}")
 
     x = facts["exchange"]
-    assert x["beta_status"] == "query", (
-        f"beta's listen returned {x['beta_status']!r}, not a query — the guard "
-        "closed agent-to-agent along with the operations")
+    assert x["beta_status"] == "message", (
+        f"beta's read_next returned {x['beta_status']!r}, not a message — the "
+        "guard closed agent-to-agent along with the operations")
     assert x["beta_heard"] == facts["ask"], (
         f"beta heard {x['beta_heard']!r}, not {facts['ask']!r}")
-    assert x["beta_caller"] == x["alpha_caller_expected"], (
-        f"beta's caller was {x['beta_caller']}, not alpha "
-        f"({x['alpha_caller_expected']}) — the query carried the wrong identity")
+    assert x["beta_sender"] == x["alpha_sender_expected"], (
+        f"beta's sender was {x['beta_sender']}, not alpha "
+        f"({x['alpha_sender_expected']}) — the message carried the wrong identity")
     assert x["alpha_got"] == facts["answer"], (
-        f"alpha got {x['alpha_got']!r}, not {facts['answer']!r} — the reply did "
-        "not come back down the session")
+        f"alpha got {x['alpha_got']!r}, not {facts['answer']!r} — the reply "
+        "never reached alpha's inbox")
 
     ops = ", ".join(facts["refusals"])
     print(f"oracle: an agent was refused {ops} and a closed agent, while the "

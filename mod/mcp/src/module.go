@@ -1,8 +1,6 @@
 package mcp
 
 import (
-	"sync"
-
 	"github.com/astralp2p/astral-go/api/mcp"
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astral-go/astral/log"
@@ -26,12 +24,7 @@ type Module struct {
 	// tools are the deployment's own, read once at load — declared_tools.go.
 	tools []declaredTool
 
-	listenMu  sync.Mutex
-	listeners map[string]chan *session   // agent identity -> parked astral-listen; guarded by listenMu
-	pending   map[string][]*pendingQuery // agent identity -> queued queries; guarded by listenMu
-
-	agentIDs sig.Set[string]           // registered agent identities, mirrors mcp__agents
-	sessions sig.Map[string, *session] // session id -> live dialog stream
+	agentIDs sig.Set[string] // registered agent identities, mirrors mcp__agents
 }
 
 func (mod *Module) Run(ctx *astral.Context) error {

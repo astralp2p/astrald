@@ -3,6 +3,7 @@ package mcp
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"time"
@@ -16,6 +17,12 @@ import (
 	mcpsdk "github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
+// Response formats an agent may ask for; the absence of both is auto.
+const (
+	formatRaw     = "raw"
+	formatObjects = "objects"
+)
+
 type queryIn struct {
 	Target        string            `json:"target" jsonschema:"target identity or alias"`
 	Path          string            `json:"path" jsonschema:"query path, e.g. user.info"`
@@ -23,7 +30,6 @@ type queryIn struct {
 	Payload       string            `json:"payload,omitempty" jsonschema:"request payload written after the query is accepted"`
 	PayloadBase64 bool              `json:"payload_base64,omitempty" jsonschema:"payload is base64-encoded binary"`
 	Format        string            `json:"format,omitempty" jsonschema:"response handling: auto (default) detects framed objects vs plain data, raw forces bytes, objects forces framed decoding"`
-	Session       bool              `json:"session,omitempty" jsonschema:"keep the stream open as a dialog session instead of collecting a response"`
 	TimeoutMs     int               `json:"timeout_ms,omitempty" jsonschema:"response window in milliseconds"`
 }
 
@@ -34,7 +40,6 @@ type queryOut struct {
 	Payload   string `json:"payload,omitempty" jsonschema:"raw response payload"`
 	Encoding  string `json:"encoding,omitempty" jsonschema:"payload encoding: utf8 or base64"`
 	Truncated bool   `json:"truncated,omitempty" jsonschema:"response hit a size cap"`
-	SessionID string `json:"session_id,omitempty" jsonschema:"dialog session handle (session mode)"`
 }
 
 func (mod *Module) queryTool(agentID *astral.Identity) mcpsdk.ToolHandlerFor[queryIn, queryOut] {
@@ -84,24 +89,6 @@ func (mod *Module) queryTool(agentID *astral.Identity) mcpsdk.ToolHandlerFor[que
 			}
 		}
 
-		if in.Session {
-			// dialog sessions default to raw — agent-to-agent talk is text
-			format := sessionFormatRaw
-			if in.Format == sessionFormatObjects {
-				format = sessionFormatObjects
-			}
-			s := mod.newSession(sessionInfo{
-				agent:  agentID,
-				conn:   conn,
-				caller: agentID,
-				path:   in.Path,
-				params: in.Args,
-				format: format,
-			})
-			out.SessionID = s.id
-			return nil, out, nil
-		}
-
 		out = mod.collectResponse(conn, in.Format, timeout)
 		return nil, out, nil
 	}
@@ -126,7 +113,7 @@ func (mod *Module) collectResponse(conn astral.Conn, format string, timeout time
 	out.Truncated = total == len(buf)
 	data := buf[:total]
 
-	if len(data) == 0 || format == sessionFormatRaw {
+	if len(data) == 0 || format == formatRaw {
 		out.Payload, out.Encoding = encodePayload(data)
 		return
 	}
@@ -136,7 +123,7 @@ func (mod *Module) collectResponse(conn astral.Conn, format string, timeout time
 	// why: ops answer in framed objects while agents answer in plain text,
 	// and the caller cannot know which — decide from the bytes themselves.
 	switch {
-	case format == sessionFormatObjects,
+	case format == formatObjects,
 		len(objs) > 0 && complete,
 		len(objs) > 0 && !utf8.Valid(data):
 		out.Objects = objs
@@ -179,4 +166,19 @@ func (c *countingReader) Read(p []byte) (int, error) {
 	n, err := c.r.Read(p)
 	c.n += n
 	return n, err
+}
+
+// objectJSON renders an object in the canonical JSON envelope {Type, Object}.
+func objectJSON(obj astral.Object) ([]byte, error) {
+	if u, ok := obj.(*astral.UnparsedObject); ok {
+		return json.Marshal(map[string]any{
+			"Type":    u.Type,
+			"Payload": u.Payload, // marshals as base64
+		})
+	}
+	payload, err := json.Marshal(obj)
+	if err != nil {
+		return nil, err
+	}
+	return json.Marshal(&astral.JSONAdapter{Type: obj.ObjectType(), Object: payload})
 }
