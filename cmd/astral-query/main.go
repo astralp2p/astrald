@@ -9,6 +9,7 @@ import (
 
 	dircli "github.com/astralp2p/astral-go/api/dir/client"
 	"github.com/astralp2p/astral-go/astral"
+	"github.com/astralp2p/astral-go/astral/channel"
 	"github.com/astralp2p/astral-go/lib/astrald"
 	"github.com/astralp2p/astral-go/lib/query"
 	"github.com/astralp2p/astrald/lib/arl"
@@ -21,11 +22,13 @@ const (
 func main() {
 	var zoneFlag string
 	var filterFlag filterList
+	var eosFlag bool
 
 	flag.StringVar(&zoneFlag, "zone", "", "zones to include: any combination of d(evice), v(irtual), n(etwork)")
 	flag.Var(&filterFlag, "filter", "identity `filter` to apply (repeatable)")
+	flag.BoolVar(&eosFlag, "eos", false, "after input ends, send an EOS so a streaming op (objects.store and the like) returns instead of waiting for more input")
 	flag.Usage = func() {
-		fmt.Fprintf(os.Stderr, "usage: %s [-zone dvn] [-filter name]... <query> [-arg <val>]...\n", os.Args[0])
+		fmt.Fprintf(os.Stderr, "usage: %s [-zone dvn] [-filter name]... [-eos] <query> [-arg <val>]...\n", os.Args[0])
 		flag.PrintDefaults()
 	}
 	flag.Parse()
@@ -93,11 +96,30 @@ func main() {
 	}
 
 	// join conn with the terminal
+	inFmt := args["in"]
 	go func() {
 		io.Copy(conn, os.Stdin)
+
+		// why: a streaming op reads its input channel until an EOS and otherwise holds the
+		// session open; io.Copy ending on stdin EOF sends no such marker, so a batch op
+		// (objects.store and the like) never returns and the caller waits on it forever. -eos
+		// signals end-of-input so the op completes. It is opt-in because an interactive or
+		// long-lived session must not have its input closed under it; a caller that pipes a
+		// bounded input and wants the op to finish asks for it. Nothing to terminate when no
+		// input format was set, so it is skipped even under the flag.
+		if eosFlag && inFmt != "" {
+			_ = sendEndOfInput(conn, inFmt)
+		}
 	}()
 
 	io.Copy(os.Stdout, conn)
+}
+
+// sendEndOfInput writes an EOS marker to rw, encoded in format — the format the op decodes its
+// input channel with, since rw carries what the op reads. It is what tells a streaming op that
+// no more input follows.
+func sendEndOfInput(rw io.ReadWriter, format string) error {
+	return channel.New(rw, channel.WithFormats("", format)).Send(&astral.EOS{})
 }
 
 func parseQueryArgs(a []string) map[string]string {
