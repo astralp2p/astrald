@@ -68,14 +68,23 @@ func (mod *Module) AuthorizeRelayFor(ctx *astral.Context, a *nodes.RelayForActio
 	return false
 }
 
-// AuthorizeSeeObjects grants object reads to the user identity itself and to any node in the local swarm.
+// AuthorizeSeeObjects grants object reads to the user identity itself, to this node itself,
+// and to any node in the local swarm.
 //
 // why: the policy is carried over unchanged from the retired per-object read handler.
 // SeeObjects covers every read op in mod/objects, not just objects.read, but the eleven ops it
 // adds were unauthorized entirely — so no caller that could read before loses access here, and
 // none gains any. Replacing the policy is stage 2 of the parent task, not this change.
+//
+// why this node's own identity is granted: matches AuthorizeStoreObjects — a local caller with
+// no identity is promoted to the node (core/router.go), so the node reads back on an unclaimed
+// node the objects it just stored there, before any user or swarm exists.
 func (mod *Module) AuthorizeSeeObjects(ctx *astral.Context, a *auth.SeeObjectsAction) bool {
 	if a.Actor().IsEqual(mod.Identity()) {
+		return true
+	}
+
+	if a.Actor().IsEqual(mod.node.Identity()) {
 		return true
 	}
 
@@ -88,8 +97,8 @@ func (mod *Module) AuthorizeSeeObjects(ctx *astral.Context, a *auth.SeeObjectsAc
 	return false
 }
 
-// AuthorizeStoreObjects grants object writes to the user identity itself and to any node in
-// the local swarm.
+// AuthorizeStoreObjects grants object writes to the user identity itself, to this node
+// itself, and to any node in the local swarm.
 //
 // why: the eight ops StoreObjects covers had no authorization at all, so there is no policy
 // to carry over. This is the narrowest rule that keeps the node working: the swarm pushes
@@ -97,8 +106,18 @@ func (mod *Module) AuthorizeSeeObjects(ctx *astral.Context, a *auth.SeeObjectsAc
 // caller identity is the node itself (core/router.go). An app holding no permits is refused,
 // which is the point. Replacing this handler with a root rule and contract-issued grants is
 // stage 2 of the parent task.
+//
+// why this node's own identity is granted: a local caller carrying no identity is promoted to
+// it (core/router.go), which is how the CLI and apphost reach these ops — including the
+// user-provisioning ceremony, which stores the derived user key on an unclaimed node before
+// any user or swarm exists, when neither other branch can match. AuthorizeAdminObjects, the
+// stricter destructive-write handler, already grants the node for the same reason.
 func (mod *Module) AuthorizeStoreObjects(ctx *astral.Context, a *auth.StoreObjectsAction) bool {
 	if a.Actor().IsEqual(mod.Identity()) {
+		return true
+	}
+
+	if a.Actor().IsEqual(mod.node.Identity()) {
 		return true
 	}
 
