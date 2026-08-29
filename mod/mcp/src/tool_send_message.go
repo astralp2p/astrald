@@ -2,6 +2,7 @@ package mcp
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	authapi "github.com/astralp2p/astral-go/api/auth"
@@ -48,9 +49,37 @@ func (mod *Module) sendMessageTool(agentID *astral.Identity) mcpsdk.ToolHandlerF
 			Content: astral.String32(in.Content),
 		}
 
+		// why the row is written here and nothing above it is: a stored list of
+		// refusals would tell a recipient that refuses apart from one that does
+		// not exist, which is the collapse the two refusals above are built on.
+		if err = mod.db.InsertOutbox(&dbOutbox{
+			ID:        msg.ID,
+			Sender:    agentID,
+			Recipient: targetID,
+			Content:   in.Content,
+		}); err != nil {
+			return nil, out, err
+		}
+
 		if err = mod.deliverMessage(agentID, targetID, msg); err != nil {
+			// why errNoAnswer stamps nothing: an answer that never arrived
+			// proves nothing about the write, and the row that says nothing is
+			// the row that is right.
+			switch {
+			case errors.Is(err, errRefused):
+				_ = mod.db.StampOutboxFailed(msg.ID)
+				_ = mod.db.SetOutboxErr(msg.ID, err.Error())
+			case errors.Is(err, errNotSent):
+				_ = mod.db.StampOutboxFailed(msg.ID)
+			}
+
+			// why the agent is told the same words in all three cases: which of
+			// them happened is a fact about the row, and the row is what the
+			// outbox tool answers.
 			return nil, out, fmt.Errorf("delivery failed: %v", err)
 		}
+
+		_ = mod.db.StampOutboxStored(msg.ID)
 
 		out.ID = msg.ID.String()
 		return nil, out, nil

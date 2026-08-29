@@ -25,7 +25,7 @@ type messageOut struct {
 	Sender      string `json:"sender,omitempty" jsonschema:"sender identity, and the address a reply goes to"`
 	SenderAlias string `json:"sender_alias,omitempty" jsonschema:"sender display name"`
 	Content     string `json:"content,omitempty" jsonschema:"the message body"`
-	DeliveredAt string `json:"delivered_at,omitempty" jsonschema:"when the message arrived"`
+	StoredAt    string `json:"stored_at,omitempty" jsonschema:"when this node stored the message"`
 }
 
 func (mod *Module) readMessageTool(agentID *astral.Identity) mcpsdk.ToolHandlerFor[readMessageIn, messageOut] {
@@ -43,6 +43,8 @@ func (mod *Module) readMessageTool(agentID *astral.Identity) mcpsdk.ToolHandlerF
 			return nil, out, err
 		}
 
+		mod.noteFetched(row)
+
 		return nil, messageResult(mod, row), nil
 	}
 }
@@ -54,7 +56,7 @@ func messageResult(mod *Module, row *dbMessage) messageOut {
 		Sender:      row.Sender.String(),
 		SenderAlias: mod.Dir.DisplayName(row.Sender),
 		Content:     row.Content,
-		DeliveredAt: stampMessageTime(row.DeliveredAt),
+		StoredAt:    stampMessageTime(row.StoredAt),
 	}
 }
 

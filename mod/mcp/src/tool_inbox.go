@@ -23,7 +23,7 @@ type inboxEntry struct {
 	ID          string `json:"id" jsonschema:"pass to read_message to read the body"`
 	Sender      string `json:"sender" jsonschema:"sender identity"`
 	SenderAlias string `json:"sender_alias,omitempty" jsonschema:"sender display name"`
-	DeliveredAt string `json:"delivered_at" jsonschema:"when the message arrived"`
+	StoredAt    string `json:"stored_at" jsonschema:"when this node stored the message"`
 	Read        bool   `json:"read" jsonschema:"the message has been read"`
 }
 
@@ -49,7 +49,7 @@ func (mod *Module) inboxTool(agentID *astral.Identity) mcpsdk.ToolHandlerFor[inb
 				ID:          row.ID.String(),
 				Sender:      row.Sender.String(),
 				SenderAlias: mod.Dir.DisplayName(row.Sender),
-				DeliveredAt: stampMessageTime(row.DeliveredAt),
+				StoredAt:    stampMessageTime(row.StoredAt),
 				Read:        row.ReadAt != nil,
 			}
 		}

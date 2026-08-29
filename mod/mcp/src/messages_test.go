@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"io"
 	"testing"
 	"time"
 
@@ -26,15 +27,7 @@ func testLogger() *log.Logger {
 func testMessageModule(t *testing.T) *Module {
 	t.Helper()
 
-	gdb, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
-	if err != nil {
-		t.Fatalf("open db: %v", err)
-	}
-
-	db := &DB{DB: gdb}
-	if err = db.MigrateMessages(); err != nil {
-		t.Fatalf("migrate: %v", err)
-	}
+	db := testDB(t)
 
 	mod := &Module{
 		Deps:   Deps{Auth: &fakeAuth{allow: true}},
@@ -44,8 +37,53 @@ func testMessageModule(t *testing.T) *Module {
 		log:    testLogger(),
 	}
 	mod.Dir = &stubDir{aliases: map[string]*astral.Identity{}}
+	mod.node = &loopbackNode{identity: astral.GenerateIdentity(), router: mod}
 
 	return mod
+}
+
+// loopbackNode routes every query to one module, which is what makes a delivery
+// and a receipt reachable in a test: the caller's side and the answering side
+// are the same code, and only the identities differ.
+type loopbackNode struct {
+	identity *astral.Identity
+	router   astral.Router
+}
+
+func (n *loopbackNode) Identity() *astral.Identity { return n.identity }
+
+func (n *loopbackNode) RouteQuery(ctx *astral.Context, q *astral.InFlightQuery, w io.WriteCloser) (io.WriteCloser, error) {
+	return n.router.RouteQuery(ctx, q, w)
+}
+
+// testDB opens an empty store with both tables.
+//
+// why the pool is capped at one connection: an in-memory sqlite database
+// belongs to the connection that opened it, so a second pooled connection is a
+// second, empty database. The receipt runs on a goroutine the read does not
+// wait on, which is exactly what opens one.
+func testDB(t *testing.T) *DB {
+	t.Helper()
+
+	gdb, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	if err != nil {
+		t.Fatalf("open db: %v", err)
+	}
+
+	pool, err := gdb.DB()
+	if err != nil {
+		t.Fatalf("pool: %v", err)
+	}
+	pool.SetMaxOpenConns(1)
+
+	db := &DB{DB: gdb}
+	if err = db.MigrateMessages(); err != nil {
+		t.Fatalf("migrate messages: %v", err)
+	}
+	if err = db.MigrateOutbox(); err != nil {
+		t.Fatalf("migrate outbox: %v", err)
+	}
+	return db
 }
 
 // testID makes an identifier a failure can name.

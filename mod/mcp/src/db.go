@@ -64,8 +64,9 @@ func (db *DB) ListAgents() (list []dbAgent, _ error) {
 }
 
 // dbMessage is one message in a recipient's inbox. The row is the whole of the
-// message's state: delivered_at is stamped on arrival, read_at when the
-// recipient claims or opens it, and nothing else changes.
+// message's state: stored_at is stamped on arrival, read_at when the recipient
+// claims or opens it, and the two receipt columns track the fact owed to a
+// sender on another node.
 type dbMessage struct {
 	// note: the id is the sender's, minted before delivery, so a delivery that
 	// arrives twice collides here and is stored once.
@@ -73,12 +74,31 @@ type dbMessage struct {
 	// fixme: the key is the id alone, so one id space spans every inbox on the
 	// node. A sender re-using an id across two recipients loses the second
 	// delivery. The key an inbox needs is (recipient, id).
-	ID          mcpapi.MessageID `gorm:"primaryKey"`
-	Sender      *astral.Identity `gorm:"index"`
-	Recipient   *astral.Identity `gorm:"index:idx_mcp_messages_inbox,priority:1"`
-	Content     string
-	DeliveredAt time.Time `gorm:"index:idx_mcp_messages_inbox,priority:2"`
-	ReadAt      *time.Time
+	ID        mcpapi.MessageID `gorm:"primaryKey"`
+	Sender    *astral.Identity `gorm:"index"`
+	Recipient *astral.Identity `gorm:"index:idx_mcp_messages_inbox,priority:1"`
+	Content   string
+
+	// StoredAt is when this node wrote the row. It is a claim about the node
+	// and not about the recipient, who may not run for days — beside an outbox
+	// whose own success state would also be called delivered, one word would
+	// name two things.
+	StoredAt time.Time `gorm:"index:idx_mcp_messages_inbox,priority:2"`
+
+	ReadAt *time.Time
+
+	// ReceiptDueAt is set when the body is first handed out and the sender is
+	// not on this node. A local sender's outbox row is stamped directly and
+	// never becomes due — see noteFetched.
+	//
+	// why the fact is recorded even though only one attempt is made: a receipt
+	// lost in transit is the sender left believing a message was never
+	// collected. The row is what a sweep would read if one is ever written,
+	// and it costs one column to leave that door open.
+	ReceiptDueAt *time.Time
+
+	// ReceiptStoredAt is the sender's node acknowledging our receipt.
+	ReceiptStoredAt *time.Time
 }
 
 func (dbMessage) TableName() string {
@@ -86,7 +106,21 @@ func (dbMessage) TableName() string {
 }
 
 // MigrateMessages brings the message table to the current schema.
+//
+// why the rename is its own step: AutoMigrate adds a column, it never renames
+// one, so without this a stored table keeps delivered_at and grows an empty
+// stored_at beside it — every message already held reads as never stored.
 func (db *DB) MigrateMessages() error {
+	m := db.Migrator()
+
+	if m.HasTable(&dbMessage{}) &&
+		m.HasColumn(&dbMessage{}, "delivered_at") &&
+		!m.HasColumn(&dbMessage{}, "stored_at") {
+		if err := m.RenameColumn(&dbMessage{}, "delivered_at", "stored_at"); err != nil {
+			return err
+		}
+	}
+
 	return db.AutoMigrate(&dbMessage{})
 }
 
@@ -94,7 +128,7 @@ func (db *DB) MigrateMessages() error {
 // whose id is already stored is left as it stands, so a sender that retries
 // after a lost acknowledgement delivers once.
 func (db *DB) InsertMessage(row *dbMessage) error {
-	row.DeliveredAt = time.Now().UTC()
+	row.StoredAt = time.Now().UTC()
 	return db.Clauses(clause.OnConflict{DoNothing: true}).Create(row).Error
 }
 
@@ -104,7 +138,7 @@ func (db *DB) ListInbox(recipient *astral.Identity, unreadOnly bool, limit int) 
 	if unreadOnly {
 		tx = tx.Where("read_at IS NULL")
 	}
-	return list, tx.Order("delivered_at").Limit(limit).Find(&list).Error
+	return list, tx.Order("stored_at").Limit(limit).Find(&list).Error
 }
 
 // ReadMessage returns one message addressed to the recipient and stamps it
@@ -142,7 +176,7 @@ func (db *DB) ClaimNext(recipient *astral.Identity) (*dbMessage, error) {
 
 		err := db.
 			Where("recipient = ? AND read_at IS NULL", recipient).
-			Order("delivered_at").
+			Order("stored_at").
 			First(&row).Error
 		if err != nil {
 			return nil, err
