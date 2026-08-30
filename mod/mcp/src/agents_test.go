@@ -48,7 +48,14 @@ func (s *stubDir) SetAlias(id *astral.Identity, alias string) error {
 	return nil
 }
 
+// why the raw form is tried first: the real directory parses an identity
+// before it looks in the alias table (mod/dir/src/module.go), so a stub that
+// only knew aliases would pass a caller the node would refuse — and fail one
+// the node would serve.
 func (s *stubDir) ResolveIdentity(name string) (*astral.Identity, error) {
+	if id, err := astral.ParseIdentity(name); err == nil {
+		return id, nil
+	}
 	if id, ok := s.aliases[name]; ok {
 		return id, nil
 	}

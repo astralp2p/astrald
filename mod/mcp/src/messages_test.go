@@ -118,7 +118,7 @@ func TestInsertMessageStoresOnce(t *testing.T) {
 	storeOne(t, mod, sender, recipient, testID(1), "first")
 	storeOne(t, mod, sender, recipient, testID(1), "second")
 
-	rows, err := mod.db.ListInbox(recipient, false, 10)
+	rows, err := mod.db.ListInbox(recipient, inboxQuery{Limit: 10})
 	if err != nil {
 		t.Fatalf("list: %v", err)
 	}
@@ -138,7 +138,7 @@ func TestListInboxOrdersAndFilters(t *testing.T) {
 	storeOne(t, mod, sender, recipient, testID(2), "two")
 	storeOne(t, mod, sender, astral.GenerateIdentity(), testID(3), "elsewhere")
 
-	rows, err := mod.db.ListInbox(recipient, false, 10)
+	rows, err := mod.db.ListInbox(recipient, inboxQuery{Limit: 10})
 	if err != nil {
 		t.Fatalf("list: %v", err)
 	}
@@ -150,7 +150,7 @@ func TestListInboxOrdersAndFilters(t *testing.T) {
 		t.Fatalf("read: %v", err)
 	}
 
-	rows, err = mod.db.ListInbox(recipient, true, 10)
+	rows, err = mod.db.ListInbox(recipient, inboxQuery{UnreadOnly: true, Limit: 10})
 	if err != nil {
 		t.Fatalf("list unread: %v", err)
 	}
@@ -210,7 +210,7 @@ func TestClaimNextTakesEachMessageOnce(t *testing.T) {
 	storeOne(t, mod, sender, recipient, testID(2), "two")
 
 	for _, want := range []mcpapi.MessageID{testID(1), testID(2)} {
-		row, err := mod.db.ClaimNext(recipient)
+		row, err := mod.db.ClaimNext(recipient, inboxQuery{})
 		if err != nil {
 			t.Fatalf("claim %v: %v", want, err)
 		}
@@ -222,7 +222,7 @@ func TestClaimNextTakesEachMessageOnce(t *testing.T) {
 		}
 	}
 
-	if _, err := mod.db.ClaimNext(recipient); !errors.Is(err, gorm.ErrRecordNotFound) {
+	if _, err := mod.db.ClaimNext(recipient, inboxQuery{}); !errors.Is(err, gorm.ErrRecordNotFound) {
 		t.Fatalf("third claim: got %v, want gorm.ErrRecordNotFound", err)
 	}
 }
@@ -238,7 +238,7 @@ func TestClaimNextWaitsForDelivery(t *testing.T) {
 		storeOne(t, mod, sender, recipient, testID(1), "late")
 	}()
 
-	row, err := mod.claimNext(context.Background(), recipient, 3*time.Second)
+	row, err := mod.claimNext(context.Background(), recipient, inboxQuery{}, 3*time.Second)
 	if err != nil {
 		t.Fatalf("claim: %v", err)
 	}
@@ -250,7 +250,7 @@ func TestClaimNextWaitsForDelivery(t *testing.T) {
 func TestClaimNextTimesOutEmpty(t *testing.T) {
 	mod := testMessageModule(t)
 
-	_, err := mod.claimNext(context.Background(), astral.GenerateIdentity(), 50*time.Millisecond)
+	_, err := mod.claimNext(context.Background(), astral.GenerateIdentity(), inboxQuery{}, 50*time.Millisecond)
 	if !errors.Is(err, gorm.ErrRecordNotFound) {
 		t.Fatalf("claim: got %v, want gorm.ErrRecordNotFound", err)
 	}
@@ -326,7 +326,7 @@ func TestRouteQueryRefusesOversizeMessage(t *testing.T) {
 		t.Fatalf("delivery answered %T, want an error", obj)
 	}
 
-	rows, err := mod.db.ListInbox(recipient, false, 10)
+	rows, err := mod.db.ListInbox(recipient, inboxQuery{Limit: 10})
 	if err != nil {
 		t.Fatalf("list: %v", err)
 	}

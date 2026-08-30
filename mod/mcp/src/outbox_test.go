@@ -249,7 +249,7 @@ func TestReadStampsALocalSenderOutbox(t *testing.T) {
 			}
 
 			// a local sender is told directly, so no receipt is ever owed
-			inbox, err := mod.db.ListInbox(recipient, false, 10)
+			inbox, err := mod.db.ListInbox(recipient, inboxQuery{Limit: 10})
 			if err != nil {
 				t.Fatalf("list inbox: %v", err)
 			}
@@ -335,7 +335,7 @@ func TestReceiptCarriesTheFetchAcrossNodes(t *testing.T) {
 		return onlyOutboxRow(t, senderMod, sender).FetchedAt != nil
 	})
 
-	inbox, err := recipientMod.db.ListInbox(recipient, false, 10)
+	inbox, err := recipientMod.db.ListInbox(recipient, inboxQuery{Limit: 10})
 	if err != nil {
 		t.Fatalf("list inbox: %v", err)
 	}
@@ -343,7 +343,7 @@ func TestReceiptCarriesTheFetchAcrossNodes(t *testing.T) {
 		t.Fatal("a remote sender's message owes no receipt")
 	}
 	waitFor(t, "the receipt is acknowledged", func() bool {
-		rows, _ := recipientMod.db.ListInbox(recipient, false, 10)
+		rows, _ := recipientMod.db.ListInbox(recipient, inboxQuery{Limit: 10})
 		return rows[0].ReceiptStoredAt != nil
 	})
 }
@@ -361,7 +361,7 @@ func TestReceiptIsOwedOnce(t *testing.T) {
 	if _, _, err := recipientMod.readMessageTool(recipient)(context.Background(), nil, readMessageIn{ID: testID(1).String()}); err != nil {
 		t.Fatalf("first read: %v", err)
 	}
-	rows, err := recipientMod.db.ListInbox(recipient, false, 10)
+	rows, err := recipientMod.db.ListInbox(recipient, inboxQuery{Limit: 10})
 	if err != nil {
 		t.Fatalf("list: %v", err)
 	}
@@ -372,7 +372,7 @@ func TestReceiptIsOwedOnce(t *testing.T) {
 	if _, _, err = recipientMod.readMessageTool(recipient)(context.Background(), nil, readMessageIn{ID: testID(1).String()}); err != nil {
 		t.Fatalf("second read: %v", err)
 	}
-	rows, _ = recipientMod.db.ListInbox(recipient, false, 10)
+	rows, _ = recipientMod.db.ListInbox(recipient, inboxQuery{Limit: 10})
 	if !rows[0].ReceiptDueAt.Equal(first) {
 		t.Fatalf("receipt_due_at moved from %v to %v", first, rows[0].ReceiptDueAt)
 	}

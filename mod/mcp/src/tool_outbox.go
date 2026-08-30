@@ -10,6 +10,7 @@ import (
 
 type outboxIn struct {
 	ID             string `json:"id,omitempty" jsonschema:"one message id, as send_message answered it; answers that send alone"`
+	Thread         string `json:"thread,omitempty" jsonschema:"list only one exchange, by its thread id"`
 	AwaitingPickup bool   `json:"awaiting_pickup,omitempty" jsonschema:"list only sends their node stored and has not handed out — the ones still waiting on the recipient"`
 	OldestFirst    bool   `json:"oldest_first,omitempty" jsonschema:"list oldest first, to reach the longest outstanding sends"`
 	Limit          int    `json:"limit,omitempty" jsonschema:"how many messages to list"`
@@ -22,6 +23,7 @@ type outboxEntry struct {
 	ID             string `json:"id" jsonschema:"the id the message was sent under"`
 	Recipient      string `json:"recipient" jsonschema:"recipient identity"`
 	RecipientAlias string `json:"recipient_alias,omitempty" jsonschema:"recipient display name"`
+	Thread         string `json:"thread" jsonschema:"the exchange this send belongs to"`
 	SentAt         string `json:"sent_at" jsonschema:"when this node took the message"`
 	StoredAt       string `json:"stored_at,omitempty" jsonschema:"when the recipient's node acknowledged the write"`
 	FailedAt       string `json:"failed_at,omitempty" jsonschema:"when the delivery was known not to have been stored"`
@@ -47,6 +49,12 @@ func (mod *Module) outboxTool(agentID *astral.Identity) mcpsdk.ToolHandlerFor[ou
 			}
 		}
 
+		if in.Thread != "" {
+			if q.Thread, err = mcpapi.ParseMessageID(in.Thread); err != nil {
+				return nil, out, err
+			}
+		}
+
 		rows, err := mod.listOutbox(agentID, q)
 		if err != nil {
 			return nil, out, err
@@ -58,6 +66,7 @@ func (mod *Module) outboxTool(agentID *astral.Identity) mcpsdk.ToolHandlerFor[ou
 				ID:             row.ID.String(),
 				Recipient:      row.Recipient.String(),
 				RecipientAlias: mod.Dir.DisplayName(row.Recipient),
+				Thread:         row.Thread.String(),
 				SentAt:         stampMessageTime(row.SentAt),
 				StoredAt:       stampOptionalTime(row.StoredAt),
 				FailedAt:       stampOptionalTime(row.FailedAt),

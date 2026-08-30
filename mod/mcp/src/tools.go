@@ -49,14 +49,17 @@ func (mod *Module) addTools(s *mcpsdk.Server, agentID *astral.Identity) {
 		Name: toolSendMessage,
 		Description: "Send a message to another agent. It lands in that " +
 			"agent's inbox and waits there until read, so the recipient need " +
-			"not be running. Returns the message id. To answer a message you " +
-			"received, send one back to its sender.",
+			"not be running. Returns the message id and the thread it went " +
+			"into. To answer a message you received, send one back to its " +
+			"sender carrying that message's thread, and the two sides can " +
+			"tell the exchange apart from every other.",
 	}, mod.sendMessageTool(agentID))
 
 	mcpsdk.AddTool(s, &mcpsdk.Tool{
 		Name: toolInbox,
-		Description: "List the messages waiting for you: sender, arrival and " +
-			"read state, without their bodies. Read one with read_message.",
+		Description: "List the messages waiting for you: sender, arrival, " +
+			"thread and read state, without their bodies. Pass a thread to " +
+			"see one exchange. Read one with read_message.",
 	}, mod.inboxTool(agentID))
 
 	mcpsdk.AddTool(s, &mcpsdk.Tool{
@@ -67,11 +70,14 @@ func (mod *Module) addTools(s *mcpsdk.Server, agentID *astral.Identity) {
 	mcpsdk.AddTool(s, &mcpsdk.Tool{
 		Name: toolReadNext,
 		Description: "Wait for your oldest unread message, claim it and " +
-			"return it, or {status: timeout} when none arrived. Nothing is " +
-			"lost between calls: a message that arrives while you are not " +
-			"reading waits in the inbox. Each call takes at most one message: " +
-			"report what happened rather than looping indefinitely, unless " +
-			"asked to keep serving.",
+			"return it, or {status: timeout} when none arrived. Pass from or " +
+			"thread to wait for one sender or one exchange: every other " +
+			"message is left untouched, so waiting on an answer cannot claim " +
+			"mail you did not ask for — and a claim cannot be given back. " +
+			"Nothing is lost between calls: a message that arrives while you " +
+			"are not reading waits in the inbox. Each call takes at most one " +
+			"message: report what happened rather than looping indefinitely, " +
+			"unless asked to keep serving.",
 	}, mod.readNextTool(agentID))
 
 	mcpsdk.AddTool(s, &mcpsdk.Tool{
