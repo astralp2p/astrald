@@ -7,11 +7,6 @@ import (
 	mcpsdk "github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
-const (
-	defaultInboxLimit = 50
-	maxInboxLimit     = 200
-)
-
 type inboxIn struct {
 	UnreadOnly bool `json:"unread_only,omitempty" jsonschema:"list only the messages not read yet"`
 	Limit      int  `json:"limit,omitempty" jsonschema:"how many messages to list, oldest first"`
@@ -33,12 +28,7 @@ type inboxOut struct {
 
 func (mod *Module) inboxTool(agentID *astral.Identity) mcpsdk.ToolHandlerFor[inboxIn, inboxOut] {
 	return func(ctx context.Context, _ *mcpsdk.CallToolRequest, in inboxIn) (res *mcpsdk.CallToolResult, out inboxOut, err error) {
-		limit := defaultInboxLimit
-		if in.Limit > 0 {
-			limit = min(in.Limit, maxInboxLimit)
-		}
-
-		rows, err := mod.db.ListInbox(agentID, in.UnreadOnly, limit)
+		rows, err := mod.listInbox(agentID, in.UnreadOnly, in.Limit)
 		if err != nil {
 			return nil, out, err
 		}

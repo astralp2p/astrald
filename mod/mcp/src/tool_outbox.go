@@ -7,11 +7,6 @@ import (
 	mcpsdk "github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
-const (
-	defaultOutboxLimit = 50
-	maxOutboxLimit     = 200
-)
-
 type outboxIn struct {
 	Limit int `json:"limit,omitempty" jsonschema:"how many messages to list, newest first"`
 }
@@ -36,15 +31,7 @@ type outboxOut struct {
 
 func (mod *Module) outboxTool(agentID *astral.Identity) mcpsdk.ToolHandlerFor[outboxIn, outboxOut] {
 	return func(ctx context.Context, _ *mcpsdk.CallToolRequest, in outboxIn) (res *mcpsdk.CallToolResult, out outboxOut, err error) {
-		limit := defaultOutboxLimit
-		if in.Limit > 0 {
-			limit = min(in.Limit, maxOutboxLimit)
-		}
-
-		// why the sender is the closure's identity and never an argument: an
-		// agent's own sends are the only ones it may read, and an argument
-		// would be a claim the route already answers.
-		rows, err := mod.db.ListOutbox(agentID, limit)
+		rows, err := mod.listOutbox(agentID, in.Limit)
 		if err != nil {
 			return nil, out, err
 		}

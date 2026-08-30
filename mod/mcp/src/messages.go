@@ -7,6 +7,7 @@ import (
 	"io"
 	"time"
 
+	authapi "github.com/astralp2p/astral-go/api/auth"
 	mcpapi "github.com/astralp2p/astral-go/api/mcp"
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astral-go/astral/channel"
@@ -25,6 +26,70 @@ var (
 	errRefused  = errors.New("the recipient's node refused it")
 	errNoAnswer = errors.New("the message left and nothing came back")
 )
+
+// sendMessage puts one message to a recipient and records what became of it.
+// It answers the id the message was stored under.
+//
+// why the two refusals answer the same words: an agent learns that it cannot
+// reach this recipient, and not whether the recipient exists.
+func (mod *Module) sendMessage(agentID *astral.Identity, to, content string) (id mcpapi.MessageID, err error) {
+	targetID, err := mod.Dir.ResolveIdentity(to)
+	if err != nil {
+		return id, fmt.Errorf("unknown recipient: %v", to)
+	}
+
+	// The same question astral-query asks about the same pair: what this agent
+	// may reach is its owner's decision, and a message buys it no reach it did
+	// not have.
+	if !mod.Auth.Authorize(mod.ctx, &mcpapi.CallAgentAction{
+		Action: authapi.NewAction(agentID),
+		ToID:   targetID,
+	}) {
+		return id, fmt.Errorf("unknown recipient: %v", to)
+	}
+
+	if len(content) > mod.config.MaxPayloadBytes {
+		return id, fmt.Errorf("content is over %v bytes", mod.config.MaxPayloadBytes)
+	}
+
+	msg := &mcpapi.Message{
+		ID:      mcpapi.NewMessageID(),
+		Content: astral.String32(content),
+	}
+
+	// why the row is written here and nothing above it is: a stored list of
+	// refusals would tell a recipient that refuses apart from one that does not
+	// exist, which is the collapse the two refusals above are built on.
+	if err = mod.db.InsertOutbox(&dbOutbox{
+		ID:        msg.ID,
+		Sender:    agentID,
+		Recipient: targetID,
+		Content:   content,
+	}); err != nil {
+		return id, err
+	}
+
+	if err = mod.deliverMessage(agentID, targetID, msg); err != nil {
+		// why errNoAnswer stamps nothing: an answer that never arrived proves
+		// nothing about the write, and the row that says nothing is the row
+		// that is right.
+		switch {
+		case errors.Is(err, errRefused):
+			_ = mod.db.StampOutboxFailed(msg.ID)
+			_ = mod.db.SetOutboxErr(msg.ID, err.Error())
+		case errors.Is(err, errNotSent):
+			_ = mod.db.StampOutboxFailed(msg.ID)
+		}
+
+		// why the caller is told the same words in all three cases: which one
+		// happened is a fact about the row, and the outbox is what answers it.
+		return id, fmt.Errorf("delivery failed: %v", err)
+	}
+
+	_ = mod.db.StampOutboxStored(msg.ID)
+
+	return msg.ID, nil
+}
 
 // deliverMessage puts the message to the recipient and returns once the
 // recipient's node has stored it.
