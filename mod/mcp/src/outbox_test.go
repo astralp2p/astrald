@@ -32,7 +32,7 @@ func sendPair(t *testing.T, mod *Module) (sender, recipient *astral.Identity) {
 func onlyOutboxRow(t *testing.T, mod *Module, sender *astral.Identity) dbOutbox {
 	t.Helper()
 
-	rows, err := mod.db.ListOutbox(sender, 10)
+	rows, err := mod.db.ListOutbox(sender, outboxQuery{Limit: 10})
 	if err != nil {
 		t.Fatalf("list outbox: %v", err)
 	}
@@ -166,7 +166,7 @@ func TestSendMessageRecordsNothingItRefusedItself(t *testing.T) {
 				t.Fatal("the send was accepted")
 			}
 
-			rows, err := mod.db.ListOutbox(sender, 10)
+			rows, err := mod.db.ListOutbox(sender, outboxQuery{Limit: 10})
 			if err != nil {
 				t.Fatalf("list: %v", err)
 			}
@@ -275,7 +275,7 @@ func TestReadWithNoOutboxRowSucceeds(t *testing.T) {
 	if out.Status != "message" {
 		t.Fatalf("status %q, want a message", out.Status)
 	}
-	if rows, _ := mod.db.ListOutbox(sender, 10); len(rows) != 0 {
+	if rows, _ := mod.db.ListOutbox(sender, outboxQuery{Limit: 10}); len(rows) != 0 {
 		t.Fatalf("%v rows appeared from a read", len(rows))
 	}
 }
@@ -578,4 +578,133 @@ func waitFor(t *testing.T, what string, done func() bool) {
 func isAck(obj astral.Object) bool {
 	_, ok := obj.(*astral.Ack)
 	return ok
+}
+
+// seedOutbox writes one row and stamps it into the state the case needs.
+func seedOutbox(t *testing.T, mod *Module, sender *astral.Identity, id mcpapi.MessageID, stored, fetched bool) {
+	t.Helper()
+
+	if err := mod.db.InsertOutbox(&dbOutbox{
+		ID: id, Sender: sender, Recipient: astral.GenerateIdentity(), Content: "x",
+	}); err != nil {
+		t.Fatalf("insert %v: %v", id, err)
+	}
+	if stored {
+		if err := mod.db.StampOutboxStored(id); err != nil {
+			t.Fatalf("stamp stored %v: %v", id, err)
+		}
+	}
+	if fetched {
+		if err := mod.db.StampOutboxFetched(id); err != nil {
+			t.Fatalf("stamp fetched %v: %v", id, err)
+		}
+	}
+
+	// arrival is stamped by the clock and the list is ordered by it
+	time.Sleep(2 * time.Millisecond)
+}
+
+// send_message answers an id, so the id is a handle: it names one send and
+// answers that send alone.
+func TestOutboxAnswersOneSendByID(t *testing.T) {
+	mod := testMessageModule(t)
+	sender := astral.GenerateIdentity()
+
+	seedOutbox(t, mod, sender, testID(1), true, false)
+	seedOutbox(t, mod, sender, testID(2), true, true)
+
+	_, out, err := mod.outboxTool(sender)(context.Background(), nil, outboxIn{ID: testID(2).String()})
+	if err != nil {
+		t.Fatalf("outbox: %v", err)
+	}
+	if len(out.Messages) != 1 || out.Messages[0].ID != testID(2).String() {
+		t.Fatalf("listed %+v, want that send alone", out.Messages)
+	}
+
+	// an id belonging to nobody answers nothing rather than everything
+	_, out, err = mod.outboxTool(sender)(context.Background(), nil, outboxIn{ID: testID(9).String()})
+	if err != nil {
+		t.Fatalf("outbox: %v", err)
+	}
+	if len(out.Messages) != 0 {
+		t.Fatalf("an unknown id listed %v rows", len(out.Messages))
+	}
+}
+
+// An id is not a way around the sender scope: another agent's send is not one
+// this agent can name.
+func TestOutboxByIDStaysWithinTheCaller(t *testing.T) {
+	mod := testMessageModule(t)
+	mine, other := astral.GenerateIdentity(), astral.GenerateIdentity()
+
+	seedOutbox(t, mod, other, testID(1), true, false)
+
+	_, out, err := mod.outboxTool(mine)(context.Background(), nil, outboxIn{ID: testID(1).String()})
+	if err != nil {
+		t.Fatalf("outbox: %v", err)
+	}
+	if len(out.Messages) != 0 {
+		t.Fatal("another agent's send is readable by id")
+	}
+}
+
+// The orchestrator's question: which sends are in a mailbox and not yet taken.
+// A delivery that failed waits on nobody, and one already collected is done.
+func TestOutboxAwaitingPickupIsStoredAndNotFetched(t *testing.T) {
+	mod := testMessageModule(t)
+	sender := astral.GenerateIdentity()
+
+	seedOutbox(t, mod, sender, testID(1), true, false)  // waiting on them
+	seedOutbox(t, mod, sender, testID(2), true, true)   // collected
+	seedOutbox(t, mod, sender, testID(3), false, false) // fate unknown
+	seedOutbox(t, mod, sender, testID(4), false, false)
+	if err := mod.db.StampOutboxFailed(testID(4)); err != nil { // did not land
+		t.Fatalf("stamp failed: %v", err)
+	}
+
+	_, out, err := mod.outboxTool(sender)(context.Background(), nil, outboxIn{AwaitingPickup: true})
+	if err != nil {
+		t.Fatalf("outbox: %v", err)
+	}
+	if len(out.Messages) != 1 || out.Messages[0].ID != testID(1).String() {
+		t.Fatalf("listed %+v, want the stored-and-uncollected send alone", out.Messages)
+	}
+}
+
+// A sent list reads newest first, and the sends worth chasing are the oldest —
+// exactly the rows a newest-first cap drops.
+func TestOutboxReachesTheOldestSends(t *testing.T) {
+	mod := testMessageModule(t)
+	sender := astral.GenerateIdentity()
+
+	for i := range 5 {
+		seedOutbox(t, mod, sender, testID(byte(i+1)), true, false)
+	}
+
+	_, newest, err := mod.outboxTool(sender)(context.Background(), nil, outboxIn{Limit: 2})
+	if err != nil {
+		t.Fatalf("outbox: %v", err)
+	}
+	if newest.Messages[0].ID != testID(5).String() {
+		t.Fatalf("first newest-first entry %v, want the last send", newest.Messages[0].ID)
+	}
+
+	_, oldest, err := mod.outboxTool(sender)(context.Background(), nil, outboxIn{Limit: 2, OldestFirst: true})
+	if err != nil {
+		t.Fatalf("outbox: %v", err)
+	}
+	if oldest.Messages[0].ID != testID(1).String() {
+		t.Fatalf("first oldest-first entry %v, want the first send", oldest.Messages[0].ID)
+	}
+}
+
+// A malformed id is refused rather than read as "list everything".
+func TestOutboxRefusesAMalformedID(t *testing.T) {
+	mod := testMessageModule(t)
+	sender := astral.GenerateIdentity()
+	seedOutbox(t, mod, sender, testID(1), true, false)
+
+	if _, _, err := mod.outboxTool(sender)(context.Background(), nil, outboxIn{ID: "not-an-id"}); err == nil {
+		t.Fatal("a malformed id was accepted")
+	}
 }

@@ -3,12 +3,16 @@ package mcp
 import (
 	"context"
 
+	mcpapi "github.com/astralp2p/astral-go/api/mcp"
 	"github.com/astralp2p/astral-go/astral"
 	mcpsdk "github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
 type outboxIn struct {
-	Limit int `json:"limit,omitempty" jsonschema:"how many messages to list, newest first"`
+	ID             string `json:"id,omitempty" jsonschema:"one message id, as send_message answered it; answers that send alone"`
+	AwaitingPickup bool   `json:"awaiting_pickup,omitempty" jsonschema:"list only sends their node stored and has not handed out — the ones still waiting on the recipient"`
+	OldestFirst    bool   `json:"oldest_first,omitempty" jsonschema:"list oldest first, to reach the longest outstanding sends"`
+	Limit          int    `json:"limit,omitempty" jsonschema:"how many messages to list"`
 }
 
 // outboxEntry is one delivery this agent performed, without its body. Every
@@ -31,7 +35,19 @@ type outboxOut struct {
 
 func (mod *Module) outboxTool(agentID *astral.Identity) mcpsdk.ToolHandlerFor[outboxIn, outboxOut] {
 	return func(ctx context.Context, _ *mcpsdk.CallToolRequest, in outboxIn) (res *mcpsdk.CallToolResult, out outboxOut, err error) {
-		rows, err := mod.listOutbox(agentID, in.Limit)
+		q := outboxQuery{
+			AwaitingPickup: in.AwaitingPickup,
+			OldestFirst:    in.OldestFirst,
+			Limit:          in.Limit,
+		}
+
+		if in.ID != "" {
+			if q.ID, err = mcpapi.ParseMessageID(in.ID); err != nil {
+				return nil, out, err
+			}
+		}
+
+		rows, err := mod.listOutbox(agentID, q)
 		if err != nil {
 			return nil, out, err
 		}

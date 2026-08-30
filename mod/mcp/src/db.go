@@ -292,14 +292,33 @@ func (db *DB) SetOutboxErr(id mcpapi.MessageID, text string) error {
 		Update("err", text).Error
 }
 
-// ListOutbox returns what the sender sent, newest first.
+// ListOutbox returns what the sender sent, narrowed by the query and newest
+// first unless it asks otherwise.
 //
-// why newest first where the inbox is oldest first: an inbox is a queue and is
-// worked from its head, and a sent list is a history and is read from its end.
-func (db *DB) ListOutbox(sender *astral.Identity, limit int) (list []dbOutbox, _ error) {
-	return list, db.
-		Where("sender = ?", sender).
-		Order("sent_at desc").
-		Limit(limit).
-		Find(&list).Error
+// why newest first by default where the inbox is oldest first: an inbox is a
+// queue and is worked from its head, and a sent list is a history and is read
+// from its end.
+//
+// why the sender is always in the where clause: an agent's own sends are the
+// only ones it may read, and no field of the query can widen that.
+func (db *DB) ListOutbox(sender *astral.Identity, q outboxQuery) (list []dbOutbox, _ error) {
+	tx := db.Where("sender = ?", sender)
+
+	if !q.ID.IsZero() {
+		tx = tx.Where("id = ?", q.ID)
+	}
+
+	// why stored_at is required and not just fetched_at absent: a delivery that
+	// failed, or one whose fate was never learned, is not waiting on the
+	// recipient. Only a message known to be in their mailbox is.
+	if q.AwaitingPickup {
+		tx = tx.Where("stored_at IS NOT NULL AND fetched_at IS NULL")
+	}
+
+	order := "sent_at desc"
+	if q.OldestFirst {
+		order = "sent_at"
+	}
+
+	return list, tx.Order(order).Limit(q.Limit).Find(&list).Error
 }
