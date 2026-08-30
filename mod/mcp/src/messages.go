@@ -140,6 +140,46 @@ func (mod *Module) sendReceipt(recipientID, senderID *astral.Identity, id mcpapi
 	return nil
 }
 
+// acceptReceipt answers a receipt: it reads one off the conn and stamps the
+// sender's outbox row collected.
+//
+// The row is the admission. A caller naming a message this agent never sent it
+// is answered an error, and a node holding no such row learns nothing about why.
+func (mod *Module) acceptReceipt(q *astral.InFlightQuery, w io.WriteCloser) (io.WriteCloser, error) {
+	// reversed: we are the original sender, the caller is the recipient
+	sender, recipient := q.Target, q.Caller
+
+	return query.Accept(q, w, func(conn astral.Conn) {
+		defer conn.Close()
+
+		timer := time.AfterFunc(mod.config.QueryTimeout, func() { conn.Close() })
+		defer timer.Stop()
+
+		ch := channel.New(conn)
+
+		obj, err := ch.Receive()
+		if err != nil {
+			return
+		}
+
+		r, ok := obj.(*mcpapi.Receipt)
+		if !ok {
+			_ = ch.Send(astral.NewError("not a receipt"))
+			return
+		}
+
+		n, err := mod.db.StampOutboxFetchedFrom(sender, recipient, r.ID)
+		if err != nil || n == 0 {
+			_ = ch.Send(astral.NewError("unknown message"))
+			return
+		}
+
+		mod.log.Logv(1, "receipt %v from %v to %v", r.ID, recipient, sender)
+
+		_ = ch.Send(&astral.Ack{})
+	})
+}
+
 // acceptMessage answers a delivery: it reads one message off the conn, stores
 // it in the recipient's inbox and acknowledges the write.
 //
