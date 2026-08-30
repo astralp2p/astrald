@@ -73,12 +73,23 @@ func (mod *Module) sendMessage(agentID *astral.Identity, to, content string) (id
 		// why errNoAnswer stamps nothing: an answer that never arrived proves
 		// nothing about the write, and the row that says nothing is the row
 		// that is right.
+		//
+		// why a stamp that fails is logged and never returned: the delivery
+		// already happened as it happened, so failing the caller would deny
+		// it. Every state here is read off which instants are set, so a lost
+		// stamp is a row claiming a fact that did occur never did.
 		switch {
 		case errors.Is(err, errRefused):
-			_ = mod.db.StampOutboxFailed(msg.ID)
-			_ = mod.db.SetOutboxErr(msg.ID, err.Error())
+			if serr := mod.db.StampOutboxFailed(msg.ID); serr != nil {
+				mod.log.Error("outbox %v: stamping failed_at: %v", msg.ID, serr)
+			}
+			if serr := mod.db.SetOutboxErr(msg.ID, err.Error()); serr != nil {
+				mod.log.Error("outbox %v: recording the refusal: %v", msg.ID, serr)
+			}
 		case errors.Is(err, errNotSent):
-			_ = mod.db.StampOutboxFailed(msg.ID)
+			if serr := mod.db.StampOutboxFailed(msg.ID); serr != nil {
+				mod.log.Error("outbox %v: stamping failed_at: %v", msg.ID, serr)
+			}
 		}
 
 		// why the caller is told the same words in all three cases: which one
@@ -86,7 +97,9 @@ func (mod *Module) sendMessage(agentID *astral.Identity, to, content string) (id
 		return id, fmt.Errorf("delivery failed: %v", err)
 	}
 
-	_ = mod.db.StampOutboxStored(msg.ID)
+	if err = mod.db.StampOutboxStored(msg.ID); err != nil {
+		mod.log.Error("outbox %v: stamping stored_at: %v", msg.ID, err)
+	}
 
 	return msg.ID, nil
 }
@@ -144,15 +157,24 @@ func (mod *Module) deliverMessage(agentID, targetID *astral.Identity, msg *mcpap
 // the database layer has no routing. Both branches belong where one can be.
 func (mod *Module) noteFetched(row *dbMessage) {
 	if mod.agentIDs.Contains(row.Sender.String()) {
-		_ = mod.db.StampOutboxFetched(row.ID)
+		if err := mod.db.StampOutboxFetched(row.ID); err != nil {
+			mod.log.Error("outbox %v: stamping fetched_at: %v", row.ID, err)
+		}
 		return
 	}
 
 	// why the count gates the send: one attempt is made, and it belongs to
 	// whichever read first handed the body out. A later read finds the row
 	// already due and sends nothing.
+	//
+	// why the error is its own branch: a write that failed and a receipt
+	// already owed both send nothing, and only one of them is a fault.
 	n, err := mod.db.MarkReceiptDue(row.ID)
-	if err != nil || n == 0 {
+	if err != nil {
+		mod.log.Error("message %v: marking the receipt due: %v", row.ID, err)
+		return
+	}
+	if n == 0 {
 		return
 	}
 
@@ -168,7 +190,9 @@ func (mod *Module) noteFetched(row *dbMessage) {
 			mod.log.Error("receipt %v to %v: %v", id, sender, err)
 			return
 		}
-		_ = mod.db.StampReceiptStored(id)
+		if err := mod.db.StampReceiptStored(id); err != nil {
+			mod.log.Error("message %v: stamping receipt_stored_at: %v", id, err)
+		}
 	}(row.Recipient, row.Sender, row.ID)
 }
 
