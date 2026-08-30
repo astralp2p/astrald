@@ -2,7 +2,6 @@ package mcp
 
 import (
 	"context"
-	"time"
 
 	"github.com/astralp2p/astral-go/astral"
 	mcpsdk "github.com/modelcontextprotocol/go-sdk/mcp"
@@ -66,13 +65,4 @@ func (mod *Module) outboxTool(agentID *astral.Identity) mcpsdk.ToolHandlerFor[ou
 
 		return nil, out, nil
 	}
-}
-
-// stampOptionalTime renders an instant that may not have happened. The empty
-// string is the absence of the fact, and the field is omitted.
-func stampOptionalTime(t *time.Time) string {
-	if t == nil {
-		return ""
-	}
-	return stampMessageTime(*t)
 }

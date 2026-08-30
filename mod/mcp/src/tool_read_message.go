@@ -64,3 +64,12 @@ func messageResult(mod *Module, row *dbMessage) messageOut {
 func stampMessageTime(t time.Time) string {
 	return t.UTC().Format(time.RFC3339)
 }
+
+// stampOptionalTime renders an instant that may not have happened. The empty
+// string is the absence of the fact, and the field is omitted.
+func stampOptionalTime(t *time.Time) string {
+	if t == nil {
+		return ""
+	}
+	return stampMessageTime(*t)
+}

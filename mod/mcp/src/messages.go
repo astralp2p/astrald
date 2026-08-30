@@ -96,9 +96,14 @@ func (mod *Module) noteFetched(row *dbMessage) {
 	// unreachable. A receipt is a courtesy; the fact it carries is already
 	// true and durable here.
 	go func(recipient, sender *astral.Identity, id mcpapi.MessageID) {
-		if mod.sendReceipt(recipient, sender, id) == nil {
-			_ = mod.db.StampReceiptStored(id)
+		// why the failure is logged and not returned: nothing waits on this
+		// goroutine, and one attempt is made. The line is the only account of
+		// a receipt that never arrived.
+		if err := mod.sendReceipt(recipient, sender, id); err != nil {
+			mod.log.Error("receipt %v to %v: %v", id, sender, err)
+			return
 		}
+		_ = mod.db.StampReceiptStored(id)
 	}(row.Recipient, row.Sender, row.ID)
 }
 
