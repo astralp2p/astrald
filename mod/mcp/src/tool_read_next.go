@@ -32,6 +32,8 @@ func (mod *Module) readNextTool(agentID *astral.Identity) mcpsdk.ToolHandlerFor[
 			return nil, out, err
 		}
 
+		mod.noteFetched(row)
+
 		out = messageResult(mod, row)
 		out.Status = "message"
 		return nil, out, nil

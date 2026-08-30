@@ -20,11 +20,12 @@ const (
 	toolInbox       = "inbox"
 	toolReadMessage = "read_message"
 	toolReadNext    = "read_next"
+	toolOutbox      = "outbox"
 )
 
 var builtinTools = []string{
 	toolQuery, toolWhoami,
-	toolSendMessage, toolInbox, toolReadMessage, toolReadNext,
+	toolSendMessage, toolInbox, toolReadMessage, toolReadNext, toolOutbox,
 }
 
 // addTools registers the astral tool set on an MCP server. Every handler is
@@ -72,6 +73,17 @@ func (mod *Module) addTools(s *mcpsdk.Server, agentID *astral.Identity) {
 			"report what happened rather than looping indefinitely, unless " +
 			"asked to keep serving.",
 	}, mod.readNextTool(agentID))
+
+	mcpsdk.AddTool(s, &mcpsdk.Tool{
+		Name: toolOutbox,
+		Description: "List what you sent and what became of each one: the " +
+			"recipient, when it was sent, whether their node stored it, " +
+			"whether it failed, and whether the body was handed out. A row " +
+			"with only a sent time is a send whose outcome is unknown. " +
+			"Handed out means their node gave the message to the reader, not " +
+			"that a model considered it, so an answer that matters is still " +
+			"the thing to wait for.",
+	}, mod.outboxTool(agentID))
 
 	// The deployment's own tools, registered after the set above so a name it
 	// cannot take is one this module already holds — see readDeclaredTools.

@@ -64,8 +64,9 @@ func (db *DB) ListAgents() (list []dbAgent, _ error) {
 }
 
 // dbMessage is one message in a recipient's inbox. The row is the whole of the
-// message's state: delivered_at is stamped on arrival, read_at when the
-// recipient claims or opens it, and nothing else changes.
+// message's state: stored_at is stamped on arrival, read_at when the recipient
+// claims or opens it, and the two receipt columns track the fact owed to a
+// sender on another node.
 type dbMessage struct {
 	// note: the id is the sender's, minted before delivery, so a delivery that
 	// arrives twice collides here and is stored once.
@@ -73,12 +74,31 @@ type dbMessage struct {
 	// fixme: the key is the id alone, so one id space spans every inbox on the
 	// node. A sender re-using an id across two recipients loses the second
 	// delivery. The key an inbox needs is (recipient, id).
-	ID          mcpapi.MessageID `gorm:"primaryKey"`
-	Sender      *astral.Identity `gorm:"index"`
-	Recipient   *astral.Identity `gorm:"index:idx_mcp_messages_inbox,priority:1"`
-	Content     string
-	DeliveredAt time.Time `gorm:"index:idx_mcp_messages_inbox,priority:2"`
-	ReadAt      *time.Time
+	ID        mcpapi.MessageID `gorm:"primaryKey"`
+	Sender    *astral.Identity `gorm:"index"`
+	Recipient *astral.Identity `gorm:"index:idx_mcp_messages_inbox,priority:1"`
+	Content   string
+
+	// StoredAt is when this node wrote the row. It is a claim about the node
+	// and not about the recipient, who may not run for days — beside an outbox
+	// whose own success state would also be called delivered, one word would
+	// name two things.
+	StoredAt time.Time `gorm:"index:idx_mcp_messages_inbox,priority:2"`
+
+	ReadAt *time.Time
+
+	// ReceiptDueAt is set when the body is first handed out and the sender is
+	// not on this node. A local sender's outbox row is stamped directly and
+	// never becomes due — see noteFetched.
+	//
+	// why the fact is recorded even though only one attempt is made: a receipt
+	// lost in transit is the sender left believing a message was never
+	// collected. The row is what a sweep would read if one is ever written,
+	// and it costs one column to leave that door open.
+	ReceiptDueAt *time.Time
+
+	// ReceiptStoredAt is the sender's node acknowledging our receipt.
+	ReceiptStoredAt *time.Time
 }
 
 func (dbMessage) TableName() string {
@@ -86,7 +106,21 @@ func (dbMessage) TableName() string {
 }
 
 // MigrateMessages brings the message table to the current schema.
+//
+// why the rename is its own step: AutoMigrate adds a column, it never renames
+// one, so without this a stored table keeps delivered_at and grows an empty
+// stored_at beside it — every message already held reads as never stored.
 func (db *DB) MigrateMessages() error {
+	m := db.Migrator()
+
+	if m.HasTable(&dbMessage{}) &&
+		m.HasColumn(&dbMessage{}, "delivered_at") &&
+		!m.HasColumn(&dbMessage{}, "stored_at") {
+		if err := m.RenameColumn(&dbMessage{}, "delivered_at", "stored_at"); err != nil {
+			return err
+		}
+	}
+
 	return db.AutoMigrate(&dbMessage{})
 }
 
@@ -94,7 +128,7 @@ func (db *DB) MigrateMessages() error {
 // whose id is already stored is left as it stands, so a sender that retries
 // after a lost acknowledgement delivers once.
 func (db *DB) InsertMessage(row *dbMessage) error {
-	row.DeliveredAt = time.Now().UTC()
+	row.StoredAt = time.Now().UTC()
 	return db.Clauses(clause.OnConflict{DoNothing: true}).Create(row).Error
 }
 
@@ -104,7 +138,7 @@ func (db *DB) ListInbox(recipient *astral.Identity, unreadOnly bool, limit int) 
 	if unreadOnly {
 		tx = tx.Where("read_at IS NULL")
 	}
-	return list, tx.Order("delivered_at").Limit(limit).Find(&list).Error
+	return list, tx.Order("stored_at").Limit(limit).Find(&list).Error
 }
 
 // ReadMessage returns one message addressed to the recipient and stamps it
@@ -142,7 +176,7 @@ func (db *DB) ClaimNext(recipient *astral.Identity) (*dbMessage, error) {
 
 		err := db.
 			Where("recipient = ? AND read_at IS NULL", recipient).
-			Order("delivered_at").
+			Order("stored_at").
 			First(&row).Error
 		if err != nil {
 			return nil, err
@@ -163,4 +197,109 @@ func (db *DB) ClaimNext(recipient *astral.Identity) (*dbMessage, error) {
 		row.ReadAt = &now
 		return &row, nil
 	}
+}
+
+// MarkReceiptDue records that a receipt is owed on this inbox row and reports
+// whether this call is the one that recorded it.
+//
+// why the caller needs the count: one attempt is made, and the attempt belongs
+// to whichever read first handed the body out. A later read finds the row
+// already due and sends nothing.
+func (db *DB) MarkReceiptDue(id mcpapi.MessageID) (int64, error) {
+	tx := db.Model(&dbMessage{}).
+		Where("id = ? AND receipt_due_at IS NULL", id).
+		Update("receipt_due_at", time.Now().UTC())
+	return tx.RowsAffected, tx.Error
+}
+
+// StampReceiptStored records the sender's node acknowledging our receipt. It
+// writes an inbox row: the fact is the recipient's, about a receipt it sent.
+func (db *DB) StampReceiptStored(id mcpapi.MessageID) error {
+	return db.Model(&dbMessage{}).
+		Where("id = ? AND receipt_stored_at IS NULL", id).
+		Update("receipt_stored_at", time.Now().UTC()).Error
+}
+
+// outboxErrLimit bounds the recipient's node's own words. The string is another
+// operator's, so it is quoted and never trusted for its length.
+const outboxErrLimit = 256
+
+// MigrateOutbox brings the outbox table to the current schema.
+func (db *DB) MigrateOutbox() error {
+	return db.AutoMigrate(&dbOutbox{})
+}
+
+// InsertOutbox records a delivery about to be attempted and stamps the attempt.
+//
+// why the row is written before the delivery and not after: a process that dies
+// mid-delivery leaves a row carrying sent_at alone, which says the fate is
+// unknown. Written afterwards it would leave nothing, which says the send never
+// happened.
+func (db *DB) InsertOutbox(row *dbOutbox) error {
+	row.SentAt = time.Now().UTC()
+	return db.Create(row).Error
+}
+
+// Each stamp is its own method and each writes once: a second call changes
+// nothing, because the first answer is the one that happened.
+//
+// why a method per column and not one taking a column name: a column passed in
+// is a query built by concatenation, and the call sites are fixed. Naming them
+// also puts the meaning where a reader is.
+
+// StampOutboxStored records the recipient's node acknowledging the write.
+func (db *DB) StampOutboxStored(id mcpapi.MessageID) error {
+	return db.Model(&dbOutbox{}).
+		Where("id = ? AND stored_at IS NULL", id).
+		Update("stored_at", time.Now().UTC()).Error
+}
+
+// StampOutboxFailed records a delivery known not to have been stored.
+func (db *DB) StampOutboxFailed(id mcpapi.MessageID) error {
+	return db.Model(&dbOutbox{}).
+		Where("id = ? AND failed_at IS NULL", id).
+		Update("failed_at", time.Now().UTC()).Error
+}
+
+// StampOutboxFetched records the body handed out, for a sender on this node.
+//
+// why matching nothing is not an error: the sender may hold no row — a message
+// from before this table existed, or one from another node.
+func (db *DB) StampOutboxFetched(id mcpapi.MessageID) error {
+	return db.Model(&dbOutbox{}).
+		Where("id = ? AND fetched_at IS NULL", id).
+		Update("fetched_at", time.Now().UTC()).Error
+}
+
+// StampOutboxFetchedFrom is the receipt's admission and its write in one
+// statement: the row must be ours, must be one we sent to this caller, and must
+// not already be stamped. RowsAffected is the answer.
+func (db *DB) StampOutboxFetchedFrom(sender, recipient *astral.Identity, id mcpapi.MessageID) (int64, error) {
+	tx := db.Model(&dbOutbox{}).
+		Where("id = ? AND sender = ? AND recipient = ? AND fetched_at IS NULL",
+			id, sender, recipient).
+		Update("fetched_at", time.Now().UTC())
+	return tx.RowsAffected, tx.Error
+}
+
+// SetOutboxErr records the recipient's node's own words for a refusal.
+func (db *DB) SetOutboxErr(id mcpapi.MessageID, text string) error {
+	if len(text) > outboxErrLimit {
+		text = text[:outboxErrLimit]
+	}
+	return db.Model(&dbOutbox{}).
+		Where("id = ? AND err = ?", id, "").
+		Update("err", text).Error
+}
+
+// ListOutbox returns what the sender sent, newest first.
+//
+// why newest first where the inbox is oldest first: an inbox is a queue and is
+// worked from its head, and a sent list is a history and is read from its end.
+func (db *DB) ListOutbox(sender *astral.Identity, limit int) (list []dbOutbox, _ error) {
+	return list, db.
+		Where("sender = ?", sender).
+		Order("sent_at desc").
+		Limit(limit).
+		Find(&list).Error
 }

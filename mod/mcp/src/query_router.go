@@ -9,7 +9,8 @@ import (
 	"github.com/astralp2p/astral-go/lib/query"
 )
 
-// RouteQuery answers a delivery addressed to an agent this module holds.
+// RouteQuery answers a delivery or a receipt addressed to an agent this module
+// holds.
 //
 // The node holds no reachability of its own. It holds many tenants' agents and
 // knows no relation between them, so which callers an agent answers is asked of
@@ -20,6 +21,17 @@ func (mod *Module) RouteQuery(ctx *astral.Context, q *astral.InFlightQuery, w io
 	// without reaching an authority that has nothing to say about it.
 	if !mod.agentIDs.Contains(q.Target.String()) {
 		return query.RouteNotFound()
+	}
+
+	path, _ := query.Parse(q.QueryString)
+
+	// why a receipt is admitted without asking the authority: the outbox row is
+	// the permission. This agent already wrote to the caller, and a receipt
+	// says one thing about that one message. Directions are granted per side,
+	// so asking answer_agent_action here would refuse a receipt whenever the
+	// two differ — which is the ordinary case, not the edge one.
+	if path == mcpapi.MethodReceipt {
+		return mod.acceptReceipt(q, w)
 	}
 
 	// why the actor is the target and not the caller: the action names what its
@@ -36,7 +48,7 @@ func (mod *Module) RouteQuery(ctx *astral.Context, q *astral.InFlightQuery, w io
 	// why every other path is a miss: an agent is a mailbox and not a service.
 	// A query naming anything else reaches an agent that does not serve it, and
 	// reads as the target being absent.
-	if path, _ := query.Parse(q.QueryString); path != mcpapi.MethodMessage {
+	if path != mcpapi.MethodMessage {
 		return query.RouteNotFound()
 	}
 
