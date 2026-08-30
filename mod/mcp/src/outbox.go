@@ -25,6 +25,10 @@ type outboxQuery struct {
 	// on nobody and is excluded.
 	AwaitingPickup bool
 
+	// Thread narrows to one exchange, so a sender reads its own side of a
+	// conversation the way the recipient reads theirs.
+	Thread mcpapi.MessageID
+
 	// OldestFirst reverses the order. A sent list reads newest first, because
 	// it is a history; a sender chasing what is outstanding wants the other
 	// end, and those are the rows a newest-first cap drops.

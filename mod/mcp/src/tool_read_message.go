@@ -25,6 +25,7 @@ type messageOut struct {
 	Sender      string `json:"sender,omitempty" jsonschema:"sender identity, and the address a reply goes to"`
 	SenderAlias string `json:"sender_alias,omitempty" jsonschema:"sender display name"`
 	Content     string `json:"content,omitempty" jsonschema:"the message body"`
+	Thread      string `json:"thread,omitempty" jsonschema:"the exchange this belongs to; name it when you reply"`
 	StoredAt    string `json:"stored_at,omitempty" jsonschema:"when this node stored the message"`
 }
 

@@ -46,6 +46,10 @@ type dbOutbox struct {
 	// arrived. A message rejected once would be rejected the same way again.
 	Err string
 
+	// Thread names the exchange this send belongs to, mirroring the recipient's
+	// row. It is what lets a sender read its own side of one conversation.
+	Thread mcpapi.MessageID `gorm:"index"`
+
 	// Content is what was sent, kept. Nothing in this change reads it: it is
 	// written so that what an agent said is answerable at all, and so that a
 	// resend, if one is ever added, has a history to work from.

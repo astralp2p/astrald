@@ -79,6 +79,12 @@ type dbMessage struct {
 	Recipient *astral.Identity `gorm:"index:idx_mcp_messages_inbox,priority:1"`
 	Content   string
 
+	// Thread names the exchange this message belongs to, and is never zero: a
+	// message that named none is stored under its own id — see storeMessage.
+	// A thread is the rows sharing this value and nothing else, so there is no
+	// record to open, own or clean up.
+	Thread mcpapi.MessageID `gorm:"index"`
+
 	// StoredAt is when this node wrote the row. It is a claim about the node
 	// and not about the recipient, who may not run for days — beside an outbox
 	// whose own success state would also be called delivered, one word would
@@ -121,7 +127,17 @@ func (db *DB) MigrateMessages() error {
 		}
 	}
 
-	return db.AutoMigrate(&dbMessage{})
+	if err := db.AutoMigrate(&dbMessage{}); err != nil {
+		return err
+	}
+
+	// why the backfill: a column added to a stored table is null on every row
+	// already there, and a null MessageID reads back as the zero value rather
+	// than an error. Left alone those rows would be in no thread at all, and
+	// "every message is in a thread" is what the reader relies on.
+	return db.Model(&dbMessage{}).
+		Where("thread IS NULL OR thread = ?", "").
+		Update("thread", gorm.Expr("id")).Error
 }
 
 // InsertMessage stores a delivered message and stamps its arrival. A message
@@ -132,13 +148,13 @@ func (db *DB) InsertMessage(row *dbMessage) error {
 	return db.Clauses(clause.OnConflict{DoNothing: true}).Create(row).Error
 }
 
-// ListInbox returns the messages addressed to the recipient, oldest first.
-func (db *DB) ListInbox(recipient *astral.Identity, unreadOnly bool, limit int) (list []dbMessage, _ error) {
-	tx := db.Where("recipient = ?", recipient)
-	if unreadOnly {
-		tx = tx.Where("read_at IS NULL")
-	}
-	return list, tx.Order("stored_at").Limit(limit).Find(&list).Error
+// ListInbox returns the messages addressed to the recipient, oldest first,
+// narrowed by the query.
+func (db *DB) ListInbox(recipient *astral.Identity, q inboxQuery) (list []dbMessage, _ error) {
+	return list, q.apply(db.DB, recipient).
+		Order("stored_at").
+		Limit(q.Limit).
+		Find(&list).Error
 }
 
 // ReadMessage returns one message addressed to the recipient and stamps it
@@ -170,12 +186,16 @@ func (db *DB) ReadMessage(recipient *astral.Identity, id mcpapi.MessageID) (*dbM
 // why the update names read_at again: two claims can select the same row, and
 // the update is where one of them loses. A claim that changes no row starts
 // over and takes the next message rather than the one it lost.
-func (db *DB) ClaimNext(recipient *astral.Identity) (*dbMessage, error) {
+func (db *DB) ClaimNext(recipient *astral.Identity, q inboxQuery) (*dbMessage, error) {
+	// why the filter is applied to the select and not to the update: a claim
+	// that loses its race starts over and takes the next message the reader
+	// asked for, rather than the next message of any kind.
+	q.UnreadOnly = true
+
 	for {
 		var row dbMessage
 
-		err := db.
-			Where("recipient = ? AND read_at IS NULL", recipient).
+		err := q.apply(db.DB, recipient).
 			Order("stored_at").
 			First(&row).Error
 		if err != nil {
@@ -226,7 +246,14 @@ const outboxErrLimit = 256
 
 // MigrateOutbox brings the outbox table to the current schema.
 func (db *DB) MigrateOutbox() error {
-	return db.AutoMigrate(&dbOutbox{})
+	if err := db.AutoMigrate(&dbOutbox{}); err != nil {
+		return err
+	}
+
+	// the same backfill the inbox needs, for the same reason
+	return db.Model(&dbOutbox{}).
+		Where("thread IS NULL OR thread = ?", "").
+		Update("thread", gorm.Expr("id")).Error
 }
 
 // InsertOutbox records a delivery about to be attempted and stamps the attempt.
@@ -311,6 +338,10 @@ func (db *DB) ListOutbox(sender *astral.Identity, q outboxQuery) (list []dbOutbo
 	// why stored_at is required and not just fetched_at absent: a delivery that
 	// failed, or one whose fate was never learned, is not waiting on the
 	// recipient. Only a message known to be in their mailbox is.
+	if !q.Thread.IsZero() {
+		tx = tx.Where("thread = ?", q.Thread)
+	}
+
 	if q.AwaitingPickup {
 		tx = tx.Where("stored_at IS NOT NULL AND fetched_at IS NULL")
 	}

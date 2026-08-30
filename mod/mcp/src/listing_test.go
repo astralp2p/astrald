@@ -32,7 +32,7 @@ func TestListLimitsAreTheModulesRuleAndNotTheCallers(t *testing.T) {
 				})
 			},
 			list: func(mod *Module, agent *astral.Identity, limit int) (int, error) {
-				rows, err := mod.listInbox(agent, false, limit)
+				rows, err := mod.listInbox(agent, inboxQuery{Limit: limit})
 				return len(rows), err
 			},
 			def: defaultInboxLimit,

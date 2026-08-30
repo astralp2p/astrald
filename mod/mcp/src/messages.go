@@ -28,14 +28,19 @@ var (
 )
 
 // sendMessage puts one message to a recipient and records what became of it.
-// It answers the id the message was stored under.
+// It answers the id the message was stored under and the thread it went into.
+//
+// why the thread comes back: a sender that named none started one, and it
+// cannot follow the answer without learning the name.
 //
 // why the two refusals answer the same words: an agent learns that it cannot
 // reach this recipient, and not whether the recipient exists.
-func (mod *Module) sendMessage(agentID *astral.Identity, to, content string) (id mcpapi.MessageID, err error) {
+// The thread is the sender's: a message naming none is the root of its own
+// exchange, and a reply names the thread it answers.
+func (mod *Module) sendMessage(agentID *astral.Identity, to, content string, thread mcpapi.MessageID) (id, sent mcpapi.MessageID, err error) {
 	targetID, err := mod.Dir.ResolveIdentity(to)
 	if err != nil {
-		return id, fmt.Errorf("unknown recipient: %v", to)
+		return id, sent, fmt.Errorf("unknown recipient: %v", to)
 	}
 
 	// The same question astral-query asks about the same pair: what this agent
@@ -45,16 +50,20 @@ func (mod *Module) sendMessage(agentID *astral.Identity, to, content string) (id
 		Action: authapi.NewAction(agentID),
 		ToID:   targetID,
 	}) {
-		return id, fmt.Errorf("unknown recipient: %v", to)
+		return id, sent, fmt.Errorf("unknown recipient: %v", to)
 	}
 
 	if len(content) > mod.config.MaxPayloadBytes {
-		return id, fmt.Errorf("content is over %v bytes", mod.config.MaxPayloadBytes)
+		return id, sent, fmt.Errorf("content is over %v bytes", mod.config.MaxPayloadBytes)
 	}
 
 	msg := &mcpapi.Message{
 		ID:      mcpapi.NewMessageID(),
 		Content: astral.String32(content),
+		Thread:  thread,
+	}
+	if msg.Thread.IsZero() {
+		msg.Thread = msg.ID
 	}
 
 	// why the row is written here and nothing above it is: a stored list of
@@ -65,8 +74,9 @@ func (mod *Module) sendMessage(agentID *astral.Identity, to, content string) (id
 		Sender:    agentID,
 		Recipient: targetID,
 		Content:   content,
+		Thread:    msg.Thread,
 	}); err != nil {
-		return id, err
+		return id, sent, err
 	}
 
 	if err = mod.deliverMessage(agentID, targetID, msg); err != nil {
@@ -94,14 +104,14 @@ func (mod *Module) sendMessage(agentID *astral.Identity, to, content string) (id
 
 		// why the caller is told the same words in all three cases: which one
 		// happened is a fact about the row, and the outbox is what answers it.
-		return id, fmt.Errorf("delivery failed: %v", err)
+		return id, sent, fmt.Errorf("delivery failed: %v", err)
 	}
 
 	if err = mod.db.StampOutboxStored(msg.ID); err != nil {
 		mod.log.Error("outbox %v: stamping stored_at: %v", msg.ID, err)
 	}
 
-	return msg.ID, nil
+	return msg.ID, msg.Thread, nil
 }
 
 // deliverMessage puts the message to the recipient and returns once the
@@ -327,11 +337,21 @@ func (mod *Module) storeMessage(sender, recipient *astral.Identity, msg *mcpapi.
 		return errors.New("message too large")
 	}
 
+	// why the thread is settled here and not taken as sent: a peer on a node
+	// that predates the field names none, and every message must be in a
+	// thread for a reader to rely on one. A message naming no exchange is the
+	// root of its own, which is what every message was before threads existed.
+	thread := msg.Thread
+	if thread.IsZero() {
+		thread = msg.ID
+	}
+
 	return mod.db.InsertMessage(&dbMessage{
 		ID:        msg.ID,
 		Sender:    sender,
 		Recipient: recipient,
 		Content:   string(msg.Content),
+		Thread:    thread,
 	})
 }
 
@@ -343,7 +363,7 @@ func (mod *Module) storeMessage(sender, recipient *astral.Identity, msg *mcpapi.
 // waiter woken by the writer has to be registered, unregistered and raced
 // against a delivery landing between the two. A quarter of a second is under
 // what an agent takes to read one message.
-func (mod *Module) claimNext(ctx context.Context, recipient *astral.Identity, timeout time.Duration) (*dbMessage, error) {
+func (mod *Module) claimNext(ctx context.Context, recipient *astral.Identity, q inboxQuery, timeout time.Duration) (*dbMessage, error) {
 	deadline := time.NewTimer(timeout)
 	defer deadline.Stop()
 
@@ -351,7 +371,7 @@ func (mod *Module) claimNext(ctx context.Context, recipient *astral.Identity, ti
 	defer poll.Stop()
 
 	for {
-		row, err := mod.db.ClaimNext(recipient)
+		row, err := mod.db.ClaimNext(recipient, q)
 		if !errors.Is(err, gorm.ErrRecordNotFound) {
 			return row, err
 		}
