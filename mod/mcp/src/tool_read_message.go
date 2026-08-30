@@ -57,6 +57,7 @@ func messageResult(mod *Module, row *dbMessage) messageOut {
 		Sender:      row.Sender.String(),
 		SenderAlias: mod.Dir.DisplayName(row.Sender),
 		Content:     row.Content,
+		Thread:      row.Thread.String(),
 		StoredAt:    stampMessageTime(row.StoredAt),
 	}
 }
