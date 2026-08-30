@@ -79,10 +79,14 @@ func (mod *Module) addTools(s *mcpsdk.Server, agentID *astral.Identity) {
 		Description: "List what you sent and what became of each one: the " +
 			"recipient, when it was sent, whether their node stored it, " +
 			"whether it failed, and whether the body was handed out. A row " +
-			"with only a sent time is a send whose outcome is unknown. " +
-			"Handed out means their node gave the message to the reader, not " +
-			"that a model considered it, so an answer that matters is still " +
-			"the thing to wait for.",
+			"with only a sent time is a send whose outcome is unknown. Pass " +
+			"an id to ask about one send, or awaiting_pickup to see only the " +
+			"ones sitting unread in a recipient's mailbox. Handed out means " +
+			"their node gave the message to the reader, not that a model " +
+			"considered it, so an answer that matters is still the thing to " +
+			"wait for. A recipient on another node reports the pickup once " +
+			"and nothing repeats it, so a missing handed-out time is not " +
+			"proof the message was never taken.",
 	}, mod.outboxTool(agentID))
 
 	// The deployment's own tools, registered after the set above so a name it
