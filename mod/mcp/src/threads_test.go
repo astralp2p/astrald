@@ -192,6 +192,36 @@ func TestReadNextRefusesAnUnknownSender(t *testing.T) {
 	}
 }
 
+// A reader is told to name the thread when it replies, so both read paths
+// answer it. One message renders through messageResult either way.
+func TestReadingAMessageAnswersItsThread(t *testing.T) {
+	mod := testMessageModule(t)
+	me := registeredAgent(mod)
+	peer := astral.GenerateIdentity()
+
+	storeThreaded(t, mod, peer, me, testID(1), testID(9), "which port?")
+	storeThreaded(t, mod, peer, me, testID(2), testID(9), "still there?")
+
+	_, byID, err := mod.readMessageTool(me)(context.Background(), nil, readMessageIn{
+		ID: testID(1).String(),
+	})
+	if err != nil {
+		t.Fatalf("read_message: %v", err)
+	}
+	if byID.Thread != testID(9).String() {
+		t.Fatalf("read_message thread %v, want %v", byID.Thread, testID(9))
+	}
+
+	// read_message stamped the first, so the claim takes the second
+	_, claimed, err := mod.readNextTool(me)(context.Background(), nil, readNextIn{TimeoutMs: 200})
+	if err != nil {
+		t.Fatalf("read_next: %v", err)
+	}
+	if claimed.Thread != testID(9).String() {
+		t.Fatalf("read_next thread %v, want %v", claimed.Thread, testID(9))
+	}
+}
+
 // inbox narrows to one exchange without claiming anything.
 func TestInboxListsOneThread(t *testing.T) {
 	mod := testMessageModule(t)
