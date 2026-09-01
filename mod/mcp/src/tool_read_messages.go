@@ -52,7 +52,7 @@ type messageOut struct {
 	ParentID  string `json:"parent_id,omitempty" jsonschema:"the message this answers"`
 	CreatedAt string `json:"created_at"`
 
-	MoreChildren int  `json:"more_children,omitempty" jsonschema:"how many of its replies this answer left; list them with list_messages and match on parent_id"`
+	MoreChildren int  `json:"more_children,omitempty" jsonschema:"how many of its replies this answer left out; raise max_children and read it again to see them"`
 	Truncated    bool `json:"truncated,omitempty" jsonschema:"the body was left out because this answer was already full; read this message on its own"`
 }
 

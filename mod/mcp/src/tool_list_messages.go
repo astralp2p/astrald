@@ -11,7 +11,7 @@ import (
 )
 
 type listMessagesIn struct {
-	Types          string `json:"types,omitempty" jsonschema:"which list to read: inbox, outbox or archive"`
+	Types          string `json:"types,omitempty" jsonschema:"which one list to read — inbox (default), outbox or archive; not a set"`
 	From           string `json:"from,omitempty" jsonschema:"inbox only — list only what this correspondent wrote, by identity or alias"`
 	To             string `json:"to,omitempty" jsonschema:"outbox only — list only what you wrote to this correspondent"`
 	UnreadOnly     bool   `json:"unread_only,omitempty" jsonschema:"inbox only — list only what you have not opened"`

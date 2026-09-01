@@ -14,15 +14,23 @@ type archiveIn struct {
 	Undo bool   `json:"undo,omitempty" jsonschema:"put it back instead"`
 }
 
+// why the field is not called "archived": undo runs through the same tool, and
+// there "archived: true" would name the opposite of what happened. What the
+// call reports is whether it was the one that moved the message.
 type archiveOut struct {
-	Archived bool `json:"archived" jsonschema:"this call is the one that changed it; false means it was already so"`
+	Changed bool `json:"changed" jsonschema:"this call moved the message; false means it was already where you asked for, or you do not hold it"`
 }
 
 // archiveTool puts one message away, or puts it back.
 //
 // why RowsAffected is the answer: admission and write are one statement, so the
 // count says both whether the message was the agent's and whether this call is
-// the one that changed it. A lookup then a write would race.
+// the one that moved it. A lookup then a write would race.
+//
+// why the two zeroes are one answer: the same count means "already there" and
+// "not yours", and separating them would tell a caller whether an id it does
+// not hold exists at all. The schema says both, because the agent's next act is
+// the same either way — list it and look.
 func (mod *Module) archiveTool(agentID *astral.Identity) mcpsdk.ToolHandlerFor[archiveIn, archiveOut] {
 	return func(ctx context.Context, _ *mcpsdk.CallToolRequest, in archiveIn) (res *mcpsdk.CallToolResult, out archiveOut, err error) {
 		ref, err := parseRef(messageRefIn{Box: in.Box, ID: in.ID})
@@ -40,7 +48,7 @@ func (mod *Module) archiveTool(agentID *astral.Identity) mcpsdk.ToolHandlerFor[a
 			return nil, out, err
 		}
 
-		out.Archived = n == 1
+		out.Changed = n == 1
 		return nil, out, nil
 	}
 }
@@ -55,5 +63,3 @@ func errUnknownPeer(name string) error {
 type unknownPeerError struct{ name string }
 
 func (e *unknownPeerError) Error() string { return "unknown correspondent: " + e.name }
-
-var _ = astral.Identity{}

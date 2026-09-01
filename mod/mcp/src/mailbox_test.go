@@ -668,3 +668,113 @@ func TestAnOldTableIsRenamedAsideRatherThanBreakingTheLoad(t *testing.T) {
 		t.Fatalf("insert after the rename: n=%v err=%v", n, err)
 	}
 }
+
+// An agent that writes to itself owns both rows of every message, so a reply to
+// it matches as a child twice under one id — once as the copy it sent and once
+// as the copy it received. It is one reply and is answered once.
+func TestASelfSentReplyIsAnsweredOnce(t *testing.T) {
+	mod := testMessageModule(t)
+	a := astral.GenerateIdentity()
+	ask, reply := mcpapi.NewMessageID(), mcpapi.NewMessageID()
+
+	for _, m := range []struct {
+		id     mcpapi.MessageID
+		parent mcpapi.MessageID
+	}{{ask, mcpapi.MessageID{}}, {reply, ask}} {
+		mustInsertOutbox(t, mod, &dbMessage{ID: m.id, Sender: a, Recipient: a, Content: "x", ParentID: m.parent})
+		mustInsertInbox(t, mod, &dbMessage{ID: m.id, Sender: a, Recipient: a, Content: "x", ParentID: m.parent})
+	}
+
+	kids, err := mod.db.Children(a, ask, 10)
+	if err != nil {
+		t.Fatalf("children: %v", err)
+	}
+	if len(kids) != 1 {
+		t.Fatalf("one reply was answered %v times: %+v", len(kids), kids)
+	}
+	if kids[0].Box != boxInbox {
+		t.Fatalf("the copy kept must be the received one, which carries the read stamp; got %v", kids[0].Box)
+	}
+
+	n, err := mod.db.CountChildren(a, ask)
+	if err != nil || n != 1 {
+		t.Fatalf("CountChildren answered %v, err %v — it must count the set Children answers", n, err)
+	}
+}
+
+// The collapse keeps the received copy only where there is one. A self-send
+// whose delivery failed has an outbox row and no inbox row, and hiding it would
+// lose the only copy the agent has.
+func TestASelfSendThatNeverLandedIsStillAnswered(t *testing.T) {
+	mod := testMessageModule(t)
+	a := astral.GenerateIdentity()
+	ask, reply := mcpapi.NewMessageID(), mcpapi.NewMessageID()
+
+	mustInsertOutbox(t, mod, &dbMessage{ID: ask, Sender: a, Recipient: a, Content: "q"})
+	mustInsertOutbox(t, mod, &dbMessage{ID: reply, Sender: a, Recipient: a, Content: "r", ParentID: ask})
+
+	kids, err := mod.db.Children(a, ask, 10)
+	if err != nil || len(kids) != 1 {
+		t.Fatalf("the only copy of the reply was hidden: %v rows, err %v", len(kids), err)
+	}
+}
+
+// A remote node's words land in this agent's sent list and from there in its
+// model's context. They are quoted material, but how much of a context window a
+// refusing peer occupies is this node's decision.
+func TestARemoteRefusalIsBounded(t *testing.T) {
+	long := ""
+	for range 4000 {
+		long += "x"
+	}
+	got := clip(long, maxRefusalBytes)
+	if len(got) > maxRefusalBytes+len("… (cut)") {
+		t.Fatalf("a refusing node wrote %v bytes into the agent's context", len(got))
+	}
+	if short := clip("refused", maxRefusalBytes); short != "refused" {
+		t.Fatalf("text within the bound must be untouched, got %q", short)
+	}
+}
+
+// undo runs through the same tool, so what the answer reports is whether this
+// call moved the message — not whether it ended up archived, which under undo
+// would name the opposite of what happened.
+func TestArchiveReportsWhetherThisCallMovedIt(t *testing.T) {
+	mod := testMessageModule(t)
+	a, b := astral.GenerateIdentity(), astral.GenerateIdentity()
+	id := mcpapi.NewMessageID()
+	mustInsertInbox(t, mod, &dbMessage{ID: id, Sender: b, Recipient: a, Content: "x"})
+
+	call := func(undo bool) bool {
+		t.Helper()
+		_, out, err := mod.archiveTool(a)(context.Background(), nil, archiveIn{
+			Box: boxInbox, ID: id.String(), Undo: undo,
+		})
+		if err != nil {
+			t.Fatalf("archive(undo=%v): %v", undo, err)
+		}
+		return out.Changed
+	}
+
+	if !call(false) {
+		t.Fatal("the first archive must report that it moved the message")
+	}
+	if call(false) {
+		t.Fatal("archiving what is already away must not report a move")
+	}
+	if !call(true) {
+		t.Fatal("undo must report that it moved the message back")
+	}
+	if call(true) {
+		t.Fatal("undoing what is already back must not report a move")
+	}
+
+	// an id the agent does not hold answers the same false, and says nothing
+	// about whether it exists elsewhere
+	_, out, err := mod.archiveTool(b)(context.Background(), nil, archiveIn{
+		Box: boxInbox, ID: id.String(),
+	})
+	if err != nil || out.Changed {
+		t.Fatalf("an agent moved a message it does not hold: changed=%v err=%v", out.Changed, err)
+	}
+}

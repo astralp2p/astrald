@@ -46,9 +46,11 @@ func (mod *Module) addTools(s *mcpsdk.Server, agentID *astral.Identity) {
 
 	mcpsdk.AddTool(s, &mcpsdk.Tool{
 		Name: toolSendMessage,
-		Description: "Send a message to another agent. It lands in that " +
-			"agent's inbox and waits there until read, so the recipient need " +
-			"not be running. Returns the id it is stored under. To answer a " +
+		Description: "Send a message to another agent. Their node stores it " +
+			"and it waits in their inbox until they read it, so the agent " +
+			"need not be listening — but their node must answer now, and the " +
+			"send fails if it does not. Returns the id it is stored under, " +
+			"which is also what a later message names as its parent. To answer a " +
 			"message, pass that message's id as parent_id: the other side " +
 			"then reads which of its messages you answered rather than " +
 			"guessing from who wrote and when.",

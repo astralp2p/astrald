@@ -14,8 +14,24 @@ import (
 	"github.com/astralp2p/astral-go/lib/query"
 )
 
-// messagePollInterval is how often a waiting read_next looks again.
+// messagePollInterval is how often a parked wait looks again.
 const messagePollInterval = 250 * time.Millisecond
+
+// maxRefusalBytes bounds what a refusing node can put in this agent's sent
+// list, and from there into its model's context. The words are the remote's,
+// answering a message this agent chose to send, so they are quoted material
+// rather than anything to act on — but unbounded quoted material is still a
+// remote peer deciding how much of a local context window to occupy.
+const maxRefusalBytes = 256
+
+// clip cuts a remote's text to a length this node chose, marking the cut so
+// the reader is not left thinking it read the whole of it.
+func clip(s string, n int) string {
+	if len(s) <= n {
+		return s
+	}
+	return s[:n] + "… (cut)"
+}
 
 // A caller reads its outbox row differently depending on whether the message is
 // known not to be stored or merely not known to be, so delivery names the three
@@ -150,7 +166,7 @@ func (mod *Module) deliverMessage(agentID, targetID *astral.Identity, msg *mcpap
 	}
 
 	if e, ok := obj.(astral.Error); ok {
-		return fmt.Errorf("%w: %s", errRefused, e.Error())
+		return fmt.Errorf("%w: %s", errRefused, clip(e.Error(), maxRefusalBytes))
 	}
 	if _, ok := obj.(*astral.Ack); !ok {
 		return fmt.Errorf("%w: answered %v", errNoAnswer, obj.ObjectType())

@@ -266,15 +266,33 @@ func (db *DB) MarkRead(owner *astral.Identity, row *dbMessage) error {
 	return nil
 }
 
-// Children returns the owner's messages that name this one as their parent, in
-// either box, oldest first. One level: walking further is the reader's.
+// childrenOf is the predicate both Children and CountChildren narrow by. They
+// share it because they must answer about the same set: more_children is their
+// difference, and it goes wrong in both directions if they disagree.
 //
 // why what was put away is excluded: it is excluded from every listing and from
 // the park, and a reply that comes back as a child of something else would be
-// the one path that undoes an archive. It must move with CountChildren or
-// more_children counts a set the answer did not carry.
+// the one path that undoes an archive.
+//
+// why a self-send is collapsed to its inbox row: an agent that writes to itself
+// owns both rows of every message, so a reply to it matches twice and is
+// answered twice under one id. The received copy is the one that carries the
+// read stamp and the receipt, so it is the one kept — and it is kept only where
+// it actually exists, so a self-send whose delivery failed still shows the copy
+// the agent has.
+func childrenOf(db *gorm.DB, owner *astral.Identity, parent mcpapi.MessageID) *gorm.DB {
+	return db.Where("owner = ? AND parent_id = ? AND archived_at IS NULL", owner, parent).
+		Where(`NOT (box = 'outbox' AND EXISTS (
+			SELECT 1 FROM mcp__messages self
+			WHERE self.owner = mcp__messages.owner
+			  AND self.box = 'inbox'
+			  AND self.id = mcp__messages.id))`)
+}
+
+// Children returns the owner's messages that name this one as their parent, in
+// either box, oldest first. One level: walking further is the reader's.
 func (db *DB) Children(owner *astral.Identity, parent mcpapi.MessageID, limit int) (list []dbMessage, _ error) {
-	return list, db.Where("owner = ? AND parent_id = ? AND archived_at IS NULL", owner, parent).
+	return list, childrenOf(db.DB, owner, parent).
 		Order("created_at").
 		Limit(limit).
 		Find(&list).Error
@@ -283,9 +301,7 @@ func (db *DB) Children(owner *astral.Identity, parent mcpapi.MessageID, limit in
 // CountChildren answers how many replies a message has, so a truncated answer
 // can say what it left.
 func (db *DB) CountChildren(owner *astral.Identity, parent mcpapi.MessageID) (n int64, _ error) {
-	return n, db.Model(&dbMessage{}).
-		Where("owner = ? AND parent_id = ? AND archived_at IS NULL", owner, parent).
-		Count(&n).Error
+	return n, childrenOf(db.Model(&dbMessage{}), owner, parent).Count(&n).Error
 }
 
 // Archive stamps one of the owner's messages put away and reports whether this
