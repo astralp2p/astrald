@@ -200,12 +200,17 @@ func (db *DB) InsertInbox(row *dbMessage) (int64, error) {
 	return tx.RowsAffected, tx.Error
 }
 
+// why the listing is unbounded: a mailbox is the agent's own and it asked for
+// this list, so nothing here is a stranger's text arriving unasked. What the
+// answer costs is the agent's to spend, and a cap the caller cannot see turns
+// "here is your inbox" into a claim that is silently false. The bound that
+// stays is on read_messages, where the bodies are.
+//
 // ListMessages returns one of the owner's lists, narrowed by the query and
 // ordered as that list reads.
 func (db *DB) ListMessages(owner *astral.Identity, q messageQuery) (list []dbMessage, _ error) {
 	return list, q.apply(db.DB, owner).
 		Order(q.order()).
-		Limit(q.Limit).
 		Find(&list).Error
 }
 

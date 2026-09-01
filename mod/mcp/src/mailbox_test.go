@@ -284,7 +284,7 @@ func TestArchivedMessagesLeaveTheListingsAndTheWait(t *testing.T) {
 		t.Fatalf("archive: %v rows, err %v", len(away), err)
 	}
 
-	rows, err := mod.waitForMessages(context.Background(), b, messageQuery{List: listInbox, Limit: 10}, 0)
+	rows, err := mod.waitForMessages(context.Background(), b, messageQuery{List: listInbox}, 0)
 	if err != nil {
 		t.Fatalf("wait: %v", err)
 	}
@@ -371,24 +371,21 @@ func TestAFilterThatCannotApplyIsRefused(t *testing.T) {
 	}
 }
 
-// One pair of limits, not three: the cap answers how much of a listing the
-// module hands out in one answer, which is a property of the answer.
-func TestTheListLimitIsTheModulesRuleAndNotTheCallers(t *testing.T) {
+// A listing answers the whole list. An agent asking what is in its own mailbox
+// and being handed a prefix has been told something silently false, and it has
+// no way to see that from the answer.
+func TestAListingAnswersTheWholeList(t *testing.T) {
 	mod := testMessageModule(t)
 	a, b := astral.GenerateIdentity(), astral.GenerateIdentity()
 
-	for range maxListLimit + 1 {
+	const held = 500
+	for range held {
 		mustInsertInbox(t, mod, &dbMessage{ID: mcpapi.NewMessageID(), Sender: b, Recipient: a, Content: "x"})
 	}
 
 	rows, err := mod.listMessages(a, messageQuery{List: listInbox})
-	if err != nil || len(rows) != defaultListLimit {
-		t.Fatalf("unasked: %v rows, want %v (err %v)", len(rows), defaultListLimit, err)
-	}
-
-	rows, err = mod.listMessages(a, messageQuery{List: listInbox, Limit: maxListLimit + 500})
-	if err != nil || len(rows) != maxListLimit {
-		t.Fatalf("over the cap: %v rows, want %v (err %v)", len(rows), maxListLimit, err)
+	if err != nil || len(rows) != held {
+		t.Fatalf("listed %v of %v (err %v)", len(rows), held, err)
 	}
 }
 
@@ -515,7 +512,7 @@ func TestTheCursorNeverSkipsAMessage(t *testing.T) {
 	<-done
 
 	// A final page, the way a reader resuming would.
-	q := messageQuery{List: listInbox, Limit: maxListLimit}
+	q := messageQuery{List: listInbox}
 	if since != "" {
 		q.Since, _ = parseSince(since)
 	}

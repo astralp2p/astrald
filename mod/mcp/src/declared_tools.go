@@ -35,13 +35,8 @@ type declaredTool struct {
 // start should not survive. A tool name is the agent's vocabulary: a duplicate
 // or a shadowed built-in silently repoints one.
 func readDeclaredTools(configs []ToolConfig) ([]declaredTool, error) {
-	taken := make(map[string]bool, len(builtinTools)+len(retiredTools)+len(configs))
+	taken := make(map[string]bool, len(builtinTools)+len(configs))
 	for _, name := range builtinTools {
-		taken[name] = true
-	}
-	// why a retired name is still taken: an agent that learned what a name
-	// meant must not find a deployment answering it with something else.
-	for _, name := range retiredTools {
 		taken[name] = true
 	}
 

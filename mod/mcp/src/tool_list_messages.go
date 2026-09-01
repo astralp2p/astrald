@@ -17,7 +17,6 @@ type listMessagesIn struct {
 	UnreadOnly     bool   `json:"unread_only,omitempty" jsonschema:"inbox only — list only what you have not opened"`
 	AwaitingPickup bool   `json:"awaiting_pickup,omitempty" jsonschema:"outbox only — list only sends their node stored and has not handed out"`
 	Since          string `json:"since,omitempty" jsonschema:"inbox only — list only what arrived after this, as a previous answer's next_since"`
-	Limit          int    `json:"limit,omitempty" jsonschema:"how many to list"`
 }
 
 // messageEntry is one message without its body. It carries box because an id
@@ -77,8 +76,6 @@ func (mod *Module) buildQuery(in listMessagesIn) (q messageQuery, err error) {
 		List:           in.Types,
 		UnreadOnly:     in.UnreadOnly,
 		AwaitingPickup: in.AwaitingPickup,
-
-		Limit: in.Limit,
 	}
 
 	if in.Since != "" {

@@ -22,11 +22,6 @@ const (
 	toolArchive      = "archive"
 )
 
-// retiredTools are names this endpoint used to serve. A deployment may not
-// claim one: an agent that learned what a name meant must not find a deployment
-// answering it with something else.
-var retiredTools = []string{"inbox", "outbox", "read_message", "read_next"}
-
 var builtinTools = []string{
 	toolQuery,
 	toolSendMessage, toolListMessages, toolReadMessages, toolWait, toolArchive,

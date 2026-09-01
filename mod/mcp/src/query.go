@@ -24,14 +24,6 @@ const (
 	boxOutbox = "outbox"
 )
 
-// One pair, not three. How much of a listing the module hands out in one answer
-// is a property of the answer's size rather than of which list is read, and
-// three names for one number are three places to drift.
-const (
-	defaultListLimit = 50
-	maxListLimit     = 200
-)
-
 // messageQuery is what an agent asks of its own mail. The owner is never a
 // field: it is the authenticated agent, passed separately, so no value here can
 // widen what the query reaches.
@@ -68,8 +60,6 @@ type messageQuery struct {
 	// does not use can only lose rows, so the other two refuse it rather than
 	// answer it wrongly.
 	Since int64
-
-	Limit int
 }
 
 var errBadNarrowing = errors.New("that filter does not apply to this list")
@@ -105,11 +95,6 @@ func (q *messageQuery) validate() error {
 	default:
 		return fmt.Errorf("no such list: %v", q.List)
 	}
-
-	if q.Limit <= 0 {
-		q.Limit = defaultListLimit
-	}
-	q.Limit = min(q.Limit, maxListLimit)
 
 	return nil
 }
