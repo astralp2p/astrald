@@ -2,7 +2,6 @@ package mcp
 
 import (
 	"context"
-	"encoding/json"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -88,8 +87,11 @@ func TestMCPServerRejectsMissingToken(t *testing.T) {
 	}
 }
 
-func TestMCPServerWhoami(t *testing.T) {
-	ts, agentID := testMCPServer(t)
+// TestMCPServerListsBuiltins asserts the tool set an authenticated agent is
+// served: the six this module registers and nothing else. A deployment's own
+// tools are added on top of these — see readDeclaredTools.
+func TestMCPServerListsBuiltins(t *testing.T) {
+	ts, _ := testMCPServer(t)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
@@ -108,38 +110,22 @@ func TestMCPServerWhoami(t *testing.T) {
 	if err != nil {
 		t.Fatalf("list tools: %v", err)
 	}
-	if len(tools.Tools) != len(builtinTools) {
-		t.Fatalf("%v tools listed, want %v", len(tools.Tools), len(builtinTools))
-	}
 
-	res, err := cs.CallTool(ctx, &mcpsdk.CallToolParams{Name: "astral-whoami"})
-	if err != nil {
-		t.Fatalf("call whoami: %v", err)
+	listed := make(map[string]bool, len(tools.Tools))
+	for _, tool := range tools.Tools {
+		listed[tool.Name] = true
 	}
-	if res.IsError {
-		t.Fatalf("whoami returned tool error: %v", res.Content)
+	if len(listed) != len(builtinTools) {
+		t.Fatalf("%v tools listed, want %v", len(listed), len(builtinTools))
 	}
-
-	var out whoamiOut
-	if err = json.Unmarshal(mustJSON(t, res.StructuredContent), &out); err != nil {
-		t.Fatalf("parse whoami: %v", err)
+	for _, name := range builtinTools {
+		if !listed[name] {
+			t.Errorf("%v is not listed", name)
+		}
 	}
-	if out.AgentID != agentID.String() {
-		t.Fatalf("agent_id %v, want %v", out.AgentID, agentID)
+	// The tool that answered an agent its own identity is gone: the alias it
+	// carried is the node's, and a node holds none for a deployment's agent.
+	if listed["astral-whoami"] {
+		t.Error("astral-whoami is still served")
 	}
-	if out.AgentAlias != "my-agent" || out.NodeAlias != "my-node" {
-		t.Fatalf("aliases %v/%v, want my-agent/my-node", out.AgentAlias, out.NodeAlias)
-	}
-	if out.UserID != "" {
-		t.Fatalf("user_id %v on a module without user dep", out.UserID)
-	}
-}
-
-func mustJSON(t *testing.T, v any) []byte {
-	t.Helper()
-	b, err := json.Marshal(v)
-	if err != nil {
-		t.Fatalf("marshal: %v", err)
-	}
-	return b
 }

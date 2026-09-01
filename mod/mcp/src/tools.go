@@ -13,8 +13,7 @@ import (
 // declared tool may not take one of these names — a configuration that
 // overrode one would silently repoint it.
 const (
-	toolQuery  = "astral-query"
-	toolWhoami = "astral-whoami"
+	toolQuery = "astral-query"
 
 	toolSendMessage = "send_message"
 	toolInbox       = "inbox"
@@ -24,7 +23,7 @@ const (
 )
 
 var builtinTools = []string{
-	toolQuery, toolWhoami,
+	toolQuery,
 	toolSendMessage, toolInbox, toolReadMessage, toolReadNext, toolOutbox,
 }
 
@@ -39,11 +38,6 @@ func (mod *Module) addTools(s *mcpsdk.Server, agentID *astral.Identity) {
 			"agent answers no query but the one that delivers a message, so " +
 			"write to another agent with send_message.",
 	}, mod.queryTool(agentID))
-
-	mcpsdk.AddTool(s, &mcpsdk.Tool{
-		Name:        toolWhoami,
-		Description: "Get your agent identity plus the host node and its user.",
-	}, mod.whoamiTool(agentID))
 
 	mcpsdk.AddTool(s, &mcpsdk.Tool{
 		Name: toolSendMessage,

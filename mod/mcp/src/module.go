@@ -13,7 +13,6 @@ var _ mcpmod.Module = &Module{}
 
 type Module struct {
 	Deps
-	OptionalDeps
 	ctx    *astral.Context
 	config Config
 	node   astral.Node

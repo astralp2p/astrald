@@ -8,7 +8,6 @@ import (
 	"github.com/astralp2p/astrald/mod/crypto"
 	"github.com/astralp2p/astrald/mod/dir"
 	"github.com/astralp2p/astrald/mod/objects"
-	"github.com/astralp2p/astrald/mod/user"
 )
 
 type Deps struct {
@@ -19,17 +18,6 @@ type Deps struct {
 	Objects objects.Module
 }
 
-type OptionalDeps struct {
-	User user.Module
-}
-
 func (mod *Module) LoadDependencies(*astral.Context) (err error) {
-	if err = core.Inject(mod.node, &mod.Deps); err != nil {
-		return
-	}
-
-	// optional — mcp can run on an unclaimed node
-	core.Inject(mod.node, &mod.OptionalDeps)
-
-	return
+	return core.Inject(mod.node, &mod.Deps)
 }
