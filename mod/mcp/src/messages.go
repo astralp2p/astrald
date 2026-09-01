@@ -12,7 +12,6 @@ import (
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astral-go/astral/channel"
 	"github.com/astralp2p/astral-go/lib/query"
-	"gorm.io/gorm"
 )
 
 // messagePollInterval is how often a waiting read_next looks again.
@@ -28,19 +27,22 @@ var (
 )
 
 // sendMessage puts one message to a recipient and records what became of it.
-// It answers the id the message was stored under and the thread it went into.
-//
-// why the thread comes back: a sender that named none started one, and it
-// cannot follow the answer without learning the name.
+// It answers the id the message was stored under, which is also the value a
+// later message names as its parent.
 //
 // why the two refusals answer the same words: an agent learns that it cannot
 // reach this recipient, and not whether the recipient exists.
-// The thread is the sender's: a message naming none is the root of its own
-// exchange, and a reply names the thread it answers.
-func (mod *Module) sendMessage(agentID *astral.Identity, to, content string, thread mcpapi.MessageID) (id, sent mcpapi.MessageID, err error) {
+func (mod *Module) sendMessage(agentID *astral.Identity, to, content string, parent mcpapi.MessageID) (id mcpapi.MessageID, err error) {
 	targetID, err := mod.Dir.ResolveIdentity(to)
 	if err != nil {
-		return id, sent, fmt.Errorf("unknown recipient: %v", to)
+		return id, fmt.Errorf("unknown recipient: %v", to)
+	}
+
+	// why the empty name is refused here: ResolveIdentity answers the Anyone
+	// identity for an empty string rather than an error, and Anyone is a target
+	// the authorizer and the router would both accept.
+	if targetID.IsZero() {
+		return id, fmt.Errorf("unknown recipient: %v", to)
 	}
 
 	// The same question astral-query asks about the same pair: what this agent
@@ -50,33 +52,30 @@ func (mod *Module) sendMessage(agentID *astral.Identity, to, content string, thr
 		Action: authapi.NewAction(agentID),
 		ToID:   targetID,
 	}) {
-		return id, sent, fmt.Errorf("unknown recipient: %v", to)
+		return id, fmt.Errorf("unknown recipient: %v", to)
 	}
 
 	if len(content) > mod.config.MaxPayloadBytes {
-		return id, sent, fmt.Errorf("content is over %v bytes", mod.config.MaxPayloadBytes)
+		return id, fmt.Errorf("content is over %v bytes", mod.config.MaxPayloadBytes)
 	}
 
 	msg := &mcpapi.Message{
-		ID:      mcpapi.NewMessageID(),
-		Content: astral.String32(content),
-		Thread:  thread,
-	}
-	if msg.Thread.IsZero() {
-		msg.Thread = msg.ID
+		ID:       mcpapi.NewMessageID(),
+		Content:  astral.String32(content),
+		ParentID: parent,
 	}
 
 	// why the row is written here and nothing above it is: a stored list of
 	// refusals would tell a recipient that refuses apart from one that does not
 	// exist, which is the collapse the two refusals above are built on.
-	if err = mod.db.InsertOutbox(&dbOutbox{
+	if err = mod.db.InsertOutbox(&dbMessage{
 		ID:        msg.ID,
 		Sender:    agentID,
 		Recipient: targetID,
 		Content:   content,
-		Thread:    msg.Thread,
+		ParentID:  parent,
 	}); err != nil {
-		return id, sent, err
+		return id, err
 	}
 
 	if err = mod.deliverMessage(agentID, targetID, msg); err != nil {
@@ -90,28 +89,28 @@ func (mod *Module) sendMessage(agentID *astral.Identity, to, content string, thr
 		// stamp is a row claiming a fact that did occur never did.
 		switch {
 		case errors.Is(err, errRefused):
-			if serr := mod.db.StampOutboxFailed(msg.ID); serr != nil {
+			if serr := mod.db.StampFailed(agentID, msg.ID); serr != nil {
 				mod.log.Error("outbox %v: stamping failed_at: %v", msg.ID, serr)
 			}
-			if serr := mod.db.SetOutboxErr(msg.ID, err.Error()); serr != nil {
+			if serr := mod.db.SetErr(agentID, msg.ID, err.Error()); serr != nil {
 				mod.log.Error("outbox %v: recording the refusal: %v", msg.ID, serr)
 			}
 		case errors.Is(err, errNotSent):
-			if serr := mod.db.StampOutboxFailed(msg.ID); serr != nil {
+			if serr := mod.db.StampFailed(agentID, msg.ID); serr != nil {
 				mod.log.Error("outbox %v: stamping failed_at: %v", msg.ID, serr)
 			}
 		}
 
 		// why the caller is told the same words in all three cases: which one
-		// happened is a fact about the row, and the outbox is what answers it.
-		return id, sent, fmt.Errorf("delivery failed: %v", err)
+		// happened is a fact about the row, and the sent list is what answers it.
+		return id, fmt.Errorf("delivery failed: %v", err)
 	}
 
-	if err = mod.db.StampOutboxStored(msg.ID); err != nil {
-		mod.log.Error("outbox %v: stamping stored_at: %v", msg.ID, err)
+	if err = mod.db.StampLanded(agentID, msg.ID); err != nil {
+		mod.log.Error("outbox %v: stamping landed_at: %v", msg.ID, err)
 	}
 
-	return msg.ID, msg.Thread, nil
+	return msg.ID, nil
 }
 
 // deliverMessage puts the message to the recipient and returns once the
@@ -166,8 +165,16 @@ func (mod *Module) deliverMessage(agentID, targetID *astral.Identity, msg *mcpap
 // why here and not inside db.ClaimNext: a remote sender is told by a query, and
 // the database layer has no routing. Both branches belong where one can be.
 func (mod *Module) noteFetched(row *dbMessage) {
+	// why the box is checked first: an agent reading its own sent row is
+	// reading its own ledger, and stamping fetched_at there would tell it that
+	// someone collected a message it merely re-read. Only handing out an inbox
+	// body is a collection.
+	if row.Box != boxInbox {
+		return
+	}
+
 	if mod.agentIDs.Contains(row.Sender.String()) {
-		if err := mod.db.StampOutboxFetched(row.ID); err != nil {
+		if err := mod.db.StampFetched(row.Sender, row.ID); err != nil {
 			mod.log.Error("outbox %v: stamping fetched_at: %v", row.ID, err)
 		}
 		return
@@ -179,7 +186,7 @@ func (mod *Module) noteFetched(row *dbMessage) {
 	//
 	// why the error is its own branch: a write that failed and a receipt
 	// already owed both send nothing, and only one of them is a fault.
-	n, err := mod.db.MarkReceiptDue(row.ID)
+	n, err := mod.db.MarkReceiptDue(row.Recipient, row.ID)
 	if err != nil {
 		mod.log.Error("message %v: marking the receipt due: %v", row.ID, err)
 		return
@@ -200,7 +207,7 @@ func (mod *Module) noteFetched(row *dbMessage) {
 			mod.log.Error("receipt %v to %v: %v", id, sender, err)
 			return
 		}
-		if err := mod.db.StampReceiptStored(id); err != nil {
+		if err := mod.db.StampReceiptStored(recipient, id); err != nil {
 			mod.log.Error("message %v: stamping receipt_stored_at: %v", id, err)
 		}
 	}(row.Recipient, row.Sender, row.ID)
@@ -272,8 +279,11 @@ func (mod *Module) acceptReceipt(q *astral.InFlightQuery, w io.WriteCloser) (io.
 			return
 		}
 
-		n, err := mod.db.StampOutboxFetchedFrom(sender, recipient, r.ID)
-		if err != nil || n == 0 {
+		// why n == 1 and not n != 0: the owner and the box narrow this to one
+		// row, so any other count is a predicate that widened, not a receipt
+		// that matched.
+		n, err := mod.db.StampFetchedFrom(sender, recipient, r.ID)
+		if err != nil || n != 1 {
 			_ = ch.Send(astral.NewError("unknown message"))
 			return
 		}
@@ -335,35 +345,54 @@ func (mod *Module) storeMessage(sender, recipient *astral.Identity, msg *mcpapi.
 		return errors.New("the message names no id")
 	case len(msg.Content) > mod.config.MaxPayloadBytes:
 		return errors.New("message too large")
+	case msg.ParentID == msg.ID:
+		// The only link refused. A parent this node does not hold is kept as it
+		// stands — a claim about a message nobody has is a claim nothing
+		// answers — but a message answering itself is a cycle of one, and the
+		// cheapest one to refuse.
+		return errors.New("a message may not answer itself")
 	}
 
-	// why the thread is settled here and not taken as sent: a peer on a node
-	// that predates the field names none, and every message must be in a
-	// thread for a reader to rely on one. A message naming no exchange is the
-	// root of its own, which is what every message was before threads existed.
-	thread := msg.Thread
-	if thread.IsZero() {
-		thread = msg.ID
-	}
-
-	return mod.db.InsertMessage(&dbMessage{
+	n, err := mod.db.InsertInbox(&dbMessage{
 		ID:        msg.ID,
 		Sender:    sender,
 		Recipient: recipient,
 		Content:   string(msg.Content),
-		Thread:    thread,
+		ParentID:  msg.ParentID,
 	})
+	if err != nil {
+		return err
+	}
+	if n == 1 {
+		return nil
+	}
+
+	// Nothing was written, and two different things look like this: the sender
+	// repeating a delivery whose acknowledgement it never saw, and a second
+	// sender minting an id this inbox already holds. The id is the sender's to
+	// choose, so the second is reachable and must not be answered with an ack
+	// the recipient will never see a message for.
+	held, err := mod.db.SenderOf(recipient, boxInbox, msg.ID)
+	if err != nil {
+		return err
+	}
+	if !held.IsEqual(sender) {
+		return errors.New("a message is already stored under that id")
+	}
+
+	return nil
 }
 
-// claimNext claims the oldest unread message for the recipient, waiting up to
-// timeout for one to arrive. Returns gorm.ErrRecordNotFound when the window
-// closes with the inbox empty.
+// waitForMessages parks until the owner's chosen list holds a message the query
+// matches, and answers what it found. Nothing is stamped and nothing is taken:
+// two agents waiting at once are answered the same messages, and a reader that
+// stops between the answer and the work leaves the mailbox as it was.
 //
 // why a poll and not a wake-up: the table already holds the answer, and a
 // waiter woken by the writer has to be registered, unregistered and raced
 // against a delivery landing between the two. A quarter of a second is under
 // what an agent takes to read one message.
-func (mod *Module) claimNext(ctx context.Context, recipient *astral.Identity, q inboxQuery, timeout time.Duration) (*dbMessage, error) {
+func (mod *Module) waitForMessages(ctx context.Context, owner *astral.Identity, q messageQuery, timeout time.Duration) ([]dbMessage, error) {
 	deadline := time.NewTimer(timeout)
 	defer deadline.Stop()
 
@@ -371,15 +400,18 @@ func (mod *Module) claimNext(ctx context.Context, recipient *astral.Identity, q 
 	defer poll.Stop()
 
 	for {
-		row, err := mod.db.ClaimNext(recipient, q)
-		if !errors.Is(err, gorm.ErrRecordNotFound) {
-			return row, err
+		rows, err := mod.listMessages(owner, q)
+		if err != nil {
+			return nil, err
+		}
+		if len(rows) > 0 {
+			return rows, nil
 		}
 
 		select {
 		case <-poll.C:
 		case <-deadline.C:
-			return nil, gorm.ErrRecordNotFound
+			return nil, nil
 		case <-ctx.Done():
 			return nil, ctx.Err()
 		}

@@ -24,7 +24,8 @@ about the op.
 
 why the exchange is sequential: a message is stored in the recipient's inbox by
 the recipient's node (mod/mcp RouteQuery), so beta collects it on its next
-read_next. Neither agent has to be running while the other writes.
+wait, and reads the body with read_messages. Neither agent has to be
+running while the other writes.
 """
 import asyncio
 import json
@@ -142,27 +143,44 @@ async def main():
         except ToolError as e:
             facts["invisible"] = {"refused": True, "detail": str(e)[:400]}
 
-        agent_alpha.call_tool("send_message", {
+        asked = _structured(agent_alpha.call_tool("send_message", {
             "to": beta["identity"], "content": ASK,
-        })
+        }))
 
+        # beta waits, then reads: the park answers what arrived without its
+        # body, and reading is the separate act that hands one out.
         with MCPClient(n1["mcp_url"], beta["token"]) as agent_beta:
-            heard = _structured(agent_beta.call_tool(
-                "read_next", {"timeout_ms": 10000}))
+            waited = _structured(agent_beta.call_tool(
+                "wait", {"timeout_ms": 10000}))
+            envelope = (waited.get("messages") or [{}])[0]
+            heard = _structured(agent_beta.call_tool("read_messages", {
+                "ids": [{"box": envelope.get("box"), "id": envelope.get("id")}],
+            }))
+            beta_msg = (heard.get("messages") or [{}])[0]
+
+            # the reply names the message it answers
             agent_beta.call_tool("send_message", {
-                "to": heard.get("sender", alpha["identity"]),
+                "to": beta_msg.get("sender", alpha["identity"]),
                 "content": ANSWER,
+                "parent_id": beta_msg.get("id"),
             })
 
-        got = _structured(agent_alpha.call_tool(
-            "read_next", {"timeout_ms": 10000}))
+        back = _structured(agent_alpha.call_tool("wait", {"timeout_ms": 10000}))
+        reply_env = (back.get("messages") or [{}])[0]
+        got = _structured(agent_alpha.call_tool("read_messages", {
+            "ids": [{"box": reply_env.get("box"), "id": reply_env.get("id")}],
+        }))
+        alpha_msg = (got.get("messages") or [{}])[0]
 
     facts["exchange"] = {
-        "beta_status": heard.get("status"),
-        "beta_heard": heard.get("content"),
-        "beta_sender": heard.get("sender"),
+        "beta_timed_out": waited.get("timed_out"),
+        "beta_waited": [m.get("id") for m in (waited.get("messages") or [])],
+        "beta_heard": beta_msg.get("content"),
+        "beta_sender": beta_msg.get("sender"),
         "alpha_sender_expected": alpha["identity"],
-        "alpha_got": got.get("content"),
+        "alpha_got": alpha_msg.get("content"),
+        "alpha_asked": asked.get("id"),
+        "reply_parent": alpha_msg.get("parent_id"),
     }
     write_facts(facts)
 

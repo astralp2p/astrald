@@ -83,9 +83,9 @@ def main():
         f"the closed agent failed without being refused: {u['detail']}")
 
     x = facts["exchange"]
-    assert x["beta_status"] == "message", (
-        f"beta's read_next returned {x['beta_status']!r}, not a message — the "
-        "guard closed agent-to-agent along with the operations")
+    assert not x["beta_timed_out"] and x["beta_waited"], (
+        f"beta's wait timed out with ids={x['beta_waited']!r} — the guard "
+        "closed agent-to-agent along with the operations")
     assert x["beta_heard"] == facts["ask"], (
         f"beta heard {x['beta_heard']!r}, not {facts['ask']!r}")
     assert x["beta_sender"] == x["alpha_sender_expected"], (
@@ -94,6 +94,10 @@ def main():
     assert x["alpha_got"] == facts["answer"], (
         f"alpha got {x['alpha_got']!r}, not {facts['answer']!r} — the reply "
         "never reached alpha's inbox")
+    assert x["reply_parent"] == x["alpha_asked"], (
+        f"the reply named {x['reply_parent']!r} as the message it answers, "
+        f"not {x['alpha_asked']!r} — a reply that names nothing is one alpha "
+        "has to match by sender and recency")
 
     ops = ", ".join(facts["refusals"])
     print(f"oracle: an agent was refused {ops} and a closed agent, while the "
