@@ -2,8 +2,6 @@ package mcp
 
 import (
 	"context"
-	"fmt"
-	"strconv"
 	"time"
 
 	"github.com/astralp2p/astral-go/astral"
@@ -49,53 +47,33 @@ type listMessagesOut struct {
 
 func (mod *Module) listMessagesTool(agentID *astral.Identity) mcpsdk.ToolHandlerFor[listMessagesIn, listMessagesOut] {
 	return func(ctx context.Context, _ *mcpsdk.CallToolRequest, in listMessagesIn) (res *mcpsdk.CallToolResult, out listMessagesOut, err error) {
-		q, err := mod.buildQuery(in)
+		rows, err := mod.listMessages(agentID, listRequest{
+			List:           in.Types,
+			From:           in.From,
+			To:             in.To,
+			Since:          in.Since,
+			UnreadOnly:     in.UnreadOnly,
+			AwaitingPickup: in.AwaitingPickup,
+		})
 		if err != nil {
 			return nil, out, err
 		}
 
-		rows, err := mod.listMessages(agentID, q)
-		if err != nil {
-			return nil, out, err
-		}
-
-		out.Messages = make([]messageEntry, len(rows))
-		for i, row := range rows {
-			out.Messages[i] = mod.entry(row)
-		}
+		out.Messages = mod.entries(rows)
 		out.NextSince = nextSince(rows)
 
 		return nil, out, nil
 	}
 }
 
-// buildQuery turns the tool's words into the store's. Resolving a correspondent
-// here rather than in the store keeps the one place a name becomes an identity.
-func (mod *Module) buildQuery(in listMessagesIn) (q messageQuery, err error) {
-	q = messageQuery{
-		List:           in.Types,
-		UnreadOnly:     in.UnreadOnly,
-		AwaitingPickup: in.AwaitingPickup,
+// entries renders a listing. It is the whole of what both listing tools do
+// with what the module hands back.
+func (mod *Module) entries(rows []dbMessage) []messageEntry {
+	list := make([]messageEntry, len(rows))
+	for i, row := range rows {
+		list[i] = mod.entry(row)
 	}
-
-	if in.Since != "" {
-		if q.Since, err = parseSince(in.Since); err != nil {
-			return q, err
-		}
-	}
-
-	if in.From != "" {
-		if q.From, err = mod.Dir.ResolveIdentity(in.From); err != nil {
-			return q, errUnknownPeer(in.From)
-		}
-	}
-	if in.To != "" {
-		if q.To, err = mod.Dir.ResolveIdentity(in.To); err != nil {
-			return q, errUnknownPeer(in.To)
-		}
-	}
-
-	return q, q.validate()
+	return list
 }
 
 // entry renders one row for a listing. The peer is whichever party the owner is
@@ -130,38 +108,6 @@ func (mod *Module) entry(row dbMessage) messageEntry {
 		e.Err = *row.Err
 	}
 	return e
-}
-
-// nextSince is the furthest the answer reached in the database's own order, so
-// a caller passing it back sees only what was written after. It is the caller's
-// to hold: the node keeps no read position, so a lost value costs a repeat
-// rather than a message.
-//
-// why the sequence and not a timestamp: created_at is read before the row is
-// written, so a message can carry an earlier instant and appear later. A cursor
-// over it steps past mail that had not arrived yet, permanently.
-func nextSince(rows []dbMessage) string {
-	var furthest int64
-	for _, row := range rows {
-		if row.Seq > furthest {
-			furthest = row.Seq
-		}
-	}
-	if furthest == 0 {
-		return ""
-	}
-	return strconv.FormatInt(furthest, 10)
-}
-
-// parseSince reads a cursor a previous answer handed out. It is opaque: only
-// its order means anything, and a caller that invents one gets a refusal rather
-// than a silently wrong page.
-func parseSince(v string) (int64, error) {
-	n, err := strconv.ParseInt(v, 10, 64)
-	if err != nil || n < 0 {
-		return 0, fmt.Errorf("since is a cursor a previous answer gave you, not %q", v)
-	}
-	return n, nil
 }
 
 // stampMessageTime renders a stored timestamp for a tool result.

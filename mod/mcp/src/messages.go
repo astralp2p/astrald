@@ -45,30 +45,10 @@ var (
 // sendMessage puts one message to a recipient and records what became of it.
 // It answers the id the message was stored under, which is also the value a
 // later message names as its parent.
-//
-// why the two refusals answer the same words: an agent learns that it cannot
-// reach this recipient, and not whether the recipient exists.
 func (mod *Module) sendMessage(agentID *astral.Identity, to, content string, parent mcpapi.MessageID) (id mcpapi.MessageID, err error) {
-	targetID, err := mod.Dir.ResolveIdentity(to)
+	targetID, err := mod.resolveRecipient(agentID, to)
 	if err != nil {
-		return id, fmt.Errorf("unknown recipient: %v", to)
-	}
-
-	// why the empty name is refused here: ResolveIdentity answers the Anyone
-	// identity for an empty string rather than an error, and Anyone is a target
-	// the authorizer and the router would both accept.
-	if targetID.IsZero() {
-		return id, fmt.Errorf("unknown recipient: %v", to)
-	}
-
-	// The same question astral-query asks about the same pair: what this agent
-	// may reach is its owner's decision, and a message buys it no reach it did
-	// not have.
-	if !mod.Auth.Authorize(mod.ctx, &mcpapi.CallAgentAction{
-		Action: authapi.NewAction(agentID),
-		ToID:   targetID,
-	}) {
-		return id, fmt.Errorf("unknown recipient: %v", to)
+		return id, err
 	}
 
 	if len(content) > mod.config.MaxPayloadBytes {
@@ -83,7 +63,7 @@ func (mod *Module) sendMessage(agentID *astral.Identity, to, content string, par
 
 	// why the row is written here and nothing above it is: a stored list of
 	// refusals would tell a recipient that refuses apart from one that does not
-	// exist, which is the collapse the two refusals above are built on.
+	// exist, which is the collapse resolveRecipient is built on.
 	if err = mod.db.InsertOutbox(&dbMessage{
 		ID:        msg.ID,
 		Sender:    agentID,
@@ -95,27 +75,7 @@ func (mod *Module) sendMessage(agentID *astral.Identity, to, content string, par
 	}
 
 	if err = mod.deliverMessage(agentID, targetID, msg); err != nil {
-		// why errNoAnswer stamps nothing: an answer that never arrived proves
-		// nothing about the write, and the row that says nothing is the row
-		// that is right.
-		//
-		// why a stamp that fails is logged and never returned: the delivery
-		// already happened as it happened, so failing the caller would deny
-		// it. Every state here is read off which instants are set, so a lost
-		// stamp is a row claiming a fact that did occur never did.
-		switch {
-		case errors.Is(err, errRefused):
-			if serr := mod.db.StampFailed(agentID, msg.ID); serr != nil {
-				mod.log.Error("outbox %v: stamping failed_at: %v", msg.ID, serr)
-			}
-			if serr := mod.db.SetErr(agentID, msg.ID, err.Error()); serr != nil {
-				mod.log.Error("outbox %v: recording the refusal: %v", msg.ID, serr)
-			}
-		case errors.Is(err, errNotSent):
-			if serr := mod.db.StampFailed(agentID, msg.ID); serr != nil {
-				mod.log.Error("outbox %v: stamping failed_at: %v", msg.ID, serr)
-			}
-		}
+		mod.noteDeliveryFailed(agentID, msg.ID, err)
 
 		// why the caller is told the same words in all three cases: which one
 		// happened is a fact about the row, and the sent list is what answers it.
@@ -127,6 +87,64 @@ func (mod *Module) sendMessage(agentID *astral.Identity, to, content string, par
 	}
 
 	return msg.ID, nil
+}
+
+// resolveRecipient answers who a name means, if this agent may reach them.
+//
+// why all three refusals answer the same words: an agent learns that it cannot
+// reach this recipient, and not whether the recipient exists.
+func (mod *Module) resolveRecipient(agentID *astral.Identity, to string) (*astral.Identity, error) {
+	unknown := fmt.Errorf("unknown recipient: %v", to)
+
+	targetID, err := mod.Dir.ResolveIdentity(to)
+	if err != nil {
+		return nil, unknown
+	}
+
+	// why the empty name is refused here: ResolveIdentity answers the Anyone
+	// identity for an empty string rather than an error, and Anyone is a target
+	// the authorizer and the router would both accept.
+	if targetID.IsZero() {
+		return nil, unknown
+	}
+
+	// The same question astral-query asks about the same pair: what this agent
+	// may reach is its owner's decision, and a message buys it no reach it did
+	// not have.
+	if !mod.Auth.Authorize(mod.ctx, &mcpapi.CallAgentAction{
+		Action: authapi.NewAction(agentID),
+		ToID:   targetID,
+	}) {
+		return nil, unknown
+	}
+
+	return targetID, nil
+}
+
+// noteDeliveryFailed records what became of a send that did not land.
+//
+// why errNoAnswer stamps nothing: an answer that never arrived proves nothing
+// about the write, and the row that says nothing is the row that is right.
+//
+// why a stamp that fails is logged and never returned: the delivery already
+// happened as it happened, so failing the caller would deny it. Every state
+// here is read off which instants are set, so a lost stamp is a row claiming a
+// fact that did occur never did.
+func (mod *Module) noteDeliveryFailed(agentID *astral.Identity, id mcpapi.MessageID, cause error) {
+	if !errors.Is(cause, errRefused) && !errors.Is(cause, errNotSent) {
+		return
+	}
+
+	if err := mod.db.StampFailed(agentID, id); err != nil {
+		mod.log.Error("outbox %v: stamping failed_at: %v", id, err)
+	}
+
+	if !errors.Is(cause, errRefused) {
+		return
+	}
+	if err := mod.db.SetErr(agentID, id, cause.Error()); err != nil {
+		mod.log.Error("outbox %v: recording the refusal: %v", id, err)
+	}
 }
 
 // deliverMessage puts the message to the recipient and returns once the
@@ -408,7 +426,7 @@ func (mod *Module) storeMessage(sender, recipient *astral.Identity, msg *mcpapi.
 // waiter woken by the writer has to be registered, unregistered and raced
 // against a delivery landing between the two. A quarter of a second is under
 // what an agent takes to read one message.
-func (mod *Module) waitForMessages(ctx context.Context, owner *astral.Identity, q messageQuery, timeout time.Duration) ([]dbMessage, error) {
+func (mod *Module) pollMessages(ctx context.Context, owner *astral.Identity, q messageQuery, timeout time.Duration) ([]dbMessage, error) {
 	deadline := time.NewTimer(timeout)
 	defer deadline.Stop()
 
@@ -416,7 +434,7 @@ func (mod *Module) waitForMessages(ctx context.Context, owner *astral.Identity, 
 	defer poll.Stop()
 
 	for {
-		rows, err := mod.listMessages(owner, q)
+		rows, err := mod.db.ListMessages(owner, q)
 		if err != nil {
 			return nil, err
 		}

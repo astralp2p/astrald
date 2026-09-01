@@ -2,25 +2,9 @@ package mcp
 
 import (
 	"context"
-	"errors"
-	"fmt"
 
-	mcpapi "github.com/astralp2p/astral-go/api/mcp"
 	"github.com/astralp2p/astral-go/astral"
 	mcpsdk "github.com/modelcontextprotocol/go-sdk/mcp"
-)
-
-// The module's own bounds on one answer. A body may be 64 KiB, and a message
-// may have any number of replies, so an unbounded read is the caller deciding
-// how much of the reader's context a stranger fills.
-//
-// why these are the module's and not the caller's: how much a read hands out in
-// one answer is a property of the answer, and a caller naming it is a caller
-// naming the reader's cost.
-const (
-	maxReadIDs      = 20
-	maxChildren     = 10
-	defaultChildren = 10
 )
 
 type messageRefIn struct {
@@ -64,73 +48,25 @@ type readMessagesOut struct {
 
 func (mod *Module) readMessagesTool(agentID *astral.Identity) mcpsdk.ToolHandlerFor[readMessagesIn, readMessagesOut] {
 	return func(ctx context.Context, _ *mcpsdk.CallToolRequest, in readMessagesIn) (res *mcpsdk.CallToolResult, out readMessagesOut, err error) {
-		if len(in.IDs) == 0 {
-			return nil, out, errors.New("name at least one message to read")
-		}
-		if len(in.IDs) > maxReadIDs {
-			return nil, out, fmt.Errorf("name at most %v messages in one read", maxReadIDs)
-		}
-
-		depth := in.Children
-		if depth == "" {
-			depth = childrenEnvelopes
-		}
-		if depth != childrenNone && depth != childrenEnvelopes && depth != childrenFull {
-			return nil, out, fmt.Errorf("children is none, envelopes or full, not %v", depth)
-		}
-
-		kids := in.MaxChildren
-		if kids <= 0 {
-			kids = defaultChildren
-		}
-		kids = min(kids, maxChildren)
-
-		refs := make([]messageRef, 0, len(in.IDs))
-		for _, r := range in.IDs {
-			ref, err := parseRef(r)
-			if err != nil {
+		refs := make([]messageRef, len(in.IDs))
+		for i, r := range in.IDs {
+			if refs[i], err = parseRef(r.Box, r.ID); err != nil {
 				return nil, out, err
 			}
-			refs = append(refs, ref)
 		}
 
-		rows, missing, err := mod.db.ReadMany(agentID, refs)
+		result, err := mod.readMessages(agentID, readRequest{
+			Refs:        refs,
+			Children:    in.Children,
+			MaxChildren: in.MaxChildren,
+		})
 		if err != nil {
 			return nil, out, err
 		}
 
-		budget := mod.config.MaxResponseBytes
-
-		for _, row := range rows {
-			mod.noteFetched(&row)
-
-			m := mod.whole(row)
-			budget -= len(m.Content)
-			if depth != childrenNone {
-				var replies []messageOut
-				if replies, m.MoreChildren, err = mod.replies(agentID, row.ID, depth, kids); err != nil {
-					return nil, out, err
-				}
-				for _, r := range replies {
-					budget -= len(r.Content)
-					if budget < 0 {
-						r.Content = ""
-					}
-					out.Replies = append(out.Replies, r)
-				}
-			}
-			if budget < 0 {
-				// why the body is dropped rather than the message: the caller
-				// named these ids, so the answer says what it holds and which
-				// bodies it left. A read that quietly returned fewer messages
-				// would look like a mailbox that lost them.
-				m.Content = ""
-				m.Truncated = true
-			}
-			out.Messages = append(out.Messages, m)
-		}
-
-		for _, ref := range missing {
+		out.Messages = mod.wholes(result.Messages)
+		out.Replies = mod.wholes(result.Replies)
+		for _, ref := range result.NotFound {
 			out.NotFound = append(out.NotFound, messageRefIn{Box: ref.Box, ID: ref.ID.String()})
 		}
 
@@ -138,51 +74,22 @@ func (mod *Module) readMessagesTool(agentID *astral.Identity) mcpsdk.ToolHandler
 	}
 }
 
-const (
-	childrenNone      = "none"
-	childrenEnvelopes = "envelopes"
-	childrenFull      = "full"
-)
-
-// replies answers a message's direct replies and how many it left. One level:
-// walking further is the reader's, and a recursive answer is one the caller
-// cannot bound.
-//
-// why a child's body is opt-in: handing one out stamps it read and tells its
-// sender the body was collected, so a reader that asked about a message would
-// otherwise report having collected mail it never asked for.
-func (mod *Module) replies(owner *astral.Identity, parent mcpapi.MessageID, depth string, limit int) ([]messageOut, int, error) {
-	rows, err := mod.db.Children(owner, parent, limit)
-	if err != nil {
-		return nil, 0, err
+// wholes renders what a read decided about each message it answers.
+func (mod *Module) wholes(list []readMessage) []messageOut {
+	if len(list) == 0 {
+		return nil
 	}
 
-	total, err := mod.db.CountChildren(owner, parent)
-	if err != nil {
-		return nil, 0, err
-	}
-
-	kids := make([]messageOut, 0, len(rows))
-	for _, row := range rows {
-		if depth == childrenEnvelopes {
-			m := mod.whole(row)
-			m.Content = ""
-			kids = append(kids, m)
-			continue
+	out := make([]messageOut, len(list))
+	for i, m := range list {
+		out[i] = mod.whole(m.Row)
+		out[i].MoreChildren = m.MoreChildren
+		if m.WithoutBody {
+			out[i].Content = ""
 		}
-
-		// why the stamp and the handout are one act: handing a body out tells
-		// the sender it was collected, and a row that says otherwise leaves the
-		// two halves of one fact disagreeing — the sender reading it collected
-		// while unread_only still lists it.
-		if err := mod.db.MarkRead(owner, &row); err != nil {
-			return nil, 0, err
-		}
-		mod.noteFetched(&row)
-		kids = append(kids, mod.whole(row))
+		out[i].Truncated = m.Truncated
 	}
-
-	return kids, int(total) - len(rows), nil
+	return out
 }
 
 // whole renders one message with its body.
@@ -205,15 +112,4 @@ func (mod *Module) whole(row dbMessage) messageOut {
 		m.ParentID = row.ParentID.String()
 	}
 	return m
-}
-
-func parseRef(r messageRefIn) (ref messageRef, err error) {
-	if r.Box != boxInbox && r.Box != boxOutbox {
-		return ref, fmt.Errorf("box is inbox or outbox, not %v", r.Box)
-	}
-	if ref.ID, err = mcpapi.ParseMessageID(r.ID); err != nil {
-		return ref, err
-	}
-	ref.Box = r.Box
-	return ref, nil
 }

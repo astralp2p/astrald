@@ -27,54 +27,20 @@ type waitOut struct {
 // to find out it is one — which stamps it read and tells its sender the body was
 // collected. The sender is on every envelope, so the agent decides without
 // opening anything.
-//
-// why it stamps nothing: the park and the read are separate acts. Two agents
-// waiting at once are answered the same messages, neither takes anything from
-// the other, and an agent that stops between the answer and the work leaves the
-// mailbox as it was.
 func (mod *Module) waitTool(agentID *astral.Identity) mcpsdk.ToolHandlerFor[waitIn, waitOut] {
 	return func(ctx context.Context, _ *mcpsdk.CallToolRequest, in waitIn) (res *mcpsdk.CallToolResult, out waitOut, err error) {
-		// why the ceiling only shortens: it is the deployment's, set against the
-		// clients it serves, and a park that outlives its client answers a
-		// connection nobody is reading.
-		timeout := mod.config.WaitTimeout
-		if in.TimeoutMs > 0 {
-			if t := time.Duration(in.TimeoutMs) * time.Millisecond; t < timeout {
-				timeout = t
-			}
-		}
-
-		q := messageQuery{List: listInbox}
-		if in.Since != "" {
-			if q.Since, err = parseSince(in.Since); err != nil {
-				return nil, out, err
-			}
-		}
-		if in.From != "" {
-			if q.From, err = mod.Dir.ResolveIdentity(in.From); err != nil {
-				return nil, out, errUnknownPeer(in.From)
-			}
-		}
-		if err = q.validate(); err != nil {
-			return nil, out, err
-		}
-
-		rows, err := mod.waitForMessages(ctx, agentID, q, timeout)
+		rows, err := mod.waitMessages(ctx, agentID, waitRequest{
+			From:    in.From,
+			Since:   in.Since,
+			Timeout: time.Duration(in.TimeoutMs) * time.Millisecond,
+		})
 		if err != nil {
 			return nil, out, err
 		}
 
-		if len(rows) == 0 {
-			out.TimedOut = true
-			out.Messages = []messageEntry{}
-			return nil, out, nil
-		}
-
-		out.Messages = make([]messageEntry, len(rows))
-		for i, row := range rows {
-			out.Messages[i] = mod.entry(row)
-		}
+		out.Messages = mod.entries(rows)
 		out.NextSince = nextSince(rows)
+		out.TimedOut = len(rows) == 0
 
 		return nil, out, nil
 	}

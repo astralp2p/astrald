@@ -172,7 +172,7 @@ func TestRouteQueryRefusesOversizeMessage(t *testing.T) {
 		t.Fatalf("delivery answered %T, want an error", obj)
 	}
 
-	rows, err := mod.listMessages(recipient, messageQuery{List: listInbox})
+	rows, err := mod.listMessages(recipient, listRequest{List: listInbox})
 	if err != nil {
 		t.Fatalf("list: %v", err)
 	}

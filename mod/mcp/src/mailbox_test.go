@@ -4,6 +4,7 @@ import (
 	"context"
 	"sync"
 	"testing"
+	"time"
 
 	mcpapi "github.com/astralp2p/astral-go/api/mcp"
 	"github.com/astralp2p/astral-go/astral"
@@ -274,17 +275,17 @@ func TestArchivedMessagesLeaveTheListingsAndTheWait(t *testing.T) {
 		t.Fatal("archiving twice must report the second call changed nothing")
 	}
 
-	live, err := mod.listMessages(b, messageQuery{List: listInbox})
+	live, err := mod.listMessages(b, listRequest{List: listInbox})
 	if err != nil || len(live) != 0 {
 		t.Fatalf("inbox after archiving: %v rows, err %v", len(live), err)
 	}
 
-	away, err := mod.listMessages(b, messageQuery{List: listArchive})
+	away, err := mod.listMessages(b, listRequest{List: listArchive})
 	if err != nil || len(away) != 1 {
 		t.Fatalf("archive: %v rows, err %v", len(away), err)
 	}
 
-	rows, err := mod.waitForMessages(context.Background(), b, messageQuery{List: listInbox}, 0)
+	rows, err := mod.waitMessages(context.Background(), b, waitRequest{Timeout: time.Millisecond})
 	if err != nil {
 		t.Fatalf("wait: %v", err)
 	}
@@ -295,7 +296,7 @@ func TestArchivedMessagesLeaveTheListingsAndTheWait(t *testing.T) {
 	if n, _ := mod.db.Unarchive(b, boxInbox, id); n != 1 {
 		t.Fatal("unarchive must put it back")
 	}
-	live, _ = mod.listMessages(b, messageQuery{List: listInbox})
+	live, _ = mod.listMessages(b, listRequest{List: listInbox})
 	if len(live) != 1 {
 		t.Fatal("an unarchived message must return to the inbox")
 	}
@@ -327,7 +328,7 @@ func TestEachListAnswersItsOwnRowsInItsOwnOrder(t *testing.T) {
 		mustInsertInbox(t, mod, &dbMessage{ID: mcpapi.NewMessageID(), Sender: b, Recipient: a, Content: "got"})
 	}
 
-	in, err := mod.listMessages(a, messageQuery{List: listInbox})
+	in, err := mod.listMessages(a, listRequest{List: listInbox})
 	if err != nil || len(in) != 3 {
 		t.Fatalf("inbox: %v rows, err %v", len(in), err)
 	}
@@ -340,7 +341,7 @@ func TestEachListAnswersItsOwnRowsInItsOwnOrder(t *testing.T) {
 		t.Fatal("an inbox is a queue and reads oldest first")
 	}
 
-	out, err := mod.listMessages(a, messageQuery{List: listOutbox})
+	out, err := mod.listMessages(a, listRequest{List: listOutbox})
 	if err != nil || len(out) != 3 {
 		t.Fatalf("outbox: %v rows, err %v", len(out), err)
 	}
@@ -383,7 +384,7 @@ func TestAListingAnswersTheWholeList(t *testing.T) {
 		mustInsertInbox(t, mod, &dbMessage{ID: mcpapi.NewMessageID(), Sender: b, Recipient: a, Content: "x"})
 	}
 
-	rows, err := mod.listMessages(a, messageQuery{List: listInbox})
+	rows, err := mod.listMessages(a, listRequest{List: listInbox})
 	if err != nil || len(rows) != held {
 		t.Fatalf("listed %v of %v (err %v)", len(rows), held, err)
 	}
@@ -398,12 +399,11 @@ func TestWaitTakesNothing(t *testing.T) {
 	a, b := astral.GenerateIdentity(), astral.GenerateIdentity()
 	mustInsertInbox(t, mod, &dbMessage{ID: mcpapi.NewMessageID(), Sender: b, Recipient: a, Content: "x"})
 
-	q := messageQuery{List: listInbox}
-	first, err := mod.waitForMessages(context.Background(), a, q, 0)
+	first, err := mod.waitMessages(context.Background(), a, waitRequest{Timeout: time.Millisecond})
 	if err != nil || len(first) != 1 {
 		t.Fatalf("first wait: %v rows, err %v", len(first), err)
 	}
-	second, err := mod.waitForMessages(context.Background(), a, q, 0)
+	second, err := mod.waitMessages(context.Background(), a, waitRequest{Timeout: time.Millisecond})
 	if err != nil || len(second) != 1 {
 		t.Fatalf("second wait: %v rows, err %v", len(second), err)
 	}
@@ -419,28 +419,28 @@ func TestSinceOnlyNarrows(t *testing.T) {
 	a, b := astral.GenerateIdentity(), astral.GenerateIdentity()
 	mustInsertInbox(t, mod, &dbMessage{ID: mcpapi.NewMessageID(), Sender: b, Recipient: a, Content: "one"})
 
-	rows, err := mod.listMessages(a, messageQuery{List: listInbox})
+	rows, err := mod.listMessages(a, listRequest{List: listInbox})
 	if err != nil || len(rows) != 1 {
 		t.Fatalf("seed: %v rows, err %v", len(rows), err)
 	}
-	since, err := parseSince(nextSince(rows))
-	if err != nil {
-		t.Fatalf("next_since must parse: %v", err)
+	since := nextSince(rows)
+	if since == "" {
+		t.Fatal("a listing that answered a row must hand out a cursor")
 	}
 
-	after, err := mod.listMessages(a, messageQuery{List: listInbox, Since: since})
+	after, err := mod.listMessages(a, listRequest{List: listInbox, Since: since})
 	if err != nil || len(after) != 0 {
 		t.Fatalf("since its own answer: %v rows, err %v", len(after), err)
 	}
 
 	mustInsertInbox(t, mod, &dbMessage{ID: mcpapi.NewMessageID(), Sender: b, Recipient: a, Content: "two"})
-	after, err = mod.listMessages(a, messageQuery{List: listInbox, Since: since})
+	after, err = mod.listMessages(a, listRequest{List: listInbox, Since: since})
 	if err != nil || len(after) != 1 || after[0].Content != "two" {
 		t.Fatalf("after a new arrival: %+v, err %v", after, err)
 	}
 
 	// An empty since is a superset, never a subset.
-	all, _ := mod.listMessages(a, messageQuery{List: listInbox})
+	all, _ := mod.listMessages(a, listRequest{List: listInbox})
 	if len(all) != 2 {
 		t.Fatalf("dropping since must widen: %v rows", len(all))
 	}
@@ -482,11 +482,7 @@ func TestTheCursorNeverSkipsAMessage(t *testing.T) {
 	go func() {
 		defer close(done)
 		for {
-			q := messageQuery{List: listInbox}
-			if since != "" {
-				q.Since, _ = parseSince(since)
-			}
-			rows, err := mod.listMessages(a, q)
+			rows, err := mod.listMessages(a, listRequest{List: listInbox, Since: since})
 			if err != nil {
 				t.Error(err)
 				return
@@ -512,11 +508,7 @@ func TestTheCursorNeverSkipsAMessage(t *testing.T) {
 	<-done
 
 	// A final page, the way a reader resuming would.
-	q := messageQuery{List: listInbox}
-	if since != "" {
-		q.Since, _ = parseSince(since)
-	}
-	rows, err := mod.listMessages(a, q)
+	rows, err := mod.listMessages(a, listRequest{List: listInbox, Since: since})
 	if err != nil {
 		t.Fatalf("final page: %v", err)
 	}
@@ -601,7 +593,7 @@ func TestAChildsBodyStampsTheRowItCameFrom(t *testing.T) {
 		t.Fatal("a body was handed out without stamping the row it came from")
 	}
 
-	unread, err := mod.listMessages(a, messageQuery{List: listInbox, UnreadOnly: true})
+	unread, err := mod.listMessages(a, listRequest{List: listInbox, UnreadOnly: true})
 	if err != nil || len(unread) != 0 {
 		t.Fatalf("unread_only still lists a message whose body was handed out: %v rows, err %v", len(unread), err)
 	}
@@ -773,5 +765,111 @@ func TestArchiveReportsWhetherThisCallMovedIt(t *testing.T) {
 	})
 	if err != nil || out.Changed {
 		t.Fatalf("an agent moved a message it does not hold: changed=%v err=%v", out.Changed, err)
+	}
+}
+
+// ── one answer has a size, and the caller does not choose it ───────────────
+
+// A body may be 64 KiB and a read names up to twenty ids, so an unbounded
+// answer is the senders deciding how much of the reader's context they fill.
+// The bodies that do not fit are left out and say so; the messages themselves
+// are still answered, because a read that returned fewer would look like a
+// mailbox that lost them.
+func TestAFullAnswerLeavesBodiesAndSaysSo(t *testing.T) {
+	mod := testMessageModule(t)
+	mod.config.MaxResponseBytes = 100
+
+	a, b := astral.GenerateIdentity(), astral.GenerateIdentity()
+
+	body := ""
+	for range 60 {
+		body += "x"
+	}
+
+	refs := make([]messageRef, 3)
+	for i := range refs {
+		id := mcpapi.NewMessageID()
+		mustInsertInbox(t, mod, &dbMessage{ID: id, Sender: b, Recipient: a, Content: body})
+		refs[i] = messageRef{Box: boxInbox, ID: id}
+	}
+
+	res, err := mod.readMessages(a, readRequest{Refs: refs, Children: childrenNone})
+	if err != nil {
+		t.Fatalf("read: %v", err)
+	}
+	if len(res.Messages) != 3 {
+		t.Fatalf("a full answer must still name every message asked for, got %v", len(res.Messages))
+	}
+
+	if res.Messages[0].Truncated {
+		t.Fatal("the first body fits and must be answered")
+	}
+	for _, m := range res.Messages[1:] {
+		if !m.Truncated || !m.WithoutBody {
+			t.Fatalf("a body past the budget must be left out and say so: %+v", m)
+		}
+	}
+}
+
+// The caller named the messages and did not name the replies, so an answer that
+// runs out of room drops the extra rather than the thing that was asked for.
+func TestRepliesAreChargedAfterTheMessageTheyAnswer(t *testing.T) {
+	mod := testMessageModule(t)
+	mod.config.MaxResponseBytes = 80
+
+	a, b := astral.GenerateIdentity(), astral.GenerateIdentity()
+	ask, reply := mcpapi.NewMessageID(), mcpapi.NewMessageID()
+
+	body := ""
+	for range 60 {
+		body += "y"
+	}
+	mustInsertOutbox(t, mod, &dbMessage{ID: ask, Sender: a, Recipient: b, Content: body})
+	mustInsertInbox(t, mod, &dbMessage{ID: reply, Sender: b, Recipient: a, Content: body, ParentID: ask})
+
+	res, err := mod.readMessages(a, readRequest{
+		Refs:     []messageRef{{Box: boxOutbox, ID: ask}},
+		Children: childrenFull,
+	})
+	if err != nil {
+		t.Fatalf("read: %v", err)
+	}
+
+	if res.Messages[0].Truncated {
+		t.Fatal("the message the caller named must keep its body while there is room")
+	}
+	if len(res.Replies) != 1 || !res.Replies[0].Truncated {
+		t.Fatalf("the reply is the extra and must be the one left out: %+v", res.Replies)
+	}
+}
+
+// A read is bounded in how many ids it takes and how many replies it answers
+// per message, and neither bound is the caller's to raise.
+func TestAReadsBoundsAreTheModulesAndNotTheCallers(t *testing.T) {
+	over := make([]messageRef, maxReadIDs+1)
+	for i := range over {
+		over[i] = messageRef{Box: boxInbox, ID: mcpapi.NewMessageID()}
+	}
+	if err := (&readRequest{Refs: over}).validate(); err == nil {
+		t.Fatalf("naming more than %v ids in one read must be refused", maxReadIDs)
+	}
+
+	if err := (&readRequest{}).validate(); err == nil {
+		t.Fatal("a read that names nothing must be refused")
+	}
+
+	req := readRequest{Refs: over[:1], MaxChildren: maxChildren + 500}
+	if err := req.validate(); err != nil {
+		t.Fatalf("validate: %v", err)
+	}
+	if req.MaxChildren != maxChildren {
+		t.Fatalf("max_children was raised to %v past the module's %v", req.MaxChildren, maxChildren)
+	}
+	if req.Children != childrenEnvelopes {
+		t.Fatalf("children defaults to envelopes, not %v", req.Children)
+	}
+
+	if err := (&readRequest{Refs: over[:1], Children: "everything"}).validate(); err == nil {
+		t.Fatal("a children mode that is not one must be refused, not ignored")
 	}
 }

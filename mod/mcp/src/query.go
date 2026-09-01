@@ -3,6 +3,7 @@ package mcp
 import (
 	"errors"
 	"fmt"
+	"strconv"
 
 	mcpapi "github.com/astralp2p/astral-go/api/mcp"
 	"github.com/astralp2p/astral-go/astral"
@@ -153,17 +154,55 @@ func (q messageQuery) order() string {
 	}
 }
 
-// listMessages returns one of the owner's three lists.
-func (mod *Module) listMessages(owner *astral.Identity, q messageQuery) ([]dbMessage, error) {
-	if err := q.validate(); err != nil {
-		return nil, err
-	}
-	return mod.db.ListMessages(owner, q)
-}
-
 // messageRef names one row. The box is not optional and never inferred: an id
 // alone names a row in each direction, and the archive spans both.
 type messageRef struct {
 	Box string
 	ID  mcpapi.MessageID
+}
+
+// nextSince is the furthest the answer reached in the database's own order, so
+// a caller passing it back sees only what was written after. It is the caller's
+// to hold: the node keeps no read position, so a lost value costs a repeat
+// rather than a message.
+//
+// why the sequence and not a timestamp: created_at is read before the row is
+// written, so a message can carry an earlier instant and appear later. A cursor
+// over it steps past mail that had not arrived yet, permanently.
+func nextSince(rows []dbMessage) string {
+	var furthest int64
+	for _, row := range rows {
+		if row.Seq > furthest {
+			furthest = row.Seq
+		}
+	}
+	if furthest == 0 {
+		return ""
+	}
+	return strconv.FormatInt(furthest, 10)
+}
+
+// parseSince reads a cursor a previous answer handed out. It is opaque: only
+// its order means anything, and a caller that invents one gets a refusal rather
+// than a silently wrong page.
+func parseSince(v string) (int64, error) {
+	n, err := strconv.ParseInt(v, 10, 64)
+	if err != nil || n < 0 {
+		return 0, fmt.Errorf("since is a cursor a previous answer gave you, not %q", v)
+	}
+	return n, nil
+}
+
+// parseRef reads the pair a listing handed out. The box is not optional and is
+// never inferred: an id alone names a row in each direction, and the archive
+// spans both.
+func parseRef(box, id string) (ref messageRef, err error) {
+	if box != boxInbox && box != boxOutbox {
+		return ref, fmt.Errorf("box is inbox or outbox, not %v", box)
+	}
+	if ref.ID, err = mcpapi.ParseMessageID(id); err != nil {
+		return ref, err
+	}
+	ref.Box = box
+	return ref, nil
 }
