@@ -964,3 +964,53 @@ func TestChildIDsComeBackEvenWhenNoRepliesAreAskedFor(t *testing.T) {
 		t.Fatal("naming a reply's id stamped it read")
 	}
 }
+
+// Naming one message twice asks for it once. A read that answered it twice
+// would charge the budget twice for a body the caller already has, and the
+// bound on how many messages a read takes is a bound on distinct messages.
+func TestNamingOneMessageTwiceReadsItOnce(t *testing.T) {
+	mod := testMessageModule(t)
+	a, b := astral.GenerateIdentity(), astral.GenerateIdentity()
+	id := mcpapi.NewMessageID()
+	mustInsertInbox(t, mod, &dbMessage{ID: id, Sender: b, Recipient: a, Content: "once"})
+
+	ref := messageRef{Box: boxInbox, ID: id}
+	res, err := mod.readMessages(a, readRequest{Refs: []messageRef{ref, ref, ref}, Children: childrenNone})
+	if err != nil {
+		t.Fatalf("read: %v", err)
+	}
+	if len(res.Messages) != 1 {
+		t.Fatalf("one message named three times was answered %v times", len(res.Messages))
+	}
+
+	// the bound counts distinct messages, so a caller repeating itself is not
+	// refused for a limit it never reached
+	repeated := make([]messageRef, maxReadIDs+5)
+	for i := range repeated {
+		repeated[i] = ref
+	}
+	if err := (&readRequest{Refs: repeated}).validate(); err != nil {
+		t.Fatalf("%v repeats of one id is one message, not %v: %v", len(repeated), len(repeated), err)
+	}
+}
+
+// The box is half of what names a row, so an agent that holds both rows of one
+// id named two messages rather than one twice.
+func TestTheSameIDInBothBoxesIsTwoMessages(t *testing.T) {
+	mod := testMessageModule(t)
+	a := astral.GenerateIdentity()
+	id := mcpapi.NewMessageID()
+	mustInsertOutbox(t, mod, &dbMessage{ID: id, Sender: a, Recipient: a, Content: "sent"})
+	mustInsertInbox(t, mod, &dbMessage{ID: id, Sender: a, Recipient: a, Content: "received"})
+
+	res, err := mod.readMessages(a, readRequest{
+		Refs:     []messageRef{{Box: boxOutbox, ID: id}, {Box: boxInbox, ID: id}},
+		Children: childrenNone,
+	})
+	if err != nil {
+		t.Fatalf("read: %v", err)
+	}
+	if len(res.Messages) != 2 {
+		t.Fatalf("the two rows of a self-send are two messages, got %v", len(res.Messages))
+	}
+}

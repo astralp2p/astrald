@@ -138,6 +138,12 @@ type readRequest struct {
 // validate refuses a read the module will not serve and fills in what the
 // caller left out.
 func (req *readRequest) validate() error {
+	// why a repeat is dropped rather than refused: naming one message twice
+	// asks for it once, and a read that charged it twice would spend a budget
+	// the caller cannot see on a message it already has. The bound is on
+	// distinct messages, so the count is taken after the drop.
+	req.Refs = distinctRefs(req.Refs)
+
 	switch {
 	case len(req.Refs) == 0:
 		return errors.New("name at least one message to read")
@@ -160,6 +166,24 @@ func (req *readRequest) validate() error {
 	req.MaxChildren = min(req.MaxChildren, maxChildren)
 
 	return nil
+}
+
+// distinctRefs keeps the first of each named row, in the order the caller named
+// them. The box is part of the identity: an agent that holds both rows of one id
+// named two messages, not one twice.
+func distinctRefs(refs []messageRef) []messageRef {
+	seen := make(map[messageRef]bool, len(refs))
+	out := refs[:0]
+
+	for _, ref := range refs {
+		if seen[ref] {
+			continue
+		}
+		seen[ref] = true
+		out = append(out, ref)
+	}
+
+	return out
 }
 
 // readMessage is one message a read answers, with what the read decided about
