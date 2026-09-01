@@ -561,9 +561,9 @@ func TestAnArchivedReplyIsNotAnsweredAsAChild(t *testing.T) {
 		t.Fatalf("an archived reply was answered as a child: %+v", kids)
 	}
 
-	n, err := mod.db.CountChildren(a, ask)
-	if err != nil || n != 0 {
-		t.Fatalf("more_children counted %v, err %v — it must count the set that was answered", n, err)
+	ids, err := mod.db.ChildIDs(a, ask)
+	if err != nil || len(ids) != 0 {
+		t.Fatalf("child_ids named %v archived replies, err %v — it must name the set that is answerable", len(ids), err)
 	}
 }
 
@@ -685,9 +685,9 @@ func TestASelfSentReplyIsAnsweredOnce(t *testing.T) {
 		t.Fatalf("the copy kept must be the received one, which carries the read stamp; got %v", kids[0].Box)
 	}
 
-	n, err := mod.db.CountChildren(a, ask)
-	if err != nil || n != 1 {
-		t.Fatalf("CountChildren answered %v, err %v — it must count the set Children answers", n, err)
+	ids, err := mod.db.ChildIDs(a, ask)
+	if err != nil || len(ids) != 1 {
+		t.Fatalf("child_ids named %v, err %v — it must name the set Children answers", len(ids), err)
 	}
 }
 
@@ -871,5 +871,96 @@ func TestAReadsBoundsAreTheModulesAndNotTheCallers(t *testing.T) {
 
 	if err := (&readRequest{Refs: over[:1], Children: "everything"}).validate(); err == nil {
 		t.Fatal("a children mode that is not one must be refused, not ignored")
+	}
+}
+
+// ── the read answers the shape of the conversation ─────────────────────────
+
+// A message carries the ids of every direct reply, however many there are. The
+// replies the answer carries are bounded, so without the ids a reader could not
+// see past that bound — and max_children cannot be raised past it either, which
+// made the bound a wall rather than a page.
+func TestAReadNamesEveryReplyEvenPastWhatItCarries(t *testing.T) {
+	mod := testMessageModule(t)
+	a, b := astral.GenerateIdentity(), astral.GenerateIdentity()
+	ask := mcpapi.NewMessageID()
+	mustInsertOutbox(t, mod, &dbMessage{ID: ask, Sender: a, Recipient: b, Content: "q"})
+
+	const replies = maxChildren + 7
+	want := make(map[string]bool, replies)
+	for range replies {
+		id := mcpapi.NewMessageID()
+		mustInsertInbox(t, mod, &dbMessage{ID: id, Sender: b, Recipient: a, Content: "r", ParentID: ask})
+		want[id.String()] = true
+	}
+
+	_, out, err := mod.readMessagesTool(a)(context.Background(), nil, readMessagesIn{
+		IDs: []messageRefIn{{Box: boxOutbox, ID: ask.String()}},
+	})
+	if err != nil {
+		t.Fatalf("read: %v", err)
+	}
+
+	if len(out.Messages[0].ChildIDs) != replies {
+		t.Fatalf("named %v of %v replies", len(out.Messages[0].ChildIDs), replies)
+	}
+	for _, id := range out.Messages[0].ChildIDs {
+		if !want[id] {
+			t.Fatalf("child_ids named a message that is not a reply: %v", id)
+		}
+	}
+	if len(out.Replies) != maxChildren {
+		t.Fatalf("the answer carried %v replies, want the module's bound of %v", len(out.Replies), maxChildren)
+	}
+
+	// every id it named is one it will answer
+	refs := make([]messageRefIn, 0, replies)
+	for _, id := range out.Messages[0].ChildIDs {
+		refs = append(refs, messageRefIn{Box: boxInbox, ID: id})
+	}
+	_, second, err := mod.readMessagesTool(a)(context.Background(), nil, readMessagesIn{
+		IDs: refs, Children: childrenNone,
+	})
+	if err != nil {
+		t.Fatalf("reading the ids it named: %v", err)
+	}
+	if len(second.NotFound) != 0 {
+		t.Fatalf("child_ids named %v messages the read then refused", len(second.NotFound))
+	}
+}
+
+// The ids are the shape of the conversation and the mode is how much of the
+// replies' content the answer carries, so asking for no replies still says what
+// there is to ask for next.
+func TestChildIDsComeBackEvenWhenNoRepliesAreAskedFor(t *testing.T) {
+	mod := testMessageModule(t)
+	a, b := astral.GenerateIdentity(), astral.GenerateIdentity()
+	ask, reply := mcpapi.NewMessageID(), mcpapi.NewMessageID()
+	mustInsertOutbox(t, mod, &dbMessage{ID: ask, Sender: a, Recipient: b, Content: "q"})
+	mustInsertInbox(t, mod, &dbMessage{ID: reply, Sender: b, Recipient: a, Content: "SECRET", ParentID: ask})
+
+	_, out, err := mod.readMessagesTool(a)(context.Background(), nil, readMessagesIn{
+		IDs:      []messageRefIn{{Box: boxOutbox, ID: ask.String()}},
+		Children: childrenNone,
+	})
+	if err != nil {
+		t.Fatalf("read: %v", err)
+	}
+
+	if len(out.Messages[0].ChildIDs) != 1 || out.Messages[0].ChildIDs[0] != reply.String() {
+		t.Fatalf("children:none must still name the reply: %+v", out.Messages[0].ChildIDs)
+	}
+	if len(out.Replies) != 0 {
+		t.Fatal("children:none must carry no replies")
+	}
+
+	// naming a reply is not handing it out: nothing was stamped and its sender
+	// is not told it was collected
+	var row dbMessage
+	if err := mod.db.Where("owner = ? AND box = ? AND id = ?", a, boxInbox, reply).Take(&row).Error; err != nil {
+		t.Fatalf("the reply: %v", err)
+	}
+	if row.ReadAt != nil {
+		t.Fatal("naming a reply's id stamped it read")
 	}
 }

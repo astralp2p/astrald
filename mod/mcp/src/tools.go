@@ -66,9 +66,11 @@ func (mod *Module) addTools(s *mcpsdk.Server, agentID *astral.Identity) {
 		Name: toolReadMessages,
 		Description: "Read whole messages, bodies included, and mark the ones " +
 			"in your inbox read. Name each by box and id, as a listing gave " +
-			"them. Each message answers its direct replies too — the messages " +
-			"that name it as their parent, from either box — as envelopes by " +
-			"default, or with children: full to read their bodies as well. " +
+			"them. Each message names every direct reply it has in child_ids " +
+			"— the messages that name it as their parent, from either box — " +
+			"and read_messages will answer any of them. Some of those replies " +
+			"come back beside it as well, as envelopes by default, or with " +
+			"children: full to read their bodies too. " +
 			"An id you do not hold comes back under not_found and the rest " +
 			"are still read. Reading is not a claim: reading twice answers " +
 			"the same messages unchanged.",

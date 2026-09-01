@@ -36,8 +36,8 @@ type messageOut struct {
 	ParentID  string `json:"parent_id,omitempty" jsonschema:"the message this answers"`
 	CreatedAt string `json:"created_at"`
 
-	MoreChildren int  `json:"more_children,omitempty" jsonschema:"how many of its replies this answer left out; raise max_children and read it again to see them"`
-	Truncated    bool `json:"truncated,omitempty" jsonschema:"the body was left out because this answer was already full; read this message on its own"`
+	ChildIDs  []string `json:"child_ids,omitempty" jsonschema:"the ids of every direct reply to this message, oldest first; read any of them with read_messages and this message's box"`
+	Truncated bool     `json:"truncated,omitempty" jsonschema:"the body was left out because this answer was already full; read this message on its own"`
 }
 
 type readMessagesOut struct {
@@ -83,7 +83,12 @@ func (mod *Module) wholes(list []readMessage) []messageOut {
 	out := make([]messageOut, len(list))
 	for i, m := range list {
 		out[i] = mod.whole(m.Row)
-		out[i].MoreChildren = m.MoreChildren
+		if len(m.ChildIDs) > 0 {
+			out[i].ChildIDs = make([]string, len(m.ChildIDs))
+			for j, id := range m.ChildIDs {
+				out[i].ChildIDs[j] = id.String()
+			}
+		}
 		if m.WithoutBody {
 			out[i].Content = ""
 		}

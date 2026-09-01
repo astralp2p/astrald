@@ -271,9 +271,10 @@ func (db *DB) MarkRead(owner *astral.Identity, row *dbMessage) error {
 	return nil
 }
 
-// childrenOf is the predicate both Children and CountChildren narrow by. They
-// share it because they must answer about the same set: more_children is their
-// difference, and it goes wrong in both directions if they disagree.
+// childrenOf is the predicate every question about a message's replies narrows
+// by. They share it because they must answer about the same set: a reader that
+// is handed an id here and refused it one call later has been told the mailbox
+// holds something it does not.
 //
 // why what was put away is excluded: it is excluded from every listing and from
 // the park, and a reply that comes back as a child of something else would be
@@ -303,10 +304,16 @@ func (db *DB) Children(owner *astral.Identity, parent mcpapi.MessageID, limit in
 		Find(&list).Error
 }
 
-// CountChildren answers how many replies a message has, so a truncated answer
-// can say what it left.
-func (db *DB) CountChildren(owner *astral.Identity, parent mcpapi.MessageID) (n int64, _ error) {
-	return n, childrenOf(db.Model(&dbMessage{}), owner, parent).Count(&n).Error
+// ChildIDs answers the ids of a message's direct replies, oldest first.
+//
+// why the whole set and not a page of it: an id is the cheap half of a message
+// and it is what read_messages takes, so a reader holding all of them can ask
+// for any reply in any order. A reader that cannot see a reply exists cannot
+// ask for it at all, and a count alone names no id.
+func (db *DB) ChildIDs(owner *astral.Identity, parent mcpapi.MessageID) (ids []mcpapi.MessageID, _ error) {
+	return ids, childrenOf(db.Model(&dbMessage{}), owner, parent).
+		Order("created_at").
+		Pluck("id", &ids).Error
 }
 
 // Archive stamps one of the owner's messages put away and reports whether this

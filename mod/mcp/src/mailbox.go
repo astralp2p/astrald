@@ -167,8 +167,9 @@ func (req *readRequest) validate() error {
 type readMessage struct {
 	Row dbMessage
 
-	// MoreChildren is how many of its replies the answer left out.
-	MoreChildren int
+	// ChildIDs are the ids of its direct replies, oldest first — the whole
+	// set, whatever the answer carried of them.
+	ChildIDs []mcpapi.MessageID
 
 	// WithoutBody says the body is not part of this answer, and Truncated says
 	// the reason was that the answer was already full rather than that
@@ -211,13 +212,20 @@ func (mod *Module) readMessages(agentID *astral.Identity, req readRequest) (res 
 			m.WithoutBody, m.Truncated = true, true
 		}
 
+		// why the ids come back whatever the children mode is: they are the
+		// shape of the conversation, and the mode is about how much of the
+		// replies' content this answer carries. A reader that asked for none
+		// still needs to know what it could ask for next.
+		if m.ChildIDs, err = mod.db.ChildIDs(agentID, row.ID); err != nil {
+			return res, err
+		}
+
 		if req.Children != childrenNone {
-			var set replySet
-			if set, err = mod.readReplies(agentID, row.ID, req, &left); err != nil {
+			var replies []readMessage
+			if replies, err = mod.readReplies(agentID, row.ID, req, &left); err != nil {
 				return res, err
 			}
-			m.MoreChildren = set.More
-			res.Replies = append(res.Replies, set.Replies...)
+			res.Replies = append(res.Replies, replies...)
 		}
 
 		res.Messages = append(res.Messages, m)
@@ -228,34 +236,22 @@ func (mod *Module) readMessages(agentID *astral.Identity, req readRequest) (res 
 	return res, nil
 }
 
-// replySet is a message's direct replies and how many the answer left out. The
-// two travel together because the count is only meaningful against the set.
-type replySet struct {
-	Replies []readMessage
-	More    int
-}
-
-// readReplies answers one message's direct replies. One level: walking further
-// is the reader's, and a recursive answer is one the caller cannot bound.
+// readReplies carries as much of one message's direct replies as the mode asks
+// for. One level: walking further is the reader's, which the child ids on every
+// message it answers are what make possible.
 //
 // why a child's body is opt-in: handing one out stamps it read and tells its
 // sender the body was collected, so a reader that asked about a message would
 // otherwise report having collected mail it never asked for.
-func (mod *Module) readReplies(owner *astral.Identity, parent mcpapi.MessageID, req readRequest, left *budget) (set replySet, err error) {
+func (mod *Module) readReplies(owner *astral.Identity, parent mcpapi.MessageID, req readRequest, left *budget) (replies []readMessage, err error) {
 	rows, err := mod.db.Children(owner, parent, req.MaxChildren)
 	if err != nil {
-		return set, err
+		return nil, err
 	}
-
-	total, err := mod.db.CountChildren(owner, parent)
-	if err != nil {
-		return set, err
-	}
-	set.More = int(total) - len(rows)
 
 	for _, row := range rows {
 		if req.Children == childrenEnvelopes {
-			set.Replies = append(set.Replies, readMessage{Row: row, WithoutBody: true})
+			replies = append(replies, readMessage{Row: row, WithoutBody: true})
 			continue
 		}
 
@@ -264,7 +260,7 @@ func (mod *Module) readReplies(owner *astral.Identity, parent mcpapi.MessageID, 
 		// two halves of one fact disagreeing — the sender reading it collected
 		// while unread_only still lists it.
 		if err = mod.db.MarkRead(owner, &row); err != nil {
-			return set, err
+			return nil, err
 		}
 		mod.noteFetched(&row)
 
@@ -272,10 +268,10 @@ func (mod *Module) readReplies(owner *astral.Identity, parent mcpapi.MessageID, 
 		if !left.spend(len(row.Content)) {
 			r.WithoutBody, r.Truncated = true, true
 		}
-		set.Replies = append(set.Replies, r)
+		replies = append(replies, r)
 	}
 
-	return set, nil
+	return replies, nil
 }
 
 // budget is what is left of one answer, in bytes of message body.
