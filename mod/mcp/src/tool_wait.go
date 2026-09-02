@@ -38,7 +38,7 @@ func (mod *Module) waitTool(agentID *astral.Identity) mcpsdk.ToolHandlerFor[wait
 			return nil, out, err
 		}
 
-		out.Messages = mod.entries(rows)
+		out.Messages = entries(rows)
 		out.NextSince = nextSince(rows)
 		out.TimedOut = len(rows) == 0
 

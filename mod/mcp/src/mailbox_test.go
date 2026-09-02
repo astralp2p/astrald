@@ -1,7 +1,9 @@
 package mcp
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"sync"
 	"testing"
 	"time"
@@ -1012,5 +1014,45 @@ func TestTheSameIDInBothBoxesIsTwoMessages(t *testing.T) {
 	}
 	if len(res.Messages) != 2 {
 		t.Fatalf("the two rows of a self-send are two messages, got %v", len(res.Messages))
+	}
+}
+
+// A listing and a read answer the two parties by identity and nothing else. A
+// display name resolves to this node's own alias for a key or, failing that, to
+// a truncated form of the key itself — so the field could not be absent, and an
+// agent had no way to tell a name it was given from one it was not.
+func TestNoAnswerCarriesADisplayName(t *testing.T) {
+	mod := testMessageModule(t)
+	a, b := astral.GenerateIdentity(), astral.GenerateIdentity()
+	id := mcpapi.NewMessageID()
+	mustInsertInbox(t, mod, &dbMessage{ID: id, Sender: b, Recipient: a, Content: "x"})
+
+	_, listed, err := mod.listMessagesTool(a)(context.Background(), nil, listMessagesIn{})
+	if err != nil {
+		t.Fatalf("list: %v", err)
+	}
+	_, read, err := mod.readMessagesTool(a)(context.Background(), nil, readMessagesIn{
+		IDs: []messageRefIn{{Box: boxInbox, ID: id.String()}},
+	})
+	if err != nil {
+		t.Fatalf("read: %v", err)
+	}
+
+	for label, v := range map[string]any{"list_messages": listed, "read_messages": read} {
+		blob, err := json.Marshal(v)
+		if err != nil {
+			t.Fatalf("%v: %v", label, err)
+		}
+		if bytes.Contains(blob, []byte("peer_alias")) || bytes.Contains(blob, []byte("alias")) {
+			t.Fatalf("%v still answers a display name: %s", label, blob)
+		}
+	}
+
+	// the parties are still named, by the value that identifies them
+	if listed.Messages[0].Peer != b.String() {
+		t.Fatalf("the listing must still name the peer: %+v", listed.Messages[0])
+	}
+	if read.Messages[0].Sender != b.String() || read.Messages[0].Recipient != a.String() {
+		t.Fatalf("the read must still name both parties: %+v", read.Messages[0])
 	}
 }

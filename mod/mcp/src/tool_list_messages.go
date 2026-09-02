@@ -24,7 +24,6 @@ type messageEntry struct {
 	ID         string `json:"id" jsonschema:"pass to read_messages with the box, to read the body"`
 	Box        string `json:"box" jsonschema:"inbox or outbox — which of your rows this is"`
 	Peer       string `json:"peer" jsonschema:"the other party: who wrote to you, or who you wrote to"`
-	PeerAlias  string `json:"peer_alias,omitempty" jsonschema:"the peer's display name"`
 	ParentID   string `json:"parent_id,omitempty" jsonschema:"the message this answers; absent when it answers none"`
 	CreatedAt  string `json:"created_at" jsonschema:"when this node wrote this row"`
 	ArchivedAt string `json:"archived_at,omitempty" jsonschema:"when you put it away"`
@@ -59,7 +58,7 @@ func (mod *Module) listMessagesTool(agentID *astral.Identity) mcpsdk.ToolHandler
 			return nil, out, err
 		}
 
-		out.Messages = mod.entries(rows)
+		out.Messages = entries(rows)
 		out.NextSince = nextSince(rows)
 
 		return nil, out, nil
@@ -68,17 +67,17 @@ func (mod *Module) listMessagesTool(agentID *astral.Identity) mcpsdk.ToolHandler
 
 // entries renders a listing. It is the whole of what both listing tools do
 // with what the module hands back.
-func (mod *Module) entries(rows []dbMessage) []messageEntry {
+func entries(rows []dbMessage) []messageEntry {
 	list := make([]messageEntry, len(rows))
 	for i, row := range rows {
-		list[i] = mod.entry(row)
+		list[i] = entry(row)
 	}
 	return list
 }
 
 // entry renders one row for a listing. The peer is whichever party the owner is
 // not, so one field answers "who" in both directions.
-func (mod *Module) entry(row dbMessage) messageEntry {
+func entry(row dbMessage) messageEntry {
 	peer := row.Sender
 	if row.Box == boxOutbox {
 		peer = row.Recipient
@@ -88,7 +87,6 @@ func (mod *Module) entry(row dbMessage) messageEntry {
 		ID:         row.ID.String(),
 		Box:        row.Box,
 		Peer:       peer.String(),
-		PeerAlias:  mod.Dir.DisplayName(peer),
 		CreatedAt:  stampMessageTime(row.CreatedAt),
 		ArchivedAt: stampOptionalTime(row.ArchivedAt),
 	}

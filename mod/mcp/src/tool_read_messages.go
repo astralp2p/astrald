@@ -31,7 +31,6 @@ type messageOut struct {
 	Box       string `json:"box" jsonschema:"inbox or outbox"`
 	Sender    string `json:"sender" jsonschema:"who wrote it"`
 	Recipient string `json:"recipient" jsonschema:"who it was written to"`
-	PeerAlias string `json:"peer_alias,omitempty" jsonschema:"the other party's display name"`
 	Content   string `json:"content" jsonschema:"the message body"`
 	ParentID  string `json:"parent_id,omitempty" jsonschema:"the message this answers"`
 	CreatedAt string `json:"created_at"`
@@ -64,8 +63,8 @@ func (mod *Module) readMessagesTool(agentID *astral.Identity) mcpsdk.ToolHandler
 			return nil, out, err
 		}
 
-		out.Messages = mod.wholes(result.Messages)
-		out.Replies = mod.wholes(result.Replies)
+		out.Messages = wholes(result.Messages)
+		out.Replies = wholes(result.Replies)
 		for _, ref := range result.NotFound {
 			out.NotFound = append(out.NotFound, messageRefIn{Box: ref.Box, ID: ref.ID.String()})
 		}
@@ -75,14 +74,14 @@ func (mod *Module) readMessagesTool(agentID *astral.Identity) mcpsdk.ToolHandler
 }
 
 // wholes renders what a read decided about each message it answers.
-func (mod *Module) wholes(list []readMessage) []messageOut {
+func wholes(list []readMessage) []messageOut {
 	if len(list) == 0 {
 		return nil
 	}
 
 	out := make([]messageOut, len(list))
 	for i, m := range list {
-		out[i] = mod.whole(m.Row)
+		out[i] = whole(m.Row)
 		if len(m.ChildIDs) > 0 {
 			out[i].ChildIDs = make([]string, len(m.ChildIDs))
 			for j, id := range m.ChildIDs {
@@ -98,18 +97,12 @@ func (mod *Module) wholes(list []readMessage) []messageOut {
 }
 
 // whole renders one message with its body.
-func (mod *Module) whole(row dbMessage) messageOut {
-	peer := row.Sender
-	if row.Box == boxOutbox {
-		peer = row.Recipient
-	}
-
+func whole(row dbMessage) messageOut {
 	m := messageOut{
 		ID:        row.ID.String(),
 		Box:       row.Box,
 		Sender:    row.Sender.String(),
 		Recipient: row.Recipient.String(),
-		PeerAlias: mod.Dir.DisplayName(peer),
 		Content:   row.Content,
 		CreatedAt: stampMessageTime(row.CreatedAt),
 	}
