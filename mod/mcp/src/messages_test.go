@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	mcpapi "github.com/astralp2p/astral-go/api/mcp"
+	"github.com/astralp2p/astral-go/api/mcp"
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astral-go/astral/channel"
 	"github.com/astralp2p/astral-go/astral/log"
@@ -82,16 +82,16 @@ func testDB(t *testing.T) *DB {
 }
 
 // testID makes an identifier a failure can name.
-func testID(n byte) mcpapi.MessageID {
-	var id mcpapi.MessageID
+func testID(n byte) mcp.MessageID {
+	var id mcp.MessageID
 	id[0] = n
 	return id
 }
 
-func storeOne(t *testing.T, mod *Module, sender, recipient *astral.Identity, id mcpapi.MessageID, body string) {
+func storeOne(t *testing.T, mod *Module, sender, recipient *astral.Identity, id mcp.MessageID, body string) {
 	t.Helper()
 
-	err := mod.storeMessage(sender, recipient, &mcpapi.Message{
+	err := mod.storeMessage(sender, recipient, &mcp.Message{
 		ID:      id,
 		Content: astral.String32(body),
 	})
@@ -104,12 +104,12 @@ func storeOne(t *testing.T, mod *Module, sender, recipient *astral.Identity, id 
 	time.Sleep(2 * time.Millisecond)
 }
 
-func deliverOverRouter(t *testing.T, mod *Module, recipient *astral.Identity, msg *mcpapi.Message) astral.Object {
+func deliverOverRouter(t *testing.T, mod *Module, recipient *astral.Identity, msg *mcp.Message) astral.Object {
 	t.Helper()
 
 	w := &bufWriteCloser{}
 
-	wc, err := mod.RouteQuery(mod.ctx, inFlight(recipient, mcpapi.MethodMessage), w)
+	wc, err := mod.RouteQuery(mod.ctx, inFlight(recipient, mcp.MethodMessage), w)
 	if err != nil {
 		t.Fatalf("route: %v", err)
 	}
@@ -140,7 +140,7 @@ func TestRouteQueryStoresMessage(t *testing.T) {
 	recipient := astral.GenerateIdentity()
 	_ = mod.agentIDs.Add(recipient.String())
 
-	obj := deliverOverRouter(t, mod, recipient, &mcpapi.Message{
+	obj := deliverOverRouter(t, mod, recipient, &mcp.Message{
 		ID:      testID(1),
 		Content: astral.String32("the index is rebuilt"),
 	})
@@ -163,7 +163,7 @@ func TestRouteQueryRefusesOversizeMessage(t *testing.T) {
 	recipient := astral.GenerateIdentity()
 	_ = mod.agentIDs.Add(recipient.String())
 
-	obj := deliverOverRouter(t, mod, recipient, &mcpapi.Message{
+	obj := deliverOverRouter(t, mod, recipient, &mcp.Message{
 		ID:      testID(1),
 		Content: astral.String32(bytes.Repeat([]byte("x"), mod.config.MaxPayloadBytes+1)),
 	})

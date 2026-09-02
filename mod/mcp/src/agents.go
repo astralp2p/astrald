@@ -3,7 +3,7 @@ package mcp
 import (
 	"errors"
 
-	authapi "github.com/astralp2p/astral-go/api/auth"
+	"github.com/astralp2p/astral-go/api/auth"
 	"github.com/astralp2p/astral-go/api/secp256k1"
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astrald/mod/apphost"
@@ -30,7 +30,7 @@ func (mod *Module) createAgentIdentity(ctx *astral.Context) (*astral.Identity, e
 		return nil, err
 	}
 
-	signed := &authapi.SignedContract{Contract: contract}
+	signed := &auth.SignedContract{Contract: contract}
 
 	if err = mod.Auth.SignContract(ctx, signed); err != nil {
 		return nil, err

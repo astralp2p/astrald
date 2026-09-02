@@ -9,8 +9,8 @@ import (
 	"time"
 	"unicode/utf8"
 
-	authapi "github.com/astralp2p/astral-go/api/auth"
-	mcpapi "github.com/astralp2p/astral-go/api/mcp"
+	"github.com/astralp2p/astral-go/api/auth"
+	"github.com/astralp2p/astral-go/api/mcp"
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astral-go/astral/channel"
 	"github.com/astralp2p/astral-go/lib/query"
@@ -56,8 +56,8 @@ func (mod *Module) queryTool(agentID *astral.Identity) mcpsdk.ToolHandlerFor[que
 		// why the refusal reads as an unresolvable target: an agent learns that
 		// it cannot reach this one, and not whether this one exists — the
 		// property the answering side has, applied to the calling side.
-		if !mod.Auth.Authorize(mod.ctx, &mcpapi.CallAgentAction{
-			Action: authapi.NewAction(agentID),
+		if !mod.Auth.Authorize(mod.ctx, &mcp.CallAgentAction{
+			Action: auth.NewAction(agentID),
 			ToID:   targetID,
 		}) {
 			return nil, out, fmt.Errorf("unknown target: %v", in.Target)

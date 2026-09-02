@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	mcpapi "github.com/astralp2p/astral-go/api/mcp"
+	"github.com/astralp2p/astral-go/api/mcp"
 	"github.com/astralp2p/astral-go/astral"
 )
 
@@ -46,7 +46,7 @@ func TestADeliveryWakesTheParkedWait(t *testing.T) {
 
 	waitUntilParked(t, mod, a, 1)
 
-	if err := mod.storeMessage(b, a, &mcpapi.Message{ID: mcpapi.NewMessageID(), Content: "x"}); err != nil {
+	if err := mod.storeMessage(b, a, &mcp.Message{ID: mcp.NewMessageID(), Content: "x"}); err != nil {
 		t.Fatalf("store: %v", err)
 	}
 
@@ -80,7 +80,7 @@ func TestEverySessionUnderOneIdentityIsWoken(t *testing.T) {
 	}
 	waitUntilParked(t, mod, a, sessions)
 
-	if err := mod.storeMessage(b, a, &mcpapi.Message{ID: mcpapi.NewMessageID(), Content: "x"}); err != nil {
+	if err := mod.storeMessage(b, a, &mcp.Message{ID: mcp.NewMessageID(), Content: "x"}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -126,7 +126,7 @@ func TestAWakeReachesOneMailbox(t *testing.T) {
 func TestUndoingAnArchiveWakesTheWait(t *testing.T) {
 	mod := testMessageModule(t)
 	a, b := astral.GenerateIdentity(), astral.GenerateIdentity()
-	id := mcpapi.NewMessageID()
+	id := mcp.NewMessageID()
 	mustInsertInbox(t, mod, &dbMessage{ID: id, Sender: b, Recipient: a, Content: "x"})
 	if _, err := mod.archiveMessage(a, messageRef{Box: boxInbox, ID: id}, false); err != nil {
 		t.Fatal(err)
@@ -159,7 +159,7 @@ func TestUndoingAnArchiveWakesTheWait(t *testing.T) {
 func TestARetryThatStoredNothingWakesNobody(t *testing.T) {
 	mod := testMessageModule(t)
 	a, b := astral.GenerateIdentity(), astral.GenerateIdentity()
-	msg := &mcpapi.Message{ID: mcpapi.NewMessageID(), Content: "x"}
+	msg := &mcp.Message{ID: mcp.NewMessageID(), Content: "x"}
 
 	if err := mod.storeMessage(b, a, msg); err != nil {
 		t.Fatal(err)
@@ -193,7 +193,7 @@ func TestEveryExitPathUnregisters(t *testing.T) {
 	a, b := astral.GenerateIdentity(), astral.GenerateIdentity()
 
 	t.Run("answered", func(t *testing.T) {
-		mustInsertInbox(t, mod, &dbMessage{ID: mcpapi.NewMessageID(), Sender: b, Recipient: a, Content: "x"})
+		mustInsertInbox(t, mod, &dbMessage{ID: mcp.NewMessageID(), Sender: b, Recipient: a, Content: "x"})
 		if _, err := mod.waitMessages(context.Background(), a, waitRequest{}); err != nil {
 			t.Fatal(err)
 		}

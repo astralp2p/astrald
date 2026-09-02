@@ -9,7 +9,7 @@ import (
 )
 
 type listMessagesIn struct {
-	Types          string `json:"types,omitempty" jsonschema:"which one list to read — inbox (default), outbox or archive; not a set"`
+	List           string `json:"list,omitempty" jsonschema:"which list to read: inbox (default), outbox or archive"`
 	From           string `json:"from,omitempty" jsonschema:"inbox only — list only what this correspondent wrote, by identity or alias"`
 	To             string `json:"to,omitempty" jsonschema:"outbox only — list only what you wrote to this correspondent"`
 	UnreadOnly     bool   `json:"unread_only,omitempty" jsonschema:"inbox only — list only what you have not opened"`
@@ -47,7 +47,7 @@ type listMessagesOut struct {
 func (mod *Module) listMessagesTool(agentID *astral.Identity) mcpsdk.ToolHandlerFor[listMessagesIn, listMessagesOut] {
 	return func(ctx context.Context, _ *mcpsdk.CallToolRequest, in listMessagesIn) (res *mcpsdk.CallToolResult, out listMessagesOut, err error) {
 		rows, err := mod.listMessages(agentID, listRequest{
-			List:           in.Types,
+			List:           in.List,
 			From:           in.From,
 			To:             in.To,
 			Since:          in.Since,

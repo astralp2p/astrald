@@ -3,7 +3,7 @@ package mcp
 import (
 	"testing"
 
-	mcpapi "github.com/astralp2p/astral-go/api/mcp"
+	"github.com/astralp2p/astral-go/api/mcp"
 	"github.com/astralp2p/astral-go/astral"
 )
 
@@ -13,11 +13,11 @@ func TestAReplyToAHeldInboxMessageIsStored(t *testing.T) {
 	mod := testMessageModule(t)
 	a, b := astral.GenerateIdentity(), astral.GenerateIdentity()
 
-	ask := mcpapi.NewMessageID()
+	ask := mcp.NewMessageID()
 	mustInsertInbox(t, mod, &dbMessage{ID: ask, Sender: b, Recipient: a, Content: "ask"})
 
-	reply := mcpapi.NewMessageID()
-	if err := mod.storeMessage(b, a, &mcpapi.Message{ID: reply, Content: "reply", ParentID: ask}); err != nil {
+	reply := mcp.NewMessageID()
+	if err := mod.storeMessage(b, a, &mcp.Message{ID: reply, Content: "reply", ParentID: ask}); err != nil {
 		t.Fatalf("a reply to a held message must be stored: %v", err)
 	}
 	if held, _ := mod.db.Holds(a, reply); !held {
@@ -32,11 +32,11 @@ func TestAReplyToAHeldOutboxMessageIsStored(t *testing.T) {
 	mod := testMessageModule(t)
 	a, b := astral.GenerateIdentity(), astral.GenerateIdentity()
 
-	ask := mcpapi.NewMessageID()
+	ask := mcp.NewMessageID()
 	mustInsertOutbox(t, mod, &dbMessage{ID: ask, Sender: a, Recipient: b, Content: "ask"})
 
-	reply := mcpapi.NewMessageID()
-	if err := mod.storeMessage(b, a, &mcpapi.Message{ID: reply, Content: "reply", ParentID: ask}); err != nil {
+	reply := mcp.NewMessageID()
+	if err := mod.storeMessage(b, a, &mcp.Message{ID: reply, Content: "reply", ParentID: ask}); err != nil {
 		t.Fatalf("a reply to a message the recipient sent must be stored: %v", err)
 	}
 }
@@ -47,14 +47,14 @@ func TestAReplyToAnArchivedParentIsStored(t *testing.T) {
 	mod := testMessageModule(t)
 	a, b := astral.GenerateIdentity(), astral.GenerateIdentity()
 
-	ask := mcpapi.NewMessageID()
+	ask := mcp.NewMessageID()
 	mustInsertInbox(t, mod, &dbMessage{ID: ask, Sender: b, Recipient: a, Content: "ask"})
 	if n, _ := mod.db.Archive(a, boxInbox, ask); n != 1 {
 		t.Fatal("archive must move the parent")
 	}
 
-	reply := mcpapi.NewMessageID()
-	if err := mod.storeMessage(b, a, &mcpapi.Message{ID: reply, Content: "reply", ParentID: ask}); err != nil {
+	reply := mcp.NewMessageID()
+	if err := mod.storeMessage(b, a, &mcp.Message{ID: reply, Content: "reply", ParentID: ask}); err != nil {
 		t.Fatalf("a reply to an archived-but-held parent must be stored: %v", err)
 	}
 }
@@ -66,10 +66,10 @@ func TestAWireCycleIsRefusedAtTheFirstEdge(t *testing.T) {
 	mod := testMessageModule(t)
 	a, b := astral.GenerateIdentity(), astral.GenerateIdentity()
 
-	x, y := mcpapi.NewMessageID(), mcpapi.NewMessageID()
+	x, y := mcp.NewMessageID(), mcp.NewMessageID()
 
 	// x answers y, which does not exist yet: refused
-	if err := mod.storeMessage(b, a, &mcpapi.Message{ID: x, Content: "x", ParentID: y}); err == nil {
+	if err := mod.storeMessage(b, a, &mcp.Message{ID: x, Content: "x", ParentID: y}); err == nil {
 		t.Fatal("the first edge of a cycle must be refused")
 	}
 	if held, _ := mod.db.Holds(a, x); held {
@@ -77,7 +77,7 @@ func TestAWireCycleIsRefusedAtTheFirstEdge(t *testing.T) {
 	}
 	// with x refused, y answering x now answers a message the node does not
 	// hold either: refused too. No cycle, nothing stored.
-	if err := mod.storeMessage(b, a, &mcpapi.Message{ID: y, Content: "y", ParentID: x}); err == nil {
+	if err := mod.storeMessage(b, a, &mcp.Message{ID: y, Content: "y", ParentID: x}); err == nil {
 		t.Fatal("the second edge must be refused as well")
 	}
 }
@@ -88,8 +88,8 @@ func TestARootMessageIsAlwaysStored(t *testing.T) {
 	mod := testMessageModule(t)
 	a, b := astral.GenerateIdentity(), astral.GenerateIdentity()
 
-	id := mcpapi.NewMessageID()
-	if err := mod.storeMessage(b, a, &mcpapi.Message{ID: id, Content: "root"}); err != nil {
+	id := mcp.NewMessageID()
+	if err := mod.storeMessage(b, a, &mcp.Message{ID: id, Content: "root"}); err != nil {
 		t.Fatalf("a message that answers none must be stored: %v", err)
 	}
 }
@@ -100,11 +100,11 @@ func TestARedeliveredReplyIsStillOneRow(t *testing.T) {
 	mod := testMessageModule(t)
 	a, b := astral.GenerateIdentity(), astral.GenerateIdentity()
 
-	ask := mcpapi.NewMessageID()
+	ask := mcp.NewMessageID()
 	mustInsertInbox(t, mod, &dbMessage{ID: ask, Sender: b, Recipient: a, Content: "ask"})
 
-	reply := mcpapi.NewMessageID()
-	msg := &mcpapi.Message{ID: reply, Content: "reply", ParentID: ask}
+	reply := mcp.NewMessageID()
+	msg := &mcp.Message{ID: reply, Content: "reply", ParentID: ask}
 	if err := mod.storeMessage(b, a, msg); err != nil {
 		t.Fatalf("first delivery: %v", err)
 	}
@@ -135,7 +135,7 @@ func TestSendRefusesAReplyToAMessageNotHeld(t *testing.T) {
 	peer := astral.GenerateIdentity()
 	mod.Dir.(*stubDir).aliases["peer"] = peer
 
-	stranger := mcpapi.NewMessageID()
+	stranger := mcp.NewMessageID()
 	_, err := mod.sendMessage(agent, "peer", "reply", stranger)
 	if err == nil {
 		t.Fatal("a reply to a message the agent does not hold must be refused")

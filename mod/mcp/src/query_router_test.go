@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	authapi "github.com/astralp2p/astral-go/api/auth"
-	mcpapi "github.com/astralp2p/astral-go/api/mcp"
+	"github.com/astralp2p/astral-go/api/auth"
+	"github.com/astralp2p/astral-go/api/mcp"
 	"github.com/astralp2p/astral-go/astral"
 	authmod "github.com/astralp2p/astrald/mod/auth"
 )
@@ -22,10 +22,10 @@ import (
 type fakeAuth struct {
 	authmod.Module
 	allow bool
-	asked []authapi.ActionObject
+	asked []auth.ActionObject
 }
 
-func (f *fakeAuth) Authorize(_ *astral.Context, action authapi.ActionObject) bool {
+func (f *fakeAuth) Authorize(_ *astral.Context, action auth.ActionObject) bool {
 	f.asked = append(f.asked, action)
 	return f.allow
 }
@@ -80,7 +80,7 @@ func TestRouteQueryRefusesAnyOtherPath(t *testing.T) {
 	mod := testRouterModule(t)
 	agentID := registeredAgent(mod)
 
-	for _, path := range []string{"chat", "", mcpapi.MethodMessage + ".x"} {
+	for _, path := range []string{"chat", "", mcp.MethodMessage + ".x"} {
 		_, err := mod.RouteQuery(mod.ctx, inFlight(agentID, path), &bufWriteCloser{})
 		if !errors.Is(err, &astral.ErrRouteNotFound{}) {
 			t.Fatalf("route %q: got %v, want route not found", path, err)

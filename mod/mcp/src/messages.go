@@ -7,8 +7,8 @@ import (
 	"io"
 	"time"
 
-	authapi "github.com/astralp2p/astral-go/api/auth"
-	mcpapi "github.com/astralp2p/astral-go/api/mcp"
+	"github.com/astralp2p/astral-go/api/auth"
+	"github.com/astralp2p/astral-go/api/mcp"
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astral-go/astral/channel"
 	"github.com/astralp2p/astral-go/lib/query"
@@ -45,7 +45,7 @@ var (
 // sendMessage puts one message to a recipient and records what became of it.
 // It answers the id the message was stored under, which is also the value a
 // later message names as its parent.
-func (mod *Module) sendMessage(agentID *astral.Identity, to, content string, parent mcpapi.MessageID) (id mcpapi.MessageID, err error) {
+func (mod *Module) sendMessage(agentID *astral.Identity, to, content string, parent mcp.MessageID) (id mcp.MessageID, err error) {
 	targetID, err := mod.resolveRecipient(agentID, to)
 	if err != nil {
 		return id, err
@@ -70,8 +70,8 @@ func (mod *Module) sendMessage(agentID *astral.Identity, to, content string, par
 		}
 	}
 
-	msg := &mcpapi.Message{
-		ID:       mcpapi.NewMessageID(),
+	msg := &mcp.Message{
+		ID:       mcp.NewMessageID(),
 		Content:  astral.String32(content),
 		ParentID: parent,
 	}
@@ -126,8 +126,8 @@ func (mod *Module) resolveRecipient(agentID *astral.Identity, to string) (*astra
 	// The same question astral-query asks about the same pair: what this agent
 	// may reach is its owner's decision, and a message buys it no reach it did
 	// not have.
-	if !mod.Auth.Authorize(mod.ctx, &mcpapi.CallAgentAction{
-		Action: authapi.NewAction(agentID),
+	if !mod.Auth.Authorize(mod.ctx, &mcp.CallAgentAction{
+		Action: auth.NewAction(agentID),
 		ToID:   targetID,
 	}) {
 		return nil, unknown
@@ -145,7 +145,7 @@ func (mod *Module) resolveRecipient(agentID *astral.Identity, to string) (*astra
 // happened as it happened, so failing the caller would deny it. Every state
 // here is read off which instants are set, so a lost stamp is a row claiming a
 // fact that did occur never did.
-func (mod *Module) noteDeliveryFailed(agentID *astral.Identity, id mcpapi.MessageID, cause error) {
+func (mod *Module) noteDeliveryFailed(agentID *astral.Identity, id mcp.MessageID, cause error) {
 	if !errors.Is(cause, errRefused) && !errors.Is(cause, errNotSent) {
 		return
 	}
@@ -168,12 +168,12 @@ func (mod *Module) noteDeliveryFailed(agentID *astral.Identity, id mcpapi.Messag
 // why a query and not a write to the table: a recipient on another node is the
 // same call as one on this node, and routing is what tells them apart. The
 // local case loops back through RouteQuery and takes the same path.
-func (mod *Module) deliverMessage(agentID, targetID *astral.Identity, msg *mcpapi.Message) error {
+func (mod *Module) deliverMessage(agentID, targetID *astral.Identity, msg *mcp.Message) error {
 	qctx, cancel := mod.ctx.WithIdentity(agentID).WithTimeout(mod.config.QueryTimeout)
 	defer cancel()
 
 	conn, err := query.RouteInFlight(qctx, mod.node,
-		launch(query.New(agentID, targetID, mcpapi.MethodMessage, nil)))
+		launch(query.New(agentID, targetID, mcp.MethodMessage, nil)))
 	if err != nil {
 		return fmt.Errorf("%w: %v", errNotSent, err)
 	}
@@ -248,7 +248,7 @@ func (mod *Module) noteFetched(row *dbMessage) {
 	// own, and it must not slow down or fail because the sender's node is
 	// unreachable. A receipt is a courtesy; the fact it carries is already
 	// true and durable here.
-	go func(recipient, sender *astral.Identity, id mcpapi.MessageID) {
+	go func(recipient, sender *astral.Identity, id mcp.MessageID) {
 		// why the failure is logged and not returned: nothing waits on this
 		// goroutine, and one attempt is made. The line is the only account of
 		// a receipt that never arrived.
@@ -269,12 +269,12 @@ func (mod *Module) noteFetched(row *dbMessage) {
 // One attempt is made. A receipt lost in transit leaves receipt_due_at set and
 // nothing retries it, which leaves the sender believing a message was never
 // collected — wrong, permanently, and in the direction that waits.
-func (mod *Module) sendReceipt(recipientID, senderID *astral.Identity, id mcpapi.MessageID) error {
+func (mod *Module) sendReceipt(recipientID, senderID *astral.Identity, id mcp.MessageID) error {
 	qctx, cancel := mod.ctx.WithIdentity(recipientID).WithTimeout(mod.config.QueryTimeout)
 	defer cancel()
 
 	conn, err := query.RouteInFlight(qctx, mod.node,
-		launch(query.New(recipientID, senderID, mcpapi.MethodReceipt, nil)))
+		launch(query.New(recipientID, senderID, mcp.MethodReceipt, nil)))
 	if err != nil {
 		return err
 	}
@@ -285,7 +285,7 @@ func (mod *Module) sendReceipt(recipientID, senderID *astral.Identity, id mcpapi
 
 	ch := channel.New(conn)
 
-	if err = ch.Send(&mcpapi.Receipt{ID: id}); err != nil {
+	if err = ch.Send(&mcp.Receipt{ID: id}); err != nil {
 		return err
 	}
 
@@ -322,7 +322,7 @@ func (mod *Module) acceptReceipt(q *astral.InFlightQuery, w io.WriteCloser) (io.
 			return
 		}
 
-		r, ok := obj.(*mcpapi.Receipt)
+		r, ok := obj.(*mcp.Receipt)
 		if !ok {
 			_ = ch.Send(astral.NewError("not a receipt"))
 			return
@@ -365,7 +365,7 @@ func (mod *Module) acceptMessage(q *astral.InFlightQuery, w io.WriteCloser) (io.
 			return
 		}
 
-		msg, ok := obj.(*mcpapi.Message)
+		msg, ok := obj.(*mcp.Message)
 		if !ok {
 			_ = ch.Send(astral.NewError("not a message"))
 			return
@@ -388,7 +388,7 @@ func (mod *Module) acceptMessage(q *astral.InFlightQuery, w io.WriteCloser) (io.
 // why the sender and the recipient come from the query and not the message:
 // both are authenticated by the route, and a message that named them could
 // name someone else.
-func (mod *Module) storeMessage(sender, recipient *astral.Identity, msg *mcpapi.Message) error {
+func (mod *Module) storeMessage(sender, recipient *astral.Identity, msg *mcp.Message) error {
 	switch {
 	case msg.ID.IsZero():
 		return errors.New("the message names no id")

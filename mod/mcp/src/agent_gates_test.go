@@ -4,8 +4,8 @@ import (
 	"errors"
 	"testing"
 
-	authapi "github.com/astralp2p/astral-go/api/auth"
-	mcpapi "github.com/astralp2p/astral-go/api/mcp"
+	"github.com/astralp2p/astral-go/api/auth"
+	"github.com/astralp2p/astral-go/api/mcp"
 	"github.com/astralp2p/astral-go/astral"
 )
 
@@ -25,7 +25,7 @@ func TestAnswerGateRefusesWhatTheAuthorityRefuses(t *testing.T) {
 	mod := testRouterModuleWithAuth(t, auth)
 	agentID := registeredAgent(mod)
 
-	_, err := mod.RouteQuery(mod.ctx, inFlight(agentID, mcpapi.MethodMessage), &bufWriteCloser{})
+	_, err := mod.RouteQuery(mod.ctx, inFlight(agentID, mcp.MethodMessage), &bufWriteCloser{})
 	if !errors.Is(err, &astral.ErrRouteNotFound{}) {
 		t.Fatalf("route: got %v, want route not found", err)
 	}
@@ -39,14 +39,14 @@ func TestAnswerGateAsksAboutTheCalledAgent(t *testing.T) {
 	mod := testRouterModuleWithAuth(t, auth)
 	agentID := registeredAgent(mod)
 
-	q := inFlight(agentID, mcpapi.MethodMessage)
+	q := inFlight(agentID, mcp.MethodMessage)
 	_, _ = mod.RouteQuery(mod.ctx, q, &bufWriteCloser{})
 
 	if len(auth.asked) != 1 {
 		t.Fatalf("the authority was asked %d times, want 1", len(auth.asked))
 	}
 
-	action, ok := auth.asked[0].(*mcpapi.AnswerAgentAction)
+	action, ok := auth.asked[0].(*mcp.AnswerAgentAction)
 	if !ok {
 		t.Fatalf("action: got %T, want *mcp.AnswerAgentAction", auth.asked[0])
 	}
@@ -65,7 +65,7 @@ func TestAnswerGateIsNotReachedForAnUnregisteredTarget(t *testing.T) {
 	auth := &fakeAuth{allow: true}
 	mod := testRouterModuleWithAuth(t, auth)
 
-	_, err := mod.RouteQuery(mod.ctx, inFlight(astral.GenerateIdentity(), mcpapi.MethodMessage), &bufWriteCloser{})
+	_, err := mod.RouteQuery(mod.ctx, inFlight(astral.GenerateIdentity(), mcp.MethodMessage), &bufWriteCloser{})
 	if !errors.Is(err, &astral.ErrRouteNotFound{}) {
 		t.Fatalf("route: got %v, want route not found", err)
 	}
@@ -80,8 +80,8 @@ func TestAnswerGateIsNotReachedForAnUnregisteredTarget(t *testing.T) {
 func TestCallActionNamesTheCallerAndTarget(t *testing.T) {
 	caller, target := astral.GenerateIdentity(), astral.GenerateIdentity()
 
-	action := &mcpapi.CallAgentAction{
-		Action: authapi.NewAction(caller),
+	action := &mcp.CallAgentAction{
+		Action: auth.NewAction(caller),
 		ToID:   target,
 	}
 
@@ -91,7 +91,7 @@ func TestCallActionNamesTheCallerAndTarget(t *testing.T) {
 	if !action.ToID.IsEqual(target) {
 		t.Fatalf("to: got %v, want %v", action.ToID, target)
 	}
-	if action.ObjectType() == (&mcpapi.AnswerAgentAction{}).ObjectType() {
+	if action.ObjectType() == (&mcp.AnswerAgentAction{}).ObjectType() {
 		t.Fatal("both directions report one object type; auth cannot tell them apart")
 	}
 }

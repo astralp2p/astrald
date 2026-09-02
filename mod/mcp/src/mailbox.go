@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"time"
 
-	mcpapi "github.com/astralp2p/astral-go/api/mcp"
+	"github.com/astralp2p/astral-go/api/mcp"
 	"github.com/astralp2p/astral-go/astral"
 )
 
@@ -210,7 +210,7 @@ type readMessage struct {
 
 	// ChildIDs are the ids of its direct replies, oldest first — the whole
 	// set, whatever the answer carried of them.
-	ChildIDs []mcpapi.MessageID
+	ChildIDs []mcp.MessageID
 
 	// WithoutBody says the body is not part of this answer, and Truncated says
 	// the reason was that the answer was already full rather than that
@@ -284,7 +284,7 @@ func (mod *Module) readMessages(agentID *astral.Identity, req readRequest) (res 
 // why a child's body is opt-in: handing one out stamps it read and tells its
 // sender the body was collected, so a reader that asked about a message would
 // otherwise report having collected mail it never asked for.
-func (mod *Module) readReplies(owner *astral.Identity, parent mcpapi.MessageID, req readRequest, left *budget) (replies []readMessage, err error) {
+func (mod *Module) readReplies(owner *astral.Identity, parent mcp.MessageID, req readRequest, left *budget) (replies []readMessage, err error) {
 	rows, err := mod.db.Children(owner, parent, req.MaxChildren)
 	if err != nil {
 		return nil, err

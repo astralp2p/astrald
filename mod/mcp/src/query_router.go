@@ -3,8 +3,8 @@ package mcp
 import (
 	"io"
 
-	authapi "github.com/astralp2p/astral-go/api/auth"
-	mcpapi "github.com/astralp2p/astral-go/api/mcp"
+	"github.com/astralp2p/astral-go/api/auth"
+	"github.com/astralp2p/astral-go/api/mcp"
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astral-go/lib/query"
 )
@@ -30,7 +30,7 @@ func (mod *Module) RouteQuery(ctx *astral.Context, q *astral.InFlightQuery, w io
 	// says one thing about that one message. Directions are granted per side,
 	// so asking answer_agent_action here would refuse a receipt whenever the
 	// two differ — which is the ordinary case, not the edge one.
-	if path == mcpapi.MethodReceipt {
+	if path == mcp.MethodReceipt {
 		return mod.acceptReceipt(q, w)
 	}
 
@@ -38,8 +38,8 @@ func (mod *Module) RouteQuery(ctx *astral.Context, q *astral.InFlightQuery, w io
 	// actor does, and taking a message is this agent's act. auth walks the
 	// contracts the actor is subject to, so naming the caller would search a
 	// stranger's delegations for a permission this agent's side holds.
-	if !mod.Auth.Authorize(ctx, &mcpapi.AnswerAgentAction{
-		Action: authapi.NewAction(q.Target),
+	if !mod.Auth.Authorize(ctx, &mcp.AnswerAgentAction{
+		Action: auth.NewAction(q.Target),
 		FromID: q.Caller,
 	}) {
 		return query.RouteNotFound()
@@ -48,7 +48,7 @@ func (mod *Module) RouteQuery(ctx *astral.Context, q *astral.InFlightQuery, w io
 	// why every other path is a miss: an agent is a mailbox and not a service.
 	// A query naming anything else reaches an agent that does not serve it, and
 	// reads as the target being absent.
-	if path != mcpapi.MethodMessage {
+	if path != mcp.MethodMessage {
 		return query.RouteNotFound()
 	}
 

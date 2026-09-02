@@ -53,7 +53,7 @@ func (mod *Module) addTools(s *mcpsdk.Server, agentID *astral.Identity) {
 
 	mcpsdk.AddTool(s, &mcpsdk.Tool{
 		Name: toolListMessages,
-		Description: "List your messages without their bodies. types is " +
+		Description: "List your messages without their bodies. list is " +
 			"inbox (what was written to you, the default), outbox (what you " +
 			"wrote) or archive (what you put away, in either direction). " +
 			"Narrow an inbox with from and unread_only, an outbox with to and " +
@@ -96,7 +96,7 @@ func (mod *Module) addTools(s *mcpsdk.Server, agentID *astral.Identity) {
 	mcpsdk.AddTool(s, &mcpsdk.Tool{
 		Name: toolArchive,
 		Description: "Put one message away, naming its box and id. It leaves " +
-			"the inbox and outbox listings, appears under types: archive, and " +
+			"the inbox and outbox listings, appears under list: archive, and " +
 			"wait never answers it again — so this is what ends a message " +
 			"rather than reading it. Pass undo to put it back. changed is " +
 			"false when the message was already the way you asked for, and " +

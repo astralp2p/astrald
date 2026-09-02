@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"strconv"
 
-	mcpapi "github.com/astralp2p/astral-go/api/mcp"
+	"github.com/astralp2p/astral-go/api/mcp"
 	"github.com/astralp2p/astral-go/astral"
 	"gorm.io/gorm"
 )
@@ -162,7 +162,7 @@ func (q messageQuery) order() string {
 // alone names a row in each direction, and the archive spans both.
 type messageRef struct {
 	Box string
-	ID  mcpapi.MessageID
+	ID  mcp.MessageID
 }
 
 // nextSince is the furthest the answer reached in the database's own order, so
@@ -204,7 +204,7 @@ func parseRef(box, id string) (ref messageRef, err error) {
 	if box != boxInbox && box != boxOutbox {
 		return ref, fmt.Errorf("box is inbox or outbox, not %v", box)
 	}
-	if ref.ID, err = mcpapi.ParseMessageID(id); err != nil {
+	if ref.ID, err = mcp.ParseMessageID(id); err != nil {
 		return ref, err
 	}
 	ref.Box = box

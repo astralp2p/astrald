@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"strings"
 
-	authapi "github.com/astralp2p/astral-go/api/auth"
-	mcpapi "github.com/astralp2p/astral-go/api/mcp"
+	"github.com/astralp2p/astral-go/api/auth"
+	"github.com/astralp2p/astral-go/api/mcp"
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astral-go/lib/query"
 	"github.com/astralp2p/astrald/lib/arl"
@@ -103,8 +103,8 @@ func (mod *Module) declaredToolHandler(agentID *astral.Identity, tool declaredTo
 
 		// The same question astral-query asks, about the same pair. A tool is a
 		// named query and buys the agent no reach it did not have.
-		if !mod.Auth.Authorize(mod.ctx, &mcpapi.CallAgentAction{
-			Action: authapi.NewAction(agentID),
+		if !mod.Auth.Authorize(mod.ctx, &mcp.CallAgentAction{
+			Action: auth.NewAction(agentID),
 			ToID:   targetID,
 		}) {
 			return nil, out, fmt.Errorf("unknown target: %v", tool.target)

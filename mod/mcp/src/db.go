@@ -5,7 +5,7 @@ import (
 	"time"
 	"unicode/utf8"
 
-	mcpapi "github.com/astralp2p/astral-go/api/mcp"
+	"github.com/astralp2p/astral-go/api/mcp"
 	"github.com/astralp2p/astral-go/astral"
 	mcpmod "github.com/astralp2p/astrald/mod/mcp"
 	"gorm.io/gorm"
@@ -80,7 +80,7 @@ type dbMessage struct {
 	// Box and ID are the key with Owner, and Box never changes after insert:
 	// every stamp below names a column only one box may carry.
 	Box string
-	ID  mcpapi.MessageID
+	ID  mcp.MessageID
 
 	Sender    *astral.Identity
 	Recipient *astral.Identity
@@ -94,7 +94,7 @@ type dbMessage struct {
 
 	// ParentID names the one message this answers. Zero answers none. It is the
 	// sender's claim, and a parent this node does not hold is kept as it stands.
-	ParentID mcpapi.MessageID
+	ParentID mcp.MessageID
 
 	// CreatedAt is when this node wrote this row — the recipient's arrival on an
 	// inbox row, the sender's attempt on an outbox row. It is the same fact from
@@ -254,7 +254,7 @@ func (db *DB) MarkRead(owner *astral.Identity, row *dbMessage) error {
 // read stamp and the receipt, so it is the one kept — and it is kept only where
 // it actually exists, so a self-send whose delivery failed still shows the copy
 // the agent has.
-func childrenOf(db *gorm.DB, owner *astral.Identity, parent mcpapi.MessageID) *gorm.DB {
+func childrenOf(db *gorm.DB, owner *astral.Identity, parent mcp.MessageID) *gorm.DB {
 	return db.Where("owner = ? AND parent_id = ? AND archived_at IS NULL", owner, parent).
 		Where(`NOT (box = 'outbox' AND EXISTS (
 			SELECT 1 FROM mcp__messages self
@@ -265,7 +265,7 @@ func childrenOf(db *gorm.DB, owner *astral.Identity, parent mcpapi.MessageID) *g
 
 // Children returns the owner's messages that name this one as their parent, in
 // either box, oldest first. One level: walking further is the reader's.
-func (db *DB) Children(owner *astral.Identity, parent mcpapi.MessageID, limit int) (list []dbMessage, _ error) {
+func (db *DB) Children(owner *astral.Identity, parent mcp.MessageID, limit int) (list []dbMessage, _ error) {
 	return list, childrenOf(db.DB, owner, parent).
 		Order("created_at").
 		Limit(limit).
@@ -278,7 +278,7 @@ func (db *DB) Children(owner *astral.Identity, parent mcpapi.MessageID, limit in
 // and it is what read_messages takes, so a reader holding all of them can ask
 // for any reply in any order. A reader that cannot see a reply exists cannot
 // ask for it at all, and a count alone names no id.
-func (db *DB) ChildIDs(owner *astral.Identity, parent mcpapi.MessageID) (ids []mcpapi.MessageID, _ error) {
+func (db *DB) ChildIDs(owner *astral.Identity, parent mcp.MessageID) (ids []mcp.MessageID, _ error) {
 	return ids, childrenOf(db.Model(&dbMessage{}), owner, parent).
 		Order("created_at").
 		Pluck("id", &ids).Error
@@ -290,7 +290,7 @@ func (db *DB) ChildIDs(owner *astral.Identity, parent mcpapi.MessageID) (ids []m
 // why admission and write are one statement: a lookup then a write would race,
 // and the answer the tool owes — did I put it away, or was it already away — is
 // exactly what the one statement returns.
-func (db *DB) Archive(owner *astral.Identity, box string, id mcpapi.MessageID) (int64, error) {
+func (db *DB) Archive(owner *astral.Identity, box string, id mcp.MessageID) (int64, error) {
 	tx := db.Model(&dbMessage{}).
 		Where("owner = ? AND box = ? AND id = ? AND archived_at IS NULL", owner, box, id).
 		Update("archived_at", time.Now().UTC())
@@ -301,7 +301,7 @@ func (db *DB) Archive(owner *astral.Identity, box string, id mcpapi.MessageID) (
 // the ids are thirty-two characters a model will mistype, and the column is the
 // recipient's own bookkeeping that crosses no link — so it is the one stamp
 // here with an inverse.
-func (db *DB) Unarchive(owner *astral.Identity, box string, id mcpapi.MessageID) (int64, error) {
+func (db *DB) Unarchive(owner *astral.Identity, box string, id mcp.MessageID) (int64, error) {
 	tx := db.Model(&dbMessage{}).
 		Where("owner = ? AND box = ? AND id = ? AND archived_at IS NOT NULL", owner, box, id).
 		Update("archived_at", nil)
@@ -317,7 +317,7 @@ func (db *DB) Unarchive(owner *astral.Identity, box string, id mcpapi.MessageID)
 
 // MarkReceiptDue records that a receipt is owed on this inbox row and reports
 // whether this call is the one that recorded it.
-func (db *DB) MarkReceiptDue(recipient *astral.Identity, id mcpapi.MessageID) (int64, error) {
+func (db *DB) MarkReceiptDue(recipient *astral.Identity, id mcp.MessageID) (int64, error) {
 	tx := db.Model(&dbMessage{}).
 		Where("owner = ? AND box = ? AND id = ? AND receipt_due_at IS NULL",
 			recipient, boxInbox, id).
@@ -326,7 +326,7 @@ func (db *DB) MarkReceiptDue(recipient *astral.Identity, id mcpapi.MessageID) (i
 }
 
 // StampReceiptStored records the sender's node acknowledging our receipt.
-func (db *DB) StampReceiptStored(recipient *astral.Identity, id mcpapi.MessageID) error {
+func (db *DB) StampReceiptStored(recipient *astral.Identity, id mcp.MessageID) error {
 	return db.Model(&dbMessage{}).
 		Where("owner = ? AND box = ? AND id = ? AND receipt_stored_at IS NULL",
 			recipient, boxInbox, id).
@@ -334,7 +334,7 @@ func (db *DB) StampReceiptStored(recipient *astral.Identity, id mcpapi.MessageID
 }
 
 // StampLanded records the recipient's node acknowledging the write.
-func (db *DB) StampLanded(sender *astral.Identity, id mcpapi.MessageID) error {
+func (db *DB) StampLanded(sender *astral.Identity, id mcp.MessageID) error {
 	return db.Model(&dbMessage{}).
 		Where("owner = ? AND box = ? AND id = ? AND landed_at IS NULL",
 			sender, boxOutbox, id).
@@ -342,7 +342,7 @@ func (db *DB) StampLanded(sender *astral.Identity, id mcpapi.MessageID) error {
 }
 
 // StampFailed records a delivery known not to have been stored.
-func (db *DB) StampFailed(sender *astral.Identity, id mcpapi.MessageID) error {
+func (db *DB) StampFailed(sender *astral.Identity, id mcp.MessageID) error {
 	return db.Model(&dbMessage{}).
 		Where("owner = ? AND box = ? AND id = ? AND failed_at IS NULL",
 			sender, boxOutbox, id).
@@ -353,7 +353,7 @@ func (db *DB) StampFailed(sender *astral.Identity, id mcpapi.MessageID) error {
 //
 // why matching nothing is not an error: the sender may hold no row — a message
 // from another node, or one whose row this node never wrote.
-func (db *DB) StampFetched(sender *astral.Identity, id mcpapi.MessageID) error {
+func (db *DB) StampFetched(sender *astral.Identity, id mcp.MessageID) error {
 	return db.Model(&dbMessage{}).
 		Where("owner = ? AND box = ? AND id = ? AND fetched_at IS NULL",
 			sender, boxOutbox, id).
@@ -367,7 +367,7 @@ func (db *DB) StampFetched(sender *astral.Identity, id mcpapi.MessageID) error {
 // why sender is spent as owner rather than kept as its own conjunct: on an
 // outbox row the owner is the sender, by the generated column. Naming it twice
 // would be one indexed equality and one that is not.
-func (db *DB) StampFetchedFrom(sender, recipient *astral.Identity, id mcpapi.MessageID) (int64, error) {
+func (db *DB) StampFetchedFrom(sender, recipient *astral.Identity, id mcp.MessageID) (int64, error) {
 	tx := db.Model(&dbMessage{}).
 		Where("owner = ? AND box = ? AND id = ? AND recipient = ? AND fetched_at IS NULL",
 			sender, boxOutbox, id, recipient).
@@ -381,7 +381,7 @@ func (db *DB) StampFetchedFrom(sender, recipient *astral.Identity, id mcpapi.Mes
 // empty string is a refusal whose words were empty rather than the absence of
 // one. Written as `err = ”` the guard matches nothing and every refusal is
 // discarded in silence.
-func (db *DB) SetErr(sender *astral.Identity, id mcpapi.MessageID, text string) error {
+func (db *DB) SetErr(sender *astral.Identity, id mcp.MessageID, text string) error {
 	return db.Model(&dbMessage{}).
 		Where("owner = ? AND box = ? AND id = ? AND err IS NULL", sender, boxOutbox, id).
 		Update("err", clip(text, errLimit)).Error
@@ -389,7 +389,7 @@ func (db *DB) SetErr(sender *astral.Identity, id mcpapi.MessageID, text string) 
 
 // SenderOf answers who wrote the row the owner holds under this id, so a caller
 // can tell a delivery that collided from one that is being retried.
-func (db *DB) SenderOf(owner *astral.Identity, box string, id mcpapi.MessageID) (*astral.Identity, error) {
+func (db *DB) SenderOf(owner *astral.Identity, box string, id mcp.MessageID) (*astral.Identity, error) {
 	var row dbMessage
 	err := db.Select("sender").
 		Where("owner = ? AND box = ? AND id = ?", owner, box, id).
@@ -405,7 +405,7 @@ func (db *DB) SenderOf(owner *astral.Identity, box string, id mcpapi.MessageID) 
 // its outbox and one it received in its inbox, and a reply may answer either;
 // archiving a message does not unsee it, so a row put away still answers held.
 // This is the same scope childrenOf reads a thread over.
-func (db *DB) Holds(owner *astral.Identity, id mcpapi.MessageID) (bool, error) {
+func (db *DB) Holds(owner *astral.Identity, id mcp.MessageID) (bool, error) {
 	err := db.Select("seq").
 		Where("owner = ? AND id = ?", owner, id).
 		Take(&dbMessage{}).Error
