@@ -82,7 +82,10 @@ func (mod *Module) addTools(s *mcpsdk.Server, agentID *astral.Identity) {
 			"not put away, and answer it without its body — read it with " +
 			"read_messages. Pass from to wait for one correspondent, and " +
 			"since (from a previous answer's next_since) to see only what is " +
-			"newer. timed_out means the window closed with nothing new. " +
+			"newer. timeout_secs asks for the window in seconds; the " +
+			"deployment's ceiling is the most any ask is granted, and every " +
+			"answer names granted_secs beside waited_secs. timed_out means " +
+			"the granted window closed with nothing new. " +
 			"Nothing is claimed and nothing is consumed, so a message you " +
 			"leave alone is answered again next time: archive is what says " +
 			"you are done with it. Each call parks once — report what " +

@@ -27,8 +27,10 @@ import (
 // why ten seconds: as the way a waiter normally learns, 250ms was right and
 // cost 0.03% of a core per parked agent. As a backstop it is forty times more
 // idle work than the job needs. What the interval has to satisfy is that it is
-// comfortably under WaitTimeout, so a missed wake is caught before the deadline
-// can report timed_out over a non-empty inbox.
+// comfortably under the default window (Config.waitDefault), so an unnamed
+// park catches a missed wake before its deadline can report timed_out over a
+// non-empty inbox. A park the caller shortened below the floor leans on the
+// wake alone, which covers every writer this module has.
 const waitFloor = 10 * time.Second
 
 // maxRefusalBytes bounds what a refusing node can put in this agent's sent
