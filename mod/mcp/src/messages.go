@@ -14,8 +14,22 @@ import (
 	"github.com/astralp2p/astral-go/lib/query"
 )
 
-// messagePollInterval is how often a parked wait looks again.
-const messagePollInterval = 250 * time.Millisecond
+// waitFloor is how often a parked wait looks again on its own.
+//
+// why it exists at all, given the wake: the wake is only as good as the set of
+// statements that remember to fire it, and that set grows — a repair, an
+// import, a tool not yet written. Without a floor a missed wake is not a slow
+// answer, it is a wrong one: pollMessages returns nil on its deadline and the
+// tool reports timed_out, so an agent is told the window closed with nothing
+// new while unarchived mail sits in its inbox. That is the one answer this
+// design exists to make impossible.
+//
+// why ten seconds: as the way a waiter normally learns, 250ms was right and
+// cost 0.03% of a core per parked agent. As a backstop it is forty times more
+// idle work than the job needs. What the interval has to satisfy is that it is
+// comfortably under WaitTimeout, so a missed wake is caught before the deadline
+// can report timed_out over a non-empty inbox.
+const waitFloor = 10 * time.Second
 
 // maxRefusalBytes bounds what a refusing node can put in this agent's sent
 // list, and from there into its model's context. The words are the remote's,
@@ -398,6 +412,11 @@ func (mod *Module) storeMessage(sender, recipient *astral.Identity, msg *mcpapi.
 		return err
 	}
 	if n == 1 {
+		// why the wake is here and not on the way out: the row is committed,
+		// and the path below wrote nothing for anyone to be woken about. A wake
+		// on "no error" would fire for a delivery that stored nothing, which is
+		// the same conflation InsertInbox's RowsAffected exists to undo.
+		mod.waiters.wake(recipient)
 		return nil
 	}
 
@@ -430,8 +449,17 @@ func (mod *Module) pollMessages(ctx context.Context, owner *astral.Identity, q m
 	deadline := time.NewTimer(timeout)
 	defer deadline.Stop()
 
-	poll := time.NewTicker(messagePollInterval)
-	defer poll.Stop()
+	// why the registration precedes the first look: a row landing between the
+	// query and the subscribe is one the waiter would sleep through, because
+	// the writer signals into a registry this waiter is not yet in — the token
+	// is not dropped, it is never made. Registering first and buffering the
+	// channel close two different windows, and either one alone still loses
+	// wakes.
+	woke, leave := mod.waiters.park(owner)
+	defer leave()
+
+	floor := time.NewTicker(waitFloor)
+	defer floor.Stop()
 
 	for {
 		rows, err := mod.db.ListMessages(owner, q)
@@ -443,7 +471,8 @@ func (mod *Module) pollMessages(ctx context.Context, owner *astral.Identity, q m
 		}
 
 		select {
-		case <-poll.C:
+		case <-woke:
+		case <-floor.C:
 		case <-deadline.C:
 			return nil, nil
 		case <-ctx.Done():

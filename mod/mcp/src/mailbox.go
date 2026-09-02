@@ -331,5 +331,14 @@ func (mod *Module) archiveMessage(agentID *astral.Identity, ref messageRef, undo
 		return false, err
 	}
 
+	// why undo wakes and archive does not: clearing archived_at puts the row
+	// back into the wait set with no insert to signal on, so it is the one
+	// statement besides a delivery that adds to what a park is watching. The
+	// waiter it wakes is this agent's own other session, which the endpoint
+	// permits — nothing keys a session by identity.
+	if undo && n == 1 {
+		mod.waiters.wake(agentID)
+	}
+
 	return n == 1, nil
 }

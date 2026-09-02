@@ -24,6 +24,9 @@ type Module struct {
 	tools []declaredTool
 
 	agentIDs sig.Set[string] // registered agent identities, mirrors mcp__agents
+
+	// waiters are the parked waits, woken when a row enters their set.
+	waiters waiters
 }
 
 func (mod *Module) Run(ctx *astral.Context) error {
