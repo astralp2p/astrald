@@ -225,7 +225,7 @@ func TestRepliesAreFoundInEitherBox(t *testing.T) {
 // A message may not answer itself. A parent this node does not hold is kept as
 // it stands, because a claim about a message nobody has is a claim nothing
 // answers — but a cycle of one is the cheapest to refuse.
-func TestStoreRefusesASelfParentAndKeepsADanglingOne(t *testing.T) {
+func TestStoreRefusesASelfParentAndADanglingOne(t *testing.T) {
 	mod := testMessageModule(t)
 	a, b := astral.GenerateIdentity(), astral.GenerateIdentity()
 
@@ -235,9 +235,14 @@ func TestStoreRefusesASelfParentAndKeepsADanglingOne(t *testing.T) {
 		t.Fatal("a message answering itself must be refused")
 	}
 
+	// a parent this node does not hold is refused, and nothing is stored
 	stranger := mcpapi.NewMessageID()
-	if err := mod.storeMessage(a, b, &mcpapi.Message{ID: mcpapi.NewMessageID(), Content: "x", ParentID: stranger}); err != nil {
-		t.Fatalf("a parent this node does not hold must be kept: %v", err)
+	child := mcpapi.NewMessageID()
+	if err := mod.storeMessage(a, b, &mcpapi.Message{ID: child, Content: "x", ParentID: stranger}); err == nil {
+		t.Fatal("a parent this node does not hold must be refused")
+	}
+	if held, _ := mod.db.Holds(b, child); held {
+		t.Fatal("the refused message must not be stored")
 	}
 }
 

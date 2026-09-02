@@ -71,6 +71,21 @@ func (mod *Module) sendMessage(agentID *astral.Identity, to, content string, par
 		return id, fmt.Errorf("content is over %v bytes", mod.config.MaxPayloadBytes)
 	}
 
+	// why a reply to a message this agent does not hold is refused here too:
+	// the recipient's node refuses a parent it does not hold, so a send that
+	// named one this agent cannot itself see would write an outbox row and then
+	// fail delivery. Refusing it here answers the agent at once, and keeps the
+	// agent's own thread graph the forest the recipient's is.
+	if !parent.IsZero() {
+		held, err := mod.db.Holds(agentID, parent)
+		if err != nil {
+			return id, err
+		}
+		if !held {
+			return id, errors.New("cannot answer a message you do not hold")
+		}
+	}
+
 	msg := &mcpapi.Message{
 		ID:       mcpapi.NewMessageID(),
 		Content:  astral.String32(content),
@@ -396,11 +411,27 @@ func (mod *Module) storeMessage(sender, recipient *astral.Identity, msg *mcpapi.
 	case len(msg.Content) > mod.config.MaxPayloadBytes:
 		return errors.New("message too large")
 	case msg.ParentID == msg.ID:
-		// The only link refused. A parent this node does not hold is kept as it
-		// stands — a claim about a message nobody has is a claim nothing
-		// answers — but a message answering itself is a cycle of one, and the
-		// cheapest one to refuse.
+		// A message answering itself is a cycle of one, the cheapest to refuse.
 		return errors.New("a message may not answer itself")
+	}
+
+	// why a parent this node does not hold is refused, where it was once kept:
+	// a reply names a message the recipient already holds, so every parent edge
+	// points at a row stored earlier, and a graph whose edges all point at
+	// earlier rows is a forest no walker loops through. Kept as a bare claim, a
+	// parent could name a message that does not exist — and a sender minting
+	// its own ids on the wire could cross-reference two fresh ids into a cycle
+	// a reader without a seen-set never leaves. Refusing the dangling parent
+	// refuses the one edge every cycle needs, at the one place every delivery
+	// passes.
+	if !msg.ParentID.IsZero() {
+		held, err := mod.db.Holds(recipient, msg.ParentID)
+		if err != nil {
+			return err
+		}
+		if !held {
+			return errors.New("the message answers one this node does not hold")
+		}
 	}
 
 	n, err := mod.db.InsertInbox(&dbMessage{
