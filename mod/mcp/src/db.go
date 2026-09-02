@@ -431,3 +431,25 @@ func (db *DB) SenderOf(owner *astral.Identity, box string, id mcpapi.MessageID) 
 		Take(&row).Error
 	return row.Sender, err
 }
+
+// Holds answers whether the owner has any row under this id, in either box and
+// whatever its archive state. It is the question a parent reference asks: has
+// this owner ever seen the message a reply names.
+//
+// why either box and any archive state: the owner holds a message it sent in
+// its outbox and one it received in its inbox, and a reply may answer either;
+// archiving a message does not unsee it, so a row put away still answers held.
+// This is the same scope childrenOf reads a thread over.
+func (db *DB) Holds(owner *astral.Identity, id mcpapi.MessageID) (bool, error) {
+	err := db.Select("seq").
+		Where("owner = ? AND id = ?", owner, id).
+		Take(&dbMessage{}).Error
+	switch {
+	case err == nil:
+		return true, nil
+	case errors.Is(err, gorm.ErrRecordNotFound):
+		return false, nil
+	default:
+		return false, err
+	}
+}
