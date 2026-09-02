@@ -115,11 +115,11 @@ func (mod *Module) waitMessages(ctx context.Context, agentID *astral.Identity, r
 		return ans, err
 	}
 
-	ans.Granted = mod.config.waitDefault()
+	ans.Granted = mod.config.WaitDefault
 	if req.Timeout > 0 {
 		ans.Granted = req.Timeout
 	}
-	ans.Granted = min(ans.Granted, mod.config.waitMax())
+	ans.Granted = min(ans.Granted, mod.config.WaitMax)
 
 	start := time.Now()
 	ans.Rows, err = mod.pollMessages(ctx, agentID, q, ans.Granted)

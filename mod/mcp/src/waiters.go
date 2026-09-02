@@ -19,9 +19,8 @@ import (
 // why that also makes coalescing free: two arrivals collapsing into one wake
 // lose nothing, because the query that follows sees both.
 type waiters struct {
-	mu   sync.Mutex
-	next uint64
-	m    map[string]map[uint64]chan struct{}
+	mu sync.Mutex
+	m  map[string]map[chan struct{}]struct{}
 }
 
 // park registers a waiter and answers the channel it will be woken on together
@@ -39,21 +38,19 @@ func (w *waiters) park(owner *astral.Identity) (woke <-chan struct{}, leave func
 	defer w.mu.Unlock()
 
 	if w.m == nil {
-		w.m = map[string]map[uint64]chan struct{}{}
+		w.m = map[string]map[chan struct{}]struct{}{}
 	}
 	if w.m[key] == nil {
-		w.m[key] = map[uint64]chan struct{}{}
+		w.m[key] = map[chan struct{}]struct{}{}
 	}
 
-	id := w.next
-	w.next++
-	w.m[key][id] = ch
+	w.m[key][ch] = struct{}{}
 
 	return ch, func() {
 		w.mu.Lock()
 		defer w.mu.Unlock()
 
-		delete(w.m[key], id)
+		delete(w.m[key], ch)
 		if len(w.m[key]) == 0 {
 			delete(w.m, key)
 		}
@@ -77,7 +74,7 @@ func (w *waiters) wake(owner *astral.Identity) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 
-	for _, ch := range w.m[owner.String()] {
+	for ch := range w.m[owner.String()] {
 		select {
 		case ch <- struct{}{}:
 		default:

@@ -4,9 +4,11 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"strings"
 	"sync"
 	"testing"
 	"time"
+	"unicode/utf8"
 
 	mcpapi "github.com/astralp2p/astral-go/api/mcp"
 	"github.com/astralp2p/astral-go/astral"
@@ -628,43 +630,6 @@ func TestAnUnheldIDIsReportedAndTheRestAreStillRead(t *testing.T) {
 
 // ── the create path survives a node that was not reset ─────────────────────
 
-// A table already standing makes CREATE TABLE IF NOT EXISTS a no-op, and every
-// statement after it fails against a shape with no box column — which loads no
-// module, which serves the agents no tools. The old table is renamed aside so
-// the create path runs.
-func TestAnOldTableIsRenamedAsideRatherThanBreakingTheLoad(t *testing.T) {
-	db := testDB(t)
-
-	// stand up something shaped like the old inbox, under the live name
-	if err := db.Exec(`DROP TABLE mcp__messages`).Error; err != nil {
-		t.Fatalf("drop: %v", err)
-	}
-	if err := db.Exec(`CREATE TABLE mcp__messages (id text PRIMARY KEY, thread text, stored_at datetime)`).Error; err != nil {
-		t.Fatalf("old table: %v", err)
-	}
-	if err := db.Exec(`INSERT INTO mcp__messages (id, thread) VALUES ('old','old')`).Error; err != nil {
-		t.Fatalf("old row: %v", err)
-	}
-
-	if err := db.MigrateMessages(); err != nil {
-		t.Fatalf("migrate over an old table: %v", err)
-	}
-
-	if !db.Migrator().HasColumn(&dbMessage{}, "box") {
-		t.Fatal("the create path did not run")
-	}
-	if !db.Migrator().HasTable("mcp__messages_v1") {
-		t.Fatal("the old table was not kept aside")
-	}
-
-	// and the new table works
-	a, b := astral.GenerateIdentity(), astral.GenerateIdentity()
-	n, err := db.InsertInbox(&dbMessage{ID: mcpapi.NewMessageID(), Sender: b, Recipient: a, Content: "x"})
-	if err != nil || n != 1 {
-		t.Fatalf("insert after the rename: n=%v err=%v", n, err)
-	}
-}
-
 // An agent that writes to itself owns both rows of every message, so a reply to
 // it matches as a child twice under one id — once as the copy it sent and once
 // as the copy it received. It is one reply and is answered once.
@@ -717,18 +682,38 @@ func TestASelfSendThatNeverLandedIsStillAnswered(t *testing.T) {
 
 // A remote node's words land in this agent's sent list and from there in its
 // model's context. They are quoted material, but how much of a context window a
-// refusing peer occupies is this node's decision.
-func TestARemoteRefusalIsBounded(t *testing.T) {
-	long := ""
-	for range 4000 {
-		long += "x"
+// refusing peer occupies is this node's decision, taken where the row is
+// written — the only place that bounds them.
+func TestARemoteRefusalIsBoundedInTheStore(t *testing.T) {
+	mod := testMessageModule(t)
+	sender, recipient := astral.GenerateIdentity(), astral.GenerateIdentity()
+	id := mcpapi.NewMessageID()
+
+	mustInsertOutbox(t, mod, &dbMessage{ID: id, Sender: sender, Recipient: recipient, Content: "x"})
+
+	long := strings.Repeat("ł", 4000)
+	if err := mod.db.SetErr(sender, id, long); err != nil {
+		t.Fatal(err)
 	}
-	got := clip(long, maxRefusalBytes)
-	if len(got) > maxRefusalBytes+len("… (cut)") {
+
+	rows, err := mod.db.ListMessages(sender, messageQuery{List: listOutbox})
+	if err != nil || len(rows) != 1 || rows[0].Err == nil {
+		t.Fatalf("the refusal was not stored: %v rows, err %v", len(rows), err)
+	}
+
+	got := *rows[0].Err
+	if len(got) > errLimit+len("… (cut)") {
 		t.Fatalf("a refusing node wrote %v bytes into the agent's context", len(got))
 	}
-	if short := clip("refused", maxRefusalBytes); short != "refused" {
-		t.Fatalf("text within the bound must be untouched, got %q", short)
+	if !strings.HasSuffix(got, "… (cut)") {
+		t.Fatalf("a cut refusal must say so, got %q", got[max(0, len(got)-16):])
+	}
+	if !utf8.ValidString(got) {
+		t.Fatal("the cut split a rune")
+	}
+
+	if err = mod.db.SetErr(sender, mcpapi.NewMessageID(), "refused"); err != nil {
+		t.Fatal(err)
 	}
 }
 

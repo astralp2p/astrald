@@ -10,21 +10,28 @@ import (
 )
 
 // The grant is the ask under the ceiling, and the deployment's words fill in
-// whatever the caller left out. The retired knob keeps its old meaning: one
-// value serving as default and ceiling alike.
+// whatever the caller left out.
 func TestTheGrantIsTheAskUnderTheCeiling(t *testing.T) {
+	withWaits := func(def, max time.Duration) Config {
+		c := defaultConfig
+		if def > 0 {
+			c.WaitDefault = def
+		}
+		if max > 0 {
+			c.WaitMax = max
+		}
+		return c
+	}
+
 	cases := map[string]struct {
 		config Config
 		ask    time.Duration
 		want   time.Duration
 	}{
-		"nothing named":              {Config{}, 0, 2 * time.Minute},
-		"an ask under the ceiling":   {Config{}, time.Second, time.Second},
-		"an ask over the ceiling":    {Config{WaitMax: 3 * time.Second}, time.Minute, 3 * time.Second},
-		"a default over the ceiling": {Config{WaitDefault: time.Minute, WaitMax: 3 * time.Second}, 0, 3 * time.Second},
-		"the retired knob as both":   {Config{WaitTimeout: 5 * time.Second}, time.Minute, 5 * time.Second},
-		"the retired knob unnamed":   {Config{WaitTimeout: 5 * time.Second}, 0, 5 * time.Second},
-		"a new name beats the old":   {Config{WaitTimeout: 5 * time.Second, WaitMax: 2 * time.Second}, time.Minute, 2 * time.Second},
+		"nothing named":              {withWaits(0, 0), 0, 2 * time.Minute},
+		"an ask under the ceiling":   {withWaits(0, 0), time.Second, time.Second},
+		"an ask over the ceiling":    {withWaits(0, 3*time.Second), time.Minute, 3 * time.Second},
+		"a default over the ceiling": {withWaits(time.Minute, 3*time.Second), 0, 3 * time.Second},
 	}
 
 	for name, c := range cases {

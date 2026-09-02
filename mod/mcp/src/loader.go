@@ -35,12 +35,7 @@ func (Loader) Load(node astral.Node, assets assets.Assets, log *log.Logger) (cor
 
 	mod.db = &DB{assets.Database()}
 
-	err = mod.db.MigrateAgents()
-	if err != nil {
-		return nil, err
-	}
-
-	err = mod.db.MigrateMessages()
+	err = mod.db.Migrate()
 	if err != nil {
 		return nil, err
 	}

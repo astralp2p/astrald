@@ -27,27 +27,11 @@ import (
 // why ten seconds: as the way a waiter normally learns, 250ms was right and
 // cost 0.03% of a core per parked agent. As a backstop it is forty times more
 // idle work than the job needs. What the interval has to satisfy is that it is
-// comfortably under the default window (Config.waitDefault), so an unnamed
+// comfortably under the default window (Config.WaitDefault), so an unnamed
 // park catches a missed wake before its deadline can report timed_out over a
 // non-empty inbox. A park the caller shortened below the floor leans on the
 // wake alone, which covers every writer this module has.
 const waitFloor = 10 * time.Second
-
-// maxRefusalBytes bounds what a refusing node can put in this agent's sent
-// list, and from there into its model's context. The words are the remote's,
-// answering a message this agent chose to send, so they are quoted material
-// rather than anything to act on — but unbounded quoted material is still a
-// remote peer deciding how much of a local context window to occupy.
-const maxRefusalBytes = 256
-
-// clip cuts a remote's text to a length this node chose, marking the cut so
-// the reader is not left thinking it read the whole of it.
-func clip(s string, n int) string {
-	if len(s) <= n {
-		return s
-	}
-	return s[:n] + "… (cut)"
-}
 
 // A caller reads its outbox row differently depending on whether the message is
 // known not to be stored or merely not known to be, so delivery names the three
@@ -215,7 +199,7 @@ func (mod *Module) deliverMessage(agentID, targetID *astral.Identity, msg *mcpap
 	}
 
 	if e, ok := obj.(astral.Error); ok {
-		return fmt.Errorf("%w: %s", errRefused, clip(e.Error(), maxRefusalBytes))
+		return fmt.Errorf("%w: %s", errRefused, e.Error())
 	}
 	if _, ok := obj.(*astral.Ack); !ok {
 		return fmt.Errorf("%w: answered %v", errNoAnswer, obj.ObjectType())

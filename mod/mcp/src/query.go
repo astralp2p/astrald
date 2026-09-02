@@ -77,20 +77,24 @@ func (q *messageQuery) validate() error {
 		if q.To != nil {
 			return fmt.Errorf("%w: an inbox is narrowed by from, not to", errBadNarrowing)
 		}
-	case listOutbox, listArchive:
+	case listOutbox:
 		if q.Since != 0 {
-			return fmt.Errorf("%w: since pages the inbox; %v is a history, read newest first", errBadNarrowing, q.List)
+			return fmt.Errorf("%w: since pages the inbox; the outbox is a history, read newest first", errBadNarrowing)
 		}
-		if q.List == listOutbox && q.UnreadOnly {
+		if q.UnreadOnly {
 			return fmt.Errorf("%w: unread_only asks about what you received", errBadNarrowing)
 		}
-		if q.List == listArchive && (q.UnreadOnly || q.AwaitingPickup) {
-			return fmt.Errorf("%w: the archive spans both directions", errBadNarrowing)
-		}
-		if q.List == listOutbox && q.From != nil {
+		if q.From != nil {
 			return fmt.Errorf("%w: you are the sender of everything here; narrow by to", errBadNarrowing)
 		}
-		if q.List == listArchive && (q.From != nil || q.To != nil) {
+	case listArchive:
+		if q.Since != 0 {
+			return fmt.Errorf("%w: since pages the inbox; the archive is a history, read newest first", errBadNarrowing)
+		}
+		if q.UnreadOnly || q.AwaitingPickup {
+			return fmt.Errorf("%w: the archive spans both directions", errBadNarrowing)
+		}
+		if q.From != nil || q.To != nil {
 			return fmt.Errorf("%w: the archive spans both directions, so neither from nor to picks one", errBadNarrowing)
 		}
 	default:

@@ -75,7 +75,7 @@ func testDB(t *testing.T) *DB {
 	pool.SetMaxOpenConns(1)
 
 	db := &DB{DB: gdb}
-	if err = db.MigrateMessages(); err != nil {
+	if err = db.Migrate(); err != nil {
 		t.Fatalf("migrate messages: %v", err)
 	}
 	return db

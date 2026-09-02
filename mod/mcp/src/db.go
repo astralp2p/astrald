@@ -3,6 +3,7 @@ package mcp
 import (
 	"errors"
 	"time"
+	"unicode/utf8"
 
 	mcpapi "github.com/astralp2p/astral-go/api/mcp"
 	"github.com/astralp2p/astral-go/astral"
@@ -15,26 +16,25 @@ type DB struct {
 	*gorm.DB
 }
 
-// MigrateAgents brings the agent table to the current schema.
+// Migrate brings the module's tables to the current schema.
 //
-// why the old columns are dropped rather than left: the node holds no
-// reachability, so a column that once carried it answers nothing and a reader
-// finding one would take it for a decision something still makes.
-func (db *DB) MigrateAgents() error {
-	m := db.Migrator()
+// why the message table is not AutoMigrated: it carries a generated column,
+// three CHECKs and a partial index, none of which a struct tag expresses.
+func (db *DB) Migrate() error {
+	if err := db.AutoMigrate(&dbAgent{}); err != nil {
+		return err
+	}
 
-	if m.HasTable(&dbAgent{}) {
-		for _, column := range []string{"visible", "exposed"} {
-			if !m.HasColumn(&dbAgent{}, column) {
-				continue
-			}
-			if err := m.DropColumn(&dbAgent{}, column); err != nil {
-				return err
-			}
+	if err := db.Exec(ddlMessages).Error; err != nil {
+		return err
+	}
+	for _, stmt := range ddlIndexes {
+		if err := db.Exec(stmt).Error; err != nil {
+			return err
 		}
 	}
 
-	return db.AutoMigrate(&dbAgent{})
+	return nil
 }
 
 // CreateAgent inserts the agent row and stamps its creation time. The caller
@@ -133,45 +133,20 @@ func (dbMessage) TableName() string {
 }
 
 // errLimit bounds the recipient's node's own words. The string is another
-// operator's, so it is quoted and never trusted for its length.
+// operator's, so it is quoted and never trusted for its length: unbounded, it
+// is a remote peer deciding how much of a local context window to occupy.
 const errLimit = 256
 
-// MigrateMessages creates the message table and its indexes.
-//
-// why the DDL is hand-written and the indexes run every time: the table carries
-// a generated column, three CHECKs and a partial index, none of which a struct
-// tag can express. IF NOT EXISTS makes every statement idempotent, so a restart
-// costs one no-op apiece.
-func (db *DB) MigrateMessages() error {
-	// why an old table is renamed rather than migrated or dropped: nothing is
-	// carried across, but a table already standing makes CREATE TABLE IF NOT
-	// EXISTS a no-op, and every statement after it then fails against a shape
-	// that has no box column. The module would fail to load, and a module that
-	// fails to load is logged once and skipped — the node comes up serving its
-	// agents no tools at all. Renaming leaves the old rows on disk for an
-	// operator to read or drop, and lets the create path run.
-	m := db.Migrator()
-	for _, old := range []string{mcpmod.DBPrefix + "messages", mcpmod.DBPrefix + "outbox"} {
-		if !m.HasTable(old) {
-			continue
-		}
-		if old == mcpmod.DBPrefix+"messages" && m.HasColumn(&dbMessage{}, "box") {
-			continue
-		}
-		if err := db.Exec("ALTER TABLE " + old + " RENAME TO " + old + "_v1").Error; err != nil {
-			return err
-		}
+// clip cuts text to n bytes on a rune boundary and marks the cut, so a reader
+// is not left thinking it read the whole of it.
+func clip(text string, n int) string {
+	if len(text) <= n {
+		return text
 	}
-
-	if err := db.Exec(ddlMessages).Error; err != nil {
-		return err
+	for n > 0 && !utf8.RuneStart(text[n]) {
+		n--
 	}
-	for _, stmt := range ddlIndexes {
-		if err := db.Exec(stmt).Error; err != nil {
-			return err
-		}
-	}
-	return nil
+	return text[:n] + "… (cut)"
 }
 
 // InsertOutbox records a delivery about to be attempted and stamps the attempt.
@@ -221,14 +196,7 @@ func (db *DB) ListMessages(owner *astral.Identity, q messageQuery) (list []dbMes
 // A message already read is returned as it stands: reading is not a claim, and
 // the stamp records the first read.
 func (db *DB) ReadMany(owner *astral.Identity, refs []messageRef) (rows []dbMessage, missing []messageRef, _ error) {
-	seen := make(map[messageRef]bool, len(refs))
-
 	for _, ref := range refs {
-		if seen[ref] {
-			continue
-		}
-		seen[ref] = true
-
 		var row dbMessage
 		err := db.Where("owner = ? AND box = ? AND id = ?", owner, ref.Box, ref.ID).
 			Take(&row).Error
@@ -414,12 +382,9 @@ func (db *DB) StampFetchedFrom(sender, recipient *astral.Identity, id mcpapi.Mes
 // one. Written as `err = ”` the guard matches nothing and every refusal is
 // discarded in silence.
 func (db *DB) SetErr(sender *astral.Identity, id mcpapi.MessageID, text string) error {
-	if len(text) > errLimit {
-		text = text[:errLimit]
-	}
 	return db.Model(&dbMessage{}).
 		Where("owner = ? AND box = ? AND id = ? AND err IS NULL", sender, boxOutbox, id).
-		Update("err", text).Error
+		Update("err", clip(text, errLimit)).Error
 }
 
 // SenderOf answers who wrote the row the owner holds under this id, so a caller

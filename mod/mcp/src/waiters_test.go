@@ -16,9 +16,9 @@ import (
 // non-empty inbox. That answer — "the window closed with nothing new", while
 // unarchived mail sits in the inbox — is the one this design must never give.
 func TestTheFloorIsUnderTheDeadline(t *testing.T) {
-	if waitFloor >= defaultConfig.waitDefault() {
+	if waitFloor >= defaultConfig.WaitDefault {
 		t.Fatalf("floor %v is not under the default window %v: a missed wake would be reported as timed_out",
-			waitFloor, defaultConfig.waitDefault())
+			waitFloor, defaultConfig.WaitDefault)
 	}
 }
 
