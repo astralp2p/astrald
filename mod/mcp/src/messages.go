@@ -416,14 +416,14 @@ func (mod *Module) storeMessage(sender, recipient *astral.Identity, msg *mcpapi.
 	}
 
 	// why a parent this node does not hold is refused, where it was once kept:
-	// a reply names a message the recipient already holds, so every parent edge
-	// points at a row stored earlier, and a graph whose edges all point at
-	// earlier rows is a forest no walker loops through. Kept as a bare claim, a
-	// parent could name a message that does not exist — and a sender minting
-	// its own ids on the wire could cross-reference two fresh ids into a cycle
-	// a reader without a seen-set never leaves. Refusing the dangling parent
-	// refuses the one edge every cycle needs, at the one place every delivery
-	// passes.
+	// a reply may only extend a conversation its two parties share. The
+	// recipient must hold the parent here, the sender must hold it in
+	// sendMessage, and a message has one of each — so the parent is a message
+	// between exactly these two, and an agent cannot reply into a conversation
+	// it is not part of. The same rule makes a cycle unstorable: every parent
+	// then points at a row stored earlier, so the graph is a forest no walker
+	// loops through, where a bare claim let a wire sender cross-reference two
+	// fresh ids into a loop a reader without a seen-set never leaves.
 	if !msg.ParentID.IsZero() {
 		held, err := mod.db.Holds(recipient, msg.ParentID)
 		if err != nil {
