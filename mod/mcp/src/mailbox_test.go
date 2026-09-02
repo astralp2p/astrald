@@ -287,11 +287,11 @@ func TestArchivedMessagesLeaveTheListingsAndTheWait(t *testing.T) {
 		t.Fatalf("archive: %v rows, err %v", len(away), err)
 	}
 
-	rows, err := mod.waitMessages(context.Background(), b, waitRequest{Timeout: time.Millisecond})
+	ans, err := mod.waitMessages(context.Background(), b, waitRequest{Timeout: time.Millisecond})
 	if err != nil {
 		t.Fatalf("wait: %v", err)
 	}
-	if len(rows) != 0 {
+	if len(ans.Rows) != 0 {
 		t.Fatal("wait answered a message that was put away")
 	}
 
@@ -402,14 +402,14 @@ func TestWaitTakesNothing(t *testing.T) {
 	mustInsertInbox(t, mod, &dbMessage{ID: mcpapi.NewMessageID(), Sender: b, Recipient: a, Content: "x"})
 
 	first, err := mod.waitMessages(context.Background(), a, waitRequest{Timeout: time.Millisecond})
-	if err != nil || len(first) != 1 {
-		t.Fatalf("first wait: %v rows, err %v", len(first), err)
+	if err != nil || len(first.Rows) != 1 {
+		t.Fatalf("first wait: %v rows, err %v", len(first.Rows), err)
 	}
 	second, err := mod.waitMessages(context.Background(), a, waitRequest{Timeout: time.Millisecond})
-	if err != nil || len(second) != 1 {
-		t.Fatalf("second wait: %v rows, err %v", len(second), err)
+	if err != nil || len(second.Rows) != 1 {
+		t.Fatalf("second wait: %v rows, err %v", len(second.Rows), err)
 	}
-	if first[0].ReadAt != nil || second[0].ReadAt != nil {
+	if first.Rows[0].ReadAt != nil || second.Rows[0].ReadAt != nil {
 		t.Fatal("waiting stamped a row")
 	}
 }

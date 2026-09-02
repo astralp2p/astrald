@@ -16,9 +16,9 @@ import (
 // non-empty inbox. That answer — "the window closed with nothing new", while
 // unarchived mail sits in the inbox — is the one this design must never give.
 func TestTheFloorIsUnderTheDeadline(t *testing.T) {
-	if waitFloor >= defaultConfig.WaitTimeout {
-		t.Fatalf("floor %v is not under the deadline %v: a missed wake would be reported as timed_out",
-			waitFloor, defaultConfig.WaitTimeout)
+	if waitFloor >= defaultConfig.waitDefault() {
+		t.Fatalf("floor %v is not under the default window %v: a missed wake would be reported as timed_out",
+			waitFloor, defaultConfig.waitDefault())
 	}
 }
 
@@ -37,11 +37,11 @@ func TestADeliveryWakesTheParkedWait(t *testing.T) {
 	done := make(chan answer, 1)
 	go func() {
 		start := time.Now()
-		rows, err := mod.waitMessages(context.Background(), a, waitRequest{})
+		ans, err := mod.waitMessages(context.Background(), a, waitRequest{})
 		if err != nil {
 			t.Error(err)
 		}
-		done <- answer{rows, time.Since(start)}
+		done <- answer{ans.Rows, time.Since(start)}
 	}()
 
 	waitUntilParked(t, mod, a, 1)
@@ -74,8 +74,8 @@ func TestEverySessionUnderOneIdentityIsWoken(t *testing.T) {
 	done := make(chan int, sessions)
 	for range sessions {
 		go func() {
-			rows, _ := mod.waitMessages(context.Background(), a, waitRequest{})
-			done <- len(rows)
+			ans, _ := mod.waitMessages(context.Background(), a, waitRequest{})
+			done <- len(ans.Rows)
 		}()
 	}
 	waitUntilParked(t, mod, a, sessions)
@@ -134,8 +134,8 @@ func TestUndoingAnArchiveWakesTheWait(t *testing.T) {
 
 	done := make(chan int, 1)
 	go func() {
-		rows, _ := mod.waitMessages(context.Background(), a, waitRequest{})
-		done <- len(rows)
+		ans, _ := mod.waitMessages(context.Background(), a, waitRequest{})
+		done <- len(ans.Rows)
 	}()
 	waitUntilParked(t, mod, a, 1)
 

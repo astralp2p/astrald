@@ -59,7 +59,15 @@ func (mod *Module) listMessagesTool(agentID *astral.Identity) mcpsdk.ToolHandler
 		}
 
 		out.Messages = entries(rows)
+
+		// why next_since repeats the caller's cursor when nothing newer was
+		// answered: the field says pass it back, and an absent value asks the
+		// caller to remember what it sent. Repeating it makes the instruction
+		// followable with no memory.
 		out.NextSince = nextSince(rows)
+		if out.NextSince == "" {
+			out.NextSince = in.Since
+		}
 
 		return nil, out, nil
 	}
