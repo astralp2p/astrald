@@ -95,7 +95,7 @@ func (mod *Module) addTools(s *mcpsdk.Server, agentID *astral.Identity) {
 		Description: "Put one message away, naming its box and id. It leaves " +
 			"the inbox and outbox listings, appears under types: archive, and " +
 			"wait never answers it again — so this is what ends a message " +
-			"rather than reading it. Pass undo to put it back. archived is " +
+			"rather than reading it. Pass undo to put it back. changed is " +
 			"false when the message was already the way you asked for, and " +
 			"when it is not yours. It is your own bookkeeping: the other " +
 			"party learns nothing from it.",
