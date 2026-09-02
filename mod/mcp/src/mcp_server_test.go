@@ -9,11 +9,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/astralp2p/astral-go/astral"
-	mcpsdk "github.com/modelcontextprotocol/go-sdk/mcp"
 	"maps"
 	"regexp"
 	"slices"
+
+	"github.com/astralp2p/astral-go/astral"
+	mcpsdk "github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
 type stubNode struct {

@@ -1,10 +1,8 @@
 package mcp
 
 import (
-	"context"
 	"errors"
 	"fmt"
-	"time"
 
 	"github.com/astralp2p/astral-go/api/mcp"
 	"github.com/astralp2p/astral-go/astral"
@@ -18,117 +16,6 @@ import (
 // correspondent, defaulting a list, bounding an answer and refusing a filter are
 // all the module's, so a tool that did any of them would be a second place the
 // rules live.
-
-// errUnknownPeer is the one answer a name that does not resolve gets, wherever
-// it is named. A caller cannot tell a correspondent it may not reach from one
-// that does not exist.
-func errUnknownPeer(name string) error {
-	return &unknownPeerError{name}
-}
-
-type unknownPeerError struct{ name string }
-
-func (e *unknownPeerError) Error() string { return "unknown correspondent: " + e.name }
-
-// ── listing ────────────────────────────────────────────────────────────────
-
-// listRequest is one of the three lists, in the words an agent asked for it.
-type listRequest struct {
-	List           string
-	From, To       string
-	Since          string
-	UnreadOnly     bool
-	AwaitingPickup bool
-}
-
-// query turns the agent's words into the store's. A name becomes an identity in
-// exactly one place, and a filter that cannot apply is refused here rather than
-// answering everything or nothing.
-func (mod *Module) query(req listRequest) (q messageQuery, err error) {
-	q = messageQuery{
-		List:           req.List,
-		UnreadOnly:     req.UnreadOnly,
-		AwaitingPickup: req.AwaitingPickup,
-	}
-
-	if req.Since != "" {
-		if q.Since, err = parseSince(req.Since); err != nil {
-			return q, err
-		}
-	}
-	if req.From != "" {
-		if q.From, err = mod.Dir.ResolveIdentity(req.From); err != nil {
-			return q, errUnknownPeer(req.From)
-		}
-	}
-	if req.To != "" {
-		if q.To, err = mod.Dir.ResolveIdentity(req.To); err != nil {
-			return q, errUnknownPeer(req.To)
-		}
-	}
-
-	return q, q.validate()
-}
-
-// listMessages answers one of the agent's three lists.
-func (mod *Module) listMessages(agentID *astral.Identity, req listRequest) ([]dbMessage, error) {
-	q, err := mod.query(req)
-	if err != nil {
-		return nil, err
-	}
-	return mod.db.ListMessages(agentID, q)
-}
-
-// ── waiting ────────────────────────────────────────────────────────────────
-
-// waitRequest is a park on the agent's inbox. A zero Timeout takes the
-// deployment's default window.
-type waitRequest struct {
-	From    string
-	Since   string
-	Timeout time.Duration
-}
-
-// waitAnswer is what one park came back with: the rows, the window it was
-// given, and the time it actually held.
-type waitAnswer struct {
-	Rows    []dbMessage
-	Granted time.Duration
-	Waited  time.Duration
-}
-
-// waitMessages parks until the agent's inbox holds a message it has not put
-// away, and answers what it found. It stamps nothing: the park and the read are
-// separate acts, so two agents waiting at once are answered the same messages
-// and an agent that stops between the answer and the work leaves the mailbox as
-// it was.
-//
-// why the grant is min(ask, ceiling) and never a refusal: the ceiling is the
-// deployment's, set against the chain that carries the call, and a refusal
-// would make that ceiling part of every client's configuration. A clamp needs
-// no coordination to be read, because the answer names what was granted.
-func (mod *Module) waitMessages(ctx context.Context, agentID *astral.Identity, req waitRequest) (waitAnswer, error) {
-	var ans waitAnswer
-
-	q, err := mod.query(listRequest{List: listInbox, From: req.From, Since: req.Since})
-	if err != nil {
-		return ans, err
-	}
-
-	ans.Granted = mod.config.WaitDefault
-	if req.Timeout > 0 {
-		ans.Granted = req.Timeout
-	}
-	ans.Granted = min(ans.Granted, mod.config.WaitMax)
-
-	start := time.Now()
-	ans.Rows, err = mod.pollMessages(ctx, agentID, q, ans.Granted)
-	ans.Waited = time.Since(start)
-
-	return ans, err
-}
-
-// ── reading ────────────────────────────────────────────────────────────────
 
 // The module's own bounds on one answer. A body may be 64 KiB and a message may
 // have any number of replies, so an unbounded read is the caller deciding how
@@ -326,36 +213,3 @@ func (b *budget) spend(n int) bool {
 }
 
 // ── archiving ──────────────────────────────────────────────────────────────
-
-// archiveMessage puts one message away, or puts it back, and reports whether
-// this call is the one that moved it.
-//
-// why RowsAffected is the answer: admission and write are one statement, so the
-// count says both whether the message is the agent's and whether this call
-// moved it. A lookup then a write would race.
-//
-// why the two zeroes are one answer: the same count means "already there" and
-// "not yours", and separating them would tell a caller whether an id it does
-// not hold exists at all. The agent's next act is the same either way.
-func (mod *Module) archiveMessage(agentID *astral.Identity, ref messageRef, undo bool) (bool, error) {
-	move := mod.db.Archive
-	if undo {
-		move = mod.db.Unarchive
-	}
-
-	n, err := move(agentID, ref.Box, ref.ID)
-	if err != nil {
-		return false, err
-	}
-
-	// why undo wakes and archive does not: clearing archived_at puts the row
-	// back into the wait set with no insert to signal on, so it is the one
-	// statement besides a delivery that adds to what a park is watching. The
-	// waiter it wakes is this agent's own other session, which the endpoint
-	// permits — nothing keys a session by identity.
-	if undo && n == 1 {
-		mod.waiters.wake(agentID)
-	}
-
-	return n == 1, nil
-}
