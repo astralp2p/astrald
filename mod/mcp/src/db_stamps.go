@@ -55,7 +55,7 @@ func (db *DB) Unarchive(owner *astral.Identity, box string, id mcp.MessageID) (i
 func (db *DB) MarkReceiptDue(recipient *astral.Identity, id mcp.MessageID) (int64, error) {
 	tx := db.Model(&dbMessage{}).
 		Where("owner = ? AND box = ? AND id = ? AND receipt_due_at IS NULL",
-			recipient, boxInbox, id).
+			recipient, mcp.BoxInbox, id).
 		Update("receipt_due_at", time.Now().UTC())
 	return tx.RowsAffected, tx.Error
 }
@@ -64,7 +64,7 @@ func (db *DB) MarkReceiptDue(recipient *astral.Identity, id mcp.MessageID) (int6
 func (db *DB) StampReceiptStored(recipient *astral.Identity, id mcp.MessageID) error {
 	return db.Model(&dbMessage{}).
 		Where("owner = ? AND box = ? AND id = ? AND receipt_stored_at IS NULL",
-			recipient, boxInbox, id).
+			recipient, mcp.BoxInbox, id).
 		Update("receipt_stored_at", time.Now().UTC()).Error
 }
 
@@ -72,7 +72,7 @@ func (db *DB) StampReceiptStored(recipient *astral.Identity, id mcp.MessageID) e
 func (db *DB) StampLanded(sender *astral.Identity, id mcp.MessageID) error {
 	return db.Model(&dbMessage{}).
 		Where("owner = ? AND box = ? AND id = ? AND landed_at IS NULL",
-			sender, boxOutbox, id).
+			sender, mcp.BoxOutbox, id).
 		Update("landed_at", time.Now().UTC()).Error
 }
 
@@ -80,7 +80,7 @@ func (db *DB) StampLanded(sender *astral.Identity, id mcp.MessageID) error {
 func (db *DB) StampFailed(sender *astral.Identity, id mcp.MessageID) error {
 	return db.Model(&dbMessage{}).
 		Where("owner = ? AND box = ? AND id = ? AND failed_at IS NULL",
-			sender, boxOutbox, id).
+			sender, mcp.BoxOutbox, id).
 		Update("failed_at", time.Now().UTC()).Error
 }
 
@@ -91,7 +91,7 @@ func (db *DB) StampFailed(sender *astral.Identity, id mcp.MessageID) error {
 func (db *DB) StampFetched(sender *astral.Identity, id mcp.MessageID) error {
 	return db.Model(&dbMessage{}).
 		Where("owner = ? AND box = ? AND id = ? AND fetched_at IS NULL",
-			sender, boxOutbox, id).
+			sender, mcp.BoxOutbox, id).
 		Update("fetched_at", time.Now().UTC()).Error
 }
 
@@ -104,7 +104,7 @@ func (db *DB) StampFetched(sender *astral.Identity, id mcp.MessageID) error {
 func (db *DB) StampFetchedFrom(sender, recipient *astral.Identity, id mcp.MessageID) (int64, error) {
 	tx := db.Model(&dbMessage{}).
 		Where("owner = ? AND box = ? AND id = ? AND recipient = ? AND fetched_at IS NULL",
-			sender, boxOutbox, id, recipient).
+			sender, mcp.BoxOutbox, id, recipient).
 		Update("fetched_at", time.Now().UTC())
 	return tx.RowsAffected, tx.Error
 }
@@ -116,6 +116,6 @@ func (db *DB) StampFetchedFrom(sender, recipient *astral.Identity, id mcp.Messag
 // and discards every refusal in silence.
 func (db *DB) SetErr(sender *astral.Identity, id mcp.MessageID, text string) error {
 	return db.Model(&dbMessage{}).
-		Where("owner = ? AND box = ? AND id = ? AND err IS NULL", sender, boxOutbox, id).
+		Where("owner = ? AND box = ? AND id = ? AND err IS NULL", sender, mcp.BoxOutbox, id).
 		Update("err", clip(text, errLimit)).Error
 }

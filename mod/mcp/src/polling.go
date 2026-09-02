@@ -4,6 +4,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/astralp2p/astral-go/api/mcp"
 	"github.com/astralp2p/astral-go/astral"
 )
 
@@ -18,7 +19,7 @@ const waitFloor = 10 * time.Second
 // pollMessages parks until the owner's list holds a message the query matches,
 // and answers what it found. Nothing is stamped and nothing is taken, so two
 // agents waiting at once are answered the same messages.
-func (mod *Module) pollMessages(ctx context.Context, owner *astral.Identity, q messageQuery, timeout time.Duration) ([]dbMessage, error) {
+func (mod *Module) pollMessages(ctx context.Context, owner *astral.Identity, q messageQuery, timeout time.Duration) ([]*mcp.StoredMessage, error) {
 	deadline := time.NewTimer(timeout)
 	defer deadline.Stop()
 

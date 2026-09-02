@@ -31,7 +31,7 @@ func TestADeliveryWakesTheParkedWait(t *testing.T) {
 	a, b := astral.GenerateIdentity(), astral.GenerateIdentity()
 
 	type answer struct {
-		rows []dbMessage
+		rows []*mcp.StoredMessage
 		took time.Duration
 	}
 	done := make(chan answer, 1)
@@ -127,8 +127,8 @@ func TestUndoingAnArchiveWakesTheWait(t *testing.T) {
 	mod := testMessageModule(t)
 	a, b := astral.GenerateIdentity(), astral.GenerateIdentity()
 	id := mcp.NewMessageID()
-	mustInsertInbox(t, mod, &dbMessage{ID: id, Sender: b, Recipient: a, Content: "x"})
-	if _, err := mod.archiveMessage(a, messageRef{Box: boxInbox, ID: id}, false); err != nil {
+	mustInsertInbox(t, mod, &mcp.StoredMessage{ID: id, Sender: b, Recipient: a, Content: "x"})
+	if _, err := mod.archiveMessage(a, messageRef{Box: mcp.BoxInbox, ID: id}, false); err != nil {
 		t.Fatal(err)
 	}
 
@@ -139,7 +139,7 @@ func TestUndoingAnArchiveWakesTheWait(t *testing.T) {
 	}()
 	waitUntilParked(t, mod, a, 1)
 
-	if _, err := mod.archiveMessage(a, messageRef{Box: boxInbox, ID: id}, true); err != nil {
+	if _, err := mod.archiveMessage(a, messageRef{Box: mcp.BoxInbox, ID: id}, true); err != nil {
 		t.Fatal(err)
 	}
 
@@ -164,7 +164,7 @@ func TestARetryThatStoredNothingWakesNobody(t *testing.T) {
 	if err := mod.storeMessage(b, a, msg); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := mod.archiveMessage(a, messageRef{Box: boxInbox, ID: msg.ID}, false); err != nil {
+	if _, err := mod.archiveMessage(a, messageRef{Box: mcp.BoxInbox, ID: msg.ID}, false); err != nil {
 		t.Fatal(err)
 	}
 
@@ -193,7 +193,7 @@ func TestEveryExitPathUnregisters(t *testing.T) {
 	a, b := astral.GenerateIdentity(), astral.GenerateIdentity()
 
 	t.Run("answered", func(t *testing.T) {
-		mustInsertInbox(t, mod, &dbMessage{ID: mcp.NewMessageID(), Sender: b, Recipient: a, Content: "x"})
+		mustInsertInbox(t, mod, &mcp.StoredMessage{ID: mcp.NewMessageID(), Sender: b, Recipient: a, Content: "x"})
 		if _, err := mod.waitMessages(context.Background(), a, waitRequest{}); err != nil {
 			t.Fatal(err)
 		}

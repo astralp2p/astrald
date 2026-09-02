@@ -53,11 +53,11 @@ func (mod *Module) sendMessage(agentID *astral.Identity, to, content string, par
 	// why nothing above this writes a row: a stored list of refusals would tell
 	// a recipient that refuses apart from one that does not exist, which is the
 	// collapse resolveRecipient is built on.
-	if err = mod.db.InsertOutbox(&dbMessage{
+	if err = mod.db.InsertOutbox(&mcp.StoredMessage{
 		ID:        msg.ID,
 		Sender:    agentID,
 		Recipient: targetID,
-		Content:   content,
+		Content:   astral.String32(content),
 		ParentID:  parent,
 	}); err != nil {
 		return id, err

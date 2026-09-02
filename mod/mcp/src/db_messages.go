@@ -15,8 +15,9 @@ import (
 // why the row is written before the delivery: a process that dies mid-delivery
 // then leaves a row carrying created_at alone, which says the fate is unknown.
 // Written afterwards it would leave nothing, which says the send never happened.
-func (db *DB) InsertOutbox(row *dbMessage) error {
-	row.Box = boxOutbox
+func (db *DB) InsertOutbox(m *mcp.StoredMessage) error {
+	row := newRow(m)
+	row.Box = mcp.BoxOutbox
 	row.CreatedAt = time.Now().UTC()
 	return db.Create(row).Error
 }
@@ -27,8 +28,9 @@ func (db *DB) InsertOutbox(row *dbMessage) error {
 // why the count and not the error: a collision and an honest retry both answer
 // rows=0 with err=nil, and only the caller holds the sender the route
 // authenticated — see storeMessage.
-func (db *DB) InsertInbox(row *dbMessage) (int64, error) {
-	row.Box = boxInbox
+func (db *DB) InsertInbox(m *mcp.StoredMessage) (int64, error) {
+	row := newRow(m)
+	row.Box = mcp.BoxInbox
 	row.CreatedAt = time.Now().UTC()
 	tx := db.Clauses(clause.OnConflict{DoNothing: true}).Create(row)
 	return tx.RowsAffected, tx.Error
@@ -37,16 +39,18 @@ func (db *DB) InsertInbox(row *dbMessage) (int64, error) {
 // ListMessages returns one of the owner's lists, narrowed by the query and
 // ordered as that list reads. It is unbounded: these rows carry no bodies, and
 // the bound is on read_messages, where they are.
-func (db *DB) ListMessages(owner *astral.Identity, q messageQuery) (list []dbMessage, _ error) {
-	return list, q.apply(db.DB, owner).
-		Order(q.order()).
-		Find(&list).Error
+func (db *DB) ListMessages(owner *astral.Identity, q messageQuery) ([]*mcp.StoredMessage, error) {
+	var rows []dbMessage
+	if err := q.apply(db.DB, owner).Order(q.order()).Find(&rows).Error; err != nil {
+		return nil, err
+	}
+	return storedAll(rows), nil
 }
 
 // ReadMany returns the owner's messages named by the refs and stamps the inbox
 // ones read. An id the owner does not hold is reported rather than refused, and
 // the stamp records the first read only.
-func (db *DB) ReadMany(owner *astral.Identity, refs []messageRef) (rows []dbMessage, missing []messageRef, _ error) {
+func (db *DB) ReadMany(owner *astral.Identity, refs []messageRef) (list []*mcp.StoredMessage, missing []messageRef, _ error) {
 	for _, ref := range refs {
 		var row dbMessage
 		err := db.Where("owner = ? AND box = ? AND id = ?", owner, ref.Box, ref.ID).
@@ -62,30 +66,31 @@ func (db *DB) ReadMany(owner *astral.Identity, refs []messageRef) (rows []dbMess
 			return nil, nil, err
 		}
 
-		if err = db.MarkRead(owner, &row); err != nil {
+		m := row.stored()
+		if err = db.MarkRead(owner, m); err != nil {
 			return nil, nil, err
 		}
 
-		rows = append(rows, row)
+		list = append(list, m)
 	}
 
-	return rows, missing, nil
+	return list, missing, nil
 }
 
 // MarkRead stamps an inbox row read, once. It is the one statement that does,
 // so a body handed out anywhere says the same thing about the row it came from.
-func (db *DB) MarkRead(owner *astral.Identity, row *dbMessage) error {
-	if row.Box != boxInbox || row.ReadAt != nil {
+func (db *DB) MarkRead(owner *astral.Identity, m *mcp.StoredMessage) error {
+	if m.Box != mcp.BoxInbox || m.ReadAt != nil {
 		return nil
 	}
 	now := time.Now().UTC()
 	err := db.Model(&dbMessage{}).
-		Where("owner = ? AND box = ? AND id = ? AND read_at IS NULL", owner, boxInbox, row.ID).
+		Where("owner = ? AND box = ? AND id = ? AND read_at IS NULL", owner, mcp.BoxInbox, m.ID).
 		Update("read_at", now).Error
 	if err != nil {
 		return err
 	}
-	row.ReadAt = &now
+	m.ReadAt = stamp(&now)
 	return nil
 }
 
@@ -107,11 +112,16 @@ func childrenOf(db *gorm.DB, owner *astral.Identity, parent mcp.MessageID) *gorm
 
 // Children returns the owner's messages that name this one as their parent, in
 // either box, oldest first. One level: walking further is the reader's.
-func (db *DB) Children(owner *astral.Identity, parent mcp.MessageID, limit int) (list []dbMessage, _ error) {
-	return list, childrenOf(db.DB, owner, parent).
+func (db *DB) Children(owner *astral.Identity, parent mcp.MessageID, limit int) ([]*mcp.StoredMessage, error) {
+	var rows []dbMessage
+	err := childrenOf(db.DB, owner, parent).
 		Order("created_at").
 		Limit(limit).
-		Find(&list).Error
+		Find(&rows).Error
+	if err != nil {
+		return nil, err
+	}
+	return storedAll(rows), nil
 }
 
 // ChildIDs answers the ids of a message's direct replies, oldest first.

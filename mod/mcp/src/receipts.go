@@ -16,17 +16,17 @@ import (
 //
 // why here and not in the store: a remote sender is told by a query, and the
 // database layer has no routing.
-func (mod *Module) noteFetched(row *dbMessage) {
+func (mod *Module) noteFetched(m *mcp.StoredMessage) {
 	// why the box is checked first: only handing out an inbox body is a
 	// collection. Stamping an agent's own sent row would tell it that someone
 	// collected a message it merely re-read.
-	if row.Box != boxInbox {
+	if m.Box != mcp.BoxInbox {
 		return
 	}
 
-	if mod.agentIDs.Contains(row.Sender.String()) {
-		if err := mod.db.StampFetched(row.Sender, row.ID); err != nil {
-			mod.log.Error("outbox %v: stamping fetched_at: %v", row.ID, err)
+	if mod.agentIDs.Contains(m.Sender.String()) {
+		if err := mod.db.StampFetched(m.Sender, m.ID); err != nil {
+			mod.log.Error("outbox %v: stamping fetched_at: %v", m.ID, err)
 		}
 		return
 	}
@@ -34,9 +34,9 @@ func (mod *Module) noteFetched(row *dbMessage) {
 	// why the count gates the send: one attempt is made, and it belongs to the
 	// read that first handed the body out. The error is a separate branch
 	// because a failed write and a receipt already owed both send nothing.
-	n, err := mod.db.MarkReceiptDue(row.Recipient, row.ID)
+	n, err := mod.db.MarkReceiptDue(m.Recipient, m.ID)
 	if err != nil {
-		mod.log.Error("message %v: marking the receipt due: %v", row.ID, err)
+		mod.log.Error("message %v: marking the receipt due: %v", m.ID, err)
 		return
 	}
 	if n == 0 {
@@ -57,7 +57,7 @@ func (mod *Module) noteFetched(row *dbMessage) {
 		if err := mod.db.StampReceiptStored(recipient, id); err != nil {
 			mod.log.Error("message %v: stamping receipt_stored_at: %v", id, err)
 		}
-	}(row.Recipient, row.Sender, row.ID)
+	}(m.Recipient, m.Sender, m.ID)
 }
 
 // sendReceipt tells the original sender's node that the body was handed out. It

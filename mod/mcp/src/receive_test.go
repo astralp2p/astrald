@@ -24,7 +24,7 @@ func TestRouteQueryStoresMessage(t *testing.T) {
 		t.Fatalf("delivery answered %T, want an ack", obj)
 	}
 
-	rows, _, err := mod.db.ReadMany(recipient, []messageRef{{Box: boxInbox, ID: testID(1)}})
+	rows, _, err := mod.db.ReadMany(recipient, []messageRef{{Box: mcp.BoxInbox, ID: testID(1)}})
 	if err != nil {
 		t.Fatalf("read stored: %v", err)
 	}

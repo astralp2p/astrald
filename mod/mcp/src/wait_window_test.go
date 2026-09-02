@@ -42,7 +42,7 @@ func TestTheGrantIsTheAskUnderTheCeiling(t *testing.T) {
 
 			// a row is already waiting, so the park answers at once and the
 			// grant is reported without being spent
-			mustInsertInbox(t, mod, &dbMessage{ID: mcp.NewMessageID(), Sender: sender, Recipient: owner, Content: "x"})
+			mustInsertInbox(t, mod, &mcp.StoredMessage{ID: mcp.NewMessageID(), Sender: sender, Recipient: owner, Content: "x"})
 
 			ans, err := mod.waitMessages(context.Background(), owner, waitRequest{Timeout: c.ask})
 			if err != nil {
@@ -60,7 +60,7 @@ func TestTheGrantIsTheAskUnderTheCeiling(t *testing.T) {
 func TestAnInstantAnswerSpendsNothing(t *testing.T) {
 	mod := testMessageModule(t)
 	owner, sender := astral.GenerateIdentity(), astral.GenerateIdentity()
-	mustInsertInbox(t, mod, &dbMessage{ID: mcp.NewMessageID(), Sender: sender, Recipient: owner, Content: "x"})
+	mustInsertInbox(t, mod, &mcp.StoredMessage{ID: mcp.NewMessageID(), Sender: sender, Recipient: owner, Content: "x"})
 
 	ans, err := mod.waitMessages(context.Background(), owner, waitRequest{Timeout: 30 * time.Second})
 	if err != nil {
@@ -79,7 +79,7 @@ func TestAnInstantAnswerSpendsNothing(t *testing.T) {
 func TestATimedOutAnswerKeepsTheCursor(t *testing.T) {
 	mod := testMessageModule(t)
 	owner, sender := astral.GenerateIdentity(), astral.GenerateIdentity()
-	mustInsertInbox(t, mod, &dbMessage{ID: mcp.NewMessageID(), Sender: sender, Recipient: owner, Content: "x"})
+	mustInsertInbox(t, mod, &mcp.StoredMessage{ID: mcp.NewMessageID(), Sender: sender, Recipient: owner, Content: "x"})
 
 	wait := mod.waitTool(owner)
 
@@ -113,7 +113,7 @@ func TestATimedOutAnswerKeepsTheCursor(t *testing.T) {
 func TestAListingKeepsTheCursor(t *testing.T) {
 	mod := testMessageModule(t)
 	owner, sender := astral.GenerateIdentity(), astral.GenerateIdentity()
-	mustInsertInbox(t, mod, &dbMessage{ID: mcp.NewMessageID(), Sender: sender, Recipient: owner, Content: "x"})
+	mustInsertInbox(t, mod, &mcp.StoredMessage{ID: mcp.NewMessageID(), Sender: sender, Recipient: owner, Content: "x"})
 
 	list := mod.listMessagesTool(owner)
 

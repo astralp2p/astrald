@@ -11,9 +11,9 @@ import (
 
 // mustInsertInbox stores a delivered message, failing the test if the write
 // found a row already there.
-func mustInsertInbox(t *testing.T, mod *Module, row *dbMessage) {
+func mustInsertInbox(t *testing.T, mod *Module, m *mcp.StoredMessage) {
 	t.Helper()
-	n, err := mod.db.InsertInbox(row)
+	n, err := mod.db.InsertInbox(m)
 	if err != nil {
 		t.Fatalf("insert inbox: %v", err)
 	}
@@ -22,9 +22,9 @@ func mustInsertInbox(t *testing.T, mod *Module, row *dbMessage) {
 	}
 }
 
-func mustInsertOutbox(t *testing.T, mod *Module, row *dbMessage) {
+func mustInsertOutbox(t *testing.T, mod *Module, m *mcp.StoredMessage) {
 	t.Helper()
-	if err := mod.db.InsertOutbox(row); err != nil {
+	if err := mod.db.InsertOutbox(m); err != nil {
 		t.Fatalf("insert outbox: %v", err)
 	}
 }
@@ -96,13 +96,13 @@ func TestOwnerIsGeneratedAndUnwritable(t *testing.T) {
 	a, b := astral.GenerateIdentity(), astral.GenerateIdentity()
 	id := mcp.NewMessageID()
 
-	mustInsertOutbox(t, mod, &dbMessage{ID: id, Sender: a, Recipient: b, Content: "x"})
-	mustInsertInbox(t, mod, &dbMessage{ID: id, Sender: a, Recipient: b, Content: "x"})
+	mustInsertOutbox(t, mod, &mcp.StoredMessage{ID: id, Sender: a, Recipient: b, Content: "x"})
+	mustInsertInbox(t, mod, &mcp.StoredMessage{ID: id, Sender: a, Recipient: b, Content: "x"})
 
 	for _, c := range []struct {
 		box   string
 		owner *astral.Identity
-	}{{boxOutbox, a}, {boxInbox, b}} {
+	}{{mcp.BoxOutbox, a}, {mcp.BoxInbox, b}} {
 		var row dbMessage
 		if err := mod.db.Where("box = ? AND id = ?", c.box, id).Take(&row).Error; err != nil {
 			t.Fatalf("%v: %v", c.box, err)
@@ -124,7 +124,7 @@ func TestTheBoxChecksRefuseACrossBoxWrite(t *testing.T) {
 	mod := testMessageModule(t)
 	a, b := astral.GenerateIdentity(), astral.GenerateIdentity()
 	id := mcp.NewMessageID()
-	mustInsertInbox(t, mod, &dbMessage{ID: id, Sender: a, Recipient: b, Content: "x"})
+	mustInsertInbox(t, mod, &mcp.StoredMessage{ID: id, Sender: a, Recipient: b, Content: "x"})
 
 	if err := mod.db.Exec(`UPDATE mcp__messages SET landed_at = ? WHERE id = ?`, "2026-01-01", id).Error; err == nil {
 		t.Fatal("landed_at on an inbox row must be refused")
@@ -145,8 +145,8 @@ func TestOneOwnerHoldsTwoRowsUnderOneID(t *testing.T) {
 	a, c := astral.GenerateIdentity(), astral.GenerateIdentity()
 	id := mcp.NewMessageID()
 
-	mustInsertOutbox(t, mod, &dbMessage{ID: id, Sender: a, Recipient: astral.GenerateIdentity(), Content: "sent"})
-	mustInsertInbox(t, mod, &dbMessage{ID: id, Sender: c, Recipient: a, Content: "a peer minted the same id"})
+	mustInsertOutbox(t, mod, &mcp.StoredMessage{ID: id, Sender: a, Recipient: astral.GenerateIdentity(), Content: "sent"})
+	mustInsertInbox(t, mod, &mcp.StoredMessage{ID: id, Sender: c, Recipient: a, Content: "a peer minted the same id"})
 
 	var n int64
 	mod.db.Model(&dbMessage{}).Where("owner = ? AND id = ?", a, id).Count(&n)
@@ -154,7 +154,7 @@ func TestOneOwnerHoldsTwoRowsUnderOneID(t *testing.T) {
 		t.Fatalf("owner+id matched %v rows, want 2", n)
 	}
 
-	rows, _, err := mod.db.ReadMany(a, []messageRef{{Box: boxInbox, ID: id}})
+	rows, _, err := mod.db.ReadMany(a, []messageRef{{Box: mcp.BoxInbox, ID: id}})
 	if err != nil {
 		t.Fatalf("read: %v", err)
 	}
@@ -169,11 +169,11 @@ func TestTheSameIDInBothBoxesIsTwoMessages(t *testing.T) {
 	mod := testMessageModule(t)
 	a := astral.GenerateIdentity()
 	id := mcp.NewMessageID()
-	mustInsertOutbox(t, mod, &dbMessage{ID: id, Sender: a, Recipient: a, Content: "sent"})
-	mustInsertInbox(t, mod, &dbMessage{ID: id, Sender: a, Recipient: a, Content: "received"})
+	mustInsertOutbox(t, mod, &mcp.StoredMessage{ID: id, Sender: a, Recipient: a, Content: "sent"})
+	mustInsertInbox(t, mod, &mcp.StoredMessage{ID: id, Sender: a, Recipient: a, Content: "received"})
 
 	res, err := mod.readMessages(a, readRequest{
-		Refs:     []messageRef{{Box: boxOutbox, ID: id}, {Box: boxInbox, ID: id}},
+		Refs:     []messageRef{{Box: mcp.BoxOutbox, ID: id}, {Box: mcp.BoxInbox, ID: id}},
 		Children: childrenNone,
 	})
 	if err != nil {
@@ -237,7 +237,7 @@ func TestARemoteRefusalIsBoundedInTheStore(t *testing.T) {
 	sender, recipient := astral.GenerateIdentity(), astral.GenerateIdentity()
 	id := mcp.NewMessageID()
 
-	mustInsertOutbox(t, mod, &dbMessage{ID: id, Sender: sender, Recipient: recipient, Content: "x"})
+	mustInsertOutbox(t, mod, &mcp.StoredMessage{ID: id, Sender: sender, Recipient: recipient, Content: "x"})
 
 	long := strings.Repeat("ł", 4000)
 	if err := mod.db.SetErr(sender, id, long); err != nil {
@@ -249,7 +249,7 @@ func TestARemoteRefusalIsBoundedInTheStore(t *testing.T) {
 		t.Fatalf("the refusal was not stored: %v rows, err %v", len(rows), err)
 	}
 
-	got := *rows[0].Err
+	got := string(*rows[0].Err)
 	if len(got) > errLimit+len("… (cut)") {
 		t.Fatalf("a refusing node wrote %v bytes into the agent's context", len(got))
 	}

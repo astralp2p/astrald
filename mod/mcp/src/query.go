@@ -20,11 +20,6 @@ const (
 	listArchive = "archive"
 )
 
-const (
-	boxInbox  = "inbox"
-	boxOutbox = "outbox"
-)
-
 // messageQuery is what an agent asks of its own mail. The owner is never a
 // field: it is the authenticated agent, passed separately, so no value here can
 // widen what the query reaches.
@@ -106,9 +101,9 @@ func (q messageQuery) apply(db *gorm.DB, owner *astral.Identity) *gorm.DB {
 	case listArchive:
 		tx = tx.Where("archived_at IS NOT NULL")
 	case listOutbox:
-		tx = tx.Where("box = ? AND archived_at IS NULL", boxOutbox)
+		tx = tx.Where("box = ? AND archived_at IS NULL", mcp.BoxOutbox)
 	default:
-		tx = tx.Where("box = ? AND archived_at IS NULL", boxInbox)
+		tx = tx.Where("box = ? AND archived_at IS NULL", mcp.BoxInbox)
 	}
 
 	if q.From != nil {
@@ -157,17 +152,17 @@ type messageRef struct {
 
 // nextSince is the furthest the answer reached in the database's own order, so
 // a caller passing it back sees only what was written after.
-func nextSince(rows []dbMessage) string {
-	var furthest int64
-	for _, row := range rows {
-		if row.Seq > furthest {
-			furthest = row.Seq
+func nextSince(list []*mcp.StoredMessage) string {
+	var furthest astral.Uint64
+	for _, m := range list {
+		if m.Cursor > furthest {
+			furthest = m.Cursor
 		}
 	}
 	if furthest == 0 {
 		return ""
 	}
-	return strconv.FormatInt(furthest, 10)
+	return strconv.FormatUint(uint64(furthest), 10)
 }
 
 // parseSince reads a cursor a previous answer handed out. It is opaque: only
@@ -185,7 +180,7 @@ func parseSince(v string) (int64, error) {
 // never inferred: an id alone names a row in each direction, and the archive
 // spans both.
 func parseRef(box, id string) (ref messageRef, err error) {
-	if box != boxInbox && box != boxOutbox {
+	if box != mcp.BoxInbox && box != mcp.BoxOutbox {
 		return ref, fmt.Errorf("box is inbox or outbox, not %v", box)
 	}
 	if ref.ID, err = mcp.ParseMessageID(id); err != nil {

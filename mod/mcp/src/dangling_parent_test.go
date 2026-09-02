@@ -14,7 +14,7 @@ func TestAReplyToAHeldInboxMessageIsStored(t *testing.T) {
 	a, b := astral.GenerateIdentity(), astral.GenerateIdentity()
 
 	ask := mcp.NewMessageID()
-	mustInsertInbox(t, mod, &dbMessage{ID: ask, Sender: b, Recipient: a, Content: "ask"})
+	mustInsertInbox(t, mod, &mcp.StoredMessage{ID: ask, Sender: b, Recipient: a, Content: "ask"})
 
 	reply := mcp.NewMessageID()
 	if err := mod.storeMessage(b, a, &mcp.Message{ID: reply, Content: "reply", ParentID: ask}); err != nil {
@@ -33,7 +33,7 @@ func TestAReplyToAHeldOutboxMessageIsStored(t *testing.T) {
 	a, b := astral.GenerateIdentity(), astral.GenerateIdentity()
 
 	ask := mcp.NewMessageID()
-	mustInsertOutbox(t, mod, &dbMessage{ID: ask, Sender: a, Recipient: b, Content: "ask"})
+	mustInsertOutbox(t, mod, &mcp.StoredMessage{ID: ask, Sender: a, Recipient: b, Content: "ask"})
 
 	reply := mcp.NewMessageID()
 	if err := mod.storeMessage(b, a, &mcp.Message{ID: reply, Content: "reply", ParentID: ask}); err != nil {
@@ -48,8 +48,8 @@ func TestAReplyToAnArchivedParentIsStored(t *testing.T) {
 	a, b := astral.GenerateIdentity(), astral.GenerateIdentity()
 
 	ask := mcp.NewMessageID()
-	mustInsertInbox(t, mod, &dbMessage{ID: ask, Sender: b, Recipient: a, Content: "ask"})
-	if n, _ := mod.db.Archive(a, boxInbox, ask); n != 1 {
+	mustInsertInbox(t, mod, &mcp.StoredMessage{ID: ask, Sender: b, Recipient: a, Content: "ask"})
+	if n, _ := mod.db.Archive(a, mcp.BoxInbox, ask); n != 1 {
 		t.Fatal("archive must move the parent")
 	}
 
@@ -101,7 +101,7 @@ func TestARedeliveredReplyIsStillOneRow(t *testing.T) {
 	a, b := astral.GenerateIdentity(), astral.GenerateIdentity()
 
 	ask := mcp.NewMessageID()
-	mustInsertInbox(t, mod, &dbMessage{ID: ask, Sender: b, Recipient: a, Content: "ask"})
+	mustInsertInbox(t, mod, &mcp.StoredMessage{ID: ask, Sender: b, Recipient: a, Content: "ask"})
 
 	reply := mcp.NewMessageID()
 	msg := &mcp.Message{ID: reply, Content: "reply", ParentID: ask}

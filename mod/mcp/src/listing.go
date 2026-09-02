@@ -1,6 +1,7 @@
 package mcp
 
 import (
+	"github.com/astralp2p/astral-go/api/mcp"
 	"github.com/astralp2p/astral-go/astral"
 )
 
@@ -52,7 +53,7 @@ func (mod *Module) query(req listRequest) (q messageQuery, err error) {
 }
 
 // listMessages answers one of the agent's three lists.
-func (mod *Module) listMessages(agentID *astral.Identity, req listRequest) ([]dbMessage, error) {
+func (mod *Module) listMessages(agentID *astral.Identity, req listRequest) ([]*mcp.StoredMessage, error) {
 	q, err := mod.query(req)
 	if err != nil {
 		return nil, err

@@ -14,15 +14,15 @@ func TestReadingStampsOnlyTheReadersOwnRow(t *testing.T) {
 	a, b := astral.GenerateIdentity(), astral.GenerateIdentity()
 	id := mcp.NewMessageID()
 
-	mustInsertOutbox(t, mod, &dbMessage{ID: id, Sender: a, Recipient: b, Content: "x"})
-	mustInsertInbox(t, mod, &dbMessage{ID: id, Sender: a, Recipient: b, Content: "x"})
+	mustInsertOutbox(t, mod, &mcp.StoredMessage{ID: id, Sender: a, Recipient: b, Content: "x"})
+	mustInsertInbox(t, mod, &mcp.StoredMessage{ID: id, Sender: a, Recipient: b, Content: "x"})
 
-	if _, _, err := mod.db.ReadMany(b, []messageRef{{Box: boxInbox, ID: id}}); err != nil {
+	if _, _, err := mod.db.ReadMany(b, []messageRef{{Box: mcp.BoxInbox, ID: id}}); err != nil {
 		t.Fatalf("read: %v", err)
 	}
 
 	var sent dbMessage
-	if err := mod.db.Where("owner = ? AND box = ?", a, boxOutbox).Take(&sent).Error; err != nil {
+	if err := mod.db.Where("owner = ? AND box = ?", a, mcp.BoxOutbox).Take(&sent).Error; err != nil {
 		t.Fatalf("sender's row: %v", err)
 	}
 	if sent.ReadAt != nil {
@@ -44,16 +44,16 @@ func TestRepliesAreFoundInEitherBox(t *testing.T) {
 
 	ask, answer := mcp.NewMessageID(), mcp.NewMessageID()
 
-	mustInsertOutbox(t, mod, &dbMessage{ID: ask, Sender: a, Recipient: b, Content: "which port?"})
-	mustInsertInbox(t, mod, &dbMessage{ID: ask, Sender: a, Recipient: b, Content: "which port?"})
-	mustInsertOutbox(t, mod, &dbMessage{ID: answer, Sender: b, Recipient: a, Content: "8626", ParentID: ask})
-	mustInsertInbox(t, mod, &dbMessage{ID: answer, Sender: b, Recipient: a, Content: "8626", ParentID: ask})
+	mustInsertOutbox(t, mod, &mcp.StoredMessage{ID: ask, Sender: a, Recipient: b, Content: "which port?"})
+	mustInsertInbox(t, mod, &mcp.StoredMessage{ID: ask, Sender: a, Recipient: b, Content: "which port?"})
+	mustInsertOutbox(t, mod, &mcp.StoredMessage{ID: answer, Sender: b, Recipient: a, Content: "8626", ParentID: ask})
+	mustInsertInbox(t, mod, &mcp.StoredMessage{ID: answer, Sender: b, Recipient: a, Content: "8626", ParentID: ask})
 
 	// A's reply arrived in A's inbox; B's own answer is in B's outbox.
 	for _, c := range []struct {
 		who *astral.Identity
-		box string
-	}{{a, boxInbox}, {b, boxOutbox}} {
+		box astral.String8
+	}{{a, mcp.BoxInbox}, {b, mcp.BoxOutbox}} {
 		kids, err := mod.db.Children(c.who, ask, 10)
 		if err != nil {
 			t.Fatalf("children: %v", err)
@@ -72,10 +72,10 @@ func TestAnArchivedReplyIsNotAnsweredAsAChild(t *testing.T) {
 	a, b := astral.GenerateIdentity(), astral.GenerateIdentity()
 	ask, reply := mcp.NewMessageID(), mcp.NewMessageID()
 
-	mustInsertOutbox(t, mod, &dbMessage{ID: ask, Sender: a, Recipient: b, Content: "q"})
-	mustInsertInbox(t, mod, &dbMessage{ID: reply, Sender: b, Recipient: a, Content: "SECRET", ParentID: ask})
+	mustInsertOutbox(t, mod, &mcp.StoredMessage{ID: ask, Sender: a, Recipient: b, Content: "q"})
+	mustInsertInbox(t, mod, &mcp.StoredMessage{ID: reply, Sender: b, Recipient: a, Content: "SECRET", ParentID: ask})
 
-	if n, _ := mod.db.Archive(a, boxInbox, reply); n != 1 {
+	if n, _ := mod.db.Archive(a, mcp.BoxInbox, reply); n != 1 {
 		t.Fatal("archive the reply")
 	}
 
@@ -100,11 +100,11 @@ func TestAChildsBodyStampsTheRowItCameFrom(t *testing.T) {
 	a, b := astral.GenerateIdentity(), astral.GenerateIdentity()
 	ask, reply := mcp.NewMessageID(), mcp.NewMessageID()
 
-	mustInsertOutbox(t, mod, &dbMessage{ID: ask, Sender: a, Recipient: b, Content: "q"})
-	mustInsertInbox(t, mod, &dbMessage{ID: reply, Sender: b, Recipient: a, Content: "the answer", ParentID: ask})
+	mustInsertOutbox(t, mod, &mcp.StoredMessage{ID: ask, Sender: a, Recipient: b, Content: "q"})
+	mustInsertInbox(t, mod, &mcp.StoredMessage{ID: reply, Sender: b, Recipient: a, Content: "the answer", ParentID: ask})
 
 	_, _, err := mod.readMessagesTool(a)(context.Background(), nil, readMessagesIn{
-		IDs:      []messageRefIn{{Box: boxOutbox, ID: ask.String()}},
+		IDs:      []messageRefIn{{Box: mcp.BoxOutbox, ID: ask.String()}},
 		Children: childrenFull,
 	})
 	if err != nil {
@@ -112,7 +112,7 @@ func TestAChildsBodyStampsTheRowItCameFrom(t *testing.T) {
 	}
 
 	var row dbMessage
-	if err := mod.db.Where("owner = ? AND box = ? AND id = ?", a, boxInbox, reply).Take(&row).Error; err != nil {
+	if err := mod.db.Where("owner = ? AND box = ? AND id = ?", a, mcp.BoxInbox, reply).Take(&row).Error; err != nil {
 		t.Fatalf("the reply: %v", err)
 	}
 	if row.ReadAt == nil {
@@ -131,11 +131,11 @@ func TestAnUnheldIDIsReportedAndTheRestAreStillRead(t *testing.T) {
 	mod := testMessageModule(t)
 	a, b := astral.GenerateIdentity(), astral.GenerateIdentity()
 	held := mcp.NewMessageID()
-	mustInsertInbox(t, mod, &dbMessage{ID: held, Sender: b, Recipient: a, Content: "here"})
+	mustInsertInbox(t, mod, &mcp.StoredMessage{ID: held, Sender: b, Recipient: a, Content: "here"})
 
 	out, _, err := mod.db.ReadMany(a, []messageRef{
-		{Box: boxInbox, ID: held},
-		{Box: boxInbox, ID: mcp.NewMessageID()},
+		{Box: mcp.BoxInbox, ID: held},
+		{Box: mcp.BoxInbox, ID: mcp.NewMessageID()},
 	})
 	if err != nil {
 		t.Fatalf("a batch with one unheld id must not fail: %v", err)
@@ -159,8 +159,8 @@ func TestASelfSentReplyIsAnsweredOnce(t *testing.T) {
 		id     mcp.MessageID
 		parent mcp.MessageID
 	}{{ask, mcp.MessageID{}}, {reply, ask}} {
-		mustInsertOutbox(t, mod, &dbMessage{ID: m.id, Sender: a, Recipient: a, Content: "x", ParentID: m.parent})
-		mustInsertInbox(t, mod, &dbMessage{ID: m.id, Sender: a, Recipient: a, Content: "x", ParentID: m.parent})
+		mustInsertOutbox(t, mod, &mcp.StoredMessage{ID: m.id, Sender: a, Recipient: a, Content: "x", ParentID: m.parent})
+		mustInsertInbox(t, mod, &mcp.StoredMessage{ID: m.id, Sender: a, Recipient: a, Content: "x", ParentID: m.parent})
 	}
 
 	kids, err := mod.db.Children(a, ask, 10)
@@ -170,7 +170,7 @@ func TestASelfSentReplyIsAnsweredOnce(t *testing.T) {
 	if len(kids) != 1 {
 		t.Fatalf("one reply was answered %v times: %+v", len(kids), kids)
 	}
-	if kids[0].Box != boxInbox {
+	if kids[0].Box != mcp.BoxInbox {
 		t.Fatalf("the copy kept must be the received one, which carries the read stamp; got %v", kids[0].Box)
 	}
 
@@ -188,8 +188,8 @@ func TestASelfSendThatNeverLandedIsStillAnswered(t *testing.T) {
 	a := astral.GenerateIdentity()
 	ask, reply := mcp.NewMessageID(), mcp.NewMessageID()
 
-	mustInsertOutbox(t, mod, &dbMessage{ID: ask, Sender: a, Recipient: a, Content: "q"})
-	mustInsertOutbox(t, mod, &dbMessage{ID: reply, Sender: a, Recipient: a, Content: "r", ParentID: ask})
+	mustInsertOutbox(t, mod, &mcp.StoredMessage{ID: ask, Sender: a, Recipient: a, Content: "q"})
+	mustInsertOutbox(t, mod, &mcp.StoredMessage{ID: reply, Sender: a, Recipient: a, Content: "r", ParentID: ask})
 
 	kids, err := mod.db.Children(a, ask, 10)
 	if err != nil || len(kids) != 1 {
@@ -216,8 +216,8 @@ func TestAFullAnswerLeavesBodiesAndSaysSo(t *testing.T) {
 	refs := make([]messageRef, 3)
 	for i := range refs {
 		id := mcp.NewMessageID()
-		mustInsertInbox(t, mod, &dbMessage{ID: id, Sender: b, Recipient: a, Content: body})
-		refs[i] = messageRef{Box: boxInbox, ID: id}
+		mustInsertInbox(t, mod, &mcp.StoredMessage{ID: id, Sender: b, Recipient: a, Content: astral.String32(body)})
+		refs[i] = messageRef{Box: mcp.BoxInbox, ID: id}
 	}
 
 	res, err := mod.readMessages(a, readRequest{Refs: refs, Children: childrenNone})
@@ -251,11 +251,11 @@ func TestRepliesAreChargedAfterTheMessageTheyAnswer(t *testing.T) {
 	for range 60 {
 		body += "y"
 	}
-	mustInsertOutbox(t, mod, &dbMessage{ID: ask, Sender: a, Recipient: b, Content: body})
-	mustInsertInbox(t, mod, &dbMessage{ID: reply, Sender: b, Recipient: a, Content: body, ParentID: ask})
+	mustInsertOutbox(t, mod, &mcp.StoredMessage{ID: ask, Sender: a, Recipient: b, Content: astral.String32(body)})
+	mustInsertInbox(t, mod, &mcp.StoredMessage{ID: reply, Sender: b, Recipient: a, Content: astral.String32(body), ParentID: ask})
 
 	res, err := mod.readMessages(a, readRequest{
-		Refs:     []messageRef{{Box: boxOutbox, ID: ask}},
+		Refs:     []messageRef{{Box: mcp.BoxOutbox, ID: ask}},
 		Children: childrenFull,
 	})
 	if err != nil {
@@ -275,7 +275,7 @@ func TestRepliesAreChargedAfterTheMessageTheyAnswer(t *testing.T) {
 func TestAReadsBoundsAreTheModulesAndNotTheCallers(t *testing.T) {
 	over := make([]messageRef, maxReadIDs+1)
 	for i := range over {
-		over[i] = messageRef{Box: boxInbox, ID: mcp.NewMessageID()}
+		over[i] = messageRef{Box: mcp.BoxInbox, ID: mcp.NewMessageID()}
 	}
 	if err := (&readRequest{Refs: over}).validate(); err == nil {
 		t.Fatalf("naming more than %v ids in one read must be refused", maxReadIDs)
@@ -311,18 +311,18 @@ func TestAReadNamesEveryReplyEvenPastWhatItCarries(t *testing.T) {
 	mod := testMessageModule(t)
 	a, b := astral.GenerateIdentity(), astral.GenerateIdentity()
 	ask := mcp.NewMessageID()
-	mustInsertOutbox(t, mod, &dbMessage{ID: ask, Sender: a, Recipient: b, Content: "q"})
+	mustInsertOutbox(t, mod, &mcp.StoredMessage{ID: ask, Sender: a, Recipient: b, Content: "q"})
 
 	const replies = maxChildren + 7
 	want := make(map[string]bool, replies)
 	for range replies {
 		id := mcp.NewMessageID()
-		mustInsertInbox(t, mod, &dbMessage{ID: id, Sender: b, Recipient: a, Content: "r", ParentID: ask})
+		mustInsertInbox(t, mod, &mcp.StoredMessage{ID: id, Sender: b, Recipient: a, Content: "r", ParentID: ask})
 		want[id.String()] = true
 	}
 
 	_, out, err := mod.readMessagesTool(a)(context.Background(), nil, readMessagesIn{
-		IDs: []messageRefIn{{Box: boxOutbox, ID: ask.String()}},
+		IDs: []messageRefIn{{Box: mcp.BoxOutbox, ID: ask.String()}},
 	})
 	if err != nil {
 		t.Fatalf("read: %v", err)
@@ -343,7 +343,7 @@ func TestAReadNamesEveryReplyEvenPastWhatItCarries(t *testing.T) {
 	// every id it named is one it will answer
 	refs := make([]messageRefIn, 0, replies)
 	for _, id := range out.Messages[0].ChildIDs {
-		refs = append(refs, messageRefIn{Box: boxInbox, ID: id})
+		refs = append(refs, messageRefIn{Box: mcp.BoxInbox, ID: id})
 	}
 	_, second, err := mod.readMessagesTool(a)(context.Background(), nil, readMessagesIn{
 		IDs: refs, Children: childrenNone,
@@ -363,11 +363,11 @@ func TestChildIDsComeBackEvenWhenNoRepliesAreAskedFor(t *testing.T) {
 	mod := testMessageModule(t)
 	a, b := astral.GenerateIdentity(), astral.GenerateIdentity()
 	ask, reply := mcp.NewMessageID(), mcp.NewMessageID()
-	mustInsertOutbox(t, mod, &dbMessage{ID: ask, Sender: a, Recipient: b, Content: "q"})
-	mustInsertInbox(t, mod, &dbMessage{ID: reply, Sender: b, Recipient: a, Content: "SECRET", ParentID: ask})
+	mustInsertOutbox(t, mod, &mcp.StoredMessage{ID: ask, Sender: a, Recipient: b, Content: "q"})
+	mustInsertInbox(t, mod, &mcp.StoredMessage{ID: reply, Sender: b, Recipient: a, Content: "SECRET", ParentID: ask})
 
 	_, out, err := mod.readMessagesTool(a)(context.Background(), nil, readMessagesIn{
-		IDs:      []messageRefIn{{Box: boxOutbox, ID: ask.String()}},
+		IDs:      []messageRefIn{{Box: mcp.BoxOutbox, ID: ask.String()}},
 		Children: childrenNone,
 	})
 	if err != nil {
@@ -384,7 +384,7 @@ func TestChildIDsComeBackEvenWhenNoRepliesAreAskedFor(t *testing.T) {
 	// naming a reply is not handing it out: nothing was stamped and its sender
 	// is not told it was collected
 	var row dbMessage
-	if err := mod.db.Where("owner = ? AND box = ? AND id = ?", a, boxInbox, reply).Take(&row).Error; err != nil {
+	if err := mod.db.Where("owner = ? AND box = ? AND id = ?", a, mcp.BoxInbox, reply).Take(&row).Error; err != nil {
 		t.Fatalf("the reply: %v", err)
 	}
 	if row.ReadAt != nil {
@@ -399,9 +399,9 @@ func TestNamingOneMessageTwiceReadsItOnce(t *testing.T) {
 	mod := testMessageModule(t)
 	a, b := astral.GenerateIdentity(), astral.GenerateIdentity()
 	id := mcp.NewMessageID()
-	mustInsertInbox(t, mod, &dbMessage{ID: id, Sender: b, Recipient: a, Content: "once"})
+	mustInsertInbox(t, mod, &mcp.StoredMessage{ID: id, Sender: b, Recipient: a, Content: "once"})
 
-	ref := messageRef{Box: boxInbox, ID: id}
+	ref := messageRef{Box: mcp.BoxInbox, ID: id}
 	res, err := mod.readMessages(a, readRequest{Refs: []messageRef{ref, ref, ref}, Children: childrenNone})
 	if err != nil {
 		t.Fatalf("read: %v", err)

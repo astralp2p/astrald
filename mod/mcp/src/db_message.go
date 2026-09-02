@@ -65,3 +65,63 @@ type dbMessage struct {
 func (dbMessage) TableName() string {
 	return mcpmod.DBPrefix + "messages"
 }
+
+// stored renders the row as the record every layer above the store works on.
+//
+// why the owner column does not cross: it is derivable from the box and the two
+// parties, the store scopes every read on it, and nothing above reads it.
+func (row dbMessage) stored() *mcp.StoredMessage {
+	m := &mcp.StoredMessage{
+		Cursor:    astral.Uint64(row.Seq),
+		ID:        row.ID,
+		Box:       astral.String8(row.Box),
+		Sender:    row.Sender,
+		Recipient: row.Recipient,
+		Content:   astral.String32(row.Content),
+		ParentID:  row.ParentID,
+		CreatedAt: astral.Time(row.CreatedAt),
+
+		ArchivedAt:      stamp(row.ArchivedAt),
+		ReadAt:          stamp(row.ReadAt),
+		ReceiptDueAt:    stamp(row.ReceiptDueAt),
+		ReceiptStoredAt: stamp(row.ReceiptStoredAt),
+		LandedAt:        stamp(row.LandedAt),
+		FailedAt:        stamp(row.FailedAt),
+		FetchedAt:       stamp(row.FetchedAt),
+	}
+	if row.Err != nil {
+		e := astral.String16(*row.Err)
+		m.Err = &e
+	}
+	return m
+}
+
+// storedAll renders a listing.
+func storedAll(rows []dbMessage) []*mcp.StoredMessage {
+	list := make([]*mcp.StoredMessage, len(rows))
+	for i, row := range rows {
+		list[i] = row.stored()
+	}
+	return list
+}
+
+// stamp carries an optional instant across, absent staying absent.
+func stamp(t *time.Time) *astral.Time {
+	if t == nil {
+		return nil
+	}
+	v := astral.Time(*t)
+	return &v
+}
+
+// newRow is the write direction: what an insert states, and nothing the store
+// stamps for itself.
+func newRow(m *mcp.StoredMessage) *dbMessage {
+	return &dbMessage{
+		ID:        m.ID,
+		Sender:    m.Sender,
+		Recipient: m.Recipient,
+		Content:   string(m.Content),
+		ParentID:  m.ParentID,
+	}
+}

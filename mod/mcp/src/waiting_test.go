@@ -14,7 +14,7 @@ import (
 func TestWaitTakesNothing(t *testing.T) {
 	mod := testMessageModule(t)
 	a, b := astral.GenerateIdentity(), astral.GenerateIdentity()
-	mustInsertInbox(t, mod, &dbMessage{ID: mcp.NewMessageID(), Sender: b, Recipient: a, Content: "x"})
+	mustInsertInbox(t, mod, &mcp.StoredMessage{ID: mcp.NewMessageID(), Sender: b, Recipient: a, Content: "x"})
 
 	first, err := mod.waitMessages(context.Background(), a, waitRequest{Timeout: time.Millisecond})
 	if err != nil || len(first.Rows) != 1 {

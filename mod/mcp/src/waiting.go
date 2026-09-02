@@ -4,6 +4,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/astralp2p/astral-go/api/mcp"
 	"github.com/astralp2p/astral-go/astral"
 )
 
@@ -18,7 +19,7 @@ type waitRequest struct {
 // waitAnswer is what one park came back with: the rows, the window it was
 // given, and the time it actually held.
 type waitAnswer struct {
-	Rows    []dbMessage
+	Rows    []*mcp.StoredMessage
 	Granted time.Duration
 	Waited  time.Duration
 }

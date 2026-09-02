@@ -4,6 +4,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/astralp2p/astral-go/api/mcp"
 	"github.com/astralp2p/astral-go/astral"
 	mcpsdk "github.com/modelcontextprotocol/go-sdk/mcp"
 )
@@ -74,55 +75,55 @@ func (mod *Module) listMessagesTool(agentID *astral.Identity) mcpsdk.ToolHandler
 }
 
 // entries renders a listing, for list_messages and wait alike.
-func entries(rows []dbMessage) []messageEntry {
-	list := make([]messageEntry, len(rows))
-	for i, row := range rows {
-		list[i] = entry(row)
+func entries(list []*mcp.StoredMessage) []messageEntry {
+	out := make([]messageEntry, len(list))
+	for i, m := range list {
+		out[i] = entry(m)
 	}
-	return list
+	return out
 }
 
 // entry renders one row for a listing. The peer is whichever party the owner is
 // not, so one field answers "who" in both directions.
-func entry(row dbMessage) messageEntry {
-	peer := row.Sender
-	if row.Box == boxOutbox {
-		peer = row.Recipient
+func entry(m *mcp.StoredMessage) messageEntry {
+	peer := m.Sender
+	if m.Box == mcp.BoxOutbox {
+		peer = m.Recipient
 	}
 
 	e := messageEntry{
-		ID:         row.ID.String(),
-		Box:        row.Box,
+		ID:         m.ID.String(),
+		Box:        string(m.Box),
 		Peer:       peer.String(),
-		CreatedAt:  stampMessageTime(row.CreatedAt),
-		ArchivedAt: stampOptionalTime(row.ArchivedAt),
+		CreatedAt:  stampMessageTime(m.CreatedAt),
+		ArchivedAt: stampOptionalTime(m.ArchivedAt),
 	}
-	if !row.ParentID.IsZero() {
-		e.ParentID = row.ParentID.String()
+	if !m.ParentID.IsZero() {
+		e.ParentID = m.ParentID.String()
 	}
 
-	if row.Box == boxInbox {
-		e.Read = row.ReadAt != nil
+	if m.Box == mcp.BoxInbox {
+		e.Read = m.ReadAt != nil
 		return e
 	}
 
-	e.LandedAt = stampOptionalTime(row.LandedAt)
-	e.FailedAt = stampOptionalTime(row.FailedAt)
-	e.FetchedAt = stampOptionalTime(row.FetchedAt)
-	if row.Err != nil {
-		e.Err = *row.Err
+	e.LandedAt = stampOptionalTime(m.LandedAt)
+	e.FailedAt = stampOptionalTime(m.FailedAt)
+	e.FetchedAt = stampOptionalTime(m.FetchedAt)
+	if m.Err != nil {
+		e.Err = string(*m.Err)
 	}
 	return e
 }
 
 // stampMessageTime renders a stored timestamp for a tool result.
-func stampMessageTime(t time.Time) string {
-	return t.UTC().Format(time.RFC3339Nano)
+func stampMessageTime(t astral.Time) string {
+	return t.Time().UTC().Format(time.RFC3339Nano)
 }
 
 // stampOptionalTime renders an instant that may not have happened. The empty
 // string is the absence of the fact, and the field is omitted.
-func stampOptionalTime(t *time.Time) string {
+func stampOptionalTime(t *astral.Time) string {
 	if t == nil {
 		return ""
 	}

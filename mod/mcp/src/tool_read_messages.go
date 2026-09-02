@@ -3,6 +3,7 @@ package mcp
 import (
 	"context"
 
+	"github.com/astralp2p/astral-go/api/mcp"
 	"github.com/astralp2p/astral-go/astral"
 	mcpsdk "github.com/modelcontextprotocol/go-sdk/mcp"
 )
@@ -94,17 +95,17 @@ func wholes(list []readMessage) []messageOut {
 }
 
 // whole renders one message with its body.
-func whole(row dbMessage) messageOut {
-	m := messageOut{
-		ID:        row.ID.String(),
-		Box:       row.Box,
-		Sender:    row.Sender.String(),
-		Recipient: row.Recipient.String(),
-		Content:   row.Content,
-		CreatedAt: stampMessageTime(row.CreatedAt),
+func whole(m *mcp.StoredMessage) messageOut {
+	out := messageOut{
+		ID:        m.ID.String(),
+		Box:       string(m.Box),
+		Sender:    m.Sender.String(),
+		Recipient: m.Recipient.String(),
+		Content:   string(m.Content),
+		CreatedAt: stampMessageTime(m.CreatedAt),
 	}
-	if !row.ParentID.IsZero() {
-		m.ParentID = row.ParentID.String()
+	if !m.ParentID.IsZero() {
+		out.ParentID = m.ParentID.String()
 	}
-	return m
+	return out
 }

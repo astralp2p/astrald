@@ -82,7 +82,7 @@ func distinctRefs(refs []messageRef) []messageRef {
 // readMessage is one message a read answers, with what the read decided about
 // it.
 type readMessage struct {
-	Row dbMessage
+	Row *mcp.StoredMessage
 
 	// ChildIDs are the ids of its direct replies, oldest first — the whole
 	// set, whatever the answer carried of them.
@@ -119,7 +119,7 @@ func (mod *Module) readMessages(agentID *astral.Identity, req readRequest) (res 
 	left := budget(mod.config.MaxResponseBytes)
 
 	for _, row := range rows {
-		mod.noteFetched(&row)
+		mod.noteFetched(row)
 
 		// why the message is charged before its replies: the caller named this
 		// id and did not name the replies, so an overflow drops the extra
@@ -174,10 +174,10 @@ func (mod *Module) readReplies(owner *astral.Identity, parent mcp.MessageID, req
 		// the sender it was collected, and a row that says otherwise leaves the
 		// two halves of one fact disagreeing — the sender reading it collected
 		// while unread_only still lists it.
-		if err = mod.db.MarkRead(owner, &row); err != nil {
+		if err = mod.db.MarkRead(owner, row); err != nil {
 			return nil, err
 		}
-		mod.noteFetched(&row)
+		mod.noteFetched(row)
 
 		r := readMessage{Row: row}
 		if !left.spend(len(row.Content)) {

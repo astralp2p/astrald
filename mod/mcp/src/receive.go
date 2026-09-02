@@ -82,11 +82,11 @@ func (mod *Module) storeMessage(sender, recipient *astral.Identity, msg *mcp.Mes
 		}
 	}
 
-	n, err := mod.db.InsertInbox(&dbMessage{
+	n, err := mod.db.InsertInbox(&mcp.StoredMessage{
 		ID:        msg.ID,
 		Sender:    sender,
 		Recipient: recipient,
-		Content:   string(msg.Content),
+		Content:   msg.Content,
 		ParentID:  msg.ParentID,
 	})
 	if err != nil {
@@ -105,7 +105,7 @@ func (mod *Module) storeMessage(sender, recipient *astral.Identity, msg *mcp.Mes
 	// acknowledgement it never saw or a second sender minting an id this inbox
 	// already holds. The id is the sender's to choose, so the second is
 	// reachable and must not be answered with an ack.
-	held, err := mod.db.SenderOf(recipient, boxInbox, msg.ID)
+	held, err := mod.db.SenderOf(recipient, mcp.BoxInbox, msg.ID)
 	if err != nil {
 		return err
 	}

@@ -18,8 +18,8 @@ func TestEachListAnswersItsOwnRowsInItsOwnOrder(t *testing.T) {
 	for i := range 3 {
 		_ = i
 		id := mcp.NewMessageID()
-		mustInsertOutbox(t, mod, &dbMessage{ID: id, Sender: a, Recipient: b, Content: "sent"})
-		mustInsertInbox(t, mod, &dbMessage{ID: mcp.NewMessageID(), Sender: b, Recipient: a, Content: "got"})
+		mustInsertOutbox(t, mod, &mcp.StoredMessage{ID: id, Sender: a, Recipient: b, Content: "sent"})
+		mustInsertInbox(t, mod, &mcp.StoredMessage{ID: mcp.NewMessageID(), Sender: b, Recipient: a, Content: "got"})
 	}
 
 	in, err := mod.listMessages(a, listRequest{List: listInbox})
@@ -27,11 +27,11 @@ func TestEachListAnswersItsOwnRowsInItsOwnOrder(t *testing.T) {
 		t.Fatalf("inbox: %v rows, err %v", len(in), err)
 	}
 	for _, row := range in {
-		if row.Box != boxInbox {
+		if row.Box != mcp.BoxInbox {
 			t.Fatalf("an outbox row answered the inbox: %+v", row)
 		}
 	}
-	if !in[0].CreatedAt.Before(in[2].CreatedAt) {
+	if !in[0].CreatedAt.Time().Before(in[2].CreatedAt.Time()) {
 		t.Fatal("an inbox is a queue and reads oldest first")
 	}
 
@@ -39,7 +39,7 @@ func TestEachListAnswersItsOwnRowsInItsOwnOrder(t *testing.T) {
 	if err != nil || len(out) != 3 {
 		t.Fatalf("outbox: %v rows, err %v", len(out), err)
 	}
-	if !out[0].CreatedAt.After(out[2].CreatedAt) {
+	if !out[0].CreatedAt.Time().After(out[2].CreatedAt.Time()) {
 		t.Fatal("a sent list is a history and reads newest first")
 	}
 }
@@ -75,7 +75,7 @@ func TestAListingAnswersTheWholeList(t *testing.T) {
 
 	const held = 500
 	for range held {
-		mustInsertInbox(t, mod, &dbMessage{ID: mcp.NewMessageID(), Sender: b, Recipient: a, Content: "x"})
+		mustInsertInbox(t, mod, &mcp.StoredMessage{ID: mcp.NewMessageID(), Sender: b, Recipient: a, Content: "x"})
 	}
 
 	rows, err := mod.listMessages(a, listRequest{List: listInbox})
@@ -91,7 +91,7 @@ func TestAListingAnswersTheWholeList(t *testing.T) {
 func TestSinceOnlyNarrows(t *testing.T) {
 	mod := testMessageModule(t)
 	a, b := astral.GenerateIdentity(), astral.GenerateIdentity()
-	mustInsertInbox(t, mod, &dbMessage{ID: mcp.NewMessageID(), Sender: b, Recipient: a, Content: "one"})
+	mustInsertInbox(t, mod, &mcp.StoredMessage{ID: mcp.NewMessageID(), Sender: b, Recipient: a, Content: "one"})
 
 	rows, err := mod.listMessages(a, listRequest{List: listInbox})
 	if err != nil || len(rows) != 1 {
@@ -107,7 +107,7 @@ func TestSinceOnlyNarrows(t *testing.T) {
 		t.Fatalf("since its own answer: %v rows, err %v", len(after), err)
 	}
 
-	mustInsertInbox(t, mod, &dbMessage{ID: mcp.NewMessageID(), Sender: b, Recipient: a, Content: "two"})
+	mustInsertInbox(t, mod, &mcp.StoredMessage{ID: mcp.NewMessageID(), Sender: b, Recipient: a, Content: "two"})
 	after, err = mod.listMessages(a, listRequest{List: listInbox, Since: since})
 	if err != nil || len(after) != 1 || after[0].Content != "two" {
 		t.Fatalf("after a new arrival: %+v, err %v", after, err)
@@ -141,7 +141,7 @@ func TestTheCursorNeverSkipsAMessage(t *testing.T) {
 			defer wg.Done()
 			for range each {
 				peer := astral.GenerateIdentity()
-				_, _ = mod.db.InsertInbox(&dbMessage{
+				_, _ = mod.db.InsertInbox(&mcp.StoredMessage{
 					ID: mcp.NewMessageID(), Sender: peer, Recipient: a, Content: "x",
 				})
 			}
@@ -191,7 +191,7 @@ func TestTheCursorNeverSkipsAMessage(t *testing.T) {
 	}
 
 	var held int64
-	mod.db.Model(&dbMessage{}).Where("owner = ? AND box = ?", a, boxInbox).Count(&held)
+	mod.db.Model(&dbMessage{}).Where("owner = ? AND box = ?", a, mcp.BoxInbox).Count(&held)
 
 	if int64(len(seen)) != held {
 		t.Fatalf("the cursor showed %v of %v messages — %v were stepped past",
@@ -220,14 +220,14 @@ func TestNoAnswerCarriesADisplayName(t *testing.T) {
 	mod := testMessageModule(t)
 	a, b := astral.GenerateIdentity(), astral.GenerateIdentity()
 	id := mcp.NewMessageID()
-	mustInsertInbox(t, mod, &dbMessage{ID: id, Sender: b, Recipient: a, Content: "x"})
+	mustInsertInbox(t, mod, &mcp.StoredMessage{ID: id, Sender: b, Recipient: a, Content: "x"})
 
 	_, listed, err := mod.listMessagesTool(a)(context.Background(), nil, listMessagesIn{})
 	if err != nil {
 		t.Fatalf("list: %v", err)
 	}
 	_, read, err := mod.readMessagesTool(a)(context.Background(), nil, readMessagesIn{
-		IDs: []messageRefIn{{Box: boxInbox, ID: id.String()}},
+		IDs: []messageRefIn{{Box: mcp.BoxInbox, ID: id.String()}},
 	})
 	if err != nil {
 		t.Fatalf("read: %v", err)

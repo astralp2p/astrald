@@ -15,13 +15,13 @@ func TestArchivedMessagesLeaveTheListingsAndTheWait(t *testing.T) {
 	mod := testMessageModule(t)
 	a, b := astral.GenerateIdentity(), astral.GenerateIdentity()
 	id := mcp.NewMessageID()
-	mustInsertInbox(t, mod, &dbMessage{ID: id, Sender: a, Recipient: b, Content: "x"})
+	mustInsertInbox(t, mod, &mcp.StoredMessage{ID: id, Sender: a, Recipient: b, Content: "x"})
 
-	n, err := mod.db.Archive(b, boxInbox, id)
+	n, err := mod.db.Archive(b, mcp.BoxInbox, id)
 	if err != nil || n != 1 {
 		t.Fatalf("archive: n=%v err=%v", n, err)
 	}
-	if n, _ := mod.db.Archive(b, boxInbox, id); n != 0 {
+	if n, _ := mod.db.Archive(b, mcp.BoxInbox, id); n != 0 {
 		t.Fatal("archiving twice must report the second call changed nothing")
 	}
 
@@ -43,7 +43,7 @@ func TestArchivedMessagesLeaveTheListingsAndTheWait(t *testing.T) {
 		t.Fatal("wait answered a message that was put away")
 	}
 
-	if n, _ := mod.db.Unarchive(b, boxInbox, id); n != 1 {
+	if n, _ := mod.db.Unarchive(b, mcp.BoxInbox, id); n != 1 {
 		t.Fatal("unarchive must put it back")
 	}
 	live, _ = mod.listMessages(b, listRequest{List: listInbox})
@@ -58,9 +58,9 @@ func TestArchiveIsScopedToItsOwner(t *testing.T) {
 	mod := testMessageModule(t)
 	a, b := astral.GenerateIdentity(), astral.GenerateIdentity()
 	id := mcp.NewMessageID()
-	mustInsertInbox(t, mod, &dbMessage{ID: id, Sender: a, Recipient: b, Content: "x"})
+	mustInsertInbox(t, mod, &mcp.StoredMessage{ID: id, Sender: a, Recipient: b, Content: "x"})
 
-	if n, _ := mod.db.Archive(a, boxInbox, id); n != 0 {
+	if n, _ := mod.db.Archive(a, mcp.BoxInbox, id); n != 0 {
 		t.Fatal("an agent archived a message it does not own")
 	}
 }
@@ -74,12 +74,12 @@ func TestArchiveReportsWhetherThisCallMovedIt(t *testing.T) {
 	mod := testMessageModule(t)
 	a, b := astral.GenerateIdentity(), astral.GenerateIdentity()
 	id := mcp.NewMessageID()
-	mustInsertInbox(t, mod, &dbMessage{ID: id, Sender: b, Recipient: a, Content: "x"})
+	mustInsertInbox(t, mod, &mcp.StoredMessage{ID: id, Sender: b, Recipient: a, Content: "x"})
 
 	call := func(undo bool) bool {
 		t.Helper()
 		_, out, err := mod.archiveTool(a)(context.Background(), nil, archiveIn{
-			Box: boxInbox, ID: id.String(), Undo: undo,
+			Box: mcp.BoxInbox, ID: id.String(), Undo: undo,
 		})
 		if err != nil {
 			t.Fatalf("archive(undo=%v): %v", undo, err)
@@ -103,7 +103,7 @@ func TestArchiveReportsWhetherThisCallMovedIt(t *testing.T) {
 	// an id the agent does not hold answers the same false, and says nothing
 	// about whether it exists elsewhere
 	_, out, err := mod.archiveTool(b)(context.Background(), nil, archiveIn{
-		Box: boxInbox, ID: id.String(),
+		Box: mcp.BoxInbox, ID: id.String(),
 	})
 	if err != nil || out.Changed {
 		t.Fatalf("an agent moved a message it does not hold: changed=%v err=%v", out.Changed, err)
