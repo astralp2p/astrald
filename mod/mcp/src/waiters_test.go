@@ -10,7 +10,7 @@ import (
 	"github.com/astralp2p/astral-go/astral"
 )
 
-// ── the invariant the floor exists for ─────────────────────────────────────
+// The invariant the floor exists for.
 
 // A missed wake must be caught before the deadline can report timed_out over a
 // non-empty inbox. That answer — "the window closed with nothing new", while
@@ -22,7 +22,7 @@ func TestTheFloorIsUnderTheDeadline(t *testing.T) {
 	}
 }
 
-// ── the wake ───────────────────────────────────────────────────────────────
+// The wake.
 
 // A delivery wakes the park that is watching that mailbox, and it does so well
 // inside the floor — otherwise the wake is doing nothing and the floor is.
@@ -184,7 +184,7 @@ func TestARetryThatStoredNothingWakesNobody(t *testing.T) {
 	}
 }
 
-// ── the registry keeps no more than it is holding ──────────────────────────
+// The registry keeps no more than it is holding.
 
 // A registration that outlives its park is a leak with no other symptom: one
 // entry per parked agent, forever.

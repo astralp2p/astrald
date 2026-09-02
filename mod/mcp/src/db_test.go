@@ -29,7 +29,7 @@ func mustInsertOutbox(t *testing.T, mod *Module, row *dbMessage) {
 	}
 }
 
-// ── the schema is what the DDL says, not what a struct tag implies ──────────
+// The schema is what the DDL says, not what a struct tag implies.
 
 // The table carries a generated column, three CHECKs and a partial index, none
 // of which a gorm tag can express. table_info omits a generated column
@@ -134,7 +134,7 @@ func TestTheBoxChecksRefuseACrossBoxWrite(t *testing.T) {
 	}
 }
 
-// ── one owner may hold two rows under one id ───────────────────────────────
+// One owner may hold two rows under one id.
 
 // An agent writing to itself holds both rows, and a peer may mint an id this
 // agent already sent under. The id is the peer's to choose, so neither is
@@ -226,7 +226,7 @@ func TestStoreTellsARetryFromACollision(t *testing.T) {
 	}
 }
 
-// ── archive ────────────────────────────────────────────────────────────────
+// Archive.
 
 // A remote node's words land in this agent's sent list and from there in its
 // model's context. They are quoted material, but how much of a context window a

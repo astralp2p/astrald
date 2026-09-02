@@ -26,18 +26,14 @@ func (mod *Module) RouteQuery(ctx *astral.Context, q *astral.InFlightQuery, w io
 	path, _ := query.Parse(q.QueryString)
 
 	// why a receipt is admitted without asking the authority: the outbox row is
-	// the permission. This agent already wrote to the caller, and a receipt
-	// says one thing about that one message. Directions are granted per side,
-	// so asking answer_agent_action here would refuse a receipt whenever the
-	// two differ — which is the ordinary case, not the edge one.
+	// the permission, and directions are granted per side — asking
+	// answer_agent_action would refuse a receipt whenever the two differ.
 	if path == mcp.MethodReceipt {
 		return mod.acceptReceipt(q, w)
 	}
 
-	// why the actor is the target and not the caller: the action names what its
-	// actor does, and taking a message is this agent's act. auth walks the
-	// contracts the actor is subject to, so naming the caller would search a
-	// stranger's delegations for a permission this agent's side holds.
+	// why the actor is the target and not the caller: auth walks the contracts
+	// the actor is subject to, and taking a message is this agent's act.
 	if !mod.Auth.Authorize(ctx, &mcp.AnswerAgentAction{
 		Action: auth.NewAction(q.Target),
 		FromID: q.Caller,
@@ -45,9 +41,8 @@ func (mod *Module) RouteQuery(ctx *astral.Context, q *astral.InFlightQuery, w io
 		return query.RouteNotFound()
 	}
 
-	// why every other path is a miss: an agent is a mailbox and not a service.
-	// A query naming anything else reaches an agent that does not serve it, and
-	// reads as the target being absent.
+	// why every other path is a miss: an agent is a mailbox and not a service,
+	// so a query naming anything else reads as the target being absent.
 	if path != mcp.MethodMessage {
 		return query.RouteNotFound()
 	}

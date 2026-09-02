@@ -31,11 +31,9 @@ func (mod *Module) sendMessage(agentID *astral.Identity, to, content string, par
 		return id, fmt.Errorf("content is over %v bytes", mod.config.MaxPayloadBytes)
 	}
 
-	// why a reply to a message this agent does not hold is refused here too:
-	// the recipient's node refuses a parent it does not hold, so a send that
-	// named one this agent cannot itself see would write an outbox row and then
-	// fail delivery. Refusing it here answers the agent at once, and keeps the
-	// agent's own thread graph the forest the recipient's is.
+	// why the parent is checked here too: the recipient's node refuses a parent
+	// it does not hold, so a send naming one this agent cannot see would write
+	// an outbox row and then fail delivery.
 	if !parent.IsZero() {
 		held, err := mod.db.Holds(agentID, parent)
 		if err != nil {
@@ -52,9 +50,9 @@ func (mod *Module) sendMessage(agentID *astral.Identity, to, content string, par
 		ParentID: parent,
 	}
 
-	// why the row is written here and nothing above it is: a stored list of
-	// refusals would tell a recipient that refuses apart from one that does not
-	// exist, which is the collapse resolveRecipient is built on.
+	// why nothing above this writes a row: a stored list of refusals would tell
+	// a recipient that refuses apart from one that does not exist, which is the
+	// collapse resolveRecipient is built on.
 	if err = mod.db.InsertOutbox(&dbMessage{
 		ID:        msg.ID,
 		Sender:    agentID,
@@ -117,10 +115,8 @@ func (mod *Module) resolveRecipient(agentID *astral.Identity, to string) (*astra
 // why errNoAnswer stamps nothing: an answer that never arrived proves nothing
 // about the write, and the row that says nothing is the row that is right.
 //
-// why a stamp that fails is logged and never returned: the delivery already
-// happened as it happened, so failing the caller would deny it. Every state
-// here is read off which instants are set, so a lost stamp is a row claiming a
-// fact that did occur never did.
+// why a failed stamp is logged and not returned: the delivery happened as it
+// happened, and every state here is read off which instants are set.
 func (mod *Module) noteDeliveryFailed(agentID *astral.Identity, id mcp.MessageID, cause error) {
 	if !errors.Is(cause, errRefused) && !errors.Is(cause, errNotSent) {
 		return

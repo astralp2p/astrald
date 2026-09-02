@@ -11,6 +11,7 @@ They should only be used for extending low-level functionality of the node.
 | admin                            | the admin console                                        |
 | [apphost](apphost/src/README.md) | provides an interface for apps to interact with the node |
 | [fwd](fwd/src/README.md)         | cross-network forwarding                                 |
+| [mcp](mcp/src/README.md)         | serves MCP to AI agents on the astral network             |
 | gateway                          | adds gateway functionality to the node                   |
 | presence                         | discover other nodes in local networks                   |
 | profile                          | allows nodes to exchange their profiles                  |

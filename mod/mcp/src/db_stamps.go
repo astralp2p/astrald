@@ -8,9 +8,8 @@ import (
 	"github.com/astralp2p/astral-go/astral"
 )
 
-// errLimit bounds the recipient's node's own words. The string is another
-// operator's, so it is quoted and never trusted for its length: unbounded, it
-// is a remote peer deciding how much of a local context window to occupy.
+// errLimit bounds the recipient's node's own words: unbounded, they are a remote
+// peer deciding how much of a local context window to occupy.
 const errLimit = 256
 
 // clip cuts text to n bytes on a rune boundary and marks the cut, so a reader
@@ -38,10 +37,8 @@ func (db *DB) Archive(owner *astral.Identity, box string, id mcp.MessageID) (int
 	return tx.RowsAffected, tx.Error
 }
 
-// Unarchive clears the stamp. Archive is the only disposal marker an agent has,
-// the ids are thirty-two characters a model will mistype, and the column is the
-// recipient's own bookkeeping that crosses no link — so it is the one stamp
-// here with an inverse.
+// Unarchive clears the stamp. Archive is the agent's own bookkeeping and
+// crosses no link, so it is the one stamp here with an inverse.
 func (db *DB) Unarchive(owner *astral.Identity, box string, id mcp.MessageID) (int64, error) {
 	tx := db.Model(&dbMessage{}).
 		Where("owner = ? AND box = ? AND id = ? AND archived_at IS NOT NULL", owner, box, id).
@@ -49,12 +46,9 @@ func (db *DB) Unarchive(owner *astral.Identity, box string, id mcp.MessageID) (i
 	return tx.RowsAffected, tx.Error
 }
 
-// Each stamp is its own method and each writes once: a second call changes
-// nothing, because the first answer is the one that happened.
-//
-// Every one of them names owner and box. Neither alone is enough: an id is the
-// peer's to mint, so one owner may hold two rows under it, and a column only one
-// box may carry is refused by the table rather than written to the wrong row.
+// Each stamp below writes once: a second call changes nothing, because the first
+// answer is the one that happened. Each names owner and box, because an id is
+// the peer's to mint and one owner may hold two rows under it.
 
 // MarkReceiptDue records that a receipt is owed on this inbox row and reports
 // whether this call is the one that recorded it.
@@ -105,9 +99,8 @@ func (db *DB) StampFetched(sender *astral.Identity, id mcp.MessageID) error {
 // the row must be ours, must be one we sent to this caller, and must not already
 // be stamped. RowsAffected is the answer.
 //
-// why sender is spent as owner rather than kept as its own conjunct: on an
-// outbox row the owner is the sender, by the generated column. Naming it twice
-// would be one indexed equality and one that is not.
+// why sender is spent as owner: on an outbox row the generated column makes
+// them equal, and naming it twice adds an unindexed equality.
 func (db *DB) StampFetchedFrom(sender, recipient *astral.Identity, id mcp.MessageID) (int64, error) {
 	tx := db.Model(&dbMessage{}).
 		Where("owner = ? AND box = ? AND id = ? AND recipient = ? AND fetched_at IS NULL",
@@ -116,12 +109,11 @@ func (db *DB) StampFetchedFrom(sender, recipient *astral.Identity, id mcp.Messag
 	return tx.RowsAffected, tx.Error
 }
 
-// SetErr records the recipient's node's own words for a refusal.
+// SetErr records the recipient's node's own words for a refusal, bounded here.
 //
-// why the guard is IS NULL and not = ”: the column is a pointer now, and the
-// empty string is a refusal whose words were empty rather than the absence of
-// one. Written as `err = ”` the guard matches nothing and every refusal is
-// discarded in silence.
+// why the guard is IS NULL and not an empty-string comparison: an empty string
+// is a refusal whose words were empty, so comparing against it matches nothing
+// and discards every refusal in silence.
 func (db *DB) SetErr(sender *astral.Identity, id mcp.MessageID, text string) error {
 	return db.Model(&dbMessage{}).
 		Where("owner = ? AND box = ? AND id = ? AND err IS NULL", sender, boxOutbox, id).

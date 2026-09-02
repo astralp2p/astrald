@@ -73,8 +73,7 @@ func (mod *Module) listMessagesTool(agentID *astral.Identity) mcpsdk.ToolHandler
 	}
 }
 
-// entries renders a listing. It is the whole of what both listing tools do
-// with what the module hands back.
+// entries renders a listing, for list_messages and wait alike.
 func entries(rows []dbMessage) []messageEntry {
 	list := make([]messageEntry, len(rows))
 	for i, row := range rows {

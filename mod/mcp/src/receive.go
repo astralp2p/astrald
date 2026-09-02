@@ -67,15 +67,11 @@ func (mod *Module) storeMessage(sender, recipient *astral.Identity, msg *mcp.Mes
 		return errors.New("a message may not answer itself")
 	}
 
-	// why a parent this node does not hold is refused, where it was once kept:
-	// a reply may only extend a conversation its two parties share. The
-	// recipient must hold the parent here, the sender must hold it in
-	// sendMessage, and a message has one of each — so the parent is a message
-	// between exactly these two, and an agent cannot reply into a conversation
-	// it is not part of. The same rule makes a cycle unstorable: every parent
-	// then points at a row stored earlier, so the graph is a forest no walker
-	// loops through, where a bare claim let a wire sender cross-reference two
-	// fresh ids into a loop a reader without a seen-set never leaves.
+	// why an unheld parent is refused: with sendMessage checking the sender's
+	// side and this checking the recipient's, a parent is a message between
+	// exactly these two parties. That also makes a cycle unstorable — every
+	// parent points at a row stored earlier — where a bare claim let a wire
+	// sender cross-reference two fresh ids into a loop.
 	if !msg.ParentID.IsZero() {
 		held, err := mod.db.Holds(recipient, msg.ParentID)
 		if err != nil {
@@ -105,11 +101,10 @@ func (mod *Module) storeMessage(sender, recipient *astral.Identity, msg *mcp.Mes
 		return nil
 	}
 
-	// Nothing was written, and two different things look like this: the sender
-	// repeating a delivery whose acknowledgement it never saw, and a second
-	// sender minting an id this inbox already holds. The id is the sender's to
-	// choose, so the second is reachable and must not be answered with an ack
-	// the recipient will never see a message for.
+	// Nothing was written, which is either a sender repeating a delivery whose
+	// acknowledgement it never saw or a second sender minting an id this inbox
+	// already holds. The id is the sender's to choose, so the second is
+	// reachable and must not be answered with an ack.
 	held, err := mod.db.SenderOf(recipient, boxInbox, msg.ID)
 	if err != nil {
 		return err

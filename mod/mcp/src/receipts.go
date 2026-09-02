@@ -14,13 +14,12 @@ import (
 // noteFetched records that a message's body was handed out, on whichever side
 // holds the sender's row.
 //
-// why here and not inside db.ClaimNext: a remote sender is told by a query, and
-// the database layer has no routing. Both branches belong where one can be.
+// why here and not in the store: a remote sender is told by a query, and the
+// database layer has no routing.
 func (mod *Module) noteFetched(row *dbMessage) {
-	// why the box is checked first: an agent reading its own sent row is
-	// reading its own ledger, and stamping fetched_at there would tell it that
-	// someone collected a message it merely re-read. Only handing out an inbox
-	// body is a collection.
+	// why the box is checked first: only handing out an inbox body is a
+	// collection. Stamping an agent's own sent row would tell it that someone
+	// collected a message it merely re-read.
 	if row.Box != boxInbox {
 		return
 	}
@@ -32,12 +31,9 @@ func (mod *Module) noteFetched(row *dbMessage) {
 		return
 	}
 
-	// why the count gates the send: one attempt is made, and it belongs to
-	// whichever read first handed the body out. A later read finds the row
-	// already due and sends nothing.
-	//
-	// why the error is its own branch: a write that failed and a receipt
-	// already owed both send nothing, and only one of them is a fault.
+	// why the count gates the send: one attempt is made, and it belongs to the
+	// read that first handed the body out. The error is a separate branch
+	// because a failed write and a receipt already owed both send nothing.
 	n, err := mod.db.MarkReceiptDue(row.Recipient, row.ID)
 	if err != nil {
 		mod.log.Error("message %v: marking the receipt due: %v", row.ID, err)
@@ -47,10 +43,9 @@ func (mod *Module) noteFetched(row *dbMessage) {
 		return
 	}
 
-	// why a goroutine and why nothing waits on it: the read is the recipient's
-	// own, and it must not slow down or fail because the sender's node is
-	// unreachable. A receipt is a courtesy; the fact it carries is already
-	// true and durable here.
+	// why nothing waits on this: the read is the recipient's own and must not
+	// fail because the sender's node is unreachable. The fact a receipt carries
+	// is already durable here.
 	go func(recipient, sender *astral.Identity, id mcp.MessageID) {
 		// why the failure is logged and not returned: nothing waits on this
 		// goroutine, and one attempt is made. The line is the only account of
@@ -69,9 +64,8 @@ func (mod *Module) noteFetched(row *dbMessage) {
 // mirrors deliverMessage with the parties reversed: the recipient calls, and the
 // sender is the target.
 //
-// One attempt is made. A receipt lost in transit leaves receipt_due_at set and
-// nothing retries it, which leaves the sender believing a message was never
-// collected — wrong, permanently, and in the direction that waits.
+// One attempt is made: a receipt lost in transit leaves receipt_due_at set and
+// the sender believing the message was never collected.
 func (mod *Module) sendReceipt(recipientID, senderID *astral.Identity, id mcp.MessageID) error {
 	qctx, cancel := mod.ctx.WithIdentity(recipientID).WithTimeout(mod.config.QueryTimeout)
 	defer cancel()

@@ -7,15 +7,6 @@ import (
 	"github.com/astralp2p/astral-go/astral"
 )
 
-// The five things an agent does with its mail. Each mail tool is one call into
-// this file: the tool names the arguments and renders the answer, and every
-// decision about what the mailbox does is made on this side of the line.
-//
-// why the requests carry the agent's words and not the store's: resolving a
-// correspondent, defaulting a list, bounding an answer and refusing a filter are
-// all the module's, so a tool that did any of them would be a second place the
-// rules live.
-
 // waitRequest is a park on the agent's inbox. A zero Timeout takes the
 // deployment's default window.
 type waitRequest struct {
@@ -34,14 +25,11 @@ type waitAnswer struct {
 
 // waitMessages parks until the agent's inbox holds a message it has not put
 // away, and answers what it found. It stamps nothing: the park and the read are
-// separate acts, so two agents waiting at once are answered the same messages
-// and an agent that stops between the answer and the work leaves the mailbox as
-// it was.
+// separate acts.
 //
-// why the grant is min(ask, ceiling) and never a refusal: the ceiling is the
-// deployment's, set against the chain that carries the call, and a refusal
-// would make that ceiling part of every client's configuration. A clamp needs
-// no coordination to be read, because the answer names what was granted.
+// why the grant is min(ask, ceiling) and never a refusal: refusing would make
+// the deployment's ceiling part of every client's configuration, where a clamp
+// is read from the answer, which names what was granted.
 func (mod *Module) waitMessages(ctx context.Context, agentID *astral.Identity, req waitRequest) (waitAnswer, error) {
 	var ans waitAnswer
 
@@ -62,5 +50,3 @@ func (mod *Module) waitMessages(ctx context.Context, agentID *astral.Identity, r
 
 	return ans, err
 }
-
-// ── reading ────────────────────────────────────────────────────────────────

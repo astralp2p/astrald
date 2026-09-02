@@ -21,8 +21,7 @@ type Config struct {
 	//
 	// why the deployment names both: what caps a held call is the MCP client's
 	// own request timeout and any proxy in front of it, which the node cannot
-	// know. The default serves a caller that named nothing; the ceiling bounds
-	// one that asked for more than the chain survives.
+	// know.
 	WaitDefault time.Duration `yaml:"wait_default,omitempty"`
 	WaitMax     time.Duration `yaml:"wait_max,omitempty"`
 
@@ -54,9 +53,8 @@ var defaultConfig = Config{
 	BindMCP:       "tcp:127.0.0.1:8626",
 	TokenDuration: 365 * 24 * time.Hour,
 	QueryTimeout:  15 * time.Second,
-	// why two minutes and fifteen: surveyed hosts' untuned client caps sit at
-	// five idle minutes, five flat and ten (Claude Code, Codex, Gemini;
-	// 2026-09-02), and the endpoint's session times out at thirty.
+	// why two minutes and fifteen: both sit under the untuned request caps of
+	// the surveyed MCP clients, and under the endpoint's thirty-minute session.
 	WaitDefault:        2 * time.Minute,
 	WaitMax:            15 * time.Minute,
 	MaxResponseBytes:   64 << 10,

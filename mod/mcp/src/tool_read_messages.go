@@ -20,12 +20,9 @@ type readMessagesIn struct {
 
 // messageOut is one whole message.
 //
-// why replies are answered flat beside these rather than nested inside them: a
-// nested type refers to itself, which no schema can describe — the SDK refuses
-// it outright — and a depth-first tree has to be linearised before the most
-// common question, what is newest, can be answered at all. Each reply carries
-// the parent it answers, which is the same information in the shape a reader
-// already holds its own conversation in.
+// why replies are answered flat beside these: a nested type refers to itself,
+// which the SDK's schema generator refuses outright. Each reply names the
+// message it answers, which carries the same edge.
 type messageOut struct {
 	ID        string `json:"id"`
 	Box       string `json:"box" jsonschema:"inbox or outbox"`

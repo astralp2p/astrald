@@ -33,7 +33,7 @@ func TestReadingStampsOnlyTheReadersOwnRow(t *testing.T) {
 	}
 }
 
-// ── replies ────────────────────────────────────────────────────────────────
+// Replies.
 
 // Every reply names its parent — one of the Done clauses — and the replies to a
 // message you sent are your own inbox rows, so one indexed lookup answers both
@@ -145,7 +145,7 @@ func TestAnUnheldIDIsReportedAndTheRestAreStillRead(t *testing.T) {
 	}
 }
 
-// ── the create path survives a node that was not reset ─────────────────────
+// The create path survives a node that was not reset.
 
 // An agent that writes to itself owns both rows of every message, so a reply to
 // it matches as a child twice under one id — once as the copy it sent and once
@@ -301,7 +301,7 @@ func TestAReadsBoundsAreTheModulesAndNotTheCallers(t *testing.T) {
 	}
 }
 
-// ── the read answers the shape of the conversation ─────────────────────────
+// The read answers the shape of the conversation.
 
 // A message carries the ids of every direct reply, however many there are. The
 // replies the answer carries are bounded, so without the ids a reader could not

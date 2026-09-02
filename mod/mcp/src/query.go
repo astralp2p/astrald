@@ -46,20 +46,13 @@ type messageQuery struct {
 	UnreadOnly     bool
 	AwaitingPickup bool
 
-	// Since narrows to rows the database wrote after the one the caller last
-	// saw. It is the caller's to hold: the node keeps no read position, so a
-	// lost or stale value costs a repeat and never a message.
-	//
-	// why a sequence and not an instant: created_at is read in Go before the
-	// INSERT, so a row can carry an earlier instant and commit later, and a
-	// cursor over it steps past a message that had not appeared when the cursor
-	// was handed out. seq is assigned under the write lock, so paging it can
-	// only ever narrow.
+	// Since narrows to rows written after the one the caller last saw. It is
+	// the caller's to hold: the node keeps no read position, so a lost value
+	// costs a repeat and never a message.
 	//
 	// why the inbox only: a cursor names a position in an order, and the other
-	// two lists are histories read newest-first. A cursor on a column the sort
-	// does not use can only lose rows, so the other two refuse it rather than
-	// answer it wrongly.
+	// two lists are histories read newest-first, so a cursor on a column their
+	// sort does not use can only lose rows.
 	Since int64
 }
 
@@ -137,16 +130,13 @@ func (q messageQuery) apply(db *gorm.DB, owner *astral.Identity) *gorm.DB {
 	return tx
 }
 
-// order is the list's own, and it is not the caller's to choose.
-//
-// An inbox is a queue and is worked from its head, so it reads in the order the
-// database wrote the rows — which is the order a cursor pages. A sent list and
-// an archive are histories and are read from their end.
+// order is the list's own and not the caller's to choose. An inbox is a queue
+// worked from its head, in the order the database wrote the rows and a cursor
+// pages; a sent list and an archive are histories read from their end.
 //
 // why the archive orders on created_at and not archived_at: the partial index
 // carries created_at, and an ORDER BY on any other column sends the whole
-// archive through a temp b-tree — measured four times the cost of the other two
-// listings, degrading to a full scan once the table is mostly archived.
+// archive through a temp b-tree.
 func (q messageQuery) order() string {
 	switch q.List {
 	case listOutbox:
@@ -166,13 +156,7 @@ type messageRef struct {
 }
 
 // nextSince is the furthest the answer reached in the database's own order, so
-// a caller passing it back sees only what was written after. It is the caller's
-// to hold: the node keeps no read position, so a lost value costs a repeat
-// rather than a message.
-//
-// why the sequence and not a timestamp: created_at is read before the row is
-// written, so a message can carry an earlier instant and appear later. A cursor
-// over it steps past mail that had not arrived yet, permanently.
+// a caller passing it back sees only what was written after.
 func nextSince(rows []dbMessage) string {
 	var furthest int64
 	for _, row := range rows {

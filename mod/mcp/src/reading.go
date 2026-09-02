@@ -8,15 +8,6 @@ import (
 	"github.com/astralp2p/astral-go/astral"
 )
 
-// The five things an agent does with its mail. Each mail tool is one call into
-// this file: the tool names the arguments and renders the answer, and every
-// decision about what the mailbox does is made on this side of the line.
-//
-// why the requests carry the agent's words and not the store's: resolving a
-// correspondent, defaulting a list, bounding an answer and refusing a filter are
-// all the module's, so a tool that did any of them would be a second place the
-// rules live.
-
 // The module's own bounds on one answer. A body may be 64 KiB and a message may
 // have any number of replies, so an unbounded read is the caller deciding how
 // much of the reader's context a stranger fills.
@@ -42,10 +33,9 @@ type readRequest struct {
 // validate refuses a read the module will not serve and fills in what the
 // caller left out.
 func (req *readRequest) validate() error {
-	// why a repeat is dropped rather than refused: naming one message twice
-	// asks for it once, and a read that charged it twice would spend a budget
-	// the caller cannot see on a message it already has. The bound is on
-	// distinct messages, so the count is taken after the drop.
+	// why a repeat is dropped rather than refused: charging it twice would
+	// spend a budget the caller cannot see. The bound is on distinct messages,
+	// so the count is taken after the drop.
 	req.Refs = distinctRefs(req.Refs)
 
 	switch {
@@ -72,9 +62,8 @@ func (req *readRequest) validate() error {
 	return nil
 }
 
-// distinctRefs keeps the first of each named row, in the order the caller named
-// them. The box is part of the identity: an agent that holds both rows of one id
-// named two messages, not one twice.
+// distinctRefs keeps the first of each named row, in the caller's order. The box
+// is part of the identity: both rows of one id are two messages, not one twice.
 func distinctRefs(refs []messageRef) []messageRef {
 	seen := make(map[messageRef]bool, len(refs))
 	out := refs[:0]
@@ -114,9 +103,9 @@ type readResult struct {
 
 // readMessages reads whole messages the agent holds, with their direct replies.
 //
-// why the replies are a flat set beside the messages: a reply names the one
-// message it answers, so the edge is on the reply and a nested answer would
-// carry the same information in a shape no schema can describe.
+// why the replies are a flat set beside the messages: the edge is on the reply,
+// which names its parent, and a nested answer refers to its own type — a shape
+// the SDK's schema generator refuses.
 func (mod *Module) readMessages(agentID *astral.Identity, req readRequest) (res readResult, err error) {
 	if err = req.validate(); err != nil {
 		return res, err
@@ -165,12 +154,10 @@ func (mod *Module) readMessages(agentID *astral.Identity, req readRequest) (res 
 }
 
 // readReplies carries as much of one message's direct replies as the mode asks
-// for. One level: walking further is the reader's, which the child ids on every
-// message it answers are what make possible.
+// for. One level: the child ids on every message are what let a reader walk on.
 //
 // why a child's body is opt-in: handing one out stamps it read and tells its
-// sender the body was collected, so a reader that asked about a message would
-// otherwise report having collected mail it never asked for.
+// sender the body was collected, which a reader never asked for.
 func (mod *Module) readReplies(owner *astral.Identity, parent mcp.MessageID, req readRequest, left *budget) (replies []readMessage, err error) {
 	rows, err := mod.db.Children(owner, parent, req.MaxChildren)
 	if err != nil {
@@ -211,5 +198,3 @@ func (b *budget) spend(n int) bool {
 	*b -= budget(n)
 	return *b >= 0
 }
-
-// ── archiving ──────────────────────────────────────────────────────────────

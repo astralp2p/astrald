@@ -7,8 +7,7 @@ import (
 	"gorm.io/gorm"
 )
 
-// CreateAgent inserts the agent row and stamps its creation time. The caller
-// builds the row, so visibility lands in the same write as the rest of the record.
+// CreateAgent inserts the agent row and stamps its creation time.
 func (db *DB) CreateAgent(row *dbAgent) error {
 	row.CreatedAt = time.Now()
 	return db.Create(row).Error

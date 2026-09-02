@@ -51,10 +51,7 @@ func (mod *Module) createAgentIdentity(ctx *astral.Context) (*astral.Identity, e
 // when it is empty. Returns the alias actually set.
 //
 // why nothing is generated: an alias is node-global, so on a node holding many
-// tenants' agents a generated name contends in a namespace none of them owns,
-// and one tenant loses it silently. A caller that wants an alias passes one; a
-// caller that does not — the dashboard, which carries its own display name —
-// leaves the agent without.
+// tenants' agents a generated name contends in a namespace none of them owns.
 func (mod *Module) assignAlias(agentID *astral.Identity, alias string) (string, error) {
 	if alias == "" {
 		return "", nil
@@ -67,11 +64,11 @@ func (mod *Module) assignAlias(agentID *astral.Identity, alias string) (string, 
 	return alias, mod.Dir.SetAlias(agentID, alias)
 }
 
-// registerAgent stores the agent row and mirrors it into the sets the router
-// reads: registration is what lets an agent queue, visibility what lets it route.
+// registerAgent stores the agent row and mirrors its identity into the set
+// RouteQuery reads.
 //
-// why the store first: the mirrors are what the router reads, so a mirror ahead
-// of a failed write would route on a decision nothing recorded.
+// why the store first: a mirror ahead of a failed write would route on a
+// decision nothing recorded.
 func (mod *Module) registerAgent(row *dbAgent) error {
 	if err := mod.db.CreateAgent(row); err != nil {
 		return err
@@ -82,9 +79,9 @@ func (mod *Module) registerAgent(row *dbAgent) error {
 	return nil
 }
 
-// deleteAgent revokes the agent's token, unsets its alias and removes its row.
-// The signed relay contract stays indexed until it expires, and the messages
-// the agent was sent go with the row.
+// deleteAgent revokes the agent's token, unsets its alias and removes its row,
+// taking its messages with it. The signed relay contract stays indexed until it
+// expires.
 func (mod *Module) deleteAgent(row *dbAgent) error {
 	err := mod.Apphost.DeleteAccessToken(row.Token)
 	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {

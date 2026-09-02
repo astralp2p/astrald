@@ -84,7 +84,7 @@ func TestAListingAnswersTheWholeList(t *testing.T) {
 	}
 }
 
-// ── wait ───────────────────────────────────────────────────────────────────
+// Wait.
 
 // since narrows a set that is already durably defined, so a stale value costs a
 // repeat and never a message.
@@ -120,7 +120,7 @@ func TestSinceOnlyNarrows(t *testing.T) {
 	}
 }
 
-// ── the cursor pages the database's order, not a clock ─────────────────────
+// The cursor pages the database's order, not a clock.
 
 // created_at is read in Go before the INSERT, so a row can carry an earlier
 // instant and commit later. A cursor over it steps past a message that had not
@@ -210,7 +210,7 @@ func TestSinceIsRefusedOnAHistory(t *testing.T) {
 	}
 }
 
-// ── archive is a filter everywhere, or it is not one ───────────────────────
+// Archive is a filter everywhere, or it is not one.
 
 // A listing and a read answer the two parties by identity and nothing else. A
 // display name resolves to this node's own alias for a key or, failing that, to

@@ -4,18 +4,8 @@ import (
 	"github.com/astralp2p/astral-go/astral"
 )
 
-// The five things an agent does with its mail. Each mail tool is one call into
-// this file: the tool names the arguments and renders the answer, and every
-// decision about what the mailbox does is made on this side of the line.
-//
-// why the requests carry the agent's words and not the store's: resolving a
-// correspondent, defaulting a list, bounding an answer and refusing a filter are
-// all the module's, so a tool that did any of them would be a second place the
-// rules live.
-
-// errUnknownPeer is the one answer a name that does not resolve gets, wherever
-// it is named. A caller cannot tell a correspondent it may not reach from one
-// that does not exist.
+// errUnknownPeer is the one answer a name that does not resolve gets: a caller
+// cannot tell a correspondent it may not reach from one that does not exist.
 func errUnknownPeer(name string) error {
 	return &unknownPeerError{name}
 }
@@ -23,8 +13,6 @@ func errUnknownPeer(name string) error {
 type unknownPeerError struct{ name string }
 
 func (e *unknownPeerError) Error() string { return "unknown correspondent: " + e.name }
-
-// ── listing ────────────────────────────────────────────────────────────────
 
 // listRequest is one of the three lists, in the words an agent asked for it.
 type listRequest struct {
@@ -35,9 +23,8 @@ type listRequest struct {
 	AwaitingPickup bool
 }
 
-// query turns the agent's words into the store's. A name becomes an identity in
-// exactly one place, and a filter that cannot apply is refused here rather than
-// answering everything or nothing.
+// query turns the agent's words into the store's: a name becomes an identity in
+// exactly one place, and a filter that cannot apply is refused here.
 func (mod *Module) query(req listRequest) (q messageQuery, err error) {
 	q = messageQuery{
 		List:           req.List,
@@ -72,5 +59,3 @@ func (mod *Module) listMessages(agentID *astral.Identity, req listRequest) ([]db
 	}
 	return mod.db.ListMessages(agentID, q)
 }
-
-// ── waiting ────────────────────────────────────────────────────────────────

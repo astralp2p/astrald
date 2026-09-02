@@ -65,7 +65,7 @@ func TestArchiveIsScopedToItsOwner(t *testing.T) {
 	}
 }
 
-// ── the three lists, and the filters that belong to each ───────────────────
+// The three lists, and the filters that belong to each.
 
 // undo runs through the same tool, so what the answer reports is whether this
 // call moved the message — not whether it ended up archived, which under undo
@@ -110,4 +110,4 @@ func TestArchiveReportsWhetherThisCallMovedIt(t *testing.T) {
 	}
 }
 
-// ── one answer has a size, and the caller does not choose it ───────────────
+// One answer has a size, and the caller does not choose it.

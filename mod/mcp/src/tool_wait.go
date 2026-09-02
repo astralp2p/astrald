@@ -24,22 +24,13 @@ type waitOut struct {
 
 // waitTool parks until the agent's inbox holds a message it has not put away.
 //
-// why it answers envelopes and not ids alone: an agent waiting on one answer
-// that is woken by a stranger would otherwise have to read the stranger's body
-// to find out it is one — which stamps it read and tells its sender the body was
-// collected. The sender is on every envelope, so the agent decides without
-// opening anything.
+// why it answers envelopes and not ids alone: an agent woken by a stranger
+// would otherwise read the stranger's body to find out it is one, stamping it
+// read. The sender is on every envelope.
 //
-// why the answer names its window: the grant is the deployment's and the ask
-// is the caller's, and where the two differ every conclusion the caller draws
-// from the silence is wrong by the difference. granted_secs is the budget and
-// waited_secs the spend, so a clamp is two numbers side by side rather than a
-// silent lie — and a spend of zero twice in a row says the caller's own
-// filters are matching mail it has already seen.
-//
-// why next_since repeats the caller's cursor when nothing newer arrived: the
-// field says pass it back, and an absent value asks the caller to remember
-// what it sent. Repeating it makes the instruction followable with no memory.
+// why the answer names granted_secs beside waited_secs: the grant is the
+// deployment's and the ask the caller's, so a clamp reads as two numbers rather
+// than as silence the caller misreads.
 func (mod *Module) waitTool(agentID *astral.Identity) mcpsdk.ToolHandlerFor[waitIn, waitOut] {
 	return func(ctx context.Context, _ *mcpsdk.CallToolRequest, in waitIn) (res *mcpsdk.CallToolResult, out waitOut, err error) {
 		ans, err := mod.waitMessages(ctx, agentID, waitRequest{

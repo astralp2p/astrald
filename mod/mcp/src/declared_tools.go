@@ -31,9 +31,8 @@ type declaredTool struct {
 	path   string
 }
 
-// readDeclaredTools reads the configured tools, refusing a configuration a
-// start should not survive. A tool name is the agent's vocabulary: a duplicate
-// or a shadowed built-in silently repoints one.
+// readDeclaredTools reads the configured tools, refusing a duplicate name or a
+// shadowed built-in: either silently repoints a name the agent already knows.
 func readDeclaredTools(configs []ToolConfig) ([]declaredTool, error) {
 	taken := make(map[string]bool, len(builtinTools)+len(configs))
 	for _, name := range builtinTools {
@@ -122,12 +121,11 @@ func (mod *Module) declaredToolHandler(agentID *astral.Identity, tool declaredTo
 	}
 }
 
-// declaredQuery is the query a declared tool puts. It is built here rather than
-// inline so that what it carries is testable.
+// declaredQuery is the query a declared tool puts, built apart from the handler
+// so that what it carries is testable.
 //
-// why launch and not a bare in-flight query: launch stamps the MCP origin the
-// node's own op router refuses, so a tool a deployment points at a node
-// operation fails rather than reaching one.
+// why launch: it stamps the MCP origin the node's own op router refuses, so a
+// tool pointed at a node operation fails rather than reaching one.
 func declaredQuery(agentID, targetID *astral.Identity, path string) *astral.InFlightQuery {
 	return launch(query.New(agentID, targetID, path, nil))
 }
