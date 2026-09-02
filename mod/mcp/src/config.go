@@ -16,8 +16,14 @@ type Config struct {
 	// QueryTimeout bounds the response window of a single-shot astral-query.
 	QueryTimeout time.Duration `yaml:"query_timeout,omitempty"`
 
-	// ReadTimeout caps how long read_next waits for a message.
-	ReadTimeout time.Duration `yaml:"read_timeout,omitempty"`
+	// WaitTimeout is how long wait parks before it answers timed_out, and the
+	// ceiling a caller's own timeout_ms may not exceed.
+	//
+	// why the deployment names it: the ceiling is not the node's to know. What
+	// caps a held call is whatever sits between the agent and the endpoint —
+	// its MCP client's own request timeout, and any proxy in front — and the
+	// deployment is what knows both.
+	WaitTimeout time.Duration `yaml:"wait_timeout,omitempty"`
 
 	MaxResponseBytes   int `yaml:"max_response_bytes,omitempty"`
 	MaxResponseObjects int `yaml:"max_response_objects,omitempty"`
@@ -47,9 +53,11 @@ var defaultConfig = Config{
 	BindMCP:       "tcp:127.0.0.1:8626",
 	TokenDuration: 365 * 24 * time.Hour,
 	QueryTimeout:  15 * time.Second,
-	// why: common MCP clients cap tool calls near 60s; stay under it so a quiet
-	// read returns a clean timeout result instead of a client error.
-	ReadTimeout:        55 * time.Second,
+	// why two minutes and not the minute the old ceiling assumed: no cap comes
+	// from the protocol, the SDK imposes no server-side deadline, and a client
+	// that sets none of its own is the only party that caps near sixty seconds.
+	// A deployment that serves such a client sets its own value here.
+	WaitTimeout:        2 * time.Minute,
 	MaxResponseBytes:   64 << 10,
 	MaxResponseObjects: 64,
 	MaxPayloadBytes:    64 << 10,

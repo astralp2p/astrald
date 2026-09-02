@@ -15,16 +15,16 @@ import (
 const (
 	toolQuery = "astral-query"
 
-	toolSendMessage = "send_message"
-	toolInbox       = "inbox"
-	toolReadMessage = "read_message"
-	toolReadNext    = "read_next"
-	toolOutbox      = "outbox"
+	toolSendMessage  = "send_message"
+	toolListMessages = "list_messages"
+	toolReadMessages = "read_messages"
+	toolWait         = "wait"
+	toolArchive      = "archive"
 )
 
 var builtinTools = []string{
 	toolQuery,
-	toolSendMessage, toolInbox, toolReadMessage, toolReadNext, toolOutbox,
+	toolSendMessage, toolListMessages, toolReadMessages, toolWait, toolArchive,
 }
 
 // addTools registers the astral tool set on an MCP server. Every handler is
@@ -41,53 +41,65 @@ func (mod *Module) addTools(s *mcpsdk.Server, agentID *astral.Identity) {
 
 	mcpsdk.AddTool(s, &mcpsdk.Tool{
 		Name: toolSendMessage,
-		Description: "Send a message to another agent. It lands in that " +
-			"agent's inbox and waits there until read, so the recipient need " +
-			"not be running. Returns the message id and the thread it went " +
-			"into. To answer a message you received, send one back to its " +
-			"sender carrying that message's thread, and the two sides can " +
-			"tell the exchange apart from every other.",
+		Description: "Send a message to another agent. Their node stores it " +
+			"and it waits in their inbox until they read it, so the agent " +
+			"need not be listening — but their node must answer now, and the " +
+			"send fails if it does not. Returns the id it is stored under, " +
+			"which is also what a later message names as its parent. To answer a " +
+			"message, pass that message's id as parent_id: the other side " +
+			"then reads which of its messages you answered rather than " +
+			"guessing from who wrote and when.",
 	}, mod.sendMessageTool(agentID))
 
 	mcpsdk.AddTool(s, &mcpsdk.Tool{
-		Name: toolInbox,
-		Description: "List the messages waiting for you: sender, arrival, " +
-			"thread and read state, without their bodies. Pass a thread to " +
-			"see one exchange. Read one with read_message.",
-	}, mod.inboxTool(agentID))
+		Name: toolListMessages,
+		Description: "List your messages without their bodies. types is " +
+			"inbox (what was written to you, the default), outbox (what you " +
+			"wrote) or archive (what you put away, in either direction). " +
+			"Narrow an inbox with from and unread_only, an outbox with to and " +
+			"awaiting_pickup; a filter that does not apply to the list you " +
+			"named is refused rather than ignored. Each row carries the box " +
+			"beside the id, and read_messages wants both.",
+	}, mod.listMessagesTool(agentID))
 
 	mcpsdk.AddTool(s, &mcpsdk.Tool{
-		Name:        toolReadMessage,
-		Description: "Read one message by id and mark it read.",
-	}, mod.readMessageTool(agentID))
+		Name: toolReadMessages,
+		Description: "Read whole messages, bodies included, and mark the ones " +
+			"in your inbox read. Name each by box and id, as a listing gave " +
+			"them. Each message names every direct reply it has in child_ids " +
+			"— the messages that name it as their parent, from either box — " +
+			"and read_messages will answer any of them. Some of those replies " +
+			"come back beside it as well, as envelopes by default, or with " +
+			"children: full to read their bodies too. " +
+			"An id you do not hold comes back under not_found and the rest " +
+			"are still read. Reading is not a claim: reading twice answers " +
+			"the same messages unchanged.",
+	}, mod.readMessagesTool(agentID))
 
 	mcpsdk.AddTool(s, &mcpsdk.Tool{
-		Name: toolReadNext,
-		Description: "Wait for your oldest unread message, claim it and " +
-			"return it, or {status: timeout} when none arrived. Pass from or " +
-			"thread to wait for one sender or one exchange: every other " +
-			"message is left untouched, so waiting on an answer cannot claim " +
-			"mail you did not ask for — and a claim cannot be given back. " +
-			"Nothing is lost between calls: a message that arrives while you " +
-			"are not reading waits in the inbox. Each call takes at most one " +
-			"message: report what happened rather than looping indefinitely, " +
-			"unless asked to keep serving.",
-	}, mod.readNextTool(agentID))
+		Name: toolWait,
+		Description: "Park until something arrives in your inbox that you have " +
+			"not put away, and answer it without its body — read it with " +
+			"read_messages. Pass from to wait for one correspondent, and " +
+			"since (from a previous answer's next_since) to see only what is " +
+			"newer. timed_out means the window closed with nothing new. " +
+			"Nothing is claimed and nothing is consumed, so a message you " +
+			"leave alone is answered again next time: archive is what says " +
+			"you are done with it. Each call parks once — report what " +
+			"happened rather than looping indefinitely, unless you were asked " +
+			"to keep serving. Nothing is lost between calls.",
+	}, mod.waitTool(agentID))
 
 	mcpsdk.AddTool(s, &mcpsdk.Tool{
-		Name: toolOutbox,
-		Description: "List what you sent and what became of each one: the " +
-			"recipient, when it was sent, whether their node stored it, " +
-			"whether it failed, and whether the body was handed out. A row " +
-			"with only a sent time is a send whose outcome is unknown. Pass " +
-			"an id to ask about one send, or awaiting_pickup to see only the " +
-			"ones sitting unread in a recipient's mailbox. Handed out means " +
-			"their node gave the message to the reader, not that a model " +
-			"considered it, so an answer that matters is still the thing to " +
-			"wait for. A recipient on another node reports the pickup once " +
-			"and nothing repeats it, so a missing handed-out time is not " +
-			"proof the message was never taken.",
-	}, mod.outboxTool(agentID))
+		Name: toolArchive,
+		Description: "Put one message away, naming its box and id. It leaves " +
+			"the inbox and outbox listings, appears under types: archive, and " +
+			"wait never answers it again — so this is what ends a message " +
+			"rather than reading it. Pass undo to put it back. archived is " +
+			"false when the message was already the way you asked for, and " +
+			"when it is not yours. It is your own bookkeeping: the other " +
+			"party learns nothing from it.",
+	}, mod.archiveTool(agentID))
 
 	// The deployment's own tools, registered after the set above so a name it
 	// cannot take is one this module already holds — see readDeclaredTools.

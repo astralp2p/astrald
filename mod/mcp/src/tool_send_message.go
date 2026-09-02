@@ -9,31 +9,30 @@ import (
 )
 
 type sendMessageIn struct {
-	To      string `json:"to" jsonschema:"recipient agent identity or alias"`
-	Content string `json:"content" jsonschema:"the message body"`
-	Thread  string `json:"thread,omitempty" jsonschema:"the exchange to send into; omit to start one"`
+	To       string `json:"to" jsonschema:"recipient agent identity or alias"`
+	Content  string `json:"content" jsonschema:"the message body"`
+	ParentID string `json:"parent_id,omitempty" jsonschema:"the id of the message this answers; omit when it answers none"`
 }
 
 type sendMessageOut struct {
-	ID     string `json:"id" jsonschema:"the id the message is stored under"`
-	Thread string `json:"thread" jsonschema:"the exchange it went into; name it to follow the answer"`
+	ID string `json:"id" jsonschema:"the id this message is stored under, in your outbox and in the recipient's inbox alike; pass it as parent_id to relate a later message to this one"`
 }
 
 func (mod *Module) sendMessageTool(agentID *astral.Identity) mcpsdk.ToolHandlerFor[sendMessageIn, sendMessageOut] {
 	return func(ctx context.Context, _ *mcpsdk.CallToolRequest, in sendMessageIn) (res *mcpsdk.CallToolResult, out sendMessageOut, err error) {
-		var thread mcpapi.MessageID
-		if in.Thread != "" {
-			if thread, err = mcpapi.ParseMessageID(in.Thread); err != nil {
+		var parent mcpapi.MessageID
+		if in.ParentID != "" {
+			if parent, err = mcpapi.ParseMessageID(in.ParentID); err != nil {
 				return nil, out, err
 			}
 		}
 
-		id, sent, err := mod.sendMessage(agentID, in.To, in.Content, thread)
+		id, err := mod.sendMessage(agentID, in.To, in.Content, parent)
 		if err != nil {
 			return nil, out, err
 		}
 
-		out.ID, out.Thread = id.String(), sent.String()
+		out.ID = id.String()
 		return nil, out, nil
 	}
 }

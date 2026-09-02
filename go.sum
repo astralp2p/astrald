@@ -15,6 +15,8 @@ github.com/astralp2p/astral-go v0.0.0-20260830215007-5d23c1c05474 h1:34mKyGhCDex
 github.com/astralp2p/astral-go v0.0.0-20260830215007-5d23c1c05474/go.mod h1:sfLR08LTvLL+csjJQcLa1ML0ZO9OWN0I1nM99jduK5Q=
 github.com/astralp2p/astral-go v0.0.0-20260830215845-8d82402d9d89 h1:xGffjl/VZrdzI1TTBTJGNx7cl0tEupSz8fmgHChWqxM=
 github.com/astralp2p/astral-go v0.0.0-20260830215845-8d82402d9d89/go.mod h1:sfLR08LTvLL+csjJQcLa1ML0ZO9OWN0I1nM99jduK5Q=
+github.com/astralp2p/astral-go v0.0.0-20260901140256-45c1882feba5 h1:/1OO0po4cW2r9GRoha5KsJYpAyl4FqVSOmRjq17yOHU=
+github.com/astralp2p/astral-go v0.0.0-20260901140256-45c1882feba5/go.mod h1:sfLR08LTvLL+csjJQcLa1ML0ZO9OWN0I1nM99jduK5Q=
 github.com/aymanbagabas/go-osc52/v2 v2.0.1 h1:HwpRHbFMcZLEVr42D4p7XBqjyuxQH5SMiErDT4WkJ2k=
 github.com/aymanbagabas/go-osc52/v2 v2.0.1/go.mod h1:uYgXzlJ7ZpABp8OJ+exZzJJhRNQ2ASbcXHWsFqH8hp8=
 github.com/bitonicnl/verify-signed-message v0.7.4 h1:qHLngHOLkyjKRLejnTCj33vqbL7gudLagoAZmW3HTjY=
