@@ -9,11 +9,13 @@ import (
 )
 
 // waitRequest is a park on the agent's inbox. A zero Timeout takes the
-// deployment's default window.
+// deployment's default window. A nil Report is a caller that named no progress
+// token.
 type waitRequest struct {
 	From    string
 	Since   string
 	Timeout time.Duration
+	Report  progressFunc
 }
 
 // waitAnswer is what one park came back with: the rows, the window it was
@@ -46,7 +48,11 @@ func (mod *Module) waitMessages(ctx context.Context, agentID *astral.Identity, r
 	ans.Granted = min(ans.Granted, mod.config.WaitMax)
 
 	start := time.Now()
-	ans.Rows, err = mod.pollMessages(ctx, agentID, q, ans.Granted)
+	ans.Rows, err = mod.pollMessages(ctx, agentID, pollRequest{
+		Query:   q,
+		Timeout: ans.Granted,
+		Report:  req.Report,
+	})
 	ans.Waited = time.Since(start)
 
 	return ans, err

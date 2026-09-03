@@ -31,12 +31,18 @@ type waitOut struct {
 // why the answer names granted_secs beside waited_secs: the grant is the
 // deployment's and the ask the caller's, so a clamp reads as two numbers rather
 // than as silence the caller misreads.
+//
+// why a held park reports progress: a client bounds a call it hears nothing on,
+// and the bound is the client's rather than the node's. A notification per
+// floor interval is the protocol's way to say the park is alive, and it is what
+// lets a caller spend the window it was granted.
 func (mod *Module) waitTool(agentID *astral.Identity) mcpsdk.ToolHandlerFor[waitIn, waitOut] {
-	return func(ctx context.Context, _ *mcpsdk.CallToolRequest, in waitIn) (res *mcpsdk.CallToolResult, out waitOut, err error) {
+	return func(ctx context.Context, req *mcpsdk.CallToolRequest, in waitIn) (res *mcpsdk.CallToolResult, out waitOut, err error) {
 		ans, err := mod.waitMessages(ctx, agentID, waitRequest{
 			From:    in.From,
 			Since:   in.Since,
 			Timeout: time.Duration(in.TimeoutSecs) * time.Second,
+			Report:  waitProgress(ctx, req),
 		})
 		if err != nil {
 			return nil, out, err
@@ -52,6 +58,37 @@ func (mod *Module) waitTool(agentID *astral.Identity) mcpsdk.ToolHandlerFor[wait
 		out.WaitedSecs = wholeSeconds(ans.Waited)
 
 		return nil, out, nil
+	}
+}
+
+// waitProgress answers the reporter for one call, or nil where the caller named
+// no progress token. A notification may name only a token from an active
+// request, so a caller that sent none is told nothing.
+//
+// why the report is never gated on the caller acting on it: a client attaches a
+// token from its own SDK, and some attach one and discard every notification.
+// The node cannot tell those apart, so it reports to whoever asked.
+func waitProgress(ctx context.Context, req *mcpsdk.CallToolRequest) progressFunc {
+	if req == nil || req.Params == nil || req.Session == nil {
+		return nil
+	}
+
+	token := req.Params.GetProgressToken()
+	if token == nil {
+		return nil
+	}
+
+	session := req.Session
+
+	return func(spent, granted time.Duration) {
+		// why the error is dropped: the park is what the caller waits for, and
+		// a notification that failed to send is not worth ending it.
+		_ = session.NotifyProgress(ctx, &mcpsdk.ProgressNotificationParams{
+			ProgressToken: token,
+			Progress:      spent.Seconds(),
+			Total:         granted.Seconds(),
+			Message:       "waiting for mail",
+		})
 	}
 }
 

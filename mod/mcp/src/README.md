@@ -58,6 +58,12 @@ node can see. The defaults sit under the untuned request caps of the surveyed
 clients and under the endpoint's thirty-minute session timeout. A deployment
 behind a sixty-second proxy names its own.
 
+A caller that sends a `progressToken` is answered a `notifications/progress`
+every ten seconds the park is held, carrying the seconds spent as `progress` and
+the granted window as `total`. A caller that sends no token is answered none: a
+notification may name only a token from an active request. Whether the
+notification lifts the client's own timeout is the client's to decide.
+
 ### Declared tools
 
 A deployment can expose an astral query to every agent as a named tool. The
