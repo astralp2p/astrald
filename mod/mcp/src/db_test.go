@@ -73,6 +73,8 @@ func TestSchemaCarriesWhatTheDDLDeclares(t *testing.T) {
 		"ix_mcp__messages_box":     {0, 0},
 		"ix_mcp__messages_parent":  {0, 0},
 		"ix_mcp__messages_archive": {0, 1},
+		"ix_mcp__messages_unread":  {0, 1},
+		"ix_mcp__messages_pickup":  {0, 1},
 	}
 	got := map[string][2]int{}
 	for _, i := range idx {

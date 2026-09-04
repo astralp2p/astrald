@@ -50,6 +50,12 @@ CREATE TABLE IF NOT EXISTS mcp__messages (
 // answer the migrator, and its index expression requires it. Aligned spacing
 // makes ColumnTypes answer "invalid DDL".
 //
+// why the unread and pickup indexes are partial on the same columns as the box
+// index: each answers a filter the box index leaves as a residual scan over the
+// whole box, and nothing deletes a message, so that scan grows without bound. A
+// partial index carries an entry only while the row matches, so an inbox that
+// has been read costs nothing to keep indexed.
+//
 // why the archive index is partial and orders on created_at: archived_at IS NOT
 // NULL plans as a range, so a plain index leaves nothing able to order and the
 // sort falls to a temp b-tree unless the index names the column the listing
@@ -59,4 +65,6 @@ var ddlIndexes = []string{
 	`CREATE INDEX IF NOT EXISTS ix_mcp__messages_box ON mcp__messages (owner, box, archived_at, seq)`,
 	`CREATE INDEX IF NOT EXISTS ix_mcp__messages_parent ON mcp__messages (owner, parent_id, archived_at, created_at)`,
 	`CREATE INDEX IF NOT EXISTS ix_mcp__messages_archive ON mcp__messages (owner, created_at) WHERE archived_at IS NOT NULL`,
+	`CREATE INDEX IF NOT EXISTS ix_mcp__messages_unread ON mcp__messages (owner, box, archived_at, seq) WHERE read_at IS NULL`,
+	`CREATE INDEX IF NOT EXISTS ix_mcp__messages_pickup ON mcp__messages (owner, box, archived_at, seq) WHERE landed_at IS NOT NULL AND fetched_at IS NULL`,
 }

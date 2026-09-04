@@ -149,9 +149,16 @@ func (db *DB) SenderOf(owner *astral.Identity, box string, id mcp.MessageID) (*a
 //
 // why either box and any archive state: a reply may answer something the owner
 // sent or something it received, and archiving a message does not unsee it.
+//
+// why the box is named though the CHECK already bounds it: the unique index is
+// (owner, box, id), and a statement skipping the middle column reaches the id
+// only by scanning everything the owner holds. Naming both values costs two
+// index lookups and takes the read off the delivery path's hot spine — every
+// inbound reply asks this question.
 func (db *DB) Holds(owner *astral.Identity, id mcp.MessageID) (bool, error) {
 	err := db.Select("seq").
-		Where("owner = ? AND id = ?", owner, id).
+		Where("owner = ? AND box IN (?, ?) AND id = ?",
+			owner, mcp.BoxInbox, mcp.BoxOutbox, id).
 		Take(&dbMessage{}).Error
 	switch {
 	case err == nil:
