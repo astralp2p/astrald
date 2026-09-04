@@ -80,8 +80,9 @@ func (mod *Module) registerAgent(row *dbAgent) error {
 }
 
 // deleteAgent revokes the agent's token, unsets its alias and removes its row,
-// taking its messages with it. The signed relay contract stays indexed until it
-// expires.
+// taking the mail it owns with it — both boxes, archived or not. A
+// correspondent's own copy of the same message is owned by the correspondent
+// and stays. The signed relay contract stays indexed until it expires.
 func (mod *Module) deleteAgent(row *dbAgent) error {
 	err := mod.Apphost.DeleteAccessToken(row.Token)
 	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {

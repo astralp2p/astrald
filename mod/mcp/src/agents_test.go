@@ -85,7 +85,10 @@ func testAgentModule(t *testing.T) (*Module, *stubApphost, *stubDir) {
 	}
 
 	db := &DB{DB: gdb}
-	if err := db.AutoMigrate(&dbAgent{}); err != nil {
+	// why the whole schema and not the agent table alone: deleting an agent
+	// deletes the mail it owns, so a store holding one table and not the other
+	// is a shape no node ever runs.
+	if err := db.Migrate(); err != nil {
 		t.Fatalf("migrate: %v", err)
 	}
 
