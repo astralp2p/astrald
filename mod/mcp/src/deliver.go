@@ -23,7 +23,10 @@ func (mod *Module) deliverMessage(agentID, targetID *astral.Identity, msg *mcp.M
 	conn, err := query.RouteInFlight(qctx, mod.node,
 		launch(query.New(agentID, targetID, mcp.MethodMessage, nil)))
 	if err != nil {
-		return fmt.Errorf("%w: %v", errNotSent, err)
+		// why the router's own words are logged and not returned: they name a
+		// routing outcome, and an agent reads a mailbox — send.go.
+		mod.log.Logv(2, "outbox %v: routing to %v: %v", msg.ID, targetID, err)
+		return errUnreachable
 	}
 	defer conn.Close()
 

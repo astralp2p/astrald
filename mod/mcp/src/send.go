@@ -10,12 +10,18 @@ import (
 )
 
 // A caller reads its outbox row differently depending on whether the message is
-// known not to be stored or merely not known to be, so delivery names the three
+// known not to be stored or merely not known to be, so delivery names the four
 // outcomes apart.
+//
+// why errUnreachable names three causes and picks none: a node that holds no
+// such agent, an agent that is not running, and an agent whose own side turns
+// this caller away all answer with one silence — RouteQuery collapses them by
+// design, so naming one of them here would be a guess the sender would act on.
 var (
-	errNotSent  = errors.New("the message did not leave this node")
-	errRefused  = errors.New("the recipient's node refused it")
-	errNoAnswer = errors.New("the message left and nothing came back")
+	errUnreachable = errors.New("the recipient took nothing; they may not exist, may be offline, or may not admit you")
+	errNotSent     = errors.New("the message did not leave this node")
+	errRefused     = errors.New("the recipient's node refused it")
+	errNoAnswer    = errors.New("the message left and nothing came back")
 )
 
 // sendMessage puts one message to a recipient and records what became of it.
@@ -118,7 +124,7 @@ func (mod *Module) resolveRecipient(agentID *astral.Identity, to string) (*astra
 // why a failed stamp is logged and not returned: the delivery happened as it
 // happened, and every state here is read off which instants are set.
 func (mod *Module) noteDeliveryFailed(agentID *astral.Identity, id mcp.MessageID, cause error) {
-	if !errors.Is(cause, errRefused) && !errors.Is(cause, errNotSent) {
+	if !errors.Is(cause, errRefused) && !errors.Is(cause, errNotSent) && !errors.Is(cause, errUnreachable) {
 		return
 	}
 
