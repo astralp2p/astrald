@@ -5,12 +5,8 @@ github.com/BurntSushi/toml v0.3.1/go.mod h1:xHWCNGjB5oqiDr8zfno3MHue2Ht5sIBksp03
 github.com/aead/siphash v1.0.1/go.mod h1:Nywa3cDsYNNK3gaciGTWPwHt0wlpNV15vwmswBAUSII=
 github.com/akutz/memconn v0.1.0 h1:NawI0TORU4hcOMsMr11g7vwlCdkYeLKXBcxWu2W/P8A=
 github.com/akutz/memconn v0.1.0/go.mod h1:Jo8rI7m0NieZyLI5e2CDlRdRqRRB4S7Xp77ukDjH+Fw=
-github.com/astralp2p/astral-go v0.0.0-20260903183203-bf01f7b5eff9 h1:/WikUmGvBhyEYbIArS4semqkiwRV/BjOjH2dlsP9twM=
-github.com/astralp2p/astral-go v0.0.0-20260903183203-bf01f7b5eff9/go.mod h1:sfLR08LTvLL+csjJQcLa1ML0ZO9OWN0I1nM99jduK5Q=
-github.com/astralp2p/astral-go v0.0.0-20260909121258-61e42a73fed0 h1:MJIY5lBIZLs4o2OcX0kln4GdccF8DT+vXDVTFJWjFiY=
-github.com/astralp2p/astral-go v0.0.0-20260909121258-61e42a73fed0/go.mod h1:sfLR08LTvLL+csjJQcLa1ML0ZO9OWN0I1nM99jduK5Q=
-github.com/astralp2p/astral-go v0.0.0-20260909122122-1eebf5e89ce7 h1:N91xGqfPOeN0XuJdO+PO/JwwiREBsXtPW1cb4/u+K/Y=
-github.com/astralp2p/astral-go v0.0.0-20260909122122-1eebf5e89ce7/go.mod h1:sfLR08LTvLL+csjJQcLa1ML0ZO9OWN0I1nM99jduK5Q=
+github.com/astralp2p/astral-go v0.0.0-20260909131729-e33219f11297 h1:NwYBycoIEDimtrKo/xsZt3QNlyeNmNtsSQoP06HwEBw=
+github.com/astralp2p/astral-go v0.0.0-20260909131729-e33219f11297/go.mod h1:0RkgSTvrWKxE99xE2apSwtnDDhFFDK9jwBQfE8PQrZ4=
 github.com/aymanbagabas/go-osc52/v2 v2.0.1 h1:HwpRHbFMcZLEVr42D4p7XBqjyuxQH5SMiErDT4WkJ2k=
 github.com/aymanbagabas/go-osc52/v2 v2.0.1/go.mod h1:uYgXzlJ7ZpABp8OJ+exZzJJhRNQ2ASbcXHWsFqH8hp8=
 github.com/bitonicnl/verify-signed-message v0.7.4 h1:qHLngHOLkyjKRLejnTCj33vqbL7gudLagoAZmW3HTjY=
@@ -111,8 +107,8 @@ github.com/google/jsonschema-go v0.4.3 h1:/DBOLZTfDow7pe2GmaJNhltueGTtDKICi8V8p+
 github.com/google/jsonschema-go v0.4.3/go.mod h1:r5quNTdLOYEz95Ru18zA0ydNbBuYoo9tgaYcxEYhJVE=
 github.com/google/pprof v0.0.0-20221118152302-e6195bd50e26 h1:Xim43kblpZXfIBQsbuBVKCudVG457BR2GZFIz3uw3hQ=
 github.com/google/pprof v0.0.0-20221118152302-e6195bd50e26/go.mod h1:dDKJzRmX4S37WGHujM7tX//fmj1uioxKzKxz3lo4HJo=
-github.com/google/uuid v1.3.1 h1:KjJaJ9iWZ3jOFZIf1Lqf4laDRCasjl0BCmnEGxkdLb4=
-github.com/google/uuid v1.3.1/go.mod h1:TIyPZe4MgqvfeYDBFedMoGGpEw/LqOeaOT+nhxU+yHo=
+github.com/google/uuid v1.6.0 h1:NIvaJDMOsjHA8n1jAhLSgzrAzy1Hgr+hNrb57e+94F0=
+github.com/google/uuid v1.6.0/go.mod h1:TIyPZe4MgqvfeYDBFedMoGGpEw/LqOeaOT+nhxU+yHo=
 github.com/gorilla/websocket v1.5.0/go.mod h1:YR8l580nyteQvAITg2hZ9XVh4b55+EU/adAjf1fMHhE=
 github.com/hpcloud/tail v1.0.0/go.mod h1:ab1qPbhIpdTxEkNHXyeSf5vhxWSCs/tWer42PpOxQnU=
 github.com/jessevdk/go-flags v0.0.0-20141203071132-1679536dcc89/go.mod h1:4FA24M0QyGHXBuZZK/XkWh8h0e1EYbRYJSGM75WSRxI=
