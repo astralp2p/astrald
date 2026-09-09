@@ -7,7 +7,6 @@ import (
 	"github.com/astralp2p/astral-go/api/auth"
 	"github.com/astralp2p/astral-go/api/mcp"
 	"github.com/astralp2p/astral-go/astral"
-	mcpmod "github.com/astralp2p/astrald/mod/mcp"
 )
 
 // registeredAgent makes an identity one this module answers for. Registration is
@@ -34,8 +33,8 @@ func TestAnswerGateRefusesWhatTheAuthorityRefuses(t *testing.T) {
 	if !errors.As(err, &rejected) {
 		t.Fatalf("route: got %v, want a rejection", err)
 	}
-	if rejected.Code != mcpmod.RejectNotAdmitted {
-		t.Fatalf("reject code: got %v, want %v", rejected.Code, mcpmod.RejectNotAdmitted)
+	if rejected.Code != mcp.RejectNotAdmitted {
+		t.Fatalf("reject code: got %v, want %v", rejected.Code, mcp.RejectNotAdmitted)
 	}
 }
 

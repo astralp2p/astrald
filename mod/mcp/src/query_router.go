@@ -7,7 +7,6 @@ import (
 	"github.com/astralp2p/astral-go/api/mcp"
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astral-go/lib/query"
-	mcpmod "github.com/astralp2p/astrald/mod/mcp"
 )
 
 // RouteQuery answers a delivery or a receipt addressed to an agent this module
@@ -44,7 +43,7 @@ func (mod *Module) RouteQuery(ctx *astral.Context, q *astral.InFlightQuery, w io
 		Action: auth.NewAction(q.Target),
 		FromID: q.Caller,
 	}) {
-		return query.RejectWithCode(mcpmod.RejectNotAdmitted)
+		return query.RejectWithCode(mcp.RejectNotAdmitted)
 	}
 
 	// why every other path is a miss: an agent is a mailbox and not a service,

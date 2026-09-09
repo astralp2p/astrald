@@ -9,7 +9,6 @@ import (
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astral-go/astral/channel"
 	"github.com/astralp2p/astral-go/lib/query"
-	mcpmod "github.com/astralp2p/astrald/mod/mcp"
 )
 
 // deliverMessage puts the message to the recipient and returns once the
@@ -26,7 +25,7 @@ func (mod *Module) deliverMessage(agentID, targetID *astral.Identity, msg *mcp.M
 		launch(query.New(agentID, targetID, mcp.MethodMessage, nil)))
 	if err != nil {
 		var rejected *astral.ErrRejected
-		if errors.As(err, &rejected) && rejected.Code == mcpmod.RejectNotAdmitted {
+		if errors.As(err, &rejected) && rejected.Code == mcp.RejectNotAdmitted {
 			return errNotAdmitted
 		}
 
