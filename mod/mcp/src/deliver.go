@@ -1,6 +1,7 @@
 package mcp
 
 import (
+	"errors"
 	"fmt"
 	"time"
 
@@ -8,6 +9,7 @@ import (
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astral-go/astral/channel"
 	"github.com/astralp2p/astral-go/lib/query"
+	mcpmod "github.com/astralp2p/astrald/mod/mcp"
 )
 
 // deliverMessage puts the message to the recipient and returns once the
@@ -23,6 +25,11 @@ func (mod *Module) deliverMessage(agentID, targetID *astral.Identity, msg *mcp.M
 	conn, err := query.RouteInFlight(qctx, mod.node,
 		launch(query.New(agentID, targetID, mcp.MethodMessage, nil)))
 	if err != nil {
+		var rejected *astral.ErrRejected
+		if errors.As(err, &rejected) && rejected.Code == mcpmod.RejectNotAdmitted {
+			return errNotAdmitted
+		}
+
 		// why the router's own words are logged and not returned: they name a
 		// routing outcome, and an agent reads a mailbox — send.go.
 		mod.log.Logv(2, "outbox %v: routing to %v: %v", msg.ID, targetID, err)

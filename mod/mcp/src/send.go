@@ -13,12 +13,16 @@ import (
 // known not to be stored or merely not known to be, so delivery names the four
 // outcomes apart.
 //
-// why errUnreachable names three causes and picks none: a node that holds no
-// such agent, an agent that is not running, and an agent whose own side turns
-// this caller away all answer with one silence — RouteQuery collapses them by
-// design, so naming one of them here would be a guess the sender would act on.
+// why errNotAdmitted is apart from errUnreachable: a sender that is turned away
+// must stop and ask its operator, and a sender that found nobody must retry
+// later. One answer for both left every failure looking like the other.
+//
+// why errUnreachable still names two causes: an identity no node holds and a
+// node that could not be reached both answer with one silence, and no code
+// tells them apart.
 var (
-	errUnreachable = errors.New("the recipient took nothing; they may not exist, may be offline, or may not admit you")
+	errNotAdmitted = errors.New("the recipient does not take messages from you")
+	errUnreachable = errors.New("the recipient took nothing; they may not exist, or their node may be unreachable")
 	errNotSent     = errors.New("the message did not leave this node")
 	errRefused     = errors.New("the recipient's node refused it")
 	errNoAnswer    = errors.New("the message left and nothing came back")
@@ -118,13 +122,14 @@ func (mod *Module) resolveRecipient(agentID *astral.Identity, to string) (*astra
 
 // noteDeliveryFailed records what became of a send that did not land.
 //
-// why errNoAnswer stamps nothing: an answer that never arrived proves nothing
-// about the write, and the row that says nothing is the row that is right.
+// why errNoAnswer is the only outcome that stamps nothing: an answer that never
+// arrived proves nothing about the write, and the row that says nothing is the
+// row that is right. Every other outcome is a delivery known not to be stored.
 //
 // why a failed stamp is logged and not returned: the delivery happened as it
 // happened, and every state here is read off which instants are set.
 func (mod *Module) noteDeliveryFailed(agentID *astral.Identity, id mcp.MessageID, cause error) {
-	if !errors.Is(cause, errRefused) && !errors.Is(cause, errNotSent) && !errors.Is(cause, errUnreachable) {
+	if errors.Is(cause, errNoAnswer) {
 		return
 	}
 
@@ -132,7 +137,9 @@ func (mod *Module) noteDeliveryFailed(agentID *astral.Identity, id mcp.MessageID
 		mod.log.Error("outbox %v: stamping failed_at: %v", id, err)
 	}
 
-	if !errors.Is(cause, errRefused) {
+	// why only these two leave words: they are the recipient's side saying no,
+	// and the row is where the agent reads that back after the call returned.
+	if !errors.Is(cause, errRefused) && !errors.Is(cause, errNotAdmitted) {
 		return
 	}
 	if err := mod.db.SetErr(agentID, id, cause.Error()); err != nil {

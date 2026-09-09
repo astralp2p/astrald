@@ -1,13 +1,17 @@
 package mcp
 
 import (
+	"errors"
+	"io"
 	"strings"
 	"testing"
 
 	"github.com/astralp2p/astral-go/api/auth"
 	"github.com/astralp2p/astral-go/api/mcp"
 	"github.com/astralp2p/astral-go/astral"
+	"github.com/astralp2p/astral-go/lib/query"
 	authmod "github.com/astralp2p/astrald/mod/auth"
+	"github.com/astralp2p/astrald/mod/nodes/frames"
 )
 
 // directionsAuth answers the two questions apart, which fakeAuth cannot: the
@@ -28,9 +32,42 @@ func (a *directionsAuth) Authorize(_ *astral.Context, action auth.ActionObject) 
 	return false
 }
 
+// linkedNode stands in for a recipient on another node. It maps the far side's
+// routing error onto a reject code and back the way the link mux does, so a
+// code that survives here survives a hop.
+type linkedNode struct {
+	identity *astral.Identity
+	far      astral.Router
+}
+
+func (n *linkedNode) Identity() *astral.Identity { return n.identity }
+
+func (n *linkedNode) RouteQuery(ctx *astral.Context, q *astral.InFlightQuery, w io.WriteCloser) (io.WriteCloser, error) {
+	rw, err := n.far.RouteQuery(ctx, q, w)
+	if err == nil {
+		return rw, nil
+	}
+
+	code := uint8(frames.CodeRejected)
+	var rejected *astral.ErrRejected
+	if errors.As(err, &rejected) {
+		code = rejected.Code
+	}
+	return query.RejectWithCode(code)
+}
+
+// refusingModule is an agent registered on this node whose own side takes
+// nothing from anybody.
+func refusingModule(t *testing.T) *Module {
+	t.Helper()
+	mod := testMessageModule(t)
+	mod.Auth = &directionsAuth{outbound: true, inbound: false}
+	return mod
+}
+
 // sendToPeer puts one root message to a peer, registered on this node or not,
 // and answers what the sending agent is told.
-func sendToPeer(t *testing.T, mod *Module, registered bool) string {
+func sendToPeer(t *testing.T, mod *Module, registered bool) error {
 	t.Helper()
 
 	agent, peer := astral.GenerateIdentity(), astral.GenerateIdentity()
@@ -44,20 +81,17 @@ func sendToPeer(t *testing.T, mod *Module, registered bool) string {
 	if err == nil {
 		t.Fatal("a send the recipient never took must fail")
 	}
-	return err.Error()
+	return err
 }
 
-// The sender is told what it can act on. The recipient's node answers one
-// silence for three different causes, so the words name all three and the
-// router's own vocabulary stays out of a mailbox's answer.
-func TestASendNobodyTookNamesWhatTheSenderCanKnow(t *testing.T) {
-	mod := testMessageModule(t)
-	mod.Auth = &directionsAuth{outbound: true, inbound: false}
+// A sender turned away is told so, and told it in the mailbox's own words: the
+// answer it must act on is that this recipient takes nothing from it, so it
+// stops rather than retrying a route that was never missing.
+func TestASenderTurnedAwayIsToldSo(t *testing.T) {
+	read := sendToPeer(t, refusingModule(t), true).Error()
 
-	read := sendToPeer(t, mod, true)
-
-	if !strings.Contains(read, errUnreachable.Error()) {
-		t.Fatalf("the sender reads %q, want it to name the three causes", read)
+	if !strings.Contains(read, errNotAdmitted.Error()) {
+		t.Fatalf("the sender reads %q, want it named a refusal", read)
 	}
 	for _, leak := range []string{"route not found", "query rejected", "did not leave this node"} {
 		if strings.Contains(read, leak) {
@@ -66,26 +100,50 @@ func TestASendNobodyTookNamesWhatTheSenderCanKnow(t *testing.T) {
 	}
 }
 
-// An agent whose inbound is off and an identity that is nobody's agent read the
-// same, which is the collapse RouteQuery is built on: a sender learns that it
-// cannot reach this recipient, and not whether the recipient exists.
-func TestARefusingAgentAndAnAbsentOneReadTheSame(t *testing.T) {
-	refusing := testMessageModule(t)
-	refusing.Auth = &directionsAuth{outbound: true, inbound: false}
-
+// An identity nobody's node holds still reads as an absence, and the two words
+// are not the same: a refusal is permanent and an absence may not be.
+func TestARefusingAgentAndAnAbsentOneReadApart(t *testing.T) {
 	absent := testMessageModule(t)
 	absent.Auth = &directionsAuth{outbound: true, inbound: true}
 
-	if a, b := sendToPeer(t, refusing, true), sendToPeer(t, absent, false); a != b {
-		t.Fatalf("a refusing recipient reads %q and an absent one %q", a, b)
+	refused := sendToPeer(t, refusingModule(t), true).Error()
+	missing := sendToPeer(t, absent, false).Error()
+
+	if refused == missing {
+		t.Fatalf("a refusal and an absence both read %q", refused)
+	}
+	if !strings.Contains(missing, errUnreachable.Error()) {
+		t.Fatalf("an absent recipient reads %q, want an absence", missing)
 	}
 }
 
-// The words changed and the row did not: a send nobody took is still stamped
-// failed, so the outbox still tells a delivered message from one that was not.
-func TestASendNobodyTookIsStillStampedFailed(t *testing.T) {
-	mod := testMessageModule(t)
-	mod.Auth = &directionsAuth{outbound: true, inbound: false}
+// The reject code is what carries the refusal, so it must survive the mapping a
+// link puts it through. A recipient on another node reads the same as one here.
+func TestARefusalSurvivesAHop(t *testing.T) {
+	near, far := refusingModule(t), refusingModule(t)
+	near.node = &linkedNode{identity: astral.GenerateIdentity(), far: far}
+
+	// the agent is registered on the far node, which is what makes this a hop:
+	// the near node holds no such target and routes the query onward.
+	agent, peer := astral.GenerateIdentity(), astral.GenerateIdentity()
+	near.Dir.(*stubDir).aliases["peer"] = peer
+	_ = far.agentIDs.Add(peer.String())
+
+	var none mcp.MessageID
+	_, err := near.sendMessage(agent, "peer", "hello", none)
+	if err == nil {
+		t.Fatal("a send the recipient never took must fail")
+	}
+
+	if local := sendToPeer(t, refusingModule(t), true).Error(); err.Error() != local {
+		t.Fatalf("across a link the sender reads %q, on this node %q", err, local)
+	}
+}
+
+// The words outlive the call: an agent that reads its outbox later finds the
+// refusal on the row, not just a stamp saying the delivery failed.
+func TestARefusalIsKeptOnTheOutboxRow(t *testing.T) {
+	mod := refusingModule(t)
 
 	agent, peer := astral.GenerateIdentity(), astral.GenerateIdentity()
 	mod.Dir.(*stubDir).aliases["peer"] = peer
@@ -105,5 +163,8 @@ func TestASendNobodyTookIsStillStampedFailed(t *testing.T) {
 	}
 	if rows[0].FailedAt == nil {
 		t.Fatal("a send nobody took must be stamped failed")
+	}
+	if rows[0].Err == nil || !strings.Contains(string(*rows[0].Err), errNotAdmitted.Error()) {
+		t.Fatalf("the row keeps %v, want the refusal", rows[0].Err)
 	}
 }

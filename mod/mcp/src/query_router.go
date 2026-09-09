@@ -7,6 +7,7 @@ import (
 	"github.com/astralp2p/astral-go/api/mcp"
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astral-go/lib/query"
+	mcpmod "github.com/astralp2p/astrald/mod/mcp"
 )
 
 // RouteQuery answers a delivery or a receipt addressed to an agent this module
@@ -34,11 +35,16 @@ func (mod *Module) RouteQuery(ctx *astral.Context, q *astral.InFlightQuery, w io
 
 	// why the actor is the target and not the caller: auth walks the contracts
 	// the actor is subject to, and taking a message is this agent's act.
+	//
+	// why a rejection and not a route miss: the target is this module's agent,
+	// so the answer is terminal, and a code is what tells a sender a refusal
+	// from an absence. Which of the authority's reasons it was does not travel:
+	// the authority answers one bit and the node holds no more.
 	if !mod.Auth.Authorize(ctx, &mcp.AnswerAgentAction{
 		Action: auth.NewAction(q.Target),
 		FromID: q.Caller,
 	}) {
-		return query.RouteNotFound()
+		return query.RejectWithCode(mcpmod.RejectNotAdmitted)
 	}
 
 	// why every other path is a miss: an agent is a mailbox and not a service,

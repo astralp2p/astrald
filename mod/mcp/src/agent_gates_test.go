@@ -7,6 +7,7 @@ import (
 	"github.com/astralp2p/astral-go/api/auth"
 	"github.com/astralp2p/astral-go/api/mcp"
 	"github.com/astralp2p/astral-go/astral"
+	mcpmod "github.com/astralp2p/astrald/mod/mcp"
 )
 
 // registeredAgent makes an identity one this module answers for. Registration is
@@ -19,15 +20,22 @@ func registeredAgent(mod *Module) *astral.Identity {
 }
 
 // TestAnswerGateRefusesWhatTheAuthorityRefuses: the agent is one this module
-// answers for, and its own side turns the caller away.
+// answers for, and its own side turns the caller away. The answer is a
+// rejection carrying a code and not a route miss, which is what lets the caller
+// tell being refused from finding nobody.
 func TestAnswerGateRefusesWhatTheAuthorityRefuses(t *testing.T) {
 	auth := &fakeAuth{allow: false}
 	mod := testRouterModuleWithAuth(t, auth)
 	agentID := registeredAgent(mod)
 
 	_, err := mod.RouteQuery(mod.ctx, inFlight(agentID, mcp.MethodMessage), &bufWriteCloser{})
-	if !errors.Is(err, &astral.ErrRouteNotFound{}) {
-		t.Fatalf("route: got %v, want route not found", err)
+
+	var rejected *astral.ErrRejected
+	if !errors.As(err, &rejected) {
+		t.Fatalf("route: got %v, want a rejection", err)
+	}
+	if rejected.Code != mcpmod.RejectNotAdmitted {
+		t.Fatalf("reject code: got %v, want %v", rejected.Code, mcpmod.RejectNotAdmitted)
 	}
 }
 
