@@ -12,6 +12,7 @@ import (
 	"github.com/astralp2p/astral-go/astral/log"
 	"github.com/astralp2p/astral-go/lib/routing"
 	"github.com/astralp2p/astral-go/sig"
+	authmod "github.com/astralp2p/astrald/mod/auth"
 	"github.com/astralp2p/astrald/mod/objects"
 	"github.com/astralp2p/astrald/resources"
 )
@@ -19,6 +20,7 @@ import (
 var _ ipmod.Module = &Module{}
 
 type Deps struct {
+	Auth    authmod.Module
 	Objects objects.Module
 }
 

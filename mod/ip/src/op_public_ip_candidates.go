@@ -11,6 +11,10 @@ type opPublicIPCandidatesArgs struct {
 }
 
 func (mod *Module) OpPublicIPCandidates(ctx *astral.Context, q *routing.IncomingQuery, args opPublicIPCandidatesArgs) (err error) {
+	if !mod.authorizeAdminNetwork(ctx, q) {
+		return q.Reject()
+	}
+
 	ch := channel.New(q.AcceptRaw(), channel.WithOutputFormat(args.Out))
 	defer ch.Close()
 

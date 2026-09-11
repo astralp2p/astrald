@@ -21,6 +21,10 @@ type opNewLinkArgs struct {
 // given (or all) strategies. The link is built by a scheduled task; the query is accepted
 // before it completes so creation may outlast the query timeout. Failures map to reject codes.
 func (mod *Module) OpNewLink(ctx *astral.Context, q *routing.IncomingQuery, args opNewLinkArgs) (err error) {
+	if !mod.authorizeAdminNetwork(ctx, q) {
+		return q.Reject()
+	}
+
 	target, err := mod.Dir.ResolveIdentity(args.Target)
 	if err != nil {
 		return q.RejectWithCode(2)

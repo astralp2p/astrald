@@ -15,6 +15,10 @@ type opNewEphemeralListenerArgs struct {
 // OpNewEphemeralListener handles a remote request to open an ephemeral TCP listener on the given port,
 // using the module's own acceptAll handler to establish inbound links for every accepted connection.
 func (mod *Module) OpNewEphemeralListener(ctx *astral.Context, q *routing.IncomingQuery, args opNewEphemeralListenerArgs) (err error) {
+	if !mod.authorizeAdminNetwork(ctx, q) {
+		return q.Reject()
+	}
+
 	ch := channel.New(q.AcceptRaw(), channel.WithFormats(args.In, args.Out))
 	defer ch.Close()
 

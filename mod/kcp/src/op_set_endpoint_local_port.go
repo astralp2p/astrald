@@ -16,6 +16,10 @@ type opSetEndpointLocalPort struct {
 }
 
 func (mod *Module) OpSetEndpointLocalPort(ctx *astral.Context, q *routing.IncomingQuery, args opSetEndpointLocalPort) (err error) {
+	if !mod.authorizeAdminNetwork(ctx, q) {
+		return q.Reject()
+	}
+
 	endpoint, err := kcp.ParseEndpoint(args.Endpoint)
 	if err != nil {
 		return q.RejectWithCode(4)

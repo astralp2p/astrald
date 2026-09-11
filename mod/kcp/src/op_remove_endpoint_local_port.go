@@ -14,6 +14,10 @@ type opRemoveEndpointLocalPort struct {
 }
 
 func (mod *Module) OpRemoveEndpointLocalPort(ctx *astral.Context, q *routing.IncomingQuery, args opRemoveEndpointLocalPort) (err error) {
+	if !mod.authorizeAdminNetwork(ctx, q) {
+		return q.Reject()
+	}
+
 	endpoint, err := kcp.ParseEndpoint(string(args.Endpoint))
 	if err != nil {
 		return q.RejectWithCode(4)

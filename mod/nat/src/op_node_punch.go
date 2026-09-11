@@ -13,6 +13,10 @@ type opNodePunchArgs struct {
 
 // OpNodePunch runs the passive (participant) side of the NAT punch protocol, responding to an initiator's offer.
 func (mod *Module) OpNodePunch(ctx *astral.Context, q *routing.IncomingQuery, args opNodePunchArgs) error {
+	if !mod.authorizeAdminNetwork(ctx, q) {
+		return q.Reject()
+	}
+
 	ch := channel.New(q.AcceptRaw(), channel.WithOutputFormat(args.Out))
 	defer ch.Close()
 

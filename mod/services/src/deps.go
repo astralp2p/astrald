@@ -3,12 +3,14 @@ package services
 import (
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astrald/core"
+	authmod "github.com/astralp2p/astrald/mod/auth"
 	"github.com/astralp2p/astrald/mod/dir"
 	"github.com/astralp2p/astrald/mod/services"
 )
 
 type Deps struct {
-	Dir dir.Module
+	Auth authmod.Module
+	Dir  dir.Module
 }
 
 func (mod *Module) LoadDependencies(*astral.Context) (err error) {

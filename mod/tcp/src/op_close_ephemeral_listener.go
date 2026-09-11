@@ -13,6 +13,10 @@ type opCloseEphemeralListenerArgs struct {
 }
 
 func (mod *Module) OpCloseEphemeralListener(ctx *astral.Context, q *routing.IncomingQuery, args opCloseEphemeralListenerArgs) (err error) {
+	if !mod.authorizeAdminNetwork(ctx, q) {
+		return q.Reject()
+	}
+
 	ch := channel.New(q.AcceptRaw(), channel.WithFormats(args.In, args.Out))
 	defer ch.Close()
 

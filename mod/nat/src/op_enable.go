@@ -13,6 +13,10 @@ type opSetEnabledArgs struct {
 }
 
 func (mod *Module) OpSetEnabled(ctx *astral.Context, q *routing.IncomingQuery, args opSetEnabledArgs) (err error) {
+	if !mod.authorizeAdminNetwork(ctx, q) {
+		return q.Reject()
+	}
+
 	ch := channel.New(q.AcceptRaw(), channel.WithFormats(args.In, args.Out))
 	defer ch.Close()
 
