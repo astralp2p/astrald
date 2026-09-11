@@ -13,6 +13,11 @@ type opSetAliasArgs struct {
 }
 
 func (mod *Module) OpSetAlias(ctx *astral.Context, q *routing.IncomingQuery, args opSetAliasArgs) (err error) {
+	// note: clearing an alias is a change and passes the same check as setting one.
+	if !mod.authorizeConfigureNodeState(ctx, q) {
+		return q.Reject()
+	}
+
 	ch := q.Accept(channel.WithOutputFormat(args.Out))
 	defer ch.Close()
 

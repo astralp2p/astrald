@@ -53,3 +53,9 @@ func (mod *Module) authorizeGrant(_ *astral.Context, action auth.ActionObject) b
 
 	return permit.Allows(action)
 }
+
+// AuthorizeConfigureNodeState answers whether this node has granted the actor
+// the right to change this node's tree, its mounts, and its alias table.
+func (mod *Module) AuthorizeConfigureNodeState(ctx *astral.Context, action *auth.ConfigureNodeStateAction) bool {
+	return mod.authorizeGrant(ctx, action)
+}
