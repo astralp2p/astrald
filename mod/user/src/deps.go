@@ -2,6 +2,7 @@ package user
 
 import (
 	"github.com/astralp2p/astral-go/api/auth"
+	"github.com/astralp2p/astral-go/api/coldcard"
 	"github.com/astralp2p/astral-go/api/nodes"
 	"github.com/astralp2p/astral-go/api/user"
 	"github.com/astralp2p/astral-go/astral"
@@ -47,6 +48,7 @@ func (mod *Module) LoadDependencies(ctx *astral.Context) (err error) {
 	mod.Auth.Add(authmod.Func[*auth.AdminObjectsAction](mod.AuthorizeAdminObjects))
 	mod.Auth.Add(authmod.Func[*user.SeeSwarmAction](mod.AuthorizeSeeSwarm))
 	mod.Auth.Add(authmod.Func[*user.AdminSwarmAction](mod.AuthorizeAdminSwarm))
+	mod.Auth.Add(authmod.Func[*coldcard.ScanAction](mod.AuthorizeColdcardScan))
 
 	// why: localuser as a name, to match localuser as a filter
 	err = mod.Dir.AddResolver(mod)

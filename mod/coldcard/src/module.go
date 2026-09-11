@@ -5,6 +5,7 @@ import (
 	"github.com/astralp2p/astral-go/astral/log"
 	"github.com/astralp2p/astral-go/lib/routing"
 	"github.com/astralp2p/astral-go/sig"
+	authmod "github.com/astralp2p/astrald/mod/auth"
 	"github.com/astralp2p/astrald/mod/coldcard"
 	"github.com/astralp2p/astrald/mod/coldcard/ckcc"
 	"github.com/astralp2p/astrald/mod/crypto"
@@ -12,6 +13,7 @@ import (
 )
 
 type Deps struct {
+	Auth   authmod.Module
 	Crypto crypto.Module
 }
 

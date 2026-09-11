@@ -2,6 +2,7 @@ package apphost
 
 import (
 	"github.com/astralp2p/astral-go/api/auth"
+	"github.com/astralp2p/astral-go/api/coldcard"
 	"github.com/astralp2p/astral-go/api/user"
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astrald/core"
@@ -23,6 +24,7 @@ func (mod *Module) LoadDependencies(*astral.Context) (err error) {
 	mod.Auth.Add(authmod.Func[*auth.ServeObjectsAction](mod.AuthorizeServeObjects))
 	mod.Auth.Add(authmod.Func[*user.SeeSwarmAction](mod.AuthorizeSeeSwarm))
 	mod.Auth.Add(authmod.Func[*user.AdminSwarmAction](mod.AuthorizeAdminSwarm))
+	mod.Auth.Add(authmod.Func[*coldcard.ScanAction](mod.AuthorizeColdcardScan))
 
 	return
 }
