@@ -40,10 +40,13 @@ func (mod *Module) OpRegister(ctx *astral.Context, query *routing.IncomingQuery,
 	extras := mod.EnRouteQueryExtras(query.Nonce())
 	origin, _ := extras[apphost.ExtraOriginWeb].(string)
 
+	// why: a registered app is served from this node, so its grant request
+	// carries ServeApps whatever the app asked for.
+	requestedGrantPermits := serveAppsGrantRequest(args.GrantPermits)
+
 	// why: the trusted-source template joins the contract request rather than
 	// the grant one, because a PermitConfig carries Delegation and delegation
 	// means nothing to a grant, which never leaves the node to be delegated.
-	requestedGrantPermits := parsePermits(args.GrantPermits)
 	requestedContractPermits := append(mod.GetWebOriginPermits(origin), parsePermits(args.ContractPermits)...)
 
 	grantPermits, contractPermits, ok := mod.GetAppRegisterPolicy()(
