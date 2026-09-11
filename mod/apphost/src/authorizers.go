@@ -53,3 +53,9 @@ func (mod *Module) authorizeGrant(_ *astral.Context, action auth.ActionObject) b
 
 	return permit.Allows(action)
 }
+
+// AuthorizeAdminManageApps answers whether this node has granted the actor the
+// right to administer app and agent credentials.
+func (mod *Module) AuthorizeAdminManageApps(ctx *astral.Context, action *auth.AdminManageAppsAction) bool {
+	return mod.authorizeGrant(ctx, action)
+}
