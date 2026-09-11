@@ -1,99 +1,109 @@
 # Rules
 
-## Work Discipline
+* Every change in `astrald` follows these rules.
+* `.ai/AGENTS.md` names where each kind of fact lives. These rules name how work is done.
 
-* Read relevant code before editing.
-* Keep changes scoped to the task.
-* Preserve user changes; never revert unrelated work.
-* Call out conflicts between code, docs, and `.ai` context.
-* Verify behavior with focused tests/checks when code changes.
+## Work
 
-## Context Discipline
+* An agent reads the relevant code before it edits.
+* A change stays within the scope of its task.
+* An agent preserves the user's changes and never reverts unrelated work.
+* An agent reports every conflict between code, docs, and `.ai/` text.
+* A code change is verified by focused tests or checks.
 
-* Keep default context small; keep always-loaded files short.
-* Correct stale `.ai` context when found; replace stale text, do not pile exceptions.
-* Never duplicate a rule or fact across files.
-* A fact about the wire, protocol, or domain lives in `.ai/system/`; a daemon fact lives in the source that implements it; non-obvious decisions live in source as `// why:` comments.
-* Primitives, wire types, and clients live in astral-go and are cited by package, never restated.
+## Context
 
-## Engineering Judgment
+* `.ai/AGENTS.md` and this file load into every session. Both stay short.
+* A fact lives in exactly one file. A rule is never repeated in a second file.
+* Stale `.ai/` text is corrected when it is found. The correction replaces the stale text and adds no exception.
 
-* Design around data, invariants, and state transitions.
-* Prefer explicit state over hidden control flow.
-* Reduce special cases instead of layering branches.
-* Use the standard library first.
-* Add abstraction on third use, only for same algorithm/data flow.
+## Design
 
-## Code Shape
+* A design starts from data, invariants, and state transitions.
+* Explicit state is preferred over hidden control flow.
+* A change removes special cases instead of layering branches.
+* The Go standard library is the first choice.
+* An abstraction is added on the third use, and only for the same algorithm or data flow.
 
-* Functions: one responsibility, max 50 lines, max 4 params.
-* 3+ related returns -> named struct.
-* Packages: one concept. No `util`, `common`, `helpers`.
-* Interfaces live at consumers. Prefer 1 method; 3+ is suspect.
-* Flat structs. `nil` as sentinel.
-* 2 options -> 2 params. Rare 5+ options -> options struct.
+## Code shape
 
-## Code Style
+* A function has one responsibility, at most 50 lines, and at most 4 parameters.
+* A function with 3 or more related return values returns a named struct.
+* A package holds one concept. `util`, `common`, and `helpers` are never package names.
+* An interface lives at its consumer. An interface has 1 method by preference; an interface with 3 or more methods is suspect.
+* A struct is flat. `nil` is the sentinel value.
+* 2 options are 2 parameters. An options struct is reserved for the rare case of 5 or more options.
 
-* Naming: precise verbs, e.g. `delete`, `find`, `create`.
-* Logging: always `%v`. Levels: `Log` 0, `Logv(1)` verbose, `Logv(2)` debug.
-* Annotate code as you write it: `// todo` `// fixme` `// note` `// why` (see Code Comments below). Intent, not mechanics.
+## Code style
 
-## Code Comments
+* A name uses a precise verb, e.g. `delete`, `find`, `create`.
+* A log call formats values with `%v`.
+* The log levels are `Log` (level 0), `Logv(1)` (verbose), and `Logv(2)` (debug).
 
-Comment code as you write it, in the same edit.
+## Code comments
 
-* Four tags, lowercase: `// todo:` deferred work; `// fixme:` a shipped gap, naming the skipped invariant; `// note:` a clarification or what to watch for; `// why:` the reason for a non-obvious decision, not the alternative.
-* Comment intent, not mechanics; one fact per line. Never restate the code (`i++ // increment i`) or write an empty tag.
-* Tag a non-obvious decision with `// why:`; never bury it in prose. Keep tags in sync with the code and remove a `todo`/`fixme` when resolved.
-* Do not comment, reformat, or re-tag code outside the current change. Link to the spec or source for context held elsewhere; never duplicate it inline.
+* A comment is written in the same edit as the code it describes.
+* A comment carries one of four tags, written in lowercase:
+  * `// todo:` — deferred work.
+  * `// fixme:` — a shipped gap. The comment names the skipped invariant.
+  * `// note:` — a clarification, or a thing to watch for.
+  * `// why:` — the reason for a non-obvious decision, not the alternative.
+* A comment states intent, not mechanics, with one fact per line.
+* A comment never restates the code (`i++ // increment i`). A tag is never empty.
+* A non-obvious decision carries a `// why:` tag and is never buried in prose.
+* A tag stays in sync with the code. A `todo` or `fixme` is removed when it is resolved.
+* A change never comments, reformats, or re-tags code outside its scope.
+* A comment links to the spec or the source for context held elsewhere and never copies that context inline.
 
-## Documentation Style
+## Documentation style
 
-* Write `.ai` docs in the minimal English of `.ai/system/`.
-* Declarative present tense. One fact per sentence or bullet.
-* No motivation, hype, hedging, or meta-commentary.
-* Repeat the subject; do not chain pronouns across sentences.
-* Backtick code identifiers. State defaults, limits, and terminators explicitly.
-* Use `*` for list bullets; small tables only for compact vocabularies.
+* `.ai/` text uses the minimal English of `.ai/system/`:
+  * Declarative present tense, with one fact per sentence or bullet.
+  * No motivation, hype, hedging, or meta-commentary.
+  * The subject is repeated. Pronouns never chain across sentences.
+  * Code identifiers and defined terms are in backticks.
+  * Defaults, limits, and terminators are stated explicitly.
+  * A list uses `*` bullets. A table is reserved for a small, compact vocabulary.
 
 ## Project APIs
 
-* Use `astral.Objectify` for `WriteTo`/`ReadFrom`.
-* Objectify handles sized Go kinds via reflection; only platform-width `int`/`uint` are rejected. Prefer sized types (`int64`/`uint64`).
-* Use `astral.Adapt(v)` to wrap a native Go value into an astral `Object`; do not hand-roll switch ladders. When the spec dictates a narrower width, dispatch on the spec first. `Adapt` and its native-type mapping live in astral-go `astral`.
-* Use `objects.Load` (mod/objects) to read + decode + type-assert an object from a `Repository`; write through `Repository.Create` and the returned `objects.Writer`, not raw `WriteTo`.
-* Inject dependencies with `core.Inject(node, &mod.Deps)` in `LoadDependencies`.
-* Prefer `sig.Map`/`sig.Set`/`sig.Queue` over mutex + map/slice.
-* Use `sig.RecvErr`/`sig.Recv`/`sig.Send` for context-aware channel ops.
+* A `WriteTo` or `ReadFrom` method delegates to `astral.Objectify`.
+* `astral.Objectify` handles sized Go kinds through reflection. `astral.Objectify` rejects only the platform-width `int` and `uint`, so a field uses a sized type such as `int64` or `uint64`.
+* `astral.Adapt(v)` wraps a native Go value into an astral `Object`. A hand-rolled type switch never replaces it.
+* When the spec dictates a narrower width than `astral.Adapt` picks, the code dispatches on the spec first.
+* `astral.Adapt` and its native-type mapping live in the astral-go `astral` package.
+* `objects.Load` (`mod/objects`) reads, decodes, and type-asserts an object from a `Repository`.
+* A write goes through `Repository.Create` and the returned `objects.Writer`, never through a raw `WriteTo`.
+* `core.Inject(node, &mod.Deps)` injects a module's dependencies in `LoadDependencies`.
+* `sig.Map`, `sig.Set`, and `sig.Queue` are preferred over a mutex guarding a map or a slice.
+* `sig.RecvErr`, `sig.Recv`, and `sig.Send` are the context-aware channel operations.
 
-## Domain Invariants
+## Domain invariants
 
-* Every repository writer must `Commit()` or `Discard()`.
-* Never access other modules during `Load`.
-* Zones narrow only; never expand at a hop.
-* Check `ctx.Zone().Is(astral.ZoneNetwork)` before network work.
-* Default context is Device|Virtual; original caller must add Network.
+* Every repository writer ends with `Commit()` or `Discard()`.
+* A module never accesses another module during `Load`.
+* A `Zone` only narrows. A hop never expands it.
+* Network work is preceded by a `ctx.Zone().Is(astral.ZoneNetwork)` check.
+* The default context is `Device|Virtual`. The original caller adds `Network`.
 * `query.Reject()` is terminal.
-* `query.RouteNotFound(r, ...)` is non-terminal.
-* Never return `nil, nil` from `RouteQuery`.
-* Streaming ops end with `ch.Send(&astral.EOS{})`.
-* Send stream errors with `ch.Send(astral.Err(err))`.
+* `query.RouteNotFound(r, ...)` is not terminal.
+* `RouteQuery` never returns `nil, nil`.
+* A streaming op ends with `ch.Send(&astral.EOS{})`.
+* A stream error is sent with `ch.Send(astral.Err(err))`.
 
 ## Concurrency
 
-* Mutex field name: `mu`; never embed.
-* Put `defer Unlock()` on the same line as `Lock()`.
-* Use `sync.RWMutex` when reads dominate.
-* Atomics: `Bool` for flags, `Int32` for states, `Uint64` for counters.
-* Idempotent close uses `CompareAndSwap(false, true)`.
-* Do not use `sync.Once`; use `atomic.Bool.CompareAndSwap`.
-* `sync.Cond` only for computed blocking conditions; `.Wait()` in `for`.
-* Simple done/ready signal -> channel.
-* `wg.Add(1)` before `go`; `defer wg.Done()` first in goroutine.
-* WaitGroups are local variables, never struct fields.
-* Signal done by `close()`, not send. Expose `<-chan struct{}`.
-* `sig.Sig` is canonical read-only signal; `sig.New()` is buffered(1).
-* Error channels are buffered with capacity >= senders.
-* `<-ctx.Done()` must be in `select` with another case.
-
+* A mutex field is named `mu` and is never embedded.
+* `defer Unlock()` sits on the same line as `Lock()`.
+* `sync.RWMutex` is used when reads dominate.
+* An atomic flag is an `atomic.Bool`, an atomic state is an `atomic.Int32`, and an atomic counter is an `atomic.Uint64`.
+* An idempotent close uses `CompareAndSwap(false, true)`.
+* `sync.Once` is never used. `atomic.Bool.CompareAndSwap` replaces it.
+* `sync.Cond` is reserved for computed blocking conditions. `.Wait()` runs inside a `for` loop.
+* A simple done or ready signal is a channel.
+* `wg.Add(1)` runs before `go`. `defer wg.Done()` is the first statement of the goroutine.
+* A `sync.WaitGroup` is a local variable, never a struct field.
+* Done is signaled by `close()`, never by a send. The exposed type is `<-chan struct{}`.
+* `sig.Sig` is the canonical read-only signal. `sig.New()` returns a signal with a buffer of 1.
+* An error channel has a buffer at least as large as its number of senders.
+* `<-ctx.Done()` appears only in a `select` that has another case.
