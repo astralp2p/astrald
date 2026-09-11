@@ -4,107 +4,109 @@
 
 ```
 astrald/
-├── astral/          Core types and utilities (Identity, Object, Query, Router)
-├── brontide/        Noise XK protocol implementation
+├── .ai/             Agent workspace; the entry point is .ai/AGENTS.md
+├── brontide/        Noise XK handshake (Noise_XK_secp256k1_ChaChaPoly_SHA256)
+├── cmd/             Binaries: astrald and the astral-* tools
 ├── core/            Node implementation, routing, module system
-├── lib/             Client libraries (apphost, query, routers, ipc)
-├── mod/             Pluggable modules (30+)
-├── sig/             Thread-safe collections (Map, Set, Queue, Ring, Pool)
-├── streams/         Stream utilities (pipes, readers, writers)
-├── tasks/           Task management
-└── cmd/             Binary entry points (astrald, anc, etc.)
+├── debug/           Crash log capture
+├── docs/            Project documentation
+├── lib/             Small libraries: aliasgen, apphost-js, arl, paths
+├── mobile/          gomobile-bind entry point for Android and iOS hosts
+├── mod/             Pluggable modules (31)
+├── resources/       Named resource store with file and in-memory backends
+├── scripts/         Blueprint check and astral-query shell completion
+├── tasks/           Task runner and task groups
+└── tests/           Integration tests (see tests/README.md)
 ```
+
+Primitives, wire types, and client libraries live in [astral-go](https://github.com/astralp2p/astral-go), not in this repository.
 
 ## Module Structure
 
-Each module follows a standard layout in `mod/<module>/src/`:
+A module lives in `mod/<name>/`. The package in `mod/<name>/` holds the module's public API; `mod/<name>/src/` holds its implementation. `mod/all` has no `src/`: it imports every module.
 
 ```
 src/
-├── module.go        Main module implementation
-├── loader.go        Module initialization
+├── module.go        Module implementation
+├── loader.go        Bootstrap and module registration
 ├── deps.go          Dependency declarations
-├── config.go        Configuration structures
-├── db.go            Database operations
-├── op_*.go          Shell command implementations
-└── object_*.go      Object system plugin implementations
+├── config.go        Configuration structures and defaults, when the module has configuration
+├── db.go            Database access, when the module has a database
+├── op_*.go          Ops served as queries
+└── object_*.go      Object-system providers
 ```
 
 ## Available Modules
 
+Descriptions of modules with a protocol in [astral-docs](https://github.com/astralp2p/astral-docs/blob/master/README.md) follow its index.
+
 | Module | Description |
 |--------|-------------|
-| all | Module registry for build inclusion |
-| allpub | Public module registry |
-| [apphost](../mod/apphost/src/README.md) | App hosting interface |
+| [all](../mod/all/README.md) | Imports every available module |
+| [apphost](../mod/apphost/src/README.md) | On-device API for local apps (tokens, handlers, contracts, holds) |
 | archives | Archive handling |
-| auth | Authentication |
-| crypto | Cryptographic operations and key management |
-| dir | Directory and name resolution |
-| ether | Ethernet layer |
+| auth | Capability contracts, signing, and action authorization |
+| bip137sig | BIP-39/32/137 seed, key derivation, and message signing |
+| [coldcard](../mod/coldcard/README.md) | Coldcard hardware wallet as a BIP-0137 signer |
+| crypto | Signing and verifying hashes and text, public key derivation |
+| dir | Alias management, identity resolution |
+| ether | LAN UDP broadcast for node presence and discovery |
 | events | Event system |
-| exonet | External network |
+| exonet | External network: dispatches a dial to the dialer registered for the endpoint's network |
 | fs | Filesystem operations |
 | [fwd](../mod/fwd/src/README.md) | TCP forwarding and tunnels |
 | gateway | Gateway operations |
-| [ip](../mod/ip/README.md) | IP utilities |
+| indexing | Indexers that track object membership across named repositories |
+| ip | IP utilities |
 | kcp | KCP protocol transport |
 | log | Logging system |
-| media | Media indexing |
-| nat | NAT traversal |
+| [mcp](../mod/mcp/src/README.md) | AI agent registration and the MCP endpoint serving agents the network |
+| nat | NAT traversal via UDP hole punching |
 | nearby | Local network discovery |
-| nodes | Node operations and streams |
-| [objects](../mod/objects/README.md) | Object management |
+| nodes | Encrypted links and multiplexed sessions between nodes |
+| objects | Typed object storage, retrieval, and provider discovery |
 | scheduler | Task scheduling |
+| secp256k1 | secp256k1 ECDSA signing, including an ASN.1 hash signer |
+| services | Service registry that fans discovery out to every registered discoverer |
 | shell | Shell operations |
 | tcp | TCP networking |
-| tor | Tor integration |
-| user | User management |
+| tor | Onion-service transport over Tor |
+| tree | Hierarchical key-value configuration store |
+| user | User identity, swarm membership, asset list |
 
-## Logic extensions 
+## Logic extensions
 
-### Shell operations (`op_*.go`)
+### Ops (`op_*.go`)
 
-Files prefixed with `op_` implement shell commands accessible through the query interface.
+A module method named `Op<Name>` implements the op `<module>.<name>`: `OpGetAlias` in `mod/dir` serves `dir.get_alias`. The module's `loader.go` registers these methods with `mod.ops.AddStructPrefix(mod, "Op")`; `mod/gateway` registers them in `deps.go` through `mod.router.AddStructPrefix(mod, "Op")`. Op documentation lives in astral-docs under `protocols/<module>/ops/`.
 
-**Pattern:**
+**Pattern** (`mod/dir/src/op_get_alias.go`):
 ```go
-// op_describe.go
-type opDescribeArgs struct {
-    ObjectID string `query:"optional"`
+type opGetAliasArgs struct {
+	ID  *astral.Identity `query:"required"`
+	Out string
 }
 
-func (mod *Module) OpDescribe(ctx *astral.Context, q shell.Query, args opDescribeArgs) error {
-    // Command implementation
+func (mod *Module) OpGetAlias(ctx *astral.Context, q *routing.IncomingQuery, args opGetAliasArgs) (err error) {
+	ch := q.Accept(channel.WithOutputFormat(args.Out))
+	defer ch.Close()
+	// ...
 }
 ```
 
-**Examples:**
-- `op_describe.go` - Describe objects
-- `op_search.go` - Search operations
-- `op_resolve.go` - Resolve identities
-- `op_new_stream.go` - Create streams
-
-Operations use `shell.Query` for I/O and take parsed arguments via struct tags.
+An op receives a `routing.IncomingQuery` (astral-go `lib/routing`), accepts or rejects it, and exchanges objects over the resulting channel. The query's arguments arrive parsed into the args struct: `query:"required"` marks a mandatory argument, and `query:"key:<name>"` sets an argument's name.
 
 ### Object system (`object_*.go`)
 
-The objects module provides a plugin architecture. Modules implement these interfaces by convention:
+A module provides an object-system capability in a file named after the method it implements:
 
-| Interface | Implemented by |
-|-----------|----------------|
-| **Describer** (`object_describer.go`) | fs, archives, media, nodes |
-| **Finder** (`object_finder.go`) | user, nodes |
-| **Holder** (`object_holder.go`) | user, nodes |
-| **Receiver** (`object_receiver.go`) | user, nodes, nearby, scheduler |
-| **Searcher** (`object_searcher.go`) | fs, archives |
+| File | Method | Implemented by |
+|------|--------|----------------|
+| `object_describer.go` | `DescribeObject` | archives, fs, nodes |
+| `object_finder.go` | `FindObject` | nodes, user |
+| `object_holder.go` | `HoldObject` (`objects.Holder`) | apphost, auth, crypto, user |
+| `object_opener.go` | `OpenObject` | archives |
+| `object_receiver.go` | `ReceiveObject` (`objects.Receiver`) | nat, nearby, nodes, scheduler, user |
+| `object_searcher.go` | `SearchObject` | archives, fs |
 
-### Other Conventions
-
-| File | Purpose |
-|------|---------|
-| `module.go` | Core module logic and interface implementations |
-| `deps.go` | Lists required module dependencies |
-| `loader.go` | Bootstrap and module registration |
-| `config.go` | Configuration structures and defaults |
-| `db.go` | Database access and persistence |
+`mod/crypto/src/object_signer.go` is outside this set: it holds `ObjectSigner`, the crypto module's object signer.
