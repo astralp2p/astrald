@@ -16,6 +16,10 @@ type opApplyFiltersArgs struct {
 }
 
 func (mod *Module) OpApplyFilters(ctx *astral.Context, q *routing.IncomingQuery, args opApplyFiltersArgs) (err error) {
+	if !mod.authorizeSeeNodeState(ctx, q) {
+		return q.Reject()
+	}
+
 	ch := q.Accept(channel.WithFormats(args.In, args.Out))
 	defer ch.Close()
 

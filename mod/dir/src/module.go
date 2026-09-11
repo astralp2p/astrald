@@ -12,6 +12,7 @@ import (
 	"github.com/astralp2p/astral-go/lib/routing"
 	"github.com/astralp2p/astral-go/sig"
 	"github.com/astralp2p/astrald/lib/aliasgen"
+	authmod "github.com/astralp2p/astrald/mod/auth"
 	"github.com/astralp2p/astrald/mod/dir"
 	"github.com/astralp2p/astrald/mod/nearby"
 	"github.com/astralp2p/astrald/resources"
@@ -21,6 +22,7 @@ import (
 const ZeroIdentity = "<anyone>"
 
 type Deps struct {
+	Auth   authmod.Module
 	Nearby nearby.Module
 }
 
