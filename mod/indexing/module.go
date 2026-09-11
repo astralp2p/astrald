@@ -10,6 +10,6 @@ const DBPrefix = "indexing__"
 // UpdateIndexerState advances the acknowledged version for a repository, signalling sync progress.
 type Module interface {
 	RegisterIndexer(ctx *astral.Context, name string) (astral.Nonce, error)
-	RemoveIndexer(ctx *astral.Context, nonce astral.Nonce) error
+	UnregisterIndexer(ctx *astral.Context, nonce astral.Nonce) error
 	UpdateIndexerState(ctx *astral.Context, nonce astral.Nonce, repoName string, version uint64) error
 }

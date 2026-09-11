@@ -92,9 +92,9 @@ func (mod *Module) RegisterIndexer(ctx *astral.Context, name string) (astral.Non
 	return nonce, nil
 }
 
-// RemoveIndexer deletes the indexerHandle registration and all of its cursor
+// UnregisterIndexer deletes the indexerHandle registration and all of its cursor
 // sub-nodes. Returns ErrIndexNotFound if no indexerHandle matches the nonce.
-func (mod *Module) RemoveIndexer(ctx *astral.Context, nonce astral.Nonce) error {
+func (mod *Module) UnregisterIndexer(ctx *astral.Context, nonce astral.Nonce) error {
 	idxer, err := mod.findIndexerByNonce(ctx, nonce)
 	if err != nil {
 		return err
