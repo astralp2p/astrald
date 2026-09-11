@@ -53,3 +53,9 @@ func (mod *Module) authorizeGrant(_ *astral.Context, action auth.ActionObject) b
 
 	return permit.Allows(action)
 }
+
+// AuthorizeAdminNetwork answers whether this node has granted the actor the
+// right to administer its network.
+func (mod *Module) AuthorizeAdminNetwork(ctx *astral.Context, action *auth.AdminNetworkAction) bool {
+	return mod.authorizeGrant(ctx, action)
+}
