@@ -55,6 +55,12 @@ func (mod *Module) authorizeGrant(_ *astral.Context, action auth.ActionObject) b
 	return permit.Allows(action)
 }
 
+// AuthorizeSeeNodeState answers whether this node has granted the actor the
+// right to read the node's state.
+func (mod *Module) AuthorizeSeeNodeState(ctx *astral.Context, action *auth.SeeNodeStateAction) bool {
+	return mod.authorizeGrant(ctx, action)
+}
+
 // AuthorizeColdcardScan answers whether this node has granted the actor the
 // right to scan the node's attached Coldcard devices.
 func (mod *Module) AuthorizeColdcardScan(ctx *astral.Context, action *coldcard.ScanAction) bool {

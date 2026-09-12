@@ -11,6 +11,10 @@ type opGetAliasArgs struct {
 	Out string
 }
 
+// why: no action guards this op, because apps name identities under their own
+// identity.
+// note: astral-js exposes dir.get_alias to every app (astral-js src/api/dir/index.ts).
+// note: cmd/astral-listen names each caller through it.
 func (mod *Module) OpGetAlias(ctx *astral.Context, q *routing.IncomingQuery, args opGetAliasArgs) (err error) {
 	ch := q.Accept(channel.WithOutputFormat(args.Out))
 	defer ch.Close()

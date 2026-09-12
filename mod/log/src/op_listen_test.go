@@ -70,7 +70,7 @@ func startListen(t *testing.T, remote io.WriteCloser) *listenRig {
 	logger := alog.New(id)
 	logger.SetFilter(func(*alog.Entry) bool { return false }) // note: gates stdout only, not subscribers
 
-	mod := &Module{log: logger, node: stubNode{id: id}}
+	mod := &Module{Deps: Deps{Auth: &recordingAuth{verdict: true}}, log: logger, node: stubNode{id: id}}
 
 	op, err := routing.NewOp(mod.OpListen)
 	if err != nil {
