@@ -9,6 +9,7 @@ import (
 	"github.com/astralp2p/astrald/mod/coldcard"
 	"github.com/astralp2p/astrald/mod/coldcard/ckcc"
 	"github.com/astralp2p/astrald/mod/crypto"
+	usermod "github.com/astralp2p/astrald/mod/user"
 	"github.com/astralp2p/astrald/resources"
 )
 
@@ -17,8 +18,18 @@ type Deps struct {
 	Crypto crypto.Module
 }
 
+// OptionalDeps holds the user module, which AuthorizeScanAction reads to name
+// the swarm's user.
+//
+// why optional: a node that loads no user module still scans as itself, and the
+// setup ceremony scans before a user claims the node.
+type OptionalDeps struct {
+	User usermod.Module
+}
+
 type Module struct {
 	Deps
+	OptionalDeps
 	config Config
 	node   astral.Node
 	log    *log.Logger
