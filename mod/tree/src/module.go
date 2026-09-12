@@ -14,12 +14,14 @@ import (
 	"github.com/astralp2p/astral-go/astral/log"
 	"github.com/astralp2p/astral-go/lib/routing"
 	"github.com/astralp2p/astral-go/sig"
+	authmod "github.com/astralp2p/astrald/mod/auth"
 	"github.com/astralp2p/astrald/mod/dir"
 	"github.com/astralp2p/astrald/resources"
 )
 
 type Deps struct {
-	Dir dir.Module
+	Auth authmod.Module
+	Dir  dir.Module
 }
 
 type Module struct {

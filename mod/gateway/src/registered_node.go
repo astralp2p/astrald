@@ -65,10 +65,6 @@ func (b *registeredNode) Close() error {
 }
 
 func (mod *Module) register(ctx *astral.Context, identity *astral.Identity, visibility gateway.Visibility, network string) (gateway.Socket, error) {
-	if !mod.canGateway(identity) {
-		return gateway.Socket{}, gatewaymod.ErrGatewayDenied
-	}
-
 	endpoint, err := mod.getGatewayEndpoint(network)
 	if err != nil {
 		return gateway.Socket{}, err
