@@ -12,8 +12,13 @@ type opScanArgs struct {
 }
 
 // OpScan triggers a device rescan and replies over the channel with an Ack on
-// success or an Error.
+// success or an Error. A caller refused coldcard.ScanAction is rejected before
+// the query is accepted.
 func (mod *Module) OpScan(ctx *astral.Context, q *routing.IncomingQuery, args opScanArgs) (err error) {
+	if !mod.authorizeScan(ctx, q) {
+		return q.Reject()
+	}
+
 	ch := channel.New(q.AcceptRaw(), channel.WithFormats(args.In, args.Out))
 	defer ch.Close()
 

@@ -36,6 +36,11 @@ func (mod *Module) OpNodeRoute(ctx *astral.Context, q *routing.IncomingQuery, ar
 		return nil
 	}
 
+	// why: forwarding uses the gateway service; accepting an inbound link above does not.
+	if !mod.authorizeUseGateway(ctx, q) {
+		return q.Reject()
+	}
+
 	// forward: accept caller side, dial target side, pipe
 	inConn := q.AcceptRaw()
 	nextQ := query.New(mod.node.Identity(), args.Target, gateway.MethodNodeRoute, query.Args{"target": args.Target})

@@ -3,8 +3,10 @@ package gateway
 import (
 	"strings"
 
+	"github.com/astralp2p/astral-go/api/auth"
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astrald/core"
+	authmod "github.com/astralp2p/astrald/mod/auth"
 )
 
 func (mod *Module) LoadDependencies(*astral.Context) (err error) {
@@ -19,6 +21,7 @@ func (mod *Module) LoadDependencies(*astral.Context) (err error) {
 	mod.router.AddStructPrefix(mod, "Op")
 	mod.Services.AddDiscoverer(mod)
 	mod.Nodes.AddResolver(mod)
+	mod.Auth.Add(authmod.Func[*auth.UseGatewayAction](mod.AuthorizeUseGateway))
 
 	for network, netConfig := range mod.config.Gateway.Networks {
 		if netConfig.Endpoint == "" {

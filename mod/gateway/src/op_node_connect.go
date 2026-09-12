@@ -20,6 +20,10 @@ func (mod *Module) OpNodeConnect(
 	q *routing.IncomingQuery,
 	args opNodeConnectArgs,
 ) (err error) {
+	if !mod.authorizeUseGateway(ctx, q) {
+		return q.Reject()
+	}
+
 	ch := channel.New(q.AcceptRaw(), channel.WithFormats(args.In, args.Out))
 	defer ch.Close()
 
