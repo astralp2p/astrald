@@ -20,7 +20,11 @@ type opAddEndpointArgs struct {
 
 // OpAddEndpoint parses "network:address" and registers it for the identity with a
 // fixed ~90-day TTL.
-func (mod *Module) OpAddEndpoint(_ *astral.Context, q *routing.IncomingQuery, args opAddEndpointArgs) (err error) {
+func (mod *Module) OpAddEndpoint(ctx *astral.Context, q *routing.IncomingQuery, args opAddEndpointArgs) (err error) {
+	if !mod.authorizeAdminNetwork(ctx, q) {
+		return q.Reject()
+	}
+
 	chunks := strings.SplitN(args.Endpoint, ":", 2)
 	if len(chunks) != 2 {
 		return errors.New("invalid endpoint")

@@ -5,6 +5,7 @@ import (
 
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astrald/core"
+	authmod "github.com/astralp2p/astrald/mod/auth"
 	"github.com/astralp2p/astrald/mod/exonet"
 	ipmod "github.com/astralp2p/astrald/mod/ip"
 	"github.com/astralp2p/astrald/mod/nearby"
@@ -15,6 +16,7 @@ import (
 )
 
 type Deps struct {
+	Auth    authmod.Module
 	Exonet  exonet.Module
 	Nodes   nodes.Module
 	Nearby  nearby.Module

@@ -14,6 +14,7 @@ import (
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astral-go/astral/log"
 	"github.com/astralp2p/astral-go/lib/routing"
+	authmod "github.com/astralp2p/astrald/mod/auth"
 	"github.com/astralp2p/astrald/mod/dir"
 	"github.com/astralp2p/astrald/mod/events"
 	"github.com/astralp2p/astrald/mod/objects"
@@ -25,6 +26,7 @@ var _ natmod.Module = &Module{}
 
 // Deps are injected by the core injector.
 type Deps struct {
+	Auth    authmod.Module
 	Dir     dir.Module
 	Objects objects.Module
 	IP      ipmod.Module

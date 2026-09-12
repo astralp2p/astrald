@@ -16,6 +16,10 @@ type opPunchArgs struct {
 
 // OpPunch drives the initiator side of the NAT punch protocol and registers the resulting hole.
 func (mod *Module) OpPunch(ctx *astral.Context, q *routing.IncomingQuery, args opPunchArgs) error {
+	if !mod.authorizeAdminNetwork(ctx, q) {
+		return q.Reject()
+	}
+
 	ch := channel.New(q.AcceptRaw(), channel.WithOutputFormat(args.Out), channel.WithInputFormat(args.In))
 	defer ch.Close()
 

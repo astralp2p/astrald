@@ -19,6 +19,10 @@ type opMigrateSessionArgs struct {
 // the migration directly; otherwise it acts as the responder, exchanging ready/switched/
 // resume/done signals with the initiator. Validates session and link state before starting.
 func (mod *Module) OpMigrateSession(ctx *astral.Context, q *routing.IncomingQuery, args opMigrateSessionArgs) error {
+	if !mod.authorizeAdminNetwork(ctx, q) {
+		return q.Reject()
+	}
+
 	ch := channel.New(q.AcceptRaw(), channel.WithOutputFormat(args.Out))
 	defer ch.Close()
 

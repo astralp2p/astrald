@@ -12,6 +12,10 @@ type opResolveEndpointsArgs struct {
 }
 
 func (mod *Module) OpResolveEndpoints(ctx *astral.Context, q *routing.IncomingQuery, args opResolveEndpointsArgs) (err error) {
+	if !mod.authorizeAdminNetwork(ctx, q) {
+		return q.Reject()
+	}
+
 	targetID, err := mod.Dir.ResolveIdentity(args.ID)
 	if err != nil {
 		return q.RejectWithCode(2)
