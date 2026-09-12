@@ -34,8 +34,14 @@ var (
 // advertisement amended rather than withdrawn and re-raised.
 //
 // Network-origin queries are rejected: an app extends the node hosting it.
+// A caller not authorized to serve apps is rejected before anything is
+// advertised.
 func (mod *Module) OpAdvertise(ctx *astral.Context, q *routing.IncomingQuery, args opAdvertiseArgs) error {
 	if q.Origin() == astral.OriginNetwork {
+		return q.Reject()
+	}
+
+	if !mod.authorizeServeApps(ctx, q) {
 		return q.Reject()
 	}
 

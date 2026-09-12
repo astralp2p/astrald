@@ -2,6 +2,7 @@ package apphost
 
 import (
 	"github.com/astralp2p/astral-go/api/auth"
+	"github.com/astralp2p/astral-go/api/coldcard"
 	"github.com/astralp2p/astral-go/api/user"
 	"github.com/astralp2p/astral-go/astral"
 )
@@ -57,5 +58,35 @@ func (mod *Module) authorizeGrant(_ *astral.Context, action auth.ActionObject) b
 // AuthorizeAdminNetwork answers whether this node has granted the actor the
 // right to administer its network.
 func (mod *Module) AuthorizeAdminNetwork(ctx *astral.Context, action *auth.AdminNetworkAction) bool {
+	return mod.authorizeGrant(ctx, action)
+}
+
+// AuthorizeAdminManageApps answers whether this node has granted the actor the
+// right to administer app and agent credentials.
+func (mod *Module) AuthorizeAdminManageApps(ctx *astral.Context, action *auth.AdminManageAppsAction) bool {
+	return mod.authorizeGrant(ctx, action)
+}
+
+// AuthorizeConfigureNodeState answers whether this node has granted the actor
+// the right to change this node's tree, its mounts, and its alias table.
+func (mod *Module) AuthorizeConfigureNodeState(ctx *astral.Context, action *auth.ConfigureNodeStateAction) bool {
+	return mod.authorizeGrant(ctx, action)
+}
+
+// AuthorizeServeApps answers whether this node has granted the actor the right
+// to host on it.
+func (mod *Module) AuthorizeServeApps(ctx *astral.Context, action *auth.ServeAppsAction) bool {
+	return mod.authorizeGrant(ctx, action)
+}
+
+// AuthorizeSeeNodeState answers whether this node has granted the actor the
+// right to read the node's state.
+func (mod *Module) AuthorizeSeeNodeState(ctx *astral.Context, action *auth.SeeNodeStateAction) bool {
+	return mod.authorizeGrant(ctx, action)
+}
+
+// AuthorizeColdcardScan answers whether this node has granted the actor the
+// right to scan the node's attached Coldcard devices.
+func (mod *Module) AuthorizeColdcardScan(ctx *astral.Context, action *coldcard.ScanAction) bool {
 	return mod.authorizeGrant(ctx, action)
 }

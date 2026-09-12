@@ -20,6 +20,10 @@ func (mod *Module) OpDeleteToken(ctx *astral.Context, q *routing.IncomingQuery, 
 		return q.Reject()
 	}
 
+	if !mod.authorizeAdminManageApps(ctx, q) {
+		return q.Reject()
+	}
+
 	ch := channel.New(q.AcceptRaw(), channel.WithOutputFormat(args.Out))
 	defer ch.Close()
 
