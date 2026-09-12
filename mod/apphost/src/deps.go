@@ -24,6 +24,7 @@ func (mod *Module) LoadDependencies(*astral.Context) (err error) {
 	mod.Auth.Add(authmod.Func[*auth.ServeObjectsAction](mod.AuthorizeServeObjects))
 	mod.Auth.Add(authmod.Func[*user.SeeSwarmAction](mod.AuthorizeSeeSwarm))
 	mod.Auth.Add(authmod.Func[*user.AdminSwarmAction](mod.AuthorizeAdminSwarm))
+	mod.Auth.Add(authmod.Func[*auth.ConfigureNodeStateAction](mod.AuthorizeConfigureNodeState))
 	mod.Auth.Add(authmod.Func[*auth.ServeAppsAction](mod.AuthorizeServeApps))
 	mod.Auth.Add(authmod.Func[*auth.SeeNodeStateAction](mod.AuthorizeSeeNodeState))
 	mod.Auth.Add(authmod.Func[*coldcard.ScanAction](mod.AuthorizeColdcardScan))

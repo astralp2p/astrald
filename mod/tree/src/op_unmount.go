@@ -13,6 +13,10 @@ type opUnmountArgs struct {
 }
 
 func (mod *Module) OpUnmount(ctx *astral.Context, q *routing.IncomingQuery, args opUnmountArgs) (err error) {
+	if !mod.authorizeConfigureNodeState(ctx, q) {
+		return q.Reject()
+	}
+
 	ch := q.Accept(channel.WithFormats(args.In, args.Out))
 	defer ch.Close()
 
