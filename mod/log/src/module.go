@@ -4,6 +4,7 @@ import (
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astral-go/astral/log"
 	"github.com/astralp2p/astral-go/lib/routing"
+	authmod "github.com/astralp2p/astrald/mod/auth"
 	"github.com/astralp2p/astrald/mod/dir"
 	modlog "github.com/astralp2p/astrald/mod/log"
 	"github.com/astralp2p/astrald/mod/tree"
@@ -11,6 +12,7 @@ import (
 )
 
 type Deps struct {
+	Auth authmod.Module
 	Dir  dir.Module
 	Tree tree.Module
 }

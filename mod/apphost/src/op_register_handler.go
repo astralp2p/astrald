@@ -19,6 +19,10 @@ func (mod *Module) OpRegisterHandler(ctx *astral.Context, q *routing.IncomingQue
 		return q.Reject()
 	}
 
+	if !mod.authorizeServeApps(ctx, q) {
+		return q.Reject()
+	}
+
 	ch := channel.New(q.AcceptRaw(), channel.WithFormats(args.In, args.Out))
 	defer ch.Close()
 

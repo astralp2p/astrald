@@ -23,6 +23,10 @@ type opListenArgs struct {
 }
 
 func (mod *Module) OpListen(ctx *astral.Context, q *routing.IncomingQuery, args opListenArgs) (err error) {
+	if !mod.authorizeSeeNodeState(ctx, q) {
+		return q.Reject()
+	}
+
 	ch := channel.New(q.AcceptRaw(), channel.WithFormats(args.In, args.Out))
 	defer ch.Close()
 
