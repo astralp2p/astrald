@@ -7,5 +7,9 @@ import (
 )
 
 func (mod *Module) OpList(ctx *astral.Context, q *routing.IncomingQuery, args treecli.ListArgs) (err error) {
+	if !mod.authorizeSeeNodeState(ctx, q) {
+		return q.Reject()
+	}
+
 	return treecli.NewNodeOps(mod.Root()).List(ctx, q, args)
 }

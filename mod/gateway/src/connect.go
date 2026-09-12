@@ -9,10 +9,6 @@ import (
 )
 
 func (mod *Module) reserveConn(caller *astral.Identity, target *astral.Identity, network string) (gateway.Socket, error) {
-	if !mod.canGateway(caller) {
-		return gateway.Socket{}, gatewaymod.ErrGatewayDenied
-	}
-
 	endpoint, err := mod.getGatewayEndpoint(network)
 	if err != nil {
 		return gateway.Socket{}, err

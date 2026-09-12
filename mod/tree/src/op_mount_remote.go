@@ -15,6 +15,11 @@ type opMountRemoteArgs struct {
 }
 
 func (mod *Module) OpMountRemote(ctx *astral.Context, q *routing.IncomingQuery, args opMountRemoteArgs) (err error) {
+	// why: a refused caller must reach neither the directory nor the remote tree.
+	if !mod.authorizeConfigureNodeState(ctx, q) {
+		return q.Reject()
+	}
+
 	ch := q.Accept(channel.WithFormats(args.In, args.Out))
 	defer ch.Close()
 
