@@ -15,6 +15,7 @@ import (
 	"github.com/astralp2p/astral-go/lib/astrald"
 	"github.com/astralp2p/astral-go/lib/routing"
 	"github.com/astralp2p/astral-go/sig"
+	authmod "github.com/astralp2p/astrald/mod/auth"
 	"github.com/astralp2p/astrald/mod/dir"
 	"github.com/astralp2p/astrald/mod/gateway"
 	"github.com/astralp2p/astrald/mod/ip"
@@ -39,6 +40,7 @@ const (
 )
 
 type Deps struct {
+	Auth      authmod.Module
 	Dir       dir.Module
 	Exonet    exonetmod.Module
 	Nearby    nearby.Module
@@ -167,7 +169,9 @@ func (mod *Module) connectorByNonce(nonce astral.Nonce) (*connector, bool) {
 	return nil, false
 }
 
-func (mod *Module) canGateway(identity *astral.Identity) bool {
+// canGateway reports whether this node serves as a gateway.
+// note: it is the one reading of Gateway.Enabled that gates service use.
+func (mod *Module) canGateway() bool {
 	return mod.config.Gateway.Enabled
 }
 
