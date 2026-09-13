@@ -51,3 +51,26 @@ func (mod *Module) Grants(identity *astral.Identity) (list []*auth.Permit, err e
 
 	return
 }
+
+// activeGrants returns the permits identity holds right now, dropping every
+// grant that has expired.
+//
+// why: Grants reports what was granted, expiry included, for a caller holding
+// the row. A permit alone carries no expiry, so the wire listing reports what
+// still authorizes rather than a lapsed grant it could not mark.
+func (mod *Module) activeGrants(identity *astral.Identity) (list []*auth.Permit, err error) {
+	rows, err := mod.db.ListActiveGrants(identity)
+	if err != nil {
+		return nil, err
+	}
+
+	for _, row := range rows {
+		permit, err := toGrantPermit(row)
+		if err != nil {
+			return nil, err
+		}
+		list = append(list, permit)
+	}
+
+	return
+}

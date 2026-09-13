@@ -73,3 +73,15 @@ func (db *DB) FindGrant(identity *astral.Identity, action string) (*auth.Permit,
 func (db *DB) ListGrants(identity *astral.Identity) (list []*dbGrant, err error) {
 	return list, db.Where("identity = ?", identity).Find(&list).Error
 }
+
+// ListActiveGrants returns the grants held for identity that have not expired.
+//
+// why: the expiry predicate is FindGrant's, so a listing and an authorization
+// answer the same question. Both sides of the comparison are UTC, for the
+// reason FindGrant records.
+func (db *DB) ListActiveGrants(identity *astral.Identity) (list []*dbGrant, err error) {
+	return list, db.
+		Where("identity = ?", identity).
+		Where("expires_at IS NULL OR expires_at > ?", time.Now().UTC()).
+		Find(&list).Error
+}
