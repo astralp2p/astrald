@@ -40,6 +40,7 @@ type Guest struct {
 type queryEnRoute struct {
 	query  *astral.InFlightQuery
 	cancel context.CancelCauseFunc
+	owner  *astral.Identity // session that launched the query; nil for a token-less session
 }
 
 // NewGuest creates a binary-mode Guest over a net.Conn. Used by TCP/unix/memu listeners.
@@ -146,8 +147,11 @@ func (guest *Guest) onRegisterHandlerMsg(ctx *astral.Context, msg *apphost.Regis
 	}
 
 	// add the handler
+	// note: Owner is the authenticated session. Identity may be another identity,
+	// one this session holds a SudoAction for.
 	handler := &IPCHandler{
 		Identity: msg.Identity,
+		Owner:    guest.guestID,
 		IPCToken: msg.AuthToken,
 		Endpoint: string(msg.Endpoint),
 	}
@@ -254,9 +258,14 @@ func (guest *Guest) onRouteQueryMsg(ctx *astral.Context, msg *apphost.RouteQuery
 		inFlight.Extra.Set(apphostmod.ExtraAnonymous, true)
 	}
 
-	enRoute := &queryEnRoute{query: inFlight, cancel: cancelQuery}
+	// why: the owner is the session's authenticated identity, not q.Caller - a
+	// guest names its own caller, and the core router rewrites a missing one to
+	// the node's identity. Only the token establishes ownership.
+	enRoute := &queryEnRoute{query: inFlight, cancel: cancelQuery, owner: guest.guestID}
 
 	// route the query
+	// note: Set refuses to overwrite, so a nonce already en route keeps its first
+	// owner. A colliding query is uncancellable rather than owning the entry.
 	guest.mod.enRoute.Set(q.Nonce, enRoute)
 	conn, err := query.RouteInFlight(qCtx, guest.mod.node, inFlight)
 	guest.mod.enRoute.Delete(q.Nonce)

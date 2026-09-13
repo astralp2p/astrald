@@ -57,11 +57,31 @@ func (mod *Module) RouteQuery(ctx *astral.Context, q *astral.InFlightQuery, w io
 	return query.RouteNotFound()
 }
 
-func (mod *Module) removeHandlersByToken(token astral.Nonce) error {
+// bindScope names whose handlers a bind session removes.
+type bindScope struct {
+	owner    *astral.Identity // the session that bound; nil for a token-less session
+	anyOwner bool             // an administrator removes by token alone
+}
+
+// removeHandlersByToken removes the handlers registered under token within scope.
+//
+// why the owner match: a bind token is a cleanup label the binding app picks
+// for itself, so two apps can pick the same one. Matching the owner as well
+// keeps one app's bind from removing another app's handlers.
+//
+// note: a handler registered by a token-less session records no owner, and a
+// token-less bind removes exactly those. Neither reaches the other's.
+func (mod *Module) removeHandlersByToken(scope bindScope, token astral.Nonce) error {
 	for _, h := range mod.ipcHandlers.Clone() {
-		if h.IPCToken == token {
-			mod.ipcHandlers.Remove(h)
+		if h.IPCToken != token {
+			continue
 		}
+
+		if !scope.anyOwner && !h.Owner.IsEqual(scope.owner) {
+			continue
+		}
+
+		mod.ipcHandlers.Remove(h)
 	}
 	return nil
 }

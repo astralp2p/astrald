@@ -19,6 +19,13 @@ func (mod *Module) OpBind(ctx *astral.Context, q *routing.IncomingQuery, args op
 		return q.Reject()
 	}
 
+	// why: the scope is resolved here, before accepting and before the session
+	// runs. Accepting drops the en-route entry that names this session, and the
+	// cleanup runs from a defer after ctx has ended, where neither the entry nor
+	// an authorization call is still available.
+	owner := mod.sessionOwner(q)
+	scope := bindScope{owner: owner, anyOwner: mod.mayManageApps(ctx, owner)}
+
 	ch := q.Accept(channel.WithOutputFormat(args.Out))
 	defer ch.Close()
 
@@ -39,7 +46,7 @@ func (mod *Module) OpBind(ctx *astral.Context, q *routing.IncomingQuery, args op
 		channel.WithContext(ctx),
 		func(msg *apphost.BindMsg) error {
 			actions = append(actions, func() error {
-				return mod.removeHandlersByToken(msg.Token)
+				return mod.removeHandlersByToken(scope, msg.Token)
 			})
 			return nil
 		},

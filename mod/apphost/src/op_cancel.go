@@ -17,11 +17,18 @@ type opCancelArgs struct {
 }
 
 func (mod *Module) OpCancel(ctx *astral.Context, q *routing.IncomingQuery, args opCancelArgs) (err error) {
+	// why: both lookups run before accepting - accepting resolves this query and
+	// drops the en-route entry that names the session behind it.
+	owner := mod.sessionOwner(q)
+	enRoute, found := mod.enRoute.Get(args.ID)
+	allowed := found && mod.mayCancel(ctx, owner, enRoute)
+
 	ch := q.Accept(channel.WithOutputFormat(args.Out))
 	defer ch.Close()
 
-	enRoute, found := mod.enRoute.Get(args.ID)
-	if !found {
+	// note: a query this session may not cancel answers as a missing one, so a
+	// caller learns nothing about the nonces other apps hold en route.
+	if !allowed {
 		return ch.Send(astral.NewError("query not found"))
 	}
 
@@ -34,4 +41,21 @@ func (mod *Module) OpCancel(ctx *astral.Context, q *routing.IncomingQuery, args 
 	mod.log.Logv(2, "cancelled query %v", args.ID)
 
 	return ch.Send(&astral.Ack{})
+}
+
+// mayCancel reports whether principal may cancel the en-route entry.
+//
+// note: an entry launched by a token-less session records no owner and stays
+// cancellable by any local session, which is what apphost.cancel did before
+// ownership. Only an authenticated app's query gains a guard.
+func (mod *Module) mayCancel(ctx *astral.Context, principal *astral.Identity, e *queryEnRoute) bool {
+	if e.owner.IsZero() {
+		return true
+	}
+
+	if principal.IsEqual(e.owner) {
+		return true
+	}
+
+	return mod.mayManageApps(ctx, principal)
 }
