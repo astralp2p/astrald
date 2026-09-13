@@ -112,8 +112,12 @@ func TestAdminNetworkGrantsThisNodeAndCurrentSwarmMembers(t *testing.T) {
 		{"an expelled member", expelled, false},
 		{"a node in another user's swarm", outsider, false},
 		{"a stranger", astral.GenerateIdentity(), false},
-		// note: the rule names nodes only; the user reaches these ops through a grant or a contract.
-		{"the user identity", userID, false},
+		// note: the user administers the network directly, as it does for the
+		// other node-wide actions.
+		{"the user identity", userID, true},
+		// note: a zero actor must not match the nil identity an unclaimed node answers.
+		{"a zero actor", &astral.Identity{}, false},
+		{"a nil actor", nil, false},
 	}
 
 	for _, c := range cases {
