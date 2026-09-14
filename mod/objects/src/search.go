@@ -125,3 +125,13 @@ func (mod *Module) AddSearcher(searcher objects.Searcher) error {
 
 	return mod.searchers.Add(searcher)
 }
+
+// removeExternalSearcher unregisters an external searcher and logs the removal.
+func (mod *Module) removeExternalSearcher(searcher *ExternalSearcher) {
+	// note: a concurrent call can remove the same searcher first.
+	if err := mod.searchers.Remove(searcher); err != nil {
+		return
+	}
+
+	mod.log.Logv(1, "removed external searcher %v", searcher.id)
+}

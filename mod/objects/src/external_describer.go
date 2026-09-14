@@ -40,8 +40,7 @@ func (d *ExternalDescriber) SourceIdentity() *astral.Identity { return d.id }
 // describer is removed and not queried.
 func (d *ExternalDescriber) DescribeObject(ctx *astral.Context, id *astral.ObjectID) (<-chan *objects.Descriptor, error) {
 	if !d.mod.authorizeServeObjects(ctx, d.id, auth.RoleDescriber) {
-		_ = d.mod.describers.Remove(d)
-		d.log.Logv(1, "external describer removed: not authorized")
+		d.mod.removeExternalDescriber(d)
 		return nil, objectsmod.ErrExternalNotAuthorized
 	}
 

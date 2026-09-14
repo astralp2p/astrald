@@ -104,7 +104,7 @@ func TestExternalProviderRemovedWhenNotAuthorized(t *testing.T) {
 	for _, p := range externalProviders() {
 		t.Run(string(p.role), func(t *testing.T) {
 			authority := &recordingAuth{verdict: false}
-			mod := &Module{Deps: Deps{Auth: authority}}
+			mod := &Module{Deps: Deps{Auth: authority}, log: log.New(astral.GenerateIdentity())}
 			router := &countingRouter{id: astral.GenerateIdentity()}
 			id := astral.GenerateIdentity()
 
@@ -152,7 +152,7 @@ func TestExternalProviderRegistersAgainWhenAuthorized(t *testing.T) {
 	for _, p := range externalProviders() {
 		t.Run(string(p.role), func(t *testing.T) {
 			authority := &recordingAuth{verdict: false}
-			mod := &Module{Deps: Deps{Auth: authority}}
+			mod := &Module{Deps: Deps{Auth: authority}, log: log.New(astral.GenerateIdentity())}
 			router := &countingRouter{id: astral.GenerateIdentity()}
 			id := astral.GenerateIdentity()
 			client := objectscli.New(id, astrald.New(router))

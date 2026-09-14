@@ -72,3 +72,13 @@ func (mod *Module) AddDescriber(describer objects.Describer) error {
 
 	return mod.describers.Add(describer)
 }
+
+// removeExternalDescriber unregisters an external describer and logs the removal.
+func (mod *Module) removeExternalDescriber(describer *ExternalDescriber) {
+	// note: a concurrent call can remove the same describer first.
+	if err := mod.describers.Remove(describer); err != nil {
+		return
+	}
+
+	mod.log.Logv(1, "removed external describer %v", describer.id)
+}

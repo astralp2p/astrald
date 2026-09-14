@@ -40,8 +40,7 @@ func (s *ExternalSearcher) SourceIdentity() *astral.Identity { return s.id }
 // authorized as a searcher is removed and not queried.
 func (s *ExternalSearcher) SearchObject(ctx *astral.Context, q objects.SearchQuery) (<-chan *objects.SearchResult, error) {
 	if !s.mod.authorizeServeObjects(ctx, s.id, auth.RoleSearcher) {
-		_ = s.mod.searchers.Remove(s)
-		s.log.Logv(1, "external searcher removed: not authorized")
+		s.mod.removeExternalSearcher(s)
 		return nil, objectsmod.ErrExternalNotAuthorized
 	}
 

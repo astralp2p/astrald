@@ -39,8 +39,7 @@ func (f *ExternalFinder) SourceIdentity() *astral.Identity { return f.id }
 // and not queried.
 func (f *ExternalFinder) FindObject(ctx *astral.Context, id *astral.ObjectID) (<-chan *astral.Identity, error) {
 	if !f.mod.authorizeServeObjects(ctx, f.id, auth.RoleFinder) {
-		_ = f.mod.finders.Remove(f)
-		f.log.Logv(1, "external finder removed: not authorized")
+		f.mod.removeExternalFinder(f)
 		return nil, objectsmod.ErrExternalNotAuthorized
 	}
 
