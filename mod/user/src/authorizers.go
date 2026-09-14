@@ -79,17 +79,22 @@ func (mod *Module) AuthorizeRelayFor(ctx *astral.Context, a *nodes.RelayForActio
 // why this node's own identity is granted: matches AuthorizeStoreObjects — a local caller with
 // no identity is promoted to the node (core/router.go), so the node reads back on an unclaimed
 // node the objects it just stored there, before any user or swarm exists.
+//
+// why a zero actor is refused first: the user identity is nil on an unclaimed node, a
+// contract subject can be nil, and Identity.IsEqual reports a zero identity equal to nil.
 func (mod *Module) AuthorizeSeeObjects(ctx *astral.Context, a *auth.SeeObjectsAction) bool {
-	if a.Actor().IsEqual(mod.Identity()) {
-		return true
+	actor := a.Actor()
+
+	if actor.IsZero() {
+		return false
 	}
 
-	if a.Actor().IsEqual(mod.node.Identity()) {
+	if mod.authorizeUserOrNode(actor) {
 		return true
 	}
 
 	for _, nodeID := range mod.LocalSwarm() {
-		if nodeID.IsEqual(a.Actor()) {
+		if nodeID.IsEqual(actor) {
 			return true
 		}
 	}
@@ -112,17 +117,22 @@ func (mod *Module) AuthorizeSeeObjects(ctx *astral.Context, a *auth.SeeObjectsAc
 // user-provisioning ceremony, which stores the derived user key on an unclaimed node before
 // any user or swarm exists, when neither other branch can match. AuthorizeAdminObjects, the
 // stricter destructive-write handler, already grants the node for the same reason.
+//
+// why a zero actor is refused first: the user identity is nil on an unclaimed node, a
+// contract subject can be nil, and Identity.IsEqual reports a zero identity equal to nil.
 func (mod *Module) AuthorizeStoreObjects(ctx *astral.Context, a *auth.StoreObjectsAction) bool {
-	if a.Actor().IsEqual(mod.Identity()) {
-		return true
+	actor := a.Actor()
+
+	if actor.IsZero() {
+		return false
 	}
 
-	if a.Actor().IsEqual(mod.node.Identity()) {
+	if mod.authorizeUserOrNode(actor) {
 		return true
 	}
 
 	for _, nodeID := range mod.LocalSwarm() {
-		if nodeID.IsEqual(a.Actor()) {
+		if nodeID.IsEqual(actor) {
 			return true
 		}
 	}
@@ -143,9 +153,5 @@ func (mod *Module) AuthorizeStoreObjects(ctx *astral.Context, a *auth.StoreObjec
 // Widening this to siblings is a decision the node's operator makes, not a default.
 // Replacing the handler with a root rule and contract-issued grants is stage 2.
 func (mod *Module) AuthorizeAdminObjects(ctx *astral.Context, a *auth.AdminObjectsAction) bool {
-	if a.Actor().IsEqual(mod.Identity()) {
-		return true
-	}
-
-	return a.Actor().IsEqual(mod.node.Identity())
+	return mod.authorizeUserOrNode(a.Actor())
 }
