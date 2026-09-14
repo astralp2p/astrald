@@ -122,6 +122,9 @@ func (mod *Module) Unmount(path string) error {
 }
 
 // MountRemote resolves remotePath on targetID's tree (empty remotePath means the root) and mounts it locally at path.
+//
+// why: every mount queries the target before it records the mount point. A mount
+// that contacts no target reports success and fails on the first read instead.
 func (mod *Module) MountRemote(ctx *astral.Context, path string, targetID *astral.Identity, remotePath string) (err error) {
 	var remoteNode = treecli.New(targetID, nil).Root()
 
@@ -130,6 +133,8 @@ func (mod *Module) MountRemote(ctx *astral.Context, path string, targetID *astra
 		if err != nil {
 			return fmt.Errorf("failed to query remote path %s: %w", remotePath, err)
 		}
+	} else if _, err = remoteNode.Sub(ctx); err != nil {
+		return fmt.Errorf("failed to query remote root: %w", err)
 	}
 
 	return mod.Mount(path, remoteNode)
