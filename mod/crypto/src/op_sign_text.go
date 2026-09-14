@@ -90,9 +90,16 @@ func (mod *Module) OpSignText(ctx *astral.Context, q *routing.IncomingQuery, arg
 		},
 		channel.MarkEOS(&sawEOS),
 	)
-	// why: no EOS reply after EOF — the caller is gone and Conn closes on read error.
-	if err != nil || !sawEOS {
+	// why: a bare return closed the channel with nothing on it, so the peer could not
+	// tell a rejected payload from a dropped transport. A failed report is discarded:
+	// the channel is already broken and the Switch error is the one worth returning.
+	if err != nil {
+		_ = ch.Send(astral.Err(err))
 		return err
+	}
+	// why: no EOS reply after EOF — the caller is gone and Conn closes on read error.
+	if !sawEOS {
+		return nil
 	}
 	return ch.Send(&astral.EOS{})
 }
