@@ -316,7 +316,7 @@ func (guest *Guest) isAuthenticated() bool {
 
 // onRegisterServiceMsg registers this connection as the notification channel for
 // inbound queries targeting msg.Identity. Authorization mirrors RouteQueryMsg: caller
-// must equal Identity or hold a SudoAction for it.
+// must equal Identity or hold a SudoAction for it. Identity must hold ServeApps.
 func (guest *Guest) onRegisterServiceMsg(ctx *astral.Context, msg *apphost.RegisterServiceMsg) error {
 	if !guest.isAuthenticated() {
 		return guest.Send(&apphost.ErrorMsg{Code: apphost.ErrCodeDenied})
@@ -326,6 +326,12 @@ func (guest *Guest) onRegisterServiceMsg(ctx *astral.Context, msg *apphost.Regis
 		if !guest.mod.Auth.Authorize(ctx, &authmod.SudoAction{Action: auth.NewAction(guest.guestID), AsID: msg.Identity}) {
 			return guest.Send(&apphost.ErrorMsg{Code: apphost.ErrCodeDenied})
 		}
+	}
+
+	// why: ServeApps names the identity a handler answers for, as it does for
+	// apphost.register_handler, so a sudo holder hosts only an identity that may host.
+	if !guest.mod.authorizeServeApps(ctx, msg.Identity) {
+		return guest.Send(&apphost.ErrorMsg{Code: apphost.ErrCodeDenied})
 	}
 
 	h := &WSHandler{

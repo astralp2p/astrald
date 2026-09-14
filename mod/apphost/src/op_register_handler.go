@@ -23,7 +23,7 @@ func (mod *Module) OpRegisterHandler(ctx *astral.Context, q *routing.IncomingQue
 	// dropped as soon as the query resolves.
 	owner := mod.sessionOwner(q)
 
-	if !mod.authorizeServeApps(ctx, q) {
+	if !mod.authorizeServeApps(ctx, q.Caller()) {
 		return q.Reject()
 	}
 

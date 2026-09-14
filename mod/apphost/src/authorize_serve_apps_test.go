@@ -3,11 +3,14 @@ package apphost
 import (
 	"errors"
 	"io"
+	"net"
 	"testing"
 	"time"
 
+	"github.com/astralp2p/astral-go/api/apphost"
 	"github.com/astralp2p/astral-go/api/auth"
 	"github.com/astralp2p/astral-go/astral"
+	"github.com/astralp2p/astral-go/astral/channel"
 	"github.com/astralp2p/astral-go/astral/log"
 	"github.com/astralp2p/astral-go/lib/query"
 	"github.com/astralp2p/astral-go/lib/routing"
@@ -246,6 +249,107 @@ func TestServeAppsJoinsEveryGrantRequest(t *testing.T) {
 		if requested[0].Constraints != nil {
 			t.Fatalf("asked %q: the ServeApps permit carries constraints", asked)
 		}
+	}
+}
+
+// registerService sends one register_service_msg for host from a guest
+// authenticated as guestID and returns the host's reply. A handler it installs
+// lives until the test ends.
+func registerService(t *testing.T, mod *Module, guestID, host *astral.Identity) astral.Object {
+	t.Helper()
+
+	srvConn, cliConn := net.Pipe()
+	t.Cleanup(func() { srvConn.Close(); cliConn.Close() })
+
+	guest := NewGuestFromChannel(mod, channel.New(srvConn, channel.WithLockedWrites()), srvConn, ModeBinary)
+	guest.guestID = guestID
+
+	ctx, cancel := astral.NewContext(nil).WithCancel()
+	t.Cleanup(cancel)
+
+	done := make(chan error, 1)
+	go func() {
+		done <- guest.onRegisterServiceMsg(ctx, &apphost.RegisterServiceMsg{Identity: host})
+	}()
+
+	reply, err := channel.New(cliConn).Receive()
+	if err != nil {
+		t.Fatalf("receive the reply to register_service_msg: %v", err)
+	}
+
+	if err := <-done; err != nil {
+		t.Fatalf("register_service_msg: %v", err)
+	}
+
+	return reply
+}
+
+// TestServeAppsRegisterServiceRefusesAHostWithoutPermits holds the WebSocket
+// hosting path to the op's bar: an authenticated guest hosting as itself is
+// denied without ServeApps, and no handler is installed.
+func TestServeAppsRegisterServiceRefusesAHostWithoutPermits(t *testing.T) {
+	authority := &recordingAuth{verdict: false}
+	mod := &Module{Deps: Deps{Auth: authority}, log: log.New(nil)}
+	host := astral.GenerateIdentity()
+
+	reply := registerService(t, mod, host, host)
+
+	refusal, ok := reply.(*apphost.ErrorMsg)
+	if !ok || refusal.Code != apphost.ErrCodeDenied {
+		t.Fatalf("register_service_msg answered a host holding no permits with %v; want error_msg{%v}", reply.ObjectType(), apphost.ErrCodeDenied)
+	}
+
+	actions := authority.recorded()
+	if len(actions) != 1 {
+		t.Fatalf("register_service_msg made %d authorization calls; want exactly 1", len(actions))
+	}
+
+	action, ok := actions[0].(*auth.ServeAppsAction)
+	if !ok {
+		t.Fatalf("register_service_msg named %q; want %q", actions[0].ObjectType(), auth.ServeAppsAction{}.ObjectType())
+	}
+
+	if !action.Actor().IsEqual(host) {
+		t.Fatalf("register_service_msg named actor %v; want the host %v", action.Actor(), host)
+	}
+
+	if n := len(mod.wsHandlers.Clone()); n != 0 {
+		t.Fatalf("register_service_msg installed %d handlers for a refused host; want none", n)
+	}
+}
+
+// TestServeAppsRegisterServiceNamesTheHostedIdentity covers the granted sudo
+// path: ServeApps is asked for the identity the handler answers for, never for
+// the guest acting as it.
+func TestServeAppsRegisterServiceNamesTheHostedIdentity(t *testing.T) {
+	authority := &recordingAuth{verdict: true}
+	mod := &Module{Deps: Deps{Auth: authority}, log: log.New(nil)}
+	guestID := astral.GenerateIdentity()
+	host := astral.GenerateIdentity()
+
+	reply := registerService(t, mod, guestID, host)
+
+	if _, ok := reply.(*astral.Ack); !ok {
+		t.Fatalf("register_service_msg answered an authorized host with %v; want ack", reply.ObjectType())
+	}
+
+	actions := authority.recorded()
+	if len(actions) != 2 {
+		t.Fatalf("register_service_msg made %d authorization calls; want sudo then ServeApps", len(actions))
+	}
+
+	action, ok := actions[1].(*auth.ServeAppsAction)
+	if !ok {
+		t.Fatalf("register_service_msg named %q second; want %q", actions[1].ObjectType(), auth.ServeAppsAction{}.ObjectType())
+	}
+
+	if !action.Actor().IsEqual(host) {
+		t.Fatalf("register_service_msg named actor %v; want the hosted identity %v", action.Actor(), host)
+	}
+
+	handlers := mod.wsHandlers.Clone()
+	if len(handlers) != 1 || !handlers[0].Identity.IsEqual(host) {
+		t.Fatalf("register_service_msg installed %d handlers; want 1 for %v", len(handlers), host)
 	}
 }
 
