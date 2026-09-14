@@ -5,16 +5,41 @@ import (
 	"github.com/astralp2p/astral-go/astral"
 )
 
-// AuthorizeSeeNodeState allows the user identity and this node's own identity to
-// read the node's state, and nobody else.
+// AuthorizeSeeNodeState allows the user identity, this node's own identity, and
+// every current node member of this node's swarm to read the node's state, and
+// nobody else.
 //
 // note: the state is tree values and listings, the directory's alias map and
 // filters, agent metadata, and the log stream (auth.SeeNodeStateAction).
 //
-// why: the log stream carries every caller's logged activity, so the default
-// holders are the owner and the node, as for AuthorizeAdminObjects.
-// A swarm sibling or an app reaches these reads through a node-local grant or a
+// why the swarm's node members: a remote tree mount queries the target as the
+// mounting node's identity (mod/tree.MountRemote), so a sibling reads nothing
+// through a mount without this rule.
+// note: the action covers the log stream, so a node member reads this node's
+// logged activity for every caller.
+// note: the swarm's grant stops at reading. AuthorizeConfigureNodeState admits
+// no sibling, so a mount is writable only through a node-local grant or a
 // signed contract.
+// why a zero actor is refused first: a contract subject can be nil, and
+// Identity.IsEqual reports a zero identity equal to nil.
+// note: LocalSwarm lists only subjects of the user's unexpelled
+// swarm-membership contracts. A link or an app registration is not membership.
 func (mod *Module) AuthorizeSeeNodeState(ctx *astral.Context, a *auth.SeeNodeStateAction) bool {
-	return mod.authorizeUserOrNode(a.Actor())
+	actor := a.Actor()
+
+	if actor.IsZero() {
+		return false
+	}
+
+	if mod.authorizeUserOrNode(actor) {
+		return true
+	}
+
+	for _, nodeID := range mod.LocalSwarm() {
+		if nodeID.IsEqual(actor) {
+			return true
+		}
+	}
+
+	return false
 }
