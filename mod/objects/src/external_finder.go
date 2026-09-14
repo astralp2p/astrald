@@ -35,11 +35,12 @@ func (f *ExternalFinder) SourceIdentity() *astral.Identity { return f.id }
 
 // FindObject queries the remote peer and relays the provider identities it
 // returns. The stream runs under a per-call timeout and closes when it ends,
-// errors, or the timeout fires. A peer not authorized as a finder is not
-// queried.
+// errors, or the timeout fires. A peer not authorized as a finder is removed
+// and not queried.
 func (f *ExternalFinder) FindObject(ctx *astral.Context, id *astral.ObjectID) (<-chan *astral.Identity, error) {
 	if !f.mod.authorizeServeObjects(ctx, f.id, auth.RoleFinder) {
-		f.log.Logv(2, "external finder skipped: not authorized")
+		_ = f.mod.finders.Remove(f)
+		f.log.Logv(1, "external finder removed: not authorized")
 		return nil, objectsmod.ErrExternalNotAuthorized
 	}
 

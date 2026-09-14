@@ -97,10 +97,10 @@ func externalProviders() []externalProvider {
 	}
 }
 
-// TestExternalProviderSkippedWhenNotAuthorized is the revocation measure for
+// TestExternalProviderRemovedWhenNotAuthorized is the revocation measure for
 // external providers: a provider that holds no ServeObjects grant for its role
-// is not queried, and stays registered.
-func TestExternalProviderSkippedWhenNotAuthorized(t *testing.T) {
+// is removed on its next call, and its peer is not queried.
+func TestExternalProviderRemovedWhenNotAuthorized(t *testing.T) {
 	for _, p := range externalProviders() {
 		t.Run(string(p.role), func(t *testing.T) {
 			authority := &recordingAuth{verdict: false}
@@ -122,8 +122,8 @@ func TestExternalProviderSkippedWhenNotAuthorized(t *testing.T) {
 				t.Fatalf("unauthorized %s was queried %d times; want 0", p.role, n)
 			}
 
-			if n := p.count(mod); n != 1 {
-				t.Fatalf("unauthorized %s: module holds %d, want it still registered", p.role, n)
+			if n := p.count(mod); n != 0 {
+				t.Fatalf("unauthorized %s is still registered: module holds %d, want 0", p.role, n)
 			}
 
 			actions := authority.recorded()
@@ -145,18 +145,19 @@ func TestExternalProviderSkippedWhenNotAuthorized(t *testing.T) {
 	}
 }
 
-// TestExternalProviderResumesWhenAuthorized guards the inverse: once the
-// provider is authorized again, the next call queries it without a new
-// registration.
-func TestExternalProviderResumesWhenAuthorized(t *testing.T) {
+// TestExternalProviderRegistersAgainWhenAuthorized guards the inverse: once the
+// identity is authorized again, a removed provider registers again, stays
+// registered across a call, and its peer is queried.
+func TestExternalProviderRegistersAgainWhenAuthorized(t *testing.T) {
 	for _, p := range externalProviders() {
 		t.Run(string(p.role), func(t *testing.T) {
 			authority := &recordingAuth{verdict: false}
 			mod := &Module{Deps: Deps{Auth: authority}}
 			router := &countingRouter{id: astral.GenerateIdentity()}
 			id := astral.GenerateIdentity()
+			client := objectscli.New(id, astrald.New(router))
 
-			call, err := p.add(mod, id, objectscli.New(id, astrald.New(router)))
+			call, err := p.add(mod, id, client)
 			if err != nil {
 				t.Fatalf("register %s: %v", p.role, err)
 			}
@@ -167,6 +168,15 @@ func TestExternalProviderResumesWhenAuthorized(t *testing.T) {
 			authority.verdict = true
 			authority.mu.Unlock()
 
+			call, err = p.add(mod, id, client)
+			if err != nil {
+				t.Fatalf("register %s again: %v", p.role, err)
+			}
+
+			if n := p.count(mod); n != 1 {
+				t.Fatalf("%s registered again: module holds %d, want 1", p.role, n)
+			}
+
 			err = call(astral.NewContext(nil))
 			if !errors.Is(err, errRefusedByTestRouter) {
 				t.Fatalf("authorized %s: got err %v, want the router's refusal", p.role, err)
@@ -174,6 +184,10 @@ func TestExternalProviderResumesWhenAuthorized(t *testing.T) {
 
 			if n := router.queries(); n != 1 {
 				t.Fatalf("authorized %s was queried %d times; want 1", p.role, n)
+			}
+
+			if n := p.count(mod); n != 1 {
+				t.Fatalf("authorized %s after a call: module holds %d, want 1", p.role, n)
 			}
 		})
 	}

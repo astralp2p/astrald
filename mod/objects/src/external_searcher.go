@@ -37,10 +37,11 @@ func (s *ExternalSearcher) SourceIdentity() *astral.Identity { return s.id }
 // SearchObject runs the query against the remote peer and relays its results,
 // stamping each with the peer's identity. The stream runs under a per-call
 // timeout and closes when it ends, errors, or the timeout fires. A peer not
-// authorized as a searcher is not queried.
+// authorized as a searcher is removed and not queried.
 func (s *ExternalSearcher) SearchObject(ctx *astral.Context, q objects.SearchQuery) (<-chan *objects.SearchResult, error) {
 	if !s.mod.authorizeServeObjects(ctx, s.id, auth.RoleSearcher) {
-		s.log.Logv(2, "external searcher skipped: not authorized")
+		_ = s.mod.searchers.Remove(s)
+		s.log.Logv(1, "external searcher removed: not authorized")
 		return nil, objectsmod.ErrExternalNotAuthorized
 	}
 
