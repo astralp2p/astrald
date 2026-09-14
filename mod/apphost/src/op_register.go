@@ -95,7 +95,7 @@ func (mod *Module) OpRegister(ctx *astral.Context, query *routing.IncomingQuery,
 
 	// both rails expire with the registration, so an identity's authority ages
 	// with the token that reaches it
-	expiresAt := time.Now().Add(RegisterDuration)
+	expiresAt := time.Now().UTC().Add(RegisterDuration)
 
 	// record the grant permits on this node. A write failure sends the error
 	// rather than a token, because a token for an identity holding less than
