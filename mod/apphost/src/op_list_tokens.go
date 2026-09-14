@@ -16,6 +16,10 @@ type opListTokensArgs struct {
 
 // OpListTokens lists all access tokens of an identity
 func (mod *Module) OpListTokens(ctx *astral.Context, q *routing.IncomingQuery, args opListTokensArgs) (err error) {
+	if q.Origin() == astral.OriginNetwork {
+		return q.Reject()
+	}
+
 	if !mod.authorizeAdminManageApps(ctx, q) {
 		return q.Reject()
 	}

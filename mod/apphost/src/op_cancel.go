@@ -17,6 +17,13 @@ type opCancelArgs struct {
 }
 
 func (mod *Module) OpCancel(ctx *astral.Context, q *routing.IncomingQuery, args opCancelArgs) (err error) {
+	// why: an entry launched by a token-less session records no owner and stays
+	// cancellable by any caller, so ownership alone leaves it reachable from a
+	// link. apphost.bind and apphost.register_handler refuse the origin outright.
+	if q.Origin() == astral.OriginNetwork {
+		return q.Reject()
+	}
+
 	// why: both lookups run before accepting - accepting resolves this query and
 	// drops the en-route entry that names the session behind it.
 	owner := mod.sessionOwner(q)
