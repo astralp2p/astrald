@@ -19,7 +19,7 @@ func (mod *Module) OpRegisterHandler(ctx *astral.Context, q *routing.IncomingQue
 		return q.Reject()
 	}
 
-	if !mod.authorizeServeApps(ctx, q) {
+	if !mod.authorizeServeApps(ctx, q.Caller()) {
 		return q.Reject()
 	}
 
