@@ -1,7 +1,6 @@
 package gateway
 
 import (
-	"io"
 	"sync"
 	"testing"
 	"time"
@@ -73,9 +72,13 @@ func (w *recordingWriter) written() int {
 	return w.n
 }
 
-// route dispatches one query to one op and returns the router's verdict once the
-// op has resolved it.
-func route(t *testing.T, fn any, caller *astral.Identity, queryString string, w io.WriteCloser) error {
+// route dispatches one query to one op and returns the router's verdict.
+//
+// note: the verdict is the router's, not the op's. An accepted op registers,
+// reserves, forwards, and answers from its own goroutine, after this returns.
+// A test reading those effects waits for them first: `answered` for an op that
+// answers its caller, an op-specific signal for one that does not.
+func route(t *testing.T, fn any, caller *astral.Identity, queryString string, w *recordingWriter) error {
 	t.Helper()
 
 	op, err := routing.NewOp(fn)
@@ -88,4 +91,20 @@ func route(t *testing.T, fn any, caller *astral.Identity, queryString string, w 
 
 	_, err = op.RouteQuery(ctx, astral.Launch(query.New(caller, caller, queryString, nil)), w)
 	return err
+}
+
+// answered waits for an op to finish answering the caller, which it signals by
+// closing the caller's writer.
+//
+// why: an op that hands the connection onward instead of answering never closes
+// it — inbound `gateway.node_route` becomes a link — so that op waits on its own
+// signal. A rejected query never reaches an op and closes nothing.
+func answered(t *testing.T, w *recordingWriter) {
+	t.Helper()
+
+	select {
+	case <-w.closed:
+	case <-time.After(10 * time.Second):
+		t.Fatal("op accepted the query and never answered the caller")
+	}
 }

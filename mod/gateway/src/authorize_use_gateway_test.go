@@ -7,7 +7,9 @@ import (
 	"net"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/astralp2p/astral-go/api/auth"
 	"github.com/astralp2p/astral-go/api/exonet"
@@ -46,17 +48,31 @@ func (n *useGatewayNode) queries() []*astral.InFlightQuery {
 }
 
 // useGatewayLinks records the inbound links node_route hands to the nodes module.
+//
+// why: inbound node_route hands the connection on as a link and never answers
+// the caller, so `linked` — not the caller's writer — is what says the op ran.
 type useGatewayLinks struct {
 	nodesmod.Module
 
 	mu      sync.Mutex
 	inbound []exonetmod.Conn
+
+	established1 atomic.Bool
+	linked       chan struct{}
+}
+
+func newUseGatewayLinks() *useGatewayLinks {
+	return &useGatewayLinks{linked: make(chan struct{})}
 }
 
 func (l *useGatewayLinks) EstablishInboundLink(_ context.Context, conn exonetmod.Conn) error {
 	l.mu.Lock()
-	defer l.mu.Unlock()
 	l.inbound = append(l.inbound, conn)
+	l.mu.Unlock()
+
+	if l.established1.CompareAndSwap(false, true) {
+		close(l.linked)
+	}
 	return nil
 }
 
@@ -64,6 +80,17 @@ func (l *useGatewayLinks) established() int {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	return len(l.inbound)
+}
+
+// waitLinked waits for the first link to reach the nodes module.
+func (l *useGatewayLinks) waitLinked(t *testing.T) {
+	t.Helper()
+
+	select {
+	case <-l.linked:
+	case <-time.After(10 * time.Second):
+		t.Fatal("inbound node_route never handed a link to the nodes module")
+	}
 }
 
 // useGatewayPolicy is an auth module holding the gateway's own handler, as
@@ -247,6 +274,7 @@ func TestUseGatewayAllowsUnrelatedCaller(t *testing.T) {
 			if err := route(t, op.op(f.mod), caller, op.query(f), w); err != nil {
 				t.Fatalf("%s refused an unrelated caller on an enabled gateway: %v", op.name, err)
 			}
+			answered(t, w)
 
 			switch op.name {
 			case "gateway.node_register":
@@ -287,13 +315,15 @@ func TestUseGatewayInboundRouteAsksNothing(t *testing.T) {
 	for _, enabled := range []bool{false, true} {
 		authority := &recordingAuth{verdict: false}
 		f := newUseGatewayFixture(t, enabled, authority)
-		links := &useGatewayLinks{}
+		links := newUseGatewayLinks()
 		f.mod.Nodes = links
 
 		err := route(t, f.mod.OpNodeRoute, astral.GenerateIdentity(), "gateway.node_route?target="+f.node.id.String(), newRecordingWriter())
 		if err != nil {
 			t.Fatalf("inbound node_route (enabled=%v) was refused: %v", enabled, err)
 		}
+		links.waitLinked(t)
+
 		if n := len(authority.recorded()); n != 0 {
 			t.Fatalf("inbound node_route (enabled=%v) made %d authorization calls; want none", enabled, n)
 		}
@@ -313,8 +343,12 @@ func TestUseGatewayLeavesCleanupAndListingOpen(t *testing.T) {
 	f.mod.registeredNodes.Set(caller.String(), &registeredNode{Identity: caller, Nonce: astral.NewNonce()})
 
 	w := newRecordingWriter()
-	if err := route(t, f.mod.OpNodeUnregister, caller, "gateway.node_unregister", w); err != nil || w.written() == 0 {
-		t.Fatalf("node_unregister on a disabled gateway: err %v, %d bytes", err, w.written())
+	if err := route(t, f.mod.OpNodeUnregister, caller, "gateway.node_unregister", w); err != nil {
+		t.Fatalf("node_unregister on a disabled gateway was refused: %v", err)
+	}
+	answered(t, w)
+	if w.written() == 0 {
+		t.Fatalf("node_unregister on a disabled gateway answered 0 bytes")
 	}
 	if _, ok := f.mod.registeredNodeByIdentity(caller); ok {
 		t.Fatalf("node_unregister kept the caller's registration")
@@ -324,8 +358,12 @@ func TestUseGatewayLeavesCleanupAndListingOpen(t *testing.T) {
 	}
 
 	w = newRecordingWriter()
-	if err := route(t, f.mod.OpNodeList, caller, "gateway.node_list", w); err != nil || w.written() == 0 {
-		t.Fatalf("node_list on a disabled gateway: err %v, %d bytes", err, w.written())
+	if err := route(t, f.mod.OpNodeList, caller, "gateway.node_list", w); err != nil {
+		t.Fatalf("node_list on a disabled gateway was refused: %v", err)
+	}
+	answered(t, w)
+	if w.written() == 0 {
+		t.Fatalf("node_list on a disabled gateway answered 0 bytes")
 	}
 	if n := len(authority.recorded()); n != 0 {
 		t.Fatalf("node_unregister and node_list made %d authorization calls; want none", n)
