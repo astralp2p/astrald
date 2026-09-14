@@ -57,6 +57,73 @@ func (o oneRepoObjects) GetRepository(name string) objects.Repository {
 	return unscannableRepository{}
 }
 
+// routeEnableRepo routes one indexing.enable_repo through the op machinery and
+// returns the router's verdict plus a channel closed once the op itself has
+// returned, so an assertion can read node state after every side effect.
+func routeEnableRepo(t *testing.T, ctx *astral.Context, mod *Module, caller *astral.Identity, queryString string, w *discardWriter) (<-chan struct{}, error) {
+	t.Helper()
+
+	returned := make(chan struct{})
+	op, err := routing.NewOp(func(ctx *astral.Context, q *routing.IncomingQuery, args opEnableRepoArgs) error {
+		defer close(returned)
+		return mod.OpEnableRepo(ctx, q, args)
+	})
+	if err != nil {
+		t.Fatalf("new op: %v", err)
+	}
+
+	_, err = op.RouteQuery(ctx, astral.Launch(query.New(caller, caller, queryString, nil)), w)
+	return returned, err
+}
+
+func waitFor(t *testing.T, returned <-chan struct{}) {
+	t.Helper()
+
+	select {
+	case <-returned:
+	case <-time.After(10 * time.Second):
+		t.Fatal("indexing.enable_repo did not return")
+	}
+}
+
+// TestEnableRepoEnablesAnAcceptedQuery is the other side of the guard below: an
+// op that accepts within the deadline still enables the repository and acks.
+func TestEnableRepoEnablesAnAcceptedQuery(t *testing.T) {
+	caller := astral.GenerateIdentity()
+	repos := newMemNode(nil, "")
+
+	ctx, cancel := astral.NewContext(nil).WithTimeout(30 * time.Second)
+	defer cancel()
+
+	authority := &blockingAuth{release: make(chan struct{})}
+	close(authority.release) // granted, without the delay
+
+	mod := &Module{
+		Deps:  Deps{Auth: authority, Objects: oneRepoObjects{name: "local"}},
+		repos: repos,
+		ctx:   ctx,
+		log:   log.New(caller),
+	}
+
+	w := &discardWriter{}
+	returned, err := routeEnableRepo(t, ctx, mod, caller, "indexing.enable_repo?repo=local", w)
+	if err != nil {
+		t.Fatalf("route indexing.enable_repo: %v", err)
+	}
+	waitFor(t, returned)
+
+	subs, err := repos.Sub(ctx)
+	if err != nil {
+		t.Fatalf("read repos: %v", err)
+	}
+	if _, enabled := subs["local"]; !enabled {
+		t.Fatal("repository local is not enabled after an accepted enable_repo")
+	}
+	if n := w.written(); n == 0 {
+		t.Fatal("an accepted enable_repo wrote nothing to the caller; want an ack")
+	}
+}
+
 // TestEnableRepoDoesNotEnableARejectedQuery: when the router rejects the query
 // before the op resolves it, the caller holds a rejection — and the repository
 // must not end up enabled behind it.
@@ -79,21 +146,8 @@ func TestEnableRepoDoesNotEnableARejectedQuery(t *testing.T) {
 		log:   log.New(caller),
 	}
 
-	// returned closes once the op function itself has returned, so the assertion
-	// below reads the tree after every side effect the op could apply.
-	returned := make(chan struct{})
-	op, err := routing.NewOp(func(ctx *astral.Context, q *routing.IncomingQuery, args opEnableRepoArgs) error {
-		defer close(returned)
-		return mod.OpEnableRepo(ctx, q, args)
-	})
-	if err != nil {
-		t.Fatalf("new op: %v", err)
-	}
-
 	w := &discardWriter{}
-	q := astral.Launch(query.New(caller, caller, "indexing.enable_repo?repo=local", nil))
-
-	_, err = op.RouteQuery(ctx, q, w)
+	returned, err := routeEnableRepo(t, ctx, mod, caller, "indexing.enable_repo?repo=local", w)
 
 	var rejected *astral.ErrRejected
 	if !errors.As(err, &rejected) {
@@ -101,12 +155,7 @@ func TestEnableRepoDoesNotEnableARejectedQuery(t *testing.T) {
 	}
 
 	close(authority.release)
-
-	select {
-	case <-returned:
-	case <-time.After(10 * time.Second):
-		t.Fatal("indexing.enable_repo did not return after its authorization was granted")
-	}
+	waitFor(t, returned)
 
 	subs, err := repos.Sub(ctx)
 	if err != nil {
