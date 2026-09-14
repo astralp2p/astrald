@@ -22,5 +22,15 @@ func (mod *Module) LoadDependencies(ctx *astral.Context) (err error) {
 		return err
 	}
 
-	return err
+	// why: a failed cleanup leaves registrations nobody reaches, which is no reason
+	// to refuse loading the module.
+	deleted, cleanupErr := mod.deleteUnownedIndexers(ctx)
+	if cleanupErr != nil {
+		mod.log.Log("error deleting unowned indexers: %v", cleanupErr)
+	}
+	if deleted > 0 {
+		mod.log.Logv(1, "deleted %v unowned indexer registrations", deleted)
+	}
+
+	return nil
 }

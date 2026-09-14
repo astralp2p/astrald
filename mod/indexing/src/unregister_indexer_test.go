@@ -116,12 +116,11 @@ func mountLikeShell(t *testing.T, mod *Module) *routing.ScopeRouter {
 	return scopes
 }
 
-// unregister sends indexing.unregister_indexer through scopes and returns once
-// the op has closed its channel.
-func unregister(t *testing.T, ctx *astral.Context, scopes *routing.ScopeRouter, nonce astral.Nonce) {
+// unregister sends indexing.unregister_indexer from caller through scopes and
+// returns once the op has closed its channel.
+func unregister(t *testing.T, ctx *astral.Context, scopes *routing.ScopeRouter, caller *astral.Identity, nonce astral.Nonce) {
 	t.Helper()
 
-	caller := astral.GenerateIdentity()
 	q := query.New(caller, caller, "indexing.unregister_indexer?nonce="+nonce.String(), nil)
 	w := newCloseWriter()
 
@@ -141,7 +140,8 @@ func unregister(t *testing.T, ctx *astral.Context, scopes *routing.ScopeRouter, 
 //
 // The module holds only the indexers tree — no database, no objects, no auth.
 // An op that reached stored objects or the repository change log would panic on
-// a nil field, so leaving them untouched is enforced by construction.
+// a nil field, so leaving them untouched is enforced by construction. The owner
+// unregisters, and the owner's path asks the auth module nothing.
 func TestUnregisterIndexerEndsTheRegistration(t *testing.T) {
 	ctx, cancel := astral.NewContext(nil).WithTimeout(10 * time.Second)
 	defer cancel()
@@ -157,7 +157,8 @@ func TestUnregisterIndexerEndsTheRegistration(t *testing.T) {
 		t.Fatal("the node still routes indexing.remove_index")
 	}
 
-	nonce, err := mod.RegisterIndexer(ctx, "search")
+	owner := astral.GenerateIdentity()
+	nonce, err := mod.RegisterIndexer(ctx, owner, "search")
 	if err != nil {
 		t.Fatalf("register: %v", err)
 	}
@@ -167,7 +168,7 @@ func TestUnregisterIndexerEndsTheRegistration(t *testing.T) {
 	registrations, _ := root.Sub(ctx)
 	registration := registrations["search"]
 
-	unregister(t, ctx, scopes, nonce)
+	unregister(t, ctx, scopes, owner, nonce)
 
 	if subs, _ := root.Sub(ctx); len(subs) != 0 {
 		t.Fatalf("%d registrations remain; want none", len(subs))
@@ -179,7 +180,7 @@ func TestUnregisterIndexerEndsTheRegistration(t *testing.T) {
 		t.Fatalf("advance on the unregistered nonce: got %v, want %v", err, indexing.ErrIndexNotFound)
 	}
 
-	fresh, err := mod.RegisterIndexer(ctx, "search")
+	fresh, err := mod.RegisterIndexer(ctx, owner, "search")
 	if err != nil {
 		t.Fatalf("register again: %v", err)
 	}

@@ -21,10 +21,15 @@ type opSubscribeArgs struct {
 // errors with exponential back-off and validates ack repo+version against the
 // sent change before committing the cursor.
 func (mod *Module) OpSubscribe(ctx *astral.Context, q *routing.IncomingQuery, args opSubscribeArgs) error {
-	// note: the nonce alone used to be the credential, and tree.get returns it
-	// (mod/indexing/src/indexers.go). StoreObjects is the gate; the nonce stays the
-	// selector for which indexer's stream is consumed.
-	if !mod.authorizeStoreObjects(ctx, q, "") {
+	// why: cheapest refusal first. Indexing state is this node's own, so a network
+	// caller is refused whatever it holds.
+	if q.Origin() == astral.OriginNetwork {
+		return q.Reject()
+	}
+
+	// note: the permit is checked when a subscription starts. Revoking it refuses
+	// the next subscription and leaves a running one open.
+	if !mod.authorizeServeIndexer(ctx, q) {
 		return q.Reject()
 	}
 
@@ -35,7 +40,11 @@ func (mod *Module) OpSubscribe(ctx *astral.Context, q *routing.IncomingQuery, ar
 	if err != nil {
 		return ch.Send(astral.Err(err))
 	}
-	if indexer == nil {
+
+	// why: consuming the stream advances the owner's cursor, so only the owner
+	// subscribes, and an AdminObjects holder does not. Any other caller is answered
+	// as if the nonce were unknown.
+	if indexer == nil || !indexer.ownedBy(q.Caller()) {
 		return ch.Send(astral.Err(indexing.ErrIndexNotFound))
 	}
 
