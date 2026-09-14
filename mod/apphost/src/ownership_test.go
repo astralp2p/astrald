@@ -237,6 +237,38 @@ func TestCancelKeepsAnUnownedQueryCancellable(t *testing.T) {
 	}
 }
 
+// TestCancelRefusesAQueryOffALink: an unowned entry is exactly the one ownership
+// leaves cancellable by any caller, so the origin refusal is what keeps a caller
+// off a link from reaching it. The authority is never asked, because the origin
+// refusal runs first.
+func TestCancelRefusesAQueryOffALink(t *testing.T) {
+	mod, authority := ownershipModule(true)
+	nonce, cancelled := enRouteQuery(mod, nil)
+	w := newRecordingWriter()
+
+	q := sessionQuery(mod, nil, astral.GenerateIdentity(), "apphost.cancel?id="+nonce.String())
+	q.Extra.Set("origin", astral.OriginNetwork)
+
+	err := routeQuery(t, mod.OpCancel, q, w)
+
+	var rejected *astral.ErrRejected
+	if !errors.As(err, &rejected) {
+		t.Fatalf("apphost.cancel answered a query off a link: got err %v, want a rejection", err)
+	}
+
+	if cancelled.Load() {
+		t.Fatal("a caller off a link cancelled an unowned query")
+	}
+
+	if n := w.written(); n != 0 {
+		t.Fatalf("apphost.cancel wrote %d bytes to a query off a link; want none", n)
+	}
+
+	if n := len(authority.recorded()); n != 0 {
+		t.Fatalf("apphost.cancel asked the authority %d times about a query off a link; want none", n)
+	}
+}
+
 // TestCancelAdminEndsAnotherAppsQuery covers the administrative override: an
 // identity holding AdminManageApps ends an app's query without holding that
 // app's token.

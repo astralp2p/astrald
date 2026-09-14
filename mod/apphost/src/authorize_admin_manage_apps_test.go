@@ -121,6 +121,41 @@ func TestAdminManageAppsKeepsNetworkRefusal(t *testing.T) {
 	}
 }
 
+// TestAdminManageAppsRefusesEveryTokenOpOffALink: apphost mounts its ops on a
+// router the network reaches, so every token op refuses a query off a link
+// before it asks the authority.
+//
+// why the authority must not be asked: a swarm node may relay for the User
+// identity (mod/user AuthorizeRelayFor), and the User holds AdminManageApps —
+// so a sibling's relayed query passes the authorization check. The origin
+// refusal is the only thing standing between a link and a minted token.
+func TestAdminManageAppsRefusesEveryTokenOpOffALink(t *testing.T) {
+	for _, op := range adminManageAppsOps() {
+		t.Run(op.name, func(t *testing.T) {
+			mod := testTokenModule(t)
+			mod.log = log.New(nil)
+			authority := &recordingAuth{verdict: true}
+			mod.Auth = authority
+			w := newRecordingWriter()
+
+			err := routeAdminManageAppsFromNetwork(t, op.op(mod), astral.GenerateIdentity(), op.name+op.args, w)
+
+			var rejected *astral.ErrRejected
+			if !errors.As(err, &rejected) {
+				t.Fatalf("%s answered a query off a link: got err %v, want a rejection", op.name, err)
+			}
+
+			if n := w.written(); n != 0 {
+				t.Fatalf("%s wrote %d bytes to a query off a link; want none", op.name, n)
+			}
+
+			if n := len(authority.recorded()); n != 0 {
+				t.Fatalf("%s asked the authority %d times about a query off a link; want none", op.name, n)
+			}
+		})
+	}
+}
+
 // checkAdminManageAppsAsked asserts exactly one authorization call, naming
 // AdminManageApps with the query's caller as the actor.
 func checkAdminManageAppsAsked(t *testing.T, name string, authority *recordingAuth, caller *astral.Identity) {
