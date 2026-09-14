@@ -9,7 +9,7 @@ import (
 
 // CreateAgent inserts the agent row and stamps its creation time.
 func (db *DB) CreateAgent(row *dbAgent) error {
-	row.CreatedAt = time.Now()
+	row.CreatedAt = time.Now().UTC()
 	return db.Create(row).Error
 }
 

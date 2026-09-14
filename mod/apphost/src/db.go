@@ -8,12 +8,15 @@ import (
 	"gorm.io/gorm/clause"
 )
 
+// why: every time this DB writes or compares is UTC. The sqlite drivers store a
+// datetime as text that SQL compares as a string, so a local time sorts wrong
+// against a UTC one, across an autumn DST change, and after a host zone change.
 type DB struct {
 	*gorm.DB
 }
 
 func (db *DB) CreateAccessToken(identity *astral.Identity, d astral.Duration) (token *dbAccessToken, err error) {
-	var expiresAt = (astral.Time)(time.Now().Add(time.Duration(d)))
+	var expiresAt = (astral.Time)(time.Now().UTC().Add(time.Duration(d)))
 
 	value, err := randomString(32)
 	if err != nil {
@@ -41,7 +44,7 @@ func (db *DB) ListAccessTokens() (list []dbAccessToken, _ error) {
 func (db *DB) FindAccessToken(token string) (at *dbAccessToken, err error) {
 	err = db.
 		Where("token = ?", token).
-		Where("expires_at > ?", time.Now()).
+		Where("expires_at > ?", time.Now().UTC()).
 		First(&at).Error
 	return
 }
@@ -66,9 +69,9 @@ func (db *DB) DeleteAccessToken(token string) error {
 // Duplicate holds are silently ignored (ON CONFLICT DO NOTHING).
 func (db *DB) HoldObject(appID *astral.Identity, objectID *astral.ObjectID, duration *astral.Duration) error {
 	// note: apps may hold object IDs before this node has fetched the object.
-	row := &dbObjectHold{AppID: appID, ObjectID: objectID, CreatedAt: time.Now()}
+	row := &dbObjectHold{AppID: appID, ObjectID: objectID, CreatedAt: time.Now().UTC()}
 	if duration != nil {
-		until := time.Now().Add(time.Duration(*duration))
+		until := time.Now().UTC().Add(time.Duration(*duration))
 		row.HoldUntil = &until
 	}
 	return db.Clauses(clause.OnConflict{DoNothing: true}).Create(row).Error
@@ -85,7 +88,7 @@ func (db *DB) UnholdObject(appID *astral.Identity, objectID *astral.ObjectID) er
 func (db *DB) ListHeldObjects(appID *astral.Identity) (list []*dbObjectHold, err error) {
 	err = db.
 		Where("app_id = ?", appID).
-		Where("(hold_until IS NULL OR hold_until > ?)", time.Now()).
+		Where("(hold_until IS NULL OR hold_until > ?)", time.Now().UTC()).
 		Find(&list).
 		Error
 	return
@@ -96,7 +99,7 @@ func (db *DB) ObjectHeld(objectID *astral.ObjectID) (held bool, err error) {
 	err = db.
 		Model(&dbObjectHold{}).
 		Where("object_id = ?", objectID).
-		Where("(hold_until IS NULL OR hold_until > ?)", time.Now()).
+		Where("(hold_until IS NULL OR hold_until > ?)", time.Now().UTC()).
 		Select("count(*) > 0").
 		First(&held).
 		Error

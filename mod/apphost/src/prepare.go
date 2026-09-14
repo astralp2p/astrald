@@ -29,7 +29,7 @@ func (mod *Module) Prepare(ctx context.Context) error {
 		err = mod.db.Create(&dbAccessToken{
 			Identity:  identity,
 			Token:     token,
-			ExpiresAt: time.Now().Add(time.Hour * 24 * 365 * 100),
+			ExpiresAt: time.Now().UTC().Add(time.Hour * 24 * 365 * 100),
 		}).Error
 		if err != nil {
 			mod.log.Error("config: cannot create token for '%v': %v", name, err)

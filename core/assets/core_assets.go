@@ -121,8 +121,12 @@ func (assets *CoreAssets) OpenDatabase(name string) (*gorm.DB, error) {
 		l = logger.Default.LogMode(logger.Silent)
 	}
 
+	// why: gorm stamps CreatedAt and UpdatedAt from time.Now().Local() by
+	// default, and the sqlite drivers store a datetime as text that SQL compares
+	// as a string, so every time a module writes is UTC.
 	var cfg = &gorm.Config{
-		Logger: l,
+		Logger:  l,
+		NowFunc: func() time.Time { return time.Now().UTC() },
 	}
 
 	switch res := assets.res.(type) {

@@ -159,7 +159,7 @@ func (mod *Module) setCache(objectID *astral.ObjectID, archive *archives.Archive
 			ObjectID: entry.ObjectID,
 			Path:     entry.Path,
 			Comment:  entry.Comment,
-			Modified: entry.Modified,
+			Modified: entry.Modified.UTC(),
 		})
 	}
 
