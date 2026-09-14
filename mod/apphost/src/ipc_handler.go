@@ -14,6 +14,7 @@ import (
 // IPCHandler routes queries to a registered IPC endpoint.
 type IPCHandler struct {
 	Identity *astral.Identity // identity of the handler
+	Owner    *astral.Identity // session that registered it; nil for a token-less session
 	IPCToken astral.Nonce     // token for the IPC endpoint
 	Endpoint string           // IPC endpoint
 }

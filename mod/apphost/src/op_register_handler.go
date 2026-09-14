@@ -19,6 +19,10 @@ func (mod *Module) OpRegisterHandler(ctx *astral.Context, q *routing.IncomingQue
 		return q.Reject()
 	}
 
+	// why: read before accepting - the en-route entry naming this session is
+	// dropped as soon as the query resolves.
+	owner := mod.sessionOwner(q)
+
 	if !mod.authorizeServeApps(ctx, q) {
 		return q.Reject()
 	}
@@ -27,8 +31,11 @@ func (mod *Module) OpRegisterHandler(ctx *astral.Context, q *routing.IncomingQue
 	defer ch.Close()
 
 	// add the handler
+	// note: Owner is the session that registered it, and is what apphost.bind
+	// matches on. Identity is who the handler answers for.
 	handler := &IPCHandler{
 		Identity: q.Caller(),
+		Owner:    owner,
 		IPCToken: args.Token,
 		Endpoint: args.Endpoint,
 	}
