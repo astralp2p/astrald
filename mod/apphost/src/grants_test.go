@@ -171,6 +171,38 @@ func TestExpiredGrantDoesNotAuthorize(t *testing.T) {
 	}
 }
 
+// TestGrantExpiryIgnoresLocalZone: the sqlite driver compares datetimes as
+// text, so an expiry written in a local zone and queried against a UTC clock
+// shifts by the zone's offset. East of UTC a lapsed grant would keep
+// authorizing; west of UTC a live one would be refused early.
+func TestGrantExpiryIgnoresLocalZone(t *testing.T) {
+	local := time.Local
+	t.Cleanup(func() { time.Local = local })
+
+	mod := testGrantModule(t)
+	app := astral.GenerateIdentity()
+
+	time.Local = time.FixedZone("UTC+2", 2*60*60)
+	past := time.Now().Add(-time.Hour)
+	if err := mod.Grant(app, servePermit(auth.RoleDescriber), &past); err != nil {
+		t.Fatalf("grant: %v", err)
+	}
+
+	if mod.authorizeGrant(nil, serveAction(app, auth.RoleDescriber)) {
+		t.Fatal("an expired grant still authorizes on a host east of UTC")
+	}
+
+	time.Local = time.FixedZone("UTC-2", -2*60*60)
+	future := time.Now().Add(time.Hour)
+	if err := mod.Grant(app, servePermit(auth.RoleDescriber), &future); err != nil {
+		t.Fatalf("grant: %v", err)
+	}
+
+	if !mod.authorizeGrant(nil, serveAction(app, auth.RoleDescriber)) {
+		t.Fatal("an unexpired grant is refused on a host west of UTC")
+	}
+}
+
 // TestGrantForcesDelegationToZero: a grant is not portable evidence, so a hop
 // count on it would describe authority it cannot carry.
 func TestGrantForcesDelegationToZero(t *testing.T) {

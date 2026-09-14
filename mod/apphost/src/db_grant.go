@@ -40,6 +40,15 @@ func fromGrantPermit(identity *astral.Identity, p *auth.Permit, expiresAt *time.
 		return nil, fmt.Errorf("encode permit: %w", err)
 	}
 
+	// why: FindGrant compares the expiry against a UTC clock and the pure-Go
+	// sqlite driver compares datetimes as text, so the stored side is UTC too
+	// whatever zone the caller built it in. The copy leaves the caller's value
+	// as it was.
+	if expiresAt != nil {
+		utc := expiresAt.UTC()
+		expiresAt = &utc
+	}
+
 	return &dbGrant{
 		Identity:  identity,
 		Name:      string(p.Action),
