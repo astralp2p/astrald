@@ -17,19 +17,24 @@ var _ exonet.EphemeralListener = &Server{}
 // Server implements KCP listening with connection acceptance via kcp.Listener
 type Server struct {
 	*Module
-	listenPort astral.Uint16
-	listener   *kcpgo.Listener
-	onAccept   exonet.EphemeralHandler
-	closed     atomic.Bool
-	closedCh   chan struct{}
+	listenPort  astral.Uint16
+	listener    *kcpgo.Listener
+	onAccept    exonet.EphemeralHandler
+	closed      atomic.Bool
+	closedCh    chan struct{}
+	accepted    atomic.Bool
+	idleTimeout time.Duration
 }
 
-func NewServer(module *Module, listenPort astral.Uint16, onAccept exonet.EphemeralHandler) *Server {
+// NewServer builds a KCP server on listenPort. A non-zero idleTimeout closes the
+// server when it accepts no connection within that time.
+func NewServer(module *Module, listenPort astral.Uint16, onAccept exonet.EphemeralHandler, idleTimeout time.Duration) *Server {
 	return &Server{
-		Module:     module,
-		listenPort: listenPort,
-		onAccept:   onAccept,
-		closedCh:   make(chan struct{}),
+		Module:      module,
+		listenPort:  listenPort,
+		onAccept:    onAccept,
+		closedCh:    make(chan struct{}),
+		idleTimeout: idleTimeout,
 	}
 }
 
@@ -57,6 +62,24 @@ func (s *Server) Run(ctx *astral.Context) error {
 		}
 	}()
 
+	// why: a NAT traversal that fails after the peer created this listener never
+	// connects to it, and nothing else reclaims the port.
+	// note: a listener that accepted a connection is never reaped here. Close
+	// closes the UDP socket its accepted sessions read and write through, so
+	// reaping it would kill every live link on this port.
+	if s.idleTimeout > 0 {
+		idle := time.AfterFunc(s.idleTimeout, func() {
+			if s.accepted.Load() {
+				return
+			}
+
+			s.log.Logv(1, "closing unused ephemeral listener on port %v after %v",
+				s.listenPort, s.idleTimeout)
+			s.Close()
+		})
+		defer idle.Stop()
+	}
+
 	for {
 		sess, err := kcpListener.AcceptKCP()
 		if err != nil {
@@ -67,6 +90,8 @@ func (s *Server) Run(ctx *astral.Context) error {
 
 			return fmt.Errorf("kcp server/run: accept failed: %w", err)
 		}
+
+		s.accepted.Store(true)
 
 		remoteEndpoint, _ := kcpmod.ParseEndpoint(sess.RemoteAddr().String())
 		s.log.Info("accepted connection from %v", remoteEndpoint)
@@ -108,7 +133,8 @@ func (s *Server) Close() error {
 
 func (mod *Module) startServer(ctx context.Context) {
 	listenPort := astral.Uint16(mod.config.ListenPort)
-	srv := NewServer(mod, listenPort, mod.acceptAll)
+	// why: the node's own listener is not ephemeral, so it carries no idle timeout.
+	srv := NewServer(mod, listenPort, mod.acceptAll, 0)
 	if err := srv.Run(astral.NewContext(ctx)); err != nil {
 		mod.log.Errorv(1, "server error: %v", err)
 	}

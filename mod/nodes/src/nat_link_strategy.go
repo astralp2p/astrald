@@ -105,34 +105,57 @@ func (s *NATLinkStrategy) attempt(ctx *astral.Context) error {
 
 	kcpClient := kcpclient.New(selfID, astrald.Default())
 
+	// note: one flag per created resource, so cleanup undoes only what exists.
+	var remoteListener, remoteMapping, localMapping, linked bool
+
+	cleanup := func() {
+		cleanupCtx := s.mod.ctx.IncludeZone(astral.ZoneNetwork)
+		if localMapping {
+			if err := kcpClient.RemoveEndpointLocalPort(cleanupCtx, peerEndpoint); err != nil {
+				s.log.Logv(2, "cleanup local socket mapping: %v", err)
+			}
+		}
+		if remoteMapping {
+			if err := kcpClient.WithTarget(s.target).RemoveEndpointLocalPort(cleanupCtx, localEndpoint); err != nil {
+				s.log.Logv(2, "cleanup remote socket mapping: %v", err)
+			}
+		}
+		if remoteListener {
+			if err := kcpClient.WithTarget(s.target).CloseEphemeralListener(cleanupCtx, peerEndpoint.Port); err != nil {
+				s.log.Logv(2, "cleanup remote ephemeral listener: %v", err)
+			}
+		}
+	}
+
+	// why: the setup below creates state on the peer, and a failure at any step has
+	// to release it. A deferred cleanup covers every early return, including ones
+	// added later.
+	// why not on success: the link owns that state until it closes, and the watcher
+	// goroutine below releases it then.
+	defer func() {
+		if !linked {
+			cleanup()
+		}
+	}()
+
 	// Set up the remote side: ephemeral listener + endpoint mapping
 	err = kcpClient.WithTarget(s.target).CreateEphemeralListener(ctx, peerEndpoint.Port)
 	if err != nil {
 		return fmt.Errorf("remote create ephemeral listener: %w", err)
 	}
+	remoteListener = true
 
 	err = kcpClient.WithTarget(s.target).SetEndpointLocalPort(ctx, localEndpoint, peerEndpoint.Port, true)
 	if err != nil {
 		return fmt.Errorf("remote set endpoint local port: %w", err)
 	}
+	remoteMapping = true
 
 	err = kcpClient.SetEndpointLocalPort(ctx, peerEndpoint, localEndpoint.Port, true)
 	if err != nil {
 		return fmt.Errorf("set endpoint local port: %w", err)
 	}
-
-	cleanup := func() {
-		cleanupCtx := s.mod.ctx.IncludeZone(astral.ZoneNetwork)
-		if err := kcpClient.RemoveEndpointLocalPort(cleanupCtx, peerEndpoint); err != nil {
-			s.log.Logv(2, "cleanup local socket mapping: %v", err)
-		}
-		if err := kcpClient.WithTarget(s.target).CloseEphemeralListener(cleanupCtx, peerEndpoint.Port); err != nil {
-			s.log.Logv(2, "cleanup remote ephemeral listener: %v", err)
-		}
-		if err := kcpClient.WithTarget(s.target).RemoveEndpointLocalPort(cleanupCtx, localEndpoint); err != nil {
-			s.log.Logv(2, "cleanup remote socket mapping: %v", err)
-		}
-	}
+	localMapping = true
 
 	s.log.Log("%v dialing %v", s.target, peerEndpoint.Address())
 	conn, err := s.mod.Exonet.Dial(ctx, &peerEndpoint)
@@ -143,10 +166,10 @@ func (s *NATLinkStrategy) attempt(ctx *astral.Context) error {
 	rawLink, err := s.mod.EstablishOutboundLink(ctx, s.target, conn)
 	if err != nil {
 		conn.Close()
-		cleanup()
 		return fmt.Errorf("establish link: %w", err)
 	}
 	link := rawLink.(*Link)
+	linked = true
 
 	go func() {
 		<-link.Done()

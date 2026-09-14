@@ -16,7 +16,7 @@ func (mod *Module) CreateEphemeralListener(port astral.Uint16) error {
 		return fmt.Errorf("%w: port %d", kcp.ErrEphemeralListenerExists, port)
 	}
 
-	kcpServer := NewServer(mod, port, mod.acceptAll)
+	kcpServer := NewServer(mod, port, mod.acceptAll, mod.config.EphemeralIdleTimeout)
 	mod.ephemeralListeners.Set(port, kcpServer)
 
 	go func() {
