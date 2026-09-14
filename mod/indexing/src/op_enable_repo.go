@@ -21,7 +21,18 @@ func (mod *Module) OpEnableRepo(ctx *astral.Context, q *routing.IncomingQuery, a
 		return q.Reject()
 	}
 
-	ch := q.Accept(channel.WithFormats(args.In, args.Out))
+	// why: routing.Op gives an op five seconds to accept or reject. Past that the
+	// router rejects on the op's behalf, answers the caller, and leaves the op
+	// running on its detached context — so an accept can arrive after the caller
+	// already holds a rejection. AcceptRaw reports that as routing.ErrorConn, the
+	// one place it is ever returned. Toggling a repository behind a rejection is
+	// what this refuses: the caller was told nothing happened.
+	conn := q.AcceptRaw()
+	if lost, ok := conn.(routing.ErrorConn); ok {
+		return lost.Err
+	}
+
+	ch := channel.New(conn, channel.WithFormats(args.In, args.Out))
 	defer ch.Close()
 
 	repo := mod.Objects.GetRepository(args.Repo)
