@@ -10,12 +10,11 @@ import (
 // node indexes.
 //
 // Indexing state is node-wide: enabling a repository indexes every object in it
-// from then on, and a subscription consumes an indexer's change stream and
-// advances its cursor. Both are writes to node state, so both answer to
-// StoreObjects — the same action that guards writes in mod/objects.
+// from then on. That is a write to node state, so it answers to StoreObjects —
+// the same action that guards writes in mod/objects.
 //
-// repo declares the noun the call touches; it is empty for an op that names no
-// repository. Nothing evaluates it yet — see auth.StoreObjectsAction.
+// repo declares the noun the call touches. Nothing evaluates it yet — see
+// auth.StoreObjectsAction.
 func (mod *Module) authorizeStoreObjects(ctx *astral.Context, q *routing.IncomingQuery, repo string) bool {
 	return mod.Auth.Authorize(ctx, &auth.StoreObjectsAction{
 		Action: auth.NewAction(q.Caller()),

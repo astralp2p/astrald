@@ -81,8 +81,9 @@ func route(t *testing.T, fn any, caller *astral.Identity, queryString string, w 
 }
 
 // TestStoreObjectsRefusesCallerWithoutPermits is the coverage measure for the
-// StoreObjects action in mod/indexing: both ops that change what the node
-// indexes must ask before they act, and must reject when the answer is no.
+// StoreObjects action in mod/indexing: the op that changes which repositories
+// the node indexes must ask before it acts, and must reject when the answer is
+// no.
 //
 // The module is a bare struct — no database, no tree nodes, no logger. An op
 // that reached past its authorization check would panic on a nil field, so
@@ -98,7 +99,6 @@ func TestStoreObjectsRefusesCallerWithoutPermits(t *testing.T) {
 		wantRepo astral.String8
 	}{
 		{"indexing.enable_repo", func(m *Module) any { return m.OpEnableRepo }, "?repo=local", "local"},
-		{"indexing.subscribe", func(m *Module) any { return m.OpSubscribe }, "?nonce=1", ""},
 	} {
 		t.Run(op.name, func(t *testing.T) {
 			authority := &recordingAuth{verdict: false}

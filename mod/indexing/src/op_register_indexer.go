@@ -12,11 +12,23 @@ type opRegisterIndexerArgs struct {
 	Out  string
 }
 
+// OpRegisterIndexer registers the caller as the owner of a named indexer and
+// returns its nonce. The caller must hold ServeObjects for the indexer role.
 func (mod *Module) OpRegisterIndexer(ctx *astral.Context, q *routing.IncomingQuery, args opRegisterIndexerArgs) error {
+	// why: cheapest refusal first. Indexing state is this node's own, so a network
+	// caller is refused whatever it holds.
+	if q.Origin() == astral.OriginNetwork {
+		return q.Reject()
+	}
+
+	if !mod.authorizeServeIndexer(ctx, q) {
+		return q.Reject()
+	}
+
 	ch := q.Accept(channel.WithFormats(args.In, args.Out))
 	defer ch.Close()
 
-	nonce, err := mod.RegisterIndexer(ctx, args.Name)
+	nonce, err := mod.RegisterIndexer(ctx, q.Caller(), args.Name)
 	if err != nil {
 		return ch.Send(astral.Err(err))
 	}
