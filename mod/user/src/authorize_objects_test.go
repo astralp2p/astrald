@@ -45,3 +45,27 @@ func TestAuthorizeObjectAccessGrantsTheNodeOnUnclaimedNode(t *testing.T) {
 		t.Fatal("a caller that is neither the node, the user, nor a swarm member must not read")
 	}
 }
+
+// TestAuthorizeObjectAccessRefusesZeroActorOnUnclaimedNode pins the unclaimed-node
+// case: the user identity is nil before a claim, and a nil or zero actor must not
+// match it in any of the three object handlers.
+func TestAuthorizeObjectAccessRefusesZeroActorOnUnclaimedNode(t *testing.T) {
+	mod := &Module{node: &identityNode{id: astral.GenerateIdentity()}}
+
+	for name, actor := range map[string]*astral.Identity{
+		"nil":  nil,
+		"zero": {},
+	} {
+		if mod.AuthorizeSeeObjects(nil, &auth.SeeObjectsAction{Action: auth.NewAction(actor)}) {
+			t.Errorf("a %s actor reads objects on an unclaimed node", name)
+		}
+
+		if mod.AuthorizeStoreObjects(nil, &auth.StoreObjectsAction{Action: auth.NewAction(actor)}) {
+			t.Errorf("a %s actor stores objects on an unclaimed node", name)
+		}
+
+		if mod.AuthorizeAdminObjects(nil, &auth.AdminObjectsAction{Action: auth.NewAction(actor)}) {
+			t.Errorf("a %s actor administers objects on an unclaimed node", name)
+		}
+	}
+}
