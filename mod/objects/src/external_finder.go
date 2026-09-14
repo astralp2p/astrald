@@ -4,11 +4,13 @@ import (
 	"errors"
 	"time"
 
+	"github.com/astralp2p/astral-go/api/auth"
 	objectscli "github.com/astralp2p/astral-go/api/objects/client"
 	"github.com/astralp2p/astral-go/astral"
 	log "github.com/astralp2p/astral-go/astral/log"
 	"github.com/astralp2p/astral-go/lib/astrald"
 	"github.com/astralp2p/astral-go/sig"
+	objectsmod "github.com/astralp2p/astrald/mod/objects"
 )
 
 type ExternalFinder struct {
@@ -33,8 +35,14 @@ func (f *ExternalFinder) SourceIdentity() *astral.Identity { return f.id }
 
 // FindObject queries the remote peer and relays the provider identities it
 // returns. The stream runs under a per-call timeout and closes when it ends,
-// errors, or the timeout fires.
+// errors, or the timeout fires. A peer not authorized as a finder is not
+// queried.
 func (f *ExternalFinder) FindObject(ctx *astral.Context, id *astral.ObjectID) (<-chan *astral.Identity, error) {
+	if !f.mod.authorizeServeObjects(ctx, f.id, auth.RoleFinder) {
+		f.log.Logv(2, "external finder skipped: not authorized")
+		return nil, objectsmod.ErrExternalNotAuthorized
+	}
+
 	providerCtx, cancel := ctx.WithTimeout(f.timeout)
 
 	providers, errPtr := f.client.Find(providerCtx, id)

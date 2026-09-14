@@ -4,12 +4,14 @@ import (
 	"errors"
 	"time"
 
+	"github.com/astralp2p/astral-go/api/auth"
 	"github.com/astralp2p/astral-go/api/objects"
 	objectscli "github.com/astralp2p/astral-go/api/objects/client"
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astral-go/astral/log"
 	"github.com/astralp2p/astral-go/lib/astrald"
 	"github.com/astralp2p/astral-go/sig"
+	objectsmod "github.com/astralp2p/astrald/mod/objects"
 )
 
 type ExternalDescriber struct {
@@ -34,8 +36,14 @@ func (d *ExternalDescriber) SourceIdentity() *astral.Identity { return d.id }
 
 // DescribeObject queries the remote peer and relays its descriptors, stamping
 // each with the peer's identity. The stream runs under a per-call timeout and
-// closes when it ends, errors, or the timeout fires.
+// closes when it ends, errors, or the timeout fires. A peer not authorized as a
+// describer is not queried.
 func (d *ExternalDescriber) DescribeObject(ctx *astral.Context, id *astral.ObjectID) (<-chan *objects.Descriptor, error) {
+	if !d.mod.authorizeServeObjects(ctx, d.id, auth.RoleDescriber) {
+		d.log.Logv(2, "external describer skipped: not authorized")
+		return nil, objectsmod.ErrExternalNotAuthorized
+	}
+
 	ctx, cancel := ctx.WithTimeout(d.timeout)
 
 	in, errPtr := d.client.Describe(ctx, id)
