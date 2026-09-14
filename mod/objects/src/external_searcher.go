@@ -4,12 +4,14 @@ import (
 	"errors"
 	"time"
 
+	"github.com/astralp2p/astral-go/api/auth"
 	"github.com/astralp2p/astral-go/api/objects"
 	objectscli "github.com/astralp2p/astral-go/api/objects/client"
 	"github.com/astralp2p/astral-go/astral"
 	log "github.com/astralp2p/astral-go/astral/log"
 	"github.com/astralp2p/astral-go/lib/astrald"
 	"github.com/astralp2p/astral-go/sig"
+	objectsmod "github.com/astralp2p/astrald/mod/objects"
 )
 
 type ExternalSearcher struct {
@@ -34,8 +36,14 @@ func (s *ExternalSearcher) SourceIdentity() *astral.Identity { return s.id }
 
 // SearchObject runs the query against the remote peer and relays its results,
 // stamping each with the peer's identity. The stream runs under a per-call
-// timeout and closes when it ends, errors, or the timeout fires.
+// timeout and closes when it ends, errors, or the timeout fires. A peer not
+// authorized as a searcher is removed and not queried.
 func (s *ExternalSearcher) SearchObject(ctx *astral.Context, q objects.SearchQuery) (<-chan *objects.SearchResult, error) {
+	if !s.mod.authorizeServeObjects(ctx, s.id, auth.RoleSearcher) {
+		s.mod.removeExternalSearcher(s)
+		return nil, objectsmod.ErrExternalNotAuthorized
+	}
+
 	providerCtx, cancel := ctx.WithTimeout(s.timeout)
 	in, errPtr := s.client.Search(providerCtx, q)
 	if in == nil {

@@ -73,3 +73,13 @@ func (mod *Module) AddFinder(finder objects.Finder) error {
 
 	return mod.finders.Add(finder)
 }
+
+// removeExternalFinder unregisters an external finder and logs the removal.
+func (mod *Module) removeExternalFinder(finder *ExternalFinder) {
+	// note: a concurrent call can remove the same finder first.
+	if err := mod.finders.Remove(finder); err != nil {
+		return
+	}
+
+	mod.log.Logv(1, "removed external finder %v", finder.id)
+}
