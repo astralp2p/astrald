@@ -100,7 +100,7 @@ what the world reaches.
 | 1792 | UDP | KCP transport | publish |
 | 8822 | UDP | `ether` LAN discovery | works only with `--network host` |
 | 8625 | TCP 127.0.0.1 | local apphost API | container-internal; share the socket instead |
-| 8624 | TCP 0.0.0.0 | apphost HTTP API | publish only to expose the HTTP API |
+| 8624 | TCP 127.0.0.1 | apphost HTTP API | container-internal until `bind_http` binds `0.0.0.0` |
 | 8626 | TCP 127.0.0.1 | MCP server | container-internal until `bind_mcp` binds `0.0.0.0` |
 
 Docker's bridge is a NAT in front of the node: peers reach only what is
