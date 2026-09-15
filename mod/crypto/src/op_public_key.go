@@ -1,11 +1,14 @@
 package crypto
 
 import (
+	"fmt"
+
 	"github.com/astralp2p/astral-go/api/crypto"
 	"github.com/astralp2p/astral-go/api/secp256k1"
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astral-go/astral/channel"
 	"github.com/astralp2p/astral-go/lib/routing"
+	cryptomod "github.com/astralp2p/astrald/mod/crypto"
 )
 
 type opPublicKeyArgs struct {
@@ -20,7 +23,14 @@ func (mod *Module) OpPublicKey(ctx *astral.Context, q *routing.IncomingQuery, ar
 	var sawEOS bool
 	err = ch.Switch(
 		func(key *crypto.PrivateKey) error {
-			return ch.Send(secp256k1.PublicKey(key))
+			publicKey := secp256k1.PublicKey(key)
+			// why: secp256k1.PublicKey answers a key of another type with a nil
+			// sentinel, and sending that nil calls a value method on a nil pointer,
+			// which panics the op and closes the connection with no diagnostic.
+			if publicKey == nil {
+				return ch.Send(astral.Err(fmt.Errorf("%w: %v", cryptomod.ErrUnsupportedKeyType, key.Type)))
+			}
+			return ch.Send(publicKey)
 		},
 		// why: a composed upstream op reports a failed item as a wrong-typed
 		// object in the stream; reply in-band and keep the batch alive.
