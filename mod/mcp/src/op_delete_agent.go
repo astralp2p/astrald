@@ -7,12 +7,12 @@ import (
 )
 
 type opDeleteAgentArgs struct {
-	ID  string `query:"required"`
-	Out string
+	Identity string `query:"required"`
+	Out      string
 }
 
 // OpDeleteAgent removes an agent: revokes its token and its grants, unsets its
-// alias and deletes its record. ID takes an identity or an alias.
+// alias and deletes its record. Identity takes an identity or an alias.
 func (mod *Module) OpDeleteAgent(ctx *astral.Context, q *routing.IncomingQuery, args opDeleteAgentArgs) error {
 	if q.Origin() == astral.OriginNetwork {
 		return q.Reject()
@@ -25,7 +25,7 @@ func (mod *Module) OpDeleteAgent(ctx *astral.Context, q *routing.IncomingQuery, 
 	ch := channel.New(q.AcceptRaw(), channel.WithOutputFormat(args.Out))
 	defer ch.Close()
 
-	agentID, err := mod.Dir.ResolveIdentity(args.ID)
+	agentID, err := mod.Dir.ResolveIdentity(args.Identity)
 	if err != nil {
 		return ch.Send(astral.NewError("unknown identity"))
 	}

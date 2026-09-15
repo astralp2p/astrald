@@ -8,12 +8,12 @@ import (
 )
 
 type opAgentArgs struct {
-	ID  string `query:"required"`
-	Out string
+	Identity string `query:"required"`
+	Out      string
 }
 
-// OpAgent answers one agent's record without its access token. ID takes an
-// identity or an alias.
+// OpAgent answers one agent's record without its access token. Identity takes
+// an identity or an alias.
 //
 // why not a filter on mcp.list_agents: that op streams every agent with its
 // token, which is how a lost one is recovered. A read made per agent is a
@@ -35,7 +35,7 @@ func (mod *Module) OpAgent(ctx *astral.Context, q *routing.IncomingQuery, args o
 	ch := channel.New(q.AcceptRaw(), channel.WithOutputFormat(args.Out))
 	defer ch.Close()
 
-	agentID, err := mod.Dir.ResolveIdentity(args.ID)
+	agentID, err := mod.Dir.ResolveIdentity(args.Identity)
 	if err != nil {
 		return ch.Send(astral.NewError("unknown identity"))
 	}

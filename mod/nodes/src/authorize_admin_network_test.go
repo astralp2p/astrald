@@ -25,10 +25,10 @@ func adminNetworkOps(id *astral.Identity) []adminNetworkOp {
 	return []adminNetworkOp{
 		{"nodes.links", func(m *Module) any { return m.OpLinks }, ""},
 		{"nodes.sessions", func(m *Module) any { return m.OpSessions }, ""},
-		{"nodes.resolve_endpoints", func(m *Module) any { return m.OpResolveEndpoints }, "?id=anything"},
-		{"nodes.new_link", func(m *Module) any { return m.OpNewLink }, "?target=anything"},
-		{"nodes.add_endpoint", func(m *Module) any { return m.OpAddEndpoint }, "?id=" + id.String() + "&endpoint=tcp:192.0.2.1:1791"},
-		{"nodes.close_link", func(m *Module) any { return m.OpCloseLink }, "?id=" + adminNetworkNonce},
+		{"nodes.resolve_endpoints", func(m *Module) any { return m.OpResolveEndpoints }, "?identity=anything"},
+		{"nodes.new_link", func(m *Module) any { return m.OpNewLink }, "?identity=anything"},
+		{"nodes.add_endpoint", func(m *Module) any { return m.OpAddEndpoint }, "?identity=" + id.String() + "&endpoint=tcp:192.0.2.1:1791"},
+		{"nodes.close_link", func(m *Module) any { return m.OpCloseLink }, "?link_id=" + adminNetworkNonce},
 		{"nodes.migrate_session", func(m *Module) any { return m.OpMigrateSession }, "?session_id=" + adminNetworkNonce + "&link_id=" + adminNetworkNonce},
 	}
 }

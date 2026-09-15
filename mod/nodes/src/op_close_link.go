@@ -7,11 +7,11 @@ import (
 )
 
 type opCloseLinkArgs struct {
-	ID  astral.Nonce `query:"required"`
-	Out string
+	LinkID astral.Nonce `query:"required"`
+	Out    string
 }
 
-// OpCloseLink closes a link with the given id.
+// OpCloseLink closes the link with the given link id.
 func (mod *Module) OpCloseLink(ctx *astral.Context, q *routing.IncomingQuery, args opCloseLinkArgs) (err error) {
 	if !mod.authorizeAdminNetwork(ctx, q) {
 		return q.Reject()
@@ -20,7 +20,7 @@ func (mod *Module) OpCloseLink(ctx *astral.Context, q *routing.IncomingQuery, ar
 	ch := channel.New(q.AcceptRaw(), channel.WithOutputFormat(args.Out))
 	defer ch.Close()
 
-	err = mod.CloseLink(args.ID)
+	err = mod.CloseLink(args.LinkID)
 	if err != nil {
 		return ch.Send(astral.NewError(err.Error()))
 	}

@@ -9,9 +9,9 @@ import (
 )
 
 type opPunchArgs struct {
-	Target string `query:"required"`
-	In     string
-	Out    string
+	Identity string `query:"required"`
+	In       string
+	Out      string
 }
 
 // OpPunch drives the initiator side of the NAT punch protocol and registers the resulting hole.
@@ -28,7 +28,7 @@ func (mod *Module) OpPunch(ctx *astral.Context, q *routing.IncomingQuery, args o
 		return ch.Send(astral.Err(err))
 	}
 
-	target, err := mod.Dir.ResolveIdentity(args.Target)
+	target, err := mod.Dir.ResolveIdentity(args.Identity)
 	if err != nil {
 		return ch.Send(astral.Err(err))
 	}

@@ -18,7 +18,7 @@ type seeNodeStateOp struct {
 
 func seeNodeStateOps(agentID *astral.Identity) []seeNodeStateOp {
 	return []seeNodeStateOp{
-		{"mcp.agent", func(m *Module) any { return m.OpAgent }, "?id=" + agentID.String()},
+		{"mcp.agent", func(m *Module) any { return m.OpAgent }, "?identity=" + agentID.String()},
 	}
 }
 

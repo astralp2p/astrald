@@ -9,10 +9,10 @@ import (
 )
 
 type opApplyFiltersArgs struct {
-	Filters string `query:"required"`
-	ID      string
-	In      string
-	Out     string
+	Filters  string `query:"required"`
+	Identity string
+	In       string
+	Out      string
 }
 
 func (mod *Module) OpApplyFilters(ctx *astral.Context, q *routing.IncomingQuery, args opApplyFiltersArgs) (err error) {
@@ -30,8 +30,8 @@ func (mod *Module) OpApplyFilters(ctx *astral.Context, q *routing.IncomingQuery,
 	)
 
 	// parse arg
-	if len(args.ID) > 0 {
-		identity, err = mod.ResolveIdentity(args.ID)
+	if len(args.Identity) > 0 {
+		identity, err = mod.ResolveIdentity(args.Identity)
 		if err != nil {
 			return ch.Send(astral.Err(err))
 		}

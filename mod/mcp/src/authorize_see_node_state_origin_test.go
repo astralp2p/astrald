@@ -24,7 +24,7 @@ func TestSeeNodeStateKeepsOriginRefusal(t *testing.T) {
 	}
 
 	caller := astral.GenerateIdentity()
-	q := astral.Launch(query.New(caller, caller, "mcp.agent?id="+caller.String(), nil))
+	q := astral.Launch(query.New(caller, caller, "mcp.agent?identity="+caller.String(), nil))
 	q.Extra.Set("origin", astral.OriginNetwork)
 
 	ctx, cancel := astral.NewContext(nil).WithTimeout(10 * time.Second)
@@ -73,7 +73,7 @@ func TestSeeNodeStateAnswersHolder(t *testing.T) {
 	mod := &Module{Deps: Deps{Auth: authority, Dir: &seeNodeStateDir{id: agentID}}, db: db}
 	w := newRecordingWriter()
 
-	if err := route(t, mod.OpAgent, astral.GenerateIdentity(), "mcp.agent?id=scout", w); err != nil {
+	if err := route(t, mod.OpAgent, astral.GenerateIdentity(), "mcp.agent?identity=scout", w); err != nil {
 		t.Fatalf("mcp.agent refused a caller holding the action: %v", err)
 	}
 

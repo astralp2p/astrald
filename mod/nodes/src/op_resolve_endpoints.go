@@ -7,8 +7,8 @@ import (
 )
 
 type opResolveEndpointsArgs struct {
-	ID  string `query:"required"`
-	Out string
+	Identity string `query:"required"`
+	Out      string
 }
 
 func (mod *Module) OpResolveEndpoints(ctx *astral.Context, q *routing.IncomingQuery, args opResolveEndpointsArgs) (err error) {
@@ -16,7 +16,7 @@ func (mod *Module) OpResolveEndpoints(ctx *astral.Context, q *routing.IncomingQu
 		return q.Reject()
 	}
 
-	targetID, err := mod.Dir.ResolveIdentity(args.ID)
+	targetID, err := mod.Dir.ResolveIdentity(args.Identity)
 	if err != nil {
 		return q.RejectWithCode(2)
 	}

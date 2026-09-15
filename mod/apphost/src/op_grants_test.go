@@ -23,9 +23,9 @@ func grantAdminOps() []grantAdminOp {
 	action := auth.ServeObjectsAction{}.ObjectType()
 
 	return []grantAdminOp{
-		{"apphost.grant", func(m *Module) any { return m.OpGrant }, "?id=" + id + "&action=" + action},
-		{"apphost.revoke", func(m *Module) any { return m.OpRevoke }, "?id=" + id + "&action=" + action},
-		{"apphost.list_grants", func(m *Module) any { return m.OpListGrants }, "?id=" + id},
+		{"apphost.grant", func(m *Module) any { return m.OpGrant }, "?identity=" + id + "&action=" + action},
+		{"apphost.revoke", func(m *Module) any { return m.OpRevoke }, "?identity=" + id + "&action=" + action},
+		{"apphost.list_grants", func(m *Module) any { return m.OpListGrants }, "?identity=" + id},
 	}
 }
 
@@ -97,7 +97,7 @@ func TestGrantOpRecordsForAnExistingIdentity(t *testing.T) {
 	action := auth.ServeObjectsAction{}.ObjectType()
 
 	w := newRecordingWriter()
-	err := route(t, mod.OpGrant, caller, "apphost.grant?id="+app.String()+"&action="+action, w)
+	err := route(t, mod.OpGrant, caller, "apphost.grant?identity="+app.String()+"&action="+action, w)
 	if err != nil {
 		t.Fatalf("apphost.grant refused an authorized caller: %v", err)
 	}
@@ -133,7 +133,7 @@ func TestRevokeOpWithdrawsTheGrant(t *testing.T) {
 	}
 
 	w := newRecordingWriter()
-	err := route(t, mod.OpRevoke, astral.GenerateIdentity(), "apphost.revoke?id="+app.String()+"&action="+action, w)
+	err := route(t, mod.OpRevoke, astral.GenerateIdentity(), "apphost.revoke?identity="+app.String()+"&action="+action, w)
 	if err != nil {
 		t.Fatalf("apphost.revoke refused an authorized caller: %v", err)
 	}
@@ -193,7 +193,7 @@ func TestGrantOpBoundsTheGrantByDuration(t *testing.T) {
 	action := auth.ServeObjectsAction{}.ObjectType()
 
 	w := newRecordingWriter()
-	err := route(t, mod.OpGrant, astral.GenerateIdentity(), "apphost.grant?id="+app.String()+"&action="+action+"&duration=1h", w)
+	err := route(t, mod.OpGrant, astral.GenerateIdentity(), "apphost.grant?identity="+app.String()+"&action="+action+"&duration=1h", w)
 	if err != nil {
 		t.Fatalf("apphost.grant refused an authorized caller: %v", err)
 	}

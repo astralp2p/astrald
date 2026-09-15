@@ -26,7 +26,7 @@ func testGrantModule(t *testing.T) *Module {
 		t.Fatalf("migrate: %v", err)
 	}
 
-	return &Module{db: db, log: log.New(nil)}
+	return &Module{Deps: Deps{Dir: &namingDir{}}, db: db, log: log.New(nil)}
 }
 
 func servePermit(roles ...astral.String8) *auth.Permit {

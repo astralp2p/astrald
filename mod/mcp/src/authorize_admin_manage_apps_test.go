@@ -24,7 +24,7 @@ func adminManageAppsOps() []adminManageAppsOp {
 	return []adminManageAppsOp{
 		{"mcp.create_agent", func(m *Module) any { return m.OpCreateAgent }, "?alias=scout"},
 		{"mcp.list_agents", func(m *Module) any { return m.OpListAgents }, ""},
-		{"mcp.delete_agent", func(m *Module) any { return m.OpDeleteAgent }, "?id=scout"},
+		{"mcp.delete_agent", func(m *Module) any { return m.OpDeleteAgent }, "?identity=scout"},
 	}
 }
 

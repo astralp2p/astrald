@@ -22,7 +22,7 @@ func testTokenModule(t *testing.T) *Module {
 	if err := db.AutoMigrate(&dbAccessToken{}); err != nil {
 		t.Fatalf("migrate: %v", err)
 	}
-	return &Module{db: db}
+	return &Module{Deps: Deps{Dir: &namingDir{}}, db: db}
 }
 
 func TestAuthenticateToken(t *testing.T) {

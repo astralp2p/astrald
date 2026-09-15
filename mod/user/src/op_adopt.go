@@ -7,12 +7,12 @@ import (
 )
 
 type opAdoptArgs struct {
-	Target string `query:"required"`
-	In     string
-	Out    string
+	Identity string `query:"required"`
+	In       string
+	Out      string
 }
 
-// OpAdopt adopts a target node into the active contract and indexes the signed result.
+// OpAdopt adopts the named node into the active contract and indexes the signed result.
 // Requires an active contract; the caller must be authorized for
 // user.AdminSwarmAction (code 4 otherwise) - the user always is, other
 // identities via authorizers.
@@ -23,7 +23,7 @@ func (mod *Module) OpAdopt(ctx *astral.Context, q *routing.IncomingQuery, args o
 	}
 
 	// resolve before authorization - the action carries the target
-	nodeID, err := mod.Dir.ResolveIdentity(args.Target)
+	nodeID, err := mod.Dir.ResolveIdentity(args.Identity)
 	if err != nil {
 		return q.RejectWithCode(3)
 	}

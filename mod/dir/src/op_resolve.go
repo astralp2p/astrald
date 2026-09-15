@@ -7,8 +7,8 @@ import (
 )
 
 type opResolveArgs struct {
-	Name string `query:"required"`
-	Out  string
+	Identity string `query:"required"`
+	Out      string
 }
 
 // why: no action guards this op, because apps resolve names under their own
@@ -19,7 +19,7 @@ func (mod *Module) OpResolve(ctx *astral.Context, q *routing.IncomingQuery, args
 	ch := q.Accept(channel.WithOutputFormat(args.Out))
 	defer ch.Close()
 
-	id, err := mod.ResolveIdentity(args.Name)
+	id, err := mod.ResolveIdentity(args.Identity)
 	if err != nil {
 		return ch.Send(astral.Err(err))
 	}

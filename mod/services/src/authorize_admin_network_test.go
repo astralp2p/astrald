@@ -33,7 +33,7 @@ func TestAdminNetworkRefusesCallerWithoutPermits(t *testing.T) {
 	mod := &Module{Deps: Deps{Auth: authority}}
 	w := newRecordingWriter()
 
-	err := route(t, mod.OpSync, caller, "services.sync?id=anything", w)
+	err := route(t, mod.OpSync, caller, "services.sync?identity=anything", w)
 
 	var rejected *astral.ErrRejected
 	if !errors.As(err, &rejected) {
@@ -56,7 +56,7 @@ func TestAdminNetworkAdmitsAuthorizedCaller(t *testing.T) {
 	mod := &Module{Deps: Deps{Auth: authority, Dir: adminNetworkDir{}}}
 	w := newRecordingWriter()
 
-	err := route(t, mod.OpSync, caller, "services.sync?id=anything", w)
+	err := route(t, mod.OpSync, caller, "services.sync?identity=anything", w)
 	if err != nil {
 		t.Fatalf("refused an authorized caller: %v", err)
 	}

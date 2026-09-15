@@ -10,9 +10,9 @@ import (
 )
 
 type opRevokeArgs struct {
-	ID     *astral.Identity `query:"required"`
-	Action astral.String8   `query:"required"`
-	Out    string
+	Identity string         `query:"required"`
+	Action   astral.String8 `query:"required"`
+	Out      string
 }
 
 // OpRevoke withdraws an identity's node-local grant for one action. The
@@ -32,7 +32,12 @@ func (mod *Module) OpRevoke(ctx *astral.Context, q *routing.IncomingQuery, args 
 	ch := channel.New(q.AcceptRaw(), channel.WithOutputFormat(args.Out))
 	defer ch.Close()
 
-	if args.ID.IsZero() {
+	identity, err := mod.Dir.ResolveIdentity(args.Identity)
+	if err != nil {
+		return ch.Send(astral.Err(err))
+	}
+
+	if identity.IsZero() {
 		return ch.Send(astral.NewError("missing identity"))
 	}
 
@@ -40,15 +45,15 @@ func (mod *Module) OpRevoke(ctx *astral.Context, q *routing.IncomingQuery, args 
 		return ch.Send(astral.NewError("missing action"))
 	}
 
-	if err := mod.Revoke(args.ID, string(args.Action)); err != nil {
+	if err := mod.Revoke(identity, string(args.Action)); err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return ch.Send(astral.NewError("grant not found"))
 		}
-		mod.log.Errorv(1, "error revoking %v from %v: %v", args.Action, args.ID, err)
+		mod.log.Errorv(1, "error revoking %v from %v: %v", args.Action, identity, err)
 		return ch.Send(astral.Err(err))
 	}
 
-	mod.log.Logv(1, "revoked %v from %v", args.Action, args.ID)
+	mod.log.Logv(1, "revoked %v from %v", args.Action, identity)
 
 	return ch.Send(&astral.Ack{})
 }

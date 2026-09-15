@@ -7,8 +7,8 @@ import (
 )
 
 type opGetAliasArgs struct {
-	ID  *astral.Identity `query:"required"`
-	Out string
+	Identity string `query:"required"`
+	Out      string
 }
 
 // why: no action guards this op, because apps name identities under their own
@@ -19,7 +19,16 @@ func (mod *Module) OpGetAlias(ctx *astral.Context, q *routing.IncomingQuery, arg
 	ch := q.Accept(channel.WithOutputFormat(args.Out))
 	defer ch.Close()
 
-	alias, err := mod.GetAlias(args.ID)
+	identity, err := mod.ResolveIdentity(args.Identity)
+	if err != nil {
+		return ch.Send(astral.Err(err))
+	}
+
+	if identity.IsZero() {
+		return ch.Send(astral.NewError("missing identity"))
+	}
+
+	alias, err := mod.GetAlias(identity)
 	if err != nil {
 		return ch.Send(astral.Err(err))
 	}

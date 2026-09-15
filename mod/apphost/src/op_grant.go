@@ -10,8 +10,8 @@ import (
 )
 
 type opGrantArgs struct {
-	ID       *astral.Identity `query:"required"`
-	Action   astral.String8   `query:"required"`
+	Identity string         `query:"required"`
+	Action   astral.String8 `query:"required"`
 	Duration astral.Duration
 	Out      string
 }
@@ -37,7 +37,12 @@ func (mod *Module) OpGrant(ctx *astral.Context, q *routing.IncomingQuery, args o
 	ch := channel.New(q.AcceptRaw(), channel.WithOutputFormat(args.Out))
 	defer ch.Close()
 
-	if args.ID.IsZero() {
+	identity, err := mod.Dir.ResolveIdentity(args.Identity)
+	if err != nil {
+		return ch.Send(astral.Err(err))
+	}
+
+	if identity.IsZero() {
 		return ch.Send(astral.NewError("missing identity"))
 	}
 
@@ -55,12 +60,12 @@ func (mod *Module) OpGrant(ctx *astral.Context, q *routing.IncomingQuery, args o
 
 	// note: the permit carries no constraints. A constrained permit is refused
 	// rather than granted in full, so this op writes the action whole.
-	if err := mod.Grant(args.ID, &auth.Permit{Action: args.Action}, expiresAt); err != nil {
-		mod.log.Errorv(1, "error granting %v to %v: %v", args.Action, args.ID, err)
+	if err := mod.Grant(identity, &auth.Permit{Action: args.Action}, expiresAt); err != nil {
+		mod.log.Errorv(1, "error granting %v to %v: %v", args.Action, identity, err)
 		return ch.Send(astral.Err(err))
 	}
 
-	mod.log.Logv(1, "granted %v to %v", args.Action, args.ID)
+	mod.log.Logv(1, "granted %v to %v", args.Action, identity)
 
 	return ch.Send(&astral.Ack{})
 }
