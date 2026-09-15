@@ -15,24 +15,37 @@ stamped query. Neither runs the path between them: a real bearer token, the real
 streamable-HTTP listener, `core.Router`, and whichever router claims the target.
 This drives that path.
 
+## Why the driver serves an authority
+
+mod/mcp holds no reachability of its own. A call between agents proceeds only
+when `mod.mcp.call_agent_action` is granted to the caller and
+`mod.mcp.answer_agent_action` to the agent called, and no handler grants either,
+so a node answers no call unless an external authority does. The harness names
+one for every local node in `auth.yaml`, on the node's own loopback port
+(`authority_url` in `session.json`); an unserved port refuses.
+
+The driver serves it. It admits alpha to the node, alpha and beta to each other
+in both directions, and nothing else, and it records every question with its
+answer. The oracle checks that record first: the refusal of gamma is evidence
+only if the authority was asked and refused it, and the exchange is evidence
+only if the authority was asked, naming the right actor, and admitted it.
+
+`astral-query` asks `mod.mcp.call_agent_action` before it routes anything. An
+agent the authority keeps from the node is refused there with `unknown target`
+and never reaches mod/shell, so alpha is admitted to the node, and `unknown
+target` does not count as the refusal under test.
+
 ## Why the control call matters
 
-A refusal and a missing operation leave the caller holding the same nothing. The
-driver records `mcp.list_agents` answered over apphost, on the same node in the
-same run, and the oracle checks it first. Without it, the test would pass
-against a node whose operations were all broken.
+A refusal and a missing operation leave the caller holding the same nothing.
+Each node op also refuses a caller without its permit, so alpha is granted
+`mod.shell.shell_action` and `mod.auth.admin_manage_apps_action`, and the driver
+records `mcp.list_agents` answered to alpha over apphost, on the same node in
+the same run. The oracle checks it first. Only the origin differs between that
+answer and the refusal over MCP.
 
 The oracle also requires each failure to *read* as a refusal. A timeout, a 401
 or a dead listener would otherwise keep this green while the guard was gone.
-
-## Why an agent is opened twice over
-
-Visibility has two doors: `mcp.set_visible` on an agent that already exists, and
-the `visible` argument to `mcp.create_agent`, which is the same decision made
-one call earlier. beta goes through the first, delta through the second, and
-both are read back through `mcp.agent` rather than trusting the ack. gamma is
-minted the way every caller minted an agent before the argument existed, so the
-default is under test with the flag.
 
 ## Why an exchange is in here
 

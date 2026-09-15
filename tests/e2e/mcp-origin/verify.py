@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 """Oracle: the door is shut on operations and open to agents.
 
-Five judgements, and the order matters. The visibility flags come first, because
-the exchange below proves nothing about reach if nothing recorded the opt-in
-that admitted it — read back through mcp.agent, not the acks. Then the control:
-if a non-agent
-caller cannot reach mcp.list_agents either, then the refusals below say nothing
-about the guard and this test has proven nothing. Only once the op is known
-reachable does an agent's refusal mean the guard refused it.
+Five judgements, and the order matters. The authority's record comes first,
+because the refusals and the exchange below prove nothing about the guard or
+about reach unless the authority admitted the calls that produced them. Then
+the control: if alpha, holding the permits, cannot reach mcp.list_agents over
+apphost either, the refusals below say nothing about the guard and this test
+has proven nothing. Only once the op is known to answer alpha does alpha's
+refusal over MCP mean the guard refused it.
 
 The refusals are then checked for being refusals. A timeout, a dead listener or
 a transport error all leave the caller with no result, and a test that accepts
@@ -18,44 +18,58 @@ check above and destroy the product.
 """
 from lib.sessionio import load
 
+CALL = "mod.mcp.call_agent_action"
+ANSWER = "mod.mcp.answer_agent_action"
+
 # what a refusal reads like at the tool boundary: mod/shell answers ErrRejected,
 # and mod/mcp's tool wraps the routing error in this text.
 REFUSAL_MARKERS = ("query failed", "rejected", "access denied")
 
 # what a refusal must NOT read like — these mean the call never got a verdict.
+# "unknown target" is the call gate's refusal, which stops a query before it
+# reaches the guard under test.
 NOT_A_REFUSAL = ("HTTP 401", "HTTP 403", "HTTP 404", "HTTP 500",
                  "unknown target", "undecodable")
+
+
+def asked(facts, kind, actor, other):
+    """The answers the authority gave to one (action, actor, other party)."""
+    return [q["allow"] for q in facts["questions"]
+            if (q["type"], q["actor"], q["other"]) == (kind, actor, other)]
 
 
 def main():
     doc = load()
     facts = doc["facts"]
+    node, a, b, g = facts["node"], facts["alpha"], facts["beta"], facts["gamma"]
 
-    beta, gamma = facts["read_beta"], facts["read_gamma"]
-    delta = facts["read_delta"]
+    for kind, actor, other, who in (
+            (CALL, a, node, "alpha calling the node"),
+            (CALL, a, b, "alpha calling beta"),
+            (ANSWER, b, a, "beta answering alpha"),
+            (CALL, b, a, "beta calling alpha"),
+            (ANSWER, a, b, "alpha answering beta")):
+        answers = asked(facts, kind, actor, other)
+        assert answers and all(answers), (
+            f"the authority answered {answers!r} for {who} — node1 did not put "
+            "the question to the configured authority, or put it naming the "
+            f"wrong actor; it was asked {facts['questions']!r}")
 
-    assert beta.get("visible") is True, (
-        f"beta reads visible={beta.get('visible')!r} after mcp.set_visible — "
-        "the write did not land, so the exchange below proves nothing")
-    assert gamma.get("visible") is False, (
-        f"gamma reads visible={gamma.get('visible')!r} without anyone opening "
-        "it — a new agent is reachable by default")
+    assert asked(facts, CALL, a, g) == [False], (
+        f"the authority answered {asked(facts, CALL, a, g)!r} for alpha calling "
+        "gamma, not one refusal — the refusal of gamma below is not the "
+        "authority's")
 
-    assert delta.get("visible") is True, (
-        f"delta reads visible={delta.get('visible')!r} after create_agent was "
-        "asked for an open agent — the argument did not reach the row, and the "
-        "caller holds an agent it believes is reachable")
-
-    for name, rec in (("beta", beta), ("gamma", gamma), ("delta", delta)):
-        leaked = [k for k in rec if "token" in k]
+    for name in ("read_beta", "read_gamma"):
+        leaked = [k for k in facts[name] if "token" in k]
         assert not leaked, (
-            f"mcp.agent answered {leaked} for {name} — the record a caller "
+            f"mcp.agent answered {leaked} in {name} — the record a caller "
             "reads about an agent carries its credential")
 
-    assert facts["control_agents"] >= 4, (
-        f"mcp.list_agents named {facts['control_agents']} agents over apphost, "
-        "not the four the driver minted — the refusals below are not evidence "
-        "about the guard, because the op is unreachable for everyone")
+    assert facts["control_agents"] >= 3, (
+        f"mcp.list_agents named {facts['control_agents']} agents to alpha over "
+        "apphost, not the three the driver minted — the refusals below are not "
+        "evidence about the guard, because the op does not answer alpha at all")
 
     assert "astral-query" in facts["tools"], (
         f"the agent's tool set is {facts['tools']}, without astral-query — "
@@ -74,13 +88,13 @@ def main():
             f"{op} failed with {r['detail']}, which names no refusal — a "
             "refusal the caller cannot read is indistinguishable from a fault")
 
-    u = facts["invisible"]
+    u = facts["unadmitted"]
     assert u["refused"], (
-        f"a closed agent answered: {u['detail']} — an agent is reachable "
-        "before its account holder opts in")
-    assert not any(m in u["detail"].lower()
-                   for m in (s.lower() for s in NOT_A_REFUSAL)), (
-        f"the closed agent failed without being refused: {u['detail']}")
+        f"gamma answered: {u['detail']} — an agent is reachable without its "
+        "authority admitting the call")
+    assert "unknown recipient" in u["detail"].lower(), (
+        f"the send to gamma failed with {u['detail']} — an agent the authority "
+        "refuses reads as an identity the node never heard of")
 
     x = facts["exchange"]
     assert not x["beta_timed_out"] and x["beta_waited"], (
@@ -100,9 +114,9 @@ def main():
         "has to match by sender and recency")
 
     ops = ", ".join(facts["refusals"])
-    print(f"oracle: an agent was refused {ops} and a closed agent, while the "
-          f"same node answers mcp.list_agents to apphost and alpha and beta "
-          f"exchanged {len(facts['ask'])} B both ways")
+    print(f"oracle: alpha was refused {ops} over MCP while the same op answers "
+          f"alpha over apphost, the authority kept gamma out, and alpha and "
+          f"beta exchanged {len(facts['ask'])} B both ways")
 
 
 main()

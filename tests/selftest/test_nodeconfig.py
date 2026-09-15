@@ -12,12 +12,13 @@ LEASE_BASE = 23800
 class TestNodeConfig(unittest.TestCase):
     def test_ports_for(self):
         p = ports_for(20800, 1)
-        self.assertEqual((p.apphost, p.tcp, p.ether, p.kcp),
-                         (20810, 20811, 20812, 20813))
+        self.assertEqual((p.apphost, p.tcp, p.ether, p.kcp, p.mcp, p.authority),
+                         (20810, 20811, 20812, 20813, 20814, 20815))
 
     def test_render(self):
         with tempfile.TemporaryDirectory() as tmp:
-            render(Path(tmp), NodePorts(20800, 20801, 20802, 20803),
+            render(Path(tmp), NodePorts(20800, 20801, 20802, 20803, 20804,
+                                        20805),
                    token="sekrit")
             cfg = Path(tmp) / "config"
             apphost = (cfg / "apphost.yaml").read_text()
@@ -28,6 +29,12 @@ class TestNodeConfig(unittest.TestCase):
             self.assertIn("listen_port: 20801", (cfg / "tcp.yaml").read_text())
             self.assertIn("udp_port: 20802", (cfg / "ether.yaml").read_text())
             self.assertIn("listen_port: 20803", (cfg / "kcp.yaml").read_text())
+            self.assertIn('bind_mcp: "tcp:127.0.0.1:20804"',
+                          (cfg / "mcp.yaml").read_text())
+            auth = (cfg / "auth.yaml").read_text()
+            self.assertIn('endpoint: "http://127.0.0.1:20805/authorize"', auth)
+            self.assertIn("- mod.mcp.call_agent_action", auth)
+            self.assertIn("- mod.mcp.answer_agent_action", auth)
 
     def test_lease_ports_skips_a_leased_span(self):
         first = lease_ports(LEASE_BASE, span=10, spans=3)

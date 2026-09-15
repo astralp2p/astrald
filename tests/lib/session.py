@@ -41,6 +41,9 @@ class Session:
                 "root": str(n.root),
                 "tcp_port": n.ports.tcp,
                 "mcp_url": f"http://127.0.0.1:{n.ports.mcp}",
+                # the external authority the node asks about agent calls; a
+                # driver that admits a call serves it
+                "authority_url": n.ports.authority_url,
                 # why: the address a PEER dials, which is not the address the
                 # host dials. On loopback they coincide; in VMs they do not,
                 # and a driver that composes 127.0.0.1 from tcp_port is not
