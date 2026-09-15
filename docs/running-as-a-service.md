@@ -98,7 +98,7 @@ Default transports bind all interfaces.
 | 1792 | UDP | KCP transport |
 | 8822 | UDP | `ether` LAN discovery |
 | 8625 | TCP 127.0.0.1 | local apphost API |
-| 8624 | TCP 0.0.0.0 | apphost HTTP API |
+| 8624 | TCP 127.0.0.1 | apphost HTTP API |
 | 8626 | TCP 127.0.0.1 | MCP server |
 
 ## Imaging and snapshots

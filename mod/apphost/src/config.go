@@ -51,7 +51,10 @@ var defaultConfig = Config{
 		"memu:apphosty",
 		"memb:apphostb",
 	},
-	BindHTTP:       "tcp:0.0.0.0:8624",
+	// why: the `/.ws` endpoint accepts any Origin and rests on the bind address
+	// to keep a remote page out — .ai/system/topics/ws-transport.md.
+	// Exposing the HTTP API beyond the host is an explicit `bind_http`.
+	BindHTTP:       "tcp:127.0.0.1:8624",
 	Tokens:         map[string]string{},
 	Workers:        32,
 	AllowAnonymous: true,
