@@ -1,5 +1,10 @@
+# Each run leases one span of ports, so concurrent runs never share a port.
+# Node N of a run uses the span's first port + 10N: +0 apphost, +1 tcp,
+# +2 ether, +3 kcp, +4 mcp.
 [ports]
-base = 20800            # node N uses base+10N+0 apphost, +1 astral tcp, +2 ether udp
+base = 20800            # the first span's first port
+span = 100              # ports per span: 10 nodes per run
+spans = 20              # spans from base: 20 concurrent runs per host
 
 [astral_py]
 path = "~/work/astralp2p/astral-py/master"
