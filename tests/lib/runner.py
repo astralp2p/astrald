@@ -15,6 +15,7 @@ from lib.executors import ExecutorError
 from lib.executors.attach import AttachExecutor
 from lib.executors.local import LocalExecutor
 from lib.executors.netsim import NetsimExecutor
+from lib.nodeconfig import PortsBusy, lease_ports
 from lib.results import RunHeader, RunResults, fresh_run_dir
 
 TESTS = Path(__file__).resolve().parent.parent
@@ -118,7 +119,7 @@ def run_env(plan: list, driver: str = "script",
     return "netsim" if any(t.env == "netsim" for t in selected) else "node"
 
 
-def _executor(args, plan, dir, binary, port_base, ref):
+def _executor(args, plan, dir, binary, ports, ref):
     """Where the machines come from — orthogonal to env and driver."""
     if args.target == "attach":
         return AttachExecutor(dir)
@@ -128,7 +129,7 @@ def _executor(args, plan, dir, binary, port_base, ref):
         return ex
     if run_env(plan, args.driver, args.target) == "netsim":
         return NetsimExecutor(dir, binary, ref)
-    return LocalExecutor(dir, binary, port_base)
+    return LocalExecutor(dir, binary, lease_ports(**ports))
 
 
 def main(args) -> int:
@@ -171,8 +172,12 @@ def main(args) -> int:
         target=args.target))
 
     env_of_run = run_env(plan, args.driver, args.target)
-    ex = _executor(args, plan, run_dir / "session", binary,
-                   cfg["ports"]["base"], ref)
+    try:
+        ex = _executor(args, plan, run_dir / "session", binary,
+                       cfg["ports"], ref)
+    except PortsBusy as e:
+        print(f"run: {e}", file=sys.stderr)
+        return 2
     if args.driver == "agent":
         # why named rather than assumed: the profile IS the operator under
         # test, so the run records which one drove it. A pass rate that cannot
