@@ -16,7 +16,12 @@ type Engine struct {
 	mod *Module
 }
 
+// DerivePublicKey only supports secp256k1 keys.
 func (e Engine) DerivePublicKey(ctx *astral.Context, key *crypto.PrivateKey) (*crypto.PublicKey, error) {
+	if key.Type != modSecp256k1.KeyType {
+		return nil, cryptomod.ErrUnsupportedKeyType
+	}
+
 	return modSecp256k1.PublicKey(key), nil
 }
 
