@@ -1,9 +1,11 @@
 """Spawn and manage one isolated astrald instance on loopback."""
 import asyncio
+import ctypes
 import re
 import secrets
 import signal
 import subprocess
+import sys
 from pathlib import Path
 
 import astral
@@ -17,6 +19,17 @@ _IDENT_RE = re.compile(r"\(\s*([0-9a-f]{66})\s*\)")
 
 class NodeError(Exception):
     pass
+
+
+def _die_with_runner() -> None:
+    """Runs in the daemon before exec: the kernel sends it SIGTERM when the
+    runner exits, however the runner exits.
+
+    note: the kernel ties this to the thread that spawns the daemon, which is
+    the runner's main thread.
+    """
+    PR_SET_PDEATHSIG = 1
+    ctypes.CDLL(None).prctl(PR_SET_PDEATHSIG, signal.SIGTERM)
 
 
 class LocalNode:
@@ -38,9 +51,15 @@ class LocalNode:
         render(self.root, self.ports, self.token)
         self.root.mkdir(parents=True, exist_ok=True)
         log = self.log_path.open("ab")
+        # why: a daemon in the runner's process group receives every signal
+        # sent to that group, and a SIGINT during boot killed a node the run
+        # then reported as a broken environment. stop() signals the daemon
+        # itself, and the parent-death signal replaces the group's reach when
+        # the runner dies without a teardown.
         self.proc = subprocess.Popen(
             [str(self.binary), "-root", str(self.root)],
-            stdout=log, stderr=subprocess.STDOUT)
+            stdout=log, stderr=subprocess.STDOUT, start_new_session=True,
+            preexec_fn=_die_with_runner if sys.platform == "linux" else None)
 
     def alive(self) -> bool:
         return self.proc is not None and self.proc.poll() is None
