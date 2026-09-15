@@ -1,8 +1,7 @@
 package user
 
 import (
-	"io"
-
+	"github.com/astralp2p/astral-go/api/user"
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astral-go/astral/channel"
 	"github.com/astralp2p/astral-go/lib/routing"
@@ -40,7 +39,7 @@ func (mod *Module) OpSyncAssets(ctx *astral.Context, q *routing.IncomingQuery, a
 		for _, row := range rows {
 			height = max(height, astral.Uint64(row.Height))
 
-			err = ch.Send(&OpUpdate{
+			err = ch.Send(&user.OpUpdate{
 				Nonce:    row.Nonce,
 				ObjectID: row.ObjectID,
 				Removed:  astral.Bool(row.Removed),
@@ -50,26 +49,4 @@ func (mod *Module) OpSyncAssets(ctx *astral.Context, q *routing.IncomingQuery, a
 	}
 
 	return ch.Send(&height)
-}
-
-type OpUpdate struct {
-	Nonce    astral.Nonce
-	ObjectID *astral.ObjectID
-	Removed  astral.Bool
-}
-
-var _ astral.Object = &OpUpdate{}
-
-func (s OpUpdate) ObjectType() string { return "mod.user.op_update" }
-
-func (s OpUpdate) WriteTo(w io.Writer) (n int64, err error) {
-	return astral.Objectify(&s).WriteTo(w)
-}
-
-func (s *OpUpdate) ReadFrom(r io.Reader) (n int64, err error) {
-	return astral.Objectify(s).ReadFrom(r)
-}
-
-func init() {
-	_ = astral.Add(&OpUpdate{})
 }

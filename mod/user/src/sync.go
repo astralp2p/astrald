@@ -46,7 +46,7 @@ func (mod *Module) syncAssets(ctx *astral.Context, nodeID *astral.Identity) (err
 		}
 
 		switch m := msg.(type) {
-		case *OpUpdate:
+		case *user.OpUpdate:
 			if m.Removed {
 				err = mod.db.RemoveAssetByNonce(m.Nonce, m.ObjectID)
 			} else {
@@ -62,7 +62,7 @@ func (mod *Module) syncAssets(ctx *astral.Context, nodeID *astral.Identity) (err
 
 		default:
 			mod.log.Error("syncAssets: protocol error: unknown msg: %v", m.ObjectType())
-			return err
+			return fmt.Errorf("protocol error: unknown msg: %s", m.ObjectType())
 		}
 	}
 }
