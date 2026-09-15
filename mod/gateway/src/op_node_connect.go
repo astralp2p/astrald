@@ -7,13 +7,13 @@ import (
 )
 
 type opNodeConnectArgs struct {
-	Target *astral.Identity `query:"required"`
-	In     string
-	Out    string
+	Identity string `query:"required"`
+	In       string
+	Out      string
 }
 
 // OpNodeConnect handles the NodeConnect RPC: it reserves a pre-established idle
-// connection to the target node and returns the nonce and endpoint the caller
+// connection to the named node and returns the nonce and endpoint the caller
 // must use to claim it; the reservation expires after connectTimeout.
 func (mod *Module) OpNodeConnect(
 	ctx *astral.Context,
@@ -27,7 +27,16 @@ func (mod *Module) OpNodeConnect(
 	ch := channel.New(q.AcceptRaw(), channel.WithFormats(args.In, args.Out))
 	defer ch.Close()
 
-	socket, err := mod.reserveConn(q.Caller(), args.Target, "tcp")
+	target, err := mod.Dir.ResolveIdentity(args.Identity)
+	if err != nil {
+		return ch.Send(astral.Err(err))
+	}
+
+	if target.IsZero() {
+		return ch.Send(astral.NewError("missing identity"))
+	}
+
+	socket, err := mod.reserveConn(q.Caller(), target, "tcp")
 	if err != nil {
 		return ch.Send(astral.NewError(err.Error()))
 	}

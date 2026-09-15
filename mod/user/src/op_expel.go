@@ -7,12 +7,12 @@ import (
 )
 
 type opExpelArgs struct {
-	Target string `query:"required"`
-	In     string
-	Out    string
+	Identity string `query:"required"`
+	In       string
+	Out      string
 }
 
-// OpExpel permanently bans the target node from the swarm and returns the signed ban.
+// OpExpel permanently bans the named node from the swarm and returns the signed ban.
 // Requires an active contract; the caller must be authorized for
 // user.AdminSwarmAction (code 4 otherwise) - the user always is, other
 // identities via authorizers.
@@ -22,7 +22,7 @@ func (mod *Module) OpExpel(ctx *astral.Context, q *routing.IncomingQuery, args o
 	}
 
 	// resolve before authorization - the action carries the target
-	nodeID, err := mod.Dir.ResolveIdentity(args.Target)
+	nodeID, err := mod.Dir.ResolveIdentity(args.Identity)
 	if err != nil {
 		return q.RejectWithCode(3)
 	}

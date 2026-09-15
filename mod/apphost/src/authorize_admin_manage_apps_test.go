@@ -24,7 +24,7 @@ type adminManageAppsOp struct {
 func adminManageAppsOps() []adminManageAppsOp {
 	id := astral.GenerateIdentity()
 	return []adminManageAppsOp{
-		{"apphost.create_token", func(m *Module) any { return m.OpCreateToken }, "?id=" + id.String()},
+		{"apphost.create_token", func(m *Module) any { return m.OpCreateToken }, "?identity=" + id.String()},
 		{"apphost.list_tokens", func(m *Module) any { return m.OpListTokens }, ""},
 		{"apphost.delete_token", func(m *Module) any { return m.OpDeleteToken }, "?token=k7m2q5x9r3v4n8p1"},
 	}
@@ -73,7 +73,7 @@ func TestAdminManageAppsIssuesTokenToAuthorizedCaller(t *testing.T) {
 	caller, holder := astral.GenerateIdentity(), astral.GenerateIdentity()
 	w := newRecordingWriter()
 
-	err := route(t, mod.OpCreateToken, caller, "apphost.create_token?id="+holder.String(), w)
+	err := route(t, mod.OpCreateToken, caller, "apphost.create_token?identity="+holder.String(), w)
 	if err != nil {
 		t.Fatalf("apphost.create_token refused an authorized caller: %v", err)
 	}

@@ -98,11 +98,11 @@ async def main():
         # read the flag back rather than trusting the ack: mcp.agent is the op
         # the dashboard reads per agent, and it must answer without a token.
         read_beta = _docs(await c.call_raw(
-            f"mcp.agent?id={beta['identity']}&out=json"))[0]
+            f"mcp.agent?identity={beta['identity']}&out=json"))[0]
         read_gamma = _docs(await c.call_raw(
-            f"mcp.agent?id={gamma['identity']}&out=json"))[0]
+            f"mcp.agent?identity={gamma['identity']}&out=json"))[0]
         read_delta = _docs(await c.call_raw(
-            f"mcp.agent?id={delta['identity']}&out=json"))[0]
+            f"mcp.agent?identity={delta['identity']}&out=json"))[0]
 
         control = _docs(await c.call_raw("mcp.list_agents?out=json"))
 

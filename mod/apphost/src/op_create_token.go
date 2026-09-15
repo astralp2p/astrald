@@ -11,7 +11,7 @@ import (
 const DefaultTokenDuration = astral.Duration(time.Hour * 24 * 365) // 1 year
 
 type opCreateTokenArgs struct {
-	ID       *astral.Identity `query:"required"`
+	Identity string `query:"required"`
 	Duration astral.Duration
 	Out      string
 }
@@ -28,7 +28,12 @@ func (mod *Module) OpCreateToken(ctx *astral.Context, q *routing.IncomingQuery, 
 	ch := channel.New(q.AcceptRaw(), channel.WithOutputFormat(args.Out))
 	defer ch.Close()
 
-	if args.ID.IsZero() {
+	identity, err := mod.Dir.ResolveIdentity(args.Identity)
+	if err != nil {
+		return ch.Send(astral.Err(err))
+	}
+
+	if identity.IsZero() {
 		return ch.Send(astral.NewError("missing identity"))
 	}
 
@@ -36,11 +41,11 @@ func (mod *Module) OpCreateToken(ctx *astral.Context, q *routing.IncomingQuery, 
 		args.Duration = DefaultTokenDuration
 	}
 
-	mod.log.Logv(1, "creating token for %v valid for %v", args.ID, args.Duration)
+	mod.log.Logv(1, "creating token for %v valid for %v", identity, args.Duration)
 
-	token, err := mod.CreateAccessToken(args.ID, args.Duration)
+	token, err := mod.CreateAccessToken(identity, args.Duration)
 	if err != nil {
-		mod.log.Errorv(1, "error creating token for %v: %v", args.ID, err)
+		mod.log.Errorv(1, "error creating token for %v: %v", identity, err)
 		return q.RejectWithCode(astral.CodeInternalError)
 	}
 

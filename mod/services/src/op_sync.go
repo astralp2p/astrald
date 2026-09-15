@@ -7,10 +7,10 @@ import (
 )
 
 type opSyncArgs struct {
-	ID     string `query:"required"`
-	Follow bool
-	In     string
-	Out    string
+	Identity string `query:"required"`
+	Follow   bool
+	In       string
+	Out      string
 }
 
 // OpSync fetches and caches services for the requested identity over ZoneNetwork.
@@ -24,7 +24,7 @@ func (mod *Module) OpSync(ctx *astral.Context, q *routing.IncomingQuery, args op
 	defer ch.Close()
 
 	// resolve the target identity
-	targetID, err := mod.Dir.ResolveIdentity(args.ID)
+	targetID, err := mod.Dir.ResolveIdentity(args.Identity)
 	if err != nil {
 		return ch.Send(astral.NewError(err.Error()))
 	}

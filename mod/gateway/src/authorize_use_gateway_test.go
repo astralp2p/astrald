@@ -5,7 +5,6 @@ import (
 	"errors"
 	"io"
 	"net"
-	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -142,7 +141,7 @@ func newUseGatewayFixture(t *testing.T, enabled bool, authority authmod.Module) 
 	}
 
 	f.mod = &Module{
-		Deps:   Deps{Auth: authority},
+		Deps:   Deps{Auth: authority, Dir: &namingDir{aliases: map[string]*astral.Identity{"peer": f.target}}},
 		node:   f.node,
 		config: Config{Gateway: GatewayConfig{Enabled: enabled}},
 		configEndpoints: map[string]exonet.Endpoint{
@@ -180,9 +179,9 @@ func useGatewayOps() []useGatewayOp {
 		{"gateway.node_register", func(m *Module) any { return m.OpNodeRegister },
 			func(*useGatewayFixture) string { return "gateway.node_register?visibility=public" }},
 		{"gateway.node_connect", func(m *Module) any { return m.OpNodeConnect },
-			func(f *useGatewayFixture) string { return "gateway.node_connect?target=" + f.target.String() }},
+			func(f *useGatewayFixture) string { return "gateway.node_connect?identity=" + f.target.String() }},
 		{"gateway.node_route/forward", func(m *Module) any { return m.OpNodeRoute },
-			func(f *useGatewayFixture) string { return "gateway.node_route?target=" + f.target.String() }},
+			func(f *useGatewayFixture) string { return "gateway.node_route?identity=" + f.target.String() }},
 	}
 }
 
@@ -303,8 +302,8 @@ func assertUseGatewayForwarded(t *testing.T, f *useGatewayFixture) {
 	if !q.Caller.IsEqual(f.node.id) || !q.Target.IsEqual(f.target) {
 		t.Fatalf("forwarding routed %v -> %v; want %v -> %v", q.Caller, q.Target, f.node.id, f.target)
 	}
-	if !strings.HasPrefix(q.QueryString, gateway.MethodNodeRoute) {
-		t.Fatalf("forwarding routed %q; want %s", q.QueryString, gateway.MethodNodeRoute)
+	if want := gateway.MethodNodeRoute + "?identity=" + f.target.String(); q.QueryString != want {
+		t.Fatalf("forwarding routed %q; want %q", q.QueryString, want)
 	}
 }
 
@@ -318,7 +317,7 @@ func TestUseGatewayInboundRouteAsksNothing(t *testing.T) {
 		links := newUseGatewayLinks()
 		f.mod.Nodes = links
 
-		err := route(t, f.mod.OpNodeRoute, astral.GenerateIdentity(), "gateway.node_route?target="+f.node.id.String(), newRecordingWriter())
+		err := route(t, f.mod.OpNodeRoute, astral.GenerateIdentity(), "gateway.node_route?identity="+f.node.id.String(), newRecordingWriter())
 		if err != nil {
 			t.Fatalf("inbound node_route (enabled=%v) was refused: %v", enabled, err)
 		}

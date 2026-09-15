@@ -22,8 +22,8 @@ type configureNodeStateOp struct {
 // clearing it with an empty value.
 func configureNodeStateOps(subject *astral.Identity) []configureNodeStateOp {
 	return []configureNodeStateOp{
-		{"dir.set_alias set", "dir.set_alias?id=" + subject.String() + "&alias=alice"},
-		{"dir.set_alias clear", "dir.set_alias?id=" + subject.String() + "&alias="},
+		{"dir.set_alias set", "dir.set_alias?identity=" + subject.String() + "&alias=alice"},
+		{"dir.set_alias clear", "dir.set_alias?identity=" + subject.String() + "&alias="},
 	}
 }
 

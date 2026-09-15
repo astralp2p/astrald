@@ -97,7 +97,7 @@ func TestCancelOwnerEndsItsOwnQuery(t *testing.T) {
 	nonce, cancelled := enRouteQuery(mod, app)
 	w := newRecordingWriter()
 
-	q := sessionQuery(mod, app, app, "apphost.cancel?id="+nonce.String())
+	q := sessionQuery(mod, app, app, "apphost.cancel?query_id="+nonce.String())
 	if err := routeQuery(t, mod.OpCancel, q, w); err != nil {
 		t.Fatalf("apphost.cancel refused the query's owner: %v", err)
 	}
@@ -123,7 +123,7 @@ func TestCancelOwnerEndsItsQueryFromASecondConnection(t *testing.T) {
 
 	// why a nil caller: the SDK's cancel names no caller, so the query carries
 	// only the session's token. Ownership must resolve from the session alone.
-	q := sessionQuery(mod, app, nil, "apphost.cancel?id="+nonce.String())
+	q := sessionQuery(mod, app, nil, "apphost.cancel?query_id="+nonce.String())
 	if err := routeQuery(t, mod.OpCancel, q, w); err != nil {
 		t.Fatalf("apphost.cancel refused the owner on a second connection: %v", err)
 	}
@@ -142,7 +142,7 @@ func TestCancelRefusesAnotherApp(t *testing.T) {
 	nonce, cancelled := enRouteQuery(mod, owner)
 	w := newRecordingWriter()
 
-	q := sessionQuery(mod, other, other, "apphost.cancel?id="+nonce.String())
+	q := sessionQuery(mod, other, other, "apphost.cancel?query_id="+nonce.String())
 	if err := routeQuery(t, mod.OpCancel, q, w); err != nil {
 		t.Fatalf("apphost.cancel errored instead of answering: %v", err)
 	}
@@ -176,14 +176,14 @@ func TestCancelAnswersAForeignQueryAsMissing(t *testing.T) {
 	nonce, _ := enRouteQuery(mod, owner)
 
 	foreign := newRecordingWriter()
-	q := sessionQuery(mod, other, other, "apphost.cancel?id="+nonce.String())
+	q := sessionQuery(mod, other, other, "apphost.cancel?query_id="+nonce.String())
 	if err := routeQuery(t, mod.OpCancel, q, foreign); err != nil {
 		t.Fatalf("apphost.cancel errored on a foreign query: %v", err)
 	}
 	awaitOwnershipAnswer(t, foreign)
 
 	missing := newRecordingWriter()
-	q = sessionQuery(mod, other, other, "apphost.cancel?id="+astral.NewNonce().String())
+	q = sessionQuery(mod, other, other, "apphost.cancel?query_id="+astral.NewNonce().String())
 	if err := routeQuery(t, mod.OpCancel, q, missing); err != nil {
 		t.Fatalf("apphost.cancel errored on a missing query: %v", err)
 	}
@@ -203,7 +203,7 @@ func TestCancelRefusesATokenLessSession(t *testing.T) {
 	nonce, cancelled := enRouteQuery(mod, astral.GenerateIdentity())
 	w := newRecordingWriter()
 
-	q := sessionQuery(mod, nil, nil, "apphost.cancel?id="+nonce.String())
+	q := sessionQuery(mod, nil, nil, "apphost.cancel?query_id="+nonce.String())
 	if err := routeQuery(t, mod.OpCancel, q, w); err != nil {
 		t.Fatalf("apphost.cancel errored instead of answering: %v", err)
 	}
@@ -226,7 +226,7 @@ func TestCancelKeepsAnUnownedQueryCancellable(t *testing.T) {
 	nonce, cancelled := enRouteQuery(mod, nil)
 	w := newRecordingWriter()
 
-	q := sessionQuery(mod, nil, nil, "apphost.cancel?id="+nonce.String())
+	q := sessionQuery(mod, nil, nil, "apphost.cancel?query_id="+nonce.String())
 	if err := routeQuery(t, mod.OpCancel, q, w); err != nil {
 		t.Fatalf("apphost.cancel refused a token-less session its own query: %v", err)
 	}
@@ -246,7 +246,7 @@ func TestCancelRefusesAQueryOffALink(t *testing.T) {
 	nonce, cancelled := enRouteQuery(mod, nil)
 	w := newRecordingWriter()
 
-	q := sessionQuery(mod, nil, astral.GenerateIdentity(), "apphost.cancel?id="+nonce.String())
+	q := sessionQuery(mod, nil, astral.GenerateIdentity(), "apphost.cancel?query_id="+nonce.String())
 	q.Extra.Set("origin", astral.OriginNetwork)
 
 	err := routeQuery(t, mod.OpCancel, q, w)
@@ -278,7 +278,7 @@ func TestCancelAdminEndsAnotherAppsQuery(t *testing.T) {
 	nonce, cancelled := enRouteQuery(mod, owner)
 	w := newRecordingWriter()
 
-	q := sessionQuery(mod, admin, admin, "apphost.cancel?id="+nonce.String())
+	q := sessionQuery(mod, admin, admin, "apphost.cancel?query_id="+nonce.String())
 	if err := routeQuery(t, mod.OpCancel, q, w); err != nil {
 		t.Fatalf("apphost.cancel refused an administrator: %v", err)
 	}
@@ -323,7 +323,7 @@ func TestEnRouteNonceCollisionKeepsTheFirstOwner(t *testing.T) {
 	}
 
 	w := newRecordingWriter()
-	q := sessionQuery(mod, second, second, "apphost.cancel?id="+nonce.String())
+	q := sessionQuery(mod, second, second, "apphost.cancel?query_id="+nonce.String())
 	if err := routeQuery(t, mod.OpCancel, q, w); err != nil {
 		t.Fatalf("apphost.cancel errored instead of answering: %v", err)
 	}

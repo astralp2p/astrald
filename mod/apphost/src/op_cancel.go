@@ -11,9 +11,9 @@ import (
 )
 
 type opCancelArgs struct {
-	ID    astral.Nonce `query:"required"`
-	Cause *string
-	Out   string
+	QueryID astral.Nonce `query:"required"`
+	Cause   *string
+	Out     string
 }
 
 func (mod *Module) OpCancel(ctx *astral.Context, q *routing.IncomingQuery, args opCancelArgs) (err error) {
@@ -27,7 +27,7 @@ func (mod *Module) OpCancel(ctx *astral.Context, q *routing.IncomingQuery, args 
 	// why: both lookups run before accepting - accepting resolves this query and
 	// drops the en-route entry that names the session behind it.
 	owner := mod.sessionOwner(q)
-	enRoute, found := mod.enRoute.Get(args.ID)
+	enRoute, found := mod.enRoute.Get(args.QueryID)
 	allowed := found && mod.mayCancel(ctx, owner, enRoute)
 
 	ch := q.Accept(channel.WithOutputFormat(args.Out))
@@ -45,7 +45,7 @@ func (mod *Module) OpCancel(ctx *astral.Context, q *routing.IncomingQuery, args 
 		enRoute.cancel(astral.NewError(*args.Cause))
 	}
 
-	mod.log.Logv(2, "cancelled query %v", args.ID)
+	mod.log.Logv(2, "cancelled query %v", args.QueryID)
 
 	return ch.Send(&astral.Ack{})
 }

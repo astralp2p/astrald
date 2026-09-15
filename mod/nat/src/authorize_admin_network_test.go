@@ -21,7 +21,7 @@ type adminNetworkOp struct {
 func adminNetworkOps() []adminNetworkOp {
 	return []adminNetworkOp{
 		{"nat.list_holes", func(m *Module) any { return m.OpListHoles }, ""},
-		{"nat.punch", func(m *Module) any { return m.OpPunch }, "?target=anything"},
+		{"nat.punch", func(m *Module) any { return m.OpPunch }, "?identity=anything"},
 		{"nat.node_punch", func(m *Module) any { return m.OpNodePunch }, ""},
 		{"nat.node_consume_hole", func(m *Module) any { return m.OpNodeConsumeHole }, "?pair=7c1a93b50f2e4d18"},
 		{"nat.set_enabled", func(m *Module) any { return m.OpSetEnabled }, "?arg=true"},

@@ -7,8 +7,8 @@ import (
 )
 
 type opListGrantsArgs struct {
-	ID  *astral.Identity `query:"required"`
-	Out string
+	Identity string `query:"required"`
+	Out      string
 }
 
 // OpListGrants lists the node-local grants an identity currently holds.
@@ -30,13 +30,18 @@ func (mod *Module) OpListGrants(ctx *astral.Context, q *routing.IncomingQuery, a
 	ch := channel.New(q.AcceptRaw(), channel.WithOutputFormat(args.Out))
 	defer ch.Close()
 
-	if args.ID.IsZero() {
+	identity, err := mod.Dir.ResolveIdentity(args.Identity)
+	if err != nil {
+		return ch.Send(astral.Err(err))
+	}
+
+	if identity.IsZero() {
 		return ch.Send(astral.NewError("missing identity"))
 	}
 
-	permits, err := mod.activeGrants(args.ID)
+	permits, err := mod.activeGrants(identity)
 	if err != nil {
-		mod.log.Errorv(1, "error listing grants of %v: %v", args.ID, err)
+		mod.log.Errorv(1, "error listing grants of %v: %v", identity, err)
 		return ch.Send(astral.Err(err))
 	}
 

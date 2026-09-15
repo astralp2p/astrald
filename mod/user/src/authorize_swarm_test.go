@@ -127,9 +127,8 @@ func swarmModule(t *testing.T, authority authmod.Module, userID *astral.Identity
 // is expected to declare.
 //
 // wantSubj asserts the action names the node the call targeted. Every row that
-// sets it targets the same identity: user.adopt and user.expel resolve their
-// argument through resolvingDir, and user.sync_with is handed that identity
-// directly, so both arrive at userID.
+// sets it targets the same identity: user.adopt, user.expel, and user.sync_with
+// resolve their argument through resolvingDir, so each arrives at userID.
 type swarmOp struct {
 	name       string
 	op         func(*Module) any
@@ -148,11 +147,11 @@ func swarmOps(id *astral.ObjectID, nodeID *astral.Identity) []swarmOp {
 		{name: "user.swarm_status", op: func(m *Module) any { return m.OpSwarmStatus }},
 		{name: "user.list_expelled", op: func(m *Module) any { return m.OpListExpelled }},
 
-		{name: "user.adopt", op: func(m *Module) any { return m.OpAdopt }, args: "?target=anything", admin: true, wantSubj: true},
-		{name: "user.expel", op: func(m *Module) any { return m.OpExpel }, args: "?target=anything", admin: true, wantSubj: true},
+		{name: "user.adopt", op: func(m *Module) any { return m.OpAdopt }, args: "?identity=anything", admin: true, wantSubj: true},
+		{name: "user.expel", op: func(m *Module) any { return m.OpExpel }, args: "?identity=anything", admin: true, wantSubj: true},
 		{name: "user.add_asset", op: func(m *Module) any { return m.OpAddAsset }, args: "?id=" + id.String(), admin: true, wantObject: id},
 		{name: "user.remove_asset", op: func(m *Module) any { return m.OpRemoveAsset }, args: "?id=" + id.String(), admin: true, wantObject: id},
-		{name: "user.sync_with", op: func(m *Module) any { return m.OpSyncWith }, args: "?node=" + nodeID.String(), admin: true, wantSubj: true},
+		{name: "user.sync_with", op: func(m *Module) any { return m.OpSyncWith }, args: "?identity=" + nodeID.String(), admin: true, wantSubj: true},
 	}
 }
 
@@ -258,5 +257,23 @@ func TestAuthorizeSwarmRefusesOnUnclaimedNode(t *testing.T) {
 
 	if mod.AuthorizeAdminSwarm(nil, &user.AdminSwarmAction{Action: auth.NewAction(actor)}) {
 		t.Fatal("an unclaimed node has no swarm to administer")
+	}
+}
+
+// TestSyncWithRefusesTheZeroIdentity: a name resolving to the zero identity is
+// rejected with code 3 before any authorization call.
+func TestSyncWithRefusesTheZeroIdentity(t *testing.T) {
+	authority := &recordingAuth{verdict: true}
+	mod := swarmModule(t, authority, astral.GenerateIdentity())
+	mod.Dir = &resolvingDir{id: &astral.Identity{}}
+
+	err := route(t, mod.OpSyncWith, astral.GenerateIdentity(), "user.sync_with?identity=anyone", newRecordingWriter())
+
+	var rejected *astral.ErrRejected
+	if !errors.As(err, &rejected) || rejected.Code != 3 {
+		t.Fatalf("user.sync_with answered the zero identity: got err %v, want rejection code 3", err)
+	}
+	if n := len(authority.recorded()); n != 0 {
+		t.Fatalf("user.sync_with made %d authorization calls; want none", n)
 	}
 }

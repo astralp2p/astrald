@@ -12,8 +12,8 @@ import (
 )
 
 type opAddEndpointArgs struct {
-	ID       *astral.Identity `query:"required"`
-	Endpoint string           `query:"required"`
+	Identity string `query:"required"`
+	Endpoint string `query:"required"`
 	In       string
 	Out      string
 }
@@ -33,12 +33,21 @@ func (mod *Module) OpAddEndpoint(ctx *astral.Context, q *routing.IncomingQuery, 
 	ch := channel.New(q.AcceptRaw(), channel.WithFormats(args.In, args.Out))
 	defer ch.Close()
 
+	identity, err := mod.Dir.ResolveIdentity(args.Identity)
+	if err != nil {
+		return ch.Send(astral.Err(err))
+	}
+
+	if identity.IsZero() {
+		return ch.Send(astral.NewError("missing identity"))
+	}
+
 	parse, err := mod.Exonet.Parse(chunks[0], chunks[1])
 	if err != nil {
 		return ch.Send(astral.Err(err))
 	}
 
-	err = mod.AddEndpoint(args.ID, nodes.NewEndpointWithTTL(parse, 3*30*24*time.Hour))
+	err = mod.AddEndpoint(identity, nodes.NewEndpointWithTTL(parse, 3*30*24*time.Hour))
 	if err != nil {
 		return ch.Send(astral.Err(err))
 	}

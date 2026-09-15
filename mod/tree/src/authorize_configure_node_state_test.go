@@ -31,7 +31,7 @@ func configureNodeStateOps(target *astral.Identity) []configureNodeStateOp {
 		{"tree.set batch", set, "tree.set?path=/cfg/key"},
 		{"tree.delete", del, "tree.delete?path=/cfg/key"},
 		{"tree.delete recursive", del, "tree.delete?path=/cfg&recursive=true"},
-		{"tree.mount_remote", func(m *Module) any { return m.OpMountRemote }, "tree.mount_remote?path=/remote/peer&target=" + target.String()},
+		{"tree.mount_remote", func(m *Module) any { return m.OpMountRemote }, "tree.mount_remote?path=/remote/peer&identity=" + target.String()},
 		{"tree.unmount", func(m *Module) any { return m.OpUnmount }, "tree.unmount?path=/remote/peer"},
 	}
 }

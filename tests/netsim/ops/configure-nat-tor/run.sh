@@ -72,7 +72,7 @@ onion=
 for _ in $(seq 1 90); do
   if systemctl is-active --quiet astrald; then
     # astrald is in netns "priv"; astral-query defaults to tcp:127.0.0.1:8625 (netns-local).
-    onion=$(ip netns exec priv astral-query nodes.resolve_endpoints -id localnode -out json 2>/dev/null | python3 -c '
+    onion=$(ip netns exec priv astral-query nodes.resolve_endpoints -identity localnode -out json 2>/dev/null | python3 -c '
 import json,sys
 def addr(ep):
     if isinstance(ep, str): return ep

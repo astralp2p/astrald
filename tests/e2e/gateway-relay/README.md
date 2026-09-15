@@ -104,7 +104,7 @@ not have to rediscover:
 - **Module YAML lives under `<root>/config/`,** not `<root>` —
   `cmd/astrald/run.go` joins `"config"` onto `-root`. A file one level up is
   read by nothing and the module keeps its defaults silently.
-- **`nodes.new_link` takes `target`, not `id`.** A query missing a required
+- **`nodes.new_link` takes `identity`, not `id`.** A query missing a required
   argument is rejected by the decoder in microseconds, which reads exactly
   like a node refusing to link. Use the SDK binding.
 - **Nothing teaches a lab node where a non-adopted node lives.** A node knows

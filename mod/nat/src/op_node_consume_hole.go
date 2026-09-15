@@ -15,15 +15,15 @@ import (
 const takeExchangeTimeout = 5 * time.Second
 
 type opNodeConsumeHoleArgs struct {
-	Pair   astral.Nonce `query:"required"`
-	Target string
+	Pair     astral.Nonce `query:"required"`
+	Identity string
 
 	In  string
 	Out string
 }
 
 // OpNodeConsumeHole coordinates a two-phase lock-then-take exchange to hand a hole out of the pool.
-// When Target is set it acts as the initiator; otherwise it is the responder waiting for the lock signal.
+// When Identity is set it acts as the initiator; otherwise it is the responder waiting for the lock signal.
 func (mod *Module) OpNodeConsumeHole(ctx *astral.Context, q *routing.IncomingQuery, args opNodeConsumeHoleArgs) (err error) {
 	if !mod.authorizeAdminNetwork(ctx, q) {
 		return q.Reject()
@@ -39,8 +39,8 @@ func (mod *Module) OpNodeConsumeHole(ctx *astral.Context, q *routing.IncomingQue
 
 	holeNonce := hole.Nonce
 
-	if args.Target != "" {
-		target, err := mod.Dir.ResolveIdentity(args.Target)
+	if args.Identity != "" {
+		target, err := mod.Dir.ResolveIdentity(args.Identity)
 		if err != nil {
 			return ch.Send(astral.Err(err))
 		}

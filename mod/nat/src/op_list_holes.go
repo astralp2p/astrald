@@ -7,8 +7,8 @@ import (
 )
 
 type opListHolesArgs struct {
-	With string
-	Out  string
+	Identity string
+	Out      string
 }
 
 func (mod *Module) OpListHoles(ctx *astral.Context, q *routing.IncomingQuery, args opListHolesArgs) (err error) {
@@ -21,8 +21,8 @@ func (mod *Module) OpListHoles(ctx *astral.Context, q *routing.IncomingQuery, ar
 
 	holes := mod.pool.GetAll()
 	for _, hole := range holes {
-		if args.With != "" {
-			target, err := mod.Dir.ResolveIdentity(string(args.With))
+		if args.Identity != "" {
+			target, err := mod.Dir.ResolveIdentity(args.Identity)
 			if err != nil {
 				return ch.Send(astral.NewError(err.Error()))
 			}

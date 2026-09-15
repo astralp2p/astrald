@@ -48,7 +48,7 @@ systemctl restart astrald
 onion=
 for _ in $(seq 1 90); do
   if systemctl is-active --quiet astrald; then
-    onion=$(astral-query nodes.resolve_endpoints -id localnode -out json 2>/dev/null | python3 -c '
+    onion=$(astral-query nodes.resolve_endpoints -identity localnode -out json 2>/dev/null | python3 -c '
 import json,sys
 def addr(ep):
     if isinstance(ep, str): return ep

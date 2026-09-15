@@ -16,7 +16,7 @@ and asked to dial exactly that. That is the whole peer side, because there is
 no direct address to give it.
 
 The link is asked for through the SDK's own binding rather than a hand-built
-query string. `nodes.new_link` takes `target`, not `id`, and a query missing a
+query string. `nodes.new_link` takes `identity`, not `id`, and a query missing a
 required argument is rejected in microseconds by the argument decoder — which
 reads exactly like a node refusing to link and cost a full netsim run to tell
 apart. nat-punch's shape is the one to copy: kick the link off, then poll the

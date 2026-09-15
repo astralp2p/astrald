@@ -10,11 +10,12 @@ import (
 )
 
 type opListTokensArgs struct {
-	ID  *astral.Identity
-	Out string
+	Identity string
+	Out      string
 }
 
-// OpListTokens lists all access tokens of an identity
+// OpListTokens lists the access tokens of an identity. An omitted identity lists
+// every token.
 func (mod *Module) OpListTokens(ctx *astral.Context, q *routing.IncomingQuery, args opListTokensArgs) (err error) {
 	if q.Origin() == astral.OriginNetwork {
 		return q.Reject()
@@ -27,6 +28,18 @@ func (mod *Module) OpListTokens(ctx *astral.Context, q *routing.IncomingQuery, a
 	ch := channel.New(q.AcceptRaw(), channel.WithOutputFormat(args.Out))
 	defer ch.Close()
 
+	var identity *astral.Identity
+	if args.Identity != "" {
+		identity, err = mod.Dir.ResolveIdentity(args.Identity)
+		if err != nil {
+			return ch.Send(astral.Err(err))
+		}
+
+		if identity.IsZero() {
+			return ch.Send(astral.NewError("missing identity"))
+		}
+	}
+
 	// get token list
 	tokens, err := mod.ListAccessTokens()
 	if err != nil {
@@ -34,10 +47,10 @@ func (mod *Module) OpListTokens(ctx *astral.Context, q *routing.IncomingQuery, a
 		return err
 	}
 
-	// filter tokens by ID
-	if !args.ID.IsZero() {
+	// filter tokens by identity
+	if identity != nil {
 		tokens = slices.DeleteFunc(tokens, func(token *apphost.AccessToken) bool {
-			return !token.Identity.IsEqual(args.ID)
+			return !token.Identity.IsEqual(identity)
 		})
 	}
 

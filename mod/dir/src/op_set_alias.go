@@ -7,9 +7,9 @@ import (
 )
 
 type opSetAliasArgs struct {
-	ID    *astral.Identity `query:"required"`
-	Alias *string          `query:"required"` // required but can be empty
-	Out   string
+	Identity string  `query:"required"`
+	Alias    *string `query:"required"` // required but can be empty
+	Out      string
 }
 
 func (mod *Module) OpSetAlias(ctx *astral.Context, q *routing.IncomingQuery, args opSetAliasArgs) (err error) {
@@ -21,7 +21,16 @@ func (mod *Module) OpSetAlias(ctx *astral.Context, q *routing.IncomingQuery, arg
 	ch := q.Accept(channel.WithOutputFormat(args.Out))
 	defer ch.Close()
 
-	err = mod.SetAlias(args.ID, *args.Alias)
+	identity, err := mod.ResolveIdentity(args.Identity)
+	if err != nil {
+		return ch.Send(astral.Err(err))
+	}
+
+	if identity.IsZero() {
+		return ch.Send(astral.NewError("missing identity"))
+	}
+
+	err = mod.SetAlias(identity, *args.Alias)
 	if err != nil {
 		return ch.Send(astral.Err(err))
 	}

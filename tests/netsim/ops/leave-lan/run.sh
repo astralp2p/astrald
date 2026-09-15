@@ -31,8 +31,8 @@ done
 # runs this vmop and can read either guest, so it fetches the onion from the
 # leaver and hands it to the peer.
 #
-# why the hex identity: nodes.add_endpoint takes `id` of type identity and
-# rejects an alias with `query rejected (1)`.
+# why the hex identity: nodes.add_endpoint resolves `identity` through the
+# peer's directory, and the hex form needs no alias on the peer.
 #
 # why ASTRAL_ID_<vm> first: this used to find the identity by searching the
 # peer's roster for the alias `node2`. Only adopt-node's script.py sets that
@@ -69,7 +69,7 @@ for line in sys.stdin:
 " "$leaver_id" "$VM" | tr -d '\r\n')
 [ -n "$leaver_id" ] || { echo "leave-lan: $PEER does not know $VM in its swarm roster" >&2; exit 1; }
 
-netsim ssh "$PEER" -- "astral-query nodes.add_endpoint -id $leaver_id -endpoint 'tor:$onion'" >/dev/null 2>&1 \
+netsim ssh "$PEER" -- "astral-query nodes.add_endpoint -identity $leaver_id -endpoint 'tor:$onion'" >/dev/null 2>&1 \
   || { echo "leave-lan: $PEER refused the endpoint for $VM" >&2; exit 1; }
 echo "leave-lan: $PEER seeded $VM ($leaver_id) onion=$onion"
 
@@ -123,7 +123,7 @@ for line in sys.stdin:
     # a link is on the departed LAN if either end wore a 10.77 address
     ends = json.dumps([m.get('LocalEndpoint'), m.get('RemoteEndpoint')])
     if '10.77.' not in ends: continue
-    subprocess.run(['astral-query','nodes.close_link','-id',m['ID']],
+    subprocess.run(['astral-query','nodes.close_link','-link_id',m['ID']],
                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     print('closed stale %s link %s' % (m.get('Network','?'), m['ID']))
 "
