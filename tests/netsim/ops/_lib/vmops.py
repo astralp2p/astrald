@@ -67,12 +67,12 @@ def query(vm, op, netns=""):
 def live_onion(vm):
     """The .onion astrald advertises for itself, or "".
 
-    Reads whatever `nodes.resolve_endpoints -id localnode` prints and picks
+    Reads whatever `nodes.resolve_endpoints -identity localnode` prints and picks
     the onion out of it. Deliberately shape-agnostic: the verifier's question
     is "does an onion appear", and pinning the envelope's field names would
     make this fail on a wire change that broke nothing.
     """
-    for token in query(vm, "nodes.resolve_endpoints -id localnode").split('"'):
+    for token in query(vm, "nodes.resolve_endpoints -identity localnode").split('"'):
         if ".onion" in token:
             return token.strip()
     return ""

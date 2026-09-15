@@ -83,8 +83,8 @@ A module method named `Op<Name>` implements the op `<module>.<name>`: `OpGetAlia
 **Pattern** (`mod/dir/src/op_get_alias.go`):
 ```go
 type opGetAliasArgs struct {
-	ID  *astral.Identity `query:"required"`
-	Out string
+	Identity string `query:"required"`
+	Out      string
 }
 
 func (mod *Module) OpGetAlias(ctx *astral.Context, q *routing.IncomingQuery, args opGetAliasArgs) (err error) {

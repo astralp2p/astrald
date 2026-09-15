@@ -41,7 +41,7 @@ astral-query nat.new_traversal -target 02abc...def
 
 Add a TCP endpoint for a node:
 ```shell
-astral-query nodes.add_endpoint -id 02abc...def -endpoint tcp:192.168.1.10:8080
+astral-query nodes.add_endpoint -identity 02abc...def -endpoint tcp:192.168.1.10:8080
 ```
 
 ## Input Formats

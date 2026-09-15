@@ -133,7 +133,7 @@ for vm in $CLIENTS $PEERS; do
   netsim ssh "$vm" -- "set -eu
     q=astral-query
     ip netns list 2>/dev/null | grep -qw priv && q='ip netns exec priv astral-query'
-    \$q nodes.add_endpoint -id $GW_ID -endpoint tcp:$GW_ADDR:1791 >/dev/null"
+    \$q nodes.add_endpoint -identity $GW_ID -endpoint tcp:$GW_ADDR:1791 >/dev/null"
   echo "configure-gateway: $vm can reach $GW at $GW_ADDR:1791"
 done
 

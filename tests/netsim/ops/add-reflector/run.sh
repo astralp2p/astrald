@@ -58,9 +58,9 @@ for p in $PEERS; do
   # shellcheck disable=SC2029
   # why: peer's astrald is in netns priv; astral-query defaults to tcp:127.0.0.1:8625 (netns-local), so run it inside the netns
   netsim ssh "$p" -- "
-    ip netns exec priv astral-query nodes.add_endpoint -id '$REFL_ID' -endpoint 'tcp:$REFL_PUB:1791' >/dev/null 2>&1 || true
-    ip netns exec priv astral-query dir.set_alias   -id '$REFL_ID' -alias reflector             >/dev/null 2>&1 || true
-    ip netns exec priv astral-query nodes.new_link  -target '$REFL_ID' -endpoint 'tcp:$REFL_PUB:1791' -out json 2>&1 | tail -3
+    ip netns exec priv astral-query nodes.add_endpoint -identity '$REFL_ID' -endpoint 'tcp:$REFL_PUB:1791' >/dev/null 2>&1 || true
+    ip netns exec priv astral-query dir.set_alias   -identity '$REFL_ID' -alias reflector       >/dev/null 2>&1 || true
+    ip netns exec priv astral-query nodes.new_link  -identity '$REFL_ID' -endpoint 'tcp:$REFL_PUB:1791' -out json 2>&1 | tail -3
   " || echo "add-reflector: WARNING new_link to reflector failed on $p (bring-up diagnoses)" >&2
 done
 echo "add-reflector: done (reflector=$REFL id=$REFL_ID pub=$REFL_PUB; peers: $PEERS)"

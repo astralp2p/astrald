@@ -2,7 +2,7 @@
 """verify enable-tor: each target VM runs Tor and saved its own onion endpoint.
 
 Host-side check, independent of run.sh: tor service active, /root/tor.json holds an onion,
-and that saved onion matches what astrald advertises now (nodes.resolve_endpoints -id localnode).
+and that saved onion matches what astrald advertises now (nodes.resolve_endpoints -identity localnode).
 """
 import argparse
 import os
@@ -35,7 +35,7 @@ def main():
         if not file_onion:
             errs.append("no onion in /root/tor.json")
         if not live:
-            errs.append("astrald advertises no onion (resolve_endpoints -id localnode)")
+            errs.append("astrald advertises no onion (resolve_endpoints -identity localnode)")
         # why containment rather than equality: the saved value is a bare
         # hostname while the advertised one is an endpoint that may carry a
         # scheme and a port. The question is whether astrald advertises THIS
