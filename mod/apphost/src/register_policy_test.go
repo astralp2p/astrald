@@ -1,9 +1,11 @@
 package apphost
 
 import (
+	"slices"
 	"testing"
 
 	"github.com/astralp2p/astral-go/api/auth"
+	"github.com/astralp2p/astral-go/api/user"
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astral-go/astral/log"
 )
@@ -117,6 +119,31 @@ func TestTheOpJoinsEntitlementAndAsk(t *testing.T) {
 	joined := append(mod.GetWebOriginPermits(origin), parsePermits("app.asked_for_action")...)
 	if len(joined) != len(entitled)+1 {
 		t.Fatalf("joined %v, expected the entitlement plus one ask", actions(joined))
+	}
+}
+
+// The shipped default entitles one origin to three actions. SeeSwarm and
+// AdminSwarm carry the swarm screen; AdminNetwork carries the LAN scan, whose
+// two ops, nearby.broadcast and nearby.list, authorize it. The settings app's
+// DEPLOY.md documents this set, so a change here is a documentation change too.
+func TestTheDefaultEntitlesTheTrustedOrigin(t *testing.T) {
+	mod := &Module{config: defaultConfig, log: log.New(nil)}
+
+	const origin = "https://settings.test.satforge.dev"
+	want := []string{
+		user.SeeSwarmAction{}.ObjectType(),
+		user.AdminSwarmAction{}.ObjectType(),
+		auth.AdminNetworkAction{}.ObjectType(),
+	}
+
+	got := actions(mod.GetWebOriginPermits(origin))
+	for _, w := range want {
+		if !slices.Contains(got, w) {
+			t.Fatalf("%v is entitled to %v; want %v among them", origin, got, w)
+		}
+	}
+	if len(got) != len(want) {
+		t.Fatalf("%v is entitled to %v; want exactly %v", origin, got, want)
 	}
 }
 

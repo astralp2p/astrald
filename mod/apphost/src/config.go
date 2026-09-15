@@ -1,6 +1,9 @@
 package apphost
 
-import "github.com/astralp2p/astral-go/api/user"
+import (
+	"github.com/astralp2p/astral-go/api/auth"
+	"github.com/astralp2p/astral-go/api/user"
+)
 
 type Config struct {
 	// Listen on these addresses
@@ -52,10 +55,17 @@ var defaultConfig = Config{
 	Tokens:         map[string]string{},
 	Workers:        32,
 	AllowAnonymous: true,
+	// why AdminNetwork: the settings app's LAN scan calls nearby.broadcast and
+	// nearby.list, and both ops authorize that action
+	// (mod/nearby/src/authorize_admin_network.go).
+	// why one test origin: a shipped default entitles its origins on every node
+	// that takes the default, so a production origin is the node operator's
+	// choice and is named in the settings app's DEPLOY.md, not here.
 	TrustedWebSources: map[string][]PermitConfig{
 		"https://settings.test.satforge.dev": {
 			{Action: user.SeeSwarmAction{}.ObjectType()},
 			{Action: user.AdminSwarmAction{}.ObjectType()},
+			{Action: auth.AdminNetworkAction{}.ObjectType()},
 		},
 	},
 	AnonymousWebAllowlist: AnonymousWebAllowlist{
