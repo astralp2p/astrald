@@ -131,12 +131,7 @@ func (assets *CoreAssets) OpenDatabase(name string) (*gorm.DB, error) {
 
 	switch res := assets.res.(type) {
 	case *resources.FileResources:
-		var dbPath = filepath.Join(res.DataRoot(), name)
-
-		return gorm.Open(
-			dbOpen(dbDSN(dbPath)),
-			cfg,
-		)
+		return openFileDatabase(filepath.Join(res.DataRoot(), name), cfg)
 
 	case *resources.MemResources:
 		var dbPath = "file::memory:?cache=shared"
@@ -148,6 +143,29 @@ func (assets *CoreAssets) OpenDatabase(name string) (*gorm.DB, error) {
 	}
 
 	return nil, errors.New("database unavailable")
+}
+
+// openFileDatabase opens the sqlite file at path through a pool of one connection.
+//
+// why: connections of one process compete for the file lock, and a waiting
+// connection fails with SQLITE_BUSY once busy_timeout runs out. A disk stall
+// during startup outlasts the timeout, and the module manager panics on the
+// error. With one connection a statement waits for the connection, with no
+// timeout.
+// note: sqlite admits one writer at a time, so the cap costs only concurrent reads.
+func openFileDatabase(path string, cfg *gorm.Config) (*gorm.DB, error) {
+	db, err := gorm.Open(dbOpen(dbDSN(path)), cfg)
+	if err != nil {
+		return nil, err
+	}
+
+	sqlDB, err := db.DB()
+	if err != nil {
+		return nil, err
+	}
+	sqlDB.SetMaxOpenConns(1)
+
+	return db, nil
 }
 
 type logWriter struct {
