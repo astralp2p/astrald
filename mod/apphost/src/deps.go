@@ -7,6 +7,7 @@ import (
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astrald/core"
 	authmod "github.com/astralp2p/astrald/mod/auth"
+	"github.com/astralp2p/astrald/mod/shell"
 )
 
 func (mod *Module) LoadDependencies(*astral.Context) (err error) {
@@ -30,6 +31,7 @@ func (mod *Module) LoadDependencies(*astral.Context) (err error) {
 	mod.Auth.Add(authmod.Func[*auth.ServeAppsAction](mod.AuthorizeServeApps))
 	mod.Auth.Add(authmod.Func[*auth.SeeNodeStateAction](mod.AuthorizeSeeNodeState))
 	mod.Auth.Add(authmod.Func[*coldcard.ScanAction](mod.AuthorizeColdcardScan))
+	mod.Auth.Add(authmod.Func[*shell.ShellAction](mod.AuthorizeShell))
 
 	return
 }

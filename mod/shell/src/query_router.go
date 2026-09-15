@@ -18,6 +18,11 @@ func (mod *Module) RouteQuery(ctx *astral.Context, q *astral.InFlightQuery, w io
 	//
 	// why Reject and not RouteNotFound: PriorityRouter stops on ErrRejected, so
 	// the caller reads a refusal rather than a missing route.
+	//
+	// why the network origin is not refused here: a link query reaching another
+	// module's op is ordinary inter-node traffic, and this router is the only
+	// mount point it has. Admission to shell.shell is guarded at that op
+	// instead, where it bounds one op rather than every scope.
 	if q.IsMCP() {
 		return query.Reject()
 	}

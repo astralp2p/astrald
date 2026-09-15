@@ -53,6 +53,7 @@ func (mod *Module) LoadDependencies(ctx *astral.Context) (err error) {
 	mod.Auth.Add(authmod.Func[*auth.ConfigureNodeStateAction](mod.AuthorizeConfigureNodeState))
 	mod.Auth.Add(authmod.Func[*auth.ServeAppsAction](mod.AuthorizeServeApps))
 	mod.Auth.Add(authmod.Func[*auth.SeeNodeStateAction](mod.AuthorizeSeeNodeState))
+	mod.Auth.Add(authmod.Func[*shell.ShellAction](mod.AuthorizeShell))
 
 	// why: localuser as a name, to match localuser as a filter
 	err = mod.Dir.AddResolver(mod)
