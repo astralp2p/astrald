@@ -40,6 +40,6 @@ func (mod *Module) blocksAnonymousWeb(ctx *astral.Context, webOrigin string, aut
 		allowlist = mod.config.AnonymousWebAllowlist.Unclaimed
 	}
 
-	opPath, _ := query.Parse(q.QueryString)
+	opPath, _ := query.Parse(q.QueryString.String())
 	return !slices.Contains(allowlist, opPath)
 }

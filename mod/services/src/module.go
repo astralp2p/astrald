@@ -49,7 +49,7 @@ func (mod *Module) syncServices(ctx *astral.Context, providerID *astral.Identity
 		switch {
 		case update == nil:
 			continue
-		case update.Available:
+		case bool(update.Available):
 			err = mod.db.createProviderService(update.ProviderID, string(update.Name), update.Info)
 		default:
 			err = mod.db.deleteProviderService(update.ProviderID, string(update.Name))

@@ -43,7 +43,7 @@ func TestNodeRouteForwardsTheResolvedIdentity(t *testing.T) {
 
 	assertUseGatewayForwarded(t, f)
 
-	_, params := query.Parse(f.node.queries()[0].QueryString)
+	_, params := query.Parse(f.node.queries()[0].QueryString.String())
 	if len(params) != 1 || params["identity"] != f.target.String() {
 		t.Fatalf("forwarding sent arguments %v; want only identity=%v", params, f.target)
 	}

@@ -302,7 +302,7 @@ func assertUseGatewayForwarded(t *testing.T, f *useGatewayFixture) {
 	if !q.Caller.IsEqual(f.node.id) || !q.Target.IsEqual(f.target) {
 		t.Fatalf("forwarding routed %v -> %v; want %v -> %v", q.Caller, q.Target, f.node.id, f.target)
 	}
-	if want := gateway.MethodNodeRoute + "?identity=" + f.target.String(); q.QueryString != want {
+	if want := gateway.MethodNodeRoute + "?identity=" + f.target.String(); q.QueryString.String() != want {
 		t.Fatalf("forwarding routed %q; want %q", q.QueryString, want)
 	}
 }

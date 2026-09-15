@@ -21,7 +21,7 @@ func (e EntryFilter) Filter(entry *log.Entry) bool {
 		return false
 	}
 
-	if entry.Level > uint8(e.Level) {
+	if uint8(entry.Level) > uint8(e.Level) {
 		return false
 	}
 
