@@ -7,8 +7,9 @@ import (
 )
 
 type PublicProfile struct {
-	NodeID    *astral.Identity
-	NodeAlias string
+	NodeID *astral.Identity
+	// why: string8, as the spec states (protocols/nearby/types/mod.nearby.public_profile.md).
+	NodeAlias astral.String8
 }
 
 var _ astral.Object = &PublicProfile{}

@@ -3,6 +3,7 @@ package archives
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astrald/mod/archives"
@@ -43,7 +44,7 @@ func (mod *Module) scan(ctx context.Context, objectID *astral.ObjectID, postScan
 	}
 
 	archive = &archives.Archive{
-		Comment: reader.Comment,
+		Comment: astral.String32(reader.Comment),
 		Format:  "zip",
 	}
 
@@ -67,9 +68,9 @@ func (mod *Module) scan(ctx context.Context, objectID *astral.ObjectID, postScan
 
 		entry := &archives.Entry{
 			ObjectID: fileID,
-			Path:     file.Name,
-			Comment:  file.Comment,
-			Modified: file.Modified,
+			Path:     astral.String32(file.Name),
+			Comment:  astral.String32(file.Comment),
+			Modified: astral.Time(file.Modified),
 		}
 
 		archive.Entries = append(archive.Entries, entry)
@@ -105,16 +106,16 @@ func (mod *Module) getCache(objectID *astral.ObjectID) (archive *archives.Archiv
 	}
 
 	archive = &archives.Archive{
-		Comment: row.Comment,
-		Format:  row.Format,
+		Comment: astral.String32(row.Comment),
+		Format:  astral.String32(row.Format),
 	}
 
 	for _, e := range row.Entries {
 		archive.Entries = append(archive.Entries, &archives.Entry{
 			ObjectID: e.ObjectID,
-			Path:     e.Path,
-			Comment:  e.Comment,
-			Modified: e.Modified,
+			Path:     astral.String32(e.Path),
+			Comment:  astral.String32(e.Comment),
+			Modified: astral.Time(e.Modified),
 		})
 	}
 
@@ -150,16 +151,16 @@ func (mod *Module) setCache(objectID *astral.ObjectID, archive *archives.Archive
 
 	row := dbArchive{
 		ObjectID: objectID,
-		Comment:  archive.Comment,
-		Format:   archive.Format,
+		Comment:  archive.Comment.String(),
+		Format:   archive.Format.String(),
 	}
 
 	for _, entry := range archive.Entries {
 		row.Entries = append(row.Entries, dbEntry{
 			ObjectID: entry.ObjectID,
-			Path:     entry.Path,
-			Comment:  entry.Comment,
-			Modified: entry.Modified.UTC(),
+			Path:     entry.Path.String(),
+			Comment:  entry.Comment.String(),
+			Modified: time.Time(entry.Modified).UTC(),
 		})
 	}
 

@@ -90,8 +90,8 @@ func (m *Mux) RouteQuery(ctx *astral.Context, q *astral.InFlightQuery, w io.Writ
 
 	queryFrame := frames.Query{
 		Nonce:  q.Nonce,
-		Query:  q.QueryString.String(),
-		Buffer: uint32(defaultBufferSize),
+		Query:  astral.String16(q.QueryString),
+		Buffer: astral.Uint32(defaultBufferSize),
 	}
 
 	var frame frames.Frame = &queryFrame
@@ -157,7 +157,7 @@ func (m *Mux) Handle(obj astral.Object) error {
 }
 
 func (m *Mux) handleQuery(f *frames.Query) {
-	m.handleInboundQuery(f.Nonce, m.RemoteIdentity(), m.LocalIdentity(), nil, f.Query, int(f.Buffer))
+	m.handleInboundQuery(f.Nonce, m.RemoteIdentity(), m.LocalIdentity(), nil, f.Query.String(), int(f.Buffer))
 }
 
 func (m *Mux) handleRelayQuery(relayQuery *frames.RelayQuery) error {
@@ -177,7 +177,7 @@ func (m *Mux) handleRelayQuery(relayQuery *frames.RelayQuery) error {
 		relayQuery.CallerID,
 		relayQuery.TargetID,
 		m.RemoteIdentity(),
-		relayQuery.Query.Query,
+		relayQuery.Query.Query.String(),
 		int(relayQuery.Query.Buffer),
 	)
 
@@ -215,12 +215,12 @@ func (m *Mux) handleInboundQuery(linkNonce astral.Nonce, caller, target, relayID
 		if errors.As(err, &reject) {
 			code = reject.Code
 		}
-		m.ch.Send(&frames.Response{Nonce: linkNonce, ErrCode: code})
+		m.ch.Send(&frames.Response{Nonce: linkNonce, ErrCode: astral.Uint8(code)})
 		return
 	}
 
 	conn.setState(stateOpen)
-	m.ch.Send(&frames.Response{Nonce: linkNonce, ErrCode: frames.CodeAccepted, Buffer: uint32(defaultBufferSize)})
+	m.ch.Send(&frames.Response{Nonce: linkNonce, ErrCode: frames.CodeAccepted, Buffer: astral.Uint32(defaultBufferSize)})
 	conn.Open()
 
 	go func() {
@@ -247,7 +247,7 @@ func (m *Mux) handleResponse(f *frames.Response) {
 		if !conn.swapState(stateRouting, stateClosed) {
 			return
 		}
-		conn.routingResult <- f.ErrCode
+		conn.routingResult <- uint8(f.ErrCode)
 		return
 	}
 

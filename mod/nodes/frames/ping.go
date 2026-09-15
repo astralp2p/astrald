@@ -12,7 +12,7 @@ var _ Frame = &Ping{}
 
 type Ping struct {
 	Nonce astral.Nonce
-	Pong  bool
+	Pong  astral.Bool
 }
 
 // astral:blueprint-ignore
