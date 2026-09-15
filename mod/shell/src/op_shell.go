@@ -8,6 +8,7 @@ import (
 	"github.com/astralp2p/astral-go/api/auth"
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astral-go/lib/routing"
+	"github.com/astralp2p/astrald/mod/shell"
 )
 
 type opShellArgs struct {
@@ -15,6 +16,13 @@ type opShellArgs struct {
 }
 
 func (mod *Module) OpShell(ctx *astral.Context, q *routing.IncomingQuery, args opShellArgs) (err error) {
+	// why: a session reaches every loaded module's op router, so admission is
+	// node-wide administration. The rule grants the user and this node and no
+	// sibling; another identity reaches it through a grant or a signed contract.
+	if !mod.Auth.Authorize(ctx, &shell.ShellAction{Action: auth.NewAction(q.Caller())}) {
+		return q.Reject()
+	}
+
 	// handle args
 	if len(args.As) > 0 {
 		asID, err := mod.Dir.ResolveIdentity(string(args.As))

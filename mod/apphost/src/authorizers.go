@@ -5,6 +5,7 @@ import (
 	"github.com/astralp2p/astral-go/api/coldcard"
 	"github.com/astralp2p/astral-go/api/user"
 	"github.com/astralp2p/astral-go/astral"
+	"github.com/astralp2p/astrald/mod/shell"
 )
 
 // AuthorizeServeObjects answers whether this node has granted the actor the role
@@ -88,5 +89,11 @@ func (mod *Module) AuthorizeSeeNodeState(ctx *astral.Context, action *auth.SeeNo
 // AuthorizeColdcardScan answers whether this node has granted the actor the
 // right to scan the node's attached Coldcard devices.
 func (mod *Module) AuthorizeColdcardScan(ctx *astral.Context, action *coldcard.ScanAction) bool {
+	return mod.authorizeGrant(ctx, action)
+}
+
+// AuthorizeShell answers whether this node has granted the actor the right to
+// open an interactive op shell on it.
+func (mod *Module) AuthorizeShell(ctx *astral.Context, action *shell.ShellAction) bool {
 	return mod.authorizeGrant(ctx, action)
 }

@@ -61,6 +61,7 @@ OBJECT_TYPES=$(
 # ---------- Collect Blueprint registrations ----------
 # Accept:
 #   astral.Add(&T{})
+#   astral.MustAdd(&T{})
 #   Add(&T{})
 #   var v T; ... Add(&v)
 # Supports multiline because perl is slurping (-0777).
@@ -76,15 +77,15 @@ BLUEPRINT_TYPES=$(
       # Old: astral.DefaultBlueprints.Add(&T{})
       # New: astral.Add(&T{}) or Add(&T{})
 
-      # Pattern 1: astral.Add(&Type{}) or pkg.Add(&Type{})
-      while (/(?:^|\W)(?:[A-Za-z_][A-Za-z0-9_]*\.)?Add\s*\(\s*&\s*([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)?)\s*(?:\{|\))/gms) {
+      # Pattern 1: astral.Add(&Type{}), astral.MustAdd(&Type{}) or pkg.Add(&Type{})
+      while (/(?:^|\W)(?:[A-Za-z_][A-Za-z0-9_]*\.)?(?:Must)?Add\s*\(\s*&\s*([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)?)\s*(?:\{|\))/gms) {
         my $t = $1;
         $t =~ s/.*\.//; # drop package qualifier
         print "$t\n";
       }
 
       # Pattern 2: var v Type; ... Add(&v)
-      while (/var\s+([A-Za-z_][A-Za-z0-9_]*)\s+([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)?)\s*.*?(?:[A-Za-z_][A-Za-z0-9_]*\.)?Add\s*\(\s*&\s*\1\s*\)/gms) {
+      while (/var\s+([A-Za-z_][A-Za-z0-9_]*)\s+([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)?)\s*.*?(?:[A-Za-z_][A-Za-z0-9_]*\.)?(?:Must)?Add\s*\(\s*&\s*\1\s*\)/gms) {
         my $t = $2;
         $t =~ s/.*\.//; # drop package qualifier
         print "$t\n";

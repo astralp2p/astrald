@@ -8,7 +8,6 @@ import (
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astral-go/lib/query"
 	"github.com/astralp2p/astral-go/lib/routing"
-	"github.com/astralp2p/astrald/mod/shell"
 )
 
 // testNode carries an identity and nothing else; RouteQuery is never reached,
@@ -58,31 +57,32 @@ func TestRouteQueryRejectsMCPOrigin(t *testing.T) {
 	}
 }
 
-// A shell.shell query off a link is refused before it reaches the shell scope.
-// The op it names hands the caller an interactive session on this node.
-func TestRouteQueryRefusesShellOffALink(t *testing.T) {
+// A query off a link reaches the scopes. This router is the sole mount point
+// for every module's op router, so refusing the network origin here would stop
+// all inter-node op traffic, not just the shell. Admission to shell.shell is
+// guarded at that op instead.
+func TestRouteQueryAdmitsALinkQueryToTheScopes(t *testing.T) {
 	mod := testModule(t)
 	spy := &spyRouter{}
-	mod.scopes.Add(shell.ModuleName, spy)
+	mod.scopes.Add("nodes", spy)
 
-	q := astral.Launch(astral.NewQuery(astral.GenerateIdentity(), mod.node.Identity(), "shell.shell"))
+	q := astral.Launch(astral.NewQuery(astral.GenerateIdentity(), mod.node.Identity(), "nodes.new_link"))
 	q.Extra.Set("origin", astral.OriginNetwork)
 
 	_, err := mod.RouteQuery(astral.NewContext(nil), q, nil)
 
-	if spy.reached {
-		t.Fatal("shell.shell off a link reached the shell scope")
+	if !spy.reached {
+		t.Fatal("a link query did not reach the scopes; inter-node ops are unreachable")
 	}
-	if !errors.Is(err, &astral.ErrRejected{}) {
-		t.Fatalf("shell.shell off a link resolved as %v, want ErrRejected", err)
+	if errors.Is(err, &astral.ErrRejected{}) {
+		t.Fatalf("a link query was refused: %v", err)
 	}
 }
 
-// A local origin reaches the scopes. The empty scope router answers
-// RouteNotFound, which is the op being absent rather than the caller refused —
-// an apphost guest and the node itself must keep reaching ops.
-func TestRouteQueryAdmitsLocalOrigins(t *testing.T) {
-	for _, origin := range []any{nil, "", astral.OriginLocal} {
+// Every origin but MCP reaches the scopes. The empty scope router answers
+// RouteNotFound, which is the op being absent rather than the caller refused.
+func TestRouteQueryAdmitsNonMCPOrigins(t *testing.T) {
+	for _, origin := range []any{nil, "", astral.OriginLocal, astral.OriginNetwork} {
 		mod := testModule(t)
 
 		_, err := mod.RouteQuery(astral.NewContext(nil), nodeQuery(mod, origin), nil)
