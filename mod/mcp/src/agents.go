@@ -79,13 +79,18 @@ func (mod *Module) registerAgent(row *dbAgent) error {
 	return nil
 }
 
-// deleteAgent revokes the agent's token, unsets its alias and removes its row,
-// taking the mail it owns with it — both boxes, archived or not. A
-// correspondent's own copy of the same message is owned by the correspondent
-// and stays. The signed relay contract stays indexed until it expires.
+// deleteAgent revokes the agent's token, withdraws every grant its identity
+// holds, unsets its alias and removes its row, taking the mail it owns with it
+// — both boxes, archived or not. A correspondent's own copy of the same message
+// is owned by the correspondent and stays. The signed relay contract stays
+// indexed until it expires.
 func (mod *Module) deleteAgent(row *dbAgent) error {
 	err := mod.Apphost.DeleteAccessToken(row.Token)
 	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+		return err
+	}
+
+	if err = mod.revokeGrants(row.Identity); err != nil {
 		return err
 	}
 
@@ -98,4 +103,33 @@ func (mod *Module) deleteAgent(row *dbAgent) error {
 	_ = mod.agentIDs.Remove(row.Identity.String())
 
 	return mod.db.DeleteAgent(row.Identity)
+}
+
+// revokeGrants withdraws every node-local grant identity holds. A grant names
+// the identity and nothing else, so one left behind keeps authorizing whoever
+// presents the deleted agent's identity.
+//
+// why every permit and not the unexpired ones: Grants reports expired rows too,
+// and a row outlives the agent that held it. Deleting an expired grant takes
+// away nothing the node was still honoring.
+//
+// why a failure stops the deletion: the agent row is the only record naming the
+// identity, so a run that removed the row and left a grant standing would leave
+// authority mcp.delete_agent can no longer reach. The kept row makes the call
+// repeatable.
+func (mod *Module) revokeGrants(identity *astral.Identity) error {
+	permits, err := mod.Apphost.Grants(identity)
+	if err != nil {
+		return err
+	}
+
+	for _, permit := range permits {
+		// note: a concurrent revoke takes the row between the listing and here.
+		err = mod.Apphost.Revoke(identity, string(permit.Action))
+		if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+			return err
+		}
+	}
+
+	return nil
 }
