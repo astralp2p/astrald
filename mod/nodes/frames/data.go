@@ -13,7 +13,7 @@ var _ Frame = &Data{}
 // Data is a Frame for transporting data
 type Data struct {
 	Nonce   astral.Nonce
-	Payload []byte
+	Payload astral.Bytes16
 }
 
 // astral:blueprint-ignore

@@ -17,8 +17,8 @@ const (
 
 type Response struct {
 	Nonce   astral.Nonce
-	ErrCode uint8
-	Buffer  uint32
+	ErrCode astral.Uint8
+	Buffer  astral.Uint32
 }
 
 // astral:blueprint-ignore

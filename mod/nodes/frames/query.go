@@ -12,8 +12,8 @@ var _ Frame = &Query{}
 
 type Query struct {
 	Nonce  astral.Nonce
-	Buffer uint32
-	Query  string
+	Buffer astral.Uint32
+	Query  astral.String16
 }
 
 // astral:blueprint-ignore
@@ -47,7 +47,7 @@ func (frame *Query) ReadFrom(r io.Reader) (n int64, err error) {
 	var m int
 	m, err = io.ReadFull(r, b)
 	n += int64(m)
-	frame.Query = string(b[:m])
+	frame.Query = astral.String16(b[:m])
 
 	return
 }
