@@ -20,19 +20,29 @@ type ExternalDescriber struct {
 	client  *objectscli.Client
 	log     *log.Logger
 	timeout time.Duration
+	lease   *externalLease
 }
 
-func NewExternalDescriber(mod *Module, id *astral.Identity) *ExternalDescriber {
+func NewExternalDescriber(mod *Module, id *astral.Identity, lease *externalLease) *ExternalDescriber {
 	return &ExternalDescriber{
 		mod:     mod,
 		id:      id,
 		client:  objectscli.New(id, astrald.Default()),
 		log:     mod.log.AppendTag(log.Tag(id.Fingerprint())),
 		timeout: defaultExternalDiscovererTimeout,
+		lease:   lease,
 	}
 }
 
 func (d *ExternalDescriber) SourceIdentity() *astral.Identity { return d.id }
+
+// expired reports whether this registration's lease has run out.
+func (d *ExternalDescriber) expired(now time.Time) bool { return d.lease.expired(now) }
+
+// renew extends this registration's lease and reports its new expiry.
+func (d *ExternalDescriber) renew(now time.Time, dur time.Duration) time.Time {
+	return d.lease.renew(now, dur)
+}
 
 // DescribeObject queries the remote peer and relays its descriptors, stamping
 // each with the peer's identity. The stream runs under a per-call timeout and

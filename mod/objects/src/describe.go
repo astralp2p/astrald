@@ -3,6 +3,7 @@ package objects
 import (
 	objectsmod "github.com/astralp2p/astrald/mod/objects"
 	"sync"
+	"time"
 
 	"github.com/astralp2p/astral-go/api/objects"
 	"github.com/astralp2p/astral-go/astral"
@@ -20,8 +21,18 @@ func (mod *Module) Describe(ctx *astral.Context, objectID *astral.ObjectID) (<-c
 
 		var wg sync.WaitGroup
 
+		now := time.Now()
+
 		for _, d := range mod.describers.Clone() {
 			d := d
+
+			// why: waiting for a registrant that has gone is the cost the lease exists
+			// to avoid, and it would be paid on every describe falling between the
+			// expiry and the next sweep tick.
+			if expiredProvider(d, now) {
+				continue
+			}
+
 			wg.Add(1)
 			go func() {
 				defer wg.Done()
