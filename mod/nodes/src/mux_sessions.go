@@ -70,7 +70,7 @@ func (m *Mux) sessionResetFunc(nonce astral.Nonce) func() {
 
 func (m *Mux) sessionOnReadFunc(nonce astral.Nonce) func(int) {
 	return func(n int) {
-		m.ch.Send(&frames.Read{Nonce: nonce, Len: uint32(n)})
+		m.ch.Send(&frames.Read{Nonce: nonce, Len: astral.Uint32(n)})
 	}
 }
 

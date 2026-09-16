@@ -12,8 +12,9 @@ import (
 // StealthHint is broadcast in stealth mode. Only nodes that know the userID can verify the
 // commitment and recover the nodeID from the masked identity.
 type StealthHint struct {
-	Commitment []byte
-	MaskedID   []byte
+	// why: []astral.Uint8 writes the bytes the plain []byte fields wrote, and a Blueprint describes it.
+	Commitment []astral.Uint8
+	MaskedID   []astral.Uint8
 	Nonce      astral.Nonce
 }
 
@@ -28,37 +29,42 @@ func (s *StealthHint) ReadFrom(r io.Reader) (n int64, err error) {
 }
 
 // ComputeCommitment computes sha256(sha256(userID) + nonce))
-func ComputeCommitment(userID *astral.Identity, nonce astral.Nonce) []byte {
+func ComputeCommitment(userID *astral.Identity, nonce astral.Nonce) []astral.Uint8 {
 	h1 := sha256.Sum256(userID.PublicKey().SerializeCompressed())
 
 	var nonceBytes [8]byte
 	binary.LittleEndian.PutUint64(nonceBytes[:], uint64(nonce))
 	h2 := sha256.Sum256(append(h1[:], nonceBytes[:]...))
 
-	return h2[:]
+	commitment := make([]astral.Uint8, len(h2))
+	for i, b := range h2 {
+		commitment[i] = astral.Uint8(b)
+	}
+
+	return commitment
 }
 
 // MaskIdentity XORs nodeID and userID compressed public keys.
-func MaskIdentity(nodeID, userID *astral.Identity) []byte {
+func MaskIdentity(nodeID, userID *astral.Identity) []astral.Uint8 {
 	nodeBytes := nodeID.PublicKey().SerializeCompressed()
 	userBytes := userID.PublicKey().SerializeCompressed()
 
-	masked := make([]byte, 33)
+	masked := make([]astral.Uint8, 33)
 
 	for i := range nodeBytes {
-		masked[i] = nodeBytes[i] ^ userBytes[i]
+		masked[i] = astral.Uint8(nodeBytes[i] ^ userBytes[i])
 	}
 
 	return masked
 }
 
 // UnmaskIdentity recovers a node identity by XORing the masked bytes with the known userID.
-func UnmaskIdentity(masked []byte, userID *astral.Identity) (*astral.Identity, error) {
+func UnmaskIdentity(masked []astral.Uint8, userID *astral.Identity) (*astral.Identity, error) {
 	userBytes := userID.PublicKey().SerializeCompressed()
 
 	var raw [33]byte
 	for i := range raw {
-		raw[i] = masked[i] ^ userBytes[i]
+		raw[i] = byte(masked[i]) ^ userBytes[i]
 	}
 
 	key, err := secp256k1.ParsePubKey(raw[:])
