@@ -50,10 +50,6 @@ func (mod *Module) Run(ctx *astral.Context) error {
 	}
 
 	go func() {
-		// fixme: a listener disabled in tor.yaml still registers an onion for a
-		// few milliseconds at startup. tree.Value.Set refreshes its cache only
-		// once the tree node's notification arrives, so the first followed value
-		// can predate loadSettings.
 		for v := range mod.settings.Listen.Follow(ctx) {
 			mod.server.Set(ctx, v == nil || bool(*v), mod.startServer)
 		}
