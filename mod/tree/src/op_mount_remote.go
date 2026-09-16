@@ -1,6 +1,7 @@
 package tree
 
 import (
+	"github.com/astralp2p/astral-go/api/auth"
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astral-go/astral/channel"
 	"github.com/astralp2p/astral-go/lib/routing"
@@ -15,8 +16,10 @@ type opMountRemoteArgs struct {
 }
 
 func (mod *Module) OpMountRemote(ctx *astral.Context, q *routing.IncomingQuery, args opMountRemoteArgs) (err error) {
+	// why: the check sits at the op and not in Module.MountRemote, because MountRemote
+	// also serves in-process callers, which carry no query caller to authorize.
 	// why: a refused caller must reach neither the directory nor the remote tree.
-	if !mod.authorizeConfigureNodeState(ctx, q) {
+	if !mod.Auth.Authorize(ctx, &auth.ConfigureNodeStateAction{Action: auth.NewAction(q.Caller())}) {
 		return q.Reject()
 	}
 

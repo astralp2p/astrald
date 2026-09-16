@@ -1,6 +1,7 @@
 package dir
 
 import (
+	"github.com/astralp2p/astral-go/api/auth"
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astral-go/astral/channel"
 	"github.com/astralp2p/astral-go/lib/routing"
@@ -12,7 +13,7 @@ type opAliasMapArgs struct {
 }
 
 func (mod *Module) OpAliasMap(ctx *astral.Context, q *routing.IncomingQuery, args opAliasMapArgs) (err error) {
-	if !mod.authorizeSeeNodeState(ctx, q) {
+	if !mod.Auth.Authorize(ctx, &auth.SeeNodeStateAction{Action: auth.NewAction(q.Caller())}) {
 		return q.Reject()
 	}
 

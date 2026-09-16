@@ -49,7 +49,14 @@ func (d *ExternalDescriber) renew(now time.Time, dur time.Duration) time.Time {
 // closes when it ends, errors, or the timeout fires. A peer not authorized as a
 // describer is removed and not queried.
 func (d *ExternalDescriber) DescribeObject(ctx *astral.Context, id *astral.ObjectID) (<-chan *objects.Descriptor, error) {
-	if !d.mod.authorizeServeObjects(ctx, d.id, auth.RoleDescriber) {
+	// why: a registration never outlives the authorization that permitted it, so a
+	// provider whose grant was revoked or has expired is removed on its next call.
+	// note: an external authority that cannot be reached refuses, so it removes a
+	// permitted provider too.
+	if !d.mod.Auth.Authorize(ctx, &auth.ServeObjectsAction{
+		Action: auth.NewAction(d.id),
+		Role:   auth.RoleDescriber,
+	}) {
 		d.mod.removeExternalDescriber(d)
 		return nil, objectsmod.ErrExternalNotAuthorized
 	}

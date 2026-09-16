@@ -1,6 +1,8 @@
 package user
 
 import (
+	"github.com/astralp2p/astral-go/api/auth"
+	"github.com/astralp2p/astral-go/api/user"
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astral-go/astral/channel"
 	"github.com/astralp2p/astral-go/lib/routing"
@@ -14,7 +16,7 @@ type opAssetsArgs struct {
 // to the caller, terminating with EOS. On send failure it attempts to deliver an
 // error frame before returning.
 func (mod *Module) OpAssets(ctx *astral.Context, q *routing.IncomingQuery, args opAssetsArgs) (err error) {
-	if !mod.authorizeSeeSwarm(ctx, q) {
+	if !mod.Auth.Authorize(ctx, &user.SeeSwarmAction{Action: auth.NewAction(q.Caller())}) {
 		return q.RejectWithCode(4)
 	}
 

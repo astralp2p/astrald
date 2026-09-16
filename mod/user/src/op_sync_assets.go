@@ -1,6 +1,7 @@
 package user
 
 import (
+	"github.com/astralp2p/astral-go/api/auth"
 	"github.com/astralp2p/astral-go/api/user"
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astral-go/astral/channel"
@@ -16,7 +17,7 @@ type opSyncAssetsArgs struct {
 // records from the given DB height and replies with the next unread height.
 // If no rows are found at or above Start, echoes Start as the height so callers can safely re-poll.
 func (mod *Module) OpSyncAssets(ctx *astral.Context, q *routing.IncomingQuery, args opSyncAssetsArgs) (err error) {
-	if !mod.authorizeSeeSwarm(ctx, q) {
+	if !mod.Auth.Authorize(ctx, &user.SeeSwarmAction{Action: auth.NewAction(q.Caller())}) {
 		return q.RejectWithCode(4)
 	}
 

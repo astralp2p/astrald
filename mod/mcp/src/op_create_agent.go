@@ -3,6 +3,7 @@ package mcp
 import (
 	"time"
 
+	"github.com/astralp2p/astral-go/api/auth"
 	"github.com/astralp2p/astral-go/api/mcp"
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astral-go/astral/channel"
@@ -26,7 +27,9 @@ func (mod *Module) OpCreateAgent(ctx *astral.Context, q *routing.IncomingQuery, 
 		return q.Reject()
 	}
 
-	if !mod.authorizeAdminManageApps(ctx, q) {
+	// why AdminManageApps, as for apphost's token ops: an agent's credential is an
+	// apphost access token, so administering agents is administering tokens.
+	if !mod.Auth.Authorize(ctx, &auth.AdminManageAppsAction{Action: auth.NewAction(q.Caller())}) {
 		return q.Reject()
 	}
 

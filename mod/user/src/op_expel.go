@@ -1,6 +1,8 @@
 package user
 
 import (
+	"github.com/astralp2p/astral-go/api/auth"
+	"github.com/astralp2p/astral-go/api/user"
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astral-go/astral/channel"
 	"github.com/astralp2p/astral-go/lib/routing"
@@ -29,7 +31,10 @@ func (mod *Module) OpExpel(ctx *astral.Context, q *routing.IncomingQuery, args o
 		return q.RejectWithCode(3)
 	}
 
-	if !mod.authorizeAdminSwarm(ctx, q, nodeID, nil) {
+	if !mod.Auth.Authorize(ctx, &user.AdminSwarmAction{
+		Action:  auth.NewAction(q.Caller()),
+		Subject: nodeID,
+	}) {
 		return q.RejectWithCode(4)
 	}
 

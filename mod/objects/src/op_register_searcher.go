@@ -31,7 +31,10 @@ func (mod *Module) OpRegisterSearcher(ctx *astral.Context, q *routing.IncomingQu
 		return q.Reject()
 	}
 
-	if !mod.authorizeServeObjects(ctx, q.Caller(), auth.RoleSearcher) {
+	if !mod.Auth.Authorize(ctx, &auth.ServeObjectsAction{
+		Action: auth.NewAction(q.Caller()),
+		Role:   auth.RoleSearcher,
+	}) {
 		return q.Reject()
 	}
 

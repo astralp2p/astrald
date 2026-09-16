@@ -6,6 +6,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/astralp2p/astral-go/api/auth"
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astral-go/astral/channel"
 	"github.com/astralp2p/astral-go/lib/routing"
@@ -24,7 +25,7 @@ type opEchoArgs struct {
 // stopped on the Stop type. Strict mode fails on objects whose blueprint isn't
 // registered; lenient mode passes them through unparsed.
 func (mod *Module) OpEcho(ctx *astral.Context, q *routing.IncomingQuery, args opEchoArgs) (err error) {
-	if !mod.authorizeStoreObjects(ctx, q, "", "") {
+	if !mod.Auth.Authorize(ctx, &auth.StoreObjectsAction{Action: auth.NewAction(q.Caller())}) {
 		return q.Reject()
 	}
 

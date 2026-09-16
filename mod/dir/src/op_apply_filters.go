@@ -3,6 +3,7 @@ package dir
 import (
 	"strings"
 
+	"github.com/astralp2p/astral-go/api/auth"
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astral-go/astral/channel"
 	"github.com/astralp2p/astral-go/lib/routing"
@@ -16,7 +17,7 @@ type opApplyFiltersArgs struct {
 }
 
 func (mod *Module) OpApplyFilters(ctx *astral.Context, q *routing.IncomingQuery, args opApplyFiltersArgs) (err error) {
-	if !mod.authorizeSeeNodeState(ctx, q) {
+	if !mod.Auth.Authorize(ctx, &auth.SeeNodeStateAction{Action: auth.NewAction(q.Caller())}) {
 		return q.Reject()
 	}
 

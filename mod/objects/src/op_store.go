@@ -1,6 +1,7 @@
 package objects
 
 import (
+	"github.com/astralp2p/astral-go/api/auth"
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astral-go/astral/channel"
 	"github.com/astralp2p/astral-go/lib/routing"
@@ -13,7 +14,10 @@ type opStoreArgs struct {
 }
 
 func (mod *Module) OpStore(ctx *astral.Context, q *routing.IncomingQuery, args opStoreArgs) error {
-	if !mod.authorizeStoreObjects(ctx, q, args.Repo, "") {
+	if !mod.Auth.Authorize(ctx, &auth.StoreObjectsAction{
+		Action: auth.NewAction(q.Caller()),
+		Repo:   astral.String8(args.Repo),
+	}) {
 		return q.Reject()
 	}
 

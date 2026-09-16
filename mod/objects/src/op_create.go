@@ -1,6 +1,7 @@
 package objects
 
 import (
+	"github.com/astralp2p/astral-go/api/auth"
 	"github.com/astralp2p/astral-go/api/objects"
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astral-go/astral/channel"
@@ -19,7 +20,10 @@ type opCreateArgs struct {
 // On successful commit returns an ObjectID, an ErrorMessage otherwise; either response ends the op. Closing the
 // connection before committing will discard the data.
 func (mod *Module) OpCreate(ctx *astral.Context, q *routing.IncomingQuery, args opCreateArgs) (err error) {
-	if !mod.authorizeStoreObjects(ctx, q, args.Repo, "") {
+	if !mod.Auth.Authorize(ctx, &auth.StoreObjectsAction{
+		Action: auth.NewAction(q.Caller()),
+		Repo:   astral.String8(args.Repo),
+	}) {
 		return q.Reject()
 	}
 

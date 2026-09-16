@@ -1,6 +1,7 @@
 package objects
 
 import (
+	"github.com/astralp2p/astral-go/api/auth"
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astral-go/astral/channel"
 	"github.com/astralp2p/astral-go/lib/routing"
@@ -16,7 +17,11 @@ type opLoadArgs struct {
 
 // OpLoad loads an object into memory and writes it to the output. OpLoad verifies the object hash.
 func (mod *Module) OpLoad(ctx *astral.Context, q *routing.IncomingQuery, args opLoadArgs) (err error) {
-	if !mod.authorizeSeeObjects(ctx, q, args.ID, args.Repo) {
+	if !mod.Auth.Authorize(ctx, &auth.SeeObjectsAction{
+		Action:   auth.NewAction(q.Caller()),
+		ObjectID: args.ID,
+		Repo:     astral.String8(args.Repo),
+	}) {
 		return q.Reject()
 	}
 

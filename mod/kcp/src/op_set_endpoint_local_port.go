@@ -1,6 +1,7 @@
 package kcp
 
 import (
+	"github.com/astralp2p/astral-go/api/auth"
 	"github.com/astralp2p/astral-go/api/kcp"
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astral-go/astral/channel"
@@ -16,7 +17,7 @@ type opSetEndpointLocalPort struct {
 }
 
 func (mod *Module) OpSetEndpointLocalPort(ctx *astral.Context, q *routing.IncomingQuery, args opSetEndpointLocalPort) (err error) {
-	if !mod.authorizeAdminNetwork(ctx, q) {
+	if !mod.Auth.Authorize(ctx, &auth.AdminNetworkAction{Action: auth.NewAction(q.Caller())}) {
 		return q.Reject()
 	}
 

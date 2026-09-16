@@ -1,6 +1,7 @@
 package indexing
 
 import (
+	"github.com/astralp2p/astral-go/api/auth"
 	"github.com/astralp2p/astral-go/api/indexing"
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astral-go/astral/channel"
@@ -48,6 +49,9 @@ func (mod *Module) OpUnregisterIndexer(ctx *astral.Context, q *routing.IncomingQ
 //
 // why: the owner needs no permit, so an identity whose indexer grant is revoked
 // still deletes its own registration.
+// why AdminObjects: deleting a registration destroys its cursors, and an op that
+// destroys object-domain state answers to AdminObjects.
 func (mod *Module) mayUnregister(ctx *astral.Context, q *routing.IncomingQuery, idxer *indexerHandle) bool {
-	return idxer.ownedBy(q.Caller()) || mod.authorizeAdminObjects(ctx, q)
+	return idxer.ownedBy(q.Caller()) ||
+		mod.Auth.Authorize(ctx, &auth.AdminObjectsAction{Action: auth.NewAction(q.Caller())})
 }

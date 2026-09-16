@@ -4,6 +4,7 @@ import (
 	"slices"
 
 	"github.com/astralp2p/astral-go/api/apphost"
+	"github.com/astralp2p/astral-go/api/auth"
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astral-go/astral/channel"
 	"github.com/astralp2p/astral-go/lib/routing"
@@ -21,7 +22,9 @@ func (mod *Module) OpListTokens(ctx *astral.Context, q *routing.IncomingQuery, a
 		return q.Reject()
 	}
 
-	if !mod.authorizeAdminManageApps(ctx, q) {
+	// why AdminManageApps for a listing: a listed token is the bearer credential
+	// itself, so reading the list is administration.
+	if !mod.Auth.Authorize(ctx, &auth.AdminManageAppsAction{Action: auth.NewAction(q.Caller())}) {
 		return q.Reject()
 	}
 

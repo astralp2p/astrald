@@ -1,6 +1,7 @@
 package objects
 
 import (
+	"github.com/astralp2p/astral-go/api/auth"
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astral-go/astral/channel"
 	"github.com/astralp2p/astral-go/lib/routing"
@@ -15,7 +16,7 @@ type opGetBlueprintArgs struct {
 // resolved or included — the caller fetches them itself. Primitive types have no
 // blueprint and return an error.
 func (mod *Module) OpGetBlueprint(ctx *astral.Context, q *routing.IncomingQuery, args opGetBlueprintArgs) (err error) {
-	if !mod.authorizeSeeObjects(ctx, q, nil, "") {
+	if !mod.Auth.Authorize(ctx, &auth.SeeObjectsAction{Action: auth.NewAction(q.Caller())}) {
 		return q.Reject()
 	}
 

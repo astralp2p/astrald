@@ -30,7 +30,7 @@ func (mod *Module) OpGrant(ctx *astral.Context, q *routing.IncomingQuery, args o
 		return q.Reject()
 	}
 
-	if !mod.authorizeAdminManageApps(ctx, q) {
+	if !mod.Auth.Authorize(ctx, &auth.AdminManageAppsAction{Action: auth.NewAction(q.Caller())}) {
 		return q.Reject()
 	}
 

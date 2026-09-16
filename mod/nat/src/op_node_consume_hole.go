@@ -4,6 +4,7 @@ import (
 	natmod "github.com/astralp2p/astrald/mod/nat"
 	"time"
 
+	"github.com/astralp2p/astral-go/api/auth"
 	"github.com/astralp2p/astral-go/api/nat"
 	natclient "github.com/astralp2p/astral-go/api/nat/client"
 	"github.com/astralp2p/astral-go/astral"
@@ -25,7 +26,7 @@ type opNodeConsumeHoleArgs struct {
 // OpNodeConsumeHole coordinates a two-phase lock-then-take exchange to hand a hole out of the pool.
 // When Identity is set it acts as the initiator; otherwise it is the responder waiting for the lock signal.
 func (mod *Module) OpNodeConsumeHole(ctx *astral.Context, q *routing.IncomingQuery, args opNodeConsumeHoleArgs) (err error) {
-	if !mod.authorizeAdminNetwork(ctx, q) {
+	if !mod.Auth.Authorize(ctx, &auth.AdminNetworkAction{Action: auth.NewAction(q.Caller())}) {
 		return q.Reject()
 	}
 

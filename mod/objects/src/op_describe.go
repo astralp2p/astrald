@@ -5,6 +5,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/astralp2p/astral-go/api/auth"
 	"github.com/astralp2p/astral-go/api/objects"
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astral-go/astral/channel"
@@ -23,7 +24,10 @@ type opDescribeArgs struct {
 // OpDescribe streams an object's descriptors, filtered by the Only/Except type
 // lists, and terminates the stream with an EOS marker.
 func (mod *Module) OpDescribe(ctx *astral.Context, q *routing.IncomingQuery, args opDescribeArgs) (err error) {
-	if !mod.authorizeSeeObjects(ctx, q, args.ID, "") {
+	if !mod.Auth.Authorize(ctx, &auth.SeeObjectsAction{
+		Action:   auth.NewAction(q.Caller()),
+		ObjectID: args.ID,
+	}) {
 		return q.Reject()
 	}
 

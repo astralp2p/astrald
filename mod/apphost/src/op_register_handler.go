@@ -1,6 +1,7 @@
 package apphost
 
 import (
+	"github.com/astralp2p/astral-go/api/auth"
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astral-go/astral/channel"
 	"github.com/astralp2p/astral-go/lib/routing"
@@ -23,7 +24,9 @@ func (mod *Module) OpRegisterHandler(ctx *astral.Context, q *routing.IncomingQue
 	// dropped as soon as the query resolves.
 	owner := mod.sessionOwner(q)
 
-	if !mod.authorizeServeApps(ctx, q.Caller()) {
+	// note: ServeApps authorizes adding the caller's own handler. It does not
+	// authorize removing another identity's handler.
+	if !mod.Auth.Authorize(ctx, &auth.ServeAppsAction{Action: auth.NewAction(q.Caller())}) {
 		return q.Reject()
 	}
 

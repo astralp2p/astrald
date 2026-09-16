@@ -1,6 +1,7 @@
 package objects
 
 import (
+	"github.com/astralp2p/astral-go/api/auth"
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astral-go/astral/channel"
 	"github.com/astralp2p/astral-go/lib/routing"
@@ -16,7 +17,7 @@ type opBlueprintsArgs struct {
 // astral.EOS marker so consumers can iterate without relying on channel
 // close to signal end-of-stream.
 func (mod *Module) OpBlueprints(ctx *astral.Context, q *routing.IncomingQuery, args opBlueprintsArgs) (err error) {
-	if !mod.authorizeSeeObjects(ctx, q, nil, "") {
+	if !mod.Auth.Authorize(ctx, &auth.SeeObjectsAction{Action: auth.NewAction(q.Caller())}) {
 		return q.Reject()
 	}
 
