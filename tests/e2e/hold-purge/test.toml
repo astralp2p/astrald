@@ -1,5 +1,9 @@
 env     = "node"
 start   = "two-nodes"
+# why no suite lists it: it purges a repository, so it mutates and saves no
+# state — TERMINAL. The chain rejects it at either end, so a suite could only
+# hold it by ending there. Run it by name: `./tests/run hold-purge`.
+unlisted = "terminal mutator: purges a repository and saves no state"
 mutates = true
 nodes   = ["node1"]
 drivers = ["script"]

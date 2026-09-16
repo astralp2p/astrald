@@ -1,5 +1,9 @@
 env     = "node"
 start   = "null"
+# why no suite lists it: start `null` means a pristine node, and env node runs
+# one live session per run, so a chain cannot go back to an unclaimed node1
+# mid-suite. Run it by name: `./tests/run import-user-software-key`.
+unlisted = "start null needs a pristine node; the env-node chain cannot rewind"
 nodes   = ["node1"]
 drivers = ["script", "agent"]
 timeout = 120
