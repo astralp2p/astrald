@@ -57,6 +57,15 @@ func allowRoot(mod *Module, root *astral.Identity) {
 	}))
 }
 
+// grantRoot registers the same rule as allowRoot on the node-local rail: it
+// stands in for apphost's grant lookup, which answers from a row this node
+// keeps and no other node reads.
+func grantRoot(mod *Module, root *astral.Identity) {
+	mod.Add(authmod.NodeLocal(authmod.Func[*testAction](func(ctx *astral.Context, a *testAction) bool {
+		return a.Actor().IsEqual(root)
+	})))
+}
+
 func dummySig() *crypto.Signature {
 	return &crypto.Signature{Scheme: crypto.SchemeASN1, Data: astral.Bytes16("dummy")}
 }
@@ -205,6 +214,74 @@ func TestAuthorizeCycle(t *testing.T) {
 
 	if mod.Authorize(ctx, action(a)) {
 		t.Fatal("a: want deny - cyclic contracts grant nothing")
+	}
+}
+
+// TestGrantIsNotSatisfiableByAContract is the first bar: an action authorized
+// by a node-local record is not reachable through a signed contract, at any
+// chain length and under the widest permits a chain can carry. Only the holder
+// of the record is authorized.
+func TestGrantIsNotSatisfiableByAContract(t *testing.T) {
+	mod := testModule(t)
+	ctx := astral.NewContext(nil)
+	root := astral.GenerateIdentity()
+	mid := astral.GenerateIdentity()
+	leaf := astral.GenerateIdentity()
+	stranger := astral.GenerateIdentity()
+	grantRoot(mod, root)
+
+	seedContract(t, mod, root, mid, permit(255))
+	seedContract(t, mod, mid, leaf, permit(255))
+	// a contract from an identity the node has granted nothing
+	seedContract(t, mod, stranger, leaf, permit(255))
+
+	if mod.Authorize(ctx, action(mid)) {
+		t.Fatal("mid: want deny - a contract does not reach the grant rail")
+	}
+	if mod.Authorize(ctx, action(leaf)) {
+		t.Fatal("leaf: want deny - no chain length reaches the grant rail")
+	}
+	if !mod.Authorize(ctx, action(root)) {
+		t.Fatal("root: want allow - the grant still decides for its holder")
+	}
+}
+
+// TestGrantIsNotExtendedAHopByItsHolder is the second bar: the grant holder
+// issues a contract for the same action, and the walk must not re-enter the
+// grant as the issuer.
+func TestGrantIsNotExtendedAHopByItsHolder(t *testing.T) {
+	mod := testModule(t)
+	ctx := astral.NewContext(nil)
+	root := astral.GenerateIdentity()
+	leaf := astral.GenerateIdentity()
+	grantRoot(mod, root)
+
+	// the widest contract the holder could write, delegation included
+	seedContract(t, mod, root, leaf, permit(255))
+
+	if mod.Authorize(ctx, action(leaf)) {
+		t.Fatal("leaf: want deny - a grant holder cannot extend the grant a hop")
+	}
+	if !mod.Authorize(ctx, action(root)) {
+		t.Fatal("root: want allow - issuing a contract does not cost the holder its grant")
+	}
+}
+
+// TestContractRailIsUnchangedByTheGrantRail is the no-regression bar: a handler
+// that is not node-local still roots a chain, which is what a node→app contract
+// rests on.
+func TestContractRailIsUnchangedByTheGrantRail(t *testing.T) {
+	mod := testModule(t)
+	ctx := astral.NewContext(nil)
+	root := astral.GenerateIdentity()
+	mid := astral.GenerateIdentity()
+	leaf := astral.GenerateIdentity()
+	allowRoot(mod, root)
+	seedContract(t, mod, root, mid, permit(1))
+	seedContract(t, mod, mid, leaf, permit(0))
+
+	if !mod.Authorize(ctx, action(leaf)) {
+		t.Fatal("leaf: want allow - a portable authority still delegates")
 	}
 }
 
