@@ -32,6 +32,23 @@ func (mod *Module) AuthorizeSeeObjects(ctx *astral.Context, action *auth.SeeObje
 	return mod.authorizeGrant(ctx, action)
 }
 
+// AuthorizeStoreObjects answers whether this node has granted the actor the
+// right to write the objects it keeps.
+//
+// why: a typed shim over the generic lookup, matching AuthorizeSeeObjects.
+//
+// note: objects.register_blueprint authorizes this action, and a served app
+// pushes the blueprints of its own types at startup, so without this shim a
+// consumer cannot decode what that app's ops return.
+//
+// note: this is a write authority and the widest of the object actions a
+// registration can ask for. The accept-all register policy admits every permit
+// put in front of it, so a node that cares which apps write objects installs a
+// policy that decides (register_policy.go).
+func (mod *Module) AuthorizeStoreObjects(ctx *astral.Context, action *auth.StoreObjectsAction) bool {
+	return mod.authorizeGrant(ctx, action)
+}
+
 // AuthorizeSeeSwarm answers whether this node has granted the actor the right to
 // read the swarm's state.
 //
