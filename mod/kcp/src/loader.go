@@ -20,7 +20,7 @@ func (Loader) Load(node astral.Node, assets assets.Assets, l *log.Logger) (core.
 	mod := &Module{
 		node:   node,
 		log:    l,
-		config: defaultConfig,
+		config: defaultConfig(),
 	}
 
 	_ = assets.LoadYAML(kcpmod.ModuleName, &mod.config)
