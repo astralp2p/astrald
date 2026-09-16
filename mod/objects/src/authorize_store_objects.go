@@ -11,6 +11,7 @@ import (
 //
 // Every write op in this module asks this question and rejects the query when
 // the answer is no, before it opens a repository or accepts the connection.
+// objects.push is the exception; see OpPush.
 //
 // repo and objectType declare the nouns the call touches; both are empty for an
 // op that names neither, and for an op whose subject arrives on the channel

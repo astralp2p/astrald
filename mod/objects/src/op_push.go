@@ -15,11 +15,11 @@ type opPushArgs struct {
 
 // OpPush receives pushed objects from the caller and replies with a Bool
 // per object indicating whether it was accepted.
+//
+// why: no action gates this op; each receiver decides what it accepts from the sender.
+// A node joins another node's swarm list only through its membership contract, which
+// arrives here, so a gate on swarm membership refused the one object that admits the sender.
 func (mod *Module) OpPush(ctx *astral.Context, q *routing.IncomingQuery, args opPushArgs) (err error) {
-	if !mod.authorizeStoreObjects(ctx, q, "", "") {
-		return q.Reject()
-	}
-
 	ch := channel.New(q.AcceptRaw(), channel.WithFormats(args.In, args.Out))
 	defer ch.Close()
 

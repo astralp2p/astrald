@@ -23,7 +23,6 @@ func storeObjectsOps() []storeOp {
 	return []storeOp{
 		{"objects.create", func(m *Module) any { return m.OpCreate }, "?repo=local", "local", ""},
 		{"objects.store", func(m *Module) any { return m.OpStore }, "?repo=local", "local", ""},
-		{"objects.push", func(m *Module) any { return m.OpPush }, "", "", ""},
 		{"objects.new_mem", func(m *Module) any { return m.OpNewMem }, "?name=scratch&size=1M", "scratch", ""},
 		{"objects.register_blueprint", func(m *Module) any { return m.OpRegisterBlueprint }, "", "", ""},
 		{"objects.echo", func(m *Module) any { return m.OpEcho }, "", "", ""},
@@ -101,5 +100,24 @@ func TestStoreObjectsAllowsGrantedCaller(t *testing.T) {
 
 	if len(authority.recorded()) != 1 {
 		t.Fatalf("objects.echo made %d authorization calls; want exactly 1", len(authority.recorded()))
+	}
+}
+
+// TestPushAsksNoAuthorization pins the decision on OpPush: a caller holding no
+// permits is not refused, and the op asks the authority nothing. Receivers decide
+// per object.
+//
+// The caller sends nothing, so no receiver runs and the bare module suffices.
+func TestPushAsksNoAuthorization(t *testing.T) {
+	authority := &recordingAuth{verdict: false}
+	mod := &Module{Deps: Deps{Auth: authority}}
+	w := newRecordingWriter()
+
+	if err := route(t, mod.OpPush, astral.GenerateIdentity(), "objects.push", w); err != nil {
+		t.Fatalf("objects.push refused a caller holding no permits: %v", err)
+	}
+
+	if n := len(authority.recorded()); n != 0 {
+		t.Fatalf("objects.push made %d authorization calls; want none", n)
 	}
 }
