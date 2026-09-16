@@ -133,64 +133,6 @@ func (guest *Guest) onAuthTokenMsg(ctx *astral.Context, msg *apphost.AuthTokenMs
 	})
 }
 
-func (guest *Guest) onRegisterHandlerMsg(ctx *astral.Context, msg *apphost.RegisterHandlerMsg) (err error) {
-	// only authenticated guests can register handlers
-	if !guest.isAuthenticated() {
-		return guest.Send(&apphost.ErrorMsg{Code: apphost.ErrCodeDenied})
-	}
-
-	// if requested identity is different from the authenticated identity, check authorization
-	if !msg.Identity.IsEqual(guest.guestID) {
-		if !guest.mod.Auth.Authorize(ctx, &authmod.SudoAction{Action: auth.NewAction(guest.guestID), AsID: msg.Identity}) {
-			return guest.Send(&apphost.ErrorMsg{Code: apphost.ErrCodeDenied})
-		}
-	}
-
-	// add the handler
-	// note: Owner is the authenticated session. Identity may be another identity,
-	// one this session holds a SudoAction for.
-	handler := &IPCHandler{
-		Identity: msg.Identity,
-		Owner:    guest.guestID,
-		IPCToken: msg.AuthToken,
-		Endpoint: string(msg.Endpoint),
-	}
-	guest.mod.ipcHandlers.Add(handler)
-	defer guest.mod.ipcHandlers.Remove(handler) // remove handler on disconnect
-
-	// send ack to the client
-	err = guest.Send(&astral.Ack{})
-	if err != nil {
-		return
-	}
-
-	defer guest.Close()
-	guest.mod.log.Logv(3, "%v registered a handler for %v at %v", guest.guestID, handler.Identity, handler.Endpoint)
-
-	// NOTE: at this stage this guest connection is only used to keep the query handler alive
-
-	// close connection if context ends
-	var done = make(chan struct{})
-	defer close(done)
-	go func() {
-		select {
-		case <-ctx.Done():
-			guest.Close()
-		case <-done:
-		}
-	}()
-
-	// wait for the connection to end ignoring all incoming objects
-	for {
-		_, err = guest.Receive()
-		if err != nil {
-			break
-		}
-	}
-
-	return nil
-}
-
 func (guest *Guest) onRouteQueryMsg(ctx *astral.Context, msg *apphost.RouteQueryMsg) (err error) {
 	// deny if not authenticated and anonymous queries are not allowed
 	if !guest.isAuthenticated() && !guest.mod.config.AllowAnonymous {
