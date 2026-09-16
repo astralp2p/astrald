@@ -33,6 +33,20 @@ func (mod *Module) OpNodeConsumeHole(ctx *astral.Context, q *routing.IncomingQue
 	ch := channel.New(q.AcceptRaw(), channel.WithFormats(args.In, args.Out))
 	defer ch.Close()
 
+	// why: the target resolves before the hole leaves the pool, so a name naming
+	// no node costs no hole. Nothing puts a taken hole back once BeginLock
+	// succeeds: finalizeLock closes the socket and frees the punched mapping.
+	var target *astral.Identity
+	if args.Identity != "" {
+		target, err = mod.Dir.ResolveIdentity(args.Identity)
+		if err != nil {
+			return ch.Send(astral.Err(err))
+		}
+		if target.IsZero() {
+			return ch.Send(astral.Err(natmod.ErrUnknownIdentity))
+		}
+	}
+
 	hole, err := mod.pool.Take(args.Pair)
 	if err != nil {
 		return ch.Send(astral.Err(err))
@@ -40,12 +54,7 @@ func (mod *Module) OpNodeConsumeHole(ctx *astral.Context, q *routing.IncomingQue
 
 	holeNonce := hole.Nonce
 
-	if args.Identity != "" {
-		target, err := mod.Dir.ResolveIdentity(args.Identity)
-		if err != nil {
-			return ch.Send(astral.Err(err))
-		}
-
+	if target != nil {
 		opCtx, cancel := ctx.WithCancel()
 		defer cancel()
 
