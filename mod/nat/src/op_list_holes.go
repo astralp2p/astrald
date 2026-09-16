@@ -19,17 +19,18 @@ func (mod *Module) OpListHoles(ctx *astral.Context, q *routing.IncomingQuery, ar
 	ch := channel.New(q.AcceptRaw(), channel.WithOutputFormat(args.Out))
 	defer ch.Close()
 
+	var target *astral.Identity
+	if args.Identity != "" {
+		target, err = mod.Dir.ResolveIdentity(args.Identity)
+		if err != nil {
+			return ch.Send(astral.Err(err))
+		}
+	}
+
 	holes := mod.pool.GetAll()
 	for _, hole := range holes {
-		if args.Identity != "" {
-			target, err := mod.Dir.ResolveIdentity(args.Identity)
-			if err != nil {
-				return ch.Send(astral.NewError(err.Error()))
-			}
-
-			if !hole.MatchesPeer(target) {
-				continue
-			}
+		if target != nil && !hole.MatchesPeer(target) {
+			continue
 		}
 
 		err = ch.Send(&hole.Hole)

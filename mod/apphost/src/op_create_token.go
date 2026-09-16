@@ -46,7 +46,7 @@ func (mod *Module) OpCreateToken(ctx *astral.Context, q *routing.IncomingQuery, 
 	token, err := mod.CreateAccessToken(identity, args.Duration)
 	if err != nil {
 		mod.log.Errorv(1, "error creating token for %v: %v", identity, err)
-		return q.RejectWithCode(astral.CodeInternalError)
+		return ch.Send(astral.Err(err))
 	}
 
 	return ch.Send(token)
