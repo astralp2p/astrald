@@ -2,7 +2,6 @@ package objects
 
 import (
 	"bytes"
-	"errors"
 	"fmt"
 	objectsmod "github.com/astralp2p/astrald/mod/objects"
 	"io"
@@ -126,42 +125,6 @@ func (mod *Module) Store(ctx *astral.Context, repo objectsmod.Repository, object
 	mod.index(object)
 
 	return id, nil
-}
-
-// Deprecated: Use Probe instead.
-func (mod *Module) GetType(ctx *astral.Context, objectID *astral.ObjectID) (objectType string, err error) {
-	// check the cache
-	// why: a row with NULL Type is tracked but untyped (blob/raw create); fall
-	// through to read the stamp rather than returning a blank as if it were known.
-	row, err := mod.db.Find(objectID)
-	if err == nil && row.Type != nil {
-		return *row.Type, nil
-	}
-
-	// read first bytes of the object
-	r, err := mod.ReadDefault().Read(ctx, objectID, 0, 260) // max header size: 4 magic bytes + 1 len + 255 type
-	if err != nil {
-		return "", objectsmod.ErrNotFound
-	}
-	defer r.Close()
-
-	// read the stamp
-	_, err = (&astral.Stamp{}).ReadFrom(r)
-	if err != nil {
-		return "", errors.New("missing astral stamp")
-	}
-
-	// read the type
-	var t astral.ObjectType
-	_, err = t.ReadFrom(r)
-	if err != nil {
-		return "", err
-	}
-
-	// seed dbObject (idempotent; existing rows are left alone)
-	mod.trackObject(objectID, t.String())
-
-	return t.String(), nil
 }
 
 // Probe reads only the object's header and reports its type, MIME, source repo,

@@ -34,7 +34,6 @@ func seeObjectsOps(id *astral.ObjectID) []seeOp {
 		{"objects.read", func(m *Module) any { return m.OpRead }, "?id=" + id.String() + "&repo=main", id, "main"},
 		{"objects.load", func(m *Module) any { return m.OpLoad }, "?id=" + id.String() + "&repo=main", id, "main"},
 		{"objects.contains", func(m *Module) any { return m.OpContains }, "?repo=main&id=" + id.String(), id, "main"},
-		{"objects.get_type", func(m *Module) any { return m.OpGetType }, "?id=" + id.String(), id, ""},
 		{"objects.probe", func(m *Module) any { return m.OpProbe }, "?id=" + id.String() + "&repo=main", id, "main"},
 		{"objects.describe", func(m *Module) any { return m.OpDescribe }, "?id=" + id.String(), id, ""},
 		{"objects.scan", func(m *Module) any { return m.OpScan }, "?repo=main", nil, "main"},

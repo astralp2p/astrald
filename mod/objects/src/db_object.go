@@ -12,7 +12,7 @@ type dbObject struct {
 	Height uint64           `gorm:"primaryKey;autoIncrement"`
 	ID     *astral.ObjectID `gorm:"uniqueIndex"`
 	// Type is the object's astral type, or NULL when unknown (blobs, raw creates).
-	// why: NULL separates "type unknown" from a known-empty type, so GetType re-reads the stamp instead of caching a blank.
+	// why: NULL separates "type unknown" from a known-empty type.
 	Type      *string   `gorm:"index"`
 	CreatedAt time.Time `gorm:"index"`
 	ReadAt    time.Time `gorm:"not null;default:CURRENT_TIMESTAMP;index"`
