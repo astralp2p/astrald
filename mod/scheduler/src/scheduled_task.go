@@ -126,7 +126,7 @@ func (task *ScheduledTask) Err() error {
 	return task.err
 }
 
-func (task ScheduledTask) ScheduledAt() time.Time {
+func (task *ScheduledTask) ScheduledAt() time.Time {
 	return task.scheduledAt
 }
 

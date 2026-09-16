@@ -116,8 +116,8 @@ func (m *Modules) loadDependencies(ctx *astral.Context, modules []string) []stri
 				err := p.LoadDependencies(ctx)
 				if err != nil {
 					m.log.Error("module %v load dependencies: %v", name, err)
-					panic(err) // TODO: handle this cleanly instead of panicking
-					return
+					// todo: handle this cleanly instead of panicking
+					panic(err)
 				}
 			}
 			loaded.Add(name)

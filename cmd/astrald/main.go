@@ -29,7 +29,9 @@ func main() {
 	ctx, shutdown := context.WithCancel(context.Background())
 
 	// trap ctrl+c
-	sigCh := make(chan os.Signal)
+	// why: signal.Notify never blocks, so an unbuffered channel drops a SIGINT
+	// that arrives while the handler is between its two receives.
+	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, syscall.SIGINT)
 	go func() {
 		<-sigCh
