@@ -12,13 +12,20 @@ type Config struct {
 	ListenPort  int
 }
 
-var trueVal = true
+// defaultConfig returns the config a load starts from.
+//
+// why: yaml.v2 decodes into an existing non-nil pointer instead of allocating a
+// new one, so a default shared by Dial and Listen is rewritten by whichever of
+// them tor.yaml sets. Each load gets its own bools.
+func defaultConfig() Config {
+	dial, listen := true, true
 
-var defaultConfig = Config{
-	Dial:        &trueVal,
-	Listen:      &trueVal,
-	TorProxy:    "127.0.0.1:9050",
-	ControlAddr: "127.0.0.1:9051",
-	DialTimeout: time.Minute,
-	ListenPort:  1791,
+	return Config{
+		Dial:        &dial,
+		Listen:      &listen,
+		TorProxy:    "127.0.0.1:9050",
+		ControlAddr: "127.0.0.1:9051",
+		DialTimeout: time.Minute,
+		ListenPort:  1791,
+	}
 }

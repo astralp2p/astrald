@@ -21,7 +21,7 @@ func (Loader) Load(node astral.Node, assets assets.Assets, logger *log.Logger) (
 		node:   node,
 		log:    logger,
 		assets: assets,
-		config: defaultConfig,
+		config: defaultConfig(),
 	}
 
 	_ = assets.LoadYAML(tor.ModuleName, &mod.config)

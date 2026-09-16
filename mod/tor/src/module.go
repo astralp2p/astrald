@@ -50,6 +50,10 @@ func (mod *Module) Run(ctx *astral.Context) error {
 	}
 
 	go func() {
+		// fixme: a listener disabled in tor.yaml still registers an onion for a
+		// few milliseconds at startup. tree.Value.Set refreshes its cache only
+		// once the tree node's notification arrives, so the first followed value
+		// can predate loadSettings.
 		for v := range mod.settings.Listen.Follow(ctx) {
 			mod.server.Set(ctx, v == nil || bool(*v), mod.startServer)
 		}
@@ -68,9 +72,8 @@ func (mod *Module) loadSettings(ctx *astral.Context) error {
 		}
 	}
 
-	if mod.config.Listen != nil && !*mod.config.Listen {
-		// fixme: writes config.Dial into settings.Listen; config-only listener disablement is broken until this reads *mod.config.Listen
-		val := astral.Bool(*mod.config.Dial)
+	if mod.config.Listen != nil {
+		val := astral.Bool(*mod.config.Listen)
 		if err := mod.settings.Listen.Set(ctx, &val); err != nil {
 			return err
 		}
