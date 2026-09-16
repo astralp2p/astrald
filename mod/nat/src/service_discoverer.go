@@ -50,7 +50,7 @@ func (mod *Module) DiscoverServices(
 
 func (mod *Module) newServiceUpdate(available bool) *services.Update {
 	return &services.Update{
-		Available:  available,
+		Available:  astral.Bool(available),
 		Name:       nat.ModuleName,
 		ProviderID: mod.node.Identity(),
 	}

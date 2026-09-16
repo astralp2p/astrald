@@ -23,7 +23,7 @@ func (mod *Module) RouteQuery(ctx *astral.Context, q *astral.InFlightQuery, w io
 		return query.RouteNotFound()
 	}
 
-	path, _ := query.Parse(q.QueryString)
+	path, _ := query.Parse(q.QueryString.String())
 
 	// why a receipt is admitted without asking the authority: the outbox row is
 	// the permission, and directions are granted per side — asking

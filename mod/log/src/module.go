@@ -32,7 +32,7 @@ func (mod *Module) LogEntryFilter(entry *log.Entry) bool {
 	if lvl == nil {
 		return entry.Level <= DefaultLogLevel
 	}
-	return entry.Level <= *lvl
+	return uint8(entry.Level) <= *lvl
 }
 
 func (mod *Module) Run(ctx *astral.Context) error {

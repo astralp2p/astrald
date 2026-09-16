@@ -100,7 +100,7 @@ type inboundResponse struct {
 
 func newInboundQuery(q *astral.InFlightQuery, w io.WriteCloser) *InboundQuery {
 	iq := &InboundQuery{
-		queryString:  q.QueryString,
+		queryString:  q.QueryString.String(),
 		remoteWriter: w,
 		response:     make(chan inboundResponse, 1),
 	}
@@ -206,7 +206,7 @@ func (r *handlerRouter) RouteQuery(ctx *astral.Context, q *astral.InFlightQuery,
 		return query.RouteNotFound()
 	}
 
-	name, _ := query.Parse(q.QueryString)
+	name, _ := query.Parse(q.QueryString.String())
 
 	h := r.node.lookupQueryHandler(name)
 	if h == nil {

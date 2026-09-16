@@ -83,7 +83,7 @@ func (m *Mux) RouteQuery(ctx *astral.Context, q *astral.InFlightQuery, w io.Writ
 		sourceID = nil
 	}
 
-	conn, ok := m.createSession(q.Nonce, q.Target, sourceID, q.QueryString, true, 0)
+	conn, ok := m.createSession(q.Nonce, q.Target, sourceID, q.QueryString.String(), true, 0)
 	if !ok {
 		return query.RouteNotFound()
 	}
@@ -203,7 +203,7 @@ func (m *Mux) handleInboundQuery(linkNonce astral.Nonce, caller, target, relayID
 		Nonce:       linkNonce,
 		Caller:      caller,
 		Target:      target,
-		QueryString: queryStr,
+		QueryString: astral.String32(queryStr),
 	})
 
 	q.Extra.Set("origin", astral.OriginNetwork)
