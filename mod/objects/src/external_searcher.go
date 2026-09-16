@@ -20,19 +20,29 @@ type ExternalSearcher struct {
 	client  *objectscli.Client
 	log     *log.Logger
 	timeout time.Duration
+	lease   *externalLease
 }
 
-func NewExternalSearcher(mod *Module, id *astral.Identity) *ExternalSearcher {
+func NewExternalSearcher(mod *Module, id *astral.Identity, lease *externalLease) *ExternalSearcher {
 	return &ExternalSearcher{
 		mod:     mod,
 		id:      id,
 		client:  objectscli.New(id, astrald.Default()),
 		log:     mod.log.AppendTag(log.Tag(id.Fingerprint())),
 		timeout: defaultExternalDiscovererTimeout,
+		lease:   lease,
 	}
 }
 
 func (s *ExternalSearcher) SourceIdentity() *astral.Identity { return s.id }
+
+// expired reports whether this registration's lease has run out.
+func (s *ExternalSearcher) expired(now time.Time) bool { return s.lease.expired(now) }
+
+// renew extends this registration's lease and reports its new expiry.
+func (s *ExternalSearcher) renew(now time.Time, dur time.Duration) time.Time {
+	return s.lease.renew(now, dur)
+}
 
 // SearchObject runs the query against the remote peer and relays its results,
 // stamping each with the peer's identity. The stream runs under a per-call

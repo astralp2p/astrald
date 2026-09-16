@@ -8,5 +8,6 @@ object-store
 object-store-peer
 read-remote-peer
 app-query
+registration-lease
 blueprints-two-node
 expel-node                     # mutates two-nodes: nothing may follow it

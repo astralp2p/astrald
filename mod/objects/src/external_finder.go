@@ -19,19 +19,29 @@ type ExternalFinder struct {
 	client  *objectscli.Client
 	log     *log.Logger
 	timeout time.Duration
+	lease   *externalLease
 }
 
-func NewExternalFinder(mod *Module, id *astral.Identity) *ExternalFinder {
+func NewExternalFinder(mod *Module, id *astral.Identity, lease *externalLease) *ExternalFinder {
 	return &ExternalFinder{
 		mod:     mod,
 		id:      id,
 		client:  objectscli.New(id, astrald.Default()),
 		log:     mod.log.AppendTag(log.Tag(id.Fingerprint())),
 		timeout: defaultExternalDiscovererTimeout,
+		lease:   lease,
 	}
 }
 
 func (f *ExternalFinder) SourceIdentity() *astral.Identity { return f.id }
+
+// expired reports whether this registration's lease has run out.
+func (f *ExternalFinder) expired(now time.Time) bool { return f.lease.expired(now) }
+
+// renew extends this registration's lease and reports its new expiry.
+func (f *ExternalFinder) renew(now time.Time, dur time.Duration) time.Time {
+	return f.lease.renew(now, dur)
+}
 
 // FindObject queries the remote peer and relays the provider identities it
 // returns. The stream runs under a per-call timeout and closes when it ends,

@@ -3,6 +3,7 @@ package objects
 import (
 	objectsmod "github.com/astralp2p/astrald/mod/objects"
 	"sync"
+	"time"
 
 	"github.com/astralp2p/astral-go/api/objects"
 	"github.com/astralp2p/astral-go/astral"
@@ -17,8 +18,18 @@ func (mod *Module) Find(ctx *astral.Context, objectID *astral.ObjectID) (<-chan 
 	results := make(chan *astral.Identity)
 	var wg sync.WaitGroup
 
+	now := time.Now()
+
 	for _, finder := range finders {
 		finder := finder
+
+		// why: an expired registration is skipped here rather than only by the sweep,
+		// so no find between the expiry and the next tick waits on a registrant that
+		// has gone.
+		if expiredProvider(finder, now) {
+			continue
+		}
+
 		wg.Add(1)
 		go func() {
 			defer wg.Done()

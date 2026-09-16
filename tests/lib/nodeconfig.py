@@ -46,6 +46,14 @@ MCP_YAML = """\
 bind_mcp: "tcp:127.0.0.1:{mcp}"
 """
 
+# why a sweep this short: the node's default is a minute, which is longer than
+# most tests live, so an expired external registration would still be in memory
+# when the oracle looked. Only the removal and its log line are hurried — the
+# fan-out skips an expired registration whatever this is set to.
+OBJECTS_YAML = """\
+external_registration_sweep_interval: 1s
+"""
+
 # why an authority at all: mod/mcp holds no reachability of its own, and no
 # handler grants these two actions, so a node without one refuses every call
 # between agents. Naming a port a driver may serve lets a test admit a call; an
@@ -138,5 +146,6 @@ def render(root: Path, ports: NodePorts, token: str) -> None:
     (cfg / "ether.yaml").write_text(ETHER_YAML.format(ether=ports.ether))
     (cfg / "kcp.yaml").write_text(KCP_YAML.format(kcp=ports.kcp))
     (cfg / "mcp.yaml").write_text(MCP_YAML.format(mcp=ports.mcp))
+    (cfg / "objects.yaml").write_text(OBJECTS_YAML)
     (cfg / "auth.yaml").write_text(
         AUTH_YAML.format(authority_url=ports.authority_url))

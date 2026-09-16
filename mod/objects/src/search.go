@@ -3,6 +3,7 @@ package objects
 import (
 	objectsmod "github.com/astralp2p/astrald/mod/objects"
 	"sync"
+	"time"
 
 	"github.com/astralp2p/astral-go/api/objects"
 	objectscli "github.com/astralp2p/astral-go/api/objects/client"
@@ -27,8 +28,18 @@ func (mod *Module) Search(ctx *astral.Context, query objects.SearchQuery) (<-cha
 	var wg sync.WaitGroup
 
 	// run local searchers
+	now := time.Now()
+
 	for _, searcher := range mod.searchers.Clone() {
 		searcher := searcher
+
+		// why: an expired registration is skipped here rather than only by the sweep,
+		// so no search between the expiry and the next tick waits on a registrant that
+		// has gone.
+		if expiredProvider(searcher, now) {
+			continue
+		}
+
 		wg.Add(1)
 		go func() {
 			defer wg.Done()

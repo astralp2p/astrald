@@ -61,6 +61,8 @@ type Module struct {
 func (mod *Module) Run(ctx *astral.Context) error {
 	mod.ctx = ctx
 
+	go mod.sweepExternalRegistrations(ctx)
+
 	<-ctx.Done()
 
 	err := mod.objectsReadsJournal.Flush()

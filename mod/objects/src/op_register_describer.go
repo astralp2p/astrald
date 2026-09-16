@@ -1,6 +1,8 @@
 package objects
 
 import (
+	"time"
+
 	"github.com/astralp2p/astral-go/api/auth"
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astral-go/astral/channel"
@@ -9,12 +11,15 @@ import (
 )
 
 type opRegisterDescriberArgs struct {
-	In  string
-	Out string
+	In       string
+	Out      string
+	Duration astral.Duration
 }
 
 // OpRegisterDescriber authorizes the caller under ServeObjects for the describer role, then
-// registers it as an external describer.
+// registers it as an external describer under a lease, answering with the lease granted.
+// Repeating the op renews the caller's registration in place rather than adding a second.
+// The requested duration is clamped to the node's maximum; zero takes the node's default.
 // Rejects network-origin callers and self-registration by the node.
 func (mod *Module) OpRegisterDescriber(ctx *astral.Context, q *routing.IncomingQuery, args opRegisterDescriberArgs) error {
 	// why: cheapest refusal first. A network caller is refused whatever it holds,
@@ -46,10 +51,10 @@ func (mod *Module) OpRegisterDescriber(ctx *astral.Context, q *routing.IncomingQ
 		return ch.Send(astral.Err(err))
 	}
 
-	err = mod.AddDescriber(NewExternalDescriber(mod, id))
+	lease, err := mod.registerExternalDescriber(id, time.Duration(args.Duration))
 	if err != nil {
 		return ch.Send(astral.Err(err))
 	}
 
-	return ch.Send(&astral.Ack{})
+	return ch.Send(lease)
 }
