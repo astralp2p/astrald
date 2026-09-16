@@ -1,107 +1,12 @@
 package crypto
 
 import (
-	"errors"
-	"io"
 	"testing"
-	"time"
 
 	"github.com/astralp2p/astral-go/api/crypto"
 	"github.com/astralp2p/astral-go/api/secp256k1"
 	"github.com/astralp2p/astral-go/astral"
-	"github.com/astralp2p/astral-go/astral/channel"
-	"github.com/astralp2p/astral-go/lib/query"
-	"github.com/astralp2p/astral-go/lib/routing"
 )
-
-// publicKeyRig drives crypto.public_key over a pipe: send writes objects into
-// the op, receive reads the op's answers back, and reported holds the op's own
-// outcome, which names a panic the routing layer turns into a closed connection.
-type publicKeyRig struct {
-	send     channel.Sender
-	receive  channel.Receiver
-	reported chan error
-	in       io.WriteCloser
-}
-
-// startPublicKey routes one crypto.public_key query against a bare Module.
-//
-// why: the op reads no module state, so no dependency has to be stubbed; the
-// pipe is unbuffered, so every receive below observes one send.
-func startPublicKey(t *testing.T) *publicKeyRig {
-	t.Helper()
-
-	mod := &Module{}
-
-	op, err := routing.NewOp(mod.OpPublicKey)
-	if err != nil {
-		t.Fatalf("new op: %v", err)
-	}
-
-	reported := make(chan error, 1)
-	op.LogFunc = func(r *routing.Report) { reported <- r.Err }
-
-	outReader, outWriter := io.Pipe()
-	caller := astral.GenerateIdentity()
-	q := astral.Launch(query.New(caller, caller, "crypto.public_key", nil))
-
-	in, err := op.RouteQuery(astral.NewContext(nil), q, outWriter)
-	if err != nil {
-		t.Fatalf("route crypto.public_key: %v", err)
-	}
-
-	t.Cleanup(func() {
-		in.Close()
-		outReader.Close()
-	})
-
-	return &publicKeyRig{
-		send:     channel.NewSender(in),
-		receive:  channel.NewReceiver(outReader),
-		reported: reported,
-		in:       in,
-	}
-}
-
-// receiveOne reads one object from the op, failing the test on a stalled or
-// broken stream. A broken stream names the op's outcome, so a panic is
-// reported as a panic rather than as a bare EOF.
-func (rig *publicKeyRig) receiveOne(t *testing.T) astral.Object {
-	t.Helper()
-
-	type result struct {
-		object astral.Object
-		err    error
-	}
-	done := make(chan result, 1)
-	go func() {
-		object, err := rig.receive.Receive()
-		done <- result{object: object, err: err}
-	}()
-
-	select {
-	case r := <-done:
-		if r.err != nil {
-			t.Fatalf("receive: %v (op returned: %v)", r.err, rig.opError())
-			return nil
-		}
-		return r.object
-	case <-time.After(10 * time.Second):
-		t.Fatal("crypto.public_key sent nothing")
-		return nil
-	}
-}
-
-// opError reports the op's own outcome. A missing outcome is an op that never
-// returned.
-func (rig *publicKeyRig) opError() error {
-	select {
-	case err := <-rig.reported:
-		return err
-	case <-time.After(10 * time.Second):
-		return errors.New("op did not return")
-	}
-}
 
 // TestPublicKeyAnswersUnsupportedKeyType: a private key of a type no engine
 // supports is answered with an error_message, and the batch survives it.
@@ -110,7 +15,8 @@ func (rig *publicKeyRig) opError() error {
 // unchecked, the nil panicked the op, and the recovered panic closed the
 // connection with no diagnostic: the caller saw EOF.
 func TestPublicKeyAnswersUnsupportedKeyType(t *testing.T) {
-	rig := startPublicKey(t)
+	mod := &Module{}
+	rig := startOp(t, "crypto.public_key", mod.OpPublicKey)
 
 	err := rig.send.Send(&crypto.PrivateKey{Type: "ed25519", Key: []byte{1, 2, 3}})
 	if err != nil {
@@ -150,7 +56,7 @@ func TestPublicKeyAnswersUnsupportedKeyType(t *testing.T) {
 		t.Fatalf("answer to eos is %v; want eos", object.ObjectType())
 	}
 
-	rig.in.Close()
+	rig.raw.Close()
 
 	if err = rig.opError(); err != nil {
 		t.Fatalf("crypto.public_key returned: %v", err)
