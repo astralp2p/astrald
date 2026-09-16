@@ -80,7 +80,7 @@ func TestBlocksAnonymousWeb(t *testing.T) {
 	claimed.User = &stubUser{id: astral.GenerateIdentity(), ready: closedChan()}
 
 	const origin = "https://settings.astrald.app"
-	q := func(s string) *astral.Query { return &astral.Query{QueryString: s} }
+	q := func(s string) *astral.Query { return &astral.Query{QueryString: astral.String32(s)} }
 
 	cases := []struct {
 		name          string

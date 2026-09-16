@@ -15,7 +15,7 @@ func (view QueryView) Render() (out string) {
 		&view.Nonce,
 		view.Caller,
 		view.Target,
-		NewQueryStringView(view.QueryString),
+		NewQueryStringView(view.QueryString.String()),
 	)
 
 	return out

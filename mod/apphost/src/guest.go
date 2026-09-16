@@ -201,7 +201,7 @@ func (guest *Guest) onRouteQueryMsg(ctx *astral.Context, msg *apphost.RouteQuery
 		Nonce:       msg.Nonce,
 		Caller:      msg.Caller,
 		Target:      msg.Target,
-		QueryString: guest.prepareQueryString(string(msg.Query)),
+		QueryString: astral.String32(guest.prepareQueryString(string(msg.Query))),
 	}
 
 	// An unauthenticated web guest is confined to the anonymous_web_allowlist

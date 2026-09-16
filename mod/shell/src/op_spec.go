@@ -21,11 +21,11 @@ func (mod *Module) OpSpec(ctx *astral.Context, q *routing.IncomingQuery, args op
 
 	list := mod.scopes.Spec()
 	slices.SortFunc(list, func(a, b routing.OpSpec) int {
-		return strings.Compare(a.Name, b.Name)
+		return strings.Compare(a.Name.String(), b.Name.String())
 	})
 
 	for _, o := range list {
-		if len(args.Op) > 0 && o.Name != args.Op {
+		if len(args.Op) > 0 && o.Name.String() != args.Op {
 			continue
 		}
 		err = ch.Send(&o)
