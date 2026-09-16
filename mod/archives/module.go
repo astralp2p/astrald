@@ -2,8 +2,9 @@ package archives
 
 import (
 	"context"
+	"io"
+
 	"github.com/astralp2p/astral-go/astral"
-	"time"
 )
 
 const ModuleName = "archives"
@@ -15,15 +16,46 @@ type Module interface {
 	Forget(objectID *astral.ObjectID) error
 }
 
+// Entry is one file of an indexed archive: mod.archives.entry.
+//
+// why: Entry and Archive are registered types, so the archive_indexed event has a Blueprint.
+// why: Modified is astral.Time. A time.Time field encoded to no bytes, so the time an entry
+// carries never crossed the wire.
 type Entry struct {
 	ObjectID *astral.ObjectID
-	Path     string
-	Comment  string
-	Modified time.Time
+	Path     astral.String32
+	Comment  astral.String32
+	Modified astral.Time
 }
 
+func (Entry) ObjectType() string { return "mod.archives.entry" }
+
+func (e Entry) WriteTo(w io.Writer) (n int64, err error) {
+	return astral.Objectify(&e).WriteTo(w)
+}
+
+func (e *Entry) ReadFrom(r io.Reader) (n int64, err error) {
+	return astral.Objectify(e).ReadFrom(r)
+}
+
+// Archive is the index of an archive object: mod.archives.archive.
 type Archive struct {
 	Entries []*Entry
-	Comment string
-	Format  string
+	Comment astral.String32
+	Format  astral.String32
+}
+
+func (Archive) ObjectType() string { return "mod.archives.archive" }
+
+func (a Archive) WriteTo(w io.Writer) (n int64, err error) {
+	return astral.Objectify(&a).WriteTo(w)
+}
+
+func (a *Archive) ReadFrom(r io.Reader) (n int64, err error) {
+	return astral.Objectify(a).ReadFrom(r)
+}
+
+func init() {
+	_ = astral.Add(&Entry{})
+	_ = astral.Add(&Archive{})
 }

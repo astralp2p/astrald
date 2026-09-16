@@ -23,7 +23,7 @@ func (mod *Module) ComposeStatus(a nearby.Composition) {
 			a.Attach(nearby.NewFlag("adoptable"))
 			a.Attach(&nearby.PublicProfile{
 				NodeID:    mod.node.Identity(),
-				NodeAlias: alias,
+				NodeAlias: astral.String8(alias),
 			})
 		}
 
