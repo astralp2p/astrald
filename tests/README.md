@@ -136,12 +136,8 @@ Every story of the catalog, in the cheapest env that can falsify it:
 | — | `smoke` | node | `null` → — |
 | — | `app-query` | node | `two-nodes` → — |
 | — | `hold-purge` | node | `two-nodes` → — (mutates) |
-
-`main.suite` is the env-node chain, and it runs in seconds.
 | — | `fs-watch` | node | `one-node` → — |
 | — | `blueprints-two-node` | node | `two-nodes` → — |
-
-`main.suite` is the env-node chain, and it runs in seconds.
 | — | `gateway-relay` | netsim | `two-nodes` → — (mutates) |
 
 `main.suite` is the env-node chain, and it runs in seconds.
