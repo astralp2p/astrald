@@ -1,9 +1,16 @@
 package apphost
 
 import (
+	"net"
 	"net/url"
 	"strings"
+	"sync"
 	"testing"
+	"time"
+
+	"github.com/astralp2p/astral-go/api/apphost"
+	"github.com/astralp2p/astral-go/astral"
+	"github.com/astralp2p/astral-go/astral/channel"
 )
 
 func TestPrepareQueryString_BinaryMode(t *testing.T) {
@@ -101,4 +108,50 @@ func TestPrepareQueryString_JSONMode(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestNewGuest_locksConcurrentWrites: a guest that registers a service is sent one
+// IncomingQueryMsg per inbound query, each from that query's own routing goroutine,
+// and a binary frame is two writes. Unlocked, two deliveries at once interleave into
+// a stream that never re-syncs — silently, with no error on either side.
+func TestNewGuest_locksConcurrentWrites(t *testing.T) {
+	srvCxn, cliCxn := net.Pipe()
+	defer srvCxn.Close()
+	defer cliCxn.Close()
+
+	guest := NewGuest(nil, srvCxn)
+	client := channel.New(cliCxn)
+
+	const deliveries = 16
+
+	var wg sync.WaitGroup
+	for i := 0; i < deliveries; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			_ = guest.Send(&apphost.IncomingQueryMsg{
+				QueryID: astral.NewNonce(),
+				Caller:  astral.Anyone,
+				Target:  astral.Anyone,
+				Query:   astral.String16("service.call"),
+			})
+		}()
+	}
+
+	// a corrupted stream leaves the reader waiting on a length it invented
+	if err := cliCxn.SetReadDeadline(time.Now().Add(10 * time.Second)); err != nil {
+		t.Fatalf("set read deadline: %v", err)
+	}
+
+	for i := range deliveries {
+		obj, err := client.Receive()
+		if err != nil {
+			t.Fatalf("frame %d: %v — the writes interleaved", i, err)
+		}
+		if _, ok := obj.(*apphost.IncomingQueryMsg); !ok {
+			t.Fatalf("frame %d decoded as %T, want *apphost.IncomingQueryMsg — the writes interleaved", i, obj)
+		}
+	}
+
+	wg.Wait()
 }
