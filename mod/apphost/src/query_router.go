@@ -8,8 +8,8 @@ import (
 	"github.com/astralp2p/astral-go/lib/query"
 )
 
-// RouteQuery dispatches an inbound query to a registered IPC or WS handler whose
-// identity matches the query target. IPC handlers are tried first; WS handlers are
+// RouteQuery dispatches an inbound query to a registered IPC or service handler whose
+// identity matches the query target. IPC handlers are tried first; service handlers are
 // tried second. An unresponsive or closed handler is automatically removed from the
 // registry so stale registrations do not accumulate.
 func (mod *Module) RouteQuery(ctx *astral.Context, q *astral.InFlightQuery, w io.WriteCloser) (io.WriteCloser, error) {
@@ -35,7 +35,7 @@ func (mod *Module) RouteQuery(ctx *astral.Context, q *astral.InFlightQuery, w io
 		}
 	}
 
-	for _, h := range mod.wsHandlers.Clone() {
+	for _, h := range mod.serviceHandlers.Clone() {
 		if !h.Identity.IsEqual(q.Target) {
 			continue
 		}
@@ -48,9 +48,9 @@ func (mod *Module) RouteQuery(ctx *astral.Context, q *astral.InFlightQuery, w io
 			return conn, nil
 		case errors.As(err, &rejected):
 			return query.RejectWithCode(rejected.Code)
-		case errors.Is(err, errWSHandlerGone):
-			mod.log.Logv(3, "removing closed ws handler for %v", h.Identity)
-			mod.wsHandlers.Remove(h)
+		case errors.Is(err, errServiceHandlerGone):
+			mod.log.Logv(3, "removing closed service handler for %v", h.Identity)
+			mod.serviceHandlers.Remove(h)
 		}
 	}
 

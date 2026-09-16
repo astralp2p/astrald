@@ -16,12 +16,12 @@ import (
 	"github.com/astralp2p/astral-go/lib/query"
 )
 
-// inboundTestRig builds a Module + WSHandler pair backed by a net.Pipe so the test
+// inboundTestRig builds a Module + ServiceHandler pair backed by a net.Pipe so the test
 // can read the IncomingQueryMsg the host sends to the "registration WS" and write
 // responses (reject) back as if it were the JS client.
 type inboundTestRig struct {
 	mod       *Module
-	handler   *WSHandler
+	handler   *ServiceHandler
 	clientCh  *channel.Channel // the "JS client" side of the registration WS
 	clientCxn net.Conn
 }
@@ -41,7 +41,7 @@ func newInboundTestRig(t *testing.T) *inboundTestRig {
 	identity := &astral.Identity{} // zero identity is fine for this test — we only
 	// route by IsEqual and the test crafts queries with the same zero identity.
 
-	h := &WSHandler{
+	h := &ServiceHandler{
 		Identity: identity,
 		mod:      mod,
 		ch:       srvCh,
@@ -55,7 +55,7 @@ func newInboundTestRig(t *testing.T) *inboundTestRig {
 	}
 }
 
-// runRouteQuery starts WSHandler.RouteQuery in a goroutine and returns channels for
+// runRouteQuery starts ServiceHandler.RouteQuery in a goroutine and returns channels for
 // its result.
 func (rig *inboundTestRig) runRouteQuery(q *astral.InFlightQuery, w io.WriteCloser) (<-chan io.WriteCloser, <-chan error) {
 	connCh := make(chan io.WriteCloser, 1)
@@ -81,7 +81,7 @@ type nopWriteCloser struct{ buf bytes.Buffer }
 func (n *nopWriteCloser) Write(p []byte) (int, error) { return n.buf.Write(p) }
 func (n *nopWriteCloser) Close() error                { return nil }
 
-func TestWSHandler_AttachPath(t *testing.T) {
+func TestServiceHandler_AttachPath(t *testing.T) {
 	rig := newInboundTestRig(t)
 	defer rig.clientCxn.Close()
 
@@ -126,7 +126,7 @@ func TestWSHandler_AttachPath(t *testing.T) {
 	}
 }
 
-func TestWSHandler_RejectPath(t *testing.T) {
+func TestServiceHandler_RejectPath(t *testing.T) {
 	rig := newInboundTestRig(t)
 	defer rig.clientCxn.Close()
 
@@ -159,7 +159,7 @@ func TestWSHandler_RejectPath(t *testing.T) {
 	}
 }
 
-func TestWSHandler_TimeoutPath(t *testing.T) {
+func TestServiceHandler_TimeoutPath(t *testing.T) {
 	rig := newInboundTestRig(t)
 	defer rig.clientCxn.Close()
 
@@ -186,7 +186,7 @@ func TestWSHandler_TimeoutPath(t *testing.T) {
 	}
 }
 
-func TestWSHandler_HandlerGoneOnSendFailure(t *testing.T) {
+func TestServiceHandler_HandlerGoneOnSendFailure(t *testing.T) {
 	rig := newInboundTestRig(t)
 	// Close the client side BEFORE RouteQuery runs, so the Send fails.
 	rig.clientCxn.Close()
@@ -196,8 +196,8 @@ func TestWSHandler_HandlerGoneOnSendFailure(t *testing.T) {
 
 	select {
 	case err := <-errCh:
-		if !errors.Is(err, errWSHandlerGone) {
-			t.Fatalf("expected errWSHandlerGone, got %v", err)
+		if !errors.Is(err, errServiceHandlerGone) {
+			t.Fatalf("expected errServiceHandlerGone, got %v", err)
 		}
 	case <-time.After(2 * time.Second):
 		t.Fatal("RouteQuery did not return on send failure")

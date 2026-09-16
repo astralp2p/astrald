@@ -47,7 +47,7 @@ type queryEnRoute struct {
 //
 // why: the writes are locked, as they are on the WS path. A guest that registers a
 // service is sent an IncomingQueryMsg per inbound query, each from that query's own
-// routing goroutine (see WSHandler.RouteQuery), and a binary frame is two writes —
+// routing goroutine (see ServiceHandler.RouteQuery), and a binary frame is two writes —
 // unlocked, two deliveries at once interleave into a stream that never re-syncs.
 func NewGuest(mod *Module, conn net.Conn) *Guest {
 	return NewGuestFromChannel(mod, channel.New(conn, channel.WithLockedWrites()), conn, ModeBinary)
@@ -281,18 +281,18 @@ func (guest *Guest) onRegisterServiceMsg(ctx *astral.Context, msg *apphost.Regis
 		return guest.Send(&apphost.ErrorMsg{Code: apphost.ErrCodeDenied})
 	}
 
-	h := &WSHandler{
+	h := &ServiceHandler{
 		Identity: msg.Identity,
 		mod:      guest.mod,
 		ch:       guest.Channel,
 	}
-	guest.mod.wsHandlers.Add(h)
+	guest.mod.serviceHandlers.Add(h)
 	guest.mod.log.Logv(3, "%v registered ws service handler for %v", guest.guestID, msg.Identity)
 
 	// remove on disconnect
 	go func() {
 		<-ctx.Done()
-		guest.mod.wsHandlers.Remove(h)
+		guest.mod.serviceHandlers.Remove(h)
 	}()
 
 	return guest.Send(&astral.Ack{})
@@ -300,7 +300,7 @@ func (guest *Guest) onRegisterServiceMsg(ctx *astral.Context, msg *apphost.Regis
 
 // onAttachQueryMsg pairs this connection with a pending inbound query that was
 // announced earlier via IncomingQueryMsg. On success the conn is "donated" to the
-// routing goroutine inside WSHandler.RouteQuery, which then owns its lifecycle.
+// routing goroutine inside ServiceHandler.RouteQuery, which then owns its lifecycle.
 func (guest *Guest) onAttachQueryMsg(ctx *astral.Context, msg *apphost.AttachQueryMsg) error {
 	pending, ok := guest.mod.pendingInboundQueries.Get(msg.QueryID)
 	if !ok {
@@ -311,7 +311,7 @@ func (guest *Guest) onAttachQueryMsg(ctx *astral.Context, msg *apphost.AttachQue
 		return err
 	}
 
-	// Donate the conn. The routing goroutine in WSHandler.RouteQuery is blocked on
+	// Donate the conn. The routing goroutine in ServiceHandler.RouteQuery is blocked on
 	// pending.attach and will start using the conn as soon as it receives it.
 	guest.donated.Store(true)
 	select {
