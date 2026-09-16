@@ -38,8 +38,8 @@ func (s *Session) Run(ctx *astral.Context) (err error) {
 	for {
 		// print the prompt
 		t.Print(&Prompt{
-			guestID: ctx.Identity(),
-			hostID:  s.mod.node.Identity(),
+			GuestID: ctx.Identity(),
+			HostID:  s.mod.node.Identity(),
 		})
 
 		// read the command
