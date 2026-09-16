@@ -11,26 +11,29 @@ import (
 	"github.com/astralp2p/astral-go/lib/query"
 )
 
-// QueryAttachTimeout is how long the host waits for a JS handler to attach a per-query WS
+// QueryAttachTimeout is how long the host waits for a handler to attach a per-query connection
 // after receiving an IncomingQueryMsg notification. After this, the inbound query is
 // treated as route-not-found.
 const QueryAttachTimeout = 5 * time.Second
 
-// errWSHandlerGone is returned by WSHandler.RouteQuery when the registration WS has
-// gone away (write failed). The caller removes the handler.
-var errWSHandlerGone = errors.New("ws handler gone")
+// errServiceHandlerGone is returned by ServiceHandler.RouteQuery when the registration
+// connection has gone away (write failed). The caller removes the handler.
+var errServiceHandlerGone = errors.New("service handler gone")
 
-// WSHandler routes inbound queries to a JS app over a registered WS notification
-// channel. Each accepted query gets its own per-query WS that the JS app opens after
-// receiving IncomingQueryMsg.
+// ServiceHandler routes inbound queries to an app over the connection that app registered
+// with register_service_msg. The node pushes an IncomingQueryMsg down that connection and
+// the app opens a per-query connection in reply, sending AttachQueryMsg.
 //
-// The name is narrower than the type: onRegisterServiceMsg is dispatched from the
-// switch every transport shares, so a binary IPC guest registering a service is
-// given a WSHandler over its own channel. Anything here must hold for that guest too.
-type WSHandler struct {
+// Every transport reaches this. onRegisterServiceMsg is dispatched from the switch they
+// all share, so the registration is a WebSocket for a browser app and a binary IPC
+// connection for a native one; nothing here may assume either.
+//
+// It is the counterpart of IPCHandler, which inverts the direction: there the app names
+// an endpoint and the node dials it per query.
+type ServiceHandler struct {
 	Identity *astral.Identity
 	mod      *Module
-	ch       *channel.Channel // notification channel (the registration WS)
+	ch       *channel.Channel // notification channel (the registration connection)
 }
 
 // pendingInboundQuery tracks an in-flight inbound query awaiting attach. It lives in
@@ -42,11 +45,11 @@ type pendingInboundQuery struct {
 	reject chan uint8              // sent with the code on RejectIncomingMsg
 }
 
-// RouteQuery pushes IncomingQueryMsg to the registration WS and waits for one of:
-//   - per-query WS to attach (carry the conn back through `attach`)
-//   - RejectIncomingMsg on the registration WS (carry the code through `reject`)
+// RouteQuery pushes IncomingQueryMsg to the registration connection and waits for one of:
+//   - a per-query connection to attach (carry the conn back through `attach`)
+//   - RejectIncomingMsg on the registration connection (carry the code through `reject`)
 //   - QueryAttachTimeout elapses → route-not-found
-func (h *WSHandler) RouteQuery(ctx *astral.Context, q *astral.InFlightQuery, w io.WriteCloser) (io.WriteCloser, error) {
+func (h *ServiceHandler) RouteQuery(ctx *astral.Context, q *astral.InFlightQuery, w io.WriteCloser) (io.WriteCloser, error) {
 	pending := &pendingInboundQuery{
 		query:  q,
 		attach: make(chan io.ReadWriteCloser, 1),
@@ -66,7 +69,7 @@ func (h *WSHandler) RouteQuery(ctx *astral.Context, q *astral.InFlightQuery, w i
 		Query:   astral.String16(q.QueryString),
 	})
 	if err != nil {
-		return nil, errWSHandlerGone
+		return nil, errServiceHandlerGone
 	}
 
 	timer := time.NewTimer(QueryAttachTimeout)

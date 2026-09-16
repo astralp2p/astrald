@@ -313,7 +313,7 @@ func TestServeAppsRegisterServiceRefusesAHostWithoutPermits(t *testing.T) {
 		t.Fatalf("register_service_msg named actor %v; want the host %v", action.Actor(), host)
 	}
 
-	if n := len(mod.wsHandlers.Clone()); n != 0 {
+	if n := len(mod.serviceHandlers.Clone()); n != 0 {
 		t.Fatalf("register_service_msg installed %d handlers for a refused host; want none", n)
 	}
 }
@@ -347,7 +347,7 @@ func TestServeAppsRegisterServiceNamesTheHostedIdentity(t *testing.T) {
 		t.Fatalf("register_service_msg named actor %v; want the hosted identity %v", action.Actor(), host)
 	}
 
-	handlers := mod.wsHandlers.Clone()
+	handlers := mod.serviceHandlers.Clone()
 	if len(handlers) != 1 || !handlers[0].Identity.IsEqual(host) {
 		t.Fatalf("register_service_msg installed %d handlers; want 1 for %v", len(handlers), host)
 	}

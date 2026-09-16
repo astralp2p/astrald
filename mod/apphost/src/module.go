@@ -43,7 +43,7 @@ type Module struct {
 	listeners             []net.Listener
 	conns                 <-chan net.Conn
 	ipcHandlers           sig.Set[*IPCHandler]
-	wsHandlers            sig.Set[*WSHandler]
+	serviceHandlers       sig.Set[*ServiceHandler]
 	enRoute               sig.Map[astral.Nonce, *queryEnRoute]
 	pendingInboundQueries sig.Map[astral.Nonce, *pendingInboundQuery]
 }
