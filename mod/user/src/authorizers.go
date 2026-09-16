@@ -105,12 +105,14 @@ func (mod *Module) AuthorizeSeeObjects(ctx *astral.Context, a *auth.SeeObjectsAc
 // AuthorizeStoreObjects grants object writes to the user identity itself, to this node
 // itself, and to any node in the local swarm.
 //
-// why: the eight ops StoreObjects covers had no authorization at all, so there is no policy
-// to carry over. This is the narrowest rule that keeps the node working: the swarm pushes
-// signed contracts and sibling notifications at objects.push, and a local caller with no
+// why: the ops StoreObjects covers had no authorization at all, so there is no policy
+// to carry over. This is the narrowest rule that keeps the node working: a local caller with no
 // caller identity is the node itself (core/router.go). An app holding no permits is refused,
 // which is the point. Replacing this handler with a root rule and contract-issued grants is
 // stage 2 of the parent task.
+//
+// todo: decide whether the local swarm still holds this action. The swarm was granted it for
+// objects.push, which asks no action (mod/objects/src/op_push.go).
 //
 // why this node's own identity is granted: a local caller carrying no identity is promoted to
 // it (core/router.go), which is how the CLI and apphost reach these ops — including the
