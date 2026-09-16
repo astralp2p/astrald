@@ -18,6 +18,20 @@ func (mod *Module) AuthorizeServeObjects(ctx *astral.Context, action *auth.Serve
 	return mod.authorizeGrant(ctx, action)
 }
 
+// AuthorizeSeeObjects answers whether this node has granted the actor the right
+// to read the objects it holds.
+//
+// why: a typed shim over the generic lookup, matching AuthorizeServeObjects. The
+// auth registry dispatches on the concrete action type, so every grantable
+// action needs one of these.
+//
+// note: objects.blueprints authorizes this action, and a served app syncs its
+// blueprints at startup, so without this shim no registered app completes
+// apps.Serve however its registration asked.
+func (mod *Module) AuthorizeSeeObjects(ctx *astral.Context, action *auth.SeeObjectsAction) bool {
+	return mod.authorizeGrant(ctx, action)
+}
+
 // AuthorizeSeeSwarm answers whether this node has granted the actor the right to
 // read the swarm's state.
 //

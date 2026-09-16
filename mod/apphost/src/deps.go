@@ -23,6 +23,7 @@ func (mod *Module) LoadDependencies(*astral.Context) (err error) {
 	// the list grows by a line and never by a decision. A wildcard authorizer
 	// would replace the list rather than each entry.
 	mod.Auth.Add(authmod.Func[*auth.ServeObjectsAction](mod.AuthorizeServeObjects))
+	mod.Auth.Add(authmod.Func[*auth.SeeObjectsAction](mod.AuthorizeSeeObjects))
 	mod.Auth.Add(authmod.Func[*user.SeeSwarmAction](mod.AuthorizeSeeSwarm))
 	mod.Auth.Add(authmod.Func[*user.AdminSwarmAction](mod.AuthorizeAdminSwarm))
 	mod.Auth.Add(authmod.Func[*auth.AdminNetworkAction](mod.AuthorizeAdminNetwork))
