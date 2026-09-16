@@ -24,18 +24,18 @@ type WrappedConn struct {
 }
 
 // Outbound reports whether this connection was initiated locally.
-func (w WrappedConn) Outbound() bool {
-	return w.outbound
+func (c *WrappedConn) Outbound() bool {
+	return c.outbound
 }
 
 // LocalEndpoint returns the local endpoint of the connection.
-func (w WrappedConn) LocalEndpoint() exonet.Endpoint {
-	return w.local
+func (c *WrappedConn) LocalEndpoint() exonet.Endpoint {
+	return c.local
 }
 
 // RemoteEndpoint returns the remote endpoint of the connection.
-func (w WrappedConn) RemoteEndpoint() exonet.Endpoint {
-	return w.remote
+func (c *WrappedConn) RemoteEndpoint() exonet.Endpoint {
+	return c.remote
 }
 
 // Read reads data from the KCP session.
