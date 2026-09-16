@@ -44,8 +44,13 @@ type queryEnRoute struct {
 }
 
 // NewGuest creates a binary-mode Guest over a net.Conn. Used by TCP/unix/memu listeners.
+//
+// why: the writes are locked, as they are on the WS path. A guest that registers a
+// service is sent an IncomingQueryMsg per inbound query, each from that query's own
+// routing goroutine (see WSHandler.RouteQuery), and a binary frame is two writes —
+// unlocked, two deliveries at once interleave into a stream that never re-syncs.
 func NewGuest(mod *Module, conn net.Conn) *Guest {
-	return NewGuestFromChannel(mod, channel.New(conn), conn, ModeBinary)
+	return NewGuestFromChannel(mod, channel.New(conn, channel.WithLockedWrites()), conn, ModeBinary)
 }
 
 // NewGuestFromChannel creates a Guest over a pre-built channel. The closer is what

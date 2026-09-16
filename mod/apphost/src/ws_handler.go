@@ -23,6 +23,10 @@ var errWSHandlerGone = errors.New("ws handler gone")
 // WSHandler routes inbound queries to a JS app over a registered WS notification
 // channel. Each accepted query gets its own per-query WS that the JS app opens after
 // receiving IncomingQueryMsg.
+//
+// The name is narrower than the type: onRegisterServiceMsg is dispatched from the
+// switch every transport shares, so a binary IPC guest registering a service is
+// given a WSHandler over its own channel. Anything here must hold for that guest too.
 type WSHandler struct {
 	Identity *astral.Identity
 	mod      *Module
