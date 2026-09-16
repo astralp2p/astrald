@@ -38,3 +38,18 @@ func (Func[T]) ActionType() string {
 	}
 	return reflect.New(t).Interface().(auth.ActionObject).ObjectType()
 }
+
+// NodeLocal marks a handler whose authority answers for this node alone, so
+// that Authorize consults it for the caller and never for a contract's issuer.
+//
+// why: a node-local record is not portable evidence — no other node reads it —
+// so the identity holding one has nothing to hand on. Reaching such a handler
+// from a chain link would let its holder extend the record a hop by issuing a
+// contract for the same action.
+func NodeLocal(h TypedHandler) TypedHandler {
+	return nodeLocal{h}
+}
+
+type nodeLocal struct{ TypedHandler }
+
+func (nodeLocal) NodeLocal() {}

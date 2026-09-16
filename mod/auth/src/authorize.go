@@ -5,12 +5,18 @@ import (
 	"github.com/astralp2p/astral-go/astral"
 )
 
+// nodeLocal is a handler whose authority answers for this node alone. The auth
+// module marks one with NodeLocal.
+type nodeLocal interface{ NodeLocal() }
+
 // Authorize checks whether the action is permitted: directly by a registered
 // handler, or through a chain of contracts delegating the action from an
 // identity a handler allows down to the actor. Each chain link must carry a
 // matching permit whose Delegation covers the number of hops below the link
 // (the link closest to the actor needs none) and whose constraints pass, so
 // authority attenuates and its flow is bounded by every issuer on the path.
+// A handler the auth module marks NodeLocal answers for the caller alone, so no
+// chain ends at one.
 func (mod *Module) Authorize(ctx *astral.Context, action auth.ActionObject) bool {
 	visited := map[string]struct{}{action.Actor().String(): {}}
 	return mod.authorize(ctx, action, 0, visited)
@@ -23,7 +29,7 @@ func (mod *Module) authorize(ctx *astral.Context, action auth.ActionObject, hops
 	actionType := action.ObjectType()
 	actor := action.Actor()
 
-	if mod.authorizeHandlers(ctx, action) {
+	if mod.authorizeHandlers(ctx, action, hopsBelow) {
 		if hopsBelow == 0 {
 			mod.log.Logv(1, "allow %v %v", actor, actionType)
 		}
@@ -89,8 +95,18 @@ func (mod *Module) authorize(ctx *astral.Context, action auth.ActionObject, hops
 	return false
 }
 
-func (mod *Module) authorizeHandlers(ctx *astral.Context, action auth.ActionObject) bool {
+// authorizeHandlers asks the handlers registered for the action's type.
+// hopsBelow is the number of chain links between the action's current actor and
+// the original caller.
+//
+// why: a node-local handler answers only at hopsBelow 0. Its authority is a
+// record this node keeps and no other node reads, so the holder has nothing to
+// hand on; letting a chain link reach it would extend that record a hop.
+func (mod *Module) authorizeHandlers(ctx *astral.Context, action auth.ActionObject, hopsBelow int) bool {
 	for _, h := range mod.get(action.ObjectType()) {
+		if _, local := h.(nodeLocal); local && hopsBelow > 0 {
+			continue
+		}
 		if h.Authorize(ctx, action) {
 			return true
 		}
