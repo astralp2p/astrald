@@ -85,7 +85,11 @@ steps   = []                # env netsim only: vm:<op> … and driver
 drivers = ["script"]        # script, agent, or both
 timeout = 180               # the scripted flow's budget
 agent_timeout = 2400         # an operator plans and works the node through its own shell
+unlisted = "<reason>"       # set only when no suite may list this test
 ```
+
+`unlisted` is the exception, and it is checked: a test is listed in a suite or
+carries this key, never neither and never both.
 
 `env` is a minimum, not a prison: drivers and oracles read `session.json`
 and never learn whether the endpoints behind it are processes on loopback
@@ -125,7 +129,7 @@ Every story of the catalog, in the cheapest env that can falsify it:
 | Story | Test | Env | States |
 |-------|------|-----|--------|
 | 0001 | `bootstrap-user-software-key` | node | `null` → `one-node` |
-| 0002 | `import-user-software-key` | node | `null` → — (runs alone) |
+| 0002 | `import-user-software-key` | node | `null` → — (unlisted) |
 | 0003 | `adopt-node` | node | `one-node` → `two-nodes` |
 | 0004 | `tor-link` | netsim | `two-nodes` → `two-nodes-tor` |
 | 0005 | `nat-punch` | netsim | `two-nodes` → `two-nodes-nat` |
@@ -134,21 +138,27 @@ Every story of the catalog, in the cheapest env that can falsify it:
 | 0008 | `read-remote-peer` | node | `two-nodes-data-peer` → `two-nodes-data-read` |
 | 0009 | `expel-node` | node | `two-nodes` → `two-nodes-expel` |
 | — | `smoke` | node | `null` → — |
-| — | `app-query` | node | `two-nodes` → — |
-| — | `hold-purge` | node | `two-nodes` → — (mutates) |
+| — | `mcp-origin` | node | `null` → — |
 | — | `fs-watch` | node | `one-node` → — |
+| — | `registration-lease` | node | `one-node` → — |
+| — | `app-query` | node | `two-nodes` → — |
+| — | `apphost-origin` | node | `two-nodes` → — |
 | — | `blueprints-two-node` | node | `two-nodes` → — |
-| — | `gateway-relay` | netsim | `two-nodes` → — (mutates) |
+| — | `hold-purge` | node | `two-nodes` → — (unlisted, mutates) |
+| — | `gateway-relay` | netsim | `two-nodes` → — (unlisted, mutates) |
 
 `main.suite` is the env-node chain, and it runs in seconds.
-`import-user-software-key` stays out of it: `start = "null"` means a
-pristine node, and env `node` runs one live session, so the chain cannot go
-back to an unclaimed node1 mid-suite.
 
-`hold-purge` stays out for a different reason: it purges a repository, so it
-is `mutates` with no `saves` — TERMINAL, and nothing may follow it. The chain
-rejects it at either end, after `expel-node` by that test's `two-nodes-expel`
-fence and before it by this one's.
+A test marked **unlisted** is in no suite, and its `test.toml` carries the
+`unlisted` key naming the reason — a start state the chain cannot reach twice,
+or a terminal mutator nothing may follow. Run one by name:
+`./tests/run hold-purge`.
+
+That key is not a label. `selftest/test_shipped.py` partitions the tree by it:
+every test is listed in a suite or declares why it is not, and a test that is
+neither fails the selftest. A test no suite names is never executed, and
+before this guard the tree held one such test — written, merged, and unrun
+from the day it landed.
 
 ## Where the machines come from
 
@@ -182,9 +192,17 @@ failure and an oracle failure are already distinct in the results
 went wrong without anyone reading a log.
 
 A test that declares the `agent` driver ships a `prompt.md`: the flow in
-plain words, the way a person would ask for it. `smoke` and `nat-punch`
-declare `script` only — neither is a flow anyone would ask an operator to
-perform.
+plain words, the way a person would ask for it. Eight of the eighteen tests
+declare it. The other ten are `script` only — a probe like `smoke`, a
+transport measurement like `nat-punch`, or a guard that has to be driven with
+a token and an origin no operator's shell can produce, like `apphost-origin`.
+
+A prompt is the agent driver's half of the contract `write_facts` is for the
+scripted one, so `selftest/test_prompts.py` holds the two to the same fact
+names: a prompt must name every fact its own oracle reads and its own
+`script.py` writes. That check is static and costs milliseconds, which is the
+point — the alternative is learning about a renamed fact after a forty-minute
+VM run.
 
 The operator is the Qwen Code agent the lab bakes into `node1`, equipped
 with the `astral-agent` skill. It reaches astrald over the guest's own

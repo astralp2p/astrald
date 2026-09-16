@@ -20,7 +20,16 @@ E2E = TESTS / "e2e"
 
 WRITE_FACTS = re.compile(r"write_facts\(\s*\{(.*?)\}", re.S)
 KEY = re.compile(r"[\"']([A-Za-z_][A-Za-z0-9_]*)[\"']\s*:")
-READ_FACT = re.compile(r"""facts["']\]\[["']([A-Za-z_][A-Za-z0-9_]*)""")
+
+# why two patterns: an oracle reads a fact either straight off the document,
+# `doc["facts"]["x"]`, or through a local it bound first, `facts = doc["facts"]`
+# then `facts["x"]`. Both idioms ship in the tree, and matching only the first
+# made this check blind to every oracle written in the second — silently, since
+# an unseen read looks exactly like a test that owes its operator nothing.
+READ_FACTS = (
+    re.compile(r"""facts["']\]\[["']([A-Za-z_][A-Za-z0-9_]*)"""),
+    re.compile(r"""\bfacts\[["']([A-Za-z_][A-Za-z0-9_]*)"""),
+)
 
 
 def facts_written(test_dir: Path) -> set:
@@ -37,7 +46,11 @@ def facts_read(test_dir: Path) -> set:
     verify = test_dir / "verify.py"
     if not verify.exists():
         return set()
-    return set(READ_FACT.findall(verify.read_text()))
+    text = verify.read_text()
+    out = set()
+    for pattern in READ_FACTS:
+        out |= set(pattern.findall(text))
+    return out
 
 
 class TestPrompts(unittest.TestCase):

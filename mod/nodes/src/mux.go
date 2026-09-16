@@ -194,8 +194,11 @@ func (m *Mux) handleInboundQuery(linkNonce astral.Nonce, caller, target, relayID
 
 	router, err := m.waitRouter(ctx)
 	if err != nil {
-		conn.Close()
+		// why the response precedes the close: closing emits a Reset, and the
+		// peer handles frames in arrival order — a Reset first deletes the
+		// session the Response needs, and the verdict is dropped.
 		m.ch.Send(&frames.Response{Nonce: linkNonce, ErrCode: frames.CodeRejected})
+		conn.Close()
 		return
 	}
 
@@ -209,13 +212,17 @@ func (m *Mux) handleInboundQuery(linkNonce astral.Nonce, caller, target, relayID
 	q.Extra.Set("origin", astral.OriginNetwork)
 	w, err := router.RouteQuery(ctx, q, conn)
 	if err != nil {
-		conn.Close()
 		code := uint8(frames.CodeRejected)
 		var reject *astral.ErrRejected
 		if errors.As(err, &reject) {
 			code = reject.Code
 		}
+		// why the response precedes the close: see waitRouter above. This is
+		// the path every origin refusal on a linked node takes, and with the
+		// order reversed the caller waits out its own deadline and reads the
+		// refusal as route_not_found.
 		m.ch.Send(&frames.Response{Nonce: linkNonce, ErrCode: astral.Uint8(code)})
+		conn.Close()
 		return
 	}
 

@@ -10,4 +10,5 @@ read-remote-peer
 app-query
 registration-lease
 blueprints-two-node
+apphost-origin
 expel-node                     # mutates two-nodes: nothing may follow it

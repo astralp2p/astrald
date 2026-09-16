@@ -15,7 +15,7 @@ from pathlib import Path
 ENVS = {"node", "netsim"}
 DRIVERS = {"script", "agent"}
 KEYS = {"env", "start", "saves", "mutates", "nodes", "steps", "drivers",
-        "timeout", "agent_timeout"}
+        "timeout", "agent_timeout", "unlisted"}
 NULL = "null"
 
 # the walk value after a mutator that saves no state: nothing may follow it
@@ -35,6 +35,7 @@ class Test:
     drivers: list
     timeout: int
     agent_timeout: int
+    unlisted: str | None
 
 
 def load_all(e2e_dir: Path) -> dict:
@@ -77,7 +78,23 @@ def _parse(mf: Path) -> Test:
                 # across 21 shell commands — the VM, not the endpoint, sets
                 # the pace, and it was still going when a 900 s budget cut it
                 # off. The scripted flow it replaces takes under a second.
-                agent_timeout=int(raw.get("agent_timeout", 2400)))
+                agent_timeout=int(raw.get("agent_timeout", 2400)),
+                # why a manifest field and not a list in the selftest: a test
+                # no suite lists never runs, and the tree had one such test
+                # sitting unexecuted from the day it landed. The reason has to
+                # travel with the test, so removing the last suite entry that
+                # named it fails rather than silently retiring it.
+                unlisted=_unlisted(name, raw))
+
+
+def _unlisted(name: str, raw: dict) -> str | None:
+    """The reason no suite lists this test, or None when a suite must."""
+    if "unlisted" not in raw:
+        return None
+    reason = raw["unlisted"]
+    if not isinstance(reason, str) or not reason.strip():
+        raise ValueError(f"{name}: unlisted must be a non-empty reason string")
+    return reason.strip()
 
 
 def _producers(all: dict) -> dict:

@@ -1,5 +1,10 @@
 env     = "netsim"
 start   = "two-nodes"
+# why no suite lists it: a terminal mutator in VMs — enter-nat rewrites the
+# world and the gateway config outlives the run, so nothing may follow it, and
+# substrate.suite already spends its two-nodes on tor-link and nat-punch. Run it
+# by name: `./tests/run gateway-relay`.
+unlisted = "terminal mutator in netsim: rewrites the world and saves no state"
 # why: enter-nat rewrites the world in place and nothing puts it back, and the
 # gateway config outlives the run on two VMs. Declaring it lets the walk reject
 # a bad order in milliseconds rather than after ten minutes of VM time.

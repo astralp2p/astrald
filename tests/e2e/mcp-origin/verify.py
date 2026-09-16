@@ -28,7 +28,15 @@ REFUSAL_MARKERS = ("query failed", "rejected", "access denied")
 # what a refusal must NOT read like — these mean the call never got a verdict.
 # "unknown target" is the call gate's refusal, which stops a query before it
 # reaches the guard under test.
-NOT_A_REFUSAL = ("HTTP 401", "HTTP 403", "HTTP 404", "HTTP 500",
+#
+# why route-not-found is listed, and listed first: mod/mcp wraps every routing
+# error as "query failed: %v" (mod/mcp/src/tool_query.go:86), and "query failed"
+# is a refusal marker above. An op that is unmounted, renamed or simply absent
+# therefore reads as a refusal on the marker alone — so an unmounted shell.shell
+# with the origin guard removed would keep this test green. Checked after the
+# markers, this is what separates "the guard refused it" from "nothing answered".
+NOT_A_REFUSAL = ("route not found", "route_not_found", "routenotfound",
+                 "HTTP 401", "HTTP 403", "HTTP 404", "HTTP 500",
                  "unknown target", "undecodable")
 
 
