@@ -25,21 +25,13 @@ func (db *DB) Contains(id *astral.ObjectID) (b bool, err error) {
 	return
 }
 
-func (db *DB) Find(id *astral.ObjectID) (row *dbObject, err error) {
-	err = db.
-		Where("id = ?", id).
-		First(&row).Error
-	return
-}
-
 // Create seeds a tracking row for id with the given type. Idempotent: if a
 // row for id already exists, the call is a no-op (existing Type and ReadAt
 // are preserved). Used by every "object entered the device" path —
-// Module.Store/Load/Probe/GetType and OpCreate — to keep dbObject in sync
+// Module.Store/Load/Probe and OpCreate — to keep dbObject in sync
 // with what flows through the module.
 func (db *DB) Create(id *astral.ObjectID, objectType string) error {
-	// why: an empty type means "unknown" (blob/raw create); store NULL, not "",
-	// so GetType re-reads the stamp instead of returning a cached blank.
+	// why: an empty type means "unknown" (blob/raw create); store NULL, not "".
 	var t *string
 	if objectType != "" {
 		t = &objectType

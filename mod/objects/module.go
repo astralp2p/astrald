@@ -66,9 +66,6 @@ type Module interface {
 	// Probe probes the object (checks type and latency)
 	Probe(ctx *astral.Context, repo Repository, objectID *astral.ObjectID) (probe *objects.Probe, err error)
 
-	// Deprecated: Use Probe instead.
-	GetType(ctx *astral.Context, objectID *astral.ObjectID) (objectType string, err error)
-
 	// Register stores a runtime *astral.Blueprint (struct kind or alias kind) and returns
 	// its content-addressed ObjectID. Other Object types return ErrBlueprintInvalid.
 	Register(astral.Object) (*astral.ObjectID, error)
