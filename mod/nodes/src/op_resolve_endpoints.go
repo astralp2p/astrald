@@ -16,8 +16,10 @@ func (mod *Module) OpResolveEndpoints(ctx *astral.Context, q *routing.IncomingQu
 		return q.Reject()
 	}
 
+	// why: the zero identity names no node, and ResolveEndpoints fans the target
+	// out to every registered resolver without testing it.
 	targetID, err := mod.Dir.ResolveIdentity(args.Identity)
-	if err != nil {
+	if err != nil || targetID.IsZero() {
 		return q.RejectWithCode(2)
 	}
 
