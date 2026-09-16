@@ -49,7 +49,14 @@ func (s *ExternalSearcher) renew(now time.Time, dur time.Duration) time.Time {
 // timeout and closes when it ends, errors, or the timeout fires. A peer not
 // authorized as a searcher is removed and not queried.
 func (s *ExternalSearcher) SearchObject(ctx *astral.Context, q objects.SearchQuery) (<-chan *objects.SearchResult, error) {
-	if !s.mod.authorizeServeObjects(ctx, s.id, auth.RoleSearcher) {
+	// why: a registration never outlives the authorization that permitted it, so a
+	// provider whose grant was revoked or has expired is removed on its next call.
+	// note: an external authority that cannot be reached refuses, so it removes a
+	// permitted provider too.
+	if !s.mod.Auth.Authorize(ctx, &auth.ServeObjectsAction{
+		Action: auth.NewAction(s.id),
+		Role:   auth.RoleSearcher,
+	}) {
 		s.mod.removeExternalSearcher(s)
 		return nil, objectsmod.ErrExternalNotAuthorized
 	}

@@ -1,6 +1,8 @@
 package user
 
 import (
+	"github.com/astralp2p/astral-go/api/auth"
+	"github.com/astralp2p/astral-go/api/user"
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astral-go/astral/channel"
 	"github.com/astralp2p/astral-go/lib/routing"
@@ -14,7 +16,10 @@ type opAddAssetArgs struct {
 // OpAddAsset authorizes the caller under AdminSwarm, then adds the object to the
 // user's asset list.
 func (mod *Module) OpAddAsset(ctx *astral.Context, q *routing.IncomingQuery, args opAddAssetArgs) (err error) {
-	if !mod.authorizeAdminSwarm(ctx, q, nil, args.ID) {
+	if !mod.Auth.Authorize(ctx, &user.AdminSwarmAction{
+		Action:   auth.NewAction(q.Caller()),
+		ObjectID: args.ID,
+	}) {
 		return q.RejectWithCode(4)
 	}
 

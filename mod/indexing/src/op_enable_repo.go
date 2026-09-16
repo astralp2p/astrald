@@ -1,6 +1,7 @@
 package indexing
 
 import (
+	"github.com/astralp2p/astral-go/api/auth"
 	modindexing "github.com/astralp2p/astral-go/api/indexing"
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astral-go/astral/channel"
@@ -17,7 +18,12 @@ type opEnableRepoArgs struct {
 // OpEnableRepo toggles repo indexing on or off; set Disable=true in args to
 // deregister a previously enabled repo.
 func (mod *Module) OpEnableRepo(ctx *astral.Context, q *routing.IncomingQuery, args opEnableRepoArgs) (err error) {
-	if !mod.authorizeStoreObjects(ctx, q, args.Repo) {
+	// why StoreObjects: indexing state is node-wide, and enabling a repository
+	// indexes every object in it from then on, so the op writes node state.
+	if !mod.Auth.Authorize(ctx, &auth.StoreObjectsAction{
+		Action: auth.NewAction(q.Caller()),
+		Repo:   astral.String8(args.Repo),
+	}) {
 		return q.Reject()
 	}
 

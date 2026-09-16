@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/astralp2p/astral-go/api/auth"
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astral-go/astral/channel"
 	"github.com/astralp2p/astral-go/lib/routing"
@@ -17,7 +18,10 @@ type opFindArgs struct {
 }
 
 func (mod *Module) OpFind(ctx *astral.Context, q *routing.IncomingQuery, args opFindArgs) error {
-	if !mod.authorizeSeeObjects(ctx, q, args.ID, "") {
+	if !mod.Auth.Authorize(ctx, &auth.SeeObjectsAction{
+		Action:   auth.NewAction(q.Caller()),
+		ObjectID: args.ID,
+	}) {
 		return q.Reject()
 	}
 

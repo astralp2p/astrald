@@ -1,6 +1,7 @@
 package nat
 
 import (
+	"github.com/astralp2p/astral-go/api/auth"
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astral-go/astral/channel"
 	"github.com/astralp2p/astral-go/lib/routing"
@@ -12,7 +13,7 @@ type opListHolesArgs struct {
 }
 
 func (mod *Module) OpListHoles(ctx *astral.Context, q *routing.IncomingQuery, args opListHolesArgs) (err error) {
-	if !mod.authorizeAdminNetwork(ctx, q) {
+	if !mod.Auth.Authorize(ctx, &auth.AdminNetworkAction{Action: auth.NewAction(q.Caller())}) {
 		return q.Reject()
 	}
 

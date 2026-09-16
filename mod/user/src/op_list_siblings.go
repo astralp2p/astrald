@@ -1,6 +1,8 @@
 package user
 
 import (
+	"github.com/astralp2p/astral-go/api/auth"
+	"github.com/astralp2p/astral-go/api/user"
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astral-go/astral/channel"
 	"github.com/astralp2p/astral-go/lib/routing"
@@ -15,7 +17,7 @@ type opListSiblingsArgs struct {
 // identities of all currently linked sibling nodes. Derives the context from the
 // caller's identity and the requested zone.
 func (mod *Module) OpListSiblings(ctx *astral.Context, q *routing.IncomingQuery, args opListSiblingsArgs) (err error) {
-	if !mod.authorizeSeeSwarm(ctx, q) {
+	if !mod.Auth.Authorize(ctx, &user.SeeSwarmAction{Action: auth.NewAction(q.Caller())}) {
 		return q.RejectWithCode(4)
 	}
 

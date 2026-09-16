@@ -3,6 +3,7 @@ package services
 import (
 	"errors"
 
+	"github.com/astralp2p/astral-go/api/auth"
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astral-go/astral/channel"
 	"github.com/astralp2p/astral-go/lib/routing"
@@ -41,7 +42,9 @@ func (mod *Module) OpAdvertise(ctx *astral.Context, q *routing.IncomingQuery, ar
 		return q.Reject()
 	}
 
-	if !mod.authorizeServeApps(ctx, q) {
+	// note: ServeApps authorizes advertising the caller itself. It does not
+	// authorize withdrawing another identity's advertisement.
+	if !mod.Auth.Authorize(ctx, &auth.ServeAppsAction{Action: auth.NewAction(q.Caller())}) {
 		return q.Reject()
 	}
 

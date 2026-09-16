@@ -1,6 +1,8 @@
 package user
 
 import (
+	"github.com/astralp2p/astral-go/api/auth"
+	"github.com/astralp2p/astral-go/api/user"
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astral-go/astral/channel"
 	"github.com/astralp2p/astral-go/lib/routing"
@@ -15,7 +17,10 @@ type opRemoveAssetArgs struct {
 // object ID.
 // Rejects the query with an internal error code if removal fails, before the channel is accepted.
 func (mod *Module) OpRemoveAsset(ctx *astral.Context, q *routing.IncomingQuery, args opRemoveAssetArgs) (err error) {
-	if !mod.authorizeAdminSwarm(ctx, q, nil, args.ID) {
+	if !mod.Auth.Authorize(ctx, &user.AdminSwarmAction{
+		Action:   auth.NewAction(q.Caller()),
+		ObjectID: args.ID,
+	}) {
 		return q.RejectWithCode(4)
 	}
 

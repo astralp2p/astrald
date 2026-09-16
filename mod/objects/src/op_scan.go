@@ -1,6 +1,7 @@
 package objects
 
 import (
+	"github.com/astralp2p/astral-go/api/auth"
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astral-go/astral/channel"
 	"github.com/astralp2p/astral-go/lib/routing"
@@ -15,7 +16,10 @@ type opScanArgs struct {
 
 // OpScan sends a list of object ids in a repository
 func (mod *Module) OpScan(ctx *astral.Context, q *routing.IncomingQuery, args opScanArgs) (err error) {
-	if !mod.authorizeSeeObjects(ctx, q, nil, args.Repo) {
+	if !mod.Auth.Authorize(ctx, &auth.SeeObjectsAction{
+		Action: auth.NewAction(q.Caller()),
+		Repo:   astral.String8(args.Repo),
+	}) {
 		return q.Reject()
 	}
 

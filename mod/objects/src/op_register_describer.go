@@ -31,7 +31,10 @@ func (mod *Module) OpRegisterDescriber(ctx *astral.Context, q *routing.IncomingQ
 		return q.Reject()
 	}
 
-	if !mod.authorizeServeObjects(ctx, q.Caller(), auth.RoleDescriber) {
+	if !mod.Auth.Authorize(ctx, &auth.ServeObjectsAction{
+		Action: auth.NewAction(q.Caller()),
+		Role:   auth.RoleDescriber,
+	}) {
 		return q.Reject()
 	}
 

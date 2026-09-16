@@ -1,6 +1,7 @@
 package objects
 
 import (
+	"github.com/astralp2p/astral-go/api/auth"
 	"github.com/astralp2p/astral-go/api/objects"
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astral-go/astral/channel"
@@ -12,7 +13,7 @@ type opRepositoriesArgs struct {
 }
 
 func (mod *Module) OpRepositories(ctx *astral.Context, q *routing.IncomingQuery, args opRepositoriesArgs) (err error) {
-	if !mod.authorizeSeeObjects(ctx, q, nil, "") {
+	if !mod.Auth.Authorize(ctx, &auth.SeeObjectsAction{Action: auth.NewAction(q.Caller())}) {
 		return q.Reject()
 	}
 

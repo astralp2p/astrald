@@ -1,6 +1,7 @@
 package nat
 
 import (
+	"github.com/astralp2p/astral-go/api/auth"
 	natclient "github.com/astralp2p/astral-go/api/nat/client"
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astral-go/astral/channel"
@@ -16,7 +17,7 @@ type opPunchArgs struct {
 
 // OpPunch drives the initiator side of the NAT punch protocol and registers the resulting hole.
 func (mod *Module) OpPunch(ctx *astral.Context, q *routing.IncomingQuery, args opPunchArgs) error {
-	if !mod.authorizeAdminNetwork(ctx, q) {
+	if !mod.Auth.Authorize(ctx, &auth.AdminNetworkAction{Action: auth.NewAction(q.Caller())}) {
 		return q.Reject()
 	}
 

@@ -1,6 +1,7 @@
 package dir
 
 import (
+	"github.com/astralp2p/astral-go/api/auth"
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astral-go/astral/channel"
 	"github.com/astralp2p/astral-go/lib/routing"
@@ -13,8 +14,10 @@ type opSetAliasArgs struct {
 }
 
 func (mod *Module) OpSetAlias(ctx *astral.Context, q *routing.IncomingQuery, args opSetAliasArgs) (err error) {
+	// why: the check sits at the op and not in Module.SetAlias, because SetAlias
+	// also serves in-process callers, which carry no query caller to authorize.
 	// note: clearing an alias is a change and passes the same check as setting one.
-	if !mod.authorizeConfigureNodeState(ctx, q) {
+	if !mod.Auth.Authorize(ctx, &auth.ConfigureNodeStateAction{Action: auth.NewAction(q.Caller())}) {
 		return q.Reject()
 	}
 

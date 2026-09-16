@@ -1,6 +1,8 @@
 package coldcard
 
 import (
+	"github.com/astralp2p/astral-go/api/auth"
+	"github.com/astralp2p/astral-go/api/coldcard"
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astral-go/astral/channel"
 	"github.com/astralp2p/astral-go/lib/routing"
@@ -15,7 +17,7 @@ type opScanArgs struct {
 // success or an Error. A caller refused coldcard.ScanAction is rejected before
 // the query is accepted.
 func (mod *Module) OpScan(ctx *astral.Context, q *routing.IncomingQuery, args opScanArgs) (err error) {
-	if !mod.authorizeScan(ctx, q) {
+	if !mod.Auth.Authorize(ctx, &coldcard.ScanAction{Action: auth.NewAction(q.Caller())}) {
 		return q.Reject()
 	}
 

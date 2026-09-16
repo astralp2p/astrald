@@ -1,6 +1,7 @@
 package tcp
 
 import (
+	"github.com/astralp2p/astral-go/api/auth"
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astral-go/astral/channel"
 	"github.com/astralp2p/astral-go/lib/routing"
@@ -15,7 +16,7 @@ type opNewEphemeralListenerArgs struct {
 // OpNewEphemeralListener handles a remote request to open an ephemeral TCP listener on the given port,
 // using the module's own acceptAll handler to establish inbound links for every accepted connection.
 func (mod *Module) OpNewEphemeralListener(ctx *astral.Context, q *routing.IncomingQuery, args opNewEphemeralListenerArgs) (err error) {
-	if !mod.authorizeAdminNetwork(ctx, q) {
+	if !mod.Auth.Authorize(ctx, &auth.AdminNetworkAction{Action: auth.NewAction(q.Caller())}) {
 		return q.Reject()
 	}
 

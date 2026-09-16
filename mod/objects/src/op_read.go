@@ -3,6 +3,7 @@ package objects
 import (
 	"io"
 
+	"github.com/astralp2p/astral-go/api/auth"
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astral-go/lib/routing"
 )
@@ -21,7 +22,11 @@ type opReadArgs struct {
 func (mod *Module) OpRead(ctx *astral.Context, q *routing.IncomingQuery, args opReadArgs) (err error) {
 	ctx = ctx.IncludeZone(args.Zone)
 
-	if !mod.authorizeSeeObjects(ctx, q, args.ID, args.Repo) {
+	if !mod.Auth.Authorize(ctx, &auth.SeeObjectsAction{
+		Action:   auth.NewAction(q.Caller()),
+		ObjectID: args.ID,
+		Repo:     astral.String8(args.Repo),
+	}) {
 		return q.Reject()
 	}
 

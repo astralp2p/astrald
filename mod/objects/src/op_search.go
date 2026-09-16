@@ -5,6 +5,7 @@ import (
 	objectsmod "github.com/astralp2p/astrald/mod/objects"
 	"time"
 
+	"github.com/astralp2p/astral-go/api/auth"
 	"github.com/astralp2p/astral-go/api/objects"
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astral-go/astral/channel"
@@ -22,7 +23,10 @@ type SearchArgs struct {
 // OpSearch streams matches for the query, deduplicated by ObjectID and
 // optionally filtered to objects the named repo contains. Bounded to one minute.
 func (mod *Module) OpSearch(ctx *astral.Context, q *routing.IncomingQuery, args SearchArgs) (err error) {
-	if !mod.authorizeSeeObjects(ctx, q, nil, args.Repo) {
+	if !mod.Auth.Authorize(ctx, &auth.SeeObjectsAction{
+		Action: auth.NewAction(q.Caller()),
+		Repo:   astral.String8(args.Repo),
+	}) {
 		return q.Reject()
 	}
 

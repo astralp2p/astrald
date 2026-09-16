@@ -277,7 +277,7 @@ func (guest *Guest) onRegisterServiceMsg(ctx *astral.Context, msg *apphost.Regis
 
 	// why: ServeApps names the identity a handler answers for, as it does for
 	// apphost.register_handler, so a sudo holder hosts only an identity that may host.
-	if !guest.mod.authorizeServeApps(ctx, msg.Identity) {
+	if !guest.mod.Auth.Authorize(ctx, &auth.ServeAppsAction{Action: auth.NewAction(msg.Identity)}) {
 		return guest.Send(&apphost.ErrorMsg{Code: apphost.ErrCodeDenied})
 	}
 

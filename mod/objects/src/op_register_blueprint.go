@@ -1,6 +1,7 @@
 package objects
 
 import (
+	"github.com/astralp2p/astral-go/api/auth"
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astral-go/astral/channel"
 	"github.com/astralp2p/astral-go/lib/routing"
@@ -25,7 +26,7 @@ type opRegisterBlueprintArgs struct {
 // grantor handing out StoreObjects would not expect it. Splitting this op into its own
 // action costs one action type and one call site.
 func (mod *Module) OpRegisterBlueprint(ctx *astral.Context, q *routing.IncomingQuery, args opRegisterBlueprintArgs) error {
-	if !mod.authorizeStoreObjects(ctx, q, "", "") {
+	if !mod.Auth.Authorize(ctx, &auth.StoreObjectsAction{Action: auth.NewAction(q.Caller())}) {
 		return q.Reject()
 	}
 

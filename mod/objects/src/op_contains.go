@@ -1,6 +1,7 @@
 package objects
 
 import (
+	"github.com/astralp2p/astral-go/api/auth"
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astral-go/astral/channel"
 	"github.com/astralp2p/astral-go/lib/routing"
@@ -16,7 +17,11 @@ type opContainsArgs struct {
 // OpContains reports whether a repository holds an object. With the ID arg it
 // answers once; otherwise it streams a Bool per ObjectID read from the channel.
 func (mod *Module) OpContains(ctx *astral.Context, q *routing.IncomingQuery, args opContainsArgs) (err error) {
-	if !mod.authorizeSeeObjects(ctx, q, args.ID, args.Repo) {
+	if !mod.Auth.Authorize(ctx, &auth.SeeObjectsAction{
+		Action:   auth.NewAction(q.Caller()),
+		ObjectID: args.ID,
+		Repo:     astral.String8(args.Repo),
+	}) {
 		return q.Reject()
 	}
 

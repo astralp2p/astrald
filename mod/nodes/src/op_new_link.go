@@ -4,6 +4,7 @@ import (
 	"errors"
 	"strings"
 
+	"github.com/astralp2p/astral-go/api/auth"
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astral-go/astral/channel"
 	"github.com/astralp2p/astral-go/lib/routing"
@@ -21,7 +22,7 @@ type opNewLinkArgs struct {
 // given (or all) strategies. The link is built by a scheduled task; the query is accepted
 // before it completes so creation may outlast the query timeout. Failures map to reject codes.
 func (mod *Module) OpNewLink(ctx *astral.Context, q *routing.IncomingQuery, args opNewLinkArgs) (err error) {
-	if !mod.authorizeAdminNetwork(ctx, q) {
+	if !mod.Auth.Authorize(ctx, &auth.AdminNetworkAction{Action: auth.NewAction(q.Caller())}) {
 		return q.Reject()
 	}
 

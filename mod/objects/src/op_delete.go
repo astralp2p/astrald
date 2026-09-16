@@ -1,6 +1,7 @@
 package objects
 
 import (
+	"github.com/astralp2p/astral-go/api/auth"
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astral-go/astral/channel"
 	"github.com/astralp2p/astral-go/lib/routing"
@@ -17,7 +18,13 @@ type opDeleteArgs struct {
 // channel. Requires an explicit repository — there is no default, to avoid
 // accidental deletion.
 func (mod *Module) OpDelete(ctx *astral.Context, q *routing.IncomingQuery, args opDeleteArgs) (err error) {
-	if !mod.authorizeAdminObjects(ctx, q, args.ID, args.Repo) {
+	// why AdminObjects and not StoreObjects: a grant to add objects does not grant
+	// destroying them.
+	if !mod.Auth.Authorize(ctx, &auth.AdminObjectsAction{
+		Action:   auth.NewAction(q.Caller()),
+		ObjectID: args.ID,
+		Repo:     astral.String8(args.Repo),
+	}) {
 		return q.Reject()
 	}
 

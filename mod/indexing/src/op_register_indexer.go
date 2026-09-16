@@ -1,6 +1,7 @@
 package indexing
 
 import (
+	"github.com/astralp2p/astral-go/api/auth"
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astral-go/astral/channel"
 	"github.com/astralp2p/astral-go/lib/routing"
@@ -21,7 +22,10 @@ func (mod *Module) OpRegisterIndexer(ctx *astral.Context, q *routing.IncomingQue
 		return q.Reject()
 	}
 
-	if !mod.authorizeServeIndexer(ctx, q) {
+	if !mod.Auth.Authorize(ctx, &auth.ServeObjectsAction{
+		Action: auth.NewAction(q.Caller()),
+		Role:   auth.RoleIndexer,
+	}) {
 		return q.Reject()
 	}
 

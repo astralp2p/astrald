@@ -1,6 +1,7 @@
 package services
 
 import (
+	"github.com/astralp2p/astral-go/api/auth"
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astral-go/astral/channel"
 	"github.com/astralp2p/astral-go/lib/routing"
@@ -16,7 +17,7 @@ type opSyncArgs struct {
 // OpSync fetches and caches services for the requested identity over ZoneNetwork.
 // Any inbound channel message cancels the sync, allowing the caller to abort early.
 func (mod *Module) OpSync(ctx *astral.Context, q *routing.IncomingQuery, args opSyncArgs) (err error) {
-	if !mod.authorizeAdminNetwork(ctx, q) {
+	if !mod.Auth.Authorize(ctx, &auth.AdminNetworkAction{Action: auth.NewAction(q.Caller())}) {
 		return q.Reject()
 	}
 

@@ -3,6 +3,7 @@ package indexing
 import (
 	"time"
 
+	"github.com/astralp2p/astral-go/api/auth"
 	"github.com/astralp2p/astral-go/api/indexing"
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astral-go/astral/channel"
@@ -29,7 +30,10 @@ func (mod *Module) OpSubscribe(ctx *astral.Context, q *routing.IncomingQuery, ar
 
 	// note: the permit is checked when a subscription starts. Revoking it refuses
 	// the next subscription and leaves a running one open.
-	if !mod.authorizeServeIndexer(ctx, q) {
+	if !mod.Auth.Authorize(ctx, &auth.ServeObjectsAction{
+		Action: auth.NewAction(q.Caller()),
+		Role:   auth.RoleIndexer,
+	}) {
 		return q.Reject()
 	}
 
