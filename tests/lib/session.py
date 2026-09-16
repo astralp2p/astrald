@@ -7,11 +7,15 @@ from lib.nodeconfig import ports_for
 
 
 class Session:
-    def __init__(self, dir: Path, binary: Path, port_base: int):
+    def __init__(self, dir: Path, binary: Path, port_base: int,
+                 keep: bool = False):
         self.dir = Path(dir)
         self.dir.mkdir(parents=True, exist_ok=True)
         self.binary = binary
         self.port_base = port_base
+        # why: a kept world outlives the runner, so its nodes are started
+        # without the parent-death signal. Decided before the first node boots.
+        self.keep = keep
         self.nodes = {}
         self.facts = {}
 
@@ -22,7 +26,7 @@ class Session:
             idx = len(self.nodes)
             node = LocalNode(name, self.dir / name, self.binary,
                              ports_for(self.port_base, idx))
-            node.start()
+            node.start(keep=self.keep)
             self.nodes[name] = node   # track BEFORE readiness — a node that
             await node.wait_ready()   # fails wait_ready must stay stoppable
         self.write_session_json()

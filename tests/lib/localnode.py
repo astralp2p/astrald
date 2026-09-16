@@ -47,7 +47,7 @@ class LocalNode:
     def endpoint(self) -> str:
         return f"tcp:127.0.0.1:{self.ports.apphost}"
 
-    def start(self) -> None:
+    def start(self, keep: bool = False) -> None:
         render(self.root, self.ports, self.token)
         self.root.mkdir(parents=True, exist_ok=True)
         log = self.log_path.open("ab")
@@ -56,10 +56,16 @@ class LocalNode:
         # then reported as a broken environment. stop() signals the daemon
         # itself, and the parent-death signal replaces the group's reach when
         # the runner dies without a teardown.
+        #
+        # why: --keep asks for the opposite — a world that outlives the runner
+        # — so the parent-death signal is not installed for a kept run. The
+        # no-keep path is unchanged and still leaves no daemon behind a
+        # SIGKILLed runner.
         self.proc = subprocess.Popen(
             [str(self.binary), "-root", str(self.root)],
             stdout=log, stderr=subprocess.STDOUT, start_new_session=True,
-            preexec_fn=_die_with_runner if sys.platform == "linux" else None)
+            preexec_fn=None if keep or sys.platform != "linux"
+            else _die_with_runner)
 
     def alive(self) -> bool:
         return self.proc is not None and self.proc.poll() is None

@@ -10,9 +10,10 @@ from lib.session import Session
 class LocalExecutor(Executor):
     env = "node"
 
-    def __init__(self, dir: Path, binary: Path, ports: PortLease):
+    def __init__(self, dir: Path, binary: Path, ports: PortLease,
+                 keep: bool = False):
         self._ports = ports   # held for the run: no other run takes the span
-        self._session = Session(dir, binary, ports.base)
+        self._session = Session(dir, binary, ports.base, keep=keep)
 
     @property
     def session_json_path(self) -> Path:

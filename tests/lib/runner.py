@@ -129,7 +129,7 @@ def _executor(args, plan, dir, binary, ports, ref):
         return ex
     if run_env(plan, args.driver, args.target) == "netsim":
         return NetsimExecutor(dir, binary, ref)
-    return LocalExecutor(dir, binary, lease_ports(**ports))
+    return LocalExecutor(dir, binary, lease_ports(**ports), keep=args.keep)
 
 
 def main(args) -> int:
