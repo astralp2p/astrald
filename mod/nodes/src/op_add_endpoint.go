@@ -1,7 +1,6 @@
 package nodes
 
 import (
-	"errors"
 	"strings"
 	"time"
 
@@ -25,11 +24,6 @@ func (mod *Module) OpAddEndpoint(ctx *astral.Context, q *routing.IncomingQuery, 
 		return q.Reject()
 	}
 
-	chunks := strings.SplitN(args.Endpoint, ":", 2)
-	if len(chunks) != 2 {
-		return errors.New("invalid endpoint")
-	}
-
 	ch := channel.New(q.AcceptRaw(), channel.WithFormats(args.In, args.Out))
 	defer ch.Close()
 
@@ -40,6 +34,11 @@ func (mod *Module) OpAddEndpoint(ctx *astral.Context, q *routing.IncomingQuery, 
 
 	if identity.IsZero() {
 		return ch.Send(astral.NewError("missing identity"))
+	}
+
+	chunks := strings.SplitN(args.Endpoint, ":", 2)
+	if len(chunks) != 2 {
+		return ch.Send(astral.NewError("invalid endpoint"))
 	}
 
 	parse, err := mod.Exonet.Parse(chunks[0], chunks[1])

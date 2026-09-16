@@ -8,10 +8,7 @@ import (
 
 type opSyncWithArgs struct {
 	Identity string `query:"required"`
-	// fixme: Start is accepted and ignored; syncAssets reads the height from the
-	// tree cursor. The spec documents it as the height to start from.
-	Start astral.Uint64
-	Out   string
+	Out      string
 }
 
 // OpSyncWith authorizes the caller under AdminSwarm, then triggers an outbound
