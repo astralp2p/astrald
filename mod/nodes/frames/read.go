@@ -13,7 +13,7 @@ var _ Frame = &Read{}
 // Read is a frame requesting more data for the nonce
 type Read struct {
 	Nonce astral.Nonce
-	Len   uint32
+	Len   astral.Uint32
 }
 
 // astral:blueprint-ignore

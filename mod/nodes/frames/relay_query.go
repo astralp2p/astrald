@@ -41,13 +41,23 @@ func (frame *RelayQuery) ReadFrom(r io.Reader) (n int64, err error) {
 }
 
 func (frame *RelayQuery) WriteTo(w io.Writer) (n int64, err error) {
-	m, err := frame.CallerID.WriteTo(w)
+	// why: astral.Identity declares WriteTo on the value receiver, so a nil pointer panics instead of erroring.
+	// why: a nil identity encodes as the zero identity, the 33 null bytes ReadFrom decodes to a zero identity.
+	callerID, targetID := frame.CallerID, frame.TargetID
+	if callerID == nil {
+		callerID = &astral.Identity{}
+	}
+	if targetID == nil {
+		targetID = &astral.Identity{}
+	}
+
+	m, err := callerID.WriteTo(w)
 	n += m
 	if err != nil {
 		return
 	}
 
-	m, err = frame.TargetID.WriteTo(w)
+	m, err = targetID.WriteTo(w)
 	n += m
 	if err != nil {
 		return

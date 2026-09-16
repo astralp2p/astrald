@@ -1,7 +1,7 @@
 package nearby
 
 import (
-	"bytes"
+	"slices"
 
 	"github.com/astralp2p/astral-go/api/auth"
 	"github.com/astralp2p/astral-go/astral"
@@ -28,7 +28,7 @@ func (mod *Module) ResolveStatus(status *nearby.StatusMessage) *astral.Identity 
 			return nil
 		}
 
-		if !bytes.Equal(nearby.ComputeCommitment(userID, hint.Nonce), hint.Commitment) {
+		if !slices.Equal(nearby.ComputeCommitment(userID, hint.Nonce), hint.Commitment) {
 			return nil
 		}
 
