@@ -311,3 +311,38 @@ func TestAuthorizeActorRestored(t *testing.T) {
 		t.Fatal("actor not restored after a denied walk")
 	}
 }
+
+func sudoAction(actor, as *astral.Identity) *authmod.SudoAction {
+	return &authmod.SudoAction{Action: auth.NewAction(actor), AsID: as}
+}
+
+// TestAuthorizeSudoAllowsAnIdentityToBeItself pins the rule the zero-target
+// refusal must not widen.
+func TestAuthorizeSudoAllowsAnIdentityToBeItself(t *testing.T) {
+	mod := testModule(t)
+	ctx := astral.NewContext(nil)
+	id := astral.GenerateIdentity()
+
+	if !mod.AuthorizeSudo(ctx, sudoAction(id, id)) {
+		t.Fatal("self: want allow")
+	}
+	if mod.AuthorizeSudo(ctx, sudoAction(id, astral.GenerateIdentity())) {
+		t.Fatal("other: want deny")
+	}
+}
+
+// TestAuthorizeSudoRefusesTheZeroTarget covers the identity Dir.ResolveIdentity
+// returns for the empty name and "anyone". The second case is the one the self
+// test alone misses: Identity.IsEqual answers true when both sides are zero.
+func TestAuthorizeSudoRefusesTheZeroTarget(t *testing.T) {
+	mod := testModule(t)
+	ctx := astral.NewContext(nil)
+	zero := &astral.Identity{}
+
+	if mod.AuthorizeSudo(ctx, sudoAction(astral.GenerateIdentity(), zero)) {
+		t.Fatal("named actor, zero target: want deny")
+	}
+	if mod.AuthorizeSudo(ctx, sudoAction(zero, zero)) {
+		t.Fatal("zero actor, zero target: want deny")
+	}
+}
