@@ -52,6 +52,19 @@ func (mod *Module) OpNodeConsumeHole(ctx *astral.Context, q *routing.IncomingQue
 		return ch.Send(astral.Err(err))
 	}
 
+	// why: every return below leaves the hole out of the pool. A hole still in
+	// StateIdle never began locking, so the pool takes it back. Past BeginLock
+	// there is nothing to give back: finalizeLock frees the punched mapping, and
+	// no state returns to StateIdle.
+	defer func() {
+		if !hole.IsIdle() {
+			return
+		}
+		if err := mod.pool.Add(hole); err != nil {
+			mod.log.Errorv(1, "return hole %v to pool: %v", hole.Nonce, err)
+		}
+	}()
+
 	holeNonce := hole.Nonce
 
 	if target != nil {
