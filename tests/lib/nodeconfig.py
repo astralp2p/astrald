@@ -8,6 +8,10 @@ silently rot as astrald grows.
 
 Concurrent runs on one host never share a port: each run leases its own
 span of ports before its first node starts.
+
+Agent reachability is decided by an external authority on a loopback port of
+the node's own. Nothing listens there unless a driver serves it, and an
+authority that cannot be reached permits nothing.
 """
 import fcntl
 import socket
@@ -42,6 +46,18 @@ MCP_YAML = """\
 bind_mcp: "tcp:127.0.0.1:{mcp}"
 """
 
+# why an authority at all: mod/mcp holds no reachability of its own, and no
+# handler grants these two actions, so a node without one refuses every call
+# between agents. Naming a port a driver may serve lets a test admit a call; an
+# unserved port refuses, which is what a node configured with none answers.
+AUTH_YAML = """\
+external_authorizers:
+  - endpoint: "{authority_url}"
+    actions:
+      - mod.mcp.call_agent_action
+      - mod.mcp.answer_agent_action
+"""
+
 
 @dataclass
 class NodePorts:
@@ -50,11 +66,17 @@ class NodePorts:
     ether: int
     kcp: int
     mcp: int
+    authority: int
+
+    @property
+    def authority_url(self) -> str:
+        return f"http://127.0.0.1:{self.authority}/authorize"
 
 
 def ports_for(base: int, index: int) -> NodePorts:
     p = base + 10 * index
-    return NodePorts(apphost=p, tcp=p + 1, ether=p + 2, kcp=p + 3, mcp=p + 4)
+    return NodePorts(apphost=p, tcp=p + 1, ether=p + 2, kcp=p + 3, mcp=p + 4,
+                     authority=p + 5)
 
 
 class PortsBusy(Exception):
@@ -116,3 +138,5 @@ def render(root: Path, ports: NodePorts, token: str) -> None:
     (cfg / "ether.yaml").write_text(ETHER_YAML.format(ether=ports.ether))
     (cfg / "kcp.yaml").write_text(KCP_YAML.format(kcp=ports.kcp))
     (cfg / "mcp.yaml").write_text(MCP_YAML.format(mcp=ports.mcp))
+    (cfg / "auth.yaml").write_text(
+        AUTH_YAML.format(authority_url=ports.authority_url))

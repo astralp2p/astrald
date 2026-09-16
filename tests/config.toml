@@ -1,6 +1,6 @@
 # Each run leases one span of ports, so concurrent runs never share a port.
 # Node N of a run uses the span's first port + 10N: +0 apphost, +1 tcp,
-# +2 ether, +3 kcp, +4 mcp.
+# +2 ether, +3 kcp, +4 mcp, +5 the external authority a driver may serve.
 [ports]
 base = 20800            # the first span's first port
 span = 100              # ports per span: 10 nodes per run
