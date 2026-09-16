@@ -3,7 +3,6 @@ package nodes
 import (
 	"slices"
 
-	"github.com/astralp2p/astral-go/api/ip"
 	"github.com/astralp2p/astral-go/api/nodes"
 	"github.com/astralp2p/astral-go/api/tcp"
 	"github.com/astralp2p/astral-go/astral"
@@ -12,8 +11,9 @@ import (
 )
 
 // ReceiveObject dispatches an inbound object by type, accepting observed-endpoint
-// messages and reacting to link events with connectivity upgrades and endpoint
-// refreshes. Unhandled types are ignored without accepting the drop.
+// messages from linked peers and reacting to local link events with connectivity
+// upgrades and endpoint refreshes. Unhandled and rejected objects are ignored
+// without accepting the drop.
 func (mod *Module) ReceiveObject(drop objects.Drop) error {
 	switch object := drop.Object().(type) {
 	case *nodes.ObservedEndpointMessage:
@@ -23,6 +23,11 @@ func (mod *Module) ReceiveObject(drop objects.Drop) error {
 		}
 
 	case *events.Event:
+		// why: a link event reports this node's own links, so an event sent by another node is forged.
+		if !drop.SenderID().IsEqual(mod.node.Identity()) {
+			return nil
+		}
+
 		switch e := object.Data.(type) {
 		case *nodes.LinkPressureEvent:
 			mod.log.Log("link pressure detected on %v with %v", e.LinkID, e.RemoteIdentity)
@@ -47,22 +52,21 @@ func (mod *Module) ReceiveObject(drop objects.Drop) error {
 	return nil
 }
 
+// receiveObservedEndpointMessage records a public TCP endpoint that a linked peer observed for this node.
 func (mod *Module) receiveObservedEndpointMessage(source *astral.Identity, event *nodes.ObservedEndpointMessage) error {
-	endpoint := event.Endpoint
-
-	var i ip.IP
-	switch e := endpoint.(type) {
-	case *tcp.Endpoint:
-		i = e.IP
-	default:
-		// unknown endpoint type
-		return nil
+	// why: reflectLink sends an observation only to the remote identity of an inbound link,
+	// so an observation from any other sender is unfounded.
+	if source.IsZero() || source.IsEqual(mod.node.Identity()) || !mod.IsLinked(source) {
+		return objects.ErrPushRejected
 	}
 
-	if i.IsPublic() {
-		mod.log.Log(`public ip %v reflected from %v`, i, source)
-		mod.AddObservedEndpoint(endpoint, i)
+	endpoint, ok := event.Endpoint.(*tcp.Endpoint)
+	if !ok || endpoint == nil || !endpoint.IP.IsPublic() {
+		return objects.ErrPushRejected
 	}
+
+	mod.log.Log(`public ip %v reflected from %v`, endpoint.IP, source)
+	mod.AddObservedEndpoint(endpoint, endpoint.IP)
 
 	return nil
 }
