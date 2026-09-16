@@ -21,9 +21,11 @@ func (mod *Module) OpExpel(ctx *astral.Context, q *routing.IncomingQuery, args o
 		return q.RejectWithCode(2)
 	}
 
-	// resolve before authorization - the action carries the target
+	// why: the action carries the node, so resolution runs before authorization.
+	// The empty name and "anyone" resolve to the zero identity, which names no
+	// node, so the name is refused here instead of banned.
 	nodeID, err := mod.Dir.ResolveIdentity(args.Identity)
-	if err != nil {
+	if err != nil || nodeID.IsZero() {
 		return q.RejectWithCode(3)
 	}
 
