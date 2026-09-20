@@ -125,11 +125,33 @@ func (repo *Repository) Scan(ctx *astral.Context, follow bool) (<-chan *astral.O
 }
 
 func (repo *Repository) Delete(ctx *astral.Context, objectID *astral.ObjectID) error {
-	_, ok := repo.objects.Delete(objectID.String())
+	// why: Delete reports ok to a single caller, so the release runs once per stored object.
+	old, ok := repo.objects.Delete(objectID.String())
 	if !ok {
 		return objectsmod.ErrNotFound
 	}
+
+	repo.release(int64(len(old)))
+
 	return nil
+}
+
+// reserve claims n bytes of quota. reserve returns false when the claim exceeds the repository size.
+func (repo *Repository) reserve(n int64) bool {
+	for {
+		var used = repo.used.Load()
+		if used+n > repo.size {
+			return false
+		}
+		if repo.used.CompareAndSwap(used, used+n) {
+			return true
+		}
+	}
+}
+
+// release returns n bytes of quota to the repository.
+func (repo *Repository) release(n int64) {
+	repo.used.Add(-n)
 }
 
 func (repo *Repository) Used() int64 {
@@ -142,10 +164,6 @@ func (repo *Repository) Free(ctx *astral.Context) (int64, error) {
 
 func (repo *Repository) String() string {
 	return repo.name
-}
-
-func (repo *Repository) free() int64 {
-	return repo.size - repo.used.Load()
 }
 
 func (repo *Repository) pushAdded(id *astral.ObjectID) {
