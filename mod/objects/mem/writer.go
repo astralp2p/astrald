@@ -28,11 +28,15 @@ func (w *Writer) Write(p []byte) (n int, err error) {
 		return 0, objectsmod.ErrClosedPipe
 	}
 
-	if int64(len(p)) > w.free() {
+	if !w.reserve(int64(len(p))) {
 		return 0, objectsmod.ErrNoSpaceLeft
 	}
+
 	n, err = w.buf.Write(p)
-	w.used.Add(int64(n))
+	if n < len(p) {
+		w.release(int64(len(p) - n))
+	}
+
 	return n, err
 }
 
@@ -45,8 +49,13 @@ func (w *Writer) Commit() (*astral.ObjectID, error) {
 
 	var buf = w.buf.Bytes()
 	var objectID, _ = astral.Resolve(bytes.NewReader(buf))
+	w.buf = nil
 
-	w.objects.Set(objectID.String(), buf)
+	// why: Set keeps the entry already stored, so a duplicate holds no bytes and releases its reservation.
+	if _, stored := w.objects.Set(objectID.String(), buf); !stored {
+		w.release(int64(len(buf)))
+		return objectID, nil
+	}
 
 	w.Repository.pushAdded(objectID)
 
@@ -55,7 +64,7 @@ func (w *Writer) Commit() (*astral.ObjectID, error) {
 
 func (w *Writer) Discard() error {
 	if w.closed.CompareAndSwap(false, true) {
-		w.used.Add(int64(-w.buf.Len())) // free up space
+		w.release(int64(w.buf.Len()))
 		w.buf = nil
 	}
 	return nil
