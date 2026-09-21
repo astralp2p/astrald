@@ -5,13 +5,18 @@ import (
 	"github.com/astralp2p/astral-go/astral/fmt"
 	"github.com/astralp2p/astral-go/astral/log"
 	"github.com/astralp2p/astral-go/astral/log/theme"
+	"github.com/astralp2p/astral-go/sig"
 )
 
 type EntryView struct {
 	*log.Entry
 }
 
-var HideOrigin = astral.Anyone
+// HideOrigin names the origin whose entries print without an origin prefix.
+//
+// why: mod/log sets this during Load while earlier-loaded modules already log
+// from other goroutines, so a bare package var is written and read at once.
+var HideOrigin sig.Value[*astral.Identity]
 
 func (v EntryView) Render() string {
 	level := fmt.Sprintf("(%v)", v.Level)
@@ -21,7 +26,7 @@ func (v EntryView) Render() string {
 		NewTimeView(&v.Time),
 	)
 
-	if HideOrigin == nil || (!v.Origin.IsEqual(HideOrigin) && !HideOrigin.IsZero()) {
+	if showOrigin(v.Origin) {
 		line = fmt.Sprintf("[%v] ", v.Origin) + line
 	}
 
@@ -30,6 +35,18 @@ func (v EntryView) Render() string {
 	}
 
 	return line
+}
+
+// showOrigin reports whether an entry from origin prints its origin prefix.
+// An origin equal to HideOrigin is hidden, and an unset or zero HideOrigin
+// hides every origin.
+func showOrigin(origin *astral.Identity) bool {
+	hide := HideOrigin.Get()
+	if hide == nil {
+		return false
+	}
+
+	return !origin.IsEqual(hide) && !hide.IsZero()
 }
 
 func UseEntryView() {
