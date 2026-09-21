@@ -152,7 +152,18 @@ func (w *Watcher) onRemoved(path string) {
 		return
 	}
 
+	// why both: zeroing the deadline makes the sig.At goroutine return without
+	// calling its callback, and the callback is what deletes the key — so the
+	// entry must be dropped here or a later onWrite finds it, takes the found
+	// early-return above and schedules no timer, and OnWriteDone never fires
+	// for this path again.
+	// why both: zeroing the deadline makes the sig.At goroutine return without
+	// calling its callback, and the callback is what deletes the key — so the
+	// entry must be dropped here or a later onWrite finds it, takes the found
+	// early-return above and schedules no timer, and OnWriteDone never fires
+	// for this path again.
 	*t = time.Time{}
+	delete(w.timeouts, path)
 }
 
 func (w *Watcher) onRenamed(path string) {
