@@ -1,7 +1,10 @@
 package mem
 
 import (
+	"bytes"
+	"errors"
 	"io"
+	"math"
 	"sync"
 	"testing"
 
@@ -263,5 +266,314 @@ func TestReaderIDIsTheWholeObject(t *testing.T) {
 
 	if got := r.ID(); !got.IsEqual(id) {
 		t.Fatalf("ID() = %v, want %v", got, id)
+	}
+}
+
+// partialOf returns the partial ID of id, parsed from its data0 form.
+func partialOf(t *testing.T, id *astral.ObjectID) *astral.ObjectID {
+	t.Helper()
+
+	partial, err := astral.ParseID(id.PartialString())
+	if err != nil {
+		t.Fatalf("ParseID(%v): %v", id.PartialString(), err)
+	}
+	if partial.Size != 0 || partial.Hash != id.Hash {
+		t.Fatalf("ParseID(%v) = %+v, want the partial ID of %v", id.PartialString(), partial, id)
+	}
+
+	return partial
+}
+
+// readAndClose reads r to the end and closes it.
+func readAndClose(t *testing.T, r objectsmod.Reader) []byte {
+	t.Helper()
+	defer r.Close()
+
+	data, err := io.ReadAll(r)
+	if err != nil {
+		t.Fatalf("ReadAll: %v", err)
+	}
+
+	return data
+}
+
+// TestReadRanges: a full and a partial ID read the same windows, and each reader reports the full ID.
+func TestReadRanges(t *testing.T) {
+	var repo = New("test", 1024)
+	var ctx = astral.NewContext(nil)
+	var id = store(t, repo, []byte("hello astral"))
+
+	for _, tc := range []struct {
+		name    string
+		offset  int64
+		limit   int64
+		want    string
+		wantErr error
+	}{
+		{"whole object", 0, 0, "hello astral", nil},
+		{"window", 2, 3, "llo", nil},
+		{"rest from offset", 6, 0, "astral", nil},
+		{"limit past the end", 7, 100, "stral", nil},
+		{"offset 1 and maximum limit", 1, math.MaxInt64, "ello astral", nil},
+		{"offset at the end", 12, 0, "", nil},
+		{"offset at the end with a limit", 12, 5, "", nil},
+		{"offset past the end", 13, 0, "", objectsmod.ErrOutOfBounds},
+		{"negative offset", -1, 0, "", objectsmod.ErrOutOfBounds},
+		{"negative limit", 0, -1, "", objectsmod.ErrOutOfBounds},
+	} {
+		for name, arg := range map[string]*astral.ObjectID{"full": id, "partial": partialOf(t, id)} {
+			t.Run(tc.name+"/"+name, func(t *testing.T) {
+				var before = *arg
+
+				r, err := repo.Read(ctx, arg, tc.offset, tc.limit)
+				if *arg != before {
+					t.Errorf("Read changed its argument to %+v, want %+v", *arg, before)
+				}
+				if tc.wantErr != nil {
+					if !errors.Is(err, tc.wantErr) {
+						t.Fatalf("Read(%v, %v) error = %v, want %v", tc.offset, tc.limit, err, tc.wantErr)
+					}
+					return
+				}
+				if err != nil {
+					t.Fatalf("Read(%v, %v): %v", tc.offset, tc.limit, err)
+				}
+				if got := r.ID(); !got.IsEqual(id) {
+					t.Errorf("ID() = %v, want %v", got, id)
+				}
+				if data := readAndClose(t, r); string(data) != tc.want {
+					t.Errorf("Read(%v, %v) = %q, want %q", tc.offset, tc.limit, data, tc.want)
+				}
+			})
+		}
+	}
+}
+
+// TestEmptyObject: the empty object's full ID has Size 0, so its full and partial IDs are one value.
+func TestEmptyObject(t *testing.T) {
+	var repo = New("test", 1024)
+	var ctx = astral.NewContext(nil)
+	var id = store(t, repo, nil)
+
+	if id.Size != 0 {
+		t.Fatalf("empty object ID = %v, want Size 0", id)
+	}
+
+	r, err := repo.Read(ctx, partialOf(t, id), 0, 512)
+	if err != nil {
+		t.Fatalf("Read: %v", err)
+	}
+	if got := r.ID(); !got.IsEqual(id) {
+		t.Errorf("ID() = %v, want %v", got, id)
+	}
+	if data := readAndClose(t, r); len(data) != 0 {
+		t.Errorf("Read = %q, want no bytes", data)
+	}
+
+	if _, err = repo.Read(ctx, id, 1, 0); !errors.Is(err, objectsmod.ErrOutOfBounds) {
+		t.Errorf("Read at offset 1 = %v, want ErrOutOfBounds", err)
+	}
+
+	if ok, err := repo.Contains(ctx, id); !ok || err != nil {
+		t.Errorf("Contains = %v, %v, want true, nil", ok, err)
+	}
+
+	if err = repo.Delete(ctx, id); err != nil {
+		t.Fatalf("Delete: %v", err)
+	}
+	if ok, err := repo.Contains(ctx, id); ok || err != nil {
+		t.Errorf("Contains after Delete = %v, %v, want false, nil", ok, err)
+	}
+}
+
+// TestFullIDOfAnotherSizeMisses: a full ID matches only a stored object of its size.
+func TestFullIDOfAnotherSizeMisses(t *testing.T) {
+	var repo = New("test", 1024)
+	var ctx = astral.NewContext(nil)
+	var id = store(t, repo, []byte("hello astral"))
+	var used = repo.Used()
+
+	for _, size := range []uint64{id.Size - 1, id.Size + 1} {
+		var other = &astral.ObjectID{Size: size, Hash: id.Hash}
+
+		if _, err := repo.Read(ctx, other, 0, 0); !errors.Is(err, objectsmod.ErrNotFound) {
+			t.Errorf("Read(%v) = %v, want ErrNotFound", other, err)
+		}
+		if ok, err := repo.Contains(ctx, other); ok || err != nil {
+			t.Errorf("Contains(%v) = %v, %v, want false, nil", other, ok, err)
+		}
+		if err := repo.Delete(ctx, other); !errors.Is(err, objectsmod.ErrNotFound) {
+			t.Errorf("Delete(%v) = %v, want ErrNotFound", other, err)
+		}
+	}
+
+	if ok, err := repo.Contains(ctx, id); !ok || err != nil {
+		t.Errorf("Contains(%v) after the misses = %v, %v, want true, nil", id, ok, err)
+	}
+	if got := repo.Used(); got != used {
+		t.Errorf("Used after the misses = %v, want %v", got, used)
+	}
+}
+
+// TestPartialIDLookup: a partial ID finds the stored object by hash, and a partial ID of an
+// absent hash misses in each method's own way. No method changes its argument.
+func TestPartialIDLookup(t *testing.T) {
+	var repo = New("test", 1024)
+	var ctx = astral.NewContext(nil)
+	var id = store(t, repo, []byte("hello astral"))
+	var other = store(t, New("other", 1024), []byte("absent"))
+
+	var hit = partialOf(t, id)
+	var miss = partialOf(t, other)
+
+	if ok, err := repo.Contains(ctx, hit); !ok || err != nil {
+		t.Errorf("Contains(hit) = %v, %v, want true, nil", ok, err)
+	}
+	if ok, err := repo.Contains(ctx, miss); ok || err != nil {
+		t.Errorf("Contains(miss) = %v, %v, want false, nil", ok, err)
+	}
+	if _, err := repo.Read(ctx, miss, 0, 0); !errors.Is(err, objectsmod.ErrNotFound) {
+		t.Errorf("Read(miss) = %v, want ErrNotFound", err)
+	}
+	if err := repo.Delete(ctx, miss); !errors.Is(err, objectsmod.ErrNotFound) {
+		t.Errorf("Delete(miss) = %v, want ErrNotFound", err)
+	}
+
+	if hit.Size != 0 || hit.Hash != id.Hash || miss.Size != 0 || miss.Hash != other.Hash {
+		t.Errorf("lookups changed their arguments to %+v and %+v", hit, miss)
+	}
+}
+
+// TestPartialReaderIDIsTheWholeObject: a reader opened by a partial ID over a window reports the
+// stored object's full ID, and the partial argument stays partial.
+func TestPartialReaderIDIsTheWholeObject(t *testing.T) {
+	var repo = New("test", 1024)
+	var id = store(t, repo, []byte("hello astral"))
+	var arg = partialOf(t, id)
+
+	r, err := repo.Read(astral.NewContext(nil), arg, 2, 3)
+	if err != nil {
+		t.Fatalf("Read: %v", err)
+	}
+	if got := r.ID(); !got.IsEqual(id) {
+		t.Errorf("ID() = %v, want %v", got, id)
+	}
+	if data := readAndClose(t, r); string(data) != "llo" {
+		t.Errorf("window = %q, want %q", data, "llo")
+	}
+	if arg.Size != 0 {
+		t.Errorf("Read set the argument's Size to %v", arg.Size)
+	}
+}
+
+// TestDeleteByPartialID: a partial ID deletes the stored object and releases its bytes once.
+func TestDeleteByPartialID(t *testing.T) {
+	var repo = New("test", 1024)
+	var ctx = astral.NewContext(nil)
+	var id = store(t, repo, []byte("hello astral"))
+	var arg = partialOf(t, id)
+
+	if err := repo.Delete(ctx, arg); err != nil {
+		t.Fatalf("Delete: %v", err)
+	}
+	if err := repo.Delete(ctx, arg); !errors.Is(err, objectsmod.ErrNotFound) {
+		t.Errorf("second Delete = %v, want ErrNotFound", err)
+	}
+	if ok, err := repo.Contains(ctx, id); ok || err != nil {
+		t.Errorf("Contains(full) after Delete = %v, %v, want false, nil", ok, err)
+	}
+	if used := repo.Used(); used != 0 {
+		t.Errorf("Used after Delete = %v, want 0", used)
+	}
+	if arg.Size != 0 || arg.Hash != id.Hash {
+		t.Errorf("Delete changed its argument to %+v", arg)
+	}
+}
+
+// TestScanEmitsFullIDs: Scan reports each stored object by its full ID.
+func TestScanEmitsFullIDs(t *testing.T) {
+	var repo = New("test", 1024)
+	var want = map[astral.ObjectID]bool{
+		*store(t, repo, []byte("hello astral")): true,
+		*store(t, repo, []byte("x")):            true,
+		*store(t, repo, nil):                    true,
+	}
+
+	ch, err := repo.Scan(astral.NewContext(nil), false)
+	if err != nil {
+		t.Fatalf("Scan: %v", err)
+	}
+
+	var got = map[astral.ObjectID]bool{}
+	for id := range ch {
+		got[*id] = true
+	}
+
+	if len(got) != len(want) {
+		t.Fatalf("Scan emitted %v IDs, want %v", len(got), len(want))
+	}
+	for id := range want {
+		if !got[id] {
+			t.Errorf("Scan did not emit %v", &id)
+		}
+	}
+}
+
+// churnObject commits a payload, reads and checks it by its partial ID, and deletes it, 50 times.
+// churnObject reports through t.Errorf, so it is safe to call from a goroutine.
+func churnObject(t *testing.T, repo *Repository, payload []byte) {
+	var ctx = astral.NewContext(nil)
+	var id, _ = astral.Resolve(bytes.NewReader(payload))
+	var partial = &astral.ObjectID{Hash: id.Hash}
+
+	for turn := 0; turn < 50; turn++ {
+		if err := storeErr(repo, payload); err != nil {
+			t.Errorf("store: %v", err)
+			return
+		}
+
+		if r, err := repo.Read(ctx, partial, 0, 0); err == nil {
+			if got := r.ID(); !got.IsEqual(id) {
+				t.Errorf("ID() = %v, want %v", got, id)
+			}
+			r.Close()
+		} else if !errors.Is(err, objectsmod.ErrNotFound) {
+			t.Errorf("Read: %v", err)
+		}
+
+		if _, err := repo.Contains(ctx, partial); err != nil {
+			t.Errorf("Contains: %v", err)
+		}
+
+		if err := repo.Delete(ctx, partial); err != nil && !errors.Is(err, objectsmod.ErrNotFound) {
+			t.Errorf("Delete: %v", err)
+		}
+	}
+}
+
+// TestConcurrentCommitDeleteAndPartialLookupAreRaceFree: four workers share each hash. A reader reports
+// the full ID, and the quota drains to zero once every object is deleted.
+func TestConcurrentCommitDeleteAndPartialLookupAreRaceFree(t *testing.T) {
+	var repo = New("test", 1<<20)
+	var workers sync.WaitGroup
+
+	for i := 0; i < 16; i++ {
+		workers.Add(1)
+		go func() {
+			defer workers.Done()
+
+			churnObject(t, repo, []byte{byte(i % 4), 'p', 'a', 'y'})
+		}()
+	}
+
+	workers.Wait()
+
+	for hash := range repo.objects.Clone() {
+		if err := repo.Delete(astral.NewContext(nil), &astral.ObjectID{Hash: hash}); err != nil {
+			t.Errorf("final Delete: %v", err)
+		}
+	}
+	if used := repo.Used(); used != 0 {
+		t.Errorf("Used after deleting every object = %v, want 0", used)
 	}
 }
