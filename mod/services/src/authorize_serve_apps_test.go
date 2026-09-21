@@ -192,6 +192,18 @@ func TestServeAppsAdvertisementStandsUntilTheSessionCloses(t *testing.T) {
 		t.Fatal("services.advertise did not end when the caller closed its end")
 	}
 
+	// why: <-w.closed reports that the caller's end closed, which astral-go's
+	// routing.Conn.Read does from inside the op's own read on any read error
+	// (lib/routing/conn.go:30-37), strictly before OpAdvertise returns from
+	// ch.Switch and runs its deferred withdraw (op_advertise.go:71). Wait for
+	// the withdraw itself, then let the assertion below report a real leak.
+	for len(mod.external.snapshot()) != 0 {
+		if ctx.Err() != nil {
+			break
+		}
+		time.Sleep(time.Millisecond)
+	}
+
 	if n := len(mod.external.snapshot()); n != 0 {
 		t.Fatalf("closing the session left %d advertisements standing; want none", n)
 	}
