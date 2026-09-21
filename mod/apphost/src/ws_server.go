@@ -8,9 +8,9 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/coder/websocket"
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astral-go/astral/channel"
+	"github.com/coder/websocket"
 )
 
 const (
