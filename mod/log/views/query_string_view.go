@@ -1,6 +1,8 @@
 package views
 
 import (
+	"sort"
+
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astral-go/astral/log/theme"
 	"github.com/astralp2p/astral-go/lib/query"
@@ -29,13 +31,20 @@ func (view QueryStringView) Render() (out string) {
 		out += sep.Render("?")
 	}
 
-	var first = true
-	for name, field := range params {
-		if !first {
+	// why: query.Parse returns a map[string]string and a go map ranges in
+	// unspecified order; collect and sort so a given query string always logs
+	// identically, as RuntimeMapView does.
+	var names = make([]string, 0, len(params))
+	for name := range params {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+
+	for i, name := range names {
+		if i > 0 {
 			out += sep.Render("&")
 		}
-		out += arg.Render(name) + sep.Render("=") + val.Render(field)
-		first = false
+		out += arg.Render(name) + sep.Render("=") + val.Render(params[name])
 	}
 
 	return out
