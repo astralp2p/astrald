@@ -86,7 +86,7 @@ func (w *Watcher) Add(path string, tree bool) (added []string, err error) {
 		added = append(added, a...)
 	}
 
-	return nil, nil
+	return added, nil
 }
 
 // Remove removes a path from the watcher
