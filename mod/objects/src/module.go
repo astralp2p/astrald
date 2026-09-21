@@ -51,7 +51,6 @@ type Module struct {
 
 	externalMu sync.Mutex
 
-	groups              sig.Map[string, *RepoGroup]
 	objectsReadsJournal *objectsReadsJournal
 }
 
