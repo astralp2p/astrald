@@ -5,8 +5,18 @@ import (
 	"github.com/astralp2p/astral-go/astral"
 )
 
-// AuthorizeSeeObjects grants read access to an archive entry by recursively
-// verifying that the actor can read the parent archive that contains it.
+// AuthorizeSeeObjects grants read access to an archive entry when the actor can
+// read any indexed archive that contains it, checked recursively.
+//
+// why any parent and not the first: an entry is indexed once per archive that
+// holds it and the lookup carries no ORDER BY, so deciding on one row makes the
+// answer depend on an unspecified row order. Any parent also grants nothing new —
+// an actor who may read the parent archive reads the entry's bytes out of it
+// directly (object_opener.go).
+//
+// why a false is not a denial: mod/auth composes handlers by OR
+// (mod/auth/src/authorize.go, authorizeHandlers), so declining here leaves every
+// other handler free to grant.
 func (mod *Module) AuthorizeSeeObjects(ctx *astral.Context, action *auth.SeeObjectsAction) bool {
 	// note: SeeObjects also covers ops that name no object — enumeration, blueprints,
 	// the repository list. An archive says nothing about those, so it grants nothing.
@@ -39,10 +49,12 @@ func (mod *Module) AuthorizeSeeObjects(ctx *astral.Context, action *auth.SeeObje
 		}
 
 		// Recursive check: can the actor read the parent archive?
-		return mod.Auth.Authorize(ctx, &auth.SeeObjectsAction{
+		if mod.Auth.Authorize(ctx, &auth.SeeObjectsAction{
 			Action:   auth.NewAction(action.Actor()),
 			ObjectID: zipID,
-		})
+		}) {
+			return true
+		}
 	}
 
 	return false

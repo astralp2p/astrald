@@ -9,13 +9,13 @@ import (
 
 // OpenObject serves an archive entry as a readable stream by locating it
 // across all known parent archives. Only serves ZoneVirtual.
+//
+// note: the signature carries no offset and no limit, so there is no read
+// window to bound here. The reader returned seeks on its own (content_reader.go);
+// a windowed read goes through objects.Repository.Read instead.
 func (mod *Module) OpenObject(ctx *astral.Context, objectID *astral.ObjectID) (io.ReadCloser, error) {
 	if !ctx.Zone().Is(astral.ZoneVirtual) {
 		return nil, astral.ErrZoneExcluded
-	}
-
-	if objects.IsOffsetLimitValid(objectID, 0, 0) {
-		return nil, objects.ErrOutOfBounds
 	}
 
 	var rows []dbEntry
