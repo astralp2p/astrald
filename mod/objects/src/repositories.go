@@ -33,11 +33,13 @@ func (mod *Module) RemoveRepository(name string) error {
 		return fmt.Errorf("repository %s not found", name)
 	}
 
-	// remove the repo from all groups
-	mod.groups.Each(func(_ string, group *RepoGroup) error {
-		group.Remove(name)
-		return nil
-	})
+	// remove the repo from all groups. Remove returns "not found" for every group
+	// that does not list the repo, which is the common case, so the error is dropped.
+	for _, repo := range mod.repos.Clone() {
+		if group, ok := repo.(*RepoGroup); ok {
+			group.Remove(name)
+		}
+	}
 
 	// call the after removed callback
 	if c, ok := removed.(objects.AfterRemovedCallback); ok {
