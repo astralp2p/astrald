@@ -138,6 +138,8 @@ func (mod *Module) Store(ctx *astral.Context, repo objectsmod.Repository, object
 	if err != nil {
 		return nil, err
 	}
+	// make sure we don't leave garbage behind
+	defer w.Discard()
 
 	_, err = astral.Encode(w, object, astral.WithEncoder(astral.CanonicalTypeEncoder))
 	if err != nil {
