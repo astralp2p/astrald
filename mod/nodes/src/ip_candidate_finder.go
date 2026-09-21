@@ -25,13 +25,14 @@ func (mod *Module) PublicIPCandidates() (list []ip.IP) {
 	return list
 }
 
-// AddObservedEndpoint adds or updates an IP in the cache, evicting the oldest if over size.
+// AddObservedEndpoint adds or updates an IP in the cache, evicting the oldest other
+// entry if over size; the entry just added is never evicted.
 func (mod *Module) AddObservedEndpoint(endpoint exonet.Endpoint, ip ip.IP) {
 	key := endpoint.Address()
 	mod.observedEndpoints.Set(key, ObservedEndpoint{
 		Endpoint: endpoint,
 		IP:       ip,
-		Observed: time.Now().Unix(),
+		Observed: time.Now().UnixNano(),
 	})
 
 	mod.Events.Emit(&nodes.NewObservedEndpointEvent{})
@@ -43,6 +44,11 @@ func (mod *Module) AddObservedEndpoint(endpoint exonet.Endpoint, ip ip.IP) {
 		var oldestTime int64
 		first := true
 		for k, v := range cache {
+			// why: the clone already holds the entry just added, and a tie or a
+			// backward clock step would otherwise make it the eviction victim.
+			if k == key {
+				continue
+			}
 			if first || v.Observed < oldestTime {
 				oldestTime = v.Observed
 				oldestKey = k
