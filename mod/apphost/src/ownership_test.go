@@ -378,8 +378,9 @@ func TestRemoveHandlersByTokenMatchesOwnerAndToken(t *testing.T) {
 }
 
 // bindSession runs one apphost.bind session as principal, sends one BindMsg
-// naming token, and returns once the session's cleanup has run.
-func bindSession(t *testing.T, mod *Module, principal *astral.Identity, token astral.Nonce) {
+// naming token, and returns once the handler endpoints left are want, or once
+// the session's deadline elapses.
+func bindSession(t *testing.T, mod *Module, principal *astral.Identity, token astral.Nonce, want []string) {
 	t.Helper()
 
 	op, err := routing.NewOp(mod.OpBind)
@@ -404,6 +405,19 @@ func bindSession(t *testing.T, mod *Module, principal *astral.Identity, token as
 	conn.Close()
 
 	awaitOwnershipAnswer(t, w)
+
+	// why: awaitOwnershipAnswer reports that the caller's end closed, which
+	// astral-go's routing.Conn.Read does from inside the op's own read on any
+	// read error (lib/routing/conn.go:30-37), strictly before OpBind returns
+	// from ch.Switch and runs its deferred cleanup actions (op_bind.go:37-43).
+	// Wait for the actions to land, then let the caller's assertion report a
+	// real leak.
+	for !slices.Equal(endpoints(mod.ipcHandlers.Clone()), want) {
+		if ctx.Err() != nil {
+			return
+		}
+		time.Sleep(time.Millisecond)
+	}
 }
 
 // TestBindRemovesOnlyTheBindersHandlers: two apps register under the same token
@@ -421,7 +435,7 @@ func TestBindRemovesOnlyTheBindersHandlers(t *testing.T) {
 		t.Fatalf("add handlers: %v", err)
 	}
 
-	bindSession(t, mod, appA, shared)
+	bindSession(t, mod, appA, shared, []string{"b"})
 
 	if got := endpoints(mod.ipcHandlers.Clone()); !slices.Equal(got, []string{"b"}) {
 		t.Fatalf("after the bind closed, the handlers left are %v; want only b", got)
@@ -440,7 +454,7 @@ func TestBindAdminRemovesAnotherAppsHandlers(t *testing.T) {
 		t.Fatalf("add handler: %v", err)
 	}
 
-	bindSession(t, mod, admin, token)
+	bindSession(t, mod, admin, token, nil)
 
 	if n := len(mod.ipcHandlers.Clone()); n != 0 {
 		t.Fatalf("an administrator's bind left %d handlers; want none", n)
