@@ -28,6 +28,9 @@ func parseVarMap(words []string) VarMap {
 	m := make(map[string]string)
 	for _, w := range words {
 		kv := strings.SplitN(w, "=", 2)
+		if len(kv) < 2 {
+			continue
+		}
 		m[kv[0]] = kv[1]
 	}
 	return m

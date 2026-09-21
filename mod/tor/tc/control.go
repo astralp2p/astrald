@@ -28,7 +28,7 @@ type watch struct {
 	closeCh chan struct{}
 }
 
-func (w watch) Read(p []byte) (int, error) {
+func (w *watch) Read(p []byte) (int, error) {
 	n, err := w.ReadWriteCloser.Read(p)
 	if err != nil {
 		if w.closeCh != nil {
@@ -158,7 +158,7 @@ func (ctl *Control) Close() error {
 func (ctl *Control) request(format string, args ...interface{}) (int, []string, error) {
 	id, err := ctl.proto.Cmd(format, args...)
 	if err != nil {
-		return 0, []string{}, nil
+		return 0, nil, err
 	}
 
 	ctl.proto.StartResponse(id)
