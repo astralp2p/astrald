@@ -119,13 +119,13 @@ func (t *PathTrie) insert(path string) error {
 
 // Covers reports whether path falls under any registered subtree root, returning ErrNotAbsolute for relative paths.
 func (t *PathTrie) Covers(path string) (bool, error) {
-	if t.coversAll {
-		return true, nil
-	}
-
 	parts, err := t.splitPath(path)
 	if err != nil {
 		return false, err
+	}
+
+	if t.coversAll {
+		return true, nil
 	}
 
 	node := t

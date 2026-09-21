@@ -384,4 +384,12 @@ func TestPathTrie_ReturnsErrorOnRelativePath(t *testing.T) {
 			t.Errorf("expected ErrNotAbsolute, got %v", err)
 		}
 	})
+
+	t.Run("Covers returns error on relative path when the root is inserted", func(t *testing.T) {
+		trie, _ := NewPathTrie([]string{"/"}, '/')
+		_, err := trie.Covers("relative/path")
+		if !errors.Is(err, ErrNotAbsolute) {
+			t.Errorf("expected ErrNotAbsolute, got %v", err)
+		}
+	})
 }
