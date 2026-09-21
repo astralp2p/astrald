@@ -31,8 +31,6 @@ func (Loader) Load(node astral.Node, assets assets.Assets, log *log.Logger) (cor
 
 	err = mod.db.AutoMigrate(&dbNode{})
 
-	mod.ctx = astral.NewContext(nil).WithIdentity(node.Identity()).WithZone(astral.ZoneAll)
-
 	return mod, err
 }
 

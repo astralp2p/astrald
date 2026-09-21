@@ -15,9 +15,8 @@ func seeNodeStateAction(actor *astral.Identity) *auth.SeeNodeStateAction {
 // SeeNodeState on a claimed node: the user identity, this node, and the user's
 // unexpelled node members, and nobody else.
 //
-// why the node members: a remote tree mount queries the target as the mounting
-// node's identity (mod/tree.MountRemote), so a sibling mount reads nothing
-// without them.
+// note: the node members are admitted so the user's own nodes read each other's
+// state. AuthorizeSeeNodeState carries the open question on that clause.
 // note: the action covers the log stream, so a node member reads this node's
 // logged activity for every caller.
 // note: the contract fixtures are the AdminNetwork table's, shared in-package.

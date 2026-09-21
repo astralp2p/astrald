@@ -3,25 +3,21 @@ package tree
 import (
 	"context"
 	"errors"
-	"fmt"
 	treemod "github.com/astralp2p/astrald/mod/tree"
 	"strings"
 	"sync"
 
 	"github.com/astralp2p/astral-go/api/tree"
-	treecli "github.com/astralp2p/astral-go/api/tree/client"
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astral-go/astral/log"
 	"github.com/astralp2p/astral-go/lib/routing"
 	"github.com/astralp2p/astral-go/sig"
 	authmod "github.com/astralp2p/astrald/mod/auth"
-	"github.com/astralp2p/astrald/mod/dir"
 	"github.com/astralp2p/astrald/resources"
 )
 
 type Deps struct {
 	Auth authmod.Module
-	Dir  dir.Module
 }
 
 type Module struct {
@@ -32,7 +28,6 @@ type Module struct {
 	assets resources.Resources
 	router routing.OpRouter
 	db     *DB
-	ctx    *astral.Context
 
 	// mounted nodes
 	mounts sig.Map[string, tree.Node]
@@ -45,8 +40,6 @@ type Module struct {
 var _ treemod.Module = &Module{}
 
 func (mod *Module) Run(ctx *astral.Context) error {
-	mod.ctx = ctx.WithZone(astral.ZoneNetwork)
-
 	<-ctx.Done()
 	return nil
 }
@@ -119,25 +112,6 @@ func (mod *Module) Unmount(path string) error {
 	}
 
 	return nil
-}
-
-// MountRemote resolves remotePath on targetID's tree (empty remotePath means the root) and mounts it locally at path.
-//
-// why: every mount queries the target before it records the mount point. A mount
-// that contacts no target reports success and fails on the first read instead.
-func (mod *Module) MountRemote(ctx *astral.Context, path string, targetID *astral.Identity, remotePath string) (err error) {
-	var remoteNode = treecli.New(targetID, nil).Root()
-
-	if len(remotePath) > 0 {
-		remoteNode, err = tree.Query(ctx, remoteNode, remotePath, false)
-		if err != nil {
-			return fmt.Errorf("failed to query remote path %s: %w", remotePath, err)
-		}
-	} else if _, err = remoteNode.Sub(ctx); err != nil {
-		return fmt.Errorf("failed to query remote root: %w", err)
-	}
-
-	return mod.Mount(path, remoteNode)
 }
 
 // Root returns the "/" mount wrapped so that subnodes at mounted paths are transparently overlaid.
