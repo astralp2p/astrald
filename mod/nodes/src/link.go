@@ -146,6 +146,7 @@ func (s *Link) RouteQuery(ctx *astral.Context, q *astral.InFlightQuery, w io.Wri
 }
 
 // Ping sends one ping and blocks for the pong. Only one ping may be in flight; concurrent calls error.
+// The returned duration is measured from just before the frame is written, so it includes the local send.
 func (s *Link) Ping() (time.Duration, error) {
 	p := &Ping{
 		nonce: astral.NewNonce(),
@@ -157,6 +158,11 @@ func (s *Link) Ping() (time.Duration, error) {
 		s.pingMu.Unlock()
 		return -1, errors.New("ping already in flight")
 	}
+	// why: pong() reaches p through s.ping under pingMu, so the stamp must sit
+	// inside this critical section to be visible and race-free. Stamping after
+	// the send loses the race outright: a pong handled first reads the zero time
+	// and reports an RTT of about 292 years.
+	p.sentAt = time.Now()
 	s.ping = p
 	s.pingMu.Unlock()
 
@@ -171,7 +177,6 @@ func (s *Link) Ping() (time.Duration, error) {
 		s.pingMu.Unlock()
 		return -1, err
 	}
-	p.sentAt = time.Now()
 
 	select {
 	case <-p.pong:
