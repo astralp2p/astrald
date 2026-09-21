@@ -52,7 +52,7 @@ func (w *Writer) Commit() (*astral.ObjectID, error) {
 	w.buf = nil
 
 	// why: Set keeps the entry already stored, so a duplicate holds no bytes and releases its reservation.
-	if _, stored := w.objects.Set(objectID.String(), buf); !stored {
+	if _, stored := w.objects.Set(objectID.Hash, buf); !stored {
 		w.release(int64(len(buf)))
 		return objectID, nil
 	}

@@ -1,6 +1,7 @@
 package fs
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -8,6 +9,8 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
+	"syscall"
 
 	"github.com/astralp2p/astral-go/api/objects"
 	"github.com/astralp2p/astral-go/astral"
@@ -37,6 +40,10 @@ func NewWatchRepository(mod *Module, root string, label string) (repo *WatchRepo
 	if !filepath.IsAbs(root) {
 		return nil, fs.ErrNotAbsolute
 	}
+
+	// why: the indexer stores paths under the cleaned root.
+	// why: PathUnder matches root plus a separator, so a trailing separator would exclude every row.
+	root = filepath.Clean(root)
 
 	stat, err := os.Stat(root)
 	switch {
@@ -79,8 +86,103 @@ func NewWatchRepository(mod *Module, root string, label string) (repo *WatchRepo
 var _ objectsmod.Repository = &WatchRepository{}
 
 // Contains checks the database index rather than the filesystem directly.
+// A partial ID also checks the file of each candidate row.
 func (repo *WatchRepository) Contains(ctx *astral.Context, objectID *astral.ObjectID) (bool, error) {
-	return repo.mod.db.ObjectExists(repo.root, objectID)
+	if objectID.Size != 0 {
+		return repo.mod.db.ObjectExists(repo.root, objectID)
+	}
+
+	_, err := repo.findPartial(ctx, objectID.Hash)
+	switch {
+	case errors.Is(err, objectsmod.ErrNotFound):
+		return false, nil
+	case err != nil:
+		return false, err
+	}
+
+	return true, nil
+}
+
+// findObject returns the full ID of the indexed object objectID names.
+// A full ID is returned as a copy; Read checks its rows.
+func (repo *WatchRepository) findObject(ctx *astral.Context, objectID *astral.ObjectID) (*astral.ObjectID, error) {
+	if objectID.Size != 0 {
+		var id = *objectID
+		return &id, nil
+	}
+
+	return repo.findPartial(ctx, objectID.Hash)
+}
+
+// findPartial returns the one indexed full ID with the hash that has an in-root regular file of its recorded size.
+// A row whose file cannot be checked is skipped; its error is returned only when no row resolves.
+// why: the query matches a text tail of the hash, so the hash is compared exactly here.
+func (repo *WatchRepository) findPartial(ctx *astral.Context, hash [32]byte) (*astral.ObjectID, error) {
+	rows, err := repo.mod.db.FindByHashTail(ctx, repo.root, hashTail(hash))
+	if err != nil {
+		return nil, err
+	}
+
+	var found *astral.ObjectID
+	var failed error
+	for _, row := range rows {
+		if row.DataID == nil || row.DataID.Hash != hash {
+			continue
+		}
+		if found != nil && found.IsEqual(row.DataID) {
+			continue
+		}
+
+		ok, err := repo.isRecordedFile(row)
+		switch {
+		case err != nil:
+			failed = cmp.Or(failed, err)
+			continue
+		case !ok:
+			continue
+		case found != nil:
+			return nil, objectsmod.ErrAmbiguousObjectID
+		}
+		found = row.DataID
+	}
+
+	switch {
+	case found != nil:
+		return found, nil
+	case failed != nil:
+		return nil, failed
+	}
+
+	return nil, objectsmod.ErrNotFound
+}
+
+// isRecordedFile reports whether an index row's path lies under the root and holds a regular file of the recorded size.
+// A missing file is not an error.
+// note: an equal length does not verify the file's hash.
+func (repo *WatchRepository) isRecordedFile(row *dbLocalFile) (bool, error) {
+	if !paths.PathUnder(row.Path, repo.root, filepath.Separator) {
+		return false, nil
+	}
+
+	stat, err := os.Stat(row.Path)
+	switch {
+	// why: stat reports ENOTDIR for a path whose parent directory became a regular file, which is a missing path.
+	case errors.Is(err, os.ErrNotExist) || errors.Is(err, syscall.ENOTDIR):
+		return false, nil
+	case err != nil:
+		return false, err
+	}
+
+	return stat.Mode().IsRegular() && uint64(stat.Size()) == row.DataID.Size, nil
+}
+
+// hashTail returns the end that every data1 string of the hash shares, whatever the size.
+// why: characters 0 to 12 of the unstripped encoding of Size||Hash carry Size bits, and PartialString keeps characters 12 to 63.
+// why: String strips leading 'y', and for Size 0 the strip reaches past character 12.
+func hashTail(hash [32]byte) string {
+	var partial = strings.TrimPrefix(astral.ObjectID{Hash: hash}.PartialString(), "data0")
+
+	return strings.TrimLeft(partial[1:], "y")
 }
 
 func (repo *WatchRepository) onChange(path string) {
@@ -139,23 +241,28 @@ func (repo *WatchRepository) Scan(ctx *astral.Context, follow bool) (<-chan *ast
 }
 
 // Read resolves the object to a filesystem path via the database index and tries each candidate
-// in order, returning the first file that opens and seeks successfully.
+// in order, returning the first in-root regular file of the object's size.
 func (repo *WatchRepository) Read(ctx *astral.Context, objectID *astral.ObjectID, offset int64, limit int64) (objectsmod.Reader, error) {
-	rows, err := repo.mod.db.FindObject(repo.root, objectID)
+	resolved, err := repo.findObject(ctx, objectID)
 	if err != nil {
 		return nil, err
 	}
-	if len(rows) == 0 {
-		return nil, objectsmod.ErrNotFound
-	}
-	if limit == 0 {
-		limit = int64(objectID.Size)
+
+	rows, err := repo.mod.db.FindObject(repo.root, resolved)
+	if err != nil {
+		return nil, err
 	}
 
 	for _, row := range rows {
-		f, err := os.Open(row.Path)
-		if err != nil {
+		f := repo.openRow(row)
+		if f == nil {
 			continue
+		}
+
+		n, err := objectsmod.ResolveReadLimit(row.DataID, offset, limit)
+		if err != nil {
+			f.Close()
+			return nil, err
 		}
 
 		if offset != 0 {
@@ -166,10 +273,31 @@ func (repo *WatchRepository) Read(ctx *astral.Context, objectID *astral.ObjectID
 			}
 		}
 
-		return NewReader(f, row.Path, limit, repo), nil
+		return NewReader(f, row.DataID, n, repo), nil
 	}
 
 	return nil, objectsmod.ErrNotFound
+}
+
+// openRow opens the file of an index row when it lies under the root and is a regular file of the recorded size.
+// openRow returns nil for any other row.
+func (repo *WatchRepository) openRow(row *dbLocalFile) *os.File {
+	if !paths.PathUnder(row.Path, repo.root, filepath.Separator) {
+		return nil
+	}
+
+	f, err := os.Open(row.Path)
+	if err != nil {
+		return nil
+	}
+
+	stat, err := f.Stat()
+	if err != nil || !stat.Mode().IsRegular() || uint64(stat.Size()) != row.DataID.Size {
+		f.Close()
+		return nil
+	}
+
+	return f
 }
 
 // Create is not supported; WatchRepository is read-only.

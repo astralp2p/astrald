@@ -1,9 +1,16 @@
 package user
 
-import "github.com/astralp2p/astral-go/astral"
+import (
+	"github.com/astralp2p/astral-go/astral"
+	"github.com/astralp2p/astrald/mod/objects"
+)
 
 // AddAsset adds an object to user's assets
 func (mod *Module) AddAsset(objectID *astral.ObjectID) (err error) {
+	if objectID.Size == 0 {
+		return objects.ErrPartialObjectID
+	}
+
 	_, err = mod.db.AddAsset(objectID, false)
 	if err == nil {
 		mod.notifySiblings("assets")
@@ -13,6 +20,10 @@ func (mod *Module) AddAsset(objectID *astral.ObjectID) (err error) {
 
 // RemoveAsset removes an object from user's assets
 func (mod *Module) RemoveAsset(objectID *astral.ObjectID) (err error) {
+	if objectID.Size == 0 {
+		return objects.ErrPartialObjectID
+	}
+
 	err = mod.db.RemoveAsset(objectID)
 	if err == nil {
 		mod.notifySiblings("assets")

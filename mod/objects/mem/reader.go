@@ -6,23 +6,27 @@ import (
 	"os"
 	"sync/atomic"
 
+	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astrald/mod/objects"
 )
 
 type Reader struct {
-	r      *bytes.Reader
-	bytes  []byte
-	repo   objects.Repository
-	closed atomic.Bool
+	r        *bytes.Reader
+	bytes    []byte
+	objectID astral.ObjectID
+	repo     objects.Repository
+	closed   atomic.Bool
 }
 
 var _ objects.Reader = &Reader{}
 
-func NewReader(buf []byte, repo objects.Repository) *Reader {
+// NewReader returns a reader over buf, a window of the object objectID names.
+func NewReader(buf []byte, objectID *astral.ObjectID, repo objects.Repository) *Reader {
 	return &Reader{
-		r:     bytes.NewReader(buf),
-		bytes: buf,
-		repo:  repo,
+		r:        bytes.NewReader(buf),
+		bytes:    buf,
+		objectID: *objectID,
+		repo:     repo,
 	}
 }
 
@@ -46,4 +50,10 @@ func (r *Reader) Close() error {
 
 func (r *Reader) Repo() objects.Repository {
 	return r.repo
+}
+
+// ID returns a copy of the full ID of the whole object, not of the window.
+func (r *Reader) ID() *astral.ObjectID {
+	id := r.objectID
+	return &id
 }

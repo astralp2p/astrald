@@ -1,8 +1,8 @@
 package mem
 
 import (
+	"errors"
 	objectsmod "github.com/astralp2p/astrald/mod/objects"
-	"slices"
 	"sync"
 	"sync/atomic"
 
@@ -16,7 +16,7 @@ var _ objectsmod.Repository = &Repository{}
 const DefaultSize = 64 * 1024 * 1024 // 64MB
 
 type Repository struct {
-	objects  sig.Map[string, []byte]
+	objects  sig.Map[[32]byte, []byte] // stored bytes by the hash of their content
 	mod      objectsmod.Module
 	used     atomic.Int64
 	size     int64
@@ -57,8 +57,43 @@ func (repo *Repository) Create(ctx *astral.Context, opts *objectsmod.CreateOpts)
 	return NewWriter(repo), nil
 }
 
+// storedObject is an object the repository holds, with its full ID.
+type storedObject struct {
+	id   astral.ObjectID
+	data []byte
+}
+
+// findObject returns the stored object objectID names, by hash alone for a partial ID.
+// A full ID matches only a stored object of its size.
+func (repo *Repository) findObject(objectID *astral.ObjectID) (*storedObject, error) {
+	data, found := repo.objects.Get(objectID.Hash)
+	if !found {
+		return nil, objectsmod.ErrNotFound
+	}
+
+	var object = &storedObject{
+		id:   astral.ObjectID{Size: uint64(len(data)), Hash: objectID.Hash},
+		data: data,
+	}
+
+	// why: Size 0 marks a partial ID, which carries no size to compare.
+	if objectID.Size != 0 && objectID.Size != object.id.Size {
+		return nil, objectsmod.ErrNotFound
+	}
+
+	return object, nil
+}
+
 func (repo *Repository) Contains(ctx *astral.Context, objectID *astral.ObjectID) (bool, error) {
-	return slices.Contains(repo.objects.Keys(), objectID.String()), nil
+	_, err := repo.findObject(objectID)
+	switch {
+	case errors.Is(err, objectsmod.ErrNotFound):
+		return false, nil
+	case err != nil:
+		return false, err
+	}
+
+	return true, nil
 }
 
 // Read serves only the device zone; other zones are excluded.
@@ -67,17 +102,17 @@ func (repo *Repository) Read(ctx *astral.Context, objectID *astral.ObjectID, off
 		return nil, astral.ErrZoneExcluded
 	}
 
-	s, e, err := getSliceBounds(objectID, offset, limit)
+	object, err := repo.findObject(objectID)
 	if err != nil {
 		return nil, err
 	}
 
-	bytes, found := repo.objects.Get(objectID.String())
-	if !found {
-		return nil, objectsmod.ErrNotFound
+	n, err := objectsmod.ResolveReadLimit(&object.id, offset, limit)
+	if err != nil {
+		return nil, err
 	}
 
-	return NewReader(bytes[s:e], repo), nil
+	return NewReader(object.data[offset:offset+n], &object.id, repo), nil
 }
 
 // Scan streams existing object IDs, then closes unless follow is set.
@@ -94,11 +129,8 @@ func (repo *Repository) Scan(ctx *astral.Context, follow bool) (<-chan *astral.O
 			s = sig.Subscribe(ctx, repo.added())
 		}
 
-		for _, s := range repo.objects.Keys() {
-			id, err := astral.ParseID(s)
-			if err != nil {
-				continue
-			}
+		for hash, data := range repo.objects.Clone() {
+			id := &astral.ObjectID{Size: uint64(len(data)), Hash: hash}
 			select {
 			case <-ctx.Done():
 				return
@@ -127,8 +159,14 @@ func (repo *Repository) Scan(ctx *astral.Context, follow bool) (<-chan *astral.O
 }
 
 func (repo *Repository) Delete(ctx *astral.Context, objectID *astral.ObjectID) error {
+	object, err := repo.findObject(objectID)
+	if err != nil {
+		return err
+	}
+
+	// why: one hash names one content, so an entry stored again after the lookup is the same object.
 	// why: Delete reports ok to a single caller, so the release runs once per stored object.
-	old, ok := repo.objects.Delete(objectID.String())
+	old, ok := repo.objects.Delete(object.id.Hash)
 	if !ok {
 		return objectsmod.ErrNotFound
 	}
@@ -181,20 +219,4 @@ func (repo *Repository) added() *sig.Queue[*astral.ObjectID] {
 	defer repo.mu.Unlock()
 
 	return repo.addQueue
-}
-
-func getSliceBounds(objectID *astral.ObjectID, offset int64, limit int64) (s int, e int, err error) {
-	switch {
-	case offset < 0 || offset > int64(objectID.Size):
-		return 0, 0, objectsmod.ErrOutOfBounds
-	case limit < 0:
-		return 0, 0, objectsmod.ErrOutOfBounds
-	case limit == 0:
-		limit = int64(objectID.Size)
-	}
-
-	s = int(offset)
-	e = min(s+int(limit), int(objectID.Size))
-
-	return
 }

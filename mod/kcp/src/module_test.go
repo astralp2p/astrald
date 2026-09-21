@@ -5,6 +5,7 @@ import (
 
 	"github.com/astralp2p/astral-go/api/tree"
 	"github.com/astralp2p/astral-go/astral"
+	"github.com/astralp2p/astral-go/astral/log"
 	"github.com/astralp2p/astrald/core/assets"
 	"gopkg.in/yaml.v2"
 )
@@ -25,10 +26,17 @@ func (a yamlAssets) LoadYAML(_ string, out any) error {
 
 // loadModule builds a Module from a kcp.yaml body and binds its settings to no
 // node, so a Set lands in the Value's local cache and Get reads it back.
+//
+// why: the logger is silenced, not nil — Load logs the endpoints it cannot
+// parse, and logf reads the prefix off the receiver, so a nil logger panics on
+// that path.
 func loadModule(t *testing.T, config string) *Module {
 	t.Helper()
 
-	loaded, err := Loader{}.Load(nil, yamlAssets{yaml: config}, nil)
+	logger := log.New(nil)
+	logger.SetFilter(func(*log.Entry) bool { return false })
+
+	loaded, err := Loader{}.Load(nil, yamlAssets{yaml: config}, logger)
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}

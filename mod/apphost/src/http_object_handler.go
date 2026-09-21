@@ -1,6 +1,7 @@
 package apphost
 
 import (
+	iofs "io/fs"
 	"net/http"
 	"path/filepath"
 	"time"
@@ -11,18 +12,18 @@ import (
 )
 
 // HTTPObjectHandler serves stored objects over HTTP, guarding each request with
-// an auth.SeeObjectsAction authorization check before delegating to the embedded file server.
+// an auth.SeeObjectsAction authorization check before delegating to a file server.
 type HTTPObjectHandler struct {
 	*Module
-	Identity   *astral.Identity
-	fileServer http.Handler
+	Identity *astral.Identity
+	files    *fs.FS
 }
 
 func NewHTTPObjectHandler(mod *Module, identity *astral.Identity) *HTTPObjectHandler {
 	return &HTTPObjectHandler{
-		Module:     mod,
-		Identity:   identity,
-		fileServer: http.FileServer(http.FS(fs.NewFS(mod.Objects.ReadDefault()))),
+		Module:   mod,
+		Identity: identity,
+		files:    fs.NewFS(mod.Objects.ReadDefault()),
 	}
 }
 
@@ -49,6 +50,30 @@ func (srv *HTTPObjectHandler) ServeHTTP(writer http.ResponseWriter, request *htt
 	}
 
 	// pass the request to the file server
-	writer.Header().Set("Content-Disposition", "inline; filename="+objectID.String())
-	srv.fileServer.ServeHTTP(writer, request)
+	files := &dispositionFS{files: srv.files, header: writer.Header()}
+	http.FileServer(http.FS(files)).ServeHTTP(writer, request)
+}
+
+// dispositionFS opens objects from files and names each opened object in header's Content-Disposition.
+// why: a partial ID names no stored object until it opens, and the file server writes the headers after it opens the object.
+type dispositionFS struct {
+	files  *fs.FS
+	header http.Header
+}
+
+func (d *dispositionFS) Open(name string) (iofs.File, error) {
+	f, err := d.files.Open(name)
+	if err != nil {
+		return nil, err
+	}
+
+	info, err := f.Stat()
+	if err != nil {
+		f.Close()
+		return nil, err
+	}
+
+	d.header.Set("Content-Disposition", "inline; filename="+info.Name())
+
+	return f, nil
 }
