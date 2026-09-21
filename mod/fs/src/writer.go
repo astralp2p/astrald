@@ -72,24 +72,17 @@ func (w *Writer) Commit() (*astral.ObjectID, error) {
 
 	objectID := w.resolver.Resolve()
 
-	var err error
 	var oldPath = filepath.Join(w.path, w.tempID)
 	var newPath = filepath.Join(w.path, objectID.String())
 
+	// why: the rename is the only writer of newPath, so its error is the commit's error -- a later
+	// stat reports ErrNotExist for a failed rename and reports success for a name a directory holds.
 	stat, err := os.Stat(newPath)
 	if err == nil && stat.Mode().IsRegular() {
 		// we already have this object
 		os.Remove(oldPath)
-	} else {
-		err = os.Rename(oldPath, newPath)
-		if err != nil {
-			os.Remove(oldPath)
-		}
-	}
-
-	// make sure the path is accessible
-	stat, err = os.Stat(newPath)
-	if err != nil || !stat.Mode().IsRegular() {
+	} else if err = os.Rename(oldPath, newPath); err != nil {
+		os.Remove(oldPath)
 		return nil, err
 	}
 
