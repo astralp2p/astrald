@@ -13,7 +13,7 @@ import (
 var _ exonetmod.Parser = &Module{}
 
 // Parse decodes a "gatewayID:targetID" address string into a gateway Endpoint.
-// Returns an error if either identity is unresolvable or if gatewayID equals targetID.
+// Returns an error if either identity is unresolvable, resolves to the zero identity, or if gatewayID equals targetID.
 func (mod *Module) Parse(network string, address string) (exonet.Endpoint, error) {
 	if network != NetworkName {
 		return nil, exonetmod.ErrUnsupportedNetwork
@@ -34,6 +34,13 @@ func (mod *Module) Parse(network string, address string) (exonet.Endpoint, error
 	endpoint.TargetID, err = mod.Dir.ResolveIdentity(ids[1])
 	if err != nil {
 		return nil, err
+	}
+
+	// why: "" and "anyone" resolve to the zero identity (mod/dir/src/module.go:58),
+	// which names no node — both gateway ops refuse it for this same value
+	// (op_node_connect.go:35, op_node_route.go:24).
+	if endpoint.GatewayID.IsZero() || endpoint.TargetID.IsZero() {
+		return nil, errors.New("invalid endpoint")
 	}
 
 	if endpoint.GatewayID.IsEqual(endpoint.TargetID) {

@@ -89,3 +89,29 @@ func TestNodeConnectResolvesAnAlias(t *testing.T) {
 		t.Fatal("gateway.node_connect did not reserve the aliased node's idle connection")
 	}
 }
+
+// TestParseRejectsAZeroIdentityHalf: "" and "anyone" resolve to the zero
+// identity, which names no node, so an address carrying one on either half is
+// not a usable endpoint. The pre-existing IsEqual guard catches only ":",
+// because IsEqual is false when exactly one side is zero.
+func TestParseRejectsAZeroIdentityHalf(t *testing.T) {
+	mod := &Module{Deps: Deps{Dir: &namingDir{}}}
+	id := astral.GenerateIdentity()
+
+	for _, address := range []string{
+		id.String() + ":",
+		":" + id.String(),
+		id.String() + ":anyone",
+		"anyone:" + id.String(),
+	} {
+		t.Run(address, func(t *testing.T) {
+			endpoint, err := mod.Parse(NetworkName, address)
+			if endpoint != nil {
+				t.Errorf("Parse(%q) returned an endpoint naming the zero identity", address)
+			}
+			if err == nil || err.Error() != "invalid endpoint" {
+				t.Errorf("Parse(%q) err = %v; want \"invalid endpoint\"", address, err)
+			}
+		})
+	}
+}
