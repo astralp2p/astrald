@@ -94,7 +94,7 @@
 ## Concurrency
 
 * A mutex field is named `mu` and is never embedded.
-* `defer Unlock()` sits on the same line as `Lock()`.
+* `defer Unlock()` sits on the line after `Lock()`.
 * `sync.RWMutex` is used when reads dominate.
 * An atomic flag is an `atomic.Bool`, an atomic state is an `atomic.Int32`, and an atomic counter is an `atomic.Uint64`.
 * An idempotent close uses `CompareAndSwap(false, true)`.
