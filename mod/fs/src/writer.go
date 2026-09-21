@@ -72,7 +72,24 @@ func (w *Writer) Commit() (*astral.ObjectID, error) {
 
 	objectID := w.resolver.Resolve()
 
-	var err error
+	stored, err := w.publish(objectID)
+	if !stored {
+		return nil, err
+	}
+
+	// why: pushAdded takes mu, which publish holds, so it runs after publish returns.
+	w.repo.pushAdded(objectID)
+
+	return objectID, nil
+}
+
+// publish moves the temp file to the object's path and adds the object to the index.
+// publish reports false when the object path is not a regular file afterwards.
+// why: mu orders the move and its index entry with Delete and index refresh.
+func (w *Writer) publish(objectID *astral.ObjectID) (bool, error) {
+	w.repo.mu.Lock()
+	defer w.repo.mu.Unlock()
+
 	var oldPath = filepath.Join(w.path, w.tempID)
 	var newPath = filepath.Join(w.path, objectID.String())
 
@@ -90,12 +107,12 @@ func (w *Writer) Commit() (*astral.ObjectID, error) {
 	// make sure the path is accessible
 	stat, err = os.Stat(newPath)
 	if err != nil || !stat.Mode().IsRegular() {
-		return nil, err
+		return false, err
 	}
 
-	w.repo.pushAdded(objectID)
+	w.repo.addObjectLocked(objectID)
 
-	return objectID, nil
+	return true, nil
 }
 
 func (w *Writer) Discard() error {
