@@ -2,14 +2,14 @@ package assets
 
 import (
 	"errors"
-	log2 "github.com/astralp2p/astral-go/astral/log"
+	"path/filepath"
+	"strings"
+	"time"
+
 	"github.com/astralp2p/astrald/resources"
 	"gopkg.in/yaml.v2"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
-	"path/filepath"
-	"strings"
-	"time"
 )
 
 var _ Assets = &CoreAssets{}
@@ -33,16 +33,14 @@ const defaultDatabaseName = "astrald"
 
 type CoreAssets struct {
 	res resources.Resources
-	log *log2.Logger
 	db  *gorm.DB
 }
 
 // NewCoreAssets opens the default database eagerly; fails if it cannot be reached.
-func NewCoreAssets(res resources.Resources, log *log2.Logger) (*CoreAssets, error) {
+func NewCoreAssets(res resources.Resources) (*CoreAssets, error) {
 	var err error
 	var a = &CoreAssets{
 		res: res,
-		log: log,
 	}
 
 	a.db, err = a.OpenDatabase(defaultDatabaseName)
@@ -107,19 +105,12 @@ func (assets *CoreAssets) OpenDatabase(name string) (*gorm.DB, error) {
 		name = name + ".db"
 	}
 
-	var l logger.Interface
-	if assets.log != nil {
-		l = logger.New(
-			&logWriter{Logger: assets.log},
-			logger.Config{
-				SlowThreshold:             200 * time.Millisecond,
-				LogLevel:                  logger.Warn,
-				IgnoreRecordNotFoundError: false,
-				Colorful:                  true,
-			})
-	} else {
-		l = logger.Default.LogMode(logger.Silent)
-	}
+	// why: gorm's logger never writes through the astral logger. A query issued
+	// while a log entry renders would re-enter Logger.logEntry and self-deadlock
+	// on the non-reentrant root mutex, and mod/log renders identities through a
+	// database read.
+	// note: gorm's own diagnostics are dropped, not redirected.
+	var l = logger.Default.LogMode(logger.Silent)
 
 	// why: gorm stamps CreatedAt and UpdatedAt from time.Now().Local() by
 	// default, and the sqlite drivers store a datetime as text that SQL compares
@@ -166,13 +157,4 @@ func openFileDatabase(path string, cfg *gorm.Config) (*gorm.DB, error) {
 	sqlDB.SetMaxOpenConns(1)
 
 	return db, nil
-}
-
-type logWriter struct {
-	*log2.Logger
-	level int
-}
-
-func (w *logWriter) Printf(s string, i ...interface{}) {
-	w.Logger.Logv(w.level, s, i...)
 }

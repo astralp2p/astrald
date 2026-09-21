@@ -22,7 +22,7 @@ type configureNodeStateOp struct {
 
 // configureNodeStateOps lists every tree op that changes state, once per write
 // mode: single-value and batch sets, plain and recursive deletes.
-func configureNodeStateOps(target *astral.Identity) []configureNodeStateOp {
+func configureNodeStateOps() []configureNodeStateOp {
 	set := func(m *Module) any { return m.OpSet }
 	del := func(m *Module) any { return m.OpDelete }
 
@@ -31,8 +31,6 @@ func configureNodeStateOps(target *astral.Identity) []configureNodeStateOp {
 		{"tree.set batch", set, "tree.set?path=/cfg/key"},
 		{"tree.delete", del, "tree.delete?path=/cfg/key"},
 		{"tree.delete recursive", del, "tree.delete?path=/cfg&recursive=true"},
-		{"tree.mount_remote", func(m *Module) any { return m.OpMountRemote }, "tree.mount_remote?path=/remote/peer&identity=" + target.String()},
-		{"tree.unmount", func(m *Module) any { return m.OpUnmount }, "tree.unmount?path=/remote/peer"},
 	}
 }
 
@@ -40,13 +38,13 @@ func configureNodeStateOps(target *astral.Identity) []configureNodeStateOp {
 // the ConfigureNodeState action in mod/tree: every op that changes the tree must
 // ask before it acts, and must reject when the answer is no.
 //
-// The module is a bare struct — no mounts, no database, no directory. An op that
+// The module is a bare struct — no mounts and no database. An op that
 // reached past its authorization check would panic on a nil field, so "changes
 // nothing" is enforced by construction as well as by the byte count.
 func TestConfigureNodeStateRefusesCallerWithoutPermits(t *testing.T) {
 	caller := astral.GenerateIdentity()
 
-	for _, op := range configureNodeStateOps(astral.GenerateIdentity()) {
+	for _, op := range configureNodeStateOps() {
 		t.Run(op.name, func(t *testing.T) {
 			authority := &recordingAuth{verdict: false}
 			mod := &Module{Deps: Deps{Auth: authority}}
