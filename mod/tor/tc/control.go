@@ -28,7 +28,7 @@ type watch struct {
 	closeCh chan struct{}
 }
 
-func (w watch) Read(p []byte) (int, error) {
+func (w *watch) Read(p []byte) (int, error) {
 	n, err := w.ReadWriteCloser.Read(p)
 	if err != nil {
 		if w.closeCh != nil {
