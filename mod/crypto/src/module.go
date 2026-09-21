@@ -46,6 +46,7 @@ func (mod *Module) Run(ctx *astral.Context) error {
 		repo := mod.Objects.GetRepository(repoName)
 		if repo == nil {
 			mod.log.Logv(1, "cannot index %v: repository not found", repoName)
+			continue
 		}
 
 		go func() {
