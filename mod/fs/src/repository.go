@@ -126,7 +126,7 @@ func (repo *Repository) Read(ctx *astral.Context, objectID *astral.ObjectID, off
 		}
 	}
 
-	return NewReader(f, path, limit, repo), nil
+	return NewReader(f, objectID, limit, repo), nil
 
 }
 

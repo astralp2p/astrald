@@ -166,7 +166,7 @@ func (repo *WatchRepository) Read(ctx *astral.Context, objectID *astral.ObjectID
 			}
 		}
 
-		return NewReader(f, row.Path, limit, repo), nil
+		return NewReader(f, row.DataID, limit, repo), nil
 	}
 
 	return nil, objectsmod.ErrNotFound

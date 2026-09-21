@@ -1,6 +1,7 @@
 package mem
 
 import (
+	"io"
 	"sync"
 	"testing"
 
@@ -231,5 +232,36 @@ func TestConcurrentCommitAndScanAreRaceFree(t *testing.T) {
 
 	if got := repo.objects.Len(); got != 16 {
 		t.Errorf("stored objects = %v, want 16", got)
+	}
+}
+
+// TestReaderIDIsTheWholeObject: a reader over a window reports the stored object's full ID,
+// and neither the Read argument nor a returned ID aliases the reader's copy.
+func TestReaderIDIsTheWholeObject(t *testing.T) {
+	var repo = New("test", 1024)
+	var ctx = astral.NewContext(nil)
+
+	var id = store(t, repo, []byte("hello astral"))
+	var arg = *id
+
+	r, err := repo.Read(ctx, &arg, 2, 3)
+	if err != nil {
+		t.Fatalf("Read: %v", err)
+	}
+	defer r.Close()
+
+	data, err := io.ReadAll(r)
+	if err != nil {
+		t.Fatalf("ReadAll: %v", err)
+	}
+	if string(data) != "llo" {
+		t.Fatalf("window = %q, want %q", data, "llo")
+	}
+
+	arg.Size++
+	r.ID().Size++
+
+	if got := r.ID(); !got.IsEqual(id) {
+		t.Fatalf("ID() = %v, want %v", got, id)
 	}
 }

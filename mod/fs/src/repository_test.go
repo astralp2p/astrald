@@ -2,6 +2,7 @@ package fs
 
 import (
 	"errors"
+	"io"
 	"os"
 	"path/filepath"
 	"sync"
@@ -93,4 +94,45 @@ func TestConcurrentCommitAndScanAreRaceFree(t *testing.T) {
 	writers.Wait()
 	cancel()
 	followers.Wait()
+}
+
+// TestReaderIDIsTheWholeObject: a reader over a window reports the stored object's full ID,
+// and neither the Read argument nor a returned ID aliases the reader's copy.
+func TestReaderIDIsTheWholeObject(t *testing.T) {
+	repo := NewRepository(nil, "test", t.TempDir())
+	ctx := astral.NewContext(nil)
+
+	w, err := repo.Create(ctx, nil)
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	if _, err = w.Write([]byte("hello astral")); err != nil {
+		t.Fatalf("Write: %v", err)
+	}
+	id, err := w.Commit()
+	if err != nil {
+		t.Fatalf("Commit: %v", err)
+	}
+	arg := *id
+
+	r, err := repo.Read(ctx, &arg, 2, 3)
+	if err != nil {
+		t.Fatalf("Read: %v", err)
+	}
+	defer r.Close()
+
+	data, err := io.ReadAll(r)
+	if err != nil {
+		t.Fatalf("ReadAll: %v", err)
+	}
+	if string(data) != "llo" {
+		t.Fatalf("window = %q, want %q", data, "llo")
+	}
+
+	arg.Size++
+	r.ID().Size++
+
+	if got := r.ID(); !got.IsEqual(id) {
+		t.Fatalf("ID() = %v, want %v", got, id)
+	}
 }

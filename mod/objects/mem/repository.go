@@ -77,7 +77,7 @@ func (repo *Repository) Read(ctx *astral.Context, objectID *astral.ObjectID, off
 		return nil, objectsmod.ErrNotFound
 	}
 
-	return NewReader(bytes[s:e], repo), nil
+	return NewReader(bytes[s:e], objectID, repo), nil
 }
 
 // Scan streams existing object IDs, then closes unless follow is set.
