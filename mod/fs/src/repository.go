@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"sync"
 
 	"github.com/astralp2p/astral-go/api/objects"
 	"github.com/astralp2p/astral-go/astral"
@@ -20,6 +21,7 @@ type Repository struct {
 	mod      *Module
 	label    string
 	root     string
+	mu       sync.Mutex // guards addQueue
 	addQueue *sig.Queue[*astral.ObjectID]
 }
 
@@ -45,7 +47,7 @@ func (repo *Repository) Scan(ctx *astral.Context, follow bool) (<-chan *astral.O
 		defer close(ch)
 
 		if follow {
-			subscribe = sig.Subscribe(ctx, repo.addQueue)
+			subscribe = sig.Subscribe(ctx, repo.added())
 		}
 
 		entries, err := os.ReadDir(repo.root)
@@ -185,5 +187,16 @@ func (repo *Repository) String() string {
 }
 
 func (repo *Repository) pushAdded(id *astral.ObjectID) {
+	repo.mu.Lock()
+	defer repo.mu.Unlock()
+
 	repo.addQueue = repo.addQueue.Push(id)
+}
+
+// added returns the queue element a new follower subscribes from.
+func (repo *Repository) added() *sig.Queue[*astral.ObjectID] {
+	repo.mu.Lock()
+	defer repo.mu.Unlock()
+
+	return repo.addQueue
 }

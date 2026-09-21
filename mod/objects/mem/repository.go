@@ -3,6 +3,7 @@ package mem
 import (
 	objectsmod "github.com/astralp2p/astrald/mod/objects"
 	"slices"
+	"sync"
 	"sync/atomic"
 
 	"github.com/astralp2p/astral-go/api/objects"
@@ -20,6 +21,7 @@ type Repository struct {
 	used     atomic.Int64
 	size     int64
 	name     string
+	mu       sync.Mutex // guards addQueue
 	addQueue *sig.Queue[*astral.ObjectID]
 }
 
@@ -89,7 +91,7 @@ func (repo *Repository) Scan(ctx *astral.Context, follow bool) (<-chan *astral.O
 		defer close(ch)
 
 		if follow {
-			s = sig.Subscribe(ctx, repo.addQueue)
+			s = sig.Subscribe(ctx, repo.added())
 		}
 
 		for _, s := range repo.objects.Keys() {
@@ -167,7 +169,18 @@ func (repo *Repository) String() string {
 }
 
 func (repo *Repository) pushAdded(id *astral.ObjectID) {
+	repo.mu.Lock()
+	defer repo.mu.Unlock()
+
 	repo.addQueue = repo.addQueue.Push(id)
+}
+
+// added returns the queue element a new follower subscribes from.
+func (repo *Repository) added() *sig.Queue[*astral.ObjectID] {
+	repo.mu.Lock()
+	defer repo.mu.Unlock()
+
+	return repo.addQueue
 }
 
 func getSliceBounds(objectID *astral.ObjectID, offset int64, limit int64) (s int, e int, err error) {

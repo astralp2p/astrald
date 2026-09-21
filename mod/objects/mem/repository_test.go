@@ -177,3 +177,59 @@ func TestWriteHoldsSizeUnderConcurrency(t *testing.T) {
 		t.Errorf("Used under 50 concurrent writers = %v, want no more than the size, 100", used)
 	}
 }
+
+// storeErr commits a payload without touching t, so it is safe to call from a goroutine.
+func storeErr(repo *Repository, payload []byte) error {
+	w, err := repo.Create(astral.NewContext(nil), nil)
+	if err != nil {
+		return err
+	}
+	if _, err = w.Write(payload); err != nil {
+		return err
+	}
+	_, err = w.Commit()
+	return err
+}
+
+func TestConcurrentCommitAndScanAreRaceFree(t *testing.T) {
+	var repo = New("test", 1<<20)
+	ctx, cancel := astral.NewContext(nil).WithCancel()
+	defer cancel()
+
+	var followers, writers sync.WaitGroup
+
+	for i := 0; i < 4; i++ {
+		followers.Add(1)
+		go func() {
+			defer followers.Done()
+
+			ch, err := repo.Scan(ctx, true)
+			if err != nil {
+				t.Errorf("Scan: %v", err)
+				return
+			}
+			for range ch {
+			}
+		}()
+	}
+
+	for i := 0; i < 16; i++ {
+		writers.Add(1)
+		go func(i int) {
+			defer writers.Done()
+
+			// distinct content per writer, so every Commit stores and notifies
+			if err := storeErr(repo, []byte{byte(i), byte(i >> 8), 'p', 'a', 'y'}); err != nil {
+				t.Errorf("writer %v: %v", i, err)
+			}
+		}(i)
+	}
+
+	writers.Wait()
+	cancel()
+	followers.Wait()
+
+	if got := repo.objects.Len(); got != 16 {
+		t.Errorf("stored objects = %v, want 16", got)
+	}
+}
