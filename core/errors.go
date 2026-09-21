@@ -19,6 +19,6 @@ func errModuleUnavailable(name string) ErrModuleUnavailable {
 
 // Is matches any ErrModuleUnavailable regardless of module name.
 func (ErrModuleUnavailable) Is(other error) bool {
-	var errModuleUnavailable *ErrModuleUnavailable
-	return errors.As(other, &errModuleUnavailable)
+	var e ErrModuleUnavailable
+	return errors.As(other, &e)
 }

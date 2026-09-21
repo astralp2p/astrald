@@ -3,7 +3,6 @@ package resources
 import (
 	"errors"
 	"fmt"
-	"io/fs"
 	"os"
 	"path"
 	"strings"
@@ -19,7 +18,7 @@ type FileResources struct {
 func NewFileResources(root string, mkdir bool) (*FileResources, error) {
 	fileInfo, err := os.Stat(root)
 	if err != nil {
-		if _, ok := err.(*fs.PathError); !ok && !mkdir {
+		if !mkdir {
 			return nil, err
 		}
 		err = os.MkdirAll(root, 0750)
