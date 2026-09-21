@@ -17,8 +17,8 @@ type opReadArgs struct {
 }
 
 // OpRead authorizes the caller under SeeObjects, then streams raw object bytes
-// over the accepted connection. Records the access in the reads journal, which
-// feeds purge ordering.
+// over the accepted connection. Records the access under the opened object's
+// full ID in the reads journal, which feeds purge ordering.
 func (mod *Module) OpRead(ctx *astral.Context, q *routing.IncomingQuery, args opReadArgs) (err error) {
 	ctx = ctx.IncludeZone(args.Zone)
 
@@ -51,7 +51,8 @@ func (mod *Module) OpRead(ctx *astral.Context, q *routing.IncomingQuery, args op
 	}
 	defer r.Close()
 
-	mod.objectsReadsJournal.Mark(args.ID)
+	// why: a partial request never becomes a journal key; the reader names the object it opened.
+	mod.objectsReadsJournal.Mark(r.ID())
 
 	conn := q.AcceptRaw()
 	defer conn.Close()

@@ -17,12 +17,14 @@ var _ objectsmod.Repository = &Repository{}
 
 // Repository is a filesystem-backed object store rooted at a single directory.
 // addQueue broadcasts newly committed object IDs to active Scan followers.
+// ids holds the candidate full IDs of each hash for partial lookup; nil means the index is not built yet.
 type Repository struct {
 	mod      *Module
 	label    string
 	root     string
-	mu       sync.Mutex // guards addQueue
+	mu       sync.Mutex // guards addQueue, ids, and the file moves and removals ids follows
 	addQueue *sig.Queue[*astral.ObjectID]
+	ids      *sig.Map[[32]byte, []astral.ObjectID]
 }
 
 var _ objectsmod.Repository = &Repository{}
@@ -57,12 +59,8 @@ func (repo *Repository) Scan(ctx *astral.Context, follow bool) (<-chan *astral.O
 		}
 
 		for _, entry := range entries {
-			if !entry.Type().IsRegular() {
-				continue
-			}
-
-			objectID, err := astral.ParseID(entry.Name())
-			if err != nil {
+			objectID := entryObjectID(entry)
+			if objectID == nil {
 				continue
 			}
 
@@ -102,35 +100,62 @@ func (repo *Repository) Read(ctx *astral.Context, objectID *astral.ObjectID, off
 		return nil, astral.ErrZoneExcluded
 	}
 
-	if limit == 0 {
-		limit = int64(objectID.Size)
+	resolved, err := repo.findObject(ctx, objectID)
+	if err != nil {
+		return nil, err
 	}
 
-	path := filepath.Join(repo.root, objectID.String())
-
-	f, err := os.Open(path)
+	f, err := repo.openObject(resolved)
 	if err != nil {
-		return nil, objectsmod.ErrNotFound
+		// why: only a partial ID resolves through the index, so only its miss can leave a stale entry.
+		// why: a full-ID miss takes no lock, so it never waits behind a partial lookup's directory listing.
+		if objectID.Size == 0 {
+			repo.evict(resolved)
+		}
+		return nil, err
+	}
+
+	n, err := objectsmod.ResolveReadLimit(resolved, offset, limit)
+	if err != nil {
+		f.Close()
+		return nil, err
 	}
 
 	if offset != 0 {
 		pos, err := f.Seek(offset, io.SeekStart)
-		if err != nil {
-			f.Close()
-			return nil, objectsmod.ErrNotFound
-		}
-
-		if pos != offset {
+		if err != nil || pos != offset {
 			f.Close()
 			return nil, objectsmod.ErrNotFound
 		}
 	}
 
-	return NewReader(f, path, limit, repo), nil
-
+	return NewReader(f, resolved, n, repo), nil
 }
 
+// openObject opens the file of a resolved full ID and checks that the opened file is a regular file of its size.
+// A file that cannot be opened or no longer matches is reported as ErrNotFound.
+func (repo *Repository) openObject(objectID *astral.ObjectID) (*os.File, error) {
+	f, err := os.Open(filepath.Join(repo.root, objectID.String()))
+	if err != nil {
+		return nil, objectsmod.ErrNotFound
+	}
+
+	stat, err := f.Stat()
+	if err != nil || !stat.Mode().IsRegular() || uint64(stat.Size()) != objectID.Size {
+		f.Close()
+		return nil, objectsmod.ErrNotFound
+	}
+
+	return f, nil
+}
+
+// Contains reports whether the repository holds the object.
+// A full ID checks its file alone; a partial ID resolves through the hash index.
 func (repo *Repository) Contains(ctx *astral.Context, objectID *astral.ObjectID) (bool, error) {
+	if objectID.Size == 0 {
+		return repo.containsPartial(ctx, objectID)
+	}
+
 	path := filepath.Join(repo.root, objectID.String())
 
 	// check if we have the file
@@ -144,6 +169,20 @@ func (repo *Repository) Contains(ctx *astral.Context, objectID *astral.ObjectID)
 		return true, nil
 	}
 	return false, nil
+}
+
+// containsPartial reports whether a partial ID resolves to a stored object.
+// A miss is false; an ambiguous hash and a filesystem error are returned.
+func (repo *Repository) containsPartial(ctx *astral.Context, objectID *astral.ObjectID) (bool, error) {
+	_, err := repo.findObject(ctx, objectID)
+	switch {
+	case errors.Is(err, objectsmod.ErrNotFound):
+		return false, nil
+	case err != nil:
+		return false, err
+	}
+
+	return true, nil
 }
 
 func (repo *Repository) Label() string {
@@ -172,14 +211,37 @@ func (repo *Repository) Free(ctx *astral.Context) (int64, error) {
 	return int64(usage.Free), nil
 }
 
+// Delete removes the object file. A partial ID is resolved and removed under one hold of mu.
 func (repo *Repository) Delete(ctx *astral.Context, objectID *astral.ObjectID) error {
-	path := filepath.Join(repo.root, objectID.String())
-	err := os.Remove(path)
+	repo.mu.Lock()
+	defer repo.mu.Unlock()
+
+	var resolved = objectID
+	if objectID.Size == 0 {
+		found, err := repo.findPartialLocked(ctx, objectID.Hash)
+		if err != nil {
+			return err
+		}
+		resolved = found
+	}
+
+	return repo.removeObjectLocked(resolved)
+}
+
+// removeObjectLocked removes the file of a resolved full ID and its index entry. The caller holds mu.
+func (repo *Repository) removeObjectLocked(objectID *astral.ObjectID) error {
+	err := os.Remove(filepath.Join(repo.root, objectID.String()))
+	if err != nil && !os.IsNotExist(err) {
+		return err
+	}
+
+	repo.evictLocked(objectID)
+
 	// why: map a missing-file miss to ErrNotFound so purge skips this leaf instead of aborting the whole pass
-	if os.IsNotExist(err) {
+	if err != nil {
 		return objectsmod.ErrNotFound
 	}
-	return err
+	return nil
 }
 
 func (repo *Repository) String() string {

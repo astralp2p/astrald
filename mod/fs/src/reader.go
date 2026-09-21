@@ -4,23 +4,27 @@ import (
 	"io"
 	"os"
 
+	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astrald/mod/objects"
 )
 
-// Reader wraps a file with an optional byte limit and a back-reference to the owning repository.
+// Reader wraps a file with an optional byte limit, the full ID of the whole object, and a back-reference to the owning repository.
 // A limit of -1 disables enforcement; 0 signals EOF immediately.
 type Reader struct {
 	io.ReadSeekCloser
-	name  string
-	limit int64
-	repo  objects.Repository
+	objectID astral.ObjectID
+	limit    int64
+	repo     objects.Repository
 }
 
+var _ objects.Reader = &Reader{}
+
 // NewReader returns a new file reader with a limit on the amount of bytes that can be read. -1 means no limit.
-func NewReader(f *os.File, name string, limit int64, repo objects.Repository) *Reader {
+// objectID names the whole object in f; limit describes only the requested window.
+func NewReader(f *os.File, objectID *astral.ObjectID, limit int64, repo objects.Repository) *Reader {
 	return &Reader{
 		ReadSeekCloser: f,
-		name:           name,
+		objectID:       *objectID,
 		limit:          limit,
 		repo:           repo,
 	}
@@ -52,4 +56,10 @@ func (r *Reader) Close() error {
 
 func (r *Reader) Repo() objects.Repository {
 	return r.repo
+}
+
+// ID returns a copy of the full ID of the whole object, not of the window.
+func (r *Reader) ID() *astral.ObjectID {
+	id := r.objectID
+	return &id
 }

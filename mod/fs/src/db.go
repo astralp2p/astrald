@@ -1,6 +1,7 @@
 package fs
 
 import (
+	"context"
 	"time"
 
 	"github.com/astralp2p/astral-go/astral"
@@ -28,6 +29,22 @@ func (db *DB) FindObject(pathPrefix string, objectID *astral.ObjectID) (rows []*
 	err = db.
 		Model(&dbLocalFile{}).
 		Where("data_id = ?", objectID).
+		Where("path like ?", pathPrefix+"%").
+		Where("updated_at != 0").
+		Where("deleted_at IS NULL").
+		Find(&rows).
+		Error
+
+	return
+}
+
+// FindByHashTail returns the valid rows under pathPrefix whose data_id ends with tail.
+// note: the zBase32 alphabet holds no LIKE wildcard, so tail matches literally.
+func (db *DB) FindByHashTail(ctx context.Context, pathPrefix string, tail string) (rows []*dbLocalFile, err error) {
+	err = db.
+		WithContext(ctx).
+		Model(&dbLocalFile{}).
+		Where("data_id LIKE '%' || ?", tail).
 		Where("path like ?", pathPrefix+"%").
 		Where("updated_at != 0").
 		Where("deleted_at IS NULL").

@@ -19,6 +19,9 @@ type ReadSeeker struct {
 	pos      int64
 }
 
+// NewReadSeeker wraps r, the reader repo opened for objectID at offset 0.
+// A nil r opens the object at offset 0 on the first Read.
+// note: every reopen adopts the full ID the opened reader reports.
 func NewReadSeeker(ctx *astral.Context, objectID *astral.ObjectID, repo Repository, r io.ReadCloser) *ReadSeeker {
 	return &ReadSeeker{
 		readerID: ctx.Identity(),
@@ -81,8 +84,16 @@ func (r *ReadSeeker) openAt(pos int64) (err error) {
 
 	ctx := astral.NewContext(nil).WithZone(r.zone).WithIdentity(r.readerID)
 
-	r.r, err = r.repo.Read(ctx, r.objectID, pos, 0)
+	reader, err := r.repo.Read(ctx, r.objectID, pos, 0)
 	r.pos = pos
+	if err != nil {
+		r.r = nil
+		return
+	}
+
+	// why: SeekEnd and every later reopen follow the full ID of the object the repository opened.
+	r.objectID = reader.ID()
+	r.r = reader
 
 	return
 }

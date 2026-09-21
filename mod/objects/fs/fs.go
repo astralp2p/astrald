@@ -28,6 +28,7 @@ func (f *FS) Open(name string) (fs.File, error) {
 }
 
 // OpenContext opens an object by its ID; name must parse as an object ID, not a path.
+// The opened file carries the full ID of the object the repository found.
 // The read is bounded by openTimeout.
 func (f *FS) OpenContext(ctx *astral.Context, name string) (fs.File, error) {
 	// parse object id
@@ -46,9 +47,12 @@ func (f *FS) OpenContext(ctx *astral.Context, name string) (fs.File, error) {
 		return nil, err
 	}
 
+	// why: a partial name carries no size, so the file's name and size come from the object the reader opened.
+	resolvedID := r.ID()
+
 	// wrap the reader into a
 	return &File{
-		ID:         objectID,
-		ReadCloser: objects.NewReadSeeker(ctx, objectID, f.repo, r),
+		ID:         resolvedID,
+		ReadCloser: objects.NewReadSeeker(ctx, resolvedID, f.repo, r),
 	}, nil
 }
