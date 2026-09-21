@@ -11,6 +11,7 @@ import (
 	"github.com/astralp2p/astrald/mod/crypto"
 	usermod "github.com/astralp2p/astrald/mod/user"
 	"github.com/astralp2p/astrald/resources"
+	"sync"
 )
 
 type Deps struct {
@@ -38,6 +39,10 @@ type Module struct {
 	db     *DB
 
 	devices sig.Map[string, string]
+
+	// why: Scan reads the recorded set, then deletes from it, so two scans
+	// interleave into a device recorded by one and forgotten by the other.
+	mu sync.Mutex
 }
 
 func (mod *Module) Run(ctx *astral.Context) error {
@@ -46,22 +51,45 @@ func (mod *Module) Run(ctx *astral.Context) error {
 	return nil
 }
 
-// Scan enumerates connected ColdCards and records each serial to pubkey;
-// devices whose pubkey cannot be read are skipped.
+// Scan enumerates connected ColdCards and records each serial to pubkey,
+// replacing the pubkey recorded for a serial that is still connected. A serial
+// the enumeration no longer lists is forgotten, so an unplugged device stops
+// being offered as a signer (Engine.NewTextSigner).
+//
+// note: a device whose pubkey cannot be read is skipped and keeps what was
+// recorded for it, because the enumeration still lists it as connected.
+// why: a failed enumeration returns the error and leaves the recorded set
+// untouched, so a transient ckcc failure does not un-register every signer.
 func (mod *Module) Scan() error {
+	mod.mu.Lock()
+	defer mod.mu.Unlock()
+
 	devices, err := ckcc.List()
 	if err != nil {
 		return err
 	}
 
+	var connected = map[string]struct{}{}
+
 	for _, dev := range devices {
+		connected[dev.Serial] = struct{}{}
+
 		pubKeyHex, err := dev.PubKey(coldcard.BIP44Path)
 		if err != nil {
 			continue
 		}
 
-		mod.devices.Set(dev.Serial, pubKeyHex)
+		mod.devices.Replace(dev.Serial, pubKeyHex)
 		mod.log.Logv(1, "found coldcard device: %v for key %v", dev.Serial, pubKeyHex)
+	}
+
+	for serial := range mod.devices.Clone() {
+		if _, found := connected[serial]; found {
+			continue
+		}
+
+		mod.devices.Delete(serial)
+		mod.log.Logv(1, "coldcard device gone: %v", serial)
 	}
 
 	return nil
