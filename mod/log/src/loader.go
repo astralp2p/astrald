@@ -44,7 +44,7 @@ func (Loader) Load(node astral.Node, assets assets.Assets, log *alog.Logger) (co
 	// configure some views
 	views.UseQueryView()
 	views.UseEntryView()
-	views.HideOrigin = node.Identity()
+	views.HideOrigin.Set(node.Identity())
 
 	return mod, err
 }
