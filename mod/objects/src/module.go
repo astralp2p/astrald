@@ -73,28 +73,34 @@ func (mod *Module) Run(ctx *astral.Context) error {
 }
 
 // Load reads and decodes an object from repo. Data that isn't a valid astral
-// object is returned as an *astral.Blob rather than an error. Marks the read in
-// the reads journal and tracks the type for decoded objects.
+// object is returned as an *astral.Blob rather than an error. An object larger
+// than MaxObjectSize returns ErrObjectTooLarge. Marks the read in the reads
+// journal and tracks the type for decoded objects, both under the opened
+// object's full ID.
 func (mod *Module) Load(ctx *astral.Context, repo objectsmod.Repository, objectID *astral.ObjectID) (astral.Object, error) {
 	// read the object data
 	r, err := repo.Read(ctx, objectID, 0, 0)
 	if err != nil {
 		return nil, err
 	}
+	defer r.Close()
 
-	data, err := io.ReadAll(r)
+	data, err := readWhole(r)
 	if err != nil {
 		return nil, err
 	}
 
-	mod.objectsReadsJournal.Mark(objectID)
+	// why: a partial request never becomes a journal or tracking key; the reader names the object it opened.
+	resolvedID := r.ID()
+
+	mod.objectsReadsJournal.Mark(resolvedID)
 
 	// parse the object
 	o, _, err := astral.Decode(bytes.NewReader(data), astral.Canonical())
 	switch {
 	case err == nil:
 		// decode succeeded, so the type is known.
-		mod.trackObject(objectID, o.ObjectType())
+		mod.trackObject(resolvedID, o.ObjectType())
 		return o, nil
 
 	case strings.Contains(err.Error(), "invalid magic bytes"): // the object is a blob
@@ -105,6 +111,26 @@ func (mod *Module) Load(ctx *astral.Context, repo objectsmod.Repository, objectI
 	default: // other error
 		return nil, err
 	}
+}
+
+// readWhole reads the whole object r opened. An object larger than MaxObjectSize returns ErrObjectTooLarge.
+func readWhole(r objectsmod.Reader) ([]byte, error) {
+	// why: a partial request carries no size, so only the opened reader knows how large the object is.
+	if r.ID().Size > uint64(objectsmod.MaxObjectSize) {
+		return nil, objectsmod.ErrObjectTooLarge
+	}
+
+	// why: a reader can serve more bytes than its ID reports, so the read stops one byte past the cap.
+	data, err := io.ReadAll(io.LimitReader(r, objectsmod.MaxObjectSize+1))
+	if err != nil {
+		return nil, err
+	}
+
+	if int64(len(data)) > objectsmod.MaxObjectSize {
+		return nil, objectsmod.ErrObjectTooLarge
+	}
+
+	return data, nil
 }
 
 func (mod *Module) Store(ctx *astral.Context, repo objectsmod.Repository, object astral.Object) (*astral.ObjectID, error) {
@@ -129,9 +155,9 @@ func (mod *Module) Store(ctx *astral.Context, repo objectsmod.Repository, object
 	return id, nil
 }
 
-// Probe reads only the object's header and reports its type, MIME, source repo,
-// and read latency without loading the full payload. Tracks the type when the
-// object carries a valid astral stamp.
+// Probe reads only the object's header and reports its full ID, type, MIME,
+// source repo, and read latency without loading the full payload. Tracks the
+// type under the full ID when the object carries a valid astral stamp.
 func (mod *Module) Probe(ctx *astral.Context, repo objectsmod.Repository, objectID *astral.ObjectID) (probe *objects.Probe, err error) {
 	probe = &objects.Probe{}
 
@@ -142,6 +168,7 @@ func (mod *Module) Probe(ctx *astral.Context, repo objectsmod.Repository, object
 	if err != nil {
 		return nil, err
 	}
+	defer r.Close()
 
 	data, err := io.ReadAll(r)
 	if err != nil {
@@ -154,6 +181,9 @@ func (mod *Module) Probe(ctx *astral.Context, repo objectsmod.Repository, object
 	// store the actual repo name
 	probe.Repo = astral.String8(mod.getRepoName(r.Repo()))
 
+	// why: a partial request never becomes a tracking key; the reader names the object it opened.
+	probe.ObjectID = r.ID()
+
 	// check if it's an astral object
 	q := bytes.NewReader(data)
 	if _, err := (&astral.Stamp{}).ReadFrom(q); err == nil {
@@ -163,7 +193,7 @@ func (mod *Module) Probe(ctx *astral.Context, repo objectsmod.Repository, object
 			probe.Type = astral.String8(t.String())
 			// seed dbObject: stamp+type parsed cleanly, type is in hand.
 			// non-astral blobs fall through unseeded (same rationale as Load).
-			mod.trackObject(objectID, t.String())
+			mod.trackObject(probe.ObjectID, t.String())
 		}
 	}
 
