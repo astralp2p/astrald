@@ -72,8 +72,7 @@ func (w *Writer) Commit() (*astral.ObjectID, error) {
 
 	objectID := w.resolver.Resolve()
 
-	stored, err := w.publish(objectID)
-	if !stored {
+	if err := w.publish(objectID); err != nil {
 		return nil, err
 	}
 
@@ -84,35 +83,28 @@ func (w *Writer) Commit() (*astral.ObjectID, error) {
 }
 
 // publish moves the temp file to the object's path and adds the object to the index.
-// publish reports false when the object path is not a regular file afterwards.
 // why: mu orders the move and its index entry with Delete and index refresh.
-func (w *Writer) publish(objectID *astral.ObjectID) (bool, error) {
+func (w *Writer) publish(objectID *astral.ObjectID) error {
 	w.repo.mu.Lock()
 	defer w.repo.mu.Unlock()
 
 	var oldPath = filepath.Join(w.path, w.tempID)
 	var newPath = filepath.Join(w.path, objectID.String())
 
+	// why: the rename is the only writer of newPath, so its error is the commit's error -- a later
+	// stat reports ErrNotExist for a failed rename and reports success for a name a directory holds.
 	stat, err := os.Stat(newPath)
 	if err == nil && stat.Mode().IsRegular() {
 		// we already have this object
 		os.Remove(oldPath)
-	} else {
-		err = os.Rename(oldPath, newPath)
-		if err != nil {
-			os.Remove(oldPath)
-		}
-	}
-
-	// make sure the path is accessible
-	stat, err = os.Stat(newPath)
-	if err != nil || !stat.Mode().IsRegular() {
-		return false, err
+	} else if err = os.Rename(oldPath, newPath); err != nil {
+		os.Remove(oldPath)
+		return err
 	}
 
 	w.repo.addObjectLocked(objectID)
 
-	return true, nil
+	return nil
 }
 
 func (w *Writer) Discard() error {

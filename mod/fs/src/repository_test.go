@@ -162,18 +162,6 @@ func store(t *testing.T, repo *Repository, payload []byte) *astral.ObjectID {
 	return id
 }
 
-// resolveID returns the full ID of a payload.
-func resolveID(t *testing.T, payload []byte) *astral.ObjectID {
-	t.Helper()
-
-	id, err := astral.Resolve(bytes.NewReader(payload))
-	if err != nil {
-		t.Fatalf("Resolve: %v", err)
-	}
-
-	return id
-}
-
 // writeFile writes a payload to path, outside any repository writer.
 func writeFile(t *testing.T, path string, payload []byte) {
 	t.Helper()
