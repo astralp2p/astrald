@@ -33,6 +33,7 @@ func (Loader) Load(node astral.Node, assets assets.Assets, l *log.Logger) (core.
 		endpoint, err := kcp.ParseEndpoint(addr)
 		if err != nil {
 			mod.log.Errorv(0, "kcp module/Load invalid endpoint: %v", addr)
+			continue
 		}
 
 		mod.configEndpoints = append(mod.configEndpoints, endpoint)
