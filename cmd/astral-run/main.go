@@ -107,7 +107,7 @@ func main() {
 // stripEnv returns a copy of env with all entries for the given key removed.
 func stripEnv(env []string, key string) []string {
 	prefix := key + "="
-	out := env[:0:len(env)]
+	out := make([]string, 0, len(env))
 	for _, e := range env {
 		if !strings.HasPrefix(e, prefix) {
 			out = append(out, e)
