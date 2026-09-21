@@ -3,6 +3,7 @@ package objects
 import (
 	"errors"
 	"io"
+	"sync"
 	"testing"
 
 	"github.com/astralp2p/astral-go/astral"
@@ -22,6 +23,22 @@ func (m *aliasModeProto) ReadFrom(r io.Reader) (int64, error) {
 	return (*astral.Uint8)(m).ReadFrom(r)
 }
 
+// why: astral.Register and astral.Add write a process-wide registry that exposes
+// no removal call, so a second -count iteration in the same process re-registers
+// and fails. Each registration runs once per process; the error it returned is
+// kept and re-checked every iteration, so a genuine registration failure still
+// fails every run.
+var (
+	bpStructOnce sync.Once
+	bpStructErr  error
+
+	bpAliasOnce sync.Once
+	bpAliasErr  error
+
+	aliasModeOnce sync.Once
+	aliasModeErr  error
+)
+
 func TestGetBlueprint_Primitive(t *testing.T) {
 	var mod Module
 	_, err := mod.GetBlueprint("uint8")
@@ -40,11 +57,13 @@ func TestGetBlueprint_NotFound(t *testing.T) {
 
 func TestGetBlueprint_RuntimeStruct(t *testing.T) {
 	var mod Module
-	bp := astral.NewBlueprint("test.objects.bp_struct",
-		astral.Field{Name: "n", Spec: &astral.PrimitiveSpec{PrimitiveType: "uint32"}},
-	)
-	if _, err := astral.Register(bp); err != nil {
-		t.Fatal(err)
+	bpStructOnce.Do(func() {
+		_, bpStructErr = astral.Register(astral.NewBlueprint("test.objects.bp_struct",
+			astral.Field{Name: "n", Spec: &astral.PrimitiveSpec{PrimitiveType: "uint32"}},
+		))
+	})
+	if bpStructErr != nil {
+		t.Fatal(bpStructErr)
 	}
 
 	got, err := mod.GetBlueprint("test.objects.bp_struct")
@@ -58,8 +77,11 @@ func TestGetBlueprint_RuntimeStruct(t *testing.T) {
 
 func TestGetBlueprint_RuntimeAlias(t *testing.T) {
 	var mod Module
-	if _, err := astral.Register(astral.NewBlueprintAlias("test.objects.bp_alias", "uint8")); err != nil {
-		t.Fatal(err)
+	bpAliasOnce.Do(func() {
+		_, bpAliasErr = astral.Register(astral.NewBlueprintAlias("test.objects.bp_alias", "uint8"))
+	})
+	if bpAliasErr != nil {
+		t.Fatal(bpAliasErr)
 	}
 
 	got, err := mod.GetBlueprint("test.objects.bp_alias")
@@ -73,8 +95,9 @@ func TestGetBlueprint_RuntimeAlias(t *testing.T) {
 
 func TestGetBlueprint_DerivedAliasPrototype(t *testing.T) {
 	var mod Module
-	if err := astral.Add(new(aliasModeProto)); err != nil {
-		t.Fatal(err)
+	aliasModeOnce.Do(func() { aliasModeErr = astral.Add(new(aliasModeProto)) })
+	if aliasModeErr != nil {
+		t.Fatal(aliasModeErr)
 	}
 
 	got, err := mod.GetBlueprint("test.objects.alias_mode")
