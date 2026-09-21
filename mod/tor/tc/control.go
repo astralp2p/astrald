@@ -158,7 +158,7 @@ func (ctl *Control) Close() error {
 func (ctl *Control) request(format string, args ...interface{}) (int, []string, error) {
 	id, err := ctl.proto.Cmd(format, args...)
 	if err != nil {
-		return 0, []string{}, nil
+		return 0, nil, err
 	}
 
 	ctl.proto.StartResponse(id)
