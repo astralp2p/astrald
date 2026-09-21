@@ -58,7 +58,9 @@ func (c *Conn) Read(b []byte) (n int, err error) {
 	// maintain an intermediate read buffer. If this buffer becomes
 	// depleted, then we read the next record, and feed it into the
 	// buffer. Otherwise, we read directly from the buffer.
-	if c.readBuf.Len() == 0 {
+	// why: a record carries a zero-length payload legally; one fetch leaves readBuf empty
+	// and bytes.Buffer.Read then reports io.EOF on an open stream.
+	for c.readBuf.Len() == 0 {
 		plaintext, err := c.noise.ReadMessage(c.conn)
 		if err != nil {
 			return 0, err
