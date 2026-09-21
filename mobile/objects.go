@@ -46,7 +46,8 @@ func (n *Node) OpenObject(objectID string, offset int64) (*ObjectReader, error) 
 		return nil, err
 	}
 
-	return &ObjectReader{r: r, size: int64(id.Size)}, nil
+	// why: a partial ID carries no size, so the player's length comes from the object the reader opened.
+	return &ObjectReader{r: r, size: int64(r.ID().Size)}, nil
 }
 
 // CreateObject opens a writer into the node's default write repository.
@@ -129,7 +130,8 @@ func (r *ObjectReader) Read(buf []byte) (int, error) {
 	}
 }
 
-// Size returns the total size of the object in bytes.
+// Size returns the total size of the opened object in bytes, also when the
+// requested ID was partial.
 func (r *ObjectReader) Size() int64 {
 	return r.size
 }
