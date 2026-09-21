@@ -47,7 +47,7 @@ func NewNode(nodeID *astral.Identity, res resources.Resources) (*Node, error) {
 	// initialize basic logger
 	node.initLogger()
 
-	node.assets, err = assets.NewCoreAssets(res, nil)
+	node.assets, err = assets.NewCoreAssets(res)
 	if err != nil {
 		return nil, fmt.Errorf("database error: %w", err)
 	}
