@@ -12,14 +12,16 @@ import (
 // note: the state is tree values and listings, the directory's alias map and
 // filters, agent metadata, and the log stream (auth.SeeNodeStateAction).
 //
-// why the swarm's node members: a remote tree mount queries the target as the
-// mounting node's identity (mod/tree.MountRemote), so a sibling reads nothing
-// through a mount without this rule.
+// note: the swarm's node members are admitted so the user's own nodes read each
+// other's state.
 // note: the action covers the log stream, so a node member reads this node's
 // logged activity for every caller.
 // note: the swarm's grant stops at reading. AuthorizeConfigureNodeState admits
-// no sibling, so a mount is writable only through a node-local grant or a
+// no sibling, so a sibling changes nothing without a node-local grant or a
 // signed contract.
+// todo: the rule's original reason was the remote tree mount, removed with
+// mod/tree.MountRemote. Whether the swarm clause still earns its breadth is
+// undecided.
 // why a zero actor is refused first: a contract subject can be nil, and
 // Identity.IsEqual reports a zero identity equal to nil.
 // note: LocalSwarm lists only subjects of the user's unexpelled
