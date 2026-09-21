@@ -21,6 +21,11 @@ var (
 	// ErrAmbiguousObjectID is returned when two distinct stored full IDs share the hash of a partial ID.
 	ErrAmbiguousObjectID = errors.New("ambiguous object id")
 
+	// ErrPartialObjectID is returned by an op that stores an object ID as a key and refuses a partial ID.
+	// why: purge asks holders about full IDs, so a hold or an asset keyed by a partial ID never protects its object.
+	// note: the full ID of the empty object has Size 0, so these ops refuse it as well.
+	ErrPartialObjectID = errors.New("partial object id")
+
 	ErrNilSourceIdentifier   = errors.New("source identifier is nil")
 	ErrInvalidSourceIdentity = errors.New("source identity is invalid")
 
