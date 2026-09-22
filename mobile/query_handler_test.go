@@ -2,7 +2,6 @@ package mobile
 
 import (
 	"bytes"
-	"io"
 	"sync"
 	"testing"
 	"time"
@@ -83,7 +82,7 @@ func TestHandlerRouterEndToEnd(t *testing.T) {
 
 	router := &handlerRouter{node: n, cnode: cnode}
 
-	var out bytes.Buffer
+	out := &closeSignalWriter{closed: make(chan struct{})}
 	q := astral.Launch(&astral.Query{
 		Caller:      id,
 		Target:      id,
@@ -91,15 +90,16 @@ func TestHandlerRouterEndToEnd(t *testing.T) {
 	})
 
 	ctx := astral.NewContext(nil)
-	w, err := router.RouteQuery(ctx, q, writeCloser{&out})
+	w, err := router.RouteQuery(ctx, q, out)
 	if err != nil {
 		t.Fatalf("RouteQuery: %v", err)
 	}
 	w.Close()
 
-	deadline := time.Now().Add(time.Second)
-	for out.String() != "response" && time.Now().Before(deadline) {
-		time.Sleep(10 * time.Millisecond)
+	select {
+	case <-out.closed:
+	case <-time.After(time.Second):
+		t.Fatal("the handler never closed the caller's writer")
 	}
 	if out.String() != "response" {
 		t.Fatalf("caller received %q, want %q", out.String(), "response")
@@ -164,6 +164,18 @@ type nopWriteCloser struct{}
 func (nopWriteCloser) Write(p []byte) (int, error) { return len(p), nil }
 func (nopWriteCloser) Close() error                { return nil }
 
-type writeCloser struct{ io.Writer }
+// closeSignalWriter records the handler's writes and closes closed when the
+// handler closes its end.
+//
+// why: the handler writes from its own goroutine. Closing the channel orders
+// every write before the test's receive, so the buffer is read only after the
+// last write.
+type closeSignalWriter struct {
+	bytes.Buffer
+	closed chan struct{}
+}
 
-func (writeCloser) Close() error { return nil }
+func (w *closeSignalWriter) Close() error {
+	close(w.closed)
+	return nil
+}
