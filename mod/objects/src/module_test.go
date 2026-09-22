@@ -50,6 +50,7 @@ var errStoreEncode = errors.New("encode failed")
 // failingObject fails to encode, which is the path that left the writer unended.
 type failingObject struct{}
 
+// astral:blueprint-ignore
 func (failingObject) ObjectType() string                { return "test.objects.failing" }
 func (failingObject) WriteTo(io.Writer) (int64, error)  { return 0, errStoreEncode }
 func (failingObject) ReadFrom(io.Reader) (int64, error) { return 0, errStoreEncode }
