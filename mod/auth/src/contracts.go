@@ -37,7 +37,13 @@ func (mod *Module) IndexContract(ctx *astral.Context, sc *auth.SignedContract) e
 func (mod *Module) indexer(ctx *astral.Context) {
 	ctx = ctx.ExcludeZone(astral.ZoneNetwork)
 
-	ch, err := mod.Objects.GetRepository(objects.RepoLocal).Scan(ctx, true)
+	repo := mod.Objects.GetRepository(objects.RepoLocal)
+	if repo == nil {
+		mod.log.Error("cannot scan objects: repository %v not found", objects.RepoLocal)
+		return
+	}
+
+	ch, err := repo.Scan(ctx, true)
 	if err != nil {
 		mod.log.Error("cannot scan objects: %v", err)
 		return
