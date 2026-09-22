@@ -4,10 +4,10 @@ import (
 	"crypto/sha256"
 	cryptomod "github.com/astralp2p/astrald/mod/crypto"
 
-	"github.com/btcsuite/btcd/btcec/v2"
-	"github.com/btcsuite/btcd/btcec/v2/ecdsa"
 	"github.com/astralp2p/astral-go/api/crypto"
 	"github.com/astralp2p/astral-go/astral"
+	"github.com/btcsuite/btcd/btcec/v2"
+	"github.com/btcsuite/btcd/btcec/v2/ecdsa"
 )
 
 type MessageSigner struct {

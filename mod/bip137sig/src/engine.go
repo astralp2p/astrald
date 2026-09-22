@@ -5,10 +5,10 @@ import (
 	"fmt"
 	cryptomod "github.com/astralp2p/astrald/mod/crypto"
 
-	"github.com/btcsuite/btcd/btcec/v2"
 	"github.com/astralp2p/astral-go/api/crypto"
 	"github.com/astralp2p/astral-go/api/secp256k1"
 	"github.com/astralp2p/astral-go/astral"
+	"github.com/btcsuite/btcd/btcec/v2"
 	"github.com/cryptopunkscc/bip-0137/verify"
 	secp "github.com/decred/dcrd/dcrec/secp256k1/v4"
 )
