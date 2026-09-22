@@ -1,8 +1,6 @@
 package src
 
 import (
-	"github.com/btcsuite/btcd/btcutil/hdkeychain"
-	"github.com/btcsuite/btcd/chaincfg"
 	"github.com/astralp2p/astral-go/api/bip137sig"
 	"github.com/astralp2p/astral-go/api/crypto"
 	"github.com/astralp2p/astral-go/api/secp256k1"
@@ -12,6 +10,8 @@ import (
 	"github.com/astralp2p/astrald/core/assets"
 	bip137sigmod "github.com/astralp2p/astrald/mod/bip137sig"
 	cryptomod "github.com/astralp2p/astrald/mod/crypto"
+	"github.com/btcsuite/btcd/btcutil/hdkeychain"
+	"github.com/btcsuite/btcd/chaincfg"
 )
 
 type Deps struct {
