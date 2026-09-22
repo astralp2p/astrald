@@ -98,7 +98,7 @@
 * `sync.RWMutex` is used when reads dominate.
 * An atomic flag is an `atomic.Bool`, an atomic state is an `atomic.Int32`, and an atomic counter is an `atomic.Uint64`.
 * An idempotent close uses `CompareAndSwap(false, true)`.
-* `sync.Once` is never used. `atomic.Bool.CompareAndSwap` replaces it.
+* `atomic.Bool.CompareAndSwap` replaces `sync.Once` where it expresses the requirement directly. `sync.Once` is used where later callers must observe the result of the single run.
 * `sync.Cond` is reserved for computed blocking conditions. `.Wait()` runs inside a `for` loop.
 * A simple done or ready signal is a channel.
 * `wg.Add(1)` runs before `go`. `defer wg.Done()` is the first statement of the goroutine.
