@@ -8,10 +8,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/coder/websocket"
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astral-go/astral/channel"
 	"github.com/astralp2p/astral-go/astral/log"
+	"github.com/coder/websocket"
 )
 
 // minimalHTTPServer returns an HTTPServer whose handleWS can negotiate but whose
