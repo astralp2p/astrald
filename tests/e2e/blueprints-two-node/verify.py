@@ -7,12 +7,12 @@ on itself rather than a claim it inherits: read the object first and fail, pull
 the schema over the link, read it again and succeed. One process, one
 connection, one difference.
 
-Everything is asked through node2, and node2 is never taught the type. Its
-registry is checked before and after and does not hold the type either time:
-nothing replicates a blueprint between nodes, and nothing needs to — node2
-forwards the query and carries the answer back as opaque bytes, decoding
-neither. What has to learn the schema is whoever decodes, and here that is
-this process.
+Everything is asked through node2 as the User, and node2 is never taught the
+type. Its registry is checked before and after and does not hold the type
+either time: nothing replicates a blueprint between nodes, and nothing needs
+to — node2 forwards the query and carries the answer back as opaque bytes,
+decoding neither. What has to learn the schema is whoever decodes, and here
+that is this process.
 """
 import asyncio
 
@@ -37,7 +37,14 @@ async def main():
         "registry that takes the second definition lets any caller redefine a "
         "live type's wire shape")
 
+    # why a User session on node2 and not node2's own token: a sibling as
+    # itself reads no object on node1 (mod.auth.see_objects_action). The User
+    # reads through node2, which relays the query to node1 as the User.
     async with await astral.connect(n2["endpoint"], token=n2["token"]) as c2:
+        sibling_user = await c2.apphost.create_token(facts["user_id"])
+
+    async with await astral.connect(n2["endpoint"],
+                                    token=sibling_user.token) as c2:
         before = await c2.objects.blueprints()
         assert type_name not in before, (
             f"node2 knows {type_name} before anything was pulled — the schema "

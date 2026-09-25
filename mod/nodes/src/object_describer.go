@@ -7,6 +7,7 @@ import (
 	objectscli "github.com/astralp2p/astral-go/api/objects/client"
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astral-go/sig"
+	"github.com/astralp2p/astrald/core"
 )
 
 // DescribeObject fans out to every provider returned by FindObject and merges their
@@ -45,7 +46,9 @@ func (mod *Module) DescribeObject(ctx *astral.Context, objectID *astral.ObjectID
 			go func() {
 				defer wg.Done()
 
-				_results, err := objectscli.New(providerIDCopy, nil).Describe(ctx, objectID)
+				// why: the provider authorizes the caller, not this node (objects.describe spec).
+				client := core.NewClientAs(mod.node, ctx.Identity())
+				_results, err := objectscli.New(providerIDCopy, client).Describe(ctx, objectID)
 				if *err != nil {
 					return
 				}

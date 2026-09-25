@@ -68,85 +68,42 @@ func (mod *Module) AuthorizeRelayFor(ctx *astral.Context, a *nodes.RelayForActio
 	return false
 }
 
-// AuthorizeSeeObjects grants object reads to the user identity itself, to this node itself,
-// and to any node in the local swarm.
+// AuthorizeSeeObjects grants object reads to the user identity and to this node
+// itself, and to nobody else.
 //
-// why: the policy is carried over unchanged from the retired per-object read handler.
-// SeeObjects covers every read op in mod/objects, not just objects.read, but the eleven ops it
-// adds were unauthorized entirely — so no caller that could read before loses access here, and
-// none gains any. Replacing the policy is stage 2 of the parent task, not this change.
+// why the swarm is not in the grant: a sibling as itself would read every
+// object. A search or describe that fans out to siblings forwards its caller's
+// identity (core.NewClientAs), so the user's own queries still reach them.
 //
-// why this node's own identity is granted: matches AuthorizeStoreObjects — a local caller with
-// no identity is promoted to the node (core/router.go), so the node reads back on an unclaimed
+// why this node's own identity is granted: a local caller with no identity is
+// promoted to the node (core/router.go), so the node reads back on an unclaimed
 // node the objects it just stored there, before any user or swarm exists.
-//
-// why a zero actor is refused first: the user identity is nil on an unclaimed node, a
-// contract subject can be nil, and Identity.IsEqual reports a zero identity equal to nil.
 func (mod *Module) AuthorizeSeeObjects(ctx *astral.Context, a *auth.SeeObjectsAction) bool {
-	actor := a.Actor()
-
-	if actor.IsZero() {
-		return false
-	}
-
-	if mod.authorizeUserOrNode(actor) {
-		return true
-	}
-
-	for _, nodeID := range mod.LocalSwarm() {
-		if nodeID.IsEqual(actor) {
-			return true
-		}
-	}
-
-	return false
+	return mod.authorizeUserOrNode(a.Actor())
 }
 
-// AuthorizeStoreObjects grants object writes to the user identity itself, to this node
-// itself, and to any node in the local swarm.
+// AuthorizeStoreObjects grants object writes to the user identity and to this
+// node itself, and to nobody else.
 //
-// why: the ops StoreObjects covers had no authorization at all, so there is no policy
-// to carry over. This is the narrowest rule that keeps the node working: a local caller with no
-// caller identity is the node itself (core/router.go). An app holding no permits is refused,
-// which is the point. Replacing this handler with a root rule and contract-issued grants is
-// stage 2 of the parent task.
+// why: the ops StoreObjects covers had no authorization at all, so there is no
+// policy to carry over. An app holding no permits is refused, which is the point.
 //
-// todo: decide whether the local swarm still holds this action. The swarm was granted it for
-// objects.push, which asks no action (mod/objects/src/op_push.go).
+// why the swarm is not in the grant: the swarm held it for objects.push, which
+// asks no action (mod/objects/src/op_push.go). A sibling writes through a
+// node-local grant or a signed contract.
 //
-// why this node's own identity is granted: a local caller carrying no identity is promoted to
-// it (core/router.go), which is how the CLI and apphost reach these ops — including the
-// user-provisioning ceremony, which stores the derived user key on an unclaimed node before
-// any user or swarm exists, when neither other branch can match. AuthorizeAdminObjects, the
-// stricter destructive-write handler, already grants the node for the same reason.
-//
-// why a zero actor is refused first: the user identity is nil on an unclaimed node, a
-// contract subject can be nil, and Identity.IsEqual reports a zero identity equal to nil.
+// why this node's own identity is granted: a local caller carrying no identity is
+// promoted to it (core/router.go), which is how the CLI and apphost reach these
+// ops — including the user-provisioning ceremony, which stores the derived user
+// key on an unclaimed node before any user or swarm exists.
 func (mod *Module) AuthorizeStoreObjects(ctx *astral.Context, a *auth.StoreObjectsAction) bool {
-	actor := a.Actor()
-
-	if actor.IsZero() {
-		return false
-	}
-
-	if mod.authorizeUserOrNode(actor) {
-		return true
-	}
-
-	for _, nodeID := range mod.LocalSwarm() {
-		if nodeID.IsEqual(actor) {
-			return true
-		}
-	}
-
-	return false
+	return mod.authorizeUserOrNode(a.Actor())
 }
 
 // AuthorizeAdminObjects grants destructive object calls to the user identity and to
 // this node itself, and to nobody else.
 //
-// why: narrower than the SeeObjects and StoreObjects handlers, which grant the whole
-// local swarm. A sibling attaching a repository to a host directory is the defect this
+// why: a sibling attaching a repository to a host directory is the defect this
 // action was added to close, and a swarm membership is granted on request today, so
 // granting the swarm here would leave that path open. This node's own identity is in
 // the grant because a local caller carrying no identity is promoted to it
