@@ -9,9 +9,11 @@ silently rot as astrald grows.
 Concurrent runs on one host never share a port: each run leases its own
 span of ports before its first node starts.
 
-Agent reachability is decided by an external authority on a loopback port of
-the node's own. Nothing listens there unless a driver serves it, and an
-authority that cannot be reached permits nothing.
+Agent reachability and mail between participants are decided by an external
+authority on a loopback port of the node's own. Nothing listens there unless a
+driver serves it, and an authority that cannot be reached permits nothing.
+
+A node serves MCP unless its roster name is in WITHOUT_MCP.
 """
 import fcntl
 import socket
@@ -46,6 +48,18 @@ MCP_YAML = """\
 bind_mcp: "tcp:127.0.0.1:{mcp}"
 """
 
+# note: an empty bind_mcp turns the MCP server off, and mod/mcp still loads.
+MCP_OFF_YAML = """\
+bind_mcp: ""
+"""
+
+# The roster names whose node serves no MCP.
+#
+# why a roster name decides it and not a manifest key: a name is one daemon
+# for the whole run, shared by every test that names it, so a config chosen by
+# the test that happened to start it would change under the tests that follow.
+WITHOUT_MCP = frozenset({"nomcp1"})
+
 # why a sweep this short: the node's default is a minute, which is longer than
 # most tests live, so an expired external registration would still be in memory
 # when the oracle looked. Only the removal and its log line are hurried — the
@@ -54,16 +68,22 @@ OBJECTS_YAML = """\
 external_registration_sweep_interval: 1s
 """
 
-# why an authority at all: mod/mcp holds no reachability of its own, and no
-# handler grants these two actions, so a node without one refuses every call
-# between agents. Naming a port a driver may serve lets a test admit a call; an
-# unserved port refuses, which is what a node configured with none answers.
+# why an authority at all: mod/mcp and mod/messaging hold no reachability of
+# their own, and no handler grants these three actions, so a node without one
+# refuses every astral-query between agents and every message. Naming a port a
+# driver may serve lets a test admit one; an unserved port refuses, which is
+# what a node configured with none answers.
+#
+# why mod.messaging.host_mailbox_action is not listed: a node hosts a mailbox
+# under the contract the mailbox's identity signs, and auth's chain walk
+# answers that without leaving the node.
 AUTH_YAML = """\
 external_authorizers:
   - endpoint: "{authority_url}"
     actions:
       - mod.mcp.call_agent_action
-      - mod.mcp.answer_agent_action
+      - mod.messaging.send_action
+      - mod.messaging.receive_action
 """
 
 
@@ -137,7 +157,8 @@ def _bindable(port: int) -> bool:
     return True
 
 
-def render(root: Path, ports: NodePorts, token: str) -> None:
+def render(root: Path, ports: NodePorts, token: str,
+           serves_mcp: bool = True) -> None:
     cfg = Path(root) / "config"
     cfg.mkdir(parents=True, exist_ok=True)
     (cfg / "apphost.yaml").write_text(
@@ -145,7 +166,8 @@ def render(root: Path, ports: NodePorts, token: str) -> None:
     (cfg / "tcp.yaml").write_text(TCP_YAML.format(tcp=ports.tcp))
     (cfg / "ether.yaml").write_text(ETHER_YAML.format(ether=ports.ether))
     (cfg / "kcp.yaml").write_text(KCP_YAML.format(kcp=ports.kcp))
-    (cfg / "mcp.yaml").write_text(MCP_YAML.format(mcp=ports.mcp))
+    (cfg / "mcp.yaml").write_text(
+        MCP_YAML.format(mcp=ports.mcp) if serves_mcp else MCP_OFF_YAML)
     (cfg / "objects.yaml").write_text(OBJECTS_YAML)
     (cfg / "auth.yaml").write_text(
         AUTH_YAML.format(authority_url=ports.authority_url))

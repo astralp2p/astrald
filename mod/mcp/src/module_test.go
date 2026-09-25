@@ -1,66 +1,79 @@
 package mcp
 
 import (
-	"bytes"
-	"io"
+	"context"
+	"errors"
+	"sync"
 	"testing"
 	"time"
 
-	"github.com/astralp2p/astral-go/api/mcp"
+	"github.com/astralp2p/astral-go/api/messaging"
 	"github.com/astralp2p/astral-go/astral"
-	"github.com/astralp2p/astral-go/astral/channel"
 	"github.com/astralp2p/astral-go/astral/log"
+	apphostmod "github.com/astralp2p/astrald/mod/apphost"
+	dirmod "github.com/astralp2p/astrald/mod/dir"
+	messagingmod "github.com/astralp2p/astrald/mod/messaging"
 	"github.com/glebarez/sqlite"
 	"gorm.io/gorm"
 )
 
-// testLogger emits nothing: the module logs every delivery, and a test
-// asserting on the store has no use for the line.
+// testLogger emits nothing: a test asserting on an answer has no use for the
+// module's log lines.
 func testLogger() *log.Logger {
 	l := log.New(astral.GenerateIdentity())
 	l.SetFilter(func(*log.Entry) bool { return false })
 	return l
 }
 
-func testMessageModule(t *testing.T) *Module {
+// testQueryModule is the module as the query tools see it: the caps and the
+// window, and no dependency.
+func testQueryModule(t *testing.T) *Module {
+	t.Helper()
+	return &Module{
+		ctx: astral.NewContext(nil),
+		config: Config{
+			QueryTimeout:       time.Second,
+			MaxResponseBytes:   64 << 10,
+			MaxResponseObjects: 64,
+		},
+	}
+}
+
+// testAgentModule is the module over an agent store and a messaging module
+// that answers as the test says.
+func testAgentModule(t *testing.T) (*Module, *fakeMessaging) {
 	t.Helper()
 
-	db := testDB(t)
-
+	msg := &fakeMessaging{}
 	mod := &Module{
-		Deps:   Deps{Auth: &fakeAuth{allow: true}},
 		ctx:    astral.NewContext(nil),
-		db:     db,
+		db:     testDB(t),
 		config: defaultConfig,
 		log:    testLogger(),
 	}
+	mod.Messaging = msg
 	mod.Dir = &stubDir{aliases: map[string]*astral.Identity{}}
-	mod.node = &loopbackNode{identity: astral.GenerateIdentity(), router: mod}
 
-	return mod
+	return mod, msg
 }
 
-// loopbackNode routes every query to one module, which is what makes a delivery
-// and a receipt reachable in a test: the caller's side and the answering side
-// are the same code, and only the identities differ.
-type loopbackNode struct {
-	identity *astral.Identity
-	router   astral.Router
+// testDB opens an empty agent store.
+func testDB(t *testing.T) *DB {
+	t.Helper()
+
+	db := &DB{DB: emptyStore(t)}
+	if err := db.Migrate(); err != nil {
+		t.Fatalf("migrate: %v", err)
+	}
+	return db
 }
 
-func (n *loopbackNode) Identity() *astral.Identity { return n.identity }
-
-func (n *loopbackNode) RouteQuery(ctx *astral.Context, q *astral.InFlightQuery, w io.WriteCloser) (io.WriteCloser, error) {
-	return n.router.RouteQuery(ctx, q, w)
-}
-
-// testDB opens an empty store with both tables.
+// emptyStore opens an in-memory store with no table in it.
 //
 // why the pool is capped at one connection: an in-memory sqlite database
 // belongs to the connection that opened it, so a second pooled connection is a
-// second, empty database. The receipt runs on a goroutine the read does not
-// wait on, which is exactly what opens one.
-func testDB(t *testing.T) *DB {
+// second, empty database.
+func emptyStore(t *testing.T) *gorm.DB {
 	t.Helper()
 
 	gdb, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
@@ -74,61 +87,146 @@ func testDB(t *testing.T) *DB {
 	}
 	pool.SetMaxOpenConns(1)
 
-	db := &DB{DB: gdb}
-	if err = db.Migrate(); err != nil {
-		t.Fatalf("migrate messages: %v", err)
+	return gdb
+}
+
+// fakeMessaging records what the module asks of messaging and answers from its
+// fields.
+//
+// why the interface is embedded rather than implemented: a method this reaches
+// without a stub panics, which is the report that mcp's use of messaging grew.
+type fakeMessaging struct {
+	messagingmod.Module
+
+	mu sync.Mutex
+
+	// callers are the identities every mail call was made as, in order.
+	callers []*astral.Identity
+
+	createAlias    string
+	createDuration astral.Duration
+	sendReq        *messaging.SendMessageRequest
+	listReq        messaging.ListMessagesRequest
+	readReq        *messaging.ReadMessagesRequest
+	waitReq        messaging.WaitRequest
+	archiveRef     messaging.MessageRef
+	archiveUndo    bool
+	deleted        []*astral.Identity
+
+	sent    messaging.MessageID
+	listed  []*messaging.Envelope
+	read    *messaging.ReadMessagesResult
+	waited  *messaging.WaitResult
+	changed bool
+	cred    *messaging.IdentityCredential
+
+	// deleteErr is what DeleteIdentity answers.
+	deleteErr error
+}
+
+// called records one mail call as id and runs record under the same lock.
+func (f *fakeMessaging) called(id *astral.Identity, record func()) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.callers = append(f.callers, id)
+	record()
+}
+
+func (f *fakeMessaging) CreateIdentity(_ *astral.Context, alias string, duration astral.Duration) (*messaging.IdentityCredential, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.createAlias, f.createDuration = alias, duration
+
+	if f.cred == nil {
+		return nil, errors.New("no credential")
 	}
-	return db
+	return f.cred, nil
 }
 
-// testID makes an identifier a failure can name.
-func testID(n byte) mcp.MessageID {
-	var id mcp.MessageID
-	id[0] = n
-	return id
+func (f *fakeMessaging) DeleteIdentity(_ *astral.Context, id *astral.Identity) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.deleted = append(f.deleted, id)
+	return f.deleteErr
 }
 
-func storeOne(t *testing.T, mod *Module, sender, recipient *astral.Identity, id mcp.MessageID, body string) {
+func (f *fakeMessaging) SendMessage(_ context.Context, sender *astral.Identity, req *messaging.SendMessageRequest) (messaging.MessageID, error) {
+	f.called(sender, func() { f.sendReq = req })
+	return f.sent, nil
+}
+
+func (f *fakeMessaging) ListMessages(_ context.Context, owner *astral.Identity, req messaging.ListMessagesRequest) ([]*messaging.Envelope, error) {
+	f.called(owner, func() { f.listReq = req })
+	return f.listed, nil
+}
+
+func (f *fakeMessaging) ReadMessages(_ context.Context, owner *astral.Identity, req *messaging.ReadMessagesRequest) (*messaging.ReadMessagesResult, error) {
+	f.called(owner, func() { f.readReq = req })
+	if f.read == nil {
+		return &messaging.ReadMessagesResult{}, nil
+	}
+	return f.read, nil
+}
+
+func (f *fakeMessaging) Wait(_ context.Context, owner *astral.Identity, req messaging.WaitRequest, _ messagingmod.ProgressFunc) (*messaging.WaitResult, error) {
+	f.called(owner, func() { f.waitReq = req })
+	if f.waited == nil {
+		return &messaging.WaitResult{}, nil
+	}
+	return f.waited, nil
+}
+
+func (f *fakeMessaging) Archive(_ context.Context, owner *astral.Identity, ref messaging.MessageRef, undo bool) (bool, error) {
+	f.called(owner, func() { f.archiveRef, f.archiveUndo = ref, undo })
+	return f.changed, nil
+}
+
+// checkCalledAs asserts every mail call was made as the identity the tool is
+// bound to.
+func (f *fakeMessaging) checkCalledAs(t *testing.T, want *astral.Identity) {
 	t.Helper()
 
-	err := mod.storeMessage(sender, recipient, &mcp.Message{
-		ID:      id,
-		Content: astral.String32(body),
-	})
-	if err != nil {
-		t.Fatalf("store %v: %v", id, err)
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	if len(f.callers) == 0 {
+		t.Fatal("messaging was never called")
 	}
-
-	// why the pause: arrival is stamped by the clock, and the inbox is ordered
-	// by it. Two messages stored in the same instant have no oldest.
-	time.Sleep(2 * time.Millisecond)
-}
-
-func deliverOverRouter(t *testing.T, mod *Module, recipient *astral.Identity, msg *mcp.Message) astral.Object {
-	t.Helper()
-
-	w := &bufWriteCloser{}
-
-	wc, err := mod.RouteQuery(mod.ctx, inFlight(recipient, mcp.MethodMessage), w)
-	if err != nil {
-		t.Fatalf("route: %v", err)
-	}
-
-	if err = channel.NewSender(wc).Send(msg); err != nil {
-		t.Fatalf("send message: %v", err)
-	}
-
-	deadline := time.Now().Add(3 * time.Second)
-	for w.String() == "" {
-		if time.Now().After(deadline) {
-			t.Fatal("no answer to the delivery")
+	for _, got := range f.callers {
+		if !got.IsEqual(want) {
+			t.Fatalf("messaging was called as %v, want the authenticated agent %v", got, want)
 		}
-		time.Sleep(5 * time.Millisecond)
 	}
+}
 
-	obj, err := channel.NewReceiver(bytes.NewReader([]byte(w.String()))).Receive()
-	if err != nil {
-		t.Fatalf("receive answer: %v", err)
+// stubApphost authenticates the tokens it holds and nothing else.
+type stubApphost struct {
+	apphostmod.Module
+	tokens map[string]*astral.Identity
+}
+
+func (s *stubApphost) AuthenticateToken(token string) (*astral.Identity, error) {
+	if id, ok := s.tokens[token]; ok {
+		return id, nil
 	}
-	return obj
+	return nil, errors.New("invalid token")
+}
+
+type stubDir struct {
+	dirmod.Module
+	aliases map[string]*astral.Identity
+}
+
+// why the raw form is tried first: the real directory parses an identity
+// before it looks in the alias table (mod/dir/src/module.go), so a stub that
+// only knew aliases would pass a caller the node would refuse — and fail one
+// the node would serve.
+func (s *stubDir) ResolveIdentity(name string) (*astral.Identity, error) {
+	if id, err := astral.ParseIdentity(name); err == nil {
+		return id, nil
+	}
+	if id, ok := s.aliases[name]; ok {
+		return id, nil
+	}
+	return nil, errors.New("not found")
 }

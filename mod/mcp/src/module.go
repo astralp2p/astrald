@@ -5,7 +5,6 @@ import (
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astral-go/astral/log"
 	"github.com/astralp2p/astral-go/lib/routing"
-	"github.com/astralp2p/astral-go/sig"
 	mcpmod "github.com/astralp2p/astrald/mod/mcp"
 )
 
@@ -22,11 +21,6 @@ type Module struct {
 
 	// tools are the deployment's own, read once at load — declared_tools.go.
 	tools []declaredTool
-
-	agentIDs sig.Set[string] // registered agent identities, mirrors mcp__agents
-
-	// waiters are the parked waits, woken when a row enters their set.
-	waiters waiters
 }
 
 func (mod *Module) Run(ctx *astral.Context) error {

@@ -91,6 +91,11 @@ unlisted = "<reason>"       # set only when no suite may list this test
 `unlisted` is the exception, and it is checked: a test is listed in a suite or
 carries this key, never neither and never both.
 
+A roster name is one daemon for the whole run, shared by every test that names
+it, so a node's config follows its name. Every node serves MCP except the ones
+`lib/nodeconfig.py` lists in `WITHOUT_MCP`: `nomcp1` is the node
+`messaging-ops` runs on.
+
 `env` is a minimum, not a prison: drivers and oracles read `session.json`
 and never learn whether the endpoints behind it are processes on loopback
 or VMs behind a tunnel.
@@ -139,11 +144,13 @@ Every story of the catalog, in the cheapest env that can falsify it:
 | 0009 | `expel-node` | node | `two-nodes` → `two-nodes-expel` |
 | — | `smoke` | node | `null` → — |
 | — | `mcp-origin` | node | `null` → — |
+| — | `messaging-ops` | node | `null` → — |
 | — | `fs-watch` | node | `one-node` → — |
 | — | `registration-lease` | node | `one-node` → — |
 | — | `app-query` | node | `two-nodes` → — |
 | — | `apphost-origin` | node | `two-nodes` → — |
 | — | `blueprints-two-node` | node | `two-nodes` → — |
+| — | `messaging-two-node` | node | `two-nodes` → — |
 | — | `hold-purge` | node | `two-nodes` → — (unlisted, mutates) |
 | — | `gateway-relay` | netsim | `two-nodes` → — (unlisted, mutates) |
 
@@ -192,8 +199,8 @@ failure and an oracle failure are already distinct in the results
 went wrong without anyone reading a log.
 
 A test that declares the `agent` driver ships a `prompt.md`: the flow in
-plain words, the way a person would ask for it. Eight of the eighteen tests
-declare it. The other ten are `script` only — a probe like `smoke`, a
+plain words, the way a person would ask for it. Eight of the twenty tests
+declare it. The other twelve are `script` only — a probe like `smoke`, a
 transport measurement like `nat-punch`, or a guard that has to be driven with
 a token and an origin no operator's shell can produce, like `apphost-origin`.
 

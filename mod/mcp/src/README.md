@@ -2,8 +2,10 @@
 
 mcp serves the Model Context Protocol over streamable HTTP, so an AI agent can
 put queries to the astral network and exchange messages with other agents. An
-agent is an identity this node mints and holds a mailbox for; it authenticates
-with its access token as a bearer token, and every tool acts as that identity.
+agent is a [messaging](../../messaging/src/README.md) participant this module
+records as an agent. An agent authenticates with its access token as a bearer
+token, and every tool acts as that identity. The mail tools call mod/messaging
+directly; mod/messaging hosts the mailbox and carries the mail.
 
 ## Configuration
 
@@ -19,12 +21,9 @@ bind_mcp: "tcp:127.0.0.1:8626"
 
 ### Agents
 
-`mcp.create_agent` mints an agent and answers its access token. The token's
-validity comes from the op's `duration` argument, or from:
-
-```yaml
-token_duration: 8760h
-```
+`mcp.create_agent` mints the participant through mod/messaging, records the
+agent, and answers its access token. The token's validity comes from the op's
+`duration` argument, or from `token_duration` in `messaging.yaml`.
 
 ### Queries
 
@@ -34,23 +33,16 @@ token_duration: 8760h
 query_timeout: 15s
 max_response_bytes: 65536
 max_response_objects: 64
-max_payload_bytes: 65536
 ```
 
-`max_payload_bytes` also bounds a message body, on the way out and on the way
-in.
+The mail tools are bounded by mod/messaging: `max_payload_bytes` bounds a
+message body, and `max_read_bytes` the bodies one read answers.
 
 ### Waiting
 
-The `wait` tool parks until something arrives in the agent's inbox. A call that
-names no window is granted `wait_default`; one that asks for more than
-`wait_max` is granted `wait_max`, and every answer names `granted_secs` beside
-`waited_secs`:
-
-```yaml
-wait_default: 2m
-wait_max: 15m
-```
+The `wait` tool parks until something arrives in the agent's inbox. The window
+is granted by mod/messaging from `wait_default` and `wait_max` in
+`messaging.yaml`, and every answer names `granted_secs` beside `waited_secs`.
 
 Both bounds are the deployment's because what caps a held call is the MCP
 client's own request timeout and any proxy in front of it, neither of which the

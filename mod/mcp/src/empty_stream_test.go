@@ -28,7 +28,7 @@ func answerJSON(t *testing.T, out queryOut) string {
 // An op that says it is done having sent nothing has answered "no objects".
 // Handing the agent the terminator's bytes presents that answer as a blob.
 func TestAnEmptyFramedStreamIsAnEmptyObjectList(t *testing.T) {
-	mod := testRouterModule(t)
+	mod := testQueryModule(t)
 	conn, peer := collectConn(t)
 
 	go func() {
@@ -57,7 +57,7 @@ func TestAnEmptyFramedStreamIsAnEmptyObjectList(t *testing.T) {
 // payload: the naive fix — dropping the len(objs) > 0 guard — answers it as an
 // empty object list and loses what the op actually said.
 func TestPlainTextIsStillAPayload(t *testing.T) {
-	mod := testRouterModule(t)
+	mod := testQueryModule(t)
 	conn, peer := collectConn(t)
 
 	go func() {
@@ -90,7 +90,7 @@ func TestATruncatedFrameIsAPayloadAndNotAnEmptyList(t *testing.T) {
 	}
 	cut := whole.Bytes()[:whole.Len()-1]
 
-	mod := testRouterModule(t)
+	mod := testQueryModule(t)
 	conn, peer := collectConn(t)
 
 	go func() {
@@ -111,7 +111,7 @@ func TestATruncatedFrameIsAPayloadAndNotAnEmptyList(t *testing.T) {
 // An answer of no bytes at all is not a framed stream and is not changed by
 // this: nothing was sent, so nothing said the answer was done.
 func TestNoBytesAtAllIsUnchanged(t *testing.T) {
-	mod := testRouterModule(t)
+	mod := testQueryModule(t)
 	conn, peer := collectConn(t)
 
 	go peer.Close()

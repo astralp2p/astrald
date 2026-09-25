@@ -3,11 +3,14 @@
 
 Five judgements, and the order matters. The authority's record comes first,
 because the refusals and the exchange below prove nothing about the guard or
-about reach unless the authority admitted the calls that produced them. Then
-the control: if alpha, holding the permits, cannot reach mcp.list_agents over
-apphost either, the refusals below say nothing about the guard and this test
-has proven nothing. Only once the op is known to answer alpha does alpha's
-refusal over MCP mean the guard refused it.
+about reach unless the authority admitted the questions that produced them.
+The record also shows which question guards what: mod.mcp.call_agent_action is
+asked of astral-query alone, and mail asks mod.messaging.send_action and
+mod.messaging.receive_action. Then the controls: if alpha, holding the permits,
+cannot reach mcp.list_agents and messaging.create_identity over apphost either,
+the refusals below say nothing about the guard and this test has proven
+nothing. Only once the ops are known to answer alpha does alpha's refusal over
+MCP mean the guard refused it.
 
 The refusals are then checked for being refusals. A timeout, a dead listener or
 a transport error all leave the caller with no result, and a test that accepts
@@ -16,10 +19,8 @@ any failure would stay green if the MCP server stopped answering entirely.
 Last, the exchange: a guard that also closed agent-to-agent would satisfy every
 check above and destroy the product.
 """
+from lib.authority import CALL, RECEIVE, SEND, answers
 from lib.sessionio import load
-
-CALL = "mod.mcp.call_agent_action"
-ANSWER = "mod.mcp.answer_agent_action"
 
 # what a refusal reads like at the tool boundary: mod/shell answers ErrRejected,
 # and mod/mcp's tool wraps the routing error in this text.
@@ -42,31 +43,44 @@ NOT_A_REFUSAL = ("route not found", "route_not_found", "routenotfound",
 
 def asked(facts, kind, actor, other):
     """The answers the authority gave to one (action, actor, other party)."""
-    return [q["allow"] for q in facts["questions"]
-            if (q["type"], q["actor"], q["other"]) == (kind, actor, other)]
+    return answers(facts["questions"], kind, actor, other)
+
+
+def check_authority(facts):
+    """The authority was asked, naming the right actor, before every call and
+    every message the checks below rely on."""
+    node, a, b, g = facts["node"], facts["alpha"], facts["beta"], facts["gamma"]
+
+    for kind, actor, other, who in (
+            (CALL, a, node, "alpha calling the node"),
+            (SEND, a, b, "alpha sending to beta"),
+            (RECEIVE, b, a, "beta receiving from alpha"),
+            (SEND, b, a, "beta sending to alpha"),
+            (RECEIVE, a, b, "alpha receiving from beta")):
+        got = asked(facts, kind, actor, other)
+        assert got and all(got), (
+            f"the authority answered {got!r} for {who} — node1 did not put "
+            "the question to the configured authority, or put it naming the "
+            f"wrong actor; it was asked {facts['questions']!r}")
+
+    assert asked(facts, SEND, a, g) == [False], (
+        f"the authority answered {asked(facts, SEND, a, g)!r} for alpha sending "
+        "to gamma, not one refusal — the refusal of gamma below is not the "
+        "authority's")
+
+    # mod.mcp.call_agent_action guards astral-query and declared tools, never
+    # mail: the only calls asked are alpha's queries to the node.
+    calls = {(q["actor"], q["other"]) for q in facts["questions"]
+             if q["type"] == CALL}
+    assert calls == {(a, node)}, (
+        f"the authority was asked {CALL} for {calls!r}, not only for alpha "
+        "calling the node — mail still asks the query action")
 
 
 def main():
     doc = load()
     facts = doc["facts"]
-    node, a, b, g = facts["node"], facts["alpha"], facts["beta"], facts["gamma"]
-
-    for kind, actor, other, who in (
-            (CALL, a, node, "alpha calling the node"),
-            (CALL, a, b, "alpha calling beta"),
-            (ANSWER, b, a, "beta answering alpha"),
-            (CALL, b, a, "beta calling alpha"),
-            (ANSWER, a, b, "alpha answering beta")):
-        answers = asked(facts, kind, actor, other)
-        assert answers and all(answers), (
-            f"the authority answered {answers!r} for {who} — node1 did not put "
-            "the question to the configured authority, or put it naming the "
-            f"wrong actor; it was asked {facts['questions']!r}")
-
-    assert asked(facts, CALL, a, g) == [False], (
-        f"the authority answered {asked(facts, CALL, a, g)!r} for alpha calling "
-        "gamma, not one refusal — the refusal of gamma below is not the "
-        "authority's")
+    check_authority(facts)
 
     for name in ("read_beta", "read_gamma"):
         leaked = [k for k in facts[name] if "token" in k]
@@ -78,6 +92,10 @@ def main():
         f"mcp.list_agents named {facts['control_agents']} agents to alpha over "
         "apphost, not the three the driver minted — the refusals below are not "
         "evidence about the guard, because the op does not answer alpha at all")
+    assert facts["control_identity"], (
+        "messaging.create_identity minted nothing for alpha over apphost — its "
+        "refusal below is not evidence about the guard, because the op does "
+        "not answer alpha at all")
 
     assert "astral-query" in facts["tools"], (
         f"the agent's tool set is {facts['tools']}, without astral-query — "
@@ -85,7 +103,7 @@ def main():
 
     for op, r in facts["refusals"].items():
         assert r["refused"], (
-            f"{op} answered an agent: {r['detail']} — mod/shell admitted a "
+            f"{op} answered an agent: {r['detail']} — a node op admitted a "
             "query carrying MCP origin")
 
         detail = r["detail"].lower()

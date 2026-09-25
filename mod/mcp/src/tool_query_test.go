@@ -25,7 +25,7 @@ func collectConn(t *testing.T) (astral.Conn, net.Conn) {
 }
 
 func TestCollectResponseAutoText(t *testing.T) {
-	mod := testRouterModule(t)
+	mod := testQueryModule(t)
 	conn, peer := collectConn(t)
 
 	go func() {
@@ -43,7 +43,7 @@ func TestCollectResponseAutoText(t *testing.T) {
 }
 
 func TestCollectResponseAutoObjects(t *testing.T) {
-	mod := testRouterModule(t)
+	mod := testQueryModule(t)
 	conn, peer := collectConn(t)
 
 	go func() {
@@ -63,7 +63,7 @@ func TestCollectResponseAutoObjects(t *testing.T) {
 }
 
 func TestCollectResponseForcedRaw(t *testing.T) {
-	mod := testRouterModule(t)
+	mod := testQueryModule(t)
 	conn, peer := collectConn(t)
 
 	go func() {

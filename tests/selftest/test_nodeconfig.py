@@ -3,7 +3,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from lib.nodeconfig import NodePorts, PortsBusy, lease_ports, ports_for, render
+from lib.nodeconfig import (WITHOUT_MCP, NodePorts, PortsBusy, lease_ports,
+                            ports_for, render)
 
 # why not the config base: a real run on this host may hold 20800's spans
 LEASE_BASE = 23800
@@ -34,7 +35,26 @@ class TestNodeConfig(unittest.TestCase):
             auth = (cfg / "auth.yaml").read_text()
             self.assertIn('endpoint: "http://127.0.0.1:20805/authorize"', auth)
             self.assertIn("- mod.mcp.call_agent_action", auth)
-            self.assertIn("- mod.mcp.answer_agent_action", auth)
+            self.assertIn("- mod.messaging.send_action", auth)
+            self.assertIn("- mod.messaging.receive_action", auth)
+            # a node hosts a mailbox under its identity's contract, never
+            # under an external authority's word
+            self.assertNotIn("host_mailbox_action", auth)
+            self.assertNotIn("answer_agent_action", auth)
+
+    def test_render_without_mcp(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            render(Path(tmp), NodePorts(20800, 20801, 20802, 20803, 20804,
+                                        20805),
+                   token="sekrit", serves_mcp=False)
+            mcp = (Path(tmp) / "config" / "mcp.yaml").read_text()
+            self.assertIn('bind_mcp: ""', mcp)
+            self.assertNotIn("20804", mcp)
+
+    def test_a_roster_name_decides_mcp(self):
+        self.assertIn("nomcp1", WITHOUT_MCP)
+        self.assertNotIn("node1", WITHOUT_MCP)
+        self.assertNotIn("node2", WITHOUT_MCP)
 
     def test_lease_ports_skips_a_leased_span(self):
         first = lease_ports(LEASE_BASE, span=10, spans=3)

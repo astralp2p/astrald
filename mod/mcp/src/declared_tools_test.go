@@ -100,11 +100,12 @@ func TestNoDeclaredToolsIsNoTools(t *testing.T) {
 }
 
 // The query a declared tool puts carries the MCP origin, which is what the
-// router mounting every module's operations refuses — mod/shell/src. A tool a
-// deployment points at a node operation therefore fails rather than reaching
-// one, and this is the call site that has to keep carrying it.
+// router mounting every module's operations refuses — mod/shell/src — and what
+// every messaging operation refuses again. A tool a deployment points at a node
+// operation therefore fails rather than reaching one, and this is the call site
+// that has to keep carrying it.
 func TestADeclaredToolPutsAnMcpQuery(t *testing.T) {
-	q := declaredQuery(astral.GenerateIdentity(), astral.GenerateIdentity(), "mcp.list_agents")
+	q := declaredQuery(astral.GenerateIdentity(), astral.GenerateIdentity(), "messaging.send_message")
 
 	if !q.IsMCP() {
 		t.Fatal("the query does not carry the MCP origin")

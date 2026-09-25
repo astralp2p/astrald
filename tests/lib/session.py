@@ -44,9 +44,12 @@ class Session:
                 "identity": n.identity,
                 "root": str(n.root),
                 "tcp_port": n.ports.tcp,
+                # the port reserved for the node's MCP server, which listens
+                # there only when serves_mcp is true
                 "mcp_url": f"http://127.0.0.1:{n.ports.mcp}",
-                # the external authority the node asks about agent calls; a
-                # driver that admits a call serves it
+                "serves_mcp": n.serves_mcp,
+                # the external authority the node asks about agent queries and
+                # mail; a driver that admits one serves it
                 "authority_url": n.ports.authority_url,
                 # why: the address a PEER dials, which is not the address the
                 # host dials. On loopback they coincide; in VMs they do not,
