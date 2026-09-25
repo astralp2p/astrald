@@ -34,6 +34,12 @@ func (mod *Module) OpDescribe(ctx *astral.Context, q *routing.IncomingQuery, arg
 	ctx, cancel := ctx.WithIdentity(q.Caller()).IncludeZone(args.Zone).WithTimeout(time.Minute)
 	defer cancel()
 
+	// why: a query from the network answers from this node alone. Its sender
+	// already fans out, and a second hop sends it back (objects.describe spec).
+	if q.Origin() == astral.OriginNetwork {
+		ctx = ctx.ExcludeZone(astral.ZoneNetwork)
+	}
+
 	ch := channel.New(q.AcceptRaw(), channel.WithOutputFormat(args.Out))
 	defer ch.Close()
 

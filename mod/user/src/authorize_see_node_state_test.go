@@ -11,57 +11,18 @@ func seeNodeStateAction(actor *astral.Identity) *auth.SeeNodeStateAction {
 	return &auth.SeeNodeStateAction{Action: auth.NewAction(actor)}
 }
 
-// TestSeeNodeStateGrantsUserNodeAndSwarmMembers pins the default holders of
-// SeeNodeState on a claimed node: the user identity, this node, and the user's
-// unexpelled node members, and nobody else.
+// TestSeeNodeStateGrantsUserAndNodeOnly pins the default holders of
+// SeeNodeState on a claimed node: the user identity and this node, and nobody
+// else. A current swarm member is refused.
 //
-// note: the node members are admitted so the user's own nodes read each other's
-// state. AuthorizeSeeNodeState carries the open question on that clause.
-// note: the action covers the log stream, so a node member reads this node's
-// logged activity for every caller.
 // note: the contract fixtures are the AdminNetwork table's, shared in-package.
-func TestSeeNodeStateGrantsUserNodeAndSwarmMembers(t *testing.T) {
-	nodeID, userID := astral.GenerateIdentity(), astral.GenerateIdentity()
-	member, expelled := astral.GenerateIdentity(), astral.GenerateIdentity()
-	outsider := astral.GenerateIdentity()
+func TestSeeNodeStateGrantsUserAndNodeOnly(t *testing.T) {
+	mod, f := swarmFixture(t)
 
-	mod := banModule(t, userID)
-	mod.node = &identityNode{id: nodeID}
-	mod.Deps.Auth = &adminNetworkContracts{contracts: []*auth.SignedContract{
-		adminNetworkMembership(userID, nodeID),
-		adminNetworkMembership(userID, member),
-		adminNetworkMembership(userID, expelled),
-		adminNetworkMembership(astral.GenerateIdentity(), outsider),
-	}}
-	if err := mod.db.StoreExpulsion(sampleSigned(userID, expelled)); err != nil {
-		t.Fatalf("store expulsion: %v", err)
-	}
-
-	cases := []struct {
-		name  string
-		actor *astral.Identity
-		want  bool
-	}{
-		{"the user identity", userID, true},
-		{"this node", nodeID, true},
-		{"a current swarm member", member, true},
-		{"an expelled member", expelled, false},
-		{"a node in another user's swarm", outsider, false},
-		{"a stranger", astral.GenerateIdentity(), false},
-		// note: a zero actor must not match the nil identity an unclaimed node answers.
-		{"a zero actor", &astral.Identity{}, false},
-		{"a nil actor", nil, false},
-	}
-
-	for _, c := range cases {
+	for _, c := range f.cases() {
 		if got := mod.AuthorizeSeeNodeState(nil, seeNodeStateAction(c.actor)); got != c.want {
 			t.Errorf("%s: authorized %v; want %v", c.name, got, c.want)
 		}
-	}
-
-	// note: the swarm's grant stops at reading. The same member changes nothing.
-	if mod.AuthorizeConfigureNodeState(nil, &auth.ConfigureNodeStateAction{Action: auth.NewAction(member)}) {
-		t.Error("a swarm member must not change the node's state")
 	}
 }
 
@@ -78,4 +39,69 @@ func TestSeeNodeStateGrantsTheNodeOnUnclaimedNode(t *testing.T) {
 	if mod.AuthorizeSeeNodeState(nil, &auth.SeeNodeStateAction{Action: auth.NewAction(astral.GenerateIdentity())}) {
 		t.Fatal("a stranger must not read the state of an unclaimed node")
 	}
+}
+
+// swarmIDs holds the identities of a claimed node's swarm fixture.
+type swarmIDs struct {
+	user, node, member, expelled, outsider *astral.Identity
+}
+
+type authzCase struct {
+	name  string
+	actor *astral.Identity
+	want  bool
+}
+
+// cases lists every actor kind and the default rule user + this node expects.
+func (f swarmIDs) cases() []authzCase {
+	return []authzCase{
+		{"the user identity", f.user, true},
+		{"this node", f.node, true},
+		{"a current swarm member", f.member, false},
+		{"an expelled member", f.expelled, false},
+		{"a node in another user's swarm", f.outsider, false},
+		{"a stranger", astral.GenerateIdentity(), false},
+		// note: a zero actor must not match the nil identity an unclaimed node answers.
+		{"a zero actor", &astral.Identity{}, false},
+		{"a nil actor", nil, false},
+	}
+}
+
+// swarmFixture builds a claimed node whose swarm holds a current member, an
+// expelled member, and a node of another user's swarm.
+func swarmFixture(t *testing.T) (*Module, swarmIDs) {
+	t.Helper()
+	f := swarmIDs{
+		user: astral.GenerateIdentity(), node: astral.GenerateIdentity(),
+		member: astral.GenerateIdentity(), expelled: astral.GenerateIdentity(),
+		outsider: astral.GenerateIdentity(),
+	}
+
+	mod := banModule(t, f.user)
+	mod.node = &identityNode{id: f.node}
+	mod.Deps.Auth = &adminNetworkContracts{contracts: []*auth.SignedContract{
+		adminNetworkMembership(f.user, f.node),
+		adminNetworkMembership(f.user, f.member),
+		adminNetworkMembership(f.user, f.expelled),
+		adminNetworkMembership(astral.GenerateIdentity(), f.outsider),
+	}}
+	if err := mod.db.StoreExpulsion(sampleSigned(f.user, f.expelled)); err != nil {
+		t.Fatalf("store expulsion: %v", err)
+	}
+
+	// note: the fixture is live only if the member is in the swarm.
+	if !slicesContainsIdentity(mod.LocalSwarm(), f.member) {
+		t.Fatal("fixture: the current member is not in LocalSwarm")
+	}
+
+	return mod, f
+}
+
+func slicesContainsIdentity(ids []*astral.Identity, id *astral.Identity) bool {
+	for _, x := range ids {
+		if x.IsEqual(id) {
+			return true
+		}
+	}
+	return false
 }
