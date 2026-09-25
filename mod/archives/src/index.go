@@ -1,6 +1,7 @@
 package archives
 
 import (
+	_zip "archive/zip"
 	"context"
 	"fmt"
 	"time"
@@ -37,6 +38,9 @@ func (mod *Module) Index(ctx context.Context, objectID *astral.ObjectID) (archiv
 	return
 }
 
+// scan reads the zip objectID and records each file entry it resolves.
+// todo: entries are searchable and describable but not readable as objects;
+// no objects.Repository serves them.
 func (mod *Module) scan(ctx context.Context, objectID *astral.ObjectID, postScan entryFunc) (archive *archives.Archive, err error) {
 	reader, err := mod.openZip(objectID)
 	if err != nil {
@@ -165,4 +169,15 @@ func (mod *Module) setCache(objectID *astral.ObjectID, archive *archives.Archive
 	}
 
 	return mod.db.Create(&row).Error
+}
+
+func (mod *Module) openZip(objectID *astral.ObjectID) (*_zip.Reader, error) {
+	var r = &readerAt{
+		identity: mod.node.Identity(),
+		objects:  mod.Objects,
+		objectID: objectID,
+	}
+
+	zipFile, err := _zip.NewReader(r, int64(objectID.Size))
+	return zipFile, err
 }
