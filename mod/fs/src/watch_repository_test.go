@@ -216,7 +216,7 @@ func TestWatchPartialLookupComparesTheWholeHash(t *testing.T) {
 }
 
 // TestWatchRootScoping: a row under a sibling root that shares the root's text prefix is outside the
-// repository for reads and partial lookups. Full-ID Contains stays database-only and keeps matching it.
+// repository for reads, partial lookups and full-ID Contains.
 func TestWatchRootScoping(t *testing.T) {
 	base := t.TempDir()
 	root := filepath.Join(base, "a")
@@ -239,9 +239,8 @@ func TestWatchRootScoping(t *testing.T) {
 	if ok, err := repo.Contains(ctx, partialOf(t, id)); ok || err != nil {
 		t.Errorf("Contains(partial) = %v, %v, want false, nil", ok, err)
 	}
-	// note: this pins the unchanged full-ID path, whose prefix query also matches the sibling root.
-	if ok, err := repo.Contains(ctx, id); !ok || err != nil {
-		t.Errorf("Contains(full) = %v, %v, want true, nil", ok, err)
+	if ok, err := repo.Contains(ctx, id); ok || err != nil {
+		t.Errorf("Contains(full) = %v, %v, want false, nil", ok, err)
 	}
 
 	indexFile(t, repo, filepath.Join(root, "g.txt"), []byte("hello astral"))
