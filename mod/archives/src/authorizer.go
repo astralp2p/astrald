@@ -12,7 +12,7 @@ import (
 // holds it and the lookup carries no ORDER BY, so deciding on one row makes the
 // answer depend on an unspecified row order. Any parent also grants nothing new —
 // an actor who may read the parent archive reads the entry's bytes out of it
-// directly (object_opener.go).
+// directly.
 //
 // why a false is not a denial: mod/auth composes handlers by OR
 // (mod/auth/src/authorize.go, authorizeHandlers), so declining here leaves every
