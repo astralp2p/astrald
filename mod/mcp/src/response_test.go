@@ -33,7 +33,7 @@ func TestCollectResponseAutoText(t *testing.T) {
 		peer.Close()
 	}()
 
-	out := mod.collectResponse(conn, "", time.Second)
+	out := mod.collectResponse(conn, time.Second)
 	if out.Payload != "plain text answer" || out.Encoding != "utf8" {
 		t.Fatalf("payload %q (%v)", out.Payload, out.Encoding)
 	}
@@ -53,30 +53,11 @@ func TestCollectResponseAutoObjects(t *testing.T) {
 		peer.Close()
 	}()
 
-	out := mod.collectResponse(conn, "", time.Second)
+	out := mod.collectResponse(conn, time.Second)
 	if len(out.Objects) != 1 {
 		t.Fatalf("%v objects, want 1 (payload %q)", len(out.Objects), out.Payload)
 	}
 	if out.Payload != "" {
 		t.Fatalf("framed stream also produced payload %q", out.Payload)
-	}
-}
-
-func TestCollectResponseForcedRaw(t *testing.T) {
-	mod := testQueryModule(t)
-	conn, peer := collectConn(t)
-
-	go func() {
-		sender := channel.NewSender(peer)
-		sender.Send(&astral.Ack{})
-		peer.Close()
-	}()
-
-	out := mod.collectResponse(conn, formatRaw, time.Second)
-	if len(out.Objects) != 0 {
-		t.Fatalf("raw mode decoded %v objects", len(out.Objects))
-	}
-	if out.Payload == "" {
-		t.Fatal("raw mode returned no payload")
 	}
 }

@@ -25,7 +25,7 @@ func testLogger() *log.Logger {
 	return l
 }
 
-// testQueryModule is the module as the query tools see it: the caps and the
+// testQueryModule is the module as a declared tool sees it: the caps and the
 // window, and no dependency.
 func testQueryModule(t *testing.T) *Module {
 	t.Helper()

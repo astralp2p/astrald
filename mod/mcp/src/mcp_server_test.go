@@ -92,8 +92,8 @@ func TestMCPServerRejectsMissingToken(t *testing.T) {
 }
 
 // TestMCPServerListsBuiltins asserts the tool set an authenticated agent is
-// served: the six this module registers and nothing else. A deployment's own
-// tools are added on top of these — see readDeclaredTools.
+// served: the five mail tools this module registers and nothing else. A
+// deployment's own tools are added on top of these — see readDeclaredTools.
 func TestMCPServerListsBuiltins(t *testing.T) {
 	ts, _ := testMCPServer(t)
 
@@ -119,13 +119,17 @@ func TestMCPServerListsBuiltins(t *testing.T) {
 	for _, tool := range tools.Tools {
 		listed[tool.Name] = true
 	}
-	if len(listed) != len(builtinTools) {
-		t.Fatalf("%v tools listed, want %v", len(listed), len(builtinTools))
+	mail := []string{"archive", "list_messages", "read_messages", "send_message", "wait"}
+	if got := slices.Sorted(maps.Keys(listed)); !slices.Equal(got, mail) {
+		t.Fatalf("listed %v, want the mail tools %v", got, mail)
 	}
-	for _, name := range builtinTools {
-		if !listed[name] {
-			t.Errorf("%v is not listed", name)
-		}
+	if held := slices.Sorted(slices.Values(builtinTools)); !slices.Equal(held, mail) {
+		t.Fatalf("a declared tool may not take %v, which is not the served set %v", held, mail)
+	}
+	// The tool that routed whatever query an agent named is gone: an agent
+	// reaches a service only through a tool its deployment declares.
+	if listed["astral-query"] {
+		t.Error("astral-query is still served")
 	}
 	// The tool that answered an agent its own identity is gone: the alias it
 	// carried is the node's, and a node holds none for a deployment's agent.

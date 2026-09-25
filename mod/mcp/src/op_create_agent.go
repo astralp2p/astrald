@@ -21,8 +21,8 @@ type opCreateAgentArgs struct {
 // token the agent uses as its PAT, and the agent row that keeps the token for
 // list_agents.
 //
-// The agent it mints answers nobody until something permits a call to it. The
-// node holds no reachability of its own, so an agent is reachable where a
+// The agent it mints takes mail from nobody until something permits it. The
+// node holds no reachability of its own, so mail reaches an agent where a
 // handler, a contract or an external authority says so.
 func (mod *Module) OpCreateAgent(ctx *astral.Context, q *routing.IncomingQuery, args opCreateAgentArgs) (err error) {
 	if q.Origin() == astral.OriginNetwork {

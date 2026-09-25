@@ -6,7 +6,7 @@ type Config struct {
 	// BindMCP is the endpoint the MCP server listens on; empty disables it.
 	BindMCP string `yaml:"bind_mcp,flow"`
 
-	// QueryTimeout bounds the response window of a single-shot astral-query.
+	// QueryTimeout bounds the response window of a declared tool's query.
 	QueryTimeout time.Duration `yaml:"query_timeout,omitempty"`
 
 	MaxResponseBytes   int `yaml:"max_response_bytes,omitempty"`

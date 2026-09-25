@@ -53,8 +53,8 @@ func routeAndWrite(t *testing.T, mod *Module, q *astral.InFlightQuery, obj astra
 // A delivery that did not come over a link is taken only from this module's
 // send path. The recipient's side asks receive_action alone and relies on
 // send_action having been asked where the message was sent; a delivery an
-// agent routed with astral-query, or a local app routed itself, was never asked
-// it. Such a delivery is rejected whether its target is hosted here or not, and
+// agent's declared tool put, or a local app routed itself, was never asked it.
+// Such a delivery is rejected whether its target is hosted here or not, and
 // stores nothing.
 func TestALocalDeliveryIsTakenOnlyFromTheSendPath(t *testing.T) {
 	mod := testMessagingModule(t)

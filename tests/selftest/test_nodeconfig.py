@@ -3,7 +3,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from lib.nodeconfig import (WITHOUT_MCP, NodePorts, PortsBusy, lease_ports,
+from lib.nodeconfig import (NODE_OP_TOOLS, PEER_ALIAS, PEER_TOOLS,
+                            WITHOUT_MCP, NodePorts, PortsBusy, lease_ports,
                             ports_for, render)
 
 # why not the config base: a real run on this host may hold 20800's spans
@@ -30,13 +31,24 @@ class TestNodeConfig(unittest.TestCase):
             self.assertIn("listen_port: 20801", (cfg / "tcp.yaml").read_text())
             self.assertIn("udp_port: 20802", (cfg / "ether.yaml").read_text())
             self.assertIn("listen_port: 20803", (cfg / "kcp.yaml").read_text())
-            self.assertIn('bind_mcp: "tcp:127.0.0.1:20804"',
-                          (cfg / "mcp.yaml").read_text())
+            mcp = (cfg / "mcp.yaml").read_text()
+            self.assertIn('bind_mcp: "tcp:127.0.0.1:20804"', mcp)
+            # every declared tool puts a node operation to this node
+            for path, name in NODE_OP_TOOLS.items():
+                self.assertIn(f"- name: {name}\n", mcp)
+                self.assertIn(f'query: "astral://localnode:{path}"', mcp)
+            # every peer tool puts its path to the node the alias names
+            for path, name in PEER_TOOLS.items():
+                self.assertIn(f"- name: {name}\n", mcp)
+                self.assertIn(f'query: "astral://{PEER_ALIAS}:{path}"', mcp)
             auth = (cfg / "auth.yaml").read_text()
             self.assertIn('endpoint: "http://127.0.0.1:20805/authorize"', auth)
-            self.assertIn("- mod.mcp.call_agent_action", auth)
-            self.assertIn("- mod.messaging.send_action", auth)
-            self.assertIn("- mod.messaging.receive_action", auth)
+            # the authority answers mail and nothing else
+            actions = [line.strip() for line in auth.splitlines()
+                       if line.strip().startswith("- mod.")]
+            self.assertEqual(actions, ["- mod.messaging.send_action",
+                                       "- mod.messaging.receive_action"])
+            self.assertNotIn("call_agent_action", auth)
             # a node hosts a mailbox under its identity's contract, never
             # under an external authority's word
             self.assertNotIn("host_mailbox_action", auth)
@@ -50,6 +62,7 @@ class TestNodeConfig(unittest.TestCase):
             mcp = (Path(tmp) / "config" / "mcp.yaml").read_text()
             self.assertIn('bind_mcp: ""', mcp)
             self.assertNotIn("20804", mcp)
+            self.assertNotIn("tools:", mcp)
 
     def test_a_roster_name_decides_mcp(self):
         self.assertIn("nomcp1", WITHOUT_MCP)

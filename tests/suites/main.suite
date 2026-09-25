@@ -13,4 +13,5 @@ registration-lease
 blueprints-two-node
 apphost-origin
 messaging-two-node
+mcp-peer
 expel-node                     # mutates two-nodes: nothing may follow it

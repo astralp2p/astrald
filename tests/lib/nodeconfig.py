@@ -9,11 +9,12 @@ silently rot as astrald grows.
 Concurrent runs on one host never share a port: each run leases its own
 span of ports before its first node starts.
 
-Agent reachability and mail between participants are decided by an external
-authority on a loopback port of the node's own. Nothing listens there unless a
-driver serves it, and an authority that cannot be reached permits nothing.
+Mail between participants is decided by an external authority on a loopback
+port of the node's own. Nothing listens there unless a driver serves it, and an
+authority that cannot be reached permits nothing.
 
-A node serves MCP unless its roster name is in WITHOUT_MCP.
+A node serves MCP unless its roster name is in WITHOUT_MCP. A node that serves
+MCP declares the tools in NODE_OP_TOOLS and PEER_TOOLS.
 """
 import fcntl
 import socket
@@ -42,10 +43,65 @@ KCP_YAML = """\
 listen_port: {kcp}
 """
 
+# The tools a node serving MCP declares, by the node operation each one puts:
+# the operation's path, then the tool's name. mcp-origin calls each as an agent.
+#
+# why every one answers an agent when the origin guard is removed — the bar for
+# membership: shell.shell is an interactive op shell over the whole scope tree;
+# mcp.list_agents is mod/mcp's own, and returns every tenant's agent;
+# messaging.create_identity is mod/messaging's own, and mints a credential.
+#
+# why not nodes.new_link: it refuses an argument-less call on its own, so it
+# reads the same guarded or not and witnesses nothing.
+#
+# why every MCP node declares them: a node's config follows its roster name,
+# and the node refuses each of these queries for its MCP origin, so they reach
+# nothing wherever they are declared.
+NODE_OP_TOOLS = {
+    "shell.shell": "node_shell",
+    "mcp.list_agents": "node_list_agents",
+    "messaging.create_identity": "node_create_identity",
+}
+
+# The alias every PEER_TOOLS query names as its target. mcp-peer sets it on
+# node1 to node2's identity. On a node where nothing sets it, a peer tool answers
+# `unknown target`.
+PEER_ALIAS = "peer"
+
+# The tools a node serving MCP declares against the node PEER_ALIAS names, by
+# the path each one puts: the path, then the tool's name. mcp-peer calls each as
+# an agent.
+#
+# why nodes.links and user.info: the peer answers both to the node the query
+# leaves from, and refuses both to a caller holding no permit — the first asks
+# mod.auth.admin_network_action, the second mod.user.see_swarm_action. A peer
+# answering either to an agent reads the query as the agent's node's.
+#
+# why test.mcp_peer.caller: it is an app mcp-peer serves on the peer, answering
+# the caller the peer read, so the agent's own identity is witnessed arriving.
+PEER_TOOLS = {
+    "nodes.links": "peer_links",
+    "user.info": "peer_user_info",
+    "test.mcp_peer.caller": "peer_caller",
+}
+
 # why bound at all: the MCP server is off unless bind_mcp names an endpoint
 # (mod/mcp defaults to a single fixed port, which two nodes would fight over).
 MCP_YAML = """\
 bind_mcp: "tcp:127.0.0.1:{mcp}"
+tools:
+{tools}"""
+
+DECLARED_TOOL_YAML = """\
+  - name: {name}
+    description: "Put {path} to this node as the agent."
+    query: "astral://localnode:{path}"
+"""
+
+PEER_TOOL_YAML = """\
+  - name: {name}
+    description: "Put {path} to the peer node as the agent."
+    query: "astral://{alias}:{path}"
 """
 
 # note: an empty bind_mcp turns the MCP server off, and mod/mcp still loads.
@@ -68,11 +124,10 @@ OBJECTS_YAML = """\
 external_registration_sweep_interval: 1s
 """
 
-# why an authority at all: mod/mcp and mod/messaging hold no reachability of
-# their own, and no handler grants these three actions, so a node without one
-# refuses every astral-query between agents and every message. Naming a port a
-# driver may serve lets a test admit one; an unserved port refuses, which is
-# what a node configured with none answers.
+# why an authority at all: mod/messaging holds no reachability of its own, and
+# no handler grants these two actions, so a node without one refuses every
+# message. Naming a port a driver may serve lets a test admit one; an unserved
+# port refuses, which is what a node configured with none answers.
 #
 # why mod.messaging.host_mailbox_action is not listed: a node hosts a mailbox
 # under the contract the mailbox's identity signs, and auth's chain walk
@@ -81,7 +136,6 @@ AUTH_YAML = """\
 external_authorizers:
   - endpoint: "{authority_url}"
     actions:
-      - mod.mcp.call_agent_action
       - mod.messaging.send_action
       - mod.messaging.receive_action
 """
@@ -157,6 +211,15 @@ def _bindable(port: int) -> bool:
     return True
 
 
+def _mcp_yaml(port: int) -> str:
+    tools = "".join(DECLARED_TOOL_YAML.format(name=name, path=path)
+                    for path, name in NODE_OP_TOOLS.items())
+    tools += "".join(PEER_TOOL_YAML.format(name=name, path=path,
+                                           alias=PEER_ALIAS)
+                     for path, name in PEER_TOOLS.items())
+    return MCP_YAML.format(mcp=port, tools=tools)
+
+
 def render(root: Path, ports: NodePorts, token: str,
            serves_mcp: bool = True) -> None:
     cfg = Path(root) / "config"
@@ -167,7 +230,7 @@ def render(root: Path, ports: NodePorts, token: str,
     (cfg / "ether.yaml").write_text(ETHER_YAML.format(ether=ports.ether))
     (cfg / "kcp.yaml").write_text(KCP_YAML.format(kcp=ports.kcp))
     (cfg / "mcp.yaml").write_text(
-        MCP_YAML.format(mcp=ports.mcp) if serves_mcp else MCP_OFF_YAML)
+        _mcp_yaml(ports.mcp) if serves_mcp else MCP_OFF_YAML)
     (cfg / "objects.yaml").write_text(OBJECTS_YAML)
     (cfg / "auth.yaml").write_text(
         AUTH_YAML.format(authority_url=ports.authority_url))

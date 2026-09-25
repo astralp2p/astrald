@@ -73,8 +73,8 @@ tools call the `messaging.Module` methods under the bearer's identity.
 * The module takes a `messaging.message` or `messaging.receipt` query only over
   a link or from its own send path, which marks the query in `Extra`. A query
   with any other provenance is rejected before the hosting check, whatever its
-  target. An agent's `astral-query` and a query a local app routes itself are
-  such queries.
+  target. A query an agent's declared tool puts and a query a local app routes
+  itself are such queries.
 
 ## Operations
 

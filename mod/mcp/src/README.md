@@ -1,11 +1,15 @@
 # mcp
 
 mcp serves the Model Context Protocol over streamable HTTP, so an AI agent can
-put queries to the astral network and exchange messages with other agents. An
-agent is a [messaging](../../messaging/src/README.md) participant this module
+exchange messages with other agents and call the tools its deployment declares.
+An agent is a [messaging](../../messaging/src/README.md) participant this module
 records as an agent. An agent authenticates with its access token as a bearer
 token, and every tool acts as that identity. The mail tools call mod/messaging
 directly; mod/messaging hosts the mailbox and carries the mail.
+
+An agent is served exactly five built-in tools — `send_message`,
+`list_messages`, `read_messages`, `wait` and `archive` — and the tools the
+deployment declares. No built-in tool puts a query.
 
 ## Configuration
 
@@ -27,7 +31,7 @@ agent, and answers its access token. The token's validity comes from the op's
 
 ### Queries
 
-`astral-query` and every declared tool are single-shot, bounded by:
+Every declared tool is single-shot, bounded by:
 
 ```yaml
 query_timeout: 15s
@@ -70,9 +74,20 @@ tools:
 ```
 
 The query is `astral://<identity-or-alias>:<query>`. A tool may not take the
-name of a built-in — `astral-query`, `send_message`, `list_messages`,
-`read_messages`, `wait`, `archive` — and a duplicate or shadowed name fails the
-load rather than silently repointing a name the agent already knows.
+name of a built-in — `send_message`, `list_messages`, `read_messages`, `wait`,
+`archive` — and a duplicate or shadowed name fails the load rather than
+silently repointing a name the agent already knows.
 
-A declared tool buys the agent no reach it did not have: the query is put as the
-agent, and the target's authority decides.
+A declared tool asks the node no authorization action. Its query names the
+agent as the caller and carries the MCP origin, so the node's own operations
+refuse it. A target on this node reads the agent as the caller.
+
+The query is routed on the node's context, as a delivery is in
+[messaging](../../messaging/src/README.md). A link carries it as a relay query
+naming the agent and the target. The far node admits it only under the agent's
+relay contract, and then reads the agent as the caller. A query routed on a
+context naming the agent would cross the link as a plain query, and the far
+node would answer it with this node's authority.
+
+A tool whose target does not resolve answers `unknown target: <target>`. A
+query that is refused or finds no route answers `query failed: <error>`.

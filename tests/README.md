@@ -94,7 +94,11 @@ carries this key, never neither and never both.
 A roster name is one daemon for the whole run, shared by every test that names
 it, so a node's config follows its name. Every node serves MCP except the ones
 `lib/nodeconfig.py` lists in `WITHOUT_MCP`: `nomcp1` is the node
-`messaging-ops` runs on.
+`messaging-ops` runs on. A node that serves MCP declares the tools
+`NODE_OP_TOOLS` lists, each pointed at one of its own operations, and
+`mcp-origin` calls them as an agent. It also declares the tools `PEER_TOOLS`
+lists, each pointed at the alias `PEER_ALIAS`, and `mcp-peer` points that alias
+at node2 and calls them as an agent on node1.
 
 `env` is a minimum, not a prison: drivers and oracles read `session.json`
 and never learn whether the endpoints behind it are processes on loopback
@@ -145,6 +149,7 @@ Every story of the catalog, in the cheapest env that can falsify it:
 | — | `smoke` | node | `null` → — |
 | — | `mcp-origin` | node | `null` → — |
 | — | `messaging-ops` | node | `null` → — |
+| — | `mcp-peer` | node | `two-nodes` → — |
 | — | `fs-watch` | node | `one-node` → — |
 | — | `registration-lease` | node | `one-node` → — |
 | — | `app-query` | node | `two-nodes` → — |

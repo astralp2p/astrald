@@ -6,8 +6,6 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/astralp2p/astral-go/api/auth"
-	"github.com/astralp2p/astral-go/api/mcp"
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astral-go/lib/query"
 	"github.com/astralp2p/astrald/lib/arl"
@@ -90,9 +88,9 @@ func splitEndpoint(endpoint string) (target, path string, err error) {
 // what came back. It reads none of it: what the answer means is the answering
 // service's, and this module carries bytes.
 //
-// why the query is the agent's and not the node's: the target decides whether
-// this agent may reach it, and a query put as the node would have it decide
-// about the wrong identity.
+// why the query's caller is the agent and not the node: the target decides
+// whether this agent may reach it, and a query put as the node would have it
+// decide about the wrong identity.
 func (mod *Module) declaredToolHandler(agentID *astral.Identity, tool declaredTool) mcpsdk.ToolHandlerFor[struct{}, queryOut] {
 	return func(ctx context.Context, _ *mcpsdk.CallToolRequest, _ struct{}) (res *mcpsdk.CallToolResult, out queryOut, err error) {
 		targetID, err := mod.Dir.ResolveIdentity(tool.target)
@@ -100,16 +98,15 @@ func (mod *Module) declaredToolHandler(agentID *astral.Identity, tool declaredTo
 			return nil, out, fmt.Errorf("unknown target: %v", tool.target)
 		}
 
-		// The same question astral-query asks, about the same pair. A tool is a
-		// named query and buys the agent no reach it did not have.
-		if !mod.Auth.Authorize(mod.ctx, &mcp.CallAgentAction{
-			Action: auth.NewAction(agentID),
-			ToID:   targetID,
-		}) {
-			return nil, out, fmt.Errorf("unknown target: %v", tool.target)
-		}
-
-		qctx, cancel := mod.ctx.WithIdentity(agentID).WithTimeout(mod.config.QueryTimeout)
+		// why: no authorization action is asked. The target decides whom it
+		// answers, and the node holds no query reachability of its own.
+		//
+		// why the context is the node's and does not name the agent: a link
+		// carries a query whose caller is not the context's identity as a relay
+		// query naming the agent, which the far node admits only under the
+		// agent's relay contract. A context naming the agent makes the link carry
+		// a plain query, which the far node answers as a query from this node.
+		qctx, cancel := mod.ctx.WithTimeout(mod.config.QueryTimeout)
 		defer cancel()
 
 		conn, err := query.RouteInFlight(qctx, mod.node, declaredQuery(agentID, targetID, tool.path))
@@ -117,7 +114,7 @@ func (mod *Module) declaredToolHandler(agentID *astral.Identity, tool declaredTo
 			return nil, out, fmt.Errorf("query failed: %v", err)
 		}
 
-		return nil, mod.collectResponse(conn, "", mod.config.QueryTimeout), nil
+		return nil, mod.collectResponse(conn, mod.config.QueryTimeout), nil
 	}
 }
 

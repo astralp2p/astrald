@@ -1,24 +1,25 @@
 #!/usr/bin/env python3
 """Driver: an agent reaches its peers through the MCP door and no node ops.
 
-astral-query hands the model a target and a path and routes whatever it names.
-Every astrald operation is mounted behind one router — mod/shell mounts each
-module's op router as a scope and answers on the node's own identity — so an
-agent that may query the node may call all of them. mod/mcp marks its queries
-with astral.OriginMCP and mod/shell refuses that origin.
+An agent is served the five mail tools and the tools its deployment declares.
+A declared tool puts a fixed query as the agent, and a deployment may point
+one at any path. Every astrald operation is mounted behind one router —
+mod/shell mounts each module's op router as a scope and answers on the node's
+own identity — so a tool pointed at the node would reach all of them. mod/mcp
+marks its queries with astral.OriginMCP and mod/shell refuses that origin. The
+harness declares one tool per node operation in lib/nodeconfig.NODE_OP_TOOLS.
 
-Reach is not the node's to give. astral-query asks mod.mcp.call_agent_action
-of the calling agent. Mail asks mod.messaging.send_action of the sender and
-mod.messaging.receive_action of the recipient. The harness points all three at
-an external authority on the node's own loopback port. This driver serves that
-authority: it admits alpha to the node, alpha and beta to each other, and
-nothing else.
+A declared tool asks the node no authorization action: its target decides whom
+it answers. Mail asks mod.messaging.send_action of the sender and
+mod.messaging.receive_action of the recipient. The harness points both at an
+external authority on the node's own loopback port. This driver serves that
+authority: it admits alpha and beta to each other, and nothing else.
 
 The driver acts and judges nothing: it mints three agents over apphost, grants
-alpha the permits the node ops ask, tries those ops as alpha over MCP, records
-what two of them answer alpha over apphost, sends to an agent the authority
-does not admit, runs one exchange between the two agents it does, and records
-every question the authority was asked.
+alpha the permits the node ops ask, calls the node-op tools as alpha over MCP,
+records what two of the ops answer alpha over apphost, sends to an agent the
+authority does not admit, runs one exchange between the two agents it does,
+and records every question the authority was asked.
 
 why the control calls: "refused" and "does not exist" leave a caller holding
 the same nothing. Recording mcp.list_agents and messaging.create_identity
@@ -36,18 +37,10 @@ import json
 
 import astral
 
-from lib.authority import CALL, RECEIVE, SEND, Authority
+from lib.authority import RECEIVE, SEND, Authority
 from lib.mcpclient import MCPClient, ToolError
+from lib.nodeconfig import NODE_OP_TOOLS
 from lib.sessionio import load, write_facts
-
-# Every op here answers an agent when the guard is removed — that is the bar
-# for membership. shell.shell is an interactive op shell over the whole scope
-# tree; mcp.list_agents is mod/mcp's own, and returns every tenant's agent;
-# messaging.create_identity is mod/messaging's own, and mints a credential.
-#
-# why not nodes.new_link: it refuses an argument-less call on its own, so it
-# reads the same guarded or not and witnesses nothing.
-NODE_OPS = ["shell.shell", "mcp.list_agents", "messaging.create_identity"]
 
 # why alpha is granted what the node ops ask: each op refuses a caller without
 # its permit, and a refusal that the permit alone explains says nothing about
@@ -109,13 +102,11 @@ async def main():
             "messaging.create_identity?out=json"))[0]
 
     a, b, g = (x["identity"].lower() for x in (alpha, beta, gamma))
-    node = n1["identity"].lower()
     facts = {
         "control_agents": len(control),
         "control_identity": minted.get("identity", ""),
         "read_beta": read_beta,
         "read_gamma": read_gamma,
-        "node": node,
         "alpha": a,
         "beta": b,
         "gamma": g,
@@ -128,12 +119,7 @@ async def main():
     # alpha and beta may send to and receive from each other; gamma is
     # admitted to nothing, which is what an agent is until an authority says
     # otherwise.
-    #
-    # why alpha may call the node: astral-query asks call_agent_action before
-    # it routes anything, so an agent the authority keeps from the node never
-    # reaches mod/shell, and the origin refusal would go unexercised.
     authority = Authority(n1["authority_url"], {
-        (CALL, a, node),
         (SEND, a, b), (RECEIVE, b, a),
         (SEND, b, a), (RECEIVE, a, b),
     })
@@ -146,7 +132,7 @@ async def main():
 
     refused = sum(1 for r in facts["refusals"].values() if r["refused"])
     x = facts["exchange"]
-    print(f"driver: {refused}/{len(NODE_OPS)} node ops refused to an agent; "
+    print(f"driver: {refused}/{len(NODE_OP_TOOLS)} node ops refused to an agent; "
           f"unadmitted agent refused={facts['unadmitted']['refused']}; "
           f"authority asked {len(authority.questions)} questions; "
           f"beta heard {x['beta_heard']!r}, alpha got {x['alpha_got']!r}")
@@ -156,11 +142,9 @@ async def exercise(n1, alpha, beta, gamma, facts):
     with MCPClient(n1["mcp_url"], alpha["token"]) as agent_alpha:
         facts["tools"] = sorted(t["name"] for t in agent_alpha.list_tools())
 
-        for op in NODE_OPS:
+        for op, tool in NODE_OP_TOOLS.items():
             try:
-                out = agent_alpha.call_tool(
-                    "astral-query",
-                    {"target": n1["identity"], "path": op, "timeout_ms": 5000})
+                out = agent_alpha.call_tool(tool, {})
                 # answered: record it, so the oracle reports an open guard
                 # rather than a missing assertion
                 facts["refusals"][op] = {"refused": False,

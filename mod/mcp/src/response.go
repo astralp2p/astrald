@@ -2,36 +2,14 @@ package mcp
 
 import (
 	"bytes"
-	"context"
 	"encoding/json"
-	"fmt"
 	"io"
 	"time"
 	"unicode/utf8"
 
-	"github.com/astralp2p/astral-go/api/auth"
-	"github.com/astralp2p/astral-go/api/mcp"
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astral-go/astral/channel"
-	"github.com/astralp2p/astral-go/lib/query"
-	mcpsdk "github.com/modelcontextprotocol/go-sdk/mcp"
 )
-
-// Response formats an agent may ask for; the absence of both is auto.
-const (
-	formatRaw     = "raw"
-	formatObjects = "objects"
-)
-
-type queryIn struct {
-	Target        string            `json:"target" jsonschema:"target identity or alias"`
-	Path          string            `json:"path" jsonschema:"query path, e.g. user.info"`
-	Args          map[string]string `json:"args,omitempty" jsonschema:"query arguments"`
-	Payload       string            `json:"payload,omitempty" jsonschema:"request payload written after the query is accepted"`
-	PayloadBase64 bool              `json:"payload_base64,omitempty" jsonschema:"payload is base64-encoded binary"`
-	Format        string            `json:"format,omitempty" jsonschema:"response handling: auto (default) detects framed objects vs plain data, raw forces bytes, objects forces framed decoding"`
-	TimeoutMs     int               `json:"timeout_ms,omitempty" jsonschema:"response window in milliseconds"`
-}
 
 // note: response objects are []any, not []json.RawMessage — the SDK infers a
 // byte-array schema for RawMessage and then rejects the actual output.
@@ -46,61 +24,9 @@ type queryOut struct {
 	Truncated bool   `json:"truncated,omitempty" jsonschema:"response hit a size cap"`
 }
 
-func (mod *Module) queryTool(agentID *astral.Identity) mcpsdk.ToolHandlerFor[queryIn, queryOut] {
-	return func(ctx context.Context, _ *mcpsdk.CallToolRequest, in queryIn) (res *mcpsdk.CallToolResult, out queryOut, err error) {
-		targetID, err := mod.Dir.ResolveIdentity(in.Target)
-		if err != nil {
-			return nil, out, fmt.Errorf("unknown target: %v", in.Target)
-		}
-
-		// Which agents this one may call is its own owner's decision, and the
-		// node does not hold it. What the target permits is a separate question,
-		// asked where the call arrives.
-		//
-		// why the refusal reads as an unresolvable target: an agent learns that
-		// it cannot reach this one, and not whether this one exists — the
-		// property the answering side has, applied to the calling side.
-		if !mod.Auth.Authorize(mod.ctx, &mcp.CallAgentAction{
-			Action: auth.NewAction(agentID),
-			ToID:   targetID,
-		}) {
-			return nil, out, fmt.Errorf("unknown target: %v", in.Target)
-		}
-
-		timeout := mod.config.QueryTimeout
-		if in.TimeoutMs > 0 {
-			timeout = time.Duration(in.TimeoutMs) * time.Millisecond
-		}
-
-		payload, err := decodePayload(in.Payload, in.PayloadBase64)
-		if err != nil {
-			return nil, out, err
-		}
-
-		q := query.New(agentID, targetID, in.Path, in.Args)
-		qctx, cancel := mod.ctx.WithIdentity(agentID).WithTimeout(timeout)
-		defer cancel()
-
-		conn, err := query.RouteInFlight(qctx, mod.node, launch(q))
-		if err != nil {
-			return nil, out, fmt.Errorf("query failed: %v", err)
-		}
-
-		if len(payload) > 0 {
-			if _, err = conn.Write(payload); err != nil {
-				conn.Close()
-				return nil, out, fmt.Errorf("write payload: %v", err)
-			}
-		}
-
-		out = mod.collectResponse(conn, in.Format, timeout)
-		return nil, out, nil
-	}
-}
-
 // collectResponse reads the single-shot response off conn, bounded by the
 // module's caps. Closing the conn on timeout is what unblocks the reads.
-func (mod *Module) collectResponse(conn astral.Conn, format string, timeout time.Duration) (out queryOut) {
+func (mod *Module) collectResponse(conn astral.Conn, timeout time.Duration) (out queryOut) {
 	timer := time.AfterFunc(timeout, func() { conn.Close() })
 	defer timer.Stop()
 	defer conn.Close()
@@ -117,8 +43,7 @@ func (mod *Module) collectResponse(conn astral.Conn, format string, timeout time
 	out.Truncated = total == len(buf)
 	data := buf[:total]
 
-	if len(data) == 0 || format == formatRaw {
-		out.Payload, out.Encoding = encodePayload(data)
+	if len(data) == 0 {
 		return
 	}
 
@@ -134,8 +59,7 @@ func (mod *Module) collectResponse(conn astral.Conn, format string, timeout time
 	// truncated frame consumes everything and yields no object too, and that is
 	// a payload the agent should see rather than an answer it should believe.
 	switch {
-	case format == formatObjects,
-		stream.eos && len(stream.objs) == 0,
+	case stream.eos && len(stream.objs) == 0,
 		len(stream.objs) > 0 && stream.complete,
 		len(stream.objs) > 0 && !utf8.Valid(data):
 		out.Objects = stream.objs

@@ -1,18 +1,15 @@
 """The external authority a driver serves on a node's `authority_url`.
 
-A node asks it about the three actions `nodeconfig.AUTH_YAML` names:
-`mod.mcp.call_agent_action` before `astral-query` or a declared tool routes,
+A node asks it about the two actions `nodeconfig.AUTH_YAML` names:
 `mod.messaging.send_action` of a sender before a message leaves, and
 `mod.messaging.receive_action` of a recipient before a delivery is stored. No
-handler grants any of them, so what a node carries is what this authority
-admits.
+handler grants either, so what a node carries is what this authority admits.
 """
 import json
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlsplit
 
-CALL = "mod.mcp.call_agent_action"
 SEND = "mod.messaging.send_action"
 RECEIVE = "mod.messaging.receive_action"
 
@@ -21,7 +18,7 @@ class Authority:
     """Allows a question only when (action type, actor, other party) is in
     `allowed`, and records every question with the answer it gave.
 
-    The other party is ToID for a query or a send, and FromID for a receive.
+    The other party is ToID for a send, and FromID for a receive.
     """
 
     def __init__(self, url: str, allowed: set):

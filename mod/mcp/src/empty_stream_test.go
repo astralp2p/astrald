@@ -36,7 +36,7 @@ func TestAnEmptyFramedStreamIsAnEmptyObjectList(t *testing.T) {
 		peer.Close()
 	}()
 
-	out := mod.collectResponse(conn, "", time.Second)
+	out := mod.collectResponse(conn, time.Second)
 
 	if out.Objects == nil {
 		t.Fatal("an empty stream answered no object list at all")
@@ -65,7 +65,7 @@ func TestPlainTextIsStillAPayload(t *testing.T) {
 		peer.Close()
 	}()
 
-	out := mod.collectResponse(conn, "", time.Second)
+	out := mod.collectResponse(conn, time.Second)
 
 	if out.Payload != "plain text answer" {
 		t.Fatalf("payload %q", out.Payload)
@@ -98,7 +98,7 @@ func TestATruncatedFrameIsAPayloadAndNotAnEmptyList(t *testing.T) {
 		peer.Close()
 	}()
 
-	out := mod.collectResponse(conn, "", time.Second)
+	out := mod.collectResponse(conn, time.Second)
 
 	if out.Objects != nil {
 		t.Fatalf("a truncated frame was answered as %v objects", len(out.Objects))
@@ -116,7 +116,7 @@ func TestNoBytesAtAllIsUnchanged(t *testing.T) {
 
 	go peer.Close()
 
-	out := mod.collectResponse(conn, "", time.Second)
+	out := mod.collectResponse(conn, time.Second)
 
 	if out.Objects != nil {
 		t.Fatalf("an empty answer became %v objects", len(out.Objects))

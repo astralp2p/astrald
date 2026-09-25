@@ -1,16 +1,18 @@
 #!/usr/bin/env python3
 """Oracle: the door is shut on operations and open to agents.
 
-Five judgements, and the order matters. The authority's record comes first,
-because the refusals and the exchange below prove nothing about the guard or
-about reach unless the authority admitted the questions that produced them.
-The record also shows which question guards what: mod.mcp.call_agent_action is
-asked of astral-query alone, and mail asks mod.messaging.send_action and
-mod.messaging.receive_action. Then the controls: if alpha, holding the permits,
-cannot reach mcp.list_agents and messaging.create_identity over apphost either,
-the refusals below say nothing about the guard and this test has proven
-nothing. Only once the ops are known to answer alpha does alpha's refusal over
-MCP mean the guard refused it.
+The judgements run in order, and the order matters. The authority's record
+comes first, because the exchange below proves nothing about reach unless the
+authority admitted the questions that produced it. The record also shows that
+the authority answers mail alone: every question is mod.messaging.send_action
+or mod.messaging.receive_action. Then the controls: if alpha, holding the
+permits, cannot reach mcp.list_agents and messaging.create_identity over
+apphost either, the refusals below say nothing about the guard and this test
+has proven nothing. Only once the ops are known to answer alpha does alpha's
+refusal over MCP mean the guard refused it.
+
+The agent's tool set comes next: exactly the five mail tools and the tools the
+node declares, with no tool that routes whatever query an agent names.
 
 The refusals are then checked for being refusals. A timeout, a dead listener or
 a transport error all leave the caller with no result, and a test that accepts
@@ -19,23 +21,28 @@ any failure would stay green if the MCP server stopped answering entirely.
 Last, the exchange: a guard that also closed agent-to-agent would satisfy every
 check above and destroy the product.
 """
-from lib.authority import CALL, RECEIVE, SEND, answers
+from lib.authority import RECEIVE, SEND, answers
+from lib.nodeconfig import NODE_OP_TOOLS, PEER_TOOLS
 from lib.sessionio import load
+
+MAIL_TOOLS = ("send_message", "list_messages", "read_messages", "wait",
+              "archive")
 
 # what a refusal reads like at the tool boundary: mod/shell answers ErrRejected,
 # and mod/mcp's tool wraps the routing error in this text.
 REFUSAL_MARKERS = ("query failed", "rejected", "access denied")
 
 # what a refusal must NOT read like — these mean the call never got a verdict.
-# "unknown target" is the call gate's refusal, which stops a query before it
-# reaches the guard under test.
+# "unknown target" is a declared tool whose target did not resolve, so its
+# query never reached the guard under test.
 #
 # why route-not-found is listed, and listed first: mod/mcp wraps every routing
-# error as "query failed: %v" (mod/mcp/src/tool_query.go:86), and "query failed"
-# is a refusal marker above. An op that is unmounted, renamed or simply absent
-# therefore reads as a refusal on the marker alone — so an unmounted shell.shell
-# with the origin guard removed would keep this test green. Checked after the
-# markers, this is what separates "the guard refused it" from "nothing answered".
+# error as "query failed: %v" (mod/mcp/src/declared_tools.go:108), and "query
+# failed" is a refusal marker above. An op that is unmounted, renamed or simply
+# absent therefore reads as a refusal on the marker alone — so an unmounted
+# shell.shell with the origin guard removed would keep this test green. Checked
+# after the markers, this is what separates "the guard refused it" from
+# "nothing answered".
 NOT_A_REFUSAL = ("route not found", "route_not_found", "routenotfound",
                  "HTTP 401", "HTTP 403", "HTTP 404", "HTTP 500",
                  "unknown target", "undecodable")
@@ -47,12 +54,11 @@ def asked(facts, kind, actor, other):
 
 
 def check_authority(facts):
-    """The authority was asked, naming the right actor, before every call and
-    every message the checks below rely on."""
-    node, a, b, g = facts["node"], facts["alpha"], facts["beta"], facts["gamma"]
+    """The authority was asked, naming the right actor, before every message
+    the checks below rely on, and was asked about mail alone."""
+    a, b, g = facts["alpha"], facts["beta"], facts["gamma"]
 
     for kind, actor, other, who in (
-            (CALL, a, node, "alpha calling the node"),
             (SEND, a, b, "alpha sending to beta"),
             (RECEIVE, b, a, "beta receiving from alpha"),
             (SEND, b, a, "beta sending to alpha"),
@@ -68,13 +74,12 @@ def check_authority(facts):
         "to gamma, not one refusal — the refusal of gamma below is not the "
         "authority's")
 
-    # mod.mcp.call_agent_action guards astral-query and declared tools, never
-    # mail: the only calls asked are alpha's queries to the node.
-    calls = {(q["actor"], q["other"]) for q in facts["questions"]
-             if q["type"] == CALL}
-    assert calls == {(a, node)}, (
-        f"the authority was asked {CALL} for {calls!r}, not only for alpha "
-        "calling the node — mail still asks the query action")
+    # a declared tool asks the node no authorization action, so the authority
+    # hears the two mail actions and nothing else
+    kinds = {q["type"] for q in facts["questions"]}
+    assert kinds <= {SEND, RECEIVE}, (
+        f"the authority was asked {sorted(kinds)!r}, not only "
+        f"{SEND} and {RECEIVE} — the node asks it something beyond mail")
 
 
 def main():
@@ -97,9 +102,13 @@ def main():
         "refusal below is not evidence about the guard, because the op does "
         "not answer alpha at all")
 
-    assert "astral-query" in facts["tools"], (
-        f"the agent's tool set is {facts['tools']}, without astral-query — "
-        "nothing below exercised the path under test")
+    served = sorted(MAIL_TOOLS + tuple(NODE_OP_TOOLS.values())
+                    + tuple(PEER_TOOLS.values()))
+    assert facts["tools"] == served, (
+        f"the agent's tool set is {facts['tools']}, not the five mail tools "
+        f"and the node's declared tools {served} — the refusals below did not "
+        "exercise the tools the node declares, or an agent is served a tool "
+        "no deployment declared")
 
     for op, r in facts["refusals"].items():
         assert r["refused"], (

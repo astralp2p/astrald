@@ -97,8 +97,8 @@ func launchDelivery(callerID, targetID *astral.Identity, path string) *astral.In
 //
 // why only a send path's: the recipient's side asks receive_action alone and
 // relies on the sending side having asked send_action, and a receipt on the
-// reader's node having handed the body out. A query an agent routed with
-// astral-query, or a local app routed itself, did neither, and would store mail
+// reader's node having handed the body out. A query an agent's declared tool
+// put, or a local app routed itself, did neither, and would store mail
 // send_action refuses with no outbox row behind it.
 func fromSendPath(q *astral.InFlightQuery) bool {
 	if q.IsNetwork() {
