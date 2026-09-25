@@ -43,6 +43,13 @@ func (mod *Module) DeleteAccessToken(token string) error {
 	return mod.db.DeleteAccessToken(token)
 }
 
+// DeleteAccessTokens removes every access token issued for identity, expired
+// ones included, so none of them authenticates it again. An identity holding
+// none is not an error.
+func (mod *Module) DeleteAccessTokens(identity *astral.Identity) error {
+	return mod.db.DeleteAccessTokens(identity)
+}
+
 // AuthenticateToken resolves a bearer token to the identity it was issued for.
 // Any lookup or expiry failure is collapsed into a single opaque error to avoid leaking token existence.
 func (mod *Module) AuthenticateToken(token string) (*astral.Identity, error) {

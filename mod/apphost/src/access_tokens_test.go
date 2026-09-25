@@ -81,3 +81,49 @@ func TestAuthenticateExpiredToken(t *testing.T) {
 		t.Fatal("authenticate succeeded on an expired token")
 	}
 }
+
+// Every token issued for the identity goes, expired ones included, and no other
+// identity's token does. An identity holding none is not an error.
+func TestDeleteAccessTokens(t *testing.T) {
+	mod := testTokenModule(t)
+	identity, other := astral.GenerateIdentity(), astral.GenerateIdentity()
+
+	var issued []string
+	for _, d := range []time.Duration{time.Hour, 2 * time.Hour, -time.Hour} {
+		token, err := mod.CreateAccessToken(identity, astral.Duration(d))
+		if err != nil {
+			t.Fatalf("create token: %v", err)
+		}
+		issued = append(issued, string(token.Token))
+	}
+	kept, err := mod.CreateAccessToken(other, astral.Duration(time.Hour))
+	if err != nil {
+		t.Fatalf("create token: %v", err)
+	}
+
+	if err = mod.DeleteAccessTokens(identity); err != nil {
+		t.Fatalf("delete tokens: %v", err)
+	}
+
+	list, err := mod.ListAccessTokens()
+	if err != nil {
+		t.Fatalf("list: %v", err)
+	}
+	for _, token := range list {
+		if token.Identity.IsEqual(identity) {
+			t.Fatalf("token %v of the identity survived the delete", token.Token)
+		}
+	}
+	for _, token := range issued {
+		if _, err = mod.AuthenticateToken(token); err == nil {
+			t.Fatalf("token %v still authenticates after the delete", token)
+		}
+	}
+	if _, err = mod.AuthenticateToken(string(kept.Token)); err != nil {
+		t.Fatalf("another identity's token stopped authenticating: %v", err)
+	}
+
+	if err = mod.DeleteAccessTokens(identity); err != nil {
+		t.Fatalf("deleting the tokens of an identity holding none: %v", err)
+	}
+}
