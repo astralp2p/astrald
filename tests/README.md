@@ -139,10 +139,12 @@ Every story of the catalog, in the cheapest env that can falsify it:
 | 0009 | `expel-node` | node | `two-nodes` → `two-nodes-expel` |
 | — | `smoke` | node | `null` → — |
 | — | `mcp-origin` | node | `null` → — |
+| — | `claim-window` | node | `null` → — |
 | — | `fs-watch` | node | `one-node` → — |
 | — | `registration-lease` | node | `one-node` → — |
 | — | `app-query` | node | `two-nodes` → — |
 | — | `apphost-origin` | node | `two-nodes` → — |
+| — | `sign-contract-guard` | node | `two-nodes` → — |
 | — | `blueprints-two-node` | node | `two-nodes` → — |
 | — | `hold-purge` | node | `two-nodes` → — (unlisted, mutates) |
 | — | `gateway-relay` | netsim | `two-nodes` → — (unlisted, mutates) |
@@ -192,8 +194,8 @@ failure and an oracle failure are already distinct in the results
 went wrong without anyone reading a log.
 
 A test that declares the `agent` driver ships a `prompt.md`: the flow in
-plain words, the way a person would ask for it. Eight of the eighteen tests
-declare it. The other ten are `script` only — a probe like `smoke`, a
+plain words, the way a person would ask for it. Eight of the twenty tests
+declare it. The other twelve are `script` only — a probe like `smoke`, a
 transport measurement like `nat-punch`, or a guard that has to be driven with
 a token and an origin no operator's shell can produce, like `apphost-origin`.
 
