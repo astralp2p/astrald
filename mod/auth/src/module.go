@@ -15,6 +15,7 @@ var _ auth.Module = &Module{}
 
 type Module struct {
 	Deps
+	OptionalDeps
 	config   Config
 	node     astral.Node
 	log      *log.Logger

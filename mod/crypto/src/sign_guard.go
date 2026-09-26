@@ -9,7 +9,7 @@ import (
 	cryptomod "github.com/astralp2p/astrald/mod/crypto"
 )
 
-// authorizeSigner reports whether caller may obtain a signature under signerKey.
+// AuthorizeSigner reports whether caller may obtain a signature under signerKey.
 // The rule is one sentence: sign as yourself, or as an identity you may sudo to.
 //
 // why this guard exists: NewHashSigner and NewTextSigner resolve a key to a
@@ -39,7 +39,9 @@ import (
 // real sudo permit for the node still signs, because it proved something the
 // router cannot fabricate. Internal callers take Module.NodeSigner and never
 // pass through here.
-func (mod *Module) authorizeSigner(ctx *astral.Context, caller *astral.Identity, signerKey *crypto.PublicKey) error {
+//
+// note: auth.sign_contract applies this rule to each party of a contract.
+func (mod *Module) AuthorizeSigner(ctx *astral.Context, caller *astral.Identity, signerKey *crypto.PublicKey) error {
 	signerID := secp256k1.Identity(signerKey)
 	if signerID == nil {
 		return cryptomod.ErrForeignKey
