@@ -4,7 +4,9 @@ import (
 	"context"
 	"time"
 
+	"github.com/astralp2p/astral-go/api/messaging"
 	"github.com/astralp2p/astral-go/astral"
+	messagingmod "github.com/astralp2p/astrald/mod/messaging"
 	mcpsdk "github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
@@ -38,24 +40,25 @@ type waitOut struct {
 // lets a caller spend the window it was granted.
 func (mod *Module) waitTool(agentID *astral.Identity) mcpsdk.ToolHandlerFor[waitIn, waitOut] {
 	return func(ctx context.Context, req *mcpsdk.CallToolRequest, in waitIn) (res *mcpsdk.CallToolResult, out waitOut, err error) {
-		ans, err := mod.waitMessages(ctx, agentID, waitRequest{
-			From:    in.From,
-			Since:   in.Since,
-			Timeout: time.Duration(in.TimeoutSecs) * time.Second,
-			Report:  waitProgress(ctx, req),
-		})
+		since, err := parseSince(in.Since)
 		if err != nil {
 			return nil, out, err
 		}
 
-		out.Messages = entries(ans.Rows)
-		out.NextSince = nextSince(ans.Rows)
-		if out.NextSince == "" {
-			out.NextSince = in.Since
+		ans, err := mod.Messaging.Wait(ctx, agentID, messaging.WaitRequest{
+			From:    in.From,
+			Since:   since,
+			Timeout: time.Duration(in.TimeoutSecs) * time.Second,
+		}, waitProgress(ctx, req))
+		if err != nil {
+			return nil, out, err
 		}
-		out.TimedOut = len(ans.Rows) == 0
-		out.GrantedSecs = wholeSeconds(ans.Granted)
-		out.WaitedSecs = wholeSeconds(ans.Waited)
+
+		out.Messages = entries(ans.Messages)
+		out.NextSince = answerSince(uint64(ans.NextSince), in.Since)
+		out.TimedOut = bool(ans.TimedOut)
+		out.GrantedSecs = wholeSeconds(time.Duration(ans.Granted))
+		out.WaitedSecs = wholeSeconds(time.Duration(ans.Waited))
 
 		return nil, out, nil
 	}
@@ -68,7 +71,7 @@ func (mod *Module) waitTool(agentID *astral.Identity) mcpsdk.ToolHandlerFor[wait
 // why the report is never gated on the caller acting on it: a client attaches a
 // token from its own SDK, and some attach one and discard every notification.
 // The node cannot tell those apart, so it reports to whoever asked.
-func waitProgress(ctx context.Context, req *mcpsdk.CallToolRequest) progressFunc {
+func waitProgress(ctx context.Context, req *mcpsdk.CallToolRequest) messagingmod.ProgressFunc {
 	if req == nil || req.Params == nil || req.Session == nil {
 		return nil
 	}

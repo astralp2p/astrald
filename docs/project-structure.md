@@ -60,7 +60,8 @@ Descriptions of modules with a protocol in [astral-docs](https://github.com/astr
 | ip | IP utilities |
 | kcp | KCP protocol transport |
 | log | Logging system |
-| [mcp](../mod/mcp/src/README.md) | AI agent registration and the MCP endpoint serving agents the network |
+| [mcp](../mod/mcp/src/README.md) | AI agent registration and the MCP endpoint serving agents their mail and the deployment's declared tools |
+| [messaging](../mod/messaging/src/README.md) | Participant identities, the hosting contracts a node holds their mailboxes under, and the mail between them: delivery, receipts, listing, reading, waiting, archiving |
 | nat | NAT traversal via UDP hole punching |
 | nearby | Local network discovery |
 | nodes | Encrypted links and multiplexed sessions between nodes |

@@ -25,6 +25,10 @@ type Module interface {
 	AuthenticateToken(string) (*astral.Identity, error)
 	DeleteAccessToken(string) error
 
+	// DeleteAccessTokens removes every access token issued for identity,
+	// expired ones included. An identity holding none is not an error.
+	DeleteAccessTokens(identity *astral.Identity) error
+
 	// Grant records a permit for identity on this node, replacing whatever it
 	// held for the same action. A nil expiresAt grants until revoked. The permit
 	// is recorded, not signed: it authorizes here and travels nowhere.

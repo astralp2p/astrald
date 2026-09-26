@@ -2,8 +2,9 @@ package mcp
 
 import (
 	"context"
+	"fmt"
 
-	"github.com/astralp2p/astral-go/api/mcp"
+	"github.com/astralp2p/astral-go/api/messaging"
 	"github.com/astralp2p/astral-go/astral"
 	mcpsdk "github.com/modelcontextprotocol/go-sdk/mcp"
 )
@@ -45,18 +46,12 @@ type readMessagesOut struct {
 
 func (mod *Module) readMessagesTool(agentID *astral.Identity) mcpsdk.ToolHandlerFor[readMessagesIn, readMessagesOut] {
 	return func(ctx context.Context, _ *mcpsdk.CallToolRequest, in readMessagesIn) (res *mcpsdk.CallToolResult, out readMessagesOut, err error) {
-		refs := make([]messageRef, len(in.IDs))
-		for i, r := range in.IDs {
-			if refs[i], err = parseRef(r.Box, r.ID); err != nil {
-				return nil, out, err
-			}
+		req, err := readRequestOf(in)
+		if err != nil {
+			return nil, out, err
 		}
 
-		result, err := mod.readMessages(agentID, readRequest{
-			Refs:        refs,
-			Children:    in.Children,
-			MaxChildren: in.MaxChildren,
-		})
+		result, err := mod.Messaging.ReadMessages(ctx, agentID, req)
 		if err != nil {
 			return nil, out, err
 		}
@@ -64,48 +59,87 @@ func (mod *Module) readMessagesTool(agentID *astral.Identity) mcpsdk.ToolHandler
 		out.Messages = wholes(result.Messages)
 		out.Replies = wholes(result.Replies)
 		for _, ref := range result.NotFound {
-			out.NotFound = append(out.NotFound, messageRefIn{Box: ref.Box, ID: ref.ID.String()})
+			out.NotFound = append(out.NotFound, messageRefIn{Box: string(ref.Box), ID: ref.ID.String()})
 		}
 
 		return nil, out, nil
 	}
 }
 
+// readRequestOf turns the agent's words into a read request, refusing a ref it
+// cannot parse before anything is read.
+//
+// why max_children is bounded here as well as in messaging: the request field is
+// sixteen bits, and an ask past it would wrap to a smaller one instead of being
+// clamped to the module's bound.
+func readRequestOf(in readMessagesIn) (*messaging.ReadMessagesRequest, error) {
+	if in.MaxChildren < 0 {
+		in.MaxChildren = 0
+	}
+
+	req := &messaging.ReadMessagesRequest{
+		Children:    astral.String8(in.Children),
+		MaxChildren: astral.Uint16(min(in.MaxChildren, messaging.MaxChildren)),
+	}
+	for _, r := range in.IDs {
+		ref, err := parseRef(r.Box, r.ID)
+		if err != nil {
+			return nil, err
+		}
+		req.Refs = append(req.Refs, &ref)
+	}
+	return req, nil
+}
+
+// parseRef reads the pair a listing handed out. The box is not optional and is
+// never inferred: an id alone names a row in each direction, and the archive
+// spans both.
+func parseRef(box, id string) (ref messaging.MessageRef, err error) {
+	if box != messaging.BoxInbox && box != messaging.BoxOutbox {
+		return ref, fmt.Errorf("box is inbox or outbox, not %v", box)
+	}
+	if ref.ID, err = messaging.ParseMessageID(id); err != nil {
+		return ref, err
+	}
+	ref.Box = astral.String8(box)
+	return ref, nil
+}
+
 // wholes renders what a read decided about each message it answers.
-func wholes(list []readMessage) []messageOut {
+func wholes(list []*messaging.ReadMessage) []messageOut {
 	if len(list) == 0 {
 		return nil
 	}
 
 	out := make([]messageOut, len(list))
 	for i, m := range list {
-		out[i] = whole(m.Row)
+		out[i] = whole(m)
 		if len(m.ChildIDs) > 0 {
 			out[i].ChildIDs = make([]string, len(m.ChildIDs))
 			for j, id := range m.ChildIDs {
 				out[i].ChildIDs[j] = id.String()
 			}
 		}
-		if m.WithoutBody {
-			out[i].Content = ""
-		}
-		out[i].Truncated = m.Truncated
+		out[i].Truncated = bool(m.Truncated)
 	}
 	return out
 }
 
-// whole renders one message with its body.
-func whole(m *mcp.StoredMessage) messageOut {
+// whole renders one message, with its body where the read handed it out.
+func whole(m *messaging.ReadMessage) messageOut {
+	e := m.Envelope
 	out := messageOut{
-		ID:        m.ID.String(),
-		Box:       string(m.Box),
-		Sender:    m.Sender.String(),
-		Recipient: m.Recipient.String(),
-		Content:   string(m.Content),
-		CreatedAt: stampMessageTime(m.CreatedAt),
+		ID:        e.ID.String(),
+		Box:       string(e.Box),
+		Sender:    e.Sender.String(),
+		Recipient: e.Recipient.String(),
+		CreatedAt: stampMessageTime(e.CreatedAt),
 	}
-	if !m.ParentID.IsZero() {
-		out.ParentID = m.ParentID.String()
+	if m.Content != nil {
+		out.Content = string(*m.Content)
+	}
+	if !e.ParentID.IsZero() {
+		out.ParentID = e.ParentID.String()
 	}
 	return out
 }

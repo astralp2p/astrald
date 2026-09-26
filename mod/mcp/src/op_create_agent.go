@@ -16,11 +16,13 @@ type opCreateAgentArgs struct {
 	Out      string
 }
 
-// OpCreateAgent mints a new agent: a fresh identity with a signed relay
-// contract, an alias and an access token the agent uses as its PAT.
+// OpCreateAgent mints a new agent: a messaging participant with a signed relay
+// contract, a signed hosting contract for its mailbox, an alias and an access
+// token the agent uses as its PAT, and the agent row that keeps the token for
+// list_agents.
 //
-// The agent it mints answers nobody until something permits a call to it. The
-// node holds no reachability of its own, so an agent is reachable where a
+// The agent it mints takes mail from nobody until something permits it. The
+// node holds no reachability of its own, so mail reaches an agent where a
 // handler, a contract or an external authority says so.
 func (mod *Module) OpCreateAgent(ctx *astral.Context, q *routing.IncomingQuery, args opCreateAgentArgs) (err error) {
 	if q.Origin() == astral.OriginNetwork {
@@ -36,42 +38,46 @@ func (mod *Module) OpCreateAgent(ctx *astral.Context, q *routing.IncomingQuery, 
 	ch := channel.New(q.AcceptRaw(), channel.WithOutputFormat(args.Out))
 	defer ch.Close()
 
-	agentID, err := mod.createAgentIdentity(ctx)
+	cred, err := mod.Messaging.CreateIdentity(ctx, args.Alias, args.Duration)
 	if err != nil {
 		return ch.Send(astral.Err(err))
 	}
 
-	alias, err := mod.assignAlias(agentID, args.Alias)
-	if err != nil {
+	agent := &mcp.Agent{
+		Identity:  cred.Identity,
+		Alias:     cred.Alias,
+		Token:     cred.Token,
+		ExpiresAt: cred.ExpiresAt,
+	}
+
+	if err = mod.storeAgent(ctx, agent); err != nil {
 		return ch.Send(astral.Err(err))
 	}
 
-	dur := args.Duration
-	if dur == 0 {
-		dur = astral.Duration(mod.config.TokenDuration)
-	}
+	mod.log.Logv(1, "created agent %v (%v)", agent.Alias, agent.Identity)
 
-	token, err := mod.Apphost.CreateAccessToken(agentID, dur)
-	if err != nil {
-		return ch.Send(astral.Err(err))
-	}
+	return ch.Send(agent)
+}
 
-	err = mod.registerAgent(&dbAgent{
-		Identity:  agentID,
-		Alias:     alias,
-		Token:     string(token.Token),
-		ExpiresAt: time.Time(token.ExpiresAt),
+// storeAgent records the agent row, and deletes the participant when it cannot.
+//
+// why the participant goes with a failed row: the row is what list_agents
+// answers a lost token from and what delete_agent finds, so a participant
+// without one holds a credential no mcp op can reach.
+func (mod *Module) storeAgent(ctx *astral.Context, agent *mcp.Agent) error {
+	err := mod.db.CreateAgent(&dbAgent{
+		Identity:  agent.Identity,
+		Alias:     string(agent.Alias),
+		Token:     string(agent.Token),
+		ExpiresAt: time.Time(agent.ExpiresAt),
 	})
-	if err != nil {
-		return ch.Send(astral.Err(err))
+	if err == nil {
+		return nil
 	}
 
-	mod.log.Logv(1, "created agent %v (%v)", alias, agentID)
+	if derr := mod.Messaging.DeleteIdentity(ctx, agent.Identity); derr != nil {
+		mod.log.Error("agent %v: deleting the participant after a failed row: %v", agent.Identity, derr)
+	}
 
-	return ch.Send(&mcp.Agent{
-		Identity:  agentID,
-		Alias:     astral.String8(alias),
-		Token:     token.Token,
-		ExpiresAt: token.ExpiresAt,
-	})
+	return err
 }

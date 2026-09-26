@@ -1,9 +1,15 @@
 # mcp
 
 mcp serves the Model Context Protocol over streamable HTTP, so an AI agent can
-put queries to the astral network and exchange messages with other agents. An
-agent is an identity this node mints and holds a mailbox for; it authenticates
-with its access token as a bearer token, and every tool acts as that identity.
+exchange messages with other agents and call the tools its deployment declares.
+An agent is a [messaging](../../messaging/src/README.md) participant this module
+records as an agent. An agent authenticates with its access token as a bearer
+token, and every tool acts as that identity. The mail tools call mod/messaging
+directly; mod/messaging hosts the mailbox and carries the mail.
+
+An agent is served exactly five built-in tools — `send_message`,
+`list_messages`, `read_messages`, `wait` and `archive` — and the tools the
+deployment declares. No built-in tool puts a query.
 
 ## Configuration
 
@@ -19,38 +25,38 @@ bind_mcp: "tcp:127.0.0.1:8626"
 
 ### Agents
 
-`mcp.create_agent` mints an agent and answers its access token. The token's
-validity comes from the op's `duration` argument, or from:
+`mcp.create_agent` mints the participant through mod/messaging, records the
+agent, and answers its access token. The token's validity comes from the op's
+`duration` argument, or from `token_duration` in `messaging.yaml`.
 
-```yaml
-token_duration: 8760h
-```
+An agent is its participant and its row, and mod/messaging never writes the
+row. `messaging.delete_identity` on an agent's identity withdraws the
+participant and leaves the row. `mcp.agent` and `mcp.list_agents` ask
+mod/messaging whether its hosting index still names each agent they read.
+`mcp.agent` answers `agent not found` for an agent the index does not name,
+and leaves the row, because `SeeNodeStateAction` grants no change to state.
+`mcp.list_agents` leaves such an agent out and drops its row.
+`mcp.delete_agent` reads the row alone, so `mcp.delete_agent` removes the row
+of a withdrawn participant.
 
 ### Queries
 
-`astral-query` and every declared tool are single-shot, bounded by:
+Every declared tool is single-shot, bounded by:
 
 ```yaml
 query_timeout: 15s
 max_response_bytes: 65536
 max_response_objects: 64
-max_payload_bytes: 65536
 ```
 
-`max_payload_bytes` also bounds a message body, on the way out and on the way
-in.
+The mail tools are bounded by mod/messaging: `max_payload_bytes` bounds a
+message body, and `max_read_bytes` the bodies one read answers.
 
 ### Waiting
 
-The `wait` tool parks until something arrives in the agent's inbox. A call that
-names no window is granted `wait_default`; one that asks for more than
-`wait_max` is granted `wait_max`, and every answer names `granted_secs` beside
-`waited_secs`:
-
-```yaml
-wait_default: 2m
-wait_max: 15m
-```
+The `wait` tool parks until something arrives in the agent's inbox. The window
+is granted by mod/messaging from `wait_default` and `wait_max` in
+`messaging.yaml`, and every answer names `granted_secs` beside `waited_secs`.
 
 Both bounds are the deployment's because what caps a held call is the MCP
 client's own request timeout and any proxy in front of it, neither of which the
@@ -78,9 +84,20 @@ tools:
 ```
 
 The query is `astral://<identity-or-alias>:<query>`. A tool may not take the
-name of a built-in — `astral-query`, `send_message`, `list_messages`,
-`read_messages`, `wait`, `archive` — and a duplicate or shadowed name fails the
-load rather than silently repointing a name the agent already knows.
+name of a built-in — `send_message`, `list_messages`, `read_messages`, `wait`,
+`archive` — and a duplicate or shadowed name fails the load rather than
+silently repointing a name the agent already knows.
 
-A declared tool buys the agent no reach it did not have: the query is put as the
-agent, and the target's authority decides.
+A declared tool asks the node no authorization action. Its query names the
+agent as the caller and carries the MCP origin, so the node's own operations
+refuse it. A target on this node reads the agent as the caller.
+
+The query is routed on the node's context, as a delivery is in
+[messaging](../../messaging/src/README.md). A link carries it as a relay query
+naming the agent and the target. The far node admits it only under the agent's
+relay contract, and then reads the agent as the caller. A query routed on a
+context naming the agent would cross the link as a plain query, and the far
+node would answer it with this node's authority.
+
+A tool whose target does not resolve answers `unknown target: <target>`. A
+query that is refused or finds no route answers `query failed: <error>`.

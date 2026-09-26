@@ -64,6 +64,12 @@ func (db *DB) DeleteAccessToken(token string) error {
 	return nil
 }
 
+// DeleteAccessTokens removes every access token row issued for identity,
+// expired rows included. Matching no row is not an error.
+func (db *DB) DeleteAccessTokens(identity *astral.Identity) error {
+	return db.Where("identity = ?", identity).Delete(&dbAccessToken{}).Error
+}
+
 // HoldObject records that appID wants objectID retained.
 // A nil duration creates a permanent hold; a non-nil duration sets an expiry.
 // Duplicate holds are silently ignored (ON CONFLICT DO NOTHING).

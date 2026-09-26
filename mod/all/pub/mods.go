@@ -19,6 +19,7 @@ import (
 	_ "github.com/astralp2p/astrald/mod/kcp"
 	_ "github.com/astralp2p/astrald/mod/log"
 	_ "github.com/astralp2p/astrald/mod/mcp"
+	_ "github.com/astralp2p/astrald/mod/messaging"
 	_ "github.com/astralp2p/astrald/mod/nat"
 	_ "github.com/astralp2p/astrald/mod/nearby"
 	_ "github.com/astralp2p/astrald/mod/nodes"

@@ -1,0 +1,5 @@
+env     = "node"
+start   = "null"
+nodes   = ["nomcp1"]
+drivers = ["script"]
+timeout = 180

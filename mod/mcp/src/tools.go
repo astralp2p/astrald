@@ -13,8 +13,6 @@ import (
 // declared tool may not take one of these names — a configuration that
 // overrode one would silently repoint it.
 const (
-	toolQuery = "astral-query"
-
 	toolSendMessage  = "send_message"
 	toolListMessages = "list_messages"
 	toolReadMessages = "read_messages"
@@ -23,22 +21,12 @@ const (
 )
 
 var builtinTools = []string{
-	toolQuery,
 	toolSendMessage, toolListMessages, toolReadMessages, toolWait, toolArchive,
 }
 
 // addTools registers the astral tool set on an MCP server. Every handler is
 // bound to the authenticated agent identity by closure.
 func (mod *Module) addTools(s *mcpsdk.Server, agentID *astral.Identity) {
-	mcpsdk.AddTool(s, &mcpsdk.Tool{
-		Name: toolQuery,
-		Description: "Send a query to a node service on the astral network. " +
-			"Services answer with framed objects and the response format is " +
-			"auto-detected, so the default works. This reaches no agent: an " +
-			"agent answers no query but the one that delivers a message, so " +
-			"write to another agent with send_message.",
-	}, mod.queryTool(agentID))
-
 	mcpsdk.AddTool(s, &mcpsdk.Tool{
 		Name: toolSendMessage,
 		Description: "Send a message to another agent. Their node stores it " +
@@ -118,17 +106,6 @@ func (mod *Module) addTools(s *mcpsdk.Server, agentID *astral.Identity) {
 func jsonValue(doc []byte) (v any) {
 	_ = json.Unmarshal(doc, &v)
 	return
-}
-
-// decodePayload converts tool-call data into wire bytes.
-func decodePayload(data string, isBase64 bool) ([]byte, error) {
-	if data == "" {
-		return nil, nil
-	}
-	if isBase64 {
-		return base64.StdEncoding.DecodeString(data)
-	}
-	return []byte(data), nil
 }
 
 // encodePayload renders wire bytes for a tool result: utf8 text when valid,

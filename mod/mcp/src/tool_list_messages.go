@@ -2,9 +2,11 @@ package mcp
 
 import (
 	"context"
+	"fmt"
+	"strconv"
 	"time"
 
-	"github.com/astralp2p/astral-go/api/mcp"
+	"github.com/astralp2p/astral-go/api/messaging"
 	"github.com/astralp2p/astral-go/astral"
 	mcpsdk "github.com/modelcontextprotocol/go-sdk/mcp"
 )
@@ -47,11 +49,16 @@ type listMessagesOut struct {
 
 func (mod *Module) listMessagesTool(agentID *astral.Identity) mcpsdk.ToolHandlerFor[listMessagesIn, listMessagesOut] {
 	return func(ctx context.Context, _ *mcpsdk.CallToolRequest, in listMessagesIn) (res *mcpsdk.CallToolResult, out listMessagesOut, err error) {
-		rows, err := mod.listMessages(agentID, listRequest{
+		since, err := parseSince(in.Since)
+		if err != nil {
+			return nil, out, err
+		}
+
+		rows, err := mod.Messaging.ListMessages(ctx, agentID, messaging.ListMessagesRequest{
 			List:           in.List,
 			From:           in.From,
 			To:             in.To,
-			Since:          in.Since,
+			Since:          since,
 			UnreadOnly:     in.UnreadOnly,
 			AwaitingPickup: in.AwaitingPickup,
 		})
@@ -65,17 +72,47 @@ func (mod *Module) listMessagesTool(agentID *astral.Identity) mcpsdk.ToolHandler
 		// answered: the field says pass it back, and an absent value asks the
 		// caller to remember what it sent. Repeating it makes the instruction
 		// followable with no memory.
-		out.NextSince = nextSince(rows)
-		if out.NextSince == "" {
-			out.NextSince = in.Since
-		}
+		out.NextSince = answerSince(messaging.NextSince(rows, since), in.Since)
 
 		return nil, out, nil
 	}
 }
 
+// answerSince renders the cursor an answer hands back. A caller that sent a
+// cursor is handed one, zero included. A caller that sent none is handed one
+// only once a row carried one.
+func answerSince(next uint64, sent string) string {
+	if sent == "" {
+		return formatSince(next)
+	}
+	return strconv.FormatUint(next, 10)
+}
+
+// parseSince reads a cursor a previous answer handed out. It is opaque: only
+// its order means anything, and a caller that invents one gets a refusal rather
+// than a silently wrong page. The empty string is no cursor.
+func parseSince(v string) (uint64, error) {
+	if v == "" {
+		return 0, nil
+	}
+	n, err := strconv.ParseInt(v, 10, 64)
+	if err != nil || n < 0 {
+		return 0, fmt.Errorf("since is a cursor a previous answer gave you, not %q", v)
+	}
+	return uint64(n), nil
+}
+
+// formatSince renders a cursor for an answer. Zero is no cursor, and the field
+// is omitted.
+func formatSince(v uint64) string {
+	if v == 0 {
+		return ""
+	}
+	return strconv.FormatUint(v, 10)
+}
+
 // entries renders a listing, for list_messages and wait alike.
-func entries(list []*mcp.StoredMessage) []messageEntry {
+func entries(list []*messaging.Envelope) []messageEntry {
 	out := make([]messageEntry, len(list))
 	for i, m := range list {
 		out[i] = entry(m)
@@ -85,9 +122,9 @@ func entries(list []*mcp.StoredMessage) []messageEntry {
 
 // entry renders one row for a listing. The peer is whichever party the owner is
 // not, so one field answers "who" in both directions.
-func entry(m *mcp.StoredMessage) messageEntry {
+func entry(m *messaging.Envelope) messageEntry {
 	peer := m.Sender
-	if m.Box == mcp.BoxOutbox {
+	if m.Box == messaging.BoxOutbox {
 		peer = m.Recipient
 	}
 
@@ -102,7 +139,7 @@ func entry(m *mcp.StoredMessage) messageEntry {
 		e.ParentID = m.ParentID.String()
 	}
 
-	if m.Box == mcp.BoxInbox {
+	if m.Box == messaging.BoxInbox {
 		e.Read = m.ReadAt != nil
 		return e
 	}

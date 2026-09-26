@@ -70,7 +70,7 @@ func TestSeeNodeStateAnswersHolder(t *testing.T) {
 	}
 
 	authority := &recordingAuth{verdict: true}
-	mod := &Module{Deps: Deps{Auth: authority, Dir: &seeNodeStateDir{id: agentID}}, db: db}
+	mod := &Module{Deps: Deps{Auth: authority, Dir: &seeNodeStateDir{id: agentID}, Messaging: &fakeMessaging{}}, db: db}
 	w := newRecordingWriter()
 
 	if err := route(t, mod.OpAgent, astral.GenerateIdentity(), "mcp.agent?identity=scout", w); err != nil {

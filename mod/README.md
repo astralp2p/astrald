@@ -12,6 +12,7 @@ They should only be used for extending low-level functionality of the node.
 | [apphost](apphost/src/README.md) | provides an interface for apps to interact with the node |
 | [fwd](fwd/src/README.md)         | cross-network forwarding                                 |
 | [mcp](mcp/src/README.md)         | serves MCP to AI agents on the astral network             |
+| [messaging](messaging/src/README.md) | hosts participant mailboxes and carries mail between them |
 | gateway                          | adds gateway functionality to the node                   |
 | presence                         | discover other nodes in local networks                   |
 | profile                          | allows nodes to exchange their profiles                  |

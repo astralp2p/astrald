@@ -91,6 +91,15 @@ unlisted = "<reason>"       # set only when no suite may list this test
 `unlisted` is the exception, and it is checked: a test is listed in a suite or
 carries this key, never neither and never both.
 
+A roster name is one daemon for the whole run, shared by every test that names
+it, so a node's config follows its name. Every node serves MCP except the ones
+`lib/nodeconfig.py` lists in `WITHOUT_MCP`: `nomcp1` is the node
+`messaging-ops` runs on. A node that serves MCP declares the tools
+`NODE_OP_TOOLS` lists, each pointed at one of its own operations, and
+`mcp-origin` calls them as an agent. It also declares the tools `PEER_TOOLS`
+lists, each pointed at the alias `PEER_ALIAS`, and `mcp-peer` points that alias
+at node2 and calls them as an agent on node1.
+
 `env` is a minimum, not a prison: drivers and oracles read `session.json`
 and never learn whether the endpoints behind it are processes on loopback
 or VMs behind a tunnel.
@@ -139,6 +148,8 @@ Every story of the catalog, in the cheapest env that can falsify it:
 | 0009 | `expel-node` | node | `two-nodes` → `two-nodes-expel` |
 | — | `smoke` | node | `null` → — |
 | — | `mcp-origin` | node | `null` → — |
+| — | `messaging-ops` | node | `null` → — |
+| — | `mcp-peer` | node | `two-nodes` → — |
 | — | `claim-window` | node | `null` → — |
 | — | `fs-watch` | node | `one-node` → — |
 | — | `registration-lease` | node | `one-node` → — |
@@ -146,6 +157,7 @@ Every story of the catalog, in the cheapest env that can falsify it:
 | — | `apphost-origin` | node | `two-nodes` → — |
 | — | `sign-contract-guard` | node | `two-nodes` → — |
 | — | `blueprints-two-node` | node | `two-nodes` → — |
+| — | `messaging-two-node` | node | `two-nodes` → — |
 | — | `hold-purge` | node | `two-nodes` → — (unlisted, mutates) |
 | — | `gateway-relay` | netsim | `two-nodes` → — (unlisted, mutates) |
 

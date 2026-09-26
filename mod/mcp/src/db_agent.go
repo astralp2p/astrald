@@ -10,8 +10,8 @@ import (
 type dbAgent struct {
 	Identity *astral.Identity `gorm:"uniqueIndex"`
 	Alias    string
-	// note: the issued token is stored so delete_agent can revoke it —
-	// apphost deletes access tokens by token string, not identity.
+	// note: the issued token is stored so list_agents can answer a lost one —
+	// delete_agent revokes every token of the identity through messaging.
 	Token     string `gorm:"uniqueIndex"`
 	ExpiresAt time.Time
 	CreatedAt time.Time

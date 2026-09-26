@@ -3,7 +3,7 @@ package mcp
 import (
 	"context"
 
-	"github.com/astralp2p/astral-go/api/mcp"
+	"github.com/astralp2p/astral-go/api/messaging"
 	"github.com/astralp2p/astral-go/astral"
 	mcpsdk "github.com/modelcontextprotocol/go-sdk/mcp"
 )
@@ -20,14 +20,18 @@ type sendMessageOut struct {
 
 func (mod *Module) sendMessageTool(agentID *astral.Identity) mcpsdk.ToolHandlerFor[sendMessageIn, sendMessageOut] {
 	return func(ctx context.Context, _ *mcpsdk.CallToolRequest, in sendMessageIn) (res *mcpsdk.CallToolResult, out sendMessageOut, err error) {
-		var parent mcp.MessageID
+		var parent messaging.MessageID
 		if in.ParentID != "" {
-			if parent, err = mcp.ParseMessageID(in.ParentID); err != nil {
+			if parent, err = messaging.ParseMessageID(in.ParentID); err != nil {
 				return nil, out, err
 			}
 		}
 
-		id, err := mod.sendMessage(agentID, in.To, in.Content, parent)
+		id, err := mod.Messaging.SendMessage(ctx, agentID, &messaging.SendMessageRequest{
+			To:       astral.String8(in.To),
+			Content:  astral.String32(in.Content),
+			ParentID: parent,
+		})
 		if err != nil {
 			return nil, out, err
 		}

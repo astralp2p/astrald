@@ -12,8 +12,12 @@ type opDeleteAgentArgs struct {
 	Out      string
 }
 
-// OpDeleteAgent removes an agent: revokes its token and its grants, unsets its
-// alias and deletes its record. Identity takes an identity or an alias.
+// OpDeleteAgent removes an agent: deletes its messaging participant — every
+// token and grant, its alias and its mail — and its record. Identity takes an
+// identity or an alias.
+//
+// why the row is read without asking mod/messaging, as findAgent does: a row
+// whose participant messaging.delete_identity withdrew is one this op removes.
 func (mod *Module) OpDeleteAgent(ctx *astral.Context, q *routing.IncomingQuery, args opDeleteAgentArgs) error {
 	if q.Origin() == astral.OriginNetwork {
 		return q.Reject()
@@ -38,7 +42,7 @@ func (mod *Module) OpDeleteAgent(ctx *astral.Context, q *routing.IncomingQuery, 
 		return ch.Send(astral.NewError("agent not found"))
 	}
 
-	if err = mod.deleteAgent(row); err != nil {
+	if err = mod.deleteAgent(ctx, row); err != nil {
 		return ch.Send(astral.Err(err))
 	}
 

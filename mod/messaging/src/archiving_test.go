@@ -1,0 +1,110 @@
+package messaging
+
+import (
+	"context"
+	"testing"
+	"time"
+
+	"github.com/astralp2p/astral-go/api/messaging"
+	"github.com/astralp2p/astral-go/astral"
+)
+
+// An archived message never reappears from wait — one of the Done clauses — and
+// leaves both listings while answering under list: archive.
+func TestArchivedMessagesLeaveTheListingsAndTheWait(t *testing.T) {
+	mod := testMessagingModule(t)
+	a, b := astral.GenerateIdentity(), astral.GenerateIdentity()
+	id := messaging.NewMessageID()
+	mustInsertInbox(t, mod, &messaging.StoredMessage{ID: id, Sender: a, Recipient: b, Content: "x"})
+
+	n, err := mod.db.Archive(b, messaging.BoxInbox, id)
+	if err != nil || n != 1 {
+		t.Fatalf("archive: n=%v err=%v", n, err)
+	}
+	if n, _ := mod.db.Archive(b, messaging.BoxInbox, id); n != 0 {
+		t.Fatal("archiving twice must report the second call changed nothing")
+	}
+
+	live, err := mod.listMessages(b, messaging.ListMessagesRequest{List: messaging.ListInbox})
+	if err != nil || len(live) != 0 {
+		t.Fatalf("inbox after archiving: %v rows, err %v", len(live), err)
+	}
+
+	away, err := mod.listMessages(b, messaging.ListMessagesRequest{List: messaging.ListArchive})
+	if err != nil || len(away) != 1 {
+		t.Fatalf("archive: %v rows, err %v", len(away), err)
+	}
+
+	ans, err := mod.waitMessages(context.Background(), b, waitRequest{Timeout: time.Millisecond})
+	if err != nil {
+		t.Fatalf("wait: %v", err)
+	}
+	if len(ans.Rows) != 0 {
+		t.Fatal("wait answered a message that was put away")
+	}
+
+	if n, _ := mod.db.Unarchive(b, messaging.BoxInbox, id); n != 1 {
+		t.Fatal("unarchive must put it back")
+	}
+	live, _ = mod.listMessages(b, messaging.ListMessagesRequest{List: messaging.ListInbox})
+	if len(live) != 1 {
+		t.Fatal("an unarchived message must return to the inbox")
+	}
+}
+
+// Archiving is scoped like every other write: an id another participant holds
+// is not this participant's to put away.
+func TestArchiveIsScopedToItsOwner(t *testing.T) {
+	mod := testMessagingModule(t)
+	a, b := astral.GenerateIdentity(), astral.GenerateIdentity()
+	id := messaging.NewMessageID()
+	mustInsertInbox(t, mod, &messaging.StoredMessage{ID: id, Sender: a, Recipient: b, Content: "x"})
+
+	if n, _ := mod.db.Archive(a, messaging.BoxInbox, id); n != 0 {
+		t.Fatal("a participant archived a message it does not own")
+	}
+}
+
+// The three lists, and the filters that belong to each.
+
+// undo runs through the same call, so what the answer reports is whether this
+// call moved the message — not whether it ended up archived, which under undo
+// would name the opposite of what happened.
+func TestArchiveReportsWhetherThisCallMovedIt(t *testing.T) {
+	mod := testMessagingModule(t)
+	a, b := hostedParticipant(t, mod), hostedParticipant(t, mod)
+	id := messaging.NewMessageID()
+	mustInsertInbox(t, mod, &messaging.StoredMessage{ID: id, Sender: b, Recipient: a, Content: "x"})
+	ref := messaging.MessageRef{Box: messaging.BoxInbox, ID: id}
+
+	call := func(undo bool) bool {
+		t.Helper()
+		changed, err := mod.Archive(context.Background(), a, ref, undo)
+		if err != nil {
+			t.Fatalf("archive(undo=%v): %v", undo, err)
+		}
+		return changed
+	}
+
+	if !call(false) {
+		t.Fatal("the first archive must report that it moved the message")
+	}
+	if call(false) {
+		t.Fatal("archiving what is already away must not report a move")
+	}
+	if !call(true) {
+		t.Fatal("undo must report that it moved the message back")
+	}
+	if call(true) {
+		t.Fatal("undoing what is already back must not report a move")
+	}
+
+	// an id the participant does not hold answers the same false, and says
+	// nothing about whether it exists elsewhere
+	changed, err := mod.Archive(context.Background(), b, ref, false)
+	if err != nil || changed {
+		t.Fatalf("a participant moved a message it does not hold: changed=%v err=%v", changed, err)
+	}
+}
+
+// One answer has a size, and the caller does not choose it.

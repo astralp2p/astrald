@@ -12,7 +12,8 @@ type opListAgentsArgs struct {
 }
 
 // OpListAgents streams the registered agents, tokens included, so an operator
-// can recover a lost PAT.
+// can recover a lost PAT. An agent whose participant mod/messaging no longer
+// names is left out, and its row is dropped — see dropWithdrawn.
 //
 // why the caller is authorized as well as the origin refused: the origin refusal
 // reads what the query carries, and an origin is stamped on two paths only —

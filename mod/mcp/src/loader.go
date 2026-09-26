@@ -40,14 +40,6 @@ func (Loader) Load(node astral.Node, assets assets.Assets, log *log.Logger) (cor
 		return nil, err
 	}
 
-	rows, err := mod.db.ListAgents()
-	if err != nil {
-		return nil, err
-	}
-	for _, r := range rows {
-		_ = mod.agentIDs.Add(r.Identity.String())
-	}
-
 	return mod, nil
 }
 

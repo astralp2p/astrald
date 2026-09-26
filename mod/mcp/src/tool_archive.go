@@ -28,7 +28,7 @@ func (mod *Module) archiveTool(agentID *astral.Identity) mcpsdk.ToolHandlerFor[a
 			return nil, out, err
 		}
 
-		out.Changed, err = mod.archiveMessage(agentID, ref, in.Undo)
+		out.Changed, err = mod.Messaging.Archive(ctx, agentID, ref, in.Undo)
 		if err != nil {
 			return nil, out, err
 		}

@@ -63,7 +63,7 @@ func TestAdminManageAppsRefusesCallerWithoutPermits(t *testing.T) {
 // TestAdminManageAppsListsAgentsToAuthorizedCaller: the check refuses only what
 // the authority refuses. An authorized caller receives the stream.
 func TestAdminManageAppsListsAgentsToAuthorizedCaller(t *testing.T) {
-	mod := testMessageModule(t)
+	mod, _ := testAgentModule(t)
 	authority := &recordingAuth{verdict: true}
 	mod.Auth = authority
 	caller := astral.GenerateIdentity()
@@ -95,7 +95,7 @@ func TestAdminManageAppsListsAgentsToAuthorizedCaller(t *testing.T) {
 func TestAdminManageAppsKeepsNetworkRefusal(t *testing.T) {
 	for _, op := range adminManageAppsOps() {
 		t.Run(op.name, func(t *testing.T) {
-			mod := testMessageModule(t)
+			mod, _ := testAgentModule(t)
 			mod.Auth = &recordingAuth{verdict: true}
 			w := newRecordingWriter()
 
