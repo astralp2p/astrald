@@ -36,23 +36,16 @@ type Module struct {
 	mailboxes sig.Map[string, mailbox]
 
 	// mu orders each write to messaging__mailboxes with its mirror in
-	// mailboxes, so a provisioning run and a deletion cannot leave the mirror
-	// naming a row the table no longer holds. A mail row is inserted under the
-	// read lock — see whileIndexed.
+	// mailboxes, so a creation and a deletion cannot leave the mirror naming a
+	// row the table no longer holds. A mail row is inserted under the read
+	// lock — see whileIndexed.
 	mu sync.RWMutex
 
 	// waiters are the parked waits, woken when a row enters their set.
 	waiters waiters
 }
 
-// Run provisions the mailboxes the legacy upgrade left pending, then serves
-// until the node stops.
-//
-// why here and not at Load: provisioning signs and indexes a contract, and a
-// module reaches no other module during Load.
 func (mod *Module) Run(ctx *astral.Context) error {
-	mod.provisionPending(ctx)
-
 	<-ctx.Done()
 	return nil
 }

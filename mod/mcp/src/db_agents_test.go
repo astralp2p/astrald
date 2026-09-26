@@ -2,6 +2,7 @@ package mcp
 
 import (
 	"errors"
+	"reflect"
 	"testing"
 	"time"
 
@@ -40,5 +41,21 @@ func TestDBAgentRoundTrip(t *testing.T) {
 
 	if list, err = db.ListAgents(); err != nil || len(list) != 0 {
 		t.Fatalf("list after delete: %v, %v rows, want none", err, len(list))
+	}
+}
+
+// The mcp migration creates the agent table and nothing else: the mail is
+// mod/messaging's, and so are its tables.
+func TestMigrateCreatesNoMailTable(t *testing.T) {
+	db := testDB(t)
+
+	var tables []string
+	err := db.Raw(`SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' ORDER BY name`).
+		Scan(&tables).Error
+	if err != nil {
+		t.Fatalf("tables: %v", err)
+	}
+	if !reflect.DeepEqual(tables, []string{"mcp__agents"}) {
+		t.Fatalf("tables %v, want only mcp__agents", tables)
 	}
 }

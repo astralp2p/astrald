@@ -8,13 +8,14 @@ import (
 )
 
 // dbMailbox is one row of the hosting index: an identity whose mailbox this
-// node was provisioned to host, and the hosting contract it holds for it. A nil
-// ContractID is a pending row, and ExpiresAt is nil exactly when ContractID is.
-// The alias is the directory's and the tokens are apphost's.
+// node was provisioned to host, the hosting contract it holds for it and that
+// contract's expiry. The alias is the directory's and the tokens are apphost's.
 type dbMailbox struct {
-	Identity   *astral.Identity
+	Identity *astral.Identity
+	// why a pointer: a nil contract is written as NULL, which the NOT NULL
+	// column refuses, where a zero ObjectID would be written as an id.
 	ContractID *astral.ObjectID
-	ExpiresAt  *time.Time
+	ExpiresAt  time.Time
 	CreatedAt  time.Time `gorm:"autoCreateTime:false;not null"`
 }
 
@@ -25,11 +26,10 @@ func (dbMailbox) TableName() string {
 // CreateMailbox inserts the index row for a mailbox provisioned under the
 // hosting contract contractID, and stamps its creation time.
 func (db *DB) CreateMailbox(identity *astral.Identity, contractID *astral.ObjectID, expiresAt time.Time) error {
-	expiresAt = expiresAt.UTC()
 	return db.Create(&dbMailbox{
 		Identity:   identity,
 		ContractID: contractID,
-		ExpiresAt:  &expiresAt,
+		ExpiresAt:  expiresAt.UTC(),
 		CreatedAt:  time.Now().UTC(),
 	}).Error
 }
@@ -41,24 +41,6 @@ func (db *DB) FindMailbox(identity *astral.Identity) (row *dbMailbox, err error)
 
 func (db *DB) ListMailboxes() (list []dbMailbox, _ error) {
 	return list, db.Find(&list).Error
-}
-
-// ListPendingMailboxes answers the rows that name no hosting contract yet.
-func (db *DB) ListPendingMailboxes() (list []dbMailbox, _ error) {
-	return list, db.Where("contract_id IS NULL").Find(&list).Error
-}
-
-// SetMailboxContract records the hosting contract a pending row was provisioned
-// under, and answers how many rows it changed: 0 when the row is gone or no
-// longer pending.
-//
-// why only a pending row: a row that names a contract keeps it, so a second
-// provisioning run changes nothing.
-func (db *DB) SetMailboxContract(identity *astral.Identity, contractID *astral.ObjectID, expiresAt time.Time) (int64, error) {
-	res := db.Model(&dbMailbox{}).
-		Where("identity = ? AND contract_id IS NULL", identity).
-		Updates(map[string]any{"contract_id": contractID, "expires_at": expiresAt.UTC()})
-	return res.RowsAffected, res.Error
 }
 
 // DeleteMailbox removes the index row and every message the identity owns.

@@ -1,7 +1,6 @@
 package messaging
 
 import (
-	"errors"
 	"time"
 
 	"github.com/astralp2p/astral-go/api/auth"
@@ -30,9 +29,8 @@ import (
 // note: auth walks every active hosting contract naming this node, so one check
 // costs more the more mailboxes this node hosts.
 //
-// note: only contracts this node provisioned are indexed, by create_identity
-// and the legacy upgrade. A hosting contract auth indexed from elsewhere is not
-// served until a provisioning path records it.
+// note: only contracts this node provisioned are indexed, by create_identity.
+// A hosting contract auth indexed from elsewhere is not served.
 func (mod *Module) hosts(identity *astral.Identity) bool {
 	if identity.IsZero() || identity.IsEqual(mod.node.Identity()) {
 		return false
@@ -88,47 +86,5 @@ func (mod *Module) signHosting(ctx *astral.Context, identity *astral.Identity) (
 		return mailbox{}, err
 	}
 
-	expiresAt := signed.ExpiresAt.Time()
-
-	return mailbox{ContractID: contractID, ExpiresAt: &expiresAt}, nil
-}
-
-// provisionPending provisions a hosting contract for every mailbox the legacy
-// upgrade left pending, and records it. A row that cannot be provisioned — the
-// node holds no key for it, or signing, indexing or storing fails — is logged
-// and stays pending and unserved. A row deleted or provisioned while its
-// contract was signed is logged as skipped.
-//
-// why a failure is logged and not returned: one mailbox that cannot be
-// provisioned must not keep the others unserved, and Run has no caller to
-// answer.
-func (mod *Module) provisionPending(ctx *astral.Context) {
-	rows, err := mod.db.ListPendingMailboxes()
-	if err != nil {
-		mod.log.Error("listing pending mailboxes: %v", err)
-		return
-	}
-
-	for _, row := range rows {
-		err = mod.provisionMailbox(ctx, row.Identity)
-		switch {
-		case errors.Is(err, errNotPending):
-			mod.log.Logv(1, "skipped hosting of mailbox %v: deleted or provisioned meanwhile", row.Identity)
-		case err != nil:
-			mod.log.Error("mailbox %v stays pending and unserved: %v", row.Identity, err)
-		default:
-			mod.log.Logv(1, "provisioned hosting of mailbox %v", row.Identity)
-		}
-	}
-}
-
-// provisionMailbox provisions the hosting contract of one pending mailbox and
-// records it on the row.
-func (mod *Module) provisionMailbox(ctx *astral.Context, identity *astral.Identity) error {
-	entry, err := mod.signHosting(ctx, identity)
-	if err != nil {
-		return err
-	}
-
-	return mod.recordHosting(identity, entry)
+	return mailbox{ContractID: contractID, ExpiresAt: signed.ExpiresAt.Time()}, nil
 }

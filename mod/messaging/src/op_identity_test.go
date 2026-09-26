@@ -13,8 +13,7 @@ import (
 
 // messaging.create_identity mints a participant whose mailbox this node hosts
 // from the moment it answers: a hosting contract the identity signed is
-// indexed, and a message sent to its alias lands in the inbox it lists — on a
-// store that holds no mcp table at all.
+// indexed, and a message sent to its alias lands in the inbox it lists.
 func TestTheCreateIdentityOpMintsAServedMailbox(t *testing.T) {
 	mod, _, _ := testIdentityModule(t)
 	peer := hostedParticipant(t, mod)
@@ -23,9 +22,6 @@ func TestTheCreateIdentityOpMintsAServedMailbox(t *testing.T) {
 	q := localQuery(astral.GenerateIdentity(), messaging.MethodCreateIdentity+"?alias=scout&duration=1h")
 	cred := onlyAnswer[*messaging.IdentityCredential](t, collectOp(t, mod.OpCreateIdentity, q))
 
-	if mcp, _ := hasTable(mod.db.DB, legacyAgents); mcp {
-		t.Fatal("the store holds an mcp agent table; the mailbox must be served without one")
-	}
 	if n := len(hostingContracts(t, mod, cred.Identity)); n != 1 {
 		t.Fatalf("%v hosting contracts indexed for the new identity, want 1", n)
 	}

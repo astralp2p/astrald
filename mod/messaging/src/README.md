@@ -37,7 +37,7 @@ tools call the `messaging.Module` methods under the bearer's identity.
   allow when `MailboxID` is nonzero and equals the actor. The rule is not
   node-local, so auth's chain walk reaches it through `U`'s contract.
 * `messaging__mailboxes` is the hosting index: `identity`, `contract_id`,
-  `expires_at` and `created_at`. A row with no `contract_id` is pending.
+  `expires_at` and `created_at`. Every column is required.
 * The index is mirrored into memory at load.
 * This node hosts `U` while the index names an unexpired contract for `U` and
   auth authorizes `HostMailboxAction{Actor: N, MailboxID: U}`. The node
@@ -48,7 +48,7 @@ tools call the `messaging.Module` methods under the bearer's identity.
 * The index authorizes nothing by itself. A contract that no longer authorizes
   stops routing and the mail operations, and the row and the stored mail stay.
 * Only contracts this node provisioned are indexed. A hosting contract auth
-  indexed from elsewhere is not served until a provisioning path records it.
+  indexed from elsewhere is not served.
 * Nothing renews a hosting contract.
 
 ## Delivery
@@ -140,14 +140,6 @@ tools call the `messaging.Module` methods under the bearer's identity.
   owner is the recipient of an inbox row and the sender of an outbox row.
 * `seq` is the cursor the inbox listing and `wait` page by. The outbox and the
   archive are histories, read newest first, and refuse a nonzero `since`.
-* On a node that ran mod/mcp's mail, the migration renames `mcp__messages` to
-  `messaging__messages` with every row and the `seq` high-water mark, and
-  replaces its indexes.
-* The migration that creates `messaging__mailboxes` imports every `mcp__agents`
-  identity as a pending row.
-* Run provisions a hosting contract for every pending row whose key this node
-  holds. A row that cannot be provisioned is logged and stays pending and
-  unserved.
 
 ## Configuration
 

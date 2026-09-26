@@ -1,6 +1,7 @@
 package messaging
 
 import (
+	"reflect"
 	"strings"
 	"testing"
 	"unicode/utf8"
@@ -87,6 +88,56 @@ func TestSchemaCarriesWhatTheDDLDeclares(t *testing.T) {
 		}
 		if g != w {
 			t.Fatalf("index %v: unique/partial %v, want %v", name, g, w)
+		}
+	}
+}
+
+// A fresh store gets the module's two tables and nothing else, and a second
+// migration changes no schema object.
+func TestMigrateCreatesOnlyTheModuleTablesAndRepeats(t *testing.T) {
+	db := testDB(t)
+	before := schemaOf(t, db)
+
+	var tables []string
+	err := db.Raw(`SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' ORDER BY name`).
+		Scan(&tables).Error
+	if err != nil {
+		t.Fatalf("tables: %v", err)
+	}
+	if !reflect.DeepEqual(tables, []string{tableMailboxes, tableMessages}) {
+		t.Fatalf("tables %v, want only %v and %v", tables, tableMailboxes, tableMessages)
+	}
+
+	if err = db.Migrate(); err != nil {
+		t.Fatalf("a second migration: %v", err)
+	}
+	if after := schemaOf(t, db); !reflect.DeepEqual(before, after) {
+		t.Fatalf("a second migration changed the schema:\nbefore %v\nafter  %v", before, after)
+	}
+}
+
+// schemaOf answers every schema object the store holds, with its statement.
+func schemaOf(t *testing.T, db *DB) []map[string]any {
+	t.Helper()
+
+	var rows []map[string]any
+	if err := db.Raw(`SELECT type, name, sql FROM sqlite_master ORDER BY type, name`).Scan(&rows).Error; err != nil {
+		t.Fatalf("schema: %v", err)
+	}
+	return rows
+}
+
+// An index row names its hosting contract and that contract's expiry. The
+// table refuses a row without either.
+func TestAMailboxRowNamesItsContractAndExpiry(t *testing.T) {
+	db := testDB(t)
+
+	for column, stmt := range map[string]string{
+		"contract_id": `INSERT INTO messaging__mailboxes (identity, expires_at, created_at) VALUES (?, '2036-01-01', '2026-01-01')`,
+		"expires_at":  `INSERT INTO messaging__mailboxes (identity, contract_id, created_at) VALUES (?, 'c', '2026-01-01')`,
+	} {
+		if err := db.Exec(stmt, astral.GenerateIdentity()).Error; err == nil {
+			t.Fatalf("a mailbox row without %v was stored", column)
 		}
 	}
 }

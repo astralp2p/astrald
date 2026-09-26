@@ -9,17 +9,15 @@ import (
 	"gorm.io/gorm"
 )
 
-// mailbox is the in-memory copy of one row of the hosting index. A nil
-// ContractID is a pending row.
+// mailbox is the in-memory copy of one row of the hosting index.
 type mailbox struct {
 	ContractID *astral.ObjectID
-	ExpiresAt  *time.Time
+	ExpiresAt  time.Time
 }
 
-// validAt answers whether the row names a hosting contract that has not expired
-// at now. A pending row names none.
+// validAt answers whether the row's hosting contract has not expired at now.
 func (m mailbox) validAt(now time.Time) bool {
-	return m.ContractID != nil && m.ExpiresAt != nil && now.Before(*m.ExpiresAt)
+	return now.Before(m.ExpiresAt)
 }
 
 // loadMailboxes mirrors the hosting index into memory. It reads this module's
@@ -49,32 +47,8 @@ func (mod *Module) recordMailbox(identity *astral.Identity, entry mailbox) error
 	mod.mu.Lock()
 	defer mod.mu.Unlock()
 
-	if err := mod.db.CreateMailbox(identity, entry.ContractID, *entry.ExpiresAt); err != nil {
+	if err := mod.db.CreateMailbox(identity, entry.ContractID, entry.ExpiresAt); err != nil {
 		return err
-	}
-
-	mod.mailboxes.Replace(identity.String(), entry)
-
-	return nil
-}
-
-// errNotPending is what recordHosting answers for a row deleted or provisioned
-// in the meantime: it recorded nothing.
-var errNotPending = errors.New("the mailbox is no longer pending")
-
-// recordHosting records the contract a pending row was provisioned under and
-// mirrors it. A row deleted or provisioned in the meantime is left as it is,
-// and answers errNotPending.
-func (mod *Module) recordHosting(identity *astral.Identity, entry mailbox) error {
-	mod.mu.Lock()
-	defer mod.mu.Unlock()
-
-	n, err := mod.db.SetMailboxContract(identity, entry.ContractID, *entry.ExpiresAt)
-	if err != nil {
-		return err
-	}
-	if n == 0 {
-		return errNotPending
 	}
 
 	mod.mailboxes.Replace(identity.String(), entry)

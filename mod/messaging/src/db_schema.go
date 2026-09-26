@@ -8,23 +8,17 @@ const (
 )
 
 // ddlMailboxes is the hosting index: one row per identity whose mailbox this
-// node was provisioned to host, naming the hosting contract it holds. A row
-// with no contract is pending: the legacy upgrade imported it and Run has not
-// provisioned it yet.
+// node was provisioned to host, naming the hosting contract it holds and that
+// contract's expiry.
 //
 // why the index authorizes nothing: it is derived from the contracts and only
 // narrows routing. Every decision also asks auth — see Module.hosts.
-//
-// why the CHECK: a contract without its expiry, or an expiry without its
-// contract, is a row no provisioning path writes.
 var ddlMailboxes = []string{
 	`CREATE TABLE IF NOT EXISTS messaging__mailboxes (
   identity    text NOT NULL,
-  contract_id text,
-  expires_at  datetime,
-  created_at  datetime NOT NULL,
-
-  CHECK ((contract_id IS NULL) = (expires_at IS NULL))
+  contract_id text NOT NULL,
+  expires_at  datetime NOT NULL,
+  created_at  datetime NOT NULL
 )`,
 	`CREATE UNIQUE INDEX IF NOT EXISTS ux_messaging__mailboxes ON messaging__mailboxes (identity)`,
 }
@@ -98,31 +92,3 @@ var ddlIndexes = []string{
 	`CREATE INDEX IF NOT EXISTS ix_messaging__messages_unread ON messaging__messages (owner, box, archived_at, seq) WHERE read_at IS NULL`,
 	`CREATE INDEX IF NOT EXISTS ix_messaging__messages_pickup ON messaging__messages (owner, box, archived_at, seq) WHERE landed_at IS NOT NULL AND fetched_at IS NULL`,
 }
-
-// The tables mod/mcp kept mail and agents in before this module existed, and
-// what carries a node's rows over from them — see Migrate.
-const (
-	legacyMessages = "mcp__messages"
-	legacyAgents   = "mcp__agents"
-)
-
-const renameLegacyMessages = `ALTER TABLE mcp__messages RENAME TO messaging__messages`
-
-// dropLegacyIndexes removes the indexes a rename carries over under their old
-// names, so the current ones are not built twice beside them.
-var dropLegacyIndexes = []string{
-	`DROP INDEX IF EXISTS ux_mcp__messages`,
-	`DROP INDEX IF EXISTS ix_mcp__messages_box`,
-	`DROP INDEX IF EXISTS ix_mcp__messages_parent`,
-	`DROP INDEX IF EXISTS ix_mcp__messages_archive`,
-	`DROP INDEX IF EXISTS ix_mcp__messages_unread`,
-	`DROP INDEX IF EXISTS ix_mcp__messages_pickup`,
-}
-
-// copyLegacyAgents imports every agent identity mod/mcp holds as a pending
-// mailbox, with no hosting contract yet. Its one argument stands in for a
-// creation instant the row does not carry.
-const copyLegacyAgents = `
-INSERT OR IGNORE INTO messaging__mailboxes (identity, created_at)
-SELECT identity, COALESCE(created_at, ?) FROM mcp__agents
-WHERE identity IS NOT NULL`

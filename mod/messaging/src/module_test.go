@@ -28,17 +28,11 @@ func testLogger() *log.Logger {
 // registered; every other question is answered yes.
 func testMessagingModule(t *testing.T) *Module {
 	t.Helper()
-	return testModuleOver(t, testDB(t))
-}
-
-// testModuleOver is testMessagingModule over a store the test prepared.
-func testModuleOver(t *testing.T, db *DB) *Module {
-	t.Helper()
 
 	keys := newKeyring()
 
 	mod := &Module{
-		db:     db,
+		db:     testDB(t),
 		config: defaultConfig,
 		log:    testLogger(),
 	}

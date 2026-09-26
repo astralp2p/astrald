@@ -68,7 +68,7 @@ func entryNaming(t *testing.T, sc *auth.SignedContract, expiresAt time.Time) mai
 	if err != nil {
 		t.Fatalf("contract id: %v", err)
 	}
-	return mailbox{ContractID: id, ExpiresAt: &expiresAt}
+	return mailbox{ContractID: id, ExpiresAt: expiresAt}
 }
 
 // mustRecord writes the identity's index row as entry says, and mirrors it.
@@ -252,7 +252,7 @@ func TestAnExpiredContractDoesNotAuthorize(t *testing.T) {
 	v := hostedParticipant(t, mod)
 	past := time.Now().Add(-time.Minute)
 	entry, _ := mod.mailboxes.Get(v.String())
-	entry.ExpiresAt = &past
+	entry.ExpiresAt = past
 	mod.mailboxes.Replace(v.String(), entry)
 
 	if mod.hosts(v) {
@@ -334,7 +334,7 @@ func outlast(t *testing.T, mod *Module, identity *astral.Identity) {
 		t.Fatalf("extend the row: %v", err)
 	}
 	entry, _ := mod.mailboxes.Get(identity.String())
-	entry.ExpiresAt = &far
+	entry.ExpiresAt = far
 	mod.mailboxes.Replace(identity.String(), entry)
 }
 
