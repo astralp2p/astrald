@@ -21,6 +21,7 @@ func (Loader) Load(node astral.Node, assets assets.Assets, log *log.Logger) (cor
 	}
 
 	_ = assets.LoadYAML(messagingmod.ModuleName, &mod.config)
+	mod.config = mod.config.withHostingDefaults()
 
 	mod.router.AddStructPrefix(mod, "Op")
 

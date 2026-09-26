@@ -45,8 +45,10 @@ type Module struct {
 	waiters waiters
 }
 
+// Run renews the hosting contracts inside the renewal window until ctx ends —
+// see renewHosting.
 func (mod *Module) Run(ctx *astral.Context) error {
-	<-ctx.Done()
+	mod.renewHosting(ctx)
 	return nil
 }
 
