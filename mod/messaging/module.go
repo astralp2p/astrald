@@ -26,6 +26,7 @@ const DBPrefix = "messaging__"
 // node identity is never a participant.
 type Module interface {
 	CreateIdentity(ctx *astral.Context, alias string, duration astral.Duration) (*messaging.IdentityCredential, error)
+	FindIdentity(identity *astral.Identity) error
 	DeleteIdentity(ctx *astral.Context, identity *astral.Identity) error
 	SendMessage(ctx context.Context, sender *astral.Identity, req *messaging.SendMessageRequest) (messaging.MessageID, error)
 	ListMessages(ctx context.Context, owner *astral.Identity, req messaging.ListMessagesRequest) ([]*messaging.Envelope, error)
@@ -39,6 +40,6 @@ type Module interface {
 // no reports.
 type ProgressFunc func(spent, granted time.Duration)
 
-// ErrIdentityNotFound is what DeleteIdentity answers for an identity whose
-// mailbox the hosting index does not name.
+// ErrIdentityNotFound is what FindIdentity and DeleteIdentity answer for an
+// identity whose mailbox the hosting index does not name.
 var ErrIdentityNotFound = errors.New("identity not found")

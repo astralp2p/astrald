@@ -107,3 +107,46 @@ func TestAFailedParticipantDeleteKeepsTheAgentRow(t *testing.T) {
 		t.Fatalf("find agent after the failed delete: %v", err)
 	}
 }
+
+// A row mcp.list_agents dropped between the two deletes is not an error: the
+// agent is gone either way.
+func TestDeletingAnAgentWhoseRowIsAlreadyGone(t *testing.T) {
+	mod, _ := testAgentModule(t)
+	agent := testAgent()
+	if err := mod.storeAgent(mod.ctx, agent); err != nil {
+		t.Fatalf("store agent: %v", err)
+	}
+	row, err := mod.db.FindAgent(agent.Identity)
+	if err != nil {
+		t.Fatalf("find agent: %v", err)
+	}
+	if err = mod.db.DeleteAgent(agent.Identity); err != nil {
+		t.Fatalf("delete row: %v", err)
+	}
+
+	if err = mod.deleteAgent(mod.ctx, row); err != nil {
+		t.Fatalf("delete agent: %v", err)
+	}
+}
+
+// A lookup that fails is not a withdrawal: the reads answer the error and no
+// row is dropped.
+func TestAFailedParticipantLookupDropsNoRow(t *testing.T) {
+	mod, msg := testAgentModule(t)
+	agent := testAgent()
+	if err := mod.storeAgent(mod.ctx, agent); err != nil {
+		t.Fatalf("store agent: %v", err)
+	}
+
+	msg.findErr = errors.New("store is down")
+
+	if _, err := mod.findAgent(agent.Identity); err == nil {
+		t.Fatal("findAgent answered no error on a failed lookup")
+	}
+	if _, err := mod.Agents(); err == nil {
+		t.Fatal("Agents answered no error on a failed lookup")
+	}
+	if _, err := mod.db.FindAgent(agent.Identity); err != nil {
+		t.Fatalf("the row after a failed lookup: %v", err)
+	}
+}

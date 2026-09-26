@@ -120,8 +120,33 @@ type fakeMessaging struct {
 	changed bool
 	cred    *messaging.IdentityCredential
 
-	// deleteErr is what DeleteIdentity answers.
+	// deleteErr is what DeleteIdentity answers for a participant not withdrawn.
 	deleteErr error
+
+	// withdrawn are the participants messaging.delete_identity removed:
+	// FindIdentity and DeleteIdentity answer ErrIdentityNotFound for them.
+	withdrawn []*astral.Identity
+
+	// findErr is what FindIdentity answers for a participant not withdrawn.
+	findErr error
+}
+
+// withdraw removes the participant as messaging.delete_identity does, behind
+// mcp's back.
+func (f *fakeMessaging) withdraw(id *astral.Identity) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.withdrawn = append(f.withdrawn, id)
+}
+
+// isWithdrawn answers whether withdraw named id. The caller holds mu.
+func (f *fakeMessaging) isWithdrawn(id *astral.Identity) bool {
+	for _, w := range f.withdrawn {
+		if w.IsEqual(id) {
+			return true
+		}
+	}
+	return false
 }
 
 // called records one mail call as id and runs record under the same lock.
@@ -143,10 +168,22 @@ func (f *fakeMessaging) CreateIdentity(_ *astral.Context, alias string, duration
 	return f.cred, nil
 }
 
+func (f *fakeMessaging) FindIdentity(id *astral.Identity) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.isWithdrawn(id) {
+		return messagingmod.ErrIdentityNotFound
+	}
+	return f.findErr
+}
+
 func (f *fakeMessaging) DeleteIdentity(_ *astral.Context, id *astral.Identity) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.deleted = append(f.deleted, id)
+	if f.isWithdrawn(id) {
+		return messagingmod.ErrIdentityNotFound
+	}
 	return f.deleteErr
 }
 

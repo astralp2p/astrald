@@ -14,7 +14,8 @@ type opAgentArgs struct {
 }
 
 // OpAgent answers one agent's record without its access token. Identity takes
-// an identity or an alias.
+// an identity or an alias. An agent whose participant mod/messaging no longer
+// names is not found, and its row is left — see findAgent.
 //
 // why not a filter on mcp.list_agents: that op streams every agent with its
 // token, which is how a lost one is recovered. A read made per agent is a
@@ -41,7 +42,7 @@ func (mod *Module) OpAgent(ctx *astral.Context, q *routing.IncomingQuery, args o
 		return ch.Send(astral.NewError("unknown identity"))
 	}
 
-	row, err := mod.db.FindAgent(agentID)
+	row, err := mod.findAgent(agentID)
 	if err != nil {
 		return ch.Send(astral.NewError("agent not found"))
 	}

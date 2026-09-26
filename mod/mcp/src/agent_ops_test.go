@@ -86,6 +86,92 @@ func TestDeleteAgentDeletesThroughMessaging(t *testing.T) {
 	}
 }
 
+// An agent whose participant messaging.delete_identity withdrew is not found by
+// mcp.agent, and its row stays: the op's guard grants no change to state, and
+// mcp.delete_agent still removes the row afterwards.
+func TestAgentIsNotFoundOnceItsParticipantIsWithdrawn(t *testing.T) {
+	mod, msg := testAgentModule(t)
+	mod.Auth = &recordingAuth{verdict: true}
+	agent := testAgent()
+	if err := mod.storeAgent(mod.ctx, agent); err != nil {
+		t.Fatalf("store agent: %v", err)
+	}
+	query := "mcp.agent?identity=" + agent.Identity.String()
+
+	info := onlyAgentAnswer[*mcp.AgentInfo](t, callAgentOp(t, mod.OpAgent, query))
+	if !info.Identity.IsEqual(agent.Identity) {
+		t.Fatalf("answered %v, want the agent %v", info.Identity, agent.Identity)
+	}
+
+	msg.withdraw(agent.Identity)
+
+	answer := onlyAgentAnswer[astral.Error](t, callAgentOp(t, mod.OpAgent, query))
+	if answer.Error() != "agent not found" {
+		t.Fatalf("answered %q, want agent not found", answer.Error())
+	}
+	if _, err := mod.db.FindAgent(agent.Identity); err != nil {
+		t.Fatalf("mcp.agent dropped the withdrawn agent's row: %v", err)
+	}
+
+	onlyAgentAnswer[*astral.Ack](t, callAgentOp(t, mod.OpDeleteAgent, "mcp.delete_agent?identity="+agent.Identity.String()))
+
+	if _, err := mod.db.FindAgent(agent.Identity); err == nil {
+		t.Fatal("the withdrawn agent's row outlived the delete")
+	}
+}
+
+// mcp.list_agents leaves out an agent whose participant is withdrawn and drops
+// its row, and still streams every other agent.
+func TestListAgentsLeavesOutAWithdrawnParticipant(t *testing.T) {
+	mod, msg := testAgentModule(t)
+	mod.Auth = &recordingAuth{verdict: true}
+	kept, gone := testAgent(), testAgent()
+	gone.Alias = "gone"
+	for _, a := range []*mcp.Agent{kept, gone} {
+		if err := mod.storeAgent(mod.ctx, a); err != nil {
+			t.Fatalf("store agent: %v", err)
+		}
+	}
+
+	msg.withdraw(gone.Identity)
+
+	objs := callAgentOp(t, mod.OpListAgents, "mcp.list_agents")
+	if len(objs) != 2 {
+		t.Fatalf("answered %v objects, want the kept agent and eos", len(objs))
+	}
+	if a, ok := objs[0].(*mcp.Agent); !ok || !a.Identity.IsEqual(kept.Identity) {
+		t.Fatalf("answered %v first, want the kept agent %v", objs[0], kept.Identity)
+	}
+	if _, ok := objs[1].(*astral.EOS); !ok {
+		t.Fatalf("answered %T last, want eos", objs[1])
+	}
+	if _, err := mod.db.FindAgent(gone.Identity); err == nil {
+		t.Fatal("the withdrawn agent's row outlived the listing")
+	}
+	if _, err := mod.db.FindAgent(kept.Identity); err != nil {
+		t.Fatalf("the kept agent's row: %v", err)
+	}
+}
+
+// mcp.delete_agent on an agent whose participant is withdrawn, before a read
+// drops the row, succeeds and removes the row.
+func TestDeleteAgentRemovesTheRowOfAWithdrawnParticipant(t *testing.T) {
+	mod, msg := testAgentModule(t)
+	mod.Auth = &recordingAuth{verdict: true}
+	agent := testAgent()
+	if err := mod.storeAgent(mod.ctx, agent); err != nil {
+		t.Fatalf("store agent: %v", err)
+	}
+
+	msg.withdraw(agent.Identity)
+
+	onlyAgentAnswer[*astral.Ack](t, callAgentOp(t, mod.OpDeleteAgent, "mcp.delete_agent?identity="+agent.Identity.String()))
+
+	if _, err := mod.db.FindAgent(agent.Identity); err == nil {
+		t.Fatal("the withdrawn agent's row outlived the delete")
+	}
+}
+
 // testCredential is a credential as messaging mints one.
 func testCredential() *messaging.IdentityCredential {
 	return &messaging.IdentityCredential{

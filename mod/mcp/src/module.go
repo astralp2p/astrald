@@ -40,19 +40,31 @@ func (mod *Module) Router() astral.Router {
 	return &mod.router
 }
 
+// Agents answers every agent whose participant mod/messaging still names, and
+// drops the row of every other — see dropWithdrawn.
 func (mod *Module) Agents() (list []*mcp.Agent, err error) {
 	rows, err := mod.db.ListAgents()
 	if err != nil {
 		return nil, err
 	}
-	list = make([]*mcp.Agent, len(rows))
-	for i, r := range rows {
-		list[i] = &mcp.Agent{
+	list = make([]*mcp.Agent, 0, len(rows))
+	for i := range rows {
+		r := &rows[i]
+
+		dropped, err := mod.dropWithdrawn(r)
+		if err != nil {
+			return nil, err
+		}
+		if dropped {
+			continue
+		}
+
+		list = append(list, &mcp.Agent{
 			Identity:  r.Identity,
 			Alias:     astral.String8(r.Alias),
 			Token:     astral.String8(r.Token),
 			ExpiresAt: astral.Time(r.ExpiresAt),
-		}
+		})
 	}
 	return list, nil
 }

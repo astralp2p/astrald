@@ -62,6 +62,29 @@ func (mod *Module) CreateIdentity(ctx *astral.Context, alias string, duration as
 // with the mail it owns. An identity whose mailbox the index does not name
 // answers messagingmod.ErrIdentityNotFound.
 func (mod *Module) DeleteIdentity(_ *astral.Context, identity *astral.Identity) error {
+	if err := mod.FindIdentity(identity); err != nil {
+		return err
+	}
+
+	if err := mod.deleteIdentity(identity); err != nil {
+		return err
+	}
+
+	mod.log.Logv(1, "deleted participant %v", identity)
+
+	return nil
+}
+
+// FindIdentity answers nil for a participant: an identity whose mailbox the
+// hosting index names, served or not. Any other identity answers
+// messagingmod.ErrIdentityNotFound.
+//
+// why the table and not its mirror: a withdrawal whose table delete failed has
+// dropped the mirror and kept the row, and DeleteIdentity finds that row again.
+//
+// why not hosts: a participant whose hosting contract expired is still one,
+// which messaging.identity answers and messaging.delete_identity removes.
+func (mod *Module) FindIdentity(identity *astral.Identity) error {
 	if identity == nil || identity.IsZero() {
 		return messagingmod.ErrIdentityNotFound
 	}
@@ -70,17 +93,7 @@ func (mod *Module) DeleteIdentity(_ *astral.Context, identity *astral.Identity) 
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return messagingmod.ErrIdentityNotFound
 	}
-	if err != nil {
-		return err
-	}
-
-	if err = mod.deleteIdentity(identity); err != nil {
-		return err
-	}
-
-	mod.log.Logv(1, "deleted participant %v", identity)
-
-	return nil
+	return err
 }
 
 // mintIdentity mints a fresh participant identity: a stored + indexed key and

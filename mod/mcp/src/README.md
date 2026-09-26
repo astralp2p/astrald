@@ -29,6 +29,16 @@ bind_mcp: "tcp:127.0.0.1:8626"
 agent, and answers its access token. The token's validity comes from the op's
 `duration` argument, or from `token_duration` in `messaging.yaml`.
 
+An agent is its participant and its row, and mod/messaging never writes the
+row. `messaging.delete_identity` on an agent's identity withdraws the
+participant and leaves the row. `mcp.agent` and `mcp.list_agents` ask
+mod/messaging whether its hosting index still names each agent they read.
+`mcp.agent` answers `agent not found` for an agent the index does not name,
+and leaves the row, because `SeeNodeStateAction` grants no change to state.
+`mcp.list_agents` leaves such an agent out and drops its row.
+`mcp.delete_agent` reads the row alone, so `mcp.delete_agent` removes the row
+of a withdrawn participant.
+
 ### Queries
 
 Every declared tool is single-shot, bounded by:

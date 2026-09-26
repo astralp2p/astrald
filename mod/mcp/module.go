@@ -18,5 +18,9 @@ const DBPrefix = "mcp__"
 // the MCP tool structs render what that module answers into the schema the
 // endpoint declares.
 type Module interface {
+	// Agents answers every agent whose participant the messaging module still
+	// names, tokens included.
+	//
+	// note: Agents is no pure read. It deletes the record of every other agent.
 	Agents() ([]*mcp.Agent, error)
 }

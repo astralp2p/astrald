@@ -230,6 +230,39 @@ func TestDeletingAnUnknownIdentityIsNotFound(t *testing.T) {
 	}
 }
 
+// FindIdentity names every identity the hosting index names, served or not: a
+// row whose hosting contract expired is still a participant. A withdrawn
+// participant, a stranger and the zero identity are not found.
+func TestFindIdentityNamesTheIndexedParticipants(t *testing.T) {
+	mod, _, _ := testIdentityModule(t)
+	hosted := hostedParticipant(t, mod)
+	expired := astral.GenerateIdentity()
+	if err := mod.db.CreateMailbox(expired, &astral.ObjectID{Size: 1}, time.Now().Add(-time.Hour)); err != nil {
+		t.Fatalf("create mailbox: %v", err)
+	}
+
+	for name, id := range map[string]*astral.Identity{"hosted": hosted, "expired": expired} {
+		if err := mod.FindIdentity(id); err != nil {
+			t.Fatalf("find the %v participant: %v", name, err)
+		}
+	}
+
+	if err := mod.DeleteIdentity(mod.ctx, hosted); err != nil {
+		t.Fatalf("delete identity: %v", err)
+	}
+
+	for name, id := range map[string]*astral.Identity{
+		"withdrawn": hosted,
+		"stranger":  astral.GenerateIdentity(),
+		"zero":      &astral.Identity{},
+		"nil":       nil,
+	} {
+		if err := mod.FindIdentity(id); !errors.Is(err, messagingmod.ErrIdentityNotFound) {
+			t.Fatalf("find the %v identity: got %v, want %v", name, err, messagingmod.ErrIdentityNotFound)
+		}
+	}
+}
+
 // A deleted participant's identity holds no grant afterwards, and no other
 // identity loses one. The first half is what an external provider reads on
 // every call: ServeObjects is checked against the identity, not against a
