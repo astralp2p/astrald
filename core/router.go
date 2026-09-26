@@ -57,7 +57,7 @@ func (r *Router) RouteQuery(ctx *astral.Context, q *astral.InFlightQuery, w io.W
 	for _, p := range r.preprocessors.Clone() {
 		err = p.PreprocessQuery(qm)
 		if err != nil {
-			r.node.log.Logv(2, "%v query blocked by %v: %v", q.Query, p, err)
+			r.node.log.Logv(2, "%v query blocked by %v: %v", loggedQuery(q.Query), p, err)
 			return query.RouteNotFound()
 		}
 
@@ -67,9 +67,11 @@ func (r *Router) RouteQuery(ctx *astral.Context, q *astral.InFlightQuery, w io.W
 		}
 	}
 
+	var logged = loggedQuery(q.Query)
+
 	// log the start of routing
 	if r.node.config.LogRoutingStart {
-		r.node.log.Logv(2, "%v routing...", q.Query)
+		r.node.log.Logv(2, "%v routing...", logged)
 	}
 
 	var startedAt = time.Now()
@@ -78,9 +80,9 @@ func (r *Router) RouteQuery(ctx *astral.Context, q *astral.InFlightQuery, w io.W
 
 	// log routing results
 	if err == nil {
-		r.node.log.Infov(0, "%v routed in %v", q.Query, d)
+		r.node.log.Infov(0, "%v routed in %v", logged, d)
 	} else {
-		r.node.log.Errorv(0, "%v error (%v): %v", q.Query, d, err)
+		r.node.log.Errorv(0, "%v error (%v): %v", logged, d, err)
 
 	}
 
