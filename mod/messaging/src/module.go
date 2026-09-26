@@ -17,6 +17,11 @@ var _ messagingmod.Module = &Module{}
 // this node does not host.
 var errNotParticipant = errors.New("not a messaging participant")
 
+// errAnotherMailbox is what a mail method answers for a request that names a
+// mailbox other than its owner's. A method acts on the mailbox it is handed; a
+// delegated read is an operation's, which asks auth about its caller.
+var errAnotherMailbox = errors.New("a mail method reads its owner's own mailbox")
+
 type Module struct {
 	Deps
 	ctx    *astral.Context

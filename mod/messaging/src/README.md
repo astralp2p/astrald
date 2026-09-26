@@ -64,9 +64,10 @@ tools call the `messaging.Module` methods under the bearer's identity.
 * The recipient's node asks `mod.messaging.receive_action` with the recipient
   as actor and the sender as `FromID`. A refusal rejects the query with
   `RejectNotAdmitted` (`5`).
-* A read that hands out an inbox body stamps the sender's outbox row
-  `fetched_at`. The stamp is direct when this node hosts the sender, and
-  otherwise one `messaging.receipt` query to the sender carries it.
+* A read of the caller's own mailbox that hands out an inbox body stamps the
+  row `read_at` and the sender's outbox row `fetched_at`. The `fetched_at`
+  stamp is direct when this node hosts the sender, and otherwise one
+  `messaging.receipt` query to the sender carries it.
 * A receipt is admitted by the matching outbox row and asks no action.
 * Delivery and receipt queries carry no origin. No operation is named `message`
   or `receipt`.
@@ -83,13 +84,55 @@ tools call the `messaging.Module` methods under the bearer's identity.
   `mod.auth.admin_manage_apps_action`, and `identity` asks
   `mod.auth.see_node_state_action`.
 * `send_message`, `list_messages`, `read_messages`, `wait` and `archive` refuse
-  network and MCP origin, and reject a caller whose mailbox this node does not
-  host.
-* Every mail operation acts on the caller's own boxes. No argument names an
-  owner.
+  network and MCP origin.
+* `send_message`, `wait` and `archive` refuse a caller whose own mailbox this
+  node does not host. `list_messages` and `read_messages` refuse such a caller
+  on its own mailbox.
+* `send_message`, `list_messages`, `wait` and `archive` reject a refused query
+  before they accept it.
+* `read_messages` rejects a network or MCP origin, the zero identity and this
+  node before it accepts the query. `read_messages` answers
+  `not a messaging participant` to a caller whose own mailbox this node does
+  not host, once the request arrives.
+* `send_message`, `wait` and `archive` act on the caller's own boxes. No
+  argument names an owner.
+* `list_messages` and `read_messages` act on the caller's own boxes unless they
+  name another mailbox — see [Delegated read](#delegated-read).
 * `wait` accepts the query before it parks. The park ends when a message
   arrives, when the granted window closes, or when the caller closes the
   channel.
+
+## Delegated read
+
+* `list_messages` takes the argument `mailbox`, a hex identity or an alias. A
+  `messaging.read_messages_request` carries `Mailbox`. An absent mailbox, or
+  one naming the caller, reads the caller's own mailbox.
+* A mailbox naming another identity makes the call a delegated read. The checks
+  run in this order: the caller is neither the zero identity nor this node, this
+  node hosts the named mailbox, and auth grants
+  `ReadMailboxAction{Actor: caller, MailboxID: mailbox}`. The caller needs no
+  mailbox on this node.
+* The module registers no rule for `mod.messaging.read_mailbox_action`. Another
+  registered handler or the external authority the node names for the action
+  grants a delegated read. A node with neither refuses every delegated read.
+* No contract carries `mod.messaging.read_mailbox_action`. The action refuses
+  every permit, constrained or not (astral-go `api/messaging`
+  `ReadMailboxAction.ApplyConstraints`), so auth's chain walk passes no
+  contract link for it, and auth asks the handlers and the external authority
+  about the caller alone. The astral-go `ReadMailboxAction` doc comment holds
+  the reason no contract carries the action.
+* `addAuthorizers` in `authorizers.go` holds the reason no rule exists and the
+  limit of the refusal.
+* A refused `list_messages` is rejected before it is accepted.
+* `read_messages` learns its mailbox from the request, which arrives after the
+  query is accepted. A refused delegated read therefore ends the query with no
+  answer.
+* A delegated read never stamps. It writes no `read_at` and no
+  `receipt_due_at`, sends no receipt, and writes no `fetched_at` on a local
+  sender's row. The rule holds for the named messages and for replies under
+  `children` `full` alike.
+* The `messaging.Module` methods act on the owner's own mailbox. A request that
+  names another mailbox is refused. mod/mcp's tools name no mailbox.
 
 ## Storage
 

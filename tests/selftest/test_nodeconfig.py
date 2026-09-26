@@ -43,11 +43,12 @@ class TestNodeConfig(unittest.TestCase):
                 self.assertIn(f'query: "astral://{PEER_ALIAS}:{path}"', mcp)
             auth = (cfg / "auth.yaml").read_text()
             self.assertIn('endpoint: "http://127.0.0.1:20805/authorize"', auth)
-            # the authority answers mail and nothing else
+            # the authority answers mail and delegated reads, nothing else
             actions = [line.strip() for line in auth.splitlines()
                        if line.strip().startswith("- mod.")]
             self.assertEqual(actions, ["- mod.messaging.send_action",
-                                       "- mod.messaging.receive_action"])
+                                       "- mod.messaging.receive_action",
+                                       "- mod.messaging.read_mailbox_action"])
             self.assertNotIn("call_agent_action", auth)
             # a node hosts a mailbox under its identity's contract, never
             # under an external authority's word

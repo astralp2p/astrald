@@ -8,6 +8,7 @@ import (
 )
 
 // Reading never stamps a row the reader does not own — one of the Done clauses.
+// The read stamp names the reader's own row, whatever other row shares its id.
 func TestReadingStampsOnlyTheReadersOwnRow(t *testing.T) {
 	mod := testMessagingModule(t)
 	a, b := astral.GenerateIdentity(), astral.GenerateIdentity()
@@ -16,8 +17,15 @@ func TestReadingStampsOnlyTheReadersOwnRow(t *testing.T) {
 	mustInsertOutbox(t, mod, &messaging.StoredMessage{ID: id, Sender: a, Recipient: b, Content: "x"})
 	mustInsertInbox(t, mod, &messaging.StoredMessage{ID: id, Sender: a, Recipient: b, Content: "x"})
 
-	if _, _, err := mod.db.ReadMany(b, []messageRef{{Box: messaging.BoxInbox, ID: id}}); err != nil {
-		t.Fatalf("read: %v", err)
+	rows, _, err := mod.db.FindMany(b, []messageRef{{Box: messaging.BoxInbox, ID: id}})
+	if err != nil || len(rows) != 1 {
+		t.Fatalf("find: %v rows, err %v", len(rows), err)
+	}
+	if err = mod.db.MarkRead(b, rows[0]); err != nil {
+		t.Fatalf("mark read: %v", err)
+	}
+	if row := mustReadOwn(t, mod, b, messageRef{Box: messaging.BoxInbox, ID: id}); row.ReadAt == nil {
+		t.Fatal("the reader's own row was not stamped read; the checks below prove nothing")
 	}
 
 	var sent dbMessage
@@ -132,7 +140,7 @@ func TestAnUnheldIDIsReportedAndTheRestAreStillRead(t *testing.T) {
 	held := messaging.NewMessageID()
 	mustInsertInbox(t, mod, &messaging.StoredMessage{ID: held, Sender: b, Recipient: a, Content: "here"})
 
-	out, _, err := mod.db.ReadMany(a, []messageRef{
+	out, _, err := mod.db.FindMany(a, []messageRef{
 		{Box: messaging.BoxInbox, ID: held},
 		{Box: messaging.BoxInbox, ID: messaging.NewMessageID()},
 	})

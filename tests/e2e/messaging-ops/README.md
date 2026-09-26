@@ -7,14 +7,18 @@ its own mailbox through the `messaging.*` ops. The node serves no MCP.
 - **env** node · **start** `null` · **saves** —
 - **driver** `script.py` — mint ada, bob and cleo; ada and bob exchange mail
   through `messaging.send_message`, `messaging.list_messages`,
-  `messaging.read_messages`, `messaging.wait` and `messaging.archive`; ada
-  writes to cleo; an app identity and the node itself try the mail ops;
-  `messaging.delete_identity` deletes bob, and ada writes to him once more.
+  `messaging.read_messages`, `messaging.wait` and `messaging.archive`; before
+  ada reads bob's answer, cleo lists and reads ada's mailbox, and bob and the
+  node name it too; ada writes to cleo; an app identity and the node itself
+  try the mail ops; `messaging.delete_identity` deletes bob, and ada writes to
+  him once more.
 - **oracle** `verify.py` — the MCP port was closed and the node's log shows
   no MCP server, the authority was asked
-  the sender's and the recipient's side of each message, the exchange
-  happened, every caller without a hosted mailbox was rejected, bob's tokens
-  stopped authenticating, and the node's own records agree.
+  the sender's and the recipient's side of each message and each reader of
+  ada's mailbox, the exchange happened, cleo read ada's mailbox and changed
+  none of it while bob and the node were refused, every caller without a
+  hosted mailbox was refused, bob's tokens stopped authenticating, and the
+  node's own records agree.
 
 ## Why the node serves no MCP
 
@@ -37,15 +41,37 @@ serves MCP.
 The node holds no reachability of its own. A message leaves only when
 `mod.messaging.send_action` is granted to its sender, and is stored only when
 `mod.messaging.receive_action` is granted to its recipient. The driver's
-authority admits ada and bob to each other in both directions and nothing
-else. cleo is hosted like them, so ada's refused send to cleo is the
-authority's refusal and not the node's.
+authority admits ada and bob to each other in both directions, lets cleo read
+ada's mailbox, and grants nothing else. cleo is hosted like them, so ada's
+refused send to cleo is the authority's refusal and not the node's.
 
 The node asks no authority whether it hosts a mailbox. Each participant signs a
 hosting contract naming this node, and auth's chain walk answers
 `mod.messaging.host_mailbox_action` from it. The oracle finds exactly one such
 contract per participant in the node's `local` repository, separate from the
 participant's relay contract, and none for the app identity.
+
+## Why cleo reads ada's mailbox
+
+A caller that names another identity's mailbox makes a delegated read, and the
+node asks the authority `mod.messaging.read_mailbox_action` with the caller as
+actor and the named mailbox as `MailboxID`. The authority grants cleo ada's
+mailbox and nobody else anything. cleo lists ada's inbox and outbox by ada's
+alias and reads ada's question with bob's answer under `children` `full`,
+naming ada's identity.
+
+The read happens while bob's answer is unread in ada's inbox and uncollected
+in bob's outbox. A delegated read never stamps, so ada's lists and bob's row
+read the same after it as before. ada then reads the answer herself, and bob's
+row is stamped collected: the unchanged rows are the delegation's, not a read
+that stamps nothing.
+
+bob corresponds with ada and is not granted her mailbox. His listing is
+rejected. His read is accepted, because `messaging.read_messages` learns the
+mailbox from its request, and ends with no answer: a refused delegated read
+carries no bytes. The node's own identity is
+never a reader, so the node's listing is rejected before the authority is
+asked anything.
 
 ## Why bob is the one deleted
 
@@ -61,8 +87,15 @@ repository, and the oracle requires it there.
 
 ## Why an app identity and the node are refused
 
-A mail op serves only a caller whose mailbox this node hosts. `apphost.register`
-mints an identity with a token and no mailbox; the node's own token
-authenticates as the node, which never hosts a mailbox. Both are rejected
-before the op accepts, and the oracle requires `QueryRejected` for each, so a
-failure that never reached the guard does not count as the refusal.
+A mail op on the caller's own mailbox serves only a caller whose mailbox this
+node hosts. `apphost.register` mints an identity with a token and no mailbox;
+the node's own token authenticates as the node, which never hosts a mailbox.
+The app's listing and send and the node's listing are rejected before the op
+accepts, and the oracle requires `QueryRejected` for each, so a failure that
+never reached the guard does not count as the refusal.
+
+The app's read of its own mailbox is accepted, because
+`messaging.read_messages` learns the mailbox from its request. The op then
+answers `not a messaging participant`, and the oracle requires those words: the
+mailbox is the caller's own, so the refusal names its reason, and a caller
+tells it apart from a node that went silent.

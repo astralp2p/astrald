@@ -12,22 +12,44 @@ import (
 // ReadMessages reads whole messages the owner holds, with their direct replies.
 // The module's own bounds on one answer are messaging.MaxReadRefs and
 // messaging.MaxChildren, and Config.MaxReadBytes bounds the bodies it carries.
+//
+// A request whose Mailbox names another identity is refused: the method reads
+// the owner's own mailbox, and a delegated read is messaging.read_messages',
+// which asks auth about its caller.
 func (mod *Module) ReadMessages(_ context.Context, owner *astral.Identity, req *messaging.ReadMessagesRequest) (*messaging.ReadMessagesResult, error) {
+	if mailbox := mailboxOf(req); mailbox != nil && !mailbox.IsEqual(owner) {
+		return nil, errAnotherMailbox
+	}
 	if !mod.hosts(owner) {
 		return nil, errNotParticipant
 	}
 
+	return mod.read(owner, req, false)
+}
+
+// read answers a read of a mailbox's messages. A delegated read hands out what
+// it answers and records none of it — see handOut.
+func (mod *Module) read(mailbox *astral.Identity, req *messaging.ReadMessagesRequest, delegated bool) (*messaging.ReadMessagesResult, error) {
 	r, err := readRequestOf(req)
 	if err != nil {
 		return nil, err
 	}
+	r.Delegated = delegated
 
-	res, err := mod.readMessages(owner, r)
+	res, err := mod.readMessages(mailbox, r)
 	if err != nil {
 		return nil, err
 	}
 
 	return res.result(), nil
+}
+
+// mailboxOf answers the mailbox a request names, nil when it names none.
+func mailboxOf(req *messaging.ReadMessagesRequest) *astral.Identity {
+	if req == nil {
+		return nil
+	}
+	return req.Mailbox
 }
 
 // readRequestOf takes a request off the wire into the module's own words.
@@ -52,6 +74,10 @@ type readRequest struct {
 	Refs        []messageRef
 	Children    string
 	MaxChildren int
+
+	// Delegated says the reader is not the mailbox's identity: the read hands
+	// bodies out and stamps nothing.
+	Delegated bool
 }
 
 // validate refuses a read the module will not serve and fills in what the
@@ -171,16 +197,23 @@ func (mod *Module) readMessages(owner *astral.Identity, req readRequest) (res re
 		return res, err
 	}
 
-	rows, missing, err := mod.db.ReadMany(owner, req.Refs)
+	rows, missing, err := mod.db.FindMany(owner, req.Refs)
 	if err != nil {
 		return res, err
+	}
+
+	// why every named message is handed out before any reply is read: a named
+	// message may also be the reply of another, and its reply copy then reads
+	// the stamp this read wrote.
+	for _, row := range rows {
+		if err = mod.handOut(owner, row, req.Delegated); err != nil {
+			return res, err
+		}
 	}
 
 	left := budget(mod.config.MaxReadBytes)
 
 	for _, row := range rows {
-		mod.noteFetched(row)
-
 		// why the message is charged before its replies: the caller named this
 		// id and did not name the replies, so an overflow drops the extra
 		// rather than the thing that was asked for.
@@ -216,8 +249,9 @@ func (mod *Module) readMessages(owner *astral.Identity, req readRequest) (res re
 // readReplies carries as much of one message's direct replies as the mode asks
 // for. One level: the child ids on every message are what let a reader walk on.
 //
-// why a child's body is opt-in: handing one out stamps it read and tells its
-// sender the body was collected, which a reader never asked for.
+// why a child's body is opt-in: handing one out to the mailbox's own reader
+// stamps it read and tells its sender the body was collected, which a reader
+// never asked for.
 func (mod *Module) readReplies(owner *astral.Identity, parent messaging.MessageID, req readRequest, left *budget) (replies []readMessage, err error) {
 	rows, err := mod.db.Children(owner, parent, req.MaxChildren)
 	if err != nil {
@@ -230,14 +264,9 @@ func (mod *Module) readReplies(owner *astral.Identity, parent messaging.MessageI
 			continue
 		}
 
-		// why the stamp and the handout are one act: handing a body out tells
-		// the sender it was collected, and a row that says otherwise leaves the
-		// two halves of one fact disagreeing — the sender reading it collected
-		// while unread_only still lists it.
-		if err = mod.db.MarkRead(owner, row); err != nil {
+		if err = mod.handOut(owner, row, req.Delegated); err != nil {
 			return nil, err
 		}
-		mod.noteFetched(row)
 
 		r := readMessage{Row: row}
 		if !left.spend(len(row.Content)) {
@@ -247,6 +276,31 @@ func (mod *Module) readReplies(owner *astral.Identity, parent messaging.MessageI
 	}
 
 	return replies, nil
+}
+
+// handOut records that the body of one of the owner's rows was handed out: the
+// row is stamped read, once, and its sender is told — see noteFetched. A
+// delegated read records nothing.
+//
+// why the stamp and the telling are one act: handing a body out tells the
+// sender it was collected, and a row that says otherwise leaves the two halves
+// of one fact disagreeing — the sender reading it collected while unread_only
+// still lists it.
+//
+// why a delegated read records nothing: its reader is not the recipient. A
+// stamp would tell the mailbox's identity it read what it did not, and tell the
+// sender of a collection its recipient never made.
+func (mod *Module) handOut(owner *astral.Identity, row *messaging.StoredMessage, delegated bool) error {
+	if delegated {
+		return nil
+	}
+
+	if err := mod.db.MarkRead(owner, row); err != nil {
+		return err
+	}
+	mod.noteFetched(row)
+
+	return nil
 }
 
 // budget is what is left of one answer, in bytes of message body.

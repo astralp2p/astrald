@@ -55,14 +55,16 @@ func TestTheMailOperationsCarryAConversation(t *testing.T) {
 }
 
 // No argument a caller adds reaches another participant's mailbox. Every mail
-// operation acts on the caller's own boxes, whatever owner, sender or identity
-// the query names, and a send is the caller's whatever it claims.
+// operation acts on the caller's own boxes, whatever owner, sender, identity or
+// mailbox the query names, and a send is the caller's whatever it claims. Only
+// list_messages takes a mailbox argument, and only read_messages' request names
+// one; a read that names another is delegated and asks auth.
 func TestNoMailOperationActsOnAnotherMailbox(t *testing.T) {
 	mod := testMessagingModule(t)
 	a, b := hostedParticipant(t, mod), hostedParticipant(t, mod)
 	held := messaging.NewMessageID()
 	mustInsertInbox(t, mod, &messaging.StoredMessage{ID: held, Sender: b, Recipient: a, Content: "a's"})
-	claims := "owner=" + a.String() + "&sender=" + a.String() + "&identity=" + a.String()
+	claims := "owner=" + a.String() + "&sender=" + a.String() + "&identity=" + a.String() + "&mailbox=" + a.String()
 
 	res := readOver(t, mod, localQuery(b, messaging.MethodReadMessages+"?"+claims), &messaging.ReadMessagesRequest{
 		Refs: []*messaging.MessageRef{{Box: messaging.BoxInbox, ID: held}},
@@ -94,26 +96,37 @@ func TestNoMailOperationActsOnAnotherMailbox(t *testing.T) {
 	}
 }
 
-// No argument of a mail operation and no field of a request body one reads
-// can name a participant: the caller is the only mailbox an operation acts on.
-func TestNoMailArgumentNamesAParticipant(t *testing.T) {
+// Only a read names a mailbox, and only as Mailbox: list_messages' argument and
+// read_messages' request field. No argument of send_message, wait or archive,
+// and no other field of a request body, can name a participant: those act on
+// the caller's own mailbox alone.
+func TestOnlyAReadNamesAMailbox(t *testing.T) {
 	names := map[string]bool{"Owner": true, "Sender": true, "Caller": true, "Identity": true, "Recipient": true, "Mailbox": true}
 	identity := reflect.TypeFor[*astral.Identity]()
 
-	for _, typ := range []reflect.Type{
-		reflect.TypeFor[opSendMessageArgs](),
-		reflect.TypeFor[opListMessagesArgs](),
-		reflect.TypeFor[opReadMessagesArgs](),
-		reflect.TypeFor[opWaitArgs](),
-		reflect.TypeFor[opArchiveArgs](),
-		reflect.TypeFor[messaging.SendMessageRequest](),
-		reflect.TypeFor[messaging.ReadMessagesRequest](),
-		reflect.TypeFor[messaging.MessageRef](),
+	for typ, reads := range map[reflect.Type]bool{
+		reflect.TypeFor[opSendMessageArgs]():             false,
+		reflect.TypeFor[opListMessagesArgs]():            true,
+		reflect.TypeFor[opReadMessagesArgs]():            false,
+		reflect.TypeFor[opWaitArgs]():                    false,
+		reflect.TypeFor[opArchiveArgs]():                 false,
+		reflect.TypeFor[messaging.SendMessageRequest]():  false,
+		reflect.TypeFor[messaging.ReadMessagesRequest](): true,
+		reflect.TypeFor[messaging.MessageRef]():          false,
 	} {
+		named := false
 		for i := range typ.NumField() {
-			if f := typ.Field(i); f.Type == identity || names[f.Name] {
-				t.Fatalf("%v.%v names a participant; a mail operation takes its mailbox from the caller alone", typ.Name(), f.Name)
+			f := typ.Field(i)
+			if reads && f.Name == "Mailbox" {
+				named = true
+				continue
 			}
+			if f.Type == identity || names[f.Name] {
+				t.Fatalf("%v.%v names a participant; only a read names a mailbox, as Mailbox", typ.Name(), f.Name)
+			}
+		}
+		if named != reads {
+			t.Fatalf("%v names no mailbox; a read names the one it reads as Mailbox", typ.Name())
 		}
 	}
 }

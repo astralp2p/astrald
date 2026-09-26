@@ -156,7 +156,7 @@ func TestOneOwnerHoldsTwoRowsUnderOneID(t *testing.T) {
 		t.Fatalf("owner+id matched %v rows, want 2", n)
 	}
 
-	rows, _, err := mod.db.ReadMany(a, []messageRef{{Box: messaging.BoxInbox, ID: id}})
+	rows, _, err := mod.db.FindMany(a, []messageRef{{Box: messaging.BoxInbox, ID: id}})
 	if err != nil {
 		t.Fatalf("read: %v", err)
 	}

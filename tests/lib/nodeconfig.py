@@ -125,9 +125,13 @@ external_registration_sweep_interval: 1s
 """
 
 # why an authority at all: mod/messaging holds no reachability of its own, and
-# no handler grants these two actions, so a node without one refuses every
+# no handler grants the two mail actions, so a node without one refuses every
 # message. Naming a port a driver may serve lets a test admit one; an unserved
 # port refuses, which is what a node configured with none answers.
+#
+# why mod.messaging.read_mailbox_action is listed: no handler grants it, so a
+# node without an authority for it refuses every delegated read. A test grants
+# a delegated read here.
 #
 # why mod.messaging.host_mailbox_action is not listed: a node hosts a mailbox
 # under the contract the mailbox's identity signs, and auth's chain walk
@@ -138,6 +142,7 @@ external_authorizers:
     actions:
       - mod.messaging.send_action
       - mod.messaging.receive_action
+      - mod.messaging.read_mailbox_action
 """
 
 

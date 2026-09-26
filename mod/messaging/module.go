@@ -20,8 +20,10 @@ const DBPrefix = "messaging__"
 // Every mail method acts on the boxes of the identity it is handed, whose
 // mailbox this node must host: the hosting index names it and auth finds this
 // node holds mod.messaging.host_mailbox_action for it under a contract the
-// identity signed. A caller that names another identity is refused with an
-// error; the node identity is never a participant.
+// identity signed. A request whose Mailbox names another identity is refused
+// with an error: a delegated read belongs to the messaging.list_messages and
+// messaging.read_messages operations, which ask auth about their caller. The
+// node identity is never a participant.
 type Module interface {
 	CreateIdentity(ctx *astral.Context, alias string, duration astral.Duration) (*messaging.IdentityCredential, error)
 	DeleteIdentity(ctx *astral.Context, identity *astral.Identity) error

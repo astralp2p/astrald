@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 """Oracle: messaging serves its participants over apphost, with MCP off.
 
-Six judgements, and the order matters. The node served no MCP, on the port
+Seven judgements, and the order matters. The node served no MCP, on the port
 the harness reserved or anywhere else, or nothing below says anything about
 messaging without it. The authority's record comes next, because an exchange
 proves nothing about reach unless the authority was asked, naming the right
-actor on each side, and admitted it. Then the exchange itself, the refusal of
-every caller whose mailbox the node does not host, and what
-messaging.delete_identity left of bob.
+actor on each side, and admitted it. Then the exchange itself, cleo's
+delegated read of ada's mailbox, the refusal of every caller whose mailbox the
+node does not host, and what messaging.delete_identity left of bob.
 
 Last, what the node holds. The driver reports what it was answered; whether
 each participant's mailbox is hosted under a contract of its own, and what
@@ -20,7 +20,7 @@ from pathlib import Path
 import astral
 
 from lib import jsonops, mail
-from lib.authority import RECEIVE, SEND, answers
+from lib.authority import READ, RECEIVE, SEND, answers
 from lib.sessionio import load
 
 HOST = "mod.messaging.host_mailbox_action"
@@ -29,6 +29,15 @@ RELAY = "mod.nodes.relay_for_action"
 # What a refusal of a caller must read like: the op rejects the query before
 # accepting it. Anything else means the call never reached the guard.
 REJECTED = "QueryRejected"
+
+# What a refused delegated read_messages must read like: the op learns the
+# mailbox from its request, after it accepted the query, and ends the query
+# with no answer.
+UNANSWERED = "the op answered nothing"
+
+# What an unhosted caller's read of its own mailbox must read like: the op
+# learns the mailbox from its request, and answers the caller's own refusal.
+NOT_PARTICIPANT = "not a messaging participant"
 
 ANSI = re.compile(r"\x1b\[[0-9;]*m")
 
@@ -72,16 +81,25 @@ def check_authority(facts):
             (RECEIVE, b, a, [True], "bob receiving from ada, once"),
             (SEND, b, a, [True], "bob sending to ada"),
             (RECEIVE, a, b, [True], "ada receiving from bob"),
-            (SEND, a, c, [False], "ada sending to cleo")):
+            (SEND, a, c, [False], "ada sending to cleo"),
+            (READ, c, a, [True, True, True], "cleo listing ada's inbox and "
+             "outbox and reading ada's messages"),
+            (READ, b, a, [False, False], "bob listing and reading ada's "
+             "mailbox")):
         got = answers(q, kind, actor, other)
         assert got == want, (
             f"the authority answered {got!r} for {who}, not {want!r} — the "
             "node put the question to the wrong side, named the wrong actor, "
             f"or asked for a mailbox it no longer hosts; it was asked {q!r}")
     kinds = {x["type"] for x in q}
-    assert kinds <= {SEND, RECEIVE}, (
-        f"the authority was asked {sorted(kinds)} — mail asks send and receive "
-        "alone, and hosting is answered by the mailbox's own contract")
+    assert kinds <= {SEND, RECEIVE, READ}, (
+        f"the authority was asked {sorted(kinds)} — mail asks send and receive, "
+        "a delegated read asks read, and hosting is answered by the mailbox's "
+        "own contract")
+    node = [x for x in q if x["actor"] == facts["node"]]
+    assert not node, (
+        f"the authority was asked {node!r} — the node names no reader, so its "
+        "own identity is refused before any question")
 
 
 def check_exchange(facts):
@@ -114,12 +132,53 @@ def check_exchange(facts):
         "authority refuses reads as one the node never heard of")
 
 
+def check_delegated(facts):
+    """cleo read ada's mailbox and changed none of it; bob and the node were
+    refused; ada's own read afterwards stamped what cleo's did not."""
+    x = facts["exchange"]
+    d, asked, answered = x["delegated"], x["asked"], x["answered"]
+    before, after = d["before"], d["after"]
+    assert [e["ID"] for e in before["inbox"]] == [answered] and \
+        before["inbox"][0]["ReadAt"] is None and \
+        before["answer_sent"]["FetchedAt"] is None, (
+        f"before cleo's read, ada's inbox read {before['inbox']!r} and bob's "
+        f"row {before['answer_sent']!r} — not bob's answer unread and "
+        "uncollected, so an unchanged mailbox would prove nothing")
+    for box in ("inbox", "outbox"):
+        assert d["listed"][box] == before[box], (
+            f"cleo listed ada's {box} as {d['listed'][box]!r}, not as ada "
+            f"lists it: {before[box]!r}")
+    read = d["read"]
+    bodies = {m["Envelope"]["ID"]: m["Content"] for m in read["Messages"]}
+    assert bodies == {asked: facts["ask"], answered: facts["answer"]}, (
+        f"cleo read {bodies!r}, not ada's question and bob's answer whole")
+    replies = {m["Envelope"]["ID"]: m["Content"] for m in read["Replies"]}
+    assert replies == {answered: facts["answer"]}, (
+        f"cleo's read answered replies {replies!r}, not bob's answer whole "
+        "under children full")
+    assert after == before, (
+        f"cleo's read changed ada's mailbox or bob's row:\nbefore "
+        f"{before!r}\nafter  {after!r}")
+    assert x["answer_fetched"]["FetchedAt"], (
+        f"bob's row for his answer reads {x['answer_fetched']!r} after ada "
+        "read it herself — an own read no longer stamps, so cleo's unchanged "
+        "rows prove nothing")
+    for who, want in (("bob_list", REJECTED), ("node_list", REJECTED),
+                      ("bob_read", UNANSWERED)):
+        r = d[who]
+        assert r["refused"] and want in r["detail"], (
+            f"{who} ended {r['detail']} — a reader the authority does not "
+            "admit, or the node itself, reached ada's mailbox, or failed "
+            "without being refused")
+
+
 def check_unhosted(facts):
     for who, r in facts["unhosted"].items():
-        assert r["refused"] and REJECTED in r["detail"], (
+        want = NOT_PARTICIPANT if who == "app_read" else REJECTED
+        assert r["refused"] and want in r["detail"], (
             f"{who} ended {r['detail']} — a caller whose mailbox the node "
             "does not host reached a mail operation, or failed without "
-            "being rejected")
+            f"being refused with {want!r}")
 
 
 def check_deletion(facts):
@@ -191,11 +250,14 @@ def main():
     check_no_mcp_server(doc["nodes"]["nomcp1"])
     check_authority(facts)
     check_exchange(facts)
+    check_delegated(facts)
     check_unhosted(facts)
     check_deletion(facts)
     asyncio.run(check_records(doc["nodes"]["nomcp1"], facts))
     print("oracle: with MCP off, ada and bob exchanged mail through the "
-          "messaging ops, a caller without a hosted mailbox was rejected, "
+          "messaging ops, cleo read ada's mailbox and changed none of it while "
+          "bob and the node were refused, a caller without a hosted mailbox "
+          "was rejected, "
           "every mailbox is hosted under its own contract, and bob's deletion "
           "withdrew his mailbox and his tokens while his contract stays")
 

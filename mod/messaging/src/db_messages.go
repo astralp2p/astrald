@@ -47,10 +47,13 @@ func (db *DB) ListMessages(owner *astral.Identity, q messageQuery) ([]*messaging
 	return storedAll(rows), nil
 }
 
-// ReadMany returns the owner's messages named by the refs and stamps the inbox
-// ones read. An id the owner does not hold is reported rather than refused, and
-// the stamp records the first read only.
-func (db *DB) ReadMany(owner *astral.Identity, refs []messageRef) (list []*messaging.StoredMessage, missing []messageRef, _ error) {
+// FindMany returns the owner's messages named by the refs, in the refs' order,
+// and stamps nothing. An id the owner does not hold is reported rather than
+// refused.
+//
+// why finding and stamping are apart: a delegated read finds the same rows and
+// stamps none — see handOut.
+func (db *DB) FindMany(owner *astral.Identity, refs []messageRef) (list []*messaging.StoredMessage, missing []messageRef, _ error) {
 	for _, ref := range refs {
 		var row dbMessage
 		err := db.Where("owner = ? AND box = ? AND id = ?", owner, ref.Box, ref.ID).
@@ -66,12 +69,7 @@ func (db *DB) ReadMany(owner *astral.Identity, refs []messageRef) (list []*messa
 			return nil, nil, err
 		}
 
-		m := row.stored()
-		if err = db.MarkRead(owner, m); err != nil {
-			return nil, nil, err
-		}
-
-		list = append(list, m)
+		list = append(list, row.stored())
 	}
 
 	return list, missing, nil

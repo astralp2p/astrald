@@ -17,18 +17,43 @@ type unknownPeerError struct{ name string }
 
 func (e *unknownPeerError) Error() string { return "unknown correspondent: " + e.name }
 
-// ListMessages answers one of the owner's three lists, without bodies.
+// ListMessages answers one of the owner's three lists, without bodies. A
+// request whose Mailbox names another identity is refused: the method lists the
+// owner's own mailbox, and a delegated read is messaging.list_messages', which
+// asks auth about its caller.
 func (mod *Module) ListMessages(_ context.Context, owner *astral.Identity, req messaging.ListMessagesRequest) ([]*messaging.Envelope, error) {
-	if !mod.hosts(owner) {
+	if !mod.namesOwnMailbox(owner, req.Mailbox) {
+		return nil, errAnotherMailbox
+	}
+
+	return mod.listMailbox(owner, req)
+}
+
+// listMailbox answers one of the three lists of a mailbox this node hosts,
+// without bodies. A listing hands no body out, so it stamps nothing, whoever
+// asked for it.
+func (mod *Module) listMailbox(mailbox *astral.Identity, req messaging.ListMessagesRequest) ([]*messaging.Envelope, error) {
+	if !mod.hosts(mailbox) {
 		return nil, errNotParticipant
 	}
 
-	rows, err := mod.listMessages(owner, req)
+	rows, err := mod.listMessages(mailbox, req)
 	if err != nil {
 		return nil, err
 	}
 
 	return envelopes(rows), nil
+}
+
+// namesOwnMailbox answers whether a mailbox name leaves the owner's own
+// mailbox: the empty name, or one that resolves to the owner.
+func (mod *Module) namesOwnMailbox(owner *astral.Identity, name string) bool {
+	if name == "" {
+		return true
+	}
+
+	mailbox, err := mod.Dir.ResolveIdentity(name)
+	return err == nil && mailbox.IsEqual(owner)
 }
 
 // query turns the participant's words into the store's: a name becomes an

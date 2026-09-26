@@ -1,9 +1,11 @@
 """The external authority a driver serves on a node's `authority_url`.
 
-A node asks it about the two actions `nodeconfig.AUTH_YAML` names:
-`mod.messaging.send_action` of a sender before a message leaves, and
-`mod.messaging.receive_action` of a recipient before a delivery is stored. No
-handler grants either, so what a node carries is what this authority admits.
+A node asks it about the three actions `nodeconfig.AUTH_YAML` names:
+`mod.messaging.send_action` of a sender before a message leaves,
+`mod.messaging.receive_action` of a recipient before a delivery is stored, and
+`mod.messaging.read_mailbox_action` of a reader before it reads a mailbox that
+is not its own. No handler grants any of the three, so what a node carries and
+whom it lets read is what this authority admits.
 """
 import json
 import threading
@@ -12,13 +14,15 @@ from urllib.parse import urlsplit
 
 SEND = "mod.messaging.send_action"
 RECEIVE = "mod.messaging.receive_action"
+READ = "mod.messaging.read_mailbox_action"
 
 
 class Authority:
     """Allows a question only when (action type, actor, other party) is in
     `allowed`, and records every question with the answer it gave.
 
-    The other party is ToID for a send, and FromID for a receive.
+    The other party is ToID for a send, FromID for a receive, and MailboxID
+    for a read.
     """
 
     def __init__(self, url: str, allowed: set):
@@ -48,7 +52,8 @@ class Authority:
         kind = envelope.get("Type")
         obj = envelope.get("Object") or {}
         actor = ((obj.get("Action") or {}).get("ActorID") or "").lower()
-        other = (obj.get("ToID") or obj.get("FromID") or "").lower()
+        other = (obj.get("ToID") or obj.get("FromID")
+                 or obj.get("MailboxID") or "").lower()
         allow = (kind, actor, other) in self.allowed
         self.questions.append(
             {"type": kind, "actor": actor, "other": other, "allow": allow})

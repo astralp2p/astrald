@@ -6,11 +6,14 @@ MCP server is off while mod/mcp still loads. Every exchange here reaches
 mod/messaging through its own ops, the way an app reaches it.
 
 The admin mints three participants with messaging.create_identity. ada and bob
-correspond; cleo is hosted like them and admitted to nothing. The driver serves
-the external authority the node asks about mail: it admits ada and bob to send
-to and receive from each other, and nothing else.
+correspond; cleo is hosted like them and admitted to no mail. The driver serves
+the external authority the node asks about mail and delegated reads: it admits
+ada and bob to send to and receive from each other, lets cleo read ada's
+mailbox, and nothing else.
 
 The driver acts and judges nothing. It records what every op answered, what
+cleo read of ada's mailbox and what ada's rows and bob's row read before and
+after, what bob and the node are answered when they name ada's mailbox, what
 an identity without a hosted mailbox and the node itself are answered, what
 messaging.delete_identity leaves of bob, and every question the authority was
 asked. The oracle reads the node's own records for the rest.
@@ -28,7 +31,7 @@ from astral import querystring
 from astral.errors import AstralError
 
 from lib import jsonops, mail
-from lib.authority import RECEIVE, SEND, Authority
+from lib.authority import READ, RECEIVE, SEND, Authority
 from lib.sessionio import load, write_facts
 
 ASK = "ada-asks-0xC0FFEE"
@@ -90,9 +93,47 @@ async def outbox_row(client, id: str) -> dict:
     return next((r for r in rows if r["ID"] == id), {})
 
 
-async def exchange(n: dict, ada: dict, bob: dict) -> dict:
-    """ada asks, bob waits, reads and answers, ada reads the answer, bob
-    archives the question, and ada writes to cleo."""
+async def mailbox_state(ca, cb, answered: str) -> dict:
+    """ada's mailbox as ada lists it, and bob's row for his answer: what a
+    delegated read of ada's mailbox must leave as it found them."""
+    return {
+        "inbox": await mail.list_messages(ca, list="inbox"),
+        "outbox": await mail.list_messages(ca, list="outbox"),
+        "answer_sent": await outbox_row(cb, answered),
+    }
+
+
+async def delegated(n: dict, ca, cb, ids: dict) -> dict:
+    """cleo, whom the authority lets read ada's mailbox, lists it and reads
+    ada's question with its replies whole while ada has not read bob's answer;
+    bob and the node name ada's mailbox too. ada's rows and bob's row for his
+    answer are taken before and after. `ids` holds cleo's token, ada's
+    identity, and the ids of ada's question and bob's answer.
+
+    why cleo names ada by alias to list and by identity to read: list_messages
+    takes either, and a read request's Mailbox is an identity.
+    """
+    alias, ada_id = ALIASES["ada"], ids["ada"]
+    asked, answered = ids["asked"], ids["answered"]
+    x = {"before": await mailbox_state(ca, cb, answered)}
+    async with await astral.connect(n["endpoint"], token=ids["cleo"]) as cc:
+        x["listed"] = {box: await mail.list_messages(cc, list=box,
+                                                     mailbox=alias)
+                       for box in ("inbox", "outbox")}
+        x["read"] = await mail.read(cc, ("outbox", asked), ("inbox", answered),
+                                    mailbox=ada_id, children="full")
+    x["bob_list"] = await attempt(mail.list_messages(cb, mailbox=alias))
+    x["bob_read"] = await attempt(mail.read(cb, ("inbox", answered),
+                                            mailbox=ada_id))
+    async with await astral.connect(n["endpoint"], token=n["token"]) as cn:
+        x["node_list"] = await attempt(mail.list_messages(cn, mailbox=alias))
+    x["after"] = await mailbox_state(ca, cb, answered)
+    return x
+
+
+async def exchange(n: dict, ada: dict, bob: dict, cleo: dict) -> dict:
+    """ada asks, bob waits, reads and answers, cleo reads ada's mailbox, ada
+    reads the answer, bob archives the question, and ada writes to cleo."""
     async with await astral.connect(n["endpoint"], token=ada["Token"]) as ca, \
             await astral.connect(n["endpoint"], token=bob["Token"]) as cb:
         # why the wait starts first: it parks, and the delivery is what ends it
@@ -107,7 +148,11 @@ async def exchange(n: dict, ada: dict, bob: dict) -> dict:
 
         answered = await mail.send(cb, ada["Identity"], ANSWER, parent=asked)
         back = await mail.wait(ca, WAIT)
+        read_by_cleo = await delegated(n, ca, cb, {
+            "cleo": cleo["Token"], "ada": ada["Identity"],
+            "asked": asked, "answered": answered})
         got = await mail.read(ca, ("inbox", answered))
+        answer_fetched = await outbox_row(cb, answered)
 
         archived = [await mail.archive(cb, "inbox", asked),
                     await mail.archive(cb, "inbox", asked)]
@@ -120,7 +165,9 @@ async def exchange(n: dict, ada: dict, bob: dict) -> dict:
             "heard": heard,
             "fetched": fetched,
             "back": back,
+            "delegated": read_by_cleo,
             "got": got,
+            "answer_fetched": answer_fetched,
             "archived": archived,
             "inbox_after": [e["ID"] for e in await mail.list_messages(
                 cb, list="inbox")],
@@ -136,9 +183,11 @@ async def unhosted(n: dict, app: dict, bob: dict) -> dict:
     async with await astral.connect(n["endpoint"], token=app["Token"]) as c:
         app_list = await attempt(mail.list_messages(c, list="inbox"))
         app_send = await attempt(mail.send(c, bob["Identity"], ASK))
+        app_read = await attempt(mail.read(c, ("inbox", "01" * 16)))
     async with await astral.connect(n["endpoint"], token=n["token"]) as c:
         node_list = await attempt(mail.list_messages(c, list="inbox"))
-    return {"app_list": app_list, "app_send": app_send, "node_list": node_list}
+    return {"app_list": app_list, "app_send": app_send, "app_read": app_read,
+            "node_list": node_list}
 
 
 async def deletion(n: dict, ada: dict, bob: dict, second: dict) -> dict:
@@ -172,12 +221,14 @@ async def main():
         "ada_token": ada["Token"], "info_ada": minted["info_ada"],
     })
 
+    c = cleo["Identity"].lower()
     authority = Authority(n["authority_url"], {
         (SEND, a, b), (RECEIVE, b, a),
         (SEND, b, a), (RECEIVE, a, b),
+        (READ, c, a),
     })
     try:
-        facts["exchange"] = await exchange(n, ada, bob)
+        facts["exchange"] = await exchange(n, ada, bob, cleo)
         facts["unhosted"] = await unhosted(n, minted["app"], bob)
         facts["deletion"] = await deletion(n, ada, bob, minted["bob_second"])
     finally:
@@ -187,6 +238,7 @@ async def main():
 
     x, d = facts["exchange"], facts["deletion"]
     print(f"driver: ada and bob exchanged {len(ASK)}+{len(ANSWER)} B; "
+          f"cleo read {len(x['delegated']['read']['Messages'])} of ada's; "
           f"archive moved {x['archived']}; cleo refused={x['to_cleo']['refused']}; "
           f"bob deleted={not d['deleted']['refused']}; authority asked "
           f"{len(authority.questions)} questions")

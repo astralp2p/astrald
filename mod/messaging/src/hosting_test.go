@@ -419,7 +419,9 @@ func TestHostingDoesNotOpenAMailboxToAnotherCaller(t *testing.T) {
 // The mail methods mod/mcp's tools call and the messaging.* operations ask one
 // hosting check. For a mailbox the index names under a contract that does not
 // authorize, every method answers errNotParticipant and every operation
-// rejects, and each asked auth the same hosting question.
+// refuses, and each asked auth the same hosting question. read_messages learns
+// the mailbox from its request, so it answers errNotParticipant once the
+// request arrives.
 func TestTheToolPathAndTheOpPathShareTheHostingCheck(t *testing.T) {
 	mod := testMessagingModule(t)
 	u := relayOnlyParticipant(t, mod)
@@ -433,12 +435,8 @@ func TestTheToolPathAndTheOpPathShareTheHostingCheck(t *testing.T) {
 	}
 
 	for _, op := range mailOps() {
-		w := newRecordingWriter()
-		err := routeQuery(t, op.op(mod), originQuery(u, op.name+op.args, astral.OriginLocal), w)
-		var rejected *astral.ErrRejected
-		if !errors.As(err, &rejected) || w.written() != 0 {
-			t.Fatalf("op path %v: got %v and %v bytes, want a rejection", op.name, err, w.written())
-		}
+		res := tryOp(t, op.op(mod), originQuery(u, op.name+op.args, astral.OriginLocal), op.body)
+		checkUnhosted(t, op, res, true)
 		checkLastHostingQuestion(t, mod, u, op.name)
 	}
 }

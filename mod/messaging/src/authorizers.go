@@ -25,6 +25,17 @@ func (mod *Module) AuthorizeHostMailbox(_ *astral.Context, a *messaging.HostMail
 //
 // why the hosting root is not NodeLocal: its authority is a contract any node
 // can verify, so a chain of contracts must be able to reach it.
+//
+// why no rule answers mod.messaging.read_mailbox_action:
+// an own read never asks the action.
+// Another registered handler, or the external authority the deployment names, decides a delegated read.
+//
+// why no contract carries mod.messaging.read_mailbox_action:
+// the astral-go doc comment on api/messaging ReadMailboxAction holds the reason.
+//
+// note: the refusal covers contracts carrying mod.messaging.read_mailbox_action alone.
+// A mod.auth.sudo_action contract lets its subject act as its issuer, in a delegated read too.
+// auth.sign_contract signs such a contract for any caller (fixme in mod/auth/src/op_sign_contract.go).
 func (mod *Module) addAuthorizers() {
 	mod.Auth.Add(authmod.Func[*messaging.HostMailboxAction](mod.AuthorizeHostMailbox))
 }

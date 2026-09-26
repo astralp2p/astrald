@@ -14,6 +14,12 @@ type opSignContractArgs struct {
 
 // OpSignContract handles the sign-contract remote operation: reads a Contract from the
 // channel, signs it as the local node, and writes the resulting SignedContract back.
+//
+// fixme: the op skips the invariant that a signature proves its signer's consent.
+// The op signs as issuer and as subject for any caller, with any key the node holds.
+// The op checks mod.auth.sudo_action for neither party.
+// crypto.sign_hash and crypto.sign_text check it through authorizeSigner (mod/crypto/src/sign_guard.go).
+// A mod.auth.sudo_action contract signed here lets its subject act as its issuer.
 func (mod *Module) OpSignContract(ctx *astral.Context, q *routing.IncomingQuery, args opSignContractArgs) error {
 	ch := q.Accept(channel.WithFormats(args.In, args.Out))
 	defer ch.Close()
