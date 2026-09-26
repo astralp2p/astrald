@@ -1,6 +1,7 @@
 # main.suite — the env-node chain, cheapest env first.
 smoke
 mcp-origin
+claim-window
 messaging-ops
 bootstrap-user-software-key
 adopt-node
@@ -12,6 +13,7 @@ app-query
 registration-lease
 blueprints-two-node
 apphost-origin
+sign-contract-guard
 messaging-two-node
 mcp-peer
 expel-node                     # mutates two-nodes: nothing may follow it

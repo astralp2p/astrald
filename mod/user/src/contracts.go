@@ -10,6 +10,7 @@ import (
 	userClient "github.com/astralp2p/astral-go/api/user/client"
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astrald/mod/nearby"
+	usermod "github.com/astralp2p/astrald/mod/user"
 )
 
 // validateActiveContract enforces the invariant of the active-contract slot:
@@ -168,7 +169,7 @@ func (mod *Module) IssueMembership(ctx *astral.Context, nodeID *astral.Identity)
 	}
 
 	// adopted and requesting nodes join as plain members without management permits
-	contract, err := user.NewNodeContract(ac.Issuer, nodeID, false, defaultContractValidity)
+	contract, err := user.NewNodeContract(ac.Issuer, nodeID, false, usermod.DefaultContractValidity)
 	if err != nil {
 		return nil, err
 	}

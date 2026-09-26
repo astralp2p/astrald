@@ -35,7 +35,8 @@ func (mod *Module) AuthorizeHostMailbox(_ *astral.Context, a *messaging.HostMail
 //
 // note: the refusal covers contracts carrying mod.messaging.read_mailbox_action alone.
 // A mod.auth.sudo_action contract lets its subject act as its issuer, in a delegated read too.
-// auth.sign_contract signs such a contract for any caller (fixme in mod/auth/src/op_sign_contract.go).
+// auth.sign_contract signs one only for a caller already entitled to both parties;
+// apphost.register still grants an app the sudo permits it asks for.
 func (mod *Module) addAuthorizers() {
 	mod.Auth.Add(authmod.Func[*messaging.HostMailboxAction](mod.AuthorizeHostMailbox))
 }

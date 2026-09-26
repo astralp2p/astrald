@@ -2,6 +2,7 @@ package fs
 
 import (
 	"context"
+	"strings"
 	"time"
 
 	"github.com/astralp2p/astral-go/astral"
@@ -13,11 +14,32 @@ type DB struct {
 	*gorm.DB
 }
 
+// pathUnderRange returns the half-open key range [lo, hi) holding every path
+// strictly under prefix, the same predicate lib/paths.PathUnder applies to
+// repo.root at watch_repository.go:127.
+//
+// why a range and not LIKE: LIKE folds ASCII case, so a root of /data/music
+// matched /DATA/MUSIC/..., and an operand COLLATE BINARY does not disable the
+// folding. LIKE also reads '_' and '%' in the prefix as wildcards and GLOB
+// reads '*', '?' and '['. Comparison on a TEXT column is byte-exact and holds
+// no metacharacters, and it uses the path index.
+//
+// hi is lo with its trailing '/' (0x2F) replaced by '0' (0x30), the next byte
+// value, so hi is the exclusive upper bound of the subtree. A prefix of "",
+// "/" or one with trailing separators yields lo="/" or the cleaned form, so a
+// root spelled /data/music/ behaves as /data/music.
+func pathUnderRange(prefix string) (lo, hi string) {
+	lo = strings.TrimRight(prefix, "/") + "/"
+	hi = lo[:len(lo)-1] + "0"
+	return
+}
+
 func (db *DB) ObjectExists(pathPrefix string, objectID *astral.ObjectID) (b bool, err error) {
+	lo, hi := pathUnderRange(pathPrefix)
 	err = db.
 		Model(&dbLocalFile{}).
 		Where("data_id = ?", objectID).
-		Where("path like ?", pathPrefix+"%").
+		Where("path >= ? AND path < ?", lo, hi).
 		Where("updated_at != 0").
 		Where("deleted_at IS NULL").
 		Select("count(*)>0").
@@ -26,10 +48,11 @@ func (db *DB) ObjectExists(pathPrefix string, objectID *astral.ObjectID) (b bool
 }
 
 func (db *DB) FindObject(pathPrefix string, objectID *astral.ObjectID) (rows []*dbLocalFile, err error) {
+	lo, hi := pathUnderRange(pathPrefix)
 	err = db.
 		Model(&dbLocalFile{}).
 		Where("data_id = ?", objectID).
-		Where("path like ?", pathPrefix+"%").
+		Where("path >= ? AND path < ?", lo, hi).
 		Where("updated_at != 0").
 		Where("deleted_at IS NULL").
 		Find(&rows).
@@ -41,11 +64,12 @@ func (db *DB) FindObject(pathPrefix string, objectID *astral.ObjectID) (rows []*
 // FindByHashTail returns the valid rows under pathPrefix whose data_id ends with tail.
 // note: the zBase32 alphabet holds no LIKE wildcard, so tail matches literally.
 func (db *DB) FindByHashTail(ctx context.Context, pathPrefix string, tail string) (rows []*dbLocalFile, err error) {
+	lo, hi := pathUnderRange(pathPrefix)
 	err = db.
 		WithContext(ctx).
 		Model(&dbLocalFile{}).
 		Where("data_id LIKE '%' || ?", tail).
-		Where("path like ?", pathPrefix+"%").
+		Where("path >= ? AND path < ?", lo, hi).
 		Where("updated_at != 0").
 		Where("deleted_at IS NULL").
 		Find(&rows).
@@ -55,10 +79,11 @@ func (db *DB) FindByHashTail(ctx context.Context, pathPrefix string, tail string
 }
 
 func (db *DB) UniqueObjectIDs(pathPrefix string) (ids []*astral.ObjectID, err error) {
+	lo, hi := pathUnderRange(pathPrefix)
 	err = db.
 		Model(&dbLocalFile{}).
 		Distinct("data_id").
-		Where("path like ?", pathPrefix+"%").
+		Where("path >= ? AND path < ?", lo, hi).
 		Where("updated_at != 0").
 		Where("deleted_at IS NULL").
 		Find(&ids).
@@ -101,9 +126,9 @@ func (db *DB) SoftDeletePaths(paths []string) error {
 }
 
 // EachPath calls fn for each path, using primary key pagination.
-// If prefix is non-empty, only paths strictly under the prefix are matched (prefix+"/%"),
-// not the prefix itself. This is correct for directory roots since only regular files
-// are indexed, not directories.
+// If prefix is non-empty, only paths strictly under the prefix are matched (see
+// pathUnderRange), not the prefix itself. This is correct for directory roots since
+// only regular files are indexed, not directories.
 // important: also calls for paths that are invalid (updated_at = 0)
 func (db *DB) EachPath(prefix string, fn func(string) error) error {
 	const batchSize = 1000
@@ -119,7 +144,8 @@ func (db *DB) EachPath(prefix string, fn func(string) error) error {
 			Order("id ASC").
 			Limit(batchSize)
 		if prefix != "" {
-			query = query.Where("path LIKE ?", prefix+"/%")
+			lo, hi := pathUnderRange(prefix)
+			query = query.Where("path >= ? AND path < ?", lo, hi)
 		}
 
 		if err := query.Find(&rows).Error; err != nil {

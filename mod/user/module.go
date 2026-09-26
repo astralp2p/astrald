@@ -1,12 +1,24 @@
 package user
 
 import (
+	"time"
+
 	"github.com/astralp2p/astral-go/api/user"
 	"github.com/astralp2p/astral-go/astral"
 )
 
 const ModuleName = "user"
 const DBPrefix = "users__"
+
+const (
+	// MinimalContractLength is the shortest remaining validity of a node
+	// contract that user.accept_membership accepts.
+	MinimalContractLength = time.Hour
+
+	// DefaultContractValidity is the validity of a node contract that
+	// user.new_node_contract builds without a duration.
+	DefaultContractValidity = 365 * 24 * time.Hour
+)
 
 type Module interface {
 	// Ready returns a channel that is closed once the module has applied the

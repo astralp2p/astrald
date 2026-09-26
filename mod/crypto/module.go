@@ -60,6 +60,12 @@ type Module interface {
 	Verify(key *crypto.PublicKey, sig *crypto.Signature, obj crypto.SignableTextObject) error
 
 	AddToIndex(object astral.Object) error
+
+	// AuthorizeSigner reports whether caller may obtain a signature under key:
+	// its own key other than the node's, or the key of an identity it may act
+	// as through mod.auth.sudo_action. It returns ErrForeignKey or
+	// ErrNodeKeyNotSignable when the caller may not.
+	AuthorizeSigner(ctx *astral.Context, caller *astral.Identity, key *crypto.PublicKey) error
 }
 
 type ObjectSigner interface {

@@ -38,6 +38,21 @@ func (db *DB) findActiveContracts(q *contractQuery) ([]*dbContract, error) {
 	return rows, gq.Find(&rows).Error
 }
 
+// contractIssued reports whether an indexed contract from issuer to subject
+// carries one of actions, whatever its validity window.
+func (db *DB) contractIssued(issuer, subject *astral.Identity, actions []string) (bool, error) {
+	var count int64
+	err := db.DB.
+		Model(&dbContract{}).
+		Joins("JOIN "+authmod.DBPrefix+"contract_permits ON "+authmod.DBPrefix+"contract_permits.object_id = "+authmod.DBPrefix+"contracts.object_id").
+		Where("issuer_id = ?", issuer).
+		Where("subject_id = ?", subject).
+		Where(authmod.DBPrefix+"contract_permits.name IN ?", actions).
+		Count(&count).
+		Error
+	return count > 0, err
+}
+
 func (db *DB) findContractPermits(objectID *astral.ObjectID) ([]*dbContractPermit, error) {
 	var rows []*dbContractPermit
 	return rows, db.Where("object_id = ?", objectID).Order("id").Find(&rows).Error

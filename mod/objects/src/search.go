@@ -1,6 +1,7 @@
 package objects
 
 import (
+	"github.com/astralp2p/astrald/core"
 	objectsmod "github.com/astralp2p/astrald/mod/objects"
 	"sync"
 	"time"
@@ -8,7 +9,6 @@ import (
 	"github.com/astralp2p/astral-go/api/objects"
 	objectscli "github.com/astralp2p/astral-go/api/objects/client"
 	"github.com/astralp2p/astral-go/astral"
-	"github.com/astralp2p/astral-go/lib/astrald"
 	"github.com/astralp2p/astral-go/sig"
 )
 
@@ -77,7 +77,8 @@ func (mod *Module) Search(ctx *astral.Context, query objects.SearchQuery) (<-cha
 				defer wg.Done()
 
 				// execute search
-				_results, errPtr := objectscli.New(nodeID, astrald.Default()).Search(ctx, query)
+				// why: the source authorizes the caller, not this node (objects.search spec).
+				_results, errPtr := objectscli.New(nodeID, core.NewClientAs(mod.node, search.CallerID)).Search(ctx, query)
 				if _results == nil {
 					if errPtr != nil && *errPtr != nil {
 						mod.log.Errorv(1, "search %v: %v", nodeID, *errPtr)

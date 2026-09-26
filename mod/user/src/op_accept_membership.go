@@ -9,6 +9,7 @@ import (
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astral-go/astral/channel"
 	"github.com/astralp2p/astral-go/lib/routing"
+	usermod "github.com/astralp2p/astrald/mod/user"
 )
 
 type opAcceptMembershipArgs struct {
@@ -44,7 +45,7 @@ func (mod *Module) OpAcceptMembership(ctx *astral.Context, q *routing.IncomingQu
 		return ch.Send(astral.Err(auth.ErrInvalidContract))
 	case !contract.Subject.IsEqual(mod.node.Identity()):
 		return ch.Send(astral.Err(auth.ErrInvalidContract))
-	case contract.ExpiresAt.Time().Before(time.Now().Add(minimalContractLength)):
+	case contract.ExpiresAt.Time().Before(time.Now().Add(usermod.MinimalContractLength)):
 		return ch.Send(astral.Err(auth.ErrInvalidContract))
 	}
 

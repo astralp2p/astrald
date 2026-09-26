@@ -7,6 +7,7 @@ import (
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astral-go/astral/channel"
 	"github.com/astralp2p/astral-go/lib/routing"
+	usermod "github.com/astralp2p/astrald/mod/user"
 )
 
 type opNewNodeContractArgs struct {
@@ -48,7 +49,7 @@ func (mod *Module) OpNewNodeContract(ctx *astral.Context, query *routing.Incomin
 		return ch.Send(astral.NewError("node id missing"))
 	}
 
-	var duration = defaultContractValidity
+	var duration = usermod.DefaultContractValidity
 	if len(args.Duration) > 0 {
 		duration, err = time.ParseDuration(args.Duration)
 		if err != nil {

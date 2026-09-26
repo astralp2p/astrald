@@ -150,10 +150,12 @@ Every story of the catalog, in the cheapest env that can falsify it:
 | — | `mcp-origin` | node | `null` → — |
 | — | `messaging-ops` | node | `null` → — |
 | — | `mcp-peer` | node | `two-nodes` → — |
+| — | `claim-window` | node | `null` → — |
 | — | `fs-watch` | node | `one-node` → — |
 | — | `registration-lease` | node | `one-node` → — |
 | — | `app-query` | node | `two-nodes` → — |
 | — | `apphost-origin` | node | `two-nodes` → — |
+| — | `sign-contract-guard` | node | `two-nodes` → — |
 | — | `blueprints-two-node` | node | `two-nodes` → — |
 | — | `messaging-two-node` | node | `two-nodes` → — |
 | — | `hold-purge` | node | `two-nodes` → — (unlisted, mutates) |
