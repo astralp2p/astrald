@@ -17,8 +17,8 @@ type opDeleteIdentityArgs struct {
 
 // OpDeleteIdentity removes a participant: revokes every token and grant its
 // identity holds, unsets its alias and withdraws its mailbox from this node with
-// the mail it owns. The hosting contract is not revoked. Identity takes an
-// identity or an alias.
+// the mail it owns. The withdrawal is local: the hosting contract is not
+// revoked, and renewal never renews it. Identity takes an identity or an alias.
 func (mod *Module) OpDeleteIdentity(ctx *astral.Context, q *routing.IncomingQuery, args opDeleteIdentityArgs) error {
 	if refusesOrigin(q) {
 		return q.Reject()

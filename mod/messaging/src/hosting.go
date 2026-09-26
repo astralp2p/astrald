@@ -29,8 +29,8 @@ import (
 // note: auth walks every active hosting contract naming this node, so one check
 // costs more the more mailboxes this node hosts.
 //
-// note: only contracts this node provisioned are indexed, by create_identity.
-// A hosting contract auth indexed from elsewhere is not served.
+// note: only contracts this node provisioned are indexed, by create_identity
+// and by renewal. A hosting contract auth indexed from elsewhere is not served.
 func (mod *Module) hosts(identity *astral.Identity) bool {
 	if identity.IsZero() || identity.IsEqual(mod.node.Identity()) {
 		return false
@@ -51,7 +51,8 @@ func (mod *Module) hosts(identity *astral.Identity) bool {
 // identity's mailbox, and answers the index entry it earns. The identity issues
 // it with its own key, which the node holds, to this node: one permit for
 // host_mailbox_action with no delegation, valid for Config.HostingDuration. The
-// contract is signed, indexed with auth and stored.
+// contract is signed, indexed with auth and stored. create_identity provisions
+// with it, and renewal signs every later contract with it.
 //
 // why a contract of its own and not a permit in the relay contract: relaying
 // and hosting are separate authority, and neither grants the other.

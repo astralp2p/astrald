@@ -39,10 +39,39 @@ type keyring struct {
 
 	mu   sync.Mutex
 	keys map[string]*crypto.PrivateKey // by compressed public key, hex
+
+	// signs counts every signature asked of a key, answered or refused, by
+	// compressed public key, hex.
+	signs map[string]int
 }
 
 func newKeyring() *keyring {
-	return &keyring{keys: map[string]*crypto.PrivateKey{}}
+	return &keyring{keys: map[string]*crypto.PrivateKey{}, signs: map[string]int{}}
+}
+
+// withhold takes the identity's key away, so a signature as the identity is
+// refused, and answers the function that gives it back.
+func (k *keyring) withhold(identity *astral.Identity) (restore func()) {
+	pub := hex.EncodeToString(secp256k1.FromIdentity(identity).Key)
+
+	k.mu.Lock()
+	defer k.mu.Unlock()
+
+	key := k.keys[pub]
+	delete(k.keys, pub)
+
+	return func() {
+		k.mu.Lock()
+		defer k.mu.Unlock()
+		k.keys[pub] = key
+	}
+}
+
+// signsAsked answers how many signatures were asked as the identity.
+func (k *keyring) signsAsked(identity *astral.Identity) int {
+	k.mu.Lock()
+	defer k.mu.Unlock()
+	return k.signs[hex.EncodeToString(secp256k1.FromIdentity(identity).Key)]
 }
 
 // mint makes a key the keyring holds and answers its identity.
@@ -71,7 +100,15 @@ func (k *keyring) find(pub *crypto.PublicKey) (*crypto.PrivateKey, bool) {
 	return key, ok
 }
 
+// countSign records that a signature was asked as pub.
+func (k *keyring) countSign(pub *crypto.PublicKey) {
+	k.mu.Lock()
+	defer k.mu.Unlock()
+	k.signs[hex.EncodeToString(pub.Key)]++
+}
+
 func (k *keyring) Sign(ctx *astral.Context, pub *crypto.PublicKey, obj crypto.SignableTextObject) (*crypto.Signature, error) {
+	k.countSign(pub)
 	key, ok := k.find(pub)
 	if !ok {
 		return nil, errors.New("the node holds no private key for this identity")

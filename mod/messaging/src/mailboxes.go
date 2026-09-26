@@ -20,6 +20,13 @@ func (m mailbox) validAt(now time.Time) bool {
 	return now.Before(m.ExpiresAt)
 }
 
+// dueAt answers whether the row's hosting contract is inside the renewal
+// window at now: less than a quarter of duration is left. A contract that has
+// expired is inside it.
+func (m mailbox) dueAt(now time.Time, duration time.Duration) bool {
+	return m.ExpiresAt.Sub(now) < duration/4
+}
+
 // loadMailboxes mirrors the hosting index into memory. It reads this module's
 // own table and nothing else, so it runs at Load.
 func (mod *Module) loadMailboxes() error {
@@ -56,14 +63,45 @@ func (mod *Module) recordMailbox(identity *astral.Identity, entry mailbox) error
 	return nil
 }
 
+// moveMailbox points the identity's index row and its mirror from the contract
+// old names to the one renewed names, in one step, and answers whether it moved
+// them. An index that no longer names old moves nothing.
+//
+// why the mirror is checked under the write lock: withdrawMailbox drops the
+// mirror under the same lock, so a mailbox withdrawn while its renewal was
+// signed stays withdrawn.
+//
+// why the row is matched on old as well: a row that names another contract is
+// not the one this renewal read, and moving it would drop a newer contract.
+func (mod *Module) moveMailbox(identity *astral.Identity, old, renewed mailbox) (bool, error) {
+	mod.mu.Lock()
+	defer mod.mu.Unlock()
+
+	current, ok := mod.mailboxes.Get(identity.String())
+	if !ok || !current.ContractID.IsEqual(old.ContractID) {
+		return false, nil
+	}
+
+	n, err := mod.db.MoveMailbox(identity, old.ContractID, renewed.ContractID, renewed.ExpiresAt)
+	if err != nil || n != 1 {
+		return false, err
+	}
+
+	mod.mailboxes.Replace(identity.String(), renewed)
+
+	return true, nil
+}
+
 // withdrawMailbox stops hosting the mailbox on this node: it drops the mirror,
 // then deletes the index row with the mail the identity owns. An identity the
 // index does not name answers messagingmod.ErrIdentityNotFound.
 //
 // why the hosting contract is left alone: this is a local withdrawal and not a
-// revocation. The signed contract stays valid until its expiry wherever it is
-// held, and this node stops hosting because its index no longer names the
-// mailbox.
+// revocation. The contract names this node as its subject and grants nothing
+// elsewhere, and auth holds no revocation. The signed contract stays valid
+// until its expiry wherever it is held, and this node stops hosting because its
+// index no longer names the mailbox. Renewal reads the index, so it never
+// renews the contract of a withdrawn mailbox.
 //
 // why the mirror goes first: a delivery admitted after the table delete would
 // store mail for a mailbox that is gone. A failed delete keeps the row, so the
