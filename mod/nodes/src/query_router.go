@@ -56,34 +56,95 @@ func (mod *Module) RouteQuery(ctx *astral.Context, q *astral.InFlightQuery, w io
 		return query.RouteNotFound()
 	}
 
-	for _, relayID := range relays {
-		// never use the target as a relay to itself
-		if relayID.IsEqual(q.Target) {
-			continue
-		}
+	relayed := &relayedQuery{ctx: ctx, q: q, w: w, reach: func(relayID *astral.Identity) (astral.Router, error) {
+		return mod.reachRelay(ctx, retrieveCtx, q, relayID)
+	}}
 
-		link := mod.linkPool.SelectLinkWith(relayID)
-		if link == nil {
-			result := <-mod.linkPool.RetrieveLink(retrieveCtx, relayID, WithStrategies(nodes.StrategyBasic, nodes.StrategyTor))
-			if result.Err != nil {
-				continue
-			}
-			link = result.Link
-		}
+	return relayed.route(relays)
+}
 
-		if !ctx.Identity().IsEqual(q.Caller) {
-			if err := mod.sendCallerProof(ctx, q, relayID); err != nil {
-				continue
-			}
-		}
+// reachRelay returns a link to relayID for q, after pushing the caller's proof
+// to it when the caller is not this node.
+func (mod *Module) reachRelay(ctx, retrieveCtx *astral.Context, q *astral.InFlightQuery, relayID *astral.Identity) (astral.Router, error) {
+	// never use the target as a relay to itself
+	if relayID.IsEqual(q.Target) {
+		return nil, errors.New("the target is not its own relay")
+	}
 
-		rw, err := link.RouteQuery(ctx, q, w)
-		if err == nil {
-			return rw, nil
+	link := mod.linkPool.SelectLinkWith(relayID)
+	if link == nil {
+		result := <-mod.linkPool.RetrieveLink(retrieveCtx, relayID, WithStrategies(nodes.StrategyBasic, nodes.StrategyTor))
+		if result.Err != nil {
+			return nil, result.Err
+		}
+		link = result.Link
+	}
+
+	if !ctx.Identity().IsEqual(q.Caller) {
+		if err := mod.sendCallerProof(ctx, q, relayID); err != nil {
+			return nil, err
 		}
 	}
 
+	return link, nil
+}
+
+// relayedQuery is one query routed through the relays its Extra lists.
+type relayedQuery struct {
+	ctx   *astral.Context
+	q     *astral.InFlightQuery
+	w     io.WriteCloser
+	reach func(relayID *astral.Identity) (astral.Router, error)
+}
+
+// route asks each relay in order and answers the first that accepts. When none
+// accepts, it answers the first rejection that carries a code other than the
+// generic astral.DefaultRejectCode, and ErrRouteNotFound when no relay answered
+// one.
+//
+// why a rejection does not end the loop: it answers for one relay's path, and
+// a later relay may still accept.
+//
+// why a rejection outranks a missing route: its code tells the caller a refusal
+// from an absence, and a missing route tells nothing.
+//
+// why the generic code counts as a missing route: a node answers a query it
+// has no route for over a link with the generic code (Mux.handleInboundQuery),
+// so that code does not tell a refusal from an absence.
+func (r *relayedQuery) route(relays []*astral.Identity) (io.WriteCloser, error) {
+	var rejected *astral.ErrRejected
+
+	for _, relayID := range relays {
+		rw, err := r.ask(relayID)
+		if err == nil {
+			return rw, nil
+		}
+
+		var reject *astral.ErrRejected
+		if rejected == nil && errors.As(err, &reject) && reject.Code != astral.DefaultRejectCode {
+			rejected = reject
+		}
+	}
+
+	if rejected != nil {
+		return nil, rejected
+	}
+
 	return query.RouteNotFound()
+}
+
+// ask asks one relay the query.
+//
+// why a missing route whatever reach answered: a relay that reach did not
+// reach, or did not prove the caller to, was never asked the query, so no
+// rejection is its answer.
+func (r *relayedQuery) ask(relayID *astral.Identity) (io.WriteCloser, error) {
+	relay, err := r.reach(relayID)
+	if err != nil {
+		return query.RouteNotFound()
+	}
+
+	return relay.RouteQuery(r.ctx, r.q, r.w)
 }
 
 func (mod *Module) sendCallerProof(ctx *astral.Context, q *astral.InFlightQuery, target *astral.Identity) error {
