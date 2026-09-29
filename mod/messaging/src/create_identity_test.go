@@ -83,12 +83,12 @@ func TestACreatedIdentityReceivesMail(t *testing.T) {
 
 // create_identity provisions two separate contracts from the new identity to
 // this node: the relay contract, unchanged, and a hosting contract carrying one
-// non-delegable host_mailbox_action permit that expires after
-// Config.HostingDuration. Both are signed, indexed and stored, and the index
-// row names the hosting one.
+// non-delegable host_mailbox_action permit that expires after the module's
+// hostingDuration. Both are signed, indexed and stored, and the index row names
+// the hosting one.
 func TestCreateIdentityProvisionsASeparateHostingContract(t *testing.T) {
 	mod, _, _ := testIdentityModule(t)
-	mod.config.HostingDuration = 48 * time.Hour
+	mod.hostingDuration = 48 * time.Hour
 	before := time.Now()
 
 	cred, err := mod.CreateIdentity(mod.ctx, "", 0)
@@ -132,7 +132,7 @@ func TestCreateIdentityProvisionsASeparateHostingContract(t *testing.T) {
 
 // checkHostingContract asserts the hosting contract's shape: subject this node,
 // one permit for host_mailbox_action with no constraint and no delegation,
-// expiring Config.HostingDuration after before.
+// expiring the module's hostingDuration after before.
 func checkHostingContract(t *testing.T, mod *Module, sc *auth.SignedContract, before time.Time) {
 	t.Helper()
 
@@ -148,7 +148,7 @@ func checkHostingContract(t *testing.T, mod *Module, sc *auth.SignedContract, be
 	}
 
 	expires := sc.ExpiresAt.Time()
-	low, high := before.Add(mod.config.HostingDuration), time.Now().Add(mod.config.HostingDuration)
+	low, high := before.Add(mod.hostingDuration), time.Now().Add(mod.hostingDuration)
 	if expires.Before(low.Add(-time.Second)) || expires.After(high.Add(time.Second)) {
 		t.Fatalf("the contract expires at %v, want within %v..%v", expires, low, high)
 	}

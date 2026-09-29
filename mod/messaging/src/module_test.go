@@ -32,9 +32,10 @@ func testMessagingModule(t *testing.T) *Module {
 	keys := newKeyring()
 
 	mod := &Module{
-		db:     testDB(t),
-		config: defaultConfig,
-		log:    testLogger(),
+		db:              testDB(t),
+		config:          defaultConfig,
+		hostingDuration: ContractDuration,
+		log:             testLogger(),
 	}
 	wireTestModule(t, mod, keys.mint(), keys)
 
