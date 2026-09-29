@@ -34,16 +34,6 @@ func (db *DB) CreateMailbox(identity *astral.Identity, contractID *astral.Object
 	}).Error
 }
 
-// MoveMailbox points the identity's index row from the hosting contract from
-// to the contract to, which expires at expiresAt, and answers how many rows it
-// moved. A row that names another contract, or no row, moves nothing.
-func (db *DB) MoveMailbox(identity *astral.Identity, from, to *astral.ObjectID, expiresAt time.Time) (int64, error) {
-	res := db.Model(&dbMailbox{}).
-		Where("identity = ? AND contract_id = ?", identity, from).
-		Updates(map[string]any{"contract_id": to, "expires_at": expiresAt.UTC()})
-	return res.RowsAffected, res.Error
-}
-
 func (db *DB) FindMailbox(identity *astral.Identity) (row *dbMailbox, err error) {
 	err = db.Where("identity = ?", identity).Take(&row).Error
 	return

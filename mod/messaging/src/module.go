@@ -3,6 +3,7 @@ package messaging
 import (
 	"errors"
 	"sync"
+	"time"
 
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astral-go/astral/log"
@@ -31,6 +32,12 @@ type Module struct {
 	db     *DB
 	router routing.OpRouter
 
+	// hostingDuration is the validity of a hosting contract this node signs,
+	// ContractDuration outside tests.
+	//
+	// why not in Config: the length is a fixed default, not a setting.
+	hostingDuration time.Duration
+
 	// mailboxes is the hosting index, keyed by identity. It mirrors
 	// messaging__mailboxes and authorizes nothing by itself — see hosts.
 	mailboxes sig.Map[string, mailbox]
@@ -45,10 +52,8 @@ type Module struct {
 	waiters waiters
 }
 
-// Run renews the hosting contracts inside the renewal window until ctx ends —
-// see renewHosting.
 func (mod *Module) Run(ctx *astral.Context) error {
-	mod.renewHosting(ctx)
+	<-ctx.Done()
 	return nil
 }
 

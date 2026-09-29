@@ -2,7 +2,6 @@ package messaging
 
 import (
 	"bytes"
-	"context"
 	"errors"
 	"testing"
 	"time"
@@ -13,16 +12,15 @@ import (
 	messagingmod "github.com/astralp2p/astrald/mod/messaging"
 )
 
-// Expiry, which happens only when renewal failed: a mailbox whose hosting
-// contract lapses, the index row and the contract alike, and nothing renews it.
-// No test here runs the renewal pass.
+// Expiry: a mailbox whose hosting contract lapses, the index row and the
+// contract alike, and nothing renews it.
 
 // lapsingParticipant provisions a mailbox whose hosting contract lapses two
 // seconds from now.
 func lapsingParticipant(t *testing.T, mod *Module) *astral.Identity {
 	t.Helper()
 
-	mod.config.HostingDuration = 2 * time.Second
+	mod.hostingDuration = 2 * time.Second
 	return hostedParticipant(t, mod)
 }
 
@@ -165,26 +163,5 @@ func TestAfterTheLapseTheMailboxIsNotServed(t *testing.T) {
 	}
 	if n := countOwned(t, mod.db, u); n != 1 {
 		t.Fatalf("%v stored messages after the lapse, want the one sent", n)
-	}
-}
-
-// A mailbox whose contract lapsed is still inside the renewal window, so the
-// next pass that succeeds renews it and serves the mailbox again, with the mail
-// it kept.
-func TestARenewalAfterTheLapseServesTheMailboxAgain(t *testing.T) {
-	mod := testMessagingModule(t)
-	u, peer := lapsingParticipant(t, mod), astral.GenerateIdentity()
-	mustInsertOutbox(t, mod, &messaging.StoredMessage{ID: messaging.NewMessageID(), Sender: u, Recipient: peer, Content: "kept"})
-	awaitLapse(t, mod, u)
-
-	mod.config.HostingDuration = time.Hour
-	mod.renewMailboxes(mod.ctx, time.Now())
-
-	if !mod.hosts(u) {
-		t.Fatal("a renewal after the lapse did not serve the mailbox again")
-	}
-	list, err := mod.ListMessages(context.Background(), u, messaging.ListMessagesRequest{List: messaging.ListOutbox})
-	if err != nil || len(list) != 1 {
-		t.Fatalf("the outbox after the renewal: %v messages, err %v; want the one kept", len(list), err)
 	}
 }

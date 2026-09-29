@@ -266,7 +266,7 @@ func TestAnExpiredContractDoesNotAuthorize(t *testing.T) {
 // the row and the stored mail stay.
 func TestTheIndexDoesNotOutliveTheContract(t *testing.T) {
 	mod := testMessagingModule(t)
-	mod.config.HostingDuration = 2 * time.Second
+	mod.hostingDuration = 2 * time.Second
 	u := hostedParticipant(t, mod)
 	outlast(t, mod, u)
 	peer := astral.GenerateIdentity()

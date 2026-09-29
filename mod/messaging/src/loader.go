@@ -15,13 +15,13 @@ type Loader struct{}
 // struct methods as router operations.
 func (Loader) Load(node astral.Node, assets assets.Assets, log *log.Logger) (core.Module, error) {
 	mod := &Module{
-		config: defaultConfig,
-		node:   node,
-		log:    log,
+		config:          defaultConfig,
+		hostingDuration: ContractDuration,
+		node:            node,
+		log:             log,
 	}
 
 	_ = assets.LoadYAML(messagingmod.ModuleName, &mod.config)
-	mod.config = mod.config.withHostingDefaults()
 
 	mod.router.AddStructPrefix(mod, "Op")
 

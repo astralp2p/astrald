@@ -26,15 +26,14 @@ tools call the `messaging.Module` methods under the bearer's identity.
   hosting contract stay valid until they expire, wherever they are held.
 * The hosting contract names this node as its subject and grants nothing on
   another node. `mod/auth` holds no revocation path for a signed contract.
-* Renewal never renews the hosting contract of a withdrawn mailbox — see
-  [Renewal and expiry](#renewal-and-expiry).
 
 ## Hosting
 
 * A hosting contract has the participant `U` as issuer and this node `N` as
   subject. The contract carries one permit for
   `mod.messaging.host_mailbox_action`, with delegation `0` and no constraints.
-  The contract expires after `hosting_duration`.
+  The contract expires after `ContractDuration`, ten 365-day years. The length
+  is not configurable.
 * The hosting contract is separate from the relay contract. A relay permit
   never authorizes hosting, and a hosting permit never authorizes relaying.
 * The module registers the root rule for `mod.messaging.host_mailbox_action`:
@@ -54,27 +53,13 @@ tools call the `messaging.Module` methods under the bearer's identity.
 * Only contracts this node provisioned are indexed. A hosting contract auth
   indexed from elsewhere is not served.
 
-## Renewal and expiry
+## Expiry
 
-* The module runs a renewal pass at Run and then every `renewal_interval`.
-* A pass renews every mailbox the in-memory index names whose hosting contract
-  has less than a quarter of `hosting_duration` left. An expired contract is
-  inside that window.
-* A renewal signs a fresh hosting contract on the same terms, indexes it with
-  auth and stores it. The mailbox identity issues the contract with the key
-  this node holds. The index row and its mirror then move to the new contract
-  in one step, under the lock a withdrawal takes.
-* The old contract stays indexed and valid until it expires.
-* A renewal that fails is logged, and the next pass retries it. The old
-  contract serves until it lapses.
-* A pass reads the mirror, which a withdrawal drops first. A mailbox withdrawn
-  before the pass is not renewed. A mailbox withdrawn while its renewal is
-  signed stays withdrawn, and the contract signed for it serves nothing.
-* A withdrawal whose delete fails keeps the index row. The mailbox is neither
-  served nor renewed while the node runs. A restart mirrors the row again, and
-  the mailbox is served and renewed until the deletion runs again.
-* A hosting contract lapses only when no renewal succeeded inside its window:
-  every pass failed, or none ran.
+* Nothing renews a hosting contract. It lapses `ContractDuration` after this
+  node signed it.
+* A withdrawal whose delete fails keeps the index row. The mailbox is not
+  served while the node runs. A restart mirrors the row again, and the mailbox
+  is served until the deletion runs again.
 * A delivery or a receipt admitted before the lapse completes. A delivery
   writes its row under the index guard, which a lapse does not close.
 * After the lapse, a delivery and a receipt are answered `route_not_found`, so
@@ -84,8 +69,7 @@ tools call the `messaging.Module` methods under the bearer's identity.
   `not a messaging participant`.
 * A `wait` parked before the lapse ends at its granted window with what it
   has.
-* The index row and the stored mail stay. A renewal that succeeds after the
-  lapse serves the mailbox again.
+* The index row and the stored mail stay.
 
 ## Delivery
 
@@ -182,8 +166,6 @@ tools call the `messaging.Module` methods under the bearer's identity.
 The config file for the module is `messaging.yaml`. The defaults:
 
 ```yaml
-hosting_duration: 87600h
-renewal_interval: 24h
 token_duration: 8760h
 delivery_timeout: 15s
 wait_default: 2m
@@ -192,12 +174,6 @@ max_payload_bytes: 65536
 max_read_bytes: 65536
 ```
 
-* `hosting_duration` is the validity of a new or renewed hosting contract. A
-  quarter of `hosting_duration` is the renewal window. A value of zero or less
-  takes the default.
-* `renewal_interval` is the time between two renewal passes. A value of zero or
-  less takes the default. An interval longer than a quarter of
-  `hosting_duration` lets a contract lapse between two passes.
 * `token_duration` is the validity of a new participant's access token when
   `create_identity` names no `duration`.
 * `delivery_timeout` bounds one delivery, one receipt, and the read of either
