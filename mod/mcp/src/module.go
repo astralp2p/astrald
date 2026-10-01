@@ -21,6 +21,11 @@ type Module struct {
 
 	// tools are the deployment's own, read once at load — declared_tools.go.
 	tools []declaredTool
+
+	// activityTarget and activityPath are the activity query as configured,
+	// empty when no report is sent — activity.go.
+	activityTarget string
+	activityPath   string
 }
 
 func (mod *Module) Run(ctx *astral.Context) error {

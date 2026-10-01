@@ -12,6 +12,13 @@ type Config struct {
 	MaxResponseBytes   int `yaml:"max_response_bytes,omitempty"`
 	MaxResponseObjects int `yaml:"max_response_objects,omitempty"`
 
+	// ActivityQuery is the query put when an identity uses the endpoint, as
+	// astral://<identity-or-alias>:<query>; empty sends no report.
+	ActivityQuery string `yaml:"activity_query,omitempty"`
+
+	// ActivityInterval is the least time between two reports for one identity.
+	ActivityInterval time.Duration `yaml:"activity_interval,omitempty"`
+
 	// Tools are the tools this deployment exposes beside the built-in set.
 	Tools []ToolConfig `yaml:"tools,omitempty"`
 }
@@ -37,4 +44,5 @@ var defaultConfig = Config{
 	QueryTimeout:       15 * time.Second,
 	MaxResponseBytes:   64 << 10,
 	MaxResponseObjects: 64,
+	ActivityInterval:   time.Minute,
 }
