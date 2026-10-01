@@ -1,23 +1,31 @@
 package services
 
-import "github.com/astralp2p/astral-go/astral"
 import (
 	"github.com/astralp2p/astral-go/api/services"
+	"github.com/astralp2p/astral-go/astral"
 )
 
 const ModuleName = "services"
-const DBPrefix = "services__"
 
-// Module is the registry and aggregate discoverer: it accepts Discoverer
-// registrations and itself satisfies Discoverer by fanning out to all registered sources.
+// Module hosts the node's service providers and answers discovery from them.
 type Module interface {
-	AddDiscoverer(Discoverer) error
-	Discoverer
+	// RegisterNative makes the node itself the provider of names. It claims
+	// every name or none, like an app advertisement, and is called in Prepare.
+	RegisterNative(names []string, e Evaluator) (Registration, error)
 }
 
-// Discoverer streams service availability updates to the caller.
-// When follow is false the channel closes after the initial snapshot; when true it
-// remains open and delivers incremental updates until ctx is cancelled.
-type Discoverer interface {
-	DiscoverServices(ctx *astral.Context, caller *astral.Identity, follow bool) (<-chan *services.Update, error)
+// Evaluator decides what a native service offers one caller.
+type Evaluator interface {
+	// Evaluate returns the caller's offering of service, or nil for none. It
+	// runs outside the module's lock, must not block, and must not call back
+	// into the module.
+	Evaluate(caller *astral.Identity, service string) *services.Update
+}
+
+// Registration is one native provider's hold on its names.
+type Registration interface {
+	// Changed tells the module that every caller's offering may have changed.
+	Changed()
+	// Close releases the names. Consumers that saw them receive a removal.
+	Close()
 }

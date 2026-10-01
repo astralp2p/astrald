@@ -6,6 +6,7 @@ import (
 	"github.com/astralp2p/astrald/core"
 	"github.com/astralp2p/astrald/core/assets"
 	"github.com/astralp2p/astrald/mod/services"
+	"github.com/astralp2p/astrald/mod/services/src/coordinator"
 )
 
 type Loader struct{}
@@ -14,17 +15,9 @@ func (Loader) Load(node astral.Node, assets assets.Assets, log *log.Logger) (cor
 	var mod = &Module{
 		node: node,
 		log:  log,
-	}
-
-	mod.db = &DB{db: assets.Database()}
-	mod.external = newExternalServices()
-
-	if err := mod.db.Migrate(); err != nil {
-		return nil, err
-	}
-
-	if err := mod.AddDiscoverer(mod.external); err != nil {
-		return nil, err
+		// why: the coordinator exists from Load, so native modules can register
+		// from their Prepare, which runs concurrently across modules.
+		coord: coordinator.New(coordinator.DefaultConfig()),
 	}
 
 	mod.router.AddStructPrefix(mod, "Op")

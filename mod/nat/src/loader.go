@@ -1,8 +1,6 @@
 package nat
 
 import (
-	"sync"
-
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astral-go/astral/log"
 	"github.com/astralp2p/astrald/core"
@@ -16,7 +14,6 @@ func (Loader) Load(node astral.Node, assets assets.Assets, l *log.Logger) (core.
 	mod := &Module{
 		node: node,
 		log:  l,
-		cond: sync.NewCond(&sync.Mutex{}),
 	}
 
 	mod.pool = NewHolePool(mod)

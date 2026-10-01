@@ -7,9 +7,11 @@ import (
 	"time"
 
 	"github.com/astralp2p/astral-go/api/auth"
+	"github.com/astralp2p/astral-go/api/services"
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astral-go/lib/query"
 	"github.com/astralp2p/astral-go/lib/routing"
+	"github.com/astralp2p/astrald/mod/services/src/coordinator"
 )
 
 // serveAppsNode is an astral.Node that only answers Identity.
@@ -21,23 +23,40 @@ type serveAppsNode struct {
 func (n *serveAppsNode) Identity() *astral.Identity { return n.id }
 
 // serveAppsModule holds the auth dependency and the two fields the advertise op
-// reaches past its guard: the node's identity and the advertisement set. Every
-// other field stays the zero value.
+// reaches past its guard: the node's identity and the coordinator. Every other
+// field stays the zero value.
 func serveAppsModule(authority *recordingAuth) *Module {
 	return &Module{
-		Deps:     Deps{Auth: authority},
-		node:     &serveAppsNode{id: astral.GenerateIdentity()},
-		external: newExternalServices(),
+		Deps:  Deps{Auth: authority},
+		node:  &serveAppsNode{id: astral.GenerateIdentity()},
+		coord: coordinator.New(coordinator.DefaultConfig()),
 	}
 }
 
+// nopTransport is a transport that delivers nothing.
+type nopTransport struct{}
+
+func (nopTransport) Send(*services.Ask) error { return nil }
+func (nopTransport) Close()                   {}
+
+// owned reports whether a live binding holds (id, name): a registration of the
+// same pair is refused exactly then.
+func owned(mod *Module, id *astral.Identity, name string) bool {
+	src, err := mod.coord.Register(id, []string{name}, nopTransport{})
+	if err != nil {
+		return true
+	}
+	src.Close()
+	return false
+}
+
 // serveAppsOp is one row of the ServeApps surface in mod/services: the op, a
-// query that binds its arguments, and a count of what it published.
+// query that binds its arguments, and whether it bound the caller.
 type serveAppsOp struct {
 	name      string
 	op        func(*Module) any
 	args      string
-	installed func(*Module) int
+	installed func(*Module, *astral.Identity) bool
 }
 
 func serveAppsOps() []serveAppsOp {
@@ -45,8 +64,8 @@ func serveAppsOps() []serveAppsOp {
 		{
 			name:      "services.advertise",
 			op:        func(m *Module) any { return m.OpAdvertise },
-			args:      "?name=contacts",
-			installed: func(m *Module) int { return len(m.external.snapshot()) },
+			args:      "?services=contacts",
+			installed: func(m *Module, id *astral.Identity) bool { return owned(m, id, "contacts") },
 		},
 	}
 }
@@ -107,8 +126,8 @@ func TestServeAppsRefusesCallerWithoutPermits(t *testing.T) {
 				t.Fatalf("%s named actor %v; want the caller %v", op.name, action.Actor(), caller)
 			}
 
-			if n := op.installed(mod); n != 0 {
-				t.Fatalf("%s published %d advertisements for a refused caller; want none", op.name, n)
+			if op.installed(mod, caller) {
+				t.Fatalf("%s bound a refused caller", op.name)
 			}
 		})
 	}
@@ -141,16 +160,16 @@ func TestServeAppsKeepsTheNetworkOriginRefusal(t *testing.T) {
 				t.Fatalf("%s made %d authorization calls for a network caller; want none", op.name, n)
 			}
 
-			if n := op.installed(mod); n != 0 {
-				t.Fatalf("%s published %d advertisements for a network caller; want none", op.name, n)
+			if op.installed(mod, caller) {
+				t.Fatalf("%s bound a network caller", op.name)
 			}
 		})
 	}
 }
 
 // TestServeAppsAdvertisementStandsUntilTheSessionCloses covers the granted
-// path: the advertisement names the caller as its provider, and closing the
-// caller's end of the channel withdraws it.
+// path: the binding names the caller as its provider, and closing the caller's
+// end of the channel releases it.
 func TestServeAppsAdvertisementStandsUntilTheSessionCloses(t *testing.T) {
 	authority := &recordingAuth{verdict: true}
 	mod := serveAppsModule(authority)
@@ -165,7 +184,7 @@ func TestServeAppsAdvertisementStandsUntilTheSessionCloses(t *testing.T) {
 	ctx, cancel := astral.NewContext(nil).WithTimeout(10 * time.Second)
 	defer cancel()
 
-	conn, err := op.RouteQuery(ctx, astral.Launch(query.New(caller, caller, "services.advertise?name=contacts", nil)), w)
+	conn, err := op.RouteQuery(ctx, astral.Launch(query.New(caller, caller, "services.advertise?services=contacts", nil)), w)
 	if err != nil {
 		t.Fatalf("services.advertise refused an authorized caller: %v", err)
 	}
@@ -177,34 +196,20 @@ func TestServeAppsAdvertisementStandsUntilTheSessionCloses(t *testing.T) {
 		time.Sleep(time.Millisecond)
 	}
 
-	ads := mod.external.snapshot()
-	if len(ads) != 1 || !ads[0].ProviderID.IsEqual(caller) {
-		t.Fatalf("services.advertise published %+v; want one advertisement provided by the caller", ads)
+	if !owned(mod, caller, "contacts") {
+		t.Fatal("services.advertise acked without binding the caller as the provider")
 	}
 
 	if err := conn.Close(); err != nil {
 		t.Fatalf("close the caller's end: %v", err)
 	}
 
-	select {
-	case <-w.closed:
-	case <-ctx.Done():
-		t.Fatal("services.advertise did not end when the caller closed its end")
-	}
-
-	// why: <-w.closed reports that the caller's end closed, which astral-go's
-	// routing.Conn.Read does from inside the op's own read on any read error
-	// (lib/routing/conn.go:30-37), strictly before OpAdvertise returns from
-	// ch.Switch and runs its deferred withdraw (op_advertise.go:71). Wait for
-	// the withdraw itself, then let the assertion below report a real leak.
-	for len(mod.external.snapshot()) != 0 {
+	// why: the caller's end closing precedes the op's deferred release of the
+	// binding; wait for the release itself.
+	for owned(mod, caller, "contacts") {
 		if ctx.Err() != nil {
-			break
+			t.Fatal("closing the session left the binding standing")
 		}
 		time.Sleep(time.Millisecond)
-	}
-
-	if n := len(mod.external.snapshot()); n != 0 {
-		t.Fatalf("closing the session left %d advertisements standing; want none", n)
 	}
 }

@@ -1,15 +1,20 @@
 package services
 
 import (
-	servicescli "github.com/astralp2p/astral-go/api/services/client"
+	"time"
+
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astral-go/astral/log"
 	"github.com/astralp2p/astral-go/lib/routing"
-	"github.com/astralp2p/astral-go/sig"
 	"github.com/astralp2p/astrald/mod/services"
+	"github.com/astralp2p/astrald/mod/services/src/coordinator"
 )
 
 const ModuleName = "services"
+
+// writeTimeout bounds one write to a discovery consumer.
+// note: provisional value, plan §10.
+const writeTimeout = 10 * time.Second
 
 type Module struct {
 	Deps
@@ -17,10 +22,7 @@ type Module struct {
 	node   astral.Node
 	log    *log.Logger
 	router routing.OpRouter
-	db     *DB
-
-	external    *externalServices
-	discoverers sig.Set[services.Discoverer]
+	coord  *coordinator.Coordinator
 }
 
 var _ services.Module = &Module{}
@@ -28,43 +30,6 @@ var _ services.Module = &Module{}
 func (mod *Module) Run(ctx *astral.Context) error {
 	<-ctx.Done()
 	return nil
-}
-
-func (mod *Module) syncServices(ctx *astral.Context, providerID *astral.Identity, follow bool) error {
-	client := servicescli.New(providerID, nil)
-
-	ch, err := client.Discover(ctx, follow)
-	if err != nil {
-		return err
-	}
-
-	// clear cache
-	err = mod.db.deleteAllProviderServices(providerID)
-	if err != nil {
-		return err
-	}
-
-	// process updates
-	for update := range ch {
-		switch {
-		case update == nil:
-			continue
-		case bool(update.Available):
-			err = mod.db.createProviderService(update.ProviderID, string(update.Name), update.Info)
-		default:
-			err = mod.db.deleteProviderService(update.ProviderID, string(update.Name))
-		}
-
-		if err != nil {
-			return err
-		}
-	}
-
-	return nil
-}
-
-func (mod *Module) AddDiscoverer(discoverer services.Discoverer) error {
-	return mod.discoverers.Add(discoverer)
 }
 
 func (mod *Module) Router() astral.Router {
