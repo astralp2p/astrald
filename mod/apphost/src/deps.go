@@ -3,6 +3,7 @@ package apphost
 import (
 	"github.com/astralp2p/astral-go/api/auth"
 	"github.com/astralp2p/astral-go/api/coldcard"
+	"github.com/astralp2p/astral-go/api/services"
 	"github.com/astralp2p/astral-go/api/user"
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astrald/core"
@@ -38,6 +39,7 @@ func (mod *Module) LoadDependencies(*astral.Context) (err error) {
 	mod.Auth.Add(authmod.NodeLocal(authmod.Func[*auth.SeeNodeStateAction](mod.AuthorizeSeeNodeState)))
 	mod.Auth.Add(authmod.NodeLocal(authmod.Func[*coldcard.ScanAction](mod.AuthorizeColdcardScan)))
 	mod.Auth.Add(authmod.NodeLocal(authmod.Func[*shell.ShellAction](mod.AuthorizeShell)))
+	mod.Auth.Add(authmod.NodeLocal(authmod.Func[*services.ServiceDiscoveryAction](mod.AuthorizeServiceDiscovery)))
 
 	return
 }
