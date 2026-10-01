@@ -31,6 +31,10 @@ func (Loader) Load(node astral.Node, assets assets.Assets, log *log.Logger) (cor
 		return nil, err
 	}
 
+	if err = mod.readActivity(); err != nil {
+		return nil, err
+	}
+
 	mod.router.AddStructPrefix(mod, "Op")
 
 	mod.db = &DB{assets.Database()}

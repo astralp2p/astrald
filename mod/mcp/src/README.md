@@ -101,3 +101,29 @@ node would answer it with this node's authority.
 
 A tool whose target does not resolve answers `unknown target: <target>`. A
 query that is refused or finds no route answers `query failed: <error>`.
+
+### Activity
+
+A deployment can have the node report that an identity uses the endpoint. The
+report is one query, put at the start of an authenticated HTTP request:
+
+```yaml
+activity_query: "astral://telepathy:agents.seen"
+activity_interval: 1m
+```
+
+`activity_query` is `astral://<identity-or-alias>:<query>`; empty, the default,
+sends no report, and a value that does not parse fails the load.
+`activity_interval` defaults to one minute.
+
+Every authenticated request triggers a report, whatever its JSON-RPC method. The
+node puts it at most once per interval per identity and never while one is in
+flight. The query is put as the authenticated identity, whether or not it is an
+agent, and carries the MCP origin. It is routed on the node's context, as a
+declared tool's query is.
+
+The report runs on a goroutine on the module's context and ends at
+`query_timeout`, so a request never waits on the target. The node drains and
+discards the answer, logs a failure at verbosity 2, and does not retry. The
+target learns the activity of every identity the endpoint authenticates.
+

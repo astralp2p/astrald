@@ -64,13 +64,26 @@ func (srv *MCPServer) Run(ctx *astral.Context) error {
 }
 
 // handler builds the middleware stack: bearer auth wrapping the streamable
-// MCP handler.
+// MCP handler, with the activity report between them when one is configured.
 func (srv *MCPServer) handler() http.Handler {
-	return sdkauth.RequireBearerToken(srv.verifyToken, nil)(
-		mcpsdk.NewStreamableHTTPHandler(srv.getServer, &mcpsdk.StreamableHTTPOptions{
-			SessionTimeout: 30 * time.Minute,
-		}),
-	)
+	var reporter *activityReporter
+	if srv.activityPath != "" {
+		reporter = newActivityReporter(srv.Module)
+	}
+
+	return srv.handlerWith(reporter)
+}
+
+func (srv *MCPServer) handlerWith(reporter *activityReporter) http.Handler {
+	var next http.Handler = mcpsdk.NewStreamableHTTPHandler(srv.getServer, &mcpsdk.StreamableHTTPOptions{
+		SessionTimeout: 30 * time.Minute,
+	})
+
+	if reporter != nil {
+		next = reporter.middleware(next)
+	}
+
+	return sdkauth.RequireBearerToken(srv.verifyToken, nil)(next)
 }
 
 // verifyToken resolves a bearer PAT to an identity via apphost access tokens.
