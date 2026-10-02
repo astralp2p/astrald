@@ -177,6 +177,32 @@ async def exchange(n: dict, ada: dict, bob: dict, cleo: dict) -> dict:
         }
 
 
+async def paging(n: dict, ada: dict, bob: dict) -> dict:
+    """ada pages her conversation with bob one row at a time, pages her
+    conversations, and reads every change from the start; bob, whom the
+    authority lets read no mailbox, names ada's; a position without its
+    generation is refused."""
+    peer = bob["Identity"]
+    async with await astral.connect(n["endpoint"], token=ada["Token"]) as ca:
+        first = await mail.page(ca, "page_messages", peer=peer, limit=1)
+        older = await mail.page(ca, "page_messages", peer=peer, limit=1,
+                                before=first["NextBefore"],
+                                generation=first["Generation"])
+        x = {
+            "first": first,
+            "older": older,
+            "conversations": await mail.page(ca, "page_conversations"),
+            "changes": await mail.page(ca, "list_message_changes", since=0,
+                                       generation=first["Generation"]),
+            "no_generation": await attempt(mail.page(
+                ca, "page_messages", peer=peer, before=first["NextBefore"])),
+        }
+    async with await astral.connect(n["endpoint"], token=bob["Token"]) as cb:
+        x["bob_pages_ada"] = await attempt(mail.page(
+            cb, "page_messages", mailbox=ALIASES["ada"]))
+    return x
+
+
 async def unhosted(n: dict, app: dict, bob: dict) -> dict:
     """What an identity without a hosted mailbox, and the node itself, are
     answered by the mail ops."""
@@ -229,6 +255,7 @@ async def main():
     })
     try:
         facts["exchange"] = await exchange(n, ada, bob, cleo)
+        facts["paging"] = await paging(n, ada, bob)
         facts["unhosted"] = await unhosted(n, minted["app"], bob)
         facts["deletion"] = await deletion(n, ada, bob, minted["bob_second"])
     finally:

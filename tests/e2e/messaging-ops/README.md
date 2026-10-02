@@ -11,7 +11,10 @@ its own mailbox through the `messaging.*` ops. The node serves no MCP.
   ada reads bob's answer, cleo lists and reads ada's mailbox, and bob and the
   node name it too; ada writes to cleo; an app identity and the node itself
   try the mail ops; `messaging.delete_identity` deletes bob, and ada writes to
-  him once more.
+  him once more. Before the deletion, ada pages her conversation with bob one
+  row at a time through `messaging.page_messages`, pages her conversations,
+  and reads every change from the start; a position without its generation,
+  and bob's page of ada's mailbox, are refused.
 - **oracle** `verify.py` — the MCP port was closed and the node's log shows
   no MCP server, the authority was asked
   the sender's and the recipient's side of each message and each reader of

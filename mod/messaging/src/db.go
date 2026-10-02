@@ -20,7 +20,10 @@ func (db *DB) Migrate() error {
 	if err := execAll(db.DB, ddlMailboxes); err != nil {
 		return err
 	}
-	return execAll(db.DB, append([]string{ddlMessages}, ddlIndexes...))
+	if err := execAll(db.DB, append([]string{ddlMessages}, ddlIndexes...)); err != nil {
+		return err
+	}
+	return db.migrateRevisions()
 }
 
 // execAll runs each statement in order and stops at the first failure.

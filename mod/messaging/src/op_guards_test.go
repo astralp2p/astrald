@@ -43,6 +43,10 @@ func mailOps() []mailOp {
 			answersUnhosted: true},
 		{name: "messaging.wait", op: func(m *Module) any { return m.OpWait }, args: "?timeout=10ms"},
 		{name: "messaging.archive", op: func(m *Module) any { return m.OpArchive }, args: ref},
+		{name: "messaging.page_messages", op: func(m *Module) any { return m.OpPageMessages }},
+		{name: "messaging.list_message_changes", op: func(m *Module) any { return m.OpListMessageChanges }, args: "?generation=0"},
+		{name: "messaging.page_conversations", op: func(m *Module) any { return m.OpPageConversations }},
+		{name: "messaging.list_conversation_changes", op: func(m *Module) any { return m.OpListConversationChanges }, args: "?generation=0"},
 	}
 }
 

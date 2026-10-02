@@ -54,6 +54,21 @@ async def list_messages(client, **args) -> list:
     return [d["Object"] for d in docs]
 
 
+async def page(client, op: str, **args) -> dict:
+    """The one object a paging op answers, which must be followed by its
+    `eos`. `op` is `page_messages`, `list_message_changes`,
+    `page_conversations` or `list_conversation_changes`; `args` are its own.
+    An error_message raises OpError."""
+    docs = await jsonops.call(client, querystring.build(
+        f"messaging.{op}", {**args, "out": "json"}))
+    if docs and docs[0]["Type"] == "error_message":
+        raise jsonops.OpError(docs[0]["Object"])
+    if len(docs) != 2 or docs[1]["Type"] != "eos":
+        raise jsonops.OpError(f"{op}: answered {[d['Type'] for d in docs]}, "
+                              "not one object and its eos")
+    return docs[0]["Object"]
+
+
 async def read(client, *refs, mailbox: str = "", children: str = "") -> dict:
     """A messaging.read_messages_result for (box, id) refs, from the mailbox
     `mailbox` names (hex identity), or the caller's own when it names none.

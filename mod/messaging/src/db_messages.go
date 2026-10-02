@@ -39,9 +39,12 @@ func (db *DB) InsertInbox(m *messaging.StoredMessage) (int64, error) {
 // ListMessages returns one of the owner's lists, narrowed by the query and
 // ordered as that list reads. It is unbounded: these rows carry no bodies, and
 // the bound is on read_messages, where they are.
+//
+// why envelope columns only: every caller renders the rows as envelopes, so a
+// body read here would be read and dropped.
 func (db *DB) ListMessages(owner *astral.Identity, q messageQuery) ([]*messaging.StoredMessage, error) {
 	var rows []dbMessage
-	if err := q.apply(db.DB, owner).Order(q.order()).Find(&rows).Error; err != nil {
+	if err := q.apply(db.Model(&dbMessage{}).Select(envelopeColumns), owner).Order(q.order()).Find(&rows).Error; err != nil {
 		return nil, err
 	}
 	return storedAll(rows), nil

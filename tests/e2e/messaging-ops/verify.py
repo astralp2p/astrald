@@ -84,8 +84,8 @@ def check_authority(facts):
             (SEND, a, c, [False], "ada sending to cleo"),
             (READ, c, a, [True, True, True], "cleo listing ada's inbox and "
              "outbox and reading ada's messages"),
-            (READ, b, a, [False, False], "bob listing and reading ada's "
-             "mailbox")):
+            (READ, b, a, [False, False, False], "bob listing, reading and "
+             "paging ada's mailbox")):
         got = answers(q, kind, actor, other)
         assert got == want, (
             f"the authority answered {got!r} for {who}, not {want!r} — the "
@@ -172,6 +172,44 @@ def check_delegated(facts):
             "without being refused")
 
 
+def check_paging(facts):
+    """ada's conversation with bob pages one row at a time, newest first,
+    across both boxes and without bodies; her conversation list holds bob's
+    with nothing unread; every change reaches a follower from the start; a
+    position without its generation and bob's page of ada's mailbox are
+    refused."""
+    p, x = facts["paging"], facts["exchange"]
+    first, older = p["first"]["Messages"], p["older"]["Messages"]
+    assert [m["Envelope"]["ID"] for m in first + older] == \
+        [x["answered"], x["asked"]], (
+        f"ada's pages read {first + older!r}, not bob's answer then her "
+        "question")
+    assert [m["Envelope"]["Box"] for m in first + older] == \
+        ["inbox", "outbox"], "the conversation did not span both boxes"
+    assert p["first"]["NextBefore"] and not p["older"]["NextBefore"], (
+        f"positions {p['first']['NextBefore']}, {p['older']['NextBefore']} "
+        "do not page to the end")
+    assert all("Content" not in m["Envelope"] for m in first + older), \
+        "a page carried a body"
+    convs = p["conversations"]["Conversations"]
+    assert len(convs) == 1 and convs[0]["Peer"].lower() == facts["bob"] and \
+        convs[0]["Unread"] == 0 and \
+        convs[0]["Latest"]["ID"] == x["answered"], (
+        f"ada's conversations read {convs!r}, not bob's, read, with his "
+        "answer latest")
+    revs = [m["Rev"] for m in p["changes"]["Messages"]]
+    ids = {m["Envelope"]["ID"] for m in p["changes"]["Messages"]}
+    assert revs == sorted(revs) and {x["asked"], x["answered"]} <= ids, (
+        f"changes from the start read {p['changes']!r}")
+    assert p["no_generation"]["refused"] and \
+        "generation is required" in p["no_generation"]["detail"], (
+        f"a position without its generation was answered "
+        f"{p['no_generation']!r}")
+    assert p["bob_pages_ada"]["refused"] and \
+        REJECTED in p["bob_pages_ada"]["detail"], (
+        f"bob's page of ada's mailbox was answered {p['bob_pages_ada']!r}")
+
+
 def check_unhosted(facts):
     for who, r in facts["unhosted"].items():
         want = NOT_PARTICIPANT if who == "app_read" else REJECTED
@@ -251,6 +289,7 @@ def main():
     check_authority(facts)
     check_exchange(facts)
     check_delegated(facts)
+    check_paging(facts)
     check_unhosted(facts)
     check_deletion(facts)
     asyncio.run(check_records(doc["nodes"]["nomcp1"], facts))

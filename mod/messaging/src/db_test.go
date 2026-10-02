@@ -92,7 +92,7 @@ func TestSchemaCarriesWhatTheDDLDeclares(t *testing.T) {
 	}
 }
 
-// A fresh store gets the module's two tables and nothing else, and a second
+// A fresh store gets the module's tables and nothing else, and a second
 // migration changes no schema object.
 func TestMigrateCreatesOnlyTheModuleTablesAndRepeats(t *testing.T) {
 	db := testDB(t)
@@ -104,8 +104,9 @@ func TestMigrateCreatesOnlyTheModuleTablesAndRepeats(t *testing.T) {
 	if err != nil {
 		t.Fatalf("tables: %v", err)
 	}
-	if !reflect.DeepEqual(tables, []string{tableMailboxes, tableMessages}) {
-		t.Fatalf("tables %v, want only %v and %v", tables, tableMailboxes, tableMessages)
+	want := []string{tableConversations, tableGenerations, tableMailboxes, tableMessages, tableRevisions}
+	if !reflect.DeepEqual(tables, want) {
+		t.Fatalf("tables %v, want only %v", tables, want)
 	}
 
 	if err = db.Migrate(); err != nil {

@@ -64,6 +64,20 @@ func (db *DB) DeleteMailbox(identity *astral.Identity) error {
 		if err := tx.Where("owner = ?", identity).Delete(&dbMessage{}).Error; err != nil {
 			return err
 		}
+		if err := tx.Exec(`DELETE FROM messaging__conversations WHERE owner = ?`, identity).Error; err != nil {
+			return err
+		}
+		// why a new generation: the rows are gone without a revision each, so a
+		// cursor held across the deletion must be told it names nothing now.
+		if err := tx.Exec(`UPDATE messaging__revisions SET rev = rev + 1 WHERE id = 1`).Error; err != nil {
+			return err
+		}
+		err := tx.Exec(`INSERT INTO messaging__generations (owner, generation)
+  VALUES (?, (SELECT rev FROM messaging__revisions WHERE id = 1))
+  ON CONFLICT (owner) DO UPDATE SET generation = excluded.generation`, identity).Error
+		if err != nil {
+			return err
+		}
 
 		res := tx.Where("identity = ?", identity).Delete(&dbMailbox{})
 		if res.Error != nil {

@@ -107,9 +107,10 @@ func TestSinceOnlyNarrows(t *testing.T) {
 		t.Fatalf("since its own answer: %v rows, err %v", len(after), err)
 	}
 
-	mustInsertInbox(t, mod, &messaging.StoredMessage{ID: messaging.NewMessageID(), Sender: b, Recipient: a, Content: "two"})
+	two := messaging.NewMessageID()
+	mustInsertInbox(t, mod, &messaging.StoredMessage{ID: two, Sender: b, Recipient: a, Content: "two"})
 	after, err = mod.listMessages(a, messaging.ListMessagesRequest{List: messaging.ListInbox, Since: since})
-	if err != nil || len(after) != 1 || after[0].Content != "two" {
+	if err != nil || len(after) != 1 || after[0].ID != two {
 		t.Fatalf("after a new arrival: %+v, err %v", after, err)
 	}
 

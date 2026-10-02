@@ -28,6 +28,14 @@ type dbMessage struct {
 	// sender on an outbox row — so no statement here can state or update it.
 	Owner *astral.Identity `gorm:"->"`
 
+	// Peer is generated as well: the sender on an inbox row, the recipient on an
+	// outbox row. It names the conversation the row belongs to.
+	Peer *astral.Identity `gorm:"->"`
+
+	// Rev is the row's position in the order of changes. The store's triggers
+	// write it on every insert and every change, so no statement here states it.
+	Rev int64 `gorm:"->"`
+
 	Content string
 
 	// ParentID names the one message this answers. Zero answers none. It is the

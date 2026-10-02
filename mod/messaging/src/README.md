@@ -121,6 +121,11 @@ tools call the `messaging.Module` methods under the bearer's identity.
 * `wait` accepts the query before it parks. The park ends when a message
   arrives, when the granted window closes, or when the caller closes the
   channel.
+* `page_messages`, `list_message_changes`, `page_conversations` and
+  `list_conversation_changes` are listings: they admit a caller as
+  `list_messages` does, take a `mailbox` argument, and stamp nothing.
+* A paging operation answers one object and an `eos`, or one `error_message`.
+  A limit of 0 reads 50. A limit over 100 is refused.
 
 ## Delegated read
 
@@ -160,6 +165,21 @@ tools call the `messaging.Module` methods under the bearer's identity.
   owner is the recipient of an inbox row and the sender of an outbox row.
 * `seq` is the cursor the inbox listing and `wait` page by. The outbox and the
   archive are histories, read newest first, and refuse a nonzero `since`.
+* A listing reads every column but `content`.
+* `peer` is generated: the sender of an inbox row and the recipient of an
+  outbox row. A trigger refuses an update to `box`, `id`, `sender`,
+  `recipient` or `content`.
+* `rev` is a row's position in one node-wide order of changes.
+  `messaging__revisions` holds the allocator. A trigger writes a new `rev` on
+  every insert and on every update that changes an envelope column.
+* `messaging__conversations` holds one summary per owner and peer: the latest
+  unarchived `seq` and its `rev`, the unread count, and the summary's own `rev`.
+  The insert and update triggers keep it. A summary whose last unarchived row
+  is archived stays, with a null `latest_seq`.
+* `messaging__generations` holds a mailbox's generation. A withdrawal deletes
+  the mailbox's rows and summaries and writes a new generation.
+* The first start after this change backfills `rev = seq`, the summaries and
+  the allocator in one transaction. The allocator row marks the backfill done.
 
 ## Configuration
 
