@@ -1,8 +1,6 @@
 package services
 
 import (
-	"errors"
-
 	"github.com/astralp2p/astral-go/api/auth"
 	"github.com/astralp2p/astral-go/api/services"
 	"github.com/astralp2p/astral-go/astral"
@@ -16,11 +14,6 @@ type opAdvertiseArgs struct {
 	In  string
 	Out string
 }
-
-var (
-	errAdvertiseIdentity = errors.New("invalid caller identity")
-	errAdvertiseSelf     = errors.New("the node cannot advertise to itself")
-)
 
 // OpAdvertise binds the caller as the provider of a fixed set of services for
 // as long as the channel is open. After the ack the node sends services.ask and
@@ -40,17 +33,14 @@ func (mod *Module) OpAdvertise(ctx *astral.Context, q *routing.IncomingQuery, ar
 	}
 
 	id := q.Caller()
-	names, err := services.ParseNames(args.Services)
-	switch {
-	case err != nil:
-	case id == nil || id.IsZero():
-		err = errAdvertiseIdentity
-	case id.IsEqual(mod.node.Identity()):
-		// why: the router substitutes the node identity for a caller-less local
-		// query, and the node holds ServeApps, so without this check such a query
-		// could claim the node's native services.
-		err = errAdvertiseSelf
+	// why: the router substitutes the node identity for a caller-less local
+	// query, and the node holds ServeApps, so without this check such a query
+	// could claim the node's native services.
+	if id == nil || id.IsZero() || id.IsEqual(mod.node.Identity()) {
+		return q.Reject()
 	}
+
+	names, err := services.ParseNames(args.Services)
 
 	ch := q.Accept(channel.WithFormats(args.In, args.Out), channel.WithLockedWrites())
 	defer ch.Close()

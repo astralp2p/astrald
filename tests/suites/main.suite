@@ -16,4 +16,5 @@ apphost-origin
 sign-contract-guard
 messaging-two-node
 mcp-peer
+services-swarm
 expel-node                     # mutates two-nodes: nothing may follow it

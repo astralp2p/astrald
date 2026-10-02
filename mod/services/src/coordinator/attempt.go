@@ -26,6 +26,7 @@ type obligation struct {
 	slot    *slot
 	service string
 	req     *request
+	remote  *Remote // set for a swarm member's contribution; src and slot are nil
 }
 
 func newAttempt(st *Stream) *attempt {
@@ -34,9 +35,12 @@ func newAttempt(st *Stream) *attempt {
 
 // detach removes o from its container and from the attempt.
 func (o *obligation) detach() {
-	if o.req != nil {
+	switch {
+	case o.remote != nil:
+		delete(o.remote.open, o.service)
+	case o.req != nil:
 		o.req.obls = removeObligation(o.req.obls, o)
-	} else {
+	default:
 		list := removeObligation(o.slot.initial[o.service], o)
 		if len(list) == 0 {
 			delete(o.slot.initial, o.service)

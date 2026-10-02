@@ -83,6 +83,7 @@ func (st *Stream) next() output {
 		v := st.pending[k]
 		delete(st.pending, k)
 		st.inflight = &k
+		st.inflightAvailable = bool(v.Available)
 		return output{kind: outView, key: k, view: v}
 	}
 	return output{}

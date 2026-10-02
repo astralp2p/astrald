@@ -45,3 +45,47 @@ func TestServiceDiscoveryRefusesEveryoneElse(t *testing.T) {
 		}
 	}
 }
+
+// TestServiceDiscoveryAllowsSwarmMembersOnThisNode: a current member may
+// discover every service on this node, so a node can carry an app's discovery
+// to the swarm. It holds nothing for another node, and expelled members and
+// other users' nodes hold nothing.
+func TestServiceDiscoveryAllowsSwarmMembersOnThisNode(t *testing.T) {
+	nodeID, userID := astral.GenerateIdentity(), astral.GenerateIdentity()
+	member, expelled := astral.GenerateIdentity(), astral.GenerateIdentity()
+	outsider := astral.GenerateIdentity()
+
+	mod := banModule(t, userID)
+	mod.node = &identityNode{id: nodeID}
+	mod.Deps.Auth = &adminNetworkContracts{contracts: []*auth.SignedContract{
+		adminNetworkMembership(userID, nodeID),
+		adminNetworkMembership(userID, member),
+		adminNetworkMembership(userID, expelled),
+		adminNetworkMembership(astral.GenerateIdentity(), outsider),
+	}}
+	if err := mod.db.StoreExpulsion(sampleSigned(userID, expelled)); err != nil {
+		t.Fatalf("store expulsion: %v", err)
+	}
+
+	on := func(actor, node *astral.Identity) *services.ServiceDiscoveryAction {
+		a := discoveryAction(actor, "player")
+		a.NodeID = node
+		return a
+	}
+	cases := []struct {
+		name   string
+		action *services.ServiceDiscoveryAction
+		want   bool
+	}{
+		{"a member, on this node", on(member, nodeID), true},
+		{"a member, on another node", on(member, astral.GenerateIdentity()), false},
+		{"an expelled member", on(expelled, nodeID), false},
+		{"another user's node", on(outsider, nodeID), false},
+		{"this node itself", on(nodeID, nodeID), false},
+	}
+	for _, c := range cases {
+		if got := mod.AuthorizeServiceDiscovery(nil, c.action); got != c.want {
+			t.Errorf("%s: authorized %v; want %v", c.name, got, c.want)
+		}
+	}
+}

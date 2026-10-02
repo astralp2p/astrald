@@ -130,6 +130,13 @@ func (c *Coordinator) markFollowersDirty(src *Source) {
 // Discover enrolls a stream and freezes its initial attempt in one critical
 // section. The caller has authorized every name beforehand.
 func (c *Coordinator) Discover(caller *astral.Identity, names []string, follow bool) *Stream {
+	return c.DiscoverSwarm(caller, names, follow, nil)
+}
+
+// DiscoverSwarm is Discover with swarm members carrying the discovery too.
+// Each member owes one initial obligation per name, settled through its
+// Remote; the caller has authorized every name on every member beforehand.
+func (c *Coordinator) DiscoverSwarm(caller *astral.Identity, names []string, follow bool, members []*astral.Identity) *Stream {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
@@ -151,6 +158,15 @@ func (c *Coordinator) Discover(caller *astral.Identity, names []string, follow b
 			sl.initial[name] = append(sl.initial[name], o)
 			touched = append(touched, sl)
 		}
+	}
+	for _, member := range members {
+		r := newRemote(st, member)
+		for _, name := range names {
+			o := &obligation{at: at, remote: r, service: name}
+			at.open[o] = struct{}{}
+			r.open[name] = o
+		}
+		st.remotes = append(st.remotes, r)
 	}
 	at.budget = c.cfg.Clock.AfterFunc(c.cfg.InitialBudget, func() { c.budgetExpired(at) })
 	for _, sl := range touched {

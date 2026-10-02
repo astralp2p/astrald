@@ -23,6 +23,7 @@ type Module struct {
 	log    *log.Logger
 	router routing.OpRouter
 	coord  *coordinator.Coordinator
+	links  linkWaiters
 }
 
 var _ services.Module = &Module{}
