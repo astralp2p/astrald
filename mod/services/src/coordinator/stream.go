@@ -22,14 +22,17 @@ type Stream struct {
 	services map[string]struct{}
 	follow   bool
 
-	visible  map[offeringKey]struct{}         // offerings shown as available
-	pending  map[offeringKey]*services.Update // T6: latest unsent view per offering
-	queue    []offeringKey                    // send order of pending keys
-	removed  map[offeringKey]struct{}         // removals not yet sent
-	inflight *offeringKey                     // view handed to the writer
-	attempt  *attempt                         // nil once the boundary is sent
-	wake     chan struct{}
-	closed   bool
+	visible           map[offeringKey]struct{}         // offerings shown as available
+	pending           map[offeringKey]*services.Update // T6: latest unsent view per offering
+	queue             []offeringKey                    // send order of pending keys
+	removed           map[offeringKey]struct{}         // removals not yet sent
+	inflight          *offeringKey                     // view handed to the writer
+	inflightAvailable bool                             // the in-flight view offers the service
+	attempt           *attempt                         // nil once the boundary is sent
+	remotes           []*Remote                        // swarm members carrying this discovery
+	wake              chan struct{}
+	done              chan struct{}
+	closed            bool
 }
 
 func newStream(c *Coordinator, caller *astral.Identity, names []string, follow bool) *Stream {
@@ -42,6 +45,7 @@ func newStream(c *Coordinator, caller *astral.Identity, names []string, follow b
 		pending:  map[offeringKey]*services.Update{},
 		removed:  map[offeringKey]struct{}{},
 		wake:     make(chan struct{}, 1),
+		done:     make(chan struct{}),
 	}
 	for _, name := range names {
 		st.services[name] = struct{}{}
@@ -49,9 +53,17 @@ func newStream(c *Coordinator, caller *astral.Identity, names []string, follow b
 	return st
 }
 
+// Remotes are the swarm members carrying this discovery, in request order.
+func (st *Stream) Remotes() []*Remote { return st.remotes }
+
+// Done is closed when the stream closes.
+func (st *Stream) Done() <-chan struct{} { return st.done }
+
+// shown reports whether the consumer has seen, or is being sent, an available
+// view of k that no removal retracts.
 func (st *Stream) shown(k offeringKey) bool {
 	if st.inflight != nil && *st.inflight == k {
-		return true
+		return st.inflightAvailable
 	}
 	_, visible := st.visible[k]
 	_, removing := st.removed[k]
@@ -96,13 +108,19 @@ func (st *Stream) lose(src *Source) {
 		if _, ok := st.services[name]; !ok {
 			continue
 		}
-		k := keyOf(src.provider, name)
-		st.drop(k)
-		if _, visible := st.visible[k]; visible || (st.inflight != nil && *st.inflight == k) {
-			st.removed[k] = struct{}{}
-		}
+		st.retract(keyOf(src.provider, name))
 	}
 	wake(st.wake)
+}
+
+// retract drops any unsent view of k and queues a removal when the consumer
+// was shown k as available.
+func (st *Stream) retract(k offeringKey) {
+	shown := st.shown(k)
+	st.drop(k)
+	if shown {
+		st.removed[k] = struct{}{}
+	}
 }
 
 // Close ends the stream on the consumer's side. Its initial obligations leave
@@ -127,10 +145,13 @@ func (st *Stream) closeLocked() {
 		at.budget.Stop()
 		for o := range at.open {
 			o.detach()
-			o.src.collect(o.slot)
+			if o.slot != nil {
+				o.src.collect(o.slot)
+			}
 		}
 	}
 	st.pending = map[offeringKey]*services.Update{}
 	st.queue = nil
+	close(st.done)
 	wake(st.wake)
 }

@@ -136,6 +136,14 @@ func (e *env) discover(caller *astral.Identity, follow bool, sink *fakeSink, nam
 	return st, done
 }
 
+// discoverSwarm is discover with swarm members carrying the discovery.
+func (e *env) discoverSwarm(caller *astral.Identity, follow bool, sink *fakeSink, members []*astral.Identity, names ...string) (*Stream, chan error) {
+	st := e.c.DiscoverSwarm(caller, names, follow, members)
+	done := make(chan error, 1)
+	go func() { done <- st.Run(sink) }()
+	return st, done
+}
+
 func expectAsk(t *testing.T, tr *fakeTransport) *services.Ask {
 	t.Helper()
 	select {
@@ -233,11 +241,17 @@ func (e *env) streamInvariants(st *Stream) {
 	if at := st.attempt; at != nil {
 		for o := range at.open {
 			in := 0
-			if o.req != nil && contains(o.req.obls, o) {
-				in++
-			}
-			if contains(o.slot.initial[o.service], o) {
-				in++
+			if o.remote != nil {
+				if o.remote.open[o.service] == o {
+					in++
+				}
+			} else {
+				if o.req != nil && contains(o.req.obls, o) {
+					in++
+				}
+				if contains(o.slot.initial[o.service], o) {
+					in++
+				}
 			}
 			if in != 1 {
 				e.t.Fatalf("obligation for %s held in %d places", o.service, in)
