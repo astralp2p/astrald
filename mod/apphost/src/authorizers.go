@@ -3,6 +3,7 @@ package apphost
 import (
 	"github.com/astralp2p/astral-go/api/auth"
 	"github.com/astralp2p/astral-go/api/coldcard"
+	"github.com/astralp2p/astral-go/api/services"
 	"github.com/astralp2p/astral-go/api/user"
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astrald/mod/shell"
@@ -126,5 +127,14 @@ func (mod *Module) AuthorizeColdcardScan(ctx *astral.Context, action *coldcard.S
 // AuthorizeShell answers whether this node has granted the actor the right to
 // open an interactive op shell on it.
 func (mod *Module) AuthorizeShell(ctx *astral.Context, action *shell.ShellAction) bool {
+	return mod.authorizeGrant(ctx, action)
+}
+
+// AuthorizeServiceDiscovery answers whether this node has granted the actor
+// discovery of the service it asks for, on the node it names.
+//
+// why: a typed shim over the generic lookup, matching AuthorizeServeObjects. The
+// permit's DiscoveryScope decides; an unconstrained grant covers nothing.
+func (mod *Module) AuthorizeServiceDiscovery(ctx *astral.Context, action *services.ServiceDiscoveryAction) bool {
 	return mod.authorizeGrant(ctx, action)
 }

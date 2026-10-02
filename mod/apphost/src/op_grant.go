@@ -10,10 +10,12 @@ import (
 )
 
 type opGrantArgs struct {
-	Identity string         `query:"required"`
-	Action   astral.String8 `query:"required"`
-	Duration astral.Duration
-	Out      string
+	Identity    string         `query:"required"`
+	Action      astral.String8 `query:"required"`
+	Duration    astral.Duration
+	Constrained bool
+	In          string
+	Out         string
 }
 
 // OpGrant records a node-local grant of one action for an identity, replacing
@@ -34,7 +36,7 @@ func (mod *Module) OpGrant(ctx *astral.Context, q *routing.IncomingQuery, args o
 		return q.Reject()
 	}
 
-	ch := channel.New(q.AcceptRaw(), channel.WithOutputFormat(args.Out))
+	ch := channel.New(q.AcceptRaw(), channel.WithFormats(args.In, args.Out))
 	defer ch.Close()
 
 	identity, err := mod.Dir.ResolveIdentity(args.Identity)
@@ -58,9 +60,20 @@ func (mod *Module) OpGrant(ctx *astral.Context, q *routing.IncomingQuery, args o
 		expiresAt = &t
 	}
 
-	// note: the permit carries no constraints. A constrained permit is refused
-	// rather than granted in full, so this op writes the action whole.
-	if err := mod.Grant(identity, &auth.Permit{Action: args.Action}, expiresAt); err != nil {
+	permit := &auth.Permit{Action: args.Action}
+
+	// why: constraints arrive on the channel because a bundle is not a query
+	// argument. The action decides what they mean; one that does not evaluate
+	// constraints refuses the constrained permit when it is checked.
+	if args.Constrained {
+		var constraints *astral.Bundle
+		if err := ch.Switch(channel.Expect(&constraints)); err != nil {
+			return ch.Send(astral.Err(err))
+		}
+		permit.Constraints = constraints
+	}
+
+	if err := mod.Grant(identity, permit, expiresAt); err != nil {
 		mod.log.Errorv(1, "error granting %v to %v: %v", args.Action, identity, err)
 		return ch.Send(astral.Err(err))
 	}
