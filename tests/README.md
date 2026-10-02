@@ -158,6 +158,7 @@ Every story of the catalog, in the cheapest env that can falsify it:
 | — | `sign-contract-guard` | node | `two-nodes` → — |
 | — | `blueprints-two-node` | node | `two-nodes` → — |
 | — | `messaging-two-node` | node | `two-nodes` → — |
+| — | `services-swarm` | node | `two-nodes` → — |
 | — | `hold-purge` | node | `two-nodes` → — (unlisted, mutates) |
 | — | `gateway-relay` | netsim | `two-nodes` → — (unlisted, mutates) |
 
