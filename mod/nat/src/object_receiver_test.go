@@ -2,7 +2,6 @@ package nat
 
 import (
 	"net"
-	"sync"
 	"sync/atomic"
 	"testing"
 
@@ -68,7 +67,6 @@ func TestReceiveNewObservedEndpointEventRequiresLocalSender(t *testing.T) {
 				Deps:     Deps{IP: ips},
 				node:     &identityNode{id: nodeID},
 				settings: Settings{Enabled: &tree.Value[*astral.Bool]{}},
-				cond:     sync.NewCond(&sync.Mutex{}),
 			}
 
 			sender := astral.GenerateIdentity()

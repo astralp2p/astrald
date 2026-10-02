@@ -18,6 +18,12 @@ func (mod *Module) OpNodePunch(ctx *astral.Context, q *routing.IncomingQuery, ar
 		return q.Reject()
 	}
 
+	// why: the initiator learns that this node does not traverse NAT from this
+	// refusal; it holds no permission to discover the nat service here.
+	if !mod.enabled.Load() {
+		return q.Reject()
+	}
+
 	ch := channel.New(q.AcceptRaw(), channel.WithOutputFormat(args.Out))
 	defer ch.Close()
 

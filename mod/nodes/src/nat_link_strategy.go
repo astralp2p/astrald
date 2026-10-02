@@ -8,11 +8,9 @@ import (
 	"github.com/astralp2p/astral-go/api/kcp"
 	kcpclient "github.com/astralp2p/astral-go/api/kcp/client"
 	natclient "github.com/astralp2p/astral-go/api/nat/client"
-	servicescli "github.com/astralp2p/astral-go/api/services/client"
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astral-go/astral/log"
 	"github.com/astralp2p/astral-go/lib/astrald"
-	"github.com/astralp2p/astrald/mod/nat"
 	"github.com/astralp2p/astrald/mod/nodes"
 )
 
@@ -48,32 +46,13 @@ func (s *NATLinkStrategy) Signal(ctx *astral.Context) {
 	}()
 }
 
-func (s *NATLinkStrategy) peerSupportsNAT(ctx *astral.Context) bool {
-	s.log.Logv(2, "%v checking NAT support", s.target)
-
-	ch, err := servicescli.New(s.target, astrald.Default()).Discover(ctx, false)
-	if err != nil {
-		s.log.Logv(2, "%v NAT support check failed: %v", s.target, err)
-		return false
-	}
-	for update := range ch {
-		if update != nil && string(update.Name) == nat.ModuleName && update.Available {
-			s.log.Logv(2, "%v supports NAT traversal", s.target)
-			return true
-		}
-	}
-	s.log.Logv(2, "%v does not support NAT traversal", s.target)
-	return false
-}
-
 func (s *NATLinkStrategy) attempt(ctx *astral.Context) error {
 	selfID := s.mod.node.Identity()
 	ctx = ctx.IncludeZone(astral.ZoneNetwork)
 
-	if !s.peerSupportsNAT(ctx) {
-		return fmt.Errorf("target does not support NAT traversal")
-	}
-
+	// note: a target that does not traverse NAT rejects the punch; no
+	// discovery precheck runs, since this node holds no permission to discover
+	// the target's services.
 	s.log.Log("%v starting traversal", s.target)
 
 	natClient := natclient.New(selfID, astrald.Default())

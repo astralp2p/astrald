@@ -5,7 +5,6 @@ import (
 	natmod "github.com/astralp2p/astrald/mod/nat"
 	treemod "github.com/astralp2p/astrald/mod/tree"
 	"net"
-	"sync"
 	"sync/atomic"
 
 	"github.com/astralp2p/astral-go/api/ip"
@@ -18,6 +17,7 @@ import (
 	"github.com/astralp2p/astrald/mod/dir"
 	"github.com/astralp2p/astrald/mod/events"
 	"github.com/astralp2p/astrald/mod/objects"
+	servicesmod "github.com/astralp2p/astrald/mod/services"
 	"github.com/astralp2p/astrald/resources"
 )
 
@@ -26,12 +26,13 @@ var _ natmod.Module = &Module{}
 
 // Deps are injected by the core injector.
 type Deps struct {
-	Auth    authmod.Module
-	Dir     dir.Module
-	Objects objects.Module
-	IP      ipmod.Module
-	Tree    treemod.Module
-	Events  events.Module
+	Auth     authmod.Module
+	Dir      dir.Module
+	Objects  objects.Module
+	IP       ipmod.Module
+	Tree     treemod.Module
+	Events   events.Module
+	Services servicesmod.Module
 }
 
 type Settings struct {
@@ -51,8 +52,8 @@ type Module struct {
 	pool   *HolePool
 	router routing.OpRouter
 
-	enabled atomic.Bool
-	cond    *sync.Cond
+	enabled  atomic.Bool
+	services servicesmod.Registration
 }
 
 func (mod *Module) Run(ctx *astral.Context) error {
@@ -81,10 +82,10 @@ func (mod *Module) Router() astral.Router {
 	return &mod.router
 }
 
-// SetEnabled updates the enabled flag and broadcasts to all waiters if the value changed.
+// SetEnabled updates the enabled flag and tells discovery when the value changed.
 func (mod *Module) SetEnabled(enabled bool) {
-	if mod.enabled.Swap(enabled) != enabled {
-		mod.cond.Broadcast()
+	if mod.enabled.Swap(enabled) != enabled && mod.services != nil {
+		mod.services.Changed()
 	}
 }
 

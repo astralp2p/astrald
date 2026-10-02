@@ -19,7 +19,6 @@ func (mod *Module) LoadDependencies(*astral.Context) (err error) {
 	mod.Exonet.SetUnpacker("gw", mod)
 	mod.Exonet.SetParser("gw", mod)
 	mod.router.AddStructPrefix(mod, "Op")
-	mod.Services.AddDiscoverer(mod)
 	mod.Nodes.AddResolver(mod)
 	mod.Auth.Add(authmod.Func[*auth.UseGatewayAction](mod.AuthorizeUseGateway))
 
