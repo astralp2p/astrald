@@ -159,6 +159,7 @@ Every story of the catalog, in the cheapest env that can falsify it:
 | — | `blueprints-two-node` | node | `two-nodes` → — |
 | — | `messaging-two-node` | node | `two-nodes` → — |
 | — | `services-swarm` | node | `two-nodes` → — |
+| — | `services-app-call` | node | `two-nodes` → — |
 | — | `hold-purge` | node | `two-nodes` → — (unlisted, mutates) |
 | — | `gateway-relay` | netsim | `two-nodes` → — (unlisted, mutates) |
 
