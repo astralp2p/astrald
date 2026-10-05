@@ -41,7 +41,11 @@ func (db *DB) InsertInbox(m *messaging.StoredMessage) (int64, error) {
 // the bound is on read_messages, where they are.
 func (db *DB) ListMessages(owner *astral.Identity, q messageQuery) ([]*messaging.StoredMessage, error) {
 	var rows []dbMessage
-	if err := q.apply(db.DB, owner).Order(q.order()).Find(&rows).Error; err != nil {
+	stmt := q.apply(db.DB, owner).Order(q.order())
+	if q.Limit != 0 {
+		stmt = stmt.Limit(q.Limit)
+	}
+	if err := stmt.Find(&rows).Error; err != nil {
 		return nil, err
 	}
 	return storedAll(rows), nil

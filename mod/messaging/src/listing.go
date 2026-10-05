@@ -68,6 +68,12 @@ func (mod *Module) query(req messaging.ListMessagesRequest) (q messageQuery, err
 	if q.Since, err = sinceOf(req.Since); err != nil {
 		return q, err
 	}
+	if q.Before, err = beforeOf(req.Before); err != nil {
+		return q, err
+	}
+	if q.Limit, err = limitOf(req.Limit); err != nil {
+		return q, err
+	}
 	if req.From != "" {
 		if q.From, err = mod.Dir.ResolveIdentity(req.From); err != nil {
 			return q, errUnknownPeer(req.From)

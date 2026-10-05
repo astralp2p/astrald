@@ -91,4 +91,6 @@ var ddlIndexes = []string{
 	`CREATE INDEX IF NOT EXISTS ix_messaging__messages_archive ON messaging__messages (owner, created_at) WHERE archived_at IS NOT NULL`,
 	`CREATE INDEX IF NOT EXISTS ix_messaging__messages_unread ON messaging__messages (owner, box, archived_at, seq) WHERE read_at IS NULL`,
 	`CREATE INDEX IF NOT EXISTS ix_messaging__messages_pickup ON messaging__messages (owner, box, archived_at, seq) WHERE landed_at IS NOT NULL AND fetched_at IS NULL`,
+	`CREATE INDEX IF NOT EXISTS ix_messaging__messages_sender ON messaging__messages (owner, box, sender, archived_at, seq)`,
+	`CREATE INDEX IF NOT EXISTS ix_messaging__messages_recipient ON messaging__messages (owner, box, recipient, archived_at, seq)`,
 }

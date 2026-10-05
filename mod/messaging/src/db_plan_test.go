@@ -87,6 +87,20 @@ func TestTheHotReadsPlanAgainstTheirIndexes(t *testing.T) {
 			},
 		},
 		{
+			name: "a page from one sender",
+			want: "ix_messaging__messages_sender",
+			call: func(db *DB) {
+				_, _ = db.ListMessages(a, messageQuery{List: messaging.ListInbox, From: b, Before: 9, Limit: 2})
+			},
+		},
+		{
+			name: "a page to one recipient",
+			want: "ix_messaging__messages_recipient",
+			call: func(db *DB) {
+				_, _ = db.ListMessages(a, messageQuery{List: messaging.ListOutbox, To: b, Before: 9, Limit: 2})
+			},
+		},
+		{
 			name: "archive",
 			want: "ix_messaging__messages_archive",
 			call: func(db *DB) { _, _ = db.ListMessages(a, messageQuery{List: messaging.ListArchive}) },
@@ -120,6 +134,12 @@ func TestNoListingSortsInATempBTree(t *testing.T) {
 		{List: messaging.ListInbox, UnreadOnly: true},
 		{List: messaging.ListOutbox},
 		{List: messaging.ListArchive},
+		{List: messaging.ListInbox, Limit: 2},
+		{List: messaging.ListInbox, Before: 9, Limit: 2},
+		{List: messaging.ListInbox, Since: 1, Limit: 2},
+		{List: messaging.ListOutbox, Before: 9, Limit: 2},
+		{List: messaging.ListInbox, From: b, Before: 9, Limit: 2},
+		{List: messaging.ListOutbox, To: b, Limit: 2},
 	} {
 		for _, sql := range recordSQL(t, mod.db, func(db *DB) { _, _ = db.ListMessages(a, q) }) {
 			if plan := planOf(t, mod.db, sql); strings.Contains(plan, "TEMP B-TREE") {

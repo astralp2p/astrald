@@ -27,14 +27,25 @@ func (mod *Module) ReadMessages(_ context.Context, owner *astral.Identity, req *
 	return mod.read(owner, req, false)
 }
 
-// read answers a read of a mailbox's messages. A delegated read hands out what
-// it answers and records none of it — see handOut.
-func (mod *Module) read(mailbox *astral.Identity, req *messaging.ReadMessagesRequest, delegated bool) (*messaging.ReadMessagesResult, error) {
+// peek reads the owner's own mailbox as ReadMessages does and stamps nothing:
+// a client that shows mail to a person collects none of it on the
+// participant's behalf.
+func (mod *Module) peek(owner *astral.Identity, req *messaging.ReadMessagesRequest) (*messaging.ReadMessagesResult, error) {
+	if !mod.hosts(owner) {
+		return nil, errNotParticipant
+	}
+	return mod.read(owner, req, true)
+}
+
+// read answers a read of a mailbox's messages. A silent read — a delegated
+// read, or a peek — hands out what it answers and records none of it — see
+// handOut.
+func (mod *Module) read(mailbox *astral.Identity, req *messaging.ReadMessagesRequest, silent bool) (*messaging.ReadMessagesResult, error) {
 	r, err := readRequestOf(req)
 	if err != nil {
 		return nil, err
 	}
-	r.Delegated = delegated
+	r.Silent = silent
 
 	res, err := mod.readMessages(mailbox, r)
 	if err != nil {
@@ -75,9 +86,9 @@ type readRequest struct {
 	Children    string
 	MaxChildren int
 
-	// Delegated says the reader is not the mailbox's identity: the read hands
-	// bodies out and stamps nothing.
-	Delegated bool
+	// Silent says the read hands bodies out and stamps nothing: the reader is
+	// not the mailbox's identity, or it peeks.
+	Silent bool
 }
 
 // validate refuses a read the module will not serve and fills in what the
@@ -206,7 +217,7 @@ func (mod *Module) readMessages(owner *astral.Identity, req readRequest) (res re
 	// message may also be the reply of another, and its reply copy then reads
 	// the stamp this read wrote.
 	for _, row := range rows {
-		if err = mod.handOut(owner, row, req.Delegated); err != nil {
+		if err = mod.handOut(owner, row, req.Silent); err != nil {
 			return res, err
 		}
 	}
@@ -264,7 +275,7 @@ func (mod *Module) readReplies(owner *astral.Identity, parent messaging.MessageI
 			continue
 		}
 
-		if err = mod.handOut(owner, row, req.Delegated); err != nil {
+		if err = mod.handOut(owner, row, req.Silent); err != nil {
 			return nil, err
 		}
 
@@ -280,7 +291,7 @@ func (mod *Module) readReplies(owner *astral.Identity, parent messaging.MessageI
 
 // handOut records that the body of one of the owner's rows was handed out: the
 // row is stamped read, once, and its sender is told — see noteFetched. A
-// delegated read records nothing.
+// silent read records nothing.
 //
 // why the stamp and the telling are one act: handing a body out tells the
 // sender it was collected, and a row that says otherwise leaves the two halves
@@ -289,9 +300,11 @@ func (mod *Module) readReplies(owner *astral.Identity, parent messaging.MessageI
 //
 // why a delegated read records nothing: its reader is not the recipient. A
 // stamp would tell the mailbox's identity it read what it did not, and tell the
-// sender of a collection its recipient never made.
-func (mod *Module) handOut(owner *astral.Identity, row *messaging.StoredMessage, delegated bool) error {
-	if delegated {
+// sender of a collection its recipient never made. A peek records nothing for
+// the same reason: its reader shows the mail to a person, and the recipient's
+// own client is what collects it.
+func (mod *Module) handOut(owner *astral.Identity, row *messaging.StoredMessage, silent bool) error {
+	if silent {
 		return nil
 	}
 
