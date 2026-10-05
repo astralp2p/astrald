@@ -66,7 +66,7 @@ func TestAFilterThatCannotApplyIsRefused(t *testing.T) {
 	}
 }
 
-// A listing answers the whole list. A participant asking what is in its own
+// A listing without a limit answers the whole list. A participant asking what is in its own
 // mailbox and being handed a prefix has been told something silently false, and
 // it has no way to see that from the answer.
 func TestAListingAnswersTheWholeList(t *testing.T) {

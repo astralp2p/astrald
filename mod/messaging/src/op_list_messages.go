@@ -15,6 +15,8 @@ type opListMessagesArgs struct {
 	UnreadOnly     bool
 	AwaitingPickup bool
 	Mailbox        string
+	Before         uint64
+	Limit          uint64
 	Out            string
 }
 
@@ -40,6 +42,8 @@ func (mod *Module) OpListMessages(ctx *astral.Context, q *routing.IncomingQuery,
 		Since:          args.Since,
 		UnreadOnly:     args.UnreadOnly,
 		AwaitingPickup: args.AwaitingPickup,
+		Before:         args.Before,
+		Limit:          args.Limit,
 	})
 	if err != nil {
 		return ch.Send(astral.Err(err))

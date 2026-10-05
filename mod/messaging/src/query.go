@@ -44,6 +44,15 @@ type messageQuery struct {
 	// two lists are histories read newest-first, so a cursor on a column their
 	// sort does not use can only lose rows.
 	Since int64
+
+	// Before narrows to rows written before a position, and Limit caps how many
+	// rows are answered: together they page a list from its newest end.
+	//
+	// why the inbox reads newest first under either: a page is the newest rows
+	// below the position asked, whichever list it is. Since with Limit keeps the
+	// inbox oldest first, so a caller draining it forwards misses nothing.
+	Before int64
+	Limit  int
 }
 
 var errBadNarrowing = errors.New("that filter does not apply to this list")
@@ -51,6 +60,10 @@ var errBadNarrowing = errors.New("that filter does not apply to this list")
 // validate refuses a narrowing that cannot mean anything, rather than letting
 // it return everything or nothing.
 func (q *messageQuery) validate() error {
+	if q.Since != 0 && q.Before != 0 {
+		return errors.New("since and before page in opposite directions")
+	}
+
 	switch q.List {
 	case "", messaging.ListInbox:
 		q.List = messaging.ListInbox
@@ -71,6 +84,9 @@ func (q *messageQuery) validate() error {
 			return fmt.Errorf("%w: you are the sender of everything here; narrow by to", errBadNarrowing)
 		}
 	case messaging.ListArchive:
+		if q.Before != 0 {
+			return fmt.Errorf("%w: before pages by cursor; the archive is read by time", errBadNarrowing)
+		}
 		if q.Since != 0 {
 			return fmt.Errorf("%w: since pages the inbox; the archive is a history, read newest first", errBadNarrowing)
 		}
@@ -116,6 +132,9 @@ func (q messageQuery) apply(db *gorm.DB, owner *astral.Identity) *gorm.DB {
 	if q.Since != 0 {
 		tx = tx.Where("seq > ?", q.Since)
 	}
+	if q.Before != 0 {
+		tx = tx.Where("seq < ?", q.Before)
+	}
 
 	return tx
 }
@@ -134,6 +153,9 @@ func (q messageQuery) order() string {
 	case messaging.ListArchive:
 		return "created_at desc"
 	default:
+		if q.Before != 0 || (q.Limit != 0 && q.Since == 0) {
+			return "seq desc"
+		}
 		return "seq"
 	}
 }
@@ -162,4 +184,24 @@ func sinceOf(v uint64) (int64, error) {
 		return 0, fmt.Errorf("since is a cursor a previous answer gave you, not %v", v)
 	}
 	return int64(v), nil
+}
+
+// beforeOf reads a page's position, as sinceOf reads the inbox's.
+func beforeOf(v uint64) (int64, error) {
+	if v > math.MaxInt64 {
+		return 0, fmt.Errorf("before is a cursor a previous answer gave you, not %v", v)
+	}
+	return int64(v), nil
+}
+
+// listLimitMax is the most rows one page answers.
+const listLimitMax = messaging.PageLimitMax
+
+// limitOf reads a page's size. A size over the ceiling is refused rather than
+// cut, so a caller never reads a short page as the last one.
+func limitOf(v uint64) (int, error) {
+	if v > listLimitMax {
+		return 0, fmt.Errorf("limit is at most %v, not %v", listLimitMax, v)
+	}
+	return int(v), nil
 }

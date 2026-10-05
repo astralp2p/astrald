@@ -10,8 +10,9 @@ import (
 )
 
 type opReadMessagesArgs struct {
-	In  string
-	Out string
+	Peek bool
+	In   string
+	Out  string
 }
 
 // errReadRefused is what readFor answers for a delegated reader the read
@@ -48,7 +49,7 @@ func (mod *Module) OpReadMessages(ctx *astral.Context, q *routing.IncomingQuery,
 		return ch.Send(astral.Err(err))
 	}
 
-	res, err := mod.readFor(ctx, q.Caller(), req)
+	res, err := mod.readFor(ctx, q.Caller(), req, args.Peek)
 	switch {
 	case errors.Is(err, errReadRefused):
 		return nil
@@ -61,13 +62,17 @@ func (mod *Module) OpReadMessages(ctx *astral.Context, q *routing.IncomingQuery,
 
 // readFor answers the read the caller asked for. With no mailbox, or the
 // caller's, the caller reads its own mailbox through ReadMessages, which
-// answers errNotParticipant where this node does not host it. Any other
+// answers errNotParticipant where this node does not host it, or through peek
+// where the caller peeks, which stamps nothing. Any other
 // mailbox is a delegated read — see admitsReader. A delegated reader the read
 // refuses is answered errReadRefused.
-func (mod *Module) readFor(ctx *astral.Context, caller *astral.Identity, req *messaging.ReadMessagesRequest) (*messaging.ReadMessagesResult, error) {
+func (mod *Module) readFor(ctx *astral.Context, caller *astral.Identity, req *messaging.ReadMessagesRequest, peek bool) (*messaging.ReadMessagesResult, error) {
 	mailbox := mailboxOf(req)
 
 	if mailbox == nil || mailbox.IsEqual(caller) {
+		if peek {
+			return mod.peek(caller, req)
+		}
 		return mod.ReadMessages(ctx, caller, req)
 	}
 
