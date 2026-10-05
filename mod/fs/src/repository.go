@@ -14,17 +14,19 @@ import (
 )
 
 var _ objectsmod.Repository = &Repository{}
+var _ objectsmod.AfterRemovedCallback = &Repository{}
 
 // Repository is a filesystem-backed object store rooted at a single directory.
 // addQueue broadcasts newly committed object IDs to active Scan followers.
 // ids holds the candidate full IDs of each hash for partial lookup; nil means the index is not built yet.
 type Repository struct {
-	mod      *Module
-	label    string
-	root     string
-	mu       sync.Mutex // guards addQueue, ids, and the file moves and removals ids follows
-	addQueue *sig.Queue[*astral.ObjectID]
-	ids      *sig.Map[[32]byte, []astral.ObjectID]
+	mod       *Module
+	label     string
+	root      string
+	mu        sync.Mutex // guards addQueue, ids, and the file moves and removals ids follows
+	addQueue  *sig.Queue[*astral.ObjectID]
+	ids       *sig.Map[[32]byte, []astral.ObjectID]
+	persisted bool // the tree holds an entry for the repository
 }
 
 var _ objectsmod.Repository = &Repository{}
@@ -261,4 +263,10 @@ func (repo *Repository) added() *sig.Queue[*astral.ObjectID] {
 	defer repo.mu.Unlock()
 
 	return repo.addQueue
+}
+
+// AfterRemoved is called by the objects system when this repository is unregistered.
+// It deletes the repository's tree entry when one was written.
+func (repo *Repository) AfterRemoved(name string) {
+	repo.mod.deletePersisted(name, repo.persisted)
 }
