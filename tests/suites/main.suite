@@ -17,4 +17,5 @@ sign-contract-guard
 messaging-two-node
 mcp-peer
 services-swarm
+services-app-call
 expel-node                     # mutates two-nodes: nothing may follow it

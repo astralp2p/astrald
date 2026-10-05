@@ -3,6 +3,7 @@ package user
 import (
 	"fmt"
 
+	"github.com/astralp2p/astral-go/api/nodes"
 	"github.com/astralp2p/astral-go/api/tree"
 	"github.com/astralp2p/astral-go/api/user"
 	"github.com/astralp2p/astral-go/astral"
@@ -149,6 +150,25 @@ func (mod *Module) syncExpulsions(ctx *astral.Context, with *astral.Identity) {
 		}
 
 		mod.Objects.Push(ctx, with, signed)
+	}
+}
+
+// syncAppContracts pushes the relay contracts of the apps this node hosts, so
+// the sibling can route a query addressed to such an app through this node.
+// note: an app registered after the link came up reaches the sibling at the
+// next first link, when this task runs again.
+func (mod *Module) syncAppContracts(ctx *astral.Context, with *astral.Identity) {
+	contracts, err := mod.Auth.SignedContracts().
+		WithSubject(mod.node.Identity()).
+		WithAction(&nodes.RelayForAction{}).
+		Find(ctx)
+	if err != nil {
+		mod.log.Error("syncAppContracts: %v", err)
+		return
+	}
+
+	for _, contract := range contracts {
+		mod.Objects.Push(ctx, with, contract)
 	}
 }
 

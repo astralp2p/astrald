@@ -24,7 +24,8 @@ func (a *SyncNodesTask) String() string {
 }
 
 // Run executes the sync sequence against the remote identity in network zone order:
-// alias pull, active contract push, sibling contract push, app contract push, asset sync.
+// alias pull, active contract push, sibling contract push, expulsion push, app
+// contract push, asset sync.
 // Errors from individual steps are logged but do not abort the remaining steps;
 // syncAssets errors are logged and swallowed — Run always returns nil.
 func (a *SyncNodesTask) Run(ctx *astral.Context) error {
@@ -40,6 +41,7 @@ func (a *SyncNodesTask) Run(ctx *astral.Context) error {
 	a.mod.pushActiveContract(ctx, remoteIdentity)
 	a.mod.syncSiblings(ctx, remoteIdentity)
 	a.mod.syncExpulsions(ctx, remoteIdentity)
+	a.mod.syncAppContracts(ctx, remoteIdentity)
 
 	err = a.mod.syncAssets(ctx, remoteIdentity)
 	if err != nil {
