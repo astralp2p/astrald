@@ -3,10 +3,13 @@ package mobile
 import (
 	"errors"
 	"strings"
+	"time"
 
+	"github.com/astralp2p/astral-go/api/auth"
 	"github.com/astralp2p/astral-go/api/services"
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astrald/core"
+	apphostmod "github.com/astralp2p/astrald/mod/apphost"
 	servicesmod "github.com/astralp2p/astrald/mod/services"
 )
 
@@ -87,4 +90,54 @@ func (a nativeEvaluator) Evaluate(caller *astral.Identity, service string) *serv
 		_ = u.Info.Append(list)
 	}
 	return u
+}
+
+// GrantServiceDiscovery lets app, an identity in hex, discover names
+// (comma-separated) on every node of the swarm. It is a node-local grant that
+// replaces any earlier discovery grant of app and lasts until revoked. The
+// platform wrapper issues it for the apps it runs, such as the contacts
+// service, which cannot grant it to themselves.
+func (n *Node) GrantServiceDiscovery(app, names string) error {
+	n.mu.Lock()
+	cnode := n.cnode
+	n.mu.Unlock()
+
+	if cnode == nil || !n.running.Load() {
+		return errors.New("node not running")
+	}
+
+	id, err := astral.ParseIdentity(app)
+	if err != nil {
+		return err
+	}
+	list, err := services.ParseNames(names)
+	if err != nil {
+		return err
+	}
+	mod, err := core.Load[apphostmod.Module](cnode, apphostmod.ModuleName)
+	if err != nil {
+		return err
+	}
+	return grantDiscovery(mod, id, list)
+}
+
+// granter records node-local grants.
+type granter interface {
+	Grant(identity *astral.Identity, permit *auth.Permit, expiresAt *time.Time) error
+}
+
+func grantDiscovery(g granter, app *astral.Identity, names []string) error {
+	rule := &services.DiscoveryRule{}
+	for _, name := range names {
+		rule.Services = append(rule.Services, astral.String8(name))
+	}
+	scope := astral.NewBundle()
+	if err := scope.Append(&services.DiscoveryScope{Rules: []*services.DiscoveryRule{rule}}); err != nil {
+		return err
+	}
+	permit := &auth.Permit{
+		Action:      astral.String8(services.ServiceDiscoveryAction{}.ObjectType()),
+		Constraints: scope,
+	}
+	return g.Grant(app, permit, nil)
 }
