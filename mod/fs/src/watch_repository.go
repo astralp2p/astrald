@@ -31,6 +31,7 @@ type WatchRepository struct {
 	root       string
 	watcher    *Watcher
 	scanCancel context.CancelFunc
+	persisted  bool // the tree holds an entry for the repository
 }
 
 // NewWatchRepository creates a WatchRepository for an absolute directory path, wires inotify
@@ -337,4 +338,6 @@ func (repo *WatchRepository) AfterRemoved(name string) {
 	if err := repo.mod.indexer.removeRoot(repo.root); err != nil {
 		repo.mod.log.Error("%v indexer DeletePath root error: %v", name, err)
 	}
+
+	repo.mod.deletePersisted(name, repo.persisted)
 }

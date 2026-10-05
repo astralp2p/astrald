@@ -12,13 +12,16 @@ type opNewWatchArgs struct {
 	Path  string `query:"required"`
 	Name  string `query:"required"`
 	Label string
-	In    string
-	Out   string
+	// Temporary keeps the repository out of the tree, so it is gone after a restart.
+	Temporary bool
+	In        string
+	Out       string
 }
 
 // OpNewWatch authorizes the caller under AdminObjects, then registers a new watched
 // repository at the given path, starts an async background scan, and adds the
-// repository to both the objects store and the local group.
+// repository to both the objects store and the local group. Unless Temporary is set, the
+// repository is saved to the tree and restored at the next start.
 func (mod *Module) OpNewWatch(ctx *astral.Context, q *routing.IncomingQuery, args opNewWatchArgs) (err error) {
 	if !mod.Auth.Authorize(ctx, &auth.AdminObjectsAction{
 		Action: auth.NewAction(q.Caller()),
@@ -47,6 +50,8 @@ func (mod *Module) OpNewWatch(ctx *astral.Context, q *routing.IncomingQuery, arg
 		return ch.Send(astral.Err(err))
 	}
 
+	repo.persisted = !args.Temporary
+
 	scanCtx, cancel := mod.ctx.WithCancel()
 	repo.scanCancel = cancel
 
@@ -66,6 +71,13 @@ func (mod *Module) OpNewWatch(ctx *astral.Context, q *routing.IncomingQuery, arg
 	if err != nil {
 		cancel()
 		return ch.Send(astral.Err(err))
+	}
+
+	if !args.Temporary {
+		err = mod.persistAdded(ctx, args.Name, RepoConfig{Label: args.Label, Path: path})
+		if err != nil {
+			return ch.Send(astral.Err(err))
+		}
 	}
 
 	return ch.Send(&astral.Ack{})
