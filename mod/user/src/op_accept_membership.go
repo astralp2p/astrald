@@ -56,7 +56,7 @@ func (mod *Module) OpAcceptMembership(ctx *astral.Context, q *routing.IncomingQu
 		return ch.Send(user.ErrExpelled)
 	}
 
-	approved := mod.GetSwarmInvitePolicy()(q.Caller(), contract)
+	approved := mod.GetSwarmInvitePolicy()(ctx, q.Caller(), contract)
 	if !approved {
 		return ch.Send(user.ErrInvitationDeclined)
 	}

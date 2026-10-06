@@ -29,7 +29,7 @@ func (mod *Module) OpRequestMembership(ctx *astral.Context, q *routing.IncomingQ
 	defer ch.Close()
 
 	target := q.Caller()
-	joinAllowed := mod.GetSwarmJoinRequestPolicy()(target)
+	joinAllowed := mod.GetSwarmJoinRequestPolicy()(ctx, target)
 	if !joinAllowed {
 		return ch.Send(user.ErrRequestDeclined)
 	}
