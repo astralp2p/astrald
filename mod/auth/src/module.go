@@ -25,6 +25,10 @@ type Module struct {
 	handlers sig.Map[string, []auth.Handler]
 	indexMu  sync.Mutex
 
+	// handlersMu serializes Add's read-modify-write of handlers against
+	// other Adds and against get, so no registration is lost.
+	handlersMu sync.RWMutex
+
 	// external holds at most one authorizer per action type; a second for the
 	// same type is refused where it is added.
 	external sig.Map[string, *ExternalAuthorizer]
@@ -46,13 +50,22 @@ func (mod *Module) Run(ctx *astral.Context) error {
 
 // Add registers typed handlers; the action type is inferred from each handler.
 func (mod *Module) Add(handlers ...auth.TypedHandler) {
+	mod.handlersMu.Lock()
+	defer mod.handlersMu.Unlock()
+
 	for _, h := range handlers {
 		t := h.ActionType()
-		mod.handlers.Replace(t, append(mod.get(t), h))
+		old, _ := mod.handlers.Get(t)
+		mod.handlers.Replace(t, append(old, h))
 	}
 }
 
+// get returns the handlers for an action type. The lock covers only the
+// lookup; callers run the handlers without holding it.
 func (mod *Module) get(actionType string) []auth.Handler {
+	mod.handlersMu.RLock()
+	defer mod.handlersMu.RUnlock()
+
 	h, _ := mod.handlers.Get(actionType)
 	return h
 }
