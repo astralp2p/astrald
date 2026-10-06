@@ -80,6 +80,14 @@ func (mod *Module) Schedule(task scheduler.Task, deps ...scheduler.Done) (_ sche
 				select {
 				case <-sTask.Done():
 					canceled.Store(true)
+					// a releasable dep may still complete (e.g. PoolLocker acquiring its items);
+					// release it once it does, never before
+					if r, ok := dep.(scheduler.Releaser); ok {
+						go func() {
+							<-dep.Done()
+							r.Release()
+						}()
+					}
 
 				case <-dep.Done():
 					// store for release if needed
