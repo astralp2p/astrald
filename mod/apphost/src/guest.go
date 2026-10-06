@@ -212,10 +212,13 @@ func (guest *Guest) onRouteQueryMsg(ctx *astral.Context, msg *apphost.RouteQuery
 
 	// route the query
 	// note: Set refuses to overwrite, so a nonce already en route keeps its first
-	// owner. A colliding query is uncancellable rather than owning the entry.
-	guest.mod.enRoute.Set(q.Nonce, enRoute)
+	// owner. A colliding query is uncancellable rather than owning the entry,
+	// and must not delete the first query's entry when it finishes.
+	_, owned := guest.mod.enRoute.Set(q.Nonce, enRoute)
 	conn, err := query.RouteInFlight(qCtx, guest.mod.node, inFlight)
-	guest.mod.enRoute.Delete(q.Nonce)
+	if owned {
+		guest.mod.enRoute.Delete(q.Nonce)
+	}
 
 	// check error
 	var rejected *astral.ErrRejected
