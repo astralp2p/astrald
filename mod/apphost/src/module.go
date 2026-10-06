@@ -14,6 +14,7 @@ import (
 	"github.com/astralp2p/astrald/mod/crypto"
 	"github.com/astralp2p/astrald/mod/dir"
 	"github.com/astralp2p/astrald/mod/objects"
+	"github.com/astralp2p/astrald/mod/tree"
 	"github.com/astralp2p/astrald/mod/user"
 )
 
@@ -24,6 +25,7 @@ type Deps struct {
 	Crypto  crypto.Module
 	Dir     dir.Module
 	Objects objects.Module
+	Tree    tree.Module
 }
 
 type OptionalDeps struct {
@@ -35,6 +37,7 @@ type Module struct {
 	OptionalDeps
 	ctx    *astral.Context
 	config Config
+	policy policyConfig
 	node   astral.Node
 	log    *log.Logger
 	db     *DB

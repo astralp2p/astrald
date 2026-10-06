@@ -1,11 +1,15 @@
 package apphost
 
-import "github.com/astralp2p/astral-go/api/auth"
+import (
+	"github.com/astralp2p/astral-go/api/auth"
+	"github.com/astralp2p/astral-go/astral"
+)
 
 // AppRegisterPolicy decides what apphost.register issues to the identity it is
 // about to provision.
 //
-// origin is the caller's web origin, empty for local IPC callers.
+// ctx bounds the decision: it ends when the registering query closes. origin
+// is the caller's web origin, empty for local IPC callers.
 //
 // A permit is the same clause on both rails — an action, its constraints, its
 // delegation. What differs is the record it is written into, and the app names
@@ -27,6 +31,7 @@ import "github.com/astralp2p/astral-go/api/auth"
 // The shipped default grants everything it is handed on the rail it was asked
 // for, so a node that cares which apps hold what installs a policy that decides.
 type AppRegisterPolicy func(
+	ctx *astral.Context,
 	origin string,
 	requestedGrantPermits, requestedContractPermits []*auth.Permit,
 ) (grantPermits, contractPermits []*auth.Permit, allow bool)

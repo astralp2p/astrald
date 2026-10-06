@@ -49,15 +49,17 @@ func (mod *Module) OpRegister(ctx *astral.Context, query *routing.IncomingQuery,
 	// means nothing to a grant, which never leaves the node to be delegated.
 	requestedContractPermits := append(mod.GetWebOriginPermits(origin), parsePermits(args.ContractPermits)...)
 
-	grantPermits, contractPermits, ok := mod.GetAppRegisterPolicy()(
-		origin, requestedGrantPermits, requestedContractPermits,
-	)
-	if !ok {
-		return query.RejectWithCode(1)
-	}
-
+	// why accept before deciding: a delegated policy may wait on the user, and
+	// a query still en route is bounded by the router's timeout.
 	ch := query.Accept(channel.WithFormats(args.In, args.Out))
 	defer ch.Close()
+
+	grantPermits, contractPermits, ok := mod.GetAppRegisterPolicy()(
+		ctx, origin, requestedGrantPermits, requestedContractPermits,
+	)
+	if !ok {
+		return ch.Send(apphost.ErrRegistrationDeclined)
+	}
 
 	// generate and store new private key
 	key := secp256k1.New()

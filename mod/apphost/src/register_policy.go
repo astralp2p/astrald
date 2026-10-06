@@ -2,14 +2,23 @@ package apphost
 
 import (
 	"github.com/astralp2p/astral-go/api/auth"
+	"github.com/astralp2p/astral-go/astral"
+	"github.com/astralp2p/astral-go/lib/query"
 	"github.com/astralp2p/astrald/mod/apphost"
 )
 
+// GetAppRegisterPolicy returns the policy apphost.register applies: the app
+// register delegate when one is set, accept-all otherwise. It is read on every
+// registration, so setting or clearing the delegate takes effect on the next.
 func (mod *Module) GetAppRegisterPolicy() apphost.AppRegisterPolicy {
+	if d := mod.policy.AppRegisterDelegate.Get(); d != nil && !d.IsZero() {
+		return mod.AppRegisterViaDelegate
+	}
 	return mod.AppRegisterAcceptAll
 }
 
 var _ apphost.AppRegisterPolicy = (*Module)(nil).AppRegisterAcceptAll
+var _ apphost.AppRegisterPolicy = (*Module)(nil).AppRegisterViaDelegate
 
 // AppRegisterAcceptAll admits every registration and writes every permit put in
 // front of it onto the rail it was asked for, whether the caller's origin
@@ -17,6 +26,7 @@ var _ apphost.AppRegisterPolicy = (*Module)(nil).AppRegisterAcceptAll
 // claims to be: a node that cares which apps hold what installs a policy that
 // decides.
 func (mod *Module) AppRegisterAcceptAll(
+	_ *astral.Context,
 	origin string,
 	requestedGrantPermits, requestedContractPermits []*auth.Permit,
 ) ([]*auth.Permit, []*auth.Permit, bool) {
@@ -24,4 +34,58 @@ func (mod *Module) AppRegisterAcceptAll(
 		origin, len(requestedGrantPermits), len(requestedContractPermits))
 
 	return requestedGrantPermits, requestedContractPermits, true
+}
+
+// AppRegisterViaDelegate asks the app register delegate and applies its answer.
+// The wait is bounded by ctx alone, so the delegate may hold the question open
+// while it asks the user.
+//
+// why a failure refuses: once registration is delegated, a delegate that cannot
+// be reached has decided nothing, and falling back to accept-all would let a
+// stopped delegate open the node to every app.
+func (mod *Module) AppRegisterViaDelegate(
+	ctx *astral.Context,
+	origin string,
+	requestedGrantPermits, requestedContractPermits []*auth.Permit,
+) ([]*auth.Permit, []*auth.Permit, bool) {
+	delegate := mod.policy.AppRegisterDelegate.Get()
+	if delegate == nil || delegate.IsZero() {
+		return nil, nil, false
+	}
+
+	ch, err := query.Route(ctx, mod.node, query.New(mod.node.Identity(), delegate, apphost.OpDecideAppRegister, nil))
+	if err != nil {
+		mod.log.Errorv(1, "app register delegate %v: %v", delegate, err)
+		return nil, nil, false
+	}
+	defer ch.Close()
+
+	err = ch.Send(&apphost.AppRegisterRequest{
+		Origin:          astral.String8(origin),
+		GrantPermits:    requestedGrantPermits,
+		ContractPermits: requestedContractPermits,
+	})
+	if err != nil {
+		mod.log.Errorv(1, "app register delegate %v: %v", delegate, err)
+		return nil, nil, false
+	}
+
+	obj, err := ch.Receive()
+	if err != nil {
+		mod.log.Errorv(1, "app register delegate %v: %v", delegate, err)
+		return nil, nil, false
+	}
+
+	// why: any other object is an answer this code cannot read, and an
+	// unreadable answer must not read as permission.
+	dec, ok := obj.(*apphost.AppRegisterDecision)
+	if !ok {
+		mod.log.Errorv(1, "app register delegate %v answered %v", delegate, obj.ObjectType())
+		return nil, nil, false
+	}
+
+	mod.log.Logv(1, "app register delegate %v decided allow=%v with %v grant permits and %v contract permits",
+		delegate, bool(dec.Allow), len(dec.GrantPermits), len(dec.ContractPermits))
+
+	return dec.GrantPermits, dec.ContractPermits, bool(dec.Allow)
 }

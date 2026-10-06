@@ -9,10 +9,16 @@ import (
 	"github.com/astralp2p/astrald/core"
 	authmod "github.com/astralp2p/astrald/mod/auth"
 	"github.com/astralp2p/astrald/mod/shell"
+	"github.com/astralp2p/astrald/mod/tree"
 )
 
-func (mod *Module) LoadDependencies(*astral.Context) (err error) {
+func (mod *Module) LoadDependencies(ctx *astral.Context) (err error) {
 	if err = core.Inject(mod.node, &mod.Deps); err != nil {
+		return
+	}
+
+	err = tree.BindPath(ctx, &mod.policy, mod.Tree.Root(), "/mod/apphost/policy", true)
+	if err != nil {
 		return
 	}
 
