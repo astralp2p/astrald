@@ -264,7 +264,10 @@ func loadNodeIdentity(res resources.Resources) (*astral.Identity, error) {
 
 	data, err := res.Read(resNodeKey)
 	if err == nil {
-		object, _, _ := astral.Decode(bytes.NewReader(data), astral.Canonical())
+		object, _, err := astral.Decode(bytes.NewReader(data), astral.Canonical())
+		if err != nil {
+			return nil, fmt.Errorf("decode %s: %w", resNodeKey, err)
+		}
 		var ok bool
 		nodeKey, ok = object.(*crypto.PrivateKey)
 		if !ok {
