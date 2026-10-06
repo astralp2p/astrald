@@ -17,6 +17,7 @@ var LogDir string
 const crashLogTimeLayout = "20060102150405"
 
 // SaveLog will save the crash log to a file, then invoke the provided function (if not nil) and panic again
+// SaveLog writes the crash log to stderr when the file cannot be created.
 func SaveLog(after func(p any)) {
 	var p = recover()
 	if p == nil {
@@ -29,17 +30,18 @@ func SaveLog(after func(p any)) {
 
 	file, err := os.Create(path)
 	if err != nil {
+		// why: a crash log that cannot be written must not swallow the panic
 		fmt.Fprintf(os.Stderr, "failed to dump crash log: %v\n", err)
 		fmt.Fprintf(os.Stderr, "panic: %v\n\n", p)
 		os.Stderr.Write(debug.Stack())
-		return
+	} else {
+		defer file.Close()
+
+		fmt.Fprintf(file, "panic: %v\n\n", p)
+		file.Write(debug.Stack())
+
+		fmt.Printf("crash log saved to %s\n", path)
 	}
-	defer file.Close()
-
-	fmt.Fprintf(file, "panic: %v\n\n", p)
-	file.Write(debug.Stack())
-
-	fmt.Printf("crash log saved to %s\n", path)
 
 	if after != nil {
 		after(p)
