@@ -35,7 +35,7 @@ func (wrap *NodeWrapper) Sub(ctx *astral.Context) (map[string]tree.Node, error) 
 
 		// add the node wrapper
 		sub[name] = &NodeWrapper{
-			path: append(wrap.path, name),
+			path: append(wrap.path[:len(wrap.path):len(wrap.path)], name),
 			Node: node,
 			mod:  wrap.mod,
 		}
@@ -51,7 +51,7 @@ func (wrap *NodeWrapper) Create(ctx *astral.Context, name string) (tree.Node, er
 	}
 
 	return &NodeWrapper{
-		path: append(wrap.path, name),
+		path: append(wrap.path[:len(wrap.path):len(wrap.path)], name),
 		Node: node,
 		mod:  wrap.mod,
 	}, nil
