@@ -1,14 +1,17 @@
 package user
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"time"
 
 	"github.com/astralp2p/astral-go/api/auth"
+	"github.com/astralp2p/astral-go/api/crypto"
 	"github.com/astralp2p/astral-go/api/user"
-	userClient "github.com/astralp2p/astral-go/api/user/client"
 	"github.com/astralp2p/astral-go/astral"
+	"github.com/astralp2p/astral-go/astral/channel"
+	"github.com/astralp2p/astral-go/lib/astrald"
 	"github.com/astralp2p/astrald/mod/nearby"
 	usermod "github.com/astralp2p/astrald/mod/user"
 )
@@ -181,7 +184,7 @@ func (mod *Module) IssueMembership(ctx *astral.Context, nodeID *astral.Identity)
 		return nil, fmt.Errorf("sign as issuer: %w", err)
 	}
 
-	subjectSig, err := userClient.New(nodeID, nil).AcceptMembership(ctx, contract, issuerSig)
+	subjectSig, err := mod.acceptMembershipAt(ctx, nodeID, contract, issuerSig)
 	if err != nil {
 		return nil, err
 	}
@@ -193,4 +196,42 @@ func (mod *Module) IssueMembership(ctx *astral.Context, nodeID *astral.Identity)
 		return nil, fmt.Errorf("subject sig verification: %w", err)
 	}
 	return signed, nil
+}
+
+// acceptMembershipAt runs the issuer side of user.accept_membership at nodeID:
+// it sends the contract and the issuer signature and reads the subject
+// signature. It is the exchange of astral-go's user client, except that ending
+// ctx closes the channel.
+//
+// why: the subject node's invite policy may be delegated and wait on its user,
+// and the client's read watches no context. Closing the channel when ctx ends
+// lets the subject node see the issuer leave, so its delegate's question ends
+// too, instead of the exchange holding both ops until someone decides.
+func (mod *Module) acceptMembershipAt(
+	ctx *astral.Context, nodeID *astral.Identity, contract *auth.Contract, issuerSig *crypto.Signature,
+) (*crypto.Signature, error) {
+	ch, err := astrald.Default().WithTarget(nodeID).QueryChannel(ctx, user.OpAcceptMembership, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer ch.Close()
+
+	stop := context.AfterFunc(ctx, func() { _ = ch.Close() })
+	defer stop()
+
+	if err = ch.Send(contract); err != nil {
+		return nil, err
+	}
+	if err = ch.Send(issuerSig); err != nil {
+		return nil, err
+	}
+
+	var subjectSig *crypto.Signature
+	if err = ch.Switch(channel.Expect(&subjectSig), channel.PassErrors); err != nil {
+		if ctx.Err() != nil {
+			return nil, fmt.Errorf("requester left before %v signed: %w", nodeID, ctx.Err())
+		}
+		return nil, err
+	}
+	return subjectSig, nil
 }

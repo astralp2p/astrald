@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/astralp2p/astral-go/api/auth"
+	"github.com/astralp2p/astral-go/api/tree"
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astral-go/lib/query"
 	"github.com/astralp2p/astrald/mod/user"
@@ -13,7 +14,7 @@ import (
 // set, accept-all otherwise. It is read on every request, so setting or clearing
 // the delegate takes effect on the next.
 func (mod *Module) GetSwarmJoinRequestPolicy() user.SwarmJoinRequestPolicy {
-	if d := mod.config.SwarmJoinDelegate.Get(); d != nil && !d.IsZero() {
+	if delegated(&mod.config.SwarmJoinDelegate) {
 		return mod.SwarmJoinViaDelegate
 	}
 	return mod.SwarmJoinRequestAcceptAll
@@ -45,9 +46,14 @@ func (mod *Module) SwarmJoinViaDelegate(ctx *astral.Context, requester *astral.I
 		return false
 	}
 
+	if ctx.Err() != nil {
+		mod.log.Logv(1, "swarm join delegate %v: requester left before a decision", delegate)
+		return false
+	}
+
 	ch, err := query.Route(ctx, mod.node, query.New(mod.node.Identity(), delegate, user.OpDecideSwarmJoin, nil))
 	if err != nil {
-		mod.log.Errorv(1, "swarm join delegate %v: %v", delegate, err)
+		mod.logDelegateFailure(ctx, "join", delegate, err)
 		return false
 	}
 	defer ch.Close()
@@ -56,17 +62,13 @@ func (mod *Module) SwarmJoinViaDelegate(ctx *astral.Context, requester *astral.I
 	defer stop()
 
 	if err = ch.Send(&user.SwarmJoinRequest{Requester: requester}); err != nil {
-		mod.log.Errorv(1, "swarm join delegate %v: %v", delegate, err)
+		mod.logDelegateFailure(ctx, "join", delegate, err)
 		return false
 	}
 
 	obj, err := ch.Receive()
 	if err != nil {
-		if ctx.Err() != nil {
-			mod.log.Logv(1, "swarm join delegate %v: requester left before a decision", delegate)
-			return false
-		}
-		mod.log.Errorv(1, "swarm join delegate %v: %v", delegate, err)
+		mod.logDelegateFailure(ctx, "join", delegate, err)
 		return false
 	}
 
@@ -86,7 +88,7 @@ func (mod *Module) SwarmJoinViaDelegate(ctx *astral.Context, requester *astral.I
 // GetSwarmInvitePolicy returns the swarm invite delegate's policy when one is
 // set, accept-all otherwise. It is read on every invitation.
 func (mod *Module) GetSwarmInvitePolicy() user.SwarmInvitePolicy {
-	if d := mod.config.SwarmInviteDelegate.Get(); d != nil && !d.IsZero() {
+	if delegated(&mod.config.SwarmInviteDelegate) {
 		return mod.SwarmInviteViaDelegate
 	}
 	return mod.SwarmInviteAcceptAll
@@ -113,9 +115,14 @@ func (mod *Module) SwarmInviteViaDelegate(ctx *astral.Context, inviter *astral.I
 		return false
 	}
 
+	if ctx.Err() != nil {
+		mod.log.Logv(1, "swarm invite delegate %v: requester left before a decision", delegate)
+		return false
+	}
+
 	ch, err := query.Route(ctx, mod.node, query.New(mod.node.Identity(), delegate, user.OpDecideSwarmInvite, nil))
 	if err != nil {
-		mod.log.Errorv(1, "swarm invite delegate %v: %v", delegate, err)
+		mod.logDelegateFailure(ctx, "invite", delegate, err)
 		return false
 	}
 	defer ch.Close()
@@ -124,17 +131,13 @@ func (mod *Module) SwarmInviteViaDelegate(ctx *astral.Context, inviter *astral.I
 	defer stop()
 
 	if err = ch.Send(&user.SwarmInviteRequest{Inviter: inviter, Contract: contract}); err != nil {
-		mod.log.Errorv(1, "swarm invite delegate %v: %v", delegate, err)
+		mod.logDelegateFailure(ctx, "invite", delegate, err)
 		return false
 	}
 
 	obj, err := ch.Receive()
 	if err != nil {
-		if ctx.Err() != nil {
-			mod.log.Logv(1, "swarm invite delegate %v: requester left before a decision", delegate)
-			return false
-		}
-		mod.log.Errorv(1, "swarm invite delegate %v: %v", delegate, err)
+		mod.logDelegateFailure(ctx, "invite", delegate, err)
 		return false
 	}
 
@@ -149,4 +152,22 @@ func (mod *Module) SwarmInviteViaDelegate(ctx *astral.Context, inviter *astral.I
 	mod.log.Logv(1, "swarm invite delegate %v decided allow=%v for invitation from %v", delegate, bool(dec.Allow), inviter)
 
 	return bool(dec.Allow)
+}
+
+// delegated reports whether a policy's delegate value names an identity, so
+// the policy is decided by a delegate that may wait on the user.
+func delegated(value *tree.Value[*astral.Identity]) bool {
+	d := value.Get()
+	return d != nil && !d.IsZero()
+}
+
+// logDelegateFailure logs why a question to a swarm delegate went unanswered:
+// the requester leaving is expected and logged as such, anything else is an
+// error.
+func (mod *Module) logDelegateFailure(ctx *astral.Context, kind string, delegate *astral.Identity, err error) {
+	if ctx.Err() != nil {
+		mod.log.Logv(1, "swarm %v delegate %v: requester left before a decision", kind, delegate)
+		return
+	}
+	mod.log.Errorv(1, "swarm %v delegate %v: %v", kind, delegate, err)
 }

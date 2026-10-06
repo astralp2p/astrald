@@ -10,6 +10,7 @@ import (
 	"github.com/astralp2p/astral-go/astral/channel"
 	"github.com/astralp2p/astral-go/astral/log"
 	"github.com/astralp2p/astral-go/lib/query"
+	"github.com/astralp2p/astral-go/lib/routing"
 	"github.com/astralp2p/astrald/mod/apphost"
 )
 
@@ -159,23 +160,138 @@ func TestDelegateWaitEndsWhenTheRequesterLeaves(t *testing.T) {
 	}
 }
 
-// watchRequesterClose cancels once the requester's side ends, and not before.
-func TestWatchRequesterCloseCancelsOnEOF(t *testing.T) {
+// watchRequester ends its context when the requester's side ends, and only
+// observes: the reply direction stays open, so an answer can still reach a
+// requester that only closed its write side.
+func TestWatchRequesterObservesWithoutClosingTheReply(t *testing.T) {
 	r, w := io.Pipe()
-	done := make(chan struct{})
-	go watchRequesterClose(r, func() { close(done) })
+	reply := newRecordingWriter()
+	conn := routing.NewConn(astral.GenerateIdentity(), astral.GenerateIdentity(), reply, r, false).(*routing.Conn)
+
+	ctx, stop := watchRequester(astral.NewContext(nil), conn)
+	defer stop()
 
 	select {
-	case <-done:
-		t.Fatal("cancelled while the requester was still connected")
+	case <-ctx.Done():
+		t.Fatal("ended while the requester was still connected")
 	case <-time.After(50 * time.Millisecond):
 	}
 
 	_ = w.Close()
 
 	select {
-	case <-done:
+	case <-ctx.Done():
 	case <-time.After(5 * time.Second):
-		t.Fatal("not cancelled after the requester closed")
+		t.Fatal("did not end after the requester closed")
+	}
+
+	select {
+	case <-reply.closed:
+		t.Fatal("watching closed the reply direction")
+	case <-time.After(50 * time.Millisecond):
+	}
+}
+
+// stop ends the watch when the op returns before the requester closes, so the
+// watching goroutine does not outlive the op.
+func TestWatchRequesterStopEndsTheWatch(t *testing.T) {
+	r, _ := io.Pipe()
+	conn := routing.NewConn(astral.GenerateIdentity(), astral.GenerateIdentity(), newRecordingWriter(), r, false).(*routing.Conn)
+
+	ctx, stop := watchRequester(astral.NewContext(nil), conn)
+	stop()
+
+	select {
+	case <-ctx.Done():
+	case <-time.After(5 * time.Second):
+		t.Fatal("stop did not end the watch")
+	}
+	if _, err := r.Read(make([]byte, 1)); err == nil {
+		t.Fatal("stop left the read side open")
+	}
+}
+
+// routeOpen dispatches one query to one op and returns the requester's write
+// side, which the caller closes to end (or half-close) the requester's side.
+func routeOpen(t *testing.T, fn any, caller *astral.Identity, queryString string, w io.WriteCloser) io.WriteCloser {
+	t.Helper()
+
+	op, err := routing.NewOp(fn)
+	if err != nil {
+		t.Fatalf("new op: %v", err)
+	}
+
+	ctx, cancel := astral.NewContext(nil).WithTimeout(10 * time.Second)
+	t.Cleanup(cancel)
+
+	target, err := op.RouteQuery(ctx, astral.Launch(query.New(caller, caller, queryString, nil)), w)
+	if err != nil {
+		t.Fatalf("route: %v", err)
+	}
+	return target
+}
+
+func countTokens(t *testing.T, mod *Module) int {
+	t.Helper()
+	var tokens []dbAccessToken
+	if err := mod.db.Find(&tokens).Error; err != nil {
+		t.Fatalf("list tokens: %v", err)
+	}
+	return len(tokens)
+}
+
+// A node without a delegate keeps serving a requester that half-closes right
+// after its query: it still provisions the app and the token reaches the
+// requester, as before delegation existed.
+func TestAcceptAllServesAHalfClosingRequester(t *testing.T) {
+	mod := serveAppsRegistrar(t)
+	w := newRecordingWriter()
+
+	requester := routeOpen(t, mod.OpRegister, astral.GenerateIdentity(), "apphost.register", w)
+	_ = requester.Close()
+
+	awaitServeAppsClose(t, w)
+	if n := countTokens(t, mod); n != 1 {
+		t.Fatalf("issued %d tokens; want 1", n)
+	}
+	if w.written() == 0 {
+		t.Fatal("the token never reached the requester")
+	}
+}
+
+// With a delegate, a requester that leaves while the delegate holds the
+// question ends the question at the delegate, and the node provisions nothing.
+func TestDelegatedRegistrationEndsWhenTheRequesterLeaves(t *testing.T) {
+	mod := serveAppsRegistrar(t)
+	delegate := &holdingDelegate{
+		id:       astral.GenerateIdentity(),
+		received: make(chan *apphost.AppRegisterRequest, 1),
+		closed:   make(chan struct{}),
+	}
+	mod.node = delegate
+	if err := mod.policy.AppRegisterDelegate.Set(nil, delegate.id); err != nil {
+		t.Fatalf("set delegate: %v", err)
+	}
+
+	w := newRecordingWriter()
+	requester := routeOpen(t, mod.OpRegister, astral.GenerateIdentity(), "apphost.register", w)
+
+	select {
+	case <-delegate.received:
+	case <-time.After(5 * time.Second):
+		t.Fatal("the delegate never received the request")
+	}
+
+	_ = requester.Close()
+
+	select {
+	case <-delegate.closed:
+	case <-time.After(5 * time.Second):
+		t.Fatal("the question stayed open at the delegate after the requester left")
+	}
+
+	awaitServeAppsClose(t, w)
+	if n := countTokens(t, mod); n != 0 {
+		t.Fatalf("issued %d tokens to a requester that left; want 0", n)
 	}
 }

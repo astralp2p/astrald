@@ -39,13 +39,27 @@ func (mod *Module) OpAdopt(ctx *astral.Context, q *routing.IncomingQuery, args o
 		return q.RejectWithCode(4)
 	}
 
-	ch := q.Accept(channel.WithFormats(args.In, args.Out))
+	conn := q.AcceptRaw()
+	ch := channel.New(conn, channel.WithFormats(args.In, args.Out))
 	defer ch.Close()
 
+	// why: issuing the membership waits on the adopted node's invite policy,
+	// which may be delegated there and wait on its user; only the conn tells
+	// that wait that nobody waits for the adoption any more.
+	issueCtx, stop := watchRequester(ctx, conn)
+	defer stop()
+
 	// issue a membership contract for the node
-	signed, err := mod.IssueMembership(ctx, nodeID)
+	signed, err := mod.IssueMembership(issueCtx, nodeID)
 	if err != nil {
 		return ch.Send(astral.Err(err))
+	}
+
+	// why: a contract the adopted node signed after the requester left is not
+	// indexed or pushed; the adopted node holds it alone.
+	if issueCtx.Err() != nil {
+		mod.log.Logv(1, "adoption of %v completed after the requester left; not indexing", nodeID)
+		return nil
 	}
 
 	err = mod.Auth.IndexContract(ctx, signed)

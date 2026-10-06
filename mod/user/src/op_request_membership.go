@@ -29,11 +29,12 @@ func (mod *Module) OpRequestMembership(ctx *astral.Context, q *routing.IncomingQ
 	ch := channel.New(conn, channel.WithFormats(args.In, args.Out))
 	defer ch.Close()
 
-	// why: the op's context is detached from the requester's, so only the conn
-	// tells the policy that nobody waits for the membership any more.
-	policyCtx, cancel := ctx.WithCancel()
-	defer cancel()
-	go watchRequesterClose(conn, cancel)
+	// why always: besides this node's join policy, issuing the membership waits
+	// on the requester node's invite policy, which may be delegated there, and
+	// only the conn tells either wait that nobody waits for the membership any
+	// more.
+	policyCtx, stop := watchRequester(ctx, conn)
+	defer stop()
 
 	target := q.Caller()
 	joinAllowed := mod.GetSwarmJoinRequestPolicy()(policyCtx, target)
@@ -48,7 +49,7 @@ func (mod *Module) OpRequestMembership(ctx *astral.Context, q *routing.IncomingQ
 		return nil
 	}
 
-	signed, err := mod.IssueMembership(ctx, target)
+	signed, err := mod.IssueMembership(policyCtx, target)
 	if err != nil {
 		return ch.Send(astral.NewError(err.Error()))
 	}

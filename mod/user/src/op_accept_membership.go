@@ -75,13 +75,17 @@ func (mod *Module) OpAcceptMembership(ctx *astral.Context, q *routing.IncomingQu
 		return ch.Send(astral.Err(err))
 	}
 
-	// why: the op's context is detached from the inviter's, so only the conn
-	// tells the policy that nobody waits for the signature any more. The
-	// inviter sends nothing after the signature, so the watcher reads nothing
-	// the op needs.
-	policyCtx, cancel := ctx.WithCancel()
-	defer cancel()
-	go watchRequesterClose(conn, cancel)
+	// why only when delegated: the delegate may wait on the user, and only the
+	// conn tells it that nobody waits for the signature any more. The inviter
+	// sends nothing after the signature, so the watch reads nothing the op
+	// needs. The accept-all policy answers at once, so without a delegate the
+	// op serves an inviter that half-closes, as it did before delegation.
+	policyCtx := ctx
+	if delegated(&mod.config.SwarmInviteDelegate) {
+		var stop func()
+		policyCtx, stop = watchRequester(ctx, conn)
+		defer stop()
+	}
 
 	approved := mod.GetSwarmInvitePolicy()(policyCtx, q.Caller(), contract)
 	if !approved {

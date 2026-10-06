@@ -56,11 +56,16 @@ func (mod *Module) OpRegister(ctx *astral.Context, query *routing.IncomingQuery,
 	ch := channel.New(conn, channel.WithFormats(args.In, args.Out))
 	defer ch.Close()
 
-	// why: the op's context is detached from the requester's, so only the conn
-	// tells the policy that nobody waits for the registration any more.
-	policyCtx, cancel := ctx.WithCancel()
-	defer cancel()
-	go watchRequesterClose(conn, cancel)
+	// why only when delegated: the delegate may wait on the user, and only the
+	// conn tells it that nobody waits for the registration any more. The
+	// accept-all policy answers at once, so a node without a delegate keeps
+	// serving a requester that half-closes, as it did before delegation.
+	policyCtx := ctx
+	if mod.appRegisterDelegated() {
+		var stop func()
+		policyCtx, stop = watchRequester(ctx, conn)
+		defer stop()
+	}
 
 	grantPermits, contractPermits, ok := mod.GetAppRegisterPolicy()(
 		policyCtx, origin, query.Caller(), anonymous, requestedGrantPermits, requestedContractPermits,

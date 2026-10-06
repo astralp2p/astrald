@@ -13,10 +13,17 @@ import (
 // register delegate when one is set, accept-all otherwise. It is read on every
 // registration, so setting or clearing the delegate takes effect on the next.
 func (mod *Module) GetAppRegisterPolicy() apphost.AppRegisterPolicy {
-	if d := mod.policy.AppRegisterDelegate.Get(); d != nil && !d.IsZero() {
+	if mod.appRegisterDelegated() {
 		return mod.AppRegisterViaDelegate
 	}
 	return mod.AppRegisterAcceptAll
+}
+
+// appRegisterDelegated reports whether app registration is decided by a
+// delegate, which may wait on the user.
+func (mod *Module) appRegisterDelegated() bool {
+	d := mod.policy.AppRegisterDelegate.Get()
+	return d != nil && !d.IsZero()
 }
 
 var _ apphost.AppRegisterPolicy = (*Module)(nil).AppRegisterAcceptAll
@@ -64,9 +71,14 @@ func (mod *Module) AppRegisterViaDelegate(
 		return nil, nil, false
 	}
 
+	if ctx.Err() != nil {
+		mod.log.Logv(1, "app register delegate %v: requester left before a decision", delegate)
+		return nil, nil, false
+	}
+
 	ch, err := query.Route(ctx, mod.node, query.New(mod.node.Identity(), delegate, apphost.OpDecideAppRegister, nil))
 	if err != nil {
-		mod.log.Errorv(1, "app register delegate %v: %v", delegate, err)
+		mod.logDelegateFailure(ctx, delegate, err)
 		return nil, nil, false
 	}
 	defer ch.Close()
@@ -82,17 +94,13 @@ func (mod *Module) AppRegisterViaDelegate(
 		Anonymous:       astral.Bool(anonymous),
 	})
 	if err != nil {
-		mod.log.Errorv(1, "app register delegate %v: %v", delegate, err)
+		mod.logDelegateFailure(ctx, delegate, err)
 		return nil, nil, false
 	}
 
 	obj, err := ch.Receive()
 	if err != nil {
-		if ctx.Err() != nil {
-			mod.log.Logv(1, "app register delegate %v: requester left before a decision", delegate)
-			return nil, nil, false
-		}
-		mod.log.Errorv(1, "app register delegate %v: %v", delegate, err)
+		mod.logDelegateFailure(ctx, delegate, err)
 		return nil, nil, false
 	}
 
@@ -108,4 +116,15 @@ func (mod *Module) AppRegisterViaDelegate(
 		delegate, bool(dec.Allow), len(dec.GrantPermits), len(dec.ContractPermits))
 
 	return dec.GrantPermits, dec.ContractPermits, bool(dec.Allow)
+}
+
+// logDelegateFailure logs why a question to the app register delegate went
+// unanswered: the requester leaving is expected and logged as such, anything
+// else is an error.
+func (mod *Module) logDelegateFailure(ctx *astral.Context, delegate *astral.Identity, err error) {
+	if ctx.Err() != nil {
+		mod.log.Logv(1, "app register delegate %v: requester left before a decision", delegate)
+		return
+	}
+	mod.log.Errorv(1, "app register delegate %v: %v", delegate, err)
 }
