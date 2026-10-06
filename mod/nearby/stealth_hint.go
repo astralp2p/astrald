@@ -3,6 +3,7 @@ package nearby
 import (
 	"crypto/sha256"
 	"encoding/binary"
+	"errors"
 	"io"
 
 	"github.com/astralp2p/astral-go/astral"
@@ -61,6 +62,10 @@ func MaskIdentity(nodeID, userID *astral.Identity) []astral.Uint8 {
 // UnmaskIdentity recovers a node identity by XORing the masked bytes with the known userID.
 func UnmaskIdentity(masked []astral.Uint8, userID *astral.Identity) (*astral.Identity, error) {
 	userBytes := userID.PublicKey().SerializeCompressed()
+
+	if len(masked) != len(userBytes) {
+		return nil, errors.New("invalid masked identity length")
+	}
 
 	var raw [33]byte
 	for i := range raw {
