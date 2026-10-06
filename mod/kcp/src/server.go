@@ -96,7 +96,7 @@ func (s *Server) Run(ctx *astral.Context) error {
 		remoteEndpoint, _ := kcpmod.ParseEndpoint(sess.RemoteAddr().String())
 		s.log.Info("accepted connection from %v", remoteEndpoint)
 
-		conn := WrapKCPConn(sess, localEndpoint, remoteEndpoint, false, 1*time.Minute)
+		conn := WrapKCPConn(sess, remoteEndpoint, localEndpoint, false, 1*time.Minute)
 		go func() {
 			shouldClose, err := s.onAccept(ctx, conn)
 			if err != nil {
