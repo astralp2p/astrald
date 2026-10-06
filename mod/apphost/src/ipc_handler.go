@@ -27,6 +27,13 @@ var errEndpointUnavailable = errors.New("endpoint unavailable")
 func (handler *IPCHandler) RouteQuery(ctx *astral.Context, q *astral.InFlightQuery, w io.WriteCloser) (io.WriteCloser, error) {
 	conn, err := ipc.DialContext(ctx, handler.Endpoint)
 	if err != nil {
+		// why: a dial the caller abandoned says nothing about the endpoint.
+		// Reporting it unavailable would make the router remove a live app's
+		// handler whenever a caller gave up mid-dial, as a requester leaving a
+		// delegated decision does.
+		if ctx.Err() != nil {
+			return nil, ctx.Err()
+		}
 		return nil, errEndpointUnavailable
 	}
 
