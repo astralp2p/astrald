@@ -80,11 +80,15 @@ func (mod *Module) Delete(ctx *astral.Context, path string) error {
 	return nil
 }
 
-// Mount registers node at an absolute path; fails if the path is not absolute or is already mounted.
+// Mount registers node at an absolute path; fails if the path is not absolute, is the root, or is already mounted.
+// The root mount is immutable: the loader sets it once and Root() relies on it.
 func (mod *Module) Mount(path string, node tree.Node) error {
 	// check and normalize the path
 	if !strings.HasPrefix(path, "/") {
 		return errors.New("path must be absolute")
+	}
+	if strings.Trim(path, "/") == "" {
+		return errors.New("cannot mount the root")
 	}
 	path = strings.TrimSuffix(path, "/")
 
@@ -97,11 +101,15 @@ func (mod *Module) Mount(path string, node tree.Node) error {
 	return nil
 }
 
-// Unmount removes the mount at an absolute path; fails if the path is not absolute or has no mount.
+// Unmount removes the mount at an absolute path; fails if the path is not absolute, is the root, or has no mount.
+// The root mount is immutable, so Root() never returns nil.
 func (mod *Module) Unmount(path string) error {
 	// check and normalize the path
 	if !strings.HasPrefix(path, "/") {
 		return errors.New("path must be absolute")
+	}
+	if strings.Trim(path, "/") == "" {
+		return errors.New("cannot unmount the root")
 	}
 	path = strings.TrimSuffix(path, "/")
 
