@@ -263,7 +263,7 @@ func (p *conePuncher) sendBursts(
 func candidatePorts(center, spread int) (ports []int) {
 	spread = max(spread, 0)
 
-	for i := max(center-spread, minPort); i < min(center+spread+1, maxPort); i++ {
+	for i := max(center-spread, minPort); i <= min(center+spread, maxPort); i++ {
 		ports = append(ports, i)
 	}
 	return

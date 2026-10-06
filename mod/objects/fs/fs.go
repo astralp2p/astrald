@@ -1,6 +1,7 @@
 package fs
 
 import (
+	"errors"
 	"io/fs"
 	"time"
 
@@ -43,6 +44,9 @@ func (f *FS) OpenContext(ctx *astral.Context, name string) (fs.File, error) {
 
 	// open the file
 	r, err := f.repo.Read(ctx, objectID, 0, 0)
+	if errors.Is(err, objects.ErrNotFound) {
+		return nil, fs.ErrNotExist
+	}
 	if err != nil {
 		return nil, err
 	}

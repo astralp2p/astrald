@@ -71,9 +71,11 @@ func (node *Node) Set(ctx *astral.Context, object astral.Object) error {
 		object = &astral.Nil{}
 	}
 
-	defer node.mod.pushNodeValue(node.id, object)
-
-	return node.mod.db.setNodeValue(node.id, object)
+	if err := node.mod.db.setNodeValue(node.id, object); err != nil {
+		return err
+	}
+	node.mod.pushNodeValue(node.id, object)
+	return nil
 }
 
 func (node *Node) Delete(ctx *astral.Context) error {

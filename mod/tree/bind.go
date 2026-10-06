@@ -32,7 +32,16 @@ func Bind(ctx *astral.Context, s any, node tree.Node) error {
 			continue
 		}
 
+		// get the tag
+		tag := parseTag(fieldType.Tag.Get("tree"))
+		if tag.skip {
+			continue
+		}
+
 		if field.Kind() == reflect.Pointer {
+			if field.Type().Elem().Kind() != reflect.Struct {
+				continue
+			}
 			if field.IsNil() {
 				field.Set(reflect.New(field.Type().Elem()))
 			}
@@ -40,12 +49,6 @@ func Bind(ctx *astral.Context, s any, node tree.Node) error {
 		}
 
 		if field.Kind() != reflect.Struct {
-			continue
-		}
-
-		// get the tag
-		tag := parseTag(fieldType.Tag.Get("tree"))
-		if tag.skip {
 			continue
 		}
 

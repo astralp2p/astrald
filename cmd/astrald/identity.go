@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"fmt"
 
 	"github.com/astralp2p/astral-go/api/crypto"
 	"github.com/astralp2p/astral-go/api/secp256k1"
@@ -15,7 +16,10 @@ func loadNodeIdentity(resources resources.Resources) (identity *astral.Identity,
 
 	data, err := resources.Read(resNodeKey)
 	if err == nil {
-		object, _, _ := astral.Decode(bytes.NewReader(data), astral.Canonical())
+		object, _, err := astral.Decode(bytes.NewReader(data), astral.Canonical())
+		if err != nil {
+			return nil, fmt.Errorf("decode node_key: %w", err)
+		}
 
 		var ok bool
 		nodeKey, ok = object.(*crypto.PrivateKey)

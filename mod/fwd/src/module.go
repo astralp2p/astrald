@@ -81,10 +81,7 @@ func (mod *Module) Servers() []*ServerRunner {
 }
 
 func (mod *Module) waitForServers() {
-	mod.mu.Lock()
-	defer mod.mu.Unlock()
-
-	for server := range mod.servers {
+	for _, server := range mod.Servers() {
 		<-server.Done()
 	}
 }
