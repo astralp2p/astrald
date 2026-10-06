@@ -33,6 +33,9 @@ func Parse(s string) (*tor.Endpoint, error) {
 		if err != nil {
 			return nil, fmt.Errorf("invalid address: %w", err)
 		}
+		if port < 0 || port > 65535 {
+			return nil, fmt.Errorf("invalid address: port %d out of range", port)
+		}
 	}
 
 	var b32data = strings.TrimSuffix(strings.ToUpper(hostPort[0]), onionSuffix)

@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"io"
 	"net"
+	"strconv"
 	"strings"
 
 	"github.com/astralp2p/astral-go/api/tor"
@@ -39,7 +40,7 @@ func (srv *Server) Run(ctx *astral.Context) error {
 	}
 	defer l.Close()
 
-	srv.endpoint, err = Parse(l.Addr())
+	srv.endpoint, err = l.Endpoint(srv.config.ListenPort)
 	if err != nil {
 		srv.log.Errorv(1, "error parsing tor key: %v", err)
 	}
@@ -126,6 +127,11 @@ type listener struct {
 
 func (l listener) Addr() string {
 	return l.onion.ServiceID
+}
+
+// Endpoint returns the onion endpoint for the virtual port the service was registered on.
+func (l listener) Endpoint(port int) (*tor.Endpoint, error) {
+	return Parse(l.Addr() + ":" + strconv.Itoa(port))
 }
 
 func (l listener) PrivateKey() Key {
