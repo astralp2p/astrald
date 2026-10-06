@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"sync/atomic"
 	"time"
 
@@ -81,6 +82,12 @@ func (m *Mux) RouteQuery(ctx *astral.Context, q *astral.InFlightQuery, w io.Writ
 	sourceID := m.RemoteIdentity()
 	if q.Caller.IsEqual(ctx.Identity()) {
 		sourceID = nil
+	}
+
+	// why: the Query frame prefixes the query string with a 16-bit length;
+	// a longer string would wrap and route a different query on the peer.
+	if len(q.QueryString) > math.MaxUint16 {
+		return query.Reject()
 	}
 
 	conn, ok := m.createSession(q.Nonce, q.Target, sourceID, q.QueryString.String(), true, 0)
