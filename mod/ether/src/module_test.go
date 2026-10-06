@@ -50,6 +50,8 @@ func TestIsLinkLocal(t *testing.T) {
 		want bool
 	}{
 		{ip: "169.254.1.1", want: true},
+		{ip: "169.253.1.1", want: false},
+		{ip: "::ffff:169.254.0.1", want: true},
 		{ip: "192.168.1.255", want: false},
 		{ip: "fe80::1", want: true},
 		{ip: "febf::1", want: true},

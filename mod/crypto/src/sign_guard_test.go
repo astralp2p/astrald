@@ -65,6 +65,7 @@ func TestAuthorizeSigner(t *testing.T) {
 		{"sudo to the node", sudoer, secp256k1.FromIdentity(node), nil},
 		{"the node as another identity", node, secp256k1.FromIdentity(user), cryptomod.ErrForeignKey},
 		{"a key of another type", app, &crypto.PublicKey{Type: "ed25519", Key: []byte{1, 2, 3}}, cryptomod.ErrForeignKey},
+		{"a malformed key", app, &crypto.PublicKey{Type: secp256k1.KeyType, Key: []byte{1}}, cryptomod.ErrForeignKey},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			err := mod.AuthorizeSigner(astral.NewContext(nil), tc.caller, tc.key)

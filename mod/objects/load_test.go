@@ -126,3 +126,71 @@ func TestLoad_RefusesAnInputSizeAboveTheCap(t *testing.T) {
 		})
 	}
 }
+
+type sourceIdentifier struct {
+	id *astral.Identity
+}
+
+func (s sourceIdentifier) SourceIdentity() *astral.Identity { return s.id }
+
+func TestIsOffsetLimitValid(t *testing.T) {
+	id := &astral.ObjectID{Size: 10}
+
+	for _, tc := range []struct {
+		offset, limit int64
+		want          bool
+	}{
+		{0, 0, true},
+		{0, 10, true},
+		{10, 0, true},
+		{5, 5, true},
+		{5, 6, false},
+		{11, 0, false},
+		{-1, 0, false},
+		{0, -1, false},
+	} {
+		if got := IsOffsetLimitValid(id, tc.offset, tc.limit); got != tc.want {
+			t.Errorf("IsOffsetLimitValid(size 10, %d, %d): got %v, want %v", tc.offset, tc.limit, got, tc.want)
+		}
+	}
+}
+
+func TestLoad_WrongType(t *testing.T) {
+	repo, id := loadStub(t, 1)
+
+	_, err := Load[*astral.Uint8](nil, repo, id)
+	if want := "cannot cast *astral.String8 into *astral.Uint8"; err == nil || err.Error() != want {
+		t.Fatalf("Load[*astral.Uint8]: got %v, want %q", err, want)
+	}
+}
+
+func TestSourceIdentity(t *testing.T) {
+	valid := astral.GenerateIdentity()
+
+	for _, tc := range []struct {
+		name    string
+		v       any
+		wantID  *astral.Identity
+		wantOK  bool
+		wantErr error
+	}{
+		{name: "not a source identifier", v: 42},
+		{name: "nil identity", v: sourceIdentifier{}, wantOK: true, wantErr: ErrInvalidSourceIdentity},
+		{name: "zero identity", v: sourceIdentifier{id: &astral.Identity{}}, wantOK: true, wantErr: ErrInvalidSourceIdentity},
+		{name: "valid identity", v: sourceIdentifier{id: valid}, wantID: valid, wantOK: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			id, ok, err := SourceIdentity(tc.v)
+
+			if ok != tc.wantOK {
+				t.Errorf("ok: got %v, want %v", ok, tc.wantOK)
+			}
+			if !errors.Is(err, tc.wantErr) {
+				t.Errorf("err: got %v, want %v", err, tc.wantErr)
+			}
+			if id != tc.wantID {
+				t.Errorf("id: got %v, want %v", id, tc.wantID)
+			}
+		})
+	}
+}
