@@ -3,6 +3,7 @@ package kcp
 import (
 	"context"
 	"fmt"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -18,6 +19,7 @@ var _ exonet.EphemeralListener = &Server{}
 type Server struct {
 	*Module
 	listenPort  astral.Uint16
+	mu          sync.Mutex
 	listener    *kcpgo.Listener
 	onAccept    exonet.EphemeralHandler
 	closed      atomic.Bool
@@ -45,7 +47,16 @@ func (s *Server) Run(ctx *astral.Context) error {
 		return fmt.Errorf("kcp server/run: failed to listen on %v: %w", addr, err)
 	}
 
+	// why: a Close that ran before the bind has already closed closedCh and
+	// found no listener to close, so Run releases the port itself.
+	s.mu.Lock()
+	if s.closed.Load() {
+		s.mu.Unlock()
+		_ = kcpListener.Close()
+		return nil
+	}
 	s.listener = kcpListener
+	s.mu.Unlock()
 
 	localEndpoint, err := kcpmod.ParseEndpoint(kcpListener.Addr().String())
 	if err != nil {
@@ -115,19 +126,22 @@ func (s *Server) Done() <-chan struct{} {
 	return s.closedCh
 }
 
-// Close stops the server idempotently; the first call closes the underlying
-// KCP listener (or the done channel if no listener was started yet), and
-// subsequent calls are no-ops.
+// Close stops the server idempotently; the first call closes the done channel
+// and the underlying KCP listener if Run has bound one, and subsequent calls
+// are no-ops. A Run that binds after Close releases the port and returns nil.
 func (s *Server) Close() error {
 	if !s.closed.CompareAndSwap(false, true) {
 		return nil
 	}
 
-	if s.listener != nil {
-		return s.listener.Close()
-	}
+	s.mu.Lock()
+	l := s.listener
+	s.mu.Unlock()
 
 	close(s.closedCh)
+	if l != nil {
+		return l.Close()
+	}
 	return nil
 }
 
