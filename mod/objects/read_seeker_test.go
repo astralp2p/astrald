@@ -3,6 +3,7 @@ package objects
 import (
 	"bytes"
 	"crypto/sha256"
+	"errors"
 	"io"
 	"testing"
 
@@ -37,5 +38,56 @@ func TestReadSeeker_AdoptsTheOpenedID(t *testing.T) {
 	}
 	if partial.Size != 0 {
 		t.Fatalf("the ReadSeeker changed its argument's size to %d", partial.Size)
+	}
+}
+
+// offsetRepository serves data from the requested offset and rejects an offset past the end.
+// note: the embedded nil interface panics on any other method, which asserts that the caller uses only Read.
+type offsetRepository struct {
+	Repository
+	id   astral.ObjectID
+	data []byte
+}
+
+func (repo *offsetRepository) Read(_ *astral.Context, objectID *astral.ObjectID, offset, limit int64) (Reader, error) {
+	n, err := ResolveReadLimit(&repo.id, offset, limit)
+	if err != nil {
+		return nil, err
+	}
+	return &stubReader{id: repo.id, data: bytes.NewReader(repo.data[offset : offset+n])}, nil
+}
+
+// TestReadSeeker_FailedSeekKeepsTheOffset reads the head, seeks past the end, and reads again.
+// The failed Seek reports the previous offset, and the next Read continues from it.
+func TestReadSeeker_FailedSeekKeepsTheOffset(t *testing.T) {
+	data := []byte("0123456789")
+	repo := &offsetRepository{id: astral.ObjectID{Size: uint64(len(data)), Hash: sha256.Sum256(data)}, data: data}
+	reader, err := repo.Read(nil, &repo.id, 0, 0)
+	if err != nil {
+		t.Fatalf("open: %v", err)
+	}
+
+	rs := NewReadSeeker(astral.NewContext(nil), &repo.id, repo, reader)
+	defer rs.Close()
+
+	head := make([]byte, 4)
+	if _, err := io.ReadFull(rs, head); err != nil {
+		t.Fatalf("read the head: %v", err)
+	}
+
+	pos, err := rs.Seek(20, io.SeekStart)
+	if !errors.Is(err, ErrOutOfBounds) {
+		t.Fatalf("seek past the end returned %v; want ErrOutOfBounds", err)
+	}
+	if pos != 4 {
+		t.Fatalf("failed seek reported offset %d; want the previous offset 4", pos)
+	}
+
+	next := make([]byte, 4)
+	if _, err := io.ReadFull(rs, next); err != nil {
+		t.Fatalf("read after the failed seek: %v", err)
+	}
+	if string(next) != "4567" {
+		t.Fatalf("read after the failed seek returned %q; want %q", next, "4567")
 	}
 }
