@@ -2,11 +2,15 @@ package user
 
 import (
 	"bytes"
+	"io"
 	"testing"
+	"time"
 
 	"github.com/astralp2p/astral-go/api/auth"
 	"github.com/astralp2p/astral-go/astral"
+	"github.com/astralp2p/astral-go/astral/channel"
 	"github.com/astralp2p/astral-go/astral/log"
+	"github.com/astralp2p/astral-go/lib/query"
 	"github.com/astralp2p/astrald/mod/user"
 )
 
@@ -73,4 +77,107 @@ func TestDelegatedSwarmPolicyWithoutDelegateRefuses(t *testing.T) {
 	if mod.SwarmInviteViaDelegate(nil, id, &auth.Contract{Subject: id}) {
 		t.Fatal("invite admitted with no delegate")
 	}
+}
+
+// holdingDelegate stands in for a delegate that takes the question and never
+// answers. It reports when it read the request and when the node closed the
+// question.
+type holdingDelegate struct {
+	id       *astral.Identity
+	received chan astral.Object
+	closed   chan struct{}
+}
+
+var _ astral.Node = &holdingDelegate{}
+
+func (n *holdingDelegate) Identity() *astral.Identity { return n.id }
+
+func (n *holdingDelegate) RouteQuery(_ *astral.Context, q *astral.InFlightQuery, w io.WriteCloser) (io.WriteCloser, error) {
+	return query.Accept(q, w, func(conn astral.Conn) {
+		defer close(n.closed)
+		obj, err := channel.New(conn).Receive()
+		if err != nil {
+			return
+		}
+		n.received <- obj
+		_, _ = io.Copy(io.Discard, conn)
+	})
+}
+
+func newHoldingDelegate() *holdingDelegate {
+	return &holdingDelegate{
+		id:       astral.GenerateIdentity(),
+		received: make(chan astral.Object, 1),
+		closed:   make(chan struct{}),
+	}
+}
+
+// awaitLeave asserts that decide waits while the delegate holds, then refuses
+// promptly once cancel runs, and that the question closes at the delegate.
+func awaitLeave(t *testing.T, d *holdingDelegate, cancel func(), decide func() bool) {
+	t.Helper()
+	result := make(chan bool, 1)
+	go func() { result <- decide() }()
+
+	select {
+	case <-d.received:
+	case <-time.After(5 * time.Second):
+		t.Fatal("the delegate never received the request")
+	}
+
+	select {
+	case <-result:
+		t.Fatal("the policy decided while the delegate was still holding")
+	case <-time.After(100 * time.Millisecond):
+	}
+
+	cancel()
+
+	select {
+	case ok := <-result:
+		if ok {
+			t.Fatal("a request whose requester left was admitted")
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("the policy kept waiting after the requester left")
+	}
+
+	select {
+	case <-d.closed:
+	case <-time.After(5 * time.Second):
+		t.Fatal("the question stayed open at the delegate")
+	}
+}
+
+// A join delegate that holds the question must not hold the request once the
+// requesting node has left.
+func TestSwarmJoinWaitEndsWhenTheRequesterLeaves(t *testing.T) {
+	d := newHoldingDelegate()
+	mod := &Module{log: log.New(nil), node: d}
+	if err := mod.config.SwarmJoinDelegate.Set(nil, d.id); err != nil {
+		t.Fatalf("set delegate: %v", err)
+	}
+
+	ctx, cancel := astral.NewContext(nil).WithCancel()
+	defer cancel()
+	awaitLeave(t, d, cancel, func() bool {
+		return mod.GetSwarmJoinRequestPolicy()(ctx, astral.GenerateIdentity())
+	})
+}
+
+// An invite delegate that holds the question must not hold the invitation once
+// the inviter has left.
+func TestSwarmInviteWaitEndsWhenTheInviterLeaves(t *testing.T) {
+	d := newHoldingDelegate()
+	mod := &Module{log: log.New(nil), node: d}
+	if err := mod.config.SwarmInviteDelegate.Set(nil, d.id); err != nil {
+		t.Fatalf("set delegate: %v", err)
+	}
+
+	id := astral.GenerateIdentity()
+	ctx, cancel := astral.NewContext(nil).WithCancel()
+	defer cancel()
+	awaitLeave(t, d, cancel, func() bool {
+		return mod.GetSwarmInvitePolicy()(ctx, astral.GenerateIdentity(), &auth.Contract{Subject: id})
+	})
 }

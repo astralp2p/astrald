@@ -1,6 +1,8 @@
 package user
 
 import (
+	"context"
+
 	"github.com/astralp2p/astral-go/api/auth"
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astral-go/lib/query"
@@ -26,8 +28,13 @@ func (mod *Module) SwarmJoinRequestAcceptAll(_ *astral.Context, requester *astra
 }
 
 // SwarmJoinViaDelegate asks the swarm join delegate and returns its answer. The
-// wait is bounded by ctx alone, so the delegate may hold the question open while
-// it asks the user.
+// delegate may hold the question open while it asks the user; the wait ends
+// when the delegate answers or when ctx ends, whichever comes first.
+//
+// why ctx closes the channel: Receive does not watch a context, and the op's
+// context is detached from the requester's, so without this a delegate that
+// never answers would hold the op forever. OpRequestMembership cancels ctx when
+// the requesting node leaves.
 //
 // why a failure refuses: once joining is delegated, a delegate that cannot be
 // reached has decided nothing, and falling back to accept-all would let a
@@ -45,6 +52,9 @@ func (mod *Module) SwarmJoinViaDelegate(ctx *astral.Context, requester *astral.I
 	}
 	defer ch.Close()
 
+	stop := context.AfterFunc(ctx, func() { _ = ch.Close() })
+	defer stop()
+
 	if err = ch.Send(&user.SwarmJoinRequest{Requester: requester}); err != nil {
 		mod.log.Errorv(1, "swarm join delegate %v: %v", delegate, err)
 		return false
@@ -52,6 +62,10 @@ func (mod *Module) SwarmJoinViaDelegate(ctx *astral.Context, requester *astral.I
 
 	obj, err := ch.Receive()
 	if err != nil {
+		if ctx.Err() != nil {
+			mod.log.Logv(1, "swarm join delegate %v: requester left before a decision", delegate)
+			return false
+		}
 		mod.log.Errorv(1, "swarm join delegate %v: %v", delegate, err)
 		return false
 	}
@@ -87,7 +101,9 @@ func (mod *Module) SwarmInviteAcceptAll(_ *astral.Context, inviter *astral.Ident
 }
 
 // SwarmInviteViaDelegate asks the swarm invite delegate and returns its answer.
-// The wait is bounded by ctx alone.
+// The wait ends when the delegate answers or when ctx ends, for the reason
+// SwarmJoinViaDelegate gives; OpAcceptMembership cancels ctx when the inviter
+// leaves.
 //
 // why a failure refuses: the same as SwarmJoinViaDelegate's — an unreachable
 // delegate has decided nothing.
@@ -104,6 +120,9 @@ func (mod *Module) SwarmInviteViaDelegate(ctx *astral.Context, inviter *astral.I
 	}
 	defer ch.Close()
 
+	stop := context.AfterFunc(ctx, func() { _ = ch.Close() })
+	defer stop()
+
 	if err = ch.Send(&user.SwarmInviteRequest{Inviter: inviter, Contract: contract}); err != nil {
 		mod.log.Errorv(1, "swarm invite delegate %v: %v", delegate, err)
 		return false
@@ -111,6 +130,10 @@ func (mod *Module) SwarmInviteViaDelegate(ctx *astral.Context, inviter *astral.I
 
 	obj, err := ch.Receive()
 	if err != nil {
+		if ctx.Err() != nil {
+			mod.log.Logv(1, "swarm invite delegate %v: requester left before a decision", delegate)
+			return false
+		}
 		mod.log.Errorv(1, "swarm invite delegate %v: %v", delegate, err)
 		return false
 	}
