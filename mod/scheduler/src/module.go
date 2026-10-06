@@ -97,10 +97,8 @@ func (mod *Module) Schedule(task scheduler.Task, deps ...scheduler.Done) (_ sche
 		}
 
 		// run the task within the context of the scheduler module
-		err = sTask.Run(mod.ctx)
-
 		// log on error
-		if err != nil {
+		if err := sTask.Run(mod.ctx); err != nil {
 			mod.log.Errorv(2, "task %v: %v", task, err)
 		}
 	}()

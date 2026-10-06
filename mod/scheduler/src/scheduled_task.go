@@ -131,6 +131,8 @@ func (task *ScheduledTask) ScheduledAt() time.Time {
 }
 
 func (task *ScheduledTask) State() scheduler.State {
+	task.mu.RLock()
+	defer task.mu.RUnlock()
 	return task.state
 }
 
