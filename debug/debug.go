@@ -13,6 +13,9 @@ const PanicExitCode = 5
 
 var LogDir string
 
+// crashLogTimeLayout is the 24-hour timestamp of a crash log filename.
+const crashLogTimeLayout = "20060102150405"
+
 // SaveLog will save the crash log to a file, then invoke the provided function (if not nil) and panic again
 func SaveLog(after func(p any)) {
 	var p = recover()
@@ -20,7 +23,7 @@ func SaveLog(after func(p any)) {
 		return
 	}
 
-	var ts = time.Now().Format("20060102030405")
+	var ts = time.Now().Format(crashLogTimeLayout)
 	var filename = "crash." + ts + ".log"
 	var path = filepath.Join(LogDir, filename)
 
