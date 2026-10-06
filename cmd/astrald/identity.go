@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 
 	"github.com/astralp2p/astral-go/api/crypto"
@@ -10,11 +11,12 @@ import (
 	"github.com/astralp2p/astrald/resources"
 )
 
-// loadNodeIdentity loads node's identity from resources. Generates a new identity if we don't have one yet.
-func loadNodeIdentity(resources resources.Resources) (identity *astral.Identity, err error) {
+// loadNodeIdentity loads node's identity from resources. Generates a new identity only if no node key
+// exists yet (resources.ErrNotFound); any other read error is returned.
+func loadNodeIdentity(res resources.Resources) (identity *astral.Identity, err error) {
 	var nodeKey *crypto.PrivateKey
 
-	data, err := resources.Read(resNodeKey)
+	data, err := res.Read(resNodeKey)
 	if err == nil {
 		object, _, err := astral.Decode(bytes.NewReader(data), astral.Canonical())
 		if err != nil {
@@ -26,6 +28,8 @@ func loadNodeIdentity(resources resources.Resources) (identity *astral.Identity,
 		if !ok {
 			return nil, astral.NewErrUnexpectedObject(object)
 		}
+	} else if !errors.Is(err, resources.ErrNotFound) {
+		return nil, fmt.Errorf("read node_key: %w", err)
 	} else {
 		nodeKey = secp256k1.New()
 
@@ -36,7 +40,7 @@ func loadNodeIdentity(resources resources.Resources) (identity *astral.Identity,
 			return nil, err
 		}
 
-		err = resources.Write("node_key", keyBytes.Bytes())
+		err = res.Write("node_key", keyBytes.Bytes())
 		if err != nil {
 			return nil, err
 		}
