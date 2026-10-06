@@ -39,6 +39,7 @@ func (mod *Module) OpRegister(ctx *astral.Context, query *routing.IncomingQuery,
 	// only resolves while the query is en route, and Accept removes that entry.
 	extras := mod.EnRouteQueryExtras(query.Nonce())
 	origin, _ := extras[apphost.ExtraOriginWeb].(string)
+	anonymous, _ := extras[apphost.ExtraAnonymous].(bool)
 
 	// why: a registered app is served from this node, so its grant request
 	// carries ServeApps whatever the app asked for.
@@ -51,14 +52,28 @@ func (mod *Module) OpRegister(ctx *astral.Context, query *routing.IncomingQuery,
 
 	// why accept before deciding: a delegated policy may wait on the user, and
 	// a query still en route is bounded by the router's timeout.
-	ch := query.Accept(channel.WithFormats(args.In, args.Out))
+	conn := query.AcceptRaw()
+	ch := channel.New(conn, channel.WithFormats(args.In, args.Out))
 	defer ch.Close()
 
+	// why: the op's context is detached from the requester's, so only the conn
+	// tells the policy that nobody waits for the registration any more.
+	policyCtx, cancel := ctx.WithCancel()
+	defer cancel()
+	go watchRequesterClose(conn, cancel)
+
 	grantPermits, contractPermits, ok := mod.GetAppRegisterPolicy()(
-		ctx, origin, requestedGrantPermits, requestedContractPermits,
+		policyCtx, origin, query.Caller(), anonymous, requestedGrantPermits, requestedContractPermits,
 	)
 	if !ok {
 		return ch.Send(apphost.ErrRegistrationDeclined)
+	}
+
+	// why: an approval that arrives after the app left would provision an
+	// identity and a token that nobody receives.
+	if policyCtx.Err() != nil {
+		mod.log.Logv(1, "registration approved after the requester left; not provisioning")
+		return nil
 	}
 
 	// generate and store new private key

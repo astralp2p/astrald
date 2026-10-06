@@ -9,7 +9,9 @@ import (
 // about to provision.
 //
 // ctx bounds the decision: it ends when the registering query closes. origin
-// is the caller's web origin, empty for local IPC callers.
+// is the caller's web origin, empty for local IPC callers. caller is the
+// identity that called apphost.register, and anonymous is true when its
+// session presented no token (caller is then this node's identity).
 //
 // A permit is the same clause on both rails — an action, its constraints, its
 // delegation. What differs is the record it is written into, and the app names
@@ -33,5 +35,7 @@ import (
 type AppRegisterPolicy func(
 	ctx *astral.Context,
 	origin string,
+	caller *astral.Identity,
+	anonymous bool,
 	requestedGrantPermits, requestedContractPermits []*auth.Permit,
 ) (grantPermits, contractPermits []*auth.Permit, allow bool)

@@ -1,6 +1,8 @@
 package apphost
 
 import (
+	"context"
+
 	"github.com/astralp2p/astral-go/api/auth"
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astral-go/lib/query"
@@ -28,6 +30,8 @@ var _ apphost.AppRegisterPolicy = (*Module)(nil).AppRegisterViaDelegate
 func (mod *Module) AppRegisterAcceptAll(
 	_ *astral.Context,
 	origin string,
+	_ *astral.Identity,
+	_ bool,
 	requestedGrantPermits, requestedContractPermits []*auth.Permit,
 ) ([]*auth.Permit, []*auth.Permit, bool) {
 	mod.log.Info("accepting registration from origin %v with %v grant permits and %v contract permits",
@@ -37,8 +41,13 @@ func (mod *Module) AppRegisterAcceptAll(
 }
 
 // AppRegisterViaDelegate asks the app register delegate and applies its answer.
-// The wait is bounded by ctx alone, so the delegate may hold the question open
-// while it asks the user.
+// The delegate may hold the question open while it asks the user; the wait ends
+// when the delegate answers or when ctx ends, whichever comes first.
+//
+// why ctx closes the channel: Receive does not watch a context, and the op's
+// context is detached from the requester's, so without this a delegate that
+// never answers would hold the op forever. OpRegister cancels ctx when the
+// registering app leaves.
 //
 // why a failure refuses: once registration is delegated, a delegate that cannot
 // be reached has decided nothing, and falling back to accept-all would let a
@@ -46,6 +55,8 @@ func (mod *Module) AppRegisterAcceptAll(
 func (mod *Module) AppRegisterViaDelegate(
 	ctx *astral.Context,
 	origin string,
+	caller *astral.Identity,
+	anonymous bool,
 	requestedGrantPermits, requestedContractPermits []*auth.Permit,
 ) ([]*auth.Permit, []*auth.Permit, bool) {
 	delegate := mod.policy.AppRegisterDelegate.Get()
@@ -60,10 +71,15 @@ func (mod *Module) AppRegisterViaDelegate(
 	}
 	defer ch.Close()
 
+	stop := context.AfterFunc(ctx, func() { _ = ch.Close() })
+	defer stop()
+
 	err = ch.Send(&apphost.AppRegisterRequest{
 		Origin:          astral.String8(origin),
 		GrantPermits:    requestedGrantPermits,
 		ContractPermits: requestedContractPermits,
+		Caller:          caller,
+		Anonymous:       astral.Bool(anonymous),
 	})
 	if err != nil {
 		mod.log.Errorv(1, "app register delegate %v: %v", delegate, err)
@@ -72,6 +88,10 @@ func (mod *Module) AppRegisterViaDelegate(
 
 	obj, err := ch.Receive()
 	if err != nil {
+		if ctx.Err() != nil {
+			mod.log.Logv(1, "app register delegate %v: requester left before a decision", delegate)
+			return nil, nil, false
+		}
 		mod.log.Errorv(1, "app register delegate %v: %v", delegate, err)
 		return nil, nil, false
 	}

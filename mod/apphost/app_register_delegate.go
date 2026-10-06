@@ -14,13 +14,21 @@ const OpDecideAppRegister = "apphost.decide_app_register"
 // ErrRegistrationDeclined is sent to a registering app the policy refused.
 var ErrRegistrationDeclined = astral.NewError("registration declined")
 
-// AppRegisterRequest is what the node asks the app register delegate: the
-// registering origin and the permits the app requested on each rail, with the
-// origin's trusted-source entitlement already joined onto the contract rail.
+// AppRegisterRequest is what the node asks the app register delegate: who is
+// registering, the registering origin, and the permits the app requested on
+// each rail, with the origin's trusted-source entitlement already joined onto
+// the contract rail.
+//
+// Caller is the identity that called apphost.register. Anonymous is true when
+// that caller's apphost session presented no token; the core router then
+// substitutes this node's identity for the missing caller, so Caller alone
+// cannot tell an anonymous local process from the node.
 type AppRegisterRequest struct {
 	Origin          astral.String8
 	GrantPermits    []*auth.Permit
 	ContractPermits []*auth.Permit
+	Caller          *astral.Identity
+	Anonymous       astral.Bool
 }
 
 func (AppRegisterRequest) ObjectType() string { return "mod.apphost.app_register_request" }
