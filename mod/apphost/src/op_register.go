@@ -56,16 +56,19 @@ func (mod *Module) OpRegister(ctx *astral.Context, query *routing.IncomingQuery,
 	ch := channel.New(conn, channel.WithFormats(args.In, args.Out))
 	defer ch.Close()
 
-	// why only when delegated: the delegate may wait on the user, and only the
-	// conn tells it that nobody waits for the registration any more. The
-	// accept-all policy answers at once, so a node without a delegate keeps
-	// serving a requester that half-closes, as it did before delegation.
-	policyCtx := ctx
-	if mod.appRegisterDelegated() {
-		var stop func()
-		policyCtx, stop = watchRequester(ctx, conn)
-		defer stop()
-	}
+	// why: a delegate may wait on the user, and only the conn tells it that
+	// nobody waits for the registration any more. The watch runs whatever the
+	// policy, so the decision to watch and the policy cannot disagree when the
+	// delegate changes mid-request.
+	//
+	// note: a requester that half-closes counts as having left; on the apphost
+	// IPC path it loses the answer anyway, because the guest proxy closes the
+	// query when the app's side ends (guest.go, streams.Join). The accept-all
+	// policy answers before the watch can see such an end, so it may still
+	// provision; only a decision that outlasts the end, as a delegate's does,
+	// is guaranteed to see it.
+	policyCtx, stop := watchRequester(ctx, conn)
+	defer stop()
 
 	grantPermits, contractPermits, ok := mod.GetAppRegisterPolicy()(
 		policyCtx, origin, query.Caller(), anonymous, requestedGrantPermits, requestedContractPermits,

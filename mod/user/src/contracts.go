@@ -11,7 +11,7 @@ import (
 	"github.com/astralp2p/astral-go/api/user"
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astral-go/astral/channel"
-	"github.com/astralp2p/astral-go/lib/astrald"
+	"github.com/astralp2p/astral-go/lib/query"
 	"github.com/astralp2p/astrald/mod/nearby"
 	usermod "github.com/astralp2p/astrald/mod/user"
 )
@@ -200,17 +200,22 @@ func (mod *Module) IssueMembership(ctx *astral.Context, nodeID *astral.Identity)
 
 // acceptMembershipAt runs the issuer side of user.accept_membership at nodeID:
 // it sends the contract and the issuer signature and reads the subject
-// signature. It is the exchange of astral-go's user client, except that ending
-// ctx closes the channel.
+// signature. It is the exchange of astral-go's user client, routed from this
+// node as the client is, except that ending ctx closes the channel.
 //
 // why: the subject node's invite policy may be delegated and wait on its user,
 // and the client's read watches no context. Closing the channel when ctx ends
 // lets the subject node see the issuer leave, so its delegate's question ends
 // too, instead of the exchange holding both ops until someone decides.
+//
+// note: the exchange has no acknowledgement after the subject signature. If
+// ctx ends while that signature is in flight, the subject has installed the
+// contract and this side returns an error, so only the subject holds the
+// membership. Closing that window needs an acknowledgement in the protocol.
 func (mod *Module) acceptMembershipAt(
 	ctx *astral.Context, nodeID *astral.Identity, contract *auth.Contract, issuerSig *crypto.Signature,
 ) (*crypto.Signature, error) {
-	ch, err := astrald.Default().WithTarget(nodeID).QueryChannel(ctx, user.OpAcceptMembership, nil)
+	ch, err := query.Route(ctx, mod.node, query.New(mod.node.Identity(), nodeID, user.OpAcceptMembership, nil))
 	if err != nil {
 		return nil, err
 	}
@@ -227,11 +232,16 @@ func (mod *Module) acceptMembershipAt(
 	}
 
 	var subjectSig *crypto.Signature
-	if err = ch.Switch(channel.Expect(&subjectSig), channel.PassErrors); err != nil {
-		if ctx.Err() != nil {
-			return nil, fmt.Errorf("requester left before %v signed: %w", nodeID, ctx.Err())
-		}
+	err = ch.Switch(channel.Expect(&subjectSig), channel.PassErrors)
+	switch {
+	case ctx.Err() != nil && subjectSig == nil:
+		return nil, fmt.Errorf("requester left before %v signed: %w", nodeID, ctx.Err())
+	case err != nil:
 		return nil, err
+	case subjectSig == nil:
+		// why: Switch ends without an error when the stream ends, so a subject
+		// that closed without answering would otherwise read as a signature.
+		return nil, fmt.Errorf("%v closed without a subject signature", nodeID)
 	}
 	return subjectSig, nil
 }

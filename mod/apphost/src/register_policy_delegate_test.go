@@ -240,25 +240,6 @@ func countTokens(t *testing.T, mod *Module) int {
 	return len(tokens)
 }
 
-// A node without a delegate keeps serving a requester that half-closes right
-// after its query: it still provisions the app and the token reaches the
-// requester, as before delegation existed.
-func TestAcceptAllServesAHalfClosingRequester(t *testing.T) {
-	mod := serveAppsRegistrar(t)
-	w := newRecordingWriter()
-
-	requester := routeOpen(t, mod.OpRegister, astral.GenerateIdentity(), "apphost.register", w)
-	_ = requester.Close()
-
-	awaitServeAppsClose(t, w)
-	if n := countTokens(t, mod); n != 1 {
-		t.Fatalf("issued %d tokens; want 1", n)
-	}
-	if w.written() == 0 {
-		t.Fatal("the token never reached the requester")
-	}
-}
-
 // With a delegate, a requester that leaves while the delegate holds the
 // question ends the question at the delegate, and the node provisions nothing.
 func TestDelegatedRegistrationEndsWhenTheRequesterLeaves(t *testing.T) {

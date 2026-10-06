@@ -52,15 +52,16 @@ func (mod *Module) OpAdopt(ctx *astral.Context, q *routing.IncomingQuery, args o
 	// issue a membership contract for the node
 	signed, err := mod.IssueMembership(issueCtx, nodeID)
 	if err != nil {
+		if issueCtx.Err() != nil {
+			mod.log.Logv(1, "adoption of %v: requester left before the node signed", nodeID)
+			return nil
+		}
 		return ch.Send(astral.Err(err))
 	}
 
-	// why: a contract the adopted node signed after the requester left is not
-	// indexed or pushed; the adopted node holds it alone.
-	if issueCtx.Err() != nil {
-		mod.log.Logv(1, "adoption of %v completed after the requester left; not indexing", nodeID)
-		return nil
-	}
+	// why a countersigned contract is recorded even when the requester left:
+	// the adopted node has already installed it, so recording it here is the
+	// only outcome that keeps the swarm consistent.
 
 	err = mod.Auth.IndexContract(ctx, signed)
 	if err != nil {
