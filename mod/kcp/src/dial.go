@@ -45,6 +45,7 @@ func (mod *Module) Dial(ctx *astral.Context, endpoint exonet.Endpoint) (
 	defer func() {
 		if err != nil {
 			_ = kcpConn.Close()
+			_ = udpConn.Close()
 		}
 	}()
 
@@ -53,7 +54,9 @@ func (mod *Module) Dial(ctx *astral.Context, endpoint exonet.Endpoint) (
 		return nil, fmt.Errorf("kcp/dial: parsing local endpoint failed: %w", err)
 	}
 
-	return WrapKCPConn(kcpConn, remoteEndpoint, localEndpoint, true, mod.config.DialTimeout), nil
+	conn := WrapKCPConn(kcpConn, remoteEndpoint, localEndpoint, true, mod.config.DialTimeout).(*WrappedConn)
+	conn.udpConn = udpConn
+	return conn, nil
 }
 
 // SetEndpointLocalSocket pins a local UDP port to a remote KCP endpoint address.

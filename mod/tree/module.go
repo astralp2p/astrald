@@ -43,9 +43,11 @@ type Module interface {
 	Delete(ctx *astral.Context, path string) error
 
 	// Mount mounts a node at the given path. This node will be returned whenever a traversal reaches this path.
-	// The path must already exist in the tree; Mount does not create it.
+	// The path must already exist in the tree; Mount does not create it. The root "/" is immutable and
+	// cannot be mounted over.
 	Mount(path string, node tree.Node) error
 
-	// Unmount unmounts a node mounted at the given path. The path itself stays in the tree.
+	// Unmount unmounts a node mounted at the given path. The path itself stays in the tree. The root "/"
+	// cannot be unmounted.
 	Unmount(path string) error
 }

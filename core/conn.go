@@ -58,8 +58,11 @@ func (w *writer) Write(p []byte) (n int, err error) {
 	return
 }
 
-// close closes the underlying writer without triggering conn.Close.
+// close closes the underlying writer without triggering conn.Close; a nil writer is a no-op.
 func (w *writer) close() {
+	if w == nil {
+		return
+	}
 	if w.closed.CompareAndSwap(false, true) {
 		w.w.Close()
 	}

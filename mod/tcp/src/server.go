@@ -5,6 +5,7 @@ import (
 	"fmt"
 	tcpmod "github.com/astralp2p/astrald/mod/tcp"
 	"net"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -20,6 +21,7 @@ var _ exonet.EphemeralListener = &Server{}
 type Server struct {
 	*Module
 	listenPort astral.Uint16
+	mu         sync.Mutex
 	listener   net.Listener
 	onAccept   exonet.EphemeralHandler
 	closed     atomic.Bool
@@ -43,7 +45,16 @@ func (s *Server) Run(ctx *astral.Context) error {
 		return fmt.Errorf("tcp server/run: failed to listen on %v: %w", addr, err)
 	}
 
+	// why: a Close that ran before the bind has already closed closedCh and
+	// found no listener to close, so Run releases the port itself.
+	s.mu.Lock()
+	if s.closed.Load() {
+		s.mu.Unlock()
+		_ = listener.Close()
+		return nil
+	}
 	s.listener = listener
+	s.mu.Unlock()
 
 	endpoint, _ := tcp.ParseEndpoint(listener.Addr().String())
 
@@ -93,16 +104,21 @@ func (s *Server) Done() <-chan struct{} {
 }
 
 // Close stops the server idempotently; concurrent or repeated calls are safe.
+// It closes the done channel and the listener if Run has bound one. A Run that
+// binds after Close releases the port and returns nil.
 func (s *Server) Close() error {
 	if !s.closed.CompareAndSwap(false, true) {
 		return nil
 	}
 
-	if s.listener != nil {
-		return s.listener.Close()
-	}
+	s.mu.Lock()
+	l := s.listener
+	s.mu.Unlock()
 
 	close(s.closedCh)
+	if l != nil {
+		return l.Close()
+	}
 	return nil
 }
 

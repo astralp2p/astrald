@@ -72,7 +72,9 @@ func (db *DB) DeleteAccessTokens(identity *astral.Identity) error {
 
 // HoldObject records that appID wants objectID retained.
 // A nil duration creates a permanent hold; a non-nil duration sets an expiry.
-// Duplicate holds are silently ignored (ON CONFLICT DO NOTHING).
+// A re-hold of an already-held object updates the existing hold: a permanent
+// hold always wins, otherwise the later expiry wins, so a shorter re-hold never
+// shortens a hold and a lapsed hold is renewed.
 func (db *DB) HoldObject(appID *astral.Identity, objectID *astral.ObjectID, duration *astral.Duration) error {
 	// note: apps may hold object IDs before this node has fetched the object.
 	row := &dbObjectHold{AppID: appID, ObjectID: objectID, CreatedAt: time.Now().UTC()}
@@ -80,7 +82,13 @@ func (db *DB) HoldObject(appID *astral.Identity, objectID *astral.ObjectID, dura
 		until := time.Now().UTC().Add(time.Duration(*duration))
 		row.HoldUntil = &until
 	}
-	return db.Clauses(clause.OnConflict{DoNothing: true}).Create(row).Error
+	// note: hold_until is UTC text, so MAX compares it in time order.
+	return db.Clauses(clause.OnConflict{
+		Columns: []clause.Column{{Name: "app_id"}, {Name: "object_id"}},
+		DoUpdates: clause.Assignments(map[string]any{
+			"hold_until": gorm.Expr("CASE WHEN hold_until IS NULL OR excluded.hold_until IS NULL THEN NULL ELSE MAX(hold_until, excluded.hold_until) END"),
+		}),
+	}).Create(row).Error
 }
 
 func (db *DB) UnholdObject(appID *astral.Identity, objectID *astral.ObjectID) error {

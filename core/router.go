@@ -103,6 +103,7 @@ func (r *Router) routeQuery(ctx *astral.Context, q *astral.InFlightQuery, src io
 	w, err = r.PriorityRouter.RouteQuery(actx, q, c.src)
 	if err != nil {
 		r.conns.Delete(q.Nonce)
+		c.mu.Unlock()
 		return nil, err
 	}
 

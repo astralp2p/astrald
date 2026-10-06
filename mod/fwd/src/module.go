@@ -128,7 +128,8 @@ func (mod *Module) parseTarget(uri string) (astral.Router, error) {
 		var caller = mod.node.Identity()
 		var target = mod.node.Identity()
 
-		if idx := strings.Index(uri, "@"); idx != -1 {
+		// [caller@][target:]query[?args] — prefixes are only searched before the first '?'
+		if idx := strings.Index(beforeArgs(uri), "@"); idx != -1 {
 			callerName := uri[:idx]
 			uri = uri[idx+1:]
 
@@ -138,7 +139,7 @@ func (mod *Module) parseTarget(uri string) (astral.Router, error) {
 			}
 		}
 
-		if idx := strings.Index(uri, ":"); idx != -1 {
+		if idx := strings.Index(beforeArgs(uri), ":"); idx != -1 {
 			name := uri[:idx]
 			uri = uri[idx+1:]
 
@@ -172,6 +173,14 @@ func (mod *Module) parseTarget(uri string) (astral.Router, error) {
 	default:
 		return nil, errors.New("unsupported protocol")
 	}
+}
+
+// beforeArgs returns s up to its first '?', i.e. without the query arguments.
+func beforeArgs(s string) string {
+	if idx := strings.IndexByte(s, '?'); idx != -1 {
+		return s[:idx]
+	}
+	return s
 }
 
 func (mod *Module) createServer(uri string, target astral.Router) (*ServerRunner, error) {

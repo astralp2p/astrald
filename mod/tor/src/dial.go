@@ -26,24 +26,26 @@ func (mod *Module) Dial(ctx *astral.Context, endpoint exonet.Endpoint) (conn exo
 	ctx, cancel := ctx.WithTimeout(mod.config.DialTimeout)
 	defer cancel()
 
-	var connCh = make(chan net.Conn, 1)
-	var errCh = make(chan error, 1)
+	// why: unbuffered, so a send succeeds only while Dial is still waiting
+	var connCh = make(chan net.Conn)
+	var errCh = make(chan error)
 
 	// Attempt a connection in the background
 	go func() {
-		defer close(connCh)
-		defer close(errCh)
-
 		c, err := mod.proxy.DialContext(ctx, "tcp", e.Address())
 		if err != nil {
-			errCh <- err
+			select {
+			case errCh <- err:
+			case <-ctx.Done():
+			}
 			return
 		}
 
-		// Return the connection if we're still waiting for it, close it otherwise
+		// note: ctx is cancelled once Dial returns, so the goroutine owns and
+		// closes a late conn; Dial never returns (nil, nil).
 		select {
 		case connCh <- c:
-		default:
+		case <-ctx.Done():
 			c.Close()
 		}
 	}()

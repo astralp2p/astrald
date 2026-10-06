@@ -37,7 +37,7 @@ func (r *ReadSeeker) Read(p []byte) (n int, err error) {
 	defer r.mu.Unlock()
 
 	if r.r == nil {
-		err = r.openAt(0)
+		err = r.openAt(r.pos)
 		if err != nil {
 			return
 		}
@@ -49,6 +49,7 @@ func (r *ReadSeeker) Read(p []byte) (n int, err error) {
 }
 
 // Seek reopens the underlying reader at the resolved position; it does not validate against object bounds.
+// A failed Seek returns the previous offset, and the next Read reopens the object there.
 func (r *ReadSeeker) Seek(offset int64, whence int) (int64, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -65,7 +66,6 @@ func (r *ReadSeeker) Seek(offset int64, whence int) (int64, error) {
 	}
 
 	err := r.openAt(pos)
-	r.pos = pos
 
 	return r.pos, err
 }
@@ -85,11 +85,12 @@ func (r *ReadSeeker) openAt(pos int64) (err error) {
 	ctx := astral.NewContext(nil).WithZone(r.zone).WithIdentity(r.readerID)
 
 	reader, err := r.repo.Read(ctx, r.objectID, pos, 0)
-	r.pos = pos
 	if err != nil {
 		r.r = nil
 		return
 	}
+
+	r.pos = pos
 
 	// why: SeekEnd and every later reopen follow the full ID of the object the repository opened.
 	r.objectID = reader.ID()

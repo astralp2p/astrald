@@ -171,6 +171,10 @@ func (mod *Module) broadcast(data []byte) error {
 		// go over all addresses of the interface
 		for _, addr := range addrs {
 			broadcastIP, err := BroadcastAddr(addr)
+			if errors.Is(err, ErrNotIPv4) {
+				// note: ether broadcasts are IPv4-only, so IPv6 prefixes are skipped
+				continue
+			}
 			if err != nil {
 				return err
 			}
@@ -262,17 +266,22 @@ func isInterfaceEnabled(iface NetInterface) bool {
 		(iface.Flags&net.FlagLoopback == 0)
 }
 
+// ErrNotIPv4 is returned by BroadcastAddr for prefixes that have no IPv4 broadcast address.
+var ErrNotIPv4 = errors.New("not an IPv4 prefix")
+
 // BroadcastAddr derives the IPv4 broadcast address from a CIDR net.Addr.
 // note: slices IPv4-in-IPv6 addresses down to 4 bytes before applying the mask.
+// IPv6 prefixes have no broadcast address and yield ErrNotIPv4.
 func BroadcastAddr(addr net.Addr) (net.IP, error) {
 	ip, ipnet, err := net.ParseCIDR(addr.String())
 	if err != nil {
 		return nil, err
 	}
 
-	if len(ipnet.Mask) == net.IPv4len {
-		ip = ip[12:]
+	if len(ipnet.Mask) != net.IPv4len {
+		return nil, ErrNotIPv4
 	}
+	ip = ip[12:]
 
 	broadIP := make(net.IP, len(ipnet.Mask))
 
@@ -287,5 +296,5 @@ func IsLinkLocal(ip net.IP) bool {
 	if ip := ip.To4(); ip != nil {
 		return ip[0] == 169 && ip[1] == 254
 	}
-	return ip[0] == 0xfe && ip[1] == 0x80
+	return len(ip) == net.IPv6len && ip[0] == 0xfe && ip[1]&0xc0 == 0x80
 }

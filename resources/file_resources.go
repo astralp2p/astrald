@@ -3,9 +3,9 @@ package resources
 import (
 	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path"
-	"strings"
 )
 
 var _ Resources = &FileResources{}
@@ -44,7 +44,7 @@ func (res *FileResources) Read(name string) ([]byte, error) {
 	switch {
 	case err == nil:
 
-	case strings.Contains(err.Error(), "no such file or directory"):
+	case errors.Is(err, fs.ErrNotExist):
 		err = ErrNotFound
 	}
 

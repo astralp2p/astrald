@@ -20,6 +20,12 @@ func run(ctx context.Context, args *Args) error {
 		return err
 	}
 
+	// why: LogDir is set by setupResources, so the handler is registered after it returns
+	defer debug.SaveLog(func(p any) {
+		debug.SigInt(p)
+		time.Sleep(time.Second) // give components time to exit cleanly
+	})
+
 	nodeID, err := loadNodeIdentity(nodeRes)
 	if err != nil {
 		return err
@@ -70,10 +76,6 @@ func setupResources(args *Args) (resources.Resources, error) {
 
 	// set directory for saving crash logs
 	debug.LogDir = configRoot
-	defer debug.SaveLog(func(p any) {
-		debug.SigInt(p)
-		time.Sleep(time.Second) // give components time to exit cleanly
-	})
 
 	return nodeRes, err
 }

@@ -16,6 +16,25 @@ you can provide a Tor address as the target.
 
 You can start a forwarder from the admin console or via the config file.
 
+### Astral targets
+
+An astral target has the form:
+
+```text
+astral://[caller@][target:]query[?args]
+```
+
+* `caller` — identity or alias the query is sent as; defaults to the node.
+* `target` — identity or alias the query is sent to; defaults to the node.
+* `query` — the query path, for example `ssh`.
+* `args` — optional query arguments, passed through as part of the query.
+
+The `caller@` and `target:` prefixes are only recognized before the first
+`?`, so arguments may contain `@` and `:`. For example,
+`astral://svc?addr=192.0.2.1:80` sends `svc?addr=192.0.2.1:80` to the
+node itself, and `astral://alice@bob:svc?to=tcp:1.2.3.4:80` sends
+`svc?to=tcp:1.2.3.4:80` from `alice` to `bob`.
+
 ### Admin panel
 
 Connect to the admin panel:

@@ -2,6 +2,7 @@ package kcp
 
 import (
 	exonetmod "github.com/astralp2p/astrald/mod/exonet"
+	"net"
 	"sync/atomic"
 	"time"
 
@@ -16,6 +17,9 @@ var _ exonetmod.Conn = (*WrappedConn)(nil)
 // connection-like semantics at the exonet layer.
 type WrappedConn struct {
 	*kcpgo.UDPSession
+	// udpConn is the socket Dial created for this session; nil for inbound
+	// sessions, whose socket belongs to the listener.
+	udpConn     *net.UDPConn
 	remote      exonet.Endpoint
 	local       exonet.Endpoint
 	outbound    bool
@@ -70,6 +74,18 @@ func (c *WrappedConn) Write(p []byte) (int, error) {
 	}
 
 	return n, err
+}
+
+// Close closes the KCP session and, for a dialed conn, the UDP socket it owns.
+//
+// why: kcp-go closes a socket passed to NewConn only when it created it, so
+// without this every dialed conn leaves its local port bound.
+func (c *WrappedConn) Close() error {
+	err := c.UDPSession.Close()
+	if c.udpConn != nil {
+		_ = c.udpConn.Close()
+	}
+	return err
 }
 
 // WrapKCPConn wraps a kcp-go UDPSession as an exonet.Conn.

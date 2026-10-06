@@ -50,7 +50,10 @@ func (task *ScheduledTask) Run(ctx *astral.Context) (err error) {
 
 	defer task.closeDone()
 
-	task.err = err
+	// an explicit cancel error (set by CancelWithError) takes precedence
+	if task.err == nil {
+		task.err = err
+	}
 	task.doneAt = time.Now()
 	task.state = scheduler.StateDone
 
@@ -93,6 +96,7 @@ func (task *ScheduledTask) CancelWithError(err error) {
 		task.closeDone()
 
 	case scheduler.StateRunning:
+		task.err = err
 		task.cancel(err)
 
 	default:
@@ -121,7 +125,8 @@ func (task *ScheduledTask) Done() <-chan struct{} {
 	return task.done
 }
 
-// Err returns the error returned by the task. Should only be called after the task is done.
+// Err returns the error passed to CancelWithError if the task was canceled, otherwise the
+// error returned by the task. Should only be called after the task is done.
 func (task *ScheduledTask) Err() error {
 	return task.err
 }

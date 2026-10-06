@@ -273,6 +273,8 @@ func loadNodeIdentity(res resources.Resources) (*astral.Identity, error) {
 		if !ok {
 			return nil, astral.NewErrUnexpectedObject(object)
 		}
+	} else if !errors.Is(err, resources.ErrNotFound) {
+		return nil, fmt.Errorf("read %s: %w", resNodeKey, err)
 	} else {
 		nodeKey = secp256k1.New()
 
