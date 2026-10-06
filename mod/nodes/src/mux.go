@@ -111,6 +111,12 @@ func (m *Mux) RouteQuery(ctx *astral.Context, q *astral.InFlightQuery, w io.Writ
 	select {
 	case errCode := <-conn.routingResult:
 		if errCode != 0 {
+			// the peer refused; it may never send a Reset (relay refusal),
+			// so drop the session here without emitting one ourselves.
+			if writer, ok := conn.writer.(*muxSessionWriter); ok {
+				writer.PeerClose()
+			}
+			conn.Close()
 			return query.RejectWithCode(errCode)
 		}
 
