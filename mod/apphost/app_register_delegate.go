@@ -5,6 +5,7 @@ import (
 
 	"github.com/astralp2p/astral-go/api/auth"
 	"github.com/astralp2p/astral-go/astral"
+	authmod "github.com/astralp2p/astrald/mod/auth"
 )
 
 // OpDecideAppRegister is the op an app register delegate serves. The node
@@ -43,11 +44,15 @@ func (r *AppRegisterRequest) ReadFrom(rd io.Reader) (n int64, err error) {
 
 // AppRegisterDecision is the delegate's answer. Allow false refuses the
 // registration; otherwise the node writes exactly the permits listed, on the
-// rail each list names.
+// rail each list names, and sets each evaluator rule for the new identity.
+//
+// Evaluators leave Actor empty: the app's identity is generated after the
+// decision, and registration fills it in.
 type AppRegisterDecision struct {
 	Allow           astral.Bool
 	GrantPermits    []*auth.Permit
 	ContractPermits []*auth.Permit
+	Evaluators      []*authmod.EvaluatorRule
 }
 
 func (AppRegisterDecision) ObjectType() string { return "mod.apphost.app_register_decision" }

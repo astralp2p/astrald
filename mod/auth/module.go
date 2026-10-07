@@ -50,4 +50,8 @@ type Module interface {
 
 	// SignedContracts returns a query builder for finding active signed contracts.
 	SignedContracts() ContractQueryBuilder
+
+	// SetEvaluatorRule replaces the rule for the rule's (Actor, Action), or
+	// removes it when the rule names no Evaluator.
+	SetEvaluatorRule(ctx *astral.Context, rule *EvaluatorRule) error
 }

@@ -70,10 +70,11 @@ func (mod *Module) OpRegister(ctx *astral.Context, query *routing.IncomingQuery,
 	policyCtx, stop := watchRequester(ctx, conn)
 	defer stop()
 
-	grantPermits, contractPermits, ok := mod.GetAppRegisterPolicy()(
+	outcome := mod.GetAppRegisterPolicy()(
 		policyCtx, origin, query.Caller(), anonymous, requestedGrantPermits, requestedContractPermits,
 	)
-	if !ok {
+	grantPermits, contractPermits := outcome.GrantPermits, outcome.ContractPermits
+	if !outcome.Allow {
 		return ch.Send(apphost.ErrRegistrationDeclined)
 	}
 
@@ -129,6 +130,12 @@ func (mod *Module) OpRegister(ctx *astral.Context, query *routing.IncomingQuery,
 		if err = mod.Grant(guestID, permit, &expiresAt); err != nil {
 			return ch.Send(astral.Err(err))
 		}
+	}
+
+	// set the evaluator rules the policy named for the new identity. A failure
+	// sends the error for the same reason a grant failure does.
+	if err = mod.setRegisteredEvaluators(ctx, guestID, outcome.Evaluators); err != nil {
+		return ch.Send(astral.Err(err))
 	}
 
 	// render the contract permits as a node→app contract, so the app's

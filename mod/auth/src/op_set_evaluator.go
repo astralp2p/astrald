@@ -58,7 +58,7 @@ func (mod *Module) OpSetEvaluator(ctx *astral.Context, q *routing.IncomingQuery,
 	}
 
 	if args.Evaluator == "" {
-		if err = mod.setEvaluatorRule(ctx, rule); err != nil {
+		if err = mod.SetEvaluatorRule(ctx, rule); err != nil {
 			return ch.Send(astral.Err(err))
 		}
 		mod.log.Logv(1, "evaluator rule for %v %v removed", actor, args.Action)
@@ -81,7 +81,7 @@ func (mod *Module) OpSetEvaluator(ctx *astral.Context, q *routing.IncomingQuery,
 	}
 
 	rule.Evaluator = evaluator
-	if err = mod.setEvaluatorRule(ctx, rule); err != nil {
+	if err = mod.SetEvaluatorRule(ctx, rule); err != nil {
 		return ch.Send(astral.Err(err))
 	}
 

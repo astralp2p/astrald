@@ -34,9 +34,9 @@ func (mod *Module) evaluatorRule(actor *astral.Identity, actionType string) *aut
 	return nil
 }
 
-// setEvaluatorRule replaces the rule for the rule's (Actor, Action), or removes
+// SetEvaluatorRule replaces the rule for the rule's (Actor, Action), or removes
 // it when the rule names no Evaluator.
-func (mod *Module) setEvaluatorRule(ctx *astral.Context, rule *authmod.EvaluatorRule) error {
+func (mod *Module) SetEvaluatorRule(ctx *astral.Context, rule *authmod.EvaluatorRule) error {
 	mod.rulesMu.Lock()
 	defer mod.rulesMu.Unlock()
 

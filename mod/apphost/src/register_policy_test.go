@@ -57,8 +57,9 @@ func TestTheDefaultPolicyWritesWhatItIsHanded(t *testing.T) {
 	askedGrant := parsePermits("mod.auth.serve_objects_action")
 	askedContract := parsePermits("mod.nodes.relay_for_action")
 
-	grantPermits, contractPermits, ok := mod.AppRegisterAcceptAll(nil, "", nil, false, askedGrant, askedContract)
-	if !ok {
+	out := mod.AppRegisterAcceptAll(nil, "", nil, false, askedGrant, askedContract)
+	grantPermits, contractPermits := out.GrantPermits, out.ContractPermits
+	if !out.Allow {
 		t.Fatal("the default policy refuses no registration")
 	}
 	if !sameActions(grantPermits, askedGrant) {
@@ -75,9 +76,10 @@ func TestTheDefaultPolicyWritesWhatItIsHanded(t *testing.T) {
 func TestTheDefaultPolicyKeepsTheRailsApart(t *testing.T) {
 	mod := &Module{config: defaultConfig, log: log.New(nil)}
 
-	grantPermits, contractPermits, _ := mod.AppRegisterAcceptAll(
+	out := mod.AppRegisterAcceptAll(
 		nil, "", nil, false, parsePermits("mod.auth.serve_objects_action"), nil,
 	)
+	grantPermits, contractPermits := out.GrantPermits, out.ContractPermits
 	if len(contractPermits) != 0 {
 		t.Fatalf("a grant request reached the contract rail: %v", actions(contractPermits))
 	}
@@ -85,9 +87,10 @@ func TestTheDefaultPolicyKeepsTheRailsApart(t *testing.T) {
 		t.Fatalf("granted %v, want one permit", actions(grantPermits))
 	}
 
-	grantPermits, contractPermits, _ = mod.AppRegisterAcceptAll(
+	out = mod.AppRegisterAcceptAll(
 		nil, "", nil, false, nil, parsePermits("mod.nodes.relay_for_action"),
 	)
+	grantPermits, contractPermits = out.GrantPermits, out.ContractPermits
 	if len(grantPermits) != 0 {
 		t.Fatalf("a contract request reached the grant rail: %v", actions(grantPermits))
 	}

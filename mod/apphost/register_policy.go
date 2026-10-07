@@ -3,6 +3,7 @@ package apphost
 import (
 	"github.com/astralp2p/astral-go/api/auth"
 	"github.com/astralp2p/astral-go/astral"
+	authmod "github.com/astralp2p/astrald/mod/auth"
 )
 
 // AppRegisterPolicy decides what apphost.register issues to the identity it is
@@ -25,8 +26,9 @@ import (
 // request before the policy sees it, because a PermitConfig carries Delegation
 // and delegation means nothing to a grant.
 //
-// grantPermits and contractPermits are what registration writes on each rail.
-// Returning false refuses the registration outright. A policy is free to move a
+// The outcome's GrantPermits and ContractPermits are what registration writes
+// on each rail, and its Evaluators are the evaluator rules registration sets for
+// the new identity. Allow false refuses the registration outright. A policy is free to move a
 // permit between the two lists, or to drop it: the app states what it wants, the
 // node decides what it holds.
 //
@@ -38,4 +40,15 @@ type AppRegisterPolicy func(
 	caller *astral.Identity,
 	anonymous bool,
 	requestedGrantPermits, requestedContractPermits []*auth.Permit,
-) (grantPermits, contractPermits []*auth.Permit, allow bool)
+) AppRegisterOutcome
+
+// AppRegisterOutcome is what a policy decides for one registration.
+type AppRegisterOutcome struct {
+	GrantPermits    []*auth.Permit
+	ContractPermits []*auth.Permit
+	// Evaluators name, per action type, the identity that evaluates the new
+	// app's actions. Actor is empty: the identity does not exist until the
+	// policy allows, and registration fills it in.
+	Evaluators []*authmod.EvaluatorRule
+	Allow      bool
+}

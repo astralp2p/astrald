@@ -43,7 +43,7 @@ func TestEvaluatorRuleDecidesForItsActor(t *testing.T) {
 	stub := &stubAsk{answer: true}
 	withEvaluators(mod, map[string]*stubAsk{media.String(): stub})
 
-	if err := mod.setEvaluatorRule(ctx, rule(player, media, "")); err != nil {
+	if err := mod.SetEvaluatorRule(ctx, rule(player, media, "")); err != nil {
 		t.Fatalf("set rule: %v", err)
 	}
 
@@ -71,7 +71,7 @@ func TestEvaluatorRuleDoesNotSpeakForOtherActors(t *testing.T) {
 	withEvaluators(mod, map[string]*stubAsk{media.String(): evaluator})
 	configured := withAuthority(t, mod)
 
-	if err := mod.setEvaluatorRule(ctx, rule(player, media, "")); err != nil {
+	if err := mod.SetEvaluatorRule(ctx, rule(player, media, "")); err != nil {
 		t.Fatalf("set rule: %v", err)
 	}
 
@@ -97,7 +97,7 @@ func TestEvaluatorRuleTakesPrecedenceOverConfig(t *testing.T) {
 	withEvaluators(mod, map[string]*stubAsk{media.String(): evaluator})
 	configured := withAuthority(t, mod)
 
-	if err := mod.setEvaluatorRule(ctx, rule(player, media, "")); err != nil {
+	if err := mod.SetEvaluatorRule(ctx, rule(player, media, "")); err != nil {
 		t.Fatalf("set rule: %v", err)
 	}
 
@@ -120,7 +120,7 @@ func TestEvaluatorRuleIsNotAskedWhenAHandlerAllows(t *testing.T) {
 	stub := &stubAsk{answer: false}
 	withEvaluators(mod, map[string]*stubAsk{media.String(): stub})
 
-	if err := mod.setEvaluatorRule(ctx, rule(player, media, "")); err != nil {
+	if err := mod.SetEvaluatorRule(ctx, rule(player, media, "")); err != nil {
 		t.Fatalf("set rule: %v", err)
 	}
 
@@ -142,7 +142,7 @@ func TestEvaluatorRuleFailsClosed(t *testing.T) {
 	stub := &stubAsk{err: errors.New("evaluator unreachable")}
 	withEvaluators(mod, map[string]*stubAsk{media.String(): stub})
 
-	if err := mod.setEvaluatorRule(ctx, rule(player, media, "")); err != nil {
+	if err := mod.SetEvaluatorRule(ctx, rule(player, media, "")); err != nil {
 		t.Fatalf("set rule: %v", err)
 	}
 
@@ -168,9 +168,9 @@ func TestSetEvaluatorRuleReplacesAndRemoves(t *testing.T) {
 		}
 	}
 
-	must(mod.setEvaluatorRule(ctx, rule(player, media, "")))
-	must(mod.setEvaluatorRule(ctx, rule(web, media, "")))
-	must(mod.setEvaluatorRule(ctx, rule(player, other, "custom.op")))
+	must(mod.SetEvaluatorRule(ctx, rule(player, media, "")))
+	must(mod.SetEvaluatorRule(ctx, rule(web, media, "")))
+	must(mod.SetEvaluatorRule(ctx, rule(player, other, "custom.op")))
 
 	if n := len(mod.rules()); n != 2 {
 		t.Fatalf("got %d rules; want 2 after replacing one", n)
@@ -181,7 +181,7 @@ func TestSetEvaluatorRuleReplacesAndRemoves(t *testing.T) {
 		t.Fatalf("the replacing rule did not take: %+v", r)
 	}
 
-	must(mod.setEvaluatorRule(ctx, rule(player, nil, "")))
+	must(mod.SetEvaluatorRule(ctx, rule(player, nil, "")))
 
 	if mod.evaluatorRule(player, "test.action") != nil {
 		t.Fatal("the removed rule is still found")

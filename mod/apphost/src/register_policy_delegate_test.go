@@ -12,6 +12,7 @@ import (
 	"github.com/astralp2p/astral-go/lib/query"
 	"github.com/astralp2p/astral-go/lib/routing"
 	"github.com/astralp2p/astrald/mod/apphost"
+	authmod "github.com/astralp2p/astrald/mod/auth"
 )
 
 // The request and decision cross to the delegate as objects, so both must come
@@ -38,7 +39,14 @@ func TestAppRegisterObjectsSurviveTheWire(t *testing.T) {
 		t.Fatalf("request changed on the wire: %+v", got)
 	}
 
-	dec := &apphost.AppRegisterDecision{Allow: true, ContractPermits: parsePermits("mod.nodes.relay_for_action")}
+	media := astral.GenerateIdentity()
+	dec := &apphost.AppRegisterDecision{
+		Allow:           true,
+		ContractPermits: parsePermits("mod.nodes.relay_for_action"),
+		Evaluators: []*authmod.EvaluatorRule{
+			{Action: "mod.auth.see_objects_action", Evaluator: media},
+		},
+	}
 
 	buf.Reset()
 	if _, err := astral.Encode(&buf, dec); err != nil {
@@ -48,7 +56,9 @@ func TestAppRegisterObjectsSurviveTheWire(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !bool(gotDec.Allow) || len(gotDec.GrantPermits) != 0 || !sameActions(gotDec.ContractPermits, dec.ContractPermits) {
+	if !bool(gotDec.Allow) || len(gotDec.GrantPermits) != 0 || !sameActions(gotDec.ContractPermits, dec.ContractPermits) ||
+		len(gotDec.Evaluators) != 1 || !gotDec.Evaluators[0].Evaluator.IsEqual(media) ||
+		gotDec.Evaluators[0].Action != "mod.auth.see_objects_action" || gotDec.Evaluators[0].Actor != nil {
 		t.Fatalf("decision changed on the wire: %+v", gotDec)
 	}
 }
@@ -57,7 +67,8 @@ func TestAppRegisterObjectsSurviveTheWire(t *testing.T) {
 func TestNoDelegateKeepsAcceptAll(t *testing.T) {
 	mod := &Module{config: defaultConfig, log: log.New(nil)}
 
-	grants, contracts, ok := mod.GetAppRegisterPolicy()(nil, "", nil, false, parsePermits("mod.auth.serve_objects_action"), nil)
+	out := mod.GetAppRegisterPolicy()(nil, "", nil, false, parsePermits("mod.auth.serve_objects_action"), nil)
+	grants, contracts, ok := out.GrantPermits, out.ContractPermits, out.Allow
 	if !ok || len(grants) != 1 || len(contracts) != 0 {
 		t.Fatalf("got grants=%v contracts=%v ok=%v, want the request back", actions(grants), actions(contracts), ok)
 	}
@@ -67,7 +78,7 @@ func TestNoDelegateKeepsAcceptAll(t *testing.T) {
 func TestDelegatedPolicyWithoutDelegateRefuses(t *testing.T) {
 	mod := &Module{config: defaultConfig, log: log.New(nil)}
 
-	if _, _, ok := mod.AppRegisterViaDelegate(nil, "", nil, false, parsePermits("mod.auth.serve_objects_action"), nil); ok {
+	if mod.AppRegisterViaDelegate(nil, "", nil, false, parsePermits("mod.auth.serve_objects_action"), nil).Allow {
 		t.Fatal("a delegated policy with no delegate admitted the registration")
 	}
 }
@@ -123,8 +134,7 @@ func TestDelegateWaitEndsWhenTheRequesterLeaves(t *testing.T) {
 
 	result := make(chan bool, 1)
 	go func() {
-		_, _, ok := mod.GetAppRegisterPolicy()(ctx, "", caller, true, parsePermits("mod.auth.serve_objects_action"), nil)
-		result <- ok
+		result <- mod.GetAppRegisterPolicy()(ctx, "", caller, true, parsePermits("mod.auth.serve_objects_action"), nil).Allow
 	}()
 
 	select {

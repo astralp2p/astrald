@@ -40,11 +40,15 @@ func (mod *Module) AppRegisterAcceptAll(
 	_ *astral.Identity,
 	_ bool,
 	requestedGrantPermits, requestedContractPermits []*auth.Permit,
-) ([]*auth.Permit, []*auth.Permit, bool) {
+) apphost.AppRegisterOutcome {
 	mod.log.Info("accepting registration from origin %v with %v grant permits and %v contract permits",
 		origin, len(requestedGrantPermits), len(requestedContractPermits))
 
-	return requestedGrantPermits, requestedContractPermits, true
+	return apphost.AppRegisterOutcome{
+		GrantPermits:    requestedGrantPermits,
+		ContractPermits: requestedContractPermits,
+		Allow:           true,
+	}
 }
 
 // AppRegisterViaDelegate asks the app register delegate and applies its answer.
@@ -65,21 +69,21 @@ func (mod *Module) AppRegisterViaDelegate(
 	caller *astral.Identity,
 	anonymous bool,
 	requestedGrantPermits, requestedContractPermits []*auth.Permit,
-) ([]*auth.Permit, []*auth.Permit, bool) {
+) apphost.AppRegisterOutcome {
 	delegate := mod.policy.AppRegisterDelegate.Get()
 	if delegate == nil || delegate.IsZero() {
-		return nil, nil, false
+		return apphost.AppRegisterOutcome{}
 	}
 
 	if ctx.Err() != nil {
 		mod.log.Logv(1, "app register delegate %v: requester left before a decision", delegate)
-		return nil, nil, false
+		return apphost.AppRegisterOutcome{}
 	}
 
 	ch, err := query.Route(ctx, mod.node, query.New(mod.node.Identity(), delegate, apphost.OpDecideAppRegister, nil))
 	if err != nil {
 		mod.logDelegateFailure(ctx, delegate, err)
-		return nil, nil, false
+		return apphost.AppRegisterOutcome{}
 	}
 	defer ch.Close()
 
@@ -95,13 +99,13 @@ func (mod *Module) AppRegisterViaDelegate(
 	})
 	if err != nil {
 		mod.logDelegateFailure(ctx, delegate, err)
-		return nil, nil, false
+		return apphost.AppRegisterOutcome{}
 	}
 
 	obj, err := ch.Receive()
 	if err != nil {
 		mod.logDelegateFailure(ctx, delegate, err)
-		return nil, nil, false
+		return apphost.AppRegisterOutcome{}
 	}
 
 	// why: any other object is an answer this code cannot read, and an
@@ -109,13 +113,18 @@ func (mod *Module) AppRegisterViaDelegate(
 	dec, ok := obj.(*apphost.AppRegisterDecision)
 	if !ok {
 		mod.log.Errorv(1, "app register delegate %v answered %v", delegate, obj.ObjectType())
-		return nil, nil, false
+		return apphost.AppRegisterOutcome{}
 	}
 
-	mod.log.Logv(1, "app register delegate %v decided allow=%v with %v grant permits and %v contract permits",
-		delegate, bool(dec.Allow), len(dec.GrantPermits), len(dec.ContractPermits))
+	mod.log.Logv(1, "app register delegate %v decided allow=%v with %v grant permits, %v contract permits and %v evaluators",
+		delegate, bool(dec.Allow), len(dec.GrantPermits), len(dec.ContractPermits), len(dec.Evaluators))
 
-	return dec.GrantPermits, dec.ContractPermits, bool(dec.Allow)
+	return apphost.AppRegisterOutcome{
+		GrantPermits:    dec.GrantPermits,
+		ContractPermits: dec.ContractPermits,
+		Evaluators:      dec.Evaluators,
+		Allow:           bool(dec.Allow),
+	}
 }
 
 // logDelegateFailure logs why a question to the app register delegate went
