@@ -3,6 +3,7 @@ package auth
 import (
 	"sync"
 
+	apiauth "github.com/astralp2p/astral-go/api/auth"
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astral-go/astral/log"
 	"github.com/astralp2p/astral-go/lib/routing"
@@ -28,6 +29,15 @@ type Module struct {
 	// external holds at most one authorizer per action type; a second for the
 	// same type is refused where it is added.
 	external sig.Map[string, *ExternalAuthorizer]
+
+	// policy holds the evaluator rules set at runtime; rulesMu serializes the
+	// read-modify-write of the rule list.
+	policy  policyConfig
+	rulesMu sync.Mutex
+
+	// evaluatorAsk builds the ask for a rule; nil means astralEvaluatorAsk.
+	// Tests replace it.
+	evaluatorAsk func(*auth.EvaluatorRule) apiauth.AuthorizeAsk
 }
 
 func (mod *Module) Router() astral.Router {

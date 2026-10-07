@@ -6,12 +6,14 @@ import (
 	"github.com/astralp2p/astrald/mod/crypto"
 	"github.com/astralp2p/astrald/mod/dir"
 	"github.com/astralp2p/astrald/mod/objects"
+	"github.com/astralp2p/astrald/mod/tree"
 )
 
 type Deps struct {
 	Crypto  crypto.Module
 	Dir     dir.Module
 	Objects objects.Module
+	Tree    tree.Module
 }
 
 // claimState is the part of the user module isNodeClaim reads: whether the
@@ -31,8 +33,13 @@ type OptionalDeps struct {
 	User claimState
 }
 
-func (mod *Module) LoadDependencies(*astral.Context) (err error) {
+func (mod *Module) LoadDependencies(ctx *astral.Context) (err error) {
 	if err = core.Inject(mod.node, &mod.Deps); err != nil {
+		return
+	}
+
+	err = tree.BindPath(ctx, &mod.policy, mod.Tree.Root(), "/mod/auth/policy", true)
+	if err != nil {
 		return
 	}
 

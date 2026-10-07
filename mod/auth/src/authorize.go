@@ -75,8 +75,9 @@ func (mod *Module) authorize(ctx *astral.Context, action auth.ActionObject, hops
 		}
 	}
 
-	// An external authority is the last word at this level. It answers for the
-	// actor this level names, so authority delegates through it exactly as it
+	// An external authority is the last word at this level: the actor's
+	// evaluator rule when one names the action type, otherwise the config-file
+	// authorizer for the type. It answers for the actor this level names, so authority delegates through it exactly as it
 	// does through a handler: a contract whose issuer the authority permits
 	// carries its subject.
 	//
@@ -85,7 +86,7 @@ func (mod *Module) authorize(ctx *astral.Context, action auth.ActionObject, hops
 	//
 	// note: a chain of depth N therefore puts N+1 questions to the authority,
 	// one per level. Nothing remembers an answer yet.
-	if ext, ok := mod.external.Get(actionType); ok && ext.Authorize(ctx, action) {
+	if ext := mod.externalFor(actor, actionType); ext != nil && ext.Authorize(ctx, action) {
 		if hopsBelow == 0 {
 			mod.log.Logv(1, "allow %v %v (external)", actor, actionType)
 		}
