@@ -22,6 +22,13 @@ type opReadArgs struct {
 func (mod *Module) OpRead(ctx *astral.Context, q *routing.IncomingQuery, args opReadArgs) (err error) {
 	ctx = ctx.IncludeZone(args.Zone)
 
+	// why: a read from the network answers from this node alone. A network
+	// repository would forward it to a sibling, and that sibling's repository
+	// back again.
+	if q.Origin() == astral.OriginNetwork {
+		ctx = ctx.ExcludeZone(astral.ZoneNetwork)
+	}
+
 	if !mod.Auth.Authorize(ctx, &auth.SeeObjectsAction{
 		Action:   auth.NewAction(q.Caller()),
 		ObjectID: args.ID,
