@@ -167,6 +167,13 @@ func (mod *Module) OpRegister(ctx *astral.Context, query *routing.IncomingQuery,
 		return ch.Send(astral.Err(err))
 	}
 
+	// why: a sibling routes a query to the app only through a relay-for contract
+	// in its index, and the link-time sync has already run for every linked sibling.
+	// note: the push is best-effort; a sibling that misses it gets the contract at its next first link.
+	if mod.User != nil {
+		go mod.User.PushToLocalSwarm(mod.ctx, signed)
+	}
+
 	tv := views.NewTimeView(&token.ExpiresAt)
 	tv.Layout = views.LongTimeLayout
 

@@ -155,8 +155,8 @@ func (mod *Module) syncExpulsions(ctx *astral.Context, with *astral.Identity) {
 
 // syncAppContracts pushes the relay contracts of the apps this node hosts, so
 // the sibling can route a query addressed to such an app through this node.
-// note: an app registered after the link came up reaches the sibling at the
-// next first link, when this task runs again.
+// note: an app registered after the link came up reaches the sibling through
+// the push in apphost.register (mod/apphost/src/op_register.go).
 func (mod *Module) syncAppContracts(ctx *astral.Context, with *astral.Identity) {
 	contracts, err := mod.Auth.SignedContracts().
 		WithSubject(mod.node.Identity()).
