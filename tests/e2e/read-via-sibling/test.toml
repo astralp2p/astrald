@@ -1,0 +1,5 @@
+env     = "node"
+start   = "two-nodes-data-peer"
+nodes   = ["node1", "node2"]
+drivers = ["script"]
+timeout = 180

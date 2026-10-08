@@ -9,6 +9,7 @@ fs-watch
 object-store
 object-store-peer
 read-remote-peer
+read-via-sibling
 app-query
 registration-lease
 blueprints-two-node

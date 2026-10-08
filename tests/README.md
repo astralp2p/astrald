@@ -145,6 +145,7 @@ Every story of the catalog, in the cheapest env that can falsify it:
 | 0006 | `object-store` | node | `two-nodes` → `two-nodes-data` |
 | 0007 | `object-store-peer` | node | `two-nodes` → `two-nodes-data-peer` |
 | 0008 | `read-remote-peer` | node | `two-nodes-data-peer` → `two-nodes-data-read` |
+| — | `read-via-sibling` | node | `two-nodes-data-peer` → — |
 | 0009 | `expel-node` | node | `two-nodes` → `two-nodes-expel` |
 | — | `smoke` | node | `null` → — |
 | — | `mcp-origin` | node | `null` → — |
