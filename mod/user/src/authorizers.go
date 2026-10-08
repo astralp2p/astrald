@@ -3,6 +3,7 @@ package user
 import (
 	"github.com/astralp2p/astral-go/api/auth"
 	"github.com/astralp2p/astral-go/api/nodes"
+	"github.com/astralp2p/astral-go/api/objects"
 	"github.com/astralp2p/astral-go/api/user"
 	"github.com/astralp2p/astral-go/astral"
 )
@@ -80,6 +81,38 @@ func (mod *Module) AuthorizeRelayFor(ctx *astral.Context, a *nodes.RelayForActio
 // node the objects it just stored there, before any user or swarm exists.
 func (mod *Module) AuthorizeSeeObjects(ctx *astral.Context, a *auth.SeeObjectsAction) bool {
 	return mod.authorizeUserOrNode(a.Actor())
+}
+
+// AuthorizeSiblingSeeObjects grants a current sibling the read of one named
+// object from this node's device repository, and nothing else.
+//
+// why: a sibling's network repository reads under its node identity, so the
+// app that asked on the sibling never reaches this node. The sibling authorized
+// that app before it asked here.
+//
+// why one object and the device repository alone: a listing, a search, or a
+// read of main would expose more than the object the sibling names, and main
+// reaches the network group, so a read of it would forward the query again.
+//
+// note: the default join policy admits every membership request, so this
+// grant reaches every node a join delegate does not refuse.
+func (mod *Module) AuthorizeSiblingSeeObjects(ctx *astral.Context, a *auth.SeeObjectsAction) bool {
+	if a.ObjectID == nil || a.Repo != objects.RepoDevice {
+		return false
+	}
+
+	actor := a.Actor()
+	if actor.IsZero() || actor.IsEqual(mod.node.Identity()) {
+		return false
+	}
+
+	for _, nodeID := range mod.LocalSwarm() {
+		if nodeID.IsEqual(actor) {
+			return true
+		}
+	}
+
+	return false
 }
 
 // AuthorizeStoreObjects grants object writes to the user identity and to this

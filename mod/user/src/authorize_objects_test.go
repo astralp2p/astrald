@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/astralp2p/astral-go/api/auth"
+	"github.com/astralp2p/astral-go/api/objects"
 	"github.com/astralp2p/astral-go/astral"
 )
 
@@ -47,7 +48,8 @@ func TestAuthorizeObjectAccessGrantsTheNodeOnUnclaimedNode(t *testing.T) {
 }
 
 // TestSeeObjectsGrantsUserAndNodeOnly pins the default holders of SeeObjects on a
-// claimed node: the user identity and this node. A current swarm member is refused.
+// claimed node: the user identity and this node. A current swarm member is refused
+// here; AuthorizeSiblingSeeObjects holds its narrower grant.
 func TestSeeObjectsGrantsUserAndNodeOnly(t *testing.T) {
 	mod, f := swarmFixture(t)
 
@@ -93,6 +95,58 @@ func TestAuthorizeObjectAccessRefusesZeroActorOnUnclaimedNode(t *testing.T) {
 
 		if mod.AuthorizeAdminObjects(nil, &auth.AdminObjectsAction{Action: auth.NewAction(actor)}) {
 			t.Errorf("a %s actor administers objects on an unclaimed node", name)
+		}
+	}
+}
+
+// TestSiblingSeeObjectsGrantsCurrentMembersOnly pins the holders of the sibling
+// grant: a current swarm member other than this node, reading one named object
+// from the device repository. The user and this node hold SeeObjects through
+// AuthorizeSeeObjects, so this handler refuses both.
+func TestSiblingSeeObjectsGrantsCurrentMembersOnly(t *testing.T) {
+	mod, f := swarmFixture(t)
+
+	cases := []authzCase{
+		{"a current swarm member", f.member, true},
+		{"the user identity", f.user, false},
+		{"this node", f.node, false},
+		{"an expelled member", f.expelled, false},
+		{"a node in another user's swarm", f.outsider, false},
+		{"a stranger", astral.GenerateIdentity(), false},
+		{"a zero actor", &astral.Identity{}, false},
+		{"a nil actor", nil, false},
+	}
+
+	for _, c := range cases {
+		a := &auth.SeeObjectsAction{
+			Action:   auth.NewAction(c.actor),
+			ObjectID: testObjectID(),
+			Repo:     objects.RepoDevice,
+		}
+		if got := mod.AuthorizeSiblingSeeObjects(nil, a); got != c.want {
+			t.Errorf("%s: authorized %v; want %v", c.name, got, c.want)
+		}
+	}
+}
+
+// TestSiblingSeeObjectsRefusesAnythingButOneDeviceObject: a current member is
+// refused a call that names no object, or a repository other than device. main
+// reaches the network group, and a listing exposes more than one object.
+func TestSiblingSeeObjectsRefusesAnythingButOneDeviceObject(t *testing.T) {
+	mod, f := swarmFixture(t)
+
+	cases := map[string]*auth.SeeObjectsAction{
+		"no object":            {ObjectID: nil, Repo: objects.RepoDevice},
+		"no repository":        {ObjectID: testObjectID(), Repo: ""},
+		"the main repository":  {ObjectID: testObjectID(), Repo: objects.RepoMain},
+		"the local repository": {ObjectID: testObjectID(), Repo: objects.RepoLocal},
+		"the network group":    {ObjectID: testObjectID(), Repo: objects.RepoNetwork},
+	}
+
+	for name, a := range cases {
+		a.Action = auth.NewAction(f.member)
+		if mod.AuthorizeSiblingSeeObjects(nil, a) {
+			t.Errorf("%s: a current member was authorized", name)
 		}
 	}
 }

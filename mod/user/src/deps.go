@@ -44,6 +44,9 @@ func (mod *Module) LoadDependencies(ctx *astral.Context) (err error) {
 
 	mod.Auth.Add(authmod.Func[*nodes.RelayForAction](mod.AuthorizeRelayFor))
 	mod.Auth.Add(authmod.Func[*auth.SeeObjectsAction](mod.AuthorizeSeeObjects))
+	// why NodeLocal: membership is this node's record of its swarm, so a sibling
+	// must not hand its device reads on through a contract.
+	mod.Auth.Add(authmod.NodeLocal(authmod.Func[*auth.SeeObjectsAction](mod.AuthorizeSiblingSeeObjects)))
 	mod.Auth.Add(authmod.Func[*auth.StoreObjectsAction](mod.AuthorizeStoreObjects))
 	mod.Auth.Add(authmod.Func[*auth.AdminObjectsAction](mod.AuthorizeAdminObjects))
 	mod.Auth.Add(authmod.Func[*auth.ServeObjectsAction](mod.AuthorizeServeObjects))
