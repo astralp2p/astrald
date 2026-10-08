@@ -1,6 +1,6 @@
 // Command driver checks that an app discovered on another swarm node can be
-// called by its app identity once the sibling sync has carried its relay
-// contract.
+// called by its app identity, with no relink, once apphost.register has pushed
+// its relay contract to the sibling.
 //
 //	driver drive  <session.json>   prints facts as JSON
 //	driver verify <session.json>   the same round trip with fresh identities
@@ -14,7 +14,6 @@ import (
 	"time"
 
 	apphostcli "github.com/astralp2p/astral-go/api/apphost/client"
-	"github.com/astralp2p/astral-go/api/nodes"
 	"github.com/astralp2p/astral-go/api/services"
 	servicescli "github.com/astralp2p/astral-go/api/services/client"
 	"github.com/astralp2p/astral-go/astral"
@@ -63,10 +62,6 @@ func run(path string) (map[string]bool, error) {
 		return facts, err
 	}
 	n1, n2 := s.Nodes["node1"], s.Nodes["node2"]
-	node2ID, err := astral.ParseIdentity(n2.Identity)
-	if err != nil {
-		return facts, err
-	}
 	ctx := astral.NewContext(nil)
 	admin1 := connect(n1.Endpoint, n1.Token)
 
@@ -97,20 +92,10 @@ func run(path string) (map[string]bool, error) {
 		return facts, fmt.Errorf("swarm discovery did not show the provider: %v", err)
 	}
 
-	// note: the provider registered after the link came up, so the sibling
-	// sync has not carried its contract yet.
-	_, err = call(ctx, frontCli, provider.Identity, 15*time.Second)
-	facts["unroutable_before_sync"] = err != nil
-	if err == nil {
-		return facts, errors.New("the provider was routable before the sibling sync ran")
-	}
-
-	if err := relink(ctx, admin1, node2ID); err != nil {
-		return facts, err
-	}
-
+	// note: the provider registered after the link came up, so only the push
+	// apphost.register makes carries its relay contract to node1.
 	var seen string
-	deadline := time.Now().Add(60 * time.Second)
+	deadline := time.Now().Add(15 * time.Second)
 	for {
 		seen, err = call(ctx, frontCli, provider.Identity, 10*time.Second)
 		if err == nil || time.Now().After(deadline) {
@@ -118,9 +103,9 @@ func run(path string) (map[string]bool, error) {
 		}
 		time.Sleep(time.Second)
 	}
-	facts["called_after_sync"] = err == nil
+	facts["called_without_relink"] = err == nil
 	if err != nil {
-		return facts, fmt.Errorf("calling the provider after the sibling sync: %w", err)
+		return facts, fmt.Errorf("calling the provider registered after the link: %w", err)
 	}
 	facts["provider_saw_the_app"] = seen == front.Identity.String()
 	if seen != front.Identity.String() {
@@ -214,49 +199,4 @@ func call(ctx *astral.Context, front *astrald.Client, provider *astral.Identity,
 		return "", errors.New("no answer")
 	}
 	return seen.String(), nil
-}
-
-// relink closes node1's links to node2 and opens a new one, so the first-link
-// sibling sync runs again on both nodes.
-func relink(ctx *astral.Context, admin *astrald.Client, node2 *astral.Identity) error {
-	ch, err := admin.QueryChannel(ctx, nodes.MethodLinks, nil)
-	if err != nil {
-		return err
-	}
-	var links []*nodes.LinkInfo
-	for {
-		obj, err := ch.Receive()
-		if err != nil {
-			ch.Close()
-			return err
-		}
-		if l, ok := obj.(*nodes.LinkInfo); ok {
-			links = append(links, l)
-			continue
-		}
-		break // eos, or an error object: the list ends
-	}
-	ch.Close()
-	for _, l := range links {
-		if !l.RemoteIdentity.IsEqual(node2) {
-			continue
-		}
-		c, err := admin.QueryChannel(ctx, "nodes.close_link", query.Args{"link_id": l.ID})
-		if err != nil {
-			return err
-		}
-		err = c.Switch(channel.ExpectAck, channel.PassErrors)
-		c.Close()
-		if err != nil {
-			return err
-		}
-	}
-	c, err := admin.QueryChannel(ctx.IncludeZone(astral.ZoneNetwork), "nodes.new_link", query.Args{"identity": node2.String()})
-	if err != nil {
-		return err
-	}
-	defer c.Close()
-	// note: nodes.new_link answers with the new link's info once it is up.
-	var info *nodes.LinkInfo
-	return c.Switch(channel.Expect(&info), channel.PassErrors)
 }
