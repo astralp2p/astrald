@@ -10,10 +10,10 @@ apphost.hosts. Then three read phases:
   allowed   the evaluator acks; the read returns node2's bytes, and node1's
             device repository still lacks the object afterwards.
   refused   the evaluator answers anything but an ack; the read is rejected.
-  unlinked  both nodes stop dialling and listening, and node1 closes its links
-            to node2; the read fails within UNLINKED_BUDGET. Linking is
-            restored and the link rebuilt before this driver exits, whatever
-            happened.
+  unlinked  both nodes stop dialling and listening, neither accepts tcp any
+            more, and node1 closes its links to node2; the read fails within
+            UNLINKED_BUDGET. Linking is restored and the link rebuilt before
+            this driver exits, whatever happened.
 
 The bytes of node2's log that each of the first two phases spans are recorded,
 so the oracle can check that the allowed read reached node2 and the refused
@@ -82,11 +82,35 @@ async def set_link_knobs(n, value: str) -> None:
             await c.tree.set_text(path, value, type="bool")
 
 
+async def tcp_listening(n) -> bool:
+    # why: lan_endpoint is the address a peer dials, which the relink races.
+    host, port = n["lan_endpoint"].removeprefix("tcp:").rsplit(":", 1)
+    try:
+        _, w = await asyncio.open_connection(host, int(port))
+    except OSError:
+        return False
+    w.close()
+    return True
+
+
+async def await_tcp_down(n, name: str) -> None:
+    """Wait until listen=false has stopped the node's tcp server."""
+    # why: the setting reaches the server asynchronously; closing links before
+    # it stops races a relink, so the precondition is asserted, not assumed.
+    for _ in range(50):
+        if not await tcp_listening(n):
+            return
+        await asyncio.sleep(0.1)
+    raise RuntimeError(f"{name} still accepts tcp after listen=false")
+
+
 async def unlink(n1, n2) -> int:
     """Stop both nodes linking, close node1's links to node2, and return how many
     links were closed before node1 held none for a whole second."""
     await set_link_knobs(n1, "false")
     await set_link_knobs(n2, "false")
+    await await_tcp_down(n1, "node1")
+    await await_tcp_down(n2, "node2")
     closed = 0
     async with await astral.connect(n1["endpoint"], token=n1["token"]) as c:
         # why: a close and a relink race; the read must start after a quiet
