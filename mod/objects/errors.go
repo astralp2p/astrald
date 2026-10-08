@@ -8,6 +8,8 @@ import (
 // CodeUnavailable is the reject code of an objects.read whose object cannot be obtained:
 // no repository holds it, no sibling has it, or the retrieval from a sibling failed.
 // note: an authorization refusal keeps astral.CodeRejected, so a client tells "refused" from "unavailable".
+// note: a repository group reports any member failure as ErrNotFound (repo_group.go), so a local
+// storage error behind a group is also unavailable: no repository could supply the object.
 // why: 5 follows the last code astral-go declares (astral.CodeInternalError).
 const CodeUnavailable = 5
 
