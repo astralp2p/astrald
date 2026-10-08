@@ -232,6 +232,22 @@ func TestHostsOfAnUnknownAppIsEOSAlone(t *testing.T) {
 	}
 }
 
+// TestHostsOfAnUnresolvedNameIsEOSAlone: a name that resolves to no app, or to
+// the zero identity, names no app, and the reply is EOS alone, not an error.
+func TestHostsOfAnUnresolvedNameIsEOSAlone(t *testing.T) {
+	self, sibling, app := astral.GenerateIdentity(), astral.GenerateIdentity(), astral.GenerateIdentity()
+	mod, index := hostsModule(self, relayContract(app, sibling))
+
+	for _, name := range []string{"no-such-alias", "anyone"} {
+		if reply := askHosts(t, mod, name); len(reply) != 0 {
+			t.Fatalf("apphost.hosts sent %v for %q; want EOS alone", reply, name)
+		}
+	}
+	if n := len(index.recorded()); n != 0 {
+		t.Fatalf("apphost.hosts read the index %d times for names of no app; want none", n)
+	}
+}
+
 // TestHostsRefusesAQueryOffALink: the answer names the nodes of this node's
 // swarm, so a query that arrived over a link is rejected before the index is
 // read and before a byte is written.
