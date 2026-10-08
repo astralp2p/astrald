@@ -33,6 +33,9 @@ type Module interface {
 	// PushToLocalSwarm broadcasts obj to every local swarm member except the
 	// node itself using ctx; delivery is best-effort and failures are silently ignored.
 	PushToLocalSwarm(ctx *astral.Context, obj astral.Object)
+	// PushToSiblings sends obj to every linked sibling, each push on its own
+	// and bounded; delivery is best-effort.
+	PushToSiblings(ctx *astral.Context, obj astral.Object)
 	// Expel permanently bans nodeID from the swarm. Only the active contract's
 	// issuer may expel and the ban is irreversible.
 	Expel(ctx *astral.Context, nodeID *astral.Identity) (*user.SignedExpulsion, error)

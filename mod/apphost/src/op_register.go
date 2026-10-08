@@ -171,7 +171,7 @@ func (mod *Module) OpRegister(ctx *astral.Context, query *routing.IncomingQuery,
 	// in its index, and the link-time sync has already run for every linked sibling.
 	// note: the push is best-effort; a sibling that misses it gets the contract at its next first link.
 	if mod.User != nil {
-		go mod.User.PushToLocalSwarm(mod.ctx, signed)
+		mod.User.PushToSiblings(mod.ctx, signed)
 	}
 
 	tv := views.NewTimeView(&token.ExpiresAt)

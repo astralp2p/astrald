@@ -2,6 +2,7 @@ package user
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/astralp2p/astral-go/api/nodes"
 	"github.com/astralp2p/astral-go/api/tree"
@@ -179,6 +180,25 @@ func (mod *Module) pushActiveContract(ctx *astral.Context, remoteIdentity *astra
 	}
 
 	mod.Objects.Push(ctx, remoteIdentity, contract)
+}
+
+// siblingPushTimeout bounds one push to a linked sibling.
+const siblingPushTimeout = 15 * time.Second
+
+// PushToSiblings sends obj to every linked sibling.
+// why: each push runs on its own and is bounded, so a stalled sibling never
+// delays the others.
+func (mod *Module) PushToSiblings(ctx *astral.Context, obj astral.Object) {
+	for _, sib := range mod.getSiblings() {
+		go func() {
+			pctx, cancel := ctx.WithTimeout(siblingPushTimeout)
+			defer cancel()
+
+			if err := mod.Objects.Push(pctx, sib, obj); err != nil {
+				mod.log.Logv(1, "push %v to sibling %v: %v", obj.ObjectType(), sib, err)
+			}
+		}()
+	}
 }
 
 // PushToLocalSwarm broadcasts obj to every member of the local swarm except the node itself.

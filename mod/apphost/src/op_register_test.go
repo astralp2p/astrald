@@ -10,21 +10,21 @@ import (
 	usermod "github.com/astralp2p/astrald/mod/user"
 )
 
-// pushRecorder is a user module that hands every object pushed to the local swarm to pushed.
+// pushRecorder is a user module that hands every object pushed to the linked siblings to pushed.
 // note: the embedded nil interface panics on any other method, which asserts that registration calls nothing else.
 type pushRecorder struct {
 	usermod.Module
 	pushed chan astral.Object
 }
 
-func (r *pushRecorder) PushToLocalSwarm(_ *astral.Context, obj astral.Object) {
+func (r *pushRecorder) PushToSiblings(_ *astral.Context, obj astral.Object) {
 	r.pushed <- obj
 }
 
-// TestRegistrationPushesTheRelayContractToTheSwarm: apphost.register pushes the
-// new app's relay-for contract, issued by the app to this node, to the local
-// swarm, so a sibling linked before the registration can route to the app.
-func TestRegistrationPushesTheRelayContractToTheSwarm(t *testing.T) {
+// TestRegistrationPushesTheRelayContractToTheSiblings: apphost.register pushes
+// the new app's relay-for contract, issued by the app to this node, to the
+// linked siblings, so a sibling linked before the registration can route to the app.
+func TestRegistrationPushesTheRelayContractToTheSiblings(t *testing.T) {
 	mod := serveAppsRegistrar(t)
 	recorder := &pushRecorder{pushed: make(chan astral.Object, 4)}
 	mod.User = recorder
@@ -48,7 +48,7 @@ func TestRegistrationPushesTheRelayContractToTheSwarm(t *testing.T) {
 	select {
 	case obj = <-recorder.pushed:
 	case <-time.After(10 * time.Second):
-		t.Fatal("apphost.register pushed nothing to the local swarm")
+		t.Fatal("apphost.register pushed nothing to the siblings")
 	}
 
 	signed, ok := obj.(*auth.SignedContract)
