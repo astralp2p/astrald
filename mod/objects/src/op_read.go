@@ -1,11 +1,13 @@
 package objects
 
 import (
+	"errors"
 	"io"
 
 	"github.com/astralp2p/astral-go/api/auth"
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astral-go/lib/routing"
+	objectsmod "github.com/astralp2p/astrald/mod/objects"
 )
 
 type opReadArgs struct {
@@ -19,6 +21,8 @@ type opReadArgs struct {
 // OpRead authorizes the caller under SeeObjects, then streams raw object bytes
 // over the accepted connection. Records the access under the opened object's
 // full ID in the reads journal, which feeds purge ordering.
+// A refusal rejects with astral.CodeRejected, and an object no repository could
+// supply rejects with objectsmod.CodeUnavailable.
 func (mod *Module) OpRead(ctx *astral.Context, q *routing.IncomingQuery, args opReadArgs) (err error) {
 	ctx = ctx.IncludeZone(args.Zone)
 
@@ -54,6 +58,11 @@ func (mod *Module) OpRead(ctx *astral.Context, q *routing.IncomingQuery, args op
 	)
 	if err != nil {
 		mod.log.Errorv(2, "read %v error: %v", args.ID, err)
+		// why: a group, the siblings repository among its members, reports every miss
+		// and every failed sibling retrieval as ErrNotFound.
+		if errors.Is(err, objectsmod.ErrNotFound) {
+			return q.RejectWithCode(objectsmod.CodeUnavailable)
+		}
 		return q.Reject()
 	}
 	defer r.Close()
