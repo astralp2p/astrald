@@ -13,7 +13,7 @@ type opHostsArgs struct {
 }
 
 // OpHosts sends each node that hosts the app once, as an astral.Identity, then EOS.
-// An app with no known host gets EOS alone.
+// An app with no known host, or a name that resolves to no app, gets EOS alone.
 // A host is the subject of an active relay-for contract the app issued, the same lookup
 // PreprocessQuery routes by (query_preprocessor.go), with this node included when it hosts the app.
 // note: a sibling's app is known once its relay contract arrived, at the first link or at registration.
@@ -31,13 +31,11 @@ func (mod *Module) OpHosts(ctx *astral.Context, q *routing.IncomingQuery, args o
 	ch := channel.New(q.AcceptRaw(), channel.WithOutputFormat(args.Out))
 	defer ch.Close()
 
+	// why: a name that resolves to no app names an app with no known host, and a
+	// caller that reads hosts until EOS gets an empty list, not an error.
 	app, err := mod.Dir.ResolveIdentity(args.App)
-	if err != nil {
-		return ch.Send(astral.Err(err))
-	}
-
-	if app.IsZero() {
-		return ch.Send(astral.NewError("missing app"))
+	if err != nil || app.IsZero() {
+		return ch.Send(&astral.EOS{})
 	}
 
 	contracts, err := mod.Auth.SignedContracts().
