@@ -3,7 +3,9 @@
 
 The app (the Player) asks node1 alone, with no target. node1 authorizes the app
 through an evaluator rule, misses the object on its own device, and its
-`siblings` repository asks node2 for it under node1's identity. Three phases:
+`siblings` repository asks node2 for it under node1's identity. First an app
+registered on node2 while the nodes are linked must appear in node1's
+apphost.hosts. Then three read phases:
 
   allowed   the evaluator acks; the read returns node2's bytes, and node1's
             device repository still lacks the object afterwards.
@@ -41,6 +43,10 @@ UNLINKED_BUDGET = 10
 # why an explicit deadline: a broken route hangs rather than answering, and the
 # client's default is 60 s.
 DEADLINE = 30
+
+# why: apphost.register pushes the new app's relay contract to node1 at once,
+# so a lookup that waits longer than this budget missed the push.
+HOSTS_BUDGET = 10
 
 # The knobs that stop a node from building a link to a sibling. Each is turned
 # off on both nodes for the unlinked phase: dialling, so neither node's link
@@ -96,6 +102,45 @@ async def unlink(n1, n2) -> int:
     raise RuntimeError("node1 still links to node2 after its links were closed")
 
 
+async def hosts_of(c, app: str) -> list:
+    """The hosts apphost.hosts names for app, as hex identities."""
+    return sorted(h.hex() for h in await c.call(f"apphost.hosts?app={app}"))
+
+
+async def hosts(n1, n2, user_token: str, player) -> dict:
+    """Register an app on node2 while node1 is linked to it, and ask node1's
+    apphost.hosts, as the Player, for that app, for the Player, and for an
+    identity that is no app. node1's links to node2 are recorded before and
+    after, so the oracle can tell the registration's push from a new link's
+    sync."""
+    async with await astral.connect(n1["endpoint"], token=user_token) as u, \
+            await astral.connect(n1["endpoint"], token=str(player.token)) as p:
+        async def link_ids() -> list:
+            return sorted(str(ln.id) for ln in await links_to(u, n2["identity"]))
+
+        links_before = await link_ids()
+        async with await astral.connect(n2["endpoint"], token=n2["token"]) as c2:
+            remote = await c2.apphost.register()
+        remote_app = remote.identity.hex()
+
+        started = time.monotonic()
+        remote_hosts = await hosts_of(p, remote_app)
+        while not remote_hosts and time.monotonic() - started < HOSTS_BUDGET:
+            await asyncio.sleep(0.2)
+            remote_hosts = await hosts_of(p, remote_app)
+        seconds = time.monotonic() - started
+
+        return {
+            "remote_app": remote_app,
+            "remote_hosts": remote_hosts,
+            "remote_seconds": seconds,
+            "player_hosts": await hosts_of(p, player.identity.hex()),
+            "no_app_hosts": await hosts_of(p, n1["identity"]),
+            "links_before": links_before,
+            "links_after": await link_ids(),
+        }
+
+
 async def relink(n1, n2) -> bool:
     """Restore linking on both nodes and rebuild the link node1 holds to node2."""
     await set_link_knobs(n1, "true")
@@ -143,6 +188,8 @@ async def main():
             else:
                 await s.send_eos()
 
+    host_lookup = await hosts(n1, n2, facts["user_token"], player)
+
     phases = {}
     relinked = None
     async with await astral.connect(n1["endpoint"], token=str(evaluator.token)) as ev:
@@ -187,11 +234,15 @@ async def main():
         "node1_device_contains": node1_device,
         "relinked": relinked,
         "unlinked_budget": UNLINKED_BUDGET,
+        "hosts": host_lookup,
+        "hosts_budget": HOSTS_BUDGET,
     }})
     print("driver: " + ", ".join(
         f"{k}: {'read ' + str(v.get('bytes')) + ' B' if v.get('ok') else 'refused'}"
         f" in {v.get('seconds', 0):.2f}s" for k, v in phases.items())
-        + f"; {len(questions)} questions; relinked {relinked}")
+        + f"; {len(questions)} questions; relinked {relinked}"
+        + f"; node2 app hosts {host_lookup['remote_hosts']}"
+        f" in {host_lookup['remote_seconds']:.2f}s")
 
 
 asyncio.run(main())

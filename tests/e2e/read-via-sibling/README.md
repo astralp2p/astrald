@@ -7,20 +7,22 @@ identity.
 
 - **env** node · **start** `two-nodes-data-peer` · **saves** —
 - **driver** `script.py` — mint a Player app and an evaluator app on node1,
-  set an evaluator rule for the Player's `mod.auth.see_objects_action`, serve
+  register an app on node2 and ask node1's `apphost.hosts` about it, set an
+  evaluator rule for the Player's `mod.auth.see_objects_action`, serve
   `auth.evaluate`, then read the object as the Player three times.
-- **oracle** `verify.py` — the allowed read returns node2's bytes and node2's
-  log records the read; the refused read is rejected and node2's log records
-  none; the unlinked read fails within its budget; node1's device repository
-  lacks the object afterwards.
+- **oracle** `verify.py` — node1's `apphost.hosts` names node2 for node2's
+  app and node1 for the Player; the allowed read returns node2's bytes and
+  node2's log records the read; the refused read is rejected with code 1 and
+  node2's log records none; the unlinked read is rejected with code 5 within
+  its budget; node1's device repository lacks the object afterwards.
 
 ## The three phases
 
 | phase | evaluator | node2 | expected |
 |-------|-----------|-------|----------|
 | allowed | acks | linked | node2's bytes, node1's device still lacks the object |
-| refused | answers `eos` | linked | rejected, no `objects.read` reaches node2 |
-| unlinked | acks | unlinked | fails within 10 s |
+| refused | answers `eos` | linked | rejected with code 1 (`astral.CodeRejected`), no `objects.read` reaches node2 |
+| unlinked | acks | unlinked | rejected with code 5 (`objects.CodeUnavailable`) within 10 s |
 
 The Player reads with no target, so every read is node1's to route. node1
 asks the evaluator before it opens any repository, so a refusal never reaches
@@ -57,3 +59,14 @@ Dialling alone was not enough: in one `main.suite` run node2 built a new `tcp`
 link to node1 milliseconds after node1 closed the old one, with `dial` already
 off on both nodes. Turning `listen` off as well closes that path whichever
 side dials.
+
+## Host lookup
+
+Before the reads, the driver registers an app on node2 while node1 is linked
+to node2. `apphost.register` pushes the app's relay-for contract to node2's
+swarm, so node1's `apphost.hosts` must name node2 for that app within 10 s.
+The driver asks as the Player, which holds no permit, because the op asks for
+none. node1's links to node2 are recorded before and after: an unchanged link
+set rules out a new link's contract sync as the carrier. node1's
+`apphost.hosts` must also name node1 for the Player, and nothing for node1's
+own identity, which is no app.

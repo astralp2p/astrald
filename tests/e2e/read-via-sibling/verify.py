@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""Oracle: node1 reads node2's object for an app only while node1 allows it.
+"""Oracle: node1 reads node2's object for an app only while node1 allows it,
+and node1's apphost.hosts names the node that hosts each app.
 
 Ground truth is node2's own copy, read with node2's token from its local
 repository, and node1's device repository, asked by the oracle itself. The
@@ -20,6 +21,10 @@ import astral
 from lib.sessionio import load
 
 ANSI = re.compile(r"\x1b\[[0-9;]*m")
+
+# astral.CodeRejected, and objects.CodeUnavailable in mod/objects.
+CODE_REJECTED = 1
+CODE_UNAVAILABLE = 5
 
 
 def log_slice(path: Path, span: list) -> str:
@@ -75,6 +80,9 @@ async def main():
     refused = phases["refused"]
     assert not refused["ok"] and refused.get("rejected"), (
         f"the refused read was not rejected: {refused}")
+    assert refused["code"] == CODE_REJECTED, (
+        f"the refused read was rejected with code {refused['code']}; an "
+        f"authorization refusal answers {CODE_REJECTED}")
     leaked = reads_of(log_slice(node2_log, refused["node2_log"]), object_id)
     assert not leaked, (
         "node2 was asked for the object while node1's evaluator refused the "
@@ -96,13 +104,32 @@ async def main():
     assert unlinked["seconds"] < run["unlinked_budget"], (
         f"the unlinked read took {unlinked['seconds']:.2f}s; the budget is "
         f"{run['unlinked_budget']}s")
+    assert unlinked.get("rejected") and unlinked["code"] == CODE_UNAVAILABLE, (
+        f"the unlinked read answered {unlinked}; an object no sibling could "
+        f"supply is rejected with code {CODE_UNAVAILABLE}")
     assert run["relinked"], "node1 did not link to node2 again after the test"
+
+    hosts = run["hosts"]
+    assert hosts["remote_hosts"] == [n2["identity"]], (
+        f"node1's apphost.hosts named {hosts['remote_hosts']} for the app "
+        f"registered on node2 within {run['hosts_budget']}s; want node2 alone")
+    assert hosts["links_before"] and hosts["links_after"] == hosts["links_before"], (
+        "node1's links to node2 changed while the node2 app's contract "
+        f"arrived ({hosts['links_before']} -> {hosts['links_after']}), so a "
+        "new link's sync may have carried it rather than the registration")
+    assert hosts["player_hosts"] == [n1["identity"]], (
+        f"node1's apphost.hosts named {hosts['player_hosts']} for the Player "
+        "registered on node1; want node1 alone")
+    assert hosts["no_app_hosts"] == [], (
+        f"node1's apphost.hosts named {hosts['no_app_hosts']} for an identity "
+        "that is no app; want EOS alone")
 
     print(f"oracle: allowed read {allowed['bytes']} B matching node2's copy "
           f"in {allowed['seconds']:.2f}s; refused read rejected with node2 "
           f"unasked; unlinked read failed in {unlinked['seconds']:.2f}s; "
           f"{len(questions)} evaluator questions; node1's device lacks the "
-          "object")
+          "object; node1's apphost.hosts names node2 for node2's app in "
+          f"{hosts['remote_seconds']:.2f}s and node1 for the Player")
 
 
 asyncio.run(main())
