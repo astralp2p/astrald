@@ -59,7 +59,7 @@ func (mod *Module) Get(ctx *astral.Context, path string) (astral.Object, error) 
 }
 
 func (mod *Module) Set(ctx *astral.Context, path string, object astral.Object) error {
-	node, err := tree.Query(ctx, mod.Root(), path, true)
+	node, err := treemod.Query(ctx, mod.Root(), path, true)
 	if err != nil {
 		return err
 	}

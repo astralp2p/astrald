@@ -1,9 +1,9 @@
 package indexing
 
 import (
-	"github.com/astralp2p/astral-go/api/tree"
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astrald/core"
+	treemod "github.com/astralp2p/astrald/mod/tree"
 )
 
 func (mod *Module) LoadDependencies(ctx *astral.Context) (err error) {
@@ -12,12 +12,12 @@ func (mod *Module) LoadDependencies(ctx *astral.Context) (err error) {
 		return
 	}
 
-	mod.repos, err = tree.Query(ctx, mod.Tree.Root(), "/mod/indexing/repos", true)
+	mod.repos, err = treemod.Query(ctx, mod.Tree.Root(), "/mod/indexing/repos", true)
 	if err != nil {
 		return err
 	}
 
-	mod.indexers, err = tree.Query(ctx, mod.Tree.Root(), "/mod/indexing/indexers", true)
+	mod.indexers, err = treemod.Query(ctx, mod.Tree.Root(), "/mod/indexing/indexers", true)
 	if err != nil {
 		return err
 	}

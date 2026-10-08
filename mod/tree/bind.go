@@ -61,7 +61,7 @@ func Bind(ctx *astral.Context, s any, node tree.Node) error {
 		// find the bind method
 		bind, found := findBindMethod(field)
 		if found {
-			fieldNode, err := tree.Query(ctx, node, keyName, true)
+			fieldNode, err := Query(ctx, node, keyName, true)
 			if err != nil {
 				return err
 			}
@@ -75,7 +75,7 @@ func Bind(ctx *astral.Context, s any, node tree.Node) error {
 			continue
 		}
 
-		subNode, err := tree.Query(ctx, node, keyName, true)
+		subNode, err := Query(ctx, node, keyName, true)
 		if err != nil {
 			return err
 		}
@@ -91,7 +91,7 @@ func Bind(ctx *astral.Context, s any, node tree.Node) error {
 
 // BindPath is a convenience function that queries the node and calls Bind.
 func BindPath(ctx *astral.Context, s any, node tree.Node, path string, create bool) (err error) {
-	node, err = tree.Query(ctx, node, path, create)
+	node, err = Query(ctx, node, path, create)
 	if err != nil {
 		return err
 	}

@@ -6,6 +6,7 @@ import (
 
 	"github.com/astralp2p/astral-go/api/tree"
 	"github.com/astralp2p/astral-go/astral"
+	treemod "github.com/astralp2p/astrald/mod/tree"
 )
 
 // reposTreePath holds one subnode per persisted repository. A subnode holds the
@@ -27,7 +28,7 @@ func (mod *Module) saveRepo(ctx *astral.Context, name string, cfg RepoConfig) er
 		return errInvalidRepoName
 	}
 
-	node, err := tree.Query(ctx, mod.Tree.Root(), reposTreePath+"/"+name, true)
+	node, err := treemod.Query(ctx, mod.Tree.Root(), reposTreePath+"/"+name, true)
 	if err != nil {
 		return err
 	}
@@ -37,7 +38,7 @@ func (mod *Module) saveRepo(ctx *astral.Context, name string, cfg RepoConfig) er
 		labelKey:    astral.NewString8(cfg.Label),
 		writableKey: (*astral.Bool)(&cfg.Writable),
 	} {
-		field, err := tree.Query(ctx, node, key, true)
+		field, err := treemod.Query(ctx, node, key, true)
 		if err != nil {
 			return err
 		}
@@ -73,7 +74,7 @@ func (mod *Module) deleteRepo(ctx *astral.Context, name string) error {
 
 // loadRepos reads every persisted entry. An entry that cannot be read is logged and skipped.
 func (mod *Module) loadRepos(ctx *astral.Context) (map[string]RepoConfig, error) {
-	root, err := tree.Query(ctx, mod.Tree.Root(), reposTreePath, true)
+	root, err := treemod.Query(ctx, mod.Tree.Root(), reposTreePath, true)
 	if err != nil {
 		return nil, err
 	}

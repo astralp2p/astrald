@@ -39,7 +39,11 @@ func (mod *Module) LoadDependencies(ctx *astral.Context) (err error) {
 	}
 
 	var modePath = fmt.Sprintf("/mod/%s/mode", nearby.ModuleName)
-	err = mod.mode.BindPath(ctx, mod.Tree.Root(), modePath, true)
+	modeNode, err := tree.Query(ctx, mod.Tree.Root(), modePath, true)
+	if err != nil {
+		return
+	}
+	err = mod.mode.Bind(ctx, modeNode)
 	if err != nil {
 		return
 	}
