@@ -3,6 +3,7 @@ package user
 import (
 	"github.com/astralp2p/astral-go/api/auth"
 	"github.com/astralp2p/astral-go/api/nodes"
+	"github.com/astralp2p/astral-go/api/objects"
 	"github.com/astralp2p/astral-go/api/services"
 	"github.com/astralp2p/astral-go/api/user"
 	"github.com/astralp2p/astral-go/astral"
@@ -59,6 +60,17 @@ func (mod *Module) LoadDependencies(ctx *astral.Context) (err error) {
 	mod.Auth.Add(authmod.Func[*auth.ServeAppsAction](mod.AuthorizeServeApps))
 	mod.Auth.Add(authmod.Func[*auth.SeeNodeStateAction](mod.AuthorizeSeeNodeState))
 	mod.Auth.Add(authmod.Func[*shell.ShellAction](mod.AuthorizeShell))
+
+	// why: the network group belongs to main, so a read that misses this device reaches the siblings.
+	err = mod.Objects.AddRepository(siblingsRepo, &SiblingRepository{mod: mod})
+	if err != nil {
+		return
+	}
+
+	err = mod.Objects.AddGroup(objects.RepoNetwork, siblingsRepo)
+	if err != nil {
+		return
+	}
 
 	// why: localuser as a name, to match localuser as a filter
 	err = mod.Dir.AddResolver(mod)
