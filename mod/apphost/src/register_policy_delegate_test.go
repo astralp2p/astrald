@@ -24,6 +24,7 @@ func TestAppRegisterObjectsSurviveTheWire(t *testing.T) {
 		ContractPermits: parsePermits("mod.nodes.relay_for_action,mod.auth.see_objects_action"),
 		Caller:          astral.GenerateIdentity(),
 		Anonymous:       true,
+		Name:            "Player Web",
 	}
 
 	var buf bytes.Buffer
@@ -35,7 +36,7 @@ func TestAppRegisterObjectsSurviveTheWire(t *testing.T) {
 		t.Fatal(err)
 	}
 	if got.Origin != req.Origin || !sameActions(got.GrantPermits, req.GrantPermits) || !sameActions(got.ContractPermits, req.ContractPermits) ||
-		!got.Caller.IsEqual(req.Caller) || got.Anonymous != req.Anonymous {
+		!got.Caller.IsEqual(req.Caller) || got.Anonymous != req.Anonymous || got.Name != req.Name {
 		t.Fatalf("request changed on the wire: %+v", got)
 	}
 
@@ -67,7 +68,7 @@ func TestAppRegisterObjectsSurviveTheWire(t *testing.T) {
 func TestNoDelegateKeepsAcceptAll(t *testing.T) {
 	mod := &Module{config: defaultConfig, log: log.New(nil)}
 
-	out := mod.GetAppRegisterPolicy()(nil, "", nil, false, parsePermits("mod.auth.serve_objects_action"), nil)
+	out := mod.GetAppRegisterPolicy()(nil, "", "", nil, false, parsePermits("mod.auth.serve_objects_action"), nil)
 	grants, contracts, ok := out.GrantPermits, out.ContractPermits, out.Allow
 	if !ok || len(grants) != 1 || len(contracts) != 0 {
 		t.Fatalf("got grants=%v contracts=%v ok=%v, want the request back", actions(grants), actions(contracts), ok)
@@ -78,7 +79,7 @@ func TestNoDelegateKeepsAcceptAll(t *testing.T) {
 func TestDelegatedPolicyWithoutDelegateRefuses(t *testing.T) {
 	mod := &Module{config: defaultConfig, log: log.New(nil)}
 
-	if mod.AppRegisterViaDelegate(nil, "", nil, false, parsePermits("mod.auth.serve_objects_action"), nil).Allow {
+	if mod.AppRegisterViaDelegate(nil, "", "", nil, false, parsePermits("mod.auth.serve_objects_action"), nil).Allow {
 		t.Fatal("a delegated policy with no delegate admitted the registration")
 	}
 }
@@ -134,12 +135,12 @@ func TestDelegateWaitEndsWhenTheRequesterLeaves(t *testing.T) {
 
 	result := make(chan bool, 1)
 	go func() {
-		result <- mod.GetAppRegisterPolicy()(ctx, "", caller, true, parsePermits("mod.auth.serve_objects_action"), nil).Allow
+		result <- mod.GetAppRegisterPolicy()(ctx, "", "Player", caller, true, parsePermits("mod.auth.serve_objects_action"), nil).Allow
 	}()
 
 	select {
 	case req := <-delegate.received:
-		if !req.Caller.IsEqual(caller) || !bool(req.Anonymous) {
+		if !req.Caller.IsEqual(caller) || !bool(req.Anonymous) || req.Name != "Player" {
 			t.Fatalf("delegate saw caller=%v anonymous=%v, want %v true", req.Caller, req.Anonymous, caller)
 		}
 	case <-time.After(5 * time.Second):

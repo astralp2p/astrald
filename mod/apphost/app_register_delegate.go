@@ -30,6 +30,9 @@ type AppRegisterRequest struct {
 	ContractPermits []*auth.Permit
 	Caller          *astral.Identity
 	Anonymous       astral.Bool
+	// Name is the name the app gives itself, empty when it gives none. It is
+	// the app's own claim, not verified by the node.
+	Name astral.String8
 }
 
 func (AppRegisterRequest) ObjectType() string { return "mod.apphost.app_register_request" }

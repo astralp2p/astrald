@@ -1,7 +1,9 @@
 package apphost
 
 import (
+	"strings"
 	"time"
+	"unicode"
 
 	"github.com/astralp2p/astral-go/api/auth"
 	"github.com/astralp2p/astral-go/api/secp256k1"
@@ -27,6 +29,10 @@ type opRegisterArgs struct {
 	// contract: portable evidence another node verifies, durable until it
 	// expires.
 	ContractPermits string
+
+	// Name is the name the app gives itself, shown when the node asks about
+	// the registration and saved as the new identity's alias on approval.
+	Name string
 
 	In  string
 	Out string
@@ -67,11 +73,13 @@ func (mod *Module) OpRegister(ctx *astral.Context, query *routing.IncomingQuery,
 	// policy answers before the watch can see such an end, so it may still
 	// provision; only a decision that outlasts the end, as a delegate's does,
 	// is guaranteed to see it.
+	name := appName(args.Name)
+
 	policyCtx, stop := watchRequester(ctx, conn)
 	defer stop()
 
 	outcome := mod.GetAppRegisterPolicy()(
-		policyCtx, origin, query.Caller(), anonymous, requestedGrantPermits, requestedContractPermits,
+		policyCtx, origin, name, query.Caller(), anonymous, requestedGrantPermits, requestedContractPermits,
 	)
 	grantPermits, contractPermits := outcome.GrantPermits, outcome.ContractPermits
 	if !outcome.Allow {
@@ -167,6 +175,8 @@ func (mod *Module) OpRegister(ctx *astral.Context, query *routing.IncomingQuery,
 		return ch.Send(astral.Err(err))
 	}
 
+	mod.aliasRegisteredApp(guestID, name)
+
 	// why: a sibling routes a query to the app only through a relay-for contract
 	// in its index, and the link-time sync has already run for every linked sibling.
 	// note: the push is best-effort; a sibling that misses it gets the contract at its next first link.
@@ -179,4 +189,55 @@ func (mod *Module) OpRegister(ctx *astral.Context, query *routing.IncomingQuery,
 
 	mod.log.Logv(1, "registered guest %v until %v (%v)", token.Identity, tv, contractID)
 	return ch.Send(token)
+}
+
+// maxAppNameRunes bounds the name an app gives itself, so a prompt shows it
+// on one line.
+const maxAppNameRunes = 40
+
+// appName cleans the name an app gives itself: control characters dropped,
+// runs of whitespace joined into one space, trimmed, cut to maxAppNameRunes.
+// A name an identity argument would read as an identity or a reserved word
+// ("localnode", "anyone") is dropped, because the alias it becomes must not
+// shadow those.
+func appName(raw string) string {
+	var b strings.Builder
+	space := false
+	for _, r := range raw {
+		switch {
+		case unicode.IsSpace(r):
+			space = true
+		case unicode.IsControl(r) || !unicode.IsPrint(r):
+		default:
+			if space && b.Len() > 0 {
+				b.WriteRune(' ')
+			}
+			space = false
+			b.WriteRune(r)
+		}
+	}
+	clean := strings.TrimSpace(b.String())
+	if clean == "localnode" || clean == "anyone" {
+		return ""
+	}
+	if _, err := astral.ParseIdentity(clean); err == nil {
+		return ""
+	}
+	if name := []rune(clean); len(name) > maxAppNameRunes {
+		clean = strings.TrimSpace(string(name[:maxAppNameRunes]))
+	}
+	return clean
+}
+
+// aliasRegisteredApp saves name as the new identity's alias, so every
+// screen that resolves aliases names the app. Best-effort: an alias already
+// held by another identity is refused by the directory, and the app then
+// keeps its short identity.
+func (mod *Module) aliasRegisteredApp(app *astral.Identity, name string) {
+	if name == "" || mod.Dir == nil {
+		return
+	}
+	if err := mod.Dir.SetAlias(app, name); err != nil {
+		mod.log.Logv(1, "registered guest %v keeps no alias %q: %v", app, name, err)
+	}
 }

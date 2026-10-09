@@ -37,6 +37,7 @@ var _ apphost.AppRegisterPolicy = (*Module)(nil).AppRegisterViaDelegate
 func (mod *Module) AppRegisterAcceptAll(
 	_ *astral.Context,
 	origin string,
+	_ string,
 	_ *astral.Identity,
 	_ bool,
 	requestedGrantPermits, requestedContractPermits []*auth.Permit,
@@ -66,6 +67,7 @@ func (mod *Module) AppRegisterAcceptAll(
 func (mod *Module) AppRegisterViaDelegate(
 	ctx *astral.Context,
 	origin string,
+	name string,
 	caller *astral.Identity,
 	anonymous bool,
 	requestedGrantPermits, requestedContractPermits []*auth.Permit,
@@ -96,6 +98,7 @@ func (mod *Module) AppRegisterViaDelegate(
 		ContractPermits: requestedContractPermits,
 		Caller:          caller,
 		Anonymous:       astral.Bool(anonymous),
+		Name:            astral.String8(name),
 	})
 	if err != nil {
 		mod.logDelegateFailure(ctx, delegate, err)

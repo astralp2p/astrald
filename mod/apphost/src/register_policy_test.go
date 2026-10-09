@@ -2,6 +2,7 @@ package apphost
 
 import (
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/astralp2p/astral-go/api/auth"
@@ -57,7 +58,7 @@ func TestTheDefaultPolicyWritesWhatItIsHanded(t *testing.T) {
 	askedGrant := parsePermits("mod.auth.serve_objects_action")
 	askedContract := parsePermits("mod.nodes.relay_for_action")
 
-	out := mod.AppRegisterAcceptAll(nil, "", nil, false, askedGrant, askedContract)
+	out := mod.AppRegisterAcceptAll(nil, "", "", nil, false, askedGrant, askedContract)
 	grantPermits, contractPermits := out.GrantPermits, out.ContractPermits
 	if !out.Allow {
 		t.Fatal("the default policy refuses no registration")
@@ -77,7 +78,7 @@ func TestTheDefaultPolicyKeepsTheRailsApart(t *testing.T) {
 	mod := &Module{config: defaultConfig, log: log.New(nil)}
 
 	out := mod.AppRegisterAcceptAll(
-		nil, "", nil, false, parsePermits("mod.auth.serve_objects_action"), nil,
+		nil, "", "", nil, false, parsePermits("mod.auth.serve_objects_action"), nil,
 	)
 	grantPermits, contractPermits := out.GrantPermits, out.ContractPermits
 	if len(contractPermits) != 0 {
@@ -88,7 +89,7 @@ func TestTheDefaultPolicyKeepsTheRailsApart(t *testing.T) {
 	}
 
 	out = mod.AppRegisterAcceptAll(
-		nil, "", nil, false, nil, parsePermits("mod.nodes.relay_for_action"),
+		nil, "", "", nil, false, nil, parsePermits("mod.nodes.relay_for_action"),
 	)
 	grantPermits, contractPermits = out.GrantPermits, out.ContractPermits
 	if len(grantPermits) != 0 {
@@ -151,3 +152,21 @@ func TestTheDefaultEntitlesTheTrustedOrigin(t *testing.T) {
 }
 
 var _ = astral.String8("")
+
+// An app's name becomes an alias, so it is cleaned to one short line and
+// never shadows an identity or a reserved word.
+func TestAppNameIsCleanedToOneShortLine(t *testing.T) {
+	for raw, want := range map[string]string{
+		"Player":                           "Player",
+		"  Player\tWeb \n":                 "Player Web",
+		"Med\x00ia":                        "Media",
+		"localnode":                        "",
+		"anyone":                           "",
+		strings.Repeat("a", 50):            strings.Repeat("a", maxAppNameRunes),
+		astral.GenerateIdentity().String(): "",
+	} {
+		if got := appName(raw); got != want {
+			t.Errorf("appName(%q) = %q, want %q", raw, got, want)
+		}
+	}
+}

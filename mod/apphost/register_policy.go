@@ -10,7 +10,9 @@ import (
 // about to provision.
 //
 // ctx bounds the decision: it ends when the registering query closes. origin
-// is the caller's web origin, empty for local IPC callers. caller is the
+// is the caller's web origin, empty for local IPC callers. name is the name
+// the app gives itself, empty when it gives none; it is the app's own claim,
+// so a policy shows it beside origin rather than in place of it. caller is the
 // identity that called apphost.register, and anonymous is true when its
 // session presented no token (caller is then this node's identity).
 //
@@ -37,6 +39,7 @@ import (
 type AppRegisterPolicy func(
 	ctx *astral.Context,
 	origin string,
+	name string,
 	caller *astral.Identity,
 	anonymous bool,
 	requestedGrantPermits, requestedContractPermits []*auth.Permit,
