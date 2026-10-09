@@ -238,6 +238,6 @@ func (mod *Module) aliasRegisteredApp(app *astral.Identity, name string) {
 		return
 	}
 	if err := mod.Dir.SetAlias(app, name); err != nil {
-		mod.log.Logv(1, "registered guest %v keeps no alias %q: %v", app, name, err)
+		mod.log.Logv(1, "registered guest %v keeps no alias \"%v\": %v", app, name, err)
 	}
 }
