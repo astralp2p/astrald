@@ -3,7 +3,10 @@ package ether
 import (
 	"errors"
 	"net"
+	"slices"
 	"testing"
+
+	"github.com/astralp2p/astral-go/api/ip"
 )
 
 type cidrAddr string
@@ -81,7 +84,35 @@ func TestBroadcastSkipsIPv6Prefixes(t *testing.T) {
 	}
 
 	mod := &Module{}
-	if err := mod.broadcast([]byte("x")); err != nil {
+	if err := broadcast([]byte("x"), mod.writeToIP); err != nil {
 		t.Fatalf("broadcast with only IPv6 prefixes: %v", err)
+	}
+}
+
+// note: the first target fails; the later targets on both interfaces still receive the packet.
+func TestBroadcastContinuesAfterFailedSend(t *testing.T) {
+	stubNetInterfaces(t, []NetInterface{
+		{Flags: net.FlagUp | net.FlagBroadcast, Addrs: staticAddrs("192.168.1.10/24", "10.1.2.3/8")},
+		{Flags: net.FlagUp | net.FlagBroadcast, Addrs: staticAddrs("172.16.5.4/20")},
+	}, nil)
+
+	errSend := errors.New("send failed")
+	var sent []string
+	send := func(target ip.IP, data []byte) (int, error) {
+		if net.IP(target).String() == "192.168.1.255" {
+			return 0, errSend
+		}
+		sent = append(sent, net.IP(target).String())
+		return len(data), nil
+	}
+
+	err := broadcast([]byte("x"), send)
+	if !errors.Is(err, errSend) {
+		t.Errorf("broadcast error = %v, want %v", err, errSend)
+	}
+
+	want := []string{"10.255.255.255", "172.16.15.255"}
+	if !slices.Equal(sent, want) {
+		t.Errorf("sent to %v, want %v", sent, want)
 	}
 }

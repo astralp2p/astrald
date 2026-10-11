@@ -76,7 +76,7 @@ func TestBroadcastSkipsLoopbackInterface(t *testing.T) {
 		},
 	}}, nil)
 
-	if err := (&Module{}).broadcast([]byte("x")); err != nil {
+	if err := broadcast([]byte("x"), (&Module{}).writeToIP); err != nil {
 		t.Errorf("broadcast() = %v; want nil", err)
 	}
 	if addrsCalled {
@@ -91,7 +91,7 @@ func TestBroadcastSkipsLinkLocal(t *testing.T) {
 	}}, nil)
 
 	// note: a nil socket fails every write, so nil proves no write was attempted.
-	if err := (&Module{}).broadcast([]byte("x")); err != nil {
+	if err := broadcast([]byte("x"), (&Module{}).writeToIP); err != nil {
 		t.Errorf("broadcast() = %v; want nil", err)
 	}
 }
@@ -102,7 +102,7 @@ func TestBroadcastWithoutSocket(t *testing.T) {
 		Addrs: staticAddrs("192.168.1.10/24"),
 	}}, nil)
 
-	err := (&Module{}).broadcast([]byte("x"))
+	err := broadcast([]byte("x"), (&Module{}).writeToIP)
 	if err == nil || !strings.Contains(err.Error(), "socket not initialized") {
 		t.Errorf("broadcast() = %v; want \"socket not initialized\"", err)
 	}
@@ -115,14 +115,14 @@ func TestBroadcastPropagatesErrors(t *testing.T) {
 		Addrs: func() ([]net.Addr, error) { return nil, addrsErr },
 	}}, nil)
 
-	if err := (&Module{}).broadcast([]byte("x")); !errors.Is(err, addrsErr) {
+	if err := broadcast([]byte("x"), (&Module{}).writeToIP); !errors.Is(err, addrsErr) {
 		t.Errorf("broadcast() with failing Addrs = %v; want %v", err, addrsErr)
 	}
 
 	ifacesErr := errors.New("interfaces failed")
 	stubNetInterfaces(t, nil, ifacesErr)
 
-	if err := (&Module{}).broadcast([]byte("x")); !errors.Is(err, ifacesErr) {
+	if err := broadcast([]byte("x"), (&Module{}).writeToIP); !errors.Is(err, ifacesErr) {
 		t.Errorf("broadcast() with failing NetInterfaces = %v; want %v", err, ifacesErr)
 	}
 }

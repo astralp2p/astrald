@@ -94,7 +94,7 @@ func (mod *Module) Push(object astral.Object, source *astral.Identity) (err erro
 		return err
 	}
 
-	return mod.broadcast(packet)
+	return broadcast(packet, mod.writeToIP)
 }
 
 // PushToIP pushes an object to a specific IP address (unicast)
@@ -150,12 +150,18 @@ func (mod *Module) readBroadcast() (*ether.SignedBroadcast, *net.UDPAddr, error)
 	}
 }
 
-func (mod *Module) broadcast(data []byte) error {
+// note: sendFunc is the seam between broadcast and the UDP socket.
+type sendFunc func(ip.IP, []byte) (int, error)
+
+// why: one failing interface or send never stops the remaining targets.
+// why: the joined error still reaches the callers, which log it (nearby status push) or return it (nearby broadcast op).
+func broadcast(data []byte, send sendFunc) error {
 	ifaces, err := NetInterfaces()
 	if err != nil {
 		return err
 	}
 
+	var errs []error
 	var broadcastedAddrs = sig.Set[string]{}
 	// go over all network interfaces
 	for _, iface := range ifaces {
@@ -165,7 +171,8 @@ func (mod *Module) broadcast(data []byte) error {
 
 		addrs, err := iface.Addrs()
 		if err != nil {
-			return err
+			errs = append(errs, err)
+			continue
 		}
 
 		// go over all addresses of the interface
@@ -176,7 +183,8 @@ func (mod *Module) broadcast(data []byte) error {
 				continue
 			}
 			if err != nil {
-				return err
+				errs = append(errs, err)
+				continue
 			}
 			if broadcastedAddrs.Contains(broadcastIP.String()) {
 				// already broadcasted this address from another interface
@@ -187,16 +195,17 @@ func (mod *Module) broadcast(data []byte) error {
 				continue
 			}
 
-			_, err = mod.writeToIP(ip.IP(broadcastIP), data)
-			if err != nil {
-				return err
-			}
-
+			// why: the socket is not bound to an interface, so a failed address is not retried from another interface.
 			broadcastedAddrs.Add(broadcastIP.String())
+
+			_, err = send(ip.IP(broadcastIP), data)
+			if err != nil {
+				errs = append(errs, fmt.Errorf("send to %v: %w", broadcastIP, err))
+			}
 		}
 	}
 
-	return nil
+	return errors.Join(errs...)
 }
 
 func (mod *Module) writeToIP(ip ip.IP, data []byte) (n int, err error) {
