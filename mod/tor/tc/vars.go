@@ -24,6 +24,28 @@ func (m VarMap) GetString(key string) string {
 	return ""
 }
 
+// splitWords splits a response line on spaces that sit outside a double-quoted string.
+// note: a backslash inside quotes escapes the next byte; both bytes stay in the word.
+func splitWords(line string) []string {
+	var words []string
+	var quoted, escaped bool
+	start := 0
+	for i := 0; i < len(line); i++ {
+		switch c := line[i]; {
+		case escaped:
+			escaped = false
+		case quoted && c == '\\':
+			escaped = true
+		case c == '"':
+			quoted = !quoted
+		case c == ' ' && !quoted:
+			words = append(words, line[start:i])
+			start = i + 1
+		}
+	}
+	return append(words, line[start:])
+}
+
 func parseVarMap(words []string) VarMap {
 	m := make(map[string]string)
 	for _, w := range words {

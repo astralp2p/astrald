@@ -89,13 +89,7 @@ func TestParseVarMapSkipsWordWithoutEquals(t *testing.T) {
 }
 
 // TestParseProtocolInfoCookieFileWithSpace: the control spec allows a quoted
-// COOKIEFILE containing a space, which the single-space split turns into a bare
-// word. That must not panic.
-//
-// note: the cookie path is deliberately not asserted. The guard stops the crash
-// but leaves the path truncated at the space, because parseProtocolInfo does not
-// tokenize QuotedStrings; fixing that is a separate change and must not have to
-// rewrite this test.
+// COOKIEFILE containing a space. The whole quoted path is kept.
 func TestParseProtocolInfoCookieFileWithSpace(t *testing.T) {
 	info, err := parseProtocolInfo([]string{
 		`AUTH METHODS=COOKIE COOKIEFILE="/var/run/my tor/control.authcookie"`,
@@ -106,6 +100,9 @@ func TestParseProtocolInfoCookieFileWithSpace(t *testing.T) {
 
 	if !slices.Equal(info.AuthMethods, []string{"COOKIE"}) {
 		t.Errorf("AuthMethods = %v; want [COOKIE]", info.AuthMethods)
+	}
+	if want := "/var/run/my tor/control.authcookie"; info.AuthCookieFile != want {
+		t.Errorf("AuthCookieFile = %q; want %q", info.AuthCookieFile, want)
 	}
 }
 

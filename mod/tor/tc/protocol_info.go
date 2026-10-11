@@ -1,7 +1,5 @@
 package tc
 
-import "strings"
-
 type ProtocolInfo struct {
 	AuthMethods    []string
 	AuthCookieFile string
@@ -50,7 +48,7 @@ func parseProtocolInfo(lines []string) (*ProtocolInfo, error) {
 	info := &ProtocolInfo{}
 
 	for _, line := range lines {
-		words := strings.Split(line, " ")
+		words := splitWords(line)
 		scope, vars := words[0], parseVarMap(words[1:])
 
 		switch scope {
