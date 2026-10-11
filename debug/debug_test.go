@@ -75,3 +75,35 @@ func TestSaveLogWritesLogAndRepanics(t *testing.T) {
 		t.Fatalf("crash log content %q does not contain %q", data, "panic: boom")
 	}
 }
+
+func crashAndRecover(msg string) {
+	defer func() { recover() }()
+	defer SaveLog(nil)
+	panic(msg)
+}
+
+func TestSaveLogKeepsSameSecondCrashLogs(t *testing.T) {
+	dir := t.TempDir()
+	setLogDir(t, dir)
+
+	crashAndRecover("first")
+	crashAndRecover("second")
+
+	logs := crashLogs(t, dir)
+	if len(logs) != 2 {
+		t.Fatalf("crash logs = %q, want two", logs)
+	}
+	var all string
+	for _, log := range logs {
+		data, err := os.ReadFile(log)
+		if err != nil {
+			t.Fatalf("ReadFile: %v", err)
+		}
+		all += string(data)
+	}
+	for _, want := range []string{"panic: first", "panic: second"} {
+		if !strings.Contains(all, want) {
+			t.Errorf("crash logs do not contain %q", want)
+		}
+	}
+}

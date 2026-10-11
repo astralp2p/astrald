@@ -1,15 +1,15 @@
 package debug
 
 import (
+	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"runtime/debug"
 	"syscall"
 	"time"
 )
-
-const PanicExitCode = 5
 
 var LogDir string
 
@@ -24,11 +24,7 @@ func SaveLog(after func(p any)) {
 		return
 	}
 
-	var ts = time.Now().Format(crashLogTimeLayout)
-	var filename = "crash." + ts + ".log"
-	var path = filepath.Join(LogDir, filename)
-
-	file, err := os.Create(path)
+	file, err := createCrashLog(LogDir, time.Now())
 	if err != nil {
 		// why: a crash log that cannot be written must not swallow the panic
 		fmt.Fprintf(os.Stderr, "failed to dump crash log: %v\n", err)
@@ -40,7 +36,7 @@ func SaveLog(after func(p any)) {
 		fmt.Fprintf(file, "panic: %v\n\n", p)
 		file.Write(debug.Stack())
 
-		fmt.Printf("crash log saved to %s\n", path)
+		fmt.Printf("crash log saved to %s\n", file.Name())
 	}
 
 	if after != nil {
@@ -48,6 +44,24 @@ func SaveLog(after func(p any)) {
 	}
 
 	panic(p)
+}
+
+// createCrashLog creates a new crash log file in dir named after t.
+// note: the first crash log of a second is crash.<ts>.log, a later one is crash.<ts>.<n>.log
+func createCrashLog(dir string, t time.Time) (*os.File, error) {
+	var ts = t.Format(crashLogTimeLayout)
+	for n := 0; ; n++ {
+		var filename = "crash." + ts + ".log"
+		if n > 0 {
+			filename = fmt.Sprintf("crash.%s.%d.log", ts, n)
+		}
+
+		// why: O_EXCL keeps a same-second crash from truncating an earlier crash log
+		file, err := os.OpenFile(filepath.Join(dir, filename), os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0666)
+		if !errors.Is(err, fs.ErrExist) {
+			return file, err
+		}
+	}
 }
 
 func SigInt(p any) {
