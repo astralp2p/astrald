@@ -15,6 +15,7 @@ import (
 	"github.com/astralp2p/astral-go/api/secp256k1"
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astrald/core"
+	"github.com/astralp2p/astrald/debug"
 	"github.com/astralp2p/astrald/mod/dir"
 	"github.com/astralp2p/astrald/mod/ether"
 	ipsrc "github.com/astralp2p/astrald/mod/ip/src"
@@ -238,6 +239,9 @@ func setupResources(configDir, dataDir string) (resources.Resources, error) {
 	if err := os.MkdirAll(configDir, 0700); err != nil {
 		return nil, fmt.Errorf("mkdir config: %w", err)
 	}
+
+	// why: an unset LogDir writes crash logs to the process cwd, which a mobile host may not allow
+	debug.LogDir = configDir
 
 	res, err := resources.NewFileResources(configDir, true)
 	if err != nil {
