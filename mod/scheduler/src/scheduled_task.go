@@ -128,6 +128,8 @@ func (task *ScheduledTask) Done() <-chan struct{} {
 // Err returns the error passed to CancelWithError if the task was canceled, otherwise the
 // error returned by the task. Should only be called after the task is done.
 func (task *ScheduledTask) Err() error {
+	task.mu.RLock()
+	defer task.mu.RUnlock()
 	return task.err
 }
 
@@ -150,5 +152,7 @@ func (task *ScheduledTask) setState(state scheduler.State) {
 }
 
 func (task *ScheduledTask) runTime() time.Duration {
+	task.mu.RLock()
+	defer task.mu.RUnlock()
 	return task.doneAt.Sub(task.runAt)
 }
