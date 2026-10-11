@@ -47,7 +47,11 @@ func (mod *Module) addTools(s *mcpsdk.Server, agentID *astral.Identity) {
 			"Narrow an inbox with from and unread_only, an outbox with to and " +
 			"awaiting_pickup; a filter that does not apply to the list you " +
 			"named is refused rather than ignored. Each row carries the box " +
-			"beside the id, and read_messages wants both.",
+			"beside the id, and read_messages wants both. Without limit a " +
+			"listing is whole. limit (at most 100) answers one page of the " +
+			"inbox or outbox, newest first; pass its next_before back as " +
+			"before, with the same limit and filters, for the next older " +
+			"page — no next_before means the last page.",
 	}, mod.listMessagesTool(agentID))
 
 	mcpsdk.AddTool(s, &mcpsdk.Tool{
