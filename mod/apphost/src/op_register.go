@@ -10,6 +10,7 @@ import (
 	"github.com/astralp2p/astral-go/lib/routing"
 	"github.com/astralp2p/astrald/mod/apphost"
 	"github.com/astralp2p/astrald/mod/log/views"
+	secp256k1sig "github.com/astralp2p/astrald/mod/secp256k1"
 )
 
 const RegisterDuration = 10 * 365 * 24 * time.Hour
@@ -59,8 +60,32 @@ func (mod *Module) OpRegister(ctx *astral.Context, query *routing.IncomingQuery,
 	ch := query.Accept(channel.WithFormats(args.In, args.Out))
 	defer ch.Close()
 
-	// generate and store new private key
 	key := secp256k1.New()
+	guestID := secp256k1.Identity(secp256k1.PublicKey(key))
+
+	// generate and sign a relay contract for the guest
+	contract, err := apphost.NewAppContract(guestID, mod.node.Identity(), RegisterDuration)
+	if err != nil {
+		return ch.Send(astral.Err(err))
+	}
+
+	// why the key signs in hand and is stored after the contract is indexed:
+	// storing a key indexes it, and the auth.sign_contract claim exception
+	// recognises a minted key only by its relay contract to the node, so a
+	// failure before that contract is indexed must leave no key behind.
+	signed := &auth.SignedContract{Contract: contract}
+	if signed.IssuerSig, err = secp256k1sig.SignASN1(key, contract.SignableHash()); err != nil {
+		return ch.Send(astral.Err(err))
+	}
+
+	if _, err = mod.Auth.SignSubject(ctx, signed); err != nil {
+		return ch.Send(astral.Err(err))
+	}
+
+	if err = mod.Auth.IndexContract(ctx, signed); err != nil {
+		return ch.Send(astral.Err(err))
+	}
+
 	_, err = mod.Objects.Store(ctx, mod.Objects.WriteDefault(), key)
 	if err != nil {
 		return ch.Send(astral.Err(err))
@@ -68,23 +93,6 @@ func (mod *Module) OpRegister(ctx *astral.Context, query *routing.IncomingQuery,
 
 	err = mod.Crypto.AddToIndex(key)
 	if err != nil {
-		return ch.Send(astral.Err(err))
-	}
-
-	guestID := secp256k1.Identity(secp256k1.PublicKey(key))
-
-	// generate and sign a contract for the guest
-	contract, err := apphost.NewAppContract(guestID, mod.node.Identity(), RegisterDuration)
-	if err != nil {
-		return ch.Send(astral.Err(err))
-	}
-
-	signed := &auth.SignedContract{Contract: contract}
-	if err = mod.Auth.SignContract(ctx, signed); err != nil {
-		return ch.Send(astral.Err(err))
-	}
-
-	if err = mod.Auth.IndexContract(ctx, signed); err != nil {
 		return ch.Send(astral.Err(err))
 	}
 

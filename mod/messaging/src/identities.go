@@ -9,6 +9,7 @@ import (
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astrald/mod/apphost"
 	messagingmod "github.com/astralp2p/astrald/mod/messaging"
+	secp256k1sig "github.com/astralp2p/astrald/mod/secp256k1"
 	"gorm.io/gorm"
 )
 
@@ -100,15 +101,6 @@ func (mod *Module) FindIdentity(identity *astral.Identity) error {
 // a signed node relay contract, mirroring apphost's register flow.
 func (mod *Module) mintIdentity(ctx *astral.Context) (*astral.Identity, error) {
 	key := secp256k1.New()
-
-	if _, err := mod.Objects.Store(ctx, mod.Objects.WriteDefault(), key); err != nil {
-		return nil, err
-	}
-
-	if err := mod.Crypto.AddToIndex(key); err != nil {
-		return nil, err
-	}
-
 	identity := secp256k1.Identity(secp256k1.PublicKey(key))
 
 	contract, err := apphost.NewAppContract(identity, mod.node.Identity(), ContractDuration)
@@ -116,13 +108,29 @@ func (mod *Module) mintIdentity(ctx *astral.Context) (*astral.Identity, error) {
 		return nil, err
 	}
 
+	// why the key signs in hand and is stored after the contract is indexed:
+	// storing a key indexes it, and the auth.sign_contract claim exception
+	// recognises a minted key only by its relay contract to the node, so a
+	// failure before that contract is indexed must leave no key behind.
 	signed := &auth.SignedContract{Contract: contract}
 
-	if err = mod.Auth.SignContract(ctx, signed); err != nil {
+	if signed.IssuerSig, err = secp256k1sig.SignASN1(key, contract.SignableHash()); err != nil {
+		return nil, err
+	}
+
+	if _, err = mod.Auth.SignSubject(ctx, signed); err != nil {
 		return nil, err
 	}
 
 	if err = mod.Auth.IndexContract(ctx, signed); err != nil {
+		return nil, err
+	}
+
+	if _, err = mod.Objects.Store(ctx, mod.Objects.WriteDefault(), key); err != nil {
+		return nil, err
+	}
+
+	if err = mod.Crypto.AddToIndex(key); err != nil {
 		return nil, err
 	}
 

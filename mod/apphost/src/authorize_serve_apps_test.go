@@ -9,6 +9,7 @@ import (
 
 	"github.com/astralp2p/astral-go/api/apphost"
 	"github.com/astralp2p/astral-go/api/auth"
+	"github.com/astralp2p/astral-go/api/crypto"
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astral-go/astral/channel"
 	"github.com/astralp2p/astral-go/astral/log"
@@ -356,7 +357,10 @@ func TestServeAppsRegisterServiceNamesTheHostedIdentity(t *testing.T) {
 // serveAppsSigner signs and indexes every contract without checking it.
 type serveAppsSigner struct{ authmod.Module }
 
-func (serveAppsSigner) SignContract(*astral.Context, *auth.SignedContract) error  { return nil }
+func (serveAppsSigner) SignContract(*astral.Context, *auth.SignedContract) error { return nil }
+func (serveAppsSigner) SignSubject(*astral.Context, *auth.SignedContract) (*crypto.Signature, error) {
+	return nil, nil
+}
 func (serveAppsSigner) IndexContract(*astral.Context, *auth.SignedContract) error { return nil }
 
 // serveAppsKeys accepts every key into the index.

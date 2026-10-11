@@ -8,9 +8,12 @@ import (
 
 	"github.com/astralp2p/astral-go/api/apphost"
 	"github.com/astralp2p/astral-go/api/auth"
+	"github.com/astralp2p/astral-go/api/crypto"
 	"github.com/astralp2p/astral-go/api/messaging"
 	"github.com/astralp2p/astral-go/api/nodes"
+	"github.com/astralp2p/astral-go/api/secp256k1"
 	"github.com/astralp2p/astral-go/astral"
+	authmod "github.com/astralp2p/astrald/mod/auth"
 	objectsmod "github.com/astralp2p/astrald/mod/objects"
 )
 
@@ -171,5 +174,103 @@ func TestAFailedCreateLeavesNoServedMailbox(t *testing.T) {
 	}
 	if n := mod.mailboxes.Len(); n != 0 {
 		t.Fatalf("%v mailboxes mirrored after a failed create, want none", n)
+	}
+}
+
+// relayIndexWatch is the test's auth module, watching the relay contract
+// create_identity indexes: whether the new identity's key was already stored
+// or indexed at that moment, and refusing the contract when err is set.
+type relayIndexWatch struct {
+	authmod.Module
+	objects *stubObjects
+	keys    *keyring
+
+	err     error
+	indexed bool // a relay contract reached the index
+	keyHeld bool // its issuer's key was stored or indexed when it did
+}
+
+func (w *relayIndexWatch) IndexContract(ctx *astral.Context, sc *auth.SignedContract) error {
+	if len(sc.HasPermit(nodes.RelayForAction{}.ObjectType())) == 0 {
+		return w.Module.IndexContract(ctx, sc)
+	}
+
+	_, indexedKey := w.keys.find(secp256k1.FromIdentity(sc.Issuer))
+	w.keyHeld = indexedKey || storedKey(w.objects)
+
+	if w.err != nil {
+		return w.err
+	}
+	w.indexed = true
+	return w.Module.IndexContract(ctx, sc)
+}
+
+// storedKey reports whether any private key reached the store.
+func storedKey(objects *stubObjects) bool {
+	for _, obj := range objects.stored {
+		if _, ok := obj.(*crypto.PrivateKey); ok {
+			return true
+		}
+	}
+	return false
+}
+
+// watchRelayIndex puts a relayIndexWatch in front of the module's auth.
+func watchRelayIndex(mod *Module, err error) *relayIndexWatch {
+	w := &relayIndexWatch{
+		Module:  mod.Auth,
+		objects: mod.Objects.(*stubObjects),
+		keys:    keysOf(mod),
+		err:     err,
+	}
+	mod.Auth = w
+	return w
+}
+
+// The key create_identity mints enters the store and the crypto index only
+// once its relay contract to the node is indexed.
+func TestCreateIdentityIndexesTheRelayContractBeforeTheKey(t *testing.T) {
+	mod, _, _ := testIdentityModule(t)
+	keys := keysOf(mod)
+	watch := watchRelayIndex(mod, nil)
+
+	cred, err := mod.CreateIdentity(mod.ctx, "", 0)
+	if err != nil {
+		t.Fatalf("create identity: %v", err)
+	}
+
+	if !watch.indexed {
+		t.Fatal("create_identity indexed no relay contract")
+	}
+	if watch.keyHeld {
+		t.Fatal("the key was stored or indexed before its relay contract was indexed")
+	}
+	if _, ok := keys.find(secp256k1.FromIdentity(cred.Identity)); !ok {
+		t.Fatal("the created identity's key is not indexed")
+	}
+}
+
+// A failure injected between minting the key and indexing its relay contract
+// leaves no key: none is stored, none is indexed, and no mailbox is served.
+func TestAFailedRelayContractLeavesNoKey(t *testing.T) {
+	mod, _, _ := testIdentityModule(t)
+	keys := keysOf(mod)
+	before := len(keys.keys)
+	watchRelayIndex(mod, errors.New("index refused"))
+
+	if _, err := mod.CreateIdentity(mod.ctx, "", 0); err == nil {
+		t.Fatal("the create answered no error when the relay contract could not be indexed")
+	}
+
+	if n := len(keys.keys); n != before {
+		t.Fatalf("%v keys indexed after a failed relay contract, want %v", n, before)
+	}
+	if storedKey(mod.Objects.(*stubObjects)) {
+		t.Fatal("a key was stored after a failed relay contract")
+	}
+
+	rows, err := mod.db.ListMailboxes()
+	if err != nil || len(rows) != 0 {
+		t.Fatalf("index rows after a failed create: %v, err %v; want none", len(rows), err)
 	}
 }
