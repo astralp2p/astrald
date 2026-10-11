@@ -1,7 +1,6 @@
 package messaging
 
 import (
-	"bytes"
 	"errors"
 	"testing"
 	"time"
@@ -132,19 +131,7 @@ func TestADeliveryAcrossAWithdrawalStoresNothing(t *testing.T) {
 	if err = channel.NewSender(wc).Send(&messaging.Message{ID: testID(1), Content: "late"}); err != nil {
 		t.Fatalf("send message: %v", err)
 	}
-	deadline := time.Now().Add(3 * time.Second)
-	for w.String() == "" {
-		if time.Now().After(deadline) {
-			t.Fatal("no answer to the delivery")
-		}
-		time.Sleep(5 * time.Millisecond)
-	}
-
-	obj, err := channel.NewReceiver(bytes.NewReader([]byte(w.String()))).Receive()
-	if err != nil {
-		t.Fatalf("receive answer: %v", err)
-	}
-	if isAck(obj) {
+	if isAck(receiveAnswer(t, w)) {
 		t.Fatal("a delivery to a withdrawn mailbox was acknowledged")
 	}
 	if n := countOwned(t, mod.db, u); n != 0 {

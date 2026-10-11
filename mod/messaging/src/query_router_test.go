@@ -3,6 +3,7 @@ package messaging
 import (
 	"bytes"
 	"errors"
+	"io"
 	"sync"
 	"testing"
 	"time"
@@ -10,6 +11,7 @@ import (
 	"github.com/astralp2p/astral-go/api/auth"
 	"github.com/astralp2p/astral-go/api/messaging"
 	"github.com/astralp2p/astral-go/astral"
+	"github.com/astralp2p/astral-go/astral/channel"
 	authmod "github.com/astralp2p/astrald/mod/auth"
 )
 
@@ -66,6 +68,29 @@ func (b *bufWriteCloser) String() string {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	return b.buf.String()
+}
+
+// receiveAnswer answers the first object the module wrote to w.
+//
+// why it decodes until a whole object arrives and not until w is non-empty: a
+// sender writes the type and the payload in separate writes, and a snapshot
+// taken between them decodes to EOF.
+func receiveAnswer(t *testing.T, w *bufWriteCloser) astral.Object {
+	t.Helper()
+
+	deadline := time.Now().Add(3 * time.Second)
+	for {
+		obj, err := channel.NewReceiver(bytes.NewReader([]byte(w.String()))).Receive()
+		switch {
+		case err == nil:
+			return obj
+		case !errors.Is(err, io.EOF) && !errors.Is(err, io.ErrUnexpectedEOF):
+			t.Fatalf("receive answer: %v", err)
+		case time.Now().After(deadline):
+			t.Fatal("no answer")
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
 }
 
 // testRouterModuleWithAuth builds the router over an authority that answers
