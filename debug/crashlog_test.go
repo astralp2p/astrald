@@ -40,3 +40,24 @@ func TestSaveLogRepanicsWhenCrashFileCannotBeCreated(t *testing.T) {
 		t.Errorf("after calls = %v, want [boom]", afterCalls)
 	}
 }
+
+func TestCreateCrashLogSuffixesSameSecondNames(t *testing.T) {
+	dir := t.TempDir()
+	at := time.Date(2026, 9, 17, 14, 30, 0, 0, time.UTC)
+	want := []string{
+		"crash.20260917143000.log",
+		"crash.20260917143000.1.log",
+		"crash.20260917143000.2.log",
+	}
+
+	for _, name := range want {
+		file, err := createCrashLog(dir, at)
+		if err != nil {
+			t.Fatalf("createCrashLog: %v", err)
+		}
+		file.Close()
+		if got := filepath.Base(file.Name()); got != name {
+			t.Errorf("crash log name = %q, want %q", got, name)
+		}
+	}
+}
