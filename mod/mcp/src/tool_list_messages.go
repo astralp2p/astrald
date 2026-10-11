@@ -18,6 +18,8 @@ type listMessagesIn struct {
 	UnreadOnly     bool   `json:"unread_only,omitempty" jsonschema:"inbox only — list only what you have not opened"`
 	AwaitingPickup bool   `json:"awaiting_pickup,omitempty" jsonschema:"outbox only — list only sends their node stored and has not handed out"`
 	Since          string `json:"since,omitempty" jsonschema:"inbox only — list only what arrived after this, as a previous answer's next_since"`
+	Before         string `json:"before,omitempty" jsonschema:"inbox or outbox — list only what was written before this, as a previous page's next_before"`
+	Limit          int    `json:"limit,omitempty" jsonschema:"answer at most this many messages, 1 to 100: one page, newest first unless since is given"`
 }
 
 // messageEntry is one message without its body. It carries box because an id
@@ -43,8 +45,9 @@ type messageEntry struct {
 }
 
 type listMessagesOut struct {
-	Messages  []messageEntry `json:"messages" jsonschema:"the messages, without their bodies"`
-	NextSince string         `json:"next_since,omitempty" jsonschema:"pass back as since to see only what arrives after these"`
+	Messages   []messageEntry `json:"messages" jsonschema:"the messages, without their bodies"`
+	NextSince  string         `json:"next_since,omitempty" jsonschema:"pass back as since to see only what arrives after these"`
+	NextBefore string         `json:"next_before,omitempty" jsonschema:"pass back as before, with the same limit and filters, for the next older page; absent on the last page"`
 }
 
 func (mod *Module) listMessagesTool(agentID *astral.Identity) mcpsdk.ToolHandlerFor[listMessagesIn, listMessagesOut] {
@@ -52,6 +55,13 @@ func (mod *Module) listMessagesTool(agentID *astral.Identity) mcpsdk.ToolHandler
 		since, err := parseSince(in.Since)
 		if err != nil {
 			return nil, out, err
+		}
+		before, err := parseCursor("before", in.Before)
+		if err != nil {
+			return nil, out, err
+		}
+		if in.Limit < 0 {
+			return nil, out, fmt.Errorf("limit is a number of messages, not %v", in.Limit)
 		}
 
 		rows, err := mod.Messaging.ListMessages(ctx, agentID, messaging.ListMessagesRequest{
@@ -61,6 +71,8 @@ func (mod *Module) listMessagesTool(agentID *astral.Identity) mcpsdk.ToolHandler
 			Since:          since,
 			UnreadOnly:     in.UnreadOnly,
 			AwaitingPickup: in.AwaitingPickup,
+			Before:         before,
+			Limit:          uint64(in.Limit),
 		})
 		if err != nil {
 			return nil, out, err
@@ -73,6 +85,7 @@ func (mod *Module) listMessagesTool(agentID *astral.Identity) mcpsdk.ToolHandler
 		// caller to remember what it sent. Repeating it makes the instruction
 		// followable with no memory.
 		out.NextSince = answerSince(messaging.NextSince(rows, since), in.Since)
+		out.NextBefore = nextBefore(rows, in)
 
 		return nil, out, nil
 	}
@@ -88,16 +101,34 @@ func answerSince(next uint64, sent string) string {
 	return strconv.FormatUint(next, 10)
 }
 
-// parseSince reads a cursor a previous answer handed out. It is opaque: only
+// nextBefore renders where the next older page starts: the least cursor of a
+// page that answered as many rows as its limit asked. A listing with no limit
+// is whole, and a short page is the last, so neither hands one out.
+//
+// why: under since, or on the archive, messaging refuses before, so a cursor
+// handed out there could only be refused.
+func nextBefore(rows []*messaging.Envelope, in listMessagesIn) string {
+	if in.Limit == 0 || len(rows) < in.Limit || in.Since != "" || in.List == messaging.ListArchive {
+		return ""
+	}
+	return formatSince(messaging.OldestCursor(rows))
+}
+
+// parseSince reads an inbox cursor a previous answer handed out.
+func parseSince(v string) (uint64, error) {
+	return parseCursor("since", v)
+}
+
+// parseCursor reads a cursor a previous answer handed out. It is opaque: only
 // its order means anything, and a caller that invents one gets a refusal rather
 // than a silently wrong page. The empty string is no cursor.
-func parseSince(v string) (uint64, error) {
+func parseCursor(field, v string) (uint64, error) {
 	if v == "" {
 		return 0, nil
 	}
 	n, err := strconv.ParseInt(v, 10, 64)
 	if err != nil || n < 0 {
-		return 0, fmt.Errorf("since is a cursor a previous answer gave you, not %q", v)
+		return 0, fmt.Errorf("%v is a cursor a previous answer gave you, not %q", field, v)
 	}
 	return uint64(n), nil
 }

@@ -81,6 +81,72 @@ func TestAListingRefusesAnInventedCursor(t *testing.T) {
 	}
 }
 
+// before and limit reach messaging as the agent sent them, and a full page
+// hands back its least cursor as next_before.
+func TestAPageNamesTheNextOlderPage(t *testing.T) {
+	mod, msg := testAgentModule(t)
+	agent, peer := astral.GenerateIdentity(), astral.GenerateIdentity()
+
+	// newest first, as the node answers a page
+	msg.listed = []*messaging.Envelope{testEnvelope(peer, agent, 9), testEnvelope(peer, agent, 8)}
+	_, page, err := mod.listMessagesTool(agent)(context.Background(), nil, listMessagesIn{Before: "12", Limit: 2})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if msg.listReq.Before != 12 || msg.listReq.Limit != 2 {
+		t.Fatalf("messaging was asked before %v, limit %v; want 12, 2", msg.listReq.Before, msg.listReq.Limit)
+	}
+	if page.NextBefore != "8" {
+		t.Fatalf("next_before %q, want the least cursor of the page, 8", page.NextBefore)
+	}
+
+	msg.checkCalledAs(t, agent)
+}
+
+// A listing that is not a full page of a list before can page hands out no
+// next_before: there is no older page, or asking one would be refused.
+func TestOnlyAFullPageNamesTheNextOlderPage(t *testing.T) {
+	mod, msg := testAgentModule(t)
+	agent, peer := astral.GenerateIdentity(), astral.GenerateIdentity()
+	msg.listed = []*messaging.Envelope{testEnvelope(peer, agent, 5), testEnvelope(peer, agent, 4)}
+
+	for name, in := range map[string]listMessagesIn{
+		"no limit":    {},
+		"short page":  {Limit: 3},
+		"since":       {Since: "3", Limit: 2},
+		"the archive": {List: messaging.ListArchive, Limit: 2},
+	} {
+		_, out, err := mod.listMessagesTool(agent)(context.Background(), nil, in)
+		if err != nil {
+			t.Fatalf("%v: %v", name, err)
+		}
+		if out.NextBefore != "" {
+			t.Fatalf("%v: next_before %q, want none", name, out.NextBefore)
+		}
+	}
+}
+
+// A before the agent invented, or a negative limit, is refused before
+// messaging is asked.
+func TestAListingRefusesAnInventedPage(t *testing.T) {
+	mod, msg := testAgentModule(t)
+
+	for _, in := range []listMessagesIn{
+		{Before: "-1"},
+		{Before: "older"},
+		{Before: "18446744073709551615"},
+		{Limit: -1},
+	} {
+		_, _, err := mod.listMessagesTool(astral.GenerateIdentity())(context.Background(), nil, in)
+		if err == nil {
+			t.Fatalf("%+v must be refused", in)
+		}
+	}
+	if len(msg.callers) != 0 {
+		t.Fatal("messaging was asked with a page no answer handed out")
+	}
+}
+
 // A listing and a read answer the two parties by identity and nothing else. A
 // display name resolves to this node's own alias for a key or, failing that, to
 // a truncated form of the key itself — so the field could not be absent, and an
