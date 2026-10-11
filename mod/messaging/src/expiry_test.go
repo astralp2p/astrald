@@ -1,7 +1,6 @@
 package messaging
 
 import (
-	"bytes"
 	"errors"
 	"testing"
 	"time"
@@ -45,19 +44,7 @@ func answerOf(t *testing.T, wc interface{ Write([]byte) (int, error) }, w *bufWr
 		t.Fatalf("write: %v", err)
 	}
 
-	deadline := time.Now().Add(3 * time.Second)
-	for w.String() == "" {
-		if time.Now().After(deadline) {
-			t.Fatal("no answer")
-		}
-		time.Sleep(5 * time.Millisecond)
-	}
-
-	answer, err := channel.NewReceiver(bytes.NewReader([]byte(w.String()))).Receive()
-	if err != nil {
-		t.Fatalf("receive answer: %v", err)
-	}
-	return answer
+	return receiveAnswer(t, w)
 }
 
 // A delivery and a receipt admitted before the lapse complete after it: the

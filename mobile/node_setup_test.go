@@ -7,6 +7,7 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/astralp2p/astrald/debug"
 	"github.com/astralp2p/astrald/resources"
 )
 
@@ -73,6 +74,9 @@ func TestSetupResources(t *testing.T) {
 	cfg := filepath.Join(tmp, "cfg")
 	data := filepath.Join(tmp, "data")
 
+	prevLogDir := debug.LogDir
+	t.Cleanup(func() { debug.LogDir = prevLogDir })
+
 	tests := []struct {
 		name     string
 		dataDir  string
@@ -84,6 +88,7 @@ func TestSetupResources(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			debug.LogDir = ""
 			res, err := setupResources(cfg, tt.dataDir)
 			if err != nil {
 				t.Fatalf("setupResources: %v", err)
@@ -99,6 +104,9 @@ func TestSetupResources(t *testing.T) {
 			}
 			if got := roots.DataRoot(); got != tt.wantRoot {
 				t.Fatalf("DataRoot() = %q, want %q", got, tt.wantRoot)
+			}
+			if debug.LogDir != cfg {
+				t.Fatalf("debug.LogDir = %q, want %q", debug.LogDir, cfg)
 			}
 		})
 	}

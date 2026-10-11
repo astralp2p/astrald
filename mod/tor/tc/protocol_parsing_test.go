@@ -73,6 +73,27 @@ func TestParseProtocolInfo(t *testing.T) {
 	}
 }
 
+func TestSplitWords(t *testing.T) {
+	tests := []struct {
+		name string
+		line string
+		want []string
+	}{
+		{"bare", `AUTH METHODS=NULL`, []string{"AUTH", "METHODS=NULL"}},
+		{"quoted space", `AUTH COOKIEFILE="/a b/c" X=1`, []string{"AUTH", `COOKIEFILE="/a b/c"`, "X=1"}},
+		{"escaped quote", `K="a\" b" X=1`, []string{`K="a\" b"`, "X=1"}},
+		{"repeated spaces", `A  B`, []string{"A", "", "B"}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := splitWords(tt.line); !slices.Equal(got, tt.want) {
+				t.Errorf("splitWords(%q) = %q; want %q", tt.line, got, tt.want)
+			}
+		})
+	}
+}
+
 func TestProtocolInfoHasAuthMethod(t *testing.T) {
 	if (ProtocolInfo{}).HasAuthMethod("COOKIE") {
 		t.Error("empty ProtocolInfo HasAuthMethod(COOKIE) = true; want false")
