@@ -1,10 +1,8 @@
 package messaging
 
 import (
-	"bytes"
 	"io"
 	"testing"
-	"time"
 
 	"github.com/astralp2p/astral-go/api/messaging"
 	"github.com/astralp2p/astral-go/astral"
@@ -137,17 +135,5 @@ func deliverOverRouter(t *testing.T, mod *Module, recipient *astral.Identity, ms
 		t.Fatalf("send message: %v", err)
 	}
 
-	deadline := time.Now().Add(3 * time.Second)
-	for w.String() == "" {
-		if time.Now().After(deadline) {
-			t.Fatal("no answer to the delivery")
-		}
-		time.Sleep(5 * time.Millisecond)
-	}
-
-	obj, err := channel.NewReceiver(bytes.NewReader([]byte(w.String()))).Receive()
-	if err != nil {
-		t.Fatalf("receive answer: %v", err)
-	}
-	return obj
+	return receiveAnswer(t, w)
 }
