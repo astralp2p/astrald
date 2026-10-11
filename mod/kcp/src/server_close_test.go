@@ -121,3 +121,70 @@ func TestServerCloseBeforeRunReleasesPort(t *testing.T) {
 	}
 	rebind.Close()
 }
+
+// TestServerRunErrorReleasesPort pins that a Run returning an error after it
+// bound its listener releases the port and closes Done, so a failed server
+// does not keep the UDP port bound.
+func TestServerRunErrorReleasesPort(t *testing.T) {
+	listenPort := reserveUDPPort(t)
+
+	mod := &Module{log: log.New(astral.GenerateIdentity())}
+	handler := func(context.Context, exonetmod.Conn) (bool, error) { return false, nil }
+	srv := NewServer(mod, astral.Uint16(listenPort), handler, 0)
+	result := startRun(t, srv)
+
+	listener := waitListener(t, srv)
+
+	// why: an expired read deadline makes the next accept fail, which drives
+	// Run down its error return while the server is still open.
+	listener.SetReadDeadline(time.Now().Add(-time.Second))
+
+	client, err := kcpgo.DialWithOptions(net.JoinHostPort("127.0.0.1", strconv.Itoa(listenPort)), nil, 0, 0)
+	if err != nil {
+		t.Fatalf("dial: %v", err)
+	}
+	defer client.Close()
+	if _, err := client.Write([]byte{0}); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+
+	select {
+	case err := <-result:
+		if err == nil {
+			t.Fatal("Run returned nil, want an accept error")
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("Run did not return after a failed accept")
+	}
+
+	select {
+	case <-srv.Done():
+	default:
+		t.Fatal("Done not closed after Run returned an error")
+	}
+
+	rebind, err := net.ListenUDP("udp", &net.UDPAddr{Port: listenPort})
+	if err != nil {
+		t.Fatalf("port still bound after Run returned an error: %v", err)
+	}
+	rebind.Close()
+}
+
+// waitListener returns the listener Run binds for srv.
+func waitListener(t *testing.T, srv *Server) *kcpgo.Listener {
+	t.Helper()
+
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		srv.mu.Lock()
+		l := srv.listener
+		srv.mu.Unlock()
+		if l != nil {
+			return l
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+
+	t.Fatal("Run bound no listener")
+	return nil
+}

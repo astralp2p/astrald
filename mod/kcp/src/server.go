@@ -58,6 +58,9 @@ func (s *Server) Run(ctx *astral.Context) error {
 	s.listener = kcpListener
 	s.mu.Unlock()
 
+	// why: an error return would otherwise leave the UDP port bound and Done open.
+	defer s.Close()
+
 	localEndpoint, err := kcpmod.ParseEndpoint(kcpListener.Addr().String())
 	if err != nil {
 		return fmt.Errorf(`kcp server/run: failed to parse local endpoint %v: %w`,
