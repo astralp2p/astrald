@@ -42,6 +42,15 @@ func (mod *Module) LoadDependencies(ctx *astral.Context) (err error) {
 		return err
 	}
 
+	// why NoLocal: a failed save must fail the setter, not fall back to memory.
+	mod.policy.SwarmJoin.NoLocal = true
+	mod.policy.SwarmInvite.NoLocal = true
+	if err = tree.BindPath(ctx, &mod.policy, mod.Tree.Root(), policyPath, true); err != nil {
+		return err
+	}
+	mod.joinPolicy = mod.selectJoinPolicy(mod.policy.SwarmJoin.Get())
+	mod.invitePolicy = mod.selectInvitePolicy(mod.policy.SwarmInvite.Get())
+
 	mod.Auth.Add(authmod.Func[*nodes.RelayForAction](mod.AuthorizeRelayFor))
 	mod.Auth.Add(authmod.Func[*auth.SeeObjectsAction](mod.AuthorizeSeeObjects))
 	mod.Auth.Add(authmod.Func[*auth.StoreObjectsAction](mod.AuthorizeStoreObjects))

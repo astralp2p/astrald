@@ -1,29 +1,90 @@
 package user
 
 import (
-	"github.com/astralp2p/astral-go/api/auth"
+	"github.com/astralp2p/astral-go/api/policy"
+	"github.com/astralp2p/astral-go/api/user"
 	"github.com/astralp2p/astral-go/astral"
-	"github.com/astralp2p/astrald/mod/user"
+	usermod "github.com/astralp2p/astrald/mod/user"
 )
 
-func (mod *Module) GetSwarmJoinRequestPolicy() user.SwarmJoinRequestPolicy {
-	return mod.SwarmJoinRequestAcceptAll
+// GetSwarmJoinRequestPolicy returns the join policy: the delegated policy when
+// a delegate is set, accept-all otherwise.
+func (mod *Module) GetSwarmJoinRequestPolicy() usermod.SwarmJoinRequestPolicy {
+	mod.policyMu.RLock()
+	defer mod.policyMu.RUnlock()
+
+	if mod.joinPolicy == nil {
+		return mod.SwarmJoinRequestAcceptAll
+	}
+	return mod.joinPolicy
 }
 
-var _ user.SwarmJoinRequestPolicy = (*Module)(nil).SwarmJoinRequestAcceptAll
+// GetSwarmInvitePolicy returns the invite policy: the delegated policy when a
+// delegate is set, accept-all otherwise.
+func (mod *Module) GetSwarmInvitePolicy() usermod.SwarmInvitePolicy {
+	mod.policyMu.RLock()
+	defer mod.policyMu.RUnlock()
 
-func (mod *Module) SwarmJoinRequestAcceptAll(requester *astral.Identity) bool {
-	mod.log.Info("Accepting %v join request into swarm", requester)
-	return true
+	if mod.invitePolicy == nil {
+		return mod.SwarmInviteAcceptAll
+	}
+	return mod.invitePolicy
 }
 
-func (mod *Module) GetSwarmInvitePolicy() user.SwarmInvitePolicy {
-	return mod.SwarmInviteAcceptAll
+// SetSwarmJoinRequestPolicy persists the delegate, then selects the policy it
+// names. A zero delegate restores accept-all. A failed save leaves the policy
+// as it was.
+func (mod *Module) SetSwarmJoinRequestPolicy(ctx *astral.Context, d *policy.PolicyDelegate) error {
+	mod.policyMu.Lock()
+	defer mod.policyMu.Unlock()
+
+	if err := saveDelegate(ctx, &mod.policy.SwarmJoin, d); err != nil {
+		return err
+	}
+	mod.joinPolicy = mod.selectJoinPolicy(d)
+
+	return nil
 }
 
-var _ user.SwarmInvitePolicy = (*Module)(nil).SwarmInviteAcceptAll
+// SetSwarmInvitePolicy persists the delegate, then selects the policy it names.
+// A zero delegate restores accept-all. A failed save leaves the policy as it
+// was.
+func (mod *Module) SetSwarmInvitePolicy(ctx *astral.Context, d *policy.PolicyDelegate) error {
+	mod.policyMu.Lock()
+	defer mod.policyMu.Unlock()
 
-func (mod *Module) SwarmInviteAcceptAll(invitee *astral.Identity, contract *auth.Contract) bool {
-	mod.log.Info("Accepting invitation from %v for %v join swarm till %v", invitee, contract.Subject, contract.ExpiresAt)
-	return true
+	if err := saveDelegate(ctx, &mod.policy.SwarmInvite, d); err != nil {
+		return err
+	}
+	mod.invitePolicy = mod.selectInvitePolicy(d)
+
+	return nil
+}
+
+func (mod *Module) selectJoinPolicy(d *policy.PolicyDelegate) usermod.SwarmJoinRequestPolicy {
+	if d.IsZero() {
+		return mod.SwarmJoinRequestAcceptAll
+	}
+	return mod.SwarmJoinRequestPolicyDelegated(d)
+}
+
+func (mod *Module) selectInvitePolicy(d *policy.PolicyDelegate) usermod.SwarmInvitePolicy {
+	if d.IsZero() {
+		return mod.SwarmInviteAcceptAll
+	}
+	return mod.SwarmInvitePolicyDelegated(d)
+}
+
+var _ usermod.SwarmJoinRequestPolicy = (*Module)(nil).SwarmJoinRequestAcceptAll
+
+func (mod *Module) SwarmJoinRequestAcceptAll(_ *astral.Context, req *user.SwarmJoinRequest) (*user.SwarmJoinDecision, error) {
+	mod.log.Info("Accepting %v join request into swarm", req.Requester)
+	return &user.SwarmJoinDecision{Allow: true}, nil
+}
+
+var _ usermod.SwarmInvitePolicy = (*Module)(nil).SwarmInviteAcceptAll
+
+func (mod *Module) SwarmInviteAcceptAll(_ *astral.Context, req *user.SwarmInviteRequest) (*user.SwarmInviteDecision, error) {
+	mod.log.Info("Accepting invitation from %v for %v join swarm till %v", req.Inviter, req.Contract.Subject, req.Contract.ExpiresAt)
+	return &user.SwarmInviteDecision{Allow: true}, nil
 }
