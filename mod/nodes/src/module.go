@@ -47,8 +47,6 @@ type Module struct {
 	strategyFactories sig.Map[string, nodesmod.StrategyFactory]
 	upgraders         sig.Map[string, *sig.Switch]
 
-	searchCache sig.Map[string, *astral.Identity]
-
 	privateKey *crypto.PrivateKey
 }
 

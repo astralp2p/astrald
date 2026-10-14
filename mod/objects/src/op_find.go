@@ -13,7 +13,7 @@ import (
 
 type opFindArgs struct {
 	ID   *astral.ObjectID `query:"required"`
-	Zone astral.Zone
+	Zone *astral.Zone
 	Out  string
 }
 
@@ -25,8 +25,18 @@ func (mod *Module) OpFind(ctx *astral.Context, q *routing.IncomingQuery, args op
 		return q.Reject()
 	}
 
-	ctx, cancel := ctx.WithIdentity(q.Caller()).IncludeZone(args.Zone).WithTimeout(time.Minute)
+	ctx, cancel := ctx.WithIdentity(q.Caller()).WithTimeout(time.Minute)
 	defer cancel()
+
+	if args.Zone != nil {
+		ctx = ctx.LimitZone(*args.Zone)
+	}
+
+	// why: a query from the network answers from this node alone. Its sender
+	// already asks every swarm member, and a second hop sends it back (objects.find spec).
+	if q.Origin() == astral.OriginNetwork {
+		ctx = ctx.ExcludeZone(astral.ZoneNetwork)
+	}
 
 	ch := q.Accept(channel.WithOutputFormat(args.Out))
 	defer ch.Close()

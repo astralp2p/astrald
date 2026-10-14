@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -92,7 +93,14 @@ func newOpFixture(t *testing.T) *opFixture {
 	reads := &readsSink{}
 	lg := log.New(astral.GenerateIdentity())
 	mod := &Module{Deps: Deps{Auth: &recordingAuth{verdict: true}}, config: defaultConfig, db: db, log: lg}
+	mod.node = &identityNode{id: astral.GenerateIdentity()}
 	mod.objectsReadsJournal = newObjectsReadsJournal(reads.record, lg)
+
+	// why: a read without a repo reads from the candidates the finders name; the
+	// loader adds this finder on a running node (loader.go).
+	if err := mod.AddFinder(mod); err != nil {
+		t.Fatalf("add local finder: %v", err)
+	}
 
 	repo := mem.New("main", 0)
 	addRepo(t, mod, "main", repo)
@@ -606,22 +614,23 @@ func (d *recordingDescriber) recorded() []astral.ObjectID {
 	return append([]astral.ObjectID(nil), d.asked...)
 }
 
-// TestPartialID_FindAndDescribeIgnoreTheRepositories pins the decided limitation:
-// find and describe do not resolve a partial ID locally. With no provider, both answer
-// only an EOS for an object the main repository holds.
-func TestPartialID_FindAndDescribeIgnoreTheRepositories(t *testing.T) {
+// TestPartialID_FindResolvesTheReadDefaultRepository pins how a partial ID reaches
+// the repositories: the local finder resolves it against the read-default
+// repository, so find names this node; describe does not resolve it locally and,
+// with no describer, answers only an EOS.
+func TestPartialID_FindResolvesTheReadDefaultRepository(t *testing.T) {
 	f := newOpFixture(t)
 	full := f.store(t, typedData(t))
 	partial := full.PartialString()
 
-	for _, op := range []struct {
-		name string
-		fn   any
-	}{{"objects.find", f.mod.OpFind}, {"objects.describe", f.mod.OpDescribe}} {
-		replies := call(t, op.fn, op.name+"?id="+partial)
-		if len(replies) != 1 || replies[0].ObjectType() != (&astral.EOS{}).ObjectType() {
-			t.Fatalf("%s answered %v for a stored object; want only an EOS", op.name, replies)
-		}
+	provider := streamed[*astral.Identity](t, call(t, f.mod.OpFind, "objects.find?id="+partial))
+	if !provider.IsEqual(f.mod.node.Identity()) {
+		t.Fatalf("find answered %v; want this node %v", provider, f.mod.node.Identity())
+	}
+
+	replies := call(t, f.mod.OpDescribe, "objects.describe?id="+partial)
+	if len(replies) != 1 || replies[0].ObjectType() != (&astral.EOS{}).ObjectType() {
+		t.Fatalf("objects.describe answered %v for a stored object; want only an EOS", replies)
 	}
 }
 
@@ -635,9 +644,13 @@ func TestPartialID_FindAndDescribePassThePartialToProviders(t *testing.T) {
 
 	finder, describer := addRecordingProviders(t, f.mod)
 
-	provider := streamed[*astral.Identity](t, call(t, f.mod.OpFind, "objects.find?id="+full.PartialString()))
-	if !provider.IsEqual(finder.provider) {
-		t.Fatalf("find answered %v; want the finder's provider %v", provider, finder.provider)
+	// note: the local finder also names this node, since the main repository holds the object.
+	providers := call(t, f.mod.OpFind, "objects.find?id="+full.PartialString())
+	if len(providers) != 3 || !slices.ContainsFunc(providers[:2], func(o astral.Object) bool {
+		id, ok := o.(*astral.Identity)
+		return ok && id.IsEqual(finder.provider)
+	}) {
+		t.Fatalf("find answered %v; want the finder's provider %v, this node and an EOS", providers, finder.provider)
 	}
 
 	descriptor := streamed[*objects.Descriptor](t, call(t, f.mod.OpDescribe, "objects.describe?id="+full.PartialString()))

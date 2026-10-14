@@ -44,11 +44,10 @@ type Module interface {
 	Store(*astral.Context, Repository, astral.Object) (*astral.ObjectID, error)
 
 	AddDescriber(objects.Describer) error
-	Describe(*astral.Context, *astral.ObjectID) (<-chan *objects.Descriptor, error)
+	Describe(*astral.Context, *objects.Describe) (<-chan *objects.Descriptor, error)
 
-	Search(ctx *astral.Context, query objects.SearchQuery) (<-chan *objects.SearchResult, error)
+	Search(*astral.Context, *objects.Search) (<-chan *objects.SearchResult, error)
 	AddSearcher(objects.Searcher) error
-	AddSearchPreprocessor(objects.SearchPreprocessor) error
 
 	AddFinder(objects.Finder) error
 	Find(*astral.Context, *astral.ObjectID) (<-chan *astral.Identity, error)

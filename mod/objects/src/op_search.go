@@ -3,6 +3,8 @@ package objects
 import (
 	"fmt"
 	objectsmod "github.com/astralp2p/astrald/mod/objects"
+	"slices"
+	"strings"
 	"time"
 
 	"github.com/astralp2p/astral-go/api/auth"
@@ -14,10 +16,12 @@ import (
 )
 
 type SearchArgs struct {
-	Query string `query:"key:q"`
-	Repo  string // return only objects that this repo contains
-	Zone  astral.Zone
-	Out   string
+	Query       string `query:"key:q"`
+	Repo        string // return only objects that this repo contains
+	Zone        *astral.Zone
+	Sources     string // comma-separated identities to ask
+	SourcesOnly bool   // ask only Sources, not the registered searchers
+	Out         string
 }
 
 // OpSearch streams matches for the query, deduplicated by ObjectID and
@@ -30,8 +34,12 @@ func (mod *Module) OpSearch(ctx *astral.Context, q *routing.IncomingQuery, args 
 		return q.Reject()
 	}
 
-	ctx, cancel := ctx.WithIdentity(q.Caller()).IncludeZone(args.Zone).WithTimeout(time.Minute)
+	ctx, cancel := ctx.WithIdentity(q.Caller()).WithTimeout(time.Minute)
 	defer cancel()
+
+	if args.Zone != nil {
+		ctx = ctx.LimitZone(*args.Zone)
+	}
 
 	// why: a query from the network answers from this node alone. Its sender
 	// already fans out, and a second hop sends it back (objects.search spec).
@@ -51,11 +59,30 @@ func (mod *Module) OpSearch(ctx *astral.Context, q *routing.IncomingQuery, args 
 		}
 	}
 
+	// resolve sources if provided
+	var sources []*astral.Identity
+	if len(args.Sources) > 0 {
+		for _, name := range strings.Split(args.Sources, ",") {
+			source, err := mod.Dir.ResolveIdentity(name)
+			if err != nil {
+				return ch.Send(astral.Err(err))
+			}
+			if !slices.ContainsFunc(sources, source.IsEqual) {
+				sources = append(sources, source)
+			}
+		}
+	}
+
 	var searchQuery objects.SearchQuery
 	_ = searchQuery.UnmarshalText([]byte(args.Query))
 
 	// run the search
-	matches, err := mod.Search(ctx, searchQuery)
+	matches, err := mod.Search(ctx, &objects.Search{
+		CallerID:    q.Caller(),
+		Query:       searchQuery,
+		Sources:     sources,
+		SourcesOnly: args.SourcesOnly,
+	})
 	if err != nil {
 		return ch.Send(astral.NewError(err.Error()))
 	}

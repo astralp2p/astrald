@@ -1,6 +1,8 @@
 package user
 
 import (
+	"slices"
+
 	"github.com/astralp2p/astral-go/api/auth"
 	"github.com/astralp2p/astral-go/api/nodes"
 	"github.com/astralp2p/astral-go/api/user"
@@ -68,18 +70,18 @@ func (mod *Module) AuthorizeRelayFor(ctx *astral.Context, a *nodes.RelayForActio
 	return false
 }
 
-// AuthorizeSeeObjects grants object reads to the user identity and to this node
-// itself, and to nobody else.
+// AuthorizeSeeObjects grants object reads to the user identity, to this node
+// itself, and to every member of the local swarm.
 //
-// why the swarm is not in the grant: a sibling as itself would read every
-// object. A search or describe that fans out to siblings forwards its caller's
-// identity (core.NewClientAs), so the user's own queries still reach them.
+// why the swarm is in the grant: a node shows the objects in its repositories to
+// its swarm peers by default. A host authorizes its own caller, then asks its
+// peers as itself, and a peer trusts that decision (mod.auth.see_objects_action spec).
 //
 // why this node's own identity is granted: a local caller with no identity is
 // promoted to the node (core/router.go), so the node reads back on an unclaimed
 // node the objects it just stored there, before any user or swarm exists.
 func (mod *Module) AuthorizeSeeObjects(ctx *astral.Context, a *auth.SeeObjectsAction) bool {
-	return mod.authorizeUserOrNode(a.Actor())
+	return mod.authorizeUserOrNode(a.Actor()) || slices.ContainsFunc(mod.LocalSwarm(), a.Actor().IsEqual)
 }
 
 // AuthorizeStoreObjects grants object writes to the user identity and to this

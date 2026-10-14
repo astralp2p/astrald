@@ -12,25 +12,25 @@ import (
 	"github.com/astralp2p/astral-go/sig"
 )
 
-// Search runs all local searchers, and network searchers when the context zone permits, merging their results into one channel.
+// Search runs the registered searchers, unless search.SourcesOnly is set, and
+// asks each of search.Sources when the context zone permits the network,
+// merging their results into one channel.
 // The channel closes once every searcher finishes; the returned error reports only setup failures.
-func (mod *Module) Search(ctx *astral.Context, query objects.SearchQuery) (<-chan *objects.SearchResult, error) {
-	search := &objects.Search{
-		CallerID: ctx.Identity(),
-		Query:    query,
-	}
-
-	for _, pre := range mod.searchPre.Clone() {
-		pre.PreprocessSearch(search)
-	}
+func (mod *Module) Search(ctx *astral.Context, search *objects.Search) (<-chan *objects.SearchResult, error) {
+	query := search.Query
 
 	var results = make(chan *objects.SearchResult)
 	var wg sync.WaitGroup
 
-	// run local searchers
+	// run registered searchers
 	now := time.Now()
 
-	for _, searcher := range mod.searchers.Clone() {
+	var searchers []objects.Searcher
+	if !search.SourcesOnly {
+		searchers = mod.searchers.Clone()
+	}
+
+	for _, searcher := range searchers {
 		searcher := searcher
 
 		// why: an expired registration is skipped here rather than only by the sweep,
@@ -67,18 +67,25 @@ func (mod *Module) Search(ctx *astral.Context, query objects.SearchQuery) (<-cha
 		}()
 	}
 
-	// run network searchers
+	// ask the sources
 	if ctx.Zone().Is(astral.ZoneNetwork) {
 		for _, nodeID := range search.Sources {
 			nodeID := nodeID
+
+			// why: asking this node would re-enter objects.search as a local query and run the searchers again.
+			if nodeID.IsEqual(mod.node.Identity()) {
+				continue
+			}
 
 			wg.Add(1)
 			go func() {
 				defer wg.Done()
 
 				// execute search
-				// why: the source authorizes the caller, not this node (objects.search spec).
-				_results, errPtr := objectscli.New(nodeID, core.NewClientAs(mod.node, search.CallerID)).Search(ctx, query)
+				// why: the host authorized its caller; the source serves the host as
+				// itself and trusts that decision (objects.search spec).
+				// note: the context identity must be the node too, or the link relays for the caller (core/router_adapter.go).
+				_results, errPtr := objectscli.New(nodeID, core.NewClientAs(mod.node, mod.node.Identity())).Search(ctx.WithIdentity(mod.node.Identity()), query)
 				if _results == nil {
 					if errPtr != nil && *errPtr != nil {
 						mod.log.Errorv(1, "search %v: %v", nodeID, *errPtr)

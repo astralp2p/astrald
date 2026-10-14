@@ -46,12 +46,18 @@ func TestAuthorizeObjectAccessGrantsTheNodeOnUnclaimedNode(t *testing.T) {
 	}
 }
 
-// TestSeeObjectsGrantsUserAndNodeOnly pins the default holders of SeeObjects on a
-// claimed node: the user identity and this node. A current swarm member is refused.
-func TestSeeObjectsGrantsUserAndNodeOnly(t *testing.T) {
+// TestSeeObjectsGrantsUserNodeAndSwarm pins the default holders of SeeObjects on a
+// claimed node: the user identity, this node and a current swarm member. An
+// expelled member and a node of another user's swarm are refused.
+func TestSeeObjectsGrantsUserNodeAndSwarm(t *testing.T) {
 	mod, f := swarmFixture(t)
 
 	for _, c := range f.cases() {
+		// why: a node shows its objects to its swarm peers by default.
+		if c.actor == f.member {
+			c.want = true
+		}
+
 		a := &auth.SeeObjectsAction{Action: auth.NewAction(c.actor)}
 		if got := mod.AuthorizeSeeObjects(nil, a); got != c.want {
 			t.Errorf("%s: authorized %v; want %v", c.name, got, c.want)

@@ -22,6 +22,9 @@ func (Loader) Load(node astral.Node, assets assets.Assets, log *log.Logger) (cor
 
 	mod.router.AddStructPrefix(mod, "Op")
 
+	// why: the deps scan skips this module (deps.go), so its own finder is added here.
+	mod.AddFinder(mod)
+
 	mod.db = &DB{DB: assets.Database()}
 	mod.objectsReadsJournal = newObjectsReadsJournal(mod.db.UpdateReadAt, log)
 
