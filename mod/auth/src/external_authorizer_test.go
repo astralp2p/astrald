@@ -58,9 +58,7 @@ func withAuthority(t *testing.T, mod *Module) *stubAsk {
 	t.Helper()
 
 	stub := &stubAsk{}
-	if err := mod.AddExternal("test.action", ExternalConfig{}, stub); err != nil {
-		t.Fatalf("add external: %v", err)
-	}
+	mod.AddExternalAuthorizer("test.action", nil, ExternalConfig{}, stub)
 
 	return stub
 }
@@ -279,7 +277,7 @@ func TestHTTPAuthorityRefusesAProxyPage(t *testing.T) {
 // authenticates to an http authority.
 func TestHTTPAuthorityCarriesTheBearerToken(t *testing.T) {
 	authority := &authorityServer{status: http.StatusOK, body: `{"allow":true}`}
-	h := overHTTP(t, authority.serve(t).URL, ExternalConfig{Token: "s3cr3t"})
+	h := overHTTP(t, authority.serve(t).URL, ExternalConfig{TokenValue: "s3cr3t"})
 
 	h.Authorize(astral.NewContext(nil), action(astral.GenerateIdentity()))
 
@@ -353,6 +351,26 @@ func TestHTTPAskerReadsATokenFile(t *testing.T) {
 
 	if asker.token != "from-a-file" {
 		t.Fatalf("token: got %q, want %q", asker.token, "from-a-file")
+	}
+}
+
+func TestHTTPAskerReadsATokenEnv(t *testing.T) {
+	t.Setenv("ASTRALD_TEST_AUTHZ_TOKEN", " from-env\n")
+
+	asker, err := newHTTPAuthorizer(ExternalConfig{Endpoint: "http://localhost/authorize", TokenEnv: "ASTRALD_TEST_AUTHZ_TOKEN"})
+	if err != nil {
+		t.Fatalf("build: %v", err)
+	}
+
+	if asker.token != "from-env" {
+		t.Fatalf("token: got %q, want %q", asker.token, "from-env")
+	}
+}
+
+func TestHTTPAskerRefusesAnUnsetTokenEnv(t *testing.T) {
+	_, err := newHTTPAuthorizer(ExternalConfig{Endpoint: "http://localhost/authorize", TokenEnv: "ASTRALD_TEST_AUTHZ_UNSET"})
+	if err == nil {
+		t.Fatal("an unset token variable was accepted")
 	}
 }
 
@@ -505,10 +523,8 @@ func TestNewAskerSelectsTheTransport(t *testing.T) {
 	}
 }
 
-func TestAddExternalAuthorizersRefusesTwoAuthoritiesForOneAction(t *testing.T) {
-	mod := testModule(t)
-
-	err := mod.addExternalAuthorizers([]ExternalConfig{
+func TestConfigAssignmentsRefusesTwoAuthoritiesForOneAction(t *testing.T) {
+	_, err := configAssignments([]ExternalConfig{
 		{Endpoint: "http://first/authorize", Actions: []string{"test.action"}},
 		{Endpoint: "http://second/authorize", Actions: []string{"test.action"}},
 	})
@@ -518,82 +534,78 @@ func TestAddExternalAuthorizersRefusesTwoAuthoritiesForOneAction(t *testing.T) {
 	}
 }
 
-func TestAddExternalAuthorizersRefusesAnIncompleteEntry(t *testing.T) {
+func TestConfigAssignmentsRefusesAnIncompleteEntry(t *testing.T) {
 	for name, config := range map[string]ExternalConfig{
 		"no endpoint": {Actions: []string{"test.action"}},
 		"no actions":  {Endpoint: "http://authz/authorize"},
-		"bad scheme":  {Endpoint: "ftp://authz/authorize", Actions: []string{"test.action"}},
+		"two tokens":  {Endpoint: "http://authz/authorize", Actions: []string{"test.action"}, TokenValue: "a", TokenEnv: "B"},
 	} {
 		t.Run(name, func(t *testing.T) {
-			if err := testModule(t).addExternalAuthorizers([]ExternalConfig{config}); err == nil {
+			if _, err := configAssignments([]ExternalConfig{config}); err == nil {
 				t.Fatal("an incomplete entry was accepted")
 			}
 		})
 	}
 }
 
-// TestAddExternalAuthorizersAppliesDefaults: a timeout of zero would refuse
-// every question the moment it was asked.
-func TestAddExternalAuthorizersAppliesDefaults(t *testing.T) {
+func TestAddAssignmentRefusesAnUnknownScheme(t *testing.T) {
+	err := testModule(t).addAssignment(&auth.AuthorizerAssignment{Action: "test.action", Endpoint: "ftp://authz/authorize"})
+	if err == nil {
+		t.Fatal("an unknown scheme was accepted")
+	}
+}
+
+// TestAddAssignmentAppliesDefaults: a timeout of zero would refuse every
+// question the moment it was asked.
+func TestAddAssignmentAppliesDefaults(t *testing.T) {
 	mod := testModule(t)
 
-	err := mod.addExternalAuthorizers([]ExternalConfig{
-		{Endpoint: "astral://telepathy:auth.authorize", Actions: []string{"test.action"}},
-	})
+	err := mod.addAssignment(&auth.AuthorizerAssignment{Action: "test.action", Endpoint: "astral://telepathy:auth.authorize"})
 	if err != nil {
 		t.Fatalf("add: %v", err)
 	}
 
 	h, ok := mod.external.Get("test.action")
 	if !ok {
-		t.Fatal("no authorizer registered for the configured action")
+		t.Fatal("no authorizer registered for the assigned action")
 	}
 	if h.config.Timeout != defaultExternal.Timeout {
 		t.Fatalf("timeout: got %v, want %v", h.config.Timeout, defaultExternal.Timeout)
 	}
 }
 
-// TestOneAuthorityServesEveryActionItNames: an entry naming two actions
-// registers two authorizers over one ask, so one endpoint is reached one way.
-func TestOneAuthorityServesEveryActionItNames(t *testing.T) {
-	mod := testModule(t)
-
-	err := mod.addExternalAuthorizers([]ExternalConfig{{
+// TestOneEntryAssignsEveryActionItNames: an entry naming two actions becomes
+// one action-wide assignment per action, each to the entry's endpoint.
+func TestOneEntryAssignsEveryActionItNames(t *testing.T) {
+	list, err := configAssignments([]ExternalConfig{{
 		Endpoint: "http://authz/authorize",
 		Actions:  []string{"test.action", "test.other_action"},
 	}})
 	if err != nil {
-		t.Fatalf("add: %v", err)
+		t.Fatalf("config: %v", err)
 	}
 
-	first, ok := mod.external.Get("test.action")
-	if !ok {
-		t.Fatal("no authorizer for test.action")
+	if len(list) != 2 || list[0].Action != "test.action" || list[1].Action != "test.other_action" {
+		t.Fatalf("assignments: %+v", list)
 	}
-	second, ok := mod.external.Get("test.other_action")
-	if !ok {
-		t.Fatal("no authorizer for test.other_action")
-	}
-
-	if first.ask != second.ask {
-		t.Fatal("two actions of one entry do not share the ask")
+	for _, a := range list {
+		if a.Endpoint != "http://authz/authorize" || a.Actor != nil {
+			t.Fatalf("assignment %+v is not action-wide to the entry's endpoint", a)
+		}
 	}
 }
 
-// TestAddExternalTakesAnyAsk is the openness the interface buys: an authority
-// reached by means this module knows nothing about registers like a configured
-// one, which is what an op would do.
-func TestAddExternalTakesAnyAsk(t *testing.T) {
+// TestAddExternalAuthorizerTakesAnyAsk is the openness the interface buys: an
+// authority reached by means this module knows nothing about is added like an
+// assigned one.
+func TestAddExternalAuthorizerTakesAnyAsk(t *testing.T) {
 	mod := testModule(t)
 	ctx := astral.NewContext(nil)
 
-	stub := &stubAsk{answer: true}
-	if err := mod.AddExternal("test.action", ExternalConfig{}, stub); err != nil {
-		t.Fatalf("add: %v", err)
-	}
+	mod.AddExternalAuthorizer("test.action", nil, ExternalConfig{}, &stubAsk{answer: true})
 
 	if !mod.Authorize(ctx, action(astral.GenerateIdentity())) {
-		t.Fatal("an ask registered without configuration did not decide")
+		t.Fatal("an ask added without configuration did not decide")
 	}
 }
 

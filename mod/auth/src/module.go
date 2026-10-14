@@ -3,6 +3,8 @@ package auth
 import (
 	"sync"
 
+	apiauth "github.com/astralp2p/astral-go/api/auth"
+	"github.com/astralp2p/astral-go/api/tree"
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astral-go/astral/log"
 	"github.com/astralp2p/astral-go/lib/routing"
@@ -29,9 +31,18 @@ type Module struct {
 	// other Adds and against get, so no registration is lost.
 	handlersMu sync.RWMutex
 
-	// external holds at most one authorizer per action type; a second for the
-	// same type is refused where it is added.
+	// external holds at most one authorizer per action type and actor, keyed by
+	// externalKey; adding one for the same key replaces it.
 	external sig.Map[string, *ExternalAuthorizer]
+
+	// authorizers persists the assignments at /mod/auth/authorizers and feeds
+	// external. authorizersMu serializes the read-modify-write of the set.
+	authorizers   tree.Value[*auth.AuthorizerAssignments]
+	authorizersMu sync.Mutex
+
+	// configured holds the assignments auth.yaml names, written to the tree on
+	// every start.
+	configured []*apiauth.AuthorizerAssignment
 }
 
 func (mod *Module) Router() astral.Router {

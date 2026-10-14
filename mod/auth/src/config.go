@@ -23,11 +23,13 @@ type ExternalConfig struct {
 	// shape yaml cannot state and a loader has to police.
 	Endpoint string `yaml:"endpoint"`
 
-	// Token authenticates the node to an http authority as a bearer token, and
-	// TokenFile names a file holding one. TokenFile wins where both are set. An
-	// astral authority needs neither: the query carries the node's identity.
-	Token     string `yaml:"token,omitempty"`
-	TokenFile string `yaml:"token_file,omitempty"`
+	// TokenValue, TokenFile and TokenEnv authenticate the node to an http
+	// authority as a bearer token: the token itself, a file holding it, or an
+	// environment variable holding it. At most one is set. An astral authority
+	// needs none: the query carries the node's identity.
+	TokenValue string `yaml:"token_value,omitempty"`
+	TokenFile  string `yaml:"token_file,omitempty"`
+	TokenEnv   string `yaml:"token_env,omitempty"`
 
 	// Actions are the object types this authority decides. An action type names
 	// one authority only: a second would make the decision an OR across

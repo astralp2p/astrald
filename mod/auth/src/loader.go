@@ -1,6 +1,8 @@
 package auth
 
 import (
+	"fmt"
+
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astral-go/astral/log"
 	"github.com/astralp2p/astrald/core"
@@ -26,10 +28,15 @@ func (Loader) Load(node astral.Node, assets assets.Assets, log *log.Logger) (cor
 
 	mod.Add(auth.Func[*auth.SudoAction](mod.AuthorizeSudo))
 
-	// note: configuration names these at load. The map is concurrency-safe, so
-	// an op that registers one at runtime adds to the same place.
-	if err = mod.addExternalAuthorizers(mod.config.ExternalAuthorizers); err != nil {
+	// note: the configured authorizers are checked here, so a misconfiguration
+	// fails the load; they reach the tree and the registry in LoadDependencies.
+	if mod.configured, err = configAssignments(mod.config.ExternalAuthorizers); err != nil {
 		return nil, err
+	}
+	for _, a := range mod.configured {
+		if _, err = newAuthorizeAsk(mod, assignmentConfig(a)); err != nil {
+			return nil, fmt.Errorf("external authorizer: %w", err)
+		}
 	}
 
 	mod.db = &DB{DB: assets.Database()}

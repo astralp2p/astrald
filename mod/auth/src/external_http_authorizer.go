@@ -53,17 +53,26 @@ type httpAnswer struct {
 }
 
 // newHTTPAuthorizer builds the asker for an http:// or https:// endpoint. A token
-// file is read here rather than at first use, so a missing one is a
-// misconfiguration the operator sees at startup and not at the first question.
+// file or environment variable is read here rather than at first use, so a
+// missing one is a misconfiguration seen when the authorizer is assigned and not
+// at the first question.
 func newHTTPAuthorizer(config ExternalConfig) (*httpAuthorizer, error) {
-	token := config.Token
+	token := config.TokenValue
 
-	if config.TokenFile != "" {
+	switch {
+	case config.TokenFile != "":
 		b, err := os.ReadFile(config.TokenFile)
 		if err != nil {
 			return nil, fmt.Errorf("read token file: %w", err)
 		}
 		token = strings.TrimSpace(string(b))
+
+	case config.TokenEnv != "":
+		v, ok := os.LookupEnv(config.TokenEnv)
+		if !ok {
+			return nil, fmt.Errorf("token env %v is not set", config.TokenEnv)
+		}
+		token = strings.TrimSpace(v)
 	}
 
 	// note: the bound is the context's, applied per request by the caller. A
