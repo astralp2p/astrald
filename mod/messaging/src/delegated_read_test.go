@@ -87,9 +87,7 @@ func withReadAuthority(t *testing.T, mod *Module, reader *astral.Identity, mailb
 	}
 
 	action := messaging.ReadMailboxAction{}.ObjectType()
-	if err := authorityOf(mod).(*authsrc.Module).AddExternal(action, authsrc.ExternalConfig{}, authority); err != nil {
-		t.Fatalf("add external: %v", err)
-	}
+	authorityOf(mod).(*authsrc.Module).AddExternalAuthorizer(action, nil, authsrc.ExternalConfig{}, authority)
 	return authority
 }
 
