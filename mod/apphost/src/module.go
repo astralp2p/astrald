@@ -14,6 +14,7 @@ import (
 	"github.com/astralp2p/astrald/mod/crypto"
 	"github.com/astralp2p/astrald/mod/dir"
 	"github.com/astralp2p/astrald/mod/objects"
+	"github.com/astralp2p/astrald/mod/tree"
 	"github.com/astralp2p/astrald/mod/user"
 )
 
@@ -24,6 +25,7 @@ type Deps struct {
 	Crypto  crypto.Module
 	Dir     dir.Module
 	Objects objects.Module
+	Tree    tree.Module
 }
 
 type OptionalDeps struct {
@@ -46,6 +48,12 @@ type Module struct {
 	serviceHandlers       sig.Set[*ServiceHandler]
 	enRoute               sig.Map[astral.Nonce, *queryEnRoute]
 	pendingInboundQueries sig.Map[astral.Nonce, *pendingInboundQuery]
+
+	// policy persists the policy delegates. policyMu guards appRegisterPolicy,
+	// the active registration policy; nil selects accept-all.
+	policy            policyConfig
+	policyMu          sync.RWMutex
+	appRegisterPolicy apphostmod.AppRegisterPolicy
 }
 
 func (mod *Module) Run(ctx *astral.Context) error {

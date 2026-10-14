@@ -9,12 +9,20 @@ import (
 	"github.com/astralp2p/astrald/core"
 	authmod "github.com/astralp2p/astrald/mod/auth"
 	"github.com/astralp2p/astrald/mod/shell"
+	"github.com/astralp2p/astrald/mod/tree"
 )
 
-func (mod *Module) LoadDependencies(*astral.Context) (err error) {
+func (mod *Module) LoadDependencies(ctx *astral.Context) (err error) {
 	if err = core.Inject(mod.node, &mod.Deps); err != nil {
 		return
 	}
+
+	// why NoLocal: a failed save must fail the setter, not fall back to memory.
+	mod.policy.AppRegister.NoLocal = true
+	if err = tree.BindPath(ctx, &mod.policy, mod.Tree.Root(), policyPath, true); err != nil {
+		return
+	}
+	mod.appRegisterPolicy = mod.selectAppRegisterPolicy(mod.policy.AppRegister.Get())
 
 	// optional — apphost can run without user module
 	core.Inject(mod.node, &mod.OptionalDeps)

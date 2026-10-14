@@ -45,3 +45,6 @@ var ErrMissingAppIdentity = errors.New("missing app identity")
 var ErrMissingObjectID = errors.New("missing object id")
 var ErrInvalidIdentity = errors.New("invalid identity")
 var ErrInvalidPermit = errors.New("invalid permit")
+
+// ErrRegistrationDeclined is sent to a registering app the policy refused.
+var ErrRegistrationDeclined = astral.NewError("registration declined")
