@@ -30,7 +30,7 @@ type opSetAuthorizerArgs struct {
 // why AdminManageApps: an assignment decides what an app may do on this node,
 // which is the administration of app authority that action covers.
 func (mod *Module) OpSetAuthorizer(ctx *astral.Context, q *routing.IncomingQuery, args opSetAuthorizerArgs) error {
-	if !mod.admitAdmin(ctx, q) {
+	if !mod.Authorize(ctx, &auth.AdminManageAppsAction{Action: auth.NewAction(q.Caller())}) {
 		return q.Reject()
 	}
 
@@ -59,19 +59,4 @@ func (mod *Module) OpSetAuthorizer(ctx *astral.Context, q *routing.IncomingQuery
 	mod.log.Logv(1, "authorizer for %v %v set to %v", args.Action, a.Actor, args.Endpoint)
 
 	return ch.Send(&astral.Ack{})
-}
-
-// admitAdmin admits a local caller holding AdminManageAppsAction.
-//
-// why local only: assignments are this node's setting, so a caller off a link
-// has no standing to read or write them. Origins are admitted by name, so one
-// added later is refused until it is judged.
-func (mod *Module) admitAdmin(ctx *astral.Context, q *routing.IncomingQuery) bool {
-	switch q.Origin() {
-	case "", astral.OriginLocal:
-	default:
-		return false
-	}
-
-	return mod.Authorize(ctx, &auth.AdminManageAppsAction{Action: auth.NewAction(q.Caller())})
 }

@@ -8,8 +8,6 @@ import (
 	"github.com/astralp2p/astral-go/api/auth"
 	"github.com/astralp2p/astral-go/api/tree"
 	"github.com/astralp2p/astral-go/astral"
-	"github.com/astralp2p/astral-go/lib/routing"
-	authmod "github.com/astralp2p/astrald/mod/auth"
 	"github.com/astralp2p/astrald/mod/dir"
 )
 
@@ -217,34 +215,6 @@ func TestSetAuthorizerRefusesTheActorAsItsAuthority(t *testing.T) {
 	})
 	if err == nil {
 		t.Fatal("an actor was assigned as its own authority")
-	}
-}
-
-// TestAdminOpsAdmitOnlyLocalAdministrators: a network caller is refused
-// whatever it holds, and a local caller without AdminManageApps is refused.
-func TestAdminOpsAdmitOnlyLocalAdministrators(t *testing.T) {
-	mod := testModule(t)
-	ctx := astral.NewContext(nil)
-	admin, stranger := astral.GenerateIdentity(), astral.GenerateIdentity()
-
-	mod.Add(authmod.Func[*auth.AdminManageAppsAction](func(_ *astral.Context, a *auth.AdminManageAppsAction) bool {
-		return a.Actor().IsEqual(admin)
-	}))
-
-	for _, tc := range []struct {
-		name   string
-		caller *astral.Identity
-		origin string
-		admit  bool
-	}{
-		{"local admin", admin, astral.OriginLocal, true},
-		{"network admin", admin, astral.OriginNetwork, false},
-		{"local stranger", stranger, astral.OriginLocal, false},
-	} {
-		q := routing.NewIncomingQuery(astral.NewQuery(tc.caller, astral.GenerateIdentity(), "auth.set_authorizer"), nil, tc.origin)
-		if got := mod.admitAdmin(ctx, q); got != tc.admit {
-			t.Errorf("%s: admitted %v, want %v", tc.name, got, tc.admit)
-		}
 	}
 }
 

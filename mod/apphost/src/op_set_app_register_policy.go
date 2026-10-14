@@ -24,14 +24,6 @@ type opSetAppRegisterPolicyArgs struct {
 // why AdminManageApps: the delegate decides which permits every new app
 // receives, which is the administration of app credentials that action covers.
 func (mod *Module) OpSetAppRegisterPolicy(ctx *astral.Context, q *routing.IncomingQuery, args opSetAppRegisterPolicyArgs) error {
-	// why local only: the policy is this node's setting, so a caller off a link
-	// has no standing to write it.
-	switch q.Origin() {
-	case "", astral.OriginLocal:
-	default:
-		return q.Reject()
-	}
-
 	if !mod.Auth.Authorize(ctx, &auth.AdminManageAppsAction{Action: auth.NewAction(q.Caller())}) {
 		return q.Reject()
 	}

@@ -14,7 +14,7 @@ type opListAuthorizersArgs struct {
 // OpListAuthorizers sends every persisted external authorizer assignment, then
 // EOS. A token value is never sent; a token file or variable is sent by name.
 func (mod *Module) OpListAuthorizers(ctx *astral.Context, q *routing.IncomingQuery, args opListAuthorizersArgs) error {
-	if !mod.admitAdmin(ctx, q) {
+	if !mod.Authorize(ctx, &auth.AdminManageAppsAction{Action: auth.NewAction(q.Caller())}) {
 		return q.Reject()
 	}
 

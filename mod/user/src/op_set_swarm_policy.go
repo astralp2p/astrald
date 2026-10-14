@@ -31,7 +31,7 @@ func (mod *Module) OpSetSwarmInvitePolicy(ctx *astral.Context, q *routing.Incomi
 	return mod.setSwarmPolicy(ctx, q, args, mod.SetSwarmInvitePolicy)
 }
 
-// setSwarmPolicy admits a local caller holding AdminManageApps and applies set.
+// setSwarmPolicy admits a caller holding AdminManageApps and applies set.
 //
 // why AdminManageApps and not AdminSwarm: AdminSwarm is held by the user of the
 // active contract, and a node with none — the node an invite policy matters
@@ -43,14 +43,6 @@ func (mod *Module) setSwarmPolicy(
 	args opSetSwarmPolicyArgs,
 	set func(*astral.Context, *policy.PolicyDelegate) error,
 ) error {
-	// why local only: the policy is this node's setting, so a caller off a link
-	// has no standing to write it.
-	switch q.Origin() {
-	case "", astral.OriginLocal:
-	default:
-		return q.Reject()
-	}
-
 	if !mod.Auth.Authorize(ctx, &auth.AdminManageAppsAction{Action: auth.NewAction(q.Caller())}) {
 		return q.Reject()
 	}
