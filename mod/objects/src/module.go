@@ -42,7 +42,6 @@ type Module struct {
 	system     objectsmod.Repository
 	describers sig.Set[objects.Describer]
 	searchers  sig.Set[objects.Searcher]
-	searchPre  sig.Set[objects.SearchPreprocessor]
 	finders    sig.Set[objects.Finder]
 	receivers  sig.Set[objectsmod.Receiver]
 	holders    sig.Set[objectsmod.Holder]
@@ -202,10 +201,6 @@ func (mod *Module) Probe(ctx *astral.Context, repo objectsmod.Repository, object
 	probe.Mime = astral.String8(http.DetectContentType(data))
 
 	return
-}
-
-func (mod *Module) AddSearchPreprocessor(pre objects.SearchPreprocessor) error {
-	return mod.searchPre.Add(pre)
 }
 
 // trackObject seeds the dbObject row for an object the module just

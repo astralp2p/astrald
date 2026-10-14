@@ -1,19 +1,24 @@
 package objects
 
 import (
+	"github.com/astralp2p/astrald/core"
 	objectsmod "github.com/astralp2p/astrald/mod/objects"
 	"sync"
 	"time"
 
 	"github.com/astralp2p/astral-go/api/objects"
+	objectscli "github.com/astralp2p/astral-go/api/objects/client"
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astral-go/sig"
 )
 
-// Describe fans the query out to all registered describers in parallel and
-// merges their descriptors onto one channel, closed when every describer is
-// done or ctx is cancelled.
-func (mod *Module) Describe(ctx *astral.Context, objectID *astral.ObjectID) (<-chan *objects.Descriptor, error) {
+// Describe fans the query out to all registered describers in parallel, unless
+// describe.SourcesOnly is set, and asks each of describe.Sources when the
+// context zone permits the network. It merges their descriptors onto one
+// channel, closed when every describer and source is done or ctx is cancelled.
+func (mod *Module) Describe(ctx *astral.Context, describe *objects.Describe) (<-chan *objects.Descriptor, error) {
+	objectID := describe.ObjectID
+
 	var results = make(chan *objects.Descriptor)
 
 	go func() {
@@ -23,7 +28,12 @@ func (mod *Module) Describe(ctx *astral.Context, objectID *astral.ObjectID) (<-c
 
 		now := time.Now()
 
-		for _, d := range mod.describers.Clone() {
+		var describers []objects.Describer
+		if !describe.SourcesOnly {
+			describers = mod.describers.Clone()
+		}
+
+		for _, d := range describers {
 			d := d
 
 			// why: waiting for a registrant that has gone is the cost the lease exists
@@ -57,6 +67,56 @@ func (mod *Module) Describe(ctx *astral.Context, objectID *astral.ObjectID) (<-c
 					}
 				}
 			}()
+		}
+
+		// ask the sources
+		if ctx.Zone().Is(astral.ZoneNetwork) {
+			for _, nodeID := range describe.Sources {
+				nodeID := nodeID
+
+				// why: asking this node would re-enter objects.describe as a local query and run the describers again.
+				if nodeID.IsEqual(mod.node.Identity()) {
+					continue
+				}
+
+				wg.Add(1)
+				go func() {
+					defer wg.Done()
+
+					// why: the host authorized its caller; the source serves the host as
+					// itself and trusts that decision (objects.describe spec).
+					// note: the context identity must be the node too, or the link relays for the caller (core/router_adapter.go).
+					_res, errPtr := objectscli.New(nodeID, core.NewClientAs(mod.node, mod.node.Identity())).Describe(ctx.WithIdentity(mod.node.Identity()), objectID)
+					if _res == nil {
+						if errPtr != nil && *errPtr != nil {
+							mod.log.Errorv(1, "describe %v: %v", nodeID, *errPtr)
+						}
+						return
+					}
+
+					for {
+						descriptor, ok, err := sig.RecvOk(ctx, _res)
+						if err != nil {
+							return
+						}
+						if !ok {
+							if errPtr != nil && *errPtr != nil {
+								mod.log.Errorv(1, "describe %v: %v", nodeID, *errPtr)
+							}
+							return
+						}
+
+						if descriptor == nil {
+							mod.log.Errorv(1, "network describe %v returned nil descriptor", nodeID)
+							continue
+						}
+
+						if err := sig.Send(ctx, results, descriptor); err != nil {
+							return
+						}
+					}
+				}()
+			}
 		}
 
 		wg.Wait()

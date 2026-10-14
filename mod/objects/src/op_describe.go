@@ -14,11 +14,13 @@ import (
 )
 
 type opDescribeArgs struct {
-	ID     *astral.ObjectID `query:"required"`
-	Out    string
-	Zone   astral.Zone
-	Only   *string
-	Except *string
+	ID          *astral.ObjectID `query:"required"`
+	Out         string
+	Zone        *astral.Zone
+	Only        *string
+	Except      *string
+	Sources     string // comma-separated identities to ask
+	SourcesOnly bool   // ask only Sources, not the registered describers
 }
 
 // OpDescribe streams an object's descriptors, filtered by the Only/Except type
@@ -31,8 +33,12 @@ func (mod *Module) OpDescribe(ctx *astral.Context, q *routing.IncomingQuery, arg
 		return q.Reject()
 	}
 
-	ctx, cancel := ctx.WithIdentity(q.Caller()).IncludeZone(args.Zone).WithTimeout(time.Minute)
+	ctx, cancel := ctx.WithIdentity(q.Caller()).WithTimeout(time.Minute)
 	defer cancel()
+
+	if args.Zone != nil {
+		ctx = ctx.LimitZone(*args.Zone)
+	}
 
 	// why: a query from the network answers from this node alone. Its sender
 	// already fans out, and a second hop sends it back (objects.describe spec).
@@ -43,7 +49,26 @@ func (mod *Module) OpDescribe(ctx *astral.Context, q *routing.IncomingQuery, arg
 	ch := channel.New(q.AcceptRaw(), channel.WithOutputFormat(args.Out))
 	defer ch.Close()
 
-	descriptors, err := mod.Describe(ctx, args.ID)
+	// resolve sources if provided
+	var sources []*astral.Identity
+	if len(args.Sources) > 0 {
+		for _, name := range strings.Split(args.Sources, ",") {
+			source, err := mod.Dir.ResolveIdentity(name)
+			if err != nil {
+				return ch.Send(astral.Err(err))
+			}
+			if !slices.ContainsFunc(sources, source.IsEqual) {
+				sources = append(sources, source)
+			}
+		}
+	}
+
+	descriptors, err := mod.Describe(ctx, &objects.Describe{
+		CallerID:    q.Caller(),
+		ObjectID:    args.ID,
+		Sources:     sources,
+		SourcesOnly: args.SourcesOnly,
+	})
 	if err != nil {
 		return
 	}
