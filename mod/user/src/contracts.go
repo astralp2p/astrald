@@ -3,6 +3,7 @@ package user
 import (
 	"errors"
 	"fmt"
+	"slices"
 	"time"
 
 	"github.com/astralp2p/astral-go/api/auth"
@@ -150,6 +151,11 @@ func (mod *Module) LocalSwarm() (list []*astral.Identity) {
 	}
 
 	return mod.ActiveNodes(ac.Issuer)
+}
+
+// SwarmPeers returns the members of the local swarm other than this node.
+func (mod *Module) SwarmPeers() []*astral.Identity {
+	return slices.DeleteFunc(mod.LocalSwarm(), mod.node.Identity().IsEqual)
 }
 
 // IssueMembership mints a swarm-membership contract for nodeID, collects the remote node's subject signature, and verifies both before returning.

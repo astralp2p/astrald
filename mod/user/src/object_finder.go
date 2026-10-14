@@ -1,7 +1,6 @@
 package user
 
 import (
-	"slices"
 	"sync"
 	"time"
 
@@ -22,7 +21,7 @@ func (mod *Module) FindObject(ctx *astral.Context, id *astral.ObjectID) (<-chan 
 	out := make(chan *astral.Identity)
 	var wg sync.WaitGroup
 
-	for _, peer := range slices.DeleteFunc(mod.LocalSwarm(), mod.node.Identity().IsEqual) {
+	for _, peer := range mod.SwarmPeers() {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()

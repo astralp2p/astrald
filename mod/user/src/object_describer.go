@@ -1,7 +1,6 @@
 package user
 
 import (
-	"slices"
 	"sync"
 
 	"github.com/astralp2p/astral-go/api/objects"
@@ -22,7 +21,7 @@ func (mod *Module) DescribeObject(ctx *astral.Context, objectID *astral.ObjectID
 	out := make(chan *objects.Descriptor)
 	var wg sync.WaitGroup
 
-	for _, peer := range slices.DeleteFunc(mod.LocalSwarm(), mod.node.Identity().IsEqual) {
+	for _, peer := range mod.SwarmPeers() {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
