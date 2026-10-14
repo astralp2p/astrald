@@ -50,8 +50,4 @@ type Module interface {
 
 	// SignedContracts returns a query builder for finding active signed contracts.
 	SignedContracts() ContractQueryBuilder
-
-	// SetAuthorizer persists the assignment, replacing the one with the same
-	// action and actor, and makes it the authorizer the node asks.
-	SetAuthorizer(ctx *astral.Context, assignment *auth.AuthorizerAssignment) error
 }

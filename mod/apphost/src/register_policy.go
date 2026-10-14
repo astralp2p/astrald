@@ -1,7 +1,7 @@
 package apphost
 
 import (
-	"github.com/astralp2p/astral-go/api/apphost"
+	"github.com/astralp2p/astral-go/api/auth"
 	"github.com/astralp2p/astral-go/api/policy"
 	"github.com/astralp2p/astral-go/astral"
 	apphostmod "github.com/astralp2p/astrald/mod/apphost"
@@ -52,16 +52,15 @@ var _ apphostmod.AppRegisterPolicy = (*Module)(nil).AppRegisterAcceptAll
 
 // AppRegisterAcceptAll admits every registration and writes every permit put in
 // front of it onto the rail it was asked for, whether the caller's origin
-// entitled it or the app simply asked. It assigns no authorizers. It is the
-// permissive default its name claims to be: a node that cares which apps hold
-// what delegates the decision.
-func (mod *Module) AppRegisterAcceptAll(_ *astral.Context, req *apphost.AppRegisterRequest) (*apphost.AppRegisterDecision, error) {
+// entitled it or the app simply asked. It is the permissive default its name
+// claims to be: a node that cares which apps hold what delegates the decision.
+func (mod *Module) AppRegisterAcceptAll(
+	_ *astral.Context,
+	origin, _ string,
+	requestedGrantPermits, requestedContractPermits []*auth.Permit,
+) ([]*auth.Permit, []*auth.Permit, bool) {
 	mod.log.Info("accepting registration from origin %v with %v grant permits and %v contract permits",
-		req.Origin, len(req.GrantPermits), len(req.ContractPermits))
+		origin, len(requestedGrantPermits), len(requestedContractPermits))
 
-	return &apphost.AppRegisterDecision{
-		Allow:           true,
-		GrantPermits:    req.GrantPermits,
-		ContractPermits: req.ContractPermits,
-	}, nil
+	return requestedGrantPermits, requestedContractPermits, true
 }

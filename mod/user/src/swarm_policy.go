@@ -1,8 +1,8 @@
 package user
 
 import (
+	"github.com/astralp2p/astral-go/api/auth"
 	"github.com/astralp2p/astral-go/api/policy"
-	"github.com/astralp2p/astral-go/api/user"
 	"github.com/astralp2p/astral-go/astral"
 	usermod "github.com/astralp2p/astrald/mod/user"
 )
@@ -77,14 +77,14 @@ func (mod *Module) selectInvitePolicy(d *policy.PolicyDelegate) usermod.SwarmInv
 
 var _ usermod.SwarmJoinRequestPolicy = (*Module)(nil).SwarmJoinRequestAcceptAll
 
-func (mod *Module) SwarmJoinRequestAcceptAll(_ *astral.Context, req *user.SwarmJoinRequest) (*user.SwarmJoinDecision, error) {
-	mod.log.Info("Accepting %v join request into swarm", req.Requester)
-	return &user.SwarmJoinDecision{Allow: true}, nil
+func (mod *Module) SwarmJoinRequestAcceptAll(_ *astral.Context, requester *astral.Identity) bool {
+	mod.log.Info("Accepting %v join request into swarm", requester)
+	return true
 }
 
 var _ usermod.SwarmInvitePolicy = (*Module)(nil).SwarmInviteAcceptAll
 
-func (mod *Module) SwarmInviteAcceptAll(_ *astral.Context, req *user.SwarmInviteRequest) (*user.SwarmInviteDecision, error) {
-	mod.log.Info("Accepting invitation from %v for %v join swarm till %v", req.Inviter, req.Contract.Subject, req.Contract.ExpiresAt)
-	return &user.SwarmInviteDecision{Allow: true}, nil
+func (mod *Module) SwarmInviteAcceptAll(_ *astral.Context, invitee *astral.Identity, contract *auth.Contract) bool {
+	mod.log.Info("Accepting invitation from %v for %v join swarm till %v", invitee, contract.Subject, contract.ExpiresAt)
+	return true
 }

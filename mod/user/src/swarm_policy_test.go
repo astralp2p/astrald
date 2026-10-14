@@ -70,9 +70,8 @@ func TestSwarmJoinDelegateDecides(t *testing.T) {
 	mod := &Module{node: node, log: log.New(nil)}
 	requester := astral.GenerateIdentity()
 
-	dec, err := mod.SwarmJoinRequestPolicyDelegated(delegate())(astral.NewContext(nil), &user.SwarmJoinRequest{Requester: requester})
-	if err != nil || bool(dec.Allow) {
-		t.Fatalf("decision %+v, %v; want the delegate's refusal", dec, err)
+	if mod.SwarmJoinRequestPolicyDelegated(delegate())(astral.NewContext(nil), requester) {
+		t.Fatal("the delegate's refusal was not applied")
 	}
 	if op := <-node.queried; op != "control.decide_swarm" {
 		t.Fatalf("asked %q, want the configured operation", op)
@@ -88,9 +87,8 @@ func TestSwarmInviteDelegateDecides(t *testing.T) {
 	inviter := astral.GenerateIdentity()
 	contract := &auth.Contract{Issuer: inviter, Subject: astral.GenerateIdentity()}
 
-	dec, err := mod.SwarmInvitePolicyDelegated(delegate())(astral.NewContext(nil), &user.SwarmInviteRequest{Inviter: inviter, Contract: contract})
-	if err != nil || !bool(dec.Allow) {
-		t.Fatalf("decision %+v, %v; want the delegate's approval", dec, err)
+	if !mod.SwarmInvitePolicyDelegated(delegate())(astral.NewContext(nil), inviter, contract) {
+		t.Fatal("the delegate's approval was not applied")
 	}
 	req, ok := (<-node.got).(*user.SwarmInviteRequest)
 	if !ok || !req.Inviter.IsEqual(inviter) || !req.Contract.Subject.IsEqual(contract.Subject) {
@@ -98,37 +96,31 @@ func TestSwarmInviteDelegateDecides(t *testing.T) {
 	}
 }
 
-// An answer of the wrong type is an error, never permission: a join decision
-// does not answer an invitation.
+// An answer of the wrong type declines, never permits: a join decision does not
+// answer an invitation.
 func TestSwarmDelegateRefusesAnUnreadableAnswer(t *testing.T) {
 	mod := &Module{node: newSwarmDelegate(&user.SwarmJoinDecision{Allow: true}), log: log.New(nil)}
 
-	_, err := mod.SwarmInvitePolicyDelegated(delegate())(astral.NewContext(nil), &user.SwarmInviteRequest{
-		Contract: &auth.Contract{},
-	})
-	if err == nil {
+	if mod.SwarmInvitePolicyDelegated(delegate())(astral.NewContext(nil), astral.GenerateIdentity(), &auth.Contract{}) {
 		t.Fatal("a join decision was read as an invite decision")
 	}
 }
 
-func TestSwarmDelegateEndsWhenTheRequesterLeaves(t *testing.T) {
+func TestSwarmDelegateEndsWithItsContext(t *testing.T) {
 	node := newSwarmDelegate(nil)
 	mod := &Module{node: node, log: log.New(nil)}
 	ctx, cancel := astral.NewContext(nil).WithCancel()
 
-	done := make(chan error, 1)
-	go func() {
-		_, err := mod.SwarmJoinRequestPolicyDelegated(delegate())(ctx, &user.SwarmJoinRequest{Requester: astral.GenerateIdentity()})
-		done <- err
-	}()
+	done := make(chan bool, 1)
+	go func() { done <- mod.SwarmJoinRequestPolicyDelegated(delegate())(ctx, astral.GenerateIdentity()) }()
 
 	<-node.got
 	cancel()
 
 	select {
-	case err := <-done:
-		if err == nil {
-			t.Fatal("a cancelled question returned a decision")
+	case ok := <-done:
+		if ok {
+			t.Fatal("a cancelled question permitted the join")
 		}
 	case <-time.After(2 * time.Second):
 		t.Fatal("the delegated policy kept waiting after ctx ended")
@@ -191,8 +183,7 @@ func boundSwarmModule(t *testing.T, leaf *swarmLeaf, node astral.Node) *Module {
 func joinAllowed(t *testing.T, mod *Module) bool {
 	t.Helper()
 
-	dec, err := mod.GetSwarmJoinRequestPolicy()(astral.NewContext(nil), &user.SwarmJoinRequest{Requester: astral.GenerateIdentity()})
-	return err == nil && bool(dec.Allow)
+	return mod.GetSwarmJoinRequestPolicy()(astral.NewContext(nil), astral.GenerateIdentity())
 }
 
 // A delegate survives a reload; clearing it restores accept-all.

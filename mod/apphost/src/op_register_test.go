@@ -6,12 +6,10 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/astralp2p/astral-go/api/apphost"
 	"github.com/astralp2p/astral-go/api/auth"
 	"github.com/astralp2p/astral-go/api/crypto"
 	"github.com/astralp2p/astral-go/api/nodes"
 	"github.com/astralp2p/astral-go/astral"
-	apphostmod "github.com/astralp2p/astrald/mod/apphost"
 	cryptomod "github.com/astralp2p/astrald/mod/crypto"
 	objectsmod "github.com/astralp2p/astrald/mod/objects"
 )
@@ -31,7 +29,6 @@ type registerSteps struct {
 	mu       sync.Mutex
 	steps    []string
 	indexErr error
-	assigned []*auth.AuthorizerAssignment
 }
 
 func (r *registerSteps) record(step string) {
@@ -61,14 +58,6 @@ func (a registerAuth) IndexContract(_ *astral.Context, sc *auth.SignedContract) 
 		return a.steps.indexErr
 	}
 	a.steps.record(stepIndexRelay)
-	return nil
-}
-
-// SetAuthorizer records the assignment registration makes.
-func (a registerAuth) SetAuthorizer(_ *astral.Context, assignment *auth.AuthorizerAssignment) error {
-	a.steps.mu.Lock()
-	defer a.steps.mu.Unlock()
-	a.steps.assigned = append(a.steps.assigned, assignment)
 	return nil
 }
 
@@ -102,15 +91,8 @@ func (s registerStore) Store(_ *astral.Context, _ objectsmod.Repository, obj ast
 // its steps in steps.
 func registerWith(t *testing.T, steps *registerSteps) *Module {
 	t.Helper()
-	return registerUnder(t, steps, nil)
-}
-
-// registerUnder is registerWith under policy; nil keeps accept-all.
-func registerUnder(t *testing.T, steps *registerSteps, policy apphostmod.AppRegisterPolicy) *Module {
-	t.Helper()
 
 	mod := serveAppsRegistrar(t)
-	mod.appRegisterPolicy = policy
 	mod.Auth = registerAuth{steps: steps}
 	mod.Crypto = registerKeys{steps: steps}
 	mod.Objects = registerStore{steps: steps}
@@ -157,55 +139,27 @@ func TestRegisterLeavesNoKeyWhenTheRelayContractFails(t *testing.T) {
 	}
 }
 
-// TestRegisterAssignsTheDecisionsAuthorizersToTheNewApp: an authorizer the
-// decision names is assigned with the minted identity as its actor.
-func TestRegisterAssignsTheDecisionsAuthorizersToTheNewApp(t *testing.T) {
-	steps := &registerSteps{}
-	mod := registerUnder(t, steps, func(_ *astral.Context, req *apphost.AppRegisterRequest) (*apphost.AppRegisterDecision, error) {
-		return &apphost.AppRegisterDecision{
-			Allow:        true,
-			GrantPermits: req.GrantPermits,
-			Authorizers: []*auth.AuthorizerAssignment{
-				{Action: "mod.auth.see_objects_action", Endpoint: "astral://media:auth.evaluate"},
-			},
-		}, nil
-	})
-
-	var tokens []dbAccessToken
-	if err := mod.db.Find(&tokens).Error; err != nil || len(tokens) != 1 {
-		t.Fatalf("tokens: %v, %v", len(tokens), err)
-	}
-
-	if len(steps.assigned) != 1 {
-		t.Fatalf("assigned %v authorizers, want 1", len(steps.assigned))
-	}
-	if a := steps.assigned[0]; !a.Actor.IsEqual(tokens[0].Identity) || a.Endpoint != "astral://media:auth.evaluate" {
-		t.Fatalf("assigned %+v, want the new app %v as actor", a, tokens[0].Identity)
-	}
-}
-
-// TestRegisterRefusedProvisionsNothing: a refusing decision mints no key and
-// issues no token, and a policy error refuses the same way.
+// TestRegisterRefusedProvisionsNothing: a refusing policy rejects the query,
+// mints no key, and issues no token.
 func TestRegisterRefusedProvisionsNothing(t *testing.T) {
-	for name, policy := range map[string]apphostmod.AppRegisterPolicy{
-		"refusal": func(*astral.Context, *apphost.AppRegisterRequest) (*apphost.AppRegisterDecision, error) {
-			return &apphost.AppRegisterDecision{Allow: false}, nil
-		},
-		"error": func(*astral.Context, *apphost.AppRegisterRequest) (*apphost.AppRegisterDecision, error) {
-			return nil, errors.New("delegate unreachable")
-		},
-	} {
-		t.Run(name, func(t *testing.T) {
-			steps := &registerSteps{}
-			mod := registerUnder(t, steps, policy)
+	steps := &registerSteps{}
+	mod := serveAppsRegistrar(t)
+	mod.appRegisterPolicy = func(*astral.Context, string, string, []*auth.Permit, []*auth.Permit) ([]*auth.Permit, []*auth.Permit, bool) {
+		return nil, nil, false
+	}
+	mod.Auth = registerAuth{steps: steps}
+	mod.Crypto = registerKeys{steps: steps}
+	mod.Objects = registerStore{steps: steps}
 
-			if got := steps.taken(); len(got) != 0 {
-				t.Fatalf("a refused registration took steps %q", got)
-			}
-			var tokens []dbAccessToken
-			if err := mod.db.Find(&tokens).Error; err != nil || len(tokens) != 0 {
-				t.Fatalf("a refused registration issued %d tokens (%v)", len(tokens), err)
-			}
-		})
+	if err := route(t, mod.OpRegister, astral.GenerateIdentity(), "apphost.register", newRecordingWriter()); err == nil {
+		t.Fatal("a refused registration was accepted")
+	}
+
+	if got := steps.taken(); len(got) != 0 {
+		t.Fatalf("a refused registration took steps %q", got)
+	}
+	var tokens []dbAccessToken
+	if err := mod.db.Find(&tokens).Error; err != nil || len(tokens) != 0 {
+		t.Fatalf("a refused registration issued %d tokens (%v)", len(tokens), err)
 	}
 }

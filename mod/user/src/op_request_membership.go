@@ -25,31 +25,13 @@ func (mod *Module) OpRequestMembership(ctx *astral.Context, q *routing.IncomingQ
 		return q.RejectWithCode(2)
 	}
 
-	conn := q.AcceptRaw()
-	ch := channel.New(conn, channel.WithFormats(args.In, args.Out))
+	ch := channel.New(q.AcceptRaw(), channel.WithFormats(args.In, args.Out))
 	defer ch.Close()
 
-	// why: a delegate may wait on the user, and only the conn tells it that
-	// nobody waits for the membership any more. The requester sends nothing
-	// after the query, so the watch reads nothing the op needs.
-	policyCtx, stop := watchRequester(ctx, conn)
-	defer stop()
-
 	target := q.Caller()
-	decision, err := mod.GetSwarmJoinRequestPolicy()(policyCtx, &user.SwarmJoinRequest{Requester: target})
-	switch {
-	case err != nil:
-		mod.log.Logv(1, "join request from %v refused: %v", target, err)
+	joinAllowed := mod.GetSwarmJoinRequestPolicy()(ctx, target)
+	if !joinAllowed {
 		return ch.Send(user.ErrRequestDeclined)
-	case decision == nil || !bool(decision.Allow):
-		return ch.Send(user.ErrRequestDeclined)
-	}
-
-	// why: an approval that arrives after the requester left would issue a
-	// membership nobody asked for any more.
-	if policyCtx.Err() != nil {
-		mod.log.Logv(1, "join of %v approved after the requester left; not issuing", target)
-		return nil
 	}
 
 	signed, err := mod.IssueMembership(ctx, target)
