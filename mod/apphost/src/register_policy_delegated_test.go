@@ -19,7 +19,7 @@ import (
 
 // delegateNode stands in for the node routing the question to a delegate. It
 // records the operation and the request, then answers with answer, or holds the
-// question open when answer is nil.
+// question open when answer is nil. One node answers one question.
 type delegateNode struct {
 	id     *astral.Identity
 	answer astral.Object
@@ -64,15 +64,19 @@ func (n *delegateNode) RouteQuery(_ *astral.Context, q *astral.InFlightQuery, w 
 	})
 }
 
-func delegatingModule(node *delegateNode) (*Module, *policy.PolicyDelegate) {
-	mod := &Module{config: defaultConfig, log: log.New(nil), node: node}
-	return mod, &policy.PolicyDelegate{Identity: astral.GenerateIdentity(), Operation: "control.decide_app_register"}
+func refusingNode() *delegateNode {
+	return newDelegateNode(&apphost.AppRegisterDecision{Allow: false})
 }
 
-// registerAsk is the registration the tests put to a policy.
-func registerAsk(ctx *astral.Context, p apphostmod.AppRegisterPolicy) bool {
-	_, _, ok := p(ctx, "", "", nil, nil)
-	return ok
+func delegatingModule(node *delegateNode) (*Module, *policy.Delegate) {
+	mod := &Module{config: defaultConfig, log: log.New(nil), node: node}
+	return mod, &policy.Delegate{Identity: astral.GenerateIdentity(), Operation: "control.decide_app_register"}
+}
+
+// registerAsk puts an empty registration to p and reports whether it admits it.
+func registerAsk(ctx *astral.Context, p apphostmod.RegisterAppPolicy) bool {
+	dec, err := p(ctx, &apphost.AppRegisterRequest{})
+	return err == nil && bool(dec.Allow)
 }
 
 // The delegate is asked at its configured operation with the full request, and
@@ -84,10 +88,14 @@ func TestDelegatedPolicyReturnsTheDelegatesDecision(t *testing.T) {
 	})
 	mod, d := delegatingModule(node)
 
-	grant, contract, ok := mod.AppRegisterPolicyDelegated(d)(
-		astral.NewContext(nil), "https://player.example", "Player",
-		parsePermits("mod.auth.serve_objects_action"), nil,
-	)
+	dec, err := mod.RegisterAppPolicyDelegated(d)(astral.NewContext(nil), &apphost.AppRegisterRequest{
+		Origin:       "https://player.example",
+		Name:         "Player",
+		GrantPermits: parsePermits("mod.auth.serve_objects_action"),
+	})
+	if err != nil {
+		t.Fatalf("delegated policy: %v", err)
+	}
 
 	if op := <-node.queried; op != "control.decide_app_register" {
 		t.Fatalf("asked %q, want the configured operation", op)
@@ -96,17 +104,17 @@ func TestDelegatedPolicyReturnsTheDelegatesDecision(t *testing.T) {
 	if req.Origin != "https://player.example" || req.Name != "Player" || len(req.GrantPermits) != 1 {
 		t.Fatalf("request reached the delegate as %+v", req)
 	}
-	if !ok || len(grant) != 0 || len(contract) != 1 {
-		t.Fatalf("decision: %v, %v grant, %v contract", ok, len(grant), len(contract))
+	if !dec.Allow || len(dec.GrantPermits) != 0 || len(dec.ContractPermits) != 1 {
+		t.Fatalf("decision: %v, %v grant, %v contract", dec.Allow, len(dec.GrantPermits), len(dec.ContractPermits))
 	}
 }
 
-// An answer that is not a decision refuses, never permits.
+// An answer that is not a decision is an error, never permission.
 func TestDelegatedPolicyRefusesAnUnreadableAnswer(t *testing.T) {
 	mod, d := delegatingModule(newDelegateNode(&astral.Ack{}))
 
-	if registerAsk(astral.NewContext(nil), mod.AppRegisterPolicyDelegated(d)) {
-		t.Fatal("an Ack was read as permission")
+	if _, err := mod.RegisterAppPolicyDelegated(d)(astral.NewContext(nil), &apphost.AppRegisterRequest{}); err == nil {
+		t.Fatal("an Ack was read as a decision")
 	}
 }
 
@@ -118,7 +126,7 @@ func TestDelegatedPolicyEndsWithItsContext(t *testing.T) {
 	ctx, cancel := astral.NewContext(nil).WithCancel()
 
 	done := make(chan bool, 1)
-	go func() { done <- registerAsk(ctx, mod.AppRegisterPolicyDelegated(d)) }()
+	go func() { done <- registerAsk(ctx, mod.RegisterAppPolicyDelegated(d)) }()
 
 	<-node.received
 	cancel()
@@ -179,6 +187,7 @@ func (n *policyLeaf) Create(*astral.Context, string) (tree.Node, error) {
 	return nil, tree.ErrUnsupported
 }
 
+// boundPolicyModule binds the delegate value to leaf as LoadDependencies does.
 func boundPolicyModule(t *testing.T, leaf *policyLeaf, node *delegateNode) *Module {
 	t.Helper()
 
@@ -187,50 +196,53 @@ func boundPolicyModule(t *testing.T, leaf *policyLeaf, node *delegateNode) *Modu
 	if err := mod.policy.AppRegister.Bind(astral.NewContext(nil), leaf); err != nil {
 		t.Fatalf("bind: %v", err)
 	}
-	mod.appRegisterPolicy = mod.selectAppRegisterPolicy(mod.policy.AppRegister.Get())
 	return mod
 }
 
-// Setting a delegate selects the delegated policy and survives a reload;
-// clearing it restores accept-all.
-func TestAppRegisterDelegateSelectsAndPersists(t *testing.T) {
+// The tree value is the only state: a delegate written there is asked at once
+// and after a reload, and clearing it restores accept-all.
+func TestRegisterAppPolicyFollowsTheTreeValue(t *testing.T) {
 	ctx := astral.NewContext(nil)
 	leaf := &policyLeaf{}
-	node := newDelegateNode(&apphost.AppRegisterDecision{Allow: false})
 
-	first := boundPolicyModule(t, leaf, node)
-	d := &policy.PolicyDelegate{Identity: astral.GenerateIdentity(), Operation: "control.decide_app_register"}
-	if err := first.SetAppRegisterPolicy(ctx, d); err != nil {
-		t.Fatalf("set: %v", err)
+	first := boundPolicyModule(t, leaf, refusingNode())
+	if !registerAsk(ctx, first.GetRegisterAppPolicy()) {
+		t.Fatal("with no delegate a registration was refused")
 	}
 
-	second := boundPolicyModule(t, leaf, node)
-	if registerAsk(ctx, second.GetAppRegisterPolicy()) {
+	d := &policy.Delegate{Identity: astral.GenerateIdentity(), Operation: "control.decide_app_register"}
+	if err := first.policy.AppRegister.Set(ctx, d); err != nil {
+		t.Fatalf("set: %v", err)
+	}
+	if registerAsk(ctx, first.GetRegisterAppPolicy()) {
+		t.Fatal("a delegate just set was not asked")
+	}
+
+	second := boundPolicyModule(t, leaf, refusingNode())
+	if registerAsk(ctx, second.GetRegisterAppPolicy()) {
 		t.Fatal("after reload the delegate's refusal was not applied")
 	}
 
-	if err := second.SetAppRegisterPolicy(ctx, &policy.PolicyDelegate{}); err != nil {
+	if err := second.policy.AppRegister.Clear(ctx); err != nil {
 		t.Fatalf("clear: %v", err)
 	}
-	third := boundPolicyModule(t, leaf, node)
-	if !registerAsk(ctx, third.GetAppRegisterPolicy()) {
+	if !registerAsk(ctx, boundPolicyModule(t, leaf, refusingNode()).GetRegisterAppPolicy()) {
 		t.Fatal("clearing the delegate did not restore accept-all")
 	}
 }
 
-// A failed save leaves the active policy as it was.
-func TestAppRegisterDelegateUnsavedIsNotApplied(t *testing.T) {
+// A failed save leaves the policy as it was.
+func TestRegisterAppPolicyIgnoresAnUnsavedDelegate(t *testing.T) {
 	ctx := astral.NewContext(nil)
 	leaf := &policyLeaf{}
-	mod := boundPolicyModule(t, leaf, newDelegateNode(&apphost.AppRegisterDecision{Allow: false}))
+	mod := boundPolicyModule(t, leaf, refusingNode())
 	leaf.failSet = true
 
-	d := &policy.PolicyDelegate{Identity: astral.GenerateIdentity(), Operation: "control.decide_app_register"}
-	if err := mod.SetAppRegisterPolicy(ctx, d); err == nil {
+	d := &policy.Delegate{Identity: astral.GenerateIdentity(), Operation: "control.decide_app_register"}
+	if err := mod.policy.AppRegister.Set(ctx, d); err == nil {
 		t.Fatal("a failed save was acknowledged")
 	}
-
-	if !registerAsk(ctx, mod.GetAppRegisterPolicy()) {
+	if !registerAsk(ctx, mod.GetRegisterAppPolicy()) {
 		t.Fatal("an unsaved delegate was applied")
 	}
 }

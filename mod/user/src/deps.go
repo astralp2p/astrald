@@ -48,8 +48,6 @@ func (mod *Module) LoadDependencies(ctx *astral.Context) (err error) {
 	if err = tree.BindPath(ctx, &mod.policy, mod.Tree.Root(), policyPath, true); err != nil {
 		return err
 	}
-	mod.joinPolicy = mod.selectJoinPolicy(mod.policy.SwarmJoin.Get())
-	mod.invitePolicy = mod.selectInvitePolicy(mod.policy.SwarmInvite.Get())
 
 	mod.Auth.Add(authmod.Func[*nodes.RelayForAction](mod.AuthorizeRelayFor))
 	mod.Auth.Add(authmod.Func[*auth.SeeObjectsAction](mod.AuthorizeSeeObjects))

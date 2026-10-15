@@ -19,7 +19,8 @@ type opAcceptMembershipArgs struct {
 
 // OpAcceptMembership handles the node side of the contract signing ceremony.
 // Rejects if an active contract already exists (code 2).
-// Validates contract subject, identity match, and minimum remaining validity before applying the invite policy.
+// Validates contract subject, identity match, and minimum remaining validity,
+// then verifies the issuer's signature before applying the invite policy.
 // Self-refuses with user.ErrExpelled if this node holds the issuer's ban on itself.
 // On success, stores the signed contract and sets it as the active contract.
 func (mod *Module) OpAcceptMembership(ctx *astral.Context, q *routing.IncomingQuery, args opAcceptMembershipArgs) (err error) {
@@ -29,7 +30,8 @@ func (mod *Module) OpAcceptMembership(ctx *astral.Context, q *routing.IncomingQu
 		return q.RejectWithCode(2)
 	}
 
-	ch := q.Accept(channel.WithFormats(args.In, args.Out))
+	conn := q.AcceptRaw()
+	ch := channel.New(conn, channel.WithFormats(args.In, args.Out))
 	defer ch.Close()
 
 	// receive the contract to sign
@@ -56,11 +58,9 @@ func (mod *Module) OpAcceptMembership(ctx *astral.Context, q *routing.IncomingQu
 		return ch.Send(user.ErrExpelled)
 	}
 
-	approved := mod.GetSwarmInvitePolicy()(ctx, q.Caller(), contract)
-	if !approved {
-		return ch.Send(user.ErrInvitationDeclined)
-	}
-
+	// why the signature before the policy: the client sends contract and
+	// signature back to back, the watch below consumes the pipe, and a delegate
+	// decides on an invitation whose issuer is verified.
 	var issuerSig *crypto.Signature
 	err = ch.Switch(channel.Expect(&issuerSig))
 	if err != nil {
@@ -70,6 +70,20 @@ func (mod *Module) OpAcceptMembership(ctx *astral.Context, q *routing.IncomingQu
 	signed := &auth.SignedContract{Contract: contract, IssuerSig: issuerSig}
 	if err = mod.Auth.VerifyIssuer(signed); err != nil {
 		return ch.Send(astral.Err(err))
+	}
+
+	// why: the inviter sends nothing more, and only the conn tells a waiting
+	// decision that nobody waits for its answer.
+	policyCtx, stop := routing.UntilDisconnect(ctx, conn)
+	defer stop()
+
+	dec, err := mod.GetSwarmInvitePolicy()(policyCtx, &user.SwarmInviteRequest{Inviter: q.Caller(), Contract: contract})
+	switch {
+	case err != nil:
+		mod.log.Logv(1, "invitation from %v declined: %v", q.Caller(), err)
+		return ch.Send(user.ErrInvitationDeclined)
+	case !bool(dec.Allow):
+		return ch.Send(user.ErrInvitationDeclined)
 	}
 
 	subjectSig, err := mod.Auth.SignSubject(ctx, signed)

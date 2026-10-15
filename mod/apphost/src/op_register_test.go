@@ -6,9 +6,11 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/astralp2p/astral-go/api/apphost"
 	"github.com/astralp2p/astral-go/api/auth"
 	"github.com/astralp2p/astral-go/api/crypto"
 	"github.com/astralp2p/astral-go/api/nodes"
+	"github.com/astralp2p/astral-go/api/policy"
 	"github.com/astralp2p/astral-go/astral"
 	cryptomod "github.com/astralp2p/astrald/mod/crypto"
 	objectsmod "github.com/astralp2p/astrald/mod/objects"
@@ -23,12 +25,27 @@ const (
 	stepIndexKey   = "index key"
 )
 
-// registerSteps records, in order, the steps apphost.register takes, and
-// refuses to index a relay contract when indexErr is set.
+// registerSteps records, in order, the steps apphost.register takes and the
+// authorizer assignments it records. It refuses to index a relay contract when
+// indexErr is set, and refuses an assignment when setErr is set.
 type registerSteps struct {
 	mu       sync.Mutex
 	steps    []string
+	assigned []*auth.AuthorizerAssignment
 	indexErr error
+	setErr   error
+}
+
+func (r *registerSteps) assign(a *auth.AuthorizerAssignment) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.assigned = append(r.assigned, a)
+}
+
+func (r *registerSteps) assignments() []*auth.AuthorizerAssignment {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return slices.Clone(r.assigned)
 }
 
 func (r *registerSteps) record(step string) {
@@ -58,6 +75,14 @@ func (a registerAuth) IndexContract(_ *astral.Context, sc *auth.SignedContract) 
 		return a.steps.indexErr
 	}
 	a.steps.record(stepIndexRelay)
+	return nil
+}
+
+func (a registerAuth) SetAuthorizer(_ *astral.Context, assignment *auth.AuthorizerAssignment) error {
+	if a.steps.setErr != nil {
+		return a.steps.setErr
+	}
+	a.steps.assign(assignment)
 	return nil
 }
 
@@ -139,27 +164,142 @@ func TestRegisterLeavesNoKeyWhenTheRelayContractFails(t *testing.T) {
 	}
 }
 
-// TestRegisterRefusedProvisionsNothing: a refusing policy rejects the query,
-// mints no key, and issues no token.
-func TestRegisterRefusedProvisionsNothing(t *testing.T) {
-	steps := &registerSteps{}
+// delegatedRegistrar is a registrar whose registration policy is delegated to
+// node, which answers one question.
+func delegatedRegistrar(t *testing.T, steps *registerSteps, node *delegateNode) *Module {
+	t.Helper()
+
 	mod := serveAppsRegistrar(t)
-	mod.appRegisterPolicy = func(*astral.Context, string, string, []*auth.Permit, []*auth.Permit) ([]*auth.Permit, []*auth.Permit, bool) {
-		return nil, nil, false
-	}
+	mod.node = node
 	mod.Auth = registerAuth{steps: steps}
 	mod.Crypto = registerKeys{steps: steps}
 	mod.Objects = registerStore{steps: steps}
 
-	if err := route(t, mod.OpRegister, astral.GenerateIdentity(), "apphost.register", newRecordingWriter()); err == nil {
-		t.Fatal("a refused registration was accepted")
+	d := &policy.Delegate{Identity: astral.GenerateIdentity(), Operation: "control.decide_app_register"}
+	if err := mod.policy.AppRegister.Set(astral.NewContext(nil), d); err != nil {
+		t.Fatalf("set delegate: %v", err)
 	}
+	return mod
+}
+
+func issuedTokens(t *testing.T, mod *Module) []dbAccessToken {
+	t.Helper()
+
+	var tokens []dbAccessToken
+	if err := mod.db.Find(&tokens).Error; err != nil {
+		t.Fatalf("list tokens: %v", err)
+	}
+	return tokens
+}
+
+// TestRegisterRefusedProvisionsNothing: the query is accepted before the
+// policy decides, so a refusal answers an error object; it mints no key and
+// issues no token.
+func TestRegisterRefusedProvisionsNothing(t *testing.T) {
+	steps := &registerSteps{}
+	mod := delegatedRegistrar(t, steps, refusingNode())
+	w := newRecordingWriter()
+
+	if err := route(t, mod.OpRegister, astral.GenerateIdentity(), "apphost.register", w); err != nil {
+		t.Fatalf("a delegated registration was rejected before the decision: %v", err)
+	}
+	awaitServeAppsClose(t, w)
+
+	if w.written() == 0 {
+		t.Fatal("a refused registration answered nothing")
+	}
+	if got := steps.taken(); len(got) != 0 {
+		t.Fatalf("a refused registration took steps %q", got)
+	}
+	if tokens := issuedTokens(t, mod); len(tokens) != 0 {
+		t.Fatalf("a refused registration issued %d tokens", len(tokens))
+	}
+}
+
+// TestRegisterRecordsTheDecisionsAuthorizers: the assignments a delegate names
+// are recorded with the new identity as actor, after the key is in place and
+// before the token is issued; the delegate's own copy stays actor-less.
+func TestRegisterRecordsTheDecisionsAuthorizers(t *testing.T) {
+	steps := &registerSteps{}
+	named := &auth.AuthorizerAssignment{Action: "mod.auth.see_objects_action", Endpoint: "astral://control-plane:control.authorize"}
+	mod := delegatedRegistrar(t, steps, newDelegateNode(&apphost.AppRegisterDecision{
+		Allow:       true,
+		Authorizers: []*auth.AuthorizerAssignment{named},
+	}))
+	w := newRecordingWriter()
+
+	if err := route(t, mod.OpRegister, astral.GenerateIdentity(), "apphost.register", w); err != nil {
+		t.Fatalf("apphost.register refused: %v", err)
+	}
+	awaitServeAppsClose(t, w)
+
+	tokens := issuedTokens(t, mod)
+	if len(tokens) != 1 {
+		t.Fatalf("issued %d tokens, want one", len(tokens))
+	}
+	assigned := steps.assignments()
+	if len(assigned) != 1 {
+		t.Fatalf("recorded %d assignments, want one", len(assigned))
+	}
+	if assigned[0].Action != named.Action || assigned[0].Endpoint != named.Endpoint {
+		t.Fatalf("recorded %+v, want the delegate's assignment", assigned[0])
+	}
+	if assigned[0].Actor == nil || !assigned[0].Actor.IsEqual(tokens[0].Identity) {
+		t.Fatalf("recorded actor %v, want the new identity %v", assigned[0].Actor, tokens[0].Identity)
+	}
+	if named.Actor != nil {
+		t.Fatal("the delegate's assignment was changed in place")
+	}
+	if want := []string{stepIndexRelay, stepStoreKey, stepIndexKey}; !slices.Equal(steps.taken(), want) {
+		t.Fatalf("apphost.register took steps %q; want %q", steps.taken(), want)
+	}
+}
+
+// TestRegisterIssuesNoTokenWhenAnAuthorizerFails: an assignment the auth
+// module cannot record fails the registration after the identity exists, and
+// no token is issued.
+func TestRegisterIssuesNoTokenWhenAnAuthorizerFails(t *testing.T) {
+	steps := &registerSteps{setErr: errors.New("endpoint names no transport")}
+	mod := delegatedRegistrar(t, steps, newDelegateNode(&apphost.AppRegisterDecision{
+		Allow:       true,
+		Authorizers: []*auth.AuthorizerAssignment{{Action: "mod.auth.see_objects_action", Endpoint: "ftp://nowhere"}},
+	}))
+	w := newRecordingWriter()
+
+	if err := route(t, mod.OpRegister, astral.GenerateIdentity(), "apphost.register", w); err != nil {
+		t.Fatalf("apphost.register refused: %v", err)
+	}
+	awaitServeAppsClose(t, w)
+
+	if tokens := issuedTokens(t, mod); len(tokens) != 0 {
+		t.Fatalf("a failed assignment issued %d tokens", len(tokens))
+	}
+	if w.written() == 0 {
+		t.Fatal("a failed assignment answered nothing")
+	}
+}
+
+// TestRegisterRefusesADecisionNamingAnActor: the node names the actor, so a
+// delegate that names one has sent a decision the node cannot apply.
+func TestRegisterRefusesADecisionNamingAnActor(t *testing.T) {
+	steps := &registerSteps{}
+	mod := delegatedRegistrar(t, steps, newDelegateNode(&apphost.AppRegisterDecision{
+		Allow: true,
+		Authorizers: []*auth.AuthorizerAssignment{{
+			Action: "mod.auth.see_objects_action", Endpoint: "astral://control-plane:control.authorize", Actor: astral.GenerateIdentity(),
+		}},
+	}))
+	w := newRecordingWriter()
+
+	if err := route(t, mod.OpRegister, astral.GenerateIdentity(), "apphost.register", w); err != nil {
+		t.Fatalf("apphost.register rejected before the decision: %v", err)
+	}
+	awaitServeAppsClose(t, w)
 
 	if got := steps.taken(); len(got) != 0 {
 		t.Fatalf("a refused registration took steps %q", got)
 	}
-	var tokens []dbAccessToken
-	if err := mod.db.Find(&tokens).Error; err != nil || len(tokens) != 0 {
-		t.Fatalf("a refused registration issued %d tokens (%v)", len(tokens), err)
+	if tokens := issuedTokens(t, mod); len(tokens) != 0 {
+		t.Fatalf("a refused registration issued %d tokens", len(tokens))
 	}
 }

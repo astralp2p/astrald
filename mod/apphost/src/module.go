@@ -49,11 +49,9 @@ type Module struct {
 	enRoute               sig.Map[astral.Nonce, *queryEnRoute]
 	pendingInboundQueries sig.Map[astral.Nonce, *pendingInboundQuery]
 
-	// policy persists the policy delegates. policyMu guards appRegisterPolicy,
-	// the active registration policy; nil selects accept-all.
-	policy            policyConfig
-	policyMu          sync.RWMutex
-	appRegisterPolicy apphostmod.AppRegisterPolicy
+	// policy persists the registration delegate; an unset value selects
+	// accept-all. GetRegisterAppPolicy reads it on every decision.
+	policy policyConfig
 }
 
 func (mod *Module) Run(ctx *astral.Context) error {

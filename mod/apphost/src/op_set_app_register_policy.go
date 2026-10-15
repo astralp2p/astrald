@@ -1,6 +1,8 @@
 package apphost
 
 import (
+	"errors"
+
 	"github.com/astralp2p/astral-go/api/auth"
 	"github.com/astralp2p/astral-go/api/policy"
 	"github.com/astralp2p/astral-go/astral"
@@ -9,17 +11,19 @@ import (
 )
 
 type opSetAppRegisterPolicyArgs struct {
-	// Identity is the identity or alias that decides apphost.register.
-	Identity string
-	// Operation is the op the identity serves for the decision.
+	// Identity and Operation name the delegate that decides apphost.register.
+	// Both empty restores AcceptAll; one alone is an error.
+	Identity  string
 	Operation string
-	In        string
-	Out       string
+	// Timeout bounds one question. Zero waits policy.MaxTimeout; above it is
+	// refused.
+	Timeout astral.Duration
+	In      string
+	Out     string
 }
 
-// OpSetAppRegisterPolicy selects the app registration policy. Identity and
-// operation together delegate the decision; neither restores accept-all; only
-// one is an error. It answers Ack once the choice is persisted.
+// OpSetAppRegisterPolicy selects the app registration policy and answers Ack
+// once the choice is persisted.
 //
 // why AdminManageApps: the delegate decides which permits every new app
 // receives, which is the administration of app credentials that action covers.
@@ -31,26 +35,38 @@ func (mod *Module) OpSetAppRegisterPolicy(ctx *astral.Context, q *routing.Incomi
 	ch := channel.New(q.AcceptRaw(), channel.WithFormats(args.In, args.Out))
 	defer ch.Close()
 
-	d := &policy.PolicyDelegate{}
-
-	switch {
-	case args.Identity == "" && args.Operation == "":
-	case args.Identity == "" || args.Operation == "":
-		return ch.Send(astral.NewError("identity and operation are set together"))
-	default:
-		id, err := mod.Dir.ResolveIdentity(args.Identity)
-		if err != nil {
+	if args.Identity == "" && args.Operation == "" {
+		if err := mod.policy.AppRegister.Clear(ctx); err != nil {
 			return ch.Send(astral.Err(err))
 		}
-		d.Identity = id
-		d.Operation = astral.String8(args.Operation)
+		mod.log.Logv(1, "app register policy restored to accept-all")
+		return ch.Send(&astral.Ack{})
 	}
 
-	if err := mod.SetAppRegisterPolicy(ctx, d); err != nil {
+	d, err := mod.newDelegate(args.Identity, args.Operation, args.Timeout)
+	if err != nil {
+		return ch.Send(astral.Err(err))
+	}
+	if err = mod.policy.AppRegister.Set(ctx, d); err != nil {
 		return ch.Send(astral.Err(err))
 	}
 
-	mod.log.Logv(1, "app register policy delegate set to %v:%v", d.Identity, d.Operation)
-
+	mod.log.Logv(1, "app register policy delegated to %v:%v", d.Identity, d.Operation)
 	return ch.Send(&astral.Ack{})
+}
+
+// newDelegate resolves name and builds the delegate the setter stores.
+//
+// why not the node itself: the admitting op would ask itself and recurse.
+func (mod *Module) newDelegate(name, op string, timeout astral.Duration) (*policy.Delegate, error) {
+	id, err := mod.Dir.ResolveIdentity(name)
+	if err != nil {
+		return nil, err
+	}
+	if id.IsEqual(mod.node.Identity()) {
+		return nil, errors.New("the node cannot be its own delegate")
+	}
+
+	d := &policy.Delegate{Identity: id, Operation: astral.String8(op), Timeout: timeout}
+	return d, d.Validate()
 }

@@ -1,66 +1,57 @@
 package apphost
 
 import (
-	"github.com/astralp2p/astral-go/api/auth"
+	"github.com/astralp2p/astral-go/api/apphost"
 	"github.com/astralp2p/astral-go/api/policy"
+	"github.com/astralp2p/astral-go/api/tree"
 	"github.com/astralp2p/astral-go/astral"
 	apphostmod "github.com/astralp2p/astrald/mod/apphost"
 )
 
-// GetAppRegisterPolicy returns the policy apphost.register applies: the
-// delegated policy when a delegate is set, accept-all otherwise.
-func (mod *Module) GetAppRegisterPolicy() apphostmod.AppRegisterPolicy {
-	mod.policyMu.RLock()
-	defer mod.policyMu.RUnlock()
+// policyPath is where apphost persists its delegate.
+const policyPath = "/mod/apphost/policy"
 
-	if mod.appRegisterPolicy == nil {
-		return mod.AppRegisterAcceptAll
-	}
-	return mod.appRegisterPolicy
+// policyConfig is bound to the tree at policyPath. An unset AppRegister
+// selects apphostmod.AcceptAll.
+//
+// why apart from Config: Config is read from apphost.yaml and copied from
+// defaultConfig, and a tree.Value carries a mutex, so it cannot ride a copied
+// struct.
+type policyConfig struct {
+	AppRegister tree.Value[*policy.Delegate]
 }
 
-// SetAppRegisterPolicy persists the delegate, then selects the policy it names.
-// A zero delegate restores accept-all. A failed save leaves the policy as it
-// was.
-func (mod *Module) SetAppRegisterPolicy(ctx *astral.Context, d *policy.PolicyDelegate) (err error) {
-	mod.policyMu.Lock()
-	defer mod.policyMu.Unlock()
-
+// GetRegisterAppPolicy returns the policy apphost.register applies: the
+// delegate the tree names, or AcceptAll when none is set.
+//
+// why derived on each call: the tree value is the only state, so a setter
+// writes it and nothing else, and a reload selects the same policy.
+func (mod *Module) GetRegisterAppPolicy() apphostmod.RegisterAppPolicy {
+	d := mod.policy.AppRegister.Get()
 	if d.IsZero() {
-		err = mod.policy.AppRegister.Clear(ctx)
-	} else {
-		err = mod.policy.AppRegister.Set(ctx, d)
+		return apphostmod.AcceptAll
 	}
-	if err != nil {
-		return err
-	}
-
-	mod.appRegisterPolicy = mod.selectAppRegisterPolicy(d)
-
-	return nil
+	return mod.RegisterAppPolicyDelegated(d)
 }
 
-// selectAppRegisterPolicy returns the policy a delegate names.
-func (mod *Module) selectAppRegisterPolicy(d *policy.PolicyDelegate) apphostmod.AppRegisterPolicy {
-	if d.IsZero() {
-		return mod.AppRegisterAcceptAll
+// RegisterAppPolicyDelegated returns the policy that asks d. The policy holds
+// d, so a later change of delegate does not move a question already asked.
+//
+// why a failure refuses and not accepts: once registration is delegated, a
+// delegate that cannot be reached has decided nothing, and falling back would
+// let a stopped delegate open the node to every app.
+func (mod *Module) RegisterAppPolicyDelegated(d *policy.Delegate) apphostmod.RegisterAppPolicy {
+	return func(ctx *astral.Context, req *apphost.AppRegisterRequest) (*apphost.AppRegisterDecision, error) {
+		obj, err := policy.Ask(ctx, mod.node, d, req)
+		if err != nil {
+			return nil, err
+		}
+		// why: any other object is an answer this code cannot read, and an
+		// unreadable answer must not read as permission.
+		dec, ok := obj.(*apphost.AppRegisterDecision)
+		if !ok {
+			return nil, astral.NewErrUnexpectedObject(obj)
+		}
+		return dec, nil
 	}
-	return mod.AppRegisterPolicyDelegated(d)
-}
-
-var _ apphostmod.AppRegisterPolicy = (*Module)(nil).AppRegisterAcceptAll
-
-// AppRegisterAcceptAll admits every registration and writes every permit put in
-// front of it onto the rail it was asked for, whether the caller's origin
-// entitled it or the app simply asked. It is the permissive default its name
-// claims to be: a node that cares which apps hold what delegates the decision.
-func (mod *Module) AppRegisterAcceptAll(
-	_ *astral.Context,
-	origin, _ string,
-	requestedGrantPermits, requestedContractPermits []*auth.Permit,
-) ([]*auth.Permit, []*auth.Permit, bool) {
-	mod.log.Info("accepting registration from origin %v with %v grant permits and %v contract permits",
-		origin, len(requestedGrantPermits), len(requestedContractPermits))
-
-	return requestedGrantPermits, requestedContractPermits, true
 }

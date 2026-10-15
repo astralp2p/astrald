@@ -1,8 +1,6 @@
 package user
 
 import (
-	"sync"
-
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astral-go/astral/log"
 	"github.com/astralp2p/astral-go/lib/routing"
@@ -27,12 +25,9 @@ type Module struct {
 
 	sibs sig.Map[string, Sibling]
 
-	// policy persists the swarm policy delegates. policyMu guards joinPolicy and
-	// invitePolicy, the active policies; nil selects accept-all.
-	policy       policyConfig
-	policyMu     sync.RWMutex
-	joinPolicy   user.SwarmJoinRequestPolicy
-	invitePolicy user.SwarmInvitePolicy
+	// policy persists the swarm delegates; an unset value selects accept-all.
+	// GetSwarmJoinPolicy and GetSwarmInvitePolicy read it on every decision.
+	policy policyConfig
 }
 
 func (mod *Module) Run(ctx *astral.Context) error {

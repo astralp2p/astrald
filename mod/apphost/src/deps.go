@@ -22,7 +22,6 @@ func (mod *Module) LoadDependencies(ctx *astral.Context) (err error) {
 	if err = tree.BindPath(ctx, &mod.policy, mod.Tree.Root(), policyPath, true); err != nil {
 		return
 	}
-	mod.appRegisterPolicy = mod.selectAppRegisterPolicy(mod.policy.AppRegister.Get())
 
 	// optional — apphost can run without user module
 	core.Inject(mod.node, &mod.OptionalDeps)

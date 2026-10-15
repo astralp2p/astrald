@@ -3,6 +3,7 @@ package apphost
 import (
 	"time"
 
+	apphostapi "github.com/astralp2p/astral-go/api/apphost"
 	"github.com/astralp2p/astral-go/api/auth"
 	"github.com/astralp2p/astral-go/api/secp256k1"
 	"github.com/astralp2p/astral-go/astral"
@@ -54,15 +55,36 @@ func (mod *Module) OpRegister(ctx *astral.Context, query *routing.IncomingQuery,
 	// means nothing to a grant, which never leaves the node to be delegated.
 	requestedContractPermits := append(mod.GetWebOriginPermits(origin), parsePermits(args.ContractPermits)...)
 
-	grantPermits, contractPermits, ok := mod.GetAppRegisterPolicy()(
-		ctx, origin, args.Name, requestedGrantPermits, requestedContractPermits,
-	)
-	if !ok {
-		return query.RejectWithCode(1)
-	}
-
-	ch := query.Accept(channel.WithFormats(args.In, args.Out))
+	// why accept before deciding: a delegate may wait on a person, and a query
+	// still en route is bounded by the router's timeout.
+	conn := query.AcceptRaw()
+	ch := channel.New(conn, channel.WithFormats(args.In, args.Out))
 	defer ch.Close()
+
+	// why: an op runs on a context detached from the requester's, and only the
+	// conn tells a waiting decision that nobody waits for its answer.
+	policyCtx, stop := routing.UntilDisconnect(ctx, conn)
+	defer stop()
+
+	dec, err := mod.GetRegisterAppPolicy()(policyCtx, &apphostapi.AppRegisterRequest{
+		Origin:          astral.String8(origin),
+		Name:            astral.String8(args.Name),
+		GrantPermits:    requestedGrantPermits,
+		ContractPermits: requestedContractPermits,
+	})
+	switch {
+	case err != nil:
+		mod.log.Logv(1, "registration refused: %v", err)
+		return ch.Send(apphostapi.ErrRegistrationDeclined)
+	case !bool(dec.Allow):
+		mod.log.Logv(1, "registration from origin %v refused by policy", origin)
+		return ch.Send(apphostapi.ErrRegistrationDeclined)
+	}
+	if err = dec.Validate(); err != nil {
+		mod.log.Logv(1, "registration refused: %v", err)
+		return ch.Send(apphostapi.ErrRegistrationDeclined)
+	}
+	grantPermits, contractPermits := dec.GrantPermits, dec.ContractPermits
 
 	key := secp256k1.New()
 	guestID := secp256k1.Identity(secp256k1.PublicKey(key))
@@ -137,6 +159,21 @@ func (mod *Module) OpRegister(ctx *astral.Context, query *routing.IncomingQuery,
 		}
 
 		if _, err = mod.Objects.Store(ctx, mod.Objects.WriteDefault(), signedPermits); err != nil {
+			return ch.Send(astral.Err(err))
+		}
+	}
+
+	// record the authorizer assignments the decision names, with the new
+	// identity as actor. A failure sends the error rather than a token, for the
+	// reason a grant failure does.
+	//
+	// why after the permits and before the token: a token for an identity whose
+	// authorizer is not in place is a registration the app cannot detect went
+	// wrong.
+	for _, a := range dec.Authorizers {
+		assignment := *a
+		assignment.Actor = guestID
+		if err = mod.Auth.SetAuthorizer(ctx, &assignment); err != nil {
 			return ch.Send(astral.Err(err))
 		}
 	}

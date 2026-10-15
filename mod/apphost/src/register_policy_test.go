@@ -4,10 +4,12 @@ import (
 	"slices"
 	"testing"
 
+	"github.com/astralp2p/astral-go/api/apphost"
 	"github.com/astralp2p/astral-go/api/auth"
 	"github.com/astralp2p/astral-go/api/user"
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astral-go/astral/log"
+	apphostmod "github.com/astralp2p/astrald/mod/apphost"
 )
 
 func actions(permits []*auth.Permit) (out []string) {
@@ -52,20 +54,24 @@ func sameActions(a, b []*auth.Permit) bool {
 // The shipped default is permissive by name: it writes what it is handed,
 // entitlement and ask alike, and leaves deciding to a policy that decides.
 func TestTheDefaultPolicyWritesWhatItIsHanded(t *testing.T) {
-	mod := &Module{config: defaultConfig, log: log.New(nil)}
-
 	askedGrant := parsePermits("mod.auth.serve_objects_action")
 	askedContract := parsePermits("mod.nodes.relay_for_action")
 
-	grantPermits, contractPermits, ok := mod.AppRegisterAcceptAll(astral.NewContext(nil), "", "", askedGrant, askedContract)
-	if !ok {
-		t.Fatal("the default policy refuses no registration")
+	dec, err := apphostmod.AcceptAll(astral.NewContext(nil), &apphost.AppRegisterRequest{
+		GrantPermits:    askedGrant,
+		ContractPermits: askedContract,
+	})
+	if err != nil || !dec.Allow {
+		t.Fatalf("the default policy refuses no registration: %v", err)
 	}
-	if !sameActions(grantPermits, askedGrant) {
-		t.Fatalf("granted %v, want %v", actions(grantPermits), actions(askedGrant))
+	if !sameActions(dec.GrantPermits, askedGrant) {
+		t.Fatalf("granted %v, want %v", actions(dec.GrantPermits), actions(askedGrant))
 	}
-	if !sameActions(contractPermits, askedContract) {
-		t.Fatalf("contracted %v, want %v", actions(contractPermits), actions(askedContract))
+	if !sameActions(dec.ContractPermits, askedContract) {
+		t.Fatalf("contracted %v, want %v", actions(dec.ContractPermits), actions(askedContract))
+	}
+	if len(dec.Authorizers) != 0 {
+		t.Fatalf("the default policy names %d authorizers", len(dec.Authorizers))
 	}
 }
 
@@ -73,26 +79,26 @@ func TestTheDefaultPolicyWritesWhatItIsHanded(t *testing.T) {
 // written on the other, so an app cannot obtain a signature by asking for a
 // grant, nor a revocable row by asking for a contract.
 func TestTheDefaultPolicyKeepsTheRailsApart(t *testing.T) {
-	mod := &Module{config: defaultConfig, log: log.New(nil)}
+	ctx := astral.NewContext(nil)
 
-	grantPermits, contractPermits, _ := mod.AppRegisterAcceptAll(
-		astral.NewContext(nil), "", "", parsePermits("mod.auth.serve_objects_action"), nil,
-	)
-	if len(contractPermits) != 0 {
-		t.Fatalf("a grant request reached the contract rail: %v", actions(contractPermits))
+	dec, _ := apphostmod.AcceptAll(ctx, &apphost.AppRegisterRequest{
+		GrantPermits: parsePermits("mod.auth.serve_objects_action"),
+	})
+	if len(dec.ContractPermits) != 0 {
+		t.Fatalf("a grant request reached the contract rail: %v", actions(dec.ContractPermits))
 	}
-	if len(grantPermits) != 1 {
-		t.Fatalf("granted %v, want one permit", actions(grantPermits))
+	if len(dec.GrantPermits) != 1 {
+		t.Fatalf("granted %v, want one permit", actions(dec.GrantPermits))
 	}
 
-	grantPermits, contractPermits, _ = mod.AppRegisterAcceptAll(
-		astral.NewContext(nil), "", "", nil, parsePermits("mod.nodes.relay_for_action"),
-	)
-	if len(grantPermits) != 0 {
-		t.Fatalf("a contract request reached the grant rail: %v", actions(grantPermits))
+	dec, _ = apphostmod.AcceptAll(ctx, &apphost.AppRegisterRequest{
+		ContractPermits: parsePermits("mod.nodes.relay_for_action"),
+	})
+	if len(dec.GrantPermits) != 0 {
+		t.Fatalf("a contract request reached the grant rail: %v", actions(dec.GrantPermits))
 	}
-	if len(contractPermits) != 1 {
-		t.Fatalf("contracted %v, want one permit", actions(contractPermits))
+	if len(dec.ContractPermits) != 1 {
+		t.Fatalf("contracted %v, want one permit", actions(dec.ContractPermits))
 	}
 }
 

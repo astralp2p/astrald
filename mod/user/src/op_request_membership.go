@@ -25,12 +25,23 @@ func (mod *Module) OpRequestMembership(ctx *astral.Context, q *routing.IncomingQ
 		return q.RejectWithCode(2)
 	}
 
-	ch := channel.New(q.AcceptRaw(), channel.WithFormats(args.In, args.Out))
+	conn := q.AcceptRaw()
+	ch := channel.New(conn, channel.WithFormats(args.In, args.Out))
 	defer ch.Close()
 
 	target := q.Caller()
-	joinAllowed := mod.GetSwarmJoinRequestPolicy()(ctx, target)
-	if !joinAllowed {
+
+	// why: the requester sends nothing more, and only the conn tells a waiting
+	// decision that nobody waits for its answer.
+	policyCtx, stop := routing.UntilDisconnect(ctx, conn)
+	defer stop()
+
+	dec, err := mod.GetSwarmJoinPolicy()(policyCtx, &user.SwarmJoinRequest{Requester: target})
+	switch {
+	case err != nil:
+		mod.log.Logv(1, "join request from %v declined: %v", target, err)
+		return ch.Send(user.ErrRequestDeclined)
+	case !bool(dec.Allow):
 		return ch.Send(user.ErrRequestDeclined)
 	}
 

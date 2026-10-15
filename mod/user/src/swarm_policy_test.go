@@ -19,7 +19,7 @@ import (
 
 // swarmDelegate stands in for the node routing a question to a delegate. It
 // records the operation and the request, then answers with answer, or holds the
-// question open when answer is nil.
+// question open when answer is nil. One delegate answers one question.
 type swarmDelegate struct {
 	id      *astral.Identity
 	answer  astral.Object
@@ -61,16 +61,24 @@ func (n *swarmDelegate) RouteQuery(_ *astral.Context, q *astral.InFlightQuery, w
 	})
 }
 
-func delegate() *policy.PolicyDelegate {
-	return &policy.PolicyDelegate{Identity: astral.GenerateIdentity(), Operation: "control.decide_swarm"}
+func delegate() *policy.Delegate {
+	return &policy.Delegate{Identity: astral.GenerateIdentity(), Operation: "control.decide_swarm"}
+}
+
+func refusingSwarmDelegate() *swarmDelegate {
+	return newSwarmDelegate(&user.SwarmJoinDecision{Allow: false})
 }
 
 func TestSwarmJoinDelegateDecides(t *testing.T) {
-	node := newSwarmDelegate(&user.SwarmJoinDecision{Allow: false})
+	node := refusingSwarmDelegate()
 	mod := &Module{node: node, log: log.New(nil)}
 	requester := astral.GenerateIdentity()
 
-	if mod.SwarmJoinRequestPolicyDelegated(delegate())(astral.NewContext(nil), requester) {
+	dec, err := mod.SwarmJoinPolicyDelegated(delegate())(astral.NewContext(nil), &user.SwarmJoinRequest{Requester: requester})
+	if err != nil {
+		t.Fatalf("delegated policy: %v", err)
+	}
+	if dec.Allow {
 		t.Fatal("the delegate's refusal was not applied")
 	}
 	if op := <-node.queried; op != "control.decide_swarm" {
@@ -87,7 +95,11 @@ func TestSwarmInviteDelegateDecides(t *testing.T) {
 	inviter := astral.GenerateIdentity()
 	contract := &auth.Contract{Issuer: inviter, Subject: astral.GenerateIdentity()}
 
-	if !mod.SwarmInvitePolicyDelegated(delegate())(astral.NewContext(nil), inviter, contract) {
+	dec, err := mod.SwarmInvitePolicyDelegated(delegate())(astral.NewContext(nil), &user.SwarmInviteRequest{Inviter: inviter, Contract: contract})
+	if err != nil {
+		t.Fatalf("delegated policy: %v", err)
+	}
+	if !dec.Allow {
 		t.Fatal("the delegate's approval was not applied")
 	}
 	req, ok := (<-node.got).(*user.SwarmInviteRequest)
@@ -96,12 +108,15 @@ func TestSwarmInviteDelegateDecides(t *testing.T) {
 	}
 }
 
-// An answer of the wrong type declines, never permits: a join decision does not
-// answer an invitation.
+// An answer of the wrong type is an error, never permission: a join decision
+// does not answer an invitation.
 func TestSwarmDelegateRefusesAnUnreadableAnswer(t *testing.T) {
 	mod := &Module{node: newSwarmDelegate(&user.SwarmJoinDecision{Allow: true}), log: log.New(nil)}
 
-	if mod.SwarmInvitePolicyDelegated(delegate())(astral.NewContext(nil), astral.GenerateIdentity(), &auth.Contract{}) {
+	_, err := mod.SwarmInvitePolicyDelegated(delegate())(astral.NewContext(nil), &user.SwarmInviteRequest{
+		Inviter: astral.GenerateIdentity(), Contract: &auth.Contract{},
+	})
+	if err == nil {
 		t.Fatal("a join decision was read as an invite decision")
 	}
 }
@@ -111,15 +126,18 @@ func TestSwarmDelegateEndsWithItsContext(t *testing.T) {
 	mod := &Module{node: node, log: log.New(nil)}
 	ctx, cancel := astral.NewContext(nil).WithCancel()
 
-	done := make(chan bool, 1)
-	go func() { done <- mod.SwarmJoinRequestPolicyDelegated(delegate())(ctx, astral.GenerateIdentity()) }()
+	done := make(chan error, 1)
+	go func() {
+		_, err := mod.SwarmJoinPolicyDelegated(delegate())(ctx, &user.SwarmJoinRequest{Requester: astral.GenerateIdentity()})
+		done <- err
+	}()
 
 	<-node.got
 	cancel()
 
 	select {
-	case ok := <-done:
-		if ok {
+	case err := <-done:
+		if err == nil {
 			t.Fatal("a cancelled question permitted the join")
 		}
 	case <-time.After(2 * time.Second):
@@ -167,7 +185,8 @@ func (n *swarmLeaf) Create(*astral.Context, string) (tree.Node, error) {
 	return nil, tree.ErrUnsupported
 }
 
-// boundSwarmModule restores the join policy from leaf as LoadDependencies does.
+// boundSwarmModule binds the join delegate value to leaf as LoadDependencies
+// does.
 func boundSwarmModule(t *testing.T, leaf *swarmLeaf, node astral.Node) *Module {
 	t.Helper()
 
@@ -176,49 +195,54 @@ func boundSwarmModule(t *testing.T, leaf *swarmLeaf, node astral.Node) *Module {
 	if err := mod.policy.SwarmJoin.Bind(astral.NewContext(nil), leaf); err != nil {
 		t.Fatalf("bind: %v", err)
 	}
-	mod.joinPolicy = mod.selectJoinPolicy(mod.policy.SwarmJoin.Get())
 	return mod
 }
 
 func joinAllowed(t *testing.T, mod *Module) bool {
 	t.Helper()
 
-	return mod.GetSwarmJoinRequestPolicy()(astral.NewContext(nil), astral.GenerateIdentity())
+	dec, err := mod.GetSwarmJoinPolicy()(astral.NewContext(nil), &user.SwarmJoinRequest{Requester: astral.GenerateIdentity()})
+	return err == nil && bool(dec.Allow)
 }
 
-// A delegate survives a reload; clearing it restores accept-all.
-func TestSwarmJoinDelegateSelectsAndPersists(t *testing.T) {
+// The tree value is the only state: a delegate written there is asked at once
+// and after a reload, and clearing it restores accept-all.
+func TestSwarmJoinPolicyFollowsTheTreeValue(t *testing.T) {
 	ctx := astral.NewContext(nil)
 	leaf := &swarmLeaf{}
-	node := newSwarmDelegate(&user.SwarmJoinDecision{Allow: false})
 
-	if !joinAllowed(t, boundSwarmModule(t, leaf, node)) {
+	if !joinAllowed(t, boundSwarmModule(t, leaf, refusingSwarmDelegate())) {
 		t.Fatal("with no delegate a join was refused")
 	}
 
-	if err := boundSwarmModule(t, leaf, node).SetSwarmJoinRequestPolicy(ctx, delegate()); err != nil {
+	first := boundSwarmModule(t, leaf, refusingSwarmDelegate())
+	if err := first.policy.SwarmJoin.Set(ctx, delegate()); err != nil {
 		t.Fatalf("set: %v", err)
 	}
+	if joinAllowed(t, first) {
+		t.Fatal("a delegate just set was not asked")
+	}
 
-	second := boundSwarmModule(t, leaf, node)
+	second := boundSwarmModule(t, leaf, refusingSwarmDelegate())
 	if joinAllowed(t, second) {
 		t.Fatal("after reload the delegate's refusal was not applied")
 	}
 
-	if err := second.SetSwarmJoinRequestPolicy(ctx, &policy.PolicyDelegate{}); err != nil {
+	if err := second.policy.SwarmJoin.Clear(ctx); err != nil {
 		t.Fatalf("clear: %v", err)
 	}
-	if !joinAllowed(t, boundSwarmModule(t, leaf, node)) {
+	if !joinAllowed(t, boundSwarmModule(t, leaf, refusingSwarmDelegate())) {
 		t.Fatal("clearing the delegate did not restore accept-all")
 	}
 }
 
-func TestSwarmJoinDelegateUnsavedIsNotApplied(t *testing.T) {
+// A failed save leaves the policy as it was.
+func TestSwarmJoinPolicyIgnoresAnUnsavedDelegate(t *testing.T) {
 	leaf := &swarmLeaf{}
-	mod := boundSwarmModule(t, leaf, newSwarmDelegate(&user.SwarmJoinDecision{Allow: false}))
+	mod := boundSwarmModule(t, leaf, refusingSwarmDelegate())
 	leaf.failSet = true
 
-	if err := mod.SetSwarmJoinRequestPolicy(astral.NewContext(nil), delegate()); err == nil {
+	if err := mod.policy.SwarmJoin.Set(astral.NewContext(nil), delegate()); err == nil {
 		t.Fatal("a failed save was acknowledged")
 	}
 	if !joinAllowed(t, mod) {
