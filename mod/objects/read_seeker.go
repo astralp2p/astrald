@@ -1,7 +1,6 @@
 package objects
 
 import (
-	"errors"
 	"github.com/astralp2p/astral-go/astral"
 	"io"
 	"sync"
@@ -70,11 +69,16 @@ func (r *ReadSeeker) Seek(offset int64, whence int) (int64, error) {
 	return r.pos, err
 }
 
+// Close closes the open reader. A ReadSeeker holding none -- never read, or
+// after a failed Seek -- has nothing to close.
 func (r *ReadSeeker) Close() error {
-	if c, ok := r.r.(io.Closer); ok {
-		return c.Close()
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	if r.r == nil {
+		return nil
 	}
-	return errors.New("reader does not implement io.Closer")
+	return r.r.Close()
 }
 
 func (r *ReadSeeker) openAt(pos int64) (err error) {

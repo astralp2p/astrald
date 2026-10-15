@@ -91,3 +91,48 @@ func TestReadSeeker_FailedSeekKeepsTheOffset(t *testing.T) {
 		t.Fatalf("read after the failed seek returned %q; want %q", next, "4567")
 	}
 }
+
+// TestReadSeeker_CloseWithNoOpenReader closes a ReadSeeker that holds no reader:
+// one never read, and one whose Seek failed. Neither has a stream to close.
+func TestReadSeeker_CloseWithNoOpenReader(t *testing.T) {
+	data := []byte("0123456789")
+	repo := &offsetRepository{id: astral.ObjectID{Size: uint64(len(data)), Hash: sha256.Sum256(data)}, data: data}
+
+	unread := NewReadSeeker(astral.NewContext(nil), &repo.id, repo, nil)
+	if err := unread.Close(); err != nil {
+		t.Fatalf("close a ReadSeeker never read: %v", err)
+	}
+
+	reader, err := repo.Read(nil, &repo.id, 0, 0)
+	if err != nil {
+		t.Fatalf("open: %v", err)
+	}
+	seeked := NewReadSeeker(astral.NewContext(nil), &repo.id, repo, reader)
+	if _, err := seeked.Seek(20, io.SeekStart); !errors.Is(err, ErrOutOfBounds) {
+		t.Fatalf("seek past the end returned %v; want ErrOutOfBounds", err)
+	}
+	if err := seeked.Close(); err != nil {
+		t.Fatalf("close after a failed seek: %v", err)
+	}
+	if !reader.(*stubReader).closed.Load() {
+		t.Fatal("the failed seek left the first reader open")
+	}
+}
+
+// TestReadSeeker_CloseClosesTheOpenReader closes a ReadSeeker that holds a reader.
+func TestReadSeeker_CloseClosesTheOpenReader(t *testing.T) {
+	data := []byte("0123456789")
+	repo := &offsetRepository{id: astral.ObjectID{Size: uint64(len(data)), Hash: sha256.Sum256(data)}, data: data}
+	reader, err := repo.Read(nil, &repo.id, 0, 0)
+	if err != nil {
+		t.Fatalf("open: %v", err)
+	}
+
+	rs := NewReadSeeker(astral.NewContext(nil), &repo.id, repo, reader)
+	if err := rs.Close(); err != nil {
+		t.Fatalf("close: %v", err)
+	}
+	if !reader.(*stubReader).closed.Load() {
+		t.Fatal("Close left the open reader open")
+	}
+}
