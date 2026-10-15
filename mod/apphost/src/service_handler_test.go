@@ -4,7 +4,9 @@ import (
 	"bytes"
 	"errors"
 	"io"
+	"math"
 	"net"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -201,6 +203,40 @@ func TestServiceHandler_HandlerGoneOnSendFailure(t *testing.T) {
 		}
 	case <-time.After(2 * time.Second):
 		t.Fatal("RouteQuery did not return on send failure")
+	}
+}
+
+// An over-long query is not routed to the app, and the handler survives it:
+// IncomingQueryMsg carries the query as a string16, and a failed send would
+// read as a closed handler and remove it. The next query reaches the app intact.
+func TestServiceHandler_OverLongQueryKeepsTheHandler(t *testing.T) {
+	rig := newInboundTestRig(t)
+	defer rig.clientCxn.Close()
+
+	long := newQuery()
+	long.QueryString = astral.String32(strings.Repeat("q", math.MaxUint16+1))
+	_, errCh := rig.runRouteQuery(long, &nopWriteCloser{})
+
+	select {
+	case err := <-errCh:
+		var notFound *astral.ErrRouteNotFound
+		if !errors.As(err, &notFound) {
+			t.Fatalf("expected ErrRouteNotFound, got %v", err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("RouteQuery did not return on an over-long query")
+	}
+
+	next := newQuery()
+	rig.runRouteQuery(next, &nopWriteCloser{})
+
+	obj, err := rig.clientCh.Receive()
+	if err != nil {
+		t.Fatalf("client recv after an over-long query: %v", err)
+	}
+	msg, ok := obj.(*apphost.IncomingQueryMsg)
+	if !ok || msg.QueryID != next.Nonce {
+		t.Fatalf("client received %T %v, want the next query %v", obj, obj, next.Nonce)
 	}
 }
 

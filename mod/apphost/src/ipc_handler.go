@@ -3,6 +3,7 @@ package apphost
 import (
 	"errors"
 	"io"
+	"math"
 
 	"github.com/astralp2p/astral-go/api/apphost"
 	"github.com/astralp2p/astral-go/astral"
@@ -25,6 +26,12 @@ var errEndpointUnavailable = errors.New("endpoint unavailable")
 // directions between the caller and the local app process.
 // A new connection is dialled for each query; the endpoint is expected to be a long-running daemon.
 func (handler *IPCHandler) RouteQuery(ctx *astral.Context, q *astral.InFlightQuery, w io.WriteCloser) (io.WriteCloser, error) {
+	// why: HandleQueryMsg carries the query as a string16, and a longer string
+	// fails to encode.
+	if len(q.QueryString) > math.MaxUint16 {
+		return query.RouteNotFound()
+	}
+
 	conn, err := ipc.DialContext(ctx, handler.Endpoint)
 	if err != nil {
 		return nil, errEndpointUnavailable

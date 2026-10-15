@@ -3,6 +3,7 @@ package apphost
 import (
 	"errors"
 	"io"
+	"math"
 	"time"
 
 	"github.com/astralp2p/astral-go/api/apphost"
@@ -50,6 +51,12 @@ type pendingInboundQuery struct {
 //   - RejectIncomingMsg on the registration connection (carry the code through `reject`)
 //   - QueryAttachTimeout elapses → route-not-found
 func (h *ServiceHandler) RouteQuery(ctx *astral.Context, q *astral.InFlightQuery, w io.WriteCloser) (io.WriteCloser, error) {
+	// why: IncomingQueryMsg carries the query as a string16, and a longer string
+	// fails to encode; a failed send reads as a closed handler and removes it.
+	if len(q.QueryString) > math.MaxUint16 {
+		return query.RouteNotFound()
+	}
+
 	pending := &pendingInboundQuery{
 		query:  q,
 		attach: make(chan io.ReadWriteCloser, 1),
