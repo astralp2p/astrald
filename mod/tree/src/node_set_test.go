@@ -13,6 +13,7 @@ import (
 // unencodableObject fails to encode, so the DB write rejects it.
 type unencodableObject struct{}
 
+// astral:blueprint-ignore
 func (unencodableObject) ObjectType() string { return "test.unencodable" }
 
 func (unencodableObject) WriteTo(io.Writer) (int64, error) {
