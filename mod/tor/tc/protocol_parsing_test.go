@@ -30,6 +30,10 @@ func TestVarMapGetString(t *testing.T) {
 		{"bare", VarMap{"k": "v"}, "v"},
 		{"lone quote kept", VarMap{"k": `"`}, `"`},
 		{"missing key", VarMap{}, ""},
+		{"escaped backslash and quotes", VarMap{"k": `"a\\b\"c\'d"`}, `a\b"c'd`},
+		{"escaped controls", VarMap{"k": `"a\tb\nc\rd"`}, "a\tb\nc\rd"},
+		{"octal bytes", VarMap{"k": `"\303\251"`}, "\u00e9"},
+		{"bare value kept", VarMap{"k": `a\b`}, `a\b`},
 	}
 
 	for _, tt := range tests {
@@ -70,6 +74,28 @@ func TestParseProtocolInfo(t *testing.T) {
 	}
 	if want := "0.4.8.9"; info.Version != want {
 		t.Errorf("Version = %q; want %q", info.Version, want)
+	}
+}
+
+// COOKIEFILE is a QuotedString, and Tor writes its escapes: these lines are
+// what Tor 0.4.9.14 sent for the two cookie file names, under another directory.
+func TestParseProtocolInfoDecodesCookieFileEscapes(t *testing.T) {
+	tests := []struct {
+		line string
+		want string
+	}{
+		{`AUTH METHODS=COOKIE,SAFECOOKIE COOKIEFILE="/var/lib/tor/co\\ok\"ie file"`, `/var/lib/tor/co\ok"ie file`},
+		{`AUTH METHODS=COOKIE,SAFECOOKIE COOKIEFILE="/var/lib/tor/q\'t\tab-\303\251-end"`, "/var/lib/tor/q't\tab-\u00e9-end"},
+	}
+
+	for _, tt := range tests {
+		info, err := parseProtocolInfo([]string{tt.line})
+		if err != nil {
+			t.Fatalf("parseProtocolInfo(%q): %v", tt.line, err)
+		}
+		if info.AuthCookieFile != tt.want {
+			t.Errorf("AuthCookieFile = %q; want %q", info.AuthCookieFile, tt.want)
+		}
 	}
 }
 
