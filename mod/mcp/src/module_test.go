@@ -53,6 +53,7 @@ func testAgentModule(t *testing.T) (*Module, *fakeMessaging) {
 	}
 	mod.Messaging = msg
 	mod.Dir = &stubDir{aliases: map[string]*astral.Identity{}}
+	mod.Apphost = &stubApphost{tokens: map[string]*astral.Identity{}}
 
 	return mod, msg
 }

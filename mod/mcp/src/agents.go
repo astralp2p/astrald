@@ -74,6 +74,24 @@ func (mod *Module) isWithdrawn(row *dbAgent) (bool, error) {
 	}
 }
 
+// liveToken answers the row's token while it authenticates as the agent, and
+// an empty token once it does not.
+//
+// why the token is checked and not trusted: the row keeps the token issued at
+// creation, and apphost.delete_token revokes it without writing this row, so
+// a reissued agent's row holds a revoked token.
+//
+// why a failed check withholds the token: AuthenticateToken answers one error
+// for a revoked, an expired and an unreadable token alike, and a listed token
+// must authenticate.
+func (mod *Module) liveToken(row *dbAgent) string {
+	id, err := mod.Apphost.AuthenticateToken(row.Token)
+	if err != nil || !id.IsEqual(row.Identity) {
+		return ""
+	}
+	return row.Token
+}
+
 // dropWithdrawn deletes the row of an agent whose participant is withdrawn —
 // see isWithdrawn — and answers whether it was one.
 //

@@ -67,7 +67,7 @@ func (mod *Module) Agents() (list []*mcp.Agent, err error) {
 		list = append(list, &mcp.Agent{
 			Identity:  r.Identity,
 			Alias:     astral.String8(r.Alias),
-			Token:     astral.String8(r.Token),
+			Token:     astral.String8(mod.liveToken(r)),
 			ExpiresAt: astral.Time(r.ExpiresAt),
 		})
 	}

@@ -19,7 +19,8 @@ const DBPrefix = "mcp__"
 // endpoint declares.
 type Module interface {
 	// Agents answers every agent whose participant the messaging module still
-	// names, tokens included.
+	// names, tokens included. An agent whose token no longer authenticates as
+	// the agent carries an empty token.
 	//
 	// note: Agents is no pure read. It deletes the record of every other agent.
 	Agents() ([]*mcp.Agent, error)

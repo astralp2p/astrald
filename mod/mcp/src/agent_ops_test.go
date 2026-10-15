@@ -153,6 +153,50 @@ func TestListAgentsLeavesOutAWithdrawnParticipant(t *testing.T) {
 	}
 }
 
+// mcp.list_agents answers an agent's token while it authenticates as the
+// agent, and no token once it does not: a reissue through apphost revokes the
+// token the row keeps, and a token can authenticate as another identity.
+func TestListAgentsWithholdsATokenThatNoLongerAuthenticates(t *testing.T) {
+	mod, _ := testAgentModule(t)
+	mod.Auth = &recordingAuth{verdict: true}
+	apphost := mod.Apphost.(*stubApphost)
+	live, reissued, foreign := testAgent(), testAgent(), testAgent()
+	for _, a := range []*mcp.Agent{live, reissued, foreign} {
+		if err := mod.storeAgent(mod.ctx, a); err != nil {
+			t.Fatalf("store agent: %v", err)
+		}
+		apphost.tokens[string(a.Token)] = a.Identity
+	}
+
+	// apphost.create_token mints the new token, apphost.delete_token revokes the old
+	apphost.tokens["reissued-token"] = reissued.Identity
+	delete(apphost.tokens, string(reissued.Token))
+	apphost.tokens[string(foreign.Token)] = astral.GenerateIdentity()
+
+	objs := callAgentOp(t, mod.OpListAgents, "mcp.list_agents")
+	if len(objs) != 4 {
+		t.Fatalf("answered %v objects, want three agents and eos", len(objs))
+	}
+	tokens := map[string]astral.String8{}
+	for _, o := range objs[:3] {
+		a, ok := o.(*mcp.Agent)
+		if !ok {
+			t.Fatalf("answered %T, want an agent", o)
+		}
+		tokens[a.Identity.String()] = a.Token
+	}
+
+	if got := tokens[live.Identity.String()]; got != live.Token {
+		t.Errorf("answered %q for the live agent, want its token %q", got, live.Token)
+	}
+	if got := tokens[reissued.Identity.String()]; got != "" {
+		t.Errorf("answered %q for the reissued agent, want no token", got)
+	}
+	if got := tokens[foreign.Identity.String()]; got != "" {
+		t.Errorf("answered %q for an agent whose token authenticates as another identity, want no token", got)
+	}
+}
+
 // mcp.delete_agent on an agent whose participant is withdrawn, before a read
 // drops the row, succeeds and removes the row.
 func TestDeleteAgentRemovesTheRowOfAWithdrawnParticipant(t *testing.T) {
