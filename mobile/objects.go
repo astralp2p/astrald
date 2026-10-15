@@ -6,6 +6,7 @@ import (
 	"io"
 
 	"github.com/astralp2p/astral-go/api/objects"
+	objectscli "github.com/astralp2p/astral-go/api/objects/client"
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astrald/core"
 )
@@ -16,8 +17,9 @@ import (
 // reads until the end of the object; seeking is done by reopening at a
 // new offset.
 //
-// The read uses the node's identity and all zones, so objects available
-// over the network (but not stored locally) work too.
+// The read uses the node's identity. An object the node's repositories
+// do not hold is read from a swarm member through objects.read, unless
+// the ID is partial.
 func (n *Node) OpenObject(objectID string, offset int64) (*ObjectReader, error) {
 	n.mu.Lock()
 	cnode := n.cnode
@@ -42,12 +44,22 @@ func (n *Node) OpenObject(objectID string, offset int64) (*ObjectReader, error) 
 		WithZone(astral.ZoneAll)
 
 	r, err := mod.ReadDefault().Read(ctx, id, offset, 0)
+	switch {
+	case err == nil:
+		// why: a partial ID carries no size, so the player's length comes from the object the reader opened.
+		return &ObjectReader{r: r, size: int64(r.ID().Size)}, nil
+	case id.Size == 0:
+		// why: a stream from a swarm member names no object, so a partial ID would leave the size unknown.
+		return nil, err
+	}
+
+	// why: the swarm read lives in objects.read without a repo (mod/objects/src/op_read.go).
+	stream, err := objectscli.New(cnode.Identity(), core.NewClientAs(cnode, cnode.Identity())).Read(ctx, id, offset, 0)
 	if err != nil {
 		return nil, err
 	}
 
-	// why: a partial ID carries no size, so the player's length comes from the object the reader opened.
-	return &ObjectReader{r: r, size: int64(r.ID().Size)}, nil
+	return &ObjectReader{r: stream, size: int64(id.Size)}, nil
 }
 
 // CreateObject opens a writer into the node's default write repository.
