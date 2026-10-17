@@ -239,3 +239,34 @@ func TestDB_InvalidatePathsLeavesANewPathUnchecked(t *testing.T) {
 		t.Errorf("UniqueObjectIDs(\"/r\") for an unhashed path: got %v, want none", ids)
 	}
 }
+
+func TestDB_ListingsSkipRowsWithoutHash(t *testing.T) {
+	db := testLocalFilesDB(t)
+	id := resolveString(t, "a")
+	indexPath(t, db, "/r/a", id, 1)
+
+	// note: the row matches one stored before UpdatedAt opted out of GORM's timestamp.
+	err := db.Exec(
+		"INSERT INTO "+(dbLocalFile{}).TableName()+" (path, updated_at) VALUES (?, 1)",
+		"/r/unhashed",
+	).Error
+	if err != nil {
+		t.Fatalf("insert row: %v", err)
+	}
+
+	ids, err := db.UniqueObjectIDs("/r")
+	if err != nil {
+		t.Fatalf("UniqueObjectIDs: %v", err)
+	}
+	if len(ids) != 1 || *ids[0] != *id {
+		t.Errorf("UniqueObjectIDs(\"/r\"): got %v, want [%v]", ids, id)
+	}
+
+	rows, err := db.SearchByPath("unhashed")
+	if err != nil {
+		t.Fatalf("SearchByPath: %v", err)
+	}
+	if len(rows) != 0 {
+		t.Errorf("SearchByPath(\"unhashed\"): got %d rows, want none", len(rows))
+	}
+}

@@ -86,6 +86,8 @@ func (db *DB) UniqueObjectIDs(pathPrefix string) (ids []*astral.ObjectID, err er
 		Where("path >= ? AND path < ?", lo, hi).
 		Where("updated_at != 0").
 		Where("deleted_at IS NULL").
+		// why: a checked row can lack a hash, and a NULL data_id scans as the zero ObjectID.
+		Where("data_id IS NOT NULL").
 		Find(&ids).
 		Error
 
@@ -280,6 +282,8 @@ func (db *DB) SearchByPath(query string) (rows []*dbLocalFile, err error) {
 		Where("LOWER(path) like ?", "%"+query+"%").
 		Where("updated_at != 0").
 		Where("deleted_at IS NULL").
+		// why: a checked row can lack a hash, and a row without a hash names no object.
+		Where("data_id IS NOT NULL").
 		Find(&rows).
 		Error
 
