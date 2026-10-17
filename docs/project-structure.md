@@ -44,7 +44,6 @@ Descriptions of modules with a protocol in [astral-docs](https://github.com/astr
 |--------|-------------|
 | [all](../mod/all/README.md) | Imports every available module |
 | [apphost](../mod/apphost/src/README.md) | On-device API for local apps (tokens, handlers, contracts, holds) |
-| archives | Archive handling |
 | auth | Capability contracts, signing, and action authorization |
 | bip137sig | BIP-39/32/137 seed, key derivation, and message signing |
 | [coldcard](../mod/coldcard/README.md) | Coldcard hardware wallet as a BIP-0137 signer |
@@ -103,10 +102,10 @@ A module provides an object-system capability in a file named after the method i
 
 | File | Method | Implemented by |
 |------|--------|----------------|
-| `object_describer.go` | `DescribeObject` | archives, fs, nodes |
+| `object_describer.go` | `DescribeObject` | fs, nodes |
 | `object_finder.go` | `FindObject` | nodes, user |
 | `object_holder.go` | `HoldObject` (`objects.Holder`) | apphost, auth, crypto, user |
 | `object_receiver.go` | `ReceiveObject` (`objects.Receiver`) | nat, nearby, nodes, scheduler, user |
-| `object_searcher.go` | `SearchObject` | archives, fs |
+| `object_searcher.go` | `SearchObject` | fs |
 
 `mod/crypto/src/object_signer.go` is outside this set: it holds `ObjectSigner`, the crypto module's object signer.

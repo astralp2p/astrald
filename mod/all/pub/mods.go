@@ -4,7 +4,6 @@ package all
 
 import (
 	_ "github.com/astralp2p/astrald/mod/apphost"
-	_ "github.com/astralp2p/astrald/mod/archives"
 	_ "github.com/astralp2p/astrald/mod/auth"
 	_ "github.com/astralp2p/astrald/mod/coldcard"
 	_ "github.com/astralp2p/astrald/mod/crypto"
