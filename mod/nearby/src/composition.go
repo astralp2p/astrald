@@ -1,13 +1,14 @@
 package nearby
 
 import (
+	"github.com/astralp2p/astral-go/api/nearby"
 	"github.com/astralp2p/astral-go/astral"
-	"github.com/astralp2p/astrald/mod/nearby"
+	nearbymod "github.com/astralp2p/astrald/mod/nearby"
 )
 
 const MaxAttachmentSize = 4 * 1024 // 4 KiB
 
-var _ nearby.Composition = &Composition{}
+var _ nearbymod.Composition = &Composition{}
 
 // Composition is the mutable context passed to each Composer during status construction,
 // scoping attachments to a specific receiver and enforcing the size limit.
@@ -25,7 +26,7 @@ func (c *Composition) Receiver() *astral.Identity {
 func (c *Composition) Attach(o astral.Object) error {
 	objectID, _ := astral.ResolveObjectID(o)
 	if objectID.Size > MaxAttachmentSize {
-		return nearby.ErrObjectTooLarge
+		return nearbymod.ErrObjectTooLarge
 	}
 	return c.s.Attachments.Append(o)
 }

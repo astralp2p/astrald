@@ -8,10 +8,10 @@ import (
 	"github.com/astralp2p/astral-go/api/dir"
 	"github.com/astralp2p/astral-go/api/ip"
 	"github.com/astralp2p/astral-go/api/kcp"
+	"github.com/astralp2p/astral-go/api/nearby"
 	"github.com/astralp2p/astral-go/api/nodes"
 	"github.com/astralp2p/astral-go/api/tcp"
 	"github.com/astralp2p/astral-go/astral"
-	"github.com/astralp2p/astrald/mod/nearby"
 )
 
 func cacheStatus(mod *Module, sourceIP string, stamped time.Time, status *nearby.StatusMessage) {

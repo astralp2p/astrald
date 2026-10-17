@@ -1,6 +1,7 @@
 package nearby
 
 import (
+	"github.com/astralp2p/astral-go/api/nearby"
 	"github.com/astralp2p/astral-go/astral"
 )
 
@@ -13,9 +14,9 @@ const (
 type Module interface {
 	Broadcast() error
 	AddStatusComposer(Composer)
-	Mode() Mode
-	SetMode(ctx *astral.Context, m Mode) error
-	ResolveStatus(status *StatusMessage) *astral.Identity
+	Mode() nearby.Mode
+	SetMode(ctx *astral.Context, m nearby.Mode) error
+	ResolveStatus(status *nearby.StatusMessage) *astral.Identity
 }
 
 // Composer contributes attachments to an outgoing status broadcast.
