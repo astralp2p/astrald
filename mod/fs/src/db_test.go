@@ -219,3 +219,23 @@ func TestDB_DeletePath(t *testing.T) {
 		t.Errorf("FindByPath after DeletePath: got %v, want %v", err, gorm.ErrRecordNotFound)
 	}
 }
+
+func TestDB_InvalidatePathsLeavesANewPathUnchecked(t *testing.T) {
+	db := testLocalFilesDB(t)
+
+	if err := db.InvalidatePaths([]string{"/r/new"}); err != nil {
+		t.Fatalf("InvalidatePaths: %v", err)
+	}
+
+	if got := eachInvalidatedPath(t, db); !slices.Equal(got, []string{"/r/new"}) {
+		t.Errorf("EachInvalidatedPath: got %v, want [/r/new]", got)
+	}
+
+	ids, err := db.UniqueObjectIDs("/r")
+	if err != nil {
+		t.Fatalf("UniqueObjectIDs: %v", err)
+	}
+	if len(ids) != 0 {
+		t.Errorf("UniqueObjectIDs(\"/r\") for an unhashed path: got %v, want none", ids)
+	}
+}
