@@ -228,10 +228,10 @@ func (db *DB) ValidatePath(path string) error {
 		}).Error
 }
 
-// InvalidateAllPaths marks all paths as invalid
-func (db *DB) InvalidateAllPaths() error {
+// InvalidatePathsCheckedOutside marks every path not checked between from and to for a re-check.
+func (db *DB) InvalidatePathsCheckedOutside(from, to int64) error {
 	return db.Model(&dbLocalFile{}).
-		Where("id > 0").
+		Where("updated_at < ? OR updated_at > ?", from, to).
 		UpdateColumn("updated_at", 0).
 		Error
 }

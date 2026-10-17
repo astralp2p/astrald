@@ -208,7 +208,7 @@ func (indexer *Indexer) checkAndFix(ctx context.Context, path string) error {
 	return nil
 }
 
-// init scans widest roots, inserts all paths as invalid into the database, invalidates whole db state and enqueues all paths for indexing
+// init scans widest roots, invalidates every path the scan did not validate and enqueues all invalidated paths for indexing
 func (indexer *Indexer) init(ctx *astral.Context) error {
 	now := time.Now()
 
@@ -220,8 +220,10 @@ func (indexer *Indexer) init(ctx *astral.Context) error {
 	}
 
 	indexer.mod.log.Info(`fs indexer: scan completed in %v`, time.Since(now))
-	if err := indexer.mod.db.InvalidateAllPaths(); err != nil {
-		return fmt.Errorf("invalidate all paths failed: %w", err)
+	// why: an invalidated path leaves repository listings, and indexing records a path absent from its startup snapshot as removed.
+	// why: a path checked after the scan ended comes from a clock set back since the last run, so the scan did not see it.
+	if err := indexer.mod.db.InvalidatePathsCheckedOutside(now.UnixNano(), time.Now().UnixNano()); err != nil {
+		return fmt.Errorf("invalidate unchecked paths failed: %w", err)
 	}
 
 	enqueuer := NewBatchCollector(1000, func(batch []string) error {
