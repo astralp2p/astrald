@@ -93,8 +93,14 @@ func (db *DB) findMissingObjectIDs(repoName string, snapshot []*astral.ObjectID)
 }
 
 // addToRepo records that objectID is now in repoName. Returns
-// ErrObjectAlreadyAdded if the latest entry already says Exist=true.
+// ErrObjectAlreadyAdded if the latest entry already says Exist=true, and
+// ErrZeroObjectID for a nil or zero objectID.
 func (db *DB) addToRepo(repoName string, objectID *astral.ObjectID) error {
+	// why: the zero ObjectID names no object, so no indexer can read the change.
+	if objectID.IsZero() {
+		return indexing.ErrZeroObjectID
+	}
+
 	return db.InTx(func(tx *DB) error {
 		exists, err := tx.latestExists(repoName, objectID)
 		if err != nil {
