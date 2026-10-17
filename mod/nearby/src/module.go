@@ -4,16 +4,17 @@ import (
 	"time"
 
 	"github.com/astralp2p/astral-go/api/ip"
+	"github.com/astralp2p/astral-go/api/nearby"
 	"github.com/astralp2p/astral-go/api/tree"
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astral-go/astral/log"
 	"github.com/astralp2p/astral-go/lib/routing"
 	"github.com/astralp2p/astral-go/sig"
-	"github.com/astralp2p/astrald/mod/nearby"
+	nearbymod "github.com/astralp2p/astrald/mod/nearby"
 	_ "github.com/astralp2p/astrald/mod/nearby/views"
 )
 
-var _ nearby.Module = &Module{}
+var _ nearbymod.Module = &Module{}
 
 const statusExpiration = 5 * time.Minute
 
@@ -24,7 +25,7 @@ type Module struct {
 	log    *log.Logger
 	ctx    *astral.Context
 
-	composers sig.Set[nearby.Composer]
+	composers sig.Set[nearbymod.Composer]
 
 	cache  sig.Map[string, *cache]
 	mode   tree.Value[*nearby.Mode]
@@ -78,7 +79,7 @@ func (mod *Module) Scan() error {
 	return mod.Ether.Push(&nearby.ScanMessage{}, nil)
 }
 
-func (mod *Module) AddStatusComposer(composer nearby.Composer) {
+func (mod *Module) AddStatusComposer(composer nearbymod.Composer) {
 	mod.composers.Add(composer)
 }
 
@@ -111,7 +112,7 @@ func (mod *Module) Router() astral.Router {
 }
 
 func (mod *Module) String() string {
-	return nearby.ModuleName
+	return nearbymod.ModuleName
 }
 
 func (mod *Module) myAlias() string {

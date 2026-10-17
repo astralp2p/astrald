@@ -4,15 +4,16 @@ import (
 	"time"
 
 	"github.com/astralp2p/astral-go/api/gateway"
+	"github.com/astralp2p/astral-go/api/nearby"
 	"github.com/astralp2p/astral-go/api/nodes"
-	"github.com/astralp2p/astrald/mod/nearby"
+	nearbymod "github.com/astralp2p/astrald/mod/nearby"
 )
 
-var _ nearby.Composer = &Module{}
+var _ nearbymod.Composer = &Module{}
 
 // ComposeStatus attaches gateway endpoints to the nearby composition only in ModeVisible.
 // Silent and stealth modes suppress all gateway advertisement.
-func (mod *Module) ComposeStatus(a nearby.Composition) {
+func (mod *Module) ComposeStatus(a nearbymod.Composition) {
 	switch mod.Nearby.Mode() {
 	case nearby.ModeSilent:
 		// no-op

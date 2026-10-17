@@ -4,8 +4,8 @@ import (
 	"slices"
 
 	"github.com/astralp2p/astral-go/api/auth"
+	"github.com/astralp2p/astral-go/api/nearby"
 	"github.com/astralp2p/astral-go/astral"
-	"github.com/astralp2p/astrald/mod/nearby"
 )
 
 // ResolveStatus extracts the sender identity from a StatusMessage using three strategies

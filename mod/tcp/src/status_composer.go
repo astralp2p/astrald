@@ -1,14 +1,15 @@
 package tcp
 
 import (
-	"github.com/astralp2p/astrald/mod/nearby"
+	"github.com/astralp2p/astral-go/api/nearby"
+	nearbymod "github.com/astralp2p/astrald/mod/nearby"
 )
 
-var _ nearby.Composer = &Module{}
+var _ nearbymod.Composer = &Module{}
 
 // ComposeStatus attaches the module's TCP endpoints to the nearby composition only in ModeVisible;
 // silent and stealth modes produce no entries.
-func (mod *Module) ComposeStatus(a nearby.Composition) {
+func (mod *Module) ComposeStatus(a nearbymod.Composition) {
 	switch mod.Nearby.Mode() {
 	case nearby.ModeSilent:
 		// no-op

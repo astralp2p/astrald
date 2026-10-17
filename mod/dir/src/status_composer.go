@@ -2,14 +2,15 @@ package dir
 
 import (
 	"github.com/astralp2p/astral-go/api/dir"
-	"github.com/astralp2p/astrald/mod/nearby"
+	"github.com/astralp2p/astral-go/api/nearby"
+	nearbymod "github.com/astralp2p/astrald/mod/nearby"
 )
 
-var _ nearby.Composer = &Module{}
+var _ nearbymod.Composer = &Module{}
 
 // ComposeStatus attaches the node's directory alias to the nearby composition when the node is in visible mode.
 // Silent and stealth modes produce no attachment.
-func (mod *Module) ComposeStatus(a nearby.Composition) {
+func (mod *Module) ComposeStatus(a nearbymod.Composition) {
 	switch mod.Nearby.Mode() {
 	case nearby.ModeSilent:
 		// no-op

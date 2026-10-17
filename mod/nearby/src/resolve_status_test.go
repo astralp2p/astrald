@@ -4,8 +4,8 @@ import (
 	"sync/atomic"
 	"testing"
 
+	"github.com/astralp2p/astral-go/api/nearby"
 	"github.com/astralp2p/astral-go/astral"
-	"github.com/astralp2p/astrald/mod/nearby"
 	usermod "github.com/astralp2p/astrald/mod/user"
 )
 
