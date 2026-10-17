@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"slices"
 	"testing"
+	"time"
 
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astral-go/astral/log"
@@ -82,6 +83,49 @@ func TestIndexerInitKeepsUnchangedFilesListed(t *testing.T) {
 	newID := resolveString(t, "new")
 	if len(listed) != 2 || !slices.ContainsFunc(listed, keptID.IsEqual) || !slices.ContainsFunc(listed, newID.IsEqual) {
 		t.Errorf("scan after checks = %v, want %v and %v", listed, keptID, newID)
+	}
+}
+
+// TestWatchScanKeepsAnEventPushedDuringTheListing: a file hashed while a following scan sends
+// its listing reaches the scan after the snapshot boundary.
+func TestWatchScanKeepsAnEventPushedDuringTheListing(t *testing.T) {
+	root := t.TempDir()
+	repo := testWatchRepository(t, root)
+	repo.mod.log = &log.Logger{}
+	repo.mod.indexer = NewIndexer(repo.mod)
+
+	indexFile(t, repo, filepath.Join(root, "a.mp3"), []byte("a"))
+	indexFile(t, repo, filepath.Join(root, "b.mp3"), []byte("b"))
+
+	ctx, cancel := astral.NewContext(nil).WithTimeout(30 * time.Second)
+	defer cancel()
+
+	ch, err := repo.Scan(ctx, true)
+	if err != nil {
+		t.Fatalf("Scan: %v", err)
+	}
+
+	// why: the scan blocks on sending the second listed ID, so the file below is hashed between the listing and the boundary.
+	<-ch
+	added := filepath.Join(root, "c.mp3")
+	writeFile(t, added, []byte("c"))
+	if err := repo.mod.indexer.checkAndFix(ctx, added); err != nil {
+		t.Fatalf("checkAndFix: %v", err)
+	}
+	<-ch
+
+	if id := <-ch; id != nil {
+		t.Fatalf("got %v, want the snapshot boundary", id)
+	}
+
+	want := resolveString(t, "c")
+	select {
+	case id := <-ch:
+		if !id.IsEqual(want) {
+			t.Fatalf("got %v, want %v", id, want)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatalf("no ID after the boundary, want %v", want)
 	}
 }
 

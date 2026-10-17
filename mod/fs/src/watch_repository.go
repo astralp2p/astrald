@@ -202,6 +202,13 @@ func (repo *WatchRepository) Scan(ctx *astral.Context, follow bool) (<-chan *ast
 	go func() {
 		defer close(ch)
 
+		var events *sig.Queue[IndexEvent]
+		if follow {
+			// why: an event pushed while the listing is read waits in the queue, so a file hashed in between reaches the follow phase.
+			events = repo.mod.indexer.subscribe()
+			defer repo.mod.indexer.unsubscribe()
+		}
+
 		ids, err := repo.mod.db.UniqueObjectIDs(repo.root)
 		if err != nil {
 			repo.mod.log.Error("db error: %v", err)
@@ -217,8 +224,7 @@ func (repo *WatchRepository) Scan(ctx *astral.Context, follow bool) (<-chan *ast
 		}
 
 		if follow {
-			subscribe := sig.Subscribe(ctx, repo.mod.indexer.subscribe())
-			defer repo.mod.indexer.unsubscribe()
+			subscribe := sig.Subscribe(ctx, events)
 
 			select {
 			case ch <- nil:
