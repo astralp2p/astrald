@@ -19,8 +19,8 @@ type opAcceptMembershipArgs struct {
 
 // OpAcceptMembership handles the node side of the contract signing ceremony.
 // Rejects if an active contract already exists (code 2).
-// Validates contract subject, identity match, and minimum remaining validity,
-// then verifies the issuer's signature before applying the invite policy.
+// Validates contract subject, identity match, issuer distinct from subject,
+// minimum remaining validity and the swarm membership permit, then verifies the issuer's signature before applying the invite policy.
 // Self-refuses with user.ErrExpelled if this node holds the issuer's ban on itself.
 // On success, stores the signed contract and sets it as the active contract.
 func (mod *Module) OpAcceptMembership(ctx *astral.Context, q *routing.IncomingQuery, args opAcceptMembershipArgs) (err error) {
@@ -46,6 +46,10 @@ func (mod *Module) OpAcceptMembership(ctx *astral.Context, q *routing.IncomingQu
 	case contract.Subject.IsZero():
 		return ch.Send(astral.Err(auth.ErrInvalidContract))
 	case !contract.Subject.IsEqual(mod.node.Identity()):
+		return ch.Send(astral.Err(auth.ErrInvalidContract))
+	case contract.Issuer.IsEqual(contract.Subject):
+		return ch.Send(astral.Err(auth.ErrInvalidContract))
+	case !user.IsNodeContract(contract):
 		return ch.Send(astral.Err(auth.ErrInvalidContract))
 	case contract.ExpiresAt.Time().Before(time.Now().Add(usermod.MinimalContractLength)):
 		return ch.Send(astral.Err(auth.ErrInvalidContract))

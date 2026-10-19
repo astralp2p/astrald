@@ -15,8 +15,8 @@ import (
 )
 
 // validateActiveContract enforces the invariant of the active-contract slot:
-// both signatures valid, this node is the subject, not expired, and it grants
-// swarm membership. Source-independent - the same gate for local setup,
+// both signatures valid, this node is the subject and not the issuer, not
+// expired, and it grants swarm membership. Source-independent - the same gate for local setup,
 // cold-card, and remote membership.
 func (mod *Module) validateActiveContract(signed *auth.SignedContract) error {
 	err := mod.Auth.VerifyContract(signed)
@@ -25,6 +25,9 @@ func (mod *Module) validateActiveContract(signed *auth.SignedContract) error {
 	}
 	if !signed.Subject.IsEqual(mod.node.Identity()) {
 		return errors.New("local node is not the subject of the contract")
+	}
+	if signed.Issuer.IsEqual(signed.Subject) {
+		return errors.New("local node is the issuer of the contract")
 	}
 	if signed.ExpiresAt.Time().Before(time.Now()) {
 		return auth.ErrContractExpired

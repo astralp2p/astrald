@@ -30,6 +30,12 @@ func TestValidateActiveContract(t *testing.T) {
 			return err != nil && err.Error() == "local node is not the subject of the contract"
 		}, "local node is not the subject of the contract"},
 
+		{"self-issued", func() *auth.SignedContract {
+			return nodeContract(nodeID, nodeID)
+		}, func(err error) bool {
+			return err != nil && err.Error() == "local node is the issuer of the contract"
+		}, "local node is the issuer of the contract"},
+
 		{"expired", func() *auth.SignedContract {
 			sc := nodeContract(userID, nodeID)
 			sc.ExpiresAt = astral.Time(time.Now().Add(-time.Minute))
