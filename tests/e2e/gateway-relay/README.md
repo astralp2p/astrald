@@ -76,6 +76,12 @@ holds an idle connection from node2's pool; with none it answers
 `target not reachable`. The claim runs last because a reservation hands one
 idle connection away.
 
+The claim shows that node2's pool reached the gateway. It does not show that
+node1's link used the socket: node1 reaches the socket endpoint, the gateway's
+198.51.100 alias, only through the route `configure-gateway` adds. Without that
+route node1's dial hangs and the link forms through `node_route` after 60 s,
+with `socket path unavailable, trying link path` in node1's journal.
+
 ## What it took to make this pass
 
 Green at `d43def01`, in about thirteen minutes from the cached `two-nodes`
