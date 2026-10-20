@@ -132,7 +132,10 @@ in `lib/results.py`): a header — `astrald_ref`, `astral_py_ref`, `host`,
 `status` ∈ pass/fail/skipped and, on failure, `failure_kind` ∈ `driver`
 (the flow never happened) / `verify` (astrald misbehaved) / `environment`
 (the world broke). Per-test driver and oracle logs sit beside them; each
-node's astrald log lands under `results/<stamp>/session/`.
+node's astrald log lands under `results/<stamp>/session/`. In env `node`
+the nodes run from the system temp directory, which `session/` links to
+until teardown copies their state back: a node's SQLite fsyncs on a busy SD
+card stall for tens of seconds, and a tmpfs temp directory does not.
 
 A hermetic run strips astral-py's ambient endpoint and token variables from
 the driver environment: an `ASTRALD_APPHOST_TOKEN` in the shell otherwise
