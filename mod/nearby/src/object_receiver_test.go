@@ -37,7 +37,7 @@ type recordingEther struct {
 	pushed []astral.Object
 }
 
-func (e *recordingEther) Push(object astral.Object, _ *astral.Identity) error {
+func (e *recordingEther) Push(object astral.Object) error {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	e.pushed = append(e.pushed, object)

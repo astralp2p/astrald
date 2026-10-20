@@ -76,7 +76,7 @@ func (mod *Module) syncConfig(ctx *astral.Context) error {
 }
 
 func (mod *Module) Scan() error {
-	return mod.Ether.Push(&nearby.ScanMessage{}, nil)
+	return mod.Ether.Push(&nearby.ScanMessage{})
 }
 
 func (mod *Module) AddStatusComposer(composer nearbymod.Composer) {
@@ -161,7 +161,7 @@ func (mod *Module) pushStatus() error {
 	if !mod.canBroadcast(s) {
 		return nil
 	}
-	return mod.Ether.Push(s, nil)
+	return mod.Ether.Push(s)
 }
 
 // canBroadcast returns false when the status should be suppressed.

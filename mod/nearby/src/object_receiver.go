@@ -41,7 +41,7 @@ func (mod *Module) receiveBroadcastEvent(event *ether.EventBroadcastReceived) er
 	case *nearby.ScanMessage:
 		s := mod.Status(astral.Anyone)
 		if mod.canBroadcast(s) {
-			mod.Ether.PushToIP(event.SourceIP, s, nil)
+			mod.Ether.PushToIP(event.SourceIP, s)
 		}
 		return objects.ErrPushRejected
 	}

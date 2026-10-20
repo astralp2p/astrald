@@ -9,7 +9,8 @@ const ModuleName = "ether"
 
 // Module provides public communication within various broadcast networks such as local area networks.
 type Module interface {
-	// Push an object to the ether
-	Push(astral.Object, *astral.Identity) error
-	PushToIP(ip.IP, astral.Object, *astral.Identity) error
+	// Push broadcasts an object to the ether, signed by and sourced from the node's identity.
+	Push(astral.Object) error
+	// PushToIP sends an object to one IP address, signed by and sourced from the node's identity.
+	PushToIP(ip.IP, astral.Object) error
 }

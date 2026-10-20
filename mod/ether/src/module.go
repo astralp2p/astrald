@@ -89,8 +89,8 @@ func (mod *Module) broadcastReceiver(ctx *astral.Context) (err error) {
 }
 
 // Push pushes an object to everyone (broadcast)
-func (mod *Module) Push(object astral.Object, source *astral.Identity) (err error) {
-	packet, err := mod.makePacket(object, source)
+func (mod *Module) Push(object astral.Object) (err error) {
+	packet, err := mod.makePacket(object)
 	if err != nil {
 		return err
 	}
@@ -99,8 +99,8 @@ func (mod *Module) Push(object astral.Object, source *astral.Identity) (err erro
 }
 
 // PushToIP pushes an object to a specific IP address (unicast)
-func (mod *Module) PushToIP(ip ip.IP, object astral.Object, source *astral.Identity) error {
-	packet, err := mod.makePacket(object, source)
+func (mod *Module) PushToIP(ip ip.IP, object astral.Object) error {
+	packet, err := mod.makePacket(object)
 	if err != nil {
 		return err
 	}
@@ -220,16 +220,14 @@ func (mod *Module) writeToIP(ip ip.IP, data []byte) (n int, err error) {
 	})
 }
 
-func (mod *Module) makePacket(object astral.Object, source *astral.Identity) (data []byte, err error) {
-	if source == nil {
-		source = mod.node.Identity()
-	}
-
+// why: the node signer holds only the node's key, so Source is always the node's identity;
+// why: receivers verify the signature against Source.
+func (mod *Module) makePacket(object astral.Object) (data []byte, err error) {
 	signed := &ether.SignedBroadcast{
 		Broadcast: ether.Broadcast{
 			Object:    object,
 			Timestamp: astral.Time(time.Now()),
-			Source:    source,
+			Source:    mod.node.Identity(),
 		},
 	}
 
