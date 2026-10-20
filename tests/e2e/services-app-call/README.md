@@ -12,6 +12,8 @@ provider's app identity, routed node1 → node2.
   as caller.
 - **oracle** `verify.py` — every step held, plus the same round trip with fresh
   identities (`driver verify`).
+- **hosts** — once the call routes, `apphost.hosts` on node1 names node2 alone
+  as the provider's host (`hosts_names_node2`).
 
 A node routes to an app on another node through the app's relay contract.
 The sibling sync pushes it when a link to a swarm member first comes up

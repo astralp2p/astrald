@@ -111,8 +111,35 @@ func run(path string) (map[string]bool, error) {
 	if seen != front.Identity.String() {
 		return facts, fmt.Errorf("the provider saw caller %v; want the app %v", seen, front.Identity)
 	}
+
+	// note: the call routed, so node1 holds the provider's relay contract.
+	hosts, err := hostsOf(ctx, admin1, provider.Identity)
+	facts["hosts_names_node2"] = err == nil && len(hosts) == 1 && hosts[0].String() == n2.Identity
+	if !facts["hosts_names_node2"] {
+		return facts, fmt.Errorf("apphost.hosts on node1 named %v (err %v); want node2 %v alone", hosts, err, n2.Identity)
+	}
 	fmt.Fprintln(os.Stderr, "ok: provider app on node2 called by its identity from an app on node1")
 	return facts, nil
+}
+
+// hostsOf asks apphost.hosts on the admin's node for the nodes that host app.
+func hostsOf(ctx *astral.Context, admin *astrald.Client, app *astral.Identity) ([]*astral.Identity, error) {
+	ch, err := admin.QueryChannel(ctx, "apphost.hosts", query.Args{"app": app.String()})
+	if err != nil {
+		return nil, err
+	}
+	defer ch.Close()
+
+	var hosts []*astral.Identity
+	err = ch.Switch(
+		func(id *astral.Identity) error {
+			hosts = append(hosts, id)
+			return nil
+		},
+		channel.BreakOnEOS,
+		channel.PassErrors,
+	)
+	return hosts, err
 }
 
 // serveProvider runs an app on node2 that advertises player and answers

@@ -16,6 +16,9 @@ from lib.sessionio import load
 ROOT = Path(__file__).resolve().parents[3]
 STEPS = ["discovered_on_node2", "called_without_relink", "provider_saw_the_app"]
 
+# apphost.hosts names the provider's host once the call routes
+STEPS += ["hosts_names_node2"]
+
 facts = load()["facts"].get("services_app_call", {})
 missing = [s for s in STEPS if not facts.get(s)]
 assert not missing, f"steps that did not hold: {missing}"
