@@ -1,0 +1,6 @@
+env     = "node"
+start   = "one-node"
+nodes   = ["node1"]
+restart = ["node1"]
+drivers = ["script"]
+timeout = 300

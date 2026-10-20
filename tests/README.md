@@ -19,12 +19,12 @@ each other.
 **A suite is *what* runs.** A file under `suites/`, listing tests in the order
 they should run. Nothing more.
 
-    ./tests/run main.suite      # the whole env-node chain, seconds
+    ./tests/run main.suite      # the whole env-node chain, minutes
     ./tests/run adopt-node      # no suite: one test, and whatever it needs first
 
 | suite | what it is | env | runs in |
 |-------|------------|-----|---------|
-| `main.suite` | the whole node chain, the everyday one | node | seconds |
+| `main.suite` | the whole node chain, the everyday one | node | ~3 min |
 | `tor.suite` | two nodes meet on a LAN, one leaves it, Tor holds | netsim | ~37 min |
 | `substrate.suite` | both transport tests: Tor, then NAT hole-punching | netsim | ~1 h |
 | `agent.suite` | the flows an AI operator can drive, one world, in order | netsim | ~1.5 h |
@@ -86,7 +86,14 @@ drivers = ["script"]        # script, agent, or both
 timeout = 180               # the scripted flow's budget
 agent_timeout = 2400         # an operator plans and works the node through its own shell
 unlisted = "<reason>"       # set only when no suite may list this test
+restart = ["node1"]         # env node: nodes restarted between driver and oracle
 ```
+
+`restart` names roster nodes the runner stops and boots again from their own
+root after the driver and before the oracle, so the oracle judges what a node
+holds across a restart. Only `--target fresh` in env `node` restarts a node; a
+selection that would need it anywhere else is refused before it starts. A
+node's `restarts` field in `session.json` counts its restarts.
 
 `unlisted` is the exception, and it is checked: a test is listed in a suite or
 carries this key, never neither and never both.
@@ -153,6 +160,7 @@ Every story of the catalog, in the cheapest env that can falsify it:
 | — | `claim-window` | node | `null` → — |
 | — | `fs-watch` | node | `one-node` → — |
 | — | `registration-lease` | node | `one-node` → — |
+| — | `policy-delegate` | node | `one-node` → — (restarts node1) |
 | — | `app-query` | node | `two-nodes` → — |
 | — | `apphost-origin` | node | `two-nodes` → — |
 | — | `sign-contract-guard` | node | `two-nodes` → — |
@@ -163,7 +171,8 @@ Every story of the catalog, in the cheapest env that can falsify it:
 | — | `hold-purge` | node | `two-nodes` → — (unlisted, mutates) |
 | — | `gateway-relay` | netsim | `two-nodes` → — (unlisted, mutates) |
 
-`main.suite` is the env-node chain, and it runs in seconds.
+`main.suite` is the env-node chain, and it runs in about 3 minutes;
+`policy-delegate`'s 70 s registration hold is the largest part.
 
 A test marked **unlisted** is in no suite, and its `test.toml` carries the
 `unlisted` key naming the reason — a start state the chain cannot reach twice,

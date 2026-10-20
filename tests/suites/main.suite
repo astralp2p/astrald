@@ -4,6 +4,7 @@ mcp-origin
 claim-window
 messaging-ops
 bootstrap-user-software-key
+policy-delegate                # restarts node1: before node2 links to it
 adopt-node
 fs-watch
 object-store

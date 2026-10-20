@@ -34,6 +34,12 @@ class LocalExecutor(Executor):
         """No-op: the live session already is the state, and the next test in
         the chain inherits it in place. Only netsim snapshots."""
 
+    def restart(self, names: list) -> None:
+        try:
+            asyncio.run(self._session.restart(names))
+        except Exception as e:
+            raise ExecutorError(f"restart: {e}") from e
+
     def broken(self) -> list:
         return self._session.dead_nodes()
 

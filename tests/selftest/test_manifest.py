@@ -102,6 +102,22 @@ class TestLoad(ManifestCase):
                 save = "one-node"
             """)
 
+    def test_restart_names_roster_nodes(self):
+        self.assertEqual(self.all["adopt-node"].restart, [])
+        with self.assertRaisesRegex(ValueError, "restart names"):
+            self.add("stray-restart", """
+                env = "node"
+                nodes = ["node1"]
+                restart = ["node2"]
+            """)
+        self.add("restarting", """
+            env = "node"
+            start = "one-node"
+            nodes = ["node1"]
+            restart = ["node1"]
+        """)
+        self.assertEqual(self.all["restarting"].restart, ["node1"])
+
     def test_unknown_driver_is_rejected(self):
         with self.assertRaisesRegex(ValueError, "bad drivers"):
             self.add("bad-driver", """

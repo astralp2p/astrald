@@ -35,6 +35,19 @@ def _run_step(py: str, script: Path, log: Path, env: dict, timeout: int) -> int:
             return 124
 
 
+def _restart_and_verify(ex, t, py: str, art: Path, env: dict) -> tuple:
+    """(status, failure_kind) of the oracle, after the restart the manifest
+    names between driver and oracle."""
+    if t.restart:
+        try:
+            ex.restart(t.restart)
+        except ExecutorError as e:
+            (art / "verify.log").write_text(f"[runner] {e}\n")
+            return "fail", "environment"
+    rc = _run_step(py, t.dir / "verify.py", art / "verify.log", env, t.timeout)
+    return ("pass", None) if rc == 0 else ("fail", "verify")
+
+
 def driver_env(session_json: Path, hermetic: bool) -> dict:
     """The environment drivers and oracles run in.
 
@@ -89,6 +102,13 @@ def _reject_unbuilt(args, plan: list) -> str | None:
                     "already stands at.")
     if args.target == "attach" and run_env(plan, args.driver, args.target) == "netsim":
         return "--target attach has no simulation to attach to"
+    restarting = [t.name for t, kind in plan if kind == "test" and t.restart]
+    if restarting and (args.target != "fresh"
+                       or run_env(plan, args.driver, args.target) != "node"):
+        # why refused up front: the driver changes the node before the
+        # restart, and only env node's fresh world can restart one.
+        return (f"{restarting[0]} restarts a node, which only env node's "
+                "fresh world can do")
     undeclared = [t.name for t, _ in plan if args.driver not in t.drivers]
     if undeclared:
         return f"{undeclared[0]} declares no {args.driver} driver"
@@ -242,10 +262,7 @@ def main(args) -> int:
                     status, fk = "fail", "driver"
                 else:
                     ex.merge_facts(art / "facts.json")
-                    rc = _run_step(py, t.dir / "verify.py",
-                                   art / "verify.log", env, t.timeout)
-                    if rc != 0:
-                        status, fk = "fail", "verify"
+                    status, fk = _restart_and_verify(ex, t, py, art, env)
                 if ex.broken():
                     status, fk = "fail", "environment"   # a dead daemon voids
                     # any verdict — even a nominal pass over a dead world

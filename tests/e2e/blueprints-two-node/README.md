@@ -54,8 +54,9 @@ fails instead of being idempotent" — and `blueprint_sync` treats
 security property or an inconvenience is not this test's to settle.
 
 Two questions the document raised remain open, both out of this test's start
-state: whether a registration survives a restart (`env = "node"` has no restart
-verb — see *Survive a node restart with state intact*), and whether the
+state: whether a registration survives a restart (`env = "node"` restarts a node
+only between driver and oracle, through the manifest's `restart` key — see
+*Survive a node restart with state intact*), and whether the
 unauthenticated squat deserves a test that passes today and fails when an
 authorization hook lands.
 

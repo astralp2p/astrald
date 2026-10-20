@@ -42,6 +42,7 @@ class LocalNode:
         self.serves_mcp = name not in WITHOUT_MCP
         self.identity = None
         self.proc = None
+        self.restarts = 0
         self.log_path = self.root / "astrald.log"
 
     @property
