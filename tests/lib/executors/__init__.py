@@ -33,6 +33,16 @@ class Executor:
         """Make the current world available under a state name."""
         raise NotImplementedError
 
+    def restart(self, names: list) -> None:
+        """Stop the named nodes and boot them again on the same state.
+
+        An executor that cannot restart a node refuses rather than skipping:
+        an oracle over a node that never restarted judges nothing.
+        """
+        raise ExecutorError(
+            f"{type(self).__name__} cannot restart a node: the manifest key "
+            "restart needs env node's fresh world")
+
     def broken(self) -> list:
         """Machines that died under a test — any verdict over them is void."""
         raise NotImplementedError

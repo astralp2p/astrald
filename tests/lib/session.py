@@ -31,6 +31,16 @@ class Session:
             await node.wait_ready()   # fails wait_ready must stay stoppable
         self.write_session_json()
 
+    async def restart(self, names) -> None:
+        """Stop each named node and boot it again from its own root."""
+        for name in names:
+            node = self.nodes[name]
+            node.stop()
+            node.start(keep=self.keep)
+            await node.wait_ready()
+            node.restarts += 1
+        self.write_session_json()
+
     @property
     def session_json_path(self) -> Path:
         return self.dir / "session.json"
@@ -56,6 +66,9 @@ class Session:
                 # and a driver that composes 127.0.0.1 from tcp_port is not
                 # env-blind however hard the design says it is.
                 "lan_endpoint": f"tcp:127.0.0.1:{n.ports.tcp}",
+                # how many times the executor restarted the node, so an
+                # oracle can tell a restart happened
+                "restarts": n.restarts,
             }
         self.session_json_path.write_text(json.dumps(doc, indent=2) + "\n")
 

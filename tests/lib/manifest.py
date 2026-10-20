@@ -15,7 +15,7 @@ from pathlib import Path
 ENVS = {"node", "netsim"}
 DRIVERS = {"script", "agent"}
 KEYS = {"env", "start", "saves", "mutates", "nodes", "steps", "drivers",
-        "timeout", "agent_timeout", "unlisted"}
+        "timeout", "agent_timeout", "unlisted", "restart"}
 NULL = "null"
 
 # the walk value after a mutator that saves no state: nothing may follow it
@@ -36,6 +36,7 @@ class Test:
     timeout: int
     agent_timeout: int
     unlisted: str | None
+    restart: list
 
 
 def load_all(e2e_dir: Path) -> dict:
@@ -66,6 +67,11 @@ def _parse(mf: Path) -> Test:
     nodes = list(raw.get("nodes", []))
     if not nodes:
         raise ValueError(f"{name}: manifest names no nodes")
+    restart = list(raw.get("restart", []))
+    stray = [n for n in restart if n not in nodes]
+    if stray:
+        raise ValueError(f"{name}: restart names {stray}, which the roster "
+                         f"{nodes} does not")
     return Test(name=name, dir=mf.parent, env=env,
                 start=raw.get("start", NULL),
                 saves=raw.get("saves") or None,
@@ -84,7 +90,13 @@ def _parse(mf: Path) -> Test:
                 # sitting unexecuted from the day it landed. The reason has to
                 # travel with the test, so removing the last suite entry that
                 # named it fails rather than silently retiring it.
-                unlisted=_unlisted(name, raw))
+                unlisted=_unlisted(name, raw),
+                # why between driver and oracle: a driver leaves state on a
+                # node, and the oracle judges what the node holds after it
+                # boots again. A driver cannot relaunch a node itself — the
+                # executor owns the process, and a node it did not start
+                # reads to the runner as a dead one.
+                restart=restart)
 
 
 def _unlisted(name: str, raw: dict) -> str | None:
