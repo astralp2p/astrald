@@ -9,18 +9,19 @@ import (
 
 	"github.com/astralp2p/astral-go/api/auth"
 	"github.com/astralp2p/astral-go/api/nodes"
+	"github.com/astralp2p/astral-go/api/user"
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astral-go/astral/channel"
 	"github.com/astralp2p/astral-go/astral/log"
 	authmod "github.com/astralp2p/astrald/mod/auth"
 )
 
-// contractIndex is an auth module whose contract index holds contracts, and
-// which records the filters of every lookup.
-// note: the embedded nil interface panics on any other method, so an op that
-// asks Authorize fails the test: apphost.hosts requires no permit.
+// contractIndex is an auth module whose contract index holds contracts, which
+// records the filters of every lookup, and which answers Authorize through the
+// embedded recordingAuth.
+// note: any other auth method panics on the nil interface recordingAuth embeds.
 type contractIndex struct {
-	authmod.Module
+	*recordingAuth
 	contracts []*auth.SignedContract
 
 	mu      sync.Mutex
@@ -98,9 +99,10 @@ func contractFor(issuer, subject *astral.Identity, action string) *auth.SignedCo
 	}}
 }
 
-// hostsModule is a module on node self whose contract index holds contracts.
+// hostsModule is a module on node self whose contract index holds contracts,
+// and which authorizes every action.
 func hostsModule(self *astral.Identity, contracts ...*auth.SignedContract) (*Module, *contractIndex) {
-	index := &contractIndex{contracts: contracts}
+	index := &contractIndex{recordingAuth: &recordingAuth{verdict: true}, contracts: contracts}
 	mod := &Module{
 		Deps: Deps{Auth: index, Dir: &namingDir{}},
 		node: &serveAppsNode{id: self},
@@ -113,11 +115,17 @@ func hostsModule(self *astral.Identity, contracts ...*auth.SignedContract) (*Mod
 // object of the reply up to and excluding EOS.
 func askHosts(t *testing.T, mod *Module, app string) []astral.Object {
 	t.Helper()
+	return askHostsAs(t, mod, astral.GenerateIdentity(), app)
+}
+
+// askHostsAs is askHosts with caller as the local caller.
+func askHostsAs(t *testing.T, mod *Module, caller *astral.Identity, app string) []astral.Object {
+	t.Helper()
 
 	r, w := io.Pipe()
 	t.Cleanup(func() { r.Close() })
 
-	routeOpen(t, mod.OpHosts, astral.GenerateIdentity(), "apphost.hosts?app="+app, w)
+	routeOpen(t, mod.OpHosts, caller, "apphost.hosts?app="+app, w)
 
 	ch := channel.New(struct {
 		io.Reader
@@ -267,5 +275,51 @@ func TestHostsRefusesAQueryOffALink(t *testing.T) {
 	}
 	if n := len(index.recorded()); n != 0 {
 		t.Fatalf("apphost.hosts read the index %d times for a query off a link; want none", n)
+	}
+	if n := len(index.recordingAuth.recorded()); n != 0 {
+		t.Fatalf("apphost.hosts asked %d authorizations for a query off a link; want none", n)
+	}
+}
+
+// TestHostsAsksSeeSwarmForTheCaller: the answer is a read of who belongs to the
+// swarm, so apphost.hosts authorizes SeeSwarm with the caller as actor, once.
+func TestHostsAsksSeeSwarmForTheCaller(t *testing.T) {
+	self, app, caller := astral.GenerateIdentity(), astral.GenerateIdentity(), astral.GenerateIdentity()
+	mod, index := hostsModule(self, relayContract(app, self))
+
+	askHostsAs(t, mod, caller, app.String())
+
+	actions := index.recordingAuth.recorded()
+	if len(actions) != 1 {
+		t.Fatalf("apphost.hosts asked %d authorizations; want 1", len(actions))
+	}
+	seeSwarm, ok := actions[0].(*user.SeeSwarmAction)
+	if !ok {
+		t.Fatalf("apphost.hosts asked to authorize %v; want %v", actions[0].ObjectType(), user.SeeSwarmAction{}.ObjectType())
+	}
+	if !seeSwarm.Actor().IsEqual(caller) {
+		t.Fatalf("apphost.hosts authorized actor %v; want the caller %v", seeSwarm.Actor(), caller)
+	}
+}
+
+// TestHostsRefusesACallerWithoutSeeSwarm: a caller the node does not authorize
+// for SeeSwarm is rejected before the index is read and before a byte is written.
+func TestHostsRefusesACallerWithoutSeeSwarm(t *testing.T) {
+	self, app := astral.GenerateIdentity(), astral.GenerateIdentity()
+	mod, index := hostsModule(self, relayContract(app, self))
+	index.recordingAuth.verdict = false
+	w := newRecordingWriter()
+
+	err := route(t, mod.OpHosts, astral.GenerateIdentity(), "apphost.hosts?app="+app.String(), w)
+
+	var rejected *astral.ErrRejected
+	if !errors.As(err, &rejected) {
+		t.Fatalf("apphost.hosts answered a caller without SeeSwarm: got err %v, want a rejection", err)
+	}
+	if n := w.written(); n != 0 {
+		t.Fatalf("apphost.hosts wrote %d bytes to a caller without SeeSwarm; want none", n)
+	}
+	if n := len(index.recorded()); n != 0 {
+		t.Fatalf("apphost.hosts read the index %d times for a caller without SeeSwarm; want none", n)
 	}
 }

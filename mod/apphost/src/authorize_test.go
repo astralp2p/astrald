@@ -89,3 +89,25 @@ func route(t *testing.T, fn any, caller *astral.Identity, queryString string, w 
 	_, err = op.RouteQuery(ctx, astral.Launch(query.New(caller, caller, queryString, nil)), w)
 	return err
 }
+
+// routeOpen dispatches one query to one op and returns the requester's write
+// side, which the caller closes to end (or half-close) the requester's side.
+// note: the query's context lives until the test ends, so the op can stream a
+// reply after routing returns.
+func routeOpen(t *testing.T, fn any, caller *astral.Identity, queryString string, w io.WriteCloser) io.WriteCloser {
+	t.Helper()
+
+	op, err := routing.NewOp(fn)
+	if err != nil {
+		t.Fatalf("new op: %v", err)
+	}
+
+	ctx, cancel := astral.NewContext(nil).WithTimeout(10 * time.Second)
+	t.Cleanup(cancel)
+
+	target, err := op.RouteQuery(ctx, astral.Launch(query.New(caller, caller, queryString, nil)), w)
+	if err != nil {
+		t.Fatalf("route: %v", err)
+	}
+	return target
+}
