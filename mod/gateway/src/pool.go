@@ -6,6 +6,7 @@ import (
 
 	"github.com/astralp2p/astral-go/api/gateway"
 	"github.com/astralp2p/astral-go/astral"
+	"github.com/astralp2p/astral-go/astral/channel"
 	"github.com/astralp2p/astral-go/sig"
 	"github.com/astralp2p/astrald/mod/exonet"
 )
@@ -72,7 +73,8 @@ func (p *ConnPool) dialSocket() (exonet.Conn, error) {
 		return nil, err
 	}
 
-	if _, err := p.socket.Nonce.WriteTo(conn); err != nil {
+	// why: handleInbound reads the nonce as a framed object, the encoding Dial sends.
+	if err := channel.New(conn).Send(&p.socket.Nonce); err != nil {
 		conn.Close()
 		return nil, err
 	}
