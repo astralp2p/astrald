@@ -1,5 +1,7 @@
 """env node: fresh astrald processes on loopback, one live session per run."""
 import asyncio
+import shutil
+import tempfile
 from pathlib import Path
 
 from lib.executors import Executor, ExecutorError
@@ -13,7 +15,17 @@ class LocalExecutor(Executor):
     def __init__(self, dir: Path, binary: Path, ports: PortLease,
                  keep: bool = False):
         self._ports = ports   # held for the run: no other run takes the span
-        self._session = Session(dir, binary, ports.base, keep=keep)
+        # why: the nodes write their state under the system temp dir, and dir
+        # is a symlink to it until teardown copies the world back. astrald
+        # fsyncs its SQLite database, and on an SD card under write load one
+        # fsync stalls for 20-30 s: a node then misses the 30 s readiness wait
+        # or a driver's deadline. Where the temp dir is tmpfs, as /tmp is on
+        # ant3, no fsync reaches the card.
+        self._dir = Path(dir)
+        self._live = Path(tempfile.mkdtemp(prefix="astrald-tests-"))
+        self._dir.parent.mkdir(parents=True, exist_ok=True)
+        self._dir.symlink_to(self._live, target_is_directory=True)
+        self._session = Session(self._dir, binary, ports.base, keep=keep)
 
     @property
     def session_json_path(self) -> Path:
@@ -44,5 +56,12 @@ class LocalExecutor(Executor):
         return self._session.dead_nodes()
 
     def teardown(self, keep: bool) -> None:
-        if not keep:
-            self._session.teardown()
+        """Stop the nodes and move their state from the temp dir into dir.
+
+        A kept world stays where it runs, still reached through dir."""
+        if keep:
+            return
+        self._session.teardown()
+        self._dir.unlink()
+        shutil.copytree(self._live, self._dir)
+        shutil.rmtree(self._live)
