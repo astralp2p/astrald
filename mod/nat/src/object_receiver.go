@@ -1,8 +1,8 @@
 package nat
 
 import (
+	"github.com/astralp2p/astral-go/api/events"
 	"github.com/astralp2p/astral-go/api/nodes"
-	"github.com/astralp2p/astrald/mod/events"
 	"github.com/astralp2p/astrald/mod/objects"
 )
 

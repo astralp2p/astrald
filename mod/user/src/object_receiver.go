@@ -6,10 +6,10 @@ import (
 	"time"
 
 	"github.com/astralp2p/astral-go/api/auth"
+	"github.com/astralp2p/astral-go/api/events"
 	"github.com/astralp2p/astral-go/api/nodes"
 	"github.com/astralp2p/astral-go/api/user"
 	"github.com/astralp2p/astral-go/astral"
-	"github.com/astralp2p/astrald/mod/events"
 	"github.com/astralp2p/astrald/mod/objects"
 )
 

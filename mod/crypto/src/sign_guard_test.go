@@ -28,7 +28,7 @@ type sudoTable struct {
 }
 
 func (s *sudoTable) Authorize(_ *astral.Context, action authapi.ActionObject) bool {
-	sudo, ok := action.(*authmod.SudoAction)
+	sudo, ok := action.(*authapi.SudoAction)
 	return ok && s.pairs[[2]string{sudo.Actor().String(), sudo.AsID.String()}]
 }
 

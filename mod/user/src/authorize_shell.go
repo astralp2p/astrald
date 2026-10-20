@@ -1,8 +1,8 @@
 package user
 
 import (
+	"github.com/astralp2p/astral-go/api/shell"
 	"github.com/astralp2p/astral-go/astral"
-	"github.com/astralp2p/astrald/mod/shell"
 )
 
 // AuthorizeShell allows the user identity and this node's own identity to open

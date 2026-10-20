@@ -4,6 +4,7 @@ import (
 	"github.com/astralp2p/astral-go/api/auth"
 	"github.com/astralp2p/astral-go/api/nodes"
 	"github.com/astralp2p/astral-go/api/services"
+	"github.com/astralp2p/astral-go/api/shell"
 	"github.com/astralp2p/astral-go/api/user"
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astrald/core"
@@ -14,7 +15,7 @@ import (
 	nodesmod "github.com/astralp2p/astrald/mod/nodes"
 	objectsmod "github.com/astralp2p/astrald/mod/objects"
 	"github.com/astralp2p/astrald/mod/scheduler"
-	"github.com/astralp2p/astrald/mod/shell"
+	shellmod "github.com/astralp2p/astrald/mod/shell"
 	"github.com/astralp2p/astrald/mod/tree"
 )
 
@@ -25,7 +26,7 @@ type Deps struct {
 	Objects   objectsmod.Module
 	Nodes     nodesmod.Module
 	Scheduler scheduler.Module
-	Shell     shell.Module
+	Shell     shellmod.Module
 	Nearby    nearby.Module
 	Tree      tree.Module
 }

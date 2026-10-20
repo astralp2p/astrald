@@ -17,7 +17,6 @@ import (
 	"github.com/astralp2p/astral-go/astral/channel"
 	"github.com/astralp2p/astral-go/lib/query"
 	"github.com/astralp2p/astral-go/lib/routing"
-	authmod "github.com/astralp2p/astrald/mod/auth"
 	cryptomod "github.com/astralp2p/astrald/mod/crypto"
 	usermod "github.com/astralp2p/astrald/mod/user"
 )
@@ -115,7 +114,7 @@ func contractOf(issuer, subject *astral.Identity, actions ...astral.Object) *aut
 }
 
 func sudoOf(issuer, subject *astral.Identity) *auth.Contract {
-	return contractOf(issuer, subject, &authmod.SudoAction{})
+	return contractOf(issuer, subject, &auth.SudoAction{})
 }
 
 func claimOf(issuer, subject *astral.Identity) *auth.Contract {
@@ -284,7 +283,7 @@ func TestAuthorizeContractNodeClaimExpiry(t *testing.T) {
 // isManagementNodeContract fails at least one row of this test or the one
 // above when it is removed.
 func TestAuthorizeContractNodeClaimShape(t *testing.T) {
-	sudo := astral.String8(authmod.SudoAction{}.ObjectType())
+	sudo := astral.String8(auth.SudoAction{}.ObjectType())
 
 	for _, tc := range []struct {
 		name string

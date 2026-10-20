@@ -5,11 +5,11 @@ import (
 	"sync/atomic"
 	"testing"
 
+	"github.com/astralp2p/astral-go/api/events"
 	"github.com/astralp2p/astral-go/api/ip"
 	"github.com/astralp2p/astral-go/api/nodes"
 	"github.com/astralp2p/astral-go/api/tree"
 	"github.com/astralp2p/astral-go/astral"
-	"github.com/astralp2p/astrald/mod/events"
 	ipmod "github.com/astralp2p/astrald/mod/ip"
 )
 

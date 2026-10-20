@@ -3,10 +3,10 @@ package nodes
 import (
 	"slices"
 
+	"github.com/astralp2p/astral-go/api/events"
 	"github.com/astralp2p/astral-go/api/nodes"
 	"github.com/astralp2p/astral-go/api/tcp"
 	"github.com/astralp2p/astral-go/astral"
-	"github.com/astralp2p/astrald/mod/events"
 	"github.com/astralp2p/astrald/mod/objects"
 )
 

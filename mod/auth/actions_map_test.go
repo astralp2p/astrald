@@ -7,9 +7,9 @@ import (
 	"github.com/astralp2p/astral-go/astral"
 )
 
-func countingSudo(verdict bool) (Func[*SudoAction], *int) {
+func countingSudo(verdict bool) (Func[*auth.SudoAction], *int) {
 	calls := new(int)
-	return Func[*SudoAction](func(_ *astral.Context, _ *SudoAction) bool {
+	return Func[*auth.SudoAction](func(_ *astral.Context, _ *auth.SudoAction) bool {
 		*calls++
 		return verdict
 	}), calls
@@ -21,7 +21,7 @@ func TestFuncActionType(t *testing.T) {
 		got  string
 		want string
 	}{
-		{"SudoAction", Func[*SudoAction](nil).ActionType(), "mod.auth.sudo_action"},
+		{"SudoAction", Func[*auth.SudoAction](nil).ActionType(), "mod.auth.sudo_action"},
 		{"AdminNetworkAction", Func[*auth.AdminNetworkAction](nil).ActionType(), auth.AdminNetworkAction{}.ObjectType()},
 	}
 
@@ -48,7 +48,7 @@ func TestFuncAuthorizeReturnsTheFuncResult(t *testing.T) {
 	for _, verdict := range []bool{true, false} {
 		f, calls := countingSudo(verdict)
 		id := astral.GenerateIdentity()
-		action := &SudoAction{Action: auth.NewAction(id), AsID: id}
+		action := &auth.SudoAction{Action: auth.NewAction(id), AsID: id}
 
 		if got := f.Authorize(astral.NewContext(nil), action); got != verdict {
 			t.Errorf("Authorize(SudoAction) = %v, want %v", got, verdict)
@@ -78,7 +78,7 @@ func TestNodeLocalMarksAndDelegates(t *testing.T) {
 
 	ctx := astral.NewContext(nil)
 	id := astral.GenerateIdentity()
-	if !local.Authorize(ctx, &SudoAction{Action: auth.NewAction(id), AsID: id}) {
+	if !local.Authorize(ctx, &auth.SudoAction{Action: auth.NewAction(id), AsID: id}) {
 		t.Fatal("NodeLocal(f).Authorize(SudoAction) = false, want the wrapped func's true")
 	}
 	if *calls != 1 {

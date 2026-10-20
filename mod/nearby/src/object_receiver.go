@@ -3,10 +3,10 @@ package nearby
 import (
 	"time"
 
+	"github.com/astralp2p/astral-go/api/ether"
 	"github.com/astralp2p/astral-go/api/ip"
 	"github.com/astralp2p/astral-go/api/nearby"
 	"github.com/astralp2p/astral-go/astral"
-	"github.com/astralp2p/astrald/mod/ether"
 	"github.com/astralp2p/astrald/mod/objects"
 )
 

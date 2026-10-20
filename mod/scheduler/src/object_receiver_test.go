@@ -4,8 +4,8 @@ import (
 	"sync/atomic"
 	"testing"
 
+	"github.com/astralp2p/astral-go/api/events"
 	"github.com/astralp2p/astral-go/astral"
-	"github.com/astralp2p/astrald/mod/events"
 	"github.com/astralp2p/astrald/mod/scheduler"
 )
 

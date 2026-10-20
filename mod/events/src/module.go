@@ -1,9 +1,10 @@
 package events
 
 import (
+	"github.com/astralp2p/astral-go/api/events"
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astral-go/astral/log"
-	"github.com/astralp2p/astrald/mod/events"
+	eventsmod "github.com/astralp2p/astrald/mod/events"
 	"github.com/astralp2p/astrald/mod/objects"
 	"github.com/astralp2p/astrald/resources"
 )
@@ -20,7 +21,7 @@ type Module struct {
 	assets resources.Resources
 }
 
-var _ events.Module = &Module{}
+var _ eventsmod.Module = &Module{}
 
 func (mod *Module) Run(ctx *astral.Context) error {
 	<-ctx.Done()
@@ -39,5 +40,5 @@ func (mod *Module) Emit(data astral.Object) *events.Event {
 }
 
 func (mod *Module) String() string {
-	return events.ModuleName
+	return eventsmod.ModuleName
 }

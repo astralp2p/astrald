@@ -1,8 +1,8 @@
 package auth
 
 import (
+	"github.com/astralp2p/astral-go/api/auth"
 	"github.com/astralp2p/astral-go/astral"
-	"github.com/astralp2p/astrald/mod/auth"
 )
 
 // AuthorizeSudo allows an identity to act as itself.
