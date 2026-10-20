@@ -8,7 +8,8 @@ A node nobody can dial is reached through a gateway that can.
 - **driver** `script.py` — wait for node2 to register itself, give node1 a
   `gw:` endpoint and nothing else, link.
 - **oracle** `verify.py` — the link to node2 is a `gw` link and not a `tcp`
-  one, and node2 answers for itself over it.
+  one, node2 answers for itself over it, and the gateway reserves an idle
+  connection from node2 through `gateway.node_connect`.
 
 The gateway module is a rendezvous and relay, five ops, and nothing exercised
 any of them.
@@ -60,6 +61,20 @@ node1 holds an ordinary `tcp` link to the gateway itself, so an unfiltered
 `gw` present means the relay carried it. `tcp` present, to a node behind NAT,
 would mean a direct path survived and the world was never what the test
 claimed.
+
+## A gw link does not prove the socket path
+
+`Dial` falls back to `gateway.node_route` whenever the socket path fails, and
+the fallback also produces a `gw` link. From the module's creation until
+`be74ee44` the registered node's pool wrote its nonce raw while the gateway
+read it framed, so every idle connection stalled at the nonce and a link could
+form only through the fallback.
+
+So the oracle's last claim asks the gateway for a socket to node2 with
+`gateway.node_connect`. The gateway answers a `mod.gateway.socket` only when it
+holds an idle connection from node2's pool; with none it answers
+`target not reachable`. The claim runs last because a reservation hands one
+idle connection away.
 
 ## What it took to make this pass
 

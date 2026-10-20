@@ -20,6 +20,7 @@ this one is green.
 import asyncio
 
 import astral
+from astral import querystring
 from astral.errors import AstralError
 
 from lib.sessionio import load
@@ -84,6 +85,30 @@ async def main():
             faults.append(
                 f"node2 did not answer a query over the gw link: "
                 f"{type(e).__name__}: {e}")
+
+    # The socket path: the gateway holds an idle connection from node2 and
+    # reserves it for node1. A gw link forms through the node_route fallback
+    # too, so the link alone never showed that node2's pool reached the gateway.
+    #
+    # why last: a reservation hands one idle connection to node1 and the pool
+    # replaces it; nothing read above depends on that connection.
+    try:
+        async with await astral.connect(n1["endpoint"],
+                                        token=n1["token"]) as c1:
+            socket = await c1.call_one(
+                querystring.build("gateway.node_connect",
+                                  identity=n2["identity"]),
+                target=refl["identity"], allow_unparsed=True, timeout=30)
+        kind = getattr(socket, "ASTRAL_TYPE", type(socket).__name__)
+        if kind != "mod.gateway.socket":
+            faults.append(
+                f"gateway.node_connect for node2 answered {kind}, not a "
+                "mod.gateway.socket")
+    except AstralError as e:
+        faults.append(
+            f"the gateway reserved no idle connection from node2 — "
+            f"gateway.node_connect: {type(e).__name__}: {e} — so node2's "
+            "pool never reached it and the link went through node_route")
 
     assert not faults, "; ".join(faults)
 
