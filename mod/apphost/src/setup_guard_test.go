@@ -20,6 +20,7 @@ func (s *stubUser) LocalSwarm() []*astral.Identity                              
 func (s *stubUser) NewMaintainLinkTask(*astral.Identity) usermod.MaintainLinkTask { return nil }
 func (s *stubUser) NewSyncNodesTask(*astral.Identity) usermod.SyncNodesTask       { return nil }
 func (s *stubUser) PushToLocalSwarm(*astral.Context, astral.Object)               {}
+func (s *stubUser) PushToSiblings(*astral.Context, astral.Object)                 {}
 func (s *stubUser) Expel(*astral.Context, *astral.Identity) (*user.SignedExpulsion, error) {
 	return nil, nil
 }
