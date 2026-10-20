@@ -13,15 +13,15 @@ import (
 	"github.com/astralp2p/astral-go/lib/routing"
 	"github.com/astralp2p/astral-go/sig"
 	authmod "github.com/astralp2p/astrald/mod/auth"
-	"github.com/astralp2p/astrald/mod/objects"
+	eventsmod "github.com/astralp2p/astrald/mod/events"
 	"github.com/astralp2p/astrald/resources"
 )
 
 var _ ipmod.Module = &Module{}
 
 type Deps struct {
-	Auth    authmod.Module
-	Objects objects.Module
+	Auth   authmod.Module
+	Events eventsmod.Module
 }
 
 type Module struct {
@@ -98,11 +98,11 @@ func (mod *Module) watchAddresses(ctx context.Context) {
 					joinIPs(added),
 					joinIPs(removed),
 				)
-				_ = mod.Objects.Receive(&ip.EventNetworkAddressChanged{
+				mod.Events.Emit(&ip.EventNetworkAddressChanged{
 					Removed: removed,
 					Added:   added,
 					All:     addrs,
-				}, nil)
+				})
 			}
 
 		case <-ctx.Done():

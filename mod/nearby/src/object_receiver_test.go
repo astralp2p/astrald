@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/astralp2p/astral-go/api/ether"
+	"github.com/astralp2p/astral-go/api/events"
 	"github.com/astralp2p/astral-go/api/ip"
 	"github.com/astralp2p/astral-go/api/nearby"
 	"github.com/astralp2p/astral-go/astral"
@@ -152,7 +153,11 @@ func TestReceiveNetworkAddressChangedRequiresLocalSender(t *testing.T) {
 				sender = nodeID
 			}
 
-			event := &ip.EventNetworkAddressChanged{Added: []ip.IP{ip.IP(net.ParseIP("192.168.1.30"))}}
+			event := &events.Event{
+				ID:       astral.NewNonce(),
+				SourceID: nodeID,
+				Data:     &ip.EventNetworkAddressChanged{Added: []ip.IP{ip.IP(net.ParseIP("192.168.1.30"))}},
+			}
 
 			drop := &recordingDrop{sender: sender, object: event}
 			if err := mod.ReceiveObject(drop); err != nil {
@@ -164,11 +169,10 @@ func TestReceiveNetworkAddressChangedRequiresLocalSender(t *testing.T) {
 				t.Fatalf("pushed %d broadcasts; want %d", len(pushed), tc.pushes)
 			}
 
-			accepted := drop.accepted()
+			if a := drop.accepted(); len(a) != 0 {
+				t.Fatalf("Accept calls %v; an event is never accepted", a)
+			}
 			if !tc.local {
-				if len(accepted) != 0 {
-					t.Fatalf("Accept calls %v; want none", accepted)
-				}
 				return
 			}
 
@@ -177,9 +181,6 @@ func TestReceiveNetworkAddressChangedRequiresLocalSender(t *testing.T) {
 			}
 			if _, ok := pushed[1].(*nearby.ScanMessage); !ok {
 				t.Fatalf("second push is %v; want a scan", pushed[1].ObjectType())
-			}
-			if len(accepted) != 1 || accepted[0] {
-				t.Fatalf("Accept calls %v; want one Accept(false)", accepted)
 			}
 		})
 	}
