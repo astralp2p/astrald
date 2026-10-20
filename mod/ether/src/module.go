@@ -8,18 +8,19 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/astralp2p/astral-go/api/ether"
 	"github.com/astralp2p/astral-go/api/ip"
 	"github.com/astralp2p/astral-go/api/secp256k1"
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astral-go/astral/log"
 	"github.com/astralp2p/astral-go/sig"
-	"github.com/astralp2p/astrald/mod/ether"
+	ethermod "github.com/astralp2p/astrald/mod/ether"
 	"github.com/astralp2p/astrald/resources"
 )
 
 const maxBroadcastSize = 1<<16 - 1
 
-var _ ether.Module = &Module{}
+var _ ethermod.Module = &Module{}
 
 type Module struct {
 	Deps
@@ -44,7 +45,7 @@ func (mod *Module) Run(ctx *astral.Context) (err error) {
 		return nil
 	}
 
-	if hook := ether.LANDiscoveryHook; hook != nil {
+	if hook := ethermod.LANDiscoveryHook; hook != nil {
 		hook(true)
 		defer hook(false)
 	}

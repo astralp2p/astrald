@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/astralp2p/astral-go/api/shell"
 	"github.com/astralp2p/astral-go/astral"
 )
 
@@ -32,7 +33,7 @@ func runScript(t *testing.T, script string) sessionRun {
 	mod := testModule(t)
 	guest := astral.GenerateIdentity()
 	conn := &scriptedConn{Reader: strings.NewReader(script)}
-	prompt := (&Prompt{GuestID: guest, HostID: mod.node.Identity()}).Render()
+	prompt := (&shell.Prompt{GuestID: guest, HostID: mod.node.Identity()}).Render()
 
 	session := NewSession(mod, conn)
 

@@ -312,8 +312,8 @@ func TestAuthorizeActorRestored(t *testing.T) {
 	}
 }
 
-func sudoAction(actor, as *astral.Identity) *authmod.SudoAction {
-	return &authmod.SudoAction{Action: auth.NewAction(actor), AsID: as}
+func sudoAction(actor, as *astral.Identity) *auth.SudoAction {
+	return &auth.SudoAction{Action: auth.NewAction(actor), AsID: as}
 }
 
 // TestAuthorizeSudoAllowsAnIdentityToBeItself pins the rule the zero-target

@@ -3,6 +3,12 @@ package all
 // This file includes all public interfaces of all modules.
 
 import (
+	// why: the ether, fs and shell wire types live in astral-go, and mod/ether,
+	// mod/fs and mod/shell no longer import them.
+	_ "github.com/astralp2p/astral-go/api/ether"
+	_ "github.com/astralp2p/astral-go/api/fs"
+	_ "github.com/astralp2p/astral-go/api/shell"
+
 	_ "github.com/astralp2p/astrald/mod/apphost"
 	_ "github.com/astralp2p/astrald/mod/auth"
 	_ "github.com/astralp2p/astrald/mod/coldcard"

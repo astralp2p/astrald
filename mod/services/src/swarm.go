@@ -4,11 +4,11 @@ import (
 	"sync"
 	"time"
 
+	"github.com/astralp2p/astral-go/api/events"
 	"github.com/astralp2p/astral-go/api/nodes"
 	servicescli "github.com/astralp2p/astral-go/api/services/client"
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astrald/core"
-	"github.com/astralp2p/astrald/mod/events"
 	"github.com/astralp2p/astrald/mod/objects"
 	"github.com/astralp2p/astrald/mod/services/src/coordinator"
 )

@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/astralp2p/astral-go/api/events"
 	"github.com/astralp2p/astral-go/api/exonet"
 	"github.com/astralp2p/astral-go/api/ip"
 	"github.com/astralp2p/astral-go/api/kcp"
@@ -14,7 +15,7 @@ import (
 	"github.com/astralp2p/astral-go/api/tcp"
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astral-go/astral/log"
-	"github.com/astralp2p/astrald/mod/events"
+	eventsmod "github.com/astralp2p/astrald/mod/events"
 	usermod "github.com/astralp2p/astrald/mod/user"
 )
 
@@ -42,7 +43,7 @@ func (c *identityConn) RemoteIdentity() *astral.Identity { return c.remote }
 
 // recordingEvents records emitted event data.
 type recordingEvents struct {
-	events.Module
+	eventsmod.Module
 
 	mu      sync.Mutex
 	emitted []astral.Object

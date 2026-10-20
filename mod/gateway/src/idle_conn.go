@@ -8,6 +8,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/astralp2p/astral-go/api/gateway"
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astral-go/astral/channel"
 	"github.com/astralp2p/astral-go/astral/log"
@@ -133,7 +134,7 @@ func (conn *idleConn) eventLoop(ctx context.Context) {
 			select {
 			case <-conn.handoffCh:
 				conn.setWriteDeadline(now.Add(writeTimeout))
-				if err := ch.Send(&Handoff{}); err != nil {
+				if err := ch.Send(&gateway.Handoff{}); err != nil {
 					return
 				}
 				handoffDone = true
@@ -145,7 +146,7 @@ func (conn *idleConn) eventLoop(ctx context.Context) {
 
 		if now.Sub(lastActivity) >= pingInterval && now.Sub(lastPing) >= pingInterval {
 			conn.setWriteDeadline(now.Add(writeTimeout))
-			if err := ch.Send(&Ping{}); err != nil {
+			if err := ch.Send(&gateway.Ping{}); err != nil {
 				return
 			}
 			lastPing = now
@@ -174,17 +175,17 @@ func (conn *idleConn) eventLoop(ctx context.Context) {
 		lastActivity = time.Now()
 
 		switch m := obj.(type) {
-		case *Ping:
+		case *gateway.Ping:
 			if !m.Pong {
 				conn.setWriteDeadline(time.Now().Add(writeTimeout))
-				if err := ch.Send(&Ping{Pong: true}); err != nil {
+				if err := ch.Send(&gateway.Ping{Pong: true}); err != nil {
 					return
 				}
 			}
 
-		case *Handoff:
+		case *gateway.Handoff:
 			conn.setWriteDeadline(time.Now().Add(writeTimeout))
-			if err := ch.Send(&HandoffAck{}); err != nil {
+			if err := ch.Send(&gateway.HandoffAck{}); err != nil {
 				return
 			}
 			handoffSuccess = true
@@ -193,7 +194,7 @@ func (conn *idleConn) eventLoop(ctx context.Context) {
 			conn.markReady()
 			return
 
-		case *HandoffAck:
+		case *gateway.HandoffAck:
 			handoffSuccess = true
 			conn.setReadDeadline(time.Time{})
 			conn.setWriteDeadline(time.Time{})

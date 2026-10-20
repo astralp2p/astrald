@@ -5,6 +5,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/astralp2p/astral-go/api/auth"
 	"github.com/astralp2p/astral-go/astral"
 	authmod "github.com/astralp2p/astrald/mod/auth"
 )
@@ -113,7 +114,7 @@ func TestAddKeysHandlersByActionType(t *testing.T) {
 	mod := &Module{}
 	mod.Add(
 		authmod.Func[*testAction](func(*astral.Context, *testAction) bool { return true }),
-		authmod.Func[*authmod.SudoAction](func(*astral.Context, *authmod.SudoAction) bool { return true }),
+		authmod.Func[*auth.SudoAction](func(*astral.Context, *auth.SudoAction) bool { return true }),
 	)
 
 	for _, actionType := range []string{"test.action", "mod.auth.sudo_action"} {

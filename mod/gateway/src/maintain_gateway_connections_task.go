@@ -3,13 +3,13 @@ package gateway
 import (
 	"time"
 
+	"github.com/astralp2p/astral-go/api/events"
 	"github.com/astralp2p/astral-go/api/gateway"
 	gatewayClient "github.com/astralp2p/astral-go/api/gateway/client"
 	"github.com/astralp2p/astral-go/api/ip"
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astral-go/lib/astrald"
 	"github.com/astralp2p/astral-go/sig"
-	"github.com/astralp2p/astrald/mod/events"
 	"github.com/astralp2p/astrald/mod/scheduler"
 )
 

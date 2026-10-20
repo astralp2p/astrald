@@ -5,7 +5,6 @@ import (
 	"github.com/astralp2p/astral-go/api/crypto"
 	"github.com/astralp2p/astral-go/api/secp256k1"
 	"github.com/astralp2p/astral-go/astral"
-	authmod "github.com/astralp2p/astrald/mod/auth"
 	cryptomod "github.com/astralp2p/astrald/mod/crypto"
 )
 
@@ -54,7 +53,7 @@ func (mod *Module) AuthorizeSigner(ctx *astral.Context, caller *astral.Identity,
 		return nil
 	}
 
-	if mod.Auth.Authorize(ctx, &authmod.SudoAction{
+	if mod.Auth.Authorize(ctx, &auth.SudoAction{
 		Action: auth.NewAction(caller),
 		AsID:   signerID,
 	}) {

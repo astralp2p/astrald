@@ -5,10 +5,11 @@ import (
 	"io"
 
 	shell2 "bitbucket.org/creachadair/shell"
+	"github.com/astralp2p/astral-go/api/shell"
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astral-go/lib/query"
 	"github.com/astralp2p/astral-go/streams"
-	"github.com/astralp2p/astrald/mod/shell"
+	shellmod "github.com/astralp2p/astrald/mod/shell"
 )
 
 type Session struct {
@@ -33,11 +34,11 @@ func NewSession(mod *Module, conn io.ReadWriteCloser) *Session {
 }
 
 func (s *Session) Run(ctx *astral.Context) (err error) {
-	var t = shell.NewTerminal(s.rwc)
+	var t = shellmod.NewTerminal(s.rwc)
 
 	for {
 		// print the prompt
-		t.Print(&Prompt{
+		t.Print(&shell.Prompt{
 			GuestID: ctx.Identity(),
 			HostID:  s.mod.node.Identity(),
 		})

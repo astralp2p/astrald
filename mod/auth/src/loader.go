@@ -3,11 +3,12 @@ package auth
 import (
 	"fmt"
 
+	"github.com/astralp2p/astral-go/api/auth"
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astral-go/astral/log"
 	"github.com/astralp2p/astrald/core"
 	"github.com/astralp2p/astrald/core/assets"
-	"github.com/astralp2p/astrald/mod/auth"
+	authmod "github.com/astralp2p/astrald/mod/auth"
 )
 
 type Loader struct{}
@@ -22,11 +23,11 @@ func (Loader) Load(node astral.Node, assets assets.Assets, log *log.Logger) (cor
 		assets: assets,
 	}
 
-	_ = assets.LoadYAML(auth.ModuleName, &mod.config)
+	_ = assets.LoadYAML(authmod.ModuleName, &mod.config)
 
 	mod.router.AddStructPrefix(mod, "Op")
 
-	mod.Add(auth.Func[*auth.SudoAction](mod.AuthorizeSudo))
+	mod.Add(authmod.Func[*auth.SudoAction](mod.AuthorizeSudo))
 
 	// note: the configured authorizers are checked here, so a misconfiguration
 	// fails the load; they reach the tree and the registry in LoadDependencies.
@@ -48,7 +49,7 @@ func (Loader) Load(node astral.Node, assets assets.Assets, log *log.Logger) (cor
 }
 
 func init() {
-	if err := core.RegisterModule(auth.ModuleName, Loader{}); err != nil {
+	if err := core.RegisterModule(authmod.ModuleName, Loader{}); err != nil {
 		panic(err)
 	}
 }

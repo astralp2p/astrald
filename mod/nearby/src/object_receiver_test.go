@@ -5,11 +5,12 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/astralp2p/astral-go/api/ether"
 	"github.com/astralp2p/astral-go/api/ip"
 	"github.com/astralp2p/astral-go/api/nearby"
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astral-go/astral/log"
-	"github.com/astralp2p/astrald/mod/ether"
+	ethermod "github.com/astralp2p/astrald/mod/ether"
 	usermod "github.com/astralp2p/astrald/mod/user"
 )
 
@@ -30,7 +31,7 @@ func (unclaimedUser) Identity() *astral.Identity { return nil }
 
 // recordingEther records broadcast pushes.
 type recordingEther struct {
-	ether.Module
+	ethermod.Module
 
 	mu     sync.Mutex
 	pushed []astral.Object
