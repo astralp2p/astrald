@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"github.com/astralp2p/astral-go/api/ether"
+	"github.com/astralp2p/astral-go/api/events"
 	"github.com/astralp2p/astral-go/api/ip"
 	"github.com/astralp2p/astral-go/api/nearby"
 	"github.com/astralp2p/astral-go/astral"
@@ -25,9 +26,10 @@ func (mod *Module) ReceiveObject(drop objects.Drop) error {
 			return drop.Accept(false)
 		}
 
-	case *ip.EventNetworkAddressChanged:
-		mod.receiveNetworkAddressChanged(object)
-		return drop.Accept(false)
+	case *events.Event:
+		if changed, ok := object.Data.(*ip.EventNetworkAddressChanged); ok {
+			mod.receiveNetworkAddressChanged(changed)
+		}
 	}
 
 	return nil
