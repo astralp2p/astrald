@@ -14,10 +14,24 @@ def git_ref(checkout: Path) -> str:
     return p.stdout.strip()
 
 
+def query_binary(binary: Path) -> Path:
+    """The astral-query ensure_binary builds beside an astrald."""
+    return Path(binary).with_name("astral-query")
+
+
 def ensure_binary(repo_root: Path) -> tuple:
+    """Build astrald, and astral-query beside it, from one checkout.
+
+    why astral-query too: the VM ops probe readiness with the guest's own
+    astral-query, and a lab-baked one drifts from the astrald under test —
+    a 2026-08-12 build sent `dir.resolve?name=localnode`, which a current
+    astrald rejects, so enter-nat never saw the daemon come back.
+    """
     cache = repo_root / "tests" / ".cache"
     cache.mkdir(parents=True, exist_ok=True)
     binary = cache / "astrald"
-    subprocess.run(["go", "build", "-o", str(binary), "./cmd/astrald"],
-                   cwd=repo_root, check=True)
+    for out, pkg in ((binary, "./cmd/astrald"),
+                     (query_binary(binary), "./cmd/astral-query")):
+        subprocess.run(["go", "build", "-o", str(out), pkg],
+                       cwd=repo_root, check=True)
     return binary, git_ref(repo_root)

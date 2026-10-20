@@ -5,10 +5,10 @@ builds one twice for the same inputs. A state name plus the recipe it came
 from plus the astrald ref under test is a cache key; a stage carrying that key
 is the same world, and booting it costs a resume instead of a build.
 
-astrald is pushed, never baked. The lab recipe bakes what is slow and stable —
-the VMs, the operator, the service unit, the apt dependencies — and the binary
-under test arrives fresh on every boot, so a stage outlives the commit that
-filled it.
+astrald and astral-query are pushed, never baked. The lab recipe bakes what is
+slow and stable — the VMs, the operator, the service unit, the apt
+dependencies — and the binaries under test arrive fresh on every boot, so a
+stage outlives the commit that filled it.
 
 The session is real ssh port-forwarding. netsim writes a standard OpenSSH
 config per simulation at `<sim_dir>/ssh_config` — one `Host <vm>` block, each
@@ -33,6 +33,7 @@ from base64 import b64encode
 from hashlib import sha256
 from pathlib import Path
 
+from lib.build import query_binary
 from lib.executors import Executor, ExecutorError
 
 TESTS = Path(__file__).resolve().parent.parent.parent
@@ -370,13 +371,16 @@ class NetsimExecutor(Executor):
     # --- the binary under test ---------------------------------------------
 
     def _push_astrald(self, nodes: list) -> None:
-        """Replace each guest's astrald with the host-built one and restart it.
+        """Replace each guest's astrald and astral-query with the host-built
+        ones and restart astrald.
 
         Guests match the host architecture, so the binary the node-env tests
         ran against is the binary the VM tests run against — one build, one
-        ref in the results header. The apphost config is written here too, so
-        the token in session.json is one the harness chose rather than one it
-        had to discover.
+        ref in the results header. astral-query rides along because the vmops
+        speak to astrald through it: a lab-baked one is as old as the stage
+        and its queries drift from the astrald under test. The apphost config
+        is written here too, so the token in session.json is one the harness
+        chose rather than one it had to discover.
 
         why: the value beside a token is the identity it authenticates as, not
         a label. `localnode` is the node itself — an invented name resolves to
@@ -385,6 +389,8 @@ class NetsimExecutor(Executor):
         for vm in nodes:
             token = sha256(f"{vm}:{self.astrald_ref}".encode()).hexdigest()[:32]
             self._scp(vm, self.binary, "/usr/local/bin/astrald")
+            self._scp(vm, query_binary(self.binary),
+                      "/usr/local/bin/astral-query")
             self._ssh(vm, f"""set -e
 mkdir -p {GUEST_ROOT}/config
 cat > {GUEST_ROOT}/config/apphost.yaml <<'EOF'
