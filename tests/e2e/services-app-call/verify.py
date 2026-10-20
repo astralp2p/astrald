@@ -2,9 +2,9 @@
 """Oracle: every step held, and the round trip works on its own.
 
 The oracle repeats the whole round trip with fresh identities (`driver verify`):
-a provider app registered on node2 after the link is unreachable from node1,
-and reachable by its app identity once the link re-forms and the sibling sync
-carries its relay contract.
+a provider app registered on node2 after the link is reachable from node1 by
+its app identity, with no relink, once apphost.register has pushed its relay
+contract.
 """
 import os
 import subprocess
@@ -14,7 +14,7 @@ from pathlib import Path
 from lib.sessionio import load
 
 ROOT = Path(__file__).resolve().parents[3]
-STEPS = ["discovered_on_node2", "unroutable_before_sync", "called_after_sync", "provider_saw_the_app"]
+STEPS = ["discovered_on_node2", "called_without_relink", "provider_saw_the_app"]
 
 facts = load()["facts"].get("services_app_call", {})
 missing = [s for s in STEPS if not facts.get(s)]
@@ -27,4 +27,4 @@ proc = subprocess.run(
 )
 sys.stderr.write(proc.stderr)
 assert proc.returncode == 0, f"oracle round trip failed: exit {proc.returncode}"
-print("oracle: an app on node2 is called by its identity from node1 after the sibling sync")
+print("oracle: an app on node2 is called by its identity from node1 with no relink")
