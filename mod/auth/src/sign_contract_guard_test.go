@@ -279,7 +279,7 @@ func TestAuthorizeContractNodeClaimExpiry(t *testing.T) {
 
 // TestAuthorizeContractNodeClaimShape: on an unclaimed node, the node's own
 // session is refused every contract that differs from the claim contract in
-// its parties or its permits. Each clause of isNodeClaim and
+// its parties or its permits. Each clause of IsNodeClaim and
 // isManagementNodeContract fails at least one row of this test or the one
 // above when it is removed.
 func TestAuthorizeContractNodeClaimShape(t *testing.T) {

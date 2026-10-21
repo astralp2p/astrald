@@ -45,6 +45,11 @@ type Module interface {
 	// SignContract signs the contract with both issuer and subject private keys if needed.
 	SignContract(ctx *astral.Context, contract *auth.SignedContract) error
 
+	// IsNodeClaim reports whether c is the contract that claims this unclaimed
+	// node, asked for by caller: the one contract auth.sign_contract signs
+	// without the signer rule.
+	IsNodeClaim(ctx *astral.Context, caller *astral.Identity, c *auth.Contract) bool
+
 	// IndexContract verifies and adds a signed contract to the auth index.
 	IndexContract(ctx *astral.Context, contract *auth.SignedContract) error
 

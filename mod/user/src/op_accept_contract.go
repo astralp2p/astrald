@@ -48,14 +48,9 @@ func (mod *Module) OpAcceptContract(ctx *astral.Context, q *routing.IncomingQuer
 		return ch.Send(astral.Err(err))
 	}
 
-	_, err = mod.Objects.Store(ctx, mod.Objects.WriteDefault(), signed)
+	err = mod.claim(ctx, signed)
 	if err != nil {
 		return ch.Send(astral.Err(err))
-	}
-
-	err = mod.SetActiveContract(signed)
-	if err != nil {
-		return ch.Send(astral.NewError(err.Error()))
 	}
 
 	return ch.Send(&astral.Ack{})

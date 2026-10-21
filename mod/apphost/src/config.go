@@ -84,6 +84,7 @@ var defaultConfig = Config{
 			"user.new_node_contract",
 			"auth.sign_contract",
 			"user.accept_contract", // guarded active-contract write (replaces tree.set)
+			"user.bootstrap",       // the calls above in one op
 		},
 		Claimed: []string{
 			"user.info",
