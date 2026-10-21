@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astral-go/astral/channel"
@@ -24,17 +25,33 @@ type muxLinkNegotiator struct {
 	ch  *channel.Channel
 }
 
+// expect reads the next object from ch into *dst; a peer that closes before sending it yields io.ErrUnexpectedEOF.
+//
+// why: Switch returns nil on EOF and leaves *dst nil, which the negotiators would dereference.
+func expect[T any, P interface {
+	*T
+	astral.Object
+}](ch *channel.Channel, dst *P) error {
+	if err := ch.Switch(channel.Expect(dst), channel.PassErrors); err != nil {
+		return err
+	}
+	if *dst == nil {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+
 // NegotiateOutbound reads the peer's feature list, selects mux2, and waits for the link nonce; fails if mux2 is absent or rejected.
 func (n *muxLinkNegotiator) NegotiateOutbound() (*Link, error) {
 	var count *astral.Uint16
-	if err := n.ch.Switch(channel.Expect(&count), channel.PassErrors); err != nil {
+	if err := expect(n.ch, &count); err != nil {
 		return nil, fmt.Errorf("read feature count: %w", err)
 	}
 
 	var supported bool
 	for i := 0; i < int(*count); i++ {
 		var feature *astral.String8
-		if err := n.ch.Switch(channel.Expect(&feature), channel.PassErrors); err != nil {
+		if err := expect(n.ch, &feature); err != nil {
 			return nil, fmt.Errorf("read feature: %w", err)
 		}
 		if feature.String() == featureMux2 {
@@ -51,7 +68,7 @@ func (n *muxLinkNegotiator) NegotiateOutbound() (*Link, error) {
 	}
 
 	var status *astral.Uint8
-	if err := n.ch.Switch(channel.Expect(&status), channel.PassErrors); err != nil {
+	if err := expect(n.ch, &status); err != nil {
 		return nil, fmt.Errorf("read negotiation status: %w", err)
 	}
 	if *status != 0 {
@@ -59,7 +76,7 @@ func (n *muxLinkNegotiator) NegotiateOutbound() (*Link, error) {
 	}
 
 	var nonce *astral.Nonce
-	if err := n.ch.Switch(channel.Expect(&nonce), channel.PassErrors); err != nil {
+	if err := expect(n.ch, &nonce); err != nil {
 		return nil, fmt.Errorf("read link nonce: %w", err)
 	}
 
@@ -82,7 +99,7 @@ func (n *muxLinkNegotiator) NegotiateInbound() (*Link, error) {
 	}
 
 	var feature *astral.String8
-	if err := n.ch.Switch(channel.Expect(&feature), channel.PassErrors); err != nil {
+	if err := expect(n.ch, &feature); err != nil {
 		return nil, fmt.Errorf("read selected feature: %w", err)
 	}
 	if feature.String() != featureMux2 {
