@@ -47,7 +47,7 @@ func (mod *Module) initiateMigration(ctx *astral.Context, ch *channel.Channel, s
 	}
 
 	var peerBuffer astral.Uint32
-	err = ch.Switch(nodes.ExpectMigrateSignal(nodes.MigrateSignalSwitched, &peerBuffer))
+	err = ch.Switch(nodes.ExpectMigrateSignal(nodes.MigrateSignalSwitched, &peerBuffer), channel.FailOnEOF())
 	if err != nil {
 		return err
 	}
@@ -68,7 +68,7 @@ func (mod *Module) initiateMigration(ctx *astral.Context, ch *channel.Channel, s
 		return err
 	}
 
-	err = ch.Switch(nodes.ExpectMigrateSignal(nodes.MigrateSignalDone, nil))
+	err = ch.Switch(nodes.ExpectMigrateSignal(nodes.MigrateSignalDone, nil), channel.FailOnEOF())
 	if err != nil {
 		return err
 	}
