@@ -63,6 +63,14 @@ func (assets *CoreAssets) Write(name string, data []byte) error {
 	return assets.res.Write(name, data)
 }
 
+func (assets *CoreAssets) ReadData(name string) ([]byte, error) {
+	return assets.res.ReadData(name)
+}
+
+func (assets *CoreAssets) WriteData(name string, data []byte) error {
+	return assets.res.WriteData(name, data)
+}
+
 // LoadYAML appends a .yaml suffix to name if missing.
 func (assets *CoreAssets) LoadYAML(name string, out interface{}) error {
 	if !strings.HasSuffix(strings.ToLower(name), ".yaml") {

@@ -17,8 +17,9 @@ FROM alpine:3.22
 # exists in the image so the volume carries that ownership one level down, because
 # a mount target the runtime has to create is created as root: a consuming stack
 # binds its configuration files to /var/lib/astrald/config/*.yaml, and a config
-# directory Docker creates leaves the node unable to write its identity at
-# <root>/config/node_key. /run/astrald is the shared mount a consuming stack uses
+# directory Docker creates leaves the node unable to remove the
+# <root>/config/node_key an earlier image wrote, once the node moves that key to
+# <root>/data/node_key. /run/astrald is the shared mount a consuming stack uses
 # for the apphost socket.
 RUN addgroup -g 1500 -S astrald \
  && adduser -u 1500 -S -G astrald -h /var/lib/astrald astrald \
@@ -30,7 +31,7 @@ COPY --from=build /out/astrald /out/astral-query /usr/local/bin/
 USER 1500:1500
 
 # The root directory holds config, identity, and data; the identity is the key at
-# <root>/config/node_key, so a discarded volume is a new node.
+# <root>/data/node_key, so a discarded volume is a new node.
 VOLUME /var/lib/astrald
 
 # EXPOSE names the ports the image's own defaults bind beyond loopback, because

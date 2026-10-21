@@ -36,6 +36,8 @@ var ErrAlreadyRunning = errors.New("node already running")
 // ErrNotConfigured is returned by Start when SetConfigDir was never called.
 var ErrNotConfigured = errors.New("config dir not set")
 
+const resNodeKey = "node_key"
+
 // Node is a single astrald instance driven from a platform wrapper.
 // One Node per process; see package doc.
 type Node struct {
@@ -70,7 +72,8 @@ func (n *Node) SetConfigDir(path string) {
 
 // SetDataDir sets the on-disk data root. If left empty, defaults to the
 // config dir (matching resources.FileResources behavior). On Android,
-// pass a path under filesDir() or noBackupFilesDir().
+// pass a path under filesDir() or noBackupFilesDir(). The data root holds
+// the node identity (node_key, tor.key), the databases and crash logs.
 func (n *Node) SetDataDir(path string) {
 	n.mu.Lock()
 	defer n.mu.Unlock()
@@ -240,9 +243,6 @@ func setupResources(configDir, dataDir string) (resources.Resources, error) {
 		return nil, fmt.Errorf("mkdir config: %w", err)
 	}
 
-	// why: an unset LogDir writes crash logs to the process cwd, which a mobile host may not allow
-	debug.LogDir = configDir
-
 	res, err := resources.NewFileResources(configDir, true)
 	if err != nil {
 		return nil, err
@@ -255,18 +255,36 @@ func setupResources(configDir, dataDir string) (resources.Resources, error) {
 		res.SetDataRoot(dataDir)
 	}
 
+	// why: an unset LogDir writes crash logs to the process cwd, which a mobile host may not allow
+	debug.LogDir = res.DataRoot()
+
+	if err := moveNodeKey(res); err != nil {
+		return nil, err
+	}
+
 	return res, nil
+}
+
+// moveNodeKey duplicates cmd/astrald/run.go.moveNodeKey to avoid pulling in
+// package main. A copy left in the config root is a warning; the data-root key
+// is in use.
+func moveNodeKey(res *resources.FileResources) error {
+	err := res.MoveToDataRoot(resNodeKey)
+	if errors.Is(err, resources.ErrRootCopyKept) {
+		fmt.Fprintf(os.Stderr, "warning: %v\n", err)
+		return nil
+	}
+
+	return err
 }
 
 // loadNodeIdentity duplicates cmd/astrald/identity.go.loadNodeIdentity to
 // avoid pulling in package main. If this logic grows, extract to a shared
 // package (e.g. core/identity).
 func loadNodeIdentity(res resources.Resources) (*astral.Identity, error) {
-	const resNodeKey = "node_key"
-
 	var nodeKey *crypto.PrivateKey
 
-	data, err := res.Read(resNodeKey)
+	data, err := res.ReadData(resNodeKey)
 	if err == nil {
 		object, _, err := astral.Decode(bytes.NewReader(data), astral.Canonical())
 		if err != nil {
@@ -286,7 +304,7 @@ func loadNodeIdentity(res resources.Resources) (*astral.Identity, error) {
 		if _, err = astral.Encode(keyBytes, nodeKey, astral.Canonical()); err != nil {
 			return nil, err
 		}
-		if err = res.Write(resNodeKey, keyBytes.Bytes()); err != nil {
+		if err = res.WriteData(resNodeKey, keyBytes.Bytes()); err != nil {
 			return nil, err
 		}
 	}

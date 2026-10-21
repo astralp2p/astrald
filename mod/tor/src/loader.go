@@ -26,6 +26,10 @@ func (Loader) Load(node astral.Node, assets assets.Assets, logger *log.Logger) (
 
 	_ = assets.LoadYAML(tor.ModuleName, &mod.config)
 
+	if err := moveKeyToDataRoot(assets.Res(), logger); err != nil {
+		return nil, err
+	}
+
 	mod.torServer = NewServer(mod)
 
 	var baseDialer = &net.Dialer{Timeout: mod.config.DialTimeout}

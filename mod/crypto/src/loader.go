@@ -41,9 +41,9 @@ func (Loader) Load(node astral.Node, assets assets.Assets, log *log.Logger) (cor
 	return mod, err
 }
 
-// loadNodeKey loads node's private key
+// loadNodeKey loads node's private key from node_key in the data root
 func (mod *Module) loadNodeKey(res resources.Resources) (*crypto.PrivateKey, error) {
-	keyBytes, err := res.Read("node_key")
+	keyBytes, err := res.ReadData("node_key")
 	if err != nil {
 		return nil, err
 	}

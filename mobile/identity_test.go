@@ -17,7 +17,7 @@ func TestLoadNodeIdentityCorruptKey(t *testing.T) {
 	}
 
 	res := resources.NewMemResources()
-	if err := res.Write("node_key", buf.Bytes()[:buf.Len()/2]); err != nil {
+	if err := res.WriteData("node_key", buf.Bytes()[:buf.Len()/2]); err != nil {
 		t.Fatal(err)
 	}
 

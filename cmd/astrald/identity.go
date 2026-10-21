@@ -11,12 +11,12 @@ import (
 	"github.com/astralp2p/astrald/resources"
 )
 
-// loadNodeIdentity loads node's identity from resources. Generates a new identity only if no node key
-// exists yet (resources.ErrNotFound); any other read error is returned.
+// loadNodeIdentity loads node's identity from node_key in the data root. Generates a new identity only if
+// no node key exists yet (resources.ErrNotFound); any other read error is returned.
 func loadNodeIdentity(res resources.Resources) (identity *astral.Identity, err error) {
 	var nodeKey *crypto.PrivateKey
 
-	data, err := res.Read(resNodeKey)
+	data, err := res.ReadData(resNodeKey)
 	if err == nil {
 		object, _, err := astral.Decode(bytes.NewReader(data), astral.Canonical())
 		if err != nil {
@@ -40,7 +40,7 @@ func loadNodeIdentity(res resources.Resources) (identity *astral.Identity, err e
 			return nil, err
 		}
 
-		err = res.Write("node_key", keyBytes.Bytes())
+		err = res.WriteData(resNodeKey, keyBytes.Bytes())
 		if err != nil {
 			return nil, err
 		}

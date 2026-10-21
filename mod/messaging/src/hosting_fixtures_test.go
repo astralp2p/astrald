@@ -95,6 +95,8 @@ var _ assets.Assets = testAssets{}
 func (testAssets) Res() resources.Resources           { return nil }
 func (testAssets) Read(string) ([]byte, error)        { return nil, os.ErrNotExist }
 func (testAssets) Write(string, []byte) error         { return os.ErrPermission }
+func (testAssets) ReadData(string) ([]byte, error)    { return nil, os.ErrNotExist }
+func (testAssets) WriteData(string, []byte) error     { return os.ErrPermission }
 func (testAssets) LoadYAML(string, interface{}) error { return os.ErrNotExist }
 func (testAssets) StoreYAML(string, interface{}) error {
 	return os.ErrPermission

@@ -2,6 +2,7 @@ package main
 
 import (
 	"errors"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"testing"
@@ -11,14 +12,18 @@ import (
 
 var errReadFailed = errors.New("read failed")
 
-// failingResources fails every Read with errReadFailed and records Writes.
+// failingResources fails every ReadData with errReadFailed and records WriteData calls.
+//
+// why: the embedded nil interface panics on Read and Write, which asserts that
+// loadNodeIdentity never touches the config root.
 type failingResources struct {
+	resources.Resources
 	writes int
 }
 
-func (r *failingResources) Read(string) ([]byte, error) { return nil, errReadFailed }
+func (r *failingResources) ReadData(string) ([]byte, error) { return nil, errReadFailed }
 
-func (r *failingResources) Write(string, []byte) error {
+func (r *failingResources) WriteData(string, []byte) error {
 	r.writes++
 	return nil
 }
@@ -38,20 +43,28 @@ func TestLoadNodeIdentityReadErrorKeepsKey(t *testing.T) {
 }
 
 // TestLoadNodeIdentityMissingKeyGenerates pins first-run key generation on a
-// FileResources root with no node_key.
+// FileResources with no node_key: the key lands in the data root only.
 func TestLoadNodeIdentityMissingKeyGenerates(t *testing.T) {
-	root := t.TempDir()
-	res, err := resources.NewFileResources(root, false)
+	cfg, data := filepath.Join(t.TempDir(), "config"), filepath.Join(t.TempDir(), "data")
+	res, err := resources.NewFileResources(cfg, true)
 	if err != nil {
 		t.Fatal(err)
 	}
+	res.SetDataRoot(data)
 
 	id1, err := loadNodeIdentity(res)
 	if err != nil {
 		t.Fatalf("first loadNodeIdentity: %v", err)
 	}
-	if _, err := os.Stat(filepath.Join(root, "node_key")); err != nil {
-		t.Fatalf("node_key not written: %v", err)
+	fi, err := os.Stat(filepath.Join(data, "node_key"))
+	if err != nil {
+		t.Fatalf("node_key not written to the data root: %v", err)
+	}
+	if got := fi.Mode().Perm(); got != 0o600 {
+		t.Fatalf("node_key mode = %o, want 600", got)
+	}
+	if _, err := os.Stat(filepath.Join(cfg, "node_key")); !errors.Is(err, fs.ErrNotExist) {
+		t.Fatalf("node_key in the config root: stat error = %v, want fs.ErrNotExist", err)
 	}
 
 	id2, err := loadNodeIdentity(res)

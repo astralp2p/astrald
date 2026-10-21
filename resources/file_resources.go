@@ -39,7 +39,16 @@ func (res *FileResources) SetDataRoot(dataRoot string) {
 }
 
 func (res *FileResources) Read(name string) ([]byte, error) {
-	bytes, err := os.ReadFile(path.Join(res.root, name))
+	return readFile(res.root, name)
+}
+
+// ReadData reads name from the data root.
+func (res *FileResources) ReadData(name string) ([]byte, error) {
+	return readFile(res.DataRoot(), name)
+}
+
+func readFile(dir, name string) ([]byte, error) {
+	bytes, err := os.ReadFile(path.Join(dir, name))
 
 	switch {
 	case err == nil:
@@ -59,6 +68,37 @@ func (res *FileResources) Write(name string, data []byte) error {
 	}
 
 	return os.WriteFile(path.Join(res.root, name), data, 0600)
+}
+
+// WriteData writes data to name in the data root with mode 0600.
+//
+// why: the data is synced to a temporary file that is then renamed onto name, so
+// a crash leaves the previous file or the complete new one, never a partial key.
+func (res *FileResources) WriteData(name string, data []byte) error {
+	var dir = res.DataRoot()
+	if err := os.MkdirAll(dir, 0700); err != nil {
+		return fmt.Errorf("cannot create data directory: %w", err)
+	}
+
+	tmp, err := os.CreateTemp(dir, name+".*.tmp")
+	if err != nil {
+		return err
+	}
+	// note: after the rename the temporary name is gone and Remove only fails
+	defer os.Remove(tmp.Name())
+
+	_, err = tmp.Write(data)
+	if err == nil {
+		err = tmp.Sync()
+	}
+	if closeErr := tmp.Close(); err == nil {
+		err = closeErr
+	}
+	if err != nil {
+		return err
+	}
+
+	return os.Rename(tmp.Name(), path.Join(dir, name))
 }
 
 func (res *FileResources) Root() string {

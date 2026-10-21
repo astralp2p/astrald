@@ -10,6 +10,8 @@ type Assets interface {
 	Res() resources.Resources
 	Read(name string) ([]byte, error)
 	Write(name string, data []byte) error
+	ReadData(name string) ([]byte, error)
+	WriteData(name string, data []byte) error
 	LoadYAML(name string, out interface{}) error
 	StoreYAML(name string, in interface{}) error
 	Database() *gorm.DB
