@@ -8,7 +8,6 @@ package main
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
 	"os"
 	"time"
@@ -187,7 +186,7 @@ func grantDiscovery(ctx *astral.Context, admin *astrald.Client, app *astral.Iden
 	if err := ch.Send(cs); err != nil {
 		return err
 	}
-	return ch.Switch(channel.ExpectAck, channel.PassErrors)
+	return ch.Switch(channel.ExpectAck, channel.PassErrors, channel.FailOnEOF())
 }
 
 // discovered waits until a swarm discovery from the front-end shows provider.
@@ -219,11 +218,8 @@ func call(ctx *astral.Context, front *astrald.Client, provider *astral.Identity,
 	}
 	defer ch.Close()
 	var seen *astral.String8
-	if err := ch.Switch(channel.Expect(&seen), channel.PassErrors, channel.WithContext(cctx)); err != nil {
+	if err := ch.Switch(channel.Expect(&seen), channel.PassErrors, channel.WithContext(cctx), channel.FailOnEOF()); err != nil {
 		return "", err
-	}
-	if seen == nil {
-		return "", errors.New("no answer")
 	}
 	return seen.String(), nil
 }

@@ -37,7 +37,7 @@ func (mod *Module) OpAcceptContract(ctx *astral.Context, q *routing.IncomingQuer
 	defer ch.Close()
 
 	var signed *auth.SignedContract
-	err = ch.Switch(channel.Expect(&signed))
+	err = ch.Switch(channel.Expect(&signed), channel.FailOnEOF())
 	if err != nil {
 		return ch.Send(astral.Err(err))
 	}
