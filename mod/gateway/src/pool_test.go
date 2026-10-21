@@ -2,7 +2,9 @@ package gateway
 
 import (
 	"context"
+	"errors"
 	"net"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -11,6 +13,7 @@ import (
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astral-go/astral/log"
 	exonetmod "github.com/astralp2p/astrald/mod/exonet"
+	gatewaymod "github.com/astralp2p/astrald/mod/gateway"
 )
 
 // pipeConn is one end of an in-memory connection, presented as an exonet.Conn.
@@ -81,5 +84,52 @@ func TestPoolNonceAddsIdleConnToRegisteredNode(t *testing.T) {
 	}
 	if n := len(node.idleConns.Clone()); n != 1 {
 		t.Fatalf("registered node holds %v idle conns, want 1", n)
+	}
+}
+
+// gatewayExonet dials every endpoint to a fresh in-memory connection whose
+// far end the gateway's handleInbound serves.
+type gatewayExonet struct {
+	exonetmod.Module
+	gw    *Module
+	dials atomic.Int32
+}
+
+func (e *gatewayExonet) Dial(ctx *astral.Context, _ exonet.Endpoint) (exonetmod.Conn, error) {
+	e.dials.Add(1)
+	clientEnd, gatewayEnd := net.Pipe()
+	go e.gw.handleInbound(ctx, pipeConn{Conn: gatewayEnd})
+	return pipeConn{Conn: clientEnd, outbound: true}, nil
+}
+
+// A gateway that no longer knows the pool's nonce closes every idle conn at
+// once. The pool backs off between redials and returns ErrSocketUnreachable
+// after maxDialFails, so the node registers again.
+func TestPoolReturnsWhenGatewayRejectsNonce(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	actx := astral.NewContext(ctx)
+
+	id := astral.GenerateIdentity()
+	logger := log.New(id)
+
+	// why: a gateway module with no registered node answers every nonce as unknown.
+	ex := &gatewayExonet{gw: &Module{log: logger, ctx: actx}}
+	pool := (&Module{Deps: Deps{Exonet: ex}, log: logger}).newConnPool(actx, id, gateway.Socket{Nonce: astral.NewNonce()})
+
+	start := time.Now()
+	err := pool.Run()
+	elapsed := time.Since(start)
+
+	if !errors.Is(err, gatewaymod.ErrSocketUnreachable) {
+		t.Fatalf("Run returned %v after %v and %v dials, want %v", err, elapsed, ex.dials.Load(), gatewaymod.ErrSocketUnreachable)
+	}
+	t.Logf("Run returned %v after %v and %v dials", err, elapsed.Round(time.Millisecond), ex.dials.Load())
+	if n, max := ex.dials.Load(), int32(minIdleConns*maxDialFails); n > max {
+		t.Fatalf("pool dialed %v times, want at most %v", n, max)
+	}
+	// why: the retry delays before the second and third redial rounds are 1s and 2s.
+	if elapsed < 3*time.Second {
+		t.Fatalf("Run returned after %v, want backoff of at least 3s", elapsed)
 	}
 }
