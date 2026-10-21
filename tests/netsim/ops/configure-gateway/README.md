@@ -26,15 +26,19 @@ address is not public — the gateway would answer *no public IP available for
 network tcp*. `networks.tcp.endpoint` is the override `deps.go` parses into
 `configEndpoints`, and it takes the gateway's own LAN address.
 
-## Why clients and peers get a 198.51.100 route
+## Why clients and peers get a route to the gateway's alias
 
 The gateway hands out its 198.51.100 alias as the socket endpoint of
 `gateway.node_connect`. A node outside NAT holds no address on that network,
 so its kernel sends the SYN out the default route, the VM's user-mode NIC,
 which reaches nothing. The dial hangs, `Dial` falls back to `node_route`, and
-the socket path is never exercised. The op therefore adds an on-link route for
-198.51.100.0/24 over the LAN NIC on every client and peer that has no
+the socket path is never exercised. The op therefore adds an on-link /32 route
+to the gateway's alias over the LAN NIC on every client and peer that has no
 198.51.100 address. A NAT'd node already holds one from `enter-nat`.
+
+The route is a /32, not the /24. A route to the whole subnet also lets a LAN
+node answer a NAT'd node's public address, so the NAT'd node's outbound dial
+completes and a direct `tcp` link forms, which gateway-relay asserts is absent.
 
 ## Why identities come from the environment
 

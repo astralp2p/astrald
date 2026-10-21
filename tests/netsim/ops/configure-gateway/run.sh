@@ -69,26 +69,31 @@ netsim ssh "$GW" -- "set -eu
   ip addr add \"198.51.100.\$oct/24\" dev \$lan 2>/dev/null || true"
 echo "configure-gateway: $GW also aliased onto 198.51.100/24 for NAT'd peers"
 
-# 0b) give every client and peer a route onto that network. The gateway hands
-# out its 198.51.100 address as the socket endpoint (getGatewayEndpoint takes
-# IP.PublicIPCandidates()[0]), and a node outside NAT has no address there, so
-# its kernel sends the SYN out the default route — the VM's user-mode NIC,
-# which leads nowhere. The dial then hangs until Dial gives up and falls back
-# to node_route, and the socket path is never exercised. An on-link route over
-# the LAN NIC reaches the alias, since the gateway answers ARP for it there.
-# Verified: from node1, a tcp connect to 198.51.100.13:1791 timed out before
-# this route and connected after it; node_connect then piped through the
-# gateway in under a second instead of falling back after 60 s.
+# 0b) give every client and peer a route to the gateway's alias. The gateway
+# hands out its 198.51.100 address as the socket endpoint (getGatewayEndpoint
+# takes IP.PublicIPCandidates()[0]), and a node outside NAT has no address
+# there, so its kernel sends the SYN out the default route — the VM's
+# user-mode NIC, which leads nowhere. The dial then hangs until Dial gives up
+# and falls back to node_route, and the socket path is never exercised.
+# Verified: from node1, a tcp connect to the alias timed out before this route
+# and connected after it; node_connect then piped through the gateway in about
+# a second instead of falling back after 60 s.
+# why /32 and not the /24: a route to the whole subnet also lets node1 answer
+# a NAT'd node's public address, so node2's outbound dial to node1 completes
+# and a direct tcp link forms — the very path gateway-relay asserts is absent.
+# Measured: with the /24 the oracle failed on `['gw', 'tcp']`; with the /32 no
+# tcp link to node2 reformed in four minutes.
 # A NAT'd node already holds a 198.51.100 alias from enter-nat, so its kernel
-# route covers the subnet and this one is skipped.
+# route covers the gateway and this one is skipped.
+GW_PUB="198.51.100.${GW_ADDR##*.}"
 # shellcheck disable=SC2086
 for vm in $CLIENTS $PEERS; do
   netsim ssh "$vm" -- "set -eu
     lan=\$(ip -o -4 addr show | awk '\$4 ~ /^10\.77\./ {print \$2; exit}')
     [ -n \"\$lan\" ] || { echo 'configure-gateway: no 10.77 nic' >&2; exit 1; }
-    ip -o -4 addr show dev \$lan | grep -q ' 198\.51\.100\.' || ip route replace 198.51.100.0/24 dev \$lan"
+    ip -o -4 addr show dev \$lan | grep -q ' 198\.51\.100\.' || ip route replace $GW_PUB/32 dev \$lan"
 done
-echo "configure-gateway: clients and peers route 198.51.100/24 over the LAN"
+echo "configure-gateway: clients and peers route $GW_PUB over the LAN"
 
 # 1) the gateway itself. Two files, and both halves are required.
 #
