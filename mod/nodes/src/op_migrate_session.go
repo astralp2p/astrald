@@ -61,33 +61,38 @@ func (mod *Module) OpMigrateSession(ctx *astral.Context, q *routing.IncomingQuer
 		return ch.Send(&astral.Ack{})
 	}
 
-	migrator, err := mod.newSessionMigrator(session)
-	if err != nil {
-		return ch.Send(astral.Err(err))
-	}
-
-	var peerBuffer astral.Uint32
-	err = ch.Switch(nodes.ExpectMigrateSignal(nodes.MigrateSignalReady, &peerBuffer))
-	if err != nil {
-		return ch.Send(astral.Err(err))
-	}
-
-	migrator.SetPeerBuffer(int(peerBuffer))
-	err = migrator.Begin(targetLink)
-	if err != nil {
-		return ch.Send(astral.Err(err))
-	}
-
-	// note: submethod made for sake of defer (im thinking about other solution)
-	migrateCtx, cancel := ctx.WithTimeout(migrateSessionTimeout)
-	defer cancel()
-	err = mod.respondMigration(migrateCtx, ch, session, migrator)
+	err := mod.acceptMigration(ctx, ch, session, targetLink)
 	if err != nil {
 		return ch.Send(astral.Err(err))
 	}
 
 	mod.log.Logv(1, "session %v migrated to link %v (responder)", session.Nonce, targetLink.id)
 	return nil
+}
+
+// acceptMigration runs the responder side of the migration signal exchange over ch.
+func (mod *Module) acceptMigration(ctx *astral.Context, ch *channel.Channel, session *session, targetLink *Link) error {
+	migrator, err := mod.newSessionMigrator(session)
+	if err != nil {
+		return err
+	}
+
+	var peerBuffer astral.Uint32
+	err = ch.Switch(nodes.ExpectMigrateSignal(nodes.MigrateSignalReady, &peerBuffer))
+	if err != nil {
+		return err
+	}
+
+	migrator.SetPeerBuffer(int(peerBuffer))
+	err = migrator.Begin(targetLink)
+	if err != nil {
+		return err
+	}
+
+	// note: submethod made for sake of defer (im thinking about other solution)
+	migrateCtx, cancel := ctx.WithTimeout(migrateSessionTimeout)
+	defer cancel()
+	return mod.respondMigration(migrateCtx, ch, session, migrator)
 }
 
 func (mod *Module) respondMigration(ctx *astral.Context, ch *channel.Channel, session *session, migrator *SessionMigrator) (err error) {
