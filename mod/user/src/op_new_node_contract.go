@@ -34,6 +34,9 @@ func (mod *Module) OpNewNodeContract(ctx *astral.Context, query *routing.Incomin
 	}
 
 	if userID.IsZero() {
+		if len(args.User) == 0 {
+			return ch.Send(astral.NewError("user id missing: pass -user <identity>; the node has no active contract to default from"))
+		}
 		return ch.Send(astral.NewError("user id missing"))
 	}
 
