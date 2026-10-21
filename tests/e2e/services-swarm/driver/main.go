@@ -115,7 +115,7 @@ func (w *world) grant(app *astral.Identity, names []string, nodes ...*astral.Ide
 	if err := ch.Send(cs); err != nil {
 		return err
 	}
-	return ch.Switch(channel.ExpectAck, channel.PassErrors)
+	return ch.Switch(channel.ExpectAck, channel.PassErrors, channel.FailOnEOF())
 }
 
 // evaluated records the callers a provider evaluated.

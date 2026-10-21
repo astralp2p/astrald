@@ -36,7 +36,7 @@ func (mod *Module) OpAcceptMembership(ctx *astral.Context, q *routing.IncomingQu
 
 	// receive the contract to sign
 	var contract *auth.Contract
-	err = ch.Switch(channel.Expect(&contract))
+	err = ch.Switch(channel.Expect(&contract), channel.FailOnEOF())
 	if err != nil {
 		return ch.Send(astral.Err(err))
 	}

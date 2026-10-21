@@ -67,7 +67,7 @@ func (mod *Module) OpGrant(ctx *astral.Context, q *routing.IncomingQuery, args o
 	// constraints refuses the constrained permit when it is checked.
 	if args.Constrained {
 		var constraints *astral.Bundle
-		if err := ch.Switch(channel.Expect(&constraints)); err != nil {
+		if err := ch.Switch(channel.Expect(&constraints), channel.FailOnEOF()); err != nil {
 			return ch.Send(astral.Err(err))
 		}
 		permit.Constraints = constraints

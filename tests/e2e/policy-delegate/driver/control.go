@@ -54,7 +54,7 @@ func (cp *controlPlane) decide(ctx *astral.Context, q *routing.IncomingQuery) er
 	defer ch.Close()
 
 	var req *apphostapi.AppRegisterRequest
-	if err := ch.Switch(channel.Expect(&req), channel.PassErrors); err != nil {
+	if err := ch.Switch(channel.Expect(&req), channel.PassErrors, channel.FailOnEOF()); err != nil {
 		return err
 	}
 	cp.received <- req

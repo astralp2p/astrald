@@ -142,7 +142,7 @@ func ack(ch *channel.Channel, err error) error {
 		return err
 	}
 	defer ch.Close()
-	return ch.Switch(channel.ExpectAck, channel.PassErrors)
+	return ch.Switch(channel.ExpectAck, channel.PassErrors, channel.FailOnEOF())
 }
 
 // drain reads objects until EOS and returns them; an error object ends it.

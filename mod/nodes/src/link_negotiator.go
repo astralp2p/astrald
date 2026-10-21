@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io"
 
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astral-go/astral/channel"
@@ -26,19 +25,8 @@ type muxLinkNegotiator struct {
 }
 
 // expect reads the next object from ch into *dst; a peer that closes before sending it yields io.ErrUnexpectedEOF.
-//
-// why: Switch returns nil on EOF and leaves *dst nil, which the negotiators would dereference.
-func expect[T any, P interface {
-	*T
-	astral.Object
-}](ch *channel.Channel, dst *P) error {
-	if err := ch.Switch(channel.Expect(dst), channel.PassErrors); err != nil {
-		return err
-	}
-	if *dst == nil {
-		return io.ErrUnexpectedEOF
-	}
-	return nil
+func expect[T astral.Object](ch *channel.Channel, dst *T) error {
+	return ch.Switch(channel.Expect(dst), channel.PassErrors, channel.FailOnEOF())
 }
 
 // NegotiateOutbound reads the peer's feature list, selects mux2, and waits for the link nonce; fails if mux2 is absent or rejected.
