@@ -17,7 +17,7 @@ type opDeleteAgentArgs struct {
 // identity or an alias.
 //
 // why the row is read without asking mod/messaging, as findAgent does: a row
-// whose participant messaging.delete_identity withdrew is one this op removes.
+// whose participant messaging.delete_mailbox withdrew is one this op removes.
 func (mod *Module) OpDeleteAgent(ctx *astral.Context, q *routing.IncomingQuery, args opDeleteAgentArgs) error {
 	if q.Origin() == astral.OriginNetwork {
 		return q.Reject()

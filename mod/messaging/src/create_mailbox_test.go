@@ -46,14 +46,14 @@ func (s *stubApphost) CreateAccessToken(id *astral.Identity, d astral.Duration) 
 	}, nil
 }
 
-// A participant create_identity mints has a mailbox the moment it is answered:
+// A participant create_mailbox mints has a mailbox the moment it is answered:
 // the node hosts it under the hosting contract the identity signed, a delivery
 // to it lands and it reads the message, with nothing else on the node knowing
 // it exists.
 func TestACreatedIdentityReceivesMail(t *testing.T) {
 	mod, apphost, dir := testIdentityModule(t)
 
-	cred, err := mod.CreateIdentity(mod.ctx, "scout", 0)
+	cred, err := mod.CreateMailbox(mod.ctx, "scout", 0)
 	if err != nil {
 		t.Fatalf("create identity: %v", err)
 	}
@@ -84,17 +84,17 @@ func TestACreatedIdentityReceivesMail(t *testing.T) {
 	}
 }
 
-// create_identity provisions two separate contracts from the new identity to
+// create_mailbox provisions two separate contracts from the new identity to
 // this node: the relay contract, unchanged, and a hosting contract carrying one
 // non-delegable host_mailbox_action permit that expires after the module's
 // hostingDuration. Both are signed, indexed and stored, and the index row names
 // the hosting one.
-func TestCreateIdentityProvisionsASeparateHostingContract(t *testing.T) {
+func TestCreateMailboxProvisionsASeparateHostingContract(t *testing.T) {
 	mod, _, _ := testIdentityModule(t)
 	mod.hostingDuration = 48 * time.Hour
 	before := time.Now()
 
-	cred, err := mod.CreateIdentity(mod.ctx, "", 0)
+	cred, err := mod.CreateMailbox(mod.ctx, "", 0)
 	if err != nil {
 		t.Fatalf("create identity: %v", err)
 	}
@@ -164,7 +164,7 @@ func TestAFailedCreateLeavesNoServedMailbox(t *testing.T) {
 	mod, apphost, _ := testIdentityModule(t)
 	apphost.createErr = errors.New("token store is down")
 
-	if _, err := mod.CreateIdentity(mod.ctx, "", 0); err == nil {
+	if _, err := mod.CreateMailbox(mod.ctx, "", 0); err == nil {
 		t.Fatal("the create answered no error when the token could not be issued")
 	}
 
@@ -178,7 +178,7 @@ func TestAFailedCreateLeavesNoServedMailbox(t *testing.T) {
 }
 
 // relayIndexWatch is the test's auth module, watching the relay contract
-// create_identity indexes: whether the new identity's key was already stored
+// create_mailbox indexes: whether the new identity's key was already stored
 // or indexed at that moment, and refusing the contract when err is set.
 type relayIndexWatch struct {
 	authmod.Module
@@ -227,20 +227,20 @@ func watchRelayIndex(mod *Module, err error) *relayIndexWatch {
 	return w
 }
 
-// The key create_identity mints enters the store and the crypto index only
+// The key create_mailbox mints enters the store and the crypto index only
 // once its relay contract to the node is indexed.
-func TestCreateIdentityIndexesTheRelayContractBeforeTheKey(t *testing.T) {
+func TestCreateMailboxIndexesTheRelayContractBeforeTheKey(t *testing.T) {
 	mod, _, _ := testIdentityModule(t)
 	keys := keysOf(mod)
 	watch := watchRelayIndex(mod, nil)
 
-	cred, err := mod.CreateIdentity(mod.ctx, "", 0)
+	cred, err := mod.CreateMailbox(mod.ctx, "", 0)
 	if err != nil {
 		t.Fatalf("create identity: %v", err)
 	}
 
 	if !watch.indexed {
-		t.Fatal("create_identity indexed no relay contract")
+		t.Fatal("create_mailbox indexed no relay contract")
 	}
 	if watch.keyHeld {
 		t.Fatal("the key was stored or indexed before its relay contract was indexed")
@@ -258,7 +258,7 @@ func TestAFailedRelayContractLeavesNoKey(t *testing.T) {
 	before := len(keys.keys)
 	watchRelayIndex(mod, errors.New("index refused"))
 
-	if _, err := mod.CreateIdentity(mod.ctx, "", 0); err == nil {
+	if _, err := mod.CreateMailbox(mod.ctx, "", 0); err == nil {
 		t.Fatal("the create answered no error when the relay contract could not be indexed")
 	}
 

@@ -2,7 +2,7 @@
 """Driver: a participant hosted on node1 mails one hosted on node2, and is
 turned away by another.
 
-node1's admin mints ann with messaging.create_identity, and node2's admin
+node1's admin mints ann with messaging.create_mailbox, and node2's admin
 mints ben and cal. ann writes to ben, ben reads it, and the receipt travels
 back to node1; ben answers, and ann reads the answer. Then ann writes to cal,
 and last asks ben for a path nothing on node2 serves. Each node serves its own
@@ -64,10 +64,10 @@ async def mint(n1: dict, n2: dict) -> tuple:
     """ann on node1, ben and cal on node2, and node2's push of each one's
     relay contract to node1, answered by node1."""
     async with await astral.connect(n1["endpoint"], token=n1["token"]) as a1:
-        ann = await mail.create_identity(a1, "two-ann")
+        ann = await mail.create_mailbox(a1, "two-ann")
     async with await astral.connect(n2["endpoint"], token=n2["token"]) as a2:
-        ben = await mail.create_identity(a2, "two-ben")
-        cal = await mail.create_identity(a2, "two-cal")
+        ben = await mail.create_mailbox(a2, "two-ben")
+        cal = await mail.create_mailbox(a2, "two-cal")
         pushed = {"ben": await introduce(a2, ben, n1["identity"]),
                   "cal": await introduce(a2, cal, n1["identity"])}
     return ann, ben, cal, pushed

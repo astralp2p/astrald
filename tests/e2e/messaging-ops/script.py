@@ -5,7 +5,7 @@ The node serves no MCP: its roster name is in nodeconfig.WITHOUT_MCP, so its
 MCP server is off while mod/mcp still loads. Every exchange here reaches
 mod/messaging through its own ops, the way an app reaches it.
 
-The admin mints three participants with messaging.create_identity. ada and bob
+The admin mints three participants with messaging.create_mailbox. ada and bob
 correspond; cleo is hosted like them and admitted to no mail. The driver serves
 the external authority the node asks about mail and delegated reads: it admits
 ada and bob to send to and receive from each other, lets cleo read ada's
@@ -15,7 +15,7 @@ The driver acts and judges nothing. It records what every op answered, what
 cleo read of ada's mailbox and what ada's rows and bob's row read before and
 after, what bob and the node are answered when they name ada's mailbox, what
 an identity without a hosted mailbox and the node itself are answered, what
-messaging.delete_identity leaves of bob, and every question the authority was
+messaging.delete_mailbox leaves of bob, and every question the authority was
 asked. The oracle reads the node's own records for the rest.
 
 why bob is the one deleted: bob is admitted, so a send to bob after the
@@ -77,9 +77,9 @@ async def mint(n: dict) -> dict:
     """The three participants, bob's second token, and an app identity the
     node registered with no mailbox."""
     async with await astral.connect(n["endpoint"], token=n["token"]) as admin:
-        minted = {name: await mail.create_identity(admin, alias)
+        minted = {name: await mail.create_mailbox(admin, alias)
                   for name, alias in ALIASES.items()}
-        minted["info_ada"] = await mail.identity(admin, ALIASES["ada"])
+        minted["info_ada"] = await mail.mailbox(admin, ALIASES["ada"])
         minted["app"] = await jsonops.value(admin, "apphost.register?out=json")
         minted["bob_second"] = await jsonops.value(admin, querystring.build(
             "apphost.create_token",
@@ -191,14 +191,14 @@ async def unhosted(n: dict, app: dict, bob: dict) -> dict:
 
 
 async def deletion(n: dict, ada: dict, bob: dict, second: dict) -> dict:
-    """bob's tokens before and after messaging.delete_identity, what the node
+    """bob's tokens before and after messaging.delete_mailbox, what the node
     answers about bob afterwards, and a send to bob that follows."""
     tokens = {"first": bob["Token"], "second": second["Token"]}
     before = {k: await whoami(n["endpoint"], t) for k, t in tokens.items()}
     async with await astral.connect(n["endpoint"], token=n["token"]) as admin:
-        deleted = await attempt(mail.delete_identity(admin, ALIASES["bob"]))
-        info = await attempt(mail.identity(admin, bob["Identity"]))
-        again = await attempt(mail.delete_identity(admin, bob["Identity"]))
+        deleted = await attempt(mail.delete_mailbox(admin, ALIASES["bob"]))
+        info = await attempt(mail.mailbox(admin, bob["Identity"]))
+        again = await attempt(mail.delete_mailbox(admin, bob["Identity"]))
     after = {k: await whoami(n["endpoint"], t) for k, t in tokens.items()}
     async with await astral.connect(n["endpoint"], token=ada["Token"]) as ca:
         sent = await attempt(mail.send(ca, bob["Identity"], AFTER))

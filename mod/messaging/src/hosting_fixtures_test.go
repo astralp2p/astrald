@@ -129,7 +129,7 @@ func keysOf(mod *Module) *keyring {
 }
 
 // hostedParticipant mints an identity and provisions its mailbox the way
-// create_identity does: a hosting contract the identity signs, indexed with the
+// create_mailbox does: a hosting contract the identity signs, indexed with the
 // real auth module, and the index row naming it.
 func hostedParticipant(t *testing.T, mod *Module) *astral.Identity {
 	t.Helper()

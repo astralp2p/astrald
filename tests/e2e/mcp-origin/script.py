@@ -22,7 +22,7 @@ authority does not admit, runs one exchange between the two agents it does,
 and records every question the authority was asked.
 
 why the control calls: "refused" and "does not exist" leave a caller holding
-the same nothing. Recording mcp.list_agents and messaging.create_identity
+the same nothing. Recording mcp.list_agents and messaging.create_mailbox
 answered to alpha over apphost, in this same run and on this same node, is what
 makes the refusals evidence about the guard rather than about the op or alpha's
 permits.
@@ -99,7 +99,7 @@ async def main():
     async with await astral.connect(n1["endpoint"], token=alpha["token"]) as c:
         control = _docs(await c.call_raw("mcp.list_agents?out=json"))
         minted = _docs(await c.call_raw(
-            "messaging.create_identity?out=json"))[0]
+            "messaging.create_mailbox?out=json"))[0]
 
     a, b, g = (x["identity"].lower() for x in (alpha, beta, gamma))
     facts = {

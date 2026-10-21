@@ -12,7 +12,7 @@ const ContractDuration = 10 * 365 * 24 * time.Hour
 
 type Config struct {
 	// TokenDuration is the validity of the access token issued to a new
-	// participant when create_identity names no duration.
+	// participant when create_mailbox names no duration.
 	TokenDuration time.Duration `yaml:"token_duration,omitempty"`
 
 	// DeliveryTimeout bounds one delivery, one receipt, and the read of either

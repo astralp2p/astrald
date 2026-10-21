@@ -6,7 +6,7 @@ comes first, because the exchange below proves nothing about reach unless the
 authority admitted the questions that produced it. The record also shows that
 the authority answers mail alone: every question is mod.messaging.send_action
 or mod.messaging.receive_action. Then the controls: if alpha, holding the
-permits, cannot reach mcp.list_agents and messaging.create_identity over
+permits, cannot reach mcp.list_agents and messaging.create_mailbox over
 apphost either, the refusals below say nothing about the guard and this test
 has proven nothing. Only once the ops are known to answer alpha does alpha's
 refusal over MCP mean the guard refused it.
@@ -98,7 +98,7 @@ def main():
         "apphost, not the three the driver minted — the refusals below are not "
         "evidence about the guard, because the op does not answer alpha at all")
     assert facts["control_identity"], (
-        "messaging.create_identity minted nothing for alpha over apphost — its "
+        "messaging.create_mailbox minted nothing for alpha over apphost — its "
         "refusal below is not evidence about the guard, because the op does "
         "not answer alpha at all")
 

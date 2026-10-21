@@ -29,7 +29,7 @@ import (
 // note: auth walks every active hosting contract naming this node, so one check
 // costs more the more mailboxes this node hosts.
 //
-// note: only contracts this node provisioned are indexed, by create_identity.
+// note: only contracts this node provisioned are indexed, by create_mailbox.
 // A hosting contract auth indexed from elsewhere is not served.
 func (mod *Module) hosts(identity *astral.Identity) bool {
 	if identity.IsZero() || identity.IsEqual(mod.node.Identity()) {

@@ -15,7 +15,7 @@ import (
 )
 
 // mcp.create_agent mints through messaging: the alias and duration it was
-// asked for reach CreateIdentity, it answers messaging's credential as the
+// asked for reach CreateMailbox, it answers messaging's credential as the
 // agent, and the agent row keeps the token for list_agents.
 func TestCreateAgentMintsThroughMessaging(t *testing.T) {
 	mod, msg := testAgentModule(t)
@@ -66,7 +66,7 @@ func TestCreateAgentUndoesTheParticipantWhenItsRowFails(t *testing.T) {
 }
 
 // mcp.delete_agent deletes through messaging: the identity the name resolves
-// to reaches DeleteIdentity, and the agent row goes after it.
+// to reaches DeleteMailbox, and the agent row goes after it.
 func TestDeleteAgentDeletesThroughMessaging(t *testing.T) {
 	mod, msg := testAgentModule(t)
 	mod.Auth = &recordingAuth{verdict: true}
@@ -86,7 +86,7 @@ func TestDeleteAgentDeletesThroughMessaging(t *testing.T) {
 	}
 }
 
-// An agent whose participant messaging.delete_identity withdrew is not found by
+// An agent whose participant messaging.delete_mailbox withdrew is not found by
 // mcp.agent, and its row stays: the op's guard grants no change to state, and
 // mcp.delete_agent still removes the row afterwards.
 func TestAgentIsNotFoundOnceItsParticipantIsWithdrawn(t *testing.T) {
@@ -217,8 +217,8 @@ func TestDeleteAgentRemovesTheRowOfAWithdrawnParticipant(t *testing.T) {
 }
 
 // testCredential is a credential as messaging mints one.
-func testCredential() *messaging.IdentityCredential {
-	return &messaging.IdentityCredential{
+func testCredential() *messaging.MailboxCredential {
+	return &messaging.MailboxCredential{
 		Identity:  astral.GenerateIdentity(),
 		Alias:     "scout",
 		Token:     astral.String8(astral.GenerateIdentity().String()),

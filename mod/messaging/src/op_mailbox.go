@@ -11,23 +11,23 @@ import (
 	"gorm.io/gorm"
 )
 
-type opIdentityArgs struct {
+type opMailboxArgs struct {
 	Identity string `query:"required"`
 	Out      string
 }
 
-// OpIdentity answers one participant's record without its access token.
+// OpMailbox answers one participant's record without its access token.
 // Identity takes an identity or an alias. A participant is any identity the
 // hosting index names, served or not.
 //
 // why this op answers no token: its guard is SeeNodeStateAction, which grants
-// participant metadata and no credential, so the answer is IdentityInfo.
+// participant metadata and no credential, so the answer is MailboxInfo.
 //
 // why the caller is authorized as well as the origin refused: the origin
 // refusal reads what the query carries, and apphost's endpoints stamp none. A
 // participant's token authenticates there, so the origin refusal alone lets a
 // participant read every tenant's record.
-func (mod *Module) OpIdentity(ctx *astral.Context, q *routing.IncomingQuery, args opIdentityArgs) error {
+func (mod *Module) OpMailbox(ctx *astral.Context, q *routing.IncomingQuery, args opMailboxArgs) error {
 	if refusesOrigin(q) {
 		return q.Reject()
 	}
@@ -55,7 +55,7 @@ func (mod *Module) OpIdentity(ctx *astral.Context, q *routing.IncomingQuery, arg
 	// note: an identity without an alias answers the empty one.
 	alias, _ := mod.Dir.GetAlias(row.Identity)
 
-	return ch.Send(&messaging.IdentityInfo{
+	return ch.Send(&messaging.MailboxInfo{
 		Identity: row.Identity,
 		Alias:    astral.String8(alias),
 	})

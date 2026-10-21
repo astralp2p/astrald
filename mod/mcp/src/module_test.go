@@ -119,20 +119,20 @@ type fakeMessaging struct {
 	read    *messaging.ReadMessagesResult
 	waited  *messaging.WaitResult
 	changed bool
-	cred    *messaging.IdentityCredential
+	cred    *messaging.MailboxCredential
 
-	// deleteErr is what DeleteIdentity answers for a participant not withdrawn.
+	// deleteErr is what DeleteMailbox answers for a participant not withdrawn.
 	deleteErr error
 
-	// withdrawn are the participants messaging.delete_identity removed:
-	// FindIdentity and DeleteIdentity answer ErrIdentityNotFound for them.
+	// withdrawn are the participants messaging.delete_mailbox removed:
+	// FindIdentity and DeleteMailbox answer ErrIdentityNotFound for them.
 	withdrawn []*astral.Identity
 
 	// findErr is what FindIdentity answers for a participant not withdrawn.
 	findErr error
 }
 
-// withdraw removes the participant as messaging.delete_identity does, behind
+// withdraw removes the participant as messaging.delete_mailbox does, behind
 // mcp's back.
 func (f *fakeMessaging) withdraw(id *astral.Identity) {
 	f.mu.Lock()
@@ -158,7 +158,7 @@ func (f *fakeMessaging) called(id *astral.Identity, record func()) {
 	record()
 }
 
-func (f *fakeMessaging) CreateIdentity(_ *astral.Context, alias string, duration astral.Duration) (*messaging.IdentityCredential, error) {
+func (f *fakeMessaging) CreateMailbox(_ *astral.Context, alias string, duration astral.Duration) (*messaging.MailboxCredential, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.createAlias, f.createDuration = alias, duration
@@ -178,7 +178,7 @@ func (f *fakeMessaging) FindIdentity(id *astral.Identity) error {
 	return f.findErr
 }
 
-func (f *fakeMessaging) DeleteIdentity(_ *astral.Context, id *astral.Identity) error {
+func (f *fakeMessaging) DeleteMailbox(_ *astral.Context, id *astral.Identity) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.deleted = append(f.deleted, id)

@@ -19,21 +19,21 @@ func TestSeeNodeStateKeepsOriginRefusal(t *testing.T) {
 			w := newRecordingWriter()
 
 			caller := astral.GenerateIdentity()
-			q := originQuery(caller, "messaging.identity?identity="+caller.String(), origin)
+			q := originQuery(caller, "messaging.mailbox?identity="+caller.String(), origin)
 
-			err := routeQuery(t, mod.OpIdentity, q, w)
+			err := routeQuery(t, mod.OpMailbox, q, w)
 
 			var rejected *astral.ErrRejected
 			if !errors.As(err, &rejected) {
-				t.Fatalf("messaging.identity answered a %v-origin query: got err %v, want a rejection", origin, err)
+				t.Fatalf("messaging.mailbox answered a %v-origin query: got err %v, want a rejection", origin, err)
 			}
 
 			if n := w.written(); n != 0 {
-				t.Fatalf("messaging.identity wrote %d bytes to a %v-origin query; want none", n, origin)
+				t.Fatalf("messaging.mailbox wrote %d bytes to a %v-origin query; want none", n, origin)
 			}
 
 			if n := len(authority.recorded()); n != 0 {
-				t.Fatalf("messaging.identity asked the authority %d times about a %v-origin query; want none", n, origin)
+				t.Fatalf("messaging.mailbox asked the authority %d times about a %v-origin query; want none", n, origin)
 			}
 		})
 	}
@@ -70,21 +70,21 @@ func TestSeeNodeStateAnswersHolder(t *testing.T) {
 	mod := &Module{Deps: Deps{Auth: authority, Dir: &seeNodeStateDir{id: identity, alias: "scout"}}, db: db}
 	w := newRecordingWriter()
 
-	if err := route(t, mod.OpIdentity, astral.GenerateIdentity(), "messaging.identity?identity=scout", w); err != nil {
-		t.Fatalf("messaging.identity refused a caller holding the action: %v", err)
+	if err := route(t, mod.OpMailbox, astral.GenerateIdentity(), "messaging.mailbox?identity=scout", w); err != nil {
+		t.Fatalf("messaging.mailbox refused a caller holding the action: %v", err)
 	}
 
 	select {
 	case <-w.closed:
 	case <-time.After(5 * time.Second):
-		t.Fatal("messaging.identity did not finish for a caller holding the action")
+		t.Fatal("messaging.mailbox did not finish for a caller holding the action")
 	}
 
 	if w.written() == 0 {
-		t.Fatal("messaging.identity wrote nothing to a caller holding the action")
+		t.Fatal("messaging.mailbox wrote nothing to a caller holding the action")
 	}
 
 	if n := len(authority.recorded()); n != 1 {
-		t.Fatalf("messaging.identity made %d authorization calls; want exactly 1", n)
+		t.Fatalf("messaging.mailbox made %d authorization calls; want exactly 1", n)
 	}
 }

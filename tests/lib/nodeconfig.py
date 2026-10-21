@@ -49,7 +49,7 @@ listen_port: {kcp}
 # why every one answers an agent when the origin guard is removed — the bar for
 # membership: shell.shell is an interactive op shell over the whole scope tree;
 # mcp.list_agents is mod/mcp's own, and returns every tenant's agent;
-# messaging.create_identity is mod/messaging's own, and mints a credential.
+# messaging.create_mailbox is mod/messaging's own, and mints a credential.
 #
 # why not nodes.new_link: it refuses an argument-less call on its own, so it
 # reads the same guarded or not and witnesses nothing.
@@ -60,7 +60,7 @@ listen_port: {kcp}
 NODE_OP_TOOLS = {
     "shell.shell": "node_shell",
     "mcp.list_agents": "node_list_agents",
-    "messaging.create_identity": "node_create_identity",
+    "messaging.create_mailbox": "node_create_mailbox",
 }
 
 # The alias every PEER_TOOLS query names as its target. mcp-peer sets it on

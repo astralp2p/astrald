@@ -38,7 +38,7 @@ func (mod *Module) OpCreateAgent(ctx *astral.Context, q *routing.IncomingQuery, 
 	ch := channel.New(q.AcceptRaw(), channel.WithOutputFormat(args.Out))
 	defer ch.Close()
 
-	cred, err := mod.Messaging.CreateIdentity(ctx, args.Alias, args.Duration)
+	cred, err := mod.Messaging.CreateMailbox(ctx, args.Alias, args.Duration)
 	if err != nil {
 		return ch.Send(astral.Err(err))
 	}
@@ -75,7 +75,7 @@ func (mod *Module) storeAgent(ctx *astral.Context, agent *mcp.Agent) error {
 		return nil
 	}
 
-	if derr := mod.Messaging.DeleteIdentity(ctx, agent.Identity); derr != nil {
+	if derr := mod.Messaging.DeleteMailbox(ctx, agent.Identity); derr != nil {
 		mod.log.Error("agent %v: deleting the participant after a failed row: %v", agent.Identity, derr)
 	}
 

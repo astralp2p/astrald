@@ -13,7 +13,7 @@ it again on its own.
 
 Every node that serves MCP declares one tool per node operation in
 `lib/nodeconfig.py` `NODE_OP_TOOLS`: `shell.shell`, `mcp.list_agents` and
-`messaging.create_identity`, each put to `localnode`. alpha calls each of them
+`messaging.create_mailbox`, each put to `localnode`. alpha calls each of them
 over MCP.
 
 ## What this proves that the unit tests do not
@@ -54,7 +54,7 @@ test, so such a node fails.
 A refusal and a missing operation leave the caller holding the same nothing.
 Each node op also refuses a caller without its permit, so alpha is granted
 `mod.shell.shell_action` and `mod.auth.admin_manage_apps_action`, and the driver
-records `mcp.list_agents` and `messaging.create_identity` answered to alpha over
+records `mcp.list_agents` and `messaging.create_mailbox` answered to alpha over
 apphost, on the same node in the same run. The oracle checks them first. Only
 the origin differs between those answers and the refusals over MCP.
 
