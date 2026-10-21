@@ -41,10 +41,12 @@ type idleConn struct {
 	handoffCh   chan struct{} // gateway only
 	handoffOnce sync.Once
 
-	readyCh   chan struct{}
-	doneCh    chan struct{}
-	readyOnce sync.Once
-	doneOnce  sync.Once
+	confirmedCh   chan struct{}
+	readyCh       chan struct{}
+	doneCh        chan struct{}
+	confirmedOnce sync.Once
+	readyOnce     sync.Once
+	doneOnce      sync.Once
 }
 
 func newIdleConn(conn exonet.Conn, role connRole, identity *astral.Identity, l *log.Logger) *idleConn {
@@ -53,6 +55,7 @@ func newIdleConn(conn exonet.Conn, role connRole, identity *astral.Identity, l *
 		role:         role,
 		log:          l,
 		withIdentity: identity,
+		confirmedCh:  make(chan struct{}),
 		readyCh:      make(chan struct{}),
 		doneCh:       make(chan struct{}),
 	}
@@ -63,8 +66,15 @@ func newIdleConn(conn exonet.Conn, role connRole, identity *astral.Identity, l *
 	return c
 }
 
-func (conn *idleConn) Ready() <-chan struct{} { return conn.readyCh }
-func (conn *idleConn) Done() <-chan struct{}  { return conn.doneCh }
+// Confirmed closes when the first frame arrives from the peer. A gateway that
+// rejects the nonce closes the conn without sending one.
+func (conn *idleConn) Confirmed() <-chan struct{} { return conn.confirmedCh }
+func (conn *idleConn) Ready() <-chan struct{}     { return conn.readyCh }
+func (conn *idleConn) Done() <-chan struct{}      { return conn.doneCh }
+
+func (conn *idleConn) markConfirmed() {
+	conn.confirmedOnce.Do(func() { close(conn.confirmedCh) })
+}
 
 func (conn *idleConn) markReady() {
 	conn.readyOnce.Do(func() { close(conn.readyCh) })
@@ -173,6 +183,7 @@ func (conn *idleConn) eventLoop(ctx context.Context) {
 		}
 
 		lastActivity = time.Now()
+		conn.markConfirmed()
 
 		switch m := obj.(type) {
 		case *gateway.Ping:
