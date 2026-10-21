@@ -30,7 +30,7 @@ agent, and answers its access token. The token's validity comes from the op's
 `duration` argument, or from `token_duration` in `messaging.yaml`.
 
 An agent is its participant and its row, and mod/messaging never writes the
-row. `messaging.delete_identity` on an agent's identity withdraws the
+row. `messaging.delete_mailbox` on an agent's identity withdraws the
 participant and leaves the row. `mcp.agent` and `mcp.list_agents` ask
 mod/messaging whether its hosting index still names each agent they read.
 `mcp.agent` answers `agent not found` for an agent the index does not name,

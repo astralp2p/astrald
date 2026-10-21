@@ -11,7 +11,7 @@ import (
 // deleteAgent deletes the agent's messaging participant — its tokens, grants,
 // alias and mail — and then its agent row.
 //
-// why a participant already gone is not an error: messaging.delete_identity may
+// why a participant already gone is not an error: messaging.delete_mailbox may
 // have removed it, or an earlier delete_agent may have stopped after it, and
 // the row left behind must stay removable.
 //
@@ -21,7 +21,7 @@ import (
 // why a row already gone is not an error: mcp.list_agents drops the row of a
 // withdrawn participant, and may do so between the two deletes.
 func (mod *Module) deleteAgent(ctx *astral.Context, row *dbAgent) error {
-	err := mod.Messaging.DeleteIdentity(ctx, row.Identity)
+	err := mod.Messaging.DeleteMailbox(ctx, row.Identity)
 	if err != nil && !errors.Is(err, messaging.ErrIdentityNotFound) {
 		return err
 	}
@@ -58,7 +58,7 @@ func (mod *Module) findAgent(identity *astral.Identity) (*dbAgent, error) {
 // isWithdrawn answers whether mod/messaging no longer names the row's
 // participant. A lookup that fails answers its error and no verdict.
 //
-// why such a row is no agent: messaging.delete_identity withdraws the
+// why such a row is no agent: messaging.delete_mailbox withdraws the
 // participant — its tokens, grants, alias and mail — and never writes this
 // module's row, so the row outlives the agent with a token that no longer
 // authenticates.

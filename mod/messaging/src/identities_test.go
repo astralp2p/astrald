@@ -179,11 +179,11 @@ func TestAssignAliasEmptyBindsNothing(t *testing.T) {
 	}
 }
 
-// Every token the identity holds is revoked, not only the one create_identity
+// Every token the identity holds is revoked, not only the one create_mailbox
 // issued, and no other identity's token is. The mailbox is withdrawn from this
 // node and the hosting contract is not revoked: it stays indexed and valid
 // until it expires.
-func TestDeleteIdentity(t *testing.T) {
+func TestDeleteMailbox(t *testing.T) {
 	mod, apphost, dir := testIdentityModule(t)
 	identity := hostedParticipant(t, mod)
 	other := astral.GenerateIdentity()
@@ -193,7 +193,7 @@ func TestDeleteIdentity(t *testing.T) {
 	apphost.tokens["reissued"] = identity
 	apphost.tokens["kept"] = other
 
-	if err := mod.deleteIdentity(identity); err != nil {
+	if err := mod.deleteMailbox(identity); err != nil {
 		t.Fatalf("delete identity: %v", err)
 	}
 
@@ -221,7 +221,7 @@ func TestDeletingAnUnknownIdentityIsNotFound(t *testing.T) {
 	stranger := astral.GenerateIdentity()
 	apphost.tokens["token123"] = stranger
 
-	err := mod.DeleteIdentity(mod.ctx, stranger)
+	err := mod.DeleteMailbox(mod.ctx, stranger)
 	if !errors.Is(err, messagingmod.ErrIdentityNotFound) {
 		t.Fatalf("delete an unknown identity: got %v, want %v", err, messagingmod.ErrIdentityNotFound)
 	}
@@ -247,7 +247,7 @@ func TestFindIdentityNamesTheIndexedParticipants(t *testing.T) {
 		}
 	}
 
-	if err := mod.DeleteIdentity(mod.ctx, hosted); err != nil {
+	if err := mod.DeleteMailbox(mod.ctx, hosted); err != nil {
 		t.Fatalf("delete identity: %v", err)
 	}
 
@@ -283,7 +283,7 @@ func TestDeletingAnIdentityRevokesTheGrantsItHolds(t *testing.T) {
 		{Action: astral.String8(auth.ServeObjectsAction{}.ObjectType())},
 	}
 
-	if err := mod.deleteIdentity(identity); err != nil {
+	if err := mod.deleteMailbox(identity); err != nil {
 		t.Fatalf("delete identity: %v", err)
 	}
 
@@ -316,7 +316,7 @@ func TestDeletingAnIdentityToleratesAGrantAlreadyRevoked(t *testing.T) {
 	}
 	apphost.revokeErr = gorm.ErrRecordNotFound
 
-	if err := mod.deleteIdentity(identity); err != nil {
+	if err := mod.deleteMailbox(identity); err != nil {
 		t.Fatalf("delete identity: %v", err)
 	}
 
@@ -326,7 +326,7 @@ func TestDeletingAnIdentityToleratesAGrantAlreadyRevoked(t *testing.T) {
 }
 
 // A revoke that fails for any other reason stops the deletion and keeps the
-// row, so the operator can run messaging.delete_identity again. A run that
+// row, so the operator can run messaging.delete_mailbox again. A run that
 // removed the row would leave the grant with no record naming who holds it.
 func TestAFailedRevokeKeepsTheIndexRow(t *testing.T) {
 	mod, apphost, _ := testIdentityModule(t)
@@ -337,7 +337,7 @@ func TestAFailedRevokeKeepsTheIndexRow(t *testing.T) {
 	}
 	apphost.revokeErr = errors.New("store is down")
 
-	if err := mod.deleteIdentity(identity); err == nil {
+	if err := mod.deleteMailbox(identity); err == nil {
 		t.Fatal("the deletion answered no error on a failed revoke")
 	}
 
@@ -348,7 +348,7 @@ func TestAFailedRevokeKeepsTheIndexRow(t *testing.T) {
 
 // A token revoke that fails stops the deletion before anything else changes:
 // the tokens, the alias, the index row, the mail and the hosting all stay, so
-// the operator can run messaging.delete_identity again.
+// the operator can run messaging.delete_mailbox again.
 func TestAFailedTokenRevokeKeepsTheMailbox(t *testing.T) {
 	mod, apphost, dir := testIdentityModule(t)
 	identity := hostedParticipant(t, mod)
@@ -359,7 +359,7 @@ func TestAFailedTokenRevokeKeepsTheMailbox(t *testing.T) {
 	})
 	apphost.deleteTokensErr = errors.New("token store is down")
 
-	if err := mod.DeleteIdentity(mod.ctx, identity); err == nil {
+	if err := mod.DeleteMailbox(mod.ctx, identity); err == nil {
 		t.Fatal("the deletion answered no error on a failed token revoke")
 	}
 

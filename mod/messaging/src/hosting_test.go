@@ -20,7 +20,7 @@ import (
 // in these tests is provisioned by the module's own code, and every contract is
 // signed with a key the test holds.
 
-// hostingPermit is the permit create_identity writes, with the constraints the
+// hostingPermit is the permit create_mailbox writes, with the constraints the
 // test names.
 func hostingPermit(constraints ...astral.Object) *auth.Permit {
 	p := &auth.Permit{Action: astral.String8(messaging.HostMailboxAction{}.ObjectType())}
@@ -175,7 +175,7 @@ func TestAContractNamingAnotherNodeDoesNotAuthorize(t *testing.T) {
 	}
 }
 
-// The relay contract create_identity signs grants routing, not hosting: an
+// The relay contract create_mailbox signs grants routing, not hosting: an
 // index row naming it serves nothing.
 func TestRelayAuthorityAloneDoesNotHost(t *testing.T) {
 	mod := testMessagingModule(t)

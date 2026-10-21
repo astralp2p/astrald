@@ -22,8 +22,8 @@ type adminManageAppsOp struct {
 
 func adminManageAppsOps() []adminManageAppsOp {
 	return []adminManageAppsOp{
-		{"messaging.create_identity", func(m *Module) any { return m.OpCreateIdentity }, "?alias=scout"},
-		{"messaging.delete_identity", func(m *Module) any { return m.OpDeleteIdentity }, "?identity=scout"},
+		{"messaging.create_mailbox", func(m *Module) any { return m.OpCreateMailbox }, "?alias=scout"},
+		{"messaging.delete_mailbox", func(m *Module) any { return m.OpDeleteMailbox }, "?identity=scout"},
 	}
 }
 
@@ -72,21 +72,21 @@ func TestAdminManageAppsDeletesForAuthorizedCaller(t *testing.T) {
 	caller := astral.GenerateIdentity()
 
 	w := newRecordingWriter()
-	if err := route(t, mod.OpDeleteIdentity, caller, "messaging.delete_identity?identity=scout", w); err != nil {
-		t.Fatalf("messaging.delete_identity refused an authorized caller: %v", err)
+	if err := route(t, mod.OpDeleteMailbox, caller, "messaging.delete_mailbox?identity=scout", w); err != nil {
+		t.Fatalf("messaging.delete_mailbox refused an authorized caller: %v", err)
 	}
 
 	select {
 	case <-w.closed:
 	case <-time.After(10 * time.Second):
-		t.Fatal("messaging.delete_identity never closed the caller's connection")
+		t.Fatal("messaging.delete_mailbox never closed the caller's connection")
 	}
 
 	if w.written() == 0 {
-		t.Fatal("messaging.delete_identity answered an authorized caller nothing")
+		t.Fatal("messaging.delete_mailbox answered an authorized caller nothing")
 	}
 
-	checkAdminManageAppsAsked(t, "messaging.delete_identity", authority, caller)
+	checkAdminManageAppsAsked(t, "messaging.delete_mailbox", authority, caller)
 }
 
 // TestAdminManageAppsKeepsOriginRefusal: every identity-credential op refuses a

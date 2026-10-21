@@ -11,16 +11,16 @@ import (
 	"github.com/astralp2p/astral-go/astral"
 )
 
-// messaging.create_identity mints a participant whose mailbox this node hosts
+// messaging.create_mailbox mints a participant whose mailbox this node hosts
 // from the moment it answers: a hosting contract the identity signed is
 // indexed, and a message sent to its alias lands in the inbox it lists.
-func TestTheCreateIdentityOpMintsAServedMailbox(t *testing.T) {
+func TestTheCreateMailboxOpMintsAServedMailbox(t *testing.T) {
 	mod, _, _ := testIdentityModule(t)
 	peer := hostedParticipant(t, mod)
 	before := time.Now()
 
-	q := localQuery(astral.GenerateIdentity(), messaging.MethodCreateIdentity+"?alias=scout&duration=1h")
-	cred := onlyAnswer[*messaging.IdentityCredential](t, collectOp(t, mod.OpCreateIdentity, q))
+	q := localQuery(astral.GenerateIdentity(), messaging.MethodCreateMailbox+"?alias=scout&duration=1h")
+	cred := onlyAnswer[*messaging.MailboxCredential](t, collectOp(t, mod.OpCreateMailbox, q))
 
 	if n := len(hostingContracts(t, mod, cred.Identity)); n != 1 {
 		t.Fatalf("%v hosting contracts indexed for the new identity, want 1", n)
@@ -39,12 +39,12 @@ func TestTheCreateIdentityOpMintsAServedMailbox(t *testing.T) {
 	}
 }
 
-// messaging.delete_identity takes everything a participant held on this node:
+// messaging.delete_mailbox takes everything a participant held on this node:
 // every token of its identity — the one issued and one reissued — its grants,
 // its alias and the mail it owns in both boxes, archived or not. The
 // correspondent keeps its own copies. Hosting is withdrawn here and the
 // hosting contract is not revoked.
-func TestTheDeleteIdentityOpWithdrawsTheParticipant(t *testing.T) {
+func TestTheDeleteMailboxOpWithdrawsTheParticipant(t *testing.T) {
 	mod, apphost, dir := testIdentityModule(t)
 	u, peer := hostedParticipant(t, mod), hostedParticipant(t, mod)
 	dir.aliases["scout"] = u
@@ -53,8 +53,8 @@ func TestTheDeleteIdentityOpWithdrawsTheParticipant(t *testing.T) {
 	correspond(t, mod, u, peer)
 	peerHolds := countOwned(t, mod.db, peer)
 
-	q := localQuery(astral.GenerateIdentity(), messaging.MethodDeleteIdentity+"?identity=scout")
-	onlyAnswer[*astral.Ack](t, collectOp(t, mod.OpDeleteIdentity, q))
+	q := localQuery(astral.GenerateIdentity(), messaging.MethodDeleteMailbox+"?identity=scout")
+	onlyAnswer[*astral.Ack](t, collectOp(t, mod.OpDeleteMailbox, q))
 
 	if len(apphost.tokens) != 1 || !apphost.tokens["peer's"].IsEqual(peer) {
 		t.Fatalf("tokens left %v, want only the correspondent's", apphost.tokens)
@@ -121,7 +121,7 @@ func checkWithdrawn(t *testing.T, mod *Module, u *astral.Identity) {
 	}
 }
 
-// messaging.identity and messaging.delete_identity answer what they cannot
+// messaging.mailbox and messaging.delete_mailbox answer what they cannot
 // find in the words those operations always used: a name nothing resolves is an
 // unknown identity, and an identity whose mailbox the index does not name is
 // not found.
@@ -133,8 +133,8 @@ func TestTheIdentityOpsNameWhatTheyCannotFind(t *testing.T) {
 		name string
 		fn   any
 	}{
-		{messaging.MethodIdentity, mod.OpIdentity},
-		{messaging.MethodDeleteIdentity, mod.OpDeleteIdentity},
+		{messaging.MethodMailbox, mod.OpMailbox},
+		{messaging.MethodDeleteMailbox, mod.OpDeleteMailbox},
 	} {
 		for arg, want := range map[string]string{"nobody": "unknown identity", stranger.String(): "identity not found"} {
 			q := localQuery(astral.GenerateIdentity(), op.name+"?identity="+arg)

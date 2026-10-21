@@ -18,12 +18,12 @@ type seeNodeStateOp struct {
 
 func seeNodeStateOps(identity *astral.Identity) []seeNodeStateOp {
 	return []seeNodeStateOp{
-		{"messaging.identity", func(m *Module) any { return m.OpIdentity }, "?identity=" + identity.String()},
+		{"messaging.mailbox", func(m *Module) any { return m.OpMailbox }, "?identity=" + identity.String()},
 	}
 }
 
 // TestSeeNodeStateRefusesCallerWithoutPermits is the coverage measure for the
-// SeeNodeState action in mod/messaging: messaging.identity must ask before it
+// SeeNodeState action in mod/messaging: messaging.mailbox must ask before it
 // reads a participant's record, and must reject when the answer is no.
 //
 // note: the module is a bare struct with no directory and no database, so an op

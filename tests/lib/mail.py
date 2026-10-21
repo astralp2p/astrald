@@ -18,21 +18,21 @@ READ_REQUEST = "messaging.read_messages_request"
 SIGNED_CONTRACT = "mod.auth.signed_contract"
 
 
-async def create_identity(admin, alias: str) -> dict:
-    """A new participant's messaging.identity_credential."""
+async def create_mailbox(admin, alias: str) -> dict:
+    """A new participant's messaging.mailbox_credential."""
     return await jsonops.value(admin, querystring.build(
-        "messaging.create_identity", {"alias": alias, "out": "json"}))
+        "messaging.create_mailbox", {"alias": alias, "out": "json"}))
 
 
-async def identity(admin, name: str) -> dict:
-    """A participant's messaging.identity_info. An unknown one raises OpError."""
+async def mailbox(admin, name: str) -> dict:
+    """A participant's messaging.mailbox_info. An unknown one raises OpError."""
     return await jsonops.value(admin, querystring.build(
-        "messaging.identity", {"identity": name, "out": "json"}))
+        "messaging.mailbox", {"identity": name, "out": "json"}))
 
 
-async def delete_identity(admin, name: str) -> None:
+async def delete_mailbox(admin, name: str) -> None:
     await jsonops.value(admin, querystring.build(
-        "messaging.delete_identity", {"identity": name, "out": "json"}))
+        "messaging.delete_mailbox", {"identity": name, "out": "json"}))
 
 
 async def send(client, to: str, content: str, parent: str = "") -> str:

@@ -10,13 +10,13 @@ tools call the `messaging.Module` methods under the bearer's identity.
 
 ## Participants
 
-* `messaging.create_identity` mints a participant: a key this node stores and
+* `messaging.create_mailbox` mints a participant: a key this node stores and
   indexes, a relay contract, a hosting contract, an optional alias, an apphost
   access token, and a row in the hosting index.
 * The index row is written last. A create that fails at an earlier step leaves
   no served mailbox.
-* `mcp.create_agent` mints its agent through `CreateIdentity`.
-* `messaging.delete_identity` revokes every apphost token and grant of the
+* `mcp.create_agent` mints its agent through `CreateMailbox`.
+* `messaging.delete_mailbox` revokes every apphost token and grant of the
   identity, unsets its alias, and withdraws its mailbox.
 * A withdrawal deletes the index row and every message the identity owns in one
   transaction. A correspondent's copy of a message stays.
@@ -99,8 +99,8 @@ tools call the `messaging.Module` methods under the bearer's identity.
 
 ## Operations
 
-* `create_identity`, `identity` and `delete_identity` refuse network and MCP
-  origin. `create_identity` and `delete_identity` ask
+* `create_mailbox`, `identity` and `delete_mailbox` refuse network and MCP
+  origin. `create_mailbox` and `delete_mailbox` ask
   `mod.auth.admin_manage_apps_action`, and `identity` asks
   `mod.auth.see_node_state_action`.
 * `send_message`, `list_messages`, `read_messages`, `wait` and `archive` refuse
@@ -175,7 +175,7 @@ max_read_bytes: 65536
 ```
 
 * `token_duration` is the validity of a new participant's access token when
-  `create_identity` names no `duration`.
+  `create_mailbox` names no `duration`.
 * `delivery_timeout` bounds one delivery, one receipt, and the read of either
   on the answering side.
 * A wait that names no window is granted `wait_default`. A wait that asks for

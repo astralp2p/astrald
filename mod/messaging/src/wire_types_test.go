@@ -16,7 +16,7 @@ import (
 // while this module declares none of them.
 func TestWireTypesResolveToAPI(t *testing.T) {
 	for _, want := range []astral.Object{
-		&messaging.IdentityCredential{}, &messaging.IdentityInfo{},
+		&messaging.MailboxCredential{}, &messaging.MailboxInfo{},
 		&messaging.Message{}, &messaging.Receipt{},
 		&messaging.Envelope{}, &messaging.MessageID{},
 		&messaging.SendMessageRequest{}, &messaging.ReadMessagesRequest{},

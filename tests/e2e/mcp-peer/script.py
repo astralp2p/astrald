@@ -13,7 +13,7 @@ evidence about the caller node2 read, and not about the op or the link.
 
 why the push: node2 admits a relay query naming the agent only under the relay
 contract the agent issued to node1 (mod/nodes/src/mux.go handleRelayQuery).
-messaging.create_identity signs one, but only node1 holds it; node2 indexes a
+messaging.create_mailbox signs one, but only node1 holds it; node2 indexes a
 relay contract pushed by the sibling it names as subject
 (mod/user/src/object_receiver.go).
 

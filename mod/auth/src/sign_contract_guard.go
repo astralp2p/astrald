@@ -144,7 +144,7 @@ func (mod *Module) isUnclaimed(ctx *astral.Context) bool {
 // expired ones included. A failed lookup answers true, so the exception closes
 // on error.
 //
-// why relay contracts: apphost.register and messaging.create_identity, which
+// why relay contracts: apphost.register and messaging.create_mailbox, which
 // mcp.create_agent mints through, mint each app, agent and account identity
 // with a relay contract to the node, so the exception never signs as a key the
 // node minted. The setup user's key is stored, not minted,

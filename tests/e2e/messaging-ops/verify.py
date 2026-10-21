@@ -7,7 +7,7 @@ messaging without it. The authority's record comes next, because an exchange
 proves nothing about reach unless the authority was asked, naming the right
 actor on each side, and admitted it. Then the exchange itself, cleo's
 delegated read of ada's mailbox, the refusal of every caller whose mailbox the
-node does not host, and what messaging.delete_identity left of bob.
+node does not host, and what messaging.delete_mailbox left of bob.
 
 Last, what the node holds. The driver reports what it was answered; whether
 each participant's mailbox is hosted under a contract of its own, and what
@@ -222,11 +222,11 @@ async def check_contracts(admin, facts):
 async def check_records(n, facts):
     async with await astral.connect(n["endpoint"], token=n["token"]) as admin:
         await check_contracts(admin, facts)
-        info = await mail.identity(admin, facts["aliases"]["ada"])
-        gone = await jsonops.call(admin, "messaging.identity?identity="
+        info = await mail.mailbox(admin, facts["aliases"]["ada"])
+        gone = await jsonops.call(admin, "messaging.mailbox?identity="
                                   f"{facts['bob']}&out=json")
     assert not [k for k in info if "token" in k.lower()], (
-        f"messaging.identity answered {info} — the record carries a credential")
+        f"messaging.mailbox answered {info} — the record carries a credential")
     assert gone[0]["Object"] == "identity not found", (
         f"the node still names bob: {gone}")
 

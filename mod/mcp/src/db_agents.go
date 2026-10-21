@@ -19,7 +19,7 @@ func (db *DB) FindAgent(identity *astral.Identity) (row *dbAgent, err error) {
 }
 
 // DeleteAgent removes the agent's row. The agent's mail is its messaging
-// participant's, and goes with messaging.delete_identity.
+// participant's, and goes with messaging.delete_mailbox.
 func (db *DB) DeleteAgent(identity *astral.Identity) error {
 	res := db.Where("identity = ?", identity).Delete(&dbAgent{})
 	if res.Error != nil {

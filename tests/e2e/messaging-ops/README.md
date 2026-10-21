@@ -1,6 +1,6 @@
 # messaging-ops — participants mail each other through the messaging ops
 
-The admin mints participants with `messaging.create_identity`. Each
+The admin mints participants with `messaging.create_mailbox`. Each
 participant, authenticated over apphost with its own token, reads and writes
 its own mailbox through the `messaging.*` ops. The node serves no MCP.
 
@@ -10,7 +10,7 @@ its own mailbox through the `messaging.*` ops. The node serves no MCP.
   `messaging.read_messages`, `messaging.wait` and `messaging.archive`; before
   ada reads bob's answer, cleo lists and reads ada's mailbox, and bob and the
   node name it too; ada writes to cleo; an app identity and the node itself
-  try the mail ops; `messaging.delete_identity` deletes bob, and ada writes to
+  try the mail ops; `messaging.delete_mailbox` deletes bob, and ada writes to
   him once more.
 - **oracle** `verify.py` — the MCP port was closed and the node's log shows
   no MCP server, the authority was asked
