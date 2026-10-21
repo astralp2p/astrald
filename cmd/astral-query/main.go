@@ -39,10 +39,15 @@ func main() {
 		return
 	}
 
+	// why: an argument error needs no node, so it is refused before the caller and target resolve
+	args, err := parseQueryArgs(flag.Args()[1:])
+	if err != nil {
+		fatal("error: %v\n", err)
+	}
+
 	defaultIn := inputFormat()
 	defaultOut := outputFormat()
 
-	var err error
 	var callerID, targetID *astral.Identity
 
 	// split the argument into parts
@@ -78,8 +83,6 @@ func main() {
 			fatal("error: %v\n", err)
 		}
 	}
-
-	args := parseQueryArgs(flag.Args()[1:])
 
 	// set default input/output formats
 	if defaultIn != "" && args["in"] == "" {
@@ -122,20 +125,29 @@ func sendEndOfInput(rw io.ReadWriter, format string) error {
 	return channel.New(rw, channel.WithFormats("", format)).Send(&astral.EOS{})
 }
 
-func parseQueryArgs(a []string) map[string]string {
+func parseQueryArgs(a []string) (map[string]string, error) {
 	args := map[string]string{}
-	for len(a) >= 2 {
-		key := a[0]
-		if !strings.HasPrefix(key, "-") || len(key) < 2 {
-			fatal("error: unexpected argument %s\n", key)
+	for len(a) > 0 {
+		tok := a[0]
+		isFlag := len(tok) >= 2 && strings.HasPrefix(tok, "-")
+		key, val, hasEq := strings.Cut(tok, "=")
+		switch {
+		case isFlag && len(a) == 1:
+			return nil, fmt.Errorf("argument %s has no value", tok)
+		case isFlag:
+			args[tok[1:]] = a[1]
+			a = a[2:]
+		case hasEq && key != "":
+			// why: key=value is not an argument syntax; as the positional it would set arg, not key
+			return nil, fmt.Errorf("unexpected argument %s: pass it as -%s %s", tok, key, val)
+		case len(a) == 1:
+			args[query.DefaultArgKey] = tok
+			a = nil
+		default:
+			return nil, fmt.Errorf("unexpected argument %s", tok)
 		}
-		args[key[1:]] = a[1]
-		a = a[2:]
 	}
-	if len(a) == 1 {
-		args[query.DefaultArgKey] = a[0]
-	}
-	return args
+	return args, nil
 }
 
 type filterList []string
