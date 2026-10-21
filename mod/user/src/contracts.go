@@ -71,6 +71,7 @@ func (mod *Module) Identity() *astral.Identity {
 // or a stray write) is scrubbed so it never stays live.
 func (mod *Module) onActiveContractChanged(signed *auth.SignedContract) {
 	if signed.IsNil() {
+		mod.log.Info("this node runs without a user")
 		go mod.Nearby.SetMode(mod.ctx, nearby.ModeVisible)
 		return
 	}
