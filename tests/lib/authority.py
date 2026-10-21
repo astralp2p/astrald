@@ -51,7 +51,7 @@ class Authority:
     def decide(self, envelope: dict) -> bool:
         kind = envelope.get("Type")
         obj = envelope.get("Object") or {}
-        actor = ((obj.get("Action") or {}).get("ActorID") or "").lower()
+        actor = (obj.get("ActorID") or "").lower()
         other = (obj.get("ToID") or obj.get("FromID")
                  or obj.get("MailboxID") or "").lower()
         allow = (kind, actor, other) in self.allowed
