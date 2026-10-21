@@ -18,7 +18,17 @@ an empty stub.
 astrald stores config, identity, and data under a root directory derived from
 `$HOME`. A systemd service has no `$HOME`. Pass `-root <dir>` to set the root
 explicitly, or set `Environment=HOME=<dir>`. The first start generates the node
-identity — a `secp256k1` key at `<root>/config/node_key` — with no interaction.
+identity — a `secp256k1` key at `<root>/data/node_key`, beside the database
+`<root>/data/astrald.db` — with no interaction. `<root>/config` holds the module
+`*.yaml` files. Removing `<root>/data` resets the node to a new identity.
+
+A node that an earlier version started holds its identity at
+`<root>/config/node_key`, and `<root>/config/tor.key` when its tor module
+listened. The first start after the upgrade copies each key to `<root>/data`,
+reads the copy back, and removes the `<root>/config` copy, so the node keeps its
+identity and onion address. A read-only `<root>/config` keeps its copy, and the
+node prints a warning naming it. That copy is removed by hand: while it exists,
+a start with an empty `<root>/data` restores the old identity.
 
 ## Unit
 
@@ -115,4 +125,4 @@ systemctl enable astrald
 systemctl stop astrald   # disk image only — skip for a live RAM snapshot
 ```
 
-The identity at `<root>/config/node_key` persists across either capture.
+The identity at `<root>/data/node_key` persists across either capture.

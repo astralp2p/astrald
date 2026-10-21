@@ -87,3 +87,44 @@ func TestFileResourcesDataRoot(t *testing.T) {
 		t.Fatalf("DataRoot() after SetDataRoot = %q, want %q", got, "/d")
 	}
 }
+
+// TestFileResourcesWriteDataReadData pins that the data pair resolves against
+// the data root, creates it, writes mode 0600, replaces an existing file, and
+// leaves no temporary file behind.
+func TestFileResourcesWriteDataReadData(t *testing.T) {
+	cfg := t.TempDir()
+	data := filepath.Join(t.TempDir(), "data")
+	res, err := NewFileResources(cfg, true)
+	if err != nil {
+		t.Fatalf("NewFileResources: %v", err)
+	}
+	res.SetDataRoot(data)
+
+	if _, err := res.ReadData("key"); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("ReadData(missing) error = %v, want %v", err, ErrNotFound)
+	}
+
+	for _, want := range []string{"v1", "v2"} {
+		if err := res.WriteData("key", []byte(want)); err != nil {
+			t.Fatalf("WriteData(key, %q): %v", want, err)
+		}
+		got, err := res.ReadData("key")
+		if err != nil || string(got) != want {
+			t.Fatalf("ReadData(key) = (%q, %v), want (%q, nil)", got, err, want)
+		}
+	}
+
+	fi, err := os.Stat(filepath.Join(data, "key"))
+	if err != nil {
+		t.Fatalf("Stat written file: %v", err)
+	}
+	if got := fi.Mode().Perm(); got != 0o600 {
+		t.Fatalf("written file mode = %o, want 600", got)
+	}
+	if entries, err := os.ReadDir(data); err != nil || len(entries) != 1 {
+		t.Fatalf("data root entries = (%v, %v), want only key", entries, err)
+	}
+	if _, err := res.Read("key"); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("Read(key) in the config root error = %v, want %v", err, ErrNotFound)
+	}
+}

@@ -58,8 +58,10 @@ func TestCoreAssetsLoadYAMLMissing(t *testing.T) {
 
 type plainResources struct{}
 
-func (plainResources) Read(string) ([]byte, error) { return nil, resources.ErrNotFound }
-func (plainResources) Write(string, []byte) error  { return nil }
+func (plainResources) Read(string) ([]byte, error)     { return nil, resources.ErrNotFound }
+func (plainResources) Write(string, []byte) error      { return nil }
+func (plainResources) ReadData(string) ([]byte, error) { return nil, resources.ErrNotFound }
+func (plainResources) WriteData(string, []byte) error  { return nil }
 
 func TestCoreAssetsOpenDatabaseErrors(t *testing.T) {
 	tests := []struct {

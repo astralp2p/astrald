@@ -28,3 +28,14 @@ func (res *MemResources) Write(name string, data []byte) error {
 
 	return nil
 }
+
+// ReadData reads name.
+// note: memory resources have one namespace, so a data name and a config name share one map
+func (res *MemResources) ReadData(name string) ([]byte, error) {
+	return res.Read(name)
+}
+
+// WriteData writes data to name.
+func (res *MemResources) WriteData(name string, data []byte) error {
+	return res.Write(name, data)
+}

@@ -1,6 +1,8 @@
 package mobile
 
 import (
+	"errors"
+	"io/fs"
 	"net"
 	"os"
 	"path/filepath"
@@ -21,7 +23,7 @@ func TestLoadNodeIdentityPersists(t *testing.T) {
 	if first.IsZero() {
 		t.Fatal("first loadNodeIdentity returned a zero identity")
 	}
-	if key, err := res.Read("node_key"); err != nil || len(key) == 0 {
+	if key, err := res.ReadData("node_key"); err != nil || len(key) == 0 {
 		t.Fatalf("node_key after first load = (%d bytes, %v), want non-empty key", len(key), err)
 	}
 
@@ -105,9 +107,48 @@ func TestSetupResources(t *testing.T) {
 			if got := roots.DataRoot(); got != tt.wantRoot {
 				t.Fatalf("DataRoot() = %q, want %q", got, tt.wantRoot)
 			}
-			if debug.LogDir != cfg {
-				t.Fatalf("debug.LogDir = %q, want %q", debug.LogDir, cfg)
+			if debug.LogDir != tt.wantRoot {
+				t.Fatalf("debug.LogDir = %q, want the data root %q", debug.LogDir, tt.wantRoot)
 			}
 		})
+	}
+}
+
+// TestSetupResourcesMovesNodeKey: an app upgraded from a version that kept
+// node_key in the config dir keeps its identity, and the key ends up in the
+// data dir only.
+func TestSetupResourcesMovesNodeKey(t *testing.T) {
+	tmp := t.TempDir()
+	cfg := filepath.Join(tmp, "cfg")
+	data := filepath.Join(tmp, "data")
+
+	prevLogDir := debug.LogDir
+	t.Cleanup(func() { debug.LogDir = prevLogDir })
+
+	old, err := resources.NewFileResources(cfg, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want, err := loadNodeIdentity(old)
+	if err != nil {
+		t.Fatalf("loadNodeIdentity in the old layout: %v", err)
+	}
+
+	res, err := setupResources(cfg, data)
+	if err != nil {
+		t.Fatalf("setupResources: %v", err)
+	}
+	got, err := loadNodeIdentity(res)
+	if err != nil {
+		t.Fatalf("loadNodeIdentity after setupResources: %v", err)
+	}
+	if !got.IsEqual(want) {
+		t.Fatalf("identity after upgrade = %v, want %v", got, want)
+	}
+	if _, err := os.Stat(filepath.Join(data, "node_key")); err != nil {
+		t.Fatalf("node_key not in the data dir: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(cfg, "node_key")); !errors.Is(err, fs.ErrNotExist) {
+		t.Fatalf("node_key still in the config dir: stat error = %v", err)
 	}
 }

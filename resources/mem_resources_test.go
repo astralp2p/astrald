@@ -23,3 +23,19 @@ func TestMemResourcesReadWrite(t *testing.T) {
 		}
 	}
 }
+
+// TestMemResourcesDataSharesNamespace pins that memory resources keep one
+// namespace for config and data names.
+func TestMemResourcesDataSharesNamespace(t *testing.T) {
+	res := NewMemResources()
+
+	if err := res.WriteData("x", []byte("d")); err != nil {
+		t.Fatalf("WriteData(x): %v", err)
+	}
+	for name, read := range map[string]func(string) ([]byte, error){"Read": res.Read, "ReadData": res.ReadData} {
+		data, err := read("x")
+		if err != nil || string(data) != "d" {
+			t.Fatalf("%s(x) = (%q, %v), want (%q, nil)", name, data, err, "d")
+		}
+	}
+}

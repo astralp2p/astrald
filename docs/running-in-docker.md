@@ -30,9 +30,17 @@ docker run -d --name astrald \
 ```
 
 The volume is the node. It holds the root directory — config, identity, and
-data — and the identity is the `secp256k1` key at `config/node_key`, generated on
-first start with no interaction. A discarded volume is a new node identity;
-back up the volume, not the container.
+data — and the identity is the `secp256k1` key at `data/node_key`, beside the
+database `data/astrald.db`, generated on first start with no interaction. The
+onion service key, `data/tor.key`, sits beside it. A discarded volume is a new
+node identity; back up the volume, not the container.
+
+A volume that an earlier image wrote holds the identity at `config/node_key`,
+and `config/tor.key` when its tor module listened. The first start of this
+image copies each key to `data/`, reads the copy back, and removes the `config/`
+copy, so the node keeps its identity and onion address. A `config/` directory
+the node cannot write keeps its copy, and the node logs a warning naming it;
+that copy is removed by hand.
 
 The container runs as uid 1500, gid 1500 — the `astrald` user the image creates —
 not as root. A fresh named volume takes the ownership of its mount point in the

@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -72,10 +73,27 @@ func setupResources(args *Args) (resources.Resources, error) {
 	err = os.MkdirAll(dataRoot, 0700)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error creating data directory: %s\n", err)
+		return nil, err
 	}
 
 	// set directory for saving crash logs
-	debug.LogDir = configRoot
+	debug.LogDir = dataRoot
 
-	return nodeRes, err
+	if err = moveNodeKey(nodeRes); err != nil {
+		return nil, err
+	}
+
+	return nodeRes, nil
+}
+
+// moveNodeKey moves a node_key that an earlier version wrote to the config root into the data root.
+// A copy left in the config root is a warning; the data-root key is in use.
+func moveNodeKey(res *resources.FileResources) error {
+	err := res.MoveToDataRoot(resNodeKey)
+	if errors.Is(err, resources.ErrRootCopyKept) {
+		fmt.Fprintf(os.Stderr, "warning: %v\n", err)
+		return nil
+	}
+
+	return err
 }

@@ -6,14 +6,15 @@ import (
 	"github.com/astralp2p/astral-go/api/tree"
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astrald/core/assets"
+	"github.com/astralp2p/astrald/resources"
 	"gopkg.in/yaml.v2"
 )
 
-// yamlAssets serves a single tor.yaml from memory.
+// yamlAssets serves a single tor.yaml from memory, with memory resources behind it.
 //
 // why: the embedded nil interface satisfies assets.Assets without implementing
-// it. Any method other than LoadYAML panics, which is the assertion that Load
-// reads its config file and nothing else.
+// it. Any method other than LoadYAML and Res panics, which is the assertion that
+// Load reads its config file and moves tor.key, and nothing else.
 type yamlAssets struct {
 	assets.Assets
 	yaml string
@@ -22,6 +23,8 @@ type yamlAssets struct {
 func (a yamlAssets) LoadYAML(_ string, out any) error {
 	return yaml.Unmarshal([]byte(a.yaml), out)
 }
+
+func (a yamlAssets) Res() resources.Resources { return resources.NewMemResources() }
 
 // loadModule builds a Module from a tor.yaml body and binds its settings to no
 // node, so a Set lands in the Value's local cache and Get reads it back.
