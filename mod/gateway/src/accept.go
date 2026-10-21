@@ -3,6 +3,7 @@ package gateway
 import (
 	"context"
 	"fmt"
+	"io"
 
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astral-go/astral/channel"
@@ -19,6 +20,10 @@ func (mod *Module) handleInbound(_ context.Context, conn exonet.Conn) (stopListe
 	var nonce *astral.Nonce
 	// expect node's signature
 	err = ch.Switch(channel.Expect(&nonce), channel.PassErrors)
+	// why: Switch returns nil on EOF, so a conn closed before its nonce leaves nonce nil.
+	if err == nil && nonce == nil {
+		err = fmt.Errorf("read nonce: %w", io.ErrUnexpectedEOF)
+	}
 	if err != nil {
 		conn.Close()
 		return false, err
