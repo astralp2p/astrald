@@ -2,6 +2,8 @@ package user
 
 import (
 	"github.com/astralp2p/astral-go/api/auth"
+	"github.com/astralp2p/astral-go/api/bip137sig"
+	cryptoapi "github.com/astralp2p/astral-go/api/crypto"
 	"github.com/astralp2p/astral-go/api/nodes"
 	"github.com/astralp2p/astral-go/api/services"
 	"github.com/astralp2p/astral-go/api/shell"
@@ -31,11 +33,25 @@ type Deps struct {
 	Tree      tree.Module
 }
 
+// keyDeriver is the part of the bip137sig module user.bootstrap reads.
+type keyDeriver interface {
+	DeriveKey(seed bip137sig.Seed, path string) (cryptoapi.PrivateKey, error)
+}
+
+// OptionalDeps holds the bip137sig module. Without it user.bootstrap refuses.
+type OptionalDeps struct {
+	Bip137sig keyDeriver
+}
+
 func (mod *Module) LoadDependencies(ctx *astral.Context) (err error) {
 	err = core.Inject(mod.node, &mod.Deps)
 	if err != nil {
 		return
 	}
+
+	// why optional: core.Inject fails on a missing module, and only
+	// user.bootstrap needs bip137sig.
+	_ = core.Inject(mod.node, &mod.OptionalDeps)
 
 	// bind the config
 	err = tree.BindPath(ctx, &mod.config, mod.Tree.Root(), "/mod/user/config", true)

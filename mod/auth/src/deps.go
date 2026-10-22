@@ -16,7 +16,7 @@ type Deps struct {
 	Tree    tree.Module
 }
 
-// claimState is the part of the user module isNodeClaim reads: whether the
+// claimState is the part of the user module IsNodeClaim reads: whether the
 // node has a user yet.
 //
 // why declared here and not mod/user's Module: auth reads two of its methods

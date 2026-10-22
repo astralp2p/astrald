@@ -28,7 +28,7 @@ const claimExpirySlack = time.Hour
 //
 // why the claim exception: node setup asks for the user→node contract as the
 // node, a caller that is neither the user nor holds sudo for it, and whose own
-// key the signer rule refuses on the self branch. isNodeClaim admits that one
+// key the signer rule refuses on the self branch. IsNodeClaim admits that one
 // contract and nothing else.
 func (mod *Module) authorizeContract(ctx *astral.Context, caller *astral.Identity, c *auth.Contract) error {
 	if c == nil || c.Issuer.IsZero() || c.Subject.IsZero() {
@@ -36,7 +36,7 @@ func (mod *Module) authorizeContract(ctx *astral.Context, caller *astral.Identit
 	}
 
 	err := mod.authorizeParties(ctx, caller, c)
-	if err != nil && mod.isNodeClaim(ctx, caller, c) {
+	if err != nil && mod.IsNodeClaim(ctx, caller, c) {
 		return nil
 	}
 	return err
@@ -57,7 +57,7 @@ func (mod *Module) authorizeParties(ctx *astral.Context, caller *astral.Identity
 	return nil
 }
 
-// isNodeClaim reports whether c is the contract that claims this unclaimed
+// IsNodeClaim reports whether c is the contract that claims this unclaimed
 // node, asked for by the node's own session: issued by another identity to
 // this node, carrying exactly the management node permits, expiring within
 // the validity setup gives it, from an issuer that never issued this node a
@@ -71,7 +71,7 @@ func (mod *Module) authorizeParties(ctx *astral.Context, caller *astral.Identity
 //
 // why the cheap tests run first: isUnclaimed may wait and issuedToNode reads
 // the database, and most refusals end before either.
-func (mod *Module) isNodeClaim(ctx *astral.Context, caller *astral.Identity, c *auth.Contract) bool {
+func (mod *Module) IsNodeClaim(ctx *astral.Context, caller *astral.Identity, c *auth.Contract) bool {
 	node := mod.node.Identity()
 	return caller.IsEqual(node) &&
 		c.Subject.IsEqual(node) &&

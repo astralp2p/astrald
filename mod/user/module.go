@@ -5,10 +5,17 @@ import (
 
 	"github.com/astralp2p/astral-go/api/user"
 	"github.com/astralp2p/astral-go/astral"
+	"github.com/astralp2p/astrald/mod/coldcard"
 )
 
 const ModuleName = "user"
 const DBPrefix = "users__"
+
+// UserKeyPath is the BIP-32 path user.bootstrap derives the user's key along.
+//
+// why the Coldcard path: one seed derives one user on a Coldcard and in
+// software (operator decision, 2026-10-21).
+const UserKeyPath = coldcard.BIP44Path
 
 const (
 	// MinimalContractLength is the shortest remaining validity of a node

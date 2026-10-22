@@ -50,6 +50,30 @@ func (mod *Module) SetActiveContract(signed *auth.SignedContract) error {
 	return mod.config.ActiveContract.Set(mod.ctx, signed)
 }
 
+// errClaimed answers a claim that another claim has preceded.
+var errClaimed = errors.New("the node has an active contract")
+
+// claim stores signed and sets it as the active contract, unless the node has
+// one already.
+//
+// why mu: the check and the set are one transition; two claims would each pass
+// an unlocked check, and the second set would replace the first.
+func (mod *Module) claim(ctx *astral.Context, signed *auth.SignedContract) error {
+	mod.mu.Lock()
+	defer mod.mu.Unlock()
+
+	if mod.ActiveContract() != nil {
+		return errClaimed
+	}
+
+	_, err := mod.Objects.Store(ctx, mod.Objects.WriteDefault(), signed)
+	if err != nil {
+		return err
+	}
+
+	return mod.SetActiveContract(signed)
+}
+
 // ActiveContract returns the active contract from the tree store - the single
 // source of truth. Nil when the node is unclaimed.
 func (mod *Module) ActiveContract() *auth.SignedContract {

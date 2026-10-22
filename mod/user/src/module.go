@@ -1,6 +1,8 @@
 package user
 
 import (
+	"sync"
+
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astral-go/astral/log"
 	"github.com/astralp2p/astral-go/lib/routing"
@@ -13,6 +15,7 @@ var _ user.Module = &Module{}
 
 type Module struct {
 	Deps
+	OptionalDeps
 	ctx    *astral.Context
 	config Config
 	node   astral.Node
@@ -28,6 +31,9 @@ type Module struct {
 	// policy persists the swarm delegates; an unset value selects accept-all.
 	// GetSwarmJoinPolicy and GetSwarmInvitePolicy read it on every decision.
 	policy policyConfig
+
+	// mu makes the claim check and the claim one transition; see claim.
+	mu sync.Mutex
 }
 
 func (mod *Module) Run(ctx *astral.Context) error {
