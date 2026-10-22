@@ -12,10 +12,10 @@ import astral
 
 from lib.sessionio import load
 
-# The identity BIP-39 + BIP-32 m/44'/0'/0'/0/0 derives from the driver's
+# The identity BIP-39 + BIP-32 m/1791'/0'/0'/0/0 derives from the driver's
 # mnemonic. Deterministic, so a pin here is a real oracle and not a snapshot.
 EXPECTED_USER_ID = (
-    "0205135bf7de5efbefcee6a2b9e149f53e3f21cb3a469271bb6222a47812aece73")
+    "02564ba75b0fc5869e12c0c89e56a9c4fbec9d23ed01e6d240aac80532fcb10af1")
 
 
 async def main():
