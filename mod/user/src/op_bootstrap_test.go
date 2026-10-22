@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/astralp2p/astral-go/api/apphost"
 	"github.com/astralp2p/astral-go/api/auth"
 	"github.com/astralp2p/astral-go/api/bip137sig"
 	"github.com/astralp2p/astral-go/api/crypto"
@@ -16,6 +17,7 @@ import (
 	"github.com/astralp2p/astral-go/astral/channel"
 	"github.com/astralp2p/astral-go/lib/query"
 	"github.com/astralp2p/astral-go/lib/routing"
+	apphostmod "github.com/astralp2p/astrald/mod/apphost"
 	authmod "github.com/astralp2p/astrald/mod/auth"
 	bip137src "github.com/astralp2p/astrald/mod/bip137sig/src"
 	cryptomod "github.com/astralp2p/astrald/mod/crypto"
@@ -112,12 +114,42 @@ func (c *keyIndex) objects() []astral.Object {
 	return append([]astral.Object(nil), c.indexed...)
 }
 
+// tokenIssuer issues access tokens, records each one it issued, and fails
+// every issue while fail is set.
+type tokenIssuer struct {
+	apphostmod.Module
+
+	mu     sync.Mutex
+	fail   error
+	issued []*apphost.AccessToken
+	ttl    []astral.Duration
+}
+
+func (a *tokenIssuer) CreateAccessToken(id *astral.Identity, ttl astral.Duration) (*apphost.AccessToken, error) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if a.fail != nil {
+		return nil, a.fail
+	}
+	token := &apphost.AccessToken{Identity: id, Token: astral.String8(astral.GenerateIdentity().String()[:16])}
+	a.issued = append(a.issued, token)
+	a.ttl = append(a.ttl, ttl)
+	return token, nil
+}
+
+func (a *tokenIssuer) tokens() []*apphost.AccessToken {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return append([]*apphost.AccessToken(nil), a.issued...)
+}
+
 type bootstrapFixture struct {
 	mod     *Module
 	nodeID  *astral.Identity
 	auth    *claimAuth
 	objects *memObjects
 	keys    *keyIndex
+	apphost *tokenIssuer
 }
 
 // newBootstrapFixture is an unclaimed node with the real bip137sig derivation.
@@ -128,9 +160,10 @@ func newBootstrapFixture() *bootstrapFixture {
 		auth:    &claimAuth{nodeKey: nodeKey, claimable: true},
 		objects: &memObjects{},
 		keys:    &keyIndex{},
+		apphost: &tokenIssuer{},
 	}
 	f.mod = &Module{
-		Deps:         Deps{Auth: f.auth, Objects: f.objects, Crypto: f.keys},
+		Deps:         Deps{Apphost: f.apphost, Auth: f.auth, Objects: f.objects, Crypto: f.keys},
 		OptionalDeps: OptionalDeps{Bip137sig: &bip137src.Module{}},
 		node:         &identityNode{id: f.nodeID},
 	}
@@ -156,8 +189,16 @@ func identityOf(t *testing.T, words string) *astral.Identity {
 // rejected query answers the rejection.
 func routeBootstrap(t *testing.T, f *bootstrapFixture, caller *astral.Identity, origin, queryString string, input astral.Object) ([]astral.Object, error) {
 	t.Helper()
+	return routeOp(t, f.mod.OpBootstrap, query.New(caller, f.nodeID, queryString, nil), origin, input)
+}
 
-	op, err := routing.NewOp(f.mod.OpBootstrap)
+// routeOp sends q to the op fn with origin, writes input to the op when it is
+// set, and answers what the op wrote once it returned. A rejected query
+// answers the rejection.
+func routeOp(t *testing.T, fn any, aq *astral.Query, origin string, input astral.Object) ([]astral.Object, error) {
+	t.Helper()
+
+	op, err := routing.NewOp(fn)
 	if err != nil {
 		t.Fatalf("new op: %v", err)
 	}
@@ -167,7 +208,7 @@ func routeBootstrap(t *testing.T, f *bootstrapFixture, caller *astral.Identity, 
 	ctx, cancel := astral.NewContext(nil).WithTimeout(10 * time.Second)
 	defer cancel()
 
-	q := astral.Launch(query.New(caller, f.nodeID, queryString, nil))
+	q := astral.Launch(aq)
 	if origin != "" {
 		q.Extra.Set("origin", origin)
 	}
@@ -282,6 +323,26 @@ func TestBootstrapClaimsWithGivenWords(t *testing.T) {
 	}
 	checkClaimed(t, f, result.Identity)
 	checkNoWords(t, f)
+	checkUserToken(t, f, result)
+}
+
+// checkUserToken fails unless the node issued exactly one access token, for the
+// claimed user with the default lifetime, and the reply carries it.
+func checkUserToken(t *testing.T, f *bootstrapFixture, result *user.BootstrapResult) {
+	t.Helper()
+	tokens := f.apphost.tokens()
+	if len(tokens) != 1 {
+		t.Fatalf("the node issued %d access tokens; want one", len(tokens))
+	}
+	if !tokens[0].Identity.IsEqual(result.Identity) {
+		t.Fatalf("token issued for %v; want the user %v", tokens[0].Identity, result.Identity)
+	}
+	if f.apphost.ttl[0] != apphostmod.DefaultTokenDuration {
+		t.Fatalf("token lifetime %v; want %v", f.apphost.ttl[0], apphostmod.DefaultTokenDuration)
+	}
+	if result.Token == "" || result.Token != tokens[0].Token {
+		t.Fatalf("reply token %q; want the issued token %q", result.Token, tokens[0].Token)
+	}
 }
 
 // TestBootstrapGeneratesWords: -generate claims the node and returns 24 words
@@ -304,6 +365,26 @@ func TestBootstrapGeneratesWords(t *testing.T) {
 	}
 	checkClaimed(t, f, result.Identity)
 	checkNoWords(t, f)
+	checkUserToken(t, f, result)
+}
+
+// TestBootstrapTokenFailureLeavesTheNodeClaimed: a token the node cannot issue
+// is answered with its error, after the claim.
+func TestBootstrapTokenFailureLeavesTheNodeClaimed(t *testing.T) {
+	f := newBootstrapFixture()
+	f.apphost.fail = errors.New("token store failed")
+
+	objs, err := routeBootstrap(t, f, f.nodeID, "", "user.bootstrap", astral.NewString16(bootstrapWords))
+	if err != nil {
+		t.Fatalf("route: %v", err)
+	}
+	if len(objs) != 1 || objs[0].ObjectType() != "error_message" {
+		t.Fatalf("the op answered %v; want one error_message", objs)
+	}
+	if got := objs[0].(astral.Error).Error(); got != "token store failed" {
+		t.Fatalf("error %q; want the token failure", got)
+	}
+	checkClaimed(t, f, identityOf(t, bootstrapWords))
 }
 
 // TestBootstrapRejects: every refused query is rejected before it is accepted,
@@ -344,6 +425,9 @@ func TestBootstrapRejects(t *testing.T) {
 			}
 			if c.claimed && !f.mod.ActiveContract().Issuer.IsEqual(owner) {
 				t.Fatal("the active contract changed")
+			}
+			if n := len(f.apphost.tokens()); n != 0 {
+				t.Fatalf("the node issued %d access tokens; want none", n)
 			}
 			if !c.claimed && f.mod.ActiveContract() != nil {
 				t.Fatal("the node is claimed")

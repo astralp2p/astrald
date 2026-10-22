@@ -2,6 +2,7 @@
 smoke
 mcp-origin
 claim-window
+token-less-setup
 messaging-ops
 bootstrap-user-software-key
 policy-delegate                # restarts node1: before node2 links to it

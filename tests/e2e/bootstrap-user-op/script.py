@@ -43,8 +43,9 @@ async def given_words(n1: dict) -> dict:
     async with await astral.connect(n1["endpoint"], token=n1["token"]) as c:
         first = await bootstrap(c, "user.bootstrap?in=json&out=json", words)
         second = await bootstrap(c, "user.bootstrap?in=json&out=json", words)
-        user_id = identity_in(first)
-        token = (await c.apphost.create_token(user_id)).token if user_id else ""
+        # why the claim's own token: user.bootstrap returns the User's
+        # credential to the claiming app.
+        token = first["answer"][0]["Object"].get("Token", "") if identity_in(first) else ""
     return {"first": first, "second": second, "user_token": token}
 
 

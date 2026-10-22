@@ -9,13 +9,15 @@ may sudo to. A query of any origin other than local is rejected first.
 - **driver** `script.py` — as the User, register an app, sign the User's own
   contract and ask for one naming the app as subject. As the app, ask for a
   sudo contract in the User's name as issuer and one naming the User as
-  subject. As node1's token, ask for the claim contract on the claimed node.
-  As an anonymous session, ask for a contract in node1's own name. As the User
+  subject. As node1's token, ask for the claim contract on the claimed node
+  and for a contract in node1's own name. As an anonymous session, ask for a
+  contract in node1's own name. As the User
   on node2, ask node1 over the link for the User's own contract. As node1's
   token, clear node1's claim from the tree, ask for a stranger's claim and the
   User's claim, and put the claim back. Record what came back.
 - **oracle** `verify.py` — the control signed as both parties, each local probe
-  was refused by the guard naming the party, the link probe was rejected with
+  with a token was refused by the guard naming the party, the anonymous probe
+  was refused by apphost with `denied`, the link probe was rejected with
   code 1, the stranger's claim passed the guard with the claim cleared while
   the User's claim was refused, node1 answers as the User's node again, and the
   app still cannot sign a text under the User's key.
@@ -57,8 +59,8 @@ key through `crypto.sign_text`; the oracle checks that it still cannot.
 ## Why the driver clears the claim from the tree
 
 `tree.set` on `/mod/user/config/active_contract` needs only
-`mod.auth.configure_node_state_action`. node1's token holds it, and so do
-node1's anonymous session and an app registered with that grant permit.
+`mod.auth.configure_node_state_action`. node1's token holds it, and so does an
+app registered with that grant permit.
 Cleared, node1 reads as unclaimed and the claim exception opens. The User's
 node contract is indexed, so the exception still refuses to sign the User's
 claim again. The stranger's claim is the control: it passes the guard and fails

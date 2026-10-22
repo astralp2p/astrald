@@ -1,11 +1,17 @@
 package apphost
 
 import (
-	usermod "github.com/astralp2p/astrald/mod/user"
+	"io"
+	"net"
 	"testing"
 
+	usermod "github.com/astralp2p/astrald/mod/user"
+
+	"github.com/astralp2p/astral-go/api/apphost"
 	"github.com/astralp2p/astral-go/api/user"
 	"github.com/astralp2p/astral-go/astral"
+	"github.com/astralp2p/astral-go/astral/log"
+	"github.com/astralp2p/astral-go/lib/query"
 )
 
 // stubUser satisfies usermod.Module; only Ready and Identity are exercised.
@@ -63,15 +69,19 @@ func TestInSetupMode(t *testing.T) {
 	}
 }
 
+const trustedOrigin = "https://settings.example"
+
 func withAllowlist(m *Module) *Module {
-	m.config.AnonymousWebAllowlist = AnonymousWebAllowlist{
+	m.config.AllowAnonymous = true
+	m.config.TrustedWebSources = map[string][]PermitConfig{trustedOrigin: nil}
+	m.config.AnonymousAllowlist = AnonymousAllowlist{
 		Unclaimed: []string{"user.info", "tree.set"},
 		Claimed:   []string{"apphost.register"},
 	}
 	return m
 }
 
-func TestBlocksAnonymousWeb(t *testing.T) {
+func TestAdmitsAnonymous(t *testing.T) {
 	ctx := astral.NewContext(nil)
 
 	unclaimed := withAllowlist(&Module{})
@@ -80,40 +90,84 @@ func TestBlocksAnonymousWeb(t *testing.T) {
 	claimed := withAllowlist(&Module{})
 	claimed.User = &stubUser{id: astral.GenerateIdentity(), ready: closedChan()}
 
-	const origin = "https://settings.astrald.app"
+	closed := withAllowlist(&Module{})
+	closed.User = &stubUser{id: nil, ready: closedChan()}
+	closed.config.AllowAnonymous = false
+
 	q := func(s string) *astral.Query { return &astral.Query{QueryString: astral.String32(s)} }
 
 	cases := []struct {
-		name          string
-		mod           *Module
-		webOrigin     string
-		authenticated bool
-		query         string
-		want          bool
+		name   string
+		mod    *Module
+		origin string
+		query  string
+		want   bool
 	}{
-		// IPC (empty origin) is never gated, in either claim state
-		{"IPC, unclaimed, non-listed op", unclaimed, "", false, "apphost.list_tokens", false},
-		{"IPC, claimed, non-listed op", claimed, "", false, "user.expel", false},
-
-		// authenticated web guest is not restricted
-		{"web, authenticated, non-listed op", claimed, origin, true, "user.expel", false},
-
 		// unclaimed: confined to the unclaimed list
-		{"web, unclaimed, listed op", unclaimed, origin, false, "user.info", false},
-		{"web, unclaimed, listed op with params", unclaimed, origin, false, "user.info?in=json", false},
-		{"web, unclaimed, non-listed op", unclaimed, origin, false, "apphost.list_tokens", true},
+		{"unclaimed, listed op", unclaimed, "", "user.info", true},
+		{"unclaimed, listed op with params", unclaimed, "", "user.info?in=json", true},
+		{"unclaimed, non-listed op", unclaimed, "", "apphost.list_tokens", false},
+
+		// unclaimed web: only a trusted origin reaches the unclaimed list
+		{"unclaimed, trusted origin, listed op", unclaimed, trustedOrigin, "user.info", true},
+		{"unclaimed, untrusted origin, listed op", unclaimed, "https://evil.example", "user.info", false},
 
 		// claimed: confined to the claimed list - former setup ops now refused
-		{"web, claimed, listed op", claimed, origin, false, "apphost.register", false},
-		{"web, claimed, unclaimed-only op refused", claimed, origin, false, "user.info", true},
-		{"web, claimed, non-listed op", claimed, origin, false, "apphost.list_tokens", true},
+		{"claimed, listed op", claimed, "", "apphost.register", true},
+		{"claimed, unclaimed-only op refused", claimed, "", "user.info", false},
+		{"claimed, non-listed op", claimed, "", "user.expel", false},
+		{"claimed, untrusted origin, listed op", claimed, "https://evil.example", "apphost.register", true},
+
+		// allow_anonymous false refuses even a listed op
+		{"anonymous not allowed, listed op", closed, "", "user.info", false},
 	}
 
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			if got := c.mod.blocksAnonymousWeb(ctx, c.webOrigin, c.authenticated, q(c.query)); got != c.want {
-				t.Fatalf("blocksAnonymousWeb = %v; want %v", got, c.want)
+			if got := c.mod.admitsAnonymous(ctx, c.origin, q(c.query)); got != c.want {
+				t.Fatalf("admitsAnonymous = %v; want %v", got, c.want)
 			}
 		})
+	}
+}
+
+// callerNode records the caller of each query routed through it and routes
+// none.
+type callerNode struct {
+	astral.Node
+	id     *astral.Identity
+	caller chan *astral.Identity
+}
+
+func (n *callerNode) Identity() *astral.Identity { return n.id }
+
+func (n *callerNode) RouteQuery(_ *astral.Context, q *astral.InFlightQuery, _ io.WriteCloser) (io.WriteCloser, error) {
+	n.caller <- q.Caller
+	return query.RouteNotFound()
+}
+
+// TestRouteQueryNamesTheSessionForAnEmptyCaller: core.Router names an empty
+// caller the node, so a session with a token that leaves the caller empty
+// reaches the router as its own identity.
+func TestRouteQueryNamesTheSessionForAnEmptyCaller(t *testing.T) {
+	srv, cli := net.Pipe()
+	defer srv.Close()
+	defer cli.Close()
+	go io.Copy(io.Discard, cli)
+
+	node := &callerNode{id: astral.GenerateIdentity(), caller: make(chan *astral.Identity, 1)}
+	guest := NewGuest(&Module{node: node, log: log.New(nil)}, srv)
+	guest.guestID = astral.GenerateIdentity()
+
+	err := guest.onRouteQueryMsg(astral.NewContext(nil), &apphost.RouteQueryMsg{
+		Nonce: astral.NewNonce(),
+		Query: "user.expel",
+	})
+	if err != nil {
+		t.Fatalf("route: %v", err)
+	}
+
+	if got := <-node.caller; !got.IsEqual(guest.guestID) {
+		t.Fatalf("caller = %v; want the session's identity %v", got, guest.guestID)
 	}
 }

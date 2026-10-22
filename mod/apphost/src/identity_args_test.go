@@ -12,6 +12,7 @@ import (
 	"github.com/astralp2p/astral-go/astral/channel"
 	"github.com/astralp2p/astral-go/lib/query"
 	"github.com/astralp2p/astral-go/lib/routing"
+	apphostmod "github.com/astralp2p/astrald/mod/apphost"
 	dirmod "github.com/astralp2p/astrald/mod/dir"
 )
 
@@ -118,7 +119,7 @@ func TestListTokensFiltersByIdentity(t *testing.T) {
 	mod.Dir = &namingDir{aliases: map[string]*astral.Identity{"holder": holder}}
 
 	for _, id := range []*astral.Identity{holder, other} {
-		if _, err := mod.CreateAccessToken(id, DefaultTokenDuration); err != nil {
+		if _, err := mod.CreateAccessToken(id, apphostmod.DefaultTokenDuration); err != nil {
 			t.Fatalf("create token: %v", err)
 		}
 	}

@@ -33,8 +33,12 @@ EXPECTED = {
     "app forges user→app sudo": f"authorize issuer: {FOREIGN}",
     "app names the user as subject": f"authorize subject: {FOREIGN}",
     "node token asks the claim on a claimed node": f"authorize issuer: {FOREIGN}",
-    "anonymous asks the node key": f"authorize issuer: {NODE_KEY}",
+    "node token asks the node key": f"authorize issuer: {NODE_KEY}",
 }
+
+# The probe apphost refuses before the guard: a session without a token on a
+# claimed node reaches the anonymous allowlist only.
+DENIED = ("anonymous asks the node key",)
 
 # What a refusal must not read like — each means the call never got a verdict.
 NOT_A_REFUSAL = ("timeout", "timed out", "route_not_found", "routenotfound",
@@ -53,8 +57,14 @@ async def main():
         "— the op signs for no one, so the refusals below prove nothing")
 
     probes = guard["probes"]
-    assert set(probes) == set(EXPECTED) | {"the user over the link"}, (
+    assert set(probes) == set(EXPECTED) | set(DENIED) | {"the user over the link"}, (
         f"probes ran: {sorted(probes)}")
+
+    for name in DENIED:
+        r = probes[name]
+        assert r["refused"] and r["detail"].startswith("Denied"), (
+            f"{name}: {r['detail']!r} — apphost did not refuse a token-less "
+            "session an op off the anonymous allowlist")
 
     for name, text in EXPECTED.items():
         r = probes[name]

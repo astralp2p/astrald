@@ -2,10 +2,10 @@
 """Oracle: one user.bootstrap call claims a node, from given or generated words.
 
 node1's first call must answer one mod.user.bootstrap_result naming
-EXPECTED_USER_ID with no words; its second must be rejected with code 2; acting
-as the User, user.info must name that User as issuer and node1 as subject.
-node2's call must answer 24 words that derive the identity it answered. No
-node log may hold any of the words.
+EXPECTED_USER_ID with no words and a token; its second must be rejected with
+code 2; acting as the User with that token, user.info must name that User as
+issuer and node1 as subject. node2's call must answer 24 words that derive the
+identity it answered, and a token. No node log may hold any of the words.
 """
 import asyncio
 from pathlib import Path
@@ -38,10 +38,14 @@ def check_log_free_of(node: dict, words: str) -> None:
 async def check_node1(n1: dict, facts: dict) -> None:
     first = facts["first"]
     assert not first["refused"], f"first call refused: {first['detail']}"
-    assert first["answer"] == [{
-        "Type": "mod.user.bootstrap_result",
-        "Object": {"Identity": EXPECTED_USER_ID, "Mnemonic": ""},
-    }], f"first call answered {first['answer']}"
+    assert len(first["answer"]) == 1, f"first call answered {first['answer']}"
+    result = first["answer"][0]
+    assert result["Type"] == "mod.user.bootstrap_result" and result["Object"] == {
+        "Identity": EXPECTED_USER_ID, "Mnemonic": "", "Token": result["Object"].get("Token")
+    }, f"first call answered {first['answer']}"
+    assert result["Object"]["Token"], "first call answered no token"
+    assert facts["user_token"] == result["Object"]["Token"], (
+        "the driver did not act with the token the claim returned")
 
     second = facts["second"]
     assert second["refused"] and "code 2" in second["detail"], (
@@ -70,6 +74,7 @@ def check_node2(n2: dict, facts: dict) -> None:
     assert facts["derived"] == result["Object"]["Identity"], (
         f"the words derive {facts['derived']}, "
         f"the reply names {result['Object']['Identity']}")
+    assert result["Object"].get("Token"), "generate answered no token"
     check_log_free_of(n2, words)
 
 

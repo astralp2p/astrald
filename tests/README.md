@@ -161,6 +161,7 @@ Every story of the catalog, in the cheapest env that can falsify it:
 | — | `messaging-ops` | node | `null` → — |
 | — | `mcp-peer` | node | `two-nodes` → — |
 | — | `claim-window` | node | `null` → — |
+| — | `token-less-setup` | node | `null` → — |
 | — | `fs-watch` | node | `one-node` → — |
 | — | `registration-lease` | node | `one-node` → — |
 | — | `policy-delegate` | node | `one-node` → — (restarts node1) |

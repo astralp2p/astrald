@@ -9,7 +9,7 @@ its default validity allows, asked by node1's own session.
 
 - **env** node · **start** `null` · **saves** —
 - **driver** `script.py` — confirm node1 is unclaimed, register an app, then
-  ask as an anonymous session for the claim contract of a stranger's key, the
+  ask as node1's token for the claim contract of a stranger's key, the
   claim issued by node1, the claim issued by the app, the claim with an extra
   sudo permit, and the claim valid for a century. As the app, ask for the
   stranger's claim. Record what came back and whether node1 is still unclaimed.
@@ -22,7 +22,14 @@ its default validity allows, asked by node1's own session.
 The unit tests hold the exception with a stand-in claim state and a stand-in
 signer rule. This drives the real user module's claim state before any
 contract exists, the relay contract `apphost.register` indexes for the app, and
-an anonymous apphost session that `core.Router` gives node1's identity.
+an apphost session authenticated with node1's token, which apphost routes as
+node1's identity.
+
+## Why node1's token and not an anonymous session
+
+The step-by-step setup ops, `auth.sign_contract` and `user.new_node_contract`
+among them, run with the node's token (`.ai/system/topics/node-setup.md`). A
+session without a token reaches only the anonymous allowlist.
 
 ## Why the issuer is a stranger
 

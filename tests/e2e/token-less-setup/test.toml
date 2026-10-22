@@ -1,0 +1,5 @@
+env     = "node"
+start   = "null"
+nodes   = ["claimer", "joiner"]
+drivers = ["script"]
+timeout = 180

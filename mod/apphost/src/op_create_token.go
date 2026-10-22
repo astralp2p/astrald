@@ -1,15 +1,12 @@
 package apphost
 
 import (
-	"time"
-
 	"github.com/astralp2p/astral-go/api/auth"
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astral-go/astral/channel"
 	"github.com/astralp2p/astral-go/lib/routing"
+	apphostmod "github.com/astralp2p/astrald/mod/apphost"
 )
-
-const DefaultTokenDuration = astral.Duration(time.Hour * 24 * 365) // 1 year
 
 type opCreateTokenArgs struct {
 	Identity string `query:"required"`
@@ -39,7 +36,7 @@ func (mod *Module) OpCreateToken(ctx *astral.Context, q *routing.IncomingQuery, 
 	}
 
 	if args.Duration == 0 {
-		args.Duration = DefaultTokenDuration
+		args.Duration = apphostmod.DefaultTokenDuration
 	}
 
 	mod.log.Logv(1, "creating token for %v valid for %v", identity, args.Duration)
