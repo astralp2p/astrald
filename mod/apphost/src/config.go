@@ -83,18 +83,6 @@ var defaultConfig = Config{
 			"user.join",            // ask a swarm node for membership
 			"crypto.list_keys",     // held public keys
 			"apphost.register",     // an app gets its token
-			// todo: the step-by-step setup ops leave the list once control-plane
-			// and the settings apps claim through user.bootstrap.
-			"bip137sig.new_entropy",
-			"bip137sig.mnemonic",
-			"bip137sig.seed",
-			"bip137sig.derive_key",
-			"coldcard.scan",
-			"crypto.public_key",
-			"objects.store",
-			"user.new_node_contract",
-			"auth.sign_contract",
-			"user.accept_contract",
 		},
 		Claimed: []string{
 			"user.info",

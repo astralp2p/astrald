@@ -5,8 +5,8 @@ the claim it previews and claims the node, or joins a swarm from the new node;
 after the claim it reaches `user.info` and `apphost.register` only.
 
 - **env** node · **start** `null` · **saves** —
-- **driver** `script.py` — on `claimer`, with no token: `user.derive_identity
-  -generate`, then `user.bootstrap` with the returned words; authenticate with
+- **driver** `script.py` — on `claimer`, with no token: the step-by-step setup
+  ops and `user.info`, then `user.derive_identity -generate`, then `user.bootstrap` with the returned words; authenticate with
   the token the claim returned; probe the claimed node with ops on and off the
   claimed list; register an app asking for `mod.auth.admin_manage_apps_action`
   and list tokens with it; ask `apphost.whoami` with the app token and no
@@ -14,7 +14,9 @@ after the claim it reaches `user.info` and `apphost.register` only.
   token, `user.join -node <claimer>`, then `user.info` and a second
   `user.join`; with joiner's token, a third `user.join`. Record what came
   back.
-- **oracle** `verify.py` — the previewed identity is the claimed one, the
+- **oracle** `verify.py` — the unclaimed node refused every step-by-step op
+  with `denied` and answered `user.info` with code 2, the previewed identity is
+  the claimed one, the
   token authenticates as the User, the claimed node answers `user.info` and
   `apphost.register` and refuses the rest with `denied`, the registered app
   holds what it asked for, an empty caller from the app's session reads as the
