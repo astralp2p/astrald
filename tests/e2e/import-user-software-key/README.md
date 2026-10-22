@@ -23,6 +23,6 @@ alone is sufficient:
 Run it alone: `./tests/run import-user-software-key`.
 
 The pinned identity is the oracle's whole point. BIP-39 plus BIP-32
-`m/44'/0'/0'/0/0` is deterministic, so an equality against a constant proves
+`m/1791'/0'/0'/0/0` is deterministic, so an equality against a constant proves
 the existing key was used and not a fresh one — the check the netsim
 `verify.sh` could only make when its caller supplied `ASTRAL_USER_ID`.

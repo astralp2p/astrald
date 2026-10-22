@@ -19,7 +19,7 @@ async def main():
         entropy = await c.bip137sig.new_entropy(bits=256)
         mnemonic = await c.bip137sig.mnemonic(entropy)
         seed = await c.bip137sig.seed(mnemonic)
-        privkey = await c.bip137sig.derive_key(seed, path="m/44'/0'/0'/0/0")
+        privkey = await c.bip137sig.derive_key(seed, path="m/1791'/0'/0'/0/0")
 
         # B. persist the key (crypto indexes it as a signer) + derive identity
         await c.objects.store(privkey)

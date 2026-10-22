@@ -23,4 +23,4 @@ Run it alone: `./tests/run bootstrap-user-op`.
 
 The pinned identity is the identity BIP-39 plus BIP-32 `m/1791'/0'/0'/0/0`
 derives from the words. A pure-Python derivation outside astrald computed it;
-the same derivation reproduces `import-user-software-key`'s `m/44'` pin.
+`import-user-software-key` pins the same identity.

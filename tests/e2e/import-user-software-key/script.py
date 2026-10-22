@@ -19,7 +19,7 @@ from lib.sessionio import load, write_facts
 
 MNEMONIC = ("horse soldier imitate stool square buyer verb party enjoy "
             "result jazz rabbit trigger file benefit cloth term change")
-PATH = "m/44'/0'/0'/0/0"
+PATH = "m/1791'/0'/0'/0/0"
 
 
 async def main():
