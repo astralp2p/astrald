@@ -138,11 +138,6 @@ func (guest *Guest) onAuthTokenMsg(ctx *astral.Context, msg *apphost.AuthTokenMs
 }
 
 func (guest *Guest) onRouteQueryMsg(ctx *astral.Context, msg *apphost.RouteQueryMsg) (err error) {
-	// deny if not authenticated and anonymous queries are not allowed
-	if !guest.isAuthenticated() && !guest.mod.config.AllowAnonymous {
-		return guest.Send(&apphost.ErrorMsg{Code: apphost.ErrCodeDenied})
-	}
-
 	var q = &astral.Query{
 		Nonce:       msg.Nonce,
 		Caller:      msg.Caller,
@@ -150,10 +145,16 @@ func (guest *Guest) onRouteQueryMsg(ctx *astral.Context, msg *apphost.RouteQuery
 		QueryString: astral.String32(guest.prepareQueryString(string(msg.Query))),
 	}
 
-	// An unauthenticated web guest is confined to the anonymous_web_allowlist
-	// for the node's claim state.
-	if guest.mod.blocksAnonymousWeb(ctx, guest.webOrigin, guest.isAuthenticated(), q) {
+	// A session without a token is confined to the anonymous_allowlist for the
+	// node's claim state.
+	if !guest.isAuthenticated() && !guest.mod.admitsAnonymous(ctx, guest.webOrigin, q) {
 		return guest.Send(&apphost.ErrorMsg{Code: apphost.ErrCodeDenied})
+	}
+
+	// why: core.Router names an empty caller the node. A session with a token
+	// speaks as its own identity, so an empty caller is that identity.
+	if q.Caller.IsZero() && guest.isAuthenticated() {
+		q.Caller = guest.guestID
 	}
 
 	// check authorization if necessary

@@ -23,23 +23,31 @@ func (mod *Module) inSetupMode(ctx *astral.Context) bool {
 	}
 }
 
-// blocksAnonymousWeb reports whether q must be refused. Only unauthenticated
-// browser guests are gated: IPC callers (empty origin) and token-authenticated
-// guests are trusted with the full op surface. A gated guest is confined to the
-// anonymous_web_allowlist for the node's claim state - the unclaimed list while
-// no user owns the node, the claimed list afterwards. An op absent from the
-// active list is refused. A web guest's Network zone is stripped, so no target
-// check is needed - it cannot reach a peer regardless.
-func (mod *Module) blocksAnonymousWeb(ctx *astral.Context, webOrigin string, authenticated bool, q *astral.Query) bool {
-	if webOrigin == "" || authenticated {
+// admitsAnonymous reports whether a session without a token may send q. The
+// session is confined to the anonymous_allowlist for the node's claim state:
+// the unclaimed list while no user owns the node, the claimed list afterwards.
+// An op absent from the active list is refused. webOrigin is the browser
+// Origin of a WebSocket session, empty for every other session.
+//
+// why every such session, IPC included: core.Router names an empty caller the
+// node, so an op the list admits runs with the node's authority.
+// note: the session's Network zone is stripped, so no target check is needed -
+// it cannot reach a peer regardless.
+func (mod *Module) admitsAnonymous(ctx *astral.Context, webOrigin string, q *astral.Query) bool {
+	if !mod.config.AllowAnonymous {
 		return false
 	}
 
-	allowlist := mod.config.AnonymousWebAllowlist.Claimed
+	allowlist := mod.config.AnonymousAllowlist.Claimed
 	if mod.inSetupMode(ctx) {
-		allowlist = mod.config.AnonymousWebAllowlist.Unclaimed
+		// why: any page open in a local browser reaches /.ws, so only a
+		// trusted origin may set up the node.
+		if webOrigin != "" && !mod.isTrustedWebSource(webOrigin) {
+			return false
+		}
+		allowlist = mod.config.AnonymousAllowlist.Unclaimed
 	}
 
 	opPath, _ := query.Parse(q.QueryString.String())
-	return !slices.Contains(allowlist, opPath)
+	return slices.Contains(allowlist, opPath)
 }

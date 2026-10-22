@@ -59,7 +59,9 @@ async def main():
             f"node1 has no live link to node2 {n2['identity']}; "
             f"linked siblings: {sorted(sibs1) or 'none'}")
 
-    async with await astral.connect(n2["endpoint"]) as c:      # anonymous
+    # why node2's token: a session without a token on a claimed node reaches
+    # user.info and apphost.register only.
+    async with await astral.connect(n2["endpoint"], token=n2["token"]) as c:
         i2 = await c.user.info()
         assert str(i2.user_id) == user_id, "node2 adopted under a different User"
         sibs2 = await await_sibling(c, n1["identity"])

@@ -16,21 +16,22 @@ type Config struct {
 
 	BindHTTP string `yaml:"bind_http,flow"`
 
+	// AllowAnonymous false refuses every query of a session without a token.
 	AllowAnonymous bool `yaml:"allow_anonymous,omitempty"`
 
 	// Web origins recognized as first-party sources of guest queries, each
 	// with the permits registration issues to identities from that origin
 	TrustedWebSources map[string][]PermitConfig `yaml:"trusted_web_sources,omitempty"`
 
-	// Ops an unauthenticated web guest may call, by node claim state
-	AnonymousWebAllowlist AnonymousWebAllowlist `yaml:"anonymous_web_allowlist,omitempty"`
+	// Ops a session without a token may call, by node claim state
+	AnonymousAllowlist AnonymousAllowlist `yaml:"anonymous_allowlist,omitempty"`
 }
 
-// AnonymousWebAllowlist lists the ops an unauthenticated web (browser) guest
-// may call, selected by whether a user has claimed the node. An op absent from
-// the active list is refused. IPC callers and token-authenticated guests are
-// not restricted by these lists.
-type AnonymousWebAllowlist struct {
+// AnonymousAllowlist lists the ops a session without a token may call, IPC
+// and WebSocket alike, selected by whether a user has claimed the node. An op
+// absent from the active list is refused. A session with a token is not
+// restricted by these lists.
+type AnonymousAllowlist struct {
 	// Unclaimed applies while no user owns the node (the setup ceremony).
 	Unclaimed []string `yaml:"unclaimed,omitempty"`
 	// Claimed applies once a user has claimed the node.
@@ -71,9 +72,19 @@ var defaultConfig = Config{
 			{Action: auth.AdminNetworkAction{}.ObjectType()},
 		},
 	},
-	AnonymousWebAllowlist: AnonymousWebAllowlist{
+	// why so few: a session without a token reaches an op as the node. It
+	// needs to learn the claim state, claim the node, and register an app;
+	// everything else is asked with a token.
+	AnonymousAllowlist: AnonymousAllowlist{
 		Unclaimed: []string{
-			"user.info", // state detection (rejects code 2 when no user)
+			"user.info",            // claim state: code 2 while no user owns the node
+			"user.derive_identity", // preview the user that words derive
+			"user.bootstrap",       // claim the node from words
+			"user.join",            // ask a swarm node for membership
+			"crypto.list_keys",     // held public keys
+			"apphost.register",     // an app gets its token
+			// todo: the step-by-step setup ops leave the list once control-plane
+			// and the settings apps claim through user.bootstrap.
 			"bip137sig.new_entropy",
 			"bip137sig.mnemonic",
 			"bip137sig.seed",
@@ -83,8 +94,7 @@ var defaultConfig = Config{
 			"objects.store",
 			"user.new_node_contract",
 			"auth.sign_contract",
-			"user.accept_contract", // guarded active-contract write (replaces tree.set)
-			"user.bootstrap",       // the calls above in one op
+			"user.accept_contract",
 		},
 		Claimed: []string{
 			"user.info",

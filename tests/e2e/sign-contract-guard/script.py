@@ -10,8 +10,9 @@ The driver acts and judges nothing. On node1 it registers an app for the
 User and asks for seven contracts: the User's own (the control), one naming
 the app as subject for the User, two the app asks in the User's name as
 issuer and as subject, the claim contract asked by node1's own token on the
-claimed node, and one in node1's own name asked by an anonymous session. Over
-the link it asks node1 for the User's own contract as the User, from node2.
+claimed node, and one in node1's own name asked by node1's token and by an
+anonymous session. Over the link it asks node1 for the User's own contract as
+the User, from node2.
 
 Last, as node1's token, it clears node1's claim from the tree, asks for a
 stranger's claim (the control) and the User's claim, and puts the claim back.
@@ -155,7 +156,11 @@ async def main():
     async with await astral.connect(n1["endpoint"], token=n1["token"]) as n:
         probes["node token asks the claim on a claimed node"] = await attempt(
             n.auth.sign_contract(claim))
+        probes["node token asks the node key"] = await attempt(
+            n.auth.sign_contract(contract(node1, app.identity, SUDO)))
 
+    # why: a session without a token reaches the claimed node's anonymous
+    # allowlist only, so apphost refuses it before the guard is asked.
     async with await astral.connect(n1["endpoint"]) as anon:
         probes["anonymous asks the node key"] = await attempt(
             anon.auth.sign_contract(contract(node1, app.identity, SUDO)))
