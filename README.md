@@ -35,30 +35,34 @@ $ astral-query localnode:.spec
 
 ## Generating user identity
 
-A new node runs without a user. One `user.bootstrap` call claims it for a user. The [Node Setup](https://github.com/astralp2p/astral-docs/blob/master/topics/node-setup.md) topic documents the user key, who may claim a node, and the step-by-step flow.
+A new node runs without a user. One `user.bootstrap` call claims it for a user and returns an access token for that user. The [Node Setup](https://github.com/astralp2p/astral-docs/blob/master/topics/node-setup.md) topic documents the user key, who may claim a node, the step-by-step flow, and joining a swarm from a new node with `user.join`.
+
+A session without a token reaches the setup ops before the claim, and only `user.info` and `apphost.register` after it ([apphost](https://github.com/astralp2p/astral-docs/blob/master/protocols/apphost/README.md#sessions-without-a-token)). Every other op needs a token.
 
 ### New identity
 
-The node generates 24 words, claims itself for the user they derive, and returns the words in the reply. The reply is the only copy of the words: write them down, they are the user's backup.
+The node generates 24 words and returns the user they derive, and claims nothing. Write the words down: they are the user's backup. The same words then claim the node.
 
 ```shellsession
-$ astral-query user.bootstrap -generate true -out json
-{"Type":"mod.user.bootstrap_result","Object":{"Identity":"02e96bd9...","Mnemonic":"penalty stadium garlic ... rifle fitness garage"}}
+$ astral-query user.derive_identity -generate true -out json
+{"Type":"mod.user.derive_identity_result","Object":{"Identity":"02e96bd9...","Mnemonic":"penalty stadium garlic ... rifle fitness garage"}}
+$ echo '{"Type":"string16","Object":"penalty stadium garlic ... rifle fitness garage"}' | astral-query user.bootstrap -in json -out json
+{"Type":"mod.user.bootstrap_result","Object":{"Identity":"02e96bd9...","Mnemonic":"","Token":"b9c2e1a3d4f5867a"}}
 ```
 
 ### Existing identity
 
-The node claims itself for the user that the given BIP-39 words derive:
+The node claims itself for the user that the given BIP-39 words derive. `user.derive_identity` with the same words previews that user first.
 
 ```shellsession
 $ echo '{"Type":"string16","Object":"horse soldier ... term change"}' | astral-query user.bootstrap -in json -out json
-{"Type":"mod.user.bootstrap_result","Object":{"Identity":"02564ba7...","Mnemonic":""}}
+{"Type":"mod.user.bootstrap_result","Object":{"Identity":"02564ba7...","Mnemonic":"","Token":"b9c2e1a3d4f5867a"}}
 ```
 
-Check the claim; `user.info` names the user and the node:
+Check the claim as the user; `user.info` names the user and the node:
 
 ```shellsession
-$ astral-query user.info -out json
+$ ASTRALD_APPHOST_TOKEN=b9c2e1a3d4f5867a astral-query user.info -out json
 ```
 
 ## Generating guest identity for apps and AI agents

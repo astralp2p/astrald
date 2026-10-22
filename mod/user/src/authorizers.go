@@ -108,8 +108,9 @@ func (mod *Module) AuthorizeStoreObjects(ctx *astral.Context, a *auth.StoreObjec
 // why: a sibling attaching a repository to a host directory is the defect this
 // action was added to close, and a swarm membership is granted on request today, so
 // granting the swarm here would leave that path open. This node's own identity is in
-// the grant because a local caller carrying no identity is promoted to it
-// (core/router.go), which is how the CLI and apphost reach these ops.
+// the grant because a session with the node's token acts as it, which is how
+// the CLI reaches these ops; a token-less local caller is promoted to it too
+// (core/router.go), within apphost's anonymous_allowlist.
 //
 // Widening this to siblings is a decision the node's operator makes, not a default.
 // Replacing the handler with a root rule and contract-issued grants is stage 2.

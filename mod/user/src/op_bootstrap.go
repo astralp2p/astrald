@@ -12,6 +12,7 @@ import (
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astral-go/astral/channel"
 	"github.com/astralp2p/astral-go/lib/routing"
+	apphostmod "github.com/astralp2p/astrald/mod/apphost"
 	secp256k1sig "github.com/astralp2p/astrald/mod/secp256k1"
 	usermod "github.com/astralp2p/astrald/mod/user"
 )
@@ -19,8 +20,9 @@ import (
 // errClaimRefused answers a user the claim rule of auth.sign_contract refuses.
 var errClaimRefused = errors.New("claim refused: the claim rule of auth.sign_contract refuses this user")
 
-// errNoKeyDeriver answers user.bootstrap on a node without the bip137sig module.
-var errNoKeyDeriver = errors.New("user.bootstrap requires the bip137sig module")
+// errNoKeyDeriver answers user.bootstrap and user.derive_identity on a node
+// without the bip137sig module.
+var errNoKeyDeriver = errors.New("user key derivation requires the bip137sig module")
 
 type opBootstrapArgs struct {
 	Generate   bool
@@ -30,8 +32,9 @@ type opBootstrapArgs struct {
 }
 
 // OpBootstrap claims this unclaimed node for the user that BIP-39 words derive
-// along UserKeyPath. The words arrive in the stream, or the node generates them
-// under Generate and returns them in the reply.
+// along UserKeyPath, and returns an access token for that user. The words
+// arrive in the stream, or the node generates them under Generate and returns
+// them in the reply.
 // Spec: .ai/system/protocols/user/ops/user.bootstrap.md
 //
 // why the origin and caller gates of auth.sign_contract: the op signs the
@@ -64,7 +67,15 @@ func (mod *Module) OpBootstrap(ctx *astral.Context, q *routing.IncomingQuery, ar
 		return ch.Send(astral.Err(err))
 	}
 
-	result := &user.BootstrapResult{Identity: userID}
+	// why: once the node is claimed, a session without a token reaches the
+	// claimed anonymous_allowlist only, so the claiming app receives its
+	// credential as the user here.
+	token, err := mod.Apphost.CreateAccessToken(userID, apphostmod.DefaultTokenDuration)
+	if err != nil {
+		return ch.Send(astral.Err(err))
+	}
+
+	result := &user.BootstrapResult{Identity: userID, Token: token.Token}
 	if args.Generate {
 		result.Mnemonic = astral.String16(strings.Join(words, " "))
 	}
@@ -99,16 +110,7 @@ func receiveWords(ch *channel.Channel, generate bool) ([]string, error) {
 // completes a claim that failed after the store, while a claimed node without
 // the user's key cannot sign user.adopt.
 func (mod *Module) bootstrap(ctx *astral.Context, caller *astral.Identity, words []string, passphrase string) (*astral.Identity, error) {
-	if mod.Bip137sig == nil {
-		return nil, errNoKeyDeriver
-	}
-
-	seed, err := bip137sig.MnemonicToSeed(words, passphrase)
-	if err != nil {
-		return nil, err
-	}
-
-	key, err := mod.Bip137sig.DeriveKey(seed, usermod.UserKeyPath)
+	key, err := mod.deriveUserKey(words, passphrase)
 	if err != nil {
 		return nil, err
 	}
@@ -134,6 +136,23 @@ func (mod *Module) bootstrap(ctx *astral.Context, caller *astral.Identity, words
 	}
 
 	return signed.Issuer, nil
+}
+
+// deriveUserKey derives the user's key from BIP-39 words along UserKeyPath.
+//
+// why one function: user.derive_identity previews the user that user.bootstrap
+// claims the node for, so both derive through it.
+func (mod *Module) deriveUserKey(words []string, passphrase string) (crypto.PrivateKey, error) {
+	if mod.Bip137sig == nil {
+		return crypto.PrivateKey{}, errNoKeyDeriver
+	}
+
+	seed, err := bip137sig.MnemonicToSeed(words, passphrase)
+	if err != nil {
+		return crypto.PrivateKey{}, err
+	}
+
+	return mod.Bip137sig.DeriveKey(seed, usermod.UserKeyPath)
 }
 
 // signClaim builds the claim contract from the identity of key to this node,

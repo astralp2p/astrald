@@ -12,6 +12,10 @@ import (
 const ModuleName = "apphost"
 const DBPrefix = "apphost__"
 
+// DefaultTokenDuration is the lifetime of an access token issued without a
+// lifetime named.
+const DefaultTokenDuration = astral.Duration(time.Hour * 24 * 365) // 1 year
+
 // Extra keys apphost sets on an inbound guest query so ops can apply their own
 // authorization. Both are set only when true; absence carries the negative.
 const (

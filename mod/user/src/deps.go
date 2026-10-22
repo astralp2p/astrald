@@ -10,6 +10,7 @@ import (
 	"github.com/astralp2p/astral-go/api/user"
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astrald/core"
+	apphostmod "github.com/astralp2p/astrald/mod/apphost"
 	authmod "github.com/astralp2p/astrald/mod/auth"
 	"github.com/astralp2p/astrald/mod/crypto"
 	"github.com/astralp2p/astrald/mod/dir"
@@ -22,6 +23,7 @@ import (
 )
 
 type Deps struct {
+	Apphost   apphostmod.Module
 	Auth      authmod.Module
 	Crypto    crypto.Module
 	Dir       dir.Module
