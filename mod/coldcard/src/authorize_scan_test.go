@@ -105,7 +105,7 @@ func TestColdcardScanDispatchesAuthorizedCallerToScan(t *testing.T) {
 	invocations := installCkccSubstitute(t)
 	caller := astral.GenerateIdentity()
 	authority := &recordingAuth{verdict: true}
-	mod := &Module{Deps: Deps{Auth: authority}}
+	mod := &Module{Deps: Deps{Auth: authority}, backend: ckccBackend{}}
 	w := newRecordingWriter()
 
 	if err := route(t, mod.OpScan, caller, coldcard.MethodScan, w); err != nil {

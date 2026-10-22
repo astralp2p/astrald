@@ -13,10 +13,11 @@ type Loader struct{}
 func (Loader) Load(node astral.Node, assets assets.Assets, log *log.Logger) (core.Module, error) {
 	var err error
 	var mod = &Module{
-		node:   node,
-		config: defaultConfig,
-		log:    log,
-		assets: assets,
+		node:    node,
+		config:  defaultConfig,
+		log:     log,
+		assets:  assets,
+		backend: ckccBackend{},
 	}
 
 	_ = assets.LoadYAML(coldcard.ModuleName, &mod.config)

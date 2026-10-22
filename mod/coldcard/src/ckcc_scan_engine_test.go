@@ -76,7 +76,7 @@ func TestScanRecordsDevicesWithReadablePubKey(t *testing.T) {
 		"'-s BBB222 pubkey '*) exit 1 ;;",
 	}, "\n"))
 
-	mod := &Module{log: log.New(nil)}
+	mod := &Module{log: log.New(nil), backend: ckccBackend{}}
 
 	if err := mod.Scan(); err != nil {
 		t.Fatalf("Scan err = %v; want nil", err)
@@ -92,21 +92,21 @@ func TestScanRecordsDevicesWithReadablePubKey(t *testing.T) {
 	}
 }
 
-func TestDeviceForPublicKeyHex(t *testing.T) {
+func TestSerialForPublicKeyHex(t *testing.T) {
 	mod := &Module{}
 	mod.devices.Set("AAA111", "02abcdef")
 
-	if dev := mod.deviceForPublicKeyHex("02abcdef"); dev == nil || dev.Serial != "AAA111" {
-		t.Fatalf("deviceForPublicKeyHex(02abcdef) = %+v; want serial AAA111", dev)
+	if serial, found := mod.serialForPublicKeyHex("02abcdef"); !found || serial != "AAA111" {
+		t.Fatalf("serialForPublicKeyHex(02abcdef) = %q, %v; want AAA111, true", serial, found)
 	}
 
-	if dev := mod.deviceForPublicKeyHex("ff"); dev != nil {
-		t.Fatalf("deviceForPublicKeyHex(ff) = %+v; want nil", dev)
+	if serial, found := mod.serialForPublicKeyHex("ff"); found || serial != "" {
+		t.Fatalf("serialForPublicKeyHex(ff) = %q, %v; want \"\", false", serial, found)
 	}
 }
 
 func TestEngineNewTextSigner(t *testing.T) {
-	mod := &Module{}
+	mod := &Module{backend: ckccBackend{}}
 	mod.devices.Set("AAA111", "02abcdef")
 	engine := &Engine{mod: mod}
 
@@ -125,8 +125,8 @@ func TestEngineNewTextSigner(t *testing.T) {
 		t.Fatalf("NewTextSigner(known key) = %T; want *MessageSigner", signer)
 	}
 
-	if ms.dev == nil || ms.dev.Serial != "AAA111" || ms.path != coldcard.BIP44Path {
-		t.Fatalf("MessageSigner = device %+v, path %q; want serial AAA111, path %q", ms.dev, ms.path, coldcard.BIP44Path)
+	if ms.serial != "AAA111" || ms.path != coldcard.BIP44Path || ms.backend == nil {
+		t.Fatalf("MessageSigner = serial %q, path %q; want serial AAA111, path %q", ms.serial, ms.path, coldcard.BIP44Path)
 	}
 
 	tests := []struct {
@@ -152,7 +152,7 @@ func TestEngineNewTextSigner(t *testing.T) {
 
 func TestMessageSignerSignText(t *testing.T) {
 	invocations := installCkccStandIn(t, "'-s AAA111 msg '*) printf 'AQID\\n' ;;")
-	signer := &MessageSigner{dev: ckcc.NewDevice("AAA111"), path: coldcard.BIP44Path}
+	signer := &MessageSigner{backend: ckccBackend{}, serial: "AAA111", path: coldcard.BIP44Path}
 
 	sig, err := signer.SignText(nil, "[abc] hello")
 	if err != nil {
@@ -169,14 +169,14 @@ func TestMessageSignerSignText(t *testing.T) {
 }
 
 func TestMessageSignerSignTextDeviceErrors(t *testing.T) {
-	signer := &MessageSigner{dev: ckcc.NewDevice("AAA111"), path: coldcard.BIP44Path}
+	signer := &MessageSigner{backend: ckccBackend{}, serial: "AAA111", path: coldcard.BIP44Path}
 
 	t.Run("device error", func(t *testing.T) {
 		installCkccStandIn(t, "*) printf 'device locked\\n' >&2; exit 1 ;;")
 
 		_, err := signer.SignText(nil, "hello")
-		if err == nil || err.Error() != "device locked" {
-			t.Fatalf("SignText err = %v; want %q", err, "device locked")
+		if err == nil || !strings.Contains(err.Error(), "device locked") {
+			t.Fatalf("SignText err = %v; want an error naming %q", err, "device locked")
 		}
 	})
 

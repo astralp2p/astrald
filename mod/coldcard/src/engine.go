@@ -8,7 +8,6 @@ import (
 	"github.com/astralp2p/astral-go/api/crypto"
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astrald/mod/coldcard"
-	"github.com/astralp2p/astrald/mod/coldcard/ckcc"
 )
 
 type Engine struct {
@@ -27,23 +26,24 @@ func (e *Engine) NewTextSigner(key *crypto.PublicKey, scheme string) (cryptomod.
 
 	pubKeyHex := hex.EncodeToString(key.Key)
 
-	device := e.mod.deviceForPublicKeyHex(pubKeyHex)
-	if device != nil {
-		return &MessageSigner{dev: device, path: coldcard.BIP44Path}, nil
+	serial, found := e.mod.serialForPublicKeyHex(pubKeyHex)
+	if !found {
+		return nil, cryptomod.ErrUnsupported
 	}
 
-	return nil, cryptomod.ErrUnsupported
+	return &MessageSigner{backend: e.mod.backend, serial: serial, path: coldcard.BIP44Path}, nil
 }
 
 type MessageSigner struct {
-	dev  *ckcc.Device
-	path string
+	backend DeviceBackend
+	serial  string
+	path    string
 }
 
 // SignText signs on the hardware device; the device returns base64 which is
 // decoded into the raw BIP137 signature.
 func (m *MessageSigner) SignText(ctx *astral.Context, msg string) (*crypto.Signature, error) {
-	sigBase64, err := m.dev.Msg(msg, m.path)
+	sigBase64, err := m.backend.SignMessage(m.serial, msg, m.path)
 	if err != nil {
 		return nil, err
 	}

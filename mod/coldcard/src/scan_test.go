@@ -19,8 +19,8 @@ import (
 // pubkey read prints the file `pub.<serial>`. A missing file makes the
 // invocation fail, which is how a lost device and a lost bus are expressed.
 //
-// why: Scan reaches the hardware only through the ckcc executable, so the
-// executable is the seam, and the production shape stays as it is.
+// why: the production backend reaches the hardware only through the ckcc
+// executable, so the executable stands in for the device bus.
 func installCkccScript(t *testing.T) string {
 	t.Helper()
 
@@ -61,8 +61,10 @@ func removeCkccFile(t *testing.T, dir, name string) {
 	}
 }
 
+// newScanModule returns a module wired to the production backend, so Scan runs
+// the ckcc stand-in on PATH.
 func newScanModule() *Module {
-	return &Module{log: log.New(nil)}
+	return &Module{log: log.New(nil), backend: ckccBackend{}}
 }
 
 // TestScanForgetsUnlistedDevice: an unplugged ColdCard stops being offered as a
