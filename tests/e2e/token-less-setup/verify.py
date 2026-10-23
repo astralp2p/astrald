@@ -3,6 +3,11 @@
 nothing else of the claimed node."""
 from lib.sessionio import load
 
+# The step-by-step setup ops; the unclaimed list refuses them with denied.
+STEP_BY_STEP = ("bip137sig.new_entropy", "bip137sig.seed", "bip137sig.derive_key",
+                "crypto.public_key", "objects.store", "user.new_node_contract",
+                "auth.sign_contract", "user.accept_contract")
+
 # Ops the claimed list admits, and ops it refuses with denied.
 ADMITTED = ("user.info", "apphost.register")
 DENIED = ("user.derive_identity", "shell.spec", "apphost.list_tokens")
@@ -12,6 +17,13 @@ def main():
     doc = load()
     nodes, facts = doc["nodes"], doc["facts"]["token_less_setup"]
     claimer, joiner = nodes["claimer"], nodes["joiner"]
+
+    u = facts["unclaimed"]
+    assert u["user.info"]["refused"] and "code 2" in u["user.info"]["detail"], (
+        f"token-less user.info on the unclaimed node: {u['user.info']['detail']}")
+    for op in STEP_BY_STEP:
+        assert u[op]["refused"] and u[op]["detail"].startswith("Denied"), (
+            f"token-less {op} on the unclaimed node: {u[op]['detail']} — want denied")
 
     c = facts["claim"]
     assert c["words"] == 24, f"user.derive_identity -generate answered {c['words']} words"

@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """Driver: set up a node, and join one to it, from sessions without a token.
 
-The driver acts and judges nothing. On claimer it previews the User with
+The driver acts and judges nothing. On claimer it first probes the
+step-by-step setup ops, then previews the User with
 user.derive_identity -generate, claims the node with user.bootstrap and the
 same words, and probes what a token-less session reaches afterwards. On joiner
 it joins claimer's swarm with user.join, then asks to join again without a
@@ -19,6 +20,10 @@ from lib import jsonops
 from lib.sessionio import load, write_facts
 
 ADMIN = "mod.auth.admin_manage_apps_action"
+# The step-by-step setup ops; they run with the node's token.
+STEP_BY_STEP = ("bip137sig.new_entropy", "bip137sig.seed", "bip137sig.derive_key",
+                "crypto.public_key", "objects.store", "user.new_node_contract",
+                "auth.sign_contract", "user.accept_contract")
 # why a deadline: a query that is never routed hangs rather than answering, and
 # the client's default is 60 s.
 DEADLINE = 30
@@ -31,6 +36,13 @@ async def attempt(coro) -> dict:
     except (AstralError, jsonops.OpError) as e:
         return {"refused": True, "detail": f"{type(e).__name__}: {e}"}
     return {"refused": False, "detail": "answered", "answer": answer}
+
+
+async def probe_unclaimed(c) -> dict:
+    """What a token-less session reaches on the unclaimed node, besides setup."""
+    probes = {op: await attempt(jsonops.value(c, f"{op}?out=json")) for op in STEP_BY_STEP}
+    probes["user.info"] = await attempt(c.user.info())
+    return probes
 
 
 async def claim(c) -> dict:
@@ -99,6 +111,7 @@ async def main():
     claimer, joiner = nodes["claimer"], nodes["joiner"]
 
     async with await astral.connect(claimer["endpoint"]) as c:     # anonymous
+        unclaimed = await probe_unclaimed(c)
         claimed = await claim(c)
         probes = await probe_claimed(c)
         admin = await register_admin(c, claimer["endpoint"])
@@ -108,9 +121,9 @@ async def main():
     await link(claimer, joiner)
     joined = await join(joiner, claimer)
 
-    for r in probes.values():
+    for r in list(probes.values()) + list(unclaimed.values()):
         r.pop("answer", None)
-    write_facts({"token_less_setup": {"claim": claimed, "probes": probes,
+    write_facts({"token_less_setup": {"unclaimed": unclaimed, "claim": claimed, "probes": probes,
                                       "admin": admin, "join": joined}})
     print(f"driver: claimed {claimed['claimed']}; joiner joined: "
           f"{joined['joined']['detail']}; second join: {joined['again']['detail']}")
