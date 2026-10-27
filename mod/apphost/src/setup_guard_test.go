@@ -131,6 +131,51 @@ func TestAdmitsAnonymous(t *testing.T) {
 	}
 }
 
+func TestAdmitsAnonymousSpecByDefault(t *testing.T) {
+	ctx := astral.NewContext(nil)
+
+	withDefaults := func(id *astral.Identity) *Module {
+		m := &Module{config: defaultConfig}
+		m.User = &stubUser{id: id, ready: closedChan()}
+		return m
+	}
+	unclaimed := withDefaults(nil)
+	claimed := withDefaults(astral.GenerateIdentity())
+
+	custom := withAllowlist(&Module{})
+	custom.User = &stubUser{id: nil, ready: closedChan()}
+
+	closed := withDefaults(nil)
+	closed.config.AllowAnonymous = false
+
+	q := func(s string) *astral.Query { return &astral.Query{QueryString: astral.String32(s)} }
+
+	cases := []struct {
+		name  string
+		mod   *Module
+		query string
+		want  bool
+	}{
+		{"unclaimed, .spec", unclaimed, ".spec", true},
+		{"unclaimed, .spec with params", unclaimed, ".spec?out=json", true},
+		{"claimed, .spec", claimed, ".spec", true},
+		{"unclaimed, apphost.whoami", unclaimed, "apphost.whoami", false},
+		{"claimed, apphost.whoami", claimed, "apphost.whoami", false},
+		{"unclaimed, tree.list", unclaimed, "tree.list", false},
+		{"claimed, tree.list", claimed, "tree.list", false},
+		{"custom list without .spec", custom, ".spec", false},
+		{"anonymous not allowed, .spec", closed, ".spec", false},
+	}
+
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if got := c.mod.admitsAnonymous(ctx, "", q(c.query)); got != c.want {
+				t.Fatalf("admitsAnonymous = %v; want %v", got, c.want)
+			}
+		})
+	}
+}
+
 // callerNode records the caller of each query routed through it and routes
 // none.
 type callerNode struct {

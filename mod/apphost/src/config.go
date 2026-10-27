@@ -75,6 +75,8 @@ var defaultConfig = Config{
 	// why so few: a session without a token reaches an op as the node. It
 	// needs to learn the claim state, claim the node, and register an app;
 	// everything else is asked with a token.
+	// why .spec: it lists the node's ops and changes nothing, so a session
+	// learns what it may call before it holds a token.
 	AnonymousAllowlist: AnonymousAllowlist{
 		Unclaimed: []string{
 			"user.info",            // claim state: code 2 while no user owns the node
@@ -82,10 +84,12 @@ var defaultConfig = Config{
 			"user.bootstrap",       // claim the node from words
 			"user.join",            // ask a swarm node for membership
 			"apphost.register",     // an app gets its token
+			".spec",                // list the node's ops
 		},
 		Claimed: []string{
 			"user.info",
 			"apphost.register",
+			".spec",
 		},
 	},
 }
