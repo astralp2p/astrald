@@ -19,10 +19,10 @@ func TestCrashLogTimeLayoutIs24Hour(t *testing.T) {
 }
 
 func TestSaveLogRepanicsWhenCrashFileCannotBeCreated(t *testing.T) {
-	prev := LogDir
-	t.Cleanup(func() { LogDir = prev })
+	prev := logDir
+	t.Cleanup(func() { logDir = prev })
 	// note: the parent exists and the directory does not, so os.Create fails
-	LogDir = filepath.Join(t.TempDir(), "missing")
+	logDir = filepath.Join(t.TempDir(), "missing")
 
 	var afterCalls []any
 	after := func(p any) { afterCalls = append(afterCalls, p) }

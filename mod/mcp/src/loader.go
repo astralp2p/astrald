@@ -1,10 +1,13 @@
 package mcp
 
 import (
+	"fmt"
+
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astral-go/astral/log"
 	"github.com/astralp2p/astrald/core"
 	"github.com/astralp2p/astrald/core/assets"
+	"github.com/astralp2p/astrald/lib/paths"
 	mcpmod "github.com/astralp2p/astrald/mod/mcp"
 )
 
@@ -22,6 +25,10 @@ func (Loader) Load(node astral.Node, assets assets.Assets, log *log.Logger) (cor
 	}
 
 	_ = assets.LoadYAML(mcpmod.ModuleName, &mod.config)
+
+	if mod.config.BindMCP, err = paths.FromConfigAddr(mod.config.BindMCP); err != nil {
+		return nil, fmt.Errorf("mcp.yaml bind_mcp: %w", err)
+	}
 
 	// why a start fails on a tool it cannot read: a tool the agent never sees
 	// is a deployment that believes it exposed one, and the failure is silent

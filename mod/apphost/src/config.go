@@ -3,6 +3,7 @@ package apphost
 import (
 	"github.com/astralp2p/astral-go/api/auth"
 	"github.com/astralp2p/astral-go/api/user"
+	"github.com/astralp2p/astrald/lib/paths"
 )
 
 type Config struct {
@@ -92,4 +93,29 @@ var defaultConfig = Config{
 			".spec",
 		},
 	},
+}
+
+// resolveAddrs applies the config path rule to the unix: addresses of listen and bind_http: "~/" is
+// expanded, and a relative path fails. A failed address is logged, naming the file and key, and
+// dropped; a failed bind_http disables the HTTP server.
+//
+// why logged and dropped: a listener that fails to bind is logged and skipped as well, and the
+// node keeps its other endpoints.
+func (mod *Module) resolveAddrs() {
+	listen := make([]string, 0, len(mod.config.Listen))
+	for i, addr := range mod.config.Listen {
+		resolved, err := paths.FromConfigAddr(addr)
+		if err != nil {
+			mod.log.Error("apphost.yaml listen[%v]: %v", i, err)
+			continue
+		}
+		listen = append(listen, resolved)
+	}
+	mod.config.Listen = listen
+
+	bindHTTP, err := paths.FromConfigAddr(mod.config.BindHTTP)
+	if err != nil {
+		mod.log.Error("apphost.yaml bind_http: %v", err)
+	}
+	mod.config.BindHTTP = bindHTTP
 }

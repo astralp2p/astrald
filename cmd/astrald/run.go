@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"path/filepath"
 	"time"
 
 	"github.com/astralp2p/astrald/core"
@@ -21,7 +20,7 @@ func run(ctx context.Context, args *Args) error {
 		return err
 	}
 
-	// why: LogDir is set by setupResources, so the handler is registered after it returns
+	// why: the crash-log directory is set by setupResources, so the handler is registered after it returns
 	defer debug.SaveLog(func(p any) {
 		debug.SigInt(p)
 		time.Sleep(time.Second) // give components time to exit cleanly
@@ -48,13 +47,9 @@ func setupResources(args *Args) (resources.Resources, error) {
 		return mem, nil
 	}
 
-	// derive config and data roots from a single base directory
-	configRoot := defaultConfigRoot()
-	dataRoot := defaultDataRoot()
-
-	if args.Root != "" {
-		configRoot = filepath.Join(args.Root, "config")
-		dataRoot = filepath.Join(args.Root, "data")
+	configRoot, dataRoot, err := nodeRoots(args.Root)
+	if err != nil {
+		return nil, err
 	}
 
 	nodeRes, err := resources.NewFileResources(configRoot, true)
@@ -62,7 +57,9 @@ func setupResources(args *Args) (resources.Resources, error) {
 		return nil, err
 	}
 
-	nodeRes.SetDataRoot(dataRoot)
+	if err = nodeRes.SetDataRoot(dataRoot); err != nil {
+		return nil, err
+	}
 
 	// make sure root directories exist
 	err = os.MkdirAll(configRoot, 0700)
@@ -77,7 +74,9 @@ func setupResources(args *Args) (resources.Resources, error) {
 	}
 
 	// set directory for saving crash logs
-	debug.LogDir = dataRoot
+	if err = debug.SetLogDir(dataRoot); err != nil {
+		return nil, err
+	}
 
 	if err = moveNodeKey(nodeRes); err != nil {
 		return nil, err

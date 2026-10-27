@@ -16,6 +16,7 @@ import (
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astrald/core"
 	"github.com/astralp2p/astrald/debug"
+	"github.com/astralp2p/astrald/lib/paths"
 	"github.com/astralp2p/astrald/mod/dir"
 	"github.com/astralp2p/astrald/mod/ether"
 	ipsrc "github.com/astralp2p/astrald/mod/ip/src"
@@ -149,6 +150,14 @@ func (n *Node) Start() error {
 	if n.configDir == "" {
 		return ErrNotConfigured
 	}
+	if err := paths.CheckAbs(n.configDir); err != nil {
+		return fmt.Errorf("SetConfigDir: %w", err)
+	}
+	if n.dataDir != "" {
+		if err := paths.CheckAbs(n.dataDir); err != nil {
+			return fmt.Errorf("SetDataDir: %w", err)
+		}
+	}
 
 	res, err := setupResources(n.configDir, n.dataDir)
 	if err != nil {
@@ -252,11 +261,14 @@ func setupResources(configDir, dataDir string) (resources.Resources, error) {
 		if err := os.MkdirAll(dataDir, 0700); err != nil {
 			return nil, fmt.Errorf("mkdir data: %w", err)
 		}
-		res.SetDataRoot(dataDir)
+		if err := res.SetDataRoot(dataDir); err != nil {
+			return nil, err
+		}
 	}
 
-	// why: an unset LogDir writes crash logs to the process cwd, which a mobile host may not allow
-	debug.LogDir = res.DataRoot()
+	if err := debug.SetLogDir(res.DataRoot()); err != nil {
+		return nil, err
+	}
 
 	if err := moveNodeKey(res); err != nil {
 		return nil, err

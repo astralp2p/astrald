@@ -91,6 +91,16 @@
 * A streaming op ends with `ch.Send(&astral.EOS{})`.
 * A stream error is sent with `ch.Send(astral.Err(err))`.
 
+## Paths
+
+* Inside astrald, an OS path is absolute. Code past the entry point never expands `~`, never joins the working directory, and never falls back to it.
+* A path is converted once, where it enters: a flag with `paths.FromFlag`, an environment variable with `paths.FromEnv`, a config field with `paths.FromConfig` or `paths.FromConfigAddr`, an op argument with an absolute-and-exists check.
+* A relative path in a config file or an op argument is an error that names its source.
+* A path that a network peer supplies is never opened.
+* A name inside a root is local, checked with `filepath.IsLocal` and joined with `filepath.Join`.
+* An open or create error names the path.
+* SQLite gets the absolute file path and `?` settings, never a `file:` URL.
+
 ## Concurrency
 
 * A mutex field is named `mu` and is never embedded.

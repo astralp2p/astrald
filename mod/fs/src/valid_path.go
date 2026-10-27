@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/astralp2p/astrald/lib/paths"
 	"github.com/astralp2p/astrald/mod/fs"
 )
 
@@ -33,4 +34,15 @@ func validPath(path string) (string, error) {
 	}
 
 	return clean, nil
+}
+
+// configRepoPath checks a repository path from the config file and returns it cleaned. "~/" is
+// expanded; the path must then pass validPath.
+func configRepoPath(path string) (string, error) {
+	path, err := paths.FromConfig(path)
+	if err != nil {
+		return "", err
+	}
+
+	return validPath(path)
 }
