@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -65,7 +66,7 @@ func main() {
 
 	// parse the caller
 	if len(caller) > 0 {
-		callerID, err = dircli.ResolveIdentity(ctx, caller)
+		callerID, err = resolveIdentity(ctx, caller)
 		if err != nil {
 			fatal("error: %v\n", err)
 		}
@@ -78,7 +79,7 @@ func main() {
 
 	// parse the target
 	if len(target) > 0 {
-		targetID, err = dircli.ResolveIdentity(ctx, target)
+		targetID, err = resolveIdentity(ctx, target)
 		if err != nil {
 			fatal("error: %v\n", err)
 		}
@@ -116,6 +117,22 @@ func main() {
 	}()
 
 	io.Copy(os.Stdout, conn)
+}
+
+// resolveIdentity resolves name to an identity. "localnode" is the host node
+// of the apphost connection; every other name goes to the host's dir resolver.
+//
+// why: a session without a token may not call dir.resolve, and the connection
+// already names the host, so "localnode:" works before the caller holds a token.
+func resolveIdentity(ctx *astral.Context, name string) (*astral.Identity, error) {
+	if name != "localnode" {
+		return dircli.ResolveIdentity(ctx, name)
+	}
+	id := astrald.HostID()
+	if id == nil {
+		return nil, errors.New("cannot connect to the host node")
+	}
+	return id, nil
 }
 
 // sendEndOfInput writes an EOS marker to rw, encoded in format — the format the op decodes its
