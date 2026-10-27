@@ -6,14 +6,17 @@ import (
 	"fmt"
 	"io/fs"
 	"os"
-	"path"
+	"path/filepath"
 )
 
 // MoveToDataRoot moves name from the root to the data root. The root copy is removed only after
 // the data-root copy reads back equal to it. A root copy that stays in place returns an error
 // wrapping ErrRootCopyKept; any other error leaves the root copy untouched.
 func (res *FileResources) MoveToDataRoot(name string) error {
-	var oldPath = path.Join(res.root, name)
+	oldPath, err := resourcePath(res.root, name)
+	if err != nil {
+		return err
+	}
 
 	oldInfo, err := os.Stat(oldPath)
 	switch {
@@ -23,7 +26,7 @@ func (res *FileResources) MoveToDataRoot(name string) error {
 		return err
 	}
 
-	newInfo, err := os.Stat(path.Join(res.DataRoot(), name))
+	newInfo, err := os.Stat(filepath.Join(res.DataRoot(), name))
 	switch {
 	case errors.Is(err, fs.ErrNotExist):
 		err = res.copyToDataRoot(name)
@@ -63,7 +66,7 @@ func (res *FileResources) copyToDataRoot(name string) error {
 	}
 
 	if !bytes.Equal(copied, data) {
-		return fmt.Errorf("%s reads back different from %s", path.Join(res.DataRoot(), name), path.Join(res.root, name))
+		return fmt.Errorf("%s reads back different from %s", filepath.Join(res.DataRoot(), name), filepath.Join(res.root, name))
 	}
 
 	return nil
@@ -84,7 +87,7 @@ func (res *FileResources) matchDataRootCopy(name string) error {
 	}
 
 	if !bytes.Equal(old, cur) {
-		return fmt.Errorf("%w: %s differs from %s", ErrRootCopyKept, path.Join(res.root, name), path.Join(res.DataRoot(), name))
+		return fmt.Errorf("%w: %s differs from %s", ErrRootCopyKept, filepath.Join(res.root, name), filepath.Join(res.DataRoot(), name))
 	}
 
 	return nil

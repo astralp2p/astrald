@@ -5,6 +5,7 @@ import (
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astral-go/astral/channel"
 	"github.com/astralp2p/astral-go/lib/routing"
+	"github.com/astralp2p/astrald/lib/paths"
 )
 
 type opRegisterHandlerArgs struct {
@@ -32,6 +33,12 @@ func (mod *Module) OpRegisterHandler(ctx *astral.Context, q *routing.IncomingQue
 
 	ch := channel.New(q.AcceptRaw(), channel.WithFormats(args.In, args.Out))
 	defer ch.Close()
+
+	// why: the endpoint is dialed for every query, so a relative unix: path would name a socket
+	// relative to the node's working directory.
+	if err = paths.CheckAddr(args.Endpoint); err != nil {
+		return ch.Send(astral.Err(err))
+	}
 
 	// add the handler
 	// note: Owner is the session that registered it, and is what apphost.bind

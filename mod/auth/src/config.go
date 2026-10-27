@@ -1,6 +1,11 @@
 package auth
 
-import "time"
+import (
+	"fmt"
+	"time"
+
+	"github.com/astralp2p/astrald/lib/paths"
+)
 
 type Config struct {
 	// ExternalAuthorizers defer named actions to an authority outside the node.
@@ -54,4 +59,22 @@ func (c ExternalConfig) withDefaults() ExternalConfig {
 		c.Timeout = defaultExternal.Timeout
 	}
 	return c
+}
+
+// resolveTokenFiles applies the config path rule to every token_file: "~/" is expanded, and a
+// relative path fails, naming the file and key.
+func resolveTokenFiles(configs []ExternalConfig) error {
+	for i := range configs {
+		if configs[i].TokenFile == "" {
+			continue
+		}
+
+		p, err := paths.FromConfig(configs[i].TokenFile)
+		if err != nil {
+			return fmt.Errorf("auth.yaml external_authorizers[%d].token_file: %w", i, err)
+		}
+		configs[i].TokenFile = p
+	}
+
+	return nil
 }

@@ -8,6 +8,7 @@ import (
 
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astral-go/lib/astrald"
+	"github.com/astralp2p/astrald/resources"
 )
 
 // Run starts the node, waits for it to finish and returns an error if any
@@ -19,6 +20,11 @@ func (node *Node) Run(nctx context.Context) (err error) {
 		node.identity,
 		node.identity.String(),
 	)
+
+	if res, ok := node.assets.Res().(*resources.FileResources); ok {
+		node.log.Log("config root: %v", res.Root())
+		node.log.Log("data root: %v", res.DataRoot())
+	}
 
 	// set this node as the default router for lib/astrald
 	astrald.SetDefault(NewClientAs(node, node.identity))

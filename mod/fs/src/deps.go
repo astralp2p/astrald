@@ -6,6 +6,7 @@ import (
 	"github.com/astralp2p/astrald/core"
 	"github.com/astralp2p/astrald/mod/auth"
 	"github.com/astralp2p/astrald/mod/dir"
+	"github.com/astralp2p/astrald/mod/fs"
 	objectsmod "github.com/astralp2p/astrald/mod/objects"
 	"github.com/astralp2p/astrald/mod/shell"
 	treemod "github.com/astralp2p/astrald/mod/tree"
@@ -46,6 +47,13 @@ func (mod *Module) LoadDependencies(ctx *astral.Context) (err error) {
 // it and returned non-nil, which core/modules.go:120 turns into a panic.
 func (mod *Module) addConfigRepos() {
 	for name, cfg := range mod.config.Repos {
+		path, repoErr := configRepoPath(cfg.Path)
+		if repoErr != nil {
+			mod.log.Error("%v.yaml repos.%v.path: %v", fs.ModuleName, name, repoErr)
+			continue
+		}
+		cfg.Path = path
+
 		repo, repoErr := mod.newRepo(cfg, false)
 		if repoErr != nil {
 			mod.log.Error("error adding repo %v: %v", name, repoErr)

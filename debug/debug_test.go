@@ -1,17 +1,22 @@
 package debug
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/astralp2p/astrald/lib/paths"
 )
 
 func setLogDir(t *testing.T, dir string) {
 	t.Helper()
-	prev := LogDir
-	LogDir = dir
-	t.Cleanup(func() { LogDir = prev })
+	prev := logDir
+	if err := SetLogDir(dir); err != nil {
+		t.Fatalf("SetLogDir(%q): %v", dir, err)
+	}
+	t.Cleanup(func() { logDir = prev })
 }
 
 func crashLogs(t *testing.T, dir string) []string {
@@ -105,5 +110,31 @@ func TestSaveLogKeepsSameSecondCrashLogs(t *testing.T) {
 		if !strings.Contains(all, want) {
 			t.Errorf("crash logs do not contain %q", want)
 		}
+	}
+}
+
+func TestSetLogDirRefusesRelativePath(t *testing.T) {
+	setLogDir(t, t.TempDir())
+	prev := LogDir()
+
+	if err := SetLogDir("rel"); !errors.Is(err, paths.ErrNotAbsolute) {
+		t.Fatalf("SetLogDir(rel) error = %v, want %v", err, paths.ErrNotAbsolute)
+	}
+	if LogDir() != prev {
+		t.Fatalf("LogDir() after a refused SetLogDir = %q, want %q", LogDir(), prev)
+	}
+}
+
+// TestSaveLogWithoutDirWritesNoFile: a crash with no crash-log directory writes no file in the
+// working directory and still re-panics.
+func TestSaveLogWithoutDirWritesNoFile(t *testing.T) {
+	cwd := t.TempDir()
+	t.Chdir(cwd)
+	setLogDir(t, "")
+
+	crashAndRecover("boom")
+
+	if logs := crashLogs(t, cwd); len(logs) != 0 {
+		t.Fatalf("crash logs in the working directory = %q, want none", logs)
 	}
 }

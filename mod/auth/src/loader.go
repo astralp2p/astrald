@@ -29,6 +29,10 @@ func (Loader) Load(node astral.Node, assets assets.Assets, log *log.Logger) (cor
 
 	mod.Add(authmod.Func[*auth.SudoAction](mod.AuthorizeSudo))
 
+	if err = resolveTokenFiles(mod.config.ExternalAuthorizers); err != nil {
+		return nil, err
+	}
+
 	// note: the configured authorizers are checked here, so a misconfiguration
 	// fails the load; they reach the tree and the registry in LoadDependencies.
 	if mod.configured, err = configAssignments(mod.config.ExternalAuthorizers); err != nil {

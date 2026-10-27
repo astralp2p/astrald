@@ -2,6 +2,7 @@ package assets
 
 import (
 	"errors"
+	"fmt"
 	"path/filepath"
 	"strings"
 	"time"
@@ -16,9 +17,9 @@ var _ Assets = &CoreAssets{}
 
 var dbOpen func(string) gorm.Dialector
 
-// dbDSN turns a database path into a driver-specific DSN carrying the
-// concurrency pragmas. Set by whichever sqlite build variant is compiled in;
-// the two drivers spell their pragmas differently.
+// dbSettings is the query part of a database DSN: the concurrency pragmas.
+// Set by whichever sqlite build variant is compiled in; the two drivers spell
+// their pragmas differently.
 //
 // why: modules load their dependencies concurrently (core.Modules.
 // loadDependencies runs one goroutine per module), so several of them open and
@@ -27,7 +28,7 @@ var dbOpen func(string) gorm.Dialector
 // panics on it — a node that dies at startup roughly one boot in four under
 // load. WAL lets readers run while a writer holds the file, which is the
 // shape of that contention.
-var dbDSN func(string) string
+var dbSettings string
 
 const defaultDatabaseName = "astrald"
 
@@ -153,9 +154,14 @@ func (assets *CoreAssets) OpenDatabase(name string) (*gorm.DB, error) {
 // timeout.
 // note: sqlite admits one writer at a time, so the cap costs only concurrent reads.
 func openFileDatabase(path string, cfg *gorm.Config) (*gorm.DB, error) {
-	db, err := gorm.Open(dbOpen(dbDSN(path)), cfg)
+	dsn, err := dbDSN(path)
 	if err != nil {
 		return nil, err
+	}
+
+	db, err := gorm.Open(dbOpen(dsn), cfg)
+	if err != nil {
+		return nil, fmt.Errorf("open database %v: %w", path, err)
 	}
 
 	sqlDB, err := db.DB()

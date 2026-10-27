@@ -19,7 +19,11 @@ const (
 )
 
 func main() {
-	var args = parseArgs()
+	args, err := parseArgs()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		os.Exit(ExitNodeError)
+	}
 
 	if args.Version {
 		os.Exit(printVersion())

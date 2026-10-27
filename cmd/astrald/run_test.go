@@ -14,10 +14,10 @@ import (
 	"github.com/astralp2p/astrald/resources"
 )
 
-// keepLogDir restores debug.LogDir after the test.
+// keepLogDir restores the crash-log directory after the test.
 func keepLogDir(t *testing.T) {
-	prev := debug.LogDir
-	t.Cleanup(func() { debug.LogDir = prev })
+	prev := debug.LogDir()
+	t.Cleanup(func() { debug.SetLogDir(prev) })
 }
 
 // startOldLayout writes node_key the way a version that kept it in the config root did.
@@ -76,8 +76,8 @@ func TestSetupResourcesFreshRoot(t *testing.T) {
 	if err := statKey(t, filepath.Join(root, "config")); !errors.Is(err, fs.ErrNotExist) {
 		t.Fatalf("node_key in the config root: stat error = %v, want fs.ErrNotExist", err)
 	}
-	if want := filepath.Join(root, "data"); debug.LogDir != want {
-		t.Fatalf("debug.LogDir = %q, want the data root %q", debug.LogDir, want)
+	if want := filepath.Join(root, "data"); debug.LogDir() != want {
+		t.Fatalf("debug.LogDir() = %q, want the data root %q", debug.LogDir(), want)
 	}
 }
 

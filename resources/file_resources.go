@@ -5,7 +5,9 @@ import (
 	"fmt"
 	"io/fs"
 	"os"
-	"path"
+	"path/filepath"
+
+	"github.com/astralp2p/astrald/lib/paths"
 )
 
 var _ Resources = &FileResources{}
@@ -15,7 +17,12 @@ type FileResources struct {
 	dataRoot string
 }
 
+// NewFileResources returns resources rooted at root. root must be absolute.
 func NewFileResources(root string, mkdir bool) (*FileResources, error) {
+	if err := paths.CheckAbs(root); err != nil {
+		return nil, err
+	}
+
 	fileInfo, err := os.Stat(root)
 	if err != nil {
 		if !mkdir {
@@ -34,8 +41,14 @@ func NewFileResources(root string, mkdir bool) (*FileResources, error) {
 	}, nil
 }
 
-func (res *FileResources) SetDataRoot(dataRoot string) {
+// SetDataRoot sets the data root. dataRoot must be absolute.
+func (res *FileResources) SetDataRoot(dataRoot string) error {
+	if err := paths.CheckAbs(dataRoot); err != nil {
+		return err
+	}
+
 	res.dataRoot = dataRoot
+	return nil
 }
 
 func (res *FileResources) Read(name string) ([]byte, error) {
@@ -48,7 +61,12 @@ func (res *FileResources) ReadData(name string) ([]byte, error) {
 }
 
 func readFile(dir, name string) ([]byte, error) {
-	bytes, err := os.ReadFile(path.Join(dir, name))
+	p, err := resourcePath(dir, name)
+	if err != nil {
+		return nil, err
+	}
+
+	bytes, err := os.ReadFile(p)
 
 	switch {
 	case err == nil:
@@ -61,13 +79,18 @@ func readFile(dir, name string) ([]byte, error) {
 }
 
 func (res *FileResources) Write(name string, data []byte) error {
+	p, err := resourcePath(res.root, name)
+	if err != nil {
+		return err
+	}
+
 	if s, _ := os.Stat(res.root); s == nil || !s.IsDir() {
 		if err := os.MkdirAll(res.root, 0700); err != nil {
 			return fmt.Errorf("cannot create config directory: %w", err)
 		}
 	}
 
-	return os.WriteFile(path.Join(res.root, name), data, 0600)
+	return os.WriteFile(p, data, 0600)
 }
 
 // WriteData writes data to name in the data root with mode 0600.
@@ -76,6 +99,11 @@ func (res *FileResources) Write(name string, data []byte) error {
 // a crash leaves the previous file or the complete new one, never a partial key.
 func (res *FileResources) WriteData(name string, data []byte) error {
 	var dir = res.DataRoot()
+	p, err := resourcePath(dir, name)
+	if err != nil {
+		return err
+	}
+
 	if err := os.MkdirAll(dir, 0700); err != nil {
 		return fmt.Errorf("cannot create data directory: %w", err)
 	}
@@ -98,7 +126,7 @@ func (res *FileResources) WriteData(name string, data []byte) error {
 		return err
 	}
 
-	return os.Rename(tmp.Name(), path.Join(dir, name))
+	return os.Rename(tmp.Name(), p)
 }
 
 func (res *FileResources) Root() string {
@@ -111,4 +139,13 @@ func (res *FileResources) DataRoot() string {
 	}
 
 	return res.Root()
+}
+
+// resourcePath joins name to dir. name must be local to dir.
+func resourcePath(dir, name string) (string, error) {
+	if !filepath.IsLocal(name) {
+		return "", fmt.Errorf("%q: %w", name, ErrNotLocal)
+	}
+
+	return filepath.Join(dir, name), nil
 }

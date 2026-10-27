@@ -7,9 +7,11 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/astralp2p/astrald/debug"
+	"github.com/astralp2p/astrald/lib/paths"
 	"github.com/astralp2p/astrald/resources"
 )
 
@@ -76,8 +78,8 @@ func TestSetupResources(t *testing.T) {
 	cfg := filepath.Join(tmp, "cfg")
 	data := filepath.Join(tmp, "data")
 
-	prevLogDir := debug.LogDir
-	t.Cleanup(func() { debug.LogDir = prevLogDir })
+	prevLogDir := debug.LogDir()
+	t.Cleanup(func() { debug.SetLogDir(prevLogDir) })
 
 	tests := []struct {
 		name     string
@@ -90,7 +92,7 @@ func TestSetupResources(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			debug.LogDir = ""
+			debug.SetLogDir("")
 			res, err := setupResources(cfg, tt.dataDir)
 			if err != nil {
 				t.Fatalf("setupResources: %v", err)
@@ -107,8 +109,8 @@ func TestSetupResources(t *testing.T) {
 			if got := roots.DataRoot(); got != tt.wantRoot {
 				t.Fatalf("DataRoot() = %q, want %q", got, tt.wantRoot)
 			}
-			if debug.LogDir != tt.wantRoot {
-				t.Fatalf("debug.LogDir = %q, want the data root %q", debug.LogDir, tt.wantRoot)
+			if debug.LogDir() != tt.wantRoot {
+				t.Fatalf("debug.LogDir() = %q, want the data root %q", debug.LogDir(), tt.wantRoot)
 			}
 		})
 	}
@@ -122,8 +124,8 @@ func TestSetupResourcesMovesNodeKey(t *testing.T) {
 	cfg := filepath.Join(tmp, "cfg")
 	data := filepath.Join(tmp, "data")
 
-	prevLogDir := debug.LogDir
-	t.Cleanup(func() { debug.LogDir = prevLogDir })
+	prevLogDir := debug.LogDir()
+	t.Cleanup(func() { debug.SetLogDir(prevLogDir) })
 
 	old, err := resources.NewFileResources(cfg, true)
 	if err != nil {
@@ -150,5 +152,35 @@ func TestSetupResourcesMovesNodeKey(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(cfg, "node_key")); !errors.Is(err, fs.ErrNotExist) {
 		t.Fatalf("node_key still in the config dir: stat error = %v", err)
+	}
+}
+
+// TestStartRefusesRelativeDirs: a relative config or data directory makes Start return an error
+// naming its setter, and nothing is created in the working directory.
+func TestStartRefusesRelativeDirs(t *testing.T) {
+	cwd := t.TempDir()
+	t.Chdir(cwd)
+
+	cases := []struct {
+		name, configDir, dataDir, setter string
+	}{
+		{"relative config dir", "relcfg", "", "SetConfigDir"},
+		{"relative data dir", filepath.Join(cwd, "cfg"), "reldata", "SetDataDir"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			n := NewNode()
+			n.SetConfigDir(c.configDir)
+			n.SetDataDir(c.dataDir)
+
+			err := n.Start()
+			if !errors.Is(err, paths.ErrNotAbsolute) || !strings.HasPrefix(err.Error(), c.setter+":") {
+				t.Fatalf("Start() error = %v, want ErrNotAbsolute naming %s", err, c.setter)
+			}
+		})
+	}
+
+	if entries, _ := os.ReadDir(cwd); len(entries) != 0 {
+		t.Fatalf("working directory holds %v after refused starts, want nothing", entries)
 	}
 }
