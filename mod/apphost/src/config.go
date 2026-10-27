@@ -81,7 +81,6 @@ var defaultConfig = Config{
 			"user.derive_identity", // preview the user that words derive
 			"user.bootstrap",       // claim the node from words
 			"user.join",            // ask a swarm node for membership
-			"crypto.list_keys",     // held public keys
 			"apphost.register",     // an app gets its token
 		},
 		Claimed: []string{
