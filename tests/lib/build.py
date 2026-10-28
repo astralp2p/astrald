@@ -14,14 +14,19 @@ def git_ref(checkout: Path) -> str:
     return p.stdout.strip()
 
 
-def lacks_commit(checkout: Path, commit: str) -> bool:
-    """Whether a checkout's HEAD lacks commit. A tree git cannot read lacks it."""
+def missing_commit(checkout: Path, commit: str) -> str:
+    """Why a checkout's HEAD does not hold commit, or "" when it does."""
     try:
-        subprocess.run(["git", "merge-base", "--is-ancestor", commit, "HEAD"],
-                       cwd=checkout, check=True, capture_output=True)
-    except (OSError, subprocess.CalledProcessError):
-        return True
-    return False
+        p = subprocess.run(["git", "merge-base", "--is-ancestor", commit, "HEAD"],
+                           cwd=checkout, capture_output=True, text=True)
+    except OSError as e:
+        return f"git cannot run: {e}"
+    if p.returncode == 0:
+        return ""
+    if p.returncode == 1:
+        return f"{git_ref(checkout)} lacks {commit[:8]}"
+    return (f"git cannot tell whether it holds {commit[:8]} (a shallow or "
+            f"unfetched checkout?): {p.stderr.strip()}")
 
 
 def query_binary(binary: Path) -> Path:

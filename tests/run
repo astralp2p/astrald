@@ -32,7 +32,7 @@ def target(value: str) -> str:
 
 
 def astral_src() -> Path:
-    from lib.build import git_ref, lacks_commit
+    from lib.build import missing_commit
 
     cfg = tomllib.loads((TESTS / "config.toml").read_text())["astral_py"]
     checkout = Path(os.path.expanduser(cfg["path"]))
@@ -40,10 +40,10 @@ def astral_src() -> Path:
     if not (src / "astral" / "__init__.py").exists():
         sys.exit(f"run: astral-py not found at {src} (config.toml astral_py.path)")
     required = cfg["requires"]
-    if lacks_commit(checkout, required):
-        sys.exit(f"run: astral-py at {checkout} is {git_ref(checkout)}, which "
-                 f"lacks {required[:8]}; these tests need astral-py "
-                 f"{required[:8]} or later (config.toml astral_py.requires)")
+    if reason := missing_commit(checkout, required):
+        sys.exit(f"run: astral-py at {checkout}: {reason}; these tests need "
+                 f"astral-py {required[:8]} or later "
+                 "(config.toml astral_py.requires)")
     return src
 
 
@@ -66,9 +66,9 @@ def main() -> int:
     if sys.version_info < (3, 11):
         sys.exit("run: Python >= 3.11 required")
 
-    src = astral_src()
-    sys.path.insert(0, str(src))
     sys.path.insert(0, str(TESTS))
+    src = astral_src()
+    sys.path.insert(1, str(src))
     os.environ["ASTRAL_TESTS_PYPATH"] = f"{TESTS}{os.pathsep}{src}"
 
     from lib import runner
