@@ -137,9 +137,11 @@ the nodes run from the system temp directory, which `session/` links to
 until teardown copies their state back: a node's SQLite fsyncs on a busy SD
 card stall for tens of seconds, and a tmpfs temp directory does not.
 
-A hermetic run strips astral-py's ambient endpoint and token variables from
-the driver environment: an `ASTRALD_APPHOST_TOKEN` in the shell otherwise
-answers for a test's anonymous connect and the test node refuses it.
+Every target but `attach` strips astral-py's ambient endpoint and token
+variables from the driver environment: an `ASTRALD_APPHOST_TOKEN` in the shell
+otherwise answers for a test's anonymous connect and the test node refuses it.
+The header's `hermetic` is provenance only — true for `fresh` — and does not
+decide the stripping.
 
 ## Coverage
 

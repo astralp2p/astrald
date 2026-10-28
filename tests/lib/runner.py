@@ -60,19 +60,23 @@ def _perform(ex, t, driver: str, art: Path, env: dict) -> tuple:
     return ("pass", None) if rc == 0 else ("fail", "verify")
 
 
-def driver_env(session_json: Path, hermetic: bool) -> dict:
+def driver_env(session_json: Path, target: str) -> dict:
     """The environment drivers and oracles run in.
 
     why: astral-py resolves an endpoint and a token from the ambient
     environment whenever a call passes none, so a developer's own daemon
     token answers for a test's anonymous connect and the test node refuses
-    it. A hermetic run resolves nothing from outside session.json; --target
+    it. Every target but attach resolves nothing from outside session.json;
     attach is the one mode where the ambient resolution is the point.
+
+    note: this keys off the target, not the header's `hermetic`. A pinned
+    stage is not hermetic, yet its nodes are the harness's, not the
+    developer's.
     """
     env = dict(os.environ,
                PYTHONPATH=os.environ.get("ASTRAL_TESTS_PYPATH", str(TESTS)),
                ASTRAL_TESTS_SESSION=str(session_json))
-    if hermetic:
+    if target != "attach":
         for var in ENDPOINT_VARS + TOKEN_VARS:
             env.pop(var, None)
     return env
@@ -225,7 +229,7 @@ def main(args) -> int:
         ex.want_model(profile.get("model", ""), profile.get("base_url", ""))
         results.header["agent_profile"] = name
         results.header["agent_model"] = profile.get("model", "") or "(lab default)"
-    base_env = driver_env(ex.session_json_path, results.header["hermetic"])
+    base_env = driver_env(ex.session_json_path, args.target)
 
     mutators = [t.name for t, _ in plan if t.mutates]
     if args.target != "fresh" and mutators:
