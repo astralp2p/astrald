@@ -259,7 +259,9 @@ lying about exactly the case the third status exists for.
 
 Python ≥ 3.11, a Go toolchain, and an astral-py checkout (path in
 `config.toml`) — imported directly from its `src/`, since the package has
-zero dependencies. No venv, no pip. Env `netsim` additionally needs a
+zero dependencies. The checkout holds the commit `config.toml`
+`astral_py.requires` names; `tests/run` refuses an older one before it builds
+anything. No venv, no pip. Env `netsim` additionally needs a
 working `netsim` on PATH. `./tests/link.sh` registers this tree's
 netsim ops — the ones a test dispatches as steps and the ones a lab recipe
 builds the world with, which live together because netsim cannot tell them

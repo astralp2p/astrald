@@ -14,6 +14,21 @@ def git_ref(checkout: Path) -> str:
     return p.stdout.strip()
 
 
+def missing_commit(checkout: Path, commit: str) -> str:
+    """Why a checkout's HEAD does not hold commit, or "" when it does."""
+    try:
+        p = subprocess.run(["git", "merge-base", "--is-ancestor", commit, "HEAD"],
+                           cwd=checkout, capture_output=True, text=True)
+    except OSError as e:
+        return f"git cannot run: {e}"
+    if p.returncode == 0:
+        return ""
+    if p.returncode == 1:
+        return f"{git_ref(checkout)} lacks {commit[:8]}"
+    return (f"git cannot tell whether it holds {commit[:8]} (a shallow or "
+            f"unfetched checkout?): {p.stderr.strip()}")
+
+
 def query_binary(binary: Path) -> Path:
     """The astral-query ensure_binary builds beside an astrald."""
     return Path(binary).with_name("astral-query")

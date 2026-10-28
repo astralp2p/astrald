@@ -8,6 +8,10 @@ spans = 20              # spans from base: 20 concurrent runs per host
 
 [astral_py]
 path = "~/work/astralp2p/astral-py/master"
+# The oldest astral-py commit these tests run against. d80c0ac sends the
+# identity argument names astrald bd98bbe8 declares; a checkout without it
+# is refused before the first query.
+requires = "d80c0acdf537f02596f386b535215ce6237d7373"
 
 [build]
 package = "./cmd/astrald"
