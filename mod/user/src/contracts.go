@@ -212,7 +212,7 @@ func (mod *Module) IssueMembership(ctx *astral.Context, nodeID *astral.Identity)
 
 	issuerSig, err := mod.Auth.SignIssuer(ctx, signed)
 	if err != nil {
-		return nil, fmt.Errorf("sign as issuer: %w", err)
+		return nil, err
 	}
 
 	subjectSig, err := userClient.New(nodeID, nil).AcceptMembership(ctx, contract, issuerSig)

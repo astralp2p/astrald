@@ -9,9 +9,9 @@ node1 does not hold, node1 itself, or an app node1 minted.
 
 why an issuer whose key node1 does not hold: the guard and the signing that
 follows are separate steps. Admitted, such a contract fails at signing
-("sign as issuer: unsupported"); refused, it fails at the guard naming the
-party. The control reads the first, the probes the second, and node1 stays
-unclaimed for the tests after this one.
+("sign as issuer: no signing scheme available for key …"); refused, it fails at
+the guard naming the party. The control reads the first, the probes the second,
+and node1 stays unclaimed for the tests after this one.
 
 why the driver checks the claim state first: the window exists only on an
 unclaimed node, and the runner's states name no such state. A selection that

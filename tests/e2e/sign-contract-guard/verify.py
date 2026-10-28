@@ -86,7 +86,7 @@ async def main():
     cleared = guard["cleared"]
     control = cleared["stranger's claim, claim cleared"]
     assert control["refused"] and "authorize" not in control["detail"] \
-        and "sign as issuer: unsupported" in control["detail"], (
+        and "sign as issuer: no signing scheme available for key" in control["detail"], (
             f"the stranger's claim answered {control['detail']} with the claim "
             "cleared — the exception is closed, so the refusal below proves nothing")
     r = cleared["user's claim, claim cleared"]

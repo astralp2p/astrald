@@ -232,11 +232,16 @@ func (mod *Module) Sign(ctx *astral.Context, key *crypto.PublicKey, obj crypto.S
 		}
 	}
 
-	if signer, err := mod.TextObjectSigner(key); err == nil {
-		return signer.SignTextObject(ctx, obj)
+	signer, err := mod.TextObjectSigner(key)
+	if err != nil {
+		return nil, err
 	}
 
-	return nil, fmt.Errorf("no signing scheme available for key %v", key)
+	sig, err := signer.SignTextObject(ctx, obj)
+	if errors.Is(err, cryptomod.ErrUnsupported) {
+		return nil, &cryptomod.ErrKeyNotHeld{Key: key}
+	}
+	return sig, err
 }
 
 // Verify checks sig against obj using key, dispatching on the signature scheme.

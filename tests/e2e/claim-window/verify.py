@@ -25,7 +25,7 @@ def main():
 
     control = probes["claim, stranger issuer"]
     assert control["refused"] and "authorize" not in control["detail"] \
-        and "sign as issuer: unsupported" in control["detail"], (
+        and "sign as issuer: no signing scheme available for key" in control["detail"], (
             f"the claim contract answered {control['detail']} — the guard did "
             "not admit it, so the refusals below do not show a narrow window")
 
