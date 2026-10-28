@@ -83,8 +83,13 @@ def driver_env(session_json: Path, target: str) -> dict:
 
 
 def plan_for(tests: dict, selection: list) -> list:
-    """[(Test, kind)] for what the CLI selected: a suite runs exactly as
-    listed, a bare test selection gets the prereq prefix its starts need."""
+    """[(Test, kind)] for what the CLI selected.
+
+    A suite runs exactly as listed, once its order walks. A bare test
+    selection gets the prereq prefix its starts need, mutators last and
+    observers before producers at equal depth; it is refused when it holds
+    two mutators, and otherwise held to the same walk a suite is.
+    """
     suites_dir = TESTS / "suites"
     if not selection:
         selection = [DEFAULT_SUITE]
@@ -96,7 +101,18 @@ def plan_for(tests: dict, selection: list) -> list:
         listed = suites.load(suites.find(suites_dir, named[0]))
         manifest.validate_order(tests, listed)
         return [(tests[n], "test") for n in listed]
-    return manifest.resolve(tests, selection)
+    plan = manifest.resolve(tests, selection)
+    # why: one live world serves the whole selection, and each mutator
+    # invalidates the state the other starts from, so no order runs both
+    mutators = [t.name for t, _ in plan if t.mutates]
+    if len(mutators) > 1:
+        raise ValueError(f"{mutators[0]} and {mutators[1]} both mutate the "
+                         "world, so no order runs both: select them in "
+                         "separate runs")
+    # why: a bare selection is held to the walk a suite is held to, so a
+    # destroyer can never run ahead of a test that needs what it destroys
+    manifest.validate_order(tests, [t.name for t, _ in plan])
+    return plan
 
 
 def _reject_unbuilt(args, plan: list) -> str | None:

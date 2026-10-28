@@ -10,6 +10,9 @@ from unittest import mock
 
 from lib import runner
 from lib.executors import ExecutorError
+from lib.manifest import load_all
+
+TESTS = Path(__file__).resolve().parent.parent
 
 
 class FakeExecutor:
@@ -118,6 +121,33 @@ class TestDriverEnv(unittest.TestCase):
         for var, value in self.AMBIENT.items():
             self.assertEqual(env[var], value)
         self.assertEqual(env["ASTRAL_TESTS_SESSION"], "/s/session.json")
+
+
+class TestPlanFor(unittest.TestCase):
+    """Bare selections over the shipped manifests."""
+
+    def setUp(self):
+        self.all = load_all(TESTS / "e2e")
+
+    def order(self, *selection) -> list:
+        return [t.name for t, _ in runner.plan_for(self.all, list(selection))]
+
+    def test_a_mutator_runs_after_the_test_it_would_break(self):
+        # why: ordered by depth alone, expel-node ran first and mcp-peer met
+        # a swarm with node2 already expelled
+        order = self.order("expel-node", "mcp-peer")
+        self.assertLess(order.index("mcp-peer"), order.index("expel-node"))
+        self.assertEqual(order[-1], "expel-node")
+
+    def test_an_observer_runs_before_a_producer_at_its_depth(self):
+        # why: claim-window needs node1 unclaimed, and bootstrap claims it
+        self.assertEqual(self.order("adopt-node", "claim-window"),
+                         ["claim-window", "bootstrap-user-software-key",
+                          "adopt-node"])
+
+    def test_a_selection_holding_two_mutators_is_refused(self):
+        with self.assertRaisesRegex(ValueError, "both mutate"):
+            runner.plan_for(self.all, ["expel-node", "hold-purge"])
 
 
 if __name__ == "__main__":

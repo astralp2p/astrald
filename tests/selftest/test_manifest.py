@@ -129,9 +129,10 @@ class TestLoad(ManifestCase):
 
 class TestResolve(ManifestCase):
     def test_full_run_order_and_kinds(self):
+        # smoke builds nothing, so it runs before the producer at its depth
         plan = resolve(self.all, only=None)
         self.assertEqual([t.name for t, _ in plan],
-                         ["bootstrap-user-software-key", "smoke", "adopt-node"])
+                         ["smoke", "bootstrap-user-software-key", "adopt-node"])
         self.assertTrue(all(kind == "test" for _, kind in plan))
 
     def test_only_builds_prereq_prefix(self):

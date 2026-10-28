@@ -172,7 +172,11 @@ def resolve(all: dict, only) -> list:
                 needed.add(dep)
                 frontier.append(dep)
 
-    ordered = sorted(needed, key=lambda n: (depths[n], n))
+    # why this key: a mutator invalidates the state its siblings start from,
+    # so it runs last; and at equal depth a test that builds nothing runs
+    # before a producer, so claim-window still finds node1 unclaimed.
+    ordered = sorted(needed, key=lambda n: (all[n].mutates, depths[n],
+                                            bool(all[n].saves), n))
     return [(all[n], "test" if n in selected else "prereq") for n in ordered]
 
 
