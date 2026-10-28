@@ -18,7 +18,7 @@ type opAcceptMembershipArgs struct {
 }
 
 // OpAcceptMembership handles the node side of the contract signing ceremony.
-// Rejects if an active contract already exists (code 2).
+// Refuses with user.ErrAlreadyClaimed if an active contract already exists.
 // Validates contract subject, identity match, issuer distinct from subject,
 // minimum remaining validity and the swarm membership permit, then verifies the issuer's signature before applying the invite policy.
 // Self-refuses with user.ErrExpelled if this node holds the issuer's ban on itself.
@@ -27,7 +27,9 @@ func (mod *Module) OpAcceptMembership(ctx *astral.Context, q *routing.IncomingQu
 	ac := mod.ActiveContract()
 	if ac != nil {
 		// We already have an active contract
-		return q.RejectWithCode(2)
+		ch := q.Accept(channel.WithFormats(args.In, args.Out))
+		defer ch.Close()
+		return ch.Send(user.ErrAlreadyClaimed)
 	}
 
 	conn := q.AcceptRaw()

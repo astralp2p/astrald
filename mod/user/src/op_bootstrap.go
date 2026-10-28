@@ -47,7 +47,9 @@ func (mod *Module) OpBootstrap(ctx *astral.Context, q *routing.IncomingQuery, ar
 	}
 
 	if mod.ActiveContract() != nil {
-		return q.RejectWithCode(2)
+		ch := q.Accept(channel.WithFormats(args.In, args.Out))
+		defer ch.Close()
+		return ch.Send(user.ErrAlreadyClaimed)
 	}
 
 	if !q.Caller().IsEqual(mod.node.Identity()) {

@@ -80,7 +80,7 @@ var defaultConfig = Config{
 	// learns what it may call before it holds a token.
 	AnonymousAllowlist: AnonymousAllowlist{
 		Unclaimed: []string{
-			"user.info",            // claim state: code 2 while no user owns the node
+			"user.info",            // claim state: no active contract while no user owns the node
 			"user.derive_identity", // preview the user that words derive
 			"user.bootstrap",       // claim the node from words
 			"user.join",            // ask a swarm node for membership

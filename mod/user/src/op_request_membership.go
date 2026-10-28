@@ -22,7 +22,9 @@ func (mod *Module) OpRequestMembership(ctx *astral.Context, q *routing.IncomingQ
 
 	if ac == nil {
 		// We don't have an active contract to invite
-		return q.RejectWithCode(2)
+		ch := q.Accept(channel.WithFormats(args.In, args.Out))
+		defer ch.Close()
+		return ch.Send(user.ErrNoActiveContract)
 	}
 
 	conn := q.AcceptRaw()
