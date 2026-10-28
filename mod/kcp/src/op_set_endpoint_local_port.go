@@ -23,7 +23,9 @@ func (mod *Module) OpSetEndpointLocalPort(ctx *astral.Context, q *routing.Incomi
 
 	endpoint, err := kcp.ParseEndpoint(args.Endpoint)
 	if err != nil {
-		return q.RejectWithCode(4)
+		ch := q.Accept(channel.WithFormats(args.In, args.Out))
+		defer ch.Close()
+		return ch.Send(kcp.ErrInvalidEndpoint)
 	}
 
 	ch := channel.New(q.AcceptRaw(), channel.WithFormats(args.In, args.Out))

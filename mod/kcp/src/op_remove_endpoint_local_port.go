@@ -21,7 +21,9 @@ func (mod *Module) OpRemoveEndpointLocalPort(ctx *astral.Context, q *routing.Inc
 
 	endpoint, err := kcp.ParseEndpoint(string(args.Endpoint))
 	if err != nil {
-		return q.RejectWithCode(4)
+		ch := q.Accept(channel.WithFormats(args.In, args.Out))
+		defer ch.Close()
+		return ch.Send(kcp.ErrInvalidEndpoint)
 	}
 
 	ch := channel.New(q.AcceptRaw(), channel.WithFormats(args.In, args.Out))

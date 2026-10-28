@@ -12,7 +12,6 @@ import (
 	"github.com/astralp2p/astral-go/astral/channel"
 	"github.com/astralp2p/astral-go/astral/log"
 	"github.com/astralp2p/astrald/mod/apphost"
-	"github.com/astralp2p/astrald/mod/objects"
 	"github.com/glebarez/sqlite"
 	"gorm.io/gorm"
 )
@@ -124,7 +123,7 @@ func TestHoldObjectRefusesPartialID(t *testing.T) {
 		t.Fatalf("apphost.hold_object: %v", err)
 	}
 
-	checkErrorReply(t, w.reply(t), objects.ErrPartialObjectID)
+	checkErrorReply(t, w.reply(t), astral.ErrPartialObjectID)
 	checkHoldCount(t, mod, app, 0)
 	if mod.HoldObject(full) {
 		t.Fatal("a refused partial hold protects the object")
@@ -147,7 +146,7 @@ func TestUnholdObjectRefusesPartialID(t *testing.T) {
 		t.Fatalf("apphost.unhold_object: %v", err)
 	}
 
-	checkErrorReply(t, w.reply(t), objects.ErrPartialObjectID)
+	checkErrorReply(t, w.reply(t), astral.ErrPartialObjectID)
 	checkHoldCount(t, mod, app, 1)
 	if !mod.HoldObject(full) {
 		t.Fatal("the hold keyed by the full ID no longer protects the object")
@@ -166,8 +165,8 @@ func TestHoldAndUnholdOneRefuseSizeZeroIDs(t *testing.T) {
 		want error
 	}{
 		{name: "zero ID", id: &astral.ObjectID{}, want: apphost.ErrMissingObjectID},
-		{name: "partial ID", id: &astral.ObjectID{Hash: heldFullID().Hash}, want: objects.ErrPartialObjectID},
-		{name: "empty object", id: empty, want: objects.ErrPartialObjectID},
+		{name: "partial ID", id: &astral.ObjectID{Hash: heldFullID().Hash}, want: astral.ErrPartialObjectID},
+		{name: "empty object", id: empty, want: astral.ErrPartialObjectID},
 	}
 
 	for _, c := range cases {
