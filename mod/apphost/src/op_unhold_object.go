@@ -5,7 +5,6 @@ import (
 	"github.com/astralp2p/astral-go/astral/channel"
 	"github.com/astralp2p/astral-go/lib/routing"
 	"github.com/astralp2p/astrald/mod/apphost"
-	"github.com/astralp2p/astrald/mod/objects"
 )
 
 type opUnholdObjectArgs struct {
@@ -47,7 +46,7 @@ func (mod *Module) unholdOne(caller *astral.Identity, id *astral.ObjectID) astra
 	}
 
 	if id.Size == 0 {
-		return astral.Err(objects.ErrPartialObjectID)
+		return astral.Err(astral.ErrPartialObjectID)
 	}
 
 	if err := mod.db.UnholdObject(caller, id); err != nil {

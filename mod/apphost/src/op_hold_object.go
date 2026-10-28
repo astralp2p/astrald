@@ -5,7 +5,6 @@ import (
 	"github.com/astralp2p/astral-go/astral/channel"
 	"github.com/astralp2p/astral-go/lib/routing"
 	"github.com/astralp2p/astrald/mod/apphost"
-	"github.com/astralp2p/astrald/mod/objects"
 )
 
 type opHoldObjectArgs struct {
@@ -48,7 +47,7 @@ func (mod *Module) holdOne(caller *astral.Identity, id *astral.ObjectID, duratio
 	}
 
 	if id.Size == 0 {
-		return astral.Err(objects.ErrPartialObjectID)
+		return astral.Err(astral.ErrPartialObjectID)
 	}
 
 	if err := mod.db.HoldObject(caller, id, duration); err != nil {

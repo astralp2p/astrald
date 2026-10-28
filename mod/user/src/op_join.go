@@ -1,6 +1,7 @@
 package user
 
 import (
+	"github.com/astralp2p/astral-go/api/dir"
 	"github.com/astralp2p/astral-go/api/user"
 	userClient "github.com/astralp2p/astral-go/api/user/client"
 	"github.com/astralp2p/astral-go/astral"
@@ -41,8 +42,20 @@ func (mod *Module) OpJoin(ctx *astral.Context, q *routing.IncomingQuery, args op
 	}
 
 	nodeID, err := mod.Dir.ResolveIdentity(args.Node)
-	if err != nil || nodeID.IsZero() || nodeID.IsEqual(mod.node.Identity()) {
-		return q.RejectWithCode(3)
+	if err != nil {
+		ch := q.Accept(channel.WithFormats(args.In, args.Out))
+		defer ch.Close()
+		return ch.Send(dir.ErrUnknownIdentity)
+	}
+	if nodeID.IsZero() {
+		ch := q.Accept(channel.WithFormats(args.In, args.Out))
+		defer ch.Close()
+		return ch.Send(astral.ErrZeroIdentity)
+	}
+	if nodeID.IsEqual(mod.node.Identity()) {
+		ch := q.Accept(channel.WithFormats(args.In, args.Out))
+		defer ch.Close()
+		return ch.Send(user.ErrJoinSelf)
 	}
 
 	ch := q.Accept(channel.WithFormats(args.In, args.Out))

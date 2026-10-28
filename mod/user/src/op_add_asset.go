@@ -8,7 +8,6 @@ import (
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astral-go/astral/channel"
 	"github.com/astralp2p/astral-go/lib/routing"
-	"github.com/astralp2p/astrald/mod/objects"
 )
 
 type opAddAssetArgs struct {
@@ -29,8 +28,10 @@ func (mod *Module) OpAddAsset(ctx *astral.Context, q *routing.IncomingQuery, arg
 	err = mod.AddAsset(args.ID)
 	switch {
 	// why: a partial ID is the caller's mistake, so it gets its own code and is not logged as a node error.
-	case errors.Is(err, objects.ErrPartialObjectID):
-		return q.RejectWithCode(astral.CodeInvalidQuery)
+	case errors.Is(err, astral.ErrPartialObjectID):
+		ch := q.Accept(channel.WithOutputFormat(args.Out))
+		defer ch.Close()
+		return ch.Send(astral.ErrPartialObjectID)
 	case err != nil:
 		mod.log.Error("error adding asset: %v", err)
 		return q.RejectWithCode(astral.CodeInternalError)

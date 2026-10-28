@@ -2,6 +2,7 @@ package user
 
 import (
 	"github.com/astralp2p/astral-go/api/auth"
+	"github.com/astralp2p/astral-go/api/dir"
 	"github.com/astralp2p/astral-go/api/user"
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astral-go/astral/channel"
@@ -22,8 +23,15 @@ type opSyncWithArgs struct {
 func (mod *Module) OpSyncWith(ctx *astral.Context, q *routing.IncomingQuery, args opSyncWithArgs) (err error) {
 	// why: the action carries the node, so resolution runs before authorization.
 	nodeID, err := mod.Dir.ResolveIdentity(args.Identity)
-	if err != nil || nodeID.IsZero() {
-		return q.RejectWithCode(3)
+	if err != nil {
+		ch := q.Accept(channel.WithOutputFormat(args.Out))
+		defer ch.Close()
+		return ch.Send(dir.ErrUnknownIdentity)
+	}
+	if nodeID.IsZero() {
+		ch := q.Accept(channel.WithOutputFormat(args.Out))
+		defer ch.Close()
+		return ch.Send(astral.ErrZeroIdentity)
 	}
 
 	if !mod.Auth.Authorize(ctx, &user.AdminSwarmAction{

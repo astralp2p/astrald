@@ -2,6 +2,7 @@ package nodes
 
 import (
 	"github.com/astralp2p/astral-go/api/auth"
+	"github.com/astralp2p/astral-go/api/dir"
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astral-go/astral/channel"
 	"github.com/astralp2p/astral-go/lib/routing"
@@ -20,8 +21,15 @@ func (mod *Module) OpResolveEndpoints(ctx *astral.Context, q *routing.IncomingQu
 	// why: the zero identity names no node, and ResolveEndpoints fans the target
 	// out to every registered resolver without testing it.
 	targetID, err := mod.Dir.ResolveIdentity(args.Identity)
-	if err != nil || targetID.IsZero() {
-		return q.RejectWithCode(2)
+	if err != nil {
+		ch := q.Accept(channel.WithOutputFormat(args.Out))
+		defer ch.Close()
+		return ch.Send(dir.ErrUnknownIdentity)
+	}
+	if targetID.IsZero() {
+		ch := q.Accept(channel.WithOutputFormat(args.Out))
+		defer ch.Close()
+		return ch.Send(astral.ErrZeroIdentity)
 	}
 
 	endpoints, err := mod.ResolveEndpoints(ctx.WithIdentity(q.Caller()), targetID)
