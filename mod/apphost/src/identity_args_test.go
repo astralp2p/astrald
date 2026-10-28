@@ -95,7 +95,7 @@ func TestGrantOpRecordsNothingForAnUnusableIdentity(t *testing.T) {
 }
 
 // TestGrantOpRefusesTheOldArgumentName: -id is not an alias of -identity, so a
-// query naming only -id lacks the required argument and is answered so.
+// query naming only -id lacks the required argument, and the answer names both.
 func TestGrantOpRefusesTheOldArgumentName(t *testing.T) {
 	mod := testGrantModule(t)
 	mod.Auth = &recordingAuth{verdict: true}
@@ -106,7 +106,7 @@ func TestGrantOpRefusesTheOldArgumentName(t *testing.T) {
 	if err := route(t, mod.OpGrant, astral.GenerateIdentity(), "apphost.grant?id="+app.String()+"&action="+action, w); err != nil {
 		t.Fatalf("route: %v", err)
 	}
-	checkErrorReply(t, w.reply(t), errors.New("argument required: identity"))
+	checkErrorReply(t, w.reply(t), errors.New("argument required: identity; unknown argument: id"))
 }
 
 // TestListTokensFiltersByIdentity: an omitted identity lists every token, a
