@@ -25,7 +25,7 @@ def main():
 
     control = probes["claim, stranger issuer"]
     assert control["refused"] and "authorize" not in control["detail"] \
-        and "sign as issuer: unsupported" in control["detail"], (
+        and "sign as issuer: no signing scheme available for key" in control["detail"], (
             f"the claim contract answered {control['detail']} — the guard did "
             "not admit it, so the refusals below do not show a narrow window")
 
@@ -34,7 +34,7 @@ def main():
         assert r["refused"] and text in r["detail"], f"{name}: {r['detail']}"
 
     u = window["unclaimed_after"]
-    assert u["refused"] and "code 2" in u["detail"], (
+    assert u["refused"] and "no active contract" in u["detail"], (
         f"user.info answered {u['detail']} — a probe claimed node1")
 
     print(f"oracle: the claim contract passed the guard; {len(GUARD)} near misses "

@@ -59,11 +59,11 @@ async def attempt(coro) -> dict:
 
 
 async def claimed(c) -> bool:
-    """Whether node1 answers user.info; it rejects with code 2 when unclaimed."""
+    """Whether node1 answers user.info; it answers "no active contract" when unclaimed."""
     try:
         await c.user.info()
     except AstralError as e:
-        if "code 2" in str(e):
+        if "no active contract" in str(e):
             return False
         raise
     return True

@@ -9,9 +9,9 @@ node1 does not hold, node1 itself, or an app node1 minted.
 
 why an issuer whose key node1 does not hold: the guard and the signing that
 follows are separate steps. Admitted, such a contract fails at signing
-("sign as issuer: unsupported"); refused, it fails at the guard naming the
-party. The control reads the first, the probes the second, and node1 stays
-unclaimed for the tests after this one.
+("sign as issuer: no signing scheme available for key …"); refused, it fails at
+the guard naming the party. The control reads the first, the probes the second,
+and node1 stays unclaimed for the tests after this one.
 
 why the driver checks the claim state first: the window exists only on an
 unclaimed node, and the runner's states name no such state. A selection that
@@ -54,9 +54,10 @@ def with_sudo(c: Contract) -> Contract:
 async def main():
     n1 = load()["nodes"]["node1"]
     async with await astral.connect(n1["endpoint"], token=n1["token"]) as node:
-        # note: user.info rejects with code 2 on a node with no active contract.
+        # note: user.info answers "no active contract" on a node with no active
+        # contract.
         before = await attempt(node.user.info())
-        if not (before["refused"] and "code 2" in before["detail"]):
+        if not (before["refused"] and "no active contract" in before["detail"]):
             sys.exit(f"driver: user.info answered {before['detail']!r}, so node1 "
                      "is not unclaimed and the claim window is closed — run "
                      "claim-window alone or in main.suite order, before "

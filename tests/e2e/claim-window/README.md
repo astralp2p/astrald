@@ -35,8 +35,9 @@ session without a token reaches only the anonymous allowlist.
 
 The guard and the signing are separate steps. The stranger's key is the
 secp256k1 generator point, whose private key node1 does not hold, so the claim
-contract fails at signing (`sign as issuer: unsupported`) once the guard
-admits it, and node1 stays unclaimed for the tests after this one.
+contract fails at signing (`sign as issuer: no signing scheme available for
+key …`) once the guard admits it, and node1 stays unclaimed for the tests after
+this one.
 
 ## Why the driver checks the claim state first
 

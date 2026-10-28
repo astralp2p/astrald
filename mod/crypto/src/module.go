@@ -224,6 +224,7 @@ func (mod *Module) formatSignableText(object crypto.SignableTextObject) string {
 
 // Sign signs obj as key, preferring an object (hash) signature and falling back
 // to a text signature when no object-signing engine is available for the key.
+// A key no engine signs as answers *cryptomod.ErrKeyNotHeld.
 func (mod *Module) Sign(ctx *astral.Context, key *crypto.PublicKey, obj crypto.SignableTextObject) (*crypto.Signature, error) {
 	if signer, err := mod.ObjectSigner(key); err == nil {
 		sig, err := signer.SignObject(ctx, obj)
@@ -232,11 +233,13 @@ func (mod *Module) Sign(ctx *astral.Context, key *crypto.PublicKey, obj crypto.S
 		}
 	}
 
-	if signer, err := mod.TextObjectSigner(key); err == nil {
-		return signer.SignTextObject(ctx, obj)
+	// note: dispatch answers ErrUnsupported whenever no engine yields a signer.
+	signer, err := mod.NewTextSigner(key, crypto.SchemeBIP137)
+	if err != nil {
+		return nil, &cryptomod.ErrKeyNotHeld{Key: key}
 	}
 
-	return nil, fmt.Errorf("no signing scheme available for key %v", key)
+	return signer.SignText(ctx, mod.formatSignableText(obj))
 }
 
 // Verify checks sig against obj using key, dispatching on the signature scheme.
