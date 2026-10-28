@@ -39,7 +39,6 @@ from lib.executors import Executor, ExecutorError
 TESTS = Path(__file__).resolve().parent.parent.parent
 APPHOST_PORT = 8625          # the guest's apphost, inside netns priv when NAT'd
 THROWAWAY_STAGE = "e2e-scratch"   # a fresh sim always saves; this is what it saves to
-LAB_STAGE = "astrald-lab"         # the recipe's canonical output
 GUEST_ROOT = "/var/lib/astrald"   # install-astrald's -root (its systemd unit)
 GUEST_TCP_PORT = 1791             # astrald's default tcp listener in the lab
 # enter-nat's private host inside netns `priv`, routable from the root netns
@@ -83,6 +82,16 @@ def _netsim(*args, check=True, capture=True) -> str:
 def recipe_hash(recipe: Path) -> str:
     """Eight hex of the recipe's bytes — the world's shape, not its contents."""
     return sha256(Path(recipe).read_bytes()).hexdigest()[:8]
+
+
+def lab_stage(recipe: Path) -> str:
+    """The stage a recipe bakes into.
+
+    why the hash in the name: a recipe change has to rebake. A fixed name
+    stood for every version of the recipe at once, so an edited lab.story
+    kept booting the world the old one built.
+    """
+    return f"e2e-lab-r{recipe_hash(recipe)}"
 
 
 def stage_key(state: str, recipe: Path, astrald_ref: str) -> str:
@@ -257,19 +266,12 @@ class NetsimExecutor(Executor):
         self.state = state
 
     def _base_stage(self) -> str:
-        """The lab every chain starts from.
-
-        why: prefer the stage the operator already has. The recipe-keyed name
-        is what a fresh bake produces, but an existing `astrald-lab` is the
-        same world and costs a resume instead of a twenty-minute build.
-        """
-        stages = self._stages()
-        for name in (f"e2e-lab-r{recipe_hash(self.recipe)}", LAB_STAGE):
-            if name in stages:
-                return name
-        _netsim("story", "--stage", "null", "--save", LAB_STAGE,
-                str(self.recipe), capture=False)
-        return LAB_STAGE
+        """The lab every chain starts from, baked once per recipe."""
+        name = lab_stage(self.recipe)
+        if name not in self._stages():
+            _netsim("story", "--stage", "null", "--save", name,
+                    str(self.recipe), capture=False)
+        return name
 
     def _resolve_pinned(self) -> str:
         """The netsim stage `--target stage:<name>` names.
@@ -741,7 +743,7 @@ systemctl restart astrald""")
         """session.json — byte-compatible with the local executor's.
 
         The endpoint is the local end of this VM's `ssh -L` forward. Verified
-        by hand against a live simulation resumed from `astrald-lab`: a host
+        by hand against a live simulation resumed from the lab stage: a host
         process reached the guest's astrald through the forward and the daemon
         answered at protocol level.
 

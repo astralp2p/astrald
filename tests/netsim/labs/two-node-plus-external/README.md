@@ -21,10 +21,13 @@ also serves as the gateway. Renaming it means editing `lab.story`, whose bytes
 are the recipe hash, so every cached stage would be orphaned — worth doing on
 its own, not in passing.
 
-- **Chain:** `null` → `astrald-lab`
+- **Chain:** `null` → `e2e-lab-r<hash>`, where `<hash>` is the first 8 hex of
+  `lab.story`'s sha256, so an edit to the recipe bakes a new stage
 - **Builds:** three VMs at 2048 MiB · astrald on all three · Qwen Code on node1
   · the astral-agent skill linked into it
-- **Bake:** `netsim story --stage null --save astrald-lab tests/netsim/labs/two-node-plus-external/lab.story`
+- **Bake:** the netsim executor bakes it on the first run that finds no stage
+  for the current hash:
+  `netsim story --stage null --save e2e-lab-r<hash> tests/netsim/labs/two-node-plus-external/lab.story`
 
 astrald is *installed* here and **pushed fresh on every boot** by the netsim
 executor, so a stage outlives the commit that filled it. What the bake is for

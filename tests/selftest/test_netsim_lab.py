@@ -10,7 +10,7 @@ from types import SimpleNamespace
 from unittest import mock
 
 from lib.executors import netsim
-from lib.executors.netsim import NetsimExecutor
+from lib.executors.netsim import NetsimExecutor, recipe_hash
 
 VMS = ["node1", "node2", "reflector"]
 
@@ -46,6 +46,49 @@ def booted(tmp: Path) -> NetsimExecutor:
 def test(name: str, nodes: list):
     return SimpleNamespace(name=name, env="node", start="null", nodes=nodes,
                            steps=[])
+
+
+class TestLabStage(unittest.TestCase):
+    def setUp(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        self.tmp = Path(tmp.name)
+        self.calls = []
+
+    def fake_netsim(self, stages):
+        def run(*args, check=True, capture=True):
+            self.calls.append(args)
+            if args[:2] == ("stages", "--json"):
+                return json.dumps([{"slug": s} for s in stages])
+            return ""
+        return run
+
+    def test_a_missing_lab_is_baked_under_its_recipe_hash(self):
+        ex = executor(self.tmp)
+        want = f"e2e-lab-r{recipe_hash(ex.recipe)}"
+        with mock.patch.object(netsim, "_netsim", self.fake_netsim([])):
+            self.assertEqual(ex._base_stage(), want)
+        story = [a for a in self.calls if a[0] == "story"]
+        self.assertEqual(len(story), 1)
+        self.assertEqual(story[0][story[0].index("--save") + 1], want)
+
+    def test_a_baked_lab_is_reused_without_a_rebake(self):
+        ex = executor(self.tmp)
+        want = f"e2e-lab-r{recipe_hash(ex.recipe)}"
+        with mock.patch.object(netsim, "_netsim",
+                               self.fake_netsim(["null", want])):
+            self.assertEqual(ex._base_stage(), want)
+        self.assertFalse([a for a in self.calls if a[0] == "story"])
+
+    def test_a_stale_lab_name_is_not_booted(self):
+        # why: a stage baked from another recipe is another world, so only
+        # the current recipe's hash may stand in for the lab
+        ex = executor(self.tmp)
+        with mock.patch.object(netsim, "_netsim",
+                               self.fake_netsim(["astrald-lab", "e2e-lab-r0"])):
+            self.assertEqual(ex._base_stage(),
+                             f"e2e-lab-r{recipe_hash(ex.recipe)}")
+        self.assertTrue([a for a in self.calls if a[0] == "story"])
 
 
 class TestPush(unittest.TestCase):
