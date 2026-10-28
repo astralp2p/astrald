@@ -37,6 +37,7 @@ func (mod *Module) LoadDependencies(ctx *astral.Context) (err error) {
 	mod.Auth.Add(authmod.NodeLocal(authmod.Func[*auth.ServeObjectsAction](mod.AuthorizeServeObjects)))
 	mod.Auth.Add(authmod.NodeLocal(authmod.Func[*auth.SeeObjectsAction](mod.AuthorizeSeeObjects)))
 	mod.Auth.Add(authmod.NodeLocal(authmod.Func[*auth.StoreObjectsAction](mod.AuthorizeStoreObjects)))
+	mod.Auth.Add(authmod.NodeLocal(authmod.Func[*auth.UseBlueprintsAction](mod.AuthorizeUseBlueprints)))
 	mod.Auth.Add(authmod.NodeLocal(authmod.Func[*user.SeeSwarmAction](mod.AuthorizeSeeSwarm)))
 	mod.Auth.Add(authmod.NodeLocal(authmod.Func[*user.AdminSwarmAction](mod.AuthorizeAdminSwarm)))
 	mod.Auth.Add(authmod.NodeLocal(authmod.Func[*auth.AdminNetworkAction](mod.AuthorizeAdminNetwork)))

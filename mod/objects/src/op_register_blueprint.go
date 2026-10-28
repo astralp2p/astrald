@@ -18,15 +18,12 @@ type opRegisterBlueprintArgs struct {
 // input is answered with a final EOS; a stream ended by EOF is not.
 //
 // note: registration mutates DefaultBlueprints for the whole node — the caller squats a
-// type name permanently and defines the wire schema everyone parses it with. StoreObjects
-// is the gate. The type name is not a noun here: the blueprints arrive on the channel,
-// after the authorization decision.
+// type name permanently and defines the wire schema everyone parses it with.
 //
-// todo: a permanent type-name squat is not recoverable the way a stored object is, so a
-// grantor handing out StoreObjects would not expect it. Splitting this op into its own
-// action costs one action type and one call site.
+// why UseBlueprints and not StoreObjects: a type-name squat is not recoverable the way a
+// stored object is, so a grantor handing out object writes would not expect it.
 func (mod *Module) OpRegisterBlueprint(ctx *astral.Context, q *routing.IncomingQuery, args opRegisterBlueprintArgs) error {
-	if !mod.Auth.Authorize(ctx, &auth.StoreObjectsAction{Action: auth.NewAction(q.Caller())}) {
+	if !mod.Auth.Authorize(ctx, &auth.UseBlueprintsAction{Action: auth.NewAction(q.Caller())}) {
 		return q.Reject()
 	}
 
