@@ -76,6 +76,9 @@ func TestIssueMembership_UnheldIssuerKey(t *testing.T) {
 	mod.Auth = &authsrc.Module{Deps: authsrc.Deps{Crypto: &cryptosrc.Module{}}}
 
 	_, err := mod.IssueMembership(astral.NewContext(nil), astral.GenerateIdentity())
+	if err == nil {
+		t.Fatal("IssueMembership signed with an issuer key the node does not hold")
+	}
 	if want := "sign as issuer: no signing scheme available for key "; !strings.HasPrefix(err.Error(), want) {
 		t.Fatalf("IssueMembership err = %q; want prefix %q", err, want)
 	}

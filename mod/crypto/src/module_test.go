@@ -46,3 +46,11 @@ func TestSignNamesAnUnheldKey(t *testing.T) {
 		t.Fatalf("Sign err = %q; want it to name %s", err, text)
 	}
 }
+
+// TestErrKeyNotHeldWithoutKey: the zero value, the errors.Is target, formats
+// without panicking.
+func TestErrKeyNotHeldWithoutKey(t *testing.T) {
+	if text := (&cryptomod.ErrKeyNotHeld{}).Error(); text == "" {
+		t.Fatal("ErrKeyNotHeld without a key has no text")
+	}
+}
