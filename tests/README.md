@@ -26,7 +26,7 @@ they should run. Nothing more.
 |-------|------------|-----|---------|
 | `main.suite` | the whole node chain, the everyday one | node | ~3 min |
 | `tor.suite` | two nodes meet on a LAN, one leaves it, Tor holds | netsim | ~37 min |
-| `substrate.suite` | both transport tests: Tor, then NAT hole-punching | netsim | ~1 h |
+| `nat.suite` | two nodes meet on a LAN, then hole-punch through NAT | netsim | not measured |
 | `agent.suite` | the flows an AI operator can drive, one world, in order | netsim | ~1.5 h |
 
 **An env is *where* it runs** — the world the test needs. A manifest field.

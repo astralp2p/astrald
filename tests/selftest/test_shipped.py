@@ -71,6 +71,14 @@ class TestShipped(unittest.TestCase):
                     self.assertFalse(self.all[name].mutates,
                                      f"{name} mutates and is not last")
 
+    def test_no_suite_lists_both_tor_link_and_nat_punch(self):
+        # why: tor-link's leave-lan downs node2's LAN interface, and nat-punch's
+        # enter-nat then finds none to move behind NAT — the two cannot share
+        # one world, which substrate.suite asked them to
+        for path in sorted((TESTS / "suites").glob("*.suite")):
+            with self.subTest(suite=path.name):
+                self.assertFalse({"tor-link", "nat-punch"} <= set(load(path)))
+
 
 if __name__ == "__main__":
     unittest.main()

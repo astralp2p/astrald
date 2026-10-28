@@ -1,6 +1,10 @@
 env     = "netsim"
 start   = "two-nodes"
 saves   = "two-nodes-tor"
+# why: leave-lan flushes node2's LAN address and downs the NIC, and nothing
+# puts it back, so a sibling cannot run from "two-nodes" afterwards —
+# nat-punch's enter-nat finds no LAN interface and exits.
+mutates = true
 nodes   = ["node1", "node2"]
 steps   = ["vm:enable-tor node1 node2",
            "vm:leave-lan node2 --peer node1",

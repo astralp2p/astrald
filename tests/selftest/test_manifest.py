@@ -217,8 +217,8 @@ class TestWalk(ManifestCase):
                                       "bootstrap-user-software-key"])
 
     def test_a_suite_may_open_partway_up_the_chain(self):
-        # substrate.suite opens at two-nodes: the netsim executor materializes
-        # that state from its stage cache instead of building it
+        # a suite run against a pinned stage opens at two-nodes: the netsim
+        # executor boots that state instead of building it
         self.branch()
         validate_order(self.all, ["object-store"])
         validate_order(self.all, ["object-store", "expel-node"])

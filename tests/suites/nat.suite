@@ -1,0 +1,10 @@
+# nat.suite — two nodes meet on a LAN, then both move behind NAT and the
+# swarm re-forms by hole-punching.
+#
+# Every step is built from nothing in one simulation, as in tor.suite. The two
+# transport tests live in separate suites because each mutates two-nodes and
+# nothing puts it back: tor-link's leave-lan downs node2's LAN interface, and
+# nat-punch's enter-nat then finds none to move behind NAT.
+bootstrap-user-software-key
+adopt-node
+nat-punch
