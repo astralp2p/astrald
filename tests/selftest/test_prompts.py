@@ -19,6 +19,7 @@ TESTS = Path(__file__).resolve().parent.parent
 E2E = TESTS / "e2e"
 
 WRITE_FACTS = re.compile(r"write_facts\(\s*\{(.*?)\}", re.S)
+PLACEHOLDER = re.compile(r"__[A-Z][A-Z0-9_]*__")
 KEY = re.compile(r"[\"']([A-Za-z_][A-Za-z0-9_]*)[\"']\s*:")
 
 # why two patterns: an oracle reads a fact either straight off the document,
@@ -67,6 +68,14 @@ class TestPrompts(unittest.TestCase):
             if '"agent"' in manifest:
                 self.assertTrue((d / "prompt.md").exists(),
                                 f"{d.name} declares the agent driver, no prompt.md")
+
+    def test_no_prompt_carries_a_placeholder(self):
+        # why: nothing renders a prompt — it reaches the operator as written,
+        # so a placeholder is a peer the operator is asked to find by a name
+        # no node carries. tor-link shipped `__PEER__` that way.
+        for d in self.agent_tests():
+            found = PLACEHOLDER.findall((d / "prompt.md").read_text())
+            self.assertFalse(found, f"{d.name}: prompt.md carries {found}")
 
     def test_prompt_names_the_facts_its_oracle_reads(self):
         for d in self.agent_tests():
