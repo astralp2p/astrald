@@ -14,6 +14,16 @@ def git_ref(checkout: Path) -> str:
     return p.stdout.strip()
 
 
+def lacks_commit(checkout: Path, commit: str) -> bool:
+    """Whether a checkout's HEAD lacks commit. A tree git cannot read lacks it."""
+    try:
+        subprocess.run(["git", "merge-base", "--is-ancestor", commit, "HEAD"],
+                       cwd=checkout, check=True, capture_output=True)
+    except (OSError, subprocess.CalledProcessError):
+        return True
+    return False
+
+
 def query_binary(binary: Path) -> Path:
     """The astral-query ensure_binary builds beside an astrald."""
     return Path(binary).with_name("astral-query")
