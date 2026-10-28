@@ -20,6 +20,7 @@ from lib.results import RunHeader, RunResults, fresh_run_dir
 
 TESTS = Path(__file__).resolve().parent.parent
 REPO = TESTS.parent
+RESULTS = TESTS / "results"
 DEFAULT_SUITE = "main.suite"
 
 
@@ -35,16 +36,27 @@ def _run_step(py: str, script: Path, log: Path, env: dict, timeout: int) -> int:
             return 124
 
 
-def _restart_and_verify(ex, t, py: str, art: Path, env: dict) -> tuple:
-    """(status, failure_kind) of the oracle, after the restart the manifest
-    names between driver and oracle."""
+def _perform(ex, t, driver: str, art: Path, env: dict) -> tuple:
+    """(status, failure_kind) of one test: prepare, driver, fact merge, the
+    restart the manifest names, then the oracle.
+
+    An ExecutorError from any of them propagates: the caller owns the one
+    place a broken world becomes an `environment` verdict.
+    """
+    ex.prepare(t)
+    if driver == "agent":
+        rc = ex.run_agent(t, art / "driver.log", art / "facts.json",
+                          t.agent_timeout)
+    else:
+        rc = _run_step(sys.executable, t.dir / "script.py",
+                       art / "driver.log", env, t.timeout)
+    if rc != 0:
+        return "fail", "driver"
+    ex.merge_facts(art / "facts.json")
     if t.restart:
-        try:
-            ex.restart(t.restart)
-        except ExecutorError as e:
-            (art / "verify.log").write_text(f"[runner] {e}\n")
-            return "fail", "environment"
-    rc = _run_step(py, t.dir / "verify.py", art / "verify.log", env, t.timeout)
+        ex.restart(t.restart)
+    rc = _run_step(sys.executable, t.dir / "verify.py", art / "verify.log",
+                   env, t.timeout)
     return ("pass", None) if rc == 0 else ("fail", "verify")
 
 
@@ -181,7 +193,7 @@ def main(args) -> int:
         binary, ref = None, git_ref(REPO)     # the daemon is already running
     else:
         binary, ref = ensure_binary(REPO)
-    run_dir = fresh_run_dir(TESTS / "results")
+    run_dir = fresh_run_dir(RESULTS)
     results = RunResults(run_dir, RunHeader(
         astrald_ref=ref,
         astral_py_ref=git_ref(Path(os.path.expanduser(
@@ -213,7 +225,6 @@ def main(args) -> int:
         ex.want_model(profile.get("model", ""), profile.get("base_url", ""))
         results.header["agent_profile"] = name
         results.header["agent_model"] = profile.get("model", "") or "(lab default)"
-    py = sys.executable
     base_env = driver_env(ex.session_json_path, results.header["hermetic"])
 
     mutators = [t.name for t, _ in plan if t.mutates]
@@ -243,29 +254,21 @@ def main(args) -> int:
                 continue
 
             t0 = time.monotonic()
-            status, fk = "pass", None
+            env = dict(base_env,
+                       ASTRAL_TESTS_FACTS_OUT=str(art / "facts.json"))
+            # why one try around every phase: an operator's model rewrite,
+            # payload push or ssh raises from inside the driver phase, and a
+            # try around prepare alone let it leave the loop with no verdict
+            # recorded and no report written.
             try:
-                ex.prepare(t)
-            except ExecutorError as e:
-                (art / "driver.log").write_text(f"[runner] {e}\n")
-                status, fk = "fail", "environment"
-            else:
-                env = dict(base_env,
-                           ASTRAL_TESTS_FACTS_OUT=str(art / "facts.json"))
-                if args.driver == "agent":
-                    rc = ex.run_agent(t, art / "driver.log",
-                                      art / "facts.json", t.agent_timeout)
-                else:
-                    rc = _run_step(py, t.dir / "script.py",
-                                   art / "driver.log", env, t.timeout)
-                if rc != 0:
-                    status, fk = "fail", "driver"
-                else:
-                    ex.merge_facts(art / "facts.json")
-                    status, fk = _restart_and_verify(ex, t, py, art, env)
+                status, fk = _perform(ex, t, args.driver, art, env)
                 if ex.broken():
                     status, fk = "fail", "environment"   # a dead daemon voids
                     # any verdict — even a nominal pass over a dead world
+            except ExecutorError as e:
+                with (art / "driver.log").open("a") as f:
+                    f.write(f"[runner] {e}\n")
+                status, fk = "fail", "environment"
 
             results.record(**entry, status=status, failure_kind=fk,
                            duration_s=time.monotonic() - t0)
