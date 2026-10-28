@@ -34,7 +34,7 @@ def main():
         assert r["refused"] and text in r["detail"], f"{name}: {r['detail']}"
 
     u = window["unclaimed_after"]
-    assert u["refused"] and "code 2" in u["detail"], (
+    assert u["refused"] and "no active contract" in u["detail"], (
         f"user.info answered {u['detail']} — a probe claimed node1")
 
     print(f"oracle: the claim contract passed the guard; {len(GUARD)} near misses "

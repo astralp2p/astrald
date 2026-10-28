@@ -54,9 +54,10 @@ def with_sudo(c: Contract) -> Contract:
 async def main():
     n1 = load()["nodes"]["node1"]
     async with await astral.connect(n1["endpoint"], token=n1["token"]) as node:
-        # note: user.info rejects with code 2 on a node with no active contract.
+        # note: user.info answers "no active contract" on a node with no active
+        # contract.
         before = await attempt(node.user.info())
-        if not (before["refused"] and "code 2" in before["detail"]):
+        if not (before["refused"] and "no active contract" in before["detail"]):
             sys.exit(f"driver: user.info answered {before['detail']!r}, so node1 "
                      "is not unclaimed and the claim window is closed — run "
                      "claim-window alone or in main.suite order, before "
