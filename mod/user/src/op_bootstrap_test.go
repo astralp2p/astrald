@@ -391,28 +391,19 @@ func TestBootstrapTokenFailureLeavesTheNodeClaimed(t *testing.T) {
 // and leaves the node as it was.
 func TestBootstrapRejects(t *testing.T) {
 	cases := []struct {
-		name    string
-		origin  string
-		caller  func(f *bootstrapFixture) *astral.Identity
-		claimed bool
-		code    uint8
+		name   string
+		origin string
+		caller func(f *bootstrapFixture) *astral.Identity
+		code   uint8
 	}{
-		{"network origin", astral.OriginNetwork, func(f *bootstrapFixture) *astral.Identity { return f.nodeID }, false, astral.CodeRejected},
-		{"mcp origin", astral.OriginMCP, func(f *bootstrapFixture) *astral.Identity { return f.nodeID }, false, astral.CodeRejected},
-		{"claimed node", "", func(f *bootstrapFixture) *astral.Identity { return f.nodeID }, true, 2},
-		{"caller other than the node", "", func(*bootstrapFixture) *astral.Identity { return astral.GenerateIdentity() }, false, 4},
+		{"network origin", astral.OriginNetwork, func(f *bootstrapFixture) *astral.Identity { return f.nodeID }, astral.CodeRejected},
+		{"mcp origin", astral.OriginMCP, func(f *bootstrapFixture) *astral.Identity { return f.nodeID }, astral.CodeRejected},
+		{"caller other than the node", "", func(*bootstrapFixture) *astral.Identity { return astral.GenerateIdentity() }, 4},
 	}
 
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			f := newBootstrapFixture()
-			owner := astral.GenerateIdentity()
-			if c.claimed {
-				err := f.mod.config.ActiveContract.Set(nil, &auth.SignedContract{Contract: &auth.Contract{Issuer: owner}})
-				if err != nil {
-					t.Fatalf("seed active contract: %v", err)
-				}
-			}
 
 			_, err := routeBootstrap(t, f, c.caller(f), c.origin, "user.bootstrap?generate=true", nil)
 
@@ -423,16 +414,44 @@ func TestBootstrapRejects(t *testing.T) {
 			if n := len(f.objects.objects()); n != 0 {
 				t.Fatalf("the node stored %d objects; want none", n)
 			}
-			if c.claimed && !f.mod.ActiveContract().Issuer.IsEqual(owner) {
-				t.Fatal("the active contract changed")
-			}
 			if n := len(f.apphost.tokens()); n != 0 {
 				t.Fatalf("the node issued %d access tokens; want none", n)
 			}
-			if !c.claimed && f.mod.ActiveContract() != nil {
+			if f.mod.ActiveContract() != nil {
 				t.Fatal("the node is claimed")
 			}
 		})
+	}
+}
+
+// TestBootstrapRefusesAClaimedNode: a claimed node answers user.ErrAlreadyClaimed
+// and keeps its contract, with nothing stored and no token issued.
+func TestBootstrapRefusesAClaimedNode(t *testing.T) {
+	f := newBootstrapFixture()
+	owner := astral.GenerateIdentity()
+	err := f.mod.config.ActiveContract.Set(nil, &auth.SignedContract{Contract: &auth.Contract{Issuer: owner}})
+	if err != nil {
+		t.Fatalf("seed active contract: %v", err)
+	}
+
+	objs, err := routeBootstrap(t, f, f.nodeID, "", "user.bootstrap?generate=true", nil)
+	if err != nil {
+		t.Fatalf("route: %v", err)
+	}
+	if len(objs) != 1 || objs[0].ObjectType() != "error_message" {
+		t.Fatalf("the op answered %v; want one error_message", objs)
+	}
+	if got, want := objs[0].(astral.Error).Error(), user.ErrAlreadyClaimed.Error(); got != want {
+		t.Fatalf("error %q; want %q", got, want)
+	}
+	if n := len(f.objects.objects()); n != 0 {
+		t.Fatalf("the node stored %d objects; want none", n)
+	}
+	if !f.mod.ActiveContract().Issuer.IsEqual(owner) {
+		t.Fatal("the active contract changed")
+	}
+	if n := len(f.apphost.tokens()); n != 0 {
+		t.Fatalf("the node issued %d access tokens; want none", n)
 	}
 }
 

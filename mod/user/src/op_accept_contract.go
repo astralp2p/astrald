@@ -2,6 +2,7 @@ package user
 
 import (
 	"github.com/astralp2p/astral-go/api/auth"
+	"github.com/astralp2p/astral-go/api/user"
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astral-go/astral/channel"
 	"github.com/astralp2p/astral-go/lib/routing"
@@ -15,12 +16,12 @@ type opAcceptContractArgs struct {
 // OpAcceptContract activates a fully-signed node contract as the node's active
 // contract - the local-setup and cold-card counterpart of OpAcceptMembership,
 // which runs the signing handshake instead of taking a pre-signed contract.
-// Rejects if the node already has an active contract (code 2). The contract is
+// Refuses with user.ErrAlreadyClaimed if the node already has an active contract. The contract is
 // validated (signatures, subject == node, not expired, grants membership)
 // before anything is stored or activated; the active-contract store's follow
 // indexes it for delegation lookups.
 //
-// why: no action gates this op, by decision. Claimed, the code 2 below refuses
+// why: no action gates this op, by decision. Claimed, the refusal below refuses
 // every caller. Unclaimed, there is no active contract and so no permit any
 // caller could hold — both swarm authorizers refuse on a nil contract, so an
 // action here would refuse everyone in the only window the op acts in. The gate
@@ -30,7 +31,9 @@ func (mod *Module) OpAcceptContract(ctx *astral.Context, q *routing.IncomingQuer
 	ac := mod.ActiveContract()
 	if ac != nil {
 		// the node already belongs to a user - claiming is a one-time transition
-		return q.RejectWithCode(2)
+		ch := q.Accept(channel.WithFormats(args.In, args.Out))
+		defer ch.Close()
+		return ch.Send(user.ErrAlreadyClaimed)
 	}
 
 	ch := q.Accept(channel.WithFormats(args.In, args.Out))

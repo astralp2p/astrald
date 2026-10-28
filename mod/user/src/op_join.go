@@ -1,6 +1,7 @@
 package user
 
 import (
+	"github.com/astralp2p/astral-go/api/user"
 	userClient "github.com/astralp2p/astral-go/api/user/client"
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astral-go/astral/channel"
@@ -30,7 +31,9 @@ func (mod *Module) OpJoin(ctx *astral.Context, q *routing.IncomingQuery, args op
 	}
 
 	if mod.ActiveContract() != nil {
-		return q.RejectWithCode(2)
+		ch := q.Accept(channel.WithFormats(args.In, args.Out))
+		defer ch.Close()
+		return ch.Send(user.ErrAlreadyClaimed)
 	}
 
 	if !q.Caller().IsEqual(mod.node.Identity()) {

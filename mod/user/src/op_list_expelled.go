@@ -17,7 +17,9 @@ type opListExpelledArgs struct {
 func (mod *Module) OpListExpelled(ctx *astral.Context, q *routing.IncomingQuery, args opListExpelledArgs) (err error) {
 	ac := mod.ActiveContract()
 	if ac == nil {
-		return q.RejectWithCode(2)
+		ch := q.Accept(channel.WithOutputFormat(args.Out))
+		defer ch.Close()
+		return ch.Send(user.ErrNoActiveContract)
 	}
 
 	if !mod.Auth.Authorize(ctx, &user.SeeSwarmAction{Action: auth.NewAction(q.Caller())}) {

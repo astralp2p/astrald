@@ -20,7 +20,9 @@ type opExpelArgs struct {
 // identities via authorizers.
 func (mod *Module) OpExpel(ctx *astral.Context, q *routing.IncomingQuery, args opExpelArgs) (err error) {
 	if mod.ActiveContract() == nil {
-		return q.RejectWithCode(2)
+		ch := q.Accept(channel.WithFormats(args.In, args.Out))
+		defer ch.Close()
+		return ch.Send(user.ErrNoActiveContract)
 	}
 
 	// why: the action carries the node, so resolution runs before authorization.

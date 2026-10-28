@@ -19,7 +19,9 @@ type opSwarmStatusArgs struct {
 func (mod *Module) OpSwarmStatus(ctx *astral.Context, q *routing.IncomingQuery, args opSwarmStatusArgs) (err error) {
 	ac := mod.ActiveContract()
 	if ac == nil {
-		return q.RejectWithCode(2)
+		ch := q.Accept(channel.WithFormats(args.In, args.Out))
+		defer ch.Close()
+		return ch.Send(user.ErrNoActiveContract)
 	}
 
 	if !mod.Auth.Authorize(ctx, &user.SeeSwarmAction{Action: auth.NewAction(q.Caller())}) {

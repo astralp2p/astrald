@@ -1,6 +1,8 @@
 package nat
 
 import (
+	"bytes"
+	"errors"
 	"io"
 	"sync"
 	"testing"
@@ -8,6 +10,7 @@ import (
 
 	"github.com/astralp2p/astral-go/api/auth"
 	"github.com/astralp2p/astral-go/astral"
+	"github.com/astralp2p/astral-go/astral/channel"
 	"github.com/astralp2p/astral-go/lib/query"
 	"github.com/astralp2p/astral-go/lib/routing"
 	authmod "github.com/astralp2p/astrald/mod/auth"
@@ -46,7 +49,7 @@ func (a *recordingAuth) recorded() []auth.ActionObject {
 // the op accepted the query and answered it.
 type recordingWriter struct {
 	mu     sync.Mutex
-	n      int
+	buf    bytes.Buffer
 	closed chan struct{}
 	once   sync.Once
 }
@@ -58,8 +61,7 @@ func newRecordingWriter() *recordingWriter {
 func (w *recordingWriter) Write(p []byte) (int, error) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
-	w.n += len(p)
-	return len(p), nil
+	return w.buf.Write(p)
 }
 
 func (w *recordingWriter) Close() error {
@@ -70,7 +72,27 @@ func (w *recordingWriter) Close() error {
 func (w *recordingWriter) written() int {
 	w.mu.Lock()
 	defer w.mu.Unlock()
-	return w.n
+	return w.buf.Len()
+}
+
+// objects decodes the objects the op wrote.
+func (w *recordingWriter) objects(t *testing.T) []astral.Object {
+	t.Helper()
+	w.mu.Lock()
+	defer w.mu.Unlock()
+
+	var objs []astral.Object
+	recv := channel.NewReceiver(bytes.NewReader(w.buf.Bytes()))
+	for {
+		obj, err := recv.Receive()
+		if errors.Is(err, io.EOF) {
+			return objs
+		}
+		if err != nil {
+			t.Fatalf("decode answer: %v", err)
+		}
+		objs = append(objs, obj)
+	}
 }
 
 // route dispatches one query to one op and returns the router's verdict once the

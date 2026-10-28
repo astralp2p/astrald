@@ -171,31 +171,23 @@ func TestJoinAnswersTheSwarmNodesRefusal(t *testing.T) {
 // no request leaves the node.
 func TestJoinRejects(t *testing.T) {
 	cases := []struct {
-		name    string
-		origin  string
-		caller  func(f *joinFixture) *astral.Identity
-		node    string
-		claimed bool
-		code    uint8
+		name   string
+		origin string
+		caller func(f *joinFixture) *astral.Identity
+		node   string
+		code   uint8
 	}{
-		{"network origin", astral.OriginNetwork, func(f *joinFixture) *astral.Identity { return f.node.id }, "swarm", false, astral.CodeRejected},
-		{"mcp origin", astral.OriginMCP, func(f *joinFixture) *astral.Identity { return f.node.id }, "swarm", false, astral.CodeRejected},
-		{"claimed node", "", func(f *joinFixture) *astral.Identity { return f.node.id }, "swarm", true, 2},
-		{"caller other than the node", "", func(*joinFixture) *astral.Identity { return astral.GenerateIdentity() }, "swarm", false, 4},
-		{"unknown node", "", func(f *joinFixture) *astral.Identity { return f.node.id }, "nobody", false, 3},
-		{"anonymous node", "", func(f *joinFixture) *astral.Identity { return f.node.id }, "anyone", false, 3},
-		{"this node", "", func(f *joinFixture) *astral.Identity { return f.node.id }, "self", false, 3},
+		{"network origin", astral.OriginNetwork, func(f *joinFixture) *astral.Identity { return f.node.id }, "swarm", astral.CodeRejected},
+		{"mcp origin", astral.OriginMCP, func(f *joinFixture) *astral.Identity { return f.node.id }, "swarm", astral.CodeRejected},
+		{"caller other than the node", "", func(*joinFixture) *astral.Identity { return astral.GenerateIdentity() }, "swarm", 4},
+		{"unknown node", "", func(f *joinFixture) *astral.Identity { return f.node.id }, "nobody", 3},
+		{"anonymous node", "", func(f *joinFixture) *astral.Identity { return f.node.id }, "anyone", 3},
+		{"this node", "", func(f *joinFixture) *astral.Identity { return f.node.id }, "self", 3},
 	}
 
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			f := newJoinFixture(&auth.SignedContract{})
-			if c.claimed {
-				err := f.mod.config.ActiveContract.Set(nil, &auth.SignedContract{Contract: &auth.Contract{Issuer: astral.GenerateIdentity()}})
-				if err != nil {
-					t.Fatalf("seed active contract: %v", err)
-				}
-			}
 
 			_, err := routeJoin(t, f, c.caller(f), c.origin, "user.join?node="+c.node)
 
@@ -209,5 +201,31 @@ func TestJoinRejects(t *testing.T) {
 			default:
 			}
 		})
+	}
+}
+
+// TestJoinRefusesAClaimedNode: a claimed node answers user.ErrAlreadyClaimed,
+// and no request leaves the node.
+func TestJoinRefusesAClaimedNode(t *testing.T) {
+	f := newJoinFixture(&auth.SignedContract{})
+	err := f.mod.config.ActiveContract.Set(nil, &auth.SignedContract{Contract: &auth.Contract{Issuer: astral.GenerateIdentity()}})
+	if err != nil {
+		t.Fatalf("seed active contract: %v", err)
+	}
+
+	objs, err := routeJoin(t, f, f.node.id, "", "user.join?node=swarm")
+	if err != nil {
+		t.Fatalf("route: %v", err)
+	}
+	if len(objs) != 1 || objs[0].ObjectType() != "error_message" {
+		t.Fatalf("the op answered %v; want one error_message", objs)
+	}
+	if got, want := objs[0].(astral.Error).Error(), user.ErrAlreadyClaimed.Error(); got != want {
+		t.Fatalf("error %q; want %q", got, want)
+	}
+	select {
+	case routed := <-f.node.routed:
+		t.Fatalf("the node sent %v", routed.query.QueryString)
+	default:
 	}
 }
