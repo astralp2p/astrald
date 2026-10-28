@@ -43,7 +43,7 @@ func (mod *Module) AuthorizeStoreObjects(ctx *astral.Context, action *auth.Store
 }
 
 // AuthorizeUseBlueprints answers whether this node has granted the actor the
-// right to read and register its blueprints.
+// right to read and register the node's blueprints.
 //
 // why: a typed shim over the generic lookup, matching AuthorizeSeeObjects.
 //

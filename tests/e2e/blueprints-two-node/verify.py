@@ -38,7 +38,8 @@ async def main():
         "live type's wire shape")
 
     # why a User session on node2 and not node2's own token: a sibling as
-    # itself reads no object on node1 (mod.auth.use_blueprints_action). The User
+    # itself reads no blueprint on node1 (objects.get_blueprint asks
+    # mod.auth.use_blueprints_action). The User
     # reads through node2, which relays the query to node1 as the User.
     async with await astral.connect(n2["endpoint"], token=n2["token"]) as c2:
         sibling_user = await c2.apphost.create_token(facts["user_id"])
