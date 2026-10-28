@@ -15,6 +15,9 @@ class ExecutorError(Exception):
 
 class Executor:
     env = None
+    # the machines the binaries under test were pushed to; empty where the
+    # run spawns its own processes or borrows a daemon
+    pushed = ()
 
     @property
     def session_json_path(self) -> Path:

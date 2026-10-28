@@ -18,6 +18,8 @@ TESTS = Path(__file__).resolve().parent.parent
 class FakeExecutor:
     """A world that comes up, and an operator that breaks before it drives."""
 
+    pushed = ()
+
     def __init__(self, dir: Path):
         self.dir = Path(dir)
         self.dir.mkdir(parents=True, exist_ok=True)
@@ -72,6 +74,30 @@ class TestOperatorError(unittest.TestCase):
         [e] = doc["entries"]
         self.assertEqual((e["test"], e["status"], e["failure_kind"]),
                          ("bootstrap-user-software-key", "fail", "environment"))
+
+
+class PushingExecutor(FakeExecutor):
+    """A VM world: the binaries under test went to three machines."""
+
+    pushed = ["node1", "node2", "reflector"]
+
+
+class TestPushedHeader(unittest.TestCase):
+    def test_the_header_names_every_vm_the_binaries_reached(self):
+        args = argparse.Namespace(selection=["bootstrap-user-software-key"],
+                                  driver="agent", target="fresh", keep=False)
+        with tempfile.TemporaryDirectory() as tmp, \
+                mock.patch.object(runner, "RESULTS", Path(tmp)), \
+                mock.patch.object(runner, "ensure_binary",
+                                  return_value=(Path(tmp) / "astrald", "abc")), \
+                mock.patch.object(runner, "_executor",
+                                  lambda args, plan, dir, *rest:
+                                  PushingExecutor(dir)), \
+                contextlib.redirect_stdout(io.StringIO()):
+            runner.main(args)
+            run_dir = next(Path(tmp).iterdir())
+            doc = json.loads((run_dir / "results.json").read_text())
+        self.assertEqual(doc["pushed"], "node1,node2,reflector")
 
 
 class TestDriverEnv(unittest.TestCase):

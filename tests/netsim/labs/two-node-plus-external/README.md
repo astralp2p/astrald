@@ -12,9 +12,9 @@ stranger to the nodes registering with it.
 
 A test opts the external machine in by naming it, exactly as it names any
 node — `nodes = ["node1", "node2", "reflector"]`. Most tests do not, and
-declare the pair alone. Nothing else distinguishes it: the roster is the only
-gate, and a named machine gets a pushed astrald, a token, a tunnel and a
-`session.json` entry like any other.
+declare the pair alone. Nothing else distinguishes it: every machine gets a
+pushed astrald and a token on every boot, and the roster is the only gate to
+a tunnel and a `session.json` entry.
 
 `reflector` is a name from its first use and now under-describes it, since it
 also serves as the gateway. Renaming it means editing `lab.story`, whose bytes

@@ -115,6 +115,7 @@ class NetsimExecutor(Executor):
         self.operator = dict(DEFAULT_OPERATOR)
         self._model_applied = False
         self.pinned = None
+        self.pushed = []
 
     # --- the runner's interface -------------------------------------------
 
@@ -132,10 +133,16 @@ class NetsimExecutor(Executor):
                     f"{test.name}: `driver` must be the last step, got "
                     f"{test.steps[-1]!r}")
         self._materialize(test.start, test.nodes)
-        # why: the roster grows along the chain — bootstrap wants node1,
-        # adopt-node wants node1 and node2. Push and tunnel per test, not per
-        # boot, or the second node runs the lab's stale astrald with no token.
-        self._push_astrald([n for n in test.nodes if n not in self._nodes])
+        # why every VM, not the roster: an op reaches machines no roster
+        # names — nat-punch's add-reflector relies on the reflector — and a
+        # machine left out keeps the astrald baked with the lab, so the
+        # verdict was partly about old code. Once per boot, since a push
+        # restarts astrald and the chain carries the world between tests.
+        self._push_astrald([vm for vm in self._vms() if vm not in self.pushed])
+        missing = [n for n in test.nodes if n not in self._nodes]
+        if missing:
+            raise ExecutorError(f"{test.name}: the simulation runs no "
+                                f"{', '.join(missing)}")
         # why open the session before the steps as well as after: a vmop is
         # given each node's identity (ASTRAL_ID_<vm>), and until this runs
         # there are no identities to give — leave-lan silently fell back to
@@ -152,7 +159,9 @@ class NetsimExecutor(Executor):
     def merge_facts(self, path: Path) -> None:
         if Path(path).exists():
             self.facts.update(json.loads(Path(path).read_text()))
-            self._write_session(list(self._nodes))
+            # note: every VM is pushed, but only a roster node has a tunnel
+            self._write_session([vm for vm, info in self._nodes.items()
+                                 if "port" in info])
 
     def save(self, state: str) -> None:
         """Snapshot the running simulation under this state's cache key.
@@ -402,6 +411,7 @@ tokens:
 EOF
 systemctl restart astrald""")
             self._nodes[vm] = {"token": token}
+            self.pushed.append(vm)
 
     # --- the session drivers and oracles see ---------------------------------
 
@@ -710,10 +720,19 @@ systemctl restart astrald""")
         if p.returncode != 0:
             raise ExecutorError(f"{vm}: pushing {src.name}: {p.stderr}")
 
+    def _manifest_vms(self) -> list:
+        """The simulation manifest's VM entries."""
+        manifest = json.loads((self.sim_dir / "manifest.json").read_text())
+        return manifest.get("vms", [])
+
+    def _vms(self) -> list:
+        """Every VM the simulation runs, by hostname."""
+        return [e["hostname"] for e in self._manifest_vms()
+                if e.get("hostname") and e.get("state") == "running"]
+
     def _lan_ip(self, vm: str) -> str:
         """The VM's address on the simulated LAN, from the sim manifest."""
-        manifest = json.loads((self.sim_dir / "manifest.json").read_text())
-        for entry in manifest.get("vms", []):
+        for entry in self._manifest_vms():
             if entry.get("hostname") == vm:
                 return entry["ip"]
         raise ExecutorError(f"{vm}: no address in the simulation manifest")

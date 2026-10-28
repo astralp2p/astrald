@@ -303,6 +303,10 @@ def main(args) -> int:
             print(f"run: --keep, world left up under "
                   f"{ex.session_json_path.parent}", file=sys.stderr)
 
+    # why: a VM verdict is about the code under test only on the machines
+    # that run it, so the header names them
+    if ex.pushed:
+        results.header["pushed"] = ",".join(ex.pushed)
     code = results.finalize()
     print(f"\n{report.summary_line(results.doc)}")
     print(f"run: report at {run_dir / 'report.md'}")
