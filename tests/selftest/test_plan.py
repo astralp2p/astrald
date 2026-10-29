@@ -1,0 +1,281 @@
+"""The planner, held to its invariants over the shipped manifests.
+
+Every single test, every ordered pair and every suite is planned shared and
+isolated, and each plan must keep the rules a world depends on. The suites'
+plans are pinned in golden/, so a manifest change that moves a test shows up
+as a diff someone reads.
+"""
+import argparse
+import itertools
+import unittest
+from pathlib import Path
+from types import SimpleNamespace
+from unittest import mock
+
+from lib import runner
+from lib.manifest import load_all
+from lib.plan import PlanError, chain, plan, render
+from lib.suites import load
+
+TESTS = Path(__file__).resolve().parent.parent
+GOLDEN = Path(__file__).resolve().parent / "golden"
+
+# suite -> the driver its golden plan is drawn under
+SUITES = {"main": "script", "tor": "script", "nat": "script", "agent": "agent"}
+
+
+def fake(after=None, destroys=False, ops=(), local_only=None,
+         nodes=("node1",), prompt=False):
+    return SimpleNamespace(after=after, destroys=destroys or bool(ops),
+                           ops=list(ops), local_only=local_only,
+                           nodes=list(nodes), prompt=prompt)
+
+
+class Invariants:
+    """What every plan of the shipped tree must hold."""
+
+    def check(self, tests, selection, worlds, isolate):
+        producers = {t.after for t in tests.values()} - {None}
+        ran = [s.test for w in worlds for s in w.steps if s.kind == "test"]
+        self.assertEqual(sorted(ran), sorted(set(selection)),
+                         "each selected test runs exactly once as a test")
+        for w in worlds:
+            names = [s.test for s in w.steps]
+            self.assertIn("test", [s.kind for s in w.steps],
+                          f"{w.name} runs no selected test")
+            if isolate:
+                self.assertEqual([s.kind for s in w.steps].count("test"), 1)
+            for i, n in enumerate(names):
+                t = tests[n]
+                self.assertTrue(set(chain(tests, n)[:-1]) <= set(names[:i]),
+                                f"{w.name}: {n} runs before its lineage")
+                if w.steps[i].kind == "prereq":
+                    self.assertTrue(any(
+                        s.kind == "test" and n in chain(tests, s.test)
+                        for s in w.steps[i + 1:]),
+                        f"{w.name}: prereq {n} feeds no later test")
+                if w.kind == "vm":
+                    self.assertIsNone(t.local_only,
+                                      f"{w.name}: local-only {n} in a VM")
+                if t.ops:
+                    self.assertEqual(w.kind, "vm",
+                                     f"{w.name}: {n}'s ops outside a VM")
+                if t.destroys:
+                    for later in names[i + 1:]:
+                        self.assertIn(n, chain(tests, later),
+                                      f"{w.name}: {later} follows {n}")
+                    if t.after is None:
+                        for before in names[:i]:
+                            b = tests[before]
+                            self.assertTrue(
+                                b.after is None and before not in producers
+                                and not b.destroys,
+                                f"{w.name}: {n} meets {before}'s world")
+                if n not in producers and not t.destroys:
+                    # an observer runs before its parent's producers
+                    for before in names[:i]:
+                        self.assertFalse(
+                            tests[before].after == t.after
+                            and before in producers,
+                            f"{w.name}: observer {n} after producer {before}")
+
+
+class TestShippedPlans(Invariants, unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.tests = load_all(TESTS / "e2e")
+        cls.suites = {p.stem: load(p) for p in
+                      sorted((TESTS / "suites").glob("*.suite"))}
+
+    def selections(self):
+        names = sorted(self.tests)
+        yield from (([n], ()) for n in names)
+        yield from ((list(p), ()) for p in itertools.permutations(names, 2))
+        yield from ((s, s) for s in self.suites.values())
+
+    def test_every_selection_keeps_the_invariants(self):
+        for isolate in (False, True):
+            for selection, order in self.selections():
+                with self.subTest(selection=selection, isolate=isolate):
+                    worlds = plan(self.tests, selection, order,
+                                  isolate=isolate)
+                    self.check(self.tests, selection, worlds, isolate)
+
+    def test_every_vm_selection_keeps_the_invariants(self):
+        for selection, order in self.selections():
+            with self.subTest(selection=selection):
+                lineage = {n for s in selection for n in chain(self.tests, s)}
+                if any(self.tests[n].local_only for n in lineage):
+                    with self.assertRaisesRegex(PlanError, "local only"):
+                        plan(self.tests, selection, order, vm=True)
+                    continue
+                worlds = plan(self.tests, selection, order, vm=True)
+                self.assertEqual({w.kind for w in worlds}, {"vm"})
+                self.check(self.tests, selection, worlds, False)
+
+    def test_a_prereq_stranded_by_a_fork_is_dropped(self):
+        # why: mcp-origin fixes w0 local, tor-link forks a VM world, and the
+        # bootstrap and adopt-node that led to it would feed nothing in w0
+        worlds = plan(self.tests, ["mcp-origin", "tor-link"])
+        self.assertEqual([[s.test for s in w.steps] for w in worlds],
+                         [["mcp-origin"],
+                          ["bootstrap-user-software-key", "adopt-node",
+                           "tor-link"]])
+
+    def test_golden_suite_plans(self):
+        self.assertEqual(set(SUITES), set(self.suites))
+        for suite, driver in SUITES.items():
+            with self.subTest(suite=suite):
+                listed = self.suites[suite]
+                got = render(plan(self.tests, listed, listed, driver=driver))
+                flag = " --driver agent" if driver == "agent" else ""
+                self.assertEqual(
+                    got, (GOLDEN / f"{suite}.plan").read_text(),
+                    f"{suite}.suite plans differently; if intended, run "
+                    f"./tests/run --plan{flag} {suite}.suite > "
+                    f"tests/selftest/golden/{suite}.plan")
+
+    def test_main_suite_is_one_world(self):
+        listed = self.suites["main"]
+        self.assertEqual(len(plan(self.tests, listed, listed)), 1)
+
+    def test_root_observers_run_before_bootstrap(self):
+        w, = plan(self.tests, ["adopt-node", "claim-window"])
+        self.assertEqual([s.test for s in w.steps],
+                         ["claim-window", "bootstrap-user-software-key",
+                          "adopt-node"])
+
+    def test_a_claiming_destroyer_never_follows_bootstrap(self):
+        # why: both claim node1, so the destroyer needs a world of its own
+        # even when no sibling destroyer ended the shared one first
+        for selection in (["bootstrap-user-software-key",
+                           "import-user-software-key"],
+                          ["adopt-node", "bootstrap-user-op"]):
+            with self.subTest(selection=selection):
+                worlds = plan(self.tests, selection)
+                self.assertEqual(len(worlds), 2)
+                self.assertEqual([s.test for s in worlds[1].steps],
+                                 [selection[1]])
+
+    def test_two_vm_destroyers_get_a_vm_world_each(self):
+        worlds = plan(self.tests, ["tor-link", "nat-punch"])
+        self.assertEqual([w.kind for w in worlds], ["vm", "vm"])
+        for w, test in zip(worlds, ["nat-punch", "tor-link"]):
+            self.assertEqual([(s.test, s.kind) for s in w.steps],
+                             [("bootstrap-user-software-key", "prereq"),
+                              ("adopt-node", "prereq"), (test, "test")])
+
+    def test_all_tests_plan_as_seven_worlds(self):
+        worlds = plan(self.tests, sorted(self.tests))
+        self.assertEqual(
+            [(w.kind, w.steps[-1].test) for w in worlds],
+            [("local", "expel-node"), ("vm", "gateway-relay"),
+             ("local", "hold-purge"), ("vm", "nat-punch"),
+             ("vm", "tor-link"), ("local", "bootstrap-user-op"),
+             ("local", "import-user-software-key")])
+
+    def test_a_local_test_never_enters_a_vm_world(self):
+        worlds = plan(self.tests, ["mcp-peer", "tor-link"])
+        self.assertEqual([w.kind for w in worlds], ["local", "vm"])
+        with self.assertRaisesRegex(PlanError, "local only"):
+            plan(self.tests, ["mcp-peer"], vm=True)
+        with self.assertRaisesRegex(PlanError, "local only"):
+            plan(self.tests, ["fs-watch"], driver="agent")
+
+    def test_agent_drives_selected_tests_and_script_replays(self):
+        w, = plan(self.tests, ["object-store"], driver="agent")
+        self.assertEqual(w.kind, "vm")
+        self.assertEqual([(s.test, s.driver) for s in w.steps],
+                         [("bootstrap-user-software-key", "script"),
+                          ("adopt-node", "script"), ("object-store", "agent")])
+        w, = plan(self.tests, ["object-store"], driver="agent",
+                  prereqs_agent=True)
+        self.assertEqual({s.driver for s in w.steps}, {"agent"})
+        with self.assertRaisesRegex(PlanError, "no prompt.md"):
+            plan(self.tests, ["smoke"], driver="agent")
+
+    def test_attach_plans_one_world_and_builds_nothing(self):
+        w, = plan(self.tests, ["smoke"], target="attach")
+        self.assertEqual((w.kind, [s.test for s in w.steps]),
+                         ("attach", ["smoke"]))
+        with self.assertRaisesRegex(PlanError, "build 'bootstrap"):
+            plan(self.tests, ["adopt-node"], target="attach")
+        with self.assertRaisesRegex(PlanError, "local only"):
+            plan(self.tests, ["mcp-origin"], target="attach")
+        with self.assertRaisesRegex(PlanError, "no operator"):
+            plan(self.tests, ["bootstrap-user-software-key"], driver="agent",
+                 target="attach")
+        with self.assertRaisesRegex(PlanError, "one world"):
+            plan(self.tests, ["smoke"], target="attach", isolate=True)
+
+    def test_unknown_test(self):
+        with self.assertRaisesRegex(PlanError, "unknown test"):
+            plan(self.tests, ["smok"])
+
+
+class TestSyntheticPlans(unittest.TestCase):
+    def test_attach_refuses_a_second_node_and_vm_ops(self):
+        tests = {"pair": fake(nodes=("node1", "node2")),
+                 "op": fake(ops=["enable-tor node1"])}
+        with self.assertRaisesRegex(PlanError, "one daemon"):
+            plan(tests, ["pair"], target="attach")
+        with self.assertRaisesRegex(PlanError, "no simulation"):
+            plan(tests, ["op"], target="attach")
+
+    def test_suite_order_is_a_preference_among_siblings(self):
+        tests = {"root": fake(), "a": fake(after="root"),
+                 "b": fake(after="root")}
+        w, = plan(tests, ["root", "a", "b"], ["b", "root", "a"])
+        self.assertEqual([s.test for s in w.steps], ["root", "b", "a"])
+        w, = plan(tests, ["root", "a", "b"])
+        self.assertEqual([s.test for s in w.steps], ["root", "a", "b"])
+
+    def test_a_second_producer_forks_and_replays_the_lineage(self):
+        tests = {"root": fake(), "p1": fake(after="root"),
+                 "p2": fake(after="root"), "c1": fake(after="p1"),
+                 "c2": fake(after="p2")}
+        worlds = plan(tests, ["c1", "c2"])
+        self.assertEqual([[(s.test, s.kind) for s in w.steps] for w in worlds],
+                         [[("root", "prereq"), ("p1", "prereq"),
+                           ("c1", "test")],
+                          [("root", "prereq"), ("p2", "prereq"),
+                           ("c2", "test")]])
+
+    def test_a_destroyers_descendants_follow_it(self):
+        tests = {"root": fake(), "d": fake(after="root", destroys=True),
+                 "kid": fake(after="d"), "obs": fake(after="root")}
+        w, = plan(tests, ["kid", "obs"])
+        self.assertEqual([s.test for s in w.steps], ["root", "obs", "d", "kid"])
+
+
+class TestRunPlan(unittest.TestCase):
+    def args(self, **kw):
+        base = dict(selection=["tor-link", "nat-punch"], driver="script",
+                    target="fresh", keep=False, plan=True, isolate=False,
+                    prereqs="script")
+        return argparse.Namespace(**{**base, **kw})
+
+    def test_plan_builds_and_starts_nothing(self):
+        boom = mock.Mock(side_effect=AssertionError("--plan built or leased"))
+        with mock.patch.object(runner, "ensure_binary", boom), \
+             mock.patch.object(runner, "lease_ports", boom), \
+             mock.patch.object(runner, "fresh_run_dir", boom), \
+             mock.patch("builtins.print") as out:
+            self.assertEqual(runner.main(self.args()), 0)
+        printed = "".join(c.args[0] for c in out.call_args_list)
+        self.assertIn("w1 vm: bootstrap-user-software-key* → adopt-node*",
+                      printed)
+
+    def test_a_refused_plan_exits_2(self):
+        with mock.patch("builtins.print"):
+            self.assertEqual(runner.main(self.args(
+                selection=["adopt-node"], target="attach")), 2)
+
+    def test_isolate_without_plan_is_refused(self):
+        with mock.patch("builtins.print"):
+            self.assertEqual(runner.main(self.args(plan=False,
+                                                   isolate=True)), 2)
+
+
+if __name__ == "__main__":
+    unittest.main()

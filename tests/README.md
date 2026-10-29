@@ -111,6 +111,31 @@ at node2 and calls them as an agent on node1.
 and never learn whether the endpoints behind it are processes on loopback
 or VMs behind a tunnel.
 
+## The planner's keys and `--plan`
+
+Every manifest also carries the keys the planner (`lib/plan.py`) reads. The
+runner still executes the state chain above; `./tests/run --plan` prints the
+worlds the planner makes of a selection and runs nothing.
+
+```toml
+after      = "adopt-node"   # the test whose world this one continues; absent: a fresh world
+destroys   = true           # only this test's descendants may follow it in its world
+ops        = ["enable-tor node1 node2"]   # VM operations before the driver; imply destroys
+local_only = "<reason>"     # it needs the host (a node root, mcp_url, a restart): never in a VM
+facts      = ["user_id"]    # the facts its driver writes
+```
+
+    ./tests/run --plan main.suite            # one local world
+    ./tests/run --plan tor-link nat-punch    # two VM worlds, each replaying its prereqs
+    ./tests/run --plan --isolate main.suite  # a world per selected test
+
+A test continues the world of its `after`. At each test, the children that
+neither build for another test nor destroy run first, in suite order; then
+the first producer continues the world and each further one forks a world
+that replays the lineage; one destroyer may end the world, and every other
+destroyer forks. `*` marks a prereq. The plans of the shipped suites are
+pinned under `selftest/golden/`.
+
 ## States
 
 Tests chain through named states — `null → one-node → two-nodes → …` — one

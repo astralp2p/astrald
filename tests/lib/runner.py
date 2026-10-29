@@ -16,6 +16,7 @@ from pathlib import Path
 from astral.client import ENDPOINT_VARS, TOKEN_VARS
 
 from lib import manifest, report, suites
+from lib import plan as planner
 from lib.build import ensure_binary, git_ref
 from lib.executors import ExecutorError
 from lib.executors.attach import AttachExecutor
@@ -205,6 +206,17 @@ def driver_env(session_json: Path, target: str) -> dict:
     return env
 
 
+def selected_suite(selection: list) -> list | None:
+    """The tests the suite the CLI named lists, or None for a bare test
+    selection. A suite runs alone."""
+    suites_dir = TESTS / "suites"
+    named = [n for n in selection if suites.find(suites_dir, n)]
+    if named and len(selection) > 1:
+        raise ValueError(f"a suite runs alone: {named[0]!r} cannot be mixed "
+                         "with other selections")
+    return suites.load(suites.find(suites_dir, named[0])) if named else None
+
+
 def plan_for(tests: dict, selection: list) -> list:
     """[(Test, kind)] for what the CLI selected.
 
@@ -213,15 +225,8 @@ def plan_for(tests: dict, selection: list) -> list:
     observers before producers at equal depth; it is refused when it holds
     two mutators, and otherwise held to the same walk a suite is.
     """
-    suites_dir = TESTS / "suites"
-    if not selection:
-        selection = [DEFAULT_SUITE]
-    named = [n for n in selection if suites.find(suites_dir, n)]
-    if named and len(selection) > 1:
-        raise ValueError(f"a suite runs alone: {named[0]!r} cannot be mixed "
-                         "with other selections")
-    if named:
-        listed = suites.load(suites.find(suites_dir, named[0]))
+    listed = selected_suite(selection or [DEFAULT_SUITE])
+    if listed:
         manifest.validate_order(tests, listed)
         return [(tests[n], "test") for n in listed]
     plan = manifest.resolve(tests, selection)
@@ -236,6 +241,27 @@ def plan_for(tests: dict, selection: list) -> list:
     # destroyer can never run ahead of a test that needs what it destroys
     manifest.validate_order(tests, [t.name for t, _ in plan])
     return plan
+
+
+def print_plan(tests: dict, args) -> int:
+    """--plan: the worlds the planner makes of the selection, printed, with
+    nothing built, leased or started."""
+    if args.target.startswith("stage:"):
+        print("run: --plan plans fresh and attach runs, not a pinned stage",
+              file=sys.stderr)
+        return 2
+    selection = args.selection or [DEFAULT_SUITE]
+    try:
+        listed = selected_suite(selection)
+        worlds = planner.plan(tests, listed or selection, listed or (),
+                              isolate=args.isolate, driver=args.driver,
+                              target=args.target,
+                              prereqs_agent=args.prereqs == "agent")
+    except ValueError as e:
+        print(f"run: {e}", file=sys.stderr)
+        return 2
+    print(planner.render(worlds), end="")
+    return 0
 
 
 def _reject_unbuilt(args, plan: list) -> str | None:
@@ -312,6 +338,19 @@ def main(args) -> int:
 
     try:
         tests = manifest.load_all(TESTS / "e2e")
+    except ValueError as e:
+        print(f"run: {e}", file=sys.stderr)
+        return 2
+    if getattr(args, "plan", False):
+        return print_plan(tests, args)
+    if getattr(args, "isolate", False) or getattr(args, "prereqs",
+                                                   "script") != "script":
+        # why refused rather than ignored: a run that silently shared a world
+        # would read as an isolated verdict it never was
+        print("run: --isolate and --prereqs take effect with --plan only, "
+              "until runs follow the plan", file=sys.stderr)
+        return 2
+    try:
         plan = plan_for(tests, args.selection)
     except ValueError as e:
         print(f"run: {e}", file=sys.stderr)

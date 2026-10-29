@@ -20,6 +20,7 @@ examples:
   ./tests/run main.suite             a named suite, in its listed order
   ./tests/run adopt-node             one test + the prereq prefix it needs
   ./tests/run smoke adopt-node       several tests
+  ./tests/run --plan main.suite      the worlds a run would use, with nothing run
 """
 
 
@@ -54,6 +55,15 @@ def main() -> int:
                     help="where the machines come from (default: fresh)")
     ap.add_argument("--keep", action="store_true",
                     help="leave the world running after the run")
+    ap.add_argument("--plan", action="store_true",
+                    help="print the worlds the selection plans into and exit, "
+                         "starting nothing")
+    ap.add_argument("--isolate", action="store_true",
+                    help="plan every selected test into a world of its own "
+                         "(only --plan honours it, until runs follow the plan)")
+    ap.add_argument("--prereqs", choices=["script", "agent"], default="script",
+                    help="who drives prereqs and replays under --driver agent "
+                         "(only --plan honours it, until runs follow the plan)")
     args = ap.parse_args()
 
     if sys.version_info < (3, 11):
