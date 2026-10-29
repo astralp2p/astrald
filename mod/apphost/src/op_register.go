@@ -46,8 +46,6 @@ func (mod *Module) OpRegister(ctx *astral.Context, query *routing.IncomingQuery,
 	extras := mod.EnRouteQueryExtras(query.Nonce())
 	origin, _ := extras[apphost.ExtraOriginWeb].(string)
 
-	// why: a registered app is served from this node, so its grant request
-	// carries ServeApps whatever the app asked for.
 	requestedGrantPermits := registerGrantRequest(args.GrantPermits)
 
 	// why: the trusted-source template joins the contract request rather than

@@ -414,7 +414,7 @@ func serveAppsRegistrar(t *testing.T) *Module {
 
 // TestServeAppsRegistrationWritesTheGrant is the operator's decision end to end:
 // under the default register policy, an app that asks for nothing leaves
-// apphost.register holding a ServeApps grant.
+// apphost.register holding ServeApps and UseBlueprints grants.
 func TestServeAppsRegistrationWritesTheGrant(t *testing.T) {
 	mod := serveAppsRegistrar(t)
 	w := newRecordingWriter()
@@ -435,5 +435,8 @@ func TestServeAppsRegistrationWritesTheGrant(t *testing.T) {
 	app := tokens[0].Identity
 	if !mod.AuthorizeServeApps(nil, serveAppsAction(app)) {
 		t.Fatalf("the app registered as %v holds no ServeApps grant", app)
+	}
+	if !mod.AuthorizeUseBlueprints(nil, useBlueprintsAction(app)) {
+		t.Fatalf("the app registered as %v holds no UseBlueprints grant", app)
 	}
 }
