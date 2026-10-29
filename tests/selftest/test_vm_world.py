@@ -70,7 +70,7 @@ class FakeLab:
 
     # -- netsim ------------------------------------------------------------
 
-    def netsim(self, *args, check=True, capture=True) -> str:
+    def netsim(self, *args, check=True, capture=True, timeout=None) -> str:
         args = tuple(str(a) for a in args)
         self.calls.append(("netsim", *args))
         verb = args[0]

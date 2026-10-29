@@ -17,7 +17,7 @@ from pathlib import Path
 
 from astral.client import ENDPOINT_VARS, TOKEN_VARS
 
-from lib import manifest, report, suites
+from lib import agent, manifest, report, suites
 from lib import plan as planner
 from lib.build import ensure_binary, git_ref
 from lib.nodeconfig import PortsBusy, lease_ports
@@ -59,7 +59,7 @@ def _run_step(py: str, script: Path, log: Path, env: dict, timeout: int) -> int:
             return 124
 
 
-def _perform(ex, t, driver: str, art: Path, view) -> tuple:
+def _perform(ex, t, drive, art: Path, view) -> tuple:
     """(status, failure_kind, phase) of one test: prepare, driver, the
     restart the manifest names, then the oracle. `phase` is the step the
     test stopped at.
@@ -67,7 +67,8 @@ def _perform(ex, t, driver: str, art: Path, view) -> tuple:
     `view(phase)` writes the test's session view for the phase about to run
     and returns the environment that phase runs in. The oracle gets a fresh
     one: a restart changes the nodes, and the oracle also reads what its own
-    driver wrote.
+    driver wrote. `drive(env)` performs the flow — script.py or the
+    operator — and returns its exit code.
 
     why one try around every step: an operator's model rewrite, payload push
     or ssh raises from inside the driver step, and a try around prepare alone
@@ -79,11 +80,7 @@ def _perform(ex, t, driver: str, art: Path, view) -> tuple:
         ex.ensure(t)
         env = view("driver")
         phase = "driver"
-        if driver == "agent":
-            rc = ex.run_agent(t, art / "driver.log", art / "facts.json")
-        else:
-            rc = _run_step(sys.executable, t.dir / "script.py",
-                           art / "driver.log", env, t.timeout)
+        rc = drive(env)
         if rc != 0:
             return "fail", "driver", phase
         if t.restart:
@@ -382,10 +379,12 @@ class _Run:
     """What the world loop shares across a run's worlds."""
 
     def __init__(self, args, tests: dict, results, saved: dict | None,
-                 configs: dict):
+                 configs: dict, operator: dict | None):
         self.args, self.tests, self.results = args, tests, results
         self.saved = saved        # the record of the world --from boots
         self.configs = configs    # world -> the overrides it starts with
+        self.operator = operator  # [agent]'s model and base_url, or None
+        self.agent = None         # the operator of the world running now
         self.pushed = []
         self.torn = None          # the first world close that raised
         self.unsaved = None       # why a --save did not land
@@ -395,6 +394,10 @@ class _Run:
         """Run one world's steps on ex, save it when asked, then close it."""
         record = WorldRecord(self.results.dir, name)
         record.config = self.configs.get(name, {})
+        # note: the agent driver runs only in VM worlds (plan rule 5), and a
+        # VM world is what offers ssh()
+        self.agent = (agent.Operator(ex.ssh, **self.operator)
+                      if self.operator is not None else None)
         try:
             if self.saved is not None:
                 self._resume(ex, record)
@@ -504,7 +507,14 @@ class _Run:
             write_view(art / "session.json", record.run, ex.nodes(), facts)
             return env
 
-        status, fk, phase = _perform(ex, t, s.driver, art, view)
+        if s.driver == "agent":
+            def drive(_env):
+                return self.agent.run(t, art)
+        else:
+            def drive(env):
+                return _run_step(sys.executable, t.dir / "script.py",
+                                 art / "driver.log", env, t.timeout)
+        status, fk, phase = _perform(ex, t, drive, art, view)
         died = ex.dead()
         if died and fk != "environment":
             # why: a dead daemon voids any verdict, even a nominal pass
@@ -537,21 +547,18 @@ def _units(tests: dict, args) -> tuple:
 
 
 def _operator(cfg: dict, results) -> dict:
-    """The operator profile config.toml selects for --driver agent.
+    """The model and endpoint config.toml's [agent] names, recorded in the
+    header.
 
-    why named rather than assumed: the profile IS the operator under test,
-    so the run records which one drove it. A pass rate that cannot name its
-    agent is not attributable to anything.
+    why recorded: a red under one model says nothing about another, so a
+    pass rate that cannot name its model is not attributable to anything.
     """
-    agent_cfg = cfg.get("agent", {})
-    name = agent_cfg.get("use", "qwen")
-    profile = agent_cfg.get(name)
-    if not isinstance(profile, dict):
-        raise ValueError(f"config.toml selects agent profile {name!r}, but "
-                         f"has no [agent.{name}] section")
-    results.header["agent_profile"] = name
-    results.header["agent_model"] = profile.get("model", "") or "(lab default)"
-    return profile
+    section = cfg.get("agent", {})
+    operator = {"model": section.get("model", ""),
+                "base_url": section.get("base_url", "")}
+    results.header["agent_profile"] = agent.NAME
+    results.header["agent_model"] = operator["model"] or "(lab default)"
+    return operator
 
 
 def main(args) -> int:
@@ -588,13 +595,7 @@ def main(args) -> int:
         target=args.target))
     if args.from_stage:
         results.header["from"] = args.from_stage
-    profile = None
-    if args.driver == "agent":
-        try:
-            profile = _operator(cfg, results)
-        except ValueError as e:
-            print(f"run: {e}", file=sys.stderr)
-            return 2
+    operator = _operator(cfg, results) if args.driver == "agent" else None
 
     lease = None
     if any(env == "node" for _, env, _ in units) and args.target != "attach":
@@ -622,16 +623,12 @@ def main(args) -> int:
         world = _vm_world(run_dir / name, binary, ref, keep, configs[name])
         if args.from_stage:
             world.boot_from(args.from_stage, run.saved)
-        if profile is not None:
-            world.use_operator(profile)
-            world.want_model(profile.get("model", ""),
-                             profile.get("base_url", ""))
         return world
 
     steps = layout(units)
     run = _Run(args, tests, results,
                snapshot(args.from_stage) if args.from_stage else None,
-               configs)
+               configs, operator)
     stop = None               # what ended the loop early, if anything
     unclosed = None           # the world whose close raised
     try:

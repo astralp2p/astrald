@@ -55,38 +55,21 @@ SSHD_DROPIN = "/etc/ssh/sshd_config.d/astral-tests.conf"
 # enter-nat's private host inside netns `priv`, routable from the root netns
 # over the veth pair it creates (netsim/ops/enter-nat).
 NAT_NETNS_HOST = "192.168.99.2"
-# The operator profile the harness falls back to when config.toml names none.
-# The lab bakes a Qwen Code operator on node1 with the astral-agent skill
-# (netsim/labs/two-node-plus-external/lab.story), which is the only machine in the
-# world that can
-# drive a flow from a prompt.
-#
-# why a dict rather than constants: which agent drives a run is a property of
-# the run, and the harness needs exactly three things to use one — where it
-# lives, who it runs as, and how to hand it a prompt. Naming those makes a
-# second agent a config entry rather than a patch.
-DEFAULT_OPERATOR = {
-    "vm": "node1",
-    "user": "tester",
-    "command": 'qwen -y "$(cat {prompt})"',
-}
+SSH_READY_TIMEOUT = 120.0
 # why: a guest that just lost its data regenerates its node key and bootstraps
 # a fresh onion before apphost listens — minutes on a 1-vCPU VM, not seconds.
 APPHOST_READY_TIMEOUT = 300.0
 # how long a killed simulation may stay listed before its world fails to close
 KILL_TIMEOUT = 60.0
-# why this large: an operator reads a prompt, plans, and works the node
-# through its own shell, and one measured import-user-software-key session
-# took 2404 s — past the 2400 s budget the manifests used to carry
-AGENT_TIMEOUT = 3600
 
 
-def _netsim(*args, check=True, capture=True) -> str:
-    """One netsim invocation. Never inherits a simulation from the shell."""
+def _netsim(*args, check=True, capture=True, timeout=None) -> str:
+    """One netsim invocation. Never inherits a simulation from the shell.
+    Past `timeout` seconds it raises subprocess.TimeoutExpired."""
     cmd = ["netsim", *[str(a) for a in args]]
     try:
         p = subprocess.run(cmd, check=check, text=True,
-                           capture_output=capture)
+                           capture_output=capture, timeout=timeout)
     except FileNotFoundError as e:
         raise WorldError("netsim is not on PATH") from e
     except subprocess.CalledProcessError as e:
@@ -147,10 +130,6 @@ class VmWorld(World):
         self._boot_error = None
         self._nodes = {}
         self._tunnels = []
-        self._agent_model = ""
-        self._agent_base_url = ""
-        self.operator = dict(DEFAULT_OPERATOR)
-        self._model_applied = False
         self.pushed = []
 
     # --- the runner's interface -------------------------------------------
@@ -270,9 +249,11 @@ class VmWorld(World):
         self._open()
         return self.saved
 
-    def ssh(self, vm: str, script: str, check=True) -> str:
-        """Run a shell script as root on one of this world's VMs."""
-        return _netsim("ssh", "--sim", self.sim, vm, "--", script, check=check)
+    def ssh(self, vm: str, script: str, check=True, timeout=None) -> str:
+        """Run a shell script as root on one of this world's VMs; its output.
+        Past `timeout` seconds it raises subprocess.TimeoutExpired."""
+        return _netsim("ssh", "--sim", self.sim, vm, "--", script,
+                       check=check, timeout=timeout)
 
     # --- booting -------------------------------------------------------------
 
@@ -673,195 +654,6 @@ systemctl restart astrald""")
         if pypath:
             env["ASTRALPY_SRC"] = pypath.split(os.pathsep)[-1]
         return env
-
-    # --- the AI operator ------------------------------------------------------
-    # todo: child 8 moves the operator into lib/agent.py, driven over ssh();
-    # until then it lives here, unchanged from the netsim executor.
-
-    def use_operator(self, profile: dict) -> None:
-        """Adopt an operator profile: where the agent is, and how to run it."""
-        self.operator = {**DEFAULT_OPERATOR,
-                         **{k: v for k, v in profile.items() if v}}
-
-    def want_model(self, model: str, base_url: str = "") -> None:
-        """Record the model this run wants; applied once the world is up."""
-        self._agent_model = model
-        self._agent_base_url = base_url
-
-    def _apply_model(self) -> None:
-        """Point the lab's baked operator at a different model, in place.
-
-        why: the model is baked by the lab recipe, so changing it there costs
-        a full rebake of the lab — far too much to pay
-        for the ordinary act of comparing two models over the same tests.
-        Qwen Code reads its model from ~/.qwen/settings.json and ~/.qwen/.env,
-        so rewriting those two files after boot makes the model a property of
-        the run instead.
-        """
-        model, base_url = self._agent_model, self._agent_base_url
-        if not model or self._model_applied:
-            return
-        home = f"/home/{self.operator['user']}"
-        sets = f"{home}/.qwen/settings.json"
-        env = f"{home}/.qwen/.env"
-        url = shlex.quote(base_url) if base_url else ""
-        script = "\n".join([
-            "set -eu",
-            f"m={shlex.quote(model)}",
-            f'python3 - "$m" {url} <<\'PY\'',
-            "import json, sys, pathlib",
-            "model = sys.argv[1]",
-            "base = sys.argv[2] if len(sys.argv) > 2 else ''",
-            f"s = pathlib.Path({sets!r})",
-            "doc = json.loads(s.read_text())",
-            "for p in doc.get('modelProviders', {}).get('openai', []):",
-            "    p['id'] = p['name'] = model",
-            "    if base:",
-            "        p['baseUrl'] = base",
-            "doc.setdefault('model', {})['name'] = model",
-            "s.write_text(json.dumps(doc, indent=2))",
-            f"e = pathlib.Path({env!r})",
-            "lines = []",
-            "for line in e.read_text().splitlines():",
-            "    if line.startswith('OPENAI_MODEL='):",
-            "        line = 'OPENAI_MODEL=' + model",
-            "    elif base and line.startswith('OPENAI_BASE_URL='):",
-            "        line = 'OPENAI_BASE_URL=' + base",
-            "    lines.append(line)",
-            "e.write_text('\\n'.join(lines) + '\\n')",
-            "PY",
-            f"chown {self.operator['user']}:{self.operator['user']} "
-            f"{sets} {env}",
-            f"grep OPENAI_MODEL= {env}",
-        ])
-        out = self.ssh(self.operator['vm'], script)
-        if f"OPENAI_MODEL={model}" not in out:
-            raise WorldError(
-                f"{self.operator['vm']}: operator model is not {model} after the "
-                f"rewrite (got {out!r})")
-        self._model_applied = True
-
-    def _push_payloads(self, test) -> None:
-        """Put a test's own files where its prompt says they are.
-
-        why: a prompt says "the contents of ~/payload.txt", and the scripted
-        driver reads that payload out of the test directory. The operator has
-        no such directory — it has a home — so without this it works on
-        whatever ~/payload.txt happens to be lying there. object-store-peer
-        found it the expensive way: it stored the payload object-store had
-        left behind, produced that object's id (ids are content hashes, which
-        is exactly why the two tests ship different payloads), and its oracle
-        went looking on the peer for an object that was never put there.
-
-        Everything in the test directory that is not harness machinery is a
-        payload and travels; the manifest, the two drivers and the prose do
-        not, because the operator is not supposed to read the test.
-        """
-        skip = {"test.toml", "script.py", "verify.py", "prompt.md", "README.md"}
-        home = f"/home/{self.operator['user']}"
-        for f in sorted(test.dir.iterdir()):
-            if not f.is_file() or f.name in skip:
-                continue
-            payload = b64encode(f.read_bytes()).decode()
-            self.ssh(self.operator["vm"], "\n".join([
-                "set -eu",
-                f"printf '%s' '{payload}' | base64 -d > {home}/{f.name}",
-                f"chown {self.operator['user']}:{self.operator['user']} "
-                f"{home}/{f.name}",
-            ]))
-
-    def _collect_agent_facts(self, facts: Path) -> None:
-        """Turn the operator's artifacts into the facts the oracles read.
-
-        why: every prompt ends by telling the operator where to save what it
-        produced — "save the object id to ~/object.json (as object_id)". That
-        is the agent's write_facts: the scripted driver hands the runner a
-        facts file, and the operator hands it a JSON artifact in its home.
-        Without this the oracle would find no object_id and report `verify` —
-        astrald misbehaved — when nothing about astrald had gone wrong. A
-        wrong layer is worse than a red.
-        """
-        merged = self.ssh(self.operator["vm"], "\n".join([
-            "python3 - <<'PY'",
-            "import glob, json",
-            "merged = {}",
-            f"for f in sorted(glob.glob('/home/{self.operator['user']}/*.json')):",
-            "    try:",
-            "        d = json.load(open(f))",
-            "    except Exception:",
-            "        continue",
-            "    if isinstance(d, dict):",
-            "        merged.update(d)",
-            "print(json.dumps(merged))",
-            "PY",
-        ]), check=False)
-        try:
-            doc = json.loads(merged.strip() or "{}")
-        except json.JSONDecodeError:
-            doc = {}
-        if doc:
-            facts.write_text(json.dumps(doc, indent=2) + "\n")
-
-    def run_agent(self, test, log: Path, facts: Path,
-                  timeout: int = AGENT_TIMEOUT) -> int:
-        """Hand the test's prompt to the lab's operator and let it drive.
-
-        why: the operator lives in the world under test, not on the host — it
-        reaches astrald the way an app would, over the guest's own apphost
-        socket. So the prompt travels in and the transcript travels back out;
-        nothing else about the test changes, and verify.py judges the result
-        exactly as it judges a scripted run.
-        """
-        prompt = test.dir / "prompt.md"
-        if not prompt.exists():
-            raise WorldError(
-                f"{test.name} declares the agent driver but ships no prompt.md")
-        self._apply_model()
-        self._push_payloads(test)
-
-        # why: the prompt is prose with quotes and newlines and travels as one
-        # ssh argv element, so it goes over as base64 and is decoded guest-side.
-        payload = b64encode(prompt.read_bytes()).decode()
-        user = self.operator["user"]
-        home = f"/home/{user}"
-        # why {prompt}: the profile says how to invoke its agent, and every
-        # agent takes its instruction differently. The one thing the harness
-        # insists on is that the prompt reaches it as a file in the guest.
-        invocation = self.operator["command"].format(
-            prompt=f"{home}/.netsim/{test.name}.prompt")
-        remote = "\n".join([
-            "set -u",
-            f"d={home}/.netsim",
-            'mkdir -p "$d"',
-            f"printf '%s' '{payload}' | base64 -d > \"$d/{test.name}.prompt\"",
-            f'chown -R {user}:{user} "$d"',
-            f"if su - {user} -c {shlex.quote(invocation)} "
-            f'> "$d/{test.name}.log" 2>&1; then rc=0; else rc=$?; fi',
-            f'cat "$d/{test.name}.log"',
-            "exit $rc",
-        ])
-
-        cmd = ["netsim", "ssh", "--sim", str(self.sim),
-               self.operator["vm"], "--", remote]
-        try:
-            p = subprocess.run(cmd, capture_output=True, text=True,
-                               timeout=timeout)
-        except subprocess.TimeoutExpired:
-            # why: killing the ssh kills the only copy of the transcript in
-            # flight, and "exceeded 900s" on its own says nothing about
-            # whether the operator was working, stuck, or never started. The
-            # guest still holds the log it was writing, so go and get it.
-            tail = self.ssh(
-                self.operator["vm"],
-                f"tail -c 4000 {home}/.netsim/{test.name}.log "
-                "2>/dev/null || true", check=False)
-            log.write_text(f"[agent] operator exceeded {timeout}s\n"
-                           f"[agent] transcript at the cut:\n{tail}\n")
-            return 124
-        log.write_text((p.stdout or "") + (p.stderr or ""))
-        if p.returncode == 0:
-            self._collect_agent_facts(facts)
-        return p.returncode
 
     # --- transport --------------------------------------------------------------
 

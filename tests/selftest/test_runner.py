@@ -17,16 +17,11 @@ TESTS = Path(__file__).resolve().parent.parent
 
 
 class FakeWorld:
-    """A world that comes up, and an operator that breaks before it drives."""
+    """A world that comes up, and a guest whose operator breaks before it
+    drives."""
 
     pushed = ()
     torn_down = False
-
-    def use_operator(self, profile: dict) -> None:
-        pass
-
-    def want_model(self, model: str, base_url: str = "") -> None:
-        pass
 
     def ensure(self, test) -> None:
         pass
@@ -34,7 +29,7 @@ class FakeWorld:
     def nodes(self) -> dict:
         return {}
 
-    def run_agent(self, test, log: Path, facts: Path, timeout=0) -> int:
+    def ssh(self, vm: str, script: str, check=True, timeout=None) -> str:
         raise WorldError("node1: operator model is not m after the rewrite")
 
     def boot_from(self, stage: str, record: dict) -> None:
@@ -119,8 +114,8 @@ def run(selection: list, ex_class=FakeWorld, driver: str = "script",
 
 class TestOperatorError(unittest.TestCase):
     def test_an_operator_error_is_an_environment_failure_with_a_report(self):
-        # why: run_agent raised outside the per-test try, so the run left the
-        # loop with no verdict recorded and no report written
+        # why: the operator's ssh once raised outside the per-test try, so
+        # the run left the loop with no verdict recorded and no report written
         args = argparse.Namespace(selection=["bootstrap-user-software-key"],
                                   driver="agent", target="fresh", keep=False)
         with tempfile.TemporaryDirectory() as tmp, \
