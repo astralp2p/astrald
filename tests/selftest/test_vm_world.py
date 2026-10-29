@@ -19,7 +19,7 @@ from types import SimpleNamespace
 from unittest import mock
 
 from lib import runner
-from lib.executors import NODE_FIELDS, ExecutorError
+from lib.worlds import NODE_FIELDS, WorldError
 from lib.worlds import vm
 from lib.worlds.vm import VmWorld, recipe_hash
 
@@ -477,7 +477,7 @@ class TestSnapshots(Lab):
         fake = self.lab()
 
         def silent(port):
-            raise ExecutorError("apphost never answered")
+            raise WorldError("apphost never answered")
         fake.identity = silent
         code, doc, _, _ = run(self.tmp, fake, ["adopt-node"], vm=True,
                               save="gw")
@@ -514,7 +514,7 @@ class TestWorldLifetime(Lab):
         self.assertEqual([(e["world"], e["status"]) for e in doc["entries"]],
                          [("w0", "pass")] * 3 + [("w1", "skipped")] * 3)
         self.assertIn("w0 failed to close", doc["aborted"])
-        self.assertIn("teardown: ExecutorError: simulation 7 is still up",
+        self.assertIn("teardown: WorldError: simulation 7 is still up",
                       doc["aborted"])
 
     def test_a_simulation_somebody_else_runs_refuses_the_boot(self):
@@ -539,7 +539,7 @@ class TestWorldLifetime(Lab):
         # second still prepares after the first one's boot failed
         fake = self.lab()
         with mock.patch.object(VmWorld, "_base_stage",
-                               side_effect=ExecutorError("bake failed")):
+                               side_effect=WorldError("bake failed")):
             _, doc, _, _ = run(self.tmp, fake, ["smoke", "claim-window"],
                                vm=True)
         self.assertEqual([(e["test"], e["failure_kind"])
@@ -558,7 +558,7 @@ class TestClose(Lab):
         for p in fake.patches():
             stack.enter_context(p)
         world = VmWorld(self.tmp / "w0", self.tmp / "astrald", "abc1234")
-        world.prepare(SimpleNamespace(name="bootstrap", nodes=["node1"],
+        world.ensure(SimpleNamespace(name="bootstrap", nodes=["node1"],
                                       ops=[]))
         return fake, world
 
@@ -567,14 +567,14 @@ class TestClose(Lab):
         with mock.patch.object(world, "_pull_logs",
                                side_effect=KeyboardInterrupt), \
                 self.assertRaises(KeyboardInterrupt):
-            world.teardown(False)
+            world.close(False)
         self.assertIn(("netsim", "kill", world.sim), fake.calls)
         self.assertEqual(fake.sims, {})
 
     def test_a_simulation_already_reaped_closes_cleanly(self):
         fake, world = self.booted()
         fake.sims.clear()                    # gone before the close asked
-        world.teardown(False)
+        world.close(False)
         self.assertIn(("netsim", "kill", world.sim), fake.calls)
 
 
@@ -620,22 +620,22 @@ class TestPush(Lab):
 
     def test_the_binaries_reach_every_vm_once_per_boot(self):
         fake, world = self.booted()
-        world.prepare(self.manifest("bootstrap", ["node1"]))
-        world.prepare(self.manifest("adopt", ["node1", "node2"]))
+        world.ensure(self.manifest("bootstrap", ["node1"]))
+        world.ensure(self.manifest("adopt", ["node1", "node2"]))
         self.assertEqual(len([c for c in fake.calls if c[0] == "scp"]),
                          2 * len(VMS))
         self.assertEqual(world.pushed, VMS)
 
     def test_a_roster_naming_no_running_vm_is_refused(self):
         _, world = self.booted()
-        with self.assertRaises(ExecutorError):
-            world.prepare(self.manifest("stray", ["node9"]))
+        with self.assertRaises(WorldError):
+            world.ensure(self.manifest("stray", ["node9"]))
 
     def test_root_sessions_carry_each_vms_own_token(self):
         # why: since 77953492 a token-less astral-query is held to
         # anonymous_allowlist, and the vmops run it over root's ssh
         fake, world = self.booted()
-        world.prepare(self.manifest("bootstrap", ["node1"]))
+        world.ensure(self.manifest("bootstrap", ["node1"]))
         for h in VMS:
             [script] = [c[6] for c in fake.calls
                         if c[:2] == ("netsim", "ssh") and c[4] == h
@@ -656,7 +656,7 @@ class TestPush(Lab):
         # why: every VM holds a token, but a VM no roster names has no tunnel,
         # and a view entry for it would point a driver at port 0
         _, world = self.booted()
-        world.prepare(self.manifest("adopt", ["node1", "node2"]))
+        world.ensure(self.manifest("adopt", ["node1", "node2"]))
         self.assertEqual(sorted(world.nodes()), ["node1", "node2"])
         self.assertIsNone(world.nodes()["node2"]["restarts"])
 
@@ -717,7 +717,7 @@ class TestConfigPush(Lab):
             world = VmWorld(self.tmp / "w0", self.tmp / "astrald", "abc1234",
                             config={"node1": {"apphost": {
                                 "allow_anonymous": False}}})
-            world.prepare(SimpleNamespace(name="t", nodes=["node1"], ops=[]))
+            world.ensure(SimpleNamespace(name="t", nodes=["node1"], ops=[]))
         apphost = pushed_files(fake, "node1")[0]["apphost.yaml"]
         self.assertEqual(apphost, {
             "listen": [f"tcp:127.0.0.1:{vm.APPHOST_PORT}"], "bind_http": "",

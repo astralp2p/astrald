@@ -20,11 +20,11 @@ from astral.client import ENDPOINT_VARS, TOKEN_VARS
 from lib import manifest, report, suites
 from lib import plan as planner
 from lib.build import ensure_binary, git_ref
-from lib.executors import ExecutorError
-from lib.executors.attach import AttachExecutor
 from lib.nodeconfig import PortsBusy, lease_ports
 from lib.record import WorldRecord
 from lib.results import RunHeader, RunResults, fresh_run_dir
+from lib.worlds import WorldError
+from lib.worlds.attach import AttachWorld
 from lib.worlds.local import LocalWorld
 from lib.worlds.vm import VmWorld, stages
 
@@ -71,17 +71,16 @@ def _perform(ex, t, driver: str, art: Path, view) -> tuple:
 
     why one try around every step: an operator's model rewrite, payload push
     or ssh raises from inside the driver step, and a try around prepare alone
-    let it leave the loop with no verdict recorded and no report written. An
-    ExecutorError is the world breaking, so it is `environment` at its step.
+    let it leave the loop with no verdict recorded and no report written. A
+    WorldError is the world breaking, so it is `environment` at its step.
     """
     phase = "prepare"
     try:
-        ex.prepare(t)
+        ex.ensure(t)
         env = view("driver")
         phase = "driver"
         if driver == "agent":
-            rc = ex.run_agent(t, art / "driver.log", art / "facts.json",
-                              t.agent_timeout)
+            rc = ex.run_agent(t, art / "driver.log", art / "facts.json")
         else:
             rc = _run_step(sys.executable, t.dir / "script.py",
                            art / "driver.log", env, t.timeout)
@@ -93,7 +92,7 @@ def _perform(ex, t, driver: str, art: Path, view) -> tuple:
         phase = "verify"
         rc = _run_step(sys.executable, t.dir / "verify.py",
                        art / "verify.log", view("verify"), t.timeout)
-    except ExecutorError as e:
+    except WorldError as e:
         with (art / "driver.log").open("a") as f:
             f.write(f"[runner] {e}\n")
         return "fail", "environment", phase
@@ -167,14 +166,14 @@ def _abort_reason(e: BaseException) -> str:
     return f"{type(e).__name__}: {first}" if first else type(e).__name__
 
 
-def _teardown(ex, keep: bool) -> BaseException | None:
+def _close(ex, keep: bool) -> BaseException | None:
     """Tear the world down; the error that stopped it, if any.
 
     why caught: the report is written after teardown, and a teardown that
     raised used to leave none — or a PASS report above a traceback.
     """
     try:
-        ex.teardown(keep)
+        ex.close(keep)
     except (KeyboardInterrupt, Exception) as e:
         if not isinstance(e, KeyboardInterrupt):
             traceback.print_exc()
@@ -198,17 +197,17 @@ def _finish(results, pushed: list) -> int:
 def write_view(path: Path, run: str, nodes: dict, facts: dict) -> None:
     """A test's session view: the one file its driver and oracle read.
 
-    why the runner writes it and no executor does: three executors wrote
-    three schemas, and only one carried every node field. Each test gets
-    its own, in a real directory under results/<stamp>/, so the view's
-    path names the run it belongs to.
+    why the runner writes it and no world does: the executors this
+    replaced wrote three schemas, and only one carried every node field.
+    Each test gets its own, in a real directory under results/<stamp>/, so
+    the view's path names the run it belongs to.
     """
     doc = {"run": run, "nodes": nodes, "facts": facts}
     path.write_text(json.dumps(doc, indent=2) + "\n")
 
 
 def _note_nodes(record: WorldRecord, ex) -> None:
-    """Write the world's nodes into its record, as the executor reports them.
+    """Write the world's nodes into its record, as the world reports them.
 
     why here and not per view: a run whose first prepare failed, the usual
     reason for --keep, wrote no view, and its record named no nodes at all.
@@ -259,32 +258,6 @@ def selected_suite(selection: list) -> list | None:
         raise ValueError(f"a suite runs alone: {named[0]!r} cannot be mixed "
                          "with other selections")
     return suites.load(suites.find(suites_dir, named[0])) if named else None
-
-
-def plan_for(tests: dict, selection: list) -> list:
-    """[(Test, kind)] for what the CLI selected.
-
-    A suite runs exactly as listed, once its order walks. A bare test
-    selection gets the prereq prefix its starts need, mutators last and
-    observers before producers at equal depth; it is refused when it holds
-    two mutators, and otherwise held to the same walk a suite is.
-    """
-    listed = selected_suite(selection or [DEFAULT_SUITE])
-    if listed:
-        manifest.validate_order(tests, listed)
-        return [(tests[n], "test") for n in listed]
-    plan = manifest.resolve(tests, selection)
-    # why: one live world serves the whole selection, and each mutator
-    # invalidates the state the other starts from, so no order runs both
-    mutators = [t.name for t, _ in plan if t.mutates]
-    if len(mutators) > 1:
-        raise ValueError(f"{mutators[0]} and {mutators[1]} both mutate the "
-                         "world, so no order runs both: select them in "
-                         "separate runs")
-    # why: a bare selection is held to the walk a suite is held to, so a
-    # destroyer can never run ahead of a test that needs what it destroys
-    manifest.validate_order(tests, [t.name for t, _ in plan])
-    return plan
 
 
 def print_plan(tests: dict, args) -> int:
@@ -376,7 +349,7 @@ def _check_stages(args) -> None:
         return
     try:
         have = stages()
-    except ExecutorError as e:
+    except WorldError as e:
         raise ValueError(str(e)) from e
     if args.save in have:
         raise ValueError(f"--save {args.save}: netsim already holds a stage "
@@ -386,62 +359,9 @@ def _check_stages(args) -> None:
                          "stage")
 
 
-def _reject_unbuilt(args, plan: list) -> str | None:
-    """What the runner cannot do yet, and why — never a silent wrong verdict."""
-    if args.driver == "agent" and args.target == "attach":
-        # why: the operator lives in the simulated world. Attach has no world
-        # of its own — it borrows a daemon — so there is nobody to drive.
-        return "--driver agent has no operator under --target attach"
-    if args.target == "attach":
-        # why: attach runs against the operator's own daemon. Building a
-        # prereq prefix there means running bootstrap's flow at it — which
-        # stores a private key object and attempts a contract on a live node.
-        # The design says attach CHECKS a start state; it does not build one.
-        built = [t.name for t, kind in plan if kind == "prereq"]
-        if built:
-            return (f"--target attach would have to build {built[0]!r} on the "
-                    "attached daemon. Attach checks a start state, it never "
-                    "builds one — select a test whose start the daemon "
-                    "already stands at.")
-    if args.target == "attach" and run_env(plan, args.driver) == "netsim":
-        return "--target attach has no simulation to attach to"
-    restarting = [t.name for t, kind in plan if kind == "test" and t.restart]
-    if restarting:
-        # why refused up front: the driver changes the node before the
-        # restart, and only a fresh local world can restart one.
-        return (f"{restarting[0]} restarts a node, which only a fresh local "
-                "world can do")
-    undeclared = [t.name for t, _ in plan if args.driver not in t.drivers]
-    if undeclared:
-        return f"{undeclared[0]} declares no {args.driver} driver"
-    return None
-
-
-def run_env(plan: list, driver: str = "script") -> str:
-    """The env this run executes in: netsim as soon as any selected test needs it.
-
-    why: a netsim test's prereq prefix is env-node tests, and they must build
-    their states in the SAME world the netsim test will run in. Running them
-    on loopback would build a state the VMs never see. This is the env lift
-    the design promises — the same files, driven against VMs instead of
-    processes, with nothing in them aware of the difference.
-
-    The agent driver lifts a run the same way. An AI operator has to live
-    somewhere and reach astrald as an app would, and the lab bakes exactly one
-    such machine — so `--driver agent` runs in VMs whatever the tests declare.
-    A manifest's env is the cheapest world that can falsify the test, not a
-    ceiling.
-    """
-    if driver == "agent":
-        return "netsim"
-    selected = [t for t, kind in plan if kind == "test"]
-    return "netsim" if any(t.env == "netsim" for t in selected) else "node"
-
-
-def _executor(args, binary, ref):
-    """The machines of the one run the plan does not drive yet: an attached
-    daemon."""
-    return AttachExecutor()
+def _attach_world():
+    """The daemon already up, as the run's one world."""
+    return AttachWorld()
 
 
 def _local_world(dir: Path, binary: Path, port_base: int, keep: bool,
@@ -456,33 +376,6 @@ def _vm_world(dir: Path, binary: Path, ref: str, keep: bool,
     """A VM world, its logs under dir; it boots on its first test, and pushes
     the world's merged config overrides with the binaries."""
     return VmWorld(dir, binary, ref, keep=keep, config=config)
-
-
-def attach_plan(tests: dict, args) -> list:
-    """[(Test, kind)] for --target attach, or ValueError naming why the
-    selection cannot run there.
-
-    todo: child 8 makes attach a world the planner plans (rule 8), and this
-    path goes with the executors.
-    """
-    if (args.isolate or args.prereqs != "script" or args.vm or args.save
-            or args.from_stage):
-        # why refused rather than ignored: attach runs one daemon that is
-        # already up, so none of these can mean anything there
-        raise ValueError("--target attach runs the daemon already up: it "
-                         "takes no --isolate, --prereqs, --vm, --save or "
-                         "--from")
-    plan = plan_for(tests, args.selection)
-    configured = [t.name for t, _ in plan if t.config]
-    if configured:
-        # why refused: the attached daemon is not the harness's to configure,
-        # so the test would judge a node it did not set up
-        raise ValueError(f"{configured[0]} overrides node config, and the "
-                         "attached daemon has no harness-rendered config")
-    unbuilt = _reject_unbuilt(args, plan)
-    if unbuilt:
-        raise ValueError(unbuilt)
-    return plan
 
 
 class _Run:
@@ -513,7 +406,7 @@ class _Run:
             # kept one is read back from this record
             _note_nodes(record, ex)
             self.pushed += [vm for vm in ex.pushed if vm not in self.pushed]
-            torn = _teardown(ex, keep)
+            torn = _close(ex, keep)
             self.torn = self.torn or torn
             if keep:
                 roots = self.results.dir / name / "session"
@@ -532,7 +425,7 @@ class _Run:
         """
         try:
             saved = ex.resume()
-        except ExecutorError:
+        except WorldError:
             return      # note: the boot error fails the world's first step
         record.history = list(saved["history"])
         record.facts = dict(saved["facts"])
@@ -553,7 +446,7 @@ class _Run:
         doc = record.doc()
         try:
             saved = ex.save_world(name, doc)
-        except ExecutorError as e:
+        except WorldError as e:
             self.unsaved = f"save {name}: {e}"
             return
         if saved != name:
@@ -612,7 +505,7 @@ class _Run:
             return env
 
         status, fk, phase = _perform(ex, t, s.driver, art, view)
-        died = ex.broken()
+        died = ex.dead()
         if died and fk != "environment":
             # why: a dead daemon voids any verdict, even a nominal pass
             status, fk, phase = "fail", "environment", "alive"
@@ -633,11 +526,6 @@ def _units(tests: dict, args) -> tuple:
     """([(world, env, [(Test, kind, driver)])], {world: config}) — what the
     run executes and the node config each world starts with, or ValueError
     naming why it cannot run."""
-    if args.target == "attach":
-        # note: attach runs through the same world loop and takes its rules;
-        # its broken() is always empty, so a world-died skip never fires there
-        return [("w0", "node", [(t, kind, args.driver)
-                                for t, kind in attach_plan(tests, args)])], {}
     worlds = plan_worlds(tests, args)
     _check_stages(args)
     # note: a step the saved world already stands past is not run, and
@@ -718,16 +606,16 @@ def main(args) -> int:
             print(f"run: {e}", file=sys.stderr)
             return 2
     if args.target == "attach":
-        ex = _executor(args, binary, ref)
-        mutators = [s[0].name for _, _, steps in units for s in steps
-                    if s[0].mutates]
-        if mutators:
-            print(f"run: --target attach: {', '.join(mutators)} really "
-                  "mutates this world — it is not a throwaway", file=sys.stderr)
+        destroyers = [s[0].name for _, _, steps in units for s in steps
+                      if s[0].destroys]
+        if destroyers:
+            print(f"run: --target attach: {', '.join(destroyers)} really "
+                  "changes this daemon — it is not a throwaway",
+                  file=sys.stderr)
 
     def open_world(name: str, env: str, keep: bool):
         if args.target == "attach":
-            return ex
+            return _attach_world()
         if env == "node":
             return _local_world(run_dir / name / "session", binary,
                                 lease.base, keep, configs[name])

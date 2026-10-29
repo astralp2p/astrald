@@ -1,6 +1,6 @@
 """Which facts a test sees, and where the runner writes what it sees.
 
-A synthetic tree runs through the real runner against a fake executor. Every
+A synthetic tree runs through the real runner against a fake world. Every
 driver and oracle copies the session view it was handed beside its logs, so
 the assertions read exactly what a real test would have read.
 """
@@ -15,7 +15,7 @@ from types import SimpleNamespace
 from unittest import mock
 
 from lib import manifest, runner
-from lib.executors import NODE_FIELDS, ExecutorError, node_entry
+from lib.worlds import NODE_FIELDS, WorldError, node_entry
 from lib.record import WorldRecord
 
 # One body for every synthetic driver and oracle: copy the view it was
@@ -36,23 +36,23 @@ if phase == "script":
 sys.exit(1 if (Path(__file__).parent / "FAIL").exists() else 0)
 '''
 
-# name -> (start, saves, oracle fails, restarts node1)
+# name -> (after, oracle fails, restarts node1)
 TREE = {
-    "build":        ("null", "one", False, False),
-    "observer":     ("one", None, False, False),
-    "reader":       ("one", None, False, True),
-    "broken":       ("one", "two", True, False),
-    "after-broken": ("two", None, False, False),
+    "build":        (None, False, False),
+    "observer":     ("build", False, False),
+    "reader":       ("build", False, True),
+    "broken":       ("build", True, False),
+    "after-broken": ("broken", False, False),
 }
 
 
-class FakeExecutor:
+class FakeWorld:
     pushed = ()
 
     def __init__(self):
         self.restarts = 0
 
-    def prepare(self, test) -> None:
+    def ensure(self, test) -> None:
         pass
 
     def restart(self, names: list) -> None:
@@ -63,24 +63,20 @@ class FakeExecutor:
                                     token="t", identity="id",
                                     restarts=self.restarts)}
 
-    def broken(self) -> list:
+    def dead(self) -> list:
         return []
 
-    def teardown(self, keep: bool) -> None:
+    def close(self, keep: bool) -> None:
         pass
 
 
 def write_tree(root: Path) -> dict:
-    producers = {saves: name for name, (_, saves, _, _) in TREE.items()
-                 if saves}
-    for name, (start, saves, fails, restarts) in TREE.items():
+    for name, (after, fails, restarts) in TREE.items():
         d = root / name
         d.mkdir(parents=True)
-        lines = [f'env = "node"', f'start = "{start}"', 'nodes = ["node1"]']
-        if saves:
-            lines.append(f'saves = "{saves}"')
-        if start != "null":
-            lines.append(f'after = "{producers[start]}"')
+        lines = ['nodes = ["node1"]']
+        if after:
+            lines.append(f'after = "{after}"')
         if restarts:
             lines.append('restart = ["node1"]')
         (d / "test.toml").write_text("\n".join(lines) + "\n")
@@ -100,7 +96,6 @@ def run_tree(tmp: Path, selection: list, ex) -> Path:
             mock.patch.object(runner.manifest, "load_all", lambda _: tests), \
             mock.patch.object(runner, "ensure_binary",
                               return_value=(tmp / "astrald", "abc")), \
-            mock.patch.object(runner, "_executor", lambda *_: ex), \
             mock.patch.object(runner, "_local_world", lambda *_: ex), \
             mock.patch.object(runner, "lease_ports",
                               return_value=SimpleNamespace(base=0)), \
@@ -114,7 +109,7 @@ class TestFactVisibility(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls._tmp = tempfile.TemporaryDirectory()
-        cls.run_dir = run_tree(Path(cls._tmp.name), list(TREE), FakeExecutor())
+        cls.run_dir = run_tree(Path(cls._tmp.name), list(TREE), FakeWorld())
         cls.world = json.loads((cls.run_dir / "w0" / "world.json").read_text())
 
     @classmethod
@@ -177,7 +172,7 @@ class TestPrereqFacts(unittest.TestCase):
         # why: a record that kept only kind == "test" facts would hand a
         # bare selection none of what its prereq prefix learned
         with tempfile.TemporaryDirectory() as tmp:
-            run_dir = run_tree(Path(tmp), ["reader"], FakeExecutor())
+            run_dir = run_tree(Path(tmp), ["reader"], FakeWorld())
             kinds = [e["kind"] for e in json.loads(
                 (run_dir / "results.json").read_text())["entries"]]
             seen = json.loads((run_dir / "reader" / "seen-script.json")
@@ -186,11 +181,11 @@ class TestPrereqFacts(unittest.TestCase):
         self.assertEqual(seen["facts"], {"build": "script"})
 
 
-class UnpreparedExecutor(FakeExecutor):
+class UnpreparedWorld(FakeWorld):
     """A world whose node came up, and whose first prepare then broke."""
 
-    def prepare(self, test) -> None:
-        raise ExecutorError("node1: not ready after 30s")
+    def ensure(self, test) -> None:
+        raise WorldError("node1: not ready after 30s")
 
 
 class TestRecordWithoutAView(unittest.TestCase):
@@ -198,7 +193,7 @@ class TestRecordWithoutAView(unittest.TestCase):
         # why: --keep is for exactly this run, and no view was written to
         # carry the nodes into the record
         with tempfile.TemporaryDirectory() as tmp:
-            run_dir = run_tree(Path(tmp), ["build"], UnpreparedExecutor())
+            run_dir = run_tree(Path(tmp), ["build"], UnpreparedWorld())
             world = json.loads((run_dir / "w0" / "world.json").read_text())
         self.assertEqual(list(world["nodes"]), ["node1"])
         self.assertEqual(world["history"],

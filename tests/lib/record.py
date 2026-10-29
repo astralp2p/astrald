@@ -1,6 +1,6 @@
 """The world record: what one world ran and what its passed tests learned.
 
-The runner is its only writer. An executor owns machines and reports their
+The runner is its only writer. A world owns machines and reports their
 nodes; it never sees a test's facts or verdict.
 
     results/<stamp>/w0/world.json

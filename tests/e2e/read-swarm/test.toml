@@ -1,7 +1,4 @@
-env     = "node"
-start   = "two-nodes-data-peer"
 nodes   = ["node1", "node2"]
-drivers = ["script"]
 timeout = 120
 after   = "object-store-peer"
 facts   = ["swarm_read_bytes", "local_read_rejected", "swarm_found"]

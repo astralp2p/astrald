@@ -1,34 +1,26 @@
-"""--target attach: no spawning at all — run against a daemon already up.
+"""An attach world: no spawning at all — the daemon already up is the world.
 
 The code-and-debug loop. Point a test at the astrald you are hacking on and
 let the standard oracle judge it, with open eyes: nothing here is hermetic,
-nothing is torn down, and a state-mutating test really mutates your daemon.
+nothing is torn down, and a destroying test really changes your daemon.
+
+The planner holds attach's guards (lib/plan.py, rule 8): one world, one
+roster node, no prereq to build, no VM operation, nothing local only.
 """
 import asyncio
 
 import astral
 from astral.client import resolve_endpoint, resolve_token
 
-from lib.executors import Executor, ExecutorError, node_entry
+from lib.worlds import World, WorldError, node_entry
 
 
-class AttachExecutor(Executor):
-    env = "node"
-
+class AttachWorld(World):
     def __init__(self):
         self._node = None
 
-    def prepare(self, test) -> None:
-        if test.steps:
-            raise ExecutorError(f"{test.name}: attach runs no steps")
-        if len(test.nodes) != 1:
-            # why: the roster comes from astral-py's ambient resolution, which
-            # names exactly one daemon. A second roster name has nothing to
-            # resolve to, and quietly pointing both at one daemon would let
-            # adopt-node "pass" by adopting a node into itself.
-            raise ExecutorError(
-                f"{test.name}: --target attach has one daemon and this test "
-                f"wants {len(test.nodes)} ({', '.join(test.nodes)})")
+    def ensure(self, test) -> None:
+        """Probe the ambient daemon once, under the test's one roster name."""
         if self._node is None:
             self._node = asyncio.run(self._probe(test.nodes[0]))
 
@@ -39,9 +31,9 @@ class AttachExecutor(Executor):
                 identity = str(await c.apphost.whoami()) if c.authenticated \
                     else ""
                 if not await c.shell.spec():
-                    raise ExecutorError(f"{endpoint}: empty op catalog")
+                    raise WorldError(f"{endpoint}: empty op catalog")
         except astral.AstralError as e:
-            raise ExecutorError(f"{endpoint}: {e}") from e
+            raise WorldError(f"{endpoint}: {e}") from e
         return {"name": name, "endpoint": endpoint, "token": token or "",
                 "identity": identity}
 
@@ -55,8 +47,8 @@ class AttachExecutor(Executor):
             endpoint=n["endpoint"], token=n["token"], identity=n["identity"],
             root="attached", tcp_port=0)}
 
-    def broken(self) -> list:
+    def dead(self) -> list:
         return []
 
-    def teardown(self, keep: bool) -> None:
+    def close(self, keep: bool) -> None:
         """Never stops the daemon. It was running before this run and stays."""

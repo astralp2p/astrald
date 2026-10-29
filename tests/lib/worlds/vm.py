@@ -39,7 +39,7 @@ from pathlib import Path
 
 from lib.build import query_binary
 from lib.nodeconfig import config_text
-from lib.executors import Executor, ExecutorError, node_entry
+from lib.worlds import World, WorldError, node_entry
 
 TESTS = Path(__file__).resolve().parent.parent.parent
 RECIPE = TESTS / "netsim" / "labs" / "two-node-plus-external" / "lab.story"
@@ -75,6 +75,10 @@ DEFAULT_OPERATOR = {
 APPHOST_READY_TIMEOUT = 300.0
 # how long a killed simulation may stay listed before its world fails to close
 KILL_TIMEOUT = 60.0
+# why this large: an operator reads a prompt, plans, and works the node
+# through its own shell, and one measured import-user-software-key session
+# took 2404 s — past the 2400 s budget the manifests used to carry
+AGENT_TIMEOUT = 3600
 
 
 def _netsim(*args, check=True, capture=True) -> str:
@@ -84,9 +88,9 @@ def _netsim(*args, check=True, capture=True) -> str:
         p = subprocess.run(cmd, check=check, text=True,
                            capture_output=capture)
     except FileNotFoundError as e:
-        raise ExecutorError("netsim is not on PATH") from e
+        raise WorldError("netsim is not on PATH") from e
     except subprocess.CalledProcessError as e:
-        raise ExecutorError(
+        raise WorldError(
             f"{' '.join(cmd)}: exit {e.returncode}\n{e.stderr or ''}") from e
     return (p.stdout or "").strip()
 
@@ -124,8 +128,7 @@ def _sims() -> set:
             json.loads(_netsim("ps", "--json") or "[]") if s.get("vms")}
 
 
-class VmWorld(Executor):
-    env = "netsim"
+class VmWorld(World):
 
     def __init__(self, dir: Path, binary: Path, astrald_ref: str,
                  keep: bool = False, config: dict | None = None):
@@ -152,7 +155,7 @@ class VmWorld(Executor):
 
     # --- the runner's interface -------------------------------------------
 
-    def prepare(self, test) -> None:
+    def ensure(self, test) -> None:
         self._open()
         # why every VM, not the roster: an op reaches machines no roster
         # names — nat-punch's add-reflector relies on the reflector — and a
@@ -162,8 +165,8 @@ class VmWorld(Executor):
         self._push_astrald([vm for vm in self._vms() if vm not in self.pushed])
         missing = [n for n in test.nodes if n not in self._nodes]
         if missing:
-            raise ExecutorError(f"{test.name}: the simulation runs no "
-                                f"{', '.join(missing)}")
+            raise WorldError(f"{test.name}: the simulation runs no "
+                             f"{', '.join(missing)}")
         # why open the session before the ops as well as after: an op is
         # given each node's identity (ASTRAL_ID_<vm>), and until this runs
         # there are no identities to give — leave-lan silently fell back to
@@ -201,7 +204,7 @@ class VmWorld(Executor):
             lan_endpoint=f"tcp:{self._lan_ip(vm)}:{GUEST_TCP_PORT}",
         ) for vm, info in self._nodes.items() if "port" in info}
 
-    def broken(self) -> list:
+    def dead(self) -> list:
         """The roster, if the simulation itself died. A verdict over a dead
         world is void — but a CLI hiccup is not a dead world, so anything
         short of the simulation being gone reports nothing broken and lets
@@ -211,11 +214,11 @@ class VmWorld(Executor):
             return []
         try:
             alive = _sims()
-        except ExecutorError:
+        except WorldError:
             return []
         return [] if str(self.sim) in alive else sorted(self._nodes)
 
-    def teardown(self, keep: bool) -> None:
+    def close(self, keep: bool) -> None:
         """Pull every guest's astrald log, then end the simulation — or, kept,
         leave it and its tunnels up for whoever debugs it next."""
         if self.sim is None:
@@ -252,8 +255,8 @@ class VmWorld(Executor):
         deadline = time.monotonic() + KILL_TIMEOUT
         while str(self.sim) in _sims():
             if time.monotonic() >= deadline:
-                raise ExecutorError(f"simulation {self.sim} is still up "
-                                    f"{KILL_TIMEOUT:.0f} s after netsim kill")
+                raise WorldError(f"simulation {self.sim} is still up "
+                                 f"{KILL_TIMEOUT:.0f} s after netsim kill")
             time.sleep(1.0)
 
     def boot_from(self, stage: str, record: dict) -> None:
@@ -275,9 +278,9 @@ class VmWorld(Executor):
 
     def _open(self) -> None:
         """Boot this world's simulation, once; a boot that failed fails every
-        later prepare the same way rather than booting again."""
+        later ensure the same way rather than booting again."""
         if self._boot_error is not None:
-            raise ExecutorError(self._boot_error)
+            raise WorldError(self._boot_error)
         if self.sim is not None:
             return
         try:
@@ -287,14 +290,14 @@ class VmWorld(Executor):
             # or one an earlier world of this run failed to kill — could run
             # its tests against it
             if before:
-                raise ExecutorError(
+                raise WorldError(
                     f"netsim already runs simulation {', '.join(sorted(before))}"
                     ": one VM world at a time — `netsim kill` it, or let its "
                     "run end")
             self._boot(self.stage or self._base_stage(), before)
             if self.stage:
                 self.saved = self._guest_record()
-        except ExecutorError as e:
+        except WorldError as e:
             self._boot_error = str(e)
             raise
 
@@ -322,8 +325,8 @@ class VmWorld(Executor):
         new = sorted(_sims() - before)
         _netsim("remove", SCRATCH_STAGE, check=False)
         if len(new) != 1:
-            raise ExecutorError(f"booting {stage}: netsim ps lists new "
-                                f"simulations [{', '.join(new)}], not one")
+            raise WorldError(f"booting {stage}: netsim ps lists new "
+                             f"simulations [{', '.join(new)}], not one")
         self.sim = new[0]
 
     @property
@@ -398,10 +401,10 @@ mv {GUEST_RECORD}.new {GUEST_RECORD}""")
         try:
             record = json.loads(out)
         except json.JSONDecodeError as e:
-            raise ExecutorError(f"stage {self.stage}: {vm} holds no world "
-                                f"record at {GUEST_RECORD}") from e
+            raise WorldError(f"stage {self.stage}: {vm} holds no world "
+                             f"record at {GUEST_RECORD}") from e
         if record != self._expected:
-            raise ExecutorError(
+            raise WorldError(
                 f"stage {self.stage} holds another world record than the "
                 "host's copy the run was planned from: it was saved again "
                 "since, or the copy is another stage's")
@@ -419,7 +422,7 @@ mv {GUEST_RECORD}.new {GUEST_RECORD}""")
             try:
                 out = self.ssh(vm, "journalctl -u astrald --no-pager 2>&1",
                                check=False)
-            except ExecutorError as e:
+            except WorldError as e:
                 out = f"[runner] no journal: {e}"
             try:
                 logs.mkdir(parents=True, exist_ok=True)
@@ -472,7 +475,7 @@ mv {GUEST_RECORD}.new {GUEST_RECORD}""")
             if proc.poll() is not None:
                 text = (self.dir / f"tunnel-{vm}.log").read_text(
                     errors="replace")
-                raise ExecutorError(f"{vm}: ssh -L failed: {text.strip()}")
+                raise WorldError(f"{vm}: ssh -L failed: {text.strip()}")
             with socket.socket() as s:
                 s.settimeout(0.5)
                 if s.connect_ex(("127.0.0.1", port)) == 0:
@@ -480,7 +483,7 @@ mv {GUEST_RECORD}.new {GUEST_RECORD}""")
                     return port, proc
             time.sleep(0.5)
         proc.terminate()
-        raise ExecutorError(f"{vm}: apphost tunnel never opened on {port}")
+        raise WorldError(f"{vm}: apphost tunnel never opened on {port}")
 
     # --- the binary under test ---------------------------------------------
 
@@ -577,8 +580,8 @@ systemctl restart astrald""")
                 except Exception as e:               # noqa: BLE001
                     last = e
                     await asyncio.sleep(2)
-            raise ExecutorError(f"apphost on 127.0.0.1:{port} never answered "
-                                f"(last error: {last})")
+            raise WorldError(f"apphost on 127.0.0.1:{port} never answered "
+                             f"(last error: {last})")
         return asyncio.run(identity_of())
 
     def _open_session(self, nodes: list) -> None:
@@ -616,7 +619,7 @@ systemctl restart astrald""")
         op, args = parts[0], parts[1:]
         opdir = TESTS / "netsim" / "ops" / op
         if not (opdir / "run.sh").is_file():
-            raise ExecutorError(f"no op {op!r} under netsim/ops")
+            raise WorldError(f"no op {op!r} under netsim/ops")
         # A bare word names a VM; anything flag-shaped passes through, so a
         # vmop with its own options (`leave-lan --peer node1`) stays writable.
         argv, passthrough = [], False
@@ -637,7 +640,7 @@ systemctl restart astrald""")
         p = subprocess.run(cmd, env=self._op_env(), capture_output=True,
                            text=True)
         if p.returncode != 0:
-            raise ExecutorError(
+            raise WorldError(
                 f"{label}: exit {p.returncode}\n{p.stdout or ''}{p.stderr or ''}")
 
     def _op_env(self) -> dict:
@@ -733,7 +736,7 @@ systemctl restart astrald""")
         ])
         out = self.ssh(self.operator['vm'], script)
         if f"OPENAI_MODEL={model}" not in out:
-            raise ExecutorError(
+            raise WorldError(
                 f"{self.operator['vm']}: operator model is not {model} after the "
                 f"rewrite (got {out!r})")
         self._model_applied = True
@@ -799,7 +802,8 @@ systemctl restart astrald""")
         if doc:
             facts.write_text(json.dumps(doc, indent=2) + "\n")
 
-    def run_agent(self, test, log: Path, facts: Path, timeout: int) -> int:
+    def run_agent(self, test, log: Path, facts: Path,
+                  timeout: int = AGENT_TIMEOUT) -> int:
         """Hand the test's prompt to the lab's operator and let it drive.
 
         why: the operator lives in the world under test, not on the host — it
@@ -810,7 +814,7 @@ systemctl restart astrald""")
         """
         prompt = test.dir / "prompt.md"
         if not prompt.exists():
-            raise ExecutorError(
+            raise WorldError(
                 f"{test.name} declares the agent driver but ships no prompt.md")
         self._apply_model()
         self._push_payloads(test)
@@ -868,7 +872,7 @@ systemctl restart astrald""")
         with Path(src).open("rb") as f:
             p = subprocess.run(cmd, stdin=f, capture_output=True, text=True)
         if p.returncode != 0:
-            raise ExecutorError(f"{vm}: pushing {src.name}: {p.stderr}")
+            raise WorldError(f"{vm}: pushing {src.name}: {p.stderr}")
 
     def _manifest_vms(self) -> list:
         """The simulation manifest's VM entries."""
@@ -885,4 +889,4 @@ systemctl restart astrald""")
         for entry in self._manifest_vms():
             if entry.get("hostname") == vm:
                 return entry["ip"]
-        raise ExecutorError(f"{vm}: no address in the simulation manifest")
+        raise WorldError(f"{vm}: no address in the simulation manifest")

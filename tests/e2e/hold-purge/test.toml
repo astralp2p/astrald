@@ -1,8 +1,4 @@
-env     = "node"
-start   = "two-nodes"
-mutates = true
 nodes   = ["node1"]
-drivers = ["script"]
 timeout = 120
 after   = "adopt-node"
 destroys = true

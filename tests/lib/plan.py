@@ -1,9 +1,8 @@
 """The planner: manifests and a selection in, worlds out.
 
 Pure: it reads loaded manifests and returns a plan. It starts nothing and
-writes nothing. The runner executes every fresh run's plan, local and VM
-worlds alike, and `--plan` prints it; only `--target attach` still takes
-the executor path.
+writes nothing. The runner runs every plan, world by world, and `--plan`
+prints one.
 
 A test names the test whose world it continues (`after`), and the worlds
 follow from that tree:
@@ -21,8 +20,8 @@ follow from that tree:
 6. `isolate` gives every selected test a world of its own.
 7. Under the agent driver, selected tests are operator-driven; prereqs and
    replays run by script unless `prereqs_agent`. A test with no prompt.md
-   that would be operator-driven is a plan error, on purpose: it mirrors
-   the runner's refusal of a test that declares no agent driver.
+   that would be operator-driven is a plan error, on purpose: a test an
+   operator can drive is exactly one that ships the prompt it works from.
 8. Under `--target attach`, the plan is one world on the daemon already up.
 9. `done` is the history of a saved world the run boots (`--from`): the plan
    is that one world, its first steps are exactly that history, and they are

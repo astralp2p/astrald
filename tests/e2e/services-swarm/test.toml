@@ -1,7 +1,4 @@
-env     = "node"
-start   = "two-nodes"
 nodes   = ["node1", "node2"]
-drivers = ["script"]
 timeout = 300
 after   = "adopt-node"
 facts   = ["services_swarm"]

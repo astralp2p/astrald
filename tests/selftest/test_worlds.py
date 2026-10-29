@@ -15,31 +15,31 @@ from types import SimpleNamespace
 from unittest import mock
 
 from lib import runner
-from lib.executors import ExecutorError
+from lib.worlds import WorldError
 from lib.worlds.local import LocalWorld
-from selftest.test_world_record import FakeExecutor, write_tree
+from selftest.test_world_record import FakeWorld, write_tree
 
 
-class FailsToClose(FakeExecutor):
-    def teardown(self, keep: bool) -> None:
-        raise ExecutorError("close: node1: did not stop")
+class FailsToClose(FakeWorld):
+    def close(self, keep: bool) -> None:
+        raise WorldError("close: node1: did not stop")
 
 
-class DiesAfterBuild(FakeExecutor):
+class DiesAfterBuild(FakeWorld):
     """A world whose node dies under `build`."""
 
     def __init__(self):
         super().__init__()
         self.prepared = []
 
-    def prepare(self, test) -> None:
+    def ensure(self, test) -> None:
         self.prepared.append(test.name)
 
-    def broken(self) -> list:
+    def dead(self) -> list:
         return ["node1"] if "build" in self.prepared else []
 
 
-def run_worlds(tmp: Path, selection: list, world=FakeExecutor,
+def run_worlds(tmp: Path, selection: list, world=FakeWorld,
                isolate=False, config=None) -> tuple:
     """(run dir, results doc, the worlds opened) of one run of the tree;
     config gives tests their [config.*] overrides."""
@@ -150,11 +150,11 @@ class TestLocalWorldConfig(unittest.TestCase):
                                      20800, config={"nomcp1": {
                                          "mcp": {"bind_mcp": ""}}})
             try:
-                world.prepare(SimpleNamespace(name="t", ops=[],
+                world.ensure(SimpleNamespace(name="t", ops=[],
                                               nodes=["node1", "nomcp1"]))
                 views = world.nodes()
             finally:
-                world.teardown(keep=False)
+                world.close(keep=False)
         self.assertEqual(started["nomcp1"].configs["mcp"]["bind_mcp"], "")
         self.assertEqual(started["node1"].configs["mcp"]["bind_mcp"],
                          "tcp:127.0.0.1:20804")
@@ -196,8 +196,8 @@ class TestSkips(unittest.TestCase):
                 DiesInW0.count += 1
                 self.first = DiesInW0.count == 1
 
-            def broken(self) -> list:
-                return super().broken() if self.first else []
+            def dead(self) -> list:
+                return super().dead() if self.first else []
 
         with tempfile.TemporaryDirectory() as tmp:
             _, doc, _ = run_worlds(Path(tmp), ["observer", "reader"],
@@ -226,7 +226,7 @@ class TestClose(unittest.TestCase):
              ("w1", "build", "skipped", "w0 failed to close"),
              ("w1", "reader", "skipped", "w0 failed to close")])
         self.assertEqual(doc["aborted"], "w0 failed to close; teardown: "
-                         "ExecutorError: close: node1: did not stop")
+                         "WorldError: close: node1: did not stop")
 
     def test_close_stops_every_node_when_one_will_not(self):
         class Node:
@@ -243,8 +243,8 @@ class TestClose(unittest.TestCase):
             world = LocalWorld(dir, Path(tmp) / "astrald", 0)
             nodes = {"node1": Node(True), "node2": Node(False)}
             world._nodes = nodes
-            with self.assertRaisesRegex(ExecutorError, "node1: still running"):
-                world.teardown(keep=False)
+            with self.assertRaisesRegex(WorldError, "node1: still running"):
+                world.close(keep=False)
             self.assertTrue(dir.is_dir() and not dir.is_symlink())
         self.assertTrue(all(n.stopped for n in nodes.values()))
 

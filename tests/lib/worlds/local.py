@@ -1,21 +1,19 @@
 """A local world: fresh astrald processes on loopback, for one planned world.
 
-It speaks the executor protocol the runner drives every world through
-(lib/executors), so a run of several local worlds and a run on a VM or an
-attached daemon share one loop.
+It speaks the world interface (lib/worlds), so a run of several local
+worlds and a run on a VM or an attached daemon share one loop.
 """
 import asyncio
 import shutil
 import tempfile
 from pathlib import Path
 
-from lib.executors import Executor, ExecutorError, node_entry
+from lib.worlds import World, WorldError, node_entry
 from lib.localnode import LocalNode
 from lib.nodeconfig import ports_for
 
 
-class LocalWorld(Executor):
-    env = "node"
+class LocalWorld(World):
 
     def __init__(self, dir: Path, binary: Path, port_base: int,
                  keep: bool = False, config: dict | None = None):
@@ -42,15 +40,15 @@ class LocalWorld(Executor):
         self.config = config or {}
         self._nodes = {}
 
-    def prepare(self, test) -> None:
+    def ensure(self, test) -> None:
         """Bring the test's roster up; a node already up stays as it is."""
         if test.ops:
-            raise ExecutorError(f"{test.name}: a local world runs no VM "
-                                "operations")
+            raise WorldError(f"{test.name}: a local world runs no VM "
+                             "operations")
         try:
             asyncio.run(self._ensure(test.nodes))
         except Exception as e:
-            raise ExecutorError(f"session: {e}") from e
+            raise WorldError(f"session: {e}") from e
 
     async def _ensure(self, names) -> None:
         for name in names:
@@ -68,7 +66,7 @@ class LocalWorld(Executor):
         try:
             asyncio.run(self._restart(names))
         except Exception as e:
-            raise ExecutorError(f"restart: {e}") from e
+            raise WorldError(f"restart: {e}") from e
 
     async def _restart(self, names) -> None:
         for name in names:
@@ -103,10 +101,10 @@ class LocalWorld(Executor):
             restarts=n.restarts,
         ) for name, n in self._nodes.items()}
 
-    def broken(self) -> list:
+    def dead(self) -> list:
         return [name for name, n in self._nodes.items() if not n.alive()]
 
-    def teardown(self, keep: bool) -> None:
+    def close(self, keep: bool) -> None:
         """Stop the nodes and move their state from the temp dir into dir.
 
         A kept world stays where it runs, still reached through dir."""
@@ -126,4 +124,4 @@ class LocalWorld(Executor):
             shutil.copytree(self._live, self._dir)
             shutil.rmtree(self._live)
         if stuck:
-            raise ExecutorError(f"close: {'; '.join(stuck)}")
+            raise WorldError(f"close: {'; '.join(stuck)}")

@@ -17,8 +17,8 @@ TESTS = Path(__file__).resolve().parent
 USAGE = """\
 examples:
   ./tests/run                        the default suite (suites/main.suite)
-  ./tests/run main.suite             a named suite, in its listed order
-  ./tests/run adopt-node             one test + the prereq prefix it needs
+  ./tests/run main.suite             a named suite, its listing a preference
+  ./tests/run adopt-node             one test + the tests its world needs first
   ./tests/run smoke adopt-node       several tests
   ./tests/run --plan main.suite      the worlds a run would use, with nothing run
   ./tests/run adopt-node --vm --save gw    build a VM world once, save it as gw

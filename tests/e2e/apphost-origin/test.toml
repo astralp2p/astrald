@@ -1,7 +1,4 @@
-env     = "node"
-start   = "two-nodes"
 nodes   = ["node1", "node2"]
-drivers = ["script"]
 timeout = 180
 after   = "adopt-node"
 facts   = ["control_minted", "control_list_count", "refusals",

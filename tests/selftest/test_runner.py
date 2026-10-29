@@ -1,4 +1,4 @@
-"""The runner's per-test loop, driven against a fake executor."""
+"""The runner's per-test loop, driven against a fake world."""
 import argparse
 import contextlib
 import io
@@ -10,13 +10,13 @@ from types import SimpleNamespace
 from unittest import mock
 
 from lib import runner
-from lib.executors import ExecutorError
+from lib.worlds import WorldError
 from lib.manifest import load_all
 
 TESTS = Path(__file__).resolve().parent.parent
 
 
-class FakeExecutor:
+class FakeWorld:
     """A world that comes up, and an operator that breaks before it drives."""
 
     pushed = ()
@@ -28,14 +28,14 @@ class FakeExecutor:
     def want_model(self, model: str, base_url: str = "") -> None:
         pass
 
-    def prepare(self, test) -> None:
+    def ensure(self, test) -> None:
         pass
 
     def nodes(self) -> dict:
         return {}
 
-    def run_agent(self, test, log: Path, facts: Path, timeout: int) -> int:
-        raise ExecutorError("node1: operator model is not m after the rewrite")
+    def run_agent(self, test, log: Path, facts: Path, timeout=0) -> int:
+        raise WorldError("node1: operator model is not m after the rewrite")
 
     def boot_from(self, stage: str, record: dict) -> None:
         self.booted_from = stage
@@ -43,52 +43,52 @@ class FakeExecutor:
     def resume(self) -> dict:
         return {"history": [], "facts": {}}
 
-    def broken(self) -> list:
+    def dead(self) -> list:
         return []
 
-    def teardown(self, keep: bool) -> None:
+    def close(self, keep: bool) -> None:
         self.torn_down = True
 
 
-class TeardownFails(FakeExecutor):
-    def teardown(self, keep: bool) -> None:
+class TeardownFails(FakeWorld):
+    def close(self, keep: bool) -> None:
         self.torn_down = True
-        raise ExecutorError("netsim kill 1: exit 1")
+        raise WorldError("netsim kill 1: exit 1")
 
 
-class DiesUnderTest(FakeExecutor):
+class DiesUnderTest(FakeWorld):
     """A world whose daemon is dead by the time any oracle has spoken."""
 
-    def broken(self) -> list:
+    def dead(self) -> list:
         return ["node1"]
 
 
 class PrepareFailsAndDies(DiesUnderTest):
-    def prepare(self, test) -> None:
-        raise ExecutorError("node1: never became ready")
+    def ensure(self, test) -> None:
+        raise WorldError("node1: never became ready")
 
 
-class CrashesOnSecond(FakeExecutor):
+class CrashesOnSecond(FakeWorld):
     """A world whose second prepare dies of something no step catches."""
 
     prepared = 0
 
-    def prepare(self, test) -> None:
+    def ensure(self, test) -> None:
         self.prepared += 1
         if self.prepared == 2:
             raise RuntimeError("netsim ps: lost the simulation\nno space")
 
 
-def run(selection: list, ex_class=FakeExecutor, driver: str = "script",
+def run(selection: list, ex_class=FakeWorld, driver: str = "script",
         step=lambda *a, **kw: 0, target: str = "fresh") -> tuple:
-    """(exit code, results doc, report text, executor, world record) of one
+    """(exit code, results doc, report text, world, world record) of one
     runner.main over a fake world, with every driver and oracle step
     answered by step."""
     args = argparse.Namespace(selection=selection, driver=driver,
                               target=target, keep=False)
     made = []
 
-    def executor(*_):
+    def world(*_):
         made.append(ex_class())
         return made[-1]
 
@@ -96,9 +96,9 @@ def run(selection: list, ex_class=FakeExecutor, driver: str = "script",
             mock.patch.object(runner, "RESULTS", Path(tmp)), \
             mock.patch.object(runner, "ensure_binary",
                               return_value=(Path(tmp) / "astrald", "abc")), \
-            mock.patch.object(runner, "_executor", executor), \
-            mock.patch.object(runner, "_local_world", executor), \
-            mock.patch.object(runner, "_vm_world", executor), \
+            mock.patch.object(runner, "_attach_world", world), \
+            mock.patch.object(runner, "_local_world", world), \
+            mock.patch.object(runner, "_vm_world", world), \
             mock.patch.object(runner, "lease_ports",
                               return_value=SimpleNamespace(base=0)), \
             mock.patch.object(runner, "_run_step", step), \
@@ -128,7 +128,7 @@ class TestOperatorError(unittest.TestCase):
                 mock.patch.object(runner, "ensure_binary",
                                   return_value=(Path(tmp) / "astrald", "abc")), \
                 mock.patch.object(runner, "_vm_world",
-                                  lambda *_: FakeExecutor()), \
+                                  lambda *_: FakeWorld()), \
                 contextlib.redirect_stdout(io.StringIO()):
             self.assertEqual(runner.main(args), 1)
             run_dir = next(Path(tmp).iterdir())
@@ -194,11 +194,11 @@ class TestCrashSafe(unittest.TestCase):
         self.assertNotEqual(code, 0)
         self.assertEqual(doc["entries"][0]["status"], "pass")
         self.assertEqual(doc["aborted"],
-                         "teardown: ExecutorError: netsim kill 1: exit 1")
+                         "teardown: WorldError: netsim kill 1: exit 1")
         self.assertIn("— INCOMPLETE", text)
 
     def test_pushed_survives_an_abort(self):
-        class PushedCrashes(PushingExecutor, CrashesOnSecond):
+        class PushedCrashes(PushingWorld, CrashesOnSecond):
             pass
 
         _, doc, _, _, _ = run(["adopt-node"], ex_class=PushedCrashes)
@@ -258,24 +258,26 @@ class TestCrashSafe(unittest.TestCase):
                       "w0", text)
 
 
-class TestExecutorPath(unittest.TestCase):
-    def test_a_skip_on_the_executor_path_names_the_failed_test(self):
-        # why: attach, the one executor path left, runs through the world
-        # loop and takes its skip rule; it read "state one-node was never
-        # built" before
-        def step(py, script, log, env, timeout):
-            return 1 if script.parent.name == "bootstrap-user-software-key" \
-                else 0
+class TestAttachWorld(unittest.TestCase):
+    def test_attach_runs_its_one_world_through_the_loop(self):
+        _, doc, _, _, world = run(["smoke"], target="attach")
+        [e] = doc["entries"]
+        self.assertEqual((e["test"], e["env"], e["world"], e["status"]),
+                         ("smoke", "node", "w0", "pass"))
+        self.assertEqual([h["test"] for h in world["history"]], ["smoke"])
 
-        _, doc, _, _, _ = run(["bootstrap-user-software-key", "fs-watch"],
-                              target="attach", step=step)
-        failed, skipped = doc["entries"]
-        self.assertEqual((failed["test"], failed["failure_kind"]),
-                         ("bootstrap-user-software-key", "driver"))
-        self.assertEqual((skipped["test"], skipped["env"], skipped["world"],
-                          skipped["reason"]),
-                         ("fs-watch", "node", "w0",
-                          "bootstrap-user-software-key failed in w0"))
+    def test_a_selection_attach_would_have_to_build_is_refused(self):
+        # why: attach checks the state a daemon stands at and never builds
+        # one, so a prereq is a plan error before anything is touched
+        args = argparse.Namespace(selection=["adopt-node"], driver="script",
+                                  target="attach", keep=False)
+        err = io.StringIO()
+        with mock.patch.object(runner, "_attach_world",
+                               lambda: self.fail("nothing may open")), \
+                contextlib.redirect_stderr(err):
+            self.assertEqual(runner.main(args), 2)
+        self.assertIn("would have to build 'bootstrap-user-software-key'",
+                      err.getvalue())
 
 
 class TestAgentRuns(unittest.TestCase):
@@ -292,7 +294,7 @@ class TestAgentRuns(unittest.TestCase):
                            "environment")])
 
 
-class PushingExecutor(FakeExecutor):
+class PushingWorld(FakeWorld):
     """A VM world: the binaries under test went to three machines."""
 
     pushed = ["node1", "node2", "reflector"]
@@ -307,7 +309,7 @@ class TestPushedHeader(unittest.TestCase):
                 mock.patch.object(runner, "ensure_binary",
                                   return_value=(Path(tmp) / "astrald", "abc")), \
                 mock.patch.object(runner, "_vm_world",
-                                  lambda *_: PushingExecutor()), \
+                                  lambda *_: PushingWorld()), \
                 contextlib.redirect_stdout(io.StringIO()):
             runner.main(args)
             run_dir = next(Path(tmp).iterdir())
@@ -339,7 +341,7 @@ class TestDriverEnv(unittest.TestCase):
                 mock.patch.object(runner, "ensure_binary",
                                   return_value=(Path(tmp) / "astrald", "abc")), \
                 mock.patch.object(runner, "_vm_world",
-                                  lambda *_: FakeExecutor()), \
+                                  lambda *_: FakeWorld()), \
                 mock.patch.object(runner, "_run_step", run_step), \
                 contextlib.redirect_stdout(io.StringIO()):
             (Path(tmp) / "gw.json").write_text(
@@ -372,31 +374,36 @@ class TestDriverEnv(unittest.TestCase):
         self.assertEqual(env["ASTRAL_TESTS_SESSION"], "/s/session.json")
 
 
-class TestPlanFor(unittest.TestCase):
-    """Bare selections over the shipped manifests."""
+class TestBareSelections(unittest.TestCase):
+    """Bare selections over the shipped manifests, as the planner orders
+    them: the orderings the old walk once got wrong."""
 
     def setUp(self):
         self.all = load_all(TESTS / "e2e")
 
-    def order(self, *selection) -> list:
-        return [t.name for t, _ in runner.plan_for(self.all, list(selection))]
+    def worlds(self, *selection) -> list:
+        return [[s.test for s in w.steps]
+                for w in runner.planner.plan(self.all, list(selection))]
 
-    def test_a_mutator_runs_after_the_test_it_would_break(self):
+    def test_a_destroyer_runs_after_the_test_it_would_break(self):
         # why: ordered by depth alone, expel-node ran first and mcp-peer met
         # a swarm with node2 already expelled
-        order = self.order("expel-node", "mcp-peer")
+        [order] = self.worlds("expel-node", "mcp-peer")
         self.assertLess(order.index("mcp-peer"), order.index("expel-node"))
         self.assertEqual(order[-1], "expel-node")
 
     def test_an_observer_runs_before_a_producer_at_its_depth(self):
         # why: claim-window needs node1 unclaimed, and bootstrap claims it
-        self.assertEqual(self.order("adopt-node", "claim-window"),
-                         ["claim-window", "bootstrap-user-software-key",
-                          "adopt-node"])
+        self.assertEqual(self.worlds("adopt-node", "claim-window"),
+                         [["claim-window", "bootstrap-user-software-key",
+                           "adopt-node"]])
 
-    def test_a_selection_holding_two_mutators_is_refused(self):
-        with self.assertRaisesRegex(ValueError, "both mutate"):
-            runner.plan_for(self.all, ["expel-node", "hold-purge"])
+    def test_two_destroyers_each_get_a_world(self):
+        # why: the old runner refused this selection outright; each
+        # destroyer now ends a world of its own
+        self.assertEqual([w[-1] for w in self.worlds("expel-node",
+                                                     "hold-purge")],
+                         ["expel-node", "hold-purge"])
 
 
 if __name__ == "__main__":

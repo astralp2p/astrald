@@ -1,17 +1,15 @@
 """The shipped manifests and suites, checked against each other.
 
 The other selftests exercise the rules on synthetic trees; this one holds the
-repository to them, so a manifest typo or a suite reordered into an
-unsatisfiable walk fails here rather than after a daemon has booted.
+repository to them, so a manifest typo or a test no suite runs fails here
+rather than after a daemon has booted.
 """
 import ast
 import unittest
 from pathlib import Path
 
-from lib.manifest import load_all, resolve, validate_order
-from lib.plan import plan
+from lib.manifest import load_all
 from lib.suites import load
-from selftest.test_plan import SUITES
 
 TESTS = Path(__file__).resolve().parent.parent
 
@@ -71,41 +69,6 @@ class TestShipped(unittest.TestCase):
     def setUp(self):
         self.all = load_all(TESTS / "e2e")
 
-    def walked_suites(self) -> list:
-        """The suites a run still walks in one world: those whose plan, under
-        the driver the suite runs with, holds a VM world. A suite of local
-        worlds runs its plan instead.
-
-        todo: child 8 retires the walk with the executor path.
-        """
-        out = []
-        for path in sorted((TESTS / "suites").glob("*.suite")):
-            listed = load(path)
-            worlds = plan(self.all, listed, listed, driver=SUITES[path.stem])
-            if any(w.kind != "local" for w in worlds):
-                out.append(path)
-        return out
-
-    def test_a_suite_runs_under_its_own_driver(self):
-        # why: agent.suite plans all-local under the script driver, so
-        # planning it that way let it escape the walk it runs under
-        self.assertIn("agent.suite",
-                      [p.name for p in self.walked_suites()])
-
-    def test_every_walked_suite_walks(self):
-        suites = self.walked_suites()
-        self.assertTrue(suites, "no suite is walked")
-        for path in suites:
-            with self.subTest(suite=path.name):
-                validate_order(self.all, load(path))
-
-    def test_every_test_resolves_alone(self):
-        for name in sorted(self.all):
-            with self.subTest(test=name):
-                plan = resolve(self.all, [name])
-                self.assertEqual(plan[-1][0].name, name)
-                self.assertEqual(plan[-1][1], "test")
-
     def test_every_test_ships_its_four_files(self):
         for name, t in sorted(self.all.items()):
             with self.subTest(test=name):
@@ -123,17 +86,6 @@ class TestShipped(unittest.TestCase):
             listed.update(load(path))
         self.assertEqual(sorted(set(self.all) - listed), [],
                          "these tests are in no suite, so nothing runs them")
-
-    def test_a_mutator_is_last_in_every_walked_suite(self):
-        # why: the walk already rejects a consumer placed after a mutator, but
-        # a mutator mid-suite means every following test was skipped by design
-        # rather than by accident — say it once, here.
-        for path in self.walked_suites():
-            listed = load(path)
-            for i, name in enumerate(listed[:-1]):
-                with self.subTest(suite=path.name, test=name):
-                    self.assertFalse(self.all[name].mutates,
-                                     f"{name} mutates and is not last")
 
     def test_no_suite_lists_both_tor_link_and_nat_punch(self):
         # why: tor-link's leave-lan downs node2's LAN interface, and nat-punch's
@@ -157,21 +109,13 @@ class TestShipped(unittest.TestCase):
                 self.assertEqual(read - declared, set(),
                                  f"{name}'s oracle reads undeclared facts")
 
-    def test_planner_keys_agree_with_the_state_chain(self):
-        # why: until planned worlds run, the runner reads the state-chain keys
-        # and `--plan` reads the planner's. A manifest that changed one and not
-        # the other would plan one order and run another.
-        producers = {t.saves: n for n, t in self.all.items() if t.saves}
+    def test_a_restart_is_local_only(self):
+        # why: only a local world restarts a node, so a test that needs one
+        # must never be planned into a VM world or onto an attached daemon
         for name, t in sorted(self.all.items()):
-            with self.subTest(test=name):
-                self.assertEqual(t.after, producers.get(t.start))
-                self.assertEqual(t.ops, [s.removeprefix("vm:")
-                                         for s in t.steps if s != "driver"])
-                if t.mutates:
-                    self.assertTrue(t.destroys, "a mutator destroys")
-                if t.restart:
-                    self.assertTrue(t.local_only, "a restart is local only")
-                self.assertEqual(t.prompt, "agent" in t.drivers)
+            if t.restart:
+                with self.subTest(test=name):
+                    self.assertTrue(t.local_only)
 
 
 if __name__ == "__main__":

@@ -1,7 +1,4 @@
-env     = "node"
-start   = "one-node"
 nodes   = ["node1"]
-drivers = ["script"]
 timeout = 180
 after   = "bootstrap-user-software-key"
 local_only = "reads node1's astrald.log from its root on the host, and needs the 1 s external_registration_sweep_interval a local world renders"

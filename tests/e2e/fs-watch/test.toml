@@ -1,7 +1,4 @@
-env     = "node"
-start   = "one-node"
 nodes   = ["node1"]
-drivers = ["script"]
 timeout = 180
 after   = "bootstrap-user-software-key"
 local_only = "has node1 watch a directory on the host"
