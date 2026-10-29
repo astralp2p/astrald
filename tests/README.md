@@ -256,6 +256,28 @@ need a prereq prefix is refused rather than run at your daemon — and a
 `mutates` test prints a warning naming itself before anything happens.
 Attach has one daemon, so a test with a multi-node roster is refused too.
 
+### Saved VM worlds
+
+A VM world takes minutes to build, so the world one VM test starts from can
+be saved once and booted again:
+
+    ./tests/run adopt-node --vm --save gw     # build it in VMs, save it as gw
+    ./tests/run gateway-relay --from gw       # boot gw, run only gateway-relay
+    ./tests/run --plan gateway-relay --from gw    # `=` marks what gw already ran
+
+- `--vm` puts every world in VMs, local tests included; a `local_only` test
+  refuses it.
+- `--save NAME` saves the run's last world — a VM world whose every step
+  passed — as netsim stage NAME. Its world record goes into every guest at
+  `/var/lib/astral-tests/world.json`, root-only, so the operator cannot read
+  the tokens it is judged with, and a copy stays on the host under
+  `${XDG_CACHE_HOME:-~/.cache}/astral-tests/snapshots/` for `--plan` and for
+  every checkout, since netsim's stages are host-wide too.
+- `--from NAME` boots that stage. The selection has to plan into one world
+  whose first steps are exactly the saved history; those steps are skipped,
+  and their facts come from the record the guests hold, which has to be the
+  host's copy. The binaries and tokens are pushed fresh. The header reads `hermetic: false` and `from: NAME`.
+
 `--keep` leaves the last world up: a local world's nodes, or a VM world's
 simulation with its tunnels.
 

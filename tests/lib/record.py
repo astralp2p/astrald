@@ -43,7 +43,9 @@ class WorldRecord:
             self.facts[test] = facts
         self.write()
 
+    def doc(self) -> dict:
+        return {"world": self.world, "run": self.run, "nodes": self.nodes,
+                "history": self.history, "facts": self.facts}
+
     def write(self) -> None:
-        doc = {"world": self.world, "run": self.run, "nodes": self.nodes,
-               "history": self.history, "facts": self.facts}
-        self.path.write_text(json.dumps(doc, indent=2) + "\n")
+        self.path.write_text(json.dumps(self.doc(), indent=2) + "\n")

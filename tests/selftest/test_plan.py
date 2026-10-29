@@ -7,6 +7,7 @@ as a diff someone reads.
 """
 import argparse
 import itertools
+import tempfile
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
@@ -257,6 +258,41 @@ class TestSyntheticPlans(unittest.TestCase):
         self.assertEqual([s.test for s in w.steps], ["root", "obs", "d", "kid"])
 
 
+class TestResumedPlans(unittest.TestCase):
+    """Rule 9: a saved world's history is where its one world starts."""
+
+    HISTORY = ["bootstrap-user-software-key", "adopt-node"]
+
+    @classmethod
+    def setUpClass(cls):
+        cls.all = load_all(TESTS / "e2e")
+
+    def resume(self, *selection):
+        return plan(self.all, list(selection), vm=True, done=self.HISTORY)
+
+    def test_the_history_is_marked_done_and_the_rest_runs(self):
+        [w] = self.resume("read-swarm")
+        self.assertEqual([(s.test, s.done) for s in w.steps],
+                         [("bootstrap-user-software-key", True),
+                          ("adopt-node", True), ("object-store-peer", False),
+                          ("read-swarm", False)])
+        self.assertEqual(render([w]).split("\n")[0],
+                         "w0 vm: bootstrap-user-software-key= → adopt-node= "
+                         "→ object-store-peer*")
+
+    def test_a_world_that_does_not_start_with_the_history_is_refused(self):
+        with self.assertRaisesRegex(PlanError, "starts smoke"):
+            self.resume("smoke")
+
+    def test_a_selection_of_two_worlds_is_refused(self):
+        with self.assertRaisesRegex(PlanError, "plans 2"):
+            self.resume("tor-link", "nat-punch")
+
+    def test_a_test_the_history_already_ran_is_refused(self):
+        with self.assertRaisesRegex(PlanError, "adopt-node already ran"):
+            self.resume("adopt-node")
+
+
 class TestRunPlan(unittest.TestCase):
     def args(self, **kw):
         base = dict(selection=["tor-link", "nat-punch"], driver="script",
@@ -286,6 +322,28 @@ class TestRunPlan(unittest.TestCase):
              mock.patch("builtins.print"):
             self.assertEqual(runner.main(self.args(
                 plan=False, selection=["smoke"], prereqs="agent")), 2)
+
+    def test_save_refuses_a_run_that_ends_in_a_local_world(self):
+        # why: only a VM world is a netsim stage that can be saved
+        with mock.patch("builtins.print"):
+            self.assertEqual(runner.main(self.args(selection=["mcp-origin"],
+                                                   save="gw")), 2)
+
+    def test_a_name_netsim_would_not_take_is_refused_up_front(self):
+        # why: netsim refuses it only after the run, and a --from name is a
+        # file name on the host
+        for opt in ({"save": "Gate Way"}, {"save": "-gw"},
+                    {"from_stage": "../gw"}):
+            with self.subTest(**opt), mock.patch("builtins.print"):
+                self.assertEqual(runner.main(self.args(
+                    selection=["adopt-node"], vm=True, **opt)), 2)
+
+    def test_from_refuses_a_world_this_host_never_saved(self):
+        with tempfile.TemporaryDirectory() as tmp, \
+                mock.patch.object(runner, "SNAPSHOTS", Path(tmp)), \
+                mock.patch("builtins.print"):
+            self.assertEqual(runner.main(self.args(selection=["gateway-relay"],
+                                                   from_stage="gw")), 2)
 
 
 if __name__ == "__main__":

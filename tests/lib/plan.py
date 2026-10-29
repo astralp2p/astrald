@@ -24,6 +24,9 @@ follow from that tree:
    that would be operator-driven is a plan error, on purpose: it mirrors
    the runner's refusal of a test that declares no agent driver.
 8. Under `--target attach`, the plan is one world on the daemon already up.
+9. `done` is the history of a saved world the run boots (`--from`): the plan
+   is that one world, its first steps are exactly that history, and they are
+   marked done rather than run.
 """
 from dataclasses import dataclass, field
 
@@ -39,6 +42,7 @@ class Step:
     test: str
     kind: str       # "test", or "prereq": run to build what a test continues
     driver: str     # "script" or "agent"
+    done: bool = False  # already in the saved world the run boots: not run
 
 
 @dataclass
@@ -59,9 +63,10 @@ def chain(tests: dict, name: str) -> list:
 
 def plan(tests: dict, selection: list, order=(), *, isolate=False,
          driver="script", vm=False, target="fresh",
-         prereqs_agent=False) -> list:
+         prereqs_agent=False, done=()) -> list:
     """The worlds a run of `selection` needs. `order` is a suite's listing,
-    a preference among siblings; the rest sort by name."""
+    a preference among siblings; the rest sort by name. `done` is the
+    history of the saved world the run boots, oldest first."""
     unknown = [n for n in selection if n not in tests]
     if unknown:
         raise PlanError(f"unknown test(s): {', '.join(unknown)}")
@@ -78,7 +83,33 @@ def plan(tests: dict, selection: list, order=(), *, isolate=False,
         return _attach(p, worlds, isolate)
     for w in worlds:
         w.kind = w.kind or p.forced or "local"
+    if done:
+        _resume(worlds, list(done), set(selection))
     return worlds
+
+
+def _resume(worlds: list, done: list, selected: set) -> None:
+    """Rule 9: mark the steps a saved world already stands past.
+
+    why a prefix and nothing looser: a saved world is exactly its history,
+    and a world whose first steps differ from it would run its tests on a
+    state the plan never named — a test that destroys, or one the snapshot
+    never ran, would be assumed rather than run.
+    """
+    if len(worlds) != 1:
+        raise PlanError(f"a saved world boots one world, and this selection "
+                        f"plans {len(worlds)}")
+    steps = worlds[0].steps
+    first = [s.test for s in steps[:len(done)]]
+    if first != done:
+        raise PlanError(f"the saved world stands past {' → '.join(done)}, "
+                        f"and this selection's world starts "
+                        f"{' → '.join(first) or 'fresh'}")
+    ran = sorted(selected & set(done))
+    if ran:
+        raise PlanError(f"{ran[0]} already ran in the saved world")
+    for s in steps[:len(done)]:
+        s.done = True
 
 
 class _Planner:
@@ -230,14 +261,16 @@ def _attach(p: _Planner, worlds: list, isolate: bool) -> list:
 
 
 def render(worlds: list) -> str:
-    """The plan as text, one world per paragraph; `*` marks a prereq."""
+    """The plan as text, one world per paragraph; `*` marks a prereq and
+    `=` a step the saved world already stands past."""
     heads = [f"{w.name} {w.kind}:" for w in worlds]
     pad = max(map(len, heads), default=0) + 1
     out = []
     for head, w in zip(heads, worlds):
         line = head.ljust(pad)
         for i, s in enumerate(w.steps):
-            label = (s.test + ("*" if s.kind == "prereq" else "")
+            mark = "=" if s.done else "*" if s.kind == "prereq" else ""
+            label = (s.test + mark
                      + (" (agent)" if s.driver == "agent" else ""))
             piece = label if i == 0 else f" → {label}"
             if i and len(line) + len(piece) > WIDTH:

@@ -3,13 +3,15 @@
 A fake lab stands in for netsim, ssh and the guests, and records every call
 in order. The real runner drives the real VmWorld against it, so these
 assertions pin the netsim call sequence a run makes — boot, push, tunnels,
-ops, logs, kill — and what a run records, without booting anything.
+ops, logs, kill, save — and what a run records, without booting anything.
 """
 import argparse
+import base64
 import contextlib
 import io
 import json
 import os
+import re
 import tempfile
 import unittest
 from pathlib import Path
@@ -30,6 +32,7 @@ class FakeProc:
     """An `ssh -L` that stays up until terminated, which it records."""
 
     terminated = False
+    dead = False            # its guest went down under it
 
     def __init__(self, calls: list, tunnel: tuple):
         self.calls, self.tunnel = calls, tunnel
@@ -57,8 +60,11 @@ class FakeLab:
         self.stages = set(stages)
         self.sims = {sim: None for sim in running}     # id -> stage booted
         self.next_id = 7
+        self.records = {}       # stage -> the world.json its guests hold
+        self.written = {}       # sim -> the world.json last written into it
         self.procs = []
         self.natted = set()     # (sim, vm) that ran enter-nat
+        self.suffix = ""        # what netsim appends to a name taken meanwhile
         # the identity each guest's apphost answers with, by tunnel port
         self.identity = lambda port: f"id-{port}"
 
@@ -81,6 +87,14 @@ class FakeLab:
             self.stages.discard(args[1])
         elif args[:1] == ("kill",) and len(args) == 2:
             self.sims.pop(args[1], None)
+        elif verb == "save":
+            name = args[-1] + self.suffix
+            self.stages.add(name)
+            self.records[name] = self.written.get(args[2])
+            # note: netsim relaunches the VMs, so every ssh -L dies
+            for p in self.procs:
+                p.dead = True
+            return name
         elif verb == "ssh":
             return self.guest(args[2], args[3], args[5])
         return ""
@@ -98,6 +112,11 @@ class FakeLab:
     def guest(self, sim: str, host: str, script: str) -> str:
         if script.startswith("ip netns list"):
             return "priv\n" if (sim, host) in self.natted else ""
+        if script.startswith(f"cat {vm.GUEST_RECORD}"):
+            return self.records.get(self.sims[sim]) or ""
+        if f"> {vm.GUEST_RECORD}.new" in script:
+            payload = re.search(r"printf '%s' '([^']*)'", script).group(1)
+            self.written[sim] = base64.b64decode(payload).decode()
         if script.startswith("journalctl"):
             return f"journal of {host} in {sim}"
         return ""
@@ -156,11 +175,12 @@ class FakeLab:
 
 def run(tmp: Path, lab: FakeLab, selection: list, **opts) -> tuple:
     """(exit code, results doc, run dir, the tests whose steps ran) of one
-    runner.main over the fake lab, its results under tmp."""
+    runner.main over the fake lab, its results under tmp. Saved worlds stay
+    beside the lab, so a later run finds what an earlier one saved."""
     args = argparse.Namespace(**{
         "selection": selection, "driver": "script", "target": "fresh",
         "keep": False, "plan": False, "isolate": False, "prereqs": "script",
-        "vm": False, **opts})
+        "vm": False, "save": None, "from_stage": None, **opts})
     ran = []
 
     def step(py, script, log, env, timeout):
@@ -171,6 +191,8 @@ def run(tmp: Path, lab: FakeLab, selection: list, **opts) -> tuple:
         for p in lab.patches():
             stack.enter_context(p)
         for p in (mock.patch.object(runner, "RESULTS", tmp / "results"),
+                  mock.patch.object(runner, "SNAPSHOTS",
+                                    lab.home.parent / "snapshots"),
                   mock.patch.object(runner, "ensure_binary",
                                     return_value=(tmp / "astrald", "abc1234")),
                   mock.patch.object(runner, "lease_ports",
@@ -265,7 +287,7 @@ class TestFreshVmWorlds(Lab):
 
     def test_no_state_is_cached_between_worlds(self):
         # why: the per-state stage cache saved after every producer and
-        # booted only the first world; no run writes a stage now
+        # booted only the first world; nothing but --save writes a stage now
         self.assertFalse([c for c in self.fake.calls
                           if c[:2] == ("netsim", "save")])
         self.assertEqual(self.fake.stages, {"null", LAB})
@@ -334,6 +356,134 @@ class TestFreshVmWorlds(Lab):
         self.assertEqual(tuple(node2), NODE_FIELDS)
         self.assertRegex(node2["endpoint"], r"^tcp:127\.0\.0\.1:3\d+$")
         self.assertEqual(node2["lan_endpoint"], "tcp:10.77.0.11:1791")
+
+
+class TestSnapshots(Lab):
+    """`--save` a VM world, then run past its history with `--from`."""
+
+    def save(self, fake: FakeLab) -> tuple:
+        return run(self.tmp, fake, ["adopt-node"], vm=True, save="gw")
+
+    def test_save_writes_the_record_root_only_before_netsim_saves(self):
+        fake = self.lab()
+        code, doc, _, _ = self.save(fake)
+        self.assertEqual((code, doc["saved"]), (0, "gw"))
+        writes = [i for i, c in enumerate(fake.calls)
+                  if c[:2] == ("netsim", "ssh") and vm.GUEST_RECORD in c[6]
+                  and "base64 -d" in c[6]]
+        [save] = [i for i, c in enumerate(fake.calls)
+                  if c[:2] == ("netsim", "save")]
+        [kill] = [i for i, c in enumerate(fake.calls)
+                  if c[:2] == ("netsim", "kill")]
+        self.assertEqual(len(writes), len(VMS))
+        self.assertLess(max(writes), save)
+        self.assertLess(save, kill)
+        script = fake.calls[writes[0]][6]
+        self.assertIn("install -d -m 700 /var/lib/astral-tests", script)
+        self.assertIn("umask 077", script)
+        record = json.loads(fake.records["gw"])
+        self.assertEqual([h["test"] for h in record["history"]],
+                         ["bootstrap-user-software-key", "adopt-node"])
+        host = json.loads((self.tmp / "snapshots" / "gw.json").read_text())
+        self.assertEqual(host, record)
+
+    def test_from_runs_only_what_the_saved_world_has_not(self):
+        fake = self.lab()
+        self.save(fake)
+        fake.calls.clear()
+        code, doc, run_dir, ran = run(self.tmp, fake, ["gateway-relay"],
+                                      from_stage="gw")
+        self.assertEqual(code, 0)
+        boots = [c for c in fake.calls if c[:2] == ("netsim", "task")]
+        self.assertEqual([c[c.index("--stage") + 1] for c in boots], ["gw"])
+        self.assertEqual(ran, [("gateway-relay", "script"),
+                               ("gateway-relay", "verify")])
+        self.assertEqual([(e["test"], e["status"]) for e in doc["entries"]],
+                         [("gateway-relay", "pass")])
+        self.assertEqual((doc["from"], doc["hermetic"]), ("gw", False))
+        world = json.loads((run_dir / "w0" / "world.json").read_text())
+        self.assertEqual([h["test"] for h in world["history"]],
+                         ["bootstrap-user-software-key", "adopt-node",
+                          "gateway-relay"])
+        # the saved world's facts reach the lineage of the first step run
+        view = json.loads((run_dir / "gateway-relay" / "session.json")
+                          .read_text())
+        self.assertEqual(set(view["facts"]), set().union(
+            *json.loads(fake.records["gw"])["facts"].values()))
+
+    def test_from_refuses_a_selection_its_history_does_not_start(self):
+        fake = self.lab()
+        self.save(fake)
+        for selection in (["smoke"], ["tor-link", "nat-punch"],
+                          ["adopt-node"]):
+            with self.subTest(selection=selection):
+                code, _, _, _ = run(self.tmp / "x", fake, selection,
+                                    from_stage="gw")
+                self.assertEqual(code, 2)
+
+    def test_a_guest_record_that_disagrees_refuses_the_boot(self):
+        # why: the stage was saved again since this host's copy — same
+        # history, other facts — and a resumed run takes its facts from it
+        fake = self.lab()
+        self.save(fake)
+        record = json.loads(fake.records["gw"])
+        record["facts"]["bootstrap-user-software-key"]["user_token"] = "other"
+        fake.records["gw"] = json.dumps(record)
+        code, doc, _, ran = run(self.tmp / "y", fake, ["gateway-relay"],
+                                from_stage="gw")
+        self.assertEqual(code, 1)
+        [e] = doc["entries"]
+        self.assertEqual((e["status"], e["failure_kind"], e["phase"]),
+                         ("fail", "environment", "prepare"))
+        self.assertEqual(ran, [])
+
+    def test_a_kept_save_reopens_the_tunnels_netsim_killed(self):
+        # why: netsim save relaunches the VMs, so a kept world's record would
+        # point a debugger at dead ports
+        fake = self.lab()
+        code, doc, run_dir, _ = run(self.tmp, fake, ["adopt-node"], vm=True,
+                                    save="gw", keep=True)
+        self.assertEqual((code, doc["saved"]), (0, "gw"))
+        [save] = [i for i, c in enumerate(fake.calls)
+                  if c[:2] == ("netsim", "save")]
+        after = [c for c in fake.calls[save:] if c[0] in ("tunnel",
+                                                          "terminate")]
+        self.assertEqual(after, [
+            ("terminate", "7", "node1", "127.0.0.1"),
+            ("terminate", "7", "node2", "127.0.0.1"),
+            ("tunnel", "7", "node1", "127.0.0.1"),
+            ("tunnel", "7", "node2", "127.0.0.1")])
+        live = {p.tunnel[1]: p for p in fake.procs[-2:]}
+        self.assertFalse(any(p.dead or p.terminated for p in live.values()))
+        kept = json.loads((run_dir / "w0" / "world.json").read_text())
+        host = json.loads((self.tmp / "snapshots" / "gw.json").read_text())
+        self.assertNotEqual(kept["nodes"], host["nodes"])
+        self.assertEqual(kept["nodes"]["node1"]["endpoint"],
+                         f"tcp:127.0.0.1:{30000 + len(fake.procs) - 1}")
+
+    def test_the_name_netsim_saved_under_is_the_one_recorded(self):
+        fake = self.lab()
+        fake.suffix = "-1"                   # taken between check and save
+        code, doc, _, _ = self.save(fake)
+        self.assertEqual((code, doc["saved"]), (0, "gw-1"))
+        self.assertTrue((self.tmp / "snapshots" / "gw-1.json").is_file())
+
+    def test_save_refuses_a_name_netsim_already_holds(self):
+        code, doc, _, _ = run(self.tmp, self.lab(stages=("null", "gw")),
+                              ["adopt-node"], vm=True, save="gw")
+        self.assertEqual((code, doc), (2, None))
+
+    def test_a_world_that_failed_is_not_saved(self):
+        fake = self.lab()
+
+        def silent(port):
+            raise ExecutorError("apphost never answered")
+        fake.identity = silent
+        code, doc, _, _ = run(self.tmp, fake, ["adopt-node"], vm=True,
+                              save="gw")
+        self.assertNotIn("saved", doc)
+        self.assertIn("save gw:", doc["aborted"])
+        self.assertNotIn("gw", fake.stages)
 
 
 class TestWorldLifetime(Lab):

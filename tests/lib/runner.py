@@ -6,6 +6,7 @@ session view each driver and oracle reads. A world owns machines only.
 import json
 import os
 import platform
+import re
 import subprocess
 import sys
 import time
@@ -25,16 +26,25 @@ from lib.nodeconfig import PortsBusy, lease_ports
 from lib.record import WorldRecord
 from lib.results import RunHeader, RunResults, fresh_run_dir
 from lib.worlds.local import LocalWorld
-from lib.worlds.vm import VmWorld
+from lib.worlds.vm import VmWorld, stages
 
 TESTS = Path(__file__).resolve().parent.parent
 REPO = TESTS.parent
 RESULTS = TESTS / "results"
+# the host's copy of each saved world's record, which --plan --from reads
+# without booting anything; the guests hold the copy a run checks against
+# why host-wide: netsim's stages are, so every checkout must see one copy
+SNAPSHOTS = (Path(os.environ.get("XDG_CACHE_HOME")
+                  or Path.home() / ".cache") / "astral-tests" / "snapshots")
+# a netsim stage name (netsim store.SLUG_RE); a saved world's host copy is
+# named after it too
+STAGE_NAME = re.compile(r"^[a-z0-9][a-z0-9._-]{0,63}$")
 DEFAULT_SUITE = "main.suite"
 # the env a record names, by the kind of world it ran in
 ENV_OF = {"local": "node", "vm": "netsim", "attach": "node"}
 # the CLI options a caller may leave out: the selftests build args by hand
-OPTIONS = {"plan": False, "isolate": False, "prereqs": "script", "vm": False}
+OPTIONS = {"plan": False, "isolate": False, "prereqs": "script", "vm": False,
+           "save": None, "from_stage": None}
 
 
 def _run_step(py: str, script: Path, log: Path, env: dict, timeout: int) -> int:
@@ -227,8 +237,9 @@ def driver_env(session_json: Path, target: str) -> dict:
     it. Every target but attach resolves nothing from outside session.json;
     attach is the one mode where the ambient resolution is the point.
 
-    note: this keys off the target, not the header's `hermetic`: a run that
-    is not hermetic still talks to the harness's nodes, not the developer's.
+    note: this keys off the target, not the header's `hermetic`. A world
+    booted --from a saved one is not hermetic, yet its nodes are the
+    harness's, not the developer's.
     """
     env = dict(os.environ,
                PYTHONPATH=os.environ.get("ASTRAL_TESTS_PYPATH", str(TESTS)),
@@ -291,9 +302,14 @@ def print_plan(tests: dict, args) -> int:
 def plan_worlds(tests: dict, args) -> list:
     """The worlds the planner makes of the CLI's selection: a suite's tests,
     with its listing as the order among siblings, or the tests named."""
-    if args.target == "attach" and args.vm:
+    if args.target == "attach" and (args.vm or args.save or args.from_stage):
         raise ValueError("--target attach runs the daemon already up: it "
-                         "takes no --vm")
+                         "takes no --vm, --save or --from")
+    for flag, name in (("--save", args.save), ("--from", args.from_stage)):
+        if name is not None and not STAGE_NAME.match(name):
+            raise ValueError(f"{flag} {name!r}: a stage name is lowercase "
+                             "letters, digits, '.', '_' and '-', starting "
+                             "with a letter or a digit, at most 64")
     if args.prereqs != "script" and args.driver != "agent":
         # why refused rather than ignored: only an operator-driven run has
         # prereqs an operator could drive, and the run would read as though
@@ -301,10 +317,49 @@ def plan_worlds(tests: dict, args) -> list:
         raise ValueError("--prereqs agent needs --driver agent")
     selection = args.selection or [DEFAULT_SUITE]
     listed = selected_suite(selection)
-    return planner.plan(
+    saved = snapshot(args.from_stage) if args.from_stage else None
+    worlds = planner.plan(
         tests, listed or selection, listed or (), isolate=args.isolate,
-        driver=args.driver, target=args.target, vm=args.vm,
-        prereqs_agent=args.prereqs == "agent")
+        driver=args.driver, target=args.target,
+        # why --from is a VM run: a saved world is a netsim stage
+        vm=args.vm or saved is not None,
+        prereqs_agent=args.prereqs == "agent",
+        done=[h["test"] for h in saved["history"]] if saved else ())
+    if args.save and worlds[-1].kind != "vm":
+        raise ValueError(f"--save {args.save} saves a VM world, and this "
+                         f"selection's last world, {worlds[-1].name}, is "
+                         f"{worlds[-1].kind} — add --vm")
+    return worlds
+
+
+def snapshot(name: str) -> dict:
+    """The world record --save NAME left on this host."""
+    path = SNAPSHOTS / f"{name}.json"
+    if not path.is_file():
+        raise ValueError(f"no saved world {name!r} on this host (a run with "
+                         f"--save {name} makes one)")
+    return json.loads(path.read_text())
+
+
+def _check_stages(args) -> None:
+    """Refuse a --save that would not land and a --from with nothing to
+    boot, before anything is built.
+
+    why --save refuses a taken name: netsim suffixes a taken name rather
+    than replacing it, so the world would be saved where no --from looks.
+    """
+    if not (args.save or args.from_stage):
+        return
+    try:
+        have = stages()
+    except ExecutorError as e:
+        raise ValueError(str(e)) from e
+    if args.save in have:
+        raise ValueError(f"--save {args.save}: netsim already holds a stage "
+                         "by that name — pick another, or `netsim remove` it")
+    if args.from_stage and args.from_stage not in have:
+        raise ValueError(f"--from {args.from_stage}: netsim holds no such "
+                         "stage")
 
 
 def _reject_unbuilt(args, plan: list) -> str | None:
@@ -382,11 +437,13 @@ def attach_plan(tests: dict, args) -> list:
     todo: child 8 makes attach a world the planner plans (rule 8), and this
     path goes with the executors.
     """
-    if args.isolate or args.prereqs != "script" or args.vm:
+    if (args.isolate or args.prereqs != "script" or args.vm or args.save
+            or args.from_stage):
         # why refused rather than ignored: attach runs one daemon that is
         # already up, so none of these can mean anything there
         raise ValueError("--target attach runs the daemon already up: it "
-                         "takes no --isolate, --prereqs or --vm")
+                         "takes no --isolate, --prereqs, --vm, --save or "
+                         "--from")
     plan = plan_for(tests, args.selection)
     unbuilt = _reject_unbuilt(args, plan)
     if unbuilt:
@@ -397,16 +454,23 @@ def attach_plan(tests: dict, args) -> list:
 class _Run:
     """What the world loop shares across a run's worlds."""
 
-    def __init__(self, args, tests: dict, results):
+    def __init__(self, args, tests: dict, results, saved: dict | None):
         self.args, self.tests, self.results = args, tests, results
+        self.saved = saved        # the record of the world --from boots
         self.pushed = []
         self.torn = None          # the first world close that raised
+        self.unsaved = None       # why a --save did not land
 
-    def world(self, name: str, steps: list, ex, keep: bool) -> None:
-        """Run one world's steps on ex, then close it."""
+    def world(self, name: str, steps: list, ex, keep: bool,
+              save: str | None = None) -> None:
+        """Run one world's steps on ex, save it when asked, then close it."""
         record = WorldRecord(self.results.dir, name)
         try:
+            if self.saved is not None:
+                self._resume(ex, record)
             self._steps(steps, ex, record)
+            if save:
+                self._save(name, save, ex, record)
         finally:
             # why before the close: a closed world reports no nodes, and a
             # kept one is read back from this record
@@ -420,6 +484,48 @@ class _Run:
                       f"{record.path}"
                       + (f", node roots and logs under {roots}"
                          if roots.exists() else ""), file=sys.stderr)
+
+    def _resume(self, ex, record: WorldRecord) -> None:
+        """Boot the saved world --from names, and take its history and facts
+        from the record its guests hold.
+
+        why the guests' record: it is the one that travels with the stage;
+        the host's copy only planned the run, and the boot refuses a stage
+        whose record is not that copy.
+        """
+        try:
+            saved = ex.resume()
+        except ExecutorError:
+            return      # note: the boot error fails the world's first step
+        record.history = list(saved["history"])
+        record.facts = dict(saved["facts"])
+
+    def _save(self, world: str, name: str, ex, record: WorldRecord) -> None:
+        """--save: the world into netsim as stage `name`, with its record.
+
+        why only a world whose every step passed: a saved world is reused as
+        the state its history names, and one that holds a failed or skipped
+        step stands somewhere nobody can name.
+        """
+        bad = [e["test"] for e in self.results.entries
+               if e["world"] == world and e["status"] != "pass"]
+        if bad:
+            self.unsaved = f"save {name}: {bad[0]} did not pass in {world}"
+            return
+        _note_nodes(record, ex)
+        doc = record.doc()
+        try:
+            saved = ex.save_world(name, doc)
+        except ExecutorError as e:
+            self.unsaved = f"save {name}: {e}"
+            return
+        if saved != name:
+            print(f"run: --save {name}: netsim saved it as {saved}",
+                  file=sys.stderr)
+        SNAPSHOTS.mkdir(parents=True, exist_ok=True)
+        (SNAPSHOTS / f"{saved}.json").write_text(
+            json.dumps(doc, indent=2) + "\n")
+        self.results.header["saved"] = saved
 
     def _steps(self, steps: list, ex, record: WorldRecord) -> None:
         status, died_at = {}, None
@@ -438,8 +544,8 @@ class _Run:
 
     def _blocked(self, s: Step, status: dict) -> str | None:
         """Why s cannot run: the first of its lineage that ran in this world
-        and did not pass. A lineage test this world never ran blocks
-        nothing."""
+        and did not pass. A lineage test this world never ran — the saved
+        world --from boots stands past it — blocks nothing."""
         for name in planner.chain(self.tests, s.test.name)[:-1]:
             if status.get(name, "pass") != "pass":
                 return f"{name} failed in {s.world}"
@@ -494,9 +600,13 @@ def _units(tests: dict, args) -> list:
         # its broken() is always empty, so a world-died skip never fires there
         return [("w0", "node", [(t, kind, args.driver)
                                 for t, kind in attach_plan(tests, args)])]
+    worlds = plan_worlds(tests, args)
+    _check_stages(args)
+    # note: a step the saved world already stands past is not run, and
+    # leaves no record
     return [(w.name, ENV_OF[w.kind],
-             [(tests[s.test], s.kind, s.driver) for s in w.steps])
-            for w in plan_worlds(tests, args)]
+             [(tests[s.test], s.kind, s.driver) for s in w.steps if not s.done])
+            for w in worlds]
 
 
 def _operator(cfg: dict, results) -> dict:
@@ -544,9 +654,13 @@ def main(args) -> int:
         astral_py_ref=git_ref(Path(os.path.expanduser(
             cfg["astral_py"]["path"]))),
         host=platform.node(), sandbox="host",
-        hermetic=args.target == "fresh",
+        # why --from is not hermetic: the world it boots was built by an
+        # earlier run, possibly of another astrald
+        hermetic=args.target == "fresh" and not args.from_stage,
         selection=" ".join(args.selection) or DEFAULT_SUITE,
         target=args.target))
+    if args.from_stage:
+        results.header["from"] = args.from_stage
     profile = None
     if args.driver == "agent":
         try:
@@ -579,6 +693,8 @@ def main(args) -> int:
             return _local_world(run_dir / name / "session", binary,
                                 lease.base, keep)
         world = _vm_world(run_dir / name, binary, ref, keep)
+        if args.from_stage:
+            world.boot_from(args.from_stage, run.saved)
         if profile is not None:
             world.use_operator(profile)
             world.want_model(profile.get("model", ""),
@@ -586,16 +702,20 @@ def main(args) -> int:
         return world
 
     steps = layout(units)
-    run = _Run(args, tests, results)
+    run = _Run(args, tests, results,
+               snapshot(args.from_stage) if args.from_stage else None)
     stop = None               # what ended the loop early, if anything
     unclosed = None           # the world whose close raised
     try:
         for i, (name, env, _) in enumerate(units):
-            # why the last world only: --keep asks for the world to debug,
-            # and every world before it has already handed on its verdicts
-            keep = args.keep and i == len(units) - 1
+            # why the last world only: --keep and --save ask for the world
+            # the run ends in, and every world before it has already handed
+            # on its verdicts
+            last = i == len(units) - 1
+            keep = args.keep and last
             run.world(name, [s for s in steps if s.world == name],
-                      open_world(name, env, keep), keep)
+                      open_world(name, env, keep), keep,
+                      args.save if last else None)
             if run.torn is not None:
                 if not isinstance(run.torn, Exception):
                     raise run.torn      # Ctrl-C while a world closed
@@ -629,6 +749,8 @@ def main(args) -> int:
                 phase = "prepare"
         if run.torn is not None:
             aborted.append(f"teardown: {_abort_reason(run.torn)}")
+        if run.unsaved is not None:
+            aborted.append(run.unsaved)
         if aborted:
             results.header["aborted"] = "; ".join(aborted)
         code = _finish(results, run.pushed)

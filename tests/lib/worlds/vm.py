@@ -1,8 +1,10 @@
 """A VM world: real VMs on a simulated LAN, for one planned world.
 
-Each VM world boots the lab stage the recipe bakes, pushes the binaries
-under test to every VM, and closes by pulling each guest's astrald log and
-killing the simulation. Nothing is cached between worlds.
+Each VM world boots the lab stage the recipe bakes (or the snapshot `--from`
+names), pushes the binaries under test to every VM, and closes by pulling
+each guest's astrald log and killing the simulation. Nothing is cached
+between worlds: a world a later run needs again is saved by name with
+`--save` and booted with `--from`, and carries its world record with it.
 
 astrald and astral-query are pushed, never baked. The lab recipe bakes what is
 slow and stable — the VMs, the operator, the service unit, the apt
@@ -44,6 +46,9 @@ APPHOST_PORT = 8625          # the guest's apphost, inside netns priv when NAT'd
 SCRATCH_STAGE = "e2e-scratch"     # a fresh sim always saves; this is what it saves to
 GUEST_ROOT = "/var/lib/astrald"   # install-astrald's -root (its systemd unit)
 GUEST_TCP_PORT = 1791             # astrald's default tcp listener in the lab
+# where a saved world keeps its record, root-only: the operator, `tester`,
+# must not read the tokens it is judged with
+GUEST_RECORD = "/var/lib/astral-tests/world.json"
 # the sshd drop-in that hands root's sessions the VM's harness token
 SSHD_DROPIN = "/etc/ssh/sshd_config.d/astral-tests.conf"
 # enter-nat's private host inside netns `priv`, routable from the root netns
@@ -128,6 +133,9 @@ class VmWorld(Executor):
         self.binary = Path(binary)
         self.astrald_ref = astrald_ref
         self.recipe = RECIPE
+        self.stage = None         # a saved world to boot instead of the lab
+        self._expected = None     # the record that saved world must hold
+        self.saved = None         # the record it does hold, once booted
         self.keep = keep
         self.sim = None
         self._boot_error = None
@@ -245,6 +253,17 @@ class VmWorld(Executor):
                                     f"{KILL_TIMEOUT:.0f} s after netsim kill")
             time.sleep(1.0)
 
+    def boot_from(self, stage: str, record: dict) -> None:
+        """Boot the saved world `stage` instead of the lab, and refuse it
+        unless its guests hold exactly `record`, the host's copy the run was
+        planned from."""
+        self.stage, self._expected = stage, record
+
+    def resume(self) -> dict:
+        """Boot the saved world, and hand back the record its guests hold."""
+        self._open()
+        return self.saved
+
     def ssh(self, vm: str, script: str, check=True) -> str:
         """Run a shell script as root on one of this world's VMs."""
         return _netsim("ssh", "--sim", self.sim, vm, "--", script, check=check)
@@ -269,7 +288,9 @@ class VmWorld(Executor):
                     f"netsim already runs simulation {', '.join(sorted(before))}"
                     ": one VM world at a time — `netsim kill` it, or let its "
                     "run end")
-            self._boot(self._base_stage(), before)
+            self._boot(self.stage or self._base_stage(), before)
+            if self.stage:
+                self.saved = self._guest_record()
         except ExecutorError as e:
             self._boot_error = str(e)
             raise
@@ -318,7 +339,70 @@ class VmWorld(Executor):
             home = base / "netsim"
         return home / "sims" / str(self.sim)
 
-    # --- closing --------------------------------------------------------------
+    # --- snapshots -----------------------------------------------------------
+
+    def save_world(self, name: str, record: dict) -> str:
+        """Put the world record into every guest, root-only, and save the
+        simulation as stage `name`; the name netsim saved it under.
+
+        why into the guests: the record is what makes a snapshot usable — its
+        history says which tests the world stands past, its facts are what
+        those tests learned — and a stage that lost them is the cache this
+        replaced, which no fact-reading test could start from.
+        """
+        payload = b64encode(json.dumps(record, indent=2).encode()).decode()
+        for vm in self.pushed:
+            self.ssh(vm, f"""set -e
+install -d -m 700 {Path(GUEST_RECORD).parent}
+umask 077
+printf '%s' '{payload}' | base64 -d > {GUEST_RECORD}.new
+mv {GUEST_RECORD}.new {GUEST_RECORD}""")
+        # note: netsim prints the stage it saved, suffixed -<n> if the name
+        # was taken since the run checked it
+        out = _netsim("save", "--sim", self.sim, name)
+        saved = out.splitlines()[-1].strip() if out else name
+        if self.keep:
+            self._reopen_tunnels()
+        return saved
+
+    def _reopen_tunnels(self) -> None:
+        """A fresh forward to every VM that had one.
+
+        why: `netsim save` shuts the VMs down and relaunches them, so every
+        `ssh -L` died with them, and a kept world would point its record at
+        dead ports.
+        """
+        names = [vm for vm, info in self._nodes.items() if "port" in info]
+        for vm in names:
+            info = self._nodes[vm]
+            if info.get("ssh") is not None:
+                info["ssh"].terminate()
+                if info["ssh"] in self._tunnels:
+                    self._tunnels.remove(info["ssh"])
+            info.pop("port", None)
+        self._open_session(names)
+
+    def _guest_record(self) -> dict:
+        """The record the booted saved world's guests hold, which has to be
+        the host's copy the run was planned from.
+
+        why equal and not just the same history: the plan, the facts and the
+        tokens of a resumed run all come from one record, and a stage saved
+        again under the same name — on this host or another — holds another.
+        """
+        vm = sorted(self._vms())[0] if self._vms() else "node1"
+        out = self.ssh(vm, f"cat {GUEST_RECORD}")
+        try:
+            record = json.loads(out)
+        except json.JSONDecodeError as e:
+            raise ExecutorError(f"stage {self.stage}: {vm} holds no world "
+                                f"record at {GUEST_RECORD}") from e
+        if record != self._expected:
+            raise ExecutorError(
+                f"stage {self.stage} holds another world record than the "
+                "host's copy the run was planned from: it was saved again "
+                "since, or the copy is another stage's")
+        return record
 
     def _pull_logs(self) -> None:
         """Every guest's astrald journal into the world's logs/.
@@ -417,7 +501,8 @@ tokens:
         speak to astrald through it: a lab-baked one is as old as the stage
         and its queries drift from the astrald under test. The apphost config
         is written here too, so the token in the session view is one the harness
-        chose rather than one it had to discover.
+        chose rather than one it had to discover. A snapshot booted with
+        `--from` gets new tokens the same way, so none is read from its record.
 
         why: the value beside a token is the identity it authenticates as, not
         a label. `localnode` is the node itself — an invented name resolves to

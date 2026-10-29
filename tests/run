@@ -21,6 +21,8 @@ examples:
   ./tests/run adopt-node             one test + the prereq prefix it needs
   ./tests/run smoke adopt-node       several tests
   ./tests/run --plan main.suite      the worlds a run would use, with nothing run
+  ./tests/run adopt-node --vm --save gw    build a VM world once, save it as gw
+  ./tests/run gateway-relay --from gw      run on it, past its history
 """
 
 
@@ -56,6 +58,12 @@ def main() -> int:
                          "(default: script)")
     ap.add_argument("--vm", action="store_true",
                     help="run every world in VMs, local tests included")
+    ap.add_argument("--save", metavar="NAME",
+                    help="save the run's last world, a VM world, as netsim "
+                         "stage NAME, its world record inside")
+    ap.add_argument("--from", dest="from_stage", metavar="NAME",
+                    help="boot the world --save NAME saved, and run only "
+                         "what its history has not")
     args = ap.parse_args()
 
     if sys.version_info < (3, 11):

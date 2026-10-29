@@ -37,6 +37,12 @@ class FakeExecutor:
     def run_agent(self, test, log: Path, facts: Path, timeout: int) -> int:
         raise ExecutorError("node1: operator model is not m after the rewrite")
 
+    def boot_from(self, stage: str, record: dict) -> None:
+        self.booted_from = stage
+
+    def resume(self) -> dict:
+        return {"history": [], "facts": {}}
+
     def broken(self) -> list:
         return []
 
@@ -312,6 +318,40 @@ class TestPushedHeader(unittest.TestCase):
 class TestDriverEnv(unittest.TestCase):
     AMBIENT = {"ASTRAL_ENDPOINT": "tcp:127.0.0.1:8625",
                "ASTRALD_APPHOST_TOKEN": "developer-token"}
+
+    def test_a_run_from_a_saved_world_hands_its_drivers_a_stripped_env(self):
+        # why through main(): the defect was the call site, which passed the
+        # header's hermetic — false for a world an earlier run built, as it
+        # was under the retired stage: target — and stripped nothing
+        args = argparse.Namespace(selection=["smoke"], driver="script",
+                                  target="fresh", keep=False, from_stage="gw")
+        seen = []
+
+        def run_step(py, script, log, env, timeout):
+            seen.append(env)
+            return 0
+
+        with tempfile.TemporaryDirectory() as tmp, \
+                mock.patch.dict("os.environ", self.AMBIENT), \
+                mock.patch.object(runner, "RESULTS", Path(tmp) / "results"), \
+                mock.patch.object(runner, "SNAPSHOTS", Path(tmp)), \
+                mock.patch.object(runner, "stages", return_value={"gw"}), \
+                mock.patch.object(runner, "ensure_binary",
+                                  return_value=(Path(tmp) / "astrald", "abc")), \
+                mock.patch.object(runner, "_vm_world",
+                                  lambda *_: FakeExecutor()), \
+                mock.patch.object(runner, "_run_step", run_step), \
+                contextlib.redirect_stdout(io.StringIO()):
+            (Path(tmp) / "gw.json").write_text(
+                json.dumps({"history": [], "facts": {}}))
+            self.assertEqual(runner.main(args), 0)
+            [run_dir] = (Path(tmp) / "results").iterdir()
+            doc = json.loads((run_dir / "results.json").read_text())
+        self.assertEqual((doc["hermetic"], doc["from"]), (False, "gw"))
+        self.assertEqual(len(seen), 2)              # driver, then oracle
+        for env in seen:
+            for var in self.AMBIENT:
+                self.assertNotIn(var, env)
 
     def env_for(self, target: str) -> dict:
         with mock.patch.dict("os.environ", self.AMBIENT):
