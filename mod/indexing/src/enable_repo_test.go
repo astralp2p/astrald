@@ -79,7 +79,7 @@ func TestEnableRepoEnablesAnAcceptedQuery(t *testing.T) {
 		t.Fatalf("new op: %v", err)
 	}
 
-	w := &discardWriter{}
+	w := newRecordingWriter()
 	q := astral.Launch(query.New(caller, caller, "indexing.enable_repo?repo=local", nil))
 
 	if _, err = op.RouteQuery(ctx, q, w); err != nil {

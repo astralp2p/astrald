@@ -21,19 +21,19 @@ type opCreateMailboxArgs struct {
 // The node holds no reachability of its own, so a participant is reachable
 // where a handler, a contract or an external authority says so.
 func (mod *Module) OpCreateMailbox(ctx *astral.Context, q *routing.IncomingQuery, args opCreateMailboxArgs) error {
+	ch := channel.New(q.AcceptRaw(), channel.WithOutputFormat(args.Out))
+	defer ch.Close()
+
 	if refusesOrigin(q) {
-		return q.Reject()
+		return ch.Send(astral.NewErrOriginNotAllowed(q.Origin()))
 	}
 
 	// why AdminManageApps, as for apphost's token ops: a participant's
 	// credential is an apphost access token, so administering participants is
 	// administering tokens.
 	if !mod.Auth.Authorize(ctx, &auth.AdminManageAppsAction{Action: auth.NewAction(q.Caller())}) {
-		return q.Reject()
+		return ch.Send(auth.ErrNotPermitted)
 	}
-
-	ch := channel.New(q.AcceptRaw(), channel.WithOutputFormat(args.Out))
-	defer ch.Close()
 
 	cred, err := mod.CreateMailbox(ctx, args.Alias, args.Duration)
 	if err != nil {

@@ -17,14 +17,14 @@ type opUnregisterIndexerArgs struct {
 // OpUnregisterIndexer deletes a registration the caller owns, or any
 // registration when the caller holds AdminObjects.
 func (mod *Module) OpUnregisterIndexer(ctx *astral.Context, q *routing.IncomingQuery, args opUnregisterIndexerArgs) error {
+	ch := q.Accept(channel.WithFormats(args.In, args.Out))
+	defer ch.Close()
+
 	// why: cheapest refusal first. Indexing state is this node's own, so a network
 	// caller is refused whatever it holds.
 	if q.Origin() == astral.OriginNetwork {
-		return q.Reject()
+		return ch.Send(astral.NewErrOriginNotAllowed(q.Origin()))
 	}
-
-	ch := q.Accept(channel.WithFormats(args.In, args.Out))
-	defer ch.Close()
 
 	idxer, err := mod.findIndexerByNonce(ctx, args.Nonce)
 	if err != nil {

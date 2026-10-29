@@ -1,7 +1,6 @@
 package apphost
 
 import (
-	"errors"
 	"slices"
 	"sync/atomic"
 	"testing"
@@ -251,17 +250,15 @@ func TestCancelRefusesAQueryOffALink(t *testing.T) {
 
 	err := routeQuery(t, mod.OpCancel, q, w)
 
-	var rejected *astral.ErrRejected
-	if !errors.As(err, &rejected) {
-		t.Fatalf("apphost.cancel answered a query off a link: got err %v, want a rejection", err)
+	if err != nil {
+		t.Fatalf("route: %v", err)
+	}
+	if got, want := w.refusal(t), astral.NewErrOriginNotAllowed(astral.OriginNetwork).Error(); got != want {
+		t.Fatalf("answered %q; want %q", got, want)
 	}
 
 	if cancelled.Load() {
 		t.Fatal("a caller off a link cancelled an unowned query")
-	}
-
-	if n := w.written(); n != 0 {
-		t.Fatalf("apphost.cancel wrote %d bytes to a query off a link; want none", n)
 	}
 
 	if n := len(authority.recorded()); n != 0 {
@@ -471,9 +468,11 @@ func TestBindKeepsTheNetworkRefusal(t *testing.T) {
 	// way mod/nodes stamps one.
 	err := routeServeAppsFromNetwork(t, mod.OpBind, astral.GenerateIdentity(), "apphost.bind", w)
 
-	var rejected *astral.ErrRejected
-	if !errors.As(err, &rejected) {
-		t.Fatalf("apphost.bind answered a query off a link: got err %v, want a rejection", err)
+	if err != nil {
+		t.Fatalf("route: %v", err)
+	}
+	if got, want := w.refusal(t), astral.NewErrOriginNotAllowed(astral.OriginNetwork).Error(); got != want {
+		t.Fatalf("answered %q; want %q", got, want)
 	}
 
 	if n := len(authority.recorded()); n != 0 {

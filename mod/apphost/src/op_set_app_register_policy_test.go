@@ -4,6 +4,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/astralp2p/astral-go/api/auth"
 	"github.com/astralp2p/astral-go/api/policy"
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astral-go/astral/log"
@@ -29,16 +30,17 @@ func setPolicy(t *testing.T, mod *Module, args string) (*recordingWriter, error)
 	return w, err
 }
 
-// A caller without AdminManageApps is rejected before anything is written.
+// A caller without AdminManageApps is answered auth.ErrNotPermitted before
+// anything is written.
 func TestSetAppRegisterPolicyRequiresAdminManageApps(t *testing.T) {
 	mod := policySetter(false)
 
 	w, err := setPolicy(t, mod, "?identity="+astral.GenerateIdentity().String()+"&operation=control.decide")
-	if err == nil {
-		t.Fatal("a caller without AdminManageApps set the policy")
+	if err != nil {
+		t.Fatalf("route: %v", err)
 	}
-	if w.written() != 0 {
-		t.Fatal("a rejected setter answered")
+	if got, want := w.refusal(t), auth.ErrNotPermitted.Error(); got != want {
+		t.Fatalf("answered %q; want %q", got, want)
 	}
 	if !mod.policy.AppRegister.Get().IsZero() {
 		t.Fatal("a rejected setter wrote a delegate")

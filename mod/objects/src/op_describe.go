@@ -26,11 +26,14 @@ type opDescribeArgs struct {
 // OpDescribe streams an object's descriptors, filtered by the Only/Except type
 // lists, and terminates the stream with an EOS marker.
 func (mod *Module) OpDescribe(ctx *astral.Context, q *routing.IncomingQuery, args opDescribeArgs) (err error) {
+	ch := channel.New(q.AcceptRaw(), channel.WithOutputFormat(args.Out))
+	defer ch.Close()
+
 	if !mod.Auth.Authorize(ctx, &auth.SeeObjectsAction{
 		Action:   auth.NewAction(q.Caller()),
 		ObjectID: args.ID,
 	}) {
-		return q.Reject()
+		return ch.Send(auth.ErrNotPermitted)
 	}
 
 	ctx, cancel := ctx.WithIdentity(q.Caller()).WithTimeout(time.Minute)
@@ -45,9 +48,6 @@ func (mod *Module) OpDescribe(ctx *astral.Context, q *routing.IncomingQuery, arg
 	if q.Origin() == astral.OriginNetwork {
 		ctx = ctx.ExcludeZone(astral.ZoneNetwork)
 	}
-
-	ch := channel.New(q.AcceptRaw(), channel.WithOutputFormat(args.Out))
-	defer ch.Close()
 
 	// resolve sources if provided
 	var sources []*astral.Identity

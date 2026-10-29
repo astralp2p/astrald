@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/astralp2p/astral-go/api/auth"
 	"github.com/astralp2p/astral-go/api/messaging"
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astral-go/astral/channel"
@@ -114,20 +115,28 @@ func checkNotParticipant(t *testing.T, name string, res opResult) {
 	}
 }
 
-// checkRefused asserts the caller was answered nothing: the query rejected, or,
-// where afterRequest says the op refuses only once its request arrives,
-// accepted and ended with no answer.
+// checkRefused asserts how the caller was refused: answered one
+// auth.ErrNotPermitted or astral.ErrOriginNotAllowed, or, where afterRequest
+// says the op refuses only once its request arrives, accepted and ended with no
+// answer.
 func checkRefused(t *testing.T, name string, res opResult, afterRequest bool) {
 	t.Helper()
 
-	var rejected *astral.ErrRejected
-	switch {
-	case afterRequest && res.err != nil:
-		t.Fatalf("%s: got err %v, want the query accepted and ended with no answer", name, res.err)
-	case !afterRequest && !errors.As(res.err, &rejected):
-		t.Fatalf("%s answered: got err %v, want a rejection", name, res.err)
-	case len(res.objs) != 0:
-		t.Fatalf("%s answered a refused caller %v objects; want none", name, len(res.objs))
+	if res.err != nil {
+		t.Fatalf("%s: got err %v, want the query accepted", name, res.err)
+	}
+	if afterRequest {
+		if len(res.objs) != 0 {
+			t.Fatalf("%s answered a refused caller %v objects; want none", name, len(res.objs))
+		}
+		return
+	}
+	if len(res.objs) != 1 {
+		t.Fatalf("%s answered %v objects; want one refusal", name, len(res.objs))
+	}
+	said, ok := res.objs[0].(*astral.ErrorMessage)
+	if !ok || !(errors.Is(said, auth.ErrNotPermitted) || errors.Is(said, astral.ErrOriginNotAllowed)) {
+		t.Fatalf("%s answered %#v; want not permitted or origin not allowed", name, res.objs[0])
 	}
 }
 
@@ -272,10 +281,10 @@ func tryOp(t *testing.T, fn any, q *astral.InFlightQuery, body astral.Object) op
 	}
 	defer conn.Close()
 
+	// note: an op that refuses returns without reading, and a write into its
+	// pipe then never returns, so the request is sent without waiting on it.
 	if body != nil {
-		if err = channel.NewSender(conn).Send(body); err != nil {
-			t.Fatalf("send the request: %v", err)
-		}
+		go channel.NewSender(conn).Send(body)
 	}
 	return opResult{objs: w.objects(t)}
 }

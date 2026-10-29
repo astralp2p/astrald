@@ -18,17 +18,17 @@ type opEnableRepoArgs struct {
 // OpEnableRepo toggles repo indexing on or off; set Disable=true in args to
 // deregister a previously enabled repo.
 func (mod *Module) OpEnableRepo(ctx *astral.Context, q *routing.IncomingQuery, args opEnableRepoArgs) (err error) {
+	ch := q.Accept(channel.WithFormats(args.In, args.Out))
+	defer ch.Close()
+
 	// why StoreObjects: indexing state is node-wide, and enabling a repository
 	// indexes every object in it from then on, so the op writes node state.
 	if !mod.Auth.Authorize(ctx, &auth.StoreObjectsAction{
 		Action: auth.NewAction(q.Caller()),
 		Repo:   astral.String8(args.Repo),
 	}) {
-		return q.Reject()
+		return ch.Send(auth.ErrNotPermitted)
 	}
-
-	ch := q.Accept(channel.WithFormats(args.In, args.Out))
-	defer ch.Close()
 
 	repo := mod.Objects.GetRepository(args.Repo)
 	if repo == nil {

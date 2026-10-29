@@ -21,12 +21,12 @@ type opAddEndpointArgs struct {
 // OpAddEndpoint parses "network:address" and registers it for the identity with a
 // fixed ~90-day TTL.
 func (mod *Module) OpAddEndpoint(ctx *astral.Context, q *routing.IncomingQuery, args opAddEndpointArgs) (err error) {
-	if !mod.Auth.Authorize(ctx, &auth.AdminNetworkAction{Action: auth.NewAction(q.Caller())}) {
-		return q.Reject()
-	}
-
 	ch := channel.New(q.AcceptRaw(), channel.WithFormats(args.In, args.Out))
 	defer ch.Close()
+
+	if !mod.Auth.Authorize(ctx, &auth.AdminNetworkAction{Action: auth.NewAction(q.Caller())}) {
+		return ch.Send(auth.ErrNotPermitted)
+	}
 
 	identity, err := mod.Dir.ResolveIdentity(args.Identity)
 	if err != nil {

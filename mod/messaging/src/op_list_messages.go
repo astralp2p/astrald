@@ -1,6 +1,7 @@
 package messaging
 
 import (
+	"github.com/astralp2p/astral-go/api/auth"
 	"github.com/astralp2p/astral-go/api/messaging"
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astral-go/astral/channel"
@@ -24,13 +25,13 @@ type opListMessagesArgs struct {
 // and ends the stream with eos. The mailbox is the caller's own, or the one
 // Mailbox names as a delegated read.
 func (mod *Module) OpListMessages(ctx *astral.Context, q *routing.IncomingQuery, args opListMessagesArgs) error {
-	mailbox, ok := mod.admitsListing(ctx, q, args.Mailbox)
-	if !ok {
-		return q.Reject()
-	}
-
 	ch := channel.New(q.AcceptRaw(), channel.WithOutputFormat(args.Out))
 	defer ch.Close()
+
+	mailbox, ok := mod.admitsListing(ctx, q, args.Mailbox)
+	if !ok {
+		return ch.Send(auth.ErrNotPermitted)
+	}
 
 	// why listMailbox and not ListMessages: the mailbox is resolved and
 	// admitted above, and ListMessages lists through listMailbox as well, so a

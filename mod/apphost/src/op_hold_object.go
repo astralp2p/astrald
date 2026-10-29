@@ -19,12 +19,12 @@ type opHoldObjectArgs struct {
 // batch mode: object IDs are read from the channel until EOS and each input
 // gets one Ack/ErrorMessage reply.
 func (mod *Module) OpHoldObject(ctx *astral.Context, q *routing.IncomingQuery, args opHoldObjectArgs) error {
-	if q.Origin() == astral.OriginNetwork {
-		return q.Reject()
-	}
-
 	ch := q.Accept(channel.WithFormats(args.In, args.Out))
 	defer ch.Close()
+
+	if q.Origin() == astral.OriginNetwork {
+		return ch.Send(astral.NewErrOriginNotAllowed(q.Origin()))
+	}
 
 	if q.Caller().IsZero() {
 		return ch.Send(astral.Err(apphost.ErrMissingAppIdentity))

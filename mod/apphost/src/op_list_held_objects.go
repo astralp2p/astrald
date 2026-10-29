@@ -12,12 +12,12 @@ type opListHeldObjectsArgs struct {
 }
 
 func (mod *Module) OpListHeldObjects(ctx *astral.Context, q *routing.IncomingQuery, args opListHeldObjectsArgs) error {
-	if q.Origin() == astral.OriginNetwork {
-		return q.Reject()
-	}
-
 	ch := channel.New(q.AcceptRaw(), channel.WithOutputFormat(args.Out))
 	defer ch.Close()
+
+	if q.Origin() == astral.OriginNetwork {
+		return ch.Send(astral.NewErrOriginNotAllowed(q.Origin()))
+	}
 
 	if q.Caller().IsZero() {
 		return ch.Send(astral.Err(apphost.ErrMissingAppIdentity))

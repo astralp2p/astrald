@@ -17,13 +17,14 @@ type opAdoptArgs struct {
 
 // OpAdopt adopts the named node into the active contract and indexes the signed result.
 // Requires an active contract; the caller must be authorized for
-// user.AdminSwarmAction (code 4 otherwise) - the user always is, other
+// user.AdminSwarmAction (auth.ErrNotPermitted otherwise) - the user always is, other
 // identities via authorizers.
 // Pushes the signed contract to the local swarm asynchronously after indexing.
 func (mod *Module) OpAdopt(ctx *astral.Context, q *routing.IncomingQuery, args opAdoptArgs) (err error) {
+	ch := q.Accept(channel.WithFormats(args.In, args.Out))
+	defer ch.Close()
+
 	if mod.ActiveContract() == nil {
-		ch := q.Accept(channel.WithFormats(args.In, args.Out))
-		defer ch.Close()
 		return ch.Send(user.ErrNoActiveContract)
 	}
 
@@ -32,13 +33,9 @@ func (mod *Module) OpAdopt(ctx *astral.Context, q *routing.IncomingQuery, args o
 	// node, so the name is refused here instead of adopted.
 	nodeID, err := mod.Dir.ResolveIdentity(args.Identity)
 	if err != nil {
-		ch := q.Accept(channel.WithFormats(args.In, args.Out))
-		defer ch.Close()
 		return ch.Send(dir.ErrUnknownIdentity)
 	}
 	if nodeID.IsZero() {
-		ch := q.Accept(channel.WithFormats(args.In, args.Out))
-		defer ch.Close()
 		return ch.Send(astral.ErrZeroIdentity)
 	}
 
@@ -46,11 +43,8 @@ func (mod *Module) OpAdopt(ctx *astral.Context, q *routing.IncomingQuery, args o
 		Action:  auth.NewAction(q.Caller()),
 		Subject: nodeID,
 	}) {
-		return q.RejectWithCode(4)
+		return ch.Send(auth.ErrNotPermitted)
 	}
-
-	ch := q.Accept(channel.WithFormats(args.In, args.Out))
-	defer ch.Close()
 
 	// issue a membership contract for the node
 	signed, err := mod.IssueMembership(ctx, nodeID)

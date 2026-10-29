@@ -1,7 +1,6 @@
 package user
 
 import (
-	"errors"
 	"strings"
 	"testing"
 
@@ -110,17 +109,19 @@ func TestDeriveIdentityPreviewsBootstrap(t *testing.T) {
 }
 
 // TestDeriveIdentityRejectsNonLocalOrigins: a query of origin network or mcp is
-// rejected before it is accepted.
+// answered astral.ErrOriginNotAllowed naming the origin.
 func TestDeriveIdentityRejectsNonLocalOrigins(t *testing.T) {
 	for _, origin := range []string{astral.OriginNetwork, astral.OriginMCP} {
 		t.Run(origin, func(t *testing.T) {
 			f := newBootstrapFixture()
 
-			_, err := routeDeriveIdentity(t, f, origin, "user.derive_identity?generate=true", nil)
-
-			var rejected *astral.ErrRejected
-			if !errors.As(err, &rejected) || rejected.Code != astral.CodeRejected {
-				t.Fatalf("got %v; want a rejection without a code", err)
+			objs, err := routeDeriveIdentity(t, f, origin, "user.derive_identity?generate=true", nil)
+			if err != nil {
+				t.Fatalf("route: %v", err)
+			}
+			want := astral.NewErrOriginNotAllowed(origin).Error()
+			if len(objs) != 1 || objs[0].ObjectType() != "error_message" || objs[0].(astral.Error).Error() != want {
+				t.Fatalf("the op answered %v; want %q", objs, want)
 			}
 		})
 	}

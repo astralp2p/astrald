@@ -25,14 +25,15 @@ type opNewLinkArgs struct {
 // before it completes so creation may outlast the query timeout. A bad identity or endpoint is
 // answered with an error_message; a task failure is sent as its error.
 func (mod *Module) OpNewLink(ctx *astral.Context, q *routing.IncomingQuery, args opNewLinkArgs) (err error) {
+	ch := channel.New(q.AcceptRaw(), channel.WithOutputFormat(args.Out))
+	defer ch.Close()
+
 	if !mod.Auth.Authorize(ctx, &auth.AdminNetworkAction{Action: auth.NewAction(q.Caller())}) {
-		return q.Reject()
+		return ch.Send(auth.ErrNotPermitted)
 	}
 
 	target, err := mod.Dir.ResolveIdentity(args.Identity)
 	if err != nil {
-		ch := q.Accept(channel.WithOutputFormat(args.Out))
-		defer ch.Close()
 		return ch.Send(dir.ErrUnknownIdentity)
 	}
 
@@ -52,20 +53,14 @@ func (mod *Module) OpNewLink(ctx *astral.Context, q *routing.IncomingQuery, args
 	case args.Endpoint != "":
 		split := strings.SplitN(args.Endpoint, ":", 2)
 		if len(split) != 2 {
-			ch := q.Accept(channel.WithOutputFormat(args.Out))
-			defer ch.Close()
 			return ch.Send(exonet.ErrInvalidEndpoint)
 		}
 
 		endpoint, err := mod.Exonet.Parse(split[0], split[1])
 		switch {
 		case errors.Is(err, exonet.ErrUnsupportedNetwork):
-			ch := q.Accept(channel.WithOutputFormat(args.Out))
-			defer ch.Close()
 			return ch.Send(exonet.ErrUnsupportedNetwork)
 		case err != nil:
-			ch := q.Accept(channel.WithOutputFormat(args.Out))
-			defer ch.Close()
 			return ch.Send(exonet.ErrInvalidEndpoint)
 		}
 		task = mod.NewCreateLinkTask(target, endpoint)
@@ -75,12 +70,10 @@ func (mod *Module) OpNewLink(ctx *astral.Context, q *routing.IncomingQuery, args
 
 	scheduledTask, err := mod.Scheduler.Schedule(task)
 	if err != nil {
-		return q.RejectWithCode(5)
+		return ch.Send(astral.Err(err))
 	}
 
 	// We need to accept query in case that creating link takes longer than query timeout
-	ch := channel.New(q.AcceptRaw(), channel.WithOutputFormat(args.Out))
-	defer ch.Close()
 
 	// Wait for task or context cancellation
 	select {

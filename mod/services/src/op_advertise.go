@@ -22,14 +22,17 @@ type opAdvertiseArgs struct {
 //
 // Spec: .ai/system/protocols/services/ops/services.advertise.md
 func (mod *Module) OpAdvertise(ctx *astral.Context, q *routing.IncomingQuery, args opAdvertiseArgs) error {
+	ch := q.Accept(channel.WithFormats(args.In, args.Out), channel.WithLockedWrites())
+	defer ch.Close()
+
 	if q.Origin() == astral.OriginNetwork {
-		return q.Reject()
+		return ch.Send(astral.NewErrOriginNotAllowed(q.Origin()))
 	}
 
 	// note: ServeApps authorizes advertising the caller itself, never another
 	// identity.
 	if !mod.Auth.Authorize(ctx, &auth.ServeAppsAction{Action: auth.NewAction(q.Caller())}) {
-		return q.Reject()
+		return ch.Send(auth.ErrNotPermitted)
 	}
 
 	id := q.Caller()
@@ -37,13 +40,10 @@ func (mod *Module) OpAdvertise(ctx *astral.Context, q *routing.IncomingQuery, ar
 	// query, and the node holds ServeApps, so without this check such a query
 	// could claim the node's native services.
 	if id == nil || id.IsZero() || id.IsEqual(mod.node.Identity()) {
-		return q.Reject()
+		return ch.Send(auth.ErrNotPermitted)
 	}
 
 	names, err := services.ParseNames(args.Services)
-
-	ch := q.Accept(channel.WithFormats(args.In, args.Out), channel.WithLockedWrites())
-	defer ch.Close()
 
 	if err != nil {
 		return ch.Send(astral.Err(err))

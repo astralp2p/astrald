@@ -3,6 +3,7 @@ package messaging
 import (
 	"errors"
 
+	"github.com/astralp2p/astral-go/api/auth"
 	"github.com/astralp2p/astral-go/api/messaging"
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astral-go/astral/channel"
@@ -37,12 +38,15 @@ var errReadRefused = errors.New("read refused")
 // no other identity anything, and a caller told its mailbox is not hosted
 // tells that apart from a node that went silent.
 func (mod *Module) OpReadMessages(ctx *astral.Context, q *routing.IncomingQuery, args opReadMessagesArgs) error {
-	if refusesOrigin(q) || !mod.mayRead(q.Caller()) {
-		return q.Reject()
-	}
-
 	ch := channel.New(q.AcceptRaw(), channel.WithFormats(args.In, args.Out))
 	defer ch.Close()
+
+	if refusesOrigin(q) {
+		return ch.Send(astral.NewErrOriginNotAllowed(q.Origin()))
+	}
+	if !mod.mayRead(q.Caller()) {
+		return ch.Send(auth.ErrNotPermitted)
+	}
 
 	var req *messaging.ReadMessagesRequest
 	if err := ch.Switch(channel.Expect(&req)); err != nil {

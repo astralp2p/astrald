@@ -15,19 +15,17 @@ type opRemoveEndpointLocalPort struct {
 }
 
 func (mod *Module) OpRemoveEndpointLocalPort(ctx *astral.Context, q *routing.IncomingQuery, args opRemoveEndpointLocalPort) (err error) {
+	ch := channel.New(q.AcceptRaw(), channel.WithFormats(args.In, args.Out))
+	defer ch.Close()
+
 	if !mod.Auth.Authorize(ctx, &auth.AdminNetworkAction{Action: auth.NewAction(q.Caller())}) {
-		return q.Reject()
+		return ch.Send(auth.ErrNotPermitted)
 	}
 
 	endpoint, err := kcp.ParseEndpoint(string(args.Endpoint))
 	if err != nil {
-		ch := q.Accept(channel.WithFormats(args.In, args.Out))
-		defer ch.Close()
 		return ch.Send(kcp.ErrInvalidEndpoint)
 	}
-
-	ch := channel.New(q.AcceptRaw(), channel.WithFormats(args.In, args.Out))
-	defer ch.Close()
 
 	err = mod.RemoveEndpointLocalSocket(*endpoint)
 	if err != nil {
