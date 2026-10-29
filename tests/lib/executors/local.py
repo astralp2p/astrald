@@ -27,10 +27,6 @@ class LocalExecutor(Executor):
         self._dir.symlink_to(self._live, target_is_directory=True)
         self._session = Session(self._dir, binary, ports.base, keep=keep)
 
-    @property
-    def session_json_path(self) -> Path:
-        return self._session.session_json_path
-
     def prepare(self, test) -> None:
         if test.steps:
             raise ExecutorError(f"{test.name}: env node runs no steps")
@@ -39,8 +35,8 @@ class LocalExecutor(Executor):
         except Exception as e:
             raise ExecutorError(f"session: {e}") from e
 
-    def merge_facts(self, path: Path) -> None:
-        self._session.merge_facts(path)
+    def nodes(self) -> dict:
+        return self._session.entries()
 
     def save(self, state: str) -> None:
         """No-op: the live session already is the state, and the next test in

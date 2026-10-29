@@ -195,6 +195,18 @@ def blocked_by(all: dict, start: str, broken: set) -> str | None:
     return None
 
 
+def lineage(all: dict, start: str) -> list:
+    """The tests that built `start`, nearest first: the producer of each
+    state on its ancestry.
+
+    why: a test reads facts only from what its start state was built from.
+    A sibling's facts describe a world this test may not stand in.
+    """
+    producers = _producers(all)
+    return [_producer(producers, state).name
+            for state in _ancestry(start, producers) if state != NULL]
+
+
 def validate_order(all: dict, names: list) -> None:
     """Reject a suite whose order cannot satisfy the chain.
 

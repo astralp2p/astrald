@@ -1,12 +1,28 @@
 """One interface between the runner and the world a test runs in.
 
 An executor materializes a test's start state for its roster, runs the
-test's steps, exposes one session.json, honors saves, and tears down. What
-it does not do is leak: drivers and oracles read session.json and never
-learn whether the endpoints behind it are processes two ports away or VMs
-behind a tunnel.
+test's steps, reports its nodes, honors saves, and tears down. It owns
+machines only: the runner owns facts and verdicts, and writes the session
+view each driver and oracle reads. What an executor does not do is leak:
+the view never says whether the endpoints behind it are processes two
+ports away or VMs behind a tunnel.
+
+Every executor reports a node under one schema, `NODE_FIELDS`. A field an
+executor cannot provide is None.
 """
 from pathlib import Path
+
+NODE_FIELDS = ("endpoint", "token", "identity", "root", "tcp_port",
+               "lan_endpoint", "mcp_url", "serves_mcp", "authority_url",
+               "restarts")
+
+
+def node_entry(**known) -> dict:
+    """One node under the shared schema, None for every field not known."""
+    stray = set(known) - set(NODE_FIELDS)
+    if stray:
+        raise ValueError(f"not a node field: {', '.join(sorted(stray))}")
+    return {f: known.get(f) for f in NODE_FIELDS}
 
 
 class ExecutorError(Exception):
@@ -19,17 +35,12 @@ class Executor:
     # run spawns its own processes or borrows a daemon
     pushed = ()
 
-    @property
-    def session_json_path(self) -> Path:
-        """The one file drivers and oracles are allowed to see."""
-        raise NotImplementedError
-
     def prepare(self, test) -> None:
         """Bring the roster up at the test's start state and run its steps."""
         raise NotImplementedError
 
-    def merge_facts(self, path: Path) -> None:
-        """Fold a driver's facts into the session the next test inherits."""
+    def nodes(self) -> dict:
+        """name -> node entry (`node_entry`) for every node up so far."""
         raise NotImplementedError
 
     def save(self, state: str) -> None:
@@ -54,7 +65,7 @@ class Executor:
         """Drive the test's flow with an AI operator instead of its script.
 
         The oracle is untouched: whatever performed the flow, verify.py judges
-        it, reading the same session.json and the same facts — so the driver
+        it, reading the same session view and the same facts — so the driver
         owes the runner a facts file however it produced one. An executor with
         no operator in its world refuses rather than pretending: a driver that
         cannot run is not a test that failed.

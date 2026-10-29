@@ -5,26 +5,18 @@ let the standard oracle judge it, with open eyes: nothing here is hermetic,
 nothing is torn down, and a state-mutating test really mutates your daemon.
 """
 import asyncio
-from pathlib import Path
 
 import astral
 from astral.client import resolve_endpoint, resolve_token
 
-from lib.executors import Executor, ExecutorError
+from lib.executors import Executor, ExecutorError, node_entry
 
 
 class AttachExecutor(Executor):
     env = "node"
 
-    def __init__(self, dir: Path):
-        self.dir = Path(dir)
-        self.dir.mkdir(parents=True, exist_ok=True)
-        self.facts = {}
+    def __init__(self):
         self._node = None
-
-    @property
-    def session_json_path(self) -> Path:
-        return self.dir / "session.json"
 
     def prepare(self, test) -> None:
         if test.steps:
@@ -39,7 +31,6 @@ class AttachExecutor(Executor):
                 f"wants {len(test.nodes)} ({', '.join(test.nodes)})")
         if self._node is None:
             self._node = asyncio.run(self._probe(test.nodes[0]))
-        self._write_session()
 
     async def _probe(self, name: str) -> dict:
         endpoint, token = resolve_endpoint(), resolve_token()
@@ -54,11 +45,15 @@ class AttachExecutor(Executor):
         return {"name": name, "endpoint": endpoint, "token": token or "",
                 "identity": identity}
 
-    def merge_facts(self, path: Path) -> None:
-        import json
-        if Path(path).exists():
-            self.facts.update(json.loads(Path(path).read_text()))
-            self._write_session()
+    def nodes(self) -> dict:
+        if self._node is None:
+            return {}
+        n = self._node
+        # note: the daemon's ports and roots are its owner's, not the run's,
+        # so attach knows only how to reach it
+        return {n["name"]: node_entry(
+            endpoint=n["endpoint"], token=n["token"], identity=n["identity"],
+            root="attached", tcp_port=0)}
 
     def save(self, state: str) -> None:
         """Nothing to snapshot: the daemon is the operator's, not the run's."""
@@ -68,13 +63,3 @@ class AttachExecutor(Executor):
 
     def teardown(self, keep: bool) -> None:
         """Never stops the daemon. It was running before this run and stays."""
-
-    def _write_session(self) -> None:
-        import json
-        n = self._node
-        doc = {"nodes": {n["name"]: {
-            "endpoint": n["endpoint"], "token": n["token"],
-            "identity": n["identity"], "root": "attached",
-            "tcp_port": 0,
-        }}, "facts": self.facts}
-        self.session_json_path.write_text(json.dumps(doc, indent=2) + "\n")

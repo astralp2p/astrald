@@ -15,7 +15,7 @@ config per simulation at `<sim_dir>/ssh_config` — one `Host <vm>` block, each
 `HostName 127.0.0.1` on its own forwarded port, `User root`, an `IdentityFile`
 beside it (sourced: netsim `sshutil.render_ssh_config`). So a guest's apphost
 reaches the host through `ssh -F <config> -N -L <local>:<apphost>:8625 <vm>`,
-and `session.json` carries the local end. `<apphost>` is the guest's loopback
+and the session view carries the local end. `<apphost>` is the guest's loopback
 normally and its netns-private address once enter-nat has moved astrald, since
 an ssh forward lands in the root netns and the netns loopback is not that.
 Drivers and oracles stay byte-identical across envs because the tunnel is the
@@ -34,7 +34,7 @@ from hashlib import sha256
 from pathlib import Path
 
 from lib.build import query_binary
-from lib.executors import Executor, ExecutorError
+from lib.executors import Executor, ExecutorError, node_entry
 
 TESTS = Path(__file__).resolve().parent.parent.parent
 APPHOST_PORT = 8625          # the guest's apphost, inside netns priv when NAT'd
@@ -110,15 +110,12 @@ def stage_key(state: str, recipe: Path, astrald_ref: str) -> str:
 class NetsimExecutor(Executor):
     env = "netsim"
 
-    def __init__(self, dir: Path, binary: Path, astrald_ref: str):
-        self.dir = Path(dir)
-        self.dir.mkdir(parents=True, exist_ok=True)
+    def __init__(self, binary: Path, astrald_ref: str):
         self.binary = Path(binary)
         self.astrald_ref = astrald_ref
         self.recipe = TESTS / "netsim" / "labs" / "two-node-plus-external" / "lab.story"
         self.sim = None
         self.state = None
-        self.facts = {}
         self._nodes = {}
         self._tunnels = []
         self._agent_model = ""
@@ -129,10 +126,6 @@ class NetsimExecutor(Executor):
         self.pushed = []
 
     # --- the runner's interface -------------------------------------------
-
-    @property
-    def session_json_path(self) -> Path:
-        return self.dir / "session.json"
 
     def prepare(self, test) -> None:
         if test.env == "netsim":
@@ -167,12 +160,29 @@ class NetsimExecutor(Executor):
             self._step(step)
         self._open_session(test.nodes)
 
-    def merge_facts(self, path: Path) -> None:
-        if Path(path).exists():
-            self.facts.update(json.loads(Path(path).read_text()))
-            # note: every VM is pushed, but only a roster node has a tunnel
-            self._write_session([vm for vm, info in self._nodes.items()
-                                 if "port" in info])
+    def nodes(self) -> dict:
+        """Every VM a roster has named so far, reached through its tunnel.
+
+        The endpoint is the local end of this VM's `ssh -L` forward. Verified
+        by hand against a live simulation resumed from the lab stage: a host
+        process reached the guest's astrald through the forward and the daemon
+        answered at protocol level.
+
+        note: every VM is pushed, but only a roster node has a tunnel.
+
+        fixme: a NAT'd node's apphost listens inside netns `priv`, which
+        `ssh -L` cannot reach — it lands in the VM's default namespace. That
+        affects `nat-punch` and not `tor-link`. The fix is a relay inside the
+        guest, published by `enter-nat`, so the forward stays uniform.
+        """
+        return {vm: node_entry(
+            endpoint=f"tcp:127.0.0.1:{info['port']}",
+            token=info.get("token", ""),
+            identity=info.get("identity", ""),
+            root=f"netsim:{self.sim}:{vm}",
+            tcp_port=GUEST_TCP_PORT,
+            lan_endpoint=f"tcp:{self._lan_ip(vm)}:{GUEST_TCP_PORT}",
+        ) for vm, info in self._nodes.items() if "port" in info}
 
     def save(self, state: str) -> None:
         """Snapshot the running simulation under this state's cache key.
@@ -392,7 +402,7 @@ class NetsimExecutor(Executor):
         ref in the results header. astral-query rides along because the vmops
         speak to astrald through it: a lab-baked one is as old as the stage
         and its queries drift from the astrald under test. The apphost config
-        is written here too, so the token in session.json is one the harness
+        is written here too, so the token in the session view is one the harness
         chose rather than one it had to discover.
 
         why: the value beside a token is the identity it authenticates as, not
@@ -438,7 +448,7 @@ systemctl restart astrald""")
     # --- the session drivers and oracles see ---------------------------------
 
     def _open_session(self, nodes: list) -> None:
-        """Tunnel to each guest's apphost, learn its identity, write session.json."""
+        """Tunnel to each guest's apphost and learn its identity."""
         import astral
 
         async def identity_of(port, token):
@@ -458,7 +468,7 @@ systemctl restart astrald""")
 
         for vm in nodes:
             info = self._nodes[vm]
-            # why: reopen a forward whose ssh has exited. session.json is
+            # why: reopen a forward whose ssh has exited. The session view is
             # rewritten per test, so a stale port there is a driver failure
             # that has nothing to do with the test.
             if info.get("ssh") is not None and info["ssh"].poll() is not None:
@@ -481,7 +491,6 @@ systemctl restart astrald""")
             if not info.get("identity"):
                 info["identity"] = asyncio.run(
                     identity_of(info["port"], info["token"]))
-        self._write_session(nodes)
 
     # --- steps --------------------------------------------------------------
 
@@ -758,29 +767,3 @@ systemctl restart astrald""")
             if entry.get("hostname") == vm:
                 return entry["ip"]
         raise ExecutorError(f"{vm}: no address in the simulation manifest")
-
-    def _write_session(self, nodes: list) -> None:
-        """session.json — byte-compatible with the local executor's.
-
-        The endpoint is the local end of this VM's `ssh -L` forward. Verified
-        by hand against a live simulation resumed from the lab stage: a host
-        process reached the guest's astrald through the forward and the daemon
-        answered at protocol level.
-
-        fixme: a NAT'd node's apphost listens inside netns `priv`, which
-        `ssh -L` cannot reach — it lands in the VM's default namespace. That
-        affects `nat-punch` and not `tor-link`. The fix is a relay inside the
-        guest, published by `enter-nat`, so the forward stays uniform.
-        """
-        doc = {"nodes": {}, "facts": self.facts}
-        for vm in nodes:
-            info = self._nodes.get(vm, {})
-            doc["nodes"][vm] = {
-                "endpoint": f"tcp:127.0.0.1:{info.get('port', 0)}",
-                "token": info.get("token", ""),
-                "identity": info.get("identity", ""),
-                "root": f"netsim:{self.sim}:{vm}",
-                "tcp_port": GUEST_TCP_PORT,
-                "lan_endpoint": f"tcp:{self._lan_ip(vm)}:{GUEST_TCP_PORT}",
-            }
-        self.session_json_path.write_text(json.dumps(doc, indent=2) + "\n")

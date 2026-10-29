@@ -9,14 +9,14 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest import mock
 
-from lib.executors import netsim
+from lib.executors import NODE_FIELDS, netsim
 from lib.executors.netsim import NetsimExecutor, recipe_hash
 
 VMS = ["node1", "node2", "reflector"]
 
 
 def executor(tmp: Path) -> NetsimExecutor:
-    return NetsimExecutor(tmp / "session", tmp / "astrald", "abc1234")
+    return NetsimExecutor(tmp / "astrald", "abc1234")
 
 
 def booted(tmp: Path) -> NetsimExecutor:
@@ -135,18 +135,20 @@ class TestPush(unittest.TestCase):
                               "\nMatch all\n", script)
                 self.assertIn("systemctl reload ssh", script)
 
-    def test_the_session_lists_only_the_tunneled_roster(self):
+    def test_nodes_lists_only_the_tunneled_roster(self):
         # why: every VM holds a token, but a VM no roster names has no tunnel,
-        # and a session entry for it would point a driver at port 0
+        # and a view entry for it would point a driver at port 0
         ex = booted(self.tmp)
         ex.prepare(test("adopt", ["node1", "node2"]))
-        facts = self.tmp / "facts.json"
-        facts.write_text(json.dumps({"user_token": "t"}))
-        ex.merge_facts(facts)
-        doc = json.loads(ex.session_json_path.read_text())
-        self.assertEqual(sorted(doc["nodes"]), ["node1", "node2"])
-        self.assertEqual(doc["facts"], {"user_token": "t"})
-
+        nodes = ex.nodes()
+        self.assertEqual(sorted(nodes), ["node1", "node2"])
+        node2 = nodes["node2"]
+        self.assertEqual(tuple(node2), NODE_FIELDS)
+        self.assertEqual(
+            (node2["endpoint"], node2["identity"], node2["lan_endpoint"]),
+            ("tcp:127.0.0.1:20005", "node2-id", "tcp:10.77.0.11:1791"))
+        self.assertEqual(node2["token"], ex._nodes["node2"]["token"])
+        self.assertIsNone(node2["restarts"])
 
 if __name__ == "__main__":
     unittest.main()

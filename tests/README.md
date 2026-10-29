@@ -137,6 +137,20 @@ the nodes run from the system temp directory, which `session/` links to
 until teardown copies their state back: a node's SQLite fsyncs on a busy SD
 card stall for tens of seconds, and a tmpfs temp directory does not.
 
+A test reads one file, its **session view**: `results/<stamp>/<test>/session.json`,
+named by `ASTRAL_TESTS_SESSION`. It holds `run` (the stamp), `nodes` and
+`facts`. Every node carries the fields `lib/executors` lists in
+`NODE_FIELDS`, `null` where its world cannot provide one: attach knows no
+MCP port, a VM no restart count. The runner is the view's only writer; it
+writes it before the driver and again before the oracle, so a restart shows.
+
+A driver sees the facts of the tests its start state was built from
+(`manifest.lineage`) and nothing a sibling wrote; its oracle also sees what
+its own driver wrote. A test's facts join the run's **world record**,
+`results/<stamp>/w0/world.json`, only once its oracle passes. The record
+also holds the nodes as last seen and the history of every test that ran in
+the world, in order.
+
 Every target but `attach` strips astral-py's ambient endpoint and token
 variables from the driver environment: an `ASTRALD_APPHOST_TOKEN` in the shell
 otherwise answers for a test's anonymous connect and the test node refuses it.

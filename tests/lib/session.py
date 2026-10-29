@@ -1,7 +1,7 @@
-"""A session: named astrald nodes on loopback + accumulated facts."""
-import json
+"""A session: named astrald nodes on loopback."""
 from pathlib import Path
 
+from lib.executors import node_entry
 from lib.localnode import LocalNode
 from lib.nodeconfig import ports_for
 
@@ -17,7 +17,6 @@ class Session:
         # without the parent-death signal. Decided before the first node boots.
         self.keep = keep
         self.nodes = {}
-        self.facts = {}
 
     async def ensure(self, names) -> None:
         for name in names:
@@ -29,7 +28,6 @@ class Session:
             node.start(keep=self.keep)
             self.nodes[name] = node   # track BEFORE readiness — a node that
             await node.wait_ready()   # fails wait_ready must stay stoppable
-        self.write_session_json()
 
     async def restart(self, names) -> None:
         """Stop each named node and boot it again from its own root."""
@@ -39,43 +37,31 @@ class Session:
             node.start(keep=self.keep)
             await node.wait_ready()
             node.restarts += 1
-        self.write_session_json()
 
-    @property
-    def session_json_path(self) -> Path:
-        return self.dir / "session.json"
-
-    def write_session_json(self) -> None:
-        doc = {"nodes": {}, "facts": self.facts}
-        for name, n in self.nodes.items():
-            doc["nodes"][name] = {
-                "endpoint": n.endpoint,
-                "token": n.token,
-                "identity": n.identity,
-                "root": str(n.root),
-                "tcp_port": n.ports.tcp,
-                # the port reserved for the node's MCP server, which listens
-                # there only when serves_mcp is true
-                "mcp_url": f"http://127.0.0.1:{n.ports.mcp}",
-                "serves_mcp": n.serves_mcp,
-                # the external authority the node asks about mail; a driver
-                # that admits one serves it
-                "authority_url": n.ports.authority_url,
-                # why: the address a PEER dials, which is not the address the
-                # host dials. On loopback they coincide; in VMs they do not,
-                # and a driver that composes 127.0.0.1 from tcp_port is not
-                # env-blind however hard the design says it is.
-                "lan_endpoint": f"tcp:127.0.0.1:{n.ports.tcp}",
-                # how many times the executor restarted the node, so an
-                # oracle can tell a restart happened
-                "restarts": n.restarts,
-            }
-        self.session_json_path.write_text(json.dumps(doc, indent=2) + "\n")
-
-    def merge_facts(self, path: Path) -> None:
-        if Path(path).exists():
-            self.facts.update(json.loads(Path(path).read_text()))
-            self.write_session_json()
+    def entries(self) -> dict:
+        """Every node started so far, as the session view names it."""
+        return {name: node_entry(
+            endpoint=n.endpoint,
+            token=n.token,
+            identity=n.identity,
+            root=str(n.root),
+            tcp_port=n.ports.tcp,
+            # why: the address a PEER dials, which is not the address the
+            # host dials. On loopback they coincide; in VMs they do not,
+            # and a driver that composes 127.0.0.1 from tcp_port is not
+            # env-blind however hard the design says it is.
+            lan_endpoint=f"tcp:127.0.0.1:{n.ports.tcp}",
+            # the port reserved for the node's MCP server, which listens
+            # there only when serves_mcp is true
+            mcp_url=f"http://127.0.0.1:{n.ports.mcp}",
+            serves_mcp=n.serves_mcp,
+            # the external authority the node asks about mail; a driver
+            # that admits one serves it
+            authority_url=n.ports.authority_url,
+            # how many times the executor restarted the node, so an
+            # oracle can tell a restart happened
+            restarts=n.restarts,
+        ) for name, n in self.nodes.items()}
 
     def dead_nodes(self):
         return [name for name, n in self.nodes.items() if not n.alive()]

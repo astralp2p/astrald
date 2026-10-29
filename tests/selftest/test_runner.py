@@ -20,14 +20,6 @@ class FakeExecutor:
 
     pushed = ()
 
-    def __init__(self, dir: Path):
-        self.dir = Path(dir)
-        self.dir.mkdir(parents=True, exist_ok=True)
-
-    @property
-    def session_json_path(self) -> Path:
-        return self.dir / "session.json"
-
     def use_operator(self, profile: dict) -> None:
         pass
 
@@ -37,11 +29,11 @@ class FakeExecutor:
     def prepare(self, test) -> None:
         pass
 
+    def nodes(self) -> dict:
+        return {}
+
     def run_agent(self, test, log: Path, facts: Path, timeout: int) -> int:
         raise ExecutorError("node1: operator model is not m after the rewrite")
-
-    def merge_facts(self, path: Path) -> None:
-        pass
 
     def broken(self) -> list:
         return []
@@ -61,8 +53,7 @@ class TestOperatorError(unittest.TestCase):
                 mock.patch.object(runner, "ensure_binary",
                                   return_value=(Path(tmp) / "astrald", "abc")), \
                 mock.patch.object(runner, "_executor",
-                                  lambda args, plan, dir, *rest:
-                                  FakeExecutor(dir)), \
+                                  lambda *_: FakeExecutor()), \
                 contextlib.redirect_stdout(io.StringIO()):
             self.assertEqual(runner.main(args), 1)
             run_dir = next(Path(tmp).iterdir())
@@ -91,8 +82,7 @@ class TestPushedHeader(unittest.TestCase):
                 mock.patch.object(runner, "ensure_binary",
                                   return_value=(Path(tmp) / "astrald", "abc")), \
                 mock.patch.object(runner, "_executor",
-                                  lambda args, plan, dir, *rest:
-                                  PushingExecutor(dir)), \
+                                  lambda *_: PushingExecutor()), \
                 contextlib.redirect_stdout(io.StringIO()):
             runner.main(args)
             run_dir = next(Path(tmp).iterdir())
@@ -121,8 +111,7 @@ class TestDriverEnv(unittest.TestCase):
                 mock.patch.object(runner, "ensure_binary",
                                   return_value=(Path(tmp) / "astrald", "abc")), \
                 mock.patch.object(runner, "_executor",
-                                  lambda args, plan, dir, *rest:
-                                  FakeExecutor(dir)), \
+                                  lambda *_: FakeExecutor()), \
                 mock.patch.object(runner, "_run_step", run_step), \
                 contextlib.redirect_stdout(io.StringIO()):
             self.assertEqual(runner.main(args), 0)

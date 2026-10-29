@@ -1,4 +1,9 @@
-"""Orchestration: selection, suites, execution through one executor, results."""
+"""Orchestration: selection, suites, execution through one executor, results.
+
+The runner owns run state: the world record, every test's facts, and the
+session view each driver and oracle reads. An executor owns machines only.
+"""
+import json
 import os
 import platform
 import subprocess
@@ -16,6 +21,7 @@ from lib.executors.attach import AttachExecutor
 from lib.executors.local import LocalExecutor
 from lib.executors.netsim import NetsimExecutor
 from lib.nodeconfig import PortsBusy, lease_ports
+from lib.record import WorldRecord
 from lib.results import RunHeader, RunResults, fresh_run_dir
 
 TESTS = Path(__file__).resolve().parent.parent
@@ -36,14 +42,20 @@ def _run_step(py: str, script: Path, log: Path, env: dict, timeout: int) -> int:
             return 124
 
 
-def _perform(ex, t, driver: str, art: Path, env: dict) -> tuple:
-    """(status, failure_kind) of one test: prepare, driver, fact merge, the
-    restart the manifest names, then the oracle.
+def _perform(ex, t, driver: str, art: Path, view) -> tuple:
+    """(status, failure_kind) of one test: prepare, driver, the restart the
+    manifest names, then the oracle.
+
+    `view(phase)` writes the test's session view for the phase about to run
+    and returns the environment that phase runs in. The oracle gets a fresh
+    one: a restart changes the nodes, and the oracle also reads what its own
+    driver wrote.
 
     An ExecutorError from any of them propagates: the caller owns the one
     place a broken world becomes an `environment` verdict.
     """
     ex.prepare(t)
+    env = view("driver")
     if driver == "agent":
         rc = ex.run_agent(t, art / "driver.log", art / "facts.json",
                           t.agent_timeout)
@@ -52,12 +64,42 @@ def _perform(ex, t, driver: str, art: Path, env: dict) -> tuple:
                        art / "driver.log", env, t.timeout)
     if rc != 0:
         return "fail", "driver"
-    ex.merge_facts(art / "facts.json")
     if t.restart:
         ex.restart(t.restart)
     rc = _run_step(sys.executable, t.dir / "verify.py", art / "verify.log",
-                   env, t.timeout)
+                   view("verify"), t.timeout)
     return ("pass", None) if rc == 0 else ("fail", "verify")
+
+
+def write_view(path: Path, run: str, nodes: dict, facts: dict) -> None:
+    """A test's session view: the one file its driver and oracle read.
+
+    why the runner writes it and no executor does: three executors wrote
+    three schemas, and only one carried every node field. Each test gets
+    its own, in a real directory under results/<stamp>/, so the view's
+    path names the run it belongs to.
+    """
+    doc = {"run": run, "nodes": nodes, "facts": facts}
+    path.write_text(json.dumps(doc, indent=2) + "\n")
+
+
+def _note_nodes(record: WorldRecord, ex) -> None:
+    """Write the world's nodes into its record, as the executor reports them.
+
+    why here and not per view: a run whose first prepare failed, the usual
+    reason for --keep, wrote no view, and its record named no nodes at all.
+    A world too broken to report its nodes keeps whatever the record held.
+    """
+    try:
+        record.nodes = ex.nodes()
+    except (ExecutorError, OSError, ValueError) as e:
+        print(f"run: the world reported no nodes: {e}", file=sys.stderr)
+    record.write()
+
+
+def own_facts(path: Path) -> dict:
+    """What a driver wrote with write_facts, or nothing when it wrote none."""
+    return json.loads(path.read_text()) if path.exists() else {}
 
 
 def driver_env(session_json: Path, target: str) -> dict:
@@ -174,13 +216,13 @@ def run_env(plan: list, driver: str = "script",
 def _executor(args, plan, dir, binary, ports, ref):
     """Where the machines come from — orthogonal to env and driver."""
     if args.target == "attach":
-        return AttachExecutor(dir)
+        return AttachExecutor()
     if args.target.startswith("stage:"):
-        ex = NetsimExecutor(dir, binary, ref)
+        ex = NetsimExecutor(binary, ref)
         ex.pinned = args.target.split(":", 1)[1]
         return ex
     if run_env(plan, args.driver, args.target) == "netsim":
-        return NetsimExecutor(dir, binary, ref)
+        return NetsimExecutor(binary, ref)
     return LocalExecutor(dir, binary, lease_ports(**ports), keep=args.keep)
 
 
@@ -245,7 +287,7 @@ def main(args) -> int:
         ex.want_model(profile.get("model", ""), profile.get("base_url", ""))
         results.header["agent_profile"] = name
         results.header["agent_model"] = profile.get("model", "") or "(lab default)"
-    base_env = driver_env(ex.session_json_path, args.target)
+    record = WorldRecord(run_dir)
 
     mutators = [t.name for t, _ in plan if t.mutates]
     if args.target != "fresh" and mutators:
@@ -274,14 +316,31 @@ def main(args) -> int:
                 continue
 
             t0 = time.monotonic()
-            env = dict(base_env,
+            lineage = manifest.lineage(tests, t.start)
+            env = dict(driver_env(art / "session.json", args.target),
                        ASTRAL_TESTS_FACTS_OUT=str(art / "facts.json"))
+
+            driven = {}
+
+            def view(phase: str) -> dict:
+                # why lineage only: a test sees the facts of what its start
+                # state was built from, never a sibling's. Its oracle also
+                # sees its own driver's, read once before the oracle runs,
+                # and those are what join the record on a pass.
+                facts = record.facts_of(lineage)
+                if phase == "verify":
+                    driven.update(own_facts(art / "facts.json"))
+                    facts |= driven
+                write_view(art / "session.json", record.run, ex.nodes(),
+                           facts)
+                return env
+
             # why one try around every phase: an operator's model rewrite,
             # payload push or ssh raises from inside the driver phase, and a
             # try around prepare alone let it leave the loop with no verdict
             # recorded and no report written.
             try:
-                status, fk = _perform(ex, t, args.driver, art, env)
+                status, fk = _perform(ex, t, args.driver, art, view)
                 if ex.broken():
                     status, fk = "fail", "environment"   # a dead daemon voids
                     # any verdict — even a nominal pass over a dead world
@@ -292,16 +351,24 @@ def main(args) -> int:
 
             results.record(**entry, status=status, failure_kind=fk,
                            duration_s=time.monotonic() - t0)
+            record.add(t.name, kind, status,
+                       driven if status == "pass" else {})
             if status == "pass":
                 if t.saves:
                     ex.save(t.saves)
             elif t.saves:
                 broken_states.add(t.saves)
     finally:
+        # why before teardown: a torn-down world reports no nodes, and a
+        # kept one is read back from this record
+        _note_nodes(record, ex)
         ex.teardown(args.keep)
         if args.keep:
-            print(f"run: --keep, world left up under "
-                  f"{ex.session_json_path.parent}", file=sys.stderr)
+            roots = run_dir / "session"
+            print(f"run: --keep, world left up; its nodes are in "
+                  f"{record.path}"
+                  + (f", node roots and logs under {roots}"
+                     if roots.exists() else ""), file=sys.stderr)
 
     # why: a VM verdict is about the code under test only on the machines
     # that run it, so the header names them
