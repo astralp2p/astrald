@@ -23,14 +23,14 @@ type opDeriveIdentityArgs struct {
 // them under Generate and returns them in the reply.
 // Spec: .ai/system/protocols/user/ops/user.derive_identity.md
 func (mod *Module) OpDeriveIdentity(ctx *astral.Context, q *routing.IncomingQuery, args opDeriveIdentityArgs) error {
+	ch := q.Accept(channel.WithFormats(args.In, args.Out))
+	defer ch.Close()
+
 	switch q.Origin() {
 	case "", astral.OriginLocal:
 	default:
-		return q.Reject()
+		return ch.Send(astral.NewErrOriginNotAllowed(q.Origin()))
 	}
-
-	ch := q.Accept(channel.WithFormats(args.In, args.Out))
-	defer ch.Close()
 
 	words, err := receiveWords(ch, args.Generate)
 	if err != nil {

@@ -23,12 +23,12 @@ type opRegisterBlueprintArgs struct {
 // why: a type-name squat is not recoverable the way a stored object is, so a grant of
 // object writes does not carry it.
 func (mod *Module) OpRegisterBlueprint(ctx *astral.Context, q *routing.IncomingQuery, args opRegisterBlueprintArgs) error {
-	if !mod.Auth.Authorize(ctx, &auth.UseBlueprintsAction{Action: auth.NewAction(q.Caller())}) {
-		return q.Reject()
-	}
-
 	ch := channel.New(q.AcceptRaw(), channel.WithFormats(args.In, args.Out))
 	defer ch.Close()
+
+	if !mod.Auth.Authorize(ctx, &auth.UseBlueprintsAction{Action: auth.NewAction(q.Caller())}) {
+		return ch.Send(auth.ErrNotPermitted)
+	}
 
 	return channel.Batch(ch, func(bp *astral.Blueprint) astral.Object {
 		id, regErr := mod.Register(bp)

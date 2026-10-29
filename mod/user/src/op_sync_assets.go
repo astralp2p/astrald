@@ -17,8 +17,11 @@ type opSyncAssetsArgs struct {
 // records from the given DB height and replies with the next unread height.
 // If no rows are found at or above Start, echoes Start as the height so callers can safely re-poll.
 func (mod *Module) OpSyncAssets(ctx *astral.Context, q *routing.IncomingQuery, args opSyncAssetsArgs) (err error) {
+	ch := channel.New(q.AcceptRaw(), channel.WithOutputFormat(args.Out))
+	defer ch.Close()
+
 	if !mod.Auth.Authorize(ctx, &user.SeeSwarmAction{Action: auth.NewAction(q.Caller())}) {
-		return q.RejectWithCode(4)
+		return ch.Send(auth.ErrNotPermitted)
 	}
 
 	var rows []*dbAsset
@@ -26,11 +29,8 @@ func (mod *Module) OpSyncAssets(ctx *astral.Context, q *routing.IncomingQuery, a
 	err = mod.db.Where("height >= ?", args.Start).Find(&rows).Error
 	if err != nil {
 		mod.log.Error("db error: %v", err)
-		return q.RejectWithCode(2)
+		return ch.Send(astral.Err(err))
 	}
-
-	ch := channel.New(q.AcceptRaw(), channel.WithOutputFormat(args.Out))
-	defer ch.Close()
 
 	var height astral.Uint64
 

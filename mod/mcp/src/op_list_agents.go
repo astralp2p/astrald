@@ -23,18 +23,18 @@ type opListAgentsArgs struct {
 // authenticates there, so the origin refusal alone lets an agent read every
 // tenant's token.
 func (mod *Module) OpListAgents(ctx *astral.Context, q *routing.IncomingQuery, args opListAgentsArgs) error {
+	ch := channel.New(q.AcceptRaw(), channel.WithOutputFormat(args.Out))
+	defer ch.Close()
+
 	if q.Origin() == astral.OriginNetwork {
-		return q.Reject()
+		return ch.Send(astral.NewErrOriginNotAllowed(q.Origin()))
 	}
 
 	// why AdminManageApps, as for apphost's token ops: an agent's credential is an
 	// apphost access token, so administering agents is administering tokens.
 	if !mod.Auth.Authorize(ctx, &auth.AdminManageAppsAction{Action: auth.NewAction(q.Caller())}) {
-		return q.Reject()
+		return ch.Send(auth.ErrNotPermitted)
 	}
-
-	ch := channel.New(q.AcceptRaw(), channel.WithOutputFormat(args.Out))
-	defer ch.Close()
 
 	agents, err := mod.Agents()
 	if err != nil {

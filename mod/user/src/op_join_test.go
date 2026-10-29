@@ -168,23 +168,22 @@ func TestJoinAnswersTheSwarmNodesRefusal(t *testing.T) {
 	}
 }
 
-// TestJoinRejects: every refused query is rejected with a code, or answered with
-// a single error_message, and no request leaves the node.
+// TestJoinRejects: every refused query is answered with a single
+// error_message, and no request leaves the node.
 func TestJoinRejects(t *testing.T) {
 	cases := []struct {
 		name   string
 		origin string
 		caller func(f *joinFixture) *astral.Identity
 		node   string
-		code   uint8
 		answer astral.Error
 	}{
-		{"network origin", astral.OriginNetwork, func(f *joinFixture) *astral.Identity { return f.node.id }, "swarm", astral.CodeRejected, nil},
-		{"mcp origin", astral.OriginMCP, func(f *joinFixture) *astral.Identity { return f.node.id }, "swarm", astral.CodeRejected, nil},
-		{"caller other than the node", "", func(*joinFixture) *astral.Identity { return astral.GenerateIdentity() }, "swarm", 4, nil},
-		{"unknown node", "", func(f *joinFixture) *astral.Identity { return f.node.id }, "nobody", 0, dir.ErrUnknownIdentity},
-		{"anonymous node", "", func(f *joinFixture) *astral.Identity { return f.node.id }, "anyone", 0, astral.ErrZeroIdentity},
-		{"this node", "", func(f *joinFixture) *astral.Identity { return f.node.id }, "self", 0, user.ErrJoinSelf},
+		{"network origin", astral.OriginNetwork, func(f *joinFixture) *astral.Identity { return f.node.id }, "swarm", astral.NewErrOriginNotAllowed(astral.OriginNetwork)},
+		{"mcp origin", astral.OriginMCP, func(f *joinFixture) *astral.Identity { return f.node.id }, "swarm", astral.NewErrOriginNotAllowed(astral.OriginMCP)},
+		{"caller other than the node", "", func(*joinFixture) *astral.Identity { return astral.GenerateIdentity() }, "swarm", auth.ErrNotPermitted},
+		{"unknown node", "", func(f *joinFixture) *astral.Identity { return f.node.id }, "nobody", dir.ErrUnknownIdentity},
+		{"anonymous node", "", func(f *joinFixture) *astral.Identity { return f.node.id }, "anyone", astral.ErrZeroIdentity},
+		{"this node", "", func(f *joinFixture) *astral.Identity { return f.node.id }, "self", user.ErrJoinSelf},
 	}
 
 	for _, c := range cases {
@@ -192,19 +191,11 @@ func TestJoinRejects(t *testing.T) {
 			f := newJoinFixture(&auth.SignedContract{})
 
 			objs, err := routeJoin(t, f, c.caller(f), c.origin, "user.join?node="+c.node)
-
-			if c.answer != nil {
-				if err != nil {
-					t.Fatalf("route: %v", err)
-				}
-				if len(objs) != 1 || objs[0].ObjectType() != "error_message" || objs[0].(astral.Error).Error() != c.answer.Error() {
-					t.Fatalf("the op answered %v; want %q", objs, c.answer)
-				}
-			} else {
-				var rejected *astral.ErrRejected
-				if !errors.As(err, &rejected) || rejected.Code != c.code {
-					t.Fatalf("got %v; want a rejection with code %d", err, c.code)
-				}
+			if err != nil {
+				t.Fatalf("route: %v", err)
+			}
+			if len(objs) != 1 || objs[0].ObjectType() != "error_message" || objs[0].(astral.Error).Error() != c.answer.Error() {
+				t.Fatalf("the op answered %v; want %q", objs, c.answer)
 			}
 			select {
 			case routed := <-f.node.routed:

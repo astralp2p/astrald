@@ -17,19 +17,17 @@ type opSwarmStatusArgs struct {
 // every active node in the issuer's swarm.
 // Each entry includes the node identity, its display alias, and whether it is currently linked.
 func (mod *Module) OpSwarmStatus(ctx *astral.Context, q *routing.IncomingQuery, args opSwarmStatusArgs) (err error) {
+	ch := q.Accept(channel.WithFormats(args.In, args.Out))
+	defer ch.Close()
+
 	ac := mod.ActiveContract()
 	if ac == nil {
-		ch := q.Accept(channel.WithFormats(args.In, args.Out))
-		defer ch.Close()
 		return ch.Send(user.ErrNoActiveContract)
 	}
 
 	if !mod.Auth.Authorize(ctx, &user.SeeSwarmAction{Action: auth.NewAction(q.Caller())}) {
-		return q.RejectWithCode(4)
+		return ch.Send(auth.ErrNotPermitted)
 	}
-
-	ch := q.Accept(channel.WithFormats(args.In, args.Out))
-	defer ch.Close()
 
 	for _, node := range mod.ActiveNodes(ac.Issuer) {
 		alias, aliasErr := mod.Dir.GetAlias(node)

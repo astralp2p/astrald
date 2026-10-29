@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/astralp2p/astral-go/api/auth"
 	"github.com/astralp2p/astral-go/api/coldcard"
 	"github.com/astralp2p/astral-go/astral"
 )
@@ -82,13 +83,11 @@ func TestColdcardScanRefusesCallerWithoutPermits(t *testing.T) {
 
 	err := route(t, mod.OpScan, caller, coldcard.MethodScan, w)
 
-	var rejected *astral.ErrRejected
-	if !errors.As(err, &rejected) {
-		t.Fatalf("coldcard.scan answered a caller holding no permits: got err %v, want a rejection", err)
+	if err != nil {
+		t.Fatalf("route: %v", err)
 	}
-
-	if n := w.written(); n != 0 {
-		t.Fatalf("coldcard.scan wrote %d bytes to a refused caller; want none", n)
+	if got, want := w.refusal(t), auth.ErrNotPermitted.Error(); got != want {
+		t.Fatalf("answered %q; want %q", got, want)
 	}
 
 	if got := invocations(); got != "" {

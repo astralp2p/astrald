@@ -20,22 +20,25 @@ type opRegisterDescriberArgs struct {
 // registers it as an external describer under a lease, answering with the lease granted.
 // Repeating the op renews the caller's registration in place rather than adding a second.
 // The requested duration is clamped to the node's maximum; zero takes the node's default.
-// Rejects network-origin callers and self-registration by the node.
+// Refuses network-origin callers and self-registration by the node.
 func (mod *Module) OpRegisterDescriber(ctx *astral.Context, q *routing.IncomingQuery, args opRegisterDescriberArgs) error {
+	ch := channel.New(q.AcceptRaw(), channel.WithFormats(args.In, args.Out))
+	defer ch.Close()
+
 	// why: cheapest refusal first. A network caller is refused whatever it holds,
 	// and this costs no database work — Authorize below queries the grants and may
 	// then walk the contract chain, and it logs an allow before this would have
-	// rejected. It is not the authorization: a query routed locally by a tool
+	// refused. It is not the authorization: a query routed locally by a tool
 	// carries no network origin whatever its caller.
 	if q.Origin() == astral.OriginNetwork {
-		return q.Reject()
+		return ch.Send(astral.NewErrOriginNotAllowed(q.Origin()))
 	}
 
 	if !mod.Auth.Authorize(ctx, &auth.ServeObjectsAction{
 		Action: auth.NewAction(q.Caller()),
 		Role:   auth.RoleDescriber,
 	}) {
-		return q.Reject()
+		return ch.Send(auth.ErrNotPermitted)
 	}
 
 	id := q.Caller()
@@ -46,9 +49,6 @@ func (mod *Module) OpRegisterDescriber(ctx *astral.Context, q *routing.IncomingQ
 	case id.IsEqual(mod.node.Identity()):
 		err = objects.ErrExternalRegistrationSelf
 	}
-
-	ch := channel.New(q.AcceptRaw(), channel.WithFormats(args.In, args.Out))
-	defer ch.Close()
 
 	if err != nil {
 		return ch.Send(astral.Err(err))

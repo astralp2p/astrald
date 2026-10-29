@@ -2,6 +2,7 @@ package objects
 
 import (
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -62,13 +63,20 @@ func TestSeeObjectsRefusesCallerWithoutPermits(t *testing.T) {
 
 			err := route(t, op.op(mod), caller, op.name+op.args, w)
 
-			var rejected *astral.ErrRejected
-			if !errors.As(err, &rejected) {
-				t.Fatalf("%s answered a caller holding no permits: got err %v, want a rejection", op.name, err)
-			}
-
-			if n := w.written(); n != 0 {
-				t.Fatalf("%s wrote %d bytes to a refused caller; want none", op.name, n)
+			// note: objects.read streams raw bytes, so it keeps the reject; an error_message
+			// would reach its caller as payload.
+			if strings.HasPrefix(op.name, "objects.read") {
+				var rejected *astral.ErrRejected
+				if !errors.As(err, &rejected) || w.written() != 0 {
+					t.Fatalf("got err %v and %d bytes; want a rejection and no bytes", err, w.written())
+				}
+			} else {
+				if err != nil {
+					t.Fatalf("route: %v", err)
+				}
+				if got, want := w.refusal(t), auth.ErrNotPermitted.Error(); got != want {
+					t.Fatalf("answered %q; want %q", got, want)
+				}
 			}
 
 			actions := authority.recorded()

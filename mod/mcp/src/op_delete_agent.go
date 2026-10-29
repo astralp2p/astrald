@@ -19,18 +19,18 @@ type opDeleteAgentArgs struct {
 // why the row is read without asking mod/messaging, as findAgent does: a row
 // whose participant messaging.delete_mailbox withdrew is one this op removes.
 func (mod *Module) OpDeleteAgent(ctx *astral.Context, q *routing.IncomingQuery, args opDeleteAgentArgs) error {
+	ch := channel.New(q.AcceptRaw(), channel.WithOutputFormat(args.Out))
+	defer ch.Close()
+
 	if q.Origin() == astral.OriginNetwork {
-		return q.Reject()
+		return ch.Send(astral.NewErrOriginNotAllowed(q.Origin()))
 	}
 
 	// why AdminManageApps, as for apphost's token ops: an agent's credential is an
 	// apphost access token, so administering agents is administering tokens.
 	if !mod.Auth.Authorize(ctx, &auth.AdminManageAppsAction{Action: auth.NewAction(q.Caller())}) {
-		return q.Reject()
+		return ch.Send(auth.ErrNotPermitted)
 	}
-
-	ch := channel.New(q.AcceptRaw(), channel.WithOutputFormat(args.Out))
-	defer ch.Close()
 
 	agentID, err := mod.Dir.ResolveIdentity(args.Identity)
 	if err != nil {

@@ -1,6 +1,7 @@
 package messaging
 
 import (
+	"github.com/astralp2p/astral-go/api/auth"
 	"github.com/astralp2p/astral-go/api/messaging"
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astral-go/astral/channel"
@@ -17,12 +18,12 @@ type opArchiveArgs struct {
 // OpArchive puts one of the caller's messages away, or back with undo, and
 // answers whether this call moved it.
 func (mod *Module) OpArchive(ctx *astral.Context, q *routing.IncomingQuery, args opArchiveArgs) error {
-	if !mod.admitsMailCaller(q) {
-		return q.Reject()
-	}
-
 	ch := channel.New(q.AcceptRaw(), channel.WithOutputFormat(args.Out))
 	defer ch.Close()
+
+	if !mod.admitsMailCaller(q) {
+		return ch.Send(auth.ErrNotPermitted)
+	}
 
 	ref := messaging.MessageRef{Box: astral.String8(args.Box), ID: args.ID}
 

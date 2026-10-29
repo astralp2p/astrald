@@ -21,16 +21,15 @@ type opSyncWithArgs struct {
 // node's asset list, so the node named here decides what this node carries.
 // That is the authority user.add_asset and user.remove_asset name.
 func (mod *Module) OpSyncWith(ctx *astral.Context, q *routing.IncomingQuery, args opSyncWithArgs) (err error) {
+	ch := channel.New(q.AcceptRaw(), channel.WithOutputFormat(args.Out))
+	defer ch.Close()
+
 	// why: the action carries the node, so resolution runs before authorization.
 	nodeID, err := mod.Dir.ResolveIdentity(args.Identity)
 	if err != nil {
-		ch := q.Accept(channel.WithOutputFormat(args.Out))
-		defer ch.Close()
 		return ch.Send(dir.ErrUnknownIdentity)
 	}
 	if nodeID.IsZero() {
-		ch := q.Accept(channel.WithOutputFormat(args.Out))
-		defer ch.Close()
 		return ch.Send(astral.ErrZeroIdentity)
 	}
 
@@ -38,11 +37,8 @@ func (mod *Module) OpSyncWith(ctx *astral.Context, q *routing.IncomingQuery, arg
 		Action:  auth.NewAction(q.Caller()),
 		Subject: nodeID,
 	}) {
-		return q.RejectWithCode(4)
+		return ch.Send(auth.ErrNotPermitted)
 	}
-
-	ch := channel.New(q.AcceptRaw(), channel.WithOutputFormat(args.Out))
-	defer ch.Close()
 
 	err = mod.syncAssets(ctx.IncludeZone(astral.ZoneNetwork), nodeID)
 	if err != nil {

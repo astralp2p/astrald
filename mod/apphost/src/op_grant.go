@@ -26,18 +26,18 @@ type opGrantArgs struct {
 // already registered could reach a newly guarded op only by re-registering
 // under a fresh identity or by being issued a signed contract.
 func (mod *Module) OpGrant(ctx *astral.Context, q *routing.IncomingQuery, args opGrantArgs) error {
+	ch := channel.New(q.AcceptRaw(), channel.WithFormats(args.In, args.Out))
+	defer ch.Close()
+
 	// why: a grant authorizes on this node alone and is never handed to anyone,
 	// so a caller off a link has no standing to write one.
 	if q.Origin() == astral.OriginNetwork {
-		return q.Reject()
+		return ch.Send(astral.NewErrOriginNotAllowed(q.Origin()))
 	}
 
 	if !mod.Auth.Authorize(ctx, &auth.AdminManageAppsAction{Action: auth.NewAction(q.Caller())}) {
-		return q.Reject()
+		return ch.Send(auth.ErrNotPermitted)
 	}
-
-	ch := channel.New(q.AcceptRaw(), channel.WithFormats(args.In, args.Out))
-	defer ch.Close()
 
 	identity, err := mod.Dir.ResolveIdentity(args.Identity)
 	if err != nil {

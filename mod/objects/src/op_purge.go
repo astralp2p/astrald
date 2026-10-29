@@ -16,13 +16,16 @@ type opPurgeArgs struct {
 // OpPurge deletes unheld objects from a repository, streaming each purged ObjectID
 // then a final error or EOS. Defaults to ZoneAll when no zone is given.
 func (mod *Module) OpPurge(ctx *astral.Context, q *routing.IncomingQuery, args opPurgeArgs) error {
+	ch := channel.New(q.AcceptRaw(), channel.WithOutputFormat(args.Out))
+	defer ch.Close()
+
 	// why AdminObjects and not StoreObjects: a grant to add objects does not grant
 	// destroying them.
 	if !mod.Auth.Authorize(ctx, &auth.AdminObjectsAction{
 		Action: auth.NewAction(q.Caller()),
 		Repo:   astral.String8(args.Repo),
 	}) {
-		return q.Reject()
+		return ch.Send(auth.ErrNotPermitted)
 	}
 
 	ctx = ctx.WithIdentity(q.Caller())
@@ -31,9 +34,6 @@ func (mod *Module) OpPurge(ctx *astral.Context, q *routing.IncomingQuery, args o
 	} else {
 		ctx = ctx.WithZone(*args.Zone)
 	}
-
-	ch := channel.New(q.AcceptRaw(), channel.WithOutputFormat(args.Out))
-	defer ch.Close()
 
 	repo := mod.GetRepository(args.Repo)
 	if repo == nil {

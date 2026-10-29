@@ -16,12 +16,12 @@ type opAssetsArgs struct {
 // to the caller, terminating with EOS. On send failure it attempts to deliver an
 // error frame before returning.
 func (mod *Module) OpAssets(ctx *astral.Context, q *routing.IncomingQuery, args opAssetsArgs) (err error) {
-	if !mod.Auth.Authorize(ctx, &user.SeeSwarmAction{Action: auth.NewAction(q.Caller())}) {
-		return q.RejectWithCode(4)
-	}
-
 	ch := channel.New(q.AcceptRaw(), channel.WithOutputFormat(args.Out))
 	defer ch.Close()
+
+	if !mod.Auth.Authorize(ctx, &user.SeeSwarmAction{Action: auth.NewAction(q.Caller())}) {
+		return ch.Send(auth.ErrNotPermitted)
+	}
 
 	for _, asset := range mod.Assets() {
 		err = ch.Send(asset)

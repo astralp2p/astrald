@@ -14,32 +14,28 @@ type opResolveEndpointsArgs struct {
 }
 
 func (mod *Module) OpResolveEndpoints(ctx *astral.Context, q *routing.IncomingQuery, args opResolveEndpointsArgs) (err error) {
+	ch := channel.New(q.AcceptRaw(), channel.WithOutputFormat(args.Out))
+	defer ch.Close()
+
 	if !mod.Auth.Authorize(ctx, &auth.AdminNetworkAction{Action: auth.NewAction(q.Caller())}) {
-		return q.Reject()
+		return ch.Send(auth.ErrNotPermitted)
 	}
 
 	// why: the zero identity names no node, and ResolveEndpoints fans the target
 	// out to every registered resolver without testing it.
 	targetID, err := mod.Dir.ResolveIdentity(args.Identity)
 	if err != nil {
-		ch := q.Accept(channel.WithOutputFormat(args.Out))
-		defer ch.Close()
 		return ch.Send(dir.ErrUnknownIdentity)
 	}
 	if targetID.IsZero() {
-		ch := q.Accept(channel.WithOutputFormat(args.Out))
-		defer ch.Close()
 		return ch.Send(astral.ErrZeroIdentity)
 	}
 
 	endpoints, err := mod.ResolveEndpoints(ctx.WithIdentity(q.Caller()), targetID)
 	if err != nil {
 		mod.log.Error("resolve endpoints: %v", err)
-		return q.RejectWithCode(astral.CodeInternalError)
+		return ch.Send(astral.Err(err))
 	}
-
-	ch := channel.New(q.AcceptRaw(), channel.WithOutputFormat(args.Out))
-	defer ch.Close()
 
 	for endpoint := range endpoints {
 		err = ch.Send(endpoint)

@@ -14,22 +14,20 @@ type opInfoArgs struct {
 
 // OpInfo returns identity and contract metadata for this node's active contract.
 // Requires an active contract (user.ErrNoActiveContract otherwise - the setup-mode probe); the
-// caller must be authorized for user.SeeSwarmAction (code 4 otherwise) - the
+// caller must be authorized for user.SeeSwarmAction (auth.ErrNotPermitted otherwise) - the
 // user and swarm members always are, other identities via authorizers.
 func (mod *Module) OpInfo(ctx *astral.Context, q *routing.IncomingQuery, args opInfoArgs) (err error) {
+	ch := q.Accept(channel.WithOutputFormat(args.Out))
+	defer ch.Close()
+
 	ac := mod.ActiveContract()
 	if ac == nil {
-		ch := q.Accept(channel.WithOutputFormat(args.Out))
-		defer ch.Close()
 		return ch.Send(user.ErrNoActiveContract)
 	}
 
 	if !mod.Auth.Authorize(ctx, &user.SeeSwarmAction{Action: auth.NewAction(q.Caller())}) {
-		return q.RejectWithCode(4)
+		return ch.Send(auth.ErrNotPermitted)
 	}
-
-	ch := q.Accept(channel.WithOutputFormat(args.Out))
-	defer ch.Close()
 
 	contractID, _ := astral.ResolveObjectID(ac)
 

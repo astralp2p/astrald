@@ -32,17 +32,15 @@ type opAcceptContractArgs struct {
 // why a policy and not an action: admission is the node's own decision, as for
 // user.accept_membership, and its bundled default keeps a fresh node claimable.
 func (mod *Module) OpAcceptContract(ctx *astral.Context, q *routing.IncomingQuery, args opAcceptContractArgs) (err error) {
-	ac := mod.ActiveContract()
-	if ac != nil {
-		// the node already belongs to a user - claiming is a one-time transition
-		ch := q.Accept(channel.WithFormats(args.In, args.Out))
-		defer ch.Close()
-		return ch.Send(user.ErrAlreadyClaimed)
-	}
-
 	conn := q.AcceptRaw()
 	ch := channel.New(conn, channel.WithFormats(args.In, args.Out))
 	defer ch.Close()
+
+	ac := mod.ActiveContract()
+	if ac != nil {
+		// the node already belongs to a user - claiming is a one-time transition
+		return ch.Send(user.ErrAlreadyClaimed)
+	}
 
 	var signed *auth.SignedContract
 	err = ch.Switch(channel.Expect(&signed), channel.FailOnEOF())

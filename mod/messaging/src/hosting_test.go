@@ -410,9 +410,11 @@ func TestHostingDoesNotOpenAMailboxToAnotherCaller(t *testing.T) {
 
 	w := newRecordingWriter()
 	err = routeQuery(t, mod.OpListMessages, originQuery(mod.node.Identity(), "messaging.list_messages", astral.OriginLocal), w)
-	var rejected *astral.ErrRejected
-	if !errors.As(err, &rejected) || w.written() != 0 {
-		t.Fatalf("the node listing over the op: got %v and %v bytes, want a rejection", err, w.written())
+	if err != nil {
+		t.Fatalf("the node listing over the op: route: %v", err)
+	}
+	if got, want := w.refusal(t), auth.ErrNotPermitted.Error(); got != want {
+		t.Fatalf("the node listing over the op answered %q; want %q", got, want)
 	}
 }
 

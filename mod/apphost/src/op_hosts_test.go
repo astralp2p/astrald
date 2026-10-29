@@ -1,7 +1,6 @@
 package apphost
 
 import (
-	"errors"
 	"io"
 	"slices"
 	"sync"
@@ -266,12 +265,11 @@ func TestHostsRefusesAQueryOffALink(t *testing.T) {
 
 	err := routeAdminManageAppsFromNetwork(t, mod.OpHosts, astral.GenerateIdentity(), "apphost.hosts?app="+app.String(), w)
 
-	var rejected *astral.ErrRejected
-	if !errors.As(err, &rejected) {
-		t.Fatalf("apphost.hosts answered a query off a link: got err %v, want a rejection", err)
+	if err != nil {
+		t.Fatalf("route: %v", err)
 	}
-	if n := w.written(); n != 0 {
-		t.Fatalf("apphost.hosts wrote %d bytes to a query off a link; want none", n)
+	if got, want := w.refusal(t), astral.NewErrOriginNotAllowed(astral.OriginNetwork).Error(); got != want {
+		t.Fatalf("answered %q; want %q", got, want)
 	}
 	if n := len(index.recorded()); n != 0 {
 		t.Fatalf("apphost.hosts read the index %d times for a query off a link; want none", n)
@@ -312,12 +310,11 @@ func TestHostsRefusesACallerWithoutSeeSwarm(t *testing.T) {
 
 	err := route(t, mod.OpHosts, astral.GenerateIdentity(), "apphost.hosts?app="+app.String(), w)
 
-	var rejected *astral.ErrRejected
-	if !errors.As(err, &rejected) {
-		t.Fatalf("apphost.hosts answered a caller without SeeSwarm: got err %v, want a rejection", err)
+	if err != nil {
+		t.Fatalf("route: %v", err)
 	}
-	if n := w.written(); n != 0 {
-		t.Fatalf("apphost.hosts wrote %d bytes to a caller without SeeSwarm; want none", n)
+	if got, want := w.refusal(t), auth.ErrNotPermitted.Error(); got != want {
+		t.Fatalf("answered %q; want %q", got, want)
 	}
 	if n := len(index.recorded()); n != 0 {
 		t.Fatalf("apphost.hosts read the index %d times for a caller without SeeSwarm; want none", n)

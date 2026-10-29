@@ -21,20 +21,20 @@ type opHostsArgs struct {
 // note: a sibling's app is known once its relay contract arrived: at the first link,
 // at the app's registration, or when the app runs swarm discovery.
 func (mod *Module) OpHosts(ctx *astral.Context, q *routing.IncomingQuery, args opHostsArgs) error {
+	ch := channel.New(q.AcceptRaw(), channel.WithOutputFormat(args.Out))
+	defer ch.Close()
+
 	// why: the answer names the nodes of the caller's swarm, so it is not
 	// enumerable over a link.
 	if q.Origin() == astral.OriginNetwork {
-		return q.Reject()
+		return ch.Send(astral.NewErrOriginNotAllowed(q.Origin()))
 	}
 
 	// why SeeSwarm: the answer is which swarm nodes run an app, a read of who
 	// belongs to the swarm.
 	if !mod.Auth.Authorize(ctx, &user.SeeSwarmAction{Action: auth.NewAction(q.Caller())}) {
-		return q.Reject()
+		return ch.Send(auth.ErrNotPermitted)
 	}
-
-	ch := channel.New(q.AcceptRaw(), channel.WithOutputFormat(args.Out))
-	defer ch.Close()
 
 	// why: a name that resolves to no app names an app with no known host, and a
 	// caller that reads hosts until EOS gets an empty list, not an error.

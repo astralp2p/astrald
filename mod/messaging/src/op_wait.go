@@ -4,6 +4,7 @@ import (
 	"io"
 	"time"
 
+	"github.com/astralp2p/astral-go/api/auth"
 	"github.com/astralp2p/astral-go/api/messaging"
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astral-go/astral/channel"
@@ -23,13 +24,13 @@ type opWaitArgs struct {
 // why the query is accepted before the park: a query must be accepted or
 // rejected within seconds, and a park holds for minutes.
 func (mod *Module) OpWait(ctx *astral.Context, q *routing.IncomingQuery, args opWaitArgs) error {
-	if !mod.admitsMailCaller(q) {
-		return q.Reject()
-	}
-
 	conn := q.AcceptRaw()
 	ch := channel.New(conn, channel.WithOutputFormat(args.Out))
 	defer ch.Close()
+
+	if !mod.admitsMailCaller(q) {
+		return ch.Send(auth.ErrNotPermitted)
+	}
 
 	parkCtx, cancel := ctx.WithCancel()
 	defer cancel()

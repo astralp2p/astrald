@@ -2,6 +2,7 @@ package auth
 
 import (
 	"errors"
+	"fmt"
 	"io"
 	"strings"
 	"sync/atomic"
@@ -335,12 +336,13 @@ func routeSignContract(t *testing.T, mod *Module, caller *astral.Identity, origi
 }
 
 // TestSignContractRefusesNonLocalOrigins: a peer's or an MCP client's query,
-// or one of an origin the op does not know, is rejected before the op reads a
-// contract; a local one is accepted.
+// or one of an origin the op does not know, is answered
+// astral.ErrOriginNotAllowed before the op reads a contract; a local one is
+// accepted.
 func TestSignContractRefusesNonLocalOrigins(t *testing.T) {
 	for _, tc := range []struct {
-		origin   any
-		rejected bool
+		origin  any
+		refused bool
 	}{
 		{nil, false},
 		{"", false},
@@ -351,18 +353,19 @@ func TestSignContractRefusesNonLocalOrigins(t *testing.T) {
 	} {
 		r := newGuardRig(t)
 		in, out, err := routeSignContract(t, r.mod, r.app, tc.origin)
-
-		var rejected *astral.ErrRejected
-		if got := errors.As(err, &rejected); got != tc.rejected {
-			t.Fatalf("origin %v: rejected=%v (%v); want %v", tc.origin, got, err, tc.rejected)
-		}
-		if !tc.rejected && err != nil {
+		if err != nil {
 			t.Fatalf("origin %v: route = %v; want accepted", tc.origin, err)
 		}
-		if in != nil {
+		if tc.refused {
+			obj, err := channel.NewReceiver(out).Receive()
+			want := astral.NewErrOriginNotAllowed(fmt.Sprint(tc.origin)).Error()
+			if msg, ok := obj.(*astral.ErrorMessage); err != nil || !ok || msg.Error() != want {
+				t.Fatalf("origin %v: answered %v (%v); want %q", tc.origin, obj, err, want)
+			}
+		} else {
 			_ = channel.NewSender(in).Send(&astral.EOS{})
-			_ = in.Close()
 		}
+		_ = in.Close()
 		_ = out.Close()
 	}
 }

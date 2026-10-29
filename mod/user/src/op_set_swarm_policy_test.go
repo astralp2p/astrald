@@ -40,17 +40,17 @@ func awaitSetterClose(t *testing.T, w *recordingWriter) {
 	}
 }
 
-// A caller without AdminManageApps is rejected before anything is written,
-// and AdminManageApps is the one action asked about.
+// A caller without AdminManageApps is answered auth.ErrNotPermitted before
+// anything is written, and AdminManageApps is the one action asked about.
 func TestSetSwarmPolicyRequiresAdminManageApps(t *testing.T) {
 	mod := swarmPolicySetter(false, astral.GenerateIdentity())
 
 	w, err := setSwarmPolicyOp(t, mod.OpSetSwarmJoinPolicy, "user.set_swarm_join_policy?identity=cp&operation=control.decide_swarm")
-	if err == nil {
-		t.Fatal("a caller without AdminManageApps set the policy")
+	if err != nil {
+		t.Fatalf("route: %v", err)
 	}
-	if w.written() != 0 {
-		t.Fatal("a rejected setter answered")
+	if got, want := w.refusal(t), auth.ErrNotPermitted.Error(); got != want {
+		t.Fatalf("answered %q; want %q", got, want)
 	}
 	if !mod.policy.SwarmJoin.Get().IsZero() {
 		t.Fatal("a rejected setter wrote a delegate")

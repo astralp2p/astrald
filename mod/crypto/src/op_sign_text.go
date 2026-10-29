@@ -19,12 +19,12 @@ type opSignTextArgs struct {
 // OpSignText signs a message under the caller's own key. Local callers only; a
 // peer signs on its own node.
 func (mod *Module) OpSignText(ctx *astral.Context, q *routing.IncomingQuery, args opSignTextArgs) (err error) {
-	if q.Origin() == astral.OriginNetwork {
-		return q.Reject()
-	}
-
 	ch := channel.New(q.AcceptRaw(), channel.WithFormats(args.In, args.Out))
 	defer ch.Close()
+
+	if q.Origin() == astral.OriginNetwork {
+		return ch.Send(astral.NewErrOriginNotAllowed(q.Origin()))
+	}
 
 	// set defaults
 	if args.Scheme == "" {
