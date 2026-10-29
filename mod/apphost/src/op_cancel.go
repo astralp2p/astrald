@@ -21,7 +21,6 @@ func (mod *Module) OpCancel(ctx *astral.Context, q *routing.IncomingQuery, args 
 	// drops the en-route entry that names the session behind it.
 	owner := mod.sessionOwner(q)
 	enRoute, found := mod.enRoute.Get(args.QueryID)
-	allowed := found && mod.mayCancel(ctx, owner, enRoute)
 
 	ch := q.Accept(channel.WithOutputFormat(args.Out))
 	defer ch.Close()
@@ -32,6 +31,8 @@ func (mod *Module) OpCancel(ctx *astral.Context, q *routing.IncomingQuery, args 
 	if q.Origin() == astral.OriginNetwork {
 		return ch.Send(astral.NewErrOriginNotAllowed(q.Origin()))
 	}
+
+	allowed := found && mod.mayCancel(ctx, owner, enRoute)
 
 	// note: a query this session may not cancel answers as a missing one, so a
 	// caller learns nothing about the nonces other apps hold en route.

@@ -1,7 +1,6 @@
 package apphost
 
 import (
-	"errors"
 	"io"
 	"net"
 	"testing"
@@ -100,13 +99,11 @@ func TestServeAppsRefusesCallerWithoutPermits(t *testing.T) {
 
 			err := route(t, op.op(mod), caller, op.name+op.args, w)
 
-			var rejected *astral.ErrRejected
-			if !errors.As(err, &rejected) {
-				t.Fatalf("%s answered a caller holding no permits: got err %v, want a rejection", op.name, err)
+			if err != nil {
+				t.Fatalf("route: %v", err)
 			}
-
-			if n := w.written(); n != 0 {
-				t.Fatalf("%s wrote %d bytes to a refused caller; want none", op.name, n)
+			if got, want := w.refusal(t), auth.ErrNotPermitted.Error(); got != want {
+				t.Fatalf("answered %q; want %q", got, want)
 			}
 
 			actions := authority.recorded()
@@ -144,13 +141,11 @@ func TestServeAppsKeepsTheNetworkOriginRefusal(t *testing.T) {
 
 			err := routeServeAppsFromNetwork(t, op.op(mod), caller, op.name+op.args, w)
 
-			var rejected *astral.ErrRejected
-			if !errors.As(err, &rejected) {
-				t.Fatalf("%s answered a network caller: got err %v, want a rejection", op.name, err)
+			if err != nil {
+				t.Fatalf("route: %v", err)
 			}
-
-			if n := w.written(); n != 0 {
-				t.Fatalf("%s wrote %d bytes to a network caller; want none", op.name, n)
+			if got, want := w.refusal(t), astral.NewErrOriginNotAllowed(astral.OriginNetwork).Error(); got != want {
+				t.Fatalf("answered %q; want %q", got, want)
 			}
 
 			if n := len(authority.recorded()); n != 0 {

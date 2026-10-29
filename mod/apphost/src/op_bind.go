@@ -14,12 +14,11 @@ type opBindArgs struct {
 // OpBind keeps a session alive so the caller can associate cleanup actions (handler removal) with its lifetime.
 // Each BindMsg received during the session registers a token whose handlers are removed on session close.
 func (mod *Module) OpBind(ctx *astral.Context, q *routing.IncomingQuery, args opBindArgs) error {
-	// why: the scope is resolved here, before accepting and before the session
-	// runs. Accepting drops the en-route entry that names this session, and the
-	// cleanup runs from a defer after ctx has ended, where neither the entry nor
-	// an authorization call is still available.
+	// why: the owner is read before accepting and the scope is resolved before
+	// the session runs. Accepting drops the en-route entry that names this
+	// session, and the cleanup runs from a defer after ctx has ended, where
+	// neither the entry nor an authorization call is still available.
 	owner := mod.sessionOwner(q)
-	scope := bindScope{owner: owner, anyOwner: mod.mayManageApps(ctx, owner)}
 
 	ch := q.Accept(channel.WithOutputFormat(args.Out))
 	defer ch.Close()
@@ -28,6 +27,8 @@ func (mod *Module) OpBind(ctx *astral.Context, q *routing.IncomingQuery, args op
 	if q.Origin() == astral.OriginNetwork {
 		return ch.Send(astral.NewErrOriginNotAllowed(q.Origin()))
 	}
+
+	scope := bindScope{owner: owner, anyOwner: mod.mayManageApps(ctx, owner)}
 
 	if err := ch.Send(&astral.Ack{}); err != nil {
 		return err

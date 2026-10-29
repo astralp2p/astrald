@@ -1,7 +1,6 @@
 package messaging
 
 import (
-	"errors"
 	"testing"
 	"time"
 
@@ -23,13 +22,11 @@ func TestSeeNodeStateKeepsOriginRefusal(t *testing.T) {
 
 			err := routeQuery(t, mod.OpMailbox, q, w)
 
-			var rejected *astral.ErrRejected
-			if !errors.As(err, &rejected) {
-				t.Fatalf("messaging.mailbox answered a %v-origin query: got err %v, want a rejection", origin, err)
+			if err != nil {
+				t.Fatalf("route: %v", err)
 			}
-
-			if n := w.written(); n != 0 {
-				t.Fatalf("messaging.mailbox wrote %d bytes to a %v-origin query; want none", n, origin)
+			if got, want := w.refusal(t), astral.NewErrOriginNotAllowed(astral.OriginNetwork).Error(); got != want {
+				t.Fatalf("answered %q; want %q", got, want)
 			}
 
 			if n := len(authority.recorded()); n != 0 {

@@ -1,7 +1,6 @@
 package mcp
 
 import (
-	"errors"
 	"testing"
 	"time"
 
@@ -32,13 +31,11 @@ func TestSeeNodeStateKeepsOriginRefusal(t *testing.T) {
 
 	_, err = op.RouteQuery(ctx, q, w)
 
-	var rejected *astral.ErrRejected
-	if !errors.As(err, &rejected) {
-		t.Fatalf("mcp.agent answered a network-origin query: got err %v, want a rejection", err)
+	if err != nil {
+		t.Fatalf("route: %v", err)
 	}
-
-	if n := w.written(); n != 0 {
-		t.Fatalf("mcp.agent wrote %d bytes to a network-origin query; want none", n)
+	if got, want := w.refusal(t), astral.NewErrOriginNotAllowed(astral.OriginNetwork).Error(); got != want {
+		t.Fatalf("answered %q; want %q", got, want)
 	}
 
 	if n := len(authority.recorded()); n != 0 {

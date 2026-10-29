@@ -232,8 +232,7 @@ func TestDiscoverReachAndForAdmission(t *testing.T) {
 	}
 }
 
-// Node identity cannot advertise: the query is rejected before anything is
-// accepted.
+// Node identity cannot advertise: the query is answered auth.ErrNotPermitted.
 func TestAdvertiseRejectsTheNodeIdentity(t *testing.T) {
 	mod, _ := wireModule(true)
 	op, err := routing.NewOp(mod.OpAdvertise)
@@ -245,7 +244,10 @@ func TestAdvertiseRejectsTheNodeIdentity(t *testing.T) {
 	nodeID := mod.node.Identity()
 	w := newRecordingWriter()
 	_, err = op.RouteQuery(ctx, astral.Launch(query.New(nodeID, nodeID, "services.advertise?services=nat", nil)), w)
-	if err == nil || w.written() != 0 {
-		t.Fatalf("advertise as the node: err %v, %d bytes; want a rejection and no bytes", err, w.written())
+	if err != nil {
+		t.Fatalf("advertise as the node: route: %v", err)
+	}
+	if got, want := w.refusal(t), auth.ErrNotPermitted.Error(); got != want {
+		t.Fatalf("advertise as the node: answered %q; want %q", got, want)
 	}
 }

@@ -75,6 +75,29 @@ func (w *recordingWriter) written() int {
 	return w.buf.Len()
 }
 
+// refusal waits for the op to close the connection and returns the text of the
+// error_message it answered.
+func (w *recordingWriter) refusal(t *testing.T) string {
+	t.Helper()
+	select {
+	case <-w.closed:
+	case <-time.After(10 * time.Second):
+		t.Fatal("the op never closed the connection")
+	}
+
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	obj, err := channel.NewReceiver(bytes.NewReader(w.buf.Bytes())).Receive()
+	if err != nil {
+		t.Fatalf("decode answer: %v", err)
+	}
+	msg, ok := obj.(*astral.ErrorMessage)
+	if !ok {
+		t.Fatalf("the op answered %v; want an error_message", obj)
+	}
+	return msg.Error()
+}
+
 // objects decodes the objects the op wrote.
 func (w *recordingWriter) objects(t *testing.T) []astral.Object {
 	t.Helper()
