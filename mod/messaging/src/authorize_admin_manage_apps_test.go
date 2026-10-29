@@ -103,7 +103,7 @@ func TestAdminManageAppsKeepsOriginRefusal(t *testing.T) {
 				if err != nil {
 					t.Fatalf("route: %v", err)
 				}
-				if got, want := w.refusal(t), astral.NewErrOriginNotAllowed(astral.OriginNetwork).Error(); got != want {
+				if got, want := w.refusal(t), astral.NewErrOriginNotAllowed(origin).Error(); got != want {
 					t.Fatalf("answered %q; want %q", got, want)
 				}
 				if n := len(authority.recorded()); n != 0 {
