@@ -3,3 +3,8 @@ start   = "one-node"
 nodes   = ["node1"]
 drivers = ["script"]
 timeout = 180
+after   = "bootstrap-user-software-key"
+local_only = "reads node1's astrald.log from its root on the host, and needs the 1 s external_registration_sweep_interval a local world renders"
+facts   = ["expires_at", "gone_identity", "granted_seconds", "kept_identity",
+           "lapsed_seconds", "lease_seconds", "leased_seconds",
+           "renewed_expires_at"]

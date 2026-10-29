@@ -9,13 +9,15 @@ Two kinds of validation, deliberately scoped differently:
   so an unrelated dangling start never breaks a targeted run.
 """
 import tomllib
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 ENVS = {"node", "netsim"}
 DRIVERS = {"script", "agent"}
 KEYS = {"env", "start", "saves", "mutates", "nodes", "steps", "drivers",
-        "timeout", "agent_timeout", "unlisted", "restart"}
+        "timeout", "agent_timeout", "unlisted", "restart",
+        # the planner's keys (lib/plan.py), beside the state-chain ones above
+        "after", "destroys", "ops", "local_only", "facts"}
 NULL = "null"
 
 # the walk value after a mutator that saves no state: nothing may follow it
@@ -37,11 +39,43 @@ class Test:
     agent_timeout: int
     unlisted: str | None
     restart: list
+    # the planner's keys: the test whose world this one continues (None: a
+    # fresh world), whether only its own descendants may follow it there, the
+    # VM operations before its driver, why it never enters a VM world, the
+    # facts its driver writes, and whether an operator can drive it
+    after: str | None = None
+    destroys: bool = False
+    ops: list = field(default_factory=list)
+    local_only: str | None = None
+    facts: list = field(default_factory=list)
+    prompt: bool = False
 
 
 def load_all(e2e_dir: Path) -> dict:
-    return {mf.parent.name: _parse(mf)
-            for mf in sorted(Path(e2e_dir).glob("*/test.toml"))}
+    all = {mf.parent.name: _parse(mf)
+           for mf in sorted(Path(e2e_dir).glob("*/test.toml"))}
+    _check_after(all)
+    return all
+
+
+def _check_after(all: dict) -> None:
+    """Every `after` names a test, and no chain of them loops.
+
+    why at load and not per selection: unlike a dangling start state, an
+    `after` naming nothing is a typo in one file, and the planner walks the
+    chain for any selection that reaches it.
+    """
+    for t in all.values():
+        seen, cur = {t.name}, t
+        while cur.after is not None:
+            if cur.after not in all:
+                raise ValueError(f"{cur.name}: after names no test "
+                                 f"{cur.after!r}")
+            if cur.after in seen:
+                raise ValueError(f"{t.name}: after chain loops at "
+                                 f"{cur.after!r}")
+            seen.add(cur.after)
+            cur = all[cur.after]
 
 
 def _parse(mf: Path) -> Test:
@@ -72,6 +106,17 @@ def _parse(mf: Path) -> Test:
     if stray:
         raise ValueError(f"{name}: restart names {stray}, which the roster "
                          f"{nodes} does not")
+    after = raw.get("after")
+    if after is not None and not (isinstance(after, str) and after):
+        raise ValueError(f"{name}: after must name a test")
+    if not isinstance(raw.get("destroys", False), bool):
+        raise ValueError(f"{name}: destroys must be true or false")
+    ops = _strings(name, raw, "ops")
+    facts = _strings(name, raw, "facts")
+    local_only = _reason(name, raw, "local_only")
+    if ops and local_only:
+        raise ValueError(f"{name}: a test with ops runs only in a VM world, "
+                         "so it cannot be local_only")
     return Test(name=name, dir=mf.parent, env=env,
                 start=raw.get("start", NULL),
                 saves=raw.get("saves") or None,
@@ -90,22 +135,39 @@ def _parse(mf: Path) -> Test:
                 # sitting unexecuted from the day it landed. The reason has to
                 # travel with the test, so removing the last suite entry that
                 # named it fails rather than silently retiring it.
-                unlisted=_unlisted(name, raw),
+                unlisted=_reason(name, raw, "unlisted"),
                 # why between driver and oracle: a driver leaves state on a
                 # node, and the oracle judges what the node holds after it
                 # boots again. A driver cannot relaunch a node itself — the
                 # executor owns the process, and a node it did not start
                 # reads to the runner as a dead one.
-                restart=restart)
+                restart=restart,
+                after=after,
+                # why ops imply it: an op reshapes the VM world in place
+                # (enter-nat, leave-lan), and nothing puts it back
+                destroys=bool(raw.get("destroys", False)) or bool(ops),
+                ops=ops,
+                local_only=local_only,
+                facts=facts,
+                prompt=(mf.parent / "prompt.md").is_file())
 
 
-def _unlisted(name: str, raw: dict) -> str | None:
-    """The reason no suite lists this test, or None when a suite must."""
-    if "unlisted" not in raw:
+def _strings(name: str, raw: dict, key: str) -> list:
+    """A key whose value is a list of non-empty strings, or absent."""
+    value = raw.get(key, [])
+    if not (isinstance(value, list)
+            and all(isinstance(v, str) and v.strip() for v in value)):
+        raise ValueError(f"{name}: {key} must be a list of non-empty strings")
+    return list(value)
+
+
+def _reason(name: str, raw: dict, key: str) -> str | None:
+    """A key whose value is a reason: absent, or a non-empty string."""
+    if key not in raw:
         return None
-    reason = raw["unlisted"]
+    reason = raw[key]
     if not isinstance(reason, str) or not reason.strip():
-        raise ValueError(f"{name}: unlisted must be a non-empty reason string")
+        raise ValueError(f"{name}: {key} must be a non-empty reason string")
     return reason.strip()
 
 

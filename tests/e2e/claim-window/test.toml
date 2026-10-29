@@ -3,3 +3,4 @@ start   = "null"
 nodes   = ["node1"]
 drivers = ["script"]
 timeout = 120
+facts   = ["claim_window"]

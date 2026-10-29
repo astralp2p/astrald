@@ -127,6 +127,81 @@ class TestLoad(ManifestCase):
             """)
 
 
+class TestPlannerKeys(ManifestCase):
+    def test_absent_keys_default(self):
+        t = self.all["smoke"]
+        self.assertEqual((t.after, t.destroys, t.ops, t.local_only, t.facts,
+                          t.prompt), (None, False, [], None, [], False))
+
+    def test_keys_parse(self):
+        self.add("vm-test", """
+            env = "netsim"
+            nodes = ["node1", "node2"]
+            after = "adopt-node"
+            ops = ["enable-tor node1 node2"]
+            facts = ["tor_link_networks"]
+        """)
+        t = self.all["vm-test"]
+        self.assertEqual(t.after, "adopt-node")
+        self.assertEqual(t.ops, ["enable-tor node1 node2"])
+        self.assertEqual(t.facts, ["tor_link_networks"])
+        self.assertTrue(t.destroys, "ops imply destroys")
+
+    def test_prompt_is_a_file_beside_the_manifest(self):
+        (self.root / "smoke" / "prompt.md").write_text("probe the node\n")
+        self.assertTrue(load_all(self.root)["smoke"].prompt)
+
+    def test_after_must_name_a_test(self):
+        with self.assertRaisesRegex(ValueError, "after names no test"):
+            self.add("orphan", """
+                env = "node"
+                nodes = ["node1"]
+                after = "adopt-nod"
+            """)
+
+    def test_an_after_loop_is_rejected(self):
+        write_test(self.root, "a", 'env = "node"\nnodes = ["n"]\nafter = "b"\n')
+        write_test(self.root, "b", 'env = "node"\nnodes = ["n"]\nafter = "a"\n')
+        with self.assertRaisesRegex(ValueError, "loops"):
+            load_all(self.root)
+
+    def test_key_types_are_checked(self):
+        for key, value, says in (("after", "1", "after must name"),
+                                 ("destroys", '"yes"', "destroys must be"),
+                                 ("facts", '"user_id"', "facts must be"),
+                                 ("facts", "[1]", "facts must be")):
+            with self.subTest(key=key, value=value):
+                with self.assertRaisesRegex(ValueError, says):
+                    self.add("typed", f"""
+                        env = "node"
+                        nodes = ["node1"]
+                        {key} = {value}
+                    """)
+
+    def test_local_only_is_a_reason(self):
+        with self.assertRaisesRegex(ValueError, "local_only must be"):
+            self.add("bare", """
+                env = "node"
+                nodes = ["node1"]
+                local_only = ""
+            """)
+
+    def test_ops_are_strings_and_never_local_only(self):
+        with self.assertRaisesRegex(ValueError, "ops must be"):
+            self.add("bad-ops", """
+                env = "netsim"
+                nodes = ["node1"]
+                ops = [1]
+            """)
+        with self.assertRaisesRegex(ValueError, "cannot be local_only"):
+            self.add("both", """
+                env = "netsim"
+                nodes = ["node1"]
+                ops = ["enable-tor node1"]
+                local_only = "reads a host path"
+            """)
+
+
 class TestResolve(ManifestCase):
     def test_full_run_order_and_kinds(self):
         # smoke builds nothing, so it runs before the producer at its depth

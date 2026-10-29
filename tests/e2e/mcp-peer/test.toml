@@ -3,3 +3,7 @@ start   = "two-nodes"
 nodes   = ["node1", "node2"]
 drivers = ["script"]
 timeout = 180
+after   = "adopt-node"
+local_only = "calls node1's MCP server at its loopback mcp_url"
+facts   = ["node1", "node2", "agent", "pushed", "control_links",
+           "control_info", "tools", "calls", "app_heard"]

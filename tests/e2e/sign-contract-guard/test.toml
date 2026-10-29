@@ -3,3 +3,5 @@ start   = "two-nodes"
 nodes   = ["node1", "node2"]
 drivers = ["script"]
 timeout = 180
+after   = "adopt-node"
+facts   = ["sign_guard"]

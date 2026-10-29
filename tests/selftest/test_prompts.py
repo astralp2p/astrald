@@ -12,6 +12,7 @@ property of three files, and checking it here costs milliseconds instead of a
 forty-minute VM run per test.
 """
 import re
+import tomllib
 import unittest
 from pathlib import Path
 
@@ -64,8 +65,8 @@ class TestPrompts(unittest.TestCase):
         # the mirror of the rule below: declaring the driver without a prompt
         # is a run that dies in the executor rather than in a verdict.
         for d in sorted(E2E.iterdir()):
-            manifest = (d / "test.toml").read_text()
-            if '"agent"' in manifest:
+            manifest = tomllib.loads((d / "test.toml").read_text())
+            if "agent" in manifest.get("drivers", []):
                 self.assertTrue((d / "prompt.md").exists(),
                                 f"{d.name} declares the agent driver, no prompt.md")
 

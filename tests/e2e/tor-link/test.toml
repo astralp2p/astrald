@@ -11,3 +11,7 @@ steps   = ["vm:enable-tor node1 node2",
            "driver"]
 drivers = ["script", "agent"]
 timeout = 600
+after   = "adopt-node"
+destroys = true
+ops     = ["enable-tor node1 node2", "leave-lan node2 --peer node1"]
+facts   = ["tor_link_networks"]

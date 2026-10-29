@@ -8,3 +8,6 @@ mutates = true
 nodes   = ["node1"]
 drivers = ["script"]
 timeout = 120
+after   = "adopt-node"
+destroys = true
+facts   = ["held_id", "unheld_id", "purged_ids"]
