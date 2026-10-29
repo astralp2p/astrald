@@ -28,6 +28,10 @@ func (mod *Module) OpListMessages(ctx *astral.Context, q *routing.IncomingQuery,
 	ch := channel.New(q.AcceptRaw(), channel.WithOutputFormat(args.Out))
 	defer ch.Close()
 
+	if refusesOrigin(q) {
+		return ch.Send(astral.NewErrOriginNotAllowed(q.Origin()))
+	}
+
 	mailbox, ok := mod.admitsListing(ctx, q, args.Mailbox)
 	if !ok {
 		return ch.Send(auth.ErrNotPermitted)
@@ -60,19 +64,15 @@ func (mod *Module) OpListMessages(ctx *astral.Context, q *routing.IncomingQuery,
 }
 
 // admitsListing answers the mailbox a listing reads, and whether the query is
-// served. A query from an origin this module does not serve is refused. With
-// no name, or a name for the caller, the mailbox is the caller's own and the
-// caller must be hosted here, as for every mail operation. Any other name makes
-// the listing a delegated read — see admitsReader.
+// served. With no name, or a name for the caller, the mailbox is the caller's
+// own and the caller must be hosted here, as for every mail operation. Any
+// other name makes the listing a delegated read — see admitsReader.
 //
 // why a name that resolves to nobody is refused and not answered an error: a
 // mailbox this node cannot name is one it does not host, and the refusal of a
 // delegated read carries no bytes.
 func (mod *Module) admitsListing(ctx *astral.Context, q *routing.IncomingQuery, name string) (*astral.Identity, bool) {
 	caller := q.Caller()
-	if refusesOrigin(q) {
-		return nil, false
-	}
 	if name == "" {
 		return caller, mod.hosts(caller)
 	}

@@ -50,9 +50,9 @@ func mailOps() []mailOp {
 // Every mail operation refuses a query off a link or from an MCP agent, and a
 // caller whose mailbox this node does not host — an unhosted identity, the zero
 // identity and the node's own — without asking the authority anything. Each
-// rejects the query before it accepts it, except read_messages for an unhosted
-// caller: it accepts, reads the request, and answers that the caller is not a
-// messaging participant.
+// answers the origin refusal for the first two and not permitted for the rest,
+// except read_messages for an unhosted caller: it reads the request, and
+// answers that the caller is not a messaging participant.
 func TestAMailOperationServesOnlyALocalParticipant(t *testing.T) {
 	for _, op := range mailOps() {
 		mod := testMessagingModule(t)
@@ -64,12 +64,13 @@ func TestAMailOperationServesOnlyALocalParticipant(t *testing.T) {
 			name   string
 			caller *astral.Identity
 			origin string
+			want   astral.Error
 		}{
-			{"network origin", participant, astral.OriginNetwork},
-			{"mcp origin", participant, astral.OriginMCP},
-			{"unhosted caller", unhosted, astral.OriginLocal},
-			{"zero caller", &astral.Identity{}, astral.OriginLocal},
-			{"node caller", mod.node.Identity(), astral.OriginLocal},
+			{"network origin", participant, astral.OriginNetwork, astral.NewErrOriginNotAllowed(astral.OriginNetwork)},
+			{"mcp origin", participant, astral.OriginMCP, astral.NewErrOriginNotAllowed(astral.OriginMCP)},
+			{"unhosted caller", unhosted, astral.OriginLocal, auth.ErrNotPermitted},
+			{"zero caller", &astral.Identity{}, astral.OriginLocal, auth.ErrNotPermitted},
+			{"node caller", mod.node.Identity(), astral.OriginLocal, auth.ErrNotPermitted},
 		} {
 			t.Run(op.name+"/"+c.name, func(t *testing.T) {
 				before := len(authority.questions())
@@ -77,6 +78,11 @@ func TestAMailOperationServesOnlyALocalParticipant(t *testing.T) {
 				res := tryOp(t, op.op(mod), originQuery(c.caller, op.name+op.args, c.origin), op.body)
 
 				checkUnhosted(t, op, res, c.caller == unhosted)
+				if !(op.answersUnhosted && c.caller == unhosted) {
+					if got := res.objs[0].(*astral.ErrorMessage).Error(); got != c.want.Error() {
+						t.Fatalf("%s answered %q; want %q", op.name, got, c.want)
+					}
+				}
 				if asked := authority.questions()[before:]; len(asked) != 0 {
 					t.Fatalf("%s asked the authority %v about a refused caller; want nothing", op.name, asked)
 				}

@@ -108,12 +108,12 @@ tools call the `messaging.Module` methods under the bearer's identity.
 * `send_message`, `wait` and `archive` refuse a caller whose own mailbox this
   node does not host. `list_messages` and `read_messages` refuse such a caller
   on its own mailbox.
-* `send_message`, `list_messages`, `wait` and `archive` reject a refused query
-  before they accept it.
-* `read_messages` rejects a network or MCP origin, the zero identity and this
-  node before it accepts the query. `read_messages` answers
-  `not a messaging participant` to a caller whose own mailbox this node does
-  not host, once the request arrives.
+* `send_message`, `list_messages`, `read_messages`, `wait` and `archive` accept
+  the query first. A network or MCP origin is answered
+  `origin not allowed: <origin>`. A refused caller is answered `not permitted`.
+* `read_messages` answers `not permitted` to the zero identity and this node.
+  `read_messages` answers `not a messaging participant` to a caller whose own
+  mailbox this node does not host, once the request arrives.
 * `send_message`, `wait` and `archive` act on the caller's own boxes. No
   argument names an owner.
 * `list_messages` and `read_messages` act on the caller's own boxes unless they
