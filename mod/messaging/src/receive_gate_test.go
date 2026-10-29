@@ -10,22 +10,19 @@ import (
 )
 
 // TestReceiveGateRefusesWhatTheAuthorityRefuses: the participant's mailbox is
-// hosted here, and its own side turns the caller away. The answer is a
-// rejection carrying a code and not a route miss, which is what lets the caller
-// tell being refused from finding nobody.
+// hosted here, and its own side turns the caller away. The answer is
+// messaging.ErrNotAdmitted on an accepted delivery and not a route miss, which
+// is what lets the caller tell being refused from finding nobody.
 func TestReceiveGateRefusesWhatTheAuthorityRefuses(t *testing.T) {
 	auth := &fakeAuth{allow: false}
 	mod := testRouterModuleWithAuth(t, auth)
 	participant := hostedParticipant(t, mod)
 
-	_, err := mod.RouteQuery(mod.ctx, inFlight(participant, messaging.MethodMessage), &bufWriteCloser{})
+	msg := &messaging.Message{ID: messaging.NewMessageID(), Content: "hello"}
+	answer := routeAndAnswer(t, mod, inFlight(participant, messaging.MethodMessage), msg)
 
-	var rejected *astral.ErrRejected
-	if !errors.As(err, &rejected) {
-		t.Fatalf("route: got %v, want a rejection", err)
-	}
-	if rejected.Code != messaging.RejectNotAdmitted {
-		t.Fatalf("reject code: got %v, want %v", rejected.Code, messaging.RejectNotAdmitted)
+	if e, ok := answer.(astral.Error); !ok || !errors.Is(e, messaging.ErrNotAdmitted) {
+		t.Fatalf("answered %v; want %v", answer, messaging.ErrNotAdmitted)
 	}
 }
 

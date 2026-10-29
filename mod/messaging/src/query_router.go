@@ -6,6 +6,7 @@ import (
 	"github.com/astralp2p/astral-go/api/auth"
 	"github.com/astralp2p/astral-go/api/messaging"
 	"github.com/astralp2p/astral-go/astral"
+	"github.com/astralp2p/astral-go/astral/channel"
 	"github.com/astralp2p/astral-go/lib/query"
 )
 
@@ -25,12 +26,23 @@ func (mod *Module) RouteQuery(ctx *astral.Context, q *astral.InFlightQuery, w io
 		return query.RouteNotFound()
 	}
 
-	// why before hosting, and a rejection: a query from outside a send path —
+	// why before hosting, and a refusal: a query from outside a send path —
 	// see fromSendPath — to a target hosted elsewhere crosses a link, where the
 	// far node cannot tell it from a send. This node is the only place it is
 	// refused.
 	if !fromSendPath(q) {
-		return query.Reject()
+		origin := astral.OriginLocal
+		if q.IsMCP() {
+			origin = astral.OriginMCP
+		}
+		return query.Accept(q, w, func(conn astral.Conn) {
+			defer conn.Close()
+			ch := channel.New(conn)
+			// why the request is read first: the caller writes it before it reads
+			// the answer, and an unread write into this conn never returns.
+			_, _ = ch.Receive()
+			_ = ch.Send(astral.NewErrOriginNotAllowed(origin))
+		})
 	}
 
 	// why hosting before the correspondent: only a mailbox this node hosts is
@@ -51,16 +63,15 @@ func (mod *Module) RouteQuery(ctx *astral.Context, q *astral.InFlightQuery, w io
 	// why the actor is the target and not the caller: auth walks the contracts
 	// the actor is subject to, and taking a message is this participant's act.
 	//
-	// why a rejection and not a route miss: the target's mailbox is hosted
-	// here, so the answer is terminal, and a code is what tells a sender a
-	// refusal from an absence. Which of the authority's reasons it was does not
-	// travel: the authority answers one bit and the node holds no more.
-	if !mod.Auth.Authorize(ctx, &messaging.ReceiveAction{
+	// why an answer and not a route miss: the target's mailbox is hosted here,
+	// so the refusal is terminal, and an accepted delivery answered
+	// messaging.ErrNotAdmitted is what tells a sender a refusal from an absence.
+	// Which of the authority's reasons it was does not travel: the authority
+	// answers one bit and the node holds no more.
+	admitted := mod.Auth.Authorize(ctx, &messaging.ReceiveAction{
 		Action: auth.NewAction(q.Target),
 		FromID: q.Caller,
-	}) {
-		return query.RejectWithCode(messaging.RejectNotAdmitted)
-	}
+	})
 
-	return mod.acceptMessage(q, w)
+	return mod.acceptMessage(q, w, admitted)
 }
