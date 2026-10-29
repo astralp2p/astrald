@@ -45,6 +45,20 @@ class TestReport(unittest.TestCase):
                                 phase="verify")), "r")
         self.assertIn("### smoke — verify\n", same)
 
+    def test_a_run_of_several_worlds_names_each_tests_world(self):
+        text = render(doc(entry("smoke", "pass", world="w0"),
+                          entry("bootstrap", "pass", kind="prereq",
+                                world="w1"),
+                          entry("hold-purge", "pass", world="w1")), "r")
+        self.assertIn("| Test | World | Env |", text)
+        self.assertIn("| hold-purge | w1 | node |", text)
+        one = render(doc(entry("smoke", "pass", world="w0")), "r")
+        self.assertNotIn("World", one)
+        skips = render(doc(entry("smoke", "pass", world="w0"),
+                           entry("hold-purge", "skipped", world="w1",
+                                 reason="adopt-node failed in w1")), "r")
+        self.assertIn("- `hold-purge` (w1) — adopt-node failed in w1", skips)
+
     def test_skip_reasons_are_listed(self):
         text = render(doc(entry("bootstrap", "fail", failure_kind="verify"),
                           entry("adopt-node", "skipped",

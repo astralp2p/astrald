@@ -54,13 +54,13 @@ def main() -> int:
                     metavar="fresh|stage:<name>|attach",
                     help="where the machines come from (default: fresh)")
     ap.add_argument("--keep", action="store_true",
-                    help="leave the world running after the run")
+                    help="leave the run's last world running after the run")
     ap.add_argument("--plan", action="store_true",
                     help="print the worlds the selection plans into and exit, "
                          "starting nothing")
     ap.add_argument("--isolate", action="store_true",
-                    help="plan every selected test into a world of its own "
-                         "(only --plan honours it, until runs follow the plan)")
+                    help="run every selected test in a world of its own "
+                         "(a VM run refuses it, until VM runs follow the plan)")
     ap.add_argument("--prereqs", choices=["script", "agent"], default="script",
                     help="who drives prereqs and replays under --driver agent "
                          "(only --plan honours it, until runs follow the plan)")

@@ -11,6 +11,7 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
 from unittest import mock
 
 from lib import manifest, runner
@@ -73,12 +74,16 @@ class FakeExecutor:
 
 
 def write_tree(root: Path) -> dict:
+    producers = {saves: name for name, (_, saves, _, _) in TREE.items()
+                 if saves}
     for name, (start, saves, fails, restarts) in TREE.items():
         d = root / name
         d.mkdir(parents=True)
         lines = [f'env = "node"', f'start = "{start}"', 'nodes = ["node1"]']
         if saves:
             lines.append(f'saves = "{saves}"')
+        if start != "null":
+            lines.append(f'after = "{producers[start]}"')
         if restarts:
             lines.append('restart = ["node1"]')
         (d / "test.toml").write_text("\n".join(lines) + "\n")
@@ -99,6 +104,9 @@ def run_tree(tmp: Path, selection: list, ex) -> Path:
             mock.patch.object(runner, "ensure_binary",
                               return_value=(tmp / "astrald", "abc")), \
             mock.patch.object(runner, "_executor", lambda *_: ex), \
+            mock.patch.object(runner, "_local_world", lambda *_: ex), \
+            mock.patch.object(runner, "lease_ports",
+                              return_value=SimpleNamespace(base=0)), \
             contextlib.redirect_stdout(io.StringIO()), \
             contextlib.redirect_stderr(io.StringIO()):
         runner.main(args)

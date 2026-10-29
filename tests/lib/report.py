@@ -81,15 +81,19 @@ def render(doc: dict, run_dir_name: str) -> str:
     lines += [""]
 
     lines += ["## Tests", ""]
+    # why only for several: one world says nothing a reader needs, and runs
+    # from before worlds carry none
+    worlds = len({e.get("world") for e in entries}) > 1
     rows = []
     for e in entries:
         note = e.get("failure_kind", "")
         if e["kind"] == "prereq":
             note = (note + " " if note else "") + "_(prereq)_"
-        rows.append([e["test"], e["env"], e["driver"],
-                     STATUS_MARK[e["status"]], f"{e['duration_s']:.2f} s",
-                     note])
-    head = ["Test", "Env", "Driver", "Result", "Time", "Note"]
+        rows.append([e["test"]] + ([e.get("world", "")] if worlds else [])
+                    + [e["env"], e["driver"], STATUS_MARK[e["status"]],
+                       f"{e['duration_s']:.2f} s", note])
+    head = (["Test"] + (["World"] if worlds else [])
+            + ["Env", "Driver", "Result", "Time", "Note"])
     # why: an all-green run has nothing to note, and an empty trailing column
     # reads as a missing value rather than as "nothing to say".
     if not any(r[-1] for r in rows):
@@ -116,8 +120,10 @@ def render(doc: dict, run_dir_name: str) -> str:
         lines += ["## Skipped", "",
                   "A skipped test never ran, so the run reports no verdict "
                   "about it.", ""]
-        lines += [f"- `{e['test']}`" + (f" — {e['reason']}" if e.get("reason")
-                                        else "") for e in skipped]
+        lines += [f"- `{e['test']}`"
+                  + (f" ({e['world']})" if worlds and e.get("world") else "")
+                  + (f" — {e['reason']}" if e.get("reason") else "")
+                  for e in skipped]
         lines += [""]
 
     lines += ["## Artifacts", "",

@@ -66,6 +66,28 @@ class TestSummary(unittest.TestCase):
                                   "expel-node": ("skipped",
                                                  "20261029T090000Z")})
 
+    def test_a_test_row_outranks_its_replays_in_the_same_run(self):
+        summary = load_summary()
+        entries = [record("bootstrap", "fail", failure_kind="verify",
+                          world="w0", phase="verify"),
+                   record("bootstrap", "pass", kind="prereq", world="w1",
+                          phase="verify", artifacts="bootstrap.w1/"),
+                   record("adopt", "pass", kind="prereq", world="w1",
+                          phase="verify")]
+        with tempfile.TemporaryDirectory() as tmp:
+            d = Path(tmp) / "20261029T100000Z"
+            d.mkdir()
+            (d / "results.json").write_text(json.dumps(
+                {"wall_time_s": 1.0, "entries": entries}))
+            with mock.patch.object(summary, "RESULTS", Path(tmp)):
+                passes = summary.collect(include_failures=False)
+                every = summary.collect(include_failures=True)
+        # a replay's pass does not stand in for the test's own fail, and a
+        # test the run only replayed still counts once
+        self.assertEqual(sorted(k[0] for k in passes), ["adopt"])
+        self.assertEqual({k[0]: e["status"] for k, e in every.items()},
+                         {"bootstrap": "fail", "adopt": "pass"})
+
 
 if __name__ == "__main__":
     unittest.main()

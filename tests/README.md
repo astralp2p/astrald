@@ -6,7 +6,7 @@ One command, real daemons, deterministic verdicts:
     ./tests/run main.suite          # a named suite, in its listed order
     ./tests/run adopt-node          # one test + the prereq prefix it needs
     ./tests/run smoke adopt-node    # several tests
-    ./tests/run adopt-node --keep   # leave the world running afterwards
+    ./tests/run adopt-node --keep   # leave the last world running afterwards
     ./tests/run smoke --target attach   # judge a daemon that is already up
 
 Design: https://wiki.satforge.dev/doc/integration-testing-system-tAKjyvbcHo
@@ -136,6 +136,11 @@ that replays the lineage; one destroyer may end the world, and every other
 destroyer forks. `*` marks a prereq. The plans of the shipped suites are
 pinned under `selftest/golden/`.
 
+A run whose worlds are all local runs exactly this plan, world after world,
+each from fresh nodes: `--isolate` gives every selected test its own world,
+and a fork replays its prereqs by script. A run with a VM world, `--target
+attach`, `stage:` or `--driver agent` still runs the walk below in one world.
+
 ## States
 
 Tests chain through named states — `null → one-node → two-nodes → …` — one
@@ -159,11 +164,15 @@ in `lib/results.py`): a header — `astrald_ref`, `astral_py_ref`, `host`,
 (the world broke). Every record also names its `world`, the `phase` it
 stopped at (`prepare`, `driver`, `restart`, `verify`, or `alive` when the
 world died under it) and, when skipped, the `reason`. Per-test driver and
-oracle logs sit beside them; each
-node's astrald log lands under `results/<stamp>/session/`. In env `node`
-the nodes run from the system temp directory, which `session/` links to
-until teardown copies their state back: a node's SQLite fsyncs on a busy SD
-card stall for tens of seconds, and a tmpfs temp directory does not.
+oracle logs sit beside them, in `results/<stamp>/<test>/`; a test the run
+already ran, replayed in a later world, writes `<test>.w<N>/` instead. Each
+local world's nodes, with their astrald logs, land under
+`results/<stamp>/w<N>/session/`. The nodes run from the system temp
+directory, which `session/` links to until the world closes and copies their
+state back: a node's SQLite fsyncs on a busy SD card stall for tens of
+seconds, and a tmpfs temp directory does not. A world whose node died skips
+the rest of its steps, and a test whose `after` chain failed in its world is
+skipped; each skip's `reason` names the test that broke.
 
 A test reads one file, its **session view**: `results/<stamp>/<test>/session.json`,
 named by `ASTRAL_TESTS_SESSION`. It holds `run` (the stamp), `nodes` and
@@ -172,10 +181,10 @@ named by `ASTRAL_TESTS_SESSION`. It holds `run` (the stamp), `nodes` and
 MCP port, a VM no restart count. The runner is the view's only writer; it
 writes it before the driver and again before the oracle, so a restart shows.
 
-A driver sees the facts of the tests its start state was built from
-(`manifest.lineage`) and nothing a sibling wrote; its oracle also sees what
-its own driver wrote. A test's facts join the run's **world record**,
-`results/<stamp>/w0/world.json`, only once its oracle passes. The record
+A driver sees the facts of the tests on its `after` chain that passed in
+its own world, and nothing a sibling wrote; its oracle also sees what its
+own driver wrote. A test's facts join its world's **world record**,
+`results/<stamp>/w<N>/world.json`, only once its oracle passes. The record
 also holds the nodes as last seen and the history of every test that ran in
 the world, in order.
 

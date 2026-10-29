@@ -1,7 +1,7 @@
-"""Orchestration: selection, suites, execution through one executor, results.
+"""Orchestration: selection, suites, execution world by world, results.
 
-The runner owns run state: the world record, every test's facts, and the
-session view each driver and oracle reads. An executor owns machines only.
+The runner owns run state: each world's record, every test's facts, and the
+session view each driver and oracle reads. A world owns machines only.
 """
 import json
 import os
@@ -11,6 +11,7 @@ import sys
 import time
 import tomllib
 import traceback
+from dataclasses import dataclass
 from pathlib import Path
 
 from astral.client import ENDPOINT_VARS, TOKEN_VARS
@@ -20,17 +21,16 @@ from lib import plan as planner
 from lib.build import ensure_binary, git_ref
 from lib.executors import ExecutorError
 from lib.executors.attach import AttachExecutor
-from lib.executors.local import LocalExecutor
 from lib.executors.netsim import NetsimExecutor
 from lib.nodeconfig import PortsBusy, lease_ports
 from lib.record import WorldRecord
 from lib.results import RunHeader, RunResults, fresh_run_dir
+from lib.worlds.local import LocalWorld
 
 TESTS = Path(__file__).resolve().parent.parent
 REPO = TESTS.parent
 RESULTS = TESTS / "results"
 DEFAULT_SUITE = "main.suite"
-WORLD = "w0"          # one world per run, until the planner splits a run
 
 
 def _run_step(py: str, script: Path, log: Path, env: dict, timeout: int) -> int:
@@ -89,8 +89,35 @@ def _perform(ex, t, driver: str, art: Path, view) -> tuple:
     return ("pass", None, phase) if rc == 0 else ("fail", "verify", phase)
 
 
-def _entry(t, kind: str, env: str, driver: str) -> dict:
-    """The fields every record of a test carries, whatever its status.
+@dataclass
+class Step:
+    """One step of the run, as the runner executes it."""
+    world: str
+    test: object        # manifest.Test
+    kind: str           # "test", or "prereq": run to build what a test continues
+    dir: str            # its artifact directory under results/<stamp>/
+
+
+def layout(units: list) -> list:
+    """Every step of a run of [(world, [(Test, kind)])], in order, each with
+    the artifact directory it writes.
+
+    why a test's first run keeps results/<stamp>/<test>/: its session view
+    then sits two levels under results/, and fs-watch and discover-swarm
+    read the run's stamp from that path. A replay of a test the run already
+    ran takes <test>.<world> beside it, at the same depth.
+    """
+    seen, out = set(), []
+    for world, steps in units:
+        for t, kind in steps:
+            out.append(Step(world, t, kind,
+                            t.name if t.name not in seen else f"{t.name}.{world}"))
+            seen.add(t.name)
+    return out
+
+
+def _entry(s: Step, env: str, driver: str) -> dict:
+    """The fields every record of a step carries, whatever its status.
 
     why env is the run's: a record states the env the test RAN in, not the
     one its manifest asks for as a minimum. A node test lifted into VMs — by
@@ -98,8 +125,8 @@ def _entry(t, kind: str, env: str, driver: str) -> dict:
     a record that said otherwise would hide the one property the design is
     built on.
     """
-    return dict(test=t.name, kind=kind, env=env, driver=driver, world=WORLD,
-                artifacts=f"{t.name}/")
+    return dict(test=s.test.name, kind=s.kind, env=env, driver=driver,
+                world=s.world, artifacts=f"{s.dir}/")
 
 
 def _skip(results, entry: dict, reason: str, phase: str = "prepare") -> None:
@@ -107,7 +134,7 @@ def _skip(results, entry: dict, reason: str, phase: str = "prepare") -> None:
 
     note: a skip never joins the world record's history — nothing ran.
     """
-    art = results.dir / entry["test"]
+    art = results.dir / entry["artifacts"]
     art.mkdir(parents=True, exist_ok=True)
     with (art / "driver.log").open("a") as f:
         f.write(f"[runner] skipped: {reason}\n")
@@ -138,13 +165,13 @@ def _teardown(ex, keep: bool) -> BaseException | None:
     return None
 
 
-def _finish(results, ex) -> int:
+def _finish(results, pushed: list) -> int:
     """Write results.json and report.md and print the verdict: the run's
     exit code."""
     # why: a VM verdict is about the code under test only on the machines
     # that run it, so the header names them
-    if ex.pushed:
-        results.header["pushed"] = ",".join(ex.pushed)
+    if pushed:
+        results.header["pushed"] = ",".join(pushed)
     code = results.finalize()
     print(f"\n{report.summary_line(results.doc)}")
     print(f"run: report at {results.dir / 'report.md'}")
@@ -250,18 +277,25 @@ def print_plan(tests: dict, args) -> int:
         print("run: --plan plans fresh and attach runs, not a pinned stage",
               file=sys.stderr)
         return 2
-    selection = args.selection or [DEFAULT_SUITE]
     try:
-        listed = selected_suite(selection)
-        worlds = planner.plan(tests, listed or selection, listed or (),
-                              isolate=args.isolate, driver=args.driver,
-                              target=args.target,
-                              prereqs_agent=args.prereqs == "agent")
+        worlds = plan_worlds(tests, args)
     except ValueError as e:
         print(f"run: {e}", file=sys.stderr)
         return 2
     print(planner.render(worlds), end="")
     return 0
+
+
+def plan_worlds(tests: dict, args) -> list:
+    """The worlds the planner makes of the CLI's selection: a suite's tests,
+    with its listing as the order among siblings, or the tests named."""
+    selection = args.selection or [DEFAULT_SUITE]
+    listed = selected_suite(selection)
+    return planner.plan(tests, listed or selection, listed or (),
+                        isolate=getattr(args, "isolate", False),
+                        driver=args.driver, target=args.target,
+                        prereqs_agent=getattr(args, "prereqs",
+                                              "script") == "agent")
 
 
 def _reject_unbuilt(args, plan: list) -> str | None:
@@ -320,17 +354,149 @@ def run_env(plan: list, driver: str = "script",
     return "netsim" if any(t.env == "netsim" for t in selected) else "node"
 
 
-def _executor(args, plan, dir, binary, ports, ref):
-    """Where the machines come from — orthogonal to env and driver."""
+def _executor(args, binary, ref):
+    """The machines of a run the plan does not drive yet: an attached daemon,
+    a pinned stage, or a simulation."""
     if args.target == "attach":
         return AttachExecutor()
+    ex = NetsimExecutor(binary, ref)
     if args.target.startswith("stage:"):
-        ex = NetsimExecutor(binary, ref)
         ex.pinned = args.target.split(":", 1)[1]
-        return ex
-    if run_env(plan, args.driver, args.target) == "netsim":
-        return NetsimExecutor(binary, ref)
-    return LocalExecutor(dir, binary, lease_ports(**ports), keep=args.keep)
+    return ex
+
+
+def _local_world(dir: Path, binary: Path, port_base: int, keep: bool):
+    """A fresh local world, its node roots under dir."""
+    return LocalWorld(dir, binary, port_base, keep=keep)
+
+
+def local_plan(tests: dict, args) -> list | None:
+    """The worlds a fresh scripted run plans into, when every one of them is
+    local; None when the run takes the executor path instead.
+
+    todo: child 7 runs VM worlds from the plan, and child 8 attach and the
+    agent driver; the executor path goes with them.
+    """
+    if getattr(args, "prereqs", "script") != "script":
+        # why refused rather than ignored: the run would drive its prereqs
+        # by script and read as though an operator had
+        raise ValueError("--prereqs takes effect with --plan only, until "
+                         "agent runs follow the plan")
+    if args.target != "fresh" or args.driver != "script":
+        return None
+    worlds = plan_worlds(tests, args)
+    return worlds if all(w.kind == "local" for w in worlds) else None
+
+
+def legacy_plan(tests: dict, args) -> list:
+    """[(Test, kind)] for the executor path, or ValueError naming why the
+    selection cannot run there."""
+    if getattr(args, "isolate", False):
+        # why refused rather than ignored: a run that silently shared a world
+        # would read as an isolated verdict it never was
+        raise ValueError("--isolate runs local worlds only, until VM worlds "
+                         "follow the plan")
+    plan = plan_for(tests, args.selection)
+    if args.target.startswith("stage:"):
+        # why: naming a stage asserts the world already stands where the
+        # selection starts, so building its prefix would rebuild what the
+        # operator just said is there. Attach makes the same assertion and
+        # refuses instead; a stage is disposable, so here the prefix is
+        # simply not run.
+        plan = [(t, kind) for t, kind in plan if kind == "test"]
+        if not plan:
+            raise ValueError("nothing to run against a pinned stage")
+    unbuilt = _reject_unbuilt(args, plan)
+    if unbuilt:
+        raise ValueError(unbuilt)
+    return plan
+
+
+class _Run:
+    """What the world loop shares across a run's worlds."""
+
+    def __init__(self, args, tests: dict, results, env: str):
+        self.args, self.tests, self.results, self.env = args, tests, results, env
+        self.pushed = []
+        self.torn = None          # the first world close that raised
+
+    def world(self, name: str, steps: list, ex, keep: bool) -> None:
+        """Run one world's steps on ex, then close it."""
+        record = WorldRecord(self.results.dir, name)
+        try:
+            self._steps(steps, ex, record)
+        finally:
+            # why before the close: a closed world reports no nodes, and a
+            # kept one is read back from this record
+            _note_nodes(record, ex)
+            self.pushed += [vm for vm in ex.pushed if vm not in self.pushed]
+            torn = _teardown(ex, keep)
+            self.torn = self.torn or torn
+            if keep:
+                roots = self.results.dir / name / "session"
+                print(f"run: --keep, world {name} left up; its nodes are in "
+                      f"{record.path}"
+                      + (f", node roots and logs under {roots}"
+                         if roots.exists() else ""), file=sys.stderr)
+
+    def _steps(self, steps: list, ex, record: WorldRecord) -> None:
+        status, died_at = {}, None
+        for s in steps:
+            entry = _entry(s, self.env, self.args.driver)
+            # why: a dead node voids every later verdict in its world, and a
+            # test whose lineage did not pass stands on a world never built
+            reason = (f"world {s.world} died at {died_at}" if died_at
+                      else self._blocked(s, status))
+            if reason:
+                _skip(self.results, entry, reason)
+                status[s.test.name] = "skipped"
+                continue
+            status[s.test.name], died = self._step(s, ex, record, entry)
+            died_at = died_at or (s.test.name if died else None)
+
+    def _blocked(self, s: Step, status: dict) -> str | None:
+        """Why s cannot run: the first of its lineage that ran in this world
+        and did not pass. A lineage test this world never ran — a pinned
+        stage stands past it — blocks nothing."""
+        for name in planner.chain(self.tests, s.test.name)[:-1]:
+            if status.get(name, "pass") != "pass":
+                return f"{name} failed in {s.world}"
+        return None
+
+    def _step(self, s: Step, ex, record: WorldRecord, entry: dict) -> tuple:
+        """(status, whether the world died) of one step, recorded."""
+        t = s.test
+        art = self.results.dir / s.dir
+        art.mkdir(parents=True, exist_ok=True)
+        t0 = time.monotonic()
+        lineage = planner.chain(self.tests, t.name)[-2::-1]   # nearest first
+        env = dict(driver_env(art / "session.json", self.args.target),
+                   ASTRAL_TESTS_FACTS_OUT=str(art / "facts.json"))
+        driven = {}
+
+        def view(phase: str) -> dict:
+            # why lineage only: a test sees the facts of the tests its world
+            # was built by, never a sibling's. Its oracle also sees its own
+            # driver's, read once before the oracle runs, and those are what
+            # join the record on a pass.
+            facts = record.facts_of(lineage)
+            if phase == "verify":
+                driven.update(own_facts(art / "facts.json"))
+                facts |= driven
+            write_view(art / "session.json", record.run, ex.nodes(), facts)
+            return env
+
+        status, fk, phase = _perform(ex, t, self.args.driver, art, view)
+        died = ex.broken()
+        if died and fk != "environment":
+            # why: a dead daemon voids any verdict, even a nominal pass
+            status, fk, phase = "fail", "environment", "alive"
+        self.results.record(**entry, status=status, failure_kind=fk,
+                            phase=phase, duration_s=time.monotonic() - t0)
+        record.add(t.name, s.kind, status, driven if status == "pass" else {})
+        if status == "pass" and t.saves:
+            ex.save(t.saves)
+        return status, bool(died)
 
 
 def main(args) -> int:
@@ -343,33 +509,24 @@ def main(args) -> int:
         return 2
     if getattr(args, "plan", False):
         return print_plan(tests, args)
-    if getattr(args, "isolate", False) or getattr(args, "prereqs",
-                                                   "script") != "script":
-        # why refused rather than ignored: a run that silently shared a world
-        # would read as an isolated verdict it never was
-        print("run: --isolate and --prereqs take effect with --plan only, "
-              "until runs follow the plan", file=sys.stderr)
-        return 2
     try:
-        plan = plan_for(tests, args.selection)
+        worlds = local_plan(tests, args)
+        legacy = legacy_plan(tests, args) if worlds is None else None
     except ValueError as e:
         print(f"run: {e}", file=sys.stderr)
         return 2
-    if args.target.startswith("stage:"):
-        # why: naming a stage asserts the world already stands where the
-        # selection starts, so building its prefix would rebuild what the
-        # operator just said is there. Attach makes the same assertion and
-        # refuses instead; a stage is disposable, so here the prefix is
-        # simply not run.
-        plan = [(t, kind) for t, kind in plan if kind == "test"]
-        if not plan:
-            print("run: nothing to run against a pinned stage", file=sys.stderr)
-            return 2
-
-    unbuilt = _reject_unbuilt(args, plan)
-    if unbuilt:
-        print(f"run: {unbuilt}", file=sys.stderr)
-        return 2
+    if legacy is None:
+        units = [(w.name, [(tests[s.test], s.kind) for s in w.steps])
+                 for w in worlds]
+        env_of_run = "node"
+    else:
+        # note: the executor path runs through the same world loop, so it
+        # takes the loop's rules — a lineage skip names the test that failed,
+        # broken() is read after every step, environment failures included,
+        # and a world that died skips the rest of itself. Deliberate: child 7
+        # deletes the VM executor path, and attach's broken() is always empty.
+        units = [("w0", legacy)]
+        env_of_run = run_env(legacy, args.driver, args.target)
 
     if args.target == "attach":
         binary, ref = None, git_ref(REPO)     # the daemon is already running
@@ -385,83 +542,62 @@ def main(args) -> int:
         selection=" ".join(args.selection) or DEFAULT_SUITE,
         target=args.target))
 
-    env_of_run = run_env(plan, args.driver, args.target)
-    try:
-        ex = _executor(args, plan, run_dir / "session", binary,
-                       cfg["ports"], ref)
-    except PortsBusy as e:
-        print(f"run: {e}", file=sys.stderr)
-        return 2
-    if args.driver == "agent":
-        # why named rather than assumed: the profile IS the operator under
-        # test, so the run records which one drove it. A pass rate that cannot
-        # name its agent is not attributable to anything.
-        agent_cfg = cfg.get("agent", {})
-        name = agent_cfg.get("use", "qwen")
-        profile = agent_cfg.get(name)
-        if not isinstance(profile, dict):
-            print(f"run: config.toml selects agent profile {name!r}, but has "
-                  f"no [agent.{name}] section", file=sys.stderr)
+    if legacy is None:
+        try:
+            # why one lease for the run: its worlds run one after another,
+            # so they share a span no other run can take
+            lease = lease_ports(**cfg["ports"])
+        except PortsBusy as e:
+            print(f"run: {e}", file=sys.stderr)
             return 2
-        ex.use_operator(profile)
-        ex.want_model(profile.get("model", ""), profile.get("base_url", ""))
-        results.header["agent_profile"] = name
-        results.header["agent_model"] = profile.get("model", "") or "(lab default)"
-    record = WorldRecord(run_dir, WORLD)
 
-    mutators = [t.name for t, _ in plan if t.mutates]
-    if args.target != "fresh" and mutators:
-        print(f"run: --target {args.target}: {', '.join(mutators)} really "
-              "mutates this world — it is not a throwaway", file=sys.stderr)
+        def open_world(name: str, keep: bool):
+            return _local_world(run_dir / name / "session", binary,
+                                lease.base, keep)
+    else:
+        ex = _executor(args, binary, ref)
+        if args.driver == "agent":
+            # why named rather than assumed: the profile IS the operator
+            # under test, so the run records which one drove it. A pass rate
+            # that cannot name its agent is not attributable to anything.
+            agent_cfg = cfg.get("agent", {})
+            name = agent_cfg.get("use", "qwen")
+            profile = agent_cfg.get(name)
+            if not isinstance(profile, dict):
+                print(f"run: config.toml selects agent profile {name!r}, but "
+                      f"has no [agent.{name}] section", file=sys.stderr)
+                return 2
+            ex.use_operator(profile)
+            ex.want_model(profile.get("model", ""), profile.get("base_url", ""))
+            results.header["agent_profile"] = name
+            results.header["agent_model"] = (profile.get("model", "")
+                                             or "(lab default)")
+        mutators = [t.name for t, _ in legacy if t.mutates]
+        if args.target != "fresh" and mutators:
+            print(f"run: --target {args.target}: {', '.join(mutators)} really "
+                  "mutates this world — it is not a throwaway", file=sys.stderr)
 
-    broken_states = set()
+        def open_world(name: str, keep: bool):
+            return ex
+
+    steps = layout(units)
+    run = _Run(args, tests, results, env_of_run)
     stop = None               # what ended the loop early, if anything
+    unclosed = None           # the world whose close raised
     try:
-        for t, kind in plan:
-            art = run_dir / t.name
-            art.mkdir(parents=True, exist_ok=True)
-            entry = _entry(t, kind, env_of_run, args.driver)
-            dead = manifest.blocked_by(tests, t.start, broken_states)
-            if dead:
-                _skip(results, entry, f"state {dead} was never built")
-                if t.saves:
-                    broken_states.add(t.saves)
-                continue
-
-            t0 = time.monotonic()
-            lineage = manifest.lineage(tests, t.start)
-            env = dict(driver_env(art / "session.json", args.target),
-                       ASTRAL_TESTS_FACTS_OUT=str(art / "facts.json"))
-
-            driven = {}
-
-            def view(phase: str) -> dict:
-                # why lineage only: a test sees the facts of what its start
-                # state was built from, never a sibling's. Its oracle also
-                # sees its own driver's, read once before the oracle runs,
-                # and those are what join the record on a pass.
-                facts = record.facts_of(lineage)
-                if phase == "verify":
-                    driven.update(own_facts(art / "facts.json"))
-                    facts |= driven
-                write_view(art / "session.json", record.run, ex.nodes(),
-                           facts)
-                return env
-
-            status, fk, phase = _perform(ex, t, args.driver, art, view)
-            if fk != "environment" and ex.broken():
-                # why: a dead daemon voids any verdict, even a nominal pass
-                status, fk, phase = "fail", "environment", "alive"
-
-            results.record(**entry, status=status, failure_kind=fk,
-                           phase=phase, duration_s=time.monotonic() - t0)
-            record.add(t.name, kind, status,
-                       driven if status == "pass" else {})
-            if status == "pass":
-                if t.saves:
-                    ex.save(t.saves)
-            elif t.saves:
-                broken_states.add(t.saves)
+        for i, (name, _) in enumerate(units):
+            # why the last world only: --keep asks for the world to debug,
+            # and every world before it has already handed on its verdicts
+            keep = args.keep and i == len(units) - 1
+            run.world(name, [s for s in steps if s.world == name],
+                      open_world(name, keep), keep)
+            if run.torn is not None:
+                if not isinstance(run.torn, Exception):
+                    raise run.torn      # Ctrl-C while a world closed
+                # why: a world that failed to close may still hold the run's
+                # ports, and the next world would boot onto them
+                unclosed = name
+                break
     # why Ctrl-C and every exception: a VM run lasts tens of minutes, and a
     # run that died without a report left only events.jsonl. Whatever ends
     # the loop, the tests it reached keep their verdicts and the rest say why.
@@ -470,39 +606,30 @@ def main(args) -> int:
             traceback.print_exc()
         stop = e
     finally:
-        # why before teardown: a torn-down world reports no nodes, and a
-        # kept one is read back from this record
-        _note_nodes(record, ex)
-        torn = _teardown(ex, args.keep)
-        if args.keep:
-            roots = run_dir / "session"
-            print(f"run: --keep, world left up; its nodes are in "
-                  f"{record.path}"
-                  + (f", node roots and logs under {roots}"
-                     if roots.exists() else ""), file=sys.stderr)
         aborted = []
-        # note: the loop records each planned test once, in plan order, so
-        # the tests past the last record never finished
-        unrun = plan[len(results.entries):]
+        # note: the loop records each step once, in run order, so the steps
+        # past the last record never finished
+        unrun = steps[len(results.entries):]
         if stop is not None or unrun:
             reason = (_abort_reason(stop) if stop is not None
+                      else f"{unclosed} failed to close" if unclosed
                       else "the run stopped before its plan ended")
             aborted.append(reason)
-            # why: the first test never recorded is the one the stop hit,
-            # so it carries the step it was in
+            # why: the first step never recorded is the one the stop hit, so
+            # it carries the step it was in
             phase = getattr(stop, "phase", "prepare")
-            for t, kind in unrun:
-                _skip(results, _entry(t, kind, env_of_run, args.driver),
-                      reason, phase)
+            for s in unrun:
+                _skip(results, _entry(s, env_of_run, args.driver), reason,
+                      phase)
                 phase = "prepare"
-        if torn:
-            aborted.append(f"teardown: {_abort_reason(torn)}")
+        if run.torn is not None:
+            aborted.append(f"teardown: {_abort_reason(run.torn)}")
         if aborted:
             results.header["aborted"] = "; ".join(aborted)
-        code = _finish(results, ex)
+        code = _finish(results, run.pushed)
     # why: a Ctrl-C or a SystemExit outlives the report — a shell loop stops
     # only on a child Ctrl-C killed, and tests/run dies of one
-    for e in (stop, torn):
+    for e in (stop, run.torn):
         if e is not None and not isinstance(e, Exception):
             raise e
     return code

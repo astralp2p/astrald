@@ -1,8 +1,9 @@
 """The planner: manifests and a selection in, worlds out.
 
 Pure: it reads loaded manifests and returns a plan. It starts nothing and
-writes nothing, and the runner executes nothing through it yet — `--plan`
-prints what it would do.
+writes nothing. The runner runs a plan whose worlds are all local, and
+`--plan` prints any plan; a run with a VM world still takes the executor
+path.
 
 A test names the test whose world it continues (`after`), and the worlds
 follow from that tree:

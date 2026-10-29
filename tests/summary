@@ -44,7 +44,13 @@ def collect(include_failures: bool):
     seen = {}
     for stamp, doc in runs():
         model = doc.get("agent_model") or ""
+        # why: a run replays a test as a prereq in every world forked below
+        # it, and the row that judged it as a test is its verdict in the run
+        judged = {e["test"] for e in doc.get("entries", [])
+                  if e["kind"] == "test"}
         for e in doc.get("entries", []):
+            if e["kind"] == "prereq" and e["test"] in judged:
+                continue
             if e["status"] != "pass" and not include_failures:
                 continue
             key = (e["test"], e["env"], e["driver"], model if e["driver"] == "agent" else "")

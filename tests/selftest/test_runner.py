@@ -6,6 +6,7 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
 from unittest import mock
 
 from lib import runner
@@ -82,13 +83,16 @@ def run(selection: list, ex_class=FakeExecutor, driver: str = "script",
 
     def executor(*_):
         made.append(ex_class())
-        return made[0]
+        return made[-1]
 
     with tempfile.TemporaryDirectory() as tmp, \
             mock.patch.object(runner, "RESULTS", Path(tmp)), \
             mock.patch.object(runner, "ensure_binary",
                               return_value=(Path(tmp) / "astrald", "abc")), \
             mock.patch.object(runner, "_executor", executor), \
+            mock.patch.object(runner, "_local_world", executor), \
+            mock.patch.object(runner, "lease_ports",
+                              return_value=SimpleNamespace(base=0)), \
             mock.patch.object(runner, "_run_step", step), \
             contextlib.redirect_stdout(io.StringIO()), \
             contextlib.redirect_stderr(io.StringIO()):
@@ -230,7 +234,7 @@ class TestCrashSafe(unittest.TestCase):
                           "bootstrap-user-software-key": ("pass", "verify"),
                           "adopt-node": ("pass", "verify")})
 
-    def test_a_state_skip_names_the_state(self):
+    def test_a_lineage_skip_names_the_failed_test(self):
         def step(py, script, log, env, timeout):
             return 1 if script.parent.name == "bootstrap-user-software-key" \
                 else 0
@@ -240,8 +244,23 @@ class TestCrashSafe(unittest.TestCase):
         self.assertEqual((skipped["test"], skipped["status"], skipped["phase"],
                           skipped["reason"]),
                          ("adopt-node", "skipped", "prepare",
-                          "state one-node was never built"))
-        self.assertIn("- `adopt-node` — state one-node was never built", text)
+                          "bootstrap-user-software-key failed in w0"))
+        self.assertIn("- `adopt-node` — bootstrap-user-software-key failed in "
+                      "w0", text)
+
+
+class TestExecutorPath(unittest.TestCase):
+    def test_a_skip_on_the_executor_path_names_the_failed_test(self):
+        # why: the executor path runs through the world loop and takes its
+        # skip rule; it read "state one-node was never built" before
+        _, doc, _, _, _ = run(["adopt-node"], driver="agent")
+        failed, skipped = doc["entries"]
+        self.assertEqual((failed["test"], failed["failure_kind"]),
+                         ("bootstrap-user-software-key", "environment"))
+        self.assertEqual((skipped["test"], skipped["env"], skipped["world"],
+                          skipped["reason"]),
+                         ("adopt-node", "netsim", "w0",
+                          "bootstrap-user-software-key failed in w0"))
 
 
 class PushingExecutor(FakeExecutor):

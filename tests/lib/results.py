@@ -3,13 +3,16 @@
 v2.2 adds three optional record fields and one optional header field; every
 earlier field and value stays as it was:
 
-* `world` — the planned world the record ran in, `w0` while a run has one;
+* `world` — the planned world the record ran in, `w0`, `w1`, …; a test a
+  run replays as a prereq in a later world has a record there too, with its
+  artifacts under `<test>.w<N>/`;
 * `phase` — where the test stopped: on a fail, the step that failed
   (`prepare`, `driver`, `restart`, `verify`, or `alive` when the world died
   under a test); on a pass, `verify`, the last step; on a skip, `prepare`,
   the first step, which never ran;
-* `reason` — on a skip, why: `state two-nodes was never built`,
-  `interrupted`, or the first line of the exception that ended the run;
+* `reason` — on a skip, why: `adopt-node failed in w1`, `world w0 died at
+  smoke`, `w0 failed to close`, `interrupted`, or the first line of the
+  exception that ended the run;
 * header `aborted` — set when the run ended on an exception or Ctrl-C, with
   the same reason. A run that did not finish never reads as PASS.
 
