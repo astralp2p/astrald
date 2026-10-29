@@ -24,7 +24,6 @@ func storeObjectsOps() []storeOp {
 		{"objects.create", func(m *Module) any { return m.OpCreate }, "?repo=local", "local", ""},
 		{"objects.store", func(m *Module) any { return m.OpStore }, "?repo=local", "local", ""},
 		{"objects.new_mem", func(m *Module) any { return m.OpNewMem }, "?name=scratch&size=1M", "scratch", ""},
-		{"objects.register_blueprint", func(m *Module) any { return m.OpRegisterBlueprint }, "", "", ""},
 		{"objects.echo", func(m *Module) any { return m.OpEcho }, "", "", ""},
 	}
 }

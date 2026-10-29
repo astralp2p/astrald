@@ -13,7 +13,7 @@ func seeObjectsGrant() *auth.Permit {
 }
 
 // seeObjectsAction names no object and no repository, which is the shape
-// objects.blueprints authorizes with (mod/objects/src/op_blueprints.go).
+// objects.repositories authorizes with (mod/objects/src/op_repositories.go).
 func seeObjectsAction(actor *astral.Identity) *auth.SeeObjectsAction {
 	return &auth.SeeObjectsAction{Action: auth.NewAction(actor)}
 }
@@ -21,9 +21,6 @@ func seeObjectsAction(actor *astral.Identity) *auth.SeeObjectsAction {
 // TestSeeObjectsGrantAuthorizesTheGrantedApp is the node-local grant path: an app
 // this node granted SeeObjects is authorized as itself, and an identity holding
 // no grant is not.
-//
-// note: a served app syncs its blueprints during apps.Serve, so this path is what
-// decides whether a registered app starts at all.
 func TestSeeObjectsGrantAuthorizesTheGrantedApp(t *testing.T) {
 	mod := testGrantModule(t)
 	app := astral.GenerateIdentity()

@@ -19,9 +19,6 @@ func storeObjectsAction(actor *astral.Identity) *auth.StoreObjectsAction {
 // TestStoreObjectsGrantAuthorizesTheGrantedApp is the node-local grant path: an
 // app this node granted StoreObjects is authorized as itself, and an identity
 // holding no grant is not.
-//
-// note: objects.register_blueprint authorizes this action, so this path decides
-// whether a served app's own types reach a consumer.
 func TestStoreObjectsGrantAuthorizesTheGrantedApp(t *testing.T) {
 	mod := testGrantModule(t)
 	app := astral.GenerateIdentity()
