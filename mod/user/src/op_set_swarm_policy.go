@@ -35,13 +35,19 @@ func (mod *Module) OpSetSwarmInvitePolicy(ctx *astral.Context, q *routing.Incomi
 	return mod.setSwarmPolicy(ctx, q, args, &mod.policy.SwarmInvite)
 }
 
+// OpSetContractAcceptPolicy selects the policy for contracts user.accept_contract
+// activates and answers Ack once the choice is persisted.
+func (mod *Module) OpSetContractAcceptPolicy(ctx *astral.Context, q *routing.IncomingQuery, args opSetSwarmPolicyArgs) error {
+	return mod.setSwarmPolicy(ctx, q, args, &mod.policy.ContractAccept)
+}
+
 // setSwarmPolicy admits a caller holding AdminManageApps, then writes the
 // delegate args name into v, or clears v when args name none.
 //
 // why AdminManageApps and not AdminSwarm: AdminSwarm is held by the user of the
-// active contract, and a node with none — the node an invite policy matters
-// for — would have no one able to set it. AdminManageApps is what every policy
-// setter requires.
+// active contract, and a node with none — the node an invite or contract
+// accept policy matters for — would have no one able to set it.
+// AdminManageApps is what every policy setter requires.
 func (mod *Module) setSwarmPolicy(
 	ctx *astral.Context,
 	q *routing.IncomingQuery,
