@@ -21,7 +21,8 @@ TESTS = Path(__file__).resolve().parent.parent
 GOLDEN = Path(__file__).resolve().parent / "golden"
 
 # suite -> the driver its golden plan is drawn under
-SUITES = {"main": "script", "tor": "script", "nat": "script", "agent": "agent"}
+SUITES = {"main": "script", "tor": "script", "nat": "script",
+          "gateway": "script", "agent": "agent"}
 
 
 def fake(after=None, destroys=False, ops=(), local_only=None,
@@ -135,9 +136,17 @@ class TestShippedPlans(Invariants, unittest.TestCase):
                     f"./tests/run --plan{flag} {suite}.suite > "
                     f"tests/selftest/golden/{suite}.plan")
 
-    def test_main_suite_is_one_world(self):
+    def test_main_suite_is_one_world_and_a_world_per_destroyer(self):
+        # note: every test that only builds or observes shares w0; each
+        # further world opens for a destroyer that cannot end w0
         listed = self.suites["main"]
-        self.assertEqual(len(plan(self.tests, listed, listed)), 1)
+        worlds = plan(self.tests, listed, listed)
+        for w in worlds[1:]:
+            with self.subTest(world=w.name):
+                self.assertTrue(self.tests[w.steps[-1].test].destroys)
+                self.assertEqual([s.kind for s in w.steps][-1], "test")
+        self.assertEqual(sum(s.kind == "test" for s in worlds[0].steps),
+                         len(listed) - len(worlds) + 1)
 
     def test_root_observers_run_before_bootstrap(self):
         w, = plan(self.tests, ["adopt-node", "claim-window"])

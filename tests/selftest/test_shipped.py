@@ -9,7 +9,9 @@ import unittest
 from pathlib import Path
 
 from lib.manifest import load_all, resolve, validate_order
+from lib.plan import plan
 from lib.suites import load
+from selftest.test_plan import SUITES
 
 TESTS = Path(__file__).resolve().parent.parent
 
@@ -69,9 +71,30 @@ class TestShipped(unittest.TestCase):
     def setUp(self):
         self.all = load_all(TESTS / "e2e")
 
-    def test_every_suite_walks(self):
-        suites = sorted((TESTS / "suites").glob("*.suite"))
-        self.assertTrue(suites, "no suites ship")
+    def walked_suites(self) -> list:
+        """The suites a run still walks in one world: those whose plan, under
+        the driver the suite runs with, holds a VM world. A suite of local
+        worlds runs its plan instead.
+
+        todo: child 8 retires the walk with the executor path.
+        """
+        out = []
+        for path in sorted((TESTS / "suites").glob("*.suite")):
+            listed = load(path)
+            worlds = plan(self.all, listed, listed, driver=SUITES[path.stem])
+            if any(w.kind != "local" for w in worlds):
+                out.append(path)
+        return out
+
+    def test_a_suite_runs_under_its_own_driver(self):
+        # why: agent.suite plans all-local under the script driver, so
+        # planning it that way let it escape the walk it runs under
+        self.assertIn("agent.suite",
+                      [p.name for p in self.walked_suites()])
+
+    def test_every_walked_suite_walks(self):
+        suites = self.walked_suites()
+        self.assertTrue(suites, "no suite is walked")
         for path in suites:
             with self.subTest(suite=path.name):
                 validate_order(self.all, load(path))
@@ -89,34 +112,23 @@ class TestShipped(unittest.TestCase):
                 for f in ("test.toml", "script.py", "verify.py", "README.md"):
                     self.assertTrue((t.dir / f).is_file(), f"{name}/{f} missing")
 
-    def test_every_test_is_listed_in_a_suite_or_says_why_not(self):
+    def test_every_test_is_in_some_suite(self):
         # why: a test no suite lists is never executed, and nothing else in the
         # tree notices. apphost-origin landed unlisted because the state it
         # starts from was broken that week, and stayed unlisted — and unrun —
-        # after the fix. The partition is the guard: listed, or carrying the
-        # reason it is not.
+        # after the fix. The planner gives any test a world of its own, so no
+        # test has a reason to stay out of every suite.
         listed = set()
         for path in sorted((TESTS / "suites").glob("*.suite")):
             listed.update(load(path))
+        self.assertEqual(sorted(set(self.all) - listed), [],
+                         "these tests are in no suite, so nothing runs them")
 
-        for name, t in sorted(self.all.items()):
-            with self.subTest(test=name):
-                if t.unlisted:
-                    self.assertNotIn(
-                        name, listed,
-                        f"{name} declares unlisted ({t.unlisted!r}) and a "
-                        f"suite lists it anyway — the reason is stale")
-                else:
-                    self.assertIn(
-                        name, listed,
-                        f"{name} is in no suite and declares no `unlisted` "
-                        f"reason, so nothing ever runs it")
-
-    def test_a_mutator_is_last_in_every_suite_that_lists_it(self):
+    def test_a_mutator_is_last_in_every_walked_suite(self):
         # why: the walk already rejects a consumer placed after a mutator, but
         # a mutator mid-suite means every following test was skipped by design
         # rather than by accident — say it once, here.
-        for path in sorted((TESTS / "suites").glob("*.suite")):
+        for path in self.walked_suites():
             listed = load(path)
             for i, name in enumerate(listed[:-1]):
                 with self.subTest(suite=path.name, test=name):

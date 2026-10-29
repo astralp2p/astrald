@@ -24,9 +24,10 @@ they should run. Nothing more.
 
 | suite | what it is | env | runs in |
 |-------|------------|-----|---------|
-| `main.suite` | the whole node chain, the everyday one | node | ~3 min |
+| `main.suite` | every local test, the everyday one | node | ~3 min |
 | `tor.suite` | two nodes meet on a LAN, one leaves it, Tor holds | netsim | ~37 min |
 | `nat.suite` | two nodes meet on a LAN, then hole-punch through NAT | netsim | not measured |
+| `gateway.suite` | a NAT'd node reaches its swarm through a gateway | netsim | not measured |
 | `agent.suite` | the flows an AI operator can drive, one world, in order | netsim | ~1.5 h |
 
 **An env is *where* it runs** — the world the test needs. A manifest field.
@@ -85,7 +86,6 @@ steps   = []                # env netsim only: vm:<op> … and driver
 drivers = ["script"]        # script, agent, or both
 timeout = 180               # the scripted flow's budget
 agent_timeout = 2400         # an operator plans and works the node through its own shell
-unlisted = "<reason>"       # set only when no suite may list this test
 restart = ["node1"]         # env node: nodes restarted between driver and oracle
 ```
 
@@ -94,9 +94,6 @@ root after the driver and before the oracle, so the oracle judges what a node
 holds across a restart. Only `--target fresh` in env `node` restarts a node; a
 selection that would need it anywhere else is refused before it starts. A
 node's `restarts` field in `session.json` counts its restarts.
-
-`unlisted` is the exception, and it is checked: a test is listed in a suite or
-carries this key, never neither and never both.
 
 A roster name is one daemon for the whole run, shared by every test that names
 it, so a node's config follows its name. Every node serves MCP except the ones
@@ -201,7 +198,7 @@ Every story of the catalog, in the cheapest env that can falsify it:
 | Story | Test | Env | States |
 |-------|------|-----|--------|
 | 0001 | `bootstrap-user-software-key` | node | `null` → `one-node` |
-| 0002 | `import-user-software-key` | node | `null` → — (unlisted) |
+| 0002 | `import-user-software-key` | node | `null` → — (a world of its own) |
 | 0003 | `adopt-node` | node | `one-node` → `two-nodes` |
 | 0004 | `tor-link` | netsim | `two-nodes` → `two-nodes-tor` |
 | 0005 | `nat-punch` | netsim | `two-nodes` → `two-nodes-nat` |
@@ -225,22 +222,17 @@ Every story of the catalog, in the cheapest env that can falsify it:
 | — | `messaging-two-node` | node | `two-nodes` → — |
 | — | `services-swarm` | node | `two-nodes` → — |
 | — | `services-app-call` | node | `two-nodes` → — |
-| — | `hold-purge` | node | `two-nodes` → — (unlisted, mutates) |
-| — | `gateway-relay` | netsim | `two-nodes` → — (unlisted, mutates) |
+| — | `hold-purge` | node | `two-nodes` → — (mutates) |
+| — | `gateway-relay` | netsim | `two-nodes` → — (mutates) |
 
-`main.suite` is the env-node chain, and it runs in about 3 minutes;
+`main.suite` holds every local test, and it runs in about 3 minutes;
 `policy-delegate`'s 70 s registration hold is the largest part.
 
-A test marked **unlisted** is in no suite, and its `test.toml` carries the
-`unlisted` key naming the reason — a start state the chain cannot reach twice,
-or a terminal mutator nothing may follow. Run one by name:
-`./tests/run hold-purge`.
-
-That key is not a label. `selftest/test_shipped.py` partitions the tree by it:
-every test is listed in a suite or declares why it is not, and a test that is
-neither fails the selftest. A test no suite names is never executed, and
-before this guard the tree held one such test — written, merged, and unrun
-from the day it landed.
+Every test is in some suite, and `selftest/test_shipped.py` fails a test
+that is in none: a test no suite names is never executed, and the tree once
+held one such test — written, merged, and unrun from the day it landed. A
+test that needs a pristine node or ends its world is not an exception: the
+planner gives it a world of its own.
 
 ## Where the machines come from
 

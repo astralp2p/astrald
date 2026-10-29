@@ -1,0 +1,8 @@
+# gateway.suite — a NAT'd node reaches its swarm through a gateway node.
+#
+# gateway-relay moves node2 behind NAT and configures the reflector as its
+# gateway, and nothing puts either back, so it ends its world. It has a suite
+# of its own while VM runs walk a suite in one world.
+bootstrap-user-software-key
+adopt-node
+gateway-relay

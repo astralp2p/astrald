@@ -5,3 +5,6 @@ w0 local: smoke → mcp-origin → claim-window → token-less-setup → messagi
           → messaging-two-node → mcp-peer → services-swarm → services-app-call
           → object-store-peer → read-remote-peer → read-swarm → discover-swarm
           → expel-node
+w1 local: bootstrap-user-software-key* → adopt-node* → hold-purge
+w2 local: import-user-software-key
+w3 local: bootstrap-user-op

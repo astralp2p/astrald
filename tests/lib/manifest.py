@@ -15,7 +15,7 @@ from pathlib import Path
 ENVS = {"node", "netsim"}
 DRIVERS = {"script", "agent"}
 KEYS = {"env", "start", "saves", "mutates", "nodes", "steps", "drivers",
-        "timeout", "agent_timeout", "unlisted", "restart",
+        "timeout", "agent_timeout", "restart",
         # the planner's keys (lib/plan.py), beside the state-chain ones above
         "after", "destroys", "ops", "local_only", "facts"}
 NULL = "null"
@@ -37,7 +37,6 @@ class Test:
     drivers: list
     timeout: int
     agent_timeout: int
-    unlisted: str | None
     restart: list
     # the planner's keys: the test whose world this one continues (None: a
     # fresh world), whether only its own descendants may follow it there, the
@@ -130,12 +129,6 @@ def _parse(mf: Path) -> Test:
                 # the pace, and it was still going when a 900 s budget cut it
                 # off. The scripted flow it replaces takes under a second.
                 agent_timeout=int(raw.get("agent_timeout", 2400)),
-                # why a manifest field and not a list in the selftest: a test
-                # no suite lists never runs, and the tree had one such test
-                # sitting unexecuted from the day it landed. The reason has to
-                # travel with the test, so removing the last suite entry that
-                # named it fails rather than silently retiring it.
-                unlisted=_reason(name, raw, "unlisted"),
                 # why between driver and oracle: a driver leaves state on a
                 # node, and the oracle judges what the node holds after it
                 # boots again. A driver cannot relaunch a node itself — the
