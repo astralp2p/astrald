@@ -1,9 +1,8 @@
-"""env netsim: real VMs on a simulated LAN, materialized from a stage cache.
+"""A VM world: real VMs on a simulated LAN, for one planned world.
 
-The expensive part of a VM test is building the world, so this executor never
-builds one twice for the same inputs. A state name plus the recipe it came
-from plus the astrald ref under test is a cache key; a stage carrying that key
-is the same world, and booting it costs a resume instead of a build.
+Each VM world boots the lab stage the recipe bakes, pushes the binaries
+under test to every VM, and closes by pulling each guest's astrald log and
+killing the simulation. Nothing is cached between worlds.
 
 astrald and astral-query are pushed, never baked. The lab recipe bakes what is
 slow and stable — the VMs, the operator, the service unit, the apt
@@ -20,6 +19,9 @@ normally and its netns-private address once enter-nat has moved astrald, since
 an ssh forward lands in the root netns and the netns loopback is not that.
 Drivers and oracles stay byte-identical across envs because the tunnel is the
 only difference.
+
+note: none of this has run against a VM since the stage cache went; the call
+sequence is pinned in selftest/test_vm_world.py against a faked netsim.
 """
 import asyncio
 import json
@@ -37,8 +39,9 @@ from lib.build import query_binary
 from lib.executors import Executor, ExecutorError, node_entry
 
 TESTS = Path(__file__).resolve().parent.parent.parent
+RECIPE = TESTS / "netsim" / "labs" / "two-node-plus-external" / "lab.story"
 APPHOST_PORT = 8625          # the guest's apphost, inside netns priv when NAT'd
-THROWAWAY_STAGE = "e2e-scratch"   # a fresh sim always saves; this is what it saves to
+SCRATCH_STAGE = "e2e-scratch"     # a fresh sim always saves; this is what it saves to
 GUEST_ROOT = "/var/lib/astrald"   # install-astrald's -root (its systemd unit)
 GUEST_TCP_PORT = 1791             # astrald's default tcp listener in the lab
 # the sshd drop-in that hands root's sessions the VM's harness token
@@ -46,7 +49,6 @@ SSHD_DROPIN = "/etc/ssh/sshd_config.d/astral-tests.conf"
 # enter-nat's private host inside netns `priv`, routable from the root netns
 # over the veth pair it creates (netsim/ops/enter-nat).
 NAT_NETNS_HOST = "192.168.99.2"
-SSH_READY_TIMEOUT = 120.0
 # The operator profile the harness falls back to when config.toml names none.
 # The lab bakes a Qwen Code operator on node1 with the astral-agent skill
 # (netsim/labs/two-node-plus-external/lab.story), which is the only machine in the
@@ -65,6 +67,8 @@ DEFAULT_OPERATOR = {
 # why: a guest that just lost its data regenerates its node key and bootstraps
 # a fresh onion before apphost listens — minutes on a 1-vCPU VM, not seconds.
 APPHOST_READY_TIMEOUT = 300.0
+# how long a killed simulation may stay listed before its world fails to close
+KILL_TIMEOUT = 60.0
 
 
 def _netsim(*args, check=True, capture=True) -> str:
@@ -96,68 +100,70 @@ def lab_stage(recipe: Path) -> str:
     return f"e2e-lab-r{recipe_hash(recipe)}"
 
 
-def stage_key(state: str, recipe: Path, astrald_ref: str) -> str:
-    """The cache key a stage carries.
+def stages() -> set:
+    """Every stage netsim holds, by name."""
+    # netsim names a stage by `slug` (verified: netsim stages --json)
+    return {s["slug"] for s in json.loads(_netsim("stages", "--json") or "[]")
+            if isinstance(s, dict) and s.get("slug")}
 
-    why: a state name alone is not the world. The same `two-nodes` built from
-    a different recipe, or filled by a different astrald, is a different thing
-    to test against, and reusing it would report a verdict about a binary
-    nobody asked about.
+
+def _sims() -> set:
+    """The simulations netsim runs, by id: those that still have VMs.
+
+    why VMs and not the listing: STALE means netsim lost the process that
+    owned the simulation, not that the world died — an adopted simulation is
+    always STALE and its VMs are still running.
     """
-    return f"e2e-{state}-r{recipe_hash(recipe)}-g{astrald_ref}"
+    return {str(s["sim_id"]) for s in
+            json.loads(_netsim("ps", "--json") or "[]") if s.get("vms")}
 
 
-class NetsimExecutor(Executor):
+class VmWorld(Executor):
     env = "netsim"
 
-    def __init__(self, binary: Path, astrald_ref: str):
+    def __init__(self, dir: Path, binary: Path, astrald_ref: str,
+                 keep: bool = False):
+        """dir is the world's own results/<stamp>/w<N>/."""
+        self.dir = Path(dir)
         self.binary = Path(binary)
         self.astrald_ref = astrald_ref
-        self.recipe = TESTS / "netsim" / "labs" / "two-node-plus-external" / "lab.story"
+        self.recipe = RECIPE
+        self.keep = keep
         self.sim = None
-        self.state = None
+        self._boot_error = None
         self._nodes = {}
         self._tunnels = []
         self._agent_model = ""
         self._agent_base_url = ""
         self.operator = dict(DEFAULT_OPERATOR)
         self._model_applied = False
-        self.pinned = None
         self.pushed = []
 
     # --- the runner's interface -------------------------------------------
 
     def prepare(self, test) -> None:
-        if test.env == "netsim":
-            if not test.steps:
-                raise ExecutorError(
-                    f"{test.name}: an env netsim test declares its steps")
-            if test.steps[-1] != "driver":
-                raise ExecutorError(
-                    f"{test.name}: `driver` must be the last step, got "
-                    f"{test.steps[-1]!r}")
-        self._materialize(test.start, test.nodes)
+        self._open()
         # why every VM, not the roster: an op reaches machines no roster
         # names — nat-punch's add-reflector relies on the reflector — and a
         # machine left out keeps the astrald baked with the lab, so the
         # verdict was partly about old code. Once per boot, since a push
-        # restarts astrald and the chain carries the world between tests.
+        # restarts astrald and the world carries forward between tests.
         self._push_astrald([vm for vm in self._vms() if vm not in self.pushed])
         missing = [n for n in test.nodes if n not in self._nodes]
         if missing:
             raise ExecutorError(f"{test.name}: the simulation runs no "
                                 f"{', '.join(missing)}")
-        # why open the session before the steps as well as after: a vmop is
+        # why open the session before the ops as well as after: an op is
         # given each node's identity (ASTRAL_ID_<vm>), and until this runs
         # there are no identities to give — leave-lan silently fell back to
         # its alias hunt and failed with the roster in fact correct. Opening
         # twice is what the call is already built for: it reuses a live
         # tunnel, and reopens one whose target moved, which is exactly what
-        # enter-nat does to apphost mid-steps. The second call is what keeps
+        # enter-nat does to apphost mid-ops. The second call is what keeps
         # nat-punch working.
         self._open_session(test.nodes)
-        for step in test.steps[:-1]:
-            self._step(step)
+        for op in test.ops:
+            self.run_op(op)
         self._open_session(test.nodes)
 
     def nodes(self) -> dict:
@@ -184,24 +190,6 @@ class NetsimExecutor(Executor):
             lan_endpoint=f"tcp:{self._lan_ip(vm)}:{GUEST_TCP_PORT}",
         ) for vm, info in self._nodes.items() if "port" in info}
 
-    def save(self, state: str) -> None:
-        """Snapshot the running simulation under this state's cache key.
-
-        Probe first and never resave: `netsim save` suffixes a taken name
-        rather than replacing it, so a blind save grows `-1`, `-2`, … stages
-        that no probe will ever match again (migration plan, decision 6).
-        """
-        if self.pinned:
-            # why: a pinned run borrows a world the operator named. Writing
-            # new stages out of it would turn a read into a side effect, the
-            # same reason attach never builds a start state.
-            return
-        key = stage_key(state, self.recipe, self.astrald_ref)
-        if key in self._stages():
-            return
-        _netsim("save", "--sim", self.sim, key)
-        self.state = state
-
     def broken(self) -> list:
         """The roster, if the simulation itself died. A verdict over a dead
         world is void — but a CLI hiccup is not a dead world, so anything
@@ -211,122 +199,108 @@ class NetsimExecutor(Executor):
         if self.sim is None:
             return []
         try:
-            sims = json.loads(_netsim("ps", "--json") or "[]")
+            alive = _sims()
         except ExecutorError:
             return []
-        # why: STALE means netsim lost the process that owned the simulation,
-        # not that the world died — an adopted simulation is always STALE and
-        # its VMs are still running. A world is broken when netsim no longer
-        # lists it, or lists it with no VMs.
-        alive = {s["sim_id"] for s in sims if s.get("vms")}
         return [] if str(self.sim) in alive else sorted(self._nodes)
 
     def teardown(self, keep: bool) -> None:
-        for p in self._tunnels:
-            p.terminate()
-        self._tunnels.clear()
-        if keep or self.sim is None:
+        """Pull every guest's astrald log, then end the simulation — or, kept,
+        leave it and its tunnels up for whoever debugs it next."""
+        if self.sim is None:
             return
-        # note: kill takes the id positionally — `--sim` is a usage error, and
-        # with check=False that failed silently and leaked the simulation. A
-        # leaked simulation is not free: a dead one held 6.7 GiB of this
-        # host's SD card for two weeks.
-        _netsim("kill", self.sim, check=False)
+        # why the kill in a finally: whatever stops the log pull — a second
+        # Ctrl-C, a full disk — must not leave three 2 GiB guests running,
+        # nor a simulation every later run refuses to boot beside
+        try:
+            self._pull_logs()
+        finally:
+            if not keep:
+                for p in self._tunnels:
+                    p.terminate()
+                self._tunnels.clear()
+                # note: kill takes the id positionally — `--sim` is a usage
+                # error. Unchecked, since a simulation already reaped answers
+                # "no such simulation"; _await_death says whether it is gone.
+                # A leaked simulation is not free: a dead one held 6.7 GiB of
+                # this host's SD card for two weeks.
+                _netsim("kill", self.sim, check=False)
+        if keep:
+            print(f"run: --keep, simulation {self.sim} left up with its "
+                  f"tunnels: netsim ssh --sim {self.sim} <vm>", file=sys.stderr)
+            return
+        self._await_death()
 
-    # --- materialization ---------------------------------------------------
+    def _await_death(self) -> None:
+        """Return once netsim no longer runs this world's simulation.
 
-    def _stages(self) -> set:
-        # netsim names a stage by `slug` (verified: netsim stages --json)
-        return {s["slug"] for s in
-                json.loads(_netsim("stages", "--json") or "[]")
-                if isinstance(s, dict) and s.get("slug")}
-
-    def _materialize(self, state: str, nodes: list) -> None:
-        """Stand the world up at `state`, from cache when there is one.
-
-        The chain advances inside one simulation, exactly as it advances
-        inside one live session on loopback: once a simulation is up, the
-        producer tests in the plan carry it forward and nothing re-boots.
+        why raise rather than move on: a close that raises ends the run, and
+        the next world would otherwise boot beside a simulation still up —
+        three more 2 GiB guests, and netsim commands that may land in either.
         """
+        deadline = time.monotonic() + KILL_TIMEOUT
+        while str(self.sim) in _sims():
+            if time.monotonic() >= deadline:
+                raise ExecutorError(f"simulation {self.sim} is still up "
+                                    f"{KILL_TIMEOUT:.0f} s after netsim kill")
+            time.sleep(1.0)
+
+    def ssh(self, vm: str, script: str, check=True) -> str:
+        """Run a shell script as root on one of this world's VMs."""
+        return _netsim("ssh", "--sim", self.sim, vm, "--", script, check=check)
+
+    # --- booting -------------------------------------------------------------
+
+    def _open(self) -> None:
+        """Boot this world's simulation, once; a boot that failed fails every
+        later prepare the same way rather than booting again."""
+        if self._boot_error is not None:
+            raise ExecutorError(self._boot_error)
         if self.sim is not None:
-            self.state = state
             return
-        # why: a boot costs minutes and gigabytes. NETSIM_E2E_SIM adopts a
-        # simulation that is already up, which is what makes iterating on this
-        # executor affordable. A debug affordance: it asserts nothing about
-        # what state that simulation stands at.
-        adopted = os.environ.get("NETSIM_E2E_SIM")
-        if adopted:
-            self.sim = adopted
-            self.state = state
-            return
-        # why: --target stage:<name> pins the world. The whole selection runs
-        # against one boot of that stage, so the chain is not walked and no
-        # state is materialized per test — the operator asserted the world
-        # already stands where the tests need it, exactly as attach does for
-        # a running daemon.
-        if self.pinned:
-            if self.sim is None:
-                self._boot(self._resolve_pinned())
-            self.state = state
-            return
-        key = stage_key(state, self.recipe, self.astrald_ref)
-        if key in self._stages():
-            self._boot(key)
-        else:
-            self._boot(self._base_stage())
-        self.state = state
+        try:
+            before = _sims()
+            # why refused: netsim attaches commands to the newest simulation,
+            # and a world booted beside another — a kept one, another run's,
+            # or one an earlier world of this run failed to kill — could run
+            # its tests against it
+            if before:
+                raise ExecutorError(
+                    f"netsim already runs simulation {', '.join(sorted(before))}"
+                    ": one VM world at a time — `netsim kill` it, or let its "
+                    "run end")
+            self._boot(self._base_stage(), before)
+        except ExecutorError as e:
+            self._boot_error = str(e)
+            raise
 
     def _base_stage(self) -> str:
-        """The lab every chain starts from, baked once per recipe."""
+        """The lab every fresh VM world boots, baked once per recipe."""
         name = lab_stage(self.recipe)
-        if name not in self._stages():
+        if name not in stages():
             _netsim("story", "--stage", "null", "--save", name,
                     str(self.recipe), capture=False)
         return name
 
-    def _resolve_pinned(self) -> str:
-        """The netsim stage `--target stage:<name>` names.
-
-        why: `<name>` is whatever the operator typed, and the obvious thing to
-        type is the state a manifest names — `two-nodes`. That is not a netsim
-        stage; the stage is `e2e-two-nodes-r<recipe>-g<astrald>`, which nobody
-        can be expected to spell. So a name netsim knows is used as given, and
-        anything else is tried as a state of THIS recipe and THIS astrald —
-        the same key the walk would have built. A state that has never been
-        cached still fails, and says which two names it looked for.
-        """
-        stages = self._stages()
-        if self.pinned in stages:
-            return self.pinned
-        key = stage_key(self.pinned, self.recipe, self.astrald_ref)
-        if key in stages:
-            return key
-        raise ExecutorError(
-            f"no stage {self.pinned!r}, and no cached {key!r} for it — "
-            f"run the chain once to build it, or name a stage from "
-            f"`netsim stages`")
-
-    def _boot(self, stage: str) -> None:
+    def _boot(self, stage: str, before: set) -> None:
         """Resume a stage into a simulation and keep it running.
 
         why: netsim starts a simulation only through `task` or `story`, and
         both need something to run — an empty story is refused outright
         (verified: `error: story has no tasks`). `noop` is the harness's boot
-        verb. A fresh simulation always saves, so it saves to a throwaway
-        name that `save()` later replaces with the real cache key.
+        verb. A fresh simulation always saves, so it saves to a scratch
+        stage that is removed straight away.
         """
-        _netsim("task", "--stage", stage, "--keep", "--save", THROWAWAY_STAGE,
+        _netsim("task", "--stage", stage, "--keep", "--save", SCRATCH_STAGE,
                 "noop", capture=False)
-        self.sim = self._latest_sim()
-        _netsim("remove", THROWAWAY_STAGE, check=False)
-
-    def _latest_sim(self) -> str:
-        # netsim keys a simulation by `sim_id` (verified: netsim ps --json)
-        sims = json.loads(_netsim("ps", "--json") or "[]")
-        if not sims:
-            raise ExecutorError("netsim ps lists no simulation after boot")
-        return str(sims[-1]["sim_id"])
+        # why the new id and not the newest: nothing else should be up, and
+        # an id that appeared is the only one this boot can claim
+        new = sorted(_sims() - before)
+        _netsim("remove", SCRATCH_STAGE, check=False)
+        if len(new) != 1:
+            raise ExecutorError(f"booting {stage}: netsim ps lists new "
+                                f"simulations [{', '.join(new)}], not one")
+        self.sim = new[0]
 
     @property
     def sim_dir(self) -> Path:
@@ -344,6 +318,29 @@ class NetsimExecutor(Executor):
             home = base / "netsim"
         return home / "sims" / str(self.sim)
 
+    # --- closing --------------------------------------------------------------
+
+    def _pull_logs(self) -> None:
+        """Every guest's astrald journal into the world's logs/.
+
+        why best-effort: a log is evidence about a verdict already recorded,
+        and a guest too broken to hand it over must not cost the run its
+        report.
+        """
+        logs = self.dir / "logs"
+        for vm in self.pushed:
+            try:
+                out = self.ssh(vm, "journalctl -u astrald --no-pager 2>&1",
+                               check=False)
+            except ExecutorError as e:
+                out = f"[runner] no journal: {e}"
+            try:
+                logs.mkdir(parents=True, exist_ok=True)
+                (logs / f"{vm}.log").write_text(out + "\n")
+            except OSError as e:
+                print(f"run: {vm}'s astrald log not kept: {e}",
+                      file=sys.stderr)
+
     def _free_port(self) -> int:
         with socket.socket() as s:
             s.bind(("127.0.0.1", 0))
@@ -359,7 +356,7 @@ class NetsimExecutor(Executor):
         the netns hangs off is routable from the root netns, so the forward
         aims at the private address instead and the session survives the move.
         """
-        out = self._ssh(vm, "ip netns list 2>/dev/null || true", check=False)
+        out = self.ssh(vm, "ip netns list 2>/dev/null || true", check=False)
         if "priv" in out.split():
             return NAT_NETNS_HOST
         return "127.0.0.1"
@@ -375,13 +372,20 @@ class NetsimExecutor(Executor):
                 # forward looks to a driver like a refused connection.
                 "-o", "ServerAliveInterval=15", "-o", "ServerAliveCountMax=8",
                 "-L", f"{port}:{host}:{APPHOST_PORT}", vm]
-        proc = subprocess.Popen(argv, stdout=subprocess.DEVNULL,
-                                stderr=subprocess.PIPE)
+        # why a log file and its own session: a kept world's tunnels outlive
+        # the runner, so ssh must neither write into a pipe nobody reads nor
+        # die with the runner's Ctrl-C
+        self.dir.mkdir(parents=True, exist_ok=True)
+        err = (self.dir / f"tunnel-{vm}.log").open("wb")
+        proc = subprocess.Popen(argv, stdout=subprocess.DEVNULL, stderr=err,
+                                start_new_session=self.keep)
+        err.close()
         deadline = time.monotonic() + 20.0
         while time.monotonic() < deadline:
             if proc.poll() is not None:
-                err = (proc.stderr.read() or b"").decode(errors="replace")
-                raise ExecutorError(f"{vm}: ssh -L failed: {err.strip()}")
+                text = (self.dir / f"tunnel-{vm}.log").read_text(
+                    errors="replace")
+                raise ExecutorError(f"{vm}: ssh -L failed: {text.strip()}")
             with socket.socket() as s:
                 s.settimeout(0.5)
                 if s.connect_ex(("127.0.0.1", port)) == 0:
@@ -393,9 +397,19 @@ class NetsimExecutor(Executor):
 
     # --- the binary under test ---------------------------------------------
 
+    def _guest_config(self, vm: str, token: str) -> dict:
+        """The module config files the push writes into a guest's config dir,
+        by file name: the one place a world's config reaches a VM."""
+        return {"apphost.yaml": f"""listen:
+  - "tcp:127.0.0.1:{APPHOST_PORT}"
+bind_http: ""
+tokens:
+  "{token}": localnode
+"""}
+
     def _push_astrald(self, nodes: list) -> None:
         """Replace each guest's astrald and astral-query with the host-built
-        ones and restart astrald.
+        ones, write its config, and restart astrald.
 
         Guests match the host architecture, so the binary the node-env tests
         ran against is the binary the VM tests run against — one build, one
@@ -414,6 +428,14 @@ class NetsimExecutor(Executor):
             self._scp(vm, self.binary, "/usr/local/bin/astrald")
             self._scp(vm, query_binary(self.binary),
                       "/usr/local/bin/astral-query")
+            # why 0600: each file names the node's own token, and the
+            # operator, `tester`, must not authenticate as the node. astrald
+            # runs as root (install-astrald's unit names no User=), and sshd
+            # reads its drop-ins as root.
+            files = "".join(
+                f"cat > {GUEST_ROOT}/config/{name} <<'EOF'\n{text}EOF\n"
+                f"chmod 600 {GUEST_ROOT}/config/{name}\n"
+                for name, text in self._guest_config(vm, token).items())
             # why the sshd drop-in: since 77953492 apphost confines a
             # token-less session to anonymous_allowlist, and every vmop runs
             # the guest's astral-query as root with no token — it reads one
@@ -425,20 +447,14 @@ class NetsimExecutor(Executor):
             # ~/.ssh/environment to sshd.
             # note: `Match all` closes the block, since the drop-in is
             # included at the top of sshd_config.
-            self._ssh(vm, f"""set -e
+            self.ssh(vm, f"""set -e
 mkdir -p {GUEST_ROOT}/config
-cat > {GUEST_ROOT}/config/apphost.yaml <<'EOF'
-listen:
-  - "tcp:127.0.0.1:{APPHOST_PORT}"
-bind_http: ""
-tokens:
-  "{token}": localnode
-EOF
-cat > {SSHD_DROPIN} <<'EOF'
+{files}cat > {SSHD_DROPIN} <<'EOF'
 Match User root
     SetEnv ASTRALD_APPHOST_TOKEN={token}
 Match all
 EOF
+chmod 600 {SSHD_DROPIN}
 sshd -t
 systemctl reload ssh
 systemctl restart astrald""")
@@ -447,11 +463,11 @@ systemctl restart astrald""")
 
     # --- the session drivers and oracles see ---------------------------------
 
-    def _open_session(self, nodes: list) -> None:
-        """Tunnel to each guest's apphost and learn its identity."""
+    def _whoami(self, port: int, token: str) -> str:
+        """The identity the apphost behind a tunnel answers with, waited for."""
         import astral
 
-        async def identity_of(port, token):
+        async def identity_of():
             deadline = time.monotonic() + APPHOST_READY_TIMEOUT
             last = None
             while time.monotonic() < deadline:
@@ -465,7 +481,10 @@ systemctl restart astrald""")
                     await asyncio.sleep(2)
             raise ExecutorError(f"apphost on 127.0.0.1:{port} never answered "
                                 f"(last error: {last})")
+        return asyncio.run(identity_of())
 
+    def _open_session(self, nodes: list) -> None:
+        """Tunnel to each guest's apphost and learn its identity."""
         for vm in nodes:
             info = self._nodes[vm]
             # why: reopen a forward whose ssh has exited. The session view is
@@ -489,17 +508,13 @@ systemctl restart astrald""")
                 info["port"], info["ssh"] = self._tunnel(vm, want)
                 info["apphost_host"] = want
             if not info.get("identity"):
-                info["identity"] = asyncio.run(
-                    identity_of(info["port"], info["token"]))
+                info["identity"] = self._whoami(info["port"], info["token"])
 
-    # --- steps --------------------------------------------------------------
+    # --- ops ------------------------------------------------------------------
 
-    def _step(self, step: str) -> None:
-        """`vm:<op> <args…>` — a vmop and its verifier, host-side."""
-        kind, _, rest = step.partition(":")
-        if kind != "vm":
-            raise ExecutorError(f"unknown step {step!r} (vm:<op> … | driver)")
-        parts = shlex.split(rest)
+    def run_op(self, line: str) -> None:
+        """`<op> <args…>` — a VM operation and its verifier, host-side."""
+        parts = shlex.split(line)
         op, args = parts[0], parts[1:]
         opdir = TESTS / "netsim" / "ops" / op
         if not (opdir / "run.sh").is_file():
@@ -518,7 +533,17 @@ systemctl restart astrald""")
                 break
 
     def _vmop(self, script: Path, argv: list, label: str) -> None:
-        """Run one vmop, or its verifier, on the host against this simulation.
+        """Run one vmop, or its verifier, on the host against this simulation."""
+        cmd = ([str(script), *argv] if script.suffix == ".sh"
+               else [sys.executable, str(script), *argv])
+        p = subprocess.run(cmd, env=self._op_env(), capture_output=True,
+                           text=True)
+        if p.returncode != 0:
+            raise ExecutorError(
+                f"{label}: exit {p.returncode}\n{p.stdout or ''}{p.stderr or ''}")
+
+    def _op_env(self) -> dict:
+        """The environment a vmop runs in.
 
         why NETSIM_SIM_DIR: a vmop drives guests from outside — it is a
         host-side script whose own `netsim ssh` and `netsim vm ls` calls have
@@ -539,8 +564,6 @@ systemctl restart astrald""")
         tunnel time and is the authority on it; an alias is cosmetic and no
         prompt should have to know the harness wants one.
         """
-        cmd = ([str(script), *argv] if script.suffix == ".sh"
-               else [sys.executable, str(script), *argv])
         env = dict(os.environ, NETSIM_SIM_DIR=str(self.sim_dir))
         for vm, info in self._nodes.items():
             if info.get("identity"):
@@ -548,12 +571,11 @@ systemctl restart astrald""")
         pypath = os.environ.get("ASTRAL_TESTS_PYPATH", "")
         if pypath:
             env["ASTRALPY_SRC"] = pypath.split(os.pathsep)[-1]
-        p = subprocess.run(cmd, env=env, capture_output=True, text=True)
-        if p.returncode != 0:
-            raise ExecutorError(
-                f"{label}: exit {p.returncode}\n{p.stdout or ''}{p.stderr or ''}")
+        return env
 
-    # --- the session drivers and oracles see --------------------------------
+    # --- the AI operator ------------------------------------------------------
+    # todo: child 8 moves the operator into lib/agent.py, driven over ssh();
+    # until then it lives here, unchanged from the netsim executor.
 
     def use_operator(self, profile: dict) -> None:
         """Adopt an operator profile: where the agent is, and how to run it."""
@@ -569,7 +591,7 @@ systemctl restart astrald""")
         """Point the lab's baked operator at a different model, in place.
 
         why: the model is baked by the lab recipe, so changing it there costs
-        a full rebake and invalidates every cached stage — far too much to pay
+        a full rebake of the lab — far too much to pay
         for the ordinary act of comparing two models over the same tests.
         Qwen Code reads its model from ~/.qwen/settings.json and ~/.qwen/.env,
         so rewriting those two files after boot makes the model a property of
@@ -611,7 +633,7 @@ systemctl restart astrald""")
             f"{sets} {env}",
             f"grep OPENAI_MODEL= {env}",
         ])
-        out = self._ssh(self.operator['vm'], script)
+        out = self.ssh(self.operator['vm'], script)
         if f"OPENAI_MODEL={model}" not in out:
             raise ExecutorError(
                 f"{self.operator['vm']}: operator model is not {model} after the "
@@ -640,7 +662,7 @@ systemctl restart astrald""")
             if not f.is_file() or f.name in skip:
                 continue
             payload = b64encode(f.read_bytes()).decode()
-            self._ssh(self.operator["vm"], "\n".join([
+            self.ssh(self.operator["vm"], "\n".join([
                 "set -eu",
                 f"printf '%s' '{payload}' | base64 -d > {home}/{f.name}",
                 f"chown {self.operator['user']}:{self.operator['user']} "
@@ -658,7 +680,7 @@ systemctl restart astrald""")
         astrald misbehaved — when nothing about astrald had gone wrong. A
         wrong layer is worse than a red.
         """
-        merged = self._ssh(self.operator["vm"], "\n".join([
+        merged = self.ssh(self.operator["vm"], "\n".join([
             "python3 - <<'PY'",
             "import glob, json",
             "merged = {}",
@@ -727,7 +749,7 @@ systemctl restart astrald""")
             # flight, and "exceeded 900s" on its own says nothing about
             # whether the operator was working, stuck, or never started. The
             # guest still holds the log it was writing, so go and get it.
-            tail = self._ssh(
+            tail = self.ssh(
                 self.operator["vm"],
                 f"tail -c 4000 {home}/.netsim/{test.name}.log "
                 "2>/dev/null || true", check=False)
@@ -739,8 +761,7 @@ systemctl restart astrald""")
             self._collect_agent_facts(facts)
         return p.returncode
 
-    def _ssh(self, vm: str, script: str, check=True) -> str:
-        return _netsim("ssh", "--sim", self.sim, vm, "--", script, check=check)
+    # --- transport --------------------------------------------------------------
 
     def _scp(self, vm: str, src: Path, dst: str) -> None:
         """No scp verb in netsim: stream the file through ssh's stdin."""

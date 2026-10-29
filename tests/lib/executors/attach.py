@@ -55,9 +55,6 @@ class AttachExecutor(Executor):
             endpoint=n["endpoint"], token=n["token"], identity=n["identity"],
             root="attached", tcp_port=0)}
 
-    def save(self, state: str) -> None:
-        """Nothing to snapshot: the daemon is the operator's, not the run's."""
-
     def broken(self) -> list:
         return []
 

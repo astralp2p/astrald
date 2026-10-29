@@ -133,10 +133,14 @@ that replays the lineage; one destroyer may end the world, and every other
 destroyer forks. `*` marks a prereq. The plans of the shipped suites are
 pinned under `selftest/golden/`.
 
-A run whose worlds are all local runs exactly this plan, world after world,
-each from fresh nodes: `--isolate` gives every selected test its own world,
-and a fork replays its prereqs by script. A run with a VM world, `--target
-attach`, `stage:` or `--driver agent` still runs the walk below in one world.
+A run executes exactly this plan, world after world, each from fresh
+machines: `--isolate` gives every selected test its own world, and a fork
+replays its prereqs by script. A local world is astrald processes on
+loopback; a VM world boots the lab (`netsim/labs/`), pushes the binaries
+under test to every VM, and on close pulls each guest's astrald log into
+`results/<stamp>/w<N>/logs/`. VM worlds run one at a time, and a VM world
+refuses to boot beside a simulation it did not start. Only `--target
+attach` still runs the walk below, in one world.
 
 ## States
 
@@ -239,10 +243,6 @@ planner gives it a world of its own.
 `--target` is orthogonal to `env` and to `--driver`:
 
 - `fresh` (default) — spawn per run. Hermetic.
-- `stage:<name>` — boot that stage once and run the whole selection against
-  it: no chain walk, no per-test state, and nothing saved back. Naming the
-  stage is the assertion that the world already stands where the tests need
-  it, the same bargain attach strikes for a running daemon.
 - `attach` — no spawning: run against a daemon that is already up, resolved
   the way astral-py resolves one (`ASTRAL_ENDPOINT`, `ASTRALD_APPHOST_TOKEN`
   and friends). The code-and-debug loop: point a test at the daemon you are
@@ -255,6 +255,9 @@ about: a start state is **checked, never built** — a selection that would
 need a prereq prefix is refused rather than run at your daemon — and a
 `mutates` test prints a warning naming itself before anything happens.
 Attach has one daemon, so a test with a multi-node roster is refused too.
+
+`--keep` leaves the last world up: a local world's nodes, or a VM world's
+simulation with its tunnels.
 
 ## Scripted and AI-driven
 

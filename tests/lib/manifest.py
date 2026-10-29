@@ -252,10 +252,10 @@ def validate_order(all: dict, names: list) -> None:
     if unknown:
         raise ValueError(f"unknown test(s): {', '.join(unknown)}")
 
-    # why: the walk seeds at the first test's start, not at null. A suite may
-    # legitimately begin partway up the chain — a suite run against a pinned
-    # stage opens at whatever state that stage stands at, which the netsim
-    # executor boots rather than builds. Seeding at null would reject it.
+    # why: the walk seeds at the first test's start, not at null. A selection
+    # may legitimately begin partway up the chain — an attached daemon
+    # already stands at whatever state it stands at, and attach checks a
+    # start state rather than building it. Seeding at null would reject it.
     state, fence, mutator = all[names[0]].start, None, None
     for name in names:
         t = all[name]

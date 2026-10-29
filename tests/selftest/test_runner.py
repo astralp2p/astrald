@@ -37,9 +37,6 @@ class FakeExecutor:
     def run_agent(self, test, log: Path, facts: Path, timeout: int) -> int:
         raise ExecutorError("node1: operator model is not m after the rewrite")
 
-    def save(self, state: str) -> None:
-        pass
-
     def broken(self) -> list:
         return []
 
@@ -65,20 +62,24 @@ class PrepareFailsAndDies(DiesUnderTest):
         raise ExecutorError("node1: never became ready")
 
 
-class SaveFails(FakeExecutor):
-    """A world whose snapshot breaks after the first producer passes."""
+class CrashesOnSecond(FakeExecutor):
+    """A world whose second prepare dies of something no step catches."""
 
-    def save(self, state: str) -> None:
-        raise ExecutorError("netsim save --sim 1 e2e-one-node: exit 1\nno space")
+    prepared = 0
+
+    def prepare(self, test) -> None:
+        self.prepared += 1
+        if self.prepared == 2:
+            raise RuntimeError("netsim ps: lost the simulation\nno space")
 
 
 def run(selection: list, ex_class=FakeExecutor, driver: str = "script",
-        step=lambda *a, **kw: 0) -> tuple:
+        step=lambda *a, **kw: 0, target: str = "fresh") -> tuple:
     """(exit code, results doc, report text, executor, world record) of one
     runner.main over a fake world, with every driver and oracle step
     answered by step."""
     args = argparse.Namespace(selection=selection, driver=driver,
-                              target="fresh", keep=False)
+                              target=target, keep=False)
     made = []
 
     def executor(*_):
@@ -91,6 +92,7 @@ def run(selection: list, ex_class=FakeExecutor, driver: str = "script",
                               return_value=(Path(tmp) / "astrald", "abc")), \
             mock.patch.object(runner, "_executor", executor), \
             mock.patch.object(runner, "_local_world", executor), \
+            mock.patch.object(runner, "_vm_world", executor), \
             mock.patch.object(runner, "lease_ports",
                               return_value=SimpleNamespace(base=0)), \
             mock.patch.object(runner, "_run_step", step), \
@@ -119,7 +121,7 @@ class TestOperatorError(unittest.TestCase):
                 mock.patch.object(runner, "RESULTS", Path(tmp)), \
                 mock.patch.object(runner, "ensure_binary",
                                   return_value=(Path(tmp) / "astrald", "abc")), \
-                mock.patch.object(runner, "_executor",
+                mock.patch.object(runner, "_vm_world",
                                   lambda *_: FakeExecutor()), \
                 contextlib.redirect_stdout(io.StringIO()):
             self.assertEqual(runner.main(args), 1)
@@ -139,10 +141,11 @@ class TestOperatorError(unittest.TestCase):
 class TestCrashSafe(unittest.TestCase):
     """A run that dies still writes its results and its report."""
 
-    def test_a_save_error_skips_the_rest_and_reports_incomplete(self):
-        # why: save() raised outside the loop's try, after the loop's finally
-        # had run, so finalize was skipped and only events.jsonl survived
-        code, doc, text, ex, world = run(["adopt-node"], ex_class=SaveFails)
+    def test_a_crash_skips_the_rest_and_reports_incomplete(self):
+        # why: an error no step catches — save() once raised outside the
+        # loop's try — skipped finalize, and only events.jsonl survived
+        code, doc, text, ex, world = run(["adopt-node"],
+                                         ex_class=CrashesOnSecond)
         self.assertNotEqual(code, 0)
         self.assertTrue(ex.torn_down)
         # the record is written on the abort path, and a skip never joins it
@@ -151,13 +154,13 @@ class TestCrashSafe(unittest.TestCase):
         first, second = doc["entries"]
         self.assertEqual((first["test"], first["status"]),
                          ("bootstrap-user-software-key", "pass"))
-        self.assertEqual((second["test"], second["status"], second["reason"]),
-                         ("adopt-node", "skipped",
-                          "ExecutorError: netsim save --sim 1 e2e-one-node: "
-                          "exit 1"))
+        self.assertEqual((second["test"], second["status"], second["phase"],
+                          second["reason"]),
+                         ("adopt-node", "skipped", "prepare",
+                          "RuntimeError: netsim ps: lost the simulation"))
         self.assertEqual(doc["aborted"], second["reason"])
         self.assertIn("— INCOMPLETE", text)
-        self.assertIn("- `adopt-node` — ExecutorError: netsim save", text)
+        self.assertIn("- `adopt-node` — RuntimeError: netsim ps", text)
 
     def test_ctrl_c_tears_down_and_reports_the_rest_as_interrupted(self):
         calls = []
@@ -189,10 +192,10 @@ class TestCrashSafe(unittest.TestCase):
         self.assertIn("— INCOMPLETE", text)
 
     def test_pushed_survives_an_abort(self):
-        class PushedSaveFails(PushingExecutor, SaveFails):
+        class PushedCrashes(PushingExecutor, CrashesOnSecond):
             pass
 
-        _, doc, _, _, _ = run(["adopt-node"], ex_class=PushedSaveFails)
+        _, doc, _, _, _ = run(["adopt-node"], ex_class=PushedCrashes)
         self.assertIn("aborted", doc)
         self.assertEqual(doc["pushed"], "node1,node2,reflector")
 
@@ -251,16 +254,36 @@ class TestCrashSafe(unittest.TestCase):
 
 class TestExecutorPath(unittest.TestCase):
     def test_a_skip_on_the_executor_path_names_the_failed_test(self):
-        # why: the executor path runs through the world loop and takes its
-        # skip rule; it read "state one-node was never built" before
-        _, doc, _, _, _ = run(["adopt-node"], driver="agent")
+        # why: attach, the one executor path left, runs through the world
+        # loop and takes its skip rule; it read "state one-node was never
+        # built" before
+        def step(py, script, log, env, timeout):
+            return 1 if script.parent.name == "bootstrap-user-software-key" \
+                else 0
+
+        _, doc, _, _, _ = run(["bootstrap-user-software-key", "fs-watch"],
+                              target="attach", step=step)
         failed, skipped = doc["entries"]
         self.assertEqual((failed["test"], failed["failure_kind"]),
-                         ("bootstrap-user-software-key", "environment"))
+                         ("bootstrap-user-software-key", "driver"))
         self.assertEqual((skipped["test"], skipped["env"], skipped["world"],
                           skipped["reason"]),
-                         ("adopt-node", "netsim", "w0",
+                         ("fs-watch", "node", "w0",
                           "bootstrap-user-software-key failed in w0"))
+
+
+class TestAgentRuns(unittest.TestCase):
+    def test_prereqs_run_by_script_and_the_selected_test_by_the_operator(self):
+        # why: rule 7 — an agent run follows the plan, so its prereqs build
+        # the world by script unless --prereqs agent asks otherwise
+        _, doc, _, _, _ = run(["adopt-node"], driver="agent")
+        self.assertEqual([(e["test"], e["kind"], e["env"], e["driver"],
+                           e["status"], e.get("failure_kind"))
+                          for e in doc["entries"]],
+                         [("bootstrap-user-software-key", "prereq", "netsim",
+                           "script", "pass", None),
+                          ("adopt-node", "test", "netsim", "agent", "fail",
+                           "environment")])
 
 
 class PushingExecutor(FakeExecutor):
@@ -277,7 +300,7 @@ class TestPushedHeader(unittest.TestCase):
                 mock.patch.object(runner, "RESULTS", Path(tmp)), \
                 mock.patch.object(runner, "ensure_binary",
                                   return_value=(Path(tmp) / "astrald", "abc")), \
-                mock.patch.object(runner, "_executor",
+                mock.patch.object(runner, "_vm_world",
                                   lambda *_: PushingExecutor()), \
                 contextlib.redirect_stdout(io.StringIO()):
             runner.main(args)
@@ -290,40 +313,15 @@ class TestDriverEnv(unittest.TestCase):
     AMBIENT = {"ASTRAL_ENDPOINT": "tcp:127.0.0.1:8625",
                "ASTRALD_APPHOST_TOKEN": "developer-token"}
 
-    def test_a_stage_run_hands_its_drivers_a_stripped_env(self):
-        # why through main(): the defect was the call site, which passed the
-        # header's hermetic — false under stage: — and stripped nothing
-        args = argparse.Namespace(selection=["smoke"], driver="script",
-                                  target="stage:two-nodes", keep=False)
-        seen = []
-
-        def run_step(py, script, log, env, timeout):
-            seen.append(env)
-            return 0
-
-        with tempfile.TemporaryDirectory() as tmp, \
-                mock.patch.dict("os.environ", self.AMBIENT), \
-                mock.patch.object(runner, "RESULTS", Path(tmp)), \
-                mock.patch.object(runner, "ensure_binary",
-                                  return_value=(Path(tmp) / "astrald", "abc")), \
-                mock.patch.object(runner, "_executor",
-                                  lambda *_: FakeExecutor()), \
-                mock.patch.object(runner, "_run_step", run_step), \
-                contextlib.redirect_stdout(io.StringIO()):
-            self.assertEqual(runner.main(args), 0)
-        self.assertEqual(len(seen), 2)              # driver, then oracle
-        for env in seen:
-            for var in self.AMBIENT:
-                self.assertNotIn(var, env)
-
     def env_for(self, target: str) -> dict:
         with mock.patch.dict("os.environ", self.AMBIENT):
             return runner.driver_env(Path("/s/session.json"), target)
 
     def test_ambient_endpoint_and_token_are_stripped_but_under_attach(self):
         # why: a developer's token answered for a test's anonymous connect
-        # under stage:, which stripped nothing because it is not hermetic
-        for target in ("fresh", "stage:two-nodes"):
+        # under the retired stage: target, which stripped nothing because it
+        # is not hermetic
+        for target in ("fresh",):
             with self.subTest(target=target):
                 env = self.env_for(target)
                 for var in self.AMBIENT:

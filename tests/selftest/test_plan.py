@@ -280,19 +280,12 @@ class TestRunPlan(unittest.TestCase):
             self.assertEqual(runner.main(self.args(
                 selection=["adopt-node"], target="attach")), 2)
 
-    def test_prereqs_on_a_local_run_is_refused(self):
+    def test_prereqs_agent_without_the_agent_driver_is_refused(self):
         boom = mock.Mock(side_effect=AssertionError("refused run built"))
         with mock.patch.object(runner, "ensure_binary", boom), \
              mock.patch("builtins.print"):
             self.assertEqual(runner.main(self.args(
                 plan=False, selection=["smoke"], prereqs="agent")), 2)
-
-    def test_isolate_on_a_vm_run_is_refused(self):
-        # note: local runs follow the plan, isolated or not; a VM run does
-        # not yet, so an isolated one would quietly share a world
-        with mock.patch("builtins.print"):
-            self.assertEqual(runner.main(self.args(plan=False,
-                                                   isolate=True)), 2)
 
 
 if __name__ == "__main__":

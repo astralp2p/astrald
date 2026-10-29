@@ -66,9 +66,6 @@ class FakeExecutor:
     def broken(self) -> list:
         return []
 
-    def save(self, state: str) -> None:
-        pass
-
     def teardown(self, keep: bool) -> None:
         pass
 

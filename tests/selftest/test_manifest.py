@@ -292,8 +292,8 @@ class TestWalk(ManifestCase):
                                       "bootstrap-user-software-key"])
 
     def test_a_suite_may_open_partway_up_the_chain(self):
-        # a suite run against a pinned stage opens at two-nodes: the netsim
-        # executor boots that state instead of building it
+        # an attached daemon may already stand at two-nodes: attach checks
+        # that state instead of building it
         self.branch()
         validate_order(self.all, ["object-store"])
         validate_order(self.all, ["object-store", "expel-node"])

@@ -6,11 +6,11 @@ Rendering it here costs nothing and catches exactly that.
 """
 import unittest
 
-from lib.executors.netsim import DEFAULT_OPERATOR, NetsimExecutor
+from lib.worlds.vm import DEFAULT_OPERATOR, VmWorld
 
 
 def executor(model="muse-glimmer-30b-p6", base_url=""):
-    ex = NetsimExecutor.__new__(NetsimExecutor)
+    ex = VmWorld.__new__(VmWorld)
     ex._agent_model, ex._agent_base_url, ex._model_applied = model, base_url, False
     ex.operator = dict(DEFAULT_OPERATOR)
     return ex
@@ -24,7 +24,7 @@ class TestAgentModel(unittest.TestCase):
             box["script"] = script
             return f"OPENAI_MODEL={ex._agent_model}"
 
-        ex._ssh = ssh
+        ex.ssh = ssh
         ex._apply_model()
         return ex, box.get("script", "")
 
@@ -42,18 +42,18 @@ class TestAgentModel(unittest.TestCase):
     def test_applies_once(self):
         ex, _ = self.render()
         calls = []
-        ex._ssh = lambda vm, s: calls.append(s) or "OPENAI_MODEL=x"
+        ex.ssh = lambda vm, s: calls.append(s) or "OPENAI_MODEL=x"
         ex._apply_model()
         self.assertEqual(calls, [], "a second apply must be a no-op")
 
     def test_no_model_is_a_no_op(self):
         ex = executor(model="")
-        ex._ssh = lambda vm, s: self.fail("must not ssh when no model is set")
+        ex.ssh = lambda vm, s: self.fail("must not ssh when no model is set")
         ex._apply_model()
 
     def test_a_rewrite_that_did_not_take_is_an_error(self):
         ex = executor()
-        ex._ssh = lambda vm, s: "OPENAI_MODEL=the-old-one"
+        ex.ssh = lambda vm, s: "OPENAI_MODEL=the-old-one"
         with self.assertRaises(Exception):
             ex._apply_model()
 

@@ -1,6 +1,6 @@
 # lab.story — the astrald lab, built in one netsim simulation.
 # start: null   save: e2e-lab-r<hash>, the first 8 hex of this file's sha256
-# (the netsim executor bakes it, so any edit here bakes a new stage)
+# (a VM world bakes it on first use, so any edit here bakes a new stage)
 # Result: a single stage with three nodes running astrald — node1, node2 and a
 # reflector that belongs to no swarm — and a Qwen Code operator on node1,
 # equipped with the astral-agent skill.

@@ -21,16 +21,20 @@ from lib import plan as planner
 from lib.build import ensure_binary, git_ref
 from lib.executors import ExecutorError
 from lib.executors.attach import AttachExecutor
-from lib.executors.netsim import NetsimExecutor
 from lib.nodeconfig import PortsBusy, lease_ports
 from lib.record import WorldRecord
 from lib.results import RunHeader, RunResults, fresh_run_dir
 from lib.worlds.local import LocalWorld
+from lib.worlds.vm import VmWorld
 
 TESTS = Path(__file__).resolve().parent.parent
 REPO = TESTS.parent
 RESULTS = TESTS / "results"
 DEFAULT_SUITE = "main.suite"
+# the env a record names, by the kind of world it ran in
+ENV_OF = {"local": "node", "vm": "netsim", "attach": "node"}
+# the CLI options a caller may leave out: the selftests build args by hand
+OPTIONS = {"plan": False, "isolate": False, "prereqs": "script", "vm": False}
 
 
 def _run_step(py: str, script: Path, log: Path, env: dict, timeout: int) -> int:
@@ -96,11 +100,13 @@ class Step:
     test: object        # manifest.Test
     kind: str           # "test", or "prereq": run to build what a test continues
     dir: str            # its artifact directory under results/<stamp>/
+    env: str            # the env its world is: "node" or "netsim"
+    driver: str         # who performs its flow: "script" or "agent"
 
 
 def layout(units: list) -> list:
-    """Every step of a run of [(world, [(Test, kind)])], in order, each with
-    the artifact directory it writes.
+    """Every step of a run of [(world, env, [(Test, kind, driver)])], in
+    order, each with the artifact directory it writes.
 
     why a test's first run keeps results/<stamp>/<test>/: its session view
     then sits two levels under results/, and fs-watch and discover-swarm
@@ -108,24 +114,25 @@ def layout(units: list) -> list:
     ran takes <test>.<world> beside it, at the same depth.
     """
     seen, out = set(), []
-    for world, steps in units:
-        for t, kind in steps:
+    for world, env, steps in units:
+        for t, kind, driver in steps:
             out.append(Step(world, t, kind,
-                            t.name if t.name not in seen else f"{t.name}.{world}"))
+                            t.name if t.name not in seen else f"{t.name}.{world}",
+                            env, driver))
             seen.add(t.name)
     return out
 
 
-def _entry(s: Step, env: str, driver: str) -> dict:
+def _entry(s: Step) -> dict:
     """The fields every record of a step carries, whatever its status.
 
-    why env is the run's: a record states the env the test RAN in, not the
+    why env is the world's: a record states the env the test RAN in, not the
     one its manifest asks for as a minimum. A node test lifted into VMs — by
-    a netsim test ahead of it, or by the agent driver — really ran there, and
-    a record that said otherwise would hide the one property the design is
-    built on.
+    a netsim test it shares a world with, or by the agent driver — really ran
+    there, and a record that said otherwise would hide the one property the
+    design is built on.
     """
-    return dict(test=s.test.name, kind=s.kind, env=env, driver=driver,
+    return dict(test=s.test.name, kind=s.kind, env=s.env, driver=s.driver,
                 world=s.world, artifacts=f"{s.dir}/")
 
 
@@ -220,9 +227,8 @@ def driver_env(session_json: Path, target: str) -> dict:
     it. Every target but attach resolves nothing from outside session.json;
     attach is the one mode where the ambient resolution is the point.
 
-    note: this keys off the target, not the header's `hermetic`. A pinned
-    stage is not hermetic, yet its nodes are the harness's, not the
-    developer's.
+    note: this keys off the target, not the header's `hermetic`: a run that
+    is not hermetic still talks to the harness's nodes, not the developer's.
     """
     env = dict(os.environ,
                PYTHONPATH=os.environ.get("ASTRAL_TESTS_PYPATH", str(TESTS)),
@@ -273,10 +279,6 @@ def plan_for(tests: dict, selection: list) -> list:
 def print_plan(tests: dict, args) -> int:
     """--plan: the worlds the planner makes of the selection, printed, with
     nothing built, leased or started."""
-    if args.target.startswith("stage:"):
-        print("run: --plan plans fresh and attach runs, not a pinned stage",
-              file=sys.stderr)
-        return 2
     try:
         worlds = plan_worlds(tests, args)
     except ValueError as e:
@@ -289,13 +291,20 @@ def print_plan(tests: dict, args) -> int:
 def plan_worlds(tests: dict, args) -> list:
     """The worlds the planner makes of the CLI's selection: a suite's tests,
     with its listing as the order among siblings, or the tests named."""
+    if args.target == "attach" and args.vm:
+        raise ValueError("--target attach runs the daemon already up: it "
+                         "takes no --vm")
+    if args.prereqs != "script" and args.driver != "agent":
+        # why refused rather than ignored: only an operator-driven run has
+        # prereqs an operator could drive, and the run would read as though
+        # one had
+        raise ValueError("--prereqs agent needs --driver agent")
     selection = args.selection or [DEFAULT_SUITE]
     listed = selected_suite(selection)
-    return planner.plan(tests, listed or selection, listed or (),
-                        isolate=getattr(args, "isolate", False),
-                        driver=args.driver, target=args.target,
-                        prereqs_agent=getattr(args, "prereqs",
-                                              "script") == "agent")
+    return planner.plan(
+        tests, listed or selection, listed or (), isolate=args.isolate,
+        driver=args.driver, target=args.target, vm=args.vm,
+        prereqs_agent=args.prereqs == "agent")
 
 
 def _reject_unbuilt(args, plan: list) -> str | None:
@@ -315,23 +324,21 @@ def _reject_unbuilt(args, plan: list) -> str | None:
                     "attached daemon. Attach checks a start state, it never "
                     "builds one — select a test whose start the daemon "
                     "already stands at.")
-    if args.target == "attach" and run_env(plan, args.driver, args.target) == "netsim":
+    if args.target == "attach" and run_env(plan, args.driver) == "netsim":
         return "--target attach has no simulation to attach to"
     restarting = [t.name for t, kind in plan if kind == "test" and t.restart]
-    if restarting and (args.target != "fresh"
-                       or run_env(plan, args.driver, args.target) != "node"):
+    if restarting:
         # why refused up front: the driver changes the node before the
-        # restart, and only env node's fresh world can restart one.
-        return (f"{restarting[0]} restarts a node, which only env node's "
-                "fresh world can do")
+        # restart, and only a fresh local world can restart one.
+        return (f"{restarting[0]} restarts a node, which only a fresh local "
+                "world can do")
     undeclared = [t.name for t, _ in plan if args.driver not in t.drivers]
     if undeclared:
         return f"{undeclared[0]} declares no {args.driver} driver"
     return None
 
 
-def run_env(plan: list, driver: str = "script",
-            target: str = "fresh") -> str:
+def run_env(plan: list, driver: str = "script") -> str:
     """The env this run executes in: netsim as soon as any selected test needs it.
 
     why: a netsim test's prereq prefix is env-node tests, and they must build
@@ -346,23 +353,16 @@ def run_env(plan: list, driver: str = "script",
     A manifest's env is the cheapest world that can falsify the test, not a
     ceiling.
     """
-    # A pinned stage is a simulation by definition, whatever the selected
-    # tests declare — so a node test run against one really did run in VMs.
-    if driver == "agent" or target.startswith("stage:"):
+    if driver == "agent":
         return "netsim"
     selected = [t for t, kind in plan if kind == "test"]
     return "netsim" if any(t.env == "netsim" for t in selected) else "node"
 
 
 def _executor(args, binary, ref):
-    """The machines of a run the plan does not drive yet: an attached daemon,
-    a pinned stage, or a simulation."""
-    if args.target == "attach":
-        return AttachExecutor()
-    ex = NetsimExecutor(binary, ref)
-    if args.target.startswith("stage:"):
-        ex.pinned = args.target.split(":", 1)[1]
-    return ex
+    """The machines of the one run the plan does not drive yet: an attached
+    daemon."""
+    return AttachExecutor()
 
 
 def _local_world(dir: Path, binary: Path, port_base: int, keep: bool):
@@ -370,42 +370,24 @@ def _local_world(dir: Path, binary: Path, port_base: int, keep: bool):
     return LocalWorld(dir, binary, port_base, keep=keep)
 
 
-def local_plan(tests: dict, args) -> list | None:
-    """The worlds a fresh scripted run plans into, when every one of them is
-    local; None when the run takes the executor path instead.
+def _vm_world(dir: Path, binary: Path, ref: str, keep: bool):
+    """A VM world, its logs under dir; it boots on its first test."""
+    return VmWorld(dir, binary, ref, keep=keep)
 
-    todo: child 7 runs VM worlds from the plan, and child 8 attach and the
-    agent driver; the executor path goes with them.
+
+def attach_plan(tests: dict, args) -> list:
+    """[(Test, kind)] for --target attach, or ValueError naming why the
+    selection cannot run there.
+
+    todo: child 8 makes attach a world the planner plans (rule 8), and this
+    path goes with the executors.
     """
-    if getattr(args, "prereqs", "script") != "script":
-        # why refused rather than ignored: the run would drive its prereqs
-        # by script and read as though an operator had
-        raise ValueError("--prereqs takes effect with --plan only, until "
-                         "agent runs follow the plan")
-    if args.target != "fresh" or args.driver != "script":
-        return None
-    worlds = plan_worlds(tests, args)
-    return worlds if all(w.kind == "local" for w in worlds) else None
-
-
-def legacy_plan(tests: dict, args) -> list:
-    """[(Test, kind)] for the executor path, or ValueError naming why the
-    selection cannot run there."""
-    if getattr(args, "isolate", False):
-        # why refused rather than ignored: a run that silently shared a world
-        # would read as an isolated verdict it never was
-        raise ValueError("--isolate runs local worlds only, until VM worlds "
-                         "follow the plan")
+    if args.isolate or args.prereqs != "script" or args.vm:
+        # why refused rather than ignored: attach runs one daemon that is
+        # already up, so none of these can mean anything there
+        raise ValueError("--target attach runs the daemon already up: it "
+                         "takes no --isolate, --prereqs or --vm")
     plan = plan_for(tests, args.selection)
-    if args.target.startswith("stage:"):
-        # why: naming a stage asserts the world already stands where the
-        # selection starts, so building its prefix would rebuild what the
-        # operator just said is there. Attach makes the same assertion and
-        # refuses instead; a stage is disposable, so here the prefix is
-        # simply not run.
-        plan = [(t, kind) for t, kind in plan if kind == "test"]
-        if not plan:
-            raise ValueError("nothing to run against a pinned stage")
     unbuilt = _reject_unbuilt(args, plan)
     if unbuilt:
         raise ValueError(unbuilt)
@@ -415,8 +397,8 @@ def legacy_plan(tests: dict, args) -> list:
 class _Run:
     """What the world loop shares across a run's worlds."""
 
-    def __init__(self, args, tests: dict, results, env: str):
-        self.args, self.tests, self.results, self.env = args, tests, results, env
+    def __init__(self, args, tests: dict, results):
+        self.args, self.tests, self.results = args, tests, results
         self.pushed = []
         self.torn = None          # the first world close that raised
 
@@ -442,7 +424,7 @@ class _Run:
     def _steps(self, steps: list, ex, record: WorldRecord) -> None:
         status, died_at = {}, None
         for s in steps:
-            entry = _entry(s, self.env, self.args.driver)
+            entry = _entry(s)
             # why: a dead node voids every later verdict in its world, and a
             # test whose lineage did not pass stands on a world never built
             reason = (f"world {s.world} died at {died_at}" if died_at
@@ -456,8 +438,8 @@ class _Run:
 
     def _blocked(self, s: Step, status: dict) -> str | None:
         """Why s cannot run: the first of its lineage that ran in this world
-        and did not pass. A lineage test this world never ran — a pinned
-        stage stands past it — blocks nothing."""
+        and did not pass. A lineage test this world never ran blocks
+        nothing."""
         for name in planner.chain(self.tests, s.test.name)[:-1]:
             if status.get(name, "pass") != "pass":
                 return f"{name} failed in {s.world}"
@@ -486,7 +468,7 @@ class _Run:
             write_view(art / "session.json", record.run, ex.nodes(), facts)
             return env
 
-        status, fk, phase = _perform(ex, t, self.args.driver, art, view)
+        status, fk, phase = _perform(ex, t, s.driver, art, view)
         died = ex.broken()
         if died and fk != "environment":
             # why: a dead daemon voids any verdict, even a nominal pass
@@ -494,12 +476,49 @@ class _Run:
         self.results.record(**entry, status=status, failure_kind=fk,
                             phase=phase, duration_s=time.monotonic() - t0)
         record.add(t.name, s.kind, status, driven if status == "pass" else {})
-        if status == "pass" and t.saves:
-            ex.save(t.saves)
         return status, bool(died)
 
 
+def _with_defaults(args):
+    for name, value in OPTIONS.items():
+        if not hasattr(args, name):
+            setattr(args, name, value)
+    return args
+
+
+def _units(tests: dict, args) -> list:
+    """[(world, env, [(Test, kind, driver)])] — what the run executes, or
+    ValueError naming why it cannot run."""
+    if args.target == "attach":
+        # note: attach runs through the same world loop and takes its rules;
+        # its broken() is always empty, so a world-died skip never fires there
+        return [("w0", "node", [(t, kind, args.driver)
+                                for t, kind in attach_plan(tests, args)])]
+    return [(w.name, ENV_OF[w.kind],
+             [(tests[s.test], s.kind, s.driver) for s in w.steps])
+            for w in plan_worlds(tests, args)]
+
+
+def _operator(cfg: dict, results) -> dict:
+    """The operator profile config.toml selects for --driver agent.
+
+    why named rather than assumed: the profile IS the operator under test,
+    so the run records which one drove it. A pass rate that cannot name its
+    agent is not attributable to anything.
+    """
+    agent_cfg = cfg.get("agent", {})
+    name = agent_cfg.get("use", "qwen")
+    profile = agent_cfg.get(name)
+    if not isinstance(profile, dict):
+        raise ValueError(f"config.toml selects agent profile {name!r}, but "
+                         f"has no [agent.{name}] section")
+    results.header["agent_profile"] = name
+    results.header["agent_model"] = profile.get("model", "") or "(lab default)"
+    return profile
+
+
 def main(args) -> int:
+    args = _with_defaults(args)
     cfg = tomllib.loads((TESTS / "config.toml").read_text())
 
     try:
@@ -507,26 +526,13 @@ def main(args) -> int:
     except ValueError as e:
         print(f"run: {e}", file=sys.stderr)
         return 2
-    if getattr(args, "plan", False):
+    if args.plan:
         return print_plan(tests, args)
     try:
-        worlds = local_plan(tests, args)
-        legacy = legacy_plan(tests, args) if worlds is None else None
+        units = _units(tests, args)
     except ValueError as e:
         print(f"run: {e}", file=sys.stderr)
         return 2
-    if legacy is None:
-        units = [(w.name, [(tests[s.test], s.kind) for s in w.steps])
-                 for w in worlds]
-        env_of_run = "node"
-    else:
-        # note: the executor path runs through the same world loop, so it
-        # takes the loop's rules — a lineage skip names the test that failed,
-        # broken() is read after every step, environment failures included,
-        # and a world that died skips the rest of itself. Deliberate: child 7
-        # deletes the VM executor path, and attach's broken() is always empty.
-        units = [("w0", legacy)]
-        env_of_run = run_env(legacy, args.driver, args.target)
 
     if args.target == "attach":
         binary, ref = None, git_ref(REPO)     # the daemon is already running
@@ -541,8 +547,16 @@ def main(args) -> int:
         hermetic=args.target == "fresh",
         selection=" ".join(args.selection) or DEFAULT_SUITE,
         target=args.target))
+    profile = None
+    if args.driver == "agent":
+        try:
+            profile = _operator(cfg, results)
+        except ValueError as e:
+            print(f"run: {e}", file=sys.stderr)
+            return 2
 
-    if legacy is None:
+    lease = None
+    if any(env == "node" for _, env, _ in units) and args.target != "attach":
         try:
             # why one lease for the run: its worlds run one after another,
             # so they share a span no other run can take
@@ -550,52 +564,44 @@ def main(args) -> int:
         except PortsBusy as e:
             print(f"run: {e}", file=sys.stderr)
             return 2
-
-        def open_world(name: str, keep: bool):
-            return _local_world(run_dir / name / "session", binary,
-                                lease.base, keep)
-    else:
+    if args.target == "attach":
         ex = _executor(args, binary, ref)
-        if args.driver == "agent":
-            # why named rather than assumed: the profile IS the operator
-            # under test, so the run records which one drove it. A pass rate
-            # that cannot name its agent is not attributable to anything.
-            agent_cfg = cfg.get("agent", {})
-            name = agent_cfg.get("use", "qwen")
-            profile = agent_cfg.get(name)
-            if not isinstance(profile, dict):
-                print(f"run: config.toml selects agent profile {name!r}, but "
-                      f"has no [agent.{name}] section", file=sys.stderr)
-                return 2
-            ex.use_operator(profile)
-            ex.want_model(profile.get("model", ""), profile.get("base_url", ""))
-            results.header["agent_profile"] = name
-            results.header["agent_model"] = (profile.get("model", "")
-                                             or "(lab default)")
-        mutators = [t.name for t, _ in legacy if t.mutates]
-        if args.target != "fresh" and mutators:
-            print(f"run: --target {args.target}: {', '.join(mutators)} really "
+        mutators = [s[0].name for _, _, steps in units for s in steps
+                    if s[0].mutates]
+        if mutators:
+            print(f"run: --target attach: {', '.join(mutators)} really "
                   "mutates this world — it is not a throwaway", file=sys.stderr)
 
-        def open_world(name: str, keep: bool):
+    def open_world(name: str, env: str, keep: bool):
+        if args.target == "attach":
             return ex
+        if env == "node":
+            return _local_world(run_dir / name / "session", binary,
+                                lease.base, keep)
+        world = _vm_world(run_dir / name, binary, ref, keep)
+        if profile is not None:
+            world.use_operator(profile)
+            world.want_model(profile.get("model", ""),
+                             profile.get("base_url", ""))
+        return world
 
     steps = layout(units)
-    run = _Run(args, tests, results, env_of_run)
+    run = _Run(args, tests, results)
     stop = None               # what ended the loop early, if anything
     unclosed = None           # the world whose close raised
     try:
-        for i, (name, _) in enumerate(units):
+        for i, (name, env, _) in enumerate(units):
             # why the last world only: --keep asks for the world to debug,
             # and every world before it has already handed on its verdicts
             keep = args.keep and i == len(units) - 1
             run.world(name, [s for s in steps if s.world == name],
-                      open_world(name, keep), keep)
+                      open_world(name, env, keep), keep)
             if run.torn is not None:
                 if not isinstance(run.torn, Exception):
                     raise run.torn      # Ctrl-C while a world closed
                 # why: a world that failed to close may still hold the run's
-                # ports, and the next world would boot onto them
+                # ports, or a simulation still up, and the next world would
+                # boot beside it
                 unclosed = name
                 break
     # why Ctrl-C and every exception: a VM run lasts tens of minutes, and a
@@ -619,8 +625,7 @@ def main(args) -> int:
             # it carries the step it was in
             phase = getattr(stop, "phase", "prepare")
             for s in unrun:
-                _skip(results, _entry(s, env_of_run, args.driver), reason,
-                      phase)
+                _skip(results, _entry(s), reason, phase)
                 phase = "prepare"
         if run.torn is not None:
             aborted.append(f"teardown: {_abort_reason(run.torn)}")

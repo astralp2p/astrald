@@ -98,9 +98,6 @@ class LocalWorld(Executor):
             restarts=n.restarts,
         ) for name, n in self._nodes.items()}
 
-    def save(self, state: str) -> None:
-        """No-op: a local world carries its state forward in place."""
-
     def broken(self) -> list:
         return [name for name, n in self._nodes.items() if not n.alive()]
 

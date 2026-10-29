@@ -43,10 +43,6 @@ class Executor:
         """name -> node entry (`node_entry`) for every node up so far."""
         raise NotImplementedError
 
-    def save(self, state: str) -> None:
-        """Make the current world available under a state name."""
-        raise NotImplementedError
-
     def restart(self, names: list) -> None:
         """Stop the named nodes and boot them again on the same state.
 

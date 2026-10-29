@@ -24,15 +24,6 @@ examples:
 """
 
 
-def target(value: str) -> str:
-    """--target: where the machines come from, orthogonal to env and driver."""
-    named_stage = value.startswith("stage:") and len(value) > len("stage:")
-    if value in ("fresh", "attach") or named_stage:
-        return value
-    raise argparse.ArgumentTypeError(
-        f"bad target {value!r} (fresh | stage:<name> | attach)")
-
-
 def astral_src() -> Path:
     cfg = tomllib.loads((TESTS / "config.toml").read_text())
     src = Path(os.path.expanduser(cfg["astral_py"]["path"])) / "src"
@@ -50,20 +41,21 @@ def main() -> int:
                          "e2e/ (default: main.suite)")
     ap.add_argument("--driver", choices=["script", "agent"], default="script",
                     help="how the flow is performed (default: script)")
-    ap.add_argument("--target", type=target, default="fresh",
-                    metavar="fresh|stage:<name>|attach",
-                    help="where the machines come from (default: fresh)")
+    ap.add_argument("--target", choices=["fresh", "attach"], default="fresh",
+                    help="where the machines come from: worlds the run "
+                         "spawns, or the daemon already up (default: fresh)")
     ap.add_argument("--keep", action="store_true",
                     help="leave the run's last world running after the run")
     ap.add_argument("--plan", action="store_true",
                     help="print the worlds the selection plans into and exit, "
                          "starting nothing")
     ap.add_argument("--isolate", action="store_true",
-                    help="run every selected test in a world of its own "
-                         "(a VM run refuses it, until VM runs follow the plan)")
+                    help="run every selected test in a world of its own")
     ap.add_argument("--prereqs", choices=["script", "agent"], default="script",
                     help="who drives prereqs and replays under --driver agent "
-                         "(only --plan honours it, until runs follow the plan)")
+                         "(default: script)")
+    ap.add_argument("--vm", action="store_true",
+                    help="run every world in VMs, local tests included")
     args = ap.parse_args()
 
     if sys.version_info < (3, 11):
