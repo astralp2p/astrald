@@ -2,368 +2,234 @@
 
 One command, real daemons, deterministic verdicts:
 
-    ./tests/run                     # the default suite (suites/main.suite)
-    ./tests/run main.suite          # a named suite, in its listed order
-    ./tests/run adopt-node          # one test + the prereq prefix it needs
-    ./tests/run smoke adopt-node    # several tests
-    ./tests/run adopt-node --keep   # leave the last world running afterwards
-    ./tests/run smoke --target attach   # judge a daemon that is already up
+    ./tests/run                        # the default suite (suites/main.suite)
+    ./tests/run adopt-node             # one test, and the tests its world needs first
+    ./tests/run --plan main.suite      # what a run would do, with nothing started
+    ./tests/run smoke --target attach  # judge a daemon you already run
 
-Design: https://wiki.satforge.dev/doc/integration-testing-system-tAKjyvbcHo
+Design: https://wiki.satforge.dev/doc/integration-testing-system-tAKjyvbcHo ·
+vision: https://wiki.satforge.dev/doc/improving-on-e2e-system-2C4ELWFOgg
 
-## Start here: suite, env, driver
+## Add a test in five minutes
 
-Three independent choices. Pick each one separately — they do not constrain
-each other.
+For humans and AI agents alike.
 
-**A suite is *what* runs.** A file under `suites/`, listing tests in the order
-they should run. Nothing more.
+**1. Make the directory** `e2e/<name>/` with four files:
 
-    ./tests/run main.suite      # the whole env-node chain, minutes
-    ./tests/run adopt-node      # no suite: one test, and whatever it needs first
+| file | what it is |
+|------|------------|
+| `test.toml` | the manifest: what the test needs (below) |
+| `script.py` | the driver: performs the flow, writes facts with `lib.sessionio.write_facts` |
+| `verify.py` | the oracle, the only judge: exits 0 when astrald did the right thing |
+| `README.md` | what the test proves, in words |
 
-| suite | what it is | env | runs in |
-|-------|------------|-----|---------|
-| `main.suite` | every local test, the everyday one | node | ~3 min |
-| `tor.suite` | two nodes meet on a LAN, one leaves it, Tor holds | netsim | ~37 min |
-| `nat.suite` | two nodes meet on a LAN, then hole-punch through NAT | netsim | not measured |
-| `gateway.suite` | a NAT'd node reaches its swarm through a gateway | netsim | not measured |
-| `agent.suite` | the flows an AI operator can drive, one world, in order | netsim | ~1.5 h |
+A driver and an oracle read one file, their session view, through
+`lib.sessionio.load()`: `{"run", "nodes", "facts"}`. Each node carries
+`endpoint`, `token`, `identity` and the other fields `lib/worlds` lists in
+`NODE_FIELDS`, `null` where its world has none. Neither ever learns whether
+a node is a process two ports away, a VM behind a tunnel, or your own daemon.
 
-**An env is *where* it runs** — the world the test needs. A manifest field.
+**2. Write the manifest.** Every key but `nodes` is optional:
 
-| env | the world | costs |
-|-----|-----------|-------|
-| `node` | astrald processes on loopback | seconds |
-| `netsim` | real VMs on a simulated LAN | minutes |
+```toml
+nodes      = ["node1", "node2"]     # the roster: names this test's nodes
+after      = "adopt-node"           # the test whose world this one continues; absent: a fresh world
+destroys   = true                   # only this test's descendants may follow it in its world
+ops        = ["enable-tor node1"]   # VM operations (netsim/ops/) run before the driver; imply destroys
+local_only = "reads a node root"    # it needs the host, so it never enters a VM world
+restart    = ["node1"]              # nodes restarted between driver and oracle (local worlds only)
+facts      = ["object_id"]          # the facts its driver writes
+timeout    = 180                    # the driver's and the oracle's budget, in seconds (default 120)
 
-`env` is a floor, not a ceiling. A `node` test runs happily in VMs when
-something else in the run needs them; it never notices, because it reads
-endpoints from `session.json` and cannot tell a process from a VM.
+[config.node1.objects]              # a module config override for one node, per world
+external_registration_sweep_interval = "1s"
+```
 
-**A driver is *who* performs the flow.**
+- **`after`** is the whole ordering model: a test names the test whose
+  world it continues, never a state. A new test needs only its files and an
+  `after`.
+- **`destroys`** marks a test that leaves its world unusable for anything
+  but its own descendants: it expels a node, purges a repository, moves a
+  node behind NAT, or claims a node another test needs unclaimed.
+- **`local_only`** is for a test that reads `mcp_url`, `authority_url`,
+  `serves_mcp`, a node `root` or a host path, or that restarts a node.
+- **`facts`** is a contract. An oracle may read only facts declared on its
+  `after` chain (`selftest/test_shipped.py` checks), and the agent driver
+  asks the operator for exactly these.
+- **`[config.<node>.<module>]`** writes over the harness's own config for
+  that module (`lib/nodeconfig.py`), key by key; a module the harness
+  builds nothing for gets the table alone. The config follows the world,
+  not the test: the planner merges the overrides of every test in a world,
+  a test that sets a key otherwise than its world forks into one of its
+  own, and a clash with its own lineage is a plan error. `--plan` lists a
+  world's overrides under its steps.
+  - Keys the harness owns, like `apphost.tokens` and the listeners' ports,
+    are refused. `mcp.bind_mcp` may only be `""`, which turns MCP off:
+    `messaging-ops` runs on `[config.nomcp1.mcp] bind_mcp = ""`.
+  - A local world writes each module's config as JSON, which astrald's YAML
+    loader reads. A VM world pushes the same files into each guest with the
+    binaries, before its ops, so a test whose override an op in its world
+    would write over forks, and a lineage holding both is refused.
+  - `--target attach` refuses an override: it renders nothing.
+
+**3. List it in a suite.** A suite under `suites/` lists tests; its order is
+only a preference among siblings. Every test is in some suite —
+`selftest/test_shipped.py` fails one that is in none, since nothing else
+would ever run it.
+
+**4. Look before you run, then run:**
+
+    ./tests/run --plan my-test     # the worlds it plans into; `*` marks a prereq
+    ./tests/run my-test            # run it, with whatever its `after` chain needs first
+    ./tests/run --isolate main.suite   # every test in a world of its own
+    ./tests/run my-test --keep     # leave the last world up to poke at
+
+`--isolate` is how you tell a real regression from interference: if a test
+passes alone and fails in the shared run, a test before it changed its world.
+
+**5. Read the result.** The runner prints a verdict and the path of
+`results/<stamp>/report.md`. See [Reading a failure](#reading-a-failure).
+
+## Suites
+
+| suite | what it is | worlds | runs in |
+|-------|------------|--------|---------|
+| `main.suite` | every local test, the everyday one | local | ~3 min |
+| `tor.suite` | two nodes meet on a LAN, one leaves it, Tor holds | VM | ~37 min |
+| `nat.suite` | two nodes meet on a LAN, then hole-punch through NAT | VM | not measured |
+| `gateway.suite` | a NAT'd node reaches its swarm through a gateway | VM | not measured |
+| `agent.suite` | the flows an AI operator can drive (`--driver agent`) | VM | ~1.5 h |
+
+The plans of the shipped suites are pinned under `selftest/golden/`, so a
+manifest change that moves a test shows up as a diff someone reads.
+
+## Worlds
+
+The planner (`lib/plan.py`) turns a selection into worlds, and the runner
+runs them one after another, each from fresh machines:
+
+- tests that only observe share a world, and run before anything builds;
+- a test that builds state continues the world;
+- every further builder, and every destroyer but one, gets a fork that
+  replays its lineage as prereqs, by script.
+
+A world is one of three kinds:
+
+| kind | the machines | when |
+|------|--------------|------|
+| local | astrald processes on loopback | the default |
+| vm | the lab's VMs on a simulated LAN (`netsim/labs/`) | a test with `ops`, `--vm`, or `--driver agent` |
+| attach | the daemon you already run | `--target attach` |
+
+A VM world boots the lab, pushes the astrald and astral-query under test to
+every VM, runs ops with their verifiers, and on close pulls each guest's
+astrald log into `results/<stamp>/w<N>/logs/`. VM worlds run one at a time.
+
+## Drivers: script and agent
 
 | driver | who | how |
 |--------|-----|-----|
 | `script` | `script.py` | code, exact and fast |
 | `agent` | an AI operator in the lab | reads `prompt.md` and works it out |
 
-    ./tests/run main.suite --driver agent
+Both are judged by the same `verify.py`, and that is the whole point:
+**script red means astrald broke; agent red while script is green means the
+operator or its prompt broke.**
 
-Both are judged by the same `verify.py`, and that is the whole point: **script
-red means astrald broke; agent red while script is green means the operator or
-its prompt broke.**
+A test an operator can drive is exactly one that ships a `prompt.md`: the
+flow in plain words, the way a person would ask for it. The operator is
+Qwen Code, baked into the lab's `node1` with the astral-agent skill, and
+`lib/agent.py` drives it:
 
-There is a fourth knob, `--target`, for where the machines come from — see
-[Where the machines come from](#where-the-machines-come-from). The default
-spawns a fresh world and is what you want unless you know otherwise.
+- the prompt's placeholders fill from the step's view: `{facts.<name>}`,
+  `{<node>.identity}` and `{<node>.alias}`, the roster name. An unknown
+  one is refused before anything runs, and so is any that would hand the
+  operator a token: it must never hold what it is judged with;
+- a footer asks for exactly the test's `facts`, in `~/.facts/<test>.json`.
+  That file alone is collected, and a declared fact missing from it is a
+  `driver` failure;
+- the model is `config.toml`'s `[agent] model`, set in the operator once
+  per world; `base_url` applies only with a model. The report names the
+  model, since a red under one model says nothing about another;
+- an operator session gets `agent.TIMEOUT`, 3600 s: one measured session
+  took 2404 s.
 
-## The nouns
+Under `--driver agent` the selected tests are operator-driven and their
+prereqs run by script; `--prereqs agent` hands the prereqs to the operator
+too.
 
-- A **test** is a directory under `e2e/`: `test.toml` (the manifest),
-  `script.py` (the driver), `verify.py` (the oracle — the only judge),
-  `README.md`. Every e2e test lives here, both envs; `env` is a manifest
-  field, not a directory.
-- A **suite** is a file under `suites/`: these tests, in this order. A suite
-  composes; it never restates what a test needs.
-- A **lab** is a world recipe: `netsim/labs/two-node-plus-external/` builds
-  the VMs, the daemons and the operator that netsim tests start from. Its name
-  is its roster: the User's two nodes, plus a third that belongs to no swarm.
-- An **op** is a named machine operation: `netsim/ops/` holds every one, both
-  the ops a lab recipe builds with and the ops a test runs as steps. netsim
-  keeps one flat task namespace and cannot tell those apart, so neither does
-  the tree.
+## Fast loops
 
-## The manifest
+- **`--keep`** leaves the run's last world up: a local world's nodes, or a
+  VM world's simulation with its tunnels.
+- **`--target attach`** runs a selection against a daemon you already run,
+  resolved the way astral-py resolves one (`ASTRAL_ENDPOINT`,
+  `ASTRALD_APPHOST_TOKEN` and friends). It is the code-and-debug loop, with
+  open eyes: nothing is torn down, and a `destroys` test really changes your
+  daemon and says so first. The plan is refused when the selection needs a
+  prereq (attach checks a state, it never builds one), a roster names more
+  than one node, a test is `local_only`, or the driver is `agent`.
+- **`--save` / `--from`** skip rebuilding a VM world:
 
-```toml
-env     = "node"            # the cheapest world that can falsify the test
-start   = "one-node"        # the state the test begins from
-saves   = "two-nodes"       # the state it leaves behind, if any
-mutates = false             # true when it invalidates its start state
-nodes   = ["node1", "node2"]
-steps   = []                # env netsim only: vm:<op> … and driver
-drivers = ["script"]        # script, agent, or both
-timeout = 180               # the scripted flow's budget
-agent_timeout = 2400         # an operator plans and works the node through its own shell
-restart = ["node1"]         # env node: nodes restarted between driver and oracle
-```
+      ./tests/run adopt-node --vm --save gw     # build it in VMs, save it as gw
+      ./tests/run gateway-relay --from gw       # boot gw, run only gateway-relay
 
-`restart` names roster nodes the runner stops and boots again from their own
-root after the driver and before the oracle, so the oracle judges what a node
-holds across a restart. Only `--target fresh` in env `node` restarts a node; a
-selection that would need it anywhere else is refused before it starts. A
-node's `restarts` field in `session.json` counts its restarts.
+  `--save NAME` saves the last world, a VM world whose every step passed, as
+  netsim stage NAME. Its world record goes into every guest, root-only, so
+  the operator cannot read the tokens it is judged with. `--from NAME` boots
+  it, skips the saved history (`=` in `--plan`), and takes its facts from
+  the saved record.
 
-A roster name is one daemon for a world, shared by every test in it. Every
-node serves MCP and declares the tools `NODE_OP_TOOLS` lists, each pointed at
-one of its own operations, and `mcp-origin` calls them as an agent. It also
-declares the tools `PEER_TOOLS` lists, each pointed at the alias `PEER_ALIAS`,
-and `mcp-peer` points that alias at node2 and calls them as an agent on node1.
+Every target but `attach` strips the ambient endpoint and token variables
+from the driver environment: a developer's `ASTRALD_APPHOST_TOKEN` would
+otherwise answer for a test's anonymous connect.
 
-A test changes what a node starts with by overriding its module config:
+## Reading a failure
 
-```toml
-[config.nomcp1.mcp]         # messaging-ops: its node serves no MCP
-bind_mcp = ""
-```
+`report.md` names each failure's kind and the phase it stopped at:
 
-Each key replaces the same key of what `lib/nodeconfig.py` builds for that
-module, and a module it builds nothing for gets the table alone. The config
-follows the world, not the test: the planner merges the overrides of every
-test in a world, so each test there sees the same node, and a test that sets
-a key otherwise than its world forks into one of its own. A clash with the
-test's own lineage is a plan error. `--plan` lists a world's overrides under
-its steps. A local world writes each module's config as JSON, which astrald's
-YAML loader reads. A VM world pushes the same files into each guest's config
-directory with the binaries, before its ops, so a test whose override an op
-in its world would write over forks, and a lineage holding both is refused
-(`configure-gateway` writes `tcp` on its `--gateway` VM and `gateway` there
-and on its clients). `--target attach` refuses an override, since it renders
-nothing.
+| failure kind | means |
+|--------------|-------|
+| `driver` | the flow never happened — the driver could not perform it |
+| `verify` | astrald misbehaved — the flow ran and the oracle rejected it |
+| `environment` | the world broke — no verdict about astrald is possible |
 
-`env` is a minimum, not a prison: drivers and oracles read `session.json`
-and never learn whether the endpoints behind it are processes on loopback
-or VMs behind a tunnel.
+| phase | the step that stopped |
+|-------|-----------------------|
+| `prepare` | bringing the roster up and running its `ops` |
+| `driver` | `script.py`, or the operator |
+| `restart` | the restart `restart` names |
+| `verify` | `verify.py` |
+| `alive` | a node died under the test |
 
-## The planner's keys and `--plan`
+A skipped test carries a `reason`: the test on its `after` chain that failed
+in its world, the world dying, or the run being interrupted. A run holding a
+skip reports INCOMPLETE, never PASS; a failure outranks a skip.
 
-Every manifest also carries the keys the planner (`lib/plan.py`) reads. The
-runner still executes the state chain above; `./tests/run --plan` prints the
-worlds the planner makes of a selection and runs nothing.
+Under `results/<stamp>/`:
 
-```toml
-after      = "adopt-node"   # the test whose world this one continues; absent: a fresh world
-destroys   = true           # only this test's descendants may follow it in its world
-ops        = ["enable-tor node1 node2"]   # VM operations before the driver; imply destroys
-local_only = "<reason>"     # it needs the host (a node root, mcp_url, a restart): never in a VM
-facts      = ["user_id"]    # the facts its driver writes
+- `report.md` for people, `results.json` and `events.jsonl` for machines
+  (schema in `lib/results.py`);
+- `<test>/`: the test's `session.json` view, `driver.log`, `verify.log` and
+  `facts.json`. A test replayed as a prereq in a later world writes
+  `<test>.w<N>/`;
+- `w<N>/world.json`: the world record — its nodes, the history of what ran,
+  and the facts of every test that passed;
+- `w<N>/session/`: a local world's node roots and astrald logs;
+  `w<N>/logs/`: a VM world's guest journals.
 
-[config.node1.mcp]          # module config its world's node1 starts with
-bind_mcp = ""
-```
-
-    ./tests/run --plan main.suite            # one local world
-    ./tests/run --plan tor-link nat-punch    # two VM worlds, each replaying its prereqs
-    ./tests/run --plan --isolate main.suite  # a world per selected test
-
-A test continues the world of its `after`. At each test, the children that
-neither build for another test nor destroy run first, in suite order; then
-the first producer continues the world and each further one forks a world
-that replays the lineage; one destroyer may end the world, and every other
-destroyer forks. `*` marks a prereq. The plans of the shipped suites are
-pinned under `selftest/golden/`.
-
-A run executes exactly this plan, world after world, each from fresh
-machines: `--isolate` gives every selected test its own world, and a fork
-replays its prereqs by script. A local world is astrald processes on
-loopback; a VM world boots the lab (`netsim/labs/`), pushes the binaries
-under test to every VM, and on close pulls each guest's astrald log into
-`results/<stamp>/w<N>/logs/`. VM worlds run one at a time, and a VM world
-refuses to boot beside a simulation it did not start. Only `--target
-attach` still runs the walk below, in one world.
-
-## States
-
-Tests chain through named states — `null → one-node → two-nodes → …` — one
-namespace across both envs. A state has at most one producer.
-
-- A suite is valid when a linear walk of its listed order satisfies every
-  test's `start`: the start is the walk state or one of its ancestors.
-- A test with `mutates = true` narrows the walk to its own branch; nothing
-  downstream may consume the state it invalidated.
-- A bare test selection gets the prereq prefix its start needs, derived
-  from the chain.
-- A failure skips every test whose start stands on the state that broke.
-
-## Output
-
-Every run writes `results/<stamp>/results.json` and `events.jsonl` (schema
-in `lib/results.py`): a header — `astrald_ref`, `astral_py_ref`, `host`,
-`sandbox`, `hermetic` — and one record per test × driver carrying `env`,
-`status` ∈ pass/fail/skipped and, on failure, `failure_kind` ∈ `driver`
-(the flow never happened) / `verify` (astrald misbehaved) / `environment`
-(the world broke). Every record also names its `world`, the `phase` it
-stopped at (`prepare`, `driver`, `restart`, `verify`, or `alive` when the
-world died under it) and, when skipped, the `reason`. Per-test driver and
-oracle logs sit beside them, in `results/<stamp>/<test>/`; a test the run
-already ran, replayed in a later world, writes `<test>.w<N>/` instead. Each
-local world's nodes, with their astrald logs, land under
-`results/<stamp>/w<N>/session/`. The nodes run from the system temp
-directory, which `session/` links to until the world closes and copies their
-state back: a node's SQLite fsyncs on a busy SD card stall for tens of
-seconds, and a tmpfs temp directory does not. A world whose node died skips
-the rest of its steps, and a test whose `after` chain failed in its world is
-skipped; each skip's `reason` names the test that broke.
-
-A test reads one file, its **session view**: `results/<stamp>/<test>/session.json`,
-named by `ASTRAL_TESTS_SESSION`. It holds `run` (the stamp), `nodes` and
-`facts`. Every node carries the fields `lib/executors` lists in
-`NODE_FIELDS`, `null` where its world cannot provide one: attach knows no
-MCP port, a VM no restart count. The runner is the view's only writer; it
-writes it before the driver and again before the oracle, so a restart shows.
-
-A driver sees the facts of the tests on its `after` chain that passed in
-its own world, and nothing a sibling wrote; its oracle also sees what its
-own driver wrote. A test's facts join its world's **world record**,
-`results/<stamp>/w<N>/world.json`, only once its oracle passes. The record
-also holds the nodes as last seen and the history of every test that ran in
-the world, in order.
-
-Every target but `attach` strips astral-py's ambient endpoint and token
-variables from the driver environment: an `ASTRALD_APPHOST_TOKEN` in the shell
-otherwise answers for a test's anonymous connect and the test node refuses it.
-The header's `hermetic` is provenance only — true for `fresh` — and does not
-decide the stripping.
-
-## Coverage
-
-Every story of the catalog, in the cheapest env that can falsify it:
-
-| Story | Test | Env | States |
-|-------|------|-----|--------|
-| 0001 | `bootstrap-user-software-key` | node | `null` → `one-node` |
-| 0002 | `import-user-software-key` | node | `null` → — (a world of its own) |
-| 0003 | `adopt-node` | node | `one-node` → `two-nodes` |
-| 0004 | `tor-link` | netsim | `two-nodes` → `two-nodes-tor` |
-| 0005 | `nat-punch` | netsim | `two-nodes` → `two-nodes-nat` |
-| 0006 | `object-store` | node | `two-nodes` → `two-nodes-data` |
-| 0007 | `object-store-peer` | node | `two-nodes` → `two-nodes-data-peer` |
-| 0008 | `read-remote-peer` | node | `two-nodes-data-peer` → `two-nodes-data-read` |
-| 0009 | `expel-node` | node | `two-nodes` → `two-nodes-expel` |
-| — | `smoke` | node | `null` → — |
-| — | `mcp-origin` | node | `null` → — |
-| — | `messaging-ops` | node | `null` → — |
-| — | `mcp-peer` | node | `two-nodes` → — |
-| — | `claim-window` | node | `null` → — |
-| — | `token-less-setup` | node | `null` → — |
-| — | `fs-watch` | node | `one-node` → — |
-| — | `registration-lease` | node | `one-node` → — |
-| — | `policy-delegate` | node | `one-node` → — (restarts node1) |
-| — | `app-query` | node | `two-nodes` → — |
-| — | `apphost-origin` | node | `two-nodes` → — |
-| — | `sign-contract-guard` | node | `two-nodes` → — |
-| — | `blueprints-two-node` | node | `two-nodes` → — |
-| — | `messaging-two-node` | node | `two-nodes` → — |
-| — | `services-swarm` | node | `two-nodes` → — |
-| — | `services-app-call` | node | `two-nodes` → — |
-| — | `hold-purge` | node | `two-nodes` → — (mutates) |
-| — | `gateway-relay` | netsim | `two-nodes` → — (mutates) |
-
-`main.suite` holds every local test, and it runs in about 3 minutes;
-`policy-delegate`'s 70 s registration hold is the largest part.
-
-Every test is in some suite, and `selftest/test_shipped.py` fails a test
-that is in none: a test no suite names is never executed, and the tree once
-held one such test — written, merged, and unrun from the day it landed. A
-test that needs a pristine node or ends its world is not an exception: the
-planner gives it a world of its own.
-
-## Where the machines come from
-
-`--target` is orthogonal to `env` and to `--driver`:
-
-- `fresh` (default) — spawn per run. Hermetic.
-- `attach` — no spawning: run against a daemon that is already up, resolved
-  the way astral-py resolves one (`ASTRAL_ENDPOINT`, `ASTRALD_APPHOST_TOKEN`
-  and friends). The code-and-debug loop: point a test at the daemon you are
-  hacking on and let the standard oracle judge it.
-
-Under `attach` the run is not hermetic, so the header carries
-`hermetic: false` and the ambient endpoint and token are deliberately left in
-the driver environment. Two guards make it safe to use on a daemon you care
-about: a start state is **checked, never built** — a selection that would
-need a prereq prefix is refused rather than run at your daemon — and a
-`mutates` test prints a warning naming itself before anything happens.
-Attach has one daemon, so a test with a multi-node roster is refused too.
-
-### Saved VM worlds
-
-A VM world takes minutes to build, so the world one VM test starts from can
-be saved once and booted again:
-
-    ./tests/run adopt-node --vm --save gw     # build it in VMs, save it as gw
-    ./tests/run gateway-relay --from gw       # boot gw, run only gateway-relay
-    ./tests/run --plan gateway-relay --from gw    # `=` marks what gw already ran
-
-- `--vm` puts every world in VMs, local tests included; a `local_only` test
-  refuses it.
-- `--save NAME` saves the run's last world — a VM world whose every step
-  passed — as netsim stage NAME. Its world record goes into every guest at
-  `/var/lib/astral-tests/world.json`, root-only, so the operator cannot read
-  the tokens it is judged with, and a copy stays on the host under
-  `${XDG_CACHE_HOME:-~/.cache}/astral-tests/snapshots/` for `--plan` and for
-  every checkout, since netsim's stages are host-wide too.
-- `--from NAME` boots that stage. The selection has to plan into one world
-  whose first steps are exactly the saved history; those steps are skipped,
-  and their facts come from the record the guests hold, which has to be the
-  host's copy. The binaries, tokens and node config overrides are pushed
-  fresh. A saved world whose history the manifests now configure otherwise
-  is refused, since the guests still hold the files it was saved with. The
-  header reads `hermetic: false` and `from: NAME`.
-
-`--keep` leaves the last world up: a local world's nodes, or a VM world's
-simulation with its tunnels.
-
-## Scripted and AI-driven
-
-A test declares its drivers, and the same oracle judges every one of them.
-That is what makes the split useful: **script red means astrald broke; agent
-red while script is green means the operator or its skill broke.** A driver
-failure and an oracle failure are already distinct in the results
-(`failure_kind` `driver` versus `verify`), so a run says which of the three
-went wrong without anyone reading a log.
-
-A test that declares the `agent` driver ships a `prompt.md`: the flow in
-plain words, the way a person would ask for it. Eight of the twenty tests
-declare it. The other twelve are `script` only — a probe like `smoke`, a
-transport measurement like `nat-punch`, or a guard that has to be driven with
-a token and an origin no operator's shell can produce, like `apphost-origin`.
-
-A prompt is the agent driver's half of the contract `write_facts` is for the
-scripted one, so `selftest/test_prompts.py` holds the two to the same fact
-names: a prompt must name every fact its own oracle reads and its own
-`script.py` writes. That check is static and costs milliseconds, which is the
-point — the alternative is learning about a renamed fact after a forty-minute
-VM run.
-
-The operator is the Qwen Code agent the lab bakes into `node1`, equipped
-with the `astral-agent` skill. It reaches astrald over the guest's own
-apphost, the way an app does, so `--driver agent` runs in VMs whatever the
-selected tests declare: a manifest's `env` is the cheapest world that can
-falsify the test, never a ceiling. Which model it drives with is a property
-of the run — `config.toml [agent] model`, rewritten into the operator after
-boot — so comparing two models costs a re-run, not a twenty-minute rebake.
-The report names the model, because a red under one model says nothing
-about another.
-
-## The report
-
-Every run writes `results/<stamp>/report.md`: the verdict, what was run,
-every test with its time, and — when something is red — which of the three
-layers broke, what that means in words, and where its log is. The runner
-prints the one-line verdict and the path. That file is the thing to hand
-someone; `results.json` is for machines.
-
-A run holding a skipped test reports INCOMPLETE, never PASS. A skip carries
-no verdict, and a green-looking document over an unbuilt state would be
-lying about exactly the case the third status exists for.
-
-The report is written however the run ends. An exception or Ctrl-C tears the
-world down, records every test that never finished as skipped with the reason
-— `interrupted`, or the exception's first line — and reports INCOMPLETE, or
-FAIL when a test it reached failed: a failure outranks a skip. A teardown that
-raises is recorded the same way, and a Ctrl-C still kills the run after its
-report is written, so a shell loop over runs stops.
+The report is written however the run ends — an exception, Ctrl-C, a world
+that failed to close — and `./tests/summary` lists what has passed here
+across runs.
 
 ## Requirements
 
 Python ≥ 3.11, a Go toolchain, and an astral-py checkout (path in
 `config.toml`) — imported directly from its `src/`, since the package has
-zero dependencies. No venv, no pip. Env `netsim` additionally needs a
-working `netsim` on PATH. `./tests/link.sh` registers this tree's
-netsim ops — the ones a test dispatches as steps and the ones a lab recipe
-builds the world with, which live together because netsim cannot tell them
-apart; run it once per checkout.
+zero dependencies. No venv, no pip. A VM world additionally needs a working
+`netsim` on PATH, and `./tests/link.sh` run once per checkout to register
+this tree's netsim ops.
 
-Manifests are TOML (stdlib), which the design document also writes.
+The harness's own selftests take a second and touch no daemon:
+
+    cd tests && PYTHONPATH=.:<astral-py>/src python3 -m unittest discover -s selftest -t .
