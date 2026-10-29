@@ -74,6 +74,41 @@ class TestResults(unittest.TestCase):
             with self.assertRaises(ValueError):   # env is a closed vocabulary
                 r.record(test="x", kind="test", env="lan", driver="script",
                          status="pass", duration_s=0, artifacts="x/")
+            with self.assertRaises(ValueError):   # phase is a closed vocabulary
+                r.record(test="x", kind="test", env="node", driver="script",
+                         status="pass", duration_s=0, artifacts="x/",
+                         phase="oracle")
+            with self.assertRaises(ValueError):   # a reason explains a skip
+                r.record(test="x", kind="test", env="node", driver="script",
+                         status="pass", duration_s=0, artifacts="x/",
+                         reason="interrupted")
+
+    def test_world_phase_and_reason_are_added_only_when_given(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            r = self.make(tmp)
+            r.record(test="a", kind="test", env="node", driver="script",
+                     status="skipped", duration_s=0, artifacts="a/",
+                     world="w0", phase="prepare", reason="interrupted")
+            r.record(test="b", kind="test", env="node", driver="script",
+                     status="pass", duration_s=0, artifacts="b/")
+            r.finalize()
+            a, b = json.loads((Path(tmp) / "results.json").read_text())["entries"]
+            self.assertEqual((a["world"], a["phase"], a["reason"]),
+                             ("w0", "prepare", "interrupted"))
+            for key in ("world", "phase", "reason"):
+                self.assertNotIn(key, b)
+
+    def test_an_aborted_run_with_every_test_green_still_exits_nonzero(self):
+        # why: an exception after the last record leaves nothing to skip, and
+        # a run that did not finish must still not read as PASS
+        with tempfile.TemporaryDirectory() as tmp:
+            r = self.make(tmp)
+            r.record(test="a", kind="test", env="node", driver="script",
+                     status="pass", duration_s=0, artifacts="a/")
+            r.header["aborted"] = "interrupted"
+            self.assertEqual(r.finalize(), 1)
+            self.assertIn("— INCOMPLETE",
+                          (Path(tmp) / "report.md").read_text())
 
 
 if __name__ == "__main__":

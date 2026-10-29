@@ -1,5 +1,18 @@
 """results.json / events.jsonl writer — the system's one stable output (v2).
 
+v2.2 adds three optional record fields and one optional header field; every
+earlier field and value stays as it was:
+
+* `world` — the planned world the record ran in, `w0` while a run has one;
+* `phase` — where the test stopped: on a fail, the step that failed
+  (`prepare`, `driver`, `restart`, `verify`, or `alive` when the world died
+  under a test); on a pass, `verify`, the last step; on a skip, `prepare`,
+  the first step, which never ran;
+* `reason` — on a skip, why: `state two-nodes was never built`,
+  `interrupted`, or the first line of the exception that ended the run;
+* header `aborted` — set when the run ended on an exception or Ctrl-C, with
+  the same reason. A run that did not finish never reads as PASS.
+
 v2.1 renames the record kind `fixture` to `prereq`: the value names a
 full e2e test — own driver, own oracle — running to build the state another
 test starts from, and "fixture" said none of that.
@@ -19,6 +32,7 @@ STATUSES = {"pass", "fail", "skipped"}
 FAILURE_KINDS = {"driver", "verify", "environment"}
 KINDS = {"test", "prereq"}
 ENVS = {"node", "netsim"}
+PHASES = {"prepare", "driver", "restart", "verify", "alive"}
 
 
 def fresh_run_dir(results: Path) -> Path:
@@ -75,7 +89,8 @@ class RunResults:
 
     def record(self, *, test: str, kind: str, env: str, driver: str,
                status: str, duration_s: float, artifacts: str,
-               failure_kind: str | None = None) -> None:
+               failure_kind: str | None = None, world: str | None = None,
+               phase: str | None = None, reason: str | None = None) -> None:
         if status not in STATUSES:
             raise ValueError(f"bad status {status!r}")
         if kind not in KINDS:
@@ -87,11 +102,19 @@ class RunResults:
                 raise ValueError(f"fail requires failure_kind, got {failure_kind!r}")
         elif failure_kind is not None:
             raise ValueError("failure_kind only valid on fail")
+        if phase is not None and phase not in PHASES:
+            raise ValueError(f"bad phase {phase!r}")
+        if reason is not None and status != "skipped":
+            raise ValueError("reason only valid on skipped")
         entry = {"test": test, "kind": kind, "env": env, "driver": driver,
                  "status": status, "duration_s": round(duration_s, 3),
                  "artifacts": artifacts}
         if failure_kind:
             entry["failure_kind"] = failure_kind
+        for key, value in (("world", world), ("phase", phase),
+                           ("reason", reason)):
+            if value is not None:
+                entry[key] = value
         self.entries.append(entry)
         with (self.dir / "events.jsonl").open("a") as f:
             f.write(json.dumps(entry) + "\n")
@@ -102,4 +125,4 @@ class RunResults:
         (self.dir / "results.json").write_text(json.dumps(doc, indent=2) + "\n")
         (self.dir / "report.md").write_text(report.render(doc, self.dir.name))
         self.doc = doc
-        return 0 if all(e["status"] == "pass" for e in self.entries) else 1
+        return 0 if report.verdict(doc) == "PASS" else 1

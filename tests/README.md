@@ -131,7 +131,10 @@ in `lib/results.py`): a header — `astrald_ref`, `astral_py_ref`, `host`,
 `sandbox`, `hermetic` — and one record per test × driver carrying `env`,
 `status` ∈ pass/fail/skipped and, on failure, `failure_kind` ∈ `driver`
 (the flow never happened) / `verify` (astrald misbehaved) / `environment`
-(the world broke). Per-test driver and oracle logs sit beside them; each
+(the world broke). Every record also names its `world`, the `phase` it
+stopped at (`prepare`, `driver`, `restart`, `verify`, or `alive` when the
+world died under it) and, when skipped, the `reason`. Per-test driver and
+oracle logs sit beside them; each
 node's astrald log lands under `results/<stamp>/session/`. In env `node`
 the nodes run from the system temp directory, which `session/` links to
 until teardown copies their state back: a node's SQLite fsyncs on a busy SD
@@ -270,6 +273,13 @@ someone; `results.json` is for machines.
 A run holding a skipped test reports INCOMPLETE, never PASS. A skip carries
 no verdict, and a green-looking document over an unbuilt state would be
 lying about exactly the case the third status exists for.
+
+The report is written however the run ends. An exception or Ctrl-C tears the
+world down, records every test that never finished as skipped with the reason
+— `interrupted`, or the exception's first line — and reports INCOMPLETE, or
+FAIL when a test it reached failed: a failure outranks a skip. A teardown that
+raises is recorded the same way, and a Ctrl-C still kills the run after its
+report is written, so a shell loop over runs stops.
 
 ## Requirements
 

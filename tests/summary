@@ -10,6 +10,9 @@ else, so it cannot claim a pass that no run recorded.
     ./tests/summary --all        every test seen, passed or not
     ./tests/summary --md         markdown, for pasting somewhere
 
+It reads only the fields every v2 record carries and ignores the rest, so
+runs from before and after a field was added read side by side.
+
 why the newest pass rather than the fastest: a fastest-ever column flatters
 the host and hides regressions. The newest pass is the one you can go and
 reproduce.
@@ -36,7 +39,8 @@ def runs():
 
 
 def collect(include_failures: bool):
-    """(test, env, driver, model) -> its newest record."""
+    """(test, env, driver, model) -> its newest verdict, or its newest skip
+    when no run ever reached a verdict."""
     seen = {}
     for stamp, doc in runs():
         model = doc.get("agent_model") or ""
@@ -44,8 +48,12 @@ def collect(include_failures: bool):
             if e["status"] != "pass" and not include_failures:
                 continue
             key = (e["test"], e["env"], e["driver"], model if e["driver"] == "agent" else "")
-            if key in seen:
-                continue      # runs are newest-first, so the first win stays
+            # why: runs are newest-first, so the first verdict stays. A skip
+            # carries none, so an interrupted run's skips must not hide an
+            # older pass or fail.
+            if key in seen and not (seen[key]["status"] == "skipped"
+                                    and e["status"] != "skipped"):
+                continue
             seen[key] = dict(e, stamp=stamp, model=model)
     return seen
 
