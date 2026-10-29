@@ -41,6 +41,8 @@ APPHOST_PORT = 8625          # the guest's apphost, inside netns priv when NAT'd
 THROWAWAY_STAGE = "e2e-scratch"   # a fresh sim always saves; this is what it saves to
 GUEST_ROOT = "/var/lib/astrald"   # install-astrald's -root (its systemd unit)
 GUEST_TCP_PORT = 1791             # astrald's default tcp listener in the lab
+# the sshd drop-in that hands root's sessions the VM's harness token
+SSHD_DROPIN = "/etc/ssh/sshd_config.d/astral-tests.conf"
 # enter-nat's private host inside netns `priv`, routable from the root netns
 # over the veth pair it creates (netsim/ops/enter-nat).
 NAT_NETNS_HOST = "192.168.99.2"
@@ -402,6 +404,17 @@ class NetsimExecutor(Executor):
             self._scp(vm, self.binary, "/usr/local/bin/astrald")
             self._scp(vm, query_binary(self.binary),
                       "/usr/local/bin/astral-query")
+            # why the sshd drop-in: since 77953492 apphost confines a
+            # token-less session to anonymous_allowlist, and every vmop runs
+            # the guest's astral-query as root with no token — it reads one
+            # only from ASTRALD_APPHOST_TOKEN. sshd sets it for root's
+            # sessions, so the ops act as the node, while the operator runs
+            # under `su -`, whose clean login environment stays token-less.
+            # why SetEnv under Match: PermitUserEnvironment is refused in a
+            # Match block, and globally it would hand every user's
+            # ~/.ssh/environment to sshd.
+            # note: `Match all` closes the block, since the drop-in is
+            # included at the top of sshd_config.
             self._ssh(vm, f"""set -e
 mkdir -p {GUEST_ROOT}/config
 cat > {GUEST_ROOT}/config/apphost.yaml <<'EOF'
@@ -411,6 +424,13 @@ bind_http: ""
 tokens:
   "{token}": localnode
 EOF
+cat > {SSHD_DROPIN} <<'EOF'
+Match User root
+    SetEnv ASTRALD_APPHOST_TOKEN={token}
+Match all
+EOF
+sshd -t
+systemctl reload ssh
 systemctl restart astrald""")
             self._nodes[vm] = {"token": token}
             self.pushed.append(vm)

@@ -34,7 +34,8 @@ def booted(tmp: Path) -> NetsimExecutor:
     ex.calls = []
     ex._materialize = lambda state, nodes: None
     ex._scp = lambda vm, src, dst: ex.calls.append(("scp", vm, dst))
-    ex._ssh = lambda vm, script, check=True: ex.calls.append(("ssh", vm)) or ""
+    ex._ssh = (lambda vm, script, check=True:
+               ex.calls.append(("ssh", vm, script)) or "")
 
     def open_session(nodes):
         for vm in nodes:
@@ -119,6 +120,20 @@ class TestPush(unittest.TestCase):
             with self.subTest(vm=vm), self.assertRaises(netsim.ExecutorError):
                 ex.prepare(test("stray", [vm]))
         self.assertNotIn("spare", ex.pushed)
+
+    def test_root_sessions_carry_each_vms_own_token(self):
+        # why: since 77953492 a token-less astral-query is held to
+        # anonymous_allowlist, and the vmops run it over root's ssh
+        ex = booted(self.tmp)
+        ex.prepare(test("bootstrap", ["node1"]))
+        for vm in VMS:
+            [script] = [c[2] for c in ex.calls if c[:2] == ("ssh", vm)]
+            with self.subTest(vm=vm):
+                self.assertIn(netsim.SSHD_DROPIN, script)
+                self.assertIn("Match User root\n    SetEnv "
+                              f"ASTRALD_APPHOST_TOKEN={ex._nodes[vm]['token']}"
+                              "\nMatch all\n", script)
+                self.assertIn("systemctl reload ssh", script)
 
     def test_the_session_lists_only_the_tunneled_roster(self):
         # why: every VM holds a token, but a VM no roster names has no tunnel,
