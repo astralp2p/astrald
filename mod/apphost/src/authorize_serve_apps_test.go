@@ -3,6 +3,7 @@ package apphost
 import (
 	"io"
 	"net"
+	"slices"
 	"testing"
 	"time"
 
@@ -228,22 +229,24 @@ func TestServeAppsGrantRefusesAConstrainedPermit(t *testing.T) {
 	}
 }
 
-// TestServeAppsJoinsEveryGrantRequest covers what the register policy is
-// handed: ServeApps leads the grant request whether or not the app asked for
-// anything, and the app's own ask follows it unchanged.
-func TestServeAppsJoinsEveryGrantRequest(t *testing.T) {
-	serveApps := astral.String8(auth.ServeAppsAction{}.ObjectType())
+// TestRegisterGrantRequestLeadsWithTheDefaults covers what the register policy
+// is handed: ServeApps and UseBlueprints lead the grant request whether or not
+// the app asked for anything, and the app's own ask follows them unchanged.
+func TestRegisterGrantRequestLeadsWithTheDefaults(t *testing.T) {
+	defaults := []string{auth.ServeAppsAction{}.ObjectType(), auth.UseBlueprintsAction{}.ObjectType()}
 
 	for _, asked := range []string{"", "mod.user.see_swarm_action"} {
-		requested := serveAppsGrantRequest(asked)
-		want := append([]string{string(serveApps)}, actions(parsePermits(asked))...)
+		requested := registerGrantRequest(asked)
+		want := append(append([]string{}, defaults...), actions(parsePermits(asked))...)
 
-		if got := actions(requested); len(got) != len(want) || got[0] != want[0] || got[len(got)-1] != want[len(want)-1] {
+		if got := actions(requested); !slices.Equal(got, want) {
 			t.Fatalf("asked %q: the policy is handed %v; want %v", asked, got, want)
 		}
 
-		if requested[0].Constraints != nil {
-			t.Fatalf("asked %q: the ServeApps permit carries constraints", asked)
+		for _, p := range requested[:len(defaults)] {
+			if p.Constraints != nil {
+				t.Fatalf("asked %q: the default %s permit carries constraints", asked, p.Action)
+			}
 		}
 	}
 }
@@ -406,7 +409,7 @@ func serveAppsRegistrar(t *testing.T) *Module {
 
 // TestServeAppsRegistrationWritesTheGrant is the operator's decision end to end:
 // under the default register policy, an app that asks for nothing leaves
-// apphost.register holding a ServeApps grant.
+// apphost.register holding ServeApps and UseBlueprints grants.
 func TestServeAppsRegistrationWritesTheGrant(t *testing.T) {
 	mod := serveAppsRegistrar(t)
 	w := newRecordingWriter()
@@ -427,5 +430,8 @@ func TestServeAppsRegistrationWritesTheGrant(t *testing.T) {
 	app := tokens[0].Identity
 	if !mod.AuthorizeServeApps(nil, serveAppsAction(app)) {
 		t.Fatalf("the app registered as %v holds no ServeApps grant", app)
+	}
+	if !mod.AuthorizeUseBlueprints(nil, useBlueprintsAction(app)) {
+		t.Fatalf("the app registered as %v holds no UseBlueprints grant", app)
 	}
 }
