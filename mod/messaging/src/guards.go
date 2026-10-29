@@ -18,14 +18,13 @@ func refusesOrigin(q *routing.IncomingQuery) bool {
 }
 
 // admitsMailCaller answers whether send_message, wait or archive serves this
-// query: an origin this module serves, and a caller whose mailbox this node
-// hosts.
+// query's caller: one whose mailbox this node hosts.
 //
 // why the caller alone names the mailbox: sending, waiting and archiving act
 // on the caller's own boxes, so no value a caller sends can reach another
 // participant's. Only a read names another mailbox — see admitsReader.
 func (mod *Module) admitsMailCaller(q *routing.IncomingQuery) bool {
-	return !refusesOrigin(q) && mod.hosts(q.Caller())
+	return mod.hosts(q.Caller())
 }
 
 // mayRead answers whether the caller may be a reader at all: neither the zero

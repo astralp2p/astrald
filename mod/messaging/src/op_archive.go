@@ -21,6 +21,9 @@ func (mod *Module) OpArchive(ctx *astral.Context, q *routing.IncomingQuery, args
 	ch := channel.New(q.AcceptRaw(), channel.WithOutputFormat(args.Out))
 	defer ch.Close()
 
+	if refusesOrigin(q) {
+		return ch.Send(astral.NewErrOriginNotAllowed(q.Origin()))
+	}
 	if !mod.admitsMailCaller(q) {
 		return ch.Send(auth.ErrNotPermitted)
 	}

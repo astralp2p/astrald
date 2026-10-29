@@ -28,6 +28,9 @@ func (mod *Module) OpWait(ctx *astral.Context, q *routing.IncomingQuery, args op
 	ch := channel.New(conn, channel.WithOutputFormat(args.Out))
 	defer ch.Close()
 
+	if refusesOrigin(q) {
+		return ch.Send(astral.NewErrOriginNotAllowed(q.Origin()))
+	}
 	if !mod.admitsMailCaller(q) {
 		return ch.Send(auth.ErrNotPermitted)
 	}
