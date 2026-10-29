@@ -7,6 +7,7 @@ no venv, no pip (the host lacks ensurepip).
 """
 import argparse
 import os
+import signal
 import sys
 import tomllib
 from pathlib import Path
@@ -64,7 +65,18 @@ def main() -> int:
     os.environ["ASTRAL_TESTS_PYPATH"] = f"{TESTS}{os.pathsep}{src}"
 
     from lib import runner
-    return runner.main(args)
+    try:
+        return runner.main(args)
+    except KeyboardInterrupt:
+        # why: a shell stops a loop only on a child that SIGINT killed, and
+        # an exit status cannot say that; the report is already written
+        # note: dying of a signal skips the flush, and piped output is
+        # block-buffered, so the verdict line would be lost
+        sys.stdout.flush()
+        sys.stderr.flush()
+        signal.signal(signal.SIGINT, signal.SIG_DFL)
+        os.kill(os.getpid(), signal.SIGINT)
+        return 130
 
 
 if __name__ == "__main__":

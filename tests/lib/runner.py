@@ -10,6 +10,7 @@ import subprocess
 import sys
 import time
 import tomllib
+import traceback
 from pathlib import Path
 
 from astral.client import ENDPOINT_VARS, TOKEN_VARS
@@ -28,6 +29,7 @@ TESTS = Path(__file__).resolve().parent.parent
 REPO = TESTS.parent
 RESULTS = TESTS / "results"
 DEFAULT_SUITE = "main.suite"
+WORLD = "w0"          # one world per run, until the planner splits a run
 
 
 def _run_step(py: str, script: Path, log: Path, env: dict, timeout: int) -> int:
@@ -43,32 +45,109 @@ def _run_step(py: str, script: Path, log: Path, env: dict, timeout: int) -> int:
 
 
 def _perform(ex, t, driver: str, art: Path, view) -> tuple:
-    """(status, failure_kind) of one test: prepare, driver, the restart the
-    manifest names, then the oracle.
+    """(status, failure_kind, phase) of one test: prepare, driver, the
+    restart the manifest names, then the oracle. `phase` is the step the
+    test stopped at.
 
     `view(phase)` writes the test's session view for the phase about to run
     and returns the environment that phase runs in. The oracle gets a fresh
     one: a restart changes the nodes, and the oracle also reads what its own
     driver wrote.
 
-    An ExecutorError from any of them propagates: the caller owns the one
-    place a broken world becomes an `environment` verdict.
+    why one try around every step: an operator's model rewrite, payload push
+    or ssh raises from inside the driver step, and a try around prepare alone
+    let it leave the loop with no verdict recorded and no report written. An
+    ExecutorError is the world breaking, so it is `environment` at its step.
     """
-    ex.prepare(t)
-    env = view("driver")
-    if driver == "agent":
-        rc = ex.run_agent(t, art / "driver.log", art / "facts.json",
-                          t.agent_timeout)
-    else:
-        rc = _run_step(sys.executable, t.dir / "script.py",
-                       art / "driver.log", env, t.timeout)
-    if rc != 0:
-        return "fail", "driver"
-    if t.restart:
-        ex.restart(t.restart)
-    rc = _run_step(sys.executable, t.dir / "verify.py", art / "verify.log",
-                   view("verify"), t.timeout)
-    return ("pass", None) if rc == 0 else ("fail", "verify")
+    phase = "prepare"
+    try:
+        ex.prepare(t)
+        env = view("driver")
+        phase = "driver"
+        if driver == "agent":
+            rc = ex.run_agent(t, art / "driver.log", art / "facts.json",
+                              t.agent_timeout)
+        else:
+            rc = _run_step(sys.executable, t.dir / "script.py",
+                           art / "driver.log", env, t.timeout)
+        if rc != 0:
+            return "fail", "driver", phase
+        if t.restart:
+            phase = "restart"
+            ex.restart(t.restart)
+        phase = "verify"
+        rc = _run_step(sys.executable, t.dir / "verify.py",
+                       art / "verify.log", view("verify"), t.timeout)
+    except ExecutorError as e:
+        with (art / "driver.log").open("a") as f:
+            f.write(f"[runner] {e}\n")
+        return "fail", "environment", phase
+    except BaseException as e:
+        e.phase = phase       # note: the abort path records the step it hit
+        raise
+    return ("pass", None, phase) if rc == 0 else ("fail", "verify", phase)
+
+
+def _entry(t, kind: str, env: str, driver: str) -> dict:
+    """The fields every record of a test carries, whatever its status.
+
+    why env is the run's: a record states the env the test RAN in, not the
+    one its manifest asks for as a minimum. A node test lifted into VMs — by
+    a netsim test ahead of it, or by the agent driver — really ran there, and
+    a record that said otherwise would hide the one property the design is
+    built on.
+    """
+    return dict(test=t.name, kind=kind, env=env, driver=driver, world=WORLD,
+                artifacts=f"{t.name}/")
+
+
+def _skip(results, entry: dict, reason: str, phase: str = "prepare") -> None:
+    """Record a test that never finished, with its reason in its driver.log.
+
+    note: a skip never joins the world record's history — nothing ran.
+    """
+    art = results.dir / entry["test"]
+    art.mkdir(parents=True, exist_ok=True)
+    with (art / "driver.log").open("a") as f:
+        f.write(f"[runner] skipped: {reason}\n")
+    results.record(**entry, status="skipped", duration_s=0.0,
+                   phase=phase, reason=reason)
+
+
+def _abort_reason(e: BaseException) -> str:
+    """What ended a run early, in one line."""
+    if isinstance(e, KeyboardInterrupt):
+        return "interrupted"
+    first = (str(e).splitlines() or [""])[0]
+    return f"{type(e).__name__}: {first}" if first else type(e).__name__
+
+
+def _teardown(ex, keep: bool) -> BaseException | None:
+    """Tear the world down; the error that stopped it, if any.
+
+    why caught: the report is written after teardown, and a teardown that
+    raised used to leave none — or a PASS report above a traceback.
+    """
+    try:
+        ex.teardown(keep)
+    except (KeyboardInterrupt, Exception) as e:
+        if not isinstance(e, KeyboardInterrupt):
+            traceback.print_exc()
+        return e
+    return None
+
+
+def _finish(results, ex) -> int:
+    """Write results.json and report.md and print the verdict: the run's
+    exit code."""
+    # why: a VM verdict is about the code under test only on the machines
+    # that run it, so the header names them
+    if ex.pushed:
+        results.header["pushed"] = ",".join(ex.pushed)
+    code = results.finalize()
+    print(f"\n{report.summary_line(results.doc)}")
+    print(f"run: report at {results.dir / 'report.md'}")
+    return code
 
 
 def write_view(path: Path, run: str, nodes: dict, facts: dict) -> None:
@@ -92,7 +171,9 @@ def _note_nodes(record: WorldRecord, ex) -> None:
     """
     try:
         record.nodes = ex.nodes()
-    except (ExecutorError, OSError, ValueError) as e:
+    # why every exception: this runs in the finally that writes the report,
+    # and whatever escaped it would cost the run its report
+    except Exception as e:                    # noqa: BLE001
         print(f"run: the world reported no nodes: {e}", file=sys.stderr)
     record.write()
 
@@ -287,7 +368,7 @@ def main(args) -> int:
         ex.want_model(profile.get("model", ""), profile.get("base_url", ""))
         results.header["agent_profile"] = name
         results.header["agent_model"] = profile.get("model", "") or "(lab default)"
-    record = WorldRecord(run_dir)
+    record = WorldRecord(run_dir, WORLD)
 
     mutators = [t.name for t, _ in plan if t.mutates]
     if args.target != "fresh" and mutators:
@@ -295,22 +376,15 @@ def main(args) -> int:
               "mutates this world — it is not a throwaway", file=sys.stderr)
 
     broken_states = set()
+    stop = None               # what ended the loop early, if anything
     try:
         for t, kind in plan:
             art = run_dir / t.name
             art.mkdir(parents=True, exist_ok=True)
-            # why: a record states the env the test RAN in, not the one its
-            # manifest asks for as a minimum. A node test lifted into VMs —
-            # by a netsim test ahead of it, or by the agent driver — really
-            # ran there, and a record that said otherwise would hide the one
-            # property the design is built on.
-            entry = dict(test=t.name, kind=kind, env=env_of_run,
-                         driver=args.driver, artifacts=f"{t.name}/")
+            entry = _entry(t, kind, env_of_run, args.driver)
             dead = manifest.blocked_by(tests, t.start, broken_states)
             if dead:
-                (art / "driver.log").write_text(
-                    f"[runner] skipped: state {dead!r} was never built\n")
-                results.record(**entry, status="skipped", duration_s=0.0)
+                _skip(results, entry, f"state {dead} was never built")
                 if t.saves:
                     broken_states.add(t.saves)
                 continue
@@ -335,22 +409,13 @@ def main(args) -> int:
                            facts)
                 return env
 
-            # why one try around every phase: an operator's model rewrite,
-            # payload push or ssh raises from inside the driver phase, and a
-            # try around prepare alone let it leave the loop with no verdict
-            # recorded and no report written.
-            try:
-                status, fk = _perform(ex, t, args.driver, art, view)
-                if ex.broken():
-                    status, fk = "fail", "environment"   # a dead daemon voids
-                    # any verdict — even a nominal pass over a dead world
-            except ExecutorError as e:
-                with (art / "driver.log").open("a") as f:
-                    f.write(f"[runner] {e}\n")
-                status, fk = "fail", "environment"
+            status, fk, phase = _perform(ex, t, args.driver, art, view)
+            if fk != "environment" and ex.broken():
+                # why: a dead daemon voids any verdict, even a nominal pass
+                status, fk, phase = "fail", "environment", "alive"
 
             results.record(**entry, status=status, failure_kind=fk,
-                           duration_s=time.monotonic() - t0)
+                           phase=phase, duration_s=time.monotonic() - t0)
             record.add(t.name, kind, status,
                        driven if status == "pass" else {})
             if status == "pass":
@@ -358,23 +423,47 @@ def main(args) -> int:
                     ex.save(t.saves)
             elif t.saves:
                 broken_states.add(t.saves)
+    # why Ctrl-C and every exception: a VM run lasts tens of minutes, and a
+    # run that died without a report left only events.jsonl. Whatever ends
+    # the loop, the tests it reached keep their verdicts and the rest say why.
+    except BaseException as e:
+        if isinstance(e, Exception):
+            traceback.print_exc()
+        stop = e
     finally:
         # why before teardown: a torn-down world reports no nodes, and a
         # kept one is read back from this record
         _note_nodes(record, ex)
-        ex.teardown(args.keep)
+        torn = _teardown(ex, args.keep)
         if args.keep:
             roots = run_dir / "session"
             print(f"run: --keep, world left up; its nodes are in "
                   f"{record.path}"
                   + (f", node roots and logs under {roots}"
                      if roots.exists() else ""), file=sys.stderr)
-
-    # why: a VM verdict is about the code under test only on the machines
-    # that run it, so the header names them
-    if ex.pushed:
-        results.header["pushed"] = ",".join(ex.pushed)
-    code = results.finalize()
-    print(f"\n{report.summary_line(results.doc)}")
-    print(f"run: report at {run_dir / 'report.md'}")
+        aborted = []
+        # note: the loop records each planned test once, in plan order, so
+        # the tests past the last record never finished
+        unrun = plan[len(results.entries):]
+        if stop is not None or unrun:
+            reason = (_abort_reason(stop) if stop is not None
+                      else "the run stopped before its plan ended")
+            aborted.append(reason)
+            # why: the first test never recorded is the one the stop hit,
+            # so it carries the step it was in
+            phase = getattr(stop, "phase", "prepare")
+            for t, kind in unrun:
+                _skip(results, _entry(t, kind, env_of_run, args.driver),
+                      reason, phase)
+                phase = "prepare"
+        if torn:
+            aborted.append(f"teardown: {_abort_reason(torn)}")
+        if aborted:
+            results.header["aborted"] = "; ".join(aborted)
+        code = _finish(results, ex)
+    # why: a Ctrl-C or a SystemExit outlives the report — a shell loop stops
+    # only on a child Ctrl-C killed, and tests/run dies of one
+    for e in (stop, torn):
+        if e is not None and not isinstance(e, Exception):
+            raise e
     return code

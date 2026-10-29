@@ -19,6 +19,7 @@ class FakeExecutor:
     """A world that comes up, and an operator that breaks before it drives."""
 
     pushed = ()
+    torn_down = False
 
     def use_operator(self, profile: dict) -> None:
         pass
@@ -35,11 +36,73 @@ class FakeExecutor:
     def run_agent(self, test, log: Path, facts: Path, timeout: int) -> int:
         raise ExecutorError("node1: operator model is not m after the rewrite")
 
+    def save(self, state: str) -> None:
+        pass
+
     def broken(self) -> list:
         return []
 
     def teardown(self, keep: bool) -> None:
-        pass
+        self.torn_down = True
+
+
+class TeardownFails(FakeExecutor):
+    def teardown(self, keep: bool) -> None:
+        self.torn_down = True
+        raise ExecutorError("netsim kill 1: exit 1")
+
+
+class DiesUnderTest(FakeExecutor):
+    """A world whose daemon is dead by the time any oracle has spoken."""
+
+    def broken(self) -> list:
+        return ["node1"]
+
+
+class PrepareFailsAndDies(DiesUnderTest):
+    def prepare(self, test) -> None:
+        raise ExecutorError("node1: never became ready")
+
+
+class SaveFails(FakeExecutor):
+    """A world whose snapshot breaks after the first producer passes."""
+
+    def save(self, state: str) -> None:
+        raise ExecutorError("netsim save --sim 1 e2e-one-node: exit 1\nno space")
+
+
+def run(selection: list, ex_class=FakeExecutor, driver: str = "script",
+        step=lambda *a, **kw: 0) -> tuple:
+    """(exit code, results doc, report text, executor, world record) of one
+    runner.main over a fake world, with every driver and oracle step
+    answered by step."""
+    args = argparse.Namespace(selection=selection, driver=driver,
+                              target="fresh", keep=False)
+    made = []
+
+    def executor(*_):
+        made.append(ex_class())
+        return made[0]
+
+    with tempfile.TemporaryDirectory() as tmp, \
+            mock.patch.object(runner, "RESULTS", Path(tmp)), \
+            mock.patch.object(runner, "ensure_binary",
+                              return_value=(Path(tmp) / "astrald", "abc")), \
+            mock.patch.object(runner, "_executor", executor), \
+            mock.patch.object(runner, "_run_step", step), \
+            contextlib.redirect_stdout(io.StringIO()), \
+            contextlib.redirect_stderr(io.StringIO()):
+        try:
+            code = runner.main(args)
+        except KeyboardInterrupt:
+            code = "interrupted"         # re-raised once the report is out
+        except SystemExit:
+            code = "exited"
+        run_dir = next(Path(tmp).iterdir())
+        doc = json.loads((run_dir / "results.json").read_text())
+        text = (run_dir / "report.md").read_text()
+        world = json.loads((run_dir / "w0" / "world.json").read_text())
+    return code, doc, text, made[0], world
 
 
 class TestOperatorError(unittest.TestCase):
@@ -63,8 +126,122 @@ class TestOperatorError(unittest.TestCase):
             self.assertIn("[runner] node1: operator model is not m",
                           log.read_text())
         [e] = doc["entries"]
-        self.assertEqual((e["test"], e["status"], e["failure_kind"]),
-                         ("bootstrap-user-software-key", "fail", "environment"))
+        self.assertEqual((e["test"], e["status"], e["failure_kind"],
+                          e["phase"], e["world"]),
+                         ("bootstrap-user-software-key", "fail", "environment",
+                          "driver", "w0"))
+
+
+class TestCrashSafe(unittest.TestCase):
+    """A run that dies still writes its results and its report."""
+
+    def test_a_save_error_skips_the_rest_and_reports_incomplete(self):
+        # why: save() raised outside the loop's try, after the loop's finally
+        # had run, so finalize was skipped and only events.jsonl survived
+        code, doc, text, ex, world = run(["adopt-node"], ex_class=SaveFails)
+        self.assertNotEqual(code, 0)
+        self.assertTrue(ex.torn_down)
+        # the record is written on the abort path, and a skip never joins it
+        self.assertEqual([h["test"] for h in world["history"]],
+                         ["bootstrap-user-software-key"])
+        first, second = doc["entries"]
+        self.assertEqual((first["test"], first["status"]),
+                         ("bootstrap-user-software-key", "pass"))
+        self.assertEqual((second["test"], second["status"], second["reason"]),
+                         ("adopt-node", "skipped",
+                          "ExecutorError: netsim save --sim 1 e2e-one-node: "
+                          "exit 1"))
+        self.assertEqual(doc["aborted"], second["reason"])
+        self.assertIn("— INCOMPLETE", text)
+        self.assertIn("- `adopt-node` — ExecutorError: netsim save", text)
+
+    def test_ctrl_c_tears_down_and_reports_the_rest_as_interrupted(self):
+        calls = []
+
+        def step(py, script, log, env, timeout):
+            calls.append(script)
+            if len(calls) == 3:          # adopt-node's driver
+                raise KeyboardInterrupt
+            return 0
+
+        code, doc, text, ex, _ = run(["adopt-node"], step=step)
+        self.assertEqual(code, "interrupted")
+        self.assertTrue(ex.torn_down)
+        self.assertEqual([(e["test"], e["status"], e["phase"], e.get("reason"))
+                          for e in doc["entries"]],
+                         [("bootstrap-user-software-key", "pass", "verify",
+                           None),
+                          ("adopt-node", "skipped", "driver", "interrupted")])
+        self.assertEqual(doc["aborted"], "interrupted")
+        self.assertIn("— INCOMPLETE", text)
+        self.assertIn("The run ended early: interrupted.", text)
+
+    def test_a_raising_teardown_is_recorded_and_never_reads_as_pass(self):
+        code, doc, text, ex, _ = run(["smoke"], ex_class=TeardownFails)
+        self.assertNotEqual(code, 0)
+        self.assertEqual(doc["entries"][0]["status"], "pass")
+        self.assertEqual(doc["aborted"],
+                         "teardown: ExecutorError: netsim kill 1: exit 1")
+        self.assertIn("— INCOMPLETE", text)
+
+    def test_pushed_survives_an_abort(self):
+        class PushedSaveFails(PushingExecutor, SaveFails):
+            pass
+
+        _, doc, _, _, _ = run(["adopt-node"], ex_class=PushedSaveFails)
+        self.assertIn("aborted", doc)
+        self.assertEqual(doc["pushed"], "node1,node2,reflector")
+
+    def test_a_world_dead_under_a_test_fails_it_at_alive(self):
+        _, doc, text, _, _ = run(["smoke"], ex_class=DiesUnderTest)
+        [e] = doc["entries"]
+        self.assertEqual((e["status"], e["failure_kind"], e["phase"]),
+                         ("fail", "environment", "alive"))
+        self.assertIn("### smoke — environment in alive", text)
+
+    def test_an_earlier_environment_failure_keeps_its_phase(self):
+        _, doc, _, _, _ = run(["smoke"], ex_class=PrepareFailsAndDies)
+        self.assertEqual(doc["entries"][0]["phase"], "prepare")
+
+    def test_a_stop_the_loop_does_not_catch_still_skips_the_rest(self):
+        # why: a SystemExit left the except untouched, and the finally wrote
+        # a PASS report over a run that had recorded nothing
+        def step(*a, **kw):
+            raise SystemExit(3)
+
+        code, doc, text, _, _ = run(["smoke"], step=step)
+        self.assertEqual(code, "exited")
+        self.assertEqual((doc["entries"][0]["status"],
+                          doc["entries"][0]["phase"]), ("skipped", "driver"))
+        self.assertIn("— INCOMPLETE", text)
+
+    def test_every_record_carries_its_world_and_phase(self):
+        def step(py, script, log, env, timeout):
+            return 1 if script.parent.name == "smoke" and \
+                script.name == "verify.py" else 0
+
+        code, doc, _, _, _ = run(["smoke", "adopt-node"], step=step)
+        self.assertEqual(code, 1)
+        self.assertNotIn("aborted", doc)
+        self.assertEqual({e["world"] for e in doc["entries"]}, {"w0"})
+        self.assertEqual({e["test"]: (e["status"], e["phase"])
+                          for e in doc["entries"]},
+                         {"smoke": ("fail", "verify"),
+                          "bootstrap-user-software-key": ("pass", "verify"),
+                          "adopt-node": ("pass", "verify")})
+
+    def test_a_state_skip_names_the_state(self):
+        def step(py, script, log, env, timeout):
+            return 1 if script.parent.name == "bootstrap-user-software-key" \
+                else 0
+
+        _, doc, text, _, _ = run(["adopt-node"], step=step)
+        skipped = doc["entries"][1]
+        self.assertEqual((skipped["test"], skipped["status"], skipped["phase"],
+                          skipped["reason"]),
+                         ("adopt-node", "skipped", "prepare",
+                          "state one-node was never built"))
+        self.assertIn("- `adopt-node` — state one-node was never built", text)
 
 
 class PushingExecutor(FakeExecutor):
