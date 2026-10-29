@@ -5,7 +5,6 @@ import (
 	"time"
 
 	"github.com/astralp2p/astral-go/api/auth"
-	"github.com/astralp2p/astral-go/api/nodes"
 	"github.com/astralp2p/astral-go/api/secp256k1"
 	"github.com/astralp2p/astral-go/api/user"
 	"github.com/astralp2p/astral-go/astral"
@@ -59,9 +58,8 @@ func (mod *Module) authorizeParties(ctx *astral.Context, caller *astral.Identity
 
 // IsNodeClaim reports whether c is the contract that claims this unclaimed
 // node, asked for by the node's own session: issued by another identity to
-// this node, carrying exactly the management node permits, expiring within
-// the validity setup gives it, from an issuer that never issued this node a
-// relay contract or a node contract.
+// this node, carrying exactly the management node permits, and expiring within
+// the validity setup gives it.
 //
 // why the caller is the node: every setup caller arrives as the node, an
 // anonymous session rewritten by core.Router or the node's own token.
@@ -69,8 +67,11 @@ func (mod *Module) authorizeParties(ctx *astral.Context, caller *astral.Identity
 // why the issuer is not the node: a node claimed by itself makes its own
 // caller the user.
 //
-// why the cheap tests run first: isUnclaimed may wait and issuedToNode reads
-// the database, and most refusals end before either.
+// why the issuer's history is not read: a former user re-claims its node, and
+// an identity the node minted may become its user.
+//
+// why the cheap tests run first: isUnclaimed may wait, and most refusals end
+// before it.
 func (mod *Module) IsNodeClaim(ctx *astral.Context, caller *astral.Identity, c *auth.Contract) bool {
 	node := mod.node.Identity()
 	return caller.IsEqual(node) &&
@@ -78,8 +79,7 @@ func (mod *Module) IsNodeClaim(ctx *astral.Context, caller *astral.Identity, c *
 		!c.Issuer.IsEqual(node) &&
 		isManagementNodeContract(c) &&
 		hasClaimExpiry(c, time.Now()) &&
-		mod.isUnclaimed(ctx) &&
-		!mod.issuedToNode(c.Issuer)
+		mod.isUnclaimed(ctx)
 }
 
 // isManagementNodeContract reports whether c carries exactly the permits
@@ -137,28 +137,4 @@ func (mod *Module) isUnclaimed(ctx *astral.Context) bool {
 	case <-ctx.Done():
 		return false
 	}
-}
-
-// issuedToNode reports whether the index holds a contract from issuer to this
-// node carrying mod.nodes.relay_for_action or mod.user.swarm_membership_action,
-// expired ones included. A failed lookup answers true, so the exception closes
-// on error.
-//
-// why relay contracts: apphost.register and messaging.create_mailbox, which
-// mcp.create_agent mints through, mint each app, agent and account identity
-// with a relay contract to the node, so the exception never signs as a key the
-// node minted. The setup user's key is stored, not minted,
-// and carries none.
-//
-// why node contracts: the user module indexes every node contract it
-// activates, so the exception never signs again for a user this node has had,
-// whether the tree value naming that user was cleared or its contract lapsed.
-//
-// why expired ones: a contract lapses, and the key it names stays on the node.
-func (mod *Module) issuedToNode(issuer *astral.Identity) bool {
-	found, err := mod.db.contractIssued(issuer, mod.node.Identity(), []string{
-		nodes.RelayForAction{}.ObjectType(),
-		user.SwarmMembershipAction{}.ObjectType(),
-	})
-	return err != nil || found
 }

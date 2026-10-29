@@ -95,10 +95,6 @@ func (mod *Module) OpRegister(ctx *astral.Context, query *routing.IncomingQuery,
 		return ch.Send(astral.Err(err))
 	}
 
-	// why the key signs in hand and is stored after the contract is indexed:
-	// storing a key indexes it, and the auth.sign_contract claim exception
-	// recognises a minted key only by its relay contract to the node, so a
-	// failure before that contract is indexed must leave no key behind.
 	signed := &auth.SignedContract{Contract: contract}
 	if signed.IssuerSig, err = secp256k1sig.SignASN1(key, contract.SignableHash()); err != nil {
 		return ch.Send(astral.Err(err))

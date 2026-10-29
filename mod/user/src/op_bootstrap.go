@@ -160,8 +160,8 @@ func (mod *Module) deriveUserKey(words []string, passphrase string) (crypto.Priv
 // signClaim builds the claim contract from the identity of key to this node,
 // and signs it as the user with key in memory and as the node.
 //
-// why IsNodeClaim: the claim rule of auth.sign_contract decides which user may
-// claim this node, and this op signs without passing through that op.
+// why IsNodeClaim: the claim rule of auth.sign_contract decides whether this
+// node may be claimed, and this op signs without passing through that op.
 func (mod *Module) signClaim(ctx *astral.Context, caller *astral.Identity, key *crypto.PrivateKey) (*auth.SignedContract, error) {
 	userID := secp256k1.Identity(secp256k1.PublicKey(key))
 

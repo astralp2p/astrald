@@ -1,17 +1,18 @@
 #!/usr/bin/env python3
-"""Driver: on an unclaimed node, auth.sign_contract admits the claim contract only.
+"""Driver: on an unclaimed node, auth.sign_contract admits the claim contract
+and refuses its near misses.
 
 A session with node1's token arrives as node1. The signer rule refuses it both
 parties of the user→node contract, and the claim exception admits that one
-contract while node1 is unclaimed. The driver asks for the claim contract and
-for five near misses, and claims nothing: every issuer is an identity whose key
-node1 does not hold, node1 itself, or an app node1 minted.
+contract while node1 is unclaimed. The driver asks for the claim contract, the
+same contract issued by an app node1 minted, and four near misses. It claims
+nothing: auth.sign_contract signs a contract and does not accept it.
 
 why an issuer whose key node1 does not hold: the guard and the signing that
 follows are separate steps. Admitted, such a contract fails at signing
 ("sign as issuer: no signing scheme available for key …"); refused, it fails at
-the guard naming the party. The control reads the first, the probes the second,
-and node1 stays unclaimed for the tests after this one.
+the guard naming the party. The control reads the first, the probes the
+second.
 
 why the driver checks the claim state first: the window exists only on an
 unclaimed node, and the runner's states name no such state. A selection that
