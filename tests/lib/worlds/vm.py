@@ -38,6 +38,7 @@ from hashlib import sha256
 from pathlib import Path
 
 from lib.build import query_binary
+from lib.nodeconfig import config_text
 from lib.executors import Executor, ExecutorError, node_entry
 
 TESTS = Path(__file__).resolve().parent.parent.parent
@@ -127,9 +128,11 @@ class VmWorld(Executor):
     env = "netsim"
 
     def __init__(self, dir: Path, binary: Path, astrald_ref: str,
-                 keep: bool = False):
-        """dir is the world's own results/<stamp>/w<N>/."""
+                 keep: bool = False, config: dict | None = None):
+        """dir is the world's own results/<stamp>/w<N>/; config is the node
+        config overrides the planner merged for the world (lib/plan.py)."""
         self.dir = Path(dir)
+        self.config = config or {}
         self.binary = Path(binary)
         self.astrald_ref = astrald_ref
         self.recipe = RECIPE
@@ -483,13 +486,22 @@ mv {GUEST_RECORD}.new {GUEST_RECORD}""")
 
     def _guest_config(self, vm: str, token: str) -> dict:
         """The module config files the push writes into a guest's config dir,
-        by file name: the one place a world's config reaches a VM."""
-        return {"apphost.yaml": f"""listen:
-  - "tcp:127.0.0.1:{APPHOST_PORT}"
-bind_http: ""
-tokens:
-  "{token}": localnode
-"""}
+        by file name: the one place a world's config reaches a VM.
+
+        apphost is the harness's, with the world's overrides for this VM merged
+        key by key; any other module the world overrides gets its table alone,
+        since the lab writes no module config of its own.
+        note: a saved stage keeps the files its world was pushed, and --from
+        refuses a history the manifests now configure otherwise
+        (runner._check_saved_config), so a resumed world is pushed them again.
+        """
+        modules = {"apphost": {"listen": [f"tcp:127.0.0.1:{APPHOST_PORT}"],
+                               "bind_http": "",
+                               "tokens": {token: "localnode"}}}
+        for module, keys in self.config.get(vm, {}).items():
+            modules[module] = {**modules.get(module, {}), **keys}
+        return {f"{module}.yaml": config_text(doc)
+                for module, doc in modules.items()}
 
     def _push_astrald(self, nodes: list) -> None:
         """Replace each guest's astrald and astral-query with the host-built
@@ -513,10 +525,11 @@ tokens:
             self._scp(vm, self.binary, "/usr/local/bin/astrald")
             self._scp(vm, query_binary(self.binary),
                       "/usr/local/bin/astral-query")
-            # why 0600: each file names the node's own token, and the
-            # operator, `tester`, must not authenticate as the node. astrald
-            # runs as root (install-astrald's unit names no User=), and sshd
-            # reads its drop-ins as root.
+            # why 0600: apphost.yaml names the node's own token, and the
+            # operator, `tester`, must not authenticate as the node, nor read
+            # the overrides of the world it is judged in. astrald runs as root
+            # (install-astrald's unit names no User=), and sshd reads its
+            # drop-ins as root.
             files = "".join(
                 f"cat > {GUEST_ROOT}/config/{name} <<'EOF'\n{text}EOF\n"
                 f"chmod 600 {GUEST_ROOT}/config/{name}\n"

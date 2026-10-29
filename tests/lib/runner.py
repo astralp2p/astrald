@@ -325,11 +325,35 @@ def plan_worlds(tests: dict, args) -> list:
         vm=args.vm or saved is not None,
         prereqs_agent=args.prereqs == "agent",
         done=[h["test"] for h in saved["history"]] if saved else ())
+    if saved is not None:
+        _check_saved_config(tests, args.from_stage, saved)
     if args.save and worlds[-1].kind != "vm":
         raise ValueError(f"--save {args.save} saves a VM world, and this "
                          f"selection's last world, {worlds[-1].name}, is "
                          f"{worlds[-1].kind} — add --vm")
     return worlds
+
+
+def _check_saved_config(tests: dict, name: str, saved: dict) -> None:
+    """Refuse a saved world whose history the manifests now configure
+    otherwise than when it was saved.
+
+    why: the guests keep the module files the saved world was pushed, and a
+    --from run pushes only the overrides it plans, so a key the history no
+    longer sets would linger in a guest file unseen.
+    note: this reads the host's copy, before anything boots; the boot then
+    refuses a guest record that is not exactly that copy, config included.
+    """
+    planned = {}
+    for h in saved["history"]:
+        planner.merge_config(planned, tests[h["test"]].config)
+    had = saved.get("config", {})
+    if json.dumps(planned, sort_keys=True) != json.dumps(had, sort_keys=True):
+        raise ValueError(f"--from {name}: the saved world started with node "
+                         f"config {json.dumps(had, sort_keys=True)}, and its "
+                         "history's manifests now set "
+                         f"{json.dumps(planned, sort_keys=True)} — save it "
+                         "again")
 
 
 def snapshot(name: str) -> dict:
@@ -427,9 +451,11 @@ def _local_world(dir: Path, binary: Path, port_base: int, keep: bool,
     return LocalWorld(dir, binary, port_base, keep=keep, config=config)
 
 
-def _vm_world(dir: Path, binary: Path, ref: str, keep: bool):
-    """A VM world, its logs under dir; it boots on its first test."""
-    return VmWorld(dir, binary, ref, keep=keep)
+def _vm_world(dir: Path, binary: Path, ref: str, keep: bool,
+              config: dict | None = None):
+    """A VM world, its logs under dir; it boots on its first test, and pushes
+    the world's merged config overrides with the binaries."""
+    return VmWorld(dir, binary, ref, keep=keep, config=config)
 
 
 def attach_plan(tests: dict, args) -> list:
@@ -462,9 +488,11 @@ def attach_plan(tests: dict, args) -> list:
 class _Run:
     """What the world loop shares across a run's worlds."""
 
-    def __init__(self, args, tests: dict, results, saved: dict | None):
+    def __init__(self, args, tests: dict, results, saved: dict | None,
+                 configs: dict):
         self.args, self.tests, self.results = args, tests, results
         self.saved = saved        # the record of the world --from boots
+        self.configs = configs    # world -> the overrides it starts with
         self.pushed = []
         self.torn = None          # the first world close that raised
         self.unsaved = None       # why a --save did not land
@@ -473,6 +501,7 @@ class _Run:
               save: str | None = None) -> None:
         """Run one world's steps on ex, save it when asked, then close it."""
         record = WorldRecord(self.results.dir, name)
+        record.config = self.configs.get(name, {})
         try:
             if self.saved is not None:
                 self._resume(ex, record)
@@ -611,11 +640,6 @@ def _units(tests: dict, args) -> tuple:
                                 for t, kind in attach_plan(tests, args)])], {}
     worlds = plan_worlds(tests, args)
     _check_stages(args)
-    configured = [w.name for w in worlds if w.kind == "vm" and w.config]
-    if configured:
-        # todo: the VM world pushes overrides in the next commit
-        raise ValueError(f"{configured[0]} is a VM world with node config "
-                         "overrides, which a VM world does not push yet")
     # note: a step the saved world already stands past is not run, and
     # leaves no record
     return ([(w.name, ENV_OF[w.kind],
@@ -707,7 +731,7 @@ def main(args) -> int:
         if env == "node":
             return _local_world(run_dir / name / "session", binary,
                                 lease.base, keep, configs[name])
-        world = _vm_world(run_dir / name, binary, ref, keep)
+        world = _vm_world(run_dir / name, binary, ref, keep, configs[name])
         if args.from_stage:
             world.boot_from(args.from_stage, run.saved)
         if profile is not None:
@@ -718,7 +742,8 @@ def main(args) -> int:
 
     steps = layout(units)
     run = _Run(args, tests, results,
-               snapshot(args.from_stage) if args.from_stage else None)
+               snapshot(args.from_stage) if args.from_stage else None,
+               configs)
     stop = None               # what ended the loop early, if anything
     unclosed = None           # the world whose close raised
     try:

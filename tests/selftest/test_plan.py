@@ -363,6 +363,56 @@ class TestConfigPlans(unittest.TestCase):
                          [("local", ["obs"], {}),
                           ("vm", ["boot", "dvm"], mcp(""))])
 
+    def test_a_vm_world_carries_and_shows_its_overrides(self):
+        tests = {"boot": fake(config=mcp("")),
+                 "dvm": fake(after="boot", ops=["enable-tor node1"])}
+        w, = plan(tests, ["dvm"])
+        self.assertEqual((w.kind, w.config), ("vm", mcp("")))
+        self.assertEqual(render([w]),
+                         "w0 vm: boot* → dvm\n"
+                         '       config node1.mcp.bind_mcp = ""\n')
+
+    GW = "configure-gateway node2 --gateway r --peer node1"
+
+    def test_an_override_a_sibling_op_would_overwrite_forks(self):
+        # why: a VM world pushes its overrides at boot and runs ops after, so
+        # configure-gateway's gateway.yaml would replace the override unseen
+        tests = {"boot": fake(),
+                 "obs": fake(after="boot",
+                             config={"node2": {"gateway": {"x": 1}}}),
+                 "gw": fake(after="boot", ops=[self.GW])}
+        worlds = plan(tests, ["obs", "gw"])
+        self.assertEqual([[s.test for s in w.steps] for w in worlds],
+                         [["boot", "obs"], ["boot", "gw"]])
+
+    def test_only_the_vms_an_op_writes_on_clash(self):
+        # configure-gateway writes tcp only on the gateway, gateway.yaml on it
+        # and its clients, and nothing on a peer
+        for vm, module, shared in (("r", "tcp", False), ("node2", "tcp", True),
+                                   ("node1", "gateway", True),
+                                   ("r", "gateway", False)):
+            with self.subTest(vm=vm, module=module):
+                tests = {"boot": fake(),
+                         "obs": fake(after="boot",
+                                     config={vm: {module: {"x": 1}}}),
+                         "gw": fake(after="boot", ops=[self.GW])}
+                self.assertEqual(len(plan(tests, ["obs", "gw"])) == 1, shared)
+
+    def test_an_op_over_its_own_lineages_override_is_a_plan_error(self):
+        tests = {"boot": fake(config={"r": {"tcp": {"x": 1}}}),
+                 "gw": fake(after="boot", ops=[self.GW])}
+        with self.assertRaisesRegex(PlanError, "gw's ops write r's tcp config, "
+                                    "which boot overrides"):
+            plan(tests, ["gw"])
+
+    def test_app_query_with_a_gateway_override_forks_from_gateway_relay(self):
+        tests = load_all(TESTS / "e2e")
+        tests["app-query"].config = {"node2": {"gateway": {"x": 1}}}
+        worlds = plan(tests, ["app-query", "gateway-relay"])
+        self.assertEqual([(w.kind, [s.test for s in w.steps if s.kind == "test"])
+                          for w in worlds],
+                         [("local", ["app-query"]), ("vm", ["gateway-relay"])])
+
     def test_attach_refuses_an_override(self):
         tests = {"a": fake(config=mcp(""))}
         with self.assertRaisesRegex(PlanError, "harness-rendered config"):

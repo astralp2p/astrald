@@ -7,7 +7,8 @@ nodes; it never sees a test's facts or verdict.
     {"world": "w0", "run": "<stamp>",
      "nodes":   {<name>: <node entry>},           the nodes as last seen
      "history": [{"test", "kind", "status"}],     every test that ran, in order
-     "facts":   {<test>: {<fact>: <value>}}}      only tests that passed
+     "facts":   {<test>: {<fact>: <value>}},      only tests that passed
+     "config":  {<node>: {<module>: {<key>: …}}}} the overrides it started with
 """
 import json
 from pathlib import Path
@@ -22,6 +23,7 @@ class WorldRecord:
         self.nodes = {}
         self.history = []
         self.facts = {}
+        self.config = {}
 
     def facts_of(self, lineage: list) -> dict:
         """The facts the passed tests among `lineage` wrote, oldest first,
@@ -45,7 +47,8 @@ class WorldRecord:
 
     def doc(self) -> dict:
         return {"world": self.world, "run": self.run, "nodes": self.nodes,
-                "history": self.history, "facts": self.facts}
+                "history": self.history, "facts": self.facts,
+                "config": self.config}
 
     def write(self) -> None:
         self.path.write_text(json.dumps(self.doc(), indent=2) + "\n")

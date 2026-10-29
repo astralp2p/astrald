@@ -661,6 +661,113 @@ class TestPush(Lab):
         self.assertIsNone(world.nodes()["node2"]["restarts"])
 
 
+def pushed_files(fake: FakeLab, host: str) -> list:
+    """{file: parsed config} of every push script sent to host, in order."""
+    out = []
+    for c in fake.calls:
+        if c[:2] == ("netsim", "ssh") and c[4] == host \
+                and c[6].startswith("set -e"):
+            out.append({name: json.loads(text) for name, text in re.findall(
+                r"cat > /var/lib/astrald/config/(\S+) <<'EOF'\n(.*?)EOF\n",
+                c[6], re.S)})
+    return out
+
+
+class TestConfigPush(Lab):
+    """A world's [config.*] overrides reach the guests they name."""
+
+    def test_a_world_override_reaches_its_vm_with_one_restart(self):
+        tests = runner.manifest.load_all(TESTS / "e2e")
+        tests["tor-link"].config = {
+            "node2": {"objects": {"label": "probe \U0001F680"}}}
+        fake = self.lab()
+        with mock.patch.object(runner.manifest, "load_all",
+                               lambda _: tests):
+            code, doc, _, _ = run(self.tmp, fake, ["tor-link"])
+        self.assertEqual(code, 0)
+        for h in VMS:
+            with self.subTest(vm=h):
+                push, = pushed_files(fake, h)       # one push per boot
+                script, = [c[6] for c in fake.calls
+                           if c[:2] == ("netsim", "ssh") and c[4] == h
+                           and c[6].startswith("set -e")]
+                self.assertEqual(script.count("systemctl restart astrald"), 1)
+                want = {"apphost.yaml"} | ({"objects.yaml"} if h == "node2"
+                                           else set())
+                self.assertEqual(set(push), want)
+        objects, = [p["objects.yaml"] for p in pushed_files(fake, "node2")]
+        self.assertEqual(objects, {"label": "probe \U0001F680"})
+        script, = [c[6] for c in fake.calls if c[:2] == ("netsim", "ssh")
+                   and c[4] == "node2" and c[6].startswith("set -e")]
+        # the file lands before the restart that reads it, and as the
+        # character itself, since yaml.v2 refuses an escaped surrogate pair
+        self.assertLess(script.index("config/objects.yaml"),
+                        script.index("systemctl restart astrald"))
+        # the operator must not read the world's config any more than its token
+        self.assertIn("chmod 600 /var/lib/astrald/config/objects.yaml\n",
+                      script)
+        self.assertIn("\U0001F680", script)
+        self.assertNotIn("\\ud83d", script)
+
+    def test_an_apphost_override_keeps_the_harness_listener_and_token(self):
+        fake = self.lab(stages=("null", LAB))
+        with contextlib.ExitStack() as stack:
+            for p in fake.patches():
+                stack.enter_context(p)
+            world = VmWorld(self.tmp / "w0", self.tmp / "astrald", "abc1234",
+                            config={"node1": {"apphost": {
+                                "allow_anonymous": False}}})
+            world.prepare(SimpleNamespace(name="t", nodes=["node1"], ops=[]))
+        apphost = pushed_files(fake, "node1")[0]["apphost.yaml"]
+        self.assertEqual(apphost, {
+            "listen": [f"tcp:127.0.0.1:{vm.APPHOST_PORT}"], "bind_http": "",
+            "tokens": {world._nodes["node1"]["token"]: "localnode"},
+            "allow_anonymous": False})
+        self.assertNotIn("allow_anonymous",
+                         pushed_files(fake, "node2")[0]["apphost.yaml"])
+
+
+class TestConfigSnapshots(Lab):
+    def test_a_saved_world_is_pushed_its_overrides_again_from_the_stage(self):
+        tests = runner.manifest.load_all(TESTS / "e2e")
+        tests["adopt-node"].config = {"node1": {"objects": {"x": 1}}}
+        tests["gateway-relay"].config = {"node1": {"kcp": {"y": 2}}}
+        fake = self.lab()
+        with mock.patch.object(runner.manifest, "load_all", lambda _: tests):
+            code, _, _, _ = run(self.tmp, fake, ["adopt-node"], vm=True,
+                                save="gw")
+            self.assertEqual(code, 0)
+            saved = json.loads((self.tmp / "snapshots" / "gw.json")
+                               .read_text())
+            self.assertEqual(saved["config"],
+                             {"node1": {"objects": {"x": 1}}})
+            fake.calls.clear()
+            code, _, _, _ = run(self.tmp, fake, ["gateway-relay"],
+                                from_stage="gw")
+        self.assertEqual(code, 0)
+        boot = next(i for i, c in enumerate(fake.calls)
+                    if c[:2] == ("netsim", "task"))
+        self.assertIn("gw", fake.calls[boot])
+        push, = pushed_files(fake, "node1")
+        self.assertEqual((push["objects.yaml"], push["kcp.yaml"]),
+                         ({"x": 1}, {"y": 2}))
+
+    def test_a_history_configured_otherwise_since_the_save_is_refused(self):
+        tests = runner.manifest.load_all(TESTS / "e2e")
+        fake = self.lab()
+        with mock.patch.object(runner.manifest, "load_all", lambda _: tests):
+            self.assertEqual(run(self.tmp, fake, ["adopt-node"], vm=True,
+                                 save="gw")[0], 0)
+            tests["adopt-node"].config = {"node1": {"objects": {"x": 1}}}
+            fake.calls.clear()
+            code, _, _, _ = run(self.tmp, fake, ["gateway-relay"],
+                                from_stage="gw")
+        # refused while planning: nothing booted, and no run directory
+        self.assertEqual(code, 2)
+        self.assertFalse([c for c in fake.calls if c[:2] == ("netsim", "task")])
+        self.assertEqual(len(list((self.tmp / "results").iterdir())), 1)
+
+
 class TestNoStageCache(unittest.TestCase):
     def test_the_stage_cache_and_the_pinned_stage_are_gone(self):
         for f in sorted((TESTS / "lib").rglob("*.py")):

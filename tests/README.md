@@ -115,7 +115,11 @@ test in a world, so each test there sees the same node, and a test that sets
 a key otherwise than its world forks into one of its own. A clash with the
 test's own lineage is a plan error. `--plan` lists a world's overrides under
 its steps. A local world writes each module's config as JSON, which astrald's
-YAML loader reads; `--target attach` refuses an override, since it renders
+YAML loader reads. A VM world pushes the same files into each guest's config
+directory with the binaries, before its ops, so a test whose override an op
+in its world would write over forks, and a lineage holding both is refused
+(`configure-gateway` writes `tcp` on its `--gateway` VM and `gateway` there
+and on its clients). `--target attach` refuses an override, since it renders
 nothing.
 
 `env` is a minimum, not a prison: drivers and oracles read `session.json`
@@ -293,7 +297,10 @@ be saved once and booted again:
 - `--from NAME` boots that stage. The selection has to plan into one world
   whose first steps are exactly the saved history; those steps are skipped,
   and their facts come from the record the guests hold, which has to be the
-  host's copy. The binaries and tokens are pushed fresh. The header reads `hermetic: false` and `from: NAME`.
+  host's copy. The binaries, tokens and node config overrides are pushed
+  fresh. A saved world whose history the manifests now configure otherwise
+  is refused, since the guests still hold the files it was saved with. The
+  header reads `hermetic: false` and `from: NAME`.
 
 `--keep` leaves the last world up: a local world's nodes, or a VM world's
 simulation with its tunnels.

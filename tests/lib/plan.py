@@ -36,6 +36,15 @@ from dataclasses import dataclass, field
 
 WIDTH = 79          # a rendered plan wraps its worlds at this column
 
+# op -> where it writes a module's config file in its guests: "" for the
+# VMs its bare words name, and a flag for the VM that flag's value names.
+# why the planner knows: a VM world pushes its overrides when it boots and
+# runs ops after, so an op's file would silently replace an override. A test
+# that would bring the two together forks, and a lineage that holds both is
+# refused.
+OP_WRITES = {"configure-gateway": {"": {"gateway"},
+                                   "--gateway": {"tcp", "gateway"}}}
+
 
 class PlanError(ValueError):
     """A selection no plan can run, and why."""
@@ -58,7 +67,19 @@ class World:
     config: dict = field(default_factory=dict)   # node -> module -> keys
 
 
-def _merge(into: dict, config: dict) -> None:
+def _writes(line: str) -> set:
+    """The (vm, module) config files one op line writes in its guests."""
+    op, *args = line.split()
+    where = OP_WRITES.get(op, {})
+    out, words = set(), iter(args)
+    for a in words:
+        vm, modules = ((next(words, None), where.get(a, ())) if a.startswith("-")
+                       else (a, where.get("", ())))
+        out |= {(vm, m) for m in modules if vm}
+    return out
+
+
+def merge_config(into: dict, config: dict) -> None:
     """Fold one test's overrides into a world's."""
     for node, modules in config.items():
         for module, keys in modules.items():
@@ -188,10 +209,32 @@ class _Planner:
         need = self._need(n)
         return (not w.ended and (w.kind is None or need is None
                                  or w.kind == need)
-                and _clash(w.config, self.tests[n].config) is None)
+                and _clash(w.config, self.tests[n].config) is None
+                and self._overwritten(w, n) is None)
+
+    def _overwritten(self, w: World, n: str) -> tuple | None:
+        """The (vm, module) override an op would write over, were n to join
+        w: the op and the override may come from n or from w's steps."""
+        names = [s.test for s in w.steps] + [n]
+        writes = {x for m in names for line in self.tests[m].ops
+                  for x in _writes(line)}
+        overrides = {(vm, module) for m in names
+                     for vm, modules in self.tests[m].config.items()
+                     for module in modules}
+        return min(writes & overrides, default=None)
 
     def _refusal(self, w: World, n: str, what: str) -> str:
         """Why n cannot <what> in w, a fork that already replays its lineage."""
+        hit = self._overwritten(w, n)
+        if hit is not None:
+            vm, module = hit
+            names = [s.test for s in w.steps] + [n]
+            op = next(m for m in names if any(
+                hit in _writes(line) for line in self.tests[m].ops))
+            conf = next(m for m in names
+                        if module in self.tests[m].config.get(vm, {}))
+            return (f"{op}'s ops write {vm}'s {module} config, which {conf} "
+                    f"overrides, and {n}'s lineage puts both in one world")
         clash = _clash(w.config, self.tests[n].config)
         if clash is None:
             return f"{n} cannot {what} in a {w.kind} world"
@@ -203,7 +246,7 @@ class _Planner:
 
     def _add(self, w: World, n: str, kind: str) -> None:
         w.kind = w.kind or self._need(n)
-        _merge(w.config, self.tests[n].config)
+        merge_config(w.config, self.tests[n].config)
         w.steps.append(Step(n, kind, self._driver(kind)))
 
     def _fork(self, parent: str | None) -> World:
@@ -276,7 +319,7 @@ class _Planner:
         w.kind = next((k for s in w.steps if (k := self._need(s.test))), None)
         w.config = {}
         for s in w.steps:
-            _merge(w.config, self.tests[s.test].config)
+            merge_config(w.config, self.tests[s.test].config)
 
 
 def _attach(p: _Planner, worlds: list, isolate: bool) -> list:

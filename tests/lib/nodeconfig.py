@@ -211,8 +211,8 @@ def serves_mcp(configs: dict) -> bool:
     return bool(configs.get("mcp", {}).get("bind_mcp"))
 
 
-def render(root: Path, configs: dict) -> None:
-    """Write each module's config to <root>/config/<module>.yaml.
+def config_text(doc: dict) -> str:
+    """A module's config file as astrald reads it.
 
     why JSON: the harness is stdlib-only and has no YAML writer, and JSON is
     YAML. astrald reads module config with gopkg.in/yaml.v2
@@ -223,8 +223,12 @@ def render(root: Path, configs: dict) -> None:
     which yaml.v2 refuses ("invalid Unicode character escape code"); YAML
     takes the character itself. NaN and infinity are not JSON at all.
     """
+    return json.dumps(doc, indent=2, ensure_ascii=False, allow_nan=False) + "\n"
+
+
+def render(root: Path, configs: dict) -> None:
+    """Write each module's config to <root>/config/<module>.yaml."""
     cfg = Path(root) / "config"
     cfg.mkdir(parents=True, exist_ok=True)
     for module, doc in configs.items():
-        text = json.dumps(doc, indent=2, ensure_ascii=False, allow_nan=False)
-        (cfg / f"{module}.yaml").write_text(text + "\n", encoding="utf-8")
+        (cfg / f"{module}.yaml").write_text(config_text(doc), encoding="utf-8")
