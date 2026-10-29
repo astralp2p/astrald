@@ -102,6 +102,26 @@ func TestSetSwarmInvitePolicyPersistsTheDelegate(t *testing.T) {
 	}
 }
 
+// The contract accept setter writes the contract accept delegate alone.
+func TestSetContractAcceptPolicyPersistsTheDelegate(t *testing.T) {
+	id := astral.GenerateIdentity()
+	mod := swarmPolicySetter(true, id)
+
+	w, err := setSwarmPolicyOp(t, mod.OpSetContractAcceptPolicy, "user.set_contract_accept_policy?identity=cp&operation=control.decide_contract")
+	if err != nil {
+		t.Fatalf("set: %v", err)
+	}
+	awaitSetterClose(t, w)
+
+	d := mod.policy.ContractAccept.Get()
+	if d.IsZero() || !d.Identity.IsEqual(id) || d.Operation != "control.decide_contract" {
+		t.Fatalf("persisted %+v, want the delegate as set", d)
+	}
+	if !mod.policy.SwarmJoin.Get().IsZero() || !mod.policy.SwarmInvite.Get().IsZero() {
+		t.Fatal("the contract accept setter wrote a swarm delegate")
+	}
+}
+
 // A timeout above the node's bound is refused before persistence.
 func TestSetSwarmPolicyRefusesATimeoutAboveTheBound(t *testing.T) {
 	mod := swarmPolicySetter(true, astral.GenerateIdentity())
