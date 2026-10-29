@@ -16,23 +16,23 @@ type opRegisterHandlerArgs struct {
 }
 
 func (mod *Module) OpRegisterHandler(ctx *astral.Context, q *routing.IncomingQuery, args opRegisterHandlerArgs) (err error) {
-	// cannot register handlers over a network
-	if q.Origin() == astral.OriginNetwork {
-		return q.Reject()
-	}
-
 	// why: read before accepting - the en-route entry naming this session is
 	// dropped as soon as the query resolves.
 	owner := mod.sessionOwner(q)
 
+	ch := channel.New(q.AcceptRaw(), channel.WithFormats(args.In, args.Out))
+	defer ch.Close()
+
+	// cannot register handlers over a network
+	if q.Origin() == astral.OriginNetwork {
+		return ch.Send(astral.NewErrOriginNotAllowed(q.Origin()))
+	}
+
 	// note: ServeApps authorizes adding the caller's own handler. It does not
 	// authorize removing another identity's handler.
 	if !mod.Auth.Authorize(ctx, &auth.ServeAppsAction{Action: auth.NewAction(q.Caller())}) {
-		return q.Reject()
+		return ch.Send(auth.ErrNotPermitted)
 	}
-
-	ch := channel.New(q.AcceptRaw(), channel.WithFormats(args.In, args.Out))
-	defer ch.Close()
 
 	// why: the endpoint is dialed for every query, so a relative unix: path would name a socket
 	// relative to the node's working directory.

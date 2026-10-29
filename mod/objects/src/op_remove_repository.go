@@ -14,17 +14,17 @@ type opRemoveRepositoryArgs struct {
 }
 
 func (mod *Module) OpRemoveRepository(ctx *astral.Context, q *routing.IncomingQuery, args opRemoveRepositoryArgs) (err error) {
+	ch := channel.New(q.AcceptRaw(), channel.WithFormats(args.In, args.Out))
+	defer ch.Close()
+
 	// why AdminObjects and not StoreObjects: a grant to add objects does not grant
 	// destroying them.
 	if !mod.Auth.Authorize(ctx, &auth.AdminObjectsAction{
 		Action: auth.NewAction(q.Caller()),
 		Repo:   astral.String8(args.Name),
 	}) {
-		return q.Reject()
+		return ch.Send(auth.ErrNotPermitted)
 	}
-
-	ch := channel.New(q.AcceptRaw(), channel.WithFormats(args.In, args.Out))
-	defer ch.Close()
 
 	err = mod.RemoveRepository(args.Name)
 	if err != nil {

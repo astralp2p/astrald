@@ -15,22 +15,22 @@ type opSignContractArgs struct {
 // OpSignContract reads contracts from the channel, signs each as its issuer and
 // as its subject with keys the node holds, and writes back a SignedContract or
 // an error per contract. A query of any origin other than local, a link's and
-// MCP's included, is rejected.
+// MCP's included, is answered astral.ErrOriginNotAllowed.
 //
 // note: a command of a shell.shell session carries no origin, so a remote
 // session's command passes the origin check; the signer rule still binds the
 // session's identity.
 func (mod *Module) OpSignContract(ctx *astral.Context, q *routing.IncomingQuery, args opSignContractArgs) error {
+	ch := q.Accept(channel.WithFormats(args.In, args.Out))
+	defer ch.Close()
+
 	// why: the origin is admitted by name rather than refused by name, so an
 	// origin added later (as mcp once was) is refused until it is judged.
 	switch q.Origin() {
 	case "", astral.OriginLocal:
 	default:
-		return q.Reject()
+		return ch.Send(astral.NewErrOriginNotAllowed(q.Origin()))
 	}
-
-	ch := q.Accept(channel.WithFormats(args.In, args.Out))
-	defer ch.Close()
 
 	return channel.Batch(ch, func(c *auth.Contract) astral.Object {
 		// why: authorized per contract and before any key is touched, because

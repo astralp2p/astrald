@@ -18,11 +18,14 @@ type opFindArgs struct {
 }
 
 func (mod *Module) OpFind(ctx *astral.Context, q *routing.IncomingQuery, args opFindArgs) error {
+	ch := q.Accept(channel.WithOutputFormat(args.Out))
+	defer ch.Close()
+
 	if !mod.Auth.Authorize(ctx, &auth.SeeObjectsAction{
 		Action:   auth.NewAction(q.Caller()),
 		ObjectID: args.ID,
 	}) {
-		return q.Reject()
+		return ch.Send(auth.ErrNotPermitted)
 	}
 
 	ctx, cancel := ctx.WithIdentity(q.Caller()).WithTimeout(time.Minute)
@@ -37,9 +40,6 @@ func (mod *Module) OpFind(ctx *astral.Context, q *routing.IncomingQuery, args op
 	if q.Origin() == astral.OriginNetwork {
 		ctx = ctx.ExcludeZone(astral.ZoneNetwork)
 	}
-
-	ch := q.Accept(channel.WithOutputFormat(args.Out))
-	defer ch.Close()
 
 	if args.ID == nil || args.ID.IsZero() {
 		return ch.Send(astral.NewError("id is required"))

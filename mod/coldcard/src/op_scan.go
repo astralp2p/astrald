@@ -14,15 +14,15 @@ type opScanArgs struct {
 }
 
 // OpScan triggers a device rescan and replies over the channel with an Ack on
-// success or an Error. A caller refused coldcard.ScanAction is rejected before
-// the query is accepted.
+// success or an Error. A caller refused coldcard.ScanAction is answered
+// auth.ErrNotPermitted.
 func (mod *Module) OpScan(ctx *astral.Context, q *routing.IncomingQuery, args opScanArgs) (err error) {
-	if !mod.Auth.Authorize(ctx, &coldcard.ScanAction{Action: auth.NewAction(q.Caller())}) {
-		return q.Reject()
-	}
-
 	ch := channel.New(q.AcceptRaw(), channel.WithFormats(args.In, args.Out))
 	defer ch.Close()
+
+	if !mod.Auth.Authorize(ctx, &coldcard.ScanAction{Action: auth.NewAction(q.Caller())}) {
+		return ch.Send(auth.ErrNotPermitted)
+	}
 
 	err = mod.Scan()
 	if err != nil {

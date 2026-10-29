@@ -40,24 +40,22 @@ type opBootstrapArgs struct {
 // why the origin and caller gates of auth.sign_contract: the op signs the
 // contract that op signs for node setup, so it admits the same queries.
 func (mod *Module) OpBootstrap(ctx *astral.Context, q *routing.IncomingQuery, args opBootstrapArgs) error {
+	ch := q.Accept(channel.WithFormats(args.In, args.Out))
+	defer ch.Close()
+
 	switch q.Origin() {
 	case "", astral.OriginLocal:
 	default:
-		return q.Reject()
+		return ch.Send(astral.NewErrOriginNotAllowed(q.Origin()))
 	}
 
 	if mod.ActiveContract() != nil {
-		ch := q.Accept(channel.WithFormats(args.In, args.Out))
-		defer ch.Close()
 		return ch.Send(user.ErrAlreadyClaimed)
 	}
 
 	if !q.Caller().IsEqual(mod.node.Identity()) {
-		return q.RejectWithCode(4)
+		return ch.Send(auth.ErrNotPermitted)
 	}
-
-	ch := q.Accept(channel.WithFormats(args.In, args.Out))
-	defer ch.Close()
 
 	words, err := receiveWords(ch, args.Generate)
 	if err != nil {

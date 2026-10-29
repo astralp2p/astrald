@@ -17,12 +17,15 @@ type opLoadArgs struct {
 
 // OpLoad loads an object into memory and writes it to the output. OpLoad verifies the object hash.
 func (mod *Module) OpLoad(ctx *astral.Context, q *routing.IncomingQuery, args opLoadArgs) (err error) {
+	ch := q.Accept(channel.WithOutputFormat(args.Out), channel.AllowUnparsed(args.Unparsed))
+	defer ch.Close()
+
 	if !mod.Auth.Authorize(ctx, &auth.SeeObjectsAction{
 		Action:   auth.NewAction(q.Caller()),
 		ObjectID: args.ID,
 		Repo:     astral.String8(args.Repo),
 	}) {
-		return q.Reject()
+		return ch.Send(auth.ErrNotPermitted)
 	}
 
 	if args.Zone == nil {
@@ -30,9 +33,6 @@ func (mod *Module) OpLoad(ctx *astral.Context, q *routing.IncomingQuery, args op
 	} else {
 		ctx = ctx.WithZone(*args.Zone)
 	}
-
-	ch := q.Accept(channel.WithOutputFormat(args.Out), channel.AllowUnparsed(args.Unparsed))
-	defer ch.Close()
 
 	repo := mod.ReadDefault()
 	if len(args.Repo) > 0 {

@@ -20,18 +20,18 @@ type opRevokeArgs struct {
 // withdrawal takes effect on the next authorization and does not undo what the
 // identity did while it held the grant.
 func (mod *Module) OpRevoke(ctx *astral.Context, q *routing.IncomingQuery, args opRevokeArgs) error {
+	ch := channel.New(q.AcceptRaw(), channel.WithOutputFormat(args.Out))
+	defer ch.Close()
+
 	// why: a grant authorizes on this node alone, so a caller off a link has no
 	// standing to withdraw one.
 	if q.Origin() == astral.OriginNetwork {
-		return q.Reject()
+		return ch.Send(astral.NewErrOriginNotAllowed(q.Origin()))
 	}
 
 	if !mod.Auth.Authorize(ctx, &auth.AdminManageAppsAction{Action: auth.NewAction(q.Caller())}) {
-		return q.Reject()
+		return ch.Send(auth.ErrNotPermitted)
 	}
-
-	ch := channel.New(q.AcceptRaw(), channel.WithOutputFormat(args.Out))
-	defer ch.Close()
 
 	identity, err := mod.Dir.ResolveIdentity(args.Identity)
 	if err != nil {

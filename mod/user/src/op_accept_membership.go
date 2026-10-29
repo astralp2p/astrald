@@ -24,17 +24,15 @@ type opAcceptMembershipArgs struct {
 // Self-refuses with user.ErrExpelled if this node holds the issuer's ban on itself.
 // On success, stores the signed contract and sets it as the active contract.
 func (mod *Module) OpAcceptMembership(ctx *astral.Context, q *routing.IncomingQuery, args opAcceptMembershipArgs) (err error) {
-	ac := mod.ActiveContract()
-	if ac != nil {
-		// We already have an active contract
-		ch := q.Accept(channel.WithFormats(args.In, args.Out))
-		defer ch.Close()
-		return ch.Send(user.ErrAlreadyClaimed)
-	}
-
 	conn := q.AcceptRaw()
 	ch := channel.New(conn, channel.WithFormats(args.In, args.Out))
 	defer ch.Close()
+
+	ac := mod.ActiveContract()
+	if ac != nil {
+		// We already have an active contract
+		return ch.Send(user.ErrAlreadyClaimed)
+	}
 
 	// receive the contract to sign
 	var contract *auth.Contract

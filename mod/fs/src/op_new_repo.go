@@ -23,16 +23,16 @@ type opNewRepoArgs struct {
 // repository at the given path and adds it to the local group. Unless Temporary is set, the
 // repository is saved to the tree and restored at the next start.
 func (mod *Module) OpNewRepo(ctx *astral.Context, q *routing.IncomingQuery, args opNewRepoArgs) (err error) {
+	ch := q.Accept(channel.WithFormats(args.In, args.Out))
+	defer ch.Close()
+
 	if !mod.Auth.Authorize(ctx, &auth.AdminObjectsAction{
 		Action: auth.NewAction(q.Caller()),
 		Repo:   astral.String8(args.Name),
 		Path:   astral.String8(args.Path),
 	}) {
-		return q.Reject()
+		return ch.Send(auth.ErrNotPermitted)
 	}
-
-	ch := q.Accept(channel.WithFormats(args.In, args.Out))
-	defer ch.Close()
 
 	// why: reported over the channel rather than as a rejection — the caller holds a
 	// grant, so it gets the reason its path was refused

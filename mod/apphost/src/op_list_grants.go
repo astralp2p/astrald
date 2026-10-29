@@ -18,18 +18,18 @@ type opListGrantsArgs struct {
 // answers what authorizes now. A permit carries no expiry of its own, so a
 // listing that included lapsed rows could not mark them as lapsed.
 func (mod *Module) OpListGrants(ctx *astral.Context, q *routing.IncomingQuery, args opListGrantsArgs) error {
+	ch := channel.New(q.AcceptRaw(), channel.WithOutputFormat(args.Out))
+	defer ch.Close()
+
 	// why: the grant table is this node's private answer about local authority,
 	// so it is not enumerable over a link.
 	if q.Origin() == astral.OriginNetwork {
-		return q.Reject()
+		return ch.Send(astral.NewErrOriginNotAllowed(q.Origin()))
 	}
 
 	if !mod.Auth.Authorize(ctx, &auth.AdminManageAppsAction{Action: auth.NewAction(q.Caller())}) {
-		return q.Reject()
+		return ch.Send(auth.ErrNotPermitted)
 	}
-
-	ch := channel.New(q.AcceptRaw(), channel.WithOutputFormat(args.Out))
-	defer ch.Close()
 
 	identity, err := mod.Dir.ResolveIdentity(args.Identity)
 	if err != nil {

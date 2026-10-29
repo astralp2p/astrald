@@ -16,11 +16,14 @@ type opScanArgs struct {
 
 // OpScan sends a list of object ids in a repository
 func (mod *Module) OpScan(ctx *astral.Context, q *routing.IncomingQuery, args opScanArgs) (err error) {
+	ch := channel.New(q.AcceptRaw(), channel.WithOutputFormat(args.Out))
+	defer ch.Close()
+
 	if !mod.Auth.Authorize(ctx, &auth.SeeObjectsAction{
 		Action: auth.NewAction(q.Caller()),
 		Repo:   astral.String8(args.Repo),
 	}) {
-		return q.Reject()
+		return ch.Send(auth.ErrNotPermitted)
 	}
 
 	// prepare the context
@@ -35,8 +38,6 @@ func (mod *Module) OpScan(ctx *astral.Context, q *routing.IncomingQuery, args op
 	defer cancel()
 
 	// accept
-	ch := channel.New(q.AcceptRaw(), channel.WithOutputFormat(args.Out))
-	defer ch.Close()
 
 	// look up the repository
 	repo := mod.GetRepository(args.Repo)

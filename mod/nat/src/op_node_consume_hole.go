@@ -26,12 +26,12 @@ type opNodeConsumeHoleArgs struct {
 // OpNodeConsumeHole coordinates a two-phase lock-then-take exchange to hand a hole out of the pool.
 // When Identity is set it acts as the initiator; otherwise it is the responder waiting for the lock signal.
 func (mod *Module) OpNodeConsumeHole(ctx *astral.Context, q *routing.IncomingQuery, args opNodeConsumeHoleArgs) (err error) {
-	if !mod.Auth.Authorize(ctx, &auth.AdminNetworkAction{Action: auth.NewAction(q.Caller())}) {
-		return q.Reject()
-	}
-
 	ch := channel.New(q.AcceptRaw(), channel.WithFormats(args.In, args.Out))
 	defer ch.Close()
+
+	if !mod.Auth.Authorize(ctx, &auth.AdminNetworkAction{Action: auth.NewAction(q.Caller())}) {
+		return ch.Send(auth.ErrNotPermitted)
+	}
 
 	// why: the target resolves before the hole leaves the pool, so a name naming
 	// no node costs no hole. Nothing puts a taken hole back once BeginLock

@@ -12,12 +12,12 @@ type opDefaultGatewayArgs struct {
 }
 
 func (mod *Module) OpDefaultGateway(ctx *astral.Context, q *routing.IncomingQuery, args opDefaultGatewayArgs) (err error) {
-	if !mod.Auth.Authorize(ctx, &auth.AdminNetworkAction{Action: auth.NewAction(q.Caller())}) {
-		return q.Reject()
-	}
-
 	ch := channel.New(q.AcceptRaw(), channel.WithOutputFormat(args.Out))
 	defer ch.Close()
+
+	if !mod.Auth.Authorize(ctx, &auth.AdminNetworkAction{Action: auth.NewAction(q.Caller())}) {
+		return ch.Send(auth.ErrNotPermitted)
+	}
 
 	gw, err := mod.DefaultGateway()
 	if err != nil {

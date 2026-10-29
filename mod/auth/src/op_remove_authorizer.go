@@ -21,12 +21,12 @@ type opRemoveAuthorizerArgs struct {
 // type and, optionally, one actor. It answers Ack once the removal is persisted.
 // Removing an actor's assignment makes the action-wide one apply to it again.
 func (mod *Module) OpRemoveAuthorizer(ctx *astral.Context, q *routing.IncomingQuery, args opRemoveAuthorizerArgs) error {
-	if !mod.Authorize(ctx, &auth.AdminManageAppsAction{Action: auth.NewAction(q.Caller())}) {
-		return q.Reject()
-	}
-
 	ch := channel.New(q.AcceptRaw(), channel.WithFormats(args.In, args.Out))
 	defer ch.Close()
+
+	if !mod.Authorize(ctx, &auth.AdminManageAppsAction{Action: auth.NewAction(q.Caller())}) {
+		return ch.Send(auth.ErrNotPermitted)
+	}
 
 	var actor *astral.Identity
 	if args.Actor != "" {
