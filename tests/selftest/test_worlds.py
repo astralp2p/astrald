@@ -40,15 +40,19 @@ class DiesAfterBuild(FakeExecutor):
 
 
 def run_worlds(tmp: Path, selection: list, world=FakeExecutor,
-               isolate=False) -> tuple:
-    """(run dir, results doc, the worlds opened) of one run of the tree."""
+               isolate=False, config=None) -> tuple:
+    """(run dir, results doc, the worlds opened) of one run of the tree;
+    config gives tests their [config.*] overrides."""
     tests = write_tree(tmp / "e2e")
+    for name, overrides in (config or {}).items():
+        tests[name].config = overrides
     args = argparse.Namespace(selection=selection, driver="script",
                               target="fresh", keep=False, isolate=isolate)
     opened = []
 
-    def open_world(dir, *_):
+    def open_world(dir, binary, base, keep, config=None):
         opened.append((Path(dir).parent.name, world()))
+        opened[-1][1].config = config
         return opened[-1][1]
 
     with mock.patch.object(runner, "RESULTS", tmp / "results"), \
@@ -109,6 +113,53 @@ class TestIsolatedWorlds(unittest.TestCase):
         seen = json.loads((self.run_dir / "reader" / "seen-script.json")
                           .read_text())
         self.assertEqual(seen["facts"], {"build": "script"})
+
+
+class TestWorldConfig(unittest.TestCase):
+    def test_each_world_opens_with_its_own_merged_overrides(self):
+        off = {"node1": {"mcp": {"bind_mcp": ""}}}
+        on = {"node1": {"mcp": {"bind_mcp": "tcp:127.0.0.1:1"}}}
+        with tempfile.TemporaryDirectory() as tmp:
+            _, doc, opened = run_worlds(Path(tmp), ["observer", "reader"],
+                                        config={"observer": off,
+                                                "reader": on})
+        # the clash forks reader into a world of its own, replaying build
+        self.assertEqual([(name, w.config) for name, w in opened],
+                         [("w0", off), ("w1", on)])
+        self.assertEqual([e["status"] for e in doc["entries"]],
+                         ["pass"] * 4)
+
+
+class TestLocalWorldConfig(unittest.TestCase):
+    def test_a_node_starts_with_its_worlds_overrides_for_it(self):
+        from lib.localnode import LocalNode
+        from lib.worlds import local
+
+        started = {}
+
+        class Node(LocalNode):
+            def start(self, keep=False):
+                started[self.name] = self
+
+            async def wait_ready(self, timeout=30.0):
+                pass
+
+        with tempfile.TemporaryDirectory() as tmp, \
+                mock.patch.object(local, "LocalNode", Node):
+            world = local.LocalWorld(Path(tmp) / "session", Path("astrald"),
+                                     20800, config={"nomcp1": {
+                                         "mcp": {"bind_mcp": ""}}})
+            try:
+                world.prepare(SimpleNamespace(name="t", ops=[],
+                                              nodes=["node1", "nomcp1"]))
+                views = world.nodes()
+            finally:
+                world.teardown(keep=False)
+        self.assertEqual(started["nomcp1"].configs["mcp"]["bind_mcp"], "")
+        self.assertEqual(started["node1"].configs["mcp"]["bind_mcp"],
+                         "tcp:127.0.0.1:20804")
+        self.assertEqual((views["node1"]["serves_mcp"],
+                          views["nomcp1"]["serves_mcp"]), (True, False))
 
 
 class TestSkips(unittest.TestCase):

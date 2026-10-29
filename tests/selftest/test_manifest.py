@@ -202,6 +202,45 @@ class TestPlannerKeys(ManifestCase):
             """)
 
 
+class TestConfigKey(ManifestCase):
+    def test_absent_config_is_empty(self):
+        self.assertEqual(self.all["smoke"].config, {})
+
+    def test_config_tables_parse_by_node_and_module(self):
+        self.add("tuned", """
+            env = "node"
+            nodes = ["node1"]
+            [config.node1.mcp]
+            bind_mcp = ""
+            [config.node1.objects]
+            external_registration_sweep_interval = "2s"
+            tags = ["a", "b"]
+        """)
+        self.assertEqual(self.all["tuned"].config, {"node1": {
+            "mcp": {"bind_mcp": ""},
+            "objects": {"external_registration_sweep_interval": "2s",
+                        "tags": ["a", "b"]}}})
+
+    def test_bad_config_is_rejected(self):
+        for body, says in (
+                ('config = "x"', "must be \\[config"),
+                ("[config.node2.mcp]\nbind_mcp = \"\"", "which the roster"),
+                ("[config.node1]\nbind_mcp = \"\"", "must be \\[config"),
+                ("[config.node1.Mcp]\nbind_mcp = \"\"", "must be \\[config"),
+                ("[config.node1.mcp]", "must be \\[config"),
+                ("[config.node1.mcp]\nat = 2026-10-29", "no module config"),
+                ("[config.node1.objects]\nx = nan", "JSON cannot hold"),
+                ("[config.node1.objects]\nx = [inf]", "JSON cannot hold"),
+                ("[config.node1.apphost]\ntokens = {}", "harness's to set"),
+                ("[config.node1.tcp]\nlisten_port = 1", "harness's to set"),
+                ("[config.node1.mcp]\nbind_mcp = \"tcp:x\"",
+                 "harness's to set")):
+            with self.subTest(body=body):
+                with self.assertRaisesRegex(ValueError, says):
+                    self.add("tuned", 'env = "node"\nnodes = ["node1"]\n'
+                             + body + "\n")
+
+
 class TestResolve(ManifestCase):
     def test_full_run_order_and_kinds(self):
         # smoke builds nothing, so it runs before the producer at its depth

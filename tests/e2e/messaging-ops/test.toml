@@ -7,3 +7,8 @@ local_only = "reads serves_mcp, mcp_url and astrald.log from the host, serves an
 facts   = ["node", "serves_mcp", "mcp_probe", "ask", "answer", "after",
            "aliases", "ada", "bob", "cleo", "app", "ada_token", "info_ada",
            "exchange", "unhosted", "deletion", "questions"]
+
+# why: the test reads that mod/messaging serves a mailbox on a node whose MCP
+# server is off, so the node's world starts it with no bind
+[config.nomcp1.mcp]
+bind_mcp = ""

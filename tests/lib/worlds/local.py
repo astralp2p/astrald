@@ -18,7 +18,7 @@ class LocalWorld(Executor):
     env = "node"
 
     def __init__(self, dir: Path, binary: Path, port_base: int,
-                 keep: bool = False):
+                 keep: bool = False, config: dict | None = None):
         # why: the nodes write their state under the system temp dir, and dir
         # is a symlink to it until close copies the world back. astrald
         # fsyncs its SQLite database, and on an SD card under write load one
@@ -36,6 +36,10 @@ class LocalWorld(Executor):
         # why: a kept world outlives the runner, so its nodes are started
         # without the parent-death signal. Decided before the first node boots.
         self.keep = keep
+        # why the world's and not a test's: every test in a world sees the
+        # same node, so its config is the union the planner merged for the
+        # world, fixed before the first node boots (lib/plan.py)
+        self.config = config or {}
         self._nodes = {}
 
     def prepare(self, test) -> None:
@@ -53,7 +57,8 @@ class LocalWorld(Executor):
             if name in self._nodes:
                 continue
             node = LocalNode(name, self._dir / name, self.binary,
-                             ports_for(self.port_base, len(self._nodes)))
+                             ports_for(self.port_base, len(self._nodes)),
+                             self.config.get(name))
             node.start(keep=self.keep)
             self._nodes[name] = node  # track BEFORE readiness — a node that
             await node.wait_ready()   # fails wait_ready must stay stoppable

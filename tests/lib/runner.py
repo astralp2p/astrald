@@ -420,9 +420,11 @@ def _executor(args, binary, ref):
     return AttachExecutor()
 
 
-def _local_world(dir: Path, binary: Path, port_base: int, keep: bool):
-    """A fresh local world, its node roots under dir."""
-    return LocalWorld(dir, binary, port_base, keep=keep)
+def _local_world(dir: Path, binary: Path, port_base: int, keep: bool,
+                 config: dict | None = None):
+    """A fresh local world, its node roots under dir, its nodes started with
+    the world's merged config overrides."""
+    return LocalWorld(dir, binary, port_base, keep=keep, config=config)
 
 
 def _vm_world(dir: Path, binary: Path, ref: str, keep: bool):
@@ -445,6 +447,12 @@ def attach_plan(tests: dict, args) -> list:
                          "takes no --isolate, --prereqs, --vm, --save or "
                          "--from")
     plan = plan_for(tests, args.selection)
+    configured = [t.name for t, _ in plan if t.config]
+    if configured:
+        # why refused: the attached daemon is not the harness's to configure,
+        # so the test would judge a node it did not set up
+        raise ValueError(f"{configured[0]} overrides node config, and the "
+                         "attached daemon has no harness-rendered config")
     unbuilt = _reject_unbuilt(args, plan)
     if unbuilt:
         raise ValueError(unbuilt)
@@ -592,21 +600,28 @@ def _with_defaults(args):
     return args
 
 
-def _units(tests: dict, args) -> list:
-    """[(world, env, [(Test, kind, driver)])] — what the run executes, or
-    ValueError naming why it cannot run."""
+def _units(tests: dict, args) -> tuple:
+    """([(world, env, [(Test, kind, driver)])], {world: config}) — what the
+    run executes and the node config each world starts with, or ValueError
+    naming why it cannot run."""
     if args.target == "attach":
         # note: attach runs through the same world loop and takes its rules;
         # its broken() is always empty, so a world-died skip never fires there
         return [("w0", "node", [(t, kind, args.driver)
-                                for t, kind in attach_plan(tests, args)])]
+                                for t, kind in attach_plan(tests, args)])], {}
     worlds = plan_worlds(tests, args)
     _check_stages(args)
+    configured = [w.name for w in worlds if w.kind == "vm" and w.config]
+    if configured:
+        # todo: the VM world pushes overrides in the next commit
+        raise ValueError(f"{configured[0]} is a VM world with node config "
+                         "overrides, which a VM world does not push yet")
     # note: a step the saved world already stands past is not run, and
     # leaves no record
-    return [(w.name, ENV_OF[w.kind],
-             [(tests[s.test], s.kind, s.driver) for s in w.steps if not s.done])
-            for w in worlds]
+    return ([(w.name, ENV_OF[w.kind],
+              [(tests[s.test], s.kind, s.driver)
+               for s in w.steps if not s.done])
+             for w in worlds], {w.name: w.config for w in worlds})
 
 
 def _operator(cfg: dict, results) -> dict:
@@ -639,7 +654,7 @@ def main(args) -> int:
     if args.plan:
         return print_plan(tests, args)
     try:
-        units = _units(tests, args)
+        units, configs = _units(tests, args)
     except ValueError as e:
         print(f"run: {e}", file=sys.stderr)
         return 2
@@ -691,7 +706,7 @@ def main(args) -> int:
             return ex
         if env == "node":
             return _local_world(run_dir / name / "session", binary,
-                                lease.base, keep)
+                                lease.base, keep, configs[name])
         world = _vm_world(run_dir / name, binary, ref, keep)
         if args.from_stage:
             world.boot_from(args.from_stage, run.saved)

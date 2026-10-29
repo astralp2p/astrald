@@ -13,35 +13,17 @@ Mail between participants is decided by an external authority on a loopback
 port of the node's own. Nothing listens there unless a driver serves it, and an
 authority that cannot be reached permits nothing.
 
-A node serves MCP unless its roster name is in WITHOUT_MCP. A node that serves
-MCP declares the tools in NODE_OP_TOOLS and PEER_TOOLS.
+Every node serves MCP and declares the tools in NODE_OP_TOOLS and PEER_TOOLS.
+A test changes any of this for its world with a `[config.<node>.<module>]`
+override, merged key by key on top of what is built here.
 """
 import fcntl
+import json
 import socket
 import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 from typing import IO
-
-APPHOST_YAML = """\
-listen:
-  - "tcp:127.0.0.1:{apphost}"
-bind_http: ""
-tokens:
-  "{token}": localnode
-"""
-
-TCP_YAML = """\
-listen_port: {tcp}
-"""
-
-ETHER_YAML = """\
-udp_port: {ether}
-"""
-
-KCP_YAML = """\
-listen_port: {kcp}
-"""
 
 # The tools a node serving MCP declares, by the node operation each one puts:
 # the operation's path, then the tool's name. mcp-origin calls each as an agent.
@@ -54,9 +36,8 @@ listen_port: {kcp}
 # why not nodes.new_link: it refuses an argument-less call on its own, so it
 # reads the same guarded or not and witnesses nothing.
 #
-# why every MCP node declares them: a node's config follows its roster name,
-# and the node refuses each of these queries for its MCP origin, so they reach
-# nothing wherever they are declared.
+# why every MCP node declares them: the node refuses each of these queries for
+# its MCP origin, so they reach nothing wherever they are declared.
 NODE_OP_TOOLS = {
     "shell.shell": "node_shell",
     "mcp.list_agents": "node_list_agents",
@@ -85,44 +66,11 @@ PEER_TOOLS = {
     "test.mcp_peer.caller": "peer_caller",
 }
 
-# why bound at all: the MCP server is off unless bind_mcp names an endpoint
-# (mod/mcp defaults to a single fixed port, which two nodes would fight over).
-MCP_YAML = """\
-bind_mcp: "tcp:127.0.0.1:{mcp}"
-tools:
-{tools}"""
-
-DECLARED_TOOL_YAML = """\
-  - name: {name}
-    description: "Put {path} to this node as the agent."
-    query: "astral://localnode:{path}"
-"""
-
-PEER_TOOL_YAML = """\
-  - name: {name}
-    description: "Put {path} to the peer node as the agent."
-    query: "astral://{alias}:{path}"
-"""
-
-# note: an empty bind_mcp turns the MCP server off, and mod/mcp still loads.
-MCP_OFF_YAML = """\
-bind_mcp: ""
-"""
-
-# The roster names whose node serves no MCP.
-#
-# why a roster name decides it and not a manifest key: a name is one daemon
-# for the whole run, shared by every test that names it, so a config chosen by
-# the test that happened to start it would change under the tests that follow.
-WITHOUT_MCP = frozenset({"nomcp1"})
-
 # why a sweep this short: the node's default is a minute, which is longer than
 # most tests live, so an expired external registration would still be in memory
 # when the oracle looked. Only the removal and its log line are hurried — the
 # fan-out skips an expired registration whatever this is set to.
-OBJECTS_YAML = """\
-external_registration_sweep_interval: 1s
-"""
+OBJECTS = {"external_registration_sweep_interval": "1s"}
 
 # why an authority at all: mod/messaging holds no reachability of its own, and
 # no handler grants the two mail actions, so a node without one refuses every
@@ -136,14 +84,11 @@ external_registration_sweep_interval: 1s
 # why mod.messaging.host_mailbox_action is not listed: a node hosts a mailbox
 # under the contract the mailbox's identity signs, and auth's chain walk
 # answers that without leaving the node.
-AUTH_YAML = """\
-external_authorizers:
-  - endpoint: "{authority_url}"
-    actions:
-      - mod.messaging.send_action
-      - mod.messaging.receive_action
-      - mod.messaging.read_mailbox_action
-"""
+AUTH_ACTIONS = [
+    "mod.messaging.send_action",
+    "mod.messaging.receive_action",
+    "mod.messaging.read_mailbox_action",
+]
 
 
 @dataclass
@@ -216,26 +161,70 @@ def _bindable(port: int) -> bool:
     return True
 
 
-def _mcp_yaml(port: int) -> str:
-    tools = "".join(DECLARED_TOOL_YAML.format(name=name, path=path)
-                    for path, name in NODE_OP_TOOLS.items())
-    tools += "".join(PEER_TOOL_YAML.format(name=name, path=path,
-                                           alias=PEER_ALIAS)
-                     for path, name in PEER_TOOLS.items())
-    return MCP_YAML.format(mcp=port, tools=tools)
+def _mcp(port: int) -> dict:
+    """mod/mcp's config: the server bound, and every declared tool.
+
+    why bound at all: the MCP server is off unless bind_mcp names an endpoint
+    (mod/mcp defaults to a single fixed port, which two nodes would fight
+    over). An empty bind_mcp turns it off, and mod/mcp still loads.
+    """
+    tools = [{"name": name,
+              "description": f"Put {path} to this node as the agent.",
+              "query": f"astral://localnode:{path}"}
+             for path, name in NODE_OP_TOOLS.items()]
+    tools += [{"name": name,
+               "description": f"Put {path} to the peer node as the agent.",
+               "query": f"astral://{PEER_ALIAS}:{path}"}
+              for path, name in PEER_TOOLS.items()]
+    return {"bind_mcp": f"tcp:127.0.0.1:{port}", "tools": tools}
 
 
-def render(root: Path, ports: NodePorts, token: str,
-           serves_mcp: bool = True) -> None:
+def module_configs(ports: NodePorts, token: str,
+                   overrides: dict | None = None) -> dict:
+    """module -> the config a node starts with: the harness's base, and a
+    world's overrides for the node merged key by key on top.
+
+    why key by key and not the whole module: an override names what a test
+    needs changed, and the ports and the token beside it stay the harness's.
+    """
+    cfg = {
+        "apphost": {"listen": [f"tcp:127.0.0.1:{ports.apphost}"],
+                    "bind_http": "",
+                    # why: the value beside a token is the identity it
+                    # authenticates as, and `localnode` is the node itself
+                    "tokens": {token: "localnode"}},
+        "tcp": {"listen_port": ports.tcp},
+        "ether": {"udp_port": ports.ether},
+        "kcp": {"listen_port": ports.kcp},
+        "mcp": _mcp(ports.mcp),
+        "objects": dict(OBJECTS),
+        "auth": {"external_authorizers": [
+            {"endpoint": ports.authority_url, "actions": list(AUTH_ACTIONS)}]},
+    }
+    for module, keys in (overrides or {}).items():
+        cfg[module] = {**cfg.get(module, {}), **keys}
+    return cfg
+
+
+def serves_mcp(configs: dict) -> bool:
+    """Whether a node started with these configs runs its MCP server."""
+    return bool(configs.get("mcp", {}).get("bind_mcp"))
+
+
+def render(root: Path, configs: dict) -> None:
+    """Write each module's config to <root>/config/<module>.yaml.
+
+    why JSON: the harness is stdlib-only and has no YAML writer, and JSON is
+    YAML. astrald reads module config with gopkg.in/yaml.v2
+    (core/assets LoadYAML), which parses it as it parses block YAML.
+    note: every module ignores a LoadYAML error and runs on its defaults, so a
+    file it cannot parse reads as a node that ignores the harness.
+    why ensure_ascii off: an escaped non-BMP character is a surrogate pair,
+    which yaml.v2 refuses ("invalid Unicode character escape code"); YAML
+    takes the character itself. NaN and infinity are not JSON at all.
+    """
     cfg = Path(root) / "config"
     cfg.mkdir(parents=True, exist_ok=True)
-    (cfg / "apphost.yaml").write_text(
-        APPHOST_YAML.format(apphost=ports.apphost, token=token))
-    (cfg / "tcp.yaml").write_text(TCP_YAML.format(tcp=ports.tcp))
-    (cfg / "ether.yaml").write_text(ETHER_YAML.format(ether=ports.ether))
-    (cfg / "kcp.yaml").write_text(KCP_YAML.format(kcp=ports.kcp))
-    (cfg / "mcp.yaml").write_text(
-        _mcp_yaml(ports.mcp) if serves_mcp else MCP_OFF_YAML)
-    (cfg / "objects.yaml").write_text(OBJECTS_YAML)
-    (cfg / "auth.yaml").write_text(
-        AUTH_YAML.format(authority_url=ports.authority_url))
+    for module, doc in configs.items():
+        text = json.dumps(doc, indent=2, ensure_ascii=False, allow_nan=False)
+        (cfg / f"{module}.yaml").write_text(text + "\n", encoding="utf-8")

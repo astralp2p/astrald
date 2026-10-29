@@ -95,14 +95,28 @@ holds across a restart. Only `--target fresh` in env `node` restarts a node; a
 selection that would need it anywhere else is refused before it starts. A
 node's `restarts` field in `session.json` counts its restarts.
 
-A roster name is one daemon for the whole run, shared by every test that names
-it, so a node's config follows its name. Every node serves MCP except the ones
-`lib/nodeconfig.py` lists in `WITHOUT_MCP`: `nomcp1` is the node
-`messaging-ops` runs on. A node that serves MCP declares the tools
-`NODE_OP_TOOLS` lists, each pointed at one of its own operations, and
-`mcp-origin` calls them as an agent. It also declares the tools `PEER_TOOLS`
-lists, each pointed at the alias `PEER_ALIAS`, and `mcp-peer` points that alias
-at node2 and calls them as an agent on node1.
+A roster name is one daemon for a world, shared by every test in it. Every
+node serves MCP and declares the tools `NODE_OP_TOOLS` lists, each pointed at
+one of its own operations, and `mcp-origin` calls them as an agent. It also
+declares the tools `PEER_TOOLS` lists, each pointed at the alias `PEER_ALIAS`,
+and `mcp-peer` points that alias at node2 and calls them as an agent on node1.
+
+A test changes what a node starts with by overriding its module config:
+
+```toml
+[config.nomcp1.mcp]         # messaging-ops: its node serves no MCP
+bind_mcp = ""
+```
+
+Each key replaces the same key of what `lib/nodeconfig.py` builds for that
+module, and a module it builds nothing for gets the table alone. The config
+follows the world, not the test: the planner merges the overrides of every
+test in a world, so each test there sees the same node, and a test that sets
+a key otherwise than its world forks into one of its own. A clash with the
+test's own lineage is a plan error. `--plan` lists a world's overrides under
+its steps. A local world writes each module's config as JSON, which astrald's
+YAML loader reads; `--target attach` refuses an override, since it renders
+nothing.
 
 `env` is a minimum, not a prison: drivers and oracles read `session.json`
 and never learn whether the endpoints behind it are processes on loopback
@@ -120,6 +134,9 @@ destroys   = true           # only this test's descendants may follow it in its 
 ops        = ["enable-tor node1 node2"]   # VM operations before the driver; imply destroys
 local_only = "<reason>"     # it needs the host (a node root, mcp_url, a restart): never in a VM
 facts      = ["user_id"]    # the facts its driver writes
+
+[config.node1.mcp]          # module config its world's node1 starts with
+bind_mcp = ""
 ```
 
     ./tests/run --plan main.suite            # one local world

@@ -27,7 +27,11 @@ follow from that tree:
 9. `done` is the history of a saved world the run boots (`--from`): the plan
    is that one world, its first steps are exactly that history, and they are
    marked done rather than run.
+10. A world's node config is the union of its tests' `[config.<node>.<module>]`
+    overrides. A test that sets a key otherwise than the world forks, and one
+    that clashes with its own lineage cannot run at all.
 """
+import json
 from dataclasses import dataclass, field
 
 WIDTH = 79          # a rendered plan wraps its worlds at this column
@@ -51,6 +55,34 @@ class World:
     kind: str | None = None   # "local", "vm" or "attach"; None until a step needs one
     steps: list = field(default_factory=list)
     ended: bool = False       # a destroyer ran: only its descendants may follow
+    config: dict = field(default_factory=dict)   # node -> module -> keys
+
+
+def _merge(into: dict, config: dict) -> None:
+    """Fold one test's overrides into a world's."""
+    for node, modules in config.items():
+        for module, keys in modules.items():
+            into.setdefault(node, {}).setdefault(module, {}).update(keys)
+
+
+def _same(a, b) -> bool:
+    """Whether two override values render to the same config.
+
+    why not ==: Python holds 0 == False and 1 == 1.0, and a module reads
+    `false` and `0` as different settings.
+    """
+    return json.dumps(a, sort_keys=True) == json.dumps(b, sort_keys=True)
+
+
+def _clash(have: dict, config: dict) -> tuple | None:
+    """The first (node, module, key) config sets otherwise than have."""
+    for node, modules in config.items():
+        for module, keys in modules.items():
+            set_ = have.get(node, {}).get(module, {})
+            for key, value in keys.items():
+                if key in set_ and not _same(set_[key], value):
+                    return node, module, key
+    return None
 
 
 def chain(tests: dict, name: str) -> list:
@@ -154,11 +186,24 @@ class _Planner:
 
     def _fits(self, w: World, n: str) -> bool:
         need = self._need(n)
-        return not w.ended and (w.kind is None or need is None
-                                or w.kind == need)
+        return (not w.ended and (w.kind is None or need is None
+                                 or w.kind == need)
+                and _clash(w.config, self.tests[n].config) is None)
+
+    def _refusal(self, w: World, n: str, what: str) -> str:
+        """Why n cannot <what> in w, a fork that already replays its lineage."""
+        clash = _clash(w.config, self.tests[n].config)
+        if clash is None:
+            return f"{n} cannot {what} in a {w.kind} world"
+        node, module, key = clash
+        other = next((s.test for s in w.steps if key in self.tests[s.test]
+                      .config.get(node, {}).get(module, {})), "its world")
+        return (f"{n} sets {node}.{module}.{key} otherwise than {other}, and "
+                "its lineage puts both in one world")
 
     def _add(self, w: World, n: str, kind: str) -> None:
         w.kind = w.kind or self._need(n)
+        _merge(w.config, self.tests[n].config)
         w.steps.append(Step(n, kind, self._driver(kind)))
 
     def _fork(self, parent: str | None) -> World:
@@ -167,8 +212,7 @@ class _Planner:
         self.worlds.append(w)
         for n in chain(self.tests, parent) if parent else []:
             if not self._fits(w, n):
-                raise PlanError(f"{n} cannot be replayed in a "
-                                f"{w.kind} world")
+                raise PlanError(self._refusal(w, n, "be replayed"))
             self._add(w, n, "prereq")
         return w
 
@@ -177,7 +221,7 @@ class _Planner:
         if not (share and self._fits(w, n)):
             w = self._fork(self.tests[n].after)
             if not self._fits(w, n):
-                raise PlanError(f"{n} cannot run in a {w.kind} world")
+                raise PlanError(self._refusal(w, n, "run"))
         self._add(w, n, "test" if n in self.selected else "prereq")
         return w
 
@@ -230,6 +274,9 @@ class _Planner:
                 feeds.update(chain(self.tests, s.test))
         w.steps = kept[::-1]
         w.kind = next((k for s in w.steps if (k := self._need(s.test))), None)
+        w.config = {}
+        for s in w.steps:
+            _merge(w.config, self.tests[s.test].config)
 
 
 def _attach(p: _Planner, worlds: list, isolate: bool) -> list:
@@ -253,6 +300,9 @@ def _attach(p: _Planner, worlds: list, isolate: bool) -> list:
         if t.ops:
             raise PlanError(f"{n} runs VM operations, and --target attach "
                             "has no simulation")
+        if t.config:
+            raise PlanError(f"{n} overrides node config, and the attached "
+                            "daemon has no harness-rendered config")
     if isolate or len(worlds) != 1:
         raise PlanError("--target attach has one daemon, so the selection "
                         "has to run in one world")
@@ -262,7 +312,8 @@ def _attach(p: _Planner, worlds: list, isolate: bool) -> list:
 
 def render(worlds: list) -> str:
     """The plan as text, one world per paragraph; `*` marks a prereq and
-    `=` a step the saved world already stands past."""
+    `=` a step the saved world already stands past. A world's node config
+    overrides follow its steps, one key per line."""
     heads = [f"{w.name} {w.kind}:" for w in worlds]
     pad = max(map(len, heads), default=0) + 1
     out = []
@@ -279,4 +330,8 @@ def render(worlds: list) -> str:
             else:
                 line += piece
         out.append(line)
+        out += [" " * pad + f"config {node}.{module}.{key} = {json.dumps(v)}"
+                for node, modules in sorted(w.config.items())
+                for module, keys in sorted(modules.items())
+                for key, v in sorted(keys.items())]
     return "\n".join(out) + "\n"

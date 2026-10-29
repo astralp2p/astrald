@@ -27,10 +27,16 @@ SUITES = {"main": "script", "tor": "script", "nat": "script",
 
 
 def fake(after=None, destroys=False, ops=(), local_only=None,
-         nodes=("node1",), prompt=False):
+         nodes=("node1",), prompt=False, config=None):
     return SimpleNamespace(after=after, destroys=destroys or bool(ops),
                            ops=list(ops), local_only=local_only,
-                           nodes=list(nodes), prompt=prompt)
+                           nodes=list(nodes), prompt=prompt,
+                           config=config or {})
+
+
+def mcp(bind: str) -> dict:
+    """An override that binds node1's MCP server to bind."""
+    return {"node1": {"mcp": {"bind_mcp": bind}}}
 
 
 class Invariants:
@@ -291,6 +297,76 @@ class TestResumedPlans(unittest.TestCase):
     def test_a_test_the_history_already_ran_is_refused(self):
         with self.assertRaisesRegex(PlanError, "adopt-node already ran"):
             self.resume("adopt-node")
+
+
+class TestConfigPlans(unittest.TestCase):
+    def test_a_world_carries_the_union_of_its_tests_overrides(self):
+        tests = {"root": fake(), "a": fake(after="root", config=mcp("")),
+                 "b": fake(after="root", config={
+                     "node1": {"objects": {"sweep": "2s"}}})}
+        w, = plan(tests, ["root", "a", "b"])
+        self.assertEqual(w.config, {"node1": {"mcp": {"bind_mcp": ""},
+                                              "objects": {"sweep": "2s"}}})
+        self.assertIn('config node1.mcp.bind_mcp = ""', render([w]))
+
+    def test_the_same_value_shares_a_world(self):
+        tests = {"a": fake(config=mcp("")), "b": fake(config=mcp(""))}
+        w, = plan(tests, ["a", "b"])
+        self.assertEqual([s.test for s in w.steps], ["a", "b"])
+
+    def test_values_python_calls_equal_still_clash(self):
+        # why: 0 == False and 1 == 1.0 in Python, and a module reads each
+        # pair as two settings
+        for a, b in ((0, False), (1, True), (1, 1.0)):
+            with self.subTest(a=a, b=b):
+                tests = {"a": fake(config={"node1": {"m": {"k": a}}}),
+                         "b": fake(config={"node1": {"m": {"k": b}}})}
+                self.assertEqual(len(plan(tests, ["a", "b"])), 2)
+
+    def test_a_dotted_roster_name_names_the_clash(self):
+        on = {"n.1": {"mcp": {"bind_mcp": "x"}}}
+        tests = {"root": fake(nodes=("n.1",), config={"n.1": {"mcp": {
+                     "bind_mcp": ""}}}),
+                 "kid": fake(after="root", nodes=("n.1",), config=on)}
+        with self.assertRaisesRegex(PlanError, "n.1.mcp.bind_mcp otherwise "
+                                    "than root"):
+            plan(tests, ["kid"])
+
+    def test_conflicting_overrides_plan_into_different_worlds(self):
+        tests = {"root": fake(), "a": fake(after="root", config=mcp("")),
+                 "b": fake(after="root", config=mcp("tcp:127.0.0.1:1"))}
+        worlds = plan(tests, ["a", "b"])
+        self.assertEqual([[(s.test, s.kind) for s in w.steps] for w in worlds],
+                         [[("root", "prereq"), ("a", "test")],
+                          [("root", "prereq"), ("b", "test")]])
+        self.assertEqual([w.config for w in worlds],
+                         [mcp(""), mcp("tcp:127.0.0.1:1")])
+
+    def test_a_clash_with_the_lineage_is_a_plan_error(self):
+        tests = {"root": fake(config=mcp("")),
+                 "kid": fake(after="root", config=mcp("tcp:127.0.0.1:1"))}
+        with self.assertRaisesRegex(PlanError, "kid sets node1.mcp.bind_mcp "
+                                    "otherwise than root"):
+            plan(tests, ["kid"])
+        with self.assertRaisesRegex(PlanError, "otherwise than root"):
+            plan(tests, ["kid"], isolate=True)
+
+    def test_a_trimmed_prereq_takes_its_overrides_with_it(self):
+        # mcp-origin fixes w0 local, so tor-link forks a VM world and the
+        # prereqs w0 built for it are trimmed, overrides and all
+        tests = {"obs": fake(local_only="host"),
+                 "boot": fake(config=mcp("")),
+                 "dvm": fake(after="boot", ops=["enable-tor node1"])}
+        worlds = plan(tests, ["obs", "dvm"])
+        self.assertEqual([(w.kind, [s.test for s in w.steps], w.config)
+                          for w in worlds],
+                         [("local", ["obs"], {}),
+                          ("vm", ["boot", "dvm"], mcp(""))])
+
+    def test_attach_refuses_an_override(self):
+        tests = {"a": fake(config=mcp(""))}
+        with self.assertRaisesRegex(PlanError, "harness-rendered config"):
+            plan(tests, ["a"], target="attach")
 
 
 class TestRunPlan(unittest.TestCase):

@@ -8,6 +8,8 @@ Two kinds of validation, deliberately scoped differently:
   order satisfiable?) is scoped to the tests a selection actually reaches,
   so an unrelated dangling start never breaks a targeted run.
 """
+import math
+import re
 import tomllib
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -17,8 +19,19 @@ DRIVERS = {"script", "agent"}
 KEYS = {"env", "start", "saves", "mutates", "nodes", "steps", "drivers",
         "timeout", "agent_timeout", "restart",
         # the planner's keys (lib/plan.py), beside the state-chain ones above
-        "after", "destroys", "ops", "local_only", "facts"}
+        "after", "destroys", "ops", "local_only", "facts", "config"}
 NULL = "null"
+MODULE = re.compile(r"[a-z][a-z0-9_]*")
+
+# (module, key) the harness owns: the ports a world leases, the token the
+# session view hands drivers, and the authority it points drivers at.
+# why refused: an override of one breaks what the session view promises — a
+# replaced token leaves a node no driver can reach, and a moved port sends
+# drivers to nothing. mcp.bind_mcp may only be emptied, since mcp_url names
+# the leased port.
+HARNESS_KEYS = {("apphost", "listen"), ("apphost", "tokens"),
+                ("tcp", "listen_port"), ("ether", "udp_port"),
+                ("kcp", "listen_port"), ("auth", "external_authorizers")}
 
 # the walk value after a mutator that saves no state: nothing may follow it
 TERMINAL = object()
@@ -48,6 +61,9 @@ class Test:
     local_only: str | None = None
     facts: list = field(default_factory=list)
     prompt: bool = False
+    # node -> module -> keys: what its world's nodes start with, on top of
+    # what lib/nodeconfig builds
+    config: dict = field(default_factory=dict)
 
 
 def load_all(e2e_dir: Path) -> dict:
@@ -142,7 +158,8 @@ def _parse(mf: Path) -> Test:
                 ops=ops,
                 local_only=local_only,
                 facts=facts,
-                prompt=(mf.parent / "prompt.md").is_file())
+                prompt=(mf.parent / "prompt.md").is_file(),
+                config=_config(name, raw, nodes))
 
 
 def _strings(name: str, raw: dict, key: str) -> list:
@@ -152,6 +169,51 @@ def _strings(name: str, raw: dict, key: str) -> list:
             and all(isinstance(v, str) and v.strip() for v in value)):
         raise ValueError(f"{name}: {key} must be a list of non-empty strings")
     return list(value)
+
+
+def _config(name: str, raw: dict, nodes: list) -> dict:
+    """[config.<node>.<module>] tables: node -> module -> keys.
+
+    why the roster is checked: an override for a node the test never starts
+    would change a node it shares with another test, behind that test's back.
+    """
+    value = raw.get("config", {})
+    shape = f"{name}: config must be [config.<node>.<module>] tables of keys"
+    if not isinstance(value, dict):
+        raise ValueError(shape)
+    for node, modules in value.items():
+        if node not in nodes:
+            raise ValueError(f"{name}: config names {node!r}, which the "
+                             f"roster {nodes} does not")
+        if not isinstance(modules, dict) or not modules:
+            raise ValueError(shape)
+        for module, keys in modules.items():
+            if not MODULE.fullmatch(module) or not isinstance(keys, dict) \
+                    or not keys:
+                raise ValueError(shape)
+            for key, v in keys.items():
+                where = f"config.{node}.{module}.{key}"
+                if (module, key) in HARNESS_KEYS or (
+                        (module, key) == ("mcp", "bind_mcp") and v != ""):
+                    raise ValueError(f"{name}: {where} is the harness's to "
+                                     "set (mcp.bind_mcp may only be \"\")")
+                _check_value(name, where, v)
+    return value
+
+
+def _check_value(name: str, where: str, v) -> None:
+    """A value a module's config file can hold: no TOML date or time."""
+    if isinstance(v, dict):
+        for k, sub in v.items():
+            _check_value(name, f"{where}.{k}", sub)
+    elif isinstance(v, list):
+        for sub in v:
+            _check_value(name, where, sub)
+    elif not isinstance(v, (str, bool, int, float)):
+        raise ValueError(f"{name}: {where} is a {type(v).__name__}, which "
+                         "no module config holds")
+    elif isinstance(v, float) and not math.isfinite(v):
+        raise ValueError(f"{name}: {where} is {v}, which JSON cannot hold")
 
 
 def _reason(name: str, raw: dict, key: str) -> str | None:
