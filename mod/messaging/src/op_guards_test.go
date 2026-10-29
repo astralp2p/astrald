@@ -281,10 +281,10 @@ func tryOp(t *testing.T, fn any, q *astral.InFlightQuery, body astral.Object) op
 	}
 	defer conn.Close()
 
-	// note: an op that refuses returns without reading, and a write into its
-	// pipe then never returns, so the request is sent without waiting on it.
+	// note: an op that refuses closes its input without reading, so sending the
+	// request then fails; the answer, not the send, is what the test reads.
 	if body != nil {
-		go channel.NewSender(conn).Send(body)
+		_ = channel.NewSender(conn).Send(body)
 	}
 	return opResult{objs: w.objects(t)}
 }
