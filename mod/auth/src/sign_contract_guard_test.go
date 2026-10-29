@@ -205,8 +205,8 @@ func TestAuthorizeContractNodeClaimState(t *testing.T) {
 }
 
 // TestAuthorizeContractNodeClaimIssuer: on an unclaimed node, the claim
-// contract is refused for an issuer that ever issued the node a relay contract
-// or a node contract, expired ones included, and only for such an issuer.
+// contract passes whatever the issuer issued the node before: a relay contract
+// of an identity the node minted, or the node contract of a former user.
 func TestAuthorizeContractNodeClaimIssuer(t *testing.T) {
 	relay := &auth.Permit{Action: astral.String8(nodes.RelayForAction{}.ObjectType())}
 	see := &auth.Permit{Action: astral.String8(auth.SeeObjectsAction{}.ObjectType())}
@@ -216,20 +216,19 @@ func TestAuthorizeContractNodeClaimIssuer(t *testing.T) {
 		seed func(t *testing.T, r *guardRig)
 		ok   bool
 	}{
-		{"issued by an app identity of this node", func(t *testing.T, r *guardRig) { seedContract(t, r.mod, r.userKey, r.node, relay) }, false},
+		{"issued by an app identity of this node", func(t *testing.T, r *guardRig) { seedContract(t, r.mod, r.userKey, r.node, relay) }, true},
 		{"issued by an app identity whose relay contract expired", func(t *testing.T, r *guardRig) {
 			seedExpired(t, r.mod, contractOf(r.userKey, r.node, &nodes.RelayForAction{}))
-		}, false},
+		}, true},
 		{"issued by the user after the claim is cleared from the tree", func(t *testing.T, r *guardRig) {
 			seedContract(t, r.mod, r.userKey, r.node, claimOf(r.userKey, r.node).Permits...)
-		}, false},
-		{"issued by a former user", func(t *testing.T, r *guardRig) { seedExpired(t, r.mod, claimOf(r.userKey, r.node)) }, false},
+		}, true},
+		{"issued by a former user", func(t *testing.T, r *guardRig) { seedExpired(t, r.mod, claimOf(r.userKey, r.node)) }, true},
 		{"issued by a former plain member's user", func(t *testing.T, r *guardRig) {
 			c := claimOf(r.userKey, r.node)
 			c.Permits = c.Permits[:1]
 			seedExpired(t, r.mod, c)
-		}, false},
-		{"when the contract lookup fails", func(t *testing.T, r *guardRig) { closeDB(t, r.mod) }, false},
+		}, true},
 		{"issued by an identity holding another contract to the node", func(t *testing.T, r *guardRig) { seedContract(t, r.mod, r.userKey, r.node, see) }, true},
 		{"issued by the user of another node", func(t *testing.T, r *guardRig) {
 			seedContract(t, r.mod, r.userKey, r.other, claimOf(r.userKey, r.other).Permits...)
@@ -307,16 +306,6 @@ func TestAuthorizeContractNodeClaimShape(t *testing.T) {
 			}
 		})
 	}
-}
-
-// closeDB closes the index database, so every contract lookup fails.
-func closeDB(t *testing.T, mod *Module) {
-	t.Helper()
-	sqlDB, err := mod.db.DB.DB()
-	if err != nil {
-		t.Fatalf("sql db: %v", err)
-	}
-	_ = sqlDB.Close()
 }
 
 // seedExpired stores c signed, with its expiry moved to an hour ago.

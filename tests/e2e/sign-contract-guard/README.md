@@ -18,9 +18,9 @@ may sudo to. A query of any origin other than local is rejected first.
 - **oracle** `verify.py` — the control signed as both parties, each local probe
   with a token was refused by the guard naming the party, the anonymous probe
   was refused by apphost with `denied`, the link probe was rejected with
-  code 1, the stranger's claim passed the guard with the claim cleared while
-  the User's claim was refused, node1 answers as the User's node again, and the
-  app still cannot sign a text under the User's key.
+  code 1, the stranger's claim passed the guard and the User's claim was signed
+  with the claim cleared, node1 answers as the User's node again, and the app
+  still cannot sign a text under the User's key.
 
 ## What this proves that the unit tests do not
 
@@ -62,9 +62,9 @@ key through `crypto.sign_text`; the oracle checks that it still cannot.
 `mod.auth.configure_node_state_action`. node1's token holds it, and so does an
 app registered with that grant permit.
 Cleared, node1 reads as unclaimed and the claim exception opens. The User's
-node contract is indexed, so the exception still refuses to sign the User's
-claim again. The stranger's claim is the control: it passes the guard and fails
-only at signing, so the exception was open when the User's claim was refused.
+node contract is indexed, and the exception still signs the User's claim: a
+former user re-claims its node. The stranger's claim is the control: it passes
+the guard and fails only at signing, so the exception was open.
 
 The driver puts the claim and the nearby mode back, because `expel-node` runs
 on this state next. A module that loses a startup race in astral-go's

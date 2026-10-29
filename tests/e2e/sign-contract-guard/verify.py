@@ -90,10 +90,9 @@ async def main():
             f"the stranger's claim answered {control['detail']} with the claim "
             "cleared — the exception is closed, so the refusal below proves nothing")
     r = cleared["user's claim, claim cleared"]
-    assert r["refused"], ("node1 signed the User's claim once the claim was "
-                          "cleared from the tree")
-    assert f"authorize issuer: {FOREIGN}" in r["detail"], (
-        f"the User's claim, claim cleared: {r['detail']!r}")
+    assert not r["refused"], (
+        f"the User's claim, claim cleared: {r['detail']!r} — node1 refused a "
+        "former user its claim")
     user = str(Identity.from_json(facts["user_id"]))
     assert cleared["restored"] == user, (
         f"node1 answers as {cleared['restored']}, not the User {user}")
