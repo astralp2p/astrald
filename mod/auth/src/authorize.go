@@ -18,6 +18,12 @@ type nodeLocal interface{ NodeLocal() }
 // A handler the auth module marks NodeLocal answers for the caller alone, so no
 // chain ends at one.
 func (mod *Module) Authorize(ctx *astral.Context, action auth.ActionObject) bool {
+	// why: the anonymous identity is not a party, so nothing grants it an action.
+	// note: a contract lookup for a zero subject drops its subject filter.
+	if action.Actor().IsZero() {
+		return false
+	}
+
 	visited := map[string]struct{}{action.Actor().String(): {}}
 	return mod.authorize(ctx, action, 0, visited)
 }
