@@ -66,8 +66,8 @@ func TestRouteQueryRejectsOverlongQueryString(t *testing.T) {
 
 	_, err := m.RouteQuery(ctx, q, nil)
 	var reject *astral.ErrRejected
-	if !errors.As(err, &reject) || reject.Code != astral.DefaultRejectCode {
-		t.Fatalf("RouteQuery err = %v; want rejection with code %v", err, astral.DefaultRejectCode)
+	if !errors.As(err, &reject) || reject.Code != astral.CodeInvalidQuery {
+		t.Fatalf("RouteQuery err = %v; want rejection with code %v", err, astral.CodeInvalidQuery)
 	}
 
 	if n := link.Len(); n != 0 {
