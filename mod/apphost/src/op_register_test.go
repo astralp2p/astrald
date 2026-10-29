@@ -16,9 +16,9 @@ import (
 	objectsmod "github.com/astralp2p/astrald/mod/objects"
 )
 
-// The steps apphost.register takes that decide whether a minted key is
-// protected: the relay contract entering the auth index, and the key entering
-// the store or the crypto index.
+// The steps apphost.register takes that decide whether a failed registration
+// leaves an orphan key: the relay contract entering the auth index, and the key
+// entering the store or the crypto index.
 const (
 	stepIndexRelay = "index relay contract"
 	stepStoreKey   = "store key"

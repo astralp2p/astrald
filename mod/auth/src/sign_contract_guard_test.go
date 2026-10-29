@@ -214,35 +214,34 @@ func TestAuthorizeContractNodeClaimIssuer(t *testing.T) {
 	for _, tc := range []struct {
 		name string
 		seed func(t *testing.T, r *guardRig)
-		ok   bool
 	}{
-		{"issued by an app identity of this node", func(t *testing.T, r *guardRig) { seedContract(t, r.mod, r.userKey, r.node, relay) }, true},
+		{"issued by an app identity of this node", func(t *testing.T, r *guardRig) { seedContract(t, r.mod, r.userKey, r.node, relay) }},
 		{"issued by an app identity whose relay contract expired", func(t *testing.T, r *guardRig) {
 			seedExpired(t, r.mod, contractOf(r.userKey, r.node, &nodes.RelayForAction{}))
-		}, true},
+		}},
 		{"issued by the user after the claim is cleared from the tree", func(t *testing.T, r *guardRig) {
 			seedContract(t, r.mod, r.userKey, r.node, claimOf(r.userKey, r.node).Permits...)
-		}, true},
-		{"issued by a former user", func(t *testing.T, r *guardRig) { seedExpired(t, r.mod, claimOf(r.userKey, r.node)) }, true},
+		}},
+		{"issued by a former user", func(t *testing.T, r *guardRig) { seedExpired(t, r.mod, claimOf(r.userKey, r.node)) }},
 		{"issued by a former plain member's user", func(t *testing.T, r *guardRig) {
 			c := claimOf(r.userKey, r.node)
 			c.Permits = c.Permits[:1]
 			seedExpired(t, r.mod, c)
-		}, true},
-		{"issued by an identity holding another contract to the node", func(t *testing.T, r *guardRig) { seedContract(t, r.mod, r.userKey, r.node, see) }, true},
+		}},
+		{"issued by an identity holding another contract to the node", func(t *testing.T, r *guardRig) { seedContract(t, r.mod, r.userKey, r.node, see) }},
 		{"issued by the user of another node", func(t *testing.T, r *guardRig) {
 			seedContract(t, r.mod, r.userKey, r.other, claimOf(r.userKey, r.other).Permits...)
-		}, true},
+		}},
 		{"issued by a stranger to a node with another former user", func(t *testing.T, r *guardRig) {
 			seedExpired(t, r.mod, claimOf(r.other, r.node))
-		}, true},
+		}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			r := newGuardRig(t)
 			tc.seed(t, r)
 			err := r.mod.authorizeContract(r.ctx, r.node, claimOf(r.userKey, r.node))
-			if (err == nil) != tc.ok {
-				t.Fatalf("authorizeContract = %v; want ok=%v", err, tc.ok)
+			if err != nil {
+				t.Fatalf("authorizeContract = %v; want the claim signed", err)
 			}
 		})
 	}

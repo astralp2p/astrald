@@ -8,8 +8,8 @@ as a rejection rather than a lost route.
 
 Then the claim cleared from the tree. A stranger's claim must pass the guard
 and fail only at signing, which shows the node reads as unclaimed and the claim
-exception is open. The User's claim must still be refused by the guard, because
-the User once claimed node1. node1 must answer as the User's node afterwards.
+exception is open. The User's claim must be signed: a former user re-claims its
+node. node1 must answer as the User's node afterwards.
 
 Last, what the app holds. Whether the forged sudo contract was refused and
 whether the app nevertheless acts as the User are two claims, and the driver is
@@ -88,7 +88,7 @@ async def main():
     assert control["refused"] and "authorize" not in control["detail"] \
         and "sign as issuer: no signing scheme available for key" in control["detail"], (
             f"the stranger's claim answered {control['detail']} with the claim "
-            "cleared — the exception is closed, so the refusal below proves nothing")
+            "cleared — the exception is closed, so the signature below proves nothing")
     r = cleared["user's claim, claim cleared"]
     assert not r["refused"], (
         f"the User's claim, claim cleared: {r['detail']!r} — node1 refused a "
@@ -108,7 +108,7 @@ async def main():
 
     print(f"oracle: node1 signed the User's own contract, refused "
           f"{len(EXPECTED)} forged parties by name and the network origin, "
-          "refused the User's claim with the claim cleared from the tree, and "
+          "signed the User's claim with the claim cleared from the tree, and "
           "the app still cannot act as the User")
 
 
