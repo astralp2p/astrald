@@ -68,11 +68,11 @@ func (mod *Module) loadSettings(ctx *astral.Context) error {
 		}
 	}
 
-	if mod.config.Listen != nil {
-		val := astral.Bool(*mod.config.Listen)
-		if err := mod.settings.Listen.Set(ctx, &val); err != nil {
-			return err
-		}
+	// why: a tor.yaml `listen:` with no value decodes to nil. Writing false then
+	// keeps listen opt-in and replaces a true an older build stored.
+	listen := astral.Bool(mod.config.Listen != nil && *mod.config.Listen)
+	if err := mod.settings.Listen.Set(ctx, &listen); err != nil {
+		return err
 	}
 
 	return nil
