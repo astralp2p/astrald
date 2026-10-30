@@ -97,7 +97,7 @@ func (testAssets) Read(string) ([]byte, error)        { return nil, os.ErrNotExi
 func (testAssets) Write(string, []byte) error         { return os.ErrPermission }
 func (testAssets) ReadData(string) ([]byte, error)    { return nil, os.ErrNotExist }
 func (testAssets) WriteData(string, []byte) error     { return os.ErrPermission }
-func (testAssets) LoadYAML(string, interface{}) error { return os.ErrNotExist }
+func (testAssets) LoadYAML(string, interface{}) error { return resources.ErrNotFound }
 func (testAssets) StoreYAML(string, interface{}) error {
 	return os.ErrPermission
 }

@@ -119,10 +119,9 @@ func askOverWS(t *testing.T, mod *Module, origin, op string) astral.Object {
 
 // TestGateConfinesTokenLessSessions: over IPC and WebSocket, a token-less
 // session reaches routing with an op of the active list and is refused every
-// other op with denied before routing; before the claim, a WebSocket session
-// from an untrusted origin is refused every op.
+// other op with denied before routing, whatever the WebSocket Origin.
 func TestGateConfinesTokenLessSessions(t *testing.T) {
-	const untrusted = "https://evil.example"
+	const anyOrigin = "https://evil.example"
 
 	cases := []struct {
 		name      string
@@ -139,11 +138,10 @@ func TestGateConfinesTokenLessSessions(t *testing.T) {
 		{"ipc, claimed, unlisted op", "ipc", "", true, "messaging.create_mailbox", false},
 
 		{"ws, no origin, unclaimed, listed op", "ws", "", false, "user.info", true},
-		{"ws, trusted origin, unclaimed, listed op", "ws", trustedOrigin, false, "user.info", true},
-		{"ws, trusted origin, unclaimed, unlisted op", "ws", trustedOrigin, false, "apphost.create_token", false},
-		{"ws, untrusted origin, unclaimed, listed op", "ws", untrusted, false, "user.info", false},
-		{"ws, untrusted origin, claimed, listed op", "ws", untrusted, true, "apphost.register", true},
-		{"ws, untrusted origin, claimed, unlisted op", "ws", untrusted, true, "apphost.create_token", false},
+		{"ws, any origin, unclaimed, listed op", "ws", anyOrigin, false, "user.info", true},
+		{"ws, any origin, unclaimed, unlisted op", "ws", anyOrigin, false, "apphost.create_token", false},
+		{"ws, any origin, claimed, listed op", "ws", anyOrigin, true, "apphost.register", true},
+		{"ws, any origin, claimed, unlisted op", "ws", anyOrigin, true, "apphost.create_token", false},
 	}
 
 	for _, c := range cases {

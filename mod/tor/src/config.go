@@ -14,14 +14,16 @@ type Config struct {
 
 // defaultConfig returns the config a load starts from.
 //
-// why: Listen stays pre-filled, so each start writes tor.yaml's value or the
-// default over the tree and a changed default reaches every node.
-// why: Dial stays nil unless tor.yaml sets it, so a value set through the tree
-// survives a restart. An unset Dial reads as on.
+// why: yaml.v2 decodes into an existing non-nil pointer instead of allocating a
+// new one, so a default shared by Dial and Listen is rewritten by whichever of
+// them tor.yaml sets. Each load gets its own bools.
 func defaultConfig() Config {
-	listen := true
+	// why: an onion service makes the node reachable worldwide, so listen is
+	// opt-in through tor.yaml.
+	dial, listen := true, false
 
 	return Config{
+		Dial:        &dial,
 		Listen:      &listen,
 		TorProxy:    "127.0.0.1:9050",
 		ControlAddr: "127.0.0.1:9051",

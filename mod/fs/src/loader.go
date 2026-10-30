@@ -1,6 +1,7 @@
 package fs
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 
@@ -24,7 +25,9 @@ func (Loader) Load(node astral.Node, assets assets.Assets, log *log.Logger) (cor
 		config: defaultConfig,
 	}
 
-	_ = assets.LoadYAML(fs.ModuleName, &mod.config)
+	if err := assets.LoadYAML(fs.ModuleName, &mod.config); err != nil && !errors.Is(err, resources.ErrNotFound) {
+		return nil, err
+	}
 
 	// set up the database
 	mod.db = &DB{assets.Database()}

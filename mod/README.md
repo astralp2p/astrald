@@ -29,7 +29,9 @@ should be enabled, add the following to `node.yaml` in your
 
 ```yaml
 modules:
-  - admin
   - apphost
+  - tcp
   - ...
 ```
+
+A module name that is not compiled in stops node startup.

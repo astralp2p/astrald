@@ -49,10 +49,14 @@ func NewModules(n *Node, mods []string, assets assets.Assets, log *log2.Logger) 
 }
 
 // Run drives all enabled modules through the load, dependency, prepare, and run stages in order, then blocks until the context ends.
+// A load error returns before any module runs.
 func (m *Modules) Run(ctx *astral.Context) error {
 	// Load enabled modules. Loaders should only return a new instance of the module and must not try
 	// to access other modules, as the order of loading is undefined.
-	var loaded = m.loadEnabled()
+	loaded, err := m.loadEnabled()
+	if err != nil {
+		return err
+	}
 
 	m.injectLoaded()
 
@@ -66,17 +70,24 @@ func (m *Modules) Run(ctx *astral.Context) error {
 	return m.runModules(ctx, prepared)
 }
 
-func (m *Modules) loadEnabled() []string {
+// why a load error stops startup: a module that cannot read its config would otherwise
+// be absent, or run on settings looser than its config file states.
+// why every module loads before the error returns: one start reports every bad config file.
+func (m *Modules) loadEnabled() ([]string, error) {
 	// Stage 1 - Load. During this stage modules are loaded.
 	var loaded = make([]string, 0, len(m.enabled))
+	var errs []error
 	for _, name := range m.enabled {
 		if err := m.loadModule(name); err != nil {
-			m.log.Error("load %v: %v", name, err)
-		} else {
-			loaded = append(loaded, name)
+			errs = append(errs, fmt.Errorf("load %v: %w", name, err))
+			continue
 		}
+		loaded = append(loaded, name)
 	}
-	return loaded
+	if err := errors.Join(errs...); err != nil {
+		return nil, err
+	}
+	return loaded, nil
 }
 
 func (m *Modules) injectLoaded() {

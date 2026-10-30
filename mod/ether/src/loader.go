@@ -1,11 +1,14 @@
 package ether
 
 import (
+	"errors"
+
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astral-go/astral/log"
 	"github.com/astralp2p/astrald/core"
 	"github.com/astralp2p/astrald/core/assets"
 	"github.com/astralp2p/astrald/mod/ether"
+	"github.com/astralp2p/astrald/resources"
 )
 
 type Loader struct{}
@@ -19,7 +22,14 @@ func (Loader) Load(node astral.Node, assets assets.Assets, log *log.Logger) (cor
 		assets: assets,
 	}
 
-	_ = assets.LoadYAML(ether.ModuleName, &mod.config)
+	if err := assets.LoadYAML(ether.ModuleName, &mod.config); err != nil && !errors.Is(err, resources.ErrNotFound) {
+		return nil, err
+	}
+
+	if !mod.config.Listen {
+		log.Log("LAN discovery disabled by config")
+		return mod, nil
+	}
 
 	// LAN discovery is optional. If UDP binding fails, module loads with nil socket; broadcasts become no-ops, API remains functional.
 	if err = mod.setupSocket(); err != nil {

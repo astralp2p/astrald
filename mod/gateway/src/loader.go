@@ -1,12 +1,15 @@
 package gateway
 
 import (
+	"errors"
+
 	"github.com/astralp2p/astral-go/api/exonet"
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astral-go/astral/log"
 	"github.com/astralp2p/astrald/core"
 	"github.com/astralp2p/astrald/core/assets"
 	"github.com/astralp2p/astrald/mod/gateway"
+	"github.com/astralp2p/astrald/resources"
 )
 
 type Loader struct{}
@@ -19,7 +22,9 @@ func (Loader) Load(node astral.Node, assets assets.Assets, log *log.Logger) (cor
 		configEndpoints: make(map[string]exonet.Endpoint),
 	}
 
-	_ = assets.LoadYAML(gateway.ModuleName, &mod.config)
+	if err := assets.LoadYAML(gateway.ModuleName, &mod.config); err != nil && !errors.Is(err, resources.ErrNotFound) {
+		return nil, err
+	}
 
 	return mod, nil
 }

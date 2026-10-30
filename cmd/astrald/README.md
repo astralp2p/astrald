@@ -16,5 +16,6 @@ A relative `$XDG_CONFIG_HOME` or `$XDG_DATA_HOME` is ignored, and a relative `$H
 `-root`, `astrald` exits with an error when no absolute directory is found. A path in a config file is absolute or
 starts with `~/`; a relative one is an error that names the file and the key.
 
-Removing the data directory resets the node to a new identity. On macOS and Windows the data directory is the
-config directory, so removing it also removes the config files.
+Removing the data directory resets the node to a new identity. The reset also removes the claim, the issued access
+tokens and grants, and the onion address, and peers know the new identity as a new node. On macOS and Windows the data
+directory is the config directory, so removing it also removes the config files.

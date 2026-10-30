@@ -1,6 +1,7 @@
 package tor
 
 import (
+	"strconv"
 	"testing"
 
 	"github.com/astralp2p/astral-go/api/tree"
@@ -46,48 +47,29 @@ func loadModule(t *testing.T, config string) *Module {
 }
 
 // TestLoadSettingsAppliesConfig pins that each flag in tor.yaml reaches its own
-// setting. A listen of false disables the listener, and the two flags never
-// cross. A dial stored in the tree survives unless tor.yaml sets dial. A stored
-// listen never survives: tor.yaml or the default replaces it at every start.
+// setting. Listen is off unless tor.yaml sets it, and the two flags never
+// cross.
 func TestLoadSettingsAppliesConfig(t *testing.T) {
-	off := astral.Bool(false)
-
 	var tests = []struct {
-		name         string
-		config       string
-		storedListen *astral.Bool
-		storedDial   *astral.Bool
-		listen       bool
-		dial         bool
+		name   string
+		config string
+		listen bool
+		dial   bool
 	}{
-		{"defaults", "", nil, nil, true, true},
-		{"listen off", "listen: false\n", nil, nil, false, true},
-		{"dial off", "dial: false\n", nil, nil, true, false},
-		{"listen off, dial on", "listen: false\ndial: true\n", nil, nil, false, true},
-		{"both off", "listen: false\ndial: false\n", nil, nil, false, false},
-		{"stored dial off survives", "", nil, &off, true, false},
-		{"file overrides stored dial", "dial: true\n", nil, &off, true, true},
-		{"default overrides stored listen", "", &off, nil, true, true},
+		{"defaults", "", false, true},
+		{"listen on", "listen: true\n", true, true},
+		{"listen empty", "listen:\n", false, true},
+		{"listen off", "listen: false\n", false, true},
+		{"dial off", "dial: false\n", false, false},
+		{"listen off, dial on", "listen: false\ndial: true\n", false, true},
+		{"both off", "listen: false\ndial: false\n", false, false},
 	}
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			mod := loadModule(t, test.config)
-			ctx := astral.NewContext(nil)
 
-			if test.storedListen != nil {
-				if err := mod.settings.Listen.Set(ctx, test.storedListen); err != nil {
-					t.Fatalf("store listen: %v", err)
-				}
-			}
-
-			if test.storedDial != nil {
-				if err := mod.settings.Dial.Set(ctx, test.storedDial); err != nil {
-					t.Fatalf("store dial: %v", err)
-				}
-			}
-
-			if err := mod.loadSettings(ctx); err != nil {
+			if err := mod.loadSettings(astral.NewContext(nil)); err != nil {
 				t.Fatalf("loadSettings: %v", err)
 			}
 
@@ -97,11 +79,36 @@ func TestLoadSettingsAppliesConfig(t *testing.T) {
 	}
 }
 
-// assertFlag reads an unset flag as on, the default every reader applies.
+// TestLoadSettingsReplacesStoredListen pins that a listen value stored by an
+// older build is replaced by the config value on start, so an upgraded node
+// without tor.yaml, or with a `listen:` that has no value, stops publishing its
+// onion service.
+func TestLoadSettingsReplacesStoredListen(t *testing.T) {
+	for _, config := range []string{"", "listen:\n"} {
+		mod := loadModule(t, config)
+		ctx := astral.NewContext(nil)
+
+		old := astral.Bool(true)
+		if err := mod.settings.Listen.Set(ctx, &old); err != nil {
+			t.Fatalf("seed: %v", err)
+		}
+
+		if err := mod.loadSettings(ctx); err != nil {
+			t.Fatalf("loadSettings: %v", err)
+		}
+
+		assertFlag(t, "listen for tor.yaml "+strconv.Quote(config), mod.settings.Listen.Get(), false)
+	}
+}
+
 func assertFlag(t *testing.T, name string, got *astral.Bool, want bool) {
 	t.Helper()
 
-	if (got == nil || bool(*got)) != want {
-		t.Errorf("%v: got %v, want %v", name, got, want)
+	if got == nil {
+		t.Fatalf("%v: got unset, want %v", name, want)
+	}
+
+	if bool(*got) != want {
+		t.Errorf("%v: got %v, want %v", name, bool(*got), want)
 	}
 }

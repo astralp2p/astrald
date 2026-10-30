@@ -48,10 +48,7 @@ func (mod *Module) OpRegister(ctx *astral.Context, query *routing.IncomingQuery,
 
 	requestedGrantPermits := registerGrantRequest(args.GrantPermits)
 
-	// why: the trusted-source template joins the contract request rather than
-	// the grant one, because a PermitConfig carries Delegation and delegation
-	// means nothing to a grant, which never leaves the node to be delegated.
-	requestedContractPermits := append(mod.GetWebOriginPermits(origin), parsePermits(args.ContractPermits)...)
+	requestedContractPermits := parsePermits(args.ContractPermits)
 
 	// why accept before deciding: a delegate may wait on a person, and a query
 	// still en route is bounded by the router's timeout.
