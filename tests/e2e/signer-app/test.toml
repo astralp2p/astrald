@@ -1,0 +1,5 @@
+env     = "node"
+start   = "null"
+nodes   = ["signer1"]
+drivers = ["script"]
+timeout = 300

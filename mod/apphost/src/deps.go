@@ -45,6 +45,7 @@ func (mod *Module) LoadDependencies(ctx *astral.Context) (err error) {
 	mod.Auth.Add(authmod.NodeLocal(authmod.Func[*auth.AdminManageAppsAction](mod.AuthorizeAdminManageApps)))
 	mod.Auth.Add(authmod.NodeLocal(authmod.Func[*auth.ConfigureNodeStateAction](mod.AuthorizeConfigureNodeState)))
 	mod.Auth.Add(authmod.NodeLocal(authmod.Func[*auth.ServeAppsAction](mod.AuthorizeServeApps)))
+	mod.Auth.Add(authmod.NodeLocal(authmod.Func[*auth.RegisterSignerAction](mod.AuthorizeRegisterSigner)))
 	mod.Auth.Add(authmod.NodeLocal(authmod.Func[*auth.SeeNodeStateAction](mod.AuthorizeSeeNodeState)))
 	mod.Auth.Add(authmod.NodeLocal(authmod.Func[*coldcard.ScanAction](mod.AuthorizeColdcardScan)))
 	mod.Auth.Add(authmod.NodeLocal(authmod.Func[*shell.ShellAction](mod.AuthorizeShell)))

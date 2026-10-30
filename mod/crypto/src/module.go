@@ -35,6 +35,7 @@ type Module struct {
 	ctx     *astral.Context
 
 	engines sig.Set[cryptomod.Engine]
+	signers signerRegistry
 }
 
 var _ cryptomod.Module = &Module{}
@@ -108,13 +109,35 @@ func (mod *Module) DerivePublicKey(ctx *astral.Context, key *crypto.PrivateKey) 
 	)
 }
 
+// NewHashSigner returns a signer for the local private key of key, or else
+// through the binding that claims key for scheme.
+//
+// why local first: otherwise an app could claim the User's key and read everything
+// signed under it. Engine order is a map's iteration order, so the binding is an
+// explicit second step and not one more engine.
 func (mod *Module) NewHashSigner(key *crypto.PublicKey, scheme string) (cryptomod.HashSigner, error) {
-	return dispatchResult[cryptomod.HashSignerProvider, cryptomod.HashSigner](
+	signer, err := dispatchResult[cryptomod.HashSignerProvider, cryptomod.HashSigner](
 		mod.engines.Clone(),
 		func(p cryptomod.HashSignerProvider) (cryptomod.HashSigner, error) {
 			return p.NewHashSigner(key, scheme)
 		},
 	)
+	if err == nil {
+		return signer, nil
+	}
+
+	// note: a pair names the request its scheme is signed through, so a text
+	// scheme never reaches a hash signer.
+	if scheme != crypto.SchemeASN1 {
+		return nil, err
+	}
+
+	binding := mod.signers.find(key, scheme)
+	if binding == nil {
+		return nil, err
+	}
+
+	return &bindingHashSigner{binding: binding, key: key, scheme: scheme}, nil
 }
 
 // NodeSigner returns a signer for the node's own secp256k1 key.
@@ -157,13 +180,32 @@ func (mod *Module) VerifyHashSignature(key *crypto.PublicKey, sig *crypto.Signat
 	)
 }
 
+// NewTextSigner returns a signer for the local private key of key, or else
+// through the binding that claims key for scheme. See NewHashSigner for why local
+// comes first.
 func (mod *Module) NewTextSigner(key *crypto.PublicKey, scheme string) (cryptomod.TextSigner, error) {
-	return dispatchResult[cryptomod.TextSignerProvider, cryptomod.TextSigner](
+	signer, err := dispatchResult[cryptomod.TextSignerProvider, cryptomod.TextSigner](
 		mod.engines.Clone(),
 		func(p cryptomod.TextSignerProvider) (cryptomod.TextSigner, error) {
 			return p.NewTextSigner(key, scheme)
 		},
 	)
+	if err == nil {
+		return signer, nil
+	}
+
+	// note: a pair names the request its scheme is signed through, so a hash
+	// scheme never reaches a text signer.
+	if scheme != crypto.SchemeBIP137 {
+		return nil, err
+	}
+
+	binding := mod.signers.find(key, scheme)
+	if binding == nil {
+		return nil, err
+	}
+
+	return &bindingTextSigner{binding: binding, key: key, scheme: scheme}, nil
 }
 
 func (mod *Module) VerifyTextSignature(key *crypto.PublicKey, sig *crypto.Signature, msg string) error {
@@ -223,14 +265,15 @@ func (mod *Module) formatSignableText(object crypto.SignableTextObject) string {
 }
 
 // Sign signs obj as key, preferring an object (hash) signature and falling back
-// to a text signature when no object-signing engine is available for the key.
-// A key no engine signs as answers *cryptomod.ErrKeyNotHeld.
+// to a text signature when no hash signer exists for the key.
+// A key nothing signs as answers *cryptomod.ErrKeyNotHeld.
+//
+// why a signing failure is returned as is: the scheme is chosen by which signer
+// exists, not by which one succeeds. A signer may have asked a person, so a second
+// attempt under another scheme is a second prompt on a device.
 func (mod *Module) Sign(ctx *astral.Context, key *crypto.PublicKey, obj crypto.SignableTextObject) (*crypto.Signature, error) {
-	if signer, err := mod.ObjectSigner(key); err == nil {
-		sig, err := signer.SignObject(ctx, obj)
-		if err == nil {
-			return sig, nil
-		}
+	if signer, err := mod.NewHashSigner(key, crypto.SchemeASN1); err == nil {
+		return signer.SignHash(ctx, obj.SignableHash())
 	}
 
 	// note: dispatch answers ErrUnsupported whenever no engine yields a signer.

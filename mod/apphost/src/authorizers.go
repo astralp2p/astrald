@@ -116,6 +116,12 @@ func (mod *Module) AuthorizeServeApps(ctx *astral.Context, action *auth.ServeApp
 	return mod.authorizeGrant(ctx, action)
 }
 
+// AuthorizeRegisterSigner answers whether this node has granted the actor the
+// right to claim keys on a crypto.register_signer binding.
+func (mod *Module) AuthorizeRegisterSigner(ctx *astral.Context, action *auth.RegisterSignerAction) bool {
+	return mod.authorizeGrant(ctx, action)
+}
+
 // AuthorizeSeeNodeState answers whether this node has granted the actor the
 // right to read the node's state.
 func (mod *Module) AuthorizeSeeNodeState(ctx *astral.Context, action *auth.SeeNodeStateAction) bool {
