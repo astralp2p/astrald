@@ -1,6 +1,8 @@
 package log
 
 import (
+	"errors"
+
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astral-go/astral/fmt"
 	alog "github.com/astralp2p/astral-go/astral/log"
@@ -22,7 +24,9 @@ func (Loader) Load(node astral.Node, assets assets.Assets, log *alog.Logger) (co
 	}
 
 	mod.config.setDefaults()
-	_ = assets.LoadYAML(modlog.ModuleName, &mod.config)
+	if err := assets.LoadYAML(modlog.ModuleName, &mod.config); err != nil && !errors.Is(err, resources.ErrNotFound) {
+		return nil, err
+	}
 
 	err = mod.router.AddStructPrefix(mod, "Op")
 	if err != nil {
