@@ -19,6 +19,7 @@ import (
 	"github.com/astralp2p/astrald/lib/paths"
 	"github.com/astralp2p/astrald/mod/dir"
 	"github.com/astralp2p/astrald/mod/ether"
+	ethersrc "github.com/astralp2p/astrald/mod/ether/src"
 	ipsrc "github.com/astralp2p/astrald/mod/ip/src"
 	"github.com/astralp2p/astrald/resources"
 
@@ -188,6 +189,10 @@ func (n *Node) Start() error {
 		ipsrc.InterfaceAddrs = func() ([]net.Addr, error) {
 			return parseCIDRList(host.LocalInterfaceAddrs()), nil
 		}
+		// why: broadcast discovery enumerates interfaces separately from mod/ip.
+		ethersrc.NetInterfaces = func() ([]ethersrc.NetInterface, error) {
+			return broadcastInterfaces(host.LANBroadcastAddrs()), nil
+		}
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -208,6 +213,7 @@ func (n *Node) Start() error {
 		}
 		ether.LANDiscoveryHook = nil
 		ipsrc.InterfaceAddrs = net.InterfaceAddrs
+		ethersrc.NetInterfaces = ethersrc.DefaultNetInterfaces
 	}()
 
 	return nil

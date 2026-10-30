@@ -28,4 +28,10 @@ type Host interface {
 	// (every ~3s by mod/ip's address-change watcher), so implementations
 	// should be cheap; getifaddrs-based enumeration is fine.
 	LocalInterfaceAddrs() string
+
+	// LANBroadcastAddrs returns IPv4 CIDRs on active broadcast-capable
+	// interfaces, one per line. Exclude loopback and point-to-point links.
+	// why: net.Interfaces also uses netlink, independently of address lookup.
+	// An empty result means no LAN is currently available.
+	LANBroadcastAddrs() string
 }
