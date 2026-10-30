@@ -31,6 +31,11 @@ func (mod *Module) OpMigrateSession(ctx *astral.Context, q *routing.IncomingQuer
 	if !ok {
 		return ch.Send(astral.Err(nodesmod.ErrSessionNotFound))
 	}
+	// why: the responder side runs for the initiator at the session's far end.
+	// why: AdminNetwork admits every swarm node, and only the peer owns the session.
+	if !bool(args.Start) && !q.Caller().IsEqual(session.RemoteIdentity) {
+		return ch.Send(auth.ErrNotPermitted)
+	}
 	if !session.IsOpen() {
 		return ch.Send(astral.Err(nodesmod.ErrInvalidSessionState))
 	}
