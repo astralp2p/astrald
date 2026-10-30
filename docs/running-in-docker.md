@@ -34,9 +34,8 @@ data — and the identity is the `secp256k1` key at `data/node_key`, beside the
 database `data/astrald.db`, generated on first start with no interaction. When
 `tor.yaml` sets `listen: true`, the onion service key, `data/tor.key`, sits
 beside it. A discarded volume is a new node identity; back up the volume, not
-the container. Discarding the volume is the reset: it also removes the claim,
-every access token and grant, and the onion address, and peers know the new
-identity as a new node.
+the container. Discarding the volume also removes the claim, every access token
+and grant, and the onion address, and peers know the new identity as a new node.
 
 A volume that an earlier image wrote holds the identity at `config/node_key`,
 and `config/tor.key` when its tor module listened. The first start of this
