@@ -27,7 +27,7 @@ func (a yamlAssets) LoadYAML(_ string, out any) error {
 // TestLoadListen pins that Load binds the discovery socket only when listen is
 // on, and that a missing listen key leaves it on.
 func TestLoadListen(t *testing.T) {
-	port := findFreeUDPPort(t)
+	port := reserveUDPPort(t)
 
 	for _, listen := range []bool{true, false} {
 		config := fmt.Sprintf("udp_port: %v\n", port)
@@ -50,8 +50,8 @@ func TestLoadListen(t *testing.T) {
 	}
 }
 
-// findFreeUDPPort returns a UDP port that was free a moment ago.
-func findFreeUDPPort(t *testing.T) int {
+// reserveUDPPort returns a UDP port that was free a moment ago.
+func reserveUDPPort(t *testing.T) int {
 	t.Helper()
 
 	conn, err := net.ListenUDP("udp", &net.UDPAddr{})
