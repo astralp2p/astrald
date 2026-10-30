@@ -59,6 +59,11 @@ func (mod *Module) OpRegister(ctx *astral.Context, query *routing.IncomingQuery,
 	ch := channel.New(conn, channel.WithFormats(args.In, args.Out))
 	defer ch.Close()
 
+	// why: identities minted over a link are indistinguishable from local apps.
+	if query.Origin() == astral.OriginNetwork {
+		return ch.Send(astral.NewErrOriginNotAllowed(query.Origin()))
+	}
+
 	// why: an op runs on a context detached from the requester's, and only the
 	// conn tells a waiting decision that nobody waits for its answer.
 	policyCtx, stop := routing.UntilDisconnect(ctx, conn)
