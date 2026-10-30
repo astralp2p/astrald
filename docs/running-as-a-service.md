@@ -114,6 +114,9 @@ Default transports bind all interfaces.
 | 8624 | TCP 127.0.0.1 | apphost HTTP API |
 | 8626 | TCP 127.0.0.1 | MCP server |
 
+[Node Exposure](https://github.com/astralp2p/astral-docs/blob/master/topics/node-exposure.md)
+in astral-docs states who reaches each surface and the setting that closes it.
+
 ## Imaging and snapshots
 
 Which step you take depends on the capture type:
