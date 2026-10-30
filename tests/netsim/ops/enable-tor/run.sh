@@ -6,6 +6,7 @@
 #   stock Debian tor gives SOCKS but leaves the control port off, so enable it.
 # why: astrald's tor module connects to the control port only at start, no retry -> restart
 #   astrald after the port opens so it re-inits and publishes an onion.
+# why: tor listen is off by default -> tor.yaml sets listen: true before the restart.
 # note: runs on the host; ssh lands as root. astrald runs as root -> can read Tor's control cookie.
 set -eu
 
@@ -41,7 +42,10 @@ for _ in $(seq 1 30); do
 done
 [ -n "$ok" ] || { echo "tor control port 9051 did not open on $(hostname)" >&2; exit 1; }
 
-# 2) restart astrald so its tor module re-initializes against the control port
+# 2) opt into the onion service, then restart astrald so its tor module
+#    re-initializes against the control port
+mkdir -p /var/lib/astrald/config
+printf 'listen: true\n' > /var/lib/astrald/config/tor.yaml
 systemctl restart astrald
 
 # 3) read the node's own onion endpoint and save it to /root/tor.json

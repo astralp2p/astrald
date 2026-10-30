@@ -106,6 +106,7 @@ what the world reaches.
 |---|---|---|---|
 | 1791 | TCP | node links | publish |
 | 1792 | UDP | KCP transport | publish |
+| onion :1791 | Tor | onion service | no publish needed; off unless `tor.yaml` sets `listen: true`; needs a Tor control port at `127.0.0.1:9051` in the container |
 | 8822 | UDP | `ether` LAN discovery | works only with `--network host` |
 | 8625 | TCP 127.0.0.1 | local apphost API | container-internal; share the socket instead |
 | 8624 | TCP 127.0.0.1 | apphost HTTP API | container-internal until `bind_http` binds `0.0.0.0` |

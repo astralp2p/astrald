@@ -106,6 +106,7 @@ Default transports bind all interfaces.
 |---|---|---|
 | 1791 | TCP | node links |
 | 1792 | UDP | KCP transport |
+| onion :1791 | Tor | onion service; off unless `tor.yaml` sets `listen: true` (needs Tor control port `127.0.0.1:9051`) |
 | 8822 | UDP | `ether` LAN discovery |
 | 8625 | TCP 127.0.0.1 | local apphost API |
 | 8624 | TCP 127.0.0.1 | apphost HTTP API |

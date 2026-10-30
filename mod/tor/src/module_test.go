@@ -46,7 +46,7 @@ func loadModule(t *testing.T, config string) *Module {
 }
 
 // TestLoadSettingsAppliesConfig pins that each flag in tor.yaml reaches its own
-// setting. A listen of false disables the listener, and the two flags never
+// setting. Listen is off unless tor.yaml sets it, and the two flags never
 // cross.
 func TestLoadSettingsAppliesConfig(t *testing.T) {
 	var tests = []struct {
@@ -55,9 +55,10 @@ func TestLoadSettingsAppliesConfig(t *testing.T) {
 		listen bool
 		dial   bool
 	}{
-		{"defaults", "", true, true},
+		{"defaults", "", false, true},
+		{"listen on", "listen: true\n", true, true},
 		{"listen off", "listen: false\n", false, true},
-		{"dial off", "dial: false\n", true, false},
+		{"dial off", "dial: false\n", false, false},
 		{"listen off, dial on", "listen: false\ndial: true\n", false, true},
 		{"both off", "listen: false\ndial: false\n", false, false},
 	}
@@ -74,6 +75,25 @@ func TestLoadSettingsAppliesConfig(t *testing.T) {
 			assertFlag(t, "dial", mod.settings.Dial.Get(), test.dial)
 		})
 	}
+}
+
+// TestLoadSettingsReplacesStoredListen pins that a listen value stored by an
+// older build is replaced by the config value on start, so an upgraded node
+// without tor.yaml stops publishing its onion service.
+func TestLoadSettingsReplacesStoredListen(t *testing.T) {
+	mod := loadModule(t, "")
+	ctx := astral.NewContext(nil)
+
+	old := astral.Bool(true)
+	if err := mod.settings.Listen.Set(ctx, &old); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+
+	if err := mod.loadSettings(ctx); err != nil {
+		t.Fatalf("loadSettings: %v", err)
+	}
+
+	assertFlag(t, "listen", mod.settings.Listen.Get(), false)
 }
 
 func assertFlag(t *testing.T, name string, got *astral.Bool, want bool) {
