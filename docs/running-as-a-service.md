@@ -20,7 +20,9 @@ astrald stores config, identity, and data under a root directory derived from
 explicitly, or set `Environment=HOME=<dir>`. The first start generates the node
 identity — a `secp256k1` key at `<root>/data/node_key`, beside the database
 `<root>/data/astrald.db` — with no interaction. `<root>/config` holds the module
-`*.yaml` files. Removing `<root>/data` resets the node to a new identity.
+`*.yaml` files. Removing `<root>/data` resets the node to a new identity. The
+reset also removes the claim, the issued access tokens and grants, and the onion
+address, and peers know the new identity as a new node.
 
 A node that an earlier version started holds its identity at
 `<root>/config/node_key`, and `<root>/config/tor.key` when its tor module
