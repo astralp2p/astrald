@@ -25,9 +25,8 @@ func (mod *Module) OpCancel(ctx *astral.Context, q *routing.IncomingQuery, args 
 	ch := q.Accept(channel.WithOutputFormat(args.Out))
 	defer ch.Close()
 
-	// why: an entry launched by a token-less session records no owner and stays
-	// cancellable by any caller, so ownership alone leaves it reachable from a
-	// link. apphost.bind and apphost.register_handler refuse the origin outright.
+	// why: a caller off a link has no guest session behind it. apphost.bind and
+	// apphost.register_handler refuse the origin outright.
 	if q.Origin() == astral.OriginNetwork {
 		return ch.Send(astral.NewErrOriginNotAllowed(q.Origin()))
 	}
@@ -53,15 +52,10 @@ func (mod *Module) OpCancel(ctx *astral.Context, q *routing.IncomingQuery, args 
 
 // mayCancel reports whether principal may cancel the en-route entry.
 //
-// note: an entry launched by a token-less session records no owner and stays
-// cancellable by any local session, which is what apphost.cancel did before
-// ownership. Only an authenticated app's query gains a guard.
+// why: an entry launched by a token-less session records no owner, and no
+// session proves it launched that entry. Only the administrative path reaches it.
 func (mod *Module) mayCancel(ctx *astral.Context, principal *astral.Identity, e *queryEnRoute) bool {
-	if e.owner.IsZero() {
-		return true
-	}
-
-	if principal.IsEqual(e.owner) {
+	if !e.owner.IsZero() && principal.IsEqual(e.owner) {
 		return true
 	}
 

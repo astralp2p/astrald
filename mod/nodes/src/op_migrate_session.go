@@ -31,17 +31,21 @@ func (mod *Module) OpMigrateSession(ctx *astral.Context, q *routing.IncomingQuer
 	if !ok {
 		return ch.Send(astral.Err(nodesmod.ErrSessionNotFound))
 	}
+	link := mod.getSessionLink(session.Nonce)
+	if link == nil {
+		return ch.Send(astral.Err(nodesmod.ErrLinkNotFound))
+	}
+	// why: AdminNetwork admits every swarm node; the responder runs only for the node across the session's link.
+	if !bool(args.Start) && !q.Caller().IsEqual(link.mux.RemoteIdentity()) {
+		return ch.Send(auth.ErrNotPermitted)
+	}
+
 	if !session.IsOpen() {
 		return ch.Send(astral.Err(nodesmod.ErrInvalidSessionState))
 	}
 
 	targetLink := mod.getLinkByID(args.LinkID)
 	if targetLink == nil {
-		return ch.Send(astral.Err(nodesmod.ErrLinkNotFound))
-	}
-
-	link := mod.getSessionLink(session.Nonce)
-	if link == nil {
 		return ch.Send(astral.Err(nodesmod.ErrLinkNotFound))
 	}
 
