@@ -226,18 +226,18 @@ func newModeModule(t *testing.T, claimed bool, stored *nearby.Mode) (*Module, *r
 func TestModeGatesScanReplyAndScan(t *testing.T) {
 	stealth, silent, visible := nearby.ModeStealth, nearby.ModeSilent, nearby.ModeVisible
 	cases := []struct {
-		name         string
-		claimed      bool
-		stored       *nearby.Mode
-		mode         nearby.Mode
-		reply, scans bool
+		name           string
+		claimed        bool
+		stored         *nearby.Mode
+		mode           nearby.Mode
+		replies, scans int
 	}{
-		{"unclaimed, mode unset", false, nil, visible, true, true},
-		{"unclaimed, stored stealth", false, &stealth, visible, true, true},
-		{"unclaimed, stored silent", false, &silent, silent, false, false},
-		{"claimed, stored silent", true, &silent, silent, false, false},
-		{"claimed, stored stealth", true, &stealth, stealth, false, true},
-		{"claimed, stored visible", true, &visible, visible, true, true},
+		{"unclaimed, mode unset", false, nil, visible, 1, 1},
+		{"unclaimed, stored stealth", false, &stealth, visible, 1, 1},
+		{"unclaimed, stored silent", false, &silent, silent, 0, 0},
+		{"claimed, stored silent", true, &silent, silent, 0, 0},
+		{"claimed, stored stealth", true, &stealth, stealth, 0, 1},
+		{"claimed, stored visible", true, &visible, visible, 1, 1},
 	}
 
 	for _, tc := range cases {
@@ -257,11 +257,11 @@ func TestModeGatesScanReplyAndScan(t *testing.T) {
 				}
 
 				replies := e.recordedUnicasts()
-				if got := len(replies) == 1 && net.IP(replies[0]).Equal(net.ParseIP(src)); got != tc.reply || len(replies) > 1 {
-					t.Fatalf("scan replies %v; want a reply to %v: %v", replies, src, tc.reply)
+				if len(replies) != tc.replies || (tc.replies == 1 && !net.IP(replies[0]).Equal(net.ParseIP(src))) {
+					t.Fatalf("scan replies %v; want %d to %v", replies, tc.replies, src)
 				}
-				if got := len(e.recorded()) == 1; got != tc.scans {
-					t.Fatalf("own scans %d; want one: %v", len(e.recorded()), tc.scans)
+				if scans := len(e.recorded()); scans != tc.scans {
+					t.Fatalf("own scans %d; want %d", scans, tc.scans)
 				}
 			})
 		}
