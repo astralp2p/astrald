@@ -1,6 +1,7 @@
 package nodes
 
 import (
+	"io"
 	"testing"
 	"time"
 
@@ -38,7 +39,7 @@ func TestMigrateSessionRefusesAResponderOtherThanThePeer(t *testing.T) {
 
 // TestMigrateSessionAdmitsThePeerAsResponder: the session's peer passes the
 // ownership check and reaches the signal exchange. Its channel closes before the
-// ready signal, so the op answers that failure instead of a refusal.
+// ready signal, so the op answers the unexpected EOF instead of a refusal.
 func TestMigrateSessionAdmitsThePeerAsResponder(t *testing.T) {
 	f := newMigrationFixture(t)
 	f.mod.Deps.Auth = &recordingAuth{verdict: true}
@@ -48,6 +49,11 @@ func TestMigrateSessionAdmitsThePeerAsResponder(t *testing.T) {
 	if err != nil {
 		t.Fatalf("new op: %v", err)
 	}
+	// why: closing the caller's side also closes the answer writer, so the op
+	// has answered only once it returns.
+	returned := make(chan struct{})
+	op.LogFunc = func(*routing.Report) { close(returned) }
+
 	ctx, cancel := astral.NewContext(nil).WithTimeout(10 * time.Second)
 	defer cancel()
 
@@ -58,7 +64,13 @@ func TestMigrateSessionAdmitsThePeerAsResponder(t *testing.T) {
 	}
 	toOp.Close()
 
-	if got := w.refusal(t); got == auth.ErrNotPermitted.Error() {
-		t.Fatalf("refused the session's peer: %q", got)
+	select {
+	case <-returned:
+	case <-time.After(10 * time.Second):
+		t.Fatal("the op never returned")
+	}
+
+	if got, want := w.refusal(t), io.ErrUnexpectedEOF.Error(); got != want {
+		t.Fatalf("answered the session's peer %q; want %q", got, want)
 	}
 }
