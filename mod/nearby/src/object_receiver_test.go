@@ -30,12 +30,13 @@ type unclaimedUser struct {
 
 func (unclaimedUser) Identity() *astral.Identity { return nil }
 
-// recordingEther records broadcast pushes.
+// recordingEther records broadcast pushes and the addresses of unicast pushes.
 type recordingEther struct {
 	ethermod.Module
 
-	mu     sync.Mutex
-	pushed []astral.Object
+	mu       sync.Mutex
+	pushed   []astral.Object
+	unicasts []ip.IP
 }
 
 func (e *recordingEther) Push(object astral.Object) error {
@@ -45,10 +46,23 @@ func (e *recordingEther) Push(object astral.Object) error {
 	return nil
 }
 
+func (e *recordingEther) PushToIP(addr ip.IP, _ astral.Object) error {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.unicasts = append(e.unicasts, addr)
+	return nil
+}
+
 func (e *recordingEther) recorded() []astral.Object {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	return append([]astral.Object(nil), e.pushed...)
+}
+
+func (e *recordingEther) recordedUnicasts() []ip.IP {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	return append([]ip.IP(nil), e.unicasts...)
 }
 
 // recordingDrop is an objects.Drop that records its Accept calls.
@@ -183,5 +197,77 @@ func TestReceiveNetworkAddressChangedRequiresLocalSender(t *testing.T) {
 				t.Fatalf("second push is %v; want a scan", pushed[1].ObjectType())
 			}
 		})
+	}
+}
+
+// TestSilentSendsNothing covers the mode a node acts on and what it sends: a
+// stored Silent holds before and after the claim and sends no scan reply and
+// no scan of its own; any other mode on an unclaimed node reads as Visible and
+// answers a scan from any source, on-link or not.
+func TestSilentSendsNothing(t *testing.T) {
+	stealth, silent := nearby.ModeStealth, nearby.ModeSilent
+	sources := []ip.IP{
+		ip.IP(net.ParseIP("192.168.1.20")),
+		ip.IP(net.ParseIP("203.0.113.7")),
+	}
+
+	cases := []struct {
+		name    string
+		claimed bool
+		stored  *nearby.Mode
+		mode    nearby.Mode
+		sends   bool
+	}{
+		{"unclaimed, mode unset", false, nil, nearby.ModeVisible, true},
+		{"unclaimed, stored stealth", false, &stealth, nearby.ModeVisible, true},
+		{"unclaimed, stored silent", false, &silent, nearby.ModeSilent, false},
+		{"claimed, stored silent", true, &silent, nearby.ModeSilent, false},
+	}
+
+	for _, tc := range cases {
+		for _, src := range sources {
+			t.Run(tc.name+" from "+src.String(), func(t *testing.T) {
+				nodeID := astral.GenerateIdentity()
+				e := &recordingEther{}
+				mod := newReceiverModule(nodeID, e)
+				if tc.claimed {
+					mod.User = claimedUser{id: astral.GenerateIdentity()}
+				}
+				if tc.stored != nil {
+					if err := mod.SetMode(astral.NewContext(nil), *tc.stored); err != nil {
+						t.Fatalf("SetMode: %v", err)
+					}
+				}
+
+				if got := mod.Mode(); got != tc.mode {
+					t.Fatalf("Mode() = %v; want %v", got, tc.mode)
+				}
+
+				event := &ether.EventBroadcastReceived{SourceIP: src, Object: &nearby.ScanMessage{}}
+				drop := &recordingDrop{sender: nodeID, object: event}
+				if err := mod.ReceiveObject(drop); err != nil {
+					t.Fatalf("ReceiveObject: %v", err)
+				}
+				if err := mod.Scan(); err != nil {
+					t.Fatalf("Scan: %v", err)
+				}
+
+				replies := e.recordedUnicasts()
+				switch {
+				case tc.sends && (len(replies) != 1 || !net.IP(replies[0]).Equal(net.IP(src))):
+					t.Fatalf("scan replies %v; want one to %v", replies, src)
+				case !tc.sends && len(replies) != 0:
+					t.Fatalf("scan replies %v; want none", replies)
+				}
+
+				scans := len(e.recorded())
+				switch {
+				case tc.sends && scans != 1:
+					t.Fatalf("own scans %d; want 1", scans)
+				case !tc.sends && scans != 0:
+					t.Fatalf("own scans %d; want none", scans)
+				}
+			})
+		}
 	}
 }
