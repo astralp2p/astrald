@@ -1,11 +1,14 @@
 package user
 
 import (
+	"errors"
+
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astral-go/astral/log"
 	"github.com/astralp2p/astrald/core"
 	"github.com/astralp2p/astrald/core/assets"
 	"github.com/astralp2p/astrald/mod/user"
+	"github.com/astralp2p/astrald/resources"
 )
 
 type Loader struct{}
@@ -19,7 +22,9 @@ func (Loader) Load(node astral.Node, assets assets.Assets, log *log.Logger) (cor
 		ready:  make(chan struct{}),
 	}
 
-	_ = assets.LoadYAML(user.ModuleName, &mod.config)
+	if err := assets.LoadYAML(user.ModuleName, &mod.config); err != nil && !errors.Is(err, resources.ErrNotFound) {
+		return nil, err
+	}
 
 	mod.ctx = astral.NewContext(nil).WithIdentity(node.Identity())
 

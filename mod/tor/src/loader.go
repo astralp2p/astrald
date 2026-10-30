@@ -9,6 +9,7 @@ import (
 	"github.com/astralp2p/astral-go/astral/log"
 	"github.com/astralp2p/astrald/core"
 	"github.com/astralp2p/astrald/core/assets"
+	"github.com/astralp2p/astrald/resources"
 	"golang.org/x/net/proxy"
 )
 
@@ -24,7 +25,9 @@ func (Loader) Load(node astral.Node, assets assets.Assets, logger *log.Logger) (
 		config: defaultConfig(),
 	}
 
-	_ = assets.LoadYAML(tor.ModuleName, &mod.config)
+	if err := assets.LoadYAML(tor.ModuleName, &mod.config); err != nil && !errors.Is(err, resources.ErrNotFound) {
+		return nil, err
+	}
 
 	if err := moveKeyToDataRoot(assets.Res(), logger); err != nil {
 		return nil, err

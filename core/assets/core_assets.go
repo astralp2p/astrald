@@ -73,6 +73,7 @@ func (assets *CoreAssets) WriteData(name string, data []byte) error {
 }
 
 // LoadYAML appends a .yaml suffix to name if missing.
+// A decode error, an unknown key included, names the file. A missing file returns resources.ErrNotFound.
 func (assets *CoreAssets) LoadYAML(name string, out interface{}) error {
 	if !strings.HasSuffix(strings.ToLower(name), ".yaml") {
 		name = name + ".yaml"
@@ -83,7 +84,11 @@ func (assets *CoreAssets) LoadYAML(name string, out interface{}) error {
 		return err
 	}
 
-	return yaml.Unmarshal(bytes, out)
+	if err = yaml.UnmarshalStrict(bytes, out); err != nil {
+		return fmt.Errorf("%v: %w", name, err)
+	}
+
+	return nil
 }
 
 // StoreYAML appends a .yaml suffix to name if missing.

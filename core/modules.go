@@ -52,7 +52,10 @@ func NewModules(n *Node, mods []string, assets assets.Assets, log *log2.Logger) 
 func (m *Modules) Run(ctx *astral.Context) error {
 	// Load enabled modules. Loaders should only return a new instance of the module and must not try
 	// to access other modules, as the order of loading is undefined.
-	var loaded = m.loadEnabled()
+	loaded, err := m.loadEnabled()
+	if err != nil {
+		return err
+	}
 
 	m.injectLoaded()
 
@@ -66,17 +69,18 @@ func (m *Modules) Run(ctx *astral.Context) error {
 	return m.runModules(ctx, prepared)
 }
 
-func (m *Modules) loadEnabled() []string {
+// why a load error stops startup: a module that cannot read its config would otherwise
+// be absent, or run on settings looser than its config file states.
+func (m *Modules) loadEnabled() ([]string, error) {
 	// Stage 1 - Load. During this stage modules are loaded.
 	var loaded = make([]string, 0, len(m.enabled))
 	for _, name := range m.enabled {
 		if err := m.loadModule(name); err != nil {
-			m.log.Error("load %v: %v", name, err)
-		} else {
-			loaded = append(loaded, name)
+			return nil, fmt.Errorf("load %v: %w", name, err)
 		}
+		loaded = append(loaded, name)
 	}
-	return loaded
+	return loaded, nil
 }
 
 func (m *Modules) injectLoaded() {

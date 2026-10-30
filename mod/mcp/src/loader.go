@@ -1,6 +1,7 @@
 package mcp
 
 import (
+	"errors"
 	"fmt"
 
 	"github.com/astralp2p/astral-go/astral"
@@ -9,6 +10,7 @@ import (
 	"github.com/astralp2p/astrald/core/assets"
 	"github.com/astralp2p/astrald/lib/paths"
 	mcpmod "github.com/astralp2p/astrald/mod/mcp"
+	"github.com/astralp2p/astrald/resources"
 )
 
 type Loader struct{}
@@ -24,7 +26,9 @@ func (Loader) Load(node astral.Node, assets assets.Assets, log *log.Logger) (cor
 		log:    log,
 	}
 
-	_ = assets.LoadYAML(mcpmod.ModuleName, &mod.config)
+	if err := assets.LoadYAML(mcpmod.ModuleName, &mod.config); err != nil && !errors.Is(err, resources.ErrNotFound) {
+		return nil, err
+	}
 
 	if mod.config.BindMCP, err = paths.FromConfigAddr(mod.config.BindMCP); err != nil {
 		return nil, fmt.Errorf("mcp.yaml bind_mcp: %w", err)
