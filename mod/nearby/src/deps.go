@@ -44,6 +44,12 @@ func (mod *Module) LoadDependencies(ctx *astral.Context) (err error) {
 		return
 	}
 
+	// why before Run: ether delivers scans once it runs, and a scan answered
+	// before the configured mode is stored reads as Visible.
+	if err = mod.syncConfig(ctx); err != nil {
+		return
+	}
+
 	mod.Dir.AddResolver(mod)
 	mod.Nodes.AddResolver(mod)
 

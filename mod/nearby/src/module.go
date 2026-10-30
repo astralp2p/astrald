@@ -53,11 +53,6 @@ func (mod *Module) Run(ctx *astral.Context) (err error) {
 
 	<-mod.User.Ready()
 
-	err = mod.syncConfig(ctx)
-	if err != nil {
-		return
-	}
-
 	go mod.periodicUpdater(ctx)
 
 	go func() {

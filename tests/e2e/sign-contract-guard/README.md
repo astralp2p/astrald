@@ -66,7 +66,6 @@ node contract is indexed, and the exception still signs the User's claim: a
 former user re-claims its node. The stranger's claim is the control: it passes
 the guard and fails only at signing, so the exception was open.
 
-The driver puts the claim and the nearby mode back, because `expel-node` runs
-on this state next. A module that loses a startup race in astral-go's
+The driver puts the claim back, because `expel-node` runs on this state next. A module that loses a startup race in astral-go's
 `tree.Query` binds its value one level up, at `/user/config` rather than
 `/mod/user/config`, so the driver reads the bound path before it writes.

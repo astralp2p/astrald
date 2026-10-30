@@ -200,52 +200,56 @@ func TestReceiveNetworkAddressChangedRequiresLocalSender(t *testing.T) {
 	}
 }
 
-// TestSilentSendsNothing covers the mode a node acts on and what it sends: a
-// stored Silent holds before and after the claim and sends no scan reply and
-// no scan of its own; any other mode on an unclaimed node reads as Visible and
-// answers a scan from any source, on-link or not.
-func TestSilentSendsNothing(t *testing.T) {
-	stealth, silent := nearby.ModeStealth, nearby.ModeSilent
-	sources := []ip.IP{
-		ip.IP(net.ParseIP("192.168.1.20")),
-		ip.IP(net.ParseIP("203.0.113.7")),
+// newModeModule returns a receiver module whose user is claimed or not and
+// whose stored mode is stored, or unset when stored is nil.
+func newModeModule(t *testing.T, claimed bool, stored *nearby.Mode) (*Module, *recordingEther) {
+	t.Helper()
+	nodeID := astral.GenerateIdentity()
+	e := &recordingEther{}
+	mod := newReceiverModule(nodeID, e)
+	if claimed {
+		mod.User = claimedUser{id: astral.GenerateIdentity()}
 	}
+	if stored != nil {
+		if err := mod.SetMode(astral.NewContext(nil), *stored); err != nil {
+			t.Fatalf("SetMode: %v", err)
+		}
+	}
+	return mod, e
+}
 
+// TestModeGatesScanReplyAndScan covers the mode a node acts on and what it
+// sends for a scan and for its own scan: a stored Silent holds before and after
+// the claim and sends neither; any other mode on an unclaimed node reads as
+// Visible; a claimed node keeps its stored mode, and Stealth without
+// attachments sends no reply. A reply goes to the scan's source, on-link or not.
+func TestModeGatesScanReplyAndScan(t *testing.T) {
+	stealth, silent, visible := nearby.ModeStealth, nearby.ModeSilent, nearby.ModeVisible
 	cases := []struct {
-		name    string
-		claimed bool
-		stored  *nearby.Mode
-		mode    nearby.Mode
-		sends   bool
+		name         string
+		claimed      bool
+		stored       *nearby.Mode
+		mode         nearby.Mode
+		reply, scans bool
 	}{
-		{"unclaimed, mode unset", false, nil, nearby.ModeVisible, true},
-		{"unclaimed, stored stealth", false, &stealth, nearby.ModeVisible, true},
-		{"unclaimed, stored silent", false, &silent, nearby.ModeSilent, false},
-		{"claimed, stored silent", true, &silent, nearby.ModeSilent, false},
+		{"unclaimed, mode unset", false, nil, visible, true, true},
+		{"unclaimed, stored stealth", false, &stealth, visible, true, true},
+		{"unclaimed, stored silent", false, &silent, silent, false, false},
+		{"claimed, stored silent", true, &silent, silent, false, false},
+		{"claimed, stored stealth", true, &stealth, stealth, false, true},
+		{"claimed, stored visible", true, &visible, visible, true, true},
 	}
 
 	for _, tc := range cases {
-		for _, src := range sources {
-			t.Run(tc.name+" from "+src.String(), func(t *testing.T) {
-				nodeID := astral.GenerateIdentity()
-				e := &recordingEther{}
-				mod := newReceiverModule(nodeID, e)
-				if tc.claimed {
-					mod.User = claimedUser{id: astral.GenerateIdentity()}
-				}
-				if tc.stored != nil {
-					if err := mod.SetMode(astral.NewContext(nil), *tc.stored); err != nil {
-						t.Fatalf("SetMode: %v", err)
-					}
-				}
-
+		for _, src := range []string{"192.168.1.20", "203.0.113.7"} {
+			t.Run(tc.name+" from "+src, func(t *testing.T) {
+				mod, e := newModeModule(t, tc.claimed, tc.stored)
 				if got := mod.Mode(); got != tc.mode {
 					t.Fatalf("Mode() = %v; want %v", got, tc.mode)
 				}
 
-				event := &ether.EventBroadcastReceived{SourceIP: src, Object: &nearby.ScanMessage{}}
-				drop := &recordingDrop{sender: nodeID, object: event}
-				if err := mod.ReceiveObject(drop); err != nil {
+				event := &ether.EventBroadcastReceived{SourceIP: ip.IP(net.ParseIP(src)), Object: &nearby.ScanMessage{}}
+				if err := mod.ReceiveObject(&recordingDrop{sender: mod.node.Identity(), object: event}); err != nil {
 					t.Fatalf("ReceiveObject: %v", err)
 				}
 				if err := mod.Scan(); err != nil {
@@ -253,21 +257,33 @@ func TestSilentSendsNothing(t *testing.T) {
 				}
 
 				replies := e.recordedUnicasts()
-				switch {
-				case tc.sends && (len(replies) != 1 || !net.IP(replies[0]).Equal(net.IP(src))):
-					t.Fatalf("scan replies %v; want one to %v", replies, src)
-				case !tc.sends && len(replies) != 0:
-					t.Fatalf("scan replies %v; want none", replies)
+				if got := len(replies) == 1 && net.IP(replies[0]).Equal(net.ParseIP(src)); got != tc.reply || len(replies) > 1 {
+					t.Fatalf("scan replies %v; want a reply to %v: %v", replies, src, tc.reply)
 				}
-
-				scans := len(e.recorded())
-				switch {
-				case tc.sends && scans != 1:
-					t.Fatalf("own scans %d; want 1", scans)
-				case !tc.sends && scans != 0:
-					t.Fatalf("own scans %d; want none", scans)
+				if got := len(e.recorded()) == 1; got != tc.scans {
+					t.Fatalf("own scans %d; want one: %v", len(e.recorded()), tc.scans)
 				}
 			})
 		}
+	}
+}
+
+// TestReceiveNetworkAddressChangedInSilent covers the address-change path: a
+// node in Silent pushes neither its status nor a scan.
+func TestReceiveNetworkAddressChangedInSilent(t *testing.T) {
+	silent := nearby.ModeSilent
+	mod, e := newModeModule(t, true, &silent)
+
+	event := &events.Event{
+		ID:       astral.NewNonce(),
+		SourceID: mod.node.Identity(),
+		Data:     &ip.EventNetworkAddressChanged{Added: []ip.IP{ip.IP(net.ParseIP("192.168.1.30"))}},
+	}
+	if err := mod.ReceiveObject(&recordingDrop{sender: mod.node.Identity(), object: event}); err != nil {
+		t.Fatalf("ReceiveObject: %v", err)
+	}
+
+	if pushed := e.recorded(); len(pushed) != 0 {
+		t.Fatalf("pushed %d broadcasts in silent; want none", len(pushed))
 	}
 }
