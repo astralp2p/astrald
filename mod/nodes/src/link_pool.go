@@ -1,8 +1,10 @@
 package nodes
 
 import (
+	"context"
 	nodesmod "github.com/astralp2p/astrald/mod/nodes"
 	"slices"
+	"sync/atomic"
 
 	"github.com/astralp2p/astral-go/api/nodes"
 	"github.com/astralp2p/astral-go/astral"
@@ -15,6 +17,7 @@ type linkWatcher struct {
 }
 
 type LinkPool struct {
+	closed   atomic.Bool
 	mod      *Module
 	links    sig.Set[*Link]
 	watchers sig.Set[*linkWatcher]
@@ -45,6 +48,13 @@ func (pool *LinkPool) AddLink(link *Link) error {
 
 	if err := pool.links.Add(link); err != nil {
 		return err
+	}
+
+	// why: a handshake can finish while module shutdown closes the pool.
+	if pool.closed.Load() {
+		pool.links.Remove(link)
+		link.CloseWithError(context.Canceled)
+		return context.Canceled
 	}
 
 	link.GetMux().SetRouter(pool.mod.node)
@@ -88,12 +98,26 @@ func (pool *LinkPool) AddLink(link *Link) error {
 	return nil
 }
 
+// Close ends the pool lifetime and disconnects every peer.
+// why: embedded nodes stop without exiting the process or closing its sockets.
+func (pool *LinkPool) Close() {
+	if !pool.closed.CompareAndSwap(false, true) {
+		return
+	}
+	for _, link := range pool.links.Clone() {
+		link.CloseWithError(context.Canceled)
+	}
+}
+
 // SelectLinkWith returns a link to id, preferring a non-high-pressure link.
 func (pool *LinkPool) SelectLinkWith(id *astral.Identity) *Link {
+	if pool.closed.Load() {
+		return nil
+	}
 	var fallback *Link
 
 	for _, link := range pool.links.Clone() {
-		if !link.RemoteIdentity().IsEqual(id) {
+		if link.Err() != nil || !link.RemoteIdentity().IsEqual(id) {
 			continue
 		}
 
