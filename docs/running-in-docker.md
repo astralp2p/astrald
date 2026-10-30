@@ -31,9 +31,10 @@ docker run -d --name astrald \
 
 The volume is the node. It holds the root directory — config, identity, and
 data — and the identity is the `secp256k1` key at `data/node_key`, beside the
-database `data/astrald.db`, generated on first start with no interaction. The
-onion service key, `data/tor.key`, sits beside it. A discarded volume is a new
-node identity; back up the volume, not the container.
+database `data/astrald.db`, generated on first start with no interaction. When
+`tor.yaml` sets `listen: true`, the onion service key, `data/tor.key`, sits
+beside it. A discarded volume is a new node identity; back up the volume, not
+the container.
 
 A volume that an earlier image wrote holds the identity at `config/node_key`,
 and `config/tor.key` when its tor module listened. The first start of this
@@ -106,6 +107,7 @@ what the world reaches.
 |---|---|---|---|
 | 1791 | TCP | node links | publish |
 | 1792 | UDP | KCP transport | publish |
+| onion :1791 | Tor | onion service | no publish needed; off unless `tor.yaml` sets `listen: true`; needs a Tor control port at `127.0.0.1:9051` in the container |
 | 8822 | UDP | `ether` LAN discovery | works only with `--network host` |
 | 8625 | TCP 127.0.0.1 | local apphost API | container-internal; share the socket instead |
 | 8624 | TCP 127.0.0.1 | apphost HTTP API | container-internal until `bind_http` binds `0.0.0.0` |
