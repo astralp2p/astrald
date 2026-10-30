@@ -10,6 +10,7 @@ type opNodeUnregister struct {
 	Out string
 }
 
+// why: no action: the op removes only the caller's own registration.
 func (mod *Module) OpNodeUnregister(
 	ctx *astral.Context,
 	q *routing.IncomingQuery,

@@ -17,6 +17,8 @@ type opVerifyHashSignatureArgs struct {
 	Out  string
 }
 
+// why: no action: the op checks a signature against the hash and public key the
+// caller supplies, its own key by default. It reads no node secret and changes no state.
 func (mod *Module) OpVerifyHashSignature(ctx *astral.Context, q *routing.IncomingQuery, args opVerifyHashSignatureArgs) (err error) {
 	ch := channel.New(q.AcceptRaw(), channel.WithFormats(args.In, args.Out))
 	defer ch.Close()

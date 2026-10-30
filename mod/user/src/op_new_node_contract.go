@@ -3,6 +3,7 @@ package user
 import (
 	"time"
 
+	"github.com/astralp2p/astral-go/api/auth"
 	"github.com/astralp2p/astral-go/api/user"
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astral-go/astral/channel"
@@ -25,12 +26,25 @@ func (mod *Module) OpNewNodeContract(ctx *astral.Context, query *routing.Incomin
 	ch := query.Accept(channel.WithFormats(args.In, args.Out))
 	defer ch.Close()
 
+	// why: no network caller needs the node to build a contract; a remote peer
+	// builds the same object client-side with user.NewNodeContract.
+	if query.Origin() == astral.OriginNetwork {
+		return ch.Send(astral.NewErrOriginNotAllowed(query.Origin()))
+	}
+
 	var userID = mod.Identity()
 	if len(args.User) > 0 {
 		userID, err = mod.Dir.ResolveIdentity(args.User)
 		if err != nil {
 			return ch.Send(astral.Err(err))
 		}
+	}
+
+	// why: the default user is the active contract's issuer, which user.info guards
+	// with SeeSwarm. A caller that names the user learns no identity it did not pass.
+	if len(args.User) == 0 && !userID.IsZero() &&
+		!mod.Auth.Authorize(ctx, &user.SeeSwarmAction{Action: auth.NewAction(query.Caller())}) {
+		return ch.Send(auth.ErrNotPermitted)
 	}
 
 	if userID.IsZero() {

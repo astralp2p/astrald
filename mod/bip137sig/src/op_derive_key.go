@@ -14,6 +14,9 @@ type opDeriveKeyArgs struct {
 }
 
 // OpDeriveKey receives a Seed over the channel and replies with the key derived along Path.
+//
+// why: no action: the key is a pure function of the caller's seed and path.
+// The op reads no node secret and changes no state.
 func (mod *Module) OpDeriveKey(
 	ctx *astral.Context,
 	q *routing.IncomingQuery,

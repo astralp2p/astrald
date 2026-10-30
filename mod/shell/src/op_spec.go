@@ -15,6 +15,8 @@ type opArgsArgs struct {
 	Out string
 }
 
+// why: no action: the same handler serves .spec (loader.go), which both apphost
+// anonymous allowlists admit. The op lists op names and arguments and changes no state.
 func (mod *Module) OpSpec(ctx *astral.Context, q *routing.IncomingQuery, args opArgsArgs) (err error) {
 	ch := channel.New(q.AcceptRaw(), channel.WithOutputFormat(args.Out))
 	defer ch.Close()

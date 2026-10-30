@@ -16,6 +16,8 @@ type opPublicKeyArgs struct {
 	Out string
 }
 
+// why: no action: the op derives a public key from the private key the caller
+// sends. It reads no node secret and changes no state.
 func (mod *Module) OpPublicKey(ctx *astral.Context, q *routing.IncomingQuery, args opPublicKeyArgs) (err error) {
 	ch := channel.New(q.AcceptRaw(), channel.WithFormats(args.In, args.Out))
 	defer ch.Close()

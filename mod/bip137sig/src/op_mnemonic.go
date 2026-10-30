@@ -15,6 +15,9 @@ type opMnemonicArgs struct {
 }
 
 // OpMnemonic receives Entropy over the channel and replies with the space-joined mnemonic words.
+//
+// why: no action: the words are a pure function of the caller's entropy.
+// The op reads no node secret and changes no state.
 func (mod *Module) OpMnemonic(
 	ctx *astral.Context,
 	q *routing.IncomingQuery,

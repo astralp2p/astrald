@@ -1,6 +1,7 @@
 package apphost
 
 import (
+	"github.com/astralp2p/astral-go/api/auth"
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astral-go/astral/channel"
 	"github.com/astralp2p/astral-go/lib/routing"
@@ -28,6 +29,12 @@ func (mod *Module) OpHoldObject(ctx *astral.Context, q *routing.IncomingQuery, a
 
 	if q.Caller().IsZero() {
 		return ch.Send(astral.Err(apphost.ErrMissingAppIdentity))
+	}
+
+	// why: a hold is a write to node state that objects.purge obeys, so it asks the
+	// write authority. Batch-mode IDs arrive after the decision, so no noun is named.
+	if !mod.Auth.Authorize(ctx, &auth.StoreObjectsAction{Action: auth.NewAction(q.Caller())}) {
+		return ch.Send(auth.ErrNotPermitted)
 	}
 
 	if args.ID == nil {
