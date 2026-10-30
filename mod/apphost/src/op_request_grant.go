@@ -21,8 +21,7 @@ type opRequestGrantArgs struct {
 // identity the permits it names, and grants all of them on approval, until
 // revoked.
 func (mod *Module) OpRequestGrant(ctx *astral.Context, q *routing.IncomingQuery, args opRequestGrantArgs) error {
-	// why before accepting: accepting drops the en-route entry naming the
-	// session and its origin.
+	// why before accepting: accepting drops the en-route entry naming the session and its origin.
 	requester := mod.sessionOwner(q)
 	origin, _ := mod.EnRouteQueryExtras(q.Nonce())[apphostmod.ExtraOriginWeb].(string)
 

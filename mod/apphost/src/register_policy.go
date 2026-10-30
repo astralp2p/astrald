@@ -8,7 +8,7 @@ import (
 	apphostmod "github.com/astralp2p/astrald/mod/apphost"
 )
 
-// policyPath is where apphost persists its delegate.
+// policyPath is where apphost persists its policy delegates.
 const policyPath = "/mod/apphost/policy"
 
 // policyConfig is bound to the tree at policyPath. An unset AppRegister

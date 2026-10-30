@@ -15,7 +15,7 @@ import (
 
 const grantRequestOp = "control.decide_grant_request"
 
-// ackAnswer is what answer returns for an ack.
+// ackAnswer is what readReply returns for an ack.
 var ackAnswer = (&astral.Ack{}).ObjectType()
 
 // grantRequester is a module that records grants in memory and delegates grant
@@ -32,9 +32,9 @@ func grantRequester(t *testing.T, node *delegateNode) *Module {
 	return mod
 }
 
-// answer waits for the op to close w and returns the text of the
+// readReply waits for the op to close w and returns the text of the
 // error_message it answered, or the type of any other object.
-func answer(t *testing.T, w *recordingWriter) string {
+func readReply(t *testing.T, w *recordingWriter) string {
 	t.Helper()
 	awaitServeAppsClose(t, w)
 
@@ -58,7 +58,7 @@ func requestGrant(t *testing.T, mod *Module, q *astral.InFlightQuery) string {
 	if err := routeQuery(t, mod.OpRequestGrant, q, w); err != nil {
 		t.Fatalf("route: %v", err)
 	}
-	return answer(t, w)
+	return readReply(t, w)
 }
 
 // askedOp returns the operation node was asked.
@@ -85,11 +85,7 @@ func heldActions(t *testing.T, mod *Module, id *astral.Identity) []string {
 	if err != nil {
 		t.Fatalf("list grants: %v", err)
 	}
-	var actions []string
-	for _, p := range permits {
-		actions = append(actions, string(p.Action))
-	}
-	return actions
+	return actions(permits)
 }
 
 // The register delegate does not decide grant requests: with only it set, the
@@ -137,10 +133,7 @@ func TestRequestGrantAsksTheDelegateAndGrants(t *testing.T) {
 	if req == nil || !req.Requester.IsEqual(owner) || req.Origin != "https://music.example" {
 		t.Fatalf("request reached the delegate as %+v", req)
 	}
-	var asked []string
-	for _, p := range req.Permits {
-		asked = append(asked, string(p.Action))
-	}
+	asked := actions(req.Permits)
 	want := []string{"mod.auth.see_objects_action", "mod.auth.store_objects_action"}
 	if !slices.Equal(asked, want) {
 		t.Fatalf("delegate was asked %q; want %q", asked, want)
@@ -245,7 +238,7 @@ func TestSetGrantRequestPolicyWritesItsOwnValue(t *testing.T) {
 		if err := route(t, mod.OpSetGrantRequestPolicy, astral.GenerateIdentity(), "apphost.set_grant_request_policy"+args, w); err != nil {
 			t.Fatalf("route: %v", err)
 		}
-		return answer(t, w)
+		return readReply(t, w)
 	}
 	delegate := "?identity=" + id.String() + "&operation=" + grantRequestOp
 
