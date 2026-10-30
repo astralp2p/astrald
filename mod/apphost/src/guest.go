@@ -147,7 +147,7 @@ func (guest *Guest) onRouteQueryMsg(ctx *astral.Context, msg *apphost.RouteQuery
 
 	// A session without a token is confined to the anonymous_allowlist for the
 	// node's claim state.
-	if !guest.isAuthenticated() && !guest.mod.admitsAnonymous(ctx, guest.webOrigin, q) {
+	if !guest.isAuthenticated() && !guest.mod.admitsAnonymous(ctx, q) {
 		return guest.Send(&apphost.ErrorMsg{Code: apphost.ErrCodeDenied})
 	}
 

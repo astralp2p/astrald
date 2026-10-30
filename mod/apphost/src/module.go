@@ -63,9 +63,9 @@ func (mod *Module) Run(ctx *astral.Context) error {
 	var workerCount = mod.config.Workers
 
 	mod.conns = mod.listen(ctx)
-	mod.log.Log("anonymous sessions: allowed %v, unclaimed ops %v, claimed ops %v; trusted web sources %v",
+	mod.log.Log("anonymous sessions: allowed %v, unclaimed ops %v, claimed ops %v",
 		mod.config.AllowAnonymous, mod.config.AnonymousAllowlist.Unclaimed,
-		mod.config.AnonymousAllowlist.Claimed, mod.config.TrustedWebSources)
+		mod.config.AnonymousAllowlist.Claimed)
 
 	// spawn workers
 	mod.log.Logv(2, "spawning %v workers", workerCount)
