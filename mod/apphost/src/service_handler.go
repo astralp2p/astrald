@@ -41,9 +41,10 @@ type ServiceHandler struct {
 // mod.pendingInboundQueries keyed by QueryID, so the attach path can look it up
 // when AttachQueryMsg arrives.
 type pendingInboundQuery struct {
-	query  *astral.InFlightQuery
-	attach chan io.ReadWriteCloser // closed/sent to with the per-query conn on accept
-	reject chan uint8              // sent with the code on RejectIncomingMsg
+	query    *astral.InFlightQuery
+	notified *channel.Channel        // the registration connection told about the query
+	attach   chan io.ReadWriteCloser // closed/sent to with the per-query conn on accept
+	reject   chan uint8              // sent with the code on RejectIncomingMsg
 }
 
 // RouteQuery pushes IncomingQueryMsg to the registration connection and waits for one of:
@@ -58,19 +59,24 @@ func (h *ServiceHandler) RouteQuery(ctx *astral.Context, q *astral.InFlightQuery
 	}
 
 	pending := &pendingInboundQuery{
-		query:  q,
-		attach: make(chan io.ReadWriteCloser, 1),
-		reject: make(chan uint8, 1),
+		query:    q,
+		notified: h.ch,
+		attach:   make(chan io.ReadWriteCloser, 1),
+		reject:   make(chan uint8, 1),
 	}
 
-	if _, ok := h.mod.pendingInboundQueries.Set(q.Nonce, pending); !ok {
+	// why: a token-less per-query connection attaches by QueryID alone. The
+	// query's nonce is chosen by its caller and travels with the query, so the
+	// QueryID is a fresh nonce that only the registration connection receives.
+	queryID := astral.NewNonce()
+	if _, ok := h.mod.pendingInboundQueries.Set(queryID, pending); !ok {
 		// extraordinarily unlikely nonce collision
 		return query.RouteNotFound()
 	}
-	defer h.mod.pendingInboundQueries.Delete(q.Nonce)
+	defer h.mod.pendingInboundQueries.Delete(queryID)
 
 	err := h.ch.Send(&apphost.IncomingQueryMsg{
-		QueryID: q.Nonce,
+		QueryID: queryID,
 		Caller:  q.Caller,
 		Target:  q.Target,
 		Query:   astral.String16(q.QueryString),

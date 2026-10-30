@@ -337,6 +337,12 @@ func (guest *Guest) onRejectIncomingMsg(ctx *astral.Context, msg *apphost.Reject
 		return nil
 	}
 
+	// why: a reject belongs to the registration connection that was told about
+	// the query; from any other connection it is ignored like an unknown QueryID.
+	if pending.notified != guest.Channel {
+		return nil
+	}
+
 	select {
 	case pending.reject <- uint8(msg.Code):
 	default:
