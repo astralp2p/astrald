@@ -25,7 +25,7 @@ are two distinct objects. Nothing about the test depends on what it means.
 
 Everything runs on one connection as the User, the identity the oracle reads
 back with. Note that this is hygiene, not a property the test can check: the
-hold is *recorded* per caller (`mod/apphost/src/op_hold_object.go:39`) but
+hold is *recorded* per caller (`holdOne` in `mod/apphost/src/op_hold_object.go`) but
 *consulted* identity-blind (`db.ObjectHeld` filters on object and expiry
 only), so a hold placed under any identity would protect the object here.
 """

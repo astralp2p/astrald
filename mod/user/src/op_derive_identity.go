@@ -23,8 +23,8 @@ type opDeriveIdentityArgs struct {
 // them under Generate and returns them in the reply.
 // Spec: .ai/system/protocols/user/ops/user.derive_identity.md
 //
-// why: no action: the op derives from words the caller sends or the node generates
-// for the caller, and it stores nothing. The setup preview runs before any user exists.
+// why: no action gates this op; it derives from words the caller sends or the node
+// generates for the caller, and it stores nothing. The setup preview runs before any user exists.
 func (mod *Module) OpDeriveIdentity(ctx *astral.Context, q *routing.IncomingQuery, args opDeriveIdentityArgs) error {
 	ch := q.Accept(channel.WithFormats(args.In, args.Out))
 	defer ch.Close()

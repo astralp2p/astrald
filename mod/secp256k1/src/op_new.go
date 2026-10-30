@@ -14,8 +14,8 @@ type opNewArgs struct {
 
 // OpNew generates a fresh secp256k1 key and sends it over the accepted channel.
 //
-// why: no action: the fresh key goes to the caller and the node keeps no copy.
-// The op reads no node secret and changes no state.
+// why: no action gates this op; the fresh key goes to the caller and the node keeps no
+// copy. The op reads no node secret and changes no state.
 func (mod *Module) OpNew(ctx *astral.Context, q *routing.IncomingQuery, args opNewArgs) (err error) {
 	ch := channel.New(q.AcceptRaw(), channel.WithFormats(args.In, args.Out))
 	defer ch.Close()

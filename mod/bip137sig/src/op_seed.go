@@ -17,8 +17,8 @@ type opSeedArgs struct {
 
 // OpSeed receives a whitespace-separated mnemonic and replies with the seed derived under Passphrase.
 //
-// why: no action: the seed is a pure function of the caller's words and passphrase.
-// The op reads no node secret and changes no state.
+// why: no action gates this op; the seed is a pure function of the caller's words and
+// passphrase. The op reads no node secret and changes no state.
 func (mod *Module) OpSeed(
 	ctx *astral.Context,
 	q *routing.IncomingQuery,

@@ -20,8 +20,8 @@ type opVerifyTextSignatureArgs struct {
 // messages; a Signature message triggers verification and ends the exchange.
 // Defaults the public key to the caller's identity when none is supplied.
 //
-// why: no action: the op checks a signature against the text and public key the
-// caller supplies, its own key by default. It reads no node secret and changes no state.
+// why: no action gates this op; it checks a signature against the text and public key
+// the caller supplies, its own key by default. It reads no node secret and changes no state.
 func (mod *Module) OpVerifyTextSignature(ctx *astral.Context, q *routing.IncomingQuery, args opVerifyTextSignatureArgs) (err error) {
 	ch := channel.New(q.AcceptRaw(), channel.WithFormats(args.In, args.Out))
 	defer ch.Close()

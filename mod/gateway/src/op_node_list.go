@@ -13,8 +13,8 @@ type opListArgs struct {
 
 // OpNodeList streams the identities of all publicly visible registered nodes, terminated by EOS.
 //
-// why: no action: the op lists only nodes that registered with public visibility,
-// which is their request to be listed. It changes no state.
+// why: no action gates this op; it lists only nodes that registered with public
+// visibility, which is their request to be listed. It changes no state.
 func (mod *Module) OpNodeList(ctx *astral.Context, q *routing.IncomingQuery, args opListArgs) error {
 	ch := q.Accept(channel.WithOutputFormat(args.Out))
 	defer ch.Close()

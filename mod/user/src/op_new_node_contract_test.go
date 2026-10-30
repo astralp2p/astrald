@@ -89,6 +89,26 @@ func TestNewNodeContractDefaultUserNeedsSeeSwarm(t *testing.T) {
 	}
 }
 
+// TestNewNodeContractUnclaimedDefaultUserNeedsNoAction: with user omitted on an
+// unclaimed node, the op makes no authorization call and answers that user is missing.
+func TestNewNodeContractUnclaimedDefaultUserNeedsNoAction(t *testing.T) {
+	authority := &recordingAuth{verdict: false}
+	mod := newNodeContractModule(t, authority, nil, astral.GenerateIdentity())
+
+	objs := askNewNodeContract(t, mod, astral.GenerateIdentity(), "", "user.new_node_contract")
+
+	msg, ok := objs[0].(*astral.ErrorMessage)
+	if !ok {
+		t.Fatalf("answered %v; want an error_message", objs[0])
+	}
+	if got, want := msg.Error(), "user id missing: pass -user <identity>; the node has no active contract to default from"; got != want {
+		t.Fatalf("answered %q; want %q", got, want)
+	}
+	if n := len(authority.recorded()); n != 0 {
+		t.Fatalf("made %d authorization calls; want none", n)
+	}
+}
+
 // TestNewNodeContractDefaultUserAllowed: a caller holding SeeSwarm gets the
 // contract issued by the active contract's issuer.
 func TestNewNodeContractDefaultUserAllowed(t *testing.T) {

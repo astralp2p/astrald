@@ -32,18 +32,16 @@ func (mod *Module) OpNewNodeContract(ctx *astral.Context, query *routing.Incomin
 		return ch.Send(astral.NewErrOriginNotAllowed(query.Origin()))
 	}
 
+	// why: SeeSwarm on the default user mirrors user.info, which guards the active
+	// contract's issuer. It hides nothing: dir.resolve answers localuser with that
+	// issuer to any app (identity_resolver.go), so a named user needs no action.
 	var userID = mod.Identity()
 	if len(args.User) > 0 {
 		userID, err = mod.Dir.ResolveIdentity(args.User)
 		if err != nil {
 			return ch.Send(astral.Err(err))
 		}
-	}
-
-	// why: the default user is the active contract's issuer, which user.info guards
-	// with SeeSwarm. A caller that names the user learns no identity it did not pass.
-	if len(args.User) == 0 && !userID.IsZero() &&
-		!mod.Auth.Authorize(ctx, &user.SeeSwarmAction{Action: auth.NewAction(query.Caller())}) {
+	} else if !userID.IsZero() && !mod.Auth.Authorize(ctx, &user.SeeSwarmAction{Action: auth.NewAction(query.Caller())}) {
 		return ch.Send(auth.ErrNotPermitted)
 	}
 

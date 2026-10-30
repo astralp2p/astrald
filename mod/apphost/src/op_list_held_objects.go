@@ -11,7 +11,7 @@ type opListHeldObjectsArgs struct {
 	Out string
 }
 
-// why: no action: the op lists only the caller's own hold rows.
+// why: no action gates this op; it lists only the caller's own hold rows.
 func (mod *Module) OpListHeldObjects(ctx *astral.Context, q *routing.IncomingQuery, args opListHeldObjectsArgs) error {
 	ch := channel.New(q.AcceptRaw(), channel.WithOutputFormat(args.Out))
 	defer ch.Close()

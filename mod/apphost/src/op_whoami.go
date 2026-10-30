@@ -11,7 +11,7 @@ type opWhoamiArgs struct {
 	Out string
 }
 
-// why: no action: the op answers the caller's own identity and changes no state.
+// why: no action gates this op; it answers the caller's own identity and changes no state.
 func (mod *Module) OpWhoami(ctx *astral.Context, query *routing.IncomingQuery, args opWhoamiArgs) (err error) {
 	ch := query.Accept(channel.WithFormats(args.In, args.Out))
 	defer ch.Close()
