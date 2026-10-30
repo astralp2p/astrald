@@ -30,7 +30,8 @@ func (mod *Module) inSetupMode(ctx *astral.Context) bool {
 //
 // why every such session, IPC included: core.Router names an empty caller the
 // node, so an op the list admits runs with the node's authority.
-// why no Origin filter: the register policy decides what a registering app holds.
+// why any Origin: a browser app sets up an unclaimed node with no config step,
+// and the register policy alone decides what a registering app holds.
 // note: any page open in a local browser reaches the active list, user.bootstrap
 // included before the claim.
 // note: the session's Network zone is stripped, so no target check is needed -

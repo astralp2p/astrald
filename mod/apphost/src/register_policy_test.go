@@ -49,7 +49,7 @@ func sameActions(a, b []*auth.Permit) bool {
 }
 
 // The shipped default is permissive by name: it writes what it is handed,
-// entitlement and ask alike, and leaves deciding to a policy that decides.
+// and leaves deciding to a policy that decides.
 func TestTheDefaultPolicyWritesWhatItIsHanded(t *testing.T) {
 	askedGrant := parsePermits("mod.auth.serve_objects_action")
 	askedContract := parsePermits("mod.nodes.relay_for_action")
