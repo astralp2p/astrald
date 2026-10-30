@@ -36,13 +36,13 @@ VOLUME /var/lib/astrald
 
 # EXPOSE names the ports the image's own defaults bind beyond loopback, because
 # that is what `docker run -P` publishes. 1791/tcp node links, 1792/udp KCP
-# transport, 8624/tcp the apphost HTTP API, which mod/apphost binds on
-# tcp:0.0.0.0:8624. The local apphost API on 8625 and the MCP server on 8626 are
-# both loopback by default — mod/mcp defaults bind_mcp to tcp:127.0.0.1:8626 —
-# so neither is named here: publishing a loopback-bound port maps a port that
-# refuses every connection. A stack that binds one of them to 0.0.0.0 publishes
-# it explicitly — docs/running-in-docker.md, "Ports".
-EXPOSE 1791/tcp 1792/udp 8624/tcp
+# transport. The apphost HTTP API on 8624, the local apphost API on 8625 and the
+# MCP server on 8626 are loopback by default — mod/apphost defaults bind_http to
+# tcp:127.0.0.1:8624 and mod/mcp defaults bind_mcp to tcp:127.0.0.1:8626 — so
+# none is named here: publishing a loopback-bound port maps a port that refuses
+# every connection. A stack that binds one of them to 0.0.0.0 publishes it
+# explicitly — docs/running-in-docker.md, "Ports".
+EXPOSE 1791/tcp 1792/udp
 
 # astrald traps SIGINT, not SIGTERM.
 STOPSIGNAL SIGINT
