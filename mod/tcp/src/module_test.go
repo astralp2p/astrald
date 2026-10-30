@@ -44,24 +44,27 @@ func loadModule(t *testing.T, config string) *Module {
 
 // TestSyncConfigAppliesConfig pins that each flag in tcp.yaml reaches its own
 // setting. A listen of false disables the listener, and the two flags never
-// cross. A listen stored in the tree survives unless tcp.yaml sets listen.
+// cross. A flag the file omits stays unset, and a listen stored in the tree
+// survives unless tcp.yaml sets listen.
 func TestSyncConfigAppliesConfig(t *testing.T) {
-	off := astral.Bool(false)
+	on, off := astral.Bool(true), astral.Bool(false)
 
+	// listen and dial are the stored values the start leaves; nil means the
+	// start wrote nothing and the setting reads as on.
 	var tests = []struct {
 		name   string
 		config string
 		stored *astral.Bool
-		listen bool
-		dial   bool
+		listen *astral.Bool
+		dial   *astral.Bool
 	}{
-		{"defaults", "", nil, true, true},
-		{"listen off", "listen: false\n", nil, false, true},
-		{"dial off", "dial: false\n", nil, true, false},
-		{"listen off, dial on", "listen: false\ndial: true\n", nil, false, true},
-		{"both off", "listen: false\ndial: false\n", nil, false, false},
-		{"stored off survives", "", &off, false, true},
-		{"file overrides stored", "listen: true\n", &off, true, true},
+		{"defaults", "", nil, nil, nil},
+		{"listen off", "listen: false\n", nil, &off, nil},
+		{"dial off", "dial: false\n", nil, nil, &off},
+		{"listen off, dial on", "listen: false\ndial: true\n", nil, &off, &on},
+		{"both off", "listen: false\ndial: false\n", nil, &off, &off},
+		{"stored off survives", "", &off, &off, nil},
+		{"file overrides stored", "listen: true\n", &off, &on, nil},
 	}
 
 	for _, test := range tests {
@@ -85,11 +88,18 @@ func TestSyncConfigAppliesConfig(t *testing.T) {
 	}
 }
 
-// assertFlag reads an unset flag as on, the default every reader applies.
-func assertFlag(t *testing.T, name string, got *astral.Bool, want bool) {
+// assertFlag compares a stored flag with the expected one; nil expects unset.
+func assertFlag(t *testing.T, name string, got *astral.Bool, want *astral.Bool) {
 	t.Helper()
 
-	if (got == nil || bool(*got)) != want {
-		t.Errorf("%v: got %v, want %v", name, got, want)
+	if got == nil || want == nil {
+		if got != want {
+			t.Errorf("%v: got %v, want %v", name, got, want)
+		}
+		return
+	}
+
+	if *got != *want {
+		t.Errorf("%v: got %v, want %v", name, *got, *want)
 	}
 }

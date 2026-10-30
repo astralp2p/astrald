@@ -23,16 +23,22 @@ func (a yamlAssets) LoadYAML(_ string, out any) error {
 	return yaml.Unmarshal([]byte(a.yaml), out)
 }
 
-// TestSyncConfigKeepsStoredMode pins that a mode stored in the tree survives a
-// start unless nearby.yaml sets mode.
+// TestSyncConfigKeepsStoredMode pins that a start writes the mode only when
+// nearby.yaml sets it: an unset mode stays unset, and a mode stored in the tree
+// survives unless the file sets mode.
 func TestSyncConfigKeepsStoredMode(t *testing.T) {
+	silent, visible := nearby.ModeSilent, nearby.ModeVisible
+
+	// want is the stored mode the start leaves; nil means unset.
 	var tests = []struct {
 		name   string
 		config string
-		want   nearby.Mode
+		stored *nearby.Mode
+		want   *nearby.Mode
 	}{
-		{"stored mode survives", "", nearby.ModeSilent},
-		{"file overrides stored", "mode: 1\n", nearby.ModeVisible},
+		{"unset stays unset", "", nil, nil},
+		{"stored mode survives", "", &visible, &visible},
+		{"file overrides stored", "mode: 1\n", &silent, &visible},
 	}
 
 	for _, test := range tests {
@@ -45,8 +51,10 @@ func TestSyncConfigKeepsStoredMode(t *testing.T) {
 			mod := loaded.(*Module)
 			ctx := astral.NewContext(nil)
 
-			if err := mod.SetMode(ctx, nearby.ModeSilent); err != nil {
-				t.Fatalf("store mode: %v", err)
+			if test.stored != nil {
+				if err := mod.SetMode(ctx, *test.stored); err != nil {
+					t.Fatalf("store mode: %v", err)
+				}
 			}
 
 			if err := mod.syncConfig(ctx); err != nil {
@@ -54,12 +62,19 @@ func TestSyncConfigKeepsStoredMode(t *testing.T) {
 			}
 
 			got := mod.mode.Get()
-			if got == nil {
-				t.Fatalf("mode: got unset, want %v", test.want)
+			if test.want == nil {
+				if got != nil {
+					t.Errorf("mode: got %v, want unset", *got)
+				}
+				return
 			}
 
-			if *got != test.want {
-				t.Errorf("mode: got %v, want %v", *got, test.want)
+			if got == nil {
+				t.Fatalf("mode: got unset, want %v", *test.want)
+			}
+
+			if *got != *test.want {
+				t.Errorf("mode: got %v, want %v", *got, *test.want)
 			}
 		})
 	}
