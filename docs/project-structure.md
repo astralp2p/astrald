@@ -46,7 +46,6 @@ Descriptions of modules with a protocol in [astral-docs](https://github.com/astr
 | [apphost](../mod/apphost/src/README.md) | On-device API for local apps (tokens, handlers, contracts, holds) |
 | auth | Capability contracts, signing, and action authorization |
 | bip137sig | BIP-39/32/137 seed, key derivation, and message signing |
-| [coldcard](../mod/coldcard/README.md) | Coldcard hardware wallet as a BIP-0137 signer |
 | crypto | Signing and verifying hashes and text, public key derivation |
 | dir | Alias management, identity resolution |
 | ether | LAN UDP broadcast for node presence and discovery |

@@ -2,7 +2,6 @@ package apphost
 
 import (
 	"github.com/astralp2p/astral-go/api/auth"
-	"github.com/astralp2p/astral-go/api/coldcard"
 	"github.com/astralp2p/astral-go/api/services"
 	"github.com/astralp2p/astral-go/api/shell"
 	"github.com/astralp2p/astral-go/api/user"
@@ -125,12 +124,6 @@ func (mod *Module) AuthorizeRegisterSigner(ctx *astral.Context, action *auth.Reg
 // AuthorizeSeeNodeState answers whether this node has granted the actor the
 // right to read the node's state.
 func (mod *Module) AuthorizeSeeNodeState(ctx *astral.Context, action *auth.SeeNodeStateAction) bool {
-	return mod.authorizeGrant(ctx, action)
-}
-
-// AuthorizeColdcardScan answers whether this node has granted the actor the
-// right to scan the node's attached Coldcard devices.
-func (mod *Module) AuthorizeColdcardScan(ctx *astral.Context, action *coldcard.ScanAction) bool {
 	return mod.authorizeGrant(ctx, action)
 }
 

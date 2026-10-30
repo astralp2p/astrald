@@ -11,7 +11,6 @@ import (
 
 	_ "github.com/astralp2p/astrald/mod/apphost"
 	_ "github.com/astralp2p/astrald/mod/auth"
-	_ "github.com/astralp2p/astrald/mod/coldcard"
 	_ "github.com/astralp2p/astrald/mod/crypto"
 	_ "github.com/astralp2p/astrald/mod/dir"
 	_ "github.com/astralp2p/astrald/mod/ether"

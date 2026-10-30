@@ -7,7 +7,6 @@ import (
 	_ "github.com/astralp2p/astrald/mod/apphost/src"
 	_ "github.com/astralp2p/astrald/mod/auth/src"
 	_ "github.com/astralp2p/astrald/mod/bip137sig/src"
-	_ "github.com/astralp2p/astrald/mod/coldcard/src"
 	_ "github.com/astralp2p/astrald/mod/crypto/src"
 	_ "github.com/astralp2p/astrald/mod/dir/src"
 	_ "github.com/astralp2p/astrald/mod/ether/src"
