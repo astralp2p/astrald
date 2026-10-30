@@ -59,7 +59,7 @@ func (mod *Module) OpRegister(ctx *astral.Context, query *routing.IncomingQuery,
 	ch := channel.New(conn, channel.WithFormats(args.In, args.Out))
 	defer ch.Close()
 
-	// note: an identity is never registered over a network.
+	// why: identities minted over a link are indistinguishable from local apps.
 	if query.Origin() == astral.OriginNetwork {
 		return ch.Send(astral.NewErrOriginNotAllowed(query.Origin()))
 	}
