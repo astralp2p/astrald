@@ -65,9 +65,8 @@ func (h *ServiceHandler) RouteQuery(ctx *astral.Context, q *astral.InFlightQuery
 		reject:   make(chan uint8, 1),
 	}
 
-	// why: a token-less per-query connection attaches by QueryID alone. The
-	// query's nonce is chosen by its caller and travels with the query, so the
-	// QueryID is a fresh nonce that only the registration connection receives.
+	// why: QueryID pairs a token-less attach — .ai/system/topics/ws-transport.md.
+	// why: the caller chooses and sees the query's nonce, so the QueryID is a fresh one.
 	queryID := astral.NewNonce()
 	if _, ok := h.mod.pendingInboundQueries.Set(queryID, pending); !ok {
 		// extraordinarily unlikely nonce collision

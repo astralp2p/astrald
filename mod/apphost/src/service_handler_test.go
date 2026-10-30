@@ -274,10 +274,10 @@ func requireRejected(t *testing.T, errCh <-chan error, code uint8) {
 	}
 }
 
-// TestAttachRefusesTheQueryNonce: the query's nonce is known to its caller, so
+// TestServiceHandler_AttachRefusesTheQueryNonce: the query's nonce is known to its caller, so
 // a token-less connection naming it is answered route_not_found and does not
 // become the responder.
-func TestAttachRefusesTheQueryNonce(t *testing.T) {
+func TestServiceHandler_AttachRefusesTheQueryNonce(t *testing.T) {
 	rig := newInboundTestRig(t)
 	defer rig.clientCxn.Close()
 
@@ -321,10 +321,10 @@ func TestAttachRefusesTheQueryNonce(t *testing.T) {
 	requireRejected(t, errCh, 7)
 }
 
-// TestRejectFromAnotherConnectionIsIgnored: a reject belongs to the
+// TestServiceHandler_RejectFromAnotherConnectionIsIgnored: a reject belongs to the
 // registration connection that was told about the query. The same QueryID on
 // another connection does not reach the query.
-func TestRejectFromAnotherConnectionIsIgnored(t *testing.T) {
+func TestServiceHandler_RejectFromAnotherConnectionIsIgnored(t *testing.T) {
 	rig := newInboundTestRig(t)
 	defer rig.clientCxn.Close()
 
