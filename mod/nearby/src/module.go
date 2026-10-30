@@ -124,7 +124,14 @@ func (mod *Module) periodicUpdater(ctx *astral.Context) {
 	modeUpdates := mod.mode.Follow(ctx)
 	<-modeUpdates // discard initial value; initial broadcast is handled in Run
 
+	// why: 255 is no defined mode, so the first pass logs on every node, a silent one included.
+	last := nearby.Mode(255)
 	for {
+		if m := mod.Mode(); m != last {
+			mod.log.Log("mode %v", m)
+			last = m
+		}
+
 		if mod.Mode() != nearby.ModeSilent {
 			if err := mod.Broadcast(); err != nil {
 				mod.log.Error("push error: %v", err)

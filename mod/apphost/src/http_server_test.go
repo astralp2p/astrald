@@ -3,10 +3,12 @@ package apphost
 import (
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/astralp2p/astral-go/astral"
+	"github.com/astralp2p/astral-go/astral/log"
 )
 
 func TestHTTPServerPreflightNeedsNoToken(t *testing.T) {
@@ -76,5 +78,59 @@ func TestGetAuthToken(t *testing.T) {
 		if got := srv.getAuthToken(req); got != c.want {
 			t.Errorf("getAuthToken(%q) = %q, want %q", c.authorization, got, c.want)
 		}
+	}
+}
+
+// entryChan is a log.EntryLogger that forwards every entry to a channel.
+type entryChan chan *log.Entry
+
+func (c entryChan) LogEntry(e *log.Entry) { c <- e }
+
+// TestHTTPRunWarnsOnNonLoopbackBind covers the bind warning: a wildcard bind
+// logs a level-0 warning and a loopback bind does not.
+func TestHTTPRunWarnsOnNonLoopbackBind(t *testing.T) {
+	const warning = "is not loopback"
+
+	cases := []struct {
+		bind string
+		warn bool
+	}{
+		{"tcp:0.0.0.0:0", true},
+		{"tcp:127.0.0.1:0", false},
+	}
+
+	for _, c := range cases {
+		t.Run(c.bind, func(t *testing.T) {
+			// note: the channel is never closed; the shutdown goroutine logs after Run returns.
+			entries := make(entryChan, 8)
+			l := &log.Logger{}
+			l.AddLogger(entries)
+
+			ctx, cancel := astral.NewContext(nil).WithCancel()
+			cancel()
+
+			srv := &HTTPServer{Module: &Module{config: Config{BindHTTP: c.bind}, log: l}}
+			if err := srv.Run(ctx); err != nil {
+				t.Fatalf("run: %v", err)
+			}
+
+			var warned bool
+			for n := len(entries); n > 0; n-- {
+				e := <-entries
+				var line string
+				for _, obj := range e.Objects {
+					line += astral.Stringify(obj)
+				}
+				if strings.Contains(line, warning) {
+					warned = true
+					if e.Level != 0 {
+						t.Errorf("warning at level %v; want 0", e.Level)
+					}
+				}
+			}
+			if warned != c.warn {
+				t.Errorf("warned = %v; want %v", warned, c.warn)
+			}
+		})
 	}
 }
