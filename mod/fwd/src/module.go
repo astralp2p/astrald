@@ -64,6 +64,8 @@ func (mod *Module) CreateForward(server, target string) error {
 		return fmt.Errorf("cannot create server: %w", err)
 	}
 
+	mod.log.Info("forwarding %v -> %v", s, t)
+
 	return mod.runServer(s)
 }
 

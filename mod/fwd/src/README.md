@@ -45,3 +45,10 @@ forwards:
   "tcp://127.0.0.1:8080": "astral://alias:http"
   "astral://hidden": "tor://cyl3gwxjmn4mhohlpufat5n25nnm6axrb3f7i3mvoaz3cpidypmihxe5.onion:8080"
 ```
+
+A TCP server admits every client that can reach its address, with no
+authentication. For an `astral://` target, each client runs the target
+query as its caller: the node unless the target names `caller@`. Bind TCP
+servers to `127.0.0.1` unless the port is meant to be reachable from the
+network. Each forward is logged at startup as
+`forwarding <server> -> <target>`, with the caller and target resolved.
