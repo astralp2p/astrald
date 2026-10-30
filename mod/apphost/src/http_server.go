@@ -3,6 +3,7 @@ package apphost
 import (
 	"context"
 	"errors"
+	"net"
 	"net/http"
 	"strings"
 	"time"
@@ -72,7 +73,10 @@ func (srv *HTTPServer) Run(ctx *astral.Context) error {
 	}()
 
 	// start the server
-	srv.log.Infov(1, "http server: started at %v", bindHTTP)
+	srv.log.Log("http server: started at %v", bindHTTP)
+	if a, ok := l.Addr().(*net.TCPAddr); ok && !a.IP.IsLoopback() {
+		srv.log.Log("http server: %v is not loopback: cleartext HTTP, CORS allows any origin", bindHTTP)
+	}
 	err = httpServer.Serve(l)
 	switch {
 	case err == nil:

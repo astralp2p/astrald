@@ -3,6 +3,7 @@ package mcp
 import (
 	"context"
 	"errors"
+	"net"
 	"net/http"
 	"time"
 
@@ -50,7 +51,10 @@ func (srv *MCPServer) Run(ctx *astral.Context) error {
 		}
 	}()
 
-	srv.log.Infov(1, "mcp server: started at %v", bind)
+	srv.log.Log("mcp server: started at %v", bind)
+	if a, ok := l.Addr().(*net.TCPAddr); ok && !a.IP.IsLoopback() {
+		srv.log.Log("mcp server: %v is not loopback: cleartext HTTP", bind)
+	}
 	err = httpServer.Serve(l)
 	switch {
 	case err == nil:
