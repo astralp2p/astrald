@@ -53,11 +53,6 @@ func (mod *Module) Run(ctx *astral.Context) (err error) {
 
 	<-mod.User.Ready()
 
-	err = mod.syncConfig(ctx)
-	if err != nil {
-		return
-	}
-
 	go mod.periodicUpdater(ctx)
 
 	go func() {
@@ -75,7 +70,11 @@ func (mod *Module) syncConfig(ctx *astral.Context) error {
 	return nil
 }
 
+// Scan asks the nodes on the LAN for their status; no-ops in ModeSilent.
 func (mod *Module) Scan() error {
+	if mod.Mode() == nearby.ModeSilent {
+		return nil
+	}
 	return mod.Ether.Push(&nearby.ScanMessage{})
 }
 
@@ -83,14 +82,19 @@ func (mod *Module) AddStatusComposer(composer nearbymod.Composer) {
 	mod.composers.Add(composer)
 }
 
-// Mode returns the current broadcast mode; falls back to ModeVisible when no user
-// identity is set (node is unowned), and to ModeStealth when the mode is unset.
+// Mode returns the current broadcast mode. While no user identity is set (node
+// is unowned) it is ModeVisible unless the stored mode is ModeSilent; an unset
+// mode on an owned node is ModeStealth.
+//
+// why Visible while unowned: the adoptable status lets a LAN device claim a
+// fresh node with no setup step.
+// why Silent is kept: an operator who configures silence gets it before the
+// claim as well as after.
 func (mod *Module) Mode() nearby.Mode {
-	if mod.User.Identity() == nil {
+	m := mod.mode.Get()
+	if mod.User.Identity() == nil && (m == nil || *m != nearby.ModeSilent) {
 		return nearby.ModeVisible
 	}
-
-	m := mod.mode.Get()
 	if m == nil {
 		return nearby.ModeStealth
 	}
@@ -171,10 +175,18 @@ func (mod *Module) pushStatus() error {
 	return mod.Ether.Push(s)
 }
 
-// canBroadcast returns false when the status should be suppressed.
-// Stealth mode with no attachments (no active contract) falls back to silent.
+// canBroadcast returns false when the status should be suppressed: always in
+// ModeSilent, and in ModeStealth when the status has no attachments (no active
+// contract). It gates the periodic status, the address-change status and the
+// scan reply alike.
 func (mod *Module) canBroadcast(s *nearby.StatusMessage) bool {
-	return mod.Mode() != nearby.ModeStealth || len(s.Attachments.Objects()) > 0
+	switch mod.Mode() {
+	case nearby.ModeSilent:
+		return false
+	case nearby.ModeStealth:
+		return len(s.Attachments.Objects()) > 0
+	}
+	return true
 }
 
 // Status assembles a StatusMessage by invoking every registered Composer; pass nil

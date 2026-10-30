@@ -18,8 +18,8 @@ Last, as node1's token, it clears node1's claim from the tree, asks for a
 stranger's claim (the control) and the User's claim, and puts the claim back.
 
 why the claim is put back: expel-node runs on this two-nodes state next. The
-driver restores the tree value and the nearby mode that clearing it changes,
-and waits until node1 answers as the User's node again.
+driver restores the tree value and waits until node1 answers as the User's node
+again.
 """
 import asyncio
 
@@ -37,7 +37,6 @@ DEADLINE = 15
 SEE = "mod.user.see_swarm_action"
 SUDO = "mod.auth.sudo_action"
 ACTIVE = "/mod/user/config/active_contract"
-MODE = "/mod/nearby/mode"
 # why the generator point: a valid identity whose private key (1) no node stores.
 STRANGER = "0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798"
 
@@ -77,19 +76,6 @@ async def settle(c, want: bool) -> None:
     raise SystemExit(f"driver: node1 claimed={not want} 5 s after the tree write")
 
 
-async def settle_mode(c, path: str, before) -> None:
-    """Wait until the nearby mode moves off its value before the clear.
-
-    why: clearing the claim sets the nearby mode from a goroutine, which must
-    not land after the driver puts the old mode back. A mode that was already
-    the one clearing sets never moves, so the wait ends after 1 s regardless.
-    """
-    for _ in range(10):
-        if repr(await c.tree.get(path)) != repr(before):
-            return
-        await asyncio.sleep(0.1)
-
-
 async def bound_path(c, path: str) -> str:
     """The path a module's value is bound at: `path`, or `path` without /mod.
 
@@ -113,12 +99,10 @@ async def cleared_claim(n1, claim) -> dict:
     """Clear node1's claim from the tree, ask for two claims, put it back."""
     async with await astral.connect(n1["endpoint"], token=n1["token"]) as n:
         active_path = await bound_path(n, ACTIVE)
-        mode_path = await bound_path(n, MODE)
-        active, mode = await n.tree.get(active_path), await n.tree.get(mode_path)
+        active = await n.tree.get(active_path)
         await n.tree.set(active_path, Nil())
         try:
             await settle(n, False)
-            await settle_mode(n, mode_path, mode)
             stranger = await n.user.new_node_contract(user=STRANGER)
             probes = {
                 "stranger's claim, claim cleared": await attempt(n.auth.sign_contract(stranger)),
@@ -127,7 +111,6 @@ async def cleared_claim(n1, claim) -> dict:
         finally:
             await n.tree.set(active_path, active)
             await settle(n, True)
-            await n.tree.set(mode_path, mode)
         probes["restored"] = str((await n.user.info()).contract.contract.issuer)
     return probes
 

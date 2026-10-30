@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/astralp2p/astral-go/api/auth"
-	"github.com/astralp2p/astral-go/api/nearby"
 	"github.com/astralp2p/astral-go/api/user"
 	userClient "github.com/astralp2p/astral-go/api/user/client"
 	"github.com/astralp2p/astral-go/astral"
@@ -96,7 +95,6 @@ func (mod *Module) Identity() *astral.Identity {
 func (mod *Module) onActiveContractChanged(signed *auth.SignedContract) {
 	if signed.IsNil() {
 		mod.log.Info("this node runs without a user")
-		go mod.Nearby.SetMode(mod.ctx, nearby.ModeVisible)
 		return
 	}
 
