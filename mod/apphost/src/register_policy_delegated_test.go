@@ -24,7 +24,7 @@ type delegateNode struct {
 	id     *astral.Identity
 	answer astral.Object
 
-	received chan *apphost.AppRegisterRequest
+	received chan astral.Object
 	queried  chan string
 	closed   chan struct{}
 }
@@ -33,7 +33,7 @@ func newDelegateNode(answer astral.Object) *delegateNode {
 	return &delegateNode{
 		id:       astral.GenerateIdentity(),
 		answer:   answer,
-		received: make(chan *apphost.AppRegisterRequest, 1),
+		received: make(chan astral.Object, 1),
 		queried:  make(chan string, 1),
 		closed:   make(chan struct{}),
 	}
@@ -52,9 +52,7 @@ func (n *delegateNode) RouteQuery(_ *astral.Context, q *astral.InFlightQuery, w 
 		if err != nil {
 			return
 		}
-		if req, ok := obj.(*apphost.AppRegisterRequest); ok {
-			n.received <- req
-		}
+		n.received <- obj
 
 		if n.answer == nil {
 			_, _ = io.Copy(io.Discard, conn)
@@ -100,8 +98,8 @@ func TestDelegatedPolicyReturnsTheDelegatesDecision(t *testing.T) {
 	if op := <-node.queried; op != "control.decide_app_register" {
 		t.Fatalf("asked %q, want the configured operation", op)
 	}
-	req := <-node.received
-	if req.Origin != "https://player.example" || req.Name != "Player" || len(req.GrantPermits) != 1 {
+	req, _ := (<-node.received).(*apphost.AppRegisterRequest)
+	if req == nil || req.Origin != "https://player.example" || req.Name != "Player" || len(req.GrantPermits) != 1 {
 		t.Fatalf("request reached the delegate as %+v", req)
 	}
 	if !dec.Allow || len(dec.GrantPermits) != 0 || len(dec.ContractPermits) != 1 {

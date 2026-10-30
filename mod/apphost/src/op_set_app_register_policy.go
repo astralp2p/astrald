@@ -5,14 +5,15 @@ import (
 
 	"github.com/astralp2p/astral-go/api/auth"
 	"github.com/astralp2p/astral-go/api/policy"
+	"github.com/astralp2p/astral-go/api/tree"
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astral-go/astral/channel"
 	"github.com/astralp2p/astral-go/lib/routing"
 )
 
-type opSetAppRegisterPolicyArgs struct {
-	// Identity and Operation name the delegate that decides apphost.register.
-	// Both empty restores AcceptAll; one alone is an error.
+type opSetPolicyArgs struct {
+	// Identity and Operation name the delegate the op's policy asks. Both
+	// empty restores the bundled policy; one alone is an error.
 	Identity  string
 	Operation string
 	// Timeout bounds one question. Zero waits policy.MaxTimeout; above it is
@@ -27,7 +28,28 @@ type opSetAppRegisterPolicyArgs struct {
 //
 // why AdminManageApps: the delegate decides which permits every new app
 // receives, which is the administration of app credentials that action covers.
-func (mod *Module) OpSetAppRegisterPolicy(ctx *astral.Context, q *routing.IncomingQuery, args opSetAppRegisterPolicyArgs) error {
+func (mod *Module) OpSetAppRegisterPolicy(ctx *astral.Context, q *routing.IncomingQuery, args opSetPolicyArgs) error {
+	return mod.setPolicyDelegate(ctx, q, args, &mod.policy.AppRegister)
+}
+
+// OpSetGrantRequestPolicy selects the policy for apphost.request_grant and
+// answers Ack once the choice is persisted.
+//
+// why AdminManageApps: the delegate decides which permits apps may add to
+// themselves, which is the administration of app credentials that action
+// covers.
+func (mod *Module) OpSetGrantRequestPolicy(ctx *astral.Context, q *routing.IncomingQuery, args opSetPolicyArgs) error {
+	return mod.setPolicyDelegate(ctx, q, args, &mod.policy.GrantRequest)
+}
+
+// setPolicyDelegate admits a caller holding AdminManageApps, then writes the
+// delegate args name into v, or clears v when args name none.
+func (mod *Module) setPolicyDelegate(
+	ctx *astral.Context,
+	q *routing.IncomingQuery,
+	args opSetPolicyArgs,
+	v *tree.Value[*policy.Delegate],
+) error {
 	ch := channel.New(q.AcceptRaw(), channel.WithFormats(args.In, args.Out))
 	defer ch.Close()
 
@@ -36,10 +58,10 @@ func (mod *Module) OpSetAppRegisterPolicy(ctx *astral.Context, q *routing.Incomi
 	}
 
 	if args.Identity == "" && args.Operation == "" {
-		if err := mod.policy.AppRegister.Clear(ctx); err != nil {
+		if err := v.Clear(ctx); err != nil {
 			return ch.Send(astral.Err(err))
 		}
-		mod.log.Logv(1, "app register policy restored to accept-all")
+		mod.log.Logv(1, "%v restored to the bundled policy", q.QueryString())
 		return ch.Send(&astral.Ack{})
 	}
 
@@ -47,11 +69,11 @@ func (mod *Module) OpSetAppRegisterPolicy(ctx *astral.Context, q *routing.Incomi
 	if err != nil {
 		return ch.Send(astral.Err(err))
 	}
-	if err = mod.policy.AppRegister.Set(ctx, d); err != nil {
+	if err = v.Set(ctx, d); err != nil {
 		return ch.Send(astral.Err(err))
 	}
 
-	mod.log.Logv(1, "app register policy delegated to %v:%v", d.Identity, d.Operation)
+	mod.log.Logv(1, "%v delegated to %v:%v", q.QueryString(), d.Identity, d.Operation)
 	return ch.Send(&astral.Ack{})
 }
 
