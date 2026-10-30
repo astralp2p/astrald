@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/astralp2p/astral-go/api/auth"
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astral-go/astral/channel"
 	"github.com/astralp2p/astral-go/astral/log"
@@ -16,7 +17,8 @@ import (
 	"gorm.io/gorm"
 )
 
-// holdModule returns a Module whose database holds only the object hold table.
+// holdModule returns a Module whose database holds only the object hold table
+// and whose auth module allows every action.
 func holdModule(t *testing.T) *Module {
 	t.Helper()
 
@@ -30,7 +32,7 @@ func holdModule(t *testing.T) *Module {
 		t.Fatalf("migrate: %v", err)
 	}
 
-	return &Module{db: db, log: log.New(nil)}
+	return &Module{Deps: Deps{Auth: &recordingAuth{verdict: true}}, db: db, log: log.New(nil)}
 }
 
 // replyWriter is the caller's end of the connection. It keeps the bytes the op answered.
@@ -108,6 +110,39 @@ func checkHoldCount(t *testing.T, mod *Module, app *astral.Identity, n int) {
 	}
 	if len(holds) != n {
 		t.Fatalf("app holds %d objects; want %d", len(holds), n)
+	}
+}
+
+// TestHoldObjectRefusesCallerWithoutStoreObjects: apphost.hold_object asks
+// StoreObjects for the caller before it places a hold, in single and batch mode,
+// and a refusal answers not permitted and stores nothing.
+func TestHoldObjectRefusesCallerWithoutStoreObjects(t *testing.T) {
+	for _, args := range []string{"?id=" + heldFullID().String(), ""} {
+		t.Run("args="+args, func(t *testing.T) {
+			mod := holdModule(t)
+			authority := &recordingAuth{verdict: false}
+			mod.Auth = authority
+			app := astral.GenerateIdentity()
+
+			w := newReplyWriter()
+			if err := route(t, mod.OpHoldObject, app, "apphost.hold_object"+args, w); err != nil {
+				t.Fatalf("apphost.hold_object: %v", err)
+			}
+
+			checkErrorReply(t, w.reply(t), auth.ErrNotPermitted)
+			checkHoldCount(t, mod, app, 0)
+
+			actions := authority.recorded()
+			if len(actions) != 1 {
+				t.Fatalf("apphost.hold_object made %d authorization calls; want 1", len(actions))
+			}
+			if _, ok := actions[0].(*auth.StoreObjectsAction); !ok {
+				t.Fatalf("apphost.hold_object named %q; want %q", actions[0].ObjectType(), auth.StoreObjectsAction{}.ObjectType())
+			}
+			if !actions[0].Actor().IsEqual(app) {
+				t.Fatalf("apphost.hold_object named actor %v; want the caller %v", actions[0].Actor(), app)
+			}
+		})
 	}
 }
 
