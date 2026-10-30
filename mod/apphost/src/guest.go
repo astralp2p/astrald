@@ -147,7 +147,7 @@ func (guest *Guest) onRouteQueryMsg(ctx *astral.Context, msg *apphost.RouteQuery
 
 	// A session without a token is confined to the anonymous_allowlist for the
 	// node's claim state.
-	if !guest.isAuthenticated() && !guest.mod.admitsAnonymous(ctx, guest.webOrigin, q) {
+	if !guest.isAuthenticated() && !guest.mod.admitsAnonymous(ctx, q) {
 		return guest.Send(&apphost.ErrorMsg{Code: apphost.ErrCodeDenied})
 	}
 
@@ -192,7 +192,7 @@ func (guest *Guest) onRouteQueryMsg(ctx *astral.Context, msg *apphost.RouteQuery
 	inFlight := astral.Launch(q)
 
 	// Carry the browser Origin for queries arriving over the WebSocket endpoint
-	// so ops can apply their own per-origin authorization.
+	// so a delegated policy can weigh it.
 	if guest.webOrigin != "" {
 		inFlight.Extra.Set(apphostmod.ExtraOriginWeb, guest.webOrigin)
 	}

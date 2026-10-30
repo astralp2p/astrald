@@ -26,25 +26,23 @@ func (mod *Module) inSetupMode(ctx *astral.Context) bool {
 // admitsAnonymous reports whether a session without a token may send q. The
 // session is confined to the anonymous_allowlist for the node's claim state:
 // the unclaimed list while no user owns the node, the claimed list afterwards.
-// An op absent from the active list is refused. webOrigin is the browser
-// Origin of a WebSocket session, empty for every other session.
+// An op absent from the active list is refused.
 //
 // why every such session, IPC included: core.Router names an empty caller the
 // node, so an op the list admits runs with the node's authority.
+// why any Origin: a browser app sets up an unclaimed node with no config step,
+// and the register policy alone decides what a registering app holds.
+// note: any page open in a local browser reaches the active list, user.bootstrap
+// included before the claim.
 // note: the session's Network zone is stripped, so no target check is needed -
 // it cannot reach a peer regardless.
-func (mod *Module) admitsAnonymous(ctx *astral.Context, webOrigin string, q *astral.Query) bool {
+func (mod *Module) admitsAnonymous(ctx *astral.Context, q *astral.Query) bool {
 	if !mod.config.AllowAnonymous {
 		return false
 	}
 
 	allowlist := mod.config.AnonymousAllowlist.Claimed
 	if mod.inSetupMode(ctx) {
-		// why: any page open in a local browser reaches /.ws, so only a
-		// trusted origin may set up the node.
-		if webOrigin != "" && !mod.isTrustedWebSource(webOrigin) {
-			return false
-		}
 		allowlist = mod.config.AnonymousAllowlist.Unclaimed
 	}
 
