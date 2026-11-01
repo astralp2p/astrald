@@ -1,6 +1,7 @@
 package mobile
 
 import (
+	"bytes"
 	"testing"
 	"time"
 
@@ -99,6 +100,29 @@ func TestGrantDiscoveryScopesTheNamedServices(t *testing.T) {
 	}
 	if allows("player") {
 		t.Fatal("the grant covers a service it does not name")
+	}
+}
+
+// The grant for the same names encodes to the same bytes every time, so the
+// host's grant at every start refreshes one row instead of adding one.
+func TestGrantDiscoveryIsDeterministic(t *testing.T) {
+	app := astral.GenerateIdentity()
+	var encoded [][]byte
+
+	for range 2 {
+		g := &grantRecorder{}
+		if err := grantDiscovery(g, app, []string{"contacts-backend", "player"}); err != nil {
+			t.Fatal(err)
+		}
+		var buf bytes.Buffer
+		if _, err := astral.Encode(&buf, g.permit); err != nil {
+			t.Fatalf("encode: %v", err)
+		}
+		encoded = append(encoded, buf.Bytes())
+	}
+
+	if !bytes.Equal(encoded[0], encoded[1]) {
+		t.Fatalf("two grants of the same names encode differently:\n%x\n%x", encoded[0], encoded[1])
 	}
 }
 

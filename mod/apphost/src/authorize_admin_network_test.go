@@ -46,7 +46,7 @@ func TestAdminNetworkGrantAuthorizesTheGrantedApp(t *testing.T) {
 func TestAdminNetworkGrantRefusesUnusableGrants(t *testing.T) {
 	mod := testGrantModule(t)
 	expired, constrained, other := astral.GenerateIdentity(), astral.GenerateIdentity(), astral.GenerateIdentity()
-	// note: FindGrant compares a stored expiry with the UTC clock (db_grants.go).
+	// note: FindGrants compares a stored expiry with the UTC clock (db_grants.go).
 	// note: an expiry written in local time east of UTC outlives its instant there.
 	past := time.Now().UTC().Add(-time.Hour)
 

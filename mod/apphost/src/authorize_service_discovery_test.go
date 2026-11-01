@@ -55,6 +55,34 @@ func TestServiceDiscoveryGrantNarrowsByScope(t *testing.T) {
 	}
 }
 
+// TestDiscoveryGrantsAddUp: single-service grants given one by one together
+// cover each service they name and no other.
+func TestDiscoveryGrantsAddUp(t *testing.T) {
+	mod := testGrantModule(t)
+	app, node := astral.GenerateIdentity(), astral.GenerateIdentity()
+	action := astral.String8(services.ServiceDiscoveryAction{}.ObjectType())
+
+	for _, service := range []astral.String8{"player", "wallet"} {
+		cs := astral.NewBundle()
+		scope := &services.DiscoveryScope{Rules: []*services.DiscoveryRule{{Services: []astral.String8{service}}}}
+		if err := cs.Append(scope); err != nil {
+			t.Fatalf("scope: %v", err)
+		}
+		if err := mod.Grant(app, &auth.Permit{Action: action, Constraints: cs}, nil); err != nil {
+			t.Fatalf("grant %v: %v", service, err)
+		}
+	}
+
+	for _, service := range []astral.String8{"player", "wallet"} {
+		if !mod.AuthorizeServiceDiscovery(nil, discoveryAction(app, node, service)) {
+			t.Fatalf("the grants must cover %v", service)
+		}
+	}
+	if mod.AuthorizeServiceDiscovery(nil, discoveryAction(app, node, "radio")) {
+		t.Fatal("the grants must not cover radio")
+	}
+}
+
 // TestGrantOpRecordsConstraintsFromTheChannel: with constrained=true the op
 // reads one bundle and records it as the permit's constraints.
 func TestGrantOpRecordsConstraintsFromTheChannel(t *testing.T) {

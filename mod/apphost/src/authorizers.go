@@ -71,7 +71,11 @@ func (mod *Module) AuthorizeAdminSwarm(ctx *astral.Context, action *user.AdminSw
 }
 
 // authorizeGrant answers from this node's grants alone: it looks up the actor's
-// permit for the action being asked and lets the permit decide.
+// unexpired permits for the action being asked and allows when any one allows.
+//
+// why any-of: grants accumulate, so scopes granted one by one add up. Five
+// single-service discovery grants together allow one services.discover over all
+// five services, which checks each (service, node) pair on its own.
 //
 // why: no action-specific logic. Narrowing lives in the permit's constraints, so
 // one function serves every grantable action — a ServeObjects grant limited to
@@ -80,16 +84,19 @@ func (mod *Module) AuthorizeAdminSwarm(ctx *astral.Context, action *user.AdminSw
 // why: a lookup error refuses. A grant reaches ops that hand out standing
 // authority, so a database fault must not read as permission.
 func (mod *Module) authorizeGrant(_ *astral.Context, action auth.ActionObject) bool {
-	permit, err := mod.db.FindGrant(action.Actor(), action.ObjectType())
-	switch {
-	case err != nil:
+	permits, err := mod.db.FindGrants(action.Actor(), action.ObjectType())
+	if err != nil {
 		mod.log.Errorv(1, "grant lookup for %v: %v", action.Actor(), err)
-		return false
-	case permit == nil:
 		return false
 	}
 
-	return permit.Allows(action)
+	for _, permit := range permits {
+		if permit.Allows(action) {
+			return true
+		}
+	}
+
+	return false
 }
 
 // AuthorizeAdminNetwork answers whether this node has granted the actor the

@@ -18,9 +18,9 @@ type opGrantArgs struct {
 	Out         string
 }
 
-// OpGrant records a node-local grant of one action for an identity, replacing
-// whatever that identity held for the same action. An omitted duration grants
-// until the grant is revoked.
+// OpGrant adds a node-local grant of one action for an identity beside the
+// grants it already holds; an identical permit refreshes its expiry. An omitted
+// duration grants until the grant is revoked.
 //
 // why: registration is otherwise the only writer of a grant, so an app that is
 // already registered could reach a newly guarded op only by re-registering
@@ -52,7 +52,7 @@ func (mod *Module) OpGrant(ctx *astral.Context, q *routing.IncomingQuery, args o
 		return ch.Send(astral.NewError("missing action"))
 	}
 
-	// why: the expiry is stored UTC because FindGrant compares it against a UTC
+	// why: the expiry is stored UTC because FindGrants compares it against a UTC
 	// clock and the pure-Go sqlite driver compares datetimes lexically.
 	var expiresAt *time.Time
 	if args.Duration != 0 {

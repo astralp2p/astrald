@@ -1,7 +1,6 @@
 package apphost
 
 import (
-	"errors"
 	"time"
 
 	"github.com/astralp2p/astral-go/api/auth"
@@ -10,26 +9,26 @@ import (
 	"gorm.io/gorm/clause"
 )
 
-// UpsertGrant records the permit for identity, replacing any grant that
-// identity already held for the same action.
+// AddGrant records the permit for identity beside the grants it already holds.
+// An identical permit is stored once: granting it again sets that row's expiry
+// to expiresAt.
 //
-// why: replace rather than accumulate. A grant is this node's current answer
-// for one identity and one action, so re-granting narrower roles must take
-// roles away. Contract permits accumulate because the walk unions them; grants
-// must not.
-func (db *DB) UpsertGrant(identity *astral.Identity, permit *auth.Permit, expiresAt *time.Time) error {
+// why: the conflict target is the whole permit, not the action. Several grants
+// for one action add up, so an identity can be granted scopes step by step;
+// re-granting the same permit only moves its expiry.
+func (db *DB) AddGrant(identity *astral.Identity, permit *auth.Permit, expiresAt *time.Time) error {
 	row, err := fromGrantPermit(identity, permit, expiresAt)
 	if err != nil {
 		return err
 	}
 
 	return db.Clauses(clause.OnConflict{
-		Columns:   []clause.Column{{Name: "identity"}, {Name: "name"}},
-		DoUpdates: clause.AssignmentColumns([]string{"data", "expires_at"}),
+		Columns:   []clause.Column{{Name: "identity"}, {Name: "name"}, {Name: "data"}},
+		DoUpdates: clause.AssignmentColumns([]string{"expires_at"}),
 	}).Create(row).Error
 }
 
-// DeleteGrant withdraws identity's grant for the action.
+// DeleteGrant withdraws every grant identity holds for the action.
 // Returns gorm.ErrRecordNotFound when no row matches.
 func (db *DB) DeleteGrant(identity *astral.Identity, action string) error {
 	tx := db.
@@ -44,44 +43,68 @@ func (db *DB) DeleteGrant(identity *astral.Identity, action string) error {
 	return nil
 }
 
-// FindGrant returns the unexpired permit granted to identity for the action,
-// or nil when the node has granted none.
+// DeleteGrantByID withdraws the one grant with the ID, when identity holds it.
+// Returns gorm.ErrRecordNotFound when no row matches.
+//
+// why the identity is matched too: an ID read from another identity's listing
+// must delete nothing.
+func (db *DB) DeleteGrantByID(identity *astral.Identity, id uint64) error {
+	tx := db.
+		Where("id = ? AND identity = ?", id, identity).
+		Delete(&dbGrant{})
+	if tx.Error != nil {
+		return tx.Error
+	}
+	if tx.RowsAffected == 0 {
+		return gorm.ErrRecordNotFound
+	}
+	return nil
+}
+
+// FindGrants returns every unexpired permit granted to identity for the
+// action, oldest first, or none when the node has granted none.
 //
 // why: both sides of the expiry comparison are UTC. The pure-Go sqlite driver
 // compares datetimes lexically, so a row stored in local time and queried
 // against a UTC now sorts wrongly and an expired grant keeps authorizing.
-func (db *DB) FindGrant(identity *astral.Identity, action string) (*auth.Permit, error) {
-	var row dbGrant
+func (db *DB) FindGrants(identity *astral.Identity, action string) (list []*auth.Permit, err error) {
+	var rows []*dbGrant
 
-	err := db.
+	err = db.
 		Where("identity = ? AND name = ?", identity, action).
 		Where("expires_at IS NULL OR expires_at > ?", time.Now().UTC()).
-		First(&row).Error
-
-	switch {
-	case errors.Is(err, gorm.ErrRecordNotFound):
-		return nil, nil
-	case err != nil:
+		Order("id").
+		Find(&rows).Error
+	if err != nil {
 		return nil, err
 	}
 
-	return toGrantPermit(&row)
+	for _, row := range rows {
+		permit, err := toGrantPermit(row)
+		if err != nil {
+			return nil, err
+		}
+		list = append(list, permit)
+	}
+
+	return list, nil
 }
 
 // ListGrants returns every grant held for identity, expired ones included, so
 // the caller can see what was granted rather than only what still applies.
 func (db *DB) ListGrants(identity *astral.Identity) (list []*dbGrant, err error) {
-	return list, db.Where("identity = ?", identity).Find(&list).Error
+	return list, db.Where("identity = ?", identity).Order("id").Find(&list).Error
 }
 
 // ListActiveGrants returns the grants held for identity that have not expired.
 //
-// why: the expiry predicate is FindGrant's, so a listing and an authorization
+// why: the expiry predicate is FindGrants', so a listing and an authorization
 // answer the same question. Both sides of the comparison are UTC, for the
-// reason FindGrant records.
+// reason FindGrants records.
 func (db *DB) ListActiveGrants(identity *astral.Identity) (list []*dbGrant, err error) {
 	return list, db.
 		Where("identity = ?", identity).
 		Where("expires_at IS NULL OR expires_at > ?", time.Now().UTC()).
+		Order("id").
 		Find(&list).Error
 }

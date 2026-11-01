@@ -8,8 +8,9 @@ import (
 	apphostmod "github.com/astralp2p/astrald/mod/apphost"
 )
 
-// Grant records a permit for identity on this node, replacing whatever it held
-// for the same action. A nil expiresAt grants until revoked.
+// Grant adds a permit for identity on this node beside the grants it already
+// holds; an identical permit refreshes its expiry. A nil expiresAt grants until
+// revoked.
 //
 // why: Delegation is forced to zero. A grant is not portable evidence — no other
 // node can read it — so passing it on is meaningless, and an issuer that wrote a
@@ -25,13 +26,20 @@ func (mod *Module) Grant(identity *astral.Identity, permit *auth.Permit, expires
 	local := *permit
 	local.Delegation = 0
 
-	return mod.db.UpsertGrant(identity, &local, expiresAt)
+	return mod.db.AddGrant(identity, &local, expiresAt)
 }
 
-// Revoke withdraws identity's grant for the action. It takes effect on the next
-// authorization; it does not undo what the identity did while it held the grant.
+// Revoke withdraws every grant identity holds for the action. It takes effect on
+// the next authorization; it does not undo what the identity did while it held
+// the grant.
 func (mod *Module) Revoke(identity *astral.Identity, action string) error {
 	return mod.db.DeleteGrant(identity, action)
+}
+
+// RevokeGrant withdraws the one grant with the ID that identity holds. An ID of
+// another identity's grant answers gorm.ErrRecordNotFound.
+func (mod *Module) RevokeGrant(identity *astral.Identity, id uint64) error {
+	return mod.db.DeleteGrantByID(identity, id)
 }
 
 // Grants returns every permit this node has granted identity, expired included.

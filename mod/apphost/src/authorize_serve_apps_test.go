@@ -393,8 +393,16 @@ func serveAppsRegistrar(t *testing.T) *Module {
 		t.Fatalf("open db: %v", err)
 	}
 
+	// note: every connection to :memory: opens its own database, so the pool
+	// holds one.
+	sqlDB, err := gdb.DB()
+	if err != nil {
+		t.Fatalf("sql db: %v", err)
+	}
+	sqlDB.SetMaxOpenConns(1)
+
 	db := &DB{DB: gdb}
-	if err := db.AutoMigrate(&dbGrant{}, &dbAccessToken{}); err != nil {
+	if err := db.migrate(); err != nil {
 		t.Fatalf("migrate: %v", err)
 	}
 

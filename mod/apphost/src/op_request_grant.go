@@ -19,7 +19,7 @@ type opRequestGrantArgs struct {
 
 // OpRequestGrant asks the grant request policy to grant the calling session's
 // identity the permits it names, and grants all of them on approval, until
-// revoked.
+// revoked, beside the grants it already holds.
 func (mod *Module) OpRequestGrant(ctx *astral.Context, q *routing.IncomingQuery, args opRequestGrantArgs) error {
 	// why before accepting: accepting drops the en-route entry naming the session and its origin.
 	requester := mod.sessionOwner(q)

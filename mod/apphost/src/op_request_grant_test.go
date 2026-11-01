@@ -8,6 +8,7 @@ import (
 	"github.com/astralp2p/astral-go/api/apphost"
 	"github.com/astralp2p/astral-go/api/auth"
 	"github.com/astralp2p/astral-go/api/policy"
+	"github.com/astralp2p/astral-go/api/services"
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astral-go/astral/channel"
 	apphostmod "github.com/astralp2p/astrald/mod/apphost"
@@ -159,6 +160,35 @@ func TestRequestGrantAsksTheDelegateAndGrants(t *testing.T) {
 		if row.ExpiresAt != nil {
 			t.Fatalf("grant %v expires at %v; want until revoked", row.Name, row.ExpiresAt)
 		}
+	}
+}
+
+// An approved request adds its permits beside the grants the identity already
+// holds, so an earlier scoped discovery grant keeps authorizing.
+func TestApprovedRequestKeepsAnEarlierScopedGrant(t *testing.T) {
+	node := newDelegateNode(&apphost.GrantDecision{Allow: true})
+	mod := grantRequester(t, node)
+	owner, target := astral.GenerateIdentity(), astral.GenerateIdentity()
+	action := astral.String8(services.ServiceDiscoveryAction{}.ObjectType())
+
+	if err := mod.Grant(owner, &auth.Permit{Action: action, Constraints: playerScope()}, nil); err != nil {
+		t.Fatalf("grant: %v", err)
+	}
+
+	q := sessionQuery(mod, owner, owner, "apphost.request_grant?permits="+string(action))
+	if got := requestGrant(t, mod, q); got != ackAnswer {
+		t.Fatalf("answered %q; want ack", got)
+	}
+
+	permits, err := mod.Grants(owner)
+	if err != nil {
+		t.Fatalf("list grants: %v", err)
+	}
+	if len(permits) != 2 || permits[0].Constraints == nil || permits[1].Constraints != nil {
+		t.Fatalf("granted %+v; want the scoped permit, then the unconstrained one", permits)
+	}
+	if !mod.AuthorizeServiceDiscovery(nil, discoveryAction(owner, target, "player")) {
+		t.Fatal("the approved request withdrew the scoped grant")
 	}
 }
 

@@ -48,7 +48,7 @@ func TestUseBlueprintsGrantAuthorizesTheGrantedApp(t *testing.T) {
 func TestUseBlueprintsGrantRefusesUnusableGrants(t *testing.T) {
 	mod := testGrantModule(t)
 	expired, constrained, other := astral.GenerateIdentity(), astral.GenerateIdentity(), astral.GenerateIdentity()
-	// note: FindGrant compares a stored expiry with the UTC clock (db_grants.go).
+	// note: FindGrants compares a stored expiry with the UTC clock (db_grants.go).
 	past := time.Now().UTC().Add(-time.Hour)
 
 	narrowed := useBlueprintsGrant()
