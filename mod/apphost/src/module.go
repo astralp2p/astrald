@@ -52,8 +52,8 @@ type Module struct {
 	// policy persists the registration and grant request delegates and the
 	// grant request mode. An unset register delegate selects accept-all for
 	// registration. A grant request delegate selects the delegate mode;
-	// otherwise the mode accept_all selects accept-all, and an unset mode or
-	// reject_all selects refuse-all for grant requests. GetRegisterAppPolicy
+	// otherwise an unset mode or accept_all selects accept-all, and any other
+	// mode selects refuse-all for grant requests. GetRegisterAppPolicy
 	// and GetGrantRequestPolicy read it on every decision.
 	policy policyConfig
 }

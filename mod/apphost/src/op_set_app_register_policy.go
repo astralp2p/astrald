@@ -27,7 +27,7 @@ type opSetPolicyArgs struct {
 // opSetGrantRequestPolicyArgs selects the grant request policy: Mode alone
 // selects accept_all or reject_all; Identity and Operation, with an optional
 // Timeout, select the delegate mode; all empty restores the bundled
-// reject_all.
+// accept_all.
 type opSetGrantRequestPolicyArgs struct {
 	Mode      string
 	Identity  string
