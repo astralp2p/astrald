@@ -97,8 +97,8 @@ func heldActions(t *testing.T, mod *Module, id *astral.Identity) []string {
 }
 
 // The register delegate does not decide grant requests: with only it set, the
-// bundled policy refuses and nobody is asked.
-func TestRequestGrantRefusedWithoutItsDelegate(t *testing.T) {
+// bundled policy grants and nobody is asked.
+func TestRequestGrantIgnoresTheRegisterDelegate(t *testing.T) {
 	node := newDelegateNode(&apphost.AppRegisterDecision{Allow: true})
 	mod := serveAppsRegistrar(t)
 	mod.node = node
@@ -109,14 +109,14 @@ func TestRequestGrantRefusedWithoutItsDelegate(t *testing.T) {
 	owner := astral.GenerateIdentity()
 
 	got := requestGrant(t, mod, sessionQuery(mod, owner, owner, "apphost.request_grant"), asking("mod.auth.see_objects_action"))
-	if want := apphost.ErrGrantDeclined.Error(); got != want {
-		t.Fatalf("answered %q; want %q", got, want)
+	if got != ackAnswer {
+		t.Fatalf("answered %q; want %q", got, ackAnswer)
 	}
 	if len(node.queried) != 0 {
 		t.Fatal("the register delegate was asked a grant request")
 	}
-	if held := heldActions(t, mod, owner); len(held) != 0 {
-		t.Fatalf("a refused request granted %q", held)
+	if held := heldActions(t, mod, owner); len(held) != 1 {
+		t.Fatalf("the identity holds %q; want the one permit", held)
 	}
 }
 
@@ -326,7 +326,7 @@ func TestSetGrantRequestPolicyWritesItsOwnValue(t *testing.T) {
 	if got, want := set(mod, "?mode=accept_all"), ackAnswer; got != want {
 		t.Fatalf("answered %q; want %q", got, want)
 	}
-	if m := mod.policy.GrantRequestMode.Get(); m == nil || m.String() != apphostmod.GrantRequestAcceptAll {
+	if m, ok := mod.policy.GrantRequestMode.Get().(*astral.String8); !ok || m.String() != apphostmod.GrantRequestAcceptAll {
 		t.Fatalf("persisted mode %v; want accept_all", m)
 	}
 	if !mod.policy.GrantRequest.Get().IsZero() {

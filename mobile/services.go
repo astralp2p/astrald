@@ -97,8 +97,9 @@ func (a nativeEvaluator) Evaluate(caller *astral.Identity, service string) *serv
 // beside earlier discovery grants of app and lasts until revoked. Granting the
 // same names again refreshes the one grant; a changed name list adds a grant and
 // the earlier one stays until revoked. The platform wrapper issues it for the
-// apps it runs, such as the contacts service, which cannot grant it to
-// themselves.
+// apps it runs, such as the contacts service, so they hold it without asking
+// through apphost.request_grant, which a delegate may refuse and which
+// reject_all or any other mode refuses.
 func (n *Node) GrantServiceDiscovery(app, names string) error {
 	n.mu.Lock()
 	cnode := n.cnode
