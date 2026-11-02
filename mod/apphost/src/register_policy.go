@@ -21,10 +21,14 @@ const policyPath = "/mod/apphost/policy"
 // why apart from Config: Config is read from apphost.yaml and copied from
 // defaultConfig, and a tree.Value carries a mutex, so it cannot ride a copied
 // struct.
+//
+// why GrantRequestMode holds any object: tree.Value reads a stored object of
+// another type as nil, so a mode bound as String8 would read a wrong-typed
+// value as unset and accept.
 type policyConfig struct {
 	AppRegister      tree.Value[*policy.Delegate]
 	GrantRequest     tree.Value[*policy.Delegate]
-	GrantRequestMode tree.Value[*astral.String8]
+	GrantRequestMode tree.Value[astral.Object]
 }
 
 // GetRegisterAppPolicy returns the policy apphost.register applies: the
@@ -74,8 +78,13 @@ func (mod *Module) GetGrantRequestPolicy() apphostmod.GrantRequestPolicy {
 	if d := mod.policy.GrantRequest.Get(); !d.IsZero() {
 		return mod.GrantRequestPolicyDelegated(d)
 	}
-	if m := mod.policy.GrantRequestMode.Get(); m == nil || m.String() == apphostmod.GrantRequestAcceptAll {
+	switch m := mod.policy.GrantRequestMode.Get().(type) {
+	case nil:
 		return apphostmod.AcceptAllGrants
+	case *astral.String8:
+		if m.String() == apphostmod.GrantRequestAcceptAll {
+			return apphostmod.AcceptAllGrants
+		}
 	}
 	return apphostmod.RefuseAllGrants
 }

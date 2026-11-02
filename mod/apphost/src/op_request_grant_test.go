@@ -346,8 +346,8 @@ func TestRequestGrantForAHeldPermitAsks(t *testing.T) {
 }
 
 // TestRequestGrantModes: unset and accept_all grant without asking anyone,
-// reject_all and any other mode decline without asking anyone, and a stored
-// delegate with no mode is asked.
+// reject_all and any other mode value, of any type, decline without asking
+// anyone, and a stored delegate with no mode is asked.
 func TestRequestGrantModes(t *testing.T) {
 	for _, tc := range []struct {
 		name     string
@@ -358,6 +358,7 @@ func TestRequestGrantModes(t *testing.T) {
 		{"unset", "", false, ackAnswer},
 		{"reject_all", apphostmod.GrantRequestRejectAll, false, apphost.ErrGrantDeclined.Error()},
 		{"unknown mode", "bogus", false, apphost.ErrGrantDeclined.Error()},
+		{"wrong-typed mode", "string16:accept_all", false, apphost.ErrGrantDeclined.Error()},
 		{"accept_all", apphostmod.GrantRequestAcceptAll, false, ackAnswer},
 		{"delegate", "", true, ackAnswer},
 	} {
@@ -373,7 +374,11 @@ func TestRequestGrantModes(t *testing.T) {
 				}
 			}
 			if tc.mode != "" {
-				if err := mod.policy.GrantRequestMode.Set(ctx, astral.NewString8(tc.mode)); err != nil {
+				var mode astral.Object = astral.NewString8(tc.mode)
+				if s, ok := strings.CutPrefix(tc.mode, "string16:"); ok {
+					mode = astral.NewString16(s)
+				}
+				if err := mod.policy.GrantRequestMode.Set(ctx, mode); err != nil {
 					t.Fatalf("set mode: %v", err)
 				}
 			}
@@ -427,7 +432,7 @@ func TestSetGrantRequestPolicyWritesItsOwnValue(t *testing.T) {
 	if got, want := set(mod, "?mode=accept_all"), ackAnswer; got != want {
 		t.Fatalf("answered %q; want %q", got, want)
 	}
-	if m := mod.policy.GrantRequestMode.Get(); m == nil || m.String() != apphostmod.GrantRequestAcceptAll {
+	if m, ok := mod.policy.GrantRequestMode.Get().(*astral.String8); !ok || m.String() != apphostmod.GrantRequestAcceptAll {
 		t.Fatalf("persisted mode %v; want accept_all", m)
 	}
 	if !mod.policy.GrantRequest.Get().IsZero() {
