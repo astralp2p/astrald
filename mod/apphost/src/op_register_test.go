@@ -371,13 +371,18 @@ func TestRegisterRefusesBeforeThePolicy(t *testing.T) {
 			mod := delegatedRegistrar(t, steps, node)
 
 			w := newRecordingWriter()
+			var got string
 			if tc.req == nil {
-				// note: the caller closes its side without sending a request.
+				// note: the caller closes its side without sending a request. The
+				// op's read error closes the answer direction, so no answer is read.
 				routeOpen(t, mod.OpRegister, astral.GenerateIdentity(), "apphost.register", w).Close()
-			} else if err := routeSending(t, mod.OpRegister, astral.GenerateIdentity(), "apphost.register"+tc.query, tc.req, w); err != nil {
-				t.Fatalf("route: %v", err)
+				awaitServeAppsClose(t, w)
+			} else {
+				if err := routeSending(t, mod.OpRegister, astral.GenerateIdentity(), "apphost.register"+tc.query, tc.req, w); err != nil {
+					t.Fatalf("route: %v", err)
+				}
+				got = readReply(t, w)
 			}
-			got := readReply(t, w)
 			if tc.want != "" && got != tc.want {
 				t.Fatalf("answered %q; want %q", got, tc.want)
 			}
