@@ -23,6 +23,10 @@ var (
 	// node still signs; see AuthorizeSigner in the src package for why the
 	// caller's identity is not evidence enough here.
 	ErrNodeKeyNotSignable = errors.New("cannot sign with the node's key")
+
+	// ErrSignerGone is returned when the binding of a key's signer ended before
+	// the signer answered.
+	ErrSignerGone = errors.New("signer is gone")
 )
 
 // ErrKeyNotHeld is returned when no engine signs as Key: the node holds no
@@ -40,7 +44,7 @@ func (e *ErrKeyNotHeld) Error() string {
 	}
 	text, _ := e.Key.MarshalText()
 	return fmt.Sprintf("no signing scheme available for key %s: the node holds no usable private key for it; "+
-		"a key is held as an indexed mod.crypto.private_key object or on a connected signing device", text)
+		"a key is held as an indexed mod.crypto.private_key object or by an app holding a crypto.register_signer binding for it", text)
 }
 
 // Unwrap answers ErrUnsupported, so callers checking for it still match.
