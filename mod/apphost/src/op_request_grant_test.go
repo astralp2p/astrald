@@ -98,8 +98,8 @@ func heldActions(t *testing.T, mod *Module, id *astral.Identity) []string {
 }
 
 // The register delegate does not decide grant requests: with only it set, the
-// bundled policy refuses and nobody is asked.
-func TestRequestGrantRefusedWithoutItsDelegate(t *testing.T) {
+// bundled policy grants and nobody is asked.
+func TestRequestGrantIgnoresTheRegisterDelegate(t *testing.T) {
 	node := newDelegateNode(&apphost.AppRegisterDecision{Allow: true})
 	mod := serveAppsRegistrar(t)
 	mod.node = node
@@ -110,14 +110,14 @@ func TestRequestGrantRefusedWithoutItsDelegate(t *testing.T) {
 	owner := astral.GenerateIdentity()
 
 	got := requestGrant(t, mod, sessionQuery(mod, owner, owner, "apphost.request_grant"), asking("mod.auth.see_objects_action"))
-	if want := apphost.ErrGrantDeclined.Error(); got != want {
-		t.Fatalf("answered %q; want %q", got, want)
+	if got != ackAnswer {
+		t.Fatalf("answered %q; want %q", got, ackAnswer)
 	}
 	if len(node.queried) != 0 {
 		t.Fatal("the register delegate was asked a grant request")
 	}
-	if held := heldActions(t, mod, owner); len(held) != 0 {
-		t.Fatalf("a refused request granted %q", held)
+	if held := heldActions(t, mod, owner); len(held) != 1 {
+		t.Fatalf("the identity holds %q; want the one permit", held)
 	}
 }
 
@@ -345,9 +345,9 @@ func TestRequestGrantForAHeldPermitAsks(t *testing.T) {
 	}
 }
 
-// TestRequestGrantModes: unset and reject_all decline without asking anyone,
-// accept_all grants without asking anyone, and a stored delegate with no mode
-// is asked.
+// TestRequestGrantModes: unset and accept_all grant without asking anyone,
+// reject_all and any other mode decline without asking anyone, and a stored
+// delegate with no mode is asked.
 func TestRequestGrantModes(t *testing.T) {
 	for _, tc := range []struct {
 		name     string
@@ -355,8 +355,9 @@ func TestRequestGrantModes(t *testing.T) {
 		delegate bool
 		want     string
 	}{
-		{"unset", "", false, apphost.ErrGrantDeclined.Error()},
+		{"unset", "", false, ackAnswer},
 		{"reject_all", apphostmod.GrantRequestRejectAll, false, apphost.ErrGrantDeclined.Error()},
+		{"unknown mode", "bogus", false, apphost.ErrGrantDeclined.Error()},
 		{"accept_all", apphostmod.GrantRequestAcceptAll, false, ackAnswer},
 		{"delegate", "", true, ackAnswer},
 	} {
