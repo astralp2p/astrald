@@ -49,10 +49,12 @@ type Module struct {
 	enRoute               sig.Map[astral.Nonce, *queryEnRoute]
 	pendingInboundQueries sig.Map[astral.Nonce, *pendingInboundQuery]
 
-	// policy persists the registration and grant request delegates; an unset
-	// value selects accept-all for registration and refuse-all for grant
-	// requests. GetRegisterAppPolicy and GetGrantRequestPolicy read it on every
-	// decision.
+	// policy persists the registration and grant request delegates and the
+	// grant request mode. An unset register delegate selects accept-all for
+	// registration. A grant request delegate selects the delegate mode;
+	// otherwise an unset mode or accept_all selects accept-all, and any other
+	// mode selects refuse-all for grant requests. GetRegisterAppPolicy
+	// and GetGrantRequestPolicy read it on every decision.
 	policy policyConfig
 }
 

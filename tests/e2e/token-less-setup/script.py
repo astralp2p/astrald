@@ -70,7 +70,10 @@ async def probe_claimed(c) -> dict:
 async def register_admin(c, endpoint: str) -> dict:
     """Register an app asking for admin rights; list tokens and ask whoami with
     no caller, as the app."""
-    app = await jsonops.value(c, f"apphost.register?grant_permits={ADMIN}&out=json")
+    app = await jsonops.value(
+        c, "apphost.register?in=json&out=json",
+        body={"Type": "mod.apphost.register_request",
+              "Object": {"GrantPermits": [{"Action": ADMIN}]}})
     async with await astral.connect(endpoint, token=app["Token"]) as a:
         tokens = await attempt(a.apphost.list_tokens())
         who = await a.apphost.whoami(caller=None)

@@ -93,10 +93,13 @@ func (a nativeEvaluator) Evaluate(caller *astral.Identity, service string) *serv
 }
 
 // GrantServiceDiscovery lets app, an identity in hex, discover names
-// (comma-separated) on every node of the swarm. It is a node-local grant that
-// replaces any earlier discovery grant of app and lasts until revoked. The
-// platform wrapper issues it for the apps it runs, such as the contacts
-// service, which cannot grant it to themselves.
+// (comma-separated) on every node of the swarm. It is a node-local grant added
+// beside earlier discovery grants of app and lasts until revoked. Granting the
+// same names again refreshes the one grant; a changed name list adds a grant and
+// the earlier one stays until revoked. The platform wrapper issues it for the
+// apps it runs, such as the contacts service, so they hold it without asking
+// through apphost.request_grant, which a delegate may refuse and which
+// reject_all or any other mode refuses.
 func (n *Node) GrantServiceDiscovery(app, names string) error {
 	n.mu.Lock()
 	cnode := n.cnode

@@ -36,6 +36,8 @@ const (
 	waitFor     = 15 * time.Second
 )
 
+var registerSigner = &auth.Permit{Action: astral.String8(auth.RegisterSignerAction{}.ObjectType())}
+
 type node struct {
 	Endpoint string `json:"endpoint"`
 	Token    string `json:"token"`
@@ -150,7 +152,7 @@ type world struct {
 }
 
 // appClient registers one app holding permits and returns its session and identity.
-func (w *world) appClient(permits ...string) (*astrald.Client, *astral.Identity, error) {
+func (w *world) appClient(permits ...*auth.Permit) (*astrald.Client, *astral.Identity, error) {
 	token, err := w.apps.Register(w.ctx, permits...)
 	if err != nil {
 		return nil, nil, fmt.Errorf("register: %w", err)
@@ -194,7 +196,7 @@ func run(path string, facts map[string]bool) (string, error) {
 	}
 	userID := secp256k1.Identity(w.userKey)
 
-	w.signerApp, _, err = w.appClient(auth.RegisterSignerAction{}.ObjectType())
+	w.signerApp, _, err = w.appClient(registerSigner)
 	if err != nil {
 		return userID.String(), err
 	}
@@ -290,7 +292,7 @@ func probeAdmission(w *world, facts map[string]bool) error {
 	userPair := &crypto.SignerKeys{Keys: []*crypto.SignerKey{{Key: w.userKey, Scheme: crypto.SchemeBIP137}}}
 	facts["no_permit_refused"] = claim(w.ctx, stranger, userPair) == auth.ErrNotPermitted.Error()
 
-	permitted, _, err := w.appClient(auth.RegisterSignerAction{}.ObjectType())
+	permitted, _, err := w.appClient(registerSigner)
 	if err != nil {
 		return err
 	}
@@ -325,7 +327,7 @@ func (s *countingSigner) SignHash(*astral.Context, *crypto.SignHashRequest) (*cr
 
 // probeLocalKey has an app claim its own key, which the node generated and holds.
 func probeLocalKey(w *world, facts map[string]bool) error {
-	app, id, err := w.appClient(auth.RegisterSignerAction{}.ObjectType())
+	app, id, err := w.appClient(registerSigner)
 	if err != nil {
 		return err
 	}

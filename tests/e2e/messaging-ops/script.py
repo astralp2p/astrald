@@ -80,7 +80,9 @@ async def mint(n: dict) -> dict:
         minted = {name: await mail.create_mailbox(admin, alias)
                   for name, alias in ALIASES.items()}
         minted["info_ada"] = await mail.mailbox(admin, ALIASES["ada"])
-        minted["app"] = await jsonops.value(admin, "apphost.register?out=json")
+        minted["app"] = await jsonops.value(
+            admin, "apphost.register?in=json&out=json",
+            body={"Type": "mod.apphost.register_request", "Object": {}})
         minted["bob_second"] = await jsonops.value(admin, querystring.build(
             "apphost.create_token",
             {"identity": minted["bob"]["Identity"], "out": "json"}))

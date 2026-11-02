@@ -67,10 +67,10 @@ $ ASTRALD_APPHOST_TOKEN=b9c2e1a3d4f5867a astral-query user.info -out json
 
 ## Generating guest identity for apps and AI agents
 
-To create a new astral identity along with an access token for it, send a `apphost.register` query to the local node. It will send back a single `apphost.access_token` object:
+To create a new astral identity along with an access token for it, send a `apphost.register` query to the local node with one `mod.apphost.register_request` object as its input. It will send back a single `apphost.access_token` object:
 
 ```shellsession
-$ astral-query apphost.register -out json | jq
+$ echo '{"Type":"mod.apphost.register_request","Object":{}}' | astral-query apphost.register -in json -out json | jq
 {
   "Type": "apphost.access_token",
   "Object": {
