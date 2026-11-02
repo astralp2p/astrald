@@ -446,8 +446,11 @@ func TestSetGrantRequestPolicyWritesItsOwnValue(t *testing.T) {
 	if got, want := set(mod, "?mode=bogus"), "unknown mode: bogus"; got != want {
 		t.Fatalf("answered %q; want %q", got, want)
 	}
-	if d := mod.policy.GrantRequest.Get(); d.IsZero() {
-		t.Fatal("a refused set cleared the delegate")
+	if got, want := set(mod, "?mode=accept_all&timeout=1m"), "unknown argument: timeout"; got != want {
+		t.Fatalf("answered %q; want %q", got, want)
+	}
+	if d := mod.policy.GrantRequest.Get(); d.IsZero() || mod.policy.GrantRequestMode.Get() != nil {
+		t.Fatal("a refused set changed the delegate or the mode")
 	}
 
 	if got, want := set(mod, "?mode=reject_all"), ackAnswer; got != want {

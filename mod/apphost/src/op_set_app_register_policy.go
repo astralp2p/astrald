@@ -25,8 +25,9 @@ type opSetPolicyArgs struct {
 }
 
 // opSetGrantRequestPolicyArgs selects the grant request policy: Mode alone
-// selects accept_all or reject_all; Identity and Operation select the delegate
-// mode; all empty restores the bundled reject_all.
+// selects accept_all or reject_all; Identity and Operation, with an optional
+// Timeout, select the delegate mode; all empty restores the bundled
+// reject_all.
 type opSetGrantRequestPolicyArgs struct {
 	Mode      string
 	Identity  string
@@ -65,7 +66,7 @@ func (mod *Module) OpSetAppRegisterPolicy(ctx *astral.Context, q *routing.Incomi
 
 // OpSetGrantRequestPolicy selects the policy for apphost.request_grant and
 // answers Ack once the choice is persisted. A mode clears the delegate, and a
-// delegate clears the mode.
+// delegate clears the mode. A mode given with a timeout is refused.
 //
 // why AdminManageApps: the policy decides which permits apps may add to
 // themselves, which is the administration of app credentials that action
@@ -89,9 +90,15 @@ func (mod *Module) OpSetGrantRequestPolicy(ctx *astral.Context, q *routing.Incom
 		if args.Identity != "" || args.Operation != "" {
 			return ch.Send(astral.NewError("give mode or a delegate, not both"))
 		}
-		err = mod.policy.GrantRequestMode.Set(ctx, astral.NewString8(args.Mode))
+		// why: timeout bounds a delegate's question, and a mode asks no one.
+		if err = refuseRemovedArgs(q.QueryString(), "timeout"); err != nil {
+			return ch.Send(astral.Err(err))
+		}
+		// why the delegate first: a delegate outranks the mode, so a failed
+		// mode write leaves no delegate in force, only the earlier mode.
+		err = mod.policy.GrantRequest.Clear(ctx)
 		if err == nil {
-			err = mod.policy.GrantRequest.Clear(ctx)
+			err = mod.policy.GrantRequestMode.Set(ctx, astral.NewString8(args.Mode))
 		}
 	default:
 		return ch.Send(astral.NewError("unknown mode: " + args.Mode))
