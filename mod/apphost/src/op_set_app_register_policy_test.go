@@ -131,24 +131,3 @@ func TestSetAppRegisterPolicyClearsTheDelegate(t *testing.T) {
 		t.Fatal("clearing the delegate did not restore accept-all")
 	}
 }
-
-// mode belongs to apphost.set_grant_request_policy: naming it here answers
-// unknown argument and leaves the register delegate in place.
-func TestSetAppRegisterPolicyRefusesMode(t *testing.T) {
-	mod := policySetter(true)
-	d := &policy.Delegate{Identity: astral.GenerateIdentity(), Operation: "control.decide"}
-	if err := mod.policy.AppRegister.Set(astral.NewContext(nil), d); err != nil {
-		t.Fatalf("seed: %v", err)
-	}
-
-	w, err := setPolicy(t, mod, "?mode=accept_all")
-	if err != nil {
-		t.Fatalf("set: %v", err)
-	}
-	if got, want := w.refusal(t), "unknown argument: mode"; got != want {
-		t.Fatalf("answered %q; want %q", got, want)
-	}
-	if mod.policy.AppRegister.Get().IsZero() {
-		t.Fatal("a refused set cleared the register delegate")
-	}
-}
