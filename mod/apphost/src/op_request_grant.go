@@ -1,6 +1,8 @@
 package apphost
 
 import (
+	"errors"
+
 	apphostapi "github.com/astralp2p/astral-go/api/apphost"
 	"github.com/astralp2p/astral-go/api/auth"
 	"github.com/astralp2p/astral-go/astral"
@@ -40,21 +42,8 @@ func (mod *Module) OpRequestGrant(ctx *astral.Context, q *routing.IncomingQuery,
 	if requester.IsZero() {
 		return ch.Send(auth.ErrNotPermitted)
 	}
-	if err := refuseRemovedArgs(q.QueryString(), "permits"); err != nil {
-		return ch.Send(astral.Err(err))
-	}
-
-	var req *apphostapi.RequestGrantRequest
-	if err := ch.Switch(channel.Expect(&req), channel.FailOnEOF()); err != nil {
-		return ch.Send(astral.Err(err))
-	}
-	switch {
-	case len(req.Permits) == 0:
-		return ch.Send(astral.NewError("missing permits"))
-	case req.Duration < 0:
-		return ch.Send(astral.NewError("negative duration"))
-	}
-	if err := validatePermits(req.Permits); err != nil {
+	req, err := receiveGrantPolicyRequest(ch, q.QueryString(), requester, origin)
+	if err != nil {
 		return ch.Send(astral.Err(err))
 	}
 
@@ -63,9 +52,7 @@ func (mod *Module) OpRequestGrant(ctx *astral.Context, q *routing.IncomingQuery,
 	policyCtx, stop := routing.UntilDisconnect(ctx, conn)
 	defer stop()
 
-	dec, err := mod.GetGrantRequestPolicy()(policyCtx, &apphostapi.GrantPolicyRequest{
-		Requester: requester, Origin: astral.String8(origin), Permits: req.Permits, Duration: req.Duration,
-	})
+	dec, err := mod.GetGrantRequestPolicy()(policyCtx, req)
 	switch {
 	case err != nil:
 		mod.log.Logv(1, "grant request from %v refused: %v", requester, err)
@@ -82,4 +69,32 @@ func (mod *Module) OpRequestGrant(ctx *astral.Context, q *routing.IncomingQuery,
 	}
 	mod.log.Logv(1, "granted %v requested permits to %v", len(req.Permits), requester)
 	return ch.Send(&astral.Ack{})
+}
+
+// receiveGrantPolicyRequest refuses a removed argument in queryString, reads
+// one mod.apphost.request_grant_request from ch, and returns the question the
+// grant request policy decides. A request without permits, with a negative
+// duration or with an invalid permit is refused before any policy is asked.
+func receiveGrantPolicyRequest(ch *channel.Channel, queryString string, requester *astral.Identity, origin string) (*apphostapi.GrantPolicyRequest, error) {
+	if err := refuseRemovedArgs(queryString, "permits"); err != nil {
+		return nil, err
+	}
+
+	var req *apphostapi.RequestGrantRequest
+	if err := ch.Switch(channel.Expect(&req), channel.FailOnEOF()); err != nil {
+		return nil, err
+	}
+	switch {
+	case len(req.Permits) == 0:
+		return nil, errors.New("missing permits")
+	case req.Duration < 0:
+		return nil, errors.New("negative duration")
+	}
+	if err := validatePermits(req.Permits); err != nil {
+		return nil, err
+	}
+
+	return &apphostapi.GrantPolicyRequest{
+		Requester: requester, Origin: astral.String8(origin), Permits: req.Permits, Duration: req.Duration,
+	}, nil
 }

@@ -49,18 +49,8 @@ func (mod *Module) OpRegister(ctx *astral.Context, query *routing.IncomingQuery,
 		return ch.Send(astral.NewErrOriginNotAllowed(query.Origin()))
 	}
 
-	if err = refuseRemovedArgs(query.QueryString(), "name", "grant_permits", "contract_permits"); err != nil {
-		return ch.Send(astral.Err(err))
-	}
-
-	var req *apphostapi.RegisterRequest
-	if err = ch.Switch(channel.Expect(&req), channel.FailOnEOF()); err != nil {
-		return ch.Send(astral.Err(err))
-	}
-	if err = validatePermits(req.GrantPermits); err != nil {
-		return ch.Send(astral.Err(err))
-	}
-	if err = validatePermits(req.ContractPermits); err != nil {
+	req, err := receiveAppRegisterRequest(ch, query.QueryString(), origin)
+	if err != nil {
 		return ch.Send(astral.Err(err))
 	}
 
@@ -69,12 +59,7 @@ func (mod *Module) OpRegister(ctx *astral.Context, query *routing.IncomingQuery,
 	policyCtx, stop := routing.UntilDisconnect(ctx, conn)
 	defer stop()
 
-	dec, err := mod.GetRegisterAppPolicy()(policyCtx, &apphostapi.AppRegisterRequest{
-		Origin:          astral.String8(origin),
-		Name:            req.Name,
-		GrantPermits:    registerGrantRequest(req.GrantPermits),
-		ContractPermits: req.ContractPermits,
-	})
+	dec, err := mod.GetRegisterAppPolicy()(policyCtx, req)
 	switch {
 	case err != nil:
 		mod.log.Logv(1, "registration refused: %v", err)
@@ -197,4 +182,32 @@ func (mod *Module) OpRegister(ctx *astral.Context, query *routing.IncomingQuery,
 
 	mod.log.Logv(1, "registered guest %v until %v (%v)", token.Identity, tv, contractID)
 	return ch.Send(token)
+}
+
+// receiveAppRegisterRequest refuses a removed argument in queryString, reads
+// one mod.apphost.register_request from ch, and returns the question the
+// register policy decides, with the origin the node read. A request with an
+// invalid permit is refused before any policy is asked.
+func receiveAppRegisterRequest(ch *channel.Channel, queryString, origin string) (*apphostapi.AppRegisterRequest, error) {
+	if err := refuseRemovedArgs(queryString, "name", "grant_permits", "contract_permits"); err != nil {
+		return nil, err
+	}
+
+	var req *apphostapi.RegisterRequest
+	if err := ch.Switch(channel.Expect(&req), channel.FailOnEOF()); err != nil {
+		return nil, err
+	}
+	if err := validatePermits(req.GrantPermits); err != nil {
+		return nil, err
+	}
+	if err := validatePermits(req.ContractPermits); err != nil {
+		return nil, err
+	}
+
+	return &apphostapi.AppRegisterRequest{
+		Origin:          astral.String8(origin),
+		Name:            req.Name,
+		GrantPermits:    registerGrantRequest(req.GrantPermits),
+		ContractPermits: req.ContractPermits,
+	}, nil
 }
