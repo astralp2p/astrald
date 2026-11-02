@@ -235,9 +235,9 @@ func TestServeAppsGrantRefusesAConstrainedPermit(t *testing.T) {
 func TestRegisterGrantRequestLeadsWithTheDefaults(t *testing.T) {
 	defaults := []string{auth.ServeAppsAction{}.ObjectType(), auth.UseBlueprintsAction{}.ObjectType()}
 
-	for _, asked := range []string{"", "mod.user.see_swarm_action"} {
-		requested := registerGrantRequest(asked)
-		want := append(append([]string{}, defaults...), actions(parsePermits(asked))...)
+	for _, asked := range [][]string{nil, {"mod.user.see_swarm_action"}} {
+		requested := registerGrantRequest(permits(asked...))
+		want := append(append([]string{}, defaults...), asked...)
 
 		if got := actions(requested); !slices.Equal(got, want) {
 			t.Fatalf("asked %q: the policy is handed %v; want %v", asked, got, want)
@@ -422,7 +422,7 @@ func TestServeAppsRegistrationWritesTheGrant(t *testing.T) {
 	mod := serveAppsRegistrar(t)
 	w := newRecordingWriter()
 
-	if err := route(t, mod.OpRegister, astral.GenerateIdentity(), "apphost.register", w); err != nil {
+	if err := register(t, mod, &apphost.RegisterRequest{}, w); err != nil {
 		t.Fatalf("apphost.register refused: %v", err)
 	}
 	awaitServeAppsClose(t, w)

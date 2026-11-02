@@ -3,6 +3,7 @@ package apphost
 import (
 	"time"
 
+	apphostapi "github.com/astralp2p/astral-go/api/apphost"
 	"github.com/astralp2p/astral-go/api/auth"
 	"github.com/astralp2p/astral-go/astral"
 	apphostmod "github.com/astralp2p/astrald/mod/apphost"
@@ -11,22 +12,32 @@ import (
 // Grant adds a permit for identity on this node beside the grants it already
 // holds; an identical permit refreshes its expiry. A nil expiresAt grants until
 // revoked.
+func (mod *Module) Grant(identity *astral.Identity, permit *auth.Permit, expiresAt *time.Time) error {
+	return mod.grantAll(identity, []*auth.Permit{permit}, expiresAt)
+}
+
+// grantAll adds every permit for identity, as Grant does, in one transaction:
+// either every permit is recorded or none is.
 //
 // why: Delegation is forced to zero. A grant is not portable evidence — no other
 // node can read it — so passing it on is meaningless, and an issuer that wrote a
 // non-zero hop count would be describing authority the grant cannot carry.
-func (mod *Module) Grant(identity *astral.Identity, permit *auth.Permit, expiresAt *time.Time) error {
+func (mod *Module) grantAll(identity *astral.Identity, permits []*auth.Permit, expiresAt *time.Time) error {
 	if identity == nil || identity.IsZero() {
 		return apphostmod.ErrInvalidIdentity
 	}
-	if permit == nil || len(permit.Action) == 0 {
-		return apphostmod.ErrInvalidPermit
+
+	local := make([]*auth.Permit, 0, len(permits))
+	for _, permit := range permits {
+		if permit == nil || len(permit.Action) == 0 {
+			return apphostmod.ErrInvalidPermit
+		}
+		p := *permit
+		p.Delegation = 0
+		local = append(local, &p)
 	}
 
-	local := *permit
-	local.Delegation = 0
-
-	return mod.db.AddGrant(identity, &local, expiresAt)
+	return mod.db.AddGrants(identity, local, expiresAt)
 }
 
 // Revoke withdraws every grant identity holds for the action. It takes effect on
@@ -60,13 +71,12 @@ func (mod *Module) Grants(identity *astral.Identity) (list []*auth.Permit, err e
 	return
 }
 
-// activeGrants returns the permits identity holds right now, dropping every
-// grant that has expired.
+// activeGrants returns the grants identity holds right now, with their IDs and
+// expiries, dropping every grant that has expired.
 //
-// why: Grants reports what was granted, expiry included, for a caller holding
-// the row. A permit alone carries no expiry, so the wire listing reports what
-// still authorizes rather than a lapsed grant it could not mark.
-func (mod *Module) activeGrants(identity *astral.Identity) (list []*auth.Permit, err error) {
+// why: the wire listing reports what still authorizes, as the authorizer
+// reads it; Grants reports what was granted, expired included.
+func (mod *Module) activeGrants(identity *astral.Identity) (list []*apphostapi.Grant, err error) {
 	rows, err := mod.db.ListActiveGrants(identity)
 	if err != nil {
 		return nil, err
@@ -77,7 +87,12 @@ func (mod *Module) activeGrants(identity *astral.Identity) (list []*auth.Permit,
 		if err != nil {
 			return nil, err
 		}
-		list = append(list, permit)
+		grant := &apphostapi.Grant{ID: astral.Uint64(row.ID), Permit: permit}
+		if row.ExpiresAt != nil {
+			t := astral.Time(*row.ExpiresAt)
+			grant.ExpiresAt = &t
+		}
+		list = append(list, grant)
 	}
 
 	return

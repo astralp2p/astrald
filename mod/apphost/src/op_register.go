@@ -16,39 +16,27 @@ import (
 
 const RegisterDuration = 10 * 365 * 24 * time.Hour
 
-// A permit is the same clause on both rails; what the app names is the record
-// it wants the permit written into. Both lists are comma-separated, and an
-// action name carries no comma, so the joining is unambiguous. Asking is not
-// receiving: the node's policy decides which permits are written, and where.
 type opRegisterArgs struct {
-	// GrantPermits asks the node to record these as node-local grants:
-	// revocable by deleting a row, and worthless off this node.
-	GrantPermits string
-
-	// ContractPermits asks the node to record these in a signed node→app
-	// contract: portable evidence another node verifies, durable until it
-	// expires.
-	ContractPermits string
-
-	// Name is the name the app gives itself, shown to a delegated policy. It is
-	// the app's own claim, not verified by the node.
-	Name string
-
 	In  string
 	Out string
 }
 
 // OpRegister provisions a brand-new identity: generates a key pair, issues a signed app contract, and returns an access token.
 // The caller receives a ready-to-use guest identity without providing any pre-existing credentials.
+//
+// The op reads one mod.apphost.register_request after accept. Its Name is the
+// name the app gives itself, shown to a delegated policy and not verified by
+// the node. Its GrantPermits ask the node to record node-local grants:
+// revocable by deleting a row, and worthless off this node. Its
+// ContractPermits ask the node to record a signed node→app contract: portable
+// evidence another node verifies, durable until it expires. Both lists carry
+// their constraints. Asking is not receiving: the node's policy decides which
+// permits are written, and where.
 func (mod *Module) OpRegister(ctx *astral.Context, query *routing.IncomingQuery, args opRegisterArgs) (err error) {
 	// why: read the registering web origin before accepting - EnRouteQueryExtras
 	// only resolves while the query is en route, and Accept removes that entry.
 	extras := mod.EnRouteQueryExtras(query.Nonce())
 	origin, _ := extras[apphost.ExtraOriginWeb].(string)
-
-	requestedGrantPermits := registerGrantRequest(args.GrantPermits)
-
-	requestedContractPermits := parsePermits(args.ContractPermits)
 
 	// why accept before deciding: a delegate may wait on a person, and a query
 	// still en route is bounded by the router's timeout.
@@ -61,6 +49,21 @@ func (mod *Module) OpRegister(ctx *astral.Context, query *routing.IncomingQuery,
 		return ch.Send(astral.NewErrOriginNotAllowed(query.Origin()))
 	}
 
+	if err = refuseRemovedArgs(query.QueryString(), "name", "grant_permits", "contract_permits"); err != nil {
+		return ch.Send(astral.Err(err))
+	}
+
+	var req *apphostapi.RegisterRequest
+	if err = ch.Switch(channel.Expect(&req), channel.FailOnEOF()); err != nil {
+		return ch.Send(astral.Err(err))
+	}
+	if err = validatePermits(req.GrantPermits); err != nil {
+		return ch.Send(astral.Err(err))
+	}
+	if err = validatePermits(req.ContractPermits); err != nil {
+		return ch.Send(astral.Err(err))
+	}
+
 	// why: an op runs on a context detached from the requester's, and only the
 	// conn tells a waiting decision that nobody waits for its answer.
 	policyCtx, stop := routing.UntilDisconnect(ctx, conn)
@@ -68,9 +71,9 @@ func (mod *Module) OpRegister(ctx *astral.Context, query *routing.IncomingQuery,
 
 	dec, err := mod.GetRegisterAppPolicy()(policyCtx, &apphostapi.AppRegisterRequest{
 		Origin:          astral.String8(origin),
-		Name:            astral.String8(args.Name),
-		GrantPermits:    requestedGrantPermits,
-		ContractPermits: requestedContractPermits,
+		Name:            req.Name,
+		GrantPermits:    registerGrantRequest(req.GrantPermits),
+		ContractPermits: req.ContractPermits,
 	})
 	switch {
 	case err != nil:

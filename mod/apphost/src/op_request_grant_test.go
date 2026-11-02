@@ -3,7 +3,9 @@ package apphost
 import (
 	"bytes"
 	"slices"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/astralp2p/astral-go/api/apphost"
 	"github.com/astralp2p/astral-go/api/auth"
@@ -51,15 +53,21 @@ func readReply(t *testing.T, w *recordingWriter) string {
 	return obj.ObjectType()
 }
 
-// requestGrant routes q to apphost.request_grant and returns its answer.
-func requestGrant(t *testing.T, mod *Module, q *astral.InFlightQuery) string {
+// requestGrant routes q to apphost.request_grant, sends req as its input, and
+// returns its answer.
+func requestGrant(t *testing.T, mod *Module, q *astral.InFlightQuery, req *apphost.RequestGrantRequest) string {
 	t.Helper()
 
 	w := newRecordingWriter()
-	if err := routeQuery(t, mod.OpRequestGrant, q, w); err != nil {
+	if err := routeQuerySending(t, mod.OpRequestGrant, q, req, w); err != nil {
 		t.Fatalf("route: %v", err)
 	}
 	return readReply(t, w)
+}
+
+// asking returns a request_grant_request for unconstrained permits of actions.
+func asking(actions ...string) *apphost.RequestGrantRequest {
+	return &apphost.RequestGrantRequest{Permits: permits(actions...)}
 }
 
 // askedOp returns the operation node was asked.
@@ -101,7 +109,7 @@ func TestRequestGrantRefusedWithoutItsDelegate(t *testing.T) {
 	}
 	owner := astral.GenerateIdentity()
 
-	got := requestGrant(t, mod, sessionQuery(mod, owner, owner, "apphost.request_grant?permits=mod.auth.see_objects_action"))
+	got := requestGrant(t, mod, sessionQuery(mod, owner, owner, "apphost.request_grant"), asking("mod.auth.see_objects_action"))
 	if want := apphost.ErrGrantDeclined.Error(); got != want {
 		t.Fatalf("answered %q; want %q", got, want)
 	}
@@ -114,27 +122,29 @@ func TestRequestGrantRefusedWithoutItsDelegate(t *testing.T) {
 }
 
 // The delegate is asked with the session's identity, its web origin and every
-// permit, and its approval grants exactly those permits, unconstrained and
-// until revoked.
+// permit as sent, and its approval grants exactly those permits, non-delegable
+// and until revoked.
 func TestRequestGrantAsksTheDelegateAndGrants(t *testing.T) {
 	node := newDelegateNode(&apphost.GrantDecision{Allow: true})
 	mod := grantRequester(t, node)
 	owner := astral.GenerateIdentity()
-	q := sessionQuery(mod, owner, owner, "apphost.request_grant?permits=mod.auth.see_objects_action,mod.auth.store_objects_action")
+	q := sessionQuery(mod, owner, owner, "apphost.request_grant")
 	q.Extra.Set(apphostmod.ExtraOriginWeb, "https://music.example")
+	req := asking("mod.auth.see_objects_action", "mod.auth.store_objects_action")
+	req.Permits[1].Delegation = 2
 
-	if got := requestGrant(t, mod, q); got != ackAnswer {
+	if got := requestGrant(t, mod, q, req); got != ackAnswer {
 		t.Fatalf("answered %q; want ack", got)
 	}
 	if op := askedOp(t, node); op != grantRequestOp {
 		t.Fatalf("asked %q, want the configured operation", op)
 	}
 
-	req, _ := (<-node.received).(*apphost.GrantRequest)
-	if req == nil || !req.Requester.IsEqual(owner) || req.Origin != "https://music.example" {
-		t.Fatalf("request reached the delegate as %+v", req)
+	policyReq, _ := (<-node.received).(*apphost.GrantPolicyRequest)
+	if policyReq == nil || !policyReq.Requester.IsEqual(owner) || policyReq.Origin != "https://music.example" || policyReq.Duration != 0 {
+		t.Fatalf("request reached the delegate as %+v", policyReq)
 	}
-	asked := actions(req.Permits)
+	asked := actions(policyReq.Permits)
 	want := []string{"mod.auth.see_objects_action", "mod.auth.store_objects_action"}
 	if !slices.Equal(asked, want) {
 		t.Fatalf("delegate was asked %q; want %q", asked, want)
@@ -175,20 +185,23 @@ func TestApprovedRequestKeepsAnEarlierScopedGrant(t *testing.T) {
 		t.Fatalf("grant: %v", err)
 	}
 
-	q := sessionQuery(mod, owner, owner, "apphost.request_grant?permits="+string(action))
-	if got := requestGrant(t, mod, q); got != ackAnswer {
+	q := sessionQuery(mod, owner, owner, "apphost.request_grant")
+	req := &apphost.RequestGrantRequest{Permits: []*auth.Permit{discoveryPermit("wallet")}}
+	if got := requestGrant(t, mod, q, req); got != ackAnswer {
 		t.Fatalf("answered %q; want ack", got)
 	}
 
-	permits, err := mod.Grants(owner)
+	granted, err := mod.Grants(owner)
 	if err != nil {
 		t.Fatalf("list grants: %v", err)
 	}
-	if len(permits) != 2 || permits[0].Constraints == nil || permits[1].Constraints != nil {
-		t.Fatalf("granted %+v; want the scoped permit, then the unconstrained one", permits)
+	if len(granted) != 2 || string(granted[0].Action) != string(action) || string(granted[1].Action) != string(action) {
+		t.Fatalf("granted %+v; want the earlier scoped permit, then the requested one", granted)
 	}
-	if !mod.AuthorizeServiceDiscovery(nil, discoveryAction(owner, target, "player")) {
-		t.Fatal("the approved request withdrew the scoped grant")
+	for _, service := range []astral.String8{"player", "wallet"} {
+		if !mod.AuthorizeServiceDiscovery(nil, discoveryAction(owner, target, service)) {
+			t.Fatalf("the grants must cover %v", service)
+		}
 	}
 }
 
@@ -198,7 +211,7 @@ func TestRequestGrantRefusedByTheDelegate(t *testing.T) {
 	mod := grantRequester(t, node)
 	owner := astral.GenerateIdentity()
 
-	got := requestGrant(t, mod, sessionQuery(mod, owner, owner, "apphost.request_grant?permits=mod.auth.see_objects_action"))
+	got := requestGrant(t, mod, sessionQuery(mod, owner, owner, "apphost.request_grant"), asking("mod.auth.see_objects_action"))
 	if want := apphost.ErrGrantDeclined.Error(); got != want {
 		t.Fatalf("answered %q; want %q", got, want)
 	}
@@ -210,34 +223,54 @@ func TestRequestGrantRefusedByTheDelegate(t *testing.T) {
 	}
 }
 
-// A request from no session, with no permits, or off a link is refused before
-// the delegate is asked. A sudo caller's request grants the session's identity.
+// A request from no session, off a link, naming a removed argument, with no
+// permits, with a negative duration, or with an invalid permit is refused
+// before the delegate is asked. A sudo caller's request grants the session's
+// identity.
 func TestRequestGrantRefusesBeforeAsking(t *testing.T) {
 	owner := astral.GenerateIdentity()
 	sudoed := astral.GenerateIdentity()
+	seeObjects := asking("mod.auth.see_objects_action")
+	discovery := astral.String8(services.ServiceDiscoveryAction{}.ObjectType())
+	twoScopes := discoveryPermit("inference")
+	if err := twoScopes.Constraints.Append(discoveryPermit("chat").Constraints.Objects()[0]); err != nil {
+		t.Fatalf("scope: %v", err)
+	}
+	invalidDiscovery := "invalid permit: " + string(discovery) + ": "
 
 	for _, tc := range []struct {
 		name      string
 		principal *astral.Identity
 		caller    *astral.Identity
-		permits   string
+		query     string
+		req       *apphost.RequestGrantRequest
 		network   bool
 		want      string
 	}{
-		{"no session", nil, owner, "mod.auth.see_objects_action", false, auth.ErrNotPermitted.Error()},
-		{"no permits", owner, owner, ",%20,", false, "missing permits"},
-		{"network origin", owner, owner, "mod.auth.see_objects_action", true, astral.NewErrOriginNotAllowed(astral.OriginNetwork).Error()},
-		{"sudo caller", owner, sudoed, "mod.auth.see_objects_action", false, ackAnswer},
+		{"no session", nil, owner, "", seeObjects, false, auth.ErrNotPermitted.Error()},
+		{"network origin", owner, owner, "", seeObjects, true, astral.NewErrOriginNotAllowed(astral.OriginNetwork).Error()},
+		{"removed permits argument", owner, owner, "?permits=mod.auth.see_objects_action", seeObjects, false, "unknown argument: permits"},
+		{"no permits", owner, owner, "", &apphost.RequestGrantRequest{}, false, "missing permits"},
+		{"negative duration", owner, owner, "", &apphost.RequestGrantRequest{Permits: seeObjects.Permits, Duration: -1}, false, "negative duration"},
+		{"unscoped discovery", owner, owner, "", asking(string(discovery)), false, invalidDiscovery + "requires constraints"},
+		{"empty bundle", owner, owner, "", &apphost.RequestGrantRequest{Permits: []*auth.Permit{{Action: discovery, Constraints: astral.NewBundle()}}}, false, invalidDiscovery + "requires constraints"},
+		{"two scopes", owner, owner, "", &apphost.RequestGrantRequest{Permits: []*auth.Permit{twoScopes}}, false, ""},
+		{"sudo caller", owner, sudoed, "", seeObjects, false, ackAnswer},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			node := newDelegateNode(&apphost.GrantDecision{Allow: true})
 			mod := grantRequester(t, node)
-			q := sessionQuery(mod, tc.principal, tc.caller, "apphost.request_grant?permits="+tc.permits)
+			q := sessionQuery(mod, tc.principal, tc.caller, "apphost.request_grant"+tc.query)
 			if tc.network {
 				q.Extra.Set("origin", astral.OriginNetwork)
 			}
 
-			if got := requestGrant(t, mod, q); got != tc.want {
+			got := requestGrant(t, mod, q, tc.req)
+			if tc.want == "" {
+				if !strings.HasPrefix(got, invalidDiscovery) {
+					t.Fatalf("answered %q; want %q…", got, invalidDiscovery)
+				}
+			} else if got != tc.want {
 				t.Fatalf("answered %q; want %q", got, tc.want)
 			}
 			if tc.want != ackAnswer {
@@ -254,6 +287,105 @@ func TestRequestGrantRefusesBeforeAsking(t *testing.T) {
 			}
 			if held := heldActions(t, mod, sudoed); len(held) != 0 {
 				t.Fatalf("the sudo caller was granted %q", held)
+			}
+		})
+	}
+}
+
+// An approved request for one discovery scope writes that scope with the
+// requested duration, and the delegate sees the scope and the duration.
+func TestRequestGrantWritesTheScopeAndDuration(t *testing.T) {
+	node := newDelegateNode(&apphost.GrantDecision{Allow: true})
+	mod := grantRequester(t, node)
+	owner, target := astral.GenerateIdentity(), astral.GenerateIdentity()
+	req := &apphost.RequestGrantRequest{Permits: []*auth.Permit{discoveryPermit("inference")}, Duration: astral.Duration(time.Hour)}
+
+	before := time.Now().UTC()
+	if got := requestGrant(t, mod, sessionQuery(mod, owner, owner, "apphost.request_grant"), req); got != ackAnswer {
+		t.Fatalf("answered %q; want ack", got)
+	}
+
+	asked, _ := (<-node.received).(*apphost.GrantPolicyRequest)
+	if asked == nil || asked.Duration != req.Duration || len(asked.Permits) != 1 || asked.Permits[0].Constraints == nil {
+		t.Fatalf("request reached the delegate as %+v", asked)
+	}
+
+	rows, err := mod.db.ListGrants(owner)
+	if err != nil {
+		t.Fatalf("list rows: %v", err)
+	}
+	if len(rows) != 1 || rows[0].ExpiresAt == nil || rows[0].ExpiresAt.Before(before.Add(time.Hour)) {
+		t.Fatalf("rows %+v; want one row expiring an hour after the request", rows)
+	}
+	if !mod.AuthorizeServiceDiscovery(nil, discoveryAction(owner, target, "inference")) {
+		t.Fatal("the granted scope must cover inference")
+	}
+	if mod.AuthorizeServiceDiscovery(nil, discoveryAction(owner, target, "chat")) {
+		t.Fatal("the granted scope must not cover chat")
+	}
+}
+
+// A request for a permit the identity already holds still asks the delegate.
+func TestRequestGrantForAHeldPermitAsks(t *testing.T) {
+	node := newDelegateNode(&apphost.GrantDecision{Allow: true})
+	mod := grantRequester(t, node)
+	owner := astral.GenerateIdentity()
+	if err := mod.Grant(owner, &auth.Permit{Action: "mod.auth.see_objects_action"}, nil); err != nil {
+		t.Fatalf("grant: %v", err)
+	}
+
+	if got := requestGrant(t, mod, sessionQuery(mod, owner, owner, "apphost.request_grant"), asking("mod.auth.see_objects_action")); got != ackAnswer {
+		t.Fatalf("answered %q; want ack", got)
+	}
+	if op := askedOp(t, node); op != grantRequestOp {
+		t.Fatalf("asked %q, want the configured operation", op)
+	}
+	if held := heldActions(t, mod, owner); len(held) != 1 {
+		t.Fatalf("the identity holds %q; want the one permit", held)
+	}
+}
+
+// TestRequestGrantModes: unset and reject_all decline without asking anyone,
+// accept_all grants without asking anyone, and a stored delegate with no mode
+// is asked.
+func TestRequestGrantModes(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		mode     string
+		delegate bool
+		want     string
+	}{
+		{"unset", "", false, apphost.ErrGrantDeclined.Error()},
+		{"reject_all", apphostmod.GrantRequestRejectAll, false, apphost.ErrGrantDeclined.Error()},
+		{"accept_all", apphostmod.GrantRequestAcceptAll, false, ackAnswer},
+		{"delegate", "", true, ackAnswer},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			node := newDelegateNode(&apphost.GrantDecision{Allow: true})
+			mod := serveAppsRegistrar(t)
+			mod.node = node
+			ctx := astral.NewContext(nil)
+			if tc.delegate {
+				d := &policy.Delegate{Identity: astral.GenerateIdentity(), Operation: grantRequestOp}
+				if err := mod.policy.GrantRequest.Set(ctx, d); err != nil {
+					t.Fatalf("set delegate: %v", err)
+				}
+			}
+			if tc.mode != "" {
+				if err := mod.policy.GrantRequestMode.Set(ctx, astral.NewString8(tc.mode)); err != nil {
+					t.Fatalf("set mode: %v", err)
+				}
+			}
+			owner := astral.GenerateIdentity()
+
+			if got := requestGrant(t, mod, sessionQuery(mod, owner, owner, "apphost.request_grant"), asking("mod.auth.see_objects_action")); got != tc.want {
+				t.Fatalf("answered %q; want %q", got, tc.want)
+			}
+			if asked := len(node.queried) != 0; asked != tc.delegate {
+				t.Fatalf("delegate asked %v; want %v", asked, tc.delegate)
+			}
+			if held := len(heldActions(t, mod, owner)); (held != 0) != (tc.want == ackAnswer) {
+				t.Fatalf("the identity holds %d grants after %q", held, tc.want)
 			}
 		})
 	}
@@ -291,10 +423,40 @@ func TestSetGrantRequestPolicyWritesItsOwnValue(t *testing.T) {
 		t.Fatal("the grant request setter wrote the register delegate")
 	}
 
+	if got, want := set(mod, "?mode=accept_all"), ackAnswer; got != want {
+		t.Fatalf("answered %q; want %q", got, want)
+	}
+	if m := mod.policy.GrantRequestMode.Get(); m == nil || m.String() != apphostmod.GrantRequestAcceptAll {
+		t.Fatalf("persisted mode %v; want accept_all", m)
+	}
+	if !mod.policy.GrantRequest.Get().IsZero() {
+		t.Fatal("a mode did not clear the delegate")
+	}
+
+	if got, want := set(mod, delegate), ackAnswer; got != want {
+		t.Fatalf("answered %q; want %q", got, want)
+	}
+	if m := mod.policy.GrantRequestMode.Get(); m != nil {
+		t.Fatalf("a delegate left the mode %v", m)
+	}
+
+	if got, want := set(mod, "?mode=accept_all&identity="+id.String()), "give mode or a delegate, not both"; got != want {
+		t.Fatalf("answered %q; want %q", got, want)
+	}
+	if got, want := set(mod, "?mode=bogus"), "unknown mode: bogus"; got != want {
+		t.Fatalf("answered %q; want %q", got, want)
+	}
+	if d := mod.policy.GrantRequest.Get(); d.IsZero() {
+		t.Fatal("a refused set cleared the delegate")
+	}
+
+	if got, want := set(mod, "?mode=reject_all"), ackAnswer; got != want {
+		t.Fatalf("answered %q; want %q", got, want)
+	}
 	if got, want := set(mod, ""), ackAnswer; got != want {
 		t.Fatalf("answered %q; want %q", got, want)
 	}
-	if !mod.policy.GrantRequest.Get().IsZero() {
-		t.Fatal("an empty set did not clear the delegate")
+	if !mod.policy.GrantRequest.Get().IsZero() || mod.policy.GrantRequestMode.Get() != nil {
+		t.Fatal("an empty set did not clear the delegate and the mode")
 	}
 }

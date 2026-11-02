@@ -7,15 +7,15 @@ import (
 
 // registerGrantRequest returns the grant request of one registration:
 // unconstrained ServeApps and UseBlueprints permits, followed by the permits the
-// app asked for.
+// app asked for, as sent, constraints included.
 //
 // why: a registered app is served from this node and syncs the blueprints of
 // its types (apps.WithBlueprintSync), so every registration asks for hosting
 // and for blueprints on the grant rail.
 // note: the register policy decides whether the grant is written, as it
 // decides for every other permit in the request.
-func registerGrantRequest(asked string) []*auth.Permit {
+func registerGrantRequest(asked []*auth.Permit) []*auth.Permit {
 	serveApps := &auth.Permit{Action: astral.String8(auth.ServeAppsAction{}.ObjectType())}
 	useBlueprints := &auth.Permit{Action: astral.String8(auth.UseBlueprintsAction{}.ObjectType())}
-	return append([]*auth.Permit{serveApps, useBlueprints}, parsePermits(asked)...)
+	return append([]*auth.Permit{serveApps, useBlueprints}, asked...)
 }

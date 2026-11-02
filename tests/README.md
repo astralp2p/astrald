@@ -172,6 +172,7 @@ Every story of the catalog, in the cheapest env that can falsify it:
 | — | `messaging-two-node` | node | `two-nodes` → — |
 | — | `services-swarm` | node | `two-nodes` → — |
 | — | `services-app-call` | node | `two-nodes` → — |
+| — | `request-grant-scope` | node | `two-nodes` → — |
 | — | `hold-purge` | node | `two-nodes` → — (unlisted, mutates) |
 | — | `gateway-relay` | netsim | `two-nodes` → — (unlisted, mutates) |
 

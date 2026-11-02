@@ -9,6 +9,7 @@ import (
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astral-go/astral/channel"
 	"github.com/astralp2p/astral-go/lib/routing"
+	apphostmod "github.com/astralp2p/astrald/mod/apphost"
 )
 
 type opSetPolicyArgs struct {
@@ -23,33 +24,24 @@ type opSetPolicyArgs struct {
 	Out     string
 }
 
+// opSetGrantRequestPolicyArgs selects the grant request policy: Mode alone
+// selects accept_all or reject_all; Identity and Operation select the delegate
+// mode; all empty restores the bundled reject_all.
+type opSetGrantRequestPolicyArgs struct {
+	Mode      string
+	Identity  string
+	Operation string
+	Timeout   astral.Duration
+	In        string
+	Out       string
+}
+
 // OpSetAppRegisterPolicy selects the app registration policy and answers Ack
 // once the choice is persisted.
 //
 // why AdminManageApps: the delegate decides which permits every new app
 // receives, which is the administration of app credentials that action covers.
 func (mod *Module) OpSetAppRegisterPolicy(ctx *astral.Context, q *routing.IncomingQuery, args opSetPolicyArgs) error {
-	return mod.setPolicyDelegate(ctx, q, args, &mod.policy.AppRegister)
-}
-
-// OpSetGrantRequestPolicy selects the policy for apphost.request_grant and
-// answers Ack once the choice is persisted.
-//
-// why AdminManageApps: the delegate decides which permits apps may add to
-// themselves, which is the administration of app credentials that action
-// covers.
-func (mod *Module) OpSetGrantRequestPolicy(ctx *astral.Context, q *routing.IncomingQuery, args opSetPolicyArgs) error {
-	return mod.setPolicyDelegate(ctx, q, args, &mod.policy.GrantRequest)
-}
-
-// setPolicyDelegate admits a caller holding AdminManageApps, then writes the
-// delegate args name into v, or clears v when args name none.
-func (mod *Module) setPolicyDelegate(
-	ctx *astral.Context,
-	q *routing.IncomingQuery,
-	args opSetPolicyArgs,
-	v *tree.Value[*policy.Delegate],
-) error {
 	ch := channel.New(q.AcceptRaw(), channel.WithFormats(args.In, args.Out))
 	defer ch.Close()
 
@@ -57,24 +49,78 @@ func (mod *Module) setPolicyDelegate(
 		return ch.Send(auth.ErrNotPermitted)
 	}
 
-	if args.Identity == "" && args.Operation == "" {
-		if err := v.Clear(ctx); err != nil {
-			return ch.Send(astral.Err(err))
-		}
-		mod.log.Logv(1, "%v restored to the bundled policy", q.QueryString())
-		return ch.Send(&astral.Ack{})
+	// why: mode belongs to apphost.set_grant_request_policy; without this a
+	// caller naming it here would clear the register delegate.
+	if err := refuseRemovedArgs(q.QueryString(), "mode"); err != nil {
+		return ch.Send(astral.Err(err))
 	}
 
-	d, err := mod.newDelegate(args.Identity, args.Operation, args.Timeout)
+	if err := mod.writePolicyDelegate(ctx, args.Identity, args.Operation, args.Timeout, &mod.policy.AppRegister); err != nil {
+		return ch.Send(astral.Err(err))
+	}
+
+	mod.log.Logv(1, "%v persisted", q.QueryString())
+	return ch.Send(&astral.Ack{})
+}
+
+// OpSetGrantRequestPolicy selects the policy for apphost.request_grant and
+// answers Ack once the choice is persisted. A mode clears the delegate, and a
+// delegate clears the mode.
+//
+// why AdminManageApps: the policy decides which permits apps may add to
+// themselves, which is the administration of app credentials that action
+// covers.
+func (mod *Module) OpSetGrantRequestPolicy(ctx *astral.Context, q *routing.IncomingQuery, args opSetGrantRequestPolicyArgs) error {
+	ch := channel.New(q.AcceptRaw(), channel.WithFormats(args.In, args.Out))
+	defer ch.Close()
+
+	if !mod.Auth.Authorize(ctx, &auth.AdminManageAppsAction{Action: auth.NewAction(q.Caller())}) {
+		return ch.Send(auth.ErrNotPermitted)
+	}
+
+	var err error
+	switch args.Mode {
+	case "":
+		err = mod.writePolicyDelegate(ctx, args.Identity, args.Operation, args.Timeout, &mod.policy.GrantRequest)
+		if err == nil {
+			err = mod.policy.GrantRequestMode.Clear(ctx)
+		}
+	case apphostmod.GrantRequestAcceptAll, apphostmod.GrantRequestRejectAll:
+		if args.Identity != "" || args.Operation != "" {
+			return ch.Send(astral.NewError("give mode or a delegate, not both"))
+		}
+		err = mod.policy.GrantRequestMode.Set(ctx, astral.NewString8(args.Mode))
+		if err == nil {
+			err = mod.policy.GrantRequest.Clear(ctx)
+		}
+	default:
+		return ch.Send(astral.NewError("unknown mode: " + args.Mode))
+	}
 	if err != nil {
 		return ch.Send(astral.Err(err))
 	}
-	if err = v.Set(ctx, d); err != nil {
-		return ch.Send(astral.Err(err))
+
+	mod.log.Logv(1, "%v persisted", q.QueryString())
+	return ch.Send(&astral.Ack{})
+}
+
+// writePolicyDelegate writes the delegate identity and op name into v, or
+// clears v when both are empty.
+func (mod *Module) writePolicyDelegate(
+	ctx *astral.Context,
+	identity, op string,
+	timeout astral.Duration,
+	v *tree.Value[*policy.Delegate],
+) error {
+	if identity == "" && op == "" {
+		return v.Clear(ctx)
 	}
 
-	mod.log.Logv(1, "%v delegated to %v:%v", q.QueryString(), d.Identity, d.Operation)
-	return ch.Send(&astral.Ack{})
+	d, err := mod.newDelegate(identity, op, timeout)
+	if err != nil {
+		return err
+	}
+	return v.Set(ctx, d)
 }
 
 // newDelegate resolves name and builds the delegate the setter stores.

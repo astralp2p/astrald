@@ -22,4 +22,5 @@ messaging-two-node
 mcp-peer
 services-swarm
 services-app-call
+request-grant-scope
 expel-node                     # mutates two-nodes: nothing may follow it

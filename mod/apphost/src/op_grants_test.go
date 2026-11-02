@@ -1,11 +1,15 @@
 package apphost
 
 import (
+	"fmt"
+	"io"
 	"testing"
 	"time"
 
+	"github.com/astralp2p/astral-go/api/apphost"
 	"github.com/astralp2p/astral-go/api/auth"
 	"github.com/astralp2p/astral-go/astral"
+	"github.com/astralp2p/astral-go/astral/channel"
 	"github.com/astralp2p/astral-go/lib/routing"
 )
 
@@ -22,7 +26,7 @@ func grantAdminOps() []grantAdminOp {
 	action := auth.ServeObjectsAction{}.ObjectType()
 
 	return []grantAdminOp{
-		{"apphost.grant", func(m *Module) any { return m.OpGrant }, "?identity=" + id + "&action=" + action},
+		{"apphost.grant", func(m *Module) any { return m.OpGrant }, ""},
 		{"apphost.revoke", func(m *Module) any { return m.OpRevoke }, "?identity=" + id + "&action=" + action},
 		{"apphost.list_grants", func(m *Module) any { return m.OpListGrants }, "?identity=" + id},
 	}
@@ -92,11 +96,13 @@ func TestGrantOpRecordsForAnExistingIdentity(t *testing.T) {
 	action := auth.ServeObjectsAction{}.ObjectType()
 
 	w := newRecordingWriter()
-	err := route(t, mod.OpGrant, caller, "apphost.grant?identity="+app.String()+"&action="+action, w)
-	if err != nil {
+	req := &apphost.GrantRequest{Identity: app, Permits: []*auth.Permit{{Action: astral.String8(action), Delegation: 3}}}
+	if err := routeSending(t, mod.OpGrant, caller, "apphost.grant", req, w); err != nil {
 		t.Fatalf("apphost.grant refused an authorized caller: %v", err)
 	}
-	waitAdminManageAppsAnswer(t, w)
+	if got := readReply(t, w); got != ackAnswer {
+		t.Fatalf("answered %q; want ack", got)
+	}
 
 	grants, err := mod.Grants(app)
 	if err != nil {
@@ -143,6 +149,215 @@ func TestRevokeOpWithdrawsTheGrant(t *testing.T) {
 	}
 }
 
+// TestRevokeOpByIDKeepsTheSibling: revoke by id withdraws that grant alone,
+// and the identity keeps its other grant for the same action.
+func TestRevokeOpByIDKeepsTheSibling(t *testing.T) {
+	mod := testGrantModule(t)
+	mod.Auth = &recordingAuth{verdict: true}
+	app := astral.GenerateIdentity()
+
+	for _, p := range []*auth.Permit{discoveryPermit("player"), discoveryPermit("wallet")} {
+		if err := mod.Grant(app, p, nil); err != nil {
+			t.Fatalf("grant: %v", err)
+		}
+	}
+	rows, err := mod.db.ListGrants(app)
+	if err != nil || len(rows) != 2 {
+		t.Fatalf("seeded %d rows (%v); want 2", len(rows), err)
+	}
+
+	w := newRecordingWriter()
+	q := fmt.Sprintf("apphost.revoke?identity=%v&id=%v", app, rows[0].ID)
+	if err := route(t, mod.OpRevoke, astral.GenerateIdentity(), q, w); err != nil {
+		t.Fatalf("route: %v", err)
+	}
+	if got := readReply(t, w); got != ackAnswer {
+		t.Fatalf("answered %q; want ack", got)
+	}
+
+	left, err := mod.db.ListGrants(app)
+	if err != nil {
+		t.Fatalf("list grants: %v", err)
+	}
+	if len(left) != 1 || left[0].ID != rows[1].ID {
+		t.Fatalf("rows left %+v; want the sibling %v alone", left, rows[1].ID)
+	}
+}
+
+// TestRevokeOpNeedsExactlyOneOfIDOrAction: both or neither is an error, and
+// nothing is withdrawn.
+func TestRevokeOpNeedsExactlyOneOfIDOrAction(t *testing.T) {
+	action := auth.ServeObjectsAction{}.ObjectType()
+
+	for args, want := range map[string]string{
+		"&id=1&action=" + action: "give id or action, not both",
+		"":                       "missing id or action",
+	} {
+		t.Run(want, func(t *testing.T) {
+			mod := testGrantModule(t)
+			mod.Auth = &recordingAuth{verdict: true}
+			app := astral.GenerateIdentity()
+			if err := mod.Grant(app, &auth.Permit{Action: astral.String8(action)}, nil); err != nil {
+				t.Fatalf("grant: %v", err)
+			}
+
+			w := newRecordingWriter()
+			if err := route(t, mod.OpRevoke, astral.GenerateIdentity(), "apphost.revoke?identity="+app.String()+args, w); err != nil {
+				t.Fatalf("route: %v", err)
+			}
+			if got := readReply(t, w); got != want {
+				t.Fatalf("answered %q; want %q", got, want)
+			}
+			if held := heldActions(t, mod, app); len(held) != 1 {
+				t.Fatalf("the identity holds %q; want its grant kept", held)
+			}
+		})
+	}
+}
+
+// TestRevokeOpIDOfAnotherIdentityIsNotFound: an ID names a grant of one
+// identity, so naming it for another withdraws nothing.
+func TestRevokeOpIDOfAnotherIdentityIsNotFound(t *testing.T) {
+	mod := testGrantModule(t)
+	mod.Auth = &recordingAuth{verdict: true}
+	app, other := astral.GenerateIdentity(), astral.GenerateIdentity()
+
+	if err := mod.Grant(app, &auth.Permit{Action: astral.String8(auth.ServeObjectsAction{}.ObjectType())}, nil); err != nil {
+		t.Fatalf("grant: %v", err)
+	}
+	rows, err := mod.db.ListGrants(app)
+	if err != nil || len(rows) != 1 {
+		t.Fatalf("seeded %d rows (%v); want 1", len(rows), err)
+	}
+
+	w := newRecordingWriter()
+	q := fmt.Sprintf("apphost.revoke?identity=%v&id=%v", other, rows[0].ID)
+	if err := route(t, mod.OpRevoke, astral.GenerateIdentity(), q, w); err != nil {
+		t.Fatalf("route: %v", err)
+	}
+	if got, want := readReply(t, w), "grant not found"; got != want {
+		t.Fatalf("answered %q; want %q", got, want)
+	}
+	if held := heldActions(t, mod, app); len(held) != 1 {
+		t.Fatalf("the owner holds %q; want its grant kept", held)
+	}
+}
+
+// TestListGrantsEmitsIDAndExpiry: the op emits one mod.apphost.grant per
+// unexpired row with the row's ID and expiry, nil for a grant until revoked,
+// then eos.
+func TestListGrantsEmitsIDAndExpiry(t *testing.T) {
+	mod := testGrantModule(t)
+	mod.Auth = &recordingAuth{verdict: true}
+	mod.Dir = &namingDir{}
+	app := astral.GenerateIdentity()
+	soon := time.Now().UTC().Add(time.Hour)
+	past := time.Now().UTC().Add(-time.Hour)
+
+	seed := []struct {
+		action    string
+		expiresAt *time.Time
+	}{
+		{auth.ServeObjectsAction{}.ObjectType(), nil},
+		{auth.SeeObjectsAction{}.ObjectType(), &soon},
+		{auth.ServeAppsAction{}.ObjectType(), &past},
+	}
+	for _, g := range seed {
+		if err := mod.Grant(app, &auth.Permit{Action: astral.String8(g.action)}, g.expiresAt); err != nil {
+			t.Fatalf("grant: %v", err)
+		}
+	}
+	rows, err := mod.db.ListGrants(app)
+	if err != nil || len(rows) != 3 {
+		t.Fatalf("seeded %d rows (%v); want 3", len(rows), err)
+	}
+
+	r, w := io.Pipe()
+	defer r.Close()
+	if err := route(t, mod.OpListGrants, astral.GenerateIdentity(), "apphost.list_grants?identity="+app.String(), w); err != nil {
+		t.Fatalf("route: %v", err)
+	}
+
+	var grants []*apphost.Grant
+	in := struct {
+		io.Reader
+		io.Writer
+	}{r, io.Discard}
+	err = channel.New(in).Switch(channel.Collect[*apphost.Grant](&grants), channel.BreakOnEOS, channel.FailOnEOF())
+	if err != nil {
+		t.Fatalf("read listing: %v", err)
+	}
+
+	if len(grants) != 2 {
+		t.Fatalf("listed %d grants; want the 2 unexpired", len(grants))
+	}
+	if uint(grants[0].ID) != rows[0].ID || string(grants[0].Permit.Action) != seed[0].action || grants[0].ExpiresAt != nil {
+		t.Fatalf("first grant %+v; want ID %v, %v, until revoked", grants[0], rows[0].ID, seed[0].action)
+	}
+	if uint(grants[1].ID) != rows[1].ID || grants[1].ExpiresAt == nil || !time.Time(*grants[1].ExpiresAt).Equal(soon) {
+		t.Fatalf("second grant %+v; want ID %v expiring at %v", grants[1], rows[1].ID, soon)
+	}
+}
+
+// TestGrantOpRefusesRemovedArguments: each argument the grant_request object
+// replaced answers unknown argument, and nothing is written.
+func TestGrantOpRefusesRemovedArguments(t *testing.T) {
+	for _, arg := range []string{"identity", "action", "duration", "constrained"} {
+		t.Run(arg, func(t *testing.T) {
+			mod := testGrantModule(t)
+			mod.Auth = &recordingAuth{verdict: true}
+			app := astral.GenerateIdentity()
+
+			w := newRecordingWriter()
+			req := &apphost.GrantRequest{Identity: app, Permits: permits(auth.ServeObjectsAction{}.ObjectType())}
+			if err := routeSending(t, mod.OpGrant, astral.GenerateIdentity(), "apphost.grant?"+arg+"=x", req, w); err != nil {
+				t.Fatalf("route: %v", err)
+			}
+			if got, want := readReply(t, w), "unknown argument: "+arg; got != want {
+				t.Fatalf("answered %q; want %q", got, want)
+			}
+			if held := heldActions(t, mod, app); len(held) != 0 {
+				t.Fatalf("a refused grant wrote %q", held)
+			}
+		})
+	}
+}
+
+// TestGrantOpRefusesBeforeWriting: a request without permits, with a negative
+// duration, or with an invalid permit is answered with an error and writes
+// nothing, not even its valid permits.
+func TestGrantOpRefusesBeforeWriting(t *testing.T) {
+	serveObjects := auth.ServeObjectsAction{}.ObjectType()
+
+	for _, tc := range []struct {
+		name string
+		req  *apphost.GrantRequest
+		want string
+	}{
+		{"no permits", &apphost.GrantRequest{}, "missing permits"},
+		{"negative duration", &apphost.GrantRequest{Duration: -1, Permits: permits(serveObjects)}, "negative duration"},
+		{"unknown action", &apphost.GrantRequest{Permits: permits(serveObjects, "mod.nope.no_action")}, "invalid permit: mod.nope.no_action: unknown action"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			mod := testGrantModule(t)
+			mod.Auth = &recordingAuth{verdict: true}
+			app := astral.GenerateIdentity()
+			tc.req.Identity = app
+
+			w := newRecordingWriter()
+			if err := routeSending(t, mod.OpGrant, astral.GenerateIdentity(), "apphost.grant", tc.req, w); err != nil {
+				t.Fatalf("route: %v", err)
+			}
+			if got := readReply(t, w); got != tc.want {
+				t.Fatalf("answered %q; want %q", got, tc.want)
+			}
+			if held := heldActions(t, mod, app); len(held) != 0 {
+				t.Fatalf("a refused grant wrote %q", held)
+			}
+		})
+	}
+}
+
 // TestListGrantsOmitsAnExpiredGrant: the wire listing answers what authorizes
 // now. The row survives for the Go-side Grants, which reports what was granted.
 func TestListGrantsOmitsAnExpiredGrant(t *testing.T) {
@@ -166,8 +381,8 @@ func TestListGrantsOmitsAnExpiredGrant(t *testing.T) {
 	if len(active) != 1 {
 		t.Fatalf("the listing reported %d grants; want the 1 that still authorizes", len(active))
 	}
-	if string(active[0].Action) != live {
-		t.Fatalf("the listing reported %q; want %q", active[0].Action, live)
+	if string(active[0].Permit.Action) != live {
+		t.Fatalf("the listing reported %q; want %q", active[0].Permit.Action, live)
 	}
 
 	all, err := mod.Grants(app)
@@ -188,8 +403,8 @@ func TestGrantOpBoundsTheGrantByDuration(t *testing.T) {
 	action := auth.ServeObjectsAction{}.ObjectType()
 
 	w := newRecordingWriter()
-	err := route(t, mod.OpGrant, astral.GenerateIdentity(), "apphost.grant?identity="+app.String()+"&action="+action+"&duration=1h", w)
-	if err != nil {
+	req := &apphost.GrantRequest{Identity: app, Duration: astral.Duration(time.Hour), Permits: permits(action)}
+	if err := routeSending(t, mod.OpGrant, astral.GenerateIdentity(), "apphost.grant", req, w); err != nil {
 		t.Fatalf("apphost.grant refused an authorized caller: %v", err)
 	}
 	waitAdminManageAppsAnswer(t, w)

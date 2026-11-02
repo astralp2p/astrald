@@ -12,6 +12,7 @@ import (
 	"github.com/astralp2p/astral-go/api/nodes"
 	"github.com/astralp2p/astral-go/api/policy"
 	"github.com/astralp2p/astral-go/astral"
+	apphostmod "github.com/astralp2p/astrald/mod/apphost"
 	cryptomod "github.com/astralp2p/astrald/mod/crypto"
 	objectsmod "github.com/astralp2p/astrald/mod/objects"
 )
@@ -123,7 +124,7 @@ func registerWith(t *testing.T, steps *registerSteps) *Module {
 	mod.Objects = registerStore{steps: steps}
 
 	w := newRecordingWriter()
-	if err := route(t, mod.OpRegister, astral.GenerateIdentity(), "apphost.register", w); err != nil {
+	if err := register(t, mod, &apphost.RegisterRequest{}, w); err != nil {
 		t.Fatalf("apphost.register refused: %v", err)
 	}
 	awaitServeAppsClose(t, w)
@@ -200,7 +201,7 @@ func TestRegisterRefusedProvisionsNothing(t *testing.T) {
 	mod := delegatedRegistrar(t, steps, refusingNode())
 	w := newRecordingWriter()
 
-	if err := route(t, mod.OpRegister, astral.GenerateIdentity(), "apphost.register", w); err != nil {
+	if err := register(t, mod, &apphost.RegisterRequest{}, w); err != nil {
 		t.Fatalf("a delegated registration was rejected before the decision: %v", err)
 	}
 	awaitServeAppsClose(t, w)
@@ -228,7 +229,7 @@ func TestRegisterRecordsTheDecisionsAuthorizers(t *testing.T) {
 	}))
 	w := newRecordingWriter()
 
-	if err := route(t, mod.OpRegister, astral.GenerateIdentity(), "apphost.register", w); err != nil {
+	if err := register(t, mod, &apphost.RegisterRequest{}, w); err != nil {
 		t.Fatalf("apphost.register refused: %v", err)
 	}
 	awaitServeAppsClose(t, w)
@@ -266,7 +267,7 @@ func TestRegisterIssuesNoTokenWhenAnAuthorizerFails(t *testing.T) {
 	}))
 	w := newRecordingWriter()
 
-	if err := route(t, mod.OpRegister, astral.GenerateIdentity(), "apphost.register", w); err != nil {
+	if err := register(t, mod, &apphost.RegisterRequest{}, w); err != nil {
 		t.Fatalf("apphost.register refused: %v", err)
 	}
 	awaitServeAppsClose(t, w)
@@ -291,7 +292,7 @@ func TestRegisterRefusesADecisionNamingAnActor(t *testing.T) {
 	}))
 	w := newRecordingWriter()
 
-	if err := route(t, mod.OpRegister, astral.GenerateIdentity(), "apphost.register", w); err != nil {
+	if err := register(t, mod, &apphost.RegisterRequest{}, w); err != nil {
 		t.Fatalf("apphost.register rejected before the decision: %v", err)
 	}
 	awaitServeAppsClose(t, w)
@@ -301,5 +302,94 @@ func TestRegisterRefusesADecisionNamingAnActor(t *testing.T) {
 	}
 	if tokens := issuedTokens(t, mod); len(tokens) != 0 {
 		t.Fatalf("a refused registration issued %d tokens", len(tokens))
+	}
+}
+
+// TestRegisterGivesThePolicyTheRequest: the delegate is asked with the name and
+// both permit lists the register_request carries, constraints included, and
+// the web origin the node read; the granted scope lands on the new identity.
+func TestRegisterGivesThePolicyTheRequest(t *testing.T) {
+	steps := &registerSteps{}
+	node := newDelegateNode(&apphost.AppRegisterDecision{Allow: true, GrantPermits: []*auth.Permit{discoveryPermit("inference")}})
+	mod := delegatedRegistrar(t, steps, node)
+	req := &apphost.RegisterRequest{
+		Name:            "smithd",
+		GrantPermits:    []*auth.Permit{discoveryPermit("inference")},
+		ContractPermits: permits("mod.nodes.relay_for_action"),
+	}
+	q := sessionQuery(mod, nil, astral.GenerateIdentity(), "apphost.register")
+	q.Extra.Set(apphostmod.ExtraOriginWeb, "https://smith.example")
+
+	w := newRecordingWriter()
+	if err := routeQuerySending(t, mod.OpRegister, q, req, w); err != nil {
+		t.Fatalf("apphost.register refused: %v", err)
+	}
+	awaitServeAppsClose(t, w)
+
+	asked, _ := (<-node.received).(*apphost.AppRegisterRequest)
+	if asked == nil || asked.Name != "smithd" || asked.Origin != "https://smith.example" {
+		t.Fatalf("request reached the delegate as %+v", asked)
+	}
+	if got := actions(asked.GrantPermits); len(got) != 3 || got[2] != string(req.GrantPermits[0].Action) || asked.GrantPermits[2].Constraints == nil {
+		t.Fatalf("the delegate was asked grant permits %q; want the defaults, then the scoped discovery permit", got)
+	}
+	if !sameActions(asked.ContractPermits, req.ContractPermits) {
+		t.Fatalf("the delegate was asked contract permits %q", actions(asked.ContractPermits))
+	}
+
+	tokens := issuedTokens(t, mod)
+	if len(tokens) != 1 {
+		t.Fatalf("issued %d tokens, want one", len(tokens))
+	}
+	if !mod.AuthorizeServiceDiscovery(nil, discoveryAction(tokens[0].Identity, astral.GenerateIdentity(), "inference")) {
+		t.Fatal("the registered identity holds no inference discovery grant")
+	}
+}
+
+// TestRegisterRefusesBeforeThePolicy: a removed argument, a missing
+// register_request, or an invalid permit in either list is answered with an
+// error before the delegate is asked, and no identity is minted.
+func TestRegisterRefusesBeforeThePolicy(t *testing.T) {
+	unscoped := permits("mod.services.service_discovery_action")
+
+	for _, tc := range []struct {
+		name  string
+		query string
+		req   *apphost.RegisterRequest
+		want  string
+	}{
+		{"name argument", "?name=player", &apphost.RegisterRequest{}, "unknown argument: name"},
+		{"grant_permits argument", "?grant_permits=mod.auth.serve_objects_action", &apphost.RegisterRequest{}, "unknown argument: grant_permits"},
+		{"contract_permits argument", "?contract_permits=mod.nodes.relay_for_action", &apphost.RegisterRequest{}, "unknown argument: contract_permits"},
+		{"no request", "", nil, ""},
+		{"invalid grant permit", "", &apphost.RegisterRequest{GrantPermits: unscoped}, "invalid permit: mod.services.service_discovery_action: requires constraints"},
+		{"invalid contract permit", "", &apphost.RegisterRequest{ContractPermits: unscoped}, "invalid permit: mod.services.service_discovery_action: requires constraints"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			steps := &registerSteps{}
+			node := newDelegateNode(&apphost.AppRegisterDecision{Allow: true})
+			mod := delegatedRegistrar(t, steps, node)
+
+			w := newRecordingWriter()
+			if tc.req == nil {
+				// note: the caller closes its side without sending a request.
+				routeOpen(t, mod.OpRegister, astral.GenerateIdentity(), "apphost.register", w).Close()
+			} else if err := routeSending(t, mod.OpRegister, astral.GenerateIdentity(), "apphost.register"+tc.query, tc.req, w); err != nil {
+				t.Fatalf("route: %v", err)
+			}
+			got := readReply(t, w)
+			if tc.want != "" && got != tc.want {
+				t.Fatalf("answered %q; want %q", got, tc.want)
+			}
+			if got == (&apphost.AccessToken{}).ObjectType() {
+				t.Fatal("the registration answered a token")
+			}
+			if len(node.queried) != 0 {
+				t.Fatal("the delegate was asked")
+			}
+			if tokens := issuedTokens(t, mod); len(tokens) != 0 {
+				t.Fatalf("a refused registration issued %d tokens", len(tokens))
+			}
+		})
 	}
 }

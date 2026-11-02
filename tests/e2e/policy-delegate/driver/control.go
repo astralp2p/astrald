@@ -109,7 +109,7 @@ func (cp *controlPlane) ping(_ *astral.Context, q *routing.IncomingQuery) error 
 // startControlPlane registers the app, serves its ops until ctx ends, and
 // returns once the node routes to it.
 func startControlPlane(ctx *astral.Context, admin *astrald.Client, ep string) (*controlPlane, error) {
-	tok, err := apphostcli.New(nil, admin).Register(ctx, "mod.auth.serve_apps_action")
+	tok, err := apphostcli.New(nil, admin).Register(ctx, &auth.Permit{Action: "mod.auth.serve_apps_action"})
 	if err != nil {
 		return nil, fmt.Errorf("register the control plane: %w", err)
 	}

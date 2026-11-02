@@ -28,6 +28,19 @@ func (db *DB) AddGrant(identity *astral.Identity, permit *auth.Permit, expiresAt
 	}).Create(row).Error
 }
 
+// AddGrants records every permit for identity, as AddGrant does, in one
+// transaction: either every permit is recorded or none is.
+func (db *DB) AddGrants(identity *astral.Identity, permits []*auth.Permit, expiresAt *time.Time) error {
+	return db.Transaction(func(tx *gorm.DB) error {
+		for _, permit := range permits {
+			if err := (&DB{tx}).AddGrant(identity, permit, expiresAt); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+}
+
 // DeleteGrant withdraws every grant identity holds for the action.
 // Returns gorm.ErrRecordNotFound when no row matches.
 func (db *DB) DeleteGrant(identity *astral.Identity, action string) error {
