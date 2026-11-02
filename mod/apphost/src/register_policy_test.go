@@ -16,26 +16,6 @@ func actions(permits []*auth.Permit) (out []string) {
 	return
 }
 
-func TestParsePermitsReadsAnAskedForSet(t *testing.T) {
-	got := actions(parsePermits(" mod.user.info_action , mod.nodes.relay_for_action ,, "))
-	want := []string{"mod.user.info_action", "mod.nodes.relay_for_action"}
-
-	if len(got) != len(want) {
-		t.Fatalf("got %v, want %v", got, want)
-	}
-	for i := range want {
-		if got[i] != want[i] {
-			t.Fatalf("got %v, want %v", got, want)
-		}
-	}
-}
-
-func TestParsePermitsOfNothingAsksForNothing(t *testing.T) {
-	if got := parsePermits(""); len(got) != 0 {
-		t.Fatalf("got %v, want no permits", actions(got))
-	}
-}
-
 func sameActions(a, b []*auth.Permit) bool {
 	if len(a) != len(b) {
 		return false
@@ -51,8 +31,8 @@ func sameActions(a, b []*auth.Permit) bool {
 // The shipped default is permissive by name: it writes what it is handed,
 // and leaves deciding to a policy that decides.
 func TestTheDefaultPolicyWritesWhatItIsHanded(t *testing.T) {
-	askedGrant := parsePermits("mod.auth.serve_objects_action")
-	askedContract := parsePermits("mod.nodes.relay_for_action")
+	askedGrant := permits("mod.auth.serve_objects_action")
+	askedContract := permits("mod.nodes.relay_for_action")
 
 	dec, err := apphostmod.AcceptAll(astral.NewContext(nil), &apphost.AppRegisterRequest{
 		GrantPermits:    askedGrant,
@@ -79,7 +59,7 @@ func TestTheDefaultPolicyKeepsTheRailsApart(t *testing.T) {
 	ctx := astral.NewContext(nil)
 
 	dec, _ := apphostmod.AcceptAll(ctx, &apphost.AppRegisterRequest{
-		GrantPermits: parsePermits("mod.auth.serve_objects_action"),
+		GrantPermits: permits("mod.auth.serve_objects_action"),
 	})
 	if len(dec.ContractPermits) != 0 {
 		t.Fatalf("a grant request reached the contract rail: %v", actions(dec.ContractPermits))
@@ -89,7 +69,7 @@ func TestTheDefaultPolicyKeepsTheRailsApart(t *testing.T) {
 	}
 
 	dec, _ = apphostmod.AcceptAll(ctx, &apphost.AppRegisterRequest{
-		ContractPermits: parsePermits("mod.nodes.relay_for_action"),
+		ContractPermits: permits("mod.nodes.relay_for_action"),
 	})
 	if len(dec.GrantPermits) != 0 {
 		t.Fatalf("a contract request reached the grant rail: %v", actions(dec.GrantPermits))

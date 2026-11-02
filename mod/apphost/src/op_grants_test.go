@@ -4,6 +4,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/astralp2p/astral-go/api/apphost"
 	"github.com/astralp2p/astral-go/api/auth"
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astral-go/lib/routing"
@@ -22,7 +23,7 @@ func grantAdminOps() []grantAdminOp {
 	action := auth.ServeObjectsAction{}.ObjectType()
 
 	return []grantAdminOp{
-		{"apphost.grant", func(m *Module) any { return m.OpGrant }, "?identity=" + id + "&action=" + action},
+		{"apphost.grant", func(m *Module) any { return m.OpGrant }, ""},
 		{"apphost.revoke", func(m *Module) any { return m.OpRevoke }, "?identity=" + id + "&action=" + action},
 		{"apphost.list_grants", func(m *Module) any { return m.OpListGrants }, "?identity=" + id},
 	}
@@ -92,11 +93,13 @@ func TestGrantOpRecordsForAnExistingIdentity(t *testing.T) {
 	action := auth.ServeObjectsAction{}.ObjectType()
 
 	w := newRecordingWriter()
-	err := route(t, mod.OpGrant, caller, "apphost.grant?identity="+app.String()+"&action="+action, w)
-	if err != nil {
+	req := &apphost.GrantRequest{Identity: app, Permits: []*auth.Permit{{Action: astral.String8(action), Delegation: 3}}}
+	if err := routeSending(t, mod.OpGrant, caller, "apphost.grant", req, w); err != nil {
 		t.Fatalf("apphost.grant refused an authorized caller: %v", err)
 	}
-	waitAdminManageAppsAnswer(t, w)
+	if got := readReply(t, w); got != ackAnswer {
+		t.Fatalf("answered %q; want ack", got)
+	}
 
 	grants, err := mod.Grants(app)
 	if err != nil {
@@ -166,8 +169,8 @@ func TestListGrantsOmitsAnExpiredGrant(t *testing.T) {
 	if len(active) != 1 {
 		t.Fatalf("the listing reported %d grants; want the 1 that still authorizes", len(active))
 	}
-	if string(active[0].Action) != live {
-		t.Fatalf("the listing reported %q; want %q", active[0].Action, live)
+	if string(active[0].Permit.Action) != live {
+		t.Fatalf("the listing reported %q; want %q", active[0].Permit.Action, live)
 	}
 
 	all, err := mod.Grants(app)
@@ -188,8 +191,8 @@ func TestGrantOpBoundsTheGrantByDuration(t *testing.T) {
 	action := auth.ServeObjectsAction{}.ObjectType()
 
 	w := newRecordingWriter()
-	err := route(t, mod.OpGrant, astral.GenerateIdentity(), "apphost.grant?identity="+app.String()+"&action="+action+"&duration=1h", w)
-	if err != nil {
+	req := &apphost.GrantRequest{Identity: app, Duration: astral.Duration(time.Hour), Permits: permits(action)}
+	if err := routeSending(t, mod.OpGrant, astral.GenerateIdentity(), "apphost.grant", req, w); err != nil {
 		t.Fatalf("apphost.grant refused an authorized caller: %v", err)
 	}
 	waitAdminManageAppsAnswer(t, w)

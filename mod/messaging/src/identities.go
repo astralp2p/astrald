@@ -200,6 +200,8 @@ func (mod *Module) revokeGrants(identity *astral.Identity) error {
 
 	for _, permit := range permits {
 		// note: a concurrent revoke takes the row between the listing and here.
+		// note: Revoke clears every row for the action, so a later permit for an
+		// action already cleared answers gorm.ErrRecordNotFound too.
 		err = mod.Apphost.Revoke(identity, string(permit.Action))
 		if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
 			return err

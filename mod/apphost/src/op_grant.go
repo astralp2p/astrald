@@ -3,6 +3,7 @@ package apphost
 import (
 	"time"
 
+	apphostapi "github.com/astralp2p/astral-go/api/apphost"
 	"github.com/astralp2p/astral-go/api/auth"
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astral-go/astral/channel"
@@ -10,17 +11,15 @@ import (
 )
 
 type opGrantArgs struct {
-	Identity    string         `query:"required"`
-	Action      astral.String8 `query:"required"`
-	Duration    astral.Duration
-	Constrained bool
-	In          string
-	Out         string
+	In  string
+	Out string
 }
 
-// OpGrant records a node-local grant of one action for an identity, replacing
-// whatever that identity held for the same action. An omitted duration grants
-// until the grant is revoked.
+// OpGrant reads one mod.apphost.grant_request after accept and adds every
+// permit it carries as a node-local grant for its identity, beside the grants
+// that identity already holds; an identical permit refreshes its expiry. A
+// zero duration grants until revoked. A constraint on an action that ignores
+// constraints is written as sent and has no effect. The op answers ack.
 //
 // why: registration is otherwise the only writer of a grant, so an app that is
 // already registered could reach a newly guarded op only by re-registering
@@ -39,46 +38,47 @@ func (mod *Module) OpGrant(ctx *astral.Context, q *routing.IncomingQuery, args o
 		return ch.Send(auth.ErrNotPermitted)
 	}
 
-	identity, err := mod.Dir.ResolveIdentity(args.Identity)
-	if err != nil {
+	if err := refuseRemovedArgs(q.QueryString(), "identity", "action", "duration", "constrained"); err != nil {
 		return ch.Send(astral.Err(err))
 	}
 
-	if identity.IsZero() {
+	var req *apphostapi.GrantRequest
+	if err := ch.Switch(channel.Expect(&req), channel.FailOnEOF()); err != nil {
+		return ch.Send(astral.Err(err))
+	}
+
+	switch {
+	case req.Identity == nil || req.Identity.IsZero():
 		return ch.Send(astral.NewError("missing identity"))
+	case len(req.Permits) == 0:
+		return ch.Send(astral.NewError("missing permits"))
+	case req.Duration < 0:
+		return ch.Send(astral.NewError("negative duration"))
 	}
 
-	if args.Action == "" {
-		return ch.Send(astral.NewError("missing action"))
-	}
-
-	// why: the expiry is stored UTC because FindGrant compares it against a UTC
-	// clock and the pure-Go sqlite driver compares datetimes lexically.
-	var expiresAt *time.Time
-	if args.Duration != 0 {
-		t := time.Now().UTC().Add(args.Duration.Duration())
-		expiresAt = &t
-	}
-
-	permit := &auth.Permit{Action: args.Action}
-
-	// why: constraints arrive on the channel because a bundle is not a query
-	// argument. The action decides what they mean; one that does not evaluate
-	// constraints refuses the constrained permit when it is checked.
-	if args.Constrained {
-		var constraints *astral.Bundle
-		if err := ch.Switch(channel.Expect(&constraints), channel.FailOnEOF()); err != nil {
-			return ch.Send(astral.Err(err))
-		}
-		permit.Constraints = constraints
-	}
-
-	if err := mod.Grant(identity, permit, expiresAt); err != nil {
-		mod.log.Errorv(1, "error granting %v to %v: %v", args.Action, identity, err)
+	if err := validatePermits(req.Permits); err != nil {
 		return ch.Send(astral.Err(err))
 	}
 
-	mod.log.Logv(1, "granted %v to %v", args.Action, identity)
+	if err := mod.grantAll(req.Identity, req.Permits, grantExpiry(req.Duration)); err != nil {
+		mod.log.Errorv(1, "error granting %v permits to %v: %v", len(req.Permits), req.Identity, err)
+		return ch.Send(astral.Err(err))
+	}
+
+	mod.log.Logv(1, "granted %v permits to %v", len(req.Permits), req.Identity)
 
 	return ch.Send(&astral.Ack{})
+}
+
+// grantExpiry returns the expiry of a grant that lasts d from now, or nil for
+// a zero d, which grants until revoked.
+//
+// why: the expiry is stored UTC because FindGrants compares it against a UTC
+// clock and the pure-Go sqlite driver compares datetimes lexically.
+func grantExpiry(d astral.Duration) *time.Time {
+	if d == 0 {
+		return nil
+	}
+	t := time.Now().UTC().Add(d.Duration())
+	return &t
 }

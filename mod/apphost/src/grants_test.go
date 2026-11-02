@@ -1,11 +1,13 @@
 package apphost
 
 import (
+	"bytes"
 	"errors"
 	"testing"
 	"time"
 
 	"github.com/astralp2p/astral-go/api/auth"
+	"github.com/astralp2p/astral-go/api/services"
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astral-go/astral/log"
 	apphostmod "github.com/astralp2p/astrald/mod/apphost"
@@ -21,8 +23,16 @@ func testGrantModule(t *testing.T) *Module {
 		t.Fatalf("open db: %v", err)
 	}
 
+	// note: every connection to :memory: opens its own database, so the pool
+	// holds one.
+	sqlDB, err := gdb.DB()
+	if err != nil {
+		t.Fatalf("sql db: %v", err)
+	}
+	sqlDB.SetMaxOpenConns(1)
+
 	db := &DB{DB: gdb}
-	if err := db.AutoMigrate(&dbGrant{}); err != nil {
+	if err := db.migrate(); err != nil {
 		t.Fatalf("migrate: %v", err)
 	}
 
@@ -97,10 +107,10 @@ func TestGrantUnconstrainedCoversEveryRole(t *testing.T) {
 	}
 }
 
-// TestGrantReplacesRatherThanAccumulates is why the table is unique on
-// (identity, action): re-granting narrower roles has to take roles away.
-// Contract permits union across the chain walk; a grant must not.
-func TestGrantReplacesRatherThanAccumulates(t *testing.T) {
+// TestGrantsAccumulate: a second, narrower grant for the same action is added
+// beside the first, and each role either grant names still authorizes.
+// Narrowing is revoking the wide grant, not re-granting over it.
+func TestGrantsAccumulate(t *testing.T) {
 	mod := testGrantModule(t)
 	app := astral.GenerateIdentity()
 
@@ -111,19 +121,185 @@ func TestGrantReplacesRatherThanAccumulates(t *testing.T) {
 		t.Fatalf("second grant: %v", err)
 	}
 
-	if mod.authorizeGrant(nil, serveAction(app, auth.RoleDescriber)) {
-		t.Fatal("a narrowed grant still authorizes the role it dropped")
-	}
-	if !mod.authorizeGrant(nil, serveAction(app, auth.RoleFinder)) {
-		t.Fatal("a narrowed grant lost the role it kept")
-	}
-
 	grants, err := mod.Grants(app)
 	if err != nil {
 		t.Fatalf("grants: %v", err)
 	}
-	if len(grants) != 1 {
-		t.Fatalf("re-granting left %d rows; want 1", len(grants))
+	if len(grants) != 2 {
+		t.Fatalf("two different permits left %d rows; want 2", len(grants))
+	}
+
+	for _, role := range []astral.String8{auth.RoleDescriber, auth.RoleFinder} {
+		if !mod.authorizeGrant(nil, serveAction(app, role)) {
+			t.Fatalf("role %q is refused while a grant names it", role)
+		}
+	}
+	if mod.authorizeGrant(nil, serveAction(app, auth.RoleSearcher)) {
+		t.Fatal("a role no grant names was allowed")
+	}
+}
+
+// TestIdenticalPermitIsStoredOnceWithTheNewerExpiry: re-granting the same
+// permit moves its expiry and adds no row; a nil expiry makes it unexpiring.
+func TestIdenticalPermitIsStoredOnceWithTheNewerExpiry(t *testing.T) {
+	mod := testGrantModule(t)
+	app := astral.GenerateIdentity()
+
+	first := time.Now().UTC().Add(time.Hour).Truncate(time.Second)
+	second := first.Add(time.Hour)
+	for _, expiresAt := range []*time.Time{&first, &second} {
+		if err := mod.Grant(app, servePermit(auth.RoleDescriber), expiresAt); err != nil {
+			t.Fatalf("grant: %v", err)
+		}
+	}
+
+	rows, err := mod.db.ListGrants(app)
+	if err != nil {
+		t.Fatalf("list: %v", err)
+	}
+	if len(rows) != 1 || rows[0].ExpiresAt == nil || !rows[0].ExpiresAt.Equal(second) {
+		t.Fatalf("rows %+v; want one row expiring at %v", rows, second)
+	}
+
+	if err := mod.Grant(app, servePermit(auth.RoleDescriber), nil); err != nil {
+		t.Fatalf("grant: %v", err)
+	}
+	rows, err = mod.db.ListGrants(app)
+	if err != nil {
+		t.Fatalf("list: %v", err)
+	}
+	if len(rows) != 1 || rows[0].ExpiresAt != nil {
+		t.Fatalf("rows %+v; want one row that does not expire", rows)
+	}
+}
+
+// grantIDs returns the IDs of identity's grant rows, oldest first.
+func grantIDs(t *testing.T, mod *Module, identity *astral.Identity) (ids []uint64) {
+	t.Helper()
+
+	rows, err := mod.db.ListGrants(identity)
+	if err != nil {
+		t.Fatalf("list: %v", err)
+	}
+	for _, row := range rows {
+		ids = append(ids, uint64(row.ID))
+	}
+	return ids
+}
+
+func TestRevokeGrantByIDKeepsTheSibling(t *testing.T) {
+	mod := testGrantModule(t)
+	app := astral.GenerateIdentity()
+
+	for _, role := range []astral.String8{auth.RoleDescriber, auth.RoleFinder} {
+		if err := mod.Grant(app, servePermit(role), nil); err != nil {
+			t.Fatalf("grant: %v", err)
+		}
+	}
+	ids := grantIDs(t, mod, app)
+	if len(ids) != 2 {
+		t.Fatalf("got %d rows; want 2", len(ids))
+	}
+
+	if err := mod.RevokeGrant(app, ids[0]); err != nil {
+		t.Fatalf("revoke: %v", err)
+	}
+
+	if mod.authorizeGrant(nil, serveAction(app, auth.RoleDescriber)) {
+		t.Fatal("the revoked grant still authorizes")
+	}
+	if !mod.authorizeGrant(nil, serveAction(app, auth.RoleFinder)) {
+		t.Fatal("the sibling grant was withdrawn with it")
+	}
+	if err := mod.RevokeGrant(app, ids[0]); !errors.Is(err, gorm.ErrRecordNotFound) {
+		t.Fatalf("revoking an absent ID: got %v, want gorm.ErrRecordNotFound", err)
+	}
+}
+
+func TestRevokeByActionClearsEveryRow(t *testing.T) {
+	mod := testGrantModule(t)
+	app := astral.GenerateIdentity()
+
+	for _, role := range []astral.String8{auth.RoleDescriber, auth.RoleFinder} {
+		if err := mod.Grant(app, servePermit(role), nil); err != nil {
+			t.Fatalf("grant: %v", err)
+		}
+	}
+
+	if err := mod.Revoke(app, auth.ServeObjectsAction{}.ObjectType()); err != nil {
+		t.Fatalf("revoke: %v", err)
+	}
+	if ids := grantIDs(t, mod, app); len(ids) != 0 {
+		t.Fatalf("revoking the action left rows %v", ids)
+	}
+}
+
+func TestRevokeGrantByIDOfAnotherIdentityDeletesNothing(t *testing.T) {
+	mod := testGrantModule(t)
+	app, other := astral.GenerateIdentity(), astral.GenerateIdentity()
+
+	if err := mod.Grant(app, servePermit(auth.RoleDescriber), nil); err != nil {
+		t.Fatalf("grant: %v", err)
+	}
+	ids := grantIDs(t, mod, app)
+
+	if err := mod.RevokeGrant(other, ids[0]); !errors.Is(err, gorm.ErrRecordNotFound) {
+		t.Fatalf("revoking another identity's ID: got %v, want gorm.ErrRecordNotFound", err)
+	}
+	if !mod.authorizeGrant(nil, serveAction(app, auth.RoleDescriber)) {
+		t.Fatal("another identity's revoke withdrew the grant")
+	}
+}
+
+// TestGrantIDIsNotReused: a revoke names one row by its ID, so the ID of a
+// revoked grant never comes back for a newer one.
+func TestGrantIDIsNotReused(t *testing.T) {
+	mod := testGrantModule(t)
+	app := astral.GenerateIdentity()
+
+	for _, role := range []astral.String8{auth.RoleDescriber, auth.RoleFinder, auth.RoleSearcher} {
+		if err := mod.Grant(app, servePermit(role), nil); err != nil {
+			t.Fatalf("grant: %v", err)
+		}
+	}
+	ids := grantIDs(t, mod, app)
+	revoked := ids[len(ids)-1]
+	if err := mod.RevokeGrant(app, revoked); err != nil {
+		t.Fatalf("revoke: %v", err)
+	}
+
+	if err := mod.Grant(app, servePermit(auth.RoleDescriber, auth.RoleSearcher), nil); err != nil {
+		t.Fatalf("grant: %v", err)
+	}
+	ids = grantIDs(t, mod, app)
+	if newest := ids[len(ids)-1]; newest <= revoked {
+		t.Fatalf("the new grant got ID %v; want above the revoked %v", newest, revoked)
+	}
+}
+
+// TestPermitEncodingIsStable: an identical permit is found by its bytes, so a
+// decoded permit must encode to the bytes it came from.
+func TestPermitEncodingIsStable(t *testing.T) {
+	permit := &auth.Permit{
+		Action:      astral.String8(services.ServiceDiscoveryAction{}.ObjectType()),
+		Constraints: playerScope(),
+	}
+
+	row, err := fromGrantPermit(astral.GenerateIdentity(), permit, nil)
+	if err != nil {
+		t.Fatalf("encode: %v", err)
+	}
+	decoded, err := toGrantPermit(row)
+	if err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	again, err := fromGrantPermit(row.Identity, decoded, nil)
+	if err != nil {
+		t.Fatalf("re-encode: %v", err)
+	}
+
+	if !bytes.Equal(row.Data, again.Data) {
+		t.Fatalf("re-encoding changed the bytes:\n%x\n%x", row.Data, again.Data)
 	}
 }
 

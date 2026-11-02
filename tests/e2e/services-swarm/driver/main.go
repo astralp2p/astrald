@@ -15,17 +15,17 @@ import (
 	"sync/atomic"
 	"time"
 
+	apphostapi "github.com/astralp2p/astral-go/api/apphost"
 	apphostcli "github.com/astralp2p/astral-go/api/apphost/client"
+	"github.com/astralp2p/astral-go/api/auth"
 	"github.com/astralp2p/astral-go/api/services"
 	servicescli "github.com/astralp2p/astral-go/api/services/client"
 	"github.com/astralp2p/astral-go/astral"
-	"github.com/astralp2p/astral-go/astral/channel"
 	"github.com/astralp2p/astral-go/lib/apphost"
 	"github.com/astralp2p/astral-go/lib/astrald"
-	"github.com/astralp2p/astral-go/lib/query"
 )
 
-const serveApps = "mod.auth.serve_apps_action"
+var serveApps = &auth.Permit{Action: "mod.auth.serve_apps_action"}
 
 type node struct {
 	Endpoint string `json:"endpoint"`
@@ -87,7 +87,7 @@ func load(path string) (*world, error) {
 func connect(ep, token string) *astrald.Client { return astrald.New(apphost.NewRouter(ep, token)) }
 
 // app registers a fresh app identity on a node and returns its services client.
-func (w *world) app(admin *astrald.Client, n node, permits ...string) (*astral.Identity, *servicescli.Client, error) {
+func (w *world) app(admin *astrald.Client, n node, permits ...*auth.Permit) (*astral.Identity, *servicescli.Client, error) {
 	tok, err := apphostcli.New(nil, admin).Register(w.ctx, permits...)
 	if err != nil {
 		return nil, nil, err
@@ -97,13 +97,6 @@ func (w *world) app(admin *astrald.Client, n node, permits ...string) (*astral.I
 
 // grant writes app's discovery scope on node1: names on nodes (any node when empty).
 func (w *world) grant(app *astral.Identity, names []string, nodes ...*astral.Identity) error {
-	ch, err := w.admin1.QueryChannel(w.ctx, "apphost.grant", query.Args{
-		"identity": app.String(), "action": services.ServiceDiscoveryAction{}.ObjectType(), "constrained": true,
-	})
-	if err != nil {
-		return err
-	}
-	defer ch.Close()
 	rule := &services.DiscoveryRule{Nodes: nodes}
 	for _, n := range names {
 		rule.Services = append(rule.Services, astral.String8(n))
@@ -112,10 +105,10 @@ func (w *world) grant(app *astral.Identity, names []string, nodes ...*astral.Ide
 	if err := cs.Append(&services.DiscoveryScope{Rules: []*services.DiscoveryRule{rule}}); err != nil {
 		return err
 	}
-	if err := ch.Send(cs); err != nil {
-		return err
-	}
-	return ch.Switch(channel.ExpectAck, channel.PassErrors, channel.FailOnEOF())
+	return apphostcli.New(nil, w.admin1).Grant(w.ctx, &apphostapi.GrantRequest{
+		Identity: app,
+		Permits:  []*auth.Permit{{Action: astral.String8(services.ServiceDiscoveryAction{}.ObjectType()), Constraints: cs}},
+	})
 }
 
 // evaluated records the callers a provider evaluated.

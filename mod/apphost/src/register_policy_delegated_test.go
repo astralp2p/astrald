@@ -82,14 +82,14 @@ func registerAsk(ctx *astral.Context, p apphostmod.RegisterAppPolicy) bool {
 func TestDelegatedPolicyReturnsTheDelegatesDecision(t *testing.T) {
 	node := newDelegateNode(&apphost.AppRegisterDecision{
 		Allow:           true,
-		ContractPermits: parsePermits("mod.nodes.relay_for_action"),
+		ContractPermits: permits("mod.nodes.relay_for_action"),
 	})
 	mod, d := delegatingModule(node)
 
 	dec, err := mod.RegisterAppPolicyDelegated(d)(astral.NewContext(nil), &apphost.AppRegisterRequest{
 		Origin:       "https://player.example",
 		Name:         "Player",
-		GrantPermits: parsePermits("mod.auth.serve_objects_action"),
+		GrantPermits: permits("mod.auth.serve_objects_action"),
 	})
 	if err != nil {
 		t.Fatalf("delegated policy: %v", err)

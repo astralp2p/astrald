@@ -49,7 +49,7 @@ func TestRegistrationPushesTheRelayContractToTheSiblings(t *testing.T) {
 	mod.User = recorder
 	w := newRecordingWriter()
 
-	if err := route(t, mod.OpRegister, astral.GenerateIdentity(), "apphost.register", w); err != nil {
+	if err := register(t, mod, &apphost.RegisterRequest{}, w); err != nil {
 		t.Fatalf("apphost.register refused: %v", err)
 	}
 	awaitServeAppsClose(t, w)
@@ -93,7 +93,7 @@ func TestRegistrationThatFailsPushesNothing(t *testing.T) {
 	mod.User = recorder
 	w := newRecordingWriter()
 
-	if err := route(t, mod.OpRegister, astral.GenerateIdentity(), "apphost.register", w); err != nil {
+	if err := register(t, mod, &apphost.RegisterRequest{}, w); err != nil {
 		t.Fatalf("apphost.register refused: %v", err)
 	}
 	awaitServeAppsClose(t, w)

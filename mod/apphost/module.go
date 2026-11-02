@@ -33,13 +33,19 @@ type Module interface {
 	// expired ones included. An identity holding none is not an error.
 	DeleteAccessTokens(identity *astral.Identity) error
 
-	// Grant records a permit for identity on this node, replacing whatever it
-	// held for the same action. A nil expiresAt grants until revoked. The permit
-	// is recorded, not signed: it authorizes here and travels nowhere.
+	// Grant adds a permit for identity on this node beside the grants it already
+	// holds; an identical permit refreshes its expiry. A nil expiresAt grants
+	// until revoked. The permit is recorded, not signed: it authorizes here and
+	// travels nowhere.
 	Grant(identity *astral.Identity, permit *auth.Permit, expiresAt *time.Time) error
 
-	// Revoke withdraws identity's grant for action, named by its object type.
+	// Revoke withdraws every grant identity holds for action, named by its
+	// object type.
 	Revoke(identity *astral.Identity, action string) error
+
+	// RevokeGrant withdraws one grant by its ID. An ID of another identity's
+	// grant is not found.
+	RevokeGrant(identity *astral.Identity, id uint64) error
 
 	// Grants returns every permit granted to identity, expired included.
 	Grants(identity *astral.Identity) ([]*auth.Permit, error)
