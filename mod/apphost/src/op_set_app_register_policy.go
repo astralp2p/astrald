@@ -56,7 +56,11 @@ func (mod *Module) OpSetAppRegisterPolicy(ctx *astral.Context, q *routing.Incomi
 		return ch.Send(astral.Err(err))
 	}
 
-	if err := mod.writePolicyDelegate(ctx, args.Identity, args.Operation, args.Timeout, &mod.policy.AppRegister); err != nil {
+	d, err := mod.newDelegate(args.Identity, args.Operation, args.Timeout)
+	if err == nil {
+		err = writePolicyDelegate(ctx, d, &mod.policy.AppRegister)
+	}
+	if err != nil {
 		return ch.Send(astral.Err(err))
 	}
 
@@ -82,7 +86,11 @@ func (mod *Module) OpSetGrantRequestPolicy(ctx *astral.Context, q *routing.Incom
 	var err error
 	switch args.Mode {
 	case "":
-		err = mod.writePolicyDelegate(ctx, args.Identity, args.Operation, args.Timeout, &mod.policy.GrantRequest)
+		var d *policy.Delegate
+		d, err = mod.newDelegate(args.Identity, args.Operation, args.Timeout)
+		if err == nil {
+			err = writePolicyDelegate(ctx, d, &mod.policy.GrantRequest)
+		}
 		if err == nil {
 			err = mod.policy.GrantRequestMode.Clear(ctx)
 		}
@@ -111,29 +119,23 @@ func (mod *Module) OpSetGrantRequestPolicy(ctx *astral.Context, q *routing.Incom
 	return ch.Send(&astral.Ack{})
 }
 
-// writePolicyDelegate writes the delegate identity and op name into v, or
-// clears v when both are empty.
-func (mod *Module) writePolicyDelegate(
-	ctx *astral.Context,
-	identity, op string,
-	timeout astral.Duration,
-	v *tree.Value[*policy.Delegate],
-) error {
-	if identity == "" && op == "" {
+// writePolicyDelegate writes d into v, or clears v when d is nil.
+func writePolicyDelegate(ctx *astral.Context, d *policy.Delegate, v *tree.Value[*policy.Delegate]) error {
+	if d == nil {
 		return v.Clear(ctx)
-	}
-
-	d, err := mod.newDelegate(identity, op, timeout)
-	if err != nil {
-		return err
 	}
 	return v.Set(ctx, d)
 }
 
-// newDelegate resolves name and builds the delegate the setter stores.
+// newDelegate resolves name and builds the delegate the setter stores. Both
+// name and op empty return nil, which restores the bundled policy.
 //
 // why not the node itself: the admitting op would ask itself and recurse.
 func (mod *Module) newDelegate(name, op string, timeout astral.Duration) (*policy.Delegate, error) {
+	if name == "" && op == "" {
+		return nil, nil
+	}
+
 	id, err := mod.Dir.ResolveIdentity(name)
 	if err != nil {
 		return nil, err
