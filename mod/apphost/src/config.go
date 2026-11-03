@@ -67,8 +67,13 @@ var defaultConfig = Config{
 	Tokens:   map[string]string{},
 	Workers:  32,
 	// why so few: a fresh node only appoints a manager, and an unclaimed node
-	// only claims and registers apps; a claimed node leaves the decision to
-	// authorization and policies.
+	// only claims, registers apps and lets them serve; a claimed node leaves the
+	// decision to authorization and policies.
+	//
+	// why apphost.bind, apphost.register_handler and apphost.cancel before the
+	// claim: the manager answers the policies delegated to it, an invitation
+	// from the owner's other device among them, and an app answers only through
+	// a registered handler.
 	Gate: Gate{
 		Tokenless: []string{
 			"apphost.register",
@@ -86,6 +91,9 @@ var defaultConfig = Config{
 				"user.bootstrap",
 				"user.join",
 				"apphost.register",
+				"apphost.bind",
+				"apphost.register_handler",
+				"apphost.cancel",
 			},
 			Claimed: []string{gateAny},
 		},
