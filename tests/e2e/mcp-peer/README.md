@@ -12,7 +12,7 @@ agent that holds no permit while they answer node1.
   `PEER_TOOLS` as the agent over MCP.
 - **oracle** `verify.py` — node2 answered node1 both ops and took the relay
   contract; node2's app heard the agent; node2 refused both ops to the agent,
-  and `user.info` refused it with code 4.
+  each answering it `not permitted`.
 
 ## What this proves that the unit tests do not
 
@@ -42,5 +42,6 @@ would say nothing about the operations.
 A guard that refused every query leaving over a link would satisfy the
 refusals. The app on node2 answers the caller it reads, so the test fails if
 the agent reaches no peer at all, and fails if node2 reads node1 as the caller.
-`user.info` refuses a caller outside the swarm with code 4, and a relay
-refusal carries code 1, so the code places that refusal at the op.
+An op refuses a caller it does not authorize by accepting the query and
+answering `not permitted`, and a relay refusal rejects the query before any op
+runs, so that answer places each refusal at the op.
