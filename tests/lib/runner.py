@@ -17,6 +17,9 @@ from pathlib import Path
 
 from astral.client import ENDPOINT_VARS, TOKEN_VARS
 
+# The variables astral-go's default router reads (lib/apphost/config.go).
+GO_ENV_VARS = ("ASTRALD_APPHOST_ENDPOINT", "ASTRALD_APPHOST_TOKEN")
+
 from lib import agent, manifest, report, suites
 from lib import plan as planner
 from lib.build import ensure_binary, git_ref
@@ -251,21 +254,22 @@ def driver_env(session_json: Path, target: str) -> dict:
     """The environment drivers and oracles run in.
 
     why: astral-py resolves an endpoint and a token from the ambient
-    environment whenever a call passes none, so a developer's own daemon
-    token answers for a test's anonymous connect and the test node refuses
-    it. Every target but attach resolves nothing from outside session.json;
-    attach is the one mode where the ambient resolution is the point.
+    environment whenever a call passes none, and astral-go's default router
+    reads ASTRALD_APPHOST_ENDPOINT and ASTRALD_APPHOST_TOKEN, so a developer's
+    own daemon token answers for a test's anonymous connect. Drivers and
+    oracles reach every node through session.json alone, so the variables are
+    stripped under every target. attach resolves its daemon from them in the
+    runner (worlds/attach.py), and the view carries that endpoint and token.
 
-    note: this keys off the target, not the header's `hermetic`. A world
-    booted --from a saved one is not hermetic, yet its nodes are the
-    harness's, not the developer's.
+    note: `target` stays a parameter so the header's `hermetic` is never read
+    here: a world booted --from a saved one is not hermetic, yet its nodes
+    are the harness's, not the developer's.
     """
     env = dict(os.environ,
                PYTHONPATH=os.environ.get("ASTRAL_TESTS_PYPATH", str(TESTS)),
                ASTRAL_TESTS_SESSION=str(session_json))
-    if target != "attach":
-        for var in ENDPOINT_VARS + TOKEN_VARS:
-            env.pop(var, None)
+    for var in ENDPOINT_VARS + TOKEN_VARS + GO_ENV_VARS:
+        env.pop(var, None)
     return env
 
 

@@ -368,6 +368,7 @@ class TestPushedHeader(unittest.TestCase):
 
 class TestDriverEnv(unittest.TestCase):
     AMBIENT = {"ASTRAL_ENDPOINT": "tcp:127.0.0.1:8625",
+               "ASTRALD_APPHOST_ENDPOINT": "tcp:127.0.0.1:8625",
                "ASTRALD_APPHOST_TOKEN": "developer-token"}
 
     def test_a_run_from_a_saved_world_hands_its_drivers_a_stripped_env(self):
@@ -408,19 +409,18 @@ class TestDriverEnv(unittest.TestCase):
         with mock.patch.dict("os.environ", self.AMBIENT):
             return runner.driver_env(Path("/s/session.json"), target)
 
-    def test_ambient_endpoint_and_token_are_stripped_but_under_attach(self):
+    def test_ambient_endpoint_and_token_are_stripped_under_every_target(self):
         # why: a developer's token answered for a test's anonymous connect
         # under the retired stage: target, which stripped nothing because it
-        # is not hermetic
-        for target in ("fresh",):
+        # is not hermetic, and under attach, where smoke's anonymous
+        # shell.spec then read as answered
+        for target in ("fresh", "attach"):
             with self.subTest(target=target):
                 env = self.env_for(target)
                 for var in self.AMBIENT:
                     self.assertNotIn(var, env)
-        env = self.env_for("attach")
-        for var, value in self.AMBIENT.items():
-            self.assertEqual(env[var], value)
-        self.assertEqual(env["ASTRAL_TESTS_SESSION"], "/s/session.json")
+                self.assertEqual(env["ASTRAL_TESTS_SESSION"],
+                                 "/s/session.json")
 
 
 class TestBareSelections(unittest.TestCase):
