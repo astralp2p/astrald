@@ -12,6 +12,7 @@ import io
 import json
 import os
 import re
+import socket
 import tempfile
 import unittest
 from pathlib import Path
@@ -50,9 +51,11 @@ class FakeLab:
     """netsim and its guests: stages, simulations, and what the guests hold.
 
     Every call lands in `calls`, in order: ("netsim", *argv), ("scp", sim,
-    vm, dst), ("tunnel", sim, vm, target), ("terminate", sim, vm, target),
-    ("op", sim, label, argv, ids). A guest that ran enter-nat answers
-    `priv` when asked for its network namespaces, as a NAT'd one does.
+    vm, dst), ("tunnel", sim, vm), ("terminate", sim, vm), ("op", sim,
+    label, argv, ids). A guest that ran enter-nat answers `priv` when asked
+    for its network namespaces, as a NAT'd one does.
+    why answer what the harness no longer asks: a fake that knew no netns
+    would let a harness that moves its tunnels on `priv` pass unseen.
     """
 
     def __init__(self, home: Path, stages=("null",), running=()):
@@ -127,9 +130,9 @@ class FakeLab:
     def scp(self, world, host, src, dst):
         self.calls.append(("scp", world.sim, host, dst))
 
-    def tunnel(self, world, host, target=None):
-        self.calls.append(("tunnel", world.sim, host, target))
-        self.procs.append(FakeProc(self.calls, (world.sim, host, target)))
+    def tunnel(self, world, host):
+        self.calls.append(("tunnel", world.sim, host))
+        self.procs.append(FakeProc(self.calls, (world.sim, host)))
         world._tunnels.append(self.procs[-1])     # as the real one does
         return 30000 + len(self.procs), self.procs[-1]
 
@@ -253,26 +256,21 @@ class TestFreshVmWorlds(Lab):
                     ("task",), ("ps", "--json"), ("remove",),
                     *[("ssh", h, "set") for h in VMS]]     # the push, per VM
 
-        def step(*roster, ops=()):
-            # the session opens before the ops and again after them, each
-            # time asking where apphost listens; then the world's pulse
-            probe = [("ssh", h, "ip") for h in roster]
-            return (probe + [("op", op) for op in ops] + probe
-                    + [("ps", "--json")])
+        def step(ops=()):
+            # the session opens before the ops and again after them without
+            # asking a guest anything; then the world's pulse
+            return [("op", op) for op in ops] + [("ps", "--json")]
 
         close = [*[("ssh", h, "journalctl") for h in VMS], ("kill",),
                  ("ps", "--json")]            # gone before the next boot
-        pair = ("node1", "node2")
         nat = ("enable-tor", "enable-tor:verify.sh", "enter-nat",
                "expose-apphost", "configure-nat-tor", "add-reflector",
                "add-reflector:verify.sh")
         tor = ("enable-tor", "enable-tor:verify.sh", "leave-lan",
                "leave-lan:verify.sh")
         self.assertEqual(self.fake.netsim_verbs(), [
-            *boot(bake=True), *step("node1"), *step(*pair),
-            *step(*pair, ops=nat), *close,
-            *boot(bake=False), *step("node1"), *step(*pair),
-            *step(*pair, ops=tor), *close])
+            *boot(bake=True), *step(), *step(), *step(ops=nat), *close,
+            *boot(bake=False), *step(), *step(), *step(ops=tor), *close])
         task = ("netsim", "task", "--stage", LAB, "--keep", "--save",
                 vm.SCRATCH_STAGE, "noop")
         self.assertEqual([c for c in self.fake.calls if c[:2] == task[:2]],
@@ -319,28 +317,22 @@ class TestFreshVmWorlds(Lab):
         self.assertTrue(all(set(i) == {"ASTRAL_ID_node1", "ASTRAL_ID_node2"}
                             for i in ids))
 
-    def test_enter_nat_moves_the_tunnels_to_the_private_address(self):
-        # why: enter-nat puts apphost in netns priv, and the forward that
-        # still reaches 127.0.0.1 forwards to nothing while its ssh lives on
-        moved = [c[2:] for c in self.fake.calls
-                 if c[0] in ("tunnel", "terminate") and c[1] == "7"
-                 and c[2] in ("node1", "node2")]
-        self.assertEqual(moved, [
-            ("node1", "127.0.0.1"), ("node2", "127.0.0.1"),
-            ("node1", "127.0.0.1"), ("node1", vm.NAT_NETNS_HOST),
-            ("node2", "127.0.0.1"), ("node2", vm.NAT_NETNS_HOST),
-            ("node1", vm.NAT_NETNS_HOST), ("node2", vm.NAT_NETNS_HOST)])
-        kinds = [c[0] for c in self.fake.calls
-                 if c[0] in ("tunnel", "terminate") and c[1] == "7"
-                 and c[2] in ("node1", "node2")]
-        self.assertEqual(kinds, ["tunnel", "tunnel", "terminate", "tunnel",
-                                 "terminate", "tunnel", "terminate",
-                                 "terminate"])
-        [last_op] = [i for i, c in enumerate(self.fake.calls)
-                     if c[:3] == ("op", "7", "add-reflector:verify.sh")]
-        first_move = self.fake.calls.index(("terminate", "7", "node1",
-                                            "127.0.0.1"))
-        self.assertLess(last_op, first_move)       # reopened after the ops
+    def test_a_tunnel_outlives_enter_nat(self):
+        # why: each tunnel reaches apphost's socket, which enter-nat leaves
+        # where it was, so a NAT'd node keeps the tunnel it had on the LAN
+        calls = self.fake.calls
+        tunnels = [c for c in calls
+                   if c[0] in ("tunnel", "terminate") and c[1] == "7"]
+        self.assertEqual(tunnels, [
+            ("tunnel", "7", "node1"), ("tunnel", "7", "node2"),
+            ("terminate", "7", "node1"), ("terminate", "7", "node2")])
+        [nat] = [i for i, c in enumerate(calls)
+                 if c[:3] == ("op", "7", "enter-nat")]
+        self.assertLess(calls.index(("tunnel", "7", "node2")), nat)
+        # torn down only as the world closes, right before its kill
+        end = calls.index(("terminate", "7", "node1"))
+        self.assertLess(nat, end)
+        self.assertEqual(calls[end + 2], ("netsim", "kill", "7"))
 
     def test_each_world_keeps_its_guests_logs(self):
         for w, sim in (("w0", "7"), ("w1", "8")):
@@ -450,10 +442,8 @@ class TestSnapshots(Lab):
         after = [c for c in fake.calls[save:] if c[0] in ("tunnel",
                                                           "terminate")]
         self.assertEqual(after, [
-            ("terminate", "7", "node1", "127.0.0.1"),
-            ("terminate", "7", "node2", "127.0.0.1"),
-            ("tunnel", "7", "node1", "127.0.0.1"),
-            ("tunnel", "7", "node2", "127.0.0.1")])
+            ("terminate", "7", "node1"), ("terminate", "7", "node2"),
+            ("tunnel", "7", "node1"), ("tunnel", "7", "node2")])
         live = {p.tunnel[1]: p for p in fake.procs[-2:]}
         self.assertFalse(any(p.dead or p.terminated for p in live.values()))
         kept = json.loads((run_dir / "w0" / "world.json").read_text())
@@ -469,10 +459,10 @@ class TestSnapshots(Lab):
         fake = self.lab()
         real = fake.tunnel
 
-        def tunnel(world, host, target=None):
+        def tunnel(world, host):
             if any(c[:2] == ("netsim", "save") for c in fake.calls):
                 raise WorldError(f"{host}: apphost tunnel never opened")
-            return real(world, host, target)
+            return real(world, host)
         fake.tunnel = tunnel
         code, doc, _, _ = run(self.tmp, fake, ["adopt-node"], vm=True,
                               save="gw", keep=True)
@@ -682,6 +672,45 @@ class TestClose(Lab):
         fake.sims.clear()                    # gone before the close asked
         world.close(False)
         self.assertIn(("netsim", "kill", world.sim), fake.calls)
+
+
+class TestTunnel(Lab):
+    """The real _tunnel, with only ssh faked."""
+
+    def test_the_forward_reaches_the_socket_and_asks_no_guest(self):
+        # why: a socket is found by path from the root netns, so one target
+        # serves a node enter-nat moved into netns priv and a LAN one alike
+        world = VmWorld(self.tmp / "w0", self.tmp / "astrald", "abc1234")
+        world.sim = "7"
+        launched = []
+
+        class Ssh:
+            def __init__(self, argv, **kw):
+                launched.append(argv)
+
+            def poll(self):
+                return None
+
+        asked = AssertionError("_tunnel asked the guest")
+        home = {"NETSIM_HOME": str(self.tmp / "netsim")}
+        with socket.socket() as ear, contextlib.ExitStack() as stack:
+            # the forward's local end, as ssh would hold it
+            ear.bind(("127.0.0.1", 0))
+            ear.listen()
+            port = ear.getsockname()[1]
+            for p in (mock.patch.object(vm.subprocess, "Popen", Ssh),
+                      mock.patch.object(VmWorld, "_free_port",
+                                        lambda w: port),
+                      mock.patch.object(vm, "_netsim", side_effect=asked),
+                      mock.patch.dict(os.environ, home)):
+                stack.enter_context(p)
+            self.assertEqual(world._tunnel("node2")[0], port)
+        argv, = launched
+        self.assertEqual(argv[argv.index("-L") + 1],
+                         f"{port}:/var/lib/astrald/apphost.sock")
+        config = self.tmp / "netsim" / "sims" / "7" / "ssh_config"
+        self.assertEqual(argv[argv.index("-F") + 1], str(config))
+        self.assertEqual(argv[-1], "node2")
 
 
 class TestLabStage(Lab):
