@@ -533,21 +533,106 @@ class TestWorldLifetime(Lab):
         self.assertIn("netsim already runs simulation 3",
                       next(log).read_text())
         self.assertEqual(ran, [])
+        self.assertEqual(fake.sims, {"3": None})
+        self.assertFalse([c for c in fake.calls if c[:2] == ("netsim", "kill")])
 
     def test_a_failed_boot_is_not_retried_by_each_later_step(self):
         # why: two root observers share a world but not a lineage, so the
         # second still prepares after the first one's boot failed
         fake = self.lab()
         with mock.patch.object(VmWorld, "_base_stage",
-                               side_effect=WorldError("bake failed")):
+                               side_effect=WorldError("bake failed")) as bake:
             _, doc, _, _ = run(self.tmp, fake, ["smoke", "claim-window"],
                                vm=True)
         self.assertEqual([(e["test"], e["failure_kind"])
                           for e in doc["entries"]],
                          [("claim-window", "environment"),
                           ("smoke", "environment")])
-        self.assertEqual(len([c for c in fake.calls
-                              if c[:2] == ("netsim", "ps")]), 1)
+        self.assertEqual(bake.call_count, 1)
+
+    def test_a_world_after_a_failed_boot_still_boots(self):
+        # why: the failed task left its simulation up under --keep, and the
+        # next world would refuse to boot beside it
+        fake = self.lab()
+        stop(fake, "task", WorldError("netsim task: exit 1"), saved="-error")
+        code, doc, _, _ = run(self.tmp, fake, ["tor-link", "nat-punch"])
+        self.assertEqual(code, 1)
+        self.assertEqual([(e["world"], e["status"]) for e in doc["entries"]],
+                         [("w0", "fail")] + [("w0", "skipped")] * 2
+                         + [("w1", "pass")] * 3)
+        self.assertIn(("netsim", "kill", "7"), fake.calls)
+        self.assertEqual(fake.sims, {})
+        self.assertFalse({vm.SCRATCH_STAGE, f"{vm.SCRATCH_STAGE}-error"}
+                         & fake.stages)
+
+
+def stop(fake: FakeLab, verb: str, error: BaseException, saved: str = ""):
+    """fake's first netsim `verb` runs, then raises error. A task's stage
+    is then saved with `saved` appended, as netsim saves a failed task's."""
+    real, armed = fake.netsim, [True]
+
+    def netsim(*args, **kw):
+        out = real(*args, **kw)
+        if args[0] == verb and armed:
+            armed.clear()
+            if saved:
+                fake.stages.discard(vm.SCRATCH_STAGE)
+                fake.stages.add(vm.SCRATCH_STAGE + saved)
+            raise error
+        return out
+    fake.netsim = netsim
+
+
+class TestStoppedBoot(Lab):
+    """A boot that stops after netsim created its simulation."""
+
+    def ensure(self, fake: FakeLab) -> VmWorld:
+        """A world's first ensure over fake, which has to raise."""
+        stack = contextlib.ExitStack()
+        self.addCleanup(stack.close)
+        for p in fake.patches():
+            stack.enter_context(p)
+        stack.enter_context(contextlib.redirect_stderr(io.StringIO()))
+        world = VmWorld(self.tmp / "w0", self.tmp / "astrald", "abc1234")
+        with self.assertRaises(BaseException):
+            world.ensure(SimpleNamespace(name="bootstrap", nodes=["node1"],
+                                         ops=[]))
+        return world
+
+    def assert_clean(self, fake: FakeLab, world: VmWorld) -> None:
+        self.assertIsNone(world.sim)
+        self.assertIn(("netsim", "kill", "7"), fake.calls)
+        self.assertEqual(fake.sims, {})
+        self.assertEqual(fake.stages, {"null", LAB})
+
+    def test_a_failed_task_kills_its_simulation_and_its_stage(self):
+        fake = self.lab(stages=("null", LAB))
+        stop(fake, "task", WorldError("netsim task: exit 1"), saved="-error")
+        self.assert_clean(fake, self.ensure(fake))
+
+    def test_a_ctrl_c_during_the_task_kills_its_simulation(self):
+        fake = self.lab(stages=("null", LAB))
+        stop(fake, "task", KeyboardInterrupt())
+        self.assert_clean(fake, self.ensure(fake))
+
+    def test_a_ctrl_c_during_the_scratch_removal_kills_the_simulation(self):
+        fake = self.lab(stages=("null", LAB))
+        stop(fake, "remove", KeyboardInterrupt())
+        self.assert_clean(fake, self.ensure(fake))
+
+    def test_a_second_new_simulation_is_killed_with_the_first(self):
+        # why: neither was up before the boot, so both are this world's
+        fake = self.lab(stages=("null", LAB))
+        real = fake.netsim
+
+        def netsim(*args, **kw):
+            if args[0] == "task":
+                fake.boot("null")
+            return real(*args, **kw)
+        fake.netsim = netsim
+        world = self.ensure(fake)
+        self.assertIsNone(world.sim)
+        self.assertEqual(fake.sims, {})
 
 
 class TestClose(Lab):

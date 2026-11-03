@@ -222,19 +222,19 @@ class VmWorld(World):
             print(f"run: --keep, simulation {self.sim} left up with its "
                   f"tunnels: netsim ssh --sim {self.sim} <vm>", file=sys.stderr)
             return
-        self._await_death()
+        self._await_death(self.sim)
 
-    def _await_death(self) -> None:
-        """Return once netsim no longer runs this world's simulation.
+    def _await_death(self, sim: str) -> None:
+        """Return once netsim no longer runs simulation `sim`.
 
         why raise rather than move on: a close that raises ends the run, and
         the next world would otherwise boot beside a simulation still up —
         three more 2 GiB guests, and netsim commands that may land in either.
         """
         deadline = time.monotonic() + KILL_TIMEOUT
-        while str(self.sim) in _sims():
+        while str(sim) in _sims():
             if time.monotonic() >= deadline:
-                raise WorldError(f"simulation {self.sim} is still up "
+                raise WorldError(f"simulation {sim} is still up "
                                  f"{KILL_TIMEOUT:.0f} s after netsim kill")
             time.sleep(1.0)
 
@@ -259,7 +259,8 @@ class VmWorld(World):
 
     def _open(self) -> None:
         """Boot this world's simulation, once; a boot that failed fails every
-        later ensure the same way rather than booting again."""
+        later ensure the same way rather than booting again, and leaves no
+        simulation of its own up."""
         if self._boot_error is not None:
             raise WorldError(self._boot_error)
         if self.sim is not None:
@@ -275,7 +276,11 @@ class VmWorld(World):
                     f"netsim already runs simulation {', '.join(sorted(before))}"
                     ": one VM world at a time — `netsim kill` it, or let its "
                     "run end")
-            self._boot(self.stage or self._base_stage(), before)
+            try:
+                self._boot(self.stage or self._base_stage(), before)
+            except BaseException:
+                self._discard(before)
+                raise
             if self.stage:
                 self.saved = self._guest_record()
         except WorldError as e:
@@ -308,7 +313,33 @@ class VmWorld(World):
         if len(new) != 1:
             raise WorldError(f"booting {stage}: netsim ps lists new "
                              f"simulations [{', '.join(new)}], not one")
+        # note: claimed last, so a boot stopped before this line is _discard's
         self.sim = new[0]
+
+    def _discard(self, before: set) -> None:
+        """Kill every simulation a boot that stopped short left up, wait for
+        each to go, and remove the scratch stages it may have saved.
+
+        why: under --keep netsim tears nothing down when its task fails, and
+        a Ctrl-C kills netsim before it can, so the boot's simulation would
+        stay up and every later VM world would refuse to boot beside it.
+        why only those absent from `before`: a simulation this world did not
+        start is never touched, and _open boots only with none up.
+        why best-effort: the boot's own error, or its Ctrl-C, is what the run
+        has to report.
+        """
+        try:
+            new = sorted(_sims() - before)
+            for sim in new:
+                _netsim("kill", sim, check=False)
+            # note: a task that failed saves its stage under -error
+            for name in (SCRATCH_STAGE, f"{SCRATCH_STAGE}-error"):
+                _netsim("remove", name, check=False)
+            for sim in new:
+                self._await_death(sim)
+        except WorldError as e:
+            print(f"run: a stopped boot left netsim unclean: {e}",
+                  file=sys.stderr)
 
     @property
     def sim_dir(self) -> Path:
