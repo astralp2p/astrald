@@ -165,8 +165,8 @@ class Operator:
         self._model_set = True
 
     def _push(self, test) -> None:
-        """Empty ~/.facts/, and put the test's own files in the operator's
-        home.
+        """Remove the test's own facts file, ~/.facts/<test>.json, and put
+        the test's own files in the operator's home.
 
         why the payloads: a prompt says "the contents of ~/payload.txt", and
         the operator has a home, not the test directory. object-store-peer
@@ -174,11 +174,15 @@ class Operator:
         object's id, and its oracle went looking on the peer for an object
         that was never put there.
 
-        why ~/.facts/ is emptied: the facts are read from one file the test
-        names, and a file an earlier test left there must not answer for it.
+        why that file is removed: the facts are read from it alone, and a
+        copy an earlier run of the test left there must not answer for it.
+        why only that file: the rest of ~/.facts/ is what earlier sessions
+        in this world kept, and bootstrap-user-software-key's file keeps the
+        User token for the sessions after it.
         """
-        lines = ["set -eu", f"rm -rf {HOME}/.facts",
-                 f"install -d -m 700 -o {USER} -g {USER} {HOME}/.facts"]
+        lines = ["set -eu",
+                 f"install -d -m 700 -o {USER} -g {USER} {HOME}/.facts",
+                 f"rm -f {HOME}/.facts/{test.name}.json"]
         for f in sorted(test.dir.iterdir()):
             if not f.is_file() or f.name in HARNESS_FILES:
                 continue

@@ -143,11 +143,24 @@ class TestOperator(unittest.TestCase):
         self.assertEqual(json.loads((art / "facts.json").read_text()),
                          {"object_id": "fresh"})
         push = guest.scripts[0]
-        self.assertIn("rm -rf /home/tester/.facts", push)
+        self.assertIn("rm -f /home/tester/.facts/object-store.json", push)
         self.assertIn("> /home/tester/payload.txt", push)
         self.assertNotIn("prompt.md", push)
         self.assertFalse(any("/home/tester/object.json" in s
                              for s in guest.scripts))
+
+    def test_a_session_removes_only_its_own_facts_file(self):
+        # why: bootstrap's operator keeps the User token in its own file,
+        # and emptying ~/.facts/ took it from every later session
+        t = a_test(self.root, "adopt-node", "adopt it\n")
+        guest = Guest({"su - tester": f"done\n{agent.EXIT}0"})
+        rc, _ = self.run_op(t, guest)
+        self.assertEqual(rc, 0)
+        push = guest.scripts[0].split("\n")
+        self.assertEqual([line for line in push if line.startswith("rm ")],
+                         ["rm -f /home/tester/.facts/adopt-node.json"])
+        self.assertIn("install -d -m 700 -o tester -g tester "
+                      "/home/tester/.facts", push)
 
     def test_a_missing_declared_fact_is_a_driver_failure(self):
         t = a_test(self.root, "t", "do it\n", facts=["a_id", "b_id"])

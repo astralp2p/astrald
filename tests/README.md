@@ -148,7 +148,9 @@ Qwen Code, baked into the lab's `node1` with the astral-agent skill, and
   operator a token: it must never hold what it is judged with;
 - a footer asks for exactly the test's `facts`, in `~/.facts/<test>.json`.
   That file alone is collected, and a declared fact missing from it is a
-  `driver` failure;
+  `driver` failure. It is removed before the session, so no earlier copy
+  answers for the test; the rest of `~/.facts/` stays, so the User token
+  bootstrap's operator keeps there outlives its session;
 - the model is `config.toml`'s `[agent] model`, set in the operator once
   per world; `base_url` applies only with a model. The report names the
   model, since a red under one model says nothing about another;
