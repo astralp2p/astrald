@@ -18,5 +18,9 @@ add-vm --hostname node2 --mem 2048
 # the others and joins a roster only where a test names it (gateway-relay).
 add-vm --hostname reflector --mem 2048
 install-astrald
-install-qwen-code --vm node1 --create-user
+# why the endpoint is named: install-qwen-code checks from node1 that its
+# endpoint answers, and its built-in one (10.21.0.3) is gone. The options need
+# netsim 1d4f65b or later. config.toml's [agent] model picks the model a run
+# drives; this endpoint stays.
+install-qwen-code --vm node1 --create-user --base-url http://spark0.hq.satforge.dev:8000/v1 --model deepseek-v4-flash
 configure-astral-agent --vm node1

@@ -21,5 +21,5 @@ package = "./cmd/astrald"
 # --driver agent with, set in the operator once per VM world. An empty model
 # keeps the one the lab baked. base_url applies only with a model, and empty
 # keeps the lab's endpoint.
-model    = "muse-glimmer-30b-p6"
+model    = "deepseek-v4-flash"
 base_url = ""
