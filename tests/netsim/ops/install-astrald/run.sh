@@ -90,10 +90,13 @@ systemctl enable --now astrald
 # build still loads the VM -- so the window is deliberately generous (the old
 # ~10s loop flaked here). On failure, dump the service state + journal so "did
 # not come up" is a real diagnosis instead of an opaque message.
+# why user.info: the bake holds no token, and a fresh node's default apphost gate
+# admits a token-less session only to apphost.register_manager and user.info
+# (mod/apphost/src/config.go); it denies .spec, so a .spec probe never passes.
 ok=
 n=0
 while [ "$n" -lt 90 ]; do
-    if systemctl is-active --quiet astrald && timeout 5 astral-query localnode:.spec -out json >/dev/null 2>&1; then
+    if systemctl is-active --quiet astrald && timeout 5 astral-query localnode:user.info -out json >/dev/null 2>&1; then
         ok=1; break
     fi
     n=$((n + 1)); sleep 1
