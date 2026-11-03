@@ -148,11 +148,17 @@ type endpointSync struct {
 	target   *astral.Identity
 }
 
-// recordingNodes records endpoint syncs and closed links.
+// recordingNodes records endpoint syncs and closed links, and reports a link to
+// the linked identities alone.
 type recordingNodes struct {
 	nodesmod.Module
 	syncs  chan endpointSync
 	closed chan *astral.Identity
+	linked []*astral.Identity
+}
+
+func (n *recordingNodes) IsLinked(id *astral.Identity) bool {
+	return slicesContainsIdentity(n.linked, id)
 }
 
 func (n *recordingNodes) UpdateNodeEndpoints(_ *astral.Context, resolver, target *astral.Identity) error {
@@ -591,4 +597,122 @@ func TestReceiveLinkCreatedEventRequiresLocalSender(t *testing.T) {
 			t.Fatalf("Accept calls %v; want one Accept(false)", a)
 		}
 	})
+}
+
+// scheduledSyncs returns the subjects of the SyncNodesTasks scheduled so far and
+// drops every other task.
+// note: the hook schedules before ReceiveObject returns, so a non-blocking drain sees it.
+func (f *receiverFixture) scheduledSyncs() (subjects []*astral.Identity) {
+	for {
+		select {
+		case task := <-f.scheduler.tasks:
+			if sync, ok := task.(*SyncNodesTask); ok {
+				subjects = append(subjects, sync.remoteIdentity)
+			}
+		default:
+			return
+		}
+	}
+}
+
+// TestReceiveNodeContractSyncsALinkedNewMember: a valid node contract that admits
+// a node this node already has a link with schedules one sync with that node,
+// as no LinkCreatedEvent sync ran for it. A third node delivers the contract,
+// so the sync names the subject, not the sender.
+func TestReceiveNodeContractSyncsALinkedNewMember(t *testing.T) {
+	userID := astral.GenerateIdentity()
+	f := newReceiverFixture(t, userID)
+
+	relay, subject := astral.GenerateIdentity(), astral.GenerateIdentity()
+	f.nodes.linked = []*astral.Identity{subject}
+	signed := nodeContract(userID, subject)
+
+	drop := &recordingDrop{sender: relay, object: signed}
+	if err := f.mod.ReceiveObject(drop); err != nil {
+		t.Fatalf("ReceiveObject: %v", err)
+	}
+
+	if got := f.auth.received(); len(got) != 1 || got[0] != signed {
+		t.Fatalf("indexed %d contracts; want the pushed node contract", len(got))
+	}
+	if a := drop.accepted(); len(a) != 1 || !a[0] {
+		t.Fatalf("Accept calls %v; want one Accept(true)", a)
+	}
+
+	syncs := f.scheduledSyncs()
+	if len(syncs) != 1 || !syncs[0].IsEqual(subject) {
+		t.Fatalf("scheduled syncs with %v; want one sync with the new member %v", syncs, subject)
+	}
+}
+
+// skippedSync is a pushed node contract that schedules no sync. subject names
+// the contract's subject and reports whether it is linked; linkSender links the
+// sender; noUser leaves the receiver without a current user.
+type skippedSync struct {
+	name       string
+	noUser     bool
+	linkSender bool
+	subject    func(f *receiverFixture) (*astral.Identity, bool)
+	modify     func(sc *auth.SignedContract)
+}
+
+func linkedNewNode(*receiverFixture) (*astral.Identity, bool) { return astral.GenerateIdentity(), true }
+
+var skippedSyncs = []skippedSync{
+	{name: "an existing member", subject: func(f *receiverFixture) (*astral.Identity, bool) { return f.addSibling(), true }},
+	{name: "a node without a link", subject: func(*receiverFixture) (*astral.Identity, bool) { return astral.GenerateIdentity(), false }},
+	{name: "a node without a link from a linked sender", linkSender: true, subject: func(*receiverFixture) (*astral.Identity, bool) {
+		return astral.GenerateIdentity(), false
+	}},
+	{name: "this node", subject: func(f *receiverFixture) (*astral.Identity, bool) { return f.nodeID, true }},
+	{name: "an expelled node", subject: func(f *receiverFixture) (*astral.Identity, bool) {
+		subject := astral.GenerateIdentity()
+		if err := f.mod.db.StoreExpulsion(sampleSigned(f.userID, subject)); err != nil {
+			panic(err)
+		}
+		return subject, true
+	}},
+	{name: "an expired contract", subject: linkedNewNode, modify: func(sc *auth.SignedContract) {
+		sc.ExpiresAt = astral.Time(time.Now().Add(-time.Minute))
+	}},
+	{name: "a receiver without a current user", noUser: true, subject: linkedNewNode},
+}
+
+// TestReceiveNodeContractSkipsTheSync: a pushed node contract schedules no sync
+// for a node already in the swarm, a node without a link, or this node, and a
+// refused contract schedules none for a linked node.
+func TestReceiveNodeContractSkipsTheSync(t *testing.T) {
+	for _, tc := range skippedSyncs {
+		t.Run(tc.name, func(t *testing.T) {
+			userID := astral.GenerateIdentity()
+			var current *astral.Identity
+			if !tc.noUser {
+				current = userID
+			}
+			f := newReceiverFixture(t, current)
+
+			sender := astral.GenerateIdentity()
+			subject, linked := tc.subject(f)
+			if linked {
+				f.nodes.linked = append(f.nodes.linked, subject)
+			}
+			if tc.linkSender {
+				f.nodes.linked = append(f.nodes.linked, sender)
+			}
+
+			signed := nodeContract(userID, subject)
+			if tc.modify != nil {
+				tc.modify(signed)
+			}
+
+			drop := &recordingDrop{sender: sender, object: signed}
+			if err := f.mod.ReceiveObject(drop); err != nil {
+				t.Fatalf("ReceiveObject: %v", err)
+			}
+
+			if syncs := f.scheduledSyncs(); len(syncs) != 0 {
+				t.Fatalf("scheduled syncs with %v; want none", syncs)
+			}
+		})
+	}
 }
