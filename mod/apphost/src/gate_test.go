@@ -155,6 +155,14 @@ func TestGateAdmitsDefaults(t *testing.T) {
 		{user.StateClaimed, false, false, "user.expel", true},
 		{user.StateClaimed, false, false, ".spec", true},
 		{user.StateClaimed, false, true, "app.anything", true},
+
+		// note: user.introduce runs on a claimed node with a token alone.
+		{user.StateFresh, false, false, "user.introduce?identity=peer", false},
+		{user.StateFresh, true, false, "user.introduce?identity=peer", false},
+		{user.StateUnclaimed, false, false, "user.introduce?identity=peer", false},
+		{user.StateUnclaimed, true, false, "user.introduce?identity=peer", false},
+		{user.StateClaimed, false, false, "user.introduce?identity=peer", true},
+		{user.StateClaimed, true, false, "user.introduce?identity=peer", false},
 	}
 
 	for _, c := range cases {

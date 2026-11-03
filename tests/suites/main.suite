@@ -15,6 +15,7 @@ import-user-software-key
 bootstrap-user-op
 policy-delegate
 adopt-node
+introduce-node
 fs-watch
 object-store
 object-store-peer

@@ -50,11 +50,17 @@ func (mod *Module) ReceiveObject(drop objects.Drop) (err error) {
 
 // receiveSignedContract indexes a pushed contract that passes checkPushedContract.
 // A node contract also syncs the subject's endpoints and runs the sibling linker.
+// A node contract that admits a linked node to the local swarm also syncs with it.
 func (mod *Module) receiveSignedContract(sender *astral.Identity, signed *auth.SignedContract) error {
 	if err := mod.checkPushedContract(sender, signed); err != nil {
 		mod.log.Errorv(1, "rejecting pushed contract from %v: %v", sender, err)
 		return objects.ErrPushRejected
 	}
+
+	// note: "newMember", not "fresh": fresh names a node state.
+	newMember := user.IsNodeContract(signed.Contract) &&
+		!signed.Subject.IsEqual(mod.node.Identity()) &&
+		!slices.ContainsFunc(mod.LocalSwarm(), signed.Subject.IsEqual)
 
 	err := mod.Auth.IndexContract(mod.ctx, signed)
 	if err != nil {
@@ -64,6 +70,12 @@ func (mod *Module) receiveSignedContract(sender *astral.Identity, signed *auth.S
 
 	if !user.IsNodeContract(signed.Contract) {
 		return nil
+	}
+
+	// why: the LinkCreatedEvent sync skipped a node linked before its contract
+	// arrived, as on user.introduce, so the sync runs once the contract admits it.
+	if newMember && mod.Nodes.IsLinked(signed.Subject) {
+		mod.Scheduler.Schedule(mod.NewSyncNodesTask(signed.Subject))
 	}
 
 	go func() {

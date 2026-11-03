@@ -6,7 +6,7 @@ import (
 )
 
 // SyncNodesTask performs a full sync sequence with a single remote node:
-// alias, active contract, sibling contracts, app contracts, and asset updates.
+// active contract, expulsions, sibling contracts, alias, app contracts, and asset updates.
 type SyncNodesTask struct {
 	remoteIdentity *astral.Identity
 	mod            *Module
@@ -24,23 +24,30 @@ func (a *SyncNodesTask) String() string {
 }
 
 // Run executes the sync sequence against the remote identity in network zone order:
-// alias pull, active contract push, sibling contract push, expulsion push, app
+// active contract push, expulsion push, sibling contract push, alias pull, app
 // contract push, asset sync.
 // Errors from individual steps are logged but do not abort the remaining steps;
 // syncAssets errors are logged and swallowed — Run always returns nil.
+//
+// why the contract first: the alias pull and the asset sync query the remote
+// node as the user, and the remote node admits them only after it indexed this
+// node's contract (RelayFor).
+// why expulsions before siblings: the remote node refuses a banned node's
+// contract only once it holds the ban.
 func (a *SyncNodesTask) Run(ctx *astral.Context) error {
 	ctx = ctx.IncludeZone(astral.ZoneNetwork)
 
 	remoteIdentity := a.remoteIdentity
+
+	a.mod.pushActiveContract(ctx, remoteIdentity)
+	a.mod.syncExpulsions(ctx, remoteIdentity)
+	a.mod.syncSiblings(ctx, remoteIdentity)
 
 	err := a.mod.syncAlias(ctx, remoteIdentity)
 	if err != nil {
 		a.mod.log.Error("error syncing alias of %v: %v", remoteIdentity, err)
 	}
 
-	a.mod.pushActiveContract(ctx, remoteIdentity)
-	a.mod.syncSiblings(ctx, remoteIdentity)
-	a.mod.syncExpulsions(ctx, remoteIdentity)
 	a.mod.syncAppContracts(ctx, remoteIdentity)
 
 	err = a.mod.syncAssets(ctx, remoteIdentity)
