@@ -181,14 +181,15 @@ class TestShippedPlans(Invariants, unittest.TestCase):
                              [("bootstrap-user-software-key", "prereq"),
                               ("adopt-node", "prereq"), (test, "test")])
 
-    def test_all_tests_plan_as_seven_worlds(self):
+    def test_all_tests_plan_as_eight_worlds(self):
         worlds = plan(self.tests, sorted(self.tests))
         self.assertEqual(
             [(w.kind, w.steps[-1].test) for w in worlds],
             [("local", "expel-node"), ("vm", "gateway-relay"),
              ("local", "hold-purge"), ("vm", "nat-punch"),
              ("vm", "tor-link"), ("local", "bootstrap-user-op"),
-             ("local", "import-user-software-key")])
+             ("local", "import-user-software-key"),
+             ("local", "introduce-node")])
 
     def test_a_local_test_never_enters_a_vm_world(self):
         # why app-query and services-app-call: each serves an app on the

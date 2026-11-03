@@ -11,3 +11,4 @@ w0 local: smoke → mcp-origin → claim-window → token-less-setup → manager
 w1 local: bootstrap-user-software-key* → adopt-node* → hold-purge
 w2 local: import-user-software-key
 w3 local: bootstrap-user-op
+w4 local: introduce-node
