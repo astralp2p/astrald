@@ -26,9 +26,11 @@ from lib.sessionio import load
 HOST = "mod.messaging.host_mailbox_action"
 RELAY = "mod.nodes.relay_for_action"
 
-# What a refusal of a caller must read like: the op rejects the query before
-# accepting it. Anything else means the call never reached the guard.
-REJECTED = "QueryRejected"
+# What a refusal of a caller must read like: the op accepts the query and
+# answers an error_message reading `not permitted` before it reads a request
+# or lists a row (astral-docs protocols/messaging/ops). Anything else means the
+# call never reached the guard.
+NOT_PERMITTED = "OpError: not permitted"
 
 # What a refused delegated read_messages must read like: the op learns the
 # mailbox from its request, after it accepted the query, and ends the query
@@ -163,7 +165,7 @@ def check_delegated(facts):
         f"bob's row for his answer reads {x['answer_fetched']!r} after ada "
         "read it herself — an own read no longer stamps, so cleo's unchanged "
         "rows prove nothing")
-    for who, want in (("bob_list", REJECTED), ("node_list", REJECTED),
+    for who, want in (("bob_list", NOT_PERMITTED), ("node_list", NOT_PERMITTED),
                       ("bob_read", UNANSWERED)):
         r = d[who]
         assert r["refused"] and want in r["detail"], (
@@ -174,7 +176,7 @@ def check_delegated(facts):
 
 def check_unhosted(facts):
     for who, r in facts["unhosted"].items():
-        want = NOT_PARTICIPANT if who == "app_read" else REJECTED
+        want = NOT_PARTICIPANT if who == "app_read" else NOT_PERMITTED
         assert r["refused"] and want in r["detail"], (
             f"{who} ended {r['detail']} — a caller whose mailbox the node "
             "does not host reached a mail operation, or failed without "
@@ -257,7 +259,7 @@ def main():
     print("oracle: with MCP off, ada and bob exchanged mail through the "
           "messaging ops, cleo read ada's mailbox and changed none of it while "
           "bob and the node were refused, a caller without a hosted mailbox "
-          "was rejected, "
+          "was refused, "
           "every mailbox is hosted under its own contract, and bob's deletion "
           "withdrew his mailbox and his tokens while his contract stays")
 

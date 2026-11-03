@@ -42,6 +42,9 @@ ALIASES = {"ada": "mail-ada", "bob": "mail-bob", "cleo": "mail-cleo"}
 # why a window this long: a wait parks until a message lands, and a landing
 # that never comes has to end the park before the driver's own budget does.
 WAIT = "10s"
+# The most times a call the op may refuse unread is made while it is reset.
+RESET_ATTEMPTS = 5
+RESETS = ("ConnectionResetError", "BrokenPipeError")
 
 
 async def attempt(coro) -> dict:
@@ -51,6 +54,42 @@ async def attempt(coro) -> dict:
     except (AstralError, jsonops.OpError, OSError) as e:
         return {"refused": True, "detail": f"{type(e).__name__}: {e}"}
     return {"refused": False, "detail": repr(out)[:400]}
+
+
+async def attempt_unread(call) -> dict:
+    """attempt() for a call whose request the op may refuse unread; `call`
+    makes the call afresh.
+
+    why repeat a reset: the op answers `not permitted` and closes before it
+    reads the request, and a socket closed with the request unread resets the
+    connection in place of that answer. A refused call changes nothing, and an
+    op that admits the call reads its request and is not reset this way, so
+    the call is made again. A reset on every attempt is recorded as a reset.
+    """
+    for _ in range(RESET_ATTEMPTS):
+        r = await attempt(call())
+        if not r["detail"].startswith(RESETS):
+            return r
+        print(f"driver: reset: {r['detail']}")
+    return r
+
+
+async def listed(client, mailbox: str) -> list:
+    """Every row messaging.list_messages answers for `mailbox`. An
+    error_message raises OpError only when no row came with it.
+
+    why not mail.list_messages: the op accepts a refused listing and answers an
+    error_message, and jsonops.stream raises at that error and drops every row
+    listed before it. Here a row listed before or after the error reads as an
+    answer, so a refusal that still hands out ada's rows is not a refusal.
+    """
+    docs = await jsonops.call(client, querystring.build(
+        "messaging.list_messages", {"mailbox": mailbox, "out": "json"}))
+    rows = [d for d in docs if d["Type"] not in ("error_message", "eos")]
+    errors = [d["Object"] for d in docs if d["Type"] == "error_message"]
+    if errors and not rows:
+        raise jsonops.OpError(errors[0])
+    return rows
 
 
 def probe_mcp(url: str) -> dict:
@@ -124,11 +163,11 @@ async def delegated(n: dict, ca, cb, ids: dict) -> dict:
                        for box in ("inbox", "outbox")}
         x["read"] = await mail.read(cc, ("outbox", asked), ("inbox", answered),
                                     mailbox=ada_id, children="full")
-    x["bob_list"] = await attempt(mail.list_messages(cb, mailbox=alias))
+    x["bob_list"] = await attempt(listed(cb, alias))
     x["bob_read"] = await attempt(mail.read(cb, ("inbox", answered),
                                             mailbox=ada_id))
     async with await astral.connect(n["endpoint"], token=n["token"]) as cn:
-        x["node_list"] = await attempt(mail.list_messages(cn, mailbox=alias))
+        x["node_list"] = await attempt(listed(cn, alias))
     x["after"] = await mailbox_state(ca, cb, answered)
     return x
 
@@ -184,7 +223,8 @@ async def unhosted(n: dict, app: dict, bob: dict) -> dict:
     answered by the mail ops."""
     async with await astral.connect(n["endpoint"], token=app["Token"]) as c:
         app_list = await attempt(mail.list_messages(c, list="inbox"))
-        app_send = await attempt(mail.send(c, bob["Identity"], ASK))
+        app_send = await attempt_unread(
+            lambda: mail.send(c, bob["Identity"], ASK))
         app_read = await attempt(mail.read(c, ("inbox", "01" * 16)))
     async with await astral.connect(n["endpoint"], token=n["token"]) as c:
         node_list = await attempt(mail.list_messages(c, list="inbox"))

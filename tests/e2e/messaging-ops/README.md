@@ -67,11 +67,13 @@ row is stamped collected: the unchanged rows are the delegation's, not a read
 that stamps nothing.
 
 bob corresponds with ada and is not granted her mailbox. His listing is
-rejected. His read is accepted, because `messaging.read_messages` learns the
-mailbox from its request, and ends with no answer: a refused delegated read
-carries no bytes. The node's own identity is
-never a reader, so the node's listing is rejected before the authority is
-asked anything.
+answered `not permitted`. His read is accepted, because
+`messaging.read_messages` learns the mailbox from its request, and ends with no
+answer: a refused delegated read carries no bytes. The node's own identity is
+never a reader, so the node's listing is answered `not permitted` before the
+authority is asked anything. The driver reads every envelope of each listing,
+so a listing that answers any of ada's rows, before or after its refusal, reads
+as an answer.
 
 ## Why bob is the one deleted
 
@@ -90,9 +92,12 @@ repository, and the oracle requires it there.
 A mail op on the caller's own mailbox serves only a caller whose mailbox this
 node hosts. `apphost.register` mints an identity with a token and no mailbox;
 the node's own token authenticates as the node, which never hosts a mailbox.
-The app's listing and send and the node's listing are rejected before the op
-accepts, and the oracle requires `QueryRejected` for each, so a failure that
-never reached the guard does not count as the refusal.
+The op accepts the app's listing and send and the node's listing and answers
+each `not permitted` before it reads a request or lists a row, and the oracle
+requires those words for each, so a failure that never reached the guard does
+not count as the refusal. The app's send request is left unread, which can
+reset the connection in place of the answer; the driver then sends again, at
+most five times, and a reset on every send fails the test.
 
 The app's read of its own mailbox is accepted, because
 `messaging.read_messages` learns the mailbox from its request. The op then
