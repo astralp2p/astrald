@@ -8,10 +8,10 @@ spans = 20              # spans from base: 20 concurrent runs per host
 
 [astral_py]
 path = "~/work/astralp2p/astral-py/master"
-# The oldest astral-py commit these tests run against. f4d5783 sends the
-# apphost register, grant and request_grant objects astrald reads after
-# accept; a checkout without it is refused before the first query.
-requires = "f4d57830bc7dd2b2790550b92f9bd1af8bac97e8"
+# The oldest astral-py commit these tests run against. 57460ab decodes
+# user.info's State and Manager, which the setup drivers read; a checkout
+# without it is refused before the first query.
+requires = "57460ab4ec928e72229c0941629606ad13dd4e2d"
 
 [build]
 package = "./cmd/astrald"
