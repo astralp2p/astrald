@@ -638,8 +638,9 @@ class TestStoppedBoot(Lab):
         stop(fake, "remove", KeyboardInterrupt())
         self.assert_clean(fake, self.ensure(fake))
 
-    def test_a_second_new_simulation_is_killed_with_the_first(self):
-        # why: neither was up before the boot, so both are this world's
+    def test_two_new_simulations_are_both_left_up(self):
+        # why: a task starts one simulation, so the second is somebody
+        # else's, and neither can be told apart from this world's
         fake = self.lab(stages=("null", LAB))
         real = fake.netsim
 
@@ -650,7 +651,8 @@ class TestStoppedBoot(Lab):
         fake.netsim = netsim
         world = self.ensure(fake)
         self.assertIsNone(world.sim)
-        self.assertEqual(fake.sims, {})
+        self.assertEqual(len(fake.sims), 2)
+        self.assertFalse([c for c in fake.calls if c[:2] == ("netsim", "kill")])
 
 
 class TestClose(Lab):

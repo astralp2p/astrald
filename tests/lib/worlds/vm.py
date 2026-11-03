@@ -318,13 +318,20 @@ class VmWorld(World):
         why: under --keep netsim tears nothing down when its task fails, and
         a Ctrl-C kills netsim before it can, so the boot's simulation would
         stay up and every later VM world would refuse to boot beside it.
-        why only those absent from `before`: a simulation this world did not
-        start is never touched, and _open boots only with none up.
+        why only a lone new one: a netsim task creates exactly one simulation,
+        so a lone simulation absent from `before` is this boot's. Two or more
+        mean somebody else started one during the boot, and none of them can
+        be told apart from this world's, so none is touched.
         why best-effort: the boot's own error, or its Ctrl-C, is what the run
         has to report.
         """
         try:
             new = sorted(_sims() - before)
+            if len(new) > 1:
+                print(f"run: a stopped boot left simulations {', '.join(new)} "
+                      "up; netsim kill the one this run started",
+                      file=sys.stderr)
+                new = []
             for sim in new:
                 _netsim("kill", sim, check=False)
             # note: a task that failed saves its stage under -error
