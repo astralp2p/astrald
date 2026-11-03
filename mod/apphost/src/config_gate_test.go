@@ -27,7 +27,8 @@ gate:
   tokenless: [apphost.register, apphost.register_manager, user.info]
   states:
     fresh: [apphost.register_manager, user.info]
-    unclaimed: [user.info, user.derive_identity, user.bootstrap, user.join, apphost.register]
+    unclaimed: [user.info, user.derive_identity, user.bootstrap, user.join, apphost.register,
+      apphost.bind, apphost.register_handler, apphost.cancel]
     claimed: ["*"]
 policies:
   app_register: reject_all
