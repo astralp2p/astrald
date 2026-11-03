@@ -10,7 +10,7 @@ from pathlib import Path
 
 import astral
 
-from lib.nodeconfig import WITHOUT_MCP, NodePorts, render
+from lib.nodeconfig import NodePorts, module_configs, render, serves_mcp
 
 # startup line prints the identity in parens; astrald's earliest lines are
 # raw %v dumps, so the hex can carry internal padding: "( <66-hex> )"
@@ -33,13 +33,16 @@ def _die_with_runner() -> None:
 
 
 class LocalNode:
-    def __init__(self, name: str, root: Path, binary: Path, ports: NodePorts):
+    def __init__(self, name: str, root: Path, binary: Path, ports: NodePorts,
+                 overrides: dict | None = None):
         self.name = name
         self.root = Path(root)
         self.binary = Path(binary)
         self.ports = ports
         self.token = secrets.token_hex(16)
-        self.serves_mcp = name not in WITHOUT_MCP
+        # overrides: module -> keys, the world's [config.<name>.*] for this node
+        self.configs = module_configs(ports, self.token, overrides)
+        self.serves_mcp = serves_mcp(self.configs)
         self.identity = None
         self.proc = None
         self.restarts = 0
@@ -50,7 +53,7 @@ class LocalNode:
         return f"tcp:127.0.0.1:{self.ports.apphost}"
 
     def start(self, keep: bool = False) -> None:
-        render(self.root, self.ports, self.token, self.serves_mcp)
+        render(self.root, self.configs)
         self.root.mkdir(parents=True, exist_ok=True)
         log = self.log_path.open("ab")
         # why: a daemon in the runner's process group receives every signal

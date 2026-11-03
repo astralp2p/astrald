@@ -1,4 +1,8 @@
-# main.suite — the env-node chain, cheapest env first.
+# main.suite — every local test: one shared world, and a world per test that
+# has to start from a node of its own or ends a world.
+#
+# The order is a preference among siblings; the planner computes the run
+# order from each test's `after`. `./tests/run --plan main.suite` shows it.
 smoke
 mcp-origin
 claim-window
@@ -7,7 +11,9 @@ manager-setup
 signer-app
 messaging-ops
 bootstrap-user-software-key
-policy-delegate                # restarts node1: before node2 links to it
+import-user-software-key
+bootstrap-user-op
+policy-delegate
 adopt-node
 fs-watch
 object-store
@@ -25,4 +31,5 @@ mcp-peer
 services-swarm
 services-app-call
 request-grant-scope
-expel-node                     # mutates two-nodes: nothing may follow it
+expel-node
+hold-purge

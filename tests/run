@@ -7,6 +7,7 @@ no venv, no pip (the host lacks ensurepip).
 """
 import argparse
 import os
+import signal
 import sys
 import tomllib
 from pathlib import Path
@@ -16,19 +17,13 @@ TESTS = Path(__file__).resolve().parent
 USAGE = """\
 examples:
   ./tests/run                        the default suite (suites/main.suite)
-  ./tests/run main.suite             a named suite, in its listed order
-  ./tests/run adopt-node             one test + the prereq prefix it needs
+  ./tests/run main.suite             a named suite, its listing a preference
+  ./tests/run adopt-node             one test + the tests its world needs first
   ./tests/run smoke adopt-node       several tests
+  ./tests/run --plan main.suite      the worlds a run would use, with nothing run
+  ./tests/run adopt-node --vm --save gw    build a VM world once, save it as gw
+  ./tests/run gateway-relay --from gw      run on it, past its history
 """
-
-
-def target(value: str) -> str:
-    """--target: where the machines come from, orthogonal to env and driver."""
-    named_stage = value.startswith("stage:") and len(value) > len("stage:")
-    if value in ("fresh", "attach") or named_stage:
-        return value
-    raise argparse.ArgumentTypeError(
-        f"bad target {value!r} (fresh | stage:<name> | attach)")
 
 
 def astral_src() -> Path:
@@ -56,11 +51,27 @@ def main() -> int:
                          "e2e/ (default: main.suite)")
     ap.add_argument("--driver", choices=["script", "agent"], default="script",
                     help="how the flow is performed (default: script)")
-    ap.add_argument("--target", type=target, default="fresh",
-                    metavar="fresh|stage:<name>|attach",
-                    help="where the machines come from (default: fresh)")
+    ap.add_argument("--target", choices=["fresh", "attach"], default="fresh",
+                    help="where the machines come from: worlds the run "
+                         "spawns, or the daemon already up (default: fresh)")
     ap.add_argument("--keep", action="store_true",
-                    help="leave the world running after the run")
+                    help="leave the run's last world running after the run")
+    ap.add_argument("--plan", action="store_true",
+                    help="print the worlds the selection plans into and exit, "
+                         "starting nothing")
+    ap.add_argument("--isolate", action="store_true",
+                    help="run every selected test in a world of its own")
+    ap.add_argument("--prereqs", choices=["script", "agent"], default="script",
+                    help="who drives prereqs and replays under --driver agent "
+                         "(default: script)")
+    ap.add_argument("--vm", action="store_true",
+                    help="run every world in VMs, local tests included")
+    ap.add_argument("--save", metavar="NAME",
+                    help="save the run's last world, a VM world, as netsim "
+                         "stage NAME, its world record inside")
+    ap.add_argument("--from", dest="from_stage", metavar="NAME",
+                    help="boot the world --save NAME saved, and run only "
+                         "what its history has not")
     args = ap.parse_args()
 
     if sys.version_info < (3, 11):
@@ -72,7 +83,18 @@ def main() -> int:
     os.environ["ASTRAL_TESTS_PYPATH"] = f"{TESTS}{os.pathsep}{src}"
 
     from lib import runner
-    return runner.main(args)
+    try:
+        return runner.main(args)
+    except KeyboardInterrupt:
+        # why: a shell stops a loop only on a child that SIGINT killed, and
+        # an exit status cannot say that; the report is already written
+        # note: dying of a signal skips the flush, and piped output is
+        # block-buffered, so the verdict line would be lost
+        sys.stdout.flush()
+        sys.stderr.flush()
+        signal.signal(signal.SIGINT, signal.SIG_DFL)
+        os.kill(os.getpid(), signal.SIGINT)
+        return 130
 
 
 if __name__ == "__main__":

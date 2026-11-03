@@ -1,5 +1,5 @@
-env     = "node"
-start   = "two-nodes"
 nodes   = ["node1", "node2"]
-drivers = ["script"]
 timeout = 300
+after   = "adopt-node"
+local_only = "serves its provider app on a host loopback port that node2 dials"
+facts   = ["services_app_call"]

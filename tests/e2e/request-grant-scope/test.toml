@@ -1,5 +1,7 @@
-env     = "node"
-start   = "two-nodes"
 nodes   = ["node1", "node2"]
-drivers = ["script"]
 timeout = 300
+after   = "adopt-node"
+facts   = ["set_accept_all", "inference_before", "request_inference",
+           "inference_after", "chat_after_inference", "request_unscoped",
+           "request_chat", "grants_two", "revoke_chat", "grants_left",
+           "inference_after_revoke", "chat_after_revoke", "restore_policy"]

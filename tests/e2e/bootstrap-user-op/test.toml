@@ -1,9 +1,7 @@
-env     = "node"
-start   = "null"
-# why no suite lists it: start `null` means a pristine node, and env node runs
-# one live session per run, so a chain cannot go back to an unclaimed node1
-# mid-suite. Run it by name: `./tests/run bootstrap-user-op`.
-unlisted = "start null needs a pristine node; the env-node chain cannot rewind"
 nodes   = ["node1", "node2"]
-drivers = ["script"]
 timeout = 120
+# why: it claims node1, as bootstrap-user-software-key does, so it needs a
+# world of its own and nothing else can follow it there
+destroys = true
+local_only = "reads node1's astrald.log from its root on the host"
+facts   = ["first", "second", "user_token", "generated", "derived"]

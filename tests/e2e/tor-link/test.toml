@@ -1,9 +1,9 @@
-env     = "netsim"
-start   = "two-nodes"
-saves   = "two-nodes-tor"
 nodes   = ["node1", "node2"]
-steps   = ["vm:enable-tor node1 node2",
-           "vm:leave-lan node2 --peer node1",
-           "driver"]
-drivers = ["script", "agent"]
 timeout = 600
+after   = "adopt-node"
+# why: leave-lan flushes node2's LAN address and downs the NIC, and nothing
+# puts it back, so a sibling cannot continue adopt-node's world afterwards —
+# nat-punch's enter-nat finds no LAN interface and exits.
+destroys = true
+ops     = ["enable-tor node1 node2", "leave-lan node2 --peer node1"]
+facts   = ["tor_link_networks"]
