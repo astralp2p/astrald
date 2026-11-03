@@ -405,6 +405,27 @@ class TestConfigPlans(unittest.TestCase):
                                     "which boot overrides"):
             plan(tests, ["gw"])
 
+    def test_enable_tor_over_a_tor_override_forks(self):
+        # why: enable-tor writes tor.yaml on each VM it names, --vm or bare,
+        # and on every VM when it names none
+        for line, vm, shared in (("enable-tor node1 node2", "node1", False),
+                                 ("enable-tor --vm node2", "node2", False),
+                                 ("enable-tor --vm node2", "node1", True),
+                                 ("enable-tor", "reflector", False)):
+            with self.subTest(line=line, vm=vm):
+                tests = {"boot": fake(),
+                         "obs": fake(after="boot", config={
+                             vm: {"tor": {"listen": False}}}),
+                         "tor": fake(after="boot", ops=[line])}
+                self.assertEqual(len(plan(tests, ["obs", "tor"])) == 1, shared)
+
+    def test_nat_punch_over_its_own_tor_override_is_a_plan_error(self):
+        tests = load_all(TESTS / "e2e")
+        tests["nat-punch"].config = {"node1": {"tor": {"listen": False}}}
+        with self.assertRaisesRegex(PlanError, "nat-punch's ops write node1's "
+                                    "tor config, which nat-punch overrides"):
+            plan(tests, ["nat-punch"])
+
     def test_app_query_with_a_gateway_override_forks_from_gateway_relay(self):
         tests = load_all(TESTS / "e2e")
         tests["app-query"].config = {"node2": {"gateway": {"x": 1}}}

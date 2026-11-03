@@ -36,13 +36,16 @@ from dataclasses import dataclass, field
 WIDTH = 79          # a rendered plan wraps its worlds at this column
 
 # op -> where it writes a module's config file in its guests: "" for the
-# VMs its bare words name, and a flag for the VM that flag's value names.
+# VMs its bare words (or --vm) name, a flag for the VM that flag's value
+# names, and None for every VM, on a line that names none: a bare
+# `enable-tor` runs on every VM the simulation runs.
 # why the planner knows: a VM world pushes its overrides when it boots and
 # runs ops after, so an op's file would silently replace an override. A test
 # that would bring the two together forks, and a lineage that holds both is
 # refused.
 OP_WRITES = {"configure-gateway": {"": {"gateway"},
-                                   "--gateway": {"tcp", "gateway"}}}
+                                   "--gateway": {"tcp", "gateway"}},
+             "enable-tor": {"": {"tor"}, None: {"tor"}}}
 
 
 class PlanError(ValueError):
@@ -67,15 +70,26 @@ class World:
 
 
 def _writes(line: str) -> set:
-    """The (vm, module) config files one op line writes in its guests."""
+    """The (vm, module) config files one op line writes in its guests; a vm
+    of None is every VM."""
     op, *args = line.split()
     where = OP_WRITES.get(op, {})
-    out, words = set(), iter(args)
+    out, words, named = set(), iter(args), False
     for a in words:
-        vm, modules = ((next(words, None), where.get(a, ())) if a.startswith("-")
-                       else (a, where.get("", ())))
-        out |= {(vm, m) for m in modules if vm}
+        # why --vm reads as a bare word: run_op hands each bare word to its
+        # op as --vm, so a line may pass the flag itself
+        flag = "" if a == "--vm" or not a.startswith("-") else a
+        vm = next(words, None) if a.startswith("-") else a
+        named = named or flag == ""
+        out |= {(vm, m) for m in where.get(flag, ()) if vm}
+    if not named:
+        out |= {(None, m) for m in where.get(None, ())}
     return out
+
+
+def _covers(writes: set, override: tuple) -> bool:
+    """Whether a (vm, module) override is a file writes replaces."""
+    return override in writes or (None, override[1]) in writes
 
 
 def merge_config(into: dict, config: dict) -> None:
@@ -220,7 +234,7 @@ class _Planner:
         overrides = {(vm, module) for m in names
                      for vm, modules in self.tests[m].config.items()
                      for module in modules}
-        return min(writes & overrides, default=None)
+        return min((o for o in overrides if _covers(writes, o)), default=None)
 
     def _refusal(self, w: World, n: str, what: str) -> str:
         """Why n cannot <what> in w, a fork that already replays its lineage."""
@@ -229,7 +243,7 @@ class _Planner:
             vm, module = hit
             names = [s.test for s in w.steps] + [n]
             op = next(m for m in names if any(
-                hit in _writes(line) for line in self.tests[m].ops))
+                _covers(_writes(line), hit) for line in self.tests[m].ops))
             conf = next(m for m in names
                         if module in self.tests[m].config.get(vm, {}))
             return (f"{op}'s ops write {vm}'s {module} config, which {conf} "
