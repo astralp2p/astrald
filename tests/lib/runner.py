@@ -47,6 +47,10 @@ OPTIONS = {"plan": False, "isolate": False, "prereqs": "script", "vm": False,
            "save": None, "from_stage": None}
 
 
+class DriverError(Exception):
+    """A driver that exited 0 and still left the flow's output broken."""
+
+
 def _run_step(py: str, script: Path, log: Path, env: dict, timeout: int) -> int:
     with log.open("wb") as f:
         try:
@@ -74,6 +78,8 @@ def _perform(ex, t, drive, art: Path, view) -> tuple:
     or ssh raises from inside the driver step, and a try around prepare alone
     let it leave the loop with no verdict recorded and no report written. A
     WorldError is the world breaking, so it is `environment` at its step.
+    A DriverError is a driver that exited 0 and broke its contract, so it is
+    `driver` at the driver, whichever step found it.
     """
     phase = "prepare"
     try:
@@ -93,6 +99,10 @@ def _perform(ex, t, drive, art: Path, view) -> tuple:
         with (art / "driver.log").open("a") as f:
             f.write(f"[runner] {e}\n")
         return "fail", "environment", phase
+    except DriverError as e:
+        with (art / "driver.log").open("a") as f:
+            f.write(f"[runner] {e}\n")
+        return "fail", "driver", "driver"
     except BaseException as e:
         e.phase = phase       # note: the abort path records the step it hit
         raise
@@ -220,8 +230,21 @@ def _note_nodes(record: WorldRecord, ex) -> None:
 
 
 def own_facts(path: Path) -> dict:
-    """What a driver wrote with write_facts, or nothing when it wrote none."""
-    return json.loads(path.read_text()) if path.exists() else {}
+    """What a driver wrote with write_facts, or nothing when it wrote none.
+
+    why DriverError: a file that is no JSON object holds no facts an oracle
+    can read, and the driver that wrote it failed, not the run.
+    """
+    if not path.exists():
+        return {}
+    try:
+        facts = json.loads(path.read_text())
+    except (OSError, ValueError) as e:
+        raise DriverError(f"{path.name} is unreadable: {e}") from e
+    if not isinstance(facts, dict):
+        raise DriverError(f"{path.name} holds a {type(facts).__name__}, "
+                          "not a JSON object")
+    return facts
 
 
 def driver_env(session_json: Path, target: str) -> dict:

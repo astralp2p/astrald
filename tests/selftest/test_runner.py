@@ -253,6 +253,30 @@ class TestCrashSafe(unittest.TestCase):
                       "w0", text)
 
 
+class TestDriverFacts(unittest.TestCase):
+    def test_a_driver_that_leaves_broken_facts_fails_alone(self):
+        # why: the facts were read outside the per-test handling, so one
+        # driver's file stopped the run and skipped every later world
+        for broken in (b"", b'{"user_id": "x"', b'["user_id"]', b"\xff"):
+            with self.subTest(facts=broken):
+                def step(py, script, log, env, timeout):
+                    if script.parent.name == "bootstrap-user-software-key" \
+                            and script.name == "script.py":
+                        Path(env["ASTRAL_TESTS_FACTS_OUT"]).write_bytes(broken)
+                    return 0
+
+                code, doc, _, _, _ = run(["adopt-node", "smoke"], step=step)
+                self.assertEqual(code, 1)
+                self.assertNotIn("aborted", doc)
+                self.assertEqual(
+                    [(e["test"], e["status"], e.get("failure_kind"),
+                      e["phase"]) for e in doc["entries"]],
+                    [("smoke", "pass", None, "verify"),
+                     ("bootstrap-user-software-key", "fail", "driver",
+                      "driver"),
+                     ("adopt-node", "skipped", None, "prepare")])
+
+
 class TestAttachWorld(unittest.TestCase):
     def test_attach_runs_its_one_world_through_the_loop(self):
         _, doc, _, _, world = run(["smoke"], target="attach")
