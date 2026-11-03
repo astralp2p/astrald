@@ -83,7 +83,7 @@ would miss.
 Only the permanent hold. An expiring hold (`duration` non-nil) and
 `unhold_object` are untouched.
 
-The hold is *recorded* per caller (`mod/apphost/src/op_hold_object.go:39`) but
+The hold is *recorded* per caller (`holdOne` in `mod/apphost/src/op_hold_object.go`) but
 *consulted* identity-blind — `db.ObjectHeld` filters on object and expiry with
 no `app_id` predicate — so a hold placed by any identity protects the object.
 This test cannot tell one holder from another and does not claim to.

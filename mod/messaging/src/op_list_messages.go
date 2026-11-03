@@ -1,6 +1,7 @@
 package messaging
 
 import (
+	"github.com/astralp2p/astral-go/api/auth"
 	"github.com/astralp2p/astral-go/api/messaging"
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astral-go/astral/channel"
@@ -24,13 +25,17 @@ type opListMessagesArgs struct {
 // and ends the stream with eos. The mailbox is the caller's own, or the one
 // Mailbox names as a delegated read.
 func (mod *Module) OpListMessages(ctx *astral.Context, q *routing.IncomingQuery, args opListMessagesArgs) error {
-	mailbox, ok := mod.admitsListing(ctx, q, args.Mailbox)
-	if !ok {
-		return q.Reject()
-	}
-
 	ch := channel.New(q.AcceptRaw(), channel.WithOutputFormat(args.Out))
 	defer ch.Close()
+
+	if refusesOrigin(q) {
+		return ch.Send(astral.NewErrOriginNotAllowed(q.Origin()))
+	}
+
+	mailbox, ok := mod.admitsListing(ctx, q, args.Mailbox)
+	if !ok {
+		return ch.Send(auth.ErrNotPermitted)
+	}
 
 	// why listMailbox and not ListMessages: the mailbox is resolved and
 	// admitted above, and ListMessages lists through listMailbox as well, so a
@@ -59,19 +64,15 @@ func (mod *Module) OpListMessages(ctx *astral.Context, q *routing.IncomingQuery,
 }
 
 // admitsListing answers the mailbox a listing reads, and whether the query is
-// served. A query from an origin this module does not serve is refused. With
-// no name, or a name for the caller, the mailbox is the caller's own and the
-// caller must be hosted here, as for every mail operation. Any other name makes
-// the listing a delegated read — see admitsReader.
+// served. With no name, or a name for the caller, the mailbox is the caller's
+// own and the caller must be hosted here, as for every mail operation. Any
+// other name makes the listing a delegated read — see admitsReader.
 //
 // why a name that resolves to nobody is refused and not answered an error: a
 // mailbox this node cannot name is one it does not host, and the refusal of a
 // delegated read carries no bytes.
 func (mod *Module) admitsListing(ctx *astral.Context, q *routing.IncomingQuery, name string) (*astral.Identity, bool) {
 	caller := q.Caller()
-	if refusesOrigin(q) {
-		return nil, false
-	}
 	if name == "" {
 		return caller, mod.hosts(caller)
 	}

@@ -14,6 +14,7 @@ import (
 	"slices"
 
 	"github.com/astralp2p/astral-go/astral"
+	"github.com/astralp2p/astral-go/astral/log"
 	mcpsdk "github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
@@ -207,4 +208,58 @@ func schemaFields(schema any) map[string]bool {
 		out[name] = true
 	}
 	return out
+}
+
+// entryChan is a log.EntryLogger that forwards every entry to a channel.
+type entryChan chan *log.Entry
+
+func (c entryChan) LogEntry(e *log.Entry) { c <- e }
+
+// TestRunWarnsOnNonLoopbackBind covers the bind warning: a wildcard bind logs
+// a level-0 warning and a loopback bind does not.
+func TestRunWarnsOnNonLoopbackBind(t *testing.T) {
+	const warning = "is not loopback"
+
+	cases := []struct {
+		bind string
+		warn bool
+	}{
+		{"tcp:0.0.0.0:0", true},
+		{"tcp:127.0.0.1:0", false},
+	}
+
+	for _, c := range cases {
+		t.Run(c.bind, func(t *testing.T) {
+			// note: the channel is never closed; the shutdown goroutine logs after Run returns.
+			entries := make(entryChan, 8)
+			l := &log.Logger{}
+			l.AddLogger(entries)
+
+			ctx, cancel := astral.NewContext(nil).WithCancel()
+			cancel()
+
+			mod := &Module{config: Config{BindMCP: c.bind}, log: l}
+			if err := NewMCPServer(mod).Run(ctx); err != nil {
+				t.Fatalf("run: %v", err)
+			}
+
+			var warned bool
+			for n := len(entries); n > 0; n-- {
+				e := <-entries
+				var line string
+				for _, obj := range e.Objects {
+					line += astral.Stringify(obj)
+				}
+				if strings.Contains(line, warning) {
+					warned = true
+					if e.Level != 0 {
+						t.Errorf("warning at level %v; want 0", e.Level)
+					}
+				}
+			}
+			if warned != c.warn {
+				t.Errorf("warned = %v; want %v", warned, c.warn)
+			}
+		})
+	}
 }

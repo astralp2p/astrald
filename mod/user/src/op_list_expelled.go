@@ -15,19 +15,17 @@ type opListExpelledArgs struct {
 // OpListExpelled authorizes the caller under SeeSwarm, then streams the signed
 // bans issued by the active swarm user, terminated by EOS.
 func (mod *Module) OpListExpelled(ctx *astral.Context, q *routing.IncomingQuery, args opListExpelledArgs) (err error) {
+	ch := q.Accept(channel.WithOutputFormat(args.Out))
+	defer ch.Close()
+
 	ac := mod.ActiveContract()
 	if ac == nil {
-		ch := q.Accept(channel.WithOutputFormat(args.Out))
-		defer ch.Close()
 		return ch.Send(user.ErrNoActiveContract)
 	}
 
 	if !mod.Auth.Authorize(ctx, &user.SeeSwarmAction{Action: auth.NewAction(q.Caller())}) {
-		return q.RejectWithCode(4)
+		return ch.Send(auth.ErrNotPermitted)
 	}
-
-	ch := q.Accept(channel.WithOutputFormat(args.Out))
-	defer ch.Close()
 
 	expulsions, err := mod.db.Expulsions(ac.Issuer)
 	if err != nil {

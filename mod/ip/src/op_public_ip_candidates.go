@@ -12,12 +12,12 @@ type opPublicIPCandidatesArgs struct {
 }
 
 func (mod *Module) OpPublicIPCandidates(ctx *astral.Context, q *routing.IncomingQuery, args opPublicIPCandidatesArgs) (err error) {
-	if !mod.Auth.Authorize(ctx, &auth.AdminNetworkAction{Action: auth.NewAction(q.Caller())}) {
-		return q.Reject()
-	}
-
 	ch := channel.New(q.AcceptRaw(), channel.WithOutputFormat(args.Out))
 	defer ch.Close()
+
+	if !mod.Auth.Authorize(ctx, &auth.AdminNetworkAction{Action: auth.NewAction(q.Caller())}) {
+		return ch.Send(auth.ErrNotPermitted)
+	}
 
 	for _, addr := range mod.PublicIPCandidates() {
 		err = ch.Send(&addr)
@@ -27,5 +27,4 @@ func (mod *Module) OpPublicIPCandidates(ctx *astral.Context, q *routing.Incoming
 	}
 
 	return ch.Send(&astral.EOS{})
-
 }

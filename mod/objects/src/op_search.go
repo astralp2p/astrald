@@ -27,11 +27,14 @@ type SearchArgs struct {
 // OpSearch streams matches for the query, deduplicated by ObjectID and
 // optionally filtered to objects the named repo contains. Bounded to one minute.
 func (mod *Module) OpSearch(ctx *astral.Context, q *routing.IncomingQuery, args SearchArgs) (err error) {
+	ch := q.Accept(channel.WithOutputFormat(args.Out))
+	defer ch.Close()
+
 	if !mod.Auth.Authorize(ctx, &auth.SeeObjectsAction{
 		Action: auth.NewAction(q.Caller()),
 		Repo:   astral.String8(args.Repo),
 	}) {
-		return q.Reject()
+		return ch.Send(auth.ErrNotPermitted)
 	}
 
 	ctx, cancel := ctx.WithIdentity(q.Caller()).WithTimeout(time.Minute)
@@ -46,9 +49,6 @@ func (mod *Module) OpSearch(ctx *astral.Context, q *routing.IncomingQuery, args 
 	if q.Origin() == astral.OriginNetwork {
 		ctx = ctx.ExcludeZone(astral.ZoneNetwork)
 	}
-
-	ch := q.Accept(channel.WithOutputFormat(args.Out))
-	defer ch.Close()
 
 	// find repo if provided
 	var repo objectsmod.Repository

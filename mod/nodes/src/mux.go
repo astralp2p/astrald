@@ -87,7 +87,7 @@ func (m *Mux) RouteQuery(ctx *astral.Context, q *astral.InFlightQuery, w io.Writ
 	// why: the Query frame prefixes the query string with a 16-bit length;
 	// a longer string would wrap and route a different query on the peer.
 	if len(q.QueryString) > math.MaxUint16 {
-		return query.Reject()
+		return query.RejectWithCode(astral.CodeInvalidQuery)
 	}
 
 	conn, ok := m.createSession(q.Nonce, q.Target, sourceID, q.QueryString.String(), true, 0)

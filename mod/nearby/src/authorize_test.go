@@ -1,6 +1,7 @@
 package nearby
 
 import (
+	"bytes"
 	"io"
 	"sync"
 	"testing"
@@ -8,6 +9,7 @@ import (
 
 	"github.com/astralp2p/astral-go/api/auth"
 	"github.com/astralp2p/astral-go/astral"
+	"github.com/astralp2p/astral-go/astral/channel"
 	"github.com/astralp2p/astral-go/lib/query"
 	"github.com/astralp2p/astral-go/lib/routing"
 	authmod "github.com/astralp2p/astrald/mod/auth"
@@ -46,7 +48,7 @@ func (a *recordingAuth) recorded() []auth.ActionObject {
 // the op accepted the query and answered it.
 type recordingWriter struct {
 	mu     sync.Mutex
-	n      int
+	buf    bytes.Buffer
 	closed chan struct{}
 	once   sync.Once
 }
@@ -58,8 +60,7 @@ func newRecordingWriter() *recordingWriter {
 func (w *recordingWriter) Write(p []byte) (int, error) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
-	w.n += len(p)
-	return len(p), nil
+	return w.buf.Write(p)
 }
 
 func (w *recordingWriter) Close() error {
@@ -70,7 +71,30 @@ func (w *recordingWriter) Close() error {
 func (w *recordingWriter) written() int {
 	w.mu.Lock()
 	defer w.mu.Unlock()
-	return w.n
+	return w.buf.Len()
+}
+
+// refusal waits for the op to close the connection and returns the text of the
+// error_message it answered.
+func (w *recordingWriter) refusal(t *testing.T) string {
+	t.Helper()
+	select {
+	case <-w.closed:
+	case <-time.After(10 * time.Second):
+		t.Fatal("the op never closed the connection")
+	}
+
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	obj, err := channel.NewReceiver(bytes.NewReader(w.buf.Bytes())).Receive()
+	if err != nil {
+		t.Fatalf("decode answer: %v", err)
+	}
+	msg, ok := obj.(*astral.ErrorMessage)
+	if !ok {
+		t.Fatalf("the op answered %v; want an error_message", obj)
+	}
+	return msg.Error()
 }
 
 // route dispatches one query to one op and returns the router's verdict once the

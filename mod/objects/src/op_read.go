@@ -28,6 +28,10 @@ type opReadArgs struct {
 // one it reads from the first candidate the finders name that delivers bytes.
 // Records the access under the opened object's full ID in the reads journal,
 // which feeds purge ordering.
+//
+// why every failure is a plain rejection (astral.CodeRejected): the answer is
+// the object's raw bytes, which leave no room for an error_message, and shell
+// pipes read it as the object itself.
 func (mod *Module) OpRead(ctx *astral.Context, q *routing.IncomingQuery, args opReadArgs) (err error) {
 	if args.Zone != nil {
 		ctx = ctx.LimitZone(*args.Zone)

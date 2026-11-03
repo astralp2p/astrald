@@ -24,5 +24,5 @@ type Config struct {
 }
 
 var defaultConfig = Config{
-	Visibility: gateway.VisibilityPublic,
+	Visibility: gateway.VisibilityPrivate,
 }

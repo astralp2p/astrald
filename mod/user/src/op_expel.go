@@ -2,6 +2,7 @@ package user
 
 import (
 	"github.com/astralp2p/astral-go/api/auth"
+	"github.com/astralp2p/astral-go/api/dir"
 	"github.com/astralp2p/astral-go/api/user"
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astral-go/astral/channel"
@@ -16,12 +17,13 @@ type opExpelArgs struct {
 
 // OpExpel permanently bans the named node from the swarm and returns the signed ban.
 // Requires an active contract; the caller must be authorized for
-// user.AdminSwarmAction (code 4 otherwise) - the user always is, other
+// user.AdminSwarmAction (auth.ErrNotPermitted otherwise) - the user always is, other
 // identities via authorizers.
 func (mod *Module) OpExpel(ctx *astral.Context, q *routing.IncomingQuery, args opExpelArgs) (err error) {
+	ch := q.Accept(channel.WithFormats(args.In, args.Out))
+	defer ch.Close()
+
 	if mod.ActiveContract() == nil {
-		ch := q.Accept(channel.WithFormats(args.In, args.Out))
-		defer ch.Close()
 		return ch.Send(user.ErrNoActiveContract)
 	}
 
@@ -29,19 +31,19 @@ func (mod *Module) OpExpel(ctx *astral.Context, q *routing.IncomingQuery, args o
 	// The empty name and "anyone" resolve to the zero identity, which names no
 	// node, so the name is refused here instead of banned.
 	nodeID, err := mod.Dir.ResolveIdentity(args.Identity)
-	if err != nil || nodeID.IsZero() {
-		return q.RejectWithCode(3)
+	if err != nil {
+		return ch.Send(dir.ErrUnknownIdentity)
+	}
+	if nodeID.IsZero() {
+		return ch.Send(astral.ErrZeroIdentity)
 	}
 
 	if !mod.Auth.Authorize(ctx, &user.AdminSwarmAction{
 		Action:  auth.NewAction(q.Caller()),
 		Subject: nodeID,
 	}) {
-		return q.RejectWithCode(4)
+		return ch.Send(auth.ErrNotPermitted)
 	}
-
-	ch := q.Accept(channel.WithFormats(args.In, args.Out))
-	defer ch.Close()
 
 	signed, err := mod.Expel(ctx, nodeID)
 	if err != nil {

@@ -28,16 +28,16 @@ type opMailboxArgs struct {
 // participant's token authenticates there, so the origin refusal alone lets a
 // participant read every tenant's record.
 func (mod *Module) OpMailbox(ctx *astral.Context, q *routing.IncomingQuery, args opMailboxArgs) error {
+	ch := channel.New(q.AcceptRaw(), channel.WithOutputFormat(args.Out))
+	defer ch.Close()
+
 	if refusesOrigin(q) {
-		return q.Reject()
+		return ch.Send(astral.NewErrOriginNotAllowed(q.Origin()))
 	}
 
 	if !mod.Auth.Authorize(ctx, &auth.SeeNodeStateAction{Action: auth.NewAction(q.Caller())}) {
-		return q.Reject()
+		return ch.Send(auth.ErrNotPermitted)
 	}
-
-	ch := channel.New(q.AcceptRaw(), channel.WithOutputFormat(args.Out))
-	defer ch.Close()
 
 	identity, err := mod.Dir.ResolveIdentity(args.Identity)
 	if err != nil {

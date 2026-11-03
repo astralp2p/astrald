@@ -19,8 +19,8 @@ func (mod *Module) AddIndexer(indexer objectsmod.Indexer) error {
 //
 // why: the repository follower picks the object up on its own schedule, so a
 // caller that stores a private key and signs with it in the next call can beat
-// its own index and get "sign as issuer: unsupported". Indexing here makes the
-// store reply mean what callers already assume it means.
+// its own index and get "sign as issuer: no signing scheme available for key".
+// Indexing here makes the store reply mean what callers already assume it means.
 //
 // note: an indexer that does not answer for this object type returns
 // ErrUnexpectedObject — the common case, and not a failure. Indexing is

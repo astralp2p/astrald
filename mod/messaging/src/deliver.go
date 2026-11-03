@@ -28,6 +28,8 @@ func (mod *Module) deliverMessage(senderID, targetID *astral.Identity, msg *mess
 
 	conn, err := query.RouteInFlight(qctx, mod.node, launchDelivery(senderID, targetID, messaging.MethodMessage))
 	if err != nil {
+		// note: a recipient's node that predates messaging.ErrNotAdmitted refuses
+		// with this code instead.
 		var rejected *astral.ErrRejected
 		if errors.As(err, &rejected) && rejected.Code == messaging.RejectNotAdmitted {
 			return errNotAdmitted
@@ -59,6 +61,9 @@ func (mod *Module) deliverMessage(senderID, targetID *astral.Identity, msg *mess
 	}
 
 	if e, ok := obj.(astral.Error); ok {
+		if errors.Is(e, messaging.ErrNotAdmitted) {
+			return errNotAdmitted
+		}
 		return fmt.Errorf("%w: %s", errRefused, e.Error())
 	}
 	if _, ok := obj.(*astral.Ack); !ok {

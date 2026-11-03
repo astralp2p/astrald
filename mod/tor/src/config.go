@@ -18,7 +18,9 @@ type Config struct {
 // new one, so a default shared by Dial and Listen is rewritten by whichever of
 // them tor.yaml sets. Each load gets its own bools.
 func defaultConfig() Config {
-	dial, listen := true, true
+	// why: an onion service makes the node reachable worldwide, so listen is
+	// opt-in through tor.yaml.
+	dial, listen := true, false
 
 	return Config{
 		Dial:        &dial,

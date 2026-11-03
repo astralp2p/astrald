@@ -1,7 +1,6 @@
 package objects
 
 import (
-	"errors"
 	"testing"
 
 	"github.com/astralp2p/astral-go/api/auth"
@@ -24,7 +23,6 @@ func storeObjectsOps() []storeOp {
 		{"objects.create", func(m *Module) any { return m.OpCreate }, "?repo=local", "local", ""},
 		{"objects.store", func(m *Module) any { return m.OpStore }, "?repo=local", "local", ""},
 		{"objects.new_mem", func(m *Module) any { return m.OpNewMem }, "?name=scratch&size=1M", "scratch", ""},
-		{"objects.register_blueprint", func(m *Module) any { return m.OpRegisterBlueprint }, "", "", ""},
 		{"objects.echo", func(m *Module) any { return m.OpEcho }, "", "", ""},
 	}
 }
@@ -48,13 +46,11 @@ func TestStoreObjectsRefusesCallerWithoutPermits(t *testing.T) {
 
 			err := route(t, op.op(mod), caller, op.name+op.args, w)
 
-			var rejected *astral.ErrRejected
-			if !errors.As(err, &rejected) {
-				t.Fatalf("%s answered a caller holding no permits: got err %v, want a rejection", op.name, err)
+			if err != nil {
+				t.Fatalf("route: %v", err)
 			}
-
-			if n := w.written(); n != 0 {
-				t.Fatalf("%s wrote %d bytes to a refused caller; want none", op.name, n)
+			if got, want := w.refusal(t), auth.ErrNotPermitted.Error(); got != want {
+				t.Fatalf("answered %q; want %q", got, want)
 			}
 
 			actions := authority.recorded()

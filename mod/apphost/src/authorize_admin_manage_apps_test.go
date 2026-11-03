@@ -1,7 +1,6 @@
 package apphost
 
 import (
-	"errors"
 	"io"
 	"testing"
 	"time"
@@ -48,13 +47,11 @@ func TestAdminManageAppsRefusesCallerWithoutPermits(t *testing.T) {
 
 			err := route(t, op.op(mod), caller, op.name+op.args, w)
 
-			var rejected *astral.ErrRejected
-			if !errors.As(err, &rejected) {
-				t.Fatalf("%s answered a caller holding no permits: got err %v, want a rejection", op.name, err)
+			if err != nil {
+				t.Fatalf("route: %v", err)
 			}
-
-			if n := w.written(); n != 0 {
-				t.Fatalf("%s wrote %d bytes to a refused caller; want none", op.name, n)
+			if got, want := w.refusal(t), auth.ErrNotPermitted.Error(); got != want {
+				t.Fatalf("answered %q; want %q", got, want)
 			}
 
 			checkAdminManageAppsAsked(t, op.name, authority, caller)
@@ -109,12 +106,11 @@ func TestAdminManageAppsKeepsNetworkRefusal(t *testing.T) {
 	w := newRecordingWriter()
 	err = routeAdminManageAppsFromNetwork(t, mod.OpDeleteToken, astral.GenerateIdentity(), "apphost.delete_token?token="+string(token.Token), w)
 
-	var rejected *astral.ErrRejected
-	if !errors.As(err, &rejected) {
-		t.Fatalf("apphost.delete_token answered a query off a link: got err %v, want a rejection", err)
+	if err != nil {
+		t.Fatalf("route: %v", err)
 	}
-	if n := w.written(); n != 0 {
-		t.Fatalf("apphost.delete_token wrote %d bytes to a query off a link; want none", n)
+	if got, want := w.refusal(t), astral.NewErrOriginNotAllowed(astral.OriginNetwork).Error(); got != want {
+		t.Fatalf("answered %q; want %q", got, want)
 	}
 	if _, err = mod.AuthenticateToken(string(token.Token)); err != nil {
 		t.Fatalf("the token stopped authenticating after a refused delete: %v", err)
@@ -140,13 +136,11 @@ func TestAdminManageAppsRefusesEveryTokenOpOffALink(t *testing.T) {
 
 			err := routeAdminManageAppsFromNetwork(t, op.op(mod), astral.GenerateIdentity(), op.name+op.args, w)
 
-			var rejected *astral.ErrRejected
-			if !errors.As(err, &rejected) {
-				t.Fatalf("%s answered a query off a link: got err %v, want a rejection", op.name, err)
+			if err != nil {
+				t.Fatalf("route: %v", err)
 			}
-
-			if n := w.written(); n != 0 {
-				t.Fatalf("%s wrote %d bytes to a query off a link; want none", op.name, n)
+			if got, want := w.refusal(t), astral.NewErrOriginNotAllowed(astral.OriginNetwork).Error(); got != want {
+				t.Fatalf("answered %q; want %q", got, want)
 			}
 
 			if n := len(authority.recorded()); n != 0 {

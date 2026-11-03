@@ -1,6 +1,11 @@
 package crypto
 
-import "errors"
+import (
+	"errors"
+	"fmt"
+
+	"github.com/astralp2p/astral-go/api/crypto"
+)
 
 var (
 	ErrUnsupportedKeyType = errors.New("unsupported key type")
@@ -18,4 +23,35 @@ var (
 	// node still signs; see AuthorizeSigner in the src package for why the
 	// caller's identity is not evidence enough here.
 	ErrNodeKeyNotSignable = errors.New("cannot sign with the node's key")
+
+	// ErrSignerGone is returned when the binding of a key's signer ended before
+	// the signer answered.
+	ErrSignerGone = errors.New("signer is gone")
 )
+
+// ErrKeyNotHeld is returned when no engine signs as Key: the node holds no
+// usable private key for it. It unwraps to ErrUnsupported.
+type ErrKeyNotHeld struct {
+	Key *crypto.PublicKey
+}
+
+// Error names the key in its text form and how a key becomes held.
+func (e *ErrKeyNotHeld) Error() string {
+	// why: the zero value is the errors.Is target, and PublicKey.MarshalText
+	// has a value receiver that panics on a nil key.
+	if e.Key == nil {
+		return "no signing scheme available for an absent key"
+	}
+	text, _ := e.Key.MarshalText()
+	return fmt.Sprintf("no signing scheme available for key %s: the node holds no usable private key for it; "+
+		"a key is held as an indexed mod.crypto.private_key object or by an app holding a crypto.register_signer binding for it", text)
+}
+
+// Unwrap answers ErrUnsupported, so callers checking for it still match.
+func (e *ErrKeyNotHeld) Unwrap() error { return ErrUnsupported }
+
+// Is matches any *ErrKeyNotHeld, regardless of its key.
+func (e *ErrKeyNotHeld) Is(other error) bool {
+	_, ok := other.(*ErrKeyNotHeld)
+	return ok
+}

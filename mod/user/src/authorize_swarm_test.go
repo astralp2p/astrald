@@ -1,7 +1,7 @@
 package user
 
 import (
-	"errors"
+	"bytes"
 	"io"
 	"sync"
 	"testing"
@@ -57,7 +57,7 @@ func (d *resolvingDir) ResolveIdentity(string) (*astral.Identity, error) { retur
 // the op accepted the query and answered it.
 type recordingWriter struct {
 	mu     sync.Mutex
-	n      int
+	buf    bytes.Buffer
 	closed chan struct{}
 	once   sync.Once
 }
@@ -67,8 +67,7 @@ func newRecordingWriter() *recordingWriter { return &recordingWriter{closed: mak
 func (w *recordingWriter) Write(p []byte) (int, error) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
-	w.n += len(p)
-	return len(p), nil
+	return w.buf.Write(p)
 }
 
 func (w *recordingWriter) Close() error {
@@ -79,7 +78,29 @@ func (w *recordingWriter) Close() error {
 func (w *recordingWriter) written() int {
 	w.mu.Lock()
 	defer w.mu.Unlock()
-	return w.n
+	return w.buf.Len()
+}
+
+// refusal waits for the op to close the connection and returns the text of the
+// single error_message it answered.
+func (w *recordingWriter) refusal(t *testing.T) string {
+	t.Helper()
+	select {
+	case <-w.closed:
+	case <-time.After(10 * time.Second):
+		t.Fatal("the op never closed the connection")
+	}
+
+	w.mu.Lock()
+	answer := &answerWriter{}
+	answer.buf.Write(w.buf.Bytes())
+	w.mu.Unlock()
+
+	objs := answer.objects(t)
+	if len(objs) != 1 || objs[0].ObjectType() != "error_message" {
+		t.Fatalf("the op answered %v; want one error_message", objs)
+	}
+	return objs[0].(astral.Error).Error()
 }
 
 // route dispatches one query to one op and returns the router's verdict once the
@@ -171,13 +192,11 @@ func TestSwarmOpsRefuseCallerWithoutPermits(t *testing.T) {
 
 			err := route(t, op.op(mod), caller, op.name+op.args, w)
 
-			var rejected *astral.ErrRejected
-			if !errors.As(err, &rejected) {
-				t.Fatalf("%s answered a caller holding no permits: got err %v, want a rejection", op.name, err)
+			if err != nil {
+				t.Fatalf("route: %v", err)
 			}
-
-			if n := w.written(); n != 0 {
-				t.Fatalf("%s wrote %d bytes to a refused caller; want none", op.name, n)
+			if got, want := w.refusal(t), auth.ErrNotPermitted.Error(); got != want {
+				t.Fatalf("answered %q; want %q", got, want)
 			}
 
 			actions := authority.recorded()
@@ -261,17 +280,18 @@ func TestAuthorizeSwarmRefusesOnUnclaimedNode(t *testing.T) {
 }
 
 // TestSyncWithRefusesTheZeroIdentity: a name resolving to the zero identity is
-// rejected with code 3 before any authorization call.
+// answered astral.ErrZeroIdentity before any authorization call.
 func TestSyncWithRefusesTheZeroIdentity(t *testing.T) {
 	authority := &recordingAuth{verdict: true}
 	mod := swarmModule(t, authority, astral.GenerateIdentity())
 	mod.Dir = &resolvingDir{id: &astral.Identity{}}
 
-	err := route(t, mod.OpSyncWith, astral.GenerateIdentity(), "user.sync_with?identity=anyone", newRecordingWriter())
-
-	var rejected *astral.ErrRejected
-	if !errors.As(err, &rejected) || rejected.Code != 3 {
-		t.Fatalf("user.sync_with answered the zero identity: got err %v, want rejection code 3", err)
+	w := newRecordingWriter()
+	if err := route(t, mod.OpSyncWith, astral.GenerateIdentity(), "user.sync_with?identity=anyone", w); err != nil {
+		t.Fatalf("route: %v", err)
+	}
+	if got, want := w.refusal(t), astral.ErrZeroIdentity.Error(); got != want {
+		t.Fatalf("user.sync_with answered %q for the zero identity; want %q", got, want)
 	}
 	if n := len(authority.recorded()); n != 0 {
 		t.Fatalf("user.sync_with made %d authorization calls; want none", n)

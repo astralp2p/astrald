@@ -12,6 +12,7 @@ type opNewArgs struct {
 	Out  string
 }
 
+// why: a zero value of a named type reads no node secret and changes no state; the type-registry leak is accepted (G9).
 func (mod *Module) OpNew(ctx *astral.Context, query *routing.IncomingQuery, args opNewArgs) (err error) {
 	ch := query.Accept(channel.WithFormats(args.In, args.Out))
 	defer ch.Close()

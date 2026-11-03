@@ -4,21 +4,17 @@ import (
 	"testing"
 	"time"
 
-	"github.com/astralp2p/astral-go/api/auth"
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astral-go/lib/query"
 	"github.com/astralp2p/astral-go/lib/routing"
 )
 
-// TestGrantOpRecordsNothingWhenConstraintsNeverArrive: a constrained grant
-// whose caller closes before sending the constraint bundle fails and records
-// no grant. An unconstrained permit in its place grants more than the caller
-// asked for.
-func TestGrantOpRecordsNothingWhenConstraintsNeverArrive(t *testing.T) {
+// TestGrantOpRecordsNothingWhenTheRequestNeverArrives: a grant whose caller
+// closes before sending its grant_request fails and records no grant.
+func TestGrantOpRecordsNothingWhenTheRequestNeverArrives(t *testing.T) {
 	mod := testGrantModule(t)
 	mod.Auth = &recordingAuth{verdict: true}
 	app := astral.GenerateIdentity()
-	action := auth.ServeObjectsAction{}.ObjectType()
 
 	op, err := routing.NewOp(mod.OpGrant)
 	if err != nil {
@@ -33,7 +29,7 @@ func TestGrantOpRecordsNothingWhenConstraintsNeverArrive(t *testing.T) {
 	defer cancel()
 
 	caller := astral.GenerateIdentity()
-	q := query.New(caller, caller, "apphost.grant?identity="+app.String()+"&action="+action+"&constrained=true", nil)
+	q := query.New(caller, caller, "apphost.grant", nil)
 	requester, err := op.RouteQuery(ctx, astral.Launch(q), newRecordingWriter())
 	if err != nil {
 		t.Fatalf("route: %v", err)

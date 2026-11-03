@@ -366,14 +366,13 @@ func TestHostingWithoutPermissionToCorrespondRefusesDelivery(t *testing.T) {
 	mod.Auth = authority
 	a, b := hostedParticipant(t, mod), hostedParticipant(t, mod)
 
-	_, err := mod.RouteQuery(mod.ctx, inFlight(b, messaging.MethodMessage), &bufWriteCloser{})
-	var rejected *astral.ErrRejected
-	if !errors.As(err, &rejected) || rejected.Code != messaging.RejectNotAdmitted {
-		t.Fatalf("a delivery to a hosted mailbox with no receive permission: got %v, want not admitted", err)
+	answer := routeAndAnswer(t, mod, inFlight(b, messaging.MethodMessage), &messaging.Message{ID: messaging.NewMessageID(), Content: "hello"})
+	if e, ok := answer.(astral.Error); !ok || !errors.Is(e, messaging.ErrNotAdmitted) {
+		t.Fatalf("a delivery to a hosted mailbox with no receive permission: answered %v, want not admitted", answer)
 	}
 
 	req := &messaging.SendMessageRequest{To: astral.String8(b.String()), Content: "hello"}
-	if _, err = mod.SendMessage(context.Background(), a, req); err == nil || !strings.Contains(err.Error(), "unknown recipient") {
+	if _, err := mod.SendMessage(context.Background(), a, req); err == nil || !strings.Contains(err.Error(), "unknown recipient") {
 		t.Fatalf("a send with no send permission: got %v, want the recipient refused", err)
 	}
 
@@ -381,7 +380,7 @@ func TestHostingWithoutPermissionToCorrespondRefusesDelivery(t *testing.T) {
 		authmod.Func[*messaging.SendAction](func(*astral.Context, *messaging.SendAction) bool { return true }),
 		authmod.Func[*messaging.ReceiveAction](func(*astral.Context, *messaging.ReceiveAction) bool { return true }),
 	)
-	if _, err = mod.SendMessage(context.Background(), a, req); err != nil {
+	if _, err := mod.SendMessage(context.Background(), a, req); err != nil {
 		t.Fatalf("a send with both permissions: %v", err)
 	}
 }
@@ -410,9 +409,11 @@ func TestHostingDoesNotOpenAMailboxToAnotherCaller(t *testing.T) {
 
 	w := newRecordingWriter()
 	err = routeQuery(t, mod.OpListMessages, originQuery(mod.node.Identity(), "messaging.list_messages", astral.OriginLocal), w)
-	var rejected *astral.ErrRejected
-	if !errors.As(err, &rejected) || w.written() != 0 {
-		t.Fatalf("the node listing over the op: got %v and %v bytes, want a rejection", err, w.written())
+	if err != nil {
+		t.Fatalf("the node listing over the op: route: %v", err)
+	}
+	if got, want := w.refusal(t), auth.ErrNotPermitted.Error(); got != want {
+		t.Fatalf("the node listing over the op answered %q; want %q", got, want)
 	}
 }
 

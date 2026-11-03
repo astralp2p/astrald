@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/astralp2p/astral-go/api/auth"
 	"github.com/astralp2p/astral-go/api/messaging"
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astral-go/astral/channel"
@@ -49,9 +50,9 @@ func mailOps() []mailOp {
 // Every mail operation refuses a query off a link or from an MCP agent, and a
 // caller whose mailbox this node does not host — an unhosted identity, the zero
 // identity and the node's own — without asking the authority anything. Each
-// rejects the query before it accepts it, except read_messages for an unhosted
-// caller: it accepts, reads the request, and answers that the caller is not a
-// messaging participant.
+// answers the origin refusal for the first two and not permitted for the rest,
+// except read_messages for an unhosted caller: it reads the request, and
+// answers that the caller is not a messaging participant.
 func TestAMailOperationServesOnlyALocalParticipant(t *testing.T) {
 	for _, op := range mailOps() {
 		mod := testMessagingModule(t)
@@ -63,12 +64,13 @@ func TestAMailOperationServesOnlyALocalParticipant(t *testing.T) {
 			name   string
 			caller *astral.Identity
 			origin string
+			want   astral.Error
 		}{
-			{"network origin", participant, astral.OriginNetwork},
-			{"mcp origin", participant, astral.OriginMCP},
-			{"unhosted caller", unhosted, astral.OriginLocal},
-			{"zero caller", &astral.Identity{}, astral.OriginLocal},
-			{"node caller", mod.node.Identity(), astral.OriginLocal},
+			{"network origin", participant, astral.OriginNetwork, astral.NewErrOriginNotAllowed(astral.OriginNetwork)},
+			{"mcp origin", participant, astral.OriginMCP, astral.NewErrOriginNotAllowed(astral.OriginMCP)},
+			{"unhosted caller", unhosted, astral.OriginLocal, auth.ErrNotPermitted},
+			{"zero caller", &astral.Identity{}, astral.OriginLocal, auth.ErrNotPermitted},
+			{"node caller", mod.node.Identity(), astral.OriginLocal, auth.ErrNotPermitted},
 		} {
 			t.Run(op.name+"/"+c.name, func(t *testing.T) {
 				before := len(authority.questions())
@@ -76,6 +78,11 @@ func TestAMailOperationServesOnlyALocalParticipant(t *testing.T) {
 				res := tryOp(t, op.op(mod), originQuery(c.caller, op.name+op.args, c.origin), op.body)
 
 				checkUnhosted(t, op, res, c.caller == unhosted)
+				if !(op.answersUnhosted && c.caller == unhosted) {
+					if got := res.objs[0].(*astral.ErrorMessage).Error(); got != c.want.Error() {
+						t.Fatalf("%s answered %q; want %q", op.name, got, c.want)
+					}
+				}
 				if asked := authority.questions()[before:]; len(asked) != 0 {
 					t.Fatalf("%s asked the authority %v about a refused caller; want nothing", op.name, asked)
 				}
@@ -114,20 +121,28 @@ func checkNotParticipant(t *testing.T, name string, res opResult) {
 	}
 }
 
-// checkRefused asserts the caller was answered nothing: the query rejected, or,
-// where afterRequest says the op refuses only once its request arrives,
-// accepted and ended with no answer.
+// checkRefused asserts how the caller was refused: answered one
+// auth.ErrNotPermitted or astral.ErrOriginNotAllowed, or, where afterRequest
+// says the op refuses only once its request arrives, accepted and ended with no
+// answer.
 func checkRefused(t *testing.T, name string, res opResult, afterRequest bool) {
 	t.Helper()
 
-	var rejected *astral.ErrRejected
-	switch {
-	case afterRequest && res.err != nil:
-		t.Fatalf("%s: got err %v, want the query accepted and ended with no answer", name, res.err)
-	case !afterRequest && !errors.As(res.err, &rejected):
-		t.Fatalf("%s answered: got err %v, want a rejection", name, res.err)
-	case len(res.objs) != 0:
-		t.Fatalf("%s answered a refused caller %v objects; want none", name, len(res.objs))
+	if res.err != nil {
+		t.Fatalf("%s: got err %v, want the query accepted", name, res.err)
+	}
+	if afterRequest {
+		if len(res.objs) != 0 {
+			t.Fatalf("%s answered a refused caller %v objects; want none", name, len(res.objs))
+		}
+		return
+	}
+	if len(res.objs) != 1 {
+		t.Fatalf("%s answered %v objects; want one refusal", name, len(res.objs))
+	}
+	said, ok := res.objs[0].(*astral.ErrorMessage)
+	if !ok || !(errors.Is(said, auth.ErrNotPermitted) || errors.Is(said, astral.ErrOriginNotAllowed)) {
+		t.Fatalf("%s answered %#v; want not permitted or origin not allowed", name, res.objs[0])
 	}
 }
 
@@ -272,10 +287,10 @@ func tryOp(t *testing.T, fn any, q *astral.InFlightQuery, body astral.Object) op
 	}
 	defer conn.Close()
 
+	// note: an op that refuses closes its input without reading, so sending the
+	// request then fails; the answer, not the send, is what the test reads.
 	if body != nil {
-		if err = channel.NewSender(conn).Send(body); err != nil {
-			t.Fatalf("send the request: %v", err)
-		}
+		_ = channel.NewSender(conn).Send(body)
 	}
 	return opResult{objs: w.objects(t)}
 }

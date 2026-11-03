@@ -40,24 +40,22 @@ type opBootstrapArgs struct {
 // why the origin and caller gates of auth.sign_contract: the op signs the
 // contract that op signs for node setup, so it admits the same queries.
 func (mod *Module) OpBootstrap(ctx *astral.Context, q *routing.IncomingQuery, args opBootstrapArgs) error {
+	ch := q.Accept(channel.WithFormats(args.In, args.Out))
+	defer ch.Close()
+
 	switch q.Origin() {
 	case "", astral.OriginLocal:
 	default:
-		return q.Reject()
+		return ch.Send(astral.NewErrOriginNotAllowed(q.Origin()))
 	}
 
 	if mod.ActiveContract() != nil {
-		ch := q.Accept(channel.WithFormats(args.In, args.Out))
-		defer ch.Close()
 		return ch.Send(user.ErrAlreadyClaimed)
 	}
 
 	if !q.Caller().IsEqual(mod.node.Identity()) {
-		return q.RejectWithCode(4)
+		return ch.Send(auth.ErrNotPermitted)
 	}
-
-	ch := q.Accept(channel.WithFormats(args.In, args.Out))
-	defer ch.Close()
 
 	words, err := receiveWords(ch, args.Generate)
 	if err != nil {
@@ -160,8 +158,8 @@ func (mod *Module) deriveUserKey(words []string, passphrase string) (crypto.Priv
 // signClaim builds the claim contract from the identity of key to this node,
 // and signs it as the user with key in memory and as the node.
 //
-// why IsNodeClaim: the claim rule of auth.sign_contract decides which user may
-// claim this node, and this op signs without passing through that op.
+// why IsNodeClaim: the claim rule of auth.sign_contract decides whether this
+// node may be claimed, and this op signs without passing through that op.
 func (mod *Module) signClaim(ctx *astral.Context, caller *astral.Identity, key *crypto.PrivateKey) (*auth.SignedContract, error) {
 	userID := secp256k1.Identity(secp256k1.PublicKey(key))
 

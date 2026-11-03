@@ -50,12 +50,37 @@ func routeAndWrite(t *testing.T, mod *Module, q *astral.InFlightQuery, obj astra
 	return nil
 }
 
+// routeAndAnswer routes q, writes obj on the accepted conn, and returns the one
+// object the node answers.
+func routeAndAnswer(t *testing.T, mod *Module, q *astral.InFlightQuery, obj astral.Object) astral.Object {
+	t.Helper()
+
+	w := &bufWriteCloser{}
+	wc, err := mod.RouteQuery(mod.ctx, q, w)
+	if err != nil {
+		t.Fatalf("route: %v", err)
+	}
+	if err = channel.NewSender(wc).Send(obj); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+
+	deadline := time.Now().Add(3 * time.Second)
+	for w.String() == "" && time.Now().Before(deadline) {
+		time.Sleep(5 * time.Millisecond)
+	}
+	answer, err := channel.NewReceiver(strings.NewReader(w.String())).Receive()
+	if err != nil {
+		t.Fatalf("decode answer: %v", err)
+	}
+	return answer
+}
+
 // A delivery that did not come over a link is taken only from this module's
 // send path. The recipient's side asks receive_action alone and relies on
 // send_action having been asked where the message was sent; a delivery an
 // agent's declared tool put, or a local app routed itself, was never asked it.
-// Such a delivery is rejected whether its target is hosted here or not, and
-// stores nothing.
+// Such a delivery is answered astral.ErrOriginNotAllowed whether its target is
+// hosted here or not, and stores nothing.
 func TestALocalDeliveryIsTakenOnlyFromTheSendPath(t *testing.T) {
 	mod := testMessagingModule(t)
 	authority := authorityOf(mod)
@@ -72,11 +97,10 @@ func TestALocalDeliveryIsTakenOnlyFromTheSendPath(t *testing.T) {
 	for _, origin := range localOrigins {
 		for name, target := range map[string]*astral.Identity{"hosted": b, "elsewhere": astral.GenerateIdentity()} {
 			msg := &messaging.Message{ID: messaging.NewMessageID(), Content: "routed"}
-			err := routeAndWrite(t, mod, unmarkedQuery(a, target, messaging.MethodMessage, origin), msg)
+			answer := routeAndAnswer(t, mod, unmarkedQuery(a, target, messaging.MethodMessage, origin), msg)
 
-			var rejected *astral.ErrRejected
-			if !errors.As(err, &rejected) {
-				t.Fatalf("a delivery with origin %q to a target %v: got %v, want a rejection", origin, name, err)
+			if e, ok := answer.(astral.Error); !ok || !errors.Is(e, astral.ErrOriginNotAllowed) {
+				t.Fatalf("a delivery with origin %q to a target %v: answered %v, want origin not allowed", origin, name, answer)
 			}
 		}
 	}
@@ -96,11 +120,10 @@ func TestALocalReceiptIsTakenOnlyFromTheSendPath(t *testing.T) {
 	mustInsertOutbox(t, mod, &messaging.StoredMessage{ID: id, Sender: a, Recipient: b, Content: "x"})
 
 	for _, origin := range localOrigins {
-		err := routeAndWrite(t, mod, unmarkedQuery(b, a, messaging.MethodReceipt, origin), &messaging.Receipt{ID: id})
+		answer := routeAndAnswer(t, mod, unmarkedQuery(b, a, messaging.MethodReceipt, origin), &messaging.Receipt{ID: id})
 
-		var rejected *astral.ErrRejected
-		if !errors.As(err, &rejected) {
-			t.Fatalf("a receipt with origin %q: got %v, want a rejection", origin, err)
+		if e, ok := answer.(astral.Error); !ok || !errors.Is(e, astral.ErrOriginNotAllowed) {
+			t.Fatalf("a receipt with origin %q: answered %v, want origin not allowed", origin, answer)
 		}
 	}
 

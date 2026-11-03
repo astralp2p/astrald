@@ -17,7 +17,7 @@ This makes dispatch implicit and error-prone:
 - real failures can be hidden as `ErrUnsupported`
 - engine selection depends on registration order
 - signing backends and verification algorithms are conflated
-- multiple providers for the same operation, such as local BIP-137 signing and coldcard BIP-137 signing, have no explicit selection policy
+- multiple providers for the same operation have no explicit selection policy
 - signer factories cannot use the caller context, so implementations create detached contexts internally
 - `crypto.public_key` currently bypasses the engine path and hardcodes secp256k1
 
@@ -138,11 +138,6 @@ Signing may try multiple matching providers, but only fallback on `ErrSignerUnav
    - register a BIP-137 text signer provider for `secp256k1/bip137`
    - register a BIP-137 text verifier for `secp256k1/bip137`
 
-10. Migrate `mod/coldcard`:
-    - register a BIP-137 text signer provider for `secp256k1/bip137`
-    - give it an explicit priority relative to the local signer
-    - return `ErrSignerUnavailable` when no matching device is present
-
 11. Fix `OpPublicKey` so it calls `mod.PublicKey(ctx, key)` instead of `secp256k1.PublicKey(key)`.
 
 12. Update object signers, text object signers, RPC operations, and `NodeSigner` for context-aware signer creation.
@@ -158,10 +153,6 @@ Signing may try multiple matching providers, but only fallback on `ErrSignerUnav
     - deterministic signer provider priority
     - `OpPublicKey` using the registry rather than hardcoded secp256k1
 
-## Open Decision
+## Settled Decision
 
-Signer provider selection needs a product decision.
-
-The simplest policy is static priority. That keeps the current API small and deterministic.
-
-A more explicit policy would let callers request a backend, for example `local` or `coldcard`. That is more work, but it may be preferable if users need to choose whether a private key or hardware wallet is used for a signature.
+A local private key signs before an app holding a `crypto.register_signer` binding. The binding is not an engine, so it takes no part in the provider priority above.

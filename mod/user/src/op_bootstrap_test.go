@@ -387,29 +387,30 @@ func TestBootstrapTokenFailureLeavesTheNodeClaimed(t *testing.T) {
 	checkClaimed(t, f, identityOf(t, bootstrapWords))
 }
 
-// TestBootstrapRejects: every refused query is rejected before it is accepted,
-// and leaves the node as it was.
+// TestBootstrapRejects: every refused query is answered with a single
+// error_message, and leaves the node as it was.
 func TestBootstrapRejects(t *testing.T) {
 	cases := []struct {
 		name   string
 		origin string
 		caller func(f *bootstrapFixture) *astral.Identity
-		code   uint8
+		answer astral.Error
 	}{
-		{"network origin", astral.OriginNetwork, func(f *bootstrapFixture) *astral.Identity { return f.nodeID }, astral.CodeRejected},
-		{"mcp origin", astral.OriginMCP, func(f *bootstrapFixture) *astral.Identity { return f.nodeID }, astral.CodeRejected},
-		{"caller other than the node", "", func(*bootstrapFixture) *astral.Identity { return astral.GenerateIdentity() }, 4},
+		{"network origin", astral.OriginNetwork, func(f *bootstrapFixture) *astral.Identity { return f.nodeID }, astral.NewErrOriginNotAllowed(astral.OriginNetwork)},
+		{"mcp origin", astral.OriginMCP, func(f *bootstrapFixture) *astral.Identity { return f.nodeID }, astral.NewErrOriginNotAllowed(astral.OriginMCP)},
+		{"caller other than the node", "", func(*bootstrapFixture) *astral.Identity { return astral.GenerateIdentity() }, auth.ErrNotPermitted},
 	}
 
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			f := newBootstrapFixture()
 
-			_, err := routeBootstrap(t, f, c.caller(f), c.origin, "user.bootstrap?generate=true", nil)
-
-			var rejected *astral.ErrRejected
-			if !errors.As(err, &rejected) || rejected.Code != c.code {
-				t.Fatalf("got %v; want a rejection with code %d", err, c.code)
+			objs, err := routeBootstrap(t, f, c.caller(f), c.origin, "user.bootstrap?generate=true", nil)
+			if err != nil {
+				t.Fatalf("route: %v", err)
+			}
+			if len(objs) != 1 || objs[0].ObjectType() != "error_message" || objs[0].(astral.Error).Error() != c.answer.Error() {
+				t.Fatalf("the op answered %v; want %q", objs, c.answer)
 			}
 			if n := len(f.objects.objects()); n != 0 {
 				t.Fatalf("the node stored %d objects; want none", n)

@@ -30,12 +30,12 @@ type opSetAuthorizerArgs struct {
 // why AdminManageApps: an assignment decides what an app may do on this node,
 // which is the administration of app authority that action covers.
 func (mod *Module) OpSetAuthorizer(ctx *astral.Context, q *routing.IncomingQuery, args opSetAuthorizerArgs) error {
-	if !mod.Authorize(ctx, &auth.AdminManageAppsAction{Action: auth.NewAction(q.Caller())}) {
-		return q.Reject()
-	}
-
 	ch := channel.New(q.AcceptRaw(), channel.WithFormats(args.In, args.Out))
 	defer ch.Close()
+
+	if !mod.Authorize(ctx, &auth.AdminManageAppsAction{Action: auth.NewAction(q.Caller())}) {
+		return ch.Send(auth.ErrNotPermitted)
+	}
 
 	a := &auth.AuthorizerAssignment{
 		Action:     astral.String8(args.Action),

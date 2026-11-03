@@ -22,10 +22,13 @@ type opSubscribeArgs struct {
 // errors with exponential back-off and validates ack repo+version against the
 // sent change before committing the cursor.
 func (mod *Module) OpSubscribe(ctx *astral.Context, q *routing.IncomingQuery, args opSubscribeArgs) error {
+	ch := q.Accept(channel.WithFormats(args.In, args.Out))
+	defer ch.Close()
+
 	// why: cheapest refusal first. Indexing state is this node's own, so a network
 	// caller is refused whatever it holds.
 	if q.Origin() == astral.OriginNetwork {
-		return q.Reject()
+		return ch.Send(astral.NewErrOriginNotAllowed(q.Origin()))
 	}
 
 	// note: the permit is checked when a subscription starts. Revoking it refuses
@@ -34,11 +37,8 @@ func (mod *Module) OpSubscribe(ctx *astral.Context, q *routing.IncomingQuery, ar
 		Action: auth.NewAction(q.Caller()),
 		Role:   auth.RoleIndexer,
 	}) {
-		return q.Reject()
+		return ch.Send(auth.ErrNotPermitted)
 	}
-
-	ch := q.Accept(channel.WithFormats(args.In, args.Out))
-	defer ch.Close()
 
 	indexer, err := mod.findIndexerByNonce(ctx, args.Nonce)
 	if err != nil {

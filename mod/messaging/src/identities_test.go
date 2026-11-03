@@ -50,21 +50,25 @@ func (s *stubApphost) Grants(id *astral.Identity) ([]*auth.Permit, error) {
 	return s.grants[id.String()], nil
 }
 
+// Revoke answers what apphost.Module.Revoke answers: every grant the identity
+// holds for the action goes.
 func (s *stubApphost) Revoke(id *astral.Identity, action string) error {
 	if s.revokeErr != nil {
 		return s.revokeErr
 	}
 
-	list := s.grants[id.String()]
-
-	for i, permit := range list {
-		if string(permit.Action) == action {
-			s.grants[id.String()] = append(list[:i:i], list[i+1:]...)
-			return nil
+	var kept []*auth.Permit
+	for _, permit := range s.grants[id.String()] {
+		if string(permit.Action) != action {
+			kept = append(kept, permit)
 		}
 	}
 
-	return gorm.ErrRecordNotFound
+	if len(kept) == len(s.grants[id.String()]) {
+		return gorm.ErrRecordNotFound
+	}
+	s.grants[id.String()] = kept
+	return nil
 }
 
 type stubDir struct {
@@ -275,9 +279,16 @@ func TestDeletingAnIdentityRevokesTheGrantsItHolds(t *testing.T) {
 
 	// the second permit is the one apphost.register writes, so the deletion is
 	// measured against a grant the participant did not ask messaging for
+	// the third permit shares the first one's action with other constraints,
+	// as grants accumulate, so one revoke for the action has to clear both
+	roles := astral.NewBundle()
+	if err := roles.Append(astral.NewString8(string(auth.RoleDescriber))); err != nil {
+		t.Fatalf("constraints: %v", err)
+	}
 	apphost.grants[identity.String()] = []*auth.Permit{
 		{Action: astral.String8(auth.ServeObjectsAction{}.ObjectType())},
 		{Action: astral.String8(auth.ServeAppsAction{}.ObjectType())},
+		{Action: astral.String8(auth.ServeObjectsAction{}.ObjectType()), Constraints: roles},
 	}
 	apphost.grants[other.String()] = []*auth.Permit{
 		{Action: astral.String8(auth.ServeObjectsAction{}.ObjectType())},

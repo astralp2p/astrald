@@ -38,14 +38,6 @@ func (node *Node) Run(nctx context.Context) (err error) {
 		defer wg.Done()
 		if err := node.modules.Run(ctx); err != nil {
 			errCh <- fmt.Errorf("module manager: %w", err)
-		}
-	}()
-
-	// wait for the context to end or a node error
-	go func() {
-		select {
-		case <-ctx.Done():
-		case err = <-errCh:
 			shutdown()
 		}
 	}()
@@ -54,6 +46,13 @@ func (node *Node) Run(nctx context.Context) (err error) {
 
 	// wait for all components to finish
 	wg.Wait()
+
+	// why after wg.Wait: the error is read once every sender is done, so a node error is
+	// returned even when the context ended first.
+	select {
+	case err = <-errCh:
+	default:
+	}
 
 	time.Sleep(100 * time.Millisecond) // wait a little bit of time for all the buffers to flush
 

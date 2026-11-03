@@ -23,7 +23,7 @@ func (mod *Module) listen(ctx context.Context) <-chan net.Conn {
 
 		mod.listeners = append(mod.listeners, listener)
 
-		mod.log.Infov(1, "listening on: %v %v", listener.Addr().Network(), listener.Addr().String())
+		mod.log.Log("listening on: %v %v", listener.Addr().Network(), listener.Addr().String())
 
 		wg.Add(1)
 		go func() {

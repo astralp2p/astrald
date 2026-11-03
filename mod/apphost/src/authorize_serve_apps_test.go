@@ -1,9 +1,9 @@
 package apphost
 
 import (
-	"errors"
 	"io"
 	"net"
+	"slices"
 	"testing"
 	"time"
 
@@ -100,13 +100,11 @@ func TestServeAppsRefusesCallerWithoutPermits(t *testing.T) {
 
 			err := route(t, op.op(mod), caller, op.name+op.args, w)
 
-			var rejected *astral.ErrRejected
-			if !errors.As(err, &rejected) {
-				t.Fatalf("%s answered a caller holding no permits: got err %v, want a rejection", op.name, err)
+			if err != nil {
+				t.Fatalf("route: %v", err)
 			}
-
-			if n := w.written(); n != 0 {
-				t.Fatalf("%s wrote %d bytes to a refused caller; want none", op.name, n)
+			if got, want := w.refusal(t), auth.ErrNotPermitted.Error(); got != want {
+				t.Fatalf("answered %q; want %q", got, want)
 			}
 
 			actions := authority.recorded()
@@ -144,13 +142,11 @@ func TestServeAppsKeepsTheNetworkOriginRefusal(t *testing.T) {
 
 			err := routeServeAppsFromNetwork(t, op.op(mod), caller, op.name+op.args, w)
 
-			var rejected *astral.ErrRejected
-			if !errors.As(err, &rejected) {
-				t.Fatalf("%s answered a network caller: got err %v, want a rejection", op.name, err)
+			if err != nil {
+				t.Fatalf("route: %v", err)
 			}
-
-			if n := w.written(); n != 0 {
-				t.Fatalf("%s wrote %d bytes to a network caller; want none", op.name, n)
+			if got, want := w.refusal(t), astral.NewErrOriginNotAllowed(astral.OriginNetwork).Error(); got != want {
+				t.Fatalf("answered %q; want %q", got, want)
 			}
 
 			if n := len(authority.recorded()); n != 0 {
@@ -233,22 +229,24 @@ func TestServeAppsGrantRefusesAConstrainedPermit(t *testing.T) {
 	}
 }
 
-// TestServeAppsJoinsEveryGrantRequest covers what the register policy is
-// handed: ServeApps leads the grant request whether or not the app asked for
-// anything, and the app's own ask follows it unchanged.
-func TestServeAppsJoinsEveryGrantRequest(t *testing.T) {
-	serveApps := astral.String8(auth.ServeAppsAction{}.ObjectType())
+// TestRegisterGrantRequestLeadsWithTheDefaults covers what the register policy
+// is handed: ServeApps and UseBlueprints lead the grant request whether or not
+// the app asked for anything, and the app's own ask follows them unchanged.
+func TestRegisterGrantRequestLeadsWithTheDefaults(t *testing.T) {
+	defaults := []string{auth.ServeAppsAction{}.ObjectType(), auth.UseBlueprintsAction{}.ObjectType()}
 
-	for _, asked := range []string{"", "mod.user.see_swarm_action"} {
-		requested := serveAppsGrantRequest(asked)
-		want := append([]string{string(serveApps)}, actions(parsePermits(asked))...)
+	for _, asked := range [][]string{nil, {"mod.user.see_swarm_action"}} {
+		requested := registerGrantRequest(permits(asked...))
+		want := append(append([]string{}, defaults...), asked...)
 
-		if got := actions(requested); len(got) != len(want) || got[0] != want[0] || got[len(got)-1] != want[len(want)-1] {
+		if got := actions(requested); !slices.Equal(got, want) {
 			t.Fatalf("asked %q: the policy is handed %v; want %v", asked, got, want)
 		}
 
-		if requested[0].Constraints != nil {
-			t.Fatalf("asked %q: the ServeApps permit carries constraints", asked)
+		for _, p := range requested[:len(defaults)] {
+			if p.Constraints != nil {
+				t.Fatalf("asked %q: the default %s permit carries constraints", asked, p.Action)
+			}
 		}
 	}
 }
@@ -395,8 +393,16 @@ func serveAppsRegistrar(t *testing.T) *Module {
 		t.Fatalf("open db: %v", err)
 	}
 
+	// note: every connection to :memory: opens its own database, so the pool
+	// holds one.
+	sqlDB, err := gdb.DB()
+	if err != nil {
+		t.Fatalf("sql db: %v", err)
+	}
+	sqlDB.SetMaxOpenConns(1)
+
 	db := &DB{DB: gdb}
-	if err := db.AutoMigrate(&dbGrant{}, &dbAccessToken{}); err != nil {
+	if err := db.migrate(); err != nil {
 		t.Fatalf("migrate: %v", err)
 	}
 
@@ -411,12 +417,12 @@ func serveAppsRegistrar(t *testing.T) *Module {
 
 // TestServeAppsRegistrationWritesTheGrant is the operator's decision end to end:
 // under the default register policy, an app that asks for nothing leaves
-// apphost.register holding a ServeApps grant.
+// apphost.register holding ServeApps and UseBlueprints grants.
 func TestServeAppsRegistrationWritesTheGrant(t *testing.T) {
 	mod := serveAppsRegistrar(t)
 	w := newRecordingWriter()
 
-	if err := route(t, mod.OpRegister, astral.GenerateIdentity(), "apphost.register", w); err != nil {
+	if err := register(t, mod, &apphost.RegisterRequest{}, w); err != nil {
 		t.Fatalf("apphost.register refused: %v", err)
 	}
 	awaitServeAppsClose(t, w)
@@ -432,5 +438,8 @@ func TestServeAppsRegistrationWritesTheGrant(t *testing.T) {
 	app := tokens[0].Identity
 	if !mod.AuthorizeServeApps(nil, serveAppsAction(app)) {
 		t.Fatalf("the app registered as %v holds no ServeApps grant", app)
+	}
+	if !mod.AuthorizeUseBlueprints(nil, useBlueprintsAction(app)) {
+		t.Fatalf("the app registered as %v holds no UseBlueprints grant", app)
 	}
 }

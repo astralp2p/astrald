@@ -108,10 +108,6 @@ func (mod *Module) mintIdentity(ctx *astral.Context) (*astral.Identity, error) {
 		return nil, err
 	}
 
-	// why the key signs in hand and is stored after the contract is indexed:
-	// storing a key indexes it, and the auth.sign_contract claim exception
-	// recognises a minted key only by its relay contract to the node, so a
-	// failure before that contract is indexed must leave no key behind.
 	signed := &auth.SignedContract{Contract: contract}
 
 	if signed.IssuerSig, err = secp256k1sig.SignASN1(key, contract.SignableHash()); err != nil {
@@ -204,6 +200,8 @@ func (mod *Module) revokeGrants(identity *astral.Identity) error {
 
 	for _, permit := range permits {
 		// note: a concurrent revoke takes the row between the listing and here.
+		// note: Revoke clears every row for the action, so a later permit for an
+		// action already cleared answers gorm.ErrRecordNotFound too.
 		err = mod.Apphost.Revoke(identity, string(permit.Action))
 		if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
 			return err

@@ -12,12 +12,14 @@ import (
 )
 
 // acceptMessage answers a delivery: it reads one message off the conn, stores
-// it in the recipient's inbox and acknowledges the write.
+// it in the recipient's inbox and acknowledges the write. A delivery the
+// recipient does not admit is answered messaging.ErrNotAdmitted and stored
+// nowhere.
 //
 // why the node answers and not the participant: storing a message is a write,
 // and it finishes inside the resolve deadline. The recipient's model is not part
 // of delivery and need not be running.
-func (mod *Module) acceptMessage(q *astral.InFlightQuery, w io.WriteCloser) (io.WriteCloser, error) {
+func (mod *Module) acceptMessage(q *astral.InFlightQuery, w io.WriteCloser, admitted bool) (io.WriteCloser, error) {
 	sender, recipient := q.Caller, q.Target
 
 	return query.Accept(q, w, func(conn astral.Conn) {
@@ -36,6 +38,13 @@ func (mod *Module) acceptMessage(q *astral.InFlightQuery, w io.WriteCloser) (io.
 		msg, ok := obj.(*messaging.Message)
 		if !ok {
 			_ = ch.Send(astral.NewError("not a message"))
+			return
+		}
+
+		// why the message is read before the refusal: the sender writes it before
+		// it reads the answer, and an unread write into this conn never returns.
+		if !admitted {
+			_ = ch.Send(messaging.ErrNotAdmitted)
 			return
 		}
 

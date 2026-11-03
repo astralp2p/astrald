@@ -1,6 +1,7 @@
 package tor
 
 import (
+	"strconv"
 	"testing"
 
 	"github.com/astralp2p/astral-go/api/tree"
@@ -46,7 +47,7 @@ func loadModule(t *testing.T, config string) *Module {
 }
 
 // TestLoadSettingsAppliesConfig pins that each flag in tor.yaml reaches its own
-// setting. A listen of false disables the listener, and the two flags never
+// setting. Listen is off unless tor.yaml sets it, and the two flags never
 // cross.
 func TestLoadSettingsAppliesConfig(t *testing.T) {
 	var tests = []struct {
@@ -55,9 +56,11 @@ func TestLoadSettingsAppliesConfig(t *testing.T) {
 		listen bool
 		dial   bool
 	}{
-		{"defaults", "", true, true},
+		{"defaults", "", false, true},
+		{"listen on", "listen: true\n", true, true},
+		{"listen empty", "listen:\n", false, true},
 		{"listen off", "listen: false\n", false, true},
-		{"dial off", "dial: false\n", true, false},
+		{"dial off", "dial: false\n", false, false},
 		{"listen off, dial on", "listen: false\ndial: true\n", false, true},
 		{"both off", "listen: false\ndial: false\n", false, false},
 	}
@@ -73,6 +76,28 @@ func TestLoadSettingsAppliesConfig(t *testing.T) {
 			assertFlag(t, "listen", mod.settings.Listen.Get(), test.listen)
 			assertFlag(t, "dial", mod.settings.Dial.Get(), test.dial)
 		})
+	}
+}
+
+// TestLoadSettingsReplacesStoredListen pins that a listen value stored by an
+// older build is replaced by the config value on start, so an upgraded node
+// without tor.yaml, or with a `listen:` that has no value, stops publishing its
+// onion service.
+func TestLoadSettingsReplacesStoredListen(t *testing.T) {
+	for _, config := range []string{"", "listen:\n"} {
+		mod := loadModule(t, config)
+		ctx := astral.NewContext(nil)
+
+		old := astral.Bool(true)
+		if err := mod.settings.Listen.Set(ctx, &old); err != nil {
+			t.Fatalf("seed: %v", err)
+		}
+
+		if err := mod.loadSettings(ctx); err != nil {
+			t.Fatalf("loadSettings: %v", err)
+		}
+
+		assertFlag(t, "listen for tor.yaml "+strconv.Quote(config), mod.settings.Listen.Get(), false)
 	}
 }
 

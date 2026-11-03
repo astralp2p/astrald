@@ -2,6 +2,7 @@ package auth
 
 import (
 	"errors"
+	"fmt"
 	"io"
 	"strings"
 	"sync/atomic"
@@ -205,8 +206,8 @@ func TestAuthorizeContractNodeClaimState(t *testing.T) {
 }
 
 // TestAuthorizeContractNodeClaimIssuer: on an unclaimed node, the claim
-// contract is refused for an issuer that ever issued the node a relay contract
-// or a node contract, expired ones included, and only for such an issuer.
+// contract passes whatever the issuer issued the node before: a relay contract
+// of an identity the node minted, or the node contract of a former user.
 func TestAuthorizeContractNodeClaimIssuer(t *testing.T) {
 	relay := &auth.Permit{Action: astral.String8(nodes.RelayForAction{}.ObjectType())}
 	see := &auth.Permit{Action: astral.String8(auth.SeeObjectsAction{}.ObjectType())}
@@ -214,36 +215,34 @@ func TestAuthorizeContractNodeClaimIssuer(t *testing.T) {
 	for _, tc := range []struct {
 		name string
 		seed func(t *testing.T, r *guardRig)
-		ok   bool
 	}{
-		{"issued by an app identity of this node", func(t *testing.T, r *guardRig) { seedContract(t, r.mod, r.userKey, r.node, relay) }, false},
+		{"issued by an app identity of this node", func(t *testing.T, r *guardRig) { seedContract(t, r.mod, r.userKey, r.node, relay) }},
 		{"issued by an app identity whose relay contract expired", func(t *testing.T, r *guardRig) {
 			seedExpired(t, r.mod, contractOf(r.userKey, r.node, &nodes.RelayForAction{}))
-		}, false},
+		}},
 		{"issued by the user after the claim is cleared from the tree", func(t *testing.T, r *guardRig) {
 			seedContract(t, r.mod, r.userKey, r.node, claimOf(r.userKey, r.node).Permits...)
-		}, false},
-		{"issued by a former user", func(t *testing.T, r *guardRig) { seedExpired(t, r.mod, claimOf(r.userKey, r.node)) }, false},
+		}},
+		{"issued by a former user", func(t *testing.T, r *guardRig) { seedExpired(t, r.mod, claimOf(r.userKey, r.node)) }},
 		{"issued by a former plain member's user", func(t *testing.T, r *guardRig) {
 			c := claimOf(r.userKey, r.node)
 			c.Permits = c.Permits[:1]
 			seedExpired(t, r.mod, c)
-		}, false},
-		{"when the contract lookup fails", func(t *testing.T, r *guardRig) { closeDB(t, r.mod) }, false},
-		{"issued by an identity holding another contract to the node", func(t *testing.T, r *guardRig) { seedContract(t, r.mod, r.userKey, r.node, see) }, true},
+		}},
+		{"issued by an identity holding another contract to the node", func(t *testing.T, r *guardRig) { seedContract(t, r.mod, r.userKey, r.node, see) }},
 		{"issued by the user of another node", func(t *testing.T, r *guardRig) {
 			seedContract(t, r.mod, r.userKey, r.other, claimOf(r.userKey, r.other).Permits...)
-		}, true},
+		}},
 		{"issued by a stranger to a node with another former user", func(t *testing.T, r *guardRig) {
 			seedExpired(t, r.mod, claimOf(r.other, r.node))
-		}, true},
+		}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			r := newGuardRig(t)
 			tc.seed(t, r)
 			err := r.mod.authorizeContract(r.ctx, r.node, claimOf(r.userKey, r.node))
-			if (err == nil) != tc.ok {
-				t.Fatalf("authorizeContract = %v; want ok=%v", err, tc.ok)
+			if err != nil {
+				t.Fatalf("authorizeContract = %v; want the claim signed", err)
 			}
 		})
 	}
@@ -309,16 +308,6 @@ func TestAuthorizeContractNodeClaimShape(t *testing.T) {
 	}
 }
 
-// closeDB closes the index database, so every contract lookup fails.
-func closeDB(t *testing.T, mod *Module) {
-	t.Helper()
-	sqlDB, err := mod.db.DB.DB()
-	if err != nil {
-		t.Fatalf("sql db: %v", err)
-	}
-	_ = sqlDB.Close()
-}
-
 // seedExpired stores c signed, with its expiry moved to an hour ago.
 func seedExpired(t *testing.T, mod *Module, c *auth.Contract) {
 	t.Helper()
@@ -347,12 +336,13 @@ func routeSignContract(t *testing.T, mod *Module, caller *astral.Identity, origi
 }
 
 // TestSignContractRefusesNonLocalOrigins: a peer's or an MCP client's query,
-// or one of an origin the op does not know, is rejected before the op reads a
-// contract; a local one is accepted.
+// or one of an origin the op does not know, is answered
+// astral.ErrOriginNotAllowed before the op reads a contract; a local one is
+// accepted.
 func TestSignContractRefusesNonLocalOrigins(t *testing.T) {
 	for _, tc := range []struct {
-		origin   any
-		rejected bool
+		origin  any
+		refused bool
 	}{
 		{nil, false},
 		{"", false},
@@ -363,18 +353,19 @@ func TestSignContractRefusesNonLocalOrigins(t *testing.T) {
 	} {
 		r := newGuardRig(t)
 		in, out, err := routeSignContract(t, r.mod, r.app, tc.origin)
-
-		var rejected *astral.ErrRejected
-		if got := errors.As(err, &rejected); got != tc.rejected {
-			t.Fatalf("origin %v: rejected=%v (%v); want %v", tc.origin, got, err, tc.rejected)
-		}
-		if !tc.rejected && err != nil {
+		if err != nil {
 			t.Fatalf("origin %v: route = %v; want accepted", tc.origin, err)
 		}
-		if in != nil {
+		if tc.refused {
+			obj, err := channel.NewReceiver(out).Receive()
+			want := astral.NewErrOriginNotAllowed(fmt.Sprint(tc.origin)).Error()
+			if msg, ok := obj.(*astral.ErrorMessage); err != nil || !ok || msg.Error() != want {
+				t.Fatalf("origin %v: answered %v (%v); want %q", tc.origin, obj, err, want)
+			}
+		} else {
 			_ = channel.NewSender(in).Send(&astral.EOS{})
-			_ = in.Close()
 		}
+		_ = in.Close()
 		_ = out.Close()
 	}
 }

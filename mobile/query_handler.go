@@ -145,10 +145,18 @@ func (iq *InboundQuery) Accept() *QueryConn {
 // Reject rejects the query with the default reject code. Safe to call
 // after the query is resolved (no-op).
 func (iq *InboundQuery) Reject() {
+	iq.rejectWithCode(astral.DefaultRejectCode)
+}
+
+// rejectWithCode rejects the query with code. Safe to call after the query is
+// resolved (no-op).
+//
+// note: unexported, so gomobile does not bind it; the app rejects with Reject.
+func (iq *InboundQuery) rejectWithCode(code uint8) {
 	if !iq.resolved.CompareAndSwap(false, true) {
 		return
 	}
-	iq.response <- inboundResponse{err: &astral.ErrRejected{Code: astral.DefaultRejectCode}}
+	iq.response <- inboundResponse{err: &astral.ErrRejected{Code: code}}
 }
 
 // QueryConn is the bidirectional byte stream of an accepted query. The
@@ -216,9 +224,10 @@ func (r *handlerRouter) RouteQuery(ctx *astral.Context, q *astral.InFlightQuery,
 	iq := newInboundQuery(q, w)
 
 	go func() {
-		// auto-reject in case the handler didn't resolve the query;
-		// no-op if it did
-		defer iq.Reject()
+		// why an internal error: a handler that returns without accepting or
+		// rejecting failed to answer, which is not a refusal of the caller.
+		// note: a no-op when the handler answered.
+		defer iq.rejectWithCode(astral.CodeInternalError)
 		h.HandleQuery(iq)
 	}()
 
@@ -227,12 +236,12 @@ func (r *handlerRouter) RouteQuery(ctx *astral.Context, q *astral.InFlightQuery,
 		return res.w, res.err
 
 	case <-ctx.Done():
-		iq.Reject()
+		iq.rejectWithCode(astral.CodeCanceled)
 		return nil, astral.NewErrRejected(astral.CodeCanceled)
 
 	case <-time.After(acceptTimeout):
-		iq.Reject()
-		return nil, astral.NewErrRejected(astral.DefaultRejectCode)
+		iq.rejectWithCode(astral.CodeTimeout)
+		return nil, astral.NewErrRejected(astral.CodeTimeout)
 	}
 }
 

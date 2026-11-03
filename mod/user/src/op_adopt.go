@@ -2,6 +2,7 @@ package user
 
 import (
 	"github.com/astralp2p/astral-go/api/auth"
+	"github.com/astralp2p/astral-go/api/dir"
 	"github.com/astralp2p/astral-go/api/user"
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astral-go/astral/channel"
@@ -16,13 +17,14 @@ type opAdoptArgs struct {
 
 // OpAdopt adopts the named node into the active contract and indexes the signed result.
 // Requires an active contract; the caller must be authorized for
-// user.AdminSwarmAction (code 4 otherwise) - the user always is, other
+// user.AdminSwarmAction (auth.ErrNotPermitted otherwise) - the user always is, other
 // identities via authorizers.
 // Pushes the signed contract to the local swarm asynchronously after indexing.
 func (mod *Module) OpAdopt(ctx *astral.Context, q *routing.IncomingQuery, args opAdoptArgs) (err error) {
+	ch := q.Accept(channel.WithFormats(args.In, args.Out))
+	defer ch.Close()
+
 	if mod.ActiveContract() == nil {
-		ch := q.Accept(channel.WithFormats(args.In, args.Out))
-		defer ch.Close()
 		return ch.Send(user.ErrNoActiveContract)
 	}
 
@@ -30,19 +32,19 @@ func (mod *Module) OpAdopt(ctx *astral.Context, q *routing.IncomingQuery, args o
 	// The empty name and "anyone" resolve to the zero identity, which names no
 	// node, so the name is refused here instead of adopted.
 	nodeID, err := mod.Dir.ResolveIdentity(args.Identity)
-	if err != nil || nodeID.IsZero() {
-		return q.RejectWithCode(3)
+	if err != nil {
+		return ch.Send(dir.ErrUnknownIdentity)
+	}
+	if nodeID.IsZero() {
+		return ch.Send(astral.ErrZeroIdentity)
 	}
 
 	if !mod.Auth.Authorize(ctx, &user.AdminSwarmAction{
 		Action:  auth.NewAction(q.Caller()),
 		Subject: nodeID,
 	}) {
-		return q.RejectWithCode(4)
+		return ch.Send(auth.ErrNotPermitted)
 	}
-
-	ch := q.Accept(channel.WithFormats(args.In, args.Out))
-	defer ch.Close()
 
 	// issue a membership contract for the node
 	signed, err := mod.IssueMembership(ctx, nodeID)

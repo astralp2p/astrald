@@ -17,18 +17,18 @@ type opContainsArgs struct {
 // OpContains reports whether a repository holds an object. With the ID arg it
 // answers once; otherwise it streams a Bool per ObjectID read from the channel.
 func (mod *Module) OpContains(ctx *astral.Context, q *routing.IncomingQuery, args opContainsArgs) (err error) {
+	ch := q.Accept(channel.WithFormats(args.In, args.Out))
+	defer ch.Close()
+
 	if !mod.Auth.Authorize(ctx, &auth.SeeObjectsAction{
 		Action:   auth.NewAction(q.Caller()),
 		ObjectID: args.ID,
 		Repo:     astral.String8(args.Repo),
 	}) {
-		return q.Reject()
+		return ch.Send(auth.ErrNotPermitted)
 	}
 
 	ctx = ctx.WithIdentity(q.Caller())
-
-	ch := q.Accept(channel.WithFormats(args.In, args.Out))
-	defer ch.Close()
 
 	repo := mod.GetRepository(args.Repo)
 	if repo == nil {

@@ -69,11 +69,8 @@ func TestInSetupMode(t *testing.T) {
 	}
 }
 
-const trustedOrigin = "https://settings.example"
-
 func withAllowlist(m *Module) *Module {
 	m.config.AllowAnonymous = true
-	m.config.TrustedWebSources = map[string][]PermitConfig{trustedOrigin: nil}
 	m.config.AnonymousAllowlist = AnonymousAllowlist{
 		Unclaimed: []string{"user.info", "tree.set"},
 		Claimed:   []string{"apphost.register"},
@@ -97,34 +94,28 @@ func TestAdmitsAnonymous(t *testing.T) {
 	q := func(s string) *astral.Query { return &astral.Query{QueryString: astral.String32(s)} }
 
 	cases := []struct {
-		name   string
-		mod    *Module
-		origin string
-		query  string
-		want   bool
+		name  string
+		mod   *Module
+		query string
+		want  bool
 	}{
 		// unclaimed: confined to the unclaimed list
-		{"unclaimed, listed op", unclaimed, "", "user.info", true},
-		{"unclaimed, listed op with params", unclaimed, "", "user.info?in=json", true},
-		{"unclaimed, non-listed op", unclaimed, "", "apphost.list_tokens", false},
-
-		// unclaimed web: only a trusted origin reaches the unclaimed list
-		{"unclaimed, trusted origin, listed op", unclaimed, trustedOrigin, "user.info", true},
-		{"unclaimed, untrusted origin, listed op", unclaimed, "https://evil.example", "user.info", false},
+		{"unclaimed, listed op", unclaimed, "user.info", true},
+		{"unclaimed, listed op with params", unclaimed, "user.info?in=json", true},
+		{"unclaimed, non-listed op", unclaimed, "apphost.list_tokens", false},
 
 		// claimed: confined to the claimed list - former setup ops now refused
-		{"claimed, listed op", claimed, "", "apphost.register", true},
-		{"claimed, unclaimed-only op refused", claimed, "", "user.info", false},
-		{"claimed, non-listed op", claimed, "", "user.expel", false},
-		{"claimed, untrusted origin, listed op", claimed, "https://evil.example", "apphost.register", true},
+		{"claimed, listed op", claimed, "apphost.register", true},
+		{"claimed, unclaimed-only op refused", claimed, "user.info", false},
+		{"claimed, non-listed op", claimed, "user.expel", false},
 
 		// allow_anonymous false refuses even a listed op
-		{"anonymous not allowed, listed op", closed, "", "user.info", false},
+		{"anonymous not allowed, listed op", closed, "user.info", false},
 	}
 
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			if got := c.mod.admitsAnonymous(ctx, c.origin, q(c.query)); got != c.want {
+			if got := c.mod.admitsAnonymous(ctx, q(c.query)); got != c.want {
 				t.Fatalf("admitsAnonymous = %v; want %v", got, c.want)
 			}
 		})
@@ -169,7 +160,7 @@ func TestAdmitsAnonymousSpecByDefault(t *testing.T) {
 
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			if got := c.mod.admitsAnonymous(ctx, "", q(c.query)); got != c.want {
+			if got := c.mod.admitsAnonymous(ctx, q(c.query)); got != c.want {
 				t.Fatalf("admitsAnonymous = %v; want %v", got, c.want)
 			}
 		})

@@ -37,6 +37,7 @@ import json
 
 import astral
 
+from lib import jsonops
 from lib.authority import RECEIVE, SEND, Authority
 from lib.mcpclient import MCPClient, ToolError
 from lib.nodeconfig import NODE_OP_TOOLS
@@ -83,9 +84,11 @@ async def main():
         beta = await mint(c, "beta")
         gamma = await mint(c, "gamma")
 
-        for action in GRANTS:
-            await c.call_raw(f"apphost.grant?identity={alpha['identity']}"
-                             f"&action={action}&out=json")
+        await jsonops.value(
+            c, "apphost.grant?in=json&out=json",
+            body={"Type": "mod.apphost.grant_request",
+                  "Object": {"Identity": alpha["identity"],
+                             "Permits": [{"Action": a} for a in GRANTS]}})
 
         # mcp.agent is the op the dashboard reads per agent, and the record it
         # answers must not carry the agent's token.

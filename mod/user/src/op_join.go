@@ -1,6 +1,8 @@
 package user
 
 import (
+	"github.com/astralp2p/astral-go/api/auth"
+	"github.com/astralp2p/astral-go/api/dir"
 	"github.com/astralp2p/astral-go/api/user"
 	userClient "github.com/astralp2p/astral-go/api/user/client"
 	"github.com/astralp2p/astral-go/astral"
@@ -24,29 +26,33 @@ type opJoinArgs struct {
 // why the origin and caller gates of user.bootstrap: the op claims this node,
 // so it admits the same queries.
 func (mod *Module) OpJoin(ctx *astral.Context, q *routing.IncomingQuery, args opJoinArgs) error {
+	ch := q.Accept(channel.WithFormats(args.In, args.Out))
+	defer ch.Close()
+
 	switch q.Origin() {
 	case "", astral.OriginLocal:
 	default:
-		return q.Reject()
+		return ch.Send(astral.NewErrOriginNotAllowed(q.Origin()))
 	}
 
 	if mod.ActiveContract() != nil {
-		ch := q.Accept(channel.WithFormats(args.In, args.Out))
-		defer ch.Close()
 		return ch.Send(user.ErrAlreadyClaimed)
 	}
 
 	if !q.Caller().IsEqual(mod.node.Identity()) {
-		return q.RejectWithCode(4)
+		return ch.Send(auth.ErrNotPermitted)
 	}
 
 	nodeID, err := mod.Dir.ResolveIdentity(args.Node)
-	if err != nil || nodeID.IsZero() || nodeID.IsEqual(mod.node.Identity()) {
-		return q.RejectWithCode(3)
+	if err != nil {
+		return ch.Send(dir.ErrUnknownIdentity)
 	}
-
-	ch := q.Accept(channel.WithFormats(args.In, args.Out))
-	defer ch.Close()
+	if nodeID.IsZero() {
+		return ch.Send(astral.ErrZeroIdentity)
+	}
+	if nodeID.IsEqual(mod.node.Identity()) {
+		return ch.Send(user.ErrJoinSelf)
+	}
 
 	// why: the request is this node's own query, and a session without a token
 	// has the Network zone stripped (mod/apphost/src/guest.go).

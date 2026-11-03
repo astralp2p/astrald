@@ -13,8 +13,8 @@ connections:
 
 ```yaml
 listen:
-  - "unix:~/.config/astrald/apphost.sock"
-  - "tcp:127.0.0.1:8625
+  - "unix:~/.apphost.sock"
+  - "tcp:127.0.0.1:8625"
 ```
 
 For now `tcp` and `unix` sockets are supported.

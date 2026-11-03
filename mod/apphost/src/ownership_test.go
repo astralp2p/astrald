@@ -1,7 +1,6 @@
 package apphost
 
 import (
-	"errors"
 	"slices"
 	"sync/atomic"
 	"testing"
@@ -218,29 +217,59 @@ func TestCancelRefusesATokenLessSession(t *testing.T) {
 	}
 }
 
-// TestCancelKeepsAnUnownedQueryCancellable holds what a token-less app had
-// before ownership: a query launched without a token records no owner, and any
-// local session still cancels it.
-func TestCancelKeepsAnUnownedQueryCancellable(t *testing.T) {
-	mod, _ := ownershipModule(false)
+// TestCancelRefusesAnUnownedQuery: a query launched without a token records no
+// owner, and no session proves it launched it. Neither a token-less session nor
+// an app without AdminManageApps cancels it.
+func TestCancelRefusesAnUnownedQuery(t *testing.T) {
+	for _, tc := range []struct {
+		name      string
+		principal *astral.Identity
+	}{
+		{"a token-less session", nil},
+		{"an app", astral.GenerateIdentity()},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			mod, _ := ownershipModule(false)
+			nonce, cancelled := enRouteQuery(mod, nil)
+			w := newRecordingWriter()
+
+			q := sessionQuery(mod, tc.principal, tc.principal, "apphost.cancel?query_id="+nonce.String())
+			if err := routeQuery(t, mod.OpCancel, q, w); err != nil {
+				t.Fatalf("apphost.cancel errored instead of answering: %v", err)
+			}
+
+			if got, want := w.refusal(t), "query not found"; got != want {
+				t.Fatalf("answered %q; want %q", got, want)
+			}
+			if cancelled.Load() {
+				t.Fatalf("%v cancelled an unowned query", tc.name)
+			}
+		})
+	}
+}
+
+// TestCancelAdminEndsAnUnownedQuery: the administrative override reaches a
+// query that records no owner.
+func TestCancelAdminEndsAnUnownedQuery(t *testing.T) {
+	mod, _ := ownershipModule(true)
 	nonce, cancelled := enRouteQuery(mod, nil)
+	admin := astral.GenerateIdentity()
 	w := newRecordingWriter()
 
-	q := sessionQuery(mod, nil, nil, "apphost.cancel?query_id="+nonce.String())
+	q := sessionQuery(mod, admin, admin, "apphost.cancel?query_id="+nonce.String())
 	if err := routeQuery(t, mod.OpCancel, q, w); err != nil {
-		t.Fatalf("apphost.cancel refused a token-less session its own query: %v", err)
+		t.Fatalf("apphost.cancel refused an administrator: %v", err)
 	}
 	awaitOwnershipAnswer(t, w)
 
 	if !cancelled.Load() {
-		t.Fatal("apphost.cancel left an unowned query running")
+		t.Fatal("an administrator's cancel left an unowned query running")
 	}
 }
 
-// TestCancelRefusesAQueryOffALink: an unowned entry is exactly the one ownership
-// leaves cancellable by any caller, so the origin refusal is what keeps a caller
-// off a link from reaching it. The authority is never asked, because the origin
-// refusal runs first.
+// TestCancelRefusesAQueryOffALink: a caller off a link has no guest session, and
+// the origin refusal keeps it from every entry. The authority is never asked,
+// because the origin refusal runs first.
 func TestCancelRefusesAQueryOffALink(t *testing.T) {
 	mod, authority := ownershipModule(true)
 	nonce, cancelled := enRouteQuery(mod, nil)
@@ -251,17 +280,15 @@ func TestCancelRefusesAQueryOffALink(t *testing.T) {
 
 	err := routeQuery(t, mod.OpCancel, q, w)
 
-	var rejected *astral.ErrRejected
-	if !errors.As(err, &rejected) {
-		t.Fatalf("apphost.cancel answered a query off a link: got err %v, want a rejection", err)
+	if err != nil {
+		t.Fatalf("route: %v", err)
+	}
+	if got, want := w.refusal(t), astral.NewErrOriginNotAllowed(astral.OriginNetwork).Error(); got != want {
+		t.Fatalf("answered %q; want %q", got, want)
 	}
 
 	if cancelled.Load() {
 		t.Fatal("a caller off a link cancelled an unowned query")
-	}
-
-	if n := w.written(); n != 0 {
-		t.Fatalf("apphost.cancel wrote %d bytes to a query off a link; want none", n)
 	}
 
 	if n := len(authority.recorded()); n != 0 {
@@ -471,9 +498,11 @@ func TestBindKeepsTheNetworkRefusal(t *testing.T) {
 	// way mod/nodes stamps one.
 	err := routeServeAppsFromNetwork(t, mod.OpBind, astral.GenerateIdentity(), "apphost.bind", w)
 
-	var rejected *astral.ErrRejected
-	if !errors.As(err, &rejected) {
-		t.Fatalf("apphost.bind answered a query off a link: got err %v, want a rejection", err)
+	if err != nil {
+		t.Fatalf("route: %v", err)
+	}
+	if got, want := w.refusal(t), astral.NewErrOriginNotAllowed(astral.OriginNetwork).Error(); got != want {
+		t.Fatalf("answered %q; want %q", got, want)
 	}
 
 	if n := len(authority.recorded()); n != 0 {

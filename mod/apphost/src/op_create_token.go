@@ -15,16 +15,16 @@ type opCreateTokenArgs struct {
 }
 
 func (mod *Module) OpCreateToken(ctx *astral.Context, q *routing.IncomingQuery, args opCreateTokenArgs) (err error) {
+	ch := channel.New(q.AcceptRaw(), channel.WithOutputFormat(args.Out))
+	defer ch.Close()
+
 	if q.Origin() == astral.OriginNetwork {
-		return q.Reject()
+		return ch.Send(astral.NewErrOriginNotAllowed(q.Origin()))
 	}
 
 	if !mod.Auth.Authorize(ctx, &auth.AdminManageAppsAction{Action: auth.NewAction(q.Caller())}) {
-		return q.Reject()
+		return ch.Send(auth.ErrNotPermitted)
 	}
-
-	ch := channel.New(q.AcceptRaw(), channel.WithOutputFormat(args.Out))
-	defer ch.Close()
 
 	identity, err := mod.Dir.ResolveIdentity(args.Identity)
 	if err != nil {

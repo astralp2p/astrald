@@ -5,7 +5,6 @@ import (
 	"github.com/astralp2p/astral-go/astral/channel"
 	"github.com/astralp2p/astral-go/lib/routing"
 	"github.com/astralp2p/astrald/mod/apphost"
-	"github.com/astralp2p/astrald/mod/objects"
 )
 
 type opUnholdObjectArgs struct {
@@ -18,13 +17,16 @@ type opUnholdObjectArgs struct {
 // releases one hold and replies Ack or an error frame. Without args.ID the op
 // runs in batch mode: object IDs are read from the channel until EOS and each
 // input gets one Ack/ErrorMessage reply.
+//
+// why: no action gates this op; it deletes only the caller's own hold rows, and a
+// release only lowers retention, so an app whose grant is gone still releases its holds.
 func (mod *Module) OpUnholdObject(ctx *astral.Context, q *routing.IncomingQuery, args opUnholdObjectArgs) error {
-	if q.Origin() == astral.OriginNetwork {
-		return q.Reject()
-	}
-
 	ch := q.Accept(channel.WithFormats(args.In, args.Out))
 	defer ch.Close()
+
+	if q.Origin() == astral.OriginNetwork {
+		return ch.Send(astral.NewErrOriginNotAllowed(q.Origin()))
+	}
 
 	if q.Caller().IsZero() {
 		return ch.Send(astral.Err(apphost.ErrMissingAppIdentity))
@@ -47,7 +49,7 @@ func (mod *Module) unholdOne(caller *astral.Identity, id *astral.ObjectID) astra
 	}
 
 	if id.Size == 0 {
-		return astral.Err(objects.ErrPartialObjectID)
+		return astral.Err(astral.ErrPartialObjectID)
 	}
 
 	if err := mod.db.UnholdObject(caller, id); err != nil {

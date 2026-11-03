@@ -34,11 +34,11 @@ type Module struct {
 }
 
 // Run starts the broadcast receiver loop and holds a platform multicast lock for the lifetime of ctx.
-// When socket is nil (UDP bind failed at load), Run exits cleanly without any network activity.
+// When socket is nil (listen is off or the UDP bind failed at load), Run exits cleanly without any network activity.
 func (mod *Module) Run(ctx *astral.Context) (err error) {
 	mod.ctx = ctx
 
-	// If the socket failed to bind during Load, run as a no-op: no broadcasts
+	// If listen is off or the socket failed to bind during Load, run as a no-op: no broadcasts
 	// in or out, no platform multicast lock requested.
 	if mod.socket == nil {
 		<-ctx.Done()

@@ -8,6 +8,8 @@ import (
 
 	"github.com/astralp2p/astral-go/api/auth"
 	"github.com/astralp2p/astral-go/astral"
+	cryptomod "github.com/astralp2p/astrald/mod/crypto"
+	cryptosrc "github.com/astralp2p/astrald/mod/crypto/src"
 )
 
 // note: every module here has a nil Crypto, so a guard that falls through to signing or verification panics.
@@ -111,5 +113,21 @@ func TestIndexContractRefusesAnUnsignedContract(t *testing.T) {
 	}
 	if mod.db.contractExists(id) {
 		t.Fatal("an unsigned contract was indexed")
+	}
+}
+
+// TestSignIssuerNamesAnUnheldKey: an issuer key the node does not hold fails
+// with the "sign as issuer: " prefix setup clients match, then the key.
+func TestSignIssuerNamesAnUnheldKey(t *testing.T) {
+	mod := &Module{Deps: Deps{Crypto: &cryptosrc.Module{}}}
+	sc := signedContract(astral.GenerateIdentity(), astral.GenerateIdentity(), time.Hour)
+	sc.IssuerSig, sc.SubjectSig = nil, nil
+
+	_, err := mod.SignIssuer(astral.NewContext(nil), sc)
+	if !errors.Is(err, &cryptomod.ErrKeyNotHeld{}) {
+		t.Fatalf("SignIssuer err = %v; want ErrKeyNotHeld", err)
+	}
+	if want := "sign as issuer: no signing scheme available for key secp256k1:"; !strings.HasPrefix(err.Error(), want) {
+		t.Fatalf("SignIssuer err = %q; want prefix %q", err, want)
 	}
 }

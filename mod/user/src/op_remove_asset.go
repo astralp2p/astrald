@@ -8,7 +8,6 @@ import (
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astral-go/astral/channel"
 	"github.com/astralp2p/astral-go/lib/routing"
-	"github.com/astralp2p/astrald/mod/objects"
 )
 
 type opRemoveAssetArgs struct {
@@ -18,27 +17,27 @@ type opRemoveAssetArgs struct {
 
 // OpRemoveAsset authorizes the caller under AdminSwarm, then removes an asset by
 // object ID.
-// Rejects the query with an internal error code if removal fails, before the channel is accepted.
+// Answers the error if removal fails.
 func (mod *Module) OpRemoveAsset(ctx *astral.Context, q *routing.IncomingQuery, args opRemoveAssetArgs) (err error) {
+	ch := channel.New(q.AcceptRaw(), channel.WithOutputFormat(args.Out))
+	defer ch.Close()
+
 	if !mod.Auth.Authorize(ctx, &user.AdminSwarmAction{
 		Action:   auth.NewAction(q.Caller()),
 		ObjectID: args.ID,
 	}) {
-		return q.RejectWithCode(4)
+		return ch.Send(auth.ErrNotPermitted)
 	}
 
 	err = mod.RemoveAsset(args.ID)
 	switch {
 	// why: a partial ID is the caller's mistake, so it gets its own code and is not logged as a node error.
-	case errors.Is(err, objects.ErrPartialObjectID):
-		return q.RejectWithCode(astral.CodeInvalidQuery)
+	case errors.Is(err, astral.ErrPartialObjectID):
+		return ch.Send(astral.ErrPartialObjectID)
 	case err != nil:
 		mod.log.Errorv(1, "remove asset: %v", err)
-		return q.RejectWithCode(astral.CodeInternalError)
+		return ch.Send(astral.Err(err))
 	}
-
-	ch := channel.New(q.AcceptRaw(), channel.WithOutputFormat(args.Out))
-	defer ch.Close()
 
 	return ch.Send(&astral.Ack{})
 }

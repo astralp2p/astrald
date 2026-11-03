@@ -7,6 +7,7 @@ smoke
 mcp-origin
 claim-window
 token-less-setup
+signer-app
 messaging-ops
 bootstrap-user-software-key
 import-user-software-key
@@ -28,5 +29,6 @@ messaging-two-node
 mcp-peer
 services-swarm
 services-app-call
+request-grant-scope
 expel-node
 hold-purge

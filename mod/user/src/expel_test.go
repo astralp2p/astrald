@@ -2,11 +2,14 @@ package user
 
 import (
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/astralp2p/astral-go/api/auth"
 	"github.com/astralp2p/astral-go/api/user"
 	"github.com/astralp2p/astral-go/astral"
+	authsrc "github.com/astralp2p/astrald/mod/auth/src"
+	cryptosrc "github.com/astralp2p/astrald/mod/crypto/src"
 )
 
 // banModule builds a Module backed by an in-memory ban store, with issuer set as
@@ -63,5 +66,20 @@ func TestIssueMembership_RefusesExpelled(t *testing.T) {
 	_, err := mod.IssueMembership(nil, banned)
 	if !errors.Is(err, user.ErrExpelled) {
 		t.Fatalf("expected ErrExpelled, got %v", err)
+	}
+}
+
+// TestIssueMembership_UnheldIssuerKey: an issuer key the node does not hold
+// fails with one "sign as issuer: " prefix, not two.
+func TestIssueMembership_UnheldIssuerKey(t *testing.T) {
+	mod := banModule(t, astral.GenerateIdentity())
+	mod.Auth = &authsrc.Module{Deps: authsrc.Deps{Crypto: &cryptosrc.Module{}}}
+
+	_, err := mod.IssueMembership(astral.NewContext(nil), astral.GenerateIdentity())
+	if err == nil {
+		t.Fatal("IssueMembership signed with an issuer key the node does not hold")
+	}
+	if want := "sign as issuer: no signing scheme available for key "; !strings.HasPrefix(err.Error(), want) {
+		t.Fatalf("IssueMembership err = %q; want prefix %q", err, want)
 	}
 }

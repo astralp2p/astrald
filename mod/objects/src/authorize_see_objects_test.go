@@ -2,6 +2,7 @@ package objects
 
 import (
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -40,8 +41,6 @@ func seeObjectsOps(id *astral.ObjectID) []seeOp {
 		{"objects.search", func(m *Module) any { return m.OpSearch }, "?q=anything&repo=main", nil, "main"},
 		{"objects.find", func(m *Module) any { return m.OpFind }, "?id=" + id.String(), id, ""},
 		{"objects.repositories", func(m *Module) any { return m.OpRepositories }, "", nil, ""},
-		{"objects.blueprints", func(m *Module) any { return m.OpBlueprints }, "", nil, ""},
-		{"objects.get_blueprint", func(m *Module) any { return m.OpGetBlueprint }, "?type=" + (&astral.Blob{}).ObjectType(), nil, ""},
 	}
 }
 
@@ -64,13 +63,20 @@ func TestSeeObjectsRefusesCallerWithoutPermits(t *testing.T) {
 
 			err := route(t, op.op(mod), caller, op.name+op.args, w)
 
-			var rejected *astral.ErrRejected
-			if !errors.As(err, &rejected) {
-				t.Fatalf("%s answered a caller holding no permits: got err %v, want a rejection", op.name, err)
-			}
-
-			if n := w.written(); n != 0 {
-				t.Fatalf("%s wrote %d bytes to a refused caller; want none", op.name, n)
+			// note: objects.read streams raw bytes, so it keeps the reject; an error_message
+			// would reach its caller as payload.
+			if strings.HasPrefix(op.name, "objects.read") {
+				var rejected *astral.ErrRejected
+				if !errors.As(err, &rejected) || w.written() != 0 {
+					t.Fatalf("got err %v and %d bytes; want a rejection and no bytes", err, w.written())
+				}
+			} else {
+				if err != nil {
+					t.Fatalf("route: %v", err)
+				}
+				if got, want := w.refusal(t), auth.ErrNotPermitted.Error(); got != want {
+					t.Fatalf("answered %q; want %q", got, want)
+				}
 			}
 
 			actions := authority.recorded()
@@ -105,24 +111,24 @@ func TestSeeObjectsRefusesCallerWithoutPermits(t *testing.T) {
 // refusal machinery must let a permitted caller through. Without it the refusal
 // table above would still pass on an op that rejects unconditionally.
 //
-// objects.blueprints is the subject because it reads no repository, so a bare
-// module answers it in full.
+// objects.repositories is the subject because a bare module holds no
+// repository, so it answers in full with the terminator alone.
 func TestSeeObjectsAllowsGrantedCaller(t *testing.T) {
 	authority := &recordingAuth{verdict: true}
 	mod := &Module{Deps: Deps{Auth: authority}}
 	w := newRecordingWriter()
 
-	if err := route(t, mod.OpBlueprints, astral.GenerateIdentity(), "objects.blueprints", w); err != nil {
+	if err := route(t, mod.OpRepositories, astral.GenerateIdentity(), "objects.repositories", w); err != nil {
 		t.Fatalf("granted caller was refused: %v", err)
 	}
 
 	select {
 	case <-w.closed:
 	case <-time.After(10 * time.Second):
-		t.Fatal("objects.blueprints did not finish answering a granted caller")
+		t.Fatal("objects.repositories did not finish answering a granted caller")
 	}
 
 	if w.written() == 0 {
-		t.Fatal("objects.blueprints wrote nothing to a granted caller")
+		t.Fatal("objects.repositories wrote nothing to a granted caller")
 	}
 }

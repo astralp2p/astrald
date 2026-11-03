@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"errors"
 	"fmt"
 
 	"github.com/astralp2p/astral-go/api/auth"
@@ -9,6 +10,7 @@ import (
 	"github.com/astralp2p/astrald/core"
 	"github.com/astralp2p/astrald/core/assets"
 	authmod "github.com/astralp2p/astrald/mod/auth"
+	"github.com/astralp2p/astrald/resources"
 )
 
 type Loader struct{}
@@ -23,7 +25,9 @@ func (Loader) Load(node astral.Node, assets assets.Assets, log *log.Logger) (cor
 		assets: assets,
 	}
 
-	_ = assets.LoadYAML(authmod.ModuleName, &mod.config)
+	if err := assets.LoadYAML(authmod.ModuleName, &mod.config); err != nil && !errors.Is(err, resources.ErrNotFound) {
+		return nil, err
+	}
 
 	mod.router.AddStructPrefix(mod, "Op")
 

@@ -3,7 +3,6 @@ package indexing
 import (
 	"bytes"
 	"encoding/json"
-	"errors"
 	"strconv"
 	"strings"
 	"sync"
@@ -223,12 +222,15 @@ func replyNonce(t *testing.T, out string) (astral.Nonce, bool) {
 	return astral.Nonce(n), true
 }
 
-func requireRejected(t *testing.T, name string, err error) {
+// requireRefused checks that the op accepted the query and answered want.
+func requireRefused(t *testing.T, name string, out string, err error, want error) {
 	t.Helper()
 
-	var rejected *astral.ErrRejected
-	if !errors.As(err, &rejected) {
-		t.Fatalf("%s: got err %v, want a rejection", name, err)
+	if err != nil {
+		t.Fatalf("%s: route: %v", name, err)
+	}
+	if !strings.Contains(out, want.Error()) {
+		t.Fatalf("%s answered %q; want %q", name, out, want)
 	}
 }
 
@@ -254,8 +256,8 @@ func TestRegisterIndexerRequiresTheIndexerRole(t *testing.T) {
 	f := newIndexerFixture(t)
 	caller := astral.GenerateIdentity()
 
-	_, err := f.query(caller, "", "indexing.register_indexer?name=search")
-	requireRejected(t, "indexing.register_indexer", err)
+	out, err := f.query(caller, "", "indexing.register_indexer?name=search")
+	requireRefused(t, "indexing.register_indexer", out, err, auth.ErrNotPermitted)
 
 	actions := f.auth.recorded()
 	requireOnlyAction(t, actions, &auth.ServeObjectsAction{}, caller)
@@ -381,8 +383,8 @@ func TestSubscribeRequiresTheIndexerRole(t *testing.T) {
 	owner := astral.GenerateIdentity()
 	nonce := f.register(owner, "search")
 
-	_, err := f.query(owner, "", "indexing.subscribe?nonce="+nonce.String())
-	requireRejected(t, "indexing.subscribe", err)
+	out, err := f.query(owner, "", "indexing.subscribe?nonce="+nonce.String())
+	requireRefused(t, "indexing.subscribe", out, err, auth.ErrNotPermitted)
 	requireOnlyAction(t, f.auth.recorded(), &auth.ServeObjectsAction{}, owner)
 }
 
@@ -455,8 +457,8 @@ func TestIndexerOpsRefuseNetworkOrigin(t *testing.T) {
 				queryString += nonce.String()
 			}
 
-			_, err := f.query(owner, astral.OriginNetwork, queryString)
-			requireRejected(t, op, err)
+			out, err := f.query(owner, astral.OriginNetwork, queryString)
+			requireRefused(t, op, out, err, astral.NewErrOriginNotAllowed(astral.OriginNetwork))
 			if n := len(f.auth.recorded()); n != 0 {
 				t.Fatalf("%s made %d authorization calls for a network caller; want none", op, n)
 			}

@@ -13,12 +13,12 @@ type opLocalAddrsArgs struct {
 }
 
 func (mod *Module) OpLocalAddrs(ctx *astral.Context, q *routing.IncomingQuery, args opLocalAddrsArgs) (err error) {
-	if !mod.Auth.Authorize(ctx, &auth.AdminNetworkAction{Action: auth.NewAction(q.Caller())}) {
-		return q.Reject()
-	}
-
 	ch := channel.New(q.AcceptRaw(), channel.WithFormats(args.In, args.Out))
 	defer ch.Close()
+
+	if !mod.Auth.Authorize(ctx, &auth.AdminNetworkAction{Action: auth.NewAction(q.Caller())}) {
+		return ch.Send(auth.ErrNotPermitted)
+	}
 
 	addrs, err := mod.localAddresses(false)
 	if err != nil {

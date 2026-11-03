@@ -2,6 +2,7 @@ package user
 
 import (
 	"github.com/astralp2p/astral-go/api/auth"
+	"github.com/astralp2p/astral-go/api/dir"
 	"github.com/astralp2p/astral-go/api/user"
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astral-go/astral/channel"
@@ -20,21 +21,24 @@ type opSyncWithArgs struct {
 // node's asset list, so the node named here decides what this node carries.
 // That is the authority user.add_asset and user.remove_asset name.
 func (mod *Module) OpSyncWith(ctx *astral.Context, q *routing.IncomingQuery, args opSyncWithArgs) (err error) {
+	ch := channel.New(q.AcceptRaw(), channel.WithOutputFormat(args.Out))
+	defer ch.Close()
+
 	// why: the action carries the node, so resolution runs before authorization.
 	nodeID, err := mod.Dir.ResolveIdentity(args.Identity)
-	if err != nil || nodeID.IsZero() {
-		return q.RejectWithCode(3)
+	if err != nil {
+		return ch.Send(dir.ErrUnknownIdentity)
+	}
+	if nodeID.IsZero() {
+		return ch.Send(astral.ErrZeroIdentity)
 	}
 
 	if !mod.Auth.Authorize(ctx, &user.AdminSwarmAction{
 		Action:  auth.NewAction(q.Caller()),
 		Subject: nodeID,
 	}) {
-		return q.RejectWithCode(4)
+		return ch.Send(auth.ErrNotPermitted)
 	}
-
-	ch := channel.New(q.AcceptRaw(), channel.WithOutputFormat(args.Out))
-	defer ch.Close()
 
 	err = mod.syncAssets(ctx.IncludeZone(astral.ZoneNetwork), nodeID)
 	if err != nil {

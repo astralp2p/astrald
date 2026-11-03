@@ -7,7 +7,6 @@ import (
 
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astral-go/astral/log"
-	"github.com/astralp2p/astrald/mod/objects"
 )
 
 // assetModule returns a Module with an in-memory asset table and an authority that allows every call.
@@ -20,20 +19,15 @@ func assetModule(t *testing.T) (*Module, *recordingAuth) {
 }
 
 // checkPartialRejected fails the test unless the op authorized the caller once and then
-// rejected the query with the invalid-query code without answering.
-// note: the authorization refusal and a database failure both answer the internal-error code.
+// answered astral.ErrPartialObjectID.
 func checkPartialRejected(t *testing.T, err error, authority *recordingAuth, w *recordingWriter) {
 	t.Helper()
 
-	var rejected *astral.ErrRejected
-	if !errors.As(err, &rejected) {
-		t.Fatalf("got err %v; want a rejection", err)
+	if err != nil {
+		t.Fatalf("route: %v", err)
 	}
-	if rejected.Code != astral.CodeInvalidQuery {
-		t.Fatalf("rejected with code %d; want the invalid-query code %d", rejected.Code, astral.CodeInvalidQuery)
-	}
-	if n := w.written(); n != 0 {
-		t.Fatalf("the op wrote %d bytes; want none", n)
+	if got, want := w.refusal(t), astral.ErrPartialObjectID.Error(); got != want {
+		t.Fatalf("the op answered %q; want %q", got, want)
 	}
 	if n := len(authority.recorded()); n != 1 {
 		t.Fatalf("the op made %d authorization calls; want 1 before the refusal", n)
@@ -94,11 +88,11 @@ func TestAssetMethodsRefuseSizeZeroIDs(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			mod, _ := assetModule(t)
 
-			if err := mod.AddAsset(id); !errors.Is(err, objects.ErrPartialObjectID) {
-				t.Fatalf("AddAsset: %v; want %v", err, objects.ErrPartialObjectID)
+			if err := mod.AddAsset(id); !errors.Is(err, astral.ErrPartialObjectID) {
+				t.Fatalf("AddAsset: %v; want %v", err, astral.ErrPartialObjectID)
 			}
-			if err := mod.RemoveAsset(id); !errors.Is(err, objects.ErrPartialObjectID) {
-				t.Fatalf("RemoveAsset: %v; want %v", err, objects.ErrPartialObjectID)
+			if err := mod.RemoveAsset(id); !errors.Is(err, astral.ErrPartialObjectID) {
+				t.Fatalf("RemoveAsset: %v; want %v", err, astral.ErrPartialObjectID)
 			}
 			if mod.AssetsContain(id) {
 				t.Fatal("a refused ID is an asset")

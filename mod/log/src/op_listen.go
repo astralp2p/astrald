@@ -24,12 +24,12 @@ type opListenArgs struct {
 }
 
 func (mod *Module) OpListen(ctx *astral.Context, q *routing.IncomingQuery, args opListenArgs) (err error) {
-	if !mod.Auth.Authorize(ctx, &auth.SeeNodeStateAction{Action: auth.NewAction(q.Caller())}) {
-		return q.Reject()
-	}
-
 	ch := channel.New(q.AcceptRaw(), channel.WithFormats(args.In, args.Out))
 	defer ch.Close()
+
+	if !mod.Auth.Authorize(ctx, &auth.SeeNodeStateAction{Action: auth.NewAction(q.Caller())}) {
+		return ch.Send(auth.ErrNotPermitted)
+	}
 
 	fwd := newLogForwarder(ch, mod.node.Identity())
 	go fwd.pump()

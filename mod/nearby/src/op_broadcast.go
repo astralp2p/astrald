@@ -12,12 +12,12 @@ type opBroadcastArgs struct {
 }
 
 func (mod *Module) OpBroadcast(ctx *astral.Context, q *routing.IncomingQuery, args opBroadcastArgs) (err error) {
-	if !mod.Auth.Authorize(ctx, &auth.AdminNetworkAction{Action: auth.NewAction(q.Caller())}) {
-		return q.Reject()
-	}
-
 	ch := channel.New(q.AcceptRaw(), channel.WithOutputFormat(args.Out))
 	defer ch.Close()
+
+	if !mod.Auth.Authorize(ctx, &auth.AdminNetworkAction{Action: auth.NewAction(q.Caller())}) {
+		return ch.Send(auth.ErrNotPermitted)
+	}
 
 	err = mod.Broadcast()
 	if err != nil {

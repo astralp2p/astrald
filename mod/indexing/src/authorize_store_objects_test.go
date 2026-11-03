@@ -1,7 +1,7 @@
 package indexing
 
 import (
-	"errors"
+	"bytes"
 	"io"
 	"sync"
 	"testing"
@@ -9,6 +9,7 @@ import (
 
 	"github.com/astralp2p/astral-go/api/auth"
 	"github.com/astralp2p/astral-go/astral"
+	"github.com/astralp2p/astral-go/astral/channel"
 	"github.com/astralp2p/astral-go/lib/query"
 	"github.com/astralp2p/astral-go/lib/routing"
 	authmod "github.com/astralp2p/astrald/mod/auth"
@@ -41,26 +42,55 @@ func (a *recordingAuth) recorded() []auth.ActionObject {
 	return append([]auth.ActionObject(nil), a.actions...)
 }
 
-// discardWriter is the caller's end of the connection. Bytes reaching it mean the
-// op accepted the query and answered it.
-type discardWriter struct {
-	mu sync.Mutex
-	n  int
+// recordingWriter is the caller's end of the connection; it keeps the bytes the
+// op wrote and closes when the op ends.
+type recordingWriter struct {
+	mu     sync.Mutex
+	buf    bytes.Buffer
+	closed chan struct{}
+	once   sync.Once
 }
 
-func (w *discardWriter) Write(p []byte) (int, error) {
+func newRecordingWriter() *recordingWriter { return &recordingWriter{closed: make(chan struct{})} }
+
+func (w *recordingWriter) Write(p []byte) (int, error) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
-	w.n += len(p)
-	return len(p), nil
+	return w.buf.Write(p)
 }
 
-func (w *discardWriter) Close() error { return nil }
+func (w *recordingWriter) Close() error {
+	w.once.Do(func() { close(w.closed) })
+	return nil
+}
 
-func (w *discardWriter) written() int {
+func (w *recordingWriter) written() int {
 	w.mu.Lock()
 	defer w.mu.Unlock()
-	return w.n
+	return w.buf.Len()
+}
+
+// refusal waits for the op to close the connection and returns the text of the
+// error_message it answered.
+func (w *recordingWriter) refusal(t *testing.T) string {
+	t.Helper()
+	select {
+	case <-w.closed:
+	case <-time.After(10 * time.Second):
+		t.Fatal("the op never closed the connection")
+	}
+
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	obj, err := channel.NewReceiver(bytes.NewReader(w.buf.Bytes())).Receive()
+	if err != nil {
+		t.Fatalf("decode answer: %v", err)
+	}
+	msg, ok := obj.(*astral.ErrorMessage)
+	if !ok {
+		t.Fatalf("the op answered %v; want an error_message", obj)
+	}
+	return msg.Error()
 }
 
 // route dispatches one query to one op and returns the router's verdict once the
@@ -103,17 +133,15 @@ func TestStoreObjectsRefusesCallerWithoutPermits(t *testing.T) {
 		t.Run(op.name, func(t *testing.T) {
 			authority := &recordingAuth{verdict: false}
 			mod := &Module{Deps: Deps{Auth: authority}}
-			w := &discardWriter{}
+			w := newRecordingWriter()
 
 			err := route(t, op.op(mod), caller, op.name+op.args, w)
 
-			var rejected *astral.ErrRejected
-			if !errors.As(err, &rejected) {
-				t.Fatalf("%s answered a caller holding no permits: got err %v, want a rejection", op.name, err)
+			if err != nil {
+				t.Fatalf("%s: route: %v", op.name, err)
 			}
-
-			if n := w.written(); n != 0 {
-				t.Fatalf("%s wrote %d bytes to a refused caller; want none", op.name, n)
+			if got, want := w.refusal(t), auth.ErrNotPermitted.Error(); got != want {
+				t.Fatalf("%s answered %q to a caller holding no permits; want %q", op.name, got, want)
 			}
 
 			actions := authority.recorded()

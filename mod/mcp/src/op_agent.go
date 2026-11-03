@@ -26,16 +26,16 @@ type opAgentArgs struct {
 // The origin refusal below narrows who reaches the guard and identifies no
 // caller; see OpListAgents for what the refusal covers.
 func (mod *Module) OpAgent(ctx *astral.Context, q *routing.IncomingQuery, args opAgentArgs) error {
+	ch := channel.New(q.AcceptRaw(), channel.WithOutputFormat(args.Out))
+	defer ch.Close()
+
 	if q.Origin() == astral.OriginNetwork {
-		return q.Reject()
+		return ch.Send(astral.NewErrOriginNotAllowed(q.Origin()))
 	}
 
 	if !mod.Auth.Authorize(ctx, &auth.SeeNodeStateAction{Action: auth.NewAction(q.Caller())}) {
-		return q.Reject()
+		return ch.Send(auth.ErrNotPermitted)
 	}
-
-	ch := channel.New(q.AcceptRaw(), channel.WithOutputFormat(args.Out))
-	defer ch.Close()
 
 	agentID, err := mod.Dir.ResolveIdentity(args.Identity)
 	if err != nil {

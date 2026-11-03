@@ -316,6 +316,41 @@ func sudoAction(actor, as *astral.Identity) *auth.SudoAction {
 	return &auth.SudoAction{Action: auth.NewAction(actor), AsID: as}
 }
 
+// TestAuthorizeRefusesAnEmptyActor covers an apphost session without a token,
+// which names no actor. A handler that allows everyone, a sudo contract made out
+// to another identity, and an authority that allows everyone each grant nothing.
+func TestAuthorizeRefusesAnEmptyActor(t *testing.T) {
+	mod := testModule(t)
+	mod.Add(authmod.Func[*auth.SudoAction](mod.AuthorizeSudo))
+	mod.Add(authmod.Func[*testAction](func(*astral.Context, *testAction) bool { return true }))
+	stub := withAuthority(t, mod)
+	stub.answer = true
+	ctx := astral.NewContext(nil)
+
+	user := astral.GenerateIdentity()
+	wallet := astral.GenerateIdentity()
+	seedContract(t, mod, user, wallet, &auth.Permit{Action: astral.String8(auth.SudoAction{}.ObjectType())})
+
+	for _, empty := range []*astral.Identity{nil, {}} {
+		if mod.Authorize(ctx, action(empty)) {
+			t.Fatal("allow-all handler: want deny for an empty actor")
+		}
+		if mod.Authorize(ctx, sudoAction(empty, user)) {
+			t.Fatal("sudo contract for another subject: want deny for an empty actor")
+		}
+	}
+	if len(stub.asked) > 0 {
+		t.Fatal("the authority was asked about an empty actor")
+	}
+
+	if !mod.Authorize(ctx, action(wallet)) {
+		t.Fatal("allow-all handler: want allow for a named actor")
+	}
+	if !mod.Authorize(ctx, sudoAction(wallet, user)) {
+		t.Fatal("sudo contract: want allow for its subject")
+	}
+}
+
 // TestAuthorizeSudoAllowsAnIdentityToBeItself pins the rule the zero-target
 // refusal must not widen.
 func TestAuthorizeSudoAllowsAnIdentityToBeItself(t *testing.T) {

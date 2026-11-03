@@ -14,19 +14,19 @@ type opStoreArgs struct {
 }
 
 func (mod *Module) OpStore(ctx *astral.Context, q *routing.IncomingQuery, args opStoreArgs) error {
-	if !mod.Auth.Authorize(ctx, &auth.StoreObjectsAction{
-		Action: auth.NewAction(q.Caller()),
-		Repo:   astral.String8(args.Repo),
-	}) {
-		return q.Reject()
-	}
-
 	ch := channel.New(
 		q.AcceptRaw(),
 		channel.WithFormats(args.In, args.Out),
 		channel.AllowUnparsed(true), // allow unparsed objects
 	)
 	defer ch.Close()
+
+	if !mod.Auth.Authorize(ctx, &auth.StoreObjectsAction{
+		Action: auth.NewAction(q.Caller()),
+		Repo:   astral.String8(args.Repo),
+	}) {
+		return ch.Send(auth.ErrNotPermitted)
+	}
 
 	repo := mod.WriteDefault()
 	if len(args.Repo) > 0 {

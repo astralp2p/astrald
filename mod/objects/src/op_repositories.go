@@ -14,14 +14,14 @@ type opRepositoriesArgs struct {
 }
 
 func (mod *Module) OpRepositories(ctx *astral.Context, q *routing.IncomingQuery, args opRepositoriesArgs) (err error) {
+	ch := q.Accept(channel.WithOutputFormat(args.Out))
+	defer ch.Close()
+
 	if !mod.Auth.Authorize(ctx, &auth.SeeObjectsAction{Action: auth.NewAction(q.Caller())}) {
-		return q.Reject()
+		return ch.Send(auth.ErrNotPermitted)
 	}
 
 	ctx = ctx.ExcludeZone(astral.ZoneNetwork)
-
-	ch := q.Accept(channel.WithOutputFormat(args.Out))
-	defer ch.Close()
 
 	for name, repo := range mod.repos.Clone() {
 		err = ch.Send(newRepositoryInfo(ctx, name, repo))

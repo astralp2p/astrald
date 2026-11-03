@@ -44,26 +44,41 @@ func loadModule(t *testing.T, config string) *Module {
 
 // TestSyncConfigAppliesConfig pins that each flag in tcp.yaml reaches its own
 // setting. A listen of false disables the listener, and the two flags never
-// cross.
+// cross. A flag the file omits stays unset, and a listen stored in the tree
+// survives unless tcp.yaml sets listen.
 func TestSyncConfigAppliesConfig(t *testing.T) {
+	on, off := astral.Bool(true), astral.Bool(false)
+
+	// listen and dial are the stored values the start leaves; nil means the
+	// start wrote nothing and the setting reads as on.
 	var tests = []struct {
 		name   string
 		config string
-		listen bool
-		dial   bool
+		stored *astral.Bool
+		listen *astral.Bool
+		dial   *astral.Bool
 	}{
-		{"defaults", "", true, true},
-		{"listen off", "listen: false\n", false, true},
-		{"dial off", "dial: false\n", true, false},
-		{"listen off, dial on", "listen: false\ndial: true\n", false, true},
-		{"both off", "listen: false\ndial: false\n", false, false},
+		{"defaults", "", nil, nil, nil},
+		{"listen off", "listen: false\n", nil, &off, nil},
+		{"dial off", "dial: false\n", nil, nil, &off},
+		{"listen off, dial on", "listen: false\ndial: true\n", nil, &off, &on},
+		{"both off", "listen: false\ndial: false\n", nil, &off, &off},
+		{"stored off survives", "", &off, &off, nil},
+		{"file overrides stored", "listen: true\n", &off, &on, nil},
 	}
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			mod := loadModule(t, test.config)
+			ctx := astral.NewContext(nil)
 
-			if err := mod.syncConfig(astral.NewContext(nil)); err != nil {
+			if test.stored != nil {
+				if err := mod.settings.Listen.Set(ctx, test.stored); err != nil {
+					t.Fatalf("store listen: %v", err)
+				}
+			}
+
+			if err := mod.syncConfig(ctx); err != nil {
 				t.Fatalf("syncConfig: %v", err)
 			}
 
@@ -73,14 +88,18 @@ func TestSyncConfigAppliesConfig(t *testing.T) {
 	}
 }
 
-func assertFlag(t *testing.T, name string, got *astral.Bool, want bool) {
+// assertFlag compares a stored flag with the expected one; nil expects unset.
+func assertFlag(t *testing.T, name string, got *astral.Bool, want *astral.Bool) {
 	t.Helper()
 
-	if got == nil {
-		t.Fatalf("%v: got unset, want %v", name, want)
+	if got == nil || want == nil {
+		if got != want {
+			t.Errorf("%v: got %v, want %v", name, got, want)
+		}
+		return
 	}
 
-	if bool(*got) != want {
-		t.Errorf("%v: got %v, want %v", name, bool(*got), want)
+	if *got != *want {
+		t.Errorf("%v: got %v, want %v", name, *got, *want)
 	}
 }

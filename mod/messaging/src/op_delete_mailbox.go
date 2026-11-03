@@ -20,19 +20,19 @@ type opDeleteMailboxArgs struct {
 // the mail it owns. The hosting contract is not revoked. Identity takes an
 // identity or an alias.
 func (mod *Module) OpDeleteMailbox(ctx *astral.Context, q *routing.IncomingQuery, args opDeleteMailboxArgs) error {
+	ch := channel.New(q.AcceptRaw(), channel.WithOutputFormat(args.Out))
+	defer ch.Close()
+
 	if refusesOrigin(q) {
-		return q.Reject()
+		return ch.Send(astral.NewErrOriginNotAllowed(q.Origin()))
 	}
 
 	// why AdminManageApps, as for apphost's token ops: a participant's
 	// credential is an apphost access token, so administering participants is
 	// administering tokens.
 	if !mod.Auth.Authorize(ctx, &auth.AdminManageAppsAction{Action: auth.NewAction(q.Caller())}) {
-		return q.Reject()
+		return ch.Send(auth.ErrNotPermitted)
 	}
-
-	ch := channel.New(q.AcceptRaw(), channel.WithOutputFormat(args.Out))
-	defer ch.Close()
 
 	identity, err := mod.Dir.ResolveIdentity(args.Identity)
 	if err != nil {

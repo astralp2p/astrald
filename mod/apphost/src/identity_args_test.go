@@ -37,50 +37,24 @@ func (d *namingDir) ResolveIdentity(name string) (*astral.Identity, error) {
 	return nil, errors.New("unknown identity: " + name)
 }
 
-// TestGrantOpResolvesAnAlias: -identity takes a name, and the grant lands on
-// the identity the name resolves to.
-func TestGrantOpResolvesAnAlias(t *testing.T) {
-	mod := testGrantModule(t)
-	mod.Auth = &recordingAuth{verdict: true}
-	app := astral.GenerateIdentity()
-	mod.Dir = &namingDir{aliases: map[string]*astral.Identity{"scout": app}}
-	action := auth.ServeObjectsAction{}.ObjectType()
-
-	w := newRecordingWriter()
-	err := route(t, mod.OpGrant, astral.GenerateIdentity(), "apphost.grant?identity=scout&action="+action, w)
-	if err != nil {
-		t.Fatalf("apphost.grant refused an authorized caller: %v", err)
-	}
-	waitAdminManageAppsAnswer(t, w)
-
-	grants, err := mod.Grants(app)
-	if err != nil {
-		t.Fatalf("grants: %v", err)
-	}
-	if len(grants) != 1 {
-		t.Fatalf("the aliased identity holds %d grants; want 1", len(grants))
-	}
-}
-
-// TestGrantOpRecordsNothingForAnUnusableIdentity: the zero identity and an
-// unresolved name are answered with an error, and no grant is written.
+// TestGrantOpRecordsNothingForAnUnusableIdentity: a grant_request with no
+// identity or the zero identity is answered with an error, and no grant is
+// written.
 func TestGrantOpRecordsNothingForAnUnusableIdentity(t *testing.T) {
 	action := auth.ServeObjectsAction{}.ObjectType()
 
-	for _, name := range []string{"", "anyone", "nobody"} {
-		t.Run("identity="+name, func(t *testing.T) {
+	for name, identity := range map[string]*astral.Identity{"absent": nil, "zero": {}} {
+		t.Run("identity "+name, func(t *testing.T) {
 			mod := testGrantModule(t)
 			mod.Auth = &recordingAuth{verdict: true}
 
 			w := newRecordingWriter()
-			err := route(t, mod.OpGrant, astral.GenerateIdentity(), "apphost.grant?identity="+name+"&action="+action, w)
-			if err != nil {
+			req := &apphost.GrantRequest{Identity: identity, Permits: permits(action)}
+			if err := routeSending(t, mod.OpGrant, astral.GenerateIdentity(), "apphost.grant", req, w); err != nil {
 				t.Fatalf("apphost.grant rejected instead of answering: %v", err)
 			}
-			waitAdminManageAppsAnswer(t, w)
-
-			if w.written() == 0 {
-				t.Fatal("apphost.grant answered nothing")
+			if got, want := readReply(t, w), "missing identity"; got != want {
+				t.Fatalf("answered %q; want %q", got, want)
 			}
 
 			var n int64
@@ -91,22 +65,6 @@ func TestGrantOpRecordsNothingForAnUnusableIdentity(t *testing.T) {
 				t.Fatalf("the node holds %d grants; want 0", n)
 			}
 		})
-	}
-}
-
-// TestGrantOpRefusesTheOldArgumentName: -id is not an alias of -identity, so a
-// query naming only -id lacks the required argument.
-func TestGrantOpRefusesTheOldArgumentName(t *testing.T) {
-	mod := testGrantModule(t)
-	mod.Auth = &recordingAuth{verdict: true}
-	app := astral.GenerateIdentity()
-	action := auth.ServeObjectsAction{}.ObjectType()
-
-	err := route(t, mod.OpGrant, astral.GenerateIdentity(), "apphost.grant?id="+app.String()+"&action="+action, newRecordingWriter())
-
-	var rejected *astral.ErrRejected
-	if !errors.As(err, &rejected) {
-		t.Fatalf("apphost.grant answered a query without -identity: got err %v, want a rejection", err)
 	}
 }
 

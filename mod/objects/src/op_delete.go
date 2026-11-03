@@ -18,6 +18,9 @@ type opDeleteArgs struct {
 // channel. Requires an explicit repository — there is no default, to avoid
 // accidental deletion.
 func (mod *Module) OpDelete(ctx *astral.Context, q *routing.IncomingQuery, args opDeleteArgs) (err error) {
+	ch := channel.New(q.AcceptRaw(), channel.WithOutputFormat(args.Out))
+	defer ch.Close()
+
 	// why AdminObjects and not StoreObjects: a grant to add objects does not grant
 	// destroying them.
 	if !mod.Auth.Authorize(ctx, &auth.AdminObjectsAction{
@@ -25,7 +28,7 @@ func (mod *Module) OpDelete(ctx *astral.Context, q *routing.IncomingQuery, args 
 		ObjectID: args.ID,
 		Repo:     astral.String8(args.Repo),
 	}) {
-		return q.Reject()
+		return ch.Send(auth.ErrNotPermitted)
 	}
 
 	// prepare the context
@@ -35,9 +38,6 @@ func (mod *Module) OpDelete(ctx *astral.Context, q *routing.IncomingQuery, args 
 	} else {
 		ctx = ctx.WithZone(*args.Zone)
 	}
-
-	ch := channel.New(q.AcceptRaw(), channel.WithOutputFormat(args.Out))
-	defer ch.Close()
 
 	// look up the repository (no default to avoid accidental deletion)
 	repo := mod.GetRepository(args.Repo)

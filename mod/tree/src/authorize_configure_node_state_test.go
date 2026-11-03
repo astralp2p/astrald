@@ -1,7 +1,6 @@
 package tree
 
 import (
-	"errors"
 	"testing"
 	"time"
 
@@ -52,13 +51,11 @@ func TestConfigureNodeStateRefusesCallerWithoutPermits(t *testing.T) {
 
 			err := route(t, op.op(mod), caller, op.query, w)
 
-			var rejected *astral.ErrRejected
-			if !errors.As(err, &rejected) {
-				t.Fatalf("%s answered a caller holding no permits: got err %v, want a rejection", op.name, err)
+			if err != nil {
+				t.Fatalf("%s: route: %v", op.name, err)
 			}
-
-			if n := w.written(); n != 0 {
-				t.Fatalf("%s wrote %d bytes to a refused caller; want none", op.name, n)
+			if got, want := w.refusal(t), auth.ErrNotPermitted.Error(); got != want {
+				t.Fatalf("%s answered %q to a caller holding no permits; want %q", op.name, got, want)
 			}
 
 			checkConfigureNodeStateAsked(t, op.name, authority, caller)

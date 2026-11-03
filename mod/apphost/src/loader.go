@@ -1,6 +1,7 @@
 package apphost
 
 import (
+	"errors"
 	"net"
 
 	"github.com/astralp2p/astral-go/astral"
@@ -8,12 +9,14 @@ import (
 	"github.com/astralp2p/astrald/core"
 	"github.com/astralp2p/astrald/core/assets"
 	"github.com/astralp2p/astrald/mod/apphost"
+	"github.com/astralp2p/astrald/resources"
 )
 
 type Loader struct{}
 
-// Load instantiates the apphost Module: loads config, auto-migrates the database schema,
-// and registers Op-prefixed struct methods as router operations.
+// Load instantiates the apphost Module: loads config, migrates the database schema
+// (the grants table included, see migrateGrants), and registers Op-prefixed struct
+// methods as router operations.
 func (Loader) Load(node astral.Node, assets assets.Assets, log *log.Logger) (core.Module, error) {
 	var err error
 
@@ -24,7 +27,9 @@ func (Loader) Load(node astral.Node, assets assets.Assets, log *log.Logger) (cor
 		log:       log,
 	}
 
-	_ = assets.LoadYAML(apphost.ModuleName, &mod.config)
+	if err := assets.LoadYAML(apphost.ModuleName, &mod.config); err != nil && !errors.Is(err, resources.ErrNotFound) {
+		return nil, err
+	}
 
 	mod.resolveAddrs()
 
@@ -33,7 +38,7 @@ func (Loader) Load(node astral.Node, assets assets.Assets, log *log.Logger) (cor
 	// set up the database
 	mod.db = &DB{assets.Database()}
 
-	err = mod.db.AutoMigrate(&dbAccessToken{}, &dbObjectHold{}, &dbGrant{})
+	err = mod.db.migrate()
 	if err != nil {
 		return nil, err
 	}

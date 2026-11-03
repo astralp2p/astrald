@@ -17,19 +17,15 @@ import (
 // record it is written into. GrantPermits are node-local grants: revocable by
 // deleting a row, never handed to anyone, worthless off this node.
 // ContractPermits go into a signed node→app contract: portable evidence
-// another node verifies, durable until it expires. The trusted-web-source
-// entitlement for the origin is joined onto the contract request before the
-// policy sees it, because a PermitConfig carries Delegation and delegation
-// means nothing to a grant.
+// another node verifies, durable until it expires.
 //
 // A policy is free to move a permit between the two lists, or to drop it: the
 // app states what it wants, the node decides what it holds.
 type RegisterAppPolicy func(ctx *astral.Context, req *apphost.AppRegisterRequest) (*apphost.AppRegisterDecision, error)
 
 // AcceptAll is the bundled policy. It admits every registration with the
-// permits it asked for, on the rail each list names, whether the caller's
-// origin entitled it or the app simply asked. A node that cares which apps
-// hold what delegates the decision.
+// permits it asked for, on the rail each list names. A node that cares which
+// apps hold what delegates the decision.
 func AcceptAll(_ *astral.Context, req *apphost.AppRegisterRequest) (*apphost.AppRegisterDecision, error) {
 	return &apphost.AppRegisterDecision{
 		Allow:           true,

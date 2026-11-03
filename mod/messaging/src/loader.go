@@ -1,11 +1,14 @@
 package messaging
 
 import (
+	"errors"
+
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astral-go/astral/log"
 	"github.com/astralp2p/astrald/core"
 	"github.com/astralp2p/astrald/core/assets"
 	messagingmod "github.com/astralp2p/astrald/mod/messaging"
+	"github.com/astralp2p/astrald/resources"
 )
 
 type Loader struct{}
@@ -21,7 +24,9 @@ func (Loader) Load(node astral.Node, assets assets.Assets, log *log.Logger) (cor
 		log:             log,
 	}
 
-	_ = assets.LoadYAML(messagingmod.ModuleName, &mod.config)
+	if err := assets.LoadYAML(messagingmod.ModuleName, &mod.config); err != nil && !errors.Is(err, resources.ErrNotFound) {
+		return nil, err
+	}
 
 	mod.router.AddStructPrefix(mod, "Op")
 

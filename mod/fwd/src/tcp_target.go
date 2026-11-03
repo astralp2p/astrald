@@ -32,7 +32,7 @@ func (t *TCPTarget) RouteQuery(ctx *astral.Context, q *astral.InFlightQuery, w i
 
 	conn, err := dialer.DialContext(ctx, "tcp", t.addr.String())
 	if err != nil {
-		return query.Reject()
+		return query.RejectWithCode(astral.CodeUnavailable)
 	}
 
 	go func() {

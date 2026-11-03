@@ -5,6 +5,7 @@ import (
 	"errors"
 	"io"
 	"net"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -212,12 +213,20 @@ func TestUseGatewayRefusesBeforeSideEffects(t *testing.T) {
 
 				err := route(t, op.op(f.mod), caller, op.query(f), w)
 
-				var rejected *astral.ErrRejected
-				if !errors.As(err, &rejected) {
-					t.Fatalf("%s answered a refused caller: got err %v, want a rejection", op.name, err)
-				}
-				if n := w.written(); n != 0 {
-					t.Fatalf("%s wrote %d bytes to a refused caller; want none", op.name, n)
+				// note: gateway.node_route streams raw bytes, so it keeps the reject; an error_message
+				// would reach its caller as payload.
+				if strings.HasPrefix(op.name, "gateway.node_route") {
+					var rejected *astral.ErrRejected
+					if !errors.As(err, &rejected) || w.written() != 0 {
+						t.Fatalf("got err %v and %d bytes; want a rejection and no bytes", err, w.written())
+					}
+				} else {
+					if err != nil {
+						t.Fatalf("route: %v", err)
+					}
+					if got, want := w.refusal(t), auth.ErrNotPermitted.Error(); got != want {
+						t.Fatalf("answered %q; want %q", got, want)
+					}
 				}
 				assertUseGatewayCalls(t, op.name, authority.recorded(), caller, c.wantCalls)
 				assertUseGatewayUntouched(t, op.name, f, caller)

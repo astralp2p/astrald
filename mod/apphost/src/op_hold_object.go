@@ -1,11 +1,11 @@
 package apphost
 
 import (
+	"github.com/astralp2p/astral-go/api/auth"
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astral-go/astral/channel"
 	"github.com/astralp2p/astral-go/lib/routing"
 	"github.com/astralp2p/astrald/mod/apphost"
-	"github.com/astralp2p/astrald/mod/objects"
 )
 
 type opHoldObjectArgs struct {
@@ -20,15 +20,21 @@ type opHoldObjectArgs struct {
 // batch mode: object IDs are read from the channel until EOS and each input
 // gets one Ack/ErrorMessage reply.
 func (mod *Module) OpHoldObject(ctx *astral.Context, q *routing.IncomingQuery, args opHoldObjectArgs) error {
-	if q.Origin() == astral.OriginNetwork {
-		return q.Reject()
-	}
-
 	ch := q.Accept(channel.WithFormats(args.In, args.Out))
 	defer ch.Close()
 
+	if q.Origin() == astral.OriginNetwork {
+		return ch.Send(astral.NewErrOriginNotAllowed(q.Origin()))
+	}
+
 	if q.Caller().IsZero() {
 		return ch.Send(astral.Err(apphost.ErrMissingAppIdentity))
+	}
+
+	// why: a hold is a write to node state that objects.purge obeys, so it asks the
+	// write authority. Batch-mode IDs arrive after the decision, so no noun is named.
+	if !mod.Auth.Authorize(ctx, &auth.StoreObjectsAction{Action: auth.NewAction(q.Caller())}) {
+		return ch.Send(auth.ErrNotPermitted)
 	}
 
 	if args.ID == nil {
@@ -48,7 +54,7 @@ func (mod *Module) holdOne(caller *astral.Identity, id *astral.ObjectID, duratio
 	}
 
 	if id.Size == 0 {
-		return astral.Err(objects.ErrPartialObjectID)
+		return astral.Err(astral.ErrPartialObjectID)
 	}
 
 	if err := mod.db.HoldObject(caller, id, duration); err != nil {

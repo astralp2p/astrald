@@ -40,17 +40,17 @@ func awaitSetterClose(t *testing.T, w *recordingWriter) {
 	}
 }
 
-// A caller without AdminManageApps is rejected before anything is written,
-// and AdminManageApps is the one action asked about.
+// A caller without AdminManageApps is answered auth.ErrNotPermitted before
+// anything is written, and AdminManageApps is the one action asked about.
 func TestSetSwarmPolicyRequiresAdminManageApps(t *testing.T) {
 	mod := swarmPolicySetter(false, astral.GenerateIdentity())
 
 	w, err := setSwarmPolicyOp(t, mod.OpSetSwarmJoinPolicy, "user.set_swarm_join_policy?identity=cp&operation=control.decide_swarm")
-	if err == nil {
-		t.Fatal("a caller without AdminManageApps set the policy")
+	if err != nil {
+		t.Fatalf("route: %v", err)
 	}
-	if w.written() != 0 {
-		t.Fatal("a rejected setter answered")
+	if got, want := w.refusal(t), auth.ErrNotPermitted.Error(); got != want {
+		t.Fatalf("answered %q; want %q", got, want)
 	}
 	if !mod.policy.SwarmJoin.Get().IsZero() {
 		t.Fatal("a rejected setter wrote a delegate")
@@ -99,6 +99,26 @@ func TestSetSwarmInvitePolicyPersistsTheDelegate(t *testing.T) {
 	}
 	if !mod.policy.SwarmJoin.Get().IsZero() {
 		t.Fatal("the invite setter wrote the join delegate")
+	}
+}
+
+// The contract accept setter writes the contract accept delegate alone.
+func TestSetContractAcceptPolicyPersistsTheDelegate(t *testing.T) {
+	id := astral.GenerateIdentity()
+	mod := swarmPolicySetter(true, id)
+
+	w, err := setSwarmPolicyOp(t, mod.OpSetContractAcceptPolicy, "user.set_contract_accept_policy?identity=cp&operation=control.decide_contract")
+	if err != nil {
+		t.Fatalf("set: %v", err)
+	}
+	awaitSetterClose(t, w)
+
+	d := mod.policy.ContractAccept.Get()
+	if d.IsZero() || !d.Identity.IsEqual(id) || d.Operation != "control.decide_contract" {
+		t.Fatalf("persisted %+v, want the delegate as set", d)
+	}
+	if !mod.policy.SwarmJoin.Get().IsZero() || !mod.policy.SwarmInvite.Get().IsZero() {
+		t.Fatal("the contract accept setter wrote a swarm delegate")
 	}
 }
 

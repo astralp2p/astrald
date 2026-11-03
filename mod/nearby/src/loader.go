@@ -1,10 +1,13 @@
 package nearby
 
 import (
+	"errors"
+
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astral-go/astral/log"
 	"github.com/astralp2p/astrald/core"
 	"github.com/astralp2p/astrald/core/assets"
+	"github.com/astralp2p/astrald/resources"
 )
 
 const ModuleName = "nearby"
@@ -13,12 +16,13 @@ type Loader struct{}
 
 func (Loader) Load(node astral.Node, assets assets.Assets, log *log.Logger) (core.Module, error) {
 	mod := &Module{
-		node:   node,
-		config: defaultConfig,
-		log:    log,
+		node: node,
+		log:  log,
 	}
 
-	_ = assets.LoadYAML(ModuleName, &mod.config)
+	if err := assets.LoadYAML(ModuleName, &mod.config); err != nil && !errors.Is(err, resources.ErrNotFound) {
+		return nil, err
+	}
 
 	err := mod.router.AddStructPrefix(mod, "Op")
 	if err != nil {

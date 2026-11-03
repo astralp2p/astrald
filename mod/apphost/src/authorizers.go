@@ -2,7 +2,6 @@ package apphost
 
 import (
 	"github.com/astralp2p/astral-go/api/auth"
-	"github.com/astralp2p/astral-go/api/coldcard"
 	"github.com/astralp2p/astral-go/api/services"
 	"github.com/astralp2p/astral-go/api/shell"
 	"github.com/astralp2p/astral-go/api/user"
@@ -25,10 +24,6 @@ func (mod *Module) AuthorizeServeObjects(ctx *astral.Context, action *auth.Serve
 // why: a typed shim over the generic lookup, matching AuthorizeServeObjects. The
 // auth registry dispatches on the concrete action type, so every grantable
 // action needs one of these.
-//
-// note: objects.blueprints authorizes this action, and a served app syncs its
-// blueprints at startup, so without this shim no registered app completes
-// apps.Serve however its registration asked.
 func (mod *Module) AuthorizeSeeObjects(ctx *astral.Context, action *auth.SeeObjectsAction) bool {
 	return mod.authorizeGrant(ctx, action)
 }
@@ -38,15 +33,23 @@ func (mod *Module) AuthorizeSeeObjects(ctx *astral.Context, action *auth.SeeObje
 //
 // why: a typed shim over the generic lookup, matching AuthorizeSeeObjects.
 //
-// note: objects.register_blueprint authorizes this action, and a served app
-// pushes the blueprints of its own types at startup, so without this shim a
-// consumer cannot decode what that app's ops return.
-//
 // note: this is a write authority and the widest of the object actions a
 // registration can ask for. The accept-all register policy admits every permit
 // put in front of it, so a node that cares which apps write objects installs a
 // policy that decides (register_policy.go).
 func (mod *Module) AuthorizeStoreObjects(ctx *astral.Context, action *auth.StoreObjectsAction) bool {
+	return mod.authorizeGrant(ctx, action)
+}
+
+// AuthorizeUseBlueprints answers whether this node has granted the actor the
+// right to read and register the node's blueprints.
+//
+// why: a typed shim over the generic lookup, matching AuthorizeSeeObjects.
+//
+// note: a served app syncs its blueprints at startup (apps.WithBlueprintSync),
+// so without this shim no registered app completes that sync however its
+// registration asked.
+func (mod *Module) AuthorizeUseBlueprints(ctx *astral.Context, action *auth.UseBlueprintsAction) bool {
 	return mod.authorizeGrant(ctx, action)
 }
 
@@ -67,7 +70,11 @@ func (mod *Module) AuthorizeAdminSwarm(ctx *astral.Context, action *user.AdminSw
 }
 
 // authorizeGrant answers from this node's grants alone: it looks up the actor's
-// permit for the action being asked and lets the permit decide.
+// unexpired permits for the action being asked and allows when any one allows.
+//
+// why any-of: grants accumulate, so scopes granted one by one add up. Five
+// single-service discovery grants together allow one services.discover over all
+// five services, which checks each (service, node) pair on its own.
 //
 // why: no action-specific logic. Narrowing lives in the permit's constraints, so
 // one function serves every grantable action — a ServeObjects grant limited to
@@ -76,16 +83,19 @@ func (mod *Module) AuthorizeAdminSwarm(ctx *astral.Context, action *user.AdminSw
 // why: a lookup error refuses. A grant reaches ops that hand out standing
 // authority, so a database fault must not read as permission.
 func (mod *Module) authorizeGrant(_ *astral.Context, action auth.ActionObject) bool {
-	permit, err := mod.db.FindGrant(action.Actor(), action.ObjectType())
-	switch {
-	case err != nil:
+	permits, err := mod.db.FindGrants(action.Actor(), action.ObjectType())
+	if err != nil {
 		mod.log.Errorv(1, "grant lookup for %v: %v", action.Actor(), err)
-		return false
-	case permit == nil:
 		return false
 	}
 
-	return permit.Allows(action)
+	for _, permit := range permits {
+		if permit.Allows(action) {
+			return true
+		}
+	}
+
+	return false
 }
 
 // AuthorizeAdminNetwork answers whether this node has granted the actor the
@@ -112,15 +122,15 @@ func (mod *Module) AuthorizeServeApps(ctx *astral.Context, action *auth.ServeApp
 	return mod.authorizeGrant(ctx, action)
 }
 
-// AuthorizeSeeNodeState answers whether this node has granted the actor the
-// right to read the node's state.
-func (mod *Module) AuthorizeSeeNodeState(ctx *astral.Context, action *auth.SeeNodeStateAction) bool {
+// AuthorizeRegisterSigner answers whether this node has granted the actor the
+// right to claim keys on a crypto.register_signer binding.
+func (mod *Module) AuthorizeRegisterSigner(ctx *astral.Context, action *auth.RegisterSignerAction) bool {
 	return mod.authorizeGrant(ctx, action)
 }
 
-// AuthorizeColdcardScan answers whether this node has granted the actor the
-// right to scan the node's attached Coldcard devices.
-func (mod *Module) AuthorizeColdcardScan(ctx *astral.Context, action *coldcard.ScanAction) bool {
+// AuthorizeSeeNodeState answers whether this node has granted the actor the
+// right to read the node's state.
+func (mod *Module) AuthorizeSeeNodeState(ctx *astral.Context, action *auth.SeeNodeStateAction) bool {
 	return mod.authorizeGrant(ctx, action)
 }
 

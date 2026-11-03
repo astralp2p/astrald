@@ -2,7 +2,6 @@ package apphost
 
 import (
 	"github.com/astralp2p/astral-go/api/auth"
-	"github.com/astralp2p/astral-go/api/coldcard"
 	"github.com/astralp2p/astral-go/api/services"
 	"github.com/astralp2p/astral-go/api/shell"
 	"github.com/astralp2p/astral-go/api/user"
@@ -19,6 +18,8 @@ func (mod *Module) LoadDependencies(ctx *astral.Context) (err error) {
 
 	// why NoLocal: a failed save must fail the setter, not fall back to memory.
 	mod.policy.AppRegister.NoLocal = true
+	mod.policy.GrantRequest.NoLocal = true
+	mod.policy.GrantRequestMode.NoLocal = true
 	if err = tree.BindPath(ctx, &mod.policy, mod.Tree.Root(), policyPath, true); err != nil {
 		return
 	}
@@ -37,14 +38,15 @@ func (mod *Module) LoadDependencies(ctx *astral.Context) (err error) {
 	mod.Auth.Add(authmod.NodeLocal(authmod.Func[*auth.ServeObjectsAction](mod.AuthorizeServeObjects)))
 	mod.Auth.Add(authmod.NodeLocal(authmod.Func[*auth.SeeObjectsAction](mod.AuthorizeSeeObjects)))
 	mod.Auth.Add(authmod.NodeLocal(authmod.Func[*auth.StoreObjectsAction](mod.AuthorizeStoreObjects)))
+	mod.Auth.Add(authmod.NodeLocal(authmod.Func[*auth.UseBlueprintsAction](mod.AuthorizeUseBlueprints)))
 	mod.Auth.Add(authmod.NodeLocal(authmod.Func[*user.SeeSwarmAction](mod.AuthorizeSeeSwarm)))
 	mod.Auth.Add(authmod.NodeLocal(authmod.Func[*user.AdminSwarmAction](mod.AuthorizeAdminSwarm)))
 	mod.Auth.Add(authmod.NodeLocal(authmod.Func[*auth.AdminNetworkAction](mod.AuthorizeAdminNetwork)))
 	mod.Auth.Add(authmod.NodeLocal(authmod.Func[*auth.AdminManageAppsAction](mod.AuthorizeAdminManageApps)))
 	mod.Auth.Add(authmod.NodeLocal(authmod.Func[*auth.ConfigureNodeStateAction](mod.AuthorizeConfigureNodeState)))
 	mod.Auth.Add(authmod.NodeLocal(authmod.Func[*auth.ServeAppsAction](mod.AuthorizeServeApps)))
+	mod.Auth.Add(authmod.NodeLocal(authmod.Func[*auth.RegisterSignerAction](mod.AuthorizeRegisterSigner)))
 	mod.Auth.Add(authmod.NodeLocal(authmod.Func[*auth.SeeNodeStateAction](mod.AuthorizeSeeNodeState)))
-	mod.Auth.Add(authmod.NodeLocal(authmod.Func[*coldcard.ScanAction](mod.AuthorizeColdcardScan)))
 	mod.Auth.Add(authmod.NodeLocal(authmod.Func[*shell.ShellAction](mod.AuthorizeShell)))
 	mod.Auth.Add(authmod.NodeLocal(authmod.Func[*services.ServiceDiscoveryAction](mod.AuthorizeServiceDiscovery)))
 

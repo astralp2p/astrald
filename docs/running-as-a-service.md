@@ -20,7 +20,9 @@ astrald stores config, identity, and data under a root directory derived from
 explicitly, or set `Environment=HOME=<dir>`. The first start generates the node
 identity — a `secp256k1` key at `<root>/data/node_key`, beside the database
 `<root>/data/astrald.db` — with no interaction. `<root>/config` holds the module
-`*.yaml` files. Removing `<root>/data` resets the node to a new identity.
+`*.yaml` files. Removing `<root>/data` resets the node to a new identity. The
+reset also removes the claim, the issued access tokens and grants, and the onion
+address, and peers know the new identity as a new node.
 
 A node that an earlier version started holds its identity at
 `<root>/config/node_key`, and `<root>/config/tor.key` when its tor module
@@ -106,10 +108,14 @@ Default transports bind all interfaces.
 |---|---|---|
 | 1791 | TCP | node links |
 | 1792 | UDP | KCP transport |
-| 8822 | UDP | `ether` LAN discovery |
+| onion :1791 | Tor | onion service; off unless `tor.yaml` sets `listen: true` (needs Tor control port `127.0.0.1:9051`) |
+| 8822 | UDP | `ether` LAN discovery; off with `listen: false` in `<root>/config/ether.yaml` |
 | 8625 | TCP 127.0.0.1 | local apphost API |
 | 8624 | TCP 127.0.0.1 | apphost HTTP API |
 | 8626 | TCP 127.0.0.1 | MCP server |
+
+[Node Exposure](https://github.com/astralp2p/astral-docs/blob/master/topics/node-exposure.md)
+in astral-docs states who reaches each surface and the setting that closes it.
 
 ## Imaging and snapshots
 

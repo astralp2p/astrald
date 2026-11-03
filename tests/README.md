@@ -226,7 +226,9 @@ across runs.
 
 Python ≥ 3.11, a Go toolchain, and an astral-py checkout (path in
 `config.toml`) — imported directly from its `src/`, since the package has
-zero dependencies. No venv, no pip. A VM world additionally needs a working
+zero dependencies. The checkout holds the commit `config.toml`
+`astral_py.requires` names; `tests/run` refuses an older one before it builds
+anything. No venv, no pip. A VM world additionally needs a working
 `netsim` on PATH, and `./tests/link.sh` run once per checkout to register
 this tree's netsim ops.
 

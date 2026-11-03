@@ -12,7 +12,9 @@ import (
 	"os"
 	"time"
 
+	apphostapi "github.com/astralp2p/astral-go/api/apphost"
 	apphostcli "github.com/astralp2p/astral-go/api/apphost/client"
+	"github.com/astralp2p/astral-go/api/auth"
 	"github.com/astralp2p/astral-go/api/services"
 	servicescli "github.com/astralp2p/astral-go/api/services/client"
 	"github.com/astralp2p/astral-go/astral"
@@ -65,7 +67,7 @@ func run(path string) (map[string]bool, error) {
 	admin1 := connect(n1.Endpoint, n1.Token)
 
 	// the provider app on node2, serving one stand-in player op
-	provider, err := apphostcli.New(nil, connect(n2.Endpoint, n2.Token)).Register(ctx, "mod.auth.serve_apps_action")
+	provider, err := apphostcli.New(nil, connect(n2.Endpoint, n2.Token)).Register(ctx, &auth.Permit{Action: "mod.auth.serve_apps_action"})
 	if err != nil {
 		return facts, err
 	}
@@ -171,22 +173,15 @@ func serveProvider(ctx *astral.Context, endpoint, token string) (func(), error) 
 }
 
 func grantDiscovery(ctx *astral.Context, admin *astrald.Client, app *astral.Identity) error {
-	ch, err := admin.QueryChannel(ctx, "apphost.grant", query.Args{
-		"identity": app.String(), "action": services.ServiceDiscoveryAction{}.ObjectType(), "constrained": true,
-	})
-	if err != nil {
-		return err
-	}
-	defer ch.Close()
 	cs := astral.NewBundle()
 	scope := &services.DiscoveryScope{Rules: []*services.DiscoveryRule{{Services: []astral.String8{"player"}}}}
 	if err := cs.Append(scope); err != nil {
 		return err
 	}
-	if err := ch.Send(cs); err != nil {
-		return err
-	}
-	return ch.Switch(channel.ExpectAck, channel.PassErrors, channel.FailOnEOF())
+	return apphostcli.New(nil, admin).Grant(ctx, &apphostapi.GrantRequest{
+		Identity: app,
+		Permits:  []*auth.Permit{{Action: astral.String8(services.ServiceDiscoveryAction{}.ObjectType()), Constraints: cs}},
+	})
 }
 
 // discovered waits until a swarm discovery from the front-end shows provider.

@@ -1,6 +1,7 @@
 package gateway
 
 import (
+	"github.com/astralp2p/astral-go/api/auth"
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astral-go/astral/channel"
 	"github.com/astralp2p/astral-go/lib/routing"
@@ -20,12 +21,12 @@ func (mod *Module) OpNodeConnect(
 	q *routing.IncomingQuery,
 	args opNodeConnectArgs,
 ) (err error) {
-	if !mod.authorizeUseGateway(ctx, q) {
-		return q.Reject()
-	}
-
 	ch := channel.New(q.AcceptRaw(), channel.WithFormats(args.In, args.Out))
 	defer ch.Close()
+
+	if !mod.authorizeUseGateway(ctx, q) {
+		return ch.Send(auth.ErrNotPermitted)
+	}
 
 	target, err := mod.Dir.ResolveIdentity(args.Identity)
 	if err != nil {

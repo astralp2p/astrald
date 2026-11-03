@@ -20,28 +20,32 @@ type opMigrateSessionArgs struct {
 // the migration directly; otherwise it acts as the responder, exchanging ready/switched/
 // resume/done signals with the initiator. Validates session and link state before starting.
 func (mod *Module) OpMigrateSession(ctx *astral.Context, q *routing.IncomingQuery, args opMigrateSessionArgs) error {
-	if !mod.Auth.Authorize(ctx, &auth.AdminNetworkAction{Action: auth.NewAction(q.Caller())}) {
-		return q.Reject()
-	}
-
 	ch := channel.New(q.AcceptRaw(), channel.WithOutputFormat(args.Out))
 	defer ch.Close()
+
+	if !mod.Auth.Authorize(ctx, &auth.AdminNetworkAction{Action: auth.NewAction(q.Caller())}) {
+		return ch.Send(auth.ErrNotPermitted)
+	}
 
 	session, ok := mod.getSession(args.SessionID)
 	if !ok {
 		return ch.Send(astral.Err(nodesmod.ErrSessionNotFound))
 	}
+	link := mod.getSessionLink(session.Nonce)
+	if link == nil {
+		return ch.Send(astral.Err(nodesmod.ErrLinkNotFound))
+	}
+	// why: AdminNetwork admits every swarm node; the responder runs only for the node across the session's link.
+	if !bool(args.Start) && !q.Caller().IsEqual(link.mux.RemoteIdentity()) {
+		return ch.Send(auth.ErrNotPermitted)
+	}
+
 	if !session.IsOpen() {
 		return ch.Send(astral.Err(nodesmod.ErrInvalidSessionState))
 	}
 
 	targetLink := mod.getLinkByID(args.LinkID)
 	if targetLink == nil {
-		return ch.Send(astral.Err(nodesmod.ErrLinkNotFound))
-	}
-
-	link := mod.getSessionLink(session.Nonce)
-	if link == nil {
 		return ch.Send(astral.Err(nodesmod.ErrLinkNotFound))
 	}
 

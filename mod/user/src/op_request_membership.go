@@ -16,20 +16,18 @@ type opRequestMembershipArgs struct {
 // Requires an active contract; applies the swarm join-request policy to the caller before issuing membership.
 // Pushes the resulting signed contract to the local swarm asynchronously.
 func (mod *Module) OpRequestMembership(ctx *astral.Context, q *routing.IncomingQuery, args opRequestMembershipArgs) (err error) {
+	conn := q.AcceptRaw()
+	ch := channel.New(conn, channel.WithFormats(args.In, args.Out))
+	defer ch.Close()
+
 	ctx = ctx.IncludeZone(astral.ZoneNetwork)
 
 	ac := mod.ActiveContract()
 
 	if ac == nil {
 		// We don't have an active contract to invite
-		ch := q.Accept(channel.WithFormats(args.In, args.Out))
-		defer ch.Close()
 		return ch.Send(user.ErrNoActiveContract)
 	}
-
-	conn := q.AcceptRaw()
-	ch := channel.New(conn, channel.WithFormats(args.In, args.Out))
-	defer ch.Close()
 
 	target := q.Caller()
 

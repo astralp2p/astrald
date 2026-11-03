@@ -17,16 +17,16 @@ type opProbeArgs struct {
 // OpProbe probes a single object when args.ID is set, otherwise streams probes
 // for ObjectIDs received over the channel until EOS.
 func (mod *Module) OpProbe(ctx *astral.Context, q *routing.IncomingQuery, args opProbeArgs) (err error) {
+	ch := channel.New(q.AcceptRaw(), channel.WithFormats(args.In, args.Out))
+	defer ch.Close()
+
 	if !mod.Auth.Authorize(ctx, &auth.SeeObjectsAction{
 		Action:   auth.NewAction(q.Caller()),
 		ObjectID: args.ID,
 		Repo:     astral.String8(args.Repo),
 	}) {
-		return q.Reject()
+		return ch.Send(auth.ErrNotPermitted)
 	}
-
-	ch := channel.New(q.AcceptRaw(), channel.WithFormats(args.In, args.Out))
-	defer ch.Close()
 
 	repo := mod.ReadDefault()
 

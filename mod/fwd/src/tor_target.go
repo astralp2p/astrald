@@ -35,7 +35,7 @@ func NewTorTarget(drv tor.Module, addr string, identity *astral.Identity) (*TorT
 func (t *TorTarget) RouteQuery(ctx *astral.Context, q *astral.InFlightQuery, w io.WriteCloser) (io.WriteCloser, error) {
 	conn, err := t.tor.Dial(ctx, t.endpoint)
 	if err != nil {
-		return query.Reject()
+		return query.RejectWithCode(astral.CodeUnavailable)
 	}
 
 	go func() {

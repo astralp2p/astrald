@@ -99,8 +99,8 @@ func TestServiceHandler_AttachPath(t *testing.T) {
 	if !ok {
 		t.Fatalf("got %T, want IncomingQueryMsg", obj)
 	}
-	if msg.QueryID != q.Nonce {
-		t.Errorf("QueryID = %v, want %v", msg.QueryID, q.Nonce)
+	if msg.QueryID == q.Nonce {
+		t.Errorf("QueryID is the query's nonce %v; want a fresh nonce", q.Nonce)
 	}
 
 	// Simulate per-query WS attach: deliver a fake responder conn via pending.attach.
@@ -235,9 +235,117 @@ func TestServiceHandler_OverLongQueryKeepsTheHandler(t *testing.T) {
 		t.Fatalf("client recv after an over-long query: %v", err)
 	}
 	msg, ok := obj.(*apphost.IncomingQueryMsg)
-	if !ok || msg.QueryID != next.Nonce {
-		t.Fatalf("client received %T %v, want the next query %v", obj, obj, next.Nonce)
+	if !ok || msg.Query != astral.String16(next.QueryString) {
+		t.Fatalf("client received %T %v, want the next query %v", obj, obj, next.QueryString)
 	}
+}
+
+// receiveIncoming reads the IncomingQueryMsg the host sends to the registration
+// connection.
+func (rig *inboundTestRig) receiveIncoming(t *testing.T) *apphost.IncomingQueryMsg {
+	t.Helper()
+
+	obj, err := rig.clientCh.Receive()
+	if err != nil {
+		t.Fatalf("client recv: %v", err)
+	}
+	msg, ok := obj.(*apphost.IncomingQueryMsg)
+	if !ok {
+		t.Fatalf("got %T, want IncomingQueryMsg", obj)
+	}
+	return msg
+}
+
+// requireRejected waits for RouteQuery to end with ErrRejected carrying code.
+func requireRejected(t *testing.T, errCh <-chan error, code uint8) {
+	t.Helper()
+
+	select {
+	case err := <-errCh:
+		var rejected *astral.ErrRejected
+		if !errors.As(err, &rejected) {
+			t.Fatalf("expected ErrRejected, got %v", err)
+		}
+		if rejected.Code != code {
+			t.Fatalf("Code = %v, want %v", rejected.Code, code)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("RouteQuery did not return after reject")
+	}
+}
+
+// TestServiceHandler_AttachRefusesTheQueryNonce: the query's nonce is known to its caller, so
+// a token-less connection naming it is answered route_not_found and does not
+// become the responder.
+func TestServiceHandler_AttachRefusesTheQueryNonce(t *testing.T) {
+	rig := newInboundTestRig(t)
+	defer rig.clientCxn.Close()
+
+	q := newQuery()
+	_, errCh := rig.runRouteQuery(q, &nopWriteCloser{})
+	msg := rig.receiveIncoming(t)
+
+	srv, cli := net.Pipe()
+	defer srv.Close()
+	defer cli.Close()
+	attacher := NewGuest(rig.mod, srv)
+
+	reply := make(chan astral.Object, 1)
+	go func() {
+		obj, _ := channel.New(cli).Receive()
+		reply <- obj
+	}()
+
+	if err := attacher.onAttachQueryMsg(astral.NewContext(nil), &apphost.AttachQueryMsg{QueryID: q.Nonce}); err != nil {
+		t.Fatalf("attach: %v", err)
+	}
+
+	select {
+	case obj := <-reply:
+		errMsg, ok := obj.(*apphost.ErrorMsg)
+		if !ok || errMsg.Code != apphost.ErrCodeRouteNotFound {
+			t.Fatalf("attach by the query's nonce answered %v; want route_not_found", obj)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("attach sent no answer")
+	}
+	if attacher.donated.Load() {
+		t.Fatal("attach by the query's nonce donated the connection")
+	}
+
+	pending, ok := rig.mod.pendingInboundQueries.Get(msg.QueryID)
+	if !ok {
+		t.Fatal("the pending query is gone")
+	}
+	pending.reject <- 7
+	requireRejected(t, errCh, 7)
+}
+
+// TestServiceHandler_RejectFromAnotherConnectionIsIgnored: a reject belongs to the
+// registration connection that was told about the query. The same QueryID on
+// another connection does not reach the query.
+func TestServiceHandler_RejectFromAnotherConnectionIsIgnored(t *testing.T) {
+	rig := newInboundTestRig(t)
+	defer rig.clientCxn.Close()
+
+	_, errCh := rig.runRouteQuery(newQuery(), &nopWriteCloser{})
+	msg := rig.receiveIncoming(t)
+	ctx := astral.NewContext(nil)
+
+	srv, cli := net.Pipe()
+	defer srv.Close()
+	defer cli.Close()
+	other := NewGuest(rig.mod, srv)
+	if err := other.onRejectIncomingMsg(ctx, &apphost.RejectIncomingMsg{QueryID: msg.QueryID, Code: 9}); err != nil {
+		t.Fatalf("reject from another connection: %v", err)
+	}
+
+	registration := NewGuestFromChannel(rig.mod, rig.handler.ch, nil, ModeBinary)
+	if err := registration.onRejectIncomingMsg(ctx, &apphost.RejectIncomingMsg{QueryID: msg.QueryID, Code: 7}); err != nil {
+		t.Fatalf("reject from the registration connection: %v", err)
+	}
+
+	requireRejected(t, errCh, 7)
 }
 
 // Drain ensures the test file's imports are used.

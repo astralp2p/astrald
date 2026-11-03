@@ -2,6 +2,7 @@ package assets
 
 import (
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/astralp2p/astrald/resources"
@@ -53,6 +54,30 @@ func TestCoreAssetsLoadYAMLMissing(t *testing.T) {
 	var out yamlConfig
 	if err := a.LoadYAML("missing", &out); !errors.Is(err, resources.ErrNotFound) {
 		t.Fatalf("LoadYAML(missing) error = %v, want %v", err, resources.ErrNotFound)
+	}
+}
+
+func TestCoreAssetsLoadYAMLSyntaxError(t *testing.T) {
+	res := resources.NewMemResources()
+	res.Write("node.yaml", []byte("a: [1\n"))
+	a := &CoreAssets{res: res}
+
+	var out yamlConfig
+	err := a.LoadYAML("node", &out)
+	if err == nil || !strings.HasPrefix(err.Error(), "node.yaml: ") {
+		t.Fatalf("LoadYAML(node) error = %v, want an error prefixed %q", err, "node.yaml: ")
+	}
+}
+
+func TestCoreAssetsLoadYAMLUnknownKey(t *testing.T) {
+	res := resources.NewMemResources()
+	res.Write("node.yaml", []byte("a: 1\nb: 2\n"))
+	a := &CoreAssets{res: res}
+
+	var out yamlConfig
+	err := a.LoadYAML("node", &out)
+	if err == nil || !strings.HasPrefix(err.Error(), "node.yaml: ") || !strings.Contains(err.Error(), "field b not found") {
+		t.Fatalf("LoadYAML(node) error = %v, want an error naming node.yaml and the key b", err)
 	}
 }
 

@@ -1,6 +1,7 @@
 package kcp
 
 import (
+	"errors"
 	"fmt"
 	kcpmod "github.com/astralp2p/astrald/mod/kcp"
 	"strings"
@@ -10,6 +11,7 @@ import (
 	"github.com/astralp2p/astral-go/astral/log"
 	"github.com/astralp2p/astrald/core"
 	"github.com/astralp2p/astrald/core/assets"
+	"github.com/astralp2p/astrald/resources"
 )
 
 type Loader struct{}
@@ -23,7 +25,9 @@ func (Loader) Load(node astral.Node, assets assets.Assets, l *log.Logger) (core.
 		config: defaultConfig(),
 	}
 
-	_ = assets.LoadYAML(kcpmod.ModuleName, &mod.config)
+	if err := assets.LoadYAML(kcpmod.ModuleName, &mod.config); err != nil && !errors.Is(err, resources.ErrNotFound) {
+		return nil, err
+	}
 
 	mod.router.AddStructPrefix(mod, "Op")
 
