@@ -191,8 +191,12 @@ class TestShippedPlans(Invariants, unittest.TestCase):
              ("local", "import-user-software-key")])
 
     def test_a_local_test_never_enters_a_vm_world(self):
-        worlds = plan(self.tests, ["mcp-peer", "tor-link"])
-        self.assertEqual([w.kind for w in worlds], ["local", "vm"])
+        # why app-query and services-app-call: each serves an app on the
+        # host, which a node in a VM cannot dial
+        for local in ("mcp-peer", "app-query", "services-app-call"):
+            with self.subTest(test=local):
+                worlds = plan(self.tests, [local, "tor-link"])
+                self.assertEqual([w.kind for w in worlds], ["local", "vm"])
         with self.assertRaisesRegex(PlanError, "local only"):
             plan(self.tests, ["mcp-peer"], vm=True)
         with self.assertRaisesRegex(PlanError, "local only"):
@@ -426,13 +430,14 @@ class TestConfigPlans(unittest.TestCase):
                                     "tor config, which nat-punch overrides"):
             plan(tests, ["nat-punch"])
 
-    def test_app_query_with_a_gateway_override_forks_from_gateway_relay(self):
+    def test_an_observer_with_a_gateway_override_forks_from_gateway_relay(self):
         tests = load_all(TESTS / "e2e")
-        tests["app-query"].config = {"node2": {"gateway": {"x": 1}}}
-        worlds = plan(tests, ["app-query", "gateway-relay"])
+        tests["sign-contract-guard"].config = {"node2": {"gateway": {"x": 1}}}
+        worlds = plan(tests, ["sign-contract-guard", "gateway-relay"])
         self.assertEqual([(w.kind, [s.test for s in w.steps if s.kind == "test"])
                           for w in worlds],
-                         [("local", ["app-query"]), ("vm", ["gateway-relay"])])
+                         [("local", ["sign-contract-guard"]),
+                          ("vm", ["gateway-relay"])])
 
     def test_attach_refuses_an_override(self):
         tests = {"a": fake(config=mcp(""))}

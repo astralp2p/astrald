@@ -52,7 +52,8 @@ external_registration_sweep_interval = "1s"
   but its own descendants: it expels a node, purges a repository, moves a
   node behind NAT, or claims a node another test needs unclaimed.
 - **`local_only`** is for a test that reads `mcp_url`, `authority_url`,
-  `serves_mcp`, a node `root` or a host path, or that restarts a node.
+  `serves_mcp`, a node `root` or a host path, that serves an app or an
+  authority on the host for a node to dial, or that restarts a node.
 - **`facts`** is a contract. An oracle may read only facts declared on its
   `after` chain (`selftest/test_shipped.py` checks), and the agent driver
   asks the operator for exactly these.

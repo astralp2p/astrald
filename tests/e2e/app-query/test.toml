@@ -1,4 +1,5 @@
 nodes   = ["node1", "node2"]
 timeout = 180
 after   = "adopt-node"
+local_only = "serves its app on a host socket that node1 dials"
 facts   = ["payload", "answered_id"]
