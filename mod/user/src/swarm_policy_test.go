@@ -15,6 +15,7 @@ import (
 	"github.com/astralp2p/astral-go/astral/channel"
 	"github.com/astralp2p/astral-go/astral/log"
 	"github.com/astralp2p/astral-go/lib/query"
+	"github.com/astralp2p/astrald/lib/policyconf"
 )
 
 // swarmDelegate stands in for the node routing a question to a delegate. It
@@ -186,11 +187,12 @@ func (n *swarmLeaf) Create(*astral.Context, string) (tree.Node, error) {
 }
 
 // boundSwarmModule binds the join delegate value to leaf as LoadDependencies
-// does.
+// does, under the accept_all config value.
 func boundSwarmModule(t *testing.T, leaf *swarmLeaf, node astral.Node) *Module {
 	t.Helper()
 
 	mod := &Module{node: node, log: log.New(nil)}
+	mod.file.Policies.SwarmJoin = policyconf.Setting{Mode: policyconf.AcceptAll}
 	mod.policy.SwarmJoin.NoLocal = true
 	if err := mod.policy.SwarmJoin.Bind(astral.NewContext(nil), leaf); err != nil {
 		t.Fatalf("bind: %v", err)
@@ -205,8 +207,8 @@ func joinAllowed(t *testing.T, mod *Module) bool {
 	return err == nil && bool(dec.Allow)
 }
 
-// The tree value is the only state: a delegate written there is asked at once
-// and after a reload, and clearing it restores accept-all.
+// The tree value outranks the config value: a delegate written there is asked
+// at once and after a reload, and clearing it restores the config's accept_all.
 func TestSwarmJoinPolicyFollowsTheTreeValue(t *testing.T) {
 	ctx := astral.NewContext(nil)
 	leaf := &swarmLeaf{}
@@ -247,5 +249,33 @@ func TestSwarmJoinPolicyIgnoresAnUnsavedDelegate(t *testing.T) {
 	}
 	if !joinAllowed(t, mod) {
 		t.Fatal("an unsaved delegate was applied")
+	}
+}
+
+// TestSwarmPoliciesFollowTheConfig: with no stored delegate the code default
+// declines, and a config value selects accept_all or a delegate.
+func TestSwarmPoliciesFollowTheConfig(t *testing.T) {
+	ctx := astral.NewContext(nil)
+	join := &user.SwarmJoinRequest{Requester: astral.GenerateIdentity()}
+	invite := &user.SwarmInviteRequest{}
+
+	mod := &Module{file: defaultFileConfig, log: log.New(nil)}
+	if dec, err := mod.GetSwarmJoinPolicy()(ctx, join); err != nil || dec.Allow {
+		t.Fatalf("default join decision %+v, %v; want a refusal", dec, err)
+	}
+	if dec, err := mod.GetSwarmInvitePolicy()(ctx, invite); err != nil || dec.Allow {
+		t.Fatalf("default invite decision %+v, %v; want a refusal", dec, err)
+	}
+
+	mod.file.Policies.SwarmInvite = policyconf.Setting{Mode: policyconf.AcceptAll}
+	if dec, err := mod.GetSwarmInvitePolicy()(ctx, invite); err != nil || !dec.Allow {
+		t.Fatalf("accept_all invite decision %+v, %v; want admission", dec, err)
+	}
+
+	delegated := &Module{node: newSwarmDelegate(&user.SwarmJoinDecision{Allow: true}), log: log.New(nil)}
+	delegated.Dir = &resolvingDir{id: astral.GenerateIdentity()}
+	delegated.file.Policies.SwarmJoin = policyconf.Setting{Delegate: &policyconf.DelegateSetting{Identity: "cp", Operation: "cp.approve_join"}}
+	if dec, err := delegated.GetSwarmJoinPolicy()(ctx, join); err != nil || !dec.Allow {
+		t.Fatalf("config delegate decision %+v, %v; want the delegate's admission", dec, err)
 	}
 }

@@ -1,6 +1,9 @@
 package user
 
 import (
+	"fmt"
+
+	"github.com/astralp2p/astral-go/api/apphost"
 	"github.com/astralp2p/astral-go/api/policy"
 	"github.com/astralp2p/astral-go/api/tree"
 	"github.com/astralp2p/astral-go/api/user"
@@ -11,9 +14,9 @@ import (
 // policyPath is where the user module persists its delegates.
 const policyPath = "/mod/user/policy"
 
-// policyConfig is bound to the tree at policyPath. An unset value selects the
-// bundled policy: every join request, every invitation and every valid
-// contract accepted.
+// policyConfig is bound to the tree at policyPath. An unset SwarmJoin or
+// SwarmInvite selects the config value; see GetSwarmJoinPolicy. An unset
+// ContractAccept selects the bundled policy: every valid contract accepted.
 type policyConfig struct {
 	SwarmJoin      tree.Value[*policy.Delegate]
 	SwarmInvite    tree.Value[*policy.Delegate]
@@ -21,26 +24,72 @@ type policyConfig struct {
 }
 
 // GetSwarmJoinPolicy returns the policy user.request_membership applies: the
-// delegate the tree names, or AcceptAllJoins when none is set.
+// delegate the tree names; else the policies.swarm_join config value, whose
+// code default is reject_all.
 //
 // why derived on each call: the tree value is the only state, so a setter
 // writes it and nothing else, and a reload selects the same policy.
+// why a config delegate that does not resolve declines: an unknown delegate
+// has decided nothing.
 func (mod *Module) GetSwarmJoinPolicy() usermod.SwarmJoinPolicy {
-	d := mod.policy.SwarmJoin.Get()
-	if d.IsZero() {
+	if d := mod.policy.SwarmJoin.Get(); !d.IsZero() {
+		return mod.SwarmJoinPolicyDelegated(d)
+	}
+
+	setting := mod.file.Policies.SwarmJoin
+	switch {
+	case setting.Delegate != nil:
+		d, err := setting.ResolveDelegate(mod.Dir.ResolveIdentity)
+		if err != nil {
+			return func(*astral.Context, *user.SwarmJoinRequest) (*user.SwarmJoinDecision, error) { return nil, err }
+		}
+		return mod.SwarmJoinPolicyDelegated(d)
+	case setting.Accepts():
 		return usermod.AcceptAllJoins
 	}
-	return mod.SwarmJoinPolicyDelegated(d)
+	return usermod.RejectAllJoins
 }
 
 // GetSwarmInvitePolicy returns the policy user.accept_membership applies: the
-// delegate the tree names, or AcceptAllInvites when none is set.
+// delegate the tree names; else the policies.swarm_invite config value, whose
+// code default is reject_all.
 func (mod *Module) GetSwarmInvitePolicy() usermod.SwarmInvitePolicy {
-	d := mod.policy.SwarmInvite.Get()
-	if d.IsZero() {
+	if d := mod.policy.SwarmInvite.Get(); !d.IsZero() {
+		return mod.SwarmInvitePolicyDelegated(d)
+	}
+
+	setting := mod.file.Policies.SwarmInvite
+	switch {
+	case setting.Delegate != nil:
+		d, err := setting.ResolveDelegate(mod.Dir.ResolveIdentity)
+		if err != nil {
+			return func(*astral.Context, *user.SwarmInviteRequest) (*user.SwarmInviteDecision, error) { return nil, err }
+		}
+		return mod.SwarmInvitePolicyDelegated(d)
+	case setting.Accepts():
 		return usermod.AcceptAllInvites
 	}
-	return mod.SwarmInvitePolicyDelegated(d)
+	return usermod.RejectAllInvites
+}
+
+// SetPolicyDelegate stores d as the delegate of the named policy, or clears it
+// when d is nil.
+func (mod *Module) SetPolicyDelegate(ctx *astral.Context, name string, d *policy.Delegate) error {
+	var v *tree.Value[*policy.Delegate]
+	switch name {
+	case apphost.PolicySwarmJoin:
+		v = &mod.policy.SwarmJoin
+	case apphost.PolicySwarmInvite:
+		v = &mod.policy.SwarmInvite
+	case apphost.PolicyContractAccept:
+		v = &mod.policy.ContractAccept
+	default:
+		return fmt.Errorf("unknown user policy: %v", name)
+	}
+	if d == nil {
+		return v.Clear(ctx)
+	}
+	return v.Set(ctx, d)
 }
 
 // GetContractAcceptPolicy returns the policy user.accept_contract applies: the

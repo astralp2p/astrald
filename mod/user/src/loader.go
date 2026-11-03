@@ -20,9 +20,10 @@ func (Loader) Load(node astral.Node, assets assets.Assets, log *log.Logger) (cor
 		log:    log,
 		assets: assets,
 		ready:  make(chan struct{}),
+		file:   defaultFileConfig,
 	}
 
-	if err := assets.LoadYAML(user.ModuleName, &mod.config); err != nil && !errors.Is(err, resources.ErrNotFound) {
+	if err := assets.LoadYAML(user.ModuleName, &mod.file); err != nil && !errors.Is(err, resources.ErrNotFound) {
 		return nil, err
 	}
 

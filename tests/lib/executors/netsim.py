@@ -35,6 +35,7 @@ from pathlib import Path
 
 from lib.build import query_binary
 from lib.executors import Executor, ExecutorError
+from lib.nodeconfig import E2E_GATE_YAML, USER_YAML
 
 TESTS = Path(__file__).resolve().parent.parent.parent
 APPHOST_PORT = 8625          # the guest's apphost, inside netns priv when NAT'd
@@ -399,7 +400,11 @@ listen:
 bind_http: ""
 tokens:
   "{token}": localnode
+{E2E_GATE_YAML}policies:
+  app_register: accept_all
 EOF
+cat > {GUEST_ROOT}/config/user.yaml <<'EOF'
+{USER_YAML}EOF
 systemctl restart astrald""")
             self._nodes[vm] = {"token": token}
 

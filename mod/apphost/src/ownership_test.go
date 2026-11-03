@@ -24,7 +24,9 @@ import (
 // verdict, and the recorder holding what it was asked.
 func ownershipModule(verdict bool) (*Module, *recordingAuth) {
 	authority := &recordingAuth{verdict: verdict}
-	return &Module{Deps: Deps{Auth: authority}, log: log.New(nil)}, authority
+	mod := &Module{Deps: Deps{Auth: authority}, log: log.New(nil)}
+	mod.config.Gate = openGate
+	return mod, authority
 }
 
 // enRouteQuery seeds one en-route entry owned by owner - nil for a token-less
@@ -536,4 +538,11 @@ func TestRegisterHandlerRecordsTheSessionOwner(t *testing.T) {
 	if !handlers[0].Identity.IsEqual(named) {
 		t.Fatalf("the handler answers for %v; want the named caller %v", handlers[0].Identity, named)
 	}
+}
+
+// openGate admits every op in every state, with a token or without, so a test
+// of another rule passes the gate.
+var openGate = Gate{
+	Tokenless: []string{gateAny},
+	States:    GateStates{Fresh: []string{gateAny}, Unclaimed: []string{gateAny}, Claimed: []string{gateAny}},
 }

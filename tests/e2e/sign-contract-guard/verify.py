@@ -37,7 +37,7 @@ EXPECTED = {
 }
 
 # The probe apphost refuses before the guard: a session without a token on a
-# claimed node reaches the anonymous allowlist only.
+# claimed node reaches the gate's tokenless list only.
 DENIED = ("anonymous asks the node key",)
 
 # What a refusal must not read like — each means the call never got a verdict.
@@ -64,7 +64,7 @@ async def main():
         r = probes[name]
         assert r["refused"] and r["detail"].startswith("Denied"), (
             f"{name}: {r['detail']!r} — apphost did not refuse a token-less "
-            "session an op off the anonymous allowlist")
+            "session an op off the gate's tokenless list")
 
     for name, text in EXPECTED.items():
         r = probes[name]

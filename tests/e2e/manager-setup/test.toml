@@ -1,0 +1,5 @@
+env     = "node"
+start   = "null"
+nodes   = ["managed"]
+drivers = ["script"]
+timeout = 120

@@ -30,6 +30,9 @@ func (Loader) Load(node astral.Node, assets assets.Assets, log *log.Logger) (cor
 	if err := assets.LoadYAML(apphost.ModuleName, &mod.config); err != nil && !errors.Is(err, resources.ErrNotFound) {
 		return nil, err
 	}
+	if err := mod.config.checkRemovedKeys(); err != nil {
+		return nil, err
+	}
 
 	mod.resolveAddrs()
 

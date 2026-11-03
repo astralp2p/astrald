@@ -110,7 +110,8 @@ func TestSetAppRegisterPolicyRefusesHalfADelegate(t *testing.T) {
 	}
 }
 
-// Both empty clears the delegate, which restores accept-all.
+// Both empty clears the delegate, which restores the config value, here the
+// code default reject_all.
 func TestSetAppRegisterPolicyClearsTheDelegate(t *testing.T) {
 	mod := policySetter(true)
 	d := &policy.Delegate{Identity: astral.GenerateIdentity(), Operation: "control.decide"}
@@ -127,7 +128,7 @@ func TestSetAppRegisterPolicyClearsTheDelegate(t *testing.T) {
 	if !mod.policy.AppRegister.Get().IsZero() {
 		t.Fatal("an empty set did not clear the delegate")
 	}
-	if !registerAsk(astral.NewContext(nil), mod.GetRegisterAppPolicy()) {
-		t.Fatal("clearing the delegate did not restore accept-all")
+	if registerAsk(astral.NewContext(nil), mod.GetRegisterAppPolicy()) {
+		t.Fatal("clearing the delegate did not restore reject_all")
 	}
 }

@@ -56,6 +56,13 @@ type Module struct {
 	// mode selects refuse-all for grant requests. GetRegisterAppPolicy
 	// and GetGrantRequestPolicy read it on every decision.
 	policy policyConfig
+
+	// appointment persists the manager apphost.register_manager appointed.
+	appointment appointmentConfig
+
+	// mu makes the fresh check and the appointment one transition; see
+	// OpRegisterManager.
+	mu sync.Mutex
 }
 
 func (mod *Module) Run(ctx *astral.Context) error {
@@ -65,9 +72,9 @@ func (mod *Module) Run(ctx *astral.Context) error {
 	var workerCount = mod.config.Workers
 
 	mod.conns = mod.listen(ctx)
-	mod.log.Log("anonymous sessions: allowed %v, unclaimed ops %v, claimed ops %v",
-		mod.config.AllowAnonymous, mod.config.AnonymousAllowlist.Unclaimed,
-		mod.config.AnonymousAllowlist.Claimed)
+	mod.log.Log("gate: tokenless ops %v, fresh ops %v, unclaimed ops %v, claimed ops %v",
+		mod.config.Gate.Tokenless, mod.config.Gate.States.Fresh,
+		mod.config.Gate.States.Unclaimed, mod.config.Gate.States.Claimed)
 
 	// spawn workers
 	mod.log.Logv(2, "spawning %v workers", workerCount)

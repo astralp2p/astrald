@@ -13,7 +13,8 @@ import (
 
 type opSetSwarmPolicyArgs struct {
 	// Identity and Operation name the delegate that decides. Both empty
-	// restores the bundled accept-all policy; one alone is an error.
+	// clears the delegate, which restores the config value, or the bundled
+	// accept-all for contract accept; one alone is an error.
 	Identity  string
 	Operation string
 	// Timeout bounds one question. Zero waits policy.MaxTimeout; above it is
@@ -41,8 +42,8 @@ func (mod *Module) OpSetContractAcceptPolicy(ctx *astral.Context, q *routing.Inc
 	return mod.setSwarmPolicy(ctx, q, args, &mod.policy.ContractAccept)
 }
 
-// setSwarmPolicy admits a caller holding AdminManageApps, then writes the
-// delegate args name into v, or clears v when args name none.
+// setSwarmPolicy admits a caller holding AdminManageApps or the manager, then
+// writes the delegate args name into v, or clears v when args name none.
 //
 // why AdminManageApps and not AdminSwarm: AdminSwarm is held by the user of the
 // active contract, and a node with none — the node an invite or contract
@@ -57,7 +58,7 @@ func (mod *Module) setSwarmPolicy(
 	ch := channel.New(q.AcceptRaw(), channel.WithFormats(args.In, args.Out))
 	defer ch.Close()
 
-	if !mod.Auth.Authorize(ctx, &auth.AdminManageAppsAction{Action: auth.NewAction(q.Caller())}) {
+	if !mod.maySetPolicies(ctx, q.Caller()) {
 		return ch.Send(auth.ErrNotPermitted)
 	}
 
@@ -65,7 +66,7 @@ func (mod *Module) setSwarmPolicy(
 		if err := v.Clear(ctx); err != nil {
 			return ch.Send(astral.Err(err))
 		}
-		mod.log.Logv(1, "%v restored to accept-all", q.QueryString())
+		mod.log.Logv(1, "%v delegate cleared", q.QueryString())
 		return ch.Send(&astral.Ack{})
 	}
 
@@ -95,4 +96,16 @@ func (mod *Module) newDelegate(name, op string, timeout astral.Duration) (*polic
 
 	d := &policy.Delegate{Identity: id, Operation: astral.String8(op), Timeout: timeout}
 	return d, d.Validate()
+}
+
+// maySetPolicies reports whether caller may select a policy: a holder of
+// AdminManageApps, or the manager.
+//
+// why the manager: the manager answers the policies it was appointed with, and
+// need not hold AdminManageApps; see apphost.register_manager.
+func (mod *Module) maySetPolicies(ctx *astral.Context, caller *astral.Identity) bool {
+	if manager := mod.Apphost.Manager(); !manager.IsZero() && caller.IsEqual(manager) {
+		return true
+	}
+	return mod.Auth.Authorize(ctx, &auth.AdminManageAppsAction{Action: auth.NewAction(caller)})
 }

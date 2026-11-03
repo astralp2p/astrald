@@ -16,7 +16,7 @@ type opArgsArgs struct {
 }
 
 // why: no action gates this op; it lists op names and arguments and changes no state.
-// The same handler serves .spec (loader.go); see AnonymousAllowlist in mod/apphost/src/config.go.
+// The same handler serves .spec (loader.go); see Gate in mod/apphost/src/config.go.
 func (mod *Module) OpSpec(ctx *astral.Context, q *routing.IncomingQuery, args opArgsArgs) (err error) {
 	ch := channel.New(q.AcceptRaw(), channel.WithOutputFormat(args.Out))
 	defer ch.Close()

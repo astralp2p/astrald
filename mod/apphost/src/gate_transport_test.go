@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/astralp2p/astral-go/api/apphost"
+	"github.com/astralp2p/astral-go/api/user"
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astral-go/astral/channel"
 	"github.com/astralp2p/astral-go/astral/log"
@@ -54,16 +55,13 @@ func (n *routeRecorder) reached(op string) bool {
 	return false
 }
 
-// gateModule is an apphost module on a node that is claimed or not, with the
-// allowlist of withAllowlist.
-func gateModule(claimed bool) (*Module, *routeRecorder) {
+// gateModule is an apphost module with the default gate on a node in state.
+func gateModule(t *testing.T, state string) (*Module, *routeRecorder) {
 	node := &routeRecorder{id: astral.GenerateIdentity()}
-	mod := withAllowlist(&Module{node: node, log: log.New(nil)})
+	mod := stateModule(t, state)
+	mod.node = node
+	mod.log = log.New(nil)
 	mod.Dir = namelessDir{}
-	mod.User = &stubUser{ready: closedChan()}
-	if claimed {
-		mod.User = &stubUser{id: astral.GenerateIdentity(), ready: closedChan()}
-	}
 	return mod, node
 }
 
@@ -118,8 +116,9 @@ func askOverWS(t *testing.T, mod *Module, origin, op string) astral.Object {
 }
 
 // TestGateConfinesTokenLessSessions: over IPC and WebSocket, a token-less
-// session reaches routing with an op of the active list and is refused every
-// other op with denied before routing, whatever the WebSocket Origin.
+// session reaches routing with an op both the tokenless list and the state list
+// name, and is refused every other op with denied before routing, whatever the
+// WebSocket Origin.
 func TestGateConfinesTokenLessSessions(t *testing.T) {
 	const anyOrigin = "https://evil.example"
 
@@ -127,26 +126,28 @@ func TestGateConfinesTokenLessSessions(t *testing.T) {
 		name      string
 		transport string
 		origin    string
-		claimed   bool
+		state     string
 		op        string
 		admitted  bool
 	}{
-		{"ipc, unclaimed, listed op", "ipc", "", false, "user.info", true},
-		{"ipc, unclaimed, unlisted op", "ipc", "", false, "apphost.create_token", false},
-		{"ipc, claimed, listed op", "ipc", "", true, "apphost.register", true},
-		{"ipc, claimed, unclaimed-only op", "ipc", "", true, "user.info", false},
-		{"ipc, claimed, unlisted op", "ipc", "", true, "messaging.create_mailbox", false},
+		{"ipc, fresh, listed op", "ipc", "", user.StateFresh, "apphost.register_manager", true},
+		{"ipc, fresh, tokenless op of another state", "ipc", "", user.StateFresh, "apphost.register", false},
+		{"ipc, fresh, unlisted op", "ipc", "", user.StateFresh, "apphost.create_token", false},
+		{"ipc, unclaimed, listed op", "ipc", "", user.StateUnclaimed, "apphost.register", true},
+		{"ipc, unclaimed, token-only op", "ipc", "", user.StateUnclaimed, "user.bootstrap", false},
+		{"ipc, claimed, listed op", "ipc", "", user.StateClaimed, "user.info", true},
+		{"ipc, claimed, unlisted op", "ipc", "", user.StateClaimed, "messaging.create_mailbox", false},
 
-		{"ws, no origin, unclaimed, listed op", "ws", "", false, "user.info", true},
-		{"ws, any origin, unclaimed, listed op", "ws", anyOrigin, false, "user.info", true},
-		{"ws, any origin, unclaimed, unlisted op", "ws", anyOrigin, false, "apphost.create_token", false},
-		{"ws, any origin, claimed, listed op", "ws", anyOrigin, true, "apphost.register", true},
-		{"ws, any origin, claimed, unlisted op", "ws", anyOrigin, true, "apphost.create_token", false},
+		{"ws, no origin, fresh, listed op", "ws", "", user.StateFresh, "user.info", true},
+		{"ws, any origin, fresh, listed op", "ws", anyOrigin, user.StateFresh, "apphost.register_manager", true},
+		{"ws, any origin, fresh, unlisted op", "ws", anyOrigin, user.StateFresh, "apphost.create_token", false},
+		{"ws, any origin, claimed, listed op", "ws", anyOrigin, user.StateClaimed, "apphost.register", true},
+		{"ws, any origin, claimed, unlisted op", "ws", anyOrigin, user.StateClaimed, "apphost.create_token", false},
 	}
 
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			mod, node := gateModule(c.claimed)
+			mod, node := gateModule(t, c.state)
 
 			var reply astral.Object
 			if c.transport == "ipc" {

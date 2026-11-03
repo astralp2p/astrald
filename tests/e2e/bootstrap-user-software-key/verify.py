@@ -22,7 +22,7 @@ async def main():
     async with await astral.connect(n1["endpoint"], token=user_token) as c:
         who = await c.apphost.whoami()
         assert str(who) == user_id, f"whoami {who} != user {user_id}"
-        info = await c.user.info()          # raises if no active contract
+        info = await c.user.info()
         assert str(info.user_id) == user_id, (
             f"contract issuer {info.user_id} != user {user_id}")
         assert str(info.node_id) == n1["identity"], (

@@ -1,8 +1,9 @@
 # token-less-setup — a session without a token sets up a node and nothing else
 
-A session without a token is confined to apphost's anonymous allowlist. Before
-the claim it previews and claims the node, or joins a swarm from the new node;
-after the claim it reaches `user.info` and `apphost.register` only.
+A session without a token is confined to the gate's `tokenless` list, here the
+E2E list (`tests/lib/nodeconfig.py`). Before the claim it previews and claims
+the node, or joins a swarm from the new node; after the claim it reaches the
+`tokenless` ops only.
 
 - **env** node · **start** `null` · **saves** —
 - **driver** `script.py` — on `claimer`, with no token: the step-by-step setup
@@ -15,14 +16,14 @@ after the claim it reaches `user.info` and `apphost.register` only.
   `user.join`; with joiner's token, a third `user.join`. Record what came
   back.
 - **oracle** `verify.py` — the unclaimed node refused every step-by-step op
-  with `denied` and answered `user.info` with code 2, the previewed identity is
-  the claimed one, the
-  token authenticates as the User, the claimed node answers `user.info` and
-  `apphost.register` and refuses the rest with `denied`, the registered app
+  with `denied` and answered `user.info` with state `fresh`, the previewed
+  identity is the claimed one, the
+  token authenticates as the User, the claimed node answers `user.info`,
+  `apphost.register` and `user.derive_identity` and refuses the rest with
+  `denied`, the registered app
   holds what it asked for, an empty caller from the app's session reads as the
   app, and `joiner` holds a contract from the same User, after which a
-  token-less join is refused with `denied` and a join with joiner's token is
-  rejected with code 2.
+  join with or without a token answers `node already claimed`.
 
 ## What this proves that the unit tests do not
 
@@ -41,5 +42,5 @@ chain's nodes untouched.
 ## Why the endpoints are added with node tokens
 
 Loopback has no discovery, so each node learns the other's endpoint with
-`nodes.add_endpoint`. That op is off the anonymous allowlist; the plumbing runs
+`nodes.add_endpoint`. That op is off the `tokenless` list; the plumbing runs
 with each node's token, and every step under test runs without one.

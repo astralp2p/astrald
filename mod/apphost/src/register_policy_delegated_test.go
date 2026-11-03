@@ -14,6 +14,7 @@ import (
 	"github.com/astralp2p/astral-go/astral/channel"
 	"github.com/astralp2p/astral-go/astral/log"
 	"github.com/astralp2p/astral-go/lib/query"
+	"github.com/astralp2p/astrald/lib/policyconf"
 	apphostmod "github.com/astralp2p/astrald/mod/apphost"
 )
 
@@ -185,11 +186,13 @@ func (n *policyLeaf) Create(*astral.Context, string) (tree.Node, error) {
 	return nil, tree.ErrUnsupported
 }
 
-// boundPolicyModule binds the delegate value to leaf as LoadDependencies does.
+// boundPolicyModule binds the delegate value to leaf as LoadDependencies does,
+// under the accept_all config value.
 func boundPolicyModule(t *testing.T, leaf *policyLeaf, node *delegateNode) *Module {
 	t.Helper()
 
 	mod := &Module{config: defaultConfig, log: log.New(nil), node: node}
+	mod.config.Policies.AppRegister = policyconf.Setting{Mode: policyconf.AcceptAll}
 	mod.policy.AppRegister.NoLocal = true
 	if err := mod.policy.AppRegister.Bind(astral.NewContext(nil), leaf); err != nil {
 		t.Fatalf("bind: %v", err)
@@ -197,8 +200,8 @@ func boundPolicyModule(t *testing.T, leaf *policyLeaf, node *delegateNode) *Modu
 	return mod
 }
 
-// The tree value is the only state: a delegate written there is asked at once
-// and after a reload, and clearing it restores accept-all.
+// The tree value outranks the config value: a delegate written there is asked
+// at once and after a reload, and clearing it restores the config's accept_all.
 func TestRegisterAppPolicyFollowsTheTreeValue(t *testing.T) {
 	ctx := astral.NewContext(nil)
 	leaf := &policyLeaf{}
@@ -242,5 +245,28 @@ func TestRegisterAppPolicyIgnoresAnUnsavedDelegate(t *testing.T) {
 	}
 	if !registerAsk(ctx, mod.GetRegisterAppPolicy()) {
 		t.Fatal("an unsaved delegate was applied")
+	}
+}
+
+// TestRegisterAppPolicyFollowsTheConfig: with no stored delegate the code
+// default refuses, and a config value selects accept_all or a delegate.
+func TestRegisterAppPolicyFollowsTheConfig(t *testing.T) {
+	ctx := astral.NewContext(nil)
+
+	mod := &Module{config: defaultConfig, log: log.New(nil)}
+	if registerAsk(ctx, mod.GetRegisterAppPolicy()) {
+		t.Fatal("the code default admitted a registration")
+	}
+
+	mod.config.Policies.AppRegister = policyconf.Setting{Mode: policyconf.AcceptAll}
+	if !registerAsk(ctx, mod.GetRegisterAppPolicy()) {
+		t.Fatal("accept_all refused a registration")
+	}
+
+	delegated := &Module{config: defaultConfig, log: log.New(nil), node: refusingNode()}
+	delegated.Dir = &namingDir{aliases: map[string]*astral.Identity{"cp": astral.GenerateIdentity()}}
+	delegated.config.Policies.AppRegister = policyconf.Setting{Delegate: &policyconf.DelegateSetting{Identity: "cp", Operation: "cp.approve_app"}}
+	if registerAsk(ctx, delegated.GetRegisterAppPolicy()) {
+		t.Fatal("a config delegate's refusal was not applied")
 	}
 }
