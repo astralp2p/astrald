@@ -19,6 +19,7 @@ override, merged key by key on top of what is built here.
 """
 import fcntl
 import json
+import re
 import socket
 import tempfile
 from dataclasses import dataclass
@@ -89,6 +90,11 @@ AUTH_ACTIONS = [
     "mod.messaging.receive_action",
     "mod.messaging.read_mailbox_action",
 ]
+
+
+# the characters a config file escapes although JSON writes them raw: those
+# outside YAML's printable set, and the ones YAML reads as a line break
+YAML_ESCAPED = re.compile("[\x7f-\x9f\u2028\u2029\ufffe\uffff]")
 
 
 @dataclass
@@ -217,13 +223,19 @@ def config_text(doc: dict) -> str:
     why JSON: the harness is stdlib-only and has no YAML writer, and JSON is
     YAML. astrald reads module config with gopkg.in/yaml.v2
     (core/assets LoadYAML), which parses it as it parses block YAML.
-    note: every module ignores a LoadYAML error and runs on its defaults, so a
-    file it cannot parse reads as a node that ignores the harness.
+    note: LoadYAML unmarshals strictly, so a file it cannot parse, or one
+    that names a key the module does not have, stops the node at startup
+    (core/modules.go).
     why ensure_ascii off: an escaped non-BMP character is a surrogate pair,
     which yaml.v2 refuses ("invalid Unicode character escape code"); YAML
     takes the character itself. NaN and infinity are not JSON at all.
+    why YAML_ESCAPED is escaped still: yaml.v2 refuses a raw DEL, C1 control,
+    U+FFFE or U+FFFF ("control characters are not allowed"), and reads a raw
+    NEL, U+2028 or U+2029 as a line break, folding the text around it. JSON's
+    \\u escape is YAML's too.
     """
-    return json.dumps(doc, indent=2, ensure_ascii=False, allow_nan=False) + "\n"
+    text = json.dumps(doc, indent=2, ensure_ascii=False, allow_nan=False)
+    return YAML_ESCAPED.sub(lambda m: f"\\u{ord(m.group()):04x}", text) + "\n"
 
 
 def render(root: Path, configs: dict) -> None:

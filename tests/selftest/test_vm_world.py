@@ -461,6 +461,24 @@ class TestSnapshots(Lab):
         self.assertEqual(kept["nodes"]["node1"]["endpoint"],
                          f"tcp:127.0.0.1:{30000 + len(fake.procs) - 1}")
 
+    def test_a_kept_save_whose_tunnel_does_not_reopen_is_still_saved(self):
+        # why: netsim holds the stage once it saved, and a save reported as
+        # failed left it with no host copy, under a name no --from finds and
+        # no --save may take
+        fake = self.lab()
+        real = fake.tunnel
+
+        def tunnel(world, host, target=None):
+            if any(c[:2] == ("netsim", "save") for c in fake.calls):
+                raise WorldError(f"{host}: apphost tunnel never opened")
+            return real(world, host, target)
+        fake.tunnel = tunnel
+        code, doc, _, _ = run(self.tmp, fake, ["adopt-node"], vm=True,
+                              save="gw", keep=True)
+        self.assertEqual((code, doc.get("saved")), (0, "gw"))
+        self.assertNotIn("aborted", doc)
+        self.assertTrue((self.tmp / "snapshots" / "gw.json").is_file())
+
     def test_the_name_netsim_saved_under_is_the_one_recorded(self):
         fake = self.lab()
         fake.suffix = "-1"                   # taken between check and save

@@ -25,12 +25,12 @@ its own, not in passing.
   `lab.story`'s sha256, so an edit to the recipe bakes a new stage
 - **Builds:** three VMs at 2048 MiB · astrald on all three · Qwen Code on node1
   · the astral-agent skill linked into it
-- **Bake:** the netsim executor bakes it on the first run that finds no stage
-  for the current hash:
+- **Bake:** a VM world (`tests/lib/worlds/vm.py`) bakes it on the first run
+  that finds no stage for the current hash:
   `netsim story --stage null --save e2e-lab-r<hash> tests/netsim/labs/two-node-plus-external/lab.story`
 
-astrald is *installed* here and **pushed fresh on every boot** by the netsim
-executor, so a stage outlives the commit that filled it. What the bake is for
+astrald is *installed* here and **pushed fresh on every boot** by the VM
+world, so a stage outlives the commit that filled it. What the bake is for
 is everything slow and stable: the VMs, the apt dependencies, the service
 unit, the operator and its skill.
 

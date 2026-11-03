@@ -118,8 +118,8 @@ def render(doc: dict, run_dir_name: str) -> str:
 
     if skipped:
         lines += ["## Skipped", "",
-                  "A skipped test never ran, so the run reports no verdict "
-                  "about it.", ""]
+                  "A skipped test did not finish, so the run reports no "
+                  "verdict about it.", ""]
         lines += [f"- `{e['test']}`"
                   + (f" ({e['world']})" if worlds and e.get("world") else "")
                   + (f" — {e['reason']}" if e.get("reason") else "")

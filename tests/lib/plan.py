@@ -14,7 +14,9 @@ follow from that tree:
 3. Then P's producers: the first continues the world, and each further one
    gets a fork that replays P's lineage as prereqs.
 4. One destroyer may end the world, provided the world's kind suits it and
-   nothing has ended the world yet. Every other destroyer forks.
+   nothing has ended the world yet. A root destroyer, one with no `after`,
+   also needs a world no producer has built on, since a fresh world is the
+   only state it can name. Every other destroyer forks.
 5. A world's kind follows from what runs in it: an op, `--vm` or the agent
    driver needs a VM world, and a local_only test needs a local one.
 6. `isolate` gives every selected test a world of its own.

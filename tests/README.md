@@ -35,11 +35,12 @@ a node is a process two ports away, a VM behind a tunnel, or your own daemon.
 nodes      = ["node1", "node2"]     # the roster: names this test's nodes
 after      = "adopt-node"           # the test whose world this one continues; absent: a fresh world
 destroys   = true                   # only this test's descendants may follow it in its world
-ops        = ["enable-tor node1"]   # VM operations (netsim/ops/) run before the driver; imply destroys
 local_only = "reads a node root"    # it needs the host, so it never enters a VM world
 restart    = ["node1"]              # nodes restarted between driver and oracle (local worlds only)
 facts      = ["object_id"]          # the facts its driver writes
 timeout    = 180                    # the driver's and the oracle's budget, in seconds (default 120)
+# ops      = ["enable-tor node1"]   # VM operations (netsim/ops/) run before the driver; imply
+#                                   # destroys, and a test with ops is never local_only
 
 [config.node1.objects]              # a module config override for one node, per world
 external_registration_sweep_interval = "1s"
@@ -58,19 +59,23 @@ external_registration_sweep_interval = "1s"
   `after` chain (`selftest/test_shipped.py` checks), and the agent driver
   asks the operator for exactly these.
 - **`[config.<node>.<module>]`** writes over the harness's own config for
-  that module (`lib/nodeconfig.py`), key by key; a module the harness
-  builds nothing for gets the table alone. The config follows the world,
+  that module, key by key; a module the harness builds nothing for gets the
+  table alone. A local world builds a config for every module
+  `lib/nodeconfig.py` names; a VM world builds apphost's alone, so there
+  every other module gets the table alone. The config follows the world,
   not the test: the planner merges the overrides of every test in a world,
   a test that sets a key otherwise than its world forks into one of its
   own, and a clash with its own lineage is a plan error. `--plan` lists a
   world's overrides under its steps.
-  - Keys the harness owns, like `apphost.tokens` and the listeners' ports,
-    are refused. `mcp.bind_mcp` may only be `""`, which turns MCP off:
-    `messaging-ops` runs on `[config.nomcp1.mcp] bind_mcp = ""`.
-  - A local world writes each module's config as JSON, which astrald's YAML
-    loader reads. A VM world pushes the same files into each guest with the
-    binaries, before its ops, so a test whose override an op in its world
-    would write over forks, and a lineage holding both is refused.
+  - Keys the harness owns, like `apphost.tokens`, `apphost.bind_http` and
+    the listeners' ports, are refused. `mcp.bind_mcp` may only be `""`,
+    which turns MCP off: `messaging-ops` runs on
+    `[config.nomcp1.mcp] bind_mcp = ""`.
+  - A world writes each module's config as JSON, which astrald's YAML
+    loader reads; a file it cannot parse, or a key the module does not
+    have, stops the node. A VM world pushes its files into each guest with
+    the binaries, before its ops, so a test whose override an op in its
+    world would write over forks, and a lineage holding both is refused.
   - `--target attach` refuses an override: it renders nothing.
 
 **3. List it in a suite.** A suite under `suites/` lists tests; its order is
@@ -112,7 +117,9 @@ runs them one after another, each from fresh machines:
 - tests that only observe share a world, and run before anything builds;
 - a test that builds state continues the world;
 - every further builder, and every destroyer but one, gets a fork that
-  replays its lineage as prereqs, by script.
+  replays its lineage as prereqs, by script;
+- a destroyer with no `after` forks once a builder has run, since a fresh
+  world is the only state it can name.
 
 A world is one of three kinds:
 

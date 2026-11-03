@@ -168,11 +168,6 @@ class VmWorld(World):
         answered at protocol level.
 
         note: every VM is pushed, but only a roster node has a tunnel.
-
-        fixme: a NAT'd node's apphost listens inside netns `priv`, which
-        `ssh -L` cannot reach — it lands in the VM's default namespace. That
-        affects `nat-punch` and not `tor-link`. The fix is a relay inside the
-        guest, published by `enter-nat`, so the forward stays uniform.
         """
         return {vm: node_entry(
             endpoint=f"tcp:127.0.0.1:{info['port']}",
@@ -380,7 +375,14 @@ mv {GUEST_RECORD}.new {GUEST_RECORD}""")
         out = _netsim("save", "--sim", self.sim, name)
         saved = out.splitlines()[-1].strip() if out else name
         if self.keep:
-            self._reopen_tunnels()
+            # why caught: netsim holds the stage by now, and a save reported
+            # as failed leaves it with no host copy, under a name no --from
+            # finds and no --save may take
+            try:
+                self._reopen_tunnels()
+            except WorldError as e:
+                print(f"run: --keep, saved as {saved}, but a tunnel did not "
+                      f"reopen: {e}", file=sys.stderr)
         return saved
 
     def _reopen_tunnels(self) -> None:

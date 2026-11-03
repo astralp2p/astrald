@@ -601,6 +601,16 @@ def main(args) -> int:
         print(f"run: {e}", file=sys.stderr)
         return 2
 
+    lease = None
+    if any(env == "node" for _, env, _ in units) and args.target != "attach":
+        try:
+            # why one lease for the run: its worlds run one after another,
+            # so they share a span no other run can take
+            # why before the run directory: a refused run leaves none
+            lease = lease_ports(**cfg["ports"])
+        except PortsBusy as e:
+            print(f"run: {e}", file=sys.stderr)
+            return 2
     if args.target == "attach":
         binary, ref = None, git_ref(REPO)     # the daemon is already running
     else:
@@ -620,15 +630,6 @@ def main(args) -> int:
         results.header["from"] = args.from_stage
     operator = _operator(cfg, results) if args.driver == "agent" else None
 
-    lease = None
-    if any(env == "node" for _, env, _ in units) and args.target != "attach":
-        try:
-            # why one lease for the run: its worlds run one after another,
-            # so they share a span no other run can take
-            lease = lease_ports(**cfg["ports"])
-        except PortsBusy as e:
-            print(f"run: {e}", file=sys.stderr)
-            return 2
     if args.target == "attach":
         destroyers = [s[0].name for _, _, steps in units for s in steps
                       if s[0].destroys]

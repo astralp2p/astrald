@@ -197,6 +197,8 @@ class TestConfigKey(ManifestCase):
                 ("[config.node1.objects]\nx = nan", "JSON cannot hold"),
                 ("[config.node1.objects]\nx = [inf]", "JSON cannot hold"),
                 ("[config.node1.apphost]\ntokens = {}", "harness's to set"),
+                ("[config.node1.apphost]\nbind_http = \"tcp:127.0.0.1:8624\"",
+                 "harness's to set"),
                 ("[config.node1.tcp]\nlisten_port = 1", "harness's to set"),
                 ("[config.node1.mcp]\nbind_mcp = \"tcp:x\"",
                  "harness's to set")):

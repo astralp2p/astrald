@@ -15,12 +15,15 @@ KEYS = {"nodes", "timeout", "restart", "after", "destroys", "ops",
 MODULE = re.compile(r"[a-z][a-z0-9_]*")
 
 # (module, key) the harness owns: the ports a world leases, the token the
-# session view hands drivers, and the authority it points drivers at.
+# session view hands drivers, the authority it points drivers at, and the
+# apphost HTTP listener it turns off.
 # why refused: an override of one breaks what the session view promises — a
 # replaced token leaves a node no driver can reach, and a moved port sends
 # drivers to nothing. mcp.bind_mcp may only be emptied, since mcp_url names
-# the leased port.
+# the leased port. bind_http names a port no lease covers, so two runs, or
+# a developer's own daemon, would bind it at once.
 HARNESS_KEYS = {("apphost", "listen"), ("apphost", "tokens"),
+                ("apphost", "bind_http"),
                 ("tcp", "listen_port"), ("ether", "udp_port"),
                 ("kcp", "listen_port"), ("auth", "external_authorizers")}
 

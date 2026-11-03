@@ -1,7 +1,7 @@
 """results.json / events.jsonl writer — the system's one stable output (v2).
 
-v2.2 adds three optional record fields and one optional header field; every
-earlier field and value stays as it was:
+v2.2 adds three optional record fields and four optional header fields;
+every earlier field and value stays as it was:
 
 * `world` — the planned world the record ran in, `w0`, `w1`, …; a test a
   run replays as a prereq in a later world has a record there too, with its
@@ -9,12 +9,19 @@ earlier field and value stays as it was:
 * `phase` — where the test stopped: on a fail, the step that failed
   (`prepare`, `driver`, `restart`, `verify`, or `alive` when the world died
   under a test); on a pass, `verify`, the last step; on a skip, `prepare`,
-  the first step, which never ran;
+  the first step, which never ran — except the test a stop interrupted,
+  whose skip carries the step it was in;
 * `reason` — on a skip, why: `adopt-node failed in w1`, `world w0 died at
   smoke`, `w0 failed to close`, `interrupted`, or the first line of the
   exception that ended the run;
-* header `aborted` — set when the run ended on an exception or Ctrl-C, with
-  the same reason. A run that did not finish never reads as PASS.
+* header `aborted` — set when the run did not finish as planned, joined by
+  `; `: the skip reason when the run ended early, `teardown: <error>` when a
+  world failed to close, and `save <name>: <why>` when a --save did not
+  land. A run that carries it never reads as PASS;
+* header `pushed` — the VMs the binaries under test reached, comma-separated,
+  when the run had a VM world;
+* header `from` — the saved world a --from run booted;
+* header `saved` — the stage a --save run saved its last world as.
 
 v2.1 renames the record kind `fixture` to `prereq`: the value names a
 full e2e test — own driver, own oracle — running to build the state another

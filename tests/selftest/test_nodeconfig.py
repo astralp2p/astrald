@@ -74,13 +74,24 @@ class TestNodeConfig(unittest.TestCase):
 
     def test_a_value_outside_the_bmp_is_written_as_itself(self):
         # why: an escaped one is a surrogate pair, which yaml.v2 refuses, and
-        # astrald then runs the whole module on its defaults
+        # astrald then stops the node at startup
         with tempfile.TemporaryDirectory() as tmp:
             render(Path(tmp), {"objects": {"label": "probe \U0001F680"}})
             raw = (Path(tmp) / "config" / "objects.yaml").read_bytes()
         self.assertIn("\U0001F680".encode(), raw)
         self.assertNotIn(b"\\ud83d", raw)
         self.assertEqual(json.loads(raw)["label"], "probe \U0001F680")
+
+    def test_a_character_yaml_refuses_or_folds_raw_is_escaped(self):
+        # why: yaml.v2 refuses a raw DEL or C1 control, which stops the node,
+        # and folds a raw NEL or U+2028 into a value no test set
+        label = "a\x7fb\x85c\x9fd\u2028e\u2029f\ufffeg\uffffh é"
+        text = nodeconfig.config_text({"label": label})
+        self.assertEqual(json.loads(text), {"label": label})
+        for c in "\x7f\x85\x9f\u2028\u2029\ufffe\uffff":
+            self.assertNotIn(c, text)
+        self.assertIn("\\u007fb\\u0085c\\u009fd\\u2028e\\u2029f\\ufffeg"
+                      "\\uffffh é", text)
 
     def test_the_mcp_config_decides_whether_a_node_serves_mcp(self):
         self.assertTrue(serves_mcp(module_configs(PORTS, "t")))

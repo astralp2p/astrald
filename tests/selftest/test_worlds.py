@@ -15,7 +15,8 @@ from types import SimpleNamespace
 from unittest import mock
 
 from lib import runner
-from lib.worlds import WorldError
+from lib.worlds import NODE_FIELDS, WorldError
+from lib.worlds.attach import AttachWorld
 from lib.worlds.local import LocalWorld
 from selftest.test_world_record import FakeWorld, write_tree
 
@@ -247,6 +248,18 @@ class TestClose(unittest.TestCase):
                 world.close(keep=False)
             self.assertTrue(dir.is_dir() and not dir.is_symlink())
         self.assertTrue(all(n.stopped for n in nodes.values()))
+
+
+class TestAttachNodes(unittest.TestCase):
+    def test_a_field_attach_cannot_provide_is_none(self):
+        # why: a sentinel reads as a value — root "attached" as a path, and
+        # tcp_port 0 as the address tcp:127.0.0.1:0
+        world = AttachWorld()
+        world._node = {"name": "node1", "endpoint": "tcp:127.0.0.1:8625",
+                       "token": "t", "identity": "id"}
+        node = world.nodes()["node1"]
+        self.assertEqual({f for f in NODE_FIELDS if node[f] is not None},
+                         {"endpoint", "token", "identity"})
 
 
 if __name__ == "__main__":

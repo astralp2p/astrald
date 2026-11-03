@@ -44,8 +44,7 @@ class AttachWorld(World):
         # note: the daemon's ports and roots are its owner's, not the run's,
         # so attach knows only how to reach it
         return {n["name"]: node_entry(
-            endpoint=n["endpoint"], token=n["token"], identity=n["identity"],
-            root="attached", tcp_port=0)}
+            endpoint=n["endpoint"], token=n["token"], identity=n["identity"])}
 
     def dead(self) -> list:
         return []

@@ -290,6 +290,23 @@ class TestDriverFacts(unittest.TestCase):
                      ("adopt-node", "skipped", None, "prepare")])
 
 
+class TestPortsBusy(unittest.TestCase):
+    def test_a_run_refused_for_ports_leaves_no_run_directory(self):
+        # why: a refused run left an empty results/<stamp>/, with no report
+        # to say why, as the newest run
+        args = argparse.Namespace(selection=["smoke"], driver="script",
+                                  target="fresh", keep=False)
+        busy = runner.PortsBusy("no free port span")
+        with tempfile.TemporaryDirectory() as tmp, \
+                mock.patch.object(runner, "RESULTS", Path(tmp) / "results"), \
+                mock.patch.object(runner, "ensure_binary",
+                                  return_value=(Path(tmp) / "astrald", "abc")), \
+                mock.patch.object(runner, "lease_ports", side_effect=busy), \
+                contextlib.redirect_stderr(io.StringIO()):
+            self.assertEqual(runner.main(args), 2)
+            self.assertFalse((Path(tmp) / "results").exists())
+
+
 class TestAttachWorld(unittest.TestCase):
     def test_attach_runs_its_one_world_through_the_loop(self):
         _, doc, _, _, world = run(["smoke"], target="attach")
