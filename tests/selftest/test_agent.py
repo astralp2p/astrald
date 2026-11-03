@@ -15,6 +15,11 @@ from lib import agent
 from lib.worlds import WorldError
 
 
+class Broken:
+    """An answer whose ssh transport fails: the world's ssh raises when
+    checked and hands back empty output when not, as _netsim does."""
+
+
 class Guest:
     """An ssh(vm, script) that answers by the first command it recognises."""
 
@@ -25,6 +30,10 @@ class Guest:
         self.scripts.append(script)
         for needle, answer in self.answers.items():
             if needle in script:
+                if answer is Broken:
+                    if check:
+                        raise WorldError("netsim ssh: exit 255")
+                    return ""
                 if isinstance(answer, BaseException):
                     raise answer
                 return answer(script) if callable(answer) else answer
@@ -87,7 +96,7 @@ class TestRender(unittest.TestCase):
             with self.subTest(text=text):
                 t = SimpleNamespace(name="t", dir=self.root, facts=[])
                 (self.root / "prompt.md").write_text(text)
-                with self.assertRaises(WorldError):
+                with self.assertRaises(agent.PromptError):
                     agent.render(t, VIEW)
 
     def test_no_placeholder_hands_the_operator_a_token(self):
@@ -99,7 +108,7 @@ class TestRender(unittest.TestCase):
             with self.subTest(text=text):
                 t = SimpleNamespace(name="t", dir=self.root, facts=[])
                 (self.root / "prompt.md").write_text(text)
-                with self.assertRaises(WorldError):
+                with self.assertRaises(agent.PromptError):
                     agent.render(t, view)
 
     def test_the_footer_names_exactly_the_declared_facts(self):
@@ -178,12 +187,27 @@ class TestOperator(unittest.TestCase):
         self.assertEqual(rc, 3)
         self.assertIn("gave up", (art / "driver.log").read_text())
 
-    def test_an_unknown_placeholder_touches_no_guest(self):
+    def test_an_unknown_placeholder_is_a_driver_failure_on_no_guest(self):
+        # why driver: the prompt is the test's defect, and a WorldError
+        # recorded it as the world breaking
         t = a_test(self.root, "t", "read {facts.nope}\n")
         guest = Guest()
-        with self.assertRaises(WorldError):
-            self.run_op(t, guest, model="m")
+        rc, art = self.run_op(t, guest, model="m")
+        self.assertEqual(rc, 1)
         self.assertEqual(guest.scripts, [])
+        self.assertIn("[agent] t: prompt.md names {facts.nope}",
+                      (art / "driver.log").read_text())
+
+    def test_a_transport_that_breaks_while_collecting_is_the_worlds(self):
+        # why: an ssh exit 255 read as an operator that left every fact out
+        t = a_test(self.root, "t", "do it\n", facts=["a_id"])
+        guest = Guest({"su - tester": f"done\n{agent.EXIT}0",
+                       "cat /home/tester/.facts/t.json": Broken})
+        art = an_art(self.root, VIEW)
+        with self.assertRaisesRegex(WorldError, "exit 255"):
+            agent.Operator(guest).run(t, art)
+        self.assertFalse((art / "facts.json").exists())
+        self.assertNotIn("lacks", (art / "driver.log").read_text())
 
     def test_a_transcript_without_a_final_newline_keeps_its_exit_code(self):
         t = a_test(self.root, "t", "do it\n")
@@ -217,6 +241,19 @@ class TestOperator(unittest.TestCase):
         rc, art = self.run_op(t, guest)
         self.assertEqual(rc, 124)
         self.assertIn("still thinking", (art / "driver.log").read_text())
+
+    def test_a_timed_out_operator_is_killed_on_its_vm(self):
+        # why: the timeout ends only the host's ssh, and the operator went
+        # on acting on node1 while the next test shared its world
+        t = a_test(self.root, "t", "do it\n")
+        guest = Guest({"su - tester": subprocess.TimeoutExpired("ssh", 1)})
+        rc, art = self.run_op(t, guest)
+        self.assertEqual(rc, 124)
+        after = guest.scripts[guest.scripts.index(next(
+            s for s in guest.scripts if "su - tester" in s)) + 1:]
+        self.assertEqual(after[0], "pkill -KILL -u tester || true")
+        self.assertIn("[agent] killed every tester process on node1",
+                      (art / "driver.log").read_text())
 
 
 class TestModel(unittest.TestCase):

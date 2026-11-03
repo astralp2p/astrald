@@ -51,14 +51,18 @@ EXIT = "[agent] exit "           # the line the guest ends a session with
 EXIT_LINE = re.compile(r"^\[agent\] exit (\d+)$", re.M)
 
 
+class PromptError(Exception):
+    """A prompt.md no operator may be handed: the test's defect."""
+
+
 def render(test, view: dict) -> str:
     """The prompt the operator gets for test: prompt.md filled from the
     step's view, then the facts footer.
 
-    why an unknown placeholder raises before anything runs: a prompt that
-    names a fact or node the world does not hold asks the operator for
+    why an unknown placeholder raises before the operator starts: a prompt
+    that names a fact or node the world does not hold asks the operator for
     something nobody can do, and that is the test's defect, not the
-    operator's.
+    operator's, nor the world's.
     """
     def fill(m: re.Match) -> str:
         root, field = m.groups()
@@ -67,11 +71,11 @@ def render(test, view: dict) -> str:
         elif root in view.get("nodes", {}) and field in NODE_PLACEHOLDERS:
             source = dict(view["nodes"][root], alias=root)
         else:
-            raise WorldError(f"{test.name}: prompt.md names {m.group(0)}, "
-                             "which no prompt may carry")
+            raise PromptError(f"{test.name}: prompt.md names {m.group(0)}, "
+                              "which no prompt may carry")
         if source.get(field) in (None, ""):
-            raise WorldError(f"{test.name}: prompt.md names {m.group(0)}, "
-                             "which this step's view does not hold")
+            raise PromptError(f"{test.name}: prompt.md names {m.group(0)}, "
+                              "which this step's view does not hold")
         return str(source[field])
 
     text = (test.dir / "prompt.md").read_text()
@@ -108,9 +112,16 @@ class Operator:
         The step's view is art/session.json and its facts go to
         art/facts.json, as a scripted driver's do. A declared fact missing
         from the operator's file is a non-zero exit — a `driver` failure:
-        the flow it owed never fully happened.
+        the flow it owed never fully happened. So is a prompt that render
+        refuses, before anything reaches the guest.
         """
-        prompt = render(test, json.loads((art / "session.json").read_text()))
+        try:
+            prompt = render(test,
+                            json.loads((art / "session.json").read_text()))
+        except PromptError as e:
+            with (art / "driver.log").open("a") as f:
+                f.write(f"[agent] {e}\n")
+            return 1
         self._set_model()
         self._push(test)
         rc = self._drive(test, prompt, art / "driver.log", timeout)
@@ -224,7 +235,7 @@ class Operator:
             out = self.ssh(VM, remote, timeout=timeout)
         except subprocess.TimeoutExpired:
             log.write_text(f"[agent] operator exceeded {timeout}s\n"
-                           + self._tail(test))
+                           + self._stop() + self._tail(test))
             return 124
         except WorldError as e:
             log.write_text(f"[agent] the session to {VM} broke: {e}\n"
@@ -233,6 +244,21 @@ class Operator:
         log.write_text(out + "\n")
         codes = EXIT_LINE.findall(out)
         return int(codes[-1]) if codes else 1
+
+    def _stop(self) -> str:
+        """Kill every process the operator runs on its VM; a log line.
+
+        why: the timeout kills only the host's ssh, and the guest's session
+        has no tty to hang up, so the operator would keep acting on node1
+        while the tests after it share the world.
+        why every process of USER: the operator runs as USER, which has no
+        sudo, so every process it started is USER's.
+        """
+        try:
+            self.ssh(VM, f"pkill -KILL -u {USER} || true", timeout=60)
+        except (WorldError, subprocess.TimeoutExpired) as e:
+            return f"[agent] the operator may still run on {VM}: {e}\n"
+        return f"[agent] killed every {USER} process on {VM}\n"
 
     def _tail(self, test) -> str:
         """The end of the operator's transcript, as the guest holds it."""
@@ -250,11 +276,14 @@ class Operator:
         why one file and only the declared keys: facts used to be a merge of
         every JSON file in the operator's home, so one test's artifact could
         satisfy another test's oracle.
+        why checked: `|| true` leaves the ssh's own exit, 255, as the only
+        failure, and a broken transport is the world's (WorldError), never
+        an operator that left its facts out.
         """
         if not test.facts:
             return 0
         out = self.ssh(VM, f"cat {HOME}/.facts/{test.name}.json "
-                           "2>/dev/null || true", check=False)
+                           "2>/dev/null || true")
         try:
             doc = json.loads(out or "null")
         except json.JSONDecodeError:

@@ -144,8 +144,9 @@ Qwen Code, baked into the lab's `node1` with the astral-agent skill, and
 
 - the prompt's placeholders fill from the step's view: `{facts.<name>}`,
   `{<node>.identity}` and `{<node>.alias}`, the roster name. An unknown
-  one is refused before anything runs, and so is any that would hand the
-  operator a token: it must never hold what it is judged with;
+  one is refused before the operator starts, as a `driver` failure, and so
+  is any that would hand the operator a token: it must never hold what it
+  is judged with;
 - a footer asks for exactly the test's `facts`, in `~/.facts/<test>.json`.
   That file alone is collected, and a declared fact missing from it is a
   `driver` failure. It is removed before the session, so no earlier copy
@@ -155,7 +156,8 @@ Qwen Code, baked into the lab's `node1` with the astral-agent skill, and
   per world; `base_url` applies only with a model. The report names the
   model, since a red under one model says nothing about another;
 - an operator session gets `agent.TIMEOUT`, 3600 s: one measured session
-  took 2404 s.
+  took 2404 s. Past it, every `tester` process on `node1` is killed, and
+  the test is a `driver` failure.
 
 Under `--driver agent` the selected tests are operator-driven and their
 prereqs run by script; `--prereqs agent` hands the prereqs to the operator

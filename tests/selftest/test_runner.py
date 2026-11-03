@@ -139,6 +139,19 @@ class TestOperatorError(unittest.TestCase):
                           "driver", "w0"))
 
 
+class TestPromptError(unittest.TestCase):
+    def test_a_prompt_the_operator_cannot_be_handed_is_a_driver_failure(self):
+        # why: the prompt is the test's defect, and it was recorded as the
+        # world breaking
+        with mock.patch.object(runner.agent, "render",
+                               side_effect=runner.agent.PromptError("x")):
+            _, doc, _, _, _ = run(["bootstrap-user-software-key"],
+                                  driver="agent")
+        [e] = doc["entries"]
+        self.assertEqual((e["status"], e["failure_kind"], e["phase"]),
+                         ("fail", "driver", "driver"))
+
+
 class TestCrashSafe(unittest.TestCase):
     """A run that dies still writes its results and its report."""
 
