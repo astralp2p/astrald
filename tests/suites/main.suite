@@ -3,6 +3,7 @@ smoke
 mcp-origin
 claim-window
 token-less-setup
+manager-setup
 signer-app
 messaging-ops
 bootstrap-user-software-key

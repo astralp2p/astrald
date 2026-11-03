@@ -39,8 +39,7 @@ def main():
         "node1 minted")
 
     u = window["unclaimed_after"]
-    assert u["refused"] and "no active contract" in u["detail"], (
-        f"user.info answered {u['detail']} — a probe claimed node1")
+    assert u != "claimed", f"user.info answered state {u} — a probe claimed node1"
 
     print(f"oracle: the claim contract passed the guard, an app's claim signed; "
           f"{len(GUARD)} near misses refused by it; node1 is unclaimed")

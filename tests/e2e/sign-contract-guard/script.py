@@ -58,14 +58,8 @@ async def attempt(coro) -> dict:
 
 
 async def claimed(c) -> bool:
-    """Whether node1 answers user.info; it answers "no active contract" when unclaimed."""
-    try:
-        await c.user.info()
-    except AstralError as e:
-        if "no active contract" in str(e):
-            return False
-        raise
-    return True
+    """Whether user.info reports node1 claimed."""
+    return (await c.user.info()).state == "claimed"
 
 
 async def settle(c, want: bool) -> None:
@@ -142,8 +136,8 @@ async def main():
         probes["node token asks the node key"] = await attempt(
             n.auth.sign_contract(contract(node1, app.identity, SUDO)))
 
-    # why: a session without a token reaches the claimed node's anonymous
-    # allowlist only, so apphost refuses it before the guard is asked.
+    # why: a session without a token reaches the gate's tokenless list only,
+    # so apphost refuses it before the guard is asked.
     async with await astral.connect(n1["endpoint"]) as anon:
         probes["anonymous asks the node key"] = await attempt(
             anon.auth.sign_contract(contract(node1, app.identity, SUDO)))

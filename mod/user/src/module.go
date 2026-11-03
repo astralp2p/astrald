@@ -18,6 +18,7 @@ type Module struct {
 	OptionalDeps
 	ctx    *astral.Context
 	config Config
+	file   FileConfig
 	node   astral.Node
 	log    *log.Logger
 	assets assets.Assets

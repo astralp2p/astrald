@@ -49,6 +49,14 @@ type Module interface {
 
 	// Grants returns every permit granted to identity, expired included.
 	Grants(identity *astral.Identity) ([]*auth.Permit, error)
+
+	// Manager returns the App identity apphost.register_manager appointed, or
+	// nil.
+	Manager() *astral.Identity
+
+	// NodeState returns the node's state, one of user.StateFresh,
+	// user.StateUnclaimed and user.StateClaimed.
+	NodeState(ctx *astral.Context) string
 }
 
 var ErrMissingAppIdentity = errors.New("missing app identity")

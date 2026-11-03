@@ -23,12 +23,32 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import IO
 
+# why the gate and policies: a fresh test node claims without a manager, and
+# every admission policy accepts, so tests reach `claimed` with no bootstrap
+# mode (the node bootstrap vision's E2E overrides). Omitted keys keep the code
+# defaults.
+E2E_GATE_YAML = """\
+gate:
+  tokenless: [apphost.register, user.info, user.derive_identity, user.bootstrap, user.join]
+  states:
+    fresh: ["*"]
+"""
+
 APPHOST_YAML = """\
 listen:
   - "tcp:127.0.0.1:{apphost}"
 bind_http: ""
 tokens:
   "{token}": localnode
+""" + E2E_GATE_YAML + """\
+policies:
+  app_register: accept_all
+"""
+
+USER_YAML = """\
+policies:
+  swarm_join: accept_all
+  swarm_invite: accept_all
 """
 
 TCP_YAML = """\
@@ -231,6 +251,7 @@ def render(root: Path, ports: NodePorts, token: str,
     cfg.mkdir(parents=True, exist_ok=True)
     (cfg / "apphost.yaml").write_text(
         APPHOST_YAML.format(apphost=ports.apphost, token=token))
+    (cfg / "user.yaml").write_text(USER_YAML)
     (cfg / "tcp.yaml").write_text(TCP_YAML.format(tcp=ports.tcp))
     (cfg / "ether.yaml").write_text(ETHER_YAML.format(ether=ports.ether))
     (cfg / "kcp.yaml").write_text(KCP_YAML.format(kcp=ports.kcp))

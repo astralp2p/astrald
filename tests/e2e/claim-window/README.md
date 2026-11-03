@@ -29,7 +29,7 @@ node1's identity.
 
 The step-by-step setup ops, `auth.sign_contract` and `user.new_node_contract`
 among them, run with the node's token (`.ai/system/topics/node-setup.md`). A
-session without a token reaches only the anonymous allowlist.
+session without a token reaches only the ops of the gate's `tokenless` list.
 
 ## Why the issuer is a stranger
 

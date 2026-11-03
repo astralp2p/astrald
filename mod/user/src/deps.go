@@ -65,6 +65,7 @@ func (mod *Module) LoadDependencies(ctx *astral.Context) (err error) {
 	mod.policy.SwarmJoin.NoLocal = true
 	mod.policy.SwarmInvite.NoLocal = true
 	mod.policy.ContractAccept.NoLocal = true
+	mod.config.Owned.NoLocal = true
 	if err = tree.BindPath(ctx, &mod.policy, mod.Tree.Root(), policyPath, true); err != nil {
 		return err
 	}

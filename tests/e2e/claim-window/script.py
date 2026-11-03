@@ -46,6 +46,11 @@ async def attempt(coro) -> dict:
     return {"refused": False, "detail": "answered"}
 
 
+async def state(node) -> str:
+    """The node state user.info reports."""
+    return (await node.user.info()).state
+
+
 def with_sudo(c: Contract) -> Contract:
     return Contract(issuer=c.issuer, subject=c.subject,
                     permits=list(c.permits) + [Permit(action=SUDO, constraints=None, delegation=0)],
@@ -55,11 +60,9 @@ def with_sudo(c: Contract) -> Contract:
 async def main():
     n1 = load()["nodes"]["node1"]
     async with await astral.connect(n1["endpoint"], token=n1["token"]) as node:
-        # note: user.info answers "no active contract" on a node with no active
-        # contract.
-        before = await attempt(node.user.info())
-        if not (before["refused"] and "no active contract" in before["detail"]):
-            sys.exit(f"driver: user.info answered {before['detail']!r}, so node1 "
+        before = await state(node)
+        if before == "claimed":
+            sys.exit(f"driver: user.info answered state {before!r}, so node1 "
                      "is not unclaimed and the claim window is closed — run "
                      "claim-window alone or in main.suite order, before "
                      "bootstrap-user-software-key")
@@ -82,7 +85,7 @@ async def main():
         probes["claim asked by an app as itself"] = await attempt(a.auth.sign_contract(claim))
 
     async with await astral.connect(n1["endpoint"], token=n1["token"]) as node:
-        after = await attempt(node.user.info())
+        after = await state(node)
 
     write_facts({"claim_window": {"probes": probes, "unclaimed_after": after}})
     print("driver: " + ", ".join(f"{k}: {v['detail'][:60]}" for k, v in probes.items()))

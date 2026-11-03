@@ -15,6 +15,7 @@ import (
 	"github.com/astralp2p/astral-go/astral/log"
 	"github.com/astralp2p/astral-go/lib/query"
 	"github.com/astralp2p/astral-go/lib/routing"
+	"github.com/astralp2p/astrald/lib/policyconf"
 	authmod "github.com/astralp2p/astrald/mod/auth"
 	cryptomod "github.com/astralp2p/astrald/mod/crypto"
 	objectsmod "github.com/astralp2p/astrald/mod/objects"
@@ -406,9 +407,13 @@ func serveAppsRegistrar(t *testing.T) *Module {
 		t.Fatalf("migrate: %v", err)
 	}
 
+	// why accept_all: a registrar under the default reject_all writes nothing.
+	config := defaultConfig
+	config.Policies.AppRegister = policyconf.Setting{Mode: policyconf.AcceptAll}
+
 	return &Module{
 		Deps:   Deps{Auth: serveAppsSigner{}, Crypto: serveAppsKeys{}, Objects: serveAppsStore{}},
-		config: defaultConfig,
+		config: config,
 		node:   &serveAppsNode{id: astral.GenerateIdentity()},
 		log:    log.New(nil),
 		db:     db,
@@ -416,7 +421,7 @@ func serveAppsRegistrar(t *testing.T) *Module {
 }
 
 // TestServeAppsRegistrationWritesTheGrant is the operator's decision end to end:
-// under the default register policy, an app that asks for nothing leaves
+// under the accept_all register policy, an app that asks for nothing leaves
 // apphost.register holding ServeApps and UseBlueprints grants.
 func TestServeAppsRegistrationWritesTheGrant(t *testing.T) {
 	mod := serveAppsRegistrar(t)
