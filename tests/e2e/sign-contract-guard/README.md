@@ -72,7 +72,14 @@ node contract is indexed, and the exception still signs the User's claim: a
 former user re-claims its node. The stranger's claim is the control: it passes
 the guard and fails only at signing, so the exception was open.
 
-The driver puts the claim back, because `expel-node` runs on this state next.
+A cleared claim leaves node1 `unclaimed`, since it was owned, and the gate's
+default list for that state admits only the claim ops. The manifest's
+`[config.node1.apphost.gate]` admits every op there, as the harness's gate does
+for `fresh`, so `auth.sign_contract` answers the probes, not the gate. The
+override gives the test a world of its own.
+
+The driver puts the claim back, so a test that continues this world finds node1
+claimed.
 A module that loses a startup race in astral-go's `tree.Query` binds its value
 one level up, at `/user/config` rather than `/mod/user/config`, so the driver
 reads the bound path before it writes.
