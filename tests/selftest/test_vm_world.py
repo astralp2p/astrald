@@ -264,8 +264,7 @@ class TestFreshVmWorlds(Lab):
         close = [*[("ssh", h, "journalctl") for h in VMS], ("kill",),
                  ("ps", "--json")]            # gone before the next boot
         nat = ("enable-tor", "enable-tor:verify.sh", "enter-nat",
-               "expose-apphost", "configure-nat-tor", "add-reflector",
-               "add-reflector:verify.sh")
+               "configure-nat-tor", "add-reflector", "add-reflector:verify.sh")
         tor = ("enable-tor", "enable-tor:verify.sh", "leave-lan",
                "leave-lan:verify.sh")
         self.assertEqual(self.fake.netsim_verbs(), [
@@ -306,8 +305,7 @@ class TestFreshVmWorlds(Lab):
         # note: an op's verify.sh wins over its verify.py, as it always has
         self.assertEqual(ops, [
             ("7", "enable-tor", both), ("7", "enable-tor:verify.sh", both),
-            ("7", "enter-nat", both), ("7", "expose-apphost", both),
-            ("7", "configure-nat-tor", both),
+            ("7", "enter-nat", both), ("7", "configure-nat-tor", both),
             ("7", "add-reflector", reflect),
             ("7", "add-reflector:verify.sh", reflect),
             ("8", "enable-tor", both), ("8", "enable-tor:verify.sh", both),
