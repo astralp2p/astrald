@@ -3,7 +3,8 @@
 `auth.sign_contract` signs a contract as its issuer and as its subject with keys
 node1 holds. Each party passes the signer rule `crypto.sign_hash` applies: the
 caller's own key, never the node's key as the node itself, or a key the caller
-may sudo to. A query of any origin other than local is rejected first.
+may sudo to. A query of any origin other than local is answered
+`origin not allowed` first.
 
 - **env** node · **start** `two-nodes` · **saves** —
 - **driver** `script.py` — as the User, register an app, sign the User's own
@@ -17,10 +18,10 @@ may sudo to. A query of any origin other than local is rejected first.
   User's claim, and put the claim back. Record what came back.
 - **oracle** `verify.py` — the control signed as both parties, each local probe
   with a token was refused by the guard naming the party, the anonymous probe
-  was refused by apphost with `denied`, the link probe was rejected with
-  code 1, the stranger's claim passed the guard and the User's claim was signed
-  with the claim cleared, node1 answers as the User's node again, and the app
-  still cannot sign a text under the User's key.
+  was refused by apphost with `denied`, the link probe was answered
+  `origin not allowed: network`, the stranger's claim passed the guard and the
+  User's claim was signed with the claim cleared, node1 answers as the User's
+  node again, and the app still cannot sign a text under the User's key.
 
 ## What this proves that the unit tests do not
 
@@ -48,6 +49,11 @@ does not pass.
 The User signs that same contract on node1 locally, so the origin is the only
 difference between the control and the probe. node2 mints its own User token,
 because `user_token` authenticates on node1 only.
+
+The op answers a refused origin before it reads a contract, and a contract
+written after that answer can make node2's relay drop it. The driver therefore
+sends the contract only after two seconds with no answer: an op that admits
+the query waits that long for its contract and then answers it.
 
 ## Why the oracle signs as the User itself
 
