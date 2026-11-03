@@ -110,6 +110,8 @@ func (mod *Module) onActiveContractChanged(signed *auth.SignedContract) {
 
 	mod.log.Info("hello, %v!", signed.Issuer)
 
+	mod.recordOwnership()
+
 	// Authorization resolves contracts through the auth index, not the config
 	// tree; an active-but-unindexed contract would break every delegation chain
 	// that terminates at the user.
@@ -225,4 +227,25 @@ func (mod *Module) IssueMembership(ctx *astral.Context, nodeID *astral.Identity)
 		return nil, fmt.Errorf("subject sig verification: %w", err)
 	}
 	return signed, nil
+}
+
+// WasOwned reports whether a user contract has been active on this node,
+// including one that has since expired or been expelled.
+func (mod *Module) WasOwned() bool {
+	owned := mod.config.Owned.Get()
+	return owned != nil && bool(*owned)
+}
+
+// recordOwnership sets the ownership history once.
+//
+// why at activation and not at claim: every route to an active contract,
+// adoption and an upgrade of a claimed node included, passes here.
+func (mod *Module) recordOwnership() {
+	if mod.WasOwned() {
+		return
+	}
+	owned := astral.Bool(true)
+	if err := mod.config.Owned.Set(mod.ctx, &owned); err != nil {
+		mod.log.Error("recording ownership history: %v", err)
+	}
 }

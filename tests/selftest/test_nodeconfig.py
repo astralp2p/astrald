@@ -5,7 +5,8 @@ import unittest
 from pathlib import Path
 
 from lib import nodeconfig
-from lib.nodeconfig import (AUTH_ACTIONS, NODE_OP_TOOLS, PEER_ALIAS,
+from lib.nodeconfig import (AUTH_ACTIONS, E2E_APPHOST_POLICIES, E2E_GATE,
+                            E2E_USER, NODE_OP_TOOLS, PEER_ALIAS,
                             PEER_TOOLS, NodePorts, PortsBusy, lease_ports,
                             module_configs, ports_for, render, serves_mcp)
 
@@ -32,7 +33,9 @@ class TestNodeConfig(unittest.TestCase):
         cfg = rendered()
         self.assertEqual(cfg["apphost"], {
             "listen": ["tcp:127.0.0.1:20800"],     # no socket-path collisions
-            "bind_http": "", "tokens": {"sekrit": "localnode"}})
+            "bind_http": "", "tokens": {"sekrit": "localnode"},
+            "gate": E2E_GATE, "policies": E2E_APPHOST_POLICIES})
+        self.assertEqual(cfg["user"], E2E_USER)
         self.assertEqual(cfg["tcp"], {"listen_port": 20801})
         self.assertEqual(cfg["ether"], {"udp_port": 20802})
         self.assertEqual(cfg["kcp"], {"listen_port": 20803})

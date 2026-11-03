@@ -14,7 +14,7 @@ import (
 
 type opSetPolicyArgs struct {
 	// Identity and Operation name the delegate the op's policy asks. Both
-	// empty restores the bundled policy; one alone is an error.
+	// empty restores the config value; one alone is an error.
 	Identity  string
 	Operation string
 	// Timeout bounds one question. Zero waits policy.MaxTimeout; above it is
@@ -46,7 +46,7 @@ func (mod *Module) OpSetAppRegisterPolicy(ctx *astral.Context, q *routing.Incomi
 	ch := channel.New(q.AcceptRaw(), channel.WithFormats(args.In, args.Out))
 	defer ch.Close()
 
-	if !mod.Auth.Authorize(ctx, &auth.AdminManageAppsAction{Action: auth.NewAction(q.Caller())}) {
+	if !mod.maySetPolicies(ctx, q.Caller()) {
 		return ch.Send(auth.ErrNotPermitted)
 	}
 
@@ -79,7 +79,7 @@ func (mod *Module) OpSetGrantRequestPolicy(ctx *astral.Context, q *routing.Incom
 	ch := channel.New(q.AcceptRaw(), channel.WithFormats(args.In, args.Out))
 	defer ch.Close()
 
-	if !mod.Auth.Authorize(ctx, &auth.AdminManageAppsAction{Action: auth.NewAction(q.Caller())}) {
+	if !mod.maySetPolicies(ctx, q.Caller()) {
 		return ch.Send(auth.ErrNotPermitted)
 	}
 
@@ -128,7 +128,7 @@ func writePolicyDelegate(ctx *astral.Context, d *policy.Delegate, v *tree.Value[
 }
 
 // newDelegate resolves name and builds the delegate the setter stores. Both
-// name and op empty return nil, which restores the bundled policy.
+// name and op empty return nil, which restores the config value.
 //
 // why not the node itself: the admitting op would ask itself and recurse.
 func (mod *Module) newDelegate(name, op string, timeout astral.Duration) (*policy.Delegate, error) {
@@ -146,4 +146,16 @@ func (mod *Module) newDelegate(name, op string, timeout astral.Duration) (*polic
 
 	d := &policy.Delegate{Identity: id, Operation: astral.String8(op), Timeout: timeout}
 	return d, d.Validate()
+}
+
+// maySetPolicies reports whether caller may select a policy: a holder of
+// AdminManageApps, or the manager.
+//
+// why the manager: the manager answers the policies it was appointed with, and
+// need not hold AdminManageApps; see OpRegisterManager.
+func (mod *Module) maySetPolicies(ctx *astral.Context, caller *astral.Identity) bool {
+	if manager := mod.Manager(); !manager.IsZero() && caller.IsEqual(manager) {
+		return true
+	}
+	return mod.Auth.Authorize(ctx, &auth.AdminManageAppsAction{Action: auth.NewAction(caller)})
 }

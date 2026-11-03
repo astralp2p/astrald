@@ -16,12 +16,25 @@ type SwarmJoinPolicy func(ctx *astral.Context, req *user.SwarmJoinRequest) (*use
 // declines.
 type SwarmInvitePolicy func(ctx *astral.Context, req *user.SwarmInviteRequest) (*user.SwarmInviteDecision, error)
 
-// AcceptAllJoins is the bundled join policy: every requester is admitted.
+// AcceptAllJoins is the accept_all join policy: every requester is admitted.
 func AcceptAllJoins(_ *astral.Context, _ *user.SwarmJoinRequest) (*user.SwarmJoinDecision, error) {
 	return &user.SwarmJoinDecision{Allow: true}, nil
 }
 
-// AcceptAllInvites is the bundled invite policy: every invitation is accepted.
+// AcceptAllInvites is the accept_all invite policy: every invitation is
+// accepted.
 func AcceptAllInvites(_ *astral.Context, _ *user.SwarmInviteRequest) (*user.SwarmInviteDecision, error) {
 	return &user.SwarmInviteDecision{Allow: true}, nil
+}
+
+// RejectAllJoins is the reject_all join policy and the code default: every
+// requester is declined.
+func RejectAllJoins(_ *astral.Context, _ *user.SwarmJoinRequest) (*user.SwarmJoinDecision, error) {
+	return &user.SwarmJoinDecision{}, nil
+}
+
+// RejectAllInvites is the reject_all invite policy and the code default: every
+// invitation is declined.
+func RejectAllInvites(_ *astral.Context, _ *user.SwarmInviteRequest) (*user.SwarmInviteDecision, error) {
+	return &user.SwarmInviteDecision{}, nil
 }

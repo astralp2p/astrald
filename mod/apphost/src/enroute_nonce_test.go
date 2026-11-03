@@ -17,6 +17,10 @@ type rejectingNode struct {
 	astral.Node
 }
 
+func (rejectingNode) Identity() *astral.Identity { return rejectingNodeID }
+
+var rejectingNodeID = astral.GenerateIdentity()
+
 func (rejectingNode) RouteQuery(*astral.Context, *astral.InFlightQuery, io.WriteCloser) (io.WriteCloser, error) {
 	return nil, &astral.ErrRejected{}
 }

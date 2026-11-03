@@ -38,7 +38,7 @@ from hashlib import sha256
 from pathlib import Path
 
 from lib.build import query_binary
-from lib.nodeconfig import config_text
+from lib.nodeconfig import config_text, harness_configs
 from lib.worlds import World, WorldError, node_entry
 
 TESTS = Path(__file__).resolve().parent.parent.parent
@@ -512,16 +512,15 @@ mv {GUEST_RECORD}.new {GUEST_RECORD}""")
         """The module config files the push writes into a guest's config dir,
         by file name: the one place a world's config reaches a VM.
 
-        apphost is the harness's, with the world's overrides for this VM merged
-        key by key; any other module the world overrides gets its table alone,
-        since the lab writes no module config of its own.
+        apphost and user are the harness's, as a local node's
+        (nodeconfig.harness_configs), with the world's overrides for this VM
+        merged key by key; any other module the world overrides gets its table
+        alone, since the lab writes no module config of its own.
         note: a saved stage keeps the files its world was pushed, and --from
         refuses a history the manifests now configure otherwise
         (runner._check_saved_config), so a resumed world is pushed them again.
         """
-        modules = {"apphost": {"listen": [f"tcp:127.0.0.1:{APPHOST_PORT}"],
-                               "bind_http": "",
-                               "tokens": {token: "localnode"}}}
+        modules = harness_configs(f"tcp:127.0.0.1:{APPHOST_PORT}", token)
         for module, keys in self.config.get(vm, {}).items():
             modules[module] = {**modules.get(module, {}), **keys}
         return {f"{module}.yaml": config_text(doc)

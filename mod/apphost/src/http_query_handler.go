@@ -75,12 +75,17 @@ func (srv *HTTPQueryHandler) ServeHTTP(writer http.ResponseWriter, request *http
 		WithTimeout(5 * time.Second)
 	defer cancel()
 
+	q := query.New(srv.Identity, targetID, method, params)
+
+	// why: an HTTP session holds a token, and a query to the node obeys the
+	// state lists of the gate as an IPC or WebSocket query does.
+	if !srv.gateAdmits(ctx, q, false) {
+		writer.WriteHeader(http.StatusForbidden)
+		return
+	}
+
 	// route the query
-	ch, err := query.Route(
-		ctx,
-		srv.node,
-		query.New(srv.Identity, targetID, method, params),
-	)
+	ch, err := query.Route(ctx, srv.node, q)
 	switch {
 	case err == nil:
 	case errors.Is(err, &astral.ErrRejected{}):

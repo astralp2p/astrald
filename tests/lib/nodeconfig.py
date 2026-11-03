@@ -17,6 +17,7 @@ Every node serves MCP and declares the tools in NODE_OP_TOOLS and PEER_TOOLS.
 A test changes any of this for its world with a `[config.<node>.<module>]`
 override, merged key by key on top of what is built here.
 """
+import copy
 import fcntl
 import json
 import re
@@ -71,6 +72,39 @@ PEER_TOOLS = {
 # most tests live, so an expired external registration would still be in memory
 # when the oracle looked. Only the removal and its log line are hurried — the
 # fan-out skips an expired registration whatever this is set to.
+# why the gate and policies: a fresh test node claims without a manager, and
+# every admission policy accepts, so tests reach `claimed` with no bootstrap
+# mode (the node bootstrap vision's E2E overrides). Omitted keys keep the code
+# defaults.
+E2E_GATE = {"tokenless": ["apphost.register", "user.info",
+                          "user.derive_identity", "user.bootstrap",
+                          "user.join"],
+            "states": {"fresh": ["*"]}}
+E2E_APPHOST_POLICIES = {"app_register": "accept_all"}
+E2E_USER = {"policies": {"swarm_join": "accept_all",
+                         "swarm_invite": "accept_all"}}
+
+
+def harness_configs(listen: str, token: str) -> dict:
+    """module -> the config every harness node starts with, local or VM:
+    apphost on `listen` with `token` as the node's own, the E2E gate and
+    policies, and the user policies.
+
+    why one function: a local world and a VM world must start nodes the same
+    way, or a test passing locally says nothing about the lab.
+    """
+    return {
+        "apphost": {"listen": [listen],
+                    "bind_http": "",
+                    # why: the value beside a token is the identity it
+                    # authenticates as, and `localnode` is the node itself
+                    "tokens": {token: "localnode"},
+                    "gate": copy.deepcopy(E2E_GATE),
+                    "policies": dict(E2E_APPHOST_POLICIES)},
+        "user": copy.deepcopy(E2E_USER),
+    }
+
+
 OBJECTS = {"external_registration_sweep_interval": "1s"}
 
 # why an authority at all: mod/messaging holds no reachability of its own, and
@@ -194,11 +228,7 @@ def module_configs(ports: NodePorts, token: str,
     needs changed, and the ports and the token beside it stay the harness's.
     """
     cfg = {
-        "apphost": {"listen": [f"tcp:127.0.0.1:{ports.apphost}"],
-                    "bind_http": "",
-                    # why: the value beside a token is the identity it
-                    # authenticates as, and `localnode` is the node itself
-                    "tokens": {token: "localnode"}},
+        **harness_configs(f"tcp:127.0.0.1:{ports.apphost}", token),
         "tcp": {"listen_port": ports.tcp},
         "ether": {"udp_port": ports.ether},
         "kcp": {"listen_port": ports.kcp},

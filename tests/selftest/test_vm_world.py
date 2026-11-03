@@ -19,6 +19,7 @@ from types import SimpleNamespace
 from unittest import mock
 
 from lib import runner
+from lib.nodeconfig import E2E_APPHOST_POLICIES, E2E_GATE, E2E_USER
 from lib.worlds import NODE_FIELDS, WorldError
 from lib.worlds import vm
 from lib.worlds.vm import VmWorld, recipe_hash
@@ -797,8 +798,8 @@ class TestConfigPush(Lab):
                            if c[:2] == ("netsim", "ssh") and c[4] == h
                            and c[6].startswith("set -e")]
                 self.assertEqual(script.count("systemctl restart astrald"), 1)
-                want = {"apphost.yaml"} | ({"objects.yaml"} if h == "node2"
-                                           else set())
+                want = {"apphost.yaml", "user.yaml"} | (
+                    {"objects.yaml"} if h == "node2" else set())
                 self.assertEqual(set(push), want)
         objects, = [p["objects.yaml"] for p in pushed_files(fake, "node2")]
         self.assertEqual(objects, {"label": "probe \U0001F680"})
@@ -827,7 +828,10 @@ class TestConfigPush(Lab):
         self.assertEqual(apphost, {
             "listen": [f"tcp:127.0.0.1:{vm.APPHOST_PORT}"], "bind_http": "",
             "tokens": {world._nodes["node1"]["token"]: "localnode"},
+            "gate": E2E_GATE, "policies": E2E_APPHOST_POLICIES,
             "allow_anonymous": False})
+        # a VM node starts with the same user policies as a local one
+        self.assertEqual(pushed_files(fake, "node1")[0]["user.yaml"], E2E_USER)
         self.assertNotIn("allow_anonymous",
                          pushed_files(fake, "node2")[0]["apphost.yaml"])
 

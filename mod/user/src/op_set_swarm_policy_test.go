@@ -16,7 +16,7 @@ import (
 // successful save.
 func swarmPolicySetter(admin bool, delegateID *astral.Identity) *Module {
 	return &Module{
-		Deps: Deps{Auth: &recordingAuth{verdict: admin}, Dir: &resolvingDir{id: delegateID}},
+		Deps: Deps{Auth: &recordingAuth{verdict: admin}, Dir: &resolvingDir{id: delegateID}, Apphost: &tokenIssuer{}},
 		node: &identityNode{id: astral.GenerateIdentity()},
 		log:  log.New(nil),
 	}
@@ -153,7 +153,8 @@ func TestSetSwarmPolicyRefusesTheNodeItself(t *testing.T) {
 	}
 }
 
-// Both empty clears the delegate, which restores accept-all.
+// Both empty clears the delegate, which restores the config value, here the
+// code default reject_all.
 func TestSetSwarmPolicyClearsTheDelegate(t *testing.T) {
 	mod := swarmPolicySetter(true, astral.GenerateIdentity())
 	if err := mod.policy.SwarmJoin.Set(astral.NewContext(nil), delegate()); err != nil {
@@ -169,7 +170,7 @@ func TestSetSwarmPolicyClearsTheDelegate(t *testing.T) {
 	if !mod.policy.SwarmJoin.Get().IsZero() {
 		t.Fatal("an empty set did not clear the delegate")
 	}
-	if !joinAllowed(t, mod) {
-		t.Fatal("clearing the delegate did not restore accept-all")
+	if joinAllowed(t, mod) {
+		t.Fatal("clearing the delegate did not restore reject_all")
 	}
 }

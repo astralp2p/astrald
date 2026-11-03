@@ -13,17 +13,17 @@ async def main():
     n1 = doc["nodes"]["node1"]
     smoke = doc["facts"]["smoke"]
 
-    # user.info answers a claimed node and rejects with code 2 on an unclaimed
-    # one; either way the query reached the op.
+    # user.info answers the node's state in every state, so the query reached
+    # the op.
     info = smoke["user_info"]
-    assert not info["refused"] or "code 2" in info["detail"], (
+    assert not info["refused"], (
         f"anonymous user.info: {info['detail']} — the claim-state probe is not "
         "open to a token-less session")
 
     spec = smoke["shell_spec"]
     assert spec["refused"] and spec["detail"].startswith("Denied"), (
         f"anonymous shell.spec: {spec['detail']} — a token-less session "
-        "reached an op off the anonymous allowlist")
+        "reached an op off the gate's tokenless list")
 
     async with await astral.connect(n1["endpoint"], token=n1["token"]) as c:
         assert c.authenticated, "node token not accepted"

@@ -13,9 +13,9 @@ import (
 const policyPath = "/mod/apphost/policy"
 
 // policyConfig is bound to the tree at policyPath. An unset AppRegister
-// selects apphostmod.AcceptAll. A set GrantRequest selects the delegate mode;
-// otherwise an unset GrantRequestMode or accept_all selects
-// apphostmod.AcceptAllGrants, and any other mode selects
+// selects the config value; see GetRegisterAppPolicy. A set GrantRequest
+// selects the delegate mode; otherwise an unset GrantRequestMode or accept_all
+// selects apphostmod.AcceptAllGrants, and any other mode selects
 // apphostmod.RefuseAllGrants.
 //
 // why apart from Config: Config is read from apphost.yaml and copied from
@@ -32,16 +32,32 @@ type policyConfig struct {
 }
 
 // GetRegisterAppPolicy returns the policy apphost.register applies: the
-// delegate the tree names, or AcceptAll when none is set.
+// delegate the tree names; else the policies.app_register config value, whose
+// code default is reject_all.
 //
 // why derived on each call: the tree value is the only state, so a setter
 // writes it and nothing else, and a reload selects the same policy.
+// why a config delegate that does not resolve refuses: an unknown delegate
+// has decided nothing.
 func (mod *Module) GetRegisterAppPolicy() apphostmod.RegisterAppPolicy {
-	d := mod.policy.AppRegister.Get()
-	if d.IsZero() {
+	if d := mod.policy.AppRegister.Get(); !d.IsZero() {
+		return mod.RegisterAppPolicyDelegated(d)
+	}
+
+	setting := mod.config.Policies.AppRegister
+	switch {
+	case setting.Delegate != nil:
+		d, err := setting.ResolveDelegate(mod.Dir.ResolveIdentity)
+		if err != nil {
+			return func(*astral.Context, *apphost.AppRegisterRequest) (*apphost.AppRegisterDecision, error) {
+				return nil, err
+			}
+		}
+		return mod.RegisterAppPolicyDelegated(d)
+	case setting.Accepts():
 		return apphostmod.AcceptAll
 	}
-	return mod.RegisterAppPolicyDelegated(d)
+	return apphostmod.RejectAll
 }
 
 // RegisterAppPolicyDelegated returns the policy that asks d. The policy holds

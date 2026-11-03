@@ -23,13 +23,18 @@ import (
 // app states what it wants, the node decides what it holds.
 type RegisterAppPolicy func(ctx *astral.Context, req *apphost.AppRegisterRequest) (*apphost.AppRegisterDecision, error)
 
-// AcceptAll is the bundled policy. It admits every registration with the
-// permits it asked for, on the rail each list names. A node that cares which
-// apps hold what delegates the decision.
+// AcceptAll is the accept_all policy. It admits every registration with the
+// permits it asked for, on the rail each list names.
 func AcceptAll(_ *astral.Context, req *apphost.AppRegisterRequest) (*apphost.AppRegisterDecision, error) {
 	return &apphost.AppRegisterDecision{
 		Allow:           true,
 		GrantPermits:    req.GrantPermits,
 		ContractPermits: req.ContractPermits,
 	}, nil
+}
+
+// RejectAll is the reject_all policy and the code default: every
+// registration is refused.
+func RejectAll(_ *astral.Context, _ *apphost.AppRegisterRequest) (*apphost.AppRegisterDecision, error) {
+	return &apphost.AppRegisterDecision{}, nil
 }

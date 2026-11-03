@@ -123,6 +123,10 @@ type tokenIssuer struct {
 	fail   error
 	issued []*apphost.AccessToken
 	ttl    []astral.Duration
+
+	// manager and state answer Manager and NodeState.
+	manager *astral.Identity
+	state   string
 }
 
 func (a *tokenIssuer) CreateAccessToken(id *astral.Identity, ttl astral.Duration) (*apphost.AccessToken, error) {
@@ -136,6 +140,10 @@ func (a *tokenIssuer) CreateAccessToken(id *astral.Identity, ttl astral.Duration
 	a.ttl = append(a.ttl, ttl)
 	return token, nil
 }
+
+func (a *tokenIssuer) Manager() *astral.Identity { return a.manager }
+
+func (a *tokenIssuer) NodeState(*astral.Context) string { return a.state }
 
 func (a *tokenIssuer) tokens() []*apphost.AccessToken {
 	a.mu.Lock()
@@ -533,5 +541,43 @@ func TestClaimRefusesSecondClaim(t *testing.T) {
 	}
 	if n := len(f.objects.objects()); n != 0 {
 		t.Fatalf("the node stored %d objects; want none", n)
+	}
+}
+
+// TestBootstrapAdmitsTheManager: the appointed manager claims the node with
+// its App identity, receives the User token, and the claim contract is signed
+// with the node as claim caller.
+func TestBootstrapAdmitsTheManager(t *testing.T) {
+	f := newBootstrapFixture()
+	manager := astral.GenerateIdentity()
+	f.apphost.manager = manager
+
+	objs, err := routeBootstrap(t, f, manager, "", "user.bootstrap", astral.NewString16(bootstrapWords))
+	if err != nil {
+		t.Fatalf("route: %v", err)
+	}
+	result := onlyResult(t, objs)
+	checkClaimed(t, f, result.Identity)
+	if result.Token == "" {
+		t.Fatal("the manager received no User token")
+	}
+}
+
+// TestBootstrapRefusesAnAppThatIsNotTheManager: another App identity is not
+// permitted, with or without a manager appointed.
+func TestBootstrapRefusesAnAppThatIsNotTheManager(t *testing.T) {
+	for name, manager := range map[string]*astral.Identity{"no manager": nil, "another manager": astral.GenerateIdentity()} {
+		f := newBootstrapFixture()
+		f.apphost.manager = manager
+
+		// note: the op refuses before it reads the words, so none are sent.
+		objs, err := routeBootstrap(t, f, astral.GenerateIdentity(), "", "user.bootstrap?generate=true", nil)
+		if err != nil {
+			t.Fatalf("%v: route: %v", name, err)
+		}
+		if len(objs) != 1 || objs[0].(*astral.ErrorMessage).Error() != auth.ErrNotPermitted.Error() {
+			t.Fatalf("%v: answered %v; want %v", name, objs, auth.ErrNotPermitted)
+		}
+		checkUnchanged(t, f)
 	}
 }
