@@ -6,6 +6,7 @@ w0 local: smoke → mcp-origin → claim-window → token-less-setup → manager
           → services-swarm → services-app-call → request-grant-scope
           → object-store-peer → read-remote-peer → read-swarm → discover-swarm
           → expel-node
+          config node1.apphost.gate = {"tokenless": ["apphost.register", "user.info", "user.derive_identity", "user.bootstrap", "user.join"], "states": {"fresh": ["*"], "unclaimed": ["*"]}}
           config nomcp1.mcp.bind_mcp = ""
 w1 local: bootstrap-user-software-key* → adopt-node* → hold-purge
 w2 local: import-user-software-key

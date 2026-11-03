@@ -2,3 +2,14 @@ nodes   = ["node1", "node2"]
 timeout = 180
 after   = "adopt-node"
 facts   = ["sign_guard"]
+
+# why: a cleared claim leaves node1 `unclaimed`, since it was owned, and the
+# gate's default list for that state admits only the claim ops, so neither the
+# probes nor the restore would reach auth.sign_contract. This admits every op
+# there, as the harness's gate does for `fresh`, so the guard is what answers.
+# The tokenless list is the harness's (lib/nodeconfig.E2E_GATE), because an
+# override replaces the whole gate key.
+[config.node1.apphost.gate]
+tokenless = ["apphost.register", "user.info", "user.derive_identity",
+             "user.bootstrap", "user.join"]
+states    = { fresh = ["*"], unclaimed = ["*"] }

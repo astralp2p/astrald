@@ -21,6 +21,8 @@ from lib.sessionio import load, write_facts
 WORDS = ("horse soldier imitate stool square buyer verb party enjoy "
          "result jazz rabbit trigger file benefit cloth term change")
 PATH = "m/1791'/0'/0'/0/0"
+# The most times the second call is made while its connection is reset.
+RESET_ATTEMPTS = 5
 
 
 async def bootstrap(client, qs: str, body: dict | None) -> dict:
@@ -30,6 +32,26 @@ async def bootstrap(client, qs: str, body: dict | None) -> dict:
     except AstralError as e:
         return {"refused": True, "detail": f"{type(e).__name__}: {e}"}
     return {"refused": False, "answer": docs}
+
+
+async def unread_bootstrap(client, qs: str, body: dict) -> dict:
+    """bootstrap() for a call the node may answer without reading body.
+
+    why repeat a reset: on a claimed node the op answers `node already
+    claimed` and closes without reading the words. A socket closed with the
+    words unread resets the connection, and asyncio raises that reset in place
+    of the answer it already holds. A refused call changes nothing on the
+    node, and a call that reads the words is not reset this way, so the call
+    is made again. A reset on every attempt is recorded as a reset, not as an
+    answer.
+    """
+    for _ in range(RESET_ATTEMPTS):
+        try:
+            return await bootstrap(client, qs, body)
+        except ConnectionError as e:
+            reset = {"refused": False, "reset": f"{type(e).__name__}: {e}"}
+            print(f"driver: second call reset: {reset['reset']}")
+    return reset
 
 
 def identity_in(result: dict) -> str:
@@ -42,7 +64,8 @@ async def given_words(n1: dict) -> dict:
     words = {"Type": "string16", "Object": WORDS}
     async with await astral.connect(n1["endpoint"], token=n1["token"]) as c:
         first = await bootstrap(c, "user.bootstrap?in=json&out=json", words)
-        second = await bootstrap(c, "user.bootstrap?in=json&out=json", words)
+        second = await unread_bootstrap(
+            c, "user.bootstrap?in=json&out=json", words)
         # why the claim's own token: user.bootstrap returns the User's
         # credential to the claiming app.
         token = first["answer"][0]["Object"].get("Token", "") if identity_in(first) else ""
