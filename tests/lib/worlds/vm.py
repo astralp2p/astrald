@@ -46,6 +46,8 @@ RECIPE = TESTS / "netsim" / "labs" / "two-node-plus-external" / "lab.story"
 APPHOST_PORT = 8625          # the guest's apphost, inside netns priv when NAT'd
 SCRATCH_STAGE = "e2e-scratch"     # a fresh sim always saves; this is what it saves to
 GUEST_ROOT = "/var/lib/astrald"   # install-astrald's -root (its systemd unit)
+# apphost's unix socket in the guest, beside its TCP listener
+APPHOST_SOCKET = f"{GUEST_ROOT}/apphost.sock"
 GUEST_TCP_PORT = 1791             # astrald's default tcp listener in the lab
 # where a saved world keeps its record, root-only: the operator, `tester`,
 # must not read the tokens it is judged with
@@ -520,7 +522,18 @@ mv {GUEST_RECORD}.new {GUEST_RECORD}""")
         refuses a history the manifests now configure otherwise
         (runner._check_saved_config), so a resumed world is pushed them again.
         """
-        modules = harness_configs(f"tcp:127.0.0.1:{APPHOST_PORT}", token)
+        # why TCP: the guest's own astral-query dials tcp:127.0.0.1:8625 unless
+        # told otherwise (astral-go lib/apphost DefaultEndpoint), the vmops'
+        # and the operator's alike.
+        # why the socket as well: a path reaches apphost from the root netns
+        # whichever netns astrald runs in, and enter-nat moves it into `priv`.
+        # note: the socket is no door for the operator, `tester`. GUEST_ROOT
+        # is root-only (install-astrald's `install -d -m 700`), and astrald
+        # runs as root under systemd's default umask 022, so the socket is
+        # writable by root alone. apphost grants nothing by transport anyway:
+        # authority comes from the token a session presents.
+        modules = harness_configs([f"tcp:127.0.0.1:{APPHOST_PORT}",
+                                   f"unix:{APPHOST_SOCKET}"], token)
         for module, keys in self.config.get(vm, {}).items():
             modules[module] = {**modules.get(module, {}), **keys}
         return {f"{module}.yaml": config_text(doc)

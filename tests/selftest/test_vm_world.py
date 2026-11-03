@@ -825,8 +825,11 @@ class TestConfigPush(Lab):
                                 "allow_anonymous": False}}})
             world.ensure(SimpleNamespace(name="t", nodes=["node1"], ops=[]))
         apphost = pushed_files(fake, "node1")[0]["apphost.yaml"]
+        # why the socket beside the TCP listener: it is what the tunnels
+        # reach, from the root netns, wherever enter-nat moved astrald
         self.assertEqual(apphost, {
-            "listen": [f"tcp:127.0.0.1:{vm.APPHOST_PORT}"], "bind_http": "",
+            "listen": [f"tcp:127.0.0.1:{vm.APPHOST_PORT}",
+                       "unix:/var/lib/astrald/apphost.sock"], "bind_http": "",
             "tokens": {world._nodes["node1"]["token"]: "localnode"},
             "gate": E2E_GATE, "policies": E2E_APPHOST_POLICIES,
             "allow_anonymous": False})

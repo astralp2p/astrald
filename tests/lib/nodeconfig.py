@@ -85,16 +85,16 @@ E2E_USER = {"policies": {"swarm_join": "accept_all",
                          "swarm_invite": "accept_all"}}
 
 
-def harness_configs(listen: str, token: str) -> dict:
+def harness_configs(listen: list, token: str) -> dict:
     """module -> the config every harness node starts with, local or VM:
-    apphost on `listen` with `token` as the node's own, the E2E gate and
-    policies, and the user policies.
+    apphost on every address in `listen` with `token` as the node's own, the
+    E2E gate and policies, and the user policies.
 
     why one function: a local world and a VM world must start nodes the same
     way, or a test passing locally says nothing about the lab.
     """
     return {
-        "apphost": {"listen": [listen],
+        "apphost": {"listen": list(listen),
                     "bind_http": "",
                     # why: the value beside a token is the identity it
                     # authenticates as, and `localnode` is the node itself
@@ -228,7 +228,7 @@ def module_configs(ports: NodePorts, token: str,
     needs changed, and the ports and the token beside it stay the harness's.
     """
     cfg = {
-        **harness_configs(f"tcp:127.0.0.1:{ports.apphost}", token),
+        **harness_configs([f"tcp:127.0.0.1:{ports.apphost}"], token),
         "tcp": {"listen_port": ports.tcp},
         "ether": {"udp_port": ports.ether},
         "kcp": {"listen_port": ports.kcp},
