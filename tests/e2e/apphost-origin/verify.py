@@ -27,6 +27,12 @@ from lib.sessionio import load
 NOT_A_REFUSAL = ("timeout", "timed out", "route_not_found", "routenotfound",
                  "nodeunavailable", "unknown target", "connection refused")
 
+# What both op pages name as the answer to a query off a link (astral-docs
+# protocols/apphost/ops/apphost.create_token.md, apphost.list_tokens.md). The
+# authorization check answers "not permitted" instead, so this text is what
+# says the origin guard refused the probe, not the check the User passes anyway.
+ORIGIN_REFUSAL = "origin not allowed: network"
+
 
 async def main():
     doc = load()
@@ -53,9 +59,10 @@ async def main():
         assert not any(m in detail for m in NOT_A_REFUSAL), (
             f"{op} failed without being refused: {r['detail']} — the query did "
             "not reach the guard, so its failure proves nothing")
-        assert "rejected" in detail, (
-            f"{op} failed with {r['detail']}, which names no refusal — a "
-            "refusal the caller cannot read is indistinguishable from a fault")
+        assert ORIGIN_REFUSAL in detail, (
+            f"{op} failed with {r['detail']}, which is not the origin refusal "
+            f"{ORIGIN_REFUSAL!r} — a refusal the caller cannot read is "
+            "indistinguishable from a fault")
 
     # The oracle measures node1 rather than taking the driver's word for it.
     async with await astral.connect(n1["endpoint"],
