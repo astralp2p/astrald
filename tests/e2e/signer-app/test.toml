@@ -1,5 +1,4 @@
-env     = "node"
-start   = "null"
 nodes   = ["signer1"]
-drivers = ["script"]
 timeout = 300
+local_only = "its roster, signer1, names a node no VM lab runs"
+facts   = ["signer_app", "signer_app_user"]
