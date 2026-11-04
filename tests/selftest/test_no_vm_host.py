@@ -98,11 +98,20 @@ class TestNoVmHost(unittest.TestCase):
                 self.assertIn(f"{flag} works on netsim stages", err)
                 self.assertNotIn("add --vm", err)
 
-    def test_the_agent_driver_names_the_lab_operator(self):
-        code, err = refused(["agent.suite"], driver="agent")
+    def test_the_agent_driver_without_netsim_or_docker_names_docker(self):
+        # why: without netsim the agent driver plans Docker worlds, and a
+        # host without Docker refuses those too
+        with mock.patch.object(runner, "docker_unavailable",
+                               return_value="docker is not on PATH"):
+            code, err = refused(["agent.suite"], driver="agent")
         self.assertEqual(code, 2)
-        self.assertIn("--driver agent runs the lab's operator, inside VM "
-                      "node1", err)
+        self.assertIn("runs in Docker worlds, and this host runs none "
+                      "(docker is not on PATH)", err)
+
+    def test_the_agent_driver_under_vm_names_the_flag(self):
+        code, err = refused(["agent.suite"], driver="agent", vm=True)
+        self.assertEqual(code, 2)
+        self.assertIn("--vm puts every world in VMs", err)
 
     def test_a_local_selection_is_not_refused(self):
         made = []

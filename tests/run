@@ -66,6 +66,9 @@ def main() -> int:
                          "(default: script)")
     ap.add_argument("--vm", action="store_true",
                     help="run every world in VMs, local tests included")
+    ap.add_argument("--docker", action="store_true",
+                    help="run every world in Docker containers, one per "
+                         "node; the agent driver's default without netsim")
     ap.add_argument("--save", metavar="NAME",
                     help="save the run's last world, a VM world, as netsim "
                          "stage NAME, its world record inside")

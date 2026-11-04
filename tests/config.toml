@@ -23,3 +23,6 @@ package = "./cmd/astrald"
 # keeps the lab's endpoint.
 model    = "deepseek-v4-flash"
 base_url = ""
+# The astral-agent skill a Docker world copies to node1's operator, links
+# resolved. A VM world's lab bakes its own (netsim/ops/configure-astral-agent).
+skill    = "~/.claude/skills/astral-agent"

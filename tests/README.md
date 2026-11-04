@@ -109,7 +109,7 @@ passes alone and fails in the shared run, a test before it changed its world.
 | `tor.suite` | two nodes meet on a LAN, one leaves it, Tor holds | VM (netsim) | ~37 min |
 | `nat.suite` | two nodes meet on a LAN, then hole-punch through NAT | VM (netsim) | not measured |
 | `gateway.suite` | a NAT'd node reaches its swarm through a gateway | VM (netsim) | not measured |
-| `agent.suite` | the flows an AI operator can drive (`--driver agent`) | VM (netsim) | ~1.5 h |
+| `agent.suite` | the flows an AI operator can drive (`--driver agent`) | VM (netsim), or Docker without netsim | ~1.5 h in VMs |
 
 The plans of the shipped suites are pinned under `selftest/golden/`, so a
 manifest change that moves a test shows up as a diff someone reads.
@@ -118,13 +118,13 @@ manifest change that moves a test shows up as a diff someone reads.
 
 A VM world needs netsim, and netsim runs only on Linux. Everything else
 needs no VM: `main.suite`, any test without `ops`, `--isolate`, and
-`--target attach`, on Linux or macOS.
+`--target attach`, on Linux or macOS. Full integration runs — the agent
+driver, or `--docker` — run in Docker worlds instead (see World kinds).
 
 A host that runs no VM world (not Linux, or no `netsim` on PATH) refuses a
 run that needs one, whole and before anything is built, leased or written:
-the tor, nat and gateway suites, any test with `ops`, `--vm`, `--save`,
-`--from`, and `--driver agent`, whose operator lives in VM node1. The
-refusal names each test and its ops, or the flag:
+the tor, nat and gateway suites, any test with `ops`, `--vm`, `--save` and
+`--from`. The refusal names each test and its ops, or the flag:
 
     $ ./tests/run tor-link
     run: this host runs no VM world (netsim is not on PATH), and this selection needs one:
@@ -160,13 +160,37 @@ runs them one after another, each from fresh machines:
 - a destroyer with no `after` forks once a builder has run, since a fresh
   world is the only state it can name.
 
-A world is one of three kinds:
+## World kinds
 
-| kind | the machines | when |
-|------|--------------|------|
-| local | astrald processes on loopback | the default |
-| vm | the lab's VMs on a simulated LAN (`netsim/labs/`); needs netsim on a Linux host, refused elsewhere | a test with `ops`, `--vm`, or `--driver agent` |
-| attach | the daemon you already run | `--target attach` |
+A world is one of four kinds:
+
+| kind | the machines | when | needs |
+|------|--------------|------|-------|
+| local | astrald processes on loopback | the default: simple e2e | nothing |
+| attach | the daemon you already run | `--target attach` | nothing |
+| docker | one throwaway container per node, on one Docker network | `--docker`, or `--driver agent` on a host without netsim | Docker Desktop (macOS) or Docker Engine (Linux) |
+| vm | the lab's VMs on a simulated LAN (`netsim/labs/`) | a test with `ops`, `--vm`, or `--driver agent` where netsim runs | netsim on a Linux host; refused elsewhere |
+
+A Docker world is the lab's shape without netsim. Each node runs in its own
+container from `docker/Dockerfile`, the containers share a network, and
+node1's container holds the lab's operator (`tester`, Qwen Code), so
+`--driver agent` drives it as it drives VM node1. A node's apphost is
+published on the host's `127.0.0.1` at its leased port, which is what
+drivers and oracles dial. No host file or environment variable enters a
+container. The run copies in an astrald and astral-query built for Linux
+(`.cache/linux-<arch>/`), and the operator's astral-agent skill from
+`[agent] skill` in `config.toml` (default `~/.claude/skills/astral-agent`).
+
+The first Docker run builds the node image, which takes minutes and needs
+npm's registry; later runs reuse it until `docker/` changes. A test with
+`ops` needs a VM world, and a `local_only` test a local one: a Docker run
+refuses both, as `--save` and `--from`. At a world's end its containers and
+network are removed; `--keep` leaves them up and names them. A run killed
+by SIGKILL leaves them, and the next Docker run removes them.
+
+The live Docker selftests build the image and start two containers:
+
+    cd tests && ASTRAL_TESTS_DOCKER=1 PYTHONPATH=.:<astral-py>/src python3 -m unittest selftest.test_docker_live -v
 
 A VM world boots the lab, pushes the astrald and astral-query under test to
 every VM, runs ops with their verifiers, and on close pulls each guest's
@@ -185,8 +209,9 @@ operator or its prompt broke.**
 
 A test an operator can drive is exactly one that ships a `prompt.md`: the
 flow in plain words, the way a person would ask for it. The operator is
-Qwen Code, baked into the lab's `node1` with the astral-agent skill, and
-`lib/agent.py` drives it:
+Qwen Code on `node1` with the astral-agent skill — baked into the lab's VM,
+or in node1's container in a Docker world — and `lib/agent.py` drives it the
+same way in both:
 
 - the prompt's placeholders fill from the step's view: `{facts.<name>}`,
   `{<node>.identity}` and `{<node>.alias}`, the roster name. An unknown
@@ -293,6 +318,10 @@ astral-py checkout (path in `config.toml`) — imported directly from its
 `src/`, since the package has zero dependencies. The checkout holds the
 commit `config.toml` `astral_py.requires` names; `tests/run` refuses an older
 one before it builds anything. No venv, no pip.
+
+Docker worlds: a `docker` CLI whose engine answers (Docker Desktop on
+macOS, Docker Engine on Linux). A host without one refuses a run that needs
+a Docker world, before anything is built.
 
 VM worlds: a Linux host with a working `netsim` on PATH (`netsim doctor`),
 and `./tests/link.sh` run once per checkout to register this tree's netsim
