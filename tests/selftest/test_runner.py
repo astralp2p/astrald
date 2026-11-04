@@ -10,7 +10,7 @@ from types import SimpleNamespace
 from unittest import mock
 
 from lib import runner
-from lib.worlds import WorldError
+from lib.worlds import WorldError, node_entry
 from lib.manifest import load_all
 
 TESTS = Path(__file__).resolve().parent.parent
@@ -27,7 +27,11 @@ class FakeWorld:
         pass
 
     def nodes(self) -> dict:
-        return {}
+        # why roster nodes: a shipped prompt names its nodes by identity and
+        # link endpoint, and a view without them is a prompt the operator
+        # cannot be handed
+        return {n: node_entry(identity=f"02{n}", lan_endpoint=f"tcp:{n}:1791")
+                for n in ("node1", "node2")}
 
     def ssh(self, vm: str, script: str, check=True, timeout=None) -> str:
         raise WorldError("node1: operator model is not m after the rewrite")
