@@ -1,8 +1,11 @@
 """The runner's per-test loop, driven against a fake world."""
 import argparse
 import contextlib
+import importlib.machinery
+import importlib.util
 import io
 import json
+import signal
 import tempfile
 import unittest
 from pathlib import Path
@@ -463,6 +466,39 @@ class TestBareSelections(unittest.TestCase):
         self.assertEqual([w[-1] for w in self.worlds("expel-node",
                                                      "hold-purge")],
                          ["expel-node", "hold-purge"])
+
+
+def load_run():
+    """tests/run as a module, its main never called."""
+    path = str(Path(__file__).resolve().parent.parent / "run")
+    loader = importlib.machinery.SourceFileLoader("run", path)
+    module = importlib.util.module_from_spec(
+        importlib.util.spec_from_loader("run", loader))
+    loader.exec_module(module)
+    return module
+
+
+class TestSignals(unittest.TestCase):
+    def setUp(self):
+        self.run = load_run()
+        for sig in (signal.SIGTERM, signal.SIGHUP):
+            self.addCleanup(signal.signal, sig, signal.getsignal(sig))
+
+    def test_sigterm_and_sighup_unwind_as_ctrl_c(self):
+        self.run._trap_signals()
+        for sig in (signal.SIGTERM, signal.SIGHUP):
+            with self.subTest(signal=sig.name):
+                with self.assertRaises(KeyboardInterrupt):
+                    signal.getsignal(sig)(sig, None)
+                self.assertEqual(self.run._SIGNALLED[-1], sig)
+
+    def test_an_ignored_sighup_stays_ignored(self):
+        # why: nohup ignores SIGHUP so that the run outlives its terminal
+        signal.signal(signal.SIGHUP, signal.SIG_IGN)
+        self.run._trap_signals()
+        self.assertIs(signal.getsignal(signal.SIGHUP), signal.SIG_IGN)
+        self.assertIs(signal.getsignal(signal.SIGTERM),
+                      self.run._as_interrupt)
 
 
 if __name__ == "__main__":
