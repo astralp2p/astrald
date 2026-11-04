@@ -40,6 +40,14 @@ def verdict(doc: dict) -> str:
     return "PASS"
 
 
+def _host(doc: dict) -> str:
+    """The host cell: its name, then its OS and machine where the run
+    recorded them (results v2.3; older runs name the host alone)."""
+    if not doc.get("host_os"):
+        return doc["host"]
+    return f"{doc['host']} · {doc['host_os']} {doc.get('host_arch', '')}".rstrip()
+
+
 def render(doc: dict, run_dir_name: str) -> str:
     """The whole run as markdown. Pure: takes the results doc, returns text."""
     entries = doc["entries"]
@@ -74,7 +82,7 @@ def render(doc: dict, run_dir_name: str) -> str:
         ["Environment", ", ".join(envs)],
         ["Driver", driver_cell],
         ["Target", f"{target} ({'hermetic' if doc['hermetic'] else 'not hermetic'})"],
-        ["Host", doc["host"]],
+        ["Host", _host(doc)],
         ["astrald", f"`{doc['astrald_ref']}`"],
         ["astral-py", f"`{doc['astral_py_ref']}`"],
     ], ["", ""])

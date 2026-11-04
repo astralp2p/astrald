@@ -673,6 +673,8 @@ def main(args) -> int:
         astral_py_ref=git_ref(Path(os.path.expanduser(
             cfg["astral_py"]["path"]))),
         host=platform.node(), sandbox="host",
+        host_os=f"{platform.system()} {platform.release()}",
+        host_arch=platform.machine(),
         # why --from is not hermetic: the world it boots was built by an
         # earlier run, possibly of another astrald
         hermetic=args.target == "fresh" and not args.from_stage,

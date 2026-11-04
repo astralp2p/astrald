@@ -105,3 +105,14 @@ class TestReport(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestHostRow(unittest.TestCase):
+    def test_a_v2_3_run_names_its_os_and_machine(self):
+        text = render(dict(doc(entry("smoke", "pass")), host_os="Linux 6.1",
+                           host_arch="aarch64"), "20260811T000000Z")
+        self.assertIn("| Host | pi · Linux 6.1 aarch64 |", text)
+
+    def test_an_older_run_names_its_host_alone(self):
+        text = render(doc(entry("smoke", "pass")), "20260811T000000Z")
+        self.assertIn("| Host | pi |", text)

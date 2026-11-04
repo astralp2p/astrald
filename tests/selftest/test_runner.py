@@ -463,3 +463,13 @@ class TestBareSelections(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestHostHeader(unittest.TestCase):
+    def test_a_run_names_the_os_and_machine_it_ran_on(self):
+        import platform
+        _, doc, text, _, _ = run(["smoke"])
+        self.assertEqual(doc["host_os"],
+                         f"{platform.system()} {platform.release()}")
+        self.assertEqual(doc["host_arch"], platform.machine())
+        self.assertIn(f"{doc['host_os']} {doc['host_arch']} |", text)
