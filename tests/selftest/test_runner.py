@@ -89,6 +89,7 @@ def run(selection: list, ex_class=FakeWorld, driver: str = "script",
 
     with tempfile.TemporaryDirectory() as tmp, \
             mock.patch.object(runner, "RESULTS", Path(tmp)), \
+            mock.patch.object(runner, "vm_unavailable", return_value=None), \
             mock.patch.object(runner, "ensure_binary",
                               return_value=(Path(tmp) / "astrald", "abc")), \
             mock.patch.object(runner, "_attach_world", world), \
@@ -120,6 +121,8 @@ class TestOperatorError(unittest.TestCase):
                                   driver="agent", target="fresh", keep=False)
         with tempfile.TemporaryDirectory() as tmp, \
                 mock.patch.object(runner, "RESULTS", Path(tmp)), \
+                mock.patch.object(runner, "vm_unavailable", return_value=None), \
+            mock.patch.object(runner, "vm_unavailable", return_value=None), \
                 mock.patch.object(runner, "ensure_binary",
                                   return_value=(Path(tmp) / "astrald", "abc")), \
                 mock.patch.object(runner, "_vm_world",
@@ -355,6 +358,8 @@ class TestPushedHeader(unittest.TestCase):
                                   driver="agent", target="fresh", keep=False)
         with tempfile.TemporaryDirectory() as tmp, \
                 mock.patch.object(runner, "RESULTS", Path(tmp)), \
+                mock.patch.object(runner, "vm_unavailable", return_value=None), \
+            mock.patch.object(runner, "vm_unavailable", return_value=None), \
                 mock.patch.object(runner, "ensure_binary",
                                   return_value=(Path(tmp) / "astrald", "abc")), \
                 mock.patch.object(runner, "_vm_world",
@@ -387,6 +392,7 @@ class TestDriverEnv(unittest.TestCase):
                 mock.patch.dict("os.environ", self.AMBIENT), \
                 mock.patch.object(runner, "RESULTS", Path(tmp) / "results"), \
                 mock.patch.object(runner, "SNAPSHOTS", Path(tmp)), \
+                mock.patch.object(runner, "vm_unavailable", return_value=None), \
                 mock.patch.object(runner, "stages", return_value={"gw"}), \
                 mock.patch.object(runner, "ensure_binary",
                                   return_value=(Path(tmp) / "astrald", "abc")), \
