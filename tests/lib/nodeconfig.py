@@ -145,8 +145,13 @@ class NodePorts:
         return f"http://127.0.0.1:{self.authority}/authorize"
 
 
+# Ports per node: +0 apphost, +1 tcp, +2 ether, +3 kcp, +4 mcp, +5 authority;
+# +6..+9 are unused.
+PORTS_PER_NODE = 10
+
+
 def ports_for(base: int, index: int) -> NodePorts:
-    p = base + 10 * index
+    p = base + PORTS_PER_NODE * index
     return NodePorts(apphost=p, tcp=p + 1, ether=p + 2, kcp=p + 3, mcp=p + 4,
                      authority=p + 5)
 

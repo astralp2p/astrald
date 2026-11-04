@@ -51,9 +51,10 @@ def run_worlds(tmp: Path, selection: list, world=FakeWorld,
                               target="fresh", keep=False, isolate=isolate)
     opened = []
 
-    def open_world(dir, binary, base, keep, config=None):
+    def open_world(dir, binary, base, max_nodes, keep, config=None):
         opened.append((Path(dir).parent.name, world()))
         opened[-1][1].config = config
+        opened[-1][1].max_nodes = max_nodes
         return opened[-1][1]
 
     with mock.patch.object(runner, "RESULTS", tmp / "results"), \
@@ -148,7 +149,7 @@ class TestLocalWorldConfig(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp, \
                 mock.patch.object(local, "LocalNode", Node):
             world = local.LocalWorld(Path(tmp) / "session", Path("astrald"),
-                                     20800, config={"nomcp1": {
+                                     20800, max_nodes=20, config={"nomcp1": {
                                          "mcp": {"bind_mcp": ""}}})
             try:
                 world.ensure(SimpleNamespace(name="t", ops=[],
@@ -161,6 +162,71 @@ class TestLocalWorldConfig(unittest.TestCase):
                          "tcp:127.0.0.1:20804")
         self.assertEqual((views["node1"]["serves_mcp"],
                           views["nomcp1"]["serves_mcp"]), (True, False))
+
+
+class StartsNothing:
+    """A LocalNode that records its start and stop and runs no daemon."""
+    started: list = []
+
+    def __init__(self, name, root, binary, ports, configs=None):
+        self.name, self.ports, self.stopped = name, ports, False
+
+    def start(self, keep=False):
+        StartsNothing.started.append(self.name)
+
+    async def wait_ready(self, timeout=30.0):
+        pass
+
+    def stop(self):
+        self.stopped = True
+
+
+class TestLocalWorldSpan(unittest.TestCase):
+    def world(self, tmp, max_nodes):
+        StartsNothing.started = []
+        return LocalWorld(Path(tmp) / "session", Path("astrald"), 20800,
+                          max_nodes=max_nodes)
+
+    def ensure(self, world, *nodes):
+        world.ensure(SimpleNamespace(name="t", ops=[], nodes=list(nodes)))
+
+    def test_a_roster_past_the_limit_starts_none_of_its_new_nodes(self):
+        from lib.worlds import local
+        with tempfile.TemporaryDirectory() as tmp, \
+                mock.patch.object(local, "LocalNode", StartsNothing):
+            world = self.world(tmp, 2)
+            self.ensure(world, "node1")
+            with self.assertRaisesRegex(
+                    WorldError, r"^session: node2, node3: the world already "
+                    r"runs 1 nodes, and \[ports\] span in tests/config.toml "
+                    r"gives a world 2$"):
+                self.ensure(world, "node1", "node2", "node3")
+            self.assertEqual(StartsNothing.started, ["node1"])
+            self.assertEqual(list(world._nodes), ["node1"])
+            self.assertFalse(world._nodes["node1"].stopped)
+            world.close(keep=False)
+
+    def test_a_roster_of_nodes_already_up_is_never_refused(self):
+        from lib.worlds import local
+        with tempfile.TemporaryDirectory() as tmp, \
+                mock.patch.object(local, "LocalNode", StartsNothing):
+            world = self.world(tmp, 2)
+            self.ensure(world, "node1", "node2", "node1")
+            self.ensure(world, "node2", "node1")
+            self.assertEqual(StartsNothing.started, ["node1", "node2"])
+            self.assertEqual(world._nodes["node2"].ports.apphost, 20810)
+            world.close(keep=False)
+
+    def test_the_runner_gives_each_local_world_the_span_over_ten(self):
+        import tomllib
+        from lib.nodeconfig import PORTS_PER_NODE
+        span = tomllib.loads((runner.TESTS / "config.toml")
+                             .read_text())["ports"]["span"]
+        with tempfile.TemporaryDirectory() as tmp:
+            _, _, opened = run_worlds(Path(tmp), ["observer", "reader"],
+                                      isolate=True)
+        self.assertEqual({w.max_nodes for _, w in opened},
+                         {span // PORTS_PER_NODE})
 
 
 class TestSkips(unittest.TestCase):
@@ -241,7 +307,7 @@ class TestClose(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as tmp:
             dir = Path(tmp) / "w0" / "session"
-            world = LocalWorld(dir, Path(tmp) / "astrald", 0)
+            world = LocalWorld(dir, Path(tmp) / "astrald", 0, max_nodes=20)
             nodes = {"node1": Node(True), "node2": Node(False)}
             world._nodes = nodes
             with self.assertRaisesRegex(WorldError, "node1: still running"):
