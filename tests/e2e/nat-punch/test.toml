@@ -6,9 +6,6 @@ after   = "adopt-node"
 destroys = true
 ops     = ["enable-tor node1 node2",
            "enter-nat node1 node2",
-           # the session is an ssh -L forward and ssh lands in the root netns;
-           # enter-nat just moved apphost out of it. This is the door back in.
-           "expose-apphost node1 node2",
            "configure-nat-tor node1 node2",
            "add-reflector node1 node2 --reflector reflector"]
 facts   = ["nat_link_networks"]

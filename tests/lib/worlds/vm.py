@@ -15,15 +15,14 @@ The session is real ssh port-forwarding. netsim writes a standard OpenSSH
 config per simulation at `<sim_dir>/ssh_config` — one `Host <vm>` block, each
 `HostName 127.0.0.1` on its own forwarded port, `User root`, an `IdentityFile`
 beside it (sourced: netsim `sshutil.render_ssh_config`). So a guest's apphost
-reaches the host through `ssh -F <config> -N -L <local>:<apphost>:8625 <vm>`,
-and the session view carries the local end. `<apphost>` is the guest's loopback
-normally and its netns-private address once enter-nat has moved astrald, since
-an ssh forward lands in the root netns and the netns loopback is not that.
-Drivers and oracles stay byte-identical across envs because the tunnel is the
-only difference.
+reaches the host through `ssh -F <config> -N -L <local>:<socket> <vm>`, an
+OpenSSH stream-local forward to apphost's unix socket, and the session view
+carries the local end. Drivers and oracles stay byte-identical across envs
+because the tunnel is the only difference.
 
-note: none of this has run against a VM since the stage cache went; the call
-sequence is pinned in selftest/test_vm_world.py against a faked netsim.
+note: none of this has run against a VM since the stage cache went, and the
+socket forward never has; the call sequence is pinned in
+selftest/test_vm_world.py against a faked netsim.
 """
 import asyncio
 import json
@@ -43,18 +42,17 @@ from lib.worlds import World, WorldError, node_entry
 
 TESTS = Path(__file__).resolve().parent.parent.parent
 RECIPE = TESTS / "netsim" / "labs" / "two-node-plus-external" / "lab.story"
-APPHOST_PORT = 8625          # the guest's apphost, inside netns priv when NAT'd
+APPHOST_PORT = 8625          # apphost's TCP listener in the guest
 SCRATCH_STAGE = "e2e-scratch"     # a fresh sim always saves; this is what it saves to
 GUEST_ROOT = "/var/lib/astrald"   # install-astrald's -root (its systemd unit)
+# apphost's unix socket in the guest, beside its TCP listener
+APPHOST_SOCKET = f"{GUEST_ROOT}/apphost.sock"
 GUEST_TCP_PORT = 1791             # astrald's default tcp listener in the lab
 # where a saved world keeps its record, root-only: the operator, `tester`,
 # must not read the tokens it is judged with
 GUEST_RECORD = "/var/lib/astral-tests/world.json"
 # the sshd drop-in that hands root's sessions the VM's harness token
 SSHD_DROPIN = "/etc/ssh/sshd_config.d/astral-tests.conf"
-# enter-nat's private host inside netns `priv`, routable from the root netns
-# over the veth pair it creates (netsim/ops/enter-nat).
-NAT_NETNS_HOST = "192.168.99.2"
 SSH_READY_TIMEOUT = 120.0
 # why: a guest that just lost its data regenerates its node key and bootstraps
 # a fresh onion before apphost listens — minutes on a 1-vCPU VM, not seconds.
@@ -151,9 +149,7 @@ class VmWorld(World):
         # there are no identities to give — leave-lan silently fell back to
         # its alias hunt and failed with the roster in fact correct. Opening
         # twice is what the call is already built for: it reuses a live
-        # tunnel, and reopens one whose target moved, which is exactly what
-        # enter-nat does to apphost mid-ops. The second call is what keeps
-        # nat-punch working.
+        # tunnel, and reopens one whose ssh exited under an op.
         self._open_session(test.nodes)
         for op in test.ops:
             self.run_op(op)
@@ -457,32 +453,28 @@ mv {GUEST_RECORD}.new {GUEST_RECORD}""")
             s.bind(("127.0.0.1", 0))
             return s.getsockname()[1]
 
-    def _apphost_host(self, vm: str) -> str:
-        """Where this VM's apphost listens, as seen from the VM's root netns.
+    def _tunnel(self, vm: str) -> tuple:
+        """A local port that reaches this VM's apphost, held open by ssh -L.
 
-        why: enter-nat relocates astrald into netns `priv` (192.168.99.2) so a
-        NAT'd node has no direct LAN path. apphost then listens on the netns
-        loopback, and 127.0.0.1 in the root netns — which is where sshd is, and
-        therefore where an `ssh -L` forward lands — reaches nothing. The veth
-        the netns hangs off is routable from the root netns, so the forward
-        aims at the private address instead and the session survives the move.
+        why the socket and not the TCP port: sshd, and so the forward's far
+        end, is in the guest's root netns, and enter-nat moves astrald into
+        netns `priv`, whose loopback the root netns cannot reach. A unix
+        socket is found by path, and enter-nat leaves the mount namespace
+        shared, so one target serves a NAT'd node and a LAN one alike.
+        note: sshd connects to the socket anew for each connection, so the
+        forward outlives an astrald restart; until apphost listens again, a
+        connection through it is closed at once.
+        note: stream-local forwarding needs the guest sshd's
+        AllowStreamLocalForwarding, on by default; no lab op sets it.
         """
-        out = self.ssh(vm, "ip netns list 2>/dev/null || true", check=False)
-        if "priv" in out.split():
-            return NAT_NETNS_HOST
-        return "127.0.0.1"
-
-    def _tunnel(self, vm: str, host: str | None = None) -> tuple:
-        """A local port that reaches this VM's apphost, held open by ssh -L."""
         port = self._free_port()
-        host = host or self._apphost_host(vm)
         argv = ["ssh", "-F", str(self.sim_dir / "ssh_config"), "-N",
                 "-o", "ExitOnForwardFailure=yes",
                 # why: a guest under load (an astrald restart on one vCPU)
                 # can stall long enough for ssh to give up, and a dead
                 # forward looks to a driver like a refused connection.
                 "-o", "ServerAliveInterval=15", "-o", "ServerAliveCountMax=8",
-                "-L", f"{port}:{host}:{APPHOST_PORT}", vm]
+                "-L", f"{port}:{APPHOST_SOCKET}", vm]
         # why a log file and its own session: a kept world's tunnels outlive
         # the runner, so ssh must neither write into a pipe nobody reads nor
         # die with the runner's Ctrl-C
@@ -520,7 +512,17 @@ mv {GUEST_RECORD}.new {GUEST_RECORD}""")
         refuses a history the manifests now configure otherwise
         (runner._check_saved_config), so a resumed world is pushed them again.
         """
-        modules = harness_configs(f"tcp:127.0.0.1:{APPHOST_PORT}", token)
+        # why TCP: the guest's own astral-query dials tcp:127.0.0.1:8625 unless
+        # told otherwise (astral-go lib/apphost DefaultEndpoint), the vmops'
+        # and the operator's alike.
+        # why the socket as well: it is what every tunnel reaches (_tunnel).
+        # note: the socket is no door for the operator, `tester`. GUEST_ROOT
+        # is root-only (install-astrald's `install -d -m 700`), and astrald
+        # runs as root under systemd's default umask 022, so the socket is
+        # writable by root alone. apphost grants nothing by transport anyway:
+        # authority comes from the token a session presents.
+        modules = harness_configs([f"tcp:127.0.0.1:{APPHOST_PORT}",
+                                   f"unix:{APPHOST_SOCKET}"], token)
         for module, keys in self.config.get(vm, {}).items():
             modules[module] = {**modules.get(module, {}), **keys}
         return {f"{module}.yaml": config_text(doc)
@@ -613,21 +615,8 @@ systemctl restart astrald""")
             # that has nothing to do with the test.
             if info.get("ssh") is not None and info["ssh"].poll() is not None:
                 info.pop("port", None)
-            # why: and reopen one whose target moved. enter-nat relocates
-            # apphost into netns priv, and the ssh holding the old forward
-            # stays perfectly alive while forwarding to nothing — so liveness
-            # is not the test. A driver then meets "closed before the
-            # greeting", which reads as a broken daemon and is a stale tunnel.
-            want = self._apphost_host(vm)
-            if "port" in info and info.get("apphost_host") != want:
-                if info.get("ssh") is not None:
-                    info["ssh"].terminate()
-                    if info["ssh"] in self._tunnels:
-                        self._tunnels.remove(info["ssh"])
-                info.pop("port", None)
             if "port" not in info:
-                info["port"], info["ssh"] = self._tunnel(vm, want)
-                info["apphost_host"] = want
+                info["port"], info["ssh"] = self._tunnel(vm)
             if not info.get("identity"):
                 info["identity"] = self._whoami(info["port"], info["token"])
 
