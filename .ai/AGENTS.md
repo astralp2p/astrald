@@ -40,7 +40,7 @@
 ## Checks
 
 * `go build ./...` builds every package. `go test ./...` runs the unit tests.
-* `./tests/run` runs the default integration suite, `tests/suites/main.suite`, against local daemons.
+* `./tests/run` runs the default integration suite, `tests/suites/main.suite`, against local daemons. The default suite needs no netsim and runs on macOS.
 * `scripts/check-astral-blueprints.sh` checks that every Go type with an `ObjectType()` method is registered through `astral.Add`. The pre-commit hook in `.githooks/` runs it.
 
 ## Rules

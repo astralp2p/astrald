@@ -94,6 +94,12 @@ class TestShipped(unittest.TestCase):
         self.assertEqual(sorted(set(self.all) - listed), [],
                          "these tests are in no suite, so nothing runs them")
 
+    def test_main_suite_is_every_test_without_ops(self):
+        # why: main.suite is the run a host without netsim can make, so a
+        # test without ops that only another suite lists never runs there
+        main = set(load(TESTS / "suites" / "main.suite"))
+        self.assertEqual(main, {n for n, t in self.all.items() if not t.ops})
+
     def test_no_suite_lists_both_tor_link_and_nat_punch(self):
         # why: tor-link's leave-lan downs node2's LAN interface, and nat-punch's
         # enter-nat then finds none to move behind NAT — the two cannot share
