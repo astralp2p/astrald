@@ -27,7 +27,9 @@ selftest/test_vm_world.py against a faked netsim.
 import asyncio
 import json
 import os
+import platform
 import shlex
+import shutil
 import socket
 import subprocess
 import sys
@@ -59,6 +61,21 @@ SSH_READY_TIMEOUT = 120.0
 APPHOST_READY_TIMEOUT = 300.0
 # how long a killed simulation may stay listed before its world fails to close
 KILL_TIMEOUT = 60.0
+
+
+def unavailable() -> str | None:
+    """Why this host can run no VM world, or None when it can.
+
+    why the platform too, not only PATH: netsim's installer only warns about
+    missing dependencies, so netsim installs on a Mac, and the astrald a run
+    builds is for the host's OS, not the guests'.
+    """
+    system = platform.system()
+    if system != "Linux":
+        return f"netsim runs only on Linux, and this host is {system}"
+    if shutil.which("netsim") is None:
+        return "netsim is not on PATH"
+    return None
 
 
 def _netsim(*args, check=True, capture=True, timeout=None) -> str:

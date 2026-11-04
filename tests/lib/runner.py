@@ -30,6 +30,7 @@ from lib.worlds import WorldError
 from lib.worlds.attach import AttachWorld
 from lib.worlds.local import LocalWorld
 from lib.worlds.vm import VmWorld, stages
+from lib.worlds.vm import unavailable as vm_unavailable
 
 TESTS = Path(__file__).resolve().parent.parent
 REPO = TESTS.parent
@@ -293,6 +294,13 @@ def print_plan(tests: dict, args) -> int:
         print(f"run: {e}", file=sys.stderr)
         return 2
     print(planner.render(worlds), end="")
+    # why a note and not a refusal: a plan names what a run would do, on any
+    # host, so the goldens regenerate anywhere; the run is what is refused
+    why = vm_unavailable()
+    vms = [w.name for w in worlds if w.kind == "vm"]
+    if why and vms:
+        print(f"run: note: this host runs no VM world ({why}); a run of "
+              f"this plan is refused at {', '.join(vms)}", file=sys.stderr)
     return 0
 
 
@@ -563,7 +571,19 @@ def _units(tests: dict, args) -> tuple:
     """([(world, env, [(Test, kind, driver)])], {world: config}) — what the
     run executes and the node config each world starts with, or ValueError
     naming why it cannot run."""
+    why = vm_unavailable()
+    if why and args.target == "fresh":
+        # why before planning: --save and --from name netsim stages, and a
+        # plan of them would answer "add --vm" on a host that cannot
+        for flag, given in (("--save", args.save), ("--from", args.from_stage)):
+            if given is not None:
+                raise ValueError(f"{flag} works on netsim stages, and this "
+                                 f"host runs no VM world ({why})")
     worlds = plan_worlds(tests, args)
+    if why:
+        refusal = _vm_refusal(tests, worlds, args, why)
+        if refusal:
+            raise ValueError(refusal)
     _check_stages(args)
     # note: a step the saved world already stands past is not run, and
     # leaves no record
@@ -571,6 +591,34 @@ def _units(tests: dict, args) -> tuple:
               [(tests[s.test], s.kind, s.driver)
                for s in w.steps if not s.done])
              for w in worlds], {w.name: w.config for w in worlds})
+
+
+def _vm_refusal(tests: dict, worlds: list, args, why: str) -> str | None:
+    """Why a host that runs no VM world refuses this plan, or None.
+
+    why the whole run: a run that started its local worlds and then failed
+    the VM one would read as a red test, not as a host that cannot run it.
+    """
+    lines = []
+    for w in worlds:
+        if w.kind != "vm":
+            continue
+        ops = [(s.test, tests[s.test].ops) for s in w.steps
+               if not s.done and tests[s.test].ops]
+        if ops:
+            lines += [f"  {w.name}: {t} runs VM ops ({'; '.join(o)})"
+                      for t, o in ops]
+        elif args.vm:
+            lines.append(f"  {w.name}: --vm puts every world in VMs")
+        else:
+            lines.append(f"  {w.name}: --driver agent runs the lab's "
+                         "operator, inside VM node1")
+    if not lines:
+        return None
+    return (f"this host runs no VM world ({why}), and this selection needs "
+            "one:\n" + "\n".join(lines) + "\nrun it on a Linux host with "
+            "netsim, or select without these (tests/README.md, Without "
+            "netsim)")
 
 
 def _operator(cfg: dict, results) -> dict:
@@ -625,6 +673,8 @@ def main(args) -> int:
         astral_py_ref=git_ref(Path(os.path.expanduser(
             cfg["astral_py"]["path"]))),
         host=platform.node(), sandbox="host",
+        host_os=f"{platform.system()} {platform.release()}",
+        host_arch=platform.machine(),
         # why --from is not hermetic: the world it boots was built by an
         # earlier run, possibly of another astrald
         hermetic=args.target == "fresh" and not args.from_stage,

@@ -195,6 +195,7 @@ def run(tmp: Path, lab: FakeLab, selection: list, **opts) -> tuple:
         for p in lab.patches():
             stack.enter_context(p)
         for p in (mock.patch.object(runner, "RESULTS", tmp / "results"),
+                  mock.patch.object(runner, "vm_unavailable", return_value=None),
                   mock.patch.object(runner, "SNAPSHOTS",
                                     lab.home.parent / "snapshots"),
                   mock.patch.object(runner, "ensure_binary",

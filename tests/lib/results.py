@@ -1,5 +1,16 @@
 """results.json / events.jsonl writer — the system's one stable output (v2).
 
+v2.3 adds four header fields; every earlier field and value stays as it was:
+
+* `host_os` — the runner's OS and release, `platform.system()` and
+  `platform.release()`, e.g. `Darwin 24.4.0`; a host-specific defect is
+  attributable only when the result names the OS it ran on;
+* `host_arch` — the runner's machine, `platform.machine()`, e.g. `arm64`;
+* `agent_profile` — under --driver agent, the operator the run drove,
+  `agent.NAME`;
+* `agent_model` — under --driver agent, the model the operator drove with,
+  or `(lab default)` when config.toml names none.
+
 v2.2 adds three optional record fields and four optional header fields;
 every earlier field and value stays as it was:
 
@@ -75,6 +86,8 @@ class RunHeader:
     # default so a caller that only cares about the records stays unchanged.
     selection: str = ""
     target: str = "fresh"
+    host_os: str = ""
+    host_arch: str = ""
 
 
 class RunResults:
@@ -88,6 +101,8 @@ class RunResults:
             # result is only reproducible if the run pins what it imported.
             "astral_py_ref": header.astral_py_ref,
             "host": header.host,
+            "host_os": header.host_os,
+            "host_arch": header.host_arch,
             "sandbox": header.sandbox,
             "hermetic": header.hermetic,
             "selection": header.selection,

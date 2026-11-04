@@ -26,6 +26,8 @@ class TestResults(unittest.TestCase):
             self.assertEqual(data["astrald_ref"], "abc1234")
             self.assertEqual(data["astral_py_ref"], "def5678")
             self.assertEqual(data["host"], "pi")
+            # v2.3: present, empty when the caller names no OS
+            self.assertEqual((data["host_os"], data["host_arch"]), ("", ""))
             self.assertEqual(data["sandbox"], "host")
             self.assertTrue(data["hermetic"])
             self.assertEqual(len(data["entries"]), 1)

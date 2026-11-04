@@ -7,6 +7,9 @@ One command, real daemons, deterministic verdicts:
     ./tests/run --plan main.suite      # what a run would do, with nothing started
     ./tests/run smoke --target attach  # judge a daemon you already run
 
+The default suite needs no netsim and runs on Linux or macOS; see
+[Without netsim](#without-netsim).
+
 Design: https://wiki.satforge.dev/doc/integration-testing-system-tAKjyvbcHo ·
 vision: https://wiki.satforge.dev/doc/improving-on-e2e-system-2C4ELWFOgg
 
@@ -100,16 +103,50 @@ passes alone and fails in the shared run, a test before it changed its world.
 
 ## Suites
 
-| suite | what it is | worlds | runs in |
-|-------|------------|--------|---------|
-| `main.suite` | every local test, the everyday one | local | ~3 min |
-| `tor.suite` | two nodes meet on a LAN, one leaves it, Tor holds | VM | ~37 min |
-| `nat.suite` | two nodes meet on a LAN, then hole-punch through NAT | VM | not measured |
-| `gateway.suite` | a NAT'd node reaches its swarm through a gateway | VM | not measured |
-| `agent.suite` | the flows an AI operator can drive (`--driver agent`) | VM | ~1.5 h |
+| suite | what it is | worlds (needs) | runs in |
+|-------|------------|----------------|---------|
+| `main.suite` | every test without `ops`, the everyday one | local (any host) | ~3 min; ~2 min on an M-series Mac |
+| `tor.suite` | two nodes meet on a LAN, one leaves it, Tor holds | VM (netsim) | ~37 min |
+| `nat.suite` | two nodes meet on a LAN, then hole-punch through NAT | VM (netsim) | not measured |
+| `gateway.suite` | a NAT'd node reaches its swarm through a gateway | VM (netsim) | not measured |
+| `agent.suite` | the flows an AI operator can drive (`--driver agent`) | VM (netsim) | ~1.5 h |
 
 The plans of the shipped suites are pinned under `selftest/golden/`, so a
 manifest change that moves a test shows up as a diff someone reads.
+
+## Without netsim
+
+A VM world needs netsim, and netsim runs only on Linux. Everything else
+needs no VM: `main.suite`, any test without `ops`, `--isolate`, and
+`--target attach`, on Linux or macOS.
+
+A host that runs no VM world (not Linux, or no `netsim` on PATH) refuses a
+run that needs one, whole and before anything is built, leased or written:
+the tor, nat and gateway suites, any test with `ops`, `--vm`, `--save`,
+`--from`, and `--driver agent`, whose operator lives in VM node1. The
+refusal names each test and its ops, or the flag:
+
+    $ ./tests/run tor-link
+    run: this host runs no VM world (netsim is not on PATH), and this selection needs one:
+      w0: tor-link runs VM ops (enable-tor node1 node2; leave-lan node2 --peer node1)
+    run it on a Linux host with netsim, or select without these (tests/README.md, Without netsim)
+
+`--plan` still prints the plan and exits 0, and notes on stderr which
+worlds a run would refuse.
+
+A first run on a new machine:
+
+    git clone https://git.satforge.dev/astralp2p/astral-py   # path in config.toml
+    ./tests/run --plan                 # what the default suite does
+    ./tests/run                        # main.suite, local worlds
+    cd tests && PYTHONPATH=.:<astral-py>/src python3 -m unittest discover -s selftest -t .
+
+On Linux with netsim, `netsim doctor` checks the host and `./tests/link.sh`
+registers this tree's ops once per checkout.
+
+On macOS, the port lease misses a port another process holds on
+`127.0.0.1` (`test_lease_ports_skips_a_bound_span` fails there), so a run
+can collide with such a listener.
 
 ## Worlds
 
@@ -128,7 +165,7 @@ A world is one of three kinds:
 | kind | the machines | when |
 |------|--------------|------|
 | local | astrald processes on loopback | the default |
-| vm | the lab's VMs on a simulated LAN (`netsim/labs/`) | a test with `ops`, `--vm`, or `--driver agent` |
+| vm | the lab's VMs on a simulated LAN (`netsim/labs/`); needs netsim on a Linux host, refused elsewhere | a test with `ops`, `--vm`, or `--driver agent` |
 | attach | the daemon you already run | `--target attach` |
 
 A VM world boots the lab, pushes the astrald and astral-query under test to
@@ -225,10 +262,18 @@ A skipped test carries a `reason`: the test on its `after` chain that failed
 in its world, the world dying, or the run being interrupted. A run holding a
 skip reports INCOMPLETE, never PASS; a failure outranks a skip.
 
+| exit | means |
+|------|-------|
+| 0 | PASS |
+| 1 | FAIL or INCOMPLETE; a preflight refusal (astral-py missing or older than `astral_py.requires`, Python < 3.11); or a harness crash, which prints a traceback and leaves no results directory |
+| 2 | refused before anything ran, with no results directory: a plan error, a host that runs no VM world, busy ports, a usage error |
+| 130 | interrupted by Ctrl-C |
+
 Under `results/<stamp>/`:
 
 - `report.md` for people, `results.json` and `events.jsonl` for machines
-  (schema in `lib/results.py`);
+  (schema in `lib/results.py`); the header names the host, its OS and
+  release (`host_os`) and its machine (`host_arch`);
 - `<test>/`: the test's `session.json` view, `driver.log`, `verify.log` and
   `facts.json`. A test replayed as a prereq in a later world writes
   `<test>.w<N>/`;
@@ -243,13 +288,15 @@ across runs.
 
 ## Requirements
 
-Python ≥ 3.11, a Go toolchain, and an astral-py checkout (path in
-`config.toml`) — imported directly from its `src/`, since the package has
-zero dependencies. The checkout holds the commit `config.toml`
-`astral_py.requires` names; `tests/run` refuses an older one before it builds
-anything. No venv, no pip. A VM world additionally needs a working
-`netsim` on PATH, and `./tests/link.sh` run once per checkout to register
-this tree's netsim ops.
+Every run, on Linux or macOS: Python ≥ 3.11, a Go toolchain, and an
+astral-py checkout (path in `config.toml`) — imported directly from its
+`src/`, since the package has zero dependencies. The checkout holds the
+commit `config.toml` `astral_py.requires` names; `tests/run` refuses an older
+one before it builds anything. No venv, no pip.
+
+VM worlds: a Linux host with a working `netsim` on PATH (`netsim doctor`),
+and `./tests/link.sh` run once per checkout to register this tree's netsim
+ops.
 
 The harness's own selftests take a second and touch no daemon:
 
