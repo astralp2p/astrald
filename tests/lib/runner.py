@@ -28,6 +28,7 @@ from lib.record import WorldRecord
 from lib.results import RunHeader, RunResults, fresh_run_dir
 from lib.worlds import WorldError
 from lib.worlds.attach import AttachWorld
+from lib.worlds.docker import DockerWorld
 from lib.worlds.local import LocalWorld
 from lib.worlds.vm import VmWorld, stages
 from lib.worlds.vm import unavailable as vm_unavailable
@@ -401,6 +402,14 @@ def _local_world(dir: Path, binary: Path, port_base: int, keep: bool,
     """A fresh local world, its node roots under dir, its nodes started with
     the world's merged config overrides."""
     return LocalWorld(dir, binary, port_base, keep=keep, config=config)
+
+
+def _docker_world(dir: Path, binary: Path, image: str, port_base: int,
+                  keep: bool, config: dict | None = None):
+    """A Docker world, its logs under dir: one container per roster node,
+    from `image`, running the Linux `binary`."""
+    return DockerWorld(dir, binary, image, port_base, keep=keep,
+                       config=config)
 
 
 def _vm_world(dir: Path, binary: Path, ref: str, keep: bool,
