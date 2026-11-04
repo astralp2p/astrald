@@ -1,3 +1,4 @@
+import errno
 import json
 import socket
 import tempfile
@@ -129,12 +130,54 @@ class TestNodeConfig(unittest.TestCase):
             second.lock.close()
 
     def test_lease_ports_skips_a_bound_span(self):
+        # why these holders: what a run's nodes bind — 127.0.0.1 for apphost,
+        # mcp and the authority, Go's dual-stack [::] for tcp, ether and kcp
+        # — and a foreign 0.0.0.0. macOS read a 127.0.0.1 one as free.
+        holders = [("tcp 127.0.0.1", socket.AF_INET, socket.SOCK_STREAM,
+                    "127.0.0.1"),
+                   ("tcp 0.0.0.0", socket.AF_INET, socket.SOCK_STREAM,
+                    "0.0.0.0"),
+                   ("tcp [::]", socket.AF_INET6, socket.SOCK_STREAM, "::"),
+                   ("udp 127.0.0.1", socket.AF_INET, socket.SOCK_DGRAM,
+                    "127.0.0.1"),
+                   ("udp [::]", socket.AF_INET6, socket.SOCK_DGRAM, "::")]
+        for name, family, kind, addr in holders:
+            with self.subTest(holder=name):
+                if family == socket.AF_INET6 and not socket.has_ipv6:
+                    self.skipTest(f"{name}: no IPv6 on this host")
+                with socket.socket(family, kind) as holder:
+                    if family == socket.AF_INET6:
+                        holder.setsockopt(socket.IPPROTO_IPV6,
+                                          socket.IPV6_V6ONLY, 0)
+                    try:
+                        holder.bind((addr, LEASE_BASE + 4))
+                    except OSError as e:
+                        if e.errno != errno.EADDRNOTAVAIL:
+                            raise
+                        self.skipTest(f"{name}: {e}")
+                    if kind == socket.SOCK_STREAM:
+                        holder.listen()
+                    lease = lease_ports(LEASE_BASE, span=10, spans=3)
+                    lease.lock.close()
+                self.assertEqual(lease.base, LEASE_BASE + 10)
+
+    def test_lease_ports_reads_a_time_wait_port_free(self):
+        # why: astrald binds over its own TIME_WAIT (Go sets SO_REUSEADDR),
+        # so a span a finished run just left must lease again
+        port = LEASE_BASE + 6
         with socket.socket() as listener:
-            listener.bind(("127.0.0.1", LEASE_BASE + 4))
+            listener.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            listener.bind(("127.0.0.1", port))
             listener.listen()
-            lease = lease_ports(LEASE_BASE, span=10, spans=3)
-            lease.lock.close()
-        self.assertEqual(lease.base, LEASE_BASE + 10)
+            with socket.create_connection(("127.0.0.1", port)) as client:
+                accepted, _ = listener.accept()
+                accepted.close()        # the server side closes first
+                client.recv(1)          # its FIN has arrived
+        with socket.socket() as plain, self.assertRaises(OSError):
+            plain.bind(("127.0.0.1", port))     # the port is held: TIME_WAIT
+        lease = lease_ports(LEASE_BASE, span=10, spans=3)
+        lease.lock.close()
+        self.assertEqual(lease.base, LEASE_BASE)
 
     def test_lease_ports_refuses_when_every_span_is_leased(self):
         held = lease_ports(LEASE_BASE, span=10, spans=1)
