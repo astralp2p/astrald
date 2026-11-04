@@ -214,10 +214,17 @@ or in node1's container in a Docker world — and `lib/agent.py` drives it the
 same way in both:
 
 - the prompt's placeholders fill from the step's view: `{facts.<name>}`,
-  `{<node>.identity}` and `{<node>.alias}`, the roster name. An unknown
+  `{<node>.identity}`, `{<node>.alias}`, the roster name, and
+  `{<node>.lan_endpoint}`, the address a peer links to. An unknown
   one is refused before the operator starts, as a `driver` failure, and so
   is any that would hand the operator a token: it must never hold what it
   is judged with;
+- a prompt holds in either world. It names a node by `{<node>.alias}`
+  together with `{<node>.identity}`, since a roster name resolves on a node
+  only where a script set it as an alias and a node's own alias is random.
+  It gives `{<node>.lan_endpoint}` when the flow links to a peer, and it
+  never says hostname, local network or this node: `selftest/test_prompts.py`
+  holds every prompt to that;
 - a footer asks for exactly the test's `facts`, in `~/.facts/<test>.json`.
   That file alone is collected, and a declared fact missing from it is a
   `driver` failure. It is removed before the session, so no earlier copy
