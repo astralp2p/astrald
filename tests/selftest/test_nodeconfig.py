@@ -1,6 +1,7 @@
 import json
 import socket
 import tempfile
+import tomllib
 import unittest
 from pathlib import Path
 
@@ -10,8 +11,10 @@ from lib.nodeconfig import (AUTH_ACTIONS, E2E_APPHOST_POLICIES, E2E_GATE,
                             PEER_TOOLS, NodePorts, PortsBusy, lease_ports,
                             module_configs, ports_for, render, serves_mcp)
 
-# why not the config base: a real run on this host may hold 20800's spans
-LEASE_BASE = 23800
+# why outside config.toml's lease range: a real run on this host may hold
+# any of its spans
+LEASE_BASE = 25800
+LEASE_END = LEASE_BASE + 30     # the end of the spans these tests lease
 PORTS = NodePorts(20800, 20801, 20802, 20803, 20804, 20805)
 
 
@@ -107,6 +110,14 @@ class TestNodeConfig(unittest.TestCase):
         source = Path(nodeconfig.__file__).read_text()
         self.assertNotIn("nomcp1", source)
         self.assertNotIn("WITHOUT_MCP", source)
+
+    def test_the_leases_here_lie_outside_the_runs_lease_range(self):
+        ports = tomllib.loads((Path(nodeconfig.__file__).parent.parent
+                               / "config.toml").read_text())["ports"]
+        end = ports["base"] + ports["span"] * ports["spans"]
+        self.assertTrue(LEASE_END <= ports["base"] or LEASE_BASE >= end,
+                        f"[{LEASE_BASE}, {LEASE_END}) overlaps "
+                        f"[{ports['base']}, {end})")
 
     def test_lease_ports_skips_a_leased_span(self):
         first = lease_ports(LEASE_BASE, span=10, spans=3)

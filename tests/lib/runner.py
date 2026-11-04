@@ -23,7 +23,7 @@ GO_ENV_VARS = ("ASTRALD_APPHOST_ENDPOINT", "ASTRALD_APPHOST_TOKEN")
 from lib import agent, manifest, report, suites
 from lib import plan as planner
 from lib.build import ensure_binary, git_ref, linux_binaries
-from lib.nodeconfig import PortsBusy, lease_ports
+from lib.nodeconfig import PORTS_PER_NODE, PortsBusy, lease_ports
 from lib.record import WorldRecord
 from lib.results import RunHeader, RunResults, fresh_run_dir
 from lib.worlds import WorldError
@@ -420,20 +420,21 @@ def _attach_world():
     return AttachWorld()
 
 
-def _local_world(dir: Path, binary: Path, port_base: int, keep: bool,
-                 config: dict | None = None):
+def _local_world(dir: Path, binary: Path, port_base: int, max_nodes: int,
+                 keep: bool, config: dict | None = None):
     """A fresh local world, its node roots under dir, its nodes started with
     the world's merged config overrides."""
-    return LocalWorld(dir, binary, port_base, keep=keep, config=config)
+    return LocalWorld(dir, binary, port_base, max_nodes=max_nodes,
+                      keep=keep, config=config)
 
 
 def _docker_world(dir: Path, binary: Path, image: str, port_base: int,
-                  keep: bool, config: dict | None = None,
+                  max_nodes: int, keep: bool, config: dict | None = None,
                   skill: Path | None = None):
     """A Docker world, its logs under dir: one container per roster node,
     from `image`, running the Linux `binary`."""
-    return DockerWorld(dir, binary, image, port_base, keep=keep,
-                       config=config, skill=skill)
+    return DockerWorld(dir, binary, image, port_base, max_nodes=max_nodes,
+                       keep=keep, config=config, skill=skill)
 
 
 def _prepare_docker() -> tuple:
@@ -716,6 +717,9 @@ def _operator(cfg: dict, results) -> dict:
 def main(args) -> int:
     args = _with_defaults(args)
     cfg = tomllib.loads((TESTS / "config.toml").read_text())
+    # why from config: a lease holds only its base, and node N of a world
+    # takes ports_for(base, N)
+    max_nodes = cfg["ports"]["span"] // PORTS_PER_NODE
 
     try:
         tests = manifest.load_all(TESTS / "e2e")
@@ -796,10 +800,10 @@ def main(args) -> int:
             return _attach_world()
         if env == "node":
             return _local_world(run_dir / name / "session", binary,
-                                lease.base, keep, configs[name])
+                                lease.base, max_nodes, keep, configs[name])
         if env == "container":
             return _docker_world(run_dir / name, linux, image, lease.base,
-                                 keep, configs[name], skill)
+                                 max_nodes, keep, configs[name], skill)
         world = _vm_world(run_dir / name, binary, ref, keep, configs[name])
         if args.from_stage:
             world.boot_from(args.from_stage, run.saved)

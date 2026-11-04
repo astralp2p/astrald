@@ -72,7 +72,8 @@ class WorldCase(unittest.TestCase):
             self.addCleanup(p.stop)
         return DockerWorld(self.tmp / "20261104T000000Z" / "w0",
                            self.tmp / "linux-arm64" / "astrald",
-                           "astral-node:abc", 20800, **kw)
+                           "astral-node:abc", 20800,
+                           **{"max_nodes": 20, **kw})
 
 
 class TestStart(WorldCase):
@@ -84,6 +85,16 @@ class TestStart(WorldCase):
         self.assertEqual([c[:2] for c in self.fake.calls
                           if c[:2] == ["network", "create"]],
                          [["network", "create"]])
+
+    def test_a_roster_past_the_span_starts_none_of_its_new_nodes(self):
+        w = self.world(max_nodes=2)
+        w.ensure(a_test(nodes=["node1"]))
+        with self.assertRaisesRegex(
+                WorldError, r"^node2, node3: the world already runs 1 nodes, "
+                r"and \[ports\] span in tests/config.toml gives a world 2$"):
+            w.ensure(a_test(nodes=["node1", "node2", "node3"]))
+        self.assertEqual(len(self.fake.of("run")), 1)
+        w.ensure(a_test(nodes=["node1"]))
 
     def test_a_container_gets_nothing_of_the_host(self):
         w = self.world()

@@ -152,9 +152,9 @@ def reap() -> list:
 
 class DockerWorld(World):
 
-    def __init__(self, dir: Path, binary: Path, image: str, port_base: int,
-                 keep: bool = False, config: dict | None = None,
-                 skill: Path | None = None):
+    def __init__(self, dir: Path, binary: Path, image: str, port_base: int, *,
+                 max_nodes: int, keep: bool = False,
+                 config: dict | None = None, skill: Path | None = None):
         self.dir = Path(dir)
         # the Linux astrald; astral-query lies beside it (build.query_binary)
         self.binary = Path(binary)
@@ -162,6 +162,9 @@ class DockerWorld(World):
         # why one base for every world of a run: the run holds one lease, and
         # its worlds run one after another, each from node index 0
         self.port_base = port_base
+        # why: node N publishes ports_for(port_base, N), so a node past the
+        # leased span would bind host ports another run may hold
+        self.max_nodes = max_nodes
         self.keep = keep
         self.config = config or {}
         self.skill = Path(skill) if skill else None
@@ -178,11 +181,17 @@ class DockerWorld(World):
         if test.ops:
             raise WorldError(f"{test.name}: a Docker world runs no VM "
                              "operations — they need a VM world (--vm)")
+        new = [n for n in dict.fromkeys(test.nodes) if n not in self._nodes]
+        # why before any start: a refused roster leaves the world as it was
+        if len(self._nodes) + len(new) > self.max_nodes:
+            raise WorldError(f"{', '.join(new)}: the world already runs "
+                             f"{len(self._nodes)} nodes, and [ports] span in "
+                             f"tests/config.toml gives a world "
+                             f"{self.max_nodes}")
         if self.network is None:
             self._open_network()
-        for name in test.nodes:
-            if name not in self._nodes:
-                self._start(name)
+        for name in new:
+            self._start(name)
 
     def nodes(self) -> dict:
         return {name: node_entry(
