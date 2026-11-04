@@ -36,7 +36,7 @@ a node is a process two ports away, a VM behind a tunnel, or your own daemon.
 
 ```toml
 nodes      = ["node1", "node2"]     # the roster: names this test's nodes
-after      = "adopt-node"           # the test whose world this one continues; absent: a fresh world
+after      = "adopt-node"           # the test whose world this one continues; absent: a root test
 destroys   = true                   # only this test's descendants may follow it in its world
 local_only = "reads a node root"    # it needs the host, so it never enters a VM world
 restart    = ["node1"]              # nodes restarted between driver and oracle (local worlds only)
@@ -49,6 +49,13 @@ timeout    = 180                    # the driver's and the oracle's budget, in s
 external_registration_sweep_interval = "1s"
 ```
 
+- **`nodes`** names nodes within the test's world: a name already used in
+  that world is the same node. Tests that share a world add up their
+  rosters, and root tests that destroy nothing share w0. A local world starts
+  at most `[ports] span / 10` distinct nodes, 20 with `tests/config.toml`'s
+  `span = 200`; a test that brings one more is FAIL/environment at
+  `prepare`, and `selftest/test_plan.py` fails first for a shipped suite.
+  `--plan` shows which tests share a world.
 - **`after`** is the whole ordering model: a test names the test whose
   world it continues, never a state. A new test needs only its files and an
   `after`.
