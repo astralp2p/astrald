@@ -8,6 +8,7 @@ as a diff someone reads.
 import argparse
 import itertools
 import tempfile
+import tomllib
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
@@ -15,6 +16,7 @@ from unittest import mock
 
 from lib import runner
 from lib.manifest import load_all
+from lib.nodeconfig import PORTS_PER_NODE
 from lib.plan import PlanError, chain, plan, render
 from lib.suites import load
 
@@ -142,6 +144,28 @@ class TestShippedPlans(Invariants, unittest.TestCase):
                     f"{suite}.suite plans differently; if intended, run "
                     f"./tests/run --plan{flag} {suite}.suite > "
                     f"tests/selftest/golden/{suite}.plan")
+
+    def test_every_shipped_local_world_fits_the_port_span(self):
+        # why: LocalWorld refuses a node past the span only when the run
+        # reaches it; this tells the test author at selftest time
+        span = tomllib.loads((TESTS / "config.toml")
+                             .read_text())["ports"]["span"]
+        limit = span // PORTS_PER_NODE
+        plans = {f"{suite}.suite": plan(self.tests, self.suites[suite],
+                                        self.suites[suite], driver=driver)
+                 for suite, driver in SUITES.items()}
+        plans["every test"] = plan(self.tests, sorted(self.tests))
+        for name, worlds in plans.items():
+            for w in worlds:
+                if w.kind != "local":
+                    continue
+                nodes = {n for s in w.steps for n in self.tests[s.test].nodes}
+                with self.subTest(plan=name, world=w.name):
+                    self.assertLessEqual(
+                        len(nodes), limit,
+                        f"{name} starts {len(nodes)} nodes in {w.name}, and "
+                        f"[ports] span in tests/config.toml gives a world "
+                        f"{limit}")
 
     def test_main_suite_is_one_world_and_a_world_per_destroyer(self):
         # note: every test that only builds or observes shares w0; each
