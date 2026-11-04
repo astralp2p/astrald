@@ -406,11 +406,11 @@ def _local_world(dir: Path, binary: Path, port_base: int, max_nodes: int,
 
 
 def _docker_world(dir: Path, binary: Path, image: str, port_base: int,
-                  keep: bool, config: dict | None = None):
+                  max_nodes: int, keep: bool, config: dict | None = None):
     """A Docker world, its logs under dir: one container per roster node,
     from `image`, running the Linux `binary`."""
-    return DockerWorld(dir, binary, image, port_base, keep=keep,
-                       config=config)
+    return DockerWorld(dir, binary, image, port_base, max_nodes=max_nodes,
+                       keep=keep, config=config)
 
 
 def _vm_world(dir: Path, binary: Path, ref: str, keep: bool,
