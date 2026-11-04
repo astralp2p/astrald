@@ -5,14 +5,22 @@ Stdlib only. astral-py is a zero-dependency package, so it is imported
 straight from its checkout (config.toml astral_py.path) via sys.path —
 no venv, no pip (the host lacks ensurepip).
 """
+import sys
+
+# why first: tomllib is 3.11's, and macOS's own /usr/bin/python3 is 3.9, which
+# would die on the import below with a traceback instead of this line
+if sys.version_info < (3, 11):
+    sys.exit("run: Python >= 3.11 required (found "
+             f"{sys.version.split()[0]} at {sys.executable})")
+
 import argparse
 import os
 import signal
-import sys
 import tomllib
 from pathlib import Path
 
 TESTS = Path(__file__).resolve().parent
+_SIGNALLED = []          # the signal that ended the run, when one did
 
 USAGE = """\
 examples:
@@ -77,27 +85,42 @@ def main() -> int:
                          "what its history has not")
     args = ap.parse_args()
 
-    if sys.version_info < (3, 11):
-        sys.exit("run: Python >= 3.11 required")
-
     sys.path.insert(0, str(TESTS))
     src = astral_src()
     sys.path.insert(1, str(src))
     os.environ["ASTRAL_TESTS_PYPATH"] = f"{TESTS}{os.pathsep}{src}"
 
     from lib import runner
+    _trap_signals()
     try:
         return runner.main(args)
     except KeyboardInterrupt:
-        # why: a shell stops a loop only on a child that SIGINT killed, and
-        # an exit status cannot say that; the report is already written
+        # why: a shell stops a loop only on a child that a signal killed,
+        # and an exit status cannot say that; the report is already written
         # note: dying of a signal skips the flush, and piped output is
         # block-buffered, so the verdict line would be lost
         sys.stdout.flush()
         sys.stderr.flush()
-        signal.signal(signal.SIGINT, signal.SIG_DFL)
-        os.kill(os.getpid(), signal.SIGINT)
-        return 130
+        sig = _SIGNALLED[0] if _SIGNALLED else signal.SIGINT
+        signal.signal(sig, signal.SIG_DFL)
+        os.kill(os.getpid(), sig)
+        return 128 + sig
+
+
+def _as_interrupt(signum, _frame):
+    _SIGNALLED.append(signum)
+    raise KeyboardInterrupt
+
+
+def _trap_signals():
+    """Read SIGTERM and SIGHUP as Ctrl-C, so the run unwinds and reports."""
+    # why: a tool's timeout and a closed terminal end a run with these, and
+    # Python dies of them without unwinding: no report, and off Linux the
+    # nodes outlive the run
+    # why not an ignored one: nohup ignores SIGHUP so that the run survives
+    for sig in (signal.SIGTERM, signal.SIGHUP):
+        if signal.getsignal(sig) != signal.SIG_IGN:
+            signal.signal(sig, _as_interrupt)
 
 
 if __name__ == "__main__":

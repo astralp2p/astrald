@@ -192,15 +192,28 @@ def lease_ports(base: int, span: int, spans: int) -> PortLease:
                     f"from {base} are leased or bound")
 
 
+# The binds a port must take to read free, by socket kind and address.
+#
+# why 127.0.0.1 beside 0.0.0.0 for TCP: under SO_REUSEADDR, macOS and the
+# BSDs refuse a bind only to a holder of the exact address it names, so a
+# 0.0.0.0 probe binds over a 127.0.0.1 listener — the address apphost, mcp
+# and the authority hold. Linux refuses it either way. 0.0.0.0 still catches
+# a 0.0.0.0 holder, and the dual-stack [::] that Go binds for ":port".
+# why UDP binds 0.0.0.0 alone: it sets no SO_REUSEADDR, so every OS refuses
+# it beside a holder on any IPv4 address, or a dual-stack [::].
+_PROBES = ((socket.SOCK_STREAM, "0.0.0.0"), (socket.SOCK_STREAM, "127.0.0.1"),
+           (socket.SOCK_DGRAM, "0.0.0.0"))
+
+
 def _bindable(port: int) -> bool:
-    for kind in (socket.SOCK_STREAM, socket.SOCK_DGRAM):
+    for kind, addr in _PROBES:
         with socket.socket(socket.AF_INET, kind) as s:
             # why: Go listeners set SO_REUSEADDR, so a port a finished run
             # left in TIME_WAIT is free to astrald and must read free here
             s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR,
                          kind == socket.SOCK_STREAM)
             try:
-                s.bind(("0.0.0.0", port))
+                s.bind((addr, port))
             except OSError:
                 return False
     return True

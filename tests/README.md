@@ -151,9 +151,7 @@ A first run on a new machine:
 On Linux with netsim, `netsim doctor` checks the host and `./tests/link.sh`
 registers this tree's ops once per checkout.
 
-On macOS, the port lease misses a port another process holds on
-`127.0.0.1` (`test_lease_ports_skips_a_bound_span` fails there), so a run
-can collide with such a listener.
+On macOS, see [Requirements, macOS](#macos) first.
 
 ## Worlds
 
@@ -307,6 +305,8 @@ skip reports INCOMPLETE, never PASS; a failure outranks a skip.
 | 1 | FAIL or INCOMPLETE; a preflight refusal (astral-py missing or older than `astral_py.requires`, Python < 3.11); or a harness crash, which prints a traceback and leaves no results directory |
 | 2 | refused before anything ran, with no results directory: a plan error, a host that runs no VM world, busy ports, a usage error |
 | 130 | interrupted by Ctrl-C |
+| 143 | ended by SIGTERM, with the report written |
+| 129 | ended by SIGHUP, with the report written; under `nohup` SIGHUP stays ignored |
 
 Under `results/<stamp>/`:
 
@@ -321,8 +321,8 @@ Under `results/<stamp>/`:
 - `w<N>/session/`: a local world's node roots and astrald logs;
   `w<N>/logs/`: a VM world's guest journals.
 
-The report is written however the run ends — an exception, Ctrl-C, a world
-that failed to close — and `./tests/summary` lists what has passed here
+The report is written however the run ends — an exception, Ctrl-C, SIGTERM
+or SIGHUP, a world that failed to close (SIGKILL writes none) — and `./tests/summary` lists what has passed here
 across runs.
 
 ## Requirements
@@ -340,6 +340,26 @@ a Docker world, before anything is built.
 VM worlds: a Linux host with a working `netsim` on PATH (`netsim doctor`),
 and `./tests/link.sh` run once per checkout to register this tree's netsim
 ops.
+
+### macOS
+
+- Use Homebrew's `python3` (3.11 or later). macOS's own `/usr/bin/python3`
+  is 3.9, and `tests/run` refuses it.
+- Keep TMPDIR at 72 characters or fewer, or run with `TMPDIR=/tmp`: the
+  drivers that serve an app bind a unix socket under it, and macOS caps
+  that path at 103 characters. Runs that may overlap on one host use the
+  same TMPDIR, because the port-lease locks live there.
+- Off Linux a node gets no parent-death signal, so after a SIGKILL the
+  nodes keep running. Stop them from the repo root with
+  `pkill -INT -f "$(pwd -P)/tests/.cache/astrald -root"`, which also stops
+  a `--keep` world; the `-P` matters because a node's argv carries the
+  resolved path. Their roots stay under `$TMPDIR/astrald-tests-*`.
+- Node logs hold `[nearby] push error … sendto: message too long` lines:
+  macOS caps a UDP datagram below nearby's status push. They do not affect
+  verdicts.
+- The application firewall may ask whether the rebuilt
+  `tests/.cache/astrald` may accept incoming connections. Loopback works
+  either way.
 
 The harness's own selftests take a second and touch no daemon:
 
