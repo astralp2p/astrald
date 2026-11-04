@@ -87,6 +87,11 @@ func (mod *Module) syncAlias(ctx *astral.Context, nodeID *astral.Identity) (err 
 		return err
 	}
 
+	// note: a remote node sends its refusal in-band, as an error object.
+	if refusal, ok := obj.(*astral.ErrorMessage); ok {
+		return fmt.Errorf("refused: %w", refusal)
+	}
+
 	info, ok := obj.(*user.Info)
 	if !ok {
 		return fmt.Errorf("protocol error: invalid object type %s", obj.ObjectType())

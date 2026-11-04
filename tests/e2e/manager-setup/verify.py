@@ -30,6 +30,13 @@ def main():
     assert g["refused"] and g["detail"].startswith("Denied"), (
         f"the manager's apphost.list_tokens on the unclaimed node: {g['detail']}")
 
+    # why the node: the caller queried with the node's token, so the handler
+    # answers the node's identity.
+    s = f["served"]
+    node_id = load()["nodes"]["managed"]["identity"]
+    assert not s["refused"] and s["detail"] == node_id, (
+        f"the manager serving on the unclaimed node: {s['detail']}; want {node_id}")
+
     a = f["app_claim"]
     assert a["refused"] and "not permitted" in a["detail"], (
         f"an ordinary app's user.bootstrap: {a['detail']}")
@@ -37,7 +44,8 @@ def main():
     assert f["claim"]["user"] and f["claim"]["token"], f"the manager's claim: {f['claim']}"
 
     print(f"oracle: one manager {manager[:8]}… appointed; fresh → unclaimed → claimed; "
-          "later appointments refused; an ordinary app could not claim")
+          "the manager served before the claim; later appointments refused; "
+          "an ordinary app could not claim")
 
 
 main()

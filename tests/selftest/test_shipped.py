@@ -5,13 +5,20 @@ repository to them, so a manifest typo or a test no suite runs fails here
 rather than after a daemon has booted.
 """
 import ast
+import re
 import unittest
 from pathlib import Path
 
 from lib.manifest import load_all
 from lib.suites import load
+from lib.worlds.vm import RECIPE
 
 TESTS = Path(__file__).resolve().parent.parent
+
+# why: the lab bake runs before any node holds a token, so its ops meet a
+# fresh node's default apphost gate (mod/apphost/src/config.go), which admits
+# a token-less session to these ops alone
+BAKE_TOKENLESS = {"apphost.register_manager", "user.info"}
 
 
 def _is_facts(node) -> bool:
@@ -116,6 +123,19 @@ class TestShipped(unittest.TestCase):
             if t.restart:
                 with self.subTest(test=name):
                     self.assertTrue(t.local_only)
+
+    def test_the_lab_bake_queries_only_ops_a_fresh_node_admits_tokenless(self):
+        # why: install-astrald probed with .spec after #355 gated it, so every
+        # bake waited out its 90 s and failed with astrald up and answering
+        steps = {line.split()[0] for line in RECIPE.read_text().splitlines()
+                 if line.strip() and not line.lstrip().startswith("#")}
+        for step in sorted(steps):
+            for script in sorted((TESTS / "netsim" / "ops" / step).glob("*.sh")):
+                with self.subTest(op=step, file=script.name):
+                    called = set(re.findall(
+                        r"\bastral-query\s+(?:localnode:)?([a-z_]*\.[a-z_]+)",
+                        script.read_text()))
+                    self.assertEqual(called - BAKE_TOKENLESS, set())
 
 
 if __name__ == "__main__":

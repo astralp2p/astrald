@@ -127,6 +127,8 @@ func TestGateAdmitsDefaults(t *testing.T) {
 		{user.StateFresh, false, false, "apphost.register_manager", true},
 		{user.StateFresh, false, false, "user.bootstrap", false},
 		{user.StateFresh, false, false, "apphost.set_app_register_policy", false},
+		{user.StateFresh, false, false, "apphost.bind", false},
+		{user.StateFresh, false, false, "apphost.register_handler", false},
 		{user.StateFresh, false, true, "app.anything", true},
 		{user.StateFresh, true, true, "user.info", false},
 
@@ -139,6 +141,11 @@ func TestGateAdmitsDefaults(t *testing.T) {
 		{user.StateUnclaimed, false, false, "user.derive_identity", true},
 		{user.StateUnclaimed, false, false, "apphost.register_manager", false},
 		{user.StateUnclaimed, false, false, "apphost.set_app_register_policy", false},
+		{user.StateUnclaimed, false, false, "apphost.bind", true},
+		{user.StateUnclaimed, false, false, "apphost.register_handler?endpoint=tcp:127.0.0.1:1", true},
+		{user.StateUnclaimed, false, false, "apphost.cancel", true},
+		{user.StateUnclaimed, true, false, "apphost.bind", false},
+		{user.StateUnclaimed, true, false, "apphost.register_handler", false},
 		{user.StateUnclaimed, false, true, "app.anything", true},
 
 		{user.StateClaimed, true, false, "apphost.register", true},
@@ -148,6 +155,14 @@ func TestGateAdmitsDefaults(t *testing.T) {
 		{user.StateClaimed, false, false, "user.expel", true},
 		{user.StateClaimed, false, false, ".spec", true},
 		{user.StateClaimed, false, true, "app.anything", true},
+
+		// note: user.introduce runs on a claimed node with a token alone.
+		{user.StateFresh, false, false, "user.introduce?identity=peer", false},
+		{user.StateFresh, true, false, "user.introduce?identity=peer", false},
+		{user.StateUnclaimed, false, false, "user.introduce?identity=peer", false},
+		{user.StateUnclaimed, true, false, "user.introduce?identity=peer", false},
+		{user.StateClaimed, false, false, "user.introduce?identity=peer", true},
+		{user.StateClaimed, true, false, "user.introduce?identity=peer", false},
 	}
 
 	for _, c := range cases {
