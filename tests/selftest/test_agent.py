@@ -12,7 +12,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 from lib import agent
-from lib.worlds import WorldError
+from lib.worlds import NODE_FIELDS, WorldError
 
 
 class Broken:
@@ -109,6 +109,23 @@ class TestRender(unittest.TestCase):
                 t = SimpleNamespace(name="t", dir=self.root, facts=[])
                 (self.root / "prompt.md").write_text(text)
                 with self.assertRaises(agent.PromptError):
+                    agent.render(t, view)
+
+    def test_a_node_renders_only_its_identity_alias_and_link_endpoint(self):
+        # why a view that holds every node field: a field the view lacks is
+        # refused whatever the allow-list says, so only a full view shows the
+        # allow-list deciding. lan_endpoint is the address a peer links to and
+        # grants nothing; endpoint, token and root are the harness's way in
+        view = dict(VIEW, nodes={"node2": {f: f"v-{f}" for f in NODE_FIELDS}})
+        t = a_test(self.root, "t", "{node2.alias} {node2.identity} "
+                   "{node2.lan_endpoint}\n")
+        self.assertEqual(agent.render(t, view),
+                         "node2 v-identity v-lan_endpoint\n")
+        for field in sorted(set(NODE_FIELDS) - {"identity", "lan_endpoint"}):
+            with self.subTest(field=field):
+                (t.dir / "prompt.md").write_text(f"{{node2.{field}}}")
+                with self.assertRaisesRegex(agent.PromptError,
+                                            "which no prompt may carry"):
                     agent.render(t, view)
 
     def test_the_footer_names_exactly_the_declared_facts(self):

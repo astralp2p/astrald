@@ -9,9 +9,11 @@ where the same verify.py that judges the scripted driver judges them.
 A step's prompt is the test's prompt.md, its placeholders filled from the
 step's session view, and a footer naming the file and the facts it owes:
 
-    {facts.<name>}       a fact the test's lineage learned, never a token
-    {<node>.identity}    a roster node's identity
-    {<node>.alias}       its roster name, which is also its hostname in the lab
+    {facts.<name>}        a fact the test's lineage learned, never a token
+    {<node>.identity}     a roster node's identity
+    {<node>.alias}        its roster name: a label, which a node resolves
+                          only where someone set it as an alias
+    {<node>.lan_endpoint} the address a peer links to it at
 
 The footer asks for every declared fact, including ones no oracle reads —
 expel-node's `expelled_id`, tor-link's `tor_link_networks`. That is
@@ -45,8 +47,9 @@ HARNESS_FILES = {"test.toml", "script.py", "verify.py", "prompt.md",
                  "README.md"}
 PLACEHOLDER = re.compile(r"\{([a-z][a-z0-9_-]*)\.([A-Za-z_][A-Za-z0-9_]*)\}")
 # the node fields a prompt may name: a node's endpoint and token are the
-# harness's way in, never the operator's
-NODE_PLACEHOLDERS = {"identity", "alias"}
+# harness's way in, never the operator's. lan_endpoint is the address a peer
+# links to, which grants nothing, and a local world has no LAN to find it on
+NODE_PLACEHOLDERS = {"identity", "alias", "lan_endpoint"}
 EXIT = "[agent] exit "           # the line the guest ends a session with
 EXIT_LINE = re.compile(r"^\[agent\] exit (\d+)$", re.M)
 
