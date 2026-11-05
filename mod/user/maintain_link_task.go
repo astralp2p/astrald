@@ -6,4 +6,7 @@ import "github.com/astralp2p/astrald/mod/scheduler"
 // link when it drops.
 type MaintainLinkTask interface {
 	scheduler.Task
+	// Wake makes the task link to its peer now when the peer is not linked,
+	// also while the task waits out its backoff.
+	Wake()
 }

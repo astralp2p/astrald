@@ -87,6 +87,6 @@ func (mod *Module) runSiblingLinker() {
 			continue
 		}
 
-		mod.addSibling(node, scheduledAction.Cancel)
+		mod.addSibling(node, scheduledAction.Cancel, maintainLinkAction.Wake)
 	}
 }
