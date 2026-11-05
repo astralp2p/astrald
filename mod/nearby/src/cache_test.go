@@ -22,9 +22,9 @@ func TestPeerSeenEmission(t *testing.T) {
 	steps := []struct {
 		name    string
 		advance time.Duration
-		expire  bool // run the expiry ticker's removal before the status
+		expire  bool // note: run the expiry ticker's removal before the status
 		src     string
-		events  int // PeerSeen emitted so far
+		events  int // note: PeerSeen emitted so far
 	}{
 		{"first seen", 0, false, peerIP, 1},
 		{"refresh from the same IP", time.Minute, false, peerIP, 1},

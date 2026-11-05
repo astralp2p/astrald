@@ -19,12 +19,12 @@ const expiryInterval = 30 * time.Second
 
 // entry is the cached status of one source IP. It is never changed once stored.
 type entry struct {
-	NodeID *astral.Identity // the verified node; nil for an unrecognised stealth status
-	UserID *astral.Identity // nil when unknown
+	NodeID *astral.Identity // note: the verified node; nil for an unrecognised stealth status
+	UserID *astral.Identity // note: nil when unknown
 	IP     ip.IP
-	Via    string // nearby.ViaHint or nearby.ViaProfile
+	Via    string // note: nearby.ViaHint or nearby.ViaProfile
 	Seen   time.Time
-	Status *nearby.StatusMessage // as received
+	Status *nearby.StatusMessage // note: as received
 }
 
 // expired reports whether the entry is older than statusTTL at now.

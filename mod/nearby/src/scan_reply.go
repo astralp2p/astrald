@@ -21,9 +21,9 @@ const maxReplySubnets = 64
 
 // The ways to answer a scan.
 const (
-	replyNone  = iota // a reply is already sent or pending in this window
-	replyNow          // the window is over: reply at once
-	replyLater        // reply once, at the end of the window
+	replyNone  = iota // note: a reply is already sent or pending in this window
+	replyNow          // note: the window is over: reply at once
+	replyLater        // note: reply once, at the end of the window
 )
 
 // scanReplies holds the scan reply window of each local subnet.
@@ -36,8 +36,8 @@ type scanReplies struct {
 
 // subnetReply is the reply state of one subnet.
 type subnetReply struct {
-	last    time.Time // the time of the last reply
-	pending bool      // a deferred reply is scheduled
+	last    time.Time // note: the time of the last reply
+	pending bool      // note: a deferred reply is scheduled
 }
 
 // plan decides how to answer a scan on subnet at now. For replyLater it returns the

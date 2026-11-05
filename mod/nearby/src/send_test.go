@@ -20,7 +20,7 @@ type statusCase struct {
 	name    string
 	owned   bool
 	stored  *nearby.Mode
-	types   []string // nil: nothing is sent
+	types   []string // note: nil when nothing is sent
 	stealth bool
 }
 

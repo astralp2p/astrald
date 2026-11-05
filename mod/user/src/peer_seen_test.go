@@ -19,7 +19,7 @@ import (
 
 // contactCall is one step of a nearby contact: a contract read or a push.
 type contactCall struct {
-	op     string // "contract" or "push"
+	op     string // note: "contract" or "push"
 	peer   *astral.Identity
 	object astral.Object
 	zone   astral.Zone

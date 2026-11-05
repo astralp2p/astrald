@@ -41,15 +41,15 @@ var (
 // receivedStatus is a status that passed the shape check, split into its parts.
 type receivedStatus struct {
 	status  *nearby.StatusMessage
-	profile *nearby.PublicProfile // nil for a stealth status
-	others  []astral.Object       // every attachment but the proof
+	profile *nearby.PublicProfile // note: nil for a stealth status
+	others  []astral.Object       // note: every attachment but the proof
 	proof   *nearby.StatusProof
 }
 
 // identified names the sender of a status; via is nearby.ViaHint or nearby.ViaProfile.
 type identified struct {
 	node *astral.Identity
-	user *astral.Identity // nil when unknown
+	user *astral.Identity // note: nil when unknown
 	via  string
 }
 
