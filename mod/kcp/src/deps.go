@@ -9,7 +9,6 @@ import (
 	"github.com/astralp2p/astrald/mod/exonet"
 	"github.com/astralp2p/astrald/mod/ip"
 	"github.com/astralp2p/astrald/mod/kcp"
-	"github.com/astralp2p/astrald/mod/nearby"
 	"github.com/astralp2p/astrald/mod/nodes"
 	"github.com/astralp2p/astrald/mod/objects"
 	"github.com/astralp2p/astrald/mod/tree"
@@ -19,7 +18,6 @@ type Deps struct {
 	Auth    authmod.Module
 	Exonet  exonet.Module
 	Nodes   nodes.Module
-	Nearby  nearby.Module
 	Objects objects.Module
 	IP      ip.Module
 	Tree    tree.Module

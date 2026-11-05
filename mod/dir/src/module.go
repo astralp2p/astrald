@@ -14,7 +14,6 @@ import (
 	"github.com/astralp2p/astrald/lib/aliasgen"
 	authmod "github.com/astralp2p/astrald/mod/auth"
 	"github.com/astralp2p/astrald/mod/dir"
-	"github.com/astralp2p/astrald/mod/nearby"
 	"github.com/astralp2p/astrald/resources"
 	"gorm.io/gorm"
 )
@@ -22,8 +21,7 @@ import (
 const ZeroIdentity = "<anyone>"
 
 type Deps struct {
-	Auth   authmod.Module
-	Nearby nearby.Module
+	Auth authmod.Module
 }
 
 type Module struct {
