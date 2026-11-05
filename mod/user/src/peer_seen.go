@@ -64,18 +64,20 @@ func (mod *Module) wakeLinkTask(e *nearby.PeerSeen) {
 
 // contactPeer reads the contract of a peer of the current user and introduces
 // this node to the peer when the contract passes checkPeerContract. A failed
-// read or check sends nothing of this node's own and holds off the next attempt
-// for dialIntervalAfterRefusal.
+// read or check sends nothing of this node's own. A failed check holds off the
+// next attempt for dialIntervalAfterRefusal; a failed read keeps the
+// dialInterval that reserve set.
 func (mod *Module) contactPeer(ac *auth.SignedContract, e *nearby.PeerSeen) {
 	// why: the query is this node's own, and its link to the peer goes out to the network.
 	ctx, cancel := mod.ctx.IncludeZone(astral.ZoneNetwork).WithTimeout(peerContractTimeout)
 	defer cancel()
 
 	signed, err := mod.readPeerContract(ctx, e.NodeID)
-	if err == nil {
-		err = mod.checkPeerContract(e.NodeID, signed, mod.now())
-	}
 	if err != nil {
+		mod.log.Log("reading the contract of nearby peer %v at %v failed: %v", e.NodeID, e.SourceIP, err)
+		return
+	}
+	if err := mod.checkPeerContract(e.NodeID, signed, mod.now()); err != nil {
 		mod.dials.delay(e.NodeID, mod.now().Add(dialIntervalAfterRefusal))
 		mod.log.Log("not introducing to nearby peer %v at %v: %v", e.NodeID, e.SourceIP, err)
 		return

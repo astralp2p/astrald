@@ -370,13 +370,10 @@ func badContractAnswers() map[string]func(f *contactFixture) (*auth.SignedContra
 			return c, nil
 		},
 		"no contract": func(*contactFixture) (*auth.SignedContract, error) { return nil, nil },
-		"query error": func(*contactFixture) (*auth.SignedContract, error) {
-			return nil, errors.New("no route to the peer")
-		},
 	}
 }
 
-// TestPeerSeenRefusesABadContract: a contract that fails the check, or no
+// TestPeerSeenRefusesABadContract: a contract that fails the check, or an empty
 // answer, pushes nothing of this node's own and holds off the next attempt for
 // dialIntervalAfterRefusal.
 func TestPeerSeenRefusesABadContract(t *testing.T) {
@@ -402,7 +399,7 @@ func TestPeerSeenRefusesABadContract(t *testing.T) {
 // dialIntervalAfterRefusal has passed.
 func TestPeerSeenRetriesAfterARefusal(t *testing.T) {
 	f := newContactFixture(t)
-	f.answer = func(*contactFixture) (*auth.SignedContract, error) { return nil, errors.New("unreachable") }
+	f.answer = badContractAnswers()["another issuer"]
 	start := f.now
 
 	f.mod.onPeerSeen(f.seen(f.peerID, f.userID))
@@ -411,6 +408,31 @@ func TestPeerSeenRetriesAfterARefusal(t *testing.T) {
 
 	if n := contractReads(f); n != 2 {
 		t.Fatalf("read the contract %v times; want twice", n)
+	}
+}
+
+// TestPeerSeenRetriesAfterAReadFailure: a failed link or query pushes nothing
+// and holds off the next attempt for dialInterval only, not for
+// dialIntervalAfterRefusal.
+func TestPeerSeenRetriesAfterAReadFailure(t *testing.T) {
+	for _, readErr := range []error{errors.New("dial tcp 192.168.1.7:1791: connection refused"), auth.ErrNotPermitted} {
+		f := newContactFixture(t)
+		f.answer = func(*contactFixture) (*auth.SignedContract, error) { return nil, readErr }
+		start := f.now
+
+		f.mod.onPeerSeen(f.seen(f.peerID, f.userID))
+		if next, _ := f.nextAttempt(f.peerID); !next.Equal(start.Add(dialInterval)) {
+			t.Fatalf("%v: next attempt at %v; want %v", readErr, next, start.Add(dialInterval))
+		}
+		if calls := f.calls.list(); len(calls) != 1 || calls[0].op != "contract" {
+			t.Fatalf("%v: contact steps %v; want the contract read alone", readErr, calls)
+		}
+
+		f.now = start.Add(dialInterval)
+		f.mod.onPeerSeen(f.seen(f.peerID, f.userID))
+		if n := contractReads(f); n != 2 {
+			t.Fatalf("%v: read the contract %v times after dialInterval; want twice", readErr, n)
+		}
 	}
 }
 
