@@ -2,6 +2,7 @@ package user
 
 import (
 	"sync"
+	"time"
 
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astral-go/astral/log"
@@ -36,6 +37,13 @@ type Module struct {
 
 	// mu makes the claim check and the claim one transition; see claim.
 	mu sync.Mutex
+
+	// dials limits the nearby contact attempts per node; see onPeerSeen.
+	dials *dialMap
+	// readPeerContract reads a nearby peer's contract; see contactPeer.
+	readPeerContract peerContractReader
+	// now is the clock of the nearby contact policy.
+	now func() time.Time
 }
 
 func (mod *Module) Run(ctx *astral.Context) error {

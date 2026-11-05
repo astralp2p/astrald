@@ -7,6 +7,7 @@ import (
 
 	"github.com/astralp2p/astral-go/api/auth"
 	"github.com/astralp2p/astral-go/api/events"
+	"github.com/astralp2p/astral-go/api/nearby"
 	"github.com/astralp2p/astral-go/api/nodes"
 	"github.com/astralp2p/astral-go/api/user"
 	"github.com/astralp2p/astral-go/astral"
@@ -16,7 +17,8 @@ import (
 var _ objects.Receiver = &Module{}
 
 // ReceiveObject handles pushed objects: indexes a signed node or relay-for contract,
-// stores and applies a signed expulsion, and schedules sibling sync on a local LinkCreatedEvent.
+// stores and applies a signed expulsion, schedules sibling sync on a local LinkCreatedEvent,
+// and contacts a peer of a local nearby PeerSeen.
 // Every object is checked before any effect; a rejected object is not accepted.
 func (mod *Module) ReceiveObject(drop objects.Drop) (err error) {
 	switch o := drop.Object().(type) {
@@ -42,6 +44,9 @@ func (mod *Module) ReceiveObject(drop objects.Drop) (err error) {
 				mod.Scheduler.Schedule(mod.NewSyncNodesTask(e.RemoteIdentity))
 				drop.Accept(false)
 			}
+		case *nearby.PeerSeen:
+			// why: contact queries the peer, which must not hold up the receivers.
+			go mod.onPeerSeen(e)
 		}
 	}
 
