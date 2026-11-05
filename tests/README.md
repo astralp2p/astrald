@@ -116,7 +116,7 @@ passes alone and fails in the shared run, a test before it changed its world.
 | `tor.suite` | two nodes meet on a LAN, one leaves it, Tor holds | VM (netsim) | ~37 min |
 | `nat.suite` | two nodes meet on a LAN, then hole-punch through NAT | VM (netsim) | not measured |
 | `gateway.suite` | a NAT'd node reaches its swarm through a gateway | VM (netsim) | not measured |
-| `agent.suite` | the flows an AI operator can drive (`--driver agent`) | VM (netsim), or Docker without netsim | ~1.5 h in VMs |
+| `agent.suite` | the flows an AI operator can drive (`--driver agent`) | VM (netsim), or Docker without netsim | not measured |
 
 The plans of the shipped suites are pinned under `selftest/golden/`, so a
 manifest change that moves a test shows up as a diff someone reads.
