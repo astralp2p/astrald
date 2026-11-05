@@ -182,21 +182,6 @@ func (f *linkTaskFixture) requireBackoff(t *testing.T) time.Duration {
 	}
 }
 
-// requireIdle waits until the task has recorded its link as up.
-//
-// note: a LinkClosedEvent between a successful dial and that record finds the
-// action already required and is lost; the wait keeps the test off that window.
-func (f *linkTaskFixture) requireIdle(t *testing.T) {
-	t.Helper()
-	deadline := time.Now().Add(effectTimeout)
-	for f.task.actionRequired.Load() {
-		if time.Now().After(deadline) {
-			t.Fatal("the task never recorded its link as up")
-		}
-		time.Sleep(time.Millisecond)
-	}
-}
-
 func failEvery(int) error { return errDialFailed }
 
 // TestMaintainLinkTaskWakeDuringBackoff: a Wake during a 15-minute-class backoff
@@ -250,8 +235,9 @@ func requireCanceled(t *testing.T, done <-chan error) {
 // for the target's last link wakes the idle task.
 func TestMaintainLinkTaskBackoffDoublesAndResets(t *testing.T) {
 	const failures = 12
+	// note: the attempt after the reset backoff succeeds, so the loop idles before the cancel.
 	f := newLinkTaskFixture(func(n int) error {
-		if n == failures+1 {
+		if n == failures+1 || n == failures+3 {
 			return nil
 		}
 		return errDialFailed
@@ -275,16 +261,45 @@ func TestMaintainLinkTaskBackoffDoublesAndResets(t *testing.T) {
 	}
 
 	f.requireAttempt(t, failures+1, effectTimeout)
-	f.requireIdle(t)
 
 	f.task.ReceiveEvent(&events.Event{Data: &nodes.LinkClosedEvent{RemoteIdentity: f.target, LinkCount: 0}})
 	f.requireAttempt(t, failures+2, wakeDialBound)
 	if d := f.requireBackoff(t); d != linkRetryMin {
 		t.Fatalf("backoff after a success %v; want %v", d, linkRetryMin)
 	}
+	f.requireAttempt(t, failures+3, effectTimeout)
 
 	cancel()
 	requireCanceled(t, done)
+}
+
+// TestMaintainLinkTaskActsOnAWakeDuringAnAttempt: a LinkClosedEvent or a Wake
+// that comes while an attempt runs, which then succeeds, makes the task dial
+// once more.
+func TestMaintainLinkTaskActsOnAWakeDuringAnAttempt(t *testing.T) {
+	closed := func(f *linkTaskFixture) {
+		f.task.ReceiveEvent(&events.Event{Data: &nodes.LinkClosedEvent{RemoteIdentity: f.target, LinkCount: 0}})
+	}
+	woken := func(f *linkTaskFixture) { f.task.Wake() }
+
+	for name, during := range map[string]func(*linkTaskFixture){"link closed": closed, "wake": woken} {
+		t.Run(name, func(t *testing.T) {
+			var f *linkTaskFixture
+			f = newLinkTaskFixture(func(n int) error {
+				if n == 1 {
+					during(f)
+				}
+				return nil
+			}, false)
+			done, cancel := f.run(t)
+
+			f.requireAttempt(t, 1, effectTimeout)
+			f.requireAttempt(t, 2, wakeDialBound)
+
+			cancel()
+			requireCanceled(t, done)
+		})
+	}
 }
 
 // TestMaintainLinkTaskIgnoresWakesOfALinkedTarget: a Wake while the target is

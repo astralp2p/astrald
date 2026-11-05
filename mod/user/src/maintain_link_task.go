@@ -58,6 +58,9 @@ func (a *MaintainLinkTask) Run(ctx *astral.Context) error {
 		if err := a.waitForAction(ctx); err != nil {
 			return err
 		}
+		// why: cleared as the attempt starts, so a link close or a Wake during the attempt
+		// sets it again and makes the loop dial once more instead of being lost.
+		a.actionRequired.Store(false)
 
 		switch {
 		case count == 0:
@@ -75,6 +78,7 @@ func (a *MaintainLinkTask) Run(ctx *astral.Context) error {
 		<-scheduled.Done()
 		if scheduled.Err() != nil {
 			count = max(count, 0) + 1
+			a.actionRequired.Store(true)
 			if err := a.backoff(ctx, delay); err != nil {
 				return err
 			}
@@ -91,7 +95,6 @@ func (a *MaintainLinkTask) Run(ctx *astral.Context) error {
 		}
 
 		count = 0
-		a.actionRequired.Store(false)
 	}
 }
 
