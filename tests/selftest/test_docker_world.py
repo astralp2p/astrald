@@ -17,6 +17,7 @@ from unittest import mock
 from lib import agent
 from lib.worlds import WorldError
 from lib.worlds import docker
+from lib.nodeconfig import PortSpan
 from lib.worlds.docker import DockerWorld
 
 
@@ -63,7 +64,7 @@ class WorldCase(unittest.TestCase):
         self.addCleanup(lambda: __import__("shutil").rmtree(self.tmp, True))
         self.fake = FakeDocker()
 
-    def world(self, **kw):
+    def world(self, max_nodes=20, **kw):
         patches = [mock.patch.object(docker, "_docker", self.fake),
                    mock.patch.object(DockerWorld, "_whoami",
                                      lambda self, port, token: f"02{port}")]
@@ -72,8 +73,8 @@ class WorldCase(unittest.TestCase):
             self.addCleanup(p.stop)
         return DockerWorld(self.tmp / "20261104T000000Z" / "w0",
                            self.tmp / "linux-arm64" / "astrald",
-                           "astral-node:abc", 20800,
-                           **{"max_nodes": 20, **kw})
+                           "astral-node:abc", PortSpan(20800, max_nodes),
+                           **kw)
 
 
 class TestStart(WorldCase):
@@ -95,6 +96,16 @@ class TestStart(WorldCase):
             w.ensure(a_test(nodes=["node1", "node2", "node3"]))
         self.assertEqual(len(self.fake.of("run")), 1)
         w.ensure(a_test(nodes=["node1"]))
+
+    def test_each_node_broadcasts_on_a_udp_port_of_its_own(self):
+        # why: the world's containers share one bridge, and a node that
+        # hears a peer's nearby broadcast learns its endpoint off the swarm
+        w = self.world()
+        w.ensure(a_test(nodes=["node1", "node2"]))
+        ports = [line for s in self.fake.scripts() if "ether.yaml" in s
+                 for line in s.split("\n") if "udp_port" in line]
+        self.assertEqual(len(ports), 2)
+        self.assertEqual(len(set(ports)), 2)
 
     def test_a_container_gets_nothing_of_the_host(self):
         w = self.world()
@@ -299,11 +310,62 @@ class TestReap(unittest.TestCase):
                 mock.patch.object(DockerWorld, "_whoami",
                                   lambda self, port, token: "02aa"):
             w = DockerWorld(Path(tmp) / "20261104T000000Z" / "w0",
-                            Path(tmp) / "astrald", "astral-node:abc", 20800,
-                            max_nodes=20, keep=True)
+                            Path(tmp) / "astrald", "astral-node:abc",
+                            PortSpan(20800, 20), keep=True)
             w.ensure(a_test())
         [run] = fake.of("run")
         self.assertIn(f"{docker.PID_LABEL}={docker.KEPT}", run)
+
+
+class TestImage(unittest.TestCase):
+    def test_the_image_carries_the_docs_this_checkout_pins(self):
+        # why: the operator then reads docs that describe the astrald the
+        # run tests, whatever skill the host has
+        import subprocess
+        pin = subprocess.run(["git", "-C", str(docker.TESTS.parent),
+                              "rev-parse", "HEAD:.ai/system"], text=True,
+                             capture_output=True, check=True).stdout.strip()
+        self.assertEqual(docker.docs_ref(), pin)
+        calls = []
+
+        def build(cmd, **kw):
+            calls.append(cmd)
+            return subprocess.CompletedProcess(cmd, 0)
+        with tempfile.TemporaryDirectory() as tmp, \
+                mock.patch.object(docker, "BUILD_LOG", Path(tmp) / "b.log"), \
+                mock.patch.object(docker, "_docker",
+                                  side_effect=WorldError("no image")), \
+                mock.patch.object(docker, "docs_ref", return_value=pin), \
+                mock.patch.object(docker.subprocess, "run", build):
+            docker.ensure_image()
+        [cmd] = calls
+        self.assertIn(f"ASTRAL_DOCS_REF={pin}", cmd)
+
+    def test_a_host_skill_brings_its_skill_md_but_not_its_docs(self):
+        fake = FakeDocker()
+        with tempfile.TemporaryDirectory() as tmp, \
+                mock.patch.object(docker, "_docker", fake), \
+                mock.patch.object(DockerWorld, "_whoami",
+                                  lambda self, port, token: "02aa"):
+            skill = Path(tmp) / "skill"
+            (skill / "references").mkdir(parents=True)
+            (skill / "SKILL.md").write_text("x")
+            (skill / "astral-docs").mkdir()
+            (skill / "astral-docs" / "README.md").write_text("stale docs")
+            copied = []
+            real_cp = fake.__call__
+
+            def cp(*args, **kw):
+                if args[0] == "cp" and str(args[1]).endswith("/."):
+                    copied.append(sorted(p.name for p in
+                                         Path(str(args[1])[:-2]).iterdir()))
+                return real_cp(*args, **kw)
+            with mock.patch.object(docker, "_docker", cp):
+                w = DockerWorld(Path(tmp) / "20261104T000000Z" / "w0",
+                                Path(tmp) / "astrald", "astral-node:abc",
+                                PortSpan(20800, 20), skill=skill)
+                w.ensure(a_test())
+        self.assertEqual(copied, [["SKILL.md", "references"]])
 
 
 class TestHost(unittest.TestCase):

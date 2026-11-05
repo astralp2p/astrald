@@ -65,6 +65,9 @@ external_registration_sweep_interval = "1s"
 - **`local_only`** is for a test that reads `mcp_url`, `authority_url`,
   `serves_mcp`, a node `root` or a host path, that serves an app or an
   authority on the host for a node to dial, or that restarts a node.
+  A roster is not a reason: a test whose `nodes` name a machine the VM lab
+  does not run (`plan.LAB_NODES`: node1, node2, reflector) never enters a
+  VM world, and runs in a local or Docker world as any other test does.
 - **`facts`** is a contract. An oracle may read only facts declared on its
   `after` chain (`selftest/test_shipped.py` checks), and the agent driver
   asks the operator for exactly these.
@@ -117,6 +120,7 @@ passes alone and fails in the shared run, a test before it changed its world.
 | `nat.suite` | two nodes meet on a LAN, then hole-punch through NAT | VM (netsim) | not measured |
 | `gateway.suite` | a NAT'd node reaches its swarm through a gateway | VM (netsim) | not measured |
 | `agent.suite` | the flows an AI operator can drive (`--driver agent`) | VM (netsim), or Docker without netsim | not measured |
+| `integration.suite` | full-integration flows in throwaway containers (`--docker`) | Docker, or local without `--docker` | not measured |
 
 The plans of the shipped suites are pinned under `selftest/golden/`, so a
 manifest change that moves a test shows up as a diff someone reads.
@@ -183,11 +187,17 @@ node1's container holds the lab's operator (`tester`, Qwen Code), so
 published on the host's `127.0.0.1` at its leased port, which is what
 drivers and oracles dial. No host file or environment variable enters a
 container. The run copies in an astrald and astral-query built for Linux
-(`.cache/linux-<arch>/`), and the operator's astral-agent skill from
-`[agent] skill` in `config.toml` (default `~/.claude/skills/astral-agent`).
+(`.cache/linux-<arch>/`). The operator's astral-agent skill comes with the
+image: the Astral docs at the commit this checkout pins in `.ai/system`,
+fetched from github.com/astralp2p/astral-docs when the image builds, and
+`docker/astral-agent.md` as its `SKILL.md`. Nothing need be installed on the
+host. `[agent] skill` in `config.toml` names a skill whose `SKILL.md` and
+`references/` replace the image's, e.g. while working on the skill; the
+docs stay the image's.
 
 The first Docker run builds the node image, which takes minutes and needs
-npm's registry; later runs reuse it until `docker/` changes. A test with
+npm's registry and GitHub; later runs reuse it until `docker/` or the
+`.ai/system` pin changes. A test with
 `ops` needs a VM world, and a `local_only` test a local one: a Docker run
 refuses both, as `--save` and `--from`. At a world's end its containers and
 network are removed; `--keep` leaves them up and names them, and later
@@ -198,6 +208,12 @@ them.
 The live Docker selftests build the image and start two containers:
 
     cd tests && ASTRAL_TESTS_DOCKER=1 PYTHONPATH=.:<astral-py>/src python3 -m unittest selftest.test_docker_live -v
+
+`./tests/check-docker.sh [--agent]` runs the whole no-netsim check in order —
+selftests, the live Docker selftests, `main.suite`, `integration.suite
+--docker`, nothing left behind, and with `--agent` the agent suite — and
+gathers each step's log, verdict and failing entries' logs into
+`results/check-docker-<stamp>/`.
 
 A VM world boots the lab, pushes the astrald and astral-query under test to
 every VM, runs ops with their verifiers, and on close pulls each guest's

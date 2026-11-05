@@ -20,7 +20,7 @@ from types import SimpleNamespace
 
 from lib import agent
 from lib.build import linux_binaries
-from lib.nodeconfig import PORTS_PER_NODE, lease_ports
+from lib.nodeconfig import PORTS_PER_NODE, PortSpan, lease_ports
 from lib.worlds import WorldError, docker
 
 TESTS = Path(__file__).resolve().parent.parent
@@ -39,8 +39,8 @@ class TestDockerLive(unittest.TestCase):
         cls.tmp = Path(tempfile.mkdtemp())
         cls.world = docker.DockerWorld(
             cls.tmp / "20990101T000000Z" / "w0", binary,
-            docker.ensure_image(), cls.lease.base,
-            max_nodes=cfg["ports"]["span"] // PORTS_PER_NODE)
+            docker.ensure_image(),
+            PortSpan(cls.lease.base, cfg["ports"]["span"] // PORTS_PER_NODE))
         cls.world.ensure(SimpleNamespace(name="t", nodes=["node1", "node2"],
                                          ops=[]))
 
@@ -77,6 +77,11 @@ class TestDockerLive(unittest.TestCase):
         self.world.ssh("node1", "su - tester -c 'astral-query user.info'")
 
 
+    def test_the_operator_reaches_its_model_endpoint(self):
+        # why its own test: an endpoint the Mac's containers cannot reach
+        # (DNS, VPN) fails every agent run, and this names it before step 5
+        agent.Operator(self.world.ssh)._check_endpoint()
+
     def test_the_operator_drives_node1_and_its_facts_come_back(self):
         # why a stub qwen: this checks the seat — push, su, prompt, facts
         # file, collection — not the model, which needs the network
@@ -96,7 +101,11 @@ class TestDockerLive(unittest.TestCase):
             (art / "session.json").write_text(json.dumps(
                 {"run": "x", "nodes": {}, "facts": {}}))
             t = SimpleNamespace(name="stubbed", dir=d, facts=["answer"])
-            rc = agent.Operator(self.world.ssh).run(t, art)
+            op = agent.Operator(self.world.ssh)
+            # why: the seat is under test here, not the model's network;
+            # test_the_operator_reaches_its_model_endpoint checks that alone
+            op._endpoint_checked = True
+            rc = op.run(t, art)
             log = (art / "driver.log").read_text()
             self.assertEqual(rc, 0, log)
             self.assertIn("stub ran", log)
@@ -114,9 +123,9 @@ class TestDockerCleanup(unittest.TestCase):
             tmp = Path(tempfile.mkdtemp())
             stamp = "20990101T000001Z"
             w = docker.DockerWorld(tmp / stamp / "w0", binary,
-                                   docker.ensure_image(), lease.base,
-                                   max_nodes=cfg["ports"]["span"]
-                                   // PORTS_PER_NODE)
+                                   docker.ensure_image(),
+                                   PortSpan(lease.base, cfg["ports"]["span"]
+                                            // PORTS_PER_NODE))
             w.ensure(SimpleNamespace(name="t", nodes=["node1"], ops=[]))
             w.close(keep=False)
         finally:

@@ -1,0 +1,15 @@
+nodes   = ["admitter", "applicant", "invitee", "acceptor"]
+timeout = 180
+facts   = ["admission"]
+
+# why every key of `policies`: an override replaces a module key whole, so a
+# policy left unnamed here would fall back to the module default, not to the
+# harness's accept_all.
+[config.admitter.user]
+policies = { swarm_join = "reject_all", swarm_invite = "accept_all" }
+
+[config.admitter.apphost]
+policies = { app_register = "reject_all" }
+
+[config.invitee.user]
+policies = { swarm_join = "accept_all", swarm_invite = "reject_all" }

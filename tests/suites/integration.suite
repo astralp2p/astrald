@@ -1,0 +1,35 @@
+# integration.suite — the full-integration flows that run in throwaway
+# containers: every node in its own Docker container on one network.
+#
+# Run it with `--docker` on a host with a Docker engine; without --docker it
+# runs in local worlds. Every test here is Docker-eligible: no VM ops, and
+# nothing that reads the host (node roots, host logs, a served app or
+# authority). The planner refuses a test that is not.
+#
+# The order is a preference among siblings; the planner computes the run
+# order from each test's `after`. expel-node is listed before hold-purge so
+# that hold-purge, which also ends a world, forks instead of expel-node.
+smoke
+claim-window
+token-less-setup
+signer-app
+admission-policies
+bootstrap-user-software-key
+adopt-node
+blueprints-two-node
+apphost-origin
+sign-contract-guard
+request-grant-scope
+swarm-authz-matrix
+services-swarm
+object-store
+object-store-peer
+read-remote-peer
+read-swarm
+expel-node
+hold-purge
+hold-isolation
+swarm-roster-sync
+expel-propagation
+import-user-software-key
+introduce-node

@@ -45,6 +45,20 @@ class World:
         """name -> node entry (`node_entry`) for every node up so far."""
         raise NotImplementedError
 
+    def ssh(self, vm: str, script: str, check=True, timeout=None) -> str:
+        """Run a root shell script on one node's machine; its output.
+
+        Only a world whose nodes stand on machines of their own (VM, Docker)
+        offers one, and the agent driver's operator works through it.
+        """
+        raise WorldError(f"{type(self).__name__} has no machine to run a "
+                         f"shell on: the agent driver needs a VM or Docker "
+                         "world")
+
+    def containers(self) -> list:
+        """The containers the world started, named in --keep's message."""
+        return []
+
     def restart(self, names: list) -> None:
         """Stop the named nodes and boot them again on the same state.
 
@@ -63,3 +77,29 @@ class World:
     def close(self, keep: bool) -> None:
         """End the world, or, kept, leave it up for whoever debugs it next."""
         raise NotImplementedError
+
+
+def wait_identity(port: int, token: str, timeout: float,
+                  interval: float) -> str:
+    """The identity the apphost on host port `port` answers with, waited for
+    up to `timeout` seconds; WorldError when it never answers."""
+    import asyncio
+    import time
+
+    import astral
+
+    async def identity_of():
+        deadline = time.monotonic() + timeout
+        last = None
+        while time.monotonic() < deadline:
+            try:
+                async with await astral.connect(
+                        f"tcp:127.0.0.1:{port}", token=token,
+                        connect_timeout=3.0) as c:
+                    return str(await c.apphost.whoami())
+            except Exception as e:               # noqa: BLE001
+                last = e
+                await asyncio.sleep(interval)
+        raise WorldError(f"apphost on 127.0.0.1:{port} never answered "
+                         f"(last error: {last})")
+    return asyncio.run(identity_of())

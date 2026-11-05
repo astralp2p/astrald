@@ -15,7 +15,7 @@ from types import SimpleNamespace
 from unittest import mock
 
 from lib import manifest, runner
-from lib.worlds import NODE_FIELDS, WorldError, node_entry
+from lib.worlds import NODE_FIELDS, World, WorldError, node_entry
 from lib.record import WorldRecord
 
 # One body for every synthetic driver and oracle: copy the view it was
@@ -46,7 +46,7 @@ TREE = {
 }
 
 
-class FakeWorld:
+class FakeWorld(World):
     pushed = ()
 
     def __init__(self):

@@ -25,8 +25,8 @@ import time
 from pathlib import Path
 
 from lib.build import query_binary
-from lib.nodeconfig import config_text, harness_configs, ports_for
-from lib.worlds import World, WorldError, node_entry
+from lib.nodeconfig import PortSpan, config_text, harness_configs, overlay
+from lib.worlds import World, WorldError, node_entry, wait_identity
 
 TESTS = Path(__file__).resolve().parent.parent.parent
 CONTEXT = TESTS / "docker"            # the image's build context
@@ -43,7 +43,7 @@ LABEL = "astral.tests.run"
 PID_LABEL = "astral.tests.pid"
 KEPT = "kept"          # the PID_LABEL of a --keep world, which reap leaves up
 # the files the node image is built from; nothing else in CONTEXT counts
-IMAGE_FILES = ("Dockerfile", "qwen-settings.sh")
+IMAGE_FILES = ("Dockerfile", "qwen-settings.sh", "astral-agent.md")
 READY_TIMEOUT = 60.0
 INFO_TIMEOUT = 10.0
 ARCHES = {"x86_64": "amd64", "amd64": "amd64",
@@ -100,10 +100,24 @@ def engine_arch() -> str:
     return ARCHES[machine]
 
 
+def docs_ref() -> str:
+    """The astral-docs commit the checkout under test pins in .ai/system,
+    which the image's skill carries; read from the tree, so an uninitialized
+    submodule still names it."""
+    try:
+        p = subprocess.run(["git", "-C", str(TESTS.parent), "rev-parse",
+                            "HEAD:.ai/system"], check=True, text=True,
+                           capture_output=True)
+    except (OSError, subprocess.CalledProcessError) as e:
+        raise WorldError(f"cannot read the astral-docs pin (.ai/system): "
+                         f"{e}") from e
+    return p.stdout.strip()
+
+
 def image_tag() -> str:
     """The node image's tag: a hash of everything it is built from, so an
     edit builds a new image and an unchanged tree reuses the old one."""
-    h = hashlib.sha256(QWEN_CODE.encode())
+    h = hashlib.sha256(QWEN_CODE.encode() + docs_ref().encode())
     for name in IMAGE_FILES:
         h.update(name.encode() + b"\0" + (CONTEXT / name).read_bytes())
     return f"astral-node:{h.hexdigest()[:12]}"
@@ -120,7 +134,8 @@ def ensure_image() -> str:
     BUILD_LOG.parent.mkdir(parents=True, exist_ok=True)
     with BUILD_LOG.open("w") as log:
         p = subprocess.run(["docker", "build", "-t", tag, "--build-arg",
-                            f"QWEN_CODE_VERSION={QWEN_CODE}", str(CONTEXT)],
+                            f"QWEN_CODE_VERSION={QWEN_CODE}", "--build-arg",
+                            f"ASTRAL_DOCS_REF={docs_ref()}", str(CONTEXT)],
                            stdout=log, stderr=subprocess.STDOUT,
                            stdin=subprocess.DEVNULL, env=_engine_env())
     if p.returncode != 0:
@@ -166,19 +181,18 @@ def reap() -> list:
 
 class DockerWorld(World):
 
-    def __init__(self, dir: Path, binary: Path, image: str, port_base: int, *,
-                 max_nodes: int, keep: bool = False,
-                 config: dict | None = None, skill: Path | None = None):
+    def __init__(self, dir: Path, binary: Path, image: str, span: PortSpan, *,
+                 keep: bool = False, config: dict | None = None,
+                 skill: Path | None = None):
         self.dir = Path(dir)
         # the Linux astrald; astral-query lies beside it (build.query_binary)
         self.binary = Path(binary)
         self.image = image
-        # why one base for every world of a run: the run holds one lease, and
+        # why one span for every world of a run: the run holds one lease, and
         # its worlds run one after another, each from node index 0
-        self.port_base = port_base
-        # why: node N publishes ports_for(port_base, N), so a node past the
-        # leased span would bind host ports another run may hold
-        self.max_nodes = max_nodes
+        # why bounded: node N publishes span.ports(N) on the host, and a node
+        # past the span would bind host ports another run may hold
+        self.span = span
         self.keep = keep
         self.config = config or {}
         self.skill = Path(skill) if skill else None
@@ -197,11 +211,9 @@ class DockerWorld(World):
                              "operations — they need a VM world (--vm)")
         new = [n for n in dict.fromkeys(test.nodes) if n not in self._nodes]
         # why before any start: a refused roster leaves the world as it was
-        if len(self._nodes) + len(new) > self.max_nodes:
-            raise WorldError(f"{', '.join(new)}: the world already runs "
-                             f"{len(self._nodes)} nodes, and [ports] span in "
-                             f"tests/config.toml gives a world "
-                             f"{self.max_nodes}")
+        refusal = self.span.refusal(len(self._nodes), new)
+        if refusal:
+            raise WorldError(refusal)
         if self.network is None:
             self._open_network()
         for name in new:
@@ -301,7 +313,7 @@ class DockerWorld(World):
         self.network = name
 
     def _start(self, name: str) -> None:
-        ports = ports_for(self.port_base, len(self._nodes))
+        ports = self.span.ports(len(self._nodes))
         container = f"{self.prefix}-{name}"
         # why tracked before the container exists: a node that fails while
         # starting must still be removed by close
@@ -320,7 +332,7 @@ class DockerWorld(World):
         _docker("cp", self.binary, f"{container}:/usr/local/bin/astrald")
         _docker("cp", query_binary(self.binary),
                 f"{container}:/usr/local/bin/astral-query")
-        self.ssh(name, self._config_script(name, n["token"]))
+        self.ssh(name, self._config_script(name, n["token"], ports.ether))
         if name == OPERATOR_NODE and self.skill:
             self._copy_skill(container)
         self._run_astrald(name)
@@ -329,7 +341,7 @@ class DockerWorld(World):
                           f"{self.network}\").IPAddress}}}}", container)
         n["identity"] = self._whoami(ports.apphost, n["token"])
 
-    def _config_script(self, name: str, token: str) -> str:
+    def _config_script(self, name: str, token: str, ether: int) -> str:
         """The script that writes a node's module configs, root-only.
 
         why 0600: apphost.yaml names the node's own token, which the
@@ -338,9 +350,14 @@ class DockerWorld(World):
         never its loopback; the operator's own astral-query still dials the
         default tcp:127.0.0.1:8625.
         """
-        modules = harness_configs([f"tcp:0.0.0.0:{APPHOST_PORT}"], token)
-        for module, keys in self.config.get(name, {}).items():
-            modules[module] = {**modules.get(module, {}), **keys}
+        # why a UDP port of its own: the containers share one bridge, which
+        # carries their nearby broadcasts, and a node that hears a peer's
+        # endpoint there learns what a test says only the swarm told it
+        # (swarm-roster-sync); local nodes are kept apart the same way
+        modules = overlay({**harness_configs([f"tcp:0.0.0.0:{APPHOST_PORT}"],
+                                             token),
+                           "ether": {"udp_port": ether}},
+                          self.config.get(name))
         files = "".join(
             f"cat > {ROOT}/config/{module}.yaml <<'EOF'\n"
             f"{config_text(doc)}EOF\n"
@@ -349,13 +366,21 @@ class DockerWorld(World):
         return f"set -e\ninstall -d -m 700 {ROOT}/config\n{files}"
 
     def _copy_skill(self, container: str) -> None:
-        """Copy the astral-agent skill to the operator, links resolved."""
+        """Put a host skill's SKILL.md and references over the image's.
+
+        why not its astral-docs: the image carries the docs the astrald
+        under test pins, and a host checkout's may be months older
+        """
         if not (self.skill / "SKILL.md").is_file():
             raise WorldError(f"{self.skill}: no SKILL.md, so no astral-agent "
                              "skill to give the operator")
         with tempfile.TemporaryDirectory() as tmp:
             copy = Path(tmp) / "astral-agent"
-            shutil.copytree(self.skill, copy, symlinks=False)
+            copy.mkdir()
+            shutil.copy(self.skill / "SKILL.md", copy / "SKILL.md")
+            if (self.skill / "references").is_dir():
+                shutil.copytree(self.skill / "references",
+                                copy / "references", symlinks=False)
             self.ssh(OPERATOR_NODE, f"install -d -o tester -g tester "
                                     f"{Path(SKILL_DIR).parent}")
             _docker("cp", f"{copy}/.", f"{container}:{SKILL_DIR}")
@@ -374,20 +399,4 @@ class DockerWorld(World):
 
     def _whoami(self, port: int, token: str) -> str:
         """The identity the apphost behind a published port answers with."""
-        import astral
-
-        async def identity_of():
-            deadline = time.monotonic() + READY_TIMEOUT
-            last = None
-            while time.monotonic() < deadline:
-                try:
-                    async with await astral.connect(
-                            f"tcp:127.0.0.1:{port}", token=token,
-                            connect_timeout=3.0) as c:
-                        return str(await c.apphost.whoami())
-                except Exception as e:               # noqa: BLE001
-                    last = e
-                    await asyncio.sleep(1)
-            raise WorldError(f"apphost on 127.0.0.1:{port} never answered "
-                             f"(last error: {last})")
-        return asyncio.run(identity_of())
+        return wait_identity(port, token, READY_TIMEOUT, 1)

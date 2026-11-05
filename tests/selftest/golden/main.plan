@@ -1,14 +1,20 @@
-w0 local: smoke → mcp-origin → claim-window → token-less-setup → manager-setup
-          → signer-app → messaging-ops → bootstrap-user-software-key
-          → policy-delegate → fs-watch → registration-lease → adopt-node
-          → object-store → app-query → blueprints-two-node → apphost-origin
-          → sign-contract-guard → messaging-two-node → mcp-peer
-          → services-swarm → services-app-call → request-grant-scope
-          → object-store-peer → read-remote-peer → read-swarm → discover-swarm
-          → expel-node
+w0 local: smoke → mcp-origin → claim-window → admission-policies
+          → token-less-setup → manager-setup → signer-app → messaging-ops
+          → bootstrap-user-software-key → policy-delegate → fs-watch
+          → registration-lease → adopt-node → object-store → app-query
+          → blueprints-two-node → apphost-origin → sign-contract-guard
+          → messaging-two-node → mcp-peer → services-swarm → services-app-call
+          → request-grant-scope → swarm-authz-matrix → object-store-peer
+          → read-remote-peer → read-swarm → discover-swarm → expel-node
+          config admitter.apphost.policies = {"app_register": "reject_all"}
+          config admitter.user.policies = {"swarm_join": "reject_all", "swarm_invite": "accept_all"}
+          config invitee.user.policies = {"swarm_join": "accept_all", "swarm_invite": "reject_all"}
           config node1.apphost.gate = {"tokenless": ["apphost.register", "user.info", "user.derive_identity", "user.bootstrap", "user.join"], "states": {"fresh": ["*"], "unclaimed": ["*"]}}
           config nomcp1.mcp.bind_mcp = ""
 w1 local: bootstrap-user-software-key* → adopt-node* → hold-purge
-w2 local: import-user-software-key
-w3 local: bootstrap-user-op
-w4 local: introduce-node
+w2 local: bootstrap-user-software-key* → adopt-node* → swarm-roster-sync
+          → expel-propagation
+w3 local: bootstrap-user-software-key* → hold-isolation
+w4 local: import-user-software-key
+w5 local: bootstrap-user-op
+w6 local: introduce-node

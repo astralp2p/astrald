@@ -23,7 +23,7 @@ GO_ENV_VARS = ("ASTRALD_APPHOST_ENDPOINT", "ASTRALD_APPHOST_TOKEN")
 from lib import agent, manifest, report, suites
 from lib import plan as planner
 from lib.build import ensure_binary, git_ref, linux_binaries
-from lib.nodeconfig import PORTS_PER_NODE, PortsBusy, lease_ports
+from lib.nodeconfig import PORTS_PER_NODE, PortSpan, PortsBusy, lease_ports
 from lib.record import WorldRecord
 from lib.results import RunHeader, RunResults, fresh_run_dir
 from lib.worlds import WorldError
@@ -55,7 +55,6 @@ OPTIONS = {"plan": False, "isolate": False, "prereqs": "script", "vm": False,
            "docker": False, "save": None, "from_stage": None}
 # the skill the operator works with in a Docker world; a VM world's lab bakes
 # its own (netsim/ops/configure-astral-agent)
-DEFAULT_SKILL = "~/.claude/skills/astral-agent"
 
 
 class DriverError(Exception):
@@ -420,21 +419,20 @@ def _attach_world():
     return AttachWorld()
 
 
-def _local_world(dir: Path, binary: Path, port_base: int, max_nodes: int,
-                 keep: bool, config: dict | None = None):
+def _local_world(dir: Path, binary: Path, span: PortSpan, keep: bool,
+                 config: dict | None = None):
     """A fresh local world, its node roots under dir, its nodes started with
     the world's merged config overrides."""
-    return LocalWorld(dir, binary, port_base, max_nodes=max_nodes,
-                      keep=keep, config=config)
+    return LocalWorld(dir, binary, span, keep=keep, config=config)
 
 
-def _docker_world(dir: Path, binary: Path, image: str, port_base: int,
-                  max_nodes: int, keep: bool, config: dict | None = None,
+def _docker_world(dir: Path, binary: Path, image: str, span: PortSpan,
+                  keep: bool, config: dict | None = None,
                   skill: Path | None = None):
     """A Docker world, its logs under dir: one container per roster node,
     from `image`, running the Linux `binary`."""
-    return DockerWorld(dir, binary, image, port_base, max_nodes=max_nodes,
-                       keep=keep, config=config, skill=skill)
+    return DockerWorld(dir, binary, image, span, keep=keep, config=config,
+                       skill=skill)
 
 
 def _prepare_docker() -> tuple:
@@ -448,13 +446,21 @@ def _prepare_docker() -> tuple:
 
 
 def _skill(cfg: dict) -> Path | None:
-    """The astral-agent skill a Docker world's operator gets: config.toml's
-    [agent] skill, or the usual install; None when there is none."""
-    path = Path(os.path.expanduser(cfg.get("agent", {}).get("skill")
-                                   or DEFAULT_SKILL))
-    if (path / "SKILL.md").is_file():
-        return path.resolve()
-    return None
+    """The host skill whose SKILL.md and references a Docker world's
+    operator gets over the image's own: config.toml's [agent] skill; None
+    when it names none.
+
+    why no default path: a host's installed skill may be months older than
+    the docs the image pins, and its SKILL.md then misleads the operator;
+    the image's own skill needs nothing on the host
+    """
+    named = cfg.get("agent", {}).get("skill")
+    if not named:
+        return None
+    path = Path(os.path.expanduser(named))
+    if not (path / "SKILL.md").is_file():
+        raise ValueError(f"[agent] skill {named} holds no SKILL.md")
+    return path.resolve()
 
 
 def _skill_name(skill: Path | None) -> str:
@@ -525,7 +531,7 @@ class _Run:
                          if roots.exists() else "")
                       + (f"; containers {', '.join(ex.containers())} "
                          "(docker exec -it <name> sh; docker rm -f to end)"
-                         if hasattr(ex, "containers") else ""),
+                         if ex.containers() else ""),
                       file=sys.stderr)
 
     def _resume(self, ex, record: WorldRecord) -> None:
@@ -743,14 +749,10 @@ def main(args) -> int:
 
     lease = None
     containers = any(env == "container" for _, env, _ in units)
-    skill = _skill(cfg) if args.driver == "agent" and containers else None
-    if args.driver == "agent" and containers and skill is None:
-        # why refused: an operator without the skill fails in ways that read
-        # as the operator or its prompt breaking, so its verdicts say nothing
-        print("run: no astral-agent skill at "
-              f"{cfg.get('agent', {}).get('skill') or DEFAULT_SKILL}; set "
-              "[agent] skill in tests/config.toml to a satforge/skills "
-              "checkout's skills/astral-agent", file=sys.stderr)
+    try:
+        skill = _skill(cfg) if args.driver == "agent" and containers else None
+    except ValueError as e:
+        print(f"run: {e}", file=sys.stderr)
         return 2
     # why containers too: a Docker world publishes each node's apphost on a
     # leased host port
@@ -774,7 +776,8 @@ def main(args) -> int:
             # why before the run directory: a host whose engine fails leaves
             # no run behind, as a refused one does
             linux, image = _prepare_docker()
-        except (WorldError, subprocess.CalledProcessError) as e:
+        except (WorldError, subprocess.CalledProcessError,
+                subprocess.TimeoutExpired) as e:
             print(f"run: the Docker world cannot open: {e}", file=sys.stderr)
             return 2
     run_dir = fresh_run_dir(RESULTS)
@@ -799,8 +802,10 @@ def main(args) -> int:
                                              else "vm-user")
         results.header["agent_version"] = (docker.QWEN_CODE if containers
                                            else "(not recorded)")
-        results.header["agent_skill"] = (_skill_name(skill) if containers
-                                         else "(not recorded)")
+        results.header["agent_skill"] = (
+            f"{_skill_name(skill) if skill else 'image astral-agent'}, "
+            f"astral-docs {docker.docs_ref()[:12]}" if containers
+            else "(not recorded)")
 
     if args.target == "attach":
         destroyers = [s[0].name for _, _, steps in units for s in steps
@@ -810,15 +815,18 @@ def main(args) -> int:
                   "changes this daemon — it is not a throwaway",
                   file=sys.stderr)
 
+    # why one span for the run: its worlds run one after another on one lease
+    span = PortSpan(lease.base, max_nodes) if lease else None
+
     def open_world(name: str, env: str, keep: bool):
         if args.target == "attach":
             return _attach_world()
         if env == "node":
             return _local_world(run_dir / name / "session", binary,
-                                lease.base, max_nodes, keep, configs[name])
+                                span, keep, configs[name])
         if env == "container":
-            return _docker_world(run_dir / name, linux, image, lease.base,
-                                 max_nodes, keep, configs[name], skill)
+            return _docker_world(run_dir / name, linux, image, span, keep,
+                                 configs[name], skill)
         world = _vm_world(run_dir / name, binary, ref, keep, configs[name])
         if args.from_stage:
             world.boot_from(args.from_stage, run.saved)

@@ -1,0 +1,5 @@
+nodes    = ["node1"]
+timeout  = 120
+after    = "bootstrap-user-software-key"
+destroys = true
+facts    = ["ids", "apps", "lists", "purged"]

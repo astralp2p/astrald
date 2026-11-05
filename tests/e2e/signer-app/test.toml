@@ -1,4 +1,3 @@
 nodes   = ["signer1"]
 timeout = 300
-local_only = "its roster, signer1, names a node no VM lab runs"
 facts   = ["signer_app", "signer_app_user"]
