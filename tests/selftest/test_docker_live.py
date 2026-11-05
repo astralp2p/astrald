@@ -9,13 +9,16 @@ selftest/ takes milliseconds and touches no daemon.
     cd tests && ASTRAL_TESTS_DOCKER=1 PYTHONPATH=.:<astral-py>/src \\
         python3 -m unittest selftest.test_docker_live -v
 """
+import json
 import os
+import shlex
 import tempfile
 import tomllib
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
 
+from lib import agent
 from lib.build import linux_binaries
 from lib.nodeconfig import PORTS_PER_NODE, lease_ports
 from lib.worlds import WorldError, docker
@@ -73,6 +76,32 @@ class TestDockerLive(unittest.TestCase):
         # and the operator's astral-query holds no token
         self.world.ssh("node1", "su - tester -c 'astral-query user.info'")
 
+
+    def test_the_operator_drives_node1_and_its_facts_come_back(self):
+        # why a stub qwen: this checks the seat — push, su, prompt, facts
+        # file, collection — not the model, which needs the network
+        stub = ("#!/bin/sh\nmkdir -p ~/.facts\n"
+                "printf '{\"answer\": \"42\"}' > ~/.facts/stubbed.json\n"
+                "echo stub ran\n")
+        self.world.ssh("node1", "set -e; for d in $(su - tester -c "
+                       "'dirname $(command -v qwen)'); do "
+                       f"rm -f $d/qwen; printf '%s' {shlex.quote(stub)} > $d/qwen; "
+                       "chmod 755 $d/qwen; done")
+        with tempfile.TemporaryDirectory() as tmp:
+            d = Path(tmp) / "stubbed"
+            d.mkdir()
+            (d / "prompt.md").write_text("answer the question\n")
+            art = Path(tmp) / "art"
+            art.mkdir()
+            (art / "session.json").write_text(json.dumps(
+                {"run": "x", "nodes": {}, "facts": {}}))
+            t = SimpleNamespace(name="stubbed", dir=d, facts=["answer"])
+            rc = agent.Operator(self.world.ssh).run(t, art)
+            log = (art / "driver.log").read_text()
+            self.assertEqual(rc, 0, log)
+            self.assertIn("stub ran", log)
+            self.assertEqual(json.loads((art / "facts.json").read_text()),
+                             {"answer": "42"})
 
 @unittest.skipUnless(WANTED, "ASTRAL_TESTS_DOCKER=1 runs the live Docker tests")
 @unittest.skipIf(WHY, f"no Docker engine: {WHY}")
