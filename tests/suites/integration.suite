@@ -11,6 +11,7 @@
 # that hold-purge, which also ends a world, forks instead of expel-node.
 smoke
 claim-window
+admission-policies
 bootstrap-user-software-key
 adopt-node
 blueprints-two-node
@@ -24,4 +25,7 @@ read-remote-peer
 read-swarm
 expel-node
 hold-purge
+hold-isolation
+swarm-roster-sync
+expel-propagation
 import-user-software-key

@@ -6,6 +6,7 @@
 smoke
 mcp-origin
 claim-window
+admission-policies
 token-less-setup
 manager-setup
 signer-app
@@ -34,3 +35,6 @@ services-app-call
 request-grant-scope
 expel-node
 hold-purge
+hold-isolation
+swarm-roster-sync
+expel-propagation

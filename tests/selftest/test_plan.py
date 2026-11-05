@@ -181,12 +181,16 @@ class TestShippedPlans(Invariants, unittest.TestCase):
         # further world opens for a destroyer that cannot end w0
         listed = self.suites["main"]
         worlds = plan(self.tests, listed, listed)
+        # why destroyers, not one test per world: a destroyer's lineage of
+        # destroyers (swarm-roster-sync → expel-propagation) shares the
+        # world it forks into
         for w in worlds[1:]:
             with self.subTest(world=w.name):
-                self.assertTrue(self.tests[w.steps[-1].test].destroys)
                 self.assertEqual([s.kind for s in w.steps][-1], "test")
-        self.assertEqual(sum(s.kind == "test" for s in worlds[0].steps),
-                         len(listed) - len(worlds) + 1)
+                self.assertTrue(all(self.tests[s.test].destroys
+                                    for s in w.steps if s.kind == "test"))
+        ran = [s.test for w in worlds for s in w.steps if s.kind == "test"]
+        self.assertEqual(sorted(ran), sorted(listed))
 
     def test_root_observers_run_before_bootstrap(self):
         w, = plan(self.tests, ["adopt-node", "claim-window"])
@@ -214,13 +218,14 @@ class TestShippedPlans(Invariants, unittest.TestCase):
                              [("bootstrap-user-software-key", "prereq"),
                               ("adopt-node", "prereq"), (test, "test")])
 
-    def test_all_tests_plan_as_eight_worlds(self):
+    def test_all_tests_plan_into_one_world_per_destroyer(self):
         worlds = plan(self.tests, sorted(self.tests))
         self.assertEqual(
             [(w.kind, w.steps[-1].test) for w in worlds],
             [("local", "expel-node"), ("vm", "gateway-relay"),
              ("local", "hold-purge"), ("vm", "nat-punch"),
-             ("vm", "tor-link"), ("local", "bootstrap-user-op"),
+             ("local", "expel-propagation"), ("vm", "tor-link"),
+             ("local", "hold-isolation"), ("local", "bootstrap-user-op"),
              ("local", "import-user-software-key"),
              ("local", "introduce-node")])
 
