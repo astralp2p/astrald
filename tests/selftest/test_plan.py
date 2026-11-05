@@ -138,16 +138,18 @@ class TestShippedPlans(Invariants, unittest.TestCase):
             with self.subTest(suite=suite):
                 listed = self.suites[suite]
                 got = render(plan(self.tests, listed, listed, driver=driver))
-                flag = " --driver agent" if driver == "agent" else ""
+                # why --vm: an agent plan's heavy kind follows the host
+                flag = " --driver agent --vm" if driver == "agent" else ""
                 self.assertEqual(
                     got, (GOLDEN / f"{suite}.plan").read_text(),
                     f"{suite}.suite plans differently; if intended, run "
                     f"./tests/run --plan{flag} {suite}.suite > "
                     f"tests/selftest/golden/{suite}.plan")
 
-    def test_every_shipped_local_world_fits_the_port_span(self):
-        # why: LocalWorld refuses a node past the span only when the run
-        # reaches it; this tells the test author at selftest time
+    def test_every_shipped_local_or_docker_world_fits_the_port_span(self):
+        # why: a local or Docker world refuses a node past the span only
+        # when the run reaches it; this tells the test author at selftest
+        # time
         span = tomllib.loads((TESTS / "config.toml")
                              .read_text())["ports"]["span"]
         limit = span // PORTS_PER_NODE
@@ -155,9 +157,16 @@ class TestShippedPlans(Invariants, unittest.TestCase):
                                         self.suites[suite], driver=driver)
                  for suite, driver in SUITES.items()}
         plans["every test"] = plan(self.tests, sorted(self.tests))
+        plans["every Docker test"] = plan(
+            self.tests, sorted(n for n, t in self.tests.items()
+                               if not t.ops and not t.local_only),
+            docker=True)
+        plans["agent.suite in Docker"] = plan(
+            self.tests, self.suites["agent"], self.suites["agent"],
+            driver="agent", heavy="docker")
         for name, worlds in plans.items():
             for w in worlds:
-                if w.kind != "local":
+                if w.kind not in ("local", "docker"):
                     continue
                 nodes = {n for s in w.steps for n in self.tests[s.test].nodes}
                 with self.subTest(plan=name, world=w.name):
@@ -525,3 +534,48 @@ class TestRunPlan(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestDockerPlans(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.tests = load_all(TESTS / "e2e")
+        cls.agent = load(TESTS / "suites" / "agent.suite")
+
+    def test_the_agent_driver_takes_the_heavy_kind_it_is_given(self):
+        worlds = plan(self.tests, self.agent, self.agent, driver="agent",
+                      heavy="docker")
+        self.assertEqual({w.kind for w in worlds}, {"docker"})
+
+    def test_golden_agent_docker_plan(self):
+        got = render(plan(self.tests, self.agent, self.agent, driver="agent",
+                          heavy="docker"))
+        self.assertEqual(
+            got, (GOLDEN / "agent-docker.plan").read_text(),
+            "agent.suite plans differently in Docker worlds; if intended, "
+            "run ./tests/run --plan --driver agent --docker agent.suite > "
+            "tests/selftest/golden/agent-docker.plan")
+
+    def test_docker_forces_every_world(self):
+        worlds = plan(self.tests, ["smoke"], docker=True)
+        self.assertEqual([w.kind for w in worlds], ["docker"])
+
+    def test_a_docker_run_refuses_vm_operations(self):
+        with self.assertRaisesRegex(PlanError, "tor-link runs VM operations"
+                                               ".*add --vm"):
+            plan(self.tests, ["tor-link"], docker=True)
+
+    def test_a_docker_run_refuses_a_local_only_test(self):
+        tests = {"a": fake(local_only="watches a host directory")}
+        with self.assertRaisesRegex(PlanError, "Docker containers"):
+            plan(tests, ["a"], docker=True)
+
+    def test_vm_and_docker_together_are_refused(self):
+        with self.assertRaisesRegex(PlanError, "choose one"):
+            plan(self.tests, ["smoke"], vm=True, docker=True)
+
+    def test_without_the_agent_driver_heavy_changes_nothing(self):
+        listed = load(TESTS / "suites" / "main.suite")
+        self.assertEqual(
+            render(plan(self.tests, listed, listed, heavy="docker")),
+            render(plan(self.tests, listed, listed)))

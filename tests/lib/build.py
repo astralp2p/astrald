@@ -1,4 +1,5 @@
 """Build astrald from this worktree; the binary under test."""
+import os
 import subprocess
 from pathlib import Path
 
@@ -50,3 +51,24 @@ def ensure_binary(repo_root: Path) -> tuple:
         subprocess.run(["go", "build", "-o", str(out), pkg],
                        cwd=repo_root, check=True)
     return binary, git_ref(repo_root)
+
+
+def linux_binaries(repo_root: Path, arch: str) -> Path:
+    """Build astrald, and astral-query beside it, for Linux on `arch`
+    (`amd64`, `arm64`): the binaries a Docker world copies into its
+    containers.
+
+    why static: a container runs the image's libc, not the host's, and the
+    daemon needs none (CGO_ENABLED=0 builds it on modernc.org/sqlite).
+    why its own directory: the host build beside it stays the one a local or
+    VM world runs.
+    """
+    out = repo_root / "tests" / ".cache" / f"linux-{arch}"
+    out.mkdir(parents=True, exist_ok=True)
+    binary = out / "astrald"
+    env = dict(os.environ, CGO_ENABLED="0", GOOS="linux", GOARCH=arch)
+    for dst, pkg in ((binary, "./cmd/astrald"),
+                     (query_binary(binary), "./cmd/astral-query")):
+        subprocess.run(["go", "build", "-o", str(dst), pkg],
+                       cwd=repo_root, env=env, check=True)
+    return binary
