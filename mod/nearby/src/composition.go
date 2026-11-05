@@ -21,9 +21,12 @@ func (c *Composition) Receiver() *astral.Identity {
 	return c.receiver
 }
 
-// Attach appends an object to the status message, rejecting it if its serialized
-// size exceeds MaxAttachmentSize.
+// Attach appends an object to the status message. It refuses a StatusProof, which only
+// the nearby module appends, and an object whose serialized size exceeds MaxAttachmentSize.
 func (c *Composition) Attach(o astral.Object) error {
+	if _, ok := o.(*nearby.StatusProof); ok {
+		return nearbymod.ErrStatusProofAttached
+	}
 	objectID, _ := astral.ResolveObjectID(o)
 	if objectID.Size > MaxAttachmentSize {
 		return nearbymod.ErrObjectTooLarge

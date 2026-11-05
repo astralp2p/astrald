@@ -9,14 +9,20 @@ const (
 	ModuleName = "nearby"
 )
 
-// Module is the public API of the nearby module; implementations manage broadcast state,
-// status composition, and stealth-mode identity resolution.
+// Module is the public API of the nearby module: it sends the node's status and scans
+// on the local network, and holds the node's nearby mode.
 type Module interface {
+	// Broadcast sends the node's status on every local subnet. It sends nothing in
+	// ModeSilent, or when the composers attach nothing.
 	Broadcast() error
+	// Scan asks the nodes on every local subnet for their status. It sends nothing in
+	// ModeSilent.
+	Scan() error
 	AddStatusComposer(Composer)
 	Mode() nearby.Mode
+	// SetMode stores the mode. It refuses a mode above nearby.ModeStealth with
+	// ErrInvalidMode.
 	SetMode(ctx *astral.Context, m nearby.Mode) error
-	ResolveStatus(status *nearby.StatusMessage) *astral.Identity
 }
 
 // Composer contributes attachments to an outgoing status broadcast.
@@ -28,4 +34,11 @@ type Composer interface {
 type Composition interface {
 	Receiver() *astral.Identity
 	Attach(astral.Object) error
+}
+
+// Recognizer reports who sent a status (stealth hint or public profile), if it can tell.
+type Recognizer interface {
+	// ok == true:  nodeID is set (never nil); userID is set if known, else nil.
+	// ok == false: this recognizer can't tell who sent this status; nothing else is implied.
+	RecognizeStatus(status *nearby.StatusMessage) (nodeID, userID *astral.Identity, ok bool)
 }

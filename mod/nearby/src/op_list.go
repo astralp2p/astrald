@@ -12,6 +12,8 @@ type opListArgs struct {
 	Out string
 }
 
+// OpList streams one Status per live cache entry: the verified node, nil for an
+// unrecognised stealth status, and the attachments as received.
 func (mod *Module) OpList(ctx *astral.Context, q *routing.IncomingQuery, args opListArgs) (err error) {
 	ch := channel.New(q.AcceptRaw(), channel.WithOutputFormat(args.Out))
 	defer ch.Close()
@@ -20,10 +22,10 @@ func (mod *Module) OpList(ctx *astral.Context, q *routing.IncomingQuery, args op
 		return ch.Send(auth.ErrNotPermitted)
 	}
 
-	for _, v := range mod.Cache().Clone() {
+	for _, e := range mod.cache.live(mod.now()) {
 		err = ch.Send(&nearby.Status{
-			Identity:    mod.ResolveStatus(v.Status),
-			Attachments: v.Status.Attachments,
+			Identity:    e.NodeID,
+			Attachments: e.Status.Attachments,
 		})
 		if err != nil {
 			return

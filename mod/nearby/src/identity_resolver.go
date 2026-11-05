@@ -2,34 +2,33 @@ package nearby
 
 import (
 	"errors"
-	dirmod "github.com/astralp2p/astrald/mod/dir"
 	"strings"
 
-	"github.com/astralp2p/astral-go/api/dir"
+	"github.com/astralp2p/astral-go/api/nearby"
 	"github.com/astralp2p/astral-go/astral"
+	dirmod "github.com/astralp2p/astrald/mod/dir"
 )
 
 var _ dirmod.Resolver = &Module{}
 
-// ResolveIdentity resolves a dot-prefixed alias (e.g. ".phone") by scanning the
-// nearby cache for a matching dir.Alias attachment; returns an error if no peer
-// has announced that alias or the prefix is absent.
+// ResolveIdentity resolves a dot-prefixed alias (e.g. ".phone") to the verified cached
+// peer whose public profile names that alias; it returns an error when the prefix is
+// absent or no verified peer names the alias.
 func (mod *Module) ResolveIdentity(s string) (*astral.Identity, error) {
-	s, found := strings.CutPrefix(s, aliasPrefix)
-	if !found {
+	name, found := strings.CutPrefix(s, aliasPrefix)
+	if !found || name == "" {
 		return nil, errors.New("not found")
 	}
 
-	for _, v := range mod.Cache().Clone() {
-		if v.GetIdentity() == nil {
+	for _, e := range mod.cache.live(mod.now()) {
+		if e.NodeID == nil {
 			continue
 		}
 
-		alias, ok := astral.First[*dir.Alias](v.Status.Attachments.Objects())
-		if ok && alias != nil && alias.String() == s {
-			return v.GetIdentity(), nil
+		profile, ok := astral.First[*nearby.PublicProfile](e.Status.Attachments.Objects())
+		if ok && profile != nil && string(profile.NodeAlias) == name {
+			return e.NodeID, nil
 		}
-
 	}
 
 	return nil, errors.New("not found")
