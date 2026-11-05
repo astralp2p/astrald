@@ -2,7 +2,7 @@
 
 A held object survives `objects.purge`; an unheld one does not.
 
-- **env** node · **start** `two-nodes` · **saves** — · **mutates** true
+- **manifest** `after = "adopt-node"` · `destroys = true` · no `local_only`, so it runs in local and Docker worlds
 - **driver** `script.py` — store two stamped objects, load both, hold the first
   with no duration, then purge the `local` repo.
 - **oracle** `verify.py` — the held object is still there and re-encodes to its
@@ -52,19 +52,15 @@ That unstamped blobs are permanently unreclaimable is tracked separately as
 *astrald: an unstamped blob is never purge-eligible, so a node cannot reclaim
 one*.
 
-## Why `mutates`, and what it does not buy
+## Why `destroys`
 
 `objects.purge` deletes every unheld object in the repository, so this test
-invalidates any state whose value includes stored objects. `mutates = true`
-with no `saves` is TERMINAL: the harness refuses to let any test **follow** it
-in a suite walk (`lib/manifest.py:189-192`).
-
-That is narrower than it sounds. It does not stop `object-store` running
-*before* this test — `validate_order(['object-store', 'hold-purge'])` is
-accepted — it guarantees that nothing downstream can consume the data this test
-destroys. Which is the property that matters, and is why the test is in no
-suite: `main.suite` rejects it at either end, after `expel-node` by that test's
-`two-nodes-expel` fence and before it by this test's TERMINAL one.
+leaves its world unusable for any test that reads what was stored before it.
+`destroys = true` tells the planner so: nothing but this test's own
+descendants may follow it in its world. In `main.suite` and
+`integration.suite`, `expel-node` already ends w0, so this test forks into a
+world of its own that replays bootstrap and adopt-node by script
+(`./tests/run --plan main.suite` shows it).
 
 ## Two halves, both required
 
