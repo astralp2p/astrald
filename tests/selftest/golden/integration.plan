@@ -1,0 +1,7 @@
+w0 local: smoke → claim-window → bootstrap-user-software-key → adopt-node
+          → blueprints-two-node → apphost-origin → sign-contract-guard
+          → request-grant-scope → services-swarm → object-store
+          → object-store-peer → read-remote-peer → read-swarm → expel-node
+          config node1.apphost.gate = {"tokenless": ["apphost.register", "user.info", "user.derive_identity", "user.bootstrap", "user.join"], "states": {"fresh": ["*"], "unclaimed": ["*"]}}
+w1 local: bootstrap-user-software-key* → adopt-node* → hold-purge
+w2 local: import-user-software-key

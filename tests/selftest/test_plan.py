@@ -25,7 +25,7 @@ GOLDEN = Path(__file__).resolve().parent / "golden"
 
 # suite -> the driver its golden plan is drawn under
 SUITES = {"main": "script", "tor": "script", "nat": "script",
-          "gateway": "script", "agent": "agent"}
+          "gateway": "script", "agent": "agent", "integration": "script"}
 
 
 def fake(after=None, destroys=False, ops=(), local_only=None,
@@ -555,6 +555,15 @@ class TestDockerPlans(unittest.TestCase):
             "agent.suite plans differently in Docker worlds; if intended, "
             "run ./tests/run --plan --driver agent --docker agent.suite > "
             "tests/selftest/golden/agent-docker.plan")
+
+    def test_golden_integration_docker_plan(self):
+        listed = load(TESTS / "suites" / "integration.suite")
+        got = render(plan(self.tests, listed, listed, docker=True))
+        self.assertEqual(
+            got, (GOLDEN / "integration-docker.plan").read_text(),
+            "integration.suite plans differently in Docker worlds; if "
+            "intended, run ./tests/run --plan --docker integration.suite > "
+            "tests/selftest/golden/integration-docker.plan")
 
     def test_docker_forces_every_world(self):
         worlds = plan(self.tests, ["smoke"], docker=True)
