@@ -198,11 +198,11 @@ func (e *fakeEvents) peersSeen(t *testing.T) []*nearby.PeerSeen {
 
 // fakeRecognizer answers RecognizeStatus with recognize.
 type fakeRecognizer struct {
-	recognize func(*nearby.StatusMessage) (node, user *astral.Identity, ok bool)
+	recognize func(*nearby.StatusMessage) *nearbymod.Recognition
 	calls     atomic.Uint64
 }
 
-func (r *fakeRecognizer) RecognizeStatus(s *nearby.StatusMessage) (*astral.Identity, *astral.Identity, bool) {
+func (r *fakeRecognizer) RecognizeStatus(s *nearby.StatusMessage) *nearbymod.Recognition {
 	r.calls.Add(1)
 	return r.recognize(s)
 }
@@ -210,23 +210,25 @@ func (r *fakeRecognizer) RecognizeStatus(s *nearby.StatusMessage) (*astral.Ident
 // userRecognizer recognizes user's nodes as the user module does: a stealth hint that
 // opens with user, and a public profile whose UserID is user.
 func userRecognizer(user *astral.Identity) *fakeRecognizer {
-	return &fakeRecognizer{recognize: func(s *nearby.StatusMessage) (*astral.Identity, *astral.Identity, bool) {
+	return &fakeRecognizer{recognize: func(s *nearby.StatusMessage) *nearbymod.Recognition {
 		objs := s.Attachments.Objects()
 		if hint, ok := astral.First[*nearby.StealthHint](objs); ok {
-			node, ok := hint.Open(user)
-			return node, user, ok
+			if node, ok := hint.Open(user); ok {
+				return &nearbymod.Recognition{NodeID: node, UserID: user}
+			}
+			return nil
 		}
 		if p, ok := astral.First[*nearby.PublicProfile](objs); ok && p.UserID.IsEqual(user) && !user.IsZero() {
-			return p.NodeID, user, true
+			return &nearbymod.Recognition{NodeID: p.NodeID, UserID: user}
 		}
-		return nil, nil, false
+		return nil
 	}}
 }
 
 // fixedRecognizer recognizes every status as node of user.
 func fixedRecognizer(node, user *astral.Identity) *fakeRecognizer {
-	return &fakeRecognizer{recognize: func(*nearby.StatusMessage) (*astral.Identity, *astral.Identity, bool) {
-		return node, user, true
+	return &fakeRecognizer{recognize: func(*nearby.StatusMessage) *nearbymod.Recognition {
+		return &nearbymod.Recognition{NodeID: node, UserID: user}
 	}}
 }
 

@@ -10,21 +10,21 @@ var _ nearbymod.Recognizer = &Module{}
 
 // RecognizeStatus recognizes a status of a node of the current user: a
 // StealthHint that opens with the user, or a PublicProfile that names the user
-// and a node. It returns the node and the user. A node without a user
+// and a node. It returns the node and the user, or nil. A node without a user
 // recognizes nothing.
 // Spec: .ai/system/protocols/nearby/README.md
-func (mod *Module) RecognizeStatus(status *nearby.StatusMessage) (nodeID, userID *astral.Identity, ok bool) {
-	userID = mod.Identity()
+func (mod *Module) RecognizeStatus(status *nearby.StatusMessage) *nearbymod.Recognition {
+	userID := mod.Identity()
 	if userID.IsZero() || status == nil || status.Attachments == nil {
-		return nil, nil, false
+		return nil
 	}
 
 	for _, obj := range status.Attachments.Objects() {
-		if nodeID, ok = recognizeAttachment(obj, userID); ok {
-			return nodeID, userID, true
+		if nodeID, ok := recognizeAttachment(obj, userID); ok {
+			return &nearbymod.Recognition{NodeID: nodeID, UserID: userID}
 		}
 	}
-	return nil, nil, false
+	return nil
 }
 
 // recognizeAttachment returns the node that obj names as a node of userID.

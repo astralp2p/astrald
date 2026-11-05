@@ -36,9 +36,15 @@ type Composition interface {
 	Attach(astral.Object) error
 }
 
+// Recognition names the sender of a status that a Recognizer recognized.
+type Recognition struct {
+	NodeID *astral.Identity // note: never nil
+	UserID *astral.Identity // note: nil when unknown
+}
+
 // Recognizer reports who sent a status (stealth hint or public profile), if it can tell.
 type Recognizer interface {
-	// ok == true:  nodeID is set (never nil); userID is set if known, else nil.
-	// ok == false: this recognizer can't tell who sent this status; nothing else is implied.
-	RecognizeStatus(status *nearby.StatusMessage) (nodeID, userID *astral.Identity, ok bool)
+	// RecognizeStatus returns the sender of status, or nil when this recognizer can't
+	// tell who sent it; nil implies nothing else.
+	RecognizeStatus(status *nearby.StatusMessage) *Recognition
 }

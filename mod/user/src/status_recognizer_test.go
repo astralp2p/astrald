@@ -56,18 +56,15 @@ func TestRecognizeStatus(t *testing.T) {
 	}
 	for _, tt := range cases {
 		t.Run(tt.name, func(t *testing.T) {
-			node, user, ok := mod.RecognizeStatus(tt.status)
-			if ok != tt.want {
-				t.Fatalf("recognized %v; want %v", ok, tt.want)
+			rec := mod.RecognizeStatus(tt.status)
+			if (rec != nil) != tt.want {
+				t.Fatalf("recognized %+v; want recognized %v", rec, tt.want)
 			}
-			if !ok {
-				if node != nil || user != nil {
-					t.Fatalf("an unrecognized status named %v of %v; want neither", node, user)
-				}
+			if rec == nil {
 				return
 			}
-			if !node.IsEqual(peerID) || !user.IsEqual(userID) {
-				t.Fatalf("recognized %v of %v; want %v of %v", node, user, peerID, userID)
+			if !rec.NodeID.IsEqual(peerID) || !rec.UserID.IsEqual(userID) {
+				t.Fatalf("recognized %v of %v; want %v of %v", rec.NodeID, rec.UserID, peerID, userID)
 			}
 		})
 	}
@@ -83,7 +80,7 @@ func TestRecognizeStatusWithoutAUser(t *testing.T) {
 		statusOf(t, &nearby.PublicProfile{NodeID: peerID}),
 		statusOf(t, &nearby.PublicProfile{NodeID: peerID, UserID: astral.GenerateIdentity()}),
 	} {
-		if _, _, ok := mod.RecognizeStatus(status); ok {
+		if rec := mod.RecognizeStatus(status); rec != nil {
 			t.Fatal("a node without a user recognized a status")
 		}
 	}

@@ -11,6 +11,7 @@ import (
 	"github.com/astralp2p/astral-go/api/ip"
 	"github.com/astralp2p/astral-go/api/nearby"
 	"github.com/astralp2p/astral-go/astral"
+	nearbymod "github.com/astralp2p/astrald/mod/nearby"
 )
 
 const peerIP = "192.168.1.20"
@@ -197,7 +198,7 @@ func identifyDropCases() []dropCase {
 			return fixedRecognizer(nil, nil)
 		}, errNoNodeID, false},
 		{"panicking recognizer", visible, func(*harness, *peer) *fakeRecognizer {
-			return &fakeRecognizer{recognize: func(*nearby.StatusMessage) (*astral.Identity, *astral.Identity, bool) {
+			return &fakeRecognizer{recognize: func(*nearby.StatusMessage) *nearbymod.Recognition {
 				panic("recognizer panic")
 			}}
 		}, errPanic, false},
@@ -358,9 +359,7 @@ func TestAcceptStatusUsesTheFirstRecognizerThatRecognizes(t *testing.T) {
 	p := newPeer(t)
 	user := astral.GenerateIdentity()
 
-	none := &fakeRecognizer{recognize: func(*nearby.StatusMessage) (*astral.Identity, *astral.Identity, bool) {
-		return nil, nil, false
-	}}
+	none := &fakeRecognizer{recognize: func(*nearby.StatusMessage) *nearbymod.Recognition { return nil }}
 	first, second := fixedRecognizer(p.node, user), fixedRecognizer(p.node, astral.GenerateIdentity())
 	h.mod.recognizers.Add(none, first, second)
 

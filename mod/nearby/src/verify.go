@@ -10,6 +10,7 @@ import (
 	"github.com/astralp2p/astral-go/api/nearby"
 	"github.com/astralp2p/astral-go/api/secp256k1"
 	"github.com/astralp2p/astral-go/astral"
+	nearbymod "github.com/astralp2p/astrald/mod/nearby"
 )
 
 // The StatusProof signature lengths a receiver accepts: a DER ECDSA secp256k1 signature.
@@ -134,16 +135,19 @@ func (mod *Module) identify(r *receivedStatus) (*identified, error) {
 		via = nearby.ViaProfile
 	}
 
-	node, user, ok := mod.recognize(r.status)
+	var node, user *astral.Identity
+	rec := mod.recognize(r.status)
 	switch {
-	case !ok && r.profile == nil:
+	case rec == nil && r.profile == nil:
 		return nil, nil
-	case !ok:
+	case rec == nil:
 		node, user = r.profile.NodeID, r.profile.UserID
-	case node.IsZero():
+	case rec.NodeID.IsZero():
 		return nil, errNoNodeID
-	case r.profile != nil && !node.IsEqual(r.profile.NodeID):
+	case r.profile != nil && !rec.NodeID.IsEqual(r.profile.NodeID):
 		return nil, errNodeMismatch
+	default:
+		node, user = rec.NodeID, rec.UserID
 	}
 
 	switch {
@@ -158,14 +162,15 @@ func (mod *Module) identify(r *receivedStatus) (*identified, error) {
 	return &identified{node: node, user: user, via: via}, nil
 }
 
-// recognize asks the recognizers in turn; the first that recognizes the status wins.
-func (mod *Module) recognize(status *nearby.StatusMessage) (node, user *astral.Identity, ok bool) {
+// recognize asks the recognizers in turn; the first that recognizes the status wins. It
+// returns nil when none does.
+func (mod *Module) recognize(status *nearby.StatusMessage) *nearbymod.Recognition {
 	for _, r := range mod.recognizers.Clone() {
-		if node, user, ok = r.RecognizeStatus(status); ok {
-			return node, user, true
+		if rec := r.RecognizeStatus(status); rec != nil {
+			return rec
 		}
 	}
-	return nil, nil, false
+	return nil
 }
 
 // verify checks that the proof's nonce is new for the node and that its signature, unwrapped
