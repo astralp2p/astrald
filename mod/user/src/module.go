@@ -37,6 +37,8 @@ type Module struct {
 
 	// mu makes the claim check and the claim one transition; see claim.
 	mu sync.Mutex
+	// linkerMu makes the sibling linker's check, schedule and register one step; see runSiblingLinker.
+	linkerMu sync.Mutex
 
 	// dials limits the nearby contact attempts per node; see onPeerSeen.
 	dials *dialMap
@@ -77,7 +79,14 @@ func (mod *Module) String() string {
 	return user.ModuleName
 }
 
+// runSiblingLinker starts a link task for every swarm member that has none.
+//
+// why linkerMu: PeerSeen events, pushed contracts and contract changes run the
+// linker at once, and two unserialized runs each start a task for one member.
 func (mod *Module) runSiblingLinker() {
+	mod.linkerMu.Lock()
+	defer mod.linkerMu.Unlock()
+
 	for _, node := range mod.LocalSwarm() {
 		if node.IsEqual(mod.node.Identity()) {
 			continue

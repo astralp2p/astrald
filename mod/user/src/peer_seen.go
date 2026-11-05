@@ -26,6 +26,10 @@ type peerContractReader func(ctx *astral.Context, peer *astral.Identity) (*auth.
 // checkPeerContract, at most once per dialInterval per node. Other nodes are
 // ignored. Spec: .ai/system/protocols/user/README.md
 func (mod *Module) onPeerSeen(e *nearby.PeerSeen) {
+	// why: nearby emits PeerSeen before this module is ready, and Run sets the
+	// context of the contact before it closes ready.
+	<-mod.ready
+
 	ac := mod.ActiveContract()
 	if ac == nil || e == nil {
 		return

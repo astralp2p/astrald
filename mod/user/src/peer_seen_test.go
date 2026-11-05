@@ -96,10 +96,13 @@ func newContactFixture(t *testing.T) *contactFixture {
 
 	ctx, cancel := astral.NewContext(nil).WithCancel()
 	t.Cleanup(cancel)
+	ready := make(chan struct{})
+	close(ready)
 
 	f.mod = &Module{
 		Deps:             Deps{Auth: f.auth, Nodes: f.nodes, Objects: &contactPusher{log: f.calls}, Scheduler: f.scheduler},
 		ctx:              ctx,
+		ready:            ready,
 		node:             &identityNode{id: f.nodeID},
 		log:              log.New(f.nodeID),
 		db:               singleConnDB(t),
@@ -565,5 +568,77 @@ func TestSiblingLinkerRegistersTheTaskWake(t *testing.T) {
 	}
 	if !link.actionRequired.Load() {
 		t.Fatal("the woken link task needs no action; want a dial")
+	}
+}
+
+// TestPeerSeenWaitsForReady: a PeerSeen received before the module is ready
+// starts its contact once the module is ready.
+func TestPeerSeenWaitsForReady(t *testing.T) {
+	f := newContactFixture(t)
+	ready := make(chan struct{})
+	f.mod.ready = ready
+
+	drop := &recordingDrop{sender: f.nodeID, object: &events.Event{Data: f.seen(f.peerID, f.userID)}}
+	if err := f.mod.ReceiveObject(drop); err != nil {
+		t.Fatalf("ReceiveObject: %v", err)
+	}
+	select {
+	case peer := <-f.calls.reads:
+		t.Fatalf("read the contract of %v before the module was ready", peer)
+	case <-time.After(100 * time.Millisecond):
+	}
+
+	close(ready)
+	select {
+	case <-f.calls.reads:
+	case <-time.After(effectTimeout):
+		t.Fatal("the PeerSeen started no contact once the module was ready")
+	}
+}
+
+// gateScheduler records every scheduled task on scheduled and holds each
+// Schedule call until release closes.
+type gateScheduler struct {
+	scheduler.Module
+	scheduled chan scheduler.Task
+	release   chan struct{}
+}
+
+func (s *gateScheduler) Schedule(task scheduler.Task, _ ...scheduler.Done) (scheduler.ScheduledTask, error) {
+	s.scheduled <- task
+	<-s.release
+	return keptTask{}, nil
+}
+
+// TestConcurrentPeerSeenStartsOneLinkTask: two PeerSeen events of a member
+// without a link task, handled at once, start one link task.
+func TestConcurrentPeerSeenStartsOneLinkTask(t *testing.T) {
+	f := newContactFixture(t)
+	f.addMember(f.peerID)
+	sched := &gateScheduler{scheduled: make(chan scheduler.Task, 4), release: make(chan struct{})}
+	f.mod.Scheduler = sched
+
+	first, second := make(chan struct{}), make(chan struct{})
+	go func() {
+		defer close(first)
+		f.mod.onPeerSeen(f.seen(f.peerID, f.userID))
+	}()
+	<-sched.scheduled
+	go func() {
+		defer close(second)
+		f.mod.onPeerSeen(f.seen(f.peerID, f.userID))
+	}()
+
+	select {
+	case task := <-sched.scheduled:
+		t.Errorf("scheduled %v while the first link task was being registered", task)
+	case <-time.After(100 * time.Millisecond):
+	}
+	close(sched.release)
+	<-first
+	<-second
+
+	if n := len(sched.scheduled); n != 0 {
+		t.Fatalf("scheduled %v more link tasks; want one in all", n)
 	}
 }
