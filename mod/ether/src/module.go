@@ -1,24 +1,18 @@
 package ether
 
 import (
-	"bytes"
 	"errors"
 	"fmt"
 	"net"
-	"strconv"
-	"time"
 
-	"github.com/astralp2p/astral-go/api/ether"
 	"github.com/astralp2p/astral-go/api/ip"
-	"github.com/astralp2p/astral-go/api/secp256k1"
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astral-go/astral/log"
 	"github.com/astralp2p/astral-go/sig"
 	ethermod "github.com/astralp2p/astrald/mod/ether"
 	"github.com/astralp2p/astrald/resources"
+	"golang.org/x/net/ipv4"
 )
-
-const maxBroadcastSize = 1<<16 - 1
 
 var _ ethermod.Module = &Module{}
 
@@ -28,16 +22,15 @@ type Module struct {
 	node   astral.Node
 	log    *log.Logger
 	assets resources.Resources
-	socket *net.UDPConn
+	socket *ipv4.PacketConn
 
-	ctx *astral.Context
+	// note: tests replace lookupPrefixes to inject the local prefixes.
+	lookupPrefixes prefixLookup
 }
 
 // Run starts the broadcast receiver loop and holds a platform multicast lock for the lifetime of ctx.
 // When socket is nil (listen is off or the UDP bind failed at load), Run exits cleanly without any network activity.
 func (mod *Module) Run(ctx *astral.Context) (err error) {
-	mod.ctx = ctx
-
 	// If listen is off or the socket failed to bind during Load, run as a no-op: no broadcasts
 	// in or out, no platform multicast lock requested.
 	if mod.socket == nil {
@@ -50,7 +43,7 @@ func (mod *Module) Run(ctx *astral.Context) (err error) {
 		defer hook(false)
 	}
 
-	go mod.broadcastReceiver(ctx)
+	go mod.receiveLoop(ctx)
 
 	<-ctx.Done()
 
@@ -59,38 +52,9 @@ func (mod *Module) Run(ctx *astral.Context) (err error) {
 	return nil
 }
 
-func (mod *Module) broadcastReceiver(ctx *astral.Context) (err error) {
-	for {
-		select {
-		case <-ctx.Done():
-			return nil
-		default:
-		}
-
-		b, addr, err := mod.readBroadcast()
-		if err != nil {
-			mod.log.Errorv(2, "read broadcast: %v", err)
-			continue
-		}
-
-		mod.Objects.Receive(&ether.EventBroadcastReceived{
-			SourceIP: ip.IP(addr.IP),
-			Object:   b.Object,
-		}, mod.node.Identity())
-
-		err = mod.Objects.Receive(b.Object, b.Source)
-		if err == nil {
-			objectID, err := astral.ResolveObjectID(b.Object)
-			if err == nil {
-				mod.log.Logv(2, "received from %v object %v (%v)", b.Source, b.Object.ObjectType(), objectID)
-			}
-		}
-	}
-}
-
 // Push pushes an object to everyone (broadcast)
 func (mod *Module) Push(object astral.Object) (err error) {
-	packet, err := mod.makePacket(object)
+	packet, err := makePacket(object)
 	if err != nil {
 		return err
 	}
@@ -98,57 +62,59 @@ func (mod *Module) Push(object astral.Object) (err error) {
 	return broadcast(packet, mod.writeToIP)
 }
 
-// PushToIP pushes an object to a specific IP address (unicast)
-func (mod *Module) PushToIP(ip ip.IP, object astral.Object) error {
-	packet, err := mod.makePacket(object)
+// PushToSubnetOf broadcasts an object on the local IPv4 subnet that contains src only.
+func (mod *Module) PushToSubnetOf(src ip.IP, object astral.Object) error {
+	return mod.pushToSubnetOf(src, object, mod.writeToIP)
+}
+
+func (mod *Module) pushToSubnetOf(src ip.IP, object astral.Object, send sendFunc) error {
+	subnet, err := mod.findLocalSubnet(src)
 	if err != nil {
 		return err
 	}
 
-	_, err = mod.writeToIP(ip, packet)
+	packet, err := makePacket(object)
+	if err != nil {
+		return err
+	}
+
+	target, err := BroadcastAddr(subnet)
+	if err != nil {
+		return err
+	}
+
+	_, err = send(ip.IP(target), packet)
 	return err
 }
 
-// readBroadcast reads the next broadcast from the UDP socket
-func (mod *Module) readBroadcast() (*ether.SignedBroadcast, *net.UDPAddr, error) {
-	if mod.socket == nil {
-		return nil, nil, errors.New("socket not initialized")
+// SubnetOf returns the CIDR of the local IPv4 subnet that contains src.
+func (mod *Module) SubnetOf(src ip.IP) (subnet string, ok bool) {
+	found, err := mod.findLocalSubnet(src)
+	if err != nil {
+		return "", false
 	}
 
-	for {
-		buf := make([]byte, maxBroadcastSize)
+	return found.String(), true
+}
 
-		n, srcAddr, err := mod.socket.ReadFromUDP(buf)
-		if err != nil {
-			return nil, nil, err
-		}
-
-		var r = bytes.NewReader(buf[:n])
-
-		var signed ether.SignedBroadcast
-		_, err = signed.ReadFrom(r)
-		if err != nil {
-			return nil, nil, fmt.Errorf("invalid broadcast object from %s: %w", srcAddr, err)
-		}
-
-		// ignore our own broadcasts
-		if signed.Source.IsEqual(mod.node.Identity()) {
-			continue
-		}
-
-		// check if the signature is present
-		if signed.Signature == nil {
-			continue
-		}
-
-		// verify signature
-		err = mod.Crypto.VerifyHashSignature(secp256k1.FromIdentity(signed.Source), signed.Signature, signed.Hash())
-		if err != nil {
-			return nil, nil, fmt.Errorf("invalid broadcast signature from %s", srcAddr)
-		}
-
-		return &signed, srcAddr, nil
+// findLocalSubnet returns the local IPv4 subnet that contains src, or ErrNotOnLink.
+func (mod *Module) findLocalSubnet(src ip.IP) (*net.IPNet, error) {
+	src4 := net.IP(src).To4()
+	if src4 == nil {
+		return nil, ethermod.ErrNotOnLink
 	}
+
+	local, err := mod.lookupPrefixes(src4)
+	if err != nil {
+		return nil, fmt.Errorf("find local prefixes: %w", err)
+	}
+
+	subnet, ok := findSubnet(local, src4)
+	if !ok {
+		return nil, ethermod.ErrNotOnLink
+	}
+
+	return subnet, nil
 }
 
 // note: sendFunc is the seam between broadcast and the UDP socket.
@@ -214,58 +180,10 @@ func (mod *Module) writeToIP(ip ip.IP, data []byte) (n int, err error) {
 		return 0, errors.New("socket not initialized")
 	}
 
-	return mod.socket.WriteTo(data, &net.UDPAddr{
+	return mod.socket.WriteTo(data, nil, &net.UDPAddr{
 		IP:   net.IP(ip),
 		Port: mod.config.UDPPort,
 	})
-}
-
-// why: the node signer holds only the node's key, so Source is always the node's identity;
-// why: receivers verify the signature against Source.
-func (mod *Module) makePacket(object astral.Object) (data []byte, err error) {
-	signed := &ether.SignedBroadcast{
-		Broadcast: ether.Broadcast{
-			Object:    object,
-			Timestamp: astral.Time(time.Now()),
-			Source:    mod.node.Identity(),
-		},
-	}
-
-	var hash = signed.Hash()
-
-	signed.Signature, err = mod.Crypto.NodeSigner().SignHash(mod.ctx, hash)
-	if err != nil {
-		return
-	}
-
-	packet := &bytes.Buffer{}
-	_, err = signed.WriteTo(packet)
-	if err != nil {
-		return
-	}
-
-	return packet.Bytes(), nil
-}
-
-// setupSocket sets up the UDP socket for broadcasts. If ctx is not nil, the socket will close when the context gets canceled.
-func (mod *Module) setupSocket() (err error) {
-	// resolve local address
-	var localAddr *net.UDPAddr
-	localAddr, err = net.ResolveUDPAddr("udp", ":"+strconv.Itoa(mod.config.UDPPort))
-	if err != nil {
-		return
-	}
-
-	// bind the udp socket
-	socket, err := net.ListenUDP("udp", localAddr)
-	if err != nil {
-		mod.log.Errorv(2, "cannot listen for broadcasts: %v", err)
-		return err
-	}
-
-	mod.socket = socket
-
-	return
 }
 
 func isInterfaceEnabled(iface NetInterface) bool {

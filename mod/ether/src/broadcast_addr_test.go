@@ -134,9 +134,4 @@ func TestSocketNotInitialized(t *testing.T) {
 	if err == nil || !strings.Contains(err.Error(), "socket not initialized") {
 		t.Errorf("writeToIP() = %v; want \"socket not initialized\"", err)
 	}
-
-	_, _, err = mod.readBroadcast()
-	if err == nil || !strings.Contains(err.Error(), "socket not initialized") {
-		t.Errorf("readBroadcast() = %v; want \"socket not initialized\"", err)
-	}
 }
