@@ -58,7 +58,6 @@ OPTIONS = {"plan": False, "isolate": False, "prereqs": "script", "vm": False,
            "docker": False, "save": None, "from_stage": None}
 # the skill the operator works with in a Docker world; a VM world's lab bakes
 # its own (netsim/ops/configure-astral-agent)
-DEFAULT_SKILL = "~/.claude/skills/astral-agent"
 
 
 class DriverError(Exception):
@@ -450,17 +449,21 @@ def _prepare_docker() -> tuple:
 
 
 def _skill(cfg: dict) -> Path | None:
-    """The astral-agent skill a Docker world's operator gets: config.toml's
-    [agent] skill, or the usual install; None when there is none."""
-    path = Path(os.path.expanduser(cfg.get("agent", {}).get("skill")
-                                   or DEFAULT_SKILL))
-    # why astral-docs too: a raw skills checkout holds SKILL.md and
-    # references/ but not the astral-docs mount its links point into; only
-    # an installed skill (skills' install links it) has all three
-    if all(p.exists() for p in (path / "SKILL.md", path / "references",
-                                path / "astral-docs" / "README.md")):
-        return path.resolve()
-    return None
+    """The host skill whose SKILL.md and references a Docker world's
+    operator gets over the image's own: config.toml's [agent] skill; None
+    when it names none.
+
+    why no default path: a host's installed skill may be months older than
+    the docs the image pins, and its SKILL.md then misleads the operator;
+    the image's own skill needs nothing on the host
+    """
+    named = cfg.get("agent", {}).get("skill")
+    if not named:
+        return None
+    path = Path(os.path.expanduser(named))
+    if not (path / "SKILL.md").is_file():
+        raise ValueError(f"[agent] skill {named} holds no SKILL.md")
+    return path.resolve()
 
 
 def _skill_name(skill: Path | None) -> str:
@@ -779,15 +782,10 @@ def main(args) -> int:
 
     lease = None
     containers = any(env == "container" for _, env, _ in units)
-    skill = _skill(cfg) if args.driver == "agent" and containers else None
-    if args.driver == "agent" and containers and skill is None:
-        # why refused: an operator without the skill fails in ways that read
-        # as the operator or its prompt breaking, so its verdicts say nothing
-        print("run: no installed astral-agent skill at "
-              f"{cfg.get('agent', {}).get('skill') or DEFAULT_SKILL} "
-              "(SKILL.md, references/ and astral-docs/README.md); set "
-              "[agent] skill in tests/config.toml to an installed skill, "
-              "such as ~/.claude/skills/astral-agent", file=sys.stderr)
+    try:
+        skill = _skill(cfg) if args.driver == "agent" and containers else None
+    except ValueError as e:
+        print(f"run: {e}", file=sys.stderr)
         return 2
     # why containers too: a Docker world publishes each node's apphost on a
     # leased host port
@@ -837,8 +835,10 @@ def main(args) -> int:
                                              else "vm-user")
         results.header["agent_version"] = (docker.QWEN_CODE if containers
                                            else "(not recorded)")
-        results.header["agent_skill"] = (_skill_name(skill) if containers
-                                         else "(not recorded)")
+        results.header["agent_skill"] = (
+            f"{_skill_name(skill) if skill else 'image astral-agent'}, "
+            f"astral-docs {docker.docs_ref()[:12]}" if containers
+            else "(not recorded)")
 
     if args.target == "attach":
         destroyers = [s[0].name for _, _, steps in units for s in steps

@@ -43,7 +43,7 @@ LABEL = "astral.tests.run"
 PID_LABEL = "astral.tests.pid"
 KEPT = "kept"          # the PID_LABEL of a --keep world, which reap leaves up
 # the files the node image is built from; nothing else in CONTEXT counts
-IMAGE_FILES = ("Dockerfile", "qwen-settings.sh")
+IMAGE_FILES = ("Dockerfile", "qwen-settings.sh", "astral-agent.md")
 READY_TIMEOUT = 60.0
 INFO_TIMEOUT = 10.0
 ARCHES = {"x86_64": "amd64", "amd64": "amd64",
@@ -100,10 +100,24 @@ def engine_arch() -> str:
     return ARCHES[machine]
 
 
+def docs_ref() -> str:
+    """The astral-docs commit the checkout under test pins in .ai/system,
+    which the image's skill carries; read from the tree, so an uninitialized
+    submodule still names it."""
+    try:
+        p = subprocess.run(["git", "-C", str(TESTS.parent), "rev-parse",
+                            "HEAD:.ai/system"], check=True, text=True,
+                           capture_output=True)
+    except (OSError, subprocess.CalledProcessError) as e:
+        raise WorldError(f"cannot read the astral-docs pin (.ai/system): "
+                         f"{e}") from e
+    return p.stdout.strip()
+
+
 def image_tag() -> str:
     """The node image's tag: a hash of everything it is built from, so an
     edit builds a new image and an unchanged tree reuses the old one."""
-    h = hashlib.sha256(QWEN_CODE.encode())
+    h = hashlib.sha256(QWEN_CODE.encode() + docs_ref().encode())
     for name in IMAGE_FILES:
         h.update(name.encode() + b"\0" + (CONTEXT / name).read_bytes())
     return f"astral-node:{h.hexdigest()[:12]}"
@@ -120,7 +134,8 @@ def ensure_image() -> str:
     BUILD_LOG.parent.mkdir(parents=True, exist_ok=True)
     with BUILD_LOG.open("w") as log:
         p = subprocess.run(["docker", "build", "-t", tag, "--build-arg",
-                            f"QWEN_CODE_VERSION={QWEN_CODE}", str(CONTEXT)],
+                            f"QWEN_CODE_VERSION={QWEN_CODE}", "--build-arg",
+                            f"ASTRAL_DOCS_REF={docs_ref()}", str(CONTEXT)],
                            stdout=log, stderr=subprocess.STDOUT,
                            stdin=subprocess.DEVNULL, env=_engine_env())
     if p.returncode != 0:
@@ -351,13 +366,21 @@ class DockerWorld(World):
         return f"set -e\ninstall -d -m 700 {ROOT}/config\n{files}"
 
     def _copy_skill(self, container: str) -> None:
-        """Copy the astral-agent skill to the operator, links resolved."""
+        """Put a host skill's SKILL.md and references over the image's.
+
+        why not its astral-docs: the image carries the docs the astrald
+        under test pins, and a host checkout's may be months older
+        """
         if not (self.skill / "SKILL.md").is_file():
             raise WorldError(f"{self.skill}: no SKILL.md, so no astral-agent "
                              "skill to give the operator")
         with tempfile.TemporaryDirectory() as tmp:
             copy = Path(tmp) / "astral-agent"
-            shutil.copytree(self.skill, copy, symlinks=False)
+            copy.mkdir()
+            shutil.copy(self.skill / "SKILL.md", copy / "SKILL.md")
+            if (self.skill / "references").is_dir():
+                shutil.copytree(self.skill / "references",
+                                copy / "references", symlinks=False)
             self.ssh(OPERATOR_NODE, f"install -d -o tester -g tester "
                                     f"{Path(SKILL_DIR).parent}")
             _docker("cp", f"{copy}/.", f"{container}:{SKILL_DIR}")
