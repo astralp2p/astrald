@@ -32,10 +32,16 @@ async def main():
     type_name = facts["probe_type"]
     object_id = facts["probe_object_id"]
 
-    assert "already registered" in facts["reregistered"], (
-        f"registering {type_name} twice answered {facts['reregistered']!r} — a "
-        "registry that takes the second definition lets any caller redefine a "
-        "live type's wire shape")
+    # why the type check first: the fact is the node's answer as text, and an
+    # operator that wrote a yes/no instead kept no answer to judge.
+    answer = facts["reregister_answer"]
+    assert isinstance(answer, str), (
+        f"reregister_answer is {answer!r}, not the text the node answered to "
+        f"registering {type_name} twice")
+    assert "already registered" in answer, (
+        f"registering {type_name} twice answered {answer!r} — a registry that "
+        "takes the second definition lets any caller redefine a live type's "
+        "wire shape")
 
     # why a User session on node2 and not node2's own token: a sibling as
     # itself reads no blueprint on node1 (objects.get_blueprint asks

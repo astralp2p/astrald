@@ -53,7 +53,32 @@ PLACEHOLDER = re.compile(r"\{([a-z][a-z0-9_-]*)\.([A-Za-z_][A-Za-z0-9_]*)\}")
 NODE_PLACEHOLDERS = {"identity", "alias", "lan_endpoint"}
 EXIT = "[agent] exit "           # the line the guest ends a session with
 EXIT_LINE = re.compile(r"^\[agent\] exit (\d+)$", re.M)
-UNREACHABLE = "[agent] endpoint unreachable: "   # the line a failed check prints
+MODEL_DOWN = "[agent] the model does not answer: "  # a failed check's line
+# The check run in the operator's seat, after `DOWN = MODEL_DOWN`: one
+# completion from the model in ~/.qwen/.env, as Qwen Code asks for it.
+# why a completion and not GET /models: deepseek-v4-flash was listed and
+# answered every completion with HTTP 500, so the run failed every session
+# why no max_tokens: some OpenAI-compatible servers refuse it for reasoning
+# models, and a refused probe would refuse a model that works
+MODEL_CHECK = """
+import json, sys, urllib.error, urllib.request
+env = dict(l.rstrip('\\n').split('=', 1) for l in open(sys.argv[1]) if '=' in l)
+model = env.get('OPENAI_MODEL', '')
+url = env.get('OPENAI_BASE_URL', '').rstrip('/') + '/chat/completions'
+body = json.dumps({'model': model, 'messages': [
+    {'role': 'user', 'content': 'Reply with the single word OK.'}]}).encode()
+req = urllib.request.Request(url, body, {
+    'Content-Type': 'application/json',
+    'Authorization': 'Bearer ' + env.get('OPENAI_API_KEY', '')})
+try:
+    with urllib.request.urlopen(req, timeout=int(sys.argv[2])) as r:
+        json.load(r)['choices'][0]['message']
+except urllib.error.HTTPError as e:
+    print(f'{DOWN}{model} at {url}: HTTP {e.code} {e.read(200)!r}')
+except Exception as e:
+    print(f'{DOWN}{model} at {url}: {e!r}')
+"""
+MODEL_CHECK_TIMEOUT = 120   # s; a reasoning model's first answer is slow
 
 
 class PromptError(Exception):
@@ -125,7 +150,7 @@ class Operator:
         self.ssh = ssh                # the world's ssh(vm, script, …)
         self.model, self.base_url = model, base_url
         self._model_set = not model
-        self._endpoint_checked = False
+        self._model_checked = False
 
     def run(self, test, art: Path, timeout: int = TIMEOUT, kept=()) -> int:
         """Drive test's flow; the driver's exit code.
@@ -145,7 +170,7 @@ class Operator:
                 f.write(f"[agent] {e}\n")
             return 1
         self._set_model()
-        self._check_endpoint()
+        self._check_model()
         self._push(test)
         rc = self._drive(test, prompt, art / "driver.log", timeout)
         if rc:
@@ -198,39 +223,27 @@ class Operator:
                              f"the rewrite (got {out!r})")
         self._model_set = True
 
-    def _check_endpoint(self) -> None:
-        """Raise WorldError when the operator's model endpoint does not
-        answer from where the operator runs; once per world.
+    def _check_model(self) -> None:
+        """Raise WorldError when the operator's model does not answer a
+        completion from where the operator runs; once per world.
 
-        why: an operator that cannot reach its model fails every session,
-        and that is the world's network, not the operator — a driver red
-        would blame the wrong thing
-        why any HTTP answer passes: a 401 or a 404 still means the endpoint
-        is there; only no answer at all means the operator cannot work
+        why: an operator whose model cannot answer fails every session, and
+        that is the world's network or the model server, not the operator —
+        a driver red would blame the wrong thing
         """
-        if self._endpoint_checked:
+        if self._model_checked:
             return
         out = self.ssh(VM, "\n".join([
-            f"python3 - {HOME}/.qwen/.env <<'PY'",
-            "import sys, urllib.error, urllib.request",
-            "url = ''",
-            "for line in open(sys.argv[1]):",
-            "    if line.startswith('OPENAI_BASE_URL='):",
-            "        url = line.split('=', 1)[1].strip()",
-            "try:",
-            "    urllib.request.urlopen(url.rstrip('/') + '/models', timeout=10)",
-            "except urllib.error.HTTPError:",
-            "    pass",
-            "except Exception as e:",
-            "    print(f'{UNREACHABLE}{url}: {e}')",
+            f"python3 - {HOME}/.qwen/.env {MODEL_CHECK_TIMEOUT} <<'PY'",
+            f"DOWN = {MODEL_DOWN!r}",
+            MODEL_CHECK.strip(),
             "PY",
-        ]).replace("{UNREACHABLE}", UNREACHABLE), check=False)
-        found = [l for l in out.splitlines() if l.startswith(UNREACHABLE)]
+        ]), check=False)
+        found = [l for l in out.splitlines() if l.startswith(MODEL_DOWN)]
         if found:
-            raise WorldError("the operator's model endpoint does not answer "
-                             "from its seat: "
-                             + found[0][len(UNREACHABLE):])
-        self._endpoint_checked = True
+            raise WorldError("the operator's model does not answer from its "
+                             "seat: " + found[0][len(MODEL_DOWN):])
+        self._model_checked = True
 
     def _push(self, test) -> None:
         """Remove the test's own facts file, ~/.facts/<test>.json, and put

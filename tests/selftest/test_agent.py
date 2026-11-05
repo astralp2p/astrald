@@ -4,8 +4,11 @@ why: the operator is driven through shell inside one ssh argv, and a
 quoting slip or a wrong file there fails minutes into a VM run. Rendered
 here, it costs nothing.
 """
+import http.server
 import json
 import subprocess
+import sys
+import threading
 import tempfile
 import unittest
 from pathlib import Path
@@ -158,6 +161,70 @@ def pushed(guest) -> str:
     return push
 
 
+class TestModelCheck(unittest.TestCase):
+    """agent.MODEL_CHECK itself, run here against a local model server."""
+
+    def check(self, status, body=b'{"choices": [{"message": {}}]}',
+              listen=True):
+        seen = []
+
+        class Model(http.server.BaseHTTPRequestHandler):
+            def do_POST(self):
+                n = int(self.headers["Content-Length"])
+                seen.append((self.path, self.headers["Authorization"],
+                             json.loads(self.rfile.read(n))))
+                self.send_response(status)
+                self.end_headers()
+                self.wfile.write(body)
+
+            def log_message(self, *a):
+                pass
+
+        server = http.server.HTTPServer(("127.0.0.1", 0), Model)
+        port = server.server_address[1]
+        if listen:
+            threading.Thread(target=server.serve_forever, daemon=True).start()
+        else:
+            server.server_close()
+        with tempfile.TemporaryDirectory() as tmp:
+            env = Path(tmp) / ".env"
+            env.write_text("OPENAI_API_KEY=k\n"
+                           f"OPENAI_BASE_URL=http://127.0.0.1:{port}/v1/\n"
+                           "OPENAI_MODEL=m\n")
+            script = f"DOWN = {agent.MODEL_DOWN!r}\n{agent.MODEL_CHECK}"
+            out = subprocess.run([sys.executable, "-c", script, str(env), "5"],
+                                 capture_output=True, text=True,
+                                 timeout=30).stdout
+        if listen:
+            server.shutdown()
+            server.server_close()
+        return out, seen
+
+    def test_a_model_that_answers_prints_nothing(self):
+        out, seen = self.check(200)
+        self.assertEqual(out, "")
+        [(path, auth, req)] = seen
+        self.assertEqual((path, auth, req["model"]),
+                         ("/v1/chat/completions", "Bearer k", "m"))
+
+    def test_a_listed_model_that_answers_500_is_down(self):
+        # why: deepseek-v4-flash passed GET /models and answered every
+        # completion with HTTP 500
+        out, _ = self.check(500, b'{"error": "upstream"}')
+        self.assertTrue(out.startswith(agent.MODEL_DOWN), out)
+        self.assertIn("HTTP 500", out)
+        self.assertIn("upstream", out)
+
+    def test_an_answer_without_a_choice_is_down(self):
+        out, _ = self.check(200, b'{"choices": []}')
+        self.assertTrue(out.startswith(agent.MODEL_DOWN), out)
+
+    def test_no_server_is_down(self):
+        out, _ = self.check(200, listen=False)
+        self.assertTrue(out.startswith(agent.MODEL_DOWN), out)
+        self.assertIn("m at http://127.0.0.1:", out)
+
+
 class TestOperator(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
@@ -191,14 +258,15 @@ class TestOperator(unittest.TestCase):
         self.assertFalse(any("/home/tester/object.json" in s
                              for s in guest.scripts))
 
-    def test_an_unreachable_model_endpoint_is_a_world_error(self):
+    def test_a_model_that_does_not_answer_is_a_world_error(self):
         # why a world error: the session cannot work at all, and that is the
-        # world's network, which the runner reads as environment
+        # world's network or model server, which the runner reads as
+        # environment
         t = a_test(self.root, "adopt-node", "adopt it\n")
-        guest = Guest({"OPENAI_BASE_URL=": agent.UNREACHABLE
-                       + "http://model:8000/v1: timed out",
+        guest = Guest({"chat/completions": agent.MODEL_DOWN
+                       + "m at http://model:8000/v1/chat/completions: HTTP 500",
                        "su - tester": f"done\n{agent.EXIT}0"})
-        with self.assertRaisesRegex(WorldError, "http://model:8000/v1"):
+        with self.assertRaisesRegex(WorldError, "HTTP 500"):
             self.run_op(t, guest)
         self.assertFalse(any("su - tester" in s for s in guest.scripts))
 
@@ -211,7 +279,7 @@ class TestOperator(unittest.TestCase):
             art.mkdir()
             (art / "session.json").write_text(json.dumps(VIEW))
             op.run(t, art)
-        self.assertEqual(sum("OPENAI_BASE_URL=" in s for s in guest.scripts),
+        self.assertEqual(sum("chat/completions" in s for s in guest.scripts),
                          1)
 
     def test_a_session_removes_only_its_own_facts_file(self):

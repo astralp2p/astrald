@@ -303,6 +303,7 @@ to a claimed node, or give a fresh one the harness's gate
 |--------------|-------|
 | `driver` | the flow never happened — the driver could not perform it |
 | `verify` | astrald misbehaved — the flow ran and the oracle rejected it |
+| `oracle` | the oracle broke on its own code (a TypeError, KeyError, NameError…) — no verdict about astrald |
 | `environment` | the world broke — no verdict about astrald is possible |
 
 | phase | the step that stopped |

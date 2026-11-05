@@ -54,8 +54,11 @@ def run(selection, step=lambda *a, **kw: 0, **kw) -> tuple:
 
     err = io.StringIO()
     skill = kw.pop("skill", "present")
+    # why results/ apart from tmp: a_skill writes astral-agent/ into tmp, and
+    # the run directory is found by listing RESULTS — on APFS the listing
+    # order put the skill first in about half the runs
     with tempfile.TemporaryDirectory() as tmp, \
-            mock.patch.object(runner, "RESULTS", Path(tmp)), \
+            mock.patch.object(runner, "RESULTS", Path(tmp) / "results"), \
             mock.patch.object(runner, "vm_unavailable", return_value=NO_NETSIM), \
             mock.patch.object(runner, "docker_unavailable", return_value=None), \
             mock.patch.object(runner, "ensure_binary",
@@ -76,7 +79,8 @@ def run(selection, step=lambda *a, **kw: 0, **kw) -> tuple:
             contextlib.redirect_stdout(io.StringIO()), \
             contextlib.redirect_stderr(err):
         code = runner.main(args(selection, **kw))
-        run_dir = next(Path(tmp).iterdir(), None)
+        results = Path(tmp) / "results"
+        run_dir = next(results.iterdir(), None) if results.is_dir() else None
         doc = (json.loads((run_dir / "results.json").read_text())
                if run_dir else None)
     return code, doc, made, err.getvalue()

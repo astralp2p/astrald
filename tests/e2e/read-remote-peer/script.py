@@ -8,7 +8,7 @@ import asyncio
 
 import astral
 
-from lib.sessionio import load, write_facts
+from lib.sessionio import as_bytes, load, write_facts
 
 
 async def main():
@@ -20,8 +20,9 @@ async def main():
                                     token=doc["facts"]["user_token"]) as c:
         got = await c.objects.load(object_id, target=n2["identity"])
 
-    write_facts({"remote_read_bytes": len(bytes(got))})
-    print(f"driver: read {len(bytes(got))} B of {object_id[:16]}… from node2")
+    read = len(as_bytes(got))
+    write_facts({"remote_read_bytes": read})
+    print(f"driver: read {read} B of {object_id[:16]}… from node2")
 
 
 asyncio.run(main())
