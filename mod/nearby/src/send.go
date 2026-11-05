@@ -36,12 +36,11 @@ func (mod *Module) Scan() error {
 	return mod.Ether.Push(&nearby.ScanMessage{})
 }
 
-// status composes the node's status and appends its StatusProof. It returns nil when
-// nothing is to be sent: in ModeSilent, and when the composers attach nothing (Stealth
-// without an active contract).
+// status composes the node's status and appends its StatusProof, wrapped when the status
+// holds a stealth hint. It returns nil when nothing is to be sent: in ModeSilent, and when
+// the composers attach nothing (Stealth without an active contract).
 func (mod *Module) status() (*nearby.StatusMessage, error) {
-	mode := mod.Mode()
-	if mode == nearby.ModeSilent {
+	if mod.Mode() == nearby.ModeSilent {
 		return nil, nil
 	}
 
@@ -55,7 +54,10 @@ func (mod *Module) status() (*nearby.StatusMessage, error) {
 		return nil, nil
 	}
 
-	proof, err := mod.signStatus(others, mode == nearby.ModeStealth)
+	// why: a receiver unwraps the signature of a status without a public profile, so the
+	// attachments decide the wrap; a mode change while the composers run cannot split them.
+	_, stealth := astral.First[*nearby.StealthHint](others)
+	proof, err := mod.signStatus(others, stealth)
 	if err != nil {
 		return nil, err
 	}

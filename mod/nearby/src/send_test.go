@@ -342,3 +342,50 @@ func TestSilentSendsNothing(t *testing.T) {
 		t.Fatalf("composed %d and signed %d times in Silent; want 0", c.calls.Load(), h.crypto.signers.Load())
 	}
 }
+
+// switchingComposer stores mode and then composes as the user module does, as when a mode
+// change lands while a status is composed.
+type switchingComposer struct {
+	modeComposer
+	t    *testing.T
+	mode nearby.Mode
+}
+
+func (c *switchingComposer) ComposeStatus(comp nearbymod.Composition) {
+	if err := c.mod.SetMode(astral.NewContext(nil), c.mode); err != nil {
+		c.t.Errorf("SetMode: %v", err)
+	}
+	c.modeComposer.ComposeStatus(comp)
+}
+
+// A mode change while the composers run leaves the status whole: a stealth hint carries a
+// wrapped signature and a public profile a plain one.
+func TestStatusWrapFollowsTheAttachments(t *testing.T) {
+	visible, stealth := nearby.ModeVisible, nearby.ModeStealth
+	hint, profile := (&nearby.StealthHint{}).ObjectType(), (&nearby.PublicProfile{}).ObjectType()
+	cases := []struct {
+		name         string
+		stored, next nearby.Mode
+		types        []string
+		wrapped      bool
+	}{
+		{"visible to stealth", visible, stealth, []string{hint}, true},
+		{"stealth to visible", stealth, visible, []string{profile}, false},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			owner := astral.GenerateIdentity()
+			h := newHarness(t, owner)
+			h.setMode(t, tc.stored)
+			h.mod.AddStatusComposer(&switchingComposer{modeComposer: modeComposer{mod: h.mod, owner: owner}, t: t, mode: tc.next})
+
+			s, err := h.mod.status()
+			if err != nil || s == nil {
+				t.Fatalf("status() = %v, %v; want a status", s, err)
+			}
+			requireStatusTypes(t, s, tc.types)
+			requireProof(t, h, s, tc.wrapped)
+		})
+	}
+}
