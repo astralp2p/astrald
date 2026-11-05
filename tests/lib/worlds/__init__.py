@@ -45,6 +45,20 @@ class World:
         """name -> node entry (`node_entry`) for every node up so far."""
         raise NotImplementedError
 
+    def ssh(self, vm: str, script: str, check=True, timeout=None) -> str:
+        """Run a root shell script on one node's machine; its output.
+
+        Only a world whose nodes stand on machines of their own (VM, Docker)
+        offers one, and the agent driver's operator works through it.
+        """
+        raise WorldError(f"{type(self).__name__} has no machine to run a "
+                         f"shell on: the agent driver needs a VM or Docker "
+                         "world")
+
+    def containers(self) -> list:
+        """The containers the world started, named in --keep's message."""
+        return []
+
     def restart(self, names: list) -> None:
         """Stop the named nodes and boot them again on the same state.
 

@@ -524,7 +524,7 @@ class _Run:
                          if roots.exists() else "")
                       + (f"; containers {', '.join(ex.containers())} "
                          "(docker exec -it <name> sh; docker rm -f to end)"
-                         if hasattr(ex, "containers") else ""),
+                         if ex.containers() else ""),
                       file=sys.stderr)
 
     def _resume(self, ex, record: WorldRecord) -> None:
