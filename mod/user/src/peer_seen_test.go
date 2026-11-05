@@ -436,17 +436,29 @@ func TestPeerSeenRetriesAfterAReadFailure(t *testing.T) {
 	}
 }
 
-// TestPeerSeenFullDialMap: a full dial map ignores a node it does not hold.
+// TestPeerSeenFullDialMap: forged claims of the user that fill the dial map
+// with refusals do not keep a new node of the user from being contacted.
 func TestPeerSeenFullDialMap(t *testing.T) {
 	f := newContactFixture(t)
+	f.calls.reads = make(chan *astral.Identity, dialMapCap+1)
+	f.answer = func(f *contactFixture) (*auth.SignedContract, error) {
+		return nodeContract(astral.GenerateIdentity(), f.peerID), nil
+	}
+	start := f.now
 	for range dialMapCap {
-		f.mod.dials.reserve(astral.GenerateIdentity(), f.now)
+		f.mod.onPeerSeen(f.seen(astral.GenerateIdentity(), f.userID))
+	}
+	if n := len(f.mod.dials.next); n != dialMapCap {
+		t.Fatalf("the dial map holds %v nodes; want it full", n)
 	}
 
+	f.answer = func(f *contactFixture) (*auth.SignedContract, error) { return nodeContract(f.userID, f.peerID), nil }
+	f.now = start.Add(dialIntervalAfterRefusal - time.Minute)
 	f.mod.onPeerSeen(f.seen(f.peerID, f.userID))
 
-	if calls := f.calls.list(); len(calls) != 0 {
-		t.Fatalf("contact steps %v; want none", calls)
+	calls := f.calls.list()
+	if last := calls[len(calls)-1]; last.op != "push" || !last.peer.IsEqual(f.peerID) {
+		t.Fatalf("last contact step %v; want the introduction of the new node", last)
 	}
 }
 

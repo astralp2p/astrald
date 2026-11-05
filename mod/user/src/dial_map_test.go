@@ -51,32 +51,37 @@ func TestDialMapDelay(t *testing.T) {
 	}
 }
 
-// TestDialMapCap: a full map refuses a new node and still serves the nodes it
-// holds; expired entries make room again.
+// TestDialMapCap: a full map takes a new node in place of the node whose next
+// attempt comes first, and keeps serving the other nodes it holds; entries
+// whose time has come are pruned.
 func TestDialMapCap(t *testing.T) {
 	m := newDialMap()
-	held := astral.GenerateIdentity()
+	held, first := astral.GenerateIdentity(), astral.GenerateIdentity()
 	m.reserve(held, testEpoch)
 	m.delay(held, testEpoch.Add(dialIntervalAfterRefusal))
+	m.reserve(first, testEpoch)
 	for len(m.next) < dialMapCap {
-		m.reserve(astral.GenerateIdentity(), testEpoch)
+		m.reserve(astral.GenerateIdentity(), testEpoch.Add(time.Second))
 	}
 
-	if m.reserve(astral.GenerateIdentity(), testEpoch.Add(time.Second)) {
-		t.Fatal("a full map took a new node")
+	newcomer := astral.GenerateIdentity()
+	if !m.reserve(newcomer, testEpoch.Add(2*time.Second)) {
+		t.Fatal("a full map refused a new node")
 	}
-	m.delay(astral.GenerateIdentity(), testEpoch.Add(dialIntervalAfterRefusal))
-	if len(m.next) != dialMapCap {
-		t.Fatalf("the map holds %v nodes; want the cap %v", len(m.next), dialMapCap)
+	if _, ok := m.next[first.String()]; ok || len(m.next) != dialMapCap {
+		t.Fatalf("the map holds %v nodes, the first-due node %v; want the cap without it", len(m.next), ok)
+	}
+	if m.reserve(held, testEpoch.Add(2*time.Second)) || m.reserve(newcomer, testEpoch.Add(3*time.Second)) {
+		t.Fatal("a held node got an attempt before its time")
 	}
 
-	if !m.reserve(astral.GenerateIdentity(), testEpoch.Add(dialInterval)) {
-		t.Fatal("a new node was refused after the other entries expired")
+	late := astral.GenerateIdentity()
+	m.delay(late, testEpoch.Add(dialIntervalAfterRefusal))
+	if _, ok := m.next[late.String()]; !ok || len(m.next) != dialMapCap {
+		t.Fatalf("the map holds %v nodes, the delayed new node %v; want the cap with it", len(m.next), ok)
 	}
-	if len(m.next) != 2 {
-		t.Fatalf("the map holds %v nodes after the prune; want the delayed node and the new one", len(m.next))
-	}
-	if m.reserve(held, testEpoch.Add(dialInterval)) {
-		t.Fatal("the prune dropped a node whose delay has not ended")
+
+	if !m.reserve(astral.GenerateIdentity(), testEpoch.Add(dialIntervalAfterRefusal)) || len(m.next) != 1 {
+		t.Fatalf("the map holds %v nodes after every time came; want the new node alone", len(m.next))
 	}
 }
