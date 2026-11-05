@@ -25,7 +25,8 @@ GOLDEN = Path(__file__).resolve().parent / "golden"
 
 # suite -> the driver its golden plan is drawn under
 SUITES = {"main": "script", "tor": "script", "nat": "script",
-          "gateway": "script", "agent": "agent", "integration": "script"}
+          "gateway": "script", "agent": "agent", "integration": "script",
+          "nearby": "script"}
 
 
 def fake(after=None, destroys=False, ops=(), local_only=None,
@@ -249,7 +250,7 @@ class TestShippedPlans(Invariants, unittest.TestCase):
              ("local", "expel-propagation"), ("vm", "tor-link"),
              ("local", "hold-isolation"), ("local", "bootstrap-user-op"),
              ("local", "import-user-software-key"),
-             ("local", "introduce-node")])
+             ("local", "introduce-node"), ("vm", "nearby-relink")])
 
     def test_a_local_test_never_enters_a_vm_world(self):
         # why app-query and services-app-call: each serves an app on the
