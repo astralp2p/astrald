@@ -421,6 +421,7 @@ class _Run:
         self.configs = configs    # world -> the overrides it starts with
         self.operator = operator  # [agent]'s model and base_url, or None
         self.agent = None         # the operator of the world running now
+        self.operated = set()     # the steps its operator drove and passed
         self.pushed = []
         self.torn = None          # the first world close that raised
         self.unsaved = None       # why a --save did not land
@@ -434,6 +435,9 @@ class _Run:
         # VM world is what offers ssh()
         self.agent = (agent.Operator(ex.ssh, **self.operator)
                       if self.operator is not None else None)
+        # the steps this world's operator drove and passed: their facts
+        # files are in its home
+        self.operated = set()
         try:
             if self.saved is not None:
                 self._resume(ex, record)
@@ -544,8 +548,11 @@ class _Run:
             return env
 
         if s.driver == "agent":
+            kept = [n for n in reversed(lineage)
+                    if self.tests[n].facts and n in self.operated]
+
             def drive(_env):
-                return self.agent.run(t, art)
+                return self.agent.run(t, art, kept=kept)
         else:
             def drive(env):
                 return _run_step(sys.executable, t.dir / "script.py",
@@ -558,6 +565,8 @@ class _Run:
         self.results.record(**entry, status=status, failure_kind=fk,
                             phase=phase, duration_s=time.monotonic() - t0)
         record.add(t.name, s.kind, status, driven if status == "pass" else {})
+        if s.driver == "agent" and status == "pass":
+            self.operated.add(t.name)
         return status, bool(died)
 
 

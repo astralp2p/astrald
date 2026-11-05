@@ -58,9 +58,10 @@ class PromptError(Exception):
     """A prompt.md no operator may be handed: the test's defect."""
 
 
-def render(test, view: dict) -> str:
+def render(test, view: dict, kept=()) -> str:
     """The prompt the operator gets for test: prompt.md filled from the
-    step's view, then the facts footer.
+    step's view, then where its lineage's facts are, then the facts footer.
+    `kept` names the lineage steps whose facts file the operator holds.
 
     why an unknown placeholder raises before the operator starts: a prompt
     that names a fact or node the world does not hold asks the operator for
@@ -82,7 +83,21 @@ def render(test, view: dict) -> str:
         return str(source[field])
 
     text = (test.dir / "prompt.md").read_text()
-    return PLACEHOLDER.sub(fill, text).rstrip("\n") + "\n" + footer(test)
+    return (PLACEHOLDER.sub(fill, text).rstrip("\n") + "\n"
+            + kept_line(kept) + footer(test))
+
+
+def kept_line(kept) -> str:
+    """Where earlier steps of the flow left what they learned.
+
+    why files and not ~/.facts/: in a shared world the directory also holds
+    siblings' files, and a sibling's facts are not this flow's
+    (object-store-peer once acted on object-store's)
+    """
+    if not kept:
+        return ""
+    files = ", ".join(f"`~/.facts/{name}.json`" for name in kept)
+    return f"\nEarlier steps of this flow left what they learned in {files}.\n"
 
 
 def footer(test) -> str:
@@ -109,7 +124,7 @@ class Operator:
         self.model, self.base_url = model, base_url
         self._model_set = not model
 
-    def run(self, test, art: Path, timeout: int = TIMEOUT) -> int:
+    def run(self, test, art: Path, timeout: int = TIMEOUT, kept=()) -> int:
         """Drive test's flow; the driver's exit code.
 
         The step's view is art/session.json and its facts go to
@@ -120,7 +135,8 @@ class Operator:
         """
         try:
             prompt = render(test,
-                            json.loads((art / "session.json").read_text()))
+                            json.loads((art / "session.json").read_text()),
+                            kept)
         except PromptError as e:
             with (art / "driver.log").open("a") as f:
                 f.write(f"[agent] {e}\n")
