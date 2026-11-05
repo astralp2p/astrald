@@ -261,6 +261,26 @@ class TestCrashSafe(unittest.TestCase):
                           "bootstrap-user-software-key": ("pass", "verify"),
                           "adopt-node": ("pass", "verify")})
 
+    def test_an_oracle_that_breaks_on_its_own_code_is_no_verdict(self):
+        # why: a TypeError in verify.py read as "astrald misbehaved"
+        def step(py, script, log, env, timeout):
+            return runner.step.FAULT if script.name == "verify.py" else 0
+
+        code, doc, text, _, _ = run(["smoke"], step=step)
+        self.assertEqual(code, 1)
+        e = doc["entries"][0]
+        self.assertEqual((e["status"], e["failure_kind"], e["phase"]),
+                         ("fail", "oracle", "verify"))
+        self.assertIn("the oracle broke on its own code", text)
+
+    def test_a_driver_that_breaks_on_its_own_code_is_the_drivers(self):
+        def step(py, script, log, env, timeout):
+            return runner.step.FAULT if script.name == "script.py" else 0
+
+        _, doc, _, _, _ = run(["smoke"], step=step)
+        e = doc["entries"][0]
+        self.assertEqual((e["failure_kind"], e["phase"]), ("driver", "driver"))
+
     def test_a_lineage_skip_names_the_failed_test(self):
         def step(py, script, log, env, timeout):
             return 1 if script.parent.name == "bootstrap-user-software-key" \

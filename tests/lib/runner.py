@@ -23,7 +23,7 @@ from astral.client import ENDPOINT_VARS, TOKEN_VARS
 # The variables astral-go's default router reads (lib/apphost/config.go).
 GO_ENV_VARS = ("ASTRALD_APPHOST_ENDPOINT", "ASTRALD_APPHOST_TOKEN")
 
-from lib import agent, manifest, report, suites
+from lib import agent, manifest, report, step, suites
 from lib import plan as planner
 from lib.build import ensure_binary, git_ref, linux_binaries
 from lib.nodeconfig import PORTS_PER_NODE, PortSpan, PortsBusy, lease_ports
@@ -65,9 +65,12 @@ class DriverError(Exception):
 
 
 def _run_step(py: str, script: Path, log: Path, env: dict, timeout: int) -> int:
+    """Run one script under lib/step.py: its exit code, step.FAULT when the
+    script's own code broke, 124 past `timeout`."""
     with log.open("wb") as f:
         try:
-            p = subprocess.run([py, str(script)], cwd=script.parent,
+            p = subprocess.run([py, step.__file__, str(script)],
+                               cwd=script.parent,
                                stdout=f, stderr=subprocess.STDOUT,
                                env=env, timeout=timeout)
             return p.returncode
@@ -92,7 +95,8 @@ def _perform(ex, t, drive, art: Path, view) -> tuple:
     let it leave the loop with no verdict recorded and no report written. A
     WorldError is the world breaking, so it is `environment` at its step.
     A DriverError is a driver that exited 0 and broke its contract, so it is
-    `driver` at the driver, whichever step found it.
+    `driver` at the driver, whichever step found it. An oracle that exits
+    step.FAULT broke on its own code, so it is `oracle`, not `verify`.
     """
     phase = "prepare"
     try:
@@ -119,7 +123,9 @@ def _perform(ex, t, drive, art: Path, view) -> tuple:
     except BaseException as e:
         e.phase = phase       # note: the abort path records the step it hit
         raise
-    return ("pass", None, phase) if rc == 0 else ("fail", "verify", phase)
+    if rc == 0:
+        return "pass", None, phase
+    return "fail", "oracle" if rc == step.FAULT else "verify", phase
 
 
 @dataclass

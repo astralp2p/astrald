@@ -1,5 +1,10 @@
 """results.json / events.jsonl writer — the system's one stable output (v2).
 
+v2.5 adds one record value; every earlier field and value stays as it was:
+
+* `failure_kind` `oracle` — `verify.py` broke on its own code (lib/step.py),
+  so the run holds no verdict about astrald for that test.
+
 v2.4 adds one record value and three header fields; every earlier field and
 value stays as it was:
 
@@ -64,7 +69,7 @@ from pathlib import Path
 from lib import report
 
 STATUSES = {"pass", "fail", "skipped"}
-FAILURE_KINDS = {"driver", "verify", "environment"}
+FAILURE_KINDS = {"driver", "verify", "oracle", "environment"}
 KINDS = {"test", "prereq"}
 ENVS = {"node", "netsim", "container"}
 PHASES = {"prepare", "driver", "restart", "verify", "alive"}

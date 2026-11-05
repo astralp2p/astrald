@@ -3,8 +3,8 @@
 why: results.json is the stable machine output and events.jsonl is the live
 stream, but neither answers "how did the run go?" without a reader that knows
 the schema. The report is that answer in one page: the verdict, what was run,
-every test, and — when something is red — which of the three layers broke and
-where its log is.
+every test, and — when something is red — which layer broke and where
+its log is.
 """
 
 # why: a failure_kind is a verdict about WHICH layer broke, so the report
@@ -12,6 +12,7 @@ where its log is.
 KIND_MEANING = {
     "driver": "the flow never happened — the driver could not perform it",
     "verify": "astrald misbehaved — the flow ran and the oracle rejected it",
+    "oracle": "the oracle broke on its own code — no verdict about astrald",
     "environment": "the world broke — no verdict about astrald is possible",
 }
 
