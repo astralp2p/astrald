@@ -2,4 +2,4 @@ nodes   = ["node1", "node2"]
 timeout = 120
 after   = "adopt-node"
 facts   = ["probe_type", "probe_label", "probe_serial", "probe_object_id",
-           "reregistered"]
+           "reregister_answer"]

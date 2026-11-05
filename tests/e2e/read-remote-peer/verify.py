@@ -18,7 +18,7 @@ import asyncio
 
 import astral
 
-from lib.sessionio import load
+from lib.sessionio import as_bytes, load
 
 
 async def main():
@@ -34,21 +34,24 @@ async def main():
                                     token=doc["facts"]["user_token"]) as c:
         crossed = await c.objects.load(object_id, target=n2["identity"])
 
-    assert bytes(held), f"node2 holds no bytes for {object_id}"
-    assert bytes(crossed) == bytes(held), (
-        f"node1 read {bytes(crossed)!r} != the peer's {bytes(held)!r}")
+    # why as_bytes: object-store-peer's operator may store the payload as a
+    # string16 object, which loads as a str; the content is what is compared.
+    held, crossed = as_bytes(held), as_bytes(crossed)
+    assert held, f"node2 holds no bytes for {object_id}"
+    assert crossed == held, (
+        f"node1 read {crossed!r} != the peer's {held!r}")
 
     # The driver's own result, which is the only part of this test the driver
     # can fail. Everything above the oracle establishes by itself.
     assert "remote_read_bytes" in facts, (
         "the driver reported no remote_read_bytes — it never performed the "
         "read, and the loads above are the oracle's own work")
-    assert facts["remote_read_bytes"] == len(bytes(held)), (
+    assert facts["remote_read_bytes"] == len(held), (
         f"the driver read {facts['remote_read_bytes']} B where the peer holds "
-        f"{len(bytes(held))} B — the flow did not read this object")
+        f"{len(held)} B — the flow did not read this object")
 
     print(f"oracle: node1 read {object_id[:16]}… from node2 over astral; "
-          f"{len(bytes(held))} B match the peer's own copy, and the driver "
+          f"{len(held)} B match the peer's own copy, and the driver "
           f"reported {facts['remote_read_bytes']} B")
 
 
