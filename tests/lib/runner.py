@@ -451,7 +451,11 @@ def _skill(cfg: dict) -> Path | None:
     [agent] skill, or the usual install; None when there is none."""
     path = Path(os.path.expanduser(cfg.get("agent", {}).get("skill")
                                    or DEFAULT_SKILL))
-    if (path / "SKILL.md").is_file():
+    # why astral-docs too: a raw skills checkout holds SKILL.md and
+    # references/ but not the astral-docs mount its links point into; only
+    # an installed skill (skills' install links it) has all three
+    if all(p.exists() for p in (path / "SKILL.md", path / "references",
+                                path / "astral-docs" / "README.md")):
         return path.resolve()
     return None
 
@@ -746,10 +750,11 @@ def main(args) -> int:
     if args.driver == "agent" and containers and skill is None:
         # why refused: an operator without the skill fails in ways that read
         # as the operator or its prompt breaking, so its verdicts say nothing
-        print("run: no astral-agent skill at "
-              f"{cfg.get('agent', {}).get('skill') or DEFAULT_SKILL}; set "
-              "[agent] skill in tests/config.toml to a satforge/skills "
-              "checkout's skills/astral-agent", file=sys.stderr)
+        print("run: no installed astral-agent skill at "
+              f"{cfg.get('agent', {}).get('skill') or DEFAULT_SKILL} "
+              "(SKILL.md, references/ and astral-docs/README.md); set "
+              "[agent] skill in tests/config.toml to an installed skill, "
+              "such as ~/.claude/skills/astral-agent", file=sys.stderr)
         return 2
     # why containers too: a Docker world publishes each node's apphost on a
     # leased host port
@@ -773,7 +778,8 @@ def main(args) -> int:
             # why before the run directory: a host whose engine fails leaves
             # no run behind, as a refused one does
             linux, image = _prepare_docker()
-        except (WorldError, subprocess.CalledProcessError) as e:
+        except (WorldError, subprocess.CalledProcessError,
+                subprocess.TimeoutExpired) as e:
             print(f"run: the Docker world cannot open: {e}", file=sys.stderr)
             return 2
     run_dir = fresh_run_dir(RESULTS)

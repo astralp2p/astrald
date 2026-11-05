@@ -118,8 +118,21 @@ class TestDockerRuns(unittest.TestCase):
         code, doc, made, err = run(["bootstrap-user-software-key"],
                                    driver="agent", skill=None)
         self.assertEqual((code, doc, made), (2, None, []))
-        self.assertIn("no astral-agent skill", err)
+        self.assertIn("no installed astral-agent skill", err)
         self.assertIn("[agent] skill", err)
+
+    def test_a_skill_counts_only_with_its_astral_docs_mount(self):
+        # why: a raw skills checkout has SKILL.md and references/ but no
+        # astral-docs, so every link the operator follows into it is missing
+        with tempfile.TemporaryDirectory() as tmp:
+            d = Path(tmp) / "astral-agent"
+            (d / "references").mkdir(parents=True)
+            (d / "SKILL.md").write_text("---\nname: astral-agent\n---\n")
+            cfg = {"agent": {"skill": str(d)}}
+            self.assertIsNone(runner._skill(cfg))
+            (d / "astral-docs").mkdir()
+            (d / "astral-docs" / "README.md").write_text("docs\n")
+            self.assertEqual(runner._skill(cfg), d.resolve())
 
     def test_a_host_without_docker_refuses_before_anything(self):
         with mock.patch.object(runner, "docker_unavailable",
