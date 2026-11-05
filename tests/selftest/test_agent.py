@@ -142,6 +142,12 @@ class TestRender(unittest.TestCase):
         self.assertEqual(agent.render(t, VIEW), "do it\n")
 
 
+def pushed(guest) -> str:
+    """The script that put the test's files in the operator's home."""
+    [push] = [s for s in guest.scripts if "install -d -m 700" in s]
+    return push
+
+
 class TestOperator(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
@@ -168,12 +174,35 @@ class TestOperator(unittest.TestCase):
         self.assertEqual(rc, 0)
         self.assertEqual(json.loads((art / "facts.json").read_text()),
                          {"object_id": "fresh"})
-        push = guest.scripts[0]
+        push = pushed(guest)
         self.assertIn("rm -f /home/tester/.facts/object-store.json", push)
         self.assertIn("> /home/tester/payload.txt", push)
         self.assertNotIn("prompt.md", push)
         self.assertFalse(any("/home/tester/object.json" in s
                              for s in guest.scripts))
+
+    def test_an_unreachable_model_endpoint_is_a_world_error(self):
+        # why a world error: the session cannot work at all, and that is the
+        # world's network, which the runner reads as environment
+        t = a_test(self.root, "adopt-node", "adopt it\n")
+        guest = Guest({"OPENAI_BASE_URL=": agent.UNREACHABLE
+                       + "http://model:8000/v1: timed out",
+                       "su - tester": f"done\n{agent.EXIT}0"})
+        with self.assertRaisesRegex(WorldError, "http://model:8000/v1"):
+            self.run_op(t, guest)
+        self.assertFalse(any("su - tester" in s for s in guest.scripts))
+
+    def test_the_endpoint_is_checked_once_per_world(self):
+        t = a_test(self.root, "adopt-node", "adopt it\n")
+        guest = Guest({"su - tester": f"done\n{agent.EXIT}0"})
+        op = agent.Operator(guest)
+        for i in range(2):
+            art = self.root / f"art{i}"
+            art.mkdir()
+            (art / "session.json").write_text(json.dumps(VIEW))
+            op.run(t, art)
+        self.assertEqual(sum("OPENAI_BASE_URL=" in s for s in guest.scripts),
+                         1)
 
     def test_a_session_removes_only_its_own_facts_file(self):
         # why: bootstrap's operator keeps the User token in its own file,
@@ -182,7 +211,7 @@ class TestOperator(unittest.TestCase):
         guest = Guest({"su - tester": f"done\n{agent.EXIT}0"})
         rc, _ = self.run_op(t, guest)
         self.assertEqual(rc, 0)
-        push = guest.scripts[0].split("\n")
+        push = pushed(guest).split("\n")
         self.assertEqual([line for line in push if line.startswith("rm ")],
                          ["rm -f /home/tester/.facts/adopt-node.json"])
         self.assertIn("install -d -m 700 -o tester -g tester "

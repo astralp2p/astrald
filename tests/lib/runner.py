@@ -127,7 +127,7 @@ class Step:
     test: object        # manifest.Test
     kind: str           # "test", or "prereq": run to build what a test continues
     dir: str            # its artifact directory under results/<stamp>/
-    env: str            # the env its world is: "node" or "netsim"
+    env: str            # the env its world is: "node", "container" or "netsim"
     driver: str         # who performs its flow: "script" or "agent"
 
 
@@ -154,9 +154,9 @@ def _entry(s: Step) -> dict:
     """The fields every record of a step carries, whatever its status.
 
     why env is the world's: a record states the env the test RAN in, not the
-    one its manifest asks for as a minimum. A node test lifted into VMs — by
-    a netsim test it shares a world with, or by the agent driver — really ran
-    there, and a record that said otherwise would hide the one property the
+    one its manifest asks for as a minimum. A node test lifted into a VM or
+    Docker world — by a netsim test it shares a world with, by the agent
+    driver, or by --vm or --docker — really ran there, and a record that said otherwise would hide the one property the
     design is built on.
     """
     return dict(test=s.test.name, kind=s.kind, env=s.env, driver=s.driver,
@@ -454,8 +454,6 @@ def _skill(cfg: dict) -> Path | None:
                                    or DEFAULT_SKILL))
     if (path / "SKILL.md").is_file():
         return path.resolve()
-    print(f"run: note: no astral-agent skill at {path}; the operator in a "
-          "Docker world works without it", file=sys.stderr)
     return None
 
 
@@ -498,8 +496,8 @@ class _Run:
         """Run one world's steps on ex, save it when asked, then close it."""
         record = WorldRecord(self.results.dir, name)
         record.config = self.configs.get(name, {})
-        # note: the agent driver runs only in VM worlds (plan rule 5), and a
-        # VM world is what offers ssh()
+        # note: the agent driver runs only in VM and Docker worlds (plan rule
+        # 5), and those are the worlds that offer ssh()
         self.agent = (agent.Operator(ex.ssh, **self.operator)
                       if self.operator is not None else None)
         try:
@@ -736,6 +734,15 @@ def main(args) -> int:
 
     lease = None
     containers = any(env == "container" for _, env, _ in units)
+    skill = _skill(cfg) if args.driver == "agent" and containers else None
+    if args.driver == "agent" and containers and skill is None:
+        # why refused: an operator without the skill fails in ways that read
+        # as the operator or its prompt breaking, so its verdicts say nothing
+        print("run: no astral-agent skill at "
+              f"{cfg.get('agent', {}).get('skill') or DEFAULT_SKILL}; set "
+              "[agent] skill in tests/config.toml to a satforge/skills "
+              "checkout's skills/astral-agent", file=sys.stderr)
+        return 2
     # why containers too: a Docker world publishes each node's apphost on a
     # leased host port
     if (containers or any(env == "node" for _, env, _ in units)) \
@@ -777,7 +784,6 @@ def main(args) -> int:
     if args.from_stage:
         results.header["from"] = args.from_stage
     operator = _operator(cfg, results) if args.driver == "agent" else None
-    skill = _skill(cfg) if args.driver == "agent" and containers else None
     if operator is not None:
         # why: a verdict under one operator seat says little about another
         results.header["agent_isolation"] = ("container-user" if containers
