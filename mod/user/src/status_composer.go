@@ -40,8 +40,9 @@ func (mod *Module) composeVisible(c nearbymod.Composition) {
 
 // composeStealth attaches the StealthHint of the node and its user.
 //
-// note: an unset mode reads Visible on a node without a user, so only a stored
-// Stealth reaches here without one, and that node attaches nothing.
+// note: nearby reads Visible on a node without a user, so a node reaches here
+// without one only when its contract ends while the status is composed, and
+// then it attaches nothing.
 func (mod *Module) composeStealth(c nearbymod.Composition) {
 	userID := mod.Identity()
 	if userID == nil {
