@@ -27,7 +27,7 @@ RUN su - tester -c "npm install --global --quiet --prefix \$HOME/.local @qwen-co
 # the lab's endpoint and model (lab.story's install-qwen-code line); config.toml's
 # [agent] model rewrites them per world, as on node1
 ARG BASE_URL=http://spark0.hq.satforge.dev:8000/v1
-ARG MODEL=deepseek-v4-flash
+ARG MODEL=deepseek-v4.1-flash-1017
 COPY qwen-settings.sh /tmp/qwen-settings.sh
 RUN u=tester base_url="$BASE_URL" model="$MODEL" sh /tmp/qwen-settings.sh \
     && rm /tmp/qwen-settings.sh
