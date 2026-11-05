@@ -13,13 +13,13 @@ from types import SimpleNamespace
 from unittest import mock
 
 from lib import runner
-from lib.worlds import WorldError, node_entry
+from lib.worlds import World, WorldError, node_entry
 from lib.manifest import load_all
 
 TESTS = Path(__file__).resolve().parent.parent
 
 
-class FakeWorld:
+class FakeWorld(World):
     """A world that comes up, and a guest whose operator breaks before it
     drives."""
 

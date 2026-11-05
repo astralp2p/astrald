@@ -53,6 +53,7 @@ def run(selection, step=lambda *a, **kw: 0, **kw) -> tuple:
         return made[-1][1]
 
     err = io.StringIO()
+    skill = kw.pop("skill", "present")
     with tempfile.TemporaryDirectory() as tmp, \
             mock.patch.object(runner, "RESULTS", Path(tmp)), \
             mock.patch.object(runner, "vm_unavailable", return_value=NO_NETSIM), \
@@ -70,6 +71,8 @@ def run(selection, step=lambda *a, **kw: 0, **kw) -> tuple:
             mock.patch.object(runner, "lease_ports",
                               return_value=SimpleNamespace(base=20800)), \
             mock.patch.object(runner, "_run_step", step), \
+            mock.patch.object(runner, "_skill",
+                              lambda cfg: a_skill(tmp) if skill else None), \
             contextlib.redirect_stdout(io.StringIO()), \
             contextlib.redirect_stderr(err):
         code = runner.main(args(selection, **kw))
@@ -77,6 +80,13 @@ def run(selection, step=lambda *a, **kw: 0, **kw) -> tuple:
         doc = (json.loads((run_dir / "results.json").read_text())
                if run_dir else None)
     return code, doc, made, err.getvalue()
+
+
+def a_skill(tmp) -> Path:
+    d = Path(tmp) / "astral-agent"
+    d.mkdir(exist_ok=True)
+    (d / "SKILL.md").write_text("---\nname: astral-agent\nversion: 9.9.9\n---\n")
+    return d
 
 
 def self_fail(what):
@@ -88,8 +98,8 @@ class TestDockerRuns(unittest.TestCase):
         code, doc, made, _ = run(["smoke"], docker=True)
         self.assertEqual(code, 0)
         self.assertEqual(len(made), 1)
-        (dir, binary, image, base, max_nodes, keep, config, skill), _ = made[0]
-        self.assertEqual((image, base, max_nodes, skill),
+        (dir, binary, image, span, keep, config, skill), _ = made[0]
+        self.assertEqual((image, span.base, span.max_nodes, skill),
                          ("astral-node:abc", 20800, 20, None))
         self.assertEqual(binary.parent.name, "linux")
         self.assertEqual({e["env"] for e in doc["entries"]}, {"container"})
@@ -102,7 +112,14 @@ class TestDockerRuns(unittest.TestCase):
         self.assertEqual((e["env"], e["driver"]), ("container", "agent"))
         self.assertEqual(doc["agent_isolation"], "container-user")
         self.assertEqual(doc["agent_version"], runner.docker.QWEN_CODE)
-        self.assertIn("agent_skill", doc)
+        self.assertEqual(doc["agent_skill"], "astral-agent 9.9.9")
+
+    def test_an_agent_run_without_the_skill_is_refused_before_anything(self):
+        code, doc, made, err = run(["bootstrap-user-software-key"],
+                                   driver="agent", skill=None)
+        self.assertEqual((code, doc, made), (2, None, []))
+        self.assertIn("no astral-agent skill", err)
+        self.assertIn("[agent] skill", err)
 
     def test_a_host_without_docker_refuses_before_anything(self):
         with mock.patch.object(runner, "docker_unavailable",

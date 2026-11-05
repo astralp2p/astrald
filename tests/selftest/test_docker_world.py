@@ -17,6 +17,7 @@ from unittest import mock
 from lib import agent
 from lib.worlds import WorldError
 from lib.worlds import docker
+from lib.nodeconfig import PortSpan
 from lib.worlds.docker import DockerWorld
 
 
@@ -63,7 +64,7 @@ class WorldCase(unittest.TestCase):
         self.addCleanup(lambda: __import__("shutil").rmtree(self.tmp, True))
         self.fake = FakeDocker()
 
-    def world(self, **kw):
+    def world(self, max_nodes=20, **kw):
         patches = [mock.patch.object(docker, "_docker", self.fake),
                    mock.patch.object(DockerWorld, "_whoami",
                                      lambda self, port, token: f"02{port}")]
@@ -72,8 +73,8 @@ class WorldCase(unittest.TestCase):
             self.addCleanup(p.stop)
         return DockerWorld(self.tmp / "20261104T000000Z" / "w0",
                            self.tmp / "linux-arm64" / "astrald",
-                           "astral-node:abc", 20800,
-                           **{"max_nodes": 20, **kw})
+                           "astral-node:abc", PortSpan(20800, max_nodes),
+                           **kw)
 
 
 class TestStart(WorldCase):
@@ -179,7 +180,7 @@ class TestShell(WorldCase):
         w.ensure(a_test())
         w.ssh("node1", "echo hi")
         self.assertEqual(self.fake.calls[-1],
-                         ["exec", "-i", "astral-20261104t000000z-w0-node1",
+                         ["exec", "astral-20261104t000000z-w0-node1",
                           "sh", "-c", "echo hi"])
 
     def test_a_failing_script_is_a_world_error_unless_unchecked(self):
@@ -254,6 +255,21 @@ class TestClose(WorldCase):
         self.assertEqual(self.fake.of("rm"), [])
         self.assertEqual(w.containers(), ["astral-20261104t000000z-w0-node1"])
 
+    def test_an_interrupted_log_copy_still_removes_the_world(self):
+        w = self.world()
+        w.ensure(a_test())
+        self.fake.fail = lambda a: a[0] == "cp" and "astrald.log" in a[1]
+
+        def interrupt(*args, **kw):
+            if args[0] == "cp":
+                raise KeyboardInterrupt
+            return FakeDocker.__call__(self.fake, *args, **kw)
+        with mock.patch.object(docker, "_docker", interrupt), \
+                self.assertRaises(KeyboardInterrupt):
+            w.close(keep=False)
+        self.assertEqual([c[0] for c in self.fake.calls[-2:]],
+                         ["rm", "network"])
+
     def test_a_node_that_failed_to_start_is_still_removed(self):
         w = self.world()
         self.fake.fail = lambda a: a[0] == "run" and a[a.index("--name") + 1] \
@@ -267,12 +283,28 @@ class TestClose(WorldCase):
 
 class TestReap(unittest.TestCase):
     def test_reap_removes_only_what_a_dead_run_left(self):
-        fake = FakeDocker(ps=f"live {os.getpid()}\ngone 999999999",
-                          networks="gone-net 999999999")
+        fake = FakeDocker(ps=f"live {os.getpid()}\ngone 999999999\n"
+                             f"kept {docker.KEPT}",
+                          networks="gone-net 999999999\n"
+                                   f"kept-net {docker.KEPT}")
         with mock.patch.object(docker, "_docker", fake):
             self.assertEqual(docker.reap(), ["gone", "gone-net"])
         self.assertIn(["rm", "-f", "gone"], fake.calls)
         self.assertNotIn(["rm", "-f", "live"], fake.calls)
+        self.assertNotIn(["rm", "-f", "kept"], fake.calls)
+
+    def test_a_kept_world_is_labelled_so_reap_leaves_it(self):
+        fake = FakeDocker()
+        with tempfile.TemporaryDirectory() as tmp, \
+                mock.patch.object(docker, "_docker", fake), \
+                mock.patch.object(DockerWorld, "_whoami",
+                                  lambda self, port, token: "02aa"):
+            w = DockerWorld(Path(tmp) / "20261104T000000Z" / "w0",
+                            Path(tmp) / "astrald", "astral-node:abc",
+                            PortSpan(20800, 20), keep=True)
+            w.ensure(a_test())
+        [run] = fake.of("run")
+        self.assertIn(f"{docker.PID_LABEL}={docker.KEPT}", run)
 
 
 class TestHost(unittest.TestCase):

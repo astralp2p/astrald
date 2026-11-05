@@ -1,0 +1,5 @@
+nodes    = ["node1", "node2", "node3"]
+timeout  = 180
+after    = "swarm-roster-sync"
+destroys = true
+facts    = ["expelled_id", "bait_id", "probes"]

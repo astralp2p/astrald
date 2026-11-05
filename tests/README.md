@@ -71,7 +71,7 @@ external_registration_sweep_interval = "1s"
 - **`[config.<node>.<module>]`** writes over the harness's own config for
   that module, key by key; a module the harness builds nothing for gets the
   table alone. A local world builds a config for every module
-  `lib/nodeconfig.py` names; a VM world builds apphost's and user's alone
+  `lib/nodeconfig.py` names; a VM or Docker world builds apphost's and user's alone
   (`harness_configs`: the listener, the token, the E2E gate and the accepting
   policies, the same as a local node's), so there every other module gets
   the table alone. The config follows the world,
@@ -117,6 +117,7 @@ passes alone and fails in the shared run, a test before it changed its world.
 | `nat.suite` | two nodes meet on a LAN, then hole-punch through NAT | VM (netsim) | not measured |
 | `gateway.suite` | a NAT'd node reaches its swarm through a gateway | VM (netsim) | not measured |
 | `agent.suite` | the flows an AI operator can drive (`--driver agent`) | VM (netsim), or Docker without netsim | not measured |
+| `integration.suite` | full-integration flows in throwaway containers (`--docker`) | Docker, or local without `--docker` | not measured |
 
 The plans of the shipped suites are pinned under `selftest/golden/`, so a
 manifest change that moves a test shows up as a diff someone reads.
@@ -190,8 +191,10 @@ The first Docker run builds the node image, which takes minutes and needs
 npm's registry; later runs reuse it until `docker/` changes. A test with
 `ops` needs a VM world, and a `local_only` test a local one: a Docker run
 refuses both, as `--save` and `--from`. At a world's end its containers and
-network are removed; `--keep` leaves them up and names them. A run killed
-by SIGKILL leaves them, and the next Docker run removes them.
+network are removed; `--keep` leaves them up and names them, and later
+runs leave a kept world alone until you remove it (`docker rm -f`). A run
+killed by SIGKILL leaves its containers, and the next Docker run removes
+them.
 
 The live Docker selftests build the image and start two containers:
 
@@ -248,8 +251,8 @@ too.
 
 ## Fast loops
 
-- **`--keep`** leaves the run's last world up: a local world's nodes, or a
-  VM world's simulation with its tunnels.
+- **`--keep`** leaves the run's last world up: a local world's nodes, a
+  Docker world's containers, or a VM world's simulation with its tunnels.
 - **`--target attach`** runs a selection against a daemon you already run,
   resolved the way astral-py resolves one (`ASTRAL_ENDPOINT`,
   `ASTRALD_APPHOST_TOKEN` and friends). It is the code-and-debug loop, with
@@ -319,7 +322,8 @@ Under `results/<stamp>/`:
 - `w<N>/world.json`: the world record — its nodes, the history of what ran,
   and the facts of every test that passed;
 - `w<N>/session/`: a local world's node roots and astrald logs;
-  `w<N>/logs/`: a VM world's guest journals.
+  `w<N>/logs/`: a VM world's guest journals, or a Docker world's astrald
+  logs.
 
 The report is written however the run ends — an exception, Ctrl-C, SIGTERM
 or SIGHUP, a world that failed to close (SIGKILL writes none) — and `./tests/summary` lists what has passed here

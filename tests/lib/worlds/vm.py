@@ -39,8 +39,8 @@ from hashlib import sha256
 from pathlib import Path
 
 from lib.build import query_binary
-from lib.nodeconfig import config_text, harness_configs
-from lib.worlds import World, WorldError, node_entry
+from lib.nodeconfig import config_text, harness_configs, overlay
+from lib.worlds import World, WorldError, node_entry, wait_identity
 
 TESTS = Path(__file__).resolve().parent.parent.parent
 RECIPE = TESTS / "netsim" / "labs" / "two-node-plus-external" / "lab.story"
@@ -540,8 +540,7 @@ mv {GUEST_RECORD}.new {GUEST_RECORD}""")
         # authority comes from the token a session presents.
         modules = harness_configs([f"tcp:127.0.0.1:{APPHOST_PORT}",
                                    f"unix:{APPHOST_SOCKET}"], token)
-        for module, keys in self.config.get(vm, {}).items():
-            modules[module] = {**modules.get(module, {}), **keys}
+        modules = overlay(modules, self.config.get(vm))
         return {f"{module}.yaml": config_text(doc)
                 for module, doc in modules.items()}
 
@@ -605,23 +604,7 @@ systemctl restart astrald""")
 
     def _whoami(self, port: int, token: str) -> str:
         """The identity the apphost behind a tunnel answers with, waited for."""
-        import astral
-
-        async def identity_of():
-            deadline = time.monotonic() + APPHOST_READY_TIMEOUT
-            last = None
-            while time.monotonic() < deadline:
-                try:
-                    async with await astral.connect(
-                            f"tcp:127.0.0.1:{port}", token=token,
-                            connect_timeout=3.0) as c:
-                        return str(await c.apphost.whoami())
-                except Exception as e:               # noqa: BLE001
-                    last = e
-                    await asyncio.sleep(2)
-            raise WorldError(f"apphost on 127.0.0.1:{port} never answered "
-                             f"(last error: {last})")
-        return asyncio.run(identity_of())
+        return wait_identity(port, token, APPHOST_READY_TIMEOUT, 2)
 
     def _open_session(self, nodes: list) -> None:
         """Tunnel to each guest's apphost and learn its identity."""

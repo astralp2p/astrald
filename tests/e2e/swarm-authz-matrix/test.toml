@@ -1,0 +1,4 @@
+nodes   = ["node1", "node2", "stranger"]
+timeout = 240
+after   = "adopt-node"
+facts   = ["bait_id", "matrix"]

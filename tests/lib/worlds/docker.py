@@ -25,8 +25,8 @@ import time
 from pathlib import Path
 
 from lib.build import query_binary
-from lib.nodeconfig import config_text, harness_configs, ports_for
-from lib.worlds import World, WorldError, node_entry
+from lib.nodeconfig import PortSpan, config_text, harness_configs, overlay
+from lib.worlds import World, WorldError, node_entry, wait_identity
 
 TESTS = Path(__file__).resolve().parent.parent.parent
 CONTEXT = TESTS / "docker"            # the image's build context
@@ -41,6 +41,9 @@ SKILL_DIR = "/home/tester/.qwen/skills/astral-agent"
 # without closing its world is cleaned up by the next one (reap)
 LABEL = "astral.tests.run"
 PID_LABEL = "astral.tests.pid"
+KEPT = "kept"          # the PID_LABEL of a --keep world, which reap leaves up
+# the files the node image is built from; nothing else in CONTEXT counts
+IMAGE_FILES = ("Dockerfile", "qwen-settings.sh")
 READY_TIMEOUT = 60.0
 INFO_TIMEOUT = 10.0
 ARCHES = {"x86_64": "amd64", "amd64": "amd64",
@@ -52,14 +55,24 @@ def _docker(*args, check=True, timeout=None) -> str:
     subprocess.TimeoutExpired."""
     cmd = ["docker", *[str(a) for a in args]]
     try:
+        # why no stdin: docker exec -i would hand the runner's terminal to
+        # the operator, and qwen prepends what it reads there to its prompt
+        # why no DOCKER_DEFAULT_PLATFORM: the image and the astrald built for
+        # it follow the engine's own architecture (engine_arch)
         p = subprocess.run(cmd, check=check, text=True, capture_output=True,
-                           timeout=timeout)
+                           timeout=timeout, stdin=subprocess.DEVNULL,
+                           env=_engine_env())
     except FileNotFoundError as e:
         raise WorldError("docker is not on PATH") from e
     except subprocess.CalledProcessError as e:
         raise WorldError(f"docker {args[0]}: exit {e.returncode}\n"
                          f"{(e.stderr or '').strip()}") from e
     return (p.stdout or "").strip()
+
+
+def _engine_env() -> dict:
+    return {k: v for k, v in os.environ.items()
+            if k != "DOCKER_DEFAULT_PLATFORM"}
 
 
 def unavailable() -> str | None:
@@ -91,8 +104,8 @@ def image_tag() -> str:
     """The node image's tag: a hash of everything it is built from, so an
     edit builds a new image and an unchanged tree reuses the old one."""
     h = hashlib.sha256(QWEN_CODE.encode())
-    for f in sorted(CONTEXT.iterdir()):
-        h.update(f.name.encode() + b"\0" + f.read_bytes())
+    for name in IMAGE_FILES:
+        h.update(name.encode() + b"\0" + (CONTEXT / name).read_bytes())
     return f"astral-node:{h.hexdigest()[:12]}"
 
 
@@ -108,7 +121,8 @@ def ensure_image() -> str:
     with BUILD_LOG.open("w") as log:
         p = subprocess.run(["docker", "build", "-t", tag, "--build-arg",
                             f"QWEN_CODE_VERSION={QWEN_CODE}", str(CONTEXT)],
-                           stdout=log, stderr=subprocess.STDOUT)
+                           stdout=log, stderr=subprocess.STDOUT,
+                           stdin=subprocess.DEVNULL, env=_engine_env())
     if p.returncode != 0:
         raise WorldError(f"the node image failed to build: {BUILD_LOG}")
     return tag
@@ -137,14 +151,14 @@ def reap() -> list:
                          "--format", fmt.replace(".Name", ".Names"))
     for line in containers.splitlines():
         name, _, pid = line.partition(" ")
-        if not _alive(pid):
+        if pid != KEPT and not _alive(pid):
             _docker("rm", "-f", name, check=False)
             gone.append(name)
     networks = _docker("network", "ls", "--filter", f"label={LABEL}",
                        "--format", fmt)
     for line in networks.splitlines():
         name, _, pid = line.partition(" ")
-        if not _alive(pid):
+        if pid != KEPT and not _alive(pid):
             _docker("network", "rm", name, check=False)
             gone.append(name)
     return gone
@@ -152,19 +166,18 @@ def reap() -> list:
 
 class DockerWorld(World):
 
-    def __init__(self, dir: Path, binary: Path, image: str, port_base: int, *,
-                 max_nodes: int, keep: bool = False,
-                 config: dict | None = None, skill: Path | None = None):
+    def __init__(self, dir: Path, binary: Path, image: str, span: PortSpan, *,
+                 keep: bool = False, config: dict | None = None,
+                 skill: Path | None = None):
         self.dir = Path(dir)
         # the Linux astrald; astral-query lies beside it (build.query_binary)
         self.binary = Path(binary)
         self.image = image
-        # why one base for every world of a run: the run holds one lease, and
+        # why one span for every world of a run: the run holds one lease, and
         # its worlds run one after another, each from node index 0
-        self.port_base = port_base
-        # why: node N publishes ports_for(port_base, N), so a node past the
-        # leased span would bind host ports another run may hold
-        self.max_nodes = max_nodes
+        # why bounded: node N publishes span.ports(N) on the host, and a node
+        # past the span would bind host ports another run may hold
+        self.span = span
         self.keep = keep
         self.config = config or {}
         self.skill = Path(skill) if skill else None
@@ -183,11 +196,9 @@ class DockerWorld(World):
                              "operations — they need a VM world (--vm)")
         new = [n for n in dict.fromkeys(test.nodes) if n not in self._nodes]
         # why before any start: a refused roster leaves the world as it was
-        if len(self._nodes) + len(new) > self.max_nodes:
-            raise WorldError(f"{', '.join(new)}: the world already runs "
-                             f"{len(self._nodes)} nodes, and [ports] span in "
-                             f"tests/config.toml gives a world "
-                             f"{self.max_nodes}")
+        refusal = self.span.refusal(len(self._nodes), new)
+        if refusal:
+            raise WorldError(refusal)
         if self.network is None:
             self._open_network()
         for name in new:
@@ -209,8 +220,13 @@ class DockerWorld(World):
     def restart(self, names: list) -> None:
         """Stop each named node's astrald and start it again on its state."""
         for name in names:
+            # why bounded: an astrald that ignores SIGINT is the world
+            # breaking, and the step reads it as environment, not a hang
             self.ssh(name, "pkill -INT -x astrald || true\n"
-                           "while pgrep -x astrald >/dev/null; do sleep 0.2; done")
+                           "i=0; while pgrep -x astrald >/dev/null; do\n"
+                           "  i=$((i+1)); [ $i -le 150 ] || "
+                           "{ echo 'astrald did not stop' >&2; exit 1; }\n"
+                           "  sleep 0.2\ndone", timeout=60)
             self._run_astrald(name)
             n = self._nodes[name]
             n["identity"] = self._whoami(n["port"], n["token"])
@@ -223,14 +239,23 @@ class DockerWorld(World):
     def close(self, keep: bool) -> None:
         """Copy each node's log into dir, then remove the containers and the
         network; kept, leave them up."""
-        stuck = []
+        try:
+            self._copy_logs()
+        finally:
+            if not keep:
+                self._remove()
+
+    def _copy_logs(self) -> None:
+        out = self.dir / "logs"
+        out.mkdir(parents=True, exist_ok=True)
         for name, n in self._nodes.items():
-            out = self.dir / "logs"
-            out.mkdir(parents=True, exist_ok=True)
             _docker("cp", f"{n['container']}:{ROOT}/astrald.log",
                     out / f"{name}.log", check=False)
-        if keep:
-            return
+
+    def _remove(self) -> None:
+        """Remove the containers and the network, every one whatever another
+        raises."""
+        stuck = []
         for name, n in self._nodes.items():
             try:
                 _docker("rm", "-f", n["container"])
@@ -249,7 +274,7 @@ class DockerWorld(World):
         Past `timeout` seconds it raises subprocess.TimeoutExpired."""
         if vm not in self._nodes:
             raise WorldError(f"the Docker world runs no {vm}")
-        return _docker("exec", "-i", self._nodes[vm]["container"], "sh",
+        return _docker("exec", self._nodes[vm]["container"], "sh",
                        "-c", script, check=check, timeout=timeout)
 
     def containers(self) -> list:
@@ -258,14 +283,22 @@ class DockerWorld(World):
 
     # --- nodes ---------------------------------------------------------------
 
+    def _owner(self) -> str:
+        """The PID_LABEL value: this runner, or KEPT for a --keep world.
+
+        why: a kept world outlives its runner, and reap removes what a gone
+        runner left; kept, it stays up until it is removed by hand
+        """
+        return KEPT if self.keep else str(os.getpid())
+
     def _open_network(self) -> None:
         name = f"{self.prefix}-net"
         _docker("network", "create", "--label", f"{LABEL}={self.stamp}",
-                "--label", f"{PID_LABEL}={os.getpid()}", name)
+                "--label", f"{PID_LABEL}={self._owner()}", name)
         self.network = name
 
     def _start(self, name: str) -> None:
-        ports = ports_for(self.port_base, len(self._nodes))
+        ports = self.span.ports(len(self._nodes))
         container = f"{self.prefix}-{name}"
         # why tracked before the container exists: a node that fails while
         # starting must still be removed by close
@@ -278,7 +311,7 @@ class DockerWorld(World):
         _docker("run", "-d", "--init", "--name", container,
                 "--hostname", name, "--network", self.network,
                 "--label", f"{LABEL}={self.stamp}",
-                "--label", f"{PID_LABEL}={os.getpid()}",
+                "--label", f"{PID_LABEL}={self._owner()}",
                 "-p", f"127.0.0.1:{ports.apphost}:{APPHOST_PORT}",
                 self.image)
         _docker("cp", self.binary, f"{container}:/usr/local/bin/astrald")
@@ -302,9 +335,8 @@ class DockerWorld(World):
         never its loopback; the operator's own astral-query still dials the
         default tcp:127.0.0.1:8625.
         """
-        modules = harness_configs([f"tcp:0.0.0.0:{APPHOST_PORT}"], token)
-        for module, keys in self.config.get(name, {}).items():
-            modules[module] = {**modules.get(module, {}), **keys}
+        modules = overlay(harness_configs([f"tcp:0.0.0.0:{APPHOST_PORT}"],
+                                          token), self.config.get(name))
         files = "".join(
             f"cat > {ROOT}/config/{module}.yaml <<'EOF'\n"
             f"{config_text(doc)}EOF\n"
@@ -338,20 +370,4 @@ class DockerWorld(World):
 
     def _whoami(self, port: int, token: str) -> str:
         """The identity the apphost behind a published port answers with."""
-        import astral
-
-        async def identity_of():
-            deadline = time.monotonic() + READY_TIMEOUT
-            last = None
-            while time.monotonic() < deadline:
-                try:
-                    async with await astral.connect(
-                            f"tcp:127.0.0.1:{port}", token=token,
-                            connect_timeout=3.0) as c:
-                        return str(await c.apphost.whoami())
-                except Exception as e:               # noqa: BLE001
-                    last = e
-                    await asyncio.sleep(1)
-            raise WorldError(f"apphost on 127.0.0.1:{port} never answered "
-                             f"(last error: {last})")
-        return asyncio.run(identity_of())
+        return wait_identity(port, token, READY_TIMEOUT, 1)

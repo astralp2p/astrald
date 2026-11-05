@@ -17,6 +17,7 @@ from unittest import mock
 from lib import runner
 from lib.worlds import NODE_FIELDS, WorldError
 from lib.worlds.attach import AttachWorld
+from lib.nodeconfig import PortSpan
 from lib.worlds.local import LocalWorld
 from selftest.test_world_record import FakeWorld, write_tree
 
@@ -51,10 +52,10 @@ def run_worlds(tmp: Path, selection: list, world=FakeWorld,
                               target="fresh", keep=False, isolate=isolate)
     opened = []
 
-    def open_world(dir, binary, base, max_nodes, keep, config=None):
+    def open_world(dir, binary, span, keep, config=None):
         opened.append((Path(dir).parent.name, world()))
         opened[-1][1].config = config
-        opened[-1][1].max_nodes = max_nodes
+        opened[-1][1].max_nodes = span.max_nodes
         return opened[-1][1]
 
     with mock.patch.object(runner, "RESULTS", tmp / "results"), \
@@ -149,7 +150,7 @@ class TestLocalWorldConfig(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp, \
                 mock.patch.object(local, "LocalNode", Node):
             world = local.LocalWorld(Path(tmp) / "session", Path("astrald"),
-                                     20800, max_nodes=20, config={"nomcp1": {
+                                     PortSpan(20800, 20), config={"nomcp1": {
                                          "mcp": {"bind_mcp": ""}}})
             try:
                 world.ensure(SimpleNamespace(name="t", ops=[],
@@ -184,8 +185,8 @@ class StartsNothing:
 class TestLocalWorldSpan(unittest.TestCase):
     def world(self, tmp, max_nodes):
         StartsNothing.started = []
-        return LocalWorld(Path(tmp) / "session", Path("astrald"), 20800,
-                          max_nodes=max_nodes)
+        return LocalWorld(Path(tmp) / "session", Path("astrald"),
+                          PortSpan(20800, max_nodes))
 
     def ensure(self, world, *nodes):
         world.ensure(SimpleNamespace(name="t", ops=[], nodes=list(nodes)))
@@ -307,7 +308,7 @@ class TestClose(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as tmp:
             dir = Path(tmp) / "w0" / "session"
-            world = LocalWorld(dir, Path(tmp) / "astrald", 0, max_nodes=20)
+            world = LocalWorld(dir, Path(tmp) / "astrald", PortSpan(0, 20))
             nodes = {"node1": Node(True), "node2": Node(False)}
             world._nodes = nodes
             with self.assertRaisesRegex(WorldError, "node1: still running"):
