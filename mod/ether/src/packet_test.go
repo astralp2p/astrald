@@ -6,6 +6,7 @@ import (
 	"net"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/astralp2p/astral-go/api/ether"
 	"github.com/astralp2p/astral-go/api/ip"
@@ -72,12 +73,13 @@ func TestMakePacketIsOneEnvelope(t *testing.T) {
 	}
 }
 
+// TestMakePacketCap pins the spec's 1024-byte datagram cap on send.
 func TestMakePacketCap(t *testing.T) {
-	if _, err := makePacket(fillerOfSize(t, maxDatagramSize)); err != nil {
+	if _, err := makePacket(fillerOfSize(t, 1024)); err != nil {
 		t.Errorf("makePacket at the cap = %v; want nil", err)
 	}
 
-	_, err := makePacket(fillerOfSize(t, maxDatagramSize+1))
+	_, err := makePacket(fillerOfSize(t, 1025))
 	if !errors.Is(err, ethermod.ErrPacketTooLarge) {
 		t.Errorf("makePacket over the cap = %v; want %v", err, ethermod.ErrPacketTooLarge)
 	}
@@ -104,5 +106,37 @@ func TestPushRefusesOversize(t *testing.T) {
 	err := mod.pushToSubnetOf(ip.IP(net.ParseIP("192.168.1.20")), big, send)
 	if !errors.Is(err, ethermod.ErrPacketTooLarge) {
 		t.Errorf("pushToSubnetOf(oversize) = %v; want %v", err, ethermod.ErrPacketTooLarge)
+	}
+}
+
+// TestPushSendsTheEnvelope pins that Push sends the Envelope bytes of the object to the
+// broadcast address of a local interface, with the link TTL 255.
+func TestPushSendsTheEnvelope(t *testing.T) {
+	mod := &Module{config: Config{UDPPort: reserveUDPPort(t)}}
+	if err := mod.setupSocket(); err != nil {
+		t.Fatalf("setupSocket: %v", err)
+	}
+	defer mod.socket.Close()
+	// note: a /32 prefix is its own broadcast address, so the datagram comes back to the socket.
+	stubNetInterfaces(t, []NetInterface{{Flags: net.FlagUp | net.FlagBroadcast, Addrs: staticAddrs("127.0.0.1/32")}}, nil)
+
+	obj := astral.NewString8("ping")
+	if err := mod.Push(obj); err != nil {
+		t.Fatalf("Push: %v", err)
+	}
+
+	buf := make([]byte, 2048)
+	if err := mod.socket.SetReadDeadline(time.Now().Add(5 * time.Second)); err != nil {
+		t.Fatalf("SetReadDeadline: %v", err)
+	}
+	n, cm, _, err := mod.socket.ReadFrom(buf)
+	if err != nil {
+		t.Fatalf("no datagram arrived: %v", err)
+	}
+	if !bytes.Equal(buf[:n], encodeEnvelope(t, obj)) {
+		t.Errorf("sent %x; want the Envelope bytes %x", buf[:n], encodeEnvelope(t, obj))
+	}
+	if checkInboundTTL && (cm == nil || cm.TTL != 255) {
+		t.Errorf("datagram arrived with control message %v; want TTL 255", cm)
 	}
 }

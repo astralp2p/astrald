@@ -82,7 +82,7 @@ func TestLoadSendsWithTheLinkTTL(t *testing.T) {
 	if err != nil {
 		t.Skipf("the platform cannot read back the TTL: %v", err)
 	}
-	if ttl != linkTTL {
-		t.Errorf("socket TTL = %v; want %v", ttl, linkTTL)
+	if ttl != 255 {
+		t.Errorf("socket TTL = %v; want 255", ttl)
 	}
 }

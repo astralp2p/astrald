@@ -63,8 +63,9 @@ func oldSignedBroadcast(t *testing.T) []byte {
 	return buf.Bytes()
 }
 
+// linkDatagram is data from src that arrived with the spec's link TTL, 255.
 func linkDatagram(data []byte, src string) datagram {
-	return datagram{data: data, src: net.ParseIP(src), ttl: linkTTL, hasTTL: true}
+	return datagram{data: data, src: net.ParseIP(src), ttl: 255, hasTTL: true}
 }
 
 func withFirstByte(data []byte, b byte) []byte {
@@ -73,33 +74,39 @@ func withFirstByte(data []byte, b byte) []byte {
 	return out
 }
 
-func TestHandleDatagram(t *testing.T) {
+// handleCase is one datagram and the receive rule it hits.
+type handleCase struct {
+	name    string
+	d       datagram
+	lookup  prefixLookup // note: nil looks up testLocal
+	wantErr error        // note: nil means delivered
+	ttlRule bool         // note: the row tests the TTL check, which Windows skips
+}
+
+// handleCases are the rows of TestHandleDatagram. The size and TTL rows state the spec's
+// literal values: a 1024-byte cap and the link TTL 255.
+func handleCases(t *testing.T) []handleCase {
 	packet := mustPacket(t, astral.NewString8("hello"))
 	unknownType := []byte{ether.EnvelopeVersion, 8, 'm', 'o', 'd', '.', 'n', 'o', 'p', 'e'}
-	errLoad := errors.New("interfaces unavailable")
-	failing := func(net.IP) ([]localPrefix, error) { return nil, errLoad }
+	failing := func(net.IP) ([]localPrefix, error) { return nil, errLookup }
 	peer := "192.168.1.20"
+	withTTL := func(ttl int) datagram { return datagram{data: packet, src: net.ParseIP(peer), ttl: ttl, hasTTL: true} }
 
-	tests := []struct {
-		name    string
-		d       datagram
-		lookup  prefixLookup // note: nil looks up testLocal
-		wantErr error        // note: nil means delivered
-		ttlRule bool         // note: the row tests the TTL check, which Windows skips
-	}{
+	return []handleCase{
 		{name: "delivered", d: linkDatagram(packet, peer)},
-		{name: "at the cap", d: linkDatagram(mustPacket(t, fillerOfSize(t, maxDatagramSize)), peer)},
-		{name: "over the cap", d: linkDatagram(encodeEnvelope(t, fillerOfSize(t, maxDatagramSize+1)), peer), wantErr: errOversize},
+		{name: "at the cap", d: linkDatagram(mustPacket(t, fillerOfSize(t, 1024)), peer)},
+		{name: "over the cap", d: linkDatagram(encodeEnvelope(t, fillerOfSize(t, 1025)), peer), wantErr: errOversize},
 		{name: "IPv6 source", d: linkDatagram(packet, "fe80::1"), wantErr: errNotIPv4},
-		{name: "no source", d: datagram{data: packet, ttl: linkTTL, hasTTL: true}, wantErr: errNotIPv4},
+		{name: "no source", d: datagram{data: packet, ttl: 255, hasTTL: true}, wantErr: errNotIPv4},
 		{name: "no TTL control message", d: datagram{data: packet, src: net.ParseIP(peer)}, wantErr: errNotLinkTTL, ttlRule: true},
-		{name: "routed TTL", d: datagram{data: packet, src: net.ParseIP(peer), ttl: linkTTL - 1, hasTTL: true}, wantErr: errNotLinkTTL, ttlRule: true},
+		{name: "routed TTL", d: withTTL(254), wantErr: errNotLinkTTL, ttlRule: true},
+		{name: "default TTL", d: withTTL(64), wantErr: errNotLinkTTL, ttlRule: true},
 		{name: "own address", d: linkDatagram(packet, "192.168.1.10"), wantErr: errOwnSource},
 		{name: "own address on another subnet", d: linkDatagram(packet, "10.0.0.5"), wantErr: errOwnSource},
 		{name: "off link", d: linkDatagram(packet, "192.168.2.1"), wantErr: errOffLink},
 		{name: "link-local source", d: linkDatagram(packet, "169.254.1.1"), wantErr: errOffLink},
 		{name: "loopback source", d: linkDatagram(packet, "127.0.0.1"), wantErr: errOffLink},
-		{name: "prefix lookup fails", d: linkDatagram(packet, peer), lookup: failing, wantErr: errLoad},
+		{name: "prefix lookup fails", d: linkDatagram(packet, peer), lookup: failing, wantErr: errLookup},
 		{name: "empty", d: linkDatagram(nil, peer), wantErr: errVersion},
 		{name: "other version", d: linkDatagram(withFirstByte(packet, 2), peer), wantErr: errVersion},
 		{name: "old signed broadcast", d: linkDatagram(oldSignedBroadcast(t), peer), wantErr: errVersion},
@@ -107,8 +114,13 @@ func TestHandleDatagram(t *testing.T) {
 		{name: "truncated", d: linkDatagram(packet[:len(packet)-1], peer), wantErr: errDecode},
 		{name: "unknown object type", d: linkDatagram(unknownType, peer), wantErr: errDecode},
 	}
+}
 
-	for _, tt := range tests {
+// errLookup is the failure of the prefix lookup in the handleCases.
+var errLookup = errors.New("interfaces unavailable")
+
+func TestHandleDatagram(t *testing.T) {
+	for _, tt := range handleCases(t) {
 		t.Run(tt.name, func(t *testing.T) {
 			lookup := tt.lookup
 			if lookup == nil {
@@ -175,12 +187,12 @@ func TestReceiveDatagramDeliversOnlyTheEvent(t *testing.T) {
 	}
 }
 
-// TestReceiveLoopSurvivesAPanickingReceiver sends two datagrams over loopback with the link TTL:
-// the first panics in the receiver, the second still reaches the receivers.
-func TestReceiveLoopSurvivesAPanickingReceiver(t *testing.T) {
+// startReceiveLoop runs the receive loop of a module whose loopback socket delivers to
+// objs, and stops it when the test ends.
+func startReceiveLoop(t *testing.T, objs *recordingObjects) *Module {
+	t.Helper()
+
 	nodeID := astral.GenerateIdentity()
-	objs := &recordingObjects{received: make(chan receivedObject, 4)}
-	objs.panicNext.Store(true)
 	mod := &Module{
 		node:   &identityNode{id: nodeID},
 		log:    &log.Logger{},
@@ -194,20 +206,40 @@ func TestReceiveLoopSurvivesAPanickingReceiver(t *testing.T) {
 	}
 
 	ctx, cancel := astral.NewContext(nil).WithCancel()
-	defer cancel()
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
 		mod.receiveLoop(ctx)
 	}()
 
+	t.Cleanup(func() {
+		cancel()
+		mod.socket.Close()
+		select {
+		case <-done:
+		case <-time.After(5 * time.Second):
+			t.Error("receiveLoop did not return after the socket closed")
+		}
+	})
+	return mod
+}
+
+// sendTo sends each datagram from a loopback socket with the link TTL to the module's port.
+func sendTo(t *testing.T, mod *Module, datagrams ...[]byte) {
+	t.Helper()
+
 	sender := linkSender(t)
-	for _, text := range []string{"first", "second"} {
-		target := &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: mod.config.UDPPort}
-		if _, err := sender.WriteTo(mustPacket(t, astral.NewString8(text)), nil, target); err != nil {
-			t.Fatalf("send %v: %v", text, err)
+	target := &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: mod.config.UDPPort}
+	for _, data := range datagrams {
+		if _, err := sender.WriteTo(data, nil, target); err != nil {
+			t.Fatalf("send: %v", err)
 		}
 	}
+}
+
+// requireDelivered waits for the next delivery and requires it to be the string8 want.
+func requireDelivered(t *testing.T, objs *recordingObjects, want string) {
+	t.Helper()
 
 	select {
 	case got := <-objs.received:
@@ -215,22 +247,39 @@ func TestReceiveLoopSurvivesAPanickingReceiver(t *testing.T) {
 		if !ok {
 			t.Fatalf("delivered %T; want *ether.EventBroadcastReceived", got.obj)
 		}
-		if s, ok := event.Object.(*astral.String8); !ok || *s != "second" {
-			t.Errorf("delivered %#v; want the second datagram", event.Object)
+		if s, ok := event.Object.(*astral.String8); !ok || string(*s) != want {
+			t.Fatalf("delivered %#v; want the datagram %q", event.Object, want)
 		}
 	case <-time.After(5 * time.Second):
-		t.Fatal("no datagram delivered after the receiver panicked")
+		t.Fatalf("the datagram %q was not delivered", want)
 	}
+}
+
+// TestReceiveLoopSurvivesAPanickingReceiver sends two datagrams over loopback with the link TTL:
+// the first panics in the receiver, the second still reaches the receivers.
+func TestReceiveLoopSurvivesAPanickingReceiver(t *testing.T) {
+	objs := &recordingObjects{received: make(chan receivedObject, 4)}
+	objs.panicNext.Store(true)
+	mod := startReceiveLoop(t, objs)
+
+	sendTo(t, mod, mustPacket(t, astral.NewString8("first")), mustPacket(t, astral.NewString8("second")))
+
+	requireDelivered(t, objs, "second")
 	if objs.panicNext.Load() {
 		t.Error("the receiver never panicked")
 	}
+}
 
-	mod.socket.Close()
-	select {
-	case <-done:
-	case <-time.After(5 * time.Second):
-		t.Fatal("receiveLoop did not return after the socket closed")
-	}
+// TestReceiveLoopDropsAnOversizeDatagram sends a 1025-byte datagram, a 1024-byte Envelope
+// and one more byte, and then a small one: only the small one is delivered.
+func TestReceiveLoopDropsAnOversizeDatagram(t *testing.T) {
+	objs := &recordingObjects{received: make(chan receivedObject, 4)}
+	mod := startReceiveLoop(t, objs)
+
+	oversize := append(mustPacket(t, fillerOfSize(t, 1024)), 0)
+	sendTo(t, mod, oversize, mustPacket(t, astral.NewString8("next")))
+
+	requireDelivered(t, objs, "next")
 }
 
 // loopbackLookup places the node at 127.0.0.2 on 127.0.0.0/8, so 127.0.0.1 is an on-link peer.
@@ -239,7 +288,7 @@ func loopbackLookup(net.IP) ([]localPrefix, error) {
 	return []localPrefix{{addr: net.IPv4(127, 0, 0, 2).To4(), subnet: subnet}}, nil
 }
 
-// linkSender returns a loopback socket that sends with the link TTL.
+// linkSender returns a loopback socket that sends with the spec's link TTL, 255.
 func linkSender(t *testing.T) *ipv4.PacketConn {
 	t.Helper()
 
@@ -250,7 +299,7 @@ func linkSender(t *testing.T) *ipv4.PacketConn {
 	sender := ipv4.NewPacketConn(conn)
 	t.Cleanup(func() { sender.Close() })
 
-	if err := sender.SetTTL(linkTTL); err != nil {
+	if err := sender.SetTTL(255); err != nil {
 		t.Fatalf("SetTTL: %v", err)
 	}
 	return sender
