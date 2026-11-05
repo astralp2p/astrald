@@ -20,7 +20,9 @@ follow from that tree:
 5. A world's kind follows from what runs in it: an op needs a VM world;
    `--vm`, `--docker` or the agent driver needs a heavy world, a VM or a
    Docker one (`heavy`, which the runner picks for the host); and a
-   local_only test needs a local one. A Docker run refuses an op.
+   local_only test needs a local one. A Docker run refuses an op. A test
+   whose roster names a node the VM lab does not run (`LAB_NODES`) never
+   enters a VM world, and stays local unless the run asks for Docker.
 6. `isolate` gives every selected test a world of its own.
 7. Under the agent driver, selected tests are operator-driven; prereqs and
    replays run by script unless `prereqs_agent`. A test with no prompt.md
@@ -54,6 +56,19 @@ OP_WRITES = {"configure-gateway": {"": {"gateway"},
 
 class PlanError(ValueError):
     """A selection no plan can run, and why."""
+
+
+# The machines the VM lab runs (netsim/labs/two-node-plus-external/lab.story).
+LAB_NODES = frozenset({"node1", "node2", "reflector"})
+
+
+def off_lab(test) -> list:
+    """The roster names a VM world cannot give test: nodes its lab lacks.
+
+    why a rule and not local_only: such a test needs no host — a local or a
+    Docker world starts any name — only a world that is not a VM
+    """
+    return [n for n in test.nodes if n not in LAB_NODES]
 
 
 @dataclass
@@ -208,6 +223,11 @@ class _Planner:
 
     def _check(self, n: str) -> None:
         t = self.tests[n]
+        strays = off_lab(t)
+        if self.forced == "vm" and strays and not t.local_only:
+            raise PlanError(f"{n} names {', '.join(strays)}, which the VM "
+                            "lab does not run, and this run puts every world "
+                            "in VMs")
         if self.forced and t.local_only:
             where = "VMs" if self.forced == "vm" else "Docker containers"
             raise PlanError(f"{n} is local only ({t.local_only}), and this "
@@ -233,7 +253,7 @@ class _Planner:
             return "vm"
         if self.forced:
             return self.forced
-        return "local" if t.local_only else None
+        return "local" if t.local_only or off_lab(t) else None
 
     def _fits(self, w: World, n: str) -> bool:
         need = self._need(n)
@@ -367,9 +387,11 @@ def _attach(p: _Planner, worlds: list, isolate: bool) -> list:
         if len(t.nodes) != 1:
             raise PlanError(f"{n} wants {len(t.nodes)} nodes, and --target "
                             "attach has one daemon")
-        if t.local_only:
-            raise PlanError(f"{n} is local only ({t.local_only}), and the "
-                            "attached daemon has no harness-rendered config")
+        if t.local_only or off_lab(t):
+            raise PlanError(f"{n} is local only "
+                            f"({t.local_only or 'its roster leaves the lab'}),"
+                            " and the attached daemon has no harness-rendered"
+                            " config")
         if t.ops:
             raise PlanError(f"{n} runs VM operations, and --target attach "
                             "has no simulation")

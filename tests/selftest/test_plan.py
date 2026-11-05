@@ -17,7 +17,7 @@ from unittest import mock
 from lib import runner
 from lib.manifest import load_all
 from lib.nodeconfig import PORTS_PER_NODE
-from lib.plan import PlanError, chain, plan, render
+from lib.plan import PlanError, chain, off_lab, plan, render
 from lib.suites import load
 
 TESTS = Path(__file__).resolve().parent.parent
@@ -115,13 +115,35 @@ class TestShippedPlans(Invariants, unittest.TestCase):
         for selection, order in self.selections():
             with self.subTest(selection=selection):
                 lineage = {n for s in selection for n in chain(self.tests, s)}
-                if any(self.tests[n].local_only for n in lineage):
-                    with self.assertRaisesRegex(PlanError, "local only"):
+                # why either refusal: a selection may hold a local_only test
+                # and one whose roster leaves the lab, and the first checked
+                # names its own reason
+                if any(self.tests[n].local_only or off_lab(self.tests[n])
+                       for n in lineage):
+                    with self.assertRaisesRegex(
+                            PlanError, "local only|the VM lab does not run"):
                         plan(self.tests, selection, order, vm=True)
                     continue
                 worlds = plan(self.tests, selection, order, vm=True)
                 self.assertEqual({w.kind for w in worlds}, {"vm"})
                 self.check(self.tests, selection, worlds, False)
+
+    def test_a_roster_off_the_lab_runs_local_or_in_docker_never_in_a_vm(self):
+        # why: a VM world can give a test only the lab's machines, while a
+        # local or Docker world starts any name it is handed
+        for t in ("token-less-setup", "introduce-node", "signer-app"):
+            with self.subTest(test=t):
+                self.assertFalse(self.tests[t].local_only)
+                self.assertEqual({w.kind for w in plan(self.tests, [t])},
+                                 {"local"})
+                self.assertEqual({w.kind for w in plan(self.tests, [t],
+                                                       docker=True)},
+                                 {"docker"})
+                with self.assertRaisesRegex(PlanError, "does not run"):
+                    plan(self.tests, [t], vm=True)
+        # a lab roster still enters VMs
+        self.assertEqual({w.kind for w in plan(self.tests, ["adopt-node"],
+                                               vm=True)}, {"vm"})
 
     def test_a_prereq_stranded_by_a_fork_is_dropped(self):
         # why: mcp-origin fixes w0 local, tor-link forks a VM world, and the

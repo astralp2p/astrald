@@ -3,5 +3,4 @@ timeout    = 240
 # why destroys: it claims five nodes of its own and expels one, so it runs in a
 # world of its own, which also keeps the shared world under its node lease.
 destroys   = true
-local_only = "its roster names nodes no VM lab runs"
 facts      = ["introduce_node"]
