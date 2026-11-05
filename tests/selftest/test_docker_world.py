@@ -97,6 +97,16 @@ class TestStart(WorldCase):
         self.assertEqual(len(self.fake.of("run")), 1)
         w.ensure(a_test(nodes=["node1"]))
 
+    def test_each_node_broadcasts_on_a_udp_port_of_its_own(self):
+        # why: the world's containers share one bridge, and a node that
+        # hears a peer's nearby broadcast learns its endpoint off the swarm
+        w = self.world()
+        w.ensure(a_test(nodes=["node1", "node2"]))
+        ports = [line for s in self.fake.scripts() if "ether.yaml" in s
+                 for line in s.split("\n") if "udp_port" in line]
+        self.assertEqual(len(ports), 2)
+        self.assertEqual(len(set(ports)), 2)
+
     def test_a_container_gets_nothing_of_the_host(self):
         w = self.world()
         w.ensure(a_test())

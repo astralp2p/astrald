@@ -317,7 +317,7 @@ class DockerWorld(World):
         _docker("cp", self.binary, f"{container}:/usr/local/bin/astrald")
         _docker("cp", query_binary(self.binary),
                 f"{container}:/usr/local/bin/astral-query")
-        self.ssh(name, self._config_script(name, n["token"]))
+        self.ssh(name, self._config_script(name, n["token"], ports.ether))
         if name == OPERATOR_NODE and self.skill:
             self._copy_skill(container)
         self._run_astrald(name)
@@ -326,7 +326,7 @@ class DockerWorld(World):
                           f"{self.network}\").IPAddress}}}}", container)
         n["identity"] = self._whoami(ports.apphost, n["token"])
 
-    def _config_script(self, name: str, token: str) -> str:
+    def _config_script(self, name: str, token: str, ether: int) -> str:
         """The script that writes a node's module configs, root-only.
 
         why 0600: apphost.yaml names the node's own token, which the
@@ -335,8 +335,14 @@ class DockerWorld(World):
         never its loopback; the operator's own astral-query still dials the
         default tcp:127.0.0.1:8625.
         """
-        modules = overlay(harness_configs([f"tcp:0.0.0.0:{APPHOST_PORT}"],
-                                          token), self.config.get(name))
+        # why a UDP port of its own: the containers share one bridge, which
+        # carries their nearby broadcasts, and a node that hears a peer's
+        # endpoint there learns what a test says only the swarm told it
+        # (swarm-roster-sync); local nodes are kept apart the same way
+        modules = overlay({**harness_configs([f"tcp:0.0.0.0:{APPHOST_PORT}"],
+                                             token),
+                           "ether": {"udp_port": ether}},
+                          self.config.get(name))
         files = "".join(
             f"cat > {ROOT}/config/{module}.yaml <<'EOF'\n"
             f"{config_text(doc)}EOF\n"
