@@ -82,12 +82,12 @@ class CrashesOnSecond(FakeWorld):
 
 
 def run(selection: list, ex_class=FakeWorld, driver: str = "script",
-        step=lambda *a, **kw: 0, target: str = "fresh") -> tuple:
+        step=lambda *a, **kw: 0, target: str = "fresh", **extra) -> tuple:
     """(exit code, results doc, report text, world, world record) of one
     runner.main over a fake world, with every driver and oracle step
     answered by step."""
     args = argparse.Namespace(selection=selection, driver=driver,
-                              target=target, keep=False)
+                              target=target, keep=False, **extra)
     made = []
 
     def world(*_):
@@ -351,6 +351,42 @@ class TestAgentRuns(unittest.TestCase):
                            "script", "pass", None),
                           ("adopt-node", "test", "netsim", "agent", "fail",
                            "environment")])
+
+
+class RecordingOperator:
+    """An operator that keeps its facts as asked and records what it was
+    told the flow's earlier steps left."""
+    told: dict = {}
+
+    def __init__(self, ssh, **_):
+        pass
+
+    def run(self, test, art, kept=()):
+        RecordingOperator.told[test.name] = list(kept)
+        (art / "facts.json").write_text(json.dumps(
+            {f: f"<{f}>" for f in test.facts}))
+        return 0
+
+
+class TestKeptFacts(unittest.TestCase):
+    def told(self, **kw) -> dict:
+        RecordingOperator.told = {}
+        with mock.patch.object(runner.agent, "Operator", RecordingOperator):
+            run(["read-remote-peer"], driver="agent", **kw)
+        return RecordingOperator.told
+
+    def test_each_session_is_told_the_files_its_operator_left(self):
+        self.assertEqual(self.told(prereqs="agent"), {
+            "bootstrap-user-software-key": [],
+            "adopt-node": ["bootstrap-user-software-key"],
+            "object-store-peer": ["bootstrap-user-software-key"],
+            "read-remote-peer": ["bootstrap-user-software-key",
+                                 "object-store-peer"]})
+
+    def test_a_step_run_by_script_left_no_file(self):
+        # why: only an operator session writes ~/.facts/, so a lineage
+        # built by script leaves the operator nothing to be pointed at
+        self.assertEqual(self.told(), {"read-remote-peer": []})
 
 
 class PushingWorld(FakeWorld):

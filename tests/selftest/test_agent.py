@@ -90,6 +90,16 @@ class TestRender(unittest.TestCase):
         self.assertEqual(agent.render(t, VIEW),
                          "read obj-1 from node2 (02ab); {not a placeholder}\n")
 
+    def test_the_lineage_files_are_named_before_the_footer(self):
+        t = a_test(self.root, "t", "do it\n", facts=["x"])
+        text = agent.render(t, VIEW, kept=["boot", "peer"])
+        self.assertEqual(text.split("\n\n")[1],
+                         "Earlier steps of this flow left what they learned "
+                         "in `~/.facts/boot.json`, `~/.facts/peer.json`.")
+        self.assertTrue(text.endswith(agent.footer(t)))
+        self.assertEqual(agent.render(t, VIEW, kept=()),
+                         agent.render(t, VIEW))
+
     def test_an_unknown_placeholder_is_refused(self):
         for text in ("{facts.object_id}", "{node9.identity}",
                      "{node2.mcp_url}", "{node2.endpoint}"):
