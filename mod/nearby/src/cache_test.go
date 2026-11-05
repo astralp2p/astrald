@@ -102,6 +102,9 @@ func capIP(i int) ip.IP {
 // The cache holds at most maxCacheEntries: a status from a new IP is dropped while it is
 // full, before identification, and a known IP is still refreshed.
 func TestCacheCap(t *testing.T) {
+	if maxCacheEntries != 512 {
+		t.Fatalf("cache cap %d; want the spec's 512", maxCacheEntries)
+	}
 	h := newHarness(t, nil)
 	rec := userRecognizer(astral.GenerateIdentity())
 	h.mod.recognizers.Add(rec)

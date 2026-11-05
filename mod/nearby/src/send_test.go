@@ -288,10 +288,10 @@ func TestPeriodicStatusInterval(t *testing.T) {
 
 // broadcastInterval draws from the whole range [85 s, 95 s] and never outside it.
 func TestBroadcastIntervalRange(t *testing.T) {
-	lo, hi := maxBroadcastInterval, minBroadcastInterval
+	lo, hi := 95*time.Second, 85*time.Second
 	for range 10000 {
 		d := broadcastInterval()
-		if d < minBroadcastInterval || d > maxBroadcastInterval {
+		if d < 85*time.Second || d > 95*time.Second {
 			t.Fatalf("drew %v; want 85 s to 95 s", d)
 		}
 		lo, hi = min(lo, d), max(hi, d)
@@ -387,5 +387,31 @@ func TestStatusWrapFollowsTheAttachments(t *testing.T) {
 			requireStatusTypes(t, s, tc.types)
 			requireProof(t, h, s, tc.wrapped)
 		})
+	}
+}
+
+// Every status carries a fresh nonce, so a peer accepts consecutive periodic statuses of
+// one sender.
+func TestEveryStatusCarriesAFreshNonce(t *testing.T) {
+	sender, receiver := newHarness(t, nil), newHarness(t, nil)
+	sender.mod.AddStatusComposer(&modeComposer{mod: sender.mod})
+
+	seen := map[astral.Nonce]bool{}
+	for i := range 3 {
+		s, err := sender.mod.status()
+		if err != nil || s == nil {
+			t.Fatalf("status %d: status() = %v, %v", i, s, err)
+		}
+		_, proof, _ := nearby.SplitProof(s.Attachments.Objects())
+		if seen[proof.Nonce] {
+			t.Fatalf("status %d reuses the nonce %v", i, proof.Nonce)
+		}
+		seen[proof.Nonce] = true
+
+		if err := receiver.mod.acceptStatus(ipOf(peerIP), s); err != nil {
+			t.Fatalf("status %d: acceptStatus = %v; want nil", i, err)
+		}
+		sender.clock.advance(maxBroadcastInterval)
+		receiver.clock.advance(maxBroadcastInterval)
 	}
 }

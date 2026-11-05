@@ -90,19 +90,22 @@ func newFakeEther(cidrs ...string) *fakeEther {
 }
 
 func (e *fakeEther) Push(obj astral.Object) error {
-	e.mu.Lock()
-	e.pushed = append(e.pushed, obj)
-	e.mu.Unlock()
+	e.record(func() { e.pushed = append(e.pushed, obj) })
 	e.sends <- struct{}{}
 	return nil
 }
 
 func (e *fakeEther) PushToSubnetOf(src ip.IP, obj astral.Object) error {
-	e.mu.Lock()
-	e.subnetted = append(e.subnetted, subnetSend{src: src, obj: obj})
-	e.mu.Unlock()
+	e.record(func() { e.subnetted = append(e.subnetted, subnetSend{src: src, obj: obj}) })
 	e.sends <- struct{}{}
 	return nil
+}
+
+// record runs add under e.mu.
+func (e *fakeEther) record(add func()) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	add()
 }
 
 func (e *fakeEther) SubnetOf(src ip.IP) (string, bool) {

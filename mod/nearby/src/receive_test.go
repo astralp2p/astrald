@@ -161,8 +161,10 @@ func shapeDropCases() []dropCase {
 	}
 }
 
-// freshnessDropCases break receive step 2.
+// freshnessDropCases break receive step 2. The recognizer would name a node, so asking it
+// shows identification ran before the freshness check.
 func freshnessDropCases() []dropCase {
+	someone := func(*harness, *peer) *fakeRecognizer { return fixedRecognizer(astral.GenerateIdentity(), nil) }
 	at := func(d time.Duration) func(*testing.T, *harness, *peer) *nearby.StatusMessage {
 		return func(t *testing.T, h *harness, p *peer) *nearby.StatusMessage {
 			return p.visible(t, h.clock.now().Add(d), nil, "")
@@ -172,10 +174,10 @@ func freshnessDropCases() []dropCase {
 		return func(t *testing.T, _ *harness, p *peer) *nearby.StatusMessage { return p.visible(t, ts, nil, "") }
 	}
 	return []dropCase{
-		{"stale timestamp", at(-statusTTL - time.Nanosecond), nil, errStale, true},
-		{"future timestamp", at(statusTTL + time.Nanosecond), nil, errStale, true},
-		{"timestamp at the end of time", farAt(time.Unix(0, 1<<63-1)), nil, errStale, true},
-		{"timestamp before 1970", farAt(time.Unix(0, -1<<63)), nil, errStale, true},
+		{"stale timestamp", at(-statusTTL - time.Nanosecond), someone, errStale, true},
+		{"future timestamp", at(statusTTL + time.Nanosecond), someone, errStale, true},
+		{"timestamp at the end of time", farAt(time.Unix(0, 1<<63-1)), someone, errStale, true},
+		{"timestamp before 1970", farAt(time.Unix(0, -1<<63)), someone, errStale, true},
 	}
 }
 
