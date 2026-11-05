@@ -39,8 +39,7 @@ func (r *senderRecorder) recorded() []*astral.Identity {
 
 // TestReceiveDispatchesAsTheSource pins the sender a receiver sees: the source
 // Receive was given, with a zero source standing for the local node. Receivers
-// guard local events on the sender, so a remote source must stay remote — ether
-// delivers a LAN broadcast's object under its signed source (mod/ether/src/module.go).
+// guard local events on the sender, so a remote source must stay remote.
 func TestReceiveDispatchesAsTheSource(t *testing.T) {
 	nodeID := astral.GenerateIdentity()
 	remoteID := astral.GenerateIdentity()
