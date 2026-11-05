@@ -1,0 +1,8 @@
+nodes   = ["node1", "node2", "reflector"]
+# why this long: up to two status intervals (85-95 s each) before the claim,
+# and two more after it, see script.py
+timeout = 480
+after   = "nearby-adopt"
+# why noop: as nearby-adopt's, the op that keeps it in a VM world
+ops     = ["noop"]
+facts   = ["nearby_stealth"]

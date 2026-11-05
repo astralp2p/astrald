@@ -3,9 +3,7 @@ package nearby
 import (
 	"strconv"
 
-	"github.com/astralp2p/astral-go/api/dir"
 	"github.com/astralp2p/astral-go/api/nearby"
-	"github.com/astralp2p/astral-go/api/nodes"
 	"github.com/astralp2p/astral-go/astral/fmt"
 	"github.com/astralp2p/astral-go/astral/log/styles"
 	"github.com/astralp2p/astral-go/astral/log/theme"
@@ -44,16 +42,13 @@ func (v StatusView) attachments() (list []string) {
 	var more int
 	var alias string
 	var flags []string
-	var endpoints int
 
 	for _, attachment := range v.Attachments.Objects() {
 		switch a := attachment.(type) {
-		case *dir.Alias:
-			alias = a.String()
+		case *nearby.PublicProfile:
+			alias = string(a.NodeAlias)
 		case *nearby.Flag:
 			flags = append(flags, a.String())
-		case *nodes.EndpointWithTTL:
-			endpoints++
 		default:
 			more++
 		}
@@ -67,12 +62,6 @@ func (v StatusView) attachments() (list []string) {
 		for _, flag := range flags {
 			list = append(list, theme.Quaternary.Render(flag))
 		}
-	}
-
-	if endpoints > 0 {
-		item := theme.Normal.Render(strconv.Itoa(endpoints))
-		item += styles.Gray.Render(" endpoints")
-		list = append(list, item)
 	}
 
 	if more > 0 {

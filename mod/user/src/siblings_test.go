@@ -12,7 +12,7 @@ func TestRemoveSiblingCancelsOnce(t *testing.T) {
 	id := astral.GenerateIdentity()
 	var cancels int
 
-	mod.addSibling(id, func() { cancels++ })
+	mod.addSibling(id, func() { cancels++ }, func() {})
 	mod.removeSibling(id)
 	mod.removeSibling(id)
 

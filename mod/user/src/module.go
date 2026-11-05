@@ -2,6 +2,7 @@ package user
 
 import (
 	"sync"
+	"time"
 
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astral-go/astral/log"
@@ -36,6 +37,15 @@ type Module struct {
 
 	// mu makes the claim check and the claim one transition; see claim.
 	mu sync.Mutex
+	// linkerMu makes the sibling linker's check, schedule and register one step; see runSiblingLinker.
+	linkerMu sync.Mutex
+
+	// dials limits the nearby contact attempts per node; see onPeerSeen.
+	dials *dialMap
+	// readPeerContract reads a nearby peer's contract; see contactPeer.
+	readPeerContract peerContractReader
+	// now is the clock of the nearby contact policy.
+	now func() time.Time
 }
 
 func (mod *Module) Run(ctx *astral.Context) error {
@@ -69,7 +79,14 @@ func (mod *Module) String() string {
 	return user.ModuleName
 }
 
+// runSiblingLinker starts a link task for every swarm member that has none.
+//
+// why linkerMu: PeerSeen events, pushed contracts and contract changes run the
+// linker at once, and two unserialized runs each start a task for one member.
 func (mod *Module) runSiblingLinker() {
+	mod.linkerMu.Lock()
+	defer mod.linkerMu.Unlock()
+
 	for _, node := range mod.LocalSwarm() {
 		if node.IsEqual(mod.node.Identity()) {
 			continue
@@ -87,6 +104,6 @@ func (mod *Module) runSiblingLinker() {
 			continue
 		}
 
-		mod.addSibling(node, scheduledAction.Cancel)
+		mod.addSibling(node, scheduledAction.Cancel, maintainLinkAction.Wake)
 	}
 }

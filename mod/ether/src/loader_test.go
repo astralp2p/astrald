@@ -62,3 +62,27 @@ func reserveUDPPort(t *testing.T) int {
 
 	return conn.LocalAddr().(*net.UDPAddr).Port
 }
+
+// TestLoadSendsWithTheLinkTTL pins that the bound socket sends every datagram with IP TTL 255.
+func TestLoadSendsWithTheLinkTTL(t *testing.T) {
+	config := fmt.Sprintf("udp_port: %v\n", reserveUDPPort(t))
+
+	loaded, err := Loader{}.Load(nil, yamlAssets{yaml: config}, &log.Logger{})
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+
+	mod := loaded.(*Module)
+	if mod.socket == nil {
+		t.Fatal("socket not bound")
+	}
+	defer mod.socket.Close()
+
+	ttl, err := mod.socket.TTL()
+	if err != nil {
+		t.Skipf("the platform cannot read back the TTL: %v", err)
+	}
+	if ttl != 255 {
+		t.Errorf("socket TTL = %v; want 255", ttl)
+	}
+}

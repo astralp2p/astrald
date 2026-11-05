@@ -19,7 +19,6 @@ import (
 	"github.com/astralp2p/astrald/mod/dir"
 	"github.com/astralp2p/astrald/mod/gateway"
 	"github.com/astralp2p/astrald/mod/ip"
-	"github.com/astralp2p/astrald/mod/nearby"
 	"github.com/astralp2p/astrald/mod/nodes"
 	"github.com/astralp2p/astrald/mod/scheduler"
 	"github.com/astralp2p/astrald/mod/services"
@@ -43,7 +42,6 @@ type Deps struct {
 	Auth      authmod.Module
 	Dir       dir.Module
 	Exonet    exonetmod.Module
-	Nearby    nearby.Module
 	Nodes     nodes.Module
 	Scheduler scheduler.Module
 	Services  services.Module

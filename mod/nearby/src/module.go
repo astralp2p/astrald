@@ -1,9 +1,9 @@
 package nearby
 
 import (
+	"sync/atomic"
 	"time"
 
-	"github.com/astralp2p/astral-go/api/ip"
 	"github.com/astralp2p/astral-go/api/nearby"
 	"github.com/astralp2p/astral-go/api/tree"
 	"github.com/astralp2p/astral-go/astral"
@@ -16,66 +16,50 @@ import (
 
 var _ nearbymod.Module = &Module{}
 
-const statusExpiration = 5 * time.Minute
+// statusTTL is how long a received status stays in the cache, and how far a status
+// timestamp may lie from the receiver's clock.
+const statusTTL = 5 * time.Minute
 
 type Module struct {
 	Deps
 	node   astral.Node
 	config Config
 	log    *log.Logger
-	ctx    *astral.Context
 
-	composers sig.Set[nearbymod.Composer]
+	// why: injectable time, so the tests of every time rule run fast and deterministic.
+	now   func() time.Time
+	after func(time.Duration) <-chan time.Time
 
-	cache  sig.Map[string, *cache]
-	mode   tree.Value[*nearby.Mode]
-	router routing.OpRouter
+	composers   sig.Set[nearbymod.Composer]
+	recognizers sig.Set[nearbymod.Recognizer]
+
+	cache   peerCache
+	nonces  nonceMemory
+	replies scanReplies
+
+	mode          tree.Value[*nearby.Mode]
+	silentListen  tree.Value[*astral.Bool]
+	badModeLogged atomic.Bool
+	router        routing.OpRouter
 }
 
-type cache struct {
-	Identity  *astral.Identity
-	IP        ip.IP
-	Timestamp time.Time
-	Status    *nearby.StatusMessage
-}
-
-func (c *cache) GetIdentity() *astral.Identity {
-	profile := astral.SelectByType[*nearby.PublicProfile](c.Status.Attachments.Objects())
-	if len(profile) == 0 {
+func (mod *Module) Run(ctx *astral.Context) error {
+	// why: the mode depends on the owner, which the user module knows once it is ready.
+	select {
+	case <-mod.User.Ready():
+	case <-ctx.Done():
 		return nil
 	}
 
-	return profile[0].NodeID
-}
-
-func (mod *Module) Run(ctx *astral.Context) (err error) {
-	mod.ctx = ctx
-
-	<-mod.User.Ready()
-
-	go mod.periodicUpdater(ctx)
-
+	go mod.runExpiry(ctx)
 	go func() {
-		mod.Scan()
+		if err := mod.Scan(); err != nil {
+			mod.log.Error("scan: %v", err)
+		}
 	}()
 
-	<-ctx.Done()
+	mod.runPeriodic(ctx)
 	return nil
-}
-
-func (mod *Module) syncConfig(ctx *astral.Context) error {
-	if mod.config.Mode != nil {
-		return mod.SetMode(ctx, *mod.config.Mode)
-	}
-	return nil
-}
-
-// Scan asks the nodes on the LAN for their status; no-ops in ModeSilent.
-func (mod *Module) Scan() error {
-	if mod.Mode() == nearby.ModeSilent {
-		return nil
-	}
-	return mod.Ether.Push(&nearby.ScanMessage{})
 }
 
 func (mod *Module) AddStatusComposer(composer nearbymod.Composer) {
@@ -91,7 +75,7 @@ func (mod *Module) AddStatusComposer(composer nearbymod.Composer) {
 // why Silent is kept: an operator who configures silence gets it before the
 // claim as well as after.
 func (mod *Module) Mode() nearby.Mode {
-	m := mod.mode.Get()
+	m := mod.storedMode()
 	if mod.User.Identity() == nil && (m == nil || *m != nearby.ModeSilent) {
 		return nearby.ModeVisible
 	}
@@ -101,14 +85,33 @@ func (mod *Module) Mode() nearby.Mode {
 	return *m
 }
 
+// storedMode returns the mode stored in the tree, or nil when it is unset or invalid.
+//
+// why: tree.Value has no validation hook, so a value above ModeStealth written straight
+// into the tree reads as unset here instead of sending in an undefined mode.
+func (mod *Module) storedMode() *nearby.Mode {
+	m := mod.mode.Get()
+	if m == nil || *m <= nearby.ModeStealth {
+		return m
+	}
+	if mod.badModeLogged.CompareAndSwap(false, true) {
+		mod.log.Logv(1, "stored mode %v is above %v, read as unset", *m, nearby.ModeStealth)
+	}
+	return nil
+}
+
+// SetMode stores m; it refuses a mode above ModeStealth.
 func (mod *Module) SetMode(ctx *astral.Context, m nearby.Mode) error {
+	if m > nearby.ModeStealth {
+		return nearbymod.ErrInvalidMode
+	}
 	return mod.mode.Set(ctx, &m)
 }
 
-// Cache returns the live peer-status map after evicting entries older than statusExpiration.
-func (mod *Module) Cache() *sig.Map[string, *cache] {
-	mod.expireCache()
-	return &mod.cache
+// listensInSilent reports the silent_listen setting; unset reads true.
+func (mod *Module) listensInSilent() bool {
+	v := mod.silentListen.Get()
+	return v == nil || bool(*v)
 }
 
 func (mod *Module) Router() astral.Router {
@@ -117,103 +120,4 @@ func (mod *Module) Router() astral.Router {
 
 func (mod *Module) String() string {
 	return nearbymod.ModuleName
-}
-
-func (mod *Module) myAlias() string {
-	a, _ := mod.Dir.GetAlias(mod.node.Identity())
-	return a
-}
-
-func (mod *Module) periodicUpdater(ctx *astral.Context) {
-	modeUpdates := mod.mode.Follow(ctx)
-	<-modeUpdates // discard initial value; initial broadcast is handled in Run
-
-	// why: 255 is no defined mode, so the first pass logs on every node, a silent one included.
-	last := nearby.Mode(255)
-	for {
-		if m := mod.Mode(); m != last {
-			mod.log.Log("mode %v", m)
-			last = m
-		}
-
-		if mod.Mode() != nearby.ModeSilent {
-			if err := mod.Broadcast(); err != nil {
-				mod.log.Error("push error: %v", err)
-			} else {
-				mod.log.Logv(3, "pushed status")
-			}
-		}
-
-		select {
-		case <-time.After(statusExpiration - 5*time.Second): // broadcast 5s early to avoid status timeout
-		case _, ok := <-modeUpdates:
-			if !ok {
-				return
-			}
-		case <-ctx.Done():
-			return
-		}
-
-	}
-}
-
-// Broadcast pushes the current status to all reachable peers; no-ops silently in
-// ModeSilent without returning an error.
-func (mod *Module) Broadcast() error {
-	if mod.Mode() == nearby.ModeSilent {
-		return nil
-	}
-
-	return mod.pushStatus()
-}
-
-func (mod *Module) pushStatus() error {
-	s := mod.Status(nil)
-	if !mod.canBroadcast(s) {
-		return nil
-	}
-	return mod.Ether.Push(s)
-}
-
-// canBroadcast returns false when the status should be suppressed: always in
-// ModeSilent, and in ModeStealth when the status has no attachments (no active
-// contract). It gates the periodic status, the address-change status and the
-// scan reply alike.
-func (mod *Module) canBroadcast(s *nearby.StatusMessage) bool {
-	switch mod.Mode() {
-	case nearby.ModeSilent:
-		return false
-	case nearby.ModeStealth:
-		return len(s.Attachments.Objects()) > 0
-	}
-	return true
-}
-
-// Status assembles a StatusMessage by invoking every registered Composer; pass nil
-// to address the message to astral.Anyone (broadcast semantics).
-func (mod *Module) Status(receiver *astral.Identity) *nearby.StatusMessage {
-	s := &nearby.StatusMessage{
-		Attachments: astral.NewBundle(),
-	}
-
-	if receiver == nil {
-		receiver = astral.Anyone
-	}
-
-	for _, a := range mod.composers.Clone() {
-		a.ComposeStatus(&Composition{
-			receiver: receiver,
-			s:        s,
-		})
-	}
-
-	return s
-}
-
-func (mod *Module) expireCache() {
-	for k, v := range mod.cache.Clone() {
-		if time.Since(v.Timestamp) > statusExpiration {
-			mod.cache.Delete(k)
-		}
-	}
 }

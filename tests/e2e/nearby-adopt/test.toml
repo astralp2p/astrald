@@ -1,0 +1,10 @@
+nodes   = ["node1", "node2"]
+timeout = 240
+# why noop: nearby needs a LAN, and only a VM world has one; ether skips the
+# loopback a local world's nodes share (mod/ether/src/module.go
+# isInterfaceEnabled), and the nearby endpoint resolver dials the default
+# ports a local world moves. An op is what puts a test in a VM world, and noop
+# changes nothing. Like every op it ends the world for anything but this
+# test's descendants, which nearby.suite's chain is.
+ops     = ["noop"]
+facts   = ["nearby_user", "nearby_adopt"]

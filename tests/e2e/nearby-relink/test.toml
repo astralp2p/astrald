@@ -1,0 +1,23 @@
+nodes   = ["node1", "node2"]
+# why: the outage (--for below), the relink after it, and margin
+timeout = 600
+after   = "nearby-silent"
+# why 420 s: node2 has to stay away past its 5 min entry in node1's cache, so
+# that nearby reports it back (PeerSeen), and past nine failed link attempts on
+# each side, so that both link tasks wait out a 256 s backoff when it returns.
+# script.py reads --for from this line.
+ops     = ["lan-outage node2 --for 420"]
+facts   = ["nearby_relink"]
+
+# why short kcp dials: a link attempt to a node off the LAN waits for its kcp
+# dial to time out, a minute by default (mod/kcp/src/config.go), and attempts
+# that long keep the backoff between them short, so a retry would fall due
+# about when node2 returns. At 3 s an attempt is about as long as its tcp dial
+# (which fails once ARP does), the backoff dominates, and a link within seconds
+# of node2's return can only come of a wake. A kcp handshake on this LAN takes
+# milliseconds.
+[config.node1.kcp]
+dial_timeout = "3s"
+
+[config.node2.kcp]
+dial_timeout = "3s"
