@@ -1,4 +1,3 @@
 nodes   = ["claimer", "joiner"]
 timeout = 180
-local_only = "its roster, claimer and joiner, names nodes no VM lab runs"
 facts   = ["token_less_setup"]

@@ -65,6 +65,9 @@ external_registration_sweep_interval = "1s"
 - **`local_only`** is for a test that reads `mcp_url`, `authority_url`,
   `serves_mcp`, a node `root` or a host path, that serves an app or an
   authority on the host for a node to dial, or that restarts a node.
+  A roster is not a reason: a test whose `nodes` name a machine the VM lab
+  does not run (`plan.LAB_NODES`: node1, node2, reflector) never enters a
+  VM world, and runs in a local or Docker world as any other test does.
 - **`facts`** is a contract. An oracle may read only facts declared on its
   `after` chain (`selftest/test_shipped.py` checks), and the agent driver
   asks the operator for exactly these.

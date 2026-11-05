@@ -11,6 +11,8 @@
 # that hold-purge, which also ends a world, forks instead of expel-node.
 smoke
 claim-window
+token-less-setup
+signer-app
 admission-policies
 bootstrap-user-software-key
 adopt-node
@@ -30,3 +32,4 @@ hold-isolation
 swarm-roster-sync
 expel-propagation
 import-user-software-key
+introduce-node
