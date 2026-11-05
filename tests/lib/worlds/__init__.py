@@ -63,3 +63,29 @@ class World:
     def close(self, keep: bool) -> None:
         """End the world, or, kept, leave it up for whoever debugs it next."""
         raise NotImplementedError
+
+
+def wait_identity(port: int, token: str, timeout: float,
+                  interval: float) -> str:
+    """The identity the apphost on host port `port` answers with, waited for
+    up to `timeout` seconds; WorldError when it never answers."""
+    import asyncio
+    import time
+
+    import astral
+
+    async def identity_of():
+        deadline = time.monotonic() + timeout
+        last = None
+        while time.monotonic() < deadline:
+            try:
+                async with await astral.connect(
+                        f"tcp:127.0.0.1:{port}", token=token,
+                        connect_timeout=3.0) as c:
+                    return str(await c.apphost.whoami())
+            except Exception as e:               # noqa: BLE001
+                last = e
+                await asyncio.sleep(interval)
+        raise WorldError(f"apphost on 127.0.0.1:{port} never answered "
+                         f"(last error: {last})")
+    return asyncio.run(identity_of())

@@ -17,6 +17,7 @@ from unittest import mock
 from lib import agent
 from lib.worlds import WorldError
 from lib.worlds import docker
+from lib.nodeconfig import PortSpan
 from lib.worlds.docker import DockerWorld
 
 
@@ -63,7 +64,7 @@ class WorldCase(unittest.TestCase):
         self.addCleanup(lambda: __import__("shutil").rmtree(self.tmp, True))
         self.fake = FakeDocker()
 
-    def world(self, **kw):
+    def world(self, max_nodes=20, **kw):
         patches = [mock.patch.object(docker, "_docker", self.fake),
                    mock.patch.object(DockerWorld, "_whoami",
                                      lambda self, port, token: f"02{port}")]
@@ -72,8 +73,8 @@ class WorldCase(unittest.TestCase):
             self.addCleanup(p.stop)
         return DockerWorld(self.tmp / "20261104T000000Z" / "w0",
                            self.tmp / "linux-arm64" / "astrald",
-                           "astral-node:abc", 20800,
-                           **{"max_nodes": 20, **kw})
+                           "astral-node:abc", PortSpan(20800, max_nodes),
+                           **kw)
 
 
 class TestStart(WorldCase):
@@ -299,8 +300,8 @@ class TestReap(unittest.TestCase):
                 mock.patch.object(DockerWorld, "_whoami",
                                   lambda self, port, token: "02aa"):
             w = DockerWorld(Path(tmp) / "20261104T000000Z" / "w0",
-                            Path(tmp) / "astrald", "astral-node:abc", 20800,
-                            max_nodes=20, keep=True)
+                            Path(tmp) / "astrald", "astral-node:abc",
+                            PortSpan(20800, 20), keep=True)
             w.ensure(a_test())
         [run] = fake.of("run")
         self.assertIn(f"{docker.PID_LABEL}={docker.KEPT}", run)

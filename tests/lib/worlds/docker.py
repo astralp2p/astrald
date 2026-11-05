@@ -25,8 +25,8 @@ import time
 from pathlib import Path
 
 from lib.build import query_binary
-from lib.nodeconfig import config_text, harness_configs, ports_for
-from lib.worlds import World, WorldError, node_entry
+from lib.nodeconfig import PortSpan, config_text, harness_configs, overlay
+from lib.worlds import World, WorldError, node_entry, wait_identity
 
 TESTS = Path(__file__).resolve().parent.parent.parent
 CONTEXT = TESTS / "docker"            # the image's build context
@@ -166,19 +166,18 @@ def reap() -> list:
 
 class DockerWorld(World):
 
-    def __init__(self, dir: Path, binary: Path, image: str, port_base: int, *,
-                 max_nodes: int, keep: bool = False,
-                 config: dict | None = None, skill: Path | None = None):
+    def __init__(self, dir: Path, binary: Path, image: str, span: PortSpan, *,
+                 keep: bool = False, config: dict | None = None,
+                 skill: Path | None = None):
         self.dir = Path(dir)
         # the Linux astrald; astral-query lies beside it (build.query_binary)
         self.binary = Path(binary)
         self.image = image
-        # why one base for every world of a run: the run holds one lease, and
+        # why one span for every world of a run: the run holds one lease, and
         # its worlds run one after another, each from node index 0
-        self.port_base = port_base
-        # why: node N publishes ports_for(port_base, N), so a node past the
-        # leased span would bind host ports another run may hold
-        self.max_nodes = max_nodes
+        # why bounded: node N publishes span.ports(N) on the host, and a node
+        # past the span would bind host ports another run may hold
+        self.span = span
         self.keep = keep
         self.config = config or {}
         self.skill = Path(skill) if skill else None
@@ -197,11 +196,9 @@ class DockerWorld(World):
                              "operations — they need a VM world (--vm)")
         new = [n for n in dict.fromkeys(test.nodes) if n not in self._nodes]
         # why before any start: a refused roster leaves the world as it was
-        if len(self._nodes) + len(new) > self.max_nodes:
-            raise WorldError(f"{', '.join(new)}: the world already runs "
-                             f"{len(self._nodes)} nodes, and [ports] span in "
-                             f"tests/config.toml gives a world "
-                             f"{self.max_nodes}")
+        refusal = self.span.refusal(len(self._nodes), new)
+        if refusal:
+            raise WorldError(refusal)
         if self.network is None:
             self._open_network()
         for name in new:
@@ -301,7 +298,7 @@ class DockerWorld(World):
         self.network = name
 
     def _start(self, name: str) -> None:
-        ports = ports_for(self.port_base, len(self._nodes))
+        ports = self.span.ports(len(self._nodes))
         container = f"{self.prefix}-{name}"
         # why tracked before the container exists: a node that fails while
         # starting must still be removed by close
@@ -338,9 +335,8 @@ class DockerWorld(World):
         never its loopback; the operator's own astral-query still dials the
         default tcp:127.0.0.1:8625.
         """
-        modules = harness_configs([f"tcp:0.0.0.0:{APPHOST_PORT}"], token)
-        for module, keys in self.config.get(name, {}).items():
-            modules[module] = {**modules.get(module, {}), **keys}
+        modules = overlay(harness_configs([f"tcp:0.0.0.0:{APPHOST_PORT}"],
+                                          token), self.config.get(name))
         files = "".join(
             f"cat > {ROOT}/config/{module}.yaml <<'EOF'\n"
             f"{config_text(doc)}EOF\n"
@@ -374,20 +370,4 @@ class DockerWorld(World):
 
     def _whoami(self, port: int, token: str) -> str:
         """The identity the apphost behind a published port answers with."""
-        import astral
-
-        async def identity_of():
-            deadline = time.monotonic() + READY_TIMEOUT
-            last = None
-            while time.monotonic() < deadline:
-                try:
-                    async with await astral.connect(
-                            f"tcp:127.0.0.1:{port}", token=token,
-                            connect_timeout=3.0) as c:
-                        return str(await c.apphost.whoami())
-                except Exception as e:               # noqa: BLE001
-                    last = e
-                    await asyncio.sleep(1)
-            raise WorldError(f"apphost on 127.0.0.1:{port} never answered "
-                             f"(last error: {last})")
-        return asyncio.run(identity_of())
+        return wait_identity(port, token, READY_TIMEOUT, 1)

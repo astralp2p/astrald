@@ -10,14 +10,13 @@ from pathlib import Path
 
 from lib.worlds import World, WorldError, node_entry
 from lib.localnode import LocalNode
-from lib.nodeconfig import ports_for
+from lib.nodeconfig import PortSpan
 
 
 class LocalWorld(World):
 
-    def __init__(self, dir: Path, binary: Path, port_base: int, *,
-                 max_nodes: int, keep: bool = False,
-                 config: dict | None = None):
+    def __init__(self, dir: Path, binary: Path, span: PortSpan, *,
+                 keep: bool = False, config: dict | None = None):
         # why: the nodes write their state under the system temp dir, and dir
         # is a symlink to it until close copies the world back. astrald
         # fsyncs its SQLite database, and on an SD card under write load one
@@ -29,12 +28,11 @@ class LocalWorld(World):
         self._dir.parent.mkdir(parents=True, exist_ok=True)
         self._dir.symlink_to(self._live, target_is_directory=True)
         self.binary = binary
-        # why one base for every world of a run: the run holds one port lease,
-        # and its worlds run one after another, each from node index 0
-        self.port_base = port_base
-        # why: node N takes ports_for(port_base, N), so a node past the
-        # leased span would bind ports another run may hold
-        self.max_nodes = max_nodes
+        # why one span for every world of a run: the run holds one port
+        # lease, and its worlds run one after another, each from node index 0
+        # why bounded: a node past the leased span would bind ports another
+        # run may hold
+        self.span = span
         # why: a kept world outlives the runner, so its nodes are started
         # without the parent-death signal. Decided before the first node boots.
         self.keep = keep
@@ -57,14 +55,12 @@ class LocalWorld(World):
     async def _ensure(self, names) -> None:
         new = [n for n in dict.fromkeys(names) if n not in self._nodes]
         # why before any start: a refused roster leaves the world as it was
-        if len(self._nodes) + len(new) > self.max_nodes:
-            raise WorldError(f"{', '.join(new)}: the world already runs "
-                             f"{len(self._nodes)} nodes, and [ports] span in "
-                             f"tests/config.toml gives a world "
-                             f"{self.max_nodes}")
+        refusal = self.span.refusal(len(self._nodes), new)
+        if refusal:
+            raise WorldError(refusal)
         for name in new:
             node = LocalNode(name, self._dir / name, self.binary,
-                             ports_for(self.port_base, len(self._nodes)),
+                             self.span.ports(len(self._nodes)),
                              self.config.get(name))
             node.start(keep=self.keep)
             self._nodes[name] = node  # track BEFORE readiness — a node that

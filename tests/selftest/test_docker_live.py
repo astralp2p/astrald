@@ -20,7 +20,7 @@ from types import SimpleNamespace
 
 from lib import agent
 from lib.build import linux_binaries
-from lib.nodeconfig import PORTS_PER_NODE, lease_ports
+from lib.nodeconfig import PORTS_PER_NODE, PortSpan, lease_ports
 from lib.worlds import WorldError, docker
 
 TESTS = Path(__file__).resolve().parent.parent
@@ -39,8 +39,8 @@ class TestDockerLive(unittest.TestCase):
         cls.tmp = Path(tempfile.mkdtemp())
         cls.world = docker.DockerWorld(
             cls.tmp / "20990101T000000Z" / "w0", binary,
-            docker.ensure_image(), cls.lease.base,
-            max_nodes=cfg["ports"]["span"] // PORTS_PER_NODE)
+            docker.ensure_image(),
+            PortSpan(cls.lease.base, cfg["ports"]["span"] // PORTS_PER_NODE))
         cls.world.ensure(SimpleNamespace(name="t", nodes=["node1", "node2"],
                                          ops=[]))
 
@@ -114,9 +114,9 @@ class TestDockerCleanup(unittest.TestCase):
             tmp = Path(tempfile.mkdtemp())
             stamp = "20990101T000001Z"
             w = docker.DockerWorld(tmp / stamp / "w0", binary,
-                                   docker.ensure_image(), lease.base,
-                                   max_nodes=cfg["ports"]["span"]
-                                   // PORTS_PER_NODE)
+                                   docker.ensure_image(),
+                                   PortSpan(lease.base, cfg["ports"]["span"]
+                                            // PORTS_PER_NODE))
             w.ensure(SimpleNamespace(name="t", nodes=["node1"], ops=[]))
             w.close(keep=False)
         finally:
