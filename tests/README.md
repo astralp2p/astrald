@@ -203,6 +203,12 @@ The live Docker selftests build the image and start two containers:
 
     cd tests && ASTRAL_TESTS_DOCKER=1 PYTHONPATH=.:<astral-py>/src python3 -m unittest selftest.test_docker_live -v
 
+`./tests/check-docker.sh [--agent]` runs the whole no-netsim check in order —
+selftests, the live Docker selftests, `main.suite`, `integration.suite
+--docker`, nothing left behind, and with `--agent` the agent suite — and
+gathers each step's log, verdict and failing entries' logs into
+`results/check-docker-<stamp>/`.
+
 A VM world boots the lab, pushes the astrald and astral-query under test to
 every VM, runs ops with their verifiers, and on close pulls each guest's
 astrald log into `results/<stamp>/w<N>/logs/`. VM worlds run one at a time.
