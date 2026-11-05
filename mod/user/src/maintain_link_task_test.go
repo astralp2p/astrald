@@ -77,13 +77,17 @@ func (s *dialScheduler) Schedule(task scheduler.Task, _ ...scheduler.Done) (sche
 		return nil, errors.New("dialScheduler runs ensure-link tasks only")
 	}
 
-	s.mu.Lock()
-	s.count++
-	n := s.count
-	s.mu.Unlock()
-
+	n := s.nextAttempt()
 	s.attempts <- n
 	return finishedTask{err: s.outcome(n)}, nil
+}
+
+// nextAttempt counts one more attempt and returns its number.
+func (s *dialScheduler) nextAttempt() int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.count++
+	return s.count
 }
 
 // finishedTask is a scheduled task that is done with err.

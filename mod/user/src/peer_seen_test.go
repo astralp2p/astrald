@@ -34,13 +34,16 @@ type contactLog struct {
 }
 
 func (l *contactLog) add(c contactCall) {
-	l.mu.Lock()
-	l.calls = append(l.calls, c)
-	l.mu.Unlock()
-
+	l.record(c)
 	if c.op == "contract" {
 		l.reads <- c.peer
 	}
+}
+
+func (l *contactLog) record(c contactCall) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.calls = append(l.calls, c)
 }
 
 func (l *contactLog) list() []contactCall {
@@ -94,7 +97,8 @@ func newContactFixture(t *testing.T) *contactFixture {
 		return nodeContract(f.userID, f.peerID), nil
 	}
 
-	ctx, cancel := astral.NewContext(nil).WithCancel()
+	// note: without the Network zone, so the contact steps show that they add it.
+	ctx, cancel := astral.NewContext(nil).ExcludeZone(astral.ZoneNetwork).WithCancel()
 	t.Cleanup(cancel)
 	ready := make(chan struct{})
 	close(ready)

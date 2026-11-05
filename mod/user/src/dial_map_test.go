@@ -13,6 +13,9 @@ var testEpoch = time.Date(2026, 11, 5, 12, 0, 0, 0, time.UTC)
 // TestDialMapAllowsOneAttemptPerInterval: a node gets one attempt per
 // dialInterval, and another node is unaffected.
 func TestDialMapAllowsOneAttemptPerInterval(t *testing.T) {
+	if dialInterval != time.Minute {
+		t.Fatalf("dial interval %v; want the spec's 1 min", dialInterval)
+	}
 	m := newDialMap()
 	node, other := astral.GenerateIdentity(), astral.GenerateIdentity()
 
@@ -37,6 +40,9 @@ func TestDialMapAllowsOneAttemptPerInterval(t *testing.T) {
 
 // TestDialMapDelay: a delayed node gets no attempt until its delay ends.
 func TestDialMapDelay(t *testing.T) {
+	if dialIntervalAfterRefusal != time.Hour {
+		t.Fatalf("dial interval after a refusal %v; want the spec's 1 h", dialIntervalAfterRefusal)
+	}
 	m := newDialMap()
 	node := astral.GenerateIdentity()
 
