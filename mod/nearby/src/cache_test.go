@@ -12,6 +12,42 @@ import (
 	"github.com/astralp2p/astral-go/astral"
 )
 
+// A node claimed while cached emits PeerSeen with its new user, although it keeps its IP
+// and its entry is live; a refresh with the same user emits nothing.
+func TestPeerSeenOnANewUser(t *testing.T) {
+	user := astral.GenerateIdentity()
+	h := newHarness(t, user)
+	h.mod.recognizers.Add(userRecognizer(user))
+	p := newPeer(t)
+
+	steps := []struct {
+		name   string
+		status func(now time.Time) *nearby.StatusMessage
+		user   *astral.Identity // note: the UserID of the last PeerSeen
+		events int              // note: PeerSeen emitted so far
+	}{
+		{"unowned", func(now time.Time) *nearby.StatusMessage { return p.visible(t, now, nil, "") }, nil, 1},
+		{"claimed, Stealth", func(now time.Time) *nearby.StatusMessage { return p.stealth(t, now, user) }, user, 2},
+		{"claimed, refresh", func(now time.Time) *nearby.StatusMessage { return p.stealth(t, now, user) }, user, 2},
+		{"claimed, Visible", func(now time.Time) *nearby.StatusMessage { return p.visible(t, now, user, "") }, user, 2},
+	}
+
+	for _, step := range steps {
+		now := h.clock.advance(time.Minute)
+		if err := h.mod.acceptStatus(ipOf(peerIP), step.status(now)); err != nil {
+			t.Fatalf("%s: acceptStatus: %v", step.name, err)
+		}
+
+		seen := h.events.peersSeen(t)
+		if len(seen) != step.events {
+			t.Fatalf("%s: emitted %d PeerSeen; want %d", step.name, len(seen), step.events)
+		}
+		if last := seen[len(seen)-1]; !last.NodeID.IsEqual(p.node) || !last.UserID.IsEqual(step.user) {
+			t.Fatalf("%s: last PeerSeen names node %v, user %v; want %v, %v", step.name, last.NodeID, last.UserID, p.node, step.user)
+		}
+	}
+}
+
 // PeerSeen is emitted when a node is new to the cache, when its IP changes, and when it
 // returns after its entry expired; not on a refresh from the same IP.
 func TestPeerSeenEmission(t *testing.T) {

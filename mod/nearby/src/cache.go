@@ -86,8 +86,9 @@ func (c *peerCache) storeUnrecognised(e *entry) error {
 
 // storeVerified stores the verified status of e.NodeID in place of its IP's entry and
 // removes the node's entry at another IP. stored is false when the cache is full. isNew
-// is true unless a live entry of the node at the same IP was replaced: the node is new
-// to the cache, moved to another IP, or returns after its entry expired.
+// is true unless a live entry of the node at the same IP and with the same user was
+// replaced: the node is new to the cache, moved to another IP, has a new user, or
+// returns after its entry expired.
 func (c *peerCache) storeVerified(e *entry) (isNew, stored bool) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -98,7 +99,9 @@ func (c *peerCache) storeVerified(e *entry) (isNew, stored bool) {
 		switch {
 		case !old.isNode(e.NodeID):
 		case k == key:
-			known = !old.expired(e.Seen)
+			// why: a node claimed while cached keeps its IP and its live entry; its new
+			// user is the news its peers of that user act on.
+			known = !old.expired(e.Seen) && old.UserID.IsEqual(e.UserID)
 		default:
 			delete(c.entries, k)
 		}
