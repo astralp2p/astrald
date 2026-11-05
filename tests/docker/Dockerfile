@@ -14,7 +14,7 @@ FROM node:22-bookworm-slim
 # why procps: Operator._stop kills the operator with pkill, and the world
 # watches astrald with pgrep.
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends python3 procps ca-certificates \
+    && apt-get install -y --no-install-recommends python3 procps ca-certificates git \
     && rm -rf /var/lib/apt/lists/*
 
 RUN useradd -m -s /bin/bash tester
@@ -31,6 +31,26 @@ ARG MODEL=deepseek-v4-flash
 COPY qwen-settings.sh /tmp/qwen-settings.sh
 RUN u=tester base_url="$BASE_URL" model="$MODEL" sh /tmp/qwen-settings.sh \
     && rm /tmp/qwen-settings.sh
+
+# The operator's astral-agent skill: the Astral docs from their public repo,
+# at the commit the astrald under test pins in .ai/system (docs_ref in
+# lib/worlds/docker.py), and a short SKILL.md that points into them. A host
+# skill ([agent] skill in tests/config.toml) replaces only the SKILL.md and
+# its references at world start; the docs stay these.
+# why the pinned commit: the docs then describe the astrald being tested
+ARG ASTRAL_DOCS_REF
+ARG ASTRAL_DOCS_REPO=https://github.com/astralp2p/astral-docs.git
+COPY astral-agent.md /tmp/astral-agent.md
+RUN test -n "$ASTRAL_DOCS_REF" \
+    && d=/home/tester/.qwen/skills/astral-agent \
+    && install -d "$d" \
+    && git init -q "$d/astral-docs" \
+    && git -C "$d/astral-docs" fetch -q --depth 1 "$ASTRAL_DOCS_REPO" "$ASTRAL_DOCS_REF" \
+    && git -C "$d/astral-docs" checkout -q FETCH_HEAD \
+    && rm -rf "$d/astral-docs/.git" \
+    && install -m 644 /tmp/astral-agent.md "$d/SKILL.md" \
+    && rm /tmp/astral-agent.md \
+    && chown -R tester:tester /home/tester/.qwen
 
 # why root-only: astrald's root holds the node's token, which the operator,
 # tester, must not read

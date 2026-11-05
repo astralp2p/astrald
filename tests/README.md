@@ -187,11 +187,17 @@ node1's container holds the lab's operator (`tester`, Qwen Code), so
 published on the host's `127.0.0.1` at its leased port, which is what
 drivers and oracles dial. No host file or environment variable enters a
 container. The run copies in an astrald and astral-query built for Linux
-(`.cache/linux-<arch>/`), and the operator's astral-agent skill from
-`[agent] skill` in `config.toml` (default `~/.claude/skills/astral-agent`).
+(`.cache/linux-<arch>/`). The operator's astral-agent skill comes with the
+image: the Astral docs at the commit this checkout pins in `.ai/system`,
+fetched from github.com/astralp2p/astral-docs when the image builds, and
+`docker/astral-agent.md` as its `SKILL.md`. Nothing need be installed on the
+host. `[agent] skill` in `config.toml` names a skill whose `SKILL.md` and
+`references/` replace the image's, e.g. while working on the skill; the
+docs stay the image's.
 
 The first Docker run builds the node image, which takes minutes and needs
-npm's registry; later runs reuse it until `docker/` changes. A test with
+npm's registry and GitHub; later runs reuse it until `docker/` or the
+`.ai/system` pin changes. A test with
 `ops` needs a VM world, and a `local_only` test a local one: a Docker run
 refuses both, as `--save` and `--from`. At a world's end its containers and
 network are removed; `--keep` leaves them up and names them, and later

@@ -112,27 +112,33 @@ class TestDockerRuns(unittest.TestCase):
         self.assertEqual((e["env"], e["driver"]), ("container", "agent"))
         self.assertEqual(doc["agent_isolation"], "container-user")
         self.assertEqual(doc["agent_version"], runner.docker.QWEN_CODE)
-        self.assertEqual(doc["agent_skill"], "astral-agent 9.9.9")
+        self.assertEqual(doc["agent_skill"], "astral-agent 9.9.9, astral-docs "
+                         + runner.docker.docs_ref()[:12])
 
-    def test_an_agent_run_without_the_skill_is_refused_before_anything(self):
-        code, doc, made, err = run(["bootstrap-user-software-key"],
-                                   driver="agent", skill=None)
-        self.assertEqual((code, doc, made), (2, None, []))
-        self.assertIn("no installed astral-agent skill", err)
-        self.assertIn("[agent] skill", err)
+    def test_without_a_host_skill_the_operator_gets_the_images(self):
+        # why no refusal: the image carries a skill and the docs the
+        # checkout pins, so a host needs nothing installed
+        code, doc, made, _ = run(["bootstrap-user-software-key"],
+                                 driver="agent", skill=None)
+        self.assertNotEqual(code, 2)          # not refused
+        self.assertEqual(len(made), 1)
+        self.assertEqual(doc["agent_skill"],
+                         "image astral-agent, astral-docs "
+                         + runner.docker.docs_ref()[:12])
 
-    def test_a_skill_counts_only_with_its_astral_docs_mount(self):
-        # why: a raw skills checkout has SKILL.md and references/ but no
-        # astral-docs, so every link the operator follows into it is missing
+    def test_a_host_skill_is_used_only_when_named(self):
+        # why: a host's installed skill may be months older than the docs
+        # the image pins, and its SKILL.md would then mislead the operator
+        self.assertIsNone(runner._skill({"agent": {"skill": ""}}))
+        self.assertIsNone(runner._skill({}))
         with tempfile.TemporaryDirectory() as tmp:
             d = Path(tmp) / "astral-agent"
-            (d / "references").mkdir(parents=True)
+            d.mkdir()
+            with self.assertRaisesRegex(ValueError, "no SKILL.md"):
+                runner._skill({"agent": {"skill": str(d)}})
             (d / "SKILL.md").write_text("---\nname: astral-agent\n---\n")
-            cfg = {"agent": {"skill": str(d)}}
-            self.assertIsNone(runner._skill(cfg))
-            (d / "astral-docs").mkdir()
-            (d / "astral-docs" / "README.md").write_text("docs\n")
-            self.assertEqual(runner._skill(cfg), d.resolve())
+            self.assertEqual(runner._skill({"agent": {"skill": str(d)}}),
+                             d.resolve())
 
     def test_a_host_without_docker_refuses_before_anything(self):
         with mock.patch.object(runner, "docker_unavailable",

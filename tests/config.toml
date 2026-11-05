@@ -24,6 +24,10 @@ package = "./cmd/astrald"
 # keeps the lab's endpoint.
 model    = "deepseek-v4-flash"
 base_url = ""
-# The astral-agent skill a Docker world copies to node1's operator, links
-# resolved. A VM world's lab bakes its own (netsim/ops/configure-astral-agent).
-skill    = "~/.claude/skills/astral-agent"
+# A Docker world's operator gets the image's astral-agent skill: the Astral
+# docs at the commit this checkout pins in .ai/system, fetched from their
+# public repo when the image builds, and tests/docker/astral-agent.md. Name a
+# skill directory here to put its SKILL.md and references/ over the image's
+# (the docs stay the image's), e.g. when working on the skill itself. A VM
+# world's lab bakes its own (netsim/ops/configure-astral-agent).
+skill    = ""
