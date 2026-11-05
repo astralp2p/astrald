@@ -17,7 +17,7 @@ from unittest import mock
 from lib import runner
 from lib.manifest import load_all
 from lib.nodeconfig import PORTS_PER_NODE
-from lib.plan import PlanError, chain, plan, render
+from lib.plan import PlanError, chain, off_lab, plan, render
 from lib.suites import load
 
 TESTS = Path(__file__).resolve().parent.parent
@@ -25,7 +25,7 @@ GOLDEN = Path(__file__).resolve().parent / "golden"
 
 # suite -> the driver its golden plan is drawn under
 SUITES = {"main": "script", "tor": "script", "nat": "script",
-          "gateway": "script", "agent": "agent"}
+          "gateway": "script", "agent": "agent", "integration": "script"}
 
 
 def fake(after=None, destroys=False, ops=(), local_only=None,
@@ -115,13 +115,35 @@ class TestShippedPlans(Invariants, unittest.TestCase):
         for selection, order in self.selections():
             with self.subTest(selection=selection):
                 lineage = {n for s in selection for n in chain(self.tests, s)}
-                if any(self.tests[n].local_only for n in lineage):
-                    with self.assertRaisesRegex(PlanError, "local only"):
+                # why either refusal: a selection may hold a local_only test
+                # and one whose roster leaves the lab, and the first checked
+                # names its own reason
+                if any(self.tests[n].local_only or off_lab(self.tests[n])
+                       for n in lineage):
+                    with self.assertRaisesRegex(
+                            PlanError, "local only|the VM lab does not run"):
                         plan(self.tests, selection, order, vm=True)
                     continue
                 worlds = plan(self.tests, selection, order, vm=True)
                 self.assertEqual({w.kind for w in worlds}, {"vm"})
                 self.check(self.tests, selection, worlds, False)
+
+    def test_a_roster_off_the_lab_runs_local_or_in_docker_never_in_a_vm(self):
+        # why: a VM world can give a test only the lab's machines, while a
+        # local or Docker world starts any name it is handed
+        for t in ("token-less-setup", "introduce-node", "signer-app"):
+            with self.subTest(test=t):
+                self.assertFalse(self.tests[t].local_only)
+                self.assertEqual({w.kind for w in plan(self.tests, [t])},
+                                 {"local"})
+                self.assertEqual({w.kind for w in plan(self.tests, [t],
+                                                       docker=True)},
+                                 {"docker"})
+                with self.assertRaisesRegex(PlanError, "does not run"):
+                    plan(self.tests, [t], vm=True)
+        # a lab roster still enters VMs
+        self.assertEqual({w.kind for w in plan(self.tests, ["adopt-node"],
+                                               vm=True)}, {"vm"})
 
     def test_a_prereq_stranded_by_a_fork_is_dropped(self):
         # why: mcp-origin fixes w0 local, tor-link forks a VM world, and the
@@ -138,16 +160,18 @@ class TestShippedPlans(Invariants, unittest.TestCase):
             with self.subTest(suite=suite):
                 listed = self.suites[suite]
                 got = render(plan(self.tests, listed, listed, driver=driver))
-                flag = " --driver agent" if driver == "agent" else ""
+                # why --vm: an agent plan's heavy kind follows the host
+                flag = " --driver agent --vm" if driver == "agent" else ""
                 self.assertEqual(
                     got, (GOLDEN / f"{suite}.plan").read_text(),
                     f"{suite}.suite plans differently; if intended, run "
                     f"./tests/run --plan{flag} {suite}.suite > "
                     f"tests/selftest/golden/{suite}.plan")
 
-    def test_every_shipped_local_world_fits_the_port_span(self):
-        # why: LocalWorld refuses a node past the span only when the run
-        # reaches it; this tells the test author at selftest time
+    def test_every_shipped_local_or_docker_world_fits_the_port_span(self):
+        # why: a local or Docker world refuses a node past the span only
+        # when the run reaches it; this tells the test author at selftest
+        # time
         span = tomllib.loads((TESTS / "config.toml")
                              .read_text())["ports"]["span"]
         limit = span // PORTS_PER_NODE
@@ -155,9 +179,16 @@ class TestShippedPlans(Invariants, unittest.TestCase):
                                         self.suites[suite], driver=driver)
                  for suite, driver in SUITES.items()}
         plans["every test"] = plan(self.tests, sorted(self.tests))
+        plans["every Docker test"] = plan(
+            self.tests, sorted(n for n, t in self.tests.items()
+                               if not t.ops and not t.local_only),
+            docker=True)
+        plans["agent.suite in Docker"] = plan(
+            self.tests, self.suites["agent"], self.suites["agent"],
+            driver="agent", heavy="docker")
         for name, worlds in plans.items():
             for w in worlds:
-                if w.kind != "local":
+                if w.kind not in ("local", "docker"):
                     continue
                 nodes = {n for s in w.steps for n in self.tests[s.test].nodes}
                 with self.subTest(plan=name, world=w.name):
@@ -172,12 +203,16 @@ class TestShippedPlans(Invariants, unittest.TestCase):
         # further world opens for a destroyer that cannot end w0
         listed = self.suites["main"]
         worlds = plan(self.tests, listed, listed)
+        # why destroyers, not one test per world: a destroyer's lineage of
+        # destroyers (swarm-roster-sync → expel-propagation) shares the
+        # world it forks into
         for w in worlds[1:]:
             with self.subTest(world=w.name):
-                self.assertTrue(self.tests[w.steps[-1].test].destroys)
                 self.assertEqual([s.kind for s in w.steps][-1], "test")
-        self.assertEqual(sum(s.kind == "test" for s in worlds[0].steps),
-                         len(listed) - len(worlds) + 1)
+                self.assertTrue(all(self.tests[s.test].destroys
+                                    for s in w.steps if s.kind == "test"))
+        ran = [s.test for w in worlds for s in w.steps if s.kind == "test"]
+        self.assertEqual(sorted(ran), sorted(listed))
 
     def test_root_observers_run_before_bootstrap(self):
         w, = plan(self.tests, ["adopt-node", "claim-window"])
@@ -205,13 +240,14 @@ class TestShippedPlans(Invariants, unittest.TestCase):
                              [("bootstrap-user-software-key", "prereq"),
                               ("adopt-node", "prereq"), (test, "test")])
 
-    def test_all_tests_plan_as_eight_worlds(self):
+    def test_all_tests_plan_into_one_world_per_destroyer(self):
         worlds = plan(self.tests, sorted(self.tests))
         self.assertEqual(
             [(w.kind, w.steps[-1].test) for w in worlds],
             [("local", "expel-node"), ("vm", "gateway-relay"),
              ("local", "hold-purge"), ("vm", "nat-punch"),
-             ("vm", "tor-link"), ("local", "bootstrap-user-op"),
+             ("local", "expel-propagation"), ("vm", "tor-link"),
+             ("local", "hold-isolation"), ("local", "bootstrap-user-op"),
              ("local", "import-user-software-key"),
              ("local", "introduce-node")])
 
@@ -525,3 +561,57 @@ class TestRunPlan(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestDockerPlans(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.tests = load_all(TESTS / "e2e")
+        cls.agent = load(TESTS / "suites" / "agent.suite")
+
+    def test_the_agent_driver_takes_the_heavy_kind_it_is_given(self):
+        worlds = plan(self.tests, self.agent, self.agent, driver="agent",
+                      heavy="docker")
+        self.assertEqual({w.kind for w in worlds}, {"docker"})
+
+    def test_golden_agent_docker_plan(self):
+        got = render(plan(self.tests, self.agent, self.agent, driver="agent",
+                          heavy="docker"))
+        self.assertEqual(
+            got, (GOLDEN / "agent-docker.plan").read_text(),
+            "agent.suite plans differently in Docker worlds; if intended, "
+            "run ./tests/run --plan --driver agent --docker agent.suite > "
+            "tests/selftest/golden/agent-docker.plan")
+
+    def test_golden_integration_docker_plan(self):
+        listed = load(TESTS / "suites" / "integration.suite")
+        got = render(plan(self.tests, listed, listed, docker=True))
+        self.assertEqual(
+            got, (GOLDEN / "integration-docker.plan").read_text(),
+            "integration.suite plans differently in Docker worlds; if "
+            "intended, run ./tests/run --plan --docker integration.suite > "
+            "tests/selftest/golden/integration-docker.plan")
+
+    def test_docker_forces_every_world(self):
+        worlds = plan(self.tests, ["smoke"], docker=True)
+        self.assertEqual([w.kind for w in worlds], ["docker"])
+
+    def test_a_docker_run_refuses_vm_operations(self):
+        with self.assertRaisesRegex(PlanError, "tor-link runs VM operations"
+                                               ".*add --vm"):
+            plan(self.tests, ["tor-link"], docker=True)
+
+    def test_a_docker_run_refuses_a_local_only_test(self):
+        tests = {"a": fake(local_only="watches a host directory")}
+        with self.assertRaisesRegex(PlanError, "Docker containers"):
+            plan(tests, ["a"], docker=True)
+
+    def test_vm_and_docker_together_are_refused(self):
+        with self.assertRaisesRegex(PlanError, "choose one"):
+            plan(self.tests, ["smoke"], vm=True, docker=True)
+
+    def test_without_the_agent_driver_heavy_changes_nothing(self):
+        listed = load(TESTS / "suites" / "main.suite")
+        self.assertEqual(
+            render(plan(self.tests, listed, listed, heavy="docker")),
+            render(plan(self.tests, listed, listed)))

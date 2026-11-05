@@ -17,8 +17,12 @@ follow from that tree:
    nothing has ended the world yet. A root destroyer, one with no `after`,
    also needs a world no producer has built on, since a fresh world is the
    only state it can name. Every other destroyer forks.
-5. A world's kind follows from what runs in it: an op, `--vm` or the agent
-   driver needs a VM world, and a local_only test needs a local one.
+5. A world's kind follows from what runs in it: an op needs a VM world;
+   `--vm`, `--docker` or the agent driver needs a heavy world, a VM or a
+   Docker one (`heavy`, which the runner picks for the host); and a
+   local_only test needs a local one. A Docker run refuses an op. A test
+   whose roster names a node the VM lab does not run (`LAB_NODES`) never
+   enters a VM world, and stays local unless the run asks for Docker.
 6. `isolate` gives every selected test a world of its own.
 7. Under the agent driver, selected tests are operator-driven; prereqs and
    replays run by script unless `prereqs_agent`. A test with no prompt.md
@@ -54,6 +58,19 @@ class PlanError(ValueError):
     """A selection no plan can run, and why."""
 
 
+# The machines the VM lab runs (netsim/labs/two-node-plus-external/lab.story).
+LAB_NODES = frozenset({"node1", "node2", "reflector"})
+
+
+def off_lab(test) -> list:
+    """The roster names a VM world cannot give test: nodes its lab lacks.
+
+    why a rule and not local_only: such a test needs no host — a local or a
+    Docker world starts any name — only a world that is not a VM
+    """
+    return [n for n in test.nodes if n not in LAB_NODES]
+
+
 @dataclass
 class Step:
     test: str
@@ -65,7 +82,7 @@ class Step:
 @dataclass
 class World:
     name: str
-    kind: str | None = None   # "local", "vm" or "attach"; None until a step needs one
+    kind: str | None = None   # "local", "vm", "docker" or "attach"; None until a step needs one
     steps: list = field(default_factory=list)
     ended: bool = False       # a destroyer ran: only its descendants may follow
     config: dict = field(default_factory=dict)   # node -> module -> keys
@@ -130,11 +147,13 @@ def chain(tests: dict, name: str) -> list:
 
 
 def plan(tests: dict, selection: list, order=(), *, isolate=False,
-         driver="script", vm=False, target="fresh",
-         prereqs_agent=False, done=()) -> list:
+         driver="script", vm=False, docker=False, heavy="vm",
+         target="fresh", prereqs_agent=False, done=()) -> list:
     """The worlds a run of `selection` needs. `order` is a suite's listing,
     a preference among siblings; the rest sort by name. `done` is the
-    history of the saved world the run boots, oldest first."""
+    history of the saved world the run boots, oldest first. `heavy` is the
+    kind the agent driver gets, "vm" or "docker"; `vm` and `docker` force
+    their kind on every world."""
     unknown = [n for n in selection if n not in tests]
     if unknown:
         raise PlanError(f"unknown test(s): {', '.join(unknown)}")
@@ -142,8 +161,13 @@ def plan(tests: dict, selection: list, order=(), *, isolate=False,
         # why: the operator lives in the simulated world, and attach borrows
         # a daemon instead of bringing one
         raise PlanError("--driver agent has no operator under --target attach")
+    if vm and docker:
+        raise PlanError("--vm and --docker each put every world in their "
+                        "kind: choose one")
+    forced = ("docker" if docker else "vm" if vm
+              else heavy if driver == "agent" else None)
     p = _Planner(tests, set(selection), order, driver, prereqs_agent,
-                 forced="vm" if vm or driver == "agent" else None)
+                 forced=forced)
     worlds = p.isolated() if isolate else p.shared()
     for w in worlds:
         p.trim(w)
@@ -199,9 +223,18 @@ class _Planner:
 
     def _check(self, n: str) -> None:
         t = self.tests[n]
+        strays = off_lab(t)
+        if self.forced == "vm" and strays and not t.local_only:
+            raise PlanError(f"{n} names {', '.join(strays)}, which the VM "
+                            "lab does not run, and this run puts every world "
+                            "in VMs")
         if self.forced and t.local_only:
+            where = "VMs" if self.forced == "vm" else "Docker containers"
             raise PlanError(f"{n} is local only ({t.local_only}), and this "
-                            "run puts every world in VMs")
+                            f"run puts every world in {where}")
+        if self.forced == "docker" and t.ops:
+            raise PlanError(f"{n} runs VM operations, which a Docker world "
+                            "cannot: add --vm")
         kind = "test" if n in self.selected else "prereq"
         if self._driver(kind) == "agent" and not t.prompt:
             raise PlanError(f"{n} ships no prompt.md, so no operator can "
@@ -216,9 +249,11 @@ class _Planner:
 
     def _need(self, n: str) -> str | None:
         t = self.tests[n]
-        if t.ops or self.forced:
+        if t.ops:
             return "vm"
-        return "local" if t.local_only else None
+        if self.forced:
+            return self.forced
+        return "local" if t.local_only or off_lab(t) else None
 
     def _fits(self, w: World, n: str) -> bool:
         need = self._need(n)
@@ -352,9 +387,11 @@ def _attach(p: _Planner, worlds: list, isolate: bool) -> list:
         if len(t.nodes) != 1:
             raise PlanError(f"{n} wants {len(t.nodes)} nodes, and --target "
                             "attach has one daemon")
-        if t.local_only:
-            raise PlanError(f"{n} is local only ({t.local_only}), and the "
-                            "attached daemon has no harness-rendered config")
+        if t.local_only or off_lab(t):
+            raise PlanError(f"{n} is local only "
+                            f"({t.local_only or 'its roster leaves the lab'}),"
+                            " and the attached daemon has no harness-rendered"
+                            " config")
         if t.ops:
             raise PlanError(f"{n} runs VM operations, and --target attach "
                             "has no simulation")

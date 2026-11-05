@@ -1,4 +1,5 @@
-"""The agent driver: the lab's AI operator, driven over a VM world's ssh.
+"""The agent driver: an AI operator on node1, driven over its world's ssh —
+a VM world's netsim ssh, or a Docker world's docker exec.
 
 The lab bakes one operator: Qwen Code on node1, run as `tester`, with the
 astral-agent skill (netsim/labs/two-node-plus-external/lab.story). It reaches
@@ -52,15 +53,17 @@ PLACEHOLDER = re.compile(r"\{([a-z][a-z0-9_-]*)\.([A-Za-z_][A-Za-z0-9_]*)\}")
 NODE_PLACEHOLDERS = {"identity", "alias", "lan_endpoint"}
 EXIT = "[agent] exit "           # the line the guest ends a session with
 EXIT_LINE = re.compile(r"^\[agent\] exit (\d+)$", re.M)
+UNREACHABLE = "[agent] endpoint unreachable: "   # the line a failed check prints
 
 
 class PromptError(Exception):
     """A prompt.md no operator may be handed: the test's defect."""
 
 
-def render(test, view: dict) -> str:
+def render(test, view: dict, kept=()) -> str:
     """The prompt the operator gets for test: prompt.md filled from the
-    step's view, then the facts footer.
+    step's view, then where its lineage's facts are, then the facts footer.
+    `kept` names the lineage steps whose facts file the operator holds.
 
     why an unknown placeholder raises before the operator starts: a prompt
     that names a fact or node the world does not hold asks the operator for
@@ -82,7 +85,21 @@ def render(test, view: dict) -> str:
         return str(source[field])
 
     text = (test.dir / "prompt.md").read_text()
-    return PLACEHOLDER.sub(fill, text).rstrip("\n") + "\n" + footer(test)
+    return (PLACEHOLDER.sub(fill, text).rstrip("\n") + "\n"
+            + kept_line(kept) + footer(test))
+
+
+def kept_line(kept) -> str:
+    """Where earlier steps of the flow left what they learned.
+
+    why files and not ~/.facts/: in a shared world the directory also holds
+    siblings' files, and a sibling's facts are not this flow's
+    (object-store-peer once acted on object-store's)
+    """
+    if not kept:
+        return ""
+    files = ", ".join(f"`~/.facts/{name}.json`" for name in kept)
+    return f"\nEarlier steps of this flow left what they learned in {files}.\n"
 
 
 def footer(test) -> str:
@@ -98,18 +115,19 @@ def footer(test) -> str:
 
 
 class Operator:
-    """The lab's operator in one VM world.
+    """The operator on node1 of one VM or Docker world.
 
     why one per world: the model is set once per world, and a world is
     what boots with the lab's own model baked in.
     """
 
     def __init__(self, ssh, model: str = "", base_url: str = ""):
-        self.ssh = ssh                # the VM world's ssh(vm, script, …)
+        self.ssh = ssh                # the world's ssh(vm, script, …)
         self.model, self.base_url = model, base_url
         self._model_set = not model
+        self._endpoint_checked = False
 
-    def run(self, test, art: Path, timeout: int = TIMEOUT) -> int:
+    def run(self, test, art: Path, timeout: int = TIMEOUT, kept=()) -> int:
         """Drive test's flow; the driver's exit code.
 
         The step's view is art/session.json and its facts go to
@@ -120,12 +138,14 @@ class Operator:
         """
         try:
             prompt = render(test,
-                            json.loads((art / "session.json").read_text()))
+                            json.loads((art / "session.json").read_text()),
+                            kept)
         except PromptError as e:
             with (art / "driver.log").open("a") as f:
                 f.write(f"[agent] {e}\n")
             return 1
         self._set_model()
+        self._check_endpoint()
         self._push(test)
         rc = self._drive(test, prompt, art / "driver.log", timeout)
         if rc:
@@ -177,6 +197,40 @@ class Operator:
             raise WorldError(f"{VM}: operator model is not {self.model} after "
                              f"the rewrite (got {out!r})")
         self._model_set = True
+
+    def _check_endpoint(self) -> None:
+        """Raise WorldError when the operator's model endpoint does not
+        answer from where the operator runs; once per world.
+
+        why: an operator that cannot reach its model fails every session,
+        and that is the world's network, not the operator — a driver red
+        would blame the wrong thing
+        why any HTTP answer passes: a 401 or a 404 still means the endpoint
+        is there; only no answer at all means the operator cannot work
+        """
+        if self._endpoint_checked:
+            return
+        out = self.ssh(VM, "\n".join([
+            f"python3 - {HOME}/.qwen/.env <<'PY'",
+            "import sys, urllib.error, urllib.request",
+            "url = ''",
+            "for line in open(sys.argv[1]):",
+            "    if line.startswith('OPENAI_BASE_URL='):",
+            "        url = line.split('=', 1)[1].strip()",
+            "try:",
+            "    urllib.request.urlopen(url.rstrip('/') + '/models', timeout=10)",
+            "except urllib.error.HTTPError:",
+            "    pass",
+            "except Exception as e:",
+            "    print(f'{UNREACHABLE}{url}: {e}')",
+            "PY",
+        ]).replace("{UNREACHABLE}", UNREACHABLE), check=False)
+        found = [l for l in out.splitlines() if l.startswith(UNREACHABLE)]
+        if found:
+            raise WorldError("the operator's model endpoint does not answer "
+                             "from its seat: "
+                             + found[0][len(UNREACHABLE):])
+        self._endpoint_checked = True
 
     def _push(self, test) -> None:
         """Remove the test's own facts file, ~/.facts/<test>.json, and put
@@ -249,7 +303,7 @@ class Operator:
         return int(codes[-1]) if codes else 1
 
     def _stop(self) -> str:
-        """Kill every process the operator runs on its VM; a log line.
+        """Kill every process the operator runs on node1; a log line.
 
         why: the timeout kills only the host's ssh, and the guest's session
         has no tty to hang up, so the operator would keep acting on node1

@@ -44,8 +44,8 @@ class TestPrompts(unittest.TestCase):
                 "facts": {f: f"<{f}>" for n in lineage
                           for f in self.all[n].facts}}
 
-    def test_the_eight_operator_tests_ship_prompts(self):
-        self.assertEqual(len(self.agent_tests), 8)
+    def test_every_operator_test_ships_a_prompt(self):
+        self.assertEqual(len(self.agent_tests), 12)
 
     def test_every_prompt_renders_with_nothing_left_unfilled(self):
         for t in self.agent_tests:

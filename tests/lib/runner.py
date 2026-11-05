@@ -25,15 +25,18 @@ GO_ENV_VARS = ("ASTRALD_APPHOST_ENDPOINT", "ASTRALD_APPHOST_TOKEN")
 
 from lib import agent, manifest, report, suites
 from lib import plan as planner
-from lib.build import ensure_binary, git_ref
-from lib.nodeconfig import PORTS_PER_NODE, PortsBusy, lease_ports
+from lib.build import ensure_binary, git_ref, linux_binaries
+from lib.nodeconfig import PORTS_PER_NODE, PortSpan, PortsBusy, lease_ports
 from lib.record import WorldRecord
 from lib.results import RunHeader, RunResults, fresh_run_dir
 from lib.worlds import WorldError
 from lib.worlds.attach import AttachWorld
+from lib.worlds import docker
+from lib.worlds.docker import DockerWorld
 from lib.worlds.local import LocalWorld
 from lib.worlds.vm import VmWorld, stages
 from lib.worlds.vm import unavailable as vm_unavailable
+from lib.worlds.docker import unavailable as docker_unavailable
 
 TESTS = Path(__file__).resolve().parent.parent
 REPO = TESTS.parent
@@ -48,10 +51,13 @@ SNAPSHOTS = (Path(os.environ.get("XDG_CACHE_HOME")
 STAGE_NAME = re.compile(r"^[a-z0-9][a-z0-9._-]{0,63}$")
 DEFAULT_SUITE = "main.suite"
 # the env a record names, by the kind of world it ran in
-ENV_OF = {"local": "node", "vm": "netsim", "attach": "node"}
+ENV_OF = {"local": "node", "vm": "netsim", "attach": "node",
+          "docker": "container"}
 # the CLI options a caller may leave out: the selftests build args by hand
 OPTIONS = {"plan": False, "isolate": False, "prereqs": "script", "vm": False,
-           "save": None, "from_stage": None}
+           "docker": False, "save": None, "from_stage": None}
+# the skill the operator works with in a Docker world; a VM world's lab bakes
+# its own (netsim/ops/configure-astral-agent)
 
 
 class DriverError(Exception):
@@ -123,7 +129,7 @@ class Step:
     test: object        # manifest.Test
     kind: str           # "test", or "prereq": run to build what a test continues
     dir: str            # its artifact directory under results/<stamp>/
-    env: str            # the env its world is: "node" or "netsim"
+    env: str            # the env its world is: "node", "container" or "netsim"
     driver: str         # who performs its flow: "script" or "agent"
 
 
@@ -150,9 +156,9 @@ def _entry(s: Step) -> dict:
     """The fields every record of a step carries, whatever its status.
 
     why env is the world's: a record states the env the test RAN in, not the
-    one its manifest asks for as a minimum. A node test lifted into VMs — by
-    a netsim test it shares a world with, or by the agent driver — really ran
-    there, and a record that said otherwise would hide the one property the
+    one its manifest asks for as a minimum. A node test lifted into a VM or
+    Docker world — by a netsim test it shares a world with, by the agent
+    driver, or by --vm or --docker — really ran there, and a record that said otherwise would hide the one property the
     design is built on.
     """
     return dict(test=s.test.name, kind=s.kind, env=s.env, driver=s.driver,
@@ -310,9 +316,13 @@ def print_plan(tests: dict, args) -> int:
 def plan_worlds(tests: dict, args) -> list:
     """The worlds the planner makes of the CLI's selection: a suite's tests,
     with its listing as the order among siblings, or the tests named."""
-    if args.target == "attach" and (args.vm or args.save or args.from_stage):
+    if args.target == "attach" and (args.vm or args.docker or args.save
+                                    or args.from_stage):
         raise ValueError("--target attach runs the daemon already up: it "
-                         "takes no --vm, --save or --from")
+                         "takes no --vm, --docker, --save or --from")
+    if args.docker and (args.save or args.from_stage):
+        raise ValueError("--save and --from work on netsim stages, which a "
+                         "Docker world does not make")
     for flag, name in (("--save", args.save), ("--from", args.from_stage)):
         if name is not None and not STAGE_NAME.match(name):
             raise ValueError(f"{flag} {name!r}: a stage name is lowercase "
@@ -330,7 +340,8 @@ def plan_worlds(tests: dict, args) -> list:
         tests, listed or selection, listed or (), isolate=args.isolate,
         driver=args.driver, target=args.target,
         # why --from is a VM run: a saved world is a netsim stage
-        vm=args.vm or saved is not None,
+        vm=args.vm or saved is not None, docker=args.docker,
+        heavy=heavy_kind(args),
         prereqs_agent=args.prereqs == "agent",
         done=[h["test"] for h in saved["history"]] if saved else ())
     if saved is not None:
@@ -340,6 +351,18 @@ def plan_worlds(tests: dict, args) -> list:
                          f"selection's last world, {worlds[-1].name}, is "
                          f"{worlds[-1].kind} — add --vm")
     return worlds
+
+
+def heavy_kind(args) -> str:
+    """The kind of world the agent driver gets on this host: a VM world
+    where netsim runs, a Docker world elsewhere.
+
+    why the host decides, not a flag: an agent run on a laptop should just
+    work, and --vm or --docker still say otherwise.
+    """
+    if args.vm or args.from_stage:
+        return "vm"
+    return "docker" if vm_unavailable() else "vm"
 
 
 def _check_saved_config(tests: dict, name: str, saved: dict) -> None:
@@ -399,12 +422,61 @@ def _attach_world():
     return AttachWorld()
 
 
-def _local_world(dir: Path, binary: Path, port_base: int, max_nodes: int,
-                 keep: bool, config: dict | None = None):
+def _local_world(dir: Path, binary: Path, span: PortSpan, keep: bool,
+                 config: dict | None = None):
     """A fresh local world, its node roots under dir, its nodes started with
     the world's merged config overrides."""
-    return LocalWorld(dir, binary, port_base, max_nodes=max_nodes,
-                      keep=keep, config=config)
+    return LocalWorld(dir, binary, span, keep=keep, config=config)
+
+
+def _docker_world(dir: Path, binary: Path, image: str, span: PortSpan,
+                  keep: bool, config: dict | None = None,
+                  skill: Path | None = None):
+    """A Docker world, its logs under dir: one container per roster node,
+    from `image`, running the Linux `binary`."""
+    return DockerWorld(dir, binary, image, span, keep=keep, config=config,
+                       skill=skill)
+
+
+def _prepare_docker() -> tuple:
+    """(the Linux astrald, the node image) a run's Docker worlds use, after
+    removing what a dead run left; WorldError when the engine fails."""
+    for name in docker.reap():
+        print(f"run: removed {name}, left by a run that is gone",
+              file=sys.stderr)
+    binary = linux_binaries(REPO, docker.engine_arch())
+    return binary, docker.ensure_image()
+
+
+def _skill(cfg: dict) -> Path | None:
+    """The host skill whose SKILL.md and references a Docker world's
+    operator gets over the image's own: config.toml's [agent] skill; None
+    when it names none.
+
+    why no default path: a host's installed skill may be months older than
+    the docs the image pins, and its SKILL.md then misleads the operator;
+    the image's own skill needs nothing on the host
+    """
+    named = cfg.get("agent", {}).get("skill")
+    if not named:
+        return None
+    path = Path(os.path.expanduser(named))
+    if not (path / "SKILL.md").is_file():
+        raise ValueError(f"[agent] skill {named} holds no SKILL.md")
+    return path.resolve()
+
+
+def _skill_name(skill: Path | None) -> str:
+    """`name version` from a skill's SKILL.md front matter."""
+    if skill is None:
+        return "(none)"
+    fields = {}
+    for line in (skill / "SKILL.md").read_text().splitlines()[1:]:
+        if line.strip() == "---":
+            break
+        key, _, value = line.partition(":")
+        fields[key.strip()] = value.strip()
+    return f"{fields.get('name', '?')} {fields.get('version', '?')}"
 
 
 def _vm_world(dir: Path, binary: Path, ref: str, keep: bool,
@@ -424,6 +496,7 @@ class _Run:
         self.configs = configs    # world -> the overrides it starts with
         self.operator = operator  # [agent]'s model and base_url, or None
         self.agent = None         # the operator of the world running now
+        self.operated = set()     # the steps its operator drove and passed
         self.pushed = []
         self.torn = None          # the first world close that raised
         self.unsaved = None       # why a --save did not land
@@ -433,10 +506,13 @@ class _Run:
         """Run one world's steps on ex, save it when asked, then close it."""
         record = WorldRecord(self.results.dir, name)
         record.config = self.configs.get(name, {})
-        # note: the agent driver runs only in VM worlds (plan rule 5), and a
-        # VM world is what offers ssh()
+        # note: the agent driver runs only in VM and Docker worlds (plan rule
+        # 5), and those are the worlds that offer ssh()
         self.agent = (agent.Operator(ex.ssh, **self.operator)
                       if self.operator is not None else None)
+        # the steps this world's operator drove and passed: their facts
+        # files are in its home
+        self.operated = set()
         try:
             if self.saved is not None:
                 self._resume(ex, record)
@@ -455,7 +531,11 @@ class _Run:
                 print(f"run: --keep, world {name} left up; its nodes are in "
                       f"{record.path}"
                       + (f", node roots and logs under {roots}"
-                         if roots.exists() else ""), file=sys.stderr)
+                         if roots.exists() else "")
+                      + (f"; containers {', '.join(ex.containers())} "
+                         "(docker exec -it <name> sh; docker rm -f to end)"
+                         if ex.containers() else ""),
+                      file=sys.stderr)
 
     def _resume(self, ex, record: WorldRecord) -> None:
         """Boot the saved world --from names, and take its history and facts
@@ -547,8 +627,11 @@ class _Run:
             return env
 
         if s.driver == "agent":
+            kept = [n for n in reversed(lineage)
+                    if self.tests[n].facts and n in self.operated]
+
             def drive(_env):
-                return self.agent.run(t, art)
+                return self.agent.run(t, art, kept=kept)
         else:
             def drive(env):
                 return _run_step(sys.executable, t.dir / "script.py",
@@ -561,6 +644,8 @@ class _Run:
         self.results.record(**entry, status=status, failure_kind=fk,
                             phase=phase, duration_s=time.monotonic() - t0)
         record.add(t.name, s.kind, status, driven if status == "pass" else {})
+        if s.driver == "agent" and status == "pass":
+            self.operated.add(t.name)
         return status, bool(died)
 
 
@@ -588,6 +673,12 @@ def _units(tests: dict, args) -> tuple:
         refusal = _vm_refusal(tests, worlds, args, why)
         if refusal:
             raise ValueError(refusal)
+    if any(w.kind == "docker" for w in worlds):
+        no_docker = docker_unavailable()
+        if no_docker:
+            raise ValueError(f"this selection runs in Docker worlds, and "
+                             f"this host runs none ({no_docker}); see "
+                             "tests/README.md, World kinds")
     _check_stages(args)
     # note: a step the saved world already stands past is not run, and
     # leaves no record
@@ -633,11 +724,10 @@ def _vm_refusal(tests: dict, worlds: list, args, why: str) -> str | None:
         if ops:
             lines += [f"  {w.name}: {t} runs VM ops ({'; '.join(o)})"
                       for t, o in ops]
-        elif args.vm:
-            lines.append(f"  {w.name}: --vm puts every world in VMs")
         else:
-            lines.append(f"  {w.name}: --driver agent runs the lab's "
-                         "operator, inside VM node1")
+            # note: the agent driver plans VM worlds only under --vm here;
+            # without netsim it gets Docker worlds (heavy_kind)
+            lines.append(f"  {w.name}: --vm puts every world in VMs")
     if not lines:
         return None
     return (f"this host runs no VM world ({why}), and this selection needs "
@@ -691,7 +781,16 @@ def main(args) -> int:
         return 2
 
     lease = None
-    if any(env == "node" for _, env, _ in units) and args.target != "attach":
+    containers = any(env == "container" for _, env, _ in units)
+    try:
+        skill = _skill(cfg) if args.driver == "agent" and containers else None
+    except ValueError as e:
+        print(f"run: {e}", file=sys.stderr)
+        return 2
+    # why containers too: a Docker world publishes each node's apphost on a
+    # leased host port
+    if (containers or any(env == "node" for _, env, _ in units)) \
+            and args.target != "attach":
         try:
             # why one lease for the run: its worlds run one after another,
             # so they share a span no other run can take
@@ -704,6 +803,16 @@ def main(args) -> int:
         binary, ref = None, git_ref(REPO)     # the daemon is already running
     else:
         binary, ref = ensure_binary(REPO)
+    linux = image = None
+    if containers:
+        try:
+            # why before the run directory: a host whose engine fails leaves
+            # no run behind, as a refused one does
+            linux, image = _prepare_docker()
+        except (WorldError, subprocess.CalledProcessError,
+                subprocess.TimeoutExpired) as e:
+            print(f"run: the Docker world cannot open: {e}", file=sys.stderr)
+            return 2
     run_dir = fresh_run_dir(RESULTS)
     results = RunResults(run_dir, RunHeader(
         astrald_ref=ref,
@@ -720,6 +829,16 @@ def main(args) -> int:
     if args.from_stage:
         results.header["from"] = args.from_stage
     operator = _operator(cfg, results) if args.driver == "agent" else None
+    if operator is not None:
+        # why: a verdict under one operator seat says little about another
+        results.header["agent_isolation"] = ("container-user" if containers
+                                             else "vm-user")
+        results.header["agent_version"] = (docker.QWEN_CODE if containers
+                                           else "(not recorded)")
+        results.header["agent_skill"] = (
+            f"{_skill_name(skill) if skill else 'image astral-agent'}, "
+            f"astral-docs {docker.docs_ref()[:12]}" if containers
+            else "(not recorded)")
 
     if args.target == "attach":
         destroyers = [s[0].name for _, _, steps in units for s in steps
@@ -729,12 +848,18 @@ def main(args) -> int:
                   "changes this daemon — it is not a throwaway",
                   file=sys.stderr)
 
+    # why one span for the run: its worlds run one after another on one lease
+    span = PortSpan(lease.base, max_nodes) if lease else None
+
     def open_world(name: str, env: str, keep: bool):
         if args.target == "attach":
             return _attach_world()
         if env == "node":
             return _local_world(run_dir / name / "session", binary,
-                                lease.base, max_nodes, keep, configs[name])
+                                span, keep, configs[name])
+        if env == "container":
+            return _docker_world(run_dir / name, linux, image, span, keep,
+                                 configs[name], skill)
         world = _vm_world(run_dir / name, binary, ref, keep, configs[name])
         if args.from_stage:
             world.boot_from(args.from_stage, run.saved)

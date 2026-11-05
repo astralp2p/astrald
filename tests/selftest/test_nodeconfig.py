@@ -120,6 +120,20 @@ class TestNodeConfig(unittest.TestCase):
                         f"[{LEASE_BASE}, {LEASE_END}) overlaps "
                         f"[{ports['base']}, {end})")
 
+    def test_a_span_gives_node_n_its_block_and_refuses_past_its_size(self):
+        span = nodeconfig.PortSpan(20800, 2)
+        self.assertEqual(span.ports(1), ports_for(20800, 1))
+        self.assertIsNone(span.refusal(1, ["node2"]))
+        self.assertEqual(span.refusal(1, ["node2", "node3"]),
+                         "node2, node3: the world already runs 1 nodes, and "
+                         "[ports] span in tests/config.toml gives a world 2")
+
+    def test_an_overlay_writes_keys_over_a_copy(self):
+        base = {"user": {"a": 1, "b": 2}}
+        out = nodeconfig.overlay(base, {"user": {"b": 3}, "new": {"c": 4}})
+        self.assertEqual(out, {"user": {"a": 1, "b": 3}, "new": {"c": 4}})
+        self.assertEqual(base, {"user": {"a": 1, "b": 2}})
+
     def test_lease_ports_skips_a_leased_span(self):
         first = lease_ports(LEASE_BASE, span=10, spans=3)
         second = lease_ports(LEASE_BASE, span=10, spans=3)

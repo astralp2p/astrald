@@ -150,6 +150,37 @@ class NodePorts:
 PORTS_PER_NODE = 10
 
 
+@dataclass(frozen=True)
+class PortSpan:
+    """The ports one world's nodes take: node N's block from base, for at
+    most max_nodes nodes.
+
+    why one value: every world that binds or publishes host ports asks the
+    same two questions of the run's lease
+    """
+    base: int
+    max_nodes: int
+
+    def ports(self, index: int) -> NodePorts:
+        return ports_for(self.base, index)
+
+    def refusal(self, have: int, new: list) -> str | None:
+        """Why a world running `have` nodes cannot start `new`, or None."""
+        if have + len(new) <= self.max_nodes:
+            return None
+        return (f"{', '.join(new)}: the world already runs {have} nodes, and "
+                f"[ports] span in tests/config.toml gives a world "
+                f"{self.max_nodes}")
+
+
+def overlay(modules: dict, overrides: dict | None) -> dict:
+    """modules with each override's keys written over its module's."""
+    out = dict(modules)
+    for module, keys in (overrides or {}).items():
+        out[module] = {**out.get(module, {}), **keys}
+    return out
+
+
 def ports_for(base: int, index: int) -> NodePorts:
     p = base + PORTS_PER_NODE * index
     return NodePorts(apphost=p, tcp=p + 1, ether=p + 2, kcp=p + 3, mcp=p + 4,
@@ -255,9 +286,7 @@ def module_configs(ports: NodePorts, token: str,
         "auth": {"external_authorizers": [
             {"endpoint": ports.authority_url, "actions": list(AUTH_ACTIONS)}]},
     }
-    for module, keys in (overrides or {}).items():
-        cfg[module] = {**cfg.get(module, {}), **keys}
-    return cfg
+    return overlay(cfg, overrides)
 
 
 def serves_mcp(configs: dict) -> bool:

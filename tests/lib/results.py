@@ -1,5 +1,19 @@
 """results.json / events.jsonl writer — the system's one stable output (v2).
 
+v2.4 adds one record value and three header fields; every earlier field and
+value stays as it was:
+
+* `env` `container` — the test ran in a Docker world, one container per node
+  (lib/worlds/docker.py);
+* `agent_isolation` — under --driver agent, the operator's seat:
+  `vm-user` (tester in VM node1) or `container-user` (tester in node1's
+  container);
+* `agent_version` — under --driver agent, the operator CLI's version, the
+  node image's pinned Qwen Code in a Docker world, `(not recorded)` in a VM;
+* `agent_skill` — under --driver agent, the astral-agent skill a Docker
+  world gives the operator, `name version` from its SKILL.md, `(none)` when
+  there is none, `(not recorded)` in a VM.
+
 v2.3 adds four header fields; every earlier field and value stays as it was:
 
 * `host_os` — the runner's OS and release, `platform.system()` and
@@ -52,7 +66,7 @@ from lib import report
 STATUSES = {"pass", "fail", "skipped"}
 FAILURE_KINDS = {"driver", "verify", "environment"}
 KINDS = {"test", "prereq"}
-ENVS = {"node", "netsim"}
+ENVS = {"node", "netsim", "container"}
 PHASES = {"prepare", "driver", "restart", "verify", "alive"}
 
 

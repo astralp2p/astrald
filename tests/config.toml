@@ -19,8 +19,15 @@ package = "./cmd/astrald"
 
 [agent]
 # The model the lab's operator (Qwen Code on node1, lib/agent.py) drives
-# --driver agent with, set in the operator once per VM world. An empty model
+# --driver agent with, set in the operator once per VM or Docker world. An empty model
 # keeps the one the lab baked. base_url applies only with a model, and empty
 # keeps the lab's endpoint.
-model    = "deepseek-v4-flash"
+model    = "deepseek-v4.1-flash-1017"
 base_url = ""
+# A Docker world's operator gets the image's astral-agent skill: the Astral
+# docs at the commit this checkout pins in .ai/system, fetched from their
+# public repo when the image builds, and tests/docker/astral-agent.md. Name a
+# skill directory here to put its SKILL.md and references/ over the image's
+# (the docs stay the image's), e.g. when working on the skill itself. A VM
+# world's lab bakes its own (netsim/ops/configure-astral-agent).
+skill    = ""
