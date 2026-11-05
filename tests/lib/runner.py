@@ -7,8 +7,11 @@ import json
 import os
 import platform
 import re
+import secrets
+import socket
 import subprocess
 import sys
+import tempfile
 import time
 import tomllib
 import traceback
@@ -685,6 +688,27 @@ def _units(tests: dict, args) -> tuple:
              for w in worlds], {w.name: w.config for w in worlds})
 
 
+def unix_socket_trouble() -> str | None:
+    """Why this host's temp dir cannot hold an app's unix socket, or None.
+
+    why: astral-py's serve() binds $TMPDIR/apphostclient.<16 chars>, and a
+    driver that serves an app fails with nothing pointing at TMPDIR when the
+    path passes the OS's sun_path limit (103 characters on macOS)
+    why a bind and not a length: the limit differs by OS
+    """
+    path = (Path(tempfile.gettempdir())
+            / f"apphostclient.{secrets.token_hex(8)}")
+    with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as s:
+        try:
+            s.bind(str(path))
+        except OSError as e:
+            return (f"TMPDIR {tempfile.gettempdir()} is too long for the unix "
+                    f"socket a driver's app binds ({len(str(path))} "
+                    f"characters: {e}); run with TMPDIR=/tmp")
+    path.unlink()
+    return None
+
+
 def _vm_refusal(tests: dict, worlds: list, args, why: str) -> str | None:
     """Why a host that runs no VM world refuses this plan, or None.
 
@@ -745,6 +769,15 @@ def main(args) -> int:
         units, configs = _units(tests, args)
     except ValueError as e:
         print(f"run: {e}", file=sys.stderr)
+        return 2
+
+    # why only where a world is local or attached: there the drivers serve
+    # apps on this host
+    # why before the lease: a refused run leaves no build, lease or results
+    trouble = (unix_socket_trouble()
+               if any(env == "node" for _, env, _ in units) else None)
+    if trouble:
+        print(f"run: {trouble}", file=sys.stderr)
         return 2
 
     lease = None

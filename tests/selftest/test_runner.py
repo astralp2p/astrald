@@ -317,6 +317,36 @@ class TestPortsBusy(unittest.TestCase):
             self.assertFalse((Path(tmp) / "results").exists())
 
 
+class TestUnixSocketRoom(unittest.TestCase):
+    def test_a_temp_dir_past_the_socket_limit_is_named(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            deep = Path(tmp) / ("d" * 60) / ("e" * 60)
+            deep.mkdir(parents=True)
+            with mock.patch.object(runner.tempfile, "tempdir", str(deep)):
+                why = runner.unix_socket_trouble()
+            with mock.patch.object(runner.tempfile, "tempdir", tmp):
+                self.assertIsNone(runner.unix_socket_trouble())
+            self.assertEqual(list(Path(tmp).glob("apphostclient.*")), [])
+        self.assertIn(f"TMPDIR {deep} is too long", why)
+        self.assertIn("TMPDIR=/tmp", why)
+
+    def test_a_run_refused_for_its_temp_dir_builds_and_leases_nothing(self):
+        args = argparse.Namespace(selection=["smoke"], driver="script",
+                                  target="fresh", keep=False)
+        with tempfile.TemporaryDirectory() as tmp, \
+                mock.patch.object(runner, "RESULTS", Path(tmp) / "results"), \
+                mock.patch.object(runner, "unix_socket_trouble",
+                                  return_value="TMPDIR /x is too long"), \
+                mock.patch.object(runner, "ensure_binary",
+                                  side_effect=AssertionError("built")), \
+                mock.patch.object(runner, "lease_ports",
+                                  side_effect=AssertionError("leased")), \
+                contextlib.redirect_stderr(io.StringIO()) as err:
+            self.assertEqual(runner.main(args), 2)
+            self.assertFalse((Path(tmp) / "results").exists())
+        self.assertIn("run: TMPDIR /x is too long", err.getvalue())
+
+
 class TestAttachWorld(unittest.TestCase):
     def test_attach_runs_its_one_world_through_the_loop(self):
         _, doc, _, _, world = run(["smoke"], target="attach")

@@ -321,7 +321,7 @@ skip reports INCOMPLETE, never PASS; a failure outranks a skip.
 |------|-------|
 | 0 | PASS |
 | 1 | FAIL or INCOMPLETE; a preflight refusal (astral-py missing or older than `astral_py.requires`, Python < 3.11); or a harness crash, which prints a traceback and leaves no results directory |
-| 2 | refused before anything ran, with no results directory: a plan error, a host that runs no VM world, busy ports, a usage error |
+| 2 | refused before anything ran, with no results directory: a plan error, a host that runs no VM world, busy ports, a TMPDIR too long for an app's unix socket, a usage error |
 | 130 | interrupted by Ctrl-C |
 | 143 | ended by SIGTERM, with the report written |
 | 129 | ended by SIGHUP, with the report written; under `nohup` SIGHUP stays ignored |
@@ -366,7 +366,8 @@ ops.
   is 3.9, and `tests/run` refuses it.
 - Keep TMPDIR at 72 characters or fewer, or run with `TMPDIR=/tmp`: the
   drivers that serve an app bind a unix socket under it, and macOS caps
-  that path at 103 characters. Runs that may overlap on one host use the
+  that path at 103 characters. A run with a local or attached world tries
+  that bind first, and refuses with exit 2 when it fails. Runs that may overlap on one host use the
   same TMPDIR, because the port-lease locks live there.
 - Off Linux a node gets no parent-death signal, so after a SIGKILL the
   nodes keep running. Stop them from the repo root with
