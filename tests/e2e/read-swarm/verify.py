@@ -9,7 +9,7 @@ import asyncio
 
 import astral
 
-from lib.sessionio import load
+from lib.sessionio import as_bytes, load
 
 
 async def main():
@@ -20,6 +20,7 @@ async def main():
 
     async with await astral.connect(n2["endpoint"], token=n2["token"]) as c:
         held = await c.objects.read(object_id, repo="local")
+        payload = as_bytes(await c.objects.load(object_id, repo="local"))
 
     async with await astral.connect(n1["endpoint"],
                                     token=facts["user_token"]) as c:
@@ -39,9 +40,18 @@ async def main():
     assert local_rejected, "a dv read on node1, which lacks the object, was served"
     assert n2["identity"] in found, f"objects.find named {found}, not node2"
 
-    assert facts.get("swarm_read_bytes") == len(held), (
+    # why two counts: the prompt asks how many bytes the operator read, and an
+    # object has two honest answers. objects.read streams its canonical bytes
+    # (the ADC0 stamp, type tag and length prefix, then the payload); a reader
+    # that decodes them counts the payload alone. Which one an operator
+    # reports, and how large the framing is, depends on how object-store-peer
+    # stored payload.txt (blob, string8 or string16), so both are accepted.
+    # Any other count, or none, still fails: that driver did not read this
+    # object.
+    accepted = {len(held), len(payload)}
+    assert facts.get("swarm_read_bytes") in accepted, (
         f"the driver read {facts.get('swarm_read_bytes')} B where node2 holds "
-        f"{len(held)} B")
+        f"{len(held)} B canonical, {len(payload)} B of payload")
     assert facts.get("local_read_rejected") is True, (
         "the driver did not report the dv read rejected")
     assert n2["identity"] in facts.get("swarm_found", []), (
