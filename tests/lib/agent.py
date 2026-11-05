@@ -1,4 +1,5 @@
-"""The agent driver: the lab's AI operator, driven over a VM world's ssh.
+"""The agent driver: an AI operator on node1, driven over its world's ssh —
+a VM world's netsim ssh, or a Docker world's docker exec.
 
 The lab bakes one operator: Qwen Code on node1, run as `tester`, with the
 astral-agent skill (netsim/labs/two-node-plus-external/lab.story). It reaches
@@ -52,6 +53,7 @@ PLACEHOLDER = re.compile(r"\{([a-z][a-z0-9_-]*)\.([A-Za-z_][A-Za-z0-9_]*)\}")
 NODE_PLACEHOLDERS = {"identity", "alias", "lan_endpoint"}
 EXIT = "[agent] exit "           # the line the guest ends a session with
 EXIT_LINE = re.compile(r"^\[agent\] exit (\d+)$", re.M)
+UNREACHABLE = "[agent] endpoint unreachable: "   # the line a failed check prints
 
 
 class PromptError(Exception):
@@ -113,16 +115,17 @@ def footer(test) -> str:
 
 
 class Operator:
-    """The lab's operator in one VM world.
+    """The operator on node1 of one VM or Docker world.
 
     why one per world: the model is set once per world, and a world is
     what boots with the lab's own model baked in.
     """
 
     def __init__(self, ssh, model: str = "", base_url: str = ""):
-        self.ssh = ssh                # the VM world's ssh(vm, script, …)
+        self.ssh = ssh                # the world's ssh(vm, script, …)
         self.model, self.base_url = model, base_url
         self._model_set = not model
+        self._endpoint_checked = False
 
     def run(self, test, art: Path, timeout: int = TIMEOUT, kept=()) -> int:
         """Drive test's flow; the driver's exit code.
@@ -142,6 +145,7 @@ class Operator:
                 f.write(f"[agent] {e}\n")
             return 1
         self._set_model()
+        self._check_endpoint()
         self._push(test)
         rc = self._drive(test, prompt, art / "driver.log", timeout)
         if rc:
@@ -193,6 +197,40 @@ class Operator:
             raise WorldError(f"{VM}: operator model is not {self.model} after "
                              f"the rewrite (got {out!r})")
         self._model_set = True
+
+    def _check_endpoint(self) -> None:
+        """Raise WorldError when the operator's model endpoint does not
+        answer from where the operator runs; once per world.
+
+        why: an operator that cannot reach its model fails every session,
+        and that is the world's network, not the operator — a driver red
+        would blame the wrong thing
+        why any HTTP answer passes: a 401 or a 404 still means the endpoint
+        is there; only no answer at all means the operator cannot work
+        """
+        if self._endpoint_checked:
+            return
+        out = self.ssh(VM, "\n".join([
+            f"python3 - {HOME}/.qwen/.env <<'PY'",
+            "import sys, urllib.error, urllib.request",
+            "url = ''",
+            "for line in open(sys.argv[1]):",
+            "    if line.startswith('OPENAI_BASE_URL='):",
+            "        url = line.split('=', 1)[1].strip()",
+            "try:",
+            "    urllib.request.urlopen(url.rstrip('/') + '/models', timeout=10)",
+            "except urllib.error.HTTPError:",
+            "    pass",
+            "except Exception as e:",
+            "    print(f'{UNREACHABLE}{url}: {e}')",
+            "PY",
+        ]).replace("{UNREACHABLE}", UNREACHABLE), check=False)
+        found = [l for l in out.splitlines() if l.startswith(UNREACHABLE)]
+        if found:
+            raise WorldError("the operator's model endpoint does not answer "
+                             "from its seat: "
+                             + found[0][len(UNREACHABLE):])
+        self._endpoint_checked = True
 
     def _push(self, test) -> None:
         """Remove the test's own facts file, ~/.facts/<test>.json, and put
@@ -265,7 +303,7 @@ class Operator:
         return int(codes[-1]) if codes else 1
 
     def _stop(self) -> str:
-        """Kill every process the operator runs on its VM; a log line.
+        """Kill every process the operator runs on node1; a log line.
 
         why: the timeout kills only the host's ssh, and the guest's session
         has no tty to hang up, so the operator would keep acting on node1

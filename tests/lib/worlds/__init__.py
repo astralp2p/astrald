@@ -6,8 +6,9 @@ facts, the verdicts and the session view, and the view never says whether
 the endpoints behind it are processes two ports away, VMs behind a tunnel,
 or a daemon the developer already runs.
 
-There are three kinds: local (lib/worlds/local.py), vm (lib/worlds/vm.py)
-and attach (lib/worlds/attach.py). Every world reports a node under one
+There are four kinds: local (lib/worlds/local.py), docker
+(lib/worlds/docker.py), vm (lib/worlds/vm.py) and attach
+(lib/worlds/attach.py). Every world reports a node under one
 schema, `NODE_FIELDS`; a field a world cannot provide is None.
 """
 
@@ -51,7 +52,8 @@ class World:
         oracle over a node that never restarted judges nothing.
         """
         raise WorldError(f"{type(self).__name__} cannot restart a node: the "
-                         "manifest key restart needs a local world")
+                         "manifest key restart needs a local or Docker "
+                         "world")
 
     def dead(self) -> list:
         """Machines that died under a test: any verdict over them is

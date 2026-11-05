@@ -1,3 +1,4 @@
 w0 vm: bootstrap-user-software-key (agent) → adopt-node (agent)
-       → object-store (agent) → object-store-peer (agent)
-       → read-remote-peer (agent) → expel-node (agent)
+       → blueprints-two-node (agent) → object-store (agent)
+       → object-store-peer (agent) → read-remote-peer (agent)
+       → read-swarm (agent) → expel-node (agent)
