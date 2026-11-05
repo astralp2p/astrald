@@ -77,10 +77,11 @@ class TestDockerLive(unittest.TestCase):
         self.world.ssh("node1", "su - tester -c 'astral-query user.info'")
 
 
-    def test_the_operator_reaches_its_model_endpoint(self):
-        # why its own test: an endpoint the Mac's containers cannot reach
-        # (DNS, VPN) fails every agent run, and this names it before step 5
-        agent.Operator(self.world.ssh)._check_endpoint()
+    def test_the_operators_model_answers_from_its_seat(self):
+        # why its own test: a model the Mac's containers cannot reach (DNS,
+        # VPN) or that answers no completion fails every agent run, and this
+        # names it before step 5
+        agent.Operator(self.world.ssh)._check_model()
 
     def test_the_operator_drives_node1_and_its_facts_come_back(self):
         # why a stub qwen: this checks the seat — push, su, prompt, facts
@@ -103,8 +104,8 @@ class TestDockerLive(unittest.TestCase):
             t = SimpleNamespace(name="stubbed", dir=d, facts=["answer"])
             op = agent.Operator(self.world.ssh)
             # why: the seat is under test here, not the model's network;
-            # test_the_operator_reaches_its_model_endpoint checks that alone
-            op._endpoint_checked = True
+            # test_the_operators_model_answers_from_its_seat checks that alone
+            op._model_checked = True
             rc = op.run(t, art)
             log = (art / "driver.log").read_text()
             self.assertEqual(rc, 0, log)
