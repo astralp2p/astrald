@@ -299,21 +299,6 @@ func TestAcceptStatusDropsAReplayedNonce(t *testing.T) {
 	}
 }
 
-// A full nonce memory drops a verified status without caching it.
-func TestAcceptStatusDropsWhenTheNonceMemoryIsFull(t *testing.T) {
-	h := newHarness(t, nil)
-	h.mod.nonces.until = make(map[nonceKey]time.Time, maxNonces)
-	for i := range maxNonces {
-		h.mod.nonces.until[nonceKey{node: "filler", nonce: astral.Nonce(i)}] = h.clock.now().Add(statusTTL)
-	}
-
-	err := h.mod.acceptStatus(ipOf(peerIP), newPeer(t).visible(t, h.clock.now(), nil, ""))
-	if !errors.Is(err, errNonceMemoryFull) {
-		t.Fatalf("acceptStatus = %v; want %v", err, errNonceMemoryFull)
-	}
-	h.requireNothingStored(t)
-}
-
 // A Stealth status no recognizer recognizes is cached with its source IP only, without a
 // signature check and without an event.
 func TestAcceptStatusCachesAnUnrecognisedStealthStatus(t *testing.T) {
@@ -336,7 +321,7 @@ func TestAcceptStatusCachesAnUnrecognisedStealthStatus(t *testing.T) {
 		if n := h.crypto.verifies.Load(); n != 0 {
 			t.Errorf("checked %d signatures; want 0", n)
 		}
-		if n := len(h.mod.nonces.until); n != 0 {
+		if n := h.mod.nonces.size(); n != 0 {
 			t.Errorf("remembered %d nonces; want 0", n)
 		}
 		if seen := h.events.peersSeen(t); len(seen) != 0 {

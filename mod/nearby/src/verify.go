@@ -31,6 +31,7 @@ var (
 	errNodeMismatch    = errors.New("recognized node differs from the public_profile node")
 	errOwnStatus       = errors.New("status of the local node")
 	errReplay          = errors.New("status nonce was seen from the node")
+	errNodeNonces      = errors.New("node holds too many live status nonces")
 	errNonceMemoryFull = errors.New("nonce memory is full")
 	errBadProof        = errors.New("status proof does not verify")
 )
@@ -192,7 +193,24 @@ func (mod *Module) verify(r *receivedStatus, id *identified, now time.Time) erro
 		return fmt.Errorf("%w: %w", errBadProof, err)
 	}
 
-	return mod.nonces.remember(id.node, r.proof.Nonce, r.proof.Timestamp.Time(), now)
+	return mod.rememberNonce(id.node, r.proof, now)
+}
+
+// rememberNonce remembers the nonce of proof for node. A full memory first forgets the
+// nonces of every node other than node that holds no live cache entry.
+//
+// why: a flood under many keys then costs the flooder's keys their nonces, not every other node its statuses.
+// note: a replay of a forgotten node's status can cache that node again; a cached node keeps its nonces, so no replay moves it.
+func (mod *Module) rememberNonce(node *astral.Identity, proof *nearby.StatusProof, now time.Time) error {
+	err := mod.nonces.remember(node, proof, now)
+	if !errors.Is(err, errNonceMemoryFull) {
+		return err
+	}
+
+	keep := mod.cache.liveNodes(now)
+	keep[node.String()] = true
+	mod.nonces.retain(keep, now)
+	return mod.nonces.remember(node, proof, now)
 }
 
 // storeUnrecognised caches a stealth status no recognizer recognizes, with its source IP only.

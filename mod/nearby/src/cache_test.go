@@ -169,7 +169,7 @@ func TestExpiryTicker(t *testing.T) {
 	if _, ok := h.cached(peerIP); ok || h.cacheLen() != 1 {
 		t.Fatalf("cache holds %d entries, expired one present %v; want only the live one", h.cacheLen(), ok)
 	}
-	if n := len(h.mod.nonces.until); n != 1 {
+	if n := h.mod.nonces.size(); n != 1 {
 		t.Fatalf("nonce memory holds %d nonces; want the live status's 1", n)
 	}
 

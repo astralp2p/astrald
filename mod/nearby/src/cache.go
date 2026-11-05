@@ -128,6 +128,20 @@ func (c *peerCache) live(now time.Time) []*entry {
 	return list
 }
 
+// liveNodes returns the nodes of the verified entries that have not expired at now.
+func (c *peerCache) liveNodes(now time.Time) map[string]bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	nodes := make(map[string]bool, len(c.entries))
+	for _, e := range c.entries {
+		if e.NodeID != nil && !e.expired(now) {
+			nodes[e.NodeID.String()] = true
+		}
+	}
+	return nodes
+}
+
 // removeExpired removes the entries that expired at now.
 func (c *peerCache) removeExpired(now time.Time) {
 	c.mu.Lock()
