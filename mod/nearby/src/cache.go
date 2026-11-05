@@ -65,18 +65,23 @@ func (c *peerCache) roomFor(ip string) bool {
 	return ok || len(c.entries) < maxCacheEntries
 }
 
-// storeUnrecognised stores an unrecognised stealth status in place of its IP's entry.
-// It returns false when the cache is full.
-func (c *peerCache) storeUnrecognised(e *entry) bool {
+// storeUnrecognised stores an unrecognised stealth status in place of its IP's entry. It
+// fails when the IP holds a live verified entry, or when the cache is full.
+//
+// why: an unrecognised status passed no check, so it never displaces a verified peer.
+func (c *peerCache) storeUnrecognised(e *entry) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
 	key := e.IP.String()
+	if old, ok := c.entries[key]; ok && old.NodeID != nil && !old.expired(e.Seen) {
+		return errVerifiedHeld
+	}
 	if !c.roomFor(key) {
-		return false
+		return errCacheFull
 	}
 	c.put(key, e)
-	return true
+	return nil
 }
 
 // storeVerified stores the verified status of e.NodeID in place of its IP's entry and

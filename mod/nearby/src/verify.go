@@ -27,6 +27,7 @@ var (
 	errSigLength       = errors.New("status_proof signature length is out of range")
 	errStale           = errors.New("status timestamp is out of the freshness window")
 	errCacheFull       = errors.New("cache is full")
+	errVerifiedHeld    = errors.New("source IP holds a verified status")
 	errNoNodeID        = errors.New("status names no node")
 	errNodeMismatch    = errors.New("recognized node differs from the public_profile node")
 	errOwnStatus       = errors.New("status of the local node")
@@ -215,10 +216,7 @@ func (mod *Module) rememberNonce(node *astral.Identity, proof *nearby.StatusProo
 
 // storeUnrecognised caches a stealth status no recognizer recognizes, with its source IP only.
 func (mod *Module) storeUnrecognised(src ip.IP, status *nearby.StatusMessage, now time.Time) error {
-	if !mod.cache.storeUnrecognised(&entry{IP: src, Via: nearby.ViaHint, Seen: now, Status: status}) {
-		return errCacheFull
-	}
-	return nil
+	return mod.cache.storeUnrecognised(&entry{IP: src, Via: nearby.ViaHint, Seen: now, Status: status})
 }
 
 // storeVerified caches a verified status and emits PeerSeen when the node is new to the

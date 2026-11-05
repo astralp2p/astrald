@@ -180,3 +180,41 @@ func TestExpiryTicker(t *testing.T) {
 		t.Fatal("the ticker did not stop with its context")
 	}
 }
+
+// An unrecognised stealth status from the IP of a live verified peer is dropped: the peer
+// keeps its endpoints and its alias, and its next status emits no PeerSeen. Once the
+// verified entry expired, an unrecognised status takes the IP.
+func TestUnrecognisedStatusLeavesAVerifiedPeer(t *testing.T) {
+	h := newHarness(t, nil)
+	p := newPeer(t)
+	if err := h.mod.acceptStatus(ipOf(peerIP), p.visible(t, h.clock.now(), nil, "phone")); err != nil {
+		t.Fatalf("acceptStatus: %v", err)
+	}
+
+	forged := newPeer(t).stealth(t, h.clock.now(), astral.GenerateIdentity())
+	if err := h.mod.acceptStatus(ipOf(peerIP), forged); !errors.Is(err, errVerifiedHeld) {
+		t.Fatalf("unrecognised status at a verified IP: acceptStatus = %v; want %v", err, errVerifiedHeld)
+	}
+	if n := len(resolveEndpoints(t, h.mod, p.node)); n != 2 {
+		t.Fatalf("resolved %d endpoints of the verified peer; want 2", n)
+	}
+	if id, err := h.mod.ResolveIdentity(".phone"); err != nil || !id.IsEqual(p.node) {
+		t.Fatalf("ResolveIdentity(.phone) = %v, %v; want %v", id, err, p.node)
+	}
+
+	now := h.clock.advance(20 * time.Second)
+	if err := h.mod.acceptStatus(ipOf(peerIP), p.visible(t, now, nil, "phone")); err != nil {
+		t.Fatalf("acceptStatus: %v", err)
+	}
+	if seen := h.events.peersSeen(t); len(seen) != 1 {
+		t.Fatalf("emitted %d PeerSeen; want the first sight only", len(seen))
+	}
+
+	now = h.clock.advance(statusTTL + time.Second)
+	if err := h.mod.acceptStatus(ipOf(peerIP), newPeer(t).stealth(t, now, astral.GenerateIdentity())); err != nil {
+		t.Fatalf("unrecognised status after the verified entry expired: acceptStatus = %v; want nil", err)
+	}
+	if e, ok := h.cached(peerIP); !ok || e.NodeID != nil {
+		t.Fatalf("cached %+v, %v; want the unrecognised entry", e, ok)
+	}
+}

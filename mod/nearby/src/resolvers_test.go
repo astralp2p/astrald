@@ -121,8 +121,8 @@ func TestResolveIdentityByAlias(t *testing.T) {
 func TestResolveIdentityOnlyForVerifiedEntries(t *testing.T) {
 	h := newHarness(t, nil)
 	status := newPeer(t).visible(t, h.clock.now(), nil, "phone")
-	if !h.mod.cache.storeUnrecognised(&entry{IP: ipOf(peerIP), Via: nearby.ViaProfile, Seen: h.clock.now(), Status: status}) {
-		t.Fatal("cache refused the entry")
+	if err := h.mod.cache.storeUnrecognised(&entry{IP: ipOf(peerIP), Via: nearby.ViaProfile, Seen: h.clock.now(), Status: status}); err != nil {
+		t.Fatalf("cache refused the entry: %v", err)
 	}
 
 	if got, err := h.mod.ResolveIdentity(".phone"); err == nil {
