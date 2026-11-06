@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	treemod "github.com/astralp2p/astrald/mod/tree"
+	"slices"
 	"strings"
 	"sync"
 
@@ -154,6 +155,25 @@ func (mod *Module) getMount(path string) tree.Node {
 	node, _ := mod.mounts.Get(path)
 
 	return node
+}
+
+// findMountNames returns the names of the subnodes of path that lead to a mount or are mounted themselves.
+func (mod *Module) findMountNames(path string) (names []string) {
+	prefix := strings.TrimSuffix(path, "/") + "/"
+
+	for _, mountPath := range mod.mounts.Keys() {
+		rest, found := strings.CutPrefix(mountPath, prefix)
+		if !found || rest == "" {
+			continue
+		}
+
+		name, _, _ := strings.Cut(rest, "/")
+		if !slices.Contains(names, name) {
+			names = append(names, name)
+		}
+	}
+
+	return names
 }
 
 // pushNodeValue sets node's value cache and notifies all subscribers.
