@@ -40,8 +40,7 @@ type opSetGrantRequestPolicyArgs struct {
 // OpSetAppRegisterPolicy selects the app registration policy and answers Ack
 // once the choice is persisted.
 //
-// why AdminManageApps: the delegate decides which permits every new app
-// receives, which is the administration of app credentials that action covers.
+// why ConfigureNodeState: the delegate is a tree value; see maySetPolicies.
 func (mod *Module) OpSetAppRegisterPolicy(ctx *astral.Context, q *routing.IncomingQuery, args opSetPolicyArgs) error {
 	ch := channel.New(q.AcceptRaw(), channel.WithFormats(args.In, args.Out))
 	defer ch.Close()
@@ -72,9 +71,7 @@ func (mod *Module) OpSetAppRegisterPolicy(ctx *astral.Context, q *routing.Incomi
 // answers Ack once the choice is persisted. A mode clears the delegate, and a
 // delegate clears the mode. A mode given with a timeout is refused.
 //
-// why AdminManageApps: the policy decides which permits apps may add to
-// themselves, which is the administration of app credentials that action
-// covers.
+// why ConfigureNodeState: the policy is a tree value; see maySetPolicies.
 func (mod *Module) OpSetGrantRequestPolicy(ctx *astral.Context, q *routing.IncomingQuery, args opSetGrantRequestPolicyArgs) error {
 	ch := channel.New(q.AcceptRaw(), channel.WithFormats(args.In, args.Out))
 	defer ch.Close()
@@ -149,13 +146,10 @@ func (mod *Module) newDelegate(name, op string, timeout astral.Duration) (*polic
 }
 
 // maySetPolicies reports whether caller may select a policy: a holder of
-// AdminManageApps, or the manager.
+// ConfigureNodeState. The manager holds it; see mod/sys.
 //
-// why the manager: the manager answers the policies it was appointed with, and
-// need not hold AdminManageApps; see OpRegisterManager.
+// why ConfigureNodeState: a policy is a tree value, and that action covers
+// changes to the tree.
 func (mod *Module) maySetPolicies(ctx *astral.Context, caller *astral.Identity) bool {
-	if manager := mod.Manager(); !manager.IsZero() && caller.IsEqual(manager) {
-		return true
-	}
-	return mod.Auth.Authorize(ctx, &auth.AdminManageAppsAction{Action: auth.NewAction(caller)})
+	return mod.Auth.Authorize(ctx, &auth.ConfigureNodeStateAction{Action: auth.NewAction(caller)})
 }

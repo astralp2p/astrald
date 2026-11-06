@@ -130,7 +130,7 @@ func TestGateConfinesTokenLessSessions(t *testing.T) {
 		op        string
 		admitted  bool
 	}{
-		{"ipc, fresh, listed op", "ipc", "", user.StateFresh, "apphost.register_manager", true},
+		{"ipc, fresh, listed op", "ipc", "", user.StateFresh, "sys.register_manager", true},
 		{"ipc, fresh, tokenless op of another state", "ipc", "", user.StateFresh, "apphost.register", false},
 		{"ipc, fresh, unlisted op", "ipc", "", user.StateFresh, "apphost.create_token", false},
 		{"ipc, unclaimed, listed op", "ipc", "", user.StateUnclaimed, "apphost.register", true},
@@ -139,7 +139,7 @@ func TestGateConfinesTokenLessSessions(t *testing.T) {
 		{"ipc, claimed, unlisted op", "ipc", "", user.StateClaimed, "messaging.create_mailbox", false},
 
 		{"ws, no origin, fresh, listed op", "ws", "", user.StateFresh, "user.info", true},
-		{"ws, any origin, fresh, listed op", "ws", anyOrigin, user.StateFresh, "apphost.register_manager", true},
+		{"ws, any origin, fresh, listed op", "ws", anyOrigin, user.StateFresh, "sys.register_manager", true},
 		{"ws, any origin, fresh, unlisted op", "ws", anyOrigin, user.StateFresh, "apphost.create_token", false},
 		{"ws, any origin, claimed, listed op", "ws", anyOrigin, user.StateClaimed, "apphost.register", true},
 		{"ws, any origin, claimed, unlisted op", "ws", anyOrigin, user.StateClaimed, "apphost.create_token", false},

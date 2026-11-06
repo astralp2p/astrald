@@ -11,39 +11,6 @@ import (
 // gateAny is the gate entry that matches every op.
 const gateAny = "*"
 
-// NodeState returns the node's state: claimed while a user contract is
-// active; else unclaimed when a manager is appointed or the node was owned
-// before; else fresh. It waits for the user module to finish initializing, so
-// a query during startup on a claimed node is not wrongly restricted.
-//
-// why ownership history closes fresh: an expired or expelled claim must not
-// reopen the appointment of a manager to the first local app.
-// why ctx cancellation reads as fresh: fresh admits the fewest ops.
-func (mod *Module) NodeState(ctx *astral.Context) string {
-	if mod.User != nil {
-		select {
-		case <-mod.User.Ready():
-		case <-ctx.Done():
-			return user.StateFresh
-		}
-		if !mod.User.Identity().IsZero() {
-			return user.StateClaimed
-		}
-		if mod.User.WasOwned() {
-			return user.StateUnclaimed
-		}
-	}
-	if !mod.Manager().IsZero() {
-		return user.StateUnclaimed
-	}
-	return user.StateFresh
-}
-
-// Manager returns the App identity apphost.register_manager appointed, or nil.
-func (mod *Module) Manager() *astral.Identity {
-	return mod.appointment.Manager.Get()
-}
-
 // gateAdmits reports whether the gate lets a session send q; tokenless names
 // a session without a token. See Gate.
 //
@@ -60,7 +27,7 @@ func (mod *Module) gateAdmits(ctx *astral.Context, q *astral.Query, tokenless bo
 	if !toNode {
 		return true
 	}
-	return gateLists(mod.config.Gate.States.forState(mod.NodeState(ctx)), op)
+	return gateLists(mod.config.Gate.States.forState(mod.Sys.NodeState(ctx)), op)
 }
 
 // forState returns the op list of state; an unknown state lists nothing.

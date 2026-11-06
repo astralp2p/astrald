@@ -151,8 +151,8 @@ container, as the [README](../README.md#setting-up-the-node) shows, with
 `docker exec -i`:
 
 ```shell
-echo '{"Type":"mod.apphost.register_manager_request","Object":{"Name":"cli-setup","GrantPermits":[],"ContractPermits":[],"Policies":[]}}' \
-  | docker exec -i astrald astral-query apphost.register_manager -in json -out json
+echo '{"Type":"mod.sys.register_manager_request","Object":{"Name":"cli-setup","GrantPermits":[],"ContractPermits":[],"Policies":[]}}' \
+  | docker exec -i astrald astral-query sys.register_manager -in json -out json
 ```
 
 Then claim with the manager's token, passed as `docker exec -e

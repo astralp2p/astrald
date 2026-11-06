@@ -8,7 +8,7 @@ as the manager for an op the unclaimed gate list omits, serves an op as the
 manager on the unclaimed node and queries it, registers an ordinary app that
 asks to claim, claims as the manager, and asks for a third appointment.
 
-why jsonops: astral-py has no binding for apphost.register_manager or
+why jsonops: astral-py has no binding for sys.register_manager or
 user.bootstrap, and the ops' JSON form is the node's own.
 """
 import asyncio
@@ -20,7 +20,7 @@ from astral.errors import AstralError
 from lib import jsonops
 from lib.sessionio import load, write_facts
 
-REQUEST = {"Type": "mod.apphost.register_manager_request", "Object": {"Name": "manager"}}
+REQUEST = {"Type": "mod.sys.register_manager_request", "Object": {"Name": "manager"}}
 SERVED_OP = "test.manager_setup.whoami"
 
 
@@ -39,7 +39,7 @@ async def info(c) -> dict:
 
 
 async def appoint(c) -> dict:
-    return await attempt(jsonops.value(c, "apphost.register_manager?in=json&out=json", REQUEST))
+    return await attempt(jsonops.value(c, "sys.register_manager?in=json&out=json", REQUEST))
 
 
 async def serve_unclaimed(m, n, manager_id) -> dict:
@@ -70,7 +70,7 @@ async def main():
     n = load()["nodes"]["managed"]
     facts = {}
 
-    # why the node token: the E2E tokenless list omits apphost.register_manager.
+    # why the node token: the E2E tokenless list omits sys.register_manager.
     async with await astral.connect(n["endpoint"], token=n["token"]) as c:
         facts["fresh"] = await info(c)
         first = await appoint(c)
@@ -80,7 +80,7 @@ async def main():
         app = await jsonops.value(c, "apphost.register?in=json&out=json",
                                   {"Type": "mod.apphost.register_request", "Object": {}})
     if first["refused"]:
-        sys.exit(f"driver: the first apphost.register_manager answered {first['detail']}")
+        sys.exit(f"driver: the first sys.register_manager answered {first['detail']}")
     manager = first.pop("answer")
     facts["manager"] = manager["Identity"]
 

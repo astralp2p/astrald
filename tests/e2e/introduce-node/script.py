@@ -12,7 +12,7 @@ to `member`. The driver also asks for the op without a token, from
 link both ways: from `replacement` of `member`, and from `member` of
 `replacement`.
 
-why jsonops: astral-py has no binding for apphost.register_manager,
+why jsonops: astral-py has no binding for sys.register_manager,
 user.bootstrap or user.introduce, and the ops' JSON form is the node's own.
 """
 import asyncio
@@ -24,7 +24,7 @@ from astral.errors import AstralError
 from lib import jsonops
 from lib.sessionio import load, write_facts
 
-MANAGER = {"Type": "mod.apphost.register_manager_request", "Object": {"Name": "manager"}}
+MANAGER = {"Type": "mod.sys.register_manager_request", "Object": {"Name": "manager"}}
 # why a deadline: a query that is never routed hangs rather than answering, and
 # the client's default is 60 s.
 DEADLINE = 30
@@ -61,7 +61,7 @@ async def claim_replacement(replacement: dict, member: dict, words: str) -> dict
     # its unclaimed list omits nodes.add_endpoint.
     async with await connect(replacement) as c:
         await c.nodes.add_endpoint(member["identity"], member["lan_endpoint"], experimental=True)
-        manager = await jsonops.value(c, "apphost.register_manager?in=json&out=json", MANAGER)
+        manager = await jsonops.value(c, "sys.register_manager?in=json&out=json", MANAGER)
     async with await connect(replacement, manager["Token"]) as m:
         return await jsonops.value(m, "user.bootstrap?in=json&out=json",
                                    {"Type": "string16", "Object": words})

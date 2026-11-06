@@ -42,13 +42,13 @@ func (mod *Module) OpSetContractAcceptPolicy(ctx *astral.Context, q *routing.Inc
 	return mod.setSwarmPolicy(ctx, q, args, &mod.policy.ContractAccept)
 }
 
-// setSwarmPolicy admits a caller holding AdminManageApps or the manager, then
-// writes the delegate args name into v, or clears v when args name none.
+// setSwarmPolicy admits a caller holding ConfigureNodeState, then writes the
+// delegate args name into v, or clears v when args name none.
 //
-// why AdminManageApps and not AdminSwarm: AdminSwarm is held by the user of the
-// active contract, and a node with none — the node an invite or contract
+// why ConfigureNodeState and not AdminSwarm: AdminSwarm is held by the user of
+// the active contract, and a node with none — the node an invite or contract
 // accept policy matters for — would have no one able to set it.
-// AdminManageApps is what every policy setter requires.
+// ConfigureNodeState is what every policy setter requires.
 func (mod *Module) setSwarmPolicy(
 	ctx *astral.Context,
 	q *routing.IncomingQuery,
@@ -99,13 +99,10 @@ func (mod *Module) newDelegate(name, op string, timeout astral.Duration) (*polic
 }
 
 // maySetPolicies reports whether caller may select a policy: a holder of
-// AdminManageApps, or the manager.
+// ConfigureNodeState. The manager holds it; see mod/sys.
 //
-// why the manager: the manager answers the policies it was appointed with, and
-// need not hold AdminManageApps; see apphost.register_manager.
+// why ConfigureNodeState: a policy is a tree value, and that action covers
+// changes to the tree.
 func (mod *Module) maySetPolicies(ctx *astral.Context, caller *astral.Identity) bool {
-	if manager := mod.Apphost.Manager(); !manager.IsZero() && caller.IsEqual(manager) {
-		return true
-	}
-	return mod.Auth.Authorize(ctx, &auth.AdminManageAppsAction{Action: auth.NewAction(caller)})
+	return mod.Auth.Authorize(ctx, &auth.ConfigureNodeStateAction{Action: auth.NewAction(caller)})
 }

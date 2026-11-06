@@ -19,6 +19,7 @@ import (
 	objectsmod "github.com/astralp2p/astrald/mod/objects"
 	"github.com/astralp2p/astrald/mod/scheduler"
 	shellmod "github.com/astralp2p/astrald/mod/shell"
+	sysmod "github.com/astralp2p/astrald/mod/sys"
 	"github.com/astralp2p/astrald/mod/tree"
 )
 
@@ -31,6 +32,7 @@ type Deps struct {
 	Nodes     nodesmod.Module
 	Scheduler scheduler.Module
 	Shell     shellmod.Module
+	Sys       sysmod.Module
 	Nearby    nearby.Module
 	Tree      tree.Module
 }

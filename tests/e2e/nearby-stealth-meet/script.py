@@ -26,7 +26,7 @@ from lib import jsonops, nearby
 from lib.nodelog import LogTap
 from lib.sessionio import load, write_facts
 
-MANAGER = {"Type": "mod.apphost.register_manager_request", "Object": {"Name": "manager"}}
+MANAGER = {"Type": "mod.sys.register_manager_request", "Object": {"Name": "manager"}}
 # why: after the claim the reflector recognises node1 and node2 at their next
 # status, at most 95 s away, then links, reads their contract and introduces
 # itself; the sync and the sibling links follow
@@ -54,7 +54,7 @@ async def listing(node: dict) -> list:
 async def claim(node: dict, words: str) -> dict:
     """Appoint a manager on node and claim it with words as the manager."""
     async with await astral.connect(node["endpoint"], token=node["token"]) as c:
-        manager = await jsonops.value(c, "apphost.register_manager?in=json&out=json", MANAGER)
+        manager = await jsonops.value(c, "sys.register_manager?in=json&out=json", MANAGER)
     async with await astral.connect(node["endpoint"], token=manager["Token"]) as m:
         return await jsonops.value(m, "user.bootstrap?in=json&out=json",
                                    {"Type": "string16", "Object": words})

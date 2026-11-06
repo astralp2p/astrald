@@ -171,7 +171,7 @@ func newBootstrapFixture() *bootstrapFixture {
 		apphost: &tokenIssuer{},
 	}
 	f.mod = &Module{
-		Deps:         Deps{Apphost: f.apphost, Auth: f.auth, Objects: f.objects, Crypto: f.keys},
+		Deps:         Deps{Apphost: f.apphost, Sys: f.apphost, Auth: f.auth, Objects: f.objects, Crypto: f.keys},
 		OptionalDeps: OptionalDeps{Bip137sig: &bip137src.Module{}},
 		node:         &identityNode{id: f.nodeID},
 	}

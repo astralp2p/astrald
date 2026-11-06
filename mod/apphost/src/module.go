@@ -14,6 +14,7 @@ import (
 	"github.com/astralp2p/astrald/mod/crypto"
 	"github.com/astralp2p/astrald/mod/dir"
 	"github.com/astralp2p/astrald/mod/objects"
+	"github.com/astralp2p/astrald/mod/sys"
 	"github.com/astralp2p/astrald/mod/tree"
 	"github.com/astralp2p/astrald/mod/user"
 )
@@ -25,6 +26,7 @@ type Deps struct {
 	Crypto  crypto.Module
 	Dir     dir.Module
 	Objects objects.Module
+	Sys     sys.Module
 	Tree    tree.Module
 }
 
@@ -56,13 +58,6 @@ type Module struct {
 	// mode selects refuse-all for grant requests. GetRegisterAppPolicy
 	// and GetGrantRequestPolicy read it on every decision.
 	policy policyConfig
-
-	// appointment persists the manager apphost.register_manager appointed.
-	appointment appointmentConfig
-
-	// mu makes the fresh check and the appointment one transition; see
-	// OpRegisterManager.
-	mu sync.Mutex
 }
 
 func (mod *Module) Run(ctx *astral.Context) error {

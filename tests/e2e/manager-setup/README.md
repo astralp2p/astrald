@@ -1,6 +1,6 @@
 # manager-setup — a fresh node appoints one manager, and the manager claims it
 
-`apphost.register_manager` appoints the manager of a fresh node. The manager
+`sys.register_manager` appoints the manager of a fresh node. The manager
 claims the node with its App token, and the claim keeps the appointment. An
 app registered later is no manager.
 
@@ -32,5 +32,5 @@ apphost gate reads the state the two modules produce.
 The harness writes the E2E overrides (`tests/lib/nodeconfig.py`): `fresh`
 admits every op and the policies accept. The `unclaimed` list keeps its
 default, so the gate check on the manager's token query is the distribution's.
-The E2E `tokenless` list omits `apphost.register_manager`, so the appointment
+The E2E `tokenless` list omits `sys.register_manager`, so the appointment
 runs with the node's token.

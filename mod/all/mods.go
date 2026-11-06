@@ -30,6 +30,7 @@ import (
 	_ "github.com/astralp2p/astrald/mod/secp256k1/src"
 	_ "github.com/astralp2p/astrald/mod/services/src"
 	_ "github.com/astralp2p/astrald/mod/shell/src"
+	_ "github.com/astralp2p/astrald/mod/sys/src"
 	_ "github.com/astralp2p/astrald/mod/tcp/src"
 	_ "github.com/astralp2p/astrald/mod/tor/src"
 	_ "github.com/astralp2p/astrald/mod/tree/src"

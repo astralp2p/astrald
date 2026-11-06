@@ -24,13 +24,6 @@ func (mod *Module) LoadDependencies(ctx *astral.Context) (err error) {
 		return
 	}
 
-	// why NoLocal: an appointment that is not saved must fail, not survive in
-	// memory until a restart reopens fresh.
-	mod.appointment.Manager.NoLocal = true
-	if err = tree.BindPath(ctx, &mod.appointment, mod.Tree.Root(), appointmentPath, true); err != nil {
-		return
-	}
-
 	// optional — apphost can run without user module
 	core.Inject(mod.node, &mod.OptionalDeps)
 
