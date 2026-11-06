@@ -10,7 +10,7 @@ import tomllib
 from dataclasses import dataclass, field
 from pathlib import Path
 
-KEYS = {"nodes", "timeout", "restart", "after", "destroys", "ops",
+KEYS = {"nodes", "timeout", "restart", "stop", "after", "destroys", "ops",
         "local_only", "facts", "config"}
 MODULE = re.compile(r"[a-z][a-z0-9_]*")
 
@@ -35,6 +35,8 @@ class Test:
     nodes: list
     timeout: int
     restart: list
+    # nodes the world stops after the driver; no later test reaches them
+    stop: list = field(default_factory=list)
     # the test whose world this one continues (None: a fresh world), whether
     # only its own descendants may follow it there, the VM operations before
     # its driver, why it never enters a VM world, the facts its driver
@@ -92,6 +94,15 @@ def _parse(mf: Path) -> Test:
     if stray:
         raise ValueError(f"{name}: restart names {stray}, which the roster "
                          f"{nodes} does not")
+    stop = _strings(name, raw, "stop")
+    stray = [n for n in stop if n not in nodes]
+    if stray:
+        raise ValueError(f"{name}: stop names {stray}, which the roster "
+                         f"{nodes} does not")
+    both = sorted(set(stop) & set(restart))
+    if both:
+        raise ValueError(f"{name}: {both} cannot be both restarted and "
+                         "stopped")
     after = raw.get("after")
     if after is not None and not (isinstance(after, str) and after):
         raise ValueError(f"{name}: after must name a test")
@@ -111,10 +122,18 @@ def _parse(mf: Path) -> Test:
                 # world owns the process, and a node it did not start reads
                 # to the runner as a dead one.
                 restart=restart,
+                # why after the driver: the driver leaves the state the
+                # stopped node took part in, and the tests after this one
+                # judge a world where that node is gone. A driver cannot
+                # stop a node itself, for the reason it cannot restart one.
+                stop=stop,
                 after=after,
                 # why ops imply it: an op reshapes the VM world in place
                 # (enter-nat, leave-lan), and nothing puts it back
-                destroys=bool(raw.get("destroys", False)) or bool(ops),
+                # why stop implies it: a test sharing the world that names
+                # the stopped node would find it gone
+                destroys=(bool(raw.get("destroys", False)) or bool(ops)
+                          or bool(stop)),
                 ops=ops,
                 local_only=local_only,
                 facts=facts,

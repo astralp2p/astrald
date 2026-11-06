@@ -30,6 +30,18 @@ class WorldError(Exception):
     environment."""
 
 
+def refuse_stopped(who: str, names: list, stopped: set) -> None:
+    """WorldError when `names` holds a node the world stopped.
+
+    why a refusal and not a fresh node: a name already used in a world is
+    the same node, and booting another under it would hide the stop.
+    """
+    hit = sorted(set(names) & stopped)
+    if hit:
+        raise WorldError(f"{who}: {', '.join(hit)} was stopped earlier in "
+                         "this world")
+
+
 class World:
     """The interface the runner drives every world through."""
 
@@ -42,7 +54,8 @@ class World:
         raise NotImplementedError
 
     def nodes(self) -> dict:
-        """name -> node entry (`node_entry`) for every node up so far."""
+        """name -> node entry (`node_entry`) for every node up so far; a
+        stopped node is not up."""
         raise NotImplementedError
 
     def ssh(self, vm: str, script: str, check=True, timeout=None) -> str:
@@ -68,6 +81,16 @@ class World:
         raise WorldError(f"{type(self).__name__} cannot restart a node: the "
                          "manifest key restart needs a local or Docker "
                          "world")
+
+    def stop(self, names: list) -> None:
+        """Stop the named nodes for good: no later test in the world reaches
+        them, and a stopped node is not a dead one.
+
+        A world that cannot stop a node refuses rather than skipping: a test
+        after it would judge a node that never stopped.
+        """
+        raise WorldError(f"{type(self).__name__} cannot stop a node: the "
+                         "manifest key stop needs a local or Docker world")
 
     def dead(self) -> list:
         """Machines that died under a test: any verdict over them is

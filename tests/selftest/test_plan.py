@@ -17,7 +17,7 @@ from unittest import mock
 from lib import runner
 from lib.manifest import load_all
 from lib.nodeconfig import PORTS_PER_NODE
-from lib.plan import PlanError, chain, off_lab, plan, render
+from lib.plan import PlanError, chain, plan, render, vm_refusal
 from lib.suites import load
 
 TESTS = Path(__file__).resolve().parent.parent
@@ -30,11 +30,12 @@ SUITES = {"main": "script", "tor": "script", "nat": "script",
 
 
 def fake(after=None, destroys=False, ops=(), local_only=None,
-         nodes=("node1",), prompt=False, config=None):
-    return SimpleNamespace(after=after, destroys=destroys or bool(ops),
+         nodes=("node1",), prompt=False, config=None, stop=()):
+    return SimpleNamespace(after=after,
+                           destroys=destroys or bool(ops) or bool(stop),
                            ops=list(ops), local_only=local_only,
                            nodes=list(nodes), prompt=prompt,
-                           config=config or {})
+                           config=config or {}, stop=list(stop))
 
 
 def mcp(bind: str) -> dict:
@@ -117,12 +118,13 @@ class TestShippedPlans(Invariants, unittest.TestCase):
             with self.subTest(selection=selection):
                 lineage = {n for s in selection for n in chain(self.tests, s)}
                 # why either refusal: a selection may hold a local_only test
-                # and one whose roster leaves the lab, and the first checked
-                # names its own reason
-                if any(self.tests[n].local_only or off_lab(self.tests[n])
+                # and one a VM world cannot run, and the first checked names
+                # its own reason
+                if any(self.tests[n].local_only or vm_refusal(self.tests[n])
                        for n in lineage):
                     with self.assertRaisesRegex(
-                            PlanError, "local only|the VM lab does not run"):
+                            PlanError, "local only|the VM lab does not run"
+                            "|a VM world cannot"):
                         plan(self.tests, selection, order, vm=True)
                     continue
                 worlds = plan(self.tests, selection, order, vm=True)
@@ -145,6 +147,19 @@ class TestShippedPlans(Invariants, unittest.TestCase):
         # a lab roster still enters VMs
         self.assertEqual({w.kind for w in plan(self.tests, ["adopt-node"],
                                                vm=True)}, {"vm"})
+
+    def test_a_stop_runs_local_or_in_docker_never_in_a_vm(self):
+        # why: a local and a Docker world stop a node, and a VM world has no
+        # stop; the roster here is the lab's, so the stop alone decides
+        tests = {"stopper": fake(nodes=("node1", "node2"), stop=["node1"])}
+        self.assertEqual({w.kind for w in plan(tests, ["stopper"])},
+                         {"local"})
+        self.assertEqual({w.kind for w in plan(tests, ["stopper"],
+                                               docker=True)}, {"docker"})
+        with self.assertRaisesRegex(PlanError, "^stopper stops a node, which "
+                                    "a VM world cannot, and this run puts "
+                                    "every world in VMs$"):
+            plan(tests, ["stopper"], vm=True)
 
     def test_a_prereq_stranded_by_a_fork_is_dropped(self):
         # why: mcp-origin fixes w0 local, tor-link forks a VM world, and the

@@ -13,4 +13,4 @@ w2 docker: bootstrap-user-software-key* → adopt-node* → swarm-roster-sync
            → expel-propagation
 w3 docker: bootstrap-user-software-key* → hold-isolation
 w4 docker: import-user-software-key
-w5 docker: introduce-node
+w5 docker: introduce-node-setup → introduce-node

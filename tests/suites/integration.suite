@@ -32,4 +32,5 @@ hold-isolation
 swarm-roster-sync
 expel-propagation
 import-user-software-key
+introduce-node-setup
 introduce-node

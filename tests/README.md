@@ -40,6 +40,7 @@ after      = "adopt-node"           # the test whose world this one continues; a
 destroys   = true                   # only this test's descendants may follow it in its world
 local_only = "reads a node root"    # it needs the host, so it never enters a VM world
 restart    = ["node1"]              # nodes restarted between driver and oracle (local worlds only)
+stop       = ["node1"]              # nodes stopped for good between driver and oracle (local or Docker worlds); implies destroys
 facts      = ["object_id"]          # the facts its driver writes
 timeout    = 180                    # the driver's and the oracle's budget, in seconds (default 120)
 # ops      = ["enable-tor node1"]   # VM operations (netsim/ops/) run before the driver; imply
@@ -68,6 +69,14 @@ external_registration_sweep_interval = "1s"
   A roster is not a reason: a test whose `nodes` name a machine the VM lab
   does not run (`plan.LAB_NODES`: node1, node2, reflector) never enters a
   VM world, and runs in a local or Docker world as any other test does.
+- **`stop`** stops the named nodes after the driver, in a local or Docker
+  world, and leaves them stopped. A stopped node is not dead: the liveness
+  check skips it, and the session view of the test's oracle and of every
+  later test in the world omits it. A later test whose roster names a
+  stopped node, or a restart of one, is FAIL/environment at `prepare`. A
+  test with `stop` never enters a VM world, like a test whose roster
+  leaves the VM lab.
+  `introduce-node-setup` stops the node that generated the User's words.
 - **`facts`** is a contract. An oracle may read only facts declared on its
   `after` chain (`selftest/test_shipped.py` checks), and the agent driver
   asks the operator for exactly these.
@@ -312,6 +321,7 @@ to a claimed node, or give a fresh one the harness's gate
 | `prepare` | bringing the roster up and running its `ops` |
 | `driver` | `script.py`, or the operator |
 | `restart` | the restart `restart` names |
+| `stop` | the stop `stop` names (v2.6) |
 | `verify` | `verify.py` |
 | `alive` | a node died under the test |
 

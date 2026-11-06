@@ -1,0 +1,6 @@
+nodes      = ["first", "member", "sibling", "banned"]
+timeout    = 180
+# why stop: introduce-node judges a replacement for a node that is gone, and
+# only the world can stop a node. A stop implies destroys.
+stop       = ["first"]
+facts      = ["introduce_swarm"]

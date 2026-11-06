@@ -1,25 +1,21 @@
 #!/usr/bin/env python3
 """Driver: bring a node claimed with the User's words into the swarm with user.introduce.
 
-The driver acts and judges nothing. It claims `first` with generated words,
-joins `member`, `sibling` and `banned` to it, and expels `banned` as the User.
-It appoints a manager on the fresh `replacement`, claims it with the same
-words as the manager, and records what `member`, `sibling` and `replacement`
-list before the introduction. As the User, `replacement` then introduces
-itself to `member`. The driver also asks for the op without a token, from
+The driver acts and judges nothing. It continues introduce-node-setup's
+world, where `first`, the node that generated the words, is stopped. It
+appoints a manager on the fresh `replacement`, claims it with the same words
+as the manager, and records what `member`, `sibling` and `replacement` list
+before the introduction. As the User, `replacement` then introduces itself
+to `member`. The driver also asks for the op without a token, from
 `sibling`'s node token, naming `replacement` itself, and once more with
-`replacement`'s node token.
-
-why `first` stays up: a driver cannot stop a node, and a node that dies under
-a test fails it (lib/runner.py). `replacement` learns no member but `member`
-from the driver, so the members reach it through the introduction alone.
+`replacement`'s node token. Last, it asks user.info as the User across the
+link both ways: from `replacement` of `member`, and from `member` of
+`replacement`.
 
 why jsonops: astral-py has no binding for apphost.register_manager,
-user.bootstrap, user.join or user.introduce, and the ops' JSON form is the
-node's own.
+user.bootstrap or user.introduce, and the ops' JSON form is the node's own.
 """
 import asyncio
-import sys
 import time
 
 import astral
@@ -32,20 +28,10 @@ MANAGER = {"Type": "mod.apphost.register_manager_request", "Object": {"Name": "m
 # why a deadline: a query that is never routed hangs rather than answering, and
 # the client's default is 60 s.
 DEADLINE = 30
-# why a window: joins, bans and sibling links reach the other members
-# asynchronously.
+# why a window: the sync that makes replacement and member siblings runs after
+# the introduction answers, and RelayFor refuses the User's query until then.
 CONVERGE = 60.0
 POLL = 1.0
-
-
-async def converge(read, done):
-    """Read until done holds or the window closes; answer the last read."""
-    deadline = time.monotonic() + CONVERGE
-    value = await read()
-    while not done(value) and time.monotonic() < deadline:
-        await asyncio.sleep(POLL)
-        value = await read()
-    return value
 
 
 def connect(node: dict, token: str | None = "node"):
@@ -58,19 +44,6 @@ async def members(node: dict) -> set:
         return {str(m.identity) for m in await c.user.swarm_status() if m.identity is not None}
 
 
-async def expelled(node: dict) -> set:
-    async with await connect(node) as c:
-        return {str(e.expulsion.subject) for e in await c.user.list_expelled()
-                if e.expulsion is not None and e.expulsion.subject is not None}
-
-
-async def link(x: dict, y: dict) -> None:
-    """Each node learns the other's endpoint, with its own token."""
-    for a, b in ((x, y), (y, x)):
-        async with await connect(a) as c:
-            await c.nodes.add_endpoint(b["identity"], b["lan_endpoint"], experimental=True)
-
-
 async def introduce(c, node: str) -> dict:
     """What user.introduce naming node answered, or how the query was refused."""
     try:
@@ -80,29 +53,6 @@ async def introduce(c, node: str) -> dict:
     if docs and docs[0]["Type"] == "error_message":
         return {"refused": True, "detail": docs[0]["Object"]}
     return {"refused": False, "types": [d["Type"] for d in docs]}
-
-
-async def build_swarm(first: dict, joiners: list) -> dict:
-    """Claim first with generated words, join every joiner to it, and answer the claim."""
-    async with await connect(first) as c:
-        claim = await jsonops.value(c, "user.bootstrap?generate=true&out=json")
-    for j in joiners:
-        await link(first, j)
-        async with await connect(j) as c:
-            await jsonops.value(c, f"user.join?node={first['identity']}&out=json", timeout=DEADLINE)
-    want = {first["identity"]} | {j["identity"] for j in joiners}
-    if not want <= await converge(lambda: members(first), lambda m: want <= m):
-        sys.exit("driver: the joined nodes never reached the first node's swarm")
-    return claim
-
-
-async def expel(first: dict, user_token: str, banned: dict, holders: list) -> None:
-    """Expel banned as the User and wait until every holder holds the ban."""
-    async with await connect(first, user_token) as c:
-        await c.user.expel(banned["identity"])
-    for h in holders:
-        if banned["identity"] not in await converge(lambda: expelled(h), lambda e: banned["identity"] in e):
-            sys.exit(f"driver: the ban of banned never reached {h['identity']}")
 
 
 async def claim_replacement(replacement: dict, member: dict, words: str) -> dict:
@@ -117,17 +67,43 @@ async def claim_replacement(replacement: dict, member: dict, words: str) -> dict
                                    {"Type": "string16", "Object": words})
 
 
+async def info_as_user(c, target: str) -> dict:
+    """user.info of target as the session's User, retried while the sync
+    that makes the two nodes siblings runs; the last answer or refusal."""
+    deadline = time.monotonic() + CONVERGE
+    while True:
+        try:
+            i = await c.user.info(target=target, timeout=DEADLINE)
+            sc = i.contract.contract if i.contract is not None else None
+            return {"answered": True, "state": i.state,
+                    "subject": str(sc.subject) if sc is not None else "",
+                    "issuer": str(sc.issuer) if sc is not None else ""}
+        except AstralError as e:
+            last = {"answered": False, "detail": f"{type(e).__name__}: {e}"}
+        if time.monotonic() >= deadline:
+            return last
+        await asyncio.sleep(POLL)
+
+
+async def cross_info(member: dict, replacement: dict, user: str, user_token: str) -> dict:
+    """user.info as the User across the link, from each node of the other."""
+    # why minted: member joined, so the driver holds no User token for it; a
+    # joined member's node token mints one (apphost.create_token).
+    async with await connect(member) as c:
+        member_user = (await c.apphost.create_token(user)).token
+    async with await connect(replacement, user_token) as u:
+        of_member = await info_as_user(u, member["identity"])
+    async with await connect(member, member_user) as u:
+        of_replacement = await info_as_user(u, replacement["identity"])
+    return {"replacement_of_member": of_member, "member_of_replacement": of_replacement}
+
+
 async def main():
-    n = load()["nodes"]
-    first, member, sibling, banned, replacement = (
-        n[k] for k in ("first", "member", "sibling", "banned", "replacement"))
+    doc = load()
+    n, swarm = doc["nodes"], doc["facts"]["introduce_swarm"]
+    member, sibling, replacement = (n[k] for k in ("member", "sibling", "replacement"))
 
-    claim = await build_swarm(first, [member, sibling, banned])
-    await expel(first, claim["Token"], banned, [member, sibling])
-    if sibling["identity"] not in await converge(lambda: members(member), lambda m: sibling["identity"] in m):
-        sys.exit("driver: member never listed sibling")
-
-    replaced = await claim_replacement(replacement, member, claim["Mnemonic"])
+    replaced = await claim_replacement(replacement, member, swarm["words"])
     before = {k: sorted(await members(n[k])) for k in ("member", "sibling", "replacement")}
 
     probes = {}
@@ -143,9 +119,11 @@ async def main():
     async with await connect(replacement) as c:
         probes["again"] = await introduce(c, member["identity"])
 
+    cross = await cross_info(member, replacement, swarm["user"], replaced["Token"])
+
     write_facts({"introduce_node": {
-        "user": claim["Identity"], "replacement_user": replaced["Identity"],
-        "before": before, "introduced": introduced, "probes": probes}})
+        "replacement_user": replaced["Identity"], "before": before,
+        "introduced": introduced, "probes": probes, "cross_info": cross}})
     print(f"driver: replacement claimed for {replaced['Identity']}; "
           f"introduce answered {introduced.get('types') or introduced.get('detail')}")
 

@@ -26,7 +26,8 @@ from pathlib import Path
 
 from lib.build import query_binary
 from lib.nodeconfig import PortSpan, config_text, harness_configs, overlay
-from lib.worlds import World, WorldError, node_entry, wait_identity
+from lib.worlds import (World, WorldError, node_entry, refuse_stopped,
+                        wait_identity)
 
 TESTS = Path(__file__).resolve().parent.parent.parent
 CONTEXT = TESTS / "docker"            # the image's build context
@@ -201,6 +202,8 @@ class DockerWorld(World):
         self.prefix = f"astral-{self.stamp}-{self.dir.name}".lower()
         self.network = None
         self._nodes = {}
+        # names of the nodes `stop` stopped; their containers stay for close
+        self._stopped = set()
 
     # --- the runner's interface -------------------------------------------
 
@@ -209,6 +212,7 @@ class DockerWorld(World):
         if test.ops:
             raise WorldError(f"{test.name}: a Docker world runs no VM "
                              "operations — they need a VM world (--vm)")
+        refuse_stopped(test.name, test.nodes, self._stopped)
         new = [n for n in dict.fromkeys(test.nodes) if n not in self._nodes]
         # why before any start: a refused roster leaves the world as it was
         refusal = self.span.refusal(len(self._nodes), new)
@@ -230,26 +234,30 @@ class DockerWorld(World):
             # network dials, which the host's published port is not
             lan_endpoint=f"tcp:{n.get('ip', '')}:{TCP_PORT}",
             restarts=n["restarts"],
-        ) for name, n in self._nodes.items() if "identity" in n}
+        ) for name, n in self._nodes.items()
+            if "identity" in n and name not in self._stopped}
 
     def restart(self, names: list) -> None:
         """Stop each named node's astrald and start it again on its state."""
+        refuse_stopped("restart", names, self._stopped)
         for name in names:
-            # why bounded: an astrald that ignores SIGINT is the world
-            # breaking, and the step reads it as environment, not a hang
-            self.ssh(name, "pkill -INT -x astrald || true\n"
-                           "i=0; while pgrep -x astrald >/dev/null; do\n"
-                           "  i=$((i+1)); [ $i -le 150 ] || "
-                           "{ echo 'astrald did not stop' >&2; exit 1; }\n"
-                           "  sleep 0.2\ndone", timeout=60)
+            self._stop_astrald(name)
             self._run_astrald(name)
             n = self._nodes[name]
             n["identity"] = self._whoami(n["port"], n["token"])
             n["restarts"] += 1
 
+    def stop(self, names: list) -> None:
+        """Stop each named node's astrald; its container stays for close to
+        copy the log from."""
+        for name in names:
+            self._stop_astrald(name)
+            self._stopped.add(name)
+
     def dead(self) -> list:
         return [name for name, n in self._nodes.items()
-                if not self._running(n["container"])]
+                if name not in self._stopped
+                and not self._running(n["container"])]
 
     def close(self, keep: bool) -> None:
         """Copy each node's log into dir, then remove the containers and the
@@ -385,6 +393,15 @@ class DockerWorld(World):
                                     f"{Path(SKILL_DIR).parent}")
             _docker("cp", f"{copy}/.", f"{container}:{SKILL_DIR}")
         self.ssh(OPERATOR_NODE, f"chown -R tester:tester {SKILL_DIR}")
+
+    def _stop_astrald(self, name: str) -> None:
+        # why bounded: an astrald that ignores SIGINT is the world breaking,
+        # and the step reads it as environment, not a hang
+        self.ssh(name, "pkill -INT -x astrald || true\n"
+                       "i=0; while pgrep -x astrald >/dev/null; do\n"
+                       "  i=$((i+1)); [ $i -le 150 ] || "
+                       "{ echo 'astrald did not stop' >&2; exit 1; }\n"
+                       "  sleep 0.2\ndone", timeout=60)
 
     def _run_astrald(self, name: str) -> None:
         _docker("exec", "-d", self._nodes[name]["container"], "sh", "-c",
