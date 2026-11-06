@@ -5,3 +5,6 @@ REPO_ROOT="$(git rev-parse --show-toplevel)"
 
 # Run astral blueprints check with an explicit repository root and ensure errors are visible.
 scripts/check-astral-blueprints.sh "$REPO_ROOT" 2>&1
+
+# Fail a commit that adds an op with neither a named action nor a // why: reason.
+(cd "$REPO_ROOT" && go test ./mod -run 'TestEveryOpIsGuardedOrSaysWhy|TestFindUnguardedOps' -count=1) 2>&1
