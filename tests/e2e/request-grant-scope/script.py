@@ -5,7 +5,7 @@ The admin selects the accept_all grant request policy; a fresh app asks
 apphost.request_grant for one discovery scope at a time with a
 mod.apphost.request_grant_request, and the driver records what services.discover
 admits, what apphost.list_grants lists, and what apphost.revoke -id leaves.
-The bundled policy is restored at the end.
+The policy is cleared at the end, as the node entered it.
 """
 import asyncio
 
