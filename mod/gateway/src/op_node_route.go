@@ -52,6 +52,8 @@ func (mod *Module) OpNodeRoute(ctx *astral.Context, q *routing.IncomingQuery, ar
 	inConn := q.AcceptRaw()
 	// why: the next hop receives the resolved identity, so it never reinterprets a
 	// name under its own directory.
+	// why: the next hop is asked as this node; the gateway forwards on its own
+	// route, and UseGatewayAction above decides who may use it (decided 2026-11-06).
 	nextQ := query.New(mod.node.Identity(), target, gateway.MethodNodeRoute, query.Args{"identity": target})
 	outConn, err := query.RouteInFlight(ctx, mod.node, astral.Launch(nextQ))
 	if err != nil {

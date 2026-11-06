@@ -25,6 +25,8 @@ type opJoinArgs struct {
 //
 // why the origin and caller gates of user.bootstrap: the op claims this node,
 // so it admits the same queries; see mayClaim.
+// why: no named action guards this op; only the node itself or the manager may
+// claim an unclaimed node (mayClaim).
 func (mod *Module) OpJoin(ctx *astral.Context, q *routing.IncomingQuery, args opJoinArgs) error {
 	ch := q.Accept(channel.WithFormats(args.In, args.Out))
 	defer ch.Close()

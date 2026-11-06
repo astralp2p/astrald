@@ -41,6 +41,8 @@ type opBootstrapArgs struct {
 // signs for node setup, so it admits the same origins.
 // why the manager besides the node: the manager claims the node with its App
 // token (operator decision, 2026-11-03).
+// why: no named action guards this op; only the node itself or the manager may
+// claim an unclaimed node (mayClaim).
 func (mod *Module) OpBootstrap(ctx *astral.Context, q *routing.IncomingQuery, args opBootstrapArgs) error {
 	ch := q.Accept(channel.WithFormats(args.In, args.Out))
 	defer ch.Close()

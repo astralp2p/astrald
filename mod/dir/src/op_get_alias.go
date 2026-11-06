@@ -11,7 +11,7 @@ type opGetAliasArgs struct {
 	Out      string
 }
 
-// why: no action guards this op, because apps name identities under their own
+// why: no named action guards this op, because apps name identities under their own
 // identity.
 // note: astral-js exposes dir.get_alias to every app (astral-js src/api/dir/index.ts).
 // note: cmd/astral-listen names each caller through it.

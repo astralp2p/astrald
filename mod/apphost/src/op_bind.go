@@ -13,6 +13,9 @@ type opBindArgs struct {
 
 // OpBind keeps a session alive so the caller can associate cleanup actions (handler removal) with its lifetime.
 // Each BindMsg received during the session registers a token whose handlers are removed on session close.
+//
+// why: no named action guards this op; a session removes only the handlers it
+// owns, and a holder of mod.auth.admin_manage_apps_action removes any (bindScope).
 func (mod *Module) OpBind(ctx *astral.Context, q *routing.IncomingQuery, args opBindArgs) error {
 	// why: the owner is read before accepting and the scope is resolved before
 	// the session runs. Accepting drops the en-route entry that names this

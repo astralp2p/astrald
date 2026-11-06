@@ -37,6 +37,10 @@ var errReadRefused = errors.New("read refused")
 // errNotParticipant: the mailbox read is the caller's own, so the answer tells
 // no other identity anything, and a caller told its mailbox is not hosted
 // tells that apart from a node that went silent.
+//
+// why: no named action guards a read of the caller's own mailbox, which this
+// node must host; a delegated read asks mod.messaging.read_mailbox_action
+// (readFor, admitsReader in guards.go).
 func (mod *Module) OpReadMessages(ctx *astral.Context, q *routing.IncomingQuery, args opReadMessagesArgs) error {
 	ch := channel.New(q.AcceptRaw(), channel.WithFormats(args.In, args.Out))
 	defer ch.Close()

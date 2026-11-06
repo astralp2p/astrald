@@ -58,6 +58,9 @@ func (mod *Module) AuthorizeAdminSwarm(ctx *astral.Context, a *user.AdminSwarmAc
 }
 
 // AuthorizeRelayFor allows a swarm node to relay queries on behalf of the local user.
+//
+// why: every swarm member relays with the user as caller; swarm members are
+// the user's own nodes (decided 2026-11-06).
 func (mod *Module) AuthorizeRelayFor(ctx *astral.Context, a *nodes.RelayForAction) bool {
 	if !a.ForID.IsEqual(mod.Identity()) {
 		return false

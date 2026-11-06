@@ -33,6 +33,10 @@ type opRegisterArgs struct {
 // evidence another node verifies, durable until it expires. Both lists carry
 // their constraints. Asking is not receiving: the node's policy decides which
 // permits are written, and where.
+//
+// why: no named action guards this op; the app register policy decides every
+// registration, and the bundled policy accepts every one until a delegate is
+// set (decided 2026-10-28).
 func (mod *Module) OpRegister(ctx *astral.Context, query *routing.IncomingQuery, args opRegisterArgs) (err error) {
 	// why: read the registering web origin before accepting - EnRouteQueryExtras
 	// only resolves while the query is en route, and Accept removes that entry.
@@ -92,6 +96,8 @@ func (mod *Module) provisionApp(ctx *astral.Context, dec *apphostapi.AppRegister
 	key := secp256k1.New()
 	guestID := secp256k1.Identity(secp256k1.PublicKey(key))
 
+	// why: every app receives the relay contract, whatever the policy decided;
+	// the contract is part of registration (decided 2026-11-06).
 	signed, err := mod.storeAppContract(ctx, key, guestID)
 	if err != nil {
 		return nil, err

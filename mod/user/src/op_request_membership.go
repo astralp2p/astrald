@@ -15,6 +15,9 @@ type opRequestMembershipArgs struct {
 // OpRequestMembership allows a caller node to request membership in this node's swarm.
 // Requires an active contract; applies the swarm join-request policy to the caller before issuing membership.
 // Pushes the resulting signed contract to the local swarm asynchronously.
+//
+// why: no named action guards this op; the swarm join policy decides every
+// requester, and only a claimed node answers.
 func (mod *Module) OpRequestMembership(ctx *astral.Context, q *routing.IncomingQuery, args opRequestMembershipArgs) (err error) {
 	conn := q.AcceptRaw()
 	ch := channel.New(conn, channel.WithFormats(args.In, args.Out))
