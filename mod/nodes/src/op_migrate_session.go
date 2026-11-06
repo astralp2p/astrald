@@ -35,7 +35,8 @@ func (mod *Module) OpMigrateSession(ctx *astral.Context, q *routing.IncomingQuer
 	if link == nil {
 		return ch.Send(astral.Err(nodesmod.ErrLinkNotFound))
 	}
-	// why: AdminNetwork admits every swarm node; the responder runs only for the node across the session's link.
+	// why: AdminNetwork admits every swarm node, and any swarm node may start moving any session;
+	// the responder runs only for the node across the session's link.
 	if !bool(args.Start) && !q.Caller().IsEqual(link.mux.RemoteIdentity()) {
 		return ch.Send(auth.ErrNotPermitted)
 	}
