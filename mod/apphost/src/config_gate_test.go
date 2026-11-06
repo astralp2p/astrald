@@ -24,10 +24,10 @@ func loadConfig(t *testing.T, src string) (Config, error) {
 func TestConfigDefaultsMatchTheDistribution(t *testing.T) {
 	distribution := `
 gate:
-  tokenless: [apphost.register, apphost.register_manager, user.info]
+  tokenless: [.spec, apphost.register, apphost.register_manager, user.info]
   states:
-    fresh: [apphost.register_manager, user.info]
-    unclaimed: [user.info, user.derive_identity, user.bootstrap, user.join, apphost.register,
+    fresh: [.spec, apphost.register_manager, user.info]
+    unclaimed: [.spec, user.info, user.derive_identity, user.bootstrap, user.join, apphost.register,
       apphost.bind, apphost.register_handler, apphost.cancel]
     claimed: ["*"]
 policies:
@@ -70,7 +70,7 @@ policies:
 	if !cfg.Policies.AppRegister.Accepts() {
 		t.Fatal("policies.app_register: accept_all not applied")
 	}
-	if defaultConfig.Policies.AppRegister.Mode != policyconf.RejectAll || len(defaultConfig.Gate.States.Fresh) != 2 {
+	if defaultConfig.Policies.AppRegister.Mode != policyconf.RejectAll || len(defaultConfig.Gate.States.Fresh) != 3 {
 		t.Fatal("loading changed the defaults")
 	}
 }

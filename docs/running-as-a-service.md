@@ -97,8 +97,18 @@ With `file: false` the node creates no `logs` directory at all.
 astral-query localnode:.spec
 ```
 
-The local API listens on `tcp:127.0.0.1:8625` with anonymous access. `.spec` is a
-built-in, always-available op. Exit code 0 means the node is up.
+The local API listens on `tcp:127.0.0.1:8625`. `.spec` lists the node's
+operations and answers a session without a token in every node state, unless
+`gate.tokenless` in `apphost.yaml` leaves it out. Exit code 0 means the node is
+up. `astral-query user.info -out json` also reports the node's state.
+
+## Setup
+
+A new node belongs to nobody. Appoint its manager and claim it as the
+[README](../README.md#setting-up-the-node) shows. A service host often runs other
+programs: write `<root>/config/apphost.yaml` before the first start, as
+[Node Setup, Before the first start](https://github.com/astralp2p/astral-docs/blob/master/topics/node-setup.md#before-the-first-start)
+shows, so that only a session holding the node's token appoints the manager.
 
 ## Ports
 
