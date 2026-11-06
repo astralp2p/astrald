@@ -24,6 +24,10 @@ type opListMessagesArgs struct {
 // OpListMessages streams one list of a mailbox as envelopes, without bodies,
 // and ends the stream with eos. The mailbox is the caller's own, or the one
 // Mailbox names as a delegated read.
+//
+// why: no named action guards a read of the caller's own mailbox, which this
+// node must host; a delegated read asks mod.messaging.read_mailbox_action
+// (admitsListing, admitsReader in guards.go).
 func (mod *Module) OpListMessages(ctx *astral.Context, q *routing.IncomingQuery, args opListMessagesArgs) error {
 	ch := channel.New(q.AcceptRaw(), channel.WithOutputFormat(args.Out))
 	defer ch.Close()

@@ -37,6 +37,9 @@ type appointmentConfig struct {
 // no policy is in place to ask yet.
 // why the record last: a failure before it leaves the node fresh, and a retry
 // replaces the delegates the failed attempt wrote.
+// why: no named action guards this op, by decision (2026-11-06); only a fresh
+// node answers, and its first caller becomes the manager with the permits it
+// asks for.
 func (mod *Module) OpRegisterManager(ctx *astral.Context, query *routing.IncomingQuery, args opRegisterArgs) error {
 	ch := channel.New(query.AcceptRaw(), channel.WithFormats(args.In, args.Out))
 	defer ch.Close()

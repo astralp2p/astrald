@@ -22,6 +22,9 @@ type opRequestGrantArgs struct {
 // beside the grants the identity already holds, for the requested duration; a
 // zero duration grants until revoked. The policy is asked on every call, even
 // when the identity already holds every requested permit.
+//
+// why: no named action guards this op; the grant request policy decides every
+// request, and only a session holding a token may ask.
 func (mod *Module) OpRequestGrant(ctx *astral.Context, q *routing.IncomingQuery, args opRequestGrantArgs) error {
 	// why before accepting: accepting drops the en-route entry naming the session and its origin.
 	requester := mod.sessionOwner(q)

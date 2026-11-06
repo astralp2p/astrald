@@ -16,6 +16,11 @@ type opCancelArgs struct {
 	Out     string
 }
 
+// OpCancel cancels an en-route query.
+//
+// why: no named action guards this op; a session cancels only queries it
+// launched, and a holder of mod.auth.admin_manage_apps_action cancels any
+// (mayCancel).
 func (mod *Module) OpCancel(ctx *astral.Context, q *routing.IncomingQuery, args opCancelArgs) (err error) {
 	// why: both lookups run before accepting - accepting resolves this query and
 	// drops the en-route entry that names the session behind it.

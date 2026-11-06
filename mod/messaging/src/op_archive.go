@@ -17,6 +17,9 @@ type opArchiveArgs struct {
 
 // OpArchive puts one of the caller's messages away, or back with undo, and
 // answers whether this call moved it.
+//
+// why: no named action guards this op; it acts only on the caller's own
+// mailbox, which this node must host (admitsMailCaller in guards.go).
 func (mod *Module) OpArchive(ctx *astral.Context, q *routing.IncomingQuery, args opArchiveArgs) error {
 	ch := channel.New(q.AcceptRaw(), channel.WithOutputFormat(args.Out))
 	defer ch.Close()

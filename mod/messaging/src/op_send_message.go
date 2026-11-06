@@ -16,6 +16,9 @@ type opSendMessageArgs struct {
 // OpSendMessage sends one message from the caller. The request arrives after
 // the query is accepted, as one messaging.send_message_request, and the answer
 // is the id the message is stored under.
+//
+// why: no named action guards this op; it acts only on the caller's own
+// mailbox, which this node must host (admitsMailCaller in guards.go).
 func (mod *Module) OpSendMessage(ctx *astral.Context, q *routing.IncomingQuery, args opSendMessageArgs) error {
 	ch := channel.New(q.AcceptRaw(), channel.WithFormats(args.In, args.Out))
 	defer ch.Close()

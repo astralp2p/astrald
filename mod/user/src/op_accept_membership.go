@@ -23,6 +23,9 @@ type opAcceptMembershipArgs struct {
 // minimum remaining validity and the swarm membership permit, then verifies the issuer's signature before applying the invite policy.
 // Self-refuses with user.ErrExpelled if this node holds the issuer's ban on itself.
 // On success, stores the signed contract and sets it as the active contract.
+//
+// why: no named action guards this op; it answers only while the node is
+// unclaimed, and the swarm invite policy decides every invitation.
 func (mod *Module) OpAcceptMembership(ctx *astral.Context, q *routing.IncomingQuery, args opAcceptMembershipArgs) (err error) {
 	conn := q.AcceptRaw()
 	ch := channel.New(conn, channel.WithFormats(args.In, args.Out))

@@ -35,9 +35,9 @@ func (o *other) OpNotOnModule() {}
 // Opaque is not an op: "aque" is not exported.
 func (mod *Module) Opaque() {}
 
-// OpUnguarded has no guard. Its reason uses an old wording that is not the tag.
+// OpUnguarded has no guard. Its reason carries no tag.
 //
-// why no action check: this wording does not count.
+// reason: an untagged reason does not count.
 func (mod *Module) OpUnguarded() { mod.loop() }
 
 func (mod *Module) loop() { mod.loop() }

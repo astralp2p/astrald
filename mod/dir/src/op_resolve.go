@@ -11,7 +11,7 @@ type opResolveArgs struct {
 	Out      string
 }
 
-// why: no action guards this op, because apps resolve names under their own
+// why: no named action guards this op, because apps resolve names under their own
 // identity.
 // note: contacts resolves localuser this way (contacts app/user.go:45).
 // note: astral-js exposes dir.resolve to every app (astral-js src/api/dir/index.ts).
