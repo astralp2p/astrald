@@ -44,7 +44,7 @@ func (mod *Module) OpShell(ctx *astral.Context, q *routing.IncomingQuery, args o
 	defer conn.Close()
 
 	// handle session
-	err = NewSession(mod, conn).Run(ctx)
+	err = NewSession(mod, conn, q.Origin()).Run(ctx)
 	switch {
 	case err == nil, errors.Is(err, io.EOF):
 		mod.log.Logv(1, "shell session with %v ended", ctx.Identity())
