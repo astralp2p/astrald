@@ -17,4 +17,4 @@ w2 local: bootstrap-user-software-key* → adopt-node* → swarm-roster-sync
 w3 local: bootstrap-user-software-key* → hold-isolation
 w4 local: import-user-software-key
 w5 local: bootstrap-user-op
-w6 local: introduce-node
+w6 local: introduce-node-setup → introduce-node

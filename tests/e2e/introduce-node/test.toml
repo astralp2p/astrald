@@ -1,6 +1,7 @@
-nodes      = ["first", "member", "sibling", "banned", "replacement"]
-timeout    = 240
-# why destroys: it claims five nodes of its own and expels one, so it runs in a
-# world of its own, which also keeps the shared world under its node lease.
-destroys   = true
-facts      = ["introduce_node"]
+nodes    = ["member", "sibling", "banned", "replacement"]
+timeout  = 240
+after    = "introduce-node-setup"
+# why destroys: it claims replacement and makes it a member, so no other test
+# may continue this world.
+destroys = true
+facts    = ["introduce_node"]
