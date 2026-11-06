@@ -123,7 +123,12 @@ func TestGateAdmitsDefaults(t *testing.T) {
 		{user.StateFresh, true, false, "user.info?out=json", true},
 		{user.StateFresh, true, false, "apphost.register", false},
 		{user.StateFresh, true, false, "user.bootstrap", false},
-		{user.StateFresh, true, false, ".spec", false},
+		{user.StateFresh, true, false, ".spec", true},
+		{user.StateFresh, true, false, ".spec?out=json", true},
+		{user.StateFresh, false, false, ".spec", true},
+		{user.StateFresh, true, false, "apphost.whoami", false},
+		{user.StateFresh, true, false, "shell.spec", false},
+		{user.StateFresh, true, true, ".spec", false},
 		{user.StateFresh, false, false, "apphost.register_manager", true},
 		{user.StateFresh, false, false, "user.bootstrap", false},
 		{user.StateFresh, false, false, "apphost.set_app_register_policy", false},
@@ -133,6 +138,9 @@ func TestGateAdmitsDefaults(t *testing.T) {
 		{user.StateFresh, true, true, "user.info", false},
 
 		{user.StateUnclaimed, true, false, "apphost.register", true},
+		{user.StateUnclaimed, true, false, ".spec", true},
+		{user.StateUnclaimed, false, false, ".spec", true},
+		{user.StateUnclaimed, true, false, "apphost.whoami", false},
 		{user.StateUnclaimed, true, false, "user.info", true},
 		{user.StateUnclaimed, true, false, "user.bootstrap", false},
 		{user.StateUnclaimed, true, false, "apphost.register_manager", false},
@@ -154,6 +162,8 @@ func TestGateAdmitsDefaults(t *testing.T) {
 		{user.StateClaimed, true, true, "apphost.register", false},
 		{user.StateClaimed, false, false, "user.expel", true},
 		{user.StateClaimed, false, false, ".spec", true},
+		{user.StateClaimed, true, false, ".spec", true},
+		{user.StateClaimed, true, false, "apphost.whoami", false},
 		{user.StateClaimed, false, true, "app.anything", true},
 
 		// note: user.introduce runs on a claimed node with a token alone.

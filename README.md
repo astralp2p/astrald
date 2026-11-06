@@ -27,21 +27,34 @@ Run the daemon:
 $ astrald
 ```
 
-The node will start and generate a new identity and an alias for itself. Once the node has started verify it is accepting local API calls:
+The node will start and generate a new identity and an alias for itself. Once the node has started verify it is accepting local API calls. `user.info` answers without a token and reports the node's state, `fresh` for a new node; `.spec` lists the node's operations:
 
 ```shellsession
-$ astral-query localnode:.spec
+$ astral-query user.info -out json
+{"Type":"mod.user.info","Object":{"NodeAlias":"","UserAlias":"","ContractID":null,"Contract":null,"State":"fresh","Manager":null}}
+$ astral-query localnode:.spec -out json
 ```
 
-## Generating user identity
+## Setting up the node
 
-A new node runs without a user. One `user.bootstrap` call claims it for a user and returns an access token for that user. The [Node Setup](https://github.com/astralp2p/astral-docs/blob/master/topics/node-setup.md) topic documents the user key, who may claim a node, the step-by-step flow, and joining a swarm from a new node with `user.join`.
+A new node belongs to nobody. Setup has two steps: one local app becomes the node's manager, and the manager claims the node for a user. A distribution's setup app does both. On a server, or for an AI agent, the shell does them with `astral-query`. [Node Setup](https://github.com/astralp2p/astral-docs/blob/master/topics/node-setup.md) explains the states, the manager and the claim; [Setting up from a shell](https://github.com/astralp2p/astral-docs/blob/master/topics/node-setup.md#setting-up-from-a-shell) has every command.
 
-A session without a token reaches the setup ops before the claim, and only `user.info` and `apphost.register` after it ([apphost](https://github.com/astralp2p/astral-docs/blob/master/protocols/apphost/README.md#sessions-without-a-token)). Every other op needs a token.
+Until a manager is appointed, any local program or browser page can appoint itself. To close that window, write `apphost.yaml` before the first start, as [Before the first start](https://github.com/astralp2p/astral-docs/blob/master/topics/node-setup.md#before-the-first-start) shows: the node gets a token, and only a session holding it appoints the manager.
 
-### New identity
+### Appoint the manager
 
-The node generates 24 words and returns the user they derive, and claims nothing. Write the words down: they are the user's backup. The same words then claim the node.
+The request takes on no policy, so app registrations, swarm joins and swarm invitations keep refusing. Without a token, or with the node's token when `apphost.yaml` sets one:
+
+```shellsession
+$ echo '{"Type":"mod.apphost.register_manager_request","Object":{"Name":"cli-setup","GrantPermits":[],"ContractPermits":[],"Policies":[]}}' \
+    | astral-query apphost.register_manager -in json -out json
+{"Type":"apphost.access_token","Object":{"Identity":"03864ef0...","Token":"k7m2q5x9r3v4n8p1","ExpiresAt":"2036-05-25T12:00:00+02:00"}}
+$ export ASTRALD_APPHOST_TOKEN=k7m2q5x9r3v4n8p1
+```
+
+### Claim for a new user
+
+The node generates 24 words and returns the user they derive, and claims nothing. Write the words down: they are the user's only backup. The same words then claim the node, and the reply carries the user's token.
 
 ```shellsession
 $ astral-query user.derive_identity -generate true -out json
@@ -50,45 +63,36 @@ $ echo '{"Type":"string16","Object":"penalty stadium garlic ... rifle fitness ga
 {"Type":"mod.user.bootstrap_result","Object":{"Identity":"02e96bd9...","Mnemonic":"","Token":"b9c2e1a3d4f5867a"}}
 ```
 
-### Existing identity
+### Claim for an existing user
 
-The node claims itself for the user that the given BIP-39 words derive. `user.derive_identity` with the same words previews that user first.
+The node claims itself for the user that the given BIP-39 words derive. `user.derive_identity` with the same words previews that user first. To bring the node into a swarm the user already runs, see [User and Swarm](https://github.com/astralp2p/astral-docs/blob/master/topics/user-and-swarm.md).
 
 ```shellsession
 $ echo '{"Type":"string16","Object":"horse soldier ... term change"}' | astral-query user.bootstrap -in json -out json
 {"Type":"mod.user.bootstrap_result","Object":{"Identity":"02564ba7...","Mnemonic":"","Token":"b9c2e1a3d4f5867a"}}
 ```
 
-Check the claim as the user; `user.info` names the user and the node:
+Check the claim; `user.info` reports `"State":"claimed"`:
 
 ```shellsession
-$ ASTRALD_APPHOST_TOKEN=b9c2e1a3d4f5867a astral-query user.info -out json
+$ astral-query user.info -out json
 ```
 
-## Generating guest identity for apps and AI agents
+## Access for apps and AI agents
 
-To create a new astral identity along with an access token for it, send a `apphost.register` query to the local node with one `mod.apphost.register_request` object as its input. It will send back a single `apphost.access_token` object:
+App registration refuses by default, so the user creates an agent's identity and token with `mcp.create_agent`, under the user's token:
 
 ```shellsession
-$ echo '{"Type":"mod.apphost.register_request","Object":{}}' | astral-query apphost.register -in json -out json | jq
-{
-  "Type": "apphost.access_token",
-  "Object": {
-    "Identity": "026923d06a51098170093fe989d30a432283f56d89d307176fd6f947c3a9d285ff",
-    "Token": "Kaz3No8nYVTufIBZ6ViQsypc93SiYWJf",
-    "ExpiresAt": "2036-05-17T17:41:49.042372148Z"
-  }
-}
+$ export ASTRALD_APPHOST_TOKEN=b9c2e1a3d4f5867a
+$ astral-query mcp.create_agent -alias agent -out json
+{"Type":"mcp.agent","Object":{"Identity":"02f40933...","Alias":"agent","Token":"h4d8s2w6y1b9t3n7","ExpiresAt":"2027-11-06T00:49:56Z"}}
+$ ASTRALD_APPHOST_TOKEN=h4d8s2w6y1b9t3n7 astral-query apphost.whoami -out json
+{"Type":"identity","Object":"02f40933..."}
 ```
 
-Then use the token via env:
+Each further action is a grant the user writes with [`apphost.grant`](https://github.com/astralp2p/astral-docs/blob/master/protocols/apphost/ops/apphost.grant.md). The agent never needs the user's token, the manager's token or the words. Apps register with [`apphost.register`](https://github.com/astralp2p/astral-docs/blob/master/protocols/apphost/ops/apphost.register.md) once the manager or the user sets the app register policy ([Node Policies](https://github.com/astralp2p/astral-docs/blob/master/topics/node-policies.md)).
 
-```shellsession
-$ ASTRALD_APPHOST_TOKEN=Kaz3No8nYVTufIBZ6ViQsypc93SiYWJf astral-query apphost.whoami -out json
-{"Type":"identity","Object":"026923d06a51098170093fe989d30a432283f56d89d307176fd6f947c3a9d285ff"}
-```
-
-Or over any of the supported transports (native or [HTTP](https://github.com/astralp2p/astral-docs/blob/master/topics/http-transport.md)).
+Tokens work over any of the supported transports (native or [HTTP](https://github.com/astralp2p/astral-docs/blob/master/topics/http-transport.md)).
 
 ## Hardware identity
 

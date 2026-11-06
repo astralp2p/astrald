@@ -70,22 +70,28 @@ var defaultConfig = Config{
 	// only claims, registers apps and lets them serve; a claimed node leaves the
 	// decision to authorization and policies.
 	//
+	// why .spec in every list: it lists the node's ops and changes nothing, so
+	// a client or agent discovers what it may call before it holds a token.
+	//
 	// why apphost.bind, apphost.register_handler and apphost.cancel before the
 	// claim: the manager answers the policies delegated to it, an invitation
 	// from the owner's other device among them, and an app answers only through
 	// a registered handler.
 	Gate: Gate{
 		Tokenless: []string{
+			".spec",
 			"apphost.register",
 			"apphost.register_manager",
 			"user.info",
 		},
 		States: GateStates{
 			Fresh: []string{
+				".spec",
 				"apphost.register_manager",
 				"user.info",
 			},
 			Unclaimed: []string{
+				".spec",
 				"user.info",
 				"user.derive_identity",
 				"user.bootstrap",
