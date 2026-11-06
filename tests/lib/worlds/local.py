@@ -8,7 +8,7 @@ import shutil
 import tempfile
 from pathlib import Path
 
-from lib.worlds import World, WorldError, node_entry
+from lib.worlds import World, WorldError, node_entry, refuse_stopped
 from lib.localnode import LocalNode
 from lib.nodeconfig import PortSpan
 
@@ -41,12 +41,15 @@ class LocalWorld(World):
         # world, fixed before the first node boots (lib/plan.py)
         self.config = config or {}
         self._nodes = {}
+        # names of the nodes `stop` stopped; they stay in _nodes for close
+        self._stopped = set()
 
     def ensure(self, test) -> None:
         """Bring the test's roster up; a node already up stays as it is."""
         if test.ops:
             raise WorldError(f"{test.name}: a local world runs no VM "
                              "operations")
+        refuse_stopped(test.name, test.nodes, self._stopped)
         try:
             asyncio.run(self._ensure(test.nodes))
         except Exception as e:
@@ -68,6 +71,7 @@ class LocalWorld(World):
 
     def restart(self, names: list) -> None:
         """Stop each named node and boot it again from its own root."""
+        refuse_stopped("restart", names, self._stopped)
         try:
             asyncio.run(self._restart(names))
         except Exception as e:
@@ -80,6 +84,15 @@ class LocalWorld(World):
             node.start(keep=self.keep)
             await node.wait_ready()
             node.restarts += 1
+
+    def stop(self, names: list) -> None:
+        """Stop each named node; its root stays for close to copy."""
+        for name in names:
+            try:
+                self._nodes[name].stop()
+            except Exception as e:
+                raise WorldError(f"stop {name}: {e}") from e
+            self._stopped.add(name)
 
     def nodes(self) -> dict:
         """Every node started so far, as the session view names it."""
@@ -104,10 +117,11 @@ class LocalWorld(World):
             # how many times the world restarted the node, so an oracle can
             # tell a restart happened
             restarts=n.restarts,
-        ) for name, n in self._nodes.items()}
+        ) for name, n in self._nodes.items() if name not in self._stopped}
 
     def dead(self) -> list:
-        return [name for name, n in self._nodes.items() if not n.alive()]
+        return [name for name, n in self._nodes.items()
+                if name not in self._stopped and not n.alive()]
 
     def close(self, keep: bool) -> None:
         """Stop the nodes and move their state from the temp dir into dir.

@@ -81,8 +81,8 @@ def _run_step(py: str, script: Path, log: Path, env: dict, timeout: int) -> int:
 
 def _perform(ex, t, drive, art: Path, view) -> tuple:
     """(status, failure_kind, phase) of one test: prepare, driver, the
-    restart the manifest names, then the oracle. `phase` is the step the
-    test stopped at.
+    restart and the stop the manifest names, then the oracle. `phase` is
+    the step the test stopped at.
 
     `view(phase)` writes the test's session view for the phase about to run
     and returns the environment that phase runs in. The oracle gets a fresh
@@ -109,6 +109,9 @@ def _perform(ex, t, drive, art: Path, view) -> tuple:
         if t.restart:
             phase = "restart"
             ex.restart(t.restart)
+        if t.stop:
+            phase = "stop"
+            ex.stop(t.stop)
         phase = "verify"
         rc = _run_step(sys.executable, t.dir / "verify.py",
                        art / "verify.log", view("verify"), t.timeout)

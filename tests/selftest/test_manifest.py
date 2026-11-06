@@ -98,6 +98,26 @@ class TestLoad(ManifestCase):
         """)
         self.assertEqual(self.all["restarting"].restart, ["node1"])
 
+    def test_stop_names_roster_nodes_and_implies_destroys(self):
+        self.assertEqual(self.all["adopt-node"].stop, [])
+        with self.assertRaisesRegex(ValueError, "stop names"):
+            self.add("stray-stop", """
+                nodes = ["node1"]
+                stop = ["node2"]
+            """)
+        with self.assertRaisesRegex(ValueError, "both restarted and stopped"):
+            self.add("restart-and-stop", """
+                nodes = ["node1"]
+                restart = ["node1"]
+                stop = ["node1"]
+            """)
+        self.add("stopping", """
+            nodes = ["node1", "node2"]
+            stop = ["node1"]
+        """)
+        t = self.all["stopping"]
+        self.assertEqual((t.stop, t.destroys), (["node1"], True))
+
 
 class TestPlannerKeys(ManifestCase):
     def test_absent_keys_default(self):

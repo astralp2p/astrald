@@ -184,6 +184,38 @@ class TestNodes(WorldCase):
         self.assertEqual(w.dead(), ["node2"])
 
 
+class TestStop(WorldCase):
+    def test_a_stopped_node_is_neither_in_the_view_nor_dead(self):
+        w = self.world()
+        w.ensure(a_test(nodes=["first", "member"]))
+        w.stop(["first"])
+        self.assertTrue(any("pkill -INT -x astrald" in s
+                            for s in self.fake.scripts()))
+        self.fake.fail = lambda a: (a[0] == "exec" and "pgrep" in a
+                                    and a[1].endswith("-first"))
+        self.assertEqual(list(w.nodes()), ["member"])
+        self.assertEqual(w.dead(), [])
+
+    def test_a_later_roster_or_restart_naming_a_stopped_node_is_refused(self):
+        w = self.world()
+        w.ensure(a_test(nodes=["first", "member"]))
+        w.stop(["first"])
+        with self.assertRaisesRegex(WorldError, "^later: first was stopped"):
+            w.ensure(a_test(name="later", nodes=["member", "first"]))
+        with self.assertRaisesRegex(WorldError, "^restart: first was stopped"):
+            w.restart(["first"])
+        self.assertEqual(len(self.fake.of("run")), 2)
+
+    def test_close_still_pulls_the_stopped_nodes_log(self):
+        w = self.world()
+        w.ensure(a_test(nodes=["first"]))
+        w.stop(["first"])
+        w.close(keep=False)
+        self.assertTrue(any(c[0] == "cp" and c[1].endswith("-first:"
+                            "/var/lib/astrald/astrald.log")
+                            for c in self.fake.calls))
+
+
 class TestShell(WorldCase):
     def test_ssh_runs_as_root_in_the_named_container(self):
         w = self.world()

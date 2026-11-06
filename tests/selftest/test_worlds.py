@@ -230,6 +230,55 @@ class TestLocalWorldSpan(unittest.TestCase):
                          {span // PORTS_PER_NODE})
 
 
+class StopsForGood(StartsNothing):
+    """A StartsNothing that a stop leaves dead and that a view can read."""
+
+    def __init__(self, name, root, binary, ports, configs=None):
+        super().__init__(name, root, binary, ports, configs)
+        self.endpoint, self.token, self.identity = f"tcp:{name}", "t", name
+        self.root, self.serves_mcp, self.restarts = root, True, 0
+
+    def alive(self):
+        return not self.stopped
+
+
+class TestLocalWorldStop(unittest.TestCase):
+    def stopped_world(self, tmp):
+        from lib.worlds import local
+        StartsNothing.started = []
+        world = LocalWorld(Path(tmp) / "session", Path("astrald"),
+                           PortSpan(20800, 20))
+        with mock.patch.object(local, "LocalNode", StopsForGood):
+            world.ensure(SimpleNamespace(name="t", ops=[],
+                                         nodes=["first", "member"]))
+        world.stop(["first"])
+        return world
+
+    def test_a_stopped_node_is_neither_in_the_view_nor_dead(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            world = self.stopped_world(tmp)
+            self.assertTrue(world._nodes["first"].stopped)
+            self.assertEqual(list(world.nodes()), ["member"])
+            self.assertEqual(world.dead(), [])
+            world._nodes["member"].stopped = True
+            self.assertEqual(world.dead(), ["member"])
+            world.close(keep=False)
+
+    def test_a_later_roster_or_restart_naming_a_stopped_node_is_refused(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            world = self.stopped_world(tmp)
+            with self.assertRaisesRegex(
+                    WorldError, "^later: first was stopped earlier in this "
+                    "world$"):
+                world.ensure(SimpleNamespace(name="later", ops=[],
+                                             nodes=["member", "first"]))
+            with self.assertRaisesRegex(WorldError, "^restart: first was "
+                                        "stopped"):
+                world.restart(["first"])
+            self.assertEqual(StartsNothing.started, ["first", "member"])
+            world.close(keep=False)
+
+
 class TestSkips(unittest.TestCase):
     def test_a_failed_lineage_skips_only_inside_its_world(self):
         with tempfile.TemporaryDirectory() as tmp:
