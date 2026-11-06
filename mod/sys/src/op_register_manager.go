@@ -1,46 +1,41 @@
-package apphost
+package sys
 
 import (
 	"fmt"
 	"slices"
 
 	apphostapi "github.com/astralp2p/astral-go/api/apphost"
+	"github.com/astralp2p/astral-go/api/auth"
 	"github.com/astralp2p/astral-go/api/policy"
-	"github.com/astralp2p/astral-go/api/tree"
+	sysapi "github.com/astralp2p/astral-go/api/sys"
 	"github.com/astralp2p/astral-go/api/user"
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astral-go/astral/channel"
 	"github.com/astralp2p/astral-go/lib/routing"
 )
 
-// appointmentPath is where apphost persists the appointed manager, at
-// appointmentPath/manager.
-const appointmentPath = "/mod/apphost"
-
-// appointmentConfig is bound to the tree at appointmentPath. An unset Manager
-// is a node without a manager.
-type appointmentConfig struct {
-	Manager tree.Value[*astral.Identity]
+type opRegisterManagerArgs struct {
+	In  string
+	Out string
 }
 
 // OpRegisterManager provisions a brand-new App identity, as apphost.register
 // does, and appoints it the node's manager. The op reads one
-// mod.apphost.register_manager_request after accept. Each policy binding of the
+// mod.sys.register_manager_request after accept. Each policy binding of the
 // request is stored as a delegate whose identity is the new manager; every
 // policy the request does not name loses its stored delegate. The node writes
 // the manager record last and answers the access token.
 //
-// A node that is not fresh answers apphostapi.ErrNotFresh. The app register
+// A node that is not fresh answers sysapi.ErrNotFresh. The app register
 // policy is not asked.
+// Spec: .ai/system/protocols/sys/ops/sys.register_manager.md
 //
-// why not asked: the manager is the identity the policies are delegated to, so
-// no policy is in place to ask yet.
 // why the record last: a failure before it leaves the node fresh, and a retry
 // replaces the delegates the failed attempt wrote.
 // why: no named action guards this op, by decision (2026-11-06); only a fresh
 // node answers, and its first caller becomes the manager with the permits it
 // asks for.
-func (mod *Module) OpRegisterManager(ctx *astral.Context, query *routing.IncomingQuery, args opRegisterArgs) error {
+func (mod *Module) OpRegisterManager(ctx *astral.Context, query *routing.IncomingQuery, args opRegisterManagerArgs) error {
 	ch := channel.New(query.AcceptRaw(), channel.WithFormats(args.In, args.Out))
 	defer ch.Close()
 
@@ -49,7 +44,7 @@ func (mod *Module) OpRegisterManager(ctx *astral.Context, query *routing.Incomin
 		return ch.Send(astral.NewErrOriginNotAllowed(query.Origin()))
 	}
 
-	var req *apphostapi.RegisterManagerRequest
+	var req *sysapi.RegisterManagerRequest
 	if err := ch.Switch(channel.Expect(&req), channel.FailOnEOF()); err != nil {
 		return ch.Send(astral.Err(err))
 	}
@@ -69,19 +64,15 @@ func (mod *Module) OpRegisterManager(ctx *astral.Context, query *routing.Incomin
 
 // appointManager provisions the manager, binds its policies and records the
 // appointment while no other appointment runs.
-func (mod *Module) appointManager(ctx *astral.Context, req *apphostapi.RegisterManagerRequest) (*apphostapi.AccessToken, error) {
+func (mod *Module) appointManager(ctx *astral.Context, req *sysapi.RegisterManagerRequest) (*apphostapi.AccessToken, error) {
 	mod.mu.Lock()
 	defer mod.mu.Unlock()
 
 	if mod.NodeState(ctx) != user.StateFresh {
-		return nil, apphostapi.ErrNotFresh
+		return nil, sysapi.ErrNotFresh
 	}
 
-	token, err := mod.provisionApp(ctx, &apphostapi.AppRegisterDecision{
-		Allow:           true,
-		GrantPermits:    registerGrantRequest(req.GrantPermits),
-		ContractPermits: req.ContractPermits,
-	})
+	token, err := mod.apps.ProvisionApp(ctx, req.GrantPermits, req.ContractPermits)
 	if err != nil {
 		return nil, err
 	}
@@ -99,19 +90,18 @@ func (mod *Module) appointManager(ctx *astral.Context, req *apphostapi.RegisterM
 // validateManagerRequest refuses an invalid permit, an unknown or repeated
 // policy name, a binding without an operation, a timeout above
 // policy.MaxTimeout, and a user policy on a node without the user module.
-func (mod *Module) validateManagerRequest(req *apphostapi.RegisterManagerRequest) error {
-	if err := validatePermits(req.GrantPermits); err != nil {
-		return err
-	}
-	if err := validatePermits(req.ContractPermits); err != nil {
-		return err
+func (mod *Module) validateManagerRequest(req *sysapi.RegisterManagerRequest) error {
+	for _, p := range slices.Concat(req.GrantPermits, req.ContractPermits) {
+		if err := auth.ValidatePermit(p); err != nil {
+			return err
+		}
 	}
 
 	var seen []string
 	for _, b := range req.Policies {
 		name := b.Policy.String()
 		switch {
-		case !slices.Contains(apphostapi.PolicyNames, name):
+		case !slices.Contains(sysapi.PolicyNames, name):
 			return fmt.Errorf("unknown policy: %v", name)
 		case slices.Contains(seen, name):
 			return fmt.Errorf("policy bound twice: %v", name)
@@ -130,8 +120,8 @@ func (mod *Module) validateManagerRequest(req *apphostapi.RegisterManagerRequest
 // bindManagerPolicies stores, for every policy name, the delegate bindings
 // name with manager as identity, and clears the delegate of every name
 // bindings omit.
-func (mod *Module) bindManagerPolicies(ctx *astral.Context, manager *astral.Identity, bindings []*apphostapi.PolicyBinding) error {
-	for _, name := range apphostapi.PolicyNames {
+func (mod *Module) bindManagerPolicies(ctx *astral.Context, manager *astral.Identity, bindings []*sysapi.PolicyBinding) error {
+	for _, name := range sysapi.PolicyNames {
 		var d *policy.Delegate
 		for _, b := range bindings {
 			if b.Policy.String() == name {
@@ -145,26 +135,24 @@ func (mod *Module) bindManagerPolicies(ctx *astral.Context, manager *astral.Iden
 	return nil
 }
 
-// setPolicyDelegate stores d as the delegate of the named policy, or clears it
-// when d is nil. A user policy on a node without the user module is skipped
-// when d is nil.
+// setPolicyDelegate stores d as the delegate of the named policy in the module
+// that owns it, or clears it when d is nil. A user policy on a node without
+// the user module is skipped when d is nil.
 func (mod *Module) setPolicyDelegate(ctx *astral.Context, name string, d *policy.Delegate) error {
-	switch name {
-	case apphostapi.PolicyAppRegister:
-		return writePolicyDelegate(ctx, d, &mod.policy.AppRegister)
-	case apphostapi.PolicyGrantRequest:
-		return writePolicyDelegate(ctx, d, &mod.policy.GrantRequest)
-	}
-	if mod.User == nil {
-		if d == nil {
-			return nil
+	store := mod.apphostPolicies
+	if !isApphostPolicy(name) {
+		if mod.User == nil {
+			if d == nil {
+				return nil
+			}
+			return fmt.Errorf("the user module is not loaded")
 		}
-		return fmt.Errorf("the user module is not loaded")
+		store = mod.User
 	}
-	return mod.User.SetPolicyDelegate(ctx, name, d)
+	return store.SetPolicyDelegate(ctx, name, d)
 }
 
 // isApphostPolicy reports whether apphost stores the delegate of name.
 func isApphostPolicy(name string) bool {
-	return name == apphostapi.PolicyAppRegister || name == apphostapi.PolicyGrantRequest
+	return name == sysapi.PolicyAppRegister || name == sysapi.PolicyGrantRequest
 }

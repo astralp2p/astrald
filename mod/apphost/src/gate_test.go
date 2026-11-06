@@ -5,105 +5,29 @@ import (
 	"net"
 	"testing"
 
-	usermod "github.com/astralp2p/astrald/mod/user"
-
 	"github.com/astralp2p/astral-go/api/apphost"
-	"github.com/astralp2p/astral-go/api/policy"
 	"github.com/astralp2p/astral-go/api/user"
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astral-go/astral/log"
 	"github.com/astralp2p/astral-go/lib/query"
 )
 
-// stubUser satisfies usermod.Module; Ready, Identity, WasOwned and
-// SetPolicyDelegate are exercised.
-type stubUser struct {
-	id       *astral.Identity
-	ready    chan struct{}
-	owned    bool
-	policies map[string]*policy.Delegate
+// stubSys satisfies sysmod.Module with a fixed node state.
+type stubSys struct {
+	state   string
+	manager *astral.Identity
 }
 
-func (s *stubUser) Ready() <-chan struct{}                                        { return s.ready }
-func (s *stubUser) Identity() *astral.Identity                                    { return s.id }
-func (s *stubUser) LocalSwarm() []*astral.Identity                                { return nil }
-func (s *stubUser) NewMaintainLinkTask(*astral.Identity) usermod.MaintainLinkTask { return nil }
-func (s *stubUser) NewSyncNodesTask(*astral.Identity) usermod.SyncNodesTask       { return nil }
-func (s *stubUser) PushToLocalSwarm(*astral.Context, astral.Object)               {}
-func (s *stubUser) PushToSiblings(*astral.Context, astral.Object)                 {}
-func (s *stubUser) Expel(*astral.Context, *astral.Identity) (*user.SignedExpulsion, error) {
-	return nil, nil
-}
-func (s *stubUser) WasOwned() bool { return s.owned }
-func (s *stubUser) SetPolicyDelegate(_ *astral.Context, name string, d *policy.Delegate) error {
-	if s.policies == nil {
-		s.policies = map[string]*policy.Delegate{}
-	}
-	s.policies[name] = d
-	return nil
-}
-
-func closedChan() chan struct{} {
-	c := make(chan struct{})
-	close(c)
-	return c
-}
+func (s *stubSys) Manager() *astral.Identity        { return s.manager }
+func (s *stubSys) NodeState(*astral.Context) string { return s.state }
 
 // stateModule is an apphost module with the default config on a node in
 // state.
 func stateModule(t *testing.T, state string) *Module {
 	t.Helper()
 	m := &Module{config: defaultConfig, node: &routeRecorder{id: astral.GenerateIdentity()}}
-	m.User = &stubUser{ready: closedChan()}
-	switch state {
-	case user.StateFresh:
-	case user.StateUnclaimed:
-		if err := m.appointment.Manager.Set(astral.NewContext(nil), astral.GenerateIdentity()); err != nil {
-			t.Fatal(err)
-		}
-	case user.StateClaimed:
-		m.User = &stubUser{id: astral.GenerateIdentity(), ready: closedChan()}
-	default:
-		t.Fatalf("unknown state %v", state)
-	}
+	m.Sys = &stubSys{state: state}
 	return m
-}
-
-func TestNodeState(t *testing.T) {
-	ctx := astral.NewContext(nil)
-
-	for _, state := range []string{user.StateFresh, user.StateUnclaimed, user.StateClaimed} {
-		if got := stateModule(t, state).NodeState(ctx); got != state {
-			t.Errorf("NodeState = %v; want %v", got, state)
-		}
-	}
-
-	if got := (&Module{}).NodeState(ctx); got != user.StateFresh {
-		t.Errorf("no user module, no manager: NodeState = %v; want fresh", got)
-	}
-
-	// an expired or expelled claim keeps the appointment closed
-	owned := &Module{}
-	owned.User = &stubUser{ready: closedChan(), owned: true}
-	if got := owned.NodeState(ctx); got != user.StateUnclaimed {
-		t.Errorf("owned before, no manager: NodeState = %v; want unclaimed", got)
-	}
-
-	// a claim keeps the manager and reads claimed
-	claimed := stateModule(t, user.StateClaimed)
-	claimed.appointment.Manager.Set(ctx, astral.GenerateIdentity())
-	if got := claimed.NodeState(ctx); got != user.StateClaimed {
-		t.Errorf("claimed with manager: NodeState = %v; want claimed", got)
-	}
-
-	// user module not ready, ctx cancelled: fresh admits the fewest ops
-	notReady := &Module{}
-	notReady.User = &stubUser{id: astral.GenerateIdentity(), ready: make(chan struct{})}
-	cctx, cancel := astral.NewContext(nil).WithCancel()
-	cancel()
-	if got := notReady.NodeState(cctx); got != user.StateFresh {
-		t.Errorf("not ready + ctx cancelled: NodeState = %v; want fresh", got)
-	}
 }
 
 // TestGateAdmitsDefaults checks the default gate across states, token
@@ -119,7 +43,7 @@ func TestGateAdmitsDefaults(t *testing.T) {
 		query     string
 		want      bool
 	}{
-		{user.StateFresh, true, false, "apphost.register_manager", true},
+		{user.StateFresh, true, false, "sys.register_manager", true},
 		{user.StateFresh, true, false, "user.info?out=json", true},
 		{user.StateFresh, true, false, "apphost.register", false},
 		{user.StateFresh, true, false, "user.bootstrap", false},
@@ -129,7 +53,7 @@ func TestGateAdmitsDefaults(t *testing.T) {
 		{user.StateFresh, true, false, "apphost.whoami", false},
 		{user.StateFresh, true, false, "shell.spec", false},
 		{user.StateFresh, true, true, ".spec", false},
-		{user.StateFresh, false, false, "apphost.register_manager", true},
+		{user.StateFresh, false, false, "sys.register_manager", true},
 		{user.StateFresh, false, false, "user.bootstrap", false},
 		{user.StateFresh, false, false, "apphost.set_app_register_policy", false},
 		{user.StateFresh, false, false, "apphost.bind", false},
@@ -143,11 +67,11 @@ func TestGateAdmitsDefaults(t *testing.T) {
 		{user.StateUnclaimed, true, false, "apphost.whoami", false},
 		{user.StateUnclaimed, true, false, "user.info", true},
 		{user.StateUnclaimed, true, false, "user.bootstrap", false},
-		{user.StateUnclaimed, true, false, "apphost.register_manager", false},
+		{user.StateUnclaimed, true, false, "sys.register_manager", false},
 		{user.StateUnclaimed, false, false, "user.bootstrap", true},
 		{user.StateUnclaimed, false, false, "user.join", true},
 		{user.StateUnclaimed, false, false, "user.derive_identity", true},
-		{user.StateUnclaimed, false, false, "apphost.register_manager", false},
+		{user.StateUnclaimed, false, false, "sys.register_manager", false},
 		{user.StateUnclaimed, false, false, "apphost.set_app_register_policy", false},
 		{user.StateUnclaimed, false, false, "apphost.bind", true},
 		{user.StateUnclaimed, false, false, "apphost.register_handler?endpoint=tcp:127.0.0.1:1", true},
@@ -243,6 +167,7 @@ func TestRouteQueryNamesTheSessionForAnEmptyCaller(t *testing.T) {
 
 	node := &callerNode{id: astral.GenerateIdentity(), caller: make(chan *astral.Identity, 1)}
 	mod := &Module{node: node, log: log.New(nil)}
+	mod.Sys = &stubSys{state: user.StateFresh}
 	mod.config.Gate.States.Fresh = []string{gateAny}
 	guest := NewGuest(mod, srv)
 	guest.guestID = astral.GenerateIdentity()

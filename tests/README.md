@@ -301,7 +301,7 @@ driver environment: a developer's `ASTRALD_APPHOST_TOKEN` would otherwise
 answer for a test's anonymous connect. `--target attach` reads them in the
 runner to find your daemon, and drivers reach it through `session.json`. The
 daemon's apphost gate must admit the test's ops: a `fresh` node under the
-default gate answers only `apphost.register_manager` and `user.info`, so attach
+default gate answers only `sys.register_manager` and `user.info`, so attach
 to a claimed node, or give a fresh one the harness's gate
 (`lib/nodeconfig.E2E_GATE`).
 

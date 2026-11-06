@@ -18,7 +18,7 @@ def main():
     assert f["claimed"] == {"state": "claimed", "manager": manager}, (
         f"after the claim: {f['claimed']}; want claimed naming {manager}")
 
-    # why two refusals: the unclaimed gate list omits apphost.register_manager,
+    # why two refusals: the unclaimed gate list omits sys.register_manager,
     # and on the claimed node the op itself refuses.
     second = f["second"]
     assert second["refused"] and second["detail"].startswith("Denied"), (

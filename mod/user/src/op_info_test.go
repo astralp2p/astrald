@@ -15,7 +15,7 @@ func TestInfoReportsStateBeforeTheClaim(t *testing.T) {
 	for state, m := range map[string]*astral.Identity{user.StateFresh: nil, user.StateUnclaimed: manager} {
 		nodeID := astral.GenerateIdentity()
 		mod := &Module{
-			Deps: Deps{Auth: &recordingAuth{verdict: false}, Apphost: &tokenIssuer{state: state, manager: m}},
+			Deps: Deps{Auth: &recordingAuth{verdict: false}, Apphost: &tokenIssuer{state: state, manager: m}, Sys: &tokenIssuer{state: state, manager: m}},
 			node: &identityNode{id: nodeID},
 		}
 
@@ -43,6 +43,7 @@ func TestInfoReportsStateAndManagerOnAClaimedNode(t *testing.T) {
 	manager := astral.GenerateIdentity()
 	mod := swarmModule(t, &recordingAuth{verdict: true}, userID)
 	mod.Apphost = &tokenIssuer{state: user.StateClaimed, manager: manager}
+	mod.Sys = mod.Apphost.(*tokenIssuer)
 	mod.Dir = namedResolvingDir{mod.Dir.(*resolvingDir)}
 
 	objs, err := routeOp(t, mod.OpInfo, query.New(userID, astral.GenerateIdentity(), "user.info", nil), "", nil)

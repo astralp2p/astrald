@@ -30,9 +30,9 @@ func setPolicy(t *testing.T, mod *Module, args string) (*recordingWriter, error)
 	return w, err
 }
 
-// A caller without AdminManageApps is answered auth.ErrNotPermitted before
-// anything is written.
-func TestSetAppRegisterPolicyRequiresAdminManageApps(t *testing.T) {
+// A caller without ConfigureNodeState is answered auth.ErrNotPermitted before
+// anything is written, and ConfigureNodeState is the one action asked about.
+func TestSetAppRegisterPolicyRequiresConfigureNodeState(t *testing.T) {
 	mod := policySetter(false)
 
 	w, err := setPolicy(t, mod, "?identity="+astral.GenerateIdentity().String()+"&operation=control.decide")
@@ -44,6 +44,10 @@ func TestSetAppRegisterPolicyRequiresAdminManageApps(t *testing.T) {
 	}
 	if !mod.policy.AppRegister.Get().IsZero() {
 		t.Fatal("a rejected setter wrote a delegate")
+	}
+	asked := mod.Auth.(*recordingAuth).recorded()
+	if len(asked) != 1 || asked[0].ObjectType() != (auth.ConfigureNodeStateAction{}).ObjectType() {
+		t.Fatalf("the setter asked about %v, want ConfigureNodeState alone", asked)
 	}
 }
 

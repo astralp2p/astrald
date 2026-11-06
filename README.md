@@ -46,8 +46,8 @@ Until a manager is appointed, any local program or browser page can appoint itse
 The request takes on no policy, so app registrations, swarm joins and swarm invitations keep refusing. Without a token, or with the node's token when `apphost.yaml` sets one:
 
 ```shellsession
-$ echo '{"Type":"mod.apphost.register_manager_request","Object":{"Name":"cli-setup","GrantPermits":[],"ContractPermits":[],"Policies":[]}}' \
-    | astral-query apphost.register_manager -in json -out json
+$ echo '{"Type":"mod.sys.register_manager_request","Object":{"Name":"cli-setup","GrantPermits":[],"ContractPermits":[],"Policies":[]}}' \
+    | astral-query sys.register_manager -in json -out json
 {"Type":"apphost.access_token","Object":{"Identity":"03864ef0...","Token":"k7m2q5x9r3v4n8p1","ExpiresAt":"2036-05-25T12:00:00+02:00"}}
 $ export ASTRALD_APPHOST_TOKEN=k7m2q5x9r3v4n8p1
 ```

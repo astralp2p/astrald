@@ -3,8 +3,8 @@ package user
 import (
 	"fmt"
 
-	"github.com/astralp2p/astral-go/api/apphost"
 	"github.com/astralp2p/astral-go/api/policy"
+	"github.com/astralp2p/astral-go/api/sys"
 	"github.com/astralp2p/astral-go/api/tree"
 	"github.com/astralp2p/astral-go/api/user"
 	"github.com/astralp2p/astral-go/astral"
@@ -77,11 +77,11 @@ func (mod *Module) GetSwarmInvitePolicy() usermod.SwarmInvitePolicy {
 func (mod *Module) SetPolicyDelegate(ctx *astral.Context, name string, d *policy.Delegate) error {
 	var v *tree.Value[*policy.Delegate]
 	switch name {
-	case apphost.PolicySwarmJoin:
+	case sys.PolicySwarmJoin:
 		v = &mod.policy.SwarmJoin
-	case apphost.PolicySwarmInvite:
+	case sys.PolicySwarmInvite:
 		v = &mod.policy.SwarmInvite
-	case apphost.PolicyContractAccept:
+	case sys.PolicyContractAccept:
 		v = &mod.policy.ContractAccept
 	default:
 		return fmt.Errorf("unknown user policy: %v", name)

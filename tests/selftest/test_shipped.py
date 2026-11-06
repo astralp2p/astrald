@@ -18,7 +18,7 @@ TESTS = Path(__file__).resolve().parent.parent
 # why: the lab bake runs before any node holds a token, so its ops meet a
 # fresh node's default apphost gate (mod/apphost/src/config.go), which admits
 # a token-less session to these ops alone
-BAKE_TOKENLESS = {"apphost.register_manager", "user.info"}
+BAKE_TOKENLESS = {"sys.register_manager", "user.info"}
 
 
 def _is_facts(node) -> bool:

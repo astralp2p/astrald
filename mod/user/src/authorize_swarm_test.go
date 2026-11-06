@@ -138,7 +138,7 @@ func swarmModule(t *testing.T, authority authmod.Module, userID *astral.Identity
 	t.Helper()
 
 	mod := claimedModule(t, userID)
-	mod.Deps = Deps{Auth: authority, Dir: &resolvingDir{id: userID}, Apphost: &tokenIssuer{state: user.StateClaimed}}
+	mod.Deps = Deps{Auth: authority, Dir: &resolvingDir{id: userID}, Apphost: &tokenIssuer{state: user.StateClaimed}, Sys: &tokenIssuer{state: user.StateClaimed}}
 
 	return mod
 }

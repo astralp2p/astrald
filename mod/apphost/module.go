@@ -6,6 +6,7 @@ import (
 
 	"github.com/astralp2p/astral-go/api/apphost"
 	"github.com/astralp2p/astral-go/api/auth"
+	"github.com/astralp2p/astral-go/api/policy"
 	"github.com/astralp2p/astral-go/astral"
 )
 
@@ -50,13 +51,16 @@ type Module interface {
 	// Grants returns every permit granted to identity, expired included.
 	Grants(identity *astral.Identity) ([]*auth.Permit, error)
 
-	// Manager returns the App identity apphost.register_manager appointed, or
-	// nil.
-	Manager() *astral.Identity
+	// ProvisionApp mints an App identity as apphost.register does, without
+	// asking the app register policy: a key pair, a signed app contract
+	// holding contractPermits, node-local grants of grantPermits beside the
+	// grants every app holds, and an access token.
+	ProvisionApp(ctx *astral.Context, grantPermits, contractPermits []*auth.Permit) (*apphost.AccessToken, error)
 
-	// NodeState returns the node's state, one of user.StateFresh,
-	// user.StateUnclaimed and user.StateClaimed.
-	NodeState(ctx *astral.Context) string
+	// SetPolicyDelegate stores d as the delegate of the named apphost policy
+	// (app_register or grant_request), or clears it when d is nil. Another
+	// name is an error.
+	SetPolicyDelegate(ctx *astral.Context, name string, d *policy.Delegate) error
 }
 
 var ErrMissingAppIdentity = errors.New("missing app identity")

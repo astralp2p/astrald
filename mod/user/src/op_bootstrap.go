@@ -199,6 +199,6 @@ func (mod *Module) mayClaim(caller *astral.Identity) bool {
 	if caller.IsEqual(mod.node.Identity()) {
 		return true
 	}
-	manager := mod.Apphost.Manager()
+	manager := mod.Sys.Manager()
 	return !manager.IsZero() && caller.IsEqual(manager)
 }

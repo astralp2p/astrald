@@ -74,13 +74,13 @@ var defaultConfig = Config{
 		Tokenless: []string{
 			".spec",
 			"apphost.register",
-			"apphost.register_manager",
+			"sys.register_manager",
 			"user.info",
 		},
 		States: GateStates{
 			Fresh: []string{
 				".spec",
-				"apphost.register_manager",
+				"sys.register_manager",
 				"user.info",
 			},
 			Unclaimed: []string{

@@ -73,7 +73,7 @@ func newJoinFixture(answer astral.Object) *joinFixture {
 			"swarm":  f.swarmID,
 			"anyone": astral.Anyone,
 			"self":   f.node.id,
-		}}, Apphost: &tokenIssuer{state: user.StateUnclaimed}},
+		}}, Apphost: &tokenIssuer{state: user.StateUnclaimed}, Sys: &tokenIssuer{state: user.StateUnclaimed}},
 		node: f.node,
 	}
 	return f
@@ -239,6 +239,7 @@ func TestJoinAdmitsTheManager(t *testing.T) {
 	f := newJoinFixture(signed)
 	manager := astral.GenerateIdentity()
 	f.mod.Apphost = &tokenIssuer{state: user.StateUnclaimed, manager: manager}
+	f.mod.Sys = f.mod.Apphost.(*tokenIssuer)
 
 	objs, err := routeJoin(t, f, manager, astral.OriginLocal, "user.join?node=swarm")
 	if err != nil {

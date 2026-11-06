@@ -27,8 +27,8 @@ func (mod *Module) OpInfo(ctx *astral.Context, q *routing.IncomingQuery, args op
 	defer ch.Close()
 
 	info := &user.Info{
-		State:   astral.String8(mod.Apphost.NodeState(ctx)),
-		Manager: mod.Apphost.Manager(),
+		State:   astral.String8(mod.Sys.NodeState(ctx)),
+		Manager: mod.Sys.Manager(),
 	}
 
 	ac := mod.ActiveContract()

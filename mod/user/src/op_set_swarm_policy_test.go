@@ -16,7 +16,7 @@ import (
 // successful save.
 func swarmPolicySetter(admin bool, delegateID *astral.Identity) *Module {
 	return &Module{
-		Deps: Deps{Auth: &recordingAuth{verdict: admin}, Dir: &resolvingDir{id: delegateID}, Apphost: &tokenIssuer{}},
+		Deps: Deps{Auth: &recordingAuth{verdict: admin}, Dir: &resolvingDir{id: delegateID}, Apphost: &tokenIssuer{}, Sys: &tokenIssuer{}},
 		node: &identityNode{id: astral.GenerateIdentity()},
 		log:  log.New(nil),
 	}
@@ -40,9 +40,9 @@ func awaitSetterClose(t *testing.T, w *recordingWriter) {
 	}
 }
 
-// A caller without AdminManageApps is answered auth.ErrNotPermitted before
-// anything is written, and AdminManageApps is the one action asked about.
-func TestSetSwarmPolicyRequiresAdminManageApps(t *testing.T) {
+// A caller without ConfigureNodeState is answered auth.ErrNotPermitted before
+// anything is written, and ConfigureNodeState is the one action asked about.
+func TestSetSwarmPolicyRequiresConfigureNodeState(t *testing.T) {
 	mod := swarmPolicySetter(false, astral.GenerateIdentity())
 
 	w, err := setSwarmPolicyOp(t, mod.OpSetSwarmJoinPolicy, "user.set_swarm_join_policy?identity=cp&operation=control.decide_swarm")
@@ -56,8 +56,8 @@ func TestSetSwarmPolicyRequiresAdminManageApps(t *testing.T) {
 		t.Fatal("a rejected setter wrote a delegate")
 	}
 	asked := mod.Auth.(*recordingAuth).recorded()
-	if len(asked) != 1 || asked[0].ObjectType() != (auth.AdminManageAppsAction{}).ObjectType() {
-		t.Fatalf("the setter asked about %v, want AdminManageApps alone", asked)
+	if len(asked) != 1 || asked[0].ObjectType() != (auth.ConfigureNodeStateAction{}).ObjectType() {
+		t.Fatalf("the setter asked about %v, want ConfigureNodeState alone", asked)
 	}
 }
 
