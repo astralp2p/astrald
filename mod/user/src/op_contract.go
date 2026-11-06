@@ -18,8 +18,9 @@ type opContractArgs struct {
 // user.ErrNoActiveContract.
 // Spec: .ai/system/protocols/user/ops/user.contract.md
 //
-// why no action check: a node of the user reads the contract of a peer it found
-// nearby before the peer holds its contract, so no swarm permit admits it yet.
+// why: no named action guards this op; a node of the user reads the contract of
+// a peer it found nearby before the peer holds its contract, so no swarm permit
+// admits it yet. A direct link is the guard.
 func (mod *Module) OpContract(ctx *astral.Context, q *routing.IncomingQuery, args opContractArgs) error {
 	ch := q.Accept(channel.WithOutputFormat(args.Out))
 	defer ch.Close()
