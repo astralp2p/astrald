@@ -23,6 +23,7 @@ const (
 	stepIndexRelay = "index relay contract"
 	stepStoreKey   = "store key"
 	stepIndexKey   = "index key"
+	stepSignPermit = "sign permit contract"
 )
 
 // registerSteps records, in order, the steps apphost.register takes and the
@@ -60,8 +61,8 @@ func (r *registerSteps) taken() []string {
 	return slices.Clone(r.steps)
 }
 
-// registerAuth signs every contract without checking it and records the relay
-// contract it indexes.
+// registerAuth signs every contract without checking it, and records the relay
+// contract it indexes and every permit contract it signs.
 type registerAuth struct {
 	serveAppsSigner
 	steps *registerSteps
@@ -75,6 +76,11 @@ func (a registerAuth) IndexContract(_ *astral.Context, sc *auth.SignedContract) 
 		return a.steps.indexErr
 	}
 	a.steps.record(stepIndexRelay)
+	return nil
+}
+
+func (a registerAuth) SignContract(*astral.Context, *auth.SignedContract) error {
+	a.steps.record(stepSignPermit)
 	return nil
 }
 
@@ -301,5 +307,108 @@ func TestRegisterRefusesADecisionNamingAnActor(t *testing.T) {
 	}
 	if tokens := issuedTokens(t, mod); len(tokens) != 0 {
 		t.Fatalf("a refused registration issued %d tokens", len(tokens))
+	}
+}
+
+// sudoPermit is an unconstrained mod.auth.sudo_action permit.
+func sudoPermit() *auth.Permit {
+	return &auth.Permit{Action: astral.String8(auth.SudoAction{}.ObjectType())}
+}
+
+// grantRows counts the node-local grants the registrar holds.
+func grantRows(t *testing.T, mod *Module) int64 {
+	t.Helper()
+
+	var n int64
+	if err := mod.db.Model(&dbGrant{}).Count(&n).Error; err != nil {
+		t.Fatalf("count grants: %v", err)
+	}
+	return n
+}
+
+// TestRegisterRefusesASudoContractPermit: a decision whose contract permits
+// name mod.auth.sudo_action is declined; the node mints no identity, signs no
+// contract, writes no grant and issues no token.
+func TestRegisterRefusesASudoContractPermit(t *testing.T) {
+	for name, contractPermits := range map[string][]*auth.Permit{
+		"alone":         {sudoPermit()},
+		"after another": append(permits("mod.user.see_swarm_action"), sudoPermit()),
+	} {
+		t.Run(name, func(t *testing.T) {
+			steps := &registerSteps{}
+			mod := delegatedRegistrar(t, steps, newDelegateNode(&apphost.AppRegisterDecision{
+				Allow:           true,
+				GrantPermits:    permits("mod.user.see_swarm_action"),
+				ContractPermits: contractPermits,
+			}))
+			w := newRecordingWriter()
+
+			if err := register(t, mod, &apphost.RegisterRequest{}, w); err != nil {
+				t.Fatalf("apphost.register rejected before the decision: %v", err)
+			}
+
+			if got, want := w.refusal(t), apphost.ErrRegistrationDeclined.Error(); got != want {
+				t.Fatalf("answered %q; want %q", got, want)
+			}
+			if got := steps.taken(); len(got) != 0 {
+				t.Fatalf("a refused registration took steps %q", got)
+			}
+			if tokens := issuedTokens(t, mod); len(tokens) != 0 {
+				t.Fatalf("a refused registration issued %d tokens", len(tokens))
+			}
+			if n := grantRows(t, mod); n != 0 {
+				t.Fatalf("a refused registration wrote %d grants", n)
+			}
+		})
+	}
+}
+
+// TestRegisterUnderAcceptAllRefusesASudoContractPermit: accept_all copies the
+// asked-for contract permits into its decision, so an app asking for
+// mod.auth.sudo_action as a contract permit is declined.
+func TestRegisterUnderAcceptAllRefusesASudoContractPermit(t *testing.T) {
+	steps := &registerSteps{}
+	mod := serveAppsRegistrar(t)
+	mod.Auth = registerAuth{steps: steps}
+	mod.Crypto = registerKeys{steps: steps}
+	mod.Objects = registerStore{steps: steps}
+	w := newRecordingWriter()
+
+	req := &apphost.RegisterRequest{ContractPermits: []*auth.Permit{sudoPermit()}}
+	if err := register(t, mod, req, w); err != nil {
+		t.Fatalf("apphost.register rejected before the decision: %v", err)
+	}
+
+	if got, want := w.refusal(t), apphost.ErrRegistrationDeclined.Error(); got != want {
+		t.Fatalf("answered %q; want %q", got, want)
+	}
+	if got := steps.taken(); len(got) != 0 {
+		t.Fatalf("a refused registration took steps %q", got)
+	}
+	if tokens := issuedTokens(t, mod); len(tokens) != 0 {
+		t.Fatalf("a refused registration issued %d tokens", len(tokens))
+	}
+}
+
+// TestProvisionAppSignsASudoContractPermit: sys.register_manager provisions the
+// manager through ProvisionApp, which asks no register policy, so a
+// mod.auth.sudo_action contract permit is signed into its node->app contract.
+func TestProvisionAppSignsASudoContractPermit(t *testing.T) {
+	steps := &registerSteps{}
+	mod := serveAppsRegistrar(t)
+	mod.Auth = registerAuth{steps: steps}
+	mod.Crypto = registerKeys{steps: steps}
+	mod.Objects = registerStore{steps: steps}
+
+	token, err := mod.ProvisionApp(astral.NewContext(nil), nil, []*auth.Permit{sudoPermit()})
+	if err != nil {
+		t.Fatalf("ProvisionApp: %v", err)
+	}
+	if token == nil || token.Identity.IsZero() {
+		t.Fatalf("ProvisionApp answered %v; want an access token", token)
+	}
+	want := []string{stepIndexRelay, stepStoreKey, stepIndexKey, stepSignPermit}
+	if got := steps.taken(); !slices.Equal(got, want) {
+		t.Fatalf("ProvisionApp took steps %q; want %q", got, want)
 	}
 }
