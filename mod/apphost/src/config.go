@@ -1,8 +1,6 @@
 package apphost
 
 import (
-	"fmt"
-
 	"github.com/astralp2p/astrald/lib/paths"
 	"github.com/astralp2p/astrald/lib/policyconf"
 )
@@ -23,11 +21,6 @@ type Config struct {
 
 	// Policies selects the admission policies apphost applies.
 	Policies Policies `yaml:"policies,omitempty"`
-
-	// AllowAnonymous and AnonymousAllowlist are removed keys. A file naming one
-	// fails to load; see checkRemovedKeys.
-	AllowAnonymous     any `yaml:"allow_anonymous,omitempty"`
-	AnonymousAllowlist any `yaml:"anonymous_allowlist,omitempty"`
 }
 
 // Gate lists the ops a session may call, IPC, WebSocket and HTTP alike. An
@@ -101,20 +94,6 @@ var defaultConfig = Config{
 	Policies: Policies{
 		AppRegister: policyconf.Setting{Mode: policyconf.RejectAll},
 	},
-}
-
-// checkRemovedKeys refuses a config that names a key the gate replaced.
-//
-// why an error and not a warning: the removed keys widened what a session
-// without a token reaches, and ignoring them would narrow it unannounced.
-func (c *Config) checkRemovedKeys() error {
-	switch {
-	case c.AllowAnonymous != nil:
-		return fmt.Errorf("apphost.yaml: allow_anonymous is removed; gate.tokenless lists the ops a session without a token may call")
-	case c.AnonymousAllowlist != nil:
-		return fmt.Errorf("apphost.yaml: anonymous_allowlist is removed; gate.tokenless and gate.states replace it")
-	}
-	return nil
 }
 
 // resolveAddrs applies the config path rule to the unix: addresses of listen and bind_http: "~/" is

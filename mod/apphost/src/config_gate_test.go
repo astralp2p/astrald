@@ -2,7 +2,6 @@ package apphost
 
 import (
 	"slices"
-	"strings"
 	"testing"
 
 	"github.com/astralp2p/astrald/lib/policyconf"
@@ -13,10 +12,8 @@ import (
 func loadConfig(t *testing.T, src string) (Config, error) {
 	t.Helper()
 	cfg := defaultConfig
-	if err := yaml.UnmarshalStrict([]byte(src), &cfg); err != nil {
-		return cfg, err
-	}
-	return cfg, cfg.checkRemovedKeys()
+	err := yaml.UnmarshalStrict([]byte(src), &cfg)
+	return cfg, err
 }
 
 // TestConfigDefaultsMatchTheDistribution: the code defaults are the
@@ -72,19 +69,5 @@ policies:
 	}
 	if defaultConfig.Policies.AppRegister.Mode != policyconf.RejectAll || len(defaultConfig.Gate.States.Fresh) != 2 {
 		t.Fatal("loading changed the defaults")
-	}
-}
-
-// TestConfigRefusesRemovedKeys: a file still naming the replaced keys fails to
-// load and names gate.
-func TestConfigRefusesRemovedKeys(t *testing.T) {
-	for _, src := range []string{
-		"allow_anonymous: true\n",
-		"allow_anonymous: false\n",
-		"anonymous_allowlist:\n  unclaimed: [user.info]\n",
-	} {
-		if _, err := loadConfig(t, src); err == nil || !strings.Contains(err.Error(), "gate") {
-			t.Errorf("%q: error %v; want one naming gate", src, err)
-		}
 	}
 }
