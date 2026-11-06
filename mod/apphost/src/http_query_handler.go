@@ -3,6 +3,7 @@ package apphost
 import (
 	"errors"
 	"io"
+	"net"
 	"net/http"
 	"strings"
 	"time"
@@ -75,17 +76,17 @@ func (srv *HTTPQueryHandler) ServeHTTP(writer http.ResponseWriter, request *http
 		WithTimeout(5 * time.Second)
 	defer cancel()
 
-	q := query.New(srv.Identity, targetID, method, params)
+	q := launchHTTPQuery(request, query.New(srv.Identity, targetID, method, params))
 
 	// why: an HTTP session holds a token, and a query to the node obeys the
 	// state lists of the gate as an IPC or WebSocket query does.
-	if !srv.gateAdmits(ctx, q, false) {
+	if !srv.gateAdmits(ctx, q.Query, false) {
 		writer.WriteHeader(http.StatusForbidden)
 		return
 	}
 
 	// route the query
-	ch, err := query.Route(ctx, srv.node, q)
+	conn, err := query.RouteInFlight(ctx, srv.node, q)
 	switch {
 	case err == nil:
 	case errors.Is(err, &astral.ErrRejected{}):
@@ -98,9 +99,36 @@ func (srv *HTTPQueryHandler) ServeHTTP(writer http.ResponseWriter, request *http
 		writer.WriteHeader(http.StatusInternalServerError)
 		return
 	}
-	defer ch.Close()
+	defer conn.Close()
 
 	// forward the traffic
 	writer.WriteHeader(http.StatusOK)
-	_, err = io.Copy(writer, ch.Transport())
+	_, err = io.Copy(writer, conn)
+}
+
+// launchHTTPQuery launches q for an HTTP request and stamps the origin of the
+// request on it.
+func launchHTTPQuery(request *http.Request, q *astral.Query) *astral.InFlightQuery {
+	inFlight := astral.Launch(q)
+
+	// why: a bind_http on a public address admits clients from other machines.
+	// Such a client arrives from outside the node, as a remote caller does, and
+	// must not pass an op's refusal of network origin as a local caller would.
+	if isRemote(request) {
+		inFlight.Extra.Set("origin", astral.OriginNetwork)
+	}
+
+	return inFlight
+}
+
+// isRemote reports whether request came over TCP from a non-loopback address.
+//
+// why TCP only: a unix: or memu: listener serves clients on the same host, and
+// their peer address is not an IP. They stay local.
+//
+// why an unparsable TCP address is remote: isLoopback reads only a loopback IP
+// as local, and a peer that cannot be placed is not trusted as local.
+func isRemote(request *http.Request) bool {
+	addr, ok := request.Context().Value(http.LocalAddrContextKey).(*net.TCPAddr)
+	return ok && addr != nil && !isLoopback(request)
 }
