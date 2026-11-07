@@ -408,7 +408,7 @@ func serveAppsRegistrar(t *testing.T) *Module {
 	}
 
 	// why accept_all: a registrar under the default reject_all writes nothing.
-	config := defaultConfig
+	config := defaultConfig()
 	config.Policies.AppRegister = policyconf.Setting{Mode: policyconf.AcceptAll}
 
 	return &Module{
