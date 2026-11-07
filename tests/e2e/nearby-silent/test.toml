@@ -1,0 +1,10 @@
+nodes   = ["node1", "node2", "reflector"]
+timeout = 300
+after   = "nearby-stealth-meet"
+# why a capture on the reflector itself: it sees every datagram the reflector
+# sends on any of its interfaces, which no peer can. The op starts it before
+# the driver and it runs on its own for --for seconds, then hands its record
+# to the reflector's tree (netsim/ops/capture-ether). script.py reads --for and
+# --name from this line.
+ops     = ["capture-ether reflector --for 150 --name silent"]
+facts   = ["nearby_silent"]

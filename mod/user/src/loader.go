@@ -2,6 +2,7 @@ package user
 
 import (
 	"errors"
+	"time"
 
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astral-go/astral/log"
@@ -20,9 +21,13 @@ func (Loader) Load(node astral.Node, assets assets.Assets, log *log.Logger) (cor
 		log:    log,
 		assets: assets,
 		ready:  make(chan struct{}),
+		file:   defaultFileConfig,
+		dials:  newDialMap(),
+		now:    time.Now,
 	}
+	mod.readPeerContract = mod.readContract
 
-	if err := assets.LoadYAML(user.ModuleName, &mod.config); err != nil && !errors.Is(err, resources.ErrNotFound) {
+	if err := assets.LoadYAML(user.ModuleName, &mod.file); err != nil && !errors.Is(err, resources.ErrNotFound) {
 		return nil, err
 	}
 

@@ -23,8 +23,9 @@ set -eu
 systemctl is-enabled --quiet astrald
 systemctl start astrald
 ok=
+# why user.info: the probe runs without a token, as run.sh's does
 for _ in 1 2 3 4 5 6 7 8 9 10; do
-    if systemctl is-active --quiet astrald && timeout 5 astral-query localnode:.spec -out json >/dev/null 2>&1; then
+    if systemctl is-active --quiet astrald && timeout 5 astral-query localnode:user.info -out json >/dev/null 2>&1; then
         ok=1; break
     fi
     sleep 1

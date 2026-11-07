@@ -38,10 +38,18 @@ async def attempt(coro) -> dict:
     return {"refused": False, "detail": "answered", "answer": answer}
 
 
+async def state(c) -> dict:
+    """The node state user.info reports, or how the probe was refused."""
+    r = await attempt(c.user.info())
+    if not r["refused"]:
+        r["state"] = r.pop("answer").state
+    return r
+
+
 async def probe_unclaimed(c) -> dict:
     """What a token-less session reaches on the unclaimed node, besides setup."""
     probes = {op: await attempt(jsonops.value(c, f"{op}?out=json")) for op in STEP_BY_STEP}
-    probes["user.info"] = await attempt(c.user.info())
+    probes["user.info"] = await state(c)
     return probes
 
 
@@ -70,7 +78,10 @@ async def probe_claimed(c) -> dict:
 async def register_admin(c, endpoint: str) -> dict:
     """Register an app asking for admin rights; list tokens and ask whoami with
     no caller, as the app."""
-    app = await jsonops.value(c, f"apphost.register?grant_permits={ADMIN}&out=json")
+    app = await jsonops.value(
+        c, "apphost.register?in=json&out=json",
+        body={"Type": "mod.apphost.register_request",
+              "Object": {"GrantPermits": [{"Action": ADMIN}]}})
     async with await astral.connect(endpoint, token=app["Token"]) as a:
         tokens = await attempt(a.apphost.list_tokens())
         who = await a.apphost.whoami(caller=None)
@@ -86,14 +97,15 @@ async def link(n1: dict, n2: dict) -> None:
 
 async def join(joiner: dict, claimer: dict) -> dict:
     async with await astral.connect(joiner["endpoint"]) as c:      # anonymous
-        before = await attempt(c.user.info())
+        before = await state(c)
         joined = await attempt(jsonops.value(
             c, f"user.join?node={claimer['identity']}&out=json", timeout=DEADLINE))
         after = await attempt(c.user.info())
         again_anon = await attempt(jsonops.value(
             c, f"user.join?node={claimer['identity']}&out=json", timeout=DEADLINE))
-    # why the node token: the claimed list refuses user.join to a token-less
-    # session, so only a session with a token reaches the op's own refusal.
+    # why the node token as well: the distribution gate refuses user.join to a
+    # token-less session, so a session with a token is the one that reaches the
+    # op's own refusal there.
     async with await astral.connect(joiner["endpoint"], token=joiner["token"]) as c:
         again = await attempt(jsonops.value(
             c, f"user.join?node={claimer['identity']}&out=json", timeout=DEADLINE))

@@ -2,10 +2,11 @@
 """Oracle: one user.bootstrap call claims a node, from given or generated words.
 
 node1's first call must answer one mod.user.bootstrap_result naming
-EXPECTED_USER_ID with no words and a token; its second must be rejected with
-code 2; acting as the User with that token, user.info must name that User as
-issuer and node1 as subject. node2's call must answer 24 words that derive the
-identity it answered, and a token. No node log may hold any of the words.
+EXPECTED_USER_ID with no words and a token; its second must answer only the
+error_message `node already claimed`; acting as the User with that token,
+user.info must name that User as issuer and node1 as subject. node2's call
+must answer 24 words that derive the identity it answered, and a token. No
+node log may hold any of the words.
 """
 import asyncio
 from pathlib import Path
@@ -20,6 +21,9 @@ EXPECTED_USER_ID = (
     "02564ba75b0fc5869e12c0c89e56a9c4fbec9d23ed01e6d240aac80532fcb10af1")
 WORDS = ("horse soldier imitate stool square buyer verb party enjoy "
          "result jazz rabbit trigger file benefit cloth term change")
+# user.bootstrap's answer on a node with an active contract, sent before the
+# op reads the words.
+ALREADY_CLAIMED = {"Type": "error_message", "Object": "node already claimed"}
 
 
 def check_log_free_of(node: dict, words: str) -> None:
@@ -48,7 +52,7 @@ async def check_node1(n1: dict, facts: dict) -> None:
         "the driver did not act with the token the claim returned")
 
     second = facts["second"]
-    assert second["refused"] and "code 2" in second["detail"], (
+    assert second == {"refused": False, "answer": [ALREADY_CLAIMED]}, (
         f"second call on a claimed node: {second}")
 
     async with await astral.connect(n1["endpoint"],
@@ -83,8 +87,8 @@ async def main():
     await check_node1(doc["nodes"]["node1"], doc["facts"])
     check_node2(doc["nodes"]["node2"], doc["facts"])
     print("oracle: given words claimed node1 for the pinned user, a second call "
-          "was refused with code 2; generated words claimed node2 and derive "
-          "its user; no node log holds the words")
+          "was refused as node already claimed; generated words claimed node2 "
+          "and derive its user; no node log holds the words")
 
 
 asyncio.run(main())

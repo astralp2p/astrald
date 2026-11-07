@@ -9,22 +9,20 @@ relay query naming the agent only under that contract.
 Then the app: node2's app heard the agent, and the tool answered it the
 agent's identity. A query crossing the link as node1's would name node1.
 
-Last, the operations: node2 refused both to the agent, and each failure reads
-as a refusal. user.info refuses a caller outside the swarm with code 4, which
-a relay refusal never carries, so its code places the refusal at the op.
+Last, the operations: node2 refused both to the agent, and each refusal is the
+op's. An op refuses a caller it does not authorize by accepting the query and
+answering `not permitted`, while a relay refusal rejects the query before any
+op runs, so that answer places the refusal at the op.
 """
 import json
 
 from lib.nodeconfig import PEER_TOOLS
 from lib.sessionio import load
 
-# what a refusal reads like at the tool boundary: mod/mcp wraps a routing
-# error as "query failed: %v", and a rejection reads "query rejected (<code>)"
-REFUSAL_MARKER = "query rejected"
-
-# what a refusal must not read like: each means the call never got a verdict
-NOT_A_REFUSAL = ("route not found", "unknown target", "HTTP 401", "HTTP 404",
-                 "HTTP 500", "undecodable")
+# what an op answers a caller it does not authorize, as the tool's objects:
+# one error_message (astral-docs core-definitions/op.md), which mod/mcp hands
+# the agent unread
+NOT_PERMITTED = [{"Type": "error_message", "Object": "not permitted"}]
 
 
 def check_controls(facts):
@@ -64,20 +62,18 @@ def check_app(facts):
 def check_ops(facts):
     for path in ("nodes.links", "user.info"):
         c = facts["calls"][path]
-        assert not c["answered"], (
+        assert c["answered"], (
+            f"{path} failed for the agent with {c['detail']} — no op answered, "
+            "so the failure says nothing about the caller node2 read")
+        objects = c["result"].get("structuredContent", {}).get("objects")
+        granted = [o for o in objects or [] if o.get("Type") != "error_message"]
+        assert not granted, (
             f"{path} on node2 answered node1's agent: "
-            f"{json.dumps(c.get('result'))[:300]} — the agent reached node2 "
+            f"{json.dumps(granted)[:300]} — the agent reached node2 "
             "with node1's authority")
-        detail = c["detail"].lower()
-        assert not any(m.lower() in detail for m in NOT_A_REFUSAL), (
-            f"{path} failed without being refused: {c['detail']}")
-        assert REFUSAL_MARKER in detail, (
-            f"{path} failed with {c['detail']}, which names no refusal")
-
-    info = facts["calls"]["user.info"]["detail"]
-    assert "(4)" in info, (
-        f"user.info refused the agent with {info!r}, not code 4 — the refusal "
-        "did not come from the op reading a caller outside the swarm")
+        assert objects == NOT_PERMITTED, (
+            f"{path} answered the agent {json.dumps(c['result'])[:300]}, which "
+            "is not the op refusing its caller")
 
 
 def main():

@@ -15,6 +15,7 @@ import (
 	"github.com/astralp2p/astral-go/astral/log"
 	"github.com/astralp2p/astral-go/lib/query"
 	"github.com/astralp2p/astral-go/lib/routing"
+	"github.com/astralp2p/astrald/lib/policyconf"
 	authmod "github.com/astralp2p/astrald/mod/auth"
 	cryptomod "github.com/astralp2p/astrald/mod/crypto"
 	objectsmod "github.com/astralp2p/astrald/mod/objects"
@@ -235,9 +236,9 @@ func TestServeAppsGrantRefusesAConstrainedPermit(t *testing.T) {
 func TestRegisterGrantRequestLeadsWithTheDefaults(t *testing.T) {
 	defaults := []string{auth.ServeAppsAction{}.ObjectType(), auth.UseBlueprintsAction{}.ObjectType()}
 
-	for _, asked := range []string{"", "mod.user.see_swarm_action"} {
-		requested := registerGrantRequest(asked)
-		want := append(append([]string{}, defaults...), actions(parsePermits(asked))...)
+	for _, asked := range [][]string{nil, {"mod.user.see_swarm_action"}} {
+		requested := registerGrantRequest(permits(asked...))
+		want := append(append([]string{}, defaults...), asked...)
 
 		if got := actions(requested); !slices.Equal(got, want) {
 			t.Fatalf("asked %q: the policy is handed %v; want %v", asked, got, want)
@@ -393,14 +394,26 @@ func serveAppsRegistrar(t *testing.T) *Module {
 		t.Fatalf("open db: %v", err)
 	}
 
+	// note: every connection to :memory: opens its own database, so the pool
+	// holds one.
+	sqlDB, err := gdb.DB()
+	if err != nil {
+		t.Fatalf("sql db: %v", err)
+	}
+	sqlDB.SetMaxOpenConns(1)
+
 	db := &DB{DB: gdb}
-	if err := db.AutoMigrate(&dbGrant{}, &dbAccessToken{}); err != nil {
+	if err := db.migrate(); err != nil {
 		t.Fatalf("migrate: %v", err)
 	}
 
+	// why accept_all: a registrar under the default reject_all writes nothing.
+	config := defaultConfig
+	config.Policies.AppRegister = policyconf.Setting{Mode: policyconf.AcceptAll}
+
 	return &Module{
 		Deps:   Deps{Auth: serveAppsSigner{}, Crypto: serveAppsKeys{}, Objects: serveAppsStore{}},
-		config: defaultConfig,
+		config: config,
 		node:   &serveAppsNode{id: astral.GenerateIdentity()},
 		log:    log.New(nil),
 		db:     db,
@@ -408,13 +421,13 @@ func serveAppsRegistrar(t *testing.T) *Module {
 }
 
 // TestServeAppsRegistrationWritesTheGrant is the operator's decision end to end:
-// under the default register policy, an app that asks for nothing leaves
+// under the accept_all register policy, an app that asks for nothing leaves
 // apphost.register holding ServeApps and UseBlueprints grants.
 func TestServeAppsRegistrationWritesTheGrant(t *testing.T) {
 	mod := serveAppsRegistrar(t)
 	w := newRecordingWriter()
 
-	if err := route(t, mod.OpRegister, astral.GenerateIdentity(), "apphost.register", w); err != nil {
+	if err := register(t, mod, &apphost.RegisterRequest{}, w); err != nil {
 		t.Fatalf("apphost.register refused: %v", err)
 	}
 	awaitServeAppsClose(t, w)

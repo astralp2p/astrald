@@ -17,6 +17,10 @@ messaging.create_mailbox signs one, but only node1 holds it; node2 indexes a
 relay contract pushed by the sibling it names as subject
 (mod/user/src/object_receiver.go).
 
+why the alias goes back: a directory keeps one alias per identity, so
+pointing PEER_ALIAS at node2 removes the `node2` adopt-node set, for every test
+that runs after this one in the same world.
+
 The driver acts and judges nothing.
 """
 import asyncio
@@ -81,9 +85,13 @@ def call_tools(n1: dict, token: str) -> dict:
     return {"tools": tools, "calls": calls}
 
 
-async def main():
-    doc = load()
-    n1, n2 = doc["nodes"]["node1"], doc["nodes"]["node2"]
+async def restore_alias(n1: dict, n2: dict) -> None:
+    """node1's alias for node2 back to the one adopt-node set."""
+    async with await astral.connect(n1["endpoint"], token=n1["token"]) as c:
+        await c.dir.set_alias(n2["identity"], "node2")
+
+
+async def drive(n1: dict, n2: dict):
     facts = {"node1": n1["identity"].lower(), "node2": n2["identity"].lower()}
     facts.update(await prepare(n1, n2))
 
@@ -108,6 +116,15 @@ async def main():
     print("driver: " + ", ".join(
         f"{path} {'answered' if c['answered'] else 'refused'}"
         for path, c in facts["calls"].items()) + f"; the app heard {heard}")
+
+
+async def main():
+    doc = load()
+    n1, n2 = doc["nodes"]["node1"], doc["nodes"]["node2"]
+    try:
+        await drive(n1, n2)
+    finally:
+        await restore_alias(n1, n2)
 
 
 asyncio.run(main())

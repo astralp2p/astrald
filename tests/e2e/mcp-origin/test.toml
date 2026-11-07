@@ -1,5 +1,6 @@
-env     = "node"
-start   = "null"
 nodes   = ["node1"]
-drivers = ["script"]
 timeout = 120
+local_only = "serves an authority on a host port and calls node1's MCP server at its loopback mcp_url"
+facts   = ["alpha", "answer", "ask", "beta", "control_agents",
+           "control_identity", "exchange", "gamma", "questions", "read_beta",
+           "read_gamma", "refusals", "tools", "unadmitted"]

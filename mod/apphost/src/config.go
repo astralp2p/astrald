@@ -2,6 +2,7 @@ package apphost
 
 import (
 	"github.com/astralp2p/astrald/lib/paths"
+	"github.com/astralp2p/astrald/lib/policyconf"
 )
 
 type Config struct {
@@ -15,22 +16,34 @@ type Config struct {
 
 	BindHTTP string `yaml:"bind_http,flow"`
 
-	// AllowAnonymous false refuses every query of a session without a token.
-	AllowAnonymous bool `yaml:"allow_anonymous,omitempty"`
+	// Gate selects the ops a session may call by token presence and node state.
+	Gate Gate `yaml:"gate,omitempty"`
 
-	// Ops a session without a token may call, by node claim state
-	AnonymousAllowlist AnonymousAllowlist `yaml:"anonymous_allowlist,omitempty"`
+	// Policies selects the admission policies apphost applies.
+	Policies Policies `yaml:"policies,omitempty"`
 }
 
-// AnonymousAllowlist lists the ops a session without a token may call, IPC
-// and WebSocket alike, selected by whether a user has claimed the node. An op
-// absent from the active list is refused. A session with a token is not
-// restricted by these lists.
-type AnonymousAllowlist struct {
-	// Unclaimed applies while no user owns the node (the setup ceremony).
+// Gate lists the ops a session may call, IPC, WebSocket and HTTP alike. An
+// entry is an op path; the entry "*" matches every op. A session without a
+// token reaches only the node, and only the ops Tokenless lists. A query to the
+// node, with a token or without, reaches only the ops States lists for the
+// node's state. A query with a token to another identity passes the gate.
+type Gate struct {
+	Tokenless []string   `yaml:"tokenless,omitempty"`
+	States    GateStates `yaml:"states,omitempty"`
+}
+
+// GateStates holds one op list per node state; see user.Info.State.
+type GateStates struct {
+	Fresh     []string `yaml:"fresh,omitempty"`
 	Unclaimed []string `yaml:"unclaimed,omitempty"`
-	// Claimed applies once a user has claimed the node.
-	Claimed []string `yaml:"claimed,omitempty"`
+	Claimed   []string `yaml:"claimed,omitempty"`
+}
+
+// Policies holds the config value of each apphost admission policy. A stored
+// delegate outranks the value; see GetRegisterAppPolicy.
+type Policies struct {
+	AppRegister policyconf.Setting `yaml:"app_register,omitempty"`
 }
 
 var defaultConfig = Config{
@@ -43,29 +56,49 @@ var defaultConfig = Config{
 	// why: the `/.ws` endpoint accepts any Origin and rests on the bind address
 	// to keep other hosts out — .ai/system/topics/ws-transport.md.
 	// Exposing the HTTP API beyond the host is an explicit `bind_http`.
-	BindHTTP:       "tcp:127.0.0.1:8624",
-	Tokens:         map[string]string{},
-	Workers:        32,
-	AllowAnonymous: true,
-	// why so few: a session without a token reaches an op as the node. It
-	// needs to learn the claim state, claim the node, and register an app;
-	// everything else is asked with a token.
-	// why .spec: it lists the node's ops and changes nothing, so a session
-	// learns what it may call before it holds a token.
-	AnonymousAllowlist: AnonymousAllowlist{
-		Unclaimed: []string{
-			"user.info",            // claim state: no active contract while no user owns the node
-			"user.derive_identity", // preview the user that words derive
-			"user.bootstrap",       // claim the node from words
-			"user.join",            // ask a swarm node for membership
-			"apphost.register",     // an app gets its token
-			".spec",                // list the node's ops
-		},
-		Claimed: []string{
-			"user.info",
-			"apphost.register",
+	BindHTTP: "tcp:127.0.0.1:8624",
+	Tokens:   map[string]string{},
+	Workers:  32,
+	// why so few: a fresh node only appoints a manager, and an unclaimed node
+	// only claims, registers apps and lets them serve; a claimed node leaves the
+	// decision to authorization and policies.
+	//
+	// why .spec in every list: it lists the node's ops and changes nothing, so
+	// a client or agent discovers what it may call before it holds a token.
+	//
+	// why apphost.bind, apphost.register_handler and apphost.cancel before the
+	// claim: the manager answers the policies delegated to it, an invitation
+	// from the owner's other device among them, and an app answers only through
+	// a registered handler.
+	Gate: Gate{
+		Tokenless: []string{
 			".spec",
+			"apphost.register",
+			"sys.register_manager",
+			"user.info",
 		},
+		States: GateStates{
+			Fresh: []string{
+				".spec",
+				"sys.register_manager",
+				"user.info",
+			},
+			Unclaimed: []string{
+				".spec",
+				"user.info",
+				"user.derive_identity",
+				"user.bootstrap",
+				"user.join",
+				"apphost.register",
+				"apphost.bind",
+				"apphost.register_handler",
+				"apphost.cancel",
+			},
+			Claimed: []string{gateAny},
+		},
+	},
+	Policies: Policies{
+		AppRegister: policyconf.Setting{Mode: policyconf.RejectAll},
 	},
 }
 

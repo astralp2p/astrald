@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/astralp2p/astral-go/api/auth"
+	"github.com/astralp2p/astral-go/api/nearby"
 	"github.com/astralp2p/astral-go/astral"
 )
 
@@ -20,6 +21,7 @@ func adminNetworkOps() []adminNetworkOp {
 	return []adminNetworkOp{
 		{"nearby.list", func(m *Module) any { return m.OpList }, ""},
 		{"nearby.broadcast", func(m *Module) any { return m.OpBroadcast }, ""},
+		{"nearby.scan", func(m *Module) any { return m.OpScan }, ""},
 	}
 }
 
@@ -57,7 +59,7 @@ func TestAdminNetworkRefusesCallerWithoutPermits(t *testing.T) {
 func TestAdminNetworkAdmitsAuthorizedCaller(t *testing.T) {
 	caller := astral.GenerateIdentity()
 	authority := &recordingAuth{verdict: true}
-	mod := &Module{Deps: Deps{Auth: authority}}
+	mod := &Module{Deps: Deps{Auth: authority}, now: time.Now}
 	w := newRecordingWriter()
 
 	err := route(t, mod.OpList, caller, "nearby.list", w)
@@ -96,4 +98,31 @@ func requireAdminNetworkAsked(t *testing.T, authority *recordingAuth, caller *as
 	if !action.Actor().IsEqual(caller) {
 		t.Fatalf("named actor %v; want the caller %v", action.Actor(), caller)
 	}
+}
+
+// TestAdminNetworkAdmitsAuthorizedScan shows a granted caller's nearby.scan sends one
+// scan on every local subnet and answers ack.
+func TestAdminNetworkAdmitsAuthorizedScan(t *testing.T) {
+	caller := astral.GenerateIdentity()
+	authority := &recordingAuth{verdict: true}
+	h := newHarness(t, nil)
+	h.mod.Auth = authority
+	w := newRecordingWriter()
+
+	if err := route(t, h.mod.OpScan, caller, "nearby.scan", w); err != nil {
+		t.Fatalf("refused an authorized caller: %v", err)
+	}
+	if got := w.answers(t); len(got) != 1 || got[0].ObjectType() != (&astral.Ack{}).ObjectType() {
+		t.Fatalf("answered %v; want ack", got)
+	}
+
+	pushed, subnetted := h.ether.recorded()
+	if len(pushed) != 1 || len(subnetted) != 0 {
+		t.Fatalf("sent %d broadcasts and %d subnet broadcasts; want one scan", len(pushed), len(subnetted))
+	}
+	if _, ok := pushed[0].(*nearby.ScanMessage); !ok {
+		t.Fatalf("sent %v; want a scan", pushed[0].ObjectType())
+	}
+
+	requireAdminNetworkAsked(t, authority, caller)
 }

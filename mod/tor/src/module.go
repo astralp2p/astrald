@@ -8,7 +8,6 @@ import (
 	"github.com/astralp2p/astral-go/sig"
 	"github.com/astralp2p/astrald/core/assets"
 	"github.com/astralp2p/astrald/mod/exonet"
-	"github.com/astralp2p/astrald/mod/nearby"
 	"github.com/astralp2p/astrald/mod/nodes"
 	treemod "github.com/astralp2p/astrald/mod/tree"
 	"golang.org/x/net/proxy"
@@ -19,7 +18,6 @@ const defaultListenPort = 1791
 type Deps struct {
 	Nodes  nodes.Module
 	Exonet exonet.Module
-	Nearby nearby.Module
 	Tree   treemod.Module
 }
 

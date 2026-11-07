@@ -1,6 +1,6 @@
 """The external authority a driver serves on a node's `authority_url`.
 
-A node asks it about the three actions `nodeconfig.AUTH_YAML` names:
+A node asks it about the three actions `nodeconfig.AUTH_ACTIONS` names:
 `mod.messaging.send_action` of a sender before a message leaves,
 `mod.messaging.receive_action` of a recipient before a delivery is stored, and
 `mod.messaging.read_mailbox_action` of a reader before it reads a mailbox that

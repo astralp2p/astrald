@@ -3,9 +3,9 @@ package user
 import (
 	"time"
 
+	"github.com/astralp2p/astral-go/api/policy"
 	"github.com/astralp2p/astral-go/api/user"
 	"github.com/astralp2p/astral-go/astral"
-	"github.com/astralp2p/astrald/mod/coldcard"
 )
 
 const ModuleName = "user"
@@ -15,7 +15,7 @@ const DBPrefix = "users__"
 //
 // why the Coldcard path: one seed derives one user on a Coldcard and in
 // software (operator decision, 2026-10-21).
-const UserKeyPath = coldcard.BIP44Path
+const UserKeyPath = "m/1791'/0'/0'/0/0"
 
 const (
 	// MinimalContractLength is the shortest remaining validity of a node
@@ -46,4 +46,11 @@ type Module interface {
 	// Expel permanently bans nodeID from the swarm. Only the active contract's
 	// issuer may expel and the ban is irreversible.
 	Expel(ctx *astral.Context, nodeID *astral.Identity) (*user.SignedExpulsion, error)
+	// WasOwned reports whether a user contract has been active on this node,
+	// including one that has since expired or been expelled.
+	WasOwned() bool
+	// SetPolicyDelegate stores d as the delegate of the named user policy
+	// (swarm_join, swarm_invite or contract_accept), or clears it when d is
+	// nil. Another name is an error.
+	SetPolicyDelegate(ctx *astral.Context, name string, d *policy.Delegate) error
 }

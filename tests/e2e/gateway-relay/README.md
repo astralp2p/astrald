@@ -3,8 +3,8 @@
 A node nobody can dial is reached through a gateway that can.
 
 - **env** netsim · **start** `two-nodes` · **saves** — · **mutates** true
-- **steps** `enter-nat node2`, `expose-apphost node2`,
-  `configure-gateway node2 --gateway reflector`, then the driver.
+- **steps** `enter-nat node2`, `configure-gateway node2 --gateway reflector`,
+  then the driver.
 - **driver** `script.py` — wait for node2 to register itself, give node1 a
   `gw:` endpoint and nothing else, link.
 - **oracle** `verify.py` — the link to node2 is a `gw` link and not a `tcp`

@@ -3,14 +3,15 @@
 nothing else of the claimed node."""
 from lib.sessionio import load
 
-# The step-by-step setup ops; the unclaimed list refuses them with denied.
+# The step-by-step setup ops; the tokenless list refuses them with denied.
 STEP_BY_STEP = ("bip137sig.new_entropy", "bip137sig.seed", "bip137sig.derive_key",
                 "crypto.public_key", "objects.store", "user.new_node_contract",
                 "auth.sign_contract", "user.accept_contract")
 
-# Ops the claimed list admits, and ops it refuses with denied.
-ADMITTED = ("user.info", "apphost.register")
-DENIED = ("user.derive_identity", "shell.spec", "apphost.list_tokens")
+# Ops the E2E tokenless list admits on the claimed node, and ops it refuses
+# with denied.
+ADMITTED = ("user.info", "apphost.register", "user.derive_identity")
+DENIED = ("shell.spec", "apphost.list_tokens")
 
 
 def main():
@@ -19,8 +20,8 @@ def main():
     claimer, joiner = nodes["claimer"], nodes["joiner"]
 
     u = facts["unclaimed"]
-    assert u["user.info"]["refused"] and "code 2" in u["user.info"]["detail"], (
-        f"token-less user.info on the unclaimed node: {u['user.info']['detail']}")
+    assert u["user.info"].get("state") == "fresh", (
+        f"token-less user.info on the unclaimed node: {u['user.info']}; want state fresh")
     for op in STEP_BY_STEP:
         assert u[op]["refused"] and u[op]["detail"].startswith("Denied"), (
             f"token-less {op} on the unclaimed node: {u[op]['detail']} — want denied")
@@ -51,20 +52,20 @@ def main():
     assert a["whoami"] != claimer["identity"], "an empty caller with a token acts as the node"
 
     j = facts["join"]
-    assert j["before"]["refused"] and "code 2" in j["before"]["detail"], (
-        f"joiner answered user.info before the join: {j['before']['detail']}")
+    assert j["before"].get("state") == "fresh", (
+        f"joiner answered user.info before the join: {j['before']}; want state fresh")
     assert not j["joined"]["refused"], f"user.join: {j['joined']['detail']}"
     assert j["issuer"] == c["claimed"] and j["subject"] == joiner["identity"], (
         f"joiner's contract {j['issuer']} -> {j['subject']}; want "
         f"{c['claimed']} -> {joiner['identity']}")
     assert j["user_after"] == c["claimed"], (
         f"joiner answers as {j['user_after'] or j['after']['detail']}, not the User")
-    assert j["again_anon"]["refused"] and j["again_anon"]["detail"].startswith("Denied"), (
-        f"a token-less user.join on the claimed joiner: {j['again_anon']['detail']} — want denied")
-    assert j["again"]["refused"] and "code 2" in j["again"]["detail"], (
+    assert j["again_anon"]["refused"] and "node already claimed" in j["again_anon"]["detail"], (
+        f"a token-less user.join on the claimed joiner: {j['again_anon']['detail']}")
+    assert j["again"]["refused"] and "node already claimed" in j["again"]["detail"], (
         f"user.join with joiner's token on the claimed joiner: {j['again']['detail']}")
 
-    print("oracle: preview = claim, token is the User, claimed list holds; "
+    print("oracle: preview = claim, token is the User, tokenless list holds; "
           "joiner joined the User's swarm and refuses a second join")
 
 

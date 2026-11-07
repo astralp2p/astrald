@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Driver: touch the node anonymously — the cheapest possible real query.
 
-A token-less session reaches the claim-state probe user.info and nothing off
-the anonymous allowlist. The driver records how both answered.
+A token-less session reaches the node-state probe user.info and nothing off
+the gate's tokenless list. The driver records how both answered.
 """
 import asyncio
 

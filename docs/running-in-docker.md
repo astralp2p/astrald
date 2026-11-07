@@ -87,7 +87,9 @@ With `file: false` the node creates no `logs` directory at all.
 ## Health
 
 The image declares a health check: `astral-query localnode:.spec` every 10
-seconds, timing out at 5, with exit code 0 meaning the node is up. Three
+seconds, timing out at 5, with exit code 0 meaning the node is up. The check
+runs without a token, so an `apphost.yaml` whose `gate.tokenless` list leaves
+out `.spec` makes every container unhealthy. Three
 consecutive failures mark the container unhealthy; the first 15 seconds are a
 start period, in which a failure counts against nothing — the node generates its
 key and starts its modules there. The timing is the image's own rather than the
@@ -141,6 +143,25 @@ services:
 volumes:
   astrald-root:
 ```
+
+## Setup
+
+A new node belongs to nobody. Appoint its manager and claim it inside the
+container, as the [README](../README.md#setting-up-the-node) shows, with
+`docker exec -i`:
+
+```shell
+echo '{"Type":"mod.sys.register_manager_request","Object":{"Name":"cli-setup","GrantPermits":[],"ContractPermits":[],"Policies":[]}}' \
+  | docker exec -i astrald astral-query sys.register_manager -in json -out json
+```
+
+Then claim with the manager's token, passed as `docker exec -e
+ASTRALD_APPHOST_TOKEN=<token>`. Before the appointment any process that reaches
+the local API can appoint itself, a container that shares the API socket
+included. To close that window, write `config/apphost.yaml` on the volume before
+the first start, as
+[Node Setup, Before the first start](https://github.com/astralp2p/astral-docs/blob/master/topics/node-setup.md#before-the-first-start)
+shows.
 
 ## Sharing the local API with other containers
 

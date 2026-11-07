@@ -4,6 +4,7 @@ import (
 	"context"
 	nodesmod "github.com/astralp2p/astrald/mod/nodes"
 	"slices"
+	"sync"
 	"sync/atomic"
 
 	"github.com/astralp2p/astral-go/api/nodes"
@@ -19,6 +20,7 @@ type linkWatcher struct {
 type LinkPool struct {
 	closed   atomic.Bool
 	mod      *Module
+	mu       sync.Mutex
 	links    sig.Set[*Link]
 	watchers sig.Set[*linkWatcher]
 	linkers  sig.Map[string, *NodeLinker]
@@ -46,7 +48,8 @@ func (pool *LinkPool) AddLink(link *Link) error {
 		netName = link.RemoteEndpoint().Network()
 	}
 
-	if err := pool.links.Add(link); err != nil {
+	linkCount, err := pool.addCounted(link)
+	if err != nil {
 		return err
 	}
 
@@ -60,9 +63,6 @@ func (pool *LinkPool) AddLink(link *Link) error {
 	link.GetMux().SetRouter(pool.mod.node)
 
 	pool.mod.log.Infov(1, "added %v-link with %v (%v)", dir, link.RemoteIdentity(), netName)
-	linksWithSameIdentity := pool.links.Select(func(v *Link) bool {
-		return v.RemoteIdentity().IsEqual(link.RemoteIdentity())
-	})
 
 	if !link.outbound {
 		pool.notifyLinkWatchers(link, nil)
@@ -71,7 +71,7 @@ func (pool *LinkPool) AddLink(link *Link) error {
 	pool.mod.Events.Emit(&nodes.LinkCreatedEvent{
 		RemoteIdentity: link.RemoteIdentity(),
 		LinkID:         link.id,
-		LinkCount:      astral.Uint32(len(linksWithSameIdentity)),
+		LinkCount:      astral.Uint32(linkCount),
 	})
 
 	go func() {
@@ -107,6 +107,23 @@ func (pool *LinkPool) Close() {
 	for _, link := range pool.links.Clone() {
 		link.CloseWithError(context.Canceled)
 	}
+}
+
+// addCounted adds link to the pool and answers how many links to its remote
+// identity the pool holds with it.
+// why one lock over both: of links to one node added at once, exactly one then
+// counts 1, and the user module starts its first-link sync on that count alone.
+func (pool *LinkPool) addCounted(link *Link) (int, error) {
+	pool.mu.Lock()
+	defer pool.mu.Unlock()
+
+	if err := pool.links.Add(link); err != nil {
+		return 0, err
+	}
+
+	return len(pool.links.Select(func(v *Link) bool {
+		return v.RemoteIdentity().IsEqual(link.RemoteIdentity())
+	})), nil
 }
 
 // SelectLinkWith returns a link to id, preferring a non-high-pressure link.

@@ -4,7 +4,7 @@
 The control first: a node that signs nothing would satisfy every refusal. Then
 each local refusal must read as the guard's own, naming the party it refused
 and never as a missing key ("sign as ..."), and the network refusal must read
-as a rejection rather than a lost route.
+as the op's origin refusal rather than a lost route.
 
 Then the claim cleared from the tree. A stranger's claim must pass the guard
 and fail only at signing, which shows the node reads as unclaimed and the claim
@@ -37,7 +37,7 @@ EXPECTED = {
 }
 
 # The probe apphost refuses before the guard: a session without a token on a
-# claimed node reaches the anonymous allowlist only.
+# claimed node reaches the gate's tokenless list only.
 DENIED = ("anonymous asks the node key",)
 
 # What a refusal must not read like — each means the call never got a verdict.
@@ -64,7 +64,7 @@ async def main():
         r = probes[name]
         assert r["refused"] and r["detail"].startswith("Denied"), (
             f"{name}: {r['detail']!r} — apphost did not refuse a token-less "
-            "session an op off the anonymous allowlist")
+            "session an op off the gate's tokenless list")
 
     for name, text in EXPECTED.items():
         r = probes[name]
@@ -80,8 +80,8 @@ async def main():
     assert r["refused"], "node1 signed a contract for a query of network origin"
     assert not any(m in detail for m in NOT_A_REFUSAL), (
         f"the user over the link: failed without a verdict: {r['detail']}")
-    assert "rejected with code 1" in detail, (
-        f"the user over the link: {r['detail']} names no rejection")
+    assert "origin not allowed: network" in detail, (
+        f"the user over the link: {r['detail']} names no origin refusal")
 
     cleared = guard["cleared"]
     control = cleared["stranger's claim, claim cleared"]

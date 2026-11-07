@@ -14,6 +14,7 @@ import (
 	"github.com/astralp2p/astrald/mod/crypto"
 	"github.com/astralp2p/astrald/mod/dir"
 	"github.com/astralp2p/astrald/mod/objects"
+	"github.com/astralp2p/astrald/mod/sys"
 	"github.com/astralp2p/astrald/mod/tree"
 	"github.com/astralp2p/astrald/mod/user"
 )
@@ -25,6 +26,7 @@ type Deps struct {
 	Crypto  crypto.Module
 	Dir     dir.Module
 	Objects objects.Module
+	Sys     sys.Module
 	Tree    tree.Module
 }
 
@@ -49,10 +51,12 @@ type Module struct {
 	enRoute               sig.Map[astral.Nonce, *queryEnRoute]
 	pendingInboundQueries sig.Map[astral.Nonce, *pendingInboundQuery]
 
-	// policy persists the registration and grant request delegates; an unset
-	// value selects accept-all for registration and refuse-all for grant
-	// requests. GetRegisterAppPolicy and GetGrantRequestPolicy read it on every
-	// decision.
+	// policy persists the registration and grant request delegates and the
+	// grant request mode. An unset register delegate selects accept-all for
+	// registration. A grant request delegate selects the delegate mode;
+	// otherwise an unset mode or accept_all selects accept-all, and any other
+	// mode selects refuse-all for grant requests. GetRegisterAppPolicy
+	// and GetGrantRequestPolicy read it on every decision.
 	policy policyConfig
 }
 
@@ -63,9 +67,9 @@ func (mod *Module) Run(ctx *astral.Context) error {
 	var workerCount = mod.config.Workers
 
 	mod.conns = mod.listen(ctx)
-	mod.log.Log("anonymous sessions: allowed %v, unclaimed ops %v, claimed ops %v",
-		mod.config.AllowAnonymous, mod.config.AnonymousAllowlist.Unclaimed,
-		mod.config.AnonymousAllowlist.Claimed)
+	mod.log.Log("gate: tokenless ops %v, fresh ops %v, unclaimed ops %v, claimed ops %v",
+		mod.config.Gate.Tokenless, mod.config.Gate.States.Fresh,
+		mod.config.Gate.States.Unclaimed, mod.config.Gate.States.Claimed)
 
 	// spawn workers
 	mod.log.Logv(2, "spawning %v workers", workerCount)

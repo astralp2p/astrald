@@ -1,40 +1,33 @@
 # Each run leases one span of ports, so concurrent runs never share a port.
-# Node N of a run uses the span's first port + 10N: +0 apphost, +1 tcp,
+# Node N of a world uses the span's first port + 10N: +0 apphost, +1 tcp,
 # +2 ether, +3 kcp, +4 mcp, +5 the external authority a driver may serve.
+# Every world of a run starts again at node 0 on the run's span.
 [ports]
 base = 20800            # the first span's first port
-span = 100              # ports per span: 10 nodes per run
-spans = 20              # spans from base: 20 concurrent runs per host
+span = 200              # ports per span: 20 nodes per world
+spans = 20              # spans from base: 20 concurrent runs, 20800-24799
 
 [astral_py]
 path = "~/work/astralp2p/astral-py/master"
-# The oldest astral-py commit these tests run against. d80c0ac sends the
-# identity argument names astrald bd98bbe8 declares; a checkout without it
-# is refused before the first query.
-requires = "d80c0acdf537f02596f386b535215ce6237d7373"
+# The oldest astral-py commit these tests run against. 57460ab decodes
+# user.info's State and Manager, which the setup drivers read; a checkout
+# without it is refused before the first query.
+requires = "57460ab4ec928e72229c0941629606ad13dd4e2d"
 
 [build]
 package = "./cmd/astrald"
 
 [agent]
-# Which operator profile drives --driver agent.
-use = "qwen"
-
-# An operator profile is everything the harness needs to know about one agent:
-# where it lives, and how to hand it a prompt. `command` gets {prompt} replaced
-# with the path to the prompt file inside the guest.
-#
-# why a profile rather than constants: the harness's contract with an agent is
-# small — reach it, hand it a prompt, read JSON facts out of its home — and
-# everything else was incidental hardcoding. Naming it is what makes a second
-# agent a config entry instead of a patch.
-#
-# note: a profile says how to INVOKE an agent, never how to install one. The
-# named command has to already exist in the world (baked into the lab, or put
-# there by a vmop).
-[agent.qwen]
-vm       = "node1"
-user     = "tester"
-command  = 'qwen -y "$(cat {prompt})"'
-model    = "muse-glimmer-30b-p6"
+# The model the lab's operator (Qwen Code on node1, lib/agent.py) drives
+# --driver agent with, set in the operator once per VM or Docker world. An empty model
+# keeps the one the lab baked. base_url applies only with a model, and empty
+# keeps the lab's endpoint.
+model    = "deepseek-v4.1-flash-1017"
 base_url = ""
+# A Docker world's operator gets the image's astral-agent skill: the Astral
+# docs at the commit this checkout pins in .ai/system, fetched from their
+# public repo when the image builds, and tests/docker/astral-agent.md. Name a
+# skill directory here to put its SKILL.md and references/ over the image's
+# (the docs stay the image's), e.g. when working on the skill itself. A VM
+# world's lab bakes its own (netsim/ops/configure-astral-agent).
+skill    = ""

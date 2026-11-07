@@ -36,6 +36,38 @@ class TestReport(unittest.TestCase):
         self.assertIn("astrald misbehaved", text)
         self.assertIn("20260811T000000Z/smoke/", text)
 
+    def test_failure_heading_names_the_phase(self):
+        text = render(doc(entry("policy-delegate", "fail",
+                                failure_kind="environment", phase="restart")),
+                      "r")
+        self.assertIn("### policy-delegate — environment in restart", text)
+        same = render(doc(entry("smoke", "fail", failure_kind="verify",
+                                phase="verify")), "r")
+        self.assertIn("### smoke — verify\n", same)
+
+    def test_a_run_of_several_worlds_names_each_tests_world(self):
+        text = render(doc(entry("smoke", "pass", world="w0"),
+                          entry("bootstrap", "pass", kind="prereq",
+                                world="w1"),
+                          entry("hold-purge", "pass", world="w1")), "r")
+        self.assertIn("| Test | World | Env |", text)
+        self.assertIn("| hold-purge | w1 | node |", text)
+        one = render(doc(entry("smoke", "pass", world="w0")), "r")
+        self.assertNotIn("World", one)
+        skips = render(doc(entry("smoke", "pass", world="w0"),
+                           entry("hold-purge", "skipped", world="w1",
+                                 reason="adopt-node failed in w1")), "r")
+        self.assertIn("- `hold-purge` (w1) — adopt-node failed in w1", skips)
+
+    def test_skip_reasons_are_listed(self):
+        text = render(doc(entry("bootstrap", "fail", failure_kind="verify"),
+                          entry("adopt-node", "skipped",
+                                reason="state one-node was never built"),
+                          entry("expel-node", "skipped")),
+                      "r")
+        self.assertIn("- `adopt-node` — state one-node was never built", text)
+        self.assertIn("- `expel-node`\n", text)    # a pre-v2.2 skip, no reason
+
     def test_skipped_run_is_not_green(self):
         # why: a skipped test carries no verdict, so a run holding one must
         # never render as PASS — that is the whole point of the third status.
@@ -65,7 +97,22 @@ class TestReport(unittest.TestCase):
             doc(entry("a", "fail", failure_kind="driver"))).startswith("FAIL"))
         self.assertTrue(summary_line(
             doc(entry("a", "skipped"))).startswith("INCOMPLETE"))
+        ended = summary_line(dict(doc(entry("a", "pass")),
+                                  aborted="interrupted"))
+        self.assertTrue(ended.startswith("INCOMPLETE"))
+        self.assertTrue(ended.endswith("(ended early: interrupted)"))
 
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestHostRow(unittest.TestCase):
+    def test_a_v2_3_run_names_its_os_and_machine(self):
+        text = render(dict(doc(entry("smoke", "pass")), host_os="Linux 6.1",
+                           host_arch="aarch64"), "20260811T000000Z")
+        self.assertIn("| Host | pi · Linux 6.1 aarch64 |", text)
+
+    def test_an_older_run_names_its_host_alone(self):
+        text = render(doc(entry("smoke", "pass")), "20260811T000000Z")
+        self.assertIn("| Host | pi |", text)

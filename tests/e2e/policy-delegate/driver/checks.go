@@ -81,6 +81,11 @@ func checkDisconnect(ctx *astral.Context, admin *astrald.Client, cp *controlPlan
 	if err != nil {
 		return fmt.Errorf("disconnect: register: %w", err)
 	}
+	// why: the node asks the delegate only once it has read the request.
+	if err := ch.Send(&apphostapi.RegisterRequest{}); err != nil {
+		ch.Close()
+		return fmt.Errorf("disconnect: send register request: %w", err)
+	}
 	if _, err := await(cp.received, 15*time.Second, "the delegate's request"); err != nil {
 		ch.Close()
 		return fmt.Errorf("disconnect: %w", err)

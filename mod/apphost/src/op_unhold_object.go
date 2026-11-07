@@ -18,7 +18,7 @@ type opUnholdObjectArgs struct {
 // runs in batch mode: object IDs are read from the channel until EOS and each
 // input gets one Ack/ErrorMessage reply.
 //
-// why: no action gates this op; it deletes only the caller's own hold rows, and a
+// why: no named action guards this op; it deletes only the caller's own hold rows, and a
 // release only lowers retention, so an app whose grant is gone still releases its holds.
 func (mod *Module) OpUnholdObject(ctx *astral.Context, q *routing.IncomingQuery, args opUnholdObjectArgs) error {
 	ch := q.Accept(channel.WithFormats(args.In, args.Out))

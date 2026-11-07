@@ -1,0 +1,4 @@
+nodes   = ["managed"]
+timeout = 120
+local_only = "its roster, managed, names a node no VM lab runs"
+facts   = ["manager_setup"]

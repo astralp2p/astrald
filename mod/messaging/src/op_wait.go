@@ -23,6 +23,9 @@ type opWaitArgs struct {
 //
 // why the query is accepted before the park: a query must be accepted or
 // rejected within seconds, and a park holds for minutes.
+//
+// why: no named action guards this op; it acts only on the caller's own
+// mailbox, which this node must host (admitsMailCaller in guards.go).
 func (mod *Module) OpWait(ctx *astral.Context, q *routing.IncomingQuery, args opWaitArgs) error {
 	conn := q.AcceptRaw()
 	ch := channel.New(conn, channel.WithOutputFormat(args.Out))

@@ -37,8 +37,12 @@ type opBootstrapArgs struct {
 // them in the reply.
 // Spec: .ai/system/protocols/user/ops/user.bootstrap.md
 //
-// why the origin and caller gates of auth.sign_contract: the op signs the
-// contract that op signs for node setup, so it admits the same queries.
+// why the origin gate of auth.sign_contract: the op signs the contract that op
+// signs for node setup, so it admits the same origins.
+// why the manager besides the node: the manager claims the node with its App
+// token (operator decision, 2026-11-03).
+// why: no named action guards this op; only the node itself or the manager may
+// claim an unclaimed node (mayClaim).
 func (mod *Module) OpBootstrap(ctx *astral.Context, q *routing.IncomingQuery, args opBootstrapArgs) error {
 	ch := q.Accept(channel.WithFormats(args.In, args.Out))
 	defer ch.Close()
@@ -53,7 +57,7 @@ func (mod *Module) OpBootstrap(ctx *astral.Context, q *routing.IncomingQuery, ar
 		return ch.Send(user.ErrAlreadyClaimed)
 	}
 
-	if !q.Caller().IsEqual(mod.node.Identity()) {
+	if !mod.mayClaim(q.Caller()) {
 		return ch.Send(auth.ErrNotPermitted)
 	}
 
@@ -62,14 +66,16 @@ func (mod *Module) OpBootstrap(ctx *astral.Context, q *routing.IncomingQuery, ar
 		return ch.Send(astral.Err(err))
 	}
 
-	userID, err := mod.bootstrap(ctx, q.Caller(), words, args.Passphrase)
+	// why the node as claim caller: mayClaim admitted the caller, and the claim
+	// rule of auth.sign_contract admits the node alone.
+	userID, err := mod.bootstrap(ctx, mod.node.Identity(), words, args.Passphrase)
 	if err != nil {
 		return ch.Send(astral.Err(err))
 	}
 
 	// why: once the node is claimed, a session without a token reaches the
-	// claimed anonymous_allowlist only, so the claiming app receives its
-	// credential as the user here.
+	// gate's tokenless list only, so the claiming app receives its credential
+	// as the user here.
 	token, err := mod.Apphost.CreateAccessToken(userID, apphostmod.DefaultTokenDuration)
 	if err != nil {
 		return ch.Send(astral.Err(err))
@@ -185,4 +191,14 @@ func (mod *Module) signClaim(ctx *astral.Context, caller *astral.Identity, key *
 	}
 
 	return signed, mod.validateActiveContract(signed)
+}
+
+// mayClaim reports whether caller may claim this node through user.bootstrap
+// or user.join: the node itself, or the manager.
+func (mod *Module) mayClaim(caller *astral.Identity) bool {
+	if caller.IsEqual(mod.node.Identity()) {
+		return true
+	}
+	manager := mod.Sys.Manager()
+	return !manager.IsZero() && caller.IsEqual(manager)
 }

@@ -126,7 +126,7 @@ func hasClaimExpiry(c *auth.Contract, now time.Time) bool {
 //
 // why wait for Ready: Run clears an invalid stored contract before Ready
 // closes, so the answer after Ready is the settled one, as apphost's
-// inSetupMode reads it.
+// NodeState reads it.
 func (mod *Module) isUnclaimed(ctx *astral.Context) bool {
 	if mod.User == nil {
 		return false

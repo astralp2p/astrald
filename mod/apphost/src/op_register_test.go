@@ -123,7 +123,7 @@ func registerWith(t *testing.T, steps *registerSteps) *Module {
 	mod.Objects = registerStore{steps: steps}
 
 	w := newRecordingWriter()
-	if err := route(t, mod.OpRegister, astral.GenerateIdentity(), "apphost.register", w); err != nil {
+	if err := register(t, mod, &apphost.RegisterRequest{}, w); err != nil {
 		t.Fatalf("apphost.register refused: %v", err)
 	}
 	awaitServeAppsClose(t, w)
@@ -200,7 +200,7 @@ func TestRegisterRefusedProvisionsNothing(t *testing.T) {
 	mod := delegatedRegistrar(t, steps, refusingNode())
 	w := newRecordingWriter()
 
-	if err := route(t, mod.OpRegister, astral.GenerateIdentity(), "apphost.register", w); err != nil {
+	if err := register(t, mod, &apphost.RegisterRequest{}, w); err != nil {
 		t.Fatalf("a delegated registration was rejected before the decision: %v", err)
 	}
 	awaitServeAppsClose(t, w)
@@ -228,7 +228,7 @@ func TestRegisterRecordsTheDecisionsAuthorizers(t *testing.T) {
 	}))
 	w := newRecordingWriter()
 
-	if err := route(t, mod.OpRegister, astral.GenerateIdentity(), "apphost.register", w); err != nil {
+	if err := register(t, mod, &apphost.RegisterRequest{}, w); err != nil {
 		t.Fatalf("apphost.register refused: %v", err)
 	}
 	awaitServeAppsClose(t, w)
@@ -266,7 +266,7 @@ func TestRegisterIssuesNoTokenWhenAnAuthorizerFails(t *testing.T) {
 	}))
 	w := newRecordingWriter()
 
-	if err := route(t, mod.OpRegister, astral.GenerateIdentity(), "apphost.register", w); err != nil {
+	if err := register(t, mod, &apphost.RegisterRequest{}, w); err != nil {
 		t.Fatalf("apphost.register refused: %v", err)
 	}
 	awaitServeAppsClose(t, w)
@@ -291,7 +291,7 @@ func TestRegisterRefusesADecisionNamingAnActor(t *testing.T) {
 	}))
 	w := newRecordingWriter()
 
-	if err := route(t, mod.OpRegister, astral.GenerateIdentity(), "apphost.register", w); err != nil {
+	if err := register(t, mod, &apphost.RegisterRequest{}, w); err != nil {
 		t.Fatalf("apphost.register rejected before the decision: %v", err)
 	}
 	awaitServeAppsClose(t, w)

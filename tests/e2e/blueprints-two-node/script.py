@@ -60,9 +60,9 @@ async def main():
         # let any caller redefine a live type's wire shape.
         try:
             await c1.objects.register_blueprint(probe_blueprint())
-            reregistered = "accepted"
+            answer = "accepted"
         except astral.errors.RemoteError as e:
-            reregistered = f"refused: {e}"
+            answer = f"refused: {e}"
 
         record = RuntimeRecord(probe_blueprint())
         record.set("Label", LABEL)
@@ -78,10 +78,10 @@ async def main():
         "probe_label": LABEL,
         "probe_serial": SERIAL,
         "probe_object_id": object_id,
-        "reregistered": reregistered,
+        "reregister_answer": answer,
     })
     print(f"driver: node1 learned {TYPE} and holds {object_id[:16]}…; "
-          f"re-registration {reregistered.split(':')[0]}")
+          f"re-registration {answer.split(':')[0]}")
 
 
 asyncio.run(main())

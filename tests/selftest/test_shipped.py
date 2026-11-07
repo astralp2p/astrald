@@ -1,35 +1,80 @@
 """The shipped manifests and suites, checked against each other.
 
 The other selftests exercise the rules on synthetic trees; this one holds the
-repository to them, so a manifest typo or a suite reordered into an
-unsatisfiable walk fails here rather than after a daemon has booted.
+repository to them, so a manifest typo or a test no suite runs fails here
+rather than after a daemon has booted.
 """
+import ast
+import re
 import unittest
 from pathlib import Path
 
-from lib.manifest import load_all, resolve, validate_order
+from lib.manifest import load_all
 from lib.suites import load
+from lib.worlds.vm import RECIPE
 
 TESTS = Path(__file__).resolve().parent.parent
+
+# why: the lab bake runs before any node holds a token, so its ops meet a
+# fresh node's default apphost gate (mod/apphost/src/config.go), which admits
+# a token-less session to these ops alone
+BAKE_TOKENLESS = {"sys.register_manager", "user.info"}
+
+
+def _is_facts(node) -> bool:
+    return (isinstance(node, ast.Subscript)
+            and isinstance(node.slice, ast.Constant)
+            and node.slice.value == "facts")
+
+
+def _read(node, names: set) -> str | None:
+    """The fact `node` reads off a session's top-level facts, if it does:
+    facts["x"] or facts.get("x"), on doc["facts"] or a name bound to it."""
+    if isinstance(node, ast.Subscript):
+        base, key = node.value, node.slice
+    elif (isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute)
+          and node.func.attr == "get" and node.args):
+        base, key = node.func.value, node.args[0]
+    else:
+        return None
+    on_facts = _is_facts(base) or (isinstance(base, ast.Name)
+                                   and base.id in names)
+    if on_facts and isinstance(key, ast.Constant) and isinstance(key.value, str):
+        return key.value
+    return None
+
+
+def oracle_reads(source: str) -> set:
+    """The fact names a verify.py reads, scope by scope: names bound to
+    doc["facts"], and parameters a call hands doc["facts"] to.
+
+    note: a name rebound to a nested dict (services-swarm's facts) is not a
+    top-level read, so only a binding to doc["facts"] itself counts.
+    """
+    tree = ast.parse(source)
+    funcs = {f.name: f for f in ast.walk(tree)
+             if isinstance(f, ast.FunctionDef)}
+    given = {}
+    for call in ast.walk(tree):
+        if isinstance(call, ast.Call) and getattr(call.func, "id", None) in funcs:
+            for i, arg in enumerate(call.args):
+                if _is_facts(arg):
+                    given.setdefault(call.func.id, set()).add(
+                        funcs[call.func.id].args.args[i].arg)
+    out = set()
+    for scope in [tree, *funcs.values()]:
+        nodes = [n for stmt in scope.body for n in ast.walk(stmt)]
+        names = set(given.get(getattr(scope, "name", None), ()))
+        names |= {t.id for n in nodes if isinstance(n, ast.Assign)
+                  and _is_facts(n.value) for t in n.targets
+                  if isinstance(t, ast.Name)}
+        out |= {k for n in nodes if (k := _read(n, names))}
+    return out
 
 
 class TestShipped(unittest.TestCase):
     def setUp(self):
         self.all = load_all(TESTS / "e2e")
-
-    def test_every_suite_walks(self):
-        suites = sorted((TESTS / "suites").glob("*.suite"))
-        self.assertTrue(suites, "no suites ship")
-        for path in suites:
-            with self.subTest(suite=path.name):
-                validate_order(self.all, load(path))
-
-    def test_every_test_resolves_alone(self):
-        for name in sorted(self.all):
-            with self.subTest(test=name):
-                plan = resolve(self.all, [name])
-                self.assertEqual(plan[-1][0].name, name)
-                self.assertEqual(plan[-1][1], "test")
 
     def test_every_test_ships_its_four_files(self):
         for name, t in sorted(self.all.items()):
@@ -37,39 +82,66 @@ class TestShipped(unittest.TestCase):
                 for f in ("test.toml", "script.py", "verify.py", "README.md"):
                     self.assertTrue((t.dir / f).is_file(), f"{name}/{f} missing")
 
-    def test_every_test_is_listed_in_a_suite_or_says_why_not(self):
+    def test_every_test_is_in_some_suite(self):
         # why: a test no suite lists is never executed, and nothing else in the
         # tree notices. apphost-origin landed unlisted because the state it
         # starts from was broken that week, and stayed unlisted — and unrun —
-        # after the fix. The partition is the guard: listed, or carrying the
-        # reason it is not.
+        # after the fix. The planner gives any test a world of its own, so no
+        # test has a reason to stay out of every suite.
         listed = set()
         for path in sorted((TESTS / "suites").glob("*.suite")):
             listed.update(load(path))
+        self.assertEqual(sorted(set(self.all) - listed), [],
+                         "these tests are in no suite, so nothing runs them")
 
-        for name, t in sorted(self.all.items()):
-            with self.subTest(test=name):
-                if t.unlisted:
-                    self.assertNotIn(
-                        name, listed,
-                        f"{name} declares unlisted ({t.unlisted!r}) and a "
-                        f"suite lists it anyway — the reason is stale")
-                else:
-                    self.assertIn(
-                        name, listed,
-                        f"{name} is in no suite and declares no `unlisted` "
-                        f"reason, so nothing ever runs it")
+    def test_main_suite_is_every_test_without_ops(self):
+        # why: main.suite is the run a host without netsim can make, so a
+        # test without ops that only another suite lists never runs there
+        main = set(load(TESTS / "suites" / "main.suite"))
+        self.assertEqual(main, {n for n, t in self.all.items() if not t.ops})
 
-    def test_a_mutator_is_last_in_every_suite_that_lists_it(self):
-        # why: the walk already rejects a consumer placed after a mutator, but
-        # a mutator mid-suite means every following test was skipped by design
-        # rather than by accident — say it once, here.
+    def test_no_suite_lists_both_tor_link_and_nat_punch(self):
+        # why: tor-link's leave-lan downs node2's LAN interface, and nat-punch's
+        # enter-nat then finds none to move behind NAT — the two cannot share
+        # one world, which substrate.suite asked them to
         for path in sorted((TESTS / "suites").glob("*.suite")):
-            listed = load(path)
-            for i, name in enumerate(listed[:-1]):
-                with self.subTest(suite=path.name, test=name):
-                    self.assertFalse(self.all[name].mutates,
-                                     f"{name} mutates and is not last")
+            with self.subTest(suite=path.name):
+                self.assertFalse({"tor-link", "nat-punch"} <= set(load(path)))
+
+    def test_every_fact_an_oracle_reads_is_declared(self):
+        # why: `facts` is the contract the agent driver's prompt footer is
+        # built from, so an oracle reading a fact no manifest on its lineage
+        # declares would fail an operator that did everything it was told
+        for name, t in sorted(self.all.items()):
+            declared, cur = set(t.facts), t
+            while cur.after:
+                cur = self.all[cur.after]
+                declared |= set(cur.facts)
+            with self.subTest(test=name):
+                read = oracle_reads((t.dir / "verify.py").read_text())
+                self.assertEqual(read - declared, set(),
+                                 f"{name}'s oracle reads undeclared facts")
+
+    def test_a_restart_is_local_only(self):
+        # why: only a local world restarts a node, so a test that needs one
+        # must never be planned into a VM world or onto an attached daemon
+        for name, t in sorted(self.all.items()):
+            if t.restart:
+                with self.subTest(test=name):
+                    self.assertTrue(t.local_only)
+
+    def test_the_lab_bake_queries_only_ops_a_fresh_node_admits_tokenless(self):
+        # why: install-astrald probed with .spec after #355 gated it, so every
+        # bake waited out its 90 s and failed with astrald up and answering
+        steps = {line.split()[0] for line in RECIPE.read_text().splitlines()
+                 if line.strip() and not line.lstrip().startswith("#")}
+        for step in sorted(steps):
+            for script in sorted((TESTS / "netsim" / "ops" / step).glob("*.sh")):
+                with self.subTest(op=step, file=script.name):
+                    called = set(re.findall(
+                        r"\bastral-query\s+(?:localnode:)?([a-z_]*\.[a-z_]+)",
+                        script.read_text()))
+                    self.assertEqual(called - BAKE_TOKENLESS, set())
 
 
 if __name__ == "__main__":

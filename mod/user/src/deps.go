@@ -19,6 +19,7 @@ import (
 	objectsmod "github.com/astralp2p/astrald/mod/objects"
 	"github.com/astralp2p/astrald/mod/scheduler"
 	shellmod "github.com/astralp2p/astrald/mod/shell"
+	sysmod "github.com/astralp2p/astrald/mod/sys"
 	"github.com/astralp2p/astrald/mod/tree"
 )
 
@@ -31,6 +32,7 @@ type Deps struct {
 	Nodes     nodesmod.Module
 	Scheduler scheduler.Module
 	Shell     shellmod.Module
+	Sys       sysmod.Module
 	Nearby    nearby.Module
 	Tree      tree.Module
 }
@@ -65,6 +67,7 @@ func (mod *Module) LoadDependencies(ctx *astral.Context) (err error) {
 	mod.policy.SwarmJoin.NoLocal = true
 	mod.policy.SwarmInvite.NoLocal = true
 	mod.policy.ContractAccept.NoLocal = true
+	mod.config.Owned.NoLocal = true
 	if err = tree.BindPath(ctx, &mod.policy, mod.Tree.Root(), policyPath, true); err != nil {
 		return err
 	}

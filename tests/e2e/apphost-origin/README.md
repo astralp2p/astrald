@@ -8,8 +8,8 @@ swarm sibling relaying as that same User does not.
   token and for its token list through that session. Record what came back, and
   what the same two ops do for the User locally on node1 in the same run.
 - **oracle** `verify.py` — the control calls answered, both probes were refused,
-  each refusal reads as a refusal, and node1 holds no token for the identity the
-  probe named.
+  each refusal reads `origin not allowed: network`, and node1 holds no token for
+  the identity the probe named.
 
 ## What this proves that the unit tests do not
 

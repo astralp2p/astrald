@@ -1,5 +1,5 @@
-env     = "node"
-start   = "two-nodes"
 nodes   = ["node1", "node2"]
-drivers = ["script"]
 timeout = 120
+after   = "adopt-node"
+facts   = ["probe_type", "probe_label", "probe_serial", "probe_object_id",
+           "reregister_answer"]

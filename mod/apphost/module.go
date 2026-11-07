@@ -6,6 +6,7 @@ import (
 
 	"github.com/astralp2p/astral-go/api/apphost"
 	"github.com/astralp2p/astral-go/api/auth"
+	"github.com/astralp2p/astral-go/api/policy"
 	"github.com/astralp2p/astral-go/astral"
 )
 
@@ -33,16 +34,33 @@ type Module interface {
 	// expired ones included. An identity holding none is not an error.
 	DeleteAccessTokens(identity *astral.Identity) error
 
-	// Grant records a permit for identity on this node, replacing whatever it
-	// held for the same action. A nil expiresAt grants until revoked. The permit
-	// is recorded, not signed: it authorizes here and travels nowhere.
+	// Grant adds a permit for identity on this node beside the grants it already
+	// holds; an identical permit refreshes its expiry. A nil expiresAt grants
+	// until revoked. The permit is recorded, not signed: it authorizes here and
+	// travels nowhere.
 	Grant(identity *astral.Identity, permit *auth.Permit, expiresAt *time.Time) error
 
-	// Revoke withdraws identity's grant for action, named by its object type.
+	// Revoke withdraws every grant identity holds for action, named by its
+	// object type.
 	Revoke(identity *astral.Identity, action string) error
+
+	// RevokeGrant withdraws one grant by its ID. An ID of another identity's
+	// grant is not found.
+	RevokeGrant(identity *astral.Identity, id uint64) error
 
 	// Grants returns every permit granted to identity, expired included.
 	Grants(identity *astral.Identity) ([]*auth.Permit, error)
+
+	// ProvisionApp mints an App identity as apphost.register does, without
+	// asking the app register policy: a key pair, a signed app contract
+	// holding contractPermits, node-local grants of grantPermits beside the
+	// grants every app holds, and an access token.
+	ProvisionApp(ctx *astral.Context, grantPermits, contractPermits []*auth.Permit) (*apphost.AccessToken, error)
+
+	// SetPolicyDelegate stores d as the delegate of the named apphost policy
+	// (app_register or grant_request), or clears it when d is nil. Another
+	// name is an error.
+	SetPolicyDelegate(ctx *astral.Context, name string, d *policy.Delegate) error
 }
 
 var ErrMissingAppIdentity = errors.New("missing app identity")

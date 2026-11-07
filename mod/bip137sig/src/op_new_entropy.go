@@ -15,7 +15,7 @@ type opNewEntropyArgs struct {
 
 // OpNewEntropy replies with fresh entropy of Bits length, defaulting to DefaultEntropyBits.
 //
-// why: no action gates this op; the fresh entropy goes to the caller and the node keeps
+// why: no named action guards this op; the fresh entropy goes to the caller and the node keeps
 // no copy. The op reads no node secret and changes no state.
 func (mod *Module) OpNewEntropy(
 	ctx *astral.Context,

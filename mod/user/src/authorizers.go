@@ -58,6 +58,9 @@ func (mod *Module) AuthorizeAdminSwarm(ctx *astral.Context, a *user.AdminSwarmAc
 }
 
 // AuthorizeRelayFor allows a swarm node to relay queries on behalf of the local user.
+//
+// why: every swarm member relays with the user as caller; swarm members are
+// the user's own nodes (decided 2026-11-06).
 func (mod *Module) AuthorizeRelayFor(ctx *astral.Context, a *nodes.RelayForAction) bool {
 	if !a.ForID.IsEqual(mod.Identity()) {
 		return false
@@ -110,7 +113,7 @@ func (mod *Module) AuthorizeStoreObjects(ctx *astral.Context, a *auth.StoreObjec
 // granting the swarm here would leave that path open. This node's own identity is in
 // the grant because a session with the node's token acts as it, which is how
 // the CLI reaches these ops; a token-less local caller is promoted to it too
-// (core/router.go), within apphost's anonymous_allowlist.
+// (core/router.go), within apphost's gate.
 //
 // Widening this to siblings is a decision the node's operator makes, not a default.
 // Replacing the handler with a root rule and contract-issued grants is stage 2.

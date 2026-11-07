@@ -1,0 +1,13 @@
+# nearby.suite — nearby on a simulated LAN, A to Z in one world: an unowned
+# node listed and adopted by its nearby alias, two nodes of one User meeting in
+# stealth, a Silent node sending nothing, and a sibling relinked the moment it
+# is heard again.
+#
+# Every test runs VM operations: nearby needs a LAN, and a local world has
+# none (ether skips loopback). Each continues the one before, so the four are
+# one chain in one simulation, and a failure skips the tests after it. The
+# order puts the long outage last.
+nearby-adopt
+nearby-stealth-meet
+nearby-silent
+nearby-relink

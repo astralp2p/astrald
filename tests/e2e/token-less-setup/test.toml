@@ -1,5 +1,3 @@
-env     = "node"
-start   = "null"
 nodes   = ["claimer", "joiner"]
-drivers = ["script"]
 timeout = 180
+facts   = ["token_less_setup"]

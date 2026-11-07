@@ -1,6 +1,8 @@
 package apphost
 
 import (
+	"errors"
+
 	apphostapi "github.com/astralp2p/astral-go/api/apphost"
 	"github.com/astralp2p/astral-go/api/auth"
 	"github.com/astralp2p/astral-go/astral"
@@ -10,16 +12,19 @@ import (
 )
 
 type opRequestGrantArgs struct {
-	// Permits names the actions asked for, comma-separated, as
-	// apphost.register's grant_permits.
-	Permits string `query:"required"`
-	In      string
-	Out     string
+	In  string
+	Out string
 }
 
-// OpRequestGrant asks the grant request policy to grant the calling session's
-// identity the permits it names, and grants all of them on approval, until
-// revoked.
+// OpRequestGrant reads one mod.apphost.request_grant_request after accept and
+// asks the grant request policy to grant the calling session's identity the
+// permits it carries, constraints included. On approval every permit is added
+// beside the grants the identity already holds, for the requested duration; a
+// zero duration grants until revoked. The policy is asked on every call, even
+// when the identity already holds every requested permit.
+//
+// why: no named action guards this op; the grant request policy decides every
+// request, and only a session holding a token may ask.
 func (mod *Module) OpRequestGrant(ctx *astral.Context, q *routing.IncomingQuery, args opRequestGrantArgs) error {
 	// why before accepting: accepting drops the en-route entry naming the session and its origin.
 	requester := mod.sessionOwner(q)
@@ -40,9 +45,9 @@ func (mod *Module) OpRequestGrant(ctx *astral.Context, q *routing.IncomingQuery,
 	if requester.IsZero() {
 		return ch.Send(auth.ErrNotPermitted)
 	}
-	permits := parsePermits(args.Permits)
-	if len(permits) == 0 {
-		return ch.Send(astral.NewError("missing permits"))
+	req, err := receiveGrantPolicyRequest(ch, q.QueryString(), requester, origin)
+	if err != nil {
+		return ch.Send(astral.Err(err))
 	}
 
 	// why: an op runs on a context detached from the requester's, and only the
@@ -50,9 +55,7 @@ func (mod *Module) OpRequestGrant(ctx *astral.Context, q *routing.IncomingQuery,
 	policyCtx, stop := routing.UntilDisconnect(ctx, conn)
 	defer stop()
 
-	dec, err := mod.GetGrantRequestPolicy()(policyCtx, &apphostapi.GrantRequest{
-		Requester: requester, Origin: astral.String8(origin), Permits: permits,
-	})
+	dec, err := mod.GetGrantRequestPolicy()(policyCtx, req)
 	switch {
 	case err != nil:
 		mod.log.Logv(1, "grant request from %v refused: %v", requester, err)
@@ -62,11 +65,39 @@ func (mod *Module) OpRequestGrant(ctx *astral.Context, q *routing.IncomingQuery,
 		return ch.Send(apphostapi.ErrGrantDeclined)
 	}
 
-	for _, permit := range permits {
-		if err = mod.Grant(requester, permit, nil); err != nil {
-			return ch.Send(astral.Err(err))
-		}
+	// why after the decision: a delegate that waits on a person does not
+	// shorten the duration the session asked for.
+	if err = mod.grantAll(requester, req.Permits, grantExpiry(req.Duration)); err != nil {
+		return ch.Send(astral.Err(err))
 	}
-	mod.log.Logv(1, "granted %v requested permits to %v", len(permits), requester)
+	mod.log.Logv(1, "granted %v requested permits to %v", len(req.Permits), requester)
 	return ch.Send(&astral.Ack{})
+}
+
+// receiveGrantPolicyRequest refuses a removed argument in queryString, reads
+// one mod.apphost.request_grant_request from ch, and returns the question the
+// grant request policy decides. A request without permits, with a negative
+// duration or with an invalid permit is refused before any policy is asked.
+func receiveGrantPolicyRequest(ch *channel.Channel, queryString string, requester *astral.Identity, origin string) (*apphostapi.GrantPolicyRequest, error) {
+	if err := refuseRemovedArgs(queryString, "permits"); err != nil {
+		return nil, err
+	}
+
+	var req *apphostapi.RequestGrantRequest
+	if err := ch.Switch(channel.Expect(&req), channel.FailOnEOF()); err != nil {
+		return nil, err
+	}
+	switch {
+	case len(req.Permits) == 0:
+		return nil, errors.New("missing permits")
+	case req.Duration < 0:
+		return nil, errors.New("negative duration")
+	}
+	if err := validatePermits(req.Permits); err != nil {
+		return nil, err
+	}
+
+	return &apphostapi.GrantPolicyRequest{
+		Requester: requester, Origin: astral.String8(origin), Permits: req.Permits, Duration: req.Duration,
+	}, nil
 }

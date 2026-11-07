@@ -145,9 +145,8 @@ func (guest *Guest) onRouteQueryMsg(ctx *astral.Context, msg *apphost.RouteQuery
 		QueryString: astral.String32(guest.prepareQueryString(string(msg.Query))),
 	}
 
-	// A session without a token is confined to the anonymous_allowlist for the
-	// node's claim state.
-	if !guest.isAuthenticated() && !guest.mod.admitsAnonymous(ctx, q) {
+	// The gate admits the query by token presence, target and node state.
+	if !guest.mod.gateAdmits(ctx, q, !guest.isAuthenticated()) {
 		return guest.Send(&apphost.ErrorMsg{Code: apphost.ErrCodeDenied})
 	}
 

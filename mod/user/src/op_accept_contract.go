@@ -22,7 +22,7 @@ type opAcceptContractArgs struct {
 // activated; the active-contract store's follow indexes it for delegation
 // lookups.
 //
-// why: no action gates this op, by decision. Claimed, the refusal below refuses
+// why: no named action guards this op, by decision. Claimed, the refusal below refuses
 // every caller. Unclaimed, there is no active contract and so no permit any
 // caller could hold — both swarm authorizers refuse on a nil contract, so an
 // action here would refuse everyone in the only window the op acts in. The gate

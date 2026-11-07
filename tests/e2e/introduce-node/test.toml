@@ -1,0 +1,7 @@
+nodes    = ["member", "sibling", "banned", "replacement"]
+timeout  = 240
+after    = "introduce-node-setup"
+# why destroys: it claims replacement and makes it a member, so no other test
+# may continue this world.
+destroys = true
+facts    = ["introduce_node"]

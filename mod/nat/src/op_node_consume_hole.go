@@ -75,6 +75,8 @@ func (mod *Module) OpNodeConsumeHole(ctx *astral.Context, q *routing.IncomingQue
 			return ch.Send(astral.Err(natmod.ErrHoleBusy))
 		}
 
+		// why: the peer is asked as this node; NAT traversal runs between nodes, and
+		// mod.auth.admin_network_action above decides who starts it (decided 2026-11-06).
 		natClient := natclient.New(target, astrald.Default())
 		err = natClient.NodeConsumeHole(opCtx, holeNonce, nil)
 		if err != nil {

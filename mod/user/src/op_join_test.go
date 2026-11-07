@@ -73,7 +73,7 @@ func newJoinFixture(answer astral.Object) *joinFixture {
 			"swarm":  f.swarmID,
 			"anyone": astral.Anyone,
 			"self":   f.node.id,
-		}}},
+		}}, Apphost: &tokenIssuer{state: user.StateUnclaimed}, Sys: &tokenIssuer{state: user.StateUnclaimed}},
 		node: f.node,
 	}
 	return f
@@ -229,5 +229,30 @@ func TestJoinRefusesAClaimedNode(t *testing.T) {
 	case routed := <-f.node.routed:
 		t.Fatalf("the node sent %v", routed.query.QueryString)
 	default:
+	}
+}
+
+// TestJoinAdmitsTheManager: the appointed manager asks with its App identity,
+// and the request still goes to the swarm node as this node.
+func TestJoinAdmitsTheManager(t *testing.T) {
+	signed := &auth.SignedContract{Contract: &auth.Contract{Issuer: astral.GenerateIdentity()}}
+	f := newJoinFixture(signed)
+	manager := astral.GenerateIdentity()
+	f.mod.Apphost = &tokenIssuer{state: user.StateUnclaimed, manager: manager}
+	f.mod.Sys = f.mod.Apphost.(*tokenIssuer)
+
+	objs, err := routeJoin(t, f, manager, astral.OriginLocal, "user.join?node=swarm")
+	if err != nil {
+		t.Fatalf("route: %v", err)
+	}
+	routed := <-f.node.routed
+	if !routed.query.Caller.IsEqual(f.node.id) {
+		t.Fatalf("request sent as %v; want the node %v", routed.query.Caller, f.node.id)
+	}
+	if len(objs) != 1 {
+		t.Fatalf("the op answered %v; want one contract", objs)
+	}
+	if _, ok := objs[0].(*auth.SignedContract); !ok {
+		t.Fatalf("the op answered %v; want the swarm node's contract", objs[0])
 	}
 }

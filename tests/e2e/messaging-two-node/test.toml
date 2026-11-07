@@ -1,5 +1,7 @@
-env     = "node"
-start   = "two-nodes"
 nodes   = ["node1", "node2"]
-drivers = ["script"]
 timeout = 180
+after   = "adopt-node"
+local_only = "serves each node's external authority on a host port the node dials"
+facts   = ["ann", "ann_token", "answer", "ask", "ben", "ben_token", "cal",
+           "exchange", "pushed", "questions", "turned_away", "unknown",
+           "unknown_path"]

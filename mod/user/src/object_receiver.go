@@ -7,6 +7,7 @@ import (
 
 	"github.com/astralp2p/astral-go/api/auth"
 	"github.com/astralp2p/astral-go/api/events"
+	"github.com/astralp2p/astral-go/api/nearby"
 	"github.com/astralp2p/astral-go/api/nodes"
 	"github.com/astralp2p/astral-go/api/user"
 	"github.com/astralp2p/astral-go/astral"
@@ -16,7 +17,8 @@ import (
 var _ objects.Receiver = &Module{}
 
 // ReceiveObject handles pushed objects: indexes a signed node or relay-for contract,
-// stores and applies a signed expulsion, and schedules sibling sync on a local LinkCreatedEvent.
+// stores and applies a signed expulsion, schedules sibling sync on a local LinkCreatedEvent,
+// and contacts a peer of a local nearby PeerSeen.
 // Every object is checked before any effect; a rejected object is not accepted.
 func (mod *Module) ReceiveObject(drop objects.Drop) (err error) {
 	switch o := drop.Object().(type) {
@@ -42,6 +44,9 @@ func (mod *Module) ReceiveObject(drop objects.Drop) (err error) {
 				mod.Scheduler.Schedule(mod.NewSyncNodesTask(e.RemoteIdentity))
 				drop.Accept(false)
 			}
+		case *nearby.PeerSeen:
+			// why: contact queries the peer, which must not hold up the receivers.
+			go mod.onPeerSeen(e)
 		}
 	}
 
@@ -50,11 +55,17 @@ func (mod *Module) ReceiveObject(drop objects.Drop) (err error) {
 
 // receiveSignedContract indexes a pushed contract that passes checkPushedContract.
 // A node contract also syncs the subject's endpoints and runs the sibling linker.
+// A node contract that admits a linked node to the local swarm also syncs with it.
 func (mod *Module) receiveSignedContract(sender *astral.Identity, signed *auth.SignedContract) error {
 	if err := mod.checkPushedContract(sender, signed); err != nil {
 		mod.log.Errorv(1, "rejecting pushed contract from %v: %v", sender, err)
 		return objects.ErrPushRejected
 	}
+
+	// note: "newMember", not "fresh": fresh names a node state.
+	newMember := user.IsNodeContract(signed.Contract) &&
+		!signed.Subject.IsEqual(mod.node.Identity()) &&
+		!slices.ContainsFunc(mod.LocalSwarm(), signed.Subject.IsEqual)
 
 	err := mod.Auth.IndexContract(mod.ctx, signed)
 	if err != nil {
@@ -64,6 +75,12 @@ func (mod *Module) receiveSignedContract(sender *astral.Identity, signed *auth.S
 
 	if !user.IsNodeContract(signed.Contract) {
 		return nil
+	}
+
+	// why: the LinkCreatedEvent sync skipped a node linked before its contract
+	// arrived, as on user.introduce, so the sync runs once the contract admits it.
+	if newMember && mod.Nodes.IsLinked(signed.Subject) {
+		mod.Scheduler.Schedule(mod.NewSyncNodesTask(signed.Subject))
 	}
 
 	go func() {

@@ -2,6 +2,7 @@ package nearby
 
 import (
 	"errors"
+	"time"
 
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astral-go/astral/log"
@@ -16,11 +17,17 @@ type Loader struct{}
 
 func (Loader) Load(node astral.Node, assets assets.Assets, log *log.Logger) (core.Module, error) {
 	mod := &Module{
-		node: node,
-		log:  log,
+		node:  node,
+		log:   log,
+		now:   time.Now,
+		after: time.After,
 	}
 
 	if err := assets.LoadYAML(ModuleName, &mod.config); err != nil && !errors.Is(err, resources.ErrNotFound) {
+		return nil, err
+	}
+
+	if err := mod.config.validate(); err != nil {
 		return nil, err
 	}
 

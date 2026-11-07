@@ -16,10 +16,11 @@ type Loader struct{}
 func (Loader) Load(node astral.Node, assets assets.Assets, log *log.Logger) (core.Module, error) {
 	var err error
 	var mod = &Module{
-		node:   node,
-		config: defaultConfig,
-		log:    log,
-		assets: assets,
+		node:           node,
+		config:         defaultConfig,
+		log:            log,
+		assets:         assets,
+		lookupPrefixes: newPrefixCache().lookup,
 	}
 
 	if err := assets.LoadYAML(ether.ModuleName, &mod.config); err != nil && !errors.Is(err, resources.ErrNotFound) {

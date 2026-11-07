@@ -13,35 +13,19 @@ Mail between participants is decided by an external authority on a loopback
 port of the node's own. Nothing listens there unless a driver serves it, and an
 authority that cannot be reached permits nothing.
 
-A node serves MCP unless its roster name is in WITHOUT_MCP. A node that serves
-MCP declares the tools in NODE_OP_TOOLS and PEER_TOOLS.
+Every node serves MCP and declares the tools in NODE_OP_TOOLS and PEER_TOOLS.
+A test changes any of this for its world with a `[config.<node>.<module>]`
+override, merged key by key on top of what is built here.
 """
+import copy
 import fcntl
+import json
+import re
 import socket
 import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 from typing import IO
-
-APPHOST_YAML = """\
-listen:
-  - "tcp:127.0.0.1:{apphost}"
-bind_http: ""
-tokens:
-  "{token}": localnode
-"""
-
-TCP_YAML = """\
-listen_port: {tcp}
-"""
-
-ETHER_YAML = """\
-udp_port: {ether}
-"""
-
-KCP_YAML = """\
-listen_port: {kcp}
-"""
 
 # The tools a node serving MCP declares, by the node operation each one puts:
 # the operation's path, then the tool's name. mcp-origin calls each as an agent.
@@ -54,9 +38,8 @@ listen_port: {kcp}
 # why not nodes.new_link: it refuses an argument-less call on its own, so it
 # reads the same guarded or not and witnesses nothing.
 #
-# why every MCP node declares them: a node's config follows its roster name,
-# and the node refuses each of these queries for its MCP origin, so they reach
-# nothing wherever they are declared.
+# why every MCP node declares them: the node refuses each of these queries for
+# its MCP origin, so they reach nothing wherever they are declared.
 NODE_OP_TOOLS = {
     "shell.shell": "node_shell",
     "mcp.list_agents": "node_list_agents",
@@ -85,44 +68,44 @@ PEER_TOOLS = {
     "test.mcp_peer.caller": "peer_caller",
 }
 
-# why bound at all: the MCP server is off unless bind_mcp names an endpoint
-# (mod/mcp defaults to a single fixed port, which two nodes would fight over).
-MCP_YAML = """\
-bind_mcp: "tcp:127.0.0.1:{mcp}"
-tools:
-{tools}"""
-
-DECLARED_TOOL_YAML = """\
-  - name: {name}
-    description: "Put {path} to this node as the agent."
-    query: "astral://localnode:{path}"
-"""
-
-PEER_TOOL_YAML = """\
-  - name: {name}
-    description: "Put {path} to the peer node as the agent."
-    query: "astral://{alias}:{path}"
-"""
-
-# note: an empty bind_mcp turns the MCP server off, and mod/mcp still loads.
-MCP_OFF_YAML = """\
-bind_mcp: ""
-"""
-
-# The roster names whose node serves no MCP.
-#
-# why a roster name decides it and not a manifest key: a name is one daemon
-# for the whole run, shared by every test that names it, so a config chosen by
-# the test that happened to start it would change under the tests that follow.
-WITHOUT_MCP = frozenset({"nomcp1"})
-
 # why a sweep this short: the node's default is a minute, which is longer than
 # most tests live, so an expired external registration would still be in memory
 # when the oracle looked. Only the removal and its log line are hurried — the
 # fan-out skips an expired registration whatever this is set to.
-OBJECTS_YAML = """\
-external_registration_sweep_interval: 1s
-"""
+# why the gate and policies: a fresh test node claims without a manager, and
+# every admission policy accepts, so tests reach `claimed` with no bootstrap
+# mode (the node bootstrap vision's E2E overrides). Omitted keys keep the code
+# defaults.
+E2E_GATE = {"tokenless": ["apphost.register", "user.info",
+                          "user.derive_identity", "user.bootstrap",
+                          "user.join"],
+            "states": {"fresh": ["*"]}}
+E2E_APPHOST_POLICIES = {"app_register": "accept_all"}
+E2E_USER = {"policies": {"swarm_join": "accept_all",
+                         "swarm_invite": "accept_all"}}
+
+
+def harness_configs(listen: list, token: str) -> dict:
+    """module -> the config every harness node starts with, local or VM:
+    apphost on every address in `listen` with `token` as the node's own, the
+    E2E gate and policies, and the user policies.
+
+    why one function: a local world and a VM world must start nodes the same
+    way, or a test passing locally says nothing about the lab.
+    """
+    return {
+        "apphost": {"listen": list(listen),
+                    "bind_http": "",
+                    # why: the value beside a token is the identity it
+                    # authenticates as, and `localnode` is the node itself
+                    "tokens": {token: "localnode"},
+                    "gate": copy.deepcopy(E2E_GATE),
+                    "policies": dict(E2E_APPHOST_POLICIES)},
+        "user": copy.deepcopy(E2E_USER),
+    }
+
+
+OBJECTS = {"external_registration_sweep_interval": "1s"}
 
 # why an authority at all: mod/messaging holds no reachability of its own, and
 # no handler grants the two mail actions, so a node without one refuses every
@@ -136,14 +119,16 @@ external_registration_sweep_interval: 1s
 # why mod.messaging.host_mailbox_action is not listed: a node hosts a mailbox
 # under the contract the mailbox's identity signs, and auth's chain walk
 # answers that without leaving the node.
-AUTH_YAML = """\
-external_authorizers:
-  - endpoint: "{authority_url}"
-    actions:
-      - mod.messaging.send_action
-      - mod.messaging.receive_action
-      - mod.messaging.read_mailbox_action
-"""
+AUTH_ACTIONS = [
+    "mod.messaging.send_action",
+    "mod.messaging.receive_action",
+    "mod.messaging.read_mailbox_action",
+]
+
+
+# the characters a config file escapes although JSON writes them raw: those
+# outside YAML's printable set, and the ones YAML reads as a line break
+YAML_ESCAPED = re.compile("[\x7f-\x9f\u2028\u2029\ufffe\uffff]")
 
 
 @dataclass
@@ -160,8 +145,44 @@ class NodePorts:
         return f"http://127.0.0.1:{self.authority}/authorize"
 
 
+# Ports per node: +0 apphost, +1 tcp, +2 ether, +3 kcp, +4 mcp, +5 authority;
+# +6..+9 are unused.
+PORTS_PER_NODE = 10
+
+
+@dataclass(frozen=True)
+class PortSpan:
+    """The ports one world's nodes take: node N's block from base, for at
+    most max_nodes nodes.
+
+    why one value: every world that binds or publishes host ports asks the
+    same two questions of the run's lease
+    """
+    base: int
+    max_nodes: int
+
+    def ports(self, index: int) -> NodePorts:
+        return ports_for(self.base, index)
+
+    def refusal(self, have: int, new: list) -> str | None:
+        """Why a world running `have` nodes cannot start `new`, or None."""
+        if have + len(new) <= self.max_nodes:
+            return None
+        return (f"{', '.join(new)}: the world already runs {have} nodes, and "
+                f"[ports] span in tests/config.toml gives a world "
+                f"{self.max_nodes}")
+
+
+def overlay(modules: dict, overrides: dict | None) -> dict:
+    """modules with each override's keys written over its module's."""
+    out = dict(modules)
+    for module, keys in (overrides or {}).items():
+        out[module] = {**out.get(module, {}), **keys}
+    return out
+
+
 def ports_for(base: int, index: int) -> NodePorts:
-    p = base + 10 * index
+    p = base + PORTS_PER_NODE * index
     return NodePorts(apphost=p, tcp=p + 1, ether=p + 2, kcp=p + 3, mcp=p + 4,
                      authority=p + 5)
 
@@ -202,40 +223,101 @@ def lease_ports(base: int, span: int, spans: int) -> PortLease:
                     f"from {base} are leased or bound")
 
 
+# The binds a port must take to read free, by socket kind and address.
+#
+# why 127.0.0.1 beside 0.0.0.0 for TCP: under SO_REUSEADDR, macOS and the
+# BSDs refuse a bind only to a holder of the exact address it names, so a
+# 0.0.0.0 probe binds over a 127.0.0.1 listener — the address apphost, mcp
+# and the authority hold. Linux refuses it either way. 0.0.0.0 still catches
+# a 0.0.0.0 holder, and the dual-stack [::] that Go binds for ":port".
+# why UDP binds 0.0.0.0 alone: it sets no SO_REUSEADDR, so every OS refuses
+# it beside a holder on any IPv4 address, or a dual-stack [::].
+_PROBES = ((socket.SOCK_STREAM, "0.0.0.0"), (socket.SOCK_STREAM, "127.0.0.1"),
+           (socket.SOCK_DGRAM, "0.0.0.0"))
+
+
 def _bindable(port: int) -> bool:
-    for kind in (socket.SOCK_STREAM, socket.SOCK_DGRAM):
+    for kind, addr in _PROBES:
         with socket.socket(socket.AF_INET, kind) as s:
             # why: Go listeners set SO_REUSEADDR, so a port a finished run
             # left in TIME_WAIT is free to astrald and must read free here
             s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR,
                          kind == socket.SOCK_STREAM)
             try:
-                s.bind(("0.0.0.0", port))
+                s.bind((addr, port))
             except OSError:
                 return False
     return True
 
 
-def _mcp_yaml(port: int) -> str:
-    tools = "".join(DECLARED_TOOL_YAML.format(name=name, path=path)
-                    for path, name in NODE_OP_TOOLS.items())
-    tools += "".join(PEER_TOOL_YAML.format(name=name, path=path,
-                                           alias=PEER_ALIAS)
-                     for path, name in PEER_TOOLS.items())
-    return MCP_YAML.format(mcp=port, tools=tools)
+def _mcp(port: int) -> dict:
+    """mod/mcp's config: the server bound, and every declared tool.
+
+    why bound at all: the MCP server is off unless bind_mcp names an endpoint
+    (mod/mcp defaults to a single fixed port, which two nodes would fight
+    over). An empty bind_mcp turns it off, and mod/mcp still loads.
+    """
+    tools = [{"name": name,
+              "description": f"Put {path} to this node as the agent.",
+              "query": f"astral://localnode:{path}"}
+             for path, name in NODE_OP_TOOLS.items()]
+    tools += [{"name": name,
+               "description": f"Put {path} to the peer node as the agent.",
+               "query": f"astral://{PEER_ALIAS}:{path}"}
+              for path, name in PEER_TOOLS.items()]
+    return {"bind_mcp": f"tcp:127.0.0.1:{port}", "tools": tools}
 
 
-def render(root: Path, ports: NodePorts, token: str,
-           serves_mcp: bool = True) -> None:
+def module_configs(ports: NodePorts, token: str,
+                   overrides: dict | None = None) -> dict:
+    """module -> the config a node starts with: the harness's base, and a
+    world's overrides for the node merged key by key on top.
+
+    why key by key and not the whole module: an override names what a test
+    needs changed, and the ports and the token beside it stay the harness's.
+    """
+    cfg = {
+        **harness_configs([f"tcp:127.0.0.1:{ports.apphost}"], token),
+        "tcp": {"listen_port": ports.tcp},
+        "ether": {"udp_port": ports.ether},
+        "kcp": {"listen_port": ports.kcp},
+        "mcp": _mcp(ports.mcp),
+        "objects": dict(OBJECTS),
+        "auth": {"external_authorizers": [
+            {"endpoint": ports.authority_url, "actions": list(AUTH_ACTIONS)}]},
+    }
+    return overlay(cfg, overrides)
+
+
+def serves_mcp(configs: dict) -> bool:
+    """Whether a node started with these configs runs its MCP server."""
+    return bool(configs.get("mcp", {}).get("bind_mcp"))
+
+
+def config_text(doc: dict) -> str:
+    """A module's config file as astrald reads it.
+
+    why JSON: the harness is stdlib-only and has no YAML writer, and JSON is
+    YAML. astrald reads module config with gopkg.in/yaml.v2
+    (core/assets LoadYAML), which parses it as it parses block YAML.
+    note: LoadYAML unmarshals strictly, so a file it cannot parse, or one
+    that names a key the module does not have, stops the node at startup
+    (core/modules.go).
+    why ensure_ascii off: an escaped non-BMP character is a surrogate pair,
+    which yaml.v2 refuses ("invalid Unicode character escape code"); YAML
+    takes the character itself. NaN and infinity are not JSON at all.
+    why YAML_ESCAPED is escaped still: yaml.v2 refuses a raw DEL, C1 control,
+    U+FFFE or U+FFFF ("control characters are not allowed"), and reads a raw
+    NEL, U+2028 or U+2029 as a line break, folding the text around it. JSON's
+    \\u escape is YAML's too.
+    """
+    text = json.dumps(doc, indent=2, ensure_ascii=False, allow_nan=False)
+    return YAML_ESCAPED.sub(lambda m: f"\\u{ord(m.group()):04x}", text) + "\n"
+
+
+def render(root: Path, configs: dict) -> None:
+    """Write each module's config to <root>/config/<module>.yaml."""
     cfg = Path(root) / "config"
     cfg.mkdir(parents=True, exist_ok=True)
-    (cfg / "apphost.yaml").write_text(
-        APPHOST_YAML.format(apphost=ports.apphost, token=token))
-    (cfg / "tcp.yaml").write_text(TCP_YAML.format(tcp=ports.tcp))
-    (cfg / "ether.yaml").write_text(ETHER_YAML.format(ether=ports.ether))
-    (cfg / "kcp.yaml").write_text(KCP_YAML.format(kcp=ports.kcp))
-    (cfg / "mcp.yaml").write_text(
-        _mcp_yaml(ports.mcp) if serves_mcp else MCP_OFF_YAML)
-    (cfg / "objects.yaml").write_text(OBJECTS_YAML)
-    (cfg / "auth.yaml").write_text(
-        AUTH_YAML.format(authority_url=ports.authority_url))
+    for module, doc in configs.items():
+        (cfg / f"{module}.yaml").write_text(config_text(doc), encoding="utf-8")

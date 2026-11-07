@@ -4,7 +4,8 @@
 The op signs a contract as its issuer and as its subject with keys node1
 holds. Each party passes the signer rule crypto.sign_hash applies: the
 caller's own key, never the node's key as the node itself, or a key the caller
-may sudo to. A query from a peer is rejected before any of that.
+may sudo to. A query from a peer is answered "origin not allowed" before any
+of that.
 
 The driver acts and judges nothing. On node1 it registers an app for the
 User and asks for seven contracts: the User's own (the control), one naming
@@ -24,8 +25,8 @@ again.
 import asyncio
 
 import astral
-from astral.api.auth import Contract, Permit
-from astral.errors import AstralError
+from astral.api.auth import Contract, Permit, SignedContract
+from astral.errors import AstralError, ProtocolError, QueryTimeout
 from astral.object import Nil
 from astral.types import Identity, Time
 
@@ -34,6 +35,9 @@ from lib.sessionio import load, write_facts
 # why a deadline: a query that is never routed hangs rather than answering, and
 # the client's default is 60 s. apphost-origin settled on 15 for the same reason.
 DEADLINE = 15
+# why: the op answers a refused origin as soon as it accepts the query, and
+# reads its contract only when it admits the query.
+QUIET = 2
 SEE = "mod.user.see_swarm_action"
 SUDO = "mod.auth.sudo_action"
 ACTIVE = "/mod/user/config/active_contract"
@@ -57,15 +61,32 @@ async def attempt(coro) -> dict:
             "both_signed": signed.issuer_sig is not None and signed.subject_sig is not None}
 
 
+async def sign_if_read(c, body: Contract, **kw) -> SignedContract:
+    """auth.sign_contract for one contract, sent only to an op that waits for it.
+
+    why: the op answers a refused origin before it reads a contract and closes
+    its channel, and a later write by the caller fails (astral-docs
+    core-definitions/op.md). Over the link that write can take the answer with
+    it: node2's relay ends both directions when the write fails, and the caller
+    reads an end with no answer.
+    why it still compares with the control: an op that admits the query
+    answers nothing until it reads a contract, so after QUIET seconds of
+    silence the contract is sent, and the op answers it without an eos.
+    """
+    async with c.stream("auth.sign_contract", **kw) as s:
+        try:
+            answer = await s.first(timeout=QUIET)
+        except QueryTimeout:
+            await s.send(body, timeout=DEADLINE)
+            answer = await s.first(timeout=DEADLINE)
+    if not isinstance(answer, SignedContract):
+        raise ProtocolError(f"auth.sign_contract: answered {answer!r}")
+    return answer
+
+
 async def claimed(c) -> bool:
-    """Whether node1 answers user.info; it answers "no active contract" when unclaimed."""
-    try:
-        await c.user.info()
-    except AstralError as e:
-        if "no active contract" in str(e):
-            return False
-        raise
-    return True
+    """Whether user.info reports node1 claimed."""
+    return (await c.user.info()).state == "claimed"
 
 
 async def settle(c, want: bool) -> None:
@@ -142,8 +163,8 @@ async def main():
         probes["node token asks the node key"] = await attempt(
             n.auth.sign_contract(contract(node1, app.identity, SUDO)))
 
-    # why: a session without a token reaches the claimed node's anonymous
-    # allowlist only, so apphost refuses it before the guard is asked.
+    # why: a session without a token reaches the gate's tokenless list only,
+    # so apphost refuses it before the guard is asked.
     async with await astral.connect(n1["endpoint"]) as anon:
         probes["anonymous asks the node key"] = await attempt(
             anon.auth.sign_contract(contract(node1, app.identity, SUDO)))
@@ -154,8 +175,8 @@ async def main():
     async with await astral.connect(n2["endpoint"], token=n2["token"]) as c2:
         sibling_user = await c2.apphost.create_token(facts["user_id"])
     async with await astral.connect(n2["endpoint"], token=sibling_user.token) as c2:
-        probes["the user over the link"] = await attempt(c2.auth.sign_contract(
-            contract(user, user, SEE), target=n1["identity"], timeout=DEADLINE))
+        probes["the user over the link"] = await attempt(sign_if_read(
+            c2, contract(user, user, SEE), target=n1["identity"], timeout=DEADLINE))
 
     cleared = await cleared_claim(n1, claim)
 

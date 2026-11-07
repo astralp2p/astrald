@@ -37,6 +37,7 @@ import time
 import astral
 from astral.types import Duration, ObjectID
 
+from lib import jsonops
 from lib.sessionio import load, write_facts
 
 # why short: the node clamps a request down, never up, so a small lease is
@@ -83,11 +84,14 @@ def _docs(raw: bytes) -> list:
 async def mint_describer(node) -> dict:
     """A fresh identity holding serve_objects, which is what registering needs.
 
-    why call_raw: `apphost.register`'s typed client takes no op arguments, so
-    grant_permits has to go on the query string by hand.
+    why jsonops: the registration is one `mod.apphost.register_request` sent
+    as JSON, and the token comes back as JSON with no codec of the script's own.
     """
-    return _docs(await node.call_raw(
-        f"apphost.register?grant_permits={SERVE_OBJECTS}&out=json"))[0]
+    token = await jsonops.value(
+        node, "apphost.register?in=json&out=json",
+        body={"Type": "mod.apphost.register_request",
+              "Object": {"GrantPermits": [{"Action": SERVE_OBJECTS}]}})
+    return {k.lower(): v for k, v in token.items()}
 
 
 async def timed_describe(client) -> float:
