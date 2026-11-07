@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"reflect"
 	"slices"
 	"strings"
@@ -85,9 +86,27 @@ func (m *Modules) loadEnabled() ([]string, error) {
 		loaded = append(loaded, name)
 	}
 	if err := errors.Join(errs...); err != nil {
+		m.closeLoaded()
 		return nil, err
 	}
 	return loaded, nil
+}
+
+// closeLoaded closes every loaded module that is an io.Closer.
+//
+// why: a load error returns before any module runs, and a module releases in
+// Run what its Load took, such as ether's UDP socket. A process that starts a
+// node again, as a mobile host does, would find those resources still held.
+func (m *Modules) closeLoaded() {
+	for name, mod := range m.loaded {
+		c, ok := mod.(io.Closer)
+		if !ok {
+			continue
+		}
+		if err := c.Close(); err != nil {
+			m.log.Error("module %v close: %v", name, err)
+		}
+	}
 }
 
 func (m *Modules) injectLoaded() {
