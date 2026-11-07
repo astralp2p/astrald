@@ -86,3 +86,22 @@ func TestLoadSendsWithTheLinkTTL(t *testing.T) {
 		t.Errorf("socket TTL = %v; want 255", ttl)
 	}
 }
+
+// TestCloseReleasesTheSocket: after Close, the next Load in the same process
+// binds the same port.
+func TestCloseReleasesTheSocket(t *testing.T) {
+	config := fmt.Sprintf("udp_port: %v\n", reserveUDPPort(t))
+	for i := 1; i <= 2; i++ {
+		loaded, err := Loader{}.Load(nil, yamlAssets{yaml: config}, &log.Logger{})
+		if err != nil {
+			t.Fatalf("Load %v: %v", i, err)
+		}
+		mod := loaded.(*Module)
+		if mod.socket == nil {
+			t.Fatalf("Load %v: socket not bound", i)
+		}
+		if err := mod.Close(); err != nil {
+			t.Fatalf("Close %v: %v", i, err)
+		}
+	}
+}

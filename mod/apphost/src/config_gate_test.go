@@ -11,7 +11,7 @@ import (
 // loadConfig reads src over the defaults as Loader.Load does.
 func loadConfig(t *testing.T, src string) (Config, error) {
 	t.Helper()
-	cfg := defaultConfig
+	cfg := defaultConfig()
 	err := yaml.UnmarshalStrict([]byte(src), &cfg)
 	return cfg, err
 }
@@ -34,12 +34,12 @@ policies:
 	if err := yaml.UnmarshalStrict([]byte(distribution), &got); err != nil {
 		t.Fatalf("unmarshal: %v", err)
 	}
-	if !slices.Equal(got.Gate.Tokenless, defaultConfig.Gate.Tokenless) ||
-		!slices.Equal(got.Gate.States.Fresh, defaultConfig.Gate.States.Fresh) ||
-		!slices.Equal(got.Gate.States.Unclaimed, defaultConfig.Gate.States.Unclaimed) ||
-		!slices.Equal(got.Gate.States.Claimed, defaultConfig.Gate.States.Claimed) ||
-		got.Policies.AppRegister != defaultConfig.Policies.AppRegister {
-		t.Fatalf("distribution config %+v; code defaults %+v", got.Gate, defaultConfig.Gate)
+	if !slices.Equal(got.Gate.Tokenless, defaultConfig().Gate.Tokenless) ||
+		!slices.Equal(got.Gate.States.Fresh, defaultConfig().Gate.States.Fresh) ||
+		!slices.Equal(got.Gate.States.Unclaimed, defaultConfig().Gate.States.Unclaimed) ||
+		!slices.Equal(got.Gate.States.Claimed, defaultConfig().Gate.States.Claimed) ||
+		got.Policies.AppRegister != defaultConfig().Policies.AppRegister {
+		t.Fatalf("distribution config %+v; code defaults %+v", got.Gate, defaultConfig().Gate)
 	}
 }
 
@@ -60,14 +60,32 @@ policies:
 	if !slices.Equal(cfg.Gate.States.Fresh, []string{gateAny}) || len(cfg.Gate.Tokenless) != 5 {
 		t.Fatalf("supplied keys not applied: %+v", cfg.Gate)
 	}
-	if !slices.Equal(cfg.Gate.States.Unclaimed, defaultConfig.Gate.States.Unclaimed) ||
-		!slices.Equal(cfg.Gate.States.Claimed, defaultConfig.Gate.States.Claimed) {
+	if !slices.Equal(cfg.Gate.States.Unclaimed, defaultConfig().Gate.States.Unclaimed) ||
+		!slices.Equal(cfg.Gate.States.Claimed, defaultConfig().Gate.States.Claimed) {
 		t.Fatalf("omitted keys lost their defaults: %+v", cfg.Gate.States)
 	}
 	if !cfg.Policies.AppRegister.Accepts() {
 		t.Fatal("policies.app_register: accept_all not applied")
 	}
-	if defaultConfig.Policies.AppRegister.Mode != policyconf.RejectAll || len(defaultConfig.Gate.States.Fresh) != 3 {
+	if defaultConfig().Policies.AppRegister.Mode != policyconf.RejectAll || len(defaultConfig().Gate.States.Fresh) != 3 {
 		t.Fatal("loading changed the defaults")
+	}
+}
+
+// TestConfigLoadsTwiceInOneProcess: a second load of an apphost.yaml with a
+// token, as a mobile host's restart of its node runs, reads the token again.
+func TestConfigLoadsTwiceInOneProcess(t *testing.T) {
+	const src = "tokens:\n  \"4d02b0e8a92e5c0b\": localnode\n"
+	for i := 1; i <= 2; i++ {
+		cfg, err := loadConfig(t, src)
+		if err != nil {
+			t.Fatalf("load %v: %v", i, err)
+		}
+		if cfg.Tokens["4d02b0e8a92e5c0b"] != "localnode" {
+			t.Fatalf("load %v: tokens = %v", i, cfg.Tokens)
+		}
+	}
+	if len(defaultConfig().Tokens) != 0 {
+		t.Fatalf("loading changed the default tokens: %v", defaultConfig().Tokens)
 	}
 }

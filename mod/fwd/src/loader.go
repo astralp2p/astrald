@@ -18,7 +18,7 @@ type Loader struct{}
 func (Loader) Load(node astral.Node, assets assets.Assets, log *log.Logger) (core.Module, error) {
 	mod := &Module{
 		node:     node,
-		config:   defaultConfig,
+		config:   defaultConfig(),
 		log:      log,
 		servers:  make(map[*ServerRunner]struct{}),
 		OpRouter: routing.NewOpRouter(node.Identity(), false),
