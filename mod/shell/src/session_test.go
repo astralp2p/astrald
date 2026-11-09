@@ -35,7 +35,7 @@ func runScript(t *testing.T, script string) sessionRun {
 	conn := &scriptedConn{Reader: strings.NewReader(script)}
 	prompt := (&shell.Prompt{GuestID: guest, HostID: mod.node.Identity()}).Render()
 
-	session := NewSession(mod, conn)
+	session := NewSession(mod, conn, "")
 
 	result := make(chan error, 1)
 	go func() {
