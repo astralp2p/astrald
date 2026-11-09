@@ -12,7 +12,7 @@ type GrantRequestPolicy func(ctx *astral.Context, req *apphost.GrantPolicyReques
 
 // The grant request policy modes apphost.set_grant_request_policy takes as
 // mode. A stored delegate selects the delegate mode; with neither stored the
-// node applies GrantRequestAcceptAll.
+// node refuses every request, as GrantRequestRejectAll does.
 const (
 	GrantRequestAcceptAll = "accept_all"
 	GrantRequestRejectAll = "reject_all"
@@ -23,12 +23,9 @@ func RefuseAllGrants(_ *astral.Context, _ *apphost.GrantPolicyRequest) (*apphost
 	return &apphost.GrantDecision{}, nil
 }
 
-// AcceptAllGrants is the bundled policy and the accept_all mode: every request
-// that passes permit validation is granted. It lets any app grant itself any
-// action it names.
-//
-// why accept-all: every admission policy accepts until an approval app takes
-// the delegation, so a node works out of the box.
+// AcceptAllGrants is the accept_all mode: every request that passes permit
+// validation is granted. It lets any app grant itself any action it names, so
+// the node applies it only while the mode is set to accept_all.
 func AcceptAllGrants(_ *astral.Context, _ *apphost.GrantPolicyRequest) (*apphost.GrantDecision, error) {
 	return &apphost.GrantDecision{Allow: true}, nil
 }
