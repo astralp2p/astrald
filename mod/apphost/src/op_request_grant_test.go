@@ -97,7 +97,8 @@ func heldActions(t *testing.T, mod *Module, id *astral.Identity) []string {
 }
 
 // The register delegate does not decide grant requests: with only it set, the
-// bundled policy grants and nobody is asked.
+// grant request policy is unset, so the request is declined, nobody is asked
+// and nothing is granted.
 func TestRequestGrantIgnoresTheRegisterDelegate(t *testing.T) {
 	node := newDelegateNode(&apphost.AppRegisterDecision{Allow: true})
 	mod := serveAppsRegistrar(t)
@@ -109,14 +110,97 @@ func TestRequestGrantIgnoresTheRegisterDelegate(t *testing.T) {
 	owner := astral.GenerateIdentity()
 
 	got := requestGrant(t, mod, sessionQuery(mod, owner, owner, "apphost.request_grant"), asking("mod.auth.see_objects_action"))
-	if got != ackAnswer {
-		t.Fatalf("answered %q; want %q", got, ackAnswer)
+	if want := apphost.ErrGrantDeclined.Error(); got != want {
+		t.Fatalf("answered %q; want %q", got, want)
 	}
 	if len(node.queried) != 0 {
 		t.Fatal("the register delegate was asked a grant request")
 	}
-	if held := heldActions(t, mod, owner); len(held) != 1 {
-		t.Fatalf("the identity holds %q; want the one permit", held)
+	if held := heldActions(t, mod, owner); len(held) != 0 {
+		t.Fatalf("a declined request granted %q", held)
+	}
+}
+
+// With no delegate stored, only a stored string8 accept_all grants: an unset
+// mode, reject_all, an unknown mode and a mode of another type are declined
+// and grant nothing. No mode asks anyone.
+func TestRequestGrantWithoutADelegate(t *testing.T) {
+	declined := apphost.ErrGrantDeclined.Error()
+	for _, tc := range []struct {
+		name string
+		mode astral.Object
+		want string
+	}{
+		{"unset", nil, declined},
+		{"accept_all", astral.NewString8(apphostmod.GrantRequestAcceptAll), ackAnswer},
+		{"reject_all", astral.NewString8(apphostmod.GrantRequestRejectAll), declined},
+		{"unknown mode", astral.NewString8("bogus"), declined},
+		{"string16 accept_all", astral.NewString16(apphostmod.GrantRequestAcceptAll), declined},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			node := newDelegateNode(&apphost.GrantDecision{Allow: true})
+			mod := serveAppsRegistrar(t)
+			mod.node = node
+			if tc.mode != nil {
+				if err := mod.policy.GrantRequestMode.Set(astral.NewContext(nil), tc.mode); err != nil {
+					t.Fatalf("set mode: %v", err)
+				}
+			}
+			owner := astral.GenerateIdentity()
+
+			got := requestGrant(t, mod, sessionQuery(mod, owner, owner, "apphost.request_grant"), asking("mod.auth.see_objects_action"))
+			if got != tc.want {
+				t.Fatalf("answered %q; want %q", got, tc.want)
+			}
+			if len(node.queried) != 0 {
+				t.Fatal("a mode asked a delegate")
+			}
+			held := heldActions(t, mod, owner)
+			if tc.want == ackAnswer {
+				if !slices.Equal(held, []string{"mod.auth.see_objects_action"}) {
+					t.Fatalf("the identity holds %q; want the asked permit", held)
+				}
+				return
+			}
+			if len(held) != 0 {
+				t.Fatalf("a declined request granted %q", held)
+			}
+		})
+	}
+}
+
+// A stored delegate decides whatever mode is stored beside it: its approval
+// grants under reject_all, and its refusal declines under accept_all.
+func TestRequestGrantDelegateOutranksTheMode(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		allow    bool
+		mode     string
+		want     string
+		wantHeld int
+	}{
+		{"approval under reject_all", true, apphostmod.GrantRequestRejectAll, ackAnswer, 1},
+		{"refusal under accept_all", false, apphostmod.GrantRequestAcceptAll, apphost.ErrGrantDeclined.Error(), 0},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			node := newDelegateNode(&apphost.GrantDecision{Allow: astral.Bool(tc.allow)})
+			mod := grantRequester(t, node)
+			if err := mod.policy.GrantRequestMode.Set(astral.NewContext(nil), astral.NewString8(tc.mode)); err != nil {
+				t.Fatalf("set mode: %v", err)
+			}
+			owner := astral.GenerateIdentity()
+
+			got := requestGrant(t, mod, sessionQuery(mod, owner, owner, "apphost.request_grant"), asking("mod.auth.see_objects_action"))
+			if got != tc.want {
+				t.Fatalf("answered %q; want %q", got, tc.want)
+			}
+			if op := askedOp(t, node); op != grantRequestOp {
+				t.Fatalf("asked %q, want the configured operation", op)
+			}
+			if held := heldActions(t, mod, owner); len(held) != tc.wantHeld {
+				t.Fatalf("the identity holds %q; want %d permits", held, tc.wantHeld)
+			}
+		})
 	}
 }
 

@@ -21,7 +21,7 @@ func (Loader) Load(node astral.Node, assets assets.Assets, log *log.Logger) (cor
 	var err error
 
 	mod := &Module{
-		config:    defaultConfig,
+		config:    defaultConfig(),
 		node:      node,
 		listeners: make([]net.Listener, 0),
 		log:       log,

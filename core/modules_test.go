@@ -139,3 +139,33 @@ func TestRegisterModuleRejectsDuplicate(t *testing.T) {
 		t.Fatalf("second RegisterModule error = %v, want %q", err, want)
 	}
 }
+
+type closerMod struct{ closed bool }
+
+func (*closerMod) Run(*astral.Context) error { return nil }
+func (c *closerMod) Close() error            { c.closed = true; return nil }
+
+// TestLoadErrorClosesLoadedModules: a load error stops startup and closes the
+// modules that did load, so a node started again in the same process finds
+// their resources free.
+func TestLoadErrorClosesLoadedModules(t *testing.T) {
+	held := &closerMod{}
+	if err := RegisterModule("test-close-held", loaderFunc(func(astral.Node, assets.Assets, *log.Logger) (Module, error) {
+		return held, nil
+	})); err != nil {
+		t.Fatal(err)
+	}
+	if err := RegisterModule("test-close-failing", loaderFunc(func(astral.Node, assets.Assets, *log.Logger) (Module, error) {
+		return nil, errors.New("bad config")
+	})); err != nil {
+		t.Fatal(err)
+	}
+
+	m, _ := NewModules(nil, []string{"test-close-held", "test-close-failing"}, nil, log.New(nil))
+	if _, err := m.loadEnabled(); err == nil {
+		t.Fatal("loadEnabled: no error")
+	}
+	if !held.closed {
+		t.Fatal("the loaded module was not closed")
+	}
+}

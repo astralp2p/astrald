@@ -159,7 +159,8 @@ func (mod *Module) assignAlias(identity *astral.Identity, alias string) (string,
 // grant, unsets its alias and withdraws its mailbox, taking the mail it owns
 // with it — both boxes, archived or not. A correspondent's own copy of the same
 // message is owned by the correspondent and stays. The signed relay and hosting
-// contracts stay indexed until they expire.
+// contracts stay indexed until they expire; apphost.withdraw_relay takes the relay
+// contract back on this node.
 //
 // why every token and not the one create_mailbox issued: a token reissued
 // through apphost authenticates the same identity, and one left standing keeps

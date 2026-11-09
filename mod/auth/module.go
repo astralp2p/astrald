@@ -56,6 +56,12 @@ type Module interface {
 	// SignedContracts returns a query builder for finding active signed contracts.
 	SignedContracts() ContractQueryBuilder
 
+	// WithdrawContracts takes back, on this node alone, every unexpired contract
+	// issued by issuer that carries a permit for action, and returns how many it
+	// took. The contract stays in the object store but no authorization, query
+	// or index reads it again. A copy on another node is untouched.
+	WithdrawContracts(issuer *astral.Identity, action astral.Object) (int, error)
+
 	// SetAuthorizer persists an external authorizer assignment, replacing the
 	// one with the same action and actor, and applies it to the next
 	// authorization. A failure leaves both the tree and the registry unchanged.
