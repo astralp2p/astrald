@@ -1,11 +1,12 @@
 w0 local: smoke → mcp-origin → claim-window → admission-policies
           → token-less-setup → manager-setup → signer-app → messaging-ops
           → bootstrap-user-software-key → policy-delegate → fs-watch
-          → registration-lease → adopt-node → object-store → app-query
-          → blueprints-two-node → apphost-origin → sign-contract-guard
-          → messaging-two-node → mcp-peer → services-swarm → services-app-call
-          → request-grant-scope → swarm-authz-matrix → object-store-peer
-          → read-remote-peer → read-swarm → discover-swarm → expel-node
+          → registration-lease → app-index-provider → adopt-node → object-store
+          → app-query → blueprints-two-node → apphost-origin
+          → sign-contract-guard → messaging-two-node → mcp-peer
+          → services-swarm → services-app-call → request-grant-scope
+          → swarm-authz-matrix → object-store-peer → read-remote-peer
+          → read-swarm → discover-swarm → expel-node
           config admitter.apphost.policies = {"app_register": "reject_all"}
           config admitter.user.policies = {"swarm_join": "reject_all", "swarm_invite": "accept_all"}
           config invitee.user.policies = {"swarm_join": "accept_all", "swarm_invite": "reject_all"}
