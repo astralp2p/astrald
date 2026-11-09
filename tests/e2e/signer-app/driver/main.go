@@ -6,6 +6,8 @@ package main
 
 import (
 	"bytes"
+	stdecdsa "crypto/ecdsa"
+	"crypto/rand"
 	"crypto/sha256"
 	"encoding/json"
 	"errors"
@@ -69,8 +71,9 @@ type recordingSigner struct {
 	key    *crypto.PrivateKey
 	forger *crypto.PrivateKey
 
-	mu    sync.Mutex
-	texts []string
+	mu     sync.Mutex
+	texts  []string
+	hashes [][]byte
 }
 
 func (s *recordingSigner) SignText(_ *astral.Context, req *crypto.SignTextRequest) (*crypto.Signature, error) {
@@ -89,8 +92,24 @@ func (s *recordingSigner) SignText(_ *astral.Context, req *crypto.SignTextReques
 	return signBIP137(s.key, text), nil
 }
 
-func (s *recordingSigner) SignHash(*astral.Context, *crypto.SignHashRequest) (*crypto.Signature, error) {
-	return nil, errors.New("this signer claims no hash scheme")
+// SignHash signs in asn1, the scheme a hardware wallet uses for a raw digest.
+func (s *recordingSigner) SignHash(_ *astral.Context, req *crypto.SignHashRequest) (*crypto.Signature, error) {
+	s.mu.Lock()
+	s.hashes = append(s.hashes, append([]byte(nil), req.Hash...))
+	s.mu.Unlock()
+
+	private, _ := btcec.PrivKeyFromBytes(s.key.Key)
+	data, err := stdecdsa.SignASN1(rand.Reader, private.ToECDSA(), req.Hash)
+	if err != nil {
+		return nil, err
+	}
+	return &crypto.Signature{Scheme: crypto.SchemeASN1, Data: data}, nil
+}
+
+func (s *recordingSigner) seenHashes() [][]byte {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return append([][]byte(nil), s.hashes...)
 }
 
 func (s *recordingSigner) seen() []string {
@@ -220,6 +239,9 @@ func run(path string, facts map[string]bool) (string, error) {
 	if err = signAsUser(w, facts); err != nil {
 		return userID.String(), err
 	}
+	if err = signHashAsUser(w, facts); err != nil {
+		return userID.String(), err
+	}
 	if err = probeAdmission(w, facts); err != nil {
 		return userID.String(), err
 	}
@@ -273,6 +295,35 @@ func signAsUser(w *world, facts map[string]bool) error {
 
 	seen := w.signer.seen()
 	facts["app_saw_the_text"] = len(seen) > 0 && seen[len(seen)-1] == text
+
+	return nil
+}
+
+// signHashAsUser binds the User key for asn1 on a second binding, has the User
+// sign a hash through it, and ends that binding.
+//
+// why a binding of its own, opened after the claim: a live asn1 pair takes
+// precedence over bip137 when the node signs an object as the User (Sign in
+// mod/crypto/src/module.go), so the claim above signs under bip137 alone.
+func signHashAsUser(w *world, facts map[string]bool) error {
+	keys := []*crypto.SignerKey{{Key: w.userKey, Scheme: crypto.SchemeASN1}}
+	binding, err := cryptocli.New(nil, w.signerApp).RegisterSigner(w.ctx, keys, w.signer)
+	if err != nil {
+		return fmt.Errorf("bind the user key for asn1: %w", err)
+	}
+	defer binding.Close()
+
+	digest := sha256.Sum256([]byte("a hash for the user to sign"))
+	signature, err := w.userCrypto.SignHash(w.ctx, digest[:], nil, "")
+	if err != nil {
+		return fmt.Errorf("sign hash: %w", err)
+	}
+
+	err = w.userCrypto.VerifyHashSignature(w.ctx, digest[:], w.userKey, signature)
+	facts["hash_signed_and_verified"] = err == nil && signature.Scheme == crypto.SchemeASN1
+
+	seen := w.signer.seenHashes()
+	facts["app_saw_the_hash"] = len(seen) == 1 && bytes.Equal(seen[0], digest[:])
 
 	return nil
 }
