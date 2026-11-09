@@ -32,9 +32,9 @@ type opIntroduceArgs struct {
 // why no network origin: a swarm member could otherwise relay the query as the
 // user and make this node push to any target, also through an expelled node's
 // delegated authority.
-// note: shell.shell launches its queries without an origin
+// note: a shell.shell command carries its session's origin
 // (mod/shell/src/session.go), so a member that relays shell.shell as the user
-// still reaches this op.
+// is refused too.
 func (mod *Module) OpIntroduce(ctx *astral.Context, q *routing.IncomingQuery, args opIntroduceArgs) error {
 	ch := q.Accept(channel.WithFormats(args.In, args.Out))
 	defer ch.Close()
