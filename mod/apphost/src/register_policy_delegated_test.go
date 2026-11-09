@@ -68,7 +68,7 @@ func refusingNode() *delegateNode {
 }
 
 func delegatingModule(node *delegateNode) (*Module, *policy.Delegate) {
-	mod := &Module{config: defaultConfig, log: log.New(nil), node: node}
+	mod := &Module{config: defaultConfig(), log: log.New(nil), node: node}
 	return mod, &policy.Delegate{Identity: astral.GenerateIdentity(), Operation: "control.decide_app_register"}
 }
 
@@ -191,7 +191,7 @@ func (n *policyLeaf) Create(*astral.Context, string) (tree.Node, error) {
 func boundPolicyModule(t *testing.T, leaf *policyLeaf, node *delegateNode) *Module {
 	t.Helper()
 
-	mod := &Module{config: defaultConfig, log: log.New(nil), node: node}
+	mod := &Module{config: defaultConfig(), log: log.New(nil), node: node}
 	mod.config.Policies.AppRegister = policyconf.Setting{Mode: policyconf.AcceptAll}
 	mod.policy.AppRegister.NoLocal = true
 	if err := mod.policy.AppRegister.Bind(astral.NewContext(nil), leaf); err != nil {
@@ -253,7 +253,7 @@ func TestRegisterAppPolicyIgnoresAnUnsavedDelegate(t *testing.T) {
 func TestRegisterAppPolicyFollowsTheConfig(t *testing.T) {
 	ctx := astral.NewContext(nil)
 
-	mod := &Module{config: defaultConfig, log: log.New(nil)}
+	mod := &Module{config: defaultConfig(), log: log.New(nil)}
 	if registerAsk(ctx, mod.GetRegisterAppPolicy()) {
 		t.Fatal("the code default admitted a registration")
 	}
@@ -263,7 +263,7 @@ func TestRegisterAppPolicyFollowsTheConfig(t *testing.T) {
 		t.Fatal("accept_all refused a registration")
 	}
 
-	delegated := &Module{config: defaultConfig, log: log.New(nil), node: refusingNode()}
+	delegated := &Module{config: defaultConfig(), log: log.New(nil), node: refusingNode()}
 	delegated.Dir = &namingDir{aliases: map[string]*astral.Identity{"cp": astral.GenerateIdentity()}}
 	delegated.config.Policies.AppRegister = policyconf.Setting{Delegate: &policyconf.DelegateSetting{Identity: "cp", Operation: "cp.approve_app"}}
 	if registerAsk(ctx, delegated.GetRegisterAppPolicy()) {

@@ -52,6 +52,15 @@ func (mod *Module) Run(ctx *astral.Context) (err error) {
 	return nil
 }
 
+// Close releases the socket Load bound. The module manager calls it when a
+// load error stops the node before Run, which otherwise closes the socket.
+func (mod *Module) Close() error {
+	if mod.socket == nil {
+		return nil
+	}
+	return mod.socket.Close()
+}
+
 // Push pushes an object to everyone (broadcast)
 func (mod *Module) Push(object astral.Object) (err error) {
 	packet, err := makePacket(object)
