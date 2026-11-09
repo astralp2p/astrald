@@ -35,6 +35,17 @@ mcp-peer
 services-swarm
 services-app-call
 app-searcher-swarm
+app-finder-read
+app-index-provider
+app-describe-provider
+app-search-provider
+app-two-providers
+app-discover-follow
+app-discover-swarm
+app-discover-local
+app-ping-pong
+app-call-remote
+app-call-local
 request-grant-scope
 swarm-authz-matrix
 expel-node
