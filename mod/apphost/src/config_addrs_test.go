@@ -13,7 +13,7 @@ func TestResolveAddrs(t *testing.T) {
 	logger := log.New(nil)
 	logger.SetFilter(func(*log.Entry) bool { return false })
 
-	mod := &Module{config: defaultConfig, log: logger}
+	mod := &Module{config: defaultConfig(), log: logger}
 	mod.config.Listen = []string{"tcp:127.0.0.1:8625", "unix:~/.apphost.sock", "unix:rel.sock", "unix:/run/a.sock", "memu:apphosty"}
 	mod.config.BindHTTP = "unix:~/http.sock"
 
@@ -26,8 +26,8 @@ func TestResolveAddrs(t *testing.T) {
 	if mod.config.BindHTTP != "unix:/home/u/http.sock" {
 		t.Fatalf("bind_http = %q, want unix:/home/u/http.sock", mod.config.BindHTTP)
 	}
-	if defaultConfig.Listen[1] != "unix:~/.apphost.sock" {
-		t.Fatalf("resolveAddrs changed the default listen list: %q", defaultConfig.Listen)
+	if defaultConfig().Listen[1] != "unix:~/.apphost.sock" {
+		t.Fatalf("resolveAddrs changed the default listen list: %q", defaultConfig().Listen)
 	}
 }
 
@@ -35,7 +35,7 @@ func TestResolveAddrsDisablesRelativeBindHTTP(t *testing.T) {
 	logger := log.New(nil)
 	logger.SetFilter(func(*log.Entry) bool { return false })
 
-	mod := &Module{config: defaultConfig, log: logger}
+	mod := &Module{config: defaultConfig(), log: logger}
 	mod.config.BindHTTP = "unix:rel.sock"
 
 	mod.resolveAddrs()
