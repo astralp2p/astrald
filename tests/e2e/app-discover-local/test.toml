@@ -1,0 +1,4 @@
+nodes   = ["node1"]
+timeout = 300
+local_only = "serves its provider app on a host loopback port that node1 dials"
+facts   = ["app_discover_local"]
