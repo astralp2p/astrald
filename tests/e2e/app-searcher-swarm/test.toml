@@ -1,0 +1,5 @@
+nodes   = ["node1", "node2"]
+timeout = 300
+after   = "adopt-node"
+local_only = "serves its recipes app on a host loopback port that node2 dials"
+facts   = ["app_searcher_swarm"]

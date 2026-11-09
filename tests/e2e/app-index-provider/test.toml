@@ -1,0 +1,4 @@
+nodes   = ["node1"]
+timeout = 300
+after   = "bootstrap-user-software-key"
+facts   = ["app_index_provider"]

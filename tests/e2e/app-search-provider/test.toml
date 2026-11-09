@@ -1,0 +1,5 @@
+nodes      = ["node1"]
+timeout    = 300
+after      = "bootstrap-user-software-key"
+local_only = "serves its catalog app on a host loopback port that node1 dials"
+facts      = ["app_search_provider"]
