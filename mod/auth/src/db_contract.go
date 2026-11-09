@@ -15,6 +15,10 @@ type dbContract struct {
 	SubjectSig []byte
 	StartsAt   time.Time
 	ExpiresAt  time.Time
+	// WithdrawnAt is set when the operator took the contract back on this node.
+	// why a mark and not a delete: the indexer and a sibling's push index a
+	// contract again, and the row is what makes IndexContract skip it.
+	WithdrawnAt *time.Time
 }
 
 func (dbContract) TableName() string { return auth.DBPrefix + "contracts" }

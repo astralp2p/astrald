@@ -46,60 +46,68 @@ type Policies struct {
 	AppRegister policyconf.Setting `yaml:"app_register,omitempty"`
 }
 
-var defaultConfig = Config{
-	Listen: []string{
-		"tcp:127.0.0.1:8625",
-		"unix:~/.apphost.sock",
-		"memu:apphosty",
-		"memb:apphostb",
-	},
-	// why: the `/.ws` endpoint accepts any Origin and rests on the bind address
-	// to keep other hosts out — .ai/system/topics/ws-transport.md.
-	// Exposing the HTTP API beyond the host is an explicit `bind_http`.
-	BindHTTP: "tcp:127.0.0.1:8624",
-	Tokens:   map[string]string{},
-	Workers:  32,
-	// why so few: a fresh node only appoints a manager, and an unclaimed node
-	// only claims, registers apps and lets them serve; a claimed node leaves the
-	// decision to authorization and policies.
-	//
-	// why .spec in every list: it lists the node's ops and changes nothing, so
-	// a client or agent discovers what it may call before it holds a token.
-	//
-	// why apphost.bind, apphost.register_handler and apphost.cancel before the
-	// claim: the manager answers the policies delegated to it, an invitation
-	// from the owner's other device among them, and an app answers only through
-	// a registered handler.
-	Gate: Gate{
-		Tokenless: []string{
-			".spec",
-			"apphost.register",
-			"sys.register_manager",
-			"user.info",
+// defaultConfig returns the config a load starts from.
+//
+// why a function: a copied Config shares its Tokens map, and the first load
+// writes the file's tokens into it. yaml.UnmarshalStrict then refuses each of
+// those keys on the next load in the same process, so a mobile host that
+// stops and starts its node fails with "key already set in map".
+func defaultConfig() Config {
+	return Config{
+		Listen: []string{
+			"tcp:127.0.0.1:8625",
+			"unix:~/.apphost.sock",
+			"memu:apphosty",
+			"memb:apphostb",
 		},
-		States: GateStates{
-			Fresh: []string{
+		// why: the `/.ws` endpoint accepts any Origin and rests on the bind address
+		// to keep other hosts out — .ai/system/topics/ws-transport.md.
+		// Exposing the HTTP API beyond the host is an explicit `bind_http`.
+		BindHTTP: "tcp:127.0.0.1:8624",
+		Tokens:   map[string]string{},
+		Workers:  32,
+		// why so few: a fresh node only appoints a manager, and an unclaimed node
+		// only claims, registers apps and lets them serve; a claimed node leaves the
+		// decision to authorization and policies.
+		//
+		// why .spec in every list: it lists the node's ops and changes nothing, so
+		// a client or agent discovers what it may call before it holds a token.
+		//
+		// why apphost.bind, apphost.register_handler and apphost.cancel before the
+		// claim: the manager answers the policies delegated to it, an invitation
+		// from the owner's other device among them, and an app answers only through
+		// a registered handler.
+		Gate: Gate{
+			Tokenless: []string{
 				".spec",
+				"apphost.register",
 				"sys.register_manager",
 				"user.info",
 			},
-			Unclaimed: []string{
-				".spec",
-				"user.info",
-				"user.derive_identity",
-				"user.bootstrap",
-				"user.join",
-				"apphost.register",
-				"apphost.bind",
-				"apphost.register_handler",
-				"apphost.cancel",
+			States: GateStates{
+				Fresh: []string{
+					".spec",
+					"sys.register_manager",
+					"user.info",
+				},
+				Unclaimed: []string{
+					".spec",
+					"user.info",
+					"user.derive_identity",
+					"user.bootstrap",
+					"user.join",
+					"apphost.register",
+					"apphost.bind",
+					"apphost.register_handler",
+					"apphost.cancel",
+				},
+				Claimed: []string{gateAny},
 			},
-			Claimed: []string{gateAny},
 		},
-	},
-	Policies: Policies{
-		AppRegister: policyconf.Setting{Mode: policyconf.RejectAll},
-	},
+		Policies: Policies{
+			AppRegister: policyconf.Setting{Mode: policyconf.RejectAll},
+		},
+	}
 }
 
 // resolveAddrs applies the config path rule to the unix: addresses of listen and bind_http: "~/" is

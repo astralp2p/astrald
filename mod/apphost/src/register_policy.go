@@ -18,9 +18,9 @@ const policyPath = "/mod/apphost/policy"
 // selects apphostmod.AcceptAllGrants, and an unset or any other mode selects
 // apphostmod.RefuseAllGrants.
 //
-// why apart from Config: Config is read from apphost.yaml and copied from
-// defaultConfig, and a tree.Value carries a mutex, so it cannot ride a copied
-// struct.
+// why apart from Config: Config is read from apphost.yaml over
+// defaultConfig() and copied by value, and a tree.Value carries a mutex, so it
+// cannot ride a copied struct.
 //
 // note: GrantRequestMode holds any object, so a stored object of another type
 // reads as itself, not as unset; GetGrantRequestPolicy refuses both.

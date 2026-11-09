@@ -17,7 +17,8 @@ func (db *DB) findActiveContracts(q *contractQuery) ([]*dbContract, error) {
 	now := time.Now().UTC()
 	gq := db.DB.
 		Where("starts_at <= ?", now).
-		Where("expires_at > ?", now)
+		Where("expires_at > ?", now).
+		Where("withdrawn_at IS NULL")
 
 	if q.issuer != nil {
 		gq = gq.Where("issuer_id = ?", q.issuer)
@@ -56,10 +57,30 @@ func (db *DB) activeContractExists(objectID *astral.ObjectID) (exists bool, err 
 		Where("object_id = ?", objectID).
 		Where("starts_at <= ?", now).
 		Where("expires_at > ?", now).
+		Where("withdrawn_at IS NULL").
 		Select("count(*) > 0").
 		First(&exists).
 		Error
 	return
+}
+
+// withdrawContracts marks every unexpired, unwithdrawn contract issued by issuer
+// that carries a permit named action, and returns how many it marked.
+func (db *DB) withdrawContracts(issuer *astral.Identity, action string) (int64, error) {
+	now := time.Now().UTC()
+	permitted := db.DB.
+		Model(&dbContractPermit{}).
+		Select("object_id").
+		Where("name = ?", action)
+
+	res := db.DB.
+		Model(&dbContract{}).
+		Where("issuer_id = ?", issuer).
+		Where("expires_at > ?", now).
+		Where("withdrawn_at IS NULL").
+		Where("object_id IN (?)", permitted).
+		Update("withdrawn_at", now)
+	return res.RowsAffected, res.Error
 }
 
 func (db *DB) storeSignedContract(sc *auth.SignedContract) error {

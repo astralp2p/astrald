@@ -52,6 +52,7 @@ type Module struct {
 
 // Run schedules the endpoint-cleanup task and blocks until ctx is cancelled.
 func (mod *Module) Run(ctx *astral.Context) error {
+	defer mod.linkPool.Close()
 	mod.ctx = ctx.IncludeZone(astral.ZoneNetwork)
 	<-mod.Deps.Scheduler.Ready()
 	mod.Scheduler.Schedule(mod.NewCleanupEndpointsTask())

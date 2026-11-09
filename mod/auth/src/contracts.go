@@ -72,6 +72,18 @@ func (mod *Module) indexer(ctx *astral.Context) {
 	mod.log.Logv(1, "auth indexer finished")
 }
 
+// WithdrawContracts takes back, on this node, every unexpired contract issued by
+// issuer that carries a permit for action. The next authorization no longer
+// finds the contract, and indexing it again changes nothing.
+func (mod *Module) WithdrawContracts(issuer *astral.Identity, action astral.Object) (int, error) {
+	if issuer == nil || issuer.IsZero() {
+		return 0, fmt.Errorf("missing issuer")
+	}
+
+	n, err := mod.db.withdrawContracts(issuer, action.ObjectType())
+	return int(n), err
+}
+
 func (mod *Module) SignedContracts() authmod.ContractQueryBuilder {
 	return &contractQuery{DB: mod.db}
 }
