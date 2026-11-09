@@ -9,6 +9,7 @@ import (
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astral-go/astral/channel"
 	"github.com/astralp2p/astral-go/lib/query"
+	"github.com/astralp2p/astrald/mod/apphost"
 )
 
 // deliverMessage puts the message to the recipient and returns once the
@@ -105,7 +106,17 @@ func launchDelivery(callerID, targetID *astral.Identity, path string) *astral.In
 // reader's node having handed the body out. A query an agent's declared tool
 // put, or a local app routed itself, did neither, and would store mail
 // send_action refuses with no outbox row behind it.
+//
+// why a remote apphost HTTP query is not one: it carries network origin, as a
+// query from a link peer does, but it came from a client holding an app's token,
+// not from a node that asked send_action. Taking it as a send path would let that
+// token's holder deliver mail without send_action, a thing the same token over
+// IPC or WebSocket is refused.
 func fromSendPath(q *astral.InFlightQuery) bool {
+	if fromRemoteHTTP(q) {
+		return false
+	}
+
 	if q.IsNetwork() {
 		return true
 	}
@@ -116,4 +127,15 @@ func fromSendPath(q *astral.InFlightQuery) bool {
 	}
 	_, mark := v.(sendPathMark)
 	return mark
+}
+
+// fromRemoteHTTP answers whether q came over apphost's HTTP endpoint from a
+// client on another host — see apphost.ExtraHTTPRemote.
+func fromRemoteHTTP(q *astral.InFlightQuery) bool {
+	v, ok := q.Extra.Get(apphost.ExtraHTTPRemote)
+	if !ok {
+		return false
+	}
+	remote, _ := v.(bool)
+	return remote
 }

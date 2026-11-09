@@ -18,10 +18,11 @@ const DBPrefix = "apphost__"
 const DefaultTokenDuration = astral.Duration(time.Hour * 24 * 365) // 1 year
 
 // Extra keys apphost sets on an inbound guest query so ops can apply their own
-// authorization. Both are set only when true; absence carries the negative.
+// authorization. Each is set only when true; absence carries the negative.
 const (
-	ExtraOriginWeb = "origin-web" // browser Origin header; set for WebSocket guests
-	ExtraAnonymous = "anonymous"  // set when the guest session presented no token
+	ExtraOriginWeb  = "origin-web"  // browser Origin header; set for WebSocket guests
+	ExtraAnonymous  = "anonymous"   // set when the guest session presented no token
+	ExtraHTTPRemote = "http-remote" // set on an HTTP query from a non-loopback TCP client
 )
 
 // Module is the public API surface of the apphost module.

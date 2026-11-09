@@ -116,6 +116,8 @@ what the world reaches.
 | 8624 | TCP 127.0.0.1 | apphost HTTP API | container-internal until `bind_http` binds `0.0.0.0` |
 | 8626 | TCP 127.0.0.1 | MCP server | container-internal until `bind_mcp` binds `0.0.0.0` |
 
+A query that reaches a `0.0.0.0` `bind_http` from outside the container arrives from a non-loopback address, even from the host itself, so it carries network origin: an operation that refuses a network caller refuses it.
+
 Docker's bridge is a NAT in front of the node: peers reach only what is
 published, and LAN discovery sees the bridge network rather than the LAN. A node
 that should be discoverable on its LAN runs with `--network host`, which makes
