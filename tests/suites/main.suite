@@ -39,5 +39,6 @@ swarm-authz-matrix
 expel-node
 hold-purge
 hold-isolation
+indexer-cursor
 swarm-roster-sync
 expel-propagation
