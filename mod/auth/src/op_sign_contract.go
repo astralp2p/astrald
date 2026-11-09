@@ -17,9 +17,8 @@ type opSignContractArgs struct {
 // an error per contract. A query of any origin other than local, a link's and
 // MCP's included, is answered astral.ErrOriginNotAllowed.
 //
-// note: a command of a shell.shell session carries no origin, so a remote
-// session's command passes the origin check; the signer rule still binds the
-// session's identity.
+// note: a command of a shell.shell session carries the session's origin, so a
+// session opened over a link is answered astral.ErrOriginNotAllowed too.
 func (mod *Module) OpSignContract(ctx *astral.Context, q *routing.IncomingQuery, args opSignContractArgs) error {
 	ch := q.Accept(channel.WithFormats(args.In, args.Out))
 	defer ch.Close()
