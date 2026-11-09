@@ -26,6 +26,7 @@ func grantAdminOps() []grantAdminOp {
 		{"apphost.grant", func(m *Module) any { return m.OpGrant }, ""},
 		{"apphost.revoke", func(m *Module) any { return m.OpRevoke }, "?identity=" + id + "&action=" + action},
 		{"apphost.list_grants", func(m *Module) any { return m.OpListGrants }, "?identity=" + id},
+		{"apphost.withdraw_relay", func(m *Module) any { return m.OpWithdrawRelay }, "?identity=" + id},
 	}
 }
 

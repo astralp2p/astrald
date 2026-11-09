@@ -16,7 +16,7 @@ import (
 func policySetter(admin bool) *Module {
 	return &Module{
 		Deps:   Deps{Auth: &recordingAuth{verdict: admin}, Dir: &namingDir{}},
-		config: defaultConfig,
+		config: defaultConfig(),
 		node:   &serveAppsNode{id: astral.GenerateIdentity()},
 		log:    log.New(nil),
 	}

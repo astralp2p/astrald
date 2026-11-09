@@ -25,7 +25,7 @@ func (s *stubSys) NodeState(*astral.Context) string { return s.state }
 // state.
 func stateModule(t *testing.T, state string) *Module {
 	t.Helper()
-	m := &Module{config: defaultConfig, node: &routeRecorder{id: astral.GenerateIdentity()}}
+	m := &Module{config: defaultConfig(), node: &routeRecorder{id: astral.GenerateIdentity()}}
 	m.Sys = &stubSys{state: state}
 	return m
 }
