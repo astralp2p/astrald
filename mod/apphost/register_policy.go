@@ -8,7 +8,8 @@ import (
 // RegisterAppPolicy decides one app registration. apphost.register applies the
 // decision: Allow false refuses; otherwise the node writes exactly the permits
 // the decision lists, on the rail each list names, and records its authorizer
-// assignments for the new identity. An error is a question that could not be
+// assignments for the new identity. A decision whose ContractPermits name
+// mod.auth.sudo_action is refused. An error is a question that could not be
 // decided, and the node refuses.
 //
 // The request carries the caller's web origin (empty for local IPC callers),

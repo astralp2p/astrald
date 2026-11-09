@@ -1,6 +1,7 @@
 package apphost
 
 import (
+	"fmt"
 	"time"
 
 	apphostapi "github.com/astralp2p/astral-go/api/apphost"
@@ -73,7 +74,7 @@ func (mod *Module) OpRegister(ctx *astral.Context, query *routing.IncomingQuery,
 		mod.log.Logv(1, "registration from origin %v refused by policy", origin)
 		return ch.Send(apphostapi.ErrRegistrationDeclined)
 	}
-	if err = dec.Validate(); err != nil {
+	if err = validateRegisterDecision(dec); err != nil {
 		mod.log.Logv(1, "registration refused: %v", err)
 		return ch.Send(apphostapi.ErrRegistrationDeclined)
 	}
@@ -83,6 +84,28 @@ func (mod *Module) OpRegister(ctx *astral.Context, query *routing.IncomingQuery,
 		return ch.Send(astral.Err(err))
 	}
 	return ch.Send(token)
+}
+
+// validateRegisterDecision returns the first reason the node cannot apply dec
+// to an apphost.register: an invalid authorizer assignment, or a contract
+// permit for mod.auth.sudo_action.
+//
+// why sudo_action: the node signs every contract permit as issuer, and a
+// node-signed mod.auth.sudo_action lets the app act and sign as the node
+// (decided 2026-11-06).
+// why not in provisionApp: sys.register_manager shares it through ProvisionApp,
+// and the manager may hold any permit it asks for.
+func validateRegisterDecision(dec *apphostapi.AppRegisterDecision) error {
+	if err := dec.Validate(); err != nil {
+		return err
+	}
+	sudo := auth.SudoAction{}.ObjectType()
+	for _, p := range dec.ContractPermits {
+		if p != nil && string(p.Action) == sudo {
+			return fmt.Errorf("app register decision: a contract permit names %v", sudo)
+		}
+	}
+	return nil
 }
 
 // provisionApp creates an App identity: a key pair, a signed app contract and
