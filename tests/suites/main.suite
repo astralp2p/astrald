@@ -35,6 +35,9 @@ mcp-peer
 services-swarm
 services-app-call
 app-discover-local
+app-ping-pong
+app-call-remote
+app-call-local
 request-grant-scope
 swarm-authz-matrix
 expel-node
