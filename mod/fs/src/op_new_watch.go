@@ -18,13 +18,18 @@ type opNewWatchArgs struct {
 	Out       string
 }
 
-// OpNewWatch authorizes the caller under AdminObjects, then registers a new watched
-// repository at the given path, starts an async background scan, and adds the
-// repository to both the objects store and the local group. Unless Temporary is set, the
-// repository is saved to the tree and restored at the next start.
+// OpNewWatch refuses a query from the network, authorizes the caller under AdminObjects, then
+// registers a new watched repository at the given path, starts an async background scan, and
+// adds the repository to both the objects store and the local group. Unless Temporary is set,
+// the repository is saved to the tree and restored at the next start.
 func (mod *Module) OpNewWatch(ctx *astral.Context, q *routing.IncomingQuery, args opNewWatchArgs) (err error) {
 	ch := q.Accept(channel.WithFormats(args.In, args.Out))
 	defer ch.Close()
+
+	// why: a host path belongs to the machine, not to a peer.
+	if q.Origin() == astral.OriginNetwork {
+		return ch.Send(astral.NewErrOriginNotAllowed(q.Origin()))
+	}
 
 	if !mod.Auth.Authorize(ctx, &auth.AdminObjectsAction{
 		Action: auth.NewAction(q.Caller()),
