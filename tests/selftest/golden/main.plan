@@ -1,8 +1,8 @@
 w0 local: smoke → mcp-origin → claim-window → admission-policies
           → token-less-setup → manager-setup → signer-app → messaging-ops
-          → app-call-local → bootstrap-user-software-key → policy-delegate
-          → fs-watch → registration-lease → adopt-node → object-store
-          → app-query → blueprints-two-node → apphost-origin
+          → app-discover-local → app-call-local → bootstrap-user-software-key
+          → policy-delegate → fs-watch → registration-lease → adopt-node
+          → object-store → app-query → blueprints-two-node → apphost-origin
           → sign-contract-guard → messaging-two-node → mcp-peer
           → services-swarm → services-app-call → app-ping-pong
           → app-call-remote → request-grant-scope → swarm-authz-matrix
