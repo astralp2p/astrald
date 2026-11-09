@@ -263,7 +263,8 @@ class TestShippedPlans(Invariants, unittest.TestCase):
             [("local", "expel-node"), ("vm", "gateway-relay"),
              ("local", "hold-purge"), ("vm", "nat-punch"),
              ("local", "expel-propagation"), ("vm", "tor-link"),
-             ("local", "hold-isolation"), ("local", "bootstrap-user-op"),
+             ("local", "hold-isolation"), ("local", "repo-removal-sticks"),
+             ("local", "bootstrap-user-op"),
              ("local", "import-user-software-key"),
              ("local", "introduce-node"), ("vm", "nearby-relink")])
 

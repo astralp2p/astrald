@@ -1,0 +1,6 @@
+nodes      = ["node1"]
+after      = "bootstrap-user-software-key"
+restart    = ["node1"]
+destroys   = true
+local_only = "attaches host directories to node1 and restarts node1"
+facts      = ["restarts_before", "repos"]
