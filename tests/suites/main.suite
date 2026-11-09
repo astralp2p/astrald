@@ -19,6 +19,7 @@ adopt-node
 introduce-node-setup
 introduce-node
 fs-watch
+repo-removal-sticks
 object-store
 object-store-peer
 read-remote-peer
