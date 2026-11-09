@@ -34,6 +34,7 @@ messaging-two-node
 mcp-peer
 services-swarm
 services-app-call
+app-search-provider
 app-two-providers
 app-discover-follow
 app-discover-swarm
