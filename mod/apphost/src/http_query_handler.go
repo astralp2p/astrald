@@ -10,6 +10,7 @@ import (
 
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astral-go/lib/query"
+	apphostmod "github.com/astralp2p/astrald/mod/apphost"
 )
 
 type HTTPQueryHandler struct {
@@ -116,6 +117,13 @@ func launchHTTPQuery(request *http.Request, q *astral.Query) *astral.InFlightQue
 	// must not pass an op's refusal of network origin as a local caller would.
 	if isRemote(request) {
 		inFlight.Extra.Set("origin", astral.OriginNetwork)
+
+		// why a mark besides the origin: network origin is also what a query
+		// from a link peer carries, and an op that takes it as proof of a path
+		// the peer's node vouched for would take this client's token as that
+		// proof. The mark tells the two apart, and an op that must not accept
+		// this client refuses it by the mark — messaging's send path does.
+		inFlight.Extra.Set(apphostmod.ExtraHTTPRemote, true)
 	}
 
 	return inFlight

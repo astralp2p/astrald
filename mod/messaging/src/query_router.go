@@ -32,8 +32,12 @@ func (mod *Module) RouteQuery(ctx *astral.Context, q *astral.InFlightQuery, w io
 	// refused.
 	if !fromSendPath(q) {
 		origin := astral.OriginLocal
-		if q.IsMCP() {
+		switch {
+		case q.IsMCP():
 			origin = astral.OriginMCP
+		case fromRemoteHTTP(q):
+			// why: the refusal names the origin the client carries, not local.
+			origin = astral.OriginNetwork
 		}
 		return query.Accept(q, w, func(conn astral.Conn) {
 			defer conn.Close()

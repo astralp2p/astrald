@@ -13,7 +13,9 @@ import (
 	"github.com/astralp2p/astral-go/api/user"
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astral-go/astral/log"
+	"github.com/astralp2p/astral-go/lib/query"
 	"github.com/astralp2p/astral-go/lib/routing"
+	apphostmod "github.com/astralp2p/astrald/mod/apphost"
 )
 
 // TestHTTPQueryObeysTheStateGate: an HTTP query holds a token, and a query to
@@ -118,6 +120,23 @@ func TestHTTPQueryFromAnotherHostIsNetwork(t *testing.T) {
 		}
 		if got := len(authority.recorded()); got != c.asked {
 			t.Errorf("%v: asked the authority %v times; want %v", c.remote, got, c.asked)
+		}
+	}
+}
+
+// TestLaunchHTTPQueryMarksARemoteClient: a query from another host carries the
+// mark that tells it from a link peer's, and a loopback client's carries none.
+func TestLaunchHTTPQueryMarksARemoteClient(t *testing.T) {
+	for remote, want := range map[string]bool{"10.0.0.1:50000": true, "127.0.0.1:50000": false} {
+		request := overTCP(httptest.NewRequest(http.MethodGet, "/", nil), remote)
+		q := launchHTTPQuery(request, query.New(astral.GenerateIdentity(), astral.GenerateIdentity(), "x", nil))
+
+		v, ok := q.Extra.Get(apphostmod.ExtraHTTPRemote)
+		if marked := ok && v == true; marked != want {
+			t.Errorf("%v: marked %v; want %v", remote, marked, want)
+		}
+		if got := q.IsNetwork(); got != want {
+			t.Errorf("%v: network origin %v; want %v", remote, got, want)
 		}
 	}
 }

@@ -10,6 +10,7 @@ import (
 	"github.com/astralp2p/astral-go/api/messaging"
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astral-go/astral/channel"
+	apphostmod "github.com/astralp2p/astrald/mod/apphost"
 	authmod "github.com/astralp2p/astrald/mod/auth"
 )
 
@@ -145,5 +146,56 @@ func TestOnlyTheSendPathsOwnMarkCounts(t *testing.T) {
 	forged.Extra.Set(extraSendPath, true)
 	if fromSendPath(forged) {
 		t.Fatal("a value set by another package under the mark's key was taken as the mark")
+	}
+}
+
+// remoteHTTPQuery is a query as apphost's HTTP endpoint launches it for a
+// client on another host: network origin, and the mark that tells it from a
+// link peer's.
+func remoteHTTPQuery(caller, target *astral.Identity, path string) *astral.InFlightQuery {
+	q := unmarkedQuery(caller, target, path, astral.OriginNetwork)
+	q.Extra.Set(apphostmod.ExtraHTTPRemote, true)
+	return q
+}
+
+// A client holding an app's token on another host, through apphost's HTTP
+// endpoint, is not a send path: its query carries network origin as a link
+// peer's does, but no send_action was asked. It is refused as network whether
+// the target is hosted here or not, and stores nothing; the genuine send path
+// still delivers.
+func TestARemoteHTTPCallerWithoutSendActionIsRefused(t *testing.T) {
+	mod := testMessagingModule(t)
+	authority := authorityOf(mod)
+	mod.Auth = authority
+	authority.Add(authmod.Func[*messaging.ReceiveAction](func(*astral.Context, *messaging.ReceiveAction) bool { return true }))
+	a, b := hostedParticipant(t, mod), hostedParticipant(t, mod)
+
+	for name, target := range map[string]*astral.Identity{"hosted": b, "elsewhere": astral.GenerateIdentity()} {
+		msg := &messaging.Message{ID: messaging.NewMessageID(), Content: "remote"}
+		answer := routeAndAnswer(t, mod, remoteHTTPQuery(a, target, messaging.MethodMessage), msg)
+
+		e, ok := answer.(astral.Error)
+		if !ok || !errors.Is(e, astral.ErrOriginNotAllowed) {
+			t.Fatalf("a remote HTTP delivery to a target %v: answered %v, want origin not allowed", name, answer)
+		}
+		if !strings.Contains(e.Error(), astral.OriginNetwork) {
+			t.Fatalf("a remote HTTP delivery to a target %v: refused as %q, want it to name %q", name, e.Error(), astral.OriginNetwork)
+		}
+	}
+
+	if n := countOwned(t, mod.db, b); n != 0 {
+		t.Fatalf("b holds %v messages, want none: mail send_action was never asked for was stored", n)
+	}
+
+	// the genuine send path: the query launchDelivery builds is taken, and so is
+	// a link peer's, which carries network origin without the mark.
+	if !fromSendPath(launchDelivery(a, b, messaging.MethodMessage)) {
+		t.Fatal("the send path's own query is refused")
+	}
+	if !fromSendPath(unmarkedQuery(a, b, messaging.MethodMessage, astral.OriginNetwork)) {
+		t.Fatal("a query from a link peer is refused")
+	}
+	if fromSendPath(remoteHTTPQuery(a, b, messaging.MethodMessage)) {
+		t.Fatal("a query from a remote HTTP client is taken as a send path")
 	}
 }
