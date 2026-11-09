@@ -34,6 +34,7 @@ messaging-two-node
 mcp-peer
 services-swarm
 services-app-call
+app-describe-provider
 request-grant-scope
 swarm-authz-matrix
 expel-node
