@@ -19,6 +19,8 @@ STEPS = [
     "claim_accepted",
     "text_signed_and_verified",
     "app_saw_the_text",
+    "hash_signed_and_verified",
+    "app_saw_the_hash",
     "foreign_caller_refused",
     "foreign_caller_never_reached_the_app",
     "no_permit_refused",
