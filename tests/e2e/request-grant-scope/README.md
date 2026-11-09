@@ -22,7 +22,7 @@ revoked by its ID.
 
 ## Notes
 
-* The driver restores the bundled grant request policy (empty set) at the
-  end, so the node leaves the test as it entered it.
+* The driver clears the grant request policy (empty set) at the end, so the
+  node leaves the test as it entered it: unset, refusing every request.
 * Discovery runs at local reach on node1, so the scope decides admission
   without any provider or peer.

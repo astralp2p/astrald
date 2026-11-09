@@ -12,12 +12,13 @@ Paths begin with a slash and consist of segments separated by slashes, just like
 Segments can contain any non-slash printable characters.
 
 The default node implementation is a simple database store. A module compiled into the node mounts another
-implementation over an existing path, which is how a module serves a computed value from the tree. Mounting is
+implementation at a path, which is how a module serves a computed value from the tree. Mounting is
 in-process: no operation exposes it over the wire.
 
-A mount is reachable only where the path already exists in the database, every segment included, because a
-traversal overlays a mount onto a name the underlying node returns. A module therefore creates the path before
-it mounts over it. Unmounting restores the stored node and leaves the path in place.
+A mount is reachable whether or not its path is stored. A traversal lists each segment on the way to a mount
+next to the stored subnodes. A segment that only a mount needs reads as nil and refuses deletion, and a write
+through that segment stores it. Unmounting restores the stored node, if any, and drops the segments that only
+the mount needed.
 */
 package tree
 
@@ -43,11 +44,10 @@ type Module interface {
 	Delete(ctx *astral.Context, path string) error
 
 	// Mount mounts a node at the given path. This node will be returned whenever a traversal reaches this path.
-	// The path must already exist in the tree; Mount does not create it. The root "/" is immutable and
-	// cannot be mounted over.
+	// The path need not be stored, and Mount stores nothing. The root "/" is immutable and cannot be mounted over.
 	Mount(path string, node tree.Node) error
 
-	// Unmount unmounts a node mounted at the given path. The path itself stays in the tree. The root "/"
-	// cannot be unmounted.
+	// Unmount unmounts a node mounted at the given path. A node stored at the path becomes reachable again.
+	// The root "/" cannot be unmounted.
 	Unmount(path string) error
 }
