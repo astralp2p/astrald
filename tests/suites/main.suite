@@ -46,6 +46,7 @@ app-discover-local
 app-ping-pong
 app-call-remote
 app-call-local
+app-op-surface
 request-grant-scope
 swarm-authz-matrix
 expel-node
