@@ -12,7 +12,6 @@ import (
 	"github.com/astralp2p/astral-go/api/services"
 	servicescli "github.com/astralp2p/astral-go/api/services/client"
 	"github.com/astralp2p/astral-go/astral"
-	"github.com/astralp2p/astral-go/astral/channel"
 	"github.com/astralp2p/astral-go/lib/apps"
 	"github.com/astralp2p/astral-go/lib/astrald"
 	"github.com/astralp2p/astral-go/lib/routing"
@@ -114,5 +113,3 @@ func provide(path string) error {
 	<-served
 	return nil
 }
-
-var _ = channel.Expect[*astral.Ack]
