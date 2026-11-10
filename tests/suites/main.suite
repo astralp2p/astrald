@@ -26,6 +26,8 @@ object-store-peer
 read-remote-peer
 read-swarm
 discover-swarm
+adopt-claimed-node-setup
+adopt-claimed-node
 app-query
 registration-lease
 blueprints-two-node
