@@ -1,30 +1,33 @@
-w0 local: smoke → mcp-origin → claim-window → admission-policies
-          → token-less-setup → manager-setup → signer-app → messaging-ops
-          → app-discover-local → app-handler-unroute → app-call-local
-          → app-routing-two-apps → app-op-surface → bootstrap-user-software-key
-          → policy-delegate → fs-watch → registration-lease
-          → app-index-provider → app-describe-provider → app-search-provider
-          → adopt-node → object-store → app-query → blueprints-two-node
-          → apphost-origin → sign-contract-guard → messaging-two-node
-          → mcp-peer → services-swarm → services-app-call
-          → services-advertise-identity → app-searcher-swarm → app-finder-read
-          → app-two-providers → services-provider-gone → app-discover-follow
-          → app-discover-swarm → app-ping-pong → app-call-remote
-          → request-grant-scope → swarm-authz-matrix → object-store-peer
-          → read-remote-peer → read-swarm → discover-swarm → expel-node
-          config admitter.apphost.policies = {"app_register": "reject_all"}
-          config admitter.user.policies = {"swarm_join": "reject_all", "swarm_invite": "accept_all"}
-          config invitee.user.policies = {"swarm_join": "accept_all", "swarm_invite": "reject_all"}
-          config node1.apphost.gate = {"tokenless": ["apphost.register", "user.info", "user.derive_identity", "user.bootstrap", "user.join"], "states": {"fresh": ["*"], "unclaimed": ["*"]}}
-          config nomcp1.mcp.bind_mcp = ""
-w1 local: bootstrap-user-software-key* → adopt-node* → hold-purge
-w2 local: bootstrap-user-software-key* → adopt-node* → swarm-roster-sync
-          → expel-propagation
-w3 local: bootstrap-user-software-key* → adopt-node* → swarm-roster-sync*
-          → swarm-member-restart
-w4 local: bootstrap-user-software-key* → repo-removal-sticks
-w5 local: bootstrap-user-software-key* → hold-isolation
-w6 local: bootstrap-user-software-key* → indexer-cursor
-w7 local: import-user-software-key
-w8 local: bootstrap-user-op
-w9 local: introduce-node-setup → introduce-node
+w0 local:  smoke → mcp-origin → claim-window → admission-policies
+           → token-less-setup → manager-setup → signer-app → messaging-ops
+           → app-discover-local → app-handler-unroute → app-call-local
+           → app-routing-two-apps → app-op-surface
+           → bootstrap-user-software-key → policy-delegate → fs-watch
+           → registration-lease → app-index-provider → app-describe-provider
+           → app-search-provider → adopt-node → object-store → app-query
+           → blueprints-two-node → apphost-origin → sign-contract-guard
+           → messaging-two-node → mcp-peer → services-swarm → services-app-call
+           → services-advertise-identity → app-searcher-swarm → app-finder-read
+           → app-two-providers → services-provider-gone → app-discover-follow
+           → app-discover-swarm → app-ping-pong → app-call-remote
+           → request-grant-scope → swarm-authz-matrix → object-store-peer
+           → read-remote-peer → read-swarm → discover-swarm → expel-node
+           config admitter.apphost.policies = {"app_register": "reject_all"}
+           config admitter.user.policies = {"swarm_join": "reject_all", "swarm_invite": "accept_all"}
+           config invitee.user.policies = {"swarm_join": "accept_all", "swarm_invite": "reject_all"}
+           config node1.apphost.gate = {"tokenless": ["apphost.register", "user.info", "user.derive_identity", "user.bootstrap", "user.join"], "states": {"fresh": ["*"], "unclaimed": ["*"]}}
+           config nomcp1.mcp.bind_mcp = ""
+w1 local:  bootstrap-user-software-key* → adopt-node* → hold-purge
+w2 local:  bootstrap-user-software-key* → adopt-node* → swarm-roster-sync
+           → expel-propagation
+w3 local:  bootstrap-user-software-key* → adopt-node* → swarm-roster-sync*
+           → swarm-member-restart
+w4 local:  bootstrap-user-software-key* → repo-removal-sticks
+w5 local:  bootstrap-user-software-key* → hold-isolation
+w6 local:  bootstrap-user-software-key* → indexer-cursor
+w7 local:  distribution-gate-setup
+           config node1.apphost.gate = {}
+           config node1.apphost.policies = {}
+w8 local:  import-user-software-key
+w9 local:  bootstrap-user-op
+w10 local: introduce-node-setup → introduce-node

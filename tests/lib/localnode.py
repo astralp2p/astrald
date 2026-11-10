@@ -17,6 +17,15 @@ from lib.nodeconfig import NodePorts, module_configs, render, serves_mcp
 _IDENT_RE = re.compile(r"\(\s*([0-9a-f]{66})\s*\)")
 
 
+# The query a node is ready when it answers.
+#
+# why `.spec` and not shell.spec: both list the node's ops, but the shipped
+# apphost gate admits `.spec` in every state and shell.spec only on a claimed
+# node, so shell.spec leaves a node under the shipped gate "not ready" until
+# it is claimed.
+READY_QUERY = ".spec"
+
+
 class NodeError(Exception):
     pass
 
@@ -94,7 +103,7 @@ class LocalNode:
                     async with await astral.connect(
                             self.endpoint, token=self.token,
                             connect_timeout=2.0) as c:
-                        specs = await c.shell.spec()
+                        specs = await c.call(READY_QUERY, timeout=5.0)
                     if specs:
                         return
                 except astral.AstralError as e:

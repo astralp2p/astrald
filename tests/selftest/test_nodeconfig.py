@@ -7,6 +7,7 @@ import unittest
 from pathlib import Path
 
 from lib import nodeconfig
+from lib.manifest import load_all
 from lib.nodeconfig import (AUTH_ACTIONS, E2E_APPHOST_POLICIES, E2E_GATE,
                             E2E_USER, NODE_OP_TOOLS, PEER_ALIAS,
                             PEER_TOOLS, NodePorts, PortsBusy, lease_ports,
@@ -133,6 +134,19 @@ class TestNodeConfig(unittest.TestCase):
         out = nodeconfig.overlay(base, {"user": {"b": 3}, "new": {"c": 4}})
         self.assertEqual(out, {"user": {"a": 1, "b": 3}, "new": {"c": 4}})
         self.assertEqual(base, {"user": {"a": 1, "b": 2}})
+
+    def test_an_empty_gate_and_policies_override_leaves_astrald_its_defaults(self):
+        # why: distribution-gate-setup starts a node under the gate and the app
+        # register policy a released astrald ships. An empty mapping replaces
+        # the harness's keys, and astrald loads a config over its code defaults
+        # (mod/apphost/src/config_gate_test.go holds the other half), so the
+        # node's own lists stand; the harness's token is not part of the gate
+        shipped = load_all(Path(nodeconfig.__file__).parent.parent / "e2e")
+        override = shipped["distribution-gate-setup"].config["node1"]
+        cfg = rendered(override)["apphost"]
+        self.assertEqual((cfg["gate"], cfg["policies"]), ({}, {}))
+        self.assertEqual(cfg["tokens"], {"sekrit": "localnode"})
+        self.assertEqual(rendered()["apphost"]["gate"], E2E_GATE)
 
     def test_lease_ports_skips_a_leased_span(self):
         first = lease_ports(LEASE_BASE, span=10, spans=3)
