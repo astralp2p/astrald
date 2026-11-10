@@ -51,7 +51,7 @@ func (mod *Module) OpDiscover(ctx *astral.Context, q *routing.IncomingQuery, arg
 
 	// fixme: authorization is checked at admission only; a follow outlives a
 	// revoked or narrowed grant.
-	st := mod.coord.DiscoverSwarm(d.app, d.names, args.Follow, d.members)
+	st := mod.coord.Discover(d.app, d.names, args.Follow, d.members)
 	defer st.Close()
 
 	ctx, cancel := ctx.WithCancel()

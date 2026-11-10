@@ -226,7 +226,7 @@ func TestSinkWriteFailureClosesTheStream(t *testing.T) {
 	e := newEnv(t)
 	src, tr := e.register("player")
 	caller := astral.GenerateIdentity()
-	st := e.c.Discover(caller, []string{"player"}, true)
+	st := e.c.Discover(caller, []string{"player"}, true, nil)
 	done := make(chan error, 1)
 	go func() { done <- st.Run(failingSink{}) }()
 

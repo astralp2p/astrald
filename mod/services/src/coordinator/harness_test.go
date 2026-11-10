@@ -130,7 +130,7 @@ func (e *env) register(names ...string) (*Binding, *fakeTransport) {
 // discover starts a stream and its writer; the returned channel yields Run's
 // result.
 func (e *env) discover(caller *astral.Identity, follow bool, sink *fakeSink, names ...string) (*Stream, chan error) {
-	st := e.c.Discover(caller, names, follow)
+	st := e.c.Discover(caller, names, follow, nil)
 	done := make(chan error, 1)
 	go func() { done <- st.Run(sink) }()
 	return st, done
@@ -138,7 +138,7 @@ func (e *env) discover(caller *astral.Identity, follow bool, sink *fakeSink, nam
 
 // discoverSwarm is discover with swarm members carrying the discovery.
 func (e *env) discoverSwarm(caller *astral.Identity, follow bool, sink *fakeSink, members []*astral.Identity, names ...string) (*Stream, chan error) {
-	st := e.c.DiscoverSwarm(caller, names, follow, members)
+	st := e.c.Discover(caller, names, follow, members)
 	done := make(chan error, 1)
 	go func() { done <- st.Run(sink) }()
 	return st, done

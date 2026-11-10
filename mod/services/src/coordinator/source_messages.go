@@ -30,9 +30,7 @@ func (b *Binding) Answer(a *services.Answer) error {
 	u.ProviderID = b.provider
 	b.removeRequest(req)
 	b.deliver(req, &u)
-	for _, o := range append([]*evaluation(nil), req.evaluations...) {
-		o.end()
-	}
+	endAll(req.evaluations)
 	b.schedule(req.slot)
 	c.mu.Unlock()
 	return nil
@@ -54,7 +52,7 @@ func (b *Binding) isValidAnswer(req *request, a *services.Answer) bool {
 // one-shot stream receives only answers to its own initial obligations.
 func (b *Binding) deliver(req *request, u *services.Update) {
 	k := keyOf(b.provider, req.service)
-	for st := range b.c.byCaller[req.slot.caller.String()] {
+	for st := range b.c.byCaller[callerKey(req.slot.caller)] {
 		if _, ok := st.names[req.service]; !ok || st.closed {
 			continue
 		}
@@ -89,44 +87,43 @@ func (b *Binding) Change(ch *services.Change) error {
 		return ErrMalformed
 	}
 
-	for _, caller := range b.audience(ch) {
-		b.refresh(caller)
+	for _, caller := range b.changedCallers(ch) {
+		b.reevaluateFor(caller)
 	}
 	c.mu.Unlock()
 	return nil
 }
 
-func (b *Binding) audience(ch *services.Change) []*Stream {
-	var heads []*Stream
+func (b *Binding) changedCallers(ch *services.Change) []*astral.Identity {
+	var callers []*astral.Identity
 	if bool(ch.All) {
 		for _, streams := range b.c.byCaller {
 			for st := range streams {
-				heads = append(heads, st)
+				callers = append(callers, st.caller)
 				break
 			}
 		}
-		return heads
+		return callers
 	}
 	for _, id := range ch.Callers {
-		for st := range b.c.byCaller[id.String()] {
-			heads = append(heads, st)
+		for st := range b.c.byCaller[callerKey(id)] {
+			callers = append(callers, st.caller)
 			break
 		}
 	}
-	return heads
+	return callers
 }
 
 // refresh retains refresh work for every service of the source the stream's
 // caller follows.
-func (b *Binding) refresh(head *Stream) {
-	ck := head.caller.String()
+func (b *Binding) reevaluateFor(caller *astral.Identity) {
 	var sl *askSlot
 	for _, name := range b.names {
-		if !b.c.followsService(ck, name) {
+		if !b.c.follows(caller, name) {
 			continue
 		}
 		if sl == nil {
-			sl = b.slot(head.caller)
+			sl = b.slot(caller)
 		}
 		sl.reevaluate[name] = struct{}{}
 	}
@@ -151,26 +148,29 @@ func (b *Binding) Close() {
 }
 
 func (b *Binding) closeLocked() {
-	c := b.c
 	b.closed = true
 	close(b.done)
+	b.failOutstanding()
+	b.releaseNames()
+	b.retractFromStreams()
+}
 
+func (b *Binding) failOutstanding() {
 	for _, req := range b.inflight {
 		req.timer.Stop()
-		for _, o := range append([]*evaluation(nil), req.evaluations...) {
-			o.fail()
-		}
+		failAll(req.evaluations)
 	}
 	b.inflight = map[astral.Nonce]*request{}
 	for _, sl := range b.slots {
-		for _, obls := range sl.waiting {
-			for _, o := range append([]*evaluation(nil), obls...) {
-				o.fail()
-			}
+		for _, waiting := range sl.waiting {
+			failAll(waiting)
 		}
 	}
 	b.slots = map[string]*askSlot{}
+}
 
+func (b *Binding) releaseNames() {
+	c := b.c
 	for _, name := range b.names {
 		k := keyOf(b.provider, name)
 		if c.owners[k] == b {
@@ -181,7 +181,10 @@ func (b *Binding) closeLocked() {
 			delete(c.byName, name)
 		}
 	}
-	for _, streams := range c.byCaller {
+}
+
+func (b *Binding) retractFromStreams() {
+	for _, streams := range b.c.byCaller {
 		for st := range streams {
 			st.retractBinding(b)
 		}

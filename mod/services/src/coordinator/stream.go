@@ -136,7 +136,7 @@ func (st *Stream) closeLocked() {
 		return
 	}
 	st.closed = true
-	ck := st.caller.String()
+	ck := callerKey(st.caller)
 	delete(st.c.byCaller[ck], st)
 	if len(st.c.byCaller[ck]) == 0 {
 		delete(st.c.byCaller, ck)

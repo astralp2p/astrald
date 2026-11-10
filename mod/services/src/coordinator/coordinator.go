@@ -67,6 +67,10 @@ type offeringKey struct {
 	name     string
 }
 
+func callerKey(id *astral.Identity) string {
+	return id.String()
+}
+
 func keyOf(provider *astral.Identity, name string) offeringKey {
 	return offeringKey{provider: provider.String(), name: name}
 }
@@ -128,27 +132,38 @@ func (c *Coordinator) reevaluateForFollowers(b *Binding) {
 }
 
 // Discover enrolls a stream and freezes its initial attempt in one critical
-// section. The caller has authorized every name beforehand.
-func (c *Coordinator) Discover(caller *astral.Identity, names []string, follow bool) *Stream {
-	return c.DiscoverSwarm(caller, names, follow, nil)
-}
-
-// DiscoverSwarm is Discover with swarm members carrying the discovery too.
-// Each member owes one initial obligation per name, settled through its
-// Remote; the caller has authorized every name on every member beforehand.
-func (c *Coordinator) DiscoverSwarm(caller *astral.Identity, names []string, follow bool, members []*astral.Identity) *Stream {
+// section. Each member owes one initial obligation per name, settled through
+// its Remote; the caller has authorized every name on every member beforehand.
+func (c *Coordinator) Discover(caller *astral.Identity, names []string, follow bool, members []*astral.Identity) *Stream {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
+	st := c.enrollStream(caller, names, follow)
+	at := newAttempt(st)
+	st.attempt = at
+	touched := c.addLocalEvaluations(at, caller, names)
+	addMemberEvaluations(at, members, names)
+	c.startBudget(at)
+	for _, sl := range touched {
+		sl.binding.schedule(sl)
+	}
+	if len(at.unresolved) == 0 {
+		at.finish()
+	}
+	return st
+}
+
+func (c *Coordinator) enrollStream(caller *astral.Identity, names []string, follow bool) *Stream {
 	st := newStream(c, caller, names, follow)
-	ck := caller.String()
+	ck := callerKey(caller)
 	if c.byCaller[ck] == nil {
 		c.byCaller[ck] = map[*Stream]struct{}{}
 	}
 	c.byCaller[ck][st] = struct{}{}
+	return st
+}
 
-	at := newAttempt(st)
-	st.attempt = at
+func (c *Coordinator) addLocalEvaluations(at *attempt, caller *astral.Identity, names []string) []*askSlot {
 	var touched []*askSlot
 	for _, name := range names {
 		for b := range c.byName[name] {
@@ -159,6 +174,11 @@ func (c *Coordinator) DiscoverSwarm(caller *astral.Identity, names []string, fol
 			touched = append(touched, sl)
 		}
 	}
+	return touched
+}
+
+func addMemberEvaluations(at *attempt, members []*astral.Identity, names []string) {
+	st := at.st
 	for _, member := range members {
 		r := newContribution(st, member)
 		for _, name := range names {
@@ -168,20 +188,16 @@ func (c *Coordinator) DiscoverSwarm(caller *astral.Identity, names []string, fol
 		}
 		st.contributions = append(st.contributions, r)
 	}
+}
+
+func (c *Coordinator) startBudget(at *attempt) {
 	at.budget = c.cfg.Clock.AfterFunc(c.cfg.InitialBudget, func() { c.budgetExpired(at) })
-	for _, sl := range touched {
-		sl.binding.schedule(sl)
-	}
-	if len(at.unresolved) == 0 {
-		at.finish()
-	}
-	return st
 }
 
 // followsService reports whether caller has an open follow stream requesting
 // name.
-func (c *Coordinator) followsService(ck, name string) bool {
-	for st := range c.byCaller[ck] {
+func (c *Coordinator) follows(caller *astral.Identity, name string) bool {
+	for st := range c.byCaller[callerKey(caller)] {
 		if _, ok := st.names[name]; ok && st.follow && !st.closed {
 			return true
 		}

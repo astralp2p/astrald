@@ -56,14 +56,8 @@ func newBinding(c *Coordinator, provider *astral.Identity, names []string, t Tra
 // Provider is the identity the source answers as.
 func (b *Binding) Provider() *astral.Identity { return b.provider }
 
-// Names are the services of the source, sorted.
-func (b *Binding) Names() []string { return append([]string(nil), b.names...) }
-
-// Done is closed when the source closes.
-func (b *Binding) Done() <-chan struct{} { return b.done }
-
 func (b *Binding) slot(caller *astral.Identity) *askSlot {
-	ck := caller.String()
+	ck := callerKey(caller)
 	sl := b.slots[ck]
 	if sl == nil {
 		sl = &askSlot{binding: b, caller: caller, waiting: map[string][]*evaluation{}, reevaluate: map[string]struct{}{}}
@@ -117,7 +111,7 @@ func (sl *askSlot) nextName() (string, bool) {
 // collect deletes an idle slot. A slot holds nothing beyond its work.
 func (b *Binding) removeIfIdle(sl *askSlot) {
 	if sl.active == nil && len(sl.waiting) == 0 && len(sl.reevaluate) == 0 {
-		delete(b.slots, sl.caller.String())
+		delete(b.slots, callerKey(sl.caller))
 	}
 }
 
@@ -147,9 +141,7 @@ func (b *Binding) requestExpired(req *request) {
 		return
 	}
 	b.removeRequest(req)
-	for _, o := range append([]*evaluation(nil), req.evaluations...) {
-		o.fail()
-	}
+	failAll(req.evaluations)
 	b.schedule(req.slot)
 }
 
@@ -178,6 +170,18 @@ func (b *Binding) sendLoop() {
 			b.Close()
 			return
 		}
+	}
+}
+
+func failAll(list []*evaluation) {
+	for _, o := range append([]*evaluation(nil), list...) {
+		o.fail()
+	}
+}
+
+func endAll(list []*evaluation) {
+	for _, o := range append([]*evaluation(nil), list...) {
+		o.end()
 	}
 }
 
