@@ -47,6 +47,8 @@ app-ping-pong
 app-call-remote
 app-handler-unroute
 app-call-local
+app-routing-two-apps
+app-op-surface
 request-grant-scope
 swarm-authz-matrix
 expel-node
