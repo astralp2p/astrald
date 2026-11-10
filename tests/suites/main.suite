@@ -15,6 +15,7 @@ messaging-ops
 bootstrap-user-software-key
 import-user-software-key
 bootstrap-user-op
+bootstrap-passphrase
 policy-delegate
 adopt-node
 introduce-node-setup

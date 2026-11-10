@@ -266,6 +266,7 @@ class TestShippedPlans(Invariants, unittest.TestCase):
              ("local", "swarm-member-restart"), ("vm", "tor-link"),
              ("local", "hold-isolation"), ("local", "indexer-cursor"),
              ("local", "repo-removal-sticks"),
+             ("local", "bootstrap-passphrase"),
              ("local", "bootstrap-user-op"),
              ("local", "distribution-gate-setup"),
              ("local", "import-user-software-key"),
