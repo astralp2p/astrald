@@ -264,6 +264,7 @@ class TestShippedPlans(Invariants, unittest.TestCase):
              ("local", "hold-purge"), ("vm", "nat-punch"),
              ("local", "expel-propagation"),
              ("local", "swarm-member-restart"), ("vm", "tor-link"),
+             ("local", "two-swarms-side-by-side"),
              ("local", "hold-isolation"), ("local", "indexer-cursor"),
              ("local", "repo-removal-sticks"),
              ("local", "bootstrap-user-op"),

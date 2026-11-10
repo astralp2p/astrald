@@ -22,12 +22,13 @@ w2 local:  bootstrap-user-software-key* → adopt-node* → swarm-roster-sync
            → expel-propagation
 w3 local:  bootstrap-user-software-key* → adopt-node* → swarm-roster-sync*
            → swarm-member-restart
-w4 local:  bootstrap-user-software-key* → repo-removal-sticks
-w5 local:  bootstrap-user-software-key* → hold-isolation
-w6 local:  bootstrap-user-software-key* → indexer-cursor
-w7 local:  distribution-gate-setup
+w4 local:  bootstrap-user-software-key* → adopt-node* → two-swarms-side-by-side
+w5 local:  bootstrap-user-software-key* → repo-removal-sticks
+w6 local:  bootstrap-user-software-key* → hold-isolation
+w7 local:  bootstrap-user-software-key* → indexer-cursor
+w8 local:  distribution-gate-setup
            config node1.apphost.gate = {}
            config node1.apphost.policies = {}
-w8 local:  import-user-software-key
-w9 local:  bootstrap-user-op
-w10 local: introduce-node-setup → introduce-node
+w9 local:  import-user-software-key
+w10 local: bootstrap-user-op
+w11 local: introduce-node-setup → introduce-node
