@@ -61,8 +61,8 @@ func (st *Stream) Run(sink Sink) error {
 	}
 }
 
-// next picks what to send: removals, then the boundary once nothing owed is
-// left, then views in first-pending order.
+// nextOutput picks what to send: removals, then the boundary once nothing it
+// waits for is left, then views in first-unsent order.
 func (st *Stream) nextOutput() output {
 	if len(st.unsentRemovals) > 0 {
 		keys := make([]offeringKey, 0, len(st.unsentRemovals))
@@ -89,6 +89,7 @@ func (st *Stream) nextOutput() output {
 	return output{}
 }
 
+// write sends one output to the sink.
 func (out output) write(sink Sink) error {
 	switch out.kind {
 	case outRemoved:
@@ -108,7 +109,8 @@ func (out output) write(sink Sink) error {
 	}
 }
 
-// sent records a successful write and reports whether the stream is done.
+// markWritten records a successful write and reports whether the stream is
+// done.
 func (st *Stream) markWritten(out output) bool {
 	switch out.kind {
 	case outRemoved:

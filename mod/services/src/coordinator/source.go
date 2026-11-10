@@ -5,8 +5,8 @@ import (
 	"github.com/astralp2p/astral-go/astral"
 )
 
-// Source is one provider lifetime: an app binding or a native registration.
-// Its names are fixed for the lifetime.
+// Binding is one provider lifetime: an app's advertise binding or a native
+// registration. Its names are fixed for the lifetime.
 type Binding struct {
 	c        *Coordinator
 	provider *astral.Identity
@@ -22,15 +22,17 @@ type Binding struct {
 	done      chan struct{}
 }
 
-// slot is the T2 gate: one outstanding ask per source and caller.
+// askSlot holds one outstanding ask per binding and caller. Work for the caller
+// waits here until the active ask is answered or expires.
 type askSlot struct {
 	binding    *Binding
 	caller     *astral.Identity
 	active     *request
-	waiting    map[string][]*evaluation // service → obligations waiting for a fresh ask
-	reevaluate map[string]struct{}      // service → retained refresh work
+	waiting    map[string][]*evaluation // service → initial evaluations waiting for a fresh ask
+	reevaluate map[string]struct{}      // service → re-evaluation owed to followers
 }
 
+// request is one ask sent to the provider and not yet answered.
 type request struct {
 	id          astral.Nonce
 	slot        *askSlot
@@ -53,7 +55,7 @@ func newBinding(c *Coordinator, provider *astral.Identity, names []string, t Tra
 	}
 }
 
-// Provider is the identity the source answers as.
+// Provider is the identity the binding answers as.
 func (b *Binding) Provider() *astral.Identity { return b.provider }
 
 func (b *Binding) slot(caller *astral.Identity) *askSlot {
@@ -66,8 +68,8 @@ func (b *Binding) slot(caller *astral.Identity) *askSlot {
 	return sl
 }
 
-// schedule issues the next ask of a free slot: initial work before refresh
-// work, services in name order.
+// schedule issues the next ask of a free slot: initial evaluations before
+// re-evaluations, services in name order.
 func (b *Binding) schedule(sl *askSlot) {
 	if b.closed || sl.active != nil {
 		return
@@ -94,6 +96,7 @@ func (b *Binding) schedule(sl *askSlot) {
 	wake(b.sendWake)
 }
 
+// nextName picks the service the slot asks about next.
 func (sl *askSlot) nextName() (string, bool) {
 	for _, name := range sl.binding.names {
 		if len(sl.waiting[name]) > 0 {
@@ -108,15 +111,16 @@ func (sl *askSlot) nextName() (string, bool) {
 	return "", false
 }
 
-// collect deletes an idle slot. A slot holds nothing beyond its work.
+// removeIfIdle deletes a slot with no work. A slot holds nothing beyond its
+// work.
 func (b *Binding) removeIfIdle(sl *askSlot) {
 	if sl.active == nil && len(sl.waiting) == 0 && len(sl.reevaluate) == 0 {
 		delete(b.slots, callerKey(sl.caller))
 	}
 }
 
-// nextID draws a random request ID that is not zero and was never issued on
-// this source.
+// newRequestID draws a random request ID that is not zero and was never issued
+// on this binding.
 func (b *Binding) newRequestID() astral.Nonce {
 	for {
 		id := astral.NewNonce()
@@ -127,12 +131,16 @@ func (b *Binding) newRequestID() astral.Nonce {
 	}
 }
 
+// removeRequest ends an outstanding ask and frees its slot.
 func (b *Binding) removeRequest(req *request) {
 	delete(b.inflight, req.id)
 	req.timer.Stop()
 	req.slot.active = nil
 }
 
+// requestExpired fails the initial evaluations an unanswered ask carried.
+// note: a timer that fires after the ask was answered finds it gone and does
+// nothing.
 func (b *Binding) requestExpired(req *request) {
 	c := b.c
 	c.mu.Lock()
@@ -145,7 +153,7 @@ func (b *Binding) requestExpired(req *request) {
 	b.schedule(req.slot)
 }
 
-// sendLoop drains asks to the transport until the source closes.
+// sendLoop drains asks to the transport until the binding closes.
 func (b *Binding) sendLoop() {
 	c := b.c
 	for {
@@ -173,12 +181,16 @@ func (b *Binding) sendLoop() {
 	}
 }
 
+// failAll fails each evaluation in list.
+// note: failing detaches an evaluation from list, so the loop runs on a copy.
 func failAll(list []*evaluation) {
 	for _, o := range append([]*evaluation(nil), list...) {
 		o.fail()
 	}
 }
 
+// endAll ends each evaluation in list.
+// note: ending detaches an evaluation from list, so the loop runs on a copy.
 func endAll(list []*evaluation) {
 	for _, o := range append([]*evaluation(nil), list...) {
 		o.end()

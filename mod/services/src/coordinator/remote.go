@@ -5,13 +5,13 @@ import (
 	"github.com/astralp2p/astral-go/astral"
 )
 
-// Remote is one swarm member's contribution to a stream: the member's own
-// discovery for the stream's caller, fed in by whoever reads it. Each method
-// takes the coordinator lock; none blocks.
+// Contribution is one swarm member's contribution to a stream: the member's
+// own discovery for the stream's caller, fed in by whoever reads it. Each
+// method takes the coordinator lock; none blocks.
 type Contribution struct {
 	st          *Stream
 	member      *astral.Identity
-	unresolved  map[string]*evaluation   // initial obligation per service, until the member's outcome
+	unresolved  map[string]*evaluation   // initial evaluation per service, until the member's outcome
 	contributed map[offeringKey]struct{} // offerings this member contributed
 }
 
@@ -22,7 +22,7 @@ func newContribution(st *Stream, member *astral.Identity) *Contribution {
 // Member is the swarm member this contribution comes from.
 func (r *Contribution) Member() *astral.Identity { return r.member }
 
-// Offer applies one view from the member.
+// Update applies one view from the member.
 func (r *Contribution) Update(u *services.Update) {
 	c := r.st.c
 	c.mu.Lock()
@@ -99,6 +99,7 @@ func (r *Contribution) Lost() {
 	wake(r.st.wake)
 }
 
+// evaluations lists the member's unresolved initial evaluations.
 func (r *Contribution) evaluations() []*evaluation {
 	list := make([]*evaluation, 0, len(r.unresolved))
 	for _, o := range r.unresolved {

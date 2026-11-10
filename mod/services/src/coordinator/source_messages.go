@@ -6,9 +6,11 @@ import (
 )
 
 // Answer accepts a provider's answer. An answer for no outstanding ask is
-// ignored. A malformed answer closes the source and returns ErrMalformed.
+// ignored. A malformed answer closes the binding and returns ErrMalformed.
 func (b *Binding) Answer(a *services.Answer) error {
 	c := b.c
+	// why: the transport is closed outside the coordinator lock, so this
+	// function unlocks by hand instead of deferring.
 	c.mu.Lock()
 	if b.closed {
 		c.mu.Unlock()
@@ -36,6 +38,8 @@ func (b *Binding) Answer(a *services.Answer) error {
 	return nil
 }
 
+// isValidAnswer reports whether an answer fits its ask: it carries an update
+// for the asked service and names no provider other than this binding's.
 func (b *Binding) isValidAnswer(req *request, a *services.Answer) bool {
 	switch {
 	case a.Update == nil:
@@ -49,7 +53,7 @@ func (b *Binding) isValidAnswer(req *request, a *services.Answer) bool {
 }
 
 // deliver offers an answer to the caller's streams requesting the service. A
-// one-shot stream receives only answers to its own initial obligations.
+// one-shot stream receives only answers to its own initial evaluations.
 func (b *Binding) deliver(req *request, u *services.Update) {
 	k := keyOf(b.provider, req.service)
 	for st := range b.c.byCaller[callerKey(req.slot.caller)] {
@@ -62,6 +66,7 @@ func (b *Binding) deliver(req *request, u *services.Update) {
 	}
 }
 
+// awaitedBy reports whether the ask carries an initial evaluation of st.
 func (req *request) awaitedBy(st *Stream) bool {
 	for _, o := range req.evaluations {
 		if o.at.st == st {
@@ -71,10 +76,12 @@ func (req *request) awaitedBy(st *Stream) bool {
 	return false
 }
 
-// Change marks the selected callers' followed services for refresh. A change
-// selecting no caller closes the source and returns ErrMalformed.
+// Change re-evaluates the selected callers' followed services. A change
+// selecting no caller closes the binding and returns ErrMalformed.
 func (b *Binding) Change(ch *services.Change) error {
 	c := b.c
+	// why: the transport is closed outside the coordinator lock, so this
+	// function unlocks by hand instead of deferring.
 	c.mu.Lock()
 	if b.closed {
 		c.mu.Unlock()
@@ -94,6 +101,8 @@ func (b *Binding) Change(ch *services.Change) error {
 	return nil
 }
 
+// changedCallers lists the callers a change selects that have a stream, once
+// per selecting entry.
 func (b *Binding) changedCallers(ch *services.Change) []*astral.Identity {
 	var callers []*astral.Identity
 	if bool(ch.All) {
@@ -114,7 +123,7 @@ func (b *Binding) changedCallers(ch *services.Change) []*astral.Identity {
 	return callers
 }
 
-// refresh retains refresh work for every service of the source the stream's
+// reevaluateFor queues a re-evaluation of every service of the binding that
 // caller follows.
 func (b *Binding) reevaluateFor(caller *astral.Identity) {
 	var sl *askSlot
@@ -132,11 +141,13 @@ func (b *Binding) reevaluateFor(caller *astral.Identity) {
 	}
 }
 
-// Close ends the source: pending asks retire, unresolved initial work fails,
+// Close ends the binding: outstanding asks end, unresolved initial work fails,
 // owned offerings are released, and streams that showed them get a removal.
 // Close is idempotent.
 func (b *Binding) Close() {
 	c := b.c
+	// why: the transport is closed outside the coordinator lock, so this
+	// function unlocks by hand instead of deferring.
 	c.mu.Lock()
 	if b.closed {
 		c.mu.Unlock()
@@ -147,6 +158,8 @@ func (b *Binding) Close() {
 	b.t.Close()
 }
 
+// closeLocked is Close with the coordinator lock held; the caller closes the
+// transport after unlocking.
 func (b *Binding) closeLocked() {
 	b.closed = true
 	close(b.done)
@@ -155,6 +168,8 @@ func (b *Binding) closeLocked() {
 	b.retractFromStreams()
 }
 
+// failOutstanding fails every initial evaluation the binding still owes,
+// asked or waiting.
 func (b *Binding) failOutstanding() {
 	for _, req := range b.inflight {
 		req.timer.Stop()
@@ -169,6 +184,7 @@ func (b *Binding) failOutstanding() {
 	b.slots = map[string]*askSlot{}
 }
 
+// releaseNames gives up the binding's names, so a new binding may claim them.
 func (b *Binding) releaseNames() {
 	c := b.c
 	for _, name := range b.names {
@@ -183,6 +199,8 @@ func (b *Binding) releaseNames() {
 	}
 }
 
+// retractFromStreams queues removals for the binding's offerings that streams
+// showed.
 func (b *Binding) retractFromStreams() {
 	for _, streams := range b.c.byCaller {
 		for st := range streams {

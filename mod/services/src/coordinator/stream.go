@@ -15,7 +15,7 @@ type Sink interface {
 	Boundary(incomplete *services.Incomplete) error
 }
 
-// Stream is one consumer discovery.
+// Stream is one consumer's discovery.
 type Stream struct {
 	c      *Coordinator
 	caller *astral.Identity
@@ -23,8 +23,8 @@ type Stream struct {
 	follow bool
 
 	visible           map[offeringKey]struct{}         // offerings shown as available
-	unsent            map[offeringKey]*services.Update // T6: latest unsent view per offering
-	sendOrder         []offeringKey                    // send order of pending keys
+	unsent            map[offeringKey]*services.Update // latest unsent view per offering
+	sendOrder         []offeringKey                    // send order of unsent keys
 	unsentRemovals    map[offeringKey]struct{}         // removals not yet sent
 	inflight          *offeringKey                     // view handed to the writer
 	inflightAvailable bool                             // the in-flight view offers the service
@@ -53,7 +53,8 @@ func newStream(c *Coordinator, caller *astral.Identity, names []string, follow b
 	return st
 }
 
-// Remotes are the swarm members carrying this discovery, in request order.
+// Contributions are the swarm members carrying this discovery, in request
+// order.
 func (st *Stream) Contributions() []*Contribution { return st.contributions }
 
 // Done is closed when the stream closes.
@@ -70,7 +71,8 @@ func (st *Stream) shown(k offeringKey) bool {
 	return visible && !removing
 }
 
-// offer applies T6 replacement and never-introduced negative suppression.
+// offer queues a view for the consumer. The latest unsent view replaces the
+// older one in place; a negative view of an offering never shown is dropped.
 func (st *Stream) offer(k offeringKey, u *services.Update) {
 	if bool(u.Available) || st.shown(k) {
 		if _, queued := st.unsent[k]; !queued {
@@ -83,7 +85,7 @@ func (st *Stream) offer(k offeringKey, u *services.Update) {
 	wake(st.wake)
 }
 
-// drop removes an unsent view and releases it from the boundary's obligations.
+// dropUnsent removes an unsent view, so the boundary no longer waits for it.
 func (st *Stream) dropUnsent(k offeringKey) {
 	if _, queued := st.unsent[k]; queued {
 		delete(st.unsent, k)
@@ -99,7 +101,8 @@ func (st *Stream) dropUnsent(k offeringKey) {
 	}
 }
 
-// lose purges a closed source's views and queues a removal for those shown.
+// retractBinding purges a closed binding's views and queues a removal for
+// those shown.
 func (st *Stream) retractBinding(b *Binding) {
 	if st.closed {
 		return
@@ -123,7 +126,7 @@ func (st *Stream) retract(k offeringKey) {
 	}
 }
 
-// Close ends the stream on the consumer's side. Its initial obligations leave
+// Close ends the stream on the consumer's side. Its initial evaluations leave
 // their slots without failing anything. Close is idempotent.
 func (st *Stream) Close() {
 	st.c.mu.Lock()

@@ -7,26 +7,27 @@ import (
 	"github.com/astralp2p/astral-go/astral"
 )
 
-// attempt is the initial discovery of one stream.
+// attempt is the initial attempt of one stream: the work that ends at its
+// boundary.
 type attempt struct {
 	st               *Stream
 	unresolved       map[*evaluation]struct{} // initial evaluations not yet ended
 	incompleteNames  map[string]struct{}      // services with unresolved or failed work
-	resolved         bool                     // open emptied, or the budget expired
+	resolved         bool                     // unresolved emptied, or the budget expired
 	unsentAtBoundary map[offeringKey]struct{} // views the boundary waits for
 	budget           Timer
 }
 
-// obligation is one initial evaluation an attempt waits for. It sits in
-// exactly one place: its slot's initial list while waiting, or req.obls once
-// asked.
+// evaluation is one initial evaluation an attempt waits for. It sits in
+// exactly one place: its slot's waiting list, its request once asked, or its
+// contribution for a swarm member.
 type evaluation struct {
 	at           *attempt
 	binding      *Binding
 	slot         *askSlot
 	service      string
 	req          *request
-	contribution *Contribution // set for a swarm member's contribution; src and slot are nil
+	contribution *Contribution // set for a swarm member; binding and slot are nil
 }
 
 func newAttempt(st *Stream) *attempt {
@@ -62,6 +63,7 @@ func (o *evaluation) end() {
 	}
 }
 
+// fail ends o and reports its service incomplete.
 func (o *evaluation) fail() {
 	if _, open := o.at.unresolved[o]; !open {
 		return
@@ -79,7 +81,8 @@ func removeEvaluation(list []*evaluation, o *evaluation) []*evaluation {
 	return list
 }
 
-// finish freezes what the boundary owes: the views pending or in flight now.
+// finish freezes what the boundary waits for: the views unsent or in flight
+// now.
 func (at *attempt) finish() {
 	at.resolved = true
 	if at.budget != nil {
@@ -96,6 +99,7 @@ func (at *attempt) finish() {
 	wake(st.wake)
 }
 
+// incomplete is the services.incomplete the boundary sends, or nil.
 func (at *attempt) incomplete() *services.Incomplete {
 	if len(at.incompleteNames) == 0 {
 		return nil
@@ -112,6 +116,8 @@ func (at *attempt) incomplete() *services.Incomplete {
 	return inc
 }
 
+// budgetExpired fails every initial evaluation still unresolved and ends the
+// attempt.
 func (c *Coordinator) budgetExpired(at *attempt) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
