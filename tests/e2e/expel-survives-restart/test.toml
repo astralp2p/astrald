@@ -1,0 +1,7 @@
+nodes      = ["node1", "node2", "node3"]
+timeout    = 180
+after      = "expel-propagation"
+restart    = ["node1", "node2", "node3"]
+destroys   = true
+local_only = "restarts all three nodes, which only a local world can do"
+facts      = ["restarts_before", "members_before"]

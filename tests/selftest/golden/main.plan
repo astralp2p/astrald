@@ -19,7 +19,7 @@ w0 local:  smoke → mcp-origin → claim-window → admission-policies
            config nomcp1.mcp.bind_mcp = ""
 w1 local:  bootstrap-user-software-key* → adopt-node* → hold-purge
 w2 local:  bootstrap-user-software-key* → adopt-node* → swarm-roster-sync
-           → expel-propagation
+           → expel-propagation → expel-survives-restart
 w3 local:  bootstrap-user-software-key* → adopt-node* → swarm-roster-sync*
            → swarm-member-restart
 w4 local:  bootstrap-user-software-key* → repo-removal-sticks
