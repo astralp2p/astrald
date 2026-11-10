@@ -13,6 +13,7 @@ distribution-gate-setup
 signer-app
 messaging-ops
 bootstrap-user-software-key
+claimed-node-keeps-owner
 import-user-software-key
 bootstrap-user-op
 policy-delegate
