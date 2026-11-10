@@ -255,8 +255,8 @@ func TestMemberTagsEachOffering(t *testing.T) {
 	}
 }
 
-// A member that predates visibility refuses tagged; the host asks it again
-// without and counts its offerings as open.
+// A member that predates visibility ignores tagged and sends plain updates;
+// the host counts them as open.
 func TestUntaggedMemberCountsAsOpen(t *testing.T) {
 	v := newVisibilitySwarm()
 	advertise(t, v.b, "bitcoin-wallet&open=false", available)

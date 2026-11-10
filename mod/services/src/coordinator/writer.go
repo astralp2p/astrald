@@ -128,6 +128,7 @@ func (st *Stream) markWritten(out output) bool {
 		for _, k := range out.removed {
 			delete(st.unsentRemovals, k)
 			delete(st.visible, k)
+			delete(st.written, k)
 		}
 	case outView:
 		if bool(out.view.Available) {
@@ -135,6 +136,7 @@ func (st *Stream) markWritten(out output) bool {
 		} else {
 			delete(st.visible, out.key)
 		}
+		st.recordTagged(out)
 		if st.attempt != nil && st.attempt.unsentAtBoundary != nil {
 			delete(st.attempt.unsentAtBoundary, out.key)
 		}
@@ -147,4 +149,20 @@ func (st *Stream) markWritten(out output) bool {
 		}
 	}
 	return false
+}
+
+// recordTagged keeps the last available view written to a tagged stream, and
+// re-sends it when its provider's visibility changed while it was written.
+func (st *Stream) recordTagged(out output) {
+	if !st.tagged {
+		return
+	}
+	if !bool(out.view.Available) {
+		delete(st.written, out.key)
+		return
+	}
+	st.written[out.key] = out.view
+	if out.open != st.c.isOpenKey(out.key) && st.follow {
+		st.offer(out.key, out.view)
+	}
 }

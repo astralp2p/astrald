@@ -19,13 +19,14 @@ type Sink interface {
 
 // Stream is one consumer's discovery.
 type Stream struct {
-	c      *Coordinator
-	caller *astral.Identity
-	names  map[string]struct{}
-	all    bool // every service is requested
-	follow bool
-	filter *Visibility // nil passes every offering
-	tagged bool        // views carry their provider's visibility
+	c       *Coordinator
+	caller  *astral.Identity
+	names   map[string]struct{}
+	all     bool // every service is requested
+	follow  bool
+	filter  *Visibility                      // nil passes every offering
+	tagged  bool                             // views carry their provider's visibility
+	written map[offeringKey]*services.Update // with tagged: the last available view written per offering
 
 	visible           map[offeringKey]struct{}         // offerings shown as available
 	unsent            map[offeringKey]*services.Update // latest unsent view per offering
@@ -49,6 +50,7 @@ func newStream(c *Coordinator, req Request) *Stream {
 		follow:         req.Follow,
 		filter:         req.Filter,
 		tagged:         req.Tagged,
+		written:        map[offeringKey]*services.Update{},
 		visible:        map[offeringKey]struct{}{},
 		unsent:         map[offeringKey]*services.Update{},
 		unsentRemovals: map[offeringKey]struct{}{},
@@ -78,6 +80,20 @@ func (st *Stream) offerFrom(b *Binding, service string, k offeringKey, u *servic
 		return
 	}
 	st.offer(k, u)
+}
+
+// retag re-sends the last view of k written to a tagged stream, so the
+// consumer reads k's current tag without waiting for the provider.
+// note: a view queued or in flight needs nothing here; the writer reads the
+// tag when it writes, and markWritten re-sends a view written with a stale tag.
+func (st *Stream) retag(k offeringKey) {
+	v := st.written[k]
+	_, queued := st.unsent[k]
+	inflight := st.inflight != nil && *st.inflight == k
+	if v == nil || queued || inflight {
+		return
+	}
+	st.offer(k, v)
 }
 
 // hide withholds k from a caller that may not see it: an unsent view is

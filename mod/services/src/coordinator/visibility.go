@@ -66,28 +66,30 @@ func (c *Coordinator) SetPrivate(list *services.PrivateList) {
 	}
 }
 
-// applyVisibilityChange updates the follows of service after b's binding of it
-// became open or private. A follow that may no longer see the offering loses
-// it; a follow that may now see it, or a tagged one, re-evaluates it.
+// applyVisibilityChange updates the streams of service after b's binding of
+// it became open or private. A stream that may no longer see the offering
+// loses it, a queued view included; a follow that may now see it
+// re-evaluates it; a tagged follow re-sends it with the new tag.
 func (c *Coordinator) applyVisibilityChange(b *Binding, service string, open bool) {
 	k := keyOf(b.provider, service)
 	for _, streams := range c.byCaller {
 		for st := range streams {
-			if st.closed || !st.follow || !st.requests(service) {
+			if st.closed || !st.requests(service) {
 				continue
 			}
-			if st.filter != nil {
-				if !st.filter.Allows(service, open) {
-					st.hide(k)
-					continue
+			switch {
+			case st.tagged:
+				if st.follow {
+					st.retag(k)
 				}
-				if st.filter.Allows(service, !open) {
-					continue // why: the caller saw it either way
-				}
+			case st.filter == nil:
+			case !st.filter.Allows(service, open):
+				st.hide(k)
+			case st.follow && !st.filter.Allows(service, !open):
+				sl := b.slot(st.caller)
+				sl.reevaluate[service] = struct{}{}
+				b.schedule(sl)
 			}
-			sl := b.slot(st.caller)
-			sl.reevaluate[service] = struct{}{}
-			b.schedule(sl)
 		}
 	}
 }
