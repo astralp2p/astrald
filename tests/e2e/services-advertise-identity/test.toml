@@ -1,0 +1,4 @@
+nodes   = ["node1", "node2"]
+timeout = 300
+after   = "adopt-node"
+facts   = ["services_advertise_identity"]

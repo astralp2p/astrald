@@ -1,0 +1,5 @@
+nodes   = ["node1", "node2"]
+timeout = 300
+after   = "adopt-node"
+local_only = "starts its provider app as a host process that node2 serves and the driver kills"
+facts   = ["services_provider_gone"]

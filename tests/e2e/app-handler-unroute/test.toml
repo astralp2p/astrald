@@ -1,0 +1,4 @@
+nodes   = ["node1"]
+timeout = 300
+local_only = "serves its apps and endpoints on host loopback and unix sockets that node1 dials"
+facts   = ["app_handler_unroute"]
