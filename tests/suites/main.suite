@@ -55,6 +55,7 @@ app-op-surface
 request-grant-scope
 swarm-authz-matrix
 expel-node
+expel-during-transfer
 hold-purge
 hold-isolation
 indexer-cursor

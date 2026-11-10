@@ -1,0 +1,5 @@
+nodes    = ["node1", "node2"]
+timeout  = 180
+after    = "adopt-node"
+destroys = true
+facts    = ["expelled_id", "object_id", "transfer"]
