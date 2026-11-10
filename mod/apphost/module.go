@@ -62,6 +62,11 @@ type Module interface {
 	// (app_register or grant_request), or clears it when d is nil. Another
 	// name is an error.
 	SetPolicyDelegate(ctx *astral.Context, name string, d *policy.Delegate) error
+
+	// IsSwarmApp reports whether app is an app hosted on a node of the local
+	// swarm, this node included: the issuer of an active relay-for contract
+	// whose subject is a swarm node. A node without a user has no swarm apps.
+	IsSwarmApp(ctx *astral.Context, app *astral.Identity) bool
 }
 
 var ErrMissingAppIdentity = errors.New("missing app identity")
