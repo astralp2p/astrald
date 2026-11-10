@@ -138,9 +138,10 @@ func (e *evaluated) saw(id *astral.Identity) bool {
 
 // result is a one-shot discovery read to its end.
 type result struct {
-	providers []string
-	outcome   *servicescli.InitialOutcome
-	err       error
+	providers  []string
+	notGranted []string
+	outcome    *servicescli.InitialOutcome
+	err        error
 }
 
 func oneShot(events <-chan servicescli.Event, err error) result {
@@ -152,6 +153,8 @@ func oneShot(events <-chan servicescli.Event, err error) result {
 		switch {
 		case ev.Update != nil:
 			r.providers = append(r.providers, ev.Update.ProviderID.String()+"/"+string(ev.Update.Name))
+		case ev.NotGranted != nil:
+			r.notGranted = ev.NotGranted
 		case ev.Initial != nil:
 			r.outcome = ev.Initial
 		case ev.Err != nil:

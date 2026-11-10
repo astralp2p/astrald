@@ -172,9 +172,10 @@ func (e *echoApp) served() []string {
 
 // discovery is a one-shot discovery read to its end.
 type discovery struct {
-	providers []*astral.Identity
-	outcome   *servicescli.InitialOutcome
-	err       error
+	providers  []*astral.Identity
+	notGranted []string
+	outcome    *servicescli.InitialOutcome
+	err        error
 }
 
 func discoverOnce(ctx *astral.Context, a *app, reach services.Reach, service string) discovery {
@@ -187,6 +188,8 @@ func discoverOnce(ctx *astral.Context, a *app, reach services.Reach, service str
 		switch {
 		case ev.Update != nil && bool(ev.Update.Available):
 			d.providers = append(d.providers, ev.Update.ProviderID)
+		case ev.NotGranted != nil:
+			d.notGranted = ev.NotGranted
 		case ev.Initial != nil:
 			d.outcome = ev.Initial
 		case ev.Err != nil:

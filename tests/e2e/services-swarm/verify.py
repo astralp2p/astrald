@@ -13,7 +13,7 @@ from lib.sessionio import load
 
 ROOT = Path(__file__).resolve().parents[3]
 STEPS = [
-    "swarm_refused_beyond_scope", "local_two_service_binding", "swarm_one_shot_complete",
+    "swarm_filtered_beyond_scope", "local_two_service_binding", "swarm_one_shot_complete",
     "member_evaluates_the_app", "swarm_follow_initial", "change_gives_a_new_view",
     "member_provider_loss_removes", "member_provider_returns", "silent_provider_incomplete",
     "unregistered_bare_eos",

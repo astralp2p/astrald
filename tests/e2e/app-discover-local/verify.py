@@ -3,7 +3,7 @@
 
 The oracle repeats the whole story with fresh identities (`driver verify`):
 a consumer granted discovery of echo-local finds the provider on node1 and
-gets its own message echoed back, and an app without the grant is refused.
+gets its own message echoed back, and an app without the grant sees no offering.
 """
 import os
 import subprocess
@@ -13,7 +13,7 @@ from pathlib import Path
 from lib.sessionio import load
 
 ROOT = Path(__file__).resolve().parents[3]
-STEPS = ["consumer_found_the_provider", "provider_echoed", "provider_saw_the_consumer", "stranger_refused"]
+STEPS = ["consumer_found_the_provider", "provider_echoed", "provider_saw_the_consumer", "stranger_filtered"]
 
 facts = load()["facts"].get("app_discover_local", {})
 missing = [s for s in STEPS if not facts.get(s)]
