@@ -133,7 +133,7 @@ func TestStaleRequestTimeoutIsIgnored(t *testing.T) {
 
 	a := expectAsk(t, tr)
 	e.c.mu.Lock()
-	req := src.pending[a.RequestID]
+	req := src.inflight[a.RequestID]
 	e.c.mu.Unlock()
 	answer(t, src, a, true)
 	expectEvent(t, sink, "update")
@@ -287,9 +287,9 @@ func TestSwarmRemovalWithNilKeyOrOnAClosedStream(t *testing.T) {
 	e := newEnv(t)
 	sink := newSink()
 	st, _ := e.discoverSwarm(astral.GenerateIdentity(), true, sink, []*astral.Identity{astral.GenerateIdentity()}, "player")
-	r := st.Remotes()[0]
+	r := st.Contributions()[0]
 	p := astral.GenerateIdentity()
-	r.Offer(remoteView(p, "player", true))
+	r.Update(remoteView(p, "player", true))
 	r.Initial(nil)
 	expectEvent(t, sink, "update")
 	expectEvent(t, sink, "boundary")

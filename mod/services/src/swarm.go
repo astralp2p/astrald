@@ -24,7 +24,7 @@ const (
 // carry feeds one swarm member's contribution to a stream: the member's own
 // discovery for app, asked by this node naming app in for. With follow it
 // restores the contribution after a loss for as long as ctx lasts.
-func (mod *Module) carry(ctx *astral.Context, r *coordinator.Remote, app *astral.Identity, names []string, follow bool) {
+func (mod *Module) carry(ctx *astral.Context, r *coordinator.Contribution, app *astral.Identity, names []string, follow bool) {
 	delay := carryRetryFirst
 	for {
 		// why: register for the link event before asking, so a link created
@@ -57,7 +57,7 @@ func (mod *Module) carry(ctx *astral.Context, r *coordinator.Remote, app *astral
 
 // carryOnce runs one discovery on the member until it ends, and reports
 // whether the member's initial outcome arrived.
-func (mod *Module) carryOnce(ctx *astral.Context, r *coordinator.Remote, app *astral.Identity, names []string, follow bool) (bool, error) {
+func (mod *Module) carryOnce(ctx *astral.Context, r *coordinator.Contribution, app *astral.Identity, names []string, follow bool) (bool, error) {
 	ctx = ctx.IncludeZone(astral.ZoneNetwork)
 	mod.pushRelayContract(ctx, app, r.Member())
 
@@ -71,7 +71,7 @@ func (mod *Module) carryOnce(ctx *astral.Context, r *coordinator.Remote, app *as
 	for ev := range events {
 		switch {
 		case ev.Update != nil:
-			r.Offer(ev.Update)
+			r.Update(ev.Update)
 		case ev.Removed != nil:
 			r.Remove(ev.Removed)
 		case ev.Initial != nil:

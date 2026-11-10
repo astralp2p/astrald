@@ -9,68 +9,68 @@ import (
 
 // attempt is the initial discovery of one stream.
 type attempt struct {
-	st       *Stream
-	open     map[*obligation]struct{} // initial evaluations not yet ended
-	failed   map[string]struct{}      // services with unresolved or failed work
-	resolved bool                     // open emptied, or the budget expired
-	owed     map[offeringKey]struct{} // views the boundary waits for
-	budget   Timer
+	st               *Stream
+	unresolved       map[*evaluation]struct{} // initial evaluations not yet ended
+	incompleteNames  map[string]struct{}      // services with unresolved or failed work
+	resolved         bool                     // open emptied, or the budget expired
+	unsentAtBoundary map[offeringKey]struct{} // views the boundary waits for
+	budget           Timer
 }
 
 // obligation is one initial evaluation an attempt waits for. It sits in
 // exactly one place: its slot's initial list while waiting, or req.obls once
 // asked.
-type obligation struct {
-	at      *attempt
-	src     *Source
-	slot    *slot
-	service string
-	req     *request
-	remote  *Remote // set for a swarm member's contribution; src and slot are nil
+type evaluation struct {
+	at           *attempt
+	binding      *Binding
+	slot         *askSlot
+	service      string
+	req          *request
+	contribution *Contribution // set for a swarm member's contribution; src and slot are nil
 }
 
 func newAttempt(st *Stream) *attempt {
-	return &attempt{st: st, open: map[*obligation]struct{}{}, failed: map[string]struct{}{}}
+	return &attempt{st: st, unresolved: map[*evaluation]struct{}{}, incompleteNames: map[string]struct{}{}}
 }
 
 // detach removes o from its container and from the attempt.
-func (o *obligation) detach() {
+func (o *evaluation) detach() {
 	switch {
-	case o.remote != nil:
-		delete(o.remote.open, o.service)
+	case o.contribution != nil:
+		delete(o.contribution.unresolved, o.service)
 	case o.req != nil:
-		o.req.obls = removeObligation(o.req.obls, o)
+		o.req.evaluations = removeEvaluation(o.req.evaluations, o)
 	default:
-		list := removeObligation(o.slot.initial[o.service], o)
+		list := removeEvaluation(o.slot.waiting[o.service], o)
 		if len(list) == 0 {
-			delete(o.slot.initial, o.service)
+			delete(o.slot.waiting, o.service)
 		} else {
-			o.slot.initial[o.service] = list
+			o.slot.waiting[o.service] = list
 		}
 	}
-	delete(o.at.open, o)
+	delete(o.at.unresolved, o)
 }
 
 // end closes o; the last one to end finishes the attempt.
-func (o *obligation) end() {
-	if _, open := o.at.open[o]; !open {
+func (o *evaluation) end() {
+	if _, open := o.at.unresolved[o]; !open {
 		return
 	}
 	o.detach()
-	if len(o.at.open) == 0 && !o.at.resolved {
+	if len(o.at.unresolved) == 0 && !o.at.resolved {
 		o.at.finish()
 	}
 }
 
-func (o *obligation) fail() {
-	if _, open := o.at.open[o]; !open {
+func (o *evaluation) fail() {
+	if _, open := o.at.unresolved[o]; !open {
 		return
 	}
-	o.at.failed[o.service] = struct{}{}
+	o.at.incompleteNames[o.service] = struct{}{}
 	o.end()
 }
 
-func removeObligation(list []*obligation, o *obligation) []*obligation {
+func removeEvaluation(list []*evaluation, o *evaluation) []*evaluation {
 	for i, x := range list {
 		if x == o {
 			return append(list[:i:i], list[i+1:]...)
@@ -86,22 +86,22 @@ func (at *attempt) finish() {
 		at.budget.Stop()
 	}
 	st := at.st
-	at.owed = map[offeringKey]struct{}{}
-	for _, k := range st.queue {
-		at.owed[k] = struct{}{}
+	at.unsentAtBoundary = map[offeringKey]struct{}{}
+	for _, k := range st.sendOrder {
+		at.unsentAtBoundary[k] = struct{}{}
 	}
 	if st.inflight != nil {
-		at.owed[*st.inflight] = struct{}{}
+		at.unsentAtBoundary[*st.inflight] = struct{}{}
 	}
 	wake(st.wake)
 }
 
 func (at *attempt) incomplete() *services.Incomplete {
-	if len(at.failed) == 0 {
+	if len(at.incompleteNames) == 0 {
 		return nil
 	}
-	names := make([]string, 0, len(at.failed))
-	for name := range at.failed {
+	names := make([]string, 0, len(at.incompleteNames))
+	for name := range at.incompleteNames {
 		names = append(names, name)
 	}
 	sort.Strings(names)
@@ -118,11 +118,11 @@ func (c *Coordinator) budgetExpired(at *attempt) {
 	if at.resolved || at.st.closed {
 		return
 	}
-	for o := range at.open {
-		at.failed[o.service] = struct{}{}
+	for o := range at.unresolved {
+		at.incompleteNames[o.service] = struct{}{}
 		o.detach()
 		if o.slot != nil {
-			o.src.collect(o.slot)
+			o.binding.removeIfIdle(o.slot)
 		}
 	}
 	at.finish()

@@ -117,7 +117,7 @@ func newEnv(t *testing.T) *env {
 	return &env{t: t, clock: clock, c: New(Config{InitialBudget: budget, RequestTimeout: timeout, Clock: clock})}
 }
 
-func (e *env) register(names ...string) (*Source, *fakeTransport) {
+func (e *env) register(names ...string) (*Binding, *fakeTransport) {
 	e.t.Helper()
 	tr := newTransport()
 	src, err := e.c.Register(astral.GenerateIdentity(), names, tr)
@@ -199,7 +199,7 @@ func expectDone(t *testing.T, done chan error) {
 	}
 }
 
-func answer(t *testing.T, src *Source, a *services.Ask, available bool) {
+func answer(t *testing.T, src *Binding, a *services.Ask, available bool) {
 	t.Helper()
 	err := src.Answer(&services.Answer{RequestID: a.RequestID, Update: &services.Update{Available: astral.Bool(available), Name: a.Service}})
 	if err != nil {
@@ -219,12 +219,12 @@ func (e *env) invariants() {
 			e.t.Fatalf("closed source still owns %v", k)
 		}
 		for _, sl := range src.slots {
-			if sl.active != nil && src.pending[sl.active.id] != sl.active {
+			if sl.active != nil && src.inflight[sl.active.id] != sl.active {
 				e.t.Fatalf("active request %v not pending", sl.active.id)
 			}
 		}
-		for id := range src.pending {
-			if _, ok := src.issued[id]; !ok || id == 0 {
+		for id := range src.inflight {
+			if _, ok := src.usedIDs[id]; !ok || id == 0 {
 				e.t.Fatalf("pending request %v was not issued", id)
 			}
 		}
@@ -239,17 +239,17 @@ func (e *env) invariants() {
 func (e *env) streamInvariants(st *Stream) {
 	e.t.Helper()
 	if at := st.attempt; at != nil {
-		for o := range at.open {
+		for o := range at.unresolved {
 			in := 0
-			if o.remote != nil {
-				if o.remote.open[o.service] == o {
+			if o.contribution != nil {
+				if o.contribution.unresolved[o.service] == o {
 					in++
 				}
 			} else {
-				if o.req != nil && contains(o.req.obls, o) {
+				if o.req != nil && contains(o.req.evaluations, o) {
 					in++
 				}
-				if contains(o.slot.initial[o.service], o) {
+				if contains(o.slot.waiting[o.service], o) {
 					in++
 				}
 			}
@@ -257,11 +257,11 @@ func (e *env) streamInvariants(st *Stream) {
 				e.t.Fatalf("obligation for %s held in %d places", o.service, in)
 			}
 		}
-		if at.resolved && len(at.open) != 0 {
+		if at.resolved && len(at.unresolved) != 0 {
 			e.t.Fatal("finished attempt still has open obligations")
 		}
-		for k := range at.owed {
-			_, queued := st.pending[k]
+		for k := range at.unsentAtBoundary {
+			_, queued := st.unsent[k]
 			if !queued && (st.inflight == nil || *st.inflight != k) {
 				e.t.Fatalf("owed view %v neither queued nor in flight", k)
 			}
@@ -269,7 +269,7 @@ func (e *env) streamInvariants(st *Stream) {
 	}
 }
 
-func contains(list []*obligation, o *obligation) bool {
+func contains(list []*evaluation, o *evaluation) bool {
 	for _, x := range list {
 		if x == o {
 			return true

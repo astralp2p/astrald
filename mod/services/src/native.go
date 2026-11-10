@@ -28,7 +28,7 @@ func (mod *Module) RegisterNative(names []string, e servicesmod.Evaluator) (serv
 // nativeTransport answers each ask in-process from an Evaluator.
 type nativeTransport struct {
 	eval servicesmod.Evaluator
-	src  *coordinator.Source
+	src  *coordinator.Binding
 	// why: Register can queue asks for existing followers before it returns
 	// the source; ready holds them until src is set.
 	ready chan struct{}
@@ -50,7 +50,7 @@ func (t *nativeTransport) Send(ask *services.Ask) error {
 func (t *nativeTransport) Close() {}
 
 type nativeRegistration struct {
-	src *coordinator.Source
+	src *coordinator.Binding
 }
 
 func (r *nativeRegistration) Changed() {

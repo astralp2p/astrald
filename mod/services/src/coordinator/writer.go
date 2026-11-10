@@ -37,7 +37,7 @@ func (st *Stream) Run(sink Sink) error {
 			c.mu.Unlock()
 			return nil
 		}
-		out := st.next()
+		out := st.nextOutput()
 		c.mu.Unlock()
 
 		if out.kind == outNone {
@@ -53,7 +53,7 @@ func (st *Stream) Run(sink Sink) error {
 			c.mu.Unlock()
 			return err
 		}
-		done := st.sent(out)
+		done := st.markWritten(out)
 		c.mu.Unlock()
 		if done {
 			return nil
@@ -63,10 +63,10 @@ func (st *Stream) Run(sink Sink) error {
 
 // next picks what to send: removals, then the boundary once nothing owed is
 // left, then views in first-pending order.
-func (st *Stream) next() output {
-	if len(st.removed) > 0 {
-		keys := make([]offeringKey, 0, len(st.removed))
-		for k := range st.removed {
+func (st *Stream) nextOutput() output {
+	if len(st.unsentRemovals) > 0 {
+		keys := make([]offeringKey, 0, len(st.unsentRemovals))
+		for k := range st.unsentRemovals {
 			keys = append(keys, k)
 		}
 		sort.Slice(keys, func(i, j int) bool {
@@ -74,14 +74,14 @@ func (st *Stream) next() output {
 		})
 		return output{kind: outRemoved, removed: keys}
 	}
-	if at := st.attempt; at != nil && at.resolved && len(at.owed) == 0 {
+	if at := st.attempt; at != nil && at.resolved && len(at.unsentAtBoundary) == 0 {
 		return output{kind: outBoundary, incomplete: at.incomplete()}
 	}
-	if len(st.queue) > 0 {
-		k := st.queue[0]
-		st.queue = st.queue[1:]
-		v := st.pending[k]
-		delete(st.pending, k)
+	if len(st.sendOrder) > 0 {
+		k := st.sendOrder[0]
+		st.sendOrder = st.sendOrder[1:]
+		v := st.unsent[k]
+		delete(st.unsent, k)
 		st.inflight = &k
 		st.inflightAvailable = bool(v.Available)
 		return output{kind: outView, key: k, view: v}
@@ -109,11 +109,11 @@ func (out output) write(sink Sink) error {
 }
 
 // sent records a successful write and reports whether the stream is done.
-func (st *Stream) sent(out output) bool {
+func (st *Stream) markWritten(out output) bool {
 	switch out.kind {
 	case outRemoved:
 		for _, k := range out.removed {
-			delete(st.removed, k)
+			delete(st.unsentRemovals, k)
 			delete(st.visible, k)
 		}
 	case outView:
@@ -122,8 +122,8 @@ func (st *Stream) sent(out output) bool {
 		} else {
 			delete(st.visible, out.key)
 		}
-		if st.attempt != nil && st.attempt.owed != nil {
-			delete(st.attempt.owed, out.key)
+		if st.attempt != nil && st.attempt.unsentAtBoundary != nil {
+			delete(st.attempt.unsentAtBoundary, out.key)
 		}
 		st.inflight = nil
 	case outBoundary:

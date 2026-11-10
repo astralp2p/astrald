@@ -7,107 +7,107 @@ import (
 
 // Source is one provider lifetime: an app binding or a native registration.
 // Its names are fixed for the lifetime.
-type Source struct {
+type Binding struct {
 	c        *Coordinator
 	provider *astral.Identity
 	names    []string // sorted
 	t        Transport
 
-	asks    []*services.Ask
-	askWake chan struct{}
-	issued  map[astral.Nonce]struct{} // every RequestID ever issued; never shrinks
-	pending map[astral.Nonce]*request
-	slots   map[string]*slot // by caller
-	closed  bool
-	done    chan struct{}
+	sendQueue []*services.Ask
+	sendWake  chan struct{}
+	usedIDs   map[astral.Nonce]struct{} // every RequestID ever issued; never shrinks
+	inflight  map[astral.Nonce]*request
+	slots     map[string]*askSlot // by caller
+	closed    bool
+	done      chan struct{}
 }
 
 // slot is the T2 gate: one outstanding ask per source and caller.
-type slot struct {
-	src     *Source
-	caller  *astral.Identity
-	active  *request
-	initial map[string][]*obligation // service → obligations waiting for a fresh ask
-	dirty   map[string]struct{}      // service → retained refresh work
+type askSlot struct {
+	binding    *Binding
+	caller     *astral.Identity
+	active     *request
+	waiting    map[string][]*evaluation // service → obligations waiting for a fresh ask
+	reevaluate map[string]struct{}      // service → retained refresh work
 }
 
 type request struct {
-	id      astral.Nonce
-	slot    *slot
-	service string
-	obls    []*obligation
-	timer   Timer
+	id          astral.Nonce
+	slot        *askSlot
+	service     string
+	evaluations []*evaluation
+	timer       Timer
 }
 
-func newSource(c *Coordinator, provider *astral.Identity, names []string, t Transport) *Source {
-	return &Source{
+func newBinding(c *Coordinator, provider *astral.Identity, names []string, t Transport) *Binding {
+	return &Binding{
 		c:        c,
 		provider: provider,
 		names:    names,
 		t:        t,
-		askWake:  make(chan struct{}, 1),
-		issued:   map[astral.Nonce]struct{}{},
-		pending:  map[astral.Nonce]*request{},
-		slots:    map[string]*slot{},
+		sendWake: make(chan struct{}, 1),
+		usedIDs:  map[astral.Nonce]struct{}{},
+		inflight: map[astral.Nonce]*request{},
+		slots:    map[string]*askSlot{},
 		done:     make(chan struct{}),
 	}
 }
 
 // Provider is the identity the source answers as.
-func (src *Source) Provider() *astral.Identity { return src.provider }
+func (b *Binding) Provider() *astral.Identity { return b.provider }
 
 // Names are the services of the source, sorted.
-func (src *Source) Names() []string { return append([]string(nil), src.names...) }
+func (b *Binding) Names() []string { return append([]string(nil), b.names...) }
 
 // Done is closed when the source closes.
-func (src *Source) Done() <-chan struct{} { return src.done }
+func (b *Binding) Done() <-chan struct{} { return b.done }
 
-func (src *Source) slot(caller *astral.Identity) *slot {
+func (b *Binding) slot(caller *astral.Identity) *askSlot {
 	ck := caller.String()
-	sl := src.slots[ck]
+	sl := b.slots[ck]
 	if sl == nil {
-		sl = &slot{src: src, caller: caller, initial: map[string][]*obligation{}, dirty: map[string]struct{}{}}
-		src.slots[ck] = sl
+		sl = &askSlot{binding: b, caller: caller, waiting: map[string][]*evaluation{}, reevaluate: map[string]struct{}{}}
+		b.slots[ck] = sl
 	}
 	return sl
 }
 
 // schedule issues the next ask of a free slot: initial work before refresh
 // work, services in name order.
-func (src *Source) schedule(sl *slot) {
-	if src.closed || sl.active != nil {
+func (b *Binding) schedule(sl *askSlot) {
+	if b.closed || sl.active != nil {
 		return
 	}
-	service, ok := sl.next()
+	service, ok := sl.nextName()
 	if !ok {
-		src.collect(sl)
+		b.removeIfIdle(sl)
 		return
 	}
 
-	req := &request{id: src.nextID(), slot: sl, service: service}
-	for _, o := range sl.initial[service] {
+	req := &request{id: b.newRequestID(), slot: sl, service: service}
+	for _, o := range sl.waiting[service] {
 		o.req = req
-		req.obls = append(req.obls, o)
+		req.evaluations = append(req.evaluations, o)
 	}
-	delete(sl.initial, service)
-	delete(sl.dirty, service)
+	delete(sl.waiting, service)
+	delete(sl.reevaluate, service)
 
 	sl.active = req
-	src.pending[req.id] = req
-	req.timer = src.c.cfg.Clock.AfterFunc(src.c.cfg.RequestTimeout, func() { src.requestExpired(req) })
+	b.inflight[req.id] = req
+	req.timer = b.c.cfg.Clock.AfterFunc(b.c.cfg.RequestTimeout, func() { b.requestExpired(req) })
 
-	src.asks = append(src.asks, &services.Ask{RequestID: req.id, CallerID: sl.caller, Service: astral.String8(service)})
-	wake(src.askWake)
+	b.sendQueue = append(b.sendQueue, &services.Ask{RequestID: req.id, CallerID: sl.caller, Service: astral.String8(service)})
+	wake(b.sendWake)
 }
 
-func (sl *slot) next() (string, bool) {
-	for _, name := range sl.src.names {
-		if len(sl.initial[name]) > 0 {
+func (sl *askSlot) nextName() (string, bool) {
+	for _, name := range sl.binding.names {
+		if len(sl.waiting[name]) > 0 {
 			return name, true
 		}
 	}
-	for _, name := range sl.src.names {
-		if _, ok := sl.dirty[name]; ok {
+	for _, name := range sl.binding.names {
+		if _, ok := sl.reevaluate[name]; ok {
 			return name, true
 		}
 	}
@@ -115,67 +115,67 @@ func (sl *slot) next() (string, bool) {
 }
 
 // collect deletes an idle slot. A slot holds nothing beyond its work.
-func (src *Source) collect(sl *slot) {
-	if sl.active == nil && len(sl.initial) == 0 && len(sl.dirty) == 0 {
-		delete(src.slots, sl.caller.String())
+func (b *Binding) removeIfIdle(sl *askSlot) {
+	if sl.active == nil && len(sl.waiting) == 0 && len(sl.reevaluate) == 0 {
+		delete(b.slots, sl.caller.String())
 	}
 }
 
 // nextID draws a random request ID that is not zero and was never issued on
 // this source.
-func (src *Source) nextID() astral.Nonce {
+func (b *Binding) newRequestID() astral.Nonce {
 	for {
 		id := astral.NewNonce()
-		if _, used := src.issued[id]; id != 0 && !used {
-			src.issued[id] = struct{}{}
+		if _, used := b.usedIDs[id]; id != 0 && !used {
+			b.usedIDs[id] = struct{}{}
 			return id
 		}
 	}
 }
 
-func (src *Source) retire(req *request) {
-	delete(src.pending, req.id)
+func (b *Binding) removeRequest(req *request) {
+	delete(b.inflight, req.id)
 	req.timer.Stop()
 	req.slot.active = nil
 }
 
-func (src *Source) requestExpired(req *request) {
-	c := src.c
+func (b *Binding) requestExpired(req *request) {
+	c := b.c
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	if src.pending[req.id] != req {
+	if b.inflight[req.id] != req {
 		return
 	}
-	src.retire(req)
-	for _, o := range append([]*obligation(nil), req.obls...) {
+	b.removeRequest(req)
+	for _, o := range append([]*evaluation(nil), req.evaluations...) {
 		o.fail()
 	}
-	src.schedule(req.slot)
+	b.schedule(req.slot)
 }
 
 // sendLoop drains asks to the transport until the source closes.
-func (src *Source) sendLoop() {
-	c := src.c
+func (b *Binding) sendLoop() {
+	c := b.c
 	for {
 		c.mu.Lock()
-		if src.closed {
+		if b.closed {
 			c.mu.Unlock()
 			return
 		}
-		if len(src.asks) == 0 {
+		if len(b.sendQueue) == 0 {
 			c.mu.Unlock()
 			select {
-			case <-src.askWake:
-			case <-src.done:
+			case <-b.sendWake:
+			case <-b.done:
 			}
 			continue
 		}
-		ask := src.asks[0]
-		src.asks = src.asks[1:]
+		ask := b.sendQueue[0]
+		b.sendQueue = b.sendQueue[1:]
 		c.mu.Unlock()
 
-		if err := src.t.Send(ask); err != nil {
-			src.Close()
+		if err := b.t.Send(ask); err != nil {
+			b.Close()
 			return
 		}
 	}

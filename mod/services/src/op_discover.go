@@ -56,7 +56,7 @@ func (mod *Module) OpDiscover(ctx *astral.Context, q *routing.IncomingQuery, arg
 
 	ctx, cancel := ctx.WithCancel()
 	defer cancel()
-	for _, r := range st.Remotes() {
+	for _, r := range st.Contributions() {
 		go mod.carry(ctx, r, d.app, d.names, args.Follow)
 	}
 

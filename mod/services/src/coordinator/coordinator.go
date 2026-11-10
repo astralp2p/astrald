@@ -45,8 +45,8 @@ func DefaultConfig() Config {
 type Coordinator struct {
 	mu       sync.Mutex
 	cfg      Config
-	owners   map[offeringKey]*Source
-	byName   map[string]map[*Source]struct{}
+	owners   map[offeringKey]*Binding
+	byName   map[string]map[*Binding]struct{}
 	byCaller map[string]map[*Stream]struct{}
 }
 
@@ -56,8 +56,8 @@ func New(cfg Config) *Coordinator {
 	}
 	return &Coordinator{
 		cfg:      cfg,
-		owners:   map[offeringKey]*Source{},
-		byName:   map[string]map[*Source]struct{}{},
+		owners:   map[offeringKey]*Binding{},
+		byName:   map[string]map[*Binding]struct{}{},
 		byCaller: map[string]map[*Stream]struct{}{},
 	}
 }
@@ -81,7 +81,7 @@ type Transport interface {
 }
 
 // Register claims every (provider, name) pair for a new source, or none.
-func (c *Coordinator) Register(provider *astral.Identity, names []string, t Transport) (*Source, error) {
+func (c *Coordinator) Register(provider *astral.Identity, names []string, t Transport) (*Binding, error) {
 	sorted := append([]string(nil), names...)
 	sort.Strings(sorted)
 
@@ -93,34 +93,34 @@ func (c *Coordinator) Register(provider *astral.Identity, names []string, t Tran
 		}
 	}
 
-	src := newSource(c, provider, sorted, t)
+	b := newBinding(c, provider, sorted, t)
 	for _, name := range sorted {
-		c.owners[keyOf(provider, name)] = src
+		c.owners[keyOf(provider, name)] = b
 		if c.byName[name] == nil {
-			c.byName[name] = map[*Source]struct{}{}
+			c.byName[name] = map[*Binding]struct{}{}
 		}
-		c.byName[name][src] = struct{}{}
+		c.byName[name][b] = struct{}{}
 	}
-	c.markFollowersDirty(src)
+	c.reevaluateForFollowers(b)
 	c.mu.Unlock()
 
-	go src.sendLoop()
-	return src, nil
+	go b.sendLoop()
+	return b, nil
 }
 
 // markFollowersDirty gives a new source refresh work for every follow stream
 // requesting one of its names.
-func (c *Coordinator) markFollowersDirty(src *Source) {
+func (c *Coordinator) reevaluateForFollowers(b *Binding) {
 	for _, streams := range c.byCaller {
 		for st := range streams {
 			if !st.follow {
 				continue
 			}
-			for _, name := range src.names {
-				if _, ok := st.services[name]; ok {
-					sl := src.slot(st.caller)
-					sl.dirty[name] = struct{}{}
-					src.schedule(sl)
+			for _, name := range b.names {
+				if _, ok := st.names[name]; ok {
+					sl := b.slot(st.caller)
+					sl.reevaluate[name] = struct{}{}
+					b.schedule(sl)
 				}
 			}
 		}
@@ -149,30 +149,30 @@ func (c *Coordinator) DiscoverSwarm(caller *astral.Identity, names []string, fol
 
 	at := newAttempt(st)
 	st.attempt = at
-	var touched []*slot
+	var touched []*askSlot
 	for _, name := range names {
-		for src := range c.byName[name] {
-			sl := src.slot(caller)
-			o := &obligation{at: at, src: src, slot: sl, service: name}
-			at.open[o] = struct{}{}
-			sl.initial[name] = append(sl.initial[name], o)
+		for b := range c.byName[name] {
+			sl := b.slot(caller)
+			o := &evaluation{at: at, binding: b, slot: sl, service: name}
+			at.unresolved[o] = struct{}{}
+			sl.waiting[name] = append(sl.waiting[name], o)
 			touched = append(touched, sl)
 		}
 	}
 	for _, member := range members {
-		r := newRemote(st, member)
+		r := newContribution(st, member)
 		for _, name := range names {
-			o := &obligation{at: at, remote: r, service: name}
-			at.open[o] = struct{}{}
-			r.open[name] = o
+			o := &evaluation{at: at, contribution: r, service: name}
+			at.unresolved[o] = struct{}{}
+			r.unresolved[name] = o
 		}
-		st.remotes = append(st.remotes, r)
+		st.contributions = append(st.contributions, r)
 	}
 	at.budget = c.cfg.Clock.AfterFunc(c.cfg.InitialBudget, func() { c.budgetExpired(at) })
 	for _, sl := range touched {
-		sl.src.schedule(sl)
+		sl.binding.schedule(sl)
 	}
-	if len(at.open) == 0 {
+	if len(at.unresolved) == 0 {
 		at.finish()
 	}
 	return st
@@ -182,7 +182,7 @@ func (c *Coordinator) DiscoverSwarm(caller *astral.Identity, names []string, fol
 // name.
 func (c *Coordinator) followsService(ck, name string) bool {
 	for st := range c.byCaller[ck] {
-		if _, ok := st.services[name]; ok && st.follow && !st.closed {
+		if _, ok := st.names[name]; ok && st.follow && !st.closed {
 			return true
 		}
 	}

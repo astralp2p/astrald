@@ -188,17 +188,17 @@ func TestRegistrationIsAtomic(t *testing.T) {
 
 // Malformed provider messages fail the binding.
 func TestMalformedMessagesFailTheSource(t *testing.T) {
-	for name, send := range map[string]func(*Source, *services.Ask) error{
-		"wrong service": func(src *Source, a *services.Ask) error {
+	for name, send := range map[string]func(*Binding, *services.Ask) error{
+		"wrong service": func(src *Binding, a *services.Ask) error {
 			return src.Answer(&services.Answer{RequestID: a.RequestID, Update: &services.Update{Name: "other"}})
 		},
-		"foreign provider": func(src *Source, a *services.Ask) error {
+		"foreign provider": func(src *Binding, a *services.Ask) error {
 			return src.Answer(&services.Answer{RequestID: a.RequestID, Update: &services.Update{Name: a.Service, ProviderID: astral.GenerateIdentity()}})
 		},
-		"missing update": func(src *Source, a *services.Ask) error {
+		"missing update": func(src *Binding, a *services.Ask) error {
 			return src.Answer(&services.Answer{RequestID: a.RequestID})
 		},
-		"empty change": func(src *Source, _ *services.Ask) error {
+		"empty change": func(src *Binding, _ *services.Ask) error {
 			return src.Change(&services.Change{})
 		},
 	} {
