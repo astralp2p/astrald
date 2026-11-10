@@ -260,7 +260,8 @@ class TestShippedPlans(Invariants, unittest.TestCase):
         worlds = plan(self.tests, sorted(self.tests))
         self.assertEqual(
             [(w.kind, w.steps[-1].test) for w in worlds],
-            [("local", "expel-node"), ("vm", "gateway-relay"),
+            [("local", "expel-authority"), ("local", "expel-node"),
+             ("vm", "gateway-relay"),
              ("local", "hold-purge"), ("vm", "nat-punch"),
              ("local", "expel-propagation"),
              ("local", "swarm-member-restart"), ("vm", "tor-link"),
