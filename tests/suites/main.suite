@@ -34,6 +34,7 @@ messaging-two-node
 mcp-peer
 services-swarm
 services-app-call
+services-advertise-identity
 app-searcher-swarm
 app-finder-read
 app-index-provider
