@@ -11,6 +11,7 @@ import (
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astral-go/astral/channel"
 	"github.com/astralp2p/astral-go/lib/routing"
+	"github.com/astralp2p/astrald/mod/services/src/coordinator"
 )
 
 type opDiscoverArgs struct {
@@ -57,29 +58,32 @@ func (mod *Module) OpDiscover(ctx *astral.Context, q *routing.IncomingQuery, arg
 	ctx, cancel := ctx.WithCancel()
 	defer cancel()
 	for _, r := range st.Contributions() {
-		go mod.carry(ctx, r, d.caller, d.names, args.Follow)
+		go mod.carry(ctx, memberCarry{contribution: r, caller: d.caller, names: d.names, follow: args.Follow})
 	}
 
-	go func() {
-		// why: the consumer sends nothing; a read ending is how the node learns
-		// the consumer closed the stream.
-		for {
-			if _, err := ch.Receive(); err != nil {
-				st.Close()
-				return
-			}
-		}
-	}()
-
-	go func() {
-		select {
-		case <-ctx.Done():
-			st.Close()
-		case <-st.Done():
-		}
-	}()
+	go closeWhenConsumerLeaves(ch, st)
+	go closeOnCancel(ctx, st)
 
 	return st.Run(&channelSink{ch: ch})
+}
+
+func closeWhenConsumerLeaves(ch *channel.Channel, st *coordinator.Stream) {
+	// why: the consumer sends nothing; a read ending is how the node learns
+	// the consumer closed the stream.
+	for {
+		if _, err := ch.Receive(); err != nil {
+			st.Close()
+			return
+		}
+	}
+}
+
+func closeOnCancel(ctx *astral.Context, st *coordinator.Stream) {
+	select {
+	case <-ctx.Done():
+		st.Close()
+	case <-st.Done():
+	}
 }
 
 // discovery is an admitted request: the identity providers evaluate, the

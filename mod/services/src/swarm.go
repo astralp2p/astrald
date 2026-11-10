@@ -21,20 +21,28 @@ const (
 	carryRetryMax   = time.Minute
 )
 
+type memberCarry struct {
+	contribution *coordinator.Contribution
+	caller       *astral.Identity
+	names        []string
+	follow       bool
+}
+
 // carry feeds one swarm member's contribution to a stream: the member's own
 // discovery for app, asked by this node naming app in for. With follow it
 // restores the contribution after a loss for as long as ctx lasts.
-func (mod *Module) carry(ctx *astral.Context, r *coordinator.Contribution, app *astral.Identity, names []string, follow bool) {
+func (mod *Module) carry(ctx *astral.Context, c memberCarry) {
+	r := c.contribution
 	delay := carryRetryFirst
 	for {
 		// why: register for the link event before asking, so a link created
 		// while the member is being asked is not missed.
 		linked := mod.links.wait(r.Member())
-		initial, err := mod.carryOnce(ctx, r, app, names, follow)
+		initial, err := mod.carryOnce(ctx, c)
 		if ctx.Err() != nil {
 			return
 		}
-		if !follow {
+		if !c.follow {
 			if err != nil && !initial {
 				r.Lost()
 			}
@@ -57,12 +65,13 @@ func (mod *Module) carry(ctx *astral.Context, r *coordinator.Contribution, app *
 
 // carryOnce runs one discovery on the member until it ends, and reports
 // whether the member's initial outcome arrived.
-func (mod *Module) carryOnce(ctx *astral.Context, r *coordinator.Contribution, app *astral.Identity, names []string, follow bool) (bool, error) {
+func (mod *Module) carryOnce(ctx *astral.Context, c memberCarry) (bool, error) {
+	r := c.contribution
 	ctx = ctx.IncludeZone(astral.ZoneNetwork)
-	mod.pushRelayContract(ctx, app, r.Member())
+	mod.pushRelayContract(ctx, c.caller, r.Member())
 
 	client := servicescli.New(r.Member(), core.NewClientAs(mod.node, mod.node.Identity()))
-	events, err := client.DiscoverFor(ctx, app, names, follow)
+	events, err := client.DiscoverFor(ctx, c.caller, c.names, c.follow)
 	if err != nil {
 		return false, err
 	}
