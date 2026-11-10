@@ -30,6 +30,7 @@ app-query
 registration-lease
 blueprints-two-node
 apphost-origin
+app-origin-guards
 sign-contract-guard
 messaging-two-node
 mcp-peer
