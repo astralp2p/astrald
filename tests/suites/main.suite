@@ -54,6 +54,7 @@ app-routing-two-apps
 app-op-surface
 request-grant-scope
 swarm-authz-matrix
+services-swarm-outcome-rules
 expel-node
 hold-purge
 hold-isolation

@@ -1,0 +1,4 @@
+nodes   = ["node1", "node2", "ssor_stranger"]
+timeout = 240
+after   = "adopt-node"
+facts   = ["services_swarm_outcome_rules"]
