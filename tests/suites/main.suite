@@ -62,3 +62,4 @@ swarm-roster-sync
 expel-propagation
 swarm-member-restart
 app-node-restart-reconnect
+services-node-restart
