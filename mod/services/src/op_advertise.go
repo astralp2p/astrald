@@ -10,6 +10,7 @@ import (
 
 type opAdvertiseArgs struct {
 	Services string
+	Open     *bool // nil is open
 
 	In  string
 	Out string
@@ -50,7 +51,8 @@ func (mod *Module) OpAdvertise(ctx *astral.Context, q *routing.IncomingQuery, ar
 	}
 
 	transport := &bindingTransport{ch: ch, ready: make(chan struct{})}
-	binding, err := mod.coord.Register(id, names, transport)
+	open := args.Open == nil || *args.Open
+	binding, err := mod.coord.Register(id, names, open, transport)
 	if err != nil {
 		return ch.Send(astral.Err(err))
 	}

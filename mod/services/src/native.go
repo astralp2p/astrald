@@ -15,7 +15,8 @@ func (mod *Module) RegisterNative(names []string, e servicesmod.Evaluator) (serv
 	}
 
 	transport := &nativeTransport{eval: e, ready: make(chan struct{})}
-	binding, err := mod.coord.Register(mod.node.Identity(), names, transport)
+	// why: a native service is open; the user's private list can hide it.
+	binding, err := mod.coord.Register(mod.node.Identity(), names, true, transport)
 	if err != nil {
 		return nil, err
 	}

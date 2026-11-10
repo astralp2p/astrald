@@ -28,7 +28,7 @@ func TestSwarmOneShotWaitsForEveryMember(t *testing.T) {
 	answer(t, src, expectAsk(t, tr), true)
 	expectEvent(t, sink, "update")
 	p1 := astral.GenerateIdentity()
-	r1.Update(remoteView(p1, "player", true))
+	r1.Update(remoteView(p1, "player", true), true)
 	r1.Initial(nil)
 	if u := expectEvent(t, sink, "update").u; !u.ProviderID.IsEqual(p1) {
 		t.Fatalf("got %v; want the member's provider", u.ProviderID)
@@ -87,8 +87,8 @@ func TestSwarmLossRetractsTheMembersOfferings(t *testing.T) {
 	answer(t, src, expectAsk(t, tr), true)
 	expectEvent(t, sink, "update")
 	shown, hidden := astral.GenerateIdentity(), astral.GenerateIdentity()
-	r.Update(remoteView(shown, "player", true))
-	r.Update(remoteView(hidden, "player", false)) // never introduced: suppressed
+	r.Update(remoteView(shown, "player", true), true)
+	r.Update(remoteView(hidden, "player", false), true) // never introduced: suppressed
 	r.Initial(nil)
 	expectEvent(t, sink, "update")
 	expectEvent(t, sink, "boundary")
@@ -99,7 +99,7 @@ func TestSwarmLossRetractsTheMembersOfferings(t *testing.T) {
 		t.Fatalf("removed %+v; want only the member's shown offering", rm.Offerings)
 	}
 
-	r.Update(remoteView(shown, "player", true))
+	r.Update(remoteView(shown, "player", true), true)
 	if u := expectEvent(t, sink, "update").u; !u.ProviderID.IsEqual(shown) {
 		t.Fatal("a restored member's offering did not reach the follow")
 	}
@@ -116,8 +116,8 @@ func TestSwarmRemoveAndUnrequestedViews(t *testing.T) {
 	r1, r2 := st.Contributions()[0], st.Contributions()[1]
 	p := astral.GenerateIdentity()
 
-	r1.Update(remoteView(p, "player", true))
-	r1.Update(remoteView(p, "wallet", true))
+	r1.Update(remoteView(p, "player", true), true)
+	r1.Update(remoteView(p, "wallet", true), true)
 	r1.Initial(nil)
 	r2.Initial(nil)
 	expectEvent(t, sink, "update")
@@ -140,7 +140,7 @@ func TestSwarmStreamCloseSignalsDone(t *testing.T) {
 	default:
 		t.Fatal("Done is open after Close")
 	}
-	st.Contributions()[0].Update(remoteView(astral.GenerateIdentity(), "player", true))
+	st.Contributions()[0].Update(remoteView(astral.GenerateIdentity(), "player", true), true)
 	st.Contributions()[0].Lost()
 	e.invariants()
 }

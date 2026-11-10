@@ -22,18 +22,27 @@ func newContribution(st *Stream, member *astral.Identity) *Contribution {
 // Member is the swarm member this contribution comes from.
 func (r *Contribution) Member() *astral.Identity { return r.member }
 
-// Update applies one view from the member.
-func (r *Contribution) Update(u *services.Update) {
+// Update applies one view from the member. A view the caller may not see,
+// as the node decided from the member's visibility tag and the caller's
+// permits, never reaches the caller and removes a view shown before.
+func (r *Contribution) Update(u *services.Update, visible bool) {
 	c := r.st.c
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if r.st.closed || u == nil || u.ProviderID == nil || u.ProviderID.IsZero() {
 		return
 	}
-	if _, requested := r.st.names[string(u.Name)]; !requested {
+	if !r.st.requests(string(u.Name)) {
 		return
 	}
 	k := keyOf(u.ProviderID, string(u.Name))
+	if !visible {
+		if _, ours := r.contributed[k]; ours {
+			delete(r.contributed, k)
+			r.st.hide(k)
+		}
+		return
+	}
 	r.contributed[k] = struct{}{}
 	r.st.offer(k, u)
 }
@@ -61,7 +70,9 @@ func (r *Contribution) Remove(keys []*services.OfferingKey) {
 }
 
 // Initial records the member's initial outcome: the services it reported
-// incomplete fail, the rest resolve.
+// incomplete fail, the rest resolve. In a discovery of every service the
+// member's one evaluation resolves and the services it reported are marked
+// incomplete.
 func (r *Contribution) Initial(incomplete []string) {
 	c := r.st.c
 	c.mu.Lock()
@@ -69,6 +80,13 @@ func (r *Contribution) Initial(incomplete []string) {
 	failed := map[string]struct{}{}
 	for _, s := range incomplete {
 		failed[s] = struct{}{}
+	}
+	if o := r.unresolved[allServices]; o != nil && r.st.all {
+		for s := range failed {
+			if s != allServices {
+				o.at.incompleteNames[s] = struct{}{}
+			}
+		}
 	}
 	for _, o := range r.evaluations() {
 		if _, f := failed[o.service]; f {

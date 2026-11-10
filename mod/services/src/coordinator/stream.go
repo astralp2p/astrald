@@ -9,6 +9,8 @@ import (
 // object is written or the write fails; an error ends the stream.
 type Sink interface {
 	Update(*services.Update) error
+	// TaggedUpdate writes a view of a tagged stream.
+	TaggedUpdate(*services.TaggedUpdate) error
 	Removed(*services.Removed) error
 	// Boundary ends the initial attempt: Incomplete when incomplete is not nil,
 	// then eos.
@@ -20,7 +22,10 @@ type Stream struct {
 	c      *Coordinator
 	caller *astral.Identity
 	names  map[string]struct{}
+	all    bool // every service is requested
 	follow bool
+	filter *Visibility // nil passes every offering
+	tagged bool        // views carry their provider's visibility
 
 	visible           map[offeringKey]struct{}         // offerings shown as available
 	unsent            map[offeringKey]*services.Update // latest unsent view per offering
@@ -35,22 +40,51 @@ type Stream struct {
 	closed            bool
 }
 
-func newStream(c *Coordinator, caller *astral.Identity, names []string, follow bool) *Stream {
+func newStream(c *Coordinator, req Request) *Stream {
 	st := &Stream{
 		c:              c,
-		caller:         caller,
+		caller:         req.Caller,
 		names:          map[string]struct{}{},
-		follow:         follow,
+		all:            req.All,
+		follow:         req.Follow,
+		filter:         req.Filter,
+		tagged:         req.Tagged,
 		visible:        map[offeringKey]struct{}{},
 		unsent:         map[offeringKey]*services.Update{},
 		unsentRemovals: map[offeringKey]struct{}{},
 		wake:           make(chan struct{}, 1),
 		done:           make(chan struct{}),
 	}
-	for _, name := range names {
+	for _, name := range req.Names {
 		st.names[name] = struct{}{}
 	}
 	return st
+}
+
+// requests reports whether the stream discovers service.
+func (st *Stream) requests(service string) bool {
+	if st.all {
+		return true
+	}
+	_, ok := st.names[service]
+	return ok
+}
+
+// offerFrom queues a view a local binding answered, unless the caller may not
+// see the binding's offering.
+func (st *Stream) offerFrom(b *Binding, service string, k offeringKey, u *services.Update) {
+	if st.filter != nil && !st.filter.Allows(service, st.c.isOpen(b, service)) {
+		st.hide(k)
+		return
+	}
+	st.offer(k, u)
+}
+
+// hide withholds k from a caller that may not see it: an unsent view is
+// dropped, and a shown offering is removed.
+func (st *Stream) hide(k offeringKey) {
+	st.retract(k)
+	wake(st.wake)
 }
 
 // Contributions are the swarm members carrying this discovery, in request
@@ -108,7 +142,7 @@ func (st *Stream) retractBinding(b *Binding) {
 		return
 	}
 	for _, name := range b.names {
-		if _, ok := st.names[name]; !ok {
+		if !st.requests(name) {
 			continue
 		}
 		st.retract(keyOf(b.provider, name))

@@ -1,6 +1,7 @@
 package services
 
 import (
+	"strings"
 	"sync"
 	"time"
 
@@ -22,12 +23,14 @@ const (
 )
 
 // memberCarry is one swarm member's part of a discovery: the contribution it
-// feeds, and the caller, services and follow flag it asks the member for.
+// feeds, the view that filters it for the caller, and the services and follow
+// flag it asks the member for.
 type memberCarry struct {
 	contribution *coordinator.Contribution
-	caller       *astral.Identity
-	names        []string
+	view         *callerView
+	names        []string // nil asks for every service
 	follow       bool
+	untagged     bool // the member predates visibility; its offerings count as open
 }
 
 // carry feeds one swarm member's contribution to a stream: the member's own
@@ -43,6 +46,13 @@ func (mod *Module) carry(ctx *astral.Context, c memberCarry) {
 		initial, err := mod.carryOnce(ctx, c)
 		if ctx.Err() != nil {
 			return
+		}
+		if !c.untagged && !initial && refusedTagged(err) {
+			// why: a member that predates visibility rejects the argument;
+			// asked again without it, its offerings count as open.
+			mod.log.Logv(1, "swarm member %v does not tag visibility", r.Member())
+			c.untagged = true
+			continue
 		}
 		if !c.follow {
 			if err != nil && !initial {
@@ -70,10 +80,15 @@ func (mod *Module) carry(ctx *astral.Context, c memberCarry) {
 func (mod *Module) carryOnce(ctx *astral.Context, c memberCarry) (bool, error) {
 	r := c.contribution
 	ctx = ctx.IncludeZone(astral.ZoneNetwork)
-	mod.pushRelayContract(ctx, c.caller, r.Member())
+	caller := c.view.caller
+	mod.pushRelayContract(ctx, caller, r.Member())
 
 	client := servicescli.New(r.Member(), core.NewClientAs(mod.node, mod.node.Identity()))
-	events, err := client.DiscoverFor(ctx, c.caller, c.names, c.follow)
+	discover := client.DiscoverForTagged
+	if c.untagged {
+		discover = client.DiscoverFor
+	}
+	events, err := discover(ctx, caller, c.names, c.follow)
 	if err != nil {
 		return false, err
 	}
@@ -82,7 +97,8 @@ func (mod *Module) carryOnce(ctx *astral.Context, c memberCarry) (bool, error) {
 	for ev := range events {
 		switch {
 		case ev.Update != nil:
-			r.Update(ev.Update)
+			open := ev.Open == nil || *ev.Open
+			r.Update(ev.Update, c.view.sees(ctx, string(ev.Update.Name), r.Member(), open))
 		case ev.Removed != nil:
 			r.Remove(ev.Removed)
 		case ev.Initial != nil:
@@ -93,6 +109,12 @@ func (mod *Module) carryOnce(ctx *astral.Context, c memberCarry) (bool, error) {
 		}
 	}
 	return initial, nil
+}
+
+// refusedTagged reports whether a member refused the tagged argument as
+// unknown.
+func refusedTagged(err error) bool {
+	return err != nil && strings.Contains(err.Error(), "unknown argument") && strings.Contains(err.Error(), "tagged")
 }
 
 // pushRelayContract shows the member that this node represents app, by pushing

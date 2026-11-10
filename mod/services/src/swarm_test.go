@@ -2,6 +2,7 @@ package services
 
 import (
 	"io"
+	"slices"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -13,6 +14,7 @@ import (
 	alog "github.com/astralp2p/astral-go/astral/log"
 	"github.com/astralp2p/astral-go/lib/query"
 	"github.com/astralp2p/astral-go/lib/routing"
+	apphostmod "github.com/astralp2p/astrald/mod/apphost"
 	authmod "github.com/astralp2p/astrald/mod/auth"
 	"github.com/astralp2p/astrald/mod/objects"
 	"github.com/astralp2p/astrald/mod/services/src/coordinator"
@@ -25,6 +27,7 @@ import (
 type swarmNode struct {
 	id   *astral.Identity
 	peer *Module
+	op   any // replaces the peer's OpDiscover when set
 	down atomic.Bool
 }
 
@@ -34,7 +37,11 @@ func (n *swarmNode) RouteQuery(ctx *astral.Context, q *astral.InFlightQuery, w i
 	if n.down.Load() || n.peer == nil || !q.Target.IsEqual(n.peer.node.Identity()) {
 		return query.RouteNotFound()
 	}
-	op, err := routing.NewOp(n.peer.OpDiscover)
+	var fn any = n.peer.OpDiscover
+	if n.op != nil {
+		fn = n.op
+	}
+	op, err := routing.NewOp(fn)
 	if err != nil {
 		return nil, err
 	}
@@ -45,9 +52,21 @@ func (n *swarmNode) RouteQuery(ctx *astral.Context, q *astral.InFlightQuery, w i
 type swarmUser struct {
 	user.Module
 	swarm []*astral.Identity
+	user  *astral.Identity // nil: the node has no user
+}
+
+// swarmApps is an apphost module whose swarm apps are fixed.
+type swarmApps struct {
+	apphostmod.Module
+	apps []*astral.Identity
+}
+
+func (a *swarmApps) IsSwarmApp(_ *astral.Context, app *astral.Identity) bool {
+	return slices.ContainsFunc(a.apps, app.IsEqual)
 }
 
 func (u *swarmUser) LocalSwarm() []*astral.Identity { return u.swarm }
+func (u *swarmUser) Identity() *astral.Identity     { return u.user }
 
 type swarmObjects struct {
 	objects.Module
@@ -86,6 +105,7 @@ type swarm struct {
 	authA    *swarmAuth
 	authB    *swarmAuth
 	objectsA *swarmObjects
+	apps     *swarmApps
 }
 
 func newSwarm() *swarm {
@@ -99,8 +119,9 @@ func newSwarm() *swarm {
 	}
 	nodeB := &swarmNode{id: astral.GenerateIdentity()}
 	members := &swarmUser{swarm: []*astral.Identity{s.nodeA.id, nodeB.id}}
-	s.a = &Module{Deps: Deps{Auth: s.authA, Objects: s.objectsA, User: members}, node: s.nodeA, log: alog.New(s.nodeA.id), coord: coordinator.New(cfg)}
-	s.b = &Module{Deps: Deps{Auth: s.authB, Objects: &swarmObjects{}, User: members}, node: nodeB, log: alog.New(nodeB.id), coord: coordinator.New(cfg)}
+	s.apps = &swarmApps{}
+	s.a = &Module{Deps: Deps{Auth: s.authA, Apphost: s.apps, Objects: s.objectsA, User: members}, node: s.nodeA, log: alog.New(s.nodeA.id), coord: coordinator.New(cfg)}
+	s.b = &Module{Deps: Deps{Auth: s.authB, Apphost: s.apps, Objects: &swarmObjects{}, User: members}, node: nodeB, log: alog.New(nodeB.id), coord: coordinator.New(cfg)}
 	s.nodeA.peer = s.b
 	return s
 }
@@ -192,8 +213,9 @@ func TestSwarmRestoresAMemberOnLink(t *testing.T) {
 	}
 }
 
-// The host checks the app on every contributing node before any work.
-func TestSwarmHostRefusesBeforeCarrying(t *testing.T) {
+// The host carries a discovery for an app without permits and filters what
+// the member returns: the member's provider is asked, nothing reaches the app.
+func TestSwarmHostFiltersWhatItCarries(t *testing.T) {
 	s := newSwarm()
 	asked := make(chan struct{}, 1)
 	advertise(t, s.b, "player", func(*services.Ask) *services.Update {
@@ -203,11 +225,15 @@ func TestSwarmHostRefusesBeforeCarrying(t *testing.T) {
 	s.authA.refuse[services.ServiceDiscoveryAction{}.ObjectType()] = true
 
 	c := open(t, s.a.OpDiscover, astral.GenerateIdentity(), "services.discover?services=player&reach=swarm", false)
-	expect[*astral.ErrorMessage](t, c)
+	if ng := expect[*services.NotGranted](t, c); len(ng.Services) != 1 || ng.Services[0] != "player" {
+		t.Fatalf("not granted %v; want player", ng.Services)
+	}
+	expect[*astral.EOS](t, c)
+	expectEnd(t, c)
 	select {
 	case <-asked:
-		t.Fatal("a refused swarm discovery asked a member's provider")
-	case <-time.After(100 * time.Millisecond):
+	case <-time.After(testWait):
+		t.Fatal("the member's provider was not asked")
 	}
 }
 

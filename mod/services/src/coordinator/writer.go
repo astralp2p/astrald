@@ -20,6 +20,8 @@ type output struct {
 	kind       outKind
 	key        offeringKey
 	view       *services.Update
+	tagged     bool // write view as a services.tagged_update
+	open       bool // with tagged: the provider's visibility when the view is written
 	removed    []offeringKey
 	incomplete *services.Incomplete
 }
@@ -84,7 +86,13 @@ func (st *Stream) nextOutput() output {
 		delete(st.unsent, k)
 		st.inflight = &k
 		st.inflightAvailable = bool(v.Available)
-		return output{kind: outView, key: k, view: v}
+		out := output{kind: outView, key: k, view: v, tagged: st.tagged}
+		if st.tagged {
+			// why: the tag is read when the view is written, so a view
+			// re-evaluated after a private list change carries the new value.
+			out.open = st.c.isOpenKey(k)
+		}
+		return out
 	}
 	return output{}
 }
@@ -105,6 +113,9 @@ func (out output) write(sink Sink) error {
 	case outBoundary:
 		return sink.Boundary(out.incomplete)
 	default:
+		if out.tagged {
+			return sink.TaggedUpdate(&services.TaggedUpdate{Open: astral.Bool(out.open), Update: out.view})
+		}
 		return sink.Update(out.view)
 	}
 }

@@ -25,12 +25,17 @@ type Module struct {
 	router routing.OpRouter
 	coord  *coordinator.Coordinator
 	links  linkWaiters
+
+	visibility visibilityConfig
 }
 
 var _ services.Module = &Module{}
 
+// Run applies every change of the private list until ctx ends.
 func (mod *Module) Run(ctx *astral.Context) error {
-	<-ctx.Done()
+	for list := range mod.visibility.Private.Follow(ctx) {
+		mod.coord.SetPrivate(list)
+	}
 	return nil
 }
 

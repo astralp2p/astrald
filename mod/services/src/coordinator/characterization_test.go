@@ -192,7 +192,7 @@ func TestTransportSendFailureClosesTheBinding(t *testing.T) {
 	e := newEnv(t)
 	provider := astral.GenerateIdentity()
 	tr := &failingTransport{closed: make(chan struct{})}
-	if _, err := e.c.Register(provider, []string{"player"}, tr); err != nil {
+	if _, err := e.c.Register(provider, []string{"player"}, true, tr); err != nil {
 		t.Fatal(err)
 	}
 
@@ -205,7 +205,7 @@ func TestTransportSendFailureClosesTheBinding(t *testing.T) {
 	case <-time.After(waitFor):
 		t.Fatal("the transport was not closed")
 	}
-	if _, err := e.c.Register(provider, []string{"player"}, newTransport()); err != nil {
+	if _, err := e.c.Register(provider, []string{"player"}, true, newTransport()); err != nil {
 		t.Fatalf("the failed binding still owns its names: %v", err)
 	}
 	e.invariants()
@@ -216,9 +216,10 @@ var errWrite = errors.New("write failed")
 // failingSink fails every write.
 type failingSink struct{}
 
-func (failingSink) Update(*services.Update) error       { return errWrite }
-func (failingSink) Removed(*services.Removed) error     { return errWrite }
-func (failingSink) Boundary(*services.Incomplete) error { return errWrite }
+func (failingSink) Update(*services.Update) error             { return errWrite }
+func (failingSink) Removed(*services.Removed) error           { return errWrite }
+func (failingSink) TaggedUpdate(*services.TaggedUpdate) error { return errWrite }
+func (failingSink) Boundary(*services.Incomplete) error       { return errWrite }
 
 // A failed write closes the stream, Run returns the error, and the closed
 // follow leaves no demand on the provider.
@@ -226,7 +227,7 @@ func TestSinkWriteFailureClosesTheStream(t *testing.T) {
 	e := newEnv(t)
 	src, tr := e.register("player")
 	caller := astral.GenerateIdentity()
-	st := e.c.Discover(caller, []string{"player"}, true, nil)
+	st := e.c.Discover(Request{Caller: caller, Names: []string{"player"}, Follow: true})
 	done := make(chan error, 1)
 	go func() { done <- st.Run(failingSink{}) }()
 
@@ -289,7 +290,7 @@ func TestSwarmRemovalWithNilKeyOrOnAClosedStream(t *testing.T) {
 	st, _ := e.discoverSwarm(astral.GenerateIdentity(), true, sink, []*astral.Identity{astral.GenerateIdentity()}, "player")
 	r := st.Contributions()[0]
 	p := astral.GenerateIdentity()
-	r.Update(remoteView(p, "player", true))
+	r.Update(remoteView(p, "player", true), true)
 	r.Initial(nil)
 	expectEvent(t, sink, "update")
 	expectEvent(t, sink, "boundary")

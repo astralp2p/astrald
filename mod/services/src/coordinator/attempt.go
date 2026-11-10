@@ -104,9 +104,13 @@ func (at *attempt) incomplete() *services.Incomplete {
 	if len(at.incompleteNames) == 0 {
 		return nil
 	}
+	// why: a member lost in a discovery of every service failed work no name
+	// describes; the boundary still reports it, with an empty list.
 	names := make([]string, 0, len(at.incompleteNames))
 	for name := range at.incompleteNames {
-		names = append(names, name)
+		if name != allServices {
+			names = append(names, name)
+		}
 	}
 	sort.Strings(names)
 	inc := &services.Incomplete{}

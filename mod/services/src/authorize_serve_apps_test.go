@@ -26,7 +26,7 @@ func (n *serveAppsNode) Identity() *astral.Identity { return n.id }
 // field stays the zero value.
 func serveAppsModule(authority *recordingAuth) *Module {
 	return &Module{
-		Deps:  Deps{Auth: authority},
+		Deps:  Deps{Auth: authority, Apphost: &swarmApps{}, User: &swarmUser{}},
 		node:  &serveAppsNode{id: astral.GenerateIdentity()},
 		coord: coordinator.New(coordinator.DefaultConfig()),
 	}
@@ -41,7 +41,7 @@ func (nopTransport) Close()                   {}
 // owned reports whether a live binding holds (id, name): a registration of the
 // same pair is refused exactly then.
 func owned(mod *Module, id *astral.Identity, name string) bool {
-	src, err := mod.coord.Register(id, []string{name}, nopTransport{})
+	src, err := mod.coord.Register(id, []string{name}, true, nopTransport{})
 	if err != nil {
 		return true
 	}

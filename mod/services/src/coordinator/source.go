@@ -11,6 +11,7 @@ type Binding struct {
 	c        *Coordinator
 	provider *astral.Identity
 	names    []string // sorted
+	open     bool     // advertised open; the private list can still hide it
 	t        Transport
 
 	sendQueue []*services.Ask

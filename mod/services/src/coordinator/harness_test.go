@@ -82,6 +82,9 @@ type event struct {
 	u    *services.Update
 	r    *services.Removed
 	inc  *services.Incomplete
+
+	tagged bool // written as a services.tagged_update
+	open   bool // with tagged: the tag
 }
 
 // fakeSink records writes; with a gate, each write waits for one release.
@@ -102,6 +105,9 @@ func (s *fakeSink) put(e event) error {
 
 func (s *fakeSink) Update(u *services.Update) error   { return s.put(event{kind: "update", u: u}) }
 func (s *fakeSink) Removed(r *services.Removed) error { return s.put(event{kind: "removed", r: r}) }
+func (s *fakeSink) TaggedUpdate(t *services.TaggedUpdate) error {
+	return s.put(event{kind: "update", u: t.Update, tagged: true, open: bool(t.Open)})
+}
 func (s *fakeSink) Boundary(inc *services.Incomplete) error {
 	return s.put(event{kind: "boundary", inc: inc})
 }
@@ -120,7 +126,7 @@ func newEnv(t *testing.T) *env {
 func (e *env) register(names ...string) (*Binding, *fakeTransport) {
 	e.t.Helper()
 	tr := newTransport()
-	src, err := e.c.Register(astral.GenerateIdentity(), names, tr)
+	src, err := e.c.Register(astral.GenerateIdentity(), names, true, tr)
 	if err != nil {
 		e.t.Fatalf("register %v: %v", names, err)
 	}
@@ -130,7 +136,7 @@ func (e *env) register(names ...string) (*Binding, *fakeTransport) {
 // discover starts a stream and its writer; the returned channel yields Run's
 // result.
 func (e *env) discover(caller *astral.Identity, follow bool, sink *fakeSink, names ...string) (*Stream, chan error) {
-	st := e.c.Discover(caller, names, follow, nil)
+	st := e.c.Discover(Request{Caller: caller, Names: names, Follow: follow})
 	done := make(chan error, 1)
 	go func() { done <- st.Run(sink) }()
 	return st, done
@@ -138,7 +144,7 @@ func (e *env) discover(caller *astral.Identity, follow bool, sink *fakeSink, nam
 
 // discoverSwarm is discover with swarm members carrying the discovery.
 func (e *env) discoverSwarm(caller *astral.Identity, follow bool, sink *fakeSink, members []*astral.Identity, names ...string) (*Stream, chan error) {
-	st := e.c.Discover(caller, names, follow, members)
+	st := e.c.Discover(Request{Caller: caller, Names: names, Follow: follow, Members: members})
 	done := make(chan error, 1)
 	go func() { done <- st.Run(sink) }()
 	return st, done

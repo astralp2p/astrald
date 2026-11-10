@@ -57,6 +57,7 @@ type Coordinator struct {
 	owners   map[offeringKey]*Binding
 	byName   map[string]map[*Binding]struct{}
 	byCaller map[string]map[*Stream]struct{}
+	private  *services.PrivateList // the user's private list; nil is empty
 }
 
 func New(cfg Config) *Coordinator {
@@ -94,8 +95,9 @@ type Transport interface {
 	Close()
 }
 
-// Register claims every (provider, name) pair for a new binding, or none.
-func (c *Coordinator) Register(provider *astral.Identity, names []string, t Transport) (*Binding, error) {
+// Register claims every (provider, name) pair for a new binding, or none. An
+// open binding is visible to swarm callers without a discovery permit.
+func (c *Coordinator) Register(provider *astral.Identity, names []string, open bool, t Transport) (*Binding, error) {
 	sorted := append([]string(nil), names...)
 	sort.Strings(sorted)
 
@@ -108,6 +110,7 @@ func (c *Coordinator) Register(provider *astral.Identity, names []string, t Tran
 	}
 
 	b := newBinding(c, provider, sorted, t)
+	b.open = open
 	for _, name := range sorted {
 		c.owners[keyOf(provider, name)] = b
 		if c.byName[name] == nil {
@@ -131,7 +134,7 @@ func (c *Coordinator) reevaluateForFollowers(b *Binding) {
 				continue
 			}
 			for _, name := range b.names {
-				if _, ok := st.names[name]; ok {
+				if st.requests(name) {
 					sl := b.slot(st.caller)
 					sl.reevaluate[name] = struct{}{}
 					b.schedule(sl)
@@ -141,19 +144,33 @@ func (c *Coordinator) reevaluateForFollowers(b *Binding) {
 	}
 }
 
+// Request describes one discovery stream.
+type Request struct {
+	Caller  *astral.Identity
+	Names   []string // the services discovered; with All, a snapshot of Names()
+	All     bool     // discover every service; members may report any name
+	Follow  bool     // keep the stream open after the initial attempt; never with All
+	Members []*astral.Identity
+	Filter  *Visibility // nil sends every offering unfiltered
+	Tagged  bool        // write each view with its provider's visibility
+}
+
 // Discover enrolls a stream and sets up its initial attempt in one critical
-// section. Every local binding of a requested name and every member owes one
-// initial evaluation per name. The caller has authorized every name on every
-// member beforehand.
-func (c *Coordinator) Discover(caller *astral.Identity, names []string, follow bool, members []*astral.Identity) *Stream {
+// section. Every local binding of a requested name owes one initial
+// evaluation per name; every member owes one per name, or one in all with All.
+func (c *Coordinator) Discover(req Request) *Stream {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	st := c.enrollStream(caller, names, follow)
+	st := c.enrollStream(req)
 	at := newAttempt(st)
 	st.attempt = at
-	touched := c.addLocalEvaluations(at, caller, names)
-	addMemberEvaluations(at, members, names)
+	touched := c.addLocalEvaluations(at, req.Caller, req.Names)
+	memberNames := req.Names
+	if req.All {
+		memberNames = []string{allServices}
+	}
+	addMemberEvaluations(at, req.Members, memberNames)
 	c.startBudget(at)
 	for _, sl := range touched {
 		sl.binding.schedule(sl)
@@ -164,11 +181,15 @@ func (c *Coordinator) Discover(caller *astral.Identity, names []string, follow b
 	return st
 }
 
+// allServices is the service of a member's single initial evaluation in a
+// discovery of every service. It names no service in services.incomplete.
+const allServices = ""
+
 // enrollStream registers a new stream under its caller, so later answers and
 // changes for that caller reach it.
-func (c *Coordinator) enrollStream(caller *astral.Identity, names []string, follow bool) *Stream {
-	st := newStream(c, caller, names, follow)
-	ck := callerKey(caller)
+func (c *Coordinator) enrollStream(req Request) *Stream {
+	st := newStream(c, req)
+	ck := callerKey(req.Caller)
 	if c.byCaller[ck] == nil {
 		c.byCaller[ck] = map[*Stream]struct{}{}
 	}
@@ -215,7 +236,7 @@ func (c *Coordinator) startBudget(at *attempt) {
 // follows reports whether caller has an open follow stream requesting name.
 func (c *Coordinator) follows(caller *astral.Identity, name string) bool {
 	for st := range c.byCaller[callerKey(caller)] {
-		if _, ok := st.names[name]; ok && st.follow && !st.closed {
+		if st.requests(name) && st.follow && !st.closed {
 			return true
 		}
 	}

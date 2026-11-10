@@ -57,11 +57,11 @@ func (b *Binding) isValidAnswer(req *request, a *services.Answer) bool {
 func (b *Binding) deliver(req *request, u *services.Update) {
 	k := keyOf(b.provider, req.service)
 	for st := range b.c.byCaller[callerKey(req.slot.caller)] {
-		if _, ok := st.names[req.service]; !ok || st.closed {
+		if !st.requests(req.service) || st.closed {
 			continue
 		}
 		if st.follow || req.awaitedBy(st) {
-			st.offer(k, u)
+			st.offerFrom(b, req.service, k, u)
 		}
 	}
 }
