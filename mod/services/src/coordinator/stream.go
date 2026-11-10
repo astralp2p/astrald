@@ -9,52 +9,103 @@ import (
 // object is written or the write fails; an error ends the stream.
 type Sink interface {
 	Update(*services.Update) error
+	// TaggedUpdate writes a view of a tagged stream.
+	TaggedUpdate(*services.TaggedUpdate) error
 	Removed(*services.Removed) error
 	// Boundary ends the initial attempt: Incomplete when incomplete is not nil,
 	// then eos.
 	Boundary(incomplete *services.Incomplete) error
 }
 
-// Stream is one consumer discovery.
+// Stream is one consumer's discovery.
 type Stream struct {
-	c        *Coordinator
-	caller   *astral.Identity
-	services map[string]struct{}
-	follow   bool
+	c       *Coordinator
+	caller  *astral.Identity
+	names   map[string]struct{}
+	all     bool // every service is requested
+	follow  bool
+	filter  *Visibility                      // nil passes every offering
+	tagged  bool                             // views carry their provider's visibility
+	written map[offeringKey]*services.Update // with tagged: the last available view written per offering
 
 	visible           map[offeringKey]struct{}         // offerings shown as available
-	pending           map[offeringKey]*services.Update // T6: latest unsent view per offering
-	queue             []offeringKey                    // send order of pending keys
-	removed           map[offeringKey]struct{}         // removals not yet sent
+	unsent            map[offeringKey]*services.Update // latest unsent view per offering
+	sendOrder         []offeringKey                    // send order of unsent keys
+	unsentRemovals    map[offeringKey]struct{}         // removals not yet sent
 	inflight          *offeringKey                     // view handed to the writer
 	inflightAvailable bool                             // the in-flight view offers the service
 	attempt           *attempt                         // nil once the boundary is sent
-	remotes           []*Remote                        // swarm members carrying this discovery
+	contributions     []*Contribution                  // swarm members carrying this discovery
 	wake              chan struct{}
 	done              chan struct{}
 	closed            bool
 }
 
-func newStream(c *Coordinator, caller *astral.Identity, names []string, follow bool) *Stream {
+func newStream(c *Coordinator, req Request) *Stream {
 	st := &Stream{
-		c:        c,
-		caller:   caller,
-		services: map[string]struct{}{},
-		follow:   follow,
-		visible:  map[offeringKey]struct{}{},
-		pending:  map[offeringKey]*services.Update{},
-		removed:  map[offeringKey]struct{}{},
-		wake:     make(chan struct{}, 1),
-		done:     make(chan struct{}),
+		c:              c,
+		caller:         req.Caller,
+		names:          map[string]struct{}{},
+		all:            req.All,
+		follow:         req.Follow,
+		filter:         req.Filter,
+		tagged:         req.Tagged,
+		written:        map[offeringKey]*services.Update{},
+		visible:        map[offeringKey]struct{}{},
+		unsent:         map[offeringKey]*services.Update{},
+		unsentRemovals: map[offeringKey]struct{}{},
+		wake:           make(chan struct{}, 1),
+		done:           make(chan struct{}),
 	}
-	for _, name := range names {
-		st.services[name] = struct{}{}
+	for _, name := range req.Names {
+		st.names[name] = struct{}{}
 	}
 	return st
 }
 
-// Remotes are the swarm members carrying this discovery, in request order.
-func (st *Stream) Remotes() []*Remote { return st.remotes }
+// requests reports whether the stream discovers service.
+func (st *Stream) requests(service string) bool {
+	if st.all {
+		return true
+	}
+	_, ok := st.names[service]
+	return ok
+}
+
+// offerFrom queues a view a local binding answered, unless the caller may not
+// see the binding's offering.
+func (st *Stream) offerFrom(b *Binding, service string, k offeringKey, u *services.Update) {
+	if st.filter != nil && !st.filter.Allows(service, st.c.isOpen(b, service)) {
+		st.hide(k)
+		return
+	}
+	st.offer(k, u)
+}
+
+// retag re-sends the last view of k written to a tagged stream, so the
+// consumer reads k's current tag without waiting for the provider.
+// note: a view queued or in flight needs nothing here; the writer reads the
+// tag when it writes, and markWritten re-sends a view written with a stale tag.
+func (st *Stream) retag(k offeringKey) {
+	v := st.written[k]
+	_, queued := st.unsent[k]
+	inflight := st.inflight != nil && *st.inflight == k
+	if v == nil || queued || inflight {
+		return
+	}
+	st.offer(k, v)
+}
+
+// hide withholds k from a caller that may not see it: an unsent view is
+// dropped, and a shown offering is removed.
+func (st *Stream) hide(k offeringKey) {
+	st.retract(k)
+	wake(st.wake)
+}
+
+// Contributions are the swarm members carrying this discovery, in request
+// order.
+func (st *Stream) Contributions() []*Contribution { return st.contributions }
 
 // Done is closed when the stream closes.
 func (st *Stream) Done() <-chan struct{} { return st.done }
@@ -66,49 +117,51 @@ func (st *Stream) shown(k offeringKey) bool {
 		return st.inflightAvailable
 	}
 	_, visible := st.visible[k]
-	_, removing := st.removed[k]
+	_, removing := st.unsentRemovals[k]
 	return visible && !removing
 }
 
-// offer applies T6 replacement and never-introduced negative suppression.
+// offer queues a view for the consumer. The latest unsent view replaces the
+// older one in place; a negative view of an offering never shown is dropped.
 func (st *Stream) offer(k offeringKey, u *services.Update) {
 	if bool(u.Available) || st.shown(k) {
-		if _, queued := st.pending[k]; !queued {
-			st.queue = append(st.queue, k)
+		if _, queued := st.unsent[k]; !queued {
+			st.sendOrder = append(st.sendOrder, k)
 		}
-		st.pending[k] = u
+		st.unsent[k] = u
 	} else {
-		st.drop(k)
+		st.dropUnsent(k)
 	}
 	wake(st.wake)
 }
 
-// drop removes an unsent view and releases it from the boundary's obligations.
-func (st *Stream) drop(k offeringKey) {
-	if _, queued := st.pending[k]; queued {
-		delete(st.pending, k)
-		for i, q := range st.queue {
+// dropUnsent removes an unsent view, so the boundary no longer waits for it.
+func (st *Stream) dropUnsent(k offeringKey) {
+	if _, queued := st.unsent[k]; queued {
+		delete(st.unsent, k)
+		for i, q := range st.sendOrder {
 			if q == k {
-				st.queue = append(st.queue[:i:i], st.queue[i+1:]...)
+				st.sendOrder = append(st.sendOrder[:i:i], st.sendOrder[i+1:]...)
 				break
 			}
 		}
 	}
-	if st.attempt != nil && st.attempt.owed != nil {
-		delete(st.attempt.owed, k)
+	if st.attempt != nil && st.attempt.unsentAtBoundary != nil {
+		delete(st.attempt.unsentAtBoundary, k)
 	}
 }
 
-// lose purges a closed source's views and queues a removal for those shown.
-func (st *Stream) lose(src *Source) {
+// retractBinding purges a closed binding's views and queues a removal for
+// those shown.
+func (st *Stream) retractBinding(b *Binding) {
 	if st.closed {
 		return
 	}
-	for _, name := range src.names {
-		if _, ok := st.services[name]; !ok {
+	for _, name := range b.names {
+		if !st.requests(name) {
 			continue
 		}
-		st.retract(keyOf(src.provider, name))
+		st.retract(keyOf(b.provider, name))
 	}
 	wake(st.wake)
 }
@@ -117,13 +170,13 @@ func (st *Stream) lose(src *Source) {
 // was shown k as available.
 func (st *Stream) retract(k offeringKey) {
 	shown := st.shown(k)
-	st.drop(k)
+	st.dropUnsent(k)
 	if shown {
-		st.removed[k] = struct{}{}
+		st.unsentRemovals[k] = struct{}{}
 	}
 }
 
-// Close ends the stream on the consumer's side. Its initial obligations leave
+// Close ends the stream on the consumer's side. Its initial evaluations leave
 // their slots without failing anything. Close is idempotent.
 func (st *Stream) Close() {
 	st.c.mu.Lock()
@@ -136,22 +189,22 @@ func (st *Stream) closeLocked() {
 		return
 	}
 	st.closed = true
-	ck := st.caller.String()
+	ck := callerKey(st.caller)
 	delete(st.c.byCaller[ck], st)
 	if len(st.c.byCaller[ck]) == 0 {
 		delete(st.c.byCaller, ck)
 	}
 	if at := st.attempt; at != nil {
 		at.budget.Stop()
-		for o := range at.open {
+		for o := range at.unresolved {
 			o.detach()
 			if o.slot != nil {
-				o.src.collect(o.slot)
+				o.binding.removeIfIdle(o.slot)
 			}
 		}
 	}
-	st.pending = map[offeringKey]*services.Update{}
-	st.queue = nil
+	st.unsent = map[offeringKey]*services.Update{}
+	st.sendOrder = nil
 	close(st.done)
 	wake(st.wake)
 }

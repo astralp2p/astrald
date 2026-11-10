@@ -19,7 +19,7 @@ func TestSwarmOneShotWaitsForEveryMember(t *testing.T) {
 	m1, m2 := astral.GenerateIdentity(), astral.GenerateIdentity()
 	sink := newSink()
 	st, done := e.discoverSwarm(astral.GenerateIdentity(), false, sink, []*astral.Identity{m1, m2}, "player")
-	r1, r2 := st.Remotes()[0], st.Remotes()[1]
+	r1, r2 := st.Contributions()[0], st.Contributions()[1]
 	if !r1.Member().IsEqual(m1) || !r2.Member().IsEqual(m2) {
 		t.Fatal("remotes are not in request order")
 	}
@@ -28,7 +28,7 @@ func TestSwarmOneShotWaitsForEveryMember(t *testing.T) {
 	answer(t, src, expectAsk(t, tr), true)
 	expectEvent(t, sink, "update")
 	p1 := astral.GenerateIdentity()
-	r1.Offer(remoteView(p1, "player", true))
+	r1.Update(remoteView(p1, "player", true), true)
 	r1.Initial(nil)
 	if u := expectEvent(t, sink, "update").u; !u.ProviderID.IsEqual(p1) {
 		t.Fatalf("got %v; want the member's provider", u.ProviderID)
@@ -51,8 +51,8 @@ func TestSwarmMemberFailuresAreIncomplete(t *testing.T) {
 	st, _ := e.discoverSwarm(astral.GenerateIdentity(), true, sink, []*astral.Identity{astral.GenerateIdentity(), astral.GenerateIdentity()}, "player", "wallet")
 	defer st.Close()
 
-	st.Remotes()[0].Initial([]string{"wallet"})
-	st.Remotes()[1].Lost()
+	st.Contributions()[0].Initial([]string{"wallet"})
+	st.Contributions()[1].Lost()
 	b := expectEvent(t, sink, "boundary")
 	if b.inc == nil || len(b.inc.Services) != 2 {
 		t.Fatalf("incomplete %+v; want player and wallet", b.inc)
@@ -82,13 +82,13 @@ func TestSwarmLossRetractsTheMembersOfferings(t *testing.T) {
 	sink := newSink()
 	st, _ := e.discoverSwarm(astral.GenerateIdentity(), true, sink, []*astral.Identity{astral.GenerateIdentity()}, "player")
 	defer st.Close()
-	r := st.Remotes()[0]
+	r := st.Contributions()[0]
 
 	answer(t, src, expectAsk(t, tr), true)
 	expectEvent(t, sink, "update")
 	shown, hidden := astral.GenerateIdentity(), astral.GenerateIdentity()
-	r.Offer(remoteView(shown, "player", true))
-	r.Offer(remoteView(hidden, "player", false)) // never introduced: suppressed
+	r.Update(remoteView(shown, "player", true), true)
+	r.Update(remoteView(hidden, "player", false), true) // never introduced: suppressed
 	r.Initial(nil)
 	expectEvent(t, sink, "update")
 	expectEvent(t, sink, "boundary")
@@ -99,7 +99,7 @@ func TestSwarmLossRetractsTheMembersOfferings(t *testing.T) {
 		t.Fatalf("removed %+v; want only the member's shown offering", rm.Offerings)
 	}
 
-	r.Offer(remoteView(shown, "player", true))
+	r.Update(remoteView(shown, "player", true), true)
 	if u := expectEvent(t, sink, "update").u; !u.ProviderID.IsEqual(shown) {
 		t.Fatal("a restored member's offering did not reach the follow")
 	}
@@ -113,11 +113,11 @@ func TestSwarmRemoveAndUnrequestedViews(t *testing.T) {
 	sink := newSink()
 	st, _ := e.discoverSwarm(astral.GenerateIdentity(), true, sink, []*astral.Identity{astral.GenerateIdentity(), astral.GenerateIdentity()}, "player")
 	defer st.Close()
-	r1, r2 := st.Remotes()[0], st.Remotes()[1]
+	r1, r2 := st.Contributions()[0], st.Contributions()[1]
 	p := astral.GenerateIdentity()
 
-	r1.Offer(remoteView(p, "player", true))
-	r1.Offer(remoteView(p, "wallet", true))
+	r1.Update(remoteView(p, "player", true), true)
+	r1.Update(remoteView(p, "wallet", true), true)
 	r1.Initial(nil)
 	r2.Initial(nil)
 	expectEvent(t, sink, "update")
@@ -140,7 +140,7 @@ func TestSwarmStreamCloseSignalsDone(t *testing.T) {
 	default:
 		t.Fatal("Done is open after Close")
 	}
-	st.Remotes()[0].Offer(remoteView(astral.GenerateIdentity(), "player", true))
-	st.Remotes()[0].Lost()
+	st.Contributions()[0].Update(remoteView(astral.GenerateIdentity(), "player", true), true)
+	st.Contributions()[0].Lost()
 	e.invariants()
 }

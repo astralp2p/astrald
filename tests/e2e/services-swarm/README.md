@@ -5,7 +5,7 @@ which evaluates its providers for the app.
 
 - **env** node · **start** `two-nodes` · **saves** —
 - **driver** `script.py` — runs `driver/` (Go, this repository's astral-go)
-  in `drive` mode: scope refusal, local reach, a two-service binding, swarm
+  in `drive` mode: a private member provider filtered beyond the app's scope, local reach, a two-service binding, swarm
   one-shot and follow, Change, a member provider's loss and return, a silent
   provider's incomplete outcome, and an unregistered service's bare `eos`.
 - **oracle** `verify.py` — every step held, plus one independent swarm round

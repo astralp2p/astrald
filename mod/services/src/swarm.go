@@ -21,20 +21,31 @@ const (
 	carryRetryMax   = time.Minute
 )
 
+// memberCarry is one swarm member's part of a discovery: the contribution it
+// feeds, the view that filters it for the caller, and the services and follow
+// flag it asks the member for.
+type memberCarry struct {
+	contribution *coordinator.Contribution
+	view         *callerView
+	names        []string // nil asks for every service
+	follow       bool
+}
+
 // carry feeds one swarm member's contribution to a stream: the member's own
-// discovery for app, asked by this node naming app in for. With follow it
-// restores the contribution after a loss for as long as ctx lasts.
-func (mod *Module) carry(ctx *astral.Context, r *coordinator.Remote, app *astral.Identity, names []string, follow bool) {
+// discovery for the caller, asked by this node naming the caller in for. With
+// follow it restores the contribution after a loss for as long as ctx lasts.
+func (mod *Module) carry(ctx *astral.Context, c memberCarry) {
+	r := c.contribution
 	delay := carryRetryFirst
 	for {
 		// why: register for the link event before asking, so a link created
 		// while the member is being asked is not missed.
 		linked := mod.links.wait(r.Member())
-		initial, err := mod.carryOnce(ctx, r, app, names, follow)
+		initial, err := mod.carryOnce(ctx, c)
 		if ctx.Err() != nil {
 			return
 		}
-		if !follow {
+		if !c.follow {
 			if err != nil && !initial {
 				r.Lost()
 			}
@@ -57,12 +68,14 @@ func (mod *Module) carry(ctx *astral.Context, r *coordinator.Remote, app *astral
 
 // carryOnce runs one discovery on the member until it ends, and reports
 // whether the member's initial outcome arrived.
-func (mod *Module) carryOnce(ctx *astral.Context, r *coordinator.Remote, app *astral.Identity, names []string, follow bool) (bool, error) {
+func (mod *Module) carryOnce(ctx *astral.Context, c memberCarry) (bool, error) {
+	r := c.contribution
 	ctx = ctx.IncludeZone(astral.ZoneNetwork)
-	mod.pushRelayContract(ctx, app, r.Member())
+	caller := c.view.caller
+	mod.pushRelayContract(ctx, caller, r.Member())
 
 	client := servicescli.New(r.Member(), core.NewClientAs(mod.node, mod.node.Identity()))
-	events, err := client.DiscoverFor(ctx, app, names, follow)
+	events, err := client.DiscoverForTagged(ctx, caller, c.names, c.follow)
 	if err != nil {
 		return false, err
 	}
@@ -71,7 +84,10 @@ func (mod *Module) carryOnce(ctx *astral.Context, r *coordinator.Remote, app *as
 	for ev := range events {
 		switch {
 		case ev.Update != nil:
-			r.Offer(ev.Update)
+			// why: a member that predates visibility ignores tagged and sends
+			// plain updates, which count as open.
+			open := ev.Open == nil || *ev.Open
+			r.Update(ev.Update, c.view.sees(ctx, string(ev.Update.Name), r.Member(), open))
 		case ev.Removed != nil:
 			r.Remove(ev.Removed)
 		case ev.Initial != nil:

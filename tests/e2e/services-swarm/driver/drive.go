@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/astralp2p/astral-go/api/services"
@@ -48,9 +49,10 @@ func scenarios(w *world, facts map[string]bool) error {
 		return err
 	}
 	defer p1.Close()
-	// node2: one player.
+	// node2: one private player, so the app's discovery scope decides whether
+	// the app sees it.
 	remote := &evaluated{}
-	b2, err := c2.Advertise(w.ctx, []string{"player"}, remote.offer)
+	b2, err := c2.AdvertiseOpen(w.ctx, []string{"player"}, false, remote.offer)
 	if err != nil {
 		return err
 	}
@@ -59,7 +61,8 @@ func scenarios(w *world, facts map[string]bool) error {
 		return err
 	}
 	r := oneShot(f.DiscoverIn(w.ctx, services.ReachSwarm, []string{"player"}, false))
-	if err := step(facts, "swarm_refused_beyond_scope", expect(r.err != nil, "a discovery beyond the app's scope was answered: %v", r.providers)); err != nil {
+	beyond := r.complete() && len(r.providers) == 1 && strings.HasSuffix(r.providers[0], "/player") && keys(r.notGranted...) == "player"
+	if err := step(facts, "swarm_filtered_beyond_scope", expect(beyond, "a discovery beyond the app's scope on node2: %+v; want node1's player alone, player not granted", r)); err != nil {
 		return err
 	}
 
@@ -115,7 +118,7 @@ func follow(w *world, f *servicescli.Client, fc followCtx) error {
 	if err := step(fc.facts, "member_provider_loss_removes", holdsN(watch, 2)); err != nil {
 		return err
 	}
-	b2, err := fc.c2.Advertise(w.ctx, []string{"player"}, fc.remote.offer)
+	b2, err := fc.c2.AdvertiseOpen(w.ctx, []string{"player"}, false, fc.remote.offer)
 	if err != nil {
 		return err
 	}

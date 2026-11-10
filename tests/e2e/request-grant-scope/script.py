@@ -40,10 +40,14 @@ async def answer(client, qs: str, body: dict | None = None) -> str:
 
 
 async def discover(app, service: str) -> str:
-    """`admitted` when services.discover answers no error, else its error."""
+    """`granted` when services.discover reports service granted, `not granted`
+    when its services.not_granted names it, else the error it answers."""
     docs = await jsonops.call(app, f"services.discover?services={service}&out=json")
     errors = [d["Object"] for d in docs if d["Type"] == "error_message"]
-    return errors[0] if errors else "admitted"
+    if errors:
+        return errors[0]
+    denied = [s for d in docs if d["Type"] == "services.not_granted" for s in d["Object"]["Services"]]
+    return "not granted" if service in denied else "granted"
 
 
 async def grants(admin, app_id: str) -> list:

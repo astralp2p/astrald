@@ -11,7 +11,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"strings"
 
 	"github.com/astralp2p/astral-go/api/services"
 	"github.com/astralp2p/astral-go/astral"
@@ -78,14 +77,16 @@ func story(path string, facts map[string]bool) error {
 		return err
 	}
 
-	// a stranger: an app on node1 with no discovery grant
+	// a stranger: an app on node1 with no discovery grant. node1 has no swarm,
+	// so the stranger is no swarm caller and sees nothing, open providers
+	// included; the stream names the service it is not granted.
 	stranger, err := register(ctx, n1)
 	if err != nil {
 		return err
 	}
 	d = discoverOnce(ctx, stranger, services.ReachLocal, service)
-	refused := d.err != nil && strings.Contains(d.err.Error(), "not permitted to discover") && len(d.providers) == 0
-	if err := step(facts, "stranger_refused", refused, "discovery without a grant: providers %v, err %v; want a refusal", d.providers, d.err); err != nil {
+	filtered := d.complete() && len(d.providers) == 0 && len(d.notGranted) == 1 && d.notGranted[0] == service
+	if err := step(facts, "stranger_filtered", filtered, "discovery without a grant: providers %v, not granted %v, err %v; want nothing, %q not granted", d.providers, d.notGranted, d.err, service); err != nil {
 		return err
 	}
 	return nil

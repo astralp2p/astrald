@@ -20,6 +20,8 @@ type output struct {
 	kind       outKind
 	key        offeringKey
 	view       *services.Update
+	tagged     bool // write view as a services.tagged_update
+	open       bool // with tagged: the provider's visibility when the view is written
 	removed    []offeringKey
 	incomplete *services.Incomplete
 }
@@ -37,7 +39,7 @@ func (st *Stream) Run(sink Sink) error {
 			c.mu.Unlock()
 			return nil
 		}
-		out := st.next()
+		out := st.nextOutput()
 		c.mu.Unlock()
 
 		if out.kind == outNone {
@@ -53,7 +55,7 @@ func (st *Stream) Run(sink Sink) error {
 			c.mu.Unlock()
 			return err
 		}
-		done := st.sent(out)
+		done := st.markWritten(out)
 		c.mu.Unlock()
 		if done {
 			return nil
@@ -61,12 +63,12 @@ func (st *Stream) Run(sink Sink) error {
 	}
 }
 
-// next picks what to send: removals, then the boundary once nothing owed is
-// left, then views in first-pending order.
-func (st *Stream) next() output {
-	if len(st.removed) > 0 {
-		keys := make([]offeringKey, 0, len(st.removed))
-		for k := range st.removed {
+// nextOutput picks what to send: removals, then the boundary once nothing it
+// waits for is left, then views in first-unsent order.
+func (st *Stream) nextOutput() output {
+	if len(st.unsentRemovals) > 0 {
+		keys := make([]offeringKey, 0, len(st.unsentRemovals))
+		for k := range st.unsentRemovals {
 			keys = append(keys, k)
 		}
 		sort.Slice(keys, func(i, j int) bool {
@@ -74,21 +76,28 @@ func (st *Stream) next() output {
 		})
 		return output{kind: outRemoved, removed: keys}
 	}
-	if at := st.attempt; at != nil && at.resolved && len(at.owed) == 0 {
+	if at := st.attempt; at != nil && at.resolved && len(at.unsentAtBoundary) == 0 {
 		return output{kind: outBoundary, incomplete: at.incomplete()}
 	}
-	if len(st.queue) > 0 {
-		k := st.queue[0]
-		st.queue = st.queue[1:]
-		v := st.pending[k]
-		delete(st.pending, k)
+	if len(st.sendOrder) > 0 {
+		k := st.sendOrder[0]
+		st.sendOrder = st.sendOrder[1:]
+		v := st.unsent[k]
+		delete(st.unsent, k)
 		st.inflight = &k
 		st.inflightAvailable = bool(v.Available)
-		return output{kind: outView, key: k, view: v}
+		out := output{kind: outView, key: k, view: v, tagged: st.tagged}
+		if st.tagged {
+			// why: the tag is read when the view is written, so a view
+			// re-evaluated after a private list change carries the new value.
+			out.open = st.c.isOpenKey(k)
+		}
+		return out
 	}
 	return output{}
 }
 
+// write sends one output to the sink.
 func (out output) write(sink Sink) error {
 	switch out.kind {
 	case outRemoved:
@@ -104,17 +113,22 @@ func (out output) write(sink Sink) error {
 	case outBoundary:
 		return sink.Boundary(out.incomplete)
 	default:
+		if out.tagged {
+			return sink.TaggedUpdate(&services.TaggedUpdate{Open: astral.Bool(out.open), Update: out.view})
+		}
 		return sink.Update(out.view)
 	}
 }
 
-// sent records a successful write and reports whether the stream is done.
-func (st *Stream) sent(out output) bool {
+// markWritten records a successful write and reports whether the stream is
+// done.
+func (st *Stream) markWritten(out output) bool {
 	switch out.kind {
 	case outRemoved:
 		for _, k := range out.removed {
-			delete(st.removed, k)
+			delete(st.unsentRemovals, k)
 			delete(st.visible, k)
+			delete(st.written, k)
 		}
 	case outView:
 		if bool(out.view.Available) {
@@ -122,8 +136,9 @@ func (st *Stream) sent(out output) bool {
 		} else {
 			delete(st.visible, out.key)
 		}
-		if st.attempt != nil && st.attempt.owed != nil {
-			delete(st.attempt.owed, out.key)
+		st.recordTagged(out)
+		if st.attempt != nil && st.attempt.unsentAtBoundary != nil {
+			delete(st.attempt.unsentAtBoundary, out.key)
 		}
 		st.inflight = nil
 	case outBoundary:
@@ -134,4 +149,20 @@ func (st *Stream) sent(out output) bool {
 		}
 	}
 	return false
+}
+
+// recordTagged keeps the last available view written to a tagged stream, and
+// re-sends it when its provider's visibility changed while it was written.
+func (st *Stream) recordTagged(out output) {
+	if !st.tagged {
+		return
+	}
+	if !bool(out.view.Available) {
+		delete(st.written, out.key)
+		return
+	}
+	st.written[out.key] = out.view
+	if out.open != st.c.isOpenKey(out.key) && st.follow {
+		st.offer(out.key, out.view)
+	}
 }

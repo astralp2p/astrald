@@ -24,7 +24,7 @@ func wireModule(verdict bool) (*Module, *recordingAuth) {
 	cfg := coordinator.DefaultConfig()
 	cfg.InitialBudget = time.Second
 	return &Module{
-		Deps:  Deps{Auth: authority},
+		Deps:  Deps{Auth: authority, Apphost: &swarmApps{}, User: &swarmUser{}},
 		node:  &serveAppsNode{id: astral.GenerateIdentity()},
 		coord: coordinator.New(cfg),
 	}, authority
@@ -192,9 +192,11 @@ func TestDiscoverOfAnUnregisteredServiceEndsAtOnce(t *testing.T) {
 	expectEnd(t, c)
 }
 
-// TestDiscoverRefusesBeforeEvaluating holds the admission rule: one service the
-// caller may not discover refuses the whole request, and no provider is asked.
-func TestDiscoverRefusesBeforeEvaluating(t *testing.T) {
+// TestDiscoverFiltersInsteadOfRefusing holds the visibility rule for a caller
+// that is not a swarm caller and holds no permit: the request is admitted, it
+// opens with every requested service not granted, providers are still asked,
+// and no offering reaches the caller.
+func TestDiscoverFiltersInsteadOfRefusing(t *testing.T) {
 	mod, authority := wireModule(true)
 	asked := make(chan struct{}, 1)
 	advertise(t, mod, "player", func(*services.Ask) *services.Update {
@@ -208,31 +210,35 @@ func TestDiscoverRefusesBeforeEvaluating(t *testing.T) {
 	caller := astral.GenerateIdentity()
 
 	c := open(t, mod.OpDiscover, caller, "services.discover?services=player,wallet", false)
-	expect[*astral.ErrorMessage](t, c)
+	ng := expect[*services.NotGranted](t, c)
+	if len(ng.Services) != 2 || ng.Services[0] != "player" || ng.Services[1] != "wallet" {
+		t.Fatalf("not granted %v; want player and wallet", ng.Services)
+	}
+	expect[*astral.EOS](t, c)
+	expectEnd(t, c)
 
-	var actions []*services.ServiceDiscoveryAction
+	checked := map[string]bool{}
 	for _, a := range authority.recorded() {
 		if d, ok := a.(*services.ServiceDiscoveryAction); ok {
-			actions = append(actions, d)
+			if !d.Actor().IsEqual(caller) || !d.NodeID.IsEqual(mod.node.Identity()) {
+				t.Fatalf("checked %+v; want the caller on this node", d)
+			}
+			checked[string(d.Service)] = true
 		}
 	}
-	if len(actions) != 1 {
-		t.Fatalf("made %d discovery checks; want 1, stopping at the first refusal", len(actions))
-	}
-	a := actions[0]
-	if !a.Actor().IsEqual(caller) || a.Service != "player" || !a.NodeID.IsEqual(mod.node.Identity()) {
-		t.Fatalf("checked %+v; want the caller discovering player on this node", a)
+	if !checked["player"] || !checked["wallet"] {
+		t.Fatalf("checked %v; want player and wallet", checked)
 	}
 
 	select {
 	case <-asked:
-		t.Fatal("a refused discovery asked the provider")
-	case <-time.After(50 * time.Millisecond):
+	case <-time.After(testWait):
+		t.Fatal("the provider was not asked; every provider is asked and the node filters")
 	}
 }
 
 func TestDiscoverRejectsAnInvalidList(t *testing.T) {
-	for _, list := range []string{"", "a,a", "a,,b"} {
+	for _, list := range []string{"a,a", "a,,b"} {
 		t.Run(list, func(t *testing.T) {
 			mod, authority := wireModule(true)
 			c := open(t, mod.OpDiscover, astral.GenerateIdentity(), "services.discover?services="+list, false)

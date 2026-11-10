@@ -10,6 +10,7 @@ import (
 
 type opAdvertiseArgs struct {
 	Services string
+	Open     *bool // nil is open
 
 	In  string
 	Out string
@@ -49,23 +50,24 @@ func (mod *Module) OpAdvertise(ctx *astral.Context, q *routing.IncomingQuery, ar
 		return ch.Send(astral.Err(err))
 	}
 
-	t := &bindingTransport{ch: ch, ready: make(chan struct{})}
-	src, err := mod.coord.Register(id, names, t)
+	transport := &bindingTransport{ch: ch, ready: make(chan struct{})}
+	open := args.Open == nil || *args.Open
+	binding, err := mod.coord.Register(id, names, open, transport)
 	if err != nil {
 		return ch.Send(astral.Err(err))
 	}
-	defer src.Close()
+	defer binding.Close()
 
 	err = ch.Send(&astral.Ack{})
-	close(t.ready)
+	close(transport.ready)
 	if err != nil {
 		return err
 	}
 
 	return ch.Switch(
 		channel.WithContext(ctx),
-		src.Answer,
-		src.Change,
+		binding.Answer,
+		binding.Change,
 	)
 }
 

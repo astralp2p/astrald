@@ -6,66 +6,69 @@ import (
 )
 
 // Answer accepts a provider's answer. An answer for no outstanding ask is
-// ignored. A malformed answer closes the source and returns ErrMalformed.
-func (src *Source) Answer(a *services.Answer) error {
-	c := src.c
+// ignored. A malformed answer closes the binding and returns ErrMalformed.
+func (b *Binding) Answer(a *services.Answer) error {
+	c := b.c
+	// why: the transport is closed outside the coordinator lock, so this
+	// function unlocks by hand instead of deferring.
 	c.mu.Lock()
-	if src.closed {
+	if b.closed {
 		c.mu.Unlock()
 		return nil
 	}
-	req := src.pending[a.RequestID]
+	req := b.inflight[a.RequestID]
 	if req == nil {
 		c.mu.Unlock()
 		return nil
 	}
-	if !src.acceptable(req, a) {
-		src.closeLocked()
+	if !b.isValidAnswer(req, a) {
+		b.closeLocked()
 		c.mu.Unlock()
-		src.t.Close()
+		b.t.Close()
 		return ErrMalformed
 	}
 
 	u := *a.Update
-	u.ProviderID = src.provider
-	src.retire(req)
-	src.deliver(req, &u)
-	for _, o := range append([]*obligation(nil), req.obls...) {
-		o.end()
-	}
-	src.schedule(req.slot)
+	u.ProviderID = b.provider
+	b.removeRequest(req)
+	b.deliver(req, &u)
+	endAll(req.evaluations)
+	b.schedule(req.slot)
 	c.mu.Unlock()
 	return nil
 }
 
-func (src *Source) acceptable(req *request, a *services.Answer) bool {
+// isValidAnswer reports whether an answer fits its ask: it carries an update
+// for the asked service and names no provider other than this binding's.
+func (b *Binding) isValidAnswer(req *request, a *services.Answer) bool {
 	switch {
 	case a.Update == nil:
 		return false
 	case string(a.Update.Name) != req.service:
 		return false
-	case a.Update.ProviderID != nil && !a.Update.ProviderID.IsZero() && !a.Update.ProviderID.IsEqual(src.provider):
+	case a.Update.ProviderID != nil && !a.Update.ProviderID.IsZero() && !a.Update.ProviderID.IsEqual(b.provider):
 		return false
 	}
 	return true
 }
 
 // deliver offers an answer to the caller's streams requesting the service. A
-// one-shot stream receives only answers to its own initial obligations.
-func (src *Source) deliver(req *request, u *services.Update) {
-	k := keyOf(src.provider, req.service)
-	for st := range src.c.byCaller[req.slot.caller.String()] {
-		if _, ok := st.services[req.service]; !ok || st.closed {
+// one-shot stream receives only answers to its own initial evaluations.
+func (b *Binding) deliver(req *request, u *services.Update) {
+	k := keyOf(b.provider, req.service)
+	for st := range b.c.byCaller[callerKey(req.slot.caller)] {
+		if !st.requests(req.service) || st.closed {
 			continue
 		}
-		if st.follow || req.owes(st) {
-			st.offer(k, u)
+		if st.follow || req.awaitedBy(st) {
+			st.offerFrom(b, req.service, k, u)
 		}
 	}
 }
 
-func (req *request) owes(st *Stream) bool {
-	for _, o := range req.obls {
+// awaitedBy reports whether the ask carries an initial evaluation of st.
+func (req *request) awaitedBy(st *Stream) bool {
+	for _, o := range req.evaluations {
 		if o.at.st == st {
 			return true
 		}
@@ -73,117 +76,135 @@ func (req *request) owes(st *Stream) bool {
 	return false
 }
 
-// Change marks the selected callers' followed services for refresh. A change
-// selecting no caller closes the source and returns ErrMalformed.
-func (src *Source) Change(ch *services.Change) error {
-	c := src.c
+// Change re-evaluates the selected callers' followed services. A change
+// selecting no caller closes the binding and returns ErrMalformed.
+func (b *Binding) Change(ch *services.Change) error {
+	c := b.c
+	// why: the transport is closed outside the coordinator lock, so this
+	// function unlocks by hand instead of deferring.
 	c.mu.Lock()
-	if src.closed {
+	if b.closed {
 		c.mu.Unlock()
 		return nil
 	}
 	if !ch.Valid() {
-		src.closeLocked()
+		b.closeLocked()
 		c.mu.Unlock()
-		src.t.Close()
+		b.t.Close()
 		return ErrMalformed
 	}
 
-	for _, caller := range src.audience(ch) {
-		src.refresh(caller)
+	for _, caller := range b.changedCallers(ch) {
+		b.reevaluateFor(caller)
 	}
 	c.mu.Unlock()
 	return nil
 }
 
-func (src *Source) audience(ch *services.Change) []*Stream {
-	var heads []*Stream
+// changedCallers lists the callers a change selects that have a stream, once
+// per selecting entry.
+func (b *Binding) changedCallers(ch *services.Change) []*astral.Identity {
+	var callers []*astral.Identity
 	if bool(ch.All) {
-		for _, streams := range src.c.byCaller {
+		for _, streams := range b.c.byCaller {
 			for st := range streams {
-				heads = append(heads, st)
+				callers = append(callers, st.caller)
 				break
 			}
 		}
-		return heads
+		return callers
 	}
 	for _, id := range ch.Callers {
-		for st := range src.c.byCaller[id.String()] {
-			heads = append(heads, st)
+		for st := range b.c.byCaller[callerKey(id)] {
+			callers = append(callers, st.caller)
 			break
 		}
 	}
-	return heads
+	return callers
 }
 
-// refresh retains refresh work for every service of the source the stream's
+// reevaluateFor queues a re-evaluation of every service of the binding that
 // caller follows.
-func (src *Source) refresh(head *Stream) {
-	ck := head.caller.String()
-	var sl *slot
-	for _, name := range src.names {
-		if !src.c.followsService(ck, name) {
+func (b *Binding) reevaluateFor(caller *astral.Identity) {
+	var sl *askSlot
+	for _, name := range b.names {
+		if !b.c.follows(caller, name) {
 			continue
 		}
 		if sl == nil {
-			sl = src.slot(head.caller)
+			sl = b.slot(caller)
 		}
-		sl.dirty[name] = struct{}{}
+		sl.reevaluate[name] = struct{}{}
 	}
 	if sl != nil {
-		src.schedule(sl)
+		b.schedule(sl)
 	}
 }
 
-// Close ends the source: pending asks retire, unresolved initial work fails,
+// Close ends the binding: outstanding asks end, unresolved initial work fails,
 // owned offerings are released, and streams that showed them get a removal.
 // Close is idempotent.
-func (src *Source) Close() {
-	c := src.c
+func (b *Binding) Close() {
+	c := b.c
+	// why: the transport is closed outside the coordinator lock, so this
+	// function unlocks by hand instead of deferring.
 	c.mu.Lock()
-	if src.closed {
+	if b.closed {
 		c.mu.Unlock()
 		return
 	}
-	src.closeLocked()
+	b.closeLocked()
 	c.mu.Unlock()
-	src.t.Close()
+	b.t.Close()
 }
 
-func (src *Source) closeLocked() {
-	c := src.c
-	src.closed = true
-	close(src.done)
+// closeLocked is Close with the coordinator lock held; the caller closes the
+// transport after unlocking.
+func (b *Binding) closeLocked() {
+	b.closed = true
+	close(b.done)
+	b.failOutstanding()
+	b.releaseNames()
+	b.retractFromStreams()
+}
 
-	for _, req := range src.pending {
+// failOutstanding fails every initial evaluation the binding still owes,
+// asked or waiting.
+func (b *Binding) failOutstanding() {
+	for _, req := range b.inflight {
 		req.timer.Stop()
-		for _, o := range append([]*obligation(nil), req.obls...) {
-			o.fail()
+		failAll(req.evaluations)
+	}
+	b.inflight = map[astral.Nonce]*request{}
+	for _, sl := range b.slots {
+		for _, waiting := range sl.waiting {
+			failAll(waiting)
 		}
 	}
-	src.pending = map[astral.Nonce]*request{}
-	for _, sl := range src.slots {
-		for _, obls := range sl.initial {
-			for _, o := range append([]*obligation(nil), obls...) {
-				o.fail()
-			}
-		}
-	}
-	src.slots = map[string]*slot{}
+	b.slots = map[string]*askSlot{}
+}
 
-	for _, name := range src.names {
-		k := keyOf(src.provider, name)
-		if c.owners[k] == src {
+// releaseNames gives up the binding's names, so a new binding may claim them.
+func (b *Binding) releaseNames() {
+	c := b.c
+	for _, name := range b.names {
+		k := keyOf(b.provider, name)
+		if c.owners[k] == b {
 			delete(c.owners, k)
 		}
-		delete(c.byName[name], src)
+		delete(c.byName[name], b)
 		if len(c.byName[name]) == 0 {
 			delete(c.byName, name)
 		}
 	}
-	for _, streams := range c.byCaller {
+}
+
+// retractFromStreams queues removals for the binding's offerings that streams
+// showed.
+func (b *Binding) retractFromStreams() {
+	for _, streams := range b.c.byCaller {
 		for st := range streams {
-			st.lose(src)
+			st.retractBinding(b)
 		}
 	}
 }

@@ -1,7 +1,7 @@
 # app-discover-local
 
 An app on node1 finds a provider app on node1 through services discovery and
-calls it; an app without a discovery grant is refused the discovery.
+calls it; an app without a discovery grant sees no offering.
 
 - **env** node · **start** fresh node1 · **saves** —
 - **driver** `script.py` — runs `driver/` (Go, this repository's pinned
@@ -17,9 +17,10 @@ calls it; an app without a discovery grant is refused the discovery.
   4. the consumer calls `echo` on the discovered provider identity with
      `msg=hello` and receives `hello` (`provider_echoed`); the provider saw
      the consumer as the caller (`provider_saw_the_consumer`);
-  5. a stranger app with no discovery grant runs the same discovery and is
-     refused with `not permitted to discover`, with no offering
-     (`stranger_refused`).
+  5. a stranger app with no discovery grant runs the same discovery. node1 has
+     no swarm, so the stranger is no swarm caller: it receives no offering,
+     a complete outcome, and `services.not_granted` naming `echo-local`
+     (`stranger_filtered`).
 - **oracle** `verify.py` — every step held, plus the whole story again with
   fresh identities (`driver verify`).
 

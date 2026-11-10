@@ -13,7 +13,8 @@ import (
 const ModuleName = "services"
 
 // writeTimeout bounds one write to a discovery consumer.
-// note: provisional value, plan §10.
+// note: provisional value; the design sets it:
+// https://wiki.satforge.dev/doc/services-api-implementation-plan-zah9USQT2q
 const writeTimeout = 10 * time.Second
 
 type Module struct {
@@ -24,12 +25,17 @@ type Module struct {
 	router routing.OpRouter
 	coord  *coordinator.Coordinator
 	links  linkWaiters
+
+	visibility visibilityConfig
 }
 
 var _ services.Module = &Module{}
 
+// Run applies every change of the private list until ctx ends.
 func (mod *Module) Run(ctx *astral.Context) error {
-	<-ctx.Done()
+	for list := range mod.visibility.Private.Follow(ctx) {
+		mod.coord.SetPrivate(list)
+	}
 	return nil
 }
 

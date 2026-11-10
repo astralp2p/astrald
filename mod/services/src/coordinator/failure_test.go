@@ -144,7 +144,7 @@ func TestReRegistration(t *testing.T) {
 	e := newEnv(t)
 	provider := astral.GenerateIdentity()
 	tr := newTransport()
-	src, err := e.c.Register(provider, []string{"player"}, tr)
+	src, err := e.c.Register(provider, []string{"player"}, true, tr)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -155,14 +155,14 @@ func TestReRegistration(t *testing.T) {
 	expectEvent(t, sink, "update")
 	expectEvent(t, sink, "boundary")
 
-	if _, err := e.c.Register(provider, []string{"player"}, newTransport()); err != ErrOwned {
+	if _, err := e.c.Register(provider, []string{"player"}, true, newTransport()); err != ErrOwned {
 		t.Fatalf("overlapping registration: %v; want ErrOwned", err)
 	}
 	src.Close()
 	expectEvent(t, sink, "removed")
 
 	tr2 := newTransport()
-	src2, err := e.c.Register(provider, []string{"player"}, tr2)
+	src2, err := e.c.Register(provider, []string{"player"}, true, tr2)
 	if err != nil {
 		t.Fatalf("re-register: %v", err)
 	}
@@ -175,30 +175,30 @@ func TestReRegistration(t *testing.T) {
 func TestRegistrationIsAtomic(t *testing.T) {
 	e := newEnv(t)
 	provider := astral.GenerateIdentity()
-	if _, err := e.c.Register(provider, []string{"player"}, newTransport()); err != nil {
+	if _, err := e.c.Register(provider, []string{"player"}, true, newTransport()); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := e.c.Register(provider, []string{"bitcoin-wallet", "player"}, newTransport()); err != ErrOwned {
+	if _, err := e.c.Register(provider, []string{"bitcoin-wallet", "player"}, true, newTransport()); err != ErrOwned {
 		t.Fatalf("got %v; want ErrOwned", err)
 	}
-	if _, err := e.c.Register(provider, []string{"bitcoin-wallet"}, newTransport()); err != nil {
+	if _, err := e.c.Register(provider, []string{"bitcoin-wallet"}, true, newTransport()); err != nil {
 		t.Fatalf("the failed attempt kept bitcoin-wallet: %v", err)
 	}
 }
 
 // Malformed provider messages fail the binding.
 func TestMalformedMessagesFailTheSource(t *testing.T) {
-	for name, send := range map[string]func(*Source, *services.Ask) error{
-		"wrong service": func(src *Source, a *services.Ask) error {
+	for name, send := range map[string]func(*Binding, *services.Ask) error{
+		"wrong service": func(src *Binding, a *services.Ask) error {
 			return src.Answer(&services.Answer{RequestID: a.RequestID, Update: &services.Update{Name: "other"}})
 		},
-		"foreign provider": func(src *Source, a *services.Ask) error {
+		"foreign provider": func(src *Binding, a *services.Ask) error {
 			return src.Answer(&services.Answer{RequestID: a.RequestID, Update: &services.Update{Name: a.Service, ProviderID: astral.GenerateIdentity()}})
 		},
-		"missing update": func(src *Source, a *services.Ask) error {
+		"missing update": func(src *Binding, a *services.Ask) error {
 			return src.Answer(&services.Answer{RequestID: a.RequestID})
 		},
-		"empty change": func(src *Source, _ *services.Ask) error {
+		"empty change": func(src *Binding, _ *services.Ask) error {
 			return src.Change(&services.Change{})
 		},
 	} {
