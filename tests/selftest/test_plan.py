@@ -266,6 +266,7 @@ class TestShippedPlans(Invariants, unittest.TestCase):
              ("local", "hold-isolation"), ("local", "indexer-cursor"),
              ("local", "repo-removal-sticks"),
              ("local", "bootstrap-user-op"),
+             ("local", "distribution-gate-setup"),
              ("local", "import-user-software-key"),
              ("local", "introduce-node"), ("vm", "nearby-relink")])
 

@@ -21,6 +21,9 @@ w2 local: bootstrap-user-software-key* → adopt-node* → swarm-roster-sync
 w3 local: bootstrap-user-software-key* → repo-removal-sticks
 w4 local: bootstrap-user-software-key* → hold-isolation
 w5 local: bootstrap-user-software-key* → indexer-cursor
-w6 local: import-user-software-key
-w7 local: bootstrap-user-op
-w8 local: introduce-node-setup → introduce-node
+w6 local: distribution-gate-setup
+          config node1.apphost.gate = {}
+          config node1.apphost.policies = {}
+w7 local: import-user-software-key
+w8 local: bootstrap-user-op
+w9 local: introduce-node-setup → introduce-node

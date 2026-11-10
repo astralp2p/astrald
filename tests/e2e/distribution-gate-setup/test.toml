@@ -1,0 +1,18 @@
+nodes    = ["node1"]
+timeout  = 180
+# why: it claims node1, as import-user-software-key does, so it needs a world
+# of its own and nothing else can follow it there
+destroys = true
+facts    = ["gate_manager_id", "gate_user_id", "gate_user_token", "gate_states",
+            "gate_probes"]
+
+# why: the harness starts every node under the E2E gate (lib/nodeconfig.py),
+# which opens a `fresh` node and lets a session without a token claim. An empty
+# `gate` and an empty `policies` replace those keys with nothing, and astrald
+# loads a config over its code defaults (mod/apphost/src/config.go
+# defaultConfig), so the node starts under the gate and the app register policy
+# a released astrald ships. The harness's token stays: the oracle and the
+# readiness check reach the node with it.
+[config.node1.apphost]
+gate     = {}
+policies = {}

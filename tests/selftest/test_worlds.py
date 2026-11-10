@@ -165,6 +165,47 @@ class TestLocalWorldConfig(unittest.TestCase):
                           views["nomcp1"]["serves_mcp"]), (True, False))
 
 
+class TestLocalNodeReadiness(unittest.TestCase):
+    def ready_query(self, ready_if):
+        """The queries wait_ready sent, against a node whose `ready_if` answers."""
+        import asyncio
+        from lib import localnode
+        from lib.localnode import LocalNode
+
+        sent = []
+
+        class Client:
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, *exc):
+                return False
+
+            async def call(self, qs, **kw):
+                sent.append(qs)
+                if qs != ready_if:
+                    raise localnode.astral.AstralError("denied")
+                return [object()]
+
+        async def connect(endpoint, **kw):
+            return Client()
+
+        with tempfile.TemporaryDirectory() as tmp:
+            node = LocalNode("n", Path(tmp), Path("astrald"),
+                             PortSpan(20800, 20).ports(0))
+            node.proc = SimpleNamespace(poll=lambda: None)
+            node.identity = "id"
+            with mock.patch.object(localnode.astral, "connect", connect):
+                asyncio.run(node.wait_ready(timeout=2.0))
+        return sent
+
+    def test_a_node_is_ready_when_it_answers_dot_spec(self):
+        # why: the shipped apphost gate admits `.spec` in every state and
+        # shell.spec only on a claimed node, so a node started under the
+        # shipped gate (distribution-gate-setup) is never ready by shell.spec
+        self.assertEqual(self.ready_query(".spec"), [".spec"])
+
+
 class StartsNothing:
     """A LocalNode that records its start and stop and runs no daemon."""
     started: list = []
