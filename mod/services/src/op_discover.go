@@ -51,13 +51,13 @@ func (mod *Module) OpDiscover(ctx *astral.Context, q *routing.IncomingQuery, arg
 
 	// fixme: authorization is checked at admission only; a follow outlives a
 	// revoked or narrowed grant.
-	st := mod.coord.Discover(d.app, d.names, args.Follow, d.members)
+	st := mod.coord.Discover(d.caller, d.names, args.Follow, d.members)
 	defer st.Close()
 
 	ctx, cancel := ctx.WithCancel()
 	defer cancel()
 	for _, r := range st.Contributions() {
-		go mod.carry(ctx, r, d.app, d.names, args.Follow)
+		go mod.carry(ctx, r, d.caller, d.names, args.Follow)
 	}
 
 	go func() {
@@ -85,7 +85,7 @@ func (mod *Module) OpDiscover(ctx *astral.Context, q *routing.IncomingQuery, arg
 // discovery is an admitted request: the identity providers evaluate, the
 // services, and the swarm members that carry it.
 type discovery struct {
-	app     *astral.Identity
+	caller  *astral.Identity
 	names   []string
 	members []*astral.Identity
 }
@@ -103,10 +103,10 @@ func (mod *Module) admitDiscovery(ctx *astral.Context, q *routing.IncomingQuery,
 	self := mod.node.Identity()
 
 	if args.For != "" {
-		return mod.admitFor(ctx, q, args.For, reach, names)
+		return mod.admitCarry(ctx, q, args.For, reach, names)
 	}
 
-	d := &discovery{app: q.Caller(), names: names}
+	d := &discovery{caller: q.Caller(), names: names}
 	nodeIDs := []*astral.Identity{self}
 	if reach == services.ReachSwarm {
 		// why: an app asks its own node; a node asked over a link answers
@@ -117,7 +117,7 @@ func (mod *Module) admitDiscovery(ctx *astral.Context, q *routing.IncomingQuery,
 		d.members = mod.swarmMembers()
 		nodeIDs = append(nodeIDs, d.members...)
 	}
-	if err := mod.authorizeDiscovery(ctx, d.app, names, nodeIDs); err != nil {
+	if err := mod.authorizeDiscovery(ctx, d.caller, names, nodeIDs); err != nil {
 		return nil, err
 	}
 	return d, nil
@@ -125,7 +125,7 @@ func (mod *Module) admitDiscovery(ctx *astral.Context, q *routing.IncomingQuery,
 
 // admitFor admits a swarm member's query carrying an app's discovery: the
 // sending node must represent the app and may discover the services here.
-func (mod *Module) admitFor(ctx *astral.Context, q *routing.IncomingQuery, forArg string, reach services.Reach, names []string) (*discovery, error) {
+func (mod *Module) admitCarry(ctx *astral.Context, q *routing.IncomingQuery, forArg string, reach services.Reach, names []string) (*discovery, error) {
 	if q.Origin() != astral.OriginNetwork {
 		return nil, errForOverLink
 	}
@@ -142,7 +142,7 @@ func (mod *Module) admitFor(ctx *astral.Context, q *routing.IncomingQuery, forAr
 	if err := mod.authorizeDiscovery(ctx, q.Caller(), names, []*astral.Identity{mod.node.Identity()}); err != nil {
 		return nil, err
 	}
-	return &discovery{app: app, names: names}, nil
+	return &discovery{caller: app, names: names}, nil
 }
 
 // authorizeDiscovery checks the actor may discover every named service on

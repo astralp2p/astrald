@@ -14,21 +14,21 @@ func (mod *Module) RegisterNative(names []string, e servicesmod.Evaluator) (serv
 		}
 	}
 
-	t := &nativeTransport{eval: e, ready: make(chan struct{})}
-	src, err := mod.coord.Register(mod.node.Identity(), names, t)
+	transport := &nativeTransport{eval: e, ready: make(chan struct{})}
+	binding, err := mod.coord.Register(mod.node.Identity(), names, transport)
 	if err != nil {
 		return nil, err
 	}
-	t.src = src
-	close(t.ready)
+	transport.binding = binding
+	close(transport.ready)
 
-	return &nativeRegistration{src: src}, nil
+	return &nativeRegistration{binding: binding}, nil
 }
 
 // nativeTransport answers each ask in-process from an Evaluator.
 type nativeTransport struct {
-	eval servicesmod.Evaluator
-	src  *coordinator.Binding
+	eval    servicesmod.Evaluator
+	binding *coordinator.Binding
 	// why: Register can queue asks for existing followers before it returns
 	// the source; ready holds them until src is set.
 	ready chan struct{}
@@ -44,19 +44,19 @@ func (t *nativeTransport) Send(ask *services.Ask) error {
 	u.Name = ask.Service
 	u.ProviderID = nil
 
-	return t.src.Answer(&services.Answer{RequestID: ask.RequestID, Update: &u})
+	return t.binding.Answer(&services.Answer{RequestID: ask.RequestID, Update: &u})
 }
 
 func (t *nativeTransport) Close() {}
 
 type nativeRegistration struct {
-	src *coordinator.Binding
+	binding *coordinator.Binding
 }
 
 func (r *nativeRegistration) Changed() {
-	_ = r.src.Change(&services.Change{All: true})
+	_ = r.binding.Change(&services.Change{All: true})
 }
 
 func (r *nativeRegistration) Close() {
-	r.src.Close()
+	r.binding.Close()
 }
