@@ -67,6 +67,8 @@ func (mod *Module) OpDiscover(ctx *astral.Context, q *routing.IncomingQuery, arg
 	return st.Run(&channelSink{ch: ch})
 }
 
+// closeWhenConsumerLeaves closes the stream once the consumer closes its end of
+// the channel.
 func closeWhenConsumerLeaves(ch *channel.Channel, st *coordinator.Stream) {
 	// why: the consumer sends nothing; a read ending is how the node learns
 	// the consumer closed the stream.
@@ -78,6 +80,7 @@ func closeWhenConsumerLeaves(ch *channel.Channel, st *coordinator.Stream) {
 	}
 }
 
+// closeOnCancel closes the stream when the op's context ends first.
 func closeOnCancel(ctx *astral.Context, st *coordinator.Stream) {
 	select {
 	case <-ctx.Done():
@@ -86,8 +89,8 @@ func closeOnCancel(ctx *astral.Context, st *coordinator.Stream) {
 	}
 }
 
-// discovery is an admitted request: the identity providers evaluate, the
-// services, and the swarm members that carry it.
+// discovery is an admitted request: the caller providers evaluate, which may
+// be an app or the user, the services, and the swarm members that carry it.
 type discovery struct {
 	caller  *astral.Identity
 	names   []string
@@ -127,7 +130,7 @@ func (mod *Module) admitDiscovery(ctx *astral.Context, q *routing.IncomingQuery,
 	return d, nil
 }
 
-// admitFor admits a swarm member's query carrying an app's discovery: the
+// admitCarry admits a swarm member's query carrying an app's discovery: the
 // sending node must represent the app and may discover the services here.
 func (mod *Module) admitCarry(ctx *astral.Context, q *routing.IncomingQuery, forArg string, reach services.Reach, names []string) (*discovery, error) {
 	if q.Origin() != astral.OriginNetwork {

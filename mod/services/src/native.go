@@ -30,7 +30,7 @@ type nativeTransport struct {
 	eval    servicesmod.Evaluator
 	binding *coordinator.Binding
 	// why: Register can queue asks for existing followers before it returns
-	// the source; ready holds them until src is set.
+	// the binding; ready holds them until binding is set.
 	ready chan struct{}
 }
 

@@ -13,7 +13,8 @@ import (
 const ModuleName = "services"
 
 // writeTimeout bounds one write to a discovery consumer.
-// note: provisional value, plan §10.
+// note: provisional value; the design sets it:
+// https://wiki.satforge.dev/doc/services-api-implementation-plan-zah9USQT2q
 const writeTimeout = 10 * time.Second
 
 type Module struct {

@@ -21,6 +21,8 @@ const (
 	carryRetryMax   = time.Minute
 )
 
+// memberCarry is one swarm member's part of a discovery: the contribution it
+// feeds, and the caller, services and follow flag it asks the member for.
 type memberCarry struct {
 	contribution *coordinator.Contribution
 	caller       *astral.Identity
@@ -29,8 +31,8 @@ type memberCarry struct {
 }
 
 // carry feeds one swarm member's contribution to a stream: the member's own
-// discovery for app, asked by this node naming app in for. With follow it
-// restores the contribution after a loss for as long as ctx lasts.
+// discovery for the caller, asked by this node naming the caller in for. With
+// follow it restores the contribution after a loss for as long as ctx lasts.
 func (mod *Module) carry(ctx *astral.Context, c memberCarry) {
 	r := c.contribution
 	delay := carryRetryFirst
