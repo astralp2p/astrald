@@ -1,0 +1,3 @@
+nodes   = ["node1", "node2", "sdstranger"]
+after   = "adopt-node"
+facts   = ["disclosed"]
