@@ -2,11 +2,12 @@ w0 local:  smoke → mcp-origin → claim-window → admission-policies
            → token-less-setup → manager-setup → signer-app → messaging-ops
            → app-discover-local → app-handler-unroute → app-call-local
            → app-routing-two-apps → app-op-surface
-           → bootstrap-user-software-key → policy-delegate → fs-watch
-           → registration-lease → app-index-provider → app-describe-provider
-           → app-search-provider → adopt-node → object-store → app-query
-           → blueprints-two-node → apphost-origin → sign-contract-guard
-           → messaging-two-node → mcp-peer → services-swarm → services-app-call
+           → bootstrap-user-software-key → app-token-lifecycle
+           → policy-delegate → fs-watch → registration-lease
+           → app-index-provider → app-describe-provider → app-search-provider
+           → adopt-node → object-store → app-query → blueprints-two-node
+           → apphost-origin → sign-contract-guard → messaging-two-node
+           → mcp-peer → services-swarm → services-app-call
            → services-advertise-identity → app-searcher-swarm → app-finder-read
            → app-two-providers → services-provider-gone → app-discover-follow
            → app-discover-swarm → app-ping-pong → app-call-remote
