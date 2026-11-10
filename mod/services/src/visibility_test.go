@@ -320,3 +320,67 @@ func TestPrivateListChangeOnAMemberRetagsItsFollow(t *testing.T) {
 		t.Fatalf("removed %v; want the player", r.Offerings)
 	}
 }
+
+// Who sees open offerings: a swarm app, the user and a swarm node; never the
+// node itself, the zero identity, or an identity outside the swarm.
+func TestIsSwarmCaller(t *testing.T) {
+	v := newVisibilitySwarm()
+	usr := astral.GenerateIdentity()
+	v.a.User.(*swarmUser).user = usr
+	ctx := astral.NewContext(nil)
+	for _, tc := range []struct {
+		name string
+		id   *astral.Identity
+		want bool
+	}{
+		{"swarm app", v.app, true},
+		{"user", usr, true},
+		{"swarm node", v.b.node.Identity(), true},
+		{"this node", v.a.node.Identity(), false},
+		{"zero", &astral.Identity{}, false},
+		{"nil", nil, false},
+		{"stranger", astral.GenerateIdentity(), false},
+	} {
+		if got := v.a.isSwarmCaller(ctx, tc.id); got != tc.want {
+			t.Errorf("%s: %v, want %v", tc.name, got, tc.want)
+		}
+	}
+	v.a.User.(*swarmUser).user = &astral.Identity{}
+	if v.a.isSwarmCaller(ctx, astral.GenerateIdentity()) {
+		t.Error("a node without a user makes a stranger a swarm caller")
+	}
+}
+
+// Run applies every change of the private list in the tree value.
+func TestRunAppliesThePrivateList(t *testing.T) {
+	v := newVisibilitySwarm()
+	advertise(t, v.a, "player", available)
+	ctx, cancel := astral.NewContext(nil).WithCancel()
+	defer cancel()
+	ran := make(chan error, 1)
+	go func() { ran <- v.a.Run(ctx) }()
+
+	if err := v.a.visibility.Private.Set(ctx, &services.PrivateList{Entries: []*services.PrivateEntry{{Service: "player"}}}); err != nil {
+		t.Fatal(err)
+	}
+	deadline := time.Now().Add(testWait)
+	for {
+		offered, _ := collect(t, open(t, v.a.OpDiscover, v.app, "services.discover", false))
+		if len(offered) == 0 {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("offered %v; Run did not apply the private list", offered)
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	cancel()
+	select {
+	case err := <-ran:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-time.After(testWait):
+		t.Fatal("Run outlived its context")
+	}
+}

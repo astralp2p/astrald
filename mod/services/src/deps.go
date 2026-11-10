@@ -35,6 +35,11 @@ func (mod *Module) LoadDependencies(ctx *astral.Context) error {
 	if err := core.Inject(mod.node, &mod.Deps); err != nil {
 		return err
 	}
+	return mod.bindVisibility(ctx)
+}
+
+// bindVisibility binds the private list in the tree and applies it.
+func (mod *Module) bindVisibility(ctx *astral.Context) error {
 	if err := tree.BindPath(ctx, &mod.visibility, mod.Tree.Root(), visibilityPath, true); err != nil {
 		return err
 	}
