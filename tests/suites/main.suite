@@ -48,6 +48,7 @@ app-two-providers
 services-provider-gone
 app-discover-follow
 app-discover-swarm
+app-preexisting-provider-sync
 app-discover-local
 app-ping-pong
 app-call-remote
