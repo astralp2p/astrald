@@ -14,8 +14,9 @@ w0 local:  smoke → mcp-origin → claim-window → admission-policies
            → app-two-providers → services-provider-gone → app-discover-follow
            → app-discover-swarm → app-ping-pong → app-call-remote
            → app-reject-code → app-op-surface-remote → request-grant-scope
-           → swarm-authz-matrix → services-swarm-outcome-rules
-           → object-store-peer → read-remote-peer → read-swarm → discover-swarm
+           → swarm-authz-matrix → stranger-disclosure
+           → services-swarm-outcome-rules → object-store-peer
+           → read-remote-peer → read-swarm → discover-swarm
            → adopt-claimed-node-setup → adopt-claimed-node → expel-node
            config admitter.apphost.policies = {"app_register": "reject_all"}
            config admitter.user.policies = {"swarm_join": "reject_all", "swarm_invite": "accept_all"}
