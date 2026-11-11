@@ -38,4 +38,5 @@ w10 local: distribution-gate-setup
            config node1.apphost.policies = {}
 w11 local: import-user-software-key
 w12 local: bootstrap-user-op
-w13 local: introduce-node-setup → introduce-node
+w13 local: bootstrap-passphrase
+w14 local: introduce-node-setup → introduce-node

@@ -16,6 +16,7 @@ bootstrap-user-software-key
 claimed-node-keeps-owner
 import-user-software-key
 bootstrap-user-op
+bootstrap-passphrase
 app-token-lifecycle
 policy-delegate
 adopt-node

@@ -269,6 +269,7 @@ class TestShippedPlans(Invariants, unittest.TestCase):
              ("local", "blueprint-survives-restart"),
              ("local", "hold-isolation"), ("local", "indexer-cursor"),
              ("local", "repo-removal-sticks"),
+             ("local", "bootstrap-passphrase"),
              ("local", "bootstrap-user-op"),
              ("local", "distribution-gate-setup"),
              ("local", "import-user-software-key"),
