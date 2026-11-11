@@ -1,0 +1,4 @@
+nodes   = ["acn-b1", "acn-b2"]
+timeout = 180
+after   = "object-store-peer"
+facts   = ["acn_user_id", "acn_user_token", "acn_contract_id"]
