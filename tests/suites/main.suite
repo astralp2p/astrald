@@ -21,6 +21,7 @@ bootstrap-passphrase
 app-token-lifecycle
 policy-delegate
 adopt-node
+adopt-refusals
 introduce-node-setup
 introduce-node
 fs-watch
