@@ -27,24 +27,25 @@ w0 local:  smoke → mcp-origin → claim-window → admission-policies
            config mai-decline.apphost.policies = {}
            config node1.apphost.gate = {"tokenless": ["apphost.register", "user.info", "user.derive_identity", "user.bootstrap", "user.join"], "states": {"fresh": ["*"], "unclaimed": ["*"]}}
            config nomcp1.mcp.bind_mcp = ""
-w1 local:  bootstrap-user-software-key* → adopt-node* → hold-purge
-w2 local:  bootstrap-user-software-key* → adopt-node* → swarm-roster-sync
+w1 local:  bootstrap-user-software-key* → adopt-node* → expel-authority
+w2 local:  bootstrap-user-software-key* → adopt-node* → hold-purge
+w3 local:  bootstrap-user-software-key* → adopt-node* → swarm-roster-sync
            → expel-propagation
-w3 local:  bootstrap-user-software-key* → adopt-node* → swarm-roster-sync*
+w4 local:  bootstrap-user-software-key* → adopt-node* → swarm-roster-sync*
            → swarm-member-restart
-w4 local:  bootstrap-user-software-key* → adopt-node* → two-swarms-side-by-side
-w5 local:  bootstrap-user-software-key* → adopt-node* → join-via-member
-w6 local:  bootstrap-user-software-key* → adopt-node*
+w5 local:  bootstrap-user-software-key* → adopt-node* → two-swarms-side-by-side
+w6 local:  bootstrap-user-software-key* → adopt-node* → join-via-member
+w7 local:  bootstrap-user-software-key* → adopt-node*
            → app-node-restart-reconnect
-w7 local:  bootstrap-user-software-key* → adopt-node* → services-node-restart
-w8 local:  bootstrap-user-software-key* → repo-removal-sticks
-w9 local:  bootstrap-user-software-key* → hold-isolation
-w10 local: bootstrap-user-software-key* → indexer-cursor
-w11 local: bootstrap-user-software-key* → blueprint-survives-restart
-w12 local: distribution-gate-setup
+w8 local:  bootstrap-user-software-key* → adopt-node* → services-node-restart
+w9 local:  bootstrap-user-software-key* → repo-removal-sticks
+w10 local: bootstrap-user-software-key* → hold-isolation
+w11 local: bootstrap-user-software-key* → indexer-cursor
+w12 local: bootstrap-user-software-key* → blueprint-survives-restart
+w13 local: distribution-gate-setup
            config node1.apphost.gate = {}
            config node1.apphost.policies = {}
-w13 local: import-user-software-key
-w14 local: bootstrap-user-op
-w15 local: bootstrap-passphrase
-w16 local: introduce-node-setup → introduce-node
+w14 local: import-user-software-key
+w15 local: bootstrap-user-op
+w16 local: bootstrap-passphrase
+w17 local: introduce-node-setup → introduce-node
