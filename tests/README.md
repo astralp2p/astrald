@@ -39,7 +39,8 @@ nodes      = ["node1", "node2"]     # the roster: names this test's nodes
 after      = "adopt-node"           # the test whose world this one continues; absent: a root test
 destroys   = true                   # only this test's descendants may follow it in its world
 local_only = "reads a node root"    # it needs the host, so it never enters a VM world
-restart    = ["node1"]              # nodes restarted between driver and oracle (local worlds only)
+restart    = ["node1"]              # nodes restarted between driver and oracle (local worlds only);
+#                                   # an app that must survive it: Long-lived apps
 stop       = ["node1"]              # nodes stopped for good between driver and oracle (local or Docker worlds); implies destroys
 facts      = ["object_id"]          # the facts its driver writes
 timeout    = 180                    # the driver's and the oracle's budget, in seconds (default 120)
@@ -273,6 +274,55 @@ same way in both:
 Under `--driver agent` the selected tests are operator-driven and their
 prereqs run by script; `--prereqs agent` hands the prereqs to the operator
 too.
+
+## Long-lived apps
+
+A driver's own processes end with it, and a manifest's `restart` restarts
+nodes between the driver and the oracle. A test about an app that must
+outlive a node restart starts it with `lib/apps.py` instead; the first user is
+`app-node-restart-reconnect`.
+
+```python
+from lib import apps
+
+binary = apps.build_go("tests/e2e/my-test/driver")      # go build into the world's bin/
+app = apps.spawn("my-test-provider", [binary, "serve"],  # a name unique in the world
+                 env={"APP_NODE_ENDPOINT": node["endpoint"],
+                      "APP_NODE_TOKEN": node["token"]})  # secrets go in env, not argv
+state = app.wait_state(lambda s: s.get("attaches", 0) >= 1, timeout=30)
+# ... the driver ends; the world restarts a node; in the oracle:
+app = apps.get("my-test-provider")
+assert app.alive() and app.state()["pid"] == app.pid
+app.stop()
+```
+
+| call | does |
+|------|------|
+| `build_go(package, name=None)` | builds a Go package of this repository, a path as `go build` takes it, into the world's `bin/`; returns the binary |
+| `spawn(name, argv, env=None, cwd=None)` | starts `argv` detached, in a session of its own, and returns an `App`; `AppError` when `name` still runs |
+| `get(name)` | the `App` an earlier script of the world spawned, running or not |
+| `App.alive()` / `.pid` / `.log` | whether the same process runs (pid and kernel start time, so a reused pid is not it) / its pid / its stdout and stderr file |
+| `App.state()` / `.wait_state(ready, timeout)` | the JSON the app last wrote to `$ASTRAL_TESTS_APP_STATE` (`{}` before it wrote one) / waits for `ready(state)`; `AppError` with the log's tail when the app dies first or time runs out |
+| `App.stop(grace=8)` | SIGTERM to the app's process group, SIGKILL after `grace` s; stopping a stopped app is no error |
+| `stop_all()` / `reap(dir)` | stops every app of the world / of directory `dir` (what the runner calls) |
+
+The app finds its state file in `ASTRAL_TESTS_APP_STATE` and rewrites the whole
+file, by rename, whenever it has news: readiness, what it served, errors it
+saw. That file is how the oracle observes the app's side without a protocol.
+
+The runner sets `ASTRAL_TESTS_APPS` for every driver and oracle step to
+`results/<stamp>/<world>/apps/`, one directory per world: `<name>.app.json`
+(pid, start time, argv), `<name>.state.json`, `<name>.log` and `bin/`. Apps
+are therefore named world-wide, so a test prefixes its own.
+
+The runner stops every app of a world, process groups and all, before it
+closes the world's nodes: after a pass, after a failed driver or oracle, on
+Ctrl-C and on SIGTERM or SIGHUP, which `tests/run` unwinds like Ctrl-C. A test
+that ends its app itself (`stop()` in the oracle) leaves the world as the next
+test expects it. Limits: a SIGKILLed runner cannot reap, so the apps stay up
+with their entries in the results directory (`pkill -f results/<stamp>/`); a
+`--keep` world keeps its apps running with its nodes; an app is a process on the
+host, so its test is `local_only`.
 
 ## Fast loops
 

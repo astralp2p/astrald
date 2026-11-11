@@ -23,7 +23,7 @@ from astral.client import ENDPOINT_VARS, TOKEN_VARS
 # The variables astral-go's default router reads (lib/apphost/config.go).
 GO_ENV_VARS = ("ASTRALD_APPHOST_ENDPOINT", "ASTRALD_APPHOST_TOKEN")
 
-from lib import agent, manifest, report, step, suites
+from lib import agent, apps, manifest, report, step, suites
 from lib import plan as planner
 from lib.build import ensure_binary, git_ref, linux_binaries
 from lib.nodeconfig import PORTS_PER_NODE, PortSpan, PortsBusy, lease_ports
@@ -208,6 +208,18 @@ def _close(ex, keep: bool) -> BaseException | None:
             traceback.print_exc()
         return e
     return None
+
+
+def _reap_apps(path: Path) -> None:
+    """Stop the long-lived apps a world's drivers started (lib/apps.py).
+
+    why caught: an app that will not stop must not cost the world its close,
+    which holds the run's ports; the failure is printed.
+    """
+    try:
+        apps.reap(path)
+    except Exception:                         # noqa: BLE001
+        traceback.print_exc()
 
 
 def _finish(results, pushed: list) -> int:
@@ -533,6 +545,11 @@ class _Run:
             # kept one is read back from this record
             _note_nodes(record, ex)
             self.pushed += [vm for vm in ex.pushed if vm not in self.pushed]
+            # why before the close: an app left running would spend its last
+            # seconds retrying a node that is going away, and a kept world
+            # leaves its apps up with its nodes
+            if not keep:
+                _reap_apps(self.results.dir / name / "apps")
             torn = _close(ex, keep)
             self.torn = self.torn or torn
             if keep:
@@ -620,7 +637,10 @@ class _Run:
         t0 = time.monotonic()
         lineage = planner.chain(self.tests, t.name)[-2::-1]   # nearest first
         env = dict(driver_env(art / "session.json", self.args.target),
-                   ASTRAL_TESTS_FACTS_OUT=str(art / "facts.json"))
+                   ASTRAL_TESTS_FACTS_OUT=str(art / "facts.json"),
+                   # why the world's: an app a driver starts outlives the
+                   # driver, and the world's close stops it (lib/apps.py)
+                   ASTRAL_TESTS_APPS=str(self.results.dir / s.world / "apps"))
         driven = {}
 
         def view(phase: str) -> dict:
