@@ -60,6 +60,7 @@ app-op-surface
 app-op-surface-remote
 request-grant-scope
 swarm-authz-matrix
+services-swarm-outcome-rules
 expel-node
 hold-purge
 hold-isolation
