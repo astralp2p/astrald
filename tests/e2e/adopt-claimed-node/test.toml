@@ -1,0 +1,4 @@
+nodes   = ["node1", "acn-b1", "acn-b2"]
+timeout = 180
+after   = "adopt-claimed-node-setup"
+facts   = ["acn_adopt_outcome"]
