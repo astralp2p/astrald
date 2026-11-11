@@ -54,8 +54,8 @@ external_registration_sweep_interval = "1s"
 - **`nodes`** names nodes within the test's world: a name already used in
   that world is the same node. Tests that share a world add up their
   rosters, and root tests that destroy nothing share w0. A local world starts
-  at most `[ports] span / 10` distinct nodes, 20 with `tests/config.toml`'s
-  `span = 200`; a test that brings one more is FAIL/environment at
+  at most `[ports] span / 10` distinct nodes, 30 with `tests/config.toml`'s
+  `span = 300`; a test that brings one more is FAIL/environment at
   `prepare`, and `selftest/test_plan.py` fails first for a shipped suite.
   `--plan` shows which tests share a world.
 - **`after`** is the whole ordering model: a test names the test whose
