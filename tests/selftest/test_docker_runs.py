@@ -104,7 +104,7 @@ class TestDockerRuns(unittest.TestCase):
         self.assertEqual(len(made), 1)
         (dir, binary, image, span, keep, config, skill), _ = made[0]
         self.assertEqual((image, span.base, span.max_nodes, skill),
-                         ("astral-node:abc", 20800, 20, None))
+                         ("astral-node:abc", 20800, 30, None))
         self.assertEqual(binary.parent.name, "linux")
         self.assertEqual({e["env"] for e in doc["entries"]}, {"container"})
 

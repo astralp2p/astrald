@@ -62,3 +62,6 @@ indexer-cursor
 swarm-roster-sync
 expel-propagation
 swarm-member-restart
+app-node-restart-reconnect
+blueprint-survives-restart
+services-node-restart

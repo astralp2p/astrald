@@ -4,8 +4,8 @@
 # Every world of a run starts again at node 0 on the run's span.
 [ports]
 base = 20800            # the first span's first port
-span = 200              # ports per span: 20 nodes per world
-spans = 20              # spans from base: 20 concurrent runs, 20800-24799
+span = 300              # ports per span: 30 nodes per world
+spans = 13              # spans from base: 13 concurrent runs, 20800-24699
 
 [astral_py]
 path = "~/work/astralp2p/astral-py/master"
