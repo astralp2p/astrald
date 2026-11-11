@@ -73,6 +73,7 @@ indexer-cursor
 swarm-roster-sync
 expel-propagation
 swarm-member-restart
+two-swarms-side-by-side
 join-via-member
 app-node-restart-reconnect
 blueprint-survives-restart
