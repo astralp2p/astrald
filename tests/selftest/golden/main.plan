@@ -1,24 +1,29 @@
 w0 local:  smoke → mcp-origin → claim-window → admission-policies
-           → token-less-setup → manager-setup → signer-app → messaging-ops
-           → app-preexisting-provider-sync → app-discover-local
-           → app-handler-unroute → app-call-local → app-routing-two-apps
-           → app-op-surface → bootstrap-user-software-key
-           → claimed-node-keeps-owner → app-token-lifecycle → policy-delegate
-           → fs-watch → registration-lease → app-index-provider
-           → app-describe-provider → app-search-provider → adopt-node
-           → object-store → app-query → blueprints-two-node
-           → app-blueprint-sync → apphost-origin → app-origin-guards
-           → sign-contract-guard → messaging-two-node → mcp-peer
-           → services-swarm → services-app-call → services-advertise-identity
-           → app-searcher-swarm → app-finder-read → app-two-providers
-           → services-provider-gone → app-discover-follow → app-discover-swarm
-           → app-ping-pong → app-call-remote → app-reject-code
-           → app-op-surface-remote → request-grant-scope → swarm-authz-matrix
-           → services-swarm-outcome-rules → object-store-peer
-           → read-remote-peer → read-swarm → discover-swarm → expel-node
+           → token-less-setup → manager-setup → manager-answers-invite
+           → signer-app → messaging-ops → app-preexisting-provider-sync
+           → app-discover-local → app-handler-unroute → app-call-local
+           → app-routing-two-apps → app-op-surface
+           → bootstrap-user-software-key → claimed-node-keeps-owner
+           → app-token-lifecycle → policy-delegate → fs-watch
+           → registration-lease → app-index-provider → app-describe-provider
+           → app-search-provider → adopt-node → object-store → app-query
+           → blueprints-two-node → app-blueprint-sync → apphost-origin
+           → app-origin-guards → sign-contract-guard → messaging-two-node
+           → mcp-peer → services-swarm → services-app-call
+           → services-advertise-identity → app-searcher-swarm → app-finder-read
+           → app-two-providers → services-provider-gone → app-discover-follow
+           → app-discover-swarm → app-ping-pong → app-call-remote
+           → app-reject-code → app-op-surface-remote → request-grant-scope
+           → swarm-authz-matrix → services-swarm-outcome-rules
+           → object-store-peer → read-remote-peer → read-swarm → discover-swarm
+           → expel-node
            config admitter.apphost.policies = {"app_register": "reject_all"}
            config admitter.user.policies = {"swarm_join": "reject_all", "swarm_invite": "accept_all"}
            config invitee.user.policies = {"swarm_join": "accept_all", "swarm_invite": "reject_all"}
+           config mai-approve.apphost.gate = {}
+           config mai-approve.apphost.policies = {}
+           config mai-decline.apphost.gate = {}
+           config mai-decline.apphost.policies = {}
            config node1.apphost.gate = {"tokenless": ["apphost.register", "user.info", "user.derive_identity", "user.bootstrap", "user.join"], "states": {"fresh": ["*"], "unclaimed": ["*"]}}
            config nomcp1.mcp.bind_mcp = ""
 w1 local:  bootstrap-user-software-key* → adopt-node* → hold-purge
