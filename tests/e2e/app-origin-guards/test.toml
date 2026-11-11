@@ -1,0 +1,5 @@
+nodes   = ["node1", "node2"]
+timeout = 180
+after   = "adopt-node"
+facts   = ["control_registered", "control_handler_acked", "control_discover",
+           "refusals", "tokens_before", "tokens_after"]

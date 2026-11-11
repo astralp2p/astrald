@@ -1,0 +1,7 @@
+nodes      = ["node1"]
+timeout    = 300
+after      = "bootstrap-user-software-key"
+restart    = ["node1"]
+destroys   = true
+local_only = "keeps an app process on the host across a restart of node1, which only a local world can do"
+facts      = ["blueprint_survives_restart"]
