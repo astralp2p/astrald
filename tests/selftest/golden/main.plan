@@ -30,7 +30,7 @@ w0 local:  smoke → mcp-origin → claim-window → admission-policies
 w1 local:  bootstrap-user-software-key* → adopt-node* → expel-authority
 w2 local:  bootstrap-user-software-key* → adopt-node* → hold-purge
 w3 local:  bootstrap-user-software-key* → adopt-node* → swarm-roster-sync
-           → expel-propagation
+           → expel-propagation → expel-survives-restart
 w4 local:  bootstrap-user-software-key* → adopt-node* → swarm-roster-sync*
            → swarm-member-restart
 w5 local:  bootstrap-user-software-key* → adopt-node* → two-swarms-side-by-side

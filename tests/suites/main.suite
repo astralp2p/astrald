@@ -75,6 +75,7 @@ hold-isolation
 indexer-cursor
 swarm-roster-sync
 expel-propagation
+expel-survives-restart
 swarm-member-restart
 two-swarms-side-by-side
 join-via-member

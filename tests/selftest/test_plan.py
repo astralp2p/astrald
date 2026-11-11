@@ -265,7 +265,7 @@ class TestShippedPlans(Invariants, unittest.TestCase):
              ("vm", "gateway-relay"), ("local", "hold-purge"),
              ("local", "join-via-member"), ("vm", "nat-punch"),
              ("local", "services-node-restart"),
-             ("local", "expel-propagation"),
+             ("local", "expel-survives-restart"),
              ("local", "swarm-member-restart"), ("vm", "tor-link"),
              ("local", "two-swarms-side-by-side"),
              ("local", "blueprint-survives-restart"),
