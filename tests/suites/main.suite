@@ -31,6 +31,7 @@ app-query
 registration-lease
 blueprints-two-node
 apphost-origin
+app-origin-guards
 sign-contract-guard
 messaging-two-node
 mcp-peer
@@ -49,6 +50,7 @@ app-discover-swarm
 app-discover-local
 app-ping-pong
 app-call-remote
+app-reject-code
 app-handler-unroute
 app-call-local
 app-routing-two-apps
@@ -62,3 +64,6 @@ indexer-cursor
 swarm-roster-sync
 expel-propagation
 swarm-member-restart
+app-node-restart-reconnect
+blueprint-survives-restart
+services-node-restart
