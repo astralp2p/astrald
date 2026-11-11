@@ -15,6 +15,7 @@ messaging-ops
 bootstrap-user-software-key
 import-user-software-key
 bootstrap-user-op
+app-token-lifecycle
 policy-delegate
 adopt-node
 introduce-node-setup
