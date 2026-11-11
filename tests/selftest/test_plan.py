@@ -263,6 +263,7 @@ class TestShippedPlans(Invariants, unittest.TestCase):
             [("local", "app-node-restart-reconnect"),
              ("local", "expel-node"), ("vm", "gateway-relay"),
              ("local", "hold-purge"), ("vm", "nat-punch"),
+             ("local", "services-node-restart"),
              ("local", "expel-propagation"),
              ("local", "swarm-member-restart"), ("vm", "tor-link"),
              ("local", "hold-isolation"), ("local", "indexer-cursor"),
