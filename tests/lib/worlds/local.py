@@ -78,9 +78,13 @@ class LocalWorld(World):
             raise WorldError(f"restart: {e}") from e
 
     async def _restart(self, names) -> None:
+        # why every stop first: a node restarted while its siblings still run
+        # can relearn what it lost from them, which hides state that a restart
+        # of the whole swarm drops (expel-survives-restart)
+        for name in names:
+            self._nodes[name].stop()
         for name in names:
             node = self._nodes[name]
-            node.stop()
             node.start(keep=self.keep)
             await node.wait_ready()
             node.restarts += 1

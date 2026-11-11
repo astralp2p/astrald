@@ -1,0 +1,5 @@
+nodes    = ["node1", "node2", "ea-target"]
+timeout  = 180
+after    = "adopt-node"
+destroys = true
+facts    = ["target_id", "baseline", "refusals", "first_ban", "second_ban"]
