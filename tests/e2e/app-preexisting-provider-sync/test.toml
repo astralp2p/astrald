@@ -1,0 +1,4 @@
+nodes      = ["ppsyncuser", "ppsyncjoiner"]
+timeout    = 300
+local_only = "serves its provider app on a host loopback port that the joiner's swarm peer dials"
+facts      = ["app_preexisting_provider_sync"]
