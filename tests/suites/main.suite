@@ -30,6 +30,7 @@ discover-swarm
 app-query
 registration-lease
 blueprints-two-node
+app-blueprint-sync
 apphost-origin
 app-origin-guards
 sign-contract-guard
