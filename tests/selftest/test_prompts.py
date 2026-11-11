@@ -45,7 +45,7 @@ class TestPrompts(unittest.TestCase):
                           for f in self.all[n].facts}}
 
     def test_every_operator_test_ships_a_prompt(self):
-        self.assertEqual(len(self.agent_tests), 13)
+        self.assertEqual(len(self.agent_tests), 16)
 
     def test_every_prompt_renders_with_nothing_left_unfilled(self):
         for t in self.agent_tests:

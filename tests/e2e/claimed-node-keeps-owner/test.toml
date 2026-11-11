@@ -1,0 +1,4 @@
+nodes   = ["node1"]
+timeout = 120
+after   = "bootstrap-user-software-key"
+facts   = []

@@ -1,0 +1,5 @@
+nodes    = ["node1", "node2", "jvm-latecomer"]
+timeout  = 180
+after    = "adopt-node"
+destroys = true
+facts    = ["join_via_node2", "after_refusal", "join_via_node1"]
