@@ -1,0 +1,20 @@
+nodes   = ["mai-inviter", "mai-approve", "mai-decline"]
+timeout = 240
+local_only = "its driver serves the manager app on a unix socket under the host's TMPDIR"
+facts   = ["manager_answers_invite"]
+
+# why: the harness starts every node under the E2E gate (lib/nodeconfig.py),
+# which opens a `fresh` node to every op. An empty `gate` and an empty
+# `policies` replace those keys with nothing, and astrald loads a config over
+# its code defaults (mod/apphost/src/config.go defaultConfig), so the two
+# invitees start under the gate a released astrald ships, with the unclaimed
+# list that holds apphost.bind, apphost.register_handler and apphost.cancel.
+# The harness's token stays: the readiness check and the oracle reach the node
+# with it. The inviter keeps the E2E gate, which claims it with no token.
+[config.mai-approve.apphost]
+gate     = {}
+policies = {}
+
+[config.mai-decline.apphost]
+gate     = {}
+policies = {}

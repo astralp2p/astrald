@@ -1,0 +1,8 @@
+# why destroys: node2 ends holding a live link to a node of another User, and
+# the world holds a second swarm. A descendant that counts links or providers
+# on node2 would read that, so the test runs in a world of its own.
+nodes    = ["node1", "node2", "tssb1", "tssb2"]
+timeout  = 180
+after    = "adopt-node"
+destroys = true
+facts    = ["b_user_id", "b_user_token", "pushes"]
