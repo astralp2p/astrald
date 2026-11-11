@@ -28,9 +28,10 @@ w5 local:  bootstrap-user-software-key* → adopt-node* → services-node-restar
 w6 local:  bootstrap-user-software-key* → repo-removal-sticks
 w7 local:  bootstrap-user-software-key* → hold-isolation
 w8 local:  bootstrap-user-software-key* → indexer-cursor
-w9 local:  distribution-gate-setup
+w9 local:  bootstrap-user-software-key* → blueprint-survives-restart
+w10 local: distribution-gate-setup
            config node1.apphost.gate = {}
            config node1.apphost.policies = {}
-w10 local: import-user-software-key
-w11 local: bootstrap-user-op
-w12 local: introduce-node-setup → introduce-node
+w11 local: import-user-software-key
+w12 local: bootstrap-user-op
+w13 local: introduce-node-setup → introduce-node
