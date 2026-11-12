@@ -12,11 +12,19 @@ type opCreateArgs struct {
 	VFS *astral.Identity `query:"required"`
 }
 
-// todo: implement vfs.create; the stub answers an error until a later part of the VFS ticket fills this file.
-// why: the stub reads and changes nothing, so it asks for no named action; the part that fills it authorizes first.
+// OpCreate creates the VFS of an identity with the default quotas and answers ack. A VFS that exists is left
+// as it is. The zero identity answers not permitted.
 func (mod *Module) OpCreate(ctx *astral.Context, q *routing.IncomingQuery, args opCreateArgs) error {
 	ch := q.Accept(channel.WithFormats(args.In, args.Out))
 	defer ch.Close()
 
-	return ch.Send(errNotImplemented)
+	if err := mod.manageAuthorize(ctx, q); err != nil {
+		return ch.Send(astral.Err(err))
+	}
+
+	if err := mod.CreateVFS(args.VFS); err != nil {
+		return ch.Send(astral.Err(err))
+	}
+
+	return ch.Send(&astral.Ack{})
 }
