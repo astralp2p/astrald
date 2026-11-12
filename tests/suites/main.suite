@@ -22,6 +22,7 @@ app-token-lifecycle
 policy-delegate
 adopt-node
 adopt-refusals
+basic-strategy-excess-link-pruning
 introduce-node-setup
 introduce-node
 fs-watch
