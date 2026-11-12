@@ -51,6 +51,7 @@ app-index-provider
 app-describe-provider
 app-search-provider
 app-two-providers
+objects-provider-registration-authz
 services-provider-gone
 app-discover-follow
 app-discover-swarm
