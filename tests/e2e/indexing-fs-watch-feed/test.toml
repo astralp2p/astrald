@@ -1,0 +1,8 @@
+nodes      = ["node1"]
+after      = "bootstrap-user-software-key"
+restart    = ["node1"]
+destroys   = true
+local_only = "writes files in a host directory node1 watches and restarts node1"
+timeout    = 180
+facts      = ["apps", "indexer", "repo", "watch_dir", "paths", "payloads",
+              "live", "live_tail", "acked_through", "restarts_before"]

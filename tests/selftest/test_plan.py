@@ -275,6 +275,7 @@ class TestShippedPlans(Invariants, unittest.TestCase):
              ("local", "blueprint-survives-restart"),
              ("local", "fs-watch-restart-restore"),
              ("local", "hold-isolation"), ("local", "indexer-cursor"),
+             ("local", "indexing-fs-watch-feed"),
              ("local", "repo-removal-sticks"),
              ("local", "bootstrap-passphrase"),
              ("local", "bootstrap-user-op"),
