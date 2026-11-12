@@ -1,0 +1,7 @@
+nodes    = ["node1", "node2"]
+after    = "adopt-node"
+# why: node1's book keeps the extra endpoints for 90 days and nodes has no
+# op to remove one; node2 keeps three extra listeners; both keep three links
+destroys = true
+timeout  = 150
+facts    = ["excess_prune"]
