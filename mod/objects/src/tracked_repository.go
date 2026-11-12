@@ -19,9 +19,9 @@ type trackedRepository struct {
 	name  string
 	inner objectsmod.Repository
 
-	// mu is the leaf's lock. A commit holds it across the inner commit and the tracking write.
-	// note: purge takes mu for each candidate, so a commit that answered cannot lose to a purge (VFS 6, §11 "objects: purge").
-	// note: Delete does not take mu, so purge can delete while it holds mu.
+	// mu is the leaf's lock. Commit and Delete hold it across the inner call and the tracking write.
+	// note: purge holds mu for each candidate from its re-check to its delete and deletes through deleteLocked,
+	// so commit, delete and purge never interleave, and a commit that answered cannot lose to a purge (VFS 6, §11 "objects: purge").
 	mu sync.Mutex
 }
 
@@ -67,6 +67,14 @@ func (repo *trackedRepository) Scan(ctx *astral.Context, follow bool) (<-chan *a
 
 // Delete deletes the object and then removes its tracking row.
 func (repo *trackedRepository) Delete(ctx *astral.Context, objectID *astral.ObjectID) error {
+	repo.mu.Lock()
+	defer repo.mu.Unlock()
+
+	return repo.deleteLocked(ctx, objectID)
+}
+
+// deleteLocked deletes the object and then removes its tracking row. The caller holds mu.
+func (repo *trackedRepository) deleteLocked(ctx *astral.Context, objectID *astral.ObjectID) error {
 	resolved, err := repo.resolve(ctx, objectID)
 	if err != nil {
 		return err
