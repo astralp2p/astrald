@@ -275,6 +275,15 @@ Under `--driver agent` the selected tests are operator-driven and their
 prereqs run by script; `--prereqs agent` hands the prereqs to the operator
 too.
 
+## Shared Go helpers
+
+A directory under `e2e/` without a `test.toml` is not a test, and the planner
+never loads it. `e2e/internal/provider` is the Go helper of the
+object-provider drivers: the session loader, app registration with
+ServeObjects permits, and apps that serve `objects.find`, `describe`,
+`search` and `read` with counting handlers in answer, claim or hang mode. Its
+`README.md` lists the calls.
+
 ## Long-lived apps
 
 A driver's own processes end with it, and a manifest's `restart` restarts

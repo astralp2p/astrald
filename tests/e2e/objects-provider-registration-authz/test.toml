@@ -1,0 +1,5 @@
+nodes      = ["node1", "node2"]
+after      = "adopt-node"
+timeout    = 180
+local_only = "serves its provider apps on host loopback ports that node1 dials"
+facts      = ["objects_provider_registration_authz"]
