@@ -514,21 +514,62 @@ func TestReadRanges(t *testing.T) {
 	checkReadRanges(t, repo, store(t, repo, []byte("hello astral")))
 }
 
-// TestEmptyObject: the empty object's full ID has Size 0, so it resolves by hash.
+// TestEmptyObject: a commit of zero bytes stores no file, and the repository answers the empty object without one.
 func TestEmptyObject(t *testing.T) {
-	repo := NewRepository(nil, "test", t.TempDir())
+	root := t.TempDir()
+	repo := NewRepository(nil, "test", root)
 	ctx := astral.NewContext(nil)
 	id := store(t, repo, nil)
+
+	if !id.IsEqual(objects.EmptyObjectID()) {
+		t.Fatalf("commit = %v, want %v", id, objects.EmptyObjectID())
+	}
+	if entries, err := os.ReadDir(root); err != nil || len(entries) != 0 {
+		t.Fatalf("root holds %v, %v, want nothing", entries, err)
+	}
 
 	checkRead(t, repo, id, nil)
 	if _, err := repo.Read(ctx, id, 1, 0); !errors.Is(err, objects.ErrOutOfBounds) {
 		t.Errorf("Read at offset 1 = %v, want ErrOutOfBounds", err)
 	}
+	if ok, err := repo.Contains(ctx, id); !ok || err != nil {
+		t.Errorf("Contains = %v, %v, want true, nil", ok, err)
+	}
 	if err := repo.Delete(ctx, id); err != nil {
 		t.Errorf("Delete: %v", err)
 	}
+	if ok, err := repo.Contains(ctx, id); !ok || err != nil {
+		t.Errorf("Contains after Delete = %v, %v, want true, nil", ok, err)
+	}
+}
+
+// TestEmptyObject_NeverCommitted: a repository that never stored anything answers the empty object.
+func TestEmptyObject_NeverCommitted(t *testing.T) {
+	repo := NewRepository(nil, "test", t.TempDir())
+
+	checkRead(t, repo, objects.EmptyObjectID(), nil)
+}
+
+// TestPartialSizeZeroIDStaysPartial: a size-0 ID of any hash other than the empty one resolves as a partial ID.
+func TestPartialSizeZeroIDStaysPartial(t *testing.T) {
+	repo := NewRepository(nil, "test", t.TempDir())
+	ctx := astral.NewContext(nil)
+	id := store(t, repo, []byte("hello"))
+
+	checkRead(t, repo, partialOf(t, id), []byte("hello"))
+
+	unknown := &astral.ObjectID{Hash: [32]byte{0x5a}}
+	if ok, err := repo.Contains(ctx, unknown); ok || err != nil {
+		t.Errorf("Contains(unknown partial) = %v, %v, want false, nil", ok, err)
+	}
+	if _, err := repo.Read(ctx, unknown, 0, 0); !errors.Is(err, objects.ErrNotFound) {
+		t.Errorf("Read(unknown partial) = %v, want ErrNotFound", err)
+	}
+	if err := repo.Delete(ctx, partialOf(t, id)); err != nil {
+		t.Errorf("Delete(partial) = %v", err)
+	}
 	if ok, err := repo.Contains(ctx, id); ok || err != nil {
-		t.Errorf("Contains after Delete = %v, %v, want false, nil", ok, err)
+		t.Errorf("Contains after Delete(partial) = %v, %v, want false, nil", ok, err)
 	}
 }
 

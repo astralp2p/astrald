@@ -56,7 +56,12 @@ func (group *RepoGroup) Create(ctx *astral.Context, opts *objectsmod.CreateOpts)
 
 // Contains reports whether a member contains the object. A group that finds nothing answers false, nil,
 // ErrHashLookupUnsupported when every invoked member returned it, or the context error once ctx has ended.
+// The empty object is always contained, also by a group without members.
 func (group *RepoGroup) Contains(ctx *astral.Context, objectID *astral.ObjectID) (bool, error) {
+	if objectsmod.IsEmptyObject(objectID) {
+		return true, nil
+	}
+
 	var tally lookupTally
 	for _, repo := range group.members() {
 		if ctx.Err() != nil {
@@ -218,8 +223,12 @@ func (group *RepoGroup) Scan(ctx *astral.Context, follow bool) (<-chan *astral.O
 
 // Delete deletes the object from every member and succeeds when one member deletes it.
 // A group that deletes nothing answers ErrNotFound, ErrHashLookupUnsupported when every invoked member returned it,
-// or the context error once ctx has ended.
+// or the context error once ctx has ended. Deleting the empty object succeeds and changes nothing.
 func (group *RepoGroup) Delete(ctx *astral.Context, objectID *astral.ObjectID) error {
+	if objectsmod.IsEmptyObject(objectID) {
+		return nil
+	}
+
 	var tally lookupTally
 	var deleted bool
 	for _, repo := range group.members() {
@@ -239,7 +248,19 @@ func (group *RepoGroup) Delete(ctx *astral.Context, objectID *astral.ObjectID) e
 
 // Read returns the reader of a member's hit unchanged. A group that finds nothing answers ErrNotFound,
 // ErrHashLookupUnsupported when every invoked member returned it, or the context error once ctx has ended.
+// The group answers the empty object itself when no member answered it.
 func (group *RepoGroup) Read(ctx *astral.Context, objectID *astral.ObjectID, offset int64, limit int64) (objectsmod.Reader, error) {
+	r, err := group.readMembers(ctx, objectID, offset, limit)
+	// why: a member's tracking wrapper records the read, so the group answers the empty object only after its members.
+	if err != nil && objectsmod.IsEmptyObject(objectID) && ctx.Err() == nil {
+		return objectsmod.OpenEmptyObject(group, offset, limit)
+	}
+
+	return r, err
+}
+
+// readMembers reads the object from the members, concurrently or in order.
+func (group *RepoGroup) readMembers(ctx *astral.Context, objectID *astral.ObjectID, offset int64, limit int64) (objectsmod.Reader, error) {
 	if group.Concurrent {
 		return group.readConcurrent(ctx, objectID, offset, limit)
 	}

@@ -84,7 +84,12 @@ func (repo *Repository) findObject(objectID *astral.ObjectID) (*storedObject, er
 	return object, nil
 }
 
+// Contains reports whether the repository holds the object. The empty object is always contained.
 func (repo *Repository) Contains(ctx *astral.Context, objectID *astral.ObjectID) (bool, error) {
+	if objectsmod.IsEmptyObject(objectID) {
+		return true, nil
+	}
+
 	_, err := repo.findObject(objectID)
 	switch {
 	case errors.Is(err, objectsmod.ErrNotFound):
@@ -96,10 +101,14 @@ func (repo *Repository) Contains(ctx *astral.Context, objectID *astral.ObjectID)
 	return true, nil
 }
 
-// Read serves only the device zone; other zones are excluded.
+// Read serves only the device zone; other zones are excluded. The empty object is answered without storage.
 func (repo *Repository) Read(ctx *astral.Context, objectID *astral.ObjectID, offset int64, limit int64) (objectsmod.Reader, error) {
 	if !ctx.Zone().Is(astral.ZoneDevice) {
 		return nil, astral.ErrZoneExcluded
+	}
+
+	if objectsmod.IsEmptyObject(objectID) {
+		return objectsmod.OpenEmptyObject(repo, offset, limit)
 	}
 
 	object, err := repo.findObject(objectID)
@@ -158,7 +167,12 @@ func (repo *Repository) Scan(ctx *astral.Context, follow bool) (<-chan *astral.O
 	return ch, nil
 }
 
+// Delete removes the object. Deleting the empty object succeeds and changes nothing.
 func (repo *Repository) Delete(ctx *astral.Context, objectID *astral.ObjectID) error {
+	if objectsmod.IsEmptyObject(objectID) {
+		return nil
+	}
+
 	object, err := repo.findObject(objectID)
 	if err != nil {
 		return err

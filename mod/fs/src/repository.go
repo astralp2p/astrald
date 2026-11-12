@@ -150,6 +150,10 @@ func (repo *Repository) Read(ctx *astral.Context, objectID *astral.ObjectID, off
 		return nil, astral.ErrZoneExcluded
 	}
 
+	if objectsmod.IsEmptyObject(objectID) {
+		return objectsmod.OpenEmptyObject(repo, offset, limit)
+	}
+
 	resolved, err := repo.findObject(ctx, objectID)
 	if err != nil {
 		return nil, err
@@ -200,8 +204,12 @@ func (repo *Repository) openObject(objectID *astral.ObjectID) (*os.File, error) 
 }
 
 // Contains reports whether the repository holds the object.
-// A full ID checks its file alone; a partial ID resolves through the hash index.
+// The empty object is always contained. A full ID checks its file alone; a partial ID resolves through the hash index.
 func (repo *Repository) Contains(ctx *astral.Context, objectID *astral.ObjectID) (bool, error) {
+	if objectsmod.IsEmptyObject(objectID) {
+		return true, nil
+	}
+
 	if objectID.Size == 0 {
 		return repo.containsPartial(ctx, objectID)
 	}
@@ -259,7 +267,12 @@ func (repo *Repository) Free(ctx *astral.Context) (int64, error) {
 }
 
 // Delete removes the object file. A partial ID is resolved and removed under one hold of mu.
+// Deleting the empty object succeeds and changes nothing.
 func (repo *Repository) Delete(ctx *astral.Context, objectID *astral.ObjectID) error {
+	if objectsmod.IsEmptyObject(objectID) {
+		return nil
+	}
+
 	repo.mu.Lock()
 	defer repo.mu.Unlock()
 
