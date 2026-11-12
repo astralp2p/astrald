@@ -302,7 +302,7 @@ func TestPartialLookupEvictsRemovedFile(t *testing.T) {
 }
 
 // TestBadRecordedSize: a file whose length differs from the size in its name is not the object.
-// Full-ID Contains keeps checking the file alone.
+// Full-ID Contains checks the file size against the ID.
 func TestBadRecordedSize(t *testing.T) {
 	root := t.TempDir()
 	repo := NewRepository(nil, "test", root)
@@ -321,8 +321,8 @@ func TestBadRecordedSize(t *testing.T) {
 	if ok, err := repo.Contains(ctx, partialOf(t, id)); ok || err != nil {
 		t.Errorf("Contains(partial) = %v, %v, want false, nil", ok, err)
 	}
-	if ok, err := repo.Contains(ctx, wrong); !ok || err != nil {
-		t.Errorf("Contains(full) = %v, %v, want true, nil", ok, err)
+	if ok, err := repo.Contains(ctx, wrong); ok || err != nil {
+		t.Errorf("Contains(full) = %v, %v, want false, nil", ok, err)
 	}
 }
 

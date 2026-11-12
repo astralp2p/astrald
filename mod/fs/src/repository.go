@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 
 	"github.com/astralp2p/astral-go/api/objects"
@@ -32,11 +33,45 @@ type Repository struct {
 var _ objectsmod.Repository = &Repository{}
 
 func NewRepository(mod *Module, label string, path string) *Repository {
-	return &Repository{
+	repo := &Repository{
 		mod:      mod,
 		label:    label,
 		root:     path,
 		addQueue: &sig.Queue[*astral.ObjectID]{},
+	}
+
+	repo.removeTempFiles()
+
+	return repo
+}
+
+// removeTempFiles deletes the temp files that interrupted writes left in the root.
+// why: a writer from an earlier run can no longer commit, so its temp file is garbage.
+// note: a missing root is not an error; the repository has nothing to clean.
+func (repo *Repository) removeTempFiles() {
+	entries, err := os.ReadDir(repo.root)
+	if err != nil {
+		if !os.IsNotExist(err) {
+			repo.logError("cannot read dir %v: %v", repo.root, err)
+		}
+		return
+	}
+
+	for _, entry := range entries {
+		if !entry.Type().IsRegular() || !strings.HasPrefix(entry.Name(), tempFilePrefix) {
+			continue
+		}
+
+		path := filepath.Join(repo.root, entry.Name())
+		if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
+			repo.logError("cannot remove temp file %v: %v", path, err)
+		}
+	}
+}
+
+func (repo *Repository) logError(format string, v ...any) {
+	if repo.mod != nil {
+		repo.mod.log.Error(format, v...)
 	}
 }
 
@@ -166,11 +201,8 @@ func (repo *Repository) Contains(ctx *astral.Context, objectID *astral.ObjectID)
 		return false, nil
 	}
 
-	// and it's a regular file
-	if f.Mode().IsRegular() {
-		return true, nil
-	}
-	return false, nil
+	// and it's a regular file of the size the ID names
+	return f.Mode().IsRegular() && uint64(f.Size()) == objectID.Size, nil
 }
 
 // containsPartial reports whether a partial ID resolves to a stored object.
