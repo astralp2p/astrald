@@ -23,6 +23,7 @@ policy-delegate
 adopt-node
 adopt-refusals
 basic-strategy-excess-link-pruning
+basic-strategy-stalled-endpoint-released
 introduce-node-setup
 introduce-node
 fs-watch
