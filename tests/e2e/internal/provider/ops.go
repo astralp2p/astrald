@@ -21,7 +21,7 @@ type idArgs struct {
 func (o *ops) Find(_ *astral.Context, q *routing.IncomingQuery, args idArgs) error {
 	mode := o.p.hit(Find, args.ID.String())
 	if mode == Hang {
-		o.p.hang(q.AcceptRaw())
+		o.p.hang(Find, args.ID.String(), q.AcceptRaw())
 		return nil
 	}
 	ch := q.Accept(channel.WithOutputFormat(args.Out))
@@ -43,7 +43,7 @@ func (o *ops) Find(_ *astral.Context, q *routing.IncomingQuery, args idArgs) err
 // (Hang).
 func (o *ops) Describe(_ *astral.Context, q *routing.IncomingQuery, args idArgs) error {
 	if o.p.hit(Describe, args.ID.String()) == Hang {
-		o.p.hang(q.AcceptRaw())
+		o.p.hang(Describe, args.ID.String(), q.AcceptRaw())
 		return nil
 	}
 	ch := q.Accept(channel.WithOutputFormat(args.Out))
@@ -75,7 +75,7 @@ func (o *ops) Search(_ *astral.Context, q *routing.IncomingQuery, args searchArg
 	var sq objects.SearchQuery
 	_ = sq.UnmarshalText([]byte(args.Query))
 	if o.p.hit(Search, string(sq.Query)) == Hang {
-		o.p.hang(q.AcceptRaw())
+		o.p.hang(Search, string(sq.Query), q.AcceptRaw())
 		return nil
 	}
 	ch := q.Accept(channel.WithOutputFormat(args.Out))
@@ -101,7 +101,7 @@ type readArgs struct {
 // or accepts and writes nothing (Hang).
 func (o *ops) Read(_ *astral.Context, q *routing.IncomingQuery, args readArgs) error {
 	if o.p.hit(Read, args.ID.String()) == Hang {
-		o.p.hang(q.AcceptRaw())
+		o.p.hang(Read, args.ID.String(), q.AcceptRaw())
 		return nil
 	}
 	o.p.mu.Lock()

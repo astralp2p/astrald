@@ -21,7 +21,8 @@ describe and read, the query text for search. Each op has a mode:
   bytes set for the id for read, or a reject for an id without bytes.
 - `Claim` is find naming every identity of the claim list, repeats included.
 - `Hang` accepts the query and holds it open, unanswered, until the caller
-  closes it, the provider stops, or 2 minutes pass.
+  closes it, the provider stops, or 2 minutes pass. `Holds` lists how long
+  each hold lasted before its caller closed it.
 
 Several providers serve in one process. Each has its own client and its own
 `routing.App`, and none uses the process-default client, so a driver calls

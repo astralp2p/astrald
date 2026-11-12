@@ -55,6 +55,7 @@ type Provider struct {
 	results     []*objects.SearchResult
 	data        map[string][]byte
 	counts      map[Op]map[string]int
+	holds       map[Op]map[string][]time.Duration
 	stopped     chan struct{}
 }
 
@@ -66,6 +67,7 @@ func New(app *App) *Provider {
 		modes:   map[Op]Mode{},
 		data:    map[string][]byte{},
 		counts:  map[Op]map[string]int{},
+		holds:   map[Op]map[string][]time.Duration{},
 		stopped: make(chan struct{}),
 	}
 }
@@ -125,6 +127,15 @@ func (p *Provider) Total(op Op) int {
 	return n
 }
 
+// Holds returns how long each Hang of an op query for key was held before its
+// caller closed it, in the order they were released. A hold the caller never
+// closed is not listed.
+func (p *Provider) Holds(op Op, key string) []time.Duration {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return append([]time.Duration(nil), p.holds[op][key]...)
+}
+
 // hit counts one op query for key and returns the op's mode.
 func (p *Provider) hit(op Op, key string) Mode {
 	p.mu.Lock()
@@ -172,10 +183,12 @@ func (p *Provider) Serve(ctx *astral.Context, hooks ...apps.RegistrationHook) (s
 	}
 }
 
-// hang holds an accepted query open until its caller closes it, the provider
-// stops, or hangLimit passes.
-func (p *Provider) hang(conn io.ReadWriteCloser) {
+// hang holds an accepted op query for key open until its caller closes it,
+// the provider stops, or hangLimit passes. A close by the caller is recorded
+// in Holds.
+func (p *Provider) hang(op Op, key string, conn io.ReadWriteCloser) {
 	defer conn.Close()
+	start := time.Now()
 	gone := make(chan struct{})
 	go func() {
 		defer close(gone)
@@ -183,6 +196,12 @@ func (p *Provider) hang(conn io.ReadWriteCloser) {
 	}()
 	select {
 	case <-gone:
+		p.mu.Lock()
+		defer p.mu.Unlock()
+		if p.holds[op] == nil {
+			p.holds[op] = map[string][]time.Duration{}
+		}
+		p.holds[op][key] = append(p.holds[op][key], time.Since(start))
 	case <-p.stopped:
 	case <-time.After(hangLimit):
 	}
