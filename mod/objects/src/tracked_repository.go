@@ -110,7 +110,7 @@ func (repo *trackedRepository) Read(ctx *astral.Context, objectID *astral.Object
 	}
 
 	tr := &trackedReader{Reader: r, repo: repo}
-	tr.counted = !objectsmod.IsHousekeeping(ctx)
+	tr.counted.Store(!objectsmod.IsHousekeeping(ctx))
 
 	// why: an object smaller than or equal to the offset delivers no byte, and the operator counts such a read when it closes.
 	tr.zeroOnly = offset >= 0 && uint64(offset) >= r.ID().Size
@@ -181,8 +181,9 @@ type trackedReader struct {
 	objectsmod.Reader
 	repo *trackedRepository
 
-	counted  bool // false for a housekeeping read
-	zeroOnly bool // the read window holds no byte
+	counted   atomic.Bool // false for a housekeeping read, until count is called
+	delivered atomic.Bool // a byte reached the reader's caller
+	zeroOnly  bool        // the read window holds no byte
 
 	mu       sync.Mutex
 	markedAt time.Time // zero until the read is counted
@@ -197,9 +198,20 @@ func (r *trackedReader) Repo() objectsmod.Repository {
 func (r *trackedReader) Read(p []byte) (int, error) {
 	n, err := r.Reader.Read(p)
 	if n > 0 {
+		r.delivered.Store(true)
 		r.mark()
 	}
 	return n, err
+}
+
+// count makes a read opened as housekeeping count from now on, and counts the bytes it delivered so far.
+// why: a read that races other candidates opens uncounted, and only the winner counts once its first byte is delivered to the caller.
+// note: the rules are in VFS 6, §11 "objects: last touched": https://wiki.satforge.dev/doc/vfs-6-specification-BxBnrSeTfT
+func (r *trackedReader) count() {
+	r.counted.Store(true)
+	if r.delivered.Load() {
+		r.mark()
+	}
 }
 
 // Close closes the inner reader and counts a read that can deliver no byte.
@@ -214,23 +226,28 @@ func (r *trackedReader) Close() error {
 // mark notes the opened object in the journal when the read is due: not counted yet, or last counted a minute ago.
 // note: marking does no database work.
 func (r *trackedReader) mark() {
-	if !r.counted {
+	if !r.counted.Load() {
 		return
 	}
 
 	journal := r.repo.mod.objectsReadsJournal
 	now := journal.now()
 
+	if r.markDue(now) {
+		journal.Mark(r.Reader.ID())
+	}
+}
+
+// markDue reports whether the read is due at now, and records now when it is.
+func (r *trackedReader) markDue(now time.Time) bool {
 	r.mu.Lock()
+	defer r.mu.Unlock()
+
 	due := r.markedAt.IsZero() || now.Sub(r.markedAt) >= recountInterval
 	if due {
 		r.markedAt = now
 	}
-	r.mu.Unlock()
-
-	if due {
-		journal.Mark(r.Reader.ID())
-	}
+	return due
 }
 
 // trackedSeekReader is a trackedReader over an inner reader that seeks.

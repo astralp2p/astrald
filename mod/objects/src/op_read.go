@@ -12,6 +12,7 @@ import (
 	"github.com/astralp2p/astral-go/lib/query"
 	"github.com/astralp2p/astral-go/lib/routing"
 	"github.com/astralp2p/astrald/core"
+	objectsmod "github.com/astralp2p/astrald/mod/objects"
 )
 
 type opReadArgs struct {
@@ -62,10 +63,12 @@ func (mod *Module) OpRead(ctx *astral.Context, q *routing.IncomingQuery, args op
 			mod.log.Errorv(2, "read %v error: %v", args.ID, err)
 			return q.Reject()
 		}
-		defer r.Close()
 
 		conn := q.AcceptRaw()
 		defer conn.Close()
+
+		// why: the reader closes before the connection, so a zero-byte read is counted before the caller sees the read end.
+		defer r.Close()
 
 		_, err = io.Copy(conn, r)
 		return err
@@ -111,7 +114,9 @@ func (mod *Module) OpRead(ctx *astral.Context, q *routing.IncomingQuery, args op
 			go func() {
 				a := attempt{key: source.String()}
 				if source.IsEqual(mod.node.Identity()) {
-					a.r, a.err = mod.ReadDefault().Read(attemptCtx.ExcludeZone(astral.ZoneNetwork), args.ID, int64(args.Offset), int64(args.Limit))
+					// why: the candidate's head read is not a delivery to the caller, so the attempt opens uncounted and the winner counts below.
+					localCtx := objectsmod.WithHousekeeping(attemptCtx.ExcludeZone(astral.ZoneNetwork))
+					a.r, a.err = mod.ReadDefault().Read(localCtx, args.ID, int64(args.Offset), int64(args.Limit))
 				} else {
 					// why: the host authorized its caller; the source serves the host as
 					// itself and trusts that decision (objects.read spec).
@@ -182,8 +187,16 @@ func (mod *Module) OpRead(ctx *astral.Context, q *routing.IncomingQuery, args op
 		}
 	}
 
+	// why: only the winner's head reaches the caller; a losing local reader stays uncounted.
+	if c, ok := won.r.(interface{ count() }); ok {
+		c.count()
+	}
+
 	conn := q.AcceptRaw()
 	defer conn.Close()
+
+	// why: the winner closes with the read and before the connection, so a zero-byte read is counted before the caller sees the read end.
+	defer won.r.Close()
 
 	if _, err = conn.Write(won.head); err != nil {
 		return err

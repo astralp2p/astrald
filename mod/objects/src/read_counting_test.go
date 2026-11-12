@@ -412,9 +412,9 @@ func TestReadCounting_ReadSeekerAndFSPathsCount(t *testing.T) {
 	expectNotPending(t, mod, other, "after a seek and close")
 }
 
-// TestReadCounting_RunFlushesEveryInterval: Run's loop writes a non-empty journal on each tick and once more at the end.
+// TestReadCounting_RunFlushesEveryInterval: Run's loop writes a non-empty journal on each tick.
 func TestReadCounting_RunFlushesEveryInterval(t *testing.T) {
-	mod, clock := newClockedModule(t)
+	mod, _ := newClockedModule(t)
 	ctx := astral.NewContext(nil)
 	repo := mod.GetRepository("mem0")
 	id := commitData(t, ctx, repo, "ticked")
@@ -424,6 +424,10 @@ func TestReadCounting_RunFlushesEveryInterval(t *testing.T) {
 	go func() {
 		defer close(done)
 		mod.runJournalFlush(runCtx, 5*time.Millisecond)
+	}()
+	defer func() {
+		cancel()
+		<-done
 	}()
 
 	r := openReader(t, ctx, repo, id, 0)
@@ -437,17 +441,70 @@ func TestReadCounting_RunFlushesEveryInterval(t *testing.T) {
 		}
 		time.Sleep(5 * time.Millisecond)
 	}
+}
 
-	// a read after the last tick is written when the loop ends
+// TestReadCounting_RunFlushesAtShutdown: Run's loop writes the journal when its context ends, with no tick in between.
+func TestReadCounting_RunFlushesAtShutdown(t *testing.T) {
+	mod, clock := newClockedModule(t)
+	ctx := astral.NewContext(nil)
+	repo := mod.GetRepository("mem0")
+	id := commitData(t, ctx, repo, "late")
+
+	runCtx, cancel := ctx.WithCancel()
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		mod.runJournalFlush(runCtx, time.Hour)
+	}()
+
 	clock.advance(time.Hour)
-	later := commitData(t, ctx, repo, "late")
-	r = openReader(t, ctx, repo, later, 0)
+	r := openReader(t, ctx, repo, id, 0)
 	io.ReadAll(r)
 	r.Close()
+	if got := expectTrackedID(t, mod, "mem0", id).ReadAt; got != 0 {
+		t.Fatalf("read time %d before shutdown; want none", got)
+	}
 
 	cancel()
 	<-done
-	if got := expectTrackedID(t, mod, "mem0", later).ReadAt; got != clock.t.Unix() {
+	if got := expectTrackedID(t, mod, "mem0", id).ReadAt; got != clock.t.Unix() {
 		t.Fatalf("read time %d after the final flush; want %d", got, clock.t.Unix())
 	}
+}
+
+// TestReadCounting_CandidateCountsOnlyAfterCount: a read opened as housekeeping delivers bytes uncounted until count is called.
+func TestReadCounting_CandidateCountsOnlyAfterCount(t *testing.T) {
+	mod, clock := newClockedModule(t)
+	ctx := astral.NewContext(nil)
+	repo := mod.GetRepository("mem0")
+	data := "candidate"
+	id := commitData(t, ctx, repo, data)
+	hk := objectsmod.WithHousekeeping(ctx)
+
+	// a loser delivers its head and closes
+	loser := openReader(t, hk, repo, id, 0)
+	if _, err := loser.Read(make([]byte, 4)); err != nil {
+		t.Fatalf("read: %v", err)
+	}
+	loser.Close()
+	expectNotPending(t, mod, id, "after a losing candidate")
+
+	// a winner counts the head it delivered when it is told to count
+	clock.advance(time.Second)
+	winner := openReader(t, hk, repo, id, 0)
+	if _, err := winner.Read(make([]byte, 4)); err != nil {
+		t.Fatalf("read: %v", err)
+	}
+	winner.(interface{ count() }).count()
+	expectPending(t, mod, id, clock.t, "after the winner counted")
+	winner.Close()
+
+	// a winner with no byte counts when it closes
+	other := commitData(t, ctx, repo, "empty window")
+	clock.advance(time.Second)
+	zero := openReader(t, hk, repo, other, int64(len("empty window")))
+	zero.(interface{ count() }).count()
+	expectNotPending(t, mod, other, "before the zero-byte winner closes")
+	zero.Close()
+	expectPending(t, mod, other, clock.t, "after the zero-byte winner closed")
 }
