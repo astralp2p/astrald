@@ -1,0 +1,5 @@
+nodes      = ["node1"]
+after      = "bootstrap-user-software-key"
+timeout    = 180
+local_only = "serves its provider apps on host loopback ports that node1 dials, and reads node1's astrald.log"
+facts      = ["objects_provider_revoke_lease"]

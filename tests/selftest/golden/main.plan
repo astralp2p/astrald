@@ -6,12 +6,13 @@ w0 local:  smoke → mcp-origin → claim-window → admission-policies
            → bootstrap-user-software-key → claimed-node-keeps-owner
            → app-token-lifecycle → policy-delegate → fs-watch → fs-index-live
            → registration-lease → app-index-provider → app-describe-provider
-           → app-search-provider → adopt-node → adopt-refusals → object-store
-           → app-query → blueprints-two-node → app-blueprint-sync
-           → apphost-origin → app-origin-guards → sign-contract-guard
-           → messaging-two-node → mcp-peer → services-swarm → services-app-call
-           → services-advertise-identity → app-searcher-swarm → app-finder-read
-           → app-two-providers → objects-provider-registration-authz
+           → app-search-provider → objects-provider-revoke-lease → adopt-node
+           → adopt-refusals → object-store → app-query → blueprints-two-node
+           → app-blueprint-sync → apphost-origin → app-origin-guards
+           → sign-contract-guard → messaging-two-node → mcp-peer
+           → services-swarm → services-app-call → services-advertise-identity
+           → app-searcher-swarm → app-finder-read → app-two-providers
+           → objects-provider-registration-authz
            → objects-provider-read-robustness → services-provider-gone
            → app-discover-follow → app-discover-swarm → app-ping-pong
            → app-call-remote → app-reject-code → app-op-surface-remote
