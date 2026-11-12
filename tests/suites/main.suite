@@ -27,6 +27,7 @@ introduce-node
 fs-watch
 fs-index-live
 repo-removal-sticks
+fs-watch-restart-restore
 object-store
 object-store-peer
 read-remote-peer
@@ -70,6 +71,8 @@ swarm-authz-matrix
 stranger-disclosure
 services-swarm-outcome-rules
 expel-node
+basic-strategy-excess-link-pruning
+basic-strategy-stalled-endpoint-released
 expel-during-transfer
 expel-authority
 hold-purge
@@ -80,6 +83,7 @@ swarm-roster-sync
 expel-propagation
 expel-survives-restart
 swarm-member-restart
+link-self-heal
 two-swarms-side-by-side
 join-via-member
 app-node-restart-reconnect

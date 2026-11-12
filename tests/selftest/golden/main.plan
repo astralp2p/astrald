@@ -27,27 +27,34 @@ w0 local:  smoke → mcp-origin → claim-window → admission-policies
            config mai-decline.apphost.policies = {}
            config node1.apphost.gate = {"tokenless": ["apphost.register", "user.info", "user.derive_identity", "user.bootstrap", "user.join"], "states": {"fresh": ["*"], "unclaimed": ["*"]}}
            config nomcp1.mcp.bind_mcp = ""
-w1 local:  bootstrap-user-software-key* → adopt-node* → expel-during-transfer
-w2 local:  bootstrap-user-software-key* → adopt-node* → expel-authority
-w3 local:  bootstrap-user-software-key* → adopt-node* → hold-purge
-w4 local:  bootstrap-user-software-key* → adopt-node* → swarm-roster-sync
+w1 local:  bootstrap-user-software-key* → adopt-node*
+           → basic-strategy-excess-link-pruning
+w2 local:  bootstrap-user-software-key* → adopt-node*
+           → basic-strategy-stalled-endpoint-released
+w3 local:  bootstrap-user-software-key* → adopt-node* → expel-during-transfer
+w4 local:  bootstrap-user-software-key* → adopt-node* → expel-authority
+w5 local:  bootstrap-user-software-key* → adopt-node* → hold-purge
+w6 local:  bootstrap-user-software-key* → adopt-node* → swarm-roster-sync
            → expel-propagation → expel-survives-restart
-w5 local:  bootstrap-user-software-key* → adopt-node* → swarm-roster-sync*
+w7 local:  bootstrap-user-software-key* → adopt-node* → swarm-roster-sync*
            → swarm-member-restart
-w6 local:  bootstrap-user-software-key* → adopt-node* → two-swarms-side-by-side
-w7 local:  bootstrap-user-software-key* → adopt-node* → join-via-member
-w8 local:  bootstrap-user-software-key* → adopt-node*
+w8 local:  bootstrap-user-software-key* → adopt-node* → swarm-roster-sync*
+           → link-self-heal
+w9 local:  bootstrap-user-software-key* → adopt-node* → two-swarms-side-by-side
+w10 local: bootstrap-user-software-key* → adopt-node* → join-via-member
+w11 local: bootstrap-user-software-key* → adopt-node*
            → app-node-restart-reconnect
-w9 local:  bootstrap-user-software-key* → adopt-node* → services-node-restart
-w10 local: bootstrap-user-software-key* → repo-removal-sticks
-w11 local: bootstrap-user-software-key* → hold-isolation
-w12 local: bootstrap-user-software-key* → indexer-cursor
-w13 local: bootstrap-user-software-key* → indexing-fs-watch-feed
-w14 local: bootstrap-user-software-key* → blueprint-survives-restart
-w15 local: distribution-gate-setup
+w12 local: bootstrap-user-software-key* → adopt-node* → services-node-restart
+w13 local: bootstrap-user-software-key* → repo-removal-sticks
+w14 local: bootstrap-user-software-key* → fs-watch-restart-restore
+w15 local: bootstrap-user-software-key* → hold-isolation
+w16 local: bootstrap-user-software-key* → indexer-cursor
+w17 local: bootstrap-user-software-key* → indexing-fs-watch-feed
+w18 local: bootstrap-user-software-key* → blueprint-survives-restart
+w19 local: distribution-gate-setup
            config node1.apphost.gate = {}
            config node1.apphost.policies = {}
-w16 local: import-user-software-key
-w17 local: bootstrap-user-op
-w18 local: bootstrap-passphrase
-w19 local: introduce-node-setup → introduce-node
+w20 local: import-user-software-key
+w21 local: bootstrap-user-op
+w22 local: bootstrap-passphrase
+w23 local: introduce-node-setup → introduce-node
