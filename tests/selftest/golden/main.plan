@@ -4,7 +4,7 @@ w0 local:  smoke → mcp-origin → claim-window → admission-policies
            → app-discover-local → app-handler-unroute → app-call-local
            → app-routing-two-apps → app-op-surface
            → bootstrap-user-software-key → claimed-node-keeps-owner
-           → app-token-lifecycle → policy-delegate → fs-watch
+           → app-token-lifecycle → policy-delegate → fs-watch → fs-index-live
            → registration-lease → app-index-provider → app-describe-provider
            → app-search-provider → adopt-node → adopt-refusals → object-store
            → app-query → blueprints-two-node → app-blueprint-sync
