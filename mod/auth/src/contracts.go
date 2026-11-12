@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	authmod "github.com/astralp2p/astrald/mod/auth"
+	objectsmod "github.com/astralp2p/astrald/mod/objects"
 
 	"github.com/astralp2p/astral-go/api/auth"
 	"github.com/astralp2p/astral-go/api/objects"
@@ -34,8 +35,13 @@ func (mod *Module) IndexContract(ctx *astral.Context, sc *auth.SignedContract) e
 	return mod.db.storeSignedContract(sc)
 }
 
+// maxContractSize is the largest object the indexer reads to find a contract.
+// note: a signed contract above it in local is not found by the indexer; one issued on this node is indexed when it is issued.
+const maxContractSize = 64 * 1024
+
 func (mod *Module) indexer(ctx *astral.Context) {
-	ctx = ctx.ExcludeZone(astral.ZoneNetwork)
+	// why: the follower reads every object in local. Housekeeping reads leave last-touched times unchanged (VFS 6, §11 "objects: last touched").
+	ctx = objectsmod.WithHousekeeping(ctx.ExcludeZone(astral.ZoneNetwork))
 
 	repo := mod.Objects.GetRepository(objects.RepoLocal)
 	if repo == nil {
@@ -54,22 +60,38 @@ func (mod *Module) indexer(ctx *astral.Context) {
 			continue
 		}
 
-		object, err := mod.Objects.Load(ctx, mod.Objects.ReadDefault(), objectID)
-
-		switch {
-		case err != nil:
+		// todo: rethink this indexing mechanism in terms of performance. It follows
+		// every object in the repository and reads each one to find contracts; the
+		// size cap and the probe below only make each miss cheaper.
+		if objectID.Size > maxContractSize {
 			continue
 		}
 
-		sc, ok := object.(*auth.SignedContract)
-		if !ok {
-			continue
-		}
-
-		_ = mod.IndexContract(ctx, sc)
+		mod.indexIfContract(ctx, repo, objectID)
 	}
 
 	mod.log.Logv(1, "auth indexer finished")
+}
+
+// indexIfContract indexes the object when its probed type is a signed contract.
+// Any other object is not loaded.
+func (mod *Module) indexIfContract(ctx *astral.Context, repo objectsmod.Repository, objectID *astral.ObjectID) {
+	probe, err := mod.Objects.Probe(ctx, repo, objectID)
+	if err != nil || string(probe.Type) != (&auth.SignedContract{}).ObjectType() {
+		return
+	}
+
+	object, err := mod.Objects.Load(ctx, mod.Objects.ReadDefault(), objectID)
+	if err != nil {
+		return
+	}
+
+	sc, ok := object.(*auth.SignedContract)
+	if !ok {
+		return
+	}
+
+	_ = mod.IndexContract(ctx, sc)
 }
 
 // WithdrawContracts takes back, on this node, every unexpired contract issued by
