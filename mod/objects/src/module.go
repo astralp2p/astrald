@@ -56,12 +56,13 @@ type Module struct {
 // journalFlushInterval is how often Run writes the reads journal while it is not empty.
 const journalFlushInterval = time.Minute
 
-// Run blocks until ctx is cancelled. It flushes the object reads journal once a minute,
-// and once more before it returns.
+// Run blocks until ctx is cancelled. It runs the daily purge task, flushes the object reads journal once a minute,
+// and flushes it once more before it returns.
 func (mod *Module) Run(ctx *astral.Context) error {
 	mod.ctx = ctx
 
 	go mod.sweepExternalRegistrations(ctx)
+	go mod.runPurgeTask(ctx, purgeTaskInterval, mod.config.PurgeUntouched)
 
 	mod.runJournalFlush(ctx, journalFlushInterval)
 
