@@ -34,19 +34,21 @@ w4 local:  bootstrap-user-software-key* → adopt-node* → swarm-roster-sync
            → expel-propagation → expel-survives-restart
 w5 local:  bootstrap-user-software-key* → adopt-node* → swarm-roster-sync*
            → swarm-member-restart
-w6 local:  bootstrap-user-software-key* → adopt-node* → two-swarms-side-by-side
-w7 local:  bootstrap-user-software-key* → adopt-node* → join-via-member
-w8 local:  bootstrap-user-software-key* → adopt-node*
+w6 local:  bootstrap-user-software-key* → adopt-node* → swarm-roster-sync*
+           → link-self-heal
+w7 local:  bootstrap-user-software-key* → adopt-node* → two-swarms-side-by-side
+w8 local:  bootstrap-user-software-key* → adopt-node* → join-via-member
+w9 local:  bootstrap-user-software-key* → adopt-node*
            → app-node-restart-reconnect
-w9 local:  bootstrap-user-software-key* → adopt-node* → services-node-restart
-w10 local: bootstrap-user-software-key* → repo-removal-sticks
-w11 local: bootstrap-user-software-key* → hold-isolation
-w12 local: bootstrap-user-software-key* → indexer-cursor
-w13 local: bootstrap-user-software-key* → blueprint-survives-restart
-w14 local: distribution-gate-setup
+w10 local: bootstrap-user-software-key* → adopt-node* → services-node-restart
+w11 local: bootstrap-user-software-key* → repo-removal-sticks
+w12 local: bootstrap-user-software-key* → hold-isolation
+w13 local: bootstrap-user-software-key* → indexer-cursor
+w14 local: bootstrap-user-software-key* → blueprint-survives-restart
+w15 local: distribution-gate-setup
            config node1.apphost.gate = {}
            config node1.apphost.policies = {}
-w15 local: import-user-software-key
-w16 local: bootstrap-user-op
-w17 local: bootstrap-passphrase
-w18 local: introduce-node-setup → introduce-node
+w16 local: import-user-software-key
+w17 local: bootstrap-user-op
+w18 local: bootstrap-passphrase
+w19 local: introduce-node-setup → introduce-node
