@@ -22,7 +22,6 @@ app-token-lifecycle
 policy-delegate
 adopt-node
 adopt-refusals
-basic-strategy-excess-link-pruning
 introduce-node-setup
 introduce-node
 fs-watch
@@ -70,6 +69,7 @@ swarm-authz-matrix
 stranger-disclosure
 services-swarm-outcome-rules
 expel-node
+basic-strategy-excess-link-pruning
 expel-during-transfer
 expel-authority
 hold-purge
