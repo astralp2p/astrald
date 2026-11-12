@@ -25,6 +25,7 @@ adopt-refusals
 introduce-node-setup
 introduce-node
 fs-watch
+fs-index-live
 repo-removal-sticks
 object-store
 object-store-peer
