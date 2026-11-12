@@ -40,13 +40,14 @@ w8 local:  bootstrap-user-software-key* → adopt-node*
            → app-node-restart-reconnect
 w9 local:  bootstrap-user-software-key* → adopt-node* → services-node-restart
 w10 local: bootstrap-user-software-key* → repo-removal-sticks
-w11 local: bootstrap-user-software-key* → hold-isolation
-w12 local: bootstrap-user-software-key* → indexer-cursor
-w13 local: bootstrap-user-software-key* → blueprint-survives-restart
-w14 local: distribution-gate-setup
+w11 local: bootstrap-user-software-key* → fs-watch-restart-restore
+w12 local: bootstrap-user-software-key* → hold-isolation
+w13 local: bootstrap-user-software-key* → indexer-cursor
+w14 local: bootstrap-user-software-key* → blueprint-survives-restart
+w15 local: distribution-gate-setup
            config node1.apphost.gate = {}
            config node1.apphost.policies = {}
-w15 local: import-user-software-key
-w16 local: bootstrap-user-op
-w17 local: bootstrap-passphrase
-w18 local: introduce-node-setup → introduce-node
+w16 local: import-user-software-key
+w17 local: bootstrap-user-op
+w18 local: bootstrap-passphrase
+w19 local: introduce-node-setup → introduce-node

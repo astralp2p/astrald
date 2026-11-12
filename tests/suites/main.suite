@@ -27,6 +27,7 @@ introduce-node
 fs-watch
 fs-index-live
 repo-removal-sticks
+fs-watch-restart-restore
 object-store
 object-store-peer
 read-remote-peer
