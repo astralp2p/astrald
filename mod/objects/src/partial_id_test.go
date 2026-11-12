@@ -544,17 +544,17 @@ func TestPartialID_EmptyObject(t *testing.T) {
 }
 
 // TestPartialID_ModuleKeepsTheArgument calls Load and Probe with a partial ID. The
-// argument keeps Size 0, and only the full ID becomes a key.
+// argument keeps Size 0, and only the full ID becomes a key. Load reads through the tracked wrapper, which counts the read.
 func TestPartialID_ModuleKeepsTheArgument(t *testing.T) {
 	f := newOpFixture(t)
 	full := f.store(t, typedData(t))
 	partial := &astral.ObjectID{Hash: full.Hash}
 	ctx := astral.NewContext(nil)
 
-	if _, err := f.mod.Load(ctx, f.repo, partial); err != nil {
+	if _, err := f.mod.Load(ctx, f.mod.GetRepository("main"), partial); err != nil {
 		t.Fatalf("load: %v", err)
 	}
-	probe, err := f.mod.Probe(ctx, f.repo, partial)
+	probe, err := f.mod.Probe(ctx, f.mod.GetRepository("main"), partial)
 	if err != nil {
 		t.Fatalf("probe: %v", err)
 	}
@@ -759,8 +759,8 @@ func TestPartialID_LoadCap(t *testing.T) {
 }
 
 // TestPartialID_LoadAtTheCap loads through a stub reader whose object is exactly
-// MaxObjectSize bytes. The load reads the whole object, decodes it, and keys its full ID
-// in the journal. The read creates no tracking row.
+// MaxObjectSize bytes. The load reads the whole object and decodes it. The stub is not a
+// tracked leaf, so the read counts nothing and creates no tracking row.
 func TestPartialID_LoadAtTheCap(t *testing.T) {
 	data := typedData(t)
 	full := &astral.ObjectID{Size: uint64(objectsmod.MaxObjectSize), Hash: [32]byte{0x5a}}
@@ -782,7 +782,9 @@ func TestPartialID_LoadAtTheCap(t *testing.T) {
 	if o.String() != storedText {
 		t.Fatalf("loaded %q; want %q", o.String(), storedText)
 	}
-	expectOnly(t, "journal", f.journalKeys(t), full)
+	if keys := f.journalKeys(t); len(keys) != 0 {
+		t.Fatalf("journal keys %v after a read of an untracked stub; want none", keys)
+	}
 	if ids := f.trackedIDs(t); len(ids) != 0 {
 		t.Fatalf("tracking keys %v after a read; want none", ids)
 	}

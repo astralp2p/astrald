@@ -1,10 +1,11 @@
 package objects
 
 import (
-	"errors"
 	"fmt"
 	"io"
 	"sync"
+	"sync/atomic"
+	"time"
 
 	"github.com/astralp2p/astral-go/api/objects"
 	"github.com/astralp2p/astral-go/astral"
@@ -100,13 +101,25 @@ func (repo *trackedRepository) resolve(ctx *astral.Context, objectID *astral.Obj
 }
 
 // Read opens the object through the inner repository. The reader names the wrapper as its repository.
-// todo: part 2b of the VFS ticket counts reads here, unless objectsmod.IsHousekeeping(ctx).
+// The reader counts the read in the journal, unless ctx is housekeeping.
+// note: the rules are in VFS 6, §11 "objects: last touched": https://wiki.satforge.dev/doc/vfs-6-specification-BxBnrSeTfT
 func (repo *trackedRepository) Read(ctx *astral.Context, objectID *astral.ObjectID, offset int64, limit int64) (objectsmod.Reader, error) {
 	r, err := repo.inner.Read(ctx, objectID, offset, limit)
 	if err != nil {
 		return nil, err
 	}
-	return &trackedReader{Reader: r, repo: repo}, nil
+
+	tr := &trackedReader{Reader: r, repo: repo}
+	tr.counted = !objectsmod.IsHousekeeping(ctx)
+
+	// why: an object smaller than or equal to the offset delivers no byte, and the operator counts such a read when it closes.
+	tr.zeroOnly = offset >= 0 && uint64(offset) >= r.ID().Size
+
+	// why: the wrapper claims io.Seeker only where the inner reader seeks, so a caller that tests for a Seeker is not misled.
+	if _, ok := r.(io.Seeker); ok {
+		return &trackedSeekReader{trackedReader: tr}, nil
+	}
+	return tr, nil
 }
 
 func (repo *trackedRepository) Free(ctx *astral.Context) (int64, error) {
@@ -157,23 +170,78 @@ func (w *trackedWriter) Commit() (*astral.ObjectID, error) {
 	return objectID, nil
 }
 
-// trackedReader names the wrapper as the repository of an opened object.
+// recountInterval is how often a stream that keeps delivering bytes is counted again.
+const recountInterval = time.Minute
+
+// trackedReader names the wrapper as the repository of an opened object and counts the read.
 // why: the name lookup compares a reader's repository with the registered one, which is the wrapper.
+// A read counts when its first byte is delivered, or when it closes if it can deliver no byte (operator decision 2026-11-12),
+// and again once a minute while bytes keep coming.
 type trackedReader struct {
 	objectsmod.Reader
 	repo *trackedRepository
+
+	counted  bool // false for a housekeeping read
+	zeroOnly bool // the read window holds no byte
+
+	mu       sync.Mutex
+	markedAt time.Time // zero until the read is counted
+	closed   atomic.Bool
 }
 
 func (r *trackedReader) Repo() objectsmod.Repository {
 	return r.repo
 }
 
-// Seek forwards to the inner reader.
-// why: the HTTP object handler seeks the reader it serves.
-func (r *trackedReader) Seek(offset int64, whence int) (int64, error) {
-	s, ok := r.Reader.(io.Seeker)
-	if !ok {
-		return -1, errors.ErrUnsupported
+// Read forwards to the inner reader and counts the read when it delivers a byte.
+func (r *trackedReader) Read(p []byte) (int, error) {
+	n, err := r.Reader.Read(p)
+	if n > 0 {
+		r.mark()
 	}
-	return s.Seek(offset, whence)
+	return n, err
+}
+
+// Close closes the inner reader and counts a read that can deliver no byte.
+func (r *trackedReader) Close() error {
+	err := r.Reader.Close()
+	if r.closed.CompareAndSwap(false, true) && r.zeroOnly {
+		r.mark()
+	}
+	return err
+}
+
+// mark notes the opened object in the journal when the read is due: not counted yet, or last counted a minute ago.
+// note: marking does no database work.
+func (r *trackedReader) mark() {
+	if !r.counted {
+		return
+	}
+
+	journal := r.repo.mod.objectsReadsJournal
+	now := journal.now()
+
+	r.mu.Lock()
+	due := r.markedAt.IsZero() || now.Sub(r.markedAt) >= recountInterval
+	if due {
+		r.markedAt = now
+	}
+	r.mu.Unlock()
+
+	if due {
+		journal.Mark(r.Reader.ID())
+	}
+}
+
+// trackedSeekReader is a trackedReader over an inner reader that seeks.
+// why: the HTTP object handler seeks the reader it serves.
+type trackedSeekReader struct {
+	*trackedReader
+}
+
+var _ io.Seeker = &trackedSeekReader{}
+
+// Seek forwards to the inner reader, which seeks.
+func (r *trackedSeekReader) Seek(offset int64, whence int) (int64, error) {
+	return r.Reader.(io.Seeker).Seek(offset, whence)
 }

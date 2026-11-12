@@ -12,7 +12,6 @@ import (
 	"github.com/astralp2p/astral-go/lib/query"
 	"github.com/astralp2p/astral-go/lib/routing"
 	"github.com/astralp2p/astrald/core"
-	objectsmod "github.com/astralp2p/astrald/mod/objects"
 )
 
 type opReadArgs struct {
@@ -26,8 +25,6 @@ type opReadArgs struct {
 // OpRead authorizes the caller under SeeObjects, then streams raw object bytes
 // over the accepted connection. With a repo it reads that repository. Without
 // one it reads from the first candidate the finders name that delivers bytes.
-// Records the access under the opened object's full ID in the reads journal,
-// which feeds purge ordering.
 //
 // why every failure is a plain rejection (astral.CodeRejected): the answer is
 // the object's raw bytes, which leave no room for an error_message, and shell
@@ -66,9 +63,6 @@ func (mod *Module) OpRead(ctx *astral.Context, q *routing.IncomingQuery, args op
 			return q.Reject()
 		}
 		defer r.Close()
-
-		// why: a partial request never becomes a journal key; the reader names the object it opened.
-		mod.objectsReadsJournal.Mark(r.ID())
 
 		conn := q.AcceptRaw()
 		defer conn.Close()
@@ -186,11 +180,6 @@ func (mod *Module) OpRead(ctx *astral.Context, q *routing.IncomingQuery, args op
 		if key != won.key {
 			cancelAttempt()
 		}
-	}
-
-	if r, ok := won.r.(objectsmod.Reader); ok {
-		// why: a partial request never becomes a journal key; the reader names the object it opened.
-		mod.objectsReadsJournal.Mark(r.ID())
 	}
 
 	conn := q.AcceptRaw()

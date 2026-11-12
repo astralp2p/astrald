@@ -53,27 +53,48 @@ type Module struct {
 	objectsReadsJournal *objectsReadsJournal
 }
 
-// Run blocks until ctx is cancelled, then flushes any pending object reads
-// before returning.
+// journalFlushInterval is how often Run writes the reads journal while it is not empty.
+const journalFlushInterval = time.Minute
+
+// Run blocks until ctx is cancelled. It flushes the object reads journal once a minute,
+// and once more before it returns.
 func (mod *Module) Run(ctx *astral.Context) error {
 	mod.ctx = ctx
 
 	go mod.sweepExternalRegistrations(ctx)
 
-	<-ctx.Done()
-
-	err := mod.objectsReadsJournal.Flush()
-	if err != nil {
-		mod.log.Error("object reads journal: final flush: %v", err)
-	}
+	mod.runJournalFlush(ctx, journalFlushInterval)
 
 	return nil
 }
 
+// runJournalFlush flushes the reads journal on every tick of interval until ctx ends, then flushes it a last time.
+// note: Flush writes nothing while the journal is empty.
+func (mod *Module) runJournalFlush(ctx *astral.Context, interval time.Duration) {
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			err := mod.objectsReadsJournal.Flush()
+			if err != nil {
+				mod.log.Error("object reads journal: final flush: %v", err)
+			}
+			return
+
+		case <-ticker.C:
+			err := mod.objectsReadsJournal.Flush()
+			if err != nil {
+				mod.log.Error("object reads journal: flush: %v", err)
+			}
+		}
+	}
+}
+
 // Load reads and decodes an object from repo. Data that isn't a valid astral
 // object is returned as an *astral.Blob rather than an error. An object larger
-// than MaxObjectSize returns ErrObjectTooLarge. Marks the read in the reads
-// journal under the opened object's full ID.
+// than MaxObjectSize returns ErrObjectTooLarge.
 func (mod *Module) Load(ctx *astral.Context, repo objectsmod.Repository, objectID *astral.ObjectID) (astral.Object, error) {
 	// read the object data
 	r, err := repo.Read(ctx, objectID, 0, 0)
@@ -86,11 +107,6 @@ func (mod *Module) Load(ctx *astral.Context, repo objectsmod.Repository, objectI
 	if err != nil {
 		return nil, err
 	}
-
-	// why: a partial request never becomes a journal key; the reader names the object it opened.
-	resolvedID := r.ID()
-
-	mod.objectsReadsJournal.Mark(resolvedID)
 
 	// parse the object
 	o, _, err := astral.Decode(bytes.NewReader(data), astral.Canonical())
