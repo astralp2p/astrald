@@ -23,7 +23,7 @@ import asyncio
 import astral
 
 from lib.sessionio import load
-from subscription import (ERROR, INDEX, INDEX_NOT_FOUND, UNINDEX,
+from lib.indexing import (ERROR, INDEX, INDEX_NOT_FOUND, UNINDEX,
                           Subscription, answer, change)
 
 # why: the resync of `local` after the restart runs in the background, so the
