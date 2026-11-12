@@ -13,5 +13,7 @@ func (mod *Module) LoadDependencies(*astral.Context) (err error) {
 	// note: the module runs without the user module; the node is then the only root caller.
 	core.Inject(mod.node, &mod.OptionalDeps)
 
+	mod.addAuthorizers()
+
 	return
 }
