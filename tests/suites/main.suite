@@ -69,6 +69,7 @@ swarm-authz-matrix
 stranger-disclosure
 services-swarm-outcome-rules
 expel-node
+basic-strategy-excess-link-pruning
 expel-during-transfer
 expel-authority
 hold-purge
