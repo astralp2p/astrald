@@ -89,3 +89,44 @@ func Emit(name string, facts any) {
 	}
 	fmt.Println(string(out))
 }
+
+// Checks records which checks of a flow held. In drive mode (Strict false) a
+// failed Check is recorded and the flow goes on, so the oracle judges it; in
+// verify mode (Strict true) it ends the flow. A failed Require always ends it:
+// it is a wiring fault of the driver, not a verdict about astrald.
+type Checks struct {
+	Strict bool
+	Held   map[string]bool
+}
+
+// NewChecks returns empty Checks, strict for mode "verify".
+func NewChecks(mode string) *Checks {
+	return &Checks{Strict: mode == "verify", Held: map[string]bool{}}
+}
+
+// Check records a verdict check and returns an error naming it when it failed
+// and c is strict.
+func (c *Checks) Check(name string, ok bool, format string, args ...any) error {
+	c.Held[name] = ok
+	if ok {
+		fmt.Fprintln(os.Stderr, "ok:", name)
+		return nil
+	}
+	err := fmt.Errorf("%s: "+format, append([]any{name}, args...)...)
+	if !c.Strict {
+		fmt.Fprintln(os.Stderr, "did not hold:", err)
+		return nil
+	}
+	return err
+}
+
+// Require records a wiring check and returns an error naming it when it
+// failed.
+func (c *Checks) Require(name string, ok bool, format string, args ...any) error {
+	c.Held[name] = ok
+	if ok {
+		fmt.Fprintln(os.Stderr, "ok:", name)
+		return nil
+	}
+	return fmt.Errorf("driver wiring: %s: "+format, append([]any{name}, args...)...)
+}

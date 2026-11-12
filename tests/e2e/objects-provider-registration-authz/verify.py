@@ -4,6 +4,9 @@ covers the role, and dials exactly the registrations it accepted.
 
 Four judgements.
 
+In `drive` mode the driver records every reply and dial count and stops only
+on a wiring fault; the verdicts are the oracle's.
+
 1. The matrix. The oracle holds its own table of which (app, role) cells a
    grant covers, and reads every reply the driver recorded against it: a 10 s
    lease for a covered cell, exactly `not permitted` for every other. An exact
@@ -124,12 +127,11 @@ async def judge_live(n1: dict, user_token: str) -> str:
 def main():
     doc = load()
     f = doc["facts"]["objects_provider_registration_authz"]
-    failed = [k for k, ok in f["checks"].items() if not ok]
-    assert not failed, f"driver checks that did not hold: {failed}"
-
     judge_matrix(f)
     node_self = judge_nodes(f)
     judge_dials(f)
+    failed = [k for k, ok in f["checks"].items() if not ok]
+    assert not failed, f"driver checks that did not hold: {failed}"
     live_self = asyncio.run(judge_live(doc["nodes"]["node1"], doc["facts"]["user_token"]))
 
     proc = subprocess.run(

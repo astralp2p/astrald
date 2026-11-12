@@ -46,7 +46,7 @@ func fanOut(ctx *astral.Context, user *astrald.Client, firstLease time.Time, f *
 	current := probe{id: id, word: "objects-provider-registration-authz-" + nonce}
 
 	f.FanoutAfter = time.Since(firstLease).Seconds()
-	if err := f.check("fanout_within_lease", time.Since(firstLease) < leaseMargin,
+	if err := f.checks.Require("fanout_within_lease", time.Since(firstLease) < leaseMargin,
 		"the fan-out started %.1f s after the first lease, past %v: the 10 s leases may lapse under it",
 		f.FanoutAfter, leaseMargin); err != nil {
 		return current, err
@@ -95,7 +95,7 @@ func checkDials(providers map[string]*provider.Provider, current probe, f *facts
 		}
 	}
 	sort.Strings(bad)
-	return f.check("dials", len(bad) == 0, "node1's fan-out dialed otherwise than the accepted cells once each: %v", bad)
+	return f.checks.Check("dials", len(bad) == 0, "node1's fan-out dialed otherwise than the accepted cells once each: %v", bad)
 }
 
 // revokeAll revokes ServeObjects from every app the matrix granted it, so no

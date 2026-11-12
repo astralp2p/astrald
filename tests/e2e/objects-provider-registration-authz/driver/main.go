@@ -70,7 +70,7 @@ func main() {
 		fmt.Fprintln(os.Stderr, "usage: driver drive|verify <session.json>")
 		os.Exit(2)
 	}
-	f := newFacts()
+	f := newFacts(os.Args[1])
 	err := run(os.Args[2], f)
 	if os.Args[1] == "drive" {
 		provider.Emit("objects_provider_registration_authz", f)
@@ -90,21 +90,16 @@ type facts struct {
 	Dials       map[string]int    `json:"dials"`
 	FanoutAfter float64           `json:"fanout_after_s"`
 	Checks      map[string]bool   `json:"checks"`
+
+	checks *provider.Checks
 }
 
-func newFacts() *facts {
+// newFacts returns empty facts whose checks end the flow in mode "verify"
+// only; in mode "drive" the oracle judges them.
+func newFacts(mode string) *facts {
+	c := provider.NewChecks(mode)
 	return &facts{Cells: map[string]string{}, NodeSelf: map[string]string{},
-		NodeNetwork: map[string]string{}, Dials: map[string]int{}, Checks: map[string]bool{}}
-}
-
-// check records a check and returns an error naming it when it failed.
-func (f *facts) check(name string, ok bool, format string, args ...any) error {
-	f.Checks[name] = ok
-	if !ok {
-		return fmt.Errorf("%s: "+format, append([]any{name}, args...)...)
-	}
-	fmt.Fprintln(os.Stderr, "ok:", name)
-	return nil
+		NodeNetwork: map[string]string{}, Dials: map[string]int{}, Checks: c.Held, checks: c}
 }
 
 // reply renders one register answer: "lease <duration>" or "error: <text>".
@@ -219,7 +214,7 @@ func registerMatrix(ctx *astral.Context, providers map[string]*provider.Provider
 			}
 		}
 	}
-	return first, f.check("matrix", len(bad) == 0,
+	return first, f.checks.Check("matrix", len(bad) == 0,
 		"cells that answered otherwise than accepted with a 10 s lease or refused with %q: %v", notPermitted, bad)
 }
 
@@ -256,10 +251,10 @@ func registerNodes(ctx *astral.Context, n1, n2 provider.Node, f *facts) error {
 			netBad = append(netBad, string(role)+": "+f.NodeNetwork[string(role)])
 		}
 	}
-	if err := f.check("node_self_refused", len(selfBad) == 0,
+	if err := f.checks.Check("node_self_refused", len(selfBad) == 0,
 		"node1's own token was not refused with %q or %q: %v", notPermitted, selfRefusal, selfBad); err != nil {
 		return err
 	}
-	return f.check("network_refused", len(netBad) == 0,
+	return f.checks.Check("network_refused", len(netBad) == 0,
 		"node2's token over the link was not refused with %q: %v", originRefusal, netBad)
 }
