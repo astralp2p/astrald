@@ -273,6 +273,7 @@ class TestShippedPlans(Invariants, unittest.TestCase):
              ("vm", "tor-link"),
              ("local", "two-swarms-side-by-side"),
              ("local", "blueprint-survives-restart"),
+             ("local", "fs-watch-restart-restore"),
              ("local", "hold-isolation"), ("local", "indexer-cursor"),
              ("local", "repo-removal-sticks"),
              ("local", "bootstrap-passphrase"),
