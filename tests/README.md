@@ -338,6 +338,12 @@ module, so the ops are raw queries.
 | `file_locations(c, oid)` | `[(Path, NodeID)]` of the `mod.fs.file_location` descriptors, after `objects.learn` |
 | `read_refused(c, oid, repo)` | None when a read is refused, else what was served |
 
+`lib/indexing.py` drives the indexing ops as raw JSON queries, since
+astral-py binds no `indexing` module: `register_indexer`, `answer` for a
+one-shot op, `Subscription` for `indexing.subscribe` (one change at a time,
+acked with `ack`), `drain`, and `change`, which reduces an envelope to its
+type, repository, version and object.
+
 ## Fast loops
 
 - **`--keep`** leaves the run's last world up: a local world's nodes, a

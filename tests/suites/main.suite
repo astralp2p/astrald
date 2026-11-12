@@ -75,6 +75,7 @@ expel-authority
 hold-purge
 hold-isolation
 indexer-cursor
+indexing-fs-watch-feed
 swarm-roster-sync
 expel-propagation
 expel-survives-restart

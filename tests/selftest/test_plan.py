@@ -271,6 +271,7 @@ class TestShippedPlans(Invariants, unittest.TestCase):
              ("local", "two-swarms-side-by-side"),
              ("local", "blueprint-survives-restart"),
              ("local", "hold-isolation"), ("local", "indexer-cursor"),
+             ("local", "indexing-fs-watch-feed"),
              ("local", "repo-removal-sticks"),
              ("local", "bootstrap-passphrase"),
              ("local", "bootstrap-user-op"),
