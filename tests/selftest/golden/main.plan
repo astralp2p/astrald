@@ -17,8 +17,7 @@ w0 local:  smoke → mcp-origin → claim-window → admission-policies
            → swarm-authz-matrix → stranger-disclosure
            → services-swarm-outcome-rules → object-store-peer
            → read-remote-peer → read-swarm → discover-swarm
-           → adopt-claimed-node-setup → adopt-claimed-node
-           → basic-strategy-excess-link-pruning
+           → adopt-claimed-node-setup → adopt-claimed-node → expel-node
            config admitter.apphost.policies = {"app_register": "reject_all"}
            config admitter.user.policies = {"swarm_join": "reject_all", "swarm_invite": "accept_all"}
            config invitee.user.policies = {"swarm_join": "accept_all", "swarm_invite": "reject_all"}
@@ -29,8 +28,9 @@ w0 local:  smoke → mcp-origin → claim-window → admission-policies
            config node1.apphost.gate = {"tokenless": ["apphost.register", "user.info", "user.derive_identity", "user.bootstrap", "user.join"], "states": {"fresh": ["*"], "unclaimed": ["*"]}}
            config nomcp1.mcp.bind_mcp = ""
 w1 local:  bootstrap-user-software-key* → adopt-node*
+           → basic-strategy-excess-link-pruning
+w2 local:  bootstrap-user-software-key* → adopt-node*
            → basic-strategy-stalled-endpoint-released
-w2 local:  bootstrap-user-software-key* → adopt-node* → expel-node
 w3 local:  bootstrap-user-software-key* → adopt-node* → expel-during-transfer
 w4 local:  bootstrap-user-software-key* → adopt-node* → expel-authority
 w5 local:  bootstrap-user-software-key* → adopt-node* → hold-purge
