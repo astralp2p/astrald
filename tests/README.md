@@ -333,6 +333,26 @@ with their entries in the results directory (`pkill -f results/<stamp>/`); a
 `--keep` world keeps its apps running with its nodes; an app is a process on the
 host, so its test is `local_only`.
 
+## Host directories
+
+`lib/fsfixture.py` holds what the fs tests share. astral-py binds no `fs`
+module, so the ops are raw queries.
+
+| call | does |
+|------|------|
+| `new_watch(c, path, name, temporary=False)` / `new_repo(...)` | `fs.new_watch` / `fs.new_repo`; None on the ack, else the node's error text |
+| `disk_ids(root)` | `{path: id}` of every regular file under `root`, hashed here; symlinks skipped |
+| `wait_scan(c, repo, want, deadline)` | polls `objects.scan` until it lists exactly `want`; `(ok, last listing)` |
+| `wait_contains(c, repo, ids, deadline)` | polls `objects.contains`; the ids still missing |
+| `file_locations(c, oid)` | `[(Path, NodeID)]` of the `mod.fs.file_location` descriptors, after `objects.learn` |
+| `read_refused(c, oid, repo)` | None when a read is refused, else what was served |
+
+`lib/indexing.py` drives the indexing ops as raw JSON queries, since
+astral-py binds no `indexing` module: `register_indexer`, `answer` for a
+one-shot op, `Subscription` for `indexing.subscribe` (one change at a time,
+acked with `ack`), `drain`, and `change`, which reduces an envelope to its
+type, repository, version and object.
+
 ## Fast loops
 
 - **`--keep`** leaves the run's last world up: a local world's nodes, a
