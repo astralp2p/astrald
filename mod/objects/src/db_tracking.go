@@ -17,5 +17,10 @@ type dbTracking struct {
 // note: provisional, pending operator decision: the name of the tracking table.
 func (dbTracking) TableName() string { return objects.DBPrefix + "tracking" }
 
+// touch returns the last touch of the row: the later of its commit and read times.
+func (row *dbTracking) touch() int64 {
+	return max(row.CommittedAt, row.ReadAt)
+}
+
 // dbObjectsTableName names the tracking table that dbTracking replaces.
 const dbObjectsTableName = objects.DBPrefix + "objects"

@@ -49,6 +49,7 @@ func (db *DB) deleteRepositoryTracking(repo string) error {
 // UpdateReadAt flushes a batch of pending read times. It only raises: a row keeps its stored read time
 // when that time is not older than the batch time, and an ObjectID without a row changes nothing.
 // A time sets the read time of every row with that ObjectID, in every repository.
+// note: this is the only tracking query that does not filter by repository: one counted read touches every tracked copy (VFS 6, §11 "objects: last touched").
 func (db *DB) UpdateReadAt(reads map[astral.ObjectID]astral.Time) error {
 	if len(reads) == 0 {
 		return nil
@@ -69,31 +70,25 @@ func (db *DB) UpdateReadAt(reads map[astral.ObjectID]astral.Time) error {
 		})
 }
 
-// readCursor marks a position in the (last touch, repository, object_id) order.
-type readCursor struct {
-	Touch      int64
-	Repository string
-	ObjectID   *astral.ObjectID
-}
-
 // touchColumn is the last touch of a row: the later of its commit and read times.
 const touchColumn = "MAX(committed_at, read_at)"
 
-// ListReadOldest returns up to limit rows ordered least recently touched first, starting
-// after the cursor (nil = from the beginning). An empty repo lists every repository.
-// next is the cursor to resume from, or nil once the final page has been returned.
-// todo: part 2c of the VFS ticket replaces this listing with the per-leaf purge of VFS 6, §11 "objects: purge".
-func (db *DB) ListReadOldest(repo string, after *readCursor, limit int) (rows []*dbTracking, next *readCursor, err error) {
-	if limit <= 0 {
-		return nil, nil, nil
-	}
+// untouchedCursor marks a position in the (last touch, object_id) order of one leaf.
+type untouchedCursor struct {
+	Touch    int64
+	ObjectID *astral.ObjectID
+}
 
-	q := db.DB.Order(touchColumn + ", repository, object_id").Limit(limit)
-	if repo != "" {
-		q = q.Where("repository = ?", repo)
-	}
+// listUntouched returns up to limit rows of the leaf repository repo whose last touch is before cutoff,
+// least recently touched first, starting after the cursor (nil = from the beginning).
+// next is the cursor to resume from, or nil once the final page has been returned.
+func (db *DB) listUntouched(repo string, cutoff int64, after *untouchedCursor, limit int) (rows []*dbTracking, next *untouchedCursor, err error) {
+	q := db.DB.
+		Where("repository = ? AND "+touchColumn+" < ?", repo, cutoff).
+		Order(touchColumn + ", object_id").
+		Limit(limit)
 	if after != nil {
-		q = q.Where("("+touchColumn+", repository, object_id) > (?, ?, ?)", after.Touch, after.Repository, after.ObjectID)
+		q = q.Where("("+touchColumn+", object_id) > (?, ?)", after.Touch, after.ObjectID)
 	}
 
 	err = q.Find(&rows).Error
@@ -101,12 +96,24 @@ func (db *DB) ListReadOldest(repo string, after *readCursor, limit int) (rows []
 		return nil, nil, err
 	}
 
-	// a short page means we reached the end; only hand back a cursor when the
-	// page was full, so the caller knows there may be more
+	// why: only a full page can have more rows after it.
 	if len(rows) == limit {
 		last := rows[len(rows)-1]
-		next = &readCursor{Touch: max(last.CommittedAt, last.ReadAt), Repository: last.Repository, ObjectID: last.ObjectID}
+		next = &untouchedCursor{Touch: last.touch(), ObjectID: last.ObjectID}
 	}
 
 	return rows, next, nil
+}
+
+// findTracking returns the row of objectID in the leaf repository repo, or nil when there is none.
+func (db *DB) findTracking(repo string, objectID *astral.ObjectID) (*dbTracking, error) {
+	var rows []*dbTracking
+	err := db.DB.
+		Where("repository = ? AND object_id = ?", repo, objectID).
+		Limit(1).
+		Find(&rows).Error
+	if err != nil || len(rows) == 0 {
+		return nil, err
+	}
+	return rows[0], nil
 }
