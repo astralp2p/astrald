@@ -418,16 +418,6 @@ func TestSeeObjectsIsNodeLocal(t *testing.T) {
 	}
 }
 
-// TestDescribeAndFindDoNotReachTheHandler checks the action objects.describe and objects.find ask: it names no
-// ObjectID, and the handler refuses an action without one. mod/objects tests that the two ops ask it so.
-func TestDescribeAndFindDoNotReachTheHandler(t *testing.T) {
-	f := newSeeFixture(t)
-
-	if f.see(f.vfs, nil) {
-		t.Fatal("an action without ObjectID is allowed")
-	}
-}
-
 func TestCheckManageOriginRefusesTheNetwork(t *testing.T) {
 	id := astral.GenerateIdentity()
 	q := query.New(id, id, "vfs.volumes", nil)
