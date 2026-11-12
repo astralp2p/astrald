@@ -262,6 +262,7 @@ class TestShippedPlans(Invariants, unittest.TestCase):
             [(w.kind, w.steps[-1].test) for w in worlds],
             [("local", "app-node-restart-reconnect"),
              ("local", "basic-strategy-excess-link-pruning"),
+             ("local", "basic-strategy-stalled-endpoint-released"),
              ("local", "expel-authority"),
              ("local", "expel-during-transfer"), ("local", "expel-node"),
              ("vm", "gateway-relay"), ("local", "hold-purge"),
