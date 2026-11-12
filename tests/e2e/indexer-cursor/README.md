@@ -14,7 +14,7 @@ only the identity that registered an indexer consumes or deletes it.
   nonce and acks whatever it is sent.
 - **oracle** `verify.py` — after the restart, subscribes as I with the token
   the driver recorded, then unregisters as J and as I.
-- **helper** `subscription.py` — the indexing ops as raw JSON queries, since
+- **helper** `lib/indexing.py` — the indexing ops as raw JSON queries, since
   astral-py binds no `indexing` module.
 
 ## What it covers

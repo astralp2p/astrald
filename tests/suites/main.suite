@@ -25,7 +25,9 @@ adopt-refusals
 introduce-node-setup
 introduce-node
 fs-watch
+fs-index-live
 repo-removal-sticks
+fs-watch-restart-restore
 object-store
 object-store-peer
 read-remote-peer
@@ -52,6 +54,7 @@ app-describe-provider
 app-search-provider
 app-two-providers
 objects-provider-registration-authz
+objects-provider-read-robustness
 objects-provider-revoke-lease
 services-provider-gone
 app-discover-follow
@@ -71,15 +74,19 @@ swarm-authz-matrix
 stranger-disclosure
 services-swarm-outcome-rules
 expel-node
+basic-strategy-excess-link-pruning
+basic-strategy-stalled-endpoint-released
 expel-during-transfer
 expel-authority
 hold-purge
 hold-isolation
 indexer-cursor
+indexing-fs-watch-feed
 swarm-roster-sync
 expel-propagation
 expel-survives-restart
 swarm-member-restart
+link-self-heal
 two-swarms-side-by-side
 join-via-member
 app-node-restart-reconnect

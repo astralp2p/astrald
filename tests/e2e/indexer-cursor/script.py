@@ -34,8 +34,8 @@ import astral
 from astral.object import Query
 
 from lib.sessionio import load, write_facts
-from subscription import (INDEX, UNINDEX, Subscription, answer, change, drain,
-                          register_indexer)
+from lib.indexing import (INDEX, UNINDEX, Subscription, answer, change,
+                          drain, register_indexer)
 
 SERVE = "mod.auth.serve_objects_action"
 REPO = "local"

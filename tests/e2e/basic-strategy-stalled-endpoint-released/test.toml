@@ -1,0 +1,8 @@
+nodes      = ["node1", "node2"]
+after      = "adopt-node"
+# why: the bait endpoint stays in node1's book for 90 days, and no op
+# removes one; both nodes keep two more links
+destroys   = true
+local_only = "serves a bait listener on the host for node1 to dial"
+timeout    = 120
+facts      = ["stalled_endpoint"]
