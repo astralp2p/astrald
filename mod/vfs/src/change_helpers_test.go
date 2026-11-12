@@ -184,13 +184,14 @@ func changeTestCall(t *testing.T, fn any, vol *dbVolume, args map[string]any) as
 }
 
 // changeTestWrite writes content as the VFS identity, in chunks of at most 4 bytes, and returns the answer after
-// the ack.
+// the ack. It returns once the op has closed the stream, so the op's writer has ended.
 func changeTestWrite(t *testing.T, mod *Module, vol *dbVolume, path, content string) astral.Object {
 	t.Helper()
 
 	c := changeTestRoute(t, mod.OpWrite, vol.Identity, map[string]any{"path": path})
 	first := c.receive()
 	if _, ok := first.(*astral.Ack); !ok {
+		c.waitClosed()
 		return first
 	}
 
@@ -203,7 +204,19 @@ func changeTestWrite(t *testing.T, mod *Module, vol *dbVolume, path, content str
 	}
 	c.send(append(objects, &objectsapi.CommitMsg{})...)
 
-	return c.receive()
+	answer := c.receive()
+	c.waitClosed()
+
+	return answer
+}
+
+// waitClosed waits until the op closes the stream and fails on any further answer.
+func (c *changeTestClient) waitClosed() {
+	c.t.Helper()
+
+	if answer := c.receive(); answer != nil {
+		c.t.Fatalf("answer %#v after the last one", answer)
+	}
 }
 
 // changeTestEntry asserts that an answer is an entry and returns it.
