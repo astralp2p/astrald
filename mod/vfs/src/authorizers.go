@@ -62,9 +62,7 @@ func (mod *Module) authzOwnOrRoot(actor, vfsID *astral.Identity) bool {
 // The Repo field is ignored. A database error refuses. A refusal is the same for an unknown ObjectID and for an
 // ObjectID of another VFS.
 //
-// fixme: VFS 6, section 6 keeps objects.describe and objects.find off this handler, but both ask a
-// SeeObjectsAction that names the ObjectID (mod/objects/src/op_describe.go, op_find.go), so they reach it.
-// The invariant needs those ops to ask without the ObjectID; this handler cannot tell them apart.
+// note: objects.describe and objects.find ask without an ObjectID (VFS 6, section 6), so this handler refuses them.
 func (mod *Module) AuthorizeSeeObjects(ctx *astral.Context, a *apiauth.SeeObjectsAction) bool {
 	id := a.ObjectID
 	if id == nil || (id.Size == 0 && !id.IsEqual(&emptyObjectID)) {

@@ -336,6 +336,21 @@ func TestSeeObjectsAllowsAReadPermitAndNotAWritePermit(t *testing.T) {
 	}
 }
 
+// TestSeeObjectsDoesNotReachDescribeOrFind checks the action objects.describe and objects.find ask: it names no
+// ObjectID (mod/objects/src/authorize_see_objects_test.go pins that), so a VFS identity is refused even for its
+// own file.
+func TestSeeObjectsDoesNotReachDescribeOrFind(t *testing.T) {
+	f := newSeeFixture(t)
+	reader := astral.GenerateIdentity()
+	f.auth.permit(&vfsapi.ReadAction{}, reader, f.vfs)
+
+	for _, actor := range []*astral.Identity{f.vfs, reader} {
+		if f.mod.AuthorizeSeeObjects(testContext(), &apiauth.SeeObjectsAction{Action: apiauth.NewAction(actor)}) {
+			t.Fatalf("%v is allowed an action that names no ObjectID", actor)
+		}
+	}
+}
+
 func TestSeeObjectsIgnoresTheRepo(t *testing.T) {
 	f := newSeeFixture(t)
 	action := seeAction(f.vfs, f.file)
