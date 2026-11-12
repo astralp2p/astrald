@@ -40,9 +40,22 @@ func NewRepository(mod *Module, label string, path string) *Repository {
 		addQueue: &sig.Queue[*astral.ObjectID]{},
 	}
 
-	repo.removeTempFiles()
-
 	return repo
+}
+
+// addRepository registers repo under name with the objects module.
+// A writable repository removes its leftover temp files once the registration succeeds.
+// why: a refused registration leaves the root untouched, so a live repository on the same root keeps its writes in flight.
+func (mod *Module) addRepository(name string, repo objectsmod.Repository) error {
+	if err := mod.Objects.AddRepository(name, repo); err != nil {
+		return err
+	}
+
+	if writable, ok := repo.(*Repository); ok {
+		writable.removeTempFiles()
+	}
+
+	return nil
 }
 
 // removeTempFiles deletes the temp files that interrupted writes left in the root.

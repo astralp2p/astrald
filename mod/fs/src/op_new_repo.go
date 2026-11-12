@@ -56,7 +56,7 @@ func (mod *Module) OpNewRepo(ctx *astral.Context, q *routing.IncomingQuery, args
 	persisted.persisted = !args.Temporary
 	repo = persisted
 
-	err = mod.Objects.AddRepository(args.Name, repo)
+	err = mod.addRepository(args.Name, repo)
 	if err != nil {
 		return ch.Send(astral.Err(err))
 	}
