@@ -93,8 +93,9 @@ func (w *Writer) publish(objectID *astral.ObjectID) error {
 
 	// why: the rename is the only writer of newPath, so its error is the commit's error -- a later
 	// stat reports ErrNotExist for a failed rename and reports success for a name a directory holds.
+	// note: a file of another size is a truncated copy; the rename replaces it.
 	stat, err := os.Stat(newPath)
-	if err == nil && stat.Mode().IsRegular() {
+	if err == nil && stat.Mode().IsRegular() && uint64(stat.Size()) == objectID.Size {
 		// we already have this object
 		os.Remove(oldPath)
 	} else if err = os.Rename(oldPath, newPath); err != nil {
