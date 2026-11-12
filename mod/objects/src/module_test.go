@@ -58,8 +58,8 @@ func (failingObject) ReadFrom(io.Reader) (int64, error) { return 0, errStoreEnco
 // TestModule_StoreDiscardsTheWriterWhenEncodingFails: a failed encode ends the
 // writer, so no reservation and no temp file survive the call.
 //
-// why a zero Module suffices: Store returns at the encode error, before
-// trackObject reaches mod.db.
+// why a zero Module suffices: Store returns at the encode error, before it
+// reaches any field of the module.
 func TestModule_StoreDiscardsTheWriterWhenEncodingFails(t *testing.T) {
 	repo := &endTrackingRepo{Repository: mem.New("test", 0)}
 	mod := &Module{}
@@ -89,8 +89,8 @@ func TestModule_StoreDiscardsTheWriterWhenEncodingFails(t *testing.T) {
 // TestModule_StoreDiscardAfterCommitIsHarmless: the deferred Discard runs on the
 // success path too and must not undo the commit.
 //
-// why Commit is driven directly: Module.Store reaches trackObject after a
-// successful commit, which needs a database this test does not build.
+// why Commit is driven directly: the deferred Discard belongs to the writer,
+// so the writer alone shows it.
 func TestModule_StoreDiscardAfterCommitIsHarmless(t *testing.T) {
 	ctx := astral.NewContext(nil)
 	repo := &endTrackingRepo{Repository: mem.New("test", 0)}

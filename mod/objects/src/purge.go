@@ -21,7 +21,13 @@ func (mod *Module) purgeRepository(ctx *astral.Context, repo objects.Repository)
 			mod.log.Error("object reads journal: purge flush: %v", err)
 		}
 
-		// purge in read order: oldest-read objects first, paged via keyset cursor
+		// why: a row names its leaf, so a stale row is dropped only when the purged repository is that leaf.
+		var leaf string
+		if tracked, ok := repo.(*trackedRepository); ok {
+			leaf = tracked.name
+		}
+
+		// purge in touch order: least recently touched objects first, paged via keyset cursor
 		var after *readCursor
 		for {
 			select {
@@ -31,13 +37,14 @@ func (mod *Module) purgeRepository(ctx *astral.Context, repo objects.Repository)
 			default:
 			}
 
-			ids, next, err := mod.db.ListReadOldest(after, 256)
+			rows, next, err := mod.db.ListReadOldest(leaf, after, 256)
 			if err != nil {
 				*errPtr = err
 				return
 			}
 
-			for _, id := range ids {
+			for _, row := range rows {
+				id := row.ObjectID
 				if len(mod.Holders(id)) > 0 {
 					continue
 				}
@@ -45,13 +52,7 @@ func (mod *Module) purgeRepository(ctx *astral.Context, repo objects.Repository)
 				err := repo.Delete(ctx, id)
 				switch {
 				case err == nil:
-					// why: the object is gone, so its tracking row must go too —
-					// otherwise it lingers as the oldest entry and every later
-					// purge re-deletes it before reaching real candidates.
-					derr := mod.db.DeleteObjectCacheByID(id)
-					if derr != nil {
-						mod.log.Error("purge: drop cache row %v: %v", id, derr)
-					}
+					// note: the tracked leaf removed its row on delete.
 					err = sig.Send(ctx, out, id)
 					if err != nil {
 						*errPtr = err
@@ -59,7 +60,10 @@ func (mod *Module) purgeRepository(ctx *astral.Context, repo objects.Repository)
 					}
 
 				case errors.Is(err, objects.ErrNotFound):
-					derr := mod.db.DeleteObjectCacheByID(id)
+					if leaf == "" {
+						continue
+					}
+					derr := mod.db.deleteTracking(leaf, id)
 					if derr != nil {
 						mod.log.Error("purge: drop stale cache row %v: %v", id, derr)
 					}

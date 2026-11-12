@@ -102,9 +102,14 @@ func newOpFixture(t *testing.T) *opFixture {
 		t.Fatalf("add local finder: %v", err)
 	}
 
+	// why: a leaf registered through AddRepository is tracked, so a commit writes the row the tests check.
 	repo := mem.New("main", 0)
-	addRepo(t, mod, "main", repo)
-	addRepo(t, mod, "named", mem.New("named", 0))
+	if err := mod.AddRepository("main", repo); err != nil {
+		t.Fatalf("add main: %v", err)
+	}
+	if err := mod.AddRepository("named", mem.New("named", 0)); err != nil {
+		t.Fatalf("add named: %v", err)
+	}
 
 	return &opFixture{mod: mod, repo: repo, reads: reads}
 }
@@ -162,14 +167,14 @@ func (f *opFixture) journalKeys(t *testing.T) []astral.ObjectID {
 func (f *opFixture) trackedIDs(t *testing.T) []astral.ObjectID {
 	t.Helper()
 
-	var rows []*dbObject
+	var rows []*dbTracking
 	if err := f.mod.db.Find(&rows).Error; err != nil {
 		t.Fatalf("list tracking rows: %v", err)
 	}
 
 	var ids []astral.ObjectID
 	for _, row := range rows {
-		ids = append(ids, *row.ID)
+		ids = append(ids, *row.ObjectID)
 	}
 	return ids
 }
@@ -754,7 +759,8 @@ func TestPartialID_LoadCap(t *testing.T) {
 }
 
 // TestPartialID_LoadAtTheCap loads through a stub reader whose object is exactly
-// MaxObjectSize bytes. The load reads the whole object, decodes it, and keys its full ID.
+// MaxObjectSize bytes. The load reads the whole object, decodes it, and keys its full ID
+// in the journal. The read creates no tracking row.
 func TestPartialID_LoadAtTheCap(t *testing.T) {
 	data := typedData(t)
 	full := &astral.ObjectID{Size: uint64(objectsmod.MaxObjectSize), Hash: [32]byte{0x5a}}
@@ -773,7 +779,13 @@ func TestPartialID_LoadAtTheCap(t *testing.T) {
 	if !reader.closed.Load() {
 		t.Fatal("load left the reader open")
 	}
-	expectLoaded(t, f, o, full)
+	if o.String() != storedText {
+		t.Fatalf("loaded %q; want %q", o.String(), storedText)
+	}
+	expectOnly(t, "journal", f.journalKeys(t), full)
+	if ids := f.trackedIDs(t); len(ids) != 0 {
+		t.Fatalf("tracking keys %v after a read; want none", ids)
+	}
 }
 
 // TestPartialID_ModuleClosesTheReader loads and probes through a stub reader. Both
