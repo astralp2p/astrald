@@ -52,6 +52,7 @@ app-describe-provider
 app-search-provider
 app-two-providers
 objects-provider-registration-authz
+objects-provider-read-robustness
 services-provider-gone
 app-discover-follow
 app-discover-swarm
