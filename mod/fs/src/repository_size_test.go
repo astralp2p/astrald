@@ -73,6 +73,90 @@ func TestAddRepository_RefusedKeepsTempFiles(t *testing.T) {
 	}
 }
 
+// A second writable repository on the root of a live one is refused and deletes nothing.
+// The root is free again once the live repository is removed.
+func TestAddRepository_LiveRootRefused(t *testing.T) {
+	mod, objects := newTreeModule(t)
+	root := t.TempDir()
+
+	if err := mod.addRepository("live", NewRepository(mod, "live", root)); err != nil {
+		t.Fatalf("addRepository live: %v", err)
+	}
+	temp, object := writeTempAndObject(t, root)
+
+	if err := mod.addRepository("other", NewRepository(mod, "other", root+"/.")); err == nil {
+		t.Fatal("addRepository on a live root succeeded")
+	}
+	if objects.repos["other"] != nil {
+		t.Fatal("refused repository is registered")
+	}
+	for _, path := range []string{temp, object} {
+		if _, err := os.Stat(path); err != nil {
+			t.Fatalf("%v removed by a refused registration: %v", path, err)
+		}
+	}
+
+	if err := objects.RemoveRepository("live"); err != nil {
+		t.Fatal(err)
+	}
+	if err := mod.addRepository("other", NewRepository(mod, "other", root)); err != nil {
+		t.Fatalf("addRepository after removal: %v", err)
+	}
+	if _, err := os.Stat(temp); !os.IsNotExist(err) {
+		t.Fatalf("temp file still exists: %v", err)
+	}
+}
+
+// A refused registration releases the root it claimed.
+func TestAddRepository_RefusedReleasesRoot(t *testing.T) {
+	mod, _ := newTreeModule(t)
+	refusing := &refusingObjects{memObjects{repos: map[string]objectsmod.Repository{}}}
+	mod.Objects = refusing
+	root := t.TempDir()
+
+	if err := mod.addRepository("x", NewRepository(mod, "x", root)); !errors.Is(err, errRefused) {
+		t.Fatalf("addRepository = %v, want errRefused", err)
+	}
+
+	mod.Objects = &refusing.memObjects
+	if err := mod.addRepository("x", NewRepository(mod, "x", root)); err != nil {
+		t.Fatalf("addRepository after a refusal: %v", err)
+	}
+}
+
+// writingObjects creates a temp file while it registers a repository, as a writer opened on the new name does.
+type writingObjects struct {
+	memObjects
+	temp string
+}
+
+func (o *writingObjects) AddRepository(name string, repo objectsmod.Repository) error {
+	if err := os.WriteFile(o.temp, []byte("fresh"), 0o600); err != nil {
+		return err
+	}
+	return o.memObjects.AddRepository(name, repo)
+}
+
+// The cleanup removes only the temp files present before the registration.
+func TestAddRepository_KeepsTempFilesOfNewWriters(t *testing.T) {
+	mod, _ := newTreeModule(t)
+	root := t.TempDir()
+	stale, _ := writeTempAndObject(t, root)
+	fresh := filepath.Join(root, tempFilePrefix+"8899aabbccddeeff")
+	mod.Objects = &writingObjects{memObjects{repos: map[string]objectsmod.Repository{}}, fresh}
+
+	if err := mod.addRepository("x", NewRepository(mod, "x", root)); err != nil {
+		t.Fatalf("addRepository: %v", err)
+	}
+
+	if _, err := os.Stat(stale); !os.IsNotExist(err) {
+		t.Fatalf("stale temp file still exists: %v", err)
+	}
+	if _, err := os.Stat(fresh); err != nil {
+		t.Fatalf("temp file of a new writer removed: %v", err)
+	}
+}
+
 // NewRepository alone deletes nothing; cleanup belongs to registration.
 func TestNewRepository_KeepsTempFiles(t *testing.T) {
 	root := t.TempDir()

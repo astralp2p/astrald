@@ -2,6 +2,7 @@ package fs
 
 import (
 	"errors"
+	"fmt"
 	objectsmod "github.com/astralp2p/astrald/mod/objects"
 	"io"
 	"os"
@@ -44,38 +45,74 @@ func NewRepository(mod *Module, label string, path string) *Repository {
 }
 
 // addRepository registers repo under name with the objects module.
-// A writable repository removes its leftover temp files once the registration succeeds.
+// A writable repository claims its root first; a root held by a live writable repository is refused.
+// A writable repository removes the temp files that were present before its registration once the registration succeeds.
 // why: a refused registration leaves the root untouched, so a live repository on the same root keeps its writes in flight.
+// why: a writer opened right after the registration creates a temp file the snapshot does not hold.
 func (mod *Module) addRepository(name string, repo objectsmod.Repository) error {
+	writable, ok := repo.(*Repository)
+	if !ok {
+		return mod.Objects.AddRepository(name, repo)
+	}
+
+	root := rootKey(writable.root)
+	if owner, ok := mod.roots.Set(root, writable); !ok {
+		return fmt.Errorf("path %v is the root of live repository %v", writable.root, owner.label)
+	}
+
+	stale := writable.findTempFiles()
+
 	if err := mod.Objects.AddRepository(name, repo); err != nil {
+		mod.roots.Delete(root)
 		return err
 	}
 
-	if writable, ok := repo.(*Repository); ok {
-		writable.removeTempFiles()
-	}
+	writable.removeFiles(stale)
 
 	return nil
 }
 
-// removeTempFiles deletes the temp files that interrupted writes left in the root.
-// why: a writer from an earlier run can no longer commit, so its temp file is garbage.
+// rootKey returns the key under which a root is claimed.
+// note: a root reached through a symlink resolves to its target; an unresolvable root keys as given.
+func rootKey(root string) string {
+	resolved, err := filepath.EvalSymlinks(root)
+	if err != nil {
+		return root
+	}
+	return resolved
+}
+
+// releaseRoot drops the claim repo holds on its root.
+func (mod *Module) releaseRoot(repo *Repository) {
+	root := rootKey(repo.root)
+	if owner, ok := mod.roots.Get(root); ok && owner == repo {
+		mod.roots.Delete(root)
+	}
+}
+
+// findTempFiles returns the paths of the temp files that interrupted writes left in the root.
 // note: a missing root is not an error; the repository has nothing to clean.
-func (repo *Repository) removeTempFiles() {
+func (repo *Repository) findTempFiles() (paths []string) {
 	entries, err := os.ReadDir(repo.root)
 	if err != nil {
 		if !os.IsNotExist(err) {
 			repo.logError("cannot read dir %v: %v", repo.root, err)
 		}
-		return
+		return nil
 	}
 
 	for _, entry := range entries {
-		if !entry.Type().IsRegular() || !strings.HasPrefix(entry.Name(), tempFilePrefix) {
-			continue
+		if entry.Type().IsRegular() && strings.HasPrefix(entry.Name(), tempFilePrefix) {
+			paths = append(paths, filepath.Join(repo.root, entry.Name()))
 		}
+	}
+	return paths
+}
 
-		path := filepath.Join(repo.root, entry.Name())
+// removeFiles deletes the files at paths.
+// why: a writer from an earlier run can no longer commit, so its temp file is garbage.
+func (repo *Repository) removeFiles(paths []string) {
+	for _, path := range paths {
 		if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
 			repo.logError("cannot remove temp file %v: %v", path, err)
 		}
@@ -324,7 +361,8 @@ func (repo *Repository) added() *sig.Queue[*astral.ObjectID] {
 }
 
 // AfterRemoved is called by the objects system when this repository is unregistered.
-// It deletes the repository's tree entry when one was written.
+// It releases the claim on the root and deletes the repository's tree entry when one was written.
 func (repo *Repository) AfterRemoved(name string) {
+	repo.mod.releaseRoot(repo)
 	repo.mod.deletePersisted(name, repo.persisted)
 }
