@@ -2,6 +2,7 @@ package objects
 
 import (
 	"sync"
+	"time"
 
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astral-go/astral/log"
@@ -10,15 +11,19 @@ import (
 // objectsReadsSink persists a batch of last-read times to durable storage.
 type objectsReadsSink func(map[astral.ObjectID]astral.Time) error
 
-// objectsReadsJournal records qualified object reads in memory and flushes them
+// objectsReadsJournal records counted object reads in memory and flushes them
 // to a sink in batches. The hot read path (Mark) never touches the DB; flushing
-// is caller-driven (Flush), wired to shutdown and purge.
+// is caller-driven (Flush), wired to the minute tick, purge and shutdown.
+// note: the rules are in VFS 6, §11 "objects: last touched": https://wiki.satforge.dev/doc/vfs-6-specification-BxBnrSeTfT
 type objectsReadsJournal struct {
 	log *log.Logger
 	mu  sync.Mutex
 
 	pending map[astral.ObjectID]astral.Time // last read time per object
 	sink    objectsReadsSink
+
+	// now is the journal's clock. Tests replace it.
+	now func() time.Time
 }
 
 func newObjectsReadsJournal(sink objectsReadsSink, log *log.Logger) *objectsReadsJournal {
@@ -26,16 +31,17 @@ func newObjectsReadsJournal(sink objectsReadsSink, log *log.Logger) *objectsRead
 		pending: map[astral.ObjectID]astral.Time{},
 		sink:    sink,
 		log:     log,
+		now:     time.Now,
 	}
 }
 
-// Mark records a qualified read of id at the current time. Hot path: O(1), no DB I/O.
+// Mark records a counted read of id at the current time. Hot path: O(1), no DB I/O.
 func (j *objectsReadsJournal) Mark(id *astral.ObjectID) {
 	if id == nil {
 		return
 	}
 	j.mu.Lock()
-	j.pending[*id] = astral.Now()
+	j.pending[*id] = astral.Time(j.now())
 	j.mu.Unlock()
 }
 

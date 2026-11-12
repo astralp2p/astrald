@@ -46,9 +46,9 @@ func (db *DB) deleteRepositoryTracking(repo string) error {
 		Delete(&dbTracking{}).Error
 }
 
-// UpdateReadAt flushes a batch of pending read times. It is UPDATE-only: each
-// id present in the table has its read_at bumped, and ids that aren't already
-// tracked are silently skipped — first reads do NOT seed rows here.
+// UpdateReadAt flushes a batch of pending read times. It only raises: a row keeps its stored read time
+// when that time is not older than the batch time, and an ObjectID without a row changes nothing.
+// A time sets the read time of every row with that ObjectID, in every repository.
 func (db *DB) UpdateReadAt(reads map[astral.ObjectID]astral.Time) error {
 	if len(reads) == 0 {
 		return nil
@@ -57,9 +57,10 @@ func (db *DB) UpdateReadAt(reads map[astral.ObjectID]astral.Time) error {
 	return db.DB.Session(&gorm.Session{PrepareStmt: true}).
 		Transaction(func(tx *gorm.DB) error {
 			for id, at := range reads {
+				readAt := at.Time().Unix()
 				err := tx.Model(&dbTracking{}).
-					Where("object_id = ?", &id).
-					Update("read_at", at.Time().Unix()).Error
+					Where("object_id = ? AND read_at < ?", &id, readAt).
+					Update("read_at", readAt).Error
 				if err != nil {
 					return err
 				}
