@@ -5,11 +5,11 @@ node1 restarts. A temporary repository ends with the restart. A persisted
 repository is restored and serves its object. No removal deletes a file.
 
 - **after** `bootstrap-user-software-key` · **restart** node1 · **destroys**
-  true (it restarts node1 and leaves a persisted repository rooted in
-  the results tree) · **local_only** (it
-  attaches host directories and restarts node1) · **roster** node1
-- **driver** `script.py`: as the User, attach three directories under the
-  run's own results tree with `fs.new_repo`:
+  true (it restarts node1 and leaves a persisted repository rooted under
+  node1's root) · **roster** node1
+- **driver** `script.py`: as the User, attach three directories under
+  node1's root, made through `lib/nodefs.py` so they lie on node1's machine
+  in every world, with `fs.new_repo`:
   - `repo-removal-sticks-kept`, persisted;
   - `repo-removal-sticks-temp`, with `temporary=true`;
   - `repo-removal-sticks-gone`, persisted.
@@ -28,7 +28,8 @@ repository is restored and serves its object. No removal deletes a file.
   - a load of `gone`'s or `temp`'s object by repository name answers the
     in-band `error_message` "repository not found", and a load through the
     default read repository answers an `error_message` too;
-  - all three files are still on disk with their bytes.
+  - all three files are still on disk with their bytes, read through
+    `lib/nodefs.py`.
 
 ## Mechanism
 
@@ -55,4 +56,5 @@ repository is restored and serves its object. No removal deletes a file.
 
 The repositories are writable fs repositories (`fs.new_repo`).
 `fs.new_watch` repositories share `deletePersisted` but are not attached
-here. The directories stay in the results tree after the run.
+here. The directories stay under node1's root after the run: in the results
+tree in a local world, in node1's container in a Docker world.

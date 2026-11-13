@@ -13,9 +13,10 @@ searcher, and through explicit `sources`.
 
 node2 starts with nothing to describe or search for the object
 `two-nodes-data-peer` stored there, so the driver writes a run-unique file into
-a directory under the run's session tree and registers it with `fs.new_watch`
-on node2. node2's fs describer then answers a `mod.fs.file_location` for it, and
-its fs searcher matches the file name.
+a directory under node2's root, through `lib/nodefs.py`, and registers it with
+`fs.new_watch` on node2. The directory lies on node2's machine in every world.
+node2's fs describer then answers a `mod.fs.file_location` for it, and its fs
+searcher matches the file name.
 
 ## What each call must return
 

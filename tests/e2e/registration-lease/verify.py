@@ -27,8 +27,8 @@ Four independent claims, each falsifiable on its own.
    still registered would be worse than none.
 """
 import re
-from pathlib import Path
 
+from lib import nodefs
 from lib.sessionio import load
 
 ANSI = re.compile(r"\x1b\[[0-9;]*m")
@@ -52,8 +52,7 @@ def main():
         f"renewal moved the expiry to {f['renewed_expires_at']}, not past the "
         f"original {f['expires_at']}")
 
-    log = ANSI.sub("", (Path(doc["nodes"]["node1"]["root"]) / "astrald.log")
-                   .read_text(errors="replace"))
+    log = ANSI.sub("", nodefs.log(doc["nodes"]["node1"]))
 
     def dials(identity: str) -> list:
         tag = short(identity)

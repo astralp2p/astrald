@@ -18,11 +18,11 @@ A removed repository that comes back is listed, joins `local` and serves its
 object again, which fails the second and third claims.
 """
 import asyncio
-from pathlib import Path
 
 import astral
 from astral.errors import RemoteError
 
+from lib import nodefs
 from lib.sessionio import as_bytes, load
 
 
@@ -86,9 +86,11 @@ async def main():
             await refused(c, r["object_id"], None)
 
     for role, r in repos.items():
-        file = Path(r["file"])
-        assert file.is_file(), f"{role}: {file} is gone from disk"
-        assert file.read_bytes() == r["payload"].encode(), (
+        file, rel = r["file"], r["file_rel"]
+        parent, _, base = rel.rpartition("/")
+        assert nodefs.listdir(n1, parent).get(base) == "file", (
+            f"{role}: {file} is gone from disk")
+        assert nodefs.read_bytes(n1, rel) == r["payload"].encode(), (
             f"{role}: {file} no longer holds the bytes stored in it")
 
     print(f"oracle: after one restart node1 lists and serves {kept['name']} "

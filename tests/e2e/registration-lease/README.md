@@ -27,8 +27,9 @@ lease rather than about the node forgetting registrations generally.
 A departed registrant is **cheap** to dial: the route is simply not there, and
 the fan-out gets `route not found` in about a millisecond. Both describes are
 therefore prompt, and timings separate nothing. What separates the two cases is
-whether the node reached for the registrant at all, and the node's own log is
-where that is visible — one routed query per fan-out, per registrant.
+whether the node reached for the registrant at all, and the node's own log, read
+through `lib/nodefs.py`, is where that is visible — one routed query per
+fan-out, per registrant.
 
 This is worth stating plainly because the opposite is easy to assume: the
 15-second external-call timeout is paid by a registrant that is **reachable and
@@ -48,10 +49,13 @@ Both margins are two seconds, so neither side is a race.
 
 * Leases are requested short rather than configured short. The node clamps a
   request down and never up, so a small lease is granted exactly as asked.
-* The world's nodes run with `external_registration_sweep_interval: 1s`
-  (`tests/lib/nodeconfig.py`); the node's own default is a minute, longer than
-  most tests live. Only the removal and its log line are hurried — the fan-out
-  skips an expired registration whatever the sweep is set to.
+* node1 runs with `external_registration_sweep_interval: 1s`, which the
+  manifest's `[config.node1.objects]` override names so that every world
+  renders it: a local world renders it for every node anyway
+  (`tests/lib/nodeconfig.py`), a Docker world only when a test names it. The
+  node's own default is a minute, longer than most tests live. Only the
+  removal and its log line are hurried — the fan-out skips an expired
+  registration whatever the sweep is set to.
 * Both registrants drive the register op directly, so what this test judges is
   the node's own lease and refresh. The SDK-side renewal loop that saves an app
   from writing one is covered by unit tests in astral-go and astral-py.

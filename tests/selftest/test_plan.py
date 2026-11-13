@@ -338,7 +338,7 @@ class TestShippedPlans(Invariants, unittest.TestCase):
         with self.assertRaisesRegex(PlanError, "local only"):
             plan(self.tests, ["mcp-peer"], vm=True)
         with self.assertRaisesRegex(PlanError, "local only"):
-            plan(self.tests, ["fs-watch"], driver="agent")
+            plan(self.tests, ["mcp-peer"], driver="agent")
 
     def test_agent_drives_selected_tests_and_script_replays(self):
         w, = plan(self.tests, ["object-store"], driver="agent")
