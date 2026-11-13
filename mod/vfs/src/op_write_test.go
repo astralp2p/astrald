@@ -203,17 +203,28 @@ func TestWriteWaitsForTheLockOfTheVFS(t *testing.T) {
 	mod, vol, _ := changeTestModule(t)
 	unlock := mod.lockVFS(vol.Identity)
 
-	answered := make(chan astral.Object, 1)
-	go func() { answered <- changeTestWrite(t, mod, vol, "/f", "x") }()
+	type written struct {
+		answer astral.Object
+		err    error
+	}
+	answered := make(chan written, 1)
+	go func() {
+		answer, err := changeTestTryWrite(mod, vol, "/f", "x")
+		answered <- written{answer, err}
+	}()
 
 	select {
-	case answer := <-answered:
-		t.Fatalf("answered %#v while another change held the lock", answer)
+	case w := <-answered:
+		t.Fatalf("answered %#v (%v) while another change held the lock", w.answer, w.err)
 	case <-time.After(100 * time.Millisecond):
 	}
 
 	unlock()
-	changeTestEntry(t, <-answered)
+	w := <-answered
+	if w.err != nil {
+		t.Fatal(w.err)
+	}
+	changeTestEntry(t, w.answer)
 }
 
 func TestConcurrentWritesToOneVFS(t *testing.T) {
@@ -227,8 +238,9 @@ func TestConcurrentWritesToOneVFS(t *testing.T) {
 		go func() {
 			defer wg.Done()
 			path := fmt.Sprintf("/d/sub/f%02d", i)
-			if _, ok := changeTestWrite(t, mod, vol, path, path).(*vfsapi.Entry); !ok {
-				errs <- fmt.Errorf("write %s failed", path)
+			answer, err := changeTestTryWrite(mod, vol, path, path)
+			if _, ok := answer.(*vfsapi.Entry); err != nil || !ok {
+				errs <- fmt.Errorf("write %s failed: %#v, %v", path, answer, err)
 			}
 		}()
 	}
