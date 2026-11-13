@@ -7,10 +7,11 @@ and its file is no longer described. No removal or restart deletes a file.
 
 - **roster** node1 · **after** `bootstrap-user-software-key` · **restart**
   node1 · **destroys** (it restarts node1 and leaves a persisted watch rooted
-  in the results tree) · `local_only` (it attaches host directories and
-  restarts node1)
+  under node1's root)
 - **driver** `script.py`: as the User, writes one run-unique file into each of
-  three sibling directories, then watches each with `fs.new_watch`:
+  three sibling directories under node1's root, through `lib/nodefs.py` so
+  they lie on node1's machine in every world, then watches each with
+  `fs.new_watch`:
   - `fs-watch-restart-kept`, persisted;
   - `fs-watch-restart-temp`, with `temporary=true`;
   - `fs-watch-restart-gone`, persisted.
@@ -32,7 +33,8 @@ and its file is no longer described. No removal or restart deletes a file.
   - a load of `temp`'s or `gone`'s id by name answers "repository not found",
     and a read through the default read is refused;
   - within 20 s no file location describes `temp`'s or `gone`'s id;
-  - all three files are still on disk with their bytes.
+  - all three files are still on disk with their bytes, read through
+    `lib/nodefs.py`.
 
 ## Mechanism
 
@@ -49,8 +51,8 @@ and its file is no longer described. No removal or restart deletes a file.
 
 ## The directories are siblings
 
-`kept`, `temp` and `gone` sit side by side under the test's own results
-directory. No root is a parent of another: `removeRoot` keeps the rows of a
+`kept`, `temp` and `gone` sit side by side under `fs-watch-restart/` in
+node1's root. No root is a parent of another: `removeRoot` keeps the rows of a
 root another root covers, and `gone` would then stay described after its
 removal.
 

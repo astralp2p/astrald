@@ -19,6 +19,7 @@ whole tar stream, where exec streams one file's bytes through cat.
 import os
 import shutil
 import subprocess
+import sys
 from pathlib import Path, PurePosixPath
 
 LOG = "astrald.log"     # astrald's log, under its root in every world
@@ -104,6 +105,22 @@ def write_bytes(node: dict, rel: str, data: bytes) -> None:
     Path(p).write_bytes(data)
 
 
+def overwrite(node: dict, rel: str, data: bytes) -> None:
+    """Write data over the start of the existing file rel, in place: the file
+    is never truncated, so it holds no other length on the way.
+
+    why not write_bytes: it truncates first, so a same-length rewrite would
+    pass through an empty file.
+    """
+    p = path(node, rel)
+    if _docker(node):
+        _exec(node, "dd", f"of={p}", "conv=notrunc,nocreat", "status=none",
+              data=data)
+        return
+    with open(p, "r+b") as f:
+        f.write(data)
+
+
 def mkdir(node: dict, rel: str) -> None:
     """Create the directory rel and its parents; one already there stays."""
     if _docker(node):
@@ -157,6 +174,15 @@ def listdir(node: dict, rel: str = "") -> dict:
                        "dir" if e.is_dir() else
                        "file" if e.is_file() else "other")
     return out
+
+
+def platform(node: dict) -> str:
+    """The node's machine's OS, as sys.platform spells it.
+
+    why "linux" for a Docker root: every node image is Linux, whatever the
+    test host runs (lib/worlds/docker.py).
+    """
+    return "linux" if _docker(node) else sys.platform
 
 
 def set_mtime(node: dict, rel: str, mtime: float) -> None:

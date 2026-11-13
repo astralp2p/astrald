@@ -6,9 +6,9 @@ directory node1 watches, reach node1's index without a restart. `objects.scan`,
 the regular files on disk. A symlink is never indexed, and `fs.new_watch`
 refuses bad paths and registers none of them.
 
-- **roster** node1 · **after** `bootstrap-user-software-key` · `local_only`
-  (it changes files in host directories under the session tree)
-- **driver** `script.py`:
+- **roster** node1 · **after** `bootstrap-user-software-key`
+- **driver** `script.py`, every file through `lib/nodefs.py` under node1's
+  root, so W lies on node1's machine in every world:
   1. Writes a baseline into W before the watch: `d0.txt` (40 B), `e0.txt`,
      `f0.txt`, `k.txt`, `sub/s1.txt`, `sub/s2.txt`, and a file OUT outside W.
   2. Attaches W with `fs.new_watch ... temporary=true`, waits until node1
@@ -18,7 +18,7 @@ refuses bad paths and registers none of them.
      | case | change |
      |------|--------|
      | a1 | create `a1.txt` empty, sleep 1.5 s, write it |
-     | a2 | write `a2.txt` in one go (Linux only) |
+     | a2 | write `a2.txt` in one go (node1 on Linux only) |
      | a3 | `mkdir newdir`, sleep 1.5 s, write `newdir/n1.txt` |
      | d | overwrite `d0.txt` in place, same length |
      | e | rewrite `e0.txt`, different length |
@@ -29,8 +29,8 @@ refuses bad paths and registers none of them.
   4. Calls `fs.new_watch` on a relative path, a missing directory and a
      regular file, and records the answers.
 - **oracle** `verify.py`:
-  - walks W itself, hashes the regular files, and checks that set against the
-    facts' present cases;
+  - walks W itself through `lib/nodefs.py`, hashes the regular files' bytes,
+    and checks that set against the facts' present cases;
   - polls up to 20 s until `objects.scan` lists exactly that set; on a timeout
     it prints every case as `ok`, `missing` or `stale` and fails once;
   - each present file is contained, read by repository returns its bytes, and
@@ -62,7 +62,9 @@ refuses bad paths and registers none of them.
 Linux inotify is authoritative. On macOS kqueue a file created and written in
 one go can report only its Create before the per-file watch exists, and a
 Create does nothing here. So a1 and a3 create first and write 1.5 s later,
-and the driver skips a2 off Linux. The oracle prints the platform.
+and the driver skips a2 when node1 runs off Linux. The platform is node1's
+machine's (`nodefs.platform`), not the test host's: a Docker node is Linux on
+any host. The oracle prints it.
 
 ## Out of scope
 
@@ -79,4 +81,5 @@ rewrite that keeps its mtime belongs to `fs-repo-corrupt-served`.
 | `OnFileCreated` wired (the rename fix) with no symlink check: the link's Create arms the debounce and `os.Stat` follows it | g stale |
 
 The watch is temporary, so no tree entry outlives a restart of the shared
-world. The directories stay in the results tree after the run.
+world. The directories stay under node1's root after the run: in the results
+tree in a local world, in node1's container in a Docker world.

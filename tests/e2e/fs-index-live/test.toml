@@ -1,5 +1,5 @@
 nodes      = ["node1"]
 after      = "bootstrap-user-software-key"
-local_only = "creates, overwrites, deletes and symlinks files in host directories under the session tree"
 timeout    = 120
-facts      = ["repo", "watch_dir", "outside_file", "platform", "cases", "bad_paths"]
+facts      = ["repo", "watch_dir", "watch_rel", "outside_file", "platform",
+              "cases", "bad_paths"]

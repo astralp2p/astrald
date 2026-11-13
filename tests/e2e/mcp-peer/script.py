@@ -106,7 +106,9 @@ async def drive(n1: dict, n2: dict):
                 await stream.send(q.caller)
                 await stream.send_eos()
 
-        async with await host.serve() as svc:
+        # why host_ip: node2 dials the app, and the default listener, a
+        # unix socket or 127.0.0.1, is on the host only in a local world
+        async with await host.serve(endpoint=f"tcp:{n2['host_ip']}:0") as svc:
             svc.mount(APP_OP, answer_caller)
             facts.update(await asyncio.to_thread(call_tools, n1, facts["token"]))
     facts["app_heard"] = heard

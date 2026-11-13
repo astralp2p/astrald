@@ -6,9 +6,9 @@ the stalled connection when the round ends.
 
 - **after** `adopt-node` (node1 and node2 linked siblings) · **destroys**
   `true` — the bait endpoint stays in node1's book for 90 days, and no op
-  removes one; both nodes keep two more links · **local_only** — the bait
-  listens on the host's loopback for node1 to dial.
-- **driver** `script.py` — serves a bait (`lib/bait.py`) on 127.0.0.1: it
+  removes one; both nodes keep two more links · **host_listener** — the bait
+  listens on the test host, at node1's `host_ip`, for node1 to dial.
+- **driver** `script.py` — serves a bait (`lib/bait.py`) at node1's `host_ip`: it
   accepts, reads and discards, never writes, and records each connection's
   accept time, bytes received and close time. As node1, adds the bait to its
   book as an endpoint of node2, beside node2's own live endpoints. Records

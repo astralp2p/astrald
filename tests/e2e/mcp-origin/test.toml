@@ -1,6 +1,6 @@
 nodes   = ["node1"]
 timeout = 120
-local_only = "serves an authority on a host port and calls node1's MCP server at its loopback mcp_url"
+host_listener = "serves node1's external authority, which node1 dials"
 facts   = ["alpha", "answer", "ask", "beta", "control_agents",
            "control_identity", "exchange", "gamma", "questions", "read_beta",
            "read_gamma", "refusals", "tools", "unadmitted"]

@@ -5,8 +5,7 @@ restarted node still holds its membership, and every node lists exactly the
 expected members and siblings.
 
 - **after** `swarm-roster-sync` (node1, node2 and node3 in the User's swarm) ·
-  **restart** `node3` · **local_only** — only a local world can restart a node
-  · **destroys** — see below.
+  **restart** `node3` · **destroys** — see below.
 - **driver** `script.py` — changes nothing. It waits until all three nodes
   agree on the whole roster (each node's `user.swarm_status` lists the three
   nodes, and links the other two), then records the three nodes' identities,

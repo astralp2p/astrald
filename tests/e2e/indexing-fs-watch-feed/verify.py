@@ -3,7 +3,8 @@
 I's changelog folds to the files on disk.
 
 Every id is the hash of a payload, computed here, and the files on disk are
-hashed here too. Claims:
+hashed here too, from bytes read on node1's machine through lib/nodefs.py.
+Claims:
 
 1. node1 was restarted exactly once since the driver ran.
 2. Before the restart, I received Index c1, c2, c4 and c4p, in write order,
@@ -152,7 +153,7 @@ async def main():
             f"a second subscription received {short(again)}: a change was "
             f"left unacked")
 
-    on_disk = set(fsfixture.disk_ids(f["watch_dir"]).values())
+    on_disk = set(fsfixture.disk_ids(n1, f["watch_rel"]).values())
     assert on_disk == {ids["c2"], ids["c4p"]}, (
         f"the watched directory holds {sorted(i[:12] for i in on_disk)}, not "
         f"c2 and c4p: the driver's changes did not land as recorded")
