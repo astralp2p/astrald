@@ -76,12 +76,11 @@ func (mod *Module) setupDefaultRepos() {
 
 	mod.repos.Set(objects.RepoMain, main)
 
-	mem0 := mem.New("Default memory", mod.config.DefaultMemSize)
-	mod.repos.Set("mem0", mem0)
+	mod.addLeaf("mem0", mem.New("Default memory", mod.config.DefaultMemSize))
 	memory.Add("mem0")
 
-	mod.system = mem.New("System memory", mod.config.DefaultMemSize)
-	mod.repos.Set(objects.RepoSystem, mod.system)
+	// why: System() returns this field, so it holds the wrapper and writes through it are tracked.
+	mod.system, _ = mod.addLeaf(objects.RepoSystem, mem.New("System memory", mod.config.DefaultMemSize))
 	memory.Add(objects.RepoSystem)
 }
 

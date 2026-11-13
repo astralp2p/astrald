@@ -6,6 +6,7 @@ import (
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astral-go/astral/log"
 	"github.com/astralp2p/astral-go/lib/routing"
+	"github.com/astralp2p/astral-go/sig"
 	"github.com/astralp2p/astrald/core/assets"
 	"github.com/astralp2p/astrald/mod/fs"
 )
@@ -22,6 +23,7 @@ type Module struct {
 	ctx     *astral.Context
 	indexer *Indexer
 	router  routing.OpRouter
+	roots   sig.Map[string, *Repository] // the root each live writable repository claims
 }
 
 func (mod *Module) Run(ctx *astral.Context) error {

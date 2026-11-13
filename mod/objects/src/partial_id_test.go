@@ -102,9 +102,14 @@ func newOpFixture(t *testing.T) *opFixture {
 		t.Fatalf("add local finder: %v", err)
 	}
 
+	// why: a leaf registered through AddRepository is tracked, so a commit writes the row the tests check.
 	repo := mem.New("main", 0)
-	addRepo(t, mod, "main", repo)
-	addRepo(t, mod, "named", mem.New("named", 0))
+	if err := mod.AddRepository("main", repo); err != nil {
+		t.Fatalf("add main: %v", err)
+	}
+	if err := mod.AddRepository("named", mem.New("named", 0)); err != nil {
+		t.Fatalf("add named: %v", err)
+	}
 
 	return &opFixture{mod: mod, repo: repo, reads: reads}
 }
@@ -162,14 +167,14 @@ func (f *opFixture) journalKeys(t *testing.T) []astral.ObjectID {
 func (f *opFixture) trackedIDs(t *testing.T) []astral.ObjectID {
 	t.Helper()
 
-	var rows []*dbObject
+	var rows []*dbTracking
 	if err := f.mod.db.Find(&rows).Error; err != nil {
 		t.Fatalf("list tracking rows: %v", err)
 	}
 
 	var ids []astral.ObjectID
 	for _, row := range rows {
-		ids = append(ids, *row.ID)
+		ids = append(ids, *row.ObjectID)
 	}
 	return ids
 }
@@ -533,23 +538,51 @@ func TestPartialID_EmptyObject(t *testing.T) {
 	only[*astral.Ack](t, call(t, f.mod.OpDelete, "objects.delete?repo=main&id="+empty.String()))
 
 	has = only[*astral.Bool](t, call(t, f.mod.OpContains, "objects.contains?repo=main&id="+empty.String()))
-	if *has {
-		t.Fatal("contains answered true after the empty object was deleted")
+	if !*has {
+		t.Fatal("contains answered false after a delete of the empty object")
+	}
+}
+
+// TestPartialID_EmptyObjectNeverStored: the ops answer the empty object from repositories that store nothing.
+func TestPartialID_EmptyObjectNeverStored(t *testing.T) {
+	f := newOpFixture(t)
+	empty := objectsmod.EmptyObjectID()
+
+	if got := callRaw(t, f.mod.OpRead, "objects.read?id="+empty.String()); len(got) != 0 {
+		t.Fatalf("read %q; want nothing", got)
+	}
+	if got := callRaw(t, f.mod.OpRead, "objects.read?repo=named&id="+empty.String()); len(got) != 0 {
+		t.Fatalf("read from named %q; want nothing", got)
+	}
+
+	blob := only[*astral.Blob](t, call(t, f.mod.OpLoad, "objects.load?id="+empty.String()))
+	if len(*blob) != 0 {
+		t.Fatalf("load answered %d bytes; want none", len(*blob))
+	}
+
+	probe := only[*objects.Probe](t, call(t, f.mod.OpProbe, "objects.probe?id="+empty.String()))
+	if probe.ObjectID == nil || !probe.ObjectID.IsEqual(empty) {
+		t.Fatalf("probe reported ID %v; want %v", probe.ObjectID, empty)
+	}
+
+	has := only[*astral.Bool](t, call(t, f.mod.OpContains, "objects.contains?repo=named&id="+empty.String()))
+	if !*has {
+		t.Fatal("contains answered false for the empty object")
 	}
 }
 
 // TestPartialID_ModuleKeepsTheArgument calls Load and Probe with a partial ID. The
-// argument keeps Size 0, and only the full ID becomes a key.
+// argument keeps Size 0, and only the full ID becomes a key. Load reads through the tracked wrapper, which counts the read.
 func TestPartialID_ModuleKeepsTheArgument(t *testing.T) {
 	f := newOpFixture(t)
 	full := f.store(t, typedData(t))
 	partial := &astral.ObjectID{Hash: full.Hash}
 	ctx := astral.NewContext(nil)
 
-	if _, err := f.mod.Load(ctx, f.repo, partial); err != nil {
+	if _, err := f.mod.Load(ctx, f.mod.GetRepository("main"), partial); err != nil {
 		t.Fatalf("load: %v", err)
 	}
-	probe, err := f.mod.Probe(ctx, f.repo, partial)
+	probe, err := f.mod.Probe(ctx, f.mod.GetRepository("main"), partial)
 	if err != nil {
 		t.Fatalf("probe: %v", err)
 	}
@@ -754,7 +787,8 @@ func TestPartialID_LoadCap(t *testing.T) {
 }
 
 // TestPartialID_LoadAtTheCap loads through a stub reader whose object is exactly
-// MaxObjectSize bytes. The load reads the whole object, decodes it, and keys its full ID.
+// MaxObjectSize bytes. The load reads the whole object and decodes it. The stub is not a
+// tracked leaf, so the read counts nothing and creates no tracking row.
 func TestPartialID_LoadAtTheCap(t *testing.T) {
 	data := typedData(t)
 	full := &astral.ObjectID{Size: uint64(objectsmod.MaxObjectSize), Hash: [32]byte{0x5a}}
@@ -773,7 +807,15 @@ func TestPartialID_LoadAtTheCap(t *testing.T) {
 	if !reader.closed.Load() {
 		t.Fatal("load left the reader open")
 	}
-	expectLoaded(t, f, o, full)
+	if o.String() != storedText {
+		t.Fatalf("loaded %q; want %q", o.String(), storedText)
+	}
+	if keys := f.journalKeys(t); len(keys) != 0 {
+		t.Fatalf("journal keys %v after a read of an untracked stub; want none", keys)
+	}
+	if ids := f.trackedIDs(t); len(ids) != 0 {
+		t.Fatalf("tracking keys %v after a read; want none", ids)
+	}
 }
 
 // TestPartialID_ModuleClosesTheReader loads and probes through a stub reader. Both
@@ -821,8 +863,9 @@ func actionObjectID(action auth.ActionObject) *astral.ObjectID {
 }
 
 // TestPartialID_RefusedCallerPerformsNoLookup routes a partial ID from a refused caller
-// to every op that takes one. The action carries the partial request, and no
-// repository, finder or describer is asked.
+// to every op that takes one. The action carries the partial request, except for
+// objects.find and objects.describe, whose action names no ObjectID (VFS 6, section 6),
+// and no repository, finder or describer is asked.
 func TestPartialID_RefusedCallerPerformsNoLookup(t *testing.T) {
 	partial := &astral.ObjectID{Hash: [32]byte{0x5a, 0x02}}
 	id := "id=" + partial.PartialString()
@@ -831,14 +874,15 @@ func TestPartialID_RefusedCallerPerformsNoLookup(t *testing.T) {
 		name string
 		op   func(*Module) any
 		args string
+		noID bool
 	}{
-		{"objects.read", func(m *Module) any { return m.OpRead }, queryOf("", id, "repo=main")},
-		{"objects.load", func(m *Module) any { return m.OpLoad }, queryOf("", id, "repo=main")},
-		{"objects.contains", func(m *Module) any { return m.OpContains }, queryOf("", id, "repo=main")},
-		{"objects.probe", func(m *Module) any { return m.OpProbe }, queryOf("", id, "repo=main")},
-		{"objects.delete", func(m *Module) any { return m.OpDelete }, queryOf("", id, "repo=main")},
-		{"objects.find", func(m *Module) any { return m.OpFind }, queryOf("", id)},
-		{"objects.describe", func(m *Module) any { return m.OpDescribe }, queryOf("", id)},
+		{"objects.read", func(m *Module) any { return m.OpRead }, queryOf("", id, "repo=main"), false},
+		{"objects.load", func(m *Module) any { return m.OpLoad }, queryOf("", id, "repo=main"), false},
+		{"objects.contains", func(m *Module) any { return m.OpContains }, queryOf("", id, "repo=main"), false},
+		{"objects.probe", func(m *Module) any { return m.OpProbe }, queryOf("", id, "repo=main"), false},
+		{"objects.delete", func(m *Module) any { return m.OpDelete }, queryOf("", id, "repo=main"), false},
+		{"objects.find", func(m *Module) any { return m.OpFind }, queryOf("", id), true},
+		{"objects.describe", func(m *Module) any { return m.OpDescribe }, queryOf("", id), true},
 	}
 
 	for _, op := range ops {
@@ -875,7 +919,14 @@ func TestPartialID_RefusedCallerPerformsNoLookup(t *testing.T) {
 			if len(actions) != 1 {
 				t.Fatalf("%s made %d authorization calls; want 1", op.name, len(actions))
 			}
-			if got := actionObjectID(actions[0]); got == nil || !got.IsEqual(partial) {
+			got := actionObjectID(actions[0])
+			if op.noID {
+				if got != nil {
+					t.Fatalf("%s authorized object %v; want none", op.name, got)
+				}
+				return
+			}
+			if got == nil || !got.IsEqual(partial) {
 				t.Fatalf("%s authorized object %v; want the partial request %v", op.name, got, partial)
 			}
 		})
