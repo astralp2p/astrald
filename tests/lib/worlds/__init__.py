@@ -76,8 +76,9 @@ class World:
         """The containers the world started, named in --keep's message."""
         return []
 
-    def restart(self, names: list) -> None:
-        """Stop the named nodes and boot them again on the same state.
+    def restart(self, names: list, while_down=None) -> None:
+        """Stop the named nodes, call `while_down()` when given, and boot
+        them again on the same state.
 
         A world that cannot restart a node refuses rather than skipping: an
         oracle over a node that never restarted judges nothing.

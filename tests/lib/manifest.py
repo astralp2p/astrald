@@ -50,6 +50,9 @@ class Test:
     host_listener: str | None = None
     facts: list = field(default_factory=list)
     prompt: bool = False
+    # whether it ships a while_down.py, which its restart runs between
+    # stopping the nodes and starting them
+    while_down: bool = False
     # node -> module -> keys: what its world's nodes start with, on top of
     # what lib/nodeconfig builds
     config: dict = field(default_factory=dict)
@@ -106,6 +109,10 @@ def _parse(mf: Path) -> Test:
     if both:
         raise ValueError(f"{name}: {both} cannot be both restarted and "
                          "stopped")
+    while_down = (mf.parent / "while_down.py").is_file()
+    if while_down and not restart:
+        raise ValueError(f"{name}: ships a while_down.py and restarts no "
+                         "node, so nothing would run it")
     after = raw.get("after")
     if after is not None and not (isinstance(after, str) and after):
         raise ValueError(f"{name}: after must name a test")
@@ -149,6 +156,9 @@ def _parse(mf: Path) -> Test:
                 # why a file and not a key: a test an operator can drive is
                 # exactly one that tells it what to do
                 prompt=(mf.parent / "prompt.md").is_file(),
+                # why a file and not a key: like the driver and the oracle,
+                # it is a script the test ships
+                while_down=while_down,
                 config=_config(name, raw, nodes))
 
 

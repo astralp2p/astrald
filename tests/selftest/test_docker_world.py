@@ -286,6 +286,35 @@ class TestNodes(WorldCase):
                                  ("start", prefix + "node2")])
         self.assertEqual([n["restarts"] for n in w.nodes().values()], [1, 1])
 
+    def test_a_restart_hook_runs_between_the_stops_and_the_starts(self):
+        # why the container stays: only astrald stops, so lib/nodefs.py
+        # reaches the stopped node's files from a test's while_down.py
+        w = self.world()
+        w.ensure(a_test(nodes=["node1", "node2"]))
+        del self.fake.calls[:]
+        roots = []
+
+        def hook():
+            self.fake.calls.append(["hook"])
+            roots.append(w.nodes()["node1"]["root"])
+        w.restart(["node1", "node2"], hook)
+        steps = [("hook",) if c == ["hook"] else
+                 ("stop" if "pkill -INT -x astrald" in c[-1] else "start",
+                  c[-4] if c[1] == "-d" else c[1])
+                 for c in self.fake.calls if c == ["hook"]
+                 or (c[0] == "exec" and c[-3:-1] == ["sh", "-c"]
+                     and ("pkill" in c[-1] or "exec astrald" in c[-1]))]
+        prefix = "astral-20261104t000000z-w0-"
+        self.assertEqual(steps, [("stop", prefix + "node1"),
+                                 ("stop", prefix + "node2"),
+                                 ("hook",),
+                                 ("start", prefix + "node1"),
+                                 ("start", prefix + "node2")])
+        self.assertEqual(roots,
+                         [f"docker:{prefix}node1:/var/lib/astrald"])
+        self.assertEqual([c for c in self.fake.calls
+                          if c[0] in ("rm", "stop", "kill", "run")], [])
+
     def test_a_node_whose_astrald_exited_is_dead(self):
         w = self.world()
         w.ensure(a_test(nodes=["node1", "node2"]))
