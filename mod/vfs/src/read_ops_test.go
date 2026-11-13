@@ -639,9 +639,9 @@ func TestVFSInfoCachesTheRootItReports(t *testing.T) {
 		t.Fatalf("vfsInfo: %v", err)
 	}
 
-	root, err := f.mod.db.getEntry(f.vol.RootID)
+	root, err := f.mod.db.findEntry(f.vol.RootID)
 	if err != nil {
-		t.Fatalf("getEntry: %v", err)
+		t.Fatalf("findEntry: %v", err)
 	}
 	if root.ObjectID == nil || *root.ObjectID != info.Root {
 		t.Errorf("cached root = %v, want the reported %v", root.ObjectID, info.Root)

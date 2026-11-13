@@ -2,7 +2,6 @@ package vfs
 
 import (
 	"errors"
-	"time"
 
 	vfsapi "github.com/astralp2p/astral-go/api/vfs"
 	"github.com/astralp2p/astral-go/astral"
@@ -35,29 +34,4 @@ func (mod *Module) CreateVFS(id *astral.Identity) error {
 
 		return tx.createVolume(id, mod.config.ByteLimit, mod.config.EntryLimit)
 	})
-}
-
-// createVolume inserts a VFS with its root folder. The root is its own parent.
-func (db *DB) createVolume(id *astral.Identity, byteLimit, entryLimit uint64) error {
-	root := &dbEntry{
-		VFS:     id,
-		Flags:   uint16(vfsapi.FlagFolder),
-		ModTime: modTimeColumn(time.Now()),
-	}
-
-	if err := db.Create(root).Error; err != nil {
-		return err
-	}
-
-	root.ParentID = root.ID
-	if err := db.Model(root).Update("parent_id", root.ID).Error; err != nil {
-		return err
-	}
-
-	return db.Create(&dbVolume{
-		Identity:   id,
-		RootID:     root.ID,
-		ByteLimit:  limitColumn(byteLimit),
-		EntryLimit: limitColumn(entryLimit),
-	}).Error
 }

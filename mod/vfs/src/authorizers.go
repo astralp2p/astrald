@@ -64,7 +64,7 @@ func (mod *Module) AuthorizeSeeObjects(ctx *astral.Context, a *apiauth.SeeObject
 		return false
 	}
 
-	vfsIDs, err := mod.db.seeObjectsFindVFSes(*id)
+	vfsIDs, err := mod.db.findVFSesWithObject(*id)
 	if err != nil {
 		mod.log.Log("find the VFSes of %v: %v", id, err)
 		return false
@@ -91,26 +91,4 @@ func (mod *Module) seeObjectsMayRead(ctx *astral.Context, actor, vfsID *astral.I
 	}
 
 	return mod.Auth.Authorize(ctx, &vfsapi.ReadAction{Action: apiauth.NewAction(actor), VFSID: vfsID})
-}
-
-// seeObjectsFindVFSes returns each VFS that has a file with the ObjectID, once.
-//
-// note: a folder's cached listing ObjectID names no stored object, so folder rows are skipped.
-func (db *DB) seeObjectsFindVFSes(id astral.ObjectID) ([]*astral.Identity, error) {
-	var rows []dbEntry
-
-	err := db.Model(&dbEntry{}).
-		Distinct("vfs").
-		Where("object_id = ? AND flags & ? = 0", id, uint16(vfsapi.FlagFolder)).
-		Find(&rows).Error
-	if err != nil {
-		return nil, err
-	}
-
-	ids := make([]*astral.Identity, 0, len(rows))
-	for _, row := range rows {
-		ids = append(ids, row.VFS)
-	}
-
-	return ids, nil
 }

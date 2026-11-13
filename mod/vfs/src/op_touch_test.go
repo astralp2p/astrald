@@ -11,7 +11,7 @@ func TestTouchSetsTheTimeOfFilesAndFolders(t *testing.T) {
 	mod, vol, _ := changeTestModule(t)
 	dir := addFolder(t, mod, vol, vol.RootID, "d")
 	addFile(t, mod, vol, dir.ID, "f", "x")
-	if err := mod.db.changeSetTime(vol.RootID, testModTime); err != nil {
+	if err := mod.db.setEntryTime(vol.RootID, testModTime); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := mod.folderObjectID(vol.Identity, vol.RootID); err != nil {

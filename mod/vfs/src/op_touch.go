@@ -77,7 +77,7 @@ func (db *DB) touchEntry(vol *dbVolume, names []string, modTime int64) (*vfsapi.
 		return nil, err
 	}
 
-	if err = db.changeSetTime(row.ID, modTime); err != nil {
+	if err = db.setEntryTime(row.ID, modTime); err != nil {
 		return nil, err
 	}
 	row.ModTime = modTime

@@ -47,7 +47,7 @@ func (db *DB) mkdirCreate(vol *dbVolume, names []string) error {
 		return nil
 	}
 
-	before, err := db.changeMeasure(vol.Identity)
+	before, err := db.measureUsage(vol.Identity)
 	if err != nil {
 		return err
 	}

@@ -2,7 +2,6 @@ package vfs
 
 import (
 	"errors"
-	"time"
 
 	vfsapi "github.com/astralp2p/astral-go/api/vfs"
 	"github.com/astralp2p/astral-go/astral"
@@ -28,37 +27,17 @@ func (mod *Module) changeVFS(vol *dbVolume, fn func(tx *DB) error) error {
 	return mod.db.inTx(fn)
 }
 
-// changeNow returns the node's time as a modification time column.
-func changeNow() int64 { return modTimeColumn(time.Now()) }
-
-// changeUsage is what the limits of a VFS measure.
-type changeUsage struct {
-	Bytes   uint64
-	Entries uint64
-}
-
-// changeMeasure returns the usage of a VFS.
-func (db *DB) changeMeasure(vfsID *astral.Identity) (u changeUsage, err error) {
-	if u.Bytes, err = db.usage(vfsID); err != nil {
-		return
-	}
-
-	u.Entries, err = db.entryCount(vfsID)
-
-	return
-}
-
 // changeCheckLimits refuses a change that grew the usage of a VFS above one of its limits.
 //
 // why: a limit below the usage is accepted (vfs.set_quota); it refuses growth and leaves the rest alone.
 // why: the limits are read inside the change, so a vfs.set_quota acked before the change holds for it.
-func (db *DB) changeCheckLimits(vfsID *astral.Identity, before changeUsage) error {
+func (db *DB) changeCheckLimits(vfsID *astral.Identity, before vfsUsage) error {
 	vol, err := db.findVolume(vfsID)
 	if err != nil {
 		return err
 	}
 
-	after, err := db.changeMeasure(vfsID)
+	after, err := db.measureUsage(vfsID)
 	if err != nil {
 		return err
 	}
@@ -74,25 +53,20 @@ func (db *DB) changeCheckLimits(vfsID *astral.Identity, before changeUsage) erro
 	return nil
 }
 
-// changeSetTime sets the modification time of one row.
-func (db *DB) changeSetTime(rowID int64, modTime int64) error {
-	return db.Model(&dbEntry{}).Where("id = ?", rowID).Update("mod_time", modTime).Error
-}
-
 // changeAddEntry inserts a new entry into a folder. The entry and the folder get the node's time, and the
 // folder IDs from the folder up are cleared.
 func (db *DB) changeAddEntry(parent *dbEntry, row *dbEntry) error {
-	now := changeNow()
+	now := nodeTime()
 
 	row.VFS = parent.VFS
 	row.ParentID = parent.ID
 	row.ModTime = now
 
-	if err := db.Create(row).Error; err != nil {
+	if err := db.insertEntry(row); err != nil {
 		return err
 	}
 
-	if err := db.changeSetTime(parent.ID, now); err != nil {
+	if err := db.setEntryTime(parent.ID, now); err != nil {
 		return err
 	}
 
@@ -102,7 +76,7 @@ func (db *DB) changeAddEntry(parent *dbEntry, row *dbEntry) error {
 // changeMakeFolders walks the names from the root of a VFS, creates every missing folder and returns the last
 // folder. A file on the way answers vfsapi.ErrNotAFolder.
 func (db *DB) changeMakeFolders(vol *dbVolume, names []string) (*dbEntry, error) {
-	row, err := db.getEntry(vol.RootID)
+	row, err := db.findEntry(vol.RootID)
 	if err != nil {
 		return nil, err
 	}
@@ -139,7 +113,7 @@ func (db *DB) changeEntry(row *dbEntry) (*vfsapi.Entry, error) {
 			return nil, err
 		}
 
-		if err = db.storeFolderIDs(filled); err != nil {
+		if err = db.setFolderIDs(filled); err != nil {
 			return nil, err
 		}
 

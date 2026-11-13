@@ -172,7 +172,7 @@ func writeFinish(w objectsapi.Writer, size uint64) (*astral.ObjectID, error) {
 // is replaced, and both limits are checked exactly.
 func (mod *Module) writeCommit(vol *dbVolume, names []string, id astral.ObjectID) (row *dbEntry, err error) {
 	err = mod.changeVFS(vol, func(tx *DB) error {
-		before, err := tx.changeMeasure(vol.Identity)
+		before, err := tx.measureUsage(vol.Identity)
 		if err != nil {
 			return err
 		}
@@ -207,11 +207,9 @@ func (db *DB) writeEntry(parent *dbEntry, name string, id astral.ObjectID) (*dbE
 		return nil, vfsapi.ErrIsAFolder
 	}
 
-	row.ObjectID, row.ModTime = &id, changeNow()
+	row.ObjectID, row.ModTime = &id, nodeTime()
 
-	err = db.Model(&dbEntry{}).Where("id = ?", row.ID).
-		Updates(map[string]any{"object_id": row.ObjectID, "mod_time": row.ModTime}).Error
-	if err != nil {
+	if err = db.setFileContent(row.ID, row.ObjectID, row.ModTime); err != nil {
 		return nil, err
 	}
 

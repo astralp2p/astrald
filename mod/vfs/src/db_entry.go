@@ -53,3 +53,6 @@ func (e *dbEntry) entry() *vfsapi.Entry {
 
 // modTimeColumn converts a time for the database: nanoseconds since the Unix epoch.
 func modTimeColumn(t time.Time) int64 { return t.UnixNano() }
+
+// nodeTime returns the node's time as a modification time column.
+func nodeTime() int64 { return modTimeColumn(time.Now()) }

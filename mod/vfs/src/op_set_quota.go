@@ -43,9 +43,6 @@ func (mod *Module) setQuotaStore(id *astral.Identity, byteLimit, entryLimit uint
 			return err
 		}
 
-		return tx.Model(&dbVolume{}).Where("id = ?", vol.ID).Updates(map[string]any{
-			"byte_limit":  limitColumn(byteLimit),
-			"entry_limit": limitColumn(entryLimit),
-		}).Error
+		return tx.setVolumeLimits(vol.ID, byteLimit, entryLimit)
 	})
 }

@@ -14,7 +14,7 @@ import (
 
 func TestWriteCreatesTheFileAndItsParents(t *testing.T) {
 	mod, vol, repo := changeTestModule(t)
-	if err := mod.db.changeSetTime(vol.RootID, testModTime); err != nil {
+	if err := mod.db.setEntryTime(vol.RootID, testModTime); err != nil {
 		t.Fatal(err)
 	}
 	start := time.Now().UnixNano()

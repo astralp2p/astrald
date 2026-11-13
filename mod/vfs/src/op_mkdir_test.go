@@ -9,7 +9,7 @@ import (
 
 func TestMkdirCreatesTheFolderAndItsParents(t *testing.T) {
 	mod, vol, _ := changeTestModule(t)
-	if err := mod.db.changeSetTime(vol.RootID, testModTime); err != nil {
+	if err := mod.db.setEntryTime(vol.RootID, testModTime); err != nil {
 		t.Fatal(err)
 	}
 	start := time.Now().UnixNano()

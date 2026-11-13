@@ -11,7 +11,7 @@ func TestMoveKeepsTheEntryTimeAndSetsBothParents(t *testing.T) {
 	mod, vol, _ := changeTestModule(t)
 	src := addFolder(t, mod, vol, vol.RootID, "src")
 	addFile(t, mod, vol, src.ID, "f", "content")
-	if err := mod.db.changeSetTime(vol.RootID, testModTime); err != nil {
+	if err := mod.db.setEntryTime(vol.RootID, testModTime); err != nil {
 		t.Fatal(err)
 	}
 	start := time.Now().UnixNano()
@@ -54,7 +54,7 @@ func TestMoveAFolderAnswersItsListingID(t *testing.T) {
 		t.Errorf("entry = %+v, want the folder with ID %v", entry, want)
 	}
 	for _, row := range []int64{vol.RootID, other.ID} {
-		got, _ := mod.db.getEntry(row)
+		got, _ := mod.db.findEntry(row)
 		if got.ObjectID != nil {
 			t.Errorf("row %d kept its cached ID", row)
 		}

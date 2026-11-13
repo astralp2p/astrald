@@ -373,7 +373,7 @@ func TestCreateRefusesTheZeroIdentity(t *testing.T) {
 		manageExpectError(t, c, vfsapi.ErrNotPermitted)
 	}
 
-	if volumes, err := f.mod.db.volumesList(); err != nil || len(volumes) != 0 {
+	if volumes, err := f.mod.db.listVolumes(); err != nil || len(volumes) != 0 {
 		t.Errorf("volumes %v, %v; want none", volumes, err)
 	}
 }

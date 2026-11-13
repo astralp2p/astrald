@@ -15,23 +15,11 @@ var _ objectsmod.Holder = &Module{}
 // note: the objects module finds the module as a holder by scanning the modules it loads, see
 // mod/objects/src/deps.go.
 func (mod *Module) HoldObject(objectID *astral.ObjectID) bool {
-	held, err := mod.db.holdFile(objectID)
+	held, err := mod.db.hasFileWithObject(objectID)
 	if err != nil {
 		mod.log.Error("object hold lookup failed: %v", err)
 		return true
 	}
 
 	return held
-}
-
-// holdFile reports whether a file row has the ObjectID.
-func (db *DB) holdFile(objectID *astral.ObjectID) (bool, error) {
-	var ids []int64
-
-	err := db.Model(&dbEntry{}).
-		Where("flags & 1 = 0 AND object_id = ?", objectID).
-		Limit(1).
-		Pluck("id", &ids).Error
-
-	return len(ids) > 0, err
 }

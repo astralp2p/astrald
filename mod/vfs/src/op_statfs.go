@@ -64,7 +64,7 @@ func (mod *Module) vfsInfo(vol *dbVolume) (*vfsapi.Info, error) {
 
 		info.Root, info.Usage, info.Entries = root, astral.Uint64(usage), astral.Uint64(entries)
 
-		return tx.storeFolderIDs(filled)
+		return tx.setFolderIDs(filled)
 	})
 	if err != nil {
 		return nil, err

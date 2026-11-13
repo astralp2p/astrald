@@ -24,7 +24,7 @@ func TestCreateVFSDefaults(t *testing.T) {
 		t.Errorf("identity = %v, want %v", vol.Identity, id)
 	}
 
-	root, err := mod.db.getEntry(vol.RootID)
+	root, err := mod.db.findEntry(vol.RootID)
 	if err != nil || !root.isRoot() || !root.VFS.IsEqual(id) {
 		t.Fatalf("root = %+v, %v", root, err)
 	}
@@ -60,7 +60,7 @@ func TestCreateVFSIsIdempotent(t *testing.T) {
 	if second.ID != first.ID || second.RootID != first.RootID || second.ByteLimit != first.ByteLimit || second.EntryLimit != first.EntryLimit {
 		t.Fatalf("second create changed the volume: %+v, was %+v", second, first)
 	}
-	if _, err := mod.db.getEntry(file.ID); err != nil {
+	if _, err := mod.db.findEntry(file.ID); err != nil {
 		t.Fatalf("second create lost an entry: %v", err)
 	}
 

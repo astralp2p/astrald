@@ -60,7 +60,7 @@ func (db *DB) moveEntry(vol *dbVolume, from, to []string) (*vfsapi.Entry, error)
 		return nil, vfsapi.ErrInvalidPath
 	}
 
-	before, err := db.changeMeasure(vol.Identity)
+	before, err := db.measureUsage(vol.Identity)
 	if err != nil {
 		return nil, err
 	}
@@ -108,15 +108,13 @@ func (db *DB) moveRelink(row *dbEntry, parent *dbEntry, name string) error {
 	oldParentID := row.ParentID
 	row.ParentID, row.Name = parent.ID, name
 
-	err = db.Model(&dbEntry{}).Where("id = ?", row.ID).
-		Updates(map[string]any{"parent_id": row.ParentID, "name": row.Name}).Error
-	if err != nil {
+	if err = db.setEntryParent(row.ID, row.ParentID, row.Name); err != nil {
 		return err
 	}
 
-	now := changeNow()
+	now := nodeTime()
 	for _, folderID := range []int64{oldParentID, parent.ID} {
-		if err = db.changeSetTime(folderID, now); err != nil {
+		if err = db.setEntryTime(folderID, now); err != nil {
 			return err
 		}
 
