@@ -15,7 +15,8 @@ const DBPrefix = "vfs__"
 
 type Module interface {
 	// CreateVFS creates the VFS of an identity with the default quotas. Creating a VFS that exists succeeds and
-	// changes nothing. The zero identity and the identity of the node are refused with ErrNotPermitted.
+	// changes nothing. Any non-zero identity is accepted, the node's included. The zero identity is refused with
+	// ErrNotPermitted.
 	//
 	// The call is not an authorized query: it is for modules inside the node, such as apphost.
 	CreateVFS(id *astral.Identity) error
