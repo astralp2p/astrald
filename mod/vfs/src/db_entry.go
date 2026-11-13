@@ -5,7 +5,7 @@ import (
 
 	vfsapi "github.com/astralp2p/astral-go/api/vfs"
 	"github.com/astralp2p/astral-go/astral"
-	"github.com/astralp2p/astrald/mod/vfs"
+	vfsmod "github.com/astralp2p/astrald/mod/vfs"
 )
 
 // dbEntry is one entry of a VFS, or the root folder of one.
@@ -28,7 +28,7 @@ type dbEntry struct {
 	ModTime int64 `gorm:"not null"`
 }
 
-func (dbEntry) TableName() string { return vfs.DBPrefix + "entries" }
+func (dbEntry) TableName() string { return vfsmod.DBPrefix + "entries" }
 
 // isFolder reports whether the folder bit is set.
 func (e *dbEntry) isFolder() bool { return astral.Uint16(e.Flags)&vfsapi.FlagFolder != 0 }
