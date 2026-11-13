@@ -99,12 +99,9 @@ func (mod *Module) folderObjectID(vfsID *astral.Identity, folderID int64) (astra
 		return *row.ObjectID, nil
 	}
 
-	unlock := mod.lockVFS(vfsID)
-	defer unlock()
-
 	var id astral.ObjectID
 
-	err = mod.db.inTx(func(tx *DB) error {
+	err = mod.runLockedTx(vfsID, func(tx *DB) error {
 		row, err := tx.findEntry(folderID)
 		if err != nil {
 			return err

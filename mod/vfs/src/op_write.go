@@ -171,36 +171,36 @@ func writeFinish(w objectsapi.Writer, size uint64) (*astral.ObjectID, error) {
 // writeCommit records the committed content at the path in one change: missing parents are created, a file there
 // is replaced, and both limits are checked exactly.
 func (mod *Module) writeCommit(vol *dbVolume, names []string, id astral.ObjectID) (row *dbEntry, err error) {
-	err = mod.changeVFS(vol, func(tx *DB) error {
-		before, err := tx.measureUsage(vol.Identity)
+	err = mod.changeVFS(vol, func(c *change) error {
+		before, err := c.tx.measureUsage(c.vol.Identity)
 		if err != nil {
 			return err
 		}
 
-		parent, err := tx.changeMakeFolders(vol, names[:len(names)-1])
+		parent, err := c.makeFolders(names[:len(names)-1])
 		if err != nil {
 			return err
 		}
 
-		if row, err = tx.writeEntry(parent, names[len(names)-1], id); err != nil {
+		if row, err = c.putFile(parent, names[len(names)-1], id); err != nil {
 			return err
 		}
 
-		return tx.changeCheckLimits(vol.Identity, before)
+		return c.checkLimits(before)
 	})
 
 	return row, err
 }
 
-// writeEntry inserts a file into a folder or replaces the content of the file there.
+// putFile inserts a file into a folder or replaces the content of the file there.
 //
 // note: replacing content sets the file's time and leaves the folder's time alone (VFS 6, section 7).
-func (db *DB) writeEntry(parent *dbEntry, name string, id astral.ObjectID) (*dbEntry, error) {
-	row, err := db.findChild(parent.ID, name)
+func (c *change) putFile(parent *dbEntry, name string, id astral.ObjectID) (*dbEntry, error) {
+	row, err := c.tx.findChild(parent.ID, name)
 	switch {
 	case errors.Is(err, vfsapi.ErrNotFound):
 		row = &dbEntry{Name: name, ObjectID: &id}
-		return row, db.changeAddEntry(parent, row)
+		return row, c.addEntry(parent, row)
 	case err != nil:
 		return nil, err
 	case row.isFolder():
@@ -209,9 +209,9 @@ func (db *DB) writeEntry(parent *dbEntry, name string, id astral.ObjectID) (*dbE
 
 	row.ObjectID, row.ModTime = &id, nodeTime()
 
-	if err = db.setFileContent(row.ID, row.ObjectID, row.ModTime); err != nil {
+	if err = c.tx.setFileContent(row.ID, row.ObjectID, row.ModTime); err != nil {
 		return nil, err
 	}
 
-	return row, db.clearFolderIDs(parent.ID)
+	return row, c.tx.clearFolderIDs(parent.ID)
 }

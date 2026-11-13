@@ -17,3 +17,13 @@ func (mod *Module) lockVFS(id *astral.Identity) (unlock func()) {
 
 	return mu.Unlock
 }
+
+// runLockedTx runs fn in one transaction under the lock of a VFS. The lock is taken before the transaction.
+//
+// note: fn calls no other module and no repository; the node has one database connection.
+func (mod *Module) runLockedTx(id *astral.Identity, fn func(tx *DB) error) error {
+	unlock := mod.lockVFS(id)
+	defer unlock()
+
+	return mod.db.inTx(fn)
+}

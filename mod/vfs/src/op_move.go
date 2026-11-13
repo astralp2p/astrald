@@ -1,9 +1,6 @@
 package vfs
 
 import (
-	"errors"
-	"slices"
-
 	vfsapi "github.com/astralp2p/astral-go/api/vfs"
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astral-go/astral/channel"
@@ -41,8 +38,8 @@ func (mod *Module) OpMove(ctx *astral.Context, q *routing.IncomingQuery, args op
 
 	var entry *vfsapi.Entry
 
-	err = mod.changeVFS(vol, func(tx *DB) (err error) {
-		entry, err = tx.moveEntry(vol, from, to)
+	err = mod.changeVFS(vol, func(c *change) (err error) {
+		entry, err = c.moveEntry(from, to)
 		return err
 	})
 	if err != nil {
@@ -50,78 +47,4 @@ func (mod *Module) OpMove(ctx *astral.Context, q *routing.IncomingQuery, args op
 	}
 
 	return ch.Send(entry)
-}
-
-// moveEntry moves the entry at from to the path to.
-func (db *DB) moveEntry(vol *dbVolume, from, to []string) (*vfsapi.Entry, error) {
-	// why: the root cannot be moved (operator decision 2026-11-12).
-	// note: operator decision 2026-11-13: a move onto the root answers invalid path, not already exists.
-	if len(from) == 0 || len(to) == 0 {
-		return nil, vfsapi.ErrInvalidPath
-	}
-
-	before, err := db.measureUsage(vol.Identity)
-	if err != nil {
-		return nil, err
-	}
-
-	row, err := db.resolveEntry(vol, from)
-	if err != nil {
-		return nil, err
-	}
-
-	if row.isFolder() && moveIsBeneath(from, to) {
-		return nil, vfsapi.ErrInvalidPath
-	}
-
-	parent, err := db.changeMakeFolders(vol, to[:len(to)-1])
-	if err != nil {
-		return nil, err
-	}
-
-	if err = db.moveRelink(row, parent, to[len(to)-1]); err != nil {
-		return nil, err
-	}
-
-	if err = db.changeCheckLimits(vol.Identity, before); err != nil {
-		return nil, err
-	}
-
-	return db.changeEntry(row)
-}
-
-// moveIsBeneath reports whether the path to is the path from or lies beneath it.
-func moveIsBeneath(from, to []string) bool {
-	return len(to) >= len(from) && slices.Equal(from, to[:len(from)])
-}
-
-// moveRelink gives an entry a new parent and name. Both parents get the node's time and lose their cached IDs.
-func (db *DB) moveRelink(row *dbEntry, parent *dbEntry, name string) error {
-	_, err := db.findChild(parent.ID, name)
-	switch {
-	case err == nil:
-		return vfsapi.ErrAlreadyExists
-	case !errors.Is(err, vfsapi.ErrNotFound):
-		return err
-	}
-
-	oldParentID := row.ParentID
-	row.ParentID, row.Name = parent.ID, name
-
-	if err = db.setEntryParent(row.ID, row.ParentID, row.Name); err != nil {
-		return err
-	}
-
-	now := nodeTime()
-	for _, folderID := range []int64{oldParentID, parent.ID} {
-		if err = db.setEntryTime(folderID, now); err != nil {
-			return err
-		}
-
-		if err = db.clearFolderIDs(folderID); err != nil {
-			return err
-		}
-	}
-
-	return nil
 }

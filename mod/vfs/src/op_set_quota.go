@@ -25,24 +25,9 @@ func (mod *Module) OpSetQuota(ctx *astral.Context, q *routing.IncomingQuery, arg
 		return ch.Send(astral.Err(err))
 	}
 
-	if err := mod.setQuotaStore(args.VFS, args.Bytes, args.Entries); err != nil {
+	if err := mod.setLimits(args.VFS, args.Bytes, args.Entries); err != nil {
 		return ch.Send(astral.Err(err))
 	}
 
 	return ch.Send(&astral.Ack{})
-}
-
-// setQuotaStore writes the limits of a VFS, or returns vfsapi.ErrNoSuchVFS.
-func (mod *Module) setQuotaStore(id *astral.Identity, byteLimit, entryLimit uint64) error {
-	unlock := mod.lockVFS(id)
-	defer unlock()
-
-	return mod.db.inTx(func(tx *DB) error {
-		vol, err := tx.findVolume(id)
-		if err != nil {
-			return err
-		}
-
-		return tx.setVolumeLimits(vol.ID, byteLimit, entryLimit)
-	})
 }

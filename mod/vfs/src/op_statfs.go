@@ -37,16 +37,13 @@ func (mod *Module) OpStatfs(ctx *astral.Context, q *routing.IncomingQuery, args 
 // why: Root, Usage and Entries are read in one transaction under the VFS lock, so they describe one state.
 // note: a caller must not hold the lock of the VFS, nor be inside a transaction.
 func (mod *Module) vfsInfo(vol *dbVolume) (*vfsapi.Info, error) {
-	unlock := mod.lockVFS(vol.Identity)
-	defer unlock()
-
 	info := &vfsapi.Info{
 		VFS:        vol.Identity,
 		Quota:      astral.Uint64(vol.byteLimit()),
 		EntryLimit: astral.Uint64(vol.entryLimit()),
 	}
 
-	err := mod.db.inTx(func(tx *DB) error {
+	err := mod.runLockedTx(vol.Identity, func(tx *DB) error {
 		root, err := tx.findEntry(vol.RootID)
 		if err != nil {
 			return err

@@ -1,7 +1,6 @@
 package vfs
 
 import (
-	vfsapi "github.com/astralp2p/astral-go/api/vfs"
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astral-go/astral/channel"
 	"github.com/astralp2p/astral-go/lib/routing"
@@ -31,43 +30,10 @@ func (mod *Module) OpRemove(ctx *astral.Context, q *routing.IncomingQuery, args 
 		return ch.Send(astral.Err(err))
 	}
 
-	err = mod.changeVFS(vol, func(tx *DB) error { return tx.removeEntry(vol, names, args.Recursive) })
+	err = mod.changeVFS(vol, func(c *change) error { return c.removeEntry(names, args.Recursive) })
 	if err != nil {
 		return ch.Send(astral.Err(err))
 	}
 
 	return ch.Send(&astral.Ack{})
-}
-
-// removeEntry removes the entry the names give, with everything below it when recursive is set.
-func (db *DB) removeEntry(vol *dbVolume, names []string, recursive bool) error {
-	// why: the root cannot be removed (operator decision 2026-11-12).
-	if len(names) == 0 {
-		return vfsapi.ErrInvalidPath
-	}
-
-	row, err := db.resolveEntry(vol, names)
-	if err != nil {
-		return err
-	}
-
-	if row.isFolder() && !recursive {
-		nonEmpty, err := db.hasChildren(row.ID)
-		if err != nil {
-			return err
-		}
-		if nonEmpty {
-			return vfsapi.ErrFolderNotEmpty
-		}
-	}
-
-	if err = db.deleteSubtree(row.ID); err != nil {
-		return err
-	}
-
-	if err = db.setEntryTime(row.ParentID, nodeTime()); err != nil {
-		return err
-	}
-
-	return db.clearFolderIDs(row.ParentID)
 }
