@@ -57,3 +57,28 @@ func TestMkdirRefusals(t *testing.T) {
 		t.Errorf("%d entries after the refusals, want 1", n)
 	}
 }
+
+// TestMkdirOfTheRootChangesNothing: mkdir of the root answers ack and leaves the root's time, the root's cached ID
+// and the entry count as they were.
+func TestMkdirOfTheRootChangesNothing(t *testing.T) {
+	mod, vol, _ := changeTestModule(t)
+	addFolder(t, mod, vol, vol.RootID, "d")
+	changeTestSetTime(t, mod, vol.RootID, testModTime)
+	root, err := mod.folderObjectID(vol.Identity, vol.RootID)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	changeTestAck(t, changeTestCall(t, mod.OpMkdir, vol, map[string]any{"path": "/"}))
+
+	got := changeTestMustFind(t, mod, vol, "/")
+	if got.ModTime != testModTime {
+		t.Errorf("root time %d, want %d", got.ModTime, testModTime)
+	}
+	if got.ObjectID == nil || *got.ObjectID != root {
+		t.Errorf("root cached ID %v, want %v", got.ObjectID, root)
+	}
+	if n := changeTestCount(t, mod, vol); n != 1 {
+		t.Errorf("%d entries, want 1", n)
+	}
+}

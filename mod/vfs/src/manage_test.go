@@ -443,3 +443,23 @@ func TestSetQuotaChecksAuthorizationBeforeExistence(t *testing.T) {
 	c := manageOpen(t, f.mod.OpSetQuota, astral.GenerateIdentity(), "vfs.set_quota?vfs="+astral.GenerateIdentity().String(), "")
 	manageExpectError(t, c, vfsapi.ErrNotPermitted)
 }
+
+// TestSetQuotaUnknownVFSLeavesOtherVFSesUnchanged: vfs.set_quota on an unknown identity answers ErrNoSuchVFS and
+// leaves the limits of an existing VFS as they were.
+func TestSetQuotaUnknownVFSLeavesOtherVFSesUnchanged(t *testing.T) {
+	f := newManageFixture(t)
+	id := astral.GenerateIdentity()
+	createVFS(t, f.mod, id)
+	manageExpect[*astral.Ack](t, manageOpen(t, f.mod.OpSetQuota, f.user, "vfs.set_quota?vfs="+id.String()+"&bytes=100&entries=7", ""))
+
+	c := manageOpen(t, f.mod.OpSetQuota, f.user, "vfs.set_quota?vfs="+astral.GenerateIdentity().String()+"&bytes=1&entries=1", "")
+	manageExpectError(t, c, vfsapi.ErrNoSuchVFS)
+
+	vol, err := f.mod.db.findVolume(id)
+	if err != nil {
+		t.Fatalf("findVolume: %v", err)
+	}
+	if vol.byteLimit() != 100 || vol.entryLimit() != 7 {
+		t.Errorf("limits %d and %d, want 100 and 7", vol.byteLimit(), vol.entryLimit())
+	}
+}

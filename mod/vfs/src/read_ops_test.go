@@ -837,3 +837,110 @@ func TestReadAnOtherVFSNeedsAPermit(t *testing.T) {
 		t.Fatalf("read = %q, %v", res.Raw, res.Err)
 	}
 }
+
+// TestStatfsWhileWritingDoesNotDeadlock: on the module with one database connection, concurrent vfs.write and
+// vfs.statfs calls on one VFS all complete within a timeout.
+func TestStatfsWhileWritingDoesNotDeadlock(t *testing.T) {
+	mod, vol, _ := changeTestModule(t)
+	const n = 8
+
+	var wg sync.WaitGroup
+	errs := make(chan error, 2*n)
+	for i := range n {
+		wg.Add(2)
+		go func() {
+			defer wg.Done()
+			path := fmt.Sprintf("/d/f%02d", i)
+			answer, err := changeTestTryWrite(mod, vol, path, path)
+			if _, ok := answer.(*vfsapi.Entry); err != nil || !ok {
+				errs <- fmt.Errorf("write %s: %#v, %v", path, answer, err)
+			}
+		}()
+		go func() {
+			defer wg.Done()
+			if err := readOpsTryStatfs(mod, vol); err != nil {
+				errs <- err
+			}
+		}()
+	}
+
+	done := make(chan struct{})
+	go func() {
+		wg.Wait()
+		close(done)
+	}()
+	select {
+	case <-done:
+	case <-time.After(4 * changeTestWait):
+		t.Fatal("the calls did not complete")
+	}
+	close(errs)
+	for err := range errs {
+		t.Error(err)
+	}
+}
+
+// readOpsTryStatfs calls vfs.statfs as the VFS identity and fails unless it answers an info. Any goroutine may
+// call it.
+func readOpsTryStatfs(mod *Module, vol *dbVolume) error {
+	c, err := changeTestOpen(mod.OpStatfs, vol.Identity, map[string]any{})
+	if err != nil {
+		return err
+	}
+	defer c.close()
+
+	answer, err := c.next()
+	if err != nil {
+		return fmt.Errorf("statfs: %w", err)
+	}
+	if _, ok := answer.(*vfsapi.Info); !ok {
+		return fmt.Errorf("statfs answered %#v, want an info", answer)
+	}
+
+	return nil
+}
+
+// TestStatfsRootMatchesARecomputeAfterEveryChange: after each of mkdir, write, move, touch and remove, the Root
+// that vfs.statfs answers equals the root ObjectID recomputed from cleared caches.
+func TestStatfsRootMatchesARecomputeAfterEveryChange(t *testing.T) {
+	mod, vol, _ := changeTestModule(t)
+
+	steps := map[string]func(){
+		"mkdir": func() { changeTestAck(t, changeTestCall(t, mod.OpMkdir, vol, map[string]any{"path": "/a/b"})) },
+		"write": func() { changeTestEntry(t, changeTestWrite(t, mod, vol, "/a/b/f", "content")) },
+		"move": func() {
+			changeTestEntry(t, changeTestCall(t, mod.OpMove, vol, map[string]any{"from": "/a/b/f", "to": "/c/g"}))
+		},
+		"touch": func() { changeTestEntry(t, changeTestCall(t, mod.OpTouch, vol, map[string]any{"path": "/a"})) },
+		"remove": func() {
+			changeTestAck(t, changeTestCall(t, mod.OpRemove, vol, map[string]any{"path": "/a", "recursive": "true"}))
+		},
+	}
+	for _, name := range []string{"mkdir", "write", "move", "touch", "remove"} {
+		steps[name]()
+
+		info := readOpsStatfsInfo(t, mod, vol)
+		changeTestCheckRecompute(t, mod, vol)
+
+		fresh, err := mod.folderObjectID(vol.Identity, vol.RootID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if info.Root != fresh {
+			t.Errorf("after %s: statfs Root %v, recomputed %v", name, info.Root, fresh)
+		}
+	}
+}
+
+// readOpsStatfsInfo calls vfs.statfs as the VFS identity and returns its info.
+func readOpsStatfsInfo(t *testing.T, mod *Module, vol *dbVolume) *vfsapi.Info {
+	t.Helper()
+
+	answer := changeTestCall(t, mod.OpStatfs, vol, map[string]any{})
+	info, ok := answer.(*vfsapi.Info)
+	if !ok {
+		t.Fatalf("statfs answered %#v, want an info", answer)
+	}
+
+	return info
+}
