@@ -147,7 +147,7 @@ func TestObjectHeldByAVFSCanBeDeletedAndTheEntryStaysVisible(t *testing.T) {
 	if err != nil {
 		t.Fatalf("resolve after the delete: %v", err)
 	}
-	if got := found.entry(); got.ID != id || got.Name != "f" || found.ID != file.ID {
+	if got := found.toEntry(); got.ID != id || got.Name != "f" || found.ID != file.ID {
 		t.Errorf("entry after the delete = %+v, want the file %v", got, id)
 	}
 

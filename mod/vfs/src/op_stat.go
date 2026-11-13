@@ -19,7 +19,7 @@ func (mod *Module) OpStat(ctx *astral.Context, q *routing.IncomingQuery, args op
 	ch := q.Accept(channel.WithFormats(args.In, args.Out))
 	defer ch.Close()
 
-	vol, err := mod.readTarget(ctx, q, args.VFS)
+	vol, err := mod.authorizeVFSQuery(ctx, q, args.VFS, accessRead)
 	if err != nil {
 		return ch.Send(astral.Err(err))
 	}

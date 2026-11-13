@@ -4,7 +4,7 @@ import (
 	"math"
 
 	"github.com/astralp2p/astral-go/astral"
-	"github.com/astralp2p/astrald/mod/vfs"
+	vfsmod "github.com/astralp2p/astrald/mod/vfs"
 )
 
 // dbVolume is one VFS.
@@ -16,7 +16,7 @@ type dbVolume struct {
 	EntryLimit int64            `gorm:"not null"` // 0 means no limit
 }
 
-func (dbVolume) TableName() string { return vfs.DBPrefix + "volumes" }
+func (dbVolume) TableName() string { return vfsmod.DBPrefix + "volumes" }
 
 // byteLimit returns the byte limit; 0 means no limit.
 func (v *dbVolume) byteLimit() uint64 { return uint64(v.ByteLimit) }

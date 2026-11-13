@@ -14,7 +14,7 @@ import (
 
 func TestWriteCreatesTheFileAndItsParents(t *testing.T) {
 	mod, vol, repo := changeTestModule(t)
-	if err := mod.db.changeSetTime(vol.RootID, testModTime); err != nil {
+	if err := mod.db.setEntryTime(vol.RootID, testModTime); err != nil {
 		t.Fatal(err)
 	}
 	start := time.Now().UnixNano()
@@ -43,6 +43,11 @@ func TestWriteCreatesTheFileAndItsParents(t *testing.T) {
 
 	if n := changeTestCount(t, mod, vol); n != 3 {
 		t.Errorf("%d entries, want 3", n)
+	}
+
+	// note: an add sets one node time on the new entry and on its parent.
+	if f, b := changeTestMustFind(t, mod, vol, "/a/b/c.txt"), changeTestMustFind(t, mod, vol, "/a/b"); f.ModTime != b.ModTime {
+		t.Errorf("/a/b/c.txt has time %d and /a/b %d, want one time", f.ModTime, b.ModTime)
 	}
 }
 

@@ -1,7 +1,6 @@
 package vfs
 
 import (
-	vfsapi "github.com/astralp2p/astral-go/api/vfs"
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astral-go/astral/channel"
 	"github.com/astralp2p/astral-go/lib/routing"
@@ -19,7 +18,7 @@ func (mod *Module) OpLs(ctx *astral.Context, q *routing.IncomingQuery, args opLs
 	ch := q.Accept(channel.WithFormats(args.In, args.Out))
 	defer ch.Close()
 
-	vol, err := mod.readTarget(ctx, q, args.VFS)
+	vol, err := mod.authorizeVFSQuery(ctx, q, args.VFS, accessRead)
 	if err != nil {
 		return ch.Send(astral.Err(err))
 	}
@@ -29,7 +28,12 @@ func (mod *Module) OpLs(ctx *astral.Context, q *routing.IncomingQuery, args opLs
 		path = *args.Path
 	}
 
-	rows, err := mod.lsRows(vol, path)
+	names, err := parsePath(path)
+	if err != nil {
+		return ch.Send(astral.Err(err))
+	}
+
+	rows, err := mod.listFolder(vol, names)
 	if err != nil {
 		return ch.Send(astral.Err(err))
 	}
@@ -46,28 +50,4 @@ func (mod *Module) OpLs(ctx *astral.Context, q *routing.IncomingQuery, args opLs
 	}
 
 	return ch.Send(&astral.EOS{})
-}
-
-// lsRows returns the children of the folder at a path, in one read transaction.
-func (mod *Module) lsRows(vol *dbVolume, path string) (rows []*dbEntry, err error) {
-	names, err := parsePath(path)
-	if err != nil {
-		return nil, err
-	}
-
-	err = mod.db.inTx(func(tx *DB) error {
-		folder, err := tx.resolveEntry(vol, names)
-		if err != nil {
-			return err
-		}
-		if !folder.isFolder() {
-			return vfsapi.ErrNotAFolder
-		}
-
-		rows, err = tx.listChildren(folder.ID)
-
-		return err
-	})
-
-	return rows, err
 }

@@ -11,7 +11,7 @@ func TestTouchSetsTheTimeOfFilesAndFolders(t *testing.T) {
 	mod, vol, _ := changeTestModule(t)
 	dir := addFolder(t, mod, vol, vol.RootID, "d")
 	addFile(t, mod, vol, dir.ID, "f", "x")
-	if err := mod.db.changeSetTime(vol.RootID, testModTime); err != nil {
+	if err := mod.db.setEntryTime(vol.RootID, testModTime); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := mod.folderObjectID(vol.Identity, vol.RootID); err != nil {
@@ -66,5 +66,33 @@ func TestTouchRefusals(t *testing.T) {
 	}
 	if got := changeTestMustFind(t, mod, vol, "/f").ModTime; got != testModTime {
 		t.Errorf("a refused touch set the time to %d", got)
+	}
+}
+
+// TestTouchAFolderKeepsItsOwnCachedIDAndClearsAncestors: a touched folder keeps its cached ID, because its time is
+// outside its own listing, while the root loses its cached ID, and stat answers the ID the folder had before.
+func TestTouchAFolderKeepsItsOwnCachedIDAndClearsAncestors(t *testing.T) {
+	mod, vol, _ := changeTestModule(t)
+	dir := addFolder(t, mod, vol, vol.RootID, "d")
+	addFile(t, mod, vol, dir.ID, "f", "x")
+	if _, err := mod.folderObjectID(vol.Identity, vol.RootID); err != nil {
+		t.Fatal(err)
+	}
+	cached := changeTestMustFind(t, mod, vol, "/d").ObjectID
+	if cached == nil {
+		t.Fatal("/d has no cached ID")
+	}
+	want := changeTestEntry(t, changeTestCall(t, mod.OpStat, vol, map[string]any{"path": "/d"})).ID
+
+	changeTestEntry(t, changeTestCall(t, mod.OpTouch, vol, map[string]any{"path": "/d"}))
+
+	if got := changeTestMustFind(t, mod, vol, "/d").ObjectID; got == nil || *got != *cached {
+		t.Errorf("/d: cached ID %v, want %v", got, *cached)
+	}
+	if got := changeTestMustFind(t, mod, vol, "/").ObjectID; got != nil {
+		t.Errorf("/: cached ID %v, want a cleared ID", got)
+	}
+	if got := changeTestEntry(t, changeTestCall(t, mod.OpStat, vol, map[string]any{"path": "/d"})).ID; got != want {
+		t.Errorf("stat /d: ID %v, want %v", got, want)
 	}
 }

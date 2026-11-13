@@ -2,63 +2,37 @@ package vfs
 
 import (
 	"errors"
-	"time"
 
 	vfsapi "github.com/astralp2p/astral-go/api/vfs"
-	"github.com/astralp2p/astral-go/astral"
-	"github.com/astralp2p/astral-go/lib/routing"
 )
 
-// changeAuthorize authorizes a write on a VFS and returns it. A nil VFS is the caller's.
-func (mod *Module) changeAuthorize(ctx *astral.Context, q *routing.IncomingQuery, vfsID *astral.Identity) (*dbVolume, error) {
-	if vfsID == nil {
-		vfsID = q.Caller()
-	}
-
-	return mod.authorizeVFS(ctx, q.Caller(), vfsID, accessWrite)
+// change is one change to a VFS: the transaction it runs in and the VFS it changes.
+//
+// note: vol was read before the lock, so a change uses vol.Identity and vol.RootID only.
+// note: checkLimits re-reads the limits inside the transaction.
+type change struct {
+	tx  *DB
+	vol *dbVolume
 }
 
 // changeVFS runs one change to a VFS: one transaction under the lock of the VFS.
-//
-// note: fn calls no other module and no repository; the node has one database connection.
-func (mod *Module) changeVFS(vol *dbVolume, fn func(tx *DB) error) error {
-	unlock := mod.lockVFS(vol.Identity)
-	defer unlock()
-
-	return mod.db.inTx(fn)
+func (mod *Module) changeVFS(vol *dbVolume, fn func(c *change) error) error {
+	return mod.runLockedTx(vol.Identity, func(tx *DB) error {
+		return fn(&change{tx: tx, vol: vol})
+	})
 }
 
-// changeNow returns the node's time as a modification time column.
-func changeNow() int64 { return modTimeColumn(time.Now()) }
-
-// changeUsage is what the limits of a VFS measure.
-type changeUsage struct {
-	Bytes   uint64
-	Entries uint64
-}
-
-// changeMeasure returns the usage of a VFS.
-func (db *DB) changeMeasure(vfsID *astral.Identity) (u changeUsage, err error) {
-	if u.Bytes, err = db.usage(vfsID); err != nil {
-		return
-	}
-
-	u.Entries, err = db.entryCount(vfsID)
-
-	return
-}
-
-// changeCheckLimits refuses a change that grew the usage of a VFS above one of its limits.
+// checkLimits refuses a change that grew the usage of a VFS above one of its limits.
 //
 // why: a limit below the usage is accepted (vfs.set_quota); it refuses growth and leaves the rest alone.
 // why: the limits are read inside the change, so a vfs.set_quota acked before the change holds for it.
-func (db *DB) changeCheckLimits(vfsID *astral.Identity, before changeUsage) error {
-	vol, err := db.findVolume(vfsID)
+func (c *change) checkLimits(before vfsUsage) error {
+	vol, err := c.tx.findVolume(c.vol.Identity)
 	if err != nil {
 		return err
 	}
 
-	after, err := db.changeMeasure(vfsID)
+	after, err := c.tx.measureUsage(c.vol.Identity)
 	if err != nil {
 		return err
 	}
@@ -74,45 +48,47 @@ func (db *DB) changeCheckLimits(vfsID *astral.Identity, before changeUsage) erro
 	return nil
 }
 
-// changeSetTime sets the modification time of one row.
-func (db *DB) changeSetTime(rowID int64, modTime int64) error {
-	return db.Model(&dbEntry{}).Where("id = ?", rowID).Update("mod_time", modTime).Error
-}
-
-// changeAddEntry inserts a new entry into a folder. The entry and the folder get the node's time, and the
-// folder IDs from the folder up are cleared.
-func (db *DB) changeAddEntry(parent *dbEntry, row *dbEntry) error {
-	now := changeNow()
+// addEntry inserts a new entry into a folder. The entry and the folder get the same node time, and the folder IDs
+// from the folder up are cleared.
+//
+// note: addEntry sets VFS, ParentID and ModTime on row.
+func (c *change) addEntry(parent, row *dbEntry) error {
+	now := nodeTime()
 
 	row.VFS = parent.VFS
 	row.ParentID = parent.ID
 	row.ModTime = now
 
-	if err := db.Create(row).Error; err != nil {
+	if err := c.tx.insertEntry(row); err != nil {
 		return err
 	}
 
-	if err := db.changeSetTime(parent.ID, now); err != nil {
-		return err
-	}
-
-	return db.clearFolderIDs(parent.ID)
+	return c.markFolderChanged(parent.ID, now)
 }
 
-// changeMakeFolders walks the names from the root of a VFS, creates every missing folder and returns the last
+// markFolderChanged sets the time of a folder and clears the folder IDs from the folder up.
+func (c *change) markFolderChanged(folderID, now int64) error {
+	if err := c.tx.setEntryTime(folderID, now); err != nil {
+		return err
+	}
+
+	return c.tx.clearFolderIDs(folderID)
+}
+
+// makeFolders walks the names from the root of the VFS, creates every missing folder and returns the last
 // folder. A file on the way answers vfsapi.ErrNotAFolder.
-func (db *DB) changeMakeFolders(vol *dbVolume, names []string) (*dbEntry, error) {
-	row, err := db.getEntry(vol.RootID)
+func (c *change) makeFolders(names []string) (*dbEntry, error) {
+	row, err := c.tx.findEntry(c.vol.RootID)
 	if err != nil {
 		return nil, err
 	}
 
 	for _, name := range names {
-		child, err := db.findChild(row.ID, name)
+		child, err := c.tx.findChild(row.ID, name)
 		switch {
 		case errors.Is(err, vfsapi.ErrNotFound):
 			child = &dbEntry{Name: name, Flags: uint16(vfsapi.FlagFolder)}
-			if err = db.changeAddEntry(row, child); err != nil {
+			if err = c.addEntry(row, child); err != nil {
 				return nil, err
 			}
 		case err != nil:
@@ -129,22 +105,11 @@ func (db *DB) changeMakeFolders(vol *dbVolume, names []string) (*dbEntry, error)
 	return row, nil
 }
 
-// changeEntry returns a row as an entry. A folder whose ObjectID is cleared gets it computed and cached.
-//
-// The caller runs inside a change, under the lock of the VFS.
-func (db *DB) changeEntry(row *dbEntry) (*vfsapi.Entry, error) {
-	if row.isFolder() && row.ObjectID == nil {
-		id, filled, err := db.computeFolderID(row.ID)
-		if err != nil {
-			return nil, err
-		}
-
-		if err = db.storeFolderIDs(filled); err != nil {
-			return nil, err
-		}
-
-		row.ObjectID = &id
+// fillEntry returns a row as an entry. A folder whose ObjectID is cleared gets it computed and cached.
+func (c *change) fillEntry(row *dbEntry) (*vfsapi.Entry, error) {
+	if err := fillFolderID(c.tx, row); err != nil {
+		return nil, err
 	}
 
-	return row.entry(), nil
+	return row.toEntry(), nil
 }

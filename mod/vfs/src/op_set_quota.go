@@ -21,31 +21,13 @@ func (mod *Module) OpSetQuota(ctx *astral.Context, q *routing.IncomingQuery, arg
 	ch := q.Accept(channel.WithFormats(args.In, args.Out))
 	defer ch.Close()
 
-	if err := mod.manageAuthorize(ctx, q); err != nil {
+	if err := mod.authorizeManageQuery(ctx, q); err != nil {
 		return ch.Send(astral.Err(err))
 	}
 
-	if err := mod.setQuotaStore(args.VFS, args.Bytes, args.Entries); err != nil {
+	if err := mod.setLimits(args.VFS, args.Bytes, args.Entries); err != nil {
 		return ch.Send(astral.Err(err))
 	}
 
 	return ch.Send(&astral.Ack{})
-}
-
-// setQuotaStore writes the limits of a VFS, or returns vfsapi.ErrNoSuchVFS.
-func (mod *Module) setQuotaStore(id *astral.Identity, byteLimit, entryLimit uint64) error {
-	unlock := mod.lockVFS(id)
-	defer unlock()
-
-	return mod.db.inTx(func(tx *DB) error {
-		vol, err := tx.findVolume(id)
-		if err != nil {
-			return err
-		}
-
-		return tx.Model(&dbVolume{}).Where("id = ?", vol.ID).Updates(map[string]any{
-			"byte_limit":  limitColumn(byteLimit),
-			"entry_limit": limitColumn(entryLimit),
-		}).Error
-	})
 }

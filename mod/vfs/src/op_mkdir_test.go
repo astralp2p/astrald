@@ -9,7 +9,7 @@ import (
 
 func TestMkdirCreatesTheFolderAndItsParents(t *testing.T) {
 	mod, vol, _ := changeTestModule(t)
-	if err := mod.db.changeSetTime(vol.RootID, testModTime); err != nil {
+	if err := mod.db.setEntryTime(vol.RootID, testModTime); err != nil {
 		t.Fatal(err)
 	}
 	start := time.Now().UnixNano()
@@ -24,6 +24,11 @@ func TestMkdirCreatesTheFolderAndItsParents(t *testing.T) {
 	}
 	if n := changeTestCount(t, mod, vol); n != 3 {
 		t.Errorf("%d entries, want 3", n)
+	}
+
+	// note: an add sets one node time on the new entry and on its parent.
+	if c, b := changeTestMustFind(t, mod, vol, "/a/b/c"), changeTestMustFind(t, mod, vol, "/a/b"); c.ModTime != b.ModTime {
+		t.Errorf("/a/b/c has time %d and /a/b %d, want one time", c.ModTime, b.ModTime)
 	}
 }
 
@@ -55,5 +60,30 @@ func TestMkdirRefusals(t *testing.T) {
 
 	if n := changeTestCount(t, mod, vol); n != 1 {
 		t.Errorf("%d entries after the refusals, want 1", n)
+	}
+}
+
+// TestMkdirOfTheRootChangesNothing: mkdir of the root answers ack and leaves the root's time, the root's cached ID
+// and the entry count as they were.
+func TestMkdirOfTheRootChangesNothing(t *testing.T) {
+	mod, vol, _ := changeTestModule(t)
+	addFolder(t, mod, vol, vol.RootID, "d")
+	changeTestSetTime(t, mod, vol.RootID, testModTime)
+	root, err := mod.folderObjectID(vol.Identity, vol.RootID)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	changeTestAck(t, changeTestCall(t, mod.OpMkdir, vol, map[string]any{"path": "/"}))
+
+	got := changeTestMustFind(t, mod, vol, "/")
+	if got.ModTime != testModTime {
+		t.Errorf("root time %d, want %d", got.ModTime, testModTime)
+	}
+	if got.ObjectID == nil || *got.ObjectID != root {
+		t.Errorf("root cached ID %v, want %v", got.ObjectID, root)
+	}
+	if n := changeTestCount(t, mod, vol); n != 1 {
+		t.Errorf("%d entries, want 1", n)
 	}
 }

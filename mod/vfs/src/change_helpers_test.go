@@ -369,3 +369,12 @@ func changeTestCount(t *testing.T, mod *Module, vol *dbVolume) uint64 {
 
 	return n
 }
+
+// changeTestSetTime sets the stored modification time of one row.
+func changeTestSetTime(t *testing.T, mod *Module, rowID int64, modTime int64) {
+	t.Helper()
+
+	if err := mod.db.Model(&dbEntry{}).Where("id = ?", rowID).Update("mod_time", modTime).Error; err != nil {
+		t.Fatalf("set time: %v", err)
+	}
+}

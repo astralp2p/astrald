@@ -5,7 +5,7 @@ import (
 
 	vfsapi "github.com/astralp2p/astral-go/api/vfs"
 	"github.com/astralp2p/astral-go/astral"
-	"github.com/astralp2p/astrald/mod/vfs"
+	vfsmod "github.com/astralp2p/astrald/mod/vfs"
 )
 
 // dbEntry is one entry of a VFS, or the root folder of one.
@@ -28,7 +28,7 @@ type dbEntry struct {
 	ModTime int64 `gorm:"not null"`
 }
 
-func (dbEntry) TableName() string { return vfs.DBPrefix + "entries" }
+func (dbEntry) TableName() string { return vfsmod.DBPrefix + "entries" }
 
 // isFolder reports whether the folder bit is set.
 func (e *dbEntry) isFolder() bool { return astral.Uint16(e.Flags)&vfsapi.FlagFolder != 0 }
@@ -36,9 +36,9 @@ func (e *dbEntry) isFolder() bool { return astral.Uint16(e.Flags)&vfsapi.FlagFol
 // isRoot reports whether the row is the root of a VFS.
 func (e *dbEntry) isRoot() bool { return e.ParentID == e.ID }
 
-// entry returns the entry as it is listed. The ID of a folder is the cached one: a caller that needs it
+// toEntry returns the entry as it is listed. The ID of a folder is the cached one: a caller that needs it
 // computes it first.
-func (e *dbEntry) entry() *vfsapi.Entry {
+func (e *dbEntry) toEntry() *vfsapi.Entry {
 	entry := &vfsapi.Entry{
 		Name:    astral.String8(e.Name),
 		Flags:   astral.Uint16(e.Flags),
@@ -53,3 +53,6 @@ func (e *dbEntry) entry() *vfsapi.Entry {
 
 // modTimeColumn converts a time for the database: nanoseconds since the Unix epoch.
 func modTimeColumn(t time.Time) int64 { return t.UnixNano() }
+
+// nodeTime returns the node's time as a modification time column.
+func nodeTime() int64 { return modTimeColumn(time.Now()) }

@@ -81,13 +81,13 @@ func TestComputeCachesEveryFolderItFills(t *testing.T) {
 	}
 
 	for _, row := range []int64{vol.RootID, a.ID, b.ID} {
-		got, err := mod.db.getEntry(row)
+		got, err := mod.db.findEntry(row)
 		if err != nil || got.ObjectID == nil {
 			t.Fatalf("row %d not cached: %v, %v", row, got, err)
 		}
 	}
 
-	root, _ := mod.db.getEntry(vol.RootID)
+	root, _ := mod.db.findEntry(vol.RootID)
 	if *root.ObjectID != rootID {
 		t.Fatalf("cached root %v, computed %v", root.ObjectID, rootID)
 	}
@@ -105,20 +105,30 @@ func TestComputeUsesCachedFolderIDs(t *testing.T) {
 		t.Fatalf("plant: %v", err)
 	}
 
-	id, filled, err := mod.db.computeFolderID(vol.RootID)
+	root, err := mod.db.findEntry(vol.RootID)
 	if err != nil {
-		t.Fatalf("computeFolderID: %v", err)
+		t.Fatalf("findEntry: %v", err)
 	}
-	if len(filled) != 1 || filled[0].Row != vol.RootID {
-		t.Fatalf("filled = %v, want the root only", filled)
+	fc := folderIDComputer{tx: mod.db}
+	id, err := fc.compute(root)
+	if err != nil {
+		t.Fatalf("compute: %v", err)
+	}
+	if len(fc.filled) != 1 || fc.filled[0].Row != vol.RootID {
+		t.Fatalf("filled = %v, want the root only", fc.filled)
 	}
 
 	if err := mod.db.clearFolderIDs(sub.ID); err != nil {
 		t.Fatalf("clearFolderIDs: %v", err)
 	}
-	fresh, _, err := mod.db.computeFolderID(vol.RootID)
+	root, err = mod.db.findEntry(vol.RootID)
 	if err != nil {
-		t.Fatalf("computeFolderID: %v", err)
+		t.Fatalf("findEntry: %v", err)
+	}
+	fc = folderIDComputer{tx: mod.db}
+	fresh, err := fc.compute(root)
+	if err != nil {
+		t.Fatalf("compute: %v", err)
 	}
 	if fresh == id {
 		t.Fatal("the listing did not change after the cache was cleared")
@@ -152,20 +162,20 @@ func TestClearFolderIDsClearsTheFolderAndEveryAncestor(t *testing.T) {
 
 	cleared := map[string]int64{"root": vol.RootID, "a": a.ID, "b": b.ID}
 	for name, row := range cleared {
-		if got, _ := mod.db.getEntry(row); got.ObjectID != nil {
+		if got, _ := mod.db.findEntry(row); got.ObjectID != nil {
 			t.Errorf("%s still has a cached ObjectID", name)
 		}
 	}
 
 	kept := map[string]int64{"c": c.ID, "side": side.ID, "kid": sideKid.ID, "other root": other.RootID}
 	for name, row := range kept {
-		if got, _ := mod.db.getEntry(row); got.ObjectID == nil {
+		if got, _ := mod.db.findEntry(row); got.ObjectID == nil {
 			t.Errorf("%s lost its cached ObjectID", name)
 		}
 	}
 
 	// a file's ObjectID is content, never touched
-	if got, _ := mod.db.getEntry(file.ID); got.ObjectID == nil || *got.ObjectID != contentID("x") {
+	if got, _ := mod.db.findEntry(file.ID); got.ObjectID == nil || *got.ObjectID != contentID("x") {
 		t.Errorf("file ObjectID changed: %v", got.ObjectID)
 	}
 }
@@ -182,10 +192,10 @@ func TestClearFolderIDsNeverClearsAFile(t *testing.T) {
 		t.Fatalf("clearFolderIDs: %v", err)
 	}
 
-	if got, _ := mod.db.getEntry(file.ID); got.ObjectID == nil || *got.ObjectID != contentID("x") {
+	if got, _ := mod.db.findEntry(file.ID); got.ObjectID == nil || *got.ObjectID != contentID("x") {
 		t.Errorf("file ObjectID = %v, want its content", got.ObjectID)
 	}
-	if got, _ := mod.db.getEntry(vol.RootID); got.ObjectID != nil {
+	if got, _ := mod.db.findEntry(vol.RootID); got.ObjectID != nil {
 		t.Error("the root above the file kept its cached ObjectID")
 	}
 }
@@ -200,7 +210,7 @@ func TestClearFolderIDsOnTheRootEndsAtTheRoot(t *testing.T) {
 	if err := mod.db.clearFolderIDs(vol.RootID); err != nil {
 		t.Fatalf("clearFolderIDs: %v", err)
 	}
-	if got, _ := mod.db.getEntry(vol.RootID); got.ObjectID != nil {
+	if got, _ := mod.db.findEntry(vol.RootID); got.ObjectID != nil {
 		t.Fatal("the root kept its cached ObjectID")
 	}
 }

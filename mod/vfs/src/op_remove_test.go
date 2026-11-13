@@ -76,3 +76,36 @@ func changeTestHolders(t *testing.T, mod *Module, id interface{}) int64 {
 
 	return n
 }
+
+// TestRemoveRefusalChangesNoTime: a refused remove, of a folder with entries without recursive or of the root,
+// leaves the parent's time and every cached folder ID as they were.
+func TestRemoveRefusalChangesNoTime(t *testing.T) {
+	mod, vol, _ := changeTestModule(t)
+	dir := addFolder(t, mod, vol, vol.RootID, "d")
+	addFile(t, mod, vol, dir.ID, "f", "x")
+	changeTestSetTime(t, mod, vol.RootID, testModTime)
+	if _, err := mod.folderObjectID(vol.Identity, vol.RootID); err != nil {
+		t.Fatal(err)
+	}
+	before := map[string]*dbEntry{}
+	for _, path := range []string{"/", "/d"} {
+		before[path] = changeTestMustFind(t, mod, vol, path)
+		if before[path].ObjectID == nil {
+			t.Fatalf("%s has no cached ID", path)
+		}
+	}
+
+	changeTestErr(t, changeTestCall(t, mod.OpRemove, vol, map[string]any{"path": "/d"}), vfsapi.ErrFolderNotEmpty)
+	changeTestErr(t, changeTestCall(t, mod.OpRemove, vol, map[string]any{"path": "/"}), vfsapi.ErrInvalidPath)
+	changeTestErr(t, changeTestCall(t, mod.OpRemove, vol, map[string]any{"path": "/", "recursive": "true"}), vfsapi.ErrInvalidPath)
+
+	for path, old := range before {
+		got := changeTestMustFind(t, mod, vol, path)
+		if got.ModTime != old.ModTime {
+			t.Errorf("%s: time %d, want %d", path, got.ModTime, old.ModTime)
+		}
+		if got.ObjectID == nil || *got.ObjectID != *old.ObjectID {
+			t.Errorf("%s: cached ID %v, want %v", path, got.ObjectID, *old.ObjectID)
+		}
+	}
+}

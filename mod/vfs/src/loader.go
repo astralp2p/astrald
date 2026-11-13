@@ -7,7 +7,7 @@ import (
 	"github.com/astralp2p/astral-go/astral/log"
 	"github.com/astralp2p/astrald/core"
 	"github.com/astralp2p/astrald/core/assets"
-	"github.com/astralp2p/astrald/mod/vfs"
+	vfsmod "github.com/astralp2p/astrald/mod/vfs"
 	"github.com/astralp2p/astrald/resources"
 )
 
@@ -22,7 +22,7 @@ func (Loader) Load(node astral.Node, assets assets.Assets, log *log.Logger) (cor
 		log:      log,
 	}
 
-	if err := assets.LoadYAML(vfs.ModuleName, &mod.config); err != nil && !errors.Is(err, resources.ErrNotFound) {
+	if err := assets.LoadYAML(vfsmod.ModuleName, &mod.config); err != nil && !errors.Is(err, resources.ErrNotFound) {
 		return nil, err
 	}
 
@@ -40,7 +40,7 @@ func (Loader) Load(node astral.Node, assets assets.Assets, log *log.Logger) (cor
 }
 
 func init() {
-	if err := core.RegisterModule(vfs.ModuleName, Loader{}); err != nil {
+	if err := core.RegisterModule(vfsmod.ModuleName, Loader{}); err != nil {
 		panic(err)
 	}
 }

@@ -12,8 +12,8 @@ import (
 func changeTestLowerLimits(t *testing.T, mod *Module, vol *dbVolume, bytes, entries uint64) {
 	t.Helper()
 
-	if err := mod.setQuotaStore(vol.Identity, bytes, entries); err != nil {
-		t.Fatalf("setQuotaStore: %v", err)
+	if err := mod.setLimits(vol.Identity, bytes, entries); err != nil {
+		t.Fatalf("setLimits: %v", err)
 	}
 }
 
@@ -21,9 +21,9 @@ func TestWriteCommitChecksTheLimitsCommittedAtTheChange(t *testing.T) {
 	mod, vol, _ := changeTestModule(t)
 	changeTestLowerLimits(t, mod, vol, 3, 0)
 
-	_, err := mod.writeCommit(vol, []string{"f"}, contentID("12345"))
+	_, err := mod.recordFile(vol, []string{"f"}, contentID("12345"))
 	if !errors.Is(err, vfsapi.ErrQuotaExceeded) {
-		t.Fatalf("writeCommit = %v, want %v", err, vfsapi.ErrQuotaExceeded)
+		t.Fatalf("recordFile = %v, want %v", err, vfsapi.ErrQuotaExceeded)
 	}
 	if n := changeTestCount(t, mod, vol); n != 0 {
 		t.Errorf("%d entries after a refused write, want 0", n)
@@ -34,7 +34,7 @@ func TestMkdirChecksTheLimitsCommittedAtTheChange(t *testing.T) {
 	mod, vol, _ := changeTestModule(t)
 	changeTestLowerLimits(t, mod, vol, 0, 1)
 
-	err := mod.changeVFS(vol, func(tx *DB) error { return tx.mkdirCreate(vol, []string{"a", "b"}) })
+	err := mod.changeVFS(vol, func(c *change) error { return c.createFolder([]string{"a", "b"}) })
 	if !errors.Is(err, vfsapi.ErrTooManyEntries) {
 		t.Fatalf("mkdir = %v, want %v", err, vfsapi.ErrTooManyEntries)
 	}
@@ -48,8 +48,8 @@ func TestMoveChecksTheLimitsCommittedAtTheChange(t *testing.T) {
 	addFile(t, mod, vol, vol.RootID, "f", "x")
 	changeTestLowerLimits(t, mod, vol, 0, 1)
 
-	err := mod.changeVFS(vol, func(tx *DB) (err error) {
-		_, err = tx.moveEntry(vol, []string{"f"}, []string{"new", "f"})
+	err := mod.changeVFS(vol, func(c *change) (err error) {
+		_, err = c.moveEntry([]string{"f"}, []string{"new", "f"})
 		return err
 	})
 	if !errors.Is(err, vfsapi.ErrTooManyEntries) {

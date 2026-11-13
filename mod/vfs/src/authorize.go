@@ -4,6 +4,7 @@ import (
 	apiauth "github.com/astralp2p/astral-go/api/auth"
 	vfsapi "github.com/astralp2p/astral-go/api/vfs"
 	"github.com/astralp2p/astral-go/astral"
+	"github.com/astralp2p/astral-go/lib/routing"
 )
 
 // access is what an operation asks of a VFS.
@@ -42,6 +43,8 @@ func (mod *Module) authorizeVFS(ctx *astral.Context, caller, vfsID *astral.Ident
 	return mod.db.findVolume(vfsID)
 }
 
+// mayAccess reports whether a caller may read or write a VFS: the caller is the VFS identity, or a root caller, or
+// holds a permit for the action with the VFS in its constraints. The zero identity may do nothing.
 func (mod *Module) mayAccess(ctx *astral.Context, caller, vfsID *astral.Identity, want access) bool {
 	switch {
 	case caller.IsZero():
@@ -76,4 +79,29 @@ func (mod *Module) authorizeManage(ctx *astral.Context, caller *astral.Identity)
 	}
 
 	return vfsapi.ErrNotPermitted
+}
+
+// authorizeVFSQuery authorizes the caller of a query on the VFS the query names and returns it. A nil vfsArg names
+// the caller.
+//
+// The caller checks the path after this call, as VFS 6, section 6 orders it.
+func (mod *Module) authorizeVFSQuery(ctx *astral.Context, q *routing.IncomingQuery, vfsArg *astral.Identity, want access) (*dbVolume, error) {
+	if vfsArg == nil {
+		vfsArg = q.Caller()
+	}
+
+	return mod.authorizeVFS(ctx, q.Caller(), vfsArg, want)
+}
+
+// authorizeManageQuery checks a query for a manage operation: it must not come from the network, and its caller
+// must be a root caller or hold a permit for the manage action. It returns vfsapi.ErrNotPermitted.
+//
+// why: a manage operation administers every VFS of the node, so a caller off a link has no standing to run it,
+// as with the other administration operations of astrald.
+func (mod *Module) authorizeManageQuery(ctx *astral.Context, q *routing.IncomingQuery) error {
+	if q.Origin() == astral.OriginNetwork {
+		return vfsapi.ErrNotPermitted
+	}
+
+	return mod.authorizeManage(ctx, q.Caller())
 }

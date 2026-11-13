@@ -450,3 +450,24 @@ func TestSeeObjectsIsNodeLocal(t *testing.T) {
 		t.Fatal("a read contract from the VFS identity does not read its file by ObjectID")
 	}
 }
+
+// TestSeeObjectsIgnoresAFolderCacheThatEqualsTheObjectID: a folder whose cached ID equals an ObjectID that no file
+// holds lets neither AuthorizeSeeObjects allow the VFS identity nor HoldObject hold the object.
+func TestSeeObjectsIgnoresAFolderCacheThatEqualsTheObjectID(t *testing.T) {
+	mod := testModule(t)
+	mod.Auth = newFakeAuth()
+	id := astral.GenerateIdentity()
+	vol := createVFS(t, mod, id)
+	planted := contentID("no file holds this")
+	insertEntry(t, mod, &dbEntry{
+		VFS: id, ParentID: vol.RootID, Name: "dir", Flags: uint16(vfsapi.FlagFolder), ObjectID: &planted,
+		ModTime: testModTime,
+	})
+
+	if mod.AuthorizeSeeObjects(testContext(), seeAction(id, &planted)) {
+		t.Error("AuthorizeSeeObjects allows a folder's cached ID")
+	}
+	if mod.HoldObject(&planted) {
+		t.Error("HoldObject holds a folder's cached ID")
+	}
+}

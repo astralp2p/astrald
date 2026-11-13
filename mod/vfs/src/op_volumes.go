@@ -16,11 +16,11 @@ func (mod *Module) OpVolumes(ctx *astral.Context, q *routing.IncomingQuery, args
 	ch := q.Accept(channel.WithFormats(args.In, args.Out))
 	defer ch.Close()
 
-	if err := mod.manageAuthorize(ctx, q); err != nil {
+	if err := mod.authorizeManageQuery(ctx, q); err != nil {
 		return ch.Send(astral.Err(err))
 	}
 
-	volumes, err := mod.db.volumesList()
+	volumes, err := mod.db.listVolumes()
 	if err != nil {
 		mod.log.Error("vfs.volumes: list volumes: %v", err)
 		return ch.Send(astral.Err(err))
@@ -39,11 +39,4 @@ func (mod *Module) OpVolumes(ctx *astral.Context, q *routing.IncomingQuery, args
 	}
 
 	return ch.Send(&astral.EOS{})
-}
-
-// volumesList returns every VFS in the order of creation.
-func (db *DB) volumesList() (volumes []*dbVolume, err error) {
-	err = db.Order("id").Find(&volumes).Error
-
-	return
 }

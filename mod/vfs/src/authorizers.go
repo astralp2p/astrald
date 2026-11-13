@@ -26,12 +26,12 @@ func (mod *Module) addAuthorizers() {
 
 // AuthorizeReadAction allows the VFS identity to read its own VFS, and a root caller to read any VFS.
 func (mod *Module) AuthorizeReadAction(_ *astral.Context, a *vfsapi.ReadAction) bool {
-	return mod.authzOwnOrRoot(a.Actor(), a.VFSID)
+	return mod.isOwnerOrRoot(a.Actor(), a.VFSID)
 }
 
 // AuthorizeWriteAction allows the VFS identity to change its own VFS, and a root caller to change any VFS.
 func (mod *Module) AuthorizeWriteAction(_ *astral.Context, a *vfsapi.WriteAction) bool {
-	return mod.authzOwnOrRoot(a.Actor(), a.VFSID)
+	return mod.isOwnerOrRoot(a.Actor(), a.VFSID)
 }
 
 // AuthorizeManageAction allows a root caller to administer VFSes.
@@ -39,10 +39,10 @@ func (mod *Module) AuthorizeManageAction(_ *astral.Context, a *vfsapi.ManageActi
 	return mod.isRootCaller(a.Actor())
 }
 
-// authzOwnOrRoot reports whether actor is the non-zero VFS identity or a root caller.
+// isOwnerOrRoot reports whether actor is the non-zero VFS identity or a root caller.
 //
 // note: the zero identity is never a VFS identity, so a zero VFSID allows no one.
-func (mod *Module) authzOwnOrRoot(actor, vfsID *astral.Identity) bool {
+func (mod *Module) isOwnerOrRoot(actor, vfsID *astral.Identity) bool {
 	if actor.IsZero() || vfsID.IsZero() {
 		return false
 	}
@@ -64,14 +64,14 @@ func (mod *Module) AuthorizeSeeObjects(ctx *astral.Context, a *apiauth.SeeObject
 		return false
 	}
 
-	vfsIDs, err := mod.db.seeObjectsFindVFSes(*id)
+	vfsIDs, err := mod.db.findVFSesWithObject(id)
 	if err != nil {
 		mod.log.Log("find the VFSes of %v: %v", id, err)
 		return false
 	}
 
 	for _, vfsID := range vfsIDs {
-		if mod.seeObjectsMayRead(ctx, a.Actor(), vfsID) {
+		if mod.maySeeObjectsIn(ctx, a.Actor(), vfsID) {
 			return true
 		}
 	}
@@ -79,10 +79,10 @@ func (mod *Module) AuthorizeSeeObjects(ctx *astral.Context, a *apiauth.SeeObject
 	return false
 }
 
-// seeObjectsMayRead reports whether actor is the VFS identity or holds a mod.vfs.read_action permit for it.
+// maySeeObjectsIn reports whether actor is the VFS identity or holds a mod.vfs.read_action permit for it.
 //
 // note: VFS 6, section 6 "Reading by ObjectID" names no root caller here; the permit is asked of the auth module.
-func (mod *Module) seeObjectsMayRead(ctx *astral.Context, actor, vfsID *astral.Identity) bool {
+func (mod *Module) maySeeObjectsIn(ctx *astral.Context, actor, vfsID *astral.Identity) bool {
 	if actor.IsZero() {
 		return false
 	}
@@ -91,26 +91,4 @@ func (mod *Module) seeObjectsMayRead(ctx *astral.Context, actor, vfsID *astral.I
 	}
 
 	return mod.Auth.Authorize(ctx, &vfsapi.ReadAction{Action: apiauth.NewAction(actor), VFSID: vfsID})
-}
-
-// seeObjectsFindVFSes returns each VFS that has a file with the ObjectID, once.
-//
-// note: a folder's cached listing ObjectID names no stored object, so folder rows are skipped.
-func (db *DB) seeObjectsFindVFSes(id astral.ObjectID) ([]*astral.Identity, error) {
-	var rows []dbEntry
-
-	err := db.Model(&dbEntry{}).
-		Distinct("vfs").
-		Where("object_id = ? AND flags & ? = 0", id, uint16(vfsapi.FlagFolder)).
-		Find(&rows).Error
-	if err != nil {
-		return nil, err
-	}
-
-	ids := make([]*astral.Identity, 0, len(rows))
-	for _, row := range rows {
-		ids = append(ids, row.VFS)
-	}
-
-	return ids, nil
 }

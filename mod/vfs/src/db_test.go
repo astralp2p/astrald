@@ -59,9 +59,9 @@ func TestRootRowIsItsOwnParent(t *testing.T) {
 	mod := testModule(t)
 	vol := createVFS(t, mod, astral.GenerateIdentity())
 
-	root, err := mod.db.getEntry(vol.RootID)
+	root, err := mod.db.findEntry(vol.RootID)
 	if err != nil {
-		t.Fatalf("getEntry: %v", err)
+		t.Fatalf("findEntry: %v", err)
 	}
 	if !root.isRoot() || root.ParentID != root.ID {
 		t.Fatalf("root row %d has parent %d", root.ID, root.ParentID)

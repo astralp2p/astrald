@@ -2,7 +2,6 @@ package vfs
 
 import (
 	"errors"
-	"time"
 
 	vfsapi "github.com/astralp2p/astral-go/api/vfs"
 	"github.com/astralp2p/astral-go/astral"
@@ -20,10 +19,7 @@ func (mod *Module) CreateVFS(id *astral.Identity) error {
 		return vfsapi.ErrNotPermitted
 	}
 
-	unlock := mod.lockVFS(id)
-	defer unlock()
-
-	return mod.db.inTx(func(tx *DB) error {
+	return mod.runLockedTx(id, func(tx *DB) error {
 		_, err := tx.findVolume(id)
 		switch {
 		case err == nil:
@@ -37,27 +33,16 @@ func (mod *Module) CreateVFS(id *astral.Identity) error {
 	})
 }
 
-// createVolume inserts a VFS with its root folder. The root is its own parent.
-func (db *DB) createVolume(id *astral.Identity, byteLimit, entryLimit uint64) error {
-	root := &dbEntry{
-		VFS:     id,
-		Flags:   uint16(vfsapi.FlagFolder),
-		ModTime: modTimeColumn(time.Now()),
-	}
+// setLimits writes the limits of a VFS, or returns vfsapi.ErrNoSuchVFS.
+//
+// note: the lock is taken before the existence check.
+func (mod *Module) setLimits(id *astral.Identity, byteLimit, entryLimit uint64) error {
+	return mod.runLockedTx(id, func(tx *DB) error {
+		vol, err := tx.findVolume(id)
+		if err != nil {
+			return err
+		}
 
-	if err := db.Create(root).Error; err != nil {
-		return err
-	}
-
-	root.ParentID = root.ID
-	if err := db.Model(root).Update("parent_id", root.ID).Error; err != nil {
-		return err
-	}
-
-	return db.Create(&dbVolume{
-		Identity:   id,
-		RootID:     root.ID,
-		ByteLimit:  limitColumn(byteLimit),
-		EntryLimit: limitColumn(entryLimit),
-	}).Error
+		return tx.setVolumeLimits(vol.ID, byteLimit, entryLimit)
+	})
 }
