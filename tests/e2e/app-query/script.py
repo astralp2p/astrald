@@ -50,7 +50,10 @@ async def main():
         # completed, so there is no window to sleep through here. A wait added
         # to compensate for a race the SDK already closes would make this test
         # green for the wrong reason.
-        async with await host.serve() as svc:
+        # why host_ip: node1 dials the registered endpoint for every query, and
+        # only an address at node1's host_ip reaches the test host from node1's
+        # machine. serve() registers the bound address, its port resolved.
+        async with await host.serve(endpoint=f"tcp:{n1['host_ip']}:0") as svc:
             svc.mount(OP, absorb)
 
             # node2 asks as itself. `user_token` is node1's apphost token and

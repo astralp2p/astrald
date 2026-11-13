@@ -23,7 +23,8 @@ node1, node2 = doc["nodes"]["node1"], doc["nodes"]["node2"]
 
 binary = apps.build_go(PKG)
 provider = apps.spawn(NAME, [binary, "serve"], env={
-    "APP_NODE_ENDPOINT": node2["endpoint"], "APP_NODE_TOKEN": node2["token"]})
+    "APP_NODE_ENDPOINT": node2["endpoint"], "APP_NODE_TOKEN": node2["token"],
+    "APP_HOST_IP": node2["host_ip"]})
 before = provider.wait_state(lambda s: s.get("attaches", 0) >= 1, timeout=30)
 
 p = subprocess.run(

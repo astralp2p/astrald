@@ -1,6 +1,6 @@
 nodes   = ["mai-inviter", "mai-approve", "mai-decline"]
 timeout = 240
-local_only = "its driver serves the manager app on a unix socket under the host's TMPDIR"
+host_listener = "its driver serves the manager app on a test-host port that each invitee dials"
 facts   = ["manager_answers_invite"]
 
 # why: the harness starts every node under the E2E gate (lib/nodeconfig.py),

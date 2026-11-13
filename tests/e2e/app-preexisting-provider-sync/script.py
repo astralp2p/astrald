@@ -50,7 +50,7 @@ async def bootstrap_user(n: dict) -> tuple[str, str]:
 
 
 async def adopt(home: dict, joiner: dict, user_token: str) -> None:
-    """Explicit loopback endpoints both ways, a direct link, then user.adopt."""
+    """Explicit lan_endpoints both ways, a direct link, then user.adopt."""
     async with await astral.connect(home["endpoint"], token=home["token"]) as c:
         await c.nodes.add_endpoint(joiner["identity"], joiner["lan_endpoint"], experimental=True)
     async with await astral.connect(joiner["endpoint"], token=joiner["token"]) as c:

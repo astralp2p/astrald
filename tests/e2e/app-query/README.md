@@ -5,7 +5,7 @@ as a side effect is on node1 afterwards.
 
 - **env** node · **start** `two-nodes` · **saves** —
 - **driver** `script.py` — serve a handler on node1 through `Client.serve`,
-  query it from node2, close the service.
+  bound at node1's `host_ip`, query it from node2, close the service.
 - **oracle** `verify.py` — the answer is the id the payload hashes to, and
   node1's `local` repo holds exactly those bytes.
 

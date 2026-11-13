@@ -1,23 +1,34 @@
 w0 local: smoke → claim-window → token-less-setup → signer-app
           → admission-policies → app-call-local → app-routing-two-apps
-          → app-op-surface → bootstrap-user-software-key
-          → app-describe-provider → app-search-provider
-          → objects-provider-revoke-lease → adopt-node → blueprints-two-node
-          → apphost-origin → sign-contract-guard → request-grant-scope
-          → swarm-authz-matrix → services-swarm → object-store
-          → app-call-remote → app-ping-pong → app-reject-code
+          → app-op-surface → app-discover-local → app-handler-unroute
+          → app-preexisting-provider-sync → manager-answers-invite
+          → bootstrap-user-software-key → app-describe-provider
+          → app-search-provider → objects-provider-revoke-lease → adopt-node
+          → blueprints-two-node → apphost-origin → sign-contract-guard
+          → request-grant-scope → swarm-authz-matrix → services-swarm
+          → object-store → app-call-remote → app-ping-pong → app-reject-code
           → app-op-surface-remote → app-finder-read → app-searcher-swarm
           → objects-provider-registration-authz
-          → objects-provider-read-robustness → object-store-peer
+          → objects-provider-read-robustness → app-query → app-discover-follow
+          → app-discover-swarm → app-two-providers → app-blueprint-sync
+          → services-app-call → services-provider-gone → object-store-peer
           → read-remote-peer → read-swarm → expel-node
           config admitter.apphost.policies = {"app_register": "reject_all"}
           config admitter.user.policies = {"swarm_join": "reject_all", "swarm_invite": "accept_all"}
           config invitee.user.policies = {"swarm_join": "accept_all", "swarm_invite": "reject_all"}
+          config mai-approve.apphost.gate = {}
+          config mai-approve.apphost.policies = {}
+          config mai-decline.apphost.gate = {}
+          config mai-decline.apphost.policies = {}
           config node1.apphost.gate = {"tokenless": ["apphost.register", "user.info", "user.derive_identity", "user.bootstrap", "user.join"], "states": {"fresh": ["*"], "unclaimed": ["*"]}}
           config node1.objects.external_registration_sweep_interval = "1s"
 w1 local: bootstrap-user-software-key* → adopt-node* → hold-purge
 w2 local: bootstrap-user-software-key* → adopt-node* → swarm-roster-sync
           → expel-propagation
-w3 local: bootstrap-user-software-key* → hold-isolation
-w4 local: import-user-software-key
-w5 local: introduce-node-setup → introduce-node
+w3 local: bootstrap-user-software-key* → adopt-node*
+          → app-node-restart-reconnect
+w4 local: bootstrap-user-software-key* → adopt-node* → services-node-restart
+w5 local: bootstrap-user-software-key* → hold-isolation
+w6 local: bootstrap-user-software-key* → blueprint-survives-restart
+w7 local: import-user-software-key
+w8 local: introduce-node-setup → introduce-node

@@ -9,6 +9,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"net"
 	"os"
 	"time"
 
@@ -30,6 +31,7 @@ type node struct {
 	Endpoint string `json:"endpoint"`
 	Token    string `json:"token"`
 	Identity string `json:"identity"`
+	HostIP   string `json:"host_ip"`
 }
 
 func main() {
@@ -71,7 +73,7 @@ func run(path string) (map[string]bool, error) {
 	if err != nil {
 		return facts, err
 	}
-	stop, err := serveProvider(ctx, n2.Endpoint, string(provider.Token))
+	stop, err := serveProvider(ctx, n2, string(provider.Token))
 	if err != nil {
 		return facts, err
 	}
@@ -145,8 +147,8 @@ func hostsOf(ctx *astral.Context, admin *astrald.Client, app *astral.Identity) (
 
 // serveProvider runs an app on node2 that advertises player and answers
 // player.state with the caller it saw.
-func serveProvider(ctx *astral.Context, endpoint, token string) (func(), error) {
-	router := apphost.NewRouter(endpoint, token)
+func serveProvider(ctx *astral.Context, n2 node, token string) (func(), error) {
+	router := apphost.NewRouter(n2.Endpoint, token)
 	apphost.SetDefaultRouter(router)
 	astrald.SetDefault(astrald.New(router))
 
@@ -167,8 +169,12 @@ func serveProvider(ctx *astral.Context, endpoint, token string) (func(), error) 
 			return &services.Update{Available: true}, nil
 		},
 	})
+	// why host_ip: the node dials the handler's registered endpoint for every
+	// query, and only an address at the node's host_ip reaches the test host
+	// from the node's machine
+	at := apps.WithHandlerAddress("tcp:" + net.JoinHostPort(n2.HostIP, "0"))
 	sctx, cancel := ctx.WithCancel()
-	go apps.Serve(sctx, ops, apps.WithServices(p))
+	go apps.Serve(sctx, ops, at, apps.WithServices(p))
 	return cancel, nil
 }
 

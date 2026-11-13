@@ -6,8 +6,8 @@ stored token and its handler registration, and a caller app on another node
 reaches it by its app identity.
 
 - **after** `adopt-node` (node1 and node2 in one swarm) · **restart** `node2` ·
-  **destroys** (every restarting test does) · **local_only** — only a local
-  world restarts a node, and the provider is a process on the host.
+  **destroys** (every restarting test does) · **host_listener** — the provider
+  is a process on the test host, bound at node2's `host_ip`.
 - **driver** `script.py` — builds `driver/` (Go, this repository's astral-go)
   and starts `driver serve` as a long-lived app with `lib/apps.py`: it registers
   a provider app on node2 (`apphost.register`) and serves
@@ -19,10 +19,12 @@ reaches it by its app identity.
   state (attach and served counts). The driver then exits; the provider keeps
   running.
 - **runner** — restarts node2 between driver and oracle. The restart is a
-  stop and a start from the node's own root: the apphost port is the node's
-  leased one (`lib/worlds/local.py` `_restart` reuses the `LocalNode` and its
-  ports), so node2 comes back on the endpoint the app dials, and its token
-  table, grants and contracts are read from the database.
+  stop and a start from the node's own root: a local world keeps the node's
+  leased apphost port (`lib/worlds/local.py` `_restart` reuses the `LocalNode`
+  and its ports), and a Docker world restarts astrald in the node's container
+  behind the same published port (`lib/worlds/docker.py` `restart`), so node2
+  comes back on the endpoint the app dials, and its token table, grants and
+  contracts are read from the database.
 - **oracle** `verify.py` — node2 restarted once, node1 not, and node2 kept its
   endpoint; the provider process is the same pid and alive (it reconnected, it
   was not started again). A fresh caller app on node1 calls the provider by

@@ -7,7 +7,8 @@
 //
 // Each reads the node it acts on from APP_NODE_ENDPOINT and APP_NODE_TOKEN (the
 // node's admin token: the apps register themselves and the consumers grant
-// themselves discovery). provide and follow write what they see to the JSON file
+// themselves discovery). provide binds its handler at APP_HOST_IP, the node's
+// host_ip. provide and follow write what they see to the JSON file
 // named by ASTRAL_TESTS_APP_STATE; call and discover print one JSON line.
 package main
 
@@ -15,6 +16,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net"
 	"os"
 	"os/signal"
 	"sort"
@@ -244,8 +246,12 @@ func provide() error {
 		st.update(func() { ps.Advertised++ })
 		return nil
 	})
+	// why APP_HOST_IP: the node dials the handler's registered endpoint for
+	// every query, and only an address at the node's host_ip reaches the test
+	// host from the node's machine
+	at := apps.WithHandlerAddress("tcp:" + net.JoinHostPort(os.Getenv("APP_HOST_IP"), "0"))
 	st.update(func() {})
-	err = apps.ServeWith(sctx, routing.NewApp(&provider{st: st, s: ps}), reg, count, advertise)
+	err = apps.ServeWith(sctx, routing.NewApp(&provider{st: st, s: ps}), reg, at, count, advertise)
 	if sctx.Err() != nil {
 		return nil
 	}

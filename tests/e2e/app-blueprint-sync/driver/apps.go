@@ -21,6 +21,7 @@ type node struct {
 	Endpoint string `json:"endpoint"`
 	Token    string `json:"token"`
 	Identity string `json:"identity"`
+	HostIP   string `json:"host_ip"`
 }
 
 var serveApps = &auth.Permit{Action: astral.String8(auth.ServeAppsAction{}.ObjectType())}

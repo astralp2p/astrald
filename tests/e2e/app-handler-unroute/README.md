@@ -28,6 +28,9 @@ call reaches the handler before the session ends, and fails with
     The failed dial removed the handler for good; it did not merely skip it.
   - `bystander_unaffected` — a bystander app served on node1 answers after
     every leg, so only the ended session's handler was removed.
+- Every handler binds TCP at node1's `host_ip` (the test declares
+  `host_listener`); `failed_dial_removes` listens again on the port its first
+  bind resolved.
 - **oracle** `verify.py` — every leg held, plus the same story with fresh
   identities (`driver verify`).
 
