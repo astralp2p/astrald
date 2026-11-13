@@ -2,10 +2,10 @@
 # containers: every node in its own Docker container on one network.
 #
 # Run it with `--docker` on a host with a Docker engine; without --docker it
-# runs in local worlds. Every test here is Docker-eligible: no VM ops, and
-# nothing local_only; a listener the test serves is bound at the node's
-# host_ip (host_listener), and a node's files and log are reached through
-# lib/nodefs.py. The planner refuses a test that is not.
+# runs in local worlds. It lists every test without VM ops. Each one is
+# Docker-eligible: nothing local_only; a listener the test serves is bound
+# at the node's host_ip (host_listener), and a node's files and log are
+# reached through lib/nodefs.py. The planner refuses a test that is not.
 #
 # The order is a preference among siblings; the planner computes the run
 # order from each test's `after`. expel-node is listed before hold-purge so
@@ -81,3 +81,21 @@ policy-delegate
 indexer-cursor
 swarm-member-restart
 expel-survives-restart
+adopt-claimed-node-setup
+distribution-gate-setup
+adopt-claimed-node
+adopt-refusals
+app-index-provider
+app-origin-guards
+app-token-lifecycle
+basic-strategy-excess-link-pruning
+bootstrap-passphrase
+claimed-node-keeps-owner
+expel-authority
+expel-during-transfer
+join-via-member
+link-self-heal
+services-advertise-identity
+services-swarm-outcome-rules
+stranger-disclosure
+two-swarms-side-by-side

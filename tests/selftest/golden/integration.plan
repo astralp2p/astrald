@@ -5,17 +5,22 @@ w0 local:  smoke → claim-window → token-less-setup → signer-app
            → mcp-origin → messaging-ops → manager-setup
            → bootstrap-user-software-key → fs-watch → fs-index-live
            → registration-lease → app-describe-provider → app-search-provider
-           → objects-provider-revoke-lease → policy-delegate → adopt-node
-           → blueprints-two-node → apphost-origin → sign-contract-guard
-           → request-grant-scope → swarm-authz-matrix → services-swarm
-           → object-store → app-call-remote → app-ping-pong → app-reject-code
+           → objects-provider-revoke-lease → policy-delegate
+           → app-index-provider → app-token-lifecycle
+           → claimed-node-keeps-owner → adopt-node → blueprints-two-node
+           → apphost-origin → sign-contract-guard → request-grant-scope
+           → swarm-authz-matrix → services-swarm → object-store
+           → app-call-remote → app-ping-pong → app-reject-code
            → app-op-surface-remote → app-finder-read → app-searcher-swarm
            → objects-provider-registration-authz
            → objects-provider-read-robustness → app-query → app-discover-follow
            → app-discover-swarm → app-two-providers → app-blueprint-sync
            → services-app-call → services-provider-gone → mcp-peer
-           → messaging-two-node → object-store-peer → read-remote-peer
-           → read-swarm → discover-swarm → expel-node
+           → messaging-two-node → adopt-refusals → app-origin-guards
+           → services-advertise-identity → services-swarm-outcome-rules
+           → stranger-disclosure → object-store-peer → read-remote-peer
+           → read-swarm → discover-swarm → adopt-claimed-node-setup
+           → adopt-claimed-node → expel-node
            config admitter.apphost.policies = {"app_register": "reject_all"}
            config admitter.user.policies = {"swarm_join": "reject_all", "swarm_invite": "accept_all"}
            config invitee.user.policies = {"swarm_join": "accept_all", "swarm_invite": "reject_all"}
@@ -31,17 +36,29 @@ w2 local:  bootstrap-user-software-key* → adopt-node* → swarm-roster-sync
            → expel-propagation → expel-survives-restart
 w3 local:  bootstrap-user-software-key* → adopt-node* → swarm-roster-sync*
            → swarm-member-restart
-w4 local:  bootstrap-user-software-key* → adopt-node*
+w4 local:  bootstrap-user-software-key* → adopt-node* → swarm-roster-sync*
+           → link-self-heal
+w5 local:  bootstrap-user-software-key* → adopt-node*
            → app-node-restart-reconnect
-w5 local:  bootstrap-user-software-key* → adopt-node* → services-node-restart
-w6 local:  bootstrap-user-software-key* → adopt-node*
+w6 local:  bootstrap-user-software-key* → adopt-node* → services-node-restart
+w7 local:  bootstrap-user-software-key* → adopt-node*
            → basic-strategy-stalled-endpoint-released
-w7 local:  bootstrap-user-software-key* → fs-watch-restart-restore
-w8 local:  bootstrap-user-software-key* → repo-removal-sticks
-w9 local:  bootstrap-user-software-key* → indexing-fs-watch-feed
-w10 local: bootstrap-user-software-key* → hold-isolation
-w11 local: bootstrap-user-software-key* → blueprint-survives-restart
-w12 local: bootstrap-user-software-key* → indexer-cursor
-w13 local: bootstrap-user-op
-w14 local: import-user-software-key
-w15 local: introduce-node-setup → introduce-node
+w8 local:  bootstrap-user-software-key* → adopt-node*
+           → basic-strategy-excess-link-pruning
+w9 local:  bootstrap-user-software-key* → adopt-node* → expel-authority
+w10 local: bootstrap-user-software-key* → adopt-node* → expel-during-transfer
+w11 local: bootstrap-user-software-key* → adopt-node* → join-via-member
+w12 local: bootstrap-user-software-key* → adopt-node* → two-swarms-side-by-side
+w13 local: bootstrap-user-software-key* → fs-watch-restart-restore
+w14 local: bootstrap-user-software-key* → repo-removal-sticks
+w15 local: bootstrap-user-software-key* → indexing-fs-watch-feed
+w16 local: bootstrap-user-software-key* → hold-isolation
+w17 local: bootstrap-user-software-key* → blueprint-survives-restart
+w18 local: bootstrap-user-software-key* → indexer-cursor
+w19 local: bootstrap-user-op
+w20 local: import-user-software-key
+w21 local: introduce-node-setup → introduce-node
+w22 local: distribution-gate-setup
+           config node1.apphost.gate = {}
+           config node1.apphost.policies = {}
+w23 local: bootstrap-passphrase
