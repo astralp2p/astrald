@@ -7,7 +7,8 @@ nobody, and node2's refusal reaches ann with its own words. Last, ann asks ben
 for a path nothing on node2 serves, and node2's missing route reaches ann as a
 missing route.
 
-- **env** node · **start** `two-nodes` · **saves** —
+- **env** node · **start** `two-nodes` · **saves** — · **host_listener** —
+  each node's authority listens at the node's `authority_url`
 - **driver** `script.py` — mint ann on node1, and ben and cal on node2, with
   `messaging.create_mailbox`; node2 pushes ben's and cal's relay contracts to
   node1; ann sends, ben waits and reads, and ben answers; ann sends to cal;

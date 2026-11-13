@@ -34,6 +34,11 @@ expel-propagation
 import-user-software-key
 introduce-node-setup
 introduce-node
+mcp-origin
+messaging-ops
+mcp-peer
+messaging-two-node
+basic-strategy-stalled-endpoint-released
 manager-setup
 policy-delegate
 indexer-cursor

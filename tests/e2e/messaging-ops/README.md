@@ -4,7 +4,8 @@ The admin mints participants with `messaging.create_mailbox`. Each
 participant, authenticated over apphost with its own token, reads and writes
 its own mailbox through the `messaging.*` ops. The node serves no MCP.
 
-- **env** node · **start** `null` · **saves** —
+- **env** node · **start** `null` · **saves** — · **host_listener** — the
+  node's authority listens at its `authority_url`
 - **driver** `script.py` — mint ada, bob and cleo; ada and bob exchange mail
   through `messaging.send_message`, `messaging.list_messages`,
   `messaging.read_messages`, `messaging.wait` and `messaging.archive`; before
@@ -29,7 +30,7 @@ port reserved for it, and the oracle requires the probe refused, so a node that
 listened anyway fails the test rather than passing it for the wrong reason.
 A node that ignored the empty `bind_mcp` would listen on mod/mcp's default
 address and not on the reserved port, so the oracle also requires the node's
-`astrald.log` to hold no `mcp server:` line. messaging's own verbose
+`astrald.log`, read through `lib/nodefs.py`, to hold no `mcp server:` line. messaging's own verbose
 `created participant` line is the control: it proves verbose lines reach the
 log.
 

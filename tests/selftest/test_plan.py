@@ -126,7 +126,7 @@ class TestShippedPlans(Invariants, unittest.TestCase):
                        for n in lineage):
                     with self.assertRaisesRegex(
                             PlanError, "local only|the VM lab does not run"
-                            "|a VM world cannot"):
+                            "|a VM world cannot|no host_ip"):
                         plan(self.tests, selection, order, vm=True)
                     continue
                 worlds = plan(self.tests, selection, order, vm=True)
@@ -329,13 +329,13 @@ class TestShippedPlans(Invariants, unittest.TestCase):
              ("local", "introduce-node"), ("vm", "nearby-relink")])
 
     def test_a_local_test_never_enters_a_vm_world(self):
-        # why app-query and services-app-call: each serves an app on the
-        # host, which a node in a VM cannot dial
+        # why mcp-peer, app-query and services-app-call: each serves an app
+        # on the host, which a node in a VM cannot dial
         for local in ("mcp-peer", "app-query", "services-app-call"):
             with self.subTest(test=local):
                 worlds = plan(self.tests, [local, "tor-link"])
                 self.assertEqual([w.kind for w in worlds], ["local", "vm"])
-        with self.assertRaisesRegex(PlanError, "local only"):
+        with self.assertRaisesRegex(PlanError, "no host_ip to dial it at"):
             plan(self.tests, ["mcp-peer"], vm=True)
         with self.assertRaisesRegex(PlanError, "local only"):
             plan(self.tests, ["fs-watch"], driver="agent")
@@ -359,7 +359,8 @@ class TestShippedPlans(Invariants, unittest.TestCase):
         with self.assertRaisesRegex(PlanError, "build 'bootstrap"):
             plan(self.tests, ["adopt-node"], target="attach")
         with self.assertRaisesRegex(PlanError, "local only"):
-            plan(self.tests, ["mcp-origin"], target="attach")
+            plan({**self.tests, "host": fake(local_only="reads a host path")},
+                 ["host"], target="attach")
         with self.assertRaisesRegex(PlanError, "no operator"):
             plan(self.tests, ["bootstrap-user-software-key"], driver="agent",
                  target="attach")

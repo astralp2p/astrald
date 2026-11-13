@@ -41,8 +41,9 @@ async def main():
     id1, id2 = n1["identity"], n2["identity"]
     user_token = doc["facts"]["user_token"]
 
-    async with Bait() as bait:
-        endpoint = f"tcp:127.0.0.1:{bait.port}"
+    # why host_ip: node1 dials the bait, which listens on the test host
+    async with Bait(n1["host_ip"]) as bait:
+        endpoint = f"tcp:{n1['host_ip']}:{bait.port}"
         async with await astral.connect(n1["endpoint"], token=n1["token"]) as c1, \
                 await astral.connect(n2["endpoint"], token=n2["token"]) as c2:
             await c1.nodes.add_endpoint(id2, endpoint, experimental=True)

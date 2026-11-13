@@ -34,8 +34,9 @@ A declared tool asks the node no authorization action: its target decides whom
 it answers. A message proceeds only when `mod.messaging.send_action` is granted
 to its sender and `mod.messaging.receive_action` to its recipient. No handler
 grants either, so a node carries no message unless an external authority does.
-The harness names one for every local node in `auth.yaml`, on the node's own
-loopback port (`authority_url` in `session.json`); an unserved port refuses.
+The harness names one for every local or Docker node in `auth.yaml`, at the
+node's own leased port on its `host_ip` (`authority_url` in `session.json`);
+an unserved port refuses.
 
 The driver serves it. It admits alpha and beta to each other in both
 directions, and nothing else, and it records every question with its answer.
