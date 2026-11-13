@@ -2,6 +2,7 @@ package objects
 
 import (
 	"bytes"
+	"fmt"
 	"io"
 	"sort"
 	"testing"
@@ -233,6 +234,138 @@ func TestPurge_CommitAndDeleteWaitForTheLeafLock(t *testing.T) {
 			t.Fatal("a commit or a delete did not finish after the lock was released")
 		}
 	}
+}
+
+// TestPurge_ReadDrainedByAConcurrentFlushKeepsObject: a read taken out of the journal by another flush that has not
+// written it yet keeps the object.
+func TestPurge_ReadDrainedByAConcurrentFlushKeepsObject(t *testing.T) {
+	mod := newTrackingModule(t)
+	ctx := astral.NewContext(nil)
+	leaf := mod.GetRepository("mem0").(*trackedRepository)
+	id := commitData(t, ctx, leaf, "read")
+	setTimes(t, mod, "mem0", id, 1, 0)
+
+	r := openReader(t, ctx, leaf, id, 0)
+	r.Read(make([]byte, 1))
+	r.Close()
+
+	j := mod.objectsReadsJournal
+	drained := make(chan struct{})
+	sink := j.sink
+	j.sink = func(batch map[astral.ObjectID]astral.Time) error {
+		close(drained)
+		time.Sleep(200 * time.Millisecond)
+		return sink(batch)
+	}
+	flushed := make(chan error, 1)
+	go func() { flushed <- j.Flush() }()
+	<-drained
+
+	run := &purgeRun{mod: mod, cutoff: ago(purgeFloor)}
+	purged, err := run.decide(ctx, leaf, id)
+	if err != nil {
+		t.Fatalf("decide: %v", err)
+	}
+	if err := <-flushed; err != nil {
+		t.Fatalf("flush: %v", err)
+	}
+	if purged {
+		t.Fatal("an object read before the decision was purged while another flush held its read")
+	}
+	expectContains(t, mod, "mem0", id, true)
+}
+
+// TestPurge_DecideWaitsForTheLeafLock: purge decides a candidate under the leaf's lock, so a commit that holds the lock
+// finishes before the decision and keeps the object.
+func TestPurge_DecideWaitsForTheLeafLock(t *testing.T) {
+	mod := newTrackingModule(t)
+	ctx := astral.NewContext(nil)
+	leaf := mod.GetRepository("mem0").(*trackedRepository)
+	id := commitData(t, ctx, leaf, "committed under the lock")
+	setTimes(t, mod, "mem0", id, 1, 0)
+
+	run := &purgeRun{mod: mod, cutoff: ago(purgeFloor)}
+
+	leaf.mu.Lock()
+	type result struct {
+		purged bool
+		err    error
+	}
+	done := make(chan result, 1)
+	go func() {
+		purged, err := run.decide(ctx, leaf, id)
+		done <- result{purged, err}
+	}()
+
+	select {
+	case <-done:
+		leaf.mu.Unlock()
+		t.Fatal("purge decided a candidate while the leaf's lock was held")
+	case <-time.After(100 * time.Millisecond):
+	}
+	// why: stands for a commit that holds the leaf's lock and writes the commit time.
+	setTimes(t, mod, "mem0", id, time.Now().Unix(), 0)
+	leaf.mu.Unlock()
+
+	var res result
+	select {
+	case res = <-done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("purge did not decide after the lock was released")
+	}
+	if res.err != nil {
+		t.Fatalf("decide: %v", res.err)
+	}
+	if res.purged {
+		t.Fatal("a candidate committed while purge waited for the leaf's lock was purged")
+	}
+	expectContains(t, mod, "mem0", id, true)
+}
+
+// TestPurge_ListUntouchedPages: the listing pages through every candidate, least recently touched first, once each.
+func TestPurge_ListUntouchedPages(t *testing.T) {
+	mod := newTrackingModule(t)
+	ctx := astral.NewContext(nil)
+	repo := mod.GetRepository("mem0")
+
+	// why: equal touches across commit and read times make the cursor break ties on object_id.
+	times := [][2]int64{{5, 0}, {1, 3}, {3, 0}, {1, 0}, {2, 3}, {3, 1}, {1, 2}}
+	var want []string
+	for i, tt := range times {
+		id := commitData(t, ctx, repo, fmt.Sprintf("row %d", i))
+		setTimes(t, mod, "mem0", id, tt[0], tt[1])
+		want = append(want, id.String())
+	}
+	// why: a row touched within the window is not listed.
+	commitData(t, ctx, repo, "fresh")
+
+	var got []string
+	var lastTouch int64
+	var after *untouchedCursor
+	for pages := 0; ; pages++ {
+		if pages > len(times) {
+			t.Fatal("the listing does not end")
+		}
+		rows, next, err := mod.db.listUntouched("mem0", ago(purgeFloor), after, 2)
+		if err != nil {
+			t.Fatalf("list: %v", err)
+		}
+		for _, row := range rows {
+			if row.touch() < lastTouch {
+				t.Fatalf("touch %v listed after %v", row.touch(), lastTouch)
+			}
+			lastTouch = row.touch()
+			got = append(got, row.ObjectID.String())
+		}
+		if next == nil {
+			break
+		}
+		after = next
+	}
+
+	sort.Strings(got)
+	sort.Strings(want)
+	expectIDs(t, "listed", got, want)
 }
 
 // TestPurge_DryAnswersWhatARunDeletes: dry answers exactly the ObjectIDs a run deletes and deletes nothing.
