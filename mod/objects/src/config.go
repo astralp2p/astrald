@@ -36,6 +36,10 @@ type Config struct {
 
 	// PurgeUntouched is the window of the daily purge of the group local. 0 turns the daily purge off.
 	PurgeUntouched time.Duration `yaml:"purge_untouched,omitempty"`
+
+	// PurgeFloor is the shortest window a purge accepts. A shorter window, or none, means PurgeFloor.
+	// why configurable: an E2E test purges objects it has just written, which the one-hour default never reclaims.
+	PurgeFloor time.Duration `yaml:"purge_floor,omitempty"`
 }
 
 var defaultConfig = Config{
@@ -44,4 +48,5 @@ var defaultConfig = Config{
 	ExternalRegistrationSweepInterval: time.Minute,
 	// note: 720 hours is the operator's decision of 2026-11-12, recorded in https://wiki.satforge.dev/doc/implement-the-vfs-module-and-the-changes-that-ship-with-it-oofFdNw03v
 	PurgeUntouched: 720 * time.Hour,
+	PurgeFloor:     purgeFloor,
 }

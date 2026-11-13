@@ -19,7 +19,8 @@ type opPurgeArgs struct {
 
 // OpPurge deletes the objects of a repository that nothing holds and that were not touched within Untouched,
 // streaming each purged ObjectID then a final error or EOS. A group is purged once per leaf.
-// Untouched below one hour, or none, means one hour. Dry answers the same ObjectIDs and deletes nothing.
+// Untouched below the configured floor (purge_floor, one hour by default), or none, means the floor.
+// Dry answers the same ObjectIDs and deletes nothing.
 // Defaults to ZoneAll when no zone is given.
 func (mod *Module) OpPurge(ctx *astral.Context, q *routing.IncomingQuery, args opPurgeArgs) error {
 	ch := channel.New(q.AcceptRaw(), channel.WithOutputFormat(args.Out))

@@ -425,6 +425,20 @@ func TestPurge_FloorKeepsRecentCommit(t *testing.T) {
 	expectContains(t, mod, "mem0", readRecently, true)
 }
 
+// TestPurge_ConfiguredFloorLowersTheWindow: a node whose purge_floor is lower purges an object touched within the
+// default floor, and a floor of zero lets an omitted window purge everything touched before the run.
+func TestPurge_ConfiguredFloorLowersTheWindow(t *testing.T) {
+	mod := newTrackingModule(t)
+	mod.config.PurgeFloor = 0
+	ctx := astral.NewContext(nil)
+	repo := mod.GetRepository("mem0")
+	recent := commitData(t, ctx, repo, "recent")
+	setTimes(t, mod, "mem0", recent, ago(30*time.Minute), 0)
+
+	expectIDs(t, "untouched omitted, floor zero", purgeIDs(t, mod, "mem0", 0, false), idStrings(recent))
+	expectContains(t, mod, "mem0", recent, false)
+}
+
 // TestPurge_EmptyObjectIsNeverPurged: a commit of the empty object writes no row, and a row left for it is never
 // answered as purged, dry or not.
 func TestPurge_EmptyObjectIsNeverPurged(t *testing.T) {

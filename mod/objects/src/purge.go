@@ -9,7 +9,7 @@ import (
 	"github.com/astralp2p/astrald/mod/objects"
 )
 
-// purgeFloor is the shortest window a purge accepts. A shorter window, or none, means purgeFloor.
+// purgeFloor is the default of Config.PurgeFloor, the shortest window a purge accepts.
 // note: the floor covers commits and reads. It closes the gap between the commit of a file's content and the write of its entry.
 // note: the operator accepted the floor for now; it may change later (VFS 6, §11 "objects: purge").
 const purgeFloor = time.Hour
@@ -17,9 +17,9 @@ const purgeFloor = time.Hour
 // purgePageSize is how many candidates one listing query returns.
 const purgePageSize = 256
 
-// purgeWindow returns untouched raised to purgeFloor.
-func purgeWindow(untouched time.Duration) time.Duration {
-	return max(untouched, purgeFloor)
+// purgeWindow returns untouched raised to floor.
+func purgeWindow(untouched, floor time.Duration) time.Duration {
+	return max(untouched, floor)
 }
 
 // purgeRun is one purge: the cutoff of its window, whether it is dry, and where it answers purged ObjectIDs.
@@ -40,7 +40,7 @@ func (mod *Module) purgeRepository(ctx *astral.Context, repo objects.Repository,
 
 	run := &purgeRun{
 		mod:    mod,
-		cutoff: time.Now().Add(-purgeWindow(untouched)).Unix(),
+		cutoff: time.Now().Add(-purgeWindow(untouched, mod.config.PurgeFloor)).Unix(),
 		dry:    dry,
 		out:    out,
 	}
