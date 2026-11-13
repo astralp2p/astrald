@@ -1,0 +1,7 @@
+nodes      = ["node1"]
+after      = "bootstrap-user-software-key"
+restart    = ["node1"]
+destroys   = true
+timeout    = 240
+facts      = ["restarts_before", "repo", "watch_dir", "watch_rel",
+              "staging_rel", "cases"]
