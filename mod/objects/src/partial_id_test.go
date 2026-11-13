@@ -863,8 +863,9 @@ func actionObjectID(action auth.ActionObject) *astral.ObjectID {
 }
 
 // TestPartialID_RefusedCallerPerformsNoLookup routes a partial ID from a refused caller
-// to every op that takes one. The action carries the partial request, and no
-// repository, finder or describer is asked.
+// to every op that takes one. The action carries the partial request, except for
+// objects.find and objects.describe, whose action names no ObjectID (VFS 6, section 6),
+// and no repository, finder or describer is asked.
 func TestPartialID_RefusedCallerPerformsNoLookup(t *testing.T) {
 	partial := &astral.ObjectID{Hash: [32]byte{0x5a, 0x02}}
 	id := "id=" + partial.PartialString()
@@ -873,14 +874,15 @@ func TestPartialID_RefusedCallerPerformsNoLookup(t *testing.T) {
 		name string
 		op   func(*Module) any
 		args string
+		noID bool
 	}{
-		{"objects.read", func(m *Module) any { return m.OpRead }, queryOf("", id, "repo=main")},
-		{"objects.load", func(m *Module) any { return m.OpLoad }, queryOf("", id, "repo=main")},
-		{"objects.contains", func(m *Module) any { return m.OpContains }, queryOf("", id, "repo=main")},
-		{"objects.probe", func(m *Module) any { return m.OpProbe }, queryOf("", id, "repo=main")},
-		{"objects.delete", func(m *Module) any { return m.OpDelete }, queryOf("", id, "repo=main")},
-		{"objects.find", func(m *Module) any { return m.OpFind }, queryOf("", id)},
-		{"objects.describe", func(m *Module) any { return m.OpDescribe }, queryOf("", id)},
+		{"objects.read", func(m *Module) any { return m.OpRead }, queryOf("", id, "repo=main"), false},
+		{"objects.load", func(m *Module) any { return m.OpLoad }, queryOf("", id, "repo=main"), false},
+		{"objects.contains", func(m *Module) any { return m.OpContains }, queryOf("", id, "repo=main"), false},
+		{"objects.probe", func(m *Module) any { return m.OpProbe }, queryOf("", id, "repo=main"), false},
+		{"objects.delete", func(m *Module) any { return m.OpDelete }, queryOf("", id, "repo=main"), false},
+		{"objects.find", func(m *Module) any { return m.OpFind }, queryOf("", id), true},
+		{"objects.describe", func(m *Module) any { return m.OpDescribe }, queryOf("", id), true},
 	}
 
 	for _, op := range ops {
@@ -917,7 +919,14 @@ func TestPartialID_RefusedCallerPerformsNoLookup(t *testing.T) {
 			if len(actions) != 1 {
 				t.Fatalf("%s made %d authorization calls; want 1", op.name, len(actions))
 			}
-			if got := actionObjectID(actions[0]); got == nil || !got.IsEqual(partial) {
+			got := actionObjectID(actions[0])
+			if op.noID {
+				if got != nil {
+					t.Fatalf("%s authorized object %v; want none", op.name, got)
+				}
+				return
+			}
+			if got == nil || !got.IsEqual(partial) {
 				t.Fatalf("%s authorized object %v; want the partial request %v", op.name, got, partial)
 			}
 		})
