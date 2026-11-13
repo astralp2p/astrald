@@ -25,6 +25,11 @@ func TestMkdirCreatesTheFolderAndItsParents(t *testing.T) {
 	if n := changeTestCount(t, mod, vol); n != 3 {
 		t.Errorf("%d entries, want 3", n)
 	}
+
+	// note: an add sets one node time on the new entry and on its parent.
+	if c, b := changeTestMustFind(t, mod, vol, "/a/b/c"), changeTestMustFind(t, mod, vol, "/a/b"); c.ModTime != b.ModTime {
+		t.Errorf("/a/b/c has time %d and /a/b %d, want one time", c.ModTime, b.ModTime)
+	}
 }
 
 func TestMkdirOnAnExistingFolderSucceeds(t *testing.T) {

@@ -900,14 +900,16 @@ func readOpsTryStatfs(mod *Module, vol *dbVolume) error {
 	return nil
 }
 
-// TestStatfsRootMatchesARecomputeAfterEveryChange: after each of mkdir, write, move, touch and remove, the Root
-// that vfs.statfs answers equals the root ObjectID recomputed from cleared caches.
+// TestStatfsRootMatchesARecomputeAfterEveryChange: after each of mkdir, write, replace, move, touch and remove, the
+// Root that vfs.statfs answers equals the root ObjectID recomputed from cleared caches.
 func TestStatfsRootMatchesARecomputeAfterEveryChange(t *testing.T) {
 	mod, vol, _ := changeTestModule(t)
 
 	steps := map[string]func(){
 		"mkdir": func() { changeTestAck(t, changeTestCall(t, mod.OpMkdir, vol, map[string]any{"path": "/a/b"})) },
 		"write": func() { changeTestEntry(t, changeTestWrite(t, mod, vol, "/a/b/f", "content")) },
+		// note: the statfs of the step before cached the root, so a replace that keeps the cache shows here.
+		"replace": func() { changeTestEntry(t, changeTestWrite(t, mod, vol, "/a/b/f", "other content")) },
 		"move": func() {
 			changeTestEntry(t, changeTestCall(t, mod.OpMove, vol, map[string]any{"from": "/a/b/f", "to": "/c/g"}))
 		},
@@ -916,7 +918,7 @@ func TestStatfsRootMatchesARecomputeAfterEveryChange(t *testing.T) {
 			changeTestAck(t, changeTestCall(t, mod.OpRemove, vol, map[string]any{"path": "/a", "recursive": "true"}))
 		},
 	}
-	for _, name := range []string{"mkdir", "write", "move", "touch", "remove"} {
+	for _, name := range []string{"mkdir", "write", "replace", "move", "touch", "remove"} {
 		steps[name]()
 
 		info := readOpsStatfsInfo(t, mod, vol)
