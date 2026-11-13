@@ -1,5 +1,4 @@
 nodes   = ["node1", "node2"]
 timeout = 120
 after   = "object-store-peer"
-local_only = "has node2 watch a directory on the host"
 facts   = ["watched_name", "watched_object_id", "answers"]

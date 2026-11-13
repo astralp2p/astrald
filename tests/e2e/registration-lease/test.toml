@@ -1,7 +1,12 @@
 nodes   = ["node1"]
 timeout = 180
 after   = "bootstrap-user-software-key"
-local_only = "reads node1's astrald.log from its root on the host, and needs the 1 s external_registration_sweep_interval a local world renders"
 facts   = ["expires_at", "gone_identity", "granted_seconds", "kept_identity",
            "lapsed_seconds", "lease_seconds", "leased_seconds",
            "renewed_expires_at"]
+
+# why: the oracle reads the expiry line the sweep logs, and the node's default
+# sweep is a minute. A local world renders 1 s for every node already
+# (lib/nodeconfig.py OBJECTS); a Docker world renders only what a test names.
+[config.node1.objects]
+external_registration_sweep_interval = "1s"

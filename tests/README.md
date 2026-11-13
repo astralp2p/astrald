@@ -115,10 +115,11 @@ external_registration_sweep_interval = "1s"
 - **`[config.<node>.<module>]`** writes over the harness's own config for
   that module, key by key; a module the harness builds nothing for gets the
   table alone. A local world builds a config for every module
-  `lib/nodeconfig.py` names; a VM or Docker world builds apphost's and user's alone
+  `lib/nodeconfig.py` names; a VM world builds apphost's and user's alone
   (`harness_configs`: the listener, the token, the E2E gate and the accepting
-  policies, the same as a local node's), so there every other module gets
-  the table alone. The config follows the world,
+  policies, the same as a local node's), and a Docker world those two, mcp's
+  (the server and the declared tools) and auth's (the authority at
+  `authority_url`), so there every other module gets the table alone. The config follows the world,
   not the test: the planner merges the overrides of every test in a world,
   a test that sets a key otherwise than its world forks into one of its
   own, and a clash with its own lineage is a plan error. `--plan` lists a
@@ -225,9 +226,10 @@ A world is one of four kinds:
 A Docker world is the lab's shape without netsim. Each node runs in its own
 container from `docker/Dockerfile`, the containers share a network, and
 node1's container holds the lab's operator (`tester`, Qwen Code), so
-`--driver agent` drives it as it drives VM node1. A node's apphost is
-published on the host's `127.0.0.1` at its leased port, which is what
-drivers and oracles dial. No host file or environment variable enters a
+`--driver agent` drives it as it drives VM node1. A node's apphost, and
+its MCP server unless the node's `mcp.bind_mcp` is `""`, are published on
+the host's `127.0.0.1` at its leased ports, which is what drivers and
+oracles dial (`endpoint`, `mcp_url`). No host file or environment variable enters a
 container. The run copies in an astrald and astral-query built for Linux
 (`.cache/linux-<arch>/`). The operator's astral-agent skill comes with the
 image: the Astral docs at the commit this checkout pins in `.ai/system`,
@@ -386,23 +388,28 @@ relative to its root; any other root (a VM world's, an attached daemon's
 | `path(node, rel="")` | the absolute path as the node's machine sees it, e.g. for `fs.new_watch`; resolved on a host |
 | `read_bytes(node, rel)` / `read_text(node, rel)` | the file's bytes / its text, a non-UTF-8 byte as U+FFFD |
 | `write_bytes(node, rel, data)` | writes the file, creating its parent directories |
+| `overwrite(node, rel, data)` | writes over the start of an existing file in place, never truncating it |
 | `mkdir(node, rel)` | creates the directory and its parents; one already there stays |
 | `remove(node, rel)` | removes a file, a symlink (never followed) or a directory tree |
 | `symlink(node, rel, target)` | makes `rel` a symlink to `target`, also relative to the root |
 | `rename(node, src, dst)` | moves `src` to `dst`, replacing a file there |
 | `listdir(node, rel="")` | `{name: kind}`, kind `file`, `dir`, `link` or `other` |
 | `set_mtime(node, rel, mtime)` | sets the modification (and access) time, in seconds since the epoch |
+| `platform(node)` | the OS of the node's machine as `sys.platform` spells it: `linux` in a Docker world, the host's in a local one |
 | `log(node)` | the node's `astrald.log` as text |
 
-## Host directories
+## Watched directories
 
-`lib/fsfixture.py` holds what the fs tests share. astral-py binds no `fs`
+`lib/fsfixture.py` holds what the fs tests share. A directory a test hands
+node1 (`fs.new_watch`, `fs.new_repo`) lies under node1's root, made with
+`lib/nodefs.py` and named by `nodefs.path`, so it is on node1's machine in
+every world. astral-py binds no `fs`
 module, so the ops are raw queries.
 
 | call | does |
 |------|------|
 | `new_watch(c, path, name, temporary=False)` / `new_repo(...)` | `fs.new_watch` / `fs.new_repo`; None on the ack, else the node's error text |
-| `disk_ids(root)` | `{path: id}` of every regular file under `root`, hashed here; symlinks skipped |
+| `disk_ids(node, rel)` | `{path: id}` of every regular file under directory `rel` of the node's root, read through `lib/nodefs.py` and hashed here; symlinks skipped |
 | `wait_scan(c, repo, want, deadline)` | polls `objects.scan` until it lists exactly `want`; `(ok, last listing)` |
 | `wait_contains(c, repo, ids, deadline)` | polls `objects.contains`; the ids still missing |
 | `file_locations(c, oid)` | `[(Path, NodeID)]` of the `mod.fs.file_location` descriptors, after `objects.learn` |

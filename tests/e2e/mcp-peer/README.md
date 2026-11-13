@@ -4,7 +4,8 @@ An agent on node1 calls declared tools that name node2, and node2 reads the
 agent as the caller: its app hears the agent, and its operations refuse an
 agent that holds no permit while they answer node1.
 
-- **env** node · **start** `two-nodes` · **saves** —
+- **env** node · **start** `two-nodes` · **saves** — · **host_listener** —
+  node2's app listens at node2's `host_ip`
 - **driver** `script.py` — point the alias `peer` at node2, mint an agent on
   node1 with `mcp.create_agent`, push its relay contract to node2, record node1's
   own answers from node2's `nodes.links` and `user.info`, serve an app on node2

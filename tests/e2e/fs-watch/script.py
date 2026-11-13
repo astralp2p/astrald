@@ -8,9 +8,11 @@ files enter the object graph — the one path by which astrald holds data nobody
 typed into it — and no test touched `fs.new_repo`, `fs.new_watch`,
 `objects.scan` or `objects.repositories`.
 
-The watched directory lives inside the run's own session tree, never anywhere
-else on the host. A test that registers a watch is telling a daemon to index a
-path, and the only path it has any business indexing is one this run made.
+The watched directory lives under node1's own root, written through
+lib/nodefs.py, never anywhere else on its machine. A test that registers a
+watch is telling a daemon to index a path, and the only path it has any
+business indexing is one this run made. Under the root it lies on node1's
+machine in every world.
 
 astral-py binds no `fs` module, so the watch is a raw query. The wire form is
 `op?param=value` — the `-flag value` spelling the docs' astral-query examples
@@ -26,6 +28,7 @@ from pathlib import Path
 
 import astral
 
+from lib import nodefs
 from lib.sessionio import load, write_facts
 
 REPO = "fs-watch-probe"
@@ -38,14 +41,15 @@ async def main():
 
     session_dir = Path(os.environ["ASTRAL_TESTS_SESSION"]).resolve().parent
     run_stamp = session_dir.parent.name        # results/<stamp>/session/…
-    watch_dir = session_dir / "fs-watch"
-    watch_dir.mkdir(parents=True, exist_ok=True)
+    watch_rel = "fs-watch"
+    nodefs.mkdir(n1, watch_rel)
+    watch_dir = nodefs.path(n1, watch_rel)
 
     # Run-unique, so an id from one run can never be mistaken for another's.
     payload = (f"fs-watch probe in {run_stamp}: a file dropped into a "
                f"watched directory becomes an object\n").encode()
-    target = watch_dir / FILENAME
-    target.write_bytes(payload)
+    nodefs.write_bytes(n1, f"{watch_rel}/{FILENAME}", payload)
+    target = nodefs.path(n1, f"{watch_rel}/{FILENAME}")
 
     async with await astral.connect(n1["endpoint"],
                                     token=doc["facts"]["user_token"]) as c:
@@ -53,8 +57,8 @@ async def main():
 
     write_facts({
         "repo": REPO,
-        "watch_dir": str(watch_dir),
-        "file_path": str(target),
+        "watch_dir": watch_dir,
+        "file_path": target,
         "payload": payload.decode(),
     })
     print(f"driver: watching {watch_dir} as {REPO!r}; "

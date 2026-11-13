@@ -33,7 +33,7 @@ from pathlib import Path
 
 import astral
 
-from lib import fsfixture
+from lib import fsfixture, nodefs
 from lib.indexing import (INDEX, UNINDEX, Subscription, answer, change,
                           register_indexer)
 from lib.sessionio import load, write_facts
@@ -94,56 +94,57 @@ class Feed:
             self.tail.append(c)
 
 
-def write_paced(path: Path, data: bytes) -> None:
-    path.touch()
+def write_paced(n1: dict, rel: str, data: bytes) -> None:
+    nodefs.write_bytes(n1, rel, b"")
     time.sleep(CREATE_PACE)
-    with open(path, "wb") as f:
-        f.write(data)
+    nodefs.write_bytes(n1, rel, data)
 
 
-async def wait_located(c, oid: str, path: Path, present: bool) -> bool:
+async def wait_located(c, oid: str, path: str, present: bool) -> bool:
     loop = asyncio.get_running_loop()
     end = loop.time() + STEP
     while True:
         paths = [p for p, _ in await fsfixture.file_locations(c, oid)]
-        if (str(path) in paths) == present:
+        if (path in paths) == present:
             return True
         if loop.time() >= end:
             return False
         await asyncio.sleep(0.5)
 
 
-async def run_steps(u, feed: Feed, w: Path, payloads: dict) -> dict:
+async def run_steps(u, feed: Feed, n1: dict, w: str, payloads: dict) -> dict:
     """Steps 2 to 5; answers what each wait observed."""
     seen = {"c1": await feed.expect("seed")}
     await feed.drain_tail("seed")
 
-    write_paced(w / "f2.txt", payloads["c2"])
+    write_paced(n1, f"{w}/f2.txt", payloads["c2"])
     seen["c2"] = await feed.expect("f2")
     await feed.drain_tail("f2")
 
-    write_paced(w / "f3.txt", payloads["c2"])
+    write_paced(n1, f"{w}/f3.txt", payloads["c2"])
     seen["f3_located"] = await wait_located(
-        u, fsfixture.object_id(payloads["c2"]), w / "f3.txt", True)
+        u, fsfixture.object_id(payloads["c2"]), nodefs.path(n1, f"{w}/f3.txt"),
+        True)
     await feed.drain_tail("f3")
 
-    write_paced(w / "f4.txt", payloads["c4"])
+    write_paced(n1, f"{w}/f4.txt", payloads["c4"])
     seen["c4"] = await feed.expect("f4")
     await feed.drain_tail("f4")
 
-    with open(w / "f4.txt", "wb") as f:
-        f.write(payloads["c4p"])
+    nodefs.write_bytes(n1, f"{w}/f4.txt", payloads["c4p"])
     seen["c4p"] = await feed.expect("f4-rewrite")
     await feed.drain_tail("f4-rewrite")
 
-    (w / "f2.txt").unlink()
+    nodefs.remove(n1, f"{w}/f2.txt")
     seen["f2_unlocated"] = await wait_located(
-        u, fsfixture.object_id(payloads["c2"]), w / "f2.txt", False)
+        u, fsfixture.object_id(payloads["c2"]), nodefs.path(n1, f"{w}/f2.txt"),
+        False)
     await feed.drain_tail("f2-delete")
 
-    (w / "seed.txt").unlink()
+    nodefs.remove(n1, f"{w}/seed.txt")
     seen["seed_unlocated"] = await wait_located(
-        u, fsfixture.object_id(payloads["c1"]), w / "seed.txt", False)
+        u, fsfixture.object_id(payloads["c1"]),
+        nodefs.path(n1, f"{w}/seed.txt"), False)
     await feed.drain_tail("seed-delete")
     return seen
 
@@ -155,16 +156,19 @@ async def main():
 
     session_dir = Path(os.environ["ASTRAL_TESTS_SESSION"]).resolve().parent
     stamp = session_dir.parent.name
-    w = session_dir / REPO / "watched"
-    w.mkdir(parents=True)
+    # why under node1's root: the watched directory must live on node1's
+    # machine, which in a Docker world sees no host directory
+    w = f"{REPO}/watched"
+    nodefs.mkdir(n1, w)
+    w_path = nodefs.path(n1, w)
     payloads = {k: f"{REPO} {stamp} payload {k}\n".encode()
                 for k in ("c1", "c2", "c4", "c4p")}
-    (w / "seed.txt").write_bytes(payloads["c1"])
+    nodefs.write_bytes(n1, f"{w}/seed.txt", payloads["c1"])
     c1 = fsfixture.object_id(payloads["c1"])
 
     async with await astral.connect(endpoint, token=user) as u:
-        err = await fsfixture.new_watch(u, w, REPO)
-        assert err is None, f"fs.new_watch {w}: {err}"
+        err = await fsfixture.new_watch(u, w_path, REPO)
+        assert err is None, f"fs.new_watch {w_path}: {err}"
         # why not asserted: a seed the scan never indexed is node1's fault,
         # and the oracle reports it as a missing Index c1
         seed_missing = await fsfixture.wait_contains(u, REPO, {c1},
@@ -180,15 +184,17 @@ async def main():
         assert enable["type"] == "ack", f"indexing.enable_repo: {enable}"
         async with Subscription(i, nonce) as sub:
             feed = Feed(sub)
-            seen = await run_steps(u, feed, w, payloads)
+            seen = await run_steps(u, feed, n1, w, payloads)
 
     acked = [c["version"] for c in feed.live if c["type"] in (INDEX, UNINDEX)]
     write_facts({
         "apps": {"I": app},
         "indexer": nonce,
         "repo": REPO,
-        "watch_dir": str(w),
-        "paths": {n: str(w / f"{n}.txt") for n in ("seed", "f2", "f3", "f4")},
+        "watch_dir": w_path,
+        "watch_rel": w,
+        "paths": {n: nodefs.path(n1, f"{w}/{n}.txt")
+                  for n in ("seed", "f2", "f3", "f4")},
         "payloads": {k: v.decode() for k, v in payloads.items()},
         "live": feed.live,
         "live_tail": feed.tail,

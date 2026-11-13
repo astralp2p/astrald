@@ -20,12 +20,11 @@ Claims:
 7. All three files are still on disk with their bytes.
 """
 import asyncio
-from pathlib import Path
 
 import astral
 from astral.errors import RemoteError
 
-from lib import fsfixture
+from lib import fsfixture, nodefs
 from lib.sessionio import as_bytes, load
 
 DEADLINE = 20.0
@@ -136,8 +135,10 @@ async def main():
             await poll(undescribed, f"{r['name']}'s file is still described")
 
     for role, r in repos.items():
-        file = Path(r["file"])
-        assert file.is_file() and file.read_bytes() == r["payload"].encode(), (
+        file, rel = r["file"], r["file_rel"]
+        parent, _, base = rel.rpartition("/")
+        assert (nodefs.listdir(n1, parent).get(base) == "file"
+                and nodefs.read_bytes(n1, rel) == r["payload"].encode()), (
             f"{role}: {file} is gone or no longer holds its bytes")
 
     print(f"oracle: after one restart node1 lists and serves {kept['name']} "

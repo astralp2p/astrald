@@ -12,6 +12,7 @@ from pathlib import Path
 import astral
 from astral.objectid import object_id_of_bytes
 
+from lib import nodefs
 from lib.sessionio import load, write_facts
 
 REPO = "discover-swarm"
@@ -25,10 +26,12 @@ async def main():
 
     session_dir = Path(os.environ["ASTRAL_TESTS_SESSION"]).resolve().parent
     name = f"discover-swarm-{session_dir.parent.name}.txt"
-    watch_dir = session_dir / "discover-swarm"
-    watch_dir.mkdir(parents=True, exist_ok=True)
+    # why under node2's root: the watched directory must live on node2's
+    # machine, which in a Docker world sees no host directory
+    nodefs.mkdir(n2, REPO)
+    watch_dir = nodefs.path(n2, REPO)
     payload = f"discover-swarm probe {name}\n".encode()
-    (watch_dir / name).write_bytes(payload)
+    nodefs.write_bytes(n2, f"{REPO}/{name}", payload)
     oid = str(object_id_of_bytes(payload))
 
     async with await astral.connect(n2["endpoint"], token=n2["token"]) as c:

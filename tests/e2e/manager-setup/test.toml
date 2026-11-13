@@ -1,4 +1,4 @@
 nodes   = ["managed"]
 timeout = 120
-local_only = "its roster, managed, names a node no VM lab runs"
+host_listener = "serves an op as the manager, which the node dials"
 facts   = ["manager_setup"]

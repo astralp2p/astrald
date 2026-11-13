@@ -9,10 +9,10 @@ must answer 24 words that derive the identity it answered, and a token. No
 node log may hold any of the words.
 """
 import asyncio
-from pathlib import Path
 
 import astral
 
+from lib import nodefs
 from lib.sessionio import load
 
 # The identity BIP-39 + BIP-32 m/1791'/0'/0'/0/0 derives from the driver's
@@ -31,9 +31,11 @@ def check_log_free_of(node: dict, words: str) -> None:
 
     why pairs: single words such as "change" or "file" occur in log text.
     """
-    log = Path(node["root"]) / "astrald.log"
-    assert log.exists(), f"no node log at {log}"
-    text = log.read_text(errors="replace")
+    log = nodefs.path(node, nodefs.LOG)
+    try:
+        text = nodefs.log(node)
+    except OSError as e:
+        raise AssertionError(f"no node log at {log}: {e}")
     ws = words.split()
     for pair in zip(ws, ws[1:]):
         assert " ".join(pair) not in text, f"{log} holds {' '.join(pair)!r}"
