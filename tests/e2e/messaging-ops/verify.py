@@ -45,9 +45,9 @@ ANSI = re.compile(r"\x1b\[[0-9;]*m")
 
 def check_precondition(facts):
     assert facts["serves_mcp"] is False, (
-        "the harness started the node with MCP on — nomcp1 is not in "
-        "nodeconfig.WITHOUT_MCP, and nothing below is evidence about "
-        "messaging without MCP")
+        "the harness started the node with MCP on — the manifest's "
+        "[config.nomcp1.mcp] bind_mcp = \"\" did not apply, and nothing "
+        "below is evidence about messaging without MCP")
     probe = facts["mcp_probe"]
     assert not probe["answered"] and "refused" in probe["detail"].lower(), (
         f"the node's MCP port answered: {probe['detail']} — an MCP server was "

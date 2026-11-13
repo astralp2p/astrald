@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Driver: participants mail each other through messaging.* over apphost.
 
-The node serves no MCP: its roster name is in nodeconfig.WITHOUT_MCP, so its
-MCP server is off while mod/mcp still loads. Every exchange here reaches
+The node serves no MCP: the manifest sets [config.nomcp1.mcp] bind_mcp = "",
+so its MCP server is off while mod/mcp still loads. Every exchange here reaches
 mod/messaging through its own ops, the way an app reaches it.
 
 The admin mints three participants with messaging.create_mailbox. ada and bob
