@@ -28,6 +28,7 @@ fs-watch
 fs-index-live
 repo-removal-sticks
 fs-watch-restart-restore
+fs-index-restart-reconcile
 object-store
 object-store-peer
 read-remote-peer

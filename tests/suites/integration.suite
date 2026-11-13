@@ -20,6 +20,7 @@ bootstrap-user-op
 fs-watch
 fs-index-live
 fs-watch-restart-restore
+fs-index-restart-reconcile
 repo-removal-sticks
 indexing-fs-watch-feed
 registration-lease
