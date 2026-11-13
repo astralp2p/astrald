@@ -4,7 +4,6 @@ import (
 	apiauth "github.com/astralp2p/astral-go/api/auth"
 	vfsapi "github.com/astralp2p/astral-go/api/vfs"
 	"github.com/astralp2p/astral-go/astral"
-	"github.com/astralp2p/astral-go/lib/routing"
 	authmod "github.com/astralp2p/astrald/mod/auth"
 	objectsmod "github.com/astralp2p/astrald/mod/objects"
 )
@@ -114,17 +113,4 @@ func (db *DB) seeObjectsFindVFSes(id astral.ObjectID) ([]*astral.Identity, error
 	}
 
 	return ids, nil
-}
-
-// checkManageOrigin refuses a manage operation for a query that arrives from the network. A manage operation calls
-// it first, before authorization.
-//
-// why: VFS 6, section 6: the manage operations refuse a network query, as every other administration operation in
-// astrald does (apphost/src/op_grant.go).
-func checkManageOrigin(q *routing.IncomingQuery) error {
-	if q.Origin() == astral.OriginNetwork {
-		return astral.NewErrOriginNotAllowed(q.Origin())
-	}
-
-	return nil
 }

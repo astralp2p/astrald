@@ -13,7 +13,6 @@ import (
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astral-go/astral/log"
 	"github.com/astralp2p/astral-go/lib/query"
-	"github.com/astralp2p/astral-go/lib/routing"
 	"github.com/astralp2p/astrald/core/assets"
 	authmod "github.com/astralp2p/astrald/mod/auth"
 	authsrc "github.com/astralp2p/astrald/mod/auth/src"
@@ -449,17 +448,5 @@ func TestSeeObjectsIsNodeLocal(t *testing.T) {
 
 	if !authority.Authorize(ctx, seeAction(app, file.ObjectID)) {
 		t.Fatal("a read contract from the VFS identity does not read its file by ObjectID")
-	}
-}
-
-func TestCheckManageOriginRefusesTheNetwork(t *testing.T) {
-	id := astral.GenerateIdentity()
-	q := query.New(id, id, "vfs.volumes", nil)
-
-	if err := checkManageOrigin(routing.NewIncomingQuery(q, nil, astral.OriginNetwork)); err == nil {
-		t.Fatal("a query from the network is accepted")
-	}
-	if err := checkManageOrigin(routing.NewIncomingQuery(q, nil, "")); err != nil {
-		t.Fatalf("a local query is refused: %v", err)
 	}
 }
