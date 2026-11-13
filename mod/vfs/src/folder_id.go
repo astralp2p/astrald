@@ -11,62 +11,85 @@ type filledID struct {
 	ID  astral.ObjectID
 }
 
-// computeFolderID returns the ObjectID of the listing of a folder, computed bottom-up: the folders below
-// first, then the folder. A folder with a cached ObjectID is not read again.
+// folderIDComputer computes the ObjectIDs of folder listings bottom-up: the folders below first, then the
+// folder. It records in filled each ID it computed, for setFolderIDs to cache.
 //
-// The call only reads, so it belongs in one read transaction. It also returns the IDs it filled in, for
-// setFolderIDs to cache.
-func (db *DB) computeFolderID(folderID int64) (id astral.ObjectID, filled []filledID, err error) {
-	row, err := db.findEntry(folderID)
-	if err != nil {
-		return id, nil, err
-	}
-
-	return db.computeFolder(row, nil)
+// note: it only reads, so it belongs in one read transaction.
+type folderIDComputer struct {
+	tx     *DB
+	filled []filledID
 }
 
-func (db *DB) computeFolder(row *dbEntry, filled []filledID) (astral.ObjectID, []filledID, error) {
+// compute returns the ObjectID of the listing of the folder in row. A folder with a cached ObjectID is not
+// read again.
+func (fc *folderIDComputer) compute(row *dbEntry) (astral.ObjectID, error) {
 	if row.ObjectID != nil {
-		return *row.ObjectID, filled, nil
+		return *row.ObjectID, nil
 	}
 
-	children, err := db.listChildren(row.ID)
+	children, err := fc.tx.listChildren(row.ID)
 	if err != nil {
-		return astral.ObjectID{}, nil, err
+		return astral.ObjectID{}, err
 	}
 
 	listing, err := vfsapi.NewListingWriter(nil, uint32(len(children)))
 	if err != nil {
-		return astral.ObjectID{}, nil, err
+		return astral.ObjectID{}, err
 	}
 
 	for _, child := range children {
-		var childID astral.ObjectID
-
 		if child.isFolder() {
-			if childID, filled, err = db.computeFolder(child, filled); err != nil {
-				return astral.ObjectID{}, nil, err
+			childID, err := fc.compute(child)
+			if err != nil {
+				return astral.ObjectID{}, err
 			}
 			child.ObjectID = &childID
 		}
 
-		if err = listing.Write(child.entry()); err != nil {
-			return astral.ObjectID{}, nil, err
+		if err = listing.Write(child.toEntry()); err != nil {
+			return astral.ObjectID{}, err
 		}
 	}
 
 	id, err := listing.Close()
 	if err != nil {
-		return astral.ObjectID{}, nil, err
+		return astral.ObjectID{}, err
 	}
 
-	return *id, append(filled, filledID{Row: row.ID, ID: *id}), nil
+	fc.filled = append(fc.filled, filledID{Row: row.ID, ID: *id})
+
+	return *id, nil
+}
+
+// fillFolderID computes and caches the ObjectID of a folder whose ObjectID is cleared, and sets it on row.
+// Any other row is left alone.
+//
+// note: the caller holds the lock of the VFS and runs inside a transaction.
+func fillFolderID(tx *DB, row *dbEntry) error {
+	if !row.isFolder() || row.ObjectID != nil {
+		return nil
+	}
+
+	fc := folderIDComputer{tx: tx}
+
+	id, err := fc.compute(row)
+	if err != nil {
+		return err
+	}
+
+	if err = tx.setFolderIDs(fc.filled); err != nil {
+		return err
+	}
+
+	row.ObjectID = &id
+
+	return nil
 }
 
 // folderObjectID returns the ObjectID of the listing of a folder, computing and caching it when it is cleared.
 // It takes the lock of the VFS only when it has to compute, so a caller must not hold that lock.
 //
-// A caller inside a transaction under the lock calls computeFolderID and setFolderIDs on its own transaction.
+// A caller inside a transaction under the lock calls fillFolderID on its own transaction.
 func (mod *Module) folderObjectID(vfsID *astral.Identity, folderID int64) (astral.ObjectID, error) {
 	row, err := mod.db.findEntry(folderID)
 	if err != nil {
@@ -81,14 +104,19 @@ func (mod *Module) folderObjectID(vfsID *astral.Identity, folderID int64) (astra
 
 	var id astral.ObjectID
 
-	err = mod.db.inTx(func(tx *DB) (err error) {
-		var filled []filledID
-
-		if id, filled, err = tx.computeFolderID(folderID); err != nil {
+	err = mod.db.inTx(func(tx *DB) error {
+		row, err := tx.findEntry(folderID)
+		if err != nil {
 			return err
 		}
 
-		return tx.setFolderIDs(filled)
+		if err = fillFolderID(tx, row); err != nil {
+			return err
+		}
+
+		id = *row.ObjectID
+
+		return nil
 	})
 
 	return id, err

@@ -47,24 +47,26 @@ func (mod *Module) vfsInfo(vol *dbVolume) (*vfsapi.Info, error) {
 	}
 
 	err := mod.db.inTx(func(tx *DB) error {
-		root, filled, err := tx.computeFolderID(vol.RootID)
+		root, err := tx.findEntry(vol.RootID)
 		if err != nil {
 			return err
 		}
 
-		usage, err := tx.usage(vol.Identity)
+		fc := folderIDComputer{tx: tx}
+
+		id, err := fc.compute(root)
 		if err != nil {
 			return err
 		}
 
-		entries, err := tx.entryCount(vol.Identity)
+		u, err := tx.measureUsage(vol.Identity)
 		if err != nil {
 			return err
 		}
 
-		info.Root, info.Usage, info.Entries = root, astral.Uint64(usage), astral.Uint64(entries)
+		info.Root, info.Usage, info.Entries = id, astral.Uint64(u.Bytes), astral.Uint64(u.Entries)
 
-		return tx.setFolderIDs(filled)
+		return tx.setFolderIDs(fc.filled)
 	})
 	if err != nil {
 		return nil, err

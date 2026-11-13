@@ -36,9 +36,9 @@ func (e *dbEntry) isFolder() bool { return astral.Uint16(e.Flags)&vfsapi.FlagFol
 // isRoot reports whether the row is the root of a VFS.
 func (e *dbEntry) isRoot() bool { return e.ParentID == e.ID }
 
-// entry returns the entry as it is listed. The ID of a folder is the cached one: a caller that needs it
+// toEntry returns the entry as it is listed. The ID of a folder is the cached one: a caller that needs it
 // computes it first.
-func (e *dbEntry) entry() *vfsapi.Entry {
+func (e *dbEntry) toEntry() *vfsapi.Entry {
 	entry := &vfsapi.Entry{
 		Name:    astral.String8(e.Name),
 		Flags:   astral.Uint16(e.Flags),

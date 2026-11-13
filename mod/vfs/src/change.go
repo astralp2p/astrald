@@ -107,18 +107,9 @@ func (db *DB) changeMakeFolders(vol *dbVolume, names []string) (*dbEntry, error)
 //
 // The caller runs inside a change, under the lock of the VFS.
 func (db *DB) changeEntry(row *dbEntry) (*vfsapi.Entry, error) {
-	if row.isFolder() && row.ObjectID == nil {
-		id, filled, err := db.computeFolderID(row.ID)
-		if err != nil {
-			return nil, err
-		}
-
-		if err = db.setFolderIDs(filled); err != nil {
-			return nil, err
-		}
-
-		row.ObjectID = &id
+	if err := fillFolderID(db, row); err != nil {
+		return nil, err
 	}
 
-	return row.entry(), nil
+	return row.toEntry(), nil
 }

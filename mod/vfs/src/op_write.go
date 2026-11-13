@@ -66,7 +66,7 @@ func (mod *Module) OpWrite(ctx *astral.Context, q *routing.IncomingQuery, args o
 		return ch.Send(astral.Err(err))
 	}
 
-	return ch.Send(row.entry())
+	return ch.Send(row.toEntry())
 }
 
 // writeAllowance checks the target of a write and returns how many bytes the stream may carry: the bytes left

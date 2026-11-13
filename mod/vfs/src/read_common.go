@@ -31,5 +31,5 @@ func (mod *Module) readEntry(vol *dbVolume, row *dbEntry) (*vfsapi.Entry, error)
 		row.ObjectID = &id
 	}
 
-	return row.entry(), nil
+	return row.toEntry(), nil
 }

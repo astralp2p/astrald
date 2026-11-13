@@ -105,20 +105,30 @@ func TestComputeUsesCachedFolderIDs(t *testing.T) {
 		t.Fatalf("plant: %v", err)
 	}
 
-	id, filled, err := mod.db.computeFolderID(vol.RootID)
+	root, err := mod.db.findEntry(vol.RootID)
 	if err != nil {
-		t.Fatalf("computeFolderID: %v", err)
+		t.Fatalf("findEntry: %v", err)
 	}
-	if len(filled) != 1 || filled[0].Row != vol.RootID {
-		t.Fatalf("filled = %v, want the root only", filled)
+	fc := folderIDComputer{tx: mod.db}
+	id, err := fc.compute(root)
+	if err != nil {
+		t.Fatalf("compute: %v", err)
+	}
+	if len(fc.filled) != 1 || fc.filled[0].Row != vol.RootID {
+		t.Fatalf("filled = %v, want the root only", fc.filled)
 	}
 
 	if err := mod.db.clearFolderIDs(sub.ID); err != nil {
 		t.Fatalf("clearFolderIDs: %v", err)
 	}
-	fresh, _, err := mod.db.computeFolderID(vol.RootID)
+	root, err = mod.db.findEntry(vol.RootID)
 	if err != nil {
-		t.Fatalf("computeFolderID: %v", err)
+		t.Fatalf("findEntry: %v", err)
+	}
+	fc = folderIDComputer{tx: mod.db}
+	fresh, err := fc.compute(root)
+	if err != nil {
+		t.Fatalf("compute: %v", err)
 	}
 	if fresh == id {
 		t.Fatal("the listing did not change after the cache was cleared")
