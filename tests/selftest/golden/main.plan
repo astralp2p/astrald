@@ -37,6 +37,7 @@ w2 local:  bootstrap-user-software-key* → adopt-node*
 w3 local:  bootstrap-user-software-key* → adopt-node* → expel-during-transfer
 w4 local:  bootstrap-user-software-key* → adopt-node* → expel-authority
 w5 local:  bootstrap-user-software-key* → adopt-node* → hold-purge
+           config node1.objects.purge_floor = "0s"
 w6 local:  bootstrap-user-software-key* → adopt-node* → swarm-roster-sync
            → expel-propagation → expel-survives-restart
 w7 local:  bootstrap-user-software-key* → adopt-node* → swarm-roster-sync*
@@ -51,6 +52,7 @@ w12 local: bootstrap-user-software-key* → adopt-node* → services-node-restar
 w13 local: bootstrap-user-software-key* → repo-removal-sticks
 w14 local: bootstrap-user-software-key* → fs-watch-restart-restore
 w15 local: bootstrap-user-software-key* → hold-isolation
+           config node1.objects.purge_floor = "0s"
 w16 local: bootstrap-user-software-key* → indexer-cursor
 w17 local: bootstrap-user-software-key* → indexing-fs-watch-feed
 w18 local: bootstrap-user-software-key* → blueprint-survives-restart

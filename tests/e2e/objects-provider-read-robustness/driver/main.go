@@ -31,6 +31,8 @@ const (
 	// holdBound is how long node1 may hold a silent candidate open: its 15 s
 	// first-byte timer, and slack.
 	holdBound = 20 * time.Second
+	// readO1Attempts bounds the reads of O1 run until one has G in play.
+	readO1Attempts = 3
 )
 
 // lease is every registration of the flow. The User revokes every grant at
@@ -76,8 +78,10 @@ type facts struct {
 	ReadO1      call     `json:"read_o1"`
 	ReadO1Bytes int      `json:"read_o1_bytes"`
 	ReadO1IsO1  bool     `json:"read_o1_is_o1"` // the bytes hash to O1
-	ReadO2A     call     `json:"read_o2_a"`
-	ReadO2B     call     `json:"read_o2_b"`
+	// how many reads of O1 ran before one had G in play; the read_o1 fields are that read's
+	ReadO1Attempts int  `json:"read_o1_attempts"`
+	ReadO2A        call `json:"read_o2_a"`
+	ReadO2B        call `json:"read_o2_b"`
 
 	// counters of the apps, by op and object
 	FFindO1  int `json:"f_find_o1"`

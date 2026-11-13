@@ -23,8 +23,8 @@ its own mailbox through the `messaging.*` ops. The node serves no MCP.
 
 ## Why the node serves no MCP
 
-mod/messaging owns the mailbox, and mod/mcp is one client of it. `nomcp1` is
-in `lib/nodeconfig.py` `WITHOUT_MCP`, so its `mcp.yaml` names an empty
+mod/messaging owns the mailbox, and mod/mcp is one client of it. The manifest
+sets `[config.nomcp1.mcp] bind_mcp = ""`, so its `mcp.yaml` names an empty
 `bind_mcp`: mod/mcp loads and its server never listens. The driver probes the
 port reserved for it, and the oracle requires the probe refused, so a node that
 listened anyway fails the test rather than passing it for the wrong reason.

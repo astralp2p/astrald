@@ -49,15 +49,16 @@ func (c *change) checkLimits(before vfsUsage) error {
 }
 
 // addEntry inserts a new entry into a folder. The entry and the folder get the same node time, and the folder IDs
-// from the folder up are cleared.
+// from the folder up are cleared. The node time is also the creation time of the entry.
 //
-// note: addEntry sets VFS, ParentID and ModTime on row.
+// note: addEntry sets VFS, ParentID, ModTime and CreationTime on row.
 func (c *change) addEntry(parent, row *dbEntry) error {
 	now := nodeTime()
 
 	row.VFS = parent.VFS
 	row.ParentID = parent.ID
 	row.ModTime = now
+	row.CreationTime = now
 
 	if err := c.tx.insertEntry(row); err != nil {
 		return err
