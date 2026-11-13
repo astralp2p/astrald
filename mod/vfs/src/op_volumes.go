@@ -16,7 +16,7 @@ func (mod *Module) OpVolumes(ctx *astral.Context, q *routing.IncomingQuery, args
 	ch := q.Accept(channel.WithFormats(args.In, args.Out))
 	defer ch.Close()
 
-	if err := mod.manageAuthorize(ctx, q); err != nil {
+	if err := mod.authorizeManageQuery(ctx, q); err != nil {
 		return ch.Send(astral.Err(err))
 	}
 

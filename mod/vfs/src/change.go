@@ -4,18 +4,7 @@ import (
 	"errors"
 
 	vfsapi "github.com/astralp2p/astral-go/api/vfs"
-	"github.com/astralp2p/astral-go/astral"
-	"github.com/astralp2p/astral-go/lib/routing"
 )
-
-// changeAuthorize authorizes a write on a VFS and returns it. A nil VFS is the caller's.
-func (mod *Module) changeAuthorize(ctx *astral.Context, q *routing.IncomingQuery, vfsID *astral.Identity) (*dbVolume, error) {
-	if vfsID == nil {
-		vfsID = q.Caller()
-	}
-
-	return mod.authorizeVFS(ctx, q.Caller(), vfsID, accessWrite)
-}
 
 // change is one change to a VFS: the transaction it runs in and the VFS it changes.
 //

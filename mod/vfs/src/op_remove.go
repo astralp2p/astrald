@@ -20,7 +20,7 @@ func (mod *Module) OpRemove(ctx *astral.Context, q *routing.IncomingQuery, args 
 	ch := q.Accept(channel.WithFormats(args.In, args.Out))
 	defer ch.Close()
 
-	vol, err := mod.changeAuthorize(ctx, q, args.VFS)
+	vol, err := mod.authorizeVFSQuery(ctx, q, args.VFS, accessWrite)
 	if err != nil {
 		return ch.Send(astral.Err(err))
 	}

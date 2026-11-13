@@ -21,7 +21,7 @@ func (mod *Module) OpSetQuota(ctx *astral.Context, q *routing.IncomingQuery, arg
 	ch := q.Accept(channel.WithFormats(args.In, args.Out))
 	defer ch.Close()
 
-	if err := mod.manageAuthorize(ctx, q); err != nil {
+	if err := mod.authorizeManageQuery(ctx, q); err != nil {
 		return ch.Send(astral.Err(err))
 	}
 
