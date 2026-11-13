@@ -3,6 +3,5 @@ timeout    = 180
 after      = "bootstrap-user-software-key"
 restart    = ["node1"]
 destroys   = true
-local_only = "restarts node1, which only a local world can do"
 facts      = ["apps", "nonce", "ids", "enable", "first_session", "probe",
               "j_subscribe"]

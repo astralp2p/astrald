@@ -3,7 +3,8 @@
 node1 delegates the app registration decision to an app, and keeps the
 authorizer assignments it records across a restart.
 
-- **env** node · **start** `one-node` · **saves** — · **restart** `node1`
+- **env** node · **start** `one-node` · **saves** — · **restart** `node1` ·
+  **host_listener** — the control-plane app listens at node1's `host_ip`
 - **driver** `script.py` — runs `driver/` (Go, this repository's astral-go) in
   `drive` mode. A control-plane app on node1 serves the decision op and an
   authorizer op, and `apphost.set_app_register_policy` points the node at it:
