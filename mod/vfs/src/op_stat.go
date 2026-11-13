@@ -13,11 +13,31 @@ type opStatArgs struct {
 	Path string `query:"required"`
 }
 
-// todo: implement vfs.stat; the stub answers an error until a later part of the VFS ticket fills this file.
-// why: the stub reads and changes nothing, so it asks for no named action; the part that fills it authorizes first.
+// OpStat answers the entry at a path (VFS 6, section 7). For "/" the entry has an empty Name, the folder flag,
+// the root ObjectID and the root's modification time.
 func (mod *Module) OpStat(ctx *astral.Context, q *routing.IncomingQuery, args opStatArgs) error {
 	ch := q.Accept(channel.WithFormats(args.In, args.Out))
 	defer ch.Close()
 
-	return ch.Send(errNotImplemented)
+	vol, err := mod.readTarget(ctx, q, args.VFS)
+	if err != nil {
+		return ch.Send(astral.Err(err))
+	}
+
+	names, err := parsePath(args.Path)
+	if err != nil {
+		return ch.Send(astral.Err(err))
+	}
+
+	row, err := mod.db.resolveEntry(vol, names)
+	if err != nil {
+		return ch.Send(astral.Err(err))
+	}
+
+	entry, err := mod.readEntry(vol, row)
+	if err != nil {
+		return ch.Send(astral.Err(err))
+	}
+
+	return ch.Send(entry)
 }
