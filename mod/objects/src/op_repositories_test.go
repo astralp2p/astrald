@@ -83,7 +83,9 @@ func readRepositories(t *testing.T, mod *Module) (map[string]objects.RepositoryI
 
 func TestRepositories_ReportsGroupMembershipAndConcurrency(t *testing.T) {
 	mod := &Module{Deps: Deps{Auth: &recordingAuth{verdict: true}}, config: defaultConfig}
-	mod.setupDefaultRepos()
+	if err := mod.setupDefaultRepos(); err != nil {
+		t.Fatalf("setup default repositories: %v", err)
+	}
 	mod.repos.Set("empty", NewRepoGroup(mod, "Empty sequential", false))
 
 	infos, last := readRepositories(t, mod)
