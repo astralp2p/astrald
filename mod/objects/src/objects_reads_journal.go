@@ -19,6 +19,11 @@ type objectsReadsJournal struct {
 	log *log.Logger
 	mu  sync.Mutex
 
+	// flushMu serializes Flush across drain and sink.
+	// why: a flush that returns must find every read marked before it in the sink; a flush in flight
+	// has already drained its batch, so a second flusher waits for it instead of finding an empty journal.
+	flushMu sync.Mutex
+
 	pending map[astral.ObjectID]astral.Time // last read time per object
 	sink    objectsReadsSink
 
@@ -58,9 +63,13 @@ func (j *objectsReadsJournal) drain() map[astral.ObjectID]astral.Time {
 }
 
 // Flush writes pending reads to the sink synchronously. Safe for concurrent use:
-// drain hands each entry to exactly one flusher. On sink error the batch is
-// re-merged so it isn't lost (keeping the newest time).
+// flushes run one at a time, so when Flush returns nil every read marked before
+// it was called is in the sink. On sink error the batch is re-merged so it isn't
+// lost (keeping the newest time).
 func (j *objectsReadsJournal) Flush() error {
+	j.flushMu.Lock()
+	defer j.flushMu.Unlock()
+
 	batch := j.drain()
 	if batch == nil {
 		return nil
