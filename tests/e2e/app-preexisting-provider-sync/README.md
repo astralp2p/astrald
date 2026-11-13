@@ -8,8 +8,8 @@ callable, from an app on the User's node once the node is adopted.
   own, so it needs no shared two-node world. Both nodes start fresh;
   `ppsyncuser` is claimed by a User the driver creates, `ppsyncjoiner` is
   never claimed until the adoption. Names no other test uses.
-- **local_only** the provider app serves its ops from the host, on a loopback
-  port the node dials.
+- **host_listener** the provider app serves its ops from the test host, on a
+  port at the joiner's `host_ip` that the joiner dials.
 - **driver** `script.py`, with a Go program in `driver/` (this repository's
   pinned astral-go):
   1. astral-py creates a software User key on `ppsyncuser` and activates its
@@ -18,9 +18,9 @@ callable, from an app on the User's node once the node is adopted.
   3. the Go `provider` mode registers an app on `ppsyncjoiner` with ServeApps,
      serves the `ppsync_echo` op through `apps.ServeWith`, advertises the
      `ppsync-echo` service, and stays up;
-  4. only then, astral-py links the two nodes over loopback and the User adopts
-     `ppsyncjoiner` (the `adopt-node` steps); the joiner reports `claimed`
-     (`joiner_state_after`);
+  4. only then, astral-py links the two nodes at their `lan_endpoint`s and the
+     User adopts `ppsyncjoiner` (the `adopt-node` steps); the joiner reports
+     `claimed` (`joiner_state_after`);
   5. the Go `consumer` mode registers an app on `ppsyncuser`, has the node's
      admin grant it discovery of `ppsync-echo`, and runs `services.discover`
      with `reach=swarm` for up to 30 s until the provider shows

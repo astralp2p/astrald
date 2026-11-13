@@ -6,7 +6,8 @@ provider app is the process the driver started (lib/apps.py), still running.
 Claims:
 
 - the harness restarted node2 once and node1 not at all, and node2 came back on
-  the endpoint the app dials (a local world keeps a node's ports);
+  the endpoint the app dials (a local world keeps a node's ports, a Docker
+  world its published port);
 - the provider process is the same one, alive: it reconnected, it was not
   started again;
 - the provider's own record says so: the node completed another registration of

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net"
 	"os"
 	"sync"
 
@@ -92,9 +93,13 @@ func provide(path string) error {
 	sctx, cancel := ctx.WithCancel()
 	defer cancel()
 	reg := apps.NewAppRegistrar(sctx, apps.WithClient(apphostcli.New(nil, a.client)))
+	// why host_ip: the node dials the handler's registered endpoint for every
+	// query, and only an address at the node's host_ip reaches the test host
+	// from the node's machine
+	at := apps.WithHandlerAddress("tcp:" + net.JoinHostPort(n2.HostIP, "0"))
 	served := make(chan error, 1)
 	go func() {
-		served <- apps.ServeWith(sctx, ops, reg,
+		served <- apps.ServeWith(sctx, ops, reg, at,
 			apps.WithBlueprintSync(), apps.WithRegistrationHook(look), apps.WithRegistrationHook(advertised))
 	}()
 

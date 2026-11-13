@@ -1,5 +1,5 @@
 nodes      = ["node1", "node2"]
 timeout    = 300
 after      = "adopt-node"
-local_only = "its provider app is a host process that dials node2's apphost port"
+host_listener = "its provider app is a test-host process whose handler node2 dials"
 facts      = ["app_blueprint_sync"]

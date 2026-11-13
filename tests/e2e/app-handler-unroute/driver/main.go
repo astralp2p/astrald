@@ -14,9 +14,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -35,6 +35,7 @@ type node struct {
 	Endpoint string `json:"endpoint"`
 	Token    string `json:"token"`
 	Identity string `json:"identity"`
+	HostIP   string `json:"host_ip"`
 }
 
 const (
@@ -145,9 +146,19 @@ type world struct {
 	admin    *astrald.Client
 	visitor  *astrald.Client
 	visitID  *astral.Identity
-	tmp      string
 	children []*exec.Cmd
 }
+
+// at is the address every handler of this driver binds: node1's host_ip, on a
+// port the system picks.
+func (w *world) at() string { return handlerAddress(w.n1.HostIP) }
+
+// handlerAddress is a TCP address at hostIP on a port the system picks.
+//
+// why host_ip: the node dials a handler's registered endpoint for every query,
+// and only an address at the node's host_ip reaches the test host from the
+// node's machine
+func handlerAddress(hostIP string) string { return "tcp:" + net.JoinHostPort(hostIP, "0") }
 
 // newApp registers an app identity on node1 and returns it with its token.
 func (w *world) newApp() (*apphost.AccessToken, error) {
@@ -179,12 +190,6 @@ func run(path string) (facts map[string]bool, err error) {
 	w.admin = connect(w.n1.Endpoint, w.n1.Token)
 	defer w.reap()
 
-	// a short directory for unix sockets: its path must fit in a socket address
-	if w.tmp, err = os.MkdirTemp("", "ahu"); err != nil {
-		return facts, err
-	}
-	defer os.RemoveAll(w.tmp)
-
 	visitor, err := w.newApp()
 	if err != nil {
 		return facts, fmt.Errorf("registering the visitor: %w", err)
@@ -197,7 +202,7 @@ func run(path string) (facts map[string]bool, err error) {
 	if err != nil {
 		return facts, fmt.Errorf("registering the bystander: %w", err)
 	}
-	stopBystander, err := serve(w.ctx, connect(w.n1.Endpoint, string(bystander.Token)), "bystander")
+	stopBystander, err := serve(w.ctx, connect(w.n1.Endpoint, string(bystander.Token)), w.n1.HostIP, "bystander")
 	if err != nil {
 		return facts, fmt.Errorf("the bystander could not serve: %w", err)
 	}
@@ -248,7 +253,7 @@ func (w *world) cleanBindClose() (time.Duration, error) {
 		return 0, err
 	}
 	cli := apphostcli.New(nil, connect(w.n1.Endpoint, string(app.Token)))
-	h, err := apps.NewHandler()
+	h, err := apps.NewHandlerOn(w.at(), astral.NewNonce())
 	if err != nil {
 		return 0, err
 	}
@@ -289,7 +294,7 @@ func (w *world) cleanAppStop() (time.Duration, error) {
 	if err != nil {
 		return 0, err
 	}
-	stop, err := serve(w.ctx, connect(w.n1.Endpoint, string(app.Token)), "clean-app")
+	stop, err := serve(w.ctx, connect(w.n1.Endpoint, string(app.Token)), w.n1.HostIP, "clean-app")
 	if err != nil {
 		return 0, err
 	}
@@ -307,7 +312,7 @@ func (w *world) crashApp() (time.Duration, error) {
 	if err != nil {
 		return 0, err
 	}
-	child, err := w.spawn("child-app", []string{"NODE=" + w.n1.Endpoint, "TOKEN=" + string(app.Token)})
+	child, err := w.spawn("child-app", []string{"NODE=" + w.n1.Endpoint, "TOKEN=" + string(app.Token), "HOST_IP=" + w.n1.HostIP})
 	if err != nil {
 		return 0, err
 	}
@@ -329,7 +334,7 @@ func (w *world) crashBindDrop() (time.Duration, error) {
 	if err != nil {
 		return 0, err
 	}
-	h, err := apps.NewHandlerOn("unix:"+filepath.Join(w.tmp, "binder.sock"), astral.NewNonce())
+	h, err := apps.NewHandlerOn(w.at(), astral.NewNonce())
 	if err != nil {
 		return 0, err
 	}
@@ -371,12 +376,13 @@ func (w *world) failedDial() error {
 		return err
 	}
 	cli := apphostcli.New(nil, connect(w.n1.Endpoint, string(app.Token)))
-	addr := "unix:" + filepath.Join(w.tmp, "dial.sock")
 	token := astral.NewNonce()
-	h, err := apps.NewHandlerOn(addr, token)
+	h, err := apps.NewHandlerOn(w.at(), token)
 	if err != nil {
 		return err
 	}
+	// the bound address, its port resolved, is where the endpoint comes back
+	addr := h.Endpoint()
 	defer func() { h.Close() }()
 	go h.Route(w.ctx, routing.NewApp(&Hello{label: "dial-first"}))
 	if err := cli.RegisterHandler(w.ctx, h.Endpoint(), token); err != nil {
@@ -444,11 +450,12 @@ func (w *world) spawn(mode string, env []string) (*exec.Cmd, error) {
 	return cmd, nil
 }
 
-// childApp serves the Hello API as the app NODE/TOKEN name, prints "ready"
-// once the node attached its handler, and serves until killed.
+// childApp serves the Hello API as the app NODE/TOKEN name, on a handler at
+// HOST_IP, prints "ready" once the node attached its handler, and serves until
+// killed.
 func childApp() int {
 	ctx := astral.NewContext(nil)
-	if _, err := serve(ctx, connect(os.Getenv("NODE"), os.Getenv("TOKEN")), "child-app"); err != nil {
+	if _, err := serve(ctx, connect(os.Getenv("NODE"), os.Getenv("TOKEN")), os.Getenv("HOST_IP"), "child-app"); err != nil {
 		fmt.Fprintln(os.Stderr, "child-app:", err)
 		return 1
 	}
@@ -484,11 +491,12 @@ func childBinder() int {
 }
 
 // serve runs the Hello API as the app cli authenticates, through its own
-// registrar. It returns once the node has attached the app's handler.
+// registrar, on a handler at hostIP. It returns once the node has attached the
+// app's handler.
 //
 // why a registration hook: the registrar reports ready as soon as it binds,
 // before it attaches a handler; a hook runs only after the attach.
-func serve(ctx *astral.Context, cli *astrald.Client, label string) (func(), error) {
+func serve(ctx *astral.Context, cli *astrald.Client, hostIP, label string) (func(), error) {
 	sctx, cancel := ctx.WithCancel()
 	reg := apps.NewAppRegistrar(sctx, apps.WithClient(apphostcli.New(nil, cli)))
 	attached := make(chan struct{})
@@ -499,8 +507,9 @@ func serve(ctx *astral.Context, cli *astrald.Client, label string) (func(), erro
 		}
 		return nil
 	})
+	at := apps.WithHandlerAddress(handlerAddress(hostIP))
 	served := make(chan error, 1)
-	go func() { served <- apps.ServeWith(sctx, routing.NewApp(&Hello{label: label}), reg, onAttach) }()
+	go func() { served <- apps.ServeWith(sctx, routing.NewApp(&Hello{label: label}), reg, at, onAttach) }()
 
 	select {
 	case <-attached:

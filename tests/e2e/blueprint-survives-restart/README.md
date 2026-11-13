@@ -5,8 +5,8 @@ and the reconnecting app syncs them again: node1 lists the types, describes
 them as declared, and decodes an object of one of them again.
 
 - **after** `bootstrap-user-software-key` (node1 with its User) · **restart**
-  `node1` · **destroys** (every restarting test does) · **local_only** — only a
-  local world restarts a node, and the app is a process on the host.
+  `node1` · **destroys** (every restarting test does) · **host_listener** — the
+  app is a process on the test host, bound at node1's `host_ip`.
 - **driver** `script.py` — builds `driver/` (Go, this repository's astral-go)
   and starts `driver serve` as a long-lived app with `lib/apps.py`. The app
   registers on node1 (`apphost.register`), adds `Note` (`Label string16`,
@@ -19,7 +19,8 @@ them as declared, and decodes an object of one of them again.
   it also registers a blueprint itself (`blueprint_survives_restart.control`)
   that no app syncs. The driver then exits; the app keeps running.
 - **runner** — restarts node1 between driver and oracle, on the endpoint the app
-  dials (`lib/worlds/local.py` keeps a restarted node's ports).
+  dials (`lib/worlds/local.py` keeps a restarted node's ports;
+  `lib/worlds/docker.py` restarts astrald behind the same published port).
 - **oracle** `verify.py` — the facts above held before the restart; node1
   restarted once; the app is the same pid and alive; the app's own state shows
   another completed sync (`syncs` grew); node1 lists both types again within

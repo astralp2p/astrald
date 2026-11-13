@@ -6,8 +6,8 @@ with the token it holds and advertises again, and the follow, which never
 ended, receives the same provider's offering available once more.
 
 - **after** `adopt-node` (node1 and node2 in one swarm) · **restart** `node2` ·
-  **destroys** (every restarting test does) · **local_only** — only a local
-  world restarts a node, and both apps are processes on the host.
+  **destroys** (every restarting test does) · **host_listener** — both apps
+  are processes on the test host; the provider binds at node2's `host_ip`.
 - **driver** `script.py` — builds `driver/` (Go, this repository's astral-go)
   and starts two long-lived apps with `lib/apps.py`:
   - `driver provide` on node2: registers a provider app holding `ServeApps`

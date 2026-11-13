@@ -3,5 +3,5 @@ timeout    = 300
 after      = "adopt-node"
 restart    = ["node2"]
 destroys   = true
-local_only = "keeps a provider app process on the host across a restart of node2, which only a local world can do"
+host_listener = "keeps a provider app process on the test host, whose handler node2 dials, across a restart of node2"
 facts      = ["app_node_restart_reconnect"]

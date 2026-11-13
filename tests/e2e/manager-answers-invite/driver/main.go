@@ -11,6 +11,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net"
 	"os"
 	"sync/atomic"
 	"time"
@@ -38,6 +39,7 @@ type node struct {
 	Endpoint string `json:"endpoint"`
 	Token    string `json:"token"`
 	Identity string `json:"identity"`
+	HostIP   string `json:"host_ip"`
 }
 
 // asked is what the manager's handler saw of one invitation.
@@ -134,7 +136,7 @@ func runCase(ctx *astral.Context, n, inviter node, userCli *astrald.Client, allo
 
 	mgr := connect(n.Endpoint, string(tok.Token))
 	app := &manager{allow: allow}
-	stop, err := serve(ctx, mgr, app)
+	stop, err := serve(ctx, mgr, n.HostIP, app)
 	if err != nil {
 		// why a fact: whether the manager can bind and attach a handler on the
 		// unclaimed node is what the oracle judges, and the invitation is
@@ -217,11 +219,12 @@ func (m *manager) Ping(_ *astral.Context, q *routing.IncomingQuery) error {
 }
 
 // serve runs the manager's ops as the app cli authenticates, through its own
-// registrar. It returns once the node has attached the app's handler.
+// registrar, on a handler at hostIP. It returns once the node has attached the
+// app's handler.
 //
 // why a registration hook: the registrar reports ready as soon as it binds,
 // before it attaches a handler; a hook runs only after the attach.
-func serve(ctx *astral.Context, cli *astrald.Client, m *manager) (func(), error) {
+func serve(ctx *astral.Context, cli *astrald.Client, hostIP string, m *manager) (func(), error) {
 	ops := routing.NewOpRouter()
 	for name, fn := range map[string]any{opDecide: m.Decide, opPing: m.Ping} {
 		op, err := routing.NewOp(fn)
@@ -242,8 +245,12 @@ func serve(ctx *astral.Context, cli *astrald.Client, m *manager) (func(), error)
 		}
 		return nil
 	})
+	// why host_ip: the node dials the handler's registered endpoint for every
+	// query, and only an address at the node's host_ip reaches the test host
+	// from the node's machine
+	at := apps.WithHandlerAddress("tcp:" + net.JoinHostPort(hostIP, "0"))
 	served := make(chan error, 1)
-	go func() { served <- apps.ServeWith(sctx, ops, reg, onAttach) }()
+	go func() { served <- apps.ServeWith(sctx, ops, reg, at, onAttach) }()
 
 	select {
 	case <-attached:

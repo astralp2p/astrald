@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"net"
 	"os"
 	"sync"
 	"time"
@@ -29,6 +30,7 @@ type node struct {
 	Endpoint string `json:"endpoint"`
 	Token    string `json:"token"`
 	Identity string `json:"identity"`
+	HostIP   string `json:"host_ip"`
 }
 
 var serveApps = &auth.Permit{Action: astral.String8(auth.ServeAppsAction{}.ObjectType())}
@@ -120,8 +122,12 @@ func startEcho(ctx *astral.Context, a *app, service string) (*echoApp, error) {
 
 	sctx, cancel := ctx.WithCancel()
 	reg := apps.NewAppRegistrar(sctx, apps.WithClient(apphostcli.New(nil, a.client)))
+	// why host_ip: the node dials the handler's registered endpoint for every
+	// query, and only an address at the node's host_ip reaches the test host
+	// from the node's machine
+	at := apps.WithHandlerAddress("tcp:" + net.JoinHostPort(a.n.HostIP, "0"))
 	served := make(chan error, 1)
-	go func() { served <- apps.ServeWith(sctx, ops, reg, apps.WithRegistrationHook(advertise)) }()
+	go func() { served <- apps.ServeWith(sctx, ops, reg, at, apps.WithRegistrationHook(advertise)) }()
 	e.stop = sync.OnceFunc(func() {
 		cancel()
 		_ = p.Close()

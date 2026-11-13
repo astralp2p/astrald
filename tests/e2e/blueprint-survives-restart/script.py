@@ -62,7 +62,8 @@ node1 = doc["nodes"]["node1"]
 
 binary = apps.build_go(PKG)
 app = apps.spawn(NAME, [binary, "serve"], env={
-    "APP_NODE_ENDPOINT": node1["endpoint"], "APP_NODE_TOKEN": node1["token"]})
+    "APP_NODE_ENDPOINT": node1["endpoint"], "APP_NODE_TOKEN": node1["token"],
+    "APP_HOST_IP": node1["host_ip"]})
 state = app.wait_state(lambda s: s.get("syncs", 0) >= 1, timeout=60)
 
 seen = asyncio.run(observe(node1, doc["facts"]["user_token"]))

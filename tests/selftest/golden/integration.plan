@@ -1,6 +1,8 @@
 w0 local:  smoke → claim-window → token-less-setup → signer-app
            → admission-policies → app-call-local → app-routing-two-apps
-           → app-op-surface → mcp-origin → messaging-ops → manager-setup
+           → app-op-surface → app-discover-local → app-handler-unroute
+           → app-preexisting-provider-sync → manager-answers-invite
+           → mcp-origin → messaging-ops → manager-setup
            → bootstrap-user-software-key → fs-watch → fs-index-live
            → registration-lease → app-describe-provider → app-search-provider
            → objects-provider-revoke-lease → policy-delegate → adopt-node
@@ -9,12 +11,18 @@ w0 local:  smoke → claim-window → token-less-setup → signer-app
            → object-store → app-call-remote → app-ping-pong → app-reject-code
            → app-op-surface-remote → app-finder-read → app-searcher-swarm
            → objects-provider-registration-authz
-           → objects-provider-read-robustness → mcp-peer → messaging-two-node
-           → object-store-peer → read-remote-peer → read-swarm → discover-swarm
-           → expel-node
+           → objects-provider-read-robustness → app-query → app-discover-follow
+           → app-discover-swarm → app-two-providers → app-blueprint-sync
+           → services-app-call → services-provider-gone → mcp-peer
+           → messaging-two-node → object-store-peer → read-remote-peer
+           → read-swarm → discover-swarm → expel-node
            config admitter.apphost.policies = {"app_register": "reject_all"}
            config admitter.user.policies = {"swarm_join": "reject_all", "swarm_invite": "accept_all"}
            config invitee.user.policies = {"swarm_join": "accept_all", "swarm_invite": "reject_all"}
+           config mai-approve.apphost.gate = {}
+           config mai-approve.apphost.policies = {}
+           config mai-decline.apphost.gate = {}
+           config mai-decline.apphost.policies = {}
            config node1.apphost.gate = {"tokenless": ["apphost.register", "user.info", "user.derive_identity", "user.bootstrap", "user.join"], "states": {"fresh": ["*"], "unclaimed": ["*"]}}
            config node1.objects.external_registration_sweep_interval = "1s"
            config nomcp1.mcp.bind_mcp = ""
@@ -24,12 +32,16 @@ w2 local:  bootstrap-user-software-key* → adopt-node* → swarm-roster-sync
 w3 local:  bootstrap-user-software-key* → adopt-node* → swarm-roster-sync*
            → swarm-member-restart
 w4 local:  bootstrap-user-software-key* → adopt-node*
+           → app-node-restart-reconnect
+w5 local:  bootstrap-user-software-key* → adopt-node* → services-node-restart
+w6 local:  bootstrap-user-software-key* → adopt-node*
            → basic-strategy-stalled-endpoint-released
-w5 local:  bootstrap-user-software-key* → fs-watch-restart-restore
-w6 local:  bootstrap-user-software-key* → repo-removal-sticks
-w7 local:  bootstrap-user-software-key* → indexing-fs-watch-feed
-w8 local:  bootstrap-user-software-key* → hold-isolation
-w9 local:  bootstrap-user-software-key* → indexer-cursor
-w10 local: bootstrap-user-op
-w11 local: import-user-software-key
-w12 local: introduce-node-setup → introduce-node
+w7 local:  bootstrap-user-software-key* → fs-watch-restart-restore
+w8 local:  bootstrap-user-software-key* → repo-removal-sticks
+w9 local:  bootstrap-user-software-key* → indexing-fs-watch-feed
+w10 local: bootstrap-user-software-key* → hold-isolation
+w11 local: bootstrap-user-software-key* → blueprint-survives-restart
+w12 local: bootstrap-user-software-key* → indexer-cursor
+w13 local: bootstrap-user-op
+w14 local: import-user-software-key
+w15 local: introduce-node-setup → introduce-node

@@ -50,8 +50,9 @@ func main() {
 }
 
 // runProvider is the child: it serves the app whose endpoint, token and
-// identity SPG_ENDPOINT, SPG_TOKEN and SPG_IDENTITY name, prints "ready" once
-// the node holds its advertisement, and on SIGTERM stops cleanly.
+// identity SPG_ENDPOINT, SPG_TOKEN and SPG_IDENTITY name, on a handler bound at
+// SPG_HOST_IP, prints "ready" once the node holds its advertisement, and on
+// SIGTERM stops cleanly.
 func runProvider() int {
 	id, err := astral.ParseIdentity(os.Getenv("SPG_IDENTITY"))
 	if err != nil {
@@ -60,7 +61,8 @@ func runProvider() int {
 	}
 	token := os.Getenv("SPG_TOKEN")
 	ep := os.Getenv("SPG_ENDPOINT")
-	a := &app{id: id, client: connect(ep, token), n: node{Endpoint: ep, Token: token}, token: token}
+	n := node{Endpoint: ep, Token: token, HostIP: os.Getenv("SPG_HOST_IP")}
+	a := &app{id: id, client: connect(ep, token), n: n, token: token}
 	e, err := startEcho(astral.NewContext(nil), a, service)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "provider:", err)
@@ -88,7 +90,7 @@ func startChild(a *app) (*child, error) {
 		return nil, err
 	}
 	cmd := exec.Command(exe, "provider")
-	cmd.Env = append(os.Environ(), "SPG_ENDPOINT="+a.n.Endpoint, "SPG_TOKEN="+a.token, "SPG_IDENTITY="+a.id.String())
+	cmd.Env = append(os.Environ(), "SPG_ENDPOINT="+a.n.Endpoint, "SPG_HOST_IP="+a.n.HostIP, "SPG_TOKEN="+a.token, "SPG_IDENTITY="+a.id.String())
 	cmd.Stderr = os.Stderr
 	out, err := cmd.StdoutPipe()
 	if err != nil {

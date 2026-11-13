@@ -3,7 +3,8 @@
 //	driver serve    a long-lived app with types of its own and blueprint sync on
 //
 // serve reads the node from APP_NODE_ENDPOINT and APP_NODE_TOKEN (an admin
-// token, to register itself) and writes what it sees to the JSON file named by
+// token, to register itself), binds its handler at APP_HOST_IP, the node's
+// host_ip, and writes what it sees to the JSON file named by
 // ASTRAL_TESTS_APP_STATE (tests/lib/apps.py).
 package main
 
@@ -11,6 +12,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net"
 	"os"
 	"os/signal"
 	"sync"
@@ -95,8 +97,12 @@ func serve() error {
 		st.update(func() { st.Syncs++ })
 		return nil
 	})
+	// why APP_HOST_IP: the node dials the handler's registered endpoint for
+	// every query, and only an address at the node's host_ip reaches the test
+	// host from the node's machine
+	at := apps.WithHandlerAddress("tcp:" + net.JoinHostPort(os.Getenv("APP_HOST_IP"), "0"))
 	st.update(func() {})
-	err = apps.ServeWith(sctx, routing.NewOpRouter(), reg, apps.WithBlueprintSync(), counted)
+	err = apps.ServeWith(sctx, routing.NewOpRouter(), reg, at, apps.WithBlueprintSync(), counted)
 	if sctx.Err() != nil {
 		return nil
 	}

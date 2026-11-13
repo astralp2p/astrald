@@ -28,7 +28,8 @@ node1, node2 = doc["nodes"]["node1"], doc["nodes"]["node2"]
 
 
 def env(node):
-    return {"APP_NODE_ENDPOINT": node["endpoint"], "APP_NODE_TOKEN": node["token"]}
+    return {"APP_NODE_ENDPOINT": node["endpoint"], "APP_NODE_TOKEN": node["token"],
+            "APP_HOST_IP": node["host_ip"]}
 
 
 binary = apps.build_go(PKG)

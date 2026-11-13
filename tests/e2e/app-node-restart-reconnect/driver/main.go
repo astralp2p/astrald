@@ -3,7 +3,8 @@
 //	driver serve              a long-lived provider app (started by tests/lib/apps.py)
 //	driver call <app-id>      a fresh caller app calls the provider, retrying
 //
-// Both read the node they act on from APP_NODE_ENDPOINT and APP_NODE_TOKEN.
+// Both read the node they act on from APP_NODE_ENDPOINT and APP_NODE_TOKEN;
+// serve binds its handler at APP_HOST_IP, the node's host_ip.
 // serve writes what it sees to the JSON file named by ASTRAL_TESTS_APP_STATE;
 // call prints one JSON line.
 package main
@@ -12,6 +13,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net"
 	"os"
 	"os/signal"
 	"strconv"
@@ -134,8 +136,12 @@ func serve() error {
 		st.update(func() { st.Attaches++ })
 		return nil
 	})
+	// why APP_HOST_IP: the node dials the handler's registered endpoint for
+	// every query, and only an address at the node's host_ip reaches the test
+	// host from the node's machine
+	at := apps.WithHandlerAddress("tcp:" + net.JoinHostPort(os.Getenv("APP_HOST_IP"), "0"))
 	st.update(func() {})
-	err = apps.ServeWith(sctx, routing.NewApp(&Provider{st: st}), reg, onAttach)
+	err = apps.ServeWith(sctx, routing.NewApp(&Provider{st: st}), reg, at, onAttach)
 	if sctx.Err() != nil {
 		return nil
 	}
