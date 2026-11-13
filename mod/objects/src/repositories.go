@@ -7,12 +7,10 @@ import (
 	"github.com/astralp2p/astrald/mod/objects"
 )
 
+// AddRepository registers a leaf repository under name. The registry holds the tracking wrapper of repo.
 func (mod *Module) AddRepository(name string, repo objects.Repository) error {
-	_, ok := mod.repos.Set(name, repo)
-	if !ok {
-		return fmt.Errorf("repo %s already added", repo.Label())
-	}
-	return nil
+	_, err := mod.addLeaf(name, repo)
+	return err
 }
 
 func (mod *Module) GetRepository(name string) (repo objects.Repository) {

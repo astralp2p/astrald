@@ -33,10 +33,15 @@ type Config struct {
 	// removed. Discovery skips an expired registration whatever this is set to,
 	// so it governs memory and logging rather than correctness.
 	ExternalRegistrationSweepInterval time.Duration `yaml:"external_registration_sweep_interval,omitempty"`
+
+	// PurgeUntouched is the window of the daily purge of the group local. 0 turns the daily purge off.
+	PurgeUntouched time.Duration `yaml:"purge_untouched,omitempty"`
 }
 
 var defaultConfig = Config{
 	ExternalRegistrationLease:         time.Hour,
 	MaxExternalRegistrationLease:      6 * time.Hour,
 	ExternalRegistrationSweepInterval: time.Minute,
+	// note: 720 hours is the operator's decision of 2026-11-12, recorded in https://wiki.satforge.dev/doc/implement-the-vfs-module-and-the-changes-that-ship-with-it-oofFdNw03v
+	PurgeUntouched: 720 * time.Hour,
 }

@@ -458,6 +458,30 @@ func TestWatchCancelledLookup(t *testing.T) {
 	}
 }
 
+// TestWatchEmptyObject: the read-only repository answers the empty object with no indexed file.
+func TestWatchEmptyObject(t *testing.T) {
+	repo := testWatchRepository(t, t.TempDir())
+	ctx := astral.NewContext(nil)
+	empty := objects.EmptyObjectID()
+
+	r, err := repo.Read(ctx, empty, 0, 0)
+	if err != nil {
+		t.Fatalf("Read: %v", err)
+	}
+	if got := r.ID(); !got.IsEqual(empty) {
+		t.Errorf("ID() = %v, want %v", got, empty)
+	}
+	if data := readAndClose(t, r); len(data) != 0 {
+		t.Errorf("Read = %q, want no bytes", data)
+	}
+	if ok, err := repo.Contains(ctx, empty); !ok || err != nil {
+		t.Errorf("Contains = %v, %v, want true, nil", ok, err)
+	}
+	if err := repo.Delete(ctx, empty); err != nil {
+		t.Errorf("Delete = %v, want nil", err)
+	}
+}
+
 // TestWatchDeleteIsUnsupported: the read-only repository refuses Delete for a full and a partial ID
 // with errors.ErrUnsupported, which is not the hash lookup sentinel.
 func TestWatchDeleteIsUnsupported(t *testing.T) {

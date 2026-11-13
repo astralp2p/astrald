@@ -29,10 +29,9 @@ func (mod *Module) OpDescribe(ctx *astral.Context, q *routing.IncomingQuery, arg
 	ch := channel.New(q.AcceptRaw(), channel.WithOutputFormat(args.Out))
 	defer ch.Close()
 
-	if !mod.Auth.Authorize(ctx, &auth.SeeObjectsAction{
-		Action:   auth.NewAction(q.Caller()),
-		ObjectID: args.ID,
-	}) {
+	// why: VFS 6, section 6: objects.describe names no ObjectID in its action, so the vfs module's handler, which
+	// allows reading one file by ObjectID, does not reach it.
+	if !mod.Auth.Authorize(ctx, &auth.SeeObjectsAction{Action: auth.NewAction(q.Caller())}) {
 		return ch.Send(auth.ErrNotPermitted)
 	}
 

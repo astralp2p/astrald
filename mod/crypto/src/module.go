@@ -303,6 +303,9 @@ func (mod *Module) Verify(key *crypto.PublicKey, sig *crypto.Signature, obj cryp
 
 // indexRepo scans and follows the given repo and attempts to index all private keys it encounters
 func (mod *Module) indexRepo(ctx *astral.Context, repo objects.Repository) error {
+	// why: the follower reads every small object in the repository. Housekeeping reads leave last-touched times unchanged (VFS 6, §11 "objects: last touched").
+	ctx = objects.WithHousekeeping(ctx)
+
 	scan, err := repo.Scan(ctx, true)
 	if err != nil {
 		return err
