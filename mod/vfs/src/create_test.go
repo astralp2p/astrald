@@ -17,8 +17,8 @@ func TestCreateVFSDefaults(t *testing.T) {
 	if vol.byteLimit() != 1<<30 {
 		t.Errorf("byte limit = %d, want 1 GiB", vol.byteLimit())
 	}
-	if vol.entryLimit() != 1_000_000 {
-		t.Errorf("entry limit = %d, want 1,000,000", vol.entryLimit())
+	if vol.inodeLimit() != 1_000_000 {
+		t.Errorf("inode limit = %d, want 1,000,000", vol.inodeLimit())
 	}
 	if !vol.Identity.IsEqual(id) {
 		t.Errorf("identity = %v, want %v", vol.Identity, id)
@@ -32,17 +32,17 @@ func TestCreateVFSDefaults(t *testing.T) {
 
 func TestCreateVFSUsesConfiguredLimits(t *testing.T) {
 	mod := testModule(t)
-	mod.config = Config{ByteLimit: 7, EntryLimit: 3}
+	mod.config = Config{ByteLimit: 7, InodeLimit: 3}
 
 	vol := createVFS(t, mod, astral.GenerateIdentity())
-	if vol.byteLimit() != 7 || vol.entryLimit() != 3 {
-		t.Fatalf("limits = %d, %d, want 7, 3", vol.byteLimit(), vol.entryLimit())
+	if vol.byteLimit() != 7 || vol.inodeLimit() != 3 {
+		t.Fatalf("limits = %d, %d, want 7, 3", vol.byteLimit(), vol.inodeLimit())
 	}
 
 	mod.config = Config{} // 0 means no limit
 	vol = createVFS(t, mod, astral.GenerateIdentity())
-	if vol.byteLimit() != 0 || vol.entryLimit() != 0 {
-		t.Fatalf("limits = %d, %d, want 0, 0", vol.byteLimit(), vol.entryLimit())
+	if vol.byteLimit() != 0 || vol.inodeLimit() != 0 {
+		t.Fatalf("limits = %d, %d, want 0, 0", vol.byteLimit(), vol.inodeLimit())
 	}
 }
 
@@ -54,10 +54,10 @@ func TestCreateVFSIsIdempotent(t *testing.T) {
 	file := addFile(t, mod, first, first.RootID, "keep", "x")
 
 	// a changed default does not touch an existing VFS
-	mod.config = Config{ByteLimit: 1, EntryLimit: 1}
+	mod.config = Config{ByteLimit: 1, InodeLimit: 1}
 
 	second := createVFS(t, mod, id)
-	if second.ID != first.ID || second.RootID != first.RootID || second.ByteLimit != first.ByteLimit || second.EntryLimit != first.EntryLimit {
+	if second.ID != first.ID || second.RootID != first.RootID || second.ByteLimit != first.ByteLimit || second.InodeLimit != first.InodeLimit {
 		t.Fatalf("second create changed the volume: %+v, was %+v", second, first)
 	}
 	if _, err := mod.db.findEntry(file.ID); err != nil {

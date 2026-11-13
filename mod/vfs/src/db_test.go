@@ -233,3 +233,39 @@ func countOf(t *testing.T, mod *Module, id *astral.Identity) uint64 {
 
 	return n
 }
+
+// TestMigrateRenamesEntryLimit: a volumes table made before the inode names keeps its limits under inode_limit.
+func TestMigrateRenamesEntryLimit(t *testing.T) {
+	mod := testModule(t)
+
+	if err := mod.db.Exec("DROP TABLE vfs__volumes").Error; err != nil {
+		t.Fatalf("drop: %v", err)
+	}
+	err := mod.db.Exec("CREATE TABLE vfs__volumes (id integer PRIMARY KEY, identity text NOT NULL UNIQUE, " +
+		"root_id integer NOT NULL, byte_limit integer NOT NULL, entry_limit integer NOT NULL)").Error
+	if err != nil {
+		t.Fatalf("create old table: %v", err)
+	}
+	id := astral.GenerateIdentity()
+	if err := mod.db.Exec("INSERT INTO vfs__volumes VALUES (1, ?, 1, 5, 7)", id).Error; err != nil {
+		t.Fatalf("insert: %v", err)
+	}
+
+	if err := mod.db.migrate(); err != nil {
+		t.Fatalf("migrate: %v", err)
+	}
+	if err := mod.db.migrate(); err != nil {
+		t.Fatalf("second migrate: %v", err)
+	}
+
+	if mod.db.Migrator().HasColumn(&dbVolume{}, "entry_limit") {
+		t.Error("entry_limit still exists")
+	}
+	vol, err := mod.db.findVolume(id)
+	if err != nil {
+		t.Fatalf("find: %v", err)
+	}
+	if vol.inodeLimit() != 7 || vol.byteLimit() != 5 {
+		t.Errorf("limits %d and %d, want 5 and 7", vol.byteLimit(), vol.inodeLimit())
+	}
+}

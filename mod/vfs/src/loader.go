@@ -26,6 +26,8 @@ func (Loader) Load(node astral.Node, assets assets.Assets, log *log.Logger) (cor
 		return nil, err
 	}
 
+	warnRemovedKeys(assets, log)
+
 	if err := mod.router.AddStructPrefix(mod, "Op"); err != nil {
 		return nil, err
 	}

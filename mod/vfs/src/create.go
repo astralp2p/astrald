@@ -29,20 +29,20 @@ func (mod *Module) CreateVFS(id *astral.Identity) error {
 			return err
 		}
 
-		return tx.createVolume(id, mod.config.ByteLimit, mod.config.EntryLimit)
+		return tx.createVolume(id, mod.config.ByteLimit, mod.config.InodeLimit)
 	})
 }
 
 // setLimits writes the limits of a VFS, or returns vfsapi.ErrNoSuchVFS.
 //
 // note: the lock is taken before the existence check.
-func (mod *Module) setLimits(id *astral.Identity, byteLimit, entryLimit uint64) error {
+func (mod *Module) setLimits(id *astral.Identity, byteLimit, inodeLimit uint64) error {
 	return mod.runLockedTx(id, func(tx *DB) error {
 		vol, err := tx.findVolume(id)
 		if err != nil {
 			return err
 		}
 
-		return tx.setVolumeLimits(vol.ID, byteLimit, entryLimit)
+		return tx.setVolumeLimits(vol.ID, byteLimit, inodeLimit)
 	})
 }

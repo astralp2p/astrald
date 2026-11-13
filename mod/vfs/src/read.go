@@ -79,13 +79,13 @@ func answerRaw(q *routing.IncomingQuery, content io.Reader) error {
 // vfsInfo returns the facts about a VFS for vfs.statfs and vfs.volumes. A limit of 0 means no limit. The root is
 // not an entry.
 //
-// why: Root, Usage and Entries are read in one transaction under the VFS lock, so they describe one state.
+// why: Root, Usage and Inodes are read in one transaction under the VFS lock, so they describe one state.
 // note: a caller must not hold the lock of the VFS, nor be inside a transaction.
 func (mod *Module) vfsInfo(vol *dbVolume) (*vfsapi.Info, error) {
 	info := &vfsapi.Info{
 		VFS:        vol.Identity,
 		Quota:      astral.Uint64(vol.byteLimit()),
-		EntryLimit: astral.Uint64(vol.entryLimit()),
+		InodeLimit: astral.Uint64(vol.inodeLimit()),
 	}
 
 	err := mod.runLockedTx(vol.Identity, func(tx *DB) error {
@@ -106,7 +106,7 @@ func (mod *Module) vfsInfo(vol *dbVolume) (*vfsapi.Info, error) {
 			return err
 		}
 
-		info.Root, info.Usage, info.Entries = id, astral.Uint64(u.Bytes), astral.Uint64(u.Entries)
+		info.Root, info.Usage, info.Inodes = id, astral.Uint64(u.Bytes), astral.Uint64(u.Inodes)
 
 		return tx.setFolderIDs(fc.filled)
 	})

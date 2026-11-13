@@ -52,7 +52,7 @@ func TestOperationArguments(t *testing.T) {
 		"touch":     {"in", "out", "vfs", "path", "time"},
 		"volumes":   {"in", "out"},
 		"create":    {"in", "out", "vfs"},
-		"set_quota": {"in", "out", "vfs", "bytes", "entries"},
+		"set_quota": {"in", "out", "vfs", "bytes", "inodes"},
 	}
 
 	for _, spec := range router.Spec() {

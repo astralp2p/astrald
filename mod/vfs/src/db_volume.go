@@ -13,7 +13,7 @@ type dbVolume struct {
 	Identity   *astral.Identity `gorm:"uniqueIndex;not null"`
 	RootID     int64            `gorm:"not null"` // the root row in vfs__entries
 	ByteLimit  int64            `gorm:"not null"` // 0 means no limit
-	EntryLimit int64            `gorm:"not null"` // 0 means no limit
+	InodeLimit int64            `gorm:"not null"` // 0 means no limit
 }
 
 func (dbVolume) TableName() string { return vfsmod.DBPrefix + "volumes" }
@@ -21,8 +21,8 @@ func (dbVolume) TableName() string { return vfsmod.DBPrefix + "volumes" }
 // byteLimit returns the byte limit; 0 means no limit.
 func (v *dbVolume) byteLimit() uint64 { return uint64(v.ByteLimit) }
 
-// entryLimit returns the entry limit; 0 means no limit.
-func (v *dbVolume) entryLimit() uint64 { return uint64(v.EntryLimit) }
+// inodeLimit returns the inode limit; 0 means no limit.
+func (v *dbVolume) inodeLimit() uint64 { return uint64(v.InodeLimit) }
 
 // limitColumn converts a limit for the database.
 //

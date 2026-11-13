@@ -79,13 +79,13 @@ func TestLimitsRefuseGrowthOnly(t *testing.T) {
 		t.Errorf("a new file = %v, want %v", err, vfsapi.ErrQuotaExceeded)
 	}
 	err = mod.changeVFS(vol, func(c *change) error { return c.createFolder([]string{"e"}) })
-	if !errors.Is(err, vfsapi.ErrTooManyEntries) {
-		t.Errorf("a new folder = %v, want %v", err, vfsapi.ErrTooManyEntries)
+	if !errors.Is(err, vfsapi.ErrNoInodesLeft) {
+		t.Errorf("a new folder = %v, want %v", err, vfsapi.ErrNoInodesLeft)
 	}
 }
 
-// TestLimitsCheckTheQuotaBeforeTheEntries: a change that breaks both limits answers vfsapi.ErrQuotaExceeded.
-func TestLimitsCheckTheQuotaBeforeTheEntries(t *testing.T) {
+// TestLimitsCheckTheQuotaBeforeTheInodes: a change that breaks both limits answers vfsapi.ErrQuotaExceeded.
+func TestLimitsCheckTheQuotaBeforeTheInodes(t *testing.T) {
 	mod, vol, _ := changeTestModule(t)
 	addFile(t, mod, vol, vol.RootID, "a", "x")
 	changeTestLowerLimits(t, mod, vol, 1, 1)

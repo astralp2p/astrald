@@ -41,8 +41,8 @@ func (c *change) checkLimits(before vfsUsage) error {
 		return vfsapi.ErrQuotaExceeded
 	}
 
-	if limit := vol.entryLimit(); limit > 0 && after.Entries > limit && after.Entries > before.Entries {
-		return vfsapi.ErrTooManyEntries
+	if limit := vol.inodeLimit(); limit > 0 && after.Inodes > limit && after.Inodes > before.Inodes {
+		return vfsapi.ErrNoInodesLeft
 	}
 
 	return nil
