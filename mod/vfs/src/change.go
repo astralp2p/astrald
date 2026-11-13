@@ -51,8 +51,14 @@ func (db *DB) changeMeasure(vfsID *astral.Identity) (u changeUsage, err error) {
 // changeCheckLimits refuses a change that grew the usage of a VFS above one of its limits.
 //
 // why: a limit below the usage is accepted (vfs.set_quota); it refuses growth and leaves the rest alone.
-func (db *DB) changeCheckLimits(vol *dbVolume, before changeUsage) error {
-	after, err := db.changeMeasure(vol.Identity)
+// why: the limits are read inside the change, so a vfs.set_quota acked before the change holds for it.
+func (db *DB) changeCheckLimits(vfsID *astral.Identity, before changeUsage) error {
+	vol, err := db.findVolume(vfsID)
+	if err != nil {
+		return err
+	}
+
+	after, err := db.changeMeasure(vfsID)
 	if err != nil {
 		return err
 	}

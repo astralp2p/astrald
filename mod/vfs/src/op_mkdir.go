@@ -70,5 +70,5 @@ func (db *DB) mkdirCreate(vol *dbVolume, names []string) error {
 		return vfsapi.ErrAlreadyExists
 	}
 
-	return db.changeCheckLimits(vol, before)
+	return db.changeCheckLimits(vol.Identity, before)
 }

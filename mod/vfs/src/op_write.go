@@ -186,7 +186,7 @@ func (mod *Module) writeCommit(vol *dbVolume, names []string, id astral.ObjectID
 			return err
 		}
 
-		return tx.changeCheckLimits(vol, before)
+		return tx.changeCheckLimits(vol.Identity, before)
 	})
 
 	return row, err

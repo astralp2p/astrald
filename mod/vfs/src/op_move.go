@@ -83,7 +83,7 @@ func (db *DB) moveEntry(vol *dbVolume, from, to []string) (*vfsapi.Entry, error)
 		return nil, err
 	}
 
-	if err = db.changeCheckLimits(vol, before); err != nil {
+	if err = db.changeCheckLimits(vol.Identity, before); err != nil {
 		return nil, err
 	}
 
