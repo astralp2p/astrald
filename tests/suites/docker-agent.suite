@@ -1,0 +1,18 @@
+# docker-agent.suite — the operator-driven flows that run only in Docker
+# worlds.
+#
+# Run it with `--driver agent --docker`: an operator in node1's container
+# performs each flow from its prompt.md, and the same oracles that judge the
+# scripted runs judge these. agent.suite holds the flows a VM world also
+# runs; the flows here either name nodes the VM lab does not run (node3,
+# acn-b1, acn-b2) or each start a world of their own, which in VMs costs a
+# full world open per test.
+#
+# The order is a preference among siblings; the planner computes the run
+# order from each test's `after`.
+adopt-claimed-node
+swarm-roster-sync
+expel-propagation
+bootstrap-passphrase
+distribution-gate-setup
+import-user-software-key
