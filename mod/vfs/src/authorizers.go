@@ -24,17 +24,25 @@ func (mod *Module) addAuthorizers() {
 	)
 }
 
-// AuthorizeReadAction allows the VFS identity to read its own VFS, and a root caller to read any VFS.
-func (mod *Module) AuthorizeReadAction(_ *astral.Context, a *vfsapi.ReadAction) bool {
-	return mod.isOwnerOrRoot(a.Actor(), a.VFSID)
+// AuthorizeReadAction allows the VFS identity to read its own VFS, and a root caller to read any VFS. Any other
+// actor is allowed when the evaluator the VFS names answers yes.
+//
+// why here: the auth module asks a handler before it reads a stored contract, and at every level of a contract
+// chain, so the evaluator is asked in that order without the auth module knowing about a VFS (operator decision,
+// 2026-11-13).
+// note: the grant handler and this handler register concurrently, so a node-local grant may be checked before or
+// after the evaluator; either order gives the same outcome.
+func (mod *Module) AuthorizeReadAction(ctx *astral.Context, a *vfsapi.ReadAction) bool {
+	return mod.isOwnerOrRoot(a.Actor(), a.VFSID) || mod.askEvaluator(ctx, a, a.VFSID)
 }
 
-// AuthorizeWriteAction allows the VFS identity to change its own VFS, and a root caller to change any VFS.
-func (mod *Module) AuthorizeWriteAction(_ *astral.Context, a *vfsapi.WriteAction) bool {
-	return mod.isOwnerOrRoot(a.Actor(), a.VFSID)
+// AuthorizeWriteAction allows the VFS identity to change its own VFS, and a root caller to change any VFS. Any
+// other actor is allowed when the evaluator the VFS names answers yes.
+func (mod *Module) AuthorizeWriteAction(ctx *astral.Context, a *vfsapi.WriteAction) bool {
+	return mod.isOwnerOrRoot(a.Actor(), a.VFSID) || mod.askEvaluator(ctx, a, a.VFSID)
 }
 
-// AuthorizeManageAction allows a root caller to administer VFSes.
+// AuthorizeManageAction allows a root caller to administer VFSes. It never asks an evaluator.
 func (mod *Module) AuthorizeManageAction(_ *astral.Context, a *vfsapi.ManageAction) bool {
 	return mod.isRootCaller(a.Actor())
 }
@@ -51,7 +59,7 @@ func (mod *Module) isOwnerOrRoot(actor, vfsID *astral.Identity) bool {
 }
 
 // AuthorizeSeeObjects allows reading one object by ObjectID when a file with that ObjectID exists in a VFS the
-// actor may read: the actor is that VFS identity, or holds a mod.vfs.read_action permit for it.
+// actor may read: the actor is that VFS identity, or is allowed mod.vfs.read_action for it.
 //
 // The action must name one complete ObjectID. Size 0 is refused, except the ObjectID of empty content.
 // The Repo field is ignored. A database error refuses. A refusal is the same for an unknown ObjectID and for an
@@ -70,6 +78,14 @@ func (mod *Module) AuthorizeSeeObjects(ctx *astral.Context, a *apiauth.SeeObject
 		return false
 	}
 
+	// why: the owner of any VFS holding the object is allowed without a question, so the evaluator of another VFS
+	// holding the same content never delays it.
+	for _, vfsID := range vfsIDs {
+		if !a.Actor().IsZero() && a.Actor().IsEqual(vfsID) {
+			return true
+		}
+	}
+
 	for _, vfsID := range vfsIDs {
 		if mod.maySeeObjectsIn(ctx, a.Actor(), vfsID) {
 			return true
@@ -79,15 +95,13 @@ func (mod *Module) AuthorizeSeeObjects(ctx *astral.Context, a *apiauth.SeeObject
 	return false
 }
 
-// maySeeObjectsIn reports whether actor is the VFS identity or holds a mod.vfs.read_action permit for it.
+// maySeeObjectsIn reports whether actor is allowed mod.vfs.read_action for the VFS, by a permit or by the
+// evaluator of the VFS answering yes.
 //
 // note: VFS 6, section 6 "Reading by ObjectID" names no root caller here; the permit is asked of the auth module.
 func (mod *Module) maySeeObjectsIn(ctx *astral.Context, actor, vfsID *astral.Identity) bool {
 	if actor.IsZero() {
 		return false
-	}
-	if actor.IsEqual(vfsID) {
-		return true
 	}
 
 	return mod.Auth.Authorize(ctx, &vfsapi.ReadAction{Action: apiauth.NewAction(actor), VFSID: vfsID})

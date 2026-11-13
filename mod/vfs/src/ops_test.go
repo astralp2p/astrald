@@ -20,6 +20,7 @@ func TestEveryOperationIsRouted(t *testing.T) {
 		vfsapi.MethodLs, vfsapi.MethodStat, vfsapi.MethodStatfs, vfsapi.MethodRead,
 		vfsapi.MethodWrite, vfsapi.MethodMkdir, vfsapi.MethodMove, vfsapi.MethodRemove,
 		vfsapi.MethodTouch, vfsapi.MethodVolumes, vfsapi.MethodCreate, vfsapi.MethodSetQuota,
+		vfsapi.MethodSetEvaluator,
 	}
 
 	for _, method := range methods {
@@ -53,6 +54,8 @@ func TestOperationArguments(t *testing.T) {
 		"volumes":   {"in", "out"},
 		"create":    {"in", "out", "vfs"},
 		"set_quota": {"in", "out", "vfs", "bytes", "inodes"},
+
+		"set_evaluator": {"in", "out", "vfs", "endpoint"},
 	}
 
 	for _, spec := range router.Spec() {

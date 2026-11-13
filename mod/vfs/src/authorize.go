@@ -105,3 +105,18 @@ func (mod *Module) authorizeManageQuery(ctx *astral.Context, q *routing.Incoming
 
 	return mod.authorizeManage(ctx, q.Caller())
 }
+
+// authorizeEvaluatorQuery checks a query that names the evaluator of a VFS: it must not come from the network, and
+// its caller must be the VFS identity, a root caller, or hold a permit for the manage action. It returns
+// vfsapi.ErrNotPermitted.
+//
+// why: the field decides who reads and writes the VFS, so it is set by whoever may set a permit for it, and by
+// an administrator (operator decision, 2026-11-13).
+func (mod *Module) authorizeEvaluatorQuery(ctx *astral.Context, q *routing.IncomingQuery, vfsID *astral.Identity) error {
+	caller := q.Caller()
+	if q.Origin() != astral.OriginNetwork && !caller.IsZero() && caller.IsEqual(vfsID) {
+		return nil
+	}
+
+	return mod.authorizeManageQuery(ctx, q)
+}

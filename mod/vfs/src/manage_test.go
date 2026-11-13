@@ -39,6 +39,11 @@ func (a *manageAuth) Authorize(_ *astral.Context, action apiauth.ActionObject) b
 	return false
 }
 
+// NewAuthorizeAsk answers an asker that refuses every question.
+func (a *manageAuth) NewAuthorizeAsk(string, time.Duration) (apiauth.AuthorizeAsk, error) {
+	return &fakeEvaluator{}, nil
+}
+
 func managePermit(constraints ...astral.Object) *apiauth.Permit {
 	p := &apiauth.Permit{Action: astral.String8((&vfsapi.ManageAction{}).ObjectType())}
 	if len(constraints) > 0 {

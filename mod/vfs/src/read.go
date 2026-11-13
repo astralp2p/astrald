@@ -86,6 +86,7 @@ func (mod *Module) vfsInfo(vol *dbVolume) (*vfsapi.Info, error) {
 		VFS:        vol.Identity,
 		Quota:      astral.Uint64(vol.byteLimit()),
 		InodeLimit: astral.Uint64(vol.inodeLimit()),
+		Evaluator:  astral.String8(vol.Evaluator),
 	}
 
 	err := mod.runLockedTx(vol.Identity, func(tx *DB) error {

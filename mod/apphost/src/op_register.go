@@ -8,6 +8,7 @@ import (
 	"github.com/astralp2p/astral-go/api/auth"
 	"github.com/astralp2p/astral-go/api/crypto"
 	"github.com/astralp2p/astral-go/api/secp256k1"
+	vfsapi "github.com/astralp2p/astral-go/api/vfs"
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astral-go/astral/channel"
 	"github.com/astralp2p/astral-go/lib/routing"
@@ -33,7 +34,9 @@ type opRegisterArgs struct {
 // ContractPermits ask the node to record a signed node→app contract: portable
 // evidence another node verifies, durable until it expires. Both lists carry
 // their constraints. Asking is not receiving: the node's policy decides which
-// permits are written, and where.
+// permits are written, and where. Its Vfs and Evaluator, both on when omitted,
+// ask for a VFS of the app and for the app to be the evaluator of that VFS;
+// the policy does not see them.
 //
 // why: no named action guards this op; the app register policy decides every
 // registration, and the bundled policy accepts every one until a delegate is
@@ -55,7 +58,7 @@ func (mod *Module) OpRegister(ctx *astral.Context, query *routing.IncomingQuery,
 		return ch.Send(astral.NewErrOriginNotAllowed(query.Origin()))
 	}
 
-	req, err := receiveAppRegisterRequest(ch, query.QueryString(), origin)
+	req, err := receiveRegisterRequest(ch, query.QueryString())
 	if err != nil {
 		return ch.Send(astral.Err(err))
 	}
@@ -65,7 +68,7 @@ func (mod *Module) OpRegister(ctx *astral.Context, query *routing.IncomingQuery,
 	policyCtx, stop := routing.UntilDisconnect(ctx, conn)
 	defer stop()
 
-	dec, err := mod.GetRegisterAppPolicy()(policyCtx, req)
+	dec, err := mod.GetRegisterAppPolicy()(policyCtx, appRegisterRequest(req, origin))
 	switch {
 	case err != nil:
 		mod.log.Logv(1, "registration refused: %v", err)
@@ -84,16 +87,7 @@ func (mod *Module) OpRegister(ctx *astral.Context, query *routing.IncomingQuery,
 		return ch.Send(astral.Err(err))
 	}
 
-	// why here: sys.register_manager shares provisionApp through ProvisionApp,
-	// and the manager app gets no VFS (decided 2026-11-12).
-	// why a direct call: the VFS belongs to the identity just made, and the
-	// call is not an authorized query (VFS 6, section 11).
-	// why no rollback: a failure after this step leaves an empty VFS, and a
-	// repeated registration is harmless because creating a VFS that exists
-	// succeeds.
-	// note: removing an app must remove its VFS; astrald has no way to remove
-	// an app yet.
-	if err = mod.VFS.CreateVFS(token.Identity); err != nil {
+	if err = mod.provisionAppVFS(req, token.Identity); err != nil {
 		return ch.Send(astral.Err(err))
 	}
 	return ch.Send(token)
@@ -250,11 +244,10 @@ func (mod *Module) storePermitContract(ctx *astral.Context, guestID *astral.Iden
 	return err
 }
 
-// receiveAppRegisterRequest refuses a removed argument in queryString, reads
-// one mod.apphost.register_request from ch, and returns the question the
-// register policy decides, with the origin the node read. A request with an
-// invalid permit is refused before any policy is asked.
-func receiveAppRegisterRequest(ch *channel.Channel, queryString, origin string) (*apphostapi.AppRegisterRequest, error) {
+// receiveRegisterRequest refuses a removed argument in queryString and reads
+// one mod.apphost.register_request from ch. A request with an invalid permit
+// is refused before any policy is asked.
+func receiveRegisterRequest(ch *channel.Channel, queryString string) (*apphostapi.RegisterRequest, error) {
 	if err := refuseRemovedArgs(queryString, "name", "grant_permits", "contract_permits"); err != nil {
 		return nil, err
 	}
@@ -270,10 +263,48 @@ func receiveAppRegisterRequest(ch *channel.Channel, queryString, origin string) 
 		return nil, err
 	}
 
+	return req, nil
+}
+
+// appRegisterRequest is the question the register policy decides for req,
+// with the origin the node read.
+func appRegisterRequest(req *apphostapi.RegisterRequest, origin string) *apphostapi.AppRegisterRequest {
 	return &apphostapi.AppRegisterRequest{
 		Origin:          astral.String8(origin),
 		Name:            req.Name,
 		GrantPermits:    registerGrantRequest(req.GrantPermits),
 		ContractPermits: req.ContractPermits,
-	}, nil
+	}
+}
+
+// provisionAppVFS creates the VFS of a new app when req asks for one, and
+// names the app the evaluator of it when req asks for that too.
+//
+// why here: sys.register_manager shares provisionApp through ProvisionApp,
+// and the manager app gets no VFS (decided 2026-11-12).
+// why a direct call: the VFS belongs to the identity just made, and the
+// call is not an authorized query (VFS 6, section 11).
+// why no rollback: a failure after this step leaves an empty VFS, and a
+// repeated registration is harmless because creating a VFS that exists
+// succeeds.
+// note: removing an app must remove its VFS; astrald has no way to remove
+// an app yet.
+func (mod *Module) provisionAppVFS(req *apphostapi.RegisterRequest, app *astral.Identity) error {
+	if !req.RequestsVFS() {
+		return nil
+	}
+	if err := mod.VFS.CreateVFS(app); err != nil {
+		return err
+	}
+	if !req.RequestsEvaluator() {
+		return nil
+	}
+
+	return mod.VFS.SetEvaluator(app, appEvaluatorEndpoint(app))
+}
+
+// appEvaluatorEndpoint is the endpoint at which an app evaluates access to
+// its own VFS: astral://<app identity>:vfs.authorize.
+func appEvaluatorEndpoint(app *astral.Identity) string {
+	return "astral://" + app.String() + ":" + vfsapi.MethodAuthorize
 }

@@ -350,3 +350,36 @@ func TestServiceHandler_RejectFromAnotherConnectionIsIgnored(t *testing.T) {
 
 // Drain ensures the test file's imports are used.
 var _ = sync.Mutex{}
+
+// A service app that registered and then stopped reading its registration connection
+// does not hold RouteQuery past ctx: the handler is reported gone.
+func TestServiceHandler_SilentReaderEndsWithTheContext(t *testing.T) {
+	srv, cli := net.Pipe() // unbuffered: a send blocks until the app reads
+	defer srv.Close()
+	defer cli.Close()
+
+	app := astral.GenerateIdentity()
+	h := &ServiceHandler{Identity: app, mod: &Module{}, ch: channel.New(srv, channel.WithLockedWrites())}
+
+	ctx, cancel := astral.NewContext(nil).WithTimeout(200 * time.Millisecond)
+	defer cancel()
+
+	done := make(chan error, 1)
+	start := time.Now()
+	go func() {
+		_, err := h.RouteQuery(ctx, ipcTestQuery(app), &nopWriteCloser{})
+		done <- err
+	}()
+
+	select {
+	case err := <-done:
+		if !errors.Is(err, errServiceHandlerGone) {
+			t.Fatalf("RouteQuery = %v, want errServiceHandlerGone", err)
+		}
+		if d := time.Since(start); d > 2*time.Second {
+			t.Fatalf("RouteQuery returned after %v, want about 200ms", d)
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatal("RouteQuery still blocked after its context ended")
+	}
+}

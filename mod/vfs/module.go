@@ -20,4 +20,13 @@ type Module interface {
 	//
 	// The call is not an authorized query: it is for modules inside the node, such as apphost.
 	CreateVFS(id *astral.Identity) error
+
+	// SetEvaluator names the evaluator of the VFS of an identity: the endpoint,
+	// astral://<identity-or-alias>:vfs.authorize, that the node asks about a reader or a writer its own rules refuse.
+	// The endpoint takes no caller part and no arguments, and is at most 255 bytes. An empty endpoint clears it. A VFS
+	// that does not exist is refused with vfsapi.ErrNoSuchVFS, and then any other endpoint with
+	// vfsapi.ErrInvalidEndpoint.
+	//
+	// The call is not an authorized query: it is for modules inside the node, such as apphost.
+	SetEvaluator(id *astral.Identity, endpoint string) error
 }
