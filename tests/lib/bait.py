@@ -5,12 +5,13 @@ hears nothing back. The bait reads and discards what arrives, never writes,
 and records each connection, so a test sees whether, and when, the node let
 go of it.
 
-    async with Bait() as bait:
-        endpoint = f"tcp:127.0.0.1:{bait.port}"
+    async with Bait(node["host_ip"]) as bait:
+        endpoint = f"tcp:{node['host_ip']}:{bait.port}"
         ...
         table = bait.table()
 
-A bait serves on the host, so its test is local_only.
+A bait serves on the test host, at the dialing node's host_ip, so its test
+declares host_listener.
 """
 import asyncio
 import time
