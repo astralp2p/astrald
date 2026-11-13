@@ -337,8 +337,14 @@ class TestShippedPlans(Invariants, unittest.TestCase):
                 self.assertEqual([w.kind for w in worlds], ["local", "vm"])
         with self.assertRaisesRegex(PlanError, "no host_ip to dial it at"):
             plan(self.tests, ["mcp-peer"], vm=True)
+        with self.assertRaisesRegex(PlanError, "no host_ip to dial it at"):
+            plan(self.tests, ["mcp-peer"], driver="agent")
+        # why a synthetic test: no shipped test is local_only once every
+        # host dependency goes through host_ip or nodefs
         with self.assertRaisesRegex(PlanError, "local only"):
-            plan(self.tests, ["fs-watch"], driver="agent")
+            plan({**self.tests,
+                  "host": fake(local_only="reads a host path", prompt=True)},
+                 ["host"], driver="agent")
 
     def test_agent_drives_selected_tests_and_script_replays(self):
         w, = plan(self.tests, ["object-store"], driver="agent")

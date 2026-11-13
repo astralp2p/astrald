@@ -1,5 +1,4 @@
 nodes   = ["node1"]
 timeout = 180
 after   = "bootstrap-user-software-key"
-local_only = "has node1 watch a directory on the host"
 facts   = ["repo", "watch_dir", "file_path", "payload"]

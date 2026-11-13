@@ -19,12 +19,13 @@ this test closes `fs.new_watch`.
 The mechanism works today, so this is a regression guard rather than a bug
 hunt.
 
-## The directory is inside the run's own tree
+## The directory is under node1's own root
 
 A test that registers a watch is telling a daemon to index a path, and the only
 path it has any business indexing is one this run made. The watched directory
-is created under the run's session directory, and stays there afterwards the
-way `astrald.log` does — nothing prunes a results tree.
+is created under node1's root through `lib/nodefs.py`, so it lies on node1's
+machine in every world, and stays there afterwards the way `astrald.log` does:
+in the results tree in a local world, in node1's container in a Docker world.
 
 The registration itself is permanent for the life of the session: there is no
 `objects.remove_repository` call here, so the repository stays in the

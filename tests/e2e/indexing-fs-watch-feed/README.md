@@ -8,10 +8,11 @@ is gone.
 
 - **roster** node1 · **after** `bootstrap-user-software-key` · **restart**
   node1 · **destroys** (it restarts node1 and leaves a persisted watch and an
-  enabled index) · `local_only` (it writes files in a host directory and
-  restarts node1)
+  enabled index)
 - **driver** `script.py`, as the User and one app I with an unconstrained
-  `mod.auth.serve_objects_action` grant:
+  `mod.auth.serve_objects_action` grant, every file of W written through
+  `lib/nodefs.py` under node1's root, so W lies on node1's machine in every
+  world:
   1. writes `seed.txt` (c1) into W, attaches W with `fs.new_watch`
      (persisted), and waits until the repository contains c1;
   2. I registers an indexer, the User enables the repository with
@@ -38,7 +39,8 @@ is gone.
   - `objects.repositories` lists the repository, and a second subscription
     is silent.
 
-All ids are hashed in the oracle from the payloads and the files on disk.
+All ids are hashed in the oracle from the payloads and the files on disk,
+whose bytes the oracle reads through `lib/nodefs.py`.
 
 ## Mechanism
 

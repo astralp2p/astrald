@@ -385,23 +385,28 @@ relative to its root; any other root (a VM world's, an attached daemon's
 | `path(node, rel="")` | the absolute path as the node's machine sees it, e.g. for `fs.new_watch`; resolved on a host |
 | `read_bytes(node, rel)` / `read_text(node, rel)` | the file's bytes / its text, a non-UTF-8 byte as U+FFFD |
 | `write_bytes(node, rel, data)` | writes the file, creating its parent directories |
+| `overwrite(node, rel, data)` | writes over the start of an existing file in place, never truncating it |
 | `mkdir(node, rel)` | creates the directory and its parents; one already there stays |
 | `remove(node, rel)` | removes a file, a symlink (never followed) or a directory tree |
 | `symlink(node, rel, target)` | makes `rel` a symlink to `target`, also relative to the root |
 | `rename(node, src, dst)` | moves `src` to `dst`, replacing a file there |
 | `listdir(node, rel="")` | `{name: kind}`, kind `file`, `dir`, `link` or `other` |
 | `set_mtime(node, rel, mtime)` | sets the modification (and access) time, in seconds since the epoch |
+| `platform(node)` | the OS of the node's machine as `sys.platform` spells it: `linux` in a Docker world, the host's in a local one |
 | `log(node)` | the node's `astrald.log` as text |
 
-## Host directories
+## Watched directories
 
-`lib/fsfixture.py` holds what the fs tests share. astral-py binds no `fs`
+`lib/fsfixture.py` holds what the fs tests share. A directory a test hands
+node1 (`fs.new_watch`, `fs.new_repo`) lies under node1's root, made with
+`lib/nodefs.py` and named by `nodefs.path`, so it is on node1's machine in
+every world. astral-py binds no `fs`
 module, so the ops are raw queries.
 
 | call | does |
 |------|------|
 | `new_watch(c, path, name, temporary=False)` / `new_repo(...)` | `fs.new_watch` / `fs.new_repo`; None on the ack, else the node's error text |
-| `disk_ids(root)` | `{path: id}` of every regular file under `root`, hashed here; symlinks skipped |
+| `disk_ids(node, rel)` | `{path: id}` of every regular file under directory `rel` of the node's root, read through `lib/nodefs.py` and hashed here; symlinks skipped |
 | `wait_scan(c, repo, want, deadline)` | polls `objects.scan` until it lists exactly `want`; `(ok, last listing)` |
 | `wait_contains(c, repo, ids, deadline)` | polls `objects.contains`; the ids still missing |
 | `file_locations(c, oid)` | `[(Path, NodeID)]` of the `mod.fs.file_location` descriptors, after `objects.learn` |

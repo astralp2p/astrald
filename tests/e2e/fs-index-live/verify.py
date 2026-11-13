@@ -2,10 +2,11 @@
 """Oracle: node1's index of the watched directory converges to the regular
 files on disk, without a restart.
 
-The expected set is the oracle's own: it walks the watched directory, keeps
-regular files (no symlinks) and hashes their bytes. It first checks that set
-against the ids of the facts' `present` cases, so the test cannot pass on an
-empty or wrong expectation. Then:
+The expected set is the oracle's own: it walks the watched directory on
+node1's machine through lib/nodefs.py, keeps regular files (no symlinks) and
+hashes the bytes it reads there. It first checks that set against the ids of
+the facts' `present` cases, so the test cannot pass on an empty or wrong
+expectation. Then:
 
 1. `objects.scan` of the repository lists exactly that set within 20 s (the
    write debounce is 3 s). On a timeout every case is reported with its
@@ -20,15 +21,14 @@ empty or wrong expectation. Then:
 5. Three bad paths (relative, missing, a regular file) are refused by
    `fs.new_watch`, from the driver and again here, and none is registered.
 
-Case a2 (one-go create and write) exists only on Linux; the driver skips it
-elsewhere, and the platform is printed.
+Case a2 (one-go create and write) exists only where node1 runs on Linux; the
+driver skips it elsewhere, and node1's platform is printed.
 """
 import asyncio
-import os
 
 import astral
 
-from lib import fsfixture
+from lib import fsfixture, nodefs
 from lib.sessionio import load
 
 DEADLINE = 20.0
@@ -47,9 +47,9 @@ def oid(case: dict) -> str:
     return fsfixture.object_id(case["payload"].encode())
 
 
-def expected_set(w: str, cases: dict) -> set:
+def expected_set(n1: dict, w: str, cases: dict) -> set:
     """The disk walk, checked against the facts."""
-    on_disk = fsfixture.disk_ids(w)
+    on_disk = fsfixture.disk_ids(n1, w)
     want = {oid(c) for c in present(cases).values()}
     assert set(on_disk.values()) == want, (
         f"the regular files under {w} hash to {sorted(i[:16] for i in on_disk.values())}, "
@@ -60,7 +60,9 @@ def expected_set(w: str, cases: dict) -> set:
             f"case {name}: {c['path']} does not hold its payload")
     for name, c in absent(cases).items():
         if c["kind"] == "symlink":
-            assert os.path.islink(c["path"]), f"case {name}: {c['path']} is no symlink"
+            parent, _, base = c["rel"].rpartition("/")
+            assert nodefs.listdir(n1, parent).get(base) == "link", (
+                f"case {name}: {c['path']} is no symlink")
         else:
             assert on_disk.get(c["path"]) != oid(c), (
                 f"case {name}: {c['path']} still holds its old bytes")
@@ -122,13 +124,14 @@ async def check_bad_paths(c, bad: dict) -> None:
 async def main():
     doc = load()
     facts = doc["facts"]
-    node1 = doc["nodes"]["node1"]["identity"]
+    n1 = doc["nodes"]["node1"]
+    node1 = n1["identity"]
     repo, w, cases = facts["repo"], facts["watch_dir"], facts["cases"]
     print(f"oracle: platform {facts['platform']}; cases {sorted(cases)}")
 
-    want = expected_set(w, cases)
+    want = expected_set(n1, facts["watch_rel"], cases)
 
-    async with await astral.connect(doc["nodes"]["node1"]["endpoint"],
+    async with await astral.connect(n1["endpoint"],
                                     token=facts["user_token"]) as c:
         loop = asyncio.get_running_loop()
         started = loop.time()

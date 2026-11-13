@@ -30,6 +30,7 @@ import astral
 from astral import querystring
 from astral.errors import RemoteError
 
+from lib import nodefs
 from lib.sessionio import as_bytes, load, write_facts
 
 PREFIX = "repo-removal-sticks"
@@ -47,12 +48,13 @@ def local_children(infos) -> set:
     raise AssertionError("objects.repositories lists no `local` group")
 
 
-async def attach(c, role: str, root: Path, stamp: str) -> dict:
+async def attach(c, n1: dict, role: str, stamp: str) -> dict:
     name = f"{PREFIX}-{role}"
-    directory = root / role
-    directory.mkdir(parents=True, exist_ok=True)
+    rel = f"{PREFIX}/{role}"
+    nodefs.mkdir(n1, rel)
+    directory = nodefs.path(n1, rel)
 
-    params = {"path": str(directory), "name": name}
+    params = {"path": directory, "name": name}
     if TEMPORARY[role]:
         params["temporary"] = True
     ack = await c.call_one(querystring.build("fs.new_repo", params))
@@ -64,8 +66,9 @@ async def attach(c, role: str, root: Path, stamp: str) -> dict:
         await w.write(payload)
         object_id = str(await w.commit())
 
-    file = directory / object_id
-    assert file.read_bytes() == payload, (
+    file_rel = f"{rel}/{object_id}"
+    file = nodefs.path(n1, file_rel)
+    assert nodefs.read_bytes(n1, file_rel) == payload, (
         f"{name}: {file} does not hold the {len(payload)} B just stored")
 
     got = as_bytes(await c.objects.load(object_id, repo=name))
@@ -74,8 +77,9 @@ async def attach(c, role: str, root: Path, stamp: str) -> dict:
     return {
         "name": name,
         "temporary": TEMPORARY[role],
-        "dir": str(directory),
-        "file": str(file),
+        "dir": directory,
+        "file": file,
+        "file_rel": file_rel,
         "object_id": object_id,
         "payload": payload.decode(),
     }
@@ -87,11 +91,14 @@ async def main():
 
     session_dir = Path(os.environ["ASTRAL_TESTS_SESSION"]).resolve().parent
     stamp = session_dir.parent.name  # results/<stamp>/<test>/session.json
-    root = session_dir / PREFIX
+    # why under node1's root: the repositories' directories must live on
+    # node1's machine, which in a Docker world sees no host directory
+    root = nodefs.path(n1, PREFIX)
 
     async with await astral.connect(n1["endpoint"],
                                     token=doc["facts"]["user_token"]) as c:
-        repos = {role: await attach(c, role, root, stamp) for role in TEMPORARY}
+        repos = {role: await attach(c, n1, role, stamp)
+                 for role in TEMPORARY}
 
         infos = await c.objects.repositories()
         for role, r in repos.items():
