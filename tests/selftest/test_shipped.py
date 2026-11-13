@@ -101,6 +101,13 @@ class TestShipped(unittest.TestCase):
         main = set(load(TESTS / "suites" / "main.suite"))
         self.assertEqual(main, {n for n, t in self.all.items() if not t.ops})
 
+    def test_integration_suite_is_every_test_without_ops_or_local_only(self):
+        # why: Docker is the default world for a test without VM ops, so a
+        # new test that is not local_only belongs in the Docker run too
+        integration = set(load(TESTS / "suites" / "integration.suite"))
+        self.assertEqual(integration, {n for n, t in self.all.items()
+                                       if not t.ops and not t.local_only})
+
     def test_no_suite_lists_both_tor_link_and_nat_punch(self):
         # why: tor-link's leave-lan downs node2's LAN interface, and nat-punch's
         # enter-nat then finds none to move behind NAT — the two cannot share
