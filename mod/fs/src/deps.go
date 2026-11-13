@@ -60,7 +60,10 @@ func (mod *Module) addConfigRepos() {
 			continue
 		}
 
-		mod.Objects.AddRepository(name, repo)
+		if repoErr = mod.addRepository(name, repo); repoErr != nil {
+			mod.log.Error("error adding repo %v: %v", name, repoErr)
+			continue
+		}
 		mod.Objects.AddGroup(objects.RepoLocal, name)
 
 		mod.log.Logv(1, "added repo %v (%v) at %v", name, cfg.Label, cfg.Path)
@@ -99,7 +102,10 @@ func (mod *Module) addTreeRepos(ctx *astral.Context) {
 			continue
 		}
 
-		mod.Objects.AddRepository(name, repo)
+		if err = mod.addRepository(name, repo); err != nil {
+			mod.log.Error("error adding persisted repo %v: %v", name, err)
+			continue
+		}
 		mod.Objects.AddGroup(objects.RepoLocal, name)
 
 		mod.log.Logv(1, "added persisted repo %v (%v) at %v", name, cfg.Label, cfg.Path)

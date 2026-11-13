@@ -2,6 +2,7 @@ package objects
 
 import (
 	"errors"
+	"fmt"
 
 	"github.com/astralp2p/astral-go/api/objects"
 	"github.com/astralp2p/astral-go/astral"
@@ -33,7 +34,9 @@ func (Loader) Load(node astral.Node, assets assets.Assets, log *log.Logger) (cor
 	mod.db = &DB{DB: assets.Database()}
 	mod.objectsReadsJournal = newObjectsReadsJournal(mod.db.UpdateReadAt, log)
 
-	mod.setupDefaultRepos()
+	if err := mod.setupDefaultRepos(); err != nil {
+		return nil, err
+	}
 
 	err := mod.db.Migrate()
 	if err != nil {
@@ -43,7 +46,9 @@ func (Loader) Load(node astral.Node, assets assets.Assets, log *log.Logger) (cor
 	return mod, nil
 }
 
-func (mod *Module) setupDefaultRepos() {
+// setupDefaultRepos registers the default groups and the default leaves mem0 and system.
+// It fails when a default leaf cannot be registered.
+func (mod *Module) setupDefaultRepos() error {
 	// device group
 	device := NewRepoGroup(mod, "This device", false)
 	mod.repos.Set(objects.RepoDevice, device)
@@ -76,13 +81,20 @@ func (mod *Module) setupDefaultRepos() {
 
 	mod.repos.Set(objects.RepoMain, main)
 
-	mem0 := mem.New("Default memory", mod.config.DefaultMemSize)
-	mod.repos.Set("mem0", mem0)
+	if _, err := mod.addLeaf("mem0", mem.New("Default memory", mod.config.DefaultMemSize)); err != nil {
+		return fmt.Errorf("add default repository mem0: %w", err)
+	}
 	memory.Add("mem0")
 
-	mod.system = mem.New("System memory", mod.config.DefaultMemSize)
-	mod.repos.Set(objects.RepoSystem, mod.system)
+	// why: System() returns this field, so it holds the wrapper and writes through it are tracked.
+	system, err := mod.addLeaf(objects.RepoSystem, mem.New("System memory", mod.config.DefaultMemSize))
+	if err != nil {
+		return fmt.Errorf("add default repository %v: %w", objects.RepoSystem, err)
+	}
+	mod.system = system
 	memory.Add(objects.RepoSystem)
+
+	return nil
 }
 
 func init() {

@@ -66,7 +66,10 @@ func (mod *Module) addDefaultRepo() {
 
 	repo := NewRepository(mod, "Default", dataPath)
 
-	mod.Objects.AddRepository(DefaultRepoName, repo)
+	if err := mod.addRepository(DefaultRepoName, repo); err != nil {
+		mod.log.Error("error adding default repo: %v", err)
+		return
+	}
 	mod.Objects.AddGroup(objects.RepoLocal, DefaultRepoName)
 }
 

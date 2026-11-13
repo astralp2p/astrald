@@ -2,6 +2,7 @@ package objects
 
 import (
 	"errors"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -87,5 +88,46 @@ func TestObjectsReadsJournal_RemergeKeepsNewest(t *testing.T) {
 	j.remerge(map[astral.ObjectID]astral.Time{id: older})
 	if got, ok := j.pending[id]; !ok || !got.Time().Equal(older.Time()) {
 		t.Fatalf("remerge did not restore missing entry: ok=%v got=%v", ok, got.Time())
+	}
+}
+
+// TestObjectsReadsJournal_FlushWaitsForFlushInFlight: a flush that finds the journal drained by a flush in flight
+// returns only after that flush has written its batch.
+func TestObjectsReadsJournal_FlushWaitsForFlushInFlight(t *testing.T) {
+	entered := make(chan struct{})
+	release := make(chan struct{})
+	var written atomic.Bool
+	j := newObjectsReadsJournal(func(map[astral.ObjectID]astral.Time) error {
+		close(entered)
+		<-release
+		written.Store(true)
+		return nil
+	}, nil)
+
+	id := astral.ObjectID{Size: 1}
+	j.Mark(&id)
+
+	first := make(chan error, 1)
+	go func() { first <- j.Flush() }()
+	<-entered
+
+	second := make(chan error, 1)
+	go func() { second <- j.Flush() }()
+
+	select {
+	case <-second:
+		t.Fatal("a flush returned while the batch of a flush in flight was not written")
+	case <-time.After(100 * time.Millisecond):
+	}
+
+	close(release)
+	if err := <-first; err != nil {
+		t.Fatalf("first Flush: %v", err)
+	}
+	if err := <-second; err != nil {
+		t.Fatalf("second Flush: %v", err)
+	}
+	if !written.Load() {
+		t.Fatal("the batch was not written")
 	}
 }

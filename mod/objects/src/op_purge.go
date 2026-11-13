@@ -1,6 +1,8 @@
 package objects
 
 import (
+	"time"
+
 	"github.com/astralp2p/astral-go/api/auth"
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astral-go/astral/channel"
@@ -8,13 +10,17 @@ import (
 )
 
 type opPurgeArgs struct {
-	Repo string `query:"required"`
-	Out  string
-	Zone *astral.Zone
+	Repo      string `query:"required"`
+	Untouched *astral.Duration
+	Dry       bool
+	Out       string
+	Zone      *astral.Zone
 }
 
-// OpPurge deletes unheld objects from a repository, streaming each purged ObjectID
-// then a final error or EOS. Defaults to ZoneAll when no zone is given.
+// OpPurge deletes the objects of a repository that nothing holds and that were not touched within Untouched,
+// streaming each purged ObjectID then a final error or EOS. A group is purged once per leaf.
+// Untouched below one hour, or none, means one hour. Dry answers the same ObjectIDs and deletes nothing.
+// Defaults to ZoneAll when no zone is given.
 func (mod *Module) OpPurge(ctx *astral.Context, q *routing.IncomingQuery, args opPurgeArgs) error {
 	ch := channel.New(q.AcceptRaw(), channel.WithOutputFormat(args.Out))
 	defer ch.Close()
@@ -43,7 +49,12 @@ func (mod *Module) OpPurge(ctx *astral.Context, q *routing.IncomingQuery, args o
 	ctx, cancel := ctx.WithCancel()
 	defer cancel()
 
-	purged, errPtr := mod.purgeRepository(ctx, repo)
+	var untouched time.Duration
+	if args.Untouched != nil {
+		untouched = args.Untouched.Duration()
+	}
+
+	purged, errPtr := mod.purgeRepository(ctx, repo, untouched, args.Dry)
 	for id := range purged {
 		err := ch.Send(id)
 		if err != nil {

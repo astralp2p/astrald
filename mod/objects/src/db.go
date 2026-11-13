@@ -1,8 +1,6 @@
 package objects
 
 import (
-	"time"
-
 	"github.com/astralp2p/astral-go/astral"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
@@ -12,42 +10,46 @@ type DB struct {
 	*gorm.DB
 }
 
+// Migrate drops the old tracking table and creates the tracking table.
+// note: content tracked only by the old table has no row and is never purged; there is no migration (VFS 6, §11 "objects: tracking").
 func (db *DB) Migrate() error {
-	return db.AutoMigrate(&dbObject{})
-}
-
-func (db *DB) Contains(id *astral.ObjectID) (b bool, err error) {
-	err = db.
-		Model(&dbObject{}).
-		Where("id = ?", id).
-		Select("count(*)>0").
-		First(&b).Error
-	return
-}
-
-// Create seeds a tracking row for id with the given type. Idempotent: if a
-// row for id already exists, the call is a no-op (existing Type and ReadAt
-// are preserved). Used by every "object entered the device" path —
-// Module.Store/Load/Probe and OpCreate — to keep dbObject in sync
-// with what flows through the module.
-func (db *DB) Create(id *astral.ObjectID, objectType string) error {
-	// why: an empty type means "unknown" (blob/raw create); store NULL, not "".
-	var t *string
-	if objectType != "" {
-		t = &objectType
+	err := db.Migrator().DropTable(dbObjectsTableName)
+	if err != nil {
+		return err
 	}
-	// why: read_at must match UpdateReadAt's UTC writes; mixing local time.Now()
-	// here would corrupt the (read_at, height) purge order on non-UTC nodes.
-	return db.DB.Clauses(clause.OnConflict{DoNothing: true}).Create(&dbObject{
-		ID:     id,
-		Type:   t,
-		ReadAt: astral.Now().Time(),
+	return db.AutoMigrate(&dbTracking{})
+}
+
+// trackCommit writes the commit time of objectID in the leaf repository repo, creating the row when it is missing.
+func (db *DB) trackCommit(repo string, objectID *astral.ObjectID, committedAt int64) error {
+	return db.DB.Clauses(clause.OnConflict{
+		Columns:   []clause.Column{{Name: "repository"}, {Name: "object_id"}},
+		DoUpdates: clause.AssignmentColumns([]string{"committed_at"}),
+	}).Create(&dbTracking{
+		Repository:  repo,
+		ObjectID:    objectID,
+		CommittedAt: committedAt,
 	}).Error
 }
 
-// UpdateReadAt flushes a batch of pending read times. It is UPDATE-only: each
-// id present in the table has its read_at bumped, and ids that aren't already
-// tracked are silently skipped — first reads do NOT seed rows here.
+// deleteTracking removes the row of objectID in the leaf repository repo. A missing row is not an error.
+func (db *DB) deleteTracking(repo string, objectID *astral.ObjectID) error {
+	return db.DB.
+		Where("repository = ? AND object_id = ?", repo, objectID).
+		Delete(&dbTracking{}).Error
+}
+
+// deleteRepositoryTracking removes every row of the leaf repository repo.
+func (db *DB) deleteRepositoryTracking(repo string) error {
+	return db.DB.
+		Where("repository = ?", repo).
+		Delete(&dbTracking{}).Error
+}
+
+// UpdateReadAt flushes a batch of pending read times. It only raises: a row keeps its stored read time
+// when that time is not older than the batch time, and an ObjectID without a row changes nothing.
+// A time sets the read time of every row with that ObjectID, in every repository.
+// note: this is the only tracking query that does not filter by repository: one counted read touches every tracked copy (VFS 6, §11 "objects: last touched").
 func (db *DB) UpdateReadAt(reads map[astral.ObjectID]astral.Time) error {
 	if len(reads) == 0 {
 		return nil
@@ -56,9 +58,10 @@ func (db *DB) UpdateReadAt(reads map[astral.ObjectID]astral.Time) error {
 	return db.DB.Session(&gorm.Session{PrepareStmt: true}).
 		Transaction(func(tx *gorm.DB) error {
 			for id, at := range reads {
-				err := tx.Model(&dbObject{}).
-					Where("id = ?", &id).
-					Update("read_at", at.Time()).Error
+				readAt := at.Time().Unix()
+				err := tx.Model(&dbTracking{}).
+					Where("object_id = ? AND read_at < ?", &id, readAt).
+					Update("read_at", readAt).Error
 				if err != nil {
 					return err
 				}
@@ -67,59 +70,50 @@ func (db *DB) UpdateReadAt(reads map[astral.ObjectID]astral.Time) error {
 		})
 }
 
-// readCursor marks a position in the (read_at, height) read order.
-type readCursor struct {
-	ReadAt time.Time
-	Height uint64
+// touchColumn is the last touch of a row: the later of its commit and read times.
+const touchColumn = "MAX(committed_at, read_at)"
+
+// untouchedCursor marks a position in the (last touch, object_id) order of one leaf.
+type untouchedCursor struct {
+	Touch    int64
+	ObjectID *astral.ObjectID
 }
 
-// ListReadOldest returns up to limit object IDs ordered oldest-read first, starting
-// after the cursor (nil = from the beginning). next is the cursor to resume
-// from, or nil once the final page has been returned.
-func (db *DB) ListReadOldest(after *readCursor, limit int) (ids []*astral.ObjectID, next *readCursor, err error) {
-	if limit <= 0 {
-		return nil, nil, nil
-	}
-
-	q := db.DB.Order("read_at, height").Limit(limit)
+// listUntouched returns up to limit rows of the leaf repository repo whose last touch is before cutoff,
+// least recently touched first, starting after the cursor (nil = from the beginning).
+// next is the cursor to resume from, or nil once the final page has been returned.
+func (db *DB) listUntouched(repo string, cutoff int64, after *untouchedCursor, limit int) (rows []*dbTracking, next *untouchedCursor, err error) {
+	q := db.DB.
+		Where("repository = ? AND "+touchColumn+" < ?", repo, cutoff).
+		Order(touchColumn + ", object_id").
+		Limit(limit)
 	if after != nil {
-		// keyset seek: (read_at, height) is a total order since height is unique.
-		// the row-value form maps directly onto the read_at index, whose entries
-		// implicitly carry height (the rowid) as their tiebreaker.
-		q = q.Where("(read_at, height) > (?, ?)", after.ReadAt, after.Height)
+		q = q.Where("("+touchColumn+", object_id) > (?, ?)", after.Touch, after.ObjectID)
 	}
 
-	var rows []*dbObject
 	err = q.Find(&rows).Error
 	if err != nil {
 		return nil, nil, err
 	}
 
-	ids = make([]*astral.ObjectID, len(rows))
-	for i, row := range rows {
-		ids[i] = row.ID
-	}
-
-	// a short page means we reached the end; only hand back a cursor when the
-	// page was full, so the caller knows there may be more
+	// why: only a full page can have more rows after it.
 	if len(rows) == limit {
 		last := rows[len(rows)-1]
-		next = &readCursor{ReadAt: last.ReadAt, Height: last.Height}
+		next = &untouchedCursor{Touch: last.touch(), ObjectID: last.ObjectID}
 	}
 
-	return ids, next, nil
+	return rows, next, nil
 }
 
-// DeleteObjectCacheByID removes the tracking row for id. Used by purge to drop
-// rows whose repo object has gone missing; safe to call for an id with no row
-// (no-op).
-func (db *DB) DeleteObjectCacheByID(id *astral.ObjectID) error {
-	return db.DB.Where("id = ?", id).Delete(&dbObject{}).Error
-}
-
-func (db *DB) FindByType(objectType string) (rows []*dbObject, err error) {
-	err = db.
-		Where("type = ?", objectType).
+// findTracking returns the row of objectID in the leaf repository repo, or nil when there is none.
+func (db *DB) findTracking(repo string, objectID *astral.ObjectID) (*dbTracking, error) {
+	var rows []*dbTracking
+	err := db.DB.
+		Where("repository = ? AND object_id = ?", repo, objectID).
+		Limit(1).
 		Find(&rows).Error
-	return
+	if err != nil || len(rows) == 0 {
+		return nil, err
+	}
+	return rows[0], nil
 }
