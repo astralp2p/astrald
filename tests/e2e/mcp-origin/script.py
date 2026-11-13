@@ -78,6 +78,15 @@ async def mint(client, alias: str) -> dict:
 async def main():
     doc = load()
     n1 = doc["nodes"]["node1"]
+    # why: the authority and the MCP server are config the harness renders
+    # for its own nodes; an attached daemon has neither, and the test means
+    # nothing against a node that dials no authority of ours
+    missing = [f for f in ("authority_url", "mcp_url") if not n1.get(f)]
+    if missing:
+        raise SystemExit(f"node1 has no {', '.join(missing)}: this world "
+                         "renders no authority or MCP server for it "
+                         "(an attached daemon); run mcp-origin in a local "
+                         "or Docker world")
 
     async with await astral.connect(n1["endpoint"], token=n1["token"]) as c:
         alpha = await mint(c, "alpha")

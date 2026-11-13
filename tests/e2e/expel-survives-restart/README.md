@@ -6,8 +6,8 @@ back in, and the two remaining members form the swarm again.
 
 - **after** `expel-propagation` (the end state of that test: node3 expelled
   by the User on node1, node1 and node2 hold the ban, node3 is `unclaimed`) ·
-  **restart** `node1`, `node2`, `node3` · **local_only** — only a local world
-  can restart a node · **destroys** — a restart replaces every node's process.
+  **restart** `node1`, `node2`, `node3` · **destroys** — a restart replaces
+  every node's process.
 - **driver** `script.py` — changes nothing. It waits until the ban has
   settled (node1 and node2 hold the User's ban on node3 and list only node1
   and node2; node3 reads `unclaimed`), then records the remaining members and
@@ -39,12 +39,13 @@ continues `expel-propagation`'s, so all three share one world. It is a
 destroyer because it restarts every node; a test that follows it needs the
 expelled, restarted swarm as its start.
 
-## Why the local world stops every node before it starts any
+## Why the world stops every node before it starts any
 
 `restart = [node1, node2, node3]` used to restart the nodes one after the
 other, each while its siblings still ran. A node that came back without its
 bans relearned them: the siblings push every ban they hold to a freshly linked
 peer (`syncExpulsions`, `mod/user/src/sync.go`), so a ban that no node loaded
 from storage was healed within a second, and the oracle could not tell.
-`LocalWorld._restart` (`tests/lib/worlds/local.py`) now stops all the named
-nodes, then starts them in order. A single-node restart behaves as before.
+`LocalWorld._restart` (`tests/lib/worlds/local.py`) and `DockerWorld.restart`
+(`tests/lib/worlds/docker.py`) now stop all the named nodes, then start them
+in order. A single-node restart behaves as before.

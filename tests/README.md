@@ -115,10 +115,11 @@ external_registration_sweep_interval = "1s"
 - **`[config.<node>.<module>]`** writes over the harness's own config for
   that module, key by key; a module the harness builds nothing for gets the
   table alone. A local world builds a config for every module
-  `lib/nodeconfig.py` names; a VM or Docker world builds apphost's and user's alone
+  `lib/nodeconfig.py` names; a VM world builds apphost's and user's alone
   (`harness_configs`: the listener, the token, the E2E gate and the accepting
-  policies, the same as a local node's), so there every other module gets
-  the table alone. The config follows the world,
+  policies, the same as a local node's), and a Docker world those two, mcp's
+  (the server and the declared tools) and auth's (the authority at
+  `authority_url`), so there every other module gets the table alone. The config follows the world,
   not the test: the planner merges the overrides of every test in a world,
   a test that sets a key otherwise than its world forks into one of its
   own, and a clash with its own lineage is a plan error. `--plan` lists a
@@ -225,9 +226,10 @@ A world is one of four kinds:
 A Docker world is the lab's shape without netsim. Each node runs in its own
 container from `docker/Dockerfile`, the containers share a network, and
 node1's container holds the lab's operator (`tester`, Qwen Code), so
-`--driver agent` drives it as it drives VM node1. A node's apphost is
-published on the host's `127.0.0.1` at its leased port, which is what
-drivers and oracles dial. No host file or environment variable enters a
+`--driver agent` drives it as it drives VM node1. A node's apphost, and
+its MCP server unless the node's `mcp.bind_mcp` is `""`, are published on
+the host's `127.0.0.1` at its leased ports, which is what drivers and
+oracles dial (`endpoint`, `mcp_url`). No host file or environment variable enters a
 container. The run copies in an astrald and astral-query built for Linux
 (`.cache/linux-<arch>/`). The operator's astral-agent skill comes with the
 image: the Astral docs at the commit this checkout pins in `.ai/system`,

@@ -24,6 +24,7 @@ const factsKey = "policy_delegate"
 type node struct {
 	Endpoint string `json:"endpoint"`
 	Token    string `json:"token"`
+	HostIP   string `json:"host_ip"`
 }
 
 type session struct {
@@ -85,7 +86,7 @@ func connect(ep, token string) *astrald.Client { return astrald.New(apphost.NewR
 // oracle to find after the restart.
 func drive(ctx *astral.Context, n node, facts map[string]any) error {
 	admin := connect(n.Endpoint, n.Token)
-	cp, err := startControlPlane(ctx, admin, n.Endpoint)
+	cp, err := startControlPlane(ctx, admin, n.Endpoint, n.HostIP)
 	if err != nil {
 		return err
 	}

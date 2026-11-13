@@ -142,7 +142,12 @@ class NodePorts:
 
     @property
     def authority_url(self) -> str:
-        return f"http://127.0.0.1:{self.authority}/authorize"
+        return authority_url("127.0.0.1", self.authority)
+
+
+def authority_url(host: str, port: int) -> str:
+    """The external authority a node asks, served by a driver at host."""
+    return f"http://{host}:{port}/authorize"
 
 
 # Ports per node: +0 apphost, +1 tcp, +2 ether, +3 kcp, +4 mcp, +5 authority;
@@ -250,8 +255,8 @@ def _bindable(port: int) -> bool:
     return True
 
 
-def _mcp(port: int) -> dict:
-    """mod/mcp's config: the server bound, and every declared tool.
+def mcp_config(bind: str) -> dict:
+    """mod/mcp's config: the server bound at `bind`, and every declared tool.
 
     why bound at all: the MCP server is off unless bind_mcp names an endpoint
     (mod/mcp defaults to a single fixed port, which two nodes would fight
@@ -265,7 +270,13 @@ def _mcp(port: int) -> dict:
                "description": f"Put {path} to the peer node as the agent.",
                "query": f"astral://{PEER_ALIAS}:{path}"}
               for path, name in PEER_TOOLS.items()]
-    return {"bind_mcp": f"tcp:127.0.0.1:{port}", "tools": tools}
+    return {"bind_mcp": bind, "tools": tools}
+
+
+def auth_config(url: str) -> dict:
+    """mod/auth's config: the external authority at `url` for AUTH_ACTIONS."""
+    return {"external_authorizers": [
+        {"endpoint": url, "actions": list(AUTH_ACTIONS)}]}
 
 
 def module_configs(ports: NodePorts, token: str,
@@ -281,10 +292,9 @@ def module_configs(ports: NodePorts, token: str,
         "tcp": {"listen_port": ports.tcp},
         "ether": {"udp_port": ports.ether},
         "kcp": {"listen_port": ports.kcp},
-        "mcp": _mcp(ports.mcp),
+        "mcp": mcp_config(f"tcp:127.0.0.1:{ports.mcp}"),
         "objects": dict(OBJECTS),
-        "auth": {"external_authorizers": [
-            {"endpoint": ports.authority_url, "actions": list(AUTH_ACTIONS)}]},
+        "auth": auth_config(ports.authority_url),
     }
     return overlay(cfg, overrides)
 

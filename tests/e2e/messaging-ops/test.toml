@@ -1,6 +1,6 @@
 nodes   = ["nomcp1"]
 timeout = 180
-local_only = "reads serves_mcp, mcp_url and astrald.log from the host, serves an authority on a host port, and names nomcp1, which no VM lab runs"
+host_listener = "serves nomcp1's external authority, which nomcp1 dials"
 facts   = ["node", "serves_mcp", "mcp_probe", "ask", "answer", "after",
            "aliases", "ada", "bob", "cleo", "app", "ada_token", "info_ada",
            "exchange", "unhosted", "deletion", "questions"]

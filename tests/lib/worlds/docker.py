@@ -6,13 +6,15 @@ operator, `tester` with Qwen Code (tests/docker/Dockerfile). `ssh()` keeps
 VmWorld.ssh's contract over `docker exec`, so lib/agent.py drives node1's
 container with the scripts it sends a VM.
 
-A node's apphost is published on the host's 127.0.0.1, at the port the run's
-lease gives that node, so drivers and oracles reach it as they reach a local
-node. Nothing of the host enters a container: no bind mount and no
-environment variable. The binaries under test are copied in, built for
-Linux on the engine's architecture (lib/build.linux_binaries). A node reaches
-a listener the test serves on the host at the network's gateway (`host_ip`),
-and a test reaches a node's files through lib/nodefs.py.
+A node's apphost, and its MCP server when it serves one, are published on
+the host's 127.0.0.1, at the ports the run's lease gives that node, so
+drivers and oracles reach them as they reach a local node's. Nothing of the
+host enters a container: no bind mount and no environment variable. The
+binaries under test are copied in, built for Linux on the engine's
+architecture (lib/build.linux_binaries). A node reaches a listener the test
+serves on the host at the network's gateway (`host_ip`), its external
+authority among them (`authority_url`), and a test reaches a node's files
+through lib/nodefs.py.
 
 A test with VM operations needs a VM world: netsim's ops do not run here.
 """
@@ -29,7 +31,9 @@ import time
 from pathlib import Path
 
 from lib.build import query_binary
-from lib.nodeconfig import PortSpan, config_text, harness_configs, overlay
+from lib.nodeconfig import (PortSpan, auth_config, authority_url,
+                            config_text, harness_configs, mcp_config, overlay,
+                            serves_mcp)
 from lib.worlds import (World, WorldError, node_entry, refuse_stopped,
                         wait_identity)
 
@@ -39,6 +43,8 @@ BUILD_LOG = TESTS / ".cache" / "docker-build.log"
 QWEN_CODE = "0.26.7"                  # the operator's version, pinned
 ROOT = "/var/lib/astrald"             # astrald's -root in a container
 APPHOST_PORT = 8625                   # apphost's TCP listener in a container
+MCP_PORT = 8626                       # mod/mcp's own default, in a container
+MCP = mcp_config(f"tcp:0.0.0.0:{MCP_PORT}")   # 0.0.0.0: as apphost's, below
 TCP_PORT = 1791                       # astrald's default tcp listener
 OPERATOR_NODE = "node1"               # where the lab puts the operator
 SKILL_DIR = "/home/tester/.qwen/skills/astral-agent"
@@ -250,6 +256,10 @@ class DockerWorld(World):
             # why the container's address: it is what a peer on the world's
             # network dials, which the host's published port is not
             lan_endpoint=f"tcp:{n.get('ip', '')}:{TCP_PORT}",
+            # the published port, which answers only when serves_mcp is true
+            mcp_url=f"http://127.0.0.1:{n['ports'].mcp}",
+            serves_mcp=n["serves_mcp"],
+            authority_url=authority_url(self.host_ip, n["ports"].authority),
             restarts=n["restarts"],
             host_ip=self.host_ip,
         ) for name, n in self._nodes.items()
@@ -258,8 +268,12 @@ class DockerWorld(World):
     def restart(self, names: list) -> None:
         """Stop each named node's astrald and start it again on its state."""
         refuse_stopped("restart", names, self._stopped)
+        # why every stop first: a node restarted while its siblings still run
+        # can relearn what it lost from them, which hides state that a restart
+        # of the whole swarm drops (expel-survives-restart); as LocalWorld
         for name in names:
             self._stop_astrald(name)
+        for name in names:
             self._run_astrald(name)
             n = self._nodes[name]
             n["identity"] = self._whoami(n["port"], n["token"])
@@ -345,25 +359,34 @@ class DockerWorld(World):
         # starting must still be removed by close
         n = self._nodes[name] = {"container": container,
                                  "port": ports.apphost,
+                                 "ports": ports,
                                  "token": secrets.token_hex(16),
                                  "restarts": 0}
+        n["serves_mcp"] = serves_mcp(overlay({"mcp": MCP},
+                                             self.config.get(name)))
+        # why only a serving node's: a published port answers on the host
+        # even with nothing behind it, and a local node's unserved MCP port
+        # refuses (messaging-ops)
+        mcp = (["-p", f"127.0.0.1:{ports.mcp}:{MCP_PORT}"]
+               if n["serves_mcp"] else [])
         # why no -v and no -e: nothing of the host — files, environment —
         # may reach a container the operator works in
         _docker("run", "-d", "--init", "--name", container,
                 "--hostname", name, "--network", self.network,
                 "--label", f"{LABEL}={self.stamp}",
                 "--label", f"{PID_LABEL}={self._owner()}",
-                "-p", f"127.0.0.1:{ports.apphost}:{APPHOST_PORT}",
+                "-p", f"127.0.0.1:{ports.apphost}:{APPHOST_PORT}", *mcp,
                 self.image)
+        # why before the configs: auth.yaml names the authority at host_ip
+        if self.host_ip is None:
+            self.host_ip = self._gateway(name)
         _docker("cp", self.binary, f"{container}:/usr/local/bin/astrald")
         _docker("cp", query_binary(self.binary),
                 f"{container}:/usr/local/bin/astral-query")
-        self.ssh(name, self._config_script(name, n["token"], ports.ether))
+        self.ssh(name, self._config_script(name, n["token"], ports))
         if name == OPERATOR_NODE and self.skill:
             self._copy_skill(container)
         self._run_astrald(name)
-        if self.host_ip is None:
-            self.host_ip = self._gateway(name)
         n["ip"] = _docker("inspect", "-f",
                           "{{(index .NetworkSettings.Networks \""
                           f"{self.network}\").IPAddress}}}}", container)
@@ -390,7 +413,7 @@ class DockerWorld(World):
                              f"inspect or in {name}'s routes")
         return gw
 
-    def _config_script(self, name: str, token: str, ether: int) -> str:
+    def _config_script(self, name: str, token: str, ports) -> str:
         """The script that writes a node's module configs, root-only.
 
         why 0600: apphost.yaml names the node's own token, which the
@@ -398,6 +421,10 @@ class DockerWorld(World):
         why 0.0.0.0: a published port reaches a container's network address,
         never its loopback; the operator's own astral-query still dials the
         default tcp:127.0.0.1:8625.
+        why mcp and auth, which a VM node does not get: a driver calls the
+        node's MCP server and serves its authority as it does a local node's
+        (mcp-origin, messaging-ops); the authority is the leased port at
+        host_ip, where the driver binds it.
         """
         # why a UDP port of its own: the containers share one bridge, which
         # carries their nearby broadcasts, and a node that hears a peer's
@@ -405,7 +432,10 @@ class DockerWorld(World):
         # (swarm-roster-sync); local nodes are kept apart the same way
         modules = overlay({**harness_configs([f"tcp:0.0.0.0:{APPHOST_PORT}"],
                                              token),
-                           "ether": {"udp_port": ether}},
+                           "ether": {"udp_port": ports.ether},
+                           "mcp": MCP,
+                           "auth": auth_config(authority_url(
+                               self.host_ip, ports.authority))},
                           self.config.get(name))
         files = "".join(
             f"cat > {ROOT}/config/{module}.yaml <<'EOF'\n"

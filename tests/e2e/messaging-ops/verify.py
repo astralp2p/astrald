@@ -15,11 +15,10 @@ ada's outbox rows say happened to her mail, the oracle asks the node itself.
 """
 import asyncio
 import re
-from pathlib import Path
 
 import astral
 
-from lib import jsonops, mail
+from lib import jsonops, mail, nodefs
 from lib.authority import READ, RECEIVE, SEND, answers
 from lib.sessionio import load
 
@@ -64,8 +63,7 @@ def check_no_mcp_server(node):
     its silence covers every address. The control is messaging's own verbose
     line: it proves verbose lines reach this log, so the silence is evidence.
     """
-    log = ANSI.sub("", (Path(node["root"]) / "astrald.log").read_text(
-        errors="replace"))
+    log = ANSI.sub("", nodefs.log(node))
     lines = [ln for ln in log.splitlines() if "mcp server:" in ln]
     assert not lines, (
         "the node's MCP server tried to start with MCP off:\n"
