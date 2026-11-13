@@ -56,7 +56,7 @@ func TestMkdirRefusals(t *testing.T) {
 	changeTestErr(t, changeTestCall(t, mod.OpMkdir, vol, map[string]any{"path": "a"}), vfsapi.ErrInvalidPath)
 
 	vol = changeTestSetLimits(t, mod, vol, 0, 2)
-	changeTestErr(t, changeTestCall(t, mod.OpMkdir, vol, map[string]any{"path": "/x/y"}), vfsapi.ErrTooManyEntries)
+	changeTestErr(t, changeTestCall(t, mod.OpMkdir, vol, map[string]any{"path": "/x/y"}), vfsapi.ErrNoInodesLeft)
 
 	if n := changeTestCount(t, mod, vol); n != 1 {
 		t.Errorf("%d entries after the refusals, want 1", n)

@@ -341,11 +341,11 @@ func changeTestMustFind(t *testing.T, mod *Module, vol *dbVolume, path string) *
 }
 
 // changeTestSetLimits sets the limits of a VFS and returns it as stored.
-func changeTestSetLimits(t *testing.T, mod *Module, vol *dbVolume, bytes, entries uint64) *dbVolume {
+func changeTestSetLimits(t *testing.T, mod *Module, vol *dbVolume, bytes, inodes uint64) *dbVolume {
 	t.Helper()
 
 	err := mod.db.Model(&dbVolume{}).Where("id = ?", vol.ID).
-		Updates(map[string]any{"byte_limit": limitColumn(bytes), "entry_limit": limitColumn(entries)}).Error
+		Updates(map[string]any{"byte_limit": limitColumn(bytes), "inode_limit": limitColumn(inodes)}).Error
 	if err != nil {
 		t.Fatalf("set limits: %v", err)
 	}

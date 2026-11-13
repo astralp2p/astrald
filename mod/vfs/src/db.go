@@ -11,7 +11,23 @@ type DB struct {
 }
 
 func (db *DB) migrate() error {
+	if err := db.renameEntryLimit(); err != nil {
+		return err
+	}
+
 	return db.AutoMigrate(&dbVolume{}, &dbEntry{})
+}
+
+// renameEntryLimit renames the column entry_limit of a volumes table made before the inode names to inode_limit.
+//
+// why: AutoMigrate would add inode_limit beside entry_limit, and SQLite refuses a new not null column without a default.
+func (db *DB) renameEntryLimit() error {
+	m := db.Migrator()
+	if !m.HasColumn(&dbVolume{}, "entry_limit") {
+		return nil
+	}
+
+	return m.RenameColumn(&dbVolume{}, "entry_limit", "inode_limit")
 }
 
 // inTx runs fn in one transaction and commits it when fn returns nil.
@@ -43,7 +59,7 @@ func (db *DB) listVolumes() (volumes []*dbVolume, err error) {
 }
 
 // createVolume inserts a VFS with its root folder. The root is its own parent.
-func (db *DB) createVolume(id *astral.Identity, byteLimit, entryLimit uint64) error {
+func (db *DB) createVolume(id *astral.Identity, byteLimit, inodeLimit uint64) error {
 	root := &dbEntry{
 		VFS:     id,
 		Flags:   uint16(vfsapi.FlagFolder),
@@ -63,15 +79,15 @@ func (db *DB) createVolume(id *astral.Identity, byteLimit, entryLimit uint64) er
 		Identity:   id,
 		RootID:     root.ID,
 		ByteLimit:  limitColumn(byteLimit),
-		EntryLimit: limitColumn(entryLimit),
+		InodeLimit: limitColumn(inodeLimit),
 	}).Error
 }
 
-// setVolumeLimits writes the byte limit and the entry limit of a VFS.
-func (db *DB) setVolumeLimits(volID int64, byteLimit, entryLimit uint64) error {
+// setVolumeLimits writes the byte limit and the inode limit of a VFS.
+func (db *DB) setVolumeLimits(volID int64, byteLimit, inodeLimit uint64) error {
 	return db.Model(&dbVolume{}).Where("id = ?", volID).Updates(map[string]any{
 		"byte_limit":  limitColumn(byteLimit),
-		"entry_limit": limitColumn(entryLimit),
+		"inode_limit": limitColumn(inodeLimit),
 	}).Error
 }
 
@@ -252,8 +268,8 @@ func (db *DB) entryCount(vfsID *astral.Identity) (count uint64, err error) {
 
 // vfsUsage is what the limits of a VFS measure.
 type vfsUsage struct {
-	Bytes   uint64
-	Entries uint64
+	Bytes  uint64
+	Inodes uint64
 }
 
 // measureUsage returns the usage of a VFS.
@@ -262,7 +278,7 @@ func (db *DB) measureUsage(vfsID *astral.Identity) (u vfsUsage, err error) {
 		return
 	}
 
-	u.Entries, err = db.entryCount(vfsID)
+	u.Inodes, err = db.entryCount(vfsID)
 
 	return
 }

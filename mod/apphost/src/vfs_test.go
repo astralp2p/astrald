@@ -69,10 +69,10 @@ func realVFSRegistrar(t *testing.T) (*Module, *gorm.DB) {
 	return mod, gdb
 }
 
-// volume is the row of vfs__volumes that vfs.statfs reports Quota and EntryLimit from.
+// volume is the row of vfs__volumes that vfs.statfs reports Quota and InodeLimit from.
 type volume struct {
 	ByteLimit  int64
-	EntryLimit int64
+	InodeLimit int64
 }
 
 // findVolumes returns the volumes of vfs__volumes stored for id.
@@ -122,8 +122,8 @@ func TestRegisterCreatesTheVFSWithTheDefaultQuotas(t *testing.T) {
 	if len(rows) != 1 {
 		t.Fatalf("app %v has %d VFSes; want 1", tokens[0].Identity, len(rows))
 	}
-	if rows[0].ByteLimit != 1<<30 || rows[0].EntryLimit != 1_000_000 {
-		t.Fatalf("limits %d bytes, %d entries; want %d and 1000000", rows[0].ByteLimit, rows[0].EntryLimit, 1<<30)
+	if rows[0].ByteLimit != 1<<30 || rows[0].InodeLimit != 1_000_000 {
+		t.Fatalf("limits %d bytes, %d entries; want %d and 1000000", rows[0].ByteLimit, rows[0].InodeLimit, 1<<30)
 	}
 }
 

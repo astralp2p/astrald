@@ -89,7 +89,7 @@ func TestMoveRefusals(t *testing.T) {
 
 	vol = changeTestSetLimits(t, mod, vol, 0, 3)
 	answer := changeTestCall(t, mod.OpMove, vol, map[string]any{"from": "/f", "to": "/new/f"})
-	changeTestErr(t, answer, vfsapi.ErrTooManyEntries)
+	changeTestErr(t, answer, vfsapi.ErrNoInodesLeft)
 
 	if changeTestFind(t, mod, vol, "/f") == nil || changeTestCount(t, mod, vol) != 3 {
 		t.Error("a refused move changed the VFS")

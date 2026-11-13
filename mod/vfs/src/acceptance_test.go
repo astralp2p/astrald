@@ -157,7 +157,7 @@ func TestAcceptanceManageOperations(t *testing.T) {
 	ops := map[string]query.Args{
 		"vfs.volumes":   nil,
 		"vfs.create":    {"vfs": target},
-		"vfs.set_quota": {"vfs": app.id, "bytes": 5, "entries": 6},
+		"vfs.set_quota": {"vfs": app.id, "bytes": 5, "inodes": 6},
 	}
 
 	for method, args := range ops {
@@ -191,7 +191,7 @@ func TestAcceptanceManageOperations(t *testing.T) {
 			t.Errorf("vfs.create as the %v answered %#v, %v; want ack", name, answer, err)
 		}
 
-		answer, err = a.call(c, "vfs.set_quota", query.Args{"vfs": vfsID, "bytes": 7, "entries": 8})
+		answer, err = a.call(c, "vfs.set_quota", query.Args{"vfs": vfsID, "bytes": 7, "inodes": 8})
 		if _, ok := answer.(*astral.Ack); err != nil || !ok {
 			t.Errorf("vfs.set_quota as the %v answered %#v, %v; want ack", name, answer, err)
 		}
@@ -200,7 +200,7 @@ func TestAcceptanceManageOperations(t *testing.T) {
 }
 
 // expectStatfs fails unless vfs.statfs of vfsID through c reports the limits.
-func expectStatfs(t *testing.T, a *acceptanceNode, c *astrald.Client, vfsID *astral.Identity, quota, entries uint64) {
+func expectStatfs(t *testing.T, a *acceptanceNode, c *astrald.Client, vfsID *astral.Identity, quota, inodes uint64) {
 	t.Helper()
 
 	answer, err := a.call(c, "vfs.statfs", query.Args{"vfs": vfsID})
@@ -208,8 +208,8 @@ func expectStatfs(t *testing.T, a *acceptanceNode, c *astrald.Client, vfsID *ast
 	if err != nil || !ok {
 		t.Fatalf("vfs.statfs of %v answered %#v, %v; want info", vfsID, answer, err)
 	}
-	if uint64(info.Quota) != quota || uint64(info.EntryLimit) != entries {
-		t.Errorf("vfs.statfs of %v: quota %v, entry limit %v; want %v and %v", vfsID, info.Quota, info.EntryLimit, quota, entries)
+	if uint64(info.Quota) != quota || uint64(info.InodeLimit) != inodes {
+		t.Errorf("vfs.statfs of %v: quota %v, inode limit %v; want %v and %v", vfsID, info.Quota, info.InodeLimit, quota, inodes)
 	}
 }
 
@@ -244,7 +244,7 @@ func TestAcceptanceTokenlessSessionReachesNoOperation(t *testing.T) {
 		"vfs.touch":     {"vfs": nodeVFS, "path": "/"},
 		"vfs.volumes":   nil,
 		"vfs.create":    {"vfs": astral.GenerateIdentity()},
-		"vfs.set_quota": {"vfs": nodeVFS, "bytes": 1, "entries": 1},
+		"vfs.set_quota": {"vfs": nodeVFS, "bytes": 1, "inodes": 1},
 	}
 
 	for _, method := range acceptanceOps {
@@ -298,7 +298,7 @@ func TestAcceptanceQuotasAndInterruptedWrites(t *testing.T) {
 	a.claim()
 	app := a.registerApp()
 
-	answer, err := a.call(a.as(a.nodeID()), "vfs.set_quota", query.Args{"vfs": app.id, "bytes": 10, "entries": 2})
+	answer, err := a.call(a.as(a.nodeID()), "vfs.set_quota", query.Args{"vfs": app.id, "bytes": 10, "inodes": 2})
 	if _, ok := answer.(*astral.Ack); err != nil || !ok {
 		t.Fatalf("vfs.set_quota answered %#v, %v", answer, err)
 	}
@@ -310,7 +310,7 @@ func TestAcceptanceQuotasAndInterruptedWrites(t *testing.T) {
 	a.mustWrite(app.client, "/one", []byte("1"))
 	a.mustWrite(app.client, "/two", []byte("2"))
 	answer, err = a.write(app.client, query.Args{"path": "/three"}, []byte("3"))
-	expectError(t, "a write over the entry quota", answer, err, vfsapi.ErrTooManyEntries)
+	expectError(t, "a write over the entry quota", answer, err, vfsapi.ErrNoInodesLeft)
 	expectNoEntry(t, a, app, "/three")
 
 	a.mustWrite(app.client, "/two", nil) // note: replacing a file adds no entry
@@ -321,7 +321,7 @@ func TestAcceptanceQuotasAndInterruptedWrites(t *testing.T) {
 func expectInterruptedWriteLeavesNoEntry(t *testing.T, a *acceptanceNode, app *acceptanceApp) {
 	t.Helper()
 
-	if answer, err := a.call(a.as(a.nodeID()), "vfs.set_quota", query.Args{"vfs": app.id, "bytes": 0, "entries": 0}); err != nil {
+	if answer, err := a.call(a.as(a.nodeID()), "vfs.set_quota", query.Args{"vfs": app.id, "bytes": 0, "inodes": 0}); err != nil {
 		t.Fatalf("vfs.set_quota answered %#v, %v", answer, err)
 	}
 
@@ -407,8 +407,8 @@ func TestAcceptanceRegisterCreatesTheVFS(t *testing.T) {
 	if err != nil || !ok {
 		t.Fatalf("vfs.statfs answered %#v, %v; want info", answer, err)
 	}
-	if !info.VFS.IsEqual(app.id) || info.Quota != 1<<30 || info.EntryLimit != 1_000_000 {
-		t.Errorf("vfs.statfs = %v, quota %v, entry limit %v; want %v, 1 GiB, 1,000,000", info.VFS, info.Quota, info.EntryLimit, app.id)
+	if !info.VFS.IsEqual(app.id) || info.Quota != 1<<30 || info.InodeLimit != 1_000_000 {
+		t.Errorf("vfs.statfs = %v, quota %v, inode limit %v; want %v, 1 GiB, 1,000,000", info.VFS, info.Quota, info.InodeLimit, app.id)
 	}
 }
 

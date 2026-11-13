@@ -613,11 +613,11 @@ func TestStatfsAnswersTheInfo(t *testing.T) {
 		t.Errorf("Usage = %d, want 11", info.Usage)
 	}
 	// sub, deep, a.txt, a, b, c
-	if info.Entries != 6 {
-		t.Errorf("Entries = %d, want 6", info.Entries)
+	if info.Inodes != 6 {
+		t.Errorf("Inodes = %d, want 6", info.Inodes)
 	}
-	if uint64(info.Quota) != defaultConfig.ByteLimit || uint64(info.EntryLimit) != defaultConfig.EntryLimit {
-		t.Errorf("limits = %d, %d, want the defaults %d, %d", info.Quota, info.EntryLimit, defaultConfig.ByteLimit, defaultConfig.EntryLimit)
+	if uint64(info.Quota) != defaultConfig.ByteLimit || uint64(info.InodeLimit) != defaultConfig.InodeLimit {
+		t.Errorf("limits = %d, %d, want the defaults %d, %d", info.Quota, info.InodeLimit, defaultConfig.ByteLimit, defaultConfig.InodeLimit)
 	}
 	// note: the root now also holds a, b and c, so it differs from the nested root
 	if info.Root.Size == 0 || info.Root == rootID {
@@ -646,8 +646,8 @@ func TestVFSInfoCachesTheRootItReports(t *testing.T) {
 	if root.ObjectID == nil || *root.ObjectID != info.Root {
 		t.Errorf("cached root = %v, want the reported %v", root.ObjectID, info.Root)
 	}
-	if info.Usage != 3 || info.Entries != 1 {
-		t.Errorf("Usage, Entries = %d, %d, want 3, 1", info.Usage, info.Entries)
+	if info.Usage != 3 || info.Inodes != 1 {
+		t.Errorf("Usage, Inodes = %d, %d, want 3, 1", info.Usage, info.Inodes)
 	}
 }
 
@@ -663,7 +663,7 @@ func TestStatfsOfAnEmptyVFS(t *testing.T) {
 	f := newReadOpsFixture(t)
 
 	info := f.run(t, "statfs", f.vfs).info(t)
-	if info.Usage != 0 || info.Entries != 0 || readOpsHash(info.Root) != v1Hash {
+	if info.Usage != 0 || info.Inodes != 0 || readOpsHash(info.Root) != v1Hash {
 		t.Errorf("info = %+v, want no usage, no entries, vector V1", info)
 	}
 }
@@ -671,26 +671,26 @@ func TestStatfsOfAnEmptyVFS(t *testing.T) {
 func TestStatfsZeroLimitsMeanNoLimit(t *testing.T) {
 	f := newReadOpsFixture(t)
 	if err := f.mod.db.Model(&dbVolume{}).Where("id = ?", f.vol.ID).
-		Updates(map[string]any{"byte_limit": limitColumn(0), "entry_limit": limitColumn(0)}).Error; err != nil {
+		Updates(map[string]any{"byte_limit": limitColumn(0), "inode_limit": limitColumn(0)}).Error; err != nil {
 		t.Fatalf("update: %v", err)
 	}
 
 	info := f.run(t, "statfs", f.vfs).info(t)
-	if info.Quota != 0 || info.EntryLimit != 0 {
-		t.Errorf("limits = %d, %d, want 0 (no limit)", info.Quota, info.EntryLimit)
+	if info.Quota != 0 || info.InodeLimit != 0 {
+		t.Errorf("limits = %d, %d, want 0 (no limit)", info.Quota, info.InodeLimit)
 	}
 }
 
 func TestStatfsReportsTheSetLimits(t *testing.T) {
 	f := newReadOpsFixture(t)
 	if err := f.mod.db.Model(&dbVolume{}).Where("id = ?", f.vol.ID).
-		Updates(map[string]any{"byte_limit": limitColumn(100), "entry_limit": limitColumn(7)}).Error; err != nil {
+		Updates(map[string]any{"byte_limit": limitColumn(100), "inode_limit": limitColumn(7)}).Error; err != nil {
 		t.Fatalf("update: %v", err)
 	}
 
 	info := f.run(t, "statfs", f.vfs).info(t)
-	if info.Quota != 100 || info.EntryLimit != 7 {
-		t.Errorf("limits = %d, %d, want 100, 7", info.Quota, info.EntryLimit)
+	if info.Quota != 100 || info.InodeLimit != 7 {
+		t.Errorf("limits = %d, %d, want 100, 7", info.Quota, info.InodeLimit)
 	}
 }
 

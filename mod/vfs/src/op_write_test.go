@@ -164,11 +164,11 @@ func TestWriteChecksTheQuotaExactlyAfterTheCommit(t *testing.T) {
 	changeTestEntry(t, changeTestWrite(t, mod, vol, "/c", "12345"))
 }
 
-func TestWriteRefusesTooManyEntries(t *testing.T) {
+func TestWriteRefusesWhenNoInodesLeft(t *testing.T) {
 	mod, vol, _ := changeTestModule(t)
 	vol = changeTestSetLimits(t, mod, vol, 0, 2)
 
-	changeTestErr(t, changeTestWrite(t, mod, vol, "/x/y/z", "z"), vfsapi.ErrTooManyEntries)
+	changeTestErr(t, changeTestWrite(t, mod, vol, "/x/y/z", "z"), vfsapi.ErrNoInodesLeft)
 
 	if n := changeTestCount(t, mod, vol); n != 0 {
 		t.Errorf("%d entries after a refused write, want 0", n)

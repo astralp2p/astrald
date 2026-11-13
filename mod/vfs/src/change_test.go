@@ -9,10 +9,10 @@ import (
 
 // changeTestLowerLimits commits new limits through vfs.set_quota after the caller read the VFS, as a set_quota that
 // runs between the authorization of a change and the change does.
-func changeTestLowerLimits(t *testing.T, mod *Module, vol *dbVolume, bytes, entries uint64) {
+func changeTestLowerLimits(t *testing.T, mod *Module, vol *dbVolume, bytes, inodes uint64) {
 	t.Helper()
 
-	if err := mod.setLimits(vol.Identity, bytes, entries); err != nil {
+	if err := mod.setLimits(vol.Identity, bytes, inodes); err != nil {
 		t.Fatalf("setLimits: %v", err)
 	}
 }
@@ -35,8 +35,8 @@ func TestMkdirChecksTheLimitsCommittedAtTheChange(t *testing.T) {
 	changeTestLowerLimits(t, mod, vol, 0, 1)
 
 	err := mod.changeVFS(vol, func(c *change) error { return c.createFolder([]string{"a", "b"}) })
-	if !errors.Is(err, vfsapi.ErrTooManyEntries) {
-		t.Fatalf("mkdir = %v, want %v", err, vfsapi.ErrTooManyEntries)
+	if !errors.Is(err, vfsapi.ErrNoInodesLeft) {
+		t.Fatalf("mkdir = %v, want %v", err, vfsapi.ErrNoInodesLeft)
 	}
 	if n := changeTestCount(t, mod, vol); n != 0 {
 		t.Errorf("%d entries after a refused mkdir, want 0", n)
@@ -52,8 +52,8 @@ func TestMoveChecksTheLimitsCommittedAtTheChange(t *testing.T) {
 		_, err = c.moveEntry([]string{"f"}, []string{"new", "f"})
 		return err
 	})
-	if !errors.Is(err, vfsapi.ErrTooManyEntries) {
-		t.Fatalf("move = %v, want %v", err, vfsapi.ErrTooManyEntries)
+	if !errors.Is(err, vfsapi.ErrNoInodesLeft) {
+		t.Fatalf("move = %v, want %v", err, vfsapi.ErrNoInodesLeft)
 	}
 	if changeTestFind(t, mod, vol, "/f") == nil || changeTestCount(t, mod, vol) != 1 {
 		t.Error("a refused move changed the VFS")

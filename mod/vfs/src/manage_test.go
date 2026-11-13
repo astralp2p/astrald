@@ -178,7 +178,7 @@ func (f *manageFixture) manageOps(t *testing.T, caller *astral.Identity, origin 
 	return map[string]*manageCaller{
 		"volumes":   manageOpen(t, f.mod.OpVolumes, caller, "vfs.volumes", origin),
 		"create":    manageOpen(t, f.mod.OpCreate, caller, "vfs.create?vfs="+vfs, origin),
-		"set_quota": manageOpen(t, f.mod.OpSetQuota, caller, "vfs.set_quota?vfs="+vfs+"&bytes=5&entries=6", origin),
+		"set_quota": manageOpen(t, f.mod.OpSetQuota, caller, "vfs.set_quota?vfs="+vfs+"&bytes=5&inodes=6", origin),
 	}
 }
 
@@ -264,7 +264,7 @@ func TestManageOperationsRefuseTheNetwork(t *testing.T) {
 		callers := map[string]*manageCaller{
 			"volumes":   manageOpen(t, f.mod.OpVolumes, caller, "vfs.volumes", astral.OriginNetwork),
 			"create":    manageOpen(t, f.mod.OpCreate, caller, "vfs.create?vfs="+target.String(), astral.OriginNetwork),
-			"set_quota": manageOpen(t, f.mod.OpSetQuota, caller, "vfs.set_quota?vfs="+existing.String()+"&bytes=5&entries=6", astral.OriginNetwork),
+			"set_quota": manageOpen(t, f.mod.OpSetQuota, caller, "vfs.set_quota?vfs="+existing.String()+"&bytes=5&inodes=6", astral.OriginNetwork),
 		}
 
 		for op, c := range callers {
@@ -280,8 +280,8 @@ func TestManageOperationsRefuseTheNetwork(t *testing.T) {
 	if err != nil {
 		t.Fatalf("findVolume: %v", err)
 	}
-	if vol.byteLimit() != defaultByteLimit || vol.entryLimit() != defaultEntryLimit {
-		t.Errorf("a refused vfs.set_quota changed the limits to %d and %d", vol.byteLimit(), vol.entryLimit())
+	if vol.byteLimit() != defaultByteLimit || vol.inodeLimit() != defaultInodeLimit {
+		t.Errorf("a refused vfs.set_quota changed the limits to %d and %d", vol.byteLimit(), vol.inodeLimit())
 	}
 }
 
@@ -320,22 +320,22 @@ func TestVolumesStreamsInfoThenEOS(t *testing.T) {
 	want := vfsapi.Info{
 		VFS: a, Root: rootA,
 		Usage: astral.Uint64(len("hello\n") + len("abc")), Quota: astral.Uint64(defaultByteLimit),
-		Entries: 4, EntryLimit: astral.Uint64(defaultEntryLimit),
+		Inodes: 4, InodeLimit: astral.Uint64(defaultInodeLimit),
 	}
 	if infoA.Root != want.Root || infoA.Usage != want.Usage || infoA.Quota != want.Quota ||
-		infoA.Entries != want.Entries || infoA.EntryLimit != want.EntryLimit {
+		infoA.Inodes != want.Inodes || infoA.InodeLimit != want.InodeLimit {
 		t.Errorf("info of a = %+v, want %+v", *infoA, want)
 	}
 
 	rootB, _ := f.mod.folderObjectID(b, volB.RootID)
-	if infoB.Root != rootB || infoB.Usage != 0 || infoB.Entries != 0 {
-		t.Errorf("info of b = %+v, want root %v, no usage, no entries", *infoB, rootB)
+	if infoB.Root != rootB || infoB.Usage != 0 || infoB.Inodes != 0 {
+		t.Errorf("info of b = %+v, want root %v, no usage, no inodes", *infoB, rootB)
 	}
 }
 
 func TestCreateIsIdempotentWithDefaultQuotas(t *testing.T) {
 	f := newManageFixture(t)
-	f.mod.config = Config{ByteLimit: 123, EntryLimit: 45}
+	f.mod.config = Config{ByteLimit: 123, InodeLimit: 45}
 	id := astral.GenerateIdentity()
 
 	manageExpect[*astral.Ack](t, manageOpen(t, f.mod.OpCreate, f.user, "vfs.create?vfs="+id.String(), ""))
@@ -344,20 +344,20 @@ func TestCreateIsIdempotentWithDefaultQuotas(t *testing.T) {
 	if err != nil {
 		t.Fatalf("findVolume: %v", err)
 	}
-	if vol.byteLimit() != 123 || vol.entryLimit() != 45 {
-		t.Errorf("limits %d and %d, want the configured 123 and 45", vol.byteLimit(), vol.entryLimit())
+	if vol.byteLimit() != 123 || vol.inodeLimit() != 45 {
+		t.Errorf("limits %d and %d, want the configured 123 and 45", vol.byteLimit(), vol.inodeLimit())
 	}
 
 	// a second create changes nothing: the file, the root and the limits stay
 	addFile(t, f.mod, vol, vol.RootID, "keep", "content")
-	f.mod.config = Config{ByteLimit: 999, EntryLimit: 99}
+	f.mod.config = Config{ByteLimit: 999, InodeLimit: 99}
 	manageExpect[*astral.Ack](t, manageOpen(t, f.mod.OpCreate, f.holder, "vfs.create?vfs="+id.String(), ""))
 
 	again, err := f.mod.db.findVolume(id)
 	if err != nil {
 		t.Fatalf("findVolume: %v", err)
 	}
-	if again.ID != vol.ID || again.RootID != vol.RootID || again.byteLimit() != 123 || again.entryLimit() != 45 {
+	if again.ID != vol.ID || again.RootID != vol.RootID || again.byteLimit() != 123 || again.inodeLimit() != 45 {
 		t.Errorf("a second create changed the VFS: %+v, was %+v", again, vol)
 	}
 	if _, err := f.mod.db.findChild(vol.RootID, "keep"); err != nil {
@@ -383,19 +383,19 @@ func TestSetQuotaSetsBothLimits(t *testing.T) {
 	id := astral.GenerateIdentity()
 	createVFS(t, f.mod, id)
 
-	manageExpect[*astral.Ack](t, manageOpen(t, f.mod.OpSetQuota, f.user, "vfs.set_quota?vfs="+id.String()+"&bytes=100&entries=7", ""))
+	manageExpect[*astral.Ack](t, manageOpen(t, f.mod.OpSetQuota, f.user, "vfs.set_quota?vfs="+id.String()+"&bytes=100&inodes=7", ""))
 
 	vol, _ := f.mod.db.findVolume(id)
-	if vol.byteLimit() != 100 || vol.entryLimit() != 7 {
-		t.Errorf("limits %d and %d, want 100 and 7", vol.byteLimit(), vol.entryLimit())
+	if vol.byteLimit() != 100 || vol.inodeLimit() != 7 {
+		t.Errorf("limits %d and %d, want 100 and 7", vol.byteLimit(), vol.inodeLimit())
 	}
 
 	// a limit left out is 0, no limit
 	manageExpect[*astral.Ack](t, manageOpen(t, f.mod.OpSetQuota, f.user, "vfs.set_quota?vfs="+id.String(), ""))
 
 	vol, _ = f.mod.db.findVolume(id)
-	if vol.byteLimit() != 0 || vol.entryLimit() != 0 {
-		t.Errorf("limits %d and %d, want 0 and 0", vol.byteLimit(), vol.entryLimit())
+	if vol.byteLimit() != 0 || vol.inodeLimit() != 0 {
+		t.Errorf("limits %d and %d, want 0 and 0", vol.byteLimit(), vol.inodeLimit())
 	}
 }
 
@@ -408,11 +408,11 @@ func TestSetQuotaBelowUsageRemovesNothing(t *testing.T) {
 	addFolder(t, f.mod, vol, vol.RootID, "d")
 	addFile(t, f.mod, vol, vol.RootID, "b", "abcdef")
 
-	manageExpect[*astral.Ack](t, manageOpen(t, f.mod.OpSetQuota, f.user, "vfs.set_quota?vfs="+id.String()+"&bytes=1&entries=1", ""))
+	manageExpect[*astral.Ack](t, manageOpen(t, f.mod.OpSetQuota, f.user, "vfs.set_quota?vfs="+id.String()+"&bytes=1&inodes=1", ""))
 
 	vol, _ = f.mod.db.findVolume(id)
-	if vol.byteLimit() != 1 || vol.entryLimit() != 1 {
-		t.Errorf("limits %d and %d, want 1 and 1", vol.byteLimit(), vol.entryLimit())
+	if vol.byteLimit() != 1 || vol.inodeLimit() != 1 {
+		t.Errorf("limits %d and %d, want 1 and 1", vol.byteLimit(), vol.inodeLimit())
 	}
 
 	if n, _ := f.mod.db.entryCount(id); n != 3 {
@@ -424,8 +424,8 @@ func TestSetQuotaBelowUsageRemovesNothing(t *testing.T) {
 
 	c := manageOpen(t, f.mod.OpVolumes, f.user, "vfs.volumes", "")
 	info := manageExpect[*vfsapi.Info](t, c)
-	if info.Quota != 1 || info.EntryLimit != 1 || info.Usage != 16 || info.Entries != 3 {
-		t.Errorf("info %+v, want quota 1, entry limit 1, usage 16, entries 3", *info)
+	if info.Quota != 1 || info.InodeLimit != 1 || info.Usage != 16 || info.Inodes != 3 {
+		t.Errorf("info %+v, want quota 1, inode limit 1, usage 16, inodes 3", *info)
 	}
 }
 
@@ -450,16 +450,16 @@ func TestSetQuotaUnknownVFSLeavesOtherVFSesUnchanged(t *testing.T) {
 	f := newManageFixture(t)
 	id := astral.GenerateIdentity()
 	createVFS(t, f.mod, id)
-	manageExpect[*astral.Ack](t, manageOpen(t, f.mod.OpSetQuota, f.user, "vfs.set_quota?vfs="+id.String()+"&bytes=100&entries=7", ""))
+	manageExpect[*astral.Ack](t, manageOpen(t, f.mod.OpSetQuota, f.user, "vfs.set_quota?vfs="+id.String()+"&bytes=100&inodes=7", ""))
 
-	c := manageOpen(t, f.mod.OpSetQuota, f.user, "vfs.set_quota?vfs="+astral.GenerateIdentity().String()+"&bytes=1&entries=1", "")
+	c := manageOpen(t, f.mod.OpSetQuota, f.user, "vfs.set_quota?vfs="+astral.GenerateIdentity().String()+"&bytes=1&inodes=1", "")
 	manageExpectError(t, c, vfsapi.ErrNoSuchVFS)
 
 	vol, err := f.mod.db.findVolume(id)
 	if err != nil {
 		t.Fatalf("findVolume: %v", err)
 	}
-	if vol.byteLimit() != 100 || vol.entryLimit() != 7 {
-		t.Errorf("limits %d and %d, want 100 and 7", vol.byteLimit(), vol.entryLimit())
+	if vol.byteLimit() != 100 || vol.inodeLimit() != 7 {
+		t.Errorf("limits %d and %d, want 100 and 7", vol.byteLimit(), vol.inodeLimit())
 	}
 }
