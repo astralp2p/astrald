@@ -564,6 +564,41 @@ def load_run():
     return module
 
 
+class TestHostListener(unittest.TestCase):
+    """A test that serves a listener on the test host, in a world whose node
+    can or cannot dial it."""
+
+    def perform(self, host_ip):
+        class World(FakeWorld):
+            def nodes(self) -> dict:
+                return {"node1": node_entry(host_ip=host_ip)}
+
+        t = SimpleNamespace(name="serves", nodes=["node1"], restart=[],
+                            stop=[], host_listener="serves an app node1 dials",
+                            dir=Path("/nonexistent"), timeout=1)
+        drove = []
+        with tempfile.TemporaryDirectory() as tmp, \
+                mock.patch.object(runner, "_run_step", return_value=0):
+            got = runner._perform(World(), t, lambda env: drove.append(1) or 0,
+                                  Path(tmp), lambda phase: {})
+            log = Path(tmp) / "driver.log"
+            text = log.read_text() if log.exists() else ""
+        return got, drove, text
+
+    def test_a_node_without_host_ip_fails_prepare_as_environment(self):
+        # why: an attached daemon off this host cannot dial the test host,
+        # and only its endpoint, read when the world opens, says so
+        got, drove, log = self.perform(None)
+        self.assertEqual(got, ("fail", "environment", "prepare"))
+        self.assertEqual(drove, [])
+        self.assertIn("node1 has no host_ip", log)
+
+    def test_a_node_with_host_ip_runs(self):
+        got, drove, _ = self.perform("127.0.0.1")
+        self.assertEqual(got, ("pass", None, "verify"))
+        self.assertEqual(drove, [1])
+
+
 class TestSignals(unittest.TestCase):
     def setUp(self):
         self.run = load_run()

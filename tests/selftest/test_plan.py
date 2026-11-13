@@ -30,12 +30,14 @@ SUITES = {"main": "script", "tor": "script", "nat": "script",
 
 
 def fake(after=None, destroys=False, ops=(), local_only=None,
-         nodes=("node1",), prompt=False, config=None, stop=()):
+         nodes=("node1",), prompt=False, config=None, stop=(), restart=(),
+         host_listener=None):
     return SimpleNamespace(after=after,
                            destroys=destroys or bool(ops) or bool(stop),
                            ops=list(ops), local_only=local_only,
                            nodes=list(nodes), prompt=prompt,
-                           config=config or {}, stop=list(stop))
+                           config=config or {}, stop=list(stop),
+                           restart=list(restart), host_listener=host_listener)
 
 
 def mcp(bind: str) -> dict:
@@ -160,6 +162,49 @@ class TestShippedPlans(Invariants, unittest.TestCase):
                                     "a VM world cannot, and this run puts "
                                     "every world in VMs$"):
             plan(tests, ["stopper"], vm=True)
+
+    def test_a_host_listener_runs_anywhere_but_in_a_vm(self):
+        # why: a local, Docker or attach world gives its nodes a host_ip, and
+        # a VM world gives none; an attached daemon off this host fails at
+        # prepare instead (runner.refuse_no_host_ip)
+        tests = {"serves": fake(host_listener="serves an app node1 dials")}
+        self.assertEqual({w.kind for w in plan(tests, ["serves"])},
+                         {"local"})
+        self.assertEqual({w.kind for w in plan(tests, ["serves"],
+                                               docker=True)}, {"docker"})
+        self.assertEqual({w.kind for w in plan(tests, ["serves"],
+                                               target="attach")}, {"attach"})
+        with self.assertRaisesRegex(PlanError, "^serves serves a listener on "
+                                    "the test host, and a VM world gives its "
+                                    "nodes no host_ip to dial it at, and this "
+                                    "run puts every world in VMs$"):
+            plan(tests, ["serves"], vm=True)
+
+    def test_a_host_listener_with_ops_cannot_run(self):
+        tests = {"both": fake(ops=["enable-tor node1"], host_listener="app")}
+        with self.assertRaisesRegex(PlanError, "^both runs VM operations and "
+                                    "serves a listener on the test host"):
+            plan(tests, ["both"])
+
+    def test_a_restart_runs_local_or_in_docker_never_in_a_vm_or_attached(self):
+        # why: a local and a Docker world restart a node; a VM world has no
+        # restart, and attach never restarts the daemon it borrows
+        tests = {"restarter": fake(restart=["node1"])}
+        self.assertEqual({w.kind for w in plan(tests, ["restarter"])},
+                         {"local"})
+        self.assertEqual({w.kind for w in plan(tests, ["restarter"],
+                                               docker=True)}, {"docker"})
+        with self.assertRaisesRegex(PlanError, "^restarter restarts a node, "
+                                    "which a VM world cannot, and this run "
+                                    "puts every world in VMs$"):
+            plan(tests, ["restarter"], vm=True)
+        with self.assertRaisesRegex(PlanError, "^restarter restarts a node, "
+                                    "and --target attach never restarts"):
+            plan(tests, ["restarter"], target="attach")
+        tests["op"] = fake(ops=["enable-tor node1"], restart=["node1"])
+        with self.assertRaisesRegex(PlanError, "^op runs VM operations and "
+                                    "restarts a node"):
+            plan(tests, ["op"])
 
     def test_a_prereq_stranded_by_a_fork_is_dropped(self):
         # why: mcp-origin fixes w0 local, tor-link forks a VM world, and the

@@ -122,8 +122,9 @@ class TestLoad(ManifestCase):
 class TestPlannerKeys(ManifestCase):
     def test_absent_keys_default(self):
         t = self.all["smoke"]
-        self.assertEqual((t.after, t.destroys, t.ops, t.local_only, t.facts,
-                          t.prompt), (None, False, [], None, [], False))
+        self.assertEqual((t.after, t.destroys, t.ops, t.local_only,
+                          t.host_listener, t.facts, t.prompt),
+                         (None, False, [], None, None, [], False))
 
     def test_keys_parse(self):
         self.add("vm-test", """
@@ -185,6 +186,30 @@ class TestPlannerKeys(ManifestCase):
                 nodes = ["node1"]
                 ops = ["enable-tor node1"]
                 local_only = "reads a host path"
+            """)
+
+
+    def test_host_listener_is_a_reason_beside_local_only_never_ops(self):
+        # why beside local_only: a test may serve a host listener and still
+        # be local only for a reason no world operation serves
+        self.add("serves", """
+            nodes = ["node1"]
+            host_listener = " serves an app node1 dials "
+            local_only = "reads a host path"
+        """)
+        t = self.all["serves"]
+        self.assertEqual((t.host_listener, t.local_only),
+                         ("serves an app node1 dials", "reads a host path"))
+        with self.assertRaisesRegex(ValueError, "host_listener must be"):
+            self.add("bare", """
+                nodes = ["node1"]
+                host_listener = ""
+            """)
+        with self.assertRaisesRegex(ValueError, "cannot be host_listener"):
+            self.add("both", """
+                nodes = ["node1"]
+                ops = ["enable-tor node1"]
+                host_listener = "serves an app node1 dials"
             """)
 
 

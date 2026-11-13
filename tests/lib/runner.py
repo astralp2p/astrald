@@ -101,6 +101,8 @@ def _perform(ex, t, drive, art: Path, view) -> tuple:
     phase = "prepare"
     try:
         ex.ensure(t)
+        if t.host_listener:
+            refuse_no_host_ip(t, ex.nodes())
         env = view("driver")
         phase = "driver"
         rc = drive(env)
@@ -129,6 +131,21 @@ def _perform(ex, t, drive, art: Path, view) -> tuple:
     if rc == 0:
         return "pass", None, phase
     return "fail", "oracle" if rc == step.FAULT else "verify", phase
+
+
+def refuse_no_host_ip(t, nodes: dict) -> None:
+    """WorldError when a node of t's roster has no host_ip, so it cannot dial
+    the listener t serves on the test host.
+
+    why at prepare and not in the planner: only the attached daemon's
+    endpoint, read when the world opens, says whether it runs on this host
+    """
+    blind = [n for n in t.nodes if nodes.get(n, {}).get("host_ip") is None]
+    if blind:
+        raise WorldError(f"{t.name} serves a listener on the test host "
+                         f"({t.host_listener}), and {', '.join(blind)} has "
+                         "no host_ip to dial it at: the world runs it off "
+                         "this host")
 
 
 @dataclass
