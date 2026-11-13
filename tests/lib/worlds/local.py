@@ -121,6 +121,8 @@ class LocalWorld(World):
             # how many times the world restarted the node, so an oracle can
             # tell a restart happened
             restarts=n.restarts,
+            # why loopback: the nodes are processes on the test host itself
+            host_ip="127.0.0.1",
         ) for name, n in self._nodes.items() if name not in self._stopped}
 
     def dead(self) -> list:

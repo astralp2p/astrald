@@ -10,11 +10,15 @@ There are four kinds: local (lib/worlds/local.py), docker
 (lib/worlds/docker.py), vm (lib/worlds/vm.py) and attach
 (lib/worlds/attach.py). Every world reports a node under one
 schema, `NODE_FIELDS`; a field a world cannot provide is None.
+
+`host_ip` is the address on the test host that a node dials to reach a
+listener the test serves there (manifest key host_listener): a helper app a
+node calls back, an authority, a bait.
 """
 
 NODE_FIELDS = ("endpoint", "token", "identity", "root", "tcp_port",
                "lan_endpoint", "mcp_url", "serves_mcp", "authority_url",
-               "restarts")
+               "restarts", "host_ip")
 
 
 def node_entry(**known) -> dict:

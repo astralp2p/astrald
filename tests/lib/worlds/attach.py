@@ -5,14 +5,34 @@ let the standard oracle judge it, with open eyes: nothing here is hermetic,
 nothing is torn down, and a destroying test really changes your daemon.
 
 The planner holds attach's guards (lib/plan.py, rule 8): one world, one
-roster node, no prereq to build, no VM operation, nothing local only.
+roster node, no prereq to build, no VM operation, nothing local only, no
+restart. A test that serves a listener on the test host (host_listener)
+plans here, and the runner fails its prepare when the daemon is remote.
 """
 import asyncio
+import ipaddress
 
 import astral
 from astral.client import resolve_endpoint, resolve_token
 
 from lib.worlds import World, WorldError, node_entry
+
+
+def host_ip(endpoint: str) -> str | None:
+    """127.0.0.1 when the daemon at endpoint runs on the test host — a unix
+    socket or a loopback TCP address — else None: a remote daemon cannot
+    dial a listener the test serves here."""
+    proto, _, addr = endpoint.partition(":")
+    if proto == "unix":
+        return "127.0.0.1"
+    if proto != "tcp":
+        return None
+    host = addr.rpartition(":")[0].strip("[]")
+    try:
+        loopback = host == "localhost" or ipaddress.ip_address(host).is_loopback
+    except ValueError:
+        return None
+    return "127.0.0.1" if loopback else None
 
 
 class AttachWorld(World):
@@ -44,7 +64,8 @@ class AttachWorld(World):
         # note: the daemon's ports and roots are its owner's, not the run's,
         # so attach knows only how to reach it
         return {n["name"]: node_entry(
-            endpoint=n["endpoint"], token=n["token"], identity=n["identity"])}
+            endpoint=n["endpoint"], token=n["token"], identity=n["identity"],
+            host_ip=host_ip(n["endpoint"]))}
 
     def dead(self) -> list:
         return []

@@ -32,20 +32,40 @@ A driver and an oracle read one file, their session view, through
 `NODE_FIELDS`, `null` where its world has none. Neither ever learns whether
 a node is a process two ports away, a VM behind a tunnel, or your own daemon.
 
+A test reaches its nodes through three things only, so it runs in any world
+that fits it:
+
+- the **session view**: `endpoint` and `token` to query a node, `identity`,
+  `lan_endpoint` for a peer to link to, and the rest of `NODE_FIELDS`;
+- **`host_ip`**: the address on the test host that this node dials to reach
+  a listener the test serves there (a helper app, an authority, a bait).
+  The test binds the listener at it and declares `host_listener`. A local
+  world gives `127.0.0.1`; an attach world gives `127.0.0.1` when its
+  endpoint is a unix socket or a loopback TCP address, else `null`; a Docker
+  world gives its network's gateway; a VM world gives `null`;
+- **`lib/nodefs.py`**: a node's files and its `astrald.log`, through the
+  node's `root` (see [Node files](#node-files)). A test never builds a host
+  path from a `root`.
+
+A test that needs anything else is `local_only`, with the reason.
+
 **2. Write the manifest.** Every key but `nodes` is optional:
 
 ```toml
 nodes      = ["node1", "node2"]     # the roster: names this test's nodes
 after      = "adopt-node"           # the test whose world this one continues; absent: a root test
 destroys   = true                   # only this test's descendants may follow it in its world
-local_only = "reads a node root"    # it needs the host, so it never enters a VM world
-restart    = ["node1"]              # nodes restarted between driver and oracle (local worlds only);
+local_only = "reads a host path"    # it needs the host, so it runs only in a local world
+host_listener = "serves an app node1 dials"  # it serves a listener on the test host at host_ip;
+#                                   # never in a VM world
+restart    = ["node1"]              # nodes restarted between driver and oracle (local or Docker worlds);
 #                                   # an app that must survive it: Long-lived apps
 stop       = ["node1"]              # nodes stopped for good between driver and oracle (local or Docker worlds); implies destroys
 facts      = ["object_id"]          # the facts its driver writes
 timeout    = 180                    # the driver's and the oracle's budget, in seconds (default 120)
 # ops      = ["enable-tor node1"]   # VM operations (netsim/ops/) run before the driver; imply
 #                                   # destroys, and a test with ops is never local_only
+#                                   # nor host_listener
 
 [config.node1.objects]              # a module config override for one node, per world
 external_registration_sweep_interval = "1s"
@@ -64,12 +84,23 @@ external_registration_sweep_interval = "1s"
 - **`destroys`** marks a test that leaves its world unusable for anything
   but its own descendants: it expels a node, purges a repository, moves a
   node behind NAT, or claims a node another test needs unclaimed.
-- **`local_only`** is for a test that reads `mcp_url`, `authority_url`,
-  `serves_mcp`, a node `root` or a host path, that serves an app or an
-  authority on the host for a node to dial, or that restarts a node.
-  A roster is not a reason: a test whose `nodes` name a machine the VM lab
-  does not run (`plan.LAB_NODES`: node1, node2, reflector) never enters a
-  VM world, and runs in a local or Docker world as any other test does.
+- **`local_only`** is only for a reason no world operation serves: the
+  session view, `host_ip` and `lib/nodefs.py` cover querying a node,
+  serving it a listener and reaching its files and log. A local_only test
+  runs in local worlds only, so a Docker run refuses it. A roster is not a
+  reason: a test whose `nodes` name a machine the VM lab does not run
+  (`plan.LAB_NODES`: node1, node2, reflector) never enters a VM world, and
+  runs in a local or Docker world as any other test does. A restart is not
+  a reason either.
+- **`host_listener`** says why a node dials a listener the test serves on
+  the test host, bound at the node's `host_ip`. The planner refuses such a
+  test only in a VM world, whose nodes have no `host_ip`. Under `--target
+  attach` it plans, and a daemon off this host (`host_ip` null) is
+  FAIL/environment at `prepare`. A test may be both `host_listener` and
+  `local_only` for another reason.
+- **`restart`** restarts the named nodes after the driver, in a local or
+  Docker world, on the state they hold. The planner never puts a test with
+  `restart` in a VM world or on an attached daemon.
 - **`stop`** stops the named nodes after the driver, in a local or Docker
   world, and leaves them stopped. A stopped node is not dead: the liveness
   check skips it, and the session view of the test's oracle and of every
@@ -210,7 +241,12 @@ The first Docker run builds the node image, which takes minutes and needs
 npm's registry and GitHub; later runs reuse it until `docker/` or the
 `.ai/system` pin changes. A test with
 `ops` needs a VM world, and a `local_only` test a local one: a Docker run
-refuses both, as `--save` and `--from`. At a world's end its containers and
+refuses both, as `--save` and `--from`. A Docker world restarts and stops a
+node's astrald in its container. A node reaches a listener the test serves
+on the host at its `host_ip`, the gateway of the world's network
+(`docker network inspect`, or the container's default route when the
+network names none), and a test reaches a node's files with
+`lib/nodefs.py`, through `docker exec`. At a world's end its containers and
 network are removed; `--keep` leaves them up and names them, and later
 runs leave a kept world alone until you remove it (`docker rm -f`). A run
 killed by SIGKILL leaves its containers, and the next Docker run removes
@@ -331,7 +367,29 @@ that ends its app itself (`stop()` in the oracle) leaves the world as the next
 test expects it. Limits: a SIGKILLed runner cannot reap, so the apps stay up
 with their entries in the results directory (`pkill -f results/<stamp>/`); a
 `--keep` world keeps its apps running with its nodes; an app is a process on the
-host, so its test is `local_only`.
+host, so a node that dials it reaches it at the node's `host_ip`, and its test
+declares `host_listener`.
+
+## Node files
+
+`lib/nodefs.py` reads and writes a node's files through its session-view
+`root`: a host path in a local world, `docker:<container>:<path>` in a Docker
+world (through `docker exec`). Every call takes the node's entry and a path
+relative to its root; any other root (a VM world's, an attached daemon's
+`null`) raises `NodeFSError`. A Docker command that fails raises `OSError`.
+
+| call | does |
+|------|------|
+| `path(node, rel="")` | the absolute path as the node's machine sees it, e.g. for `fs.new_watch`; resolved on a host |
+| `read_bytes(node, rel)` / `read_text(node, rel)` | the file's bytes / its text, a non-UTF-8 byte as U+FFFD |
+| `write_bytes(node, rel, data)` | writes the file, creating its parent directories |
+| `mkdir(node, rel)` | creates the directory and its parents; one already there stays |
+| `remove(node, rel)` | removes a file, a symlink (never followed) or a directory tree |
+| `symlink(node, rel, target)` | makes `rel` a symlink to `target`, also relative to the root |
+| `rename(node, src, dst)` | moves `src` to `dst`, replacing a file there |
+| `listdir(node, rel="")` | `{name: kind}`, kind `file`, `dir`, `link` or `other` |
+| `set_mtime(node, rel, mtime)` | sets the modification (and access) time, in seconds since the epoch |
+| `log(node)` | the node's `astrald.log` as text |
 
 ## Host directories
 
@@ -363,7 +421,8 @@ type, repository, version and object.
   open eyes: nothing is torn down, and a `destroys` test really changes your
   daemon and says so first. The plan is refused when the selection needs a
   prereq (attach checks a state, it never builds one), a roster names more
-  than one node, a test is `local_only`, or the driver is `agent`.
+  than one node, a test is `local_only` or restarts a node, or the driver is
+  `agent`. A `host_listener` test runs when the daemon is on this host.
 - **`--save` / `--from`** skip rebuilding a VM world:
 
       ./tests/run adopt-node --vm --save gw     # build it in VMs, save it as gw
