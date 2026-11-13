@@ -107,13 +107,13 @@ func (mod *Module) folderObjectID(vfsID *astral.Identity, folderID int64) (astra
 			return err
 		}
 
-		if err = fillFolderID(tx, row); err != nil {
+		// why: compute answers an ID for any row, so a row that changed under the lock never yields a nil ID.
+		fc := folderIDComputer{tx: tx}
+		if id, err = fc.compute(row); err != nil {
 			return err
 		}
 
-		id = *row.ObjectID
-
-		return nil
+		return tx.setFolderIDs(fc.filled)
 	})
 
 	return id, err

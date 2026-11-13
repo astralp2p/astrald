@@ -115,11 +115,11 @@ func (db *DB) listChildren(parentID int64) (rows []*dbEntry, err error) {
 }
 
 // hasChildren reports whether a folder has at least one entry.
-func (db *DB) hasChildren(rowID int64) (bool, error) {
+func (db *DB) hasChildren(parentID int64) (bool, error) {
 	var n int64
 
 	// note: the root is its own parent, so the query leaves the root row itself out.
-	err := db.Model(&dbEntry{}).Where("parent_id = ? AND id <> parent_id", rowID).Count(&n).Error
+	err := db.Model(&dbEntry{}).Where("parent_id = ? AND id <> parent_id", parentID).Count(&n).Error
 
 	return n > 0, err
 }
@@ -282,7 +282,7 @@ func (db *DB) hasFileWithObject(objectID *astral.ObjectID) (bool, error) {
 // findVFSesWithObject returns each VFS that has a file with the ObjectID, once.
 //
 // note: a folder's cached listing ObjectID names no stored object, so folder rows are skipped.
-func (db *DB) findVFSesWithObject(id astral.ObjectID) ([]*astral.Identity, error) {
+func (db *DB) findVFSesWithObject(id *astral.ObjectID) ([]*astral.Identity, error) {
 	var rows []dbEntry
 
 	err := db.Model(&dbEntry{}).

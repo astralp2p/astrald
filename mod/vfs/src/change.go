@@ -8,8 +8,8 @@ import (
 
 // change is one change to a VFS: the transaction it runs in and the VFS it changes.
 //
-// note: vol was read before the lock; a change uses vol.Identity and vol.RootID only, and checkLimits reads the
-// limits inside the transaction.
+// note: vol was read before the lock, so a change uses vol.Identity and vol.RootID only.
+// note: checkLimits re-reads the limits inside the transaction.
 type change struct {
 	tx  *DB
 	vol *dbVolume

@@ -64,7 +64,7 @@ func (mod *Module) AuthorizeSeeObjects(ctx *astral.Context, a *apiauth.SeeObject
 		return false
 	}
 
-	vfsIDs, err := mod.db.findVFSesWithObject(*id)
+	vfsIDs, err := mod.db.findVFSesWithObject(id)
 	if err != nil {
 		mod.log.Log("find the VFSes of %v: %v", id, err)
 		return false
