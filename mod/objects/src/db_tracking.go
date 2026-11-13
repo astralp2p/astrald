@@ -14,7 +14,7 @@ type dbTracking struct {
 	ReadAt      int64            `gorm:"not null;default:0"`
 }
 
-// note: provisional, pending operator decision: the name of the tracking table.
+// note: operator decision 2026-11-13: the tracking table is named objects__tracking.
 func (dbTracking) TableName() string { return objects.DBPrefix + "tracking" }
 
 // touch returns the last touch of the row: the later of its commit and read times.

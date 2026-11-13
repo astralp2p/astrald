@@ -36,7 +36,9 @@ func newTrackingModule(t *testing.T) *Module {
 	lg := log.New(astral.GenerateIdentity())
 	mod := &Module{config: defaultConfig, db: db, log: lg}
 	mod.objectsReadsJournal = newObjectsReadsJournal(db.UpdateReadAt, lg)
-	mod.setupDefaultRepos()
+	if err := mod.setupDefaultRepos(); err != nil {
+		t.Fatalf("setup default repositories: %v", err)
+	}
 	return mod
 }
 
@@ -313,5 +315,18 @@ func TestTracking_MigrateDropsOldTable(t *testing.T) {
 	}
 	if !mod.db.Migrator().HasTable(&dbTracking{}) {
 		t.Fatal("the tracking table is missing after Migrate")
+	}
+}
+
+// TestTracking_SetupFailsWhenADefaultLeafCannotBeAdded: a name already taken by mem0 or system fails the setup
+// that registers the default leaves.
+func TestTracking_SetupFailsWhenADefaultLeafCannotBeAdded(t *testing.T) {
+	for _, name := range []string{"mem0", objects.RepoSystem} {
+		mod := &Module{config: defaultConfig}
+		mod.repos.Set(name, mem.New("taken", 0))
+
+		if err := mod.setupDefaultRepos(); err == nil {
+			t.Errorf("setup with %v taken succeeded; want an error", name)
+		}
 	}
 }

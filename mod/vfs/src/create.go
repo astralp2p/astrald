@@ -11,12 +11,12 @@ import (
 // CreateVFS creates the VFS of an identity with the default quotas, and its root folder. A VFS that exists is
 // left as it is.
 //
-// The zero identity is refused with vfsapi.ErrNotPermitted.
+// Any non-zero identity is accepted, the node's included. The zero identity is refused with
+// vfsapi.ErrNotPermitted.
 //
-// note: provisional, pending operator decision: does vfs.create accept the identity of the node? VFS 6 section 7
-// accepts any non-zero identity and section 6 says no VFS is created for the node, so the node is refused.
+// note: operator decision 2026-11-13: the node's identity is accepted; no automatic path creates a VFS for the node.
 func (mod *Module) CreateVFS(id *astral.Identity) error {
-	if id.IsZero() || id.IsEqual(mod.identity) {
+	if id.IsZero() {
 		return vfsapi.ErrNotPermitted
 	}
 

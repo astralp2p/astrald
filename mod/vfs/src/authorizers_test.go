@@ -336,6 +336,25 @@ func TestSeeObjectsAllowsAReadPermitAndNotAWritePermit(t *testing.T) {
 	}
 }
 
+// TestSeeObjectsHasNoRootCallerShortcut checks that the handler itself allows a root caller only through a read
+// permit, as VFS 6, section 6 "Reading by ObjectID" lists.
+func TestSeeObjectsHasNoRootCallerShortcut(t *testing.T) {
+	f := newSeeFixture(t)
+	user := astral.GenerateIdentity()
+	f.mod.User = fakeUser{id: user}
+
+	for name, root := range map[string]*astral.Identity{"node": f.mod.identity, "user": user} {
+		if f.see(root, f.file) {
+			t.Fatalf("the %v is allowed without a read permit", name)
+		}
+	}
+
+	f.auth.permit(&vfsapi.ReadAction{}, user, f.vfs)
+	if !f.see(user, f.file) {
+		t.Fatal("the user is refused with a read permit")
+	}
+}
+
 // TestSeeObjectsDoesNotReachDescribeOrFind checks the action objects.describe and objects.find ask: it names no
 // ObjectID (mod/objects/src/authorize_see_objects_test.go pins that), so a VFS identity is refused even for its
 // own file.

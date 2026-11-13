@@ -1,7 +1,6 @@
 package vfs
 
 import (
-	vfsapi "github.com/astralp2p/astral-go/api/vfs"
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astral-go/astral/channel"
 	"github.com/astralp2p/astral-go/lib/routing"
@@ -28,7 +27,7 @@ func (mod *Module) OpVolumes(ctx *astral.Context, q *routing.IncomingQuery, args
 	}
 
 	for _, vol := range volumes {
-		info, err := mod.volumesInfo(vol)
+		info, err := mod.vfsInfo(vol)
 		if err != nil {
 			mod.log.Error("vfs.volumes: info of %v: %v", vol.Identity, err)
 			return ch.Send(astral.Err(err))
@@ -47,34 +46,4 @@ func (db *DB) volumesList() (volumes []*dbVolume, err error) {
 	err = db.Order("id").Find(&volumes).Error
 
 	return
-}
-
-// volumesInfo returns the facts of one VFS.
-//
-// note: the facts are read one after another and not in one transaction, because the root ObjectID takes the
-// VFS lock when it is not cached and the lock is never held across a read of this kind.
-func (mod *Module) volumesInfo(vol *dbVolume) (*vfsapi.Info, error) {
-	root, err := mod.folderObjectID(vol.Identity, vol.RootID)
-	if err != nil {
-		return nil, err
-	}
-
-	usage, err := mod.db.usage(vol.Identity)
-	if err != nil {
-		return nil, err
-	}
-
-	entries, err := mod.db.entryCount(vol.Identity)
-	if err != nil {
-		return nil, err
-	}
-
-	return &vfsapi.Info{
-		VFS:        vol.Identity,
-		Root:       root,
-		Usage:      astral.Uint64(usage),
-		Quota:      astral.Uint64(vol.byteLimit()),
-		Entries:    astral.Uint64(entries),
-		EntryLimit: astral.Uint64(vol.entryLimit()),
-	}, nil
 }

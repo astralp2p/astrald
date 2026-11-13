@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"crypto/sha256"
 	"errors"
+	"fmt"
 	"io"
 	"sync"
 	"testing"
@@ -106,6 +107,8 @@ func changeTestModule(t *testing.T) (*Module, *dbVolume, *changeTestRepo) {
 }
 
 // changeTestClient is the caller's end of one routed query.
+//
+// note: the methods that return an error never call t.Fatal, so a goroutine other than the test's may use them.
 type changeTestClient struct {
 	t    *testing.T
 	in   io.WriteCloser
@@ -113,25 +116,39 @@ type changeTestClient struct {
 	recv channel.Receiver
 }
 
-// changeTestRoute routes one query to an op and returns the caller's end.
-func changeTestRoute(t *testing.T, fn any, caller *astral.Identity, args map[string]any) *changeTestClient {
-	t.Helper()
-
+// changeTestOpen routes one query to an op and returns the caller's end. The caller closes it.
+func changeTestOpen(fn any, caller *astral.Identity, args map[string]any) (*changeTestClient, error) {
 	op, err := routing.NewOp(fn)
 	if err != nil {
-		t.Fatalf("new op: %v", err)
+		return nil, fmt.Errorf("new op: %w", err)
 	}
 
 	out, outWriter := io.Pipe()
 	in, err := op.RouteQuery(testContext(), astral.Launch(query.New(caller, caller, "op", args)), outWriter)
 	if err != nil {
-		t.Fatalf("route: %v", err)
+		return nil, fmt.Errorf("route: %w", err)
 	}
 
-	c := &changeTestClient{t: t, in: in, out: out, recv: channel.NewReceiver(out)}
-	t.Cleanup(func() { in.Close(); out.Close() })
+	return &changeTestClient{in: in, out: out, recv: channel.NewReceiver(out)}, nil
+}
+
+// changeTestRoute routes one query to an op and returns the caller's end, closed when the test ends.
+func changeTestRoute(t *testing.T, fn any, caller *astral.Identity, args map[string]any) *changeTestClient {
+	t.Helper()
+
+	c, err := changeTestOpen(fn, caller, args)
+	if err != nil {
+		t.Fatal(err)
+	}
+	c.t = t
+	t.Cleanup(c.close)
 
 	return c
+}
+
+func (c *changeTestClient) close() {
+	c.in.Close()
+	c.out.Close()
 }
 
 // send sends objects in the background; the op may stop reading at any time.
@@ -150,10 +167,8 @@ func (c *changeTestClient) send(objects ...astral.Object) <-chan struct{} {
 	return done
 }
 
-// receive returns the next answer, or nil when the op closed the stream.
-func (c *changeTestClient) receive() astral.Object {
-	c.t.Helper()
-
+// next returns the next answer, or nil when the op closed the stream. It fails when no answer comes in time.
+func (c *changeTestClient) next() (astral.Object, error) {
 	type answer struct {
 		obj astral.Object
 		err error
@@ -167,12 +182,45 @@ func (c *changeTestClient) receive() astral.Object {
 	select {
 	case a := <-got:
 		if a.err != nil {
-			return nil
+			return nil, nil
 		}
-		return a.obj
+		return a.obj, nil
 	case <-time.After(changeTestWait):
-		c.t.Fatal("no answer")
-		return nil
+		return nil, errors.New("no answer")
+	}
+}
+
+// nextClosed waits until the op closes the stream and fails on any further answer.
+func (c *changeTestClient) nextClosed() error {
+	answer, err := c.next()
+	switch {
+	case err != nil:
+		return err
+	case answer != nil:
+		return fmt.Errorf("answer %#v after the last one", answer)
+	}
+
+	return nil
+}
+
+// receive returns the next answer, or nil when the op closed the stream.
+func (c *changeTestClient) receive() astral.Object {
+	c.t.Helper()
+
+	answer, err := c.next()
+	if err != nil {
+		c.t.Fatal(err)
+	}
+
+	return answer
+}
+
+// waitClosed waits until the op closes the stream and fails on any further answer.
+func (c *changeTestClient) waitClosed() {
+	c.t.Helper()
+
+	if err := c.nextClosed(); err != nil {
+		c.t.Fatal(err)
 	}
 }
 
@@ -188,11 +236,28 @@ func changeTestCall(t *testing.T, fn any, vol *dbVolume, args map[string]any) as
 func changeTestWrite(t *testing.T, mod *Module, vol *dbVolume, path, content string) astral.Object {
 	t.Helper()
 
-	c := changeTestRoute(t, mod.OpWrite, vol.Identity, map[string]any{"path": path})
-	first := c.receive()
+	answer, err := changeTestTryWrite(mod, vol, path, content)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	return answer
+}
+
+// changeTestTryWrite is changeTestWrite for any goroutine: it returns an error instead of failing the test.
+func changeTestTryWrite(mod *Module, vol *dbVolume, path, content string) (astral.Object, error) {
+	c, err := changeTestOpen(mod.OpWrite, vol.Identity, map[string]any{"path": path})
+	if err != nil {
+		return nil, err
+	}
+	defer c.close()
+
+	first, err := c.next()
+	if err != nil {
+		return nil, err
+	}
 	if _, ok := first.(*astral.Ack); !ok {
-		c.waitClosed()
-		return first
+		return first, c.nextClosed()
 	}
 
 	var objects []astral.Object
@@ -204,19 +269,12 @@ func changeTestWrite(t *testing.T, mod *Module, vol *dbVolume, path, content str
 	}
 	c.send(append(objects, &objectsapi.CommitMsg{})...)
 
-	answer := c.receive()
-	c.waitClosed()
-
-	return answer
-}
-
-// waitClosed waits until the op closes the stream and fails on any further answer.
-func (c *changeTestClient) waitClosed() {
-	c.t.Helper()
-
-	if answer := c.receive(); answer != nil {
-		c.t.Fatalf("answer %#v after the last one", answer)
+	answer, err := c.next()
+	if err != nil {
+		return nil, err
 	}
+
+	return answer, c.nextClosed()
 }
 
 // changeTestEntry asserts that an answer is an entry and returns it.

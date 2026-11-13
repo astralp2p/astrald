@@ -128,6 +128,11 @@ func (run *purgeRun) purgeLeaf(ctx *astral.Context, leaf *trackedRepository) err
 // It reports whether the candidate is purged.
 // why: a read or a commit between the listing and this turn moves the last touch, so the listed row is stale.
 func (run *purgeRun) decide(ctx *astral.Context, leaf *trackedRepository, objectID *astral.ObjectID) (bool, error) {
+	// why: the empty object is never stored, so a row left for it names nothing to delete.
+	if objects.IsEmptyObject(objectID) {
+		return false, nil
+	}
+
 	leaf.mu.Lock()
 	defer leaf.mu.Unlock()
 

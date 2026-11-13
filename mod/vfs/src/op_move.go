@@ -55,7 +55,7 @@ func (mod *Module) OpMove(ctx *astral.Context, q *routing.IncomingQuery, args op
 // moveEntry moves the entry at from to the path to.
 func (db *DB) moveEntry(vol *dbVolume, from, to []string) (*vfsapi.Entry, error) {
 	// why: the root cannot be moved (operator decision 2026-11-12).
-	// note: provisional, pending operator decision: a move onto the root answers invalid path, not already exists.
+	// note: operator decision 2026-11-13: a move onto the root answers invalid path, not already exists.
 	if len(from) == 0 || len(to) == 0 {
 		return nil, vfsapi.ErrInvalidPath
 	}

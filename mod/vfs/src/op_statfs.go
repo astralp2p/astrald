@@ -23,7 +23,7 @@ func (mod *Module) OpStatfs(ctx *astral.Context, q *routing.IncomingQuery, args 
 		return ch.Send(astral.Err(err))
 	}
 
-	info, err := mod.statfsInfo(vol)
+	info, err := mod.vfsInfo(vol)
 	if err != nil {
 		return ch.Send(astral.Err(err))
 	}
@@ -31,31 +31,44 @@ func (mod *Module) OpStatfs(ctx *astral.Context, q *routing.IncomingQuery, args 
 	return ch.Send(info)
 }
 
-// statfsInfo returns the facts about a VFS. A limit of 0 means no limit. The root is not an entry.
+// vfsInfo returns the facts about a VFS for vfs.statfs and vfs.volumes. A limit of 0 means no limit. The root is
+// not an entry.
 //
+// why: Root, Usage and Entries are read in one transaction under the VFS lock, so they describe one state.
 // note: a caller must not hold the lock of the VFS, nor be inside a transaction.
-func (mod *Module) statfsInfo(vol *dbVolume) (*vfsapi.Info, error) {
-	root, err := mod.folderObjectID(vol.Identity, vol.RootID)
-	if err != nil {
-		return nil, err
-	}
+func (mod *Module) vfsInfo(vol *dbVolume) (*vfsapi.Info, error) {
+	unlock := mod.lockVFS(vol.Identity)
+	defer unlock()
 
-	usage, err := mod.db.usage(vol.Identity)
-	if err != nil {
-		return nil, err
-	}
-
-	entries, err := mod.db.entryCount(vol.Identity)
-	if err != nil {
-		return nil, err
-	}
-
-	return &vfsapi.Info{
+	info := &vfsapi.Info{
 		VFS:        vol.Identity,
-		Root:       root,
-		Usage:      astral.Uint64(usage),
 		Quota:      astral.Uint64(vol.byteLimit()),
-		Entries:    astral.Uint64(entries),
 		EntryLimit: astral.Uint64(vol.entryLimit()),
-	}, nil
+	}
+
+	err := mod.db.inTx(func(tx *DB) error {
+		root, filled, err := tx.computeFolderID(vol.RootID)
+		if err != nil {
+			return err
+		}
+
+		usage, err := tx.usage(vol.Identity)
+		if err != nil {
+			return err
+		}
+
+		entries, err := tx.entryCount(vol.Identity)
+		if err != nil {
+			return err
+		}
+
+		info.Root, info.Usage, info.Entries = root, astral.Uint64(usage), astral.Uint64(entries)
+
+		return tx.storeFolderIDs(filled)
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return info, nil
 }

@@ -88,14 +88,14 @@ func TestCreateVFSRefusesTheZeroIdentity(t *testing.T) {
 	}
 }
 
-func TestCreateVFSRefusesTheNode(t *testing.T) {
+func TestCreateVFSAcceptsTheNode(t *testing.T) {
 	mod := testModule(t)
 
-	if err := mod.CreateVFS(mod.identity); !errors.Is(err, vfsapi.ErrNotPermitted) {
-		t.Fatalf("CreateVFS(node) = %v, want not permitted", err)
+	if err := mod.CreateVFS(mod.identity); err != nil {
+		t.Fatalf("CreateVFS(node) = %v, want nil", err)
 	}
-	if _, err := mod.db.findVolume(mod.identity); !errors.Is(err, vfsapi.ErrNoSuchVFS) {
-		t.Fatalf("a VFS exists for the node: %v", err)
+	if _, err := mod.db.findVolume(mod.identity); err != nil {
+		t.Fatalf("no VFS exists for the node: %v", err)
 	}
 }
 

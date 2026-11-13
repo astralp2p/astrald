@@ -13,7 +13,7 @@ const purgeTaskInterval = 24 * time.Hour
 // runPurgeTask purges the group local with the window untouched once every interval until ctx ends.
 // A window of 0 turns the task off.
 // note: the first run comes one interval after start (VFS 6, §11 "objects: purge").
-// note: provisional, pending operator decision: a negative window also turns the task off.
+// note: operator decision 2026-11-13: a window at or below zero turns the task off.
 func (mod *Module) runPurgeTask(ctx *astral.Context, interval time.Duration, untouched time.Duration) {
 	if untouched <= 0 {
 		mod.log.Logv(1, "purge task: off")
