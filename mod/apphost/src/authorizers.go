@@ -5,6 +5,7 @@ import (
 	"github.com/astralp2p/astral-go/api/services"
 	"github.com/astralp2p/astral-go/api/shell"
 	"github.com/astralp2p/astral-go/api/user"
+	vfsapi "github.com/astralp2p/astral-go/api/vfs"
 	"github.com/astralp2p/astral-go/astral"
 )
 
@@ -146,5 +147,32 @@ func (mod *Module) AuthorizeShell(ctx *astral.Context, action *shell.ShellAction
 // why: a typed shim over the generic lookup, matching AuthorizeServeObjects. The
 // permit's DiscoveryScope decides; an unconstrained grant covers nothing.
 func (mod *Module) AuthorizeServiceDiscovery(ctx *astral.Context, action *services.ServiceDiscoveryAction) bool {
+	return mod.authorizeGrant(ctx, action)
+}
+
+// AuthorizeVFSRead answers whether this node has granted the actor the right to
+// read the VFSes its permit lists.
+//
+// why: a typed shim over the generic lookup, matching AuthorizeServeObjects.
+// The permit's constraints decide; a grant that lists no VFS covers none.
+func (mod *Module) AuthorizeVFSRead(ctx *astral.Context, action *vfsapi.ReadAction) bool {
+	return mod.authorizeGrant(ctx, action)
+}
+
+// AuthorizeVFSWrite answers whether this node has granted the actor the right
+// to change the VFSes its permit lists.
+//
+// why: a typed shim over the generic lookup, matching AuthorizeVFSRead. A write
+// grant does not imply a read grant.
+func (mod *Module) AuthorizeVFSWrite(ctx *astral.Context, action *vfsapi.WriteAction) bool {
+	return mod.authorizeGrant(ctx, action)
+}
+
+// AuthorizeVFSManage answers whether this node has granted the actor the right
+// to administer VFSes.
+//
+// why: a typed shim over the generic lookup, matching AuthorizeVFSRead. The
+// action takes no constraints, so only an unconstrained grant authorizes.
+func (mod *Module) AuthorizeVFSManage(ctx *astral.Context, action *vfsapi.ManageAction) bool {
 	return mod.authorizeGrant(ctx, action)
 }

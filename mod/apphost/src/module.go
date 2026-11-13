@@ -17,6 +17,7 @@ import (
 	"github.com/astralp2p/astrald/mod/sys"
 	"github.com/astralp2p/astrald/mod/tree"
 	"github.com/astralp2p/astrald/mod/user"
+	"github.com/astralp2p/astrald/mod/vfs"
 )
 
 var _ apphostmod.Module = &Module{}
@@ -28,6 +29,7 @@ type Deps struct {
 	Objects objects.Module
 	Sys     sys.Module
 	Tree    tree.Module
+	VFS     vfs.Module
 }
 
 type OptionalDeps struct {

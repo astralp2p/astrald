@@ -5,6 +5,7 @@ import (
 	"github.com/astralp2p/astral-go/api/services"
 	"github.com/astralp2p/astral-go/api/shell"
 	"github.com/astralp2p/astral-go/api/user"
+	vfsapi "github.com/astralp2p/astral-go/api/vfs"
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astrald/core"
 	authmod "github.com/astralp2p/astrald/mod/auth"
@@ -49,6 +50,9 @@ func (mod *Module) LoadDependencies(ctx *astral.Context) (err error) {
 	mod.Auth.Add(authmod.NodeLocal(authmod.Func[*auth.SeeNodeStateAction](mod.AuthorizeSeeNodeState)))
 	mod.Auth.Add(authmod.NodeLocal(authmod.Func[*shell.ShellAction](mod.AuthorizeShell)))
 	mod.Auth.Add(authmod.NodeLocal(authmod.Func[*services.ServiceDiscoveryAction](mod.AuthorizeServiceDiscovery)))
+	mod.Auth.Add(authmod.NodeLocal(authmod.Func[*vfsapi.ReadAction](mod.AuthorizeVFSRead)))
+	mod.Auth.Add(authmod.NodeLocal(authmod.Func[*vfsapi.WriteAction](mod.AuthorizeVFSWrite)))
+	mod.Auth.Add(authmod.NodeLocal(authmod.Func[*vfsapi.ManageAction](mod.AuthorizeVFSManage)))
 
 	return
 }
