@@ -201,3 +201,106 @@ func TestMigrateAddsAnEmptyEvaluatorToExistingVolumes(t *testing.T) {
 		t.Fatalf("a second migrate: %v", err)
 	}
 }
+
+// dbEntryBeforeDirGen is the entries table as it was before the dir_gen column.
+type dbEntryBeforeDirGen struct {
+	ID           int64            `gorm:"primaryKey"`
+	VFS          *astral.Identity `gorm:"not null"`
+	ParentID     int64            `gorm:"not null"`
+	Name         string           `gorm:"type:text collate binary;not null"`
+	Flags        uint16           `gorm:"not null"`
+	ObjectID     *astral.ObjectID
+	ModTime      int64 `gorm:"not null"`
+	CreationTime int64 `gorm:"not null;default:0"`
+}
+
+func (dbEntryBeforeDirGen) TableName() string { return dbEntry{}.TableName() }
+
+// TestMigrateDirGenClearsFolderIDsOnce: an entries table with rows and cached folder ObjectIDs gains the column,
+// loses the folder IDs, which name no stored object, and keeps the files. The table of notes is made, and a second
+// start changes nothing.
+func TestMigrateDirGenClearsFolderIDsOnce(t *testing.T) {
+	mod := testModule(t)
+	vol := createVFS(t, mod, astral.GenerateIdentity())
+	m := mod.db.Migrator()
+	for _, table := range []any{&dbEntry{}, &dbReplacedDirectory{}} {
+		if err := m.DropTable(table); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := m.CreateTable(&dbEntryBeforeDirGen{}); err != nil {
+		t.Fatal(err)
+	}
+
+	stale, content := contentID("a cached folder ObjectID"), contentID("file")
+	rows := []*dbEntryBeforeDirGen{
+		{ID: vol.RootID, ParentID: vol.RootID, Flags: uint16(vfsapi.FlagFolder), ObjectID: &stale},
+		{ParentID: vol.RootID, Name: "f", ObjectID: &content},
+	}
+	for _, row := range rows {
+		row.VFS, row.ModTime = vol.Identity, testModTime
+		if err := mod.db.Create(row).Error; err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	if err := mod.db.migrate(); err != nil {
+		t.Fatalf("migrate: %v", err)
+	}
+	if !m.HasColumn(&dbEntry{}, "dir_gen") || !m.HasTable(&dbReplacedDirectory{}) {
+		t.Fatal("the column or the table of notes is missing")
+	}
+	if got := cachedID(t, mod, vol.RootID); got != nil {
+		t.Fatalf("the root kept %v", got)
+	}
+	if got := cachedID(t, mod, rows[1].ID); got == nil || *got != content {
+		t.Fatalf("the file has %v, want its content", got)
+	}
+	if n := noteCount(t, mod); n != 0 {
+		t.Fatalf("%d notes, want none", n)
+	}
+	expectMigrateDirGenRunsOnce(t, mod, vol)
+}
+
+// expectMigrateDirGenRunsOnce checks that a second start keeps a root computed after the first.
+func expectMigrateDirGenRunsOnce(t *testing.T, mod *Module, vol *dbVolume) {
+	t.Helper()
+
+	root, err := mod.folderObjectID(vol.Identity, vol.RootID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = mod.db.migrate(); err != nil {
+		t.Fatalf("a second migrate: %v", err)
+	}
+	if got := cachedID(t, mod, vol.RootID); got == nil || *got != root {
+		t.Fatalf("a second start changed the root to %v, want %v", got, root)
+	}
+}
+
+// TestMigrateSeedsDirGenAboveEveryRow: a database made before the generation counter gets it at the highest
+// generation of its rows, so the next draw is above every row; a second start keeps the counter where it is.
+func TestMigrateSeedsDirGenAboveEveryRow(t *testing.T) {
+	mod := testModule(t)
+	vol := createVFS(t, mod, astral.GenerateIdentity())
+	if err := mod.db.Migrator().DropTable(&dbDirGen{}); err != nil {
+		t.Fatal(err)
+	}
+	if err := mod.db.Exec(`UPDATE vfs__entries SET dir_gen = 41 WHERE id = ?`, vol.RootID).Error; err != nil {
+		t.Fatal(err)
+	}
+
+	if err := mod.db.migrate(); err != nil {
+		t.Fatalf("migrate: %v", err)
+	}
+	if gen, err := mod.db.nextDirGen(); err != nil || gen != 42 {
+		t.Fatalf("first draw %v, %v; want 42", gen, err)
+	}
+
+	if err := mod.db.migrate(); err != nil {
+		t.Fatalf("a second migrate: %v", err)
+	}
+	if gen, err := mod.db.nextDirGen(); err != nil || gen != 43 {
+		t.Fatalf("draw after a second start %v, %v; want 43", gen, err)
+	}
+}

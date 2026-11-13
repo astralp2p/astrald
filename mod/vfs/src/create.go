@@ -19,7 +19,10 @@ func (mod *Module) CreateVFS(id *astral.Identity) error {
 		return vfsapi.ErrNotPermitted
 	}
 
-	return mod.runLockedTx(id, func(tx *DB) error {
+	var created bool
+
+	// note: a new root is cleared, so a new VFS is pending.
+	return mod.runLockedTxThen(id, func(tx *DB) error {
 		_, err := tx.findVolume(id)
 		switch {
 		case err == nil:
@@ -29,7 +32,13 @@ func (mod *Module) CreateVFS(id *astral.Identity) error {
 			return err
 		}
 
+		created = true
+
 		return tx.createVolume(id, mod.config.ByteLimit, mod.config.InodeLimit)
+	}, func() {
+		if created {
+			mod.sched.noteChange(id, mod.clock.Now())
+		}
 	})
 }
 

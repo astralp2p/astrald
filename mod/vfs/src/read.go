@@ -79,6 +79,8 @@ func answerRaw(q *routing.IncomingQuery, content io.Reader) error {
 // vfsInfo returns the facts about a VFS for vfs.statfs and vfs.volumes. A limit of 0 means no limit. The root is
 // not an entry.
 //
+// A cleared root is computed and stored at once, without tokens, as folderObjectID does.
+//
 // why: Root, Usage and Inodes are read in one transaction under the VFS lock, so they describe one state.
 // note: a caller must not hold the lock of the VFS, nor be inside a transaction.
 func (mod *Module) vfsInfo(vol *dbVolume) (*vfsapi.Info, error) {
@@ -89,16 +91,18 @@ func (mod *Module) vfsInfo(vol *dbVolume) (*vfsapi.Info, error) {
 		Evaluator:  astral.String8(vol.Evaluator),
 	}
 
+	unlock := mod.lockCompute(vol.Identity)
+	defer unlock()
+
+	var plan *dirPlan
+
 	err := mod.runLockedTx(vol.Identity, func(tx *DB) error {
 		root, err := tx.findEntry(vol.RootID)
 		if err != nil {
 			return err
 		}
 
-		fc := folderIDComputer{tx: tx}
-
-		id, err := fc.compute(root)
-		if err != nil {
+		if plan, err = planFolder(tx, vol.Identity, root, 0); err != nil {
 			return err
 		}
 
@@ -107,13 +111,15 @@ func (mod *Module) vfsInfo(vol *dbVolume) (*vfsapi.Info, error) {
 			return err
 		}
 
-		info.Root, info.Usage, info.Inodes = id, astral.Uint64(u.Bytes), astral.Uint64(u.Inodes)
+		info.Root, info.Usage, info.Inodes = plan.ID, astral.Uint64(u.Bytes), astral.Uint64(u.Inodes)
 
-		return tx.setFolderIDs(fc.filled)
+		return nil
 	})
 	if err != nil {
 		return nil, err
 	}
+
+	mod.storePlanLogged(plan)
 
 	return info, nil
 }

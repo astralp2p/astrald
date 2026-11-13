@@ -28,6 +28,8 @@ type readOpsFixture struct {
 	vfs   *astral.Identity
 	vol   *dbVolume
 	other *astral.Identity
+
+	dirObjects *dirTestObjects // where the directories are stored
 }
 
 func newReadOpsFixture(t *testing.T) *readOpsFixture {
@@ -41,7 +43,8 @@ func newReadOpsFixture(t *testing.T) *readOpsFixture {
 		other: astral.GenerateIdentity(),
 	}
 	f.mod.Auth = f.auth
-	f.mod.Objects = &readOpsObjects{repos: map[string]objectsmod.Repository{readRepository: f.repo}}
+	f.dirObjects = f.mod.Objects.(*dirTestObjects)
+	f.mod.Objects = &readOpsObjects{dirTestObjects: f.dirObjects, repos: map[string]objectsmod.Repository{readRepository: f.repo}}
 	f.vol = createVFS(t, f.mod, f.vfs)
 
 	return f
@@ -56,9 +59,9 @@ func (f *readOpsFixture) putFile(t *testing.T, parent int64, name, content strin
 	return addFile(t, f.mod, f.vol, parent, name, content)
 }
 
-// readOpsObjects answers the repositories by name.
+// readOpsObjects answers the repositories by name, and stores directories in the test repository.
 type readOpsObjects struct {
-	objectsmod.Module
+	*dirTestObjects
 	repos map[string]objectsmod.Repository
 }
 
@@ -634,7 +637,7 @@ func TestStatfsAnswersTheInfo(t *testing.T) {
 func TestVFSInfoCachesTheRootItReports(t *testing.T) {
 	f := newReadOpsFixture(t)
 	f.putFile(t, f.vol.RootID, "a", "abc")
-	if err := f.mod.db.clearFolderIDs(f.vol.RootID); err != nil {
+	if err := f.mod.db.clearFolderIDs(f.vol.RootID, 0); err != nil {
 		t.Fatalf("clearFolderIDs: %v", err)
 	}
 
@@ -803,7 +806,7 @@ func TestReadRejectsEveryFailure(t *testing.T) {
 func TestReadRejectsWithoutALocalRepository(t *testing.T) {
 	f := newReadOpsFixture(t)
 	f.putFile(t, f.vol.RootID, "a.txt", "x")
-	f.mod.Objects = &readOpsObjects{repos: map[string]objectsmod.Repository{}}
+	f.mod.Objects = &readOpsObjects{dirTestObjects: f.dirObjects, repos: map[string]objectsmod.Repository{}}
 
 	f.run(t, "read", f.vfs, "path", "/a.txt").wantRejected(t)
 }
@@ -821,7 +824,7 @@ func TestReadOfTheEmptyFileAnswersZeroBytesWithoutARepository(t *testing.T) {
 	}
 
 	// the same holds with no repository at all
-	f.mod.Objects = &readOpsObjects{repos: map[string]objectsmod.Repository{}}
+	f.mod.Objects = &readOpsObjects{dirTestObjects: f.dirObjects, repos: map[string]objectsmod.Repository{}}
 	if res = f.run(t, "read", f.vfs, "path", "/empty"); res.Err != nil || len(res.Raw) != 0 {
 		t.Fatalf("read without a repository = %q, %v; want zero bytes", res.Raw, res.Err)
 	}

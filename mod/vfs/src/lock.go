@@ -22,8 +22,24 @@ func (mod *Module) lockVFS(id *astral.Identity) (unlock func()) {
 //
 // note: fn calls no other module and no repository; the node has one database connection.
 func (mod *Module) runLockedTx(id *astral.Identity, fn func(tx *DB) error) error {
+	return mod.runLockedTxThen(id, fn, nil)
+}
+
+// runLockedTxThen is runLockedTx that calls after once the transaction committed, still under the lock. A nil
+// after is skipped.
+//
+// note: after takes no lock and does no IO; it updates the in-memory state of the background compute.
+func (mod *Module) runLockedTxThen(id *astral.Identity, fn func(tx *DB) error, after func()) error {
 	unlock := mod.lockVFS(id)
 	defer unlock()
 
-	return mod.db.inTx(fn)
+	if err := mod.db.inTx(fn); err != nil {
+		return err
+	}
+
+	if after != nil {
+		after()
+	}
+
+	return nil
 }

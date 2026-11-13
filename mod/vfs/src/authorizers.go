@@ -58,8 +58,11 @@ func (mod *Module) isOwnerOrRoot(actor, vfsID *astral.Identity) bool {
 	return actor.IsEqual(vfsID) || mod.isRootCaller(actor)
 }
 
-// AuthorizeSeeObjects allows reading one object by ObjectID when a file with that ObjectID exists in a VFS the
-// actor may read: the actor is that VFS identity, or is allowed mod.vfs.read_action for it.
+// AuthorizeSeeObjects allows reading one object by ObjectID when a file with that ObjectID, or a folder whose
+// current directory has it, exists in a VFS the actor may read: the actor is that VFS identity, or is allowed
+// mod.vfs.read_action for it.
+//
+// A replaced directory is in no row and is refused.
 //
 // The action must name one complete ObjectID. Size 0 is refused, except the ObjectID of empty content.
 // The Repo field is ignored. A database error refuses. A refusal is the same for an unknown ObjectID and for an

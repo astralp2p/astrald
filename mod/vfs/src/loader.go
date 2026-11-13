@@ -13,7 +13,8 @@ import (
 
 type Loader struct{}
 
-// Load reads the config, migrates the tables and registers the Op-prefixed methods of the module as operations.
+// Load reads the config, migrates the tables, registers the Op-prefixed methods of the module as operations, and
+// makes every VFS whose root ObjectID is cleared pending for the background compute.
 func (Loader) Load(node astral.Node, assets assets.Assets, log *log.Logger) (core.Module, error) {
 	mod := &Module{
 		config:   defaultConfig,
@@ -27,6 +28,7 @@ func (Loader) Load(node astral.Node, assets assets.Assets, log *log.Logger) (cor
 	}
 
 	warnRemovedKeys(assets, log)
+	mod.config.checkDirectoryValues(log)
 
 	if err := mod.router.AddStructPrefix(mod, "Op"); err != nil {
 		return nil, err
@@ -35,6 +37,12 @@ func (Loader) Load(node astral.Node, assets assets.Assets, log *log.Logger) (cor
 	mod.db = &DB{assets.Database()}
 
 	if err := mod.db.migrate(); err != nil {
+		return nil, err
+	}
+
+	mod.setupDirectories(systemClock{})
+
+	if err := mod.seedPending(); err != nil {
 		return nil, err
 	}
 

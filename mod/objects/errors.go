@@ -13,6 +13,9 @@ var (
 	ErrClosedPipe     = errors.New("pipe closed")
 	ErrPushRejected   = errors.New("push rejected")
 
+	// ErrObjectInUse is returned by DeleteUnheld when a holder holds the object or a leaf committed it since.
+	ErrObjectInUse = errors.New("object in use")
+
 	// ErrHashLookupUnsupported is returned by a repository that cannot find an object by a partial ID.
 	// note: callers match this sentinel, not errors.ErrUnsupported, which a read-only Delete also returns.
 	// why: a repository never returns it for a full ID, because purge skips an ErrUnsupported from Delete.

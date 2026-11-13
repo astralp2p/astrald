@@ -309,8 +309,10 @@ func TestSeeObjectsFollowsTheVFSOfTheFile(t *testing.T) {
 		t.Fatal("the VFS identity reads a file of another VFS")
 	case f.see(f.vfs, &astral.ObjectID{Size: 4, Hash: sha256.Sum256([]byte("none"))}):
 		t.Fatal("an unknown ObjectID is allowed")
-	case f.see(f.vfs, f.folder):
-		t.Fatal("a folder's cached ObjectID is allowed")
+	case !f.see(f.vfs, f.folder):
+		t.Fatal("the VFS identity is refused the current directory of its folder")
+	case f.see(f.other, f.folder):
+		t.Fatal("the identity of another VFS reads the directory of a folder")
 	case f.see(f.vfs, nil):
 		t.Fatal("an action without ObjectID is allowed")
 	case f.see(nil, f.file):
@@ -451,23 +453,37 @@ func TestSeeObjectsIsNodeLocal(t *testing.T) {
 	}
 }
 
-// TestSeeObjectsIgnoresAFolderCacheThatEqualsTheObjectID: a folder whose cached ID equals an ObjectID that no file
-// holds lets neither AuthorizeSeeObjects allow the VFS identity nor HoldObject hold the object.
-func TestSeeObjectsIgnoresAFolderCacheThatEqualsTheObjectID(t *testing.T) {
-	mod := testModule(t)
-	mod.Auth = newFakeAuth()
-	id := astral.GenerateIdentity()
-	vol := createVFS(t, mod, id)
-	planted := contentID("no file holds this")
-	insertEntry(t, mod, &dbEntry{
-		VFS: id, ParentID: vol.RootID, Name: "dir", Flags: uint16(vfsapi.FlagFolder), ObjectID: &planted,
-		ModTime: testModTime,
-	})
+// TestSeeObjectsFollowsTheCurrentDirectoryOfAFolder: a folder's cached ObjectID is its current directory, read by
+// ObjectID under the rule of a file: the VFS identity and a read permit holder are allowed, another VFS is not, and
+// a replaced directory is refused. The owner is allowed without a question.
+func TestSeeObjectsFollowsTheCurrentDirectoryOfAFolder(t *testing.T) {
+	f := newSeeFixture(t)
+	reader := astral.GenerateIdentity()
+	f.auth.permit(&vfsapi.ReadAction{}, reader, f.vfs)
 
-	if mod.AuthorizeSeeObjects(testContext(), seeAction(id, &planted)) {
-		t.Error("AuthorizeSeeObjects allows a folder's cached ID")
+	if !f.see(f.vfs, f.folder) {
+		t.Fatal("the VFS identity is refused the directory of its folder")
 	}
-	if mod.HoldObject(&planted) {
-		t.Error("HoldObject holds a folder's cached ID")
+	if len(f.auth.asked) != 0 {
+		t.Fatalf("the owner was asked about: %v", f.auth.asked)
+	}
+	if !f.see(reader, f.folder) {
+		t.Fatal("a read permit holder is refused the directory")
+	}
+	if f.see(f.other, f.folder) {
+		t.Fatal("another VFS identity reads the directory")
+	}
+
+	// the folder changes: its directory is replaced, and no row has it
+	dir := mustVolume(t, f.mod, f.vfs)
+	row := changeTestMustFind(t, f.mod, dir, "/dir")
+	if err := f.mod.db.clearFolderIDs(row.ID, 0); err != nil {
+		t.Fatalf("clear: %v", err)
+	}
+	if f.see(f.vfs, f.folder) || f.see(reader, f.folder) {
+		t.Fatal("a replaced directory is allowed")
+	}
+	if f.mod.HoldObject(f.folder) {
+		t.Fatal("a replaced directory is held")
 	}
 }
