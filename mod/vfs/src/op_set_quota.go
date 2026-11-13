@@ -14,11 +14,38 @@ type opSetQuotaArgs struct {
 	Entries uint64
 }
 
-// todo: implement vfs.set_quota; the stub answers an error until a later part of the VFS ticket fills this file.
-// why: the stub reads and changes nothing, so it asks for no named action; the part that fills it authorizes first.
+// OpSetQuota sets the byte limit and the entry limit of a VFS and answers ack. A limit of 0 means no limit.
+//
+// A limit below the current usage is accepted. It refuses further growth and removes nothing.
 func (mod *Module) OpSetQuota(ctx *astral.Context, q *routing.IncomingQuery, args opSetQuotaArgs) error {
 	ch := q.Accept(channel.WithFormats(args.In, args.Out))
 	defer ch.Close()
 
-	return ch.Send(errNotImplemented)
+	if err := mod.manageAuthorize(ctx, q); err != nil {
+		return ch.Send(astral.Err(err))
+	}
+
+	if err := mod.setQuotaStore(args.VFS, args.Bytes, args.Entries); err != nil {
+		return ch.Send(astral.Err(err))
+	}
+
+	return ch.Send(&astral.Ack{})
+}
+
+// setQuotaStore writes the limits of a VFS, or returns vfsapi.ErrNoSuchVFS.
+func (mod *Module) setQuotaStore(id *astral.Identity, byteLimit, entryLimit uint64) error {
+	unlock := mod.lockVFS(id)
+	defer unlock()
+
+	return mod.db.inTx(func(tx *DB) error {
+		vol, err := tx.findVolume(id)
+		if err != nil {
+			return err
+		}
+
+		return tx.Model(&dbVolume{}).Where("id = ?", vol.ID).Updates(map[string]any{
+			"byte_limit":  limitColumn(byteLimit),
+			"entry_limit": limitColumn(entryLimit),
+		}).Error
+	})
 }
