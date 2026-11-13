@@ -35,4 +35,5 @@ import (
 	_ "github.com/astralp2p/astrald/mod/tor/src"
 	_ "github.com/astralp2p/astrald/mod/tree/src"
 	_ "github.com/astralp2p/astrald/mod/user/src"
+	_ "github.com/astralp2p/astrald/mod/vfs/src"
 )

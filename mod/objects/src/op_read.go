@@ -26,8 +26,6 @@ type opReadArgs struct {
 // OpRead authorizes the caller under SeeObjects, then streams raw object bytes
 // over the accepted connection. With a repo it reads that repository. Without
 // one it reads from the first candidate the finders name that delivers bytes.
-// Records the access under the opened object's full ID in the reads journal,
-// which feeds purge ordering.
 //
 // why every failure is a plain rejection (astral.CodeRejected): the answer is
 // the object's raw bytes, which leave no room for an error_message, and shell
@@ -65,13 +63,12 @@ func (mod *Module) OpRead(ctx *astral.Context, q *routing.IncomingQuery, args op
 			mod.log.Errorv(2, "read %v error: %v", args.ID, err)
 			return q.Reject()
 		}
-		defer r.Close()
-
-		// why: a partial request never becomes a journal key; the reader names the object it opened.
-		mod.objectsReadsJournal.Mark(r.ID())
 
 		conn := q.AcceptRaw()
 		defer conn.Close()
+
+		// why: the reader closes before the connection, so a zero-byte read is counted before the caller sees the read end.
+		defer r.Close()
 
 		_, err = io.Copy(conn, r)
 		return err
@@ -117,7 +114,9 @@ func (mod *Module) OpRead(ctx *astral.Context, q *routing.IncomingQuery, args op
 			go func() {
 				a := attempt{key: source.String()}
 				if source.IsEqual(mod.node.Identity()) {
-					a.r, a.err = mod.ReadDefault().Read(attemptCtx.ExcludeZone(astral.ZoneNetwork), args.ID, int64(args.Offset), int64(args.Limit))
+					// why: the candidate's head read is not a delivery to the caller, so the attempt opens uncounted and the winner counts below.
+					localCtx := objectsmod.WithHousekeeping(attemptCtx.ExcludeZone(astral.ZoneNetwork))
+					a.r, a.err = mod.ReadDefault().Read(localCtx, args.ID, int64(args.Offset), int64(args.Limit))
 				} else {
 					// why: the host authorized its caller; the source serves the host as
 					// itself and trusts that decision (objects.read spec).
@@ -188,13 +187,16 @@ func (mod *Module) OpRead(ctx *astral.Context, q *routing.IncomingQuery, args op
 		}
 	}
 
-	if r, ok := won.r.(objectsmod.Reader); ok {
-		// why: a partial request never becomes a journal key; the reader names the object it opened.
-		mod.objectsReadsJournal.Mark(r.ID())
+	// why: only the winner's head reaches the caller; a losing local reader stays uncounted.
+	if c, ok := won.r.(interface{ count() }); ok {
+		c.count()
 	}
 
 	conn := q.AcceptRaw()
 	defer conn.Close()
+
+	// why: the winner closes with the read and before the connection, so a zero-byte read is counted before the caller sees the read end.
+	defer won.r.Close()
 
 	if _, err = conn.Write(won.head); err != nil {
 		return err

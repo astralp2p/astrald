@@ -21,10 +21,9 @@ func (mod *Module) OpFind(ctx *astral.Context, q *routing.IncomingQuery, args op
 	ch := q.Accept(channel.WithOutputFormat(args.Out))
 	defer ch.Close()
 
-	if !mod.Auth.Authorize(ctx, &auth.SeeObjectsAction{
-		Action:   auth.NewAction(q.Caller()),
-		ObjectID: args.ID,
-	}) {
+	// why: VFS 6, section 6: objects.find names no ObjectID in its action, so the vfs module's handler, which
+	// allows reading one file by ObjectID, does not reach it.
+	if !mod.Auth.Authorize(ctx, &auth.SeeObjectsAction{Action: auth.NewAction(q.Caller())}) {
 		return ch.Send(auth.ErrNotPermitted)
 	}
 

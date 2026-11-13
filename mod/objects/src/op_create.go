@@ -72,15 +72,6 @@ func (mod *Module) OpCreate(ctx *astral.Context, q *routing.IncomingQuery, args 
 
 			mod.log.Logv(3, "%v created %v in %v", q.Caller(), objectID, repo)
 
-			// seed dbObject: type isn't known from the raw blob stream, so
-			// piggy-back on Probe — it reads the stamp from the just-written
-			// repo and seeds via mod.trackObject. Errors are non-fatal; the
-			// row will be lazily seeded by the next path that touches the object.
-			_, perr := mod.Probe(ctx, repo, objectID)
-			if perr != nil {
-				mod.log.Logv(3, "OpCreate: probe-seed for %v failed: %v", objectID, perr)
-			}
-
 			err = ch.Send(objectID)
 			if err != nil {
 				return err
