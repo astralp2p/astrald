@@ -3,5 +3,4 @@ timeout    = 180
 after      = "swarm-roster-sync"
 restart    = ["node3"]
 destroys   = true
-local_only = "restarts node3, which only a local world can do"
 facts      = ["restarts_before", "contracts", "roster"]

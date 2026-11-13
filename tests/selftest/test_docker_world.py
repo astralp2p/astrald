@@ -267,6 +267,25 @@ class TestNodes(WorldCase):
         self.assertTrue(any("pkill -INT -x astrald" in s
                             for s in self.fake.scripts()))
 
+    def test_a_restart_stops_every_named_node_before_it_starts_any(self):
+        # why: a node restarted beside running siblings relearns from them
+        # what a restart lost (expel-survives-restart)
+        w = self.world()
+        w.ensure(a_test(nodes=["node1", "node2"]))
+        del self.fake.calls[:]
+        w.restart(["node1", "node2"])
+        steps = [("stop" if "pkill -INT -x astrald" in c[-1] else "start",
+                  c[-4] if c[1] == "-d" else c[1])
+                 for c in self.fake.calls if c[0] == "exec"
+                 and c[-3:-1] == ["sh", "-c"]
+                 and ("pkill" in c[-1] or "exec astrald" in c[-1])]
+        prefix = "astral-20261104t000000z-w0-"
+        self.assertEqual(steps, [("stop", prefix + "node1"),
+                                 ("stop", prefix + "node2"),
+                                 ("start", prefix + "node1"),
+                                 ("start", prefix + "node2")])
+        self.assertEqual([n["restarts"] for n in w.nodes().values()], [1, 1])
+
     def test_a_node_whose_astrald_exited_is_dead(self):
         w = self.world()
         w.ensure(a_test(nodes=["node1", "node2"]))

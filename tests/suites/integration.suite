@@ -39,3 +39,8 @@ messaging-ops
 mcp-peer
 messaging-two-node
 basic-strategy-stalled-endpoint-released
+manager-setup
+policy-delegate
+indexer-cursor
+swarm-member-restart
+expel-survives-restart

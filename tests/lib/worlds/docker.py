@@ -268,8 +268,12 @@ class DockerWorld(World):
     def restart(self, names: list) -> None:
         """Stop each named node's astrald and start it again on its state."""
         refuse_stopped("restart", names, self._stopped)
+        # why every stop first: a node restarted while its siblings still run
+        # can relearn what it lost from them, which hides state that a restart
+        # of the whole swarm drops (expel-survives-restart); as LocalWorld
         for name in names:
             self._stop_astrald(name)
+        for name in names:
             self._run_astrald(name)
             n = self._nodes[name]
             n["identity"] = self._whoami(n["port"], n["token"])

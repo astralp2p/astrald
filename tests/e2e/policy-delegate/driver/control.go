@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"net"
 	"sync"
 	"time"
 
@@ -108,7 +109,7 @@ func (cp *controlPlane) ping(_ *astral.Context, q *routing.IncomingQuery) error 
 
 // startControlPlane registers the app, serves its ops until ctx ends, and
 // returns once the node routes to it.
-func startControlPlane(ctx *astral.Context, admin *astrald.Client, ep string) (*controlPlane, error) {
+func startControlPlane(ctx *astral.Context, admin *astrald.Client, ep, hostIP string) (*controlPlane, error) {
 	tok, err := apphostcli.New(nil, admin).Register(ctx, &auth.Permit{Action: "mod.auth.serve_apps_action"})
 	if err != nil {
 		return nil, fmt.Errorf("register the control plane: %w", err)
@@ -135,7 +136,9 @@ func startControlPlane(ctx *astral.Context, admin *astrald.Client, ep string) (*
 			return nil, err
 		}
 	}
-	go apps.Serve(ctx, ops)
+	// why host_ip: the node dials the handler, and a system-assigned
+	// 127.0.0.1 port is the host's own loopback only in a local world
+	go apps.Serve(ctx, ops, apps.WithHandlerAddress("tcp:"+net.JoinHostPort(hostIP, "0")))
 	return cp, awaitRoutable(ctx, admin, cp.id)
 }
 
