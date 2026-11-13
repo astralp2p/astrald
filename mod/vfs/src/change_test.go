@@ -21,9 +21,9 @@ func TestWriteCommitChecksTheLimitsCommittedAtTheChange(t *testing.T) {
 	mod, vol, _ := changeTestModule(t)
 	changeTestLowerLimits(t, mod, vol, 3, 0)
 
-	_, err := mod.writeCommit(vol, []string{"f"}, contentID("12345"))
+	_, err := mod.recordFile(vol, []string{"f"}, contentID("12345"))
 	if !errors.Is(err, vfsapi.ErrQuotaExceeded) {
-		t.Fatalf("writeCommit = %v, want %v", err, vfsapi.ErrQuotaExceeded)
+		t.Fatalf("recordFile = %v, want %v", err, vfsapi.ErrQuotaExceeded)
 	}
 	if n := changeTestCount(t, mod, vol); n != 0 {
 		t.Errorf("%d entries after a refused write, want 0", n)
