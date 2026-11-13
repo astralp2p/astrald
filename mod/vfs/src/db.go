@@ -15,7 +15,39 @@ func (db *DB) migrate() error {
 		return err
 	}
 
+	if err := db.migrateCreationTime(); err != nil {
+		return err
+	}
+
 	return db.AutoMigrate(&dbVolume{}, &dbEntry{})
+}
+
+// migrateCreationTime adds the creation_time column to an entries table made before it. In the same transaction
+// every entry gets its modification time as its creation time, and every cached folder ObjectID is cleared.
+//
+// why: the missing column is the marker, so the step runs once; one transaction adds the column with the rows'
+// values, so a failed step leaves no column and runs again on the next start.
+// why: the folder ObjectIDs are cleared because the directory type name and the entry layout changed with the
+// column.
+// note: the root has no creation time and keeps 0.
+func (db *DB) migrateCreationTime() error {
+	m := db.Migrator()
+	if !m.HasTable(&dbEntry{}) || m.HasColumn(&dbEntry{}, "creation_time") {
+		return nil
+	}
+
+	return db.inTx(func(tx *DB) error {
+		if err := tx.Migrator().AddColumn(&dbEntry{}, "CreationTime"); err != nil {
+			return err
+		}
+
+		err := tx.Exec(`UPDATE vfs__entries SET creation_time = mod_time WHERE id <> parent_id`).Error
+		if err != nil {
+			return err
+		}
+
+		return tx.Exec(`UPDATE vfs__entries SET object_id = NULL WHERE flags & ? != 0`, uint16(vfsapi.FlagFolder)).Error
+	})
 }
 
 // renameEntryLimit renames the column entry_limit of a volumes table made before the inode names to inode_limit.
@@ -297,7 +329,7 @@ func (db *DB) hasFileWithObject(objectID *astral.ObjectID) (bool, error) {
 
 // findVFSesWithObject returns each VFS that has a file with the ObjectID, once.
 //
-// note: a folder's cached listing ObjectID names no stored object, so folder rows are skipped.
+// note: a folder's cached directory ObjectID names no stored object, so folder rows are skipped.
 func (db *DB) findVFSesWithObject(id *astral.ObjectID) ([]*astral.Identity, error) {
 	var rows []dbEntry
 

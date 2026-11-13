@@ -409,7 +409,8 @@ func TestLsListsInByteOrderOfName(t *testing.T) {
 	if want := "dir z è é"; strings.Join(names, " ") != want {
 		t.Fatalf("names = %q, want %q", strings.Join(names, " "), want)
 	}
-	if got[1].ID != contentID("1") || got[1].Flags != 0 || time.Time(got[1].ModTime).UnixNano() != testModTime {
+	if got[1].ID != contentID("1") || got[1].Flags != 0 || time.Time(got[1].ModTime).UnixNano() != testModTime ||
+		time.Time(got[1].CreationTime).UnixNano() != testCreationTime {
 		t.Errorf("entry z = %+v", got[1])
 	}
 	if !got[0].IsFolder() {
@@ -454,13 +455,13 @@ func TestLsErrors(t *testing.T) {
 	}
 }
 
-// expectedFolderID computes the ObjectID of a listing with the SDK writer, independent of the module.
+// expectedFolderID computes the ObjectID of a directory with the SDK writer, independent of the module.
 func expectedFolderID(t *testing.T, entries ...*vfsapi.Entry) astral.ObjectID {
 	t.Helper()
 
-	w, err := vfsapi.NewListingWriter(nil, uint32(len(entries)))
+	w, err := vfsapi.NewDirectoryWriter(nil, uint32(len(entries)))
 	if err != nil {
-		t.Fatalf("NewListingWriter: %v", err)
+		t.Fatalf("NewDirectoryWriter: %v", err)
 	}
 	for _, e := range entries {
 		if err = w.Write(e); err != nil {
@@ -484,9 +485,10 @@ func readOpsNestedFixture(t *testing.T) (f *readOpsFixture, deepID, subID, rootI
 	f.putFile(t, deep.ID, "a.txt", "hello\n")
 
 	modTime := astral.Time(time.Unix(0, testModTime).UTC())
-	deepID = expectedFolderID(t, &vfsapi.Entry{Name: "a.txt", ID: contentID("hello\n"), ModTime: modTime})
-	subID = expectedFolderID(t, &vfsapi.Entry{Name: "deep", ID: deepID, Flags: vfsapi.FlagFolder, ModTime: modTime})
-	rootID = expectedFolderID(t, &vfsapi.Entry{Name: "sub", ID: subID, Flags: vfsapi.FlagFolder, ModTime: modTime})
+	cTime := astral.Time(time.Unix(0, testCreationTime).UTC())
+	deepID = expectedFolderID(t, &vfsapi.Entry{Name: "a.txt", ID: contentID("hello\n"), ModTime: modTime, CreationTime: cTime})
+	subID = expectedFolderID(t, &vfsapi.Entry{Name: "deep", ID: deepID, Flags: vfsapi.FlagFolder, ModTime: modTime, CreationTime: cTime})
+	rootID = expectedFolderID(t, &vfsapi.Entry{Name: "sub", ID: subID, Flags: vfsapi.FlagFolder, ModTime: modTime, CreationTime: cTime})
 
 	return
 }
@@ -521,7 +523,7 @@ func TestLsOfEmptyFolderEntryIsVectorV1(t *testing.T) {
 	addFolder(t, f.mod, f.vol, f.vol.RootID, "sub")
 
 	got := f.run(t, "ls", f.vfs).entries(t)
-	if len(got) != 1 || got[0].ID.Size != 24 || readOpsHash(got[0].ID) != v1Hash {
+	if len(got) != 1 || got[0].ID.Size != v1Size || readOpsHash(got[0].ID) != v1Hash {
 		t.Fatalf("ls / = %+v, want sub with the ObjectID of vector V1", got)
 	}
 }
@@ -533,12 +535,14 @@ func TestStatAnswersAFileAndAFolder(t *testing.T) {
 	f.putFile(t, f.vol.RootID, "top", "x")
 
 	file := f.run(t, "stat", f.vfs, "path", "/top").entry(t)
-	if file.Name != "top" || file.ID != contentID("x") || file.IsFolder() || time.Time(file.ModTime).UnixNano() != testModTime {
+	if file.Name != "top" || file.ID != contentID("x") || file.IsFolder() || time.Time(file.ModTime).UnixNano() != testModTime ||
+		time.Time(file.CreationTime).UnixNano() != testCreationTime {
 		t.Errorf("stat /top = %+v", file)
 	}
 
 	folder := f.run(t, "stat", f.vfs, "path", "/sub").entry(t)
-	if folder.Name != "sub" || folder.ID != subID || !folder.IsFolder() || time.Time(folder.ModTime).UnixNano() != testModTime {
+	if folder.Name != "sub" || folder.ID != subID || !folder.IsFolder() || time.Time(folder.ModTime).UnixNano() != testModTime ||
+		time.Time(folder.CreationTime).UnixNano() != testCreationTime {
 		t.Errorf("stat /sub = %+v, want ID %v", folder, subID)
 	}
 }
@@ -554,8 +558,8 @@ func TestStatOfTheRoot(t *testing.T) {
 
 	root := f.run(t, "stat", f.vfs, "path", "/").entry(t)
 
-	// the listing is vector V3: one empty sub-folder, the root's own time is not hashed
-	if root.ID.Size != 78 || readOpsHash(root.ID) != v3Hash {
+	// the directory is vector V3: one empty sub-folder, the root's own time is not hashed
+	if root.ID.Size != v3Size || readOpsHash(root.ID) != v3Hash {
 		t.Errorf("root ID = size %d %s, want vector V3", root.ID.Size, readOpsHash(root.ID))
 	}
 	if root.Name != "" || !root.IsFolder() || time.Time(root.ModTime).UnixNano() != rootTime {
@@ -567,7 +571,7 @@ func TestStatOfAnEmptyVFSRootIsVectorV1(t *testing.T) {
 	f := newReadOpsFixture(t)
 
 	root := f.run(t, "stat", f.vfs, "path", "/").entry(t)
-	if root.ID.Size != 24 || readOpsHash(root.ID) != v1Hash {
+	if root.ID.Size != v1Size || readOpsHash(root.ID) != v1Hash {
 		t.Errorf("root ID = size %d %s, want vector V1", root.ID.Size, readOpsHash(root.ID))
 	}
 }

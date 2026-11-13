@@ -11,7 +11,7 @@ import (
 // readRepository is the repository group that holds VFS content.
 const readRepository = "local"
 
-// readEntry returns the entry of a row as it is answered. The ID of a folder is its listing ObjectID, computed
+// readEntry returns the entry of a row as it is answered. The ID of a folder is its directory ObjectID, computed
 // from the folders below it when it is cleared.
 //
 // note: a caller must not hold the lock of the VFS, nor be inside a transaction; the computation takes both.

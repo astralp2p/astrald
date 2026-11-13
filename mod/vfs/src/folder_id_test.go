@@ -7,12 +7,21 @@ import (
 	"github.com/astralp2p/astral-go/astral"
 )
 
-// The vectors of VFS 6, section 5. Every ModTime is 1700000000000000000.
+// The vectors of VFS 6, section 5, with the type name mod.vfs.directory and the creation time. Every ModTime is
+// 1700000000000000000 and every CreationTime 1699996400000000000.
 const (
-	v1Hash = "bca43d0a568b64607f38b186a87810458f6776e86ae1978408b6e5790a00c242"
-	v2Hash = "5ab8b70ba82974c48df86f4bcf3525cabe79931cff16d52d9fbb7c281f381eae"
-	v3Hash = "44ef65c004d37cd130e83e85f7e994b0ddbf39f8fe072faedfaad32b5e87781b"
-	v4Hash = "7a9882a18b111cf488f7c0de46fc95d4a1d8356c6adcc33b63d21550b6393049"
+	v1Hash = "5bda020d3782b67b601ab110d94f3a3d64396438e5b4c4a7c2cbf3d9ff565382"
+	v2Hash = "d7702ed2ff919b922b0b391123f977fe466455a7afcaba17f0528e66f0bc3982"
+	v3Hash = "dab8a151d3e876ddb3c9cac823a0078a6a715698c82ae5b3b85b8d4abbb2805d"
+	v4Hash = "d34da3f6c22c6532dc7737e39aca0b641256797c324fd7273435226586135de5"
+)
+
+// The sizes of the vectors in bytes.
+const (
+	v1Size = 26
+	v2Size = 90
+	v3Size = 88
+	v4Size = 208
 )
 
 func requireFolderID(t *testing.T, mod *Module, vol *dbVolume, row int64, size uint64, hash string) {
@@ -27,11 +36,12 @@ func requireFolderID(t *testing.T, mod *Module, vol *dbVolume, row int64, size u
 	}
 }
 
+// TestVectorV1EmptyFolder: the root of a new VFS is the empty folder.
 func TestVectorV1EmptyFolder(t *testing.T) {
 	mod := testModule(t)
 	vol := createVFS(t, mod, astral.GenerateIdentity())
 
-	requireFolderID(t, mod, vol, vol.RootID, 24, v1Hash)
+	requireFolderID(t, mod, vol, vol.RootID, v1Size, v1Hash)
 }
 
 func TestVectorV2OneFile(t *testing.T) {
@@ -40,7 +50,7 @@ func TestVectorV2OneFile(t *testing.T) {
 
 	addFile(t, mod, vol, vol.RootID, "a.txt", "hello\n")
 
-	requireFolderID(t, mod, vol, vol.RootID, 80, v2Hash)
+	requireFolderID(t, mod, vol, vol.RootID, v2Size, v2Hash)
 }
 
 func TestVectorV3OneSubfolder(t *testing.T) {
@@ -49,10 +59,10 @@ func TestVectorV3OneSubfolder(t *testing.T) {
 
 	sub := addFolder(t, mod, vol, vol.RootID, "sub")
 
-	requireFolderID(t, mod, vol, vol.RootID, 78, v3Hash)
+	requireFolderID(t, mod, vol, vol.RootID, v3Size, v3Hash)
 
 	// the empty sub-folder is V1, and the computation cached it
-	requireFolderID(t, mod, vol, sub.ID, 24, v1Hash)
+	requireFolderID(t, mod, vol, sub.ID, v1Size, v1Hash)
 }
 
 func TestVectorV4ByteOrderOfNames(t *testing.T) {
@@ -64,7 +74,7 @@ func TestVectorV4ByteOrderOfNames(t *testing.T) {
 	addFile(t, mod, vol, vol.RootID, "z", "1")
 	addFile(t, mod, vol, vol.RootID, "è", "2")
 
-	requireFolderID(t, mod, vol, vol.RootID, 182, v4Hash)
+	requireFolderID(t, mod, vol, vol.RootID, v4Size, v4Hash)
 }
 
 func TestComputeCachesEveryFolderItFills(t *testing.T) {
@@ -131,7 +141,7 @@ func TestComputeUsesCachedFolderIDs(t *testing.T) {
 		t.Fatalf("compute: %v", err)
 	}
 	if fresh == id {
-		t.Fatal("the listing did not change after the cache was cleared")
+		t.Fatal("the directory did not change after the cache was cleared")
 	}
 	if got := hex.EncodeToString(fresh.Hash[:]); got != v3Hash {
 		t.Fatalf("root after clearing = %s, want V3 %s", got, v3Hash)
@@ -258,7 +268,7 @@ func TestUsageIgnoresCachedFolderIDs(t *testing.T) {
 		t.Fatalf("folderObjectID: %v", err)
 	}
 
-	// the root and the folder now carry listing IDs; neither is content
+	// the root and the folder now carry directory IDs; neither is content
 	if got, want := usageOf(t, mod, vol.Identity), uint64(5); got != want {
 		t.Fatalf("usage = %d, want %d", got, want)
 	}

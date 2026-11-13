@@ -288,12 +288,12 @@ func TestWriteClearsFolderIDsUpThePath(t *testing.T) {
 
 	changeTestCheckRecompute(t, mod, vol)
 
-	// note: the listing of b holds the one new file.
-	listing, _ := vfsapi.NewListingWriter(nil, 1)
-	if err := listing.Write(entry); err != nil {
+	// note: the directory of b holds the one new file.
+	dir, _ := vfsapi.NewDirectoryWriter(nil, 1)
+	if err := dir.Write(entry); err != nil {
 		t.Fatal(err)
 	}
-	want, _ := listing.Close()
+	want, _ := dir.Close()
 	if got := changeTestMustFind(t, mod, vol, "/a/b").ObjectID; got == nil || *got != *want {
 		t.Errorf("ID of /a/b = %v, want %v", got, want)
 	}
