@@ -1,0 +1,8 @@
+w0 docker: bootstrap-user-software-key* → adopt-node* → object-store-peer*
+           → adopt-claimed-node-setup* → adopt-claimed-node (agent)
+           → swarm-roster-sync (agent) → expel-propagation (agent)
+w1 docker: bootstrap-passphrase (agent)
+w2 docker: distribution-gate-setup (agent)
+           config node1.apphost.gate = {}
+           config node1.apphost.policies = {}
+w3 docker: import-user-software-key (agent)

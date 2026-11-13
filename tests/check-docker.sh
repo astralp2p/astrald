@@ -7,7 +7,8 @@
 # Runs, from the repo root: the selftests, the live Docker selftests,
 # main.suite (local worlds), integration.suite --docker, a check that no
 # container or network of the harness is left, and with --agent the plan
-# and a run of agent.suite --driver agent. Every step runs even when one
+# and a run of agent.suite --driver agent, then docker-agent.suite --driver
+# agent --docker. Every step runs even when one
 # before it failed; the summary says which passed.
 #
 # Everything lands in tests/results/check-docker-<stamp>/: summary.txt, one
@@ -117,6 +118,10 @@ if [ "$AGENT" = 1 ]; then
     before=$(newest)
     step agent-suite ./tests/run agent.suite --driver agent
     collect agent-suite "$before" | tee -a "$SUMMARY"
+    before=$(newest)
+    step docker-agent-suite ./tests/run docker-agent.suite --driver agent \
+        --docker
+    collect docker-agent-suite "$before" | tee -a "$SUMMARY"
 fi
 
 echo

@@ -108,6 +108,14 @@ class TestShipped(unittest.TestCase):
         self.assertEqual(integration, {n for n, t in self.all.items()
                                        if not t.ops and not t.local_only})
 
+    def test_every_prompt_without_ops_is_in_an_agent_suite(self):
+        # why: a prompt.md no agent suite lists is never driven by an
+        # operator; a test with ops runs in its VM suite instead
+        listed = (set(load(TESTS / "suites" / "agent.suite"))
+                  | set(load(TESTS / "suites" / "docker-agent.suite")))
+        prompted = {n for n, t in self.all.items() if t.prompt and not t.ops}
+        self.assertEqual(sorted(prompted - listed), [])
+
     def test_no_suite_lists_both_tor_link_and_nat_punch(self):
         # why: tor-link's leave-lan downs node2's LAN interface, and nat-punch's
         # enter-nat then finds none to move behind NAT — the two cannot share

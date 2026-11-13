@@ -26,7 +26,11 @@ GOLDEN = Path(__file__).resolve().parent / "golden"
 # suite -> the driver its golden plan is drawn under
 SUITES = {"main": "script", "tor": "script", "nat": "script",
           "gateway": "script", "agent": "agent", "integration": "script",
-          "nearby": "script"}
+          "nearby": "script", "docker-agent": "agent"}
+# suite -> the heavy world its agent plan is drawn in, where not a VM
+# why: docker-agent.suite holds operator flows a VM world cannot run (a
+# roster the lab lacks) or would open a world of its own for
+HEAVY = {"docker-agent": "docker"}
 
 
 def fake(after=None, destroys=False, ops=(), local_only=None,
@@ -220,9 +224,12 @@ class TestShippedPlans(Invariants, unittest.TestCase):
         for suite, driver in SUITES.items():
             with self.subTest(suite=suite):
                 listed = self.suites[suite]
-                got = render(plan(self.tests, listed, listed, driver=driver))
+                heavy = HEAVY.get(suite, "vm")
+                got = render(plan(self.tests, listed, listed, driver=driver,
+                                  heavy=heavy))
                 # why --vm: an agent plan's heavy kind follows the host
-                flag = " --driver agent --vm" if driver == "agent" else ""
+                flag = (f" --driver agent --{heavy}" if driver == "agent"
+                        else "")
                 self.assertEqual(
                     got, (GOLDEN / f"{suite}.plan").read_text(),
                     f"{suite}.suite plans differently; if intended, run "
@@ -237,7 +244,8 @@ class TestShippedPlans(Invariants, unittest.TestCase):
                              .read_text())["ports"]["span"]
         limit = span // PORTS_PER_NODE
         plans = {f"{suite}.suite": plan(self.tests, self.suites[suite],
-                                        self.suites[suite], driver=driver)
+                                        self.suites[suite], driver=driver,
+                                        heavy=HEAVY.get(suite, "vm"))
                  for suite, driver in SUITES.items()}
         plans["every test"] = plan(self.tests, sorted(self.tests))
         plans["every Docker test"] = plan(

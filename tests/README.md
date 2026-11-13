@@ -163,6 +163,7 @@ passes alone and fails in the shared run, a test before it changed its world.
 | `gateway.suite` | a NAT'd node reaches its swarm through a gateway | VM (netsim) | not measured |
 | `nearby.suite` | an unowned node adopted by its nearby alias, two nodes of one User meeting in stealth, a Silent node, a sibling relinked when heard | VM (netsim) | ~75 min estimated (not measured) |
 | `agent.suite` | the flows an AI operator can drive (`--driver agent`) | VM (netsim), or Docker without netsim | not measured |
+| `docker-agent.suite` | the operator flows only a Docker world runs: a roster the VM lab lacks, or a world of their own (`--driver agent --docker`) | Docker | not measured |
 | `integration.suite` | full-integration flows in throwaway containers (`--docker`) | Docker, or local without `--docker` | not measured |
 
 The plans of the shipped suites are pinned under `selftest/golden/`, so a
@@ -260,7 +261,7 @@ The live Docker selftests build the image and start two containers:
 
 `./tests/check-docker.sh [--agent]` runs the whole no-netsim check in order —
 selftests, the live Docker selftests, `main.suite`, `integration.suite
---docker`, nothing left behind, and with `--agent` the agent suite — and
+--docker`, nothing left behind, and with `--agent` the two agent suites — and
 gathers each step's log, verdict and failing entries' logs into
 `results/check-docker-<stamp>/`.
 
