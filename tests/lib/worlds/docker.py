@@ -265,14 +265,19 @@ class DockerWorld(World):
         ) for name, n in self._nodes.items()
             if "identity" in n and name not in self._stopped}
 
-    def restart(self, names: list) -> None:
-        """Stop each named node's astrald and start it again on its state."""
+    def restart(self, names: list, while_down=None) -> None:
+        """Stop each named node's astrald, call `while_down()` when given,
+        and start it again on its state."""
         refuse_stopped("restart", names, self._stopped)
         # why every stop first: a node restarted while its siblings still run
         # can relearn what it lost from them, which hides state that a restart
         # of the whole swarm drops (expel-survives-restart); as LocalWorld
         for name in names:
             self._stop_astrald(name)
+        # note: the container stays up, so lib/nodefs.py reaches the stopped
+        # node's files from the hook
+        if while_down:
+            while_down()
         for name in names:
             self._run_astrald(name)
             n = self._nodes[name]

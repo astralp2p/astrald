@@ -110,7 +110,8 @@ def _perform(ex, t, drive, art: Path, view) -> tuple:
             return "fail", "driver", phase
         if t.restart:
             phase = "restart"
-            ex.restart(t.restart)
+            if _restart(ex, t, art, view) != 0:
+                return "fail", "driver", phase
         if t.stop:
             phase = "stop"
             ex.stop(t.stop)
@@ -131,6 +132,36 @@ def _perform(ex, t, drive, art: Path, view) -> tuple:
     if rc == 0:
         return "pass", None, phase
     return "fail", "oracle" if rc == step.FAULT else "verify", phase
+
+
+def _restart(ex, t, art: Path, view) -> int:
+    """Restart t's nodes, running its while_down.py once between stopping
+    them and starting them; the script's exit code, 0 when t ships none.
+
+    why between: a change made while a node runs reaches its live watchers,
+    so only a change made while it is down tests what it reconciles at
+    start. The nodes start again whatever the script's exit code, so the
+    world stays as every other restart leaves it.
+    The script reads the oracle's view, its own driver's facts included,
+    written before the stop: a node keeps its entry while it is down.
+    """
+    if not t.while_down:
+        ex.restart(t.restart)
+        return 0
+    env = view("while_down")
+    codes = []
+
+    def while_down():
+        codes.append(_run_step(sys.executable, t.dir / "while_down.py",
+                               art / "while_down.log", env, t.timeout))
+    ex.restart(t.restart, while_down)
+    if len(codes) != 1:
+        raise WorldError(f"restart ran while_down.py {len(codes)} times")
+    if codes[0] != 0:
+        with (art / "driver.log").open("a") as f:
+            f.write(f"[runner] while_down.py exited {codes[0]}; see "
+                    "while_down.log\n")
+    return codes[0]
 
 
 def refuse_no_host_ip(t, nodes: dict) -> None:
@@ -662,11 +693,11 @@ class _Run:
 
         def view(phase: str) -> dict:
             # why lineage only: a test sees the facts of the tests its world
-            # was built by, never a sibling's. Its oracle also sees its own
-            # driver's, read once before the oracle runs, and those are what
-            # join the record on a pass.
+            # was built by, never a sibling's. Its while_down.py and its
+            # oracle also see its own driver's, and those are what join the
+            # record on a pass.
             facts = record.facts_of(lineage)
-            if phase == "verify":
+            if phase != "driver":
                 driven.update(own_facts(art / "facts.json"))
                 facts |= driven
             write_view(art / "session.json", record.run, ex.nodes(), facts)

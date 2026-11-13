@@ -69,20 +69,28 @@ class LocalWorld(World):
             self._nodes[name] = node  # track BEFORE readiness — a node that
             await node.wait_ready()   # fails wait_ready must stay stoppable
 
-    def restart(self, names: list) -> None:
-        """Stop each named node and boot it again from its own root."""
+    def restart(self, names: list, while_down=None) -> None:
+        """Stop each named node, call `while_down()` when given, and boot
+        each again from its own root."""
         refuse_stopped("restart", names, self._stopped)
-        try:
-            asyncio.run(self._restart(names))
-        except Exception as e:
-            raise WorldError(f"restart: {e}") from e
-
-    async def _restart(self, names) -> None:
         # why every stop first: a node restarted while its siblings still run
         # can relearn what it lost from them, which hides state that a restart
         # of the whole swarm drops (expel-survives-restart)
-        for name in names:
-            self._nodes[name].stop()
+        try:
+            for name in names:
+                self._nodes[name].stop()
+        except Exception as e:
+            raise WorldError(f"restart: {e}") from e
+        # why outside the WorldError wrap: the hook runs the test's own
+        # script, and what it raises is not the world breaking
+        if while_down:
+            while_down()
+        try:
+            asyncio.run(self._start(names))
+        except Exception as e:
+            raise WorldError(f"restart: {e}") from e
+
+    async def _start(self, names) -> None:
         for name in names:
             node = self._nodes[name]
             node.start(keep=self.keep)

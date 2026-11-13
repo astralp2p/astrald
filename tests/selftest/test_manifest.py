@@ -98,6 +98,20 @@ class TestLoad(ManifestCase):
         """)
         self.assertEqual(self.all["restarting"].restart, ["node1"])
 
+    def test_a_while_down_script_needs_a_restart(self):
+        # why: nothing but a restart runs it, so a test that ships one and
+        # restarts nothing would pass without its changes ever made
+        self.assertFalse(self.all["smoke"].while_down)
+        d = self.root / "idle"
+        d.mkdir()
+        (d / "while_down.py").write_text("")
+        with self.assertRaisesRegex(ValueError, "^idle: ships a while_down"):
+            self.add("idle", 'nodes = ["node1"]\n')
+        d.mkdir()
+        (d / "while_down.py").write_text("")
+        self.add("idle", 'nodes = ["node1"]\nrestart = ["node1"]\n')
+        self.assertTrue(self.all["idle"].while_down)
+
     def test_stop_names_roster_nodes_and_implies_destroys(self):
         self.assertEqual(self.all["adopt-node"].stop, [])
         with self.assertRaisesRegex(ValueError, "stop names"):

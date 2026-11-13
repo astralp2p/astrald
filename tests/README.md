@@ -100,7 +100,9 @@ external_registration_sweep_interval = "1s"
   `local_only` for another reason.
 - **`restart`** restarts the named nodes after the driver, in a local or
   Docker world, on the state they hold. The planner never puts a test with
-  `restart` in a VM world or on an attached daemon.
+  `restart` in a VM world or on an attached daemon. A test that ships
+  `while_down.py` changes what the nodes find when they start: see
+  [Changes while nodes are down](#changes-while-nodes-are-down).
 - **`stop`** stops the named nodes after the driver, in a local or Docker
   world, and leaves them stopped. A stopped node is not dead: the liveness
   check skips it, and the session view of the test's oracle and of every
@@ -376,6 +378,26 @@ declares `host_listener`. A Go app binds its handler there with astral-go's
 `apps.WithHandlerAddress("tcp:" + net.JoinHostPort(hostIP, "0"))`, and the
 handler registers the bound port.
 
+## Changes while nodes are down
+
+A driver runs while its nodes run, so a node's live watchers see each
+change it makes. A test of what a node reconciles when it starts ships a
+fifth file, `while_down.py`, beside a manifest with `restart`. The runner
+then stops every node `restart` names, runs `while_down.py` once, and
+starts them again. A test without the file restarts as before; one that
+ships it and restarts nothing is a manifest error.
+
+- The script reads the oracle's session view (`lib.sessionio.load()`),
+  its own driver's facts included, and runs under the test's `timeout`.
+- The nodes are down while it runs: their endpoints refuse. It changes
+  their files with `lib/nodefs.py`, which reaches a stopped node's files in
+  a local world and, since only astrald stops in its container, in a Docker
+  world.
+- A non-zero exit is a `driver` failure in phase `restart`, with its output
+  in `while_down.log`. The nodes start again either way.
+- Like an oracle, it reads only facts declared on its `after` chain
+  (`selftest/test_shipped.py` checks), and it writes none.
+
 ## Node files
 
 `lib/nodefs.py` reads and writes a node's files through its session-view
@@ -469,7 +491,7 @@ to a claimed node, or give a fresh one the harness's gate
 |-------|-----------------------|
 | `prepare` | bringing the roster up and running its `ops` |
 | `driver` | `script.py`, or the operator |
-| `restart` | the restart `restart` names |
+| `restart` | the restart `restart` names, and its `while_down.py` |
 | `stop` | the stop `stop` names (v2.6) |
 | `verify` | `verify.py` |
 | `alive` | a node died under the test |
@@ -492,9 +514,9 @@ Under `results/<stamp>/`:
 - `report.md` for people, `results.json` and `events.jsonl` for machines
   (schema in `lib/results.py`); the header names the host, its OS and
   release (`host_os`) and its machine (`host_arch`);
-- `<test>/`: the test's `session.json` view, `driver.log`, `verify.log` and
-  `facts.json`. A test replayed as a prereq in a later world writes
-  `<test>.w<N>/`;
+- `<test>/`: the test's `session.json` view, `driver.log`, `verify.log`,
+  `while_down.log` when it ships a `while_down.py`, and `facts.json`. A
+  test replayed as a prereq in a later world writes `<test>.w<N>/`;
 - `w<N>/world.json`: the world record — its nodes, the history of what ran,
   and the facts of every test that passed;
 - `w<N>/session/`: a local world's node roots and astrald logs;

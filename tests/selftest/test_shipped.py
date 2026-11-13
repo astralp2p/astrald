@@ -133,10 +133,15 @@ class TestShipped(unittest.TestCase):
             while cur.after:
                 cur = self.all[cur.after]
                 declared |= set(cur.facts)
-            with self.subTest(test=name):
-                read = oracle_reads((t.dir / "verify.py").read_text())
-                self.assertEqual(read - declared, set(),
-                                 f"{name}'s oracle reads undeclared facts")
+            # why while_down.py too: it reads the oracle's view
+            for script in ("verify.py", "while_down.py"):
+                if not (t.dir / script).is_file():
+                    continue
+                with self.subTest(test=name, script=script):
+                    read = oracle_reads((t.dir / script).read_text())
+                    self.assertEqual(read - declared, set(),
+                                     f"{name}'s {script} reads undeclared "
+                                     "facts")
 
     def test_a_restart_is_never_planned_into_a_vm_or_onto_attach(self):
         # why: a local and a Docker world restart a node, a VM world cannot,
