@@ -66,13 +66,18 @@ func contentID(content string) astral.ObjectID {
 
 const testModTime int64 = 1700000000000000000
 
+// testCreationTime is one hour before testModTime, the creation time of every vector.
+const testCreationTime int64 = 1699996400000000000
+
 // addFile inserts a file with the given content under a parent.
 func addFile(t *testing.T, mod *Module, vol *dbVolume, parent int64, name, content string) *dbEntry {
 	t.Helper()
 
 	id := contentID(content)
 
-	return insertEntry(t, mod, &dbEntry{VFS: vol.Identity, ParentID: parent, Name: name, ObjectID: &id, ModTime: testModTime})
+	return insertEntry(t, mod, &dbEntry{VFS: vol.Identity, ParentID: parent, Name: name, ObjectID: &id, ModTime: testModTime,
+		CreationTime: testCreationTime,
+	})
 }
 
 // addFolder inserts a folder with a cleared ObjectID under a parent.
@@ -81,6 +86,7 @@ func addFolder(t *testing.T, mod *Module, vol *dbVolume, parent int64, name stri
 
 	return insertEntry(t, mod, &dbEntry{
 		VFS: vol.Identity, ParentID: parent, Name: name, Flags: uint16(vfsapi.FlagFolder), ModTime: testModTime,
+		CreationTime: testCreationTime,
 	})
 }
 

@@ -52,26 +52,35 @@ func phaseA(w *world, f *facts) error {
 		f.FindA = append(f.FindA, id.String())
 	}
 
-	start = time.Now()
-	data, err := provider.ReadAll(w.ctx, cli, w.o1, callTimeout)
-	f.ReadO1 = timed(start, err)
-	f.ReadO1Bytes = len(data)
-	if err == nil {
-		id, _ := astral.Resolve(bytes.NewReader(data))
-		f.ReadO1IsO1 = id != nil && id.IsEqual(w.o1)
+	// why up to readO1Attempts reads: node1 takes the first candidate to
+	// deliver a byte, and when it finds node2 itself before F's claims of G
+	// arrive, node2 wins with G never dialed. That read says nothing about a
+	// silent candidate, so the read repeats until one has G in play; node1
+	// keeps no candidate between reads (op_read.go).
+	for attempt := 1; attempt <= readO1Attempts && f.GReadO1 == 0; attempt++ {
+		f.ReadO1Attempts = attempt
+		start = time.Now()
+		data, err := provider.ReadAll(w.ctx, cli, w.o1, callTimeout)
+		f.ReadO1 = timed(start, err)
+		f.ReadO1Bytes = len(data)
+		f.ReadO1IsO1 = false
+		if err == nil {
+			id, _ := astral.Resolve(bytes.NewReader(data))
+			f.ReadO1IsO1 = id != nil && id.IsEqual(w.o1)
+		}
+		f.GReadO1 = poll(func() int { return w.g.Count(provider.Read, w.o1.String()) }, 2*time.Second)
 	}
 
 	// why a wiring check: without F and H asked, and G dialed, nothing below
 	// says anything about a bad candidate.
 	f.FFindO1 = w.f.Count(provider.Find, w.o1.String())
 	f.HFindO1 = w.h.Count(provider.Find, w.o1.String())
-	f.GReadO1 = poll(func() int { return w.g.Count(provider.Read, w.o1.String()) }, 2*time.Second)
 	if err := f.checks.Require("finders_asked", f.FFindO1 > 0 && f.HFindO1 > 0,
 		"F asked %d times, H %d times for O1; want both asked", f.FFindO1, f.HFindO1); err != nil {
 		return err
 	}
 	if err := f.checks.Require("silent_reader_dialed", f.GReadO1 > 0,
-		"G was never dialed for O1 within 2 s of the read"); err != nil {
+		"G was never dialed for O1 within 2 s of any of %d reads", f.ReadO1Attempts); err != nil {
 		return err
 	}
 	if err := checkFindA(w, f); err != nil {

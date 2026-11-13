@@ -70,7 +70,7 @@ func TestTouchRefusals(t *testing.T) {
 }
 
 // TestTouchAFolderKeepsItsOwnCachedIDAndClearsAncestors: a touched folder keeps its cached ID, because its time is
-// outside its own listing, while the root loses its cached ID, and stat answers the ID the folder had before.
+// outside its own directory, while the root loses its cached ID, and stat answers the ID the folder had before.
 func TestTouchAFolderKeepsItsOwnCachedIDAndClearsAncestors(t *testing.T) {
 	mod, vol, _ := changeTestModule(t)
 	dir := addFolder(t, mod, vol, vol.RootID, "d")

@@ -34,7 +34,7 @@ func TestMoveKeepsTheEntryTimeAndSetsBothParents(t *testing.T) {
 	}
 }
 
-func TestMoveAFolderAnswersItsListingID(t *testing.T) {
+func TestMoveAFolderAnswersItsDirectoryID(t *testing.T) {
 	mod, vol, _ := changeTestModule(t)
 	dir := addFolder(t, mod, vol, vol.RootID, "dir")
 	addFile(t, mod, vol, dir.ID, "f", "x")

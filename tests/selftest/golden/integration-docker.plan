@@ -33,6 +33,7 @@ w0 docker:  smoke → claim-window → token-less-setup → signer-app
             config node1.objects.external_registration_sweep_interval = "1s"
             config nomcp1.mcp.bind_mcp = ""
 w1 docker:  bootstrap-user-software-key* → adopt-node* → hold-purge
+            config node1.objects.purge_floor = "0s"
 w2 docker:  bootstrap-user-software-key* → adopt-node* → swarm-roster-sync
             → expel-propagation → expel-survives-restart
 w3 docker:  bootstrap-user-software-key* → adopt-node* → swarm-roster-sync*
@@ -56,6 +57,7 @@ w14 docker: bootstrap-user-software-key* → fs-index-restart-reconcile
 w15 docker: bootstrap-user-software-key* → repo-removal-sticks
 w16 docker: bootstrap-user-software-key* → indexing-fs-watch-feed
 w17 docker: bootstrap-user-software-key* → hold-isolation
+            config node1.objects.purge_floor = "0s"
 w18 docker: bootstrap-user-software-key* → blueprint-survives-restart
 w19 docker: bootstrap-user-software-key* → indexer-cursor
 w20 docker: bootstrap-user-op

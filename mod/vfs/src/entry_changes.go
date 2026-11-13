@@ -142,7 +142,7 @@ func (c *change) removeEntry(names []string, recursive bool) error {
 
 // touchEntry sets the time of the entry the names give.
 //
-// note: the time of a folder is outside its own listing, so only the folders above it lose their cached IDs.
+// note: the time of a folder is outside its own directory, so only the folders above it lose their cached IDs.
 func (c *change) touchEntry(names []string, modTime int64) (*vfsapi.Entry, error) {
 	// why: the root cannot be touched (operator decision 2026-11-12).
 	if len(names) == 0 {

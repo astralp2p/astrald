@@ -3,3 +3,8 @@ timeout = 120
 after   = "adopt-node"
 destroys = true
 facts   = ["held_id", "unheld_id", "purged_ids"]
+
+# why: objects.purge never takes an object touched within purge_floor, one
+# hour by default, and this test purges objects it has just written
+[config.node1.objects]
+purge_floor = "0s"

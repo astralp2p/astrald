@@ -20,12 +20,16 @@ type dbEntry struct {
 	Name     string `gorm:"type:text collate binary;not null;uniqueIndex:idx_vfs__entries_parent_name,priority:2"`
 	Flags    uint16 `gorm:"not null"`
 
-	// ObjectID is the content ObjectID of a file. For a folder it is the cached ObjectID of the listing,
+	// ObjectID is the content ObjectID of a file. For a folder it is the cached ObjectID of the directory,
 	// or NULL when cleared.
 	ObjectID *astral.ObjectID `gorm:"index;index:idx_vfs__entries_vfs_object,priority:2"`
 
 	// ModTime is nanoseconds since the Unix epoch, the value that is hashed.
 	ModTime int64 `gorm:"not null"`
+
+	// CreationTime is nanoseconds since the Unix epoch, set when the entry is created. The root has none: 0.
+	// why: the default lets the column be added to a table with rows (migrateCreationTime).
+	CreationTime int64 `gorm:"not null;default:0"`
 }
 
 func (dbEntry) TableName() string { return vfsmod.DBPrefix + "entries" }
@@ -40,9 +44,10 @@ func (e *dbEntry) isRoot() bool { return e.ParentID == e.ID }
 // computes it first.
 func (e *dbEntry) toEntry() *vfsapi.Entry {
 	entry := &vfsapi.Entry{
-		Name:    astral.String8(e.Name),
-		Flags:   astral.Uint16(e.Flags),
-		ModTime: astral.Time(time.Unix(0, e.ModTime).UTC()),
+		Name:         astral.String8(e.Name),
+		Flags:        astral.Uint16(e.Flags),
+		ModTime:      astral.Time(time.Unix(0, e.ModTime).UTC()),
+		CreationTime: astral.Time(time.Unix(0, e.CreationTime).UTC()),
 	}
 	if e.ObjectID != nil {
 		entry.ID = *e.ObjectID

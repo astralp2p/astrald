@@ -49,8 +49,11 @@ descriptor or search result with the provider's own identity.
     oracle stores on node2.
 
 A wiring fault fails the driver: F or H never asked for O1, or G never dialed
-within 2 s of read(O1). Without them the flow says nothing about a bad
-candidate.
+within 2 s of any of up to 3 reads of O1. Without them the flow says nothing
+about a bad candidate. node1 takes the first candidate to deliver a byte, and
+when it finds node2 itself before F's claims of G arrive, node2 wins with G
+never dialed; the driver then reads O1 again, and the read_o1 facts are those
+of the read that had G in play.
 
 ## Timers
 
