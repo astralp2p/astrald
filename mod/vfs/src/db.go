@@ -19,7 +19,37 @@ func (db *DB) migrate() error {
 		return err
 	}
 
-	return db.AutoMigrate(&dbVolume{}, &dbEntry{})
+	if err := db.migrateDirGen(); err != nil {
+		return err
+	}
+
+	if err := db.AutoMigrate(&dbVolume{}, &dbEntry{}, &dbReplacedDirectory{}, &dbDirGen{}); err != nil {
+		return err
+	}
+
+	return db.seedDirGen()
+}
+
+// migrateDirGen adds the dir_gen column to an entries table made before it. In the same transaction every cached
+// folder ObjectID is cleared.
+//
+// why: the missing column is the marker, so the step runs once; one transaction adds the column and clears the
+// IDs, so a failed step leaves no column and runs again on the next start.
+// why: a folder ObjectID cached before this version names no stored object; cleared, it is computed and stored.
+// note: nothing is noted for removal, because none of those IDs was stored.
+func (db *DB) migrateDirGen() error {
+	m := db.Migrator()
+	if !m.HasTable(&dbEntry{}) || m.HasColumn(&dbEntry{}, "dir_gen") {
+		return nil
+	}
+
+	return db.inTx(func(tx *DB) error {
+		if err := tx.Migrator().AddColumn(&dbEntry{}, "DirGen"); err != nil {
+			return err
+		}
+
+		return tx.Exec(`UPDATE vfs__entries SET object_id = NULL WHERE flags & ? != 0`, uint16(vfsapi.FlagFolder)).Error
+	})
 }
 
 // migrateCreationTime adds the creation_time column to an entries table made before it. In the same transaction
@@ -98,7 +128,7 @@ func (db *DB) createVolume(id *astral.Identity, byteLimit, inodeLimit uint64) er
 		ModTime: nodeTime(),
 	}
 
-	if err := db.Create(root).Error; err != nil {
+	if err := db.insertEntry(root); err != nil {
 		return err
 	}
 
@@ -200,8 +230,14 @@ func (db *DB) resolveEntry(vol *dbVolume, names []string) (*dbEntry, error) {
 	return row, nil
 }
 
-// insertEntry inserts a new row.
-func (db *DB) insertEntry(row *dbEntry) error {
+// insertEntry inserts a new row at the next folder generation.
+//
+// why: a file row draws one too, so a row id reused by any row never meets a generation a compute read.
+func (db *DB) insertEntry(row *dbEntry) (err error) {
+	if row.DirGen, err = db.nextDirGen(); err != nil {
+		return err
+	}
+
 	return db.Create(row).Error
 }
 
@@ -222,51 +258,79 @@ func (db *DB) setFileContent(rowID int64, id *astral.ObjectID, modTime int64) er
 		Updates(map[string]any{"object_id": id, "mod_time": modTime}).Error
 }
 
-// deleteSubtree deletes a row and every row below it.
+// subtreeCTE names the rows of a subtree: the row bound to its parameter and every row below it.
 //
 // note: the walk goes down from a row that is not a root, so it never reaches the root, which is its own parent.
-func (db *DB) deleteSubtree(rowID int64) error {
-	return db.Exec(`
-		DELETE FROM vfs__entries WHERE id IN (
-			WITH RECURSIVE tree(id) AS (
-				SELECT id FROM vfs__entries WHERE id = ?
-				UNION
-				SELECT e.id FROM vfs__entries e JOIN tree t ON e.parent_id = t.id
-			)
-			SELECT id FROM tree
-		)`, rowID).Error
+const subtreeCTE = `WITH RECURSIVE tree(id) AS (
+	SELECT id FROM vfs__entries WHERE id = ?
+	UNION
+	SELECT e.id FROM vfs__entries e JOIN tree t ON e.parent_id = t.id
+) SELECT id FROM tree`
+
+// ancestorsCTE names the rows of a path: the row bound to its parameter and every row above it, up to the root.
+//
+// note: the root is its own parent, and UNION drops a repeated row, so the recursion ends there.
+const ancestorsCTE = `WITH RECURSIVE ancestors(id, parent_id) AS (
+	SELECT id, parent_id FROM vfs__entries WHERE id = ?
+	UNION
+	SELECT e.id, e.parent_id FROM vfs__entries e JOIN ancestors a ON e.id = a.parent_id
+) SELECT id FROM ancestors`
+
+// deleteSubtree deletes a row and every row below it. The cached ObjectIDs of the folders it deletes are noted as
+// replaced at now.
+func (db *DB) deleteSubtree(rowID, now int64) error {
+	if err := db.noteFolderIDsIn(subtreeCTE, rowID, now); err != nil {
+		return err
+	}
+
+	return db.Exec(`DELETE FROM vfs__entries WHERE id IN (`+subtreeCTE+`)`, rowID).Error
 }
 
-// clearFolderIDs clears the cached ObjectID of a folder and of every folder above it, up to the root.
+// clearFolderIDs clears the cached ObjectID of a folder and of every folder above it, up to the root, and sets
+// their generations to the next one of the node. The cleared ObjectIDs are noted as replaced at now.
 //
 // A change in a folder, or below it, calls this with the row of the folder. A file row is never cleared, so a
 // call with the row of a file clears the folders above it only.
-func (db *DB) clearFolderIDs(folderID int64) error {
-	// note: the root is its own parent, and UNION drops a repeated row, so the recursion ends there.
-	// why: a file's ObjectID names its content and is never a cache.
-	return db.Exec(`
-		UPDATE vfs__entries SET object_id = NULL WHERE flags & ? != 0 AND id IN (
-			WITH RECURSIVE ancestors(id, parent_id) AS (
-				SELECT id, parent_id FROM vfs__entries WHERE id = ?
-				UNION
-				SELECT e.id, e.parent_id FROM vfs__entries e JOIN ancestors a ON e.id = a.parent_id
-			)
-			SELECT id FROM ancestors
-		)`, uint16(vfsapi.FlagFolder), folderID).Error
-}
-
-// setFolderIDs caches computed ObjectIDs in their rows.
 //
-// The caller holds the lock of the VFS, so no change cleared a folder between the computation and the store.
-func (db *DB) setFolderIDs(filled []filledID) error {
-	for _, f := range filled {
-		id := f.ID
-		if err := db.Model(&dbEntry{}).Where("id = ?", f.Row).Update("object_id", &id).Error; err != nil {
-			return err
-		}
+// why: the generation moves on an already cleared slot too, so a compute that read the folder before this
+// change never writes back.
+// why: a file's ObjectID names its content and is never a cache.
+func (db *DB) clearFolderIDs(folderID, now int64) error {
+	if err := db.noteFolderIDsIn(ancestorsCTE, folderID, now); err != nil {
+		return err
 	}
 
-	return nil
+	gen, err := db.nextDirGen()
+	if err != nil {
+		return err
+	}
+
+	return db.Exec(`UPDATE vfs__entries SET object_id = NULL, dir_gen = ?
+		WHERE flags & ? != 0 AND id IN (`+ancestorsCTE+`)`, gen, uint16(vfsapi.FlagFolder), folderID).Error
+}
+
+// noteFolderIDsIn notes the cached ObjectIDs of the folders among the rows a CTE names as replaced at now.
+//
+// note: the latest note wins, so the grace time counts from the last replacement.
+// note: the WHERE clause also settles SQLite's parse of ON CONFLICT after a SELECT.
+func (db *DB) noteFolderIDsIn(cte string, rowID, now int64) error {
+	return db.Exec(`INSERT INTO vfs__replaced_directories (object_id, noted_at)
+		SELECT object_id, ? FROM vfs__entries
+		WHERE flags & ? != 0 AND object_id IS NOT NULL AND id IN (`+cte+`)
+		ON CONFLICT (object_id) DO UPDATE SET noted_at = excluded.noted_at`,
+		now, uint16(vfsapi.FlagFolder), rowID).Error
+}
+
+// setFolderIDIfUnchanged caches a computed ObjectID in its row when the folder is still cleared at the generation
+// the compute read. It reports whether the row took the ID.
+//
+// note: a generation is drawn once on the node (dbDirGen), so the row id and the generation name one folder state.
+func (db *DB) setFolderIDIfUnchanged(rowID, gen int64, id astral.ObjectID) (bool, error) {
+	res := db.Model(&dbEntry{}).
+		Where("id = ? AND dir_gen = ? AND object_id IS NULL", rowID, gen).
+		Update("object_id", &id)
+
+	return res.RowsAffected == 1, res.Error
 }
 
 // usage returns the bytes of file content a VFS holds. Each distinct ObjectID counts once, and a folder counts
@@ -320,28 +384,23 @@ func (db *DB) measureUsage(vfsID *astral.Identity) (u vfsUsage, err error) {
 	return
 }
 
-// hasFileWithObject reports whether a file row has the ObjectID.
-func (db *DB) hasFileWithObject(objectID *astral.ObjectID) (bool, error) {
+// hasEntryWithObject reports whether a row has the ObjectID: the content of a file or the cached directory of a
+// folder.
+func (db *DB) hasEntryWithObject(objectID *astral.ObjectID) (bool, error) {
 	var ids []int64
 
-	err := db.Model(&dbEntry{}).
-		Where("flags & ? = 0 AND object_id = ?", uint16(vfsapi.FlagFolder), objectID).
-		Limit(1).
-		Pluck("id", &ids).Error
+	err := db.Model(&dbEntry{}).Where("object_id = ?", objectID).Limit(1).Pluck("id", &ids).Error
 
 	return len(ids) > 0, err
 }
 
-// findVFSesWithObject returns each VFS that has a file with the ObjectID, once.
+// findVFSesWithObject returns each VFS that has a file or a cached folder with the ObjectID, once.
 //
-// note: a folder's cached directory ObjectID names no stored object, so folder rows are skipped.
+// note: Find loads every row before the caller asks another module, so no cursor holds the one connection.
 func (db *DB) findVFSesWithObject(id *astral.ObjectID) ([]*astral.Identity, error) {
 	var rows []dbEntry
 
-	err := db.Model(&dbEntry{}).
-		Distinct("vfs").
-		Where("object_id = ? AND flags & ? = 0", id, uint16(vfsapi.FlagFolder)).
-		Find(&rows).Error
+	err := db.Model(&dbEntry{}).Distinct("vfs").Where("object_id = ?", id).Find(&rows).Error
 	if err != nil {
 		return nil, err
 	}

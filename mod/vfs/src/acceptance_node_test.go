@@ -63,6 +63,7 @@ type acceptanceNode struct {
 	endpoint string   // the apphost IPC endpoint
 	httpAddr string   // the apphost HTTP endpoint
 	db       *gorm.DB // a second connection to the node's database
+	vfsYAML  string   // the vfs.yaml the next run writes; empty writes none
 }
 
 // startAcceptanceNode starts a node in a temporary root and returns once apphost answers and the group local
@@ -70,7 +71,14 @@ type acceptanceNode struct {
 func startAcceptanceNode(t *testing.T) *acceptanceNode {
 	t.Helper()
 
-	a := &acceptanceNode{t: t, root: t.TempDir()}
+	return startAcceptanceNodeWith(t, "")
+}
+
+// startAcceptanceNodeWith is startAcceptanceNode with a vfs.yaml.
+func startAcceptanceNodeWith(t *testing.T, vfsYAML string) *acceptanceNode {
+	t.Helper()
+
+	a := &acceptanceNode{t: t, root: t.TempDir(), vfsYAML: vfsYAML}
 
 	key := secp256k1.New()
 	a.id = secp256k1.Identity(secp256k1.PublicKey(key))
@@ -132,6 +140,9 @@ func (a *acceptanceNode) writeConfig() {
 		"node.yaml":    "modules: " + acceptanceModules + "\n",
 		"apphost.yaml": fmt.Sprintf("listen: [%q]\nbind_http: %q\npolicies:\n  app_register: accept_all\n", a.endpoint, a.httpAddr),
 		"objects.yaml": "purge_untouched: 0\n",
+	}
+	if a.vfsYAML != "" {
+		configs["vfs.yaml"] = a.vfsYAML
 	}
 	for name, body := range configs {
 		if err := os.WriteFile(filepath.Join(a.root, name), []byte(body), 0600); err != nil {

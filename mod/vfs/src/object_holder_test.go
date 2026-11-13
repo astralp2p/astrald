@@ -51,35 +51,30 @@ func TestHoldObjectEndsWithTheEntry(t *testing.T) {
 	}
 }
 
-// The cached ObjectID of a folder names no stored object.
-func TestHoldObjectDoesNotHoldACachedFolderID(t *testing.T) {
+// The cached ObjectID of a folder is its current directory and is held until the folder changes.
+func TestHoldObjectHoldsTheCurrentFolderID(t *testing.T) {
 	mod := testModule(t)
 	vol := createVFS(t, mod, astral.GenerateIdentity())
-	addFolder(t, mod, vol, vol.RootID, "d")
+	folder := addFolder(t, mod, vol, vol.RootID, "d")
 
 	root, err := mod.folderObjectID(vol.Identity, vol.RootID)
 	if err != nil {
 		t.Fatalf("folderObjectID: %v", err)
 	}
-
-	var cached int64
-	if err := mod.db.Model(&dbEntry{}).Where("object_id IS NOT NULL").Count(&cached).Error; err != nil || cached == 0 {
-		t.Fatalf("no folder ID is cached: %d, %v", cached, err)
-	}
-
-	if mod.HoldObject(&root) {
-		t.Error("the root ObjectID is held")
-	}
-
-	folder, err := mod.db.findChild(vol.RootID, "d")
-	if err != nil {
-		t.Fatalf("findChild: %v", err)
-	}
-	if folder.ObjectID == nil {
+	sub := cachedID(t, mod, folder.ID)
+	if sub == nil {
 		t.Fatal("the folder ID is not cached")
 	}
-	if mod.HoldObject(folder.ObjectID) {
-		t.Error("the cached ObjectID of a folder is held")
+
+	if !mod.HoldObject(&root) || !mod.HoldObject(sub) {
+		t.Fatal("a current directory is not held")
+	}
+
+	if err = mod.db.clearFolderIDs(folder.ID, 0); err != nil {
+		t.Fatalf("clearFolderIDs: %v", err)
+	}
+	if mod.HoldObject(&root) || mod.HoldObject(sub) {
+		t.Error("a replaced directory is held")
 	}
 }
 

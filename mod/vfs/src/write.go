@@ -155,5 +155,5 @@ func (c *change) putFile(parent *dbEntry, name string, id astral.ObjectID) (*dbE
 		return nil, err
 	}
 
-	return row, c.tx.clearFolderIDs(parent.ID)
+	return row, c.clearFolderIDs(parent.ID)
 }

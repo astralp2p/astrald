@@ -133,7 +133,7 @@ func (c *change) removeEntry(names []string, recursive bool) error {
 		}
 	}
 
-	if err = c.tx.deleteSubtree(row.ID); err != nil {
+	if err = c.tx.deleteSubtree(row.ID, c.now); err != nil {
 		return err
 	}
 
@@ -159,7 +159,7 @@ func (c *change) touchEntry(names []string, modTime int64) (*vfsapi.Entry, error
 	}
 	row.ModTime = modTime
 
-	if err = c.tx.clearFolderIDs(row.ParentID); err != nil {
+	if err = c.clearFolderIDs(row.ParentID); err != nil {
 		return nil, err
 	}
 

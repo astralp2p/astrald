@@ -15,7 +15,8 @@ import (
 )
 
 // testModule returns a module over an in-memory database with one connection, as the node has. A query on
-// the module's database from inside a transaction would block here as it does on the node.
+// the module's database from inside a transaction would block here as it does on the node. The module runs on a
+// fake clock and stores directories in a test repository; nothing runs in the background.
 func testModule(t *testing.T) *Module {
 	t.Helper()
 
@@ -39,6 +40,8 @@ func testModule(t *testing.T) *Module {
 	if err := mod.db.migrate(); err != nil {
 		t.Fatalf("migrate: %v", err)
 	}
+
+	setupDirTest(t, mod)
 
 	return mod
 }

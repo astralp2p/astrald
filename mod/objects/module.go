@@ -1,6 +1,8 @@
 package objects
 
 import (
+	"time"
+
 	"github.com/astralp2p/astral-go/api/objects"
 	"github.com/astralp2p/astral-go/astral"
 )
@@ -54,6 +56,11 @@ type Module interface {
 
 	AddHolder(Holder) error
 	Holders(objectID *astral.ObjectID) []Holder
+
+	// DeleteUnheld deletes a full ObjectID from every tracked leaf below repo, each under the leaf's lock, unless a
+	// holder holds it or the leaf committed it after since. It returns ErrObjectInUse when a leaf kept it for one of
+	// those, and ErrNotFound when no leaf had it.
+	DeleteUnheld(ctx *astral.Context, repo Repository, objectID *astral.ObjectID, since time.Time) error
 
 	AddIndexer(Indexer) error
 

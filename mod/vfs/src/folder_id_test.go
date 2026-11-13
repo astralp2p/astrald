@@ -119,27 +119,27 @@ func TestComputeUsesCachedFolderIDs(t *testing.T) {
 	if err != nil {
 		t.Fatalf("findEntry: %v", err)
 	}
-	fc := folderIDComputer{tx: mod.db}
-	id, err := fc.compute(root)
+	plan, err := planFolder(mod.db, vol.Identity, root, 0)
 	if err != nil {
-		t.Fatalf("compute: %v", err)
+		t.Fatalf("plan: %v", err)
 	}
-	if len(fc.filled) != 1 || fc.filled[0].Row != vol.RootID {
-		t.Fatalf("filled = %v, want the root only", fc.filled)
+	id := plan.ID
+	if len(plan.Dirs) != 1 || plan.Dirs[0].Row != vol.RootID {
+		t.Fatalf("planned = %v, want the root only", plan.Dirs)
 	}
 
-	if err := mod.db.clearFolderIDs(sub.ID); err != nil {
+	if err := mod.db.clearFolderIDs(sub.ID, 0); err != nil {
 		t.Fatalf("clearFolderIDs: %v", err)
 	}
 	root, err = mod.db.findEntry(vol.RootID)
 	if err != nil {
 		t.Fatalf("findEntry: %v", err)
 	}
-	fc = folderIDComputer{tx: mod.db}
-	fresh, err := fc.compute(root)
+	plan, err = planFolder(mod.db, vol.Identity, root, 0)
 	if err != nil {
-		t.Fatalf("compute: %v", err)
+		t.Fatalf("plan: %v", err)
 	}
+	fresh := plan.ID
 	if fresh == id {
 		t.Fatal("the directory did not change after the cache was cleared")
 	}
@@ -166,7 +166,7 @@ func TestClearFolderIDsClearsTheFolderAndEveryAncestor(t *testing.T) {
 		}
 	}
 
-	if err := mod.db.clearFolderIDs(b.ID); err != nil {
+	if err := mod.db.clearFolderIDs(b.ID, 0); err != nil {
 		t.Fatalf("clearFolderIDs: %v", err)
 	}
 
@@ -198,7 +198,7 @@ func TestClearFolderIDsNeverClearsAFile(t *testing.T) {
 	if _, err := mod.folderObjectID(vol.Identity, vol.RootID); err != nil {
 		t.Fatalf("folderObjectID: %v", err)
 	}
-	if err := mod.db.clearFolderIDs(file.ID); err != nil {
+	if err := mod.db.clearFolderIDs(file.ID, 0); err != nil {
 		t.Fatalf("clearFolderIDs: %v", err)
 	}
 
@@ -217,7 +217,7 @@ func TestClearFolderIDsOnTheRootEndsAtTheRoot(t *testing.T) {
 	if _, err := mod.folderObjectID(vol.Identity, vol.RootID); err != nil {
 		t.Fatalf("folderObjectID: %v", err)
 	}
-	if err := mod.db.clearFolderIDs(vol.RootID); err != nil {
+	if err := mod.db.clearFolderIDs(vol.RootID, 0); err != nil {
 		t.Fatalf("clearFolderIDs: %v", err)
 	}
 	if got, _ := mod.db.findEntry(vol.RootID); got.ObjectID != nil {
@@ -235,7 +235,7 @@ func TestRootObjectIDFollowsEntryModTimeNotRootModTime(t *testing.T) {
 	if err := mod.db.Model(&dbEntry{}).Where("id = ?", f.ID).Update("mod_time", testModTime+1).Error; err != nil {
 		t.Fatal(err)
 	}
-	if err := mod.db.clearFolderIDs(vol.RootID); err != nil {
+	if err := mod.db.clearFolderIDs(vol.RootID, 0); err != nil {
 		t.Fatal(err)
 	}
 
@@ -245,7 +245,7 @@ func TestRootObjectIDFollowsEntryModTimeNotRootModTime(t *testing.T) {
 	}
 
 	// the root's own time is outside the hashed bytes
-	if err := mod.db.clearFolderIDs(vol.RootID); err != nil {
+	if err := mod.db.clearFolderIDs(vol.RootID, 0); err != nil {
 		t.Fatal(err)
 	}
 	if err := mod.db.Model(&dbEntry{}).Where("id = ?", vol.RootID).Update("mod_time", testModTime+99).Error; err != nil {

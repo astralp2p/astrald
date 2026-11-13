@@ -20,8 +20,8 @@ type dbEntry struct {
 	Name     string `gorm:"type:text collate binary;not null;uniqueIndex:idx_vfs__entries_parent_name,priority:2"`
 	Flags    uint16 `gorm:"not null"`
 
-	// ObjectID is the content ObjectID of a file. For a folder it is the cached ObjectID of the directory,
-	// or NULL when cleared.
+	// ObjectID is the content ObjectID of a file. For a folder it is the cached ObjectID of the directory, or NULL
+	// when cleared. A cached directory is stored in the default write repository.
 	ObjectID *astral.ObjectID `gorm:"index;index:idx_vfs__entries_vfs_object,priority:2"`
 
 	// ModTime is nanoseconds since the Unix epoch, the value that is hashed.
@@ -30,6 +30,12 @@ type dbEntry struct {
 	// CreationTime is nanoseconds since the Unix epoch, set when the entry is created. The root has none: 0.
 	// why: the default lets the column be added to a table with rows (migrateCreationTime).
 	CreationTime int64 `gorm:"not null;default:0"`
+
+	// DirGen is the generation of a row, drawn from the node's counter (dbDirGen) when the row is made and at each
+	// clear of a folder's cached ObjectID. A write-back fills the slot only at the generation its compute read, so
+	// a folder changed or made anew during the compute keeps a cleared slot.
+	// why: the default lets the column be added to a table with rows (migrateDirGen).
+	DirGen int64 `gorm:"not null;default:0"`
 }
 
 func (dbEntry) TableName() string { return vfsmod.DBPrefix + "entries" }
