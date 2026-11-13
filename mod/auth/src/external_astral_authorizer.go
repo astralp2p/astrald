@@ -1,13 +1,17 @@
 package auth
 
 import (
+	"context"
 	"errors"
 	"fmt"
+	"io"
 	"strings"
 	"sync"
+	"sync/atomic"
 
 	"github.com/astralp2p/astral-go/api/auth"
 	"github.com/astralp2p/astral-go/astral"
+	"github.com/astralp2p/astral-go/astral/channel"
 	"github.com/astralp2p/astral-go/lib/query"
 	"github.com/astralp2p/astrald/lib/arl"
 )
@@ -60,7 +64,7 @@ func newAstralAuthorizer(mod *Module, config ExternalConfig) (*astralAuthorizer,
 
 func (a *astralAuthorizer) String() string { return astralScheme + a.name + ":" + a.path }
 
-// Ask sends the action to the authority and reads one object back.
+// Ask sends the action to the authority and reads one object back. The context bounds the send and the receive.
 func (a *astralAuthorizer) Ask(ctx *astral.Context, action auth.ActionObject) (bool, error) {
 	target, err := a.resolveTarget()
 	if err != nil {
@@ -73,19 +77,25 @@ func (a *astralAuthorizer) Ask(ctx *astral.Context, action auth.ActionObject) (b
 		return false, errors.New("the authority cannot be the actor")
 	}
 
-	ch, err := query.Route(ctx, a.node, query.New(a.node.Identity(), target, a.path, nil))
+	conn, err := a.route(ctx, target)
 	if err != nil {
 		return false, err
 	}
-	defer ch.Close()
+	defer conn.Close()
 
+	// why: a send and a receive have no deadline of their own, so an authority that accepts the query and never
+	// reads or never answers would hold the authorization past its timeout.
+	stop := closeWhenDone(ctx, conn)
+	defer stop()
+
+	ch := channel.New(conn)
 	if err = ch.Send(action); err != nil {
-		return false, err
+		return false, contextErr(ctx, err)
 	}
 
 	obj, err := ch.Receive()
 	if err != nil {
-		return false, err
+		return false, contextErr(ctx, err)
 	}
 
 	// why ack alone: every other object is an answer this code cannot read, and
@@ -93,6 +103,63 @@ func (a *astralAuthorizer) Ask(ctx *astral.Context, action auth.ActionObject) (b
 	_, allow := obj.(*astral.Ack)
 
 	return allow, nil
+}
+
+// route routes the question to the target and returns the asker's end of it.
+//
+// why not query.Route: the asker keeps the read end of the pipe, so closing the connection also ends a blocked
+// receive.
+func (a *astralAuthorizer) route(ctx *astral.Context, target *astral.Identity) (*questionConn, error) {
+	reader, writer := io.Pipe()
+
+	w, err := a.node.RouteQuery(ctx, astral.Launch(query.New(a.node.Identity(), target, a.path, nil)), writer)
+	if err != nil {
+		reader.Close()
+		return nil, err
+	}
+
+	return &questionConn{PipeReader: reader, WriteCloser: w}, nil
+}
+
+// questionConn is the asker's end of a question. Close closes the read end and the write end, once.
+type questionConn struct {
+	*io.PipeReader
+	io.WriteCloser
+	closed atomic.Bool
+}
+
+func (c *questionConn) Close() error {
+	if !c.closed.CompareAndSwap(false, true) {
+		return nil
+	}
+	c.PipeReader.Close()
+
+	return c.WriteCloser.Close()
+}
+
+// closeWhenDone closes c when ctx ends. The returned stop returns only after a close it started has finished, so
+// no goroutine outlives the caller.
+func closeWhenDone(ctx context.Context, c io.Closer) (stop func()) {
+	closed := make(chan struct{})
+	stopAfter := context.AfterFunc(ctx, func() {
+		defer close(closed)
+		c.Close()
+	})
+
+	return func() {
+		if !stopAfter() {
+			<-closed
+		}
+	}
+}
+
+// contextErr returns the context's error when the context has ended, and err otherwise.
+func contextErr(ctx context.Context, err error) error {
+	if ctxErr := ctx.Err(); ctxErr != nil {
+		return ctxErr
+	}
+
+	return err
 }
 
 // resolveTarget resolves the configured name into an identity, once.

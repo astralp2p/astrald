@@ -11,9 +11,10 @@ import (
 type dbVolume struct {
 	ID         int64            `gorm:"primaryKey"`
 	Identity   *astral.Identity `gorm:"uniqueIndex;not null"`
-	RootID     int64            `gorm:"not null"` // the root row in vfs__entries
-	ByteLimit  int64            `gorm:"not null"` // 0 means no limit
-	InodeLimit int64            `gorm:"not null"` // 0 means no limit
+	RootID     int64            `gorm:"not null"`            // the root row in vfs__entries
+	ByteLimit  int64            `gorm:"not null"`            // 0 means no limit
+	InodeLimit int64            `gorm:"not null"`            // 0 means no limit
+	Evaluator  string           `gorm:"not null;default:''"` // the evaluator's endpoint; empty means none
 }
 
 func (dbVolume) TableName() string { return vfsmod.DBPrefix + "volumes" }

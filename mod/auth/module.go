@@ -1,6 +1,8 @@
 package auth
 
 import (
+	"time"
+
 	"github.com/astralp2p/astral-go/api/auth"
 	"github.com/astralp2p/astral-go/api/crypto"
 	"github.com/astralp2p/astral-go/astral"
@@ -66,4 +68,11 @@ type Module interface {
 	// one with the same action and actor, and applies it to the next
 	// authorization. A failure leaves both the tree and the registry unchanged.
 	SetAuthorizer(ctx *astral.Context, assignment *auth.AuthorizerAssignment) error
+
+	// NewAuthorizeAsk builds an asker for an endpoint, in the forms an external
+	// authorizer takes: http://, https:// or astral://<identity-or-alias>:<op>.
+	// Every question, its send and its receive, is bounded by timeout; a
+	// timeout of 0 or less is the default of an external authorizer. The asker
+	// remembers no answer.
+	NewAuthorizeAsk(endpoint string, timeout time.Duration) (auth.AuthorizeAsk, error)
 }

@@ -1,6 +1,7 @@
 package apphost
 
 import (
+	"context"
 	"errors"
 	"io"
 	"math"
@@ -74,7 +75,7 @@ func (h *ServiceHandler) RouteQuery(ctx *astral.Context, q *astral.InFlightQuery
 	}
 	defer h.mod.pendingInboundQueries.Delete(queryID)
 
-	err := h.ch.Send(&apphost.IncomingQueryMsg{
+	err := h.notify(ctx, &apphost.IncomingQueryMsg{
 		QueryID: queryID,
 		Caller:  q.Caller,
 		Target:  q.Target,
@@ -105,4 +106,24 @@ func (h *ServiceHandler) RouteQuery(ctx *astral.Context, q *astral.InFlightQuery
 	case <-ctx.Done():
 		return query.RouteNotFound()
 	}
+}
+
+// notify sends msg down the registration connection, bounded by ctx.
+//
+// why: an app that stops reading its registration connection would block the send, and the caller, with no limit;
+// a handler that cannot take a notification before ctx ends is closed, and RouteQuery reports it gone.
+func (h *ServiceHandler) notify(ctx context.Context, msg astral.Object) error {
+	closed := make(chan struct{})
+	stopClose := context.AfterFunc(ctx, func() {
+		defer close(closed)
+		h.ch.Close()
+	})
+
+	err := h.ch.Send(msg)
+	if !stopClose() {
+		<-closed
+		return errServiceHandlerGone
+	}
+
+	return err
 }

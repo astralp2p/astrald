@@ -153,3 +153,51 @@ func TestMigrateCreationTimeRunsOnce(t *testing.T) {
 		t.Errorf("a second start set the creation time to %d, want %d", got, later)
 	}
 }
+
+// dbVolumeBeforeEvaluator is the volumes table as it was before the evaluator column.
+type dbVolumeBeforeEvaluator struct {
+	ID         int64            `gorm:"primaryKey"`
+	Identity   *astral.Identity `gorm:"uniqueIndex;not null"`
+	RootID     int64            `gorm:"not null"`
+	ByteLimit  int64            `gorm:"not null"`
+	InodeLimit int64            `gorm:"not null"`
+}
+
+func (dbVolumeBeforeEvaluator) TableName() string { return dbVolume{}.TableName() }
+
+// TestMigrateAddsAnEmptyEvaluatorToExistingVolumes: a volumes table with rows gains the column, and every row
+// keeps its values with an empty evaluator.
+func TestMigrateAddsAnEmptyEvaluatorToExistingVolumes(t *testing.T) {
+	mod := testModule(t)
+	m := mod.db.Migrator()
+	if err := m.DropTable(&dbVolume{}); err != nil {
+		t.Fatal(err)
+	}
+	if err := m.CreateTable(&dbVolumeBeforeEvaluator{}); err != nil {
+		t.Fatal(err)
+	}
+
+	old := &dbVolumeBeforeEvaluator{Identity: astral.GenerateIdentity(), RootID: 7, ByteLimit: 5, InodeLimit: 6}
+	if err := mod.db.Create(old).Error; err != nil {
+		t.Fatalf("insert: %v", err)
+	}
+
+	if err := mod.db.migrate(); err != nil {
+		t.Fatalf("migrate: %v", err)
+	}
+	if !m.HasColumn(&dbVolume{}, "evaluator") {
+		t.Fatal("the evaluator column was not added")
+	}
+
+	vol, err := mod.db.findVolume(old.Identity)
+	if err != nil {
+		t.Fatalf("findVolume: %v", err)
+	}
+	if vol.Evaluator != "" || vol.RootID != 7 || vol.ByteLimit != 5 || vol.InodeLimit != 6 {
+		t.Fatalf("the migrated row is %+v", vol)
+	}
+
+	if err := mod.db.migrate(); err != nil {
+		t.Fatalf("a second migrate: %v", err)
+	}
+}

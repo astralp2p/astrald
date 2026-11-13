@@ -1,8 +1,11 @@
 package apphost
 
 import (
+	"errors"
+	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/astralp2p/astral-go/api/apphost"
 	"github.com/astralp2p/astral-go/api/auth"
@@ -11,6 +14,7 @@ import (
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astral-go/astral/log"
 	"github.com/astralp2p/astrald/core/assets"
+	authmod "github.com/astralp2p/astrald/mod/auth"
 	"github.com/astralp2p/astrald/mod/vfs"
 	vfssrc "github.com/astralp2p/astrald/mod/vfs/src"
 	"github.com/astralp2p/astrald/resources"
@@ -18,11 +22,12 @@ import (
 	"gorm.io/gorm"
 )
 
-// recordingVFS records every identity it is asked to create a VFS for.
+// recordingVFS records every identity it is asked to create a VFS for, and every evaluator it is asked to name.
 type recordingVFS struct {
 	vfs.Module
-	mu  sync.Mutex
-	ids []*astral.Identity
+	mu         sync.Mutex
+	ids        []*astral.Identity
+	evaluators []string
 }
 
 func (r *recordingVFS) CreateVFS(id *astral.Identity) error {
@@ -30,6 +35,24 @@ func (r *recordingVFS) CreateVFS(id *astral.Identity) error {
 	defer r.mu.Unlock()
 	r.ids = append(r.ids, id)
 	return nil
+}
+
+func (r *recordingVFS) SetEvaluator(id *astral.Identity, endpoint string) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.evaluators = append(r.evaluators, id.String()+" "+endpoint)
+	return nil
+}
+
+// endpointAuth builds an asker for an astral:// endpoint, as the auth module does, and nothing else. The vfs
+// module checks an evaluator endpoint with it.
+type endpointAuth struct{ authmod.Module }
+
+func (endpointAuth) NewAuthorizeAsk(endpoint string, _ time.Duration) (auth.AuthorizeAsk, error) {
+	if !strings.HasPrefix(endpoint, "astral://") {
+		return nil, errors.New("not an astral endpoint")
+	}
+	return nil, nil
 }
 
 // vfsAssets answers the module's database and no config file.
@@ -64,15 +87,17 @@ func realVFSRegistrar(t *testing.T) (*Module, *gorm.DB) {
 	if err != nil {
 		t.Fatalf("load vfs: %v", err)
 	}
+	loaded.(*vfssrc.Module).Auth = endpointAuth{}
 	mod.VFS = loaded.(vfs.Module)
 
 	return mod, gdb
 }
 
-// volume is the row of vfs__volumes that vfs.statfs reports Quota and InodeLimit from.
+// volume is the row of vfs__volumes that vfs.statfs reports Quota, InodeLimit and Evaluator from.
 type volume struct {
 	ByteLimit  int64
 	InodeLimit int64
+	Evaluator  string
 }
 
 // findVolumes returns the volumes of vfs__volumes stored for id.
@@ -159,6 +184,81 @@ func TestRegisterCreatesTheVFSForTheTokenIdentity(t *testing.T) {
 	tokens := issuedTokens(t, mod)
 	if len(tokens) != 1 || len(rec.ids) != 1 || !rec.ids[0].IsEqual(tokens[0].Identity) {
 		t.Fatalf("created VFSes for %v; want the token identity of %v", rec.ids, tokens)
+	}
+}
+
+// registerAppWith registers an app with req and returns its identity.
+func registerAppWith(t *testing.T, mod *Module, req *apphost.RegisterRequest) *astral.Identity {
+	t.Helper()
+
+	w := newRecordingWriter()
+	if err := register(t, mod, req, w); err != nil {
+		t.Fatalf("apphost.register refused: %v", err)
+	}
+	awaitServeAppsClose(t, w)
+
+	tokens := issuedTokens(t, mod)
+	if len(tokens) == 0 {
+		t.Fatal("apphost.register issued no token")
+	}
+	return tokens[len(tokens)-1].Identity
+}
+
+// TestRegisterMakesTheAppTheEvaluatorOfItsVFS: a request that omits both switches leaves the app with a VFS whose
+// evaluator is the app at vfs.authorize, and so does one that turns both on.
+func TestRegisterMakesTheAppTheEvaluatorOfItsVFS(t *testing.T) {
+	mod, gdb := realVFSRegistrar(t)
+
+	for name, req := range map[string]*apphost.RegisterRequest{
+		"omitted": {},
+		"on":      {Vfs: astral.NewBool(true), Evaluator: astral.NewBool(true)},
+	} {
+		app := registerAppWith(t, mod, req)
+
+		rows := findVolumes(t, gdb, app)
+		want := "astral://" + app.String() + ":vfs.authorize"
+		if len(rows) != 1 || rows[0].Evaluator != want {
+			t.Fatalf("%v: the app has VFSes %+v; want one with the evaluator %v", name, rows, want)
+		}
+	}
+}
+
+// TestRegisterWithTheEvaluatorOffLeavesItEmpty: the app gets a VFS with an empty evaluator.
+func TestRegisterWithTheEvaluatorOffLeavesItEmpty(t *testing.T) {
+	mod, gdb := realVFSRegistrar(t)
+
+	app := registerAppWith(t, mod, &apphost.RegisterRequest{Evaluator: astral.NewBool(false)})
+
+	rows := findVolumes(t, gdb, app)
+	if len(rows) != 1 || rows[0].Evaluator != "" {
+		t.Fatalf("the app has VFSes %+v; want one with an empty evaluator", rows)
+	}
+}
+
+// TestRegisterWithTheVFSOffLeavesNoVFS: the app gets no VFS, whatever the evaluator switch says.
+func TestRegisterWithTheVFSOffLeavesNoVFS(t *testing.T) {
+	mod, gdb := realVFSRegistrar(t)
+
+	registerAppWith(t, mod, &apphost.RegisterRequest{Vfs: astral.NewBool(false)})
+	registerAppWith(t, mod, &apphost.RegisterRequest{Vfs: astral.NewBool(false), Evaluator: astral.NewBool(true)})
+
+	if n := countVolumes(t, gdb); n != 0 {
+		t.Fatalf("registrations without a VFS left %d VFSes", n)
+	}
+}
+
+// TestRegisterNamesTheEvaluatorForTheTokenIdentity: the evaluator call carries the identity the token names and
+// the endpoint of that identity.
+func TestRegisterNamesTheEvaluatorForTheTokenIdentity(t *testing.T) {
+	mod := serveAppsRegistrar(t)
+	rec := &recordingVFS{}
+	mod.VFS = rec
+
+	app := registerAppWith(t, mod, &apphost.RegisterRequest{})
+
+	want := app.String() + " astral://" + app.String() + ":vfs.authorize"
+	if len(rec.evaluators) != 1 || rec.evaluators[0] != want {
+		t.Fatalf("named evaluators %v; want %v", rec.evaluators, want)
 	}
 }
 
@@ -274,6 +374,7 @@ func TestVFSGrantWithoutConstraintsIsRefused(t *testing.T) {
 var vfsOps = []string{
 	"vfs.ls", "vfs.stat", "vfs.statfs", "vfs.read", "vfs.write", "vfs.mkdir",
 	"vfs.move", "vfs.remove", "vfs.touch", "vfs.volumes", "vfs.create", "vfs.set_quota",
+	"vfs.set_evaluator",
 }
 
 // TestGateRefusesEveryVFSOpWithoutAToken: a local session without a token reaches no vfs op, in

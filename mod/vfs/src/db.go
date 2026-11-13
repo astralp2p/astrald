@@ -123,6 +123,11 @@ func (db *DB) setVolumeLimits(volID int64, byteLimit, inodeLimit uint64) error {
 	}).Error
 }
 
+// setVolumeEvaluator writes the evaluator endpoint of a VFS. An empty endpoint clears it.
+func (db *DB) setVolumeEvaluator(volID int64, endpoint string) error {
+	return db.Model(&dbVolume{}).Where("id = ?", volID).Update("evaluator", endpoint).Error
+}
+
 // findEntry returns the row of an entry, or vfsapi.ErrNotFound.
 func (db *DB) findEntry(rowID int64) (*dbEntry, error) {
 	var rows []dbEntry
