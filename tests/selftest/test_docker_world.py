@@ -14,7 +14,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest import mock
 
-from lib import agent
+from lib import agent, nodeconfig
 from lib.worlds import WorldError
 from lib.worlds import docker
 from lib.nodeconfig import PortSpan
@@ -154,6 +154,53 @@ class TestStart(WorldCase):
             self.assertIn(f"chmod 600 /var/lib/astrald/config/{module}.yaml",
                           script)
         self.assertIn('"bind_http": "x"', script)
+
+    def test_mcp_is_published_at_the_leased_port_and_declares_the_tools(self):
+        w = self.world()
+        w.ensure(a_test(nodes=["node1", "node2"]))
+        runs = self.fake.of("run")
+        self.assertEqual([[r[i + 1] for i, a in enumerate(r) if a == "-p"]
+                          for r in runs],
+                         [["127.0.0.1:20800:8625", "127.0.0.1:20804:8626"],
+                          ["127.0.0.1:20810:8625", "127.0.0.1:20814:8626"]])
+        [script] = [s for s in self.fake.scripts() if "apphost.yaml" in s
+                    and "ether" in s and "20802" in s]
+        self.assertIn('"bind_mcp": "tcp:0.0.0.0:8626"', script)
+        self.assertIn("chmod 600 /var/lib/astrald/config/mcp.yaml", script)
+        for tool in nodeconfig.NODE_OP_TOOLS.values():
+            self.assertIn(f'"name": "{tool}"', script)
+        node = w.nodes()["node1"]
+        self.assertEqual(node["mcp_url"], "http://127.0.0.1:20804")
+        self.assertIs(node["serves_mcp"], True)
+
+    def test_a_node_with_mcp_off_publishes_no_mcp_port(self):
+        # why: a published port answers on the host with nothing behind it,
+        # and messaging-ops reads a refusal there
+        w = self.world(config={"nomcp1": {"mcp": {"bind_mcp": ""}}})
+        w.ensure(a_test(nodes=["nomcp1"]))
+        [run] = self.fake.of("run")
+        self.assertEqual(run.count("-p"), 1)
+        [script] = [s for s in self.fake.scripts() if "apphost.yaml" in s]
+        self.assertIn('"bind_mcp": ""', script)
+        node = w.nodes()["nomcp1"]
+        self.assertIs(node["serves_mcp"], False)
+        self.assertEqual(node["mcp_url"], "http://127.0.0.1:20804")
+
+    def test_the_authority_is_the_leased_port_at_host_ip(self):
+        w = self.world()
+        w.ensure(a_test(nodes=["node1", "node2"]))
+        nodes = w.nodes()
+        self.assertEqual(nodes["node1"]["authority_url"],
+                         "http://172.18.0.1:20805/authorize")
+        self.assertEqual(nodes["node2"]["authority_url"],
+                         "http://172.18.0.1:20815/authorize")
+        [script] = [s for s in self.fake.scripts() if "apphost.yaml" in s
+                    and "20802" in s]
+        self.assertIn('"endpoint": "http://172.18.0.1:20805/authorize"',
+                      script)
+        for action in nodeconfig.AUTH_ACTIONS:
+            self.assertIn(f'"{action}"', script)
+        self.assertIn("chmod 600 /var/lib/astrald/config/auth.yaml", script)
 
     def test_astrald_starts_detached_under_its_root(self):
         w = self.world()
