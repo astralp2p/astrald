@@ -10,6 +10,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net"
 	"os"
 	"sync/atomic"
 	"time"
@@ -29,6 +30,7 @@ type node struct {
 	Endpoint string `json:"endpoint"`
 	Token    string `json:"token"`
 	Identity string `json:"identity"`
+	HostIP   string `json:"host_ip"`
 }
 
 func main() {
@@ -70,7 +72,7 @@ func run(path string) (map[string]bool, error) {
 	if err != nil {
 		return facts, fmt.Errorf("registering the greeter: %w", err)
 	}
-	stop, err := serve(ctx, n1.Endpoint, string(greeter.Token))
+	stop, err := serve(ctx, n1, string(greeter.Token))
 	facts["greeter_serves"] = err == nil
 	if err != nil {
 		return facts, fmt.Errorf("the greeter could not serve: %w", err)
@@ -99,7 +101,7 @@ func run(path string) (map[string]bool, error) {
 	if err := apphostcli.New(nil, admin).RevokeAction(ctx, stray.Identity, auth.ServeAppsAction{}.ObjectType()); err != nil {
 		return facts, fmt.Errorf("revoking serve_apps from the stray app: %w", err)
 	}
-	stopStray, err := serve(ctx, n1.Endpoint, string(stray.Token))
+	stopStray, err := serve(ctx, n1, string(stray.Token))
 	if err == nil {
 		stopStray()
 	}
@@ -133,8 +135,8 @@ func (*Greeter) Hello(_ *astral.Context, q *routing.IncomingQuery) error {
 //
 // why a registration hook: the registrar reports ready as soon as it binds,
 // before it attaches a handler; a hook runs only after the attach.
-func serve(ctx *astral.Context, endpoint, token string) (func(), error) {
-	cli := apphostcli.New(nil, connect(endpoint, token))
+func serve(ctx *astral.Context, n node, token string) (func(), error) {
+	cli := apphostcli.New(nil, connect(n.Endpoint, token))
 	sctx, cancel := ctx.WithCancel()
 	reg := apps.NewAppRegistrar(sctx, apps.WithClient(cli))
 	attached := make(chan struct{})
@@ -145,8 +147,12 @@ func serve(ctx *astral.Context, endpoint, token string) (func(), error) {
 		}
 		return nil
 	})
+	// why host_ip: the node dials the handler's registered endpoint for every
+	// query, and only an address at the node's host_ip reaches the test host
+	// from the node's machine
+	at := apps.WithHandlerAddress("tcp:" + net.JoinHostPort(n.HostIP, "0"))
 	served := make(chan error, 1)
-	go func() { served <- apps.ServeWith(sctx, routing.NewApp(&Greeter{}), reg, onAttach) }()
+	go func() { served <- apps.ServeWith(sctx, routing.NewApp(&Greeter{}), reg, at, onAttach) }()
 
 	select {
 	case <-attached:

@@ -75,7 +75,7 @@ func setUp(path, o1 string, f *facts) (*world, error) {
 	if w.o2, err = astral.ResolveObjectID(astral.NewString16("objects-provider-read-robustness O2 " + nonce)); err != nil {
 		return w, err
 	}
-	if err := w.startApps(n1.Endpoint); err != nil {
+	if err := w.startApps(n1); err != nil {
 		return w, err
 	}
 	f.O1, f.O2 = w.o1.String(), w.o2.String()
@@ -88,7 +88,7 @@ func setUp(path, o1 string, f *facts) (*world, error) {
 
 // startApps registers the apps as the User and serves F, H, L and G; D is
 // registered and never served.
-func (w *world) startApps(endpoint string) error {
+func (w *world) startApps(n1 provider.Node) error {
 	all, err := provider.ServeObjectsPermit()
 	if err != nil {
 		return err
@@ -97,22 +97,22 @@ func (w *world) startApps(endpoint string) error {
 	if err != nil {
 		return err
 	}
-	if w.f, err = w.serve(endpoint, all, provider.Find); err != nil {
+	if w.f, err = w.serve(n1, all, provider.Find); err != nil {
 		return fmt.Errorf("finder F: %w", err)
 	}
 	w.f.SetMode(provider.Find, provider.Claim)
-	if w.h, err = w.serve(endpoint, all, provider.Find); err != nil {
+	if w.h, err = w.serve(n1, all, provider.Find); err != nil {
 		return fmt.Errorf("finder H: %w", err)
 	}
 	w.h.SetMode(provider.Find, provider.Hang)
-	if w.l, err = w.serve(endpoint, liar, provider.Describe, provider.Search); err != nil {
+	if w.l, err = w.serve(n1, liar, provider.Describe, provider.Search); err != nil {
 		return fmt.Errorf("liar L: %w", err)
 	}
-	if w.g, err = w.serve(endpoint, nil); err != nil {
+	if w.g, err = w.serve(n1, nil); err != nil {
 		return fmt.Errorf("silent reader G: %w", err)
 	}
 	w.g.SetMode(provider.Read, provider.Hang)
-	if w.d, err = provider.Register(w.ctx, w.user, endpoint); err != nil {
+	if w.d, err = provider.Register(w.ctx, w.user, n1); err != nil {
 		return fmt.Errorf("dead app D: %w", err)
 	}
 	return nil
@@ -125,12 +125,12 @@ var roleOf = map[provider.Op]astral.String8{
 
 // serve registers an app with permit (none when nil) and serves it; each of
 // ops is registered with node1 from a registration hook, with lease.
-func (w *world) serve(endpoint string, permit *auth.Permit, ops ...provider.Op) (*provider.Provider, error) {
+func (w *world) serve(n1 provider.Node, permit *auth.Permit, ops ...provider.Op) (*provider.Provider, error) {
 	var permits []*auth.Permit
 	if permit != nil {
 		permits = append(permits, permit)
 	}
-	app, err := provider.Register(w.ctx, w.user, endpoint, permits...)
+	app, err := provider.Register(w.ctx, w.user, n1, permits...)
 	if err != nil {
 		return nil, err
 	}

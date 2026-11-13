@@ -3,7 +3,7 @@
 A catalog app serves `objects.search` for node1. The User searches node1, and
 the app's result comes back with the app as its source.
 
-- **roster** node1 · **after** `bootstrap-user-software-key` · `local_only`
+- **roster** node1 · **after** `bootstrap-user-software-key` · `host_listener`
 - **driver** `script.py` — runs `driver/` (Go, this repository's astral-go) in
   `drive` mode:
   1. The User registers the catalog app with `apphost.register`, asking for

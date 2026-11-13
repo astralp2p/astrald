@@ -1,5 +1,5 @@
 nodes   = ["node1", "node2"]
 timeout = 300
 after   = "adopt-node"
-local_only = "serves its player apps on host loopback ports that node1 and node2 dial"
+host_listener = "serves its player apps on test-host ports that node1 and node2 dial"
 facts   = ["app_ping_pong"]

@@ -12,6 +12,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net"
 	"os"
 	"sync"
 	"time"
@@ -37,6 +38,7 @@ type node struct {
 	Endpoint string `json:"endpoint"`
 	Token    string `json:"token"`
 	Identity string `json:"identity"`
+	HostIP   string `json:"host_ip"`
 }
 
 func main() {
@@ -86,7 +88,7 @@ func run(path string, facts map[string]bool) error {
 		return err
 	}
 
-	notes, stop, err := startNotes(ctx, apps2, n2.Endpoint)
+	notes, stop, err := startNotes(ctx, apps2, n2)
 	if err != nil {
 		return err
 	}
@@ -140,7 +142,7 @@ func refuseWithoutGrant(ctx *astral.Context, apps2 *apphostcli.Client, endpoint 
 
 // startNotes registers the notes app with serve_objects, gives it one note,
 // and serves it until the returned stop runs.
-func startNotes(ctx *astral.Context, apps2 *apphostcli.Client, endpoint string) (*notes, func(), error) {
+func startNotes(ctx *astral.Context, apps2 *apphostcli.Client, n2 node) (*notes, func(), error) {
 	token, err := apps2.Register(ctx, serveObjects)
 	if err != nil {
 		return nil, nil, fmt.Errorf("register the notes app: %w", err)
@@ -149,7 +151,7 @@ func startNotes(ctx *astral.Context, apps2 *apphostcli.Client, endpoint string) 
 	if n.id, err = astral.Resolve(bytes.NewReader(n.text)); err != nil {
 		return nil, nil, err
 	}
-	stop, err := n.serve(ctx, endpoint, string(token.Token))
+	stop, err := n.serve(ctx, n2.Endpoint, n2.HostIP, string(token.Token))
 	if err != nil {
 		return nil, nil, err
 	}
@@ -219,9 +221,7 @@ func (n *notes) readers() []*astral.Identity {
 
 // serve runs the app on node2 under its own client and returns once node2 has
 // granted it a finder lease.
-func (n *notes) serve(ctx *astral.Context, endpoint, token string) (func(), error) {
-	// note: the handler's listener takes its protocol from the default router.
-	apphost.SetDefaultRouter(apphost.NewRouter(endpoint, token))
+func (n *notes) serve(ctx *astral.Context, endpoint, hostIP, token string) (func(), error) {
 	client := connect(endpoint, token)
 
 	app := routing.NewApp(&struct{}{})
@@ -239,8 +239,12 @@ func (n *notes) serve(ctx *astral.Context, endpoint, token string) (func(), erro
 
 	sctx, cancel := ctx.WithCancel()
 	reg := apps.NewAppRegistrar(sctx, apps.WithClient(apphostcli.New(nil, client)))
+	// why host_ip: the node dials the handler's registered endpoint for every
+	// query, and only an address at the node's host_ip reaches the test host
+	// from the node's machine
+	at := apps.WithHandlerAddress("tcp:" + net.JoinHostPort(hostIP, "0"))
 	served := make(chan error, 1)
-	go func() { served <- apps.ServeWith(sctx, app, reg, apps.WithRegistrationHook(hook)) }()
+	go func() { served <- apps.ServeWith(sctx, app, reg, at, apps.WithRegistrationHook(hook)) }()
 
 	select {
 	case err := <-registered:

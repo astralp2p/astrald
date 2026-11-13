@@ -7,9 +7,9 @@ the planner never loads it.
 
 | file | holds |
 |------|-------|
-| `session.go` | `Load` of the session view, `Node`, `UserToken`, `Connect` |
-| `app.go` | `Register` of an app with permits, `ServeObjectsPermit`, `StoreObjectsPermit`, `RegisterAs`/`RegisterRole` by role, `Grant`, `Revoke` |
-| `provider.go` | `Provider`: an app that serves the objects ops with counting handlers, and `Serve` through `apps.ServeWith` with the app's own client |
+| `session.go` | `Load` of the session view, `Node` (with its `HostIP`), `UserToken`, `Connect` |
+| `app.go` | `Register` of an app on a `Node` with permits, `ServeObjectsPermit`, `StoreObjectsPermit`, `RegisterAs`/`RegisterRole` by role, `Grant`, `Revoke` |
+| `provider.go` | `Provider`: an app that serves the objects ops with counting handlers, and `Serve` through `apps.ServeWith` with the app's own client, on a handler bound at the node's `host_ip` |
 | `ops.go` | the `objects.find`, `objects.describe`, `objects.search` and `objects.read` handlers |
 | `calls.go` | `FindAll`, `DescribeAll`, `SearchAll`, `ReadAll` as a caller, and `Emit` of the facts line |
 
@@ -23,6 +23,12 @@ describe and read, the query text for search. Each op has a mode:
 - `Hang` accepts the query and holds it open, unanswered, until the caller
   closes it, the provider stops, or 2 minutes pass. `Holds` lists how long
   each hold lasted before its caller closed it.
+
+A `Provider` binds its handler at `tcp:<host_ip>:0` and registers the bound
+address, its port resolved (astral-go `Handler.Endpoint`). The node dials that
+endpoint for every query, so it reaches the test host from a Docker container
+as from a local process. `Serve` fails for a node without a `host_ip`, and a
+test that serves a `Provider` declares `host_listener`.
 
 Several providers serve in one process. Each has its own client and its own
 `routing.App`, and none uses the process-default client, so a driver calls

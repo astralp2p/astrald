@@ -41,18 +41,19 @@ func StoreObjectsPermit() *auth.Permit {
 }
 
 // App is a registered app identity with a client of its own on the node at
-// Endpoint.
+// Endpoint. The node dials the app's handler at HostIP.
 type App struct {
 	ID       *astral.Identity
 	Token    string
 	Endpoint string
+	HostIP   string
 	Client   *astrald.Client
 }
 
-// Register mints a fresh app on the node at endpoint through registrar, a
-// client that may register apps there (the User or the node), and grants it
-// permits. The node adds ServeApps and UseBlueprints to every registration.
-func Register(ctx *astral.Context, registrar *astrald.Client, endpoint string, permits ...*auth.Permit) (*App, error) {
+// Register mints a fresh app on node n through registrar, a client that may
+// register apps there (the User or the node), and grants it permits. The node
+// adds ServeApps and UseBlueprints to every registration.
+func Register(ctx *astral.Context, registrar *astrald.Client, n Node, permits ...*auth.Permit) (*App, error) {
 	tok, err := apphostcli.New(nil, registrar).Register(ctx, permits...)
 	if err != nil {
 		return nil, fmt.Errorf("apphost.register: %w", err)
@@ -60,8 +61,9 @@ func Register(ctx *astral.Context, registrar *astrald.Client, endpoint string, p
 	return &App{
 		ID:       tok.Identity,
 		Token:    string(tok.Token),
-		Endpoint: endpoint,
-		Client:   Connect(endpoint, string(tok.Token)),
+		Endpoint: n.Endpoint,
+		HostIP:   n.HostIP,
+		Client:   Connect(n.Endpoint, string(tok.Token)),
 	}, nil
 }
 

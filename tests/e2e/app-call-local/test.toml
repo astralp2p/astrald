@@ -1,4 +1,4 @@
 nodes   = ["node1"]
 timeout = 300
-local_only = "serves its apps on host loopback ports that node1 dials"
+host_listener = "serves its apps on test-host ports that node1 dials"
 facts   = ["app_call_local"]

@@ -4,7 +4,7 @@ node1 lets an app register as a finder, describer or searcher only when the
 app is a local, non-node caller whose ServeObjects grant covers that role. A
 refused registrant is never dialed.
 
-- **roster** node1, node2 · **after** `adopt-node` · `local_only`
+- **roster** node1, node2 · **after** `adopt-node` · `host_listener`
 - **driver** `script.py` runs `driver/` (Go, on `tests/e2e/internal/provider`)
   in `drive` mode:
   1. The User mints eight apps on node1 with `apphost.register`. They differ

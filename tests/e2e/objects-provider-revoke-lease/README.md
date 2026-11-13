@@ -5,7 +5,7 @@ An app finder that loses its ServeObjects grant is dropped on node1's next
 re-registration stays refused until the grant is back. An unrenewed finder or
 searcher lease lapses, and re-registering revives it.
 
-- **roster** node1 · **after** `bootstrap-user-software-key` · `local_only`
+- **roster** node1 · **after** `bootstrap-user-software-key` · `host_listener`
 - **driver** `script.py` runs `driver/` (Go, on `tests/e2e/internal/provider`)
   in `drive` mode. The driver records and stops only on a wiring fault.
   1. The User registers four apps on node1: P, Q and E with ServeObjects for
@@ -33,8 +33,9 @@ searcher lease lapses, and re-registering revives it.
   - Q is asked once per find although it registered twice.
   - P's re-registration after the revoke answers exactly `not permitted`;
     after the grant it answers a lease.
-  - node1's `astrald.log` shows the same dials: 5 `objects.find` to P, 7 to Q,
-    2 to E, and 2 `objects.search` to Z.
+  - node1's `astrald.log`, read through `lib/nodefs.py`, shows the same
+    dials: 5 `objects.find` to P, 7 to Q, 2 to E, and 2 `objects.search` to
+    Z.
   - node1's log holds `external finder <E>: registration expired` and
     `external searcher <Z>: registration expired`, and no expiry for Q.
   - `driver verify` reruns the flow with fresh apps.
@@ -48,6 +49,8 @@ out (`find.go`, `search.go`), and the sweep removes it and logs the expiry
 (`external_registration.go`). A registration of an identity already
 registered renews the entry in place.
 
-The world's 1 s sweep (`lib/nodeconfig.py`) and the fan-out skip give the same
-observable here, so removing only one of them is not caught.
+The 1 s sweep and the fan-out skip give the same observable here, so removing
+only one of them is not caught. A local world renders the 1 s sweep for every
+node (`lib/nodeconfig.py`); the manifest sets it for node1 in any world, since
+a Docker world renders no objects config.
 `registration-lease` covers the describer lease.

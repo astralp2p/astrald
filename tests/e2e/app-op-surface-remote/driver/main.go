@@ -24,6 +24,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"os"
 	"sync/atomic"
 	"time"
@@ -48,6 +49,7 @@ type node struct {
 	Endpoint string `json:"endpoint"`
 	Token    string `json:"token"`
 	Identity string `json:"identity"`
+	HostIP   string `json:"host_ip"`
 }
 
 func main() {
@@ -93,7 +95,7 @@ func run(path string) (map[string]any, error) {
 		return facts, fmt.Errorf("registering the provider on node2: %w", err)
 	}
 	facts["provider"] = provider.Identity.String()
-	stop, err := serve(ctx, n2.Endpoint, string(provider.Token))
+	stop, err := serve(ctx, n2, string(provider.Token))
 	facts["provider_serves"] = err == nil
 	if err != nil {
 		return facts, fmt.Errorf("the provider could not serve on node2: %w", err)
@@ -269,8 +271,8 @@ func pattern(n int) []byte {
 //
 // why a registration hook: the registrar reports ready as soon as it binds,
 // before it attaches a handler; a hook runs only after the attach.
-func serve(ctx *astral.Context, endpoint, token string) (func(), error) {
-	cli := apphostcli.New(nil, connect(endpoint, token))
+func serve(ctx *astral.Context, n node, token string) (func(), error) {
+	cli := apphostcli.New(nil, connect(n.Endpoint, token))
 	sctx, cancel := ctx.WithCancel()
 	reg := apps.NewAppRegistrar(sctx, apps.WithClient(cli))
 	attached := make(chan struct{})
@@ -281,8 +283,12 @@ func serve(ctx *astral.Context, endpoint, token string) (func(), error) {
 		}
 		return nil
 	})
+	// why host_ip: the node dials the handler's registered endpoint for every
+	// query, and only an address at the node's host_ip reaches the test host
+	// from the node's machine
+	at := apps.WithHandlerAddress("tcp:" + net.JoinHostPort(n.HostIP, "0"))
 	served := make(chan error, 1)
-	go func() { served <- apps.ServeWith(sctx, routing.NewApp(&Provider{}), reg, onAttach) }()
+	go func() { served <- apps.ServeWith(sctx, routing.NewApp(&Provider{}), reg, at, onAttach) }()
 
 	select {
 	case <-attached:

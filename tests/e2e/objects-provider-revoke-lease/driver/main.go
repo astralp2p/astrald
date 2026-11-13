@@ -151,7 +151,7 @@ func setUp(path string, f *facts) (*world, error) {
 		name   string
 		permit *auth.Permit
 	}{{&w.p, "P", finder}, {&w.q, "Q", finder}, {&w.e, "E", finder}, {&w.z, "Z", searcher}} {
-		if *a.slot, err = w.serve(n1.Endpoint, a.name, a.permit); err != nil {
+		if *a.slot, err = w.serve(n1, a.name, a.permit); err != nil {
 			return w, fmt.Errorf("app %s: %w", a.name, err)
 		}
 	}
@@ -172,8 +172,8 @@ func setUp(path string, f *facts) (*world, error) {
 
 // serve registers an app with permit as the User and serves it. A finder
 // claims an identity of its own, named after the app, for any object.
-func (w *world) serve(endpoint, name string, permit *auth.Permit) (*provider.Provider, error) {
-	app, err := provider.Register(w.ctx, w.user, endpoint, permit)
+func (w *world) serve(n1 provider.Node, name string, permit *auth.Permit) (*provider.Provider, error) {
+	app, err := provider.Register(w.ctx, w.user, n1, permit)
 	if err != nil {
 		return nil, err
 	}

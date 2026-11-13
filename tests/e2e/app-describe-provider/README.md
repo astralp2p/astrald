@@ -3,7 +3,7 @@
 A labeler app serves `objects.describe` for node1. The User asks node1 to
 describe a note, and the app's label comes back with the app as its source.
 
-- **roster** node1 · **after** `bootstrap-user-software-key` · `local_only`
+- **roster** node1 · **after** `bootstrap-user-software-key` · `host_listener`
 - **driver** `script.py` — runs `driver/` (Go, this repository's astral-go) in
   `drive` mode:
   1. The User registers the labeler app with `apphost.register`, asking for
