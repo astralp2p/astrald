@@ -416,7 +416,24 @@ class TestAttachNodes(unittest.TestCase):
                        "token": "t", "identity": "id"}
         node = world.nodes()["node1"]
         self.assertEqual({f for f in NODE_FIELDS if node[f] is not None},
-                         {"endpoint", "token", "identity"})
+                         {"endpoint", "token", "identity", "host_ip"})
+
+    def test_a_daemon_on_this_host_dials_loopback_and_a_remote_one_nothing(self):
+        # why: host_ip is where the daemon reaches a listener the test serves
+        # here, and only a daemon on this host reaches the host's loopback
+        for endpoint, want in (("tcp:127.0.0.1:8625", "127.0.0.1"),
+                               ("tcp:localhost:8625", "127.0.0.1"),
+                               ("tcp:[::1]:8625", "127.0.0.1"),
+                               ("unix:/tmp/apphost.sock", "127.0.0.1"),
+                               ("unix:~/.apphost.sock", "127.0.0.1"),
+                               ("tcp:192.168.1.20:8625", None),
+                               ("tcp:node.example:8625", None),
+                               ("ws://127.0.0.1:8625", None)):
+            with self.subTest(endpoint=endpoint):
+                world = AttachWorld()
+                world._node = {"name": "node1", "endpoint": endpoint,
+                               "token": "t", "identity": "id"}
+                self.assertEqual(world.nodes()["node1"]["host_ip"], want)
 
 
 if __name__ == "__main__":

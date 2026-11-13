@@ -10,6 +10,7 @@ import unittest
 from pathlib import Path
 
 from lib.manifest import load_all
+from lib.plan import PlanError, plan, vm_refusal
 from lib.suites import load
 from lib.worlds.vm import RECIPE
 
@@ -122,13 +123,19 @@ class TestShipped(unittest.TestCase):
                 self.assertEqual(read - declared, set(),
                                  f"{name}'s oracle reads undeclared facts")
 
-    def test_a_restart_is_local_only(self):
-        # why: only a local world restarts a node, so a test that needs one
-        # must never be planned into a VM world or onto an attached daemon
+    def test_a_restart_is_never_planned_into_a_vm_or_onto_attach(self):
+        # why: a local and a Docker world restart a node, a VM world cannot,
+        # and attach never restarts the daemon it borrows; the restart alone
+        # refuses a VM world, whether or not the test is also local_only
         for name, t in sorted(self.all.items()):
-            if t.restart:
-                with self.subTest(test=name):
-                    self.assertTrue(t.local_only)
+            if not t.restart:
+                continue
+            with self.subTest(test=name):
+                self.assertTrue(vm_refusal(t))
+            for where in ({"vm": True}, {"target": "attach"}):
+                with self.subTest(test=name, **where), \
+                        self.assertRaises(PlanError):
+                    plan(self.all, [name], **where)
 
     def test_the_lab_bake_queries_only_ops_a_fresh_node_admits_tokenless(self):
         # why: install-astrald probed with .spec after #355 gated it, so every

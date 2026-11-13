@@ -55,7 +55,10 @@ async def serve_unclaimed(m, n, manager_id) -> dict:
             await stream.send_eos()
 
     async def run() -> str:
-        async with await m.serve(ready_timeout=15) as svc:
+        # why host_ip: the node dials the handler, and the default listener,
+        # a unix socket or 127.0.0.1, is on the host only in a local world
+        async with await m.serve(endpoint=f"tcp:{n['host_ip']}:0",
+                                 ready_timeout=15) as svc:
             svc.mount(SERVED_OP, whoami)
             async with await astral.connect(n["endpoint"], token=n["token"]) as caller:
                 return str(await caller.call_one(SERVED_OP, target=manager_id, timeout=15))

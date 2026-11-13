@@ -11,7 +11,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 KEYS = {"nodes", "timeout", "restart", "stop", "after", "destroys", "ops",
-        "local_only", "facts", "config"}
+        "local_only", "host_listener", "facts", "config"}
 MODULE = re.compile(r"[a-z][a-z0-9_]*")
 
 # (module, key) the harness owns: the ports a world leases, the token the
@@ -45,6 +45,9 @@ class Test:
     destroys: bool = False
     ops: list = field(default_factory=list)
     local_only: str | None = None
+    # why a node dials a listener the test serves on the test host (at the
+    # node's host_ip); a VM world gives its nodes no such address
+    host_listener: str | None = None
     facts: list = field(default_factory=list)
     prompt: bool = False
     # node -> module -> keys: what its world's nodes start with, on top of
@@ -114,6 +117,11 @@ def _parse(mf: Path) -> Test:
     if ops and local_only:
         raise ValueError(f"{name}: a test with ops runs only in a VM world, "
                          "so it cannot be local_only")
+    host_listener = _reason(name, raw, "host_listener")
+    if ops and host_listener:
+        raise ValueError(f"{name}: a test with ops runs only in a VM world, "
+                         "which has no host_ip, so it cannot be "
+                         "host_listener")
     return Test(name=name, dir=mf.parent, nodes=nodes,
                 timeout=int(raw.get("timeout", 120)),
                 # why between driver and oracle: a driver leaves state on a
@@ -136,6 +144,7 @@ def _parse(mf: Path) -> Test:
                           or bool(stop)),
                 ops=ops,
                 local_only=local_only,
+                host_listener=host_listener,
                 facts=facts,
                 # why a file and not a key: a test an operator can drive is
                 # exactly one that tells it what to do

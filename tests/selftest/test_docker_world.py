@@ -24,10 +24,10 @@ from lib.worlds.docker import DockerWorld
 class FakeDocker:
     """Records every docker call; answers the few whose output matters."""
 
-    def __init__(self, fail=None, ps="", networks=""):
+    def __init__(self, fail=None, ps="", networks="", gateway="172.18.0.1"):
         self.calls = []
         self.fail = fail or (lambda args: False)
-        self.ps, self.networks = ps, networks
+        self.ps, self.networks, self.gateway = ps, networks, gateway
 
     def __call__(self, *args, check=True, timeout=None):
         args = [str(a) for a in args]
@@ -42,6 +42,10 @@ class FakeDocker:
             return self.ps
         if args[:2] == ["network", "ls"]:
             return self.networks
+        if args[:2] == ["network", "inspect"]:
+            return self.gateway
+        if args[0] == "exec" and args[-1] == "cat /proc/net/route":
+            return ROUTES
         if args[0] == "exec" and "grep OPENAI_MODEL=" in args[-1]:
             return "OPENAI_MODEL=m"
         return ""
@@ -52,6 +56,14 @@ class FakeDocker:
     def scripts(self):
         return [c[-1] for c in self.calls
                 if c[0] == "exec" and c[-3:-1] == ["sh", "-c"]]
+
+
+# a container's routes on a world network whose gateway is 172.18.0.1
+ROUTES = """\
+Iface\tDestination\tGateway \tFlags\tRefCnt\tUse\tMetric\tMask\t\tMTU\tWindow\tIRTT
+eth0\t00000000\t010012AC\t0003\t0\t0\t0\t00000000\t0\t0\t0
+eth0\t000012AC\t00000000\t0001\t0\t0\t0\t0000FFFF\t0\t0\t0
+"""
 
 
 def a_test(name="t", nodes=("node1",), ops=()):
@@ -168,6 +180,38 @@ class TestNodes(WorldCase):
         self.assertEqual(nodes["node1"]["token"], w._nodes["node1"]["token"])
         self.assertEqual(nodes["node1"]["restarts"], 0)
 
+    def test_every_node_dials_the_host_at_the_networks_gateway(self):
+        w = self.world()
+        w.ensure(a_test(nodes=["node1", "node2"]))
+        self.assertEqual({n["host_ip"] for n in w.nodes().values()},
+                         {"172.18.0.1"})
+        inspects = [c for c in self.fake.calls if c[:2] == ["network",
+                                                            "inspect"]]
+        self.assertEqual(inspects, [[
+            "network", "inspect", "-f",
+            "{{range .IPAM.Config}}{{.Gateway}} {{end}}",
+            "astral-20261104t000000z-w0-net"]])
+
+    def test_an_ipv6_gateway_is_passed_over_for_the_ipv4_one(self):
+        self.fake.gateway = "fd00::1 172.19.0.1"
+        w = self.world()
+        w.ensure(a_test())
+        self.assertEqual(w.nodes()["node1"]["host_ip"], "172.19.0.1")
+
+    def test_no_gateway_in_the_network_falls_back_to_the_default_route(self):
+        self.fake.gateway = ""
+        w = self.world()
+        w.ensure(a_test())
+        self.assertEqual(w.nodes()["node1"]["host_ip"], "172.18.0.1")
+        self.assertIn(["exec", "astral-20261104t000000z-w0-node1", "sh", "-c",
+                       "cat /proc/net/route"], self.fake.calls)
+
+    def test_no_gateway_anywhere_is_a_world_error(self):
+        self.fake.gateway = ""
+        with mock.patch(f"{__name__}.ROUTES", ROUTES.splitlines()[0]):
+            with self.assertRaisesRegex(WorldError, "no gateway"):
+                self.world().ensure(a_test())
+
     def test_a_restart_counts_and_reaches_the_node_again(self):
         w = self.world()
         w.ensure(a_test())
@@ -175,6 +219,25 @@ class TestNodes(WorldCase):
         self.assertEqual(w.nodes()["node1"]["restarts"], 1)
         self.assertTrue(any("pkill -INT -x astrald" in s
                             for s in self.fake.scripts()))
+
+    def test_a_restart_stops_every_named_node_before_it_starts_any(self):
+        # why: a node restarted beside running siblings relearns from them
+        # what a restart lost (expel-survives-restart)
+        w = self.world()
+        w.ensure(a_test(nodes=["node1", "node2"]))
+        del self.fake.calls[:]
+        w.restart(["node1", "node2"])
+        steps = [("stop" if "pkill -INT -x astrald" in c[-1] else "start",
+                  c[-4] if c[1] == "-d" else c[1])
+                 for c in self.fake.calls if c[0] == "exec"
+                 and c[-3:-1] == ["sh", "-c"]
+                 and ("pkill" in c[-1] or "exec astrald" in c[-1])]
+        prefix = "astral-20261104t000000z-w0-"
+        self.assertEqual(steps, [("stop", prefix + "node1"),
+                                 ("stop", prefix + "node2"),
+                                 ("start", prefix + "node1"),
+                                 ("start", prefix + "node2")])
+        self.assertEqual([n["restarts"] for n in w.nodes().values()], [1, 1])
 
     def test_a_node_whose_astrald_exited_is_dead(self):
         w = self.world()

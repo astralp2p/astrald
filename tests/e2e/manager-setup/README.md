@@ -4,7 +4,8 @@
 claims the node with its App token, and the claim keeps the appointment. An
 app registered later is no manager.
 
-- **env** node · **start** `null` · **saves** —
+- **env** node · **start** `null` · **saves** — · **host_listener** — the
+  manager's handler listens at the node's `host_ip`
 - **driver** `script.py` — read `user.info` on the fresh node, appoint a
   manager from a session with the node's token, ask for a second appointment, read
   `user.info`, ask as the manager for an op outside the `unclaimed` gate list,

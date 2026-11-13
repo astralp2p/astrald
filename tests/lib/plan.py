@@ -21,15 +21,18 @@ follow from that tree:
    `--vm`, `--docker` or the agent driver needs a heavy world, a VM or a
    Docker one (`heavy`, which the runner picks for the host); and a
    local_only test needs a local one. A Docker run refuses an op. A test
-   whose roster names a node the VM lab does not run (`LAB_NODES`), or that
-   stops a node, never enters a VM world, and stays local unless the run
-   asks for Docker.
+   whose roster names a node the VM lab does not run (`LAB_NODES`), that
+   stops or restarts a node, or that serves a listener a node dials on the
+   test host (`host_listener`), never enters a VM world, and stays local
+   unless the run asks for Docker; with ops as well, it cannot run at all.
 6. `isolate` gives every selected test a world of its own.
 7. Under the agent driver, selected tests are operator-driven; prereqs and
    replays run by script unless `prereqs_agent`. A test with no prompt.md
    that would be operator-driven is a plan error, on purpose: a test an
    operator can drive is exactly one that ships the prompt it works from.
-8. Under `--target attach`, the plan is one world on the daemon already up.
+8. Under `--target attach`, the plan is one world on the daemon already up,
+   which the harness never stops or restarts. A host_listener test plans
+   there; the runner fails its prepare when the daemon is remote.
 9. `done` is the history of a saved world the run boots (`--from`): the plan
    is that one world, its first steps are exactly that history, and they are
    marked done rather than run.
@@ -75,14 +78,25 @@ def off_lab(test) -> list:
 def vm_refusal(test) -> str | None:
     """Why a VM world cannot run test, or None when one can.
 
-    why stop is here and not local_only: a local and a Docker world both stop
-    a node; a VM world has no stop (lib/worlds)
+    why stop, restart and host_listener are here and not local_only: a local
+    and a Docker world stop and restart a node and give it a host_ip; a VM
+    world does none of these (lib/worlds)
     """
+    return _lab_refusal(test) or (
+        "serves a listener on the test host, and a VM world gives its nodes "
+        "no host_ip to dial it at" if test.host_listener else None)
+
+
+def _lab_refusal(test) -> str | None:
+    """Why neither a VM world nor an attached daemon can run test: its roster
+    or the stop or restart it asks of a node."""
     strays = off_lab(test)
     if strays:
         return f"names {', '.join(strays)}, which the VM lab does not run"
     if test.stop:
         return "stops a node, which a VM world cannot"
+    if test.restart:
+        return "restarts a node, which a VM world cannot"
     return None
 
 
@@ -239,6 +253,9 @@ class _Planner:
     def _check(self, n: str) -> None:
         t = self.tests[n]
         refusal = vm_refusal(t)
+        if t.ops and refusal:
+            # why: ops put the test in a VM world, whatever the run forces
+            raise PlanError(f"{n} runs VM operations and {refusal}")
         if self.forced == "vm" and refusal and not t.local_only:
             raise PlanError(f"{n} {refusal}, and this run puts every world "
                             "in VMs")
@@ -401,9 +418,12 @@ def _attach(p: _Planner, worlds: list, isolate: bool) -> list:
         if len(t.nodes) != 1:
             raise PlanError(f"{n} wants {len(t.nodes)} nodes, and --target "
                             "attach has one daemon")
-        if t.local_only or vm_refusal(t):
+        if t.restart:
+            raise PlanError(f"{n} restarts a node, and --target attach never "
+                            "restarts the daemon it borrows")
+        if t.local_only or _lab_refusal(t):
             raise PlanError(f"{n} is local only "
-                            f"({t.local_only or 'it ' + vm_refusal(t)}),"
+                            f"({t.local_only or 'it ' + _lab_refusal(t)}),"
                             " and the attached daemon has no harness-rendered"
                             " config")
         if t.ops:

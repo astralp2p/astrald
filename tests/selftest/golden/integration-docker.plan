@@ -1,16 +1,19 @@
 w0 docker: smoke → claim-window → token-less-setup → signer-app
-           → admission-policies → bootstrap-user-software-key → adopt-node
-           → blueprints-two-node → apphost-origin → sign-contract-guard
-           → request-grant-scope → swarm-authz-matrix → services-swarm
-           → object-store → object-store-peer → read-remote-peer → read-swarm
-           → expel-node
+           → admission-policies → manager-setup → bootstrap-user-software-key
+           → policy-delegate → adopt-node → blueprints-two-node
+           → apphost-origin → sign-contract-guard → request-grant-scope
+           → swarm-authz-matrix → services-swarm → object-store
+           → object-store-peer → read-remote-peer → read-swarm → expel-node
            config admitter.apphost.policies = {"app_register": "reject_all"}
            config admitter.user.policies = {"swarm_join": "reject_all", "swarm_invite": "accept_all"}
            config invitee.user.policies = {"swarm_join": "accept_all", "swarm_invite": "reject_all"}
            config node1.apphost.gate = {"tokenless": ["apphost.register", "user.info", "user.derive_identity", "user.bootstrap", "user.join"], "states": {"fresh": ["*"], "unclaimed": ["*"]}}
 w1 docker: bootstrap-user-software-key* → adopt-node* → hold-purge
 w2 docker: bootstrap-user-software-key* → adopt-node* → swarm-roster-sync
-           → expel-propagation
-w3 docker: bootstrap-user-software-key* → hold-isolation
-w4 docker: import-user-software-key
-w5 docker: introduce-node-setup → introduce-node
+           → expel-propagation → expel-survives-restart
+w3 docker: bootstrap-user-software-key* → adopt-node* → swarm-roster-sync*
+           → swarm-member-restart
+w4 docker: bootstrap-user-software-key* → hold-isolation
+w5 docker: bootstrap-user-software-key* → indexer-cursor
+w6 docker: import-user-software-key
+w7 docker: introduce-node-setup → introduce-node

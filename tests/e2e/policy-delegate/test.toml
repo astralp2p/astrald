@@ -2,5 +2,5 @@ nodes   = ["node1"]
 restart = ["node1"]
 timeout = 300
 after   = "bootstrap-user-software-key"
-local_only = "restarts node1, which only a local world can do"
+host_listener = "serves a control-plane app node1 dials"
 facts   = ["policy_delegate"]

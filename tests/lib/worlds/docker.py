@@ -10,7 +10,9 @@ A node's apphost is published on the host's 127.0.0.1, at the port the run's
 lease gives that node, so drivers and oracles reach it as they reach a local
 node. Nothing of the host enters a container: no bind mount and no
 environment variable. The binaries under test are copied in, built for
-Linux on the engine's architecture (lib/build.linux_binaries).
+Linux on the engine's architecture (lib/build.linux_binaries). A node reaches
+a listener the test serves on the host at the network's gateway (`host_ip`),
+and a test reaches a node's files through lib/nodefs.py.
 
 A test with VM operations needs a VM world: netsim's ops do not run here.
 """
@@ -19,6 +21,8 @@ import hashlib
 import os
 import secrets
 import shutil
+import socket
+import struct
 import subprocess
 import tempfile
 import time
@@ -180,6 +184,17 @@ def reap() -> list:
     return gone
 
 
+def default_gateway(routes: str) -> str | None:
+    """The gateway of the default route in a /proc/net/route table."""
+    for line in routes.splitlines()[1:]:
+        f = line.split()
+        if len(f) > 2 and f[1] == "00000000" and f[2] != "00000000":
+            # note: the kernel prints the address as a hex word in its own
+            # byte order, little-endian on every engine ARCHES admits
+            return socket.inet_ntoa(struct.pack("<I", int(f[2], 16)))
+    return None
+
+
 class DockerWorld(World):
 
     def __init__(self, dir: Path, binary: Path, image: str, span: PortSpan, *,
@@ -201,6 +216,8 @@ class DockerWorld(World):
         self.stamp = self.dir.parent.name
         self.prefix = f"astral-{self.stamp}-{self.dir.name}".lower()
         self.network = None
+        # the address the containers reach the test host at (gateway)
+        self.host_ip = None
         self._nodes = {}
         # names of the nodes `stop` stopped; their containers stay for close
         self._stopped = set()
@@ -234,14 +251,19 @@ class DockerWorld(World):
             # network dials, which the host's published port is not
             lan_endpoint=f"tcp:{n.get('ip', '')}:{TCP_PORT}",
             restarts=n["restarts"],
+            host_ip=self.host_ip,
         ) for name, n in self._nodes.items()
             if "identity" in n and name not in self._stopped}
 
     def restart(self, names: list) -> None:
         """Stop each named node's astrald and start it again on its state."""
         refuse_stopped("restart", names, self._stopped)
+        # why every stop first: a node restarted while its siblings still run
+        # can relearn what it lost from them, which hides state that a restart
+        # of the whole swarm drops (expel-survives-restart); as LocalWorld
         for name in names:
             self._stop_astrald(name)
+        for name in names:
             self._run_astrald(name)
             n = self._nodes[name]
             n["identity"] = self._whoami(n["port"], n["token"])
@@ -344,10 +366,33 @@ class DockerWorld(World):
         if name == OPERATOR_NODE and self.skill:
             self._copy_skill(container)
         self._run_astrald(name)
+        if self.host_ip is None:
+            self.host_ip = self._gateway(name)
         n["ip"] = _docker("inspect", "-f",
                           "{{(index .NetworkSettings.Networks \""
                           f"{self.network}\").IPAddress}}}}", container)
         n["identity"] = self._whoami(ports.apphost, n["token"])
+
+    def _gateway(self, name: str) -> str:
+        """The world network's gateway: the test host's address on it, which
+        a listener the test serves binds and a node dials.
+
+        why the default route as the fallback: an engine may leave the IPAM
+        gateway unset in `network inspect`, and the route a container sends
+        off-network traffic through is that same gateway, read from the
+        kernel (/proc/net/route needs no package the image lacks)
+        """
+        out = _docker("network", "inspect", "-f",
+                      "{{range .IPAM.Config}}{{.Gateway}} {{end}}",
+                      self.network)
+        ipv4 = [a for a in out.split() if "." in a]
+        if ipv4:
+            return ipv4[0]
+        gw = default_gateway(self.ssh(name, "cat /proc/net/route"))
+        if gw is None:
+            raise WorldError(f"{self.network}: no gateway, in network "
+                             f"inspect or in {name}'s routes")
+        return gw
 
     def _config_script(self, name: str, token: str, ether: int) -> str:
         """The script that writes a node's module configs, root-only.
