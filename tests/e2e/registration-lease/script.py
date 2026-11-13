@@ -48,13 +48,17 @@ LEASE_SECONDS = 6
 # `kept` has not, which is what makes the two registrants differ:
 #
 #   t=0   both register, leases end at t=6
-#   t=4   `kept` renews, its lease now ends at t=10
+#   t=4   `kept` renews for RENEWED_LEASE_SECONDS, its lease now ends at t=124
 #   t=6   `gone` expires; this world's 1s sweep removes and logs it by t=7
-#   t=8   the second describe: `gone` is two seconds gone, `kept` has two left
+#   t=8   the second describe: `gone` is two seconds gone, `kept` is leased
 #
-# Both margins are two seconds, so neither side is a race.
+# Both margins are at least two seconds, so neither side is a race.
 RENEW_AT = 4
 SECOND_DESCRIBE_AT = 4
+# why long: the oracle asserts that the node never logged `kept`'s expiry; a
+# renewal for LEASE_SECONDS lapsed again at t=10, and an oracle that read the
+# log after that, on a loaded host, saw that second lapse
+RENEWED_LEASE_SECONDS = 120
 
 # why a minted identity and not the node's token: the op refuses to register the
 # node as a describer of its own objects (ErrExternalRegistrationSelf), and the
@@ -142,7 +146,7 @@ async def main():
         # renew before the lease ends, which is what an SDK's keeper does
         await asyncio.sleep(RENEW_AT)
         renewed = await keeper.objects.register_describer(
-            Duration(LEASE_SECONDS * 1_000_000_000))
+            Duration(RENEWED_LEASE_SECONDS * 1_000_000_000))
         facts["renewed_expires_at"] = str(renewed.expires_at)
         print("driver: kept renewed")
 
