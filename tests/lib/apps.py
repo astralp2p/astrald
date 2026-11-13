@@ -12,7 +12,8 @@ Ctrl-C and SIGTERM alike (lib/runner.py, `_Run.world`).
 
     binary = apps.build_go("tests/e2e/my-test/driver")        # once per script
     app = apps.spawn("my-test-provider", [str(binary), "serve"],
-                     env={"APP_NODE_ENDPOINT": ..., "APP_NODE_TOKEN": ...})
+                     env={"APP_NODE_ENDPOINT": ..., "APP_NODE_TOKEN": ...,
+                          "APP_HOST_IP": node["host_ip"]})
     state = app.wait_state(lambda s: s.get("attached"), timeout=30)
     ...                                                        # driver ends
     app = apps.get("my-test-provider")                         # in the oracle
@@ -29,6 +30,10 @@ Everything lives in one directory per world, `ASTRAL_TESTS_APPS`, which the
 runner sets for each step: `<name>.app.json` (pid, start time, argv),
 `<name>.state.json`, `<name>.log`, and `bin/` for `build_go`. Names are
 world-wide, so a test prefixes its own.
+
+An app is a process on the test host. A node that dials it reaches it at the
+node's `host_ip`, so the app binds its handler there (`APP_HOST_IP` above) and
+its test declares `host_listener`.
 
 An app runs in a session of its own, so the process group is what stops: the
 app and anything it started. A SIGKILLed runner cannot reap; it leaves the apps

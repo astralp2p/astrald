@@ -1,5 +1,12 @@
 nodes      = ["node1"]
 after      = "bootstrap-user-software-key"
 timeout    = 180
-local_only = "serves its provider apps on host loopback ports that node1 dials, and reads node1's astrald.log"
+host_listener = "serves its provider apps on test-host ports that node1 dials"
 facts      = ["objects_provider_revoke_lease"]
+
+# why: the oracle reads node1's sweep expiry lines, and the node's default
+# sweep is a minute, longer than the flow. A local world renders 1 s for every
+# node (lib/nodeconfig.py OBJECTS); a Docker world renders no objects config,
+# so the test sets the same value for node1 there.
+[config.node1.objects]
+external_registration_sweep_interval = "1s"

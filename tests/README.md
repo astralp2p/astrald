@@ -333,7 +333,8 @@ from lib import apps
 binary = apps.build_go("tests/e2e/my-test/driver")      # go build into the world's bin/
 app = apps.spawn("my-test-provider", [binary, "serve"],  # a name unique in the world
                  env={"APP_NODE_ENDPOINT": node["endpoint"],
-                      "APP_NODE_TOKEN": node["token"]})  # secrets go in env, not argv
+                      "APP_NODE_TOKEN": node["token"],   # secrets go in env, not argv
+                      "APP_HOST_IP": node["host_ip"]})   # where the app binds its handler
 state = app.wait_state(lambda s: s.get("attaches", 0) >= 1, timeout=30)
 # ... the driver ends; the world restarts a node; in the oracle:
 app = apps.get("my-test-provider")
@@ -368,7 +369,9 @@ test expects it. Limits: a SIGKILLed runner cannot reap, so the apps stay up
 with their entries in the results directory (`pkill -f results/<stamp>/`); a
 `--keep` world keeps its apps running with its nodes; an app is a process on the
 host, so a node that dials it reaches it at the node's `host_ip`, and its test
-declares `host_listener`.
+declares `host_listener`. A Go app binds its handler there with astral-go's
+`apps.WithHandlerAddress("tcp:" + net.JoinHostPort(hostIP, "0"))`, and the
+handler registers the bound port.
 
 ## Node files
 

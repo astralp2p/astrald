@@ -3,6 +3,7 @@ package provider
 import (
 	"fmt"
 	"io"
+	"net"
 	"sync"
 	"time"
 
@@ -148,10 +149,17 @@ func (p *Provider) hit(op Op, key string) Mode {
 }
 
 // Serve serves the provider on its app's node through apps.ServeWith with the
-// app's own client. hooks run after each registration of the handler, in
-// order. Serve returns once the first registration and its hooks succeeded;
+// app's own client, on a handler bound at the app's HostIP. hooks run after
+// each registration of the handler, in order. Serve returns once the first registration and its hooks succeeded;
 // the returned stop ends the serving.
 func (p *Provider) Serve(ctx *astral.Context, hooks ...apps.RegistrationHook) (stop func(), err error) {
+	// why the host IP: the node dials the handler's registered endpoint for
+	// every query, and only an address at the node's host_ip reaches the test
+	// host from the node's machine
+	if p.App.HostIP == "" {
+		return nil, fmt.Errorf("serving app %v: its node has no host_ip", p.App.ID)
+	}
+	at := apps.WithHandlerAddress("tcp:" + net.JoinHostPort(p.App.HostIP, "0"))
 	app := routing.NewApp(&struct{}{})
 	app.Add("objects", &ops{p: p})
 
@@ -165,7 +173,7 @@ func (p *Provider) Serve(ctx *astral.Context, hooks ...apps.RegistrationHook) (s
 	sctx, cancel := ctx.WithCancel()
 	reg := apps.NewAppRegistrar(sctx, apps.WithClient(apphostcli.New(nil, p.App.Client)))
 	served := make(chan error, 1)
-	go func() { served <- apps.ServeWith(sctx, app, reg, apps.WithRegistrationHooks(hooks...)) }()
+	go func() { served <- apps.ServeWith(sctx, app, reg, at, apps.WithRegistrationHooks(hooks...)) }()
 
 	stop = sync.OnceFunc(func() {
 		cancel()

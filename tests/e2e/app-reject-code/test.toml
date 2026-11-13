@@ -1,5 +1,5 @@
 nodes   = ["node1", "node2"]
 timeout = 300
 after   = "adopt-node"
-local_only = "serves its provider app on a host loopback port that node2 dials"
+host_listener = "serves its provider app on a test-host port that node2 dials"
 facts   = ["app_reject_code"]

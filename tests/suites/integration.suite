@@ -3,8 +3,9 @@
 #
 # Run it with `--docker` on a host with a Docker engine; without --docker it
 # runs in local worlds. Every test here is Docker-eligible: no VM ops, and
-# nothing that reads the host (node roots, host logs, a served app or
-# authority). The planner refuses a test that is not.
+# nothing that reaches the host beyond the session view, host_ip (an app or
+# authority the test serves, `host_listener`) and lib/nodefs.py. The planner
+# refuses a test that is not.
 #
 # The order is a preference among siblings; the planner computes the run
 # order from each test's `after`. expel-node is listed before hold-purge so
@@ -34,3 +35,17 @@ expel-propagation
 import-user-software-key
 introduce-node-setup
 introduce-node
+app-call-local
+app-routing-two-apps
+app-op-surface
+app-call-remote
+app-ping-pong
+app-reject-code
+app-op-surface-remote
+app-finder-read
+app-searcher-swarm
+app-describe-provider
+app-search-provider
+objects-provider-registration-authz
+objects-provider-read-robustness
+objects-provider-revoke-lease

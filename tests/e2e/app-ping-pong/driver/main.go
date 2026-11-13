@@ -10,6 +10,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net"
 	"os"
 	"sync/atomic"
 	"time"
@@ -27,6 +28,7 @@ type node struct {
 	Endpoint string `json:"endpoint"`
 	Token    string `json:"token"`
 	Identity string `json:"identity"`
+	HostIP   string `json:"host_ip"`
 }
 
 // player is one app: its identity and the client of its own token.
@@ -70,13 +72,13 @@ func run(path string) (map[string]bool, error) {
 	admin1, admin2 := connect(n1.Endpoint, n1.Token), connect(n2.Endpoint, n2.Token)
 
 	// one player on each node, each serving ping on its own client
-	p1, stop1, err := startPlayer(ctx, admin1, n1.Endpoint)
+	p1, stop1, err := startPlayer(ctx, admin1, n1)
 	facts["player1_serves_on_node1"] = err == nil
 	if err != nil {
 		return facts, fmt.Errorf("player1 on node1: %w", err)
 	}
 	defer stop1()
-	p2, stop2, err := startPlayer(ctx, admin2, n2.Endpoint)
+	p2, stop2, err := startPlayer(ctx, admin2, n2)
 	facts["player2_serves_on_node2"] = err == nil
 	if err != nil {
 		return facts, fmt.Errorf("player2 on node2: %w", err)
@@ -105,15 +107,15 @@ func run(path string) (map[string]bool, error) {
 	return facts, nil
 }
 
-// startPlayer registers a player app on the admin's node and serves ping on a
-// client of the player's own token.
-func startPlayer(ctx *astral.Context, admin *astrald.Client, endpoint string) (player, func(), error) {
+// startPlayer registers a player app on n through the admin and serves ping
+// on a client of the player's own token.
+func startPlayer(ctx *astral.Context, admin *astrald.Client, n node) (player, func(), error) {
 	token, err := apphostcli.New(nil, admin).Register(ctx)
 	if err != nil {
 		return player{}, nil, fmt.Errorf("registering: %w", err)
 	}
-	cli := connect(endpoint, string(token.Token))
-	stop, err := serve(ctx, cli)
+	cli := connect(n.Endpoint, string(token.Token))
+	stop, err := serve(ctx, cli, n.HostIP)
 	if err != nil {
 		return player{}, nil, fmt.Errorf("serving: %w", err)
 	}
@@ -144,12 +146,12 @@ func (*Player) Ping(_ *astral.Context, q *routing.IncomingQuery) error {
 }
 
 // serve runs the player API as the app cli authenticates, through its own
-// registrar. It returns once the node has attached the app's handler, or with
+// registrar, on a handler bound at hostIP. It returns once the node has attached the app's handler, or with
 // the error that stopped the registration.
 //
 // why a registration hook: the registrar reports ready as soon as it binds,
 // before it attaches a handler; a hook runs only after the attach.
-func serve(ctx *astral.Context, cli *astrald.Client) (func(), error) {
+func serve(ctx *astral.Context, cli *astrald.Client, hostIP string) (func(), error) {
 	sctx, cancel := ctx.WithCancel()
 	reg := apps.NewAppRegistrar(sctx, apps.WithClient(apphostcli.New(nil, cli)))
 	attached := make(chan struct{})
@@ -160,8 +162,12 @@ func serve(ctx *astral.Context, cli *astrald.Client) (func(), error) {
 		}
 		return nil
 	})
+	// why host_ip: the node dials the handler's registered endpoint for every
+	// query, and only an address at the node's host_ip reaches the test host
+	// from the node's machine
+	at := apps.WithHandlerAddress("tcp:" + net.JoinHostPort(hostIP, "0"))
 	served := make(chan error, 1)
-	go func() { served <- apps.ServeWith(sctx, routing.NewApp(&Player{}), reg, onAttach) }()
+	go func() { served <- apps.ServeWith(sctx, routing.NewApp(&Player{}), reg, at, onAttach) }()
 
 	select {
 	case <-attached:

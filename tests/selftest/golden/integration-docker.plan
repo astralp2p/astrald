@@ -1,13 +1,20 @@
 w0 docker: smoke → claim-window → token-less-setup → signer-app
-           → admission-policies → bootstrap-user-software-key → adopt-node
-           → blueprints-two-node → apphost-origin → sign-contract-guard
-           → request-grant-scope → swarm-authz-matrix → services-swarm
-           → object-store → object-store-peer → read-remote-peer → read-swarm
-           → expel-node
+           → admission-policies → app-call-local → app-routing-two-apps
+           → app-op-surface → bootstrap-user-software-key
+           → app-describe-provider → app-search-provider
+           → objects-provider-revoke-lease → adopt-node → blueprints-two-node
+           → apphost-origin → sign-contract-guard → request-grant-scope
+           → swarm-authz-matrix → services-swarm → object-store
+           → app-call-remote → app-ping-pong → app-reject-code
+           → app-op-surface-remote → app-finder-read → app-searcher-swarm
+           → objects-provider-registration-authz
+           → objects-provider-read-robustness → object-store-peer
+           → read-remote-peer → read-swarm → expel-node
            config admitter.apphost.policies = {"app_register": "reject_all"}
            config admitter.user.policies = {"swarm_join": "reject_all", "swarm_invite": "accept_all"}
            config invitee.user.policies = {"swarm_join": "accept_all", "swarm_invite": "reject_all"}
            config node1.apphost.gate = {"tokenless": ["apphost.register", "user.info", "user.derive_identity", "user.bootstrap", "user.join"], "states": {"fresh": ["*"], "unclaimed": ["*"]}}
+           config node1.objects.external_registration_sweep_interval = "1s"
 w1 docker: bootstrap-user-software-key* → adopt-node* → hold-purge
 w2 docker: bootstrap-user-software-key* → adopt-node* → swarm-roster-sync
            → expel-propagation

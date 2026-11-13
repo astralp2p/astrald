@@ -23,6 +23,9 @@ type Node struct {
 	Token    string `json:"token"`
 	Identity string `json:"identity"`
 	Root     string `json:"root"`
+	// HostIP is the address on the test host that the node dials to reach a
+	// listener the driver serves there (tests/README.md, host_ip).
+	HostIP string `json:"host_ip"`
 }
 
 // ID parses the node's identity.

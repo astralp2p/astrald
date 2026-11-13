@@ -26,6 +26,7 @@ import sys
 from collections import Counter
 from pathlib import Path
 
+from lib import nodefs
 from lib.sessionio import load
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -85,8 +86,8 @@ def judge_registrations(f: dict) -> None:
     assert not off, f"register replies {off}; want {LEASES}"
 
 
-def judge_log(f: dict, root: str) -> None:
-    log = ANSI.sub("", (Path(root) / "astrald.log").read_text(errors="replace"))
+def judge_log(f: dict, node: dict) -> None:
+    log = ANSI.sub("", nodefs.log(node))
     lines = log.splitlines()
     dials = Counter()
     for name, app in f["apps"].items():
@@ -108,7 +109,7 @@ def main():
     f = doc["facts"]["objects_provider_revoke_lease"]
     judge_steps(f)
     judge_registrations(f)
-    judge_log(f, doc["nodes"]["node1"]["root"])
+    judge_log(f, doc["nodes"]["node1"])
     failed = [k for k, ok in f["checks"].items() if not ok]
     assert not failed, f"driver checks that did not hold: {failed}"
 

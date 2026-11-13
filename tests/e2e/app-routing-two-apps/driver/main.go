@@ -10,6 +10,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net"
 	"os"
 	"sync"
 	"sync/atomic"
@@ -29,6 +30,7 @@ type node struct {
 	Endpoint string `json:"endpoint"`
 	Token    string `json:"token"`
 	Identity string `json:"identity"`
+	HostIP   string `json:"host_ip"`
 }
 
 func main() {
@@ -121,7 +123,7 @@ func run(path string) (map[string]bool, error) {
 	if err != nil {
 		return facts, fmt.Errorf("registering alpha: %w", err)
 	}
-	stopA, err := serve(ctx, n1.Endpoint, string(alphaApp.Token), alpha)
+	stopA, err := serve(ctx, n1, string(alphaApp.Token), alpha)
 	if err != nil {
 		return facts, fmt.Errorf("alpha could not serve: %w", err)
 	}
@@ -130,7 +132,7 @@ func run(path string) (map[string]bool, error) {
 	if err != nil {
 		return facts, fmt.Errorf("registering bravo: %w", err)
 	}
-	stopB, err := serve(ctx, n1.Endpoint, string(bravoApp.Token), bravo)
+	stopB, err := serve(ctx, n1, string(bravoApp.Token), bravo)
 	if err != nil {
 		return facts, fmt.Errorf("bravo could not serve: %w", err)
 	}
@@ -225,8 +227,8 @@ func run(path string) (map[string]bool, error) {
 //
 // why a registration hook: the registrar reports ready as soon as it binds,
 // before it attaches a handler; a hook runs only after the attach.
-func serve(ctx *astral.Context, endpoint, token string, api *Who) (func(), error) {
-	cli := apphostcli.New(nil, connect(endpoint, token))
+func serve(ctx *astral.Context, n node, token string, api *Who) (func(), error) {
+	cli := apphostcli.New(nil, connect(n.Endpoint, token))
 	sctx, cancel := ctx.WithCancel()
 	reg := apps.NewAppRegistrar(sctx, apps.WithClient(cli))
 	attached := make(chan struct{})
@@ -237,8 +239,12 @@ func serve(ctx *astral.Context, endpoint, token string, api *Who) (func(), error
 		}
 		return nil
 	})
+	// why host_ip: the node dials the handler's registered endpoint for every
+	// query, and only an address at the node's host_ip reaches the test host
+	// from the node's machine
+	at := apps.WithHandlerAddress("tcp:" + net.JoinHostPort(n.HostIP, "0"))
 	served := make(chan error, 1)
-	go func() { served <- apps.ServeWith(sctx, routing.NewApp(api), reg, onAttach) }()
+	go func() { served <- apps.ServeWith(sctx, routing.NewApp(api), reg, at, onAttach) }()
 
 	select {
 	case <-attached:

@@ -133,7 +133,7 @@ func run(path string, f *facts) error {
 	ctx := astral.NewContext(nil)
 	user := provider.Connect(n1.Endpoint, token)
 
-	providers, stop, err := startApps(ctx, user, n1.Endpoint)
+	providers, stop, err := startApps(ctx, user, n1)
 	defer stop()
 	if err != nil {
 		return err
@@ -156,7 +156,7 @@ func run(path string, f *facts) error {
 
 // startApps registers every app of the matrix as the User and serves it with
 // counting handlers. stop ends every app started, also on an error.
-func startApps(ctx *astral.Context, user *astrald.Client, endpoint string) (map[string]*provider.Provider, func(), error) {
+func startApps(ctx *astral.Context, user *astrald.Client, n1 provider.Node) (map[string]*provider.Provider, func(), error) {
 	providers := map[string]*provider.Provider{}
 	var stops []func()
 	stop := func() {
@@ -169,7 +169,7 @@ func startApps(ctx *astral.Context, user *astrald.Client, endpoint string) (map[
 		if err != nil {
 			return providers, stop, err
 		}
-		app, err := provider.Register(ctx, user, endpoint, permits...)
+		app, err := provider.Register(ctx, user, n1, permits...)
 		if err != nil {
 			return providers, stop, fmt.Errorf("app %s: %w", c.name, err)
 		}

@@ -10,6 +10,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"net"
 	"os"
 	"sync/atomic"
 	"time"
@@ -30,6 +31,7 @@ const serveObjects = "mod.auth.serve_objects_action"
 
 type node struct {
 	Endpoint string `json:"endpoint"`
+	HostIP   string `json:"host_ip"`
 }
 
 type session struct {
@@ -94,7 +96,7 @@ func run(path string) (map[string]bool, error) {
 
 	// 2. the app serves objects.describe and registers with node1 as a describer
 	lab := &labeler{note: note, label: label}
-	stop, err := serveLabeler(ctx, n1.Endpoint, string(app.Token), lab)
+	stop, err := serveLabeler(ctx, n1, string(app.Token), lab)
 	facts["registered_as_describer"] = err == nil
 	if err != nil {
 		return facts, fmt.Errorf("serving the labeler: %w", err)
@@ -169,8 +171,8 @@ func (l *labeler) asked() uint64 { return l.count.Load() }
 // note: WithObjectDescriber's lease keeper registers through the process-default
 // objects client, so the app's client is also the process default here. The
 // User's client stays a separate one.
-func serveLabeler(ctx *astral.Context, endpoint, token string, lab *labeler) (func(), error) {
-	router := apphost.NewRouter(endpoint, token)
+func serveLabeler(ctx *astral.Context, n node, token string, lab *labeler) (func(), error) {
+	router := apphost.NewRouter(n.Endpoint, token)
 	apphost.SetDefaultRouter(router)
 	appCli := astrald.New(router)
 	astrald.SetDefault(appCli)
@@ -180,9 +182,13 @@ func serveLabeler(ctx *astral.Context, endpoint, token string, lab *labeler) (fu
 	var closed atomic.Bool
 	reg := apps.NewAppRegistrar(sctx, apps.WithClient(apphostcli.New(nil, appCli)))
 
+	// why host_ip: the node dials the handler's registered endpoint for every
+	// query, and only an address at the node's host_ip reaches the test host
+	// from the node's machine
+	at := apps.WithHandlerAddress("tcp:" + net.JoinHostPort(n.HostIP, "0"))
 	served := make(chan error, 1)
 	go func() {
-		served <- apps.ServeWith(sctx, routing.NewApp(&struct{}{}), reg,
+		served <- apps.ServeWith(sctx, routing.NewApp(&struct{}{}), reg, at,
 			apps.WithObjectDescriber(lab),
 			// why last: hooks run in order, so this one runs once the describer
 			// registration before it has succeeded.

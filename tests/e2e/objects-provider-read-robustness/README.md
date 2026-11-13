@@ -5,7 +5,7 @@ from the real holder, names each identity once in `objects.find`, rejects an
 unheld object within its timers, and replaces a false `SourceID` on a
 descriptor or search result with the provider's own identity.
 
-- **roster** node1, node2 · **after** `adopt-node` · `local_only`
+- **roster** node1, node2 · **after** `adopt-node` · `host_listener`
 - **driver** `script.py` stores a unique raw blob O1 on node2 alone, as the
   User on node1, then runs `driver/` (Go, on `tests/e2e/internal/provider`) in
   `drive` mode. The Go driver records and stops only on a wiring fault.

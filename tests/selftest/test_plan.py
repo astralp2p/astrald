@@ -126,7 +126,7 @@ class TestShippedPlans(Invariants, unittest.TestCase):
                        for n in lineage):
                     with self.assertRaisesRegex(
                             PlanError, "local only|the VM lab does not run"
-                            "|a VM world cannot"):
+                            "|a VM world cannot|no host_ip"):
                         plan(self.tests, selection, order, vm=True)
                     continue
                 worlds = plan(self.tests, selection, order, vm=True)
