@@ -42,6 +42,18 @@ func TestRepoGroup_EmptyObjectWithoutMembers(t *testing.T) {
 	}
 }
 
+// TestRepoGroup_EmptyObjectZoneExcluded: a group refuses the empty object outside the device zone, as its leaves do.
+func TestRepoGroup_EmptyObjectZoneExcluded(t *testing.T) {
+	for _, concurrent := range []bool{false, true} {
+		group := addGroup(t, &Module{}, "g", concurrent)
+		ctx := astral.NewContext(nil).ExcludeZone(astral.ZoneDevice)
+
+		if _, err := group.Read(ctx, objectsmod.EmptyObjectID(), 0, 0); err == nil {
+			t.Errorf("concurrent=%v: Read outside the device zone succeeded", concurrent)
+		}
+	}
+}
+
 // TestRepoGroup_EmptyObjectReadsThroughMembers: a group with members reads the empty object from a member,
 // so the member's wrapper sees the read; a commit through the group stores nothing in any member.
 func TestRepoGroup_EmptyObjectReadsThroughMembers(t *testing.T) {

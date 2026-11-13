@@ -252,7 +252,8 @@ func (group *RepoGroup) Delete(ctx *astral.Context, objectID *astral.ObjectID) e
 func (group *RepoGroup) Read(ctx *astral.Context, objectID *astral.ObjectID, offset int64, limit int64) (objectsmod.Reader, error) {
 	r, err := group.readMembers(ctx, objectID, offset, limit)
 	// why: a member's tracking wrapper records the read, so the group answers the empty object only after its members.
-	if err != nil && objectsmod.IsEmptyObject(objectID) && ctx.Err() == nil {
+	// why: a leaf answers the empty object only in the device zone, so the group does too.
+	if err != nil && objectsmod.IsEmptyObject(objectID) && ctx.Err() == nil && ctx.Zone().Is(astral.ZoneDevice) {
 		return objectsmod.OpenEmptyObject(group, offset, limit)
 	}
 

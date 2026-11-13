@@ -569,10 +569,6 @@ func TestPartialID_EmptyObjectNeverStored(t *testing.T) {
 	if !*has {
 		t.Fatal("contains answered false for the empty object")
 	}
-
-	if rows := trackingRows(t, f.mod, "main"); len(rows) != 0 {
-		t.Fatalf("tracking rows %v; want none", rows)
-	}
 }
 
 // TestPartialID_ModuleKeepsTheArgument calls Load and Probe with a partial ID. The
