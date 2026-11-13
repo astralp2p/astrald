@@ -2,6 +2,7 @@ package fs
 
 import (
 	"errors"
+	"fmt"
 	objectsmod "github.com/astralp2p/astrald/mod/objects"
 	"io"
 	"os"
@@ -40,29 +41,78 @@ func NewRepository(mod *Module, label string, path string) *Repository {
 		addQueue: &sig.Queue[*astral.ObjectID]{},
 	}
 
-	repo.removeTempFiles()
-
 	return repo
 }
 
-// removeTempFiles deletes the temp files that interrupted writes left in the root.
-// why: a writer from an earlier run can no longer commit, so its temp file is garbage.
+// addRepository registers repo under name with the objects module.
+// A writable repository claims its root first; a root held by a live writable repository is refused.
+// A writable repository removes the temp files that were present before its registration once the registration succeeds.
+// why: a refused registration leaves the root untouched, so a live repository on the same root keeps its writes in flight.
+// why: a writer opened right after the registration creates a temp file the snapshot does not hold.
+func (mod *Module) addRepository(name string, repo objectsmod.Repository) error {
+	writable, ok := repo.(*Repository)
+	if !ok {
+		return mod.Objects.AddRepository(name, repo)
+	}
+
+	root := rootKey(writable.root)
+	if owner, ok := mod.roots.Set(root, writable); !ok {
+		return fmt.Errorf("path %v is the root of live repository %v", writable.root, owner.label)
+	}
+
+	stale := writable.findTempFiles()
+
+	if err := mod.Objects.AddRepository(name, repo); err != nil {
+		mod.roots.Delete(root)
+		return err
+	}
+
+	writable.removeFiles(stale)
+
+	return nil
+}
+
+// rootKey returns the key under which a root is claimed.
+// note: a root reached through a symlink resolves to its target; an unresolvable root keys as given.
+func rootKey(root string) string {
+	resolved, err := filepath.EvalSymlinks(root)
+	if err != nil {
+		return root
+	}
+	return resolved
+}
+
+// releaseRoot drops the claim repo holds on its root.
+func (mod *Module) releaseRoot(repo *Repository) {
+	root := rootKey(repo.root)
+	if owner, ok := mod.roots.Get(root); ok && owner == repo {
+		mod.roots.Delete(root)
+	}
+}
+
+// findTempFiles returns the paths of the temp files that interrupted writes left in the root.
 // note: a missing root is not an error; the repository has nothing to clean.
-func (repo *Repository) removeTempFiles() {
+func (repo *Repository) findTempFiles() (paths []string) {
 	entries, err := os.ReadDir(repo.root)
 	if err != nil {
 		if !os.IsNotExist(err) {
 			repo.logError("cannot read dir %v: %v", repo.root, err)
 		}
-		return
+		return nil
 	}
 
 	for _, entry := range entries {
-		if !entry.Type().IsRegular() || !strings.HasPrefix(entry.Name(), tempFilePrefix) {
-			continue
+		if entry.Type().IsRegular() && strings.HasPrefix(entry.Name(), tempFilePrefix) {
+			paths = append(paths, filepath.Join(repo.root, entry.Name()))
 		}
+	}
+	return paths
+}
 
-		path := filepath.Join(repo.root, entry.Name())
+// removeFiles deletes the files at paths.
+// why: a writer from an earlier run can no longer commit, so its temp file is garbage.
+func (repo *Repository) removeFiles(paths []string) {
+	for _, path := range paths {
 		if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
 			repo.logError("cannot remove temp file %v: %v", path, err)
 		}
@@ -137,6 +187,10 @@ func (repo *Repository) Read(ctx *astral.Context, objectID *astral.ObjectID, off
 		return nil, astral.ErrZoneExcluded
 	}
 
+	if objectsmod.IsEmptyObject(objectID) {
+		return objectsmod.OpenEmptyObject(repo, offset, limit)
+	}
+
 	resolved, err := repo.findObject(ctx, objectID)
 	if err != nil {
 		return nil, err
@@ -187,8 +241,12 @@ func (repo *Repository) openObject(objectID *astral.ObjectID) (*os.File, error) 
 }
 
 // Contains reports whether the repository holds the object.
-// A full ID checks its file alone; a partial ID resolves through the hash index.
+// The empty object is always contained. A full ID checks its file alone; a partial ID resolves through the hash index.
 func (repo *Repository) Contains(ctx *astral.Context, objectID *astral.ObjectID) (bool, error) {
+	if objectsmod.IsEmptyObject(objectID) {
+		return true, nil
+	}
+
 	if objectID.Size == 0 {
 		return repo.containsPartial(ctx, objectID)
 	}
@@ -246,7 +304,12 @@ func (repo *Repository) Free(ctx *astral.Context) (int64, error) {
 }
 
 // Delete removes the object file. A partial ID is resolved and removed under one hold of mu.
+// Deleting the empty object succeeds and changes nothing.
 func (repo *Repository) Delete(ctx *astral.Context, objectID *astral.ObjectID) error {
+	if objectsmod.IsEmptyObject(objectID) {
+		return nil
+	}
+
 	repo.mu.Lock()
 	defer repo.mu.Unlock()
 
@@ -298,7 +361,8 @@ func (repo *Repository) added() *sig.Queue[*astral.ObjectID] {
 }
 
 // AfterRemoved is called by the objects system when this repository is unregistered.
-// It deletes the repository's tree entry when one was written.
+// It releases the claim on the root and deletes the repository's tree entry when one was written.
 func (repo *Repository) AfterRemoved(name string) {
+	repo.mod.releaseRoot(repo)
 	repo.mod.deletePersisted(name, repo.persisted)
 }

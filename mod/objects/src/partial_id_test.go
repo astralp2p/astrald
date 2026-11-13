@@ -538,8 +538,36 @@ func TestPartialID_EmptyObject(t *testing.T) {
 	only[*astral.Ack](t, call(t, f.mod.OpDelete, "objects.delete?repo=main&id="+empty.String()))
 
 	has = only[*astral.Bool](t, call(t, f.mod.OpContains, "objects.contains?repo=main&id="+empty.String()))
-	if *has {
-		t.Fatal("contains answered true after the empty object was deleted")
+	if !*has {
+		t.Fatal("contains answered false after a delete of the empty object")
+	}
+}
+
+// TestPartialID_EmptyObjectNeverStored: the ops answer the empty object from repositories that store nothing.
+func TestPartialID_EmptyObjectNeverStored(t *testing.T) {
+	f := newOpFixture(t)
+	empty := objectsmod.EmptyObjectID()
+
+	if got := callRaw(t, f.mod.OpRead, "objects.read?id="+empty.String()); len(got) != 0 {
+		t.Fatalf("read %q; want nothing", got)
+	}
+	if got := callRaw(t, f.mod.OpRead, "objects.read?repo=named&id="+empty.String()); len(got) != 0 {
+		t.Fatalf("read from named %q; want nothing", got)
+	}
+
+	blob := only[*astral.Blob](t, call(t, f.mod.OpLoad, "objects.load?id="+empty.String()))
+	if len(*blob) != 0 {
+		t.Fatalf("load answered %d bytes; want none", len(*blob))
+	}
+
+	probe := only[*objects.Probe](t, call(t, f.mod.OpProbe, "objects.probe?id="+empty.String()))
+	if probe.ObjectID == nil || !probe.ObjectID.IsEqual(empty) {
+		t.Fatalf("probe reported ID %v; want %v", probe.ObjectID, empty)
+	}
+
+	has := only[*astral.Bool](t, call(t, f.mod.OpContains, "objects.contains?repo=named&id="+empty.String()))
+	if !*has {
+		t.Fatal("contains answered false for the empty object")
 	}
 }
 

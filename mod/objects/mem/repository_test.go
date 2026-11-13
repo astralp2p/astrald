@@ -351,14 +351,17 @@ func TestReadRanges(t *testing.T) {
 	}
 }
 
-// TestEmptyObject: the empty object's full ID has Size 0, so its full and partial IDs are one value.
+// TestEmptyObject: a commit of zero bytes stores nothing, and the repository answers the empty object without storage.
 func TestEmptyObject(t *testing.T) {
 	var repo = New("test", 1024)
 	var ctx = astral.NewContext(nil)
 	var id = store(t, repo, nil)
 
-	if id.Size != 0 {
-		t.Fatalf("empty object ID = %v, want Size 0", id)
+	if !id.IsEqual(objectsmod.EmptyObjectID()) {
+		t.Fatalf("empty object ID = %v, want %v", id, objectsmod.EmptyObjectID())
+	}
+	if n := len(repo.objects.Clone()); n != 0 {
+		t.Fatalf("stored %v objects, want none", n)
 	}
 
 	r, err := repo.Read(ctx, partialOf(t, id), 0, 512)
@@ -383,8 +386,35 @@ func TestEmptyObject(t *testing.T) {
 	if err = repo.Delete(ctx, id); err != nil {
 		t.Fatalf("Delete: %v", err)
 	}
-	if ok, err := repo.Contains(ctx, id); ok || err != nil {
-		t.Errorf("Contains after Delete = %v, %v, want false, nil", ok, err)
+	if ok, err := repo.Contains(ctx, id); !ok || err != nil {
+		t.Errorf("Contains after Delete = %v, %v, want true, nil", ok, err)
+	}
+}
+
+// TestPartialSizeZeroIDStaysPartial: a size-0 ID of any hash other than the empty one resolves as a partial ID.
+func TestPartialSizeZeroIDStaysPartial(t *testing.T) {
+	var repo = New("test", 1024)
+	var ctx = astral.NewContext(nil)
+	var id = store(t, repo, []byte("hello"))
+	var partial = &astral.ObjectID{Hash: id.Hash}
+
+	r, err := repo.Read(ctx, partial, 0, 0)
+	if err != nil {
+		t.Fatalf("Read: %v", err)
+	}
+	if got := r.ID(); !got.IsEqual(id) {
+		t.Errorf("ID() = %v, want %v", got, id)
+	}
+	if data := readAndClose(t, r); string(data) != "hello" {
+		t.Errorf("Read = %q, want hello", data)
+	}
+
+	var unknown = &astral.ObjectID{Hash: [32]byte{0x5a}}
+	if ok, err := repo.Contains(ctx, unknown); ok || err != nil {
+		t.Errorf("Contains(unknown partial) = %v, %v, want false, nil", ok, err)
+	}
+	if err := repo.Delete(ctx, unknown); !errors.Is(err, objectsmod.ErrNotFound) {
+		t.Errorf("Delete(unknown partial) = %v, want ErrNotFound", err)
 	}
 }
 
@@ -492,14 +522,14 @@ func TestDeleteByPartialID(t *testing.T) {
 	}
 }
 
-// TestScanEmitsFullIDs: Scan reports each stored object by its full ID.
+// TestScanEmitsFullIDs: Scan reports each stored object by its full ID. The empty object is never stored, so it is not emitted.
 func TestScanEmitsFullIDs(t *testing.T) {
 	var repo = New("test", 1024)
 	var want = map[astral.ObjectID]bool{
 		*store(t, repo, []byte("hello astral")): true,
 		*store(t, repo, []byte("x")):            true,
-		*store(t, repo, nil):                    true,
 	}
+	store(t, repo, nil)
 
 	ch, err := repo.Scan(astral.NewContext(nil), false)
 	if err != nil {
