@@ -412,7 +412,7 @@ func serveAppsRegistrar(t *testing.T) *Module {
 	config.Policies.AppRegister = policyconf.Setting{Mode: policyconf.AcceptAll}
 
 	return &Module{
-		Deps:   Deps{Auth: serveAppsSigner{}, Crypto: serveAppsKeys{}, Objects: serveAppsStore{}},
+		Deps:   Deps{Auth: serveAppsSigner{}, Crypto: serveAppsKeys{}, Objects: serveAppsStore{}, VFS: &recordingVFS{}},
 		config: config,
 		node:   &serveAppsNode{id: astral.GenerateIdentity()},
 		log:    log.New(nil),

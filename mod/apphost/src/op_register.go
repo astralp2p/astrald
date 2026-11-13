@@ -83,6 +83,19 @@ func (mod *Module) OpRegister(ctx *astral.Context, query *routing.IncomingQuery,
 	if err != nil {
 		return ch.Send(astral.Err(err))
 	}
+
+	// why here: sys.register_manager shares provisionApp through ProvisionApp,
+	// and the manager app gets no VFS (decided 2026-11-12).
+	// why a direct call: the VFS belongs to the identity just made, and the
+	// call is not an authorized query (VFS 6, section 11).
+	// why no rollback: a failure after this step leaves an empty VFS, and a
+	// repeated registration is harmless because creating a VFS that exists
+	// succeeds.
+	// note: removing an app must remove its VFS; astrald has no way to remove
+	// an app yet.
+	if err = mod.VFS.CreateVFS(token.Identity); err != nil {
+		return ch.Send(astral.Err(err))
+	}
 	return ch.Send(token)
 }
 
