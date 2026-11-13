@@ -13,18 +13,20 @@ type filledID struct {
 
 // clearFolderIDs clears the cached ObjectID of a folder and of every folder above it, up to the root.
 //
-// A change in a folder, or below it, calls this with the row of the folder.
+// A change in a folder, or below it, calls this with the row of the folder. A file row is never cleared, so a
+// call with the row of a file clears the folders above it only.
 func (db *DB) clearFolderIDs(folderID int64) error {
 	// note: the root is its own parent, and UNION drops a repeated row, so the recursion ends there.
+	// why: a file's ObjectID names its content and is never a cache.
 	return db.Exec(`
-		UPDATE vfs__entries SET object_id = NULL WHERE id IN (
+		UPDATE vfs__entries SET object_id = NULL WHERE flags & ? != 0 AND id IN (
 			WITH RECURSIVE ancestors(id, parent_id) AS (
 				SELECT id, parent_id FROM vfs__entries WHERE id = ?
 				UNION
 				SELECT e.id, e.parent_id FROM vfs__entries e JOIN ancestors a ON e.id = a.parent_id
 			)
 			SELECT id FROM ancestors
-		)`, folderID).Error
+		)`, uint16(vfsapi.FlagFolder), folderID).Error
 }
 
 // computeFolderID returns the ObjectID of the listing of a folder, computed bottom-up: the folders below

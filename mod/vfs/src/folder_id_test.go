@@ -170,6 +170,26 @@ func TestClearFolderIDsClearsTheFolderAndEveryAncestor(t *testing.T) {
 	}
 }
 
+func TestClearFolderIDsNeverClearsAFile(t *testing.T) {
+	mod := testModule(t)
+	vol := createVFS(t, mod, astral.GenerateIdentity())
+	file := addFile(t, mod, vol, vol.RootID, "f", "x")
+
+	if _, err := mod.folderObjectID(vol.Identity, vol.RootID); err != nil {
+		t.Fatalf("folderObjectID: %v", err)
+	}
+	if err := mod.db.clearFolderIDs(file.ID); err != nil {
+		t.Fatalf("clearFolderIDs: %v", err)
+	}
+
+	if got, _ := mod.db.getEntry(file.ID); got.ObjectID == nil || *got.ObjectID != contentID("x") {
+		t.Errorf("file ObjectID = %v, want its content", got.ObjectID)
+	}
+	if got, _ := mod.db.getEntry(vol.RootID); got.ObjectID != nil {
+		t.Error("the root above the file kept its cached ObjectID")
+	}
+}
+
 func TestClearFolderIDsOnTheRootEndsAtTheRoot(t *testing.T) {
 	mod := testModule(t)
 	vol := createVFS(t, mod, astral.GenerateIdentity())
