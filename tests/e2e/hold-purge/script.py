@@ -38,6 +38,7 @@ from lib.sessionio import load, write_facts
 
 HELD = "hold-purge: this one is held and must survive the purge"
 UNHELD = "hold-purge: this one is unheld and must not survive it"
+TOUCH_RESOLUTION = 2.0   # s: past the one-second resolution of a last touch
 
 
 async def main():
@@ -61,6 +62,12 @@ async def main():
 
         # duration omitted is a permanent hold, not a defaulted one.
         await c.apphost.hold_object(held_id)
+
+        # why: a purge takes objects last touched before its cutoff, in whole
+        # seconds, so one touched in the purge's own second is never a
+        # candidate; the manifest's purge_floor = "0s" makes the window
+        # start at the purge itself
+        await asyncio.sleep(TOUCH_RESOLUTION)
 
         purged = [str(i) for i in await c.objects.purge("local")]
 
