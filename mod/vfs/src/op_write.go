@@ -1,7 +1,6 @@
 package vfs
 
 import (
-	"crypto/sha256"
 	"errors"
 	"math"
 
@@ -10,6 +9,7 @@ import (
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astral-go/astral/channel"
 	"github.com/astralp2p/astral-go/lib/routing"
+	objectsmod "github.com/astralp2p/astrald/mod/objects"
 )
 
 type opWriteArgs struct {
@@ -162,7 +162,7 @@ func writeReceive(ctx *astral.Context, ch *channel.Channel, w objectsapi.Writer,
 // the ObjectID of empty content.
 func writeFinish(w objectsapi.Writer, size uint64) (*astral.ObjectID, error) {
 	if size == 0 {
-		return &astral.ObjectID{Hash: sha256.Sum256(nil)}, w.Discard()
+		return objectsmod.EmptyObjectID(), w.Discard()
 	}
 
 	return w.Commit()

@@ -1,17 +1,13 @@
 package vfs
 
 import (
-	"crypto/sha256"
-
 	apiauth "github.com/astralp2p/astral-go/api/auth"
 	vfsapi "github.com/astralp2p/astral-go/api/vfs"
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astral-go/lib/routing"
 	authmod "github.com/astralp2p/astrald/mod/auth"
+	objectsmod "github.com/astralp2p/astrald/mod/objects"
 )
-
-// emptyObjectID is the ObjectID of empty content: size 0 and the SHA-256 of an empty buffer.
-var emptyObjectID = astral.ObjectID{Hash: sha256.Sum256(nil)}
 
 // addAuthorizers registers the module's handlers with the auth module. See VFS 6, section 6.
 //
@@ -56,7 +52,7 @@ func (mod *Module) authzOwnOrRoot(actor, vfsID *astral.Identity) bool {
 }
 
 // AuthorizeSeeObjects allows reading one object by ObjectID when a file with that ObjectID exists in a VFS the
-// actor may read: the actor is that VFS identity, or a root caller, or holds a read permit for it.
+// actor may read: the actor is that VFS identity, or holds a mod.vfs.read_action permit for it.
 //
 // The action must name one complete ObjectID. Size 0 is refused, except the ObjectID of empty content.
 // The Repo field is ignored. A database error refuses. A refusal is the same for an unknown ObjectID and for an
@@ -65,7 +61,7 @@ func (mod *Module) authzOwnOrRoot(actor, vfsID *astral.Identity) bool {
 // note: objects.describe and objects.find ask without an ObjectID (VFS 6, section 6), so this handler refuses them.
 func (mod *Module) AuthorizeSeeObjects(ctx *astral.Context, a *apiauth.SeeObjectsAction) bool {
 	id := a.ObjectID
-	if id == nil || (id.Size == 0 && !id.IsEqual(&emptyObjectID)) {
+	if id == nil || (id.Size == 0 && !objectsmod.IsEmptyObject(id)) {
 		return false
 	}
 
@@ -76,12 +72,26 @@ func (mod *Module) AuthorizeSeeObjects(ctx *astral.Context, a *apiauth.SeeObject
 	}
 
 	for _, vfsID := range vfsIDs {
-		if mod.mayAccess(ctx, a.Actor(), vfsID, accessRead) {
+		if mod.seeObjectsMayRead(ctx, a.Actor(), vfsID) {
 			return true
 		}
 	}
 
 	return false
+}
+
+// seeObjectsMayRead reports whether actor is the VFS identity or holds a mod.vfs.read_action permit for it.
+//
+// note: VFS 6, section 6 "Reading by ObjectID" names no root caller here; the permit is asked of the auth module.
+func (mod *Module) seeObjectsMayRead(ctx *astral.Context, actor, vfsID *astral.Identity) bool {
+	if actor.IsZero() {
+		return false
+	}
+	if actor.IsEqual(vfsID) {
+		return true
+	}
+
+	return mod.Auth.Authorize(ctx, &vfsapi.ReadAction{Action: apiauth.NewAction(actor), VFSID: vfsID})
 }
 
 // seeObjectsFindVFSes returns each VFS that has a file with the ObjectID, once.

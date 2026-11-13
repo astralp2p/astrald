@@ -134,6 +134,13 @@ type readOpsResult struct {
 func readOpsRoute(t *testing.T, fn any, caller *astral.Identity, queryString string) readOpsResult {
 	t.Helper()
 
+	return readOpsRouteIn(t, astral.NewContext(nil), fn, caller, queryString)
+}
+
+// readOpsRouteIn routes like readOpsRoute, from a context the test chooses.
+func readOpsRouteIn(t *testing.T, parent *astral.Context, fn any, caller *astral.Identity, queryString string) readOpsResult {
+	t.Helper()
+
 	op, err := routing.NewOp(fn)
 	if err != nil {
 		t.Fatalf("new op: %v", err)
@@ -141,7 +148,7 @@ func readOpsRoute(t *testing.T, fn any, caller *astral.Identity, queryString str
 	reports := make(chan *routing.Report, 1)
 	op.LogFunc = func(r *routing.Report) { reports <- r }
 
-	ctx, cancel := astral.NewContext(nil).WithTimeout(10 * time.Second)
+	ctx, cancel := parent.WithTimeout(10 * time.Second)
 	defer cancel()
 
 	w := &readOpsWriter{}
@@ -618,6 +625,32 @@ func TestStatfsAnswersTheInfo(t *testing.T) {
 	}
 }
 
+// TestVFSInfoCachesTheRootItReports checks that the info of statfs and volumes computes a cleared root in its
+// transaction and caches the same ObjectID it answers.
+func TestVFSInfoCachesTheRootItReports(t *testing.T) {
+	f := newReadOpsFixture(t)
+	f.putFile(t, f.vol.RootID, "a", "abc")
+	if err := f.mod.db.clearFolderIDs(f.vol.RootID); err != nil {
+		t.Fatalf("clearFolderIDs: %v", err)
+	}
+
+	info, err := f.mod.vfsInfo(f.vol)
+	if err != nil {
+		t.Fatalf("vfsInfo: %v", err)
+	}
+
+	root, err := f.mod.db.getEntry(f.vol.RootID)
+	if err != nil {
+		t.Fatalf("getEntry: %v", err)
+	}
+	if root.ObjectID == nil || *root.ObjectID != info.Root {
+		t.Errorf("cached root = %v, want the reported %v", root.ObjectID, info.Root)
+	}
+	if info.Usage != 3 || info.Entries != 1 {
+		t.Errorf("Usage, Entries = %d, %d, want 3, 1", info.Usage, info.Entries)
+	}
+}
+
 func TestStatfsRootIsTheRootObjectID(t *testing.T) {
 	f, _, _, rootID := readOpsNestedFixture(t)
 
@@ -684,6 +717,23 @@ func TestReadFromLocalWithTheDeviceZoneOnly(t *testing.T) {
 	}
 	if got := f.repo.reads[0].zone; got != astral.ZoneDevice {
 		t.Errorf("zone = %v, want the device zone", got)
+	}
+}
+
+// TestReadNeverWidensTheZone checks that vfs.read narrows the caller's zone to the device zone: a context without
+// the device zone reaches the repository with no zone at all.
+func TestReadNeverWidensTheZone(t *testing.T) {
+	f := newReadOpsFixture(t)
+	f.putFile(t, f.vol.RootID, "a.txt", "hello world")
+
+	ctx := astral.NewContext(nil).WithZone(astral.ZoneVirtual | astral.ZoneNetwork)
+	readOpsRouteIn(t, ctx, f.mod.OpRead, f.vfs, readOpsQuery("read", "path", "/a.txt"))
+
+	if len(f.repo.reads) != 1 {
+		t.Fatalf("%d repository reads, want 1", len(f.repo.reads))
+	}
+	if got := f.repo.reads[0].zone; got != 0 {
+		t.Errorf("zone = %v, want no zone", got)
 	}
 }
 
