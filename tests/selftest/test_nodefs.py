@@ -6,6 +6,7 @@ host that runs one.
 """
 import os
 import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -67,6 +68,16 @@ class TestLocalRoot(unittest.TestCase):
         self.assertEqual(nodefs.listdir(self.node), {"b": "file"})
         self.assertEqual(nodefs.read_bytes(self.node, "b"), b"new")
 
+    def test_overwrite_keeps_the_rest_and_creates_nothing(self):
+        nodefs.write_bytes(self.node, "a", b"abcdef")
+        nodefs.overwrite(self.node, "a", b"XY")
+        self.assertEqual(nodefs.read_bytes(self.node, "a"), b"XYcdef")
+        with self.assertRaises(FileNotFoundError):
+            nodefs.overwrite(self.node, "missing", b"XY")
+
+    def test_the_platform_is_the_hosts(self):
+        self.assertEqual(nodefs.platform(self.node), sys.platform)
+
     def test_set_mtime(self):
         nodefs.write_bytes(self.node, "a", b"a")
         nodefs.set_mtime(self.node, "a", 1_700_000_000)
@@ -117,6 +128,17 @@ class TestDockerRoot(unittest.TestCase):
             ["docker", "exec", "-i", C, "sh", "-c",
              'mkdir -p -- "$(dirname -- "$1")" && cat > "$1"', "sh",
              "/var/lib/astrald/w/sub/a"], b"data", None)])
+
+    def test_an_overwrite_streams_its_bytes_into_dd_in_place(self):
+        nodefs.overwrite(self.node, "w/d", b"data")
+        self.assertEqual(self.calls, [(
+            ["docker", "exec", "-i", C, "dd", "of=/var/lib/astrald/w/d",
+             "conv=notrunc,nocreat", "status=none"], b"data", None)])
+
+    def test_the_platform_is_linux_whatever_the_host(self):
+        with mock.patch.object(nodefs.sys, "platform", "darwin"):
+            self.assertEqual(nodefs.platform(self.node), "linux")
+        self.assertEqual(self.calls, [])
 
     def test_each_operation_runs_its_command_in_the_container(self):
         self.out = b"f a.txt\0d sub\0l link\0p fifo\0"

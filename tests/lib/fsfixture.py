@@ -1,5 +1,5 @@
-"""Host directories as node1 sees them: the fs ops, the expected ids, and the
-file locations node1 reports.
+"""Directories on node1's machine: the fs ops, the expected ids, and the file
+locations node1 reports.
 
 astral-py binds no `fs` module, so `fs.new_watch` and `fs.new_repo` are raw
 queries built with `querystring.build`, which encodes the path. Both answer an
@@ -7,18 +7,20 @@ queries built with `querystring.build`, which encodes the path. Both answer an
 `RemoteError`; the wrappers answer None for the Ack and the error text
 otherwise, so a test asserts a refusal as plainly as a success.
 
-`disk_ids` is the oracle's own expected set: it walks a directory, keeps the
-regular files (a symlink is never one, whatever it points at), and hashes
-their bytes with astral-py's `object_id_of_bytes`. A test compares what node1
-lists against it, never against ids node1 reported earlier.
+`disk_ids` is the oracle's own expected set: it walks a directory under the
+node's root through lib/nodefs.py, keeps the regular files (a symlink is never
+one, whatever it points at), reads their bytes itself and hashes them with
+astral-py's `object_id_of_bytes`. A test compares what node1 lists against it,
+never against ids node1 reported earlier.
 """
 import asyncio
-import os
-from pathlib import Path
+import posixpath
 
 from astral import querystring
 from astral.errors import QueryRejected, RemoteError
 from astral.objectid import object_id_of_bytes
+
+from lib import nodefs
 
 LOCATION = "mod.fs.file_location"
 
@@ -28,16 +30,18 @@ def object_id(data: bytes) -> str:
     return str(object_id_of_bytes(data))
 
 
-def disk_ids(root) -> dict[str, str]:
-    """{path: id} for every regular file under `root`. Symlinks, to files or
-    directories, are skipped and not followed."""
+def disk_ids(node: dict, rel: str) -> dict[str, str]:
+    """{path: id} for every regular file under the directory `rel` of the
+    node's root, each path as the node's machine sees it (nodefs.path).
+    Symlinks, to files or directories, are skipped and not followed."""
     out = {}
-    for dirpath, dirnames, filenames in os.walk(root, followlinks=False):
-        for name in filenames:
-            path = os.path.join(dirpath, name)
-            if os.path.islink(path) or not os.path.isfile(path):
-                continue
-            out[path] = object_id(Path(path).read_bytes())
+    for name, kind in nodefs.listdir(node, rel).items():
+        sub = posixpath.join(rel, name)
+        if kind == "dir":
+            out |= disk_ids(node, sub)
+        elif kind == "file":
+            out[nodefs.path(node, sub)] = object_id(
+                nodefs.read_bytes(node, sub))
     return out
 
 
