@@ -351,43 +351,33 @@ func TestReadRanges(t *testing.T) {
 	}
 }
 
-// TestEmptyObject: a commit of zero bytes stores nothing, and the repository answers the empty object without storage.
-func TestEmptyObject(t *testing.T) {
+// TestZeroByteCommitIsStored: a commit of zero bytes is stored as an ordinary object, and its full ID, whose Size is
+// 0, resolves through the hash index.
+func TestZeroByteCommitIsStored(t *testing.T) {
 	var repo = New("test", 1024)
 	var ctx = astral.NewContext(nil)
 	var id = store(t, repo, nil)
 
-	if !id.IsEqual(objectsmod.EmptyObjectID()) {
-		t.Fatalf("empty object ID = %v, want %v", id, objectsmod.EmptyObjectID())
-	}
-	if n := len(repo.objects.Clone()); n != 0 {
-		t.Fatalf("stored %v objects, want none", n)
+	if n := len(repo.objects.Clone()); n != 1 {
+		t.Fatalf("stored %v objects, want 1", n)
 	}
 
-	r, err := repo.Read(ctx, partialOf(t, id), 0, 512)
+	r, err := repo.Read(ctx, id, 0, 0)
 	if err != nil {
 		t.Fatalf("Read: %v", err)
-	}
-	if got := r.ID(); !got.IsEqual(id) {
-		t.Errorf("ID() = %v, want %v", got, id)
 	}
 	if data := readAndClose(t, r); len(data) != 0 {
 		t.Errorf("Read = %q, want no bytes", data)
 	}
 
-	if _, err = repo.Read(ctx, id, 1, 0); !errors.Is(err, objectsmod.ErrOutOfBounds) {
-		t.Errorf("Read at offset 1 = %v, want ErrOutOfBounds", err)
-	}
-
 	if ok, err := repo.Contains(ctx, id); !ok || err != nil {
 		t.Errorf("Contains = %v, %v, want true, nil", ok, err)
 	}
-
 	if err = repo.Delete(ctx, id); err != nil {
 		t.Fatalf("Delete: %v", err)
 	}
-	if ok, err := repo.Contains(ctx, id); !ok || err != nil {
-		t.Errorf("Contains after Delete = %v, %v, want true, nil", ok, err)
+	if ok, err := repo.Contains(ctx, id); ok || err != nil {
+		t.Errorf("Contains after Delete = %v, %v, want false, nil", ok, err)
 	}
 }
 
@@ -522,14 +512,14 @@ func TestDeleteByPartialID(t *testing.T) {
 	}
 }
 
-// TestScanEmitsFullIDs: Scan reports each stored object by its full ID. The empty object is never stored, so it is not emitted.
+// TestScanEmitsFullIDs: Scan reports each stored object by its full ID.
 func TestScanEmitsFullIDs(t *testing.T) {
 	var repo = New("test", 1024)
 	var want = map[astral.ObjectID]bool{
 		*store(t, repo, []byte("hello astral")): true,
 		*store(t, repo, []byte("x")):            true,
+		*store(t, repo, nil):                    true,
 	}
-	store(t, repo, nil)
 
 	ch, err := repo.Scan(astral.NewContext(nil), false)
 	if err != nil {

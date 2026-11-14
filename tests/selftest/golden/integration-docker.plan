@@ -70,3 +70,5 @@ w25 docker: distribution-gate-setup
             config node1.apphost.gate = {}
             config node1.apphost.policies = {}
 w26 docker: bootstrap-passphrase
+w27 docker: claim-race
+w28 docker: concurrent-adoption
