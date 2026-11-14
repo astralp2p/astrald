@@ -197,6 +197,23 @@ func TestAcceptanceReadRoutesMoveTheReadTime(t *testing.T) {
 	})
 }
 
+// TestAcceptanceHTTPObjectRangeRequest: the HTTP object handler answers a range of a file's object, from the middle
+// and from the end, so a seek reaches the object through the tracked leaf.
+func TestAcceptanceHTTPObjectRangeRequest(t *testing.T) {
+	a := startAcceptanceNode(t)
+	a.claim()
+	app := a.registerApp()
+	entry := a.mustWrite(app.client, "/range.txt", []byte("0123456789abcdef"))
+	path := "/.objects/" + entry.ID.String()
+
+	for byteRange, want := range map[string]string{"bytes=4-9": "456789", "bytes=-3": "def"} {
+		status, body := a.httpGetRange(app.token, path, byteRange)
+		if status != http.StatusPartialContent || string(body) != want {
+			t.Errorf("GET %v with Range %v = %v, %q; want %v, %q", path, byteRange, status, body, http.StatusPartialContent, want)
+		}
+	}
+}
+
 // expectReadMoves moves every read time two hours back, reads the object through one route, writes the reads
 // journal, and fails unless the object has the given number of tracked copies, each with a read time at or after
 // the read.
