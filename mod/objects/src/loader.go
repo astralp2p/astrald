@@ -32,7 +32,7 @@ func (Loader) Load(node astral.Node, assets assets.Assets, log *log.Logger) (cor
 	mod.AddFinder(mod)
 
 	mod.db = &DB{DB: assets.Database()}
-	mod.objectsReadsJournal = newObjectsReadsJournal(mod.db.UpdateReadAt, log)
+	mod.tracker.attach(mod.db, log)
 
 	if err := mod.setupDefaultRepos(); err != nil {
 		return nil, err

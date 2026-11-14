@@ -263,31 +263,33 @@ func TestAcceptanceTokenlessSessionReachesNoOperation(t *testing.T) {
 	}
 }
 
-// TestAcceptanceEmptyFile (acceptance criterion 6): an empty file is written and is read back as zero bytes
-// through vfs.read and through objects.read; objects.contains answers true for it.
+// TestAcceptanceEmptyFile (acceptance criterion 6): a write of zero bytes answers empty file and changes nothing.
+// No entry and no missing parent folder is created, and a file already at the path keeps its ObjectID and
+// modification time.
 func TestAcceptanceEmptyFile(t *testing.T) {
 	a := startAcceptanceNode(t)
 	a.claim()
 	app := a.registerApp()
+	emptyFile := astral.NewError("empty file")
 
-	entry := a.mustWrite(app.client, "/empty", nil)
-	if entry.ID.Size != 0 {
-		t.Fatalf("the empty file has ID %v", entry.ID)
+	answer, err := a.write(app.client, query.Args{"path": "/new/empty"}, nil)
+	expectError(t, "vfs.write of zero bytes", answer, err, emptyFile)
+	for _, path := range []string{"/new/empty", "/new"} {
+		answer, err = a.call(app.client, "vfs.stat", query.Args{"path": path})
+		expectError(t, "vfs.stat of "+path, answer, err, vfsapi.ErrNotFound)
 	}
 
-	content, err := a.readRaw(app.client, "vfs.read", query.Args{"path": "/empty"})
-	if err != nil || len(content) != 0 {
-		t.Errorf("vfs.read of the empty file = %q, %v; want zero bytes", content, err)
-	}
+	before := a.mustWrite(app.client, "/kept", []byte("content"))
+	answer, err = a.write(app.client, query.Args{"path": "/kept"}, nil)
+	expectError(t, "vfs.write of zero bytes over a file", answer, err, emptyFile)
 
-	content, err = a.readRaw(app.client, "objects.read", query.Args{"id": &entry.ID})
-	if err != nil || len(content) != 0 {
-		t.Errorf("objects.read of the empty file = %q, %v; want zero bytes", content, err)
+	answer, err = a.call(app.client, "vfs.stat", query.Args{"path": "/kept"})
+	after, ok := answer.(*vfsapi.Entry)
+	if err != nil || !ok {
+		t.Fatalf("vfs.stat of /kept answered %#v, %v; want an entry", answer, err)
 	}
-
-	answer, err := a.call(a.as(a.nodeID()), "objects.contains", query.Args{"repo": "local", "id": &entry.ID})
-	if b, ok := answer.(*astral.Bool); err != nil || !ok || !bool(*b) {
-		t.Errorf("objects.contains of the empty object in local answered %#v, %v; want true", answer, err)
+	if after.ID != before.ID || !after.ModTime.Time().Equal(before.ModTime.Time()) {
+		t.Errorf("/kept is %v at %v after the empty write; want %v at %v", after.ID, after.ModTime, before.ID, before.ModTime)
 	}
 }
 
@@ -313,7 +315,7 @@ func TestAcceptanceQuotasAndInterruptedWrites(t *testing.T) {
 	expectError(t, "a write over the entry quota", answer, err, vfsapi.ErrNoInodesLeft)
 	expectNoEntry(t, a, app, "/three")
 
-	a.mustWrite(app.client, "/two", nil) // note: replacing a file adds no entry
+	a.mustWrite(app.client, "/two", []byte("22")) // note: replacing a file adds no entry
 	expectInterruptedWriteLeavesNoEntry(t, a, app)
 }
 

@@ -465,6 +465,13 @@ func (a *acceptanceNode) mustWrite(c *astrald.Client, path string, content []byt
 func (a *acceptanceNode) httpGet(token, path string) (int, []byte) {
 	a.t.Helper()
 
+	return a.httpGetRange(token, path, "")
+}
+
+// httpGetRange fetches a path like httpGet and sends byteRange as the Range header unless it is empty.
+func (a *acceptanceNode) httpGetRange(token, path, byteRange string) (int, []byte) {
+	a.t.Helper()
+
 	client := &http.Client{
 		Timeout: acceptanceWait,
 		Transport: &http.Transport{DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
@@ -477,6 +484,9 @@ func (a *acceptanceNode) httpGet(token, path string) (int, []byte) {
 		a.t.Fatalf("request: %v", err)
 	}
 	req.Header.Set("Authorization", "Bearer "+token)
+	if byteRange != "" {
+		req.Header.Set("Range", byteRange)
+	}
 
 	resp, err := client.Do(req)
 	if err != nil {

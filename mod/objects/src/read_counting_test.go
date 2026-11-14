@@ -23,13 +23,13 @@ func newClockedModule(t *testing.T) (*Module, *fakeClock) {
 
 	mod := newTrackingModule(t)
 	clock := &fakeClock{t: time.Unix(1_000_000, 0)}
-	mod.objectsReadsJournal.now = clock.now
+	mod.tracker.journal.now = clock.now
 	return mod, clock
 }
 
 // pendingTime returns the journal's pending read time of id.
 func pendingTime(mod *Module, id *astral.ObjectID) (time.Time, bool) {
-	j := mod.objectsReadsJournal
+	j := mod.tracker.journal
 	j.mu.Lock()
 	defer j.mu.Unlock()
 
@@ -186,7 +186,7 @@ func TestReadCounting_HousekeepingReadRecordsNothing(t *testing.T) {
 		t.Fatalf("probe: %v", err)
 	}
 
-	if n := len(mod.objectsReadsJournal.pending); n != 0 {
+	if n := len(mod.tracker.journal.pending); n != 0 {
 		t.Fatalf("journal holds %d reads after housekeeping reads; want none", n)
 	}
 }
@@ -201,7 +201,7 @@ func TestReadCounting_FlushKeepsNewerStoredTime(t *testing.T) {
 		t.Fatalf("set the stored time: %v", err)
 	}
 
-	j := mod.objectsReadsJournal
+	j := mod.tracker.journal
 	j.pending[*id] = astral.Time(time.Unix(100, 0))
 	if err := j.Flush(); err != nil {
 		t.Fatalf("flush older: %v", err)
@@ -235,7 +235,7 @@ func TestReadCounting_FlushNeverCreatesRow(t *testing.T) {
 	inner := mem.New("leaf", 0)
 	untracked := commitData(t, astral.NewContext(nil), inner, "untracked")
 
-	j := mod.objectsReadsJournal
+	j := mod.tracker.journal
 	j.Mark(untracked)
 	j.Mark(&astral.ObjectID{Size: 7})
 	if err := j.Flush(); err != nil {
@@ -265,7 +265,7 @@ func TestReadCounting_FlushSetsEveryCopy(t *testing.T) {
 	r := openReader(t, ctx, mod.GetRepository("mem0"), id, 0)
 	io.ReadAll(r)
 	r.Close()
-	if err := mod.objectsReadsJournal.Flush(); err != nil {
+	if err := mod.tracker.flush(); err != nil {
 		t.Fatalf("flush: %v", err)
 	}
 
@@ -316,8 +316,8 @@ func TestReadCounting_SystemAndGroupReadsCount(t *testing.T) {
 
 	clock.advance(time.Second)
 	r = openReader(t, ctx, mod.GetRepository("main"), groupID, 0)
-	if r.Repo() != mod.GetRepository("mem0") {
-		t.Fatalf("the group reader names %v; want the wrapper of mem0", r.Repo().Label())
+	if got := mod.getRepoName(r.Repo()); got != "mem0" {
+		t.Fatalf("the group reader names %v, which resolves to %q; want mem0", r.Repo().Label(), got)
 	}
 	io.ReadAll(r)
 	r.Close()
@@ -338,8 +338,10 @@ func (r *plainLeaf) Read(ctx *astral.Context, id *astral.ObjectID, offset int64,
 	return &plainReader{Reader: inner}, nil
 }
 
-// TestReadCounting_SeekerOnlyWhereInnerSeeks: the wrapper claims io.Seeker only for an inner reader that seeks.
-func TestReadCounting_SeekerOnlyWhereInnerSeeks(t *testing.T) {
+// TestReadCounting_ReaderClaimsNoSeekerAndNamesItsLeaf: the counting reader claims no io.Seeker, also over an inner
+// reader that seeks. It names the repository the leaf's reader names, never the wrapper, and the module resolves a
+// leaf that names itself to the registered name.
+func TestReadCounting_ReaderClaimsNoSeekerAndNamesItsLeaf(t *testing.T) {
 	mod, _ := newClockedModule(t)
 	ctx := astral.NewContext(nil)
 
@@ -348,27 +350,30 @@ func TestReadCounting_SeekerOnlyWhereInnerSeeks(t *testing.T) {
 	if err := mod.AddRepository("plain", plain); err != nil {
 		t.Fatalf("AddRepository: %v", err)
 	}
-	if err := mod.AddRepository("seeking", mem.New("seeking", 0)); err != nil {
+	seeking := mem.New("seeking", 0)
+	if err := mod.AddRepository("seeking", seeking); err != nil {
 		t.Fatalf("AddRepository: %v", err)
 	}
 	commitData(t, ctx, mod.GetRepository("seeking"), "no seek")
 
-	r := openReader(t, ctx, mod.GetRepository("plain"), id, 0)
-	defer r.Close()
-	if _, ok := r.(io.Seeker); ok {
-		t.Fatal("the wrapper of a reader that cannot seek claims io.Seeker")
-	}
-	if r.Repo() != mod.GetRepository("plain") {
-		t.Fatal("the reader does not name the wrapper")
+	for _, name := range []string{"plain", "seeking"} {
+		r := openReader(t, ctx, mod.GetRepository(name), id, 0)
+		if _, ok := r.(io.Seeker); ok {
+			t.Errorf("the reader of %v claims io.Seeker", name)
+		}
+		if _, ok := r.Repo().(*trackedLeaf); ok {
+			t.Errorf("the reader of %v names the wrapper", name)
+		}
+		r.Close()
 	}
 
-	s := openReader(t, ctx, mod.GetRepository("seeking"), id, 0)
-	defer s.Close()
-	if _, ok := s.(io.Seeker); !ok {
-		t.Fatal("the wrapper of a reader that has Seek does not claim io.Seeker")
+	r := openReader(t, ctx, mod.GetRepository("seeking"), id, 0)
+	defer r.Close()
+	if r.Repo() != seeking {
+		t.Fatalf("the reader of seeking names %T; want the leaf", r.Repo())
 	}
-	if s.Repo() != mod.GetRepository("seeking") {
-		t.Fatal("the seeking reader does not name the wrapper")
+	if got := mod.getRepoName(r.Repo()); got != "seeking" {
+		t.Fatalf("the reader of seeking resolves to %q; want seeking", got)
 	}
 }
 
