@@ -100,3 +100,4 @@ services-advertise-identity
 services-swarm-outcome-rules
 stranger-disclosure
 two-swarms-side-by-side
+basic-strategy-stalled-negotiation

@@ -60,10 +60,11 @@ w17 docker: bootstrap-user-software-key* → hold-isolation
             config node1.objects.purge_floor = "0s"
 w18 docker: bootstrap-user-software-key* → blueprint-survives-restart
 w19 docker: bootstrap-user-software-key* → indexer-cursor
-w20 docker: bootstrap-user-op
-w21 docker: import-user-software-key
-w22 docker: introduce-node-setup → introduce-node
-w23 docker: distribution-gate-setup
+w20 docker: bootstrap-user-software-key* → basic-strategy-stalled-negotiation
+w21 docker: bootstrap-user-op
+w22 docker: import-user-software-key
+w23 docker: introduce-node-setup → introduce-node
+w24 docker: distribution-gate-setup
             config node1.apphost.gate = {}
             config node1.apphost.policies = {}
-w24 docker: bootstrap-passphrase
+w25 docker: bootstrap-passphrase

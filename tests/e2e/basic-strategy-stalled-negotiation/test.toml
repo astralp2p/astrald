@@ -1,0 +1,8 @@
+nodes         = ["node1"]
+after         = "bootstrap-user-software-key"
+# why: the fake peer's three endpoints stay in node1's book for 90 days, and
+# no op removes one
+destroys      = true
+host_listener = "serves a fake peer node1 dials, on three listeners"
+timeout       = 120
+facts         = ["stalled_negotiation"]

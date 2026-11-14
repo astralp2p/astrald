@@ -52,15 +52,16 @@ w12 local: bootstrap-user-software-key* → adopt-node* → services-node-restar
 w13 local: bootstrap-user-software-key* → repo-removal-sticks
 w14 local: bootstrap-user-software-key* → fs-watch-restart-restore
 w15 local: bootstrap-user-software-key* → fs-index-restart-reconcile
-w16 local: bootstrap-user-software-key* → hold-isolation
+w16 local: bootstrap-user-software-key* → basic-strategy-stalled-negotiation
+w17 local: bootstrap-user-software-key* → hold-isolation
            config node1.objects.purge_floor = "0s"
-w17 local: bootstrap-user-software-key* → indexer-cursor
-w18 local: bootstrap-user-software-key* → indexing-fs-watch-feed
-w19 local: bootstrap-user-software-key* → blueprint-survives-restart
-w20 local: distribution-gate-setup
+w18 local: bootstrap-user-software-key* → indexer-cursor
+w19 local: bootstrap-user-software-key* → indexing-fs-watch-feed
+w20 local: bootstrap-user-software-key* → blueprint-survives-restart
+w21 local: distribution-gate-setup
            config node1.apphost.gate = {}
            config node1.apphost.policies = {}
-w21 local: import-user-software-key
-w22 local: bootstrap-user-op
-w23 local: bootstrap-passphrase
-w24 local: introduce-node-setup → introduce-node
+w22 local: import-user-software-key
+w23 local: bootstrap-user-op
+w24 local: bootstrap-passphrase
+w25 local: introduce-node-setup → introduce-node
