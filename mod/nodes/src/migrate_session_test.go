@@ -269,3 +269,21 @@ func TestInitiatorAttachesSessionBeforeResume(t *testing.T) {
 		t.Fatal("the session is not open after the migration")
 	}
 }
+
+// TestMigrationResponderIsTheLinkPeer: the initiator addresses the node across
+// the session's link for every kind of session, including a session relayed in
+// for an app, whose logical peer is the app.
+func TestMigrationResponderIsTheLinkPeer(t *testing.T) {
+	f := newMigrationFixture(t)
+	peer := f.oldLink.mux.RemoteIdentity()
+
+	for name, sess := range linkPeerSessions(t, f, astral.GenerateIdentity()) {
+		got, err := f.mod.migrationResponder(sess)
+		if err != nil {
+			t.Fatalf("%v session: %v", name, err)
+		}
+		if !got.IsEqual(peer) {
+			t.Fatalf("%v session: responder %v; want the link peer %v", name, got, peer)
+		}
+	}
+}
