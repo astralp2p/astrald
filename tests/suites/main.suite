@@ -78,6 +78,7 @@ expel-node
 basic-strategy-excess-link-pruning
 basic-strategy-stalled-endpoint-released
 link-session-migrate
+link-session-migrate-serving-side
 expel-during-transfer
 expel-authority
 hold-purge

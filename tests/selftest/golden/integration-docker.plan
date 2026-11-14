@@ -53,18 +53,20 @@ w11 docker: bootstrap-user-software-key* → adopt-node* → join-via-member
 w12 docker: bootstrap-user-software-key* → adopt-node*
             → two-swarms-side-by-side
 w13 docker: bootstrap-user-software-key* → adopt-node* → link-session-migrate
-w14 docker: bootstrap-user-software-key* → fs-watch-restart-restore
-w15 docker: bootstrap-user-software-key* → fs-index-restart-reconcile
-w16 docker: bootstrap-user-software-key* → repo-removal-sticks
-w17 docker: bootstrap-user-software-key* → indexing-fs-watch-feed
-w18 docker: bootstrap-user-software-key* → hold-isolation
+w14 docker: bootstrap-user-software-key* → adopt-node*
+            → link-session-migrate-serving-side
+w15 docker: bootstrap-user-software-key* → fs-watch-restart-restore
+w16 docker: bootstrap-user-software-key* → fs-index-restart-reconcile
+w17 docker: bootstrap-user-software-key* → repo-removal-sticks
+w18 docker: bootstrap-user-software-key* → indexing-fs-watch-feed
+w19 docker: bootstrap-user-software-key* → hold-isolation
             config node1.objects.purge_floor = "0s"
-w19 docker: bootstrap-user-software-key* → blueprint-survives-restart
-w20 docker: bootstrap-user-software-key* → indexer-cursor
-w21 docker: bootstrap-user-op
-w22 docker: import-user-software-key
-w23 docker: introduce-node-setup → introduce-node
-w24 docker: distribution-gate-setup
+w20 docker: bootstrap-user-software-key* → blueprint-survives-restart
+w21 docker: bootstrap-user-software-key* → indexer-cursor
+w22 docker: bootstrap-user-op
+w23 docker: import-user-software-key
+w24 docker: introduce-node-setup → introduce-node
+w25 docker: distribution-gate-setup
             config node1.apphost.gate = {}
             config node1.apphost.policies = {}
-w25 docker: bootstrap-passphrase
+w26 docker: bootstrap-passphrase
