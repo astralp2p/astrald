@@ -439,29 +439,6 @@ func TestPurge_ConfiguredFloorLowersTheWindow(t *testing.T) {
 	expectContains(t, mod, "mem0", recent, false)
 }
 
-// TestPurge_EmptyObjectIsNeverPurged: a commit of the empty object writes no row, and a row left for it is never
-// answered as purged, dry or not.
-func TestPurge_EmptyObjectIsNeverPurged(t *testing.T) {
-	mod := newTrackingModule(t)
-	ctx := astral.NewContext(nil)
-	repo := mod.GetRepository("mem0")
-
-	empty := commitData(t, ctx, repo, "")
-	if !objectsmod.IsEmptyObject(empty) {
-		t.Fatalf("committed %v; want the empty object", empty)
-	}
-	if rows := trackingRows(t, mod, "mem0"); len(rows) != 0 {
-		t.Fatalf("tracking rows after an empty commit: %v; want none", rows)
-	}
-
-	if err := mod.db.trackCommit("mem0", empty, ago(3*time.Hour)); err != nil {
-		t.Fatalf("track: %v", err)
-	}
-
-	expectIDs(t, "dry", purgeIDs(t, mod, "mem0", 2*time.Hour, true), nil)
-	expectIDs(t, "purged", purgeIDs(t, mod, "mem0", 2*time.Hour, false), nil)
-}
-
 // TestPurge_GroupVisitsEachLeaf: a group is purged once per leaf below it, nested groups included.
 func TestPurge_GroupVisitsEachLeaf(t *testing.T) {
 	mod := newTrackingModule(t)

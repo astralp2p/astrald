@@ -15,11 +15,6 @@ import (
 // why: the check and the delete run under the leaf's lock, as a purge decides, so a commit of the same content
 // or a holder that a commit precedes cannot fall between them.
 func (mod *Module) DeleteUnheld(ctx *astral.Context, repo objects.Repository, objectID *astral.ObjectID, since time.Time) error {
-	// why: the empty object is never stored.
-	if objects.IsEmptyObject(objectID) {
-		return nil
-	}
-
 	var deleted, kept bool
 	for _, leaf := range mod.trackedLeaves(repo) {
 		err := mod.deleteUnheldIn(ctx, leaf, objectID, since)

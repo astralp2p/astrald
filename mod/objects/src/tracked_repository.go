@@ -163,7 +163,6 @@ type trackedWriter struct {
 }
 
 // Commit commits the object and writes its commit time, also when the content already existed.
-// The empty object gets no row: it is never stored, so nothing is left to purge.
 // note: the commit refreshes the time so that purge cannot delete fresh content; accepted by the operator for now and may change later.
 // note: no Commit runs inside an open database transaction, because the node has one database connection.
 func (w *trackedWriter) Commit() (*astral.ObjectID, error) {
@@ -175,9 +174,7 @@ func (w *trackedWriter) Commit() (*astral.ObjectID, error) {
 		return nil, err
 	}
 
-	if !objectsmod.IsEmptyObject(objectID) {
-		w.repo.track(objectID)
-	}
+	w.repo.track(objectID)
 	return objectID, nil
 }
 

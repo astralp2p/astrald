@@ -6,7 +6,6 @@ import (
 	"errors"
 	"github.com/astralp2p/astral-go/api/objects"
 	"github.com/astralp2p/astral-go/astral"
-	objectsmod "github.com/astralp2p/astrald/mod/objects"
 	"os"
 	"path/filepath"
 	"sync/atomic"
@@ -63,7 +62,6 @@ func (w *Writer) Write(p []byte) (n int, err error) {
 
 // Commit finalizes the object: renames the temp file to its content-addressed name,
 // deduplicates silently if a file with that name already exists, then notifies the repository.
-// A commit of zero bytes removes the temp file, stores nothing and answers the empty ObjectID.
 // Returns an error if the writer was already closed or the rename fails.
 func (w *Writer) Commit() (*astral.ObjectID, error) {
 	if !w.finalized.CompareAndSwap(false, true) {
@@ -73,11 +71,6 @@ func (w *Writer) Commit() (*astral.ObjectID, error) {
 	w.file.Close()
 
 	objectID := w.resolver.Resolve()
-
-	if objectsmod.IsEmptyObject(objectID) {
-		os.Remove(filepath.Join(w.path, w.tempID))
-		return objectID, nil
-	}
 
 	if err := w.publish(objectID); err != nil {
 		return nil, err
