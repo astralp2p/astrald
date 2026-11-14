@@ -64,4 +64,6 @@ w21 local: distribution-gate-setup
 w22 local: import-user-software-key
 w23 local: bootstrap-user-op
 w24 local: bootstrap-passphrase
-w25 local: introduce-node-setup → introduce-node
+w25 local: claim-race
+w26 local: introduce-node-setup → introduce-node
+w27 local: concurrent-adoption

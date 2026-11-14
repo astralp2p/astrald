@@ -8,7 +8,6 @@ import (
 	vfsapi "github.com/astralp2p/astral-go/api/vfs"
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astral-go/astral/channel"
-	objectsmod "github.com/astralp2p/astrald/mod/objects"
 )
 
 // computeAllowance checks the target of a write and returns how many bytes the stream may carry: the bytes left
@@ -98,13 +97,13 @@ func receiveContent(ctx *astral.Context, ch *channel.Channel, w objectsapi.Write
 	return id, err
 }
 
-// commitContent commits the content and returns its ObjectID.
+// commitContent commits the content and returns its ObjectID. Content of zero bytes answers errEmptyFile and
+// commits nothing.
 //
-// why: the empty object is never stored (operator decision 2026-11-12); an empty file commits nothing and its ID is
-// the ObjectID of empty content.
+// why: a VFS holds no empty file, so a path never names the empty object (operator decision 2026-11-13).
 func commitContent(w objectsapi.Writer, size uint64) (*astral.ObjectID, error) {
 	if size == 0 {
-		return objectsmod.EmptyObjectID(), w.Discard()
+		return nil, errEmptyFile
 	}
 
 	return w.Commit()

@@ -87,12 +87,8 @@ func NewWatchRepository(mod *Module, root string, label string) (repo *WatchRepo
 var _ objectsmod.Repository = &WatchRepository{}
 
 // Contains checks the database index rather than the filesystem directly.
-// A partial ID also checks the file of each candidate row. The empty object is always contained.
+// A partial ID also checks the file of each candidate row.
 func (repo *WatchRepository) Contains(ctx *astral.Context, objectID *astral.ObjectID) (bool, error) {
-	if objectsmod.IsEmptyObject(objectID) {
-		return true, nil
-	}
-
 	if objectID.Size != 0 {
 		return repo.mod.db.ObjectExists(repo.root, objectID)
 	}
@@ -253,12 +249,7 @@ func (repo *WatchRepository) Scan(ctx *astral.Context, follow bool) (<-chan *ast
 
 // Read resolves the object to a filesystem path via the database index and tries each candidate
 // in order, returning the first in-root regular file of the object's size.
-// The empty object is answered without a file.
 func (repo *WatchRepository) Read(ctx *astral.Context, objectID *astral.ObjectID, offset int64, limit int64) (objectsmod.Reader, error) {
-	if objectsmod.IsEmptyObject(objectID) {
-		return objectsmod.OpenEmptyObject(repo, offset, limit)
-	}
-
 	resolved, err := repo.findObject(ctx, objectID)
 	if err != nil {
 		return nil, err
@@ -326,12 +317,7 @@ func (repo *WatchRepository) Label() string {
 }
 
 // Delete is not supported; WatchRepository is read-only.
-// Deleting the empty object succeeds and changes nothing.
 func (repo *WatchRepository) Delete(ctx *astral.Context, objectID *astral.ObjectID) error {
-	if objectsmod.IsEmptyObject(objectID) {
-		return nil
-	}
-
 	return errors.ErrUnsupported
 }
 

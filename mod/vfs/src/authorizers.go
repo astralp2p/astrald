@@ -5,7 +5,6 @@ import (
 	vfsapi "github.com/astralp2p/astral-go/api/vfs"
 	"github.com/astralp2p/astral-go/astral"
 	authmod "github.com/astralp2p/astrald/mod/auth"
-	objectsmod "github.com/astralp2p/astrald/mod/objects"
 )
 
 // addAuthorizers registers the module's handlers with the auth module. See VFS 6, section 6.
@@ -64,14 +63,14 @@ func (mod *Module) isOwnerOrRoot(actor, vfsID *astral.Identity) bool {
 //
 // A replaced directory is in no row and is refused.
 //
-// The action must name one complete ObjectID. Size 0 is refused, except the ObjectID of empty content.
+// The action must name one complete ObjectID. Size 0 is refused.
 // The Repo field is ignored. A database error refuses. A refusal is the same for an unknown ObjectID and for an
 // ObjectID of another VFS.
 //
 // note: objects.describe and objects.find ask without an ObjectID (VFS 6, section 6), so this handler refuses them.
 func (mod *Module) AuthorizeSeeObjects(ctx *astral.Context, a *apiauth.SeeObjectsAction) bool {
 	id := a.ObjectID
-	if id == nil || (id.Size == 0 && !objectsmod.IsEmptyObject(id)) {
+	if id == nil || id.Size == 0 {
 		return false
 	}
 

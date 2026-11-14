@@ -1,6 +1,7 @@
 package user
 
 import (
+	"errors"
 	"time"
 
 	"github.com/astralp2p/astral-go/api/auth"
@@ -22,7 +23,9 @@ type opAcceptMembershipArgs struct {
 // Validates contract subject, identity match, issuer distinct from subject,
 // minimum remaining validity and the swarm membership permit, then verifies the issuer's signature before applying the invite policy.
 // Self-refuses with user.ErrExpelled if this node holds the issuer's ban on itself.
-// On success, stores the signed contract and sets it as the active contract.
+// On success, stores the signed contract, sets it as the active contract and
+// indexes it, then sends the subject signature; an invitation that loses the
+// claim to a concurrent one is refused with user.ErrAlreadyClaimed.
 //
 // why: no named action guards this op; it answers only while the node is
 // unclaimed, and the swarm invite policy decides every invitation.
@@ -98,9 +101,16 @@ func (mod *Module) OpAcceptMembership(ctx *astral.Context, q *routing.IncomingQu
 		return ch.Send(astral.Err(err))
 	}
 
-	err = ch.Send(subjectSig)
-	if err != nil {
-		return
+	// why claim before the signature is sent: the subject signature is the
+	// node's yes, so the node commits first. claim repeats the check above
+	// under mu; of concurrent invitations that all passed it, one commits and
+	// every other is refused before it holds a signature.
+	err = mod.claim(ctx, signed)
+	switch {
+	case errors.Is(err, errClaimed):
+		return ch.Send(user.ErrAlreadyClaimed)
+	case err != nil:
+		return ch.Send(astral.Err(err))
 	}
 
 	err = mod.Auth.IndexContract(ctx, signed)
@@ -108,15 +118,5 @@ func (mod *Module) OpAcceptMembership(ctx *astral.Context, q *routing.IncomingQu
 		return ch.Send(astral.Err(err))
 	}
 
-	_, err = mod.Objects.Store(ctx, mod.Objects.WriteDefault(), signed)
-	if err != nil {
-		return ch.Send(astral.Err(err))
-	}
-
-	err = mod.SetActiveContract(signed)
-	if err != nil {
-		return ch.Send(astral.NewError(err.Error()))
-	}
-
-	return nil
+	return ch.Send(subjectSig)
 }

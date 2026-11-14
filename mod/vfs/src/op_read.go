@@ -5,7 +5,6 @@ import (
 
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astral-go/lib/routing"
-	objectsmod "github.com/astralp2p/astrald/mod/objects"
 )
 
 type opReadArgs struct {
@@ -34,11 +33,6 @@ func (mod *Module) OpRead(ctx *astral.Context, q *routing.IncomingQuery, args op
 	id, err := mod.findFileID(vol, names)
 	if err != nil || args.Offset > id.Size {
 		return q.Reject()
-	}
-
-	// why: the empty object is never stored, so the answer needs no repository.
-	if objectsmod.IsEmptyObject(&id) {
-		return answerRaw(q, nil)
 	}
 
 	repo := mod.Objects.GetRepository(readRepository)

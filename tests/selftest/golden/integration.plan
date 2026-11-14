@@ -66,3 +66,5 @@ w24 local: distribution-gate-setup
            config node1.apphost.gate = {}
            config node1.apphost.policies = {}
 w25 local: bootstrap-passphrase
+w26 local: claim-race
+w27 local: concurrent-adoption

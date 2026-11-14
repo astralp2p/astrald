@@ -10,13 +10,8 @@ type DB struct {
 	*gorm.DB
 }
 
-// Migrate drops the old tracking table and creates the tracking table.
-// note: content tracked only by the old table has no row and is never purged; there is no migration (VFS 6, §11 "objects: tracking").
+// Migrate creates the tracking table.
 func (db *DB) Migrate() error {
-	err := db.Migrator().DropTable(dbObjectsTableName)
-	if err != nil {
-		return err
-	}
 	return db.AutoMigrate(&dbTracking{})
 }
 
