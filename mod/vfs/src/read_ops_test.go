@@ -811,28 +811,6 @@ func TestReadRejectsWithoutALocalRepository(t *testing.T) {
 	f.run(t, "read", f.vfs, "path", "/a.txt").wantRejected(t)
 }
 
-func TestReadOfTheEmptyFileAnswersZeroBytesWithoutARepository(t *testing.T) {
-	f := newReadOpsFixture(t)
-	addFile(t, f.mod, f.vol, f.vol.RootID, "empty", "") // the empty object is never stored
-
-	res := f.run(t, "read", f.vfs, "path", "/empty")
-	if res.Err != nil || len(res.Raw) != 0 {
-		t.Fatalf("read = %q, %v; want zero bytes", res.Raw, res.Err)
-	}
-	if len(f.repo.reads) != 0 {
-		t.Errorf("%d repository reads, want none", len(f.repo.reads))
-	}
-
-	// the same holds with no repository at all
-	f.mod.Objects = &readOpsObjects{dirTestObjects: f.dirObjects, repos: map[string]objectsmod.Repository{}}
-	if res = f.run(t, "read", f.vfs, "path", "/empty"); res.Err != nil || len(res.Raw) != 0 {
-		t.Fatalf("read without a repository = %q, %v; want zero bytes", res.Raw, res.Err)
-	}
-
-	// an offset beyond the empty content still rejects
-	f.run(t, "read", f.vfs, "path", "/empty", "offset", "1").wantRejected(t)
-}
-
 func TestReadAnOtherVFSNeedsAPermit(t *testing.T) {
 	f := newReadOpsFixture(t)
 	f.putFile(t, f.vol.RootID, "a.txt", "mine")

@@ -34,34 +34,39 @@ w1 local:  bootstrap-user-software-key* → adopt-node*
            → basic-strategy-excess-link-pruning
 w2 local:  bootstrap-user-software-key* → adopt-node*
            → basic-strategy-stalled-endpoint-released
-w3 local:  bootstrap-user-software-key* → adopt-node* → expel-during-transfer
-w4 local:  bootstrap-user-software-key* → adopt-node* → expel-authority
-w5 local:  bootstrap-user-software-key* → adopt-node* → hold-purge
+w3 local:  bootstrap-user-software-key* → adopt-node* → link-session-migrate
+w4 local:  bootstrap-user-software-key* → adopt-node*
+           → link-session-migrate-serving-side
+w5 local:  bootstrap-user-software-key* → adopt-node* → expel-during-transfer
+w6 local:  bootstrap-user-software-key* → adopt-node* → expel-authority
+w7 local:  bootstrap-user-software-key* → adopt-node* → hold-purge
            config node1.objects.purge_floor = "0s"
-w6 local:  bootstrap-user-software-key* → adopt-node* → swarm-roster-sync
+w8 local:  bootstrap-user-software-key* → adopt-node* → swarm-roster-sync
            → expel-propagation → expel-survives-restart
-w7 local:  bootstrap-user-software-key* → adopt-node* → swarm-roster-sync*
+w9 local:  bootstrap-user-software-key* → adopt-node* → swarm-roster-sync*
            → swarm-member-restart
-w8 local:  bootstrap-user-software-key* → adopt-node* → swarm-roster-sync*
+w10 local: bootstrap-user-software-key* → adopt-node* → swarm-roster-sync*
            → link-self-heal
-w9 local:  bootstrap-user-software-key* → adopt-node* → two-swarms-side-by-side
-w10 local: bootstrap-user-software-key* → adopt-node* → join-via-member
-w11 local: bootstrap-user-software-key* → adopt-node*
+w11 local: bootstrap-user-software-key* → adopt-node* → two-swarms-side-by-side
+w12 local: bootstrap-user-software-key* → adopt-node* → join-via-member
+w13 local: bootstrap-user-software-key* → adopt-node*
            → app-node-restart-reconnect
-w12 local: bootstrap-user-software-key* → adopt-node* → services-node-restart
-w13 local: bootstrap-user-software-key* → repo-removal-sticks
-w14 local: bootstrap-user-software-key* → fs-watch-restart-restore
-w15 local: bootstrap-user-software-key* → fs-index-restart-reconcile
-w16 local: bootstrap-user-software-key* → basic-strategy-stalled-negotiation
-w17 local: bootstrap-user-software-key* → hold-isolation
+w14 local: bootstrap-user-software-key* → adopt-node* → services-node-restart
+w15 local: bootstrap-user-software-key* → repo-removal-sticks
+w16 local: bootstrap-user-software-key* → fs-watch-restart-restore
+w17 local: bootstrap-user-software-key* → fs-index-restart-reconcile
+w18 local: bootstrap-user-software-key* → basic-strategy-stalled-negotiation
+w19 local: bootstrap-user-software-key* → hold-isolation
            config node1.objects.purge_floor = "0s"
-w18 local: bootstrap-user-software-key* → indexer-cursor
-w19 local: bootstrap-user-software-key* → indexing-fs-watch-feed
-w20 local: bootstrap-user-software-key* → blueprint-survives-restart
-w21 local: distribution-gate-setup
+w20 local: bootstrap-user-software-key* → indexer-cursor
+w21 local: bootstrap-user-software-key* → indexing-fs-watch-feed
+w22 local: bootstrap-user-software-key* → blueprint-survives-restart
+w23 local: distribution-gate-setup
            config node1.apphost.gate = {}
            config node1.apphost.policies = {}
-w22 local: import-user-software-key
-w23 local: bootstrap-user-op
-w24 local: bootstrap-passphrase
-w25 local: introduce-node-setup → introduce-node
+w24 local: import-user-software-key
+w25 local: bootstrap-user-op
+w26 local: bootstrap-passphrase
+w27 local: claim-race
+w28 local: introduce-node-setup → introduce-node
+w29 local: concurrent-adoption

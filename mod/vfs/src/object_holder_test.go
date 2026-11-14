@@ -14,17 +14,12 @@ func TestHoldObjectHoldsTheFileOfAnyVFS(t *testing.T) {
 	folder := addFolder(t, mod, a, a.RootID, "d")
 	addFile(t, mod, a, folder.ID, "f", "in a")
 	addFile(t, mod, b, b.RootID, "g", "in b")
-	empty := contentID("")
-	addFile(t, mod, b, b.RootID, "e", "")
 
-	for name, content := range map[string]string{"first VFS": "in a", "second VFS": "in b", "empty file": ""} {
+	for name, content := range map[string]string{"first VFS": "in a", "second VFS": "in b"} {
 		id := contentID(content)
 		if !mod.HoldObject(&id) {
 			t.Errorf("%s: not held", name)
 		}
-	}
-	if !mod.HoldObject(&empty) {
-		t.Error("the empty object is not held")
 	}
 
 	unknown := contentID("nobody has this")

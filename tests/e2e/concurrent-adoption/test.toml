@@ -1,0 +1,8 @@
+# why destroys: every `cadu` node is claimed by a User of its own and every
+# `cadp` node ends claimed by one of them, so the world holds no node a later
+# test could claim or adopt. The test is a root: it forks a world of its own.
+nodes    = ["cadu1", "cadu2", "cadu3", "cadu4",
+            "cadp1", "cadp2", "cadp3", "cadp4", "cadp5"]
+timeout  = 300
+destroys = true
+facts    = ["adopters", "rounds"]

@@ -60,9 +60,15 @@ func (mod *Module) purgeRepository(ctx *astral.Context, repo objects.Repository,
 	return out, errPtr
 }
 
+// leafRef names a tracked leaf and the repository it wraps.
+type leafRef struct {
+	name string
+	repo objects.Repository
+}
+
 // trackedLeaves returns the tracked leaves of repo in member order. A leaf below several members is listed once.
-func (mod *Module) trackedLeaves(repo objects.Repository) []*trackedRepository {
-	var leaves []*trackedRepository
+func (mod *Module) trackedLeaves(repo objects.Repository) []leafRef {
+	var leaves []leafRef
 	seen := map[objects.Repository]bool{}
 
 	var walk func(repo objects.Repository)
@@ -73,13 +79,16 @@ func (mod *Module) trackedLeaves(repo objects.Repository) []*trackedRepository {
 		}
 		seen[repo] = true
 
-		switch repo := repo.(type) {
-		case *trackedRepository:
-			leaves = append(leaves, repo)
-		case *RepoGroup:
-			for _, member := range repo.members() {
+		if group, ok := repo.(*RepoGroup); ok {
+			for _, member := range group.members() {
 				walk(member)
 			}
+			return
+		}
+
+		name := mod.getRepoName(repo)
+		if inner, ok := mod.tracker.leaf(name); ok {
+			leaves = append(leaves, leafRef{name: name, repo: inner})
 		}
 	}
 	walk(repo)
@@ -88,7 +97,7 @@ func (mod *Module) trackedLeaves(repo objects.Repository) []*trackedRepository {
 }
 
 // purgeLeaf purges one leaf: it lists the candidates, then decides each one on current data.
-func (run *purgeRun) purgeLeaf(ctx *astral.Context, leaf *trackedRepository) error {
+func (run *purgeRun) purgeLeaf(ctx *astral.Context, leaf leafRef) error {
 	run.flushJournal()
 
 	var after *untouchedCursor
@@ -127,14 +136,10 @@ func (run *purgeRun) purgeLeaf(ctx *astral.Context, leaf *trackedRepository) err
 // decide takes the leaf's lock, checks the candidate again on current data, and deletes it unless the run is dry.
 // It reports whether the candidate is purged.
 // why: a read or a commit between the listing and this turn moves the last touch, so the listed row is stale.
-func (run *purgeRun) decide(ctx *astral.Context, leaf *trackedRepository, objectID *astral.ObjectID) (bool, error) {
-	// why: the empty object is never stored, so a row left for it names nothing to delete.
-	if objects.IsEmptyObject(objectID) {
-		return false, nil
-	}
-
-	leaf.mu.Lock()
-	defer leaf.mu.Unlock()
+func (run *purgeRun) decide(ctx *astral.Context, leaf leafRef, objectID *astral.ObjectID) (bool, error) {
+	mu := run.mod.tracker.leafLock(leaf.name)
+	mu.Lock()
+	defer mu.Unlock()
 
 	// why: an unwritten read can make an object look untouched, so a candidate is skipped when the journal cannot be written.
 	if !run.flushJournal() {
@@ -163,24 +168,21 @@ func (run *purgeRun) decide(ctx *astral.Context, leaf *trackedRepository, object
 
 // wouldDelete reports whether a run that is not dry deletes the candidate.
 // why: a run that is not dry drops the row of an object missing from the leaf and answers nothing for it.
-func (run *purgeRun) wouldDelete(ctx *astral.Context, leaf *trackedRepository, objectID *astral.ObjectID) bool {
-	has, err := leaf.inner.Contains(ctx, objectID)
+func (run *purgeRun) wouldDelete(ctx *astral.Context, leaf leafRef, objectID *astral.ObjectID) bool {
+	has, err := leaf.repo.Contains(ctx, objectID)
 	return err == nil && has
 }
 
-// delete deletes the candidate through the wrapper, which removes its row. The caller holds the leaf's lock.
+// delete deletes the candidate through the tracker, which removes its row. The caller holds the leaf's lock.
 // A delete that answers not found drops the row.
-func (run *purgeRun) delete(ctx *astral.Context, leaf *trackedRepository, objectID *astral.ObjectID) (bool, error) {
-	err := leaf.deleteLocked(ctx, objectID)
+func (run *purgeRun) delete(ctx *astral.Context, leaf leafRef, objectID *astral.ObjectID) (bool, error) {
+	err := run.mod.tracker.deleteLocked(ctx, leaf.name, leaf.repo, objectID)
 	switch {
 	case err == nil:
 		return true, nil
 
 	case errors.Is(err, objects.ErrNotFound):
-		derr := run.mod.db.deleteTracking(leaf.name, objectID)
-		if derr != nil {
-			run.mod.log.Error("purge: drop the row of missing %v in %v: %v", objectID, leaf.name, derr)
-		}
+		run.mod.tracker.dropRow(leaf.name, objectID)
 		return false, nil
 
 	case errors.Is(err, errors.ErrUnsupported):
@@ -193,7 +195,7 @@ func (run *purgeRun) delete(ctx *astral.Context, leaf *trackedRepository, object
 
 // flushJournal writes the reads journal and reports whether it succeeded.
 func (run *purgeRun) flushJournal() bool {
-	err := run.mod.objectsReadsJournal.Flush()
+	err := run.mod.tracker.flush()
 	if err != nil {
 		run.mod.log.Error("object reads journal: purge flush: %v", err)
 		return false

@@ -35,11 +35,29 @@ func newTrackingModule(t *testing.T) *Module {
 
 	lg := log.New(astral.GenerateIdentity())
 	mod := &Module{config: defaultConfig, db: db, log: lg}
-	mod.objectsReadsJournal = newObjectsReadsJournal(db.UpdateReadAt, lg)
+	mod.tracker.attach(db, lg)
 	if err := mod.setupDefaultRepos(); err != nil {
 		t.Fatalf("setup default repositories: %v", err)
 	}
 	return mod
+}
+
+// innerLeaf returns the repository that the leaf named name wraps.
+func innerLeaf(t *testing.T, mod *Module, name string) objectsmod.Repository {
+	t.Helper()
+
+	repo, ok := mod.tracker.leaf(name)
+	if !ok {
+		t.Fatalf("no tracked leaf %v", name)
+	}
+	return repo
+}
+
+// leafRefOf returns the purge reference of the leaf named name.
+func leafRefOf(t *testing.T, mod *Module, name string) leafRef {
+	t.Helper()
+
+	return leafRef{name: name, repo: innerLeaf(t, mod, name)}
 }
 
 // commitData writes data to repo and commits it.
@@ -88,7 +106,7 @@ func expectTracked(t *testing.T, mod *Module, repo string, id *astral.ObjectID) 
 func TestTracking_SystemWriteCreatesRow(t *testing.T) {
 	mod := newTrackingModule(t)
 
-	if _, ok := mod.System().(*trackedRepository); !ok {
+	if _, ok := mod.System().(*trackedLeaf); !ok {
 		t.Fatalf("System() returned %T; want the tracking wrapper", mod.System())
 	}
 
@@ -104,7 +122,7 @@ func TestTracking_SystemWriteCreatesRow(t *testing.T) {
 	}
 }
 
-// TestTracking_AddRepositoryWrapsLeaf: AddRepository registers the wrapper, which exposes the inner repository.
+// TestTracking_AddRepositoryWrapsLeaf: AddRepository registers the wrapper, and the tracker holds the inner repository.
 func TestTracking_AddRepositoryWrapsLeaf(t *testing.T) {
 	mod := newTrackingModule(t)
 	inner := mem.New("leaf", 0)
@@ -116,12 +134,12 @@ func TestTracking_AddRepositoryWrapsLeaf(t *testing.T) {
 		t.Fatal("a second AddRepository under one name succeeded")
 	}
 
-	tracked, ok := mod.GetRepository("leaf").(*trackedRepository)
+	tracked, ok := mod.GetRepository("leaf").(*trackedLeaf)
 	if !ok {
 		t.Fatalf("registered %T; want the tracking wrapper", mod.GetRepository("leaf"))
 	}
-	if tracked.Inner() != inner {
-		t.Fatal("Inner() does not return the registered repository")
+	if innerLeaf(t, mod, "leaf") != inner {
+		t.Fatal("the tracker does not hold the registered repository")
 	}
 
 	id := commitData(t, astral.NewContext(nil), tracked, "leaf data")
@@ -297,24 +315,6 @@ func TestTracking_ProbeMarksHousekeeping(t *testing.T) {
 	}
 	if objectsmod.IsHousekeeping(ctx) {
 		t.Fatal("Probe marked the caller's context")
-	}
-}
-
-// TestTracking_MigrateDropsOldTable: Migrate drops the old tracking table.
-func TestTracking_MigrateDropsOldTable(t *testing.T) {
-	mod := newTrackingModule(t)
-
-	if err := mod.db.Exec("CREATE TABLE " + dbObjectsTableName + " (id TEXT)").Error; err != nil {
-		t.Fatalf("create old table: %v", err)
-	}
-	if err := mod.db.Migrate(); err != nil {
-		t.Fatalf("migrate: %v", err)
-	}
-	if mod.db.Migrator().HasTable(dbObjectsTableName) {
-		t.Fatalf("%v survived Migrate", dbObjectsTableName)
-	}
-	if !mod.db.Migrator().HasTable(&dbTracking{}) {
-		t.Fatal("the tracking table is missing after Migrate")
 	}
 }
 

@@ -1,0 +1,9 @@
+nodes    = ["node1", "node2"]
+after    = "adopt-node"
+# why: the world ends with a second link and a 32 MiB object on node2
+destroys = true
+# why: a failing move can wait out the op's 30 s migrateSessionTimeout
+timeout  = 240
+facts    = ["seed", "object_size", "object_id", "link_new_created",
+            "link_new_seen", "session_id", "link_old", "link_new", "migrate",
+            "stream"]

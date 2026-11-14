@@ -238,3 +238,52 @@ func TestMigrationCompletesWhenPeerSendsEverySignal(t *testing.T) {
 		}
 	})
 }
+
+// TestInitiatorAttachesSessionBeforeResume checks the order the responder
+// relies on: it writes on the target link as soon as it reads Resume, so the
+// initiator's session must already be on the target link's mux by then.
+func TestInitiatorAttachesSessionBeforeResume(t *testing.T) {
+	f := newMigrationFixture(t)
+	ch, peer := newMigrationPeer(t)
+	attached := make(chan bool, 1)
+	peerDone := make(chan struct{})
+	go func() {
+		defer close(peerDone)
+		peer.expect(t, nodes.MigrateSignalReady)
+		peer.send(t, nodes.MigrateSignalSwitched)
+		peer.expect(t, nodes.MigrateSignalResume)
+		attached <- f.migrated()
+		peer.send(t, nodes.MigrateSignalDone)
+	}()
+
+	ctx, cancel := astral.NewContext(nil).WithTimeout(effectTimeout)
+	defer cancel()
+	if err := f.mod.initiateMigration(ctx, ch, f.session, f.targetLink); err != nil {
+		t.Fatalf("migration err = %v; want nil", err)
+	}
+	<-peerDone
+	if !<-attached {
+		t.Fatal("the session was not on the target link's mux when the peer read Resume")
+	}
+	if !f.session.IsOpen() {
+		t.Fatal("the session is not open after the migration")
+	}
+}
+
+// TestMigrationResponderIsTheLinkPeer: the initiator addresses the node across
+// the session's link for every kind of session, including a session relayed in
+// for an app, whose logical peer is the app.
+func TestMigrationResponderIsTheLinkPeer(t *testing.T) {
+	f := newMigrationFixture(t)
+	peer := f.oldLink.mux.RemoteIdentity()
+
+	for name, sess := range linkPeerSessions(t, f, astral.GenerateIdentity()) {
+		got, err := f.mod.migrationResponder(sess)
+		if err != nil {
+			t.Fatalf("%v session: %v", name, err)
+		}
+		if !got.IsEqual(peer) {
+			t.Fatalf("%v session: responder %v; want the link peer %v", name, got, peer)
+		}
+	}
+}

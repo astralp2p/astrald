@@ -393,22 +393,12 @@ func TestSeeObjectsRefusesAPartialObjectID(t *testing.T) {
 	}
 }
 
-func TestSeeObjectsAllowsTheEmptyObject(t *testing.T) {
+func TestSeeObjectsRefusesTheEmptyObject(t *testing.T) {
 	f := newSeeFixture(t)
-	vol := mustVolume(t, f.mod, f.vfs)
 	empty := contentID("")
 
 	if f.see(f.vfs, &empty) {
-		t.Fatal("the empty object is allowed with no empty file")
-	}
-
-	addFile(t, f.mod, vol, vol.RootID, "empty", "")
-
-	if !f.see(f.vfs, &empty) {
-		t.Fatal("the empty object is refused for the VFS that has an empty file")
-	}
-	if f.see(f.other, &empty) {
-		t.Fatal("the empty object is allowed for a VFS without an empty file")
+		t.Fatal("the ObjectID of empty content is allowed")
 	}
 }
 

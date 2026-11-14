@@ -50,19 +50,24 @@ w9 local:  bootstrap-user-software-key* → adopt-node* → expel-authority
 w10 local: bootstrap-user-software-key* → adopt-node* → expel-during-transfer
 w11 local: bootstrap-user-software-key* → adopt-node* → join-via-member
 w12 local: bootstrap-user-software-key* → adopt-node* → two-swarms-side-by-side
-w13 local: bootstrap-user-software-key* → fs-watch-restart-restore
-w14 local: bootstrap-user-software-key* → fs-index-restart-reconcile
-w15 local: bootstrap-user-software-key* → repo-removal-sticks
-w16 local: bootstrap-user-software-key* → indexing-fs-watch-feed
-w17 local: bootstrap-user-software-key* → hold-isolation
+w13 local: bootstrap-user-software-key* → adopt-node* → link-session-migrate
+w14 local: bootstrap-user-software-key* → adopt-node*
+           → link-session-migrate-serving-side
+w15 local: bootstrap-user-software-key* → fs-watch-restart-restore
+w16 local: bootstrap-user-software-key* → fs-index-restart-reconcile
+w17 local: bootstrap-user-software-key* → repo-removal-sticks
+w18 local: bootstrap-user-software-key* → indexing-fs-watch-feed
+w19 local: bootstrap-user-software-key* → hold-isolation
            config node1.objects.purge_floor = "0s"
-w18 local: bootstrap-user-software-key* → blueprint-survives-restart
-w19 local: bootstrap-user-software-key* → indexer-cursor
-w20 local: bootstrap-user-software-key* → basic-strategy-stalled-negotiation
-w21 local: bootstrap-user-op
-w22 local: import-user-software-key
-w23 local: introduce-node-setup → introduce-node
-w24 local: distribution-gate-setup
+w20 local: bootstrap-user-software-key* → blueprint-survives-restart
+w21 local: bootstrap-user-software-key* → indexer-cursor
+w22 local: bootstrap-user-software-key* → basic-strategy-stalled-negotiation
+w23 local: bootstrap-user-op
+w24 local: import-user-software-key
+w25 local: introduce-node-setup → introduce-node
+w26 local: distribution-gate-setup
            config node1.apphost.gate = {}
            config node1.apphost.policies = {}
-w25 local: bootstrap-passphrase
+w27 local: bootstrap-passphrase
+w28 local: claim-race
+w29 local: concurrent-adoption
