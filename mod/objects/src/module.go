@@ -50,7 +50,7 @@ type Module struct {
 
 	externalMu sync.Mutex
 
-	objectsReadsJournal *objectsReadsJournal
+	tracker tracker
 }
 
 // journalFlushInterval is how often Run writes the reads journal while it is not empty.
@@ -78,14 +78,14 @@ func (mod *Module) runJournalFlush(ctx *astral.Context, interval time.Duration) 
 	for {
 		select {
 		case <-ctx.Done():
-			err := mod.objectsReadsJournal.Flush()
+			err := mod.tracker.flush()
 			if err != nil {
 				mod.log.Error("object reads journal: final flush: %v", err)
 			}
 			return
 
 		case <-ticker.C:
-			err := mod.objectsReadsJournal.Flush()
+			err := mod.tracker.flush()
 			if err != nil {
 				mod.log.Error("object reads journal: flush: %v", err)
 			}
@@ -212,10 +212,14 @@ func (mod *Module) Probe(ctx *astral.Context, repo objectsmod.Repository, object
 	return
 }
 
-// getRepoName returns the name of a repository
+// getRepoName returns the name of a repository: a registered one, or the leaf that a registered one wraps.
+// why: a reader names the leaf it read from, and the registry holds the leaf's tracked form.
 func (mod *Module) getRepoName(repo objectsmod.Repository) string {
 	for name, r := range mod.repos.Clone() {
 		if r == repo {
+			return name
+		}
+		if inner, ok := mod.tracker.leaf(name); ok && inner == repo {
 			return name
 		}
 	}

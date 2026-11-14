@@ -15,7 +15,7 @@ type opWriteArgs struct {
 
 // OpWrite creates or replaces a file. It answers ack when the writer is open, receives blobs until a
 // mod.objects.commit_msg, commits the content and answers the entry. A stream that ends before the commit message
-// changes nothing. See VFS 6, sections 7 and 10.
+// changes nothing, and content of zero bytes answers errEmptyFile and changes nothing. See VFS 6, sections 7 and 10.
 func (mod *Module) OpWrite(ctx *astral.Context, q *routing.IncomingQuery, args opWriteArgs) error {
 	ch := q.Accept(channel.WithFormats(args.In, args.Out))
 	defer ch.Close()
