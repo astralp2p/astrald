@@ -61,12 +61,13 @@ w19 local: bootstrap-user-software-key* → hold-isolation
            config node1.objects.purge_floor = "0s"
 w20 local: bootstrap-user-software-key* → blueprint-survives-restart
 w21 local: bootstrap-user-software-key* → indexer-cursor
-w22 local: bootstrap-user-op
-w23 local: import-user-software-key
-w24 local: introduce-node-setup → introduce-node
-w25 local: distribution-gate-setup
+w22 local: bootstrap-user-software-key* → basic-strategy-stalled-negotiation
+w23 local: bootstrap-user-op
+w24 local: import-user-software-key
+w25 local: introduce-node-setup → introduce-node
+w26 local: distribution-gate-setup
            config node1.apphost.gate = {}
            config node1.apphost.policies = {}
-w26 local: bootstrap-passphrase
-w27 local: claim-race
-w28 local: concurrent-adoption
+w27 local: bootstrap-passphrase
+w28 local: claim-race
+w29 local: concurrent-adoption

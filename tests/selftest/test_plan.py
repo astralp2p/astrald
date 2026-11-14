@@ -328,6 +328,7 @@ class TestShippedPlans(Invariants, unittest.TestCase):
              ("local", "link-self-heal"), ("local", "swarm-member-restart"),
              ("vm", "tor-link"),
              ("local", "two-swarms-side-by-side"),
+             ("local", "basic-strategy-stalled-negotiation"),
              ("local", "blueprint-survives-restart"),
              ("local", "fs-index-restart-reconcile"),
              ("local", "fs-watch-restart-restore"),

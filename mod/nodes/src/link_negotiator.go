@@ -140,7 +140,13 @@ func (mod *Module) EstablishOutboundLink(ctx context.Context, remoteID *astral.I
 
 	ch := channel.New(aconn, channel.WithLockedWrites())
 	negotiator := mod.GetLinkNegotiator(ch)
+	// why: NegotiateOutbound reads with no deadline; closing the conn when ctx ends
+	// releases a peer that stalls after the handshake, as HandshakeOutbound does before it.
+	stopWatch := context.AfterFunc(ctx, func() { aconn.Close() })
 	link, err := negotiator.NegotiateOutbound()
+	if !stopWatch() {
+		err = errors.Join(ctx.Err(), err)
+	}
 	if err != nil {
 		return nil, err
 	}

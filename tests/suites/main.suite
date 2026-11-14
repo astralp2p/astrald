@@ -78,6 +78,7 @@ services-swarm-outcome-rules
 expel-node
 basic-strategy-excess-link-pruning
 basic-strategy-stalled-endpoint-released
+basic-strategy-stalled-negotiation
 link-session-migrate
 link-session-migrate-serving-side
 expel-during-transfer

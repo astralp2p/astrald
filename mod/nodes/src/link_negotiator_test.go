@@ -2,6 +2,7 @@ package nodes
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net"
 	"runtime/debug"
@@ -170,4 +171,54 @@ func TestEstablishOutboundLinkFailsOnPeerClosingMidNegotiation(t *testing.T) {
 			return noise.HandshakeInbound(context.Background(), conn, peerKey)
 		},
 	)
+}
+
+func TestEstablishOutboundLinkReleasesPeerStalledInNegotiation(t *testing.T) {
+	localKey, peerKey := newNegotiationKey(t), newNegotiationKey(t)
+	mod := &Module{privateKey: &crypto.PrivateKey{Key: localKey.Serialize()}}
+
+	a, b := net.Pipe()
+	deadline := time.Now().Add(negotiationTimeout)
+	_ = a.SetDeadline(deadline)
+	_ = b.SetDeadline(deadline)
+	t.Cleanup(func() {
+		_ = a.Close()
+		_ = b.Close()
+	})
+	localConn := &negotiationPipeConn{Conn: a}
+	peerConn := &negotiationPipeConn{Conn: b}
+
+	// note: the peer completes the handshake, then sends nothing and reads until closed.
+	peerDone := make(chan error, 1)
+	go func() {
+		aconn, err := noise.HandshakeInbound(context.Background(), peerConn, peerKey)
+		if err != nil {
+			peerDone <- fmt.Errorf("peer handshake: %w", err)
+			return
+		}
+		buf := make([]byte, 64)
+		for {
+			if _, err := aconn.Read(buf); err != nil {
+				peerDone <- nil
+				return
+			}
+		}
+	}()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+	defer cancel()
+	start := time.Now()
+	_, err := mod.EstablishOutboundLink(ctx, astral.IdentityFromPubKey(peerKey.PubKey()), localConn)
+	if err == nil {
+		t.Fatal("EstablishOutboundLink returned a link from a peer that never negotiated")
+	}
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("EstablishOutboundLink error %v; want one wrapping %v", err, context.DeadlineExceeded)
+	}
+	if elapsed := time.Since(start); elapsed > 2*time.Second {
+		t.Fatalf("EstablishOutboundLink returned after %v; want it released when ctx ends", elapsed)
+	}
+	if peerErr := <-peerDone; peerErr != nil {
+		t.Fatalf("%v", peerErr)
+	}
 }

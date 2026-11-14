@@ -63,12 +63,13 @@ w19 docker: bootstrap-user-software-key* → hold-isolation
             config node1.objects.purge_floor = "0s"
 w20 docker: bootstrap-user-software-key* → blueprint-survives-restart
 w21 docker: bootstrap-user-software-key* → indexer-cursor
-w22 docker: bootstrap-user-op
-w23 docker: import-user-software-key
-w24 docker: introduce-node-setup → introduce-node
-w25 docker: distribution-gate-setup
+w22 docker: bootstrap-user-software-key* → basic-strategy-stalled-negotiation
+w23 docker: bootstrap-user-op
+w24 docker: import-user-software-key
+w25 docker: introduce-node-setup → introduce-node
+w26 docker: distribution-gate-setup
             config node1.apphost.gate = {}
             config node1.apphost.policies = {}
-w26 docker: bootstrap-passphrase
-w27 docker: claim-race
-w28 docker: concurrent-adoption
+w27 docker: bootstrap-passphrase
+w28 docker: claim-race
+w29 docker: concurrent-adoption
