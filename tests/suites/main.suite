@@ -18,6 +18,7 @@ claimed-node-keeps-owner
 import-user-software-key
 bootstrap-user-op
 bootstrap-passphrase
+claim-race
 app-token-lifecycle
 policy-delegate
 adopt-node

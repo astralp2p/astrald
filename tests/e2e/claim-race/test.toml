@@ -1,0 +1,6 @@
+nodes    = ["race1", "race2", "race3", "race4"]
+timeout  = 240
+# why: it claims each node of its roster, so it needs a world of its own and
+# nothing else can follow it there
+destroys = true
+facts    = ["claim_race"]

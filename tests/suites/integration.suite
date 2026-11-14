@@ -91,6 +91,7 @@ app-origin-guards
 app-token-lifecycle
 basic-strategy-excess-link-pruning
 bootstrap-passphrase
+claim-race
 claimed-node-keeps-owner
 expel-authority
 expel-during-transfer
