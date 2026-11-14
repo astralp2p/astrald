@@ -63,6 +63,13 @@ func (mod *Module) initiateMigration(ctx *astral.Context, ch *channel.Channel, s
 		return err
 	}
 
+	// why: the responder resumes writing on the new link as soon as it reads Resume;
+	// the session must already be on the new link's mux, or its first data frames draw a Reset.
+	err = migrator.Attach()
+	if err != nil {
+		return err
+	}
+
 	err = ch.Send(&nodes.MigrateSignal{Signal: nodes.MigrateSignalResume})
 	if err != nil {
 		return err
@@ -73,10 +80,7 @@ func (mod *Module) initiateMigration(ctx *astral.Context, ch *channel.Channel, s
 		return err
 	}
 
-	err = migrator.Complete()
-	if err != nil {
-		return err
-	}
+	migrator.Resume()
 
 	mod.log.Logv(1, "session %v migrated to link %v (initiator)", session.Nonce, targetLink.id)
 	return nil

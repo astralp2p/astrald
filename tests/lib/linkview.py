@@ -82,3 +82,68 @@ async def settle(probe, *, polls: int = 5, every: float = 1.0,
         same = same + 1 if got == last else 1
         last = got
     return last, same >= polls and (want is None or want(last))
+
+
+def throughput_row(info) -> dict:
+    """row(info) with the link's cumulative data-frame byte counter.
+
+    why cumulative: astrald counts every data-frame payload a link carries
+    (mod/nodes/src/link.go onBytes) and never resets it, whatever the
+    astral-py docstring says.
+    """
+    r = row(info)
+    r["bytes_throughput"] = int(info.bytes_throughput)
+    return r
+
+
+async def throughput(c) -> list:
+    """Every link the node behind client c holds, with byte counters."""
+    return [throughput_row(i) for i in await c.nodes.links(experimental=True)]
+
+
+def session_row(info) -> dict:
+    """One astral-py SessionInfo as {id, link_id, remote, outbound, query,
+    bytes}."""
+    return {"id": str(info.id), "link_id": str(info.link_id),
+            "remote": str(info.remote_identity), "outbound": bool(info.outbound),
+            "query": str(info.query), "bytes": int(info.bytes)}
+
+
+async def sessions(c) -> list:
+    """Every open session on the node's links, as rows, oldest first.
+
+    A session that is migrating is not listed (astrald
+    mod/nodes/src/op_sessions.go).
+    """
+    return [session_row(s) for s in await c.nodes.sessions(experimental=True)]
+
+
+def carrying(rows: list, needle: str) -> list:
+    """The session rows whose query contains needle."""
+    return [r for r in rows if needle in r["query"]]
+
+
+async def wait_both(c1, c2, id1: str, id2: str, link_id: str,
+                    timeout: float = 10.0) -> bool:
+    """Wait until node1 (c1) and node2 (c2) both list link_id to each other."""
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        if (link_id in ids(await links(c1), id2)
+                and link_id in ids(await links(c2), id1)):
+            return True
+        await asyncio.sleep(0.25)
+    return False
+
+
+async def migrate(c, session_id: str, link_id: str) -> dict:
+    """nodes.migrate_session(start=true) on the node behind c, as
+    {ok, error?, elapsed}; every outcome is recorded, none raised."""
+    start = time.monotonic()
+    try:
+        await c.nodes.migrate_session(session_id, link_id, start=True,
+                                      experimental=True, timeout=60.0)
+        out = {"ok": True}
+    except Exception as e:  # noqa: BLE001 — every outcome is recorded
+        out = {"ok": False, "error": f"{type(e).__name__}: {e}"}
+    out["elapsed"] = round(time.monotonic() - start, 3)
+    return out

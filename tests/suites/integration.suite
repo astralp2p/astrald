@@ -101,4 +101,5 @@ services-advertise-identity
 services-swarm-outcome-rules
 stranger-disclosure
 two-swarms-side-by-side
+link-session-migrate
 concurrent-adoption
