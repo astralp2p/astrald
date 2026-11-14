@@ -6,11 +6,17 @@ import (
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astral-go/astral/channel"
 	"github.com/astralp2p/astral-go/lib/astrald"
+	nodesmod "github.com/astralp2p/astrald/mod/nodes"
 )
 
 // migrateSession migrates single session (initiator side).
 func (mod *Module) migrateSession(ctx *astral.Context, session *session, targetLink *Link) error {
-	ch, err := nodesClient.New(session.RemoteIdentity, astrald.Default()).MigrateSession(ctx, nodesClient.MigrateSessionArgs{
+	responder, err := mod.migrationResponder(session)
+	if err != nil {
+		return err
+	}
+
+	ch, err := nodesClient.New(responder, astrald.Default()).MigrateSession(ctx, nodesClient.MigrateSessionArgs{
 		SessionID: session.Nonce,
 		LinkID:    targetLink.id,
 	})
@@ -21,6 +27,18 @@ func (mod *Module) migrateSession(ctx *astral.Context, session *session, targetL
 	defer ch.Close()
 
 	return mod.initiateMigration(ctx, ch, session, targetLink)
+}
+
+// migrationResponder returns the node across the session's link, which runs the responder side.
+//
+// why not session.RemoteIdentity: on the node that serves a relayed query it is the relayed
+// caller (Mux.handleRelayQuery), an identity no link leads to.
+func (mod *Module) migrationResponder(session *session) (*astral.Identity, error) {
+	link := mod.getSessionLink(session.Nonce)
+	if link == nil {
+		return nil, nodesmod.ErrLinkNotFound
+	}
+	return link.GetMux().RemoteIdentity(), nil
 }
 
 // initiateMigration runs the initiator side of the migration signal exchange over ch.

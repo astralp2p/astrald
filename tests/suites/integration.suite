@@ -102,4 +102,5 @@ services-swarm-outcome-rules
 stranger-disclosure
 two-swarms-side-by-side
 link-session-migrate
+link-session-migrate-serving-side
 concurrent-adoption
