@@ -1,0 +1,9 @@
+nodes    = ["node1", "node2"]
+after    = "adopt-node"
+# why: the world ends with the adopt-node link closed, a second link in its
+# place and a 32 MiB object on node2
+destroys = true
+timeout  = 180
+facts    = ["seed", "object_size", "object_id", "links_before",
+            "link_new_created", "link_new_seen", "session_id", "link_old",
+            "link_new", "migrate", "close_old", "stream"]

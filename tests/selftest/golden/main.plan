@@ -34,33 +34,34 @@ w1 local:  bootstrap-user-software-key* → adopt-node*
            → basic-strategy-excess-link-pruning
 w2 local:  bootstrap-user-software-key* → adopt-node*
            → basic-strategy-stalled-endpoint-released
-w3 local:  bootstrap-user-software-key* → adopt-node* → expel-during-transfer
-w4 local:  bootstrap-user-software-key* → adopt-node* → expel-authority
-w5 local:  bootstrap-user-software-key* → adopt-node* → hold-purge
+w3 local:  bootstrap-user-software-key* → adopt-node* → link-session-migrate
+w4 local:  bootstrap-user-software-key* → adopt-node* → expel-during-transfer
+w5 local:  bootstrap-user-software-key* → adopt-node* → expel-authority
+w6 local:  bootstrap-user-software-key* → adopt-node* → hold-purge
            config node1.objects.purge_floor = "0s"
-w6 local:  bootstrap-user-software-key* → adopt-node* → swarm-roster-sync
+w7 local:  bootstrap-user-software-key* → adopt-node* → swarm-roster-sync
            → expel-propagation → expel-survives-restart
-w7 local:  bootstrap-user-software-key* → adopt-node* → swarm-roster-sync*
-           → swarm-member-restart
 w8 local:  bootstrap-user-software-key* → adopt-node* → swarm-roster-sync*
+           → swarm-member-restart
+w9 local:  bootstrap-user-software-key* → adopt-node* → swarm-roster-sync*
            → link-self-heal
-w9 local:  bootstrap-user-software-key* → adopt-node* → two-swarms-side-by-side
-w10 local: bootstrap-user-software-key* → adopt-node* → join-via-member
-w11 local: bootstrap-user-software-key* → adopt-node*
+w10 local: bootstrap-user-software-key* → adopt-node* → two-swarms-side-by-side
+w11 local: bootstrap-user-software-key* → adopt-node* → join-via-member
+w12 local: bootstrap-user-software-key* → adopt-node*
            → app-node-restart-reconnect
-w12 local: bootstrap-user-software-key* → adopt-node* → services-node-restart
-w13 local: bootstrap-user-software-key* → repo-removal-sticks
-w14 local: bootstrap-user-software-key* → fs-watch-restart-restore
-w15 local: bootstrap-user-software-key* → fs-index-restart-reconcile
-w16 local: bootstrap-user-software-key* → hold-isolation
+w13 local: bootstrap-user-software-key* → adopt-node* → services-node-restart
+w14 local: bootstrap-user-software-key* → repo-removal-sticks
+w15 local: bootstrap-user-software-key* → fs-watch-restart-restore
+w16 local: bootstrap-user-software-key* → fs-index-restart-reconcile
+w17 local: bootstrap-user-software-key* → hold-isolation
            config node1.objects.purge_floor = "0s"
-w17 local: bootstrap-user-software-key* → indexer-cursor
-w18 local: bootstrap-user-software-key* → indexing-fs-watch-feed
-w19 local: bootstrap-user-software-key* → blueprint-survives-restart
-w20 local: distribution-gate-setup
+w18 local: bootstrap-user-software-key* → indexer-cursor
+w19 local: bootstrap-user-software-key* → indexing-fs-watch-feed
+w20 local: bootstrap-user-software-key* → blueprint-survives-restart
+w21 local: distribution-gate-setup
            config node1.apphost.gate = {}
            config node1.apphost.policies = {}
-w21 local: import-user-software-key
-w22 local: bootstrap-user-op
-w23 local: bootstrap-passphrase
-w24 local: introduce-node-setup → introduce-node
+w22 local: import-user-software-key
+w23 local: bootstrap-user-op
+w24 local: bootstrap-passphrase
+w25 local: introduce-node-setup → introduce-node
