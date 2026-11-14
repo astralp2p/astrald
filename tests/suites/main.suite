@@ -90,6 +90,7 @@ swarm-member-restart
 link-self-heal
 two-swarms-side-by-side
 join-via-member
+concurrent-adoption
 app-node-restart-reconnect
 blueprint-survives-restart
 services-node-restart
