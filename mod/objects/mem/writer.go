@@ -41,7 +41,6 @@ func (w *Writer) Write(p []byte) (n int, err error) {
 }
 
 // Commit resolves the buffered bytes to an object ID and stores them.
-// A commit of zero bytes stores nothing and answers the empty ObjectID.
 // Idempotent: only the first call succeeds; later calls return ErrClosedPipe.
 func (w *Writer) Commit() (*astral.ObjectID, error) {
 	if !w.closed.CompareAndSwap(false, true) {
@@ -51,10 +50,6 @@ func (w *Writer) Commit() (*astral.ObjectID, error) {
 	var buf = w.buf.Bytes()
 	var objectID, _ = astral.Resolve(bytes.NewReader(buf))
 	w.buf = nil
-
-	if objectsmod.IsEmptyObject(objectID) {
-		return objectID, nil
-	}
 
 	// why: Set keeps the entry already stored, so a duplicate holds no bytes and releases its reservation.
 	if _, stored := w.objects.Set(objectID.Hash, buf); !stored {

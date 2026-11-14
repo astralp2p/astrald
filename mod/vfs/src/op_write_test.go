@@ -1,7 +1,6 @@
 package vfs
 
 import (
-	"crypto/sha256"
 	"errors"
 	"fmt"
 	"sync"
@@ -177,20 +176,24 @@ func TestWriteRefusesWhenNoInodesLeft(t *testing.T) {
 	changeTestEntry(t, changeTestWrite(t, mod, vol, "/x/y", "y"))
 }
 
-func TestWriteAnEmptyFileCommitsNothing(t *testing.T) {
+func TestWriteOfZeroBytesChangesNothing(t *testing.T) {
 	mod, vol, repo := changeTestModule(t)
 
-	entry := changeTestEntry(t, changeTestWrite(t, mod, vol, "/empty", ""))
-
-	empty := astral.ObjectID{Hash: sha256.Sum256(nil)}
-	if entry.ID != empty {
-		t.Errorf("ID = %v, want the ObjectID of empty content", entry.ID)
+	changeTestErr(t, changeTestWrite(t, mod, vol, "/new/empty", ""), errEmptyFile)
+	for _, path := range []string{"/new/empty", "/new"} {
+		if row := changeTestFind(t, mod, vol, path); row != nil {
+			t.Errorf("an entry at %v after an empty write", path)
+		}
 	}
 	if _, committed, discarded := repo.counts(); committed != 0 || discarded != 1 {
 		t.Errorf("committed %d, discarded %d; want 0 and 1", committed, discarded)
 	}
-	if row := changeTestMustFind(t, mod, vol, "/empty"); *row.ObjectID != empty {
-		t.Errorf("stored ID = %v", row.ObjectID)
+
+	changeTestEntry(t, changeTestWrite(t, mod, vol, "/kept", "content"))
+	before := *changeTestMustFind(t, mod, vol, "/kept")
+	changeTestErr(t, changeTestWrite(t, mod, vol, "/kept", ""), errEmptyFile)
+	if after := changeTestMustFind(t, mod, vol, "/kept"); *after.ObjectID != *before.ObjectID || after.ModTime != before.ModTime {
+		t.Errorf("/kept is %v at %v after the empty write; want %v at %v", after.ObjectID, after.ModTime, before.ObjectID, before.ModTime)
 	}
 }
 
