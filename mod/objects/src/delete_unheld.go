@@ -44,9 +44,10 @@ func (mod *Module) DeleteUnheld(ctx *astral.Context, repo objects.Repository, ob
 //
 // note: tracking keeps whole seconds, so a commit in the second of since counts as before it.
 // note: an object without a row is deleted when nothing holds it; only a failed tracking write leaves one.
-func (mod *Module) deleteUnheldIn(ctx *astral.Context, leaf *trackedRepository, objectID *astral.ObjectID, since time.Time) error {
-	leaf.mu.Lock()
-	defer leaf.mu.Unlock()
+func (mod *Module) deleteUnheldIn(ctx *astral.Context, leaf leafRef, objectID *astral.ObjectID, since time.Time) error {
+	mu := mod.tracker.leafLock(leaf.name)
+	mu.Lock()
+	defer mu.Unlock()
 
 	row, err := mod.db.findTracking(leaf.name, objectID)
 	if err != nil {
@@ -60,5 +61,5 @@ func (mod *Module) deleteUnheldIn(ctx *astral.Context, leaf *trackedRepository, 
 		return objects.ErrObjectInUse
 	}
 
-	return leaf.deleteLocked(ctx, objectID)
+	return mod.tracker.deleteLocked(ctx, leaf.name, leaf.repo, objectID)
 }

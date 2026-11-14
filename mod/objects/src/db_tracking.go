@@ -21,6 +21,3 @@ func (dbTracking) TableName() string { return objects.DBPrefix + "tracking" }
 func (row *dbTracking) touch() int64 {
 	return max(row.CommittedAt, row.ReadAt)
 }
-
-// dbObjectsTableName names the tracking table that dbTracking replaces.
-const dbObjectsTableName = objects.DBPrefix + "objects"

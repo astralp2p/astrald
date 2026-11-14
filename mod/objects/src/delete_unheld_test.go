@@ -84,23 +84,23 @@ func TestDeleteUnheld_MissingIsNotFound(t *testing.T) {
 func TestDeleteUnheld_DecidesUnderTheLeafLock(t *testing.T) {
 	mod := newTrackingModule(t)
 	ctx := astral.NewContext(nil)
-	leaf := mod.GetRepository("mem0").(*trackedRepository)
+	leaf := mod.GetRepository("mem0")
 	id := commitData(t, ctx, leaf, "committed under the lock")
 	setTimes(t, mod, "mem0", id, ago(2*time.Hour), 0)
 
-	leaf.mu.Lock()
+	mod.tracker.leafLock("mem0").Lock()
 	done := make(chan error, 1)
 	go func() { done <- mod.DeleteUnheld(ctx, leaf, id, time.Now().Add(-time.Hour)) }()
 
 	select {
 	case <-done:
-		leaf.mu.Unlock()
+		mod.tracker.leafLock("mem0").Unlock()
 		t.Fatal("the delete decided while the leaf's lock was held")
 	case <-time.After(100 * time.Millisecond):
 	}
 	// why: stands for a commit that holds the leaf's lock and writes the commit time.
 	setTimes(t, mod, "mem0", id, time.Now().Unix(), 0)
-	leaf.mu.Unlock()
+	mod.tracker.leafLock("mem0").Unlock()
 
 	select {
 	case err := <-done:

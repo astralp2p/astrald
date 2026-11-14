@@ -175,7 +175,7 @@ func TestPurge_ReadBetweenSelectionAndTurnKeepsObject(t *testing.T) {
 func TestPurge_CommitBetweenSelectionAndTurnKeepsObject(t *testing.T) {
 	mod := newTrackingModule(t)
 	ctx := astral.NewContext(nil)
-	leaf := mod.GetRepository("mem0").(*trackedRepository)
+	leaf := mod.GetRepository("mem0")
 	id := commitData(t, ctx, leaf, "recommitted")
 	setTimes(t, mod, "mem0", id, 1, 0)
 
@@ -190,7 +190,7 @@ func TestPurge_CommitBetweenSelectionAndTurnKeepsObject(t *testing.T) {
 
 	commitData(t, ctx, leaf, "recommitted")
 
-	purged, err := run.decide(ctx, leaf, id)
+	purged, err := run.decide(ctx, leafRefOf(t, mod, "mem0"), id)
 	if err != nil {
 		t.Fatalf("decide: %v", err)
 	}
@@ -204,7 +204,7 @@ func TestPurge_CommitBetweenSelectionAndTurnKeepsObject(t *testing.T) {
 func TestPurge_CommitAndDeleteWaitForTheLeafLock(t *testing.T) {
 	mod := newTrackingModule(t)
 	ctx := astral.NewContext(nil)
-	leaf := mod.GetRepository("mem0").(*trackedRepository)
+	leaf := mod.GetRepository("mem0")
 	victim := commitData(t, ctx, leaf, "victim")
 
 	w, err := leaf.Create(ctx, nil)
@@ -214,18 +214,18 @@ func TestPurge_CommitAndDeleteWaitForTheLeafLock(t *testing.T) {
 	defer w.Discard()
 	w.Write([]byte("waiting commit"))
 
-	leaf.mu.Lock()
+	mod.tracker.leafLock("mem0").Lock()
 	done := make(chan struct{}, 2)
 	go func() { w.Commit(); done <- struct{}{} }()
 	go func() { leaf.Delete(ctx, victim); done <- struct{}{} }()
 
 	select {
 	case <-done:
-		leaf.mu.Unlock()
+		mod.tracker.leafLock("mem0").Unlock()
 		t.Fatal("a commit or a delete ran while the leaf's lock was held")
 	case <-time.After(100 * time.Millisecond):
 	}
-	leaf.mu.Unlock()
+	mod.tracker.leafLock("mem0").Unlock()
 
 	for range 2 {
 		select {
@@ -241,7 +241,7 @@ func TestPurge_CommitAndDeleteWaitForTheLeafLock(t *testing.T) {
 func TestPurge_ReadDrainedByAConcurrentFlushKeepsObject(t *testing.T) {
 	mod := newTrackingModule(t)
 	ctx := astral.NewContext(nil)
-	leaf := mod.GetRepository("mem0").(*trackedRepository)
+	leaf := mod.GetRepository("mem0")
 	id := commitData(t, ctx, leaf, "read")
 	setTimes(t, mod, "mem0", id, 1, 0)
 
@@ -249,7 +249,7 @@ func TestPurge_ReadDrainedByAConcurrentFlushKeepsObject(t *testing.T) {
 	r.Read(make([]byte, 1))
 	r.Close()
 
-	j := mod.objectsReadsJournal
+	j := mod.tracker.journal
 	drained := make(chan struct{})
 	sink := j.sink
 	j.sink = func(batch map[astral.ObjectID]astral.Time) error {
@@ -262,7 +262,7 @@ func TestPurge_ReadDrainedByAConcurrentFlushKeepsObject(t *testing.T) {
 	<-drained
 
 	run := &purgeRun{mod: mod, cutoff: ago(purgeFloor)}
-	purged, err := run.decide(ctx, leaf, id)
+	purged, err := run.decide(ctx, leafRefOf(t, mod, "mem0"), id)
 	if err != nil {
 		t.Fatalf("decide: %v", err)
 	}
@@ -280,32 +280,32 @@ func TestPurge_ReadDrainedByAConcurrentFlushKeepsObject(t *testing.T) {
 func TestPurge_DecideWaitsForTheLeafLock(t *testing.T) {
 	mod := newTrackingModule(t)
 	ctx := astral.NewContext(nil)
-	leaf := mod.GetRepository("mem0").(*trackedRepository)
+	leaf := mod.GetRepository("mem0")
 	id := commitData(t, ctx, leaf, "committed under the lock")
 	setTimes(t, mod, "mem0", id, 1, 0)
 
 	run := &purgeRun{mod: mod, cutoff: ago(purgeFloor)}
 
-	leaf.mu.Lock()
+	mod.tracker.leafLock("mem0").Lock()
 	type result struct {
 		purged bool
 		err    error
 	}
 	done := make(chan result, 1)
 	go func() {
-		purged, err := run.decide(ctx, leaf, id)
+		purged, err := run.decide(ctx, leafRefOf(t, mod, "mem0"), id)
 		done <- result{purged, err}
 	}()
 
 	select {
 	case <-done:
-		leaf.mu.Unlock()
+		mod.tracker.leafLock("mem0").Unlock()
 		t.Fatal("purge decided a candidate while the leaf's lock was held")
 	case <-time.After(100 * time.Millisecond):
 	}
 	// why: stands for a commit that holds the leaf's lock and writes the commit time.
 	setTimes(t, mod, "mem0", id, time.Now().Unix(), 0)
-	leaf.mu.Unlock()
+	mod.tracker.leafLock("mem0").Unlock()
 
 	var res result
 	select {
@@ -372,7 +372,7 @@ func TestPurge_ListUntouchedPages(t *testing.T) {
 func TestPurge_DryAnswersWhatARunDeletes(t *testing.T) {
 	mod := newTrackingModule(t)
 	ctx := astral.NewContext(nil)
-	leaf := mod.GetRepository("mem0").(*trackedRepository)
+	leaf := mod.GetRepository("mem0")
 
 	x := commitData(t, ctx, leaf, "x")
 	y := commitData(t, ctx, leaf, "y")
@@ -383,7 +383,7 @@ func TestPurge_DryAnswersWhatARunDeletes(t *testing.T) {
 		setTimes(t, mod, "mem0", id, 1, 0)
 	}
 	// why: an object deleted behind the wrapper's back leaves a row without content.
-	if err := leaf.inner.Delete(ctx, missing); err != nil {
+	if err := innerLeaf(t, mod, "mem0").Delete(ctx, missing); err != nil {
 		t.Fatalf("delete behind the wrapper: %v", err)
 	}
 	mod.AddHolder(holderFunc(func(id *astral.ObjectID) bool { return id.IsEqual(held) }))

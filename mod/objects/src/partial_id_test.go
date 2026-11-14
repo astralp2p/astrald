@@ -94,7 +94,8 @@ func newOpFixture(t *testing.T) *opFixture {
 	lg := log.New(astral.GenerateIdentity())
 	mod := &Module{Deps: Deps{Auth: &recordingAuth{verdict: true}}, config: defaultConfig, db: db, log: lg}
 	mod.node = &identityNode{id: astral.GenerateIdentity()}
-	mod.objectsReadsJournal = newObjectsReadsJournal(reads.record, lg)
+	mod.tracker.attach(db, lg)
+	mod.tracker.journal = newObjectsReadsJournal(reads.record, lg)
 
 	// why: a read without a repo reads from the candidates the finders name; the
 	// loader adds this finder on a running node (loader.go).
@@ -154,7 +155,7 @@ func typedData(t *testing.T) []byte {
 func (f *opFixture) journalKeys(t *testing.T) []astral.ObjectID {
 	t.Helper()
 
-	if err := f.mod.objectsReadsJournal.Flush(); err != nil {
+	if err := f.mod.tracker.flush(); err != nil {
 		t.Fatalf("flush: %v", err)
 	}
 
