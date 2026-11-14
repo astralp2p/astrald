@@ -7,7 +7,7 @@ import (
 )
 
 // SessionMigrator moves an open session from one link to another.
-// Call Begin, SendMigrateFrame, WaitClosed, then Complete in that order.
+// Call Begin, SendMigrateFrame, WaitClosed, then Complete (or Attach and Resume) in that order.
 type SessionMigrator struct {
 	mod            *Module
 	session        *session
@@ -84,10 +84,19 @@ func (m *SessionMigrator) SetPeerBuffer(n int) {
 	m.peerBuffer = n
 }
 
-// Complete reattaches the session to the new link's mux, reopens it, and
-// resumes the writer grown to the peer's advertised buffer.
+// Complete reattaches the session to the new link's mux and resumes it.
 func (m *SessionMigrator) Complete() error {
-	m.mod.log.Logv(1, "resuming session %v on link %v (peer buffer %v)", m.session.Nonce, m.newLink.id, m.peerBuffer)
+	if err := m.Attach(); err != nil {
+		return err
+	}
+	m.Resume()
+	return nil
+}
+
+// Attach moves the session from the old link's mux to the new link's mux,
+// so frames for it on the new link reach it.
+func (m *SessionMigrator) Attach() error {
+	m.mod.log.Logv(1, "attaching session %v to link %v", m.session.Nonce, m.newLink.id)
 
 	if m.oldLink != nil && m.newLink != nil && m.oldLink != m.newLink {
 		oldMux := m.oldLink.GetMux()
@@ -101,9 +110,14 @@ func (m *SessionMigrator) Complete() error {
 			return err
 		}
 	}
+	return nil
+}
+
+// Resume reopens the session and resumes the writer grown to the peer's advertised buffer.
+func (m *SessionMigrator) Resume() {
+	m.mod.log.Logv(1, "resuming session %v on link %v (peer buffer %v)", m.session.Nonce, m.newLink.id, m.peerBuffer)
 
 	m.session.setState(stateOpen)
 	m.writer.Grow(m.peerBuffer)
 	m.writer.Resume()
-	return nil
 }
