@@ -25,7 +25,7 @@ gate:
   states:
     fresh: [.spec, sys.register_manager, user.info]
     unclaimed: [.spec, user.info, user.derive_identity, user.bootstrap, user.join, apphost.register,
-      apphost.bind, apphost.register_handler, apphost.cancel]
+      apphost.bind, apphost.register_handler, apphost.cancel, nodes.resolve_endpoints]
     claimed: ["*"]
 policies:
   app_register: reject_all

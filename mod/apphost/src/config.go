@@ -77,6 +77,10 @@ func defaultConfig() Config {
 		// claim: the manager answers the policies delegated to it, an invitation
 		// from the owner's other device among them, and an app answers only through
 		// a registered handler.
+		//
+		// why nodes.resolve_endpoints before the claim: the manager shows the
+		// node's endpoints so that another device claims the node by address. The
+		// op asks for admin_network itself.
 		Gate: Gate{
 			Tokenless: []string{
 				".spec",
@@ -100,6 +104,7 @@ func defaultConfig() Config {
 					"apphost.bind",
 					"apphost.register_handler",
 					"apphost.cancel",
+					"nodes.resolve_endpoints",
 				},
 				Claimed: []string{gateAny},
 			},

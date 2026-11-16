@@ -5,8 +5,9 @@ The driver acts and judges nothing. It reads user.info at each step, appoints
 the manager from a session with the node's token, asks for a second
 appointment, asks
 as the manager for an op the unclaimed gate list omits, serves an op as the
-manager on the unclaimed node and queries it, registers an ordinary app that
-asks to claim, claims as the manager, and asks for a third appointment.
+manager on the unclaimed node and queries it, resolves the node's endpoints
+as the manager and as an ordinary app, has the ordinary app ask to claim,
+claims as the manager, and asks for a third appointment.
 
 why jsonops: astral-py has no binding for sys.register_manager or
 user.bootstrap, and the ops' JSON form is the node's own.
@@ -20,8 +21,13 @@ from astral.errors import AstralError
 from lib import jsonops
 from lib.sessionio import load, write_facts
 
-REQUEST = {"Type": "mod.sys.register_manager_request", "Object": {"Name": "manager"}}
+# why admin_network: the manager shows the node's endpoints before the claim,
+# and nodes.resolve_endpoints asks for that grant.
+REQUEST = {"Type": "mod.sys.register_manager_request",
+           "Object": {"Name": "manager",
+                      "GrantPermits": [{"Action": "mod.auth.admin_network_action"}]}}
 SERVED_OP = "test.manager_setup.whoami"
+RESOLVE = "nodes.resolve_endpoints?identity=localnode&out=json"
 
 
 async def attempt(coro) -> dict:
@@ -90,7 +96,10 @@ async def main():
     async with await astral.connect(n["endpoint"], token=manager["Token"]) as m:
         facts["outside_gate"] = await attempt(m.apphost.list_tokens())
         facts["served"] = await serve_unclaimed(m, n, manager["Identity"])
+        facts["endpoints"] = await attempt(jsonops.stream(m, RESOLVE, timeout=15))
         async with await astral.connect(n["endpoint"], token=app["Token"]) as a:
+            facts["app_endpoints"] = await attempt(jsonops.stream(a, RESOLVE, timeout=15))
+            facts["app_endpoints"].pop("answer", None)
             facts["app_claim"] = await attempt(
                 jsonops.value(a, "user.bootstrap?generate=true&out=json"))
             facts["app_claim"].pop("answer", None)

@@ -37,6 +37,18 @@ def main():
     assert not s["refused"] and s["detail"] == node_id, (
         f"the manager serving on the unclaimed node: {s['detail']}; want {node_id}")
 
+    # why "not permitted" and not "Denied": the gate admits the op on the
+    # unclaimed node, and the op's own admin_network check refuses the app.
+    e = f["endpoints"]
+    assert not e["refused"] and e["answer"], (
+        f"the manager's nodes.resolve_endpoints on the unclaimed node: {e['detail']}, "
+        f"{e.get('answer')}; want the node's endpoints")
+    e = f["app_endpoints"]
+    assert e["refused"] and "not permitted" in e["detail"] \
+        and not e["detail"].startswith("Denied"), (
+        f"an ordinary app's nodes.resolve_endpoints on the unclaimed node: "
+        f"{e['detail']} — want the op's not permitted")
+
     a = f["app_claim"]
     assert a["refused"] and "not permitted" in a["detail"], (
         f"an ordinary app's user.bootstrap: {a['detail']}")
@@ -44,7 +56,8 @@ def main():
     assert f["claim"]["user"] and f["claim"]["token"], f"the manager's claim: {f['claim']}"
 
     print(f"oracle: one manager {manager[:8]}… appointed; fresh → unclaimed → claimed; "
-          "the manager served before the claim; later appointments refused; "
+          "the manager served and resolved the node's endpoints before the claim, "
+          "and an ordinary app was not permitted to; later appointments refused; "
           "an ordinary app could not claim")
 
 

@@ -60,6 +60,8 @@ func TestGateAdmitsDefaults(t *testing.T) {
 		{user.StateFresh, false, false, "apphost.register_handler", false},
 		{user.StateFresh, false, true, "app.anything", true},
 		{user.StateFresh, true, true, "user.info", false},
+		{user.StateFresh, false, false, "nodes.resolve_endpoints?identity=localnode", false},
+		{user.StateFresh, true, false, "nodes.resolve_endpoints?identity=localnode", false},
 
 		{user.StateUnclaimed, true, false, "apphost.register", true},
 		{user.StateUnclaimed, true, false, ".spec", true},
@@ -79,6 +81,9 @@ func TestGateAdmitsDefaults(t *testing.T) {
 		{user.StateUnclaimed, true, false, "apphost.bind", false},
 		{user.StateUnclaimed, true, false, "apphost.register_handler", false},
 		{user.StateUnclaimed, false, true, "app.anything", true},
+		// note: the op asks for admin_network itself, so the gate admits any token.
+		{user.StateUnclaimed, false, false, "nodes.resolve_endpoints?identity=localnode", true},
+		{user.StateUnclaimed, true, false, "nodes.resolve_endpoints?identity=localnode", false},
 
 		{user.StateClaimed, true, false, "apphost.register", true},
 		{user.StateClaimed, true, false, "user.info", true},
@@ -89,6 +94,7 @@ func TestGateAdmitsDefaults(t *testing.T) {
 		{user.StateClaimed, true, false, ".spec", true},
 		{user.StateClaimed, true, false, "apphost.whoami", false},
 		{user.StateClaimed, false, true, "app.anything", true},
+		{user.StateClaimed, false, false, "nodes.resolve_endpoints?identity=localnode", true},
 
 		// note: user.introduce runs on a claimed node with a token alone.
 		{user.StateFresh, false, false, "user.introduce?identity=peer", false},
