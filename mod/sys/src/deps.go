@@ -2,6 +2,7 @@ package sys
 
 import (
 	"github.com/astralp2p/astral-go/api/auth"
+	vfsapi "github.com/astralp2p/astral-go/api/vfs"
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astrald/core"
 	authmod "github.com/astralp2p/astrald/mod/auth"
@@ -30,7 +31,11 @@ func (mod *Module) LoadDependencies(ctx *astral.Context) (err error) {
 
 	// why NodeLocal: the manager is a record of this node, and a contract chain
 	// must not extend it a hop.
-	mod.Auth.Add(authmod.NodeLocal(authmod.Func[*auth.ConfigureNodeStateAction](mod.AuthorizeConfigureNodeState)))
+	mod.Auth.Add(
+		authmod.NodeLocal(authmod.Func[*auth.ConfigureNodeStateAction](mod.AuthorizeConfigureNodeState)),
+		authmod.NodeLocal(authmod.Func[*vfsapi.ManageAction](mod.AuthorizeVFSManage)),
+		authmod.NodeLocal(authmod.Func[*vfsapi.ReadAction](mod.AuthorizeVFSRead)),
+	)
 
 	return
 }
