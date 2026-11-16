@@ -14,9 +14,8 @@ import (
 // policyPath is where the user module persists its delegates.
 const policyPath = "/mod/user/policy"
 
-// policyConfig is bound to the tree at policyPath. An unset SwarmJoin or
-// SwarmInvite selects the config value; see GetSwarmJoinPolicy. An unset
-// ContractAccept selects the bundled policy: every valid contract accepted.
+// policyConfig is bound to the tree at policyPath. An unset delegate selects
+// the config value; see GetSwarmJoinPolicy.
 type policyConfig struct {
 	SwarmJoin      tree.Value[*policy.Delegate]
 	SwarmInvite    tree.Value[*policy.Delegate]
@@ -93,13 +92,27 @@ func (mod *Module) SetPolicyDelegate(ctx *astral.Context, name string, d *policy
 }
 
 // GetContractAcceptPolicy returns the policy user.accept_contract applies: the
-// delegate the tree names, or AcceptAllContracts when none is set.
+// delegate the tree names; else the policies.contract_accept config value,
+// whose code default is reject_all.
 func (mod *Module) GetContractAcceptPolicy() usermod.ContractAcceptPolicy {
-	d := mod.policy.ContractAccept.Get()
-	if d.IsZero() {
+	if d := mod.policy.ContractAccept.Get(); !d.IsZero() {
+		return mod.ContractAcceptPolicyDelegated(d)
+	}
+
+	setting := mod.file.Policies.ContractAccept
+	switch {
+	case setting.Delegate != nil:
+		d, err := setting.ResolveDelegate(mod.Dir.ResolveIdentity)
+		if err != nil {
+			return func(*astral.Context, *user.ContractAcceptRequest) (*user.ContractAcceptDecision, error) {
+				return nil, err
+			}
+		}
+		return mod.ContractAcceptPolicyDelegated(d)
+	case setting.Accepts():
 		return usermod.AcceptAllContracts
 	}
-	return mod.ContractAcceptPolicyDelegated(d)
+	return usermod.RejectAllContracts
 }
 
 // SwarmJoinPolicyDelegated returns the join policy that asks d. The policy

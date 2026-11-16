@@ -10,10 +10,14 @@ import (
 // is a question that could not be decided, and the node declines.
 type ContractAcceptPolicy func(ctx *astral.Context, req *user.ContractAcceptRequest) (*user.ContractAcceptDecision, error)
 
-// AcceptAllContracts is the bundled contract accept policy: every contract
+// AcceptAllContracts is the accept_all contract accept policy: every contract
 // that passed validation is accepted.
-//
-// why accept-all: a node out of the box stays claimable.
 func AcceptAllContracts(_ *astral.Context, _ *user.ContractAcceptRequest) (*user.ContractAcceptDecision, error) {
 	return &user.ContractAcceptDecision{Allow: true}, nil
+}
+
+// RejectAllContracts is the reject_all contract accept policy and the code
+// default: every contract is declined.
+func RejectAllContracts(_ *astral.Context, _ *user.ContractAcceptRequest) (*user.ContractAcceptDecision, error) {
+	return &user.ContractAcceptDecision{}, nil
 }

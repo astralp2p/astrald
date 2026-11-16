@@ -279,3 +279,27 @@ func TestSwarmPoliciesFollowTheConfig(t *testing.T) {
 		t.Fatalf("config delegate decision %+v, %v; want the delegate's admission", dec, err)
 	}
 }
+
+// TestContractAcceptPolicyFollowsTheConfig: with no stored delegate the code
+// default declines, and a config value selects accept_all or a delegate.
+func TestContractAcceptPolicyFollowsTheConfig(t *testing.T) {
+	ctx := astral.NewContext(nil)
+	req := &user.ContractAcceptRequest{}
+
+	mod := &Module{file: defaultFileConfig, log: log.New(nil)}
+	if dec, err := mod.GetContractAcceptPolicy()(ctx, req); err != nil || dec.Allow {
+		t.Fatalf("default decision %+v, %v; want a refusal", dec, err)
+	}
+
+	mod.file.Policies.ContractAccept = policyconf.Setting{Mode: policyconf.AcceptAll}
+	if dec, err := mod.GetContractAcceptPolicy()(ctx, req); err != nil || !dec.Allow {
+		t.Fatalf("accept_all decision %+v, %v; want acceptance", dec, err)
+	}
+
+	delegated := &Module{node: newSwarmDelegate(&user.ContractAcceptDecision{Allow: true}), log: log.New(nil)}
+	delegated.Dir = &resolvingDir{id: astral.GenerateIdentity()}
+	delegated.file.Policies.ContractAccept = policyconf.Setting{Delegate: &policyconf.DelegateSetting{Identity: "cp", Operation: "cp.decide_contract"}}
+	if dec, err := delegated.GetContractAcceptPolicy()(ctx, req); err != nil || !dec.Allow {
+		t.Fatalf("config delegate decision %+v, %v; want the delegate's acceptance", dec, err)
+	}
+}

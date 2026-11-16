@@ -6,8 +6,8 @@ revoked by its ID.
 
 ## What it covers
 
-* `apphost.set_grant_request_policy -mode accept_all` approves every request
-  that passes permit validation, with no delegate asked.
+* The E2E config value `policies.grant_request: accept_all` approves every
+  request that passes permit validation, with no delegate asked.
 * `apphost.request_grant` reads one `mod.apphost.request_grant_request`. A
   `mod.services.service_discovery_action` permit scoped to `inference` is
   written as sent: `services.discover` for `inference` reports it granted, and
@@ -22,7 +22,5 @@ revoked by its ID.
 
 ## Notes
 
-* The driver clears the grant request policy (empty set) at the end, so the
-  node leaves the test as it entered it: unset, refusing every request.
 * Discovery runs at local reach on node1, so the scope decides
   `services.not_granted` without any provider or peer.

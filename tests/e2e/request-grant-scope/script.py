@@ -66,34 +66,28 @@ async def main():
     facts = {}
 
     async with await astral.connect(n1["endpoint"], token=n1["token"]) as admin:
-        facts["set_accept_all"] = await answer(
-            admin, "apphost.set_grant_request_policy?mode=accept_all&out=json")
-        try:
-            token = await jsonops.value(
-                admin, "apphost.register?in=json&out=json",
-                body={"Type": "mod.apphost.register_request", "Object": {"Name": "request-grant-scope"}})
-            app_id = token["Identity"]
-            async with await astral.connect(n1["endpoint"], token=token["Token"]) as app:
-                facts["inference_before"] = await discover(app, "inference")
-                facts["request_inference"] = await answer(
-                    app, "apphost.request_grant?in=json&out=json", scoped("inference"))
-                facts["inference_after"] = await discover(app, "inference")
-                facts["chat_after_inference"] = await discover(app, "chat")
-                facts["request_unscoped"] = await answer(
-                    app, "apphost.request_grant?in=json&out=json", request([{"Action": DISCOVERY}]))
-                facts["request_chat"] = await answer(
-                    app, "apphost.request_grant?in=json&out=json", scoped("chat"))
-                facts["grants_two"] = await grants(admin, app_id)
+        token = await jsonops.value(
+            admin, "apphost.register?in=json&out=json",
+            body={"Type": "mod.apphost.register_request", "Object": {"Name": "request-grant-scope"}})
+        app_id = token["Identity"]
+        async with await astral.connect(n1["endpoint"], token=token["Token"]) as app:
+            facts["inference_before"] = await discover(app, "inference")
+            facts["request_inference"] = await answer(
+                app, "apphost.request_grant?in=json&out=json", scoped("inference"))
+            facts["inference_after"] = await discover(app, "inference")
+            facts["chat_after_inference"] = await discover(app, "chat")
+            facts["request_unscoped"] = await answer(
+                app, "apphost.request_grant?in=json&out=json", request([{"Action": DISCOVERY}]))
+            facts["request_chat"] = await answer(
+                app, "apphost.request_grant?in=json&out=json", scoped("chat"))
+            facts["grants_two"] = await grants(admin, app_id)
 
-                chat = [g["id"] for g in facts["grants_two"] if g["services"] == ["chat"]]
-                facts["revoke_chat"] = await answer(
-                    admin, f"apphost.revoke?identity={app_id}&id={chat[0] if chat else 0}&out=json")
-                facts["grants_left"] = await grants(admin, app_id)
-                facts["inference_after_revoke"] = await discover(app, "inference")
-                facts["chat_after_revoke"] = await discover(app, "chat")
-        finally:
-            facts["restore_policy"] = await answer(
-                admin, "apphost.set_grant_request_policy?out=json")
+            chat = [g["id"] for g in facts["grants_two"] if g["services"] == ["chat"]]
+            facts["revoke_chat"] = await answer(
+                admin, f"apphost.revoke?identity={app_id}&id={chat[0] if chat else 0}&out=json")
+            facts["grants_left"] = await grants(admin, app_id)
+            facts["inference_after_revoke"] = await discover(app, "inference")
+            facts["chat_after_revoke"] = await discover(app, "chat")
 
     print(f"driver: {facts}")
     write_facts(facts)

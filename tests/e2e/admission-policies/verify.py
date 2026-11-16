@@ -38,13 +38,15 @@ REFUSALS = {
     "adopt_invitee": INVITATION,
     "register_delegate": REGISTRATION,
     "accept_contract_delegate": CONTRACT,
-    "grant_reject_all": GRANT,
+    "accept_contract_config": CONTRACT,
+    "grant_config": GRANT,
+    "grant_delegate": GRANT,
 }
 CONTROLS = ("register_applicant", "set_join_wrong_object", "set_join_unreachable",
             "clear_join_delegate", "adopt_applicant", "set_register_delegate",
             "clear_register_delegate", "set_contract_delegate",
-            "clear_contract_delegate", "accept_contract_cleared", "mode_reject_all",
-            "mode_accept_all", "grant_accept_all", "mode_reject_all_again")
+            "clear_contract_delegate", "accept_contract_cleared", "set_grant_delegate",
+            "clear_grant_delegate", "grant_accept_all")
 # The control's action, and the action every declined request asks.
 SEE = "mod.auth.see_objects_action"
 DENIED = "mod.user.see_swarm_action"
@@ -83,6 +85,8 @@ def check_record(f: dict) -> None:
         f"applicant read {f['applicant_after_joins']} after three refused joins")
     assert f["acceptor_after_decline"] == "fresh", (
         f"acceptor read {f['acceptor_after_decline']} after its contract was declined")
+    assert f["invitee_after_contract"] == "fresh", (
+        f"invitee read {f['invitee_after_contract']} after its config declined a contract")
     assert DENIED not in f["grants_after_reject"], (
         f"the app held {DENIED} after its request was declined: {f['grants_after_reject']}")
 
@@ -136,23 +140,22 @@ async def check_acceptor(nodes: dict, f: dict, admitter_user: str) -> None:
             f"acceptor reads {info.state} for {info.user_id}; want claimed by "
             f"{f['acceptor_user']}")
         assert f["acceptor_user"] != admitter_user, "acceptor's User is admitter's"
-        stored = await c.tree.get("/mod/user/policy/contract_accept")
-        assert isinstance(stored, Nil), f"the contract accept delegate holds {stored!r}"
-        mode = await c.tree.get("/mod/apphost/policy/grant_request_mode")
-        assert str(mode) == "reject_all", f"the grant request mode reads {mode!r}"
+        for path in ("/mod/user/policy/contract_accept", "/mod/apphost/policy/grant_request"):
+            stored = await c.tree.get(path)
+            assert isinstance(stored, Nil), f"{path} holds {stored!r} after the clear"
         before = await c.apphost.list_grants(f["app"])
 
     async with await connect(acceptor, f["app_token"]) as a:
         text = await refusal(a.apphost.request_grant([DENIED], timeout=DEADLINE))
-    assert text == GRANT, f"the app's request under reject_all: {text!r}"
+    # why again, by the oracle: the cleared delegate leaves the config's
+    # reject_all deciding.
+    assert text == GRANT, f"the app's request under the config's reject_all: {text!r}"
 
     async with await connect(acceptor) as c:
         after = await c.apphost.list_grants(f["app"])
     held = [g.permit.action for g in before]
     assert DENIED not in held, (
         f"the app holds {DENIED}, though every request for it was declined: {held}")
-    assert held.count(SEE) == 1, (
-        f"the app holds {held.count(SEE)} {SEE} grants; want the one accept_all wrote")
     assert [g.id for g in after] == [g.id for g in before], (
         f"a declined request changed the app's grants: {held} -> "
         f"{[g.permit.action for g in after]}")
@@ -167,7 +170,7 @@ async def main():
     print(f"oracle: {len(REFUSALS)} refusals read as their policy's, {len(CONTROLS)} "
           "controls answered; admitter's swarm holds applicant alone, invitee stays "
           "fresh, acceptor claimed once its delegate was cleared, and the app holds "
-          "the grant accept_all wrote and none it declined")
+          "no grant it was declined")
 
 
 asyncio.run(main())
