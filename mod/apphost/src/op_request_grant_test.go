@@ -12,6 +12,7 @@ import (
 	"github.com/astralp2p/astral-go/api/services"
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astral-go/astral/channel"
+	"github.com/astralp2p/astrald/lib/policyconf"
 	apphostmod "github.com/astralp2p/astrald/mod/apphost"
 )
 
@@ -97,8 +98,8 @@ func heldActions(t *testing.T, mod *Module, id *astral.Identity) []string {
 }
 
 // The register delegate does not decide grant requests: with only it set, the
-// grant request policy is unset, so the request is declined, nobody is asked
-// and nothing is granted.
+// grant request policy applies its code default, reject_all, so the request
+// is declined, nobody is asked and nothing is granted.
 func TestRequestGrantIgnoresTheRegisterDelegate(t *testing.T) {
 	node := newDelegateNode(&apphost.AppRegisterDecision{Allow: true})
 	mod := serveAppsRegistrar(t)
@@ -121,31 +122,26 @@ func TestRequestGrantIgnoresTheRegisterDelegate(t *testing.T) {
 	}
 }
 
-// With no delegate stored, only a stored string8 accept_all grants: an unset
-// mode, reject_all, an unknown mode and a mode of another type are declined
-// and grant nothing. No mode asks anyone.
+// With no delegate stored, the policies.grant_request config value decides:
+// accept_all grants, and reject_all, the code default, declines and grants
+// nothing. A grant_request_mode value an earlier node stored decides nothing.
+// Neither asks anyone.
 func TestRequestGrantWithoutADelegate(t *testing.T) {
 	declined := apphost.ErrGrantDeclined.Error()
 	for _, tc := range []struct {
-		name string
-		mode astral.Object
-		want string
+		name    string
+		setting policyconf.Setting
+		want    string
 	}{
-		{"unset", nil, declined},
-		{"accept_all", astral.NewString8(apphostmod.GrantRequestAcceptAll), ackAnswer},
-		{"reject_all", astral.NewString8(apphostmod.GrantRequestRejectAll), declined},
-		{"unknown mode", astral.NewString8("bogus"), declined},
-		{"string16 accept_all", astral.NewString16(apphostmod.GrantRequestAcceptAll), declined},
+		{"code default", defaultConfig().Policies.GrantRequest, declined},
+		{"accept_all", policyconf.Setting{Mode: policyconf.AcceptAll}, ackAnswer},
+		{"reject_all", policyconf.Setting{Mode: policyconf.RejectAll}, declined},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			node := newDelegateNode(&apphost.GrantDecision{Allow: true})
 			mod := serveAppsRegistrar(t)
 			mod.node = node
-			if tc.mode != nil {
-				if err := mod.policy.GrantRequestMode.Set(astral.NewContext(nil), tc.mode); err != nil {
-					t.Fatalf("set mode: %v", err)
-				}
-			}
+			mod.config.Policies.GrantRequest = tc.setting
 			owner := astral.GenerateIdentity()
 
 			got := requestGrant(t, mod, sessionQuery(mod, owner, owner, "apphost.request_grant"), asking("mod.auth.see_objects_action"))
@@ -153,7 +149,7 @@ func TestRequestGrantWithoutADelegate(t *testing.T) {
 				t.Fatalf("answered %q; want %q", got, tc.want)
 			}
 			if len(node.queried) != 0 {
-				t.Fatal("a mode asked a delegate")
+				t.Fatal("a config mode asked a delegate")
 			}
 			held := heldActions(t, mod, owner)
 			if tc.want == ackAnswer {
@@ -169,9 +165,27 @@ func TestRequestGrantWithoutADelegate(t *testing.T) {
 	}
 }
 
-// A stored delegate decides whatever mode is stored beside it: its approval
-// grants under reject_all, and its refusal declines under accept_all.
-func TestRequestGrantDelegateOutranksTheMode(t *testing.T) {
+// A config delegate is asked like a stored one.
+func TestRequestGrantAsksTheConfigDelegate(t *testing.T) {
+	node := newDelegateNode(&apphost.GrantDecision{Allow: true})
+	mod := serveAppsRegistrar(t)
+	mod.node = node
+	mod.Dir = &namingDir{}
+	mod.config.Policies.GrantRequest = policyconf.Setting{Delegate: &policyconf.DelegateSetting{
+		Identity: astral.GenerateIdentity().String(), Operation: grantRequestOp}}
+	owner := astral.GenerateIdentity()
+
+	if got := requestGrant(t, mod, sessionQuery(mod, owner, owner, "apphost.request_grant"), asking("mod.auth.see_objects_action")); got != ackAnswer {
+		t.Fatalf("answered %q; want %q", got, ackAnswer)
+	}
+	if op := askedOp(t, node); op != grantRequestOp {
+		t.Fatalf("asked %q, want the configured operation", op)
+	}
+}
+
+// A stored delegate outranks the config value: its approval grants under
+// reject_all, and its refusal declines under accept_all.
+func TestRequestGrantDelegateOutranksTheConfig(t *testing.T) {
 	for _, tc := range []struct {
 		name     string
 		allow    bool
@@ -179,15 +193,13 @@ func TestRequestGrantDelegateOutranksTheMode(t *testing.T) {
 		want     string
 		wantHeld int
 	}{
-		{"approval under reject_all", true, apphostmod.GrantRequestRejectAll, ackAnswer, 1},
-		{"refusal under accept_all", false, apphostmod.GrantRequestAcceptAll, apphost.ErrGrantDeclined.Error(), 0},
+		{"approval under reject_all", true, policyconf.RejectAll, ackAnswer, 1},
+		{"refusal under accept_all", false, policyconf.AcceptAll, apphost.ErrGrantDeclined.Error(), 0},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			node := newDelegateNode(&apphost.GrantDecision{Allow: astral.Bool(tc.allow)})
 			mod := grantRequester(t, node)
-			if err := mod.policy.GrantRequestMode.Set(astral.NewContext(nil), astral.NewString8(tc.mode)); err != nil {
-				t.Fatalf("set mode: %v", err)
-			}
+			mod.config.Policies.GrantRequest = policyconf.Setting{Mode: tc.mode}
 			owner := astral.GenerateIdentity()
 
 			got := requestGrant(t, mod, sessionQuery(mod, owner, owner, "apphost.request_grant"), asking("mod.auth.see_objects_action"))
@@ -376,7 +388,7 @@ func TestRequestGrantRefusesBeforeAsking(t *testing.T) {
 }
 
 // apphost.set_grant_request_policy requires AdminManageApps, writes the grant
-// request delegate alone, and clears it on empty arguments.
+// request delegate alone, refuses mode, and clears it on empty arguments.
 func TestSetGrantRequestPolicyWritesItsOwnValue(t *testing.T) {
 	id := astral.GenerateIdentity()
 	set := func(mod *Module, args string) string {
@@ -407,43 +419,19 @@ func TestSetGrantRequestPolicyWritesItsOwnValue(t *testing.T) {
 		t.Fatal("the grant request setter wrote the register delegate")
 	}
 
-	if got, want := set(mod, "?mode=accept_all"), ackAnswer; got != want {
-		t.Fatalf("answered %q; want %q", got, want)
+	for _, args := range []string{"?mode=accept_all", "?mode=reject_all", "?mode=accept_all&identity=" + id.String()} {
+		if got, want := set(mod, args), "unknown argument: mode"; got != want {
+			t.Fatalf("%v answered %q; want %q", args, got, want)
+		}
 	}
-	if m, ok := mod.policy.GrantRequestMode.Get().(*astral.String8); !ok || m.String() != apphostmod.GrantRequestAcceptAll {
-		t.Fatalf("persisted mode %v; want accept_all", m)
-	}
-	if !mod.policy.GrantRequest.Get().IsZero() {
-		t.Fatal("a mode did not clear the delegate")
-	}
-
-	if got, want := set(mod, delegate), ackAnswer; got != want {
-		t.Fatalf("answered %q; want %q", got, want)
-	}
-	if m := mod.policy.GrantRequestMode.Get(); m != nil {
-		t.Fatalf("a delegate left the mode %v", m)
+	if d := mod.policy.GrantRequest.Get(); d.IsZero() {
+		t.Fatal("a refused mode cleared the delegate")
 	}
 
-	if got, want := set(mod, "?mode=accept_all&identity="+id.String()), "give mode or a delegate, not both"; got != want {
-		t.Fatalf("answered %q; want %q", got, want)
-	}
-	if got, want := set(mod, "?mode=bogus"), "unknown mode: bogus"; got != want {
-		t.Fatalf("answered %q; want %q", got, want)
-	}
-	if got, want := set(mod, "?mode=accept_all&timeout=1m"), "unknown argument: timeout"; got != want {
-		t.Fatalf("answered %q; want %q", got, want)
-	}
-	if d := mod.policy.GrantRequest.Get(); d.IsZero() || mod.policy.GrantRequestMode.Get() != nil {
-		t.Fatal("a refused set changed the delegate or the mode")
-	}
-
-	if got, want := set(mod, "?mode=reject_all"), ackAnswer; got != want {
-		t.Fatalf("answered %q; want %q", got, want)
-	}
 	if got, want := set(mod, ""), ackAnswer; got != want {
 		t.Fatalf("answered %q; want %q", got, want)
 	}
-	if !mod.policy.GrantRequest.Get().IsZero() || mod.policy.GrantRequestMode.Get() != nil {
-		t.Fatal("an empty set did not clear the delegate and the mode")
+	if !mod.policy.GrantRequest.Get().IsZero() {
+		t.Fatal("an empty set did not clear the delegate")
 	}
 }

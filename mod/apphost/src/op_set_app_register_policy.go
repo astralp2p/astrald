@@ -9,7 +9,6 @@ import (
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astral-go/astral/channel"
 	"github.com/astralp2p/astral-go/lib/routing"
-	apphostmod "github.com/astralp2p/astrald/mod/apphost"
 )
 
 type opSetPolicyArgs struct {
@@ -24,19 +23,6 @@ type opSetPolicyArgs struct {
 	Out     string
 }
 
-// opSetGrantRequestPolicyArgs selects the grant request policy: Mode alone
-// selects accept_all or reject_all; Identity and Operation, with an optional
-// Timeout, select the delegate mode; all empty clears both, and the unset
-// policy refuses every request.
-type opSetGrantRequestPolicyArgs struct {
-	Mode      string
-	Identity  string
-	Operation string
-	Timeout   astral.Duration
-	In        string
-	Out       string
-}
-
 // OpSetAppRegisterPolicy selects the app registration policy and answers Ack
 // once the choice is persisted.
 //
@@ -49,64 +35,37 @@ func (mod *Module) OpSetAppRegisterPolicy(ctx *astral.Context, q *routing.Incomi
 		return ch.Send(auth.ErrNotPermitted)
 	}
 
-	// why: mode belongs to apphost.set_grant_request_policy; without this a
-	// caller naming it here would clear the register delegate.
-	if err := refuseRemovedArgs(q.QueryString(), "mode"); err != nil {
-		return ch.Send(astral.Err(err))
-	}
-
-	d, err := mod.newDelegate(args.Identity, args.Operation, args.Timeout)
-	if err == nil {
-		err = writePolicyDelegate(ctx, d, &mod.policy.AppRegister)
-	}
-	if err != nil {
-		return ch.Send(astral.Err(err))
-	}
-
-	mod.log.Logv(1, "%v persisted", q.QueryString())
-	return ch.Send(&astral.Ack{})
+	return mod.setPolicyDelegate(ctx, q, ch, args, &mod.policy.AppRegister)
 }
 
-// OpSetGrantRequestPolicy selects the policy for apphost.request_grant and
-// answers Ack once the choice is persisted. A mode clears the delegate, and a
-// delegate clears the mode. A mode given with a timeout is refused.
+// OpSetGrantRequestPolicy selects the delegate for apphost.request_grant and
+// answers Ack once the choice is persisted.
 //
 // why ConfigureNodeState: the policy is a tree value; see maySetPolicies.
-func (mod *Module) OpSetGrantRequestPolicy(ctx *astral.Context, q *routing.IncomingQuery, args opSetGrantRequestPolicyArgs) error {
+func (mod *Module) OpSetGrantRequestPolicy(ctx *astral.Context, q *routing.IncomingQuery, args opSetPolicyArgs) error {
 	ch := channel.New(q.AcceptRaw(), channel.WithFormats(args.In, args.Out))
 	defer ch.Close()
 
 	if !mod.maySetPolicies(ctx, q.Caller()) {
 		return ch.Send(auth.ErrNotPermitted)
 	}
+	return mod.setPolicyDelegate(ctx, q, ch, args, &mod.policy.GrantRequest)
+}
 
-	var err error
-	switch args.Mode {
-	case "":
-		var d *policy.Delegate
-		d, err = mod.newDelegate(args.Identity, args.Operation, args.Timeout)
-		if err == nil {
-			err = writePolicyDelegate(ctx, d, &mod.policy.GrantRequest)
-		}
-		if err == nil {
-			err = mod.policy.GrantRequestMode.Clear(ctx)
-		}
-	case apphostmod.GrantRequestAcceptAll, apphostmod.GrantRequestRejectAll:
-		if args.Identity != "" || args.Operation != "" {
-			return ch.Send(astral.NewError("give mode or a delegate, not both"))
-		}
-		// why: timeout bounds a delegate's question, and a mode asks no one.
-		if err = refuseRemovedArgs(q.QueryString(), "timeout"); err != nil {
-			return ch.Send(astral.Err(err))
-		}
-		// why the delegate first: a delegate outranks the mode, so a failed
-		// mode write leaves no delegate in force, only the earlier mode.
-		err = mod.policy.GrantRequest.Clear(ctx)
-		if err == nil {
-			err = mod.policy.GrantRequestMode.Set(ctx, astral.NewString8(args.Mode))
-		}
-	default:
-		return ch.Send(astral.NewError("unknown mode: " + args.Mode))
+// setPolicyDelegate writes the delegate args name into v, or clears v when
+// args name none, and answers Ack once it is persisted.
+//
+// why mode is refused: apphost.set_grant_request_policy took a mode before
+// the policies had config values; an old caller naming it must not clear the
+// delegate.
+func (mod *Module) setPolicyDelegate(ctx *astral.Context, q *routing.IncomingQuery, ch *channel.Channel, args opSetPolicyArgs, v *tree.Value[*policy.Delegate]) error {
+	if err := refuseRemovedArgs(q.QueryString(), "mode"); err != nil {
+		return ch.Send(astral.Err(err))
+	}
+
+	d, err := mod.newDelegate(args.Identity, args.Operation, args.Timeout)
+	if err == nil {
+		err = writePolicyDelegate(ctx, d, v)
 	}
 	if err != nil {
 		return ch.Send(astral.Err(err))

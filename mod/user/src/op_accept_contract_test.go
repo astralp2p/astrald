@@ -12,6 +12,7 @@ import (
 	"github.com/astralp2p/astral-go/astral/log"
 	"github.com/astralp2p/astral-go/lib/query"
 	"github.com/astralp2p/astral-go/lib/routing"
+	"github.com/astralp2p/astrald/lib/policyconf"
 	secp256k1sig "github.com/astralp2p/astrald/mod/secp256k1"
 )
 
@@ -103,10 +104,29 @@ func answeredDeclined(objs []astral.Object) bool {
 	return ok && e.Error() == user.ErrContractDeclined.Error()
 }
 
-// With no delegate set, a valid contract claims the node: a fresh node stays
-// claimable.
-func TestAcceptContractDefaultPolicyClaims(t *testing.T) {
+// With no delegate set and no config value, the code default reject_all
+// declines a valid contract and leaves the node unclaimed.
+func TestAcceptContractCodeDefaultDeclines(t *testing.T) {
+	f, node := newContractFixture(nil)
+	signed, _ := signedClaim(t, f, false)
+
+	if objs := routeContract(t, f, astral.GenerateIdentity(), signed); !answeredDeclined(objs) {
+		t.Fatalf("the op answered %v, want contract declined", objs)
+	}
+	if f.mod.ActiveContract() != nil {
+		t.Fatal("a declined contract was activated")
+	}
+	select {
+	case <-node.got:
+		t.Fatal("the code default asked a delegate")
+	default:
+	}
+}
+
+// policies.contract_accept: accept_all claims the node with a valid contract.
+func TestAcceptContractAcceptAllClaims(t *testing.T) {
 	f, _ := newContractFixture(nil)
+	f.mod.file.Policies.ContractAccept = policyconf.Setting{Mode: policyconf.AcceptAll}
 	signed, userID := signedClaim(t, f, false)
 
 	if objs := routeContract(t, f, astral.GenerateIdentity(), signed); !answeredAck(objs) {

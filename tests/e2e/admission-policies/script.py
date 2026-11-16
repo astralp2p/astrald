@@ -7,13 +7,16 @@ then asks it for a registration and a membership by config and through
 delegates that cannot decide; it adopts `invitee`, whose invite policy rejects,
 and `applicant`, whose policy accepts. On `acceptor` it claims step by step
 under a contract accept delegate that cannot decide, then without one, and
-asks for a grant under the reject_all and accept_all grant request modes.
+asks for a grant under the reject_all config value and under a grant request
+delegate that cannot decide. On `invitee`, whose contract accept policy
+rejects, it asks `user.accept_contract` by config.
 Every answer goes into the `admission` fact; the oracle judges.
 
 why the controls beside every refusal: a refusal and a broken op leave the
 caller holding the same nothing. A register answered on `applicant`, an
 adoption answered for `applicant`, a contract accepted once the delegate is
-cleared and a grant answered under accept_all show the op works in this world,
+cleared and a grant answered on `applicant` under the harness's accept_all
+show the op works in this world,
 so the refusal is the policy's.
 
 why delegates that cannot decide: a delegate that answers the wrong object,
@@ -48,7 +51,8 @@ WRONG_OP = "user.info"
 # and request_grant's 610 s.
 DELEGATE_TIMEOUT = "3s"
 DEADLINE = 15
-GRANT_MODE = "apphost.set_grant_request_policy?mode={}&out=json"
+GRANT_DELEGATE = "apphost.set_grant_request_policy?identity={}&operation={}&timeout={}&out=json"
+GRANT_CLEAR = "apphost.set_grant_request_policy?out=json"
 
 
 async def attempt(coro) -> dict:
@@ -149,7 +153,8 @@ async def claim_contract(c):
 
 
 async def acceptor_flow(acceptor, invitee, refusals, controls, facts):
-    """The contract accept and grant request policies."""
+    """The contract accept policy by delegate, and the grant request policy by
+    config and by delegate."""
     async with await connect(acceptor) as c:
         controls["set_contract_delegate"] = await attempt(c.user.set_contract_accept_policy(
             invitee["identity"], WRONG_OP, timeout=DELEGATE_TIMEOUT))
@@ -165,12 +170,17 @@ async def acceptor_flow(acceptor, invitee, refusals, controls, facts):
 
     async with await connect(acceptor, user_token) as u:
         app = await u.apphost.register(name="admission-policies", timeout=DEADLINE)
-        controls["mode_reject_all"] = await attempt(
-            jsonops.value(u, GRANT_MODE.format("reject_all"), timeout=DEADLINE))
     facts["app"], facts["app_token"] = str(app.identity), app.token
 
     async with await connect(acceptor, app.token) as a:
-        refusals["grant_reject_all"] = await attempt(
+        refusals["grant_config"] = await attempt(
+            a.apphost.request_grant([DENIED], timeout=DEADLINE))
+    async with await connect(acceptor, user_token) as u:
+        controls["set_grant_delegate"] = await attempt(jsonops.value(
+            u, GRANT_DELEGATE.format(invitee["identity"], WRONG_OP, DELEGATE_TIMEOUT),
+            timeout=DEADLINE))
+    async with await connect(acceptor, app.token) as a:
+        refusals["grant_delegate"] = await attempt(
             a.apphost.request_grant([DENIED], timeout=DEADLINE))
     # why actions and not a count: the registration itself grants the app
     # serve_apps and use_blueprints, so only the requested action says whether
@@ -178,15 +188,26 @@ async def acceptor_flow(acceptor, invitee, refusals, controls, facts):
     async with await connect(acceptor, user_token) as u:
         facts["grants_after_reject"] = [g.permit.action for g in
                                         await u.apphost.list_grants(app.identity)]
-        controls["mode_accept_all"] = await attempt(
-            jsonops.value(u, GRANT_MODE.format("accept_all"), timeout=DEADLINE))
-    async with await connect(acceptor, app.token) as a:
+        controls["clear_grant_delegate"] = await attempt(
+            jsonops.value(u, GRANT_CLEAR, timeout=DEADLINE))
+
+
+async def invitee_flow(invitee, refusals, facts):
+    """The contract accept policy by config: invitee's rejects."""
+    async with await connect(invitee) as c:
+        _, signed = await claim_contract(c)
+        refusals["accept_contract_config"] = await attempt(
+            c.user.accept_contract(signed, timeout=DEADLINE))
+        facts["invitee_after_contract"] = (await c.user.info()).state
+
+
+async def applicant_grant(applicant, controls):
+    """The grant request control: applicant runs the harness's accept_all."""
+    async with await connect(applicant) as c:
+        app = await c.apphost.register(name="admission-policies", timeout=DEADLINE)
+    async with await connect(applicant, app.token) as a:
         controls["grant_accept_all"] = await attempt(
             a.apphost.request_grant([SEE], timeout=DEADLINE))
-    # why reject_all again: the oracle asks DENIED again under it.
-    async with await connect(acceptor, user_token) as u:
-        controls["mode_reject_all_again"] = await attempt(
-            jsonops.value(u, GRANT_MODE.format("reject_all"), timeout=DEADLINE))
 
 
 async def main():
@@ -202,6 +223,8 @@ async def main():
     refusals, controls, facts = {}, {}, {}
     await admitter_flow(admitter, applicant, invitee, refusals, controls, facts)
     await acceptor_flow(acceptor, invitee, refusals, controls, facts)
+    await invitee_flow(invitee, refusals, facts)
+    await applicant_grant(applicant, controls)
 
     facts["refusals"], facts["controls"] = refusals, controls
     write_facts({"admission": facts})

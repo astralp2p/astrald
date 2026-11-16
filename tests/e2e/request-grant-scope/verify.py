@@ -10,7 +10,6 @@ DISCOVERY = "mod.services.service_discovery_action"
 def main():
     f = load()["facts"]
 
-    assert f["set_accept_all"] == ACK, f"set_grant_request_policy -mode accept_all: {f['set_accept_all']}"
     assert f["inference_before"] == "not granted", f"inference before any grant: {f['inference_before']}"
     assert f["request_inference"] == ACK, f"request for the inference scope: {f['request_inference']}"
     assert f["inference_after"] == "granted", f"inference after its grant: {f['inference_after']}"
@@ -30,8 +29,6 @@ def main():
     assert [g["services"] for g in left] == [["inference"]], f"grants after the revoke: {left}"
     assert f["inference_after_revoke"] == "granted", "revoking chat withdrew inference"
     assert f["chat_after_revoke"] == "not granted", "chat stays granted after its revoke"
-
-    assert f["restore_policy"] == ACK, f"restoring the bundled policy: {f['restore_policy']}"
 
 
 if __name__ == "__main__":

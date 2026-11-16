@@ -8,26 +8,21 @@ import (
 	apphostmod "github.com/astralp2p/astrald/mod/apphost"
 )
 
-// policyPath is where apphost persists its policy delegates and the grant
-// request mode.
+// policyPath is where apphost persists its policy delegates.
 const policyPath = "/mod/apphost/policy"
 
-// policyConfig is bound to the tree at policyPath. An unset AppRegister
-// selects the config value; see GetRegisterAppPolicy. A set GrantRequest
-// selects the delegate mode; otherwise a GrantRequestMode of accept_all
-// selects apphostmod.AcceptAllGrants, and an unset or any other mode selects
-// apphostmod.RefuseAllGrants.
+// policyConfig is bound to the tree at policyPath. An unset AppRegister or
+// GrantRequest selects the config value; see GetRegisterAppPolicy.
+//
+// note: a grant_request_mode value an earlier node stored under policyPath is
+// not bound and decides nothing.
 //
 // why apart from Config: Config is read from apphost.yaml over
 // defaultConfig() and copied by value, and a tree.Value carries a mutex, so it
 // cannot ride a copied struct.
-//
-// note: GrantRequestMode holds any object, so a stored object of another type
-// reads as itself, not as unset; GetGrantRequestPolicy refuses both.
 type policyConfig struct {
-	AppRegister      tree.Value[*policy.Delegate]
-	GrantRequest     tree.Value[*policy.Delegate]
-	GrantRequestMode tree.Value[astral.Object]
+	AppRegister  tree.Value[*policy.Delegate]
+	GrantRequest tree.Value[*policy.Delegate]
 }
 
 // GetRegisterAppPolicy returns the policy apphost.register applies: the
@@ -82,20 +77,28 @@ func (mod *Module) RegisterAppPolicyDelegated(d *policy.Delegate) apphostmod.Reg
 }
 
 // GetGrantRequestPolicy returns the policy apphost.request_grant applies: the
-// delegate the tree names; else AcceptAllGrants when the mode is accept_all;
-// else RefuseAllGrants, also when no mode is stored.
+// delegate the tree names; else the policies.grant_request config value, whose
+// code default is reject_all.
 //
-// why the delegate first: a delegate stored before the mode existed keeps
-// deciding after an upgrade.
-// why unset refuses: on a node nobody configured, an app must not grant itself
-// authority, admin_manage_apps included; apphost.register refuses by default too.
-// why any other mode refuses: a mode this code cannot read must not read as
-// permission.
+// why reject_all by default: on a node nobody configured, an app must not grant
+// itself authority, admin_manage_apps included; apphost.register refuses by
+// default too.
 func (mod *Module) GetGrantRequestPolicy() apphostmod.GrantRequestPolicy {
 	if d := mod.policy.GrantRequest.Get(); !d.IsZero() {
 		return mod.GrantRequestPolicyDelegated(d)
 	}
-	if m, ok := mod.policy.GrantRequestMode.Get().(*astral.String8); ok && m.String() == apphostmod.GrantRequestAcceptAll {
+
+	setting := mod.config.Policies.GrantRequest
+	switch {
+	case setting.Delegate != nil:
+		d, err := setting.ResolveDelegate(mod.Dir.ResolveIdentity)
+		if err != nil {
+			return func(*astral.Context, *apphost.GrantPolicyRequest) (*apphost.GrantDecision, error) {
+				return nil, err
+			}
+		}
+		return mod.GrantRequestPolicyDelegated(d)
+	case setting.Accepts():
 		return apphostmod.AcceptAllGrants
 	}
 	return apphostmod.RefuseAllGrants

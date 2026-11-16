@@ -25,13 +25,15 @@ type FileConfig struct {
 // Policies holds the config value of each user admission policy. A stored
 // delegate outranks the value; see GetSwarmJoinPolicy.
 type Policies struct {
-	SwarmJoin   policyconf.Setting `yaml:"swarm_join,omitempty"`
-	SwarmInvite policyconf.Setting `yaml:"swarm_invite,omitempty"`
+	SwarmJoin      policyconf.Setting `yaml:"swarm_join,omitempty"`
+	SwarmInvite    policyconf.Setting `yaml:"swarm_invite,omitempty"`
+	ContractAccept policyconf.Setting `yaml:"contract_accept,omitempty"`
 }
 
 var defaultFileConfig = FileConfig{
 	Policies: Policies{
-		SwarmJoin:   policyconf.Setting{Mode: policyconf.RejectAll},
-		SwarmInvite: policyconf.Setting{Mode: policyconf.RejectAll},
+		SwarmJoin:      policyconf.Setting{Mode: policyconf.RejectAll},
+		SwarmInvite:    policyconf.Setting{Mode: policyconf.RejectAll},
+		ContractAccept: policyconf.Setting{Mode: policyconf.RejectAll},
 	},
 }

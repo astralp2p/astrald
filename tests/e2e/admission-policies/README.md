@@ -2,15 +2,14 @@
 
 The five admission policies of `node-policies.md` (app register, grant
 request, swarm join, swarm invite, contract accept) each refuse with their own
-text: by config value, by mode, and through a stored delegate that cannot
-decide. Every other test runs the harness's accepting policies, so none of
+text: by config value and through a stored delegate that cannot decide. Every other test runs the harness's accepting policies, so none of
 these refusal paths runs anywhere else.
 
 - **env** node · **start** `null` · **saves** — · a guard: it destroys nothing.
 - **config** — `admitter` rejects every swarm join and app registration and
-  accepts invitations; `invitee` accepts joins and rejects invitations. The
-  override names every key of `policies`, since it replaces the module key
-  whole.
+  accepts invitations; `invitee` accepts joins and rejects invitations and
+  contracts; `acceptor` rejects every grant request. The override names every
+  key of `policies`, since it replaces the module key whole.
 - **driver** `script.py` — links admitter with applicant and invitee, and
   acceptor with invitee, then:
   - claims `admitter` with a token-less `user.bootstrap`, and registers an app
@@ -27,10 +26,14 @@ these refusal paths runs anywhere else.
   - on `acceptor`, with a contract accept delegate that answers the wrong
     object, claims step by step to `user.accept_contract` (refused), clears
     the delegate and accepts the same contract (the control);
-  - as acceptor's User, sets the grant request mode `reject_all`, has an app
-    request `mod.user.see_swarm_action` (refused), sets `accept_all`, has it
-    request `mod.auth.see_objects_action` (the control), and leaves the mode
-    at `reject_all`.
+  - as acceptor's User, registers an app that requests
+    `mod.user.see_swarm_action` under the config's `reject_all` (refused) and
+    under a grant request delegate that answers the wrong object (refused),
+    then clears the delegate;
+  - on `invitee`, claims step by step to `user.accept_contract` under its
+    config's `reject_all` (refused);
+  - on `applicant`, under the harness's `accept_all`, registers an app that
+    requests `mod.auth.see_objects_action` (the control).
 
   Every answer, its error class and its node text go into the `admission`
   fact.
@@ -39,9 +42,8 @@ these refusal paths runs anywhere else.
   with each node's own token: admitter and applicant are claimed by the same
   User, admitter's swarm is admitter and applicant alone, invitee stays
   `fresh`, both admitter delegates read `nil` in the tree, acceptor is claimed
-  by its own User with no contract accept delegate, the grant request mode
-  reads `reject_all`, and the app holds one `mod.auth.see_objects_action`
-  grant and no `mod.user.see_swarm_action` grant. The oracle asks three
+  by its own User with neither a contract accept nor a grant request delegate,
+  and the app holds no `mod.user.see_swarm_action` grant. The oracle asks three
   refusals again itself: a token-less register on admitter (declined, and no
   token minted), invitee's join to admitter (declined by the config once the
   delegate is cleared, invitee still `fresh`), and the app's request for
@@ -61,12 +63,11 @@ these refusal paths runs anywhere else.
   would read as a pass from the caller's side alone.
 - **The `nil` delegates.** Clearing a delegate restores the config value; the
   oracle's own join from invitee shows the config decides again.
-- **Two actions.** The node records a permit an app already holds as the
-  same grant, so a declined request for the control's action would leave
-  nothing to tell apart. The declined requests ask `mod.user.see_swarm_action`,
-  which `accept_all` grants, and the control `mod.auth.see_objects_action`.
-  Registration grants an app `serve_apps` and `use_blueprints` by itself, so
-  the oracle judges the requested actions alone.
+- **Two actions.** The declined requests ask `mod.user.see_swarm_action`, and
+  the control `mod.auth.see_objects_action`, so the control's grant never
+  reads as a declined request's. Registration grants an app `serve_apps` and
+  `use_blueprints` by itself, so the oracle judges the requested actions
+  alone.
 
 ## Why its own nodes
 
