@@ -7,6 +7,8 @@ import (
 	_log "log"
 
 	"github.com/astralp2p/astral-go/astral/log"
+	"github.com/charmbracelet/lipgloss"
+	"github.com/muesli/termenv"
 )
 
 const maxAdapterBuffer = 1 << 16 // 64kb
@@ -23,6 +25,15 @@ func (node *Node) initLogger() {
 
 	_log.SetOutput(&adapter{Logger: node.log.Tag("stdout")})
 	_log.SetFlags(0)
+}
+
+// applyLogColors turns log colours off when node.yaml sets log.disable_colors.
+// note: otherwise lipgloss detects the profile from stdout, so a file, pipe or
+// journal gets plain text and NO_COLOR is honoured.
+func (node *Node) applyLogColors() {
+	if node.config.Log.DisableColors {
+		lipgloss.SetColorProfile(termenv.Ascii)
+	}
 }
 
 func (a *adapter) Write(p []byte) (n int, err error) {
