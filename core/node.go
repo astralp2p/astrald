@@ -60,6 +60,8 @@ func NewNode(nodeID *astral.Identity, res resources.Resources) (*Node, error) {
 		}
 	}
 
+	node.applyLogColors()
+
 	// modules
 	var enabled = node.config.Modules
 	if enabled == nil {
