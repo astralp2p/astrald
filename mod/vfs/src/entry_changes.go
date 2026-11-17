@@ -133,7 +133,7 @@ func (c *change) removeEntry(names []string, recursive bool) error {
 		}
 	}
 
-	if err = c.tx.deleteSubtree(row.ID, c.now); err != nil {
+	if err = c.deleteSubtree(row.ID); err != nil {
 		return err
 	}
 

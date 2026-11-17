@@ -99,8 +99,39 @@ func insertEntry(t *testing.T, mod *Module, row *dbEntry) *dbEntry {
 	if err := mod.db.Create(row).Error; err != nil {
 		t.Fatalf("insert %q: %v", row.Name, err)
 	}
+	restoreUsage(t, mod, row.VFS)
 
 	return row
+}
+
+// restoreUsage sets the stored usage of a VFS to its recount, for fixtures that insert rows past the changes.
+func restoreUsage(t *testing.T, mod *Module, vfsID *astral.Identity) {
+	t.Helper()
+
+	u := recountUsage(t, mod, vfsID)
+
+	err := mod.db.Model(&dbVolume{}).Where("identity = ?", vfsID).
+		Updates(map[string]any{"bytes": int64(u.Bytes), "inodes": int64(u.Inodes)}).Error
+	if err != nil {
+		t.Fatalf("restore usage: %v", err)
+	}
+}
+
+// recountUsage returns the usage of a VFS computed from its entries.
+func recountUsage(t *testing.T, mod *Module, vfsID *astral.Identity) vfsUsage {
+	t.Helper()
+
+	bytes, err := mod.db.countContent(vfsID)
+	if err != nil {
+		t.Fatalf("count content: %v", err)
+	}
+
+	inodes, err := mod.db.countEntries(vfsID)
+	if err != nil {
+		t.Fatalf("count entries: %v", err)
+	}
+
+	return vfsUsage{Bytes: bytes, Inodes: inodes}
 }
 
 // fakeAuth answers Authorize from a set of permits: the action type, the actor and the VFS.

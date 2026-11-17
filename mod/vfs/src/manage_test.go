@@ -420,10 +420,10 @@ func TestSetQuotaBelowUsageRemovesNothing(t *testing.T) {
 		t.Errorf("limits %d and %d, want 1 and 1", vol.byteLimit(), vol.inodeLimit())
 	}
 
-	if n, _ := f.mod.db.entryCount(id); n != 3 {
+	if n, _ := f.mod.db.countEntries(id); n != 3 {
 		t.Errorf("entries %d, want 3", n)
 	}
-	if u, _ := f.mod.db.usage(id); u != 16 {
+	if u, _ := f.mod.db.countContent(id); u != 16 {
 		t.Errorf("usage %d, want 16", u)
 	}
 

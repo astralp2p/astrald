@@ -23,13 +23,13 @@ func (mod *Module) computeAllowance(vol *dbVolume, names []string) (uint64, erro
 		return math.MaxUint64, nil
 	}
 
-	usage, err := mod.db.usage(vol.Identity)
+	usage, err := mod.db.measureUsage(vol.Identity)
 	if err != nil {
 		return 0, err
 	}
 
 	// note: a coarse bound; the exact check runs in the transaction after the commit.
-	allowed := limit - min(usage, limit)
+	allowed := limit - min(usage.Bytes, limit)
 	if replaced != nil && replaced.ObjectID != nil {
 		allowed += replaced.ObjectID.Size
 	}
@@ -148,10 +148,21 @@ func (c *change) putFile(parent *dbEntry, name string, id astral.ObjectID) (*dbE
 		return nil, vfsapi.ErrIsAFolder
 	}
 
+	replaced := row.ObjectID
+	if err = c.gainContent(&id); err != nil {
+		return nil, err
+	}
+
 	row.ObjectID, row.ModTime = &id, nodeTime()
 
 	if err = c.tx.setFileContent(row.ID, row.ObjectID, row.ModTime); err != nil {
 		return nil, err
+	}
+
+	if replaced != nil {
+		if err = c.dropContent(replaced); err != nil {
+			return nil, err
+		}
 	}
 
 	return row, c.clearFolderIDs(parent.ID)
