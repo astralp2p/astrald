@@ -175,6 +175,7 @@ func newBootstrapFixture() *bootstrapFixture {
 		OptionalDeps: OptionalDeps{Bip137sig: &bip137src.Module{}},
 		node:         &identityNode{id: f.nodeID},
 	}
+	f.mod.db = memDB()
 	return f
 }
 

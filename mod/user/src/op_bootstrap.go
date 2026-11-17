@@ -110,7 +110,12 @@ func receiveWords(ch *channel.Channel, generate bool) ([]string, error) {
 }
 
 // bootstrap derives the user's key from words, signs the claim contract as the
-// user and as the node, stores the user's key, and claims the node.
+// user and as the node, stores the user's key and the words, and claims the
+// node.
+//
+// why the words are kept: the user reads them back through user.mnemonic for a
+// backup; the passphrase is never stored, and the words are no user asset, so
+// they never sync to sibling nodes.
 //
 // why the key is stored before the claim: a repeat call with the same words
 // completes a claim that failed after the store, while a claimed node without
@@ -136,12 +141,30 @@ func (mod *Module) bootstrap(ctx *astral.Context, caller *astral.Identity, words
 		return nil, err
 	}
 
+	err = mod.storeMnemonic(ctx, signed.Issuer, words)
+	if err != nil {
+		return nil, err
+	}
+
 	err = mod.claim(ctx, signed)
 	if err != nil {
 		return nil, err
 	}
 
 	return signed.Issuer, nil
+}
+
+// storeMnemonic stores words as the Mnemonic of userID and records it.
+// Spec: .ai/system/protocols/user/types/mod.user.mnemonic.md
+func (mod *Module) storeMnemonic(ctx *astral.Context, userID *astral.Identity, words []string) error {
+	objectID, err := mod.Objects.Store(ctx, mod.Objects.WriteDefault(), &user.Mnemonic{
+		Words: astral.String16(strings.Join(words, " ")),
+	})
+	if err != nil {
+		return err
+	}
+
+	return mod.db.SetMnemonic(userID, objectID)
 }
 
 // deriveUserKey derives the user's key from BIP-39 words along UserKeyPath.
