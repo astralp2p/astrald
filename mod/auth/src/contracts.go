@@ -5,6 +5,7 @@ import (
 	"fmt"
 	authmod "github.com/astralp2p/astrald/mod/auth"
 	objectsmod "github.com/astralp2p/astrald/mod/objects"
+	"slices"
 
 	"github.com/astralp2p/astral-go/api/auth"
 	"github.com/astralp2p/astral-go/api/objects"
@@ -13,26 +14,51 @@ import (
 
 // IndexContract verifies and stores sc in the local DB; skips silently if already indexed.
 // Callers must hold no locks — the method acquires indexMu internally.
+// A newly stored contract runs every OnContractIndexed callback after indexMu is released.
 func (mod *Module) IndexContract(ctx *astral.Context, sc *auth.SignedContract) error {
+	stored, err := mod.storeContract(sc)
+	if err != nil || !stored {
+		return err
+	}
+	mod.onIndexedMu.Lock()
+	callbacks := mod.onIndexed
+	mod.onIndexedMu.Unlock()
+	for _, fn := range callbacks {
+		fn(sc)
+	}
+	return nil
+}
+
+// OnContractIndexed registers fn to run after each newly indexed contract.
+func (mod *Module) OnContractIndexed(fn func(*auth.SignedContract)) {
+	mod.onIndexedMu.Lock()
+	defer mod.onIndexedMu.Unlock()
+	// why: a new slice, so a reader iterating the old one never sees it change.
+	mod.onIndexed = append(slices.Clip(mod.onIndexed), fn)
+}
+
+// storeContract verifies and stores sc under indexMu, and reports whether sc
+// was new to the index.
+func (mod *Module) storeContract(sc *auth.SignedContract) (bool, error) {
 	mod.indexMu.Lock()
 	defer mod.indexMu.Unlock()
 
 	objectID, err := astral.ResolveObjectID(sc)
 	if err != nil {
-		return fmt.Errorf("resolve object id: %w", err)
+		return false, fmt.Errorf("resolve object id: %w", err)
 	}
 
 	// check if already indexed
 	if mod.db.contractExists(objectID) {
-		return nil
+		return false, nil
 	}
 
 	err = mod.VerifyContract(sc)
 	if err != nil {
-		return fmt.Errorf("verify: %w", err)
+		return false, fmt.Errorf("verify: %w", err)
 	}
 
-	return mod.db.storeSignedContract(sc)
+	return true, mod.db.storeSignedContract(sc)
 }
 
 // maxContractSize is the largest object the indexer reads to find a contract.

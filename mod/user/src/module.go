@@ -30,6 +30,9 @@ type Module struct {
 
 	sibs sig.Map[string, Sibling]
 
+	// swarm is the member set publishSwarm last emitted events for.
+	swarm memberSet
+
 	// policy persists the admission delegates; an unset value selects the
 	// policies.* config value, whose code default is reject_all.
 	// GetSwarmJoinPolicy, GetSwarmInvitePolicy and GetContractAcceptPolicy read
@@ -55,6 +58,7 @@ func (mod *Module) Run(ctx *astral.Context) error {
 
 	activeContractFollow := mod.config.ActiveContract.Follow(ctx)
 	mod.onActiveContractChanged(<-activeContractFollow)
+	mod.recordSwarm()
 	close(mod.ready)
 	go func() {
 		for contract := range activeContractFollow {

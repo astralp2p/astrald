@@ -191,7 +191,8 @@ func TestAllServicesMemberOutcome(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			e := newEnv(t)
 			sink := newSink()
-			st := e.c.Discover(Request{Caller: astral.GenerateIdentity(), All: true, Members: []*astral.Identity{astral.GenerateIdentity()}})
+			e.c.SetMembers([]*astral.Identity{astral.GenerateIdentity()})
+			st := e.c.Discover(Request{Caller: astral.GenerateIdentity(), All: true, Swarm: true})
 			go st.Run(sink)
 			r := st.Contributions()[0]
 			r.Update(remoteView(astral.GenerateIdentity(), "anything", true), true)

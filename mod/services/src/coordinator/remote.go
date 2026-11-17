@@ -13,6 +13,8 @@ type Contribution struct {
 	member      *astral.Identity
 	unresolved  map[string]*evaluation   // initial evaluation per service, until the member's outcome
 	contributed map[offeringKey]struct{} // offerings this member contributed
+	stop        func()                   // stops the carry; nil before it starts
+	ended       bool                     // the member left or the stream closed
 }
 
 func newContribution(st *Stream, member *astral.Identity) *Contribution {
@@ -29,7 +31,7 @@ func (r *Contribution) Update(u *services.Update, visible bool) {
 	c := r.st.c
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	if r.st.closed || u == nil || u.ProviderID == nil || u.ProviderID.IsZero() {
+	if r.ended || r.st.closed || u == nil || u.ProviderID == nil || u.ProviderID.IsZero() {
 		return
 	}
 	if !r.st.requests(string(u.Name)) {
@@ -52,7 +54,7 @@ func (r *Contribution) Remove(keys []*services.OfferingKey) {
 	c := r.st.c
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	if r.st.closed {
+	if r.ended || r.st.closed {
 		return
 	}
 	for _, ok := range keys {
@@ -77,6 +79,9 @@ func (r *Contribution) Initial(incomplete []string) {
 	c := r.st.c
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	if r.ended {
+		return
+	}
 	failed := map[string]struct{}{}
 	for _, s := range incomplete {
 		failed[s] = struct{}{}
@@ -104,6 +109,13 @@ func (r *Contribution) Lost() {
 	c := r.st.c
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	if r.ended {
+		return
+	}
+	r.lostLocked()
+}
+
+func (r *Contribution) lostLocked() {
 	for _, o := range r.evaluations() {
 		o.fail()
 	}

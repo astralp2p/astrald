@@ -26,6 +26,9 @@ type Module struct {
 	router   routing.OpRouter
 	handlers sig.Map[string, []auth.Handler]
 	indexMu  sync.Mutex
+	// onIndexed holds the OnContractIndexed callbacks.
+	onIndexedMu sync.Mutex
+	onIndexed   []func(*apiauth.SignedContract)
 
 	// handlersMu serializes Add's read-modify-write of handlers against
 	// other Adds and against get, so no registration is lost.

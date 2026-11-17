@@ -68,6 +68,13 @@ func (a *swarmApps) IsSwarmApp(_ *astral.Context, app *astral.Identity) bool {
 func (u *swarmUser) LocalSwarm() []*astral.Identity { return u.swarm }
 func (u *swarmUser) Identity() *astral.Identity     { return u.user }
 
+// Ready reports the user module ready at once.
+func (u *swarmUser) Ready() <-chan struct{} {
+	ch := make(chan struct{})
+	close(ch)
+	return ch
+}
+
 type swarmObjects struct {
 	objects.Module
 	pushes atomic.Int32
@@ -123,6 +130,8 @@ func newSwarm() *swarm {
 	s.a = &Module{Deps: Deps{Auth: s.authA, Apphost: s.apps, Objects: s.objectsA, User: members}, node: s.nodeA, log: alog.New(s.nodeA.id), coord: coordinator.New(cfg)}
 	s.b = &Module{Deps: Deps{Auth: s.authB, Apphost: s.apps, Objects: &swarmObjects{}, User: members}, node: nodeB, log: alog.New(nodeB.id), coord: coordinator.New(cfg)}
 	s.nodeA.peer = s.b
+	s.a.coord.SetMembers(s.a.swarmMembers())
+	s.b.coord.SetMembers(s.b.swarmMembers())
 	return s
 }
 

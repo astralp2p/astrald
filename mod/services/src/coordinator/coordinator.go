@@ -58,6 +58,7 @@ type Coordinator struct {
 	byName   map[string]map[*Binding]struct{}
 	byCaller map[string]map[*Stream]struct{}
 	private  *services.PrivateList // the user's private list; nil is empty
+	members  []*astral.Identity    // the other members of the local swarm, in SetMembers order
 }
 
 func New(cfg Config) *Coordinator {
@@ -147,21 +148,30 @@ func (c *Coordinator) reevaluateForFollowers(b *Binding) {
 // Request describes one discovery stream.
 type Request struct {
 	Caller  *astral.Identity
-	Names   []string // the services discovered; with All, a snapshot of Names()
-	All     bool     // discover every service; members may report any name
-	Follow  bool     // keep the stream open after the initial attempt; never with All
-	Members []*astral.Identity
+	Names   []string    // the services discovered; with All, a snapshot of Names()
+	All     bool        // discover every service; members may report any name
+	Follow  bool        // keep the stream open after the initial attempt; never with All
+	Swarm   bool        // carry the discovery to every swarm member
+	Carrier Carrier     // feeds the swarm members' contributions; nil starts no carry
 	Filter  *Visibility // nil sends every offering unfiltered
 	Tagged  bool        // write each view with its provider's visibility
 }
 
 // Discover enrolls a stream and sets up its initial attempt in one critical
-// section. Every local binding of a requested name owes one initial
-// evaluation per name; every member owes one per name, or one in all with All.
+// section, then starts the carry of each swarm member outside it. Every local
+// binding of a requested name owes one initial evaluation per name; with
+// Swarm, every member owes one per name, or one in all with All.
 func (c *Coordinator) Discover(req Request) *Stream {
 	c.mu.Lock()
-	defer c.mu.Unlock()
+	st := c.discoverLocked(req)
+	initial := append([]*Contribution(nil), st.contributions...)
+	c.mu.Unlock()
 
+	c.startCarries(st, initial)
+	return st
+}
+
+func (c *Coordinator) discoverLocked(req Request) *Stream {
 	st := c.enrollStream(req)
 	at := newAttempt(st)
 	st.attempt = at
@@ -170,7 +180,9 @@ func (c *Coordinator) Discover(req Request) *Stream {
 	if req.All {
 		memberNames = []string{allServices}
 	}
-	addMemberEvaluations(at, req.Members, memberNames)
+	if req.Swarm {
+		addMemberEvaluations(at, c.members, memberNames)
+	}
 	c.startBudget(at)
 	for _, sl := range touched {
 		sl.binding.schedule(sl)

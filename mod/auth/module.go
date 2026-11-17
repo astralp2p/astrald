@@ -55,6 +55,10 @@ type Module interface {
 	// IndexContract verifies and adds a signed contract to the auth index.
 	IndexContract(ctx *astral.Context, contract *auth.SignedContract) error
 
+	// OnContractIndexed registers fn to run after each contract the index did
+	// not hold before is added to it. fn runs outside the index lock.
+	OnContractIndexed(fn func(*auth.SignedContract))
+
 	// SignedContracts returns a query builder for finding active signed contracts.
 	SignedContracts() ContractQueryBuilder
 

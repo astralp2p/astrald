@@ -75,6 +75,7 @@ request-grant-scope
 swarm-authz-matrix
 stranger-disclosure
 services-swarm-outcome-rules
+services-swarm-membership
 expel-node
 basic-strategy-excess-link-pruning
 basic-strategy-stalled-endpoint-released

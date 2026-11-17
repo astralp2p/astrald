@@ -7,6 +7,7 @@ import (
 	"github.com/astralp2p/astral-go/api/events"
 	"github.com/astralp2p/astral-go/api/nodes"
 	servicescli "github.com/astralp2p/astral-go/api/services/client"
+	"github.com/astralp2p/astral-go/api/user"
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astrald/core"
 	"github.com/astralp2p/astrald/mod/objects"
@@ -29,6 +30,33 @@ type memberCarry struct {
 	view         *callerView
 	names        []string // nil asks for every service
 	follow       bool
+}
+
+// discoveryCarrier starts the member carries of one discovery. Each carry
+// runs under its own context, derived from the op's.
+type discoveryCarrier struct {
+	mod    *Module
+	ctx    *astral.Context
+	view   *callerView
+	names  []string // nil asks for every service
+	follow bool
+}
+
+func (mod *Module) newCarrier(ctx *astral.Context, d *discovery) *discoveryCarrier {
+	// why: with All the request's names are this node's snapshot; a member is
+	// asked for every service of its own.
+	names := d.request.Names
+	if d.request.All {
+		names = nil
+	}
+	return &discoveryCarrier{mod: mod, ctx: ctx, view: d.view, names: names, follow: d.request.Follow}
+}
+
+// Carry starts feeding r until stop is called or the op ends.
+func (c *discoveryCarrier) Carry(r *coordinator.Contribution) (stop func()) {
+	ctx, cancel := c.ctx.WithCancel()
+	go c.mod.carry(ctx, memberCarry{contribution: r, view: c.view, names: c.names, follow: c.follow})
+	return cancel
 }
 
 // carry feeds one swarm member's contribution to a stream: the member's own
@@ -118,15 +146,21 @@ func (mod *Module) pushRelayContract(ctx *astral.Context, app, member *astral.Id
 }
 
 // ReceiveObject watches this node's link events, which restore lost swarm
-// contributions.
+// contributions, and its swarm member events, which update the member set of
+// open swarm follows.
 func (mod *Module) ReceiveObject(drop objects.Drop) error {
 	e, ok := drop.Object().(*events.Event)
 	// why: link events report this node's own links; one sent by another node is forged.
 	if !ok || !drop.SenderID().IsEqual(mod.node.Identity()) {
 		return nil
 	}
-	if lc, ok := e.Data.(*nodes.LinkCreatedEvent); ok {
-		mod.links.notify(lc.RemoteIdentity)
+	switch data := e.Data.(type) {
+	case *nodes.LinkCreatedEvent:
+		mod.links.notify(data.RemoteIdentity)
+	case *user.SwarmMemberJoined, *user.SwarmMemberLeft:
+		// why: the current set, not the event's node, so events that arrive
+		// out of order still leave the latest set.
+		mod.refreshMembers()
 	}
 	return nil
 }

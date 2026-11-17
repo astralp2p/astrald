@@ -1,0 +1,100 @@
+package main
+
+import (
+	"encoding/json"
+	"fmt"
+	"os"
+	"time"
+
+	"github.com/astralp2p/astral-go/api/services"
+	userclient "github.com/astralp2p/astral-go/api/user/client"
+	"github.com/astralp2p/astral-go/astral"
+)
+
+// membershipWait bounds how long the follow takes to reflect a member change.
+// note: a carry to a new member retries on a capped backoff starting at 1s.
+const membershipWait = 60 * time.Second
+
+// membership opens a swarm follow on node1, adopts the fresh node ssm_late,
+// then expels it, and prints which steps held as JSON facts.
+func membership(path string) error {
+	facts := map[string]bool{}
+	err := membershipSteps(path, facts)
+	out, _ := json.Marshal(map[string]any{"services_swarm_membership": facts})
+	fmt.Println(string(out))
+	return err
+}
+
+func membershipSteps(path string, facts map[string]bool) error {
+	w, err := load(path)
+	if err != nil {
+		return err
+	}
+	late, userToken, err := loadLate(path)
+	if err != nil {
+		return err
+	}
+	lateID, err := astral.ParseIdentity(late.Identity)
+	if err != nil {
+		return err
+	}
+	const name = "latejoin"
+
+	app, f, err := w.app(w.admin1, w.n1)
+	if err != nil {
+		return err
+	}
+	if err := w.grant(app, []string{name}); err != nil {
+		return err
+	}
+	providerID, cl, err := w.app(connect(late.Endpoint, late.Token), late, serveApps)
+	if err != nil {
+		return err
+	}
+	provider := &evaluated{}
+	b, err := cl.AdvertiseOpen(w.ctx, []string{name}, true, provider.offer)
+	if err != nil {
+		return err
+	}
+	defer b.Close()
+
+	watch, err := f.WatchIn(w.ctx, services.ReachSwarm, []string{name})
+	if err != nil {
+		return err
+	}
+	defer watch.Close()
+	if err := holds(watch); err != nil {
+		return err
+	}
+
+	users := userclient.New(w.node1, connect(w.n1.Endpoint, userToken))
+	if _, err := users.Adopt(w.ctx, late.Identity); err != nil {
+		return fmt.Errorf("adopt: %w", err)
+	}
+	if err := step(facts, "late_join_reaches_open_follow", holdsWithin(watch, membershipWait, providerID.String()+"/"+name)); err != nil {
+		return err
+	}
+
+	if _, err := users.Expel(w.ctx, lateID); err != nil {
+		return fmt.Errorf("expel: %w", err)
+	}
+	return step(facts, "expulsion_removes_from_open_follow", holdsWithin(watch, membershipWait))
+}
+
+// loadLate reads the late node and the User's token from the session.
+func loadLate(path string) (node, string, error) {
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		return node{}, "", err
+	}
+	var s struct {
+		Nodes map[string]node `json:"nodes"`
+		Facts struct {
+			UserToken string `json:"user_token"`
+		} `json:"facts"`
+	}
+	if err := json.Unmarshal(raw, &s); err != nil {
+		return node{}, "", err
+	}
+	return s.Nodes["ssm_late"], s.Facts.UserToken, nil
+}
