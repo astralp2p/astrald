@@ -95,10 +95,11 @@ func (mod *Module) applyExpulsion(id *astral.Identity) {
 		return
 	}
 
+	// why: a link-maintenance task still running when its link closes redials it.
+	mod.removeSibling(id)
 	if err := mod.Nodes.CloseLinks(id); err != nil {
 		mod.log.Errorv(1, "closing links to expelled %v: %v", id, err)
 	}
-	mod.removeSibling(id)
 }
 
 // leaveSwarm strips this node's own membership after it is expelled from its swarm:

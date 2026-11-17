@@ -326,3 +326,21 @@ func TestMaintainLinkTaskIgnoresWakesOfALinkedTarget(t *testing.T) {
 	default:
 	}
 }
+
+// TestMaintainLinkTaskDoesNotDialAfterCancel: a task whose context is already
+// cancelled when the link needs work returns without dialing, so a link close
+// racing the cancel of an expelled sibling's task cannot redial it.
+func TestMaintainLinkTaskDoesNotDialAfterCancel(t *testing.T) {
+	f := newLinkTaskFixture(failEvery, false)
+	f.task.Wake()
+
+	ctx, cancel := astral.NewContext(nil).WithCancel()
+	cancel()
+
+	if err := f.task.Run(ctx); !errors.Is(err, context.Canceled) {
+		t.Fatalf("Run returned %v; want %v", err, context.Canceled)
+	}
+	if n := f.scheduler.nextAttempt() - 1; n != 0 {
+		t.Fatalf("the cancelled task dialed %v times; want 0", n)
+	}
+}
