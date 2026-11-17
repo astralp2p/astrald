@@ -21,7 +21,7 @@ func testDB(t *testing.T) *DB {
 	}
 
 	db := &DB{DB: gdb}
-	if err := db.AutoMigrate(&dbExpulsion{}, &dbAsset{}); err != nil {
+	if err := db.AutoMigrate(&dbExpulsion{}, &dbAsset{}, &dbMnemonic{}); err != nil {
 		t.Fatalf("migrate: %v", err)
 	}
 	return db
