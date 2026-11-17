@@ -13,8 +13,8 @@ import (
 
 type opSetSwarmPolicyArgs struct {
 	// Identity and Operation name the delegate that decides. Both empty
-	// clears the delegate, which restores the config value, or the bundled
-	// accept-all for contract accept; one alone is an error.
+	// clears the delegate, which restores the policies.* config value, whose
+	// code default is reject_all; one alone is an error.
 	Identity  string
 	Operation string
 	// Timeout bounds one question. Zero waits policy.MaxTimeout; above it is
