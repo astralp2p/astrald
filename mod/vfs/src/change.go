@@ -92,7 +92,17 @@ func (c *change) addEntry(parent, row *dbEntry) error {
 	row.ModTime = now
 	row.CreationTime = now
 
+	if row.ObjectID != nil && !row.isFolder() {
+		if err := c.gainContent(row.ObjectID); err != nil {
+			return err
+		}
+	}
+
 	if err := c.tx.insertEntry(row); err != nil {
+		return err
+	}
+
+	if err := c.tx.addUsage(c.vol.Identity, 0, 1); err != nil {
 		return err
 	}
 

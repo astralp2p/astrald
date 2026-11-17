@@ -362,7 +362,7 @@ func changeTestSetLimits(t *testing.T, mod *Module, vol *dbVolume, bytes, inodes
 func changeTestCount(t *testing.T, mod *Module, vol *dbVolume) uint64 {
 	t.Helper()
 
-	n, err := mod.db.entryCount(vol.Identity)
+	n, err := mod.db.countEntries(vol.Identity)
 	if err != nil {
 		t.Fatalf("entry count: %v", err)
 	}

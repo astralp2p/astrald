@@ -15,6 +15,11 @@ type dbVolume struct {
 	ByteLimit  int64            `gorm:"not null"`            // 0 means no limit
 	InodeLimit int64            `gorm:"not null"`            // 0 means no limit
 	Evaluator  string           `gorm:"not null;default:''"` // the evaluator's endpoint; empty means none
+
+	// Bytes and Inodes are the usage of the VFS, kept by every change in its transaction (usage.go).
+	// why: the defaults let AutoMigrate add the columns to a table with rows.
+	Bytes  int64 `gorm:"not null;default:0"`
+	Inodes int64 `gorm:"not null;default:0"`
 }
 
 func (dbVolume) TableName() string { return vfsmod.DBPrefix + "volumes" }

@@ -215,7 +215,7 @@ func TestEntryCountIsPerVFSAndSkipsTheRoot(t *testing.T) {
 func usageOf(t *testing.T, mod *Module, id *astral.Identity) uint64 {
 	t.Helper()
 
-	n, err := mod.db.usage(id)
+	n, err := mod.db.countContent(id)
 	if err != nil {
 		t.Fatalf("usage: %v", err)
 	}
@@ -226,7 +226,7 @@ func usageOf(t *testing.T, mod *Module, id *astral.Identity) uint64 {
 func countOf(t *testing.T, mod *Module, id *astral.Identity) uint64 {
 	t.Helper()
 
-	n, err := mod.db.entryCount(id)
+	n, err := mod.db.countEntries(id)
 	if err != nil {
 		t.Fatalf("entryCount: %v", err)
 	}

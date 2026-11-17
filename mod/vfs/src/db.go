@@ -333,11 +333,11 @@ func (db *DB) setFolderIDIfUnchanged(rowID, gen int64, id astral.ObjectID) (bool
 	return res.RowsAffected == 1, res.Error
 }
 
-// usage returns the bytes of file content a VFS holds. Each distinct ObjectID counts once, and a folder counts
-// nothing.
+// countContent returns the bytes of file content a VFS holds by reading every file of it. Each distinct ObjectID
+// counts once, and a folder counts nothing.
 //
-// why: usage is computed from the entries, so no column can drift from them.
-func (db *DB) usage(vfsID *astral.Identity) (total uint64, err error) {
+// note: the cost grows with the VFS; a change reads the stored usage instead (measureUsage).
+func (db *DB) countContent(vfsID *astral.Identity) (total uint64, err error) {
 	rows, err := db.Model(&dbEntry{}).
 		Where("vfs = ? AND flags & ? = 0", vfsID, uint16(vfsapi.FlagFolder)).
 		Distinct("object_id").
@@ -358,8 +358,8 @@ func (db *DB) usage(vfsID *astral.Identity) (total uint64, err error) {
 	return total, rows.Err()
 }
 
-// entryCount returns the number of entries of a VFS. The root is not counted.
-func (db *DB) entryCount(vfsID *astral.Identity) (count uint64, err error) {
+// countEntries returns the number of entries of a VFS by counting them. The root is not counted.
+func (db *DB) countEntries(vfsID *astral.Identity) (count uint64, err error) {
 	var n int64
 
 	err = db.Model(&dbEntry{}).Where("vfs = ? AND id <> parent_id", vfsID).Count(&n).Error
@@ -373,15 +373,50 @@ type vfsUsage struct {
 	Inodes uint64
 }
 
-// measureUsage returns the usage of a VFS.
-func (db *DB) measureUsage(vfsID *astral.Identity) (u vfsUsage, err error) {
-	if u.Bytes, err = db.usage(vfsID); err != nil {
-		return
+// measureUsage returns the stored usage of a VFS.
+//
+// why: every change keeps the stored usage in its transaction, so a change costs the same in any size of VFS.
+func (db *DB) measureUsage(vfsID *astral.Identity) (vfsUsage, error) {
+	vol, err := db.findVolume(vfsID)
+	if err != nil {
+		return vfsUsage{}, err
 	}
 
-	u.Inodes, err = db.entryCount(vfsID)
+	return vfsUsage{Bytes: uint64(vol.Bytes), Inodes: uint64(vol.Inodes)}, nil
+}
 
-	return
+// addUsage adds signed deltas to the stored usage of a VFS.
+func (db *DB) addUsage(vfsID *astral.Identity, bytes, inodes int64) error {
+	return db.Model(&dbVolume{}).Where("identity = ?", vfsID).Updates(map[string]any{
+		"bytes":  gorm.Expr("bytes + ?", bytes),
+		"inodes": gorm.Expr("inodes + ?", inodes),
+	}).Error
+}
+
+// holdsContent reports whether a file of a VFS has the content ObjectID.
+//
+// note: the lookup uses idx_vfs__entries_vfs_object, so it costs the same in any size of VFS.
+func (db *DB) holdsContent(vfsID *astral.Identity, id *astral.ObjectID) (bool, error) {
+	var ids []int64
+
+	err := db.Model(&dbEntry{}).
+		Where("vfs = ? AND object_id = ? AND flags & ? = 0", vfsID, id, uint16(vfsapi.FlagFolder)).
+		Limit(1).Pluck("id", &ids).Error
+
+	return len(ids) > 0, err
+}
+
+// findSubtreeContent returns the number of rows of a subtree and the distinct content ObjectIDs of its files.
+func (db *DB) findSubtreeContent(rowID int64) (rows int64, ids []*astral.ObjectID, err error) {
+	if err = db.Raw(`SELECT COUNT(*) FROM (`+subtreeCTE+`)`, rowID).Scan(&rows).Error; err != nil {
+		return 0, nil, err
+	}
+
+	err = db.Model(&dbEntry{}).
+		Where(`id IN (`+subtreeCTE+`) AND flags & ? = 0`, rowID, uint16(vfsapi.FlagFolder)).
+		Distinct().Pluck("object_id", &ids).Error
+
+	return rows, ids, err
 }
 
 // hasEntryWithObject reports whether a row has the ObjectID: the content of a file or the cached directory of a
