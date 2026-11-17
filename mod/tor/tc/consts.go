@@ -14,4 +14,5 @@ const (
 	keyAuthMethods       = "METHODS"
 	keyAuthCookieFile    = "COOKIEFILE"
 	authMethodSafeCookie = "SAFECOOKIE"
+	authMethodNull       = "NULL"
 )

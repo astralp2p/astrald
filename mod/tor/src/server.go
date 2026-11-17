@@ -10,6 +10,7 @@ import (
 
 	"github.com/astralp2p/astral-go/api/tor"
 	"github.com/astralp2p/astral-go/astral"
+	"github.com/astralp2p/astral-go/lib/ipc"
 	"github.com/astralp2p/astral-go/sig"
 	"github.com/astralp2p/astrald/mod/tor/tc"
 )
@@ -71,13 +72,13 @@ func (srv *Server) Run(ctx *astral.Context) error {
 
 func (srv *Server) listen(ctx context.Context, key Key) (*listener, error) {
 	// Set up the listener for incoming tor connections
-	tcpListener, err := net.Listen("tcp", "127.0.0.1:0")
+	targetListener, err := ipc.Listen(ipcAddr(srv.config.OnionTarget))
 	if err != nil {
 		return nil, err
 	}
 
 	sig.On(ctx, func() {
-		tcpListener.Close()
+		targetListener.Close()
 	})
 
 	ctl, err := srv.control()
@@ -93,36 +94,54 @@ func (srv *Server) listen(ctx context.Context, key Key) (*listener, error) {
 		keyStr = "ED25519-V3:" + base64.StdEncoding.EncodeToString(key)
 	}
 
-	onion, err := ctl.AddOnion(keyStr, tc.Port(srv.config.ListenPort, tcpListener.Addr().String()))
+	onion, err := ctl.AddOnion(keyStr, tc.Port(srv.config.ListenPort, onionTarget(targetListener)))
 	if err != nil {
 		return nil, err
 	}
 
-	return &listener{tcpListener, onion, ctl}, nil
+	return &listener{targetListener, onion, ctl}, nil
+}
+
+// onionTarget is the target ADD_ONION names for l: a TCP listener's host:port, or a unix
+// listener's path as "unix:/path".
+func onionTarget(l net.Listener) string {
+	if l.Addr().Network() == "unix" {
+		return unixPrefix + l.Addr().String()
+	}
+
+	return l.Addr().String()
 }
 
 func (srv *Server) control() (*tc.Control, error) {
-	conn, err := srv.connect()
+	network, address := netAddr(srv.config.ControlAddr)
+
+	conn, err := srv.connect(network, address)
 	if err != nil {
 		return nil, err
 	}
 
 	ctl := tc.New(conn)
-	if err := ctl.Authenticate(); err != nil {
+
+	authenticate := ctl.Authenticate
+	if network == "unix" {
+		authenticate = ctl.AuthenticateOverUnixSocket
+	}
+	if err := authenticate(); err != nil {
+		conn.Close()
 		return nil, err
 	}
 
 	return ctl, nil
 }
 
-func (srv *Server) connect() (io.ReadWriteCloser, error) {
-	return net.Dial("tcp", srv.config.ControlAddr)
+func (srv *Server) connect(network, address string) (io.ReadWriteCloser, error) {
+	return net.Dial(network, address)
 }
 
 type listener struct {
-	tcp   net.Listener
-	onion tc.Onion
-	ctl   *tc.Control
+	target net.Listener
+	onion  tc.Onion
+	ctl    *tc.Control
 }
 
 func (l listener) Addr() string {
@@ -157,11 +176,11 @@ func (l listener) PrivateKey() Key {
 }
 
 func (l listener) Accept() (net.Conn, error) {
-	return l.tcp.Accept()
+	return l.target.Accept()
 }
 
 func (l listener) Close() error {
-	l.tcp.Close()
+	l.target.Close()
 
 	return l.ctl.DelOnion(l.onion.ServiceID)
 }
