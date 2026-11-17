@@ -30,7 +30,9 @@ type opAcceptContractArgs struct {
 // this node's own key. Revisit when the claim window admits an identity.
 //
 // why a policy and not an action: admission is the node's own decision, as for
-// user.accept_membership, and its bundled default keeps a fresh node claimable.
+// user.accept_membership. GetContractAcceptPolicy decides: the stored delegate;
+// else the policies.contract_accept config value, whose code default is
+// reject_all.
 func (mod *Module) OpAcceptContract(ctx *astral.Context, q *routing.IncomingQuery, args opAcceptContractArgs) (err error) {
 	conn := q.AcceptRaw()
 	ch := channel.New(conn, channel.WithFormats(args.In, args.Out))

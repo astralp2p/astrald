@@ -30,9 +30,10 @@ type Module struct {
 
 	sibs sig.Map[string, Sibling]
 
-	// policy persists the admission delegates; an unset value selects
-	// accept-all. GetSwarmJoinPolicy, GetSwarmInvitePolicy and
-	// GetContractAcceptPolicy read it on every decision.
+	// policy persists the admission delegates; an unset value selects the
+	// policies.* config value, whose code default is reject_all.
+	// GetSwarmJoinPolicy, GetSwarmInvitePolicy and GetContractAcceptPolicy read
+	// it on every decision.
 	policy policyConfig
 
 	// mu makes the claim check and the claim one transition; see claim.
