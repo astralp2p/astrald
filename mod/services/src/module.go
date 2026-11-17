@@ -1,6 +1,7 @@
 package services
 
 import (
+	"sync"
 	"time"
 
 	"github.com/astralp2p/astral-go/astral"
@@ -26,6 +27,10 @@ type Module struct {
 	coord  *coordinator.Coordinator
 	links  linkWaiters
 
+	// membersMu makes reading the member set and handing it to the
+	// coordinator one step, so a stale read never replaces a newer set.
+	membersMu sync.Mutex
+
 	visibility visibilityConfig
 }
 
@@ -39,11 +44,21 @@ func (mod *Module) Run(ctx *astral.Context) error {
 	case <-ctx.Done():
 		return nil
 	}
-	mod.coord.SetMembers(mod.swarmMembers())
+	mod.refreshMembers()
 	for list := range mod.visibility.Private.Follow(ctx) {
 		mod.coord.SetPrivate(list)
 	}
 	return nil
+}
+
+// refreshMembers reads the current swarm member set, hands it to the
+// coordinator and returns it.
+func (mod *Module) refreshMembers() []*astral.Identity {
+	mod.membersMu.Lock()
+	defer mod.membersMu.Unlock()
+	members := mod.swarmMembers()
+	mod.coord.SetMembers(members)
+	return members
 }
 
 func (mod *Module) Router() astral.Router {

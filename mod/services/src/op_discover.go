@@ -144,7 +144,9 @@ func (mod *Module) admitDiscovery(ctx *astral.Context, q *routing.IncomingQuery,
 			return nil, errSwarmFromLink
 		}
 		req.Swarm = true
-		nodeIDs = append(nodeIDs, mod.swarmMembers()...)
+		// why: the coordinator carries to its own member set; refreshing it
+		// here covers a discovery admitted before Run seeds it.
+		nodeIDs = append(nodeIDs, mod.refreshMembers()...)
 	}
 
 	d := &discovery{view: mod.newCallerView(ctx, req.Caller)}

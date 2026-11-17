@@ -160,7 +160,7 @@ func (mod *Module) ReceiveObject(drop objects.Drop) error {
 	case *user.SwarmMemberJoined, *user.SwarmMemberLeft:
 		// why: the current set, not the event's node, so events that arrive
 		// out of order still leave the latest set.
-		mod.coord.SetMembers(mod.swarmMembers())
+		mod.refreshMembers()
 	}
 	return nil
 }
