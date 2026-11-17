@@ -6,8 +6,12 @@ type Config struct {
 	Listen *bool `yaml:"listen,omitempty"`
 	Dial   *bool `yaml:"dial,omitempty"`
 
+	// TorProxy is Tor's SOCKS port and ControlAddr its control port, each a "host:port" or a
+	// "unix:/path" socket. OnionTarget is where the node takes the connections Tor forwards from
+	// the onion service: "tcp:127.0.0.1:0" for a free loopback port, or a "unix:/path" socket.
 	TorProxy    string        `yaml:"tor_proxy"`
 	ControlAddr string        `yaml:"control_addr"`
+	OnionTarget string        `yaml:"onion_target"`
 	DialTimeout time.Duration `yaml:"dial_timeout"`
 	ListenPort  int
 }
@@ -27,6 +31,7 @@ func defaultConfig() Config {
 		Listen:      &listen,
 		TorProxy:    "127.0.0.1:9050",
 		ControlAddr: "127.0.0.1:9051",
+		OnionTarget: "tcp:127.0.0.1:0",
 		DialTimeout: time.Minute,
 		ListenPort:  1791,
 	}

@@ -30,13 +30,31 @@ var errServerHash = errors.New("tor control: server hash does not prove the cook
 // process listening on the control address reads any file the node can read. With SAFECOOKIE the
 // daemon proves it knows the cookie before the client answers, and the answer is an HMAC.
 func (ctl *Control) Authenticate() error {
+	return ctl.authenticate(false)
+}
+
+// AuthenticateOverUnixSocket is Authenticate for a control connection over a unix socket. It also
+// accepts a daemon that asks for no authentication, method NULL; SAFECOOKIE stays preferred.
+//
+// why: the file system guards a unix socket, while any local process reaches a TCP control port.
+// An app that embeds Tor gets such a socket: tor-android's TorService starts tor with a
+// ControlSocket in the app's private directory and CookieAuthentication 0.
+func (ctl *Control) AuthenticateOverUnixSocket() error {
+	return ctl.authenticate(true)
+}
+
+func (ctl *Control) authenticate(allowNull bool) error {
 	info := ctl.ProtocolInfo()
 	if info == nil {
 		return errors.New("protocol info unavailable")
 	}
 
-	if info.HasAuthMethod(authMethodSafeCookie) {
+	switch {
+	case info.HasAuthMethod(authMethodSafeCookie):
 		return ctl.authenticateWithSafeCookie(info)
+	case allowNull && info.HasAuthMethod(authMethodNull):
+		_, _, err := ctl.request("AUTHENTICATE")
+		return err
 	}
 
 	return errors.New("no supported auth method")
