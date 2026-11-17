@@ -99,7 +99,12 @@ func (a *MaintainLinkTask) Run(ctx *astral.Context) error {
 }
 
 // waitForAction returns once the link needs work, or with the error of ctx.
+// why: ctx is checked first because a link close or Wake racing the cancel sets
+// actionRequired and fills wake, and either would otherwise start one more dial.
 func (a *MaintainLinkTask) waitForAction(ctx *astral.Context) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	for !a.actionRequired.Load() {
 		select {
 		case <-ctx.Done():
