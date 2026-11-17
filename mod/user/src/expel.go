@@ -43,6 +43,7 @@ func (mod *Module) Expel(ctx *astral.Context, nodeID *astral.Identity) (*user.Si
 	if err != nil {
 		return nil, err
 	}
+	mod.publishSwarm()
 
 	go mod.PushToLocalSwarm(mod.ctx, signed)
 	// why: PushToLocalSwarm and syncExpulsions both skip the subject, so push the ban
@@ -79,6 +80,7 @@ func (mod *Module) receiveExpulsion(signed *user.SignedExpulsion) error {
 		mod.log.Errorv(1, "storing expulsion failed: %v", err)
 		return objects.ErrPushRejected
 	}
+	mod.publishSwarm()
 
 	mod.applyExpulsion(signed.Subject)
 	return nil

@@ -62,22 +62,16 @@ func (mod *Module) OpDiscover(ctx *astral.Context, q *routing.IncomingQuery, arg
 		}
 	}
 
+	ctx, cancel := ctx.WithCancel()
+	defer cancel()
+	if d.request.Swarm {
+		d.request.Carrier = mod.newCarrier(ctx, d)
+	}
+
 	// fixme: authorization is checked at admission only; a follow outlives a
 	// revoked or narrowed grant.
 	st := mod.coord.Discover(d.request)
 	defer st.Close()
-
-	ctx, cancel := ctx.WithCancel()
-	defer cancel()
-	// why: with All the request's names are this node's snapshot; a member is
-	// asked for every service of its own.
-	memberNames := d.request.Names
-	if d.request.All {
-		memberNames = nil
-	}
-	for _, r := range st.Contributions() {
-		go mod.carry(ctx, memberCarry{contribution: r, view: d.view, names: memberNames, follow: args.Follow})
-	}
 
 	go closeWhenConsumerLeaves(ch, st)
 	go closeOnCancel(ctx, st)
@@ -149,8 +143,8 @@ func (mod *Module) admitDiscovery(ctx *astral.Context, q *routing.IncomingQuery,
 		if q.Origin() == astral.OriginNetwork {
 			return nil, errSwarmFromLink
 		}
-		req.Members = mod.swarmMembers()
-		nodeIDs = append(nodeIDs, req.Members...)
+		req.Swarm = true
+		nodeIDs = append(nodeIDs, mod.swarmMembers()...)
 	}
 
 	d := &discovery{view: mod.newCallerView(ctx, req.Caller)}

@@ -2,6 +2,7 @@
 //
 //	driver drive  <session.json>   the v1 and swarm scenarios; prints facts as JSON
 //	driver verify <session.json>   one independent swarm round trip
+//	driver membership <session.json>  a swarm follow across a late join and an expulsion; prints facts as JSON
 package main
 
 import (
@@ -42,8 +43,15 @@ type world struct {
 
 func main() {
 	if len(os.Args) != 3 {
-		fmt.Fprintln(os.Stderr, "usage: driver drive|verify <session.json>")
+		fmt.Fprintln(os.Stderr, "usage: driver drive|verify|membership <session.json>")
 		os.Exit(2)
+	}
+	if os.Args[1] == "membership" {
+		if err := membership(os.Args[2]); err != nil {
+			fmt.Fprintln(os.Stderr, "FAIL:", err)
+			os.Exit(1)
+		}
+		return
 	}
 	w, err := load(os.Args[2])
 	if err == nil {
@@ -174,7 +182,12 @@ func keys(ids ...string) string {
 
 // holds waits until the watcher holds exactly want.
 func holds(w *servicescli.Watcher, want ...string) error {
-	deadline := time.After(20 * time.Second)
+	return holdsWithin(w, 20*time.Second, want...)
+}
+
+// holdsWithin waits up to wait until the watcher holds exactly want.
+func holdsWithin(w *servicescli.Watcher, wait time.Duration, want ...string) error {
+	deadline := time.After(wait)
 	for {
 		var got []string
 		for _, u := range w.Offerings() {

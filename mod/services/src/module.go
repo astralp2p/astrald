@@ -31,8 +31,15 @@ type Module struct {
 
 var _ services.Module = &Module{}
 
-// Run applies every change of the private list until ctx ends.
+// Run seeds the swarm member set, then applies every change of the private
+// list until ctx ends. Member changes arrive through ReceiveObject.
 func (mod *Module) Run(ctx *astral.Context) error {
+	select {
+	case <-mod.User.Ready():
+	case <-ctx.Done():
+		return nil
+	}
+	mod.coord.SetMembers(mod.swarmMembers())
 	for list := range mod.visibility.Private.Follow(ctx) {
 		mod.coord.SetPrivate(list)
 	}

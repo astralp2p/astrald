@@ -144,7 +144,8 @@ func (e *env) discover(caller *astral.Identity, follow bool, sink *fakeSink, nam
 
 // discoverSwarm is discover with swarm members carrying the discovery.
 func (e *env) discoverSwarm(caller *astral.Identity, follow bool, sink *fakeSink, members []*astral.Identity, names ...string) (*Stream, chan error) {
-	st := e.c.Discover(Request{Caller: caller, Names: names, Follow: follow, Members: members})
+	e.c.SetMembers(members)
+	st := e.c.Discover(Request{Caller: caller, Names: names, Follow: follow, Swarm: true})
 	done := make(chan error, 1)
 	go func() { done <- st.Run(sink) }()
 	return st, done

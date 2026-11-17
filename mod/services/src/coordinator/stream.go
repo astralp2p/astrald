@@ -35,6 +35,8 @@ type Stream struct {
 	inflight          *offeringKey                     // view handed to the writer
 	inflightAvailable bool                             // the in-flight view offers the service
 	attempt           *attempt                         // nil once the boundary is sent
+	swarm             bool                             // swarm members carry this discovery
+	carrier           Carrier                          // nil starts no carry
 	contributions     []*Contribution                  // swarm members carrying this discovery
 	wake              chan struct{}
 	done              chan struct{}
@@ -50,6 +52,8 @@ func newStream(c *Coordinator, req Request) *Stream {
 		follow:         req.Follow,
 		filter:         req.Filter,
 		tagged:         req.Tagged,
+		swarm:          req.Swarm,
+		carrier:        req.Carrier,
 		written:        map[offeringKey]*services.Update{},
 		visible:        map[offeringKey]struct{}{},
 		unsent:         map[offeringKey]*services.Update{},
@@ -202,6 +206,9 @@ func (st *Stream) closeLocked() {
 				o.binding.removeIfIdle(o.slot)
 			}
 		}
+	}
+	for _, r := range st.contributions {
+		r.endLocked()
 	}
 	st.unsent = map[offeringKey]*services.Update{}
 	st.sendOrder = nil

@@ -214,6 +214,9 @@ func TestSwarmCarryRetriesOnItsBackoff(t *testing.T) {
 
 	// note: the failed first attempt doubled the delay to 2*carryRetryFirst;
 	// a restored member that ends again is retried after carryRetryFirst.
+	// why: the member's eos follows its update; a cut before the carry reads
+	// it leaves the attempt without an initial outcome, and the delay unreset.
+	time.Sleep(carryRetryFirst / 10)
 	node.cut()
 	start := time.Now()
 	expect[*services.Removed](t, c)

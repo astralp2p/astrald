@@ -93,6 +93,7 @@ func (mod *Module) Identity() *astral.Identity {
 // use ActiveContract(). A stored value that fails validation (stale, corrupt,
 // or a stray write) is scrubbed so it never stays live.
 func (mod *Module) onActiveContractChanged(signed *auth.SignedContract) {
+	defer mod.publishSwarm()
 	if signed.IsNil() {
 		mod.log.Info("this node runs without a user")
 		return

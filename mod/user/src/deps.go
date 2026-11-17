@@ -14,6 +14,7 @@ import (
 	authmod "github.com/astralp2p/astrald/mod/auth"
 	"github.com/astralp2p/astrald/mod/crypto"
 	"github.com/astralp2p/astrald/mod/dir"
+	"github.com/astralp2p/astrald/mod/events"
 	"github.com/astralp2p/astrald/mod/nearby"
 	nodesmod "github.com/astralp2p/astrald/mod/nodes"
 	objectsmod "github.com/astralp2p/astrald/mod/objects"
@@ -28,6 +29,7 @@ type Deps struct {
 	Auth      authmod.Module
 	Crypto    crypto.Module
 	Dir       dir.Module
+	Events    events.Module
 	Objects   objectsmod.Module
 	Nodes     nodesmod.Module
 	Scheduler scheduler.Module
@@ -71,6 +73,8 @@ func (mod *Module) LoadDependencies(ctx *astral.Context) (err error) {
 	if err = tree.BindPath(ctx, &mod.policy, mod.Tree.Root(), policyPath, true); err != nil {
 		return err
 	}
+
+	mod.Auth.OnContractIndexed(mod.onContractIndexed)
 
 	mod.Auth.Add(authmod.Func[*nodes.RelayForAction](mod.AuthorizeRelayFor))
 	mod.Auth.Add(authmod.Func[*auth.SeeObjectsAction](mod.AuthorizeSeeObjects))
