@@ -171,18 +171,77 @@ func TestLinkEventsWakeOnlyFromThisNode(t *testing.T) {
 	}
 }
 
-// cuttableNode routes like swarmNode and can end every stream it routed.
+// cuttableNode routes like swarmNode and can end every stream it routed. It
+// signals eos each time a member's eos reaches this node.
 type cuttableNode struct {
 	*swarmNode
+	eos chan struct{}
 	mu  sync.Mutex
 	out []io.WriteCloser
 }
 
+func newCuttableNode(n *swarmNode) *cuttableNode {
+	return &cuttableNode{swarmNode: n, eos: make(chan struct{}, 8)}
+}
+
 func (n *cuttableNode) RouteQuery(ctx *astral.Context, q *astral.InFlightQuery, w io.WriteCloser) (io.WriteCloser, error) {
+	ew := watchEOS(w, n.eos)
 	n.mu.Lock()
-	n.out = append(n.out, w)
+	n.out = append(n.out, ew)
 	n.mu.Unlock()
-	return n.swarmNode.RouteQuery(ctx, q, w)
+	return n.swarmNode.RouteQuery(ctx, q, ew)
+}
+
+// waitEOS waits until a member's eos reached this node.
+func (n *cuttableNode) waitEOS(t *testing.T) {
+	t.Helper()
+	select {
+	case <-n.eos:
+	case <-time.After(testWait):
+		t.Fatal("the member's eos did not reach the node")
+	}
+}
+
+// eosWatcher passes a member's stream to this node and signals each eos the
+// node has read.
+type eosWatcher struct {
+	io.WriteCloser
+	tap *io.PipeWriter
+}
+
+func watchEOS(w io.WriteCloser, eos chan<- struct{}) *eosWatcher {
+	r, tap := io.Pipe()
+	go func() {
+		objs := channel.NewReceiver(r)
+		for {
+			obj, err := objs.Receive()
+			if err != nil {
+				// why: a tap that stops reading would block the member's writes.
+				_, _ = io.Copy(io.Discard, r)
+				return
+			}
+			if _, ok := obj.(*astral.EOS); ok {
+				select {
+				case eos <- struct{}{}:
+				default:
+				}
+			}
+		}
+	}()
+	return &eosWatcher{WriteCloser: w, tap: tap}
+}
+
+// why: the node's end is an io.PipeWriter, whose Write returns once the node
+// read the bytes; the tap decodes them only after that.
+func (w *eosWatcher) Write(p []byte) (int, error) {
+	n, err := w.WriteCloser.Write(p)
+	_, _ = w.tap.Write(p[:n])
+	return n, err
+}
+
+func (w *eosWatcher) Close() error {
+	_ = w.tap.Close()
+	return w.WriteCloser.Close()
 }
 
 func (n *cuttableNode) cut() {
@@ -199,7 +258,7 @@ func (n *cuttableNode) cut() {
 // carryRetryFirst.
 func TestSwarmCarryRetriesOnItsBackoff(t *testing.T) {
 	s := newSwarm()
-	node := &cuttableNode{swarmNode: s.nodeA}
+	node := newCuttableNode(s.nodeA)
 	s.a.node = node
 	_, remoteP := advertise(t, s.b, "player", available)
 	s.nodeA.down.Store(true)
@@ -216,7 +275,7 @@ func TestSwarmCarryRetriesOnItsBackoff(t *testing.T) {
 	// a restored member that ends again is retried after carryRetryFirst.
 	// why: the member's eos follows its update; a cut before the carry reads
 	// it leaves the attempt without an initial outcome, and the delay unreset.
-	time.Sleep(carryRetryFirst / 10)
+	node.waitEOS(t)
 	node.cut()
 	start := time.Now()
 	expect[*services.Removed](t, c)
