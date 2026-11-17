@@ -29,6 +29,10 @@ func (Loader) Load(node astral.Node, assets assets.Assets, logger *log.Logger) (
 		return nil, err
 	}
 
+	if err := mod.config.resolveAddrs(); err != nil {
+		return nil, err
+	}
+
 	if err := moveKeyToDataRoot(assets.Res(), logger); err != nil {
 		return nil, err
 	}
@@ -37,7 +41,7 @@ func (Loader) Load(node astral.Node, assets assets.Assets, logger *log.Logger) (
 
 	var baseDialer = &net.Dialer{Timeout: mod.config.DialTimeout}
 
-	socksProxy, err := proxy.SOCKS5("tcp", mod.config.TorProxy, nil, baseDialer)
+	socksProxy, err := newSOCKSDialer(mod.config.TorProxy, baseDialer)
 	if err != nil {
 		return nil, err
 	}
