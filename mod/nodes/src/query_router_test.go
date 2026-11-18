@@ -7,6 +7,7 @@ import (
 	"io"
 	"testing"
 
+	"github.com/astralp2p/astral-go/api/objects"
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astral-go/lib/query"
 )
@@ -170,9 +171,9 @@ func TestTheGenericRejectionIsARefusal(t *testing.T) {
 	assertAsked(t, f.asked, relays)
 }
 
-// A relay that is not reached, or that the caller's proof does not reach, is
-// never asked the query and answers unavailable: a later attempt may reach it.
-// A proof push the relay rejected is not the relay's refusal of the query.
+// A relay that is not reached, or that the caller's proof does not get
+// through to, is never asked the query and answers unavailable: a later
+// attempt may reach it.
 func TestAnUnreachedRelayIsUnavailable(t *testing.T) {
 	relays := newRelays(3)
 	f := &fakeRelays{unreached: map[*astral.Identity]error{
@@ -183,6 +184,20 @@ func TestAnUnreachedRelayIsUnavailable(t *testing.T) {
 
 	_, err := f.route(relays)
 	assertRejectedWith(t, err, astral.CodeUnavailable)
+	assertAsked(t, f.asked, nil)
+}
+
+// A relay that receives the caller's proof and refuses it refuses the caller:
+// the answer is final, and it outranks an unreachable relay.
+func TestARefusedProofIsARefusal(t *testing.T) {
+	relays := newRelays(2)
+	f := &fakeRelays{unreached: map[*astral.Identity]error{
+		relays[0]: errors.New("link not produced"),
+		relays[1]: fmt.Errorf("push failed: %w", objects.ErrPushRejected),
+	}}
+
+	_, err := f.route(relays)
+	assertRejectedWith(t, err, astral.DefaultRejectCode)
 	assertAsked(t, f.asked, nil)
 }
 

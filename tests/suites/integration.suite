@@ -51,6 +51,7 @@ app-call-remote
 app-ping-pong
 app-reject-code
 route-outcomes
+route-outcomes-expelled-host
 app-op-surface-remote
 app-finder-read
 app-searcher-swarm

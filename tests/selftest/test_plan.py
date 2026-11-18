@@ -325,6 +325,7 @@ class TestShippedPlans(Invariants, unittest.TestCase):
              ("local", "link-session-migrate-serving-side"),
              ("vm", "nat-punch"),
              ("local", "route-outcomes-dead-peer"),
+             ("local", "route-outcomes-expelled-host"),
              ("local", "services-node-restart"),
              ("local", "services-swarm-membership"),
              ("local", "expel-survives-restart"),

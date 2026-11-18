@@ -1,0 +1,6 @@
+nodes   = ["node1", "node2"]
+timeout = 300
+after   = "adopt-node"
+destroys = true
+host_listener = "serves its provider app on a test-host port that node2 dials"
+facts   = ["expelled_host"]

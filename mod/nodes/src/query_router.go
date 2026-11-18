@@ -6,6 +6,7 @@ import (
 	"io"
 	"time"
 
+	"github.com/astralp2p/astral-go/api/objects"
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astral-go/lib/query"
 	"github.com/astralp2p/astrald/mod/nodes"
@@ -170,14 +171,20 @@ func (a *relayAnswers) result() (io.WriteCloser, error) {
 
 // ask asks one relay the query.
 //
-// why unavailable whatever reach answered: a relay that reach did not reach,
-// or did not prove the caller to, was never asked the query, so no refusal is
-// its answer, and a later attempt may reach it.
+// why a refused proof is a refusal: the relay received the caller's proof and
+// did not accept it (an expelled host, a caller it will not carry), and a
+// retry meets the same answer.
+//
+// why unavailable for any other reach failure: a relay that reach did not
+// reach, or could not deliver the proof to, was never asked the query, and a
+// later attempt may reach it.
 func (r *relayedQuery) ask(relayID *astral.Identity) (io.WriteCloser, error) {
 	relay, err := r.reach(relayID)
 	switch {
 	case errors.Is(err, errTargetIsRelay):
 		return query.RouteNotFound()
+	case errors.Is(err, objects.ErrPushRejected):
+		return nil, astral.NewErrRejected(astral.DefaultRejectCode)
 	case err != nil:
 		return nil, unavailable()
 	}
