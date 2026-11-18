@@ -20,7 +20,7 @@ import (
 // why the index row is written last: the row is what serves the mailbox, so a
 // create that fails at any earlier step leaves no served mailbox behind.
 func (mod *Module) CreateMailbox(ctx *astral.Context, alias string, duration astral.Duration) (*messaging.MailboxCredential, error) {
-	identity, err := mod.mintIdentity(ctx)
+	identity, relay, err := mod.mintIdentity(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -46,6 +46,17 @@ func (mod *Module) CreateMailbox(ctx *astral.Context, alias string, duration ast
 
 	if err = mod.recordMailbox(identity, hosting); err != nil {
 		return nil, err
+	}
+
+	// why: a sibling routes a delivery to the mailbox only through its relay-for
+	// contract in the sibling's index, and the first-link sync has already run
+	// for every linked sibling.
+	// why after the index row: a create that fails pushes no contract of a
+	// mailbox this node does not serve.
+	// note: the push is best-effort; a sibling that misses it gets the contract
+	// at its next first link.
+	if mod.User != nil {
+		mod.User.PushToSiblings(mod.ctx, relay)
 	}
 
 	mod.log.Logv(1, "created participant %v (%v)", alias, identity)
@@ -98,43 +109,44 @@ func (mod *Module) FindIdentity(identity *astral.Identity) error {
 }
 
 // mintIdentity mints a fresh participant identity: a stored + indexed key and
-// a signed node relay contract, mirroring apphost's register flow.
-func (mod *Module) mintIdentity(ctx *astral.Context) (*astral.Identity, error) {
+// a signed node relay contract, mirroring apphost's register flow. Returns the
+// identity and its relay contract.
+func (mod *Module) mintIdentity(ctx *astral.Context) (*astral.Identity, *auth.SignedContract, error) {
 	key := secp256k1.New()
 	identity := secp256k1.Identity(secp256k1.PublicKey(key))
 
 	contract, err := apphost.NewAppContract(identity, mod.node.Identity(), ContractDuration)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	signed := &auth.SignedContract{Contract: contract}
 
 	if signed.IssuerSig, err = secp256k1sig.SignASN1(key, contract.SignableHash()); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	if _, err = mod.Auth.SignSubject(ctx, signed); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	if err = mod.Auth.IndexContract(ctx, signed); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	if _, err = mod.Objects.Store(ctx, mod.Objects.WriteDefault(), key); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	if err = mod.Crypto.AddToIndex(key); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	if _, err = mod.Objects.Store(ctx, mod.Objects.WriteDefault(), signed); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
-	return identity, nil
+	return identity, signed, nil
 }
 
 // assignAlias binds alias to the participant when one is given, and binds

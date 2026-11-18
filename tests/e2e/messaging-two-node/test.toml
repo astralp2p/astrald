@@ -3,5 +3,5 @@ timeout = 180
 after   = "adopt-node"
 host_listener = "serves each node's external authority, which the node dials"
 facts   = ["ann", "ann_token", "answer", "ask", "ben", "ben_token", "cal",
-           "exchange", "pushed", "questions", "turned_away", "unknown",
+           "exchange", "hosts", "questions", "turned_away", "unknown",
            "unknown_path"]

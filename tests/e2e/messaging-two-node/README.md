@@ -10,10 +10,10 @@ missing route.
 - **env** node · **start** `two-nodes` · **saves** — · **host_listener** —
   each node's authority listens at the node's `authority_url`
 - **driver** `script.py` — mint ann on node1, and ben and cal on node2, with
-  `messaging.create_mailbox`; node2 pushes ben's and cal's relay contracts to
-  node1; ann sends, ben waits and reads, and ben answers; ann sends to cal;
+  `messaging.create_mailbox`; wait, within 30 s, until `apphost.hosts` on
+  node1 names node2 for ben and for cal; ann sends, ben waits and reads, and ben answers; ann sends to cal;
   ann queries `e2e.no_such_path` on ben.
-- **oracle** `verify.py` — node1 took both relay contracts, each node's
+- **oracle** `verify.py` — node1 names node2 as ben's and cal's host, each node's
   authority was asked its own participant's side, the rows on both nodes
   record the landing, the receipt and the answer, and ann's send to cal
   answered `delivery failed: the recipient does not take messages from you`
@@ -38,15 +38,17 @@ link, because a link response has no code of its own for a missing route.
 node1's relay path counts code 1 as no route, so ann reads `route_not_found`
 and not a refusal.
 
-## Why node2 introduces ben and cal to node1
+## Why node1 knows where ben and cal are hosted
 
 node1 routes to an identity it does not host through a relay contract that
 identity issued: mod/apphost's query preprocessor names the contract's subject
-as a relay. `messaging.create_mailbox` signs one for each participant, but
-only node2 holds ben's and cal's. node2 pushes each with `objects.push`, and
-node1 indexes it because the sender is the sibling the contract names as
-subject (mod/user's object receiver). The oracle checks node1's answers to the
-pushes first: without them neither send had a route.
+as a relay. `messaging.create_mailbox` on node2 signs one for each participant
+and pushes it to node2's linked siblings, and node1 indexes it because the
+sender is the sibling the contract names as subject (mod/user's object
+receiver). No step of the test hands node1 either contract. The push runs on
+its own goroutine, so the driver waits until `apphost.hosts` on node1 names
+node2, and the oracle checks those hosts first: without them neither send had
+a route.
 
 The way back needs no step. node1 pushes ann's relay contract to node2 as the
 caller proof of the first relayed delivery, so node2 already knows where ann is
