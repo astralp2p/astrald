@@ -2,6 +2,7 @@ package user
 
 import (
 	"sync"
+	"time"
 
 	"github.com/astralp2p/astral-go/api/auth"
 	"github.com/astralp2p/astral-go/api/user"
@@ -13,13 +14,17 @@ import (
 type memberSet struct {
 	mu      sync.Mutex
 	members map[string]*astral.Identity
+	// expiry republishes the set at the earliest member expiry; nil when none is armed.
+	expiry *time.Timer
 }
+
+// expiryMargin delays the republish past the expiry, so the auth index,
+// which compares expires_at with the time of the read, already omits the member.
+const expiryMargin = time.Second
 
 // publishSwarm recomputes LocalSwarm and emits one SwarmMemberJoined or
 // SwarmMemberLeft per node whose membership differs from the last published
 // set. It emits nothing before the first set is recorded.
-// fixme: a membership contract that expires changes LocalSwarm without
-// emitting SwarmMemberLeft; nothing republishes the set at expiry.
 func (mod *Module) publishSwarm() {
 	mod.swarm.mu.Lock()
 	defer mod.swarm.mu.Unlock()
@@ -38,6 +43,7 @@ func (mod *Module) publishSwarm() {
 		}
 	}
 	mod.swarm.members = next
+	mod.armExpiry()
 }
 
 // recordSwarm records the current member set as published, without events.
@@ -45,6 +51,62 @@ func (mod *Module) recordSwarm() {
 	mod.swarm.mu.Lock()
 	defer mod.swarm.mu.Unlock()
 	mod.swarm.members = identitySet(mod.LocalSwarm())
+	mod.armExpiry()
+}
+
+// armExpiry replaces the expiry timer with one that republishes the set at the
+// earliest member expiry, and arms none when no member contract expires.
+// The caller holds swarm.mu.
+//
+// why one stored timer: every publish re-arms, and unstopped timers would pile up.
+func (mod *Module) armExpiry() {
+	mod.stopExpiry()
+	next := mod.nextMemberExpiry()
+	if next.IsZero() {
+		return
+	}
+	mod.swarm.expiry = time.AfterFunc(next.Sub(mod.now())+expiryMargin, mod.publishSwarm)
+}
+
+// stopExpiry stops the expiry timer. The caller holds swarm.mu.
+func (mod *Module) stopExpiry() {
+	if mod.swarm.expiry != nil {
+		mod.swarm.expiry.Stop()
+		mod.swarm.expiry = nil
+	}
+}
+
+// nextMemberExpiry returns the earliest time at which a member other than this
+// node leaves the swarm by expiry, or the zero time when none does.
+//
+// why the latest contract per subject: a member with an overlapping renewal
+// stays in the swarm until its last contract expires.
+// why not this node: a lapse of its own membership belongs to the active
+// contract's lifecycle, not to a member change.
+func (mod *Module) nextMemberExpiry() (next time.Time) {
+	ac := mod.ActiveContract()
+	if ac == nil {
+		return
+	}
+	contracts, err := mod.ActiveNodeContracts(ac.Issuer)
+	if err != nil {
+		return
+	}
+	last := map[string]time.Time{}
+	for _, c := range contracts {
+		if c.Subject.IsEqual(mod.node.Identity()) {
+			continue
+		}
+		if t := c.ExpiresAt.Time(); t.After(last[c.Subject.String()]) {
+			last[c.Subject.String()] = t
+		}
+	}
+	for _, t := range last {
+		if next.IsZero() || t.Before(next) {
+			next = t
+		}
+	}
+	return
 }
 
 // onContractIndexed republishes the member set after a node contract enters
