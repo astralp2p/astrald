@@ -79,9 +79,16 @@ func (m *Mux) SetRouter(r astral.Router) {
 
 // RouteQuery opens a session and sends a query (or relay query) frame, then blocks for the peer's routing result or ctx cancellation; on accept it pumps the session into w.
 func (m *Mux) RouteQuery(ctx *astral.Context, q *astral.InFlightQuery, w io.WriteCloser) (_ io.WriteCloser, err error) {
-	sourceID := m.RemoteIdentity()
-	if q.Caller.IsEqual(ctx.Identity()) {
-		sourceID = nil
+	// why target too: a bare Query frame names no target, so the peer delivers
+	// it to itself; a query for anyone other than the linked node must carry
+	// its target in a RelayQuery, even when this node is the caller.
+	relayed := !q.Caller.IsEqual(ctx.Identity()) || !q.Target.IsEqual(m.RemoteIdentity())
+
+	// why: handleResponse accepts a Response for a session whose remote is not
+	// the linked node only when the session names the link's remote as source.
+	var sourceID *astral.Identity
+	if relayed {
+		sourceID = m.RemoteIdentity()
 	}
 
 	// why: the Query frame prefixes the query string with a 16-bit length;
@@ -102,7 +109,7 @@ func (m *Mux) RouteQuery(ctx *astral.Context, q *astral.InFlightQuery, w io.Writ
 	}
 
 	var frame frames.Frame = &queryFrame
-	if !q.Caller.IsEqual(ctx.Identity()) {
+	if relayed {
 		frame = &frames.RelayQuery{
 			CallerID: q.Caller,
 			TargetID: q.Target,
