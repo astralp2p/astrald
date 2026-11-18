@@ -96,6 +96,11 @@ func (mod *Module) onActiveContractChanged(signed *auth.SignedContract) {
 	defer mod.publishSwarm()
 	if signed.IsNil() {
 		mod.log.Info("this node runs without a user")
+		// why linkerMu: a linker run that read the old swarm before the clear
+		// would otherwise register tasks for former members after this prune.
+		mod.linkerMu.Lock()
+		mod.pruneSiblings(nil)
+		mod.linkerMu.Unlock()
 		return
 	}
 
@@ -149,6 +154,12 @@ func (mod *Module) ActiveNodeContracts(userID *astral.Identity) ([]*auth.SignedC
 // ActiveNodes returns all nodes with an active swarm-membership contract from the given
 // user, excluding expelled subjects.
 func (mod *Module) ActiveNodes(userID *astral.Identity) (nodes []*astral.Identity) {
+	nodes, _ = mod.activeNodes(userID)
+	return
+}
+
+// activeNodes is ActiveNodes with the error of the contract query.
+func (mod *Module) activeNodes(userID *astral.Identity) (nodes []*astral.Identity, err error) {
 	contracts, err := mod.Auth.
 		SignedContracts().
 		WithIssuer(userID).
@@ -157,7 +168,7 @@ func (mod *Module) ActiveNodes(userID *astral.Identity) (nodes []*astral.Identit
 
 	if err != nil {
 		mod.log.Error("error getting active nodes: %v", err)
-		return
+		return nil, err
 	}
 
 	expelled := mod.expelledSet(userID)
@@ -174,12 +185,19 @@ func (mod *Module) ActiveNodes(userID *astral.Identity) (nodes []*astral.Identit
 
 // LocalSwarm returns a list of node identities with an active swarm-membership contract with the current user
 func (mod *Module) LocalSwarm() (list []*astral.Identity) {
+	list, _ = mod.localSwarm()
+	return
+}
+
+// localSwarm is LocalSwarm with the error of the contract query. Without an
+// active contract the swarm is empty and the error is nil.
+func (mod *Module) localSwarm() ([]*astral.Identity, error) {
 	ac := mod.ActiveContract()
 	if ac == nil {
-		return
+		return nil, nil
 	}
 
-	return mod.ActiveNodes(ac.Issuer)
+	return mod.activeNodes(ac.Issuer)
 }
 
 // SwarmPeers returns the members of the local swarm other than this node.
