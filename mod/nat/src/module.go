@@ -73,9 +73,10 @@ func (mod *Module) Run(ctx *astral.Context) error {
 func (mod *Module) evaluateEnabled() {
 	setting := mod.settings.Enabled.Get()
 	settingEnabled := setting == nil || bool(*setting)
-	hasPublicIPs := len(mod.IP.PublicIPCandidates()) > 0
+	// why: the cone puncher is IPv4-only; an IPv6-only node cannot punch.
+	_, err := mod.getLocalIPv4()
 
-	mod.SetEnabled(settingEnabled && hasPublicIPs)
+	mod.SetEnabled(settingEnabled && err == nil)
 }
 
 func (mod *Module) Router() astral.Router {
