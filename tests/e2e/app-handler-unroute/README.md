@@ -1,9 +1,11 @@
 # app-handler-unroute
 
 When an app's session ends, node1 stops routing queries to its handler. A
-visitor app calls other apps on node1 by their app identity; in each leg the
-call reaches the handler before the session ends, and fails with
-`route_not_found` after, and keeps failing.
+visitor app calls other apps on node1 by their app identity; in each removal
+leg the call reaches the handler before the session ends, and fails with
+`route_not_found` after, and keeps failing. When a failed dial removes the
+handler of an app bound through an `AppRegistrar`, node1 ends that app's bind
+session, and the app's handler is routed to again once it is registered anew.
 
 - **env** node · **start** `null` · **saves** —
 - **driver** `script.py` — runs `driver/` (Go, this repository's astral-go) in
@@ -26,18 +28,25 @@ call reaches the handler before the session ends, and fails with
     endpoint closes and a call fails with `route_not_found`; the endpoint then
     comes back at the same address with the same token, and calls still fail.
     The failed dial removed the handler for good; it did not merely skip it.
+  - `listener_restart_reregisters` — a handler registered and bound through an
+    astral-go `AppRegistrar`. Its listener closes and a call fails with
+    `route_not_found`; the listener comes back at the same address with the
+    same token 200 ms after the close, and a call reaches it within 5 s. The
+    failed dial ended the app's bind session, so the registrar registered the
+    handler again.
   - `bystander_unaffected` — a bystander app served on node1 answers after
     every leg, so only the ended session's handler was removed.
 - Every handler binds TCP at node1's `host_ip` (the test declares
-  `host_listener`); `failed_dial_removes` listens again on the port its first
-  bind resolved.
+  `host_listener`); `failed_dial_removes` and `listener_restart_reregisters`
+  listen again on the port their first bind resolved.
 - **oracle** `verify.py` — every leg held, plus the same story with fresh
   identities (`driver verify`).
 
 Two removal paths exist in `mod/apphost/src/query_router.go`:
 `removeHandlersByToken` removes the handlers a bind session named with a
 `BindMsg` when the session ends (`op_bind.go`), and `RouteQuery` removes an IPC
-handler whose dial fails (`errEndpointUnavailable`). The legs that keep the
+handler whose dial fails (`errEndpointUnavailable`) and ends the bind session
+that bound its token (`app_bind.go`). The legs that keep the
 endpoint listening tell the first from the second; `failed_dial_removes` guards
 the second on its own.
 

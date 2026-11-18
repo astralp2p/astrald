@@ -13,6 +13,7 @@ type opBindArgs struct {
 
 // OpBind keeps a session alive so the caller can associate cleanup actions (handler removal) with its lifetime.
 // Each BindMsg received during the session registers a token whose handlers are removed on session close.
+// apphost ends the session itself when a failed dial removes one of its handlers (endBindSession).
 //
 // why: no named action guards this op; a session removes only the handlers it
 // owns, and a holder of mod.auth.admin_manage_apps_action removes any (bindScope).
@@ -37,24 +38,24 @@ func (mod *Module) OpBind(ctx *astral.Context, q *routing.IncomingQuery, args op
 		return err
 	}
 
-	var actions []func() error
-	defer func() {
-		for _, a := range actions {
-			if err := a(); err != nil {
-				mod.log.Error("bind error: %v", err)
-			}
-		}
-	}()
+	sctx, cancel := ctx.WithCancel()
+	defer cancel()
+
+	session := &appBind{scope: scope, cancel: cancel}
+	defer mod.finishBind(session)
 
 	err := ch.Switch(
-		channel.WithContext(ctx),
+		channel.WithContext(sctx),
 		func(msg *apphost.BindMsg) error {
-			actions = append(actions, func() error {
-				return mod.removeHandlersByToken(scope, msg.Token)
-			})
+			mod.bindToken(session, msg.Token)
 			return nil
 		},
 	)
+
+	// note: a session apphost ended (endBindSession) is a normal end.
+	if sctx.Err() != nil && ctx.Err() == nil {
+		return nil
+	}
 	if err != nil {
 		_ = ch.Send(astral.Err(err))
 	}

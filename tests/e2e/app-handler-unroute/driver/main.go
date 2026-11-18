@@ -1,7 +1,9 @@
 // Command driver proves that node1 stops routing queries to an app's handler
 // when the app's session ends. Each leg registers an app's handler, shows that
 // a visitor's call reaches it, ends the session in one way, and shows that the
-// same call now fails with route_not_found and keeps failing.
+// same call now fails with route_not_found and keeps failing. One leg shows
+// that a failed dial ends the app's bind session, so an app bound through an
+// AppRegistrar registers its handler again and is routed to again.
 //
 //	driver drive  <session.json>   prints facts as JSON
 //	driver verify <session.json>   the same story with fresh identities
@@ -41,6 +43,10 @@ type node struct {
 const (
 	// removalDeadline is how long the node has to stop routing once a session ended.
 	removalDeadline = 5 * time.Second
+	// listenerGap is how long an app's listener stays closed in listener_restart_reregisters.
+	listenerGap = 200 * time.Millisecond
+	// recoveryDeadline is how long the node has to route to a re-registered handler again.
+	recoveryDeadline = 5 * time.Second
 	// op is the one operation every app here serves; prefixed with the test's name.
 	op = "unroute_hello"
 )
@@ -223,6 +229,7 @@ func run(path string) (facts map[string]bool, err error) {
 		{"crash_app_unroutes", (*world).crashApp},
 		{"crash_bind_drop_unroutes", (*world).crashBindDrop},
 		{"failed_dial_removes", func(w *world) (time.Duration, error) { return 0, w.failedDial() }},
+		{"listener_restart_reregisters", (*world).listenerRestart},
 	}
 	// every leg runs, so a failure names exactly the legs it breaks
 	var failures []error
@@ -233,7 +240,7 @@ func run(path string) (facts map[string]bool, err error) {
 			failures = append(failures, fmt.Errorf("%s: %w", leg.fact, err))
 		} else {
 			facts[leg.fact] = true
-			fmt.Fprintf(os.Stderr, "ok: %s (gone after %v)\n", leg.fact, took.Round(time.Millisecond))
+			fmt.Fprintf(os.Stderr, "ok: %s (took %v)\n", leg.fact, took.Round(time.Millisecond))
 		}
 		if err := stillThere(leg.fact); err != nil {
 			failures = append(failures, err)
@@ -410,6 +417,59 @@ func (w *world) failedDial() error {
 		time.Sleep(200 * time.Millisecond)
 	}
 	return nil
+}
+
+// listenerRestart: an app bound through an AppRegistrar closes its listener
+// and a call fails with route_not_found. The listener returns at the same
+// address with the same token 200 ms after the close. The failed dial ended
+// the app's bind session, so the registrar registered the handler again, and
+// a call reaches it within 5 s of the listener's return.
+func (w *world) listenerRestart() (time.Duration, error) {
+	app, err := w.newApp()
+	if err != nil {
+		return 0, err
+	}
+	token := astral.NewNonce()
+	h, err := apps.NewHandlerOn(w.at(), token)
+	if err != nil {
+		return 0, err
+	}
+	addr := h.Endpoint()
+	defer func() { h.Close() }()
+	go h.Route(w.ctx, routing.NewApp(&Hello{label: "restart-first"}))
+
+	rctx, cancel := w.ctx.WithCancel()
+	defer cancel()
+	reg := apps.NewAppRegistrar(rctx, apps.WithClient(apphostcli.New(nil, connect(w.n1.Endpoint, string(app.Token)))))
+	if err := reg.Register(rctx, addr, token); err != nil {
+		return 0, fmt.Errorf("registering the handler: %w", err)
+	}
+	if err := reaches(w.ctx, w.visitor, w.visitID, app.Identity, "restart-first"); err != nil {
+		return 0, fmt.Errorf("before the listener closed: %w", err)
+	}
+
+	h.Close()
+	closed := time.Now()
+	if _, err := call(w.ctx, w.visitor, app.Identity); !notFound(err) {
+		return 0, fmt.Errorf("a call to a closed listener returned err %v; want %q", err, apphost.ErrCodeRouteNotFound)
+	}
+	time.Sleep(time.Until(closed.Add(listenerGap)))
+	if h, err = apps.NewHandlerOn(addr, token); err != nil {
+		return 0, fmt.Errorf("listening again on %s: %w", addr, err)
+	}
+	go h.Route(w.ctx, routing.NewApp(&Hello{label: "restart-second"}))
+
+	back := time.Now()
+	for {
+		err := reaches(w.ctx, w.visitor, w.visitID, app.Identity, "restart-second")
+		if err == nil {
+			return time.Since(back), nil
+		}
+		if time.Since(back) > recoveryDeadline {
+			return 0, fmt.Errorf("the node did not route to the restarted listener within %v: %v", recoveryDeadline, err)
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
 }
 
 // spawn re-executes this binary as a child with the given mode and env, and

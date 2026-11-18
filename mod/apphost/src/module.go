@@ -50,6 +50,8 @@ type Module struct {
 	conns                 <-chan net.Conn
 	ipcHandlers           sig.Set[*IPCHandler]
 	serviceHandlers       sig.Set[*ServiceHandler]
+	bindSessions          bindRegistry
+	sessionEnds           endSpacer
 	enRoute               sig.Map[astral.Nonce, *queryEnRoute]
 	pendingInboundQueries sig.Map[astral.Nonce, *pendingInboundQuery]
 
