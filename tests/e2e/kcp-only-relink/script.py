@@ -5,7 +5,7 @@ block-tcp dropped every tcp packet between node1 and node2 and closed their
 tcp links, so kcp over UDP is the only path between them. restart-astrald
 restarts node2's astrald --in seconds after it ran. The driver polls node2
 every POLL s: whether its apphost answers, and once it is back, which links
-it holds to node1. It opens a log tap on node2 as soon as node2 answers again,
+it holds to node1, until it lists an outbound kcp link. It opens a log tap on node2 as soon as node2 answers again,
 and keeps one on node1 throughout.
 
 why a timer and polls: a VM world restarts a node only through an op, which
@@ -67,7 +67,7 @@ async def links_to(node: dict, peer: str) -> list:
 
 
 async def watch(n2: dict, id1: str, t0: float, deadline: float) -> dict:
-    """down, up and the first kcp link on node2, in s since t0, and node2's tap."""
+    """down, up and node2's first outbound kcp link to node1, in s since t0, and node2's tap."""
     seen = {"down": None, "up": None, "kcp": None, "links": [], "log2": [], "tap2": None}
     clock = lambda: round(time.monotonic() - t0, 2)  # noqa: E731
     while seen["down"] is None and clock() < deadline:
@@ -84,7 +84,7 @@ async def watch(n2: dict, id1: str, t0: float, deadline: float) -> dict:
     async with LogTap(n2) as t2:
         while clock() < deadline:
             seen["links"] = await links_to(n2, id1)
-            if seen["kcp"] is None and any(l["network"] == "kcp" for l in seen["links"]):
+            if seen["kcp"] is None and any(l["network"] == "kcp" and l["outbound"] for l in seen["links"]):
                 seen["kcp"] = clock()
             if seen["kcp"] is not None and clock() >= seen["kcp"] + LINKED_FOR:
                 break

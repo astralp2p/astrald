@@ -14,11 +14,12 @@ kcp rows that the restarted node holds for its sibling.
   once it is back, its links to node1; taps node2's log as soon as it answers
   again, and node1's throughout. Judges nothing.
 - **oracle** `verify.py` — node2 stopped answering and came back; node2
-  lists a kcp link to node1; node2 linked within 5 s of its link task
-  starting. The measure is node2's log, `starting to maintain link to
-  <node1>` to `link to <node1> established`; when the tap opened too late for
-  the first line, it is the host's polls, from node2 going down to the kcp link
-  listed, which is longer.
+  lists an outbound kcp link to node1 (node2 dialed it); node2 linked within
+  5 s of its link task starting. The measure is node2's log, `starting to
+  maintain link to <node1>` to `link to <node1> established`. When the tap
+  opened too late for the first line, it is the host's polls, from node2's
+  first answer to the outbound kcp link listed, judged only while node2's log
+  shows no failed attempt (`restored after N attempts`) to node1.
 
 why it fails at astrald `463a4fea`: basic was registered for tcp only, and
 `BasicLinkStrategy.Signal` dropped every kcp row before a worker saw it, so
