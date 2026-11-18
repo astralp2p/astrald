@@ -65,11 +65,23 @@ w13 docker: bootstrap-user-software-key* → adopt-node*
 w14 docker: bootstrap-user-software-key* → adopt-node*
             → basic-strategy-stalled-endpoint-released
 w15 docker: bootstrap-user-software-key* → adopt-node*
+            → membership-resync-volume
+            config node1.user.reconcile_interval = "10s"
+            config node10.user.reconcile_interval = "10s"
+            config node2.user.reconcile_interval = "10s"
+            config node3.user.reconcile_interval = "10s"
+            config node4.user.reconcile_interval = "10s"
+            config node5.user.reconcile_interval = "10s"
+            config node6.user.reconcile_interval = "10s"
+            config node7.user.reconcile_interval = "10s"
+            config node8.user.reconcile_interval = "10s"
+            config node9.user.reconcile_interval = "10s"
+w16 docker: bootstrap-user-software-key* → adopt-node*
             → basic-strategy-excess-link-pruning
-w16 docker: bootstrap-user-software-key* → adopt-node* → expel-authority
-w17 docker: bootstrap-user-software-key* → adopt-node* → expel-during-transfer
-w18 docker: bootstrap-user-software-key* → adopt-node* → join-via-member
-w19 docker: bootstrap-user-software-key* → adopt-node* → link-idle-keepalive
+w17 docker: bootstrap-user-software-key* → adopt-node* → expel-authority
+w18 docker: bootstrap-user-software-key* → adopt-node* → expel-during-transfer
+w19 docker: bootstrap-user-software-key* → adopt-node* → join-via-member
+w20 docker: bootstrap-user-software-key* → adopt-node* → link-idle-keepalive
             config node1.kcp.link_idle_ping = "2s"
             config node1.kcp.link_ping_timeout = "2s"
             config node1.nodes.log_pings = true
@@ -80,29 +92,29 @@ w19 docker: bootstrap-user-software-key* → adopt-node* → link-idle-keepalive
             config node2.nodes.log_pings = true
             config node2.tcp.link_idle_ping = "2s"
             config node2.tcp.link_ping_timeout = "2s"
-w20 docker: bootstrap-user-software-key* → adopt-node*
-            → two-swarms-side-by-side
 w21 docker: bootstrap-user-software-key* → adopt-node*
+            → two-swarms-side-by-side
+w22 docker: bootstrap-user-software-key* → adopt-node*
             → basic-strategy-dead-rows
             config node2.kcp.listen = false
-w22 docker: bootstrap-user-software-key* → adopt-node* → link-session-migrate
-w23 docker: bootstrap-user-software-key* → adopt-node*
+w23 docker: bootstrap-user-software-key* → adopt-node* → link-session-migrate
+w24 docker: bootstrap-user-software-key* → adopt-node*
             → link-session-migrate-serving-side
-w24 docker: bootstrap-user-software-key* → fs-watch-restart-restore
-w25 docker: bootstrap-user-software-key* → fs-index-restart-reconcile
-w26 docker: bootstrap-user-software-key* → repo-removal-sticks
-w27 docker: bootstrap-user-software-key* → indexing-fs-watch-feed
-w28 docker: bootstrap-user-software-key* → hold-isolation
+w25 docker: bootstrap-user-software-key* → fs-watch-restart-restore
+w26 docker: bootstrap-user-software-key* → fs-index-restart-reconcile
+w27 docker: bootstrap-user-software-key* → repo-removal-sticks
+w28 docker: bootstrap-user-software-key* → indexing-fs-watch-feed
+w29 docker: bootstrap-user-software-key* → hold-isolation
             config node1.objects.purge_floor = "0s"
-w29 docker: bootstrap-user-software-key* → blueprint-survives-restart
-w30 docker: bootstrap-user-software-key* → indexer-cursor
-w31 docker: bootstrap-user-software-key* → basic-strategy-stalled-negotiation
-w32 docker: bootstrap-user-op
-w33 docker: import-user-software-key
-w34 docker: introduce-node-setup → introduce-node
-w35 docker: distribution-gate-setup
+w30 docker: bootstrap-user-software-key* → blueprint-survives-restart
+w31 docker: bootstrap-user-software-key* → indexer-cursor
+w32 docker: bootstrap-user-software-key* → basic-strategy-stalled-negotiation
+w33 docker: bootstrap-user-op
+w34 docker: import-user-software-key
+w35 docker: introduce-node-setup → introduce-node
+w36 docker: distribution-gate-setup
             config node1.apphost.gate = {}
             config node1.apphost.policies = {}
-w36 docker: bootstrap-passphrase
-w37 docker: claim-race
-w38 docker: concurrent-adoption
+w37 docker: bootstrap-passphrase
+w38 docker: claim-race
+w39 docker: concurrent-adoption
