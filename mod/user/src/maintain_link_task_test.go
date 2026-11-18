@@ -3,12 +3,16 @@ package user
 import (
 	"context"
 	"errors"
+	"fmt"
+	"net"
 	"slices"
+	"strings"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/astralp2p/astral-go/api/events"
+	"github.com/astralp2p/astral-go/api/ip"
 	"github.com/astralp2p/astral-go/api/nodes"
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astral-go/astral/log"
@@ -343,4 +347,137 @@ func TestMaintainLinkTaskDoesNotDialAfterCancel(t *testing.T) {
 	if n := f.scheduler.nextAttempt() - 1; n != 0 {
 		t.Fatalf("the cancelled task dialed %v times; want 0", n)
 	}
+}
+
+// addrAdded is an address change that adds addr.
+func addrAdded(addr string) *events.Event {
+	return &events.Event{Data: &ip.EventNetworkAddressChanged{Added: []ip.IP{ip.IP(net.ParseIP(addr))}}}
+}
+
+// TestMaintainLinkTaskWakesOnAddressChange: an ip.EventNetworkAddressChanged
+// that adds a routable address during a backoff wait makes the unlinked task dial at once and restarts the
+// backoff from linkRetryMin; the fake clock never ends the wait.
+func TestMaintainLinkTaskWakesOnAddressChange(t *testing.T) {
+	f := newLinkTaskFixture(failEvery, false)
+	done, cancel := f.run(t)
+
+	f.requireAttempt(t, 1, effectTimeout)
+	f.requireBackoff(t)
+	f.task.Wake()
+	f.requireAttempt(t, 2, wakeDialBound)
+	if d := f.requireBackoff(t); d != 2*linkRetryMin {
+		t.Fatalf("second backoff %v; want %v", d, 2*linkRetryMin)
+	}
+
+	f.task.ReceiveEvent(addrAdded("192.168.1.10"))
+	f.requireAttempt(t, 3, wakeDialBound)
+	if d := f.requireBackoff(t); d != linkRetryMin {
+		t.Fatalf("backoff after an address change %v; want %v", d, linkRetryMin)
+	}
+
+	cancel()
+	requireCanceled(t, done)
+}
+
+// TestMaintainLinkTaskIgnoresAddressChangeWhileLinked: an address change while
+// the target is linked leaves the idle task idle.
+func TestMaintainLinkTaskIgnoresAddressChangeWhileLinked(t *testing.T) {
+	f := newLinkTaskFixture(func(int) error { return nil }, false)
+	f.nodes.setLinked(f.target, true)
+
+	f.task.ReceiveEvent(addrAdded("192.168.1.10"))
+
+	f.requireIdle(t)
+}
+
+// TestMaintainLinkTaskIgnoresAddressChangesThatAddNoRoutableAddress: removing
+// an address or adding only a link-local one neither wakes the unlinked task
+// nor restarts its backoff.
+func TestMaintainLinkTaskIgnoresAddressChangesThatAddNoRoutableAddress(t *testing.T) {
+	f := newLinkTaskFixture(failEvery, false)
+
+	f.task.ReceiveEvent(&events.Event{Data: &ip.EventNetworkAddressChanged{
+		Removed: []ip.IP{ip.IP(net.ParseIP("192.168.1.10"))},
+	}})
+	f.task.ReceiveEvent(addrAdded("fe80::1"))
+
+	f.requireIdle(t)
+}
+
+// requireIdle fails if the task needs action, restarts its backoff, or was signalled.
+func (f *linkTaskFixture) requireIdle(t *testing.T) {
+	t.Helper()
+	if f.task.actionRequired.Load() || f.task.resetBackoff.Load() {
+		t.Fatal("the task needs action; want it idle")
+	}
+	select {
+	case <-f.task.wake:
+		t.Fatal("the task was signalled; want no signal")
+	default:
+	}
+}
+
+// logLines records the text of every log entry.
+type logLines struct {
+	mu    sync.Mutex
+	lines []string
+}
+
+func (l *logLines) LogEntry(e *log.Entry) {
+	var b strings.Builder
+	for _, obj := range e.Objects {
+		fmt.Fprint(&b, obj)
+	}
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.lines = append(l.lines, b.String())
+}
+
+// count returns how many lines contain text.
+func (l *logLines) count(text string) int {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	n := 0
+	for _, line := range l.lines {
+		if strings.Contains(line, text) {
+			n++
+		}
+	}
+	return n
+}
+
+// TestMaintainLinkTaskLogsBrokenOnlyForAClosedLink: a Wake during the first,
+// successful dial makes the task dial once more without logging the standing
+// link as broken; a link that then closes is logged as broken and redialed.
+func TestMaintainLinkTaskLogsBrokenOnlyForAClosedLink(t *testing.T) {
+	var f *linkTaskFixture
+	f = newLinkTaskFixture(func(n int) error {
+		if n == 1 {
+			f.task.Wake()
+		}
+		f.nodes.setLinked(f.target, true)
+		return nil
+	}, false)
+	lines := &logLines{}
+	f.mod.log.AddLogger(lines)
+	done, cancel := f.run(t)
+
+	f.requireAttempt(t, 1, effectTimeout)
+	f.requireAttempt(t, 2, wakeDialBound)
+	if n := lines.count("established"); n != 1 {
+		t.Fatalf("%v \"established\" lines; want 1", n)
+	}
+	if n := lines.count("is broken"); n != 0 {
+		t.Fatalf("%v \"is broken\" lines while the link stands; want 0", n)
+	}
+
+	f.nodes.setLinked(f.target, false)
+	f.task.ReceiveEvent(&events.Event{Data: &nodes.LinkClosedEvent{RemoteIdentity: f.target, LinkCount: 0}})
+	f.requireAttempt(t, 3, wakeDialBound)
+	if n := lines.count("is broken, trying to reconnect"); n != 1 {
+		t.Fatalf("%v \"is broken, trying to reconnect\" lines after the close; want 1", n)
+	}
+
+	cancel()
+	requireCanceled(t, done)
 }
