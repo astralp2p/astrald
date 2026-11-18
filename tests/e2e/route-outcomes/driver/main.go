@@ -20,9 +20,11 @@ import (
 	"github.com/astralp2p/astral-go/api/services"
 	servicescli "github.com/astralp2p/astral-go/api/services/client"
 	"github.com/astralp2p/astral-go/astral"
+	"github.com/astralp2p/astral-go/astral/channel"
 	"github.com/astralp2p/astral-go/lib/apphost"
 	"github.com/astralp2p/astral-go/lib/apps"
 	"github.com/astralp2p/astral-go/lib/astrald"
+	"github.com/astralp2p/astral-go/lib/query"
 	"github.com/astralp2p/astral-go/lib/routing"
 )
 
@@ -139,7 +141,22 @@ func handlerGone(ctx *astral.Context, facts map[string]any, nodes map[string]nod
 	time.Sleep(2 * time.Second) // the node drops the handler when its bind session ends
 	facts["handler_gone"] = ask(ctx, caller, provider.Identity, "echo")
 	facts["provider_still_listed"] = listed(ctx, caller, provider.Identity)
+
+	// node2 takes back the caller's relay contract, so it refuses to relay
+	// for the caller: a relay's refusal, not a missing route
+	facts["caller_relay_withdrawn"] = withdrawRelay(ctx, admin2, appID) == nil
+	facts["relay_refused"] = ask(ctx, caller, provider.Identity, "echo")
 	return nil
+}
+
+// withdrawRelay takes back app's relay contract on the admin's node.
+func withdrawRelay(ctx *astral.Context, admin *astrald.Client, app *astral.Identity) error {
+	ch, err := admin.QueryChannel(ctx, "apphost.withdraw_relay", query.Args{"identity": app.String()})
+	if err != nil {
+		return err
+	}
+	defer ch.Close()
+	return ch.Switch(channel.ExpectAck, channel.PassErrors)
 }
 
 // ask queries target:op as the caller and records how the query ended.

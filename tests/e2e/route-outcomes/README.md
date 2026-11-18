@@ -19,13 +19,19 @@ cause calls for.
     discovery from node1 lists it and a call is accepted (`provider_served`),
     the provider's handler ends while its advertisement stays, and the
     caller queries it again. Discovery still lists the provider afterwards.
+  - `relay_refused`: node2 takes back the caller's relay contract
+    (`apphost.withdraw_relay`), and the caller queries the provider again;
+    node2, the provider's host and the caller's relay, refuses the relay.
 - **oracle** `verify.py` — `unknown_identity`, `no_such_op` and `handler_gone`
-  read `route_not_found`, `refused` reads rejection code 1, and `filtered`
-  reads `target_not_allowed`, each in under 100 ms and not retryable.
+  read `route_not_found`, `refused` and `relay_refused` read rejection code 1,
+  and `filtered` reads `target_not_allowed`, each in under 100 ms and not
+  retryable.
 
 `no_such_op` and `handler_gone` cross the link: node2 finds no route and
 answers the link's "no route here" value (`mod/nodes/src/mux.go`, `linkCode`),
-which node1 reads as a missing route. A refusal crosses as code 1. `filtered`
+which node1 reads as a missing route. A refusal crosses as code 1, and
+node1's relay loop answers a relay's code 1 as the refusal it is
+(`mod/nodes/src/query_router.go`, `route`). `filtered`
 never leaves node1: `core.Router` returns the directory filter's
 `ErrTargetNotAllowed` as it is (`core/router.go`).
 

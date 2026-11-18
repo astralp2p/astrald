@@ -12,7 +12,7 @@ FAST_MS = 100  # an answer that needs no network wait
 facts = load()["facts"].get("route_outcomes", {})
 
 for step in ("node2_knows_the_caller", "provider_listed", "node1_knows_the_provider",
-             "provider_still_listed"):
+             "provider_still_listed", "caller_relay_withdrawn"):
     assert facts.get(step) is True, f"step did not hold: {step}"
 
 
@@ -33,5 +33,6 @@ outcome("refused", "rejected", 1)
 outcome("filtered", "target_not_allowed")
 outcome("provider_served", "accepted", fast=False)
 outcome("handler_gone", "route_not_found")
+outcome("relay_refused", "rejected", 1)
 
-print("oracle: no route, refusal, policy block and a gone handler each read as their own outcome")
+print("oracle: no route, refusal, relay refusal, policy block and a gone handler each read as their own outcome")
