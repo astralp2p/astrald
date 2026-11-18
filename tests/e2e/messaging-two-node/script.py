@@ -10,13 +10,15 @@ external authority, and each admits only its own participant's side of the
 exchange: node1 lets ann send to ben and cal and receive from ben, node2 lets
 ben receive from ann and send to her. node2 lets cal receive from nobody.
 
-why node2 introduces ben's and cal's relay contracts to node1: node1 finds the
-node that hosts an identity through a relay contract that identity issued
-(mod/apphost/src/query_preprocessor.go), and nothing hands node1 either one.
-node2 pushes them, and node1 indexes a relay contract pushed by the sibling it
-names as subject (mod/user/src/object_receiver.go). The way back needs no step:
-node1 pushes ann's relay contract as the caller proof of its first relayed
-delivery.
+why the driver waits for node1 to name node2 as ben's and cal's host: node1
+finds the node that hosts an identity through a relay contract that identity
+issued (mod/apphost/src/query_preprocessor.go). messaging.create_mailbox on
+node2 pushes each new participant's relay contract to its linked siblings
+(mod/messaging/src/identities.go), and node1 indexes a relay contract pushed
+by the sibling it names as subject (mod/user/src/object_receiver.go). The push
+runs on its own goroutine, so a send issued at once can precede it. The way
+back needs no step: node1 pushes ann's relay contract as the caller proof of
+its first relayed delivery.
 
 why cal is a third participant and not ben refused later: the oracle reads one
 answer per question from each authority, and a refusal of ben would put a
@@ -32,6 +34,7 @@ every question each authority was asked.
 import asyncio
 
 import astral
+from astral import querystring
 from astral.errors import AstralError
 
 from lib import jsonops, mail
@@ -42,8 +45,11 @@ ASK = "ann-asks-across-0xC0FFEE"
 ANSWER = "ben-answers-across-0xBEEF"
 TURNED_AWAY = "ann-writes-to-cal-0xDEAD"
 UNKNOWN_PATH = "e2e.no_such_path"
-RELAY = "mod.nodes.relay_for_action"
 WAIT = "10s"
+
+# why a deadline on the hosts: create_mailbox pushes the relay contract on a
+# goroutine nothing waits for, so node1 indexes it a moment after the create.
+HOST_DEADLINE = 30.0
 
 # why a deadline on the stamps: a receipt is sent after the read has answered,
 # on a goroutine nothing waits for, so the sender's row is stamped a moment
@@ -51,26 +57,31 @@ WAIT = "10s"
 STAMP_DEADLINE = 10.0
 
 
-async def introduce(admin, participant: dict, node: str) -> list:
-    """The push of a participant's relay contract to `node`, as `node`
-    answered it."""
-    relay = [c for c in await mail.contracts_of(admin, participant["Identity"])
-             if mail.permits(c) == [(RELAY, 0, None)]]
-    return await jsonops.call(admin, "objects.push?in=json&out=json",
-                              relay[0], eos=True, target=node)
+async def hosts_of(admin, participant: dict, host: str) -> list:
+    """The hosts of `participant` that `admin`'s node names, once they include
+    `host`, or as they stand at the deadline."""
+    deadline = asyncio.get_running_loop().time() + HOST_DEADLINE
+    while True:
+        docs = await jsonops.stream(admin, querystring.build(
+            "apphost.hosts", {"app": participant["Identity"], "out": "json"}))
+        hosts = [d["Object"].lower() for d in docs]
+        if host.lower() in hosts or asyncio.get_running_loop().time() > deadline:
+            return hosts
+        await asyncio.sleep(0.2)
 
 
 async def mint(n1: dict, n2: dict) -> tuple:
-    """ann on node1, ben and cal on node2, and node2's push of each one's
-    relay contract to node1, answered by node1."""
+    """ann on node1, ben and cal on node2, and the hosts node1 names for ben
+    and cal. No step hands node1 their relay contracts."""
     async with await astral.connect(n1["endpoint"], token=n1["token"]) as a1:
         ann = await mail.create_mailbox(a1, "two-ann")
     async with await astral.connect(n2["endpoint"], token=n2["token"]) as a2:
         ben = await mail.create_mailbox(a2, "two-ben")
         cal = await mail.create_mailbox(a2, "two-cal")
-        pushed = {"ben": await introduce(a2, ben, n1["identity"]),
-                  "cal": await introduce(a2, cal, n1["identity"])}
-    return ann, ben, cal, pushed
+    async with await astral.connect(n1["endpoint"], token=n1["token"]) as a1:
+        hosts = {"ben": await hosts_of(a1, ben, n2["identity"]),
+                 "cal": await hosts_of(a1, cal, n2["identity"])}
+    return ann, ben, cal, hosts
 
 
 async def stamped(client, list_name: str, id: str, field: str) -> dict:
@@ -132,10 +143,10 @@ async def main():
     doc = load()
     n1, n2 = doc["nodes"]["node1"], doc["nodes"]["node2"]
 
-    ann, ben, cal, pushed = await mint(n1, n2)
+    ann, ben, cal, hosts = await mint(n1, n2)
     a, b, c = (p["Identity"].lower() for p in (ann, ben, cal))
     facts = {"ann": a, "ben": b, "cal": c, "ann_token": ann["Token"],
-             "ben_token": ben["Token"], "pushed": pushed, "ask": ASK,
+             "ben_token": ben["Token"], "hosts": hosts, "ask": ASK,
              "answer": ANSWER, "unknown_path": UNKNOWN_PATH}
 
     first = Authority(n1["authority_url"],

@@ -25,6 +25,7 @@ var errAnotherMailbox = errors.New("a mail method reads its owner's own mailbox"
 
 type Module struct {
 	Deps
+	OptionalDeps
 	ctx    *astral.Context
 	config Config
 	node   astral.Node

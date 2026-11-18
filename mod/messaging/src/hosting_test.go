@@ -180,7 +180,7 @@ func TestAContractNamingAnotherNodeDoesNotAuthorize(t *testing.T) {
 func TestRelayAuthorityAloneDoesNotHost(t *testing.T) {
 	mod := testMessagingModule(t)
 
-	u, err := mod.mintIdentity(mod.ctx)
+	u, _, err := mod.mintIdentity(mod.ctx)
 	if err != nil {
 		t.Fatalf("mint identity: %v", err)
 	}

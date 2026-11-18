@@ -34,12 +34,14 @@ NOT_ADMITTED = "the recipient does not take messages from you"
 MISSING_ROUTE = "RouteNotFound"
 
 
-def check_push(facts):
+def check_hosts(nodes, facts):
+    node2 = nodes["node2"]["identity"].lower()
     for who in ("ben", "cal"):
-        pushed = facts["pushed"][who]
-        assert pushed[:1] == [{"Type": "bool", "Object": True}], (
-            f"node1 answered {pushed!r} to {who}'s relay contract — node1 "
-            f"never learned where {who} is hosted, so the send had no route")
+        hosts = facts["hosts"][who]
+        assert node2 in hosts, (
+            f"node1 named {hosts!r} as {who}'s hosts, not node2 — "
+            f"create_mailbox on node2 never pushed {who}'s relay contract to "
+            f"node1, so the send had no route")
 
 
 def check_authorities(facts):
@@ -128,7 +130,7 @@ async def check_records(nodes, facts):
 def main():
     doc = load()
     facts = doc["facts"]
-    check_push(facts)
+    check_hosts(doc["nodes"], facts)
     check_authorities(facts)
     check_exchange(facts)
     check_turned_away(facts)
