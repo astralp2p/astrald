@@ -204,8 +204,8 @@ func TestPushToSubnetOfUsesTheSocket(t *testing.T) {
 	obj := astral.NewString8("x")
 
 	err := mod.PushToSubnetOf(ip.IP(net.ParseIP("192.168.1.77")), obj)
-	if err == nil || err.Error() != "socket not initialized" {
-		t.Errorf("PushToSubnetOf(on link) = %v; want \"socket not initialized\"", err)
+	if !errors.Is(err, ethermod.ErrNotListening) {
+		t.Errorf("PushToSubnetOf(on link) = %v; want %v", err, ethermod.ErrNotListening)
 	}
 
 	if err := mod.PushToSubnetOf(ip.IP(net.ParseIP("192.168.2.1")), obj); !errors.Is(err, ethermod.ErrNotOnLink) {

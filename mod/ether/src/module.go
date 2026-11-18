@@ -186,7 +186,7 @@ func broadcast(data []byte, send sendFunc) error {
 
 func (mod *Module) writeToIP(ip ip.IP, data []byte) (n int, err error) {
 	if mod.socket == nil {
-		return 0, errors.New("socket not initialized")
+		return 0, ethermod.ErrNotListening
 	}
 
 	return mod.socket.WriteTo(data, nil, &net.UDPAddr{

@@ -12,6 +12,10 @@ const ModuleName = "ether"
 // ErrNotOnLink is returned when no local IPv4 subnet contains an IP.
 var ErrNotOnLink = errors.New("ip is not on a local subnet")
 
+// ErrNotListening is wrapped in the error of Push and PushToSubnetOf when a send finds
+// LAN discovery off: listen is false in the config, or the UDP socket failed to bind at load.
+var ErrNotListening = errors.New("lan discovery is off")
+
 // ErrPacketTooLarge is returned when an object does not fit one ether datagram.
 var ErrPacketTooLarge = errors.New("packet too large")
 
@@ -19,9 +23,11 @@ var ErrPacketTooLarge = errors.New("packet too large")
 // A datagram is unsigned and names no source identity; a receiver learns only its source IP.
 type Module interface {
 	// Push broadcasts an object on every local IPv4 subnet.
+	// Its error wraps ErrNotListening when LAN discovery is off.
 	Push(astral.Object) error
 	// PushToSubnetOf broadcasts an object on the local IPv4 subnet that contains src only.
-	// It returns ErrNotOnLink when no local IPv4 subnet contains src.
+	// It returns ErrNotOnLink when no local IPv4 subnet contains src; its error wraps
+	// ErrNotListening when LAN discovery is off.
 	PushToSubnetOf(src ip.IP, obj astral.Object) error
 	// SubnetOf returns the CIDR of the local IPv4 subnet that contains src.
 	SubnetOf(src ip.IP) (subnet string, ok bool)

@@ -59,10 +59,10 @@ func (mod *Module) receiveNetworkAddressChanged(event *ip.EventNetworkAddressCha
 		return
 	}
 
-	if err := mod.Broadcast(); err != nil {
+	if err := mod.Broadcast(); err != nil && !lanOff(err) {
 		mod.log.Error("broadcast status: %v", err)
 	}
-	if err := mod.Scan(); err != nil {
+	if err := mod.Scan(); err != nil && !lanOff(err) {
 		mod.log.Error("scan: %v", err)
 	}
 }

@@ -3,10 +3,11 @@ package ether
 import (
 	"errors"
 	"net"
-	"strings"
 	"testing"
 
 	"github.com/astralp2p/astral-go/api/ip"
+	"github.com/astralp2p/astral-go/astral"
+	ethermod "github.com/astralp2p/astrald/mod/ether"
 )
 
 func stubNetInterfaces(t *testing.T, ifaces []NetInterface, err error) {
@@ -103,8 +104,20 @@ func TestBroadcastWithoutSocket(t *testing.T) {
 	}}, nil)
 
 	err := broadcast([]byte("x"), (&Module{}).writeToIP)
-	if err == nil || !strings.Contains(err.Error(), "socket not initialized") {
-		t.Errorf("broadcast() = %v; want \"socket not initialized\"", err)
+	if !errors.Is(err, ethermod.ErrNotListening) {
+		t.Errorf("broadcast() = %v; want %v", err, ethermod.ErrNotListening)
+	}
+}
+
+// TestPushWithoutSocket pins that Push reports ErrNotListening when LAN discovery is off.
+func TestPushWithoutSocket(t *testing.T) {
+	stubNetInterfaces(t, []NetInterface{{
+		Flags: net.FlagUp | net.FlagBroadcast,
+		Addrs: staticAddrs("192.168.1.10/24"),
+	}}, nil)
+
+	if err := (&Module{}).Push(astral.NewString8("ping")); !errors.Is(err, ethermod.ErrNotListening) {
+		t.Errorf("Push() = %v; want %v", err, ethermod.ErrNotListening)
 	}
 }
 
@@ -131,7 +144,7 @@ func TestSocketNotInitialized(t *testing.T) {
 	mod := &Module{}
 
 	_, err := mod.writeToIP(ip.IP(net.ParseIP("192.168.1.255")), []byte("x"))
-	if err == nil || !strings.Contains(err.Error(), "socket not initialized") {
-		t.Errorf("writeToIP() = %v; want \"socket not initialized\"", err)
+	if !errors.Is(err, ethermod.ErrNotListening) {
+		t.Errorf("writeToIP() = %v; want %v", err, ethermod.ErrNotListening)
 	}
 }

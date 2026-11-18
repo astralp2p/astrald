@@ -1,12 +1,14 @@
 package nearby
 
 import (
+	"errors"
 	"fmt"
 	"math/rand/v2"
 	"time"
 
 	"github.com/astralp2p/astral-go/api/nearby"
 	"github.com/astralp2p/astral-go/astral"
+	ethermod "github.com/astralp2p/astrald/mod/ether"
 )
 
 // The periodic status interval, drawn uniformly from [minBroadcastInterval, maxBroadcastInterval].
@@ -103,7 +105,7 @@ func (mod *Module) runPeriodic(ctx *astral.Context) {
 			last = m
 		}
 
-		if err := mod.Broadcast(); err != nil {
+		if err := mod.Broadcast(); err != nil && !lanOff(err) {
 			mod.log.Error("broadcast status: %v", err)
 		}
 
@@ -122,4 +124,12 @@ func (mod *Module) runPeriodic(ctx *astral.Context) {
 // broadcastInterval draws the wait before the next periodic status.
 func broadcastInterval() time.Duration {
 	return minBroadcastInterval + rand.N(maxBroadcastInterval-minBroadcastInterval+1)
+}
+
+// lanOff reports whether a send failed only because LAN discovery is off.
+//
+// why: with LAN discovery off every send fails the same way, and ether already logs the
+// cause once at load; an error log per periodic status hides real errors at level 0.
+func lanOff(err error) bool {
+	return errors.Is(err, ethermod.ErrNotListening)
 }
