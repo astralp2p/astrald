@@ -9,6 +9,9 @@ import (
 // hostOnlyIfacePrefixes name interfaces of container and virtual-machine bridges. Their
 // addresses are reachable only from the host itself, and default subnets repeat across
 // hosts, so a remote peer dialing one reaches its own host instead.
+//
+// The names are Linux interface names. macOS vmnet bridges (bridge100 and up) and Windows
+// Hyper-V switches ("vEthernet (...)") are not matched, so their addresses are still advertised.
 var hostOnlyIfacePrefixes = []string{
 	"docker", // docker0, docker_gwbridge
 	"podman", // netavark bridges
