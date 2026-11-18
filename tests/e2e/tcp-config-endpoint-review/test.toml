@@ -1,0 +1,12 @@
+nodes    = ["node1", "node2"]
+timeout  = 600
+after    = "adopt-node"
+# why: enter-nat rewrites the world in place and nothing puts it back.
+destroys = true
+ops      = ["enter-nat node1 node2"]
+facts    = ["resolved_on_node1", "resolved_on_node2", "dial_link"]
+
+# The astral-docs tcp example: node2 advertises the public alias that
+# enter-nat SNATs it to and DNATs back into its netns (198.51.100.<lan octet>).
+[config.node2.tcp]
+configEndpoints = ["198.51.100.12:1791"]

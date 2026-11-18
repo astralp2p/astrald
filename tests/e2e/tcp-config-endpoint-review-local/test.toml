@@ -1,0 +1,10 @@
+nodes    = ["node1", "node2"]
+timeout  = 300
+after    = "adopt-node"
+host_listener = "serves the port forward node1 dials, on a test-host port"
+facts    = ["resolved_on_node1", "resolved_on_node2", "dial_link"]
+
+# The astral-docs tcp example with a port forward: node2 advertises the
+# forward's public side; the driver forwards it to node2's tcp listen port.
+[config.node2.tcp]
+configEndpoints = ["127.0.0.1:26791"]
