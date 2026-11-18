@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net"
 	"slices"
 	"strings"
 	"sync"
@@ -348,8 +349,13 @@ func TestMaintainLinkTaskDoesNotDialAfterCancel(t *testing.T) {
 	}
 }
 
+// addrAdded is an address change that adds addr.
+func addrAdded(addr string) *events.Event {
+	return &events.Event{Data: &ip.EventNetworkAddressChanged{Added: []ip.IP{ip.IP(net.ParseIP(addr))}}}
+}
+
 // TestMaintainLinkTaskWakesOnAddressChange: an ip.EventNetworkAddressChanged
-// during a backoff wait makes the unlinked task dial at once and restarts the
+// that adds a routable address during a backoff wait makes the unlinked task dial at once and restarts the
 // backoff from linkRetryMin; the fake clock never ends the wait.
 func TestMaintainLinkTaskWakesOnAddressChange(t *testing.T) {
 	f := newLinkTaskFixture(failEvery, false)
@@ -363,7 +369,7 @@ func TestMaintainLinkTaskWakesOnAddressChange(t *testing.T) {
 		t.Fatalf("second backoff %v; want %v", d, 2*linkRetryMin)
 	}
 
-	f.task.ReceiveEvent(&events.Event{Data: &ip.EventNetworkAddressChanged{}})
+	f.task.ReceiveEvent(addrAdded("192.168.1.10"))
 	f.requireAttempt(t, 3, wakeDialBound)
 	if d := f.requireBackoff(t); d != linkRetryMin {
 		t.Fatalf("backoff after an address change %v; want %v", d, linkRetryMin)
@@ -379,8 +385,28 @@ func TestMaintainLinkTaskIgnoresAddressChangeWhileLinked(t *testing.T) {
 	f := newLinkTaskFixture(func(int) error { return nil }, false)
 	f.nodes.setLinked(f.target, true)
 
-	f.task.ReceiveEvent(&events.Event{Data: &ip.EventNetworkAddressChanged{}})
+	f.task.ReceiveEvent(addrAdded("192.168.1.10"))
 
+	f.requireIdle(t)
+}
+
+// TestMaintainLinkTaskIgnoresAddressChangesThatAddNoRoutableAddress: removing
+// an address or adding only a link-local one neither wakes the unlinked task
+// nor restarts its backoff.
+func TestMaintainLinkTaskIgnoresAddressChangesThatAddNoRoutableAddress(t *testing.T) {
+	f := newLinkTaskFixture(failEvery, false)
+
+	f.task.ReceiveEvent(&events.Event{Data: &ip.EventNetworkAddressChanged{
+		Removed: []ip.IP{ip.IP(net.ParseIP("192.168.1.10"))},
+	}})
+	f.task.ReceiveEvent(addrAdded("fe80::1"))
+
+	f.requireIdle(t)
+}
+
+// requireIdle fails if the task needs action, restarts its backoff, or was signalled.
+func (f *linkTaskFixture) requireIdle(t *testing.T) {
+	t.Helper()
 	if f.task.actionRequired.Load() || f.task.resetBackoff.Load() {
 		t.Fatal("the task needs action; want it idle")
 	}

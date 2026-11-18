@@ -2,6 +2,7 @@ package user
 
 import (
 	nodesmod "github.com/astralp2p/astrald/mod/nodes"
+	"slices"
 	"sync/atomic"
 	"time"
 
@@ -28,7 +29,7 @@ const (
 // triggers:
 // - nodes.LinkClosedEvent (link to target dropped)
 // - Wake (the user module saw target nearby)
-// - ip.EventNetworkAddressChanged (a local address changed; also restarts the backoff)
+// - ip.EventNetworkAddressChanged that adds a routable address (also restarts the backoff)
 type MaintainLinkTask struct {
 	mod            *Module
 	Target         *astral.Identity
@@ -157,7 +158,7 @@ func (a *MaintainLinkTask) Wake() {
 func (a *MaintainLinkTask) ReceiveEvent(e *events.Event) {
 	switch typed := e.Data.(type) {
 	case *ip.EventNetworkAddressChanged:
-		if a.mod.Nodes.IsLinked(a.Target) {
+		if !addsRoutableAddress(typed) || a.mod.Nodes.IsLinked(a.Target) {
 			return
 		}
 		a.resetBackoff.Store(true)
@@ -173,6 +174,15 @@ func (a *MaintainLinkTask) ReceiveEvent(e *events.Event) {
 			a.signal()
 		}
 	}
+}
+
+// addsRoutableAddress reports whether e adds a global unicast address.
+//
+// why: a removed address makes no failed dial succeed, and a link-local address
+// (each container start adds a veth fe80::) reaches no sibling; waking on those
+// would restart every offline sibling's backoff and keep it below linkRetryMax.
+func addsRoutableAddress(e *ip.EventNetworkAddressChanged) bool {
+	return slices.ContainsFunc(e.Added, func(a ip.IP) bool { return a.IsGlobalUnicast() })
 }
 
 // signal wakes the loop; a wake already pending absorbs it.
