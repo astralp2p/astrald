@@ -229,6 +229,24 @@ func userRecognizer(user *astral.Identity) *fakeRecognizer {
 	}}
 }
 
+// joinRecognizer recognizes as the user module of a node without a user does while
+// user.join runs: a stealth hint that opens with the join target to its user. It
+// recognizes nothing while target holds nil.
+func joinRecognizer() (*fakeRecognizer, *atomic.Pointer[astral.Identity]) {
+	target := &atomic.Pointer[astral.Identity]{}
+	return &fakeRecognizer{recognize: func(s *nearby.StatusMessage) *nearbymod.Recognition {
+		node := target.Load()
+		hint, ok := astral.First[*nearby.StealthHint](s.Attachments.Objects())
+		if node == nil || !ok {
+			return nil
+		}
+		if user, ok := hint.OpenWithNode(node); ok {
+			return &nearbymod.Recognition{NodeID: node, UserID: user}
+		}
+		return nil
+	}}, target
+}
+
 // fixedRecognizer recognizes every status as node of user.
 func fixedRecognizer(node, user *astral.Identity) *fakeRecognizer {
 	return &fakeRecognizer{recognize: func(*nearby.StatusMessage) *nearbymod.Recognition {

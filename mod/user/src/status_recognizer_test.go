@@ -86,6 +86,59 @@ func TestRecognizeStatusWithoutAUser(t *testing.T) {
 	}
 }
 
+// TestRecognizeJoinTarget: a node without a user recognizes a hint made for
+// the node user.join is joining, naming that node and its user; it recognizes
+// no hint of another node, no profile, and nothing while no join runs.
+func TestRecognizeJoinTarget(t *testing.T) {
+	target, swarmUser, other := astral.GenerateIdentity(), astral.GenerateIdentity(), astral.GenerateIdentity()
+
+	cases := []struct {
+		name   string
+		target *astral.Identity
+		status *nearby.StatusMessage
+		want   bool
+	}{
+		{"hint of the target", target, statusOf(t, stealthHint(t, target, swarmUser)), true},
+		{"hint of another node", target, statusOf(t, stealthHint(t, other, swarmUser)), false},
+		{"hint of the target, another target set", other, statusOf(t, stealthHint(t, target, swarmUser)), false},
+		{"hint of the target, no join", nil, statusOf(t, stealthHint(t, target, swarmUser)), false},
+		{"profile of the target", target, statusOf(t, &nearby.PublicProfile{NodeID: target, UserID: swarmUser}), false},
+		{"empty bundle", target, statusOf(t), false},
+		{"no bundle", target, &nearby.StatusMessage{}, false},
+	}
+	for _, tt := range cases {
+		t.Run(tt.name, func(t *testing.T) {
+			mod := claimedModule(t, nil)
+			mod.joinTarget.Store(tt.target)
+
+			rec := mod.RecognizeStatus(tt.status)
+			if (rec != nil) != tt.want {
+				t.Fatalf("recognized %+v; want recognized %v", rec, tt.want)
+			}
+			if rec != nil && (!rec.NodeID.IsEqual(target) || !rec.UserID.IsEqual(swarmUser)) {
+				t.Fatalf("recognized %v of %v; want %v of %v", rec.NodeID, rec.UserID, target, swarmUser)
+			}
+		})
+	}
+}
+
+// TestRecognizeJoinTargetOnAClaimedNode: a claimed node with a stale join
+// target recognizes its own user's nodes only, never the target's hint.
+func TestRecognizeJoinTargetOnAClaimedNode(t *testing.T) {
+	userID, peerID := astral.GenerateIdentity(), astral.GenerateIdentity()
+	target, swarmUser := astral.GenerateIdentity(), astral.GenerateIdentity()
+	mod := claimedModule(t, userID)
+	mod.joinTarget.Store(target)
+
+	if rec := mod.RecognizeStatus(statusOf(t, stealthHint(t, target, swarmUser))); rec != nil {
+		t.Fatalf("a claimed node recognized the join target's hint as %v of %v", rec.NodeID, rec.UserID)
+	}
+	rec := mod.RecognizeStatus(statusOf(t, stealthHint(t, peerID, userID)))
+	if rec == nil || !rec.NodeID.IsEqual(peerID) || !rec.UserID.IsEqual(userID) {
+		t.Fatalf("recognized %+v; want %v of the node's user %v", rec, peerID, userID)
+	}
+}
+
 // TestRecognizeAttachmentRefusesGarbage: zero identities, nil attachments and
 // other objects are not recognized, and none panics.
 func TestRecognizeAttachmentRefusesGarbage(t *testing.T) {
