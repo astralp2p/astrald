@@ -5,9 +5,12 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+	"time"
 
+	"github.com/astralp2p/astral-go/api/auth"
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astral-go/astral/log"
+	authmod "github.com/astralp2p/astrald/mod/auth"
 	"github.com/astralp2p/astrald/mod/scheduler"
 )
 
@@ -137,4 +140,54 @@ func TestSiblingLinkerKeepsTasksWhenTheSwarmQueryFails(t *testing.T) {
 	e.mod.runSiblingLinker()
 
 	e.requireLinked(t, a)
+}
+
+// gatedQuery holds every Find until open is closed and reports the first one on entered.
+type gatedQuery struct {
+	*memberQuery
+	entered chan struct{}
+	open    chan struct{}
+	once    sync.Once
+}
+
+func (q *gatedQuery) WithIssuer(*astral.Identity) authmod.ContractQueryBuilder  { return q }
+func (q *gatedQuery) WithSubject(*astral.Identity) authmod.ContractQueryBuilder { return q }
+func (q *gatedQuery) WithAction(...astral.Object) authmod.ContractQueryBuilder  { return q }
+func (q *gatedQuery) Find(ctx *astral.Context) ([]*auth.SignedContract, error) {
+	q.once.Do(func() { close(q.entered) })
+	<-q.open
+	return q.memberQuery.Find(ctx)
+}
+
+type gatedAuth struct {
+	authmod.Module
+	query *gatedQuery
+}
+
+func (a *gatedAuth) SignedContracts() authmod.ContractQueryBuilder { return a.query }
+
+// TestClearedContractDuringALinkerRunStopsEverySiblingTask: a linker run that
+// read the swarm before the contract was cleared leaves no link task behind.
+func TestClearedContractDuringALinkerRunStopsEverySiblingTask(t *testing.T) {
+	a, b := astral.GenerateIdentity(), astral.GenerateIdentity()
+	e := newLinkerEnv(t, a, b)
+	q := &gatedQuery{memberQuery: e.query, entered: make(chan struct{}), open: make(chan struct{})}
+	e.mod.Auth = &gatedAuth{query: q}
+
+	linked := make(chan struct{})
+	go func() { e.mod.runSiblingLinker(); close(linked) }()
+	<-q.entered
+
+	cleared := make(chan struct{})
+	go func() { e.mod.onActiveContractChanged(nil); close(cleared) }()
+	select {
+	case <-cleared:
+	case <-time.After(100 * time.Millisecond):
+	}
+	close(q.open)
+	<-linked
+	<-cleared
+
+	e.requireStopped(t, a)
+	e.requireStopped(t, b)
 }

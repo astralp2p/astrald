@@ -96,7 +96,11 @@ func (mod *Module) onActiveContractChanged(signed *auth.SignedContract) {
 	defer mod.publishSwarm()
 	if signed.IsNil() {
 		mod.log.Info("this node runs without a user")
+		// why linkerMu: a linker run that read the old swarm before the clear
+		// would otherwise register tasks for former members after this prune.
+		mod.linkerMu.Lock()
 		mod.pruneSiblings(nil)
+		mod.linkerMu.Unlock()
 		return
 	}
 
