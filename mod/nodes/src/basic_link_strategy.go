@@ -1,21 +1,36 @@
 package nodes
 
 import (
-	nodesmod "github.com/astralp2p/astrald/mod/nodes"
+	"context"
 	"slices"
 	"sync"
+	"time"
+
+	nodesmod "github.com/astralp2p/astrald/mod/nodes"
 
 	"github.com/astralp2p/astral-go/api/nodes"
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astral-go/sig"
 )
 
+// basicNetworks are the networks whose rows the basic strategy dials.
+var basicNetworks = []string{"tcp", "kcp", "gw"}
+
+// defaultRowBudgets bounds one row's dial and handshake per network; a network without an entry has no bound of its own.
+// why kcp: a kcp dial succeeds at once over UDP, so a dead row fails only in the Noise handshake, which nothing else bounds.
+// why gw: a gw dial routes a query to the gateway, which may start a nested dial round for the gateway itself.
+var defaultRowBudgets = map[string]time.Duration{
+	"kcp": 5 * time.Second,
+	"gw":  20 * time.Second,
+}
+
 // BasicLinkStrategy dials all known endpoints of the target node in parallel
 // and uses the first successful connection to establish a link.
 type BasicLinkStrategy struct {
-	mod      *Module
-	networks []string
-	target   *astral.Identity
+	mod        *Module
+	networks   []string
+	rowBudgets map[string]time.Duration
+	target     *astral.Identity
 
 	mu         sync.Mutex
 	activeDone chan struct{}
@@ -118,7 +133,14 @@ func (s *BasicLinkStrategy) Done() <-chan struct{} {
 	return s.activeDone
 }
 
+// tryEndpoint dials one row and establishes a link over it, within the row's network budget; nil on any failure.
 func (s *BasicLinkStrategy) tryEndpoint(ctx *astral.Context, endpoint *nodes.EndpointWithTTL) *Link {
+	if d, ok := s.rowBudgets[endpoint.Network()]; ok {
+		var cancel context.CancelFunc
+		ctx, cancel = ctx.WithTimeout(d)
+		defer cancel()
+	}
+
 	conn, err := s.mod.Exonet.Dial(ctx, endpoint.Endpoint)
 	if err != nil {
 		return nil
@@ -137,16 +159,23 @@ func (s *BasicLinkStrategy) tryEndpoint(ctx *astral.Context, endpoint *nodes.End
 // factory
 
 type BasicLinkStrategyFactory struct {
-	mod      *Module
-	networks []string
+	mod        *Module
+	networks   []string
+	rowBudgets map[string]time.Duration
 }
 
 var _ nodesmod.StrategyFactory = &BasicLinkStrategyFactory{}
 
+// newBasicLinkStrategyFactory returns the factory the module registers: basicNetworks with defaultRowBudgets.
+func newBasicLinkStrategyFactory(mod *Module) *BasicLinkStrategyFactory {
+	return &BasicLinkStrategyFactory{mod: mod, networks: basicNetworks, rowBudgets: defaultRowBudgets}
+}
+
 func (f *BasicLinkStrategyFactory) Build(target *astral.Identity) nodesmod.LinkStrategy {
 	return &BasicLinkStrategy{
-		mod:      f.mod,
-		networks: f.networks,
-		target:   target,
+		mod:        f.mod,
+		networks:   f.networks,
+		rowBudgets: f.rowBudgets,
+		target:     target,
 	}
 }

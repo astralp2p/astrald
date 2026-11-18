@@ -9,9 +9,10 @@ minutes: the user module wakes the task when nearby reports the sibling.
 - **op** `lan-outage node2 --for 420`: `node2` leaves the LAN, every link to
   it is closed, and a timer in the guest brings it back at the same address
   420 s later.
-- **config** `kcp.dial_timeout = "3s"` on both, so that a failed attempt takes
-  seconds, not the minute a kcp dial waits by default, and the backoff
-  dominates the time between attempts.
+- **attempts** each link attempt dials the peer's tcp and kcp rows; a kcp row
+  gives up after the basic strategy's 5 s kcp budget
+  (`mod/nodes/src/basic_link_strategy.go` `defaultRowBudgets`), so a failed
+  attempt takes seconds and the backoff dominates the time between attempts.
 - **driver** `script.py`: records both nodes' link-task and nearby-contact log
   lines (`log.listen`), and polls `node1`'s nearby list and links every second
   until the link has been back for 20 s.
@@ -25,9 +26,9 @@ minutes: the user module wakes the task when nearby reports the sibling.
 
 Why 420 s: `node2`'s cache entry on `node1` expires at most 300 s after its
 last status, and only then does nearby report it back at the same address.
-With attempts of about 3 s on `node1` (instant on `node2`, whose route into
-the LAN is unreachable), each side has failed nine attempts by then and waits
-256 s for the tenth. The oracle's bound is then 480 s after the `attempt 5`
+With attempts of at most 5 s on each side, each side has failed nine
+attempts by 300 s after the cut (the waits after failures 1 to 8 add up to
+255 s) and waits 256 s for the tenth. The oracle's bound is then 480 s after the `attempt 5`
 line, which falls 31 s or more after the cut: 511 s or later, against a return
 420 s after the cut.
 
