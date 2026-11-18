@@ -38,11 +38,16 @@ cancels the round is closed without becoming a link, so a round may have
 fewer excess lines than losers.
 
 note: node1's book also holds the endpoints node2 publishes for itself, one
-per interface of its host (live: 127.0.0.1, a LAN address and a link-local
-IPv6 address, 7 tcp endpoints in all), so the number of losers depends on
-the host. The oracle's upper bound is read from the book.
+per advertisable interface address of its host, so the number of losers
+depends on the host. node2 publishes no IPv6 link-local and no container or
+host-only bridge address (`ip.Module.LocalIPs`, astrald
+`mod/ip/src/advertisable.go`). The oracle's upper bound is read from the book.
 
-Calibration, on a kept world of this test: 200 rounds of the driver's round,
-each winner closed after it, on the 7-endpoint book above: 6 rounds with no
-excess line, and 16, 35, 58 and 85 rounds with 1, 2, 3 and 4. Three rounds
-all without one: about 3e-5 a run.
+Calibration, on a kept world of this test before that filter: 200 rounds of
+the driver's round, each winner closed after it, on a 7-endpoint book
+(127.0.0.1, a LAN address and a link-local IPv6 address published by node2):
+6 rounds with no excess line, and 16, 35, 58 and 85 rounds with 1, 2, 3 and
+4. Three rounds all without one: about 3e-5 a run. The same host now yields a
+6-endpoint book with one loser fewer a round, so a round without an excess
+line is more frequent than 6 in 200 and the per-run figure is a lower bound
+until recalibrated.

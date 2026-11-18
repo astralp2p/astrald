@@ -15,6 +15,16 @@ func stubInterfaceAddrs(t *testing.T, addrs []net.Addr, err error) {
 	orig := InterfaceAddrs
 	t.Cleanup(func() { InterfaceAddrs = orig })
 	InterfaceAddrs = func() ([]net.Addr, error) { return addrs, err }
+	// why: keep LocalIPs hermetic; the real host may have bridge interfaces.
+	stubNetInterfaceAddrs(t, map[string][]net.Addr{}, nil)
+}
+
+func stubNetInterfaceAddrs(t *testing.T, byIface map[string][]net.Addr, err error) {
+	t.Helper()
+
+	orig := NetInterfaceAddrs
+	t.Cleanup(func() { NetInterfaceAddrs = orig })
+	NetInterfaceAddrs = func() (map[string][]net.Addr, error) { return byIface, err }
 }
 
 func cidr(t *testing.T, s string) *net.IPNet {

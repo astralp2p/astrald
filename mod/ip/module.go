@@ -7,7 +7,8 @@ import (
 
 const ModuleName = "ip"
 
-// Module is the public API of the ip module; LocalIPs returns addresses bound to local interfaces,
+// Module is the public API of the ip module; LocalIPs returns the advertisable addresses bound to
+// local interfaces (no IPv6 link-local, no container or VM bridge addresses),
 // while PublicIPCandidates returns the subset considered reachable from the internet.
 type Module interface {
 	LocalIPs() ([]ip.IP, error)

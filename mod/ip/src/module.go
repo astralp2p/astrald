@@ -41,9 +41,30 @@ func (mod *Module) Run(ctx *astral.Context) error {
 	return nil
 }
 
-// LocalIPs returns all non-loopback IP addresses currently assigned to local network interfaces.
+// LocalIPs returns the local interface addresses a node advertises as its endpoints: every
+// non-loopback address except IPv6 link-local ones and those of host-only interfaces
+// (container and virtual-machine bridges).
+//
+// why: ip.IP carries no zone, so an advertised fe80:: address can never be dialed.
 func (mod *Module) LocalIPs() ([]ip.IP, error) {
-	return mod.localAddresses(false)
+	addrs, err := mod.localAddresses(false)
+	if err != nil {
+		return nil, err
+	}
+
+	hostOnly := hostOnlyIPs()
+
+	var out []ip.IP
+	for _, a := range addrs {
+		if net.IP(a).IsLinkLocalUnicast() && net.IP(a).To4() == nil {
+			continue
+		}
+		if hostOnly[a.String()] {
+			continue
+		}
+		out = append(out, a)
+	}
+	return out, nil
 }
 
 func (mod *Module) localAddresses(includeLoopback bool) (out []ip.IP, err error) {
