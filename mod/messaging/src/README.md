@@ -15,6 +15,8 @@ tools call the `messaging.Module` methods under the bearer's identity.
   access token, and a row in the hosting index.
 * The index row is written last. A create that fails at an earlier step leaves
   no served mailbox.
+* After the index row is written, the relay contract is pushed to every linked
+  sibling, best-effort. A create that fails pushes nothing.
 * `mcp.create_agent` mints its agent through `CreateMailbox`.
 * `messaging.delete_mailbox` revokes every apphost token and grant of the
   identity, unsets its alias, and withdraws its mailbox.
