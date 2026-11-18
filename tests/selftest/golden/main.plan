@@ -70,21 +70,23 @@ w19 local: bootstrap-user-software-key* → adopt-node* → join-via-member
 w20 local: bootstrap-user-software-key* → adopt-node*
            → app-node-restart-reconnect
 w21 local: bootstrap-user-software-key* → adopt-node* → services-node-restart
-w22 local: bootstrap-user-software-key* → repo-removal-sticks
-w23 local: bootstrap-user-software-key* → fs-watch-restart-restore
-w24 local: bootstrap-user-software-key* → fs-index-restart-reconcile
-w25 local: bootstrap-user-software-key* → basic-strategy-stalled-negotiation
-w26 local: bootstrap-user-software-key* → hold-isolation
+w22 local: bootstrap-user-software-key* → adopt-node*
+           → services-consumer-restart
+w23 local: bootstrap-user-software-key* → repo-removal-sticks
+w24 local: bootstrap-user-software-key* → fs-watch-restart-restore
+w25 local: bootstrap-user-software-key* → fs-index-restart-reconcile
+w26 local: bootstrap-user-software-key* → basic-strategy-stalled-negotiation
+w27 local: bootstrap-user-software-key* → hold-isolation
            config node1.objects.purge_floor = "0s"
-w27 local: bootstrap-user-software-key* → indexer-cursor
-w28 local: bootstrap-user-software-key* → indexing-fs-watch-feed
-w29 local: bootstrap-user-software-key* → blueprint-survives-restart
-w30 local: distribution-gate-setup
+w28 local: bootstrap-user-software-key* → indexer-cursor
+w29 local: bootstrap-user-software-key* → indexing-fs-watch-feed
+w30 local: bootstrap-user-software-key* → blueprint-survives-restart
+w31 local: distribution-gate-setup
            config node1.apphost.gate = {}
            config node1.apphost.policies = {}
-w31 local: import-user-software-key
-w32 local: bootstrap-user-op
-w33 local: bootstrap-passphrase
-w34 local: claim-race
-w35 local: introduce-node-setup → introduce-node
-w36 local: concurrent-adoption
+w32 local: import-user-software-key
+w33 local: bootstrap-user-op
+w34 local: bootstrap-passphrase
+w35 local: claim-race
+w36 local: introduce-node-setup → introduce-node
+w37 local: concurrent-adoption
