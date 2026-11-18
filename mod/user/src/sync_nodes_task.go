@@ -38,6 +38,8 @@ func (a *SyncNodesTask) Run(ctx *astral.Context) error {
 	ctx = ctx.IncludeZone(astral.ZoneNetwork)
 
 	remoteIdentity := a.remoteIdentity
+	// note: one line per run, so link flapping shows as a run count in the log.
+	a.mod.log.Logv(1, "syncing with %v", remoteIdentity)
 
 	a.mod.pushActiveContract(ctx, remoteIdentity)
 	a.mod.syncExpulsions(ctx, remoteIdentity)

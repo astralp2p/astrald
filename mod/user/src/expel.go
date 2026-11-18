@@ -8,6 +8,7 @@ import (
 	"github.com/astralp2p/astral-go/api/user"
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astrald/mod/objects"
+	"gorm.io/gorm"
 )
 
 // Expel permanently bans nodeID from the active swarm. Only the swarm's user (the
@@ -46,8 +47,9 @@ func (mod *Module) Expel(ctx *astral.Context, nodeID *astral.Identity) (*user.Si
 	mod.publishSwarm()
 
 	go mod.PushToLocalSwarm(mod.ctx, signed)
-	// why: PushToLocalSwarm and syncExpulsions both skip the subject, so push the ban
-	// to the expelled node directly — its only trigger to self-enforce via leaveSwarm.
+	// why: PushToLocalSwarm skips the subject, so push the ban to the expelled node
+	// directly — its trigger to self-enforce via leaveSwarm. A missed push is repaired
+	// by the expulsion sync at its next link and by the sweep (reconcile_task.go).
 	go mod.Objects.Push(mod.ctx, nodeID, signed)
 	// why: stop maintaining the link but do not force-close it — that would race the
 	// push above. On delivery the node tears itself down; until then the issuer's
@@ -119,6 +121,24 @@ func (mod *Module) leaveSwarm() {
 	if err := mod.config.ActiveContract.Clear(mod.ctx); err != nil {
 		mod.log.Errorv(1, "clearing active contract after expulsion: %v", err)
 	}
+}
+
+// banOn returns the ban the active contract's issuer issued on subject, or nil
+// when there is no active contract or no such ban.
+func (mod *Module) banOn(subject *astral.Identity) *user.SignedExpulsion {
+	ac := mod.ActiveContract()
+	if ac == nil {
+		return nil
+	}
+
+	ban, err := mod.db.ExpulsionFor(ac.Issuer, subject)
+	if err != nil {
+		if !errors.Is(err, gorm.ErrRecordNotFound) {
+			mod.log.Errorv(1, "reading the ban on %v: %v", subject, err)
+		}
+		return nil
+	}
+	return ban
 }
 
 // isExpelled reports whether issuer has banned subject. Expulsion is irreversible,

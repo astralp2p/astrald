@@ -91,6 +91,7 @@ policy-delegate
 indexer-cursor
 swarm-member-restart
 expel-survives-restart
+membership-resync-volume
 adopt-claimed-node-setup
 distribution-gate-setup
 adopt-claimed-node
