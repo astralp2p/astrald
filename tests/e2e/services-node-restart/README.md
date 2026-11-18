@@ -33,7 +33,8 @@ ended, receives the same provider's offering available once more.
 - **oracle** `verify.py` — node2 restarted once, node1 not, and node2 kept its
   endpoint; the provider and consumer processes are the same pids and alive.
   Within 90 s the follow's events after the driver's count hold a Removed
-  naming the provider's offering and, after it, an update making the same
+  naming the provider's offering, with cause `member_lost` or
+  `member_removed` (below), and, after it, an update making the same
   provider's offering available again; the follow did not end and holds the
   offering. The provider's own record shows another registration and another
   acknowledged advertise binding, and an ask to evaluate the offering for the
@@ -55,8 +56,10 @@ stream that sees the whole story.
 The removal reaches the follow by either of two paths, and the oracle accepts
 whichever comes first: node2's coordinator retracts the provider's binding when
 node2 shuts down (the runner stops a node gracefully) and sends a Removed over
-the open link, or node1's `carry` (`mod/services/src/swarm.go`) calls `Lost` on
-the member when the stream to node2 ends. The return is node1's `carry`
+the open link, which node1 forwards with cause `member_removed`, or node1's
+`carry` (`mod/services/src/swarm.go`) calls `Lost` on the member when the
+stream to node2 ends, with cause `member_lost`. The cause is recorded in the
+oracle's log. The return is node1's `carry`
 asking node2 again on its next link or after a backoff, and node2's
 `Register` re-evaluating the new binding for the follows it already holds.
 

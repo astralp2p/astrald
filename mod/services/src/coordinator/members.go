@@ -1,6 +1,7 @@
 package coordinator
 
 import (
+	"github.com/astralp2p/astral-go/api/services"
 	"github.com/astralp2p/astral-go/astral"
 )
 
@@ -81,7 +82,7 @@ func (st *Stream) dropMembers(keep map[string]struct{}) {
 			kept = append(kept, r)
 			continue
 		}
-		r.lostLocked()
+		r.lostLocked(services.CauseMemberLeft)
 		r.endLocked()
 	}
 	st.contributions = kept

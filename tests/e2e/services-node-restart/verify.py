@@ -11,8 +11,10 @@ follow is the one stream that spans the restart. Claims:
 - the provider process is the same one and the consumer process is the same one,
   both alive, and the follow never ended;
 - the follow, in the events after the driver's last count, removed the provider's
-  offering when node2 went away (a Removed event naming it) and then delivered
-  the same provider's offering available again, in that order;
+  offering when node2 went away (a Removed event naming it, with the cause of
+  the path that removed it: member_lost when node1 lost its carry to node2,
+  member_removed when node2 sent the removal itself) and then delivered the
+  same provider's offering available again, in that order;
 - the provider's own record agrees: the node completed another registration of
   its handler and acknowledged another advertise binding, and asked it to
   evaluate the offering for the consumer under that new attach;
@@ -120,6 +122,14 @@ try:
     back = returns(late, gone)
     gap = (late[back]["at"] - late[gone]["at"]) / 1000
     assert not state["err"], f"the follow ended: {state['err']}"
+    # why: node2's graceful stop races the end of node1's carry (member_lost)
+    # against node2's retraction of the provider's binding, which node1
+    # forwards as member_removed; both are the cause of the hop node1 saw.
+    cause = late[gone].get("cause")
+    assert cause in ("member_lost", "member_removed"), (
+        f"the follow removed the provider's offering with cause {cause!r}, not "
+        f"member_lost (node1 lost its carry to node2) or member_removed (node2 "
+        f"removed it)")
     assert late[back]["provider"] == facts["provider"], (
         f"the offering came back from {late[back]['provider']}, not from the "
         f"same provider {facts['provider']}")
@@ -168,11 +178,11 @@ try:
 
     print(f"oracle: node2 restarted once; the follow on node1 removed "
           f"{facts['provider'][:12]}…/{facts['service']} and held it again "
-          f"{gap:.1f}s later; the provider re-registered "
+          f"{gap:.1f}s later (cause {cause}); the provider re-registered "
           f"({facts['attaches_before']} -> {final['attaches']} attaches), a fresh "
           f"discovery found it, and a caller got {called['reply'][:24]}…")
     print(f"note: events the follow recorded since the driver: "
-          f"{[(e['kind'], e['up'], e.get('detail', '')) for e in late]}")
+          f"{[(e['kind'], e['up'], e.get('detail', ''), e.get('cause', '')) for e in late]}")
     print(f"note: provider registrar errors at disconnect: "
           f"{final['disconnects'] or '(none)'}; first call error: "
           f"{called['first_error'] or '(none)'}")
