@@ -50,6 +50,7 @@ app-op-surface
 app-call-remote
 app-ping-pong
 app-reject-code
+route-outcomes
 app-op-surface-remote
 app-finder-read
 app-searcher-swarm

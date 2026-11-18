@@ -1,6 +1,7 @@
 package apphost
 
 import (
+	"context"
 	"errors"
 	"io"
 	"net"
@@ -88,16 +89,8 @@ func (srv *HTTPQueryHandler) ServeHTTP(writer http.ResponseWriter, request *http
 
 	// route the query
 	conn, err := query.RouteInFlight(ctx, srv.node, q)
-	switch {
-	case err == nil:
-	case errors.Is(err, &astral.ErrRejected{}):
-		writer.WriteHeader(http.StatusMethodNotAllowed)
-		return
-	case errors.Is(err, &astral.ErrRouteNotFound{}):
-		writer.WriteHeader(http.StatusNotFound)
-		return
-	default:
-		writer.WriteHeader(http.StatusInternalServerError)
+	if err != nil {
+		writer.WriteHeader(routingStatus(err))
 		return
 	}
 	defer conn.Close()
@@ -105,6 +98,26 @@ func (srv *HTTPQueryHandler) ServeHTTP(writer http.ResponseWriter, request *http
 	// forward the traffic
 	writer.WriteHeader(http.StatusOK)
 	_, err = io.Copy(writer, conn)
+}
+
+// routingStatus is the HTTP status that answers a routing failure.
+func routingStatus(err error) int {
+	var rejected *astral.ErrRejected
+	switch {
+	case errors.As(err, &rejected) && rejected.Code == astral.CodeUnavailable:
+		return http.StatusBadGateway
+	case errors.As(err, &rejected) && rejected.Code == astral.CodeTimeout,
+		errors.Is(err, context.DeadlineExceeded):
+		return http.StatusGatewayTimeout
+	case errors.As(err, &rejected):
+		return http.StatusMethodNotAllowed
+	case errors.Is(err, &astral.ErrRouteNotFound{}):
+		return http.StatusNotFound
+	case errors.Is(err, astral.ErrTargetNotAllowed):
+		return http.StatusForbidden
+	default:
+		return http.StatusInternalServerError
+	}
 }
 
 // launchHTTPQuery launches q for an HTTP request and stamps the origin of the

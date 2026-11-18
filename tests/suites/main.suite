@@ -66,6 +66,8 @@ app-discover-local
 app-ping-pong
 app-call-remote
 app-reject-code
+route-outcomes
+route-outcomes-dead-peer
 app-handler-unroute
 app-call-local
 app-routing-two-apps
