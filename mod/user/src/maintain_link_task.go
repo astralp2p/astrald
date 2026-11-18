@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/astralp2p/astral-go/api/events"
+	"github.com/astralp2p/astral-go/api/ip"
 	"github.com/astralp2p/astral-go/api/nodes"
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astrald/mod/scheduler"
@@ -27,11 +28,14 @@ const (
 // triggers:
 // - nodes.LinkClosedEvent (link to target dropped)
 // - Wake (the user module saw target nearby)
+// - ip.EventNetworkAddressChanged (a local address changed; also restarts the backoff)
 type MaintainLinkTask struct {
 	mod            *Module
 	Target         *astral.Identity
 	wake           chan struct{}
 	actionRequired atomic.Bool
+	// resetBackoff makes the next attempt start the backoff over from linkRetryMin.
+	resetBackoff atomic.Bool
 	// after is the backoff clock.
 	after func(time.Duration) <-chan time.Time
 }
@@ -61,9 +65,14 @@ func (a *MaintainLinkTask) Run(ctx *astral.Context) error {
 		// why: cleared as the attempt starts, so a link close or a Wake during the attempt
 		// sets it again and makes the loop dial once more instead of being lost.
 		a.actionRequired.Store(false)
+		if a.resetBackoff.Swap(false) {
+			delay = linkRetryMin
+		}
 
 		switch {
-		case count == 0:
+		// why: a Wake during the previous, successful attempt also lands here with
+		// count == 0; the link then stands and is not broken.
+		case count == 0 && !a.mod.Nodes.IsLinked(a.Target):
 			a.mod.log.Log("link to %v is broken, trying to reconnect", a.Target)
 		case count > 0 && count%5 == 0:
 			a.mod.log.Log("still trying to reconnect to %v (attempt %v)", a.Target, count)
@@ -142,8 +151,19 @@ func (a *MaintainLinkTask) Wake() {
 
 // ReceiveEvent wakes the reconnect loop when the last link to Target is closed.
 // Ignores events for other identities and partial disconnects (LinkCount != 0).
+// A local address change wakes an unlinked task and restarts its backoff, so a
+// node that regains network dials without waiting out a backoff of up to
+// linkRetryMax.
 func (a *MaintainLinkTask) ReceiveEvent(e *events.Event) {
 	switch typed := e.Data.(type) {
+	case *ip.EventNetworkAddressChanged:
+		if a.mod.Nodes.IsLinked(a.Target) {
+			return
+		}
+		a.resetBackoff.Store(true)
+		a.actionRequired.Store(true)
+		a.signal()
+
 	case *nodes.LinkClosedEvent:
 		if !typed.RemoteIdentity.IsEqual(a.Target) || typed.LinkCount != 0 {
 			return
