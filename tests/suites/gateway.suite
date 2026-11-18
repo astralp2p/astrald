@@ -1,8 +1,10 @@
 # gateway.suite — a NAT'd node reaches its swarm through a gateway node.
 #
 # gateway-relay moves node2 behind NAT and configures the reflector as its
-# gateway, and nothing puts either back, so it ends its world. It has a suite
+# gateway, and nothing puts either back; gateway-unregistered-advertise then
+# stops the gateway, so the two end their world. It has a suite
 # of its own because each VM suite is one world's worth of VM time.
 bootstrap-user-software-key
 adopt-node
 gateway-relay
+gateway-unregistered-advertise

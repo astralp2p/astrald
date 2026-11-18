@@ -35,7 +35,8 @@ const (
 	maxDialFails        = 3
 	connectTimeout      = 30 * time.Second
 	acceptTimeout       = 30 * time.Second
-	pipeIdleTimeout     = 24 * time.Hour // note: lower it when we will enforce pings on gw links
+	pipeIdleTimeout     = 24 * time.Hour     // note: lower it when we will enforce pings on gw links
+	endpointTTL         = 7 * 24 * time.Hour // why: matches the self-advertised tcp rows; a lapsed gw row then lives at most 7 d at a sibling
 )
 
 type Deps struct {
@@ -59,6 +60,7 @@ type Module struct {
 	ctx    *astral.Context
 
 	gateways        sig.Set[*astral.Identity]
+	registered      sig.Map[string, struct{}] // gateways this node holds a registration with, by identity
 	registeredNodes sig.Map[string, *registeredNode]
 	connectors      sig.Set[*connector]
 
@@ -80,8 +82,9 @@ func (mod *Module) Run(ctx *astral.Context) error {
 
 	<-mod.Scheduler.Ready()
 
-	for _, gw := range mod.config.Gateways {
-		mod.addPersistentGateway(gw)
+	// why: exonet parsers register in LoadDependencies, so config endpoints parse only after Ready.
+	for _, entry := range mod.config.Gateways {
+		mod.addPersistentGateway(entry.ID, mod.parseGatewayEndpoints(entry))
 	}
 
 	<-ctx.Done()
@@ -173,9 +176,10 @@ func (mod *Module) canGateway() bool {
 	return mod.config.Gateway.Enabled
 }
 
-func (mod *Module) addPersistentGateway(gatewayID *astral.Identity) {
+func (mod *Module) addPersistentGateway(gatewayID *astral.Identity, endpoints []exonet.Endpoint) {
 	mod.gateways.Add(gatewayID)
-	mod.Scheduler.Schedule(mod.NewMaintainGatewayConnectionsTask(gatewayID, mod.config.Visibility))
+	mod.storeGatewayEndpoints(gatewayID, endpoints)
+	mod.Scheduler.Schedule(mod.NewMaintainGatewayConnectionsTask(gatewayID, endpoints, mod.config.Visibility))
 }
 
 func (mod *Module) String() string {

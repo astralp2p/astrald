@@ -1,1 +1,2 @@
 w0 vm: bootstrap-user-software-key → adopt-node → gateway-relay
+       → gateway-unregistered-advertise

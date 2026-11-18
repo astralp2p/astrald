@@ -25,6 +25,8 @@ from astral.errors import AstralError
 
 from lib.sessionio import load
 
+WEEK = 7 * 24 * 60 * 60   # seconds: the TTL of a node's own gw row
+
 
 async def networks_to(endpoint, token, peer):
     """The exonet networks of every link this node holds to that peer."""
@@ -85,6 +87,23 @@ async def main():
             faults.append(
                 f"node2 did not answer a query over the gw link: "
                 f"{type(e).__name__}: {e}")
+
+    # The advertise rule: node2, registered, resolves gw:<gateway>:<node2> for
+    # itself with a 7 d TTL. gateway-unregistered-advertise checks that the
+    # row goes once the registration is lost.
+    want = f"{refl['identity']}:{n2['identity']}"
+    async with await astral.connect(n2["endpoint"], token=n2["token"]) as c2:
+        own = await c2.nodes.resolve_endpoints("localnode", experimental=True,
+                                               timeout=30)
+    gw_rows = {r.endpoint.address(): r.ttl for r in own
+               if r.endpoint.network() == "gw"}
+    if want not in gw_rows:
+        faults.append(
+            f"node2, registered, resolves {sorted(gw_rows) or 'no gw row'} "
+            f"for itself, not gw:{want[:16]}…")
+    elif gw_rows[want] != WEEK:
+        faults.append(
+            f"node2's own gw row carries TTL {gw_rows[want]} s, not {WEEK} s")
 
     # The socket path: the gateway holds an idle connection from node2 and
     # reserves it for node1. A gw link forms through the node_route fallback

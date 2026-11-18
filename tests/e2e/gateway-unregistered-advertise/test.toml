@@ -1,0 +1,7 @@
+nodes    = ["node2", "reflector"]
+timeout  = 600
+after    = "gateway-relay"
+# why: the gateway stays stopped, and nothing starts it again.
+destroys = true
+ops      = ["stop-astrald reflector"]
+facts    = ["cleared", "cleared_after_s", "gw_rows"]

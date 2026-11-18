@@ -8,8 +8,9 @@ A node nobody can dial is reached through a gateway that can.
 - **driver** `script.py` — wait for node2 to register itself, give node1 a
   `gw:` endpoint and nothing else, link.
 - **oracle** `verify.py` — the link to node2 is a `gw` link and not a `tcp`
-  one, node2 answers for itself over it, and the gateway reserves an idle
-  connection from node2 through `gateway.node_connect`.
+  one, node2 answers for itself over it, node2 resolves
+  `gw:<gateway>:<node2>` for itself with a 7 d TTL, and the gateway reserves
+  an idle connection from node2 through `gateway.node_connect`.
 
 The gateway module is a rendezvous and relay, five ops, and nothing exercised
 any of them.
@@ -34,8 +35,9 @@ Both halves are config and neither is reachable over apphost, which is why
 `configure-gateway` is a vmop rather than driver calls:
 
 - a node is a gateway only with `gateway.enabled: true`;
-- a node registers with one only by listing it under `gateways`, after which
-  the module schedules `MaintainGatewayConnectionsTask` and registers itself.
+- a node registers with one only by listing it as an `{id, endpoints}` entry
+  under `gateways`, after which the module stores the gateway's endpoints,
+  schedules `MaintainGatewayConnectionsTask` and registers itself.
 
 So the driver **waits** for node2 to arrive in the gateway's list rather than
 putting it there. A test that registered node2 by hand would prove the op
@@ -129,9 +131,11 @@ not have to rediscover:
   argument is rejected by the decoder in microseconds, which reads exactly
   like a node refusing to link. Use the SDK binding.
 - **Nothing teaches a lab node where a non-adopted node lives.** A node knows
-  its swarm siblings from adoption and knows nothing else, so a gateway that
-  was never adopted needs an explicit `nodes.add_endpoint` on every node that
-  must reach it — and, for NAT'd clients, an address on their own network.
+  its swarm siblings from adoption and knows nothing else. A client's
+  `gateways` entry carries the gateway's endpoint, so node2 registers from its
+  config alone. node1 is a `--peer` with no entry, so it still needs an
+  explicit `nodes.add_endpoint` for the gateway before it dials
+  `gw:<gateway>:<node2>`.
 
 ## What it does not cover
 

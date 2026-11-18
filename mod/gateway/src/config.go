@@ -5,8 +5,6 @@ import (
 	"github.com/astralp2p/astral-go/astral"
 )
 
-const defaultGateway = "node1f3AwbE1gJAgAqEx98FMipokcaE9ZapIphzDUkAceE7Pmw8ghmFV19QKCATeC7uyoLszQA"
-
 type NetworkConfig struct {
 	Port     int    `yaml:"port"`
 	Endpoint string `yaml:"endpoint,omitempty"`
@@ -17,10 +15,17 @@ type GatewayConfig struct {
 	Networks map[string]*NetworkConfig `yaml:"networks,omitempty"`
 }
 
+// GatewayEntry names one gateway this node registers with.
+// Endpoints holds the gateway's own link endpoints as `network:address` strings, e.g. `tcp:203.0.113.7:1791`.
+type GatewayEntry struct {
+	ID        *astral.Identity `yaml:"id"`
+	Endpoints []string         `yaml:"endpoints,omitempty"`
+}
+
 type Config struct {
 	Gateway    GatewayConfig      `yaml:"gateway"`
 	Visibility gateway.Visibility `yaml:"visibility"`
-	Gateways   []*astral.Identity `yaml:"gateways"`
+	Gateways   []GatewayEntry     `yaml:"gateways"`
 }
 
 var defaultConfig = Config{

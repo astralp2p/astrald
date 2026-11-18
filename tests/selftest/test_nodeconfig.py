@@ -70,7 +70,7 @@ class TestNodeConfig(unittest.TestCase):
     def test_an_override_replaces_its_keys_and_keeps_the_rest(self):
         cfg = rendered({"mcp": {"bind_mcp": ""},
                         "objects": {"extra": [1, "two"]},
-                        "gateway": {"gateways": ["x"]}})
+                        "gateway": {"gateways": [{"id": "x"}]}})
         self.assertEqual(cfg["mcp"]["bind_mcp"], "")
         self.assertEqual(len(cfg["mcp"]["tools"]),
                          len(NODE_OP_TOOLS) + len(PEER_TOOLS))
@@ -78,7 +78,7 @@ class TestNodeConfig(unittest.TestCase):
             "external_registration_sweep_interval": "1s",
             "extra": [1, "two"]})
         # a module the harness renders nothing for gets the override alone
-        self.assertEqual(cfg["gateway"], {"gateways": ["x"]})
+        self.assertEqual(cfg["gateway"], {"gateways": [{"id": "x"}]})
 
     def test_a_value_outside_the_bmp_is_written_as_itself(self):
         # why: an escaped one is a surrogate pair, which yaml.v2 refuses, and
