@@ -12,13 +12,16 @@ import (
 	authmod "github.com/astralp2p/astrald/mod/auth"
 )
 
-// memberQuery returns the staged membership contracts for any filter.
-type memberQuery struct{ found []*auth.SignedContract }
+// memberQuery returns the staged membership contracts, or err, for any filter.
+type memberQuery struct {
+	found []*auth.SignedContract
+	err   error
+}
 
 func (q *memberQuery) WithIssuer(*astral.Identity) authmod.ContractQueryBuilder  { return q }
 func (q *memberQuery) WithSubject(*astral.Identity) authmod.ContractQueryBuilder { return q }
 func (q *memberQuery) WithAction(...astral.Object) authmod.ContractQueryBuilder  { return q }
-func (q *memberQuery) Find(*astral.Context) ([]*auth.SignedContract, error)      { return q.found, nil }
+func (q *memberQuery) Find(*astral.Context) ([]*auth.SignedContract, error)      { return q.found, q.err }
 
 type memberAuth struct {
 	authmod.Module

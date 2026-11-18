@@ -84,15 +84,24 @@ func (mod *Module) String() string {
 	return user.ModuleName
 }
 
-// runSiblingLinker starts a link task for every swarm member that has none.
+// runSiblingLinker starts a link task for every swarm member that has none and
+// stops the link task of every sibling that is no longer a swarm member.
 //
 // why linkerMu: PeerSeen events, pushed contracts and contract changes run the
 // linker at once, and two unserialized runs each start a task for one member.
+// why the early return: a failed contract query reads as an empty swarm, and
+// pruning on it would stop every sibling's link task.
 func (mod *Module) runSiblingLinker() {
 	mod.linkerMu.Lock()
 	defer mod.linkerMu.Unlock()
 
-	for _, node := range mod.LocalSwarm() {
+	swarm, err := mod.localSwarm()
+	if err != nil {
+		return
+	}
+	mod.pruneSiblings(swarm)
+
+	for _, node := range swarm {
 		if node.IsEqual(mod.node.Identity()) {
 			continue
 		}

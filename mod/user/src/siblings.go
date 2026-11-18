@@ -66,6 +66,20 @@ func (mod *Module) wakeSibling(id *astral.Identity) bool {
 	return true
 }
 
+// pruneSiblings stops the link task of every sibling that is not in members.
+func (mod *Module) pruneSiblings(members []*astral.Identity) {
+	keep := make(map[string]struct{}, len(members))
+	for _, m := range members {
+		keep[m.String()] = struct{}{}
+	}
+
+	for _, sib := range mod.sibs.Values() {
+		if _, ok := keep[sib.ID.String()]; !ok {
+			mod.removeSibling(sib.ID)
+		}
+	}
+}
+
 func (mod *Module) removeSibling(id *astral.Identity) {
 	sib, ok := mod.sibs.Delete(id.String())
 	if !ok {
