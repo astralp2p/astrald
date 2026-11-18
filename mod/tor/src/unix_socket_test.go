@@ -2,7 +2,6 @@ package tor
 
 import (
 	"bufio"
-	"context"
 	"io"
 	"net"
 	"path/filepath"
@@ -72,10 +71,8 @@ func TestListenThroughUnixSockets(t *testing.T) {
 	targetPath := filepath.Join(t.TempDir(), "onion.sock")
 
 	mod := loadModule(t, "control_addr: unix:"+controlPath+"\nonion_target: unix:"+targetPath+"\n")
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
 
-	l, err := NewServer(mod).listen(ctx, nil)
+	l, err := NewServer(mod).listen(nil)
 	if err != nil {
 		t.Fatalf("listen: %v", err)
 	}

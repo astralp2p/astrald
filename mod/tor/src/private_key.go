@@ -1,7 +1,6 @@
 package tor
 
 import (
-	"context"
 	"errors"
 	"fmt"
 
@@ -66,7 +65,7 @@ func moveKeyToDataRoot(res resources.Resources, log *log.Logger) error {
 }
 
 func (mod *Module) generatePrivateKey() (Key, error) {
-	service, err := mod.torServer.listen(context.Background(), nil)
+	service, err := mod.torServer.listen(nil)
 	if err != nil {
 		return nil, err
 	}

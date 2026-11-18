@@ -151,6 +151,20 @@ func (ctl *Control) WaitClose() <-chan struct{} {
 	return ctl.closeCh
 }
 
+// Wait blocks reading the transport until it closes and returns the read error. Lines Tor sends
+// meanwhile are discarded.
+//
+// why: Tor sends nothing unsolicited on a connection without SETEVENTS, so an idle connection
+// that owns an onion service reports its close only to a reader. Wait must not run alongside a
+// request, since both read the same transport.
+func (ctl *Control) Wait() error {
+	for {
+		if _, err := ctl.proto.ReadLine(); err != nil {
+			return err
+		}
+	}
+}
+
 func (ctl *Control) Close() error {
 	return ctl.proto.Close()
 }
