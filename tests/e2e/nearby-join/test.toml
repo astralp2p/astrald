@@ -1,0 +1,9 @@
+nodes   = ["node1", "reflector"]
+timeout = 240
+after   = "nearby-adopt"
+# why noop: as nearby-adopt's, the op that keeps it in a VM world. It also
+# makes the test a destroyer: it claims the reflector, which
+# nearby-stealth-meet needs unowned, so the planner gives it a world of its own
+# that replays nearby-adopt.
+ops     = ["noop"]
+facts   = ["nearby_join"]
