@@ -53,7 +53,7 @@ func (mod *Module) Run(ctx *astral.Context) error {
 
 	go mod.runExpiry(ctx)
 	go func() {
-		if err := mod.Scan(); err != nil {
+		if err := mod.Scan(); err != nil && !lanOff(err) {
 			mod.log.Error("scan: %v", err)
 		}
 	}()

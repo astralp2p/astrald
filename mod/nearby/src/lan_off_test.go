@@ -6,6 +6,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/astralp2p/astral-go/api/ip"
 	"github.com/astralp2p/astral-go/api/nearby"
@@ -90,4 +91,68 @@ func TestSendErrorLogWhileLANDiscoveryIsOff(t *testing.T) {
 			}
 		})
 	}
+}
+
+// With LAN discovery off, the startup scan in Run logs no level-0 error; any other
+// send error still logs it at level 0.
+func TestStartupScanErrorLogWhileLANDiscoveryIsOff(t *testing.T) {
+	lanOffErr := errors.Join(fmt.Errorf("send to 192.168.1.255: %w", ethermod.ErrNotListening))
+
+	for _, tt := range []struct {
+		name string
+		err  error
+		want int
+	}{
+		{"lan discovery off", lanOffErr, 0},
+		{"other send error", errors.New("network is unreachable"), 1},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			owner := astral.GenerateIdentity()
+			h := newHarness(t, owner)
+			h.setMode(t, nearby.ModeVisible)
+			h.mod.AddStatusComposer(&modeComposer{mod: h.mod, owner: owner})
+			h.ether.err = tt.err
+			rec := &entryRecorder{}
+			h.mod.log.AddLogger(rec)
+
+			ctx, cancel := astral.NewContext(nil).WithCancel()
+			done := make(chan struct{})
+			go func() {
+				defer close(done)
+				h.mod.Run(ctx)
+			}()
+			h.ether.waitSend(t) // note: the startup scan and the first status, in either order
+			h.ether.waitSend(t)
+
+			// note: the scan goroutine logs after its send; wait for the entry, or a grace
+			// period when none is expected.
+			deadline := time.Now().Add(waitTimeout)
+			if tt.want == 0 {
+				deadline = time.Now().Add(50 * time.Millisecond)
+			}
+			for len(rec.scanErrors()) < tt.want && time.Now().Before(deadline) {
+				time.Sleep(5 * time.Millisecond)
+			}
+			if tt.want == 0 {
+				time.Sleep(time.Until(deadline))
+			}
+			cancel()
+			<-done
+
+			if got := rec.scanErrors(); len(got) != tt.want {
+				t.Errorf("logged %d scan errors at level 0 %q; want %d", len(got), got, tt.want)
+			}
+		})
+	}
+}
+
+// scanErrors returns the recorded level-0 lines of a failed scan send.
+func (r *entryRecorder) scanErrors() []string {
+	var out []string
+	for _, l := range r.sendErrors() {
+		if strings.HasPrefix(l, "scan:") {
+			out = append(out, l)
+		}
+	}
+	return out
 }
