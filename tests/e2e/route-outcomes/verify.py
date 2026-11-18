@@ -7,7 +7,11 @@ long it took. The oracle reads those facts; it repeats nothing.
 """
 from lib.sessionio import load
 
-FAST_MS = 100  # an answer that needs no network wait
+# An answer that waits for nothing. The criterion is 100 ms on an idle node;
+# why 500: in the shared main.suite world on a loaded 4-core host node1's own
+# core.Router logged 133-168 ms for these queries (2026-11-18), and 500 ms still
+# tells an immediate answer from the 60 s routing deadline.
+FAST_MS = 500
 
 facts = load()["facts"].get("route_outcomes", {})
 

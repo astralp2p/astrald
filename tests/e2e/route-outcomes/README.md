@@ -8,8 +8,9 @@ cause calls for.
 - **driver** `script.py` — runs `driver/` (Go, this repository's astral-go).
   node1 registers a caller app, and the driver waits until node2 holds its relay
   contract (`apphost.hosts` on node2 names node1), so node2 admits relays for
-  it. The caller then queries, recording the outcome, the time it took and
-  `apphost.IsRetryable`:
+  it. The caller then queries, recording the outcome, the time node1 took to
+  answer the route request (the apphost session is connected and authenticated
+  before the clock starts) and `apphost.IsRetryable`:
   - `unknown_identity`: a freshly generated identity no node knows;
   - `no_such_op`: `node2:no.such.op` over the live link;
   - `refused`: `node2:shell.shell`, which node2 refuses for the app;
@@ -24,8 +25,9 @@ cause calls for.
     node2, the provider's host and the caller's relay, refuses the relay.
 - **oracle** `verify.py` — `unknown_identity`, `no_such_op` and `handler_gone`
   read `route_not_found`, `refused` and `relay_refused` read rejection code 1,
-  and `filtered` reads `target_not_allowed`, each in under 100 ms and not
-  retryable.
+  and `filtered` reads `target_not_allowed`, each fast and not retryable.
+  Fast is under 500 ms: an idle node answers in under 15 ms, a loaded shared
+  world was measured at up to 170 ms, and the routing deadline is 60 s.
 
 `no_such_op` and `handler_gone` cross the link: node2 finds no route and
 answers the link's "no route here" value (`mod/nodes/src/mux.go`, `linkCode`),

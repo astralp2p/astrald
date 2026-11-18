@@ -96,18 +96,19 @@ func run(path string) (map[string]any, error) {
 		return facts, fmt.Errorf("apphost.hosts on node2 never named node1 for the caller %v", app.Identity)
 	}
 	caller := connect(n1.Endpoint, string(app.Token))
+	as := asker{endpoint: n1.Endpoint, token: string(app.Token)}
 
-	facts["unknown_identity"] = ask(ctx, caller, astral.GenerateIdentity(), "route.outcomes")
-	facts["no_such_op"] = ask(ctx, caller, node2, "no.such.op")
-	facts["refused"] = ask(ctx, caller, node2, "shell.shell")
-	facts["filtered"] = ask(ctx.WithFilters("linked"), caller, astral.GenerateIdentity(), "route.outcomes")
+	facts["unknown_identity"] = ask(ctx, as, astral.GenerateIdentity(), "route.outcomes")
+	facts["no_such_op"] = ask(ctx, as, node2, "no.such.op")
+	facts["refused"] = ask(ctx, as, node2, "shell.shell")
+	facts["filtered"] = ask(ctx.WithFilters("linked"), as, astral.GenerateIdentity(), "route.outcomes")
 
-	return facts, handlerGone(ctx, facts, s.Nodes, admin1, app.Identity, caller)
+	return facts, handlerGone(ctx, facts, s.Nodes, admin1, app.Identity, caller, as)
 }
 
 // handlerGone serves a provider on node2 that advertises a service, ends its
 // handler while its advertisement stays, and records what a query to it reads.
-func handlerGone(ctx *astral.Context, facts map[string]any, nodes map[string]node, admin1 *astrald.Client, appID *astral.Identity, caller *astrald.Client) error {
+func handlerGone(ctx *astral.Context, facts map[string]any, nodes map[string]node, admin1 *astrald.Client, appID *astral.Identity, caller *astrald.Client, as asker) error {
 	n2 := nodes["node2"]
 	admin2 := connect(n2.Endpoint, n2.Token)
 	provider, err := apphostcli.New(nil, admin2).Register(ctx, &auth.Permit{Action: "mod.auth.serve_apps_action"})
@@ -135,17 +136,17 @@ func handlerGone(ctx *astral.Context, facts map[string]any, nodes map[string]nod
 	}
 	facts["provider_listed"] = listed(ctx, caller, provider.Identity)
 	facts["node1_knows_the_provider"] = waitHost(ctx, admin1, provider.Identity, n2.Identity)
-	facts["provider_served"] = ask(ctx, caller, provider.Identity, "echo")
+	facts["provider_served"] = ask(ctx, as, provider.Identity, "echo")
 
 	stop()
 	time.Sleep(2 * time.Second) // the node drops the handler when its bind session ends
-	facts["handler_gone"] = ask(ctx, caller, provider.Identity, "echo")
+	facts["handler_gone"] = ask(ctx, as, provider.Identity, "echo")
 	facts["provider_still_listed"] = listed(ctx, caller, provider.Identity)
 
 	// node2 takes back the caller's relay contract, so it refuses to relay
 	// for the caller: a relay's refusal, not a missing route
 	facts["caller_relay_withdrawn"] = withdrawRelay(ctx, admin2, appID) == nil
-	facts["relay_refused"] = ask(ctx, caller, provider.Identity, "echo")
+	facts["relay_refused"] = ask(ctx, as, provider.Identity, "echo")
 	return nil
 }
 
@@ -159,12 +160,25 @@ func withdrawRelay(ctx *astral.Context, admin *astrald.Client, app *astral.Ident
 	return ch.Switch(channel.ExpectAck, channel.PassErrors)
 }
 
-// ask queries target:op as the caller and records how the query ended.
-func ask(ctx *astral.Context, caller *astrald.Client, target *astral.Identity, op string) outcome {
-	cctx, cancel := ctx.IncludeZone(astral.ZoneNetwork).WithTimeout(90 * time.Second)
-	defer cancel()
+// asker is the calling app's session on its node.
+type asker struct{ endpoint, token string }
+
+// ask queries target:op as the caller and records how the query ended. The
+// time is the node's answer to the route request alone: the session is
+// connected and authenticated before the clock starts.
+func ask(ctx *astral.Context, as asker, target *astral.Identity, op string) outcome {
+	host, err := apphost.Connect(ctx, as.endpoint)
+	if err == nil {
+		err = host.AuthToken(as.token)
+	}
+	if err != nil {
+		return outcome{Kind: "other", Error: "connecting the caller: " + err.Error()}
+	}
+	defer host.Close()
+
+	q := astral.Launch(astral.NewQuery(nil, target, op))
 	start := time.Now()
-	conn, err := caller.WithTarget(target).Query(cctx, op, nil)
+	conn, err := host.RouteQuery(q, astral.ZoneAll, ctx.Filters())
 	o := outcome{Millis: float64(time.Since(start).Microseconds()) / 1000, Retryable: apphost.IsRetryable(err)}
 	if err == nil {
 		conn.Close()
