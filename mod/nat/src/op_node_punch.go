@@ -29,7 +29,7 @@ func (mod *Module) OpNodePunch(ctx *astral.Context, q *routing.IncomingQuery, ar
 
 	localIP, err := mod.getLocalIPv4()
 	if err != nil {
-		return err
+		return ch.Send(astral.Err(err))
 	}
 
 	mod.log.Log("starting traversal as participant with %v", q.Caller())
