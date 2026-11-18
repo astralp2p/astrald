@@ -18,8 +18,9 @@ type opHostsArgs struct {
 // An app with no known host, or a name that resolves to no app, gets EOS alone.
 // A host is the subject of an active relay-for contract the app issued, the same lookup
 // PreprocessQuery routes by (query_preprocessor.go), with this node included when it hosts the app.
-// note: a sibling's app is known once its relay contract arrived: at the first link,
-// at the app's registration, or when the app runs swarm discovery.
+// note: a sibling's app is known once its relay contract arrived: at the first link
+// to its host or to any other member that holds it, at the app's registration, or
+// when the app runs swarm discovery.
 func (mod *Module) OpHosts(ctx *astral.Context, q *routing.IncomingQuery, args opHostsArgs) error {
 	ch := channel.New(q.AcceptRaw(), channel.WithOutputFormat(args.Out))
 	defer ch.Close()

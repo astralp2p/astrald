@@ -364,8 +364,11 @@ func TestReceiveSignedContractRejects(t *testing.T) {
 		{"relay-for contract with another permit", false, func(f *receiverFixture, sender *astral.Identity) *auth.SignedContract {
 			return contractWith(astral.GenerateIdentity(), sender, nodes.RelayForAction{}.ObjectType(), auth.SeeObjectsAction{}.ObjectType())
 		}},
-		{"relay-for contract for another subject", false, func(f *receiverFixture, _ *astral.Identity) *auth.SignedContract {
-			return relayForContract(astral.GenerateIdentity(), f.addSibling())
+		{"relay-for contract for a subject outside the swarm", false, func(f *receiverFixture, _ *astral.Identity) *auth.SignedContract {
+			return relayForContract(astral.GenerateIdentity(), astral.GenerateIdentity())
+		}},
+		{"relay-for contract for an expelled subject", false, func(f *receiverFixture, _ *astral.Identity) *auth.SignedContract {
+			return relayForContract(astral.GenerateIdentity(), f.expelSibling())
 		}},
 		{"relay-for contract with a forged signature", false, func(f *receiverFixture, sender *astral.Identity) *auth.SignedContract {
 			sc := relayForContract(astral.GenerateIdentity(), sender)
@@ -403,13 +406,13 @@ func TestReceiveSignedContractRejects(t *testing.T) {
 }
 
 // TestReceiveRelayForContractRequiresSiblingSender covers the sender half of the
-// relay-for rule: a contract naming its sender is refused while the sender is not
-// in the local swarm.
+// relay-for rule: a contract for a member's app is refused while its sender is
+// not in the local swarm.
 func TestReceiveRelayForContractRequiresSiblingSender(t *testing.T) {
 	f := newReceiverFixture(t, astral.GenerateIdentity())
 
 	stranger := astral.GenerateIdentity()
-	drop := &recordingDrop{sender: stranger, object: relayForContract(astral.GenerateIdentity(), stranger)}
+	drop := &recordingDrop{sender: stranger, object: relayForContract(astral.GenerateIdentity(), f.addSibling())}
 
 	if err := f.mod.ReceiveObject(drop); err != nil {
 		t.Fatalf("ReceiveObject: %v", err)
@@ -491,6 +494,28 @@ func TestReceiveRelayForContractFromSibling(t *testing.T) {
 	case task := <-f.scheduler.tasks:
 		t.Fatalf("scheduled %v; a relay-for contract admits no node", task)
 	default:
+	}
+}
+
+// TestReceiveRelayForContractForwardedByMember covers a forwarded relay-for
+// contract: a sibling delivers the contract of an app another sibling hosts, and
+// it is indexed and saved like one its host pushed.
+func TestReceiveRelayForContractForwardedByMember(t *testing.T) {
+	f := newReceiverFixture(t, astral.GenerateIdentity())
+
+	forwarder, host := f.addSibling(), f.addSibling()
+	signed := relayForContract(astral.GenerateIdentity(), host)
+
+	drop := &recordingDrop{sender: forwarder, object: signed}
+	if err := f.mod.ReceiveObject(drop); err != nil {
+		t.Fatalf("ReceiveObject: %v", err)
+	}
+
+	if got := f.auth.received(); len(got) != 1 || got[0] != signed {
+		t.Fatalf("indexed %d contracts; want the forwarded relay-for contract", len(got))
+	}
+	if a := drop.accepted(); len(a) != 1 || !a[0] {
+		t.Fatalf("Accept calls %v; want one Accept(true)", a)
 	}
 }
 

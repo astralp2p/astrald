@@ -40,6 +40,8 @@ expel-node
 hold-purge
 hold-isolation
 swarm-roster-sync
+relay-contract-forwarding
+relay-contract-reindex-after-expel
 expel-propagation
 import-user-software-key
 introduce-node-setup

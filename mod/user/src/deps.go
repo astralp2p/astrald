@@ -75,6 +75,10 @@ func (mod *Module) LoadDependencies(ctx *astral.Context) (err error) {
 	}
 
 	mod.Auth.OnContractIndexed(mod.onContractIndexed)
+	// why: every path into the auth index, the indexer included, passes the one relay rule.
+	mod.Auth.AddAdmitter(func(sc *auth.SignedContract) error {
+		return mod.AdmitRelayContract(nil, sc)
+	})
 
 	mod.Auth.Add(authmod.Func[*nodes.RelayForAction](mod.AuthorizeRelayFor))
 	mod.Auth.Add(authmod.Func[*auth.SeeObjectsAction](mod.AuthorizeSeeObjects))

@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"errors"
 	"time"
 
 	"github.com/astralp2p/astral-go/api/auth"
@@ -12,6 +13,9 @@ const (
 	ModuleName = "auth"
 	DBPrefix   = "auth__"
 )
+
+// ErrNotAdmitted wraps the refusal of an admitter: IndexContract stored nothing.
+var ErrNotAdmitted = errors.New("contract not admitted")
 
 // ContractQueryBuilder builds and executes queries for active signed contracts.
 // Filters are cumulative; call Find to execute.
@@ -53,7 +57,14 @@ type Module interface {
 	IsNodeClaim(ctx *astral.Context, caller *astral.Identity, c *auth.Contract) bool
 
 	// IndexContract verifies and adds a signed contract to the auth index.
+	// A contract an admitter refuses is not added, and the error wraps
+	// ErrNotAdmitted.
 	IndexContract(ctx *astral.Context, contract *auth.SignedContract) error
+
+	// AddAdmitter registers fn to run on each contract IndexContract would add
+	// to the index. A non-nil answer refuses the contract. fn runs outside the
+	// index lock and never for a contract the index already holds.
+	AddAdmitter(fn func(*auth.SignedContract) error)
 
 	// OnContractIndexed registers fn to run after each contract the index did
 	// not hold before is added to it. fn runs outside the index lock.
