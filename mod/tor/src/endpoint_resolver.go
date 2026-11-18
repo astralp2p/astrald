@@ -12,7 +12,7 @@ import (
 var _ nodesmod.EndpointResolver = &Module{}
 
 // ResolveEndpoints returns the local node's onion endpoint with a ~90-day TTL.
-// Returns an empty channel for any identity other than the local node, or when listening is disabled or the server has no endpoint yet.
+// Returns an empty channel for any identity other than the local node, or when listening is disabled or the onion service is not registered.
 func (mod *Module) ResolveEndpoints(ctx *astral.Context, nodeID *astral.Identity) (out <-chan *nodes.EndpointWithTTL, err error) {
 	out = sig.ArrayToChan([]*nodes.EndpointWithTTL{})
 
@@ -26,11 +26,14 @@ func (mod *Module) ResolveEndpoints(ctx *astral.Context, nodeID *astral.Identity
 		return
 	case mod.torServer == nil:
 		return
-	case mod.torServer.endpoint.IsZero():
+	}
+
+	endpoint := mod.torServer.Endpoint()
+	if endpoint == nil || endpoint.IsZero() {
 		return
 	}
 
 	return sig.ArrayToChan([]*nodes.EndpointWithTTL{
-		nodes.NewEndpointWithTTL(mod.torServer.endpoint, 3*30*24*time.Hour),
+		nodes.NewEndpointWithTTL(endpoint, 3*30*24*time.Hour),
 	}), nil
 }
