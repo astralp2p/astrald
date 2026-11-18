@@ -75,6 +75,7 @@ type fakeEther struct {
 	pushed    []astral.Object
 	subnetted []subnetSend
 	sends     chan struct{}
+	err       error // note: returned by every Push and PushToSubnetOf
 }
 
 func newFakeEther(cidrs ...string) *fakeEther {
@@ -92,13 +93,13 @@ func newFakeEther(cidrs ...string) *fakeEther {
 func (e *fakeEther) Push(obj astral.Object) error {
 	e.record(func() { e.pushed = append(e.pushed, obj) })
 	e.sends <- struct{}{}
-	return nil
+	return e.err
 }
 
 func (e *fakeEther) PushToSubnetOf(src ip.IP, obj astral.Object) error {
 	e.record(func() { e.subnetted = append(e.subnetted, subnetSend{src: src, obj: obj}) })
 	e.sends <- struct{}{}
-	return nil
+	return e.err
 }
 
 // record runs add under e.mu.
