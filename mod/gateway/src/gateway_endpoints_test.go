@@ -177,7 +177,8 @@ func TestRunStoresConfiguredGatewayEndpointsAfterReady(t *testing.T) {
 }
 
 // The module advertises gw:G:self only while the task holds a registration
-// with G: not before Register succeeds, and not after the pool ends.
+// with G: not while the first Register is in progress, and not after the pool
+// ends. The task stores G's rows after Register succeeds and after the pool ends.
 func TestResolveEndpointsAdvertisesOnlyWhileRegistered(t *testing.T) {
 	node := &identityNode{id: astral.GenerateIdentity()}
 	gw := astral.GenerateIdentity()
@@ -194,11 +195,13 @@ func TestResolveEndpointsAdvertisesOnlyWhileRegistered(t *testing.T) {
 	}
 	task := mod.NewMaintainGatewayConnectionsTask(gw, []exonet.Endpoint{configured}, gateway.VisibilityPublic)
 
+	registerEntered := make(chan struct{})
 	registerOK := make(chan struct{})
 	reregister := make(chan struct{})
 	var registers atomic.Uint64
 	task.register = func(ctx *astral.Context) (*gateway.Socket, error) {
 		if registers.Add(1) == 1 {
+			close(registerEntered)
 			select {
 			case <-registerOK:
 			case <-time.After(time.Minute):
@@ -228,12 +231,16 @@ func TestResolveEndpointsAdvertisesOnlyWhileRegistered(t *testing.T) {
 	done := make(chan error, 1)
 	go func() { done <- task.Run(ctx) }()
 
+	waitClosed(t, registerEntered, "the task did not call Register")
 	if rows := resolveGatewayRows(t, mod, node.Identity()); len(rows) != 0 {
-		t.Fatalf("before registration: got %v, want no gw row", rows)
+		t.Fatalf("during the first Register: got %v, want no gw row", rows)
 	}
 
 	close(registerOK)
 	waitClosed(t, poolUp, "the pool did not start after Register succeeded")
+	if stored := store.list(); len(stored) != 1 || !stored[0].identity.IsEqual(gw) {
+		t.Errorf("after Register: got stored %v, want the configured endpoint stored for %v", stored, gw)
+	}
 
 	rows := resolveGatewayRows(t, mod, node.Identity())
 	if len(rows) != 1 {
@@ -256,7 +263,7 @@ func TestResolveEndpointsAdvertisesOnlyWhileRegistered(t *testing.T) {
 	if rows := resolveGatewayRows(t, mod, node.Identity()); len(rows) != 0 {
 		t.Fatalf("after the pool ended: got %v, want no gw row", rows)
 	}
-	if stored := store.list(); len(stored) != 1 || !stored[0].identity.IsEqual(gw) {
+	if stored := store.list(); len(stored) != 2 || !stored[1].identity.IsEqual(gw) {
 		t.Errorf("re-registration: got stored %v, want the configured endpoint stored again for %v", stored, gw)
 	}
 
@@ -268,6 +275,58 @@ func TestResolveEndpointsAdvertisesOnlyWhileRegistered(t *testing.T) {
 		}
 	case <-time.After(10 * time.Second):
 		t.Fatal("the task did not stop within 10s of cancel")
+	}
+}
+
+// While the registration is up, the task stores the gateway's rows again
+// every refreshInterval, and stops once the pool ends.
+func TestHoldRegistrationRefreshesGatewayEndpoints(t *testing.T) {
+	node := &identityNode{id: astral.GenerateIdentity()}
+	gw := astral.GenerateIdentity()
+	store := &recordingNodes{}
+	mod := &Module{Deps: Deps{Nodes: store}, node: node, log: log.New(node.Identity())}
+
+	configured, err := tcp.ParseEndpoint("203.0.113.7:1795")
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	task := mod.NewMaintainGatewayConnectionsTask(gw, []exonet.Endpoint{configured}, gateway.VisibilityPublic)
+	task.refreshInterval = 10 * time.Millisecond
+
+	refreshed := make(chan struct{})
+	task.holdPool = func(*astral.Context, gateway.Socket) error {
+		// why: one store at the start and two from the ticker.
+		deadline := time.After(10 * time.Second)
+		for len(store.list()) < 3 {
+			select {
+			case <-deadline:
+				return errors.New("no refresh within 10s")
+			case <-time.After(5 * time.Millisecond):
+			}
+		}
+		close(refreshed)
+		return gatewaymod.ErrSocketUnreachable
+	}
+
+	ctx, cancel := astral.NewContext(context.Background()).WithCancel()
+	t.Cleanup(cancel)
+	if err := task.holdRegistration(ctx, gateway.Socket{}); !errors.Is(err, gatewaymod.ErrSocketUnreachable) {
+		t.Fatalf("holdRegistration: got %v, want %v", err, gatewaymod.ErrSocketUnreachable)
+	}
+	waitClosed(t, refreshed, "the rows were not stored again while registered")
+	for _, s := range store.list() {
+		if !s.identity.IsEqual(gw) || s.endpoint.TTL == nil || *s.endpoint.TTL != weekSeconds {
+			t.Errorf("refreshed row: got %v %v, want %v with a %v s TTL", s.identity, s.endpoint, gw, weekSeconds)
+		}
+	}
+
+	after := len(store.list())
+	time.Sleep(50 * time.Millisecond)
+	if got := len(store.list()); got != after {
+		t.Errorf("after the pool ended: %v more stores, want none", got-after)
+	}
+	if _, ok := mod.registered.Get(gw.String()); ok {
+		t.Error("after the pool ended: the gateway is still marked registered")
 	}
 }
 
@@ -296,5 +355,14 @@ func TestLoadGatewayEntries(t *testing.T) {
 
 	if _, err := (Loader{}).Load(nil, yamlAssets{doc: "gateways:\n  - " + gw.String() + "\n"}, nil); err == nil {
 		t.Error("Load of a bare identity list: got nil error, want a decode error")
+	}
+
+	if _, err := (Loader{}).Load(nil, yamlAssets{doc: "gateways:\n  - endpoints: [\"tcp:203.0.113.7:1791\"]\n"}, nil); err == nil {
+		t.Error("Load of an entry without id: got nil error, want an error")
+	}
+
+	twice := "gateways:\n  - id: " + gw.String() + "\n  - id: " + gw.String() + "\n"
+	if _, err := (Loader{}).Load(nil, yamlAssets{doc: twice}, nil); err == nil {
+		t.Error("Load of a gateway listed twice: got nil error, want an error")
 	}
 }

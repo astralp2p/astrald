@@ -1,6 +1,8 @@
 package gateway
 
 import (
+	"fmt"
+
 	"github.com/astralp2p/astral-go/api/gateway"
 	"github.com/astralp2p/astral-go/astral"
 )
@@ -30,4 +32,20 @@ type Config struct {
 
 var defaultConfig = Config{
 	Visibility: gateway.VisibilityPrivate,
+}
+
+// validateGateways checks that every gateways entry names a gateway, and no gateway twice.
+// why: the registration task and the registered flag are keyed by the gateway identity.
+func (c Config) validateGateways() error {
+	seen := map[string]bool{}
+	for i, entry := range c.Gateways {
+		if entry.ID.IsZero() {
+			return fmt.Errorf("gateways[%v]: id is missing", i)
+		}
+		if seen[entry.ID.String()] {
+			return fmt.Errorf("gateways[%v]: gateway %v is listed twice", i, entry.ID)
+		}
+		seen[entry.ID.String()] = true
+	}
+	return nil
 }

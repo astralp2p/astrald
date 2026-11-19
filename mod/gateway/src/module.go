@@ -27,16 +27,17 @@ import (
 const NetworkName = "gw"
 
 const (
-	pingInterval        = 30 * time.Second
-	pingTimeout         = 60 * time.Second
-	writeTimeout        = 10 * time.Second
-	handoffPollInterval = time.Second
-	minIdleConns        = 2
-	maxDialFails        = 3
-	connectTimeout      = 30 * time.Second
-	acceptTimeout       = 30 * time.Second
-	pipeIdleTimeout     = 24 * time.Hour     // note: lower it when we will enforce pings on gw links
-	endpointTTL         = 7 * 24 * time.Hour // why: matches the self-advertised tcp rows; a lapsed gw row then lives at most 7 d at a sibling
+	pingInterval            = 30 * time.Second
+	pingTimeout             = 60 * time.Second
+	writeTimeout            = 10 * time.Second
+	handoffPollInterval     = time.Second
+	minIdleConns            = 2
+	maxDialFails            = 3
+	connectTimeout          = 30 * time.Second
+	acceptTimeout           = 30 * time.Second
+	pipeIdleTimeout         = 24 * time.Hour     // note: lower it when we will enforce pings on gw links
+	endpointTTL             = 7 * 24 * time.Hour // why: matches the self-advertised tcp rows; a lapsed gw row then lives at most 7 d at a sibling
+	endpointRefreshInterval = 24 * time.Hour     // why: well inside endpointTTL, so a configured gateway's rows never lapse while registered
 )
 
 type Deps struct {

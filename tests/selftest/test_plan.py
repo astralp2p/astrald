@@ -319,7 +319,7 @@ class TestShippedPlans(Invariants, unittest.TestCase):
              ("local", "basic-strategy-stalled-endpoint-released"),
              ("local", "expel-authority"),
              ("local", "expel-during-transfer"), ("local", "expel-node"),
-             ("vm", "gateway-relink"), ("local", "hold-purge"),
+             ("vm", "gateway-unregistered-advertise"), ("local", "hold-purge"),
              ("local", "join-via-member"), ("vm", "kcp-only-relink"),
              ("local", "link-session-migrate"),
              ("local", "link-session-migrate-serving-side"),

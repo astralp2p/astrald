@@ -1,6 +1,7 @@
 package gateway
 
 import (
+	"sync"
 	"time"
 
 	"github.com/astralp2p/astral-go/api/events"
@@ -28,19 +29,21 @@ type MaintainGatewayConnectionsTask struct {
 	retry      *sig.Retry
 	wakeCh     chan struct{}
 
-	register func(*astral.Context) (*gateway.Socket, error) // registers with the gateway
-	holdPool func(*astral.Context, gateway.Socket) error    // holds the idle conn pool until it fails
+	register        func(*astral.Context) (*gateway.Socket, error) // registers with the gateway
+	holdPool        func(*astral.Context, gateway.Socket) error    // holds the idle conn pool until it fails
+	refreshInterval time.Duration                                  // how often the gateway's rows are stored again while registered
 }
 
 func (mod *Module) NewMaintainGatewayConnectionsTask(gatewayID *astral.Identity, endpoints []exonet.Endpoint, visibility gateway.Visibility) *MaintainGatewayConnectionsTask {
 	retry, _ := sig.NewRetry(time.Second, 15*time.Minute, 2)
 	return &MaintainGatewayConnectionsTask{
-		mod:        mod,
-		GatewayID:  gatewayID,
-		Endpoints:  endpoints,
-		Visibility: visibility,
-		retry:      retry,
-		wakeCh:     make(chan struct{}, 1),
+		mod:             mod,
+		GatewayID:       gatewayID,
+		Endpoints:       endpoints,
+		Visibility:      visibility,
+		retry:           retry,
+		wakeCh:          make(chan struct{}, 1),
+		refreshInterval: endpointRefreshInterval,
 		register: func(ctx *astral.Context) (*gateway.Socket, error) {
 			client := gatewayClient.New(gatewayID, astrald.Default())
 			return client.Register(ctx.IncludeZone(astral.ZoneNetwork), visibility)
@@ -88,13 +91,47 @@ func (task *MaintainGatewayConnectionsTask) Run(ctx *astral.Context) error {
 		}
 		count = 0
 
-		task.mod.registered.Set(task.GatewayID.String(), struct{}{})
-		err = task.holdPool(ctx, *socket)
-		task.mod.registered.Delete(task.GatewayID.String())
+		err = task.holdRegistration(ctx, *socket)
 		if err != nil {
 			task.mod.log.Error("rebinding to %v due to: %v", task.GatewayID, err)
 		}
 		task.mod.storeGatewayEndpoints(task.GatewayID, task.Endpoints)
+	}
+}
+
+// holdRegistration marks the gateway registered and holds the idle conn pool until it ends.
+// The gateway's rows are stored again at the start and every refreshInterval until then.
+func (task *MaintainGatewayConnectionsTask) holdRegistration(ctx *astral.Context, socket gateway.Socket) error {
+	task.mod.storeGatewayEndpoints(task.GatewayID, task.Endpoints)
+	task.mod.registered.Set(task.GatewayID.String(), struct{}{})
+	defer task.mod.registered.Delete(task.GatewayID.String())
+
+	refreshCtx, cancel := ctx.WithCancel()
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		task.refreshEndpoints(refreshCtx)
+	}()
+
+	err := task.holdPool(ctx, socket)
+	cancel()
+	wg.Wait()
+	return err
+}
+
+// refreshEndpoints stores the gateway's rows every refreshInterval until ctx ends.
+// why: a registration can outlive the rows' TTL, and every query to the gateway routes through them.
+func (task *MaintainGatewayConnectionsTask) refreshEndpoints(ctx *astral.Context) {
+	ticker := time.NewTicker(task.refreshInterval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			task.mod.storeGatewayEndpoints(task.GatewayID, task.Endpoints)
+		}
 	}
 }
 
