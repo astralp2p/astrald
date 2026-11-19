@@ -16,12 +16,19 @@ nodes answer now:
   (`starting to maintain link to <node1>` to `link to <node1> established`
   or `restored after N attempts`). The basic strategy dials kcp rows
   (mod/nodes/src/basic_link_strategy.go);
-- criterion 2: node1 drops every link it held to node2's old process within
-  DROP s of the oracle's start: a new link probes the older ones
-  (mod/nodes/src/link_pool.go probeOlderLinks), and the kcp keepalive closes
-  an idle dead link after `link_idle_ping` 15 s plus `link_ping_timeout`
-  10 s (mod/kcp/src/config.go);
+- criterion 2: within DROP s of the oracle's start, node1 drops every link
+  it held to node2's old process and every link node2 does not hold: a new
+  link probes the older ones (mod/nodes/src/link_pool.go probeOlderLinks),
+  and the kcp keepalive closes an idle dead link after `link_idle_ping` 15 s
+  plus `link_ping_timeout` 10 s (mod/kcp/src/config.go);
 - a query from node1 to node2 is answered, with no `nodes.close_link`.
+
+why links node2 does not hold: node2's link task dials every kcp row of
+node1 at once (mod/nodes/src/basic_link_strategy.go). node1 can complete the
+handshake of a row node2 then closes as excess, and a kcp close sends the
+peer nothing, so node1 holds that link half-open until its keepalive closes
+it. A query node1 routes over it is rejected as unavailable (code 7) when the
+link closes.
 
 why node2's log for criterion 1: the runner waits for node2 to answer before
 the oracle starts, and node2's link task starts at boot, so the oracle's own
@@ -74,9 +81,16 @@ def relink_took(node2: dict, names: set):
     return (seconds(linked) - seconds(start)) % 86400
 
 
+def dead_on_node1(links1: list, links2: list, stale: set) -> set:
+    """The ids of node1's links to node2 that are stale or that node2 does
+    not hold."""
+    ids1 = {r["id"] for r in links1}
+    return ids1 & stale | ids1 - {r["id"] for r in links2}
+
+
 async def watch(c1, c2, id1: str, id2: str, stale: set) -> dict:
     """Poll both ends until node2 holds a kcp link to node1 and node1 holds
-    none of the stale ids, or WAIT s pass. Times in s since the start."""
+    no dead link to node2, or WAIT s pass. Times in s since the start."""
     t0 = time.monotonic()
     seen = {"relinked": None, "dropped": None, "links1": [], "links2": []}
     while time.monotonic() - t0 < WAIT:
@@ -85,7 +99,11 @@ async def watch(c1, c2, id1: str, id2: str, stale: set) -> dict:
         seen["links2"] = linkview.to(await linkview.links(c2), id1)
         if seen["relinked"] is None and any(r["network"] == "kcp" for r in seen["links2"]):
             seen["relinked"] = t
-        if seen["dropped"] is None and not stale & {r["id"] for r in seen["links1"]}:
+        # why reset on a dead link: a link node2 lists at one poll can close at
+        # node2 alone later, which leaves node1's end half-open
+        if dead_on_node1(seen["links1"], seen["links2"], stale):
+            seen["dropped"] = None
+        elif seen["dropped"] is None:
             seen["dropped"] = t
         if seen["relinked"] is not None and seen["dropped"] is not None:
             break
@@ -136,15 +154,16 @@ async def main():
             f"node2 linked to node1 {took:.2f} s after its link task started; want within {WITHIN} s")
 
         assert seen["dropped"] is not None and seen["dropped"] <= DROP, (
-            f"node1 still lists a link to node2's old process {seen['dropped'] or WAIT} s after the "
-            f"oracle started, want within {DROP} s: stale {sorted(stale)}, node1 {seen['links1']}")
+            f"node1 still lists a dead link to node2 (one to node2's old process, or one node2 "
+            f"does not hold) {seen['dropped'] or WAIT} s after the oracle started, want within "
+            f"{DROP} s: stale {sorted(stale)}, node1 {seen['links1']}, node2 {seen['links2']}")
         assert all(r["network"] == "kcp" for r in seen["links1"] + seen["links2"]), (
             f"a non-kcp link joined the pair: node1 {seen['links1']}, node2 {seen['links2']}")
 
         await cu.nodes.links(experimental=True, target=id2, timeout=10)
 
     print(f"oracle: dead kcp dial failed in {dead['elapsed']} s; node2 relinked over kcp "
-          f"{took:.2f} s after its link task started; node1 dropped the old link "
+          f"{took:.2f} s after its link task started; node1 dropped its dead links "
           f"{seen['dropped']} s into the oracle; node1 queried node2")
 
 
