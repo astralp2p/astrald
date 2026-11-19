@@ -276,6 +276,7 @@ type event struct {
 	Name     string `json:"name,omitempty"`
 	Up       bool   `json:"up"`               // update: the offering is available
 	Detail   string `json:"detail,omitempty"` // removed: the provider/name keys, comma-separated
+	Cause    string `json:"cause,omitempty"`  // removed: the removal cause, e.g. member_lost
 	At       int64  `json:"at"`               // unix milliseconds
 }
 
@@ -313,7 +314,7 @@ func follow() error {
 					delete(held, e.Provider+"/"+e.Name)
 				}
 			case ev.Removed != nil:
-				e.Kind = "removed"
+				e.Kind, e.Cause = "removed", ev.RemovedCause.String()
 				var keys []string
 				for _, k := range ev.Removed {
 					key := k.ProviderID.String() + "/" + string(k.Name)

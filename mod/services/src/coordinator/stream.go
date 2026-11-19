@@ -28,16 +28,16 @@ type Stream struct {
 	tagged  bool                             // views carry their provider's visibility
 	written map[offeringKey]*services.Update // with tagged: the last available view written per offering
 
-	visible           map[offeringKey]struct{}         // offerings shown as available
-	unsent            map[offeringKey]*services.Update // latest unsent view per offering
-	sendOrder         []offeringKey                    // send order of unsent keys
-	unsentRemovals    map[offeringKey]struct{}         // removals not yet sent
-	inflight          *offeringKey                     // view handed to the writer
-	inflightAvailable bool                             // the in-flight view offers the service
-	attempt           *attempt                         // nil once the boundary is sent
-	swarm             bool                             // swarm members carry this discovery
-	carrier           Carrier                          // nil starts no carry
-	contributions     []*Contribution                  // swarm members carrying this discovery
+	visible           map[offeringKey]struct{}              // offerings shown as available
+	unsent            map[offeringKey]*services.Update      // latest unsent view per offering
+	sendOrder         []offeringKey                         // send order of unsent keys
+	unsentRemovals    map[offeringKey]services.RemovalCause // removals not yet sent, with their cause
+	inflight          *offeringKey                          // view handed to the writer
+	inflightAvailable bool                                  // the in-flight view offers the service
+	attempt           *attempt                              // nil once the boundary is sent
+	swarm             bool                                  // swarm members carry this discovery
+	carrier           Carrier                               // nil starts no carry
+	contributions     []*Contribution                       // swarm members carrying this discovery
 	wake              chan struct{}
 	done              chan struct{}
 	closed            bool
@@ -57,7 +57,7 @@ func newStream(c *Coordinator, req Request) *Stream {
 		written:        map[offeringKey]*services.Update{},
 		visible:        map[offeringKey]struct{}{},
 		unsent:         map[offeringKey]*services.Update{},
-		unsentRemovals: map[offeringKey]struct{}{},
+		unsentRemovals: map[offeringKey]services.RemovalCause{},
 		wake:           make(chan struct{}, 1),
 		done:           make(chan struct{}),
 	}
@@ -103,7 +103,7 @@ func (st *Stream) retag(k offeringKey) {
 // hide withholds k from a caller that may not see it: an unsent view is
 // dropped, and a shown offering is removed.
 func (st *Stream) hide(k offeringKey) {
-	st.retract(k)
+	st.retract(k, services.CauseHidden)
 	wake(st.wake)
 }
 
@@ -165,18 +165,20 @@ func (st *Stream) retractBinding(b *Binding) {
 		if !st.requests(name) {
 			continue
 		}
-		st.retract(keyOf(b.provider, name))
+		st.retract(keyOf(b.provider, name), services.CauseBindingClosed)
 	}
 	wake(st.wake)
 }
 
-// retract drops any unsent view of k and queues a removal when the consumer
-// was shown k as available.
-func (st *Stream) retract(k offeringKey) {
+// retract drops any unsent view of k and queues a removal with cause when the
+// consumer was shown k as available.
+// why: a key already queued keeps its first cause, as services.removed.md
+// requires; shown alone does not ensure it while k's view is in flight.
+func (st *Stream) retract(k offeringKey, cause services.RemovalCause) {
 	shown := st.shown(k)
 	st.dropUnsent(k)
-	if shown {
-		st.unsentRemovals[k] = struct{}{}
+	if _, queued := st.unsentRemovals[k]; shown && !queued {
+		st.unsentRemovals[k] = cause
 	}
 }
 

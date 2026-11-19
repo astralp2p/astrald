@@ -23,7 +23,8 @@ calls it; the provider stops, and the follow removes it.
      (`provider_echoed`); the provider saw the consumer as the caller
      (`provider_saw_the_consumer`);
   5. the provider stops: its advertisement and its handler close; the next
-     follow event removes exactly the provider's offering of `echo-follow`
+     follow event removes exactly the provider's offering of `echo-follow`,
+     with cause `member_removed`: node2 ended the binding and sent the removal
      (`follow_removes_the_provider`).
 - **oracle** `verify.py` — every step held, plus the whole story again with
   fresh identities (`driver verify`).

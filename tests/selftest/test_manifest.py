@@ -132,6 +132,28 @@ class TestLoad(ManifestCase):
         t = self.all["stopping"]
         self.assertEqual((t.stop, t.destroys), (["node1"], True))
 
+    def test_restart_kill_is_a_reason_that_needs_a_restart(self):
+        self.assertIsNone(self.all["smoke"].restart_kill)
+        self.add("killing", """
+            nodes = ["node1"]
+            restart = ["node1"]
+            restart_kill = " node1 must send nothing as it goes "
+        """)
+        self.assertEqual(self.all["killing"].restart_kill,
+                         "node1 must send nothing as it goes")
+        with self.assertRaisesRegex(ValueError, "^idle: restart_kill without "
+                                    "restart"):
+            self.add("idle", """
+                nodes = ["node1"]
+                restart_kill = "node1 must send nothing as it goes"
+            """)
+        with self.assertRaisesRegex(ValueError, "restart_kill must be"):
+            self.add("bare", """
+                nodes = ["node1"]
+                restart = ["node1"]
+                restart_kill = ""
+            """)
+
 
 class TestPlannerKeys(ManifestCase):
     def test_absent_keys_default(self):

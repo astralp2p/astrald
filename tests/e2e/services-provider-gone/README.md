@@ -28,6 +28,8 @@ again each time it comes back.
      (`restart_after_crash_shows_the_provider`), then stops cleanly and is
      removed (`final_stop_removes_the_provider`), so no provider outlives the
      test.
+  Every removal carries cause `member_removed`: node2 ends the provider's
+  binding and sends the removal, which node1 forwards.
 - **oracle** `verify.py` — every step held, plus the whole story again with
   fresh identities (`driver verify`).
 

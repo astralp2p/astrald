@@ -69,16 +69,20 @@ class LocalWorld(World):
             self._nodes[name] = node  # track BEFORE readiness — a node that
             await node.wait_ready()   # fails wait_ready must stay stoppable
 
-    def restart(self, names: list, while_down=None) -> None:
-        """Stop each named node, call `while_down()` when given, and boot
-        each again from its own root."""
+    def restart(self, names: list, while_down=None,
+                kill: bool = False) -> None:
+        """Stop each named node (SIGKILL it when `kill`), call
+        `while_down()` when given, and boot each again from its own root."""
         refuse_stopped("restart", names, self._stopped)
         # why every stop first: a node restarted while its siblings still run
         # can relearn what it lost from them, which hides state that a restart
         # of the whole swarm drops (expel-survives-restart)
         try:
             for name in names:
-                self._nodes[name].stop()
+                if kill:
+                    self._nodes[name].kill()
+                else:
+                    self._nodes[name].stop()
         except Exception as e:
             raise WorldError(f"restart: {e}") from e
         # why outside the WorldError wrap: the hook runs the test's own

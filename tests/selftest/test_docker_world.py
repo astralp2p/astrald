@@ -267,6 +267,16 @@ class TestNodes(WorldCase):
         self.assertTrue(any("pkill -INT -x astrald" in s
                             for s in self.fake.scripts()))
 
+    def test_a_kill_restart_sigkills_astrald(self):
+        w = self.world()
+        w.ensure(a_test())
+        del self.fake.calls[:]
+        w.restart(["node1"], kill=True)
+        self.assertEqual(w.nodes()["node1"]["restarts"], 1)
+        scripts = self.fake.scripts()
+        self.assertTrue(any("pkill -KILL -x astrald" in s for s in scripts))
+        self.assertFalse(any("pkill -INT" in s for s in scripts))
+
     def test_a_restart_stops_every_named_node_before_it_starts_any(self):
         # why: a node restarted beside running siblings relearns from them
         # what a restart lost (expel-survives-restart)

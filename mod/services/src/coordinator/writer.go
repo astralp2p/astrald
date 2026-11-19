@@ -23,6 +23,7 @@ type output struct {
 	tagged     bool // write view as a services.tagged_update
 	open       bool // with tagged: the provider's visibility when the view is written
 	removed    []offeringKey
+	cause      services.RemovalCause // with removed: the cause of every key
 	incomplete *services.Incomplete
 }
 
@@ -63,18 +64,12 @@ func (st *Stream) Run(sink Sink) error {
 	}
 }
 
-// nextOutput picks what to send: removals, then the boundary once nothing it
-// waits for is left, then views in first-unsent order.
+// nextOutput picks what to send: removals of the lowest pending cause, then
+// the boundary once nothing it waits for is left, then views in first-unsent
+// order.
 func (st *Stream) nextOutput() output {
 	if len(st.unsentRemovals) > 0 {
-		keys := make([]offeringKey, 0, len(st.unsentRemovals))
-		for k := range st.unsentRemovals {
-			keys = append(keys, k)
-		}
-		sort.Slice(keys, func(i, j int) bool {
-			return keys[i].provider+"\x00"+keys[i].name < keys[j].provider+"\x00"+keys[j].name
-		})
-		return output{kind: outRemoved, removed: keys}
+		return st.nextRemoved()
 	}
 	if at := st.attempt; at != nil && at.resolved && len(at.unsentAtBoundary) == 0 {
 		return output{kind: outBoundary, incomplete: at.incomplete()}
@@ -97,11 +92,32 @@ func (st *Stream) nextOutput() output {
 	return output{}
 }
 
+// nextRemoved collects the pending removals of the lowest cause, sorted by
+// key. One services.removed carries one cause.
+func (st *Stream) nextRemoved() output {
+	var cause services.RemovalCause
+	for _, c := range st.unsentRemovals {
+		if cause == 0 || c < cause {
+			cause = c
+		}
+	}
+	var keys []offeringKey
+	for k, c := range st.unsentRemovals {
+		if c == cause {
+			keys = append(keys, k)
+		}
+	}
+	sort.Slice(keys, func(i, j int) bool {
+		return keys[i].provider+"\x00"+keys[i].name < keys[j].provider+"\x00"+keys[j].name
+	})
+	return output{kind: outRemoved, removed: keys, cause: cause}
+}
+
 // write sends one output to the sink.
 func (out output) write(sink Sink) error {
 	switch out.kind {
 	case outRemoved:
-		r := &services.Removed{}
+		r := &services.Removed{Cause: astral.Uint8(out.cause)}
 		for _, k := range out.removed {
 			id, err := astral.ParseIdentity(k.provider)
 			if err != nil {

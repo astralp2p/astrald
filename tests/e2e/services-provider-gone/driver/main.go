@@ -252,9 +252,11 @@ func shows(ev servicescli.Event, err error, provider *astral.Identity) bool {
 		ev.Update.ProviderID.IsEqual(provider) && string(ev.Update.Name) == service
 }
 
-// removes reports whether ev removes exactly the provider's offering of service.
+// removes reports whether ev removes exactly the provider's offering of
+// service, with cause member_removed: the provider's binding ended on the
+// member, which sent the removal.
 func removes(ev servicescli.Event, err error, provider *astral.Identity) bool {
-	if err != nil || len(ev.Removed) != 1 {
+	if err != nil || len(ev.Removed) != 1 || ev.RemovedCause != services.CauseMemberRemoved {
 		return false
 	}
 	k := ev.Removed[0]
