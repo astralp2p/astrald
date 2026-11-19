@@ -50,6 +50,9 @@ func (t *nativeTransport) Send(ask *services.Ask) error {
 
 func (t *nativeTransport) Close() {}
 
+// InProcess exempts the binding from probing and from retirement.
+func (t *nativeTransport) InProcess() {}
+
 type nativeRegistration struct {
 	binding *coordinator.Binding
 }

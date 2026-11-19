@@ -87,7 +87,7 @@ func (c *Coordinator) applyVisibilityChange(b *Binding, service string, open boo
 				st.hide(k)
 			case st.follow && !st.filter.Allows(service, !open):
 				sl := b.slot(st.caller)
-				sl.reevaluate[service] = struct{}{}
+				sl.owe(service, false)
 				b.schedule(sl)
 			}
 		}

@@ -1,6 +1,8 @@
 package coordinator
 
 import (
+	"bytes"
+
 	"github.com/astralp2p/astral-go/api/services"
 	"github.com/astralp2p/astral-go/astral"
 )
@@ -30,6 +32,7 @@ type Stream struct {
 
 	visible           map[offeringKey]struct{}              // offerings shown as available
 	unsent            map[offeringKey]*services.Update      // latest unsent view per offering
+	latest            map[offeringKey]*services.Update      // latest available view queued or written per offering
 	sendOrder         []offeringKey                         // send order of unsent keys
 	unsentRemovals    map[offeringKey]services.RemovalCause // removals not yet sent, with their cause
 	inflight          *offeringKey                          // view handed to the writer
@@ -57,6 +60,7 @@ func newStream(c *Coordinator, req Request) *Stream {
 		written:        map[offeringKey]*services.Update{},
 		visible:        map[offeringKey]struct{}{},
 		unsent:         map[offeringKey]*services.Update{},
+		latest:         map[offeringKey]*services.Update{},
 		unsentRemovals: map[offeringKey]services.RemovalCause{},
 		wake:           make(chan struct{}, 1),
 		done:           make(chan struct{}),
@@ -128,6 +132,11 @@ func (st *Stream) shown(k offeringKey) bool {
 // offer queues a view for the consumer. The latest unsent view replaces the
 // older one in place; a negative view of an offering never shown is dropped.
 func (st *Stream) offer(k offeringKey, u *services.Update) {
+	if bool(u.Available) {
+		st.latest[k] = u
+	} else {
+		delete(st.latest, k)
+	}
 	if bool(u.Available) || st.shown(k) {
 		if _, queued := st.unsent[k]; !queued {
 			st.sendOrder = append(st.sendOrder, k)
@@ -155,6 +164,31 @@ func (st *Stream) dropUnsent(k offeringKey) {
 	}
 }
 
+// repeats reports whether u is an available view equal to the latest one the
+// consumer was sent or is about to be sent for k, with no removal pending.
+func (st *Stream) repeats(k offeringKey, u *services.Update) bool {
+	v := st.latest[k]
+	if v == nil || !bool(u.Available) {
+		return false
+	}
+	if _, removing := st.unsentRemovals[k]; removing {
+		return false
+	}
+	return sameView(v, u)
+}
+
+// sameView reports whether two views encode to the same bytes.
+func sameView(a, b *services.Update) bool {
+	var x, y bytes.Buffer
+	if _, err := a.WriteTo(&x); err != nil {
+		return false
+	}
+	if _, err := b.WriteTo(&y); err != nil {
+		return false
+	}
+	return bytes.Equal(x.Bytes(), y.Bytes())
+}
+
 // retractBinding purges a closed binding's views and queues a removal for
 // those shown.
 func (st *Stream) retractBinding(b *Binding) {
@@ -176,6 +210,7 @@ func (st *Stream) retractBinding(b *Binding) {
 // requires; shown alone does not ensure it while k's view is in flight.
 func (st *Stream) retract(k offeringKey, cause services.RemovalCause) {
 	shown := st.shown(k)
+	delete(st.latest, k)
 	st.dropUnsent(k)
 	if _, queued := st.unsentRemovals[k]; shown && !queued {
 		st.unsentRemovals[k] = cause

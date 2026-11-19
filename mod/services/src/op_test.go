@@ -366,3 +366,65 @@ func TestNativeRegistrationIsExclusive(t *testing.T) {
 		t.Fatalf("second registration: got %v; want ErrOwned", err)
 	}
 }
+
+// TestAdvertiseEndsWhenAsksGoUnanswered holds the liveness rule: a provider
+// that stops answering its follower's probes is retired, the follower sees
+// the removal, the node closes the advertise channel, OpAdvertise returns and
+// the names are free.
+// Spec: .ai/system/protocols/services/ops/services.advertise.md#liveness
+func TestAdvertiseEndsWhenAsksGoUnanswered(t *testing.T) {
+	cfg := coordinator.DefaultConfig()
+	cfg.InitialBudget = time.Second
+	cfg.RequestTimeout = 100 * time.Millisecond
+	cfg.ProbeInterval = 200 * time.Millisecond
+	mod := &Module{
+		Deps:  Deps{Auth: &recordingAuth{verdict: true}, Apphost: &swarmApps{}, User: &swarmUser{}},
+		node:  &serveAppsNode{id: astral.GenerateIdentity()},
+		coord: coordinator.New(cfg),
+	}
+	returned := make(chan struct{})
+	op := func(ctx *astral.Context, q *routing.IncomingQuery, args opAdvertiseArgs) error {
+		defer close(returned)
+		return mod.OpAdvertise(ctx, q, args)
+	}
+	id := astral.GenerateIdentity()
+	p := open(t, op, id, "services.advertise?services=player", false)
+	expect[*astral.Ack](t, p)
+
+	// the provider answers its first ask only, then keeps the channel open
+	// and silent
+	ended := make(chan struct{})
+	go func() {
+		defer close(ended)
+		answered := false
+		for {
+			obj, err := p.ch.Receive()
+			if err != nil {
+				return
+			}
+			if ask, ok := obj.(*services.Ask); ok && !answered {
+				answered = true
+				_ = p.ch.Send(&services.Answer{RequestID: ask.RequestID, Update: &services.Update{Available: true, Name: ask.Service}})
+			}
+		}
+	}()
+
+	c := open(t, mod.OpDiscover, astral.GenerateIdentity(), "services.discover?services=player&follow=true", false)
+	expect[*services.Update](t, c)
+	expect[*astral.EOS](t, c)
+
+	r := expect[*services.Removed](t, c)
+	if len(r.Offerings) != 1 || !r.Offerings[0].ProviderID.IsEqual(id) || services.RemovalCause(r.Cause) != services.CauseBindingClosed {
+		t.Fatalf("removed %+v cause %v; want the provider's player with binding_closed", r.Offerings, r.Cause)
+	}
+	for name, ch := range map[string]chan struct{}{"the advertise channel did not close": ended, "OpAdvertise did not return": returned} {
+		select {
+		case <-ch:
+		case <-time.After(testWait):
+			t.Fatal(name)
+		}
+	}
+	if owned(mod, id, "player") {
+		t.Fatal("the retired binding still holds its names")
+	}
+}

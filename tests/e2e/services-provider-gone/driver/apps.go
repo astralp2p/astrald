@@ -6,6 +6,7 @@ import (
 	"net"
 	"os"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	apphostapi "github.com/astralp2p/astral-go/api/apphost"
@@ -86,8 +87,9 @@ type echoApp struct {
 
 // startEcho serves a as an echo provider of service, through apps.ServeWith
 // with a's own client, and returns once the node holds the handler and the
-// advertisement.
-func startEcho(ctx *astral.Context, a *app, service string) (*echoApp, error) {
+// advertisement. The slow asks after the first are answered 12 s late, past
+// the node's 10 s request timeout.
+func startEcho(ctx *astral.Context, a *app, service string, slow int) (*echoApp, error) {
 	e := &echoApp{app: a}
 	ops := routing.NewOpRouter()
 	op, err := routing.NewOp(e.echo)
@@ -98,8 +100,12 @@ func startEcho(ctx *astral.Context, a *app, service string) (*echoApp, error) {
 		return nil, err
 	}
 
+	var asks atomic.Int32
 	p := servicescli.NewProvider(map[string]servicescli.OfferingFunc{
 		service: func(*astral.Context, *astral.Identity) (*services.Update, error) {
+			if n := int(asks.Add(1)); n > 1 && n <= 1+slow {
+				time.Sleep(lateAnswer)
+			}
 			return &services.Update{Available: true}, nil
 		},
 	})
@@ -205,6 +211,11 @@ func follow(ctx *astral.Context, a *app, reach services.Reach, service string) (
 // next returns the next event of the follow, or an error when none arrives
 // within 60 seconds or the follow ends.
 func (f *follower) next() (servicescli.Event, error) {
+	return f.nextWithin(60 * time.Second)
+}
+
+// nextWithin is next with a deadline of d.
+func (f *follower) nextWithin(d time.Duration) (servicescli.Event, error) {
 	select {
 	case ev, ok := <-f.events:
 		if !ok {
@@ -214,7 +225,7 @@ func (f *follower) next() (servicescli.Event, error) {
 			return ev, ev.Err
 		}
 		return ev, nil
-	case <-time.After(60 * time.Second):
-		return servicescli.Event{}, fmt.Errorf("no follow event within 60s")
+	case <-time.After(d):
+		return servicescli.Event{}, fmt.Errorf("no follow event within %v", d)
 	}
 }

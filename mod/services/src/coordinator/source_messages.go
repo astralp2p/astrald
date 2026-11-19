@@ -30,6 +30,7 @@ func (b *Binding) Answer(a *services.Answer) error {
 
 	u := *a.Update
 	u.ProviderID = b.provider
+	b.timeouts = 0
 	b.removeRequest(req)
 	b.deliver(req, &u)
 	endAll(req.evaluations)
@@ -58,6 +59,11 @@ func (b *Binding) deliver(req *request, u *services.Update) {
 	k := keyOf(b.provider, req.service)
 	for st := range b.c.byCaller[callerKey(req.slot.caller)] {
 		if !st.requests(req.service) || st.closed {
+			continue
+		}
+		// why: a probe checks that the provider answers; a view it leaves
+		// unchanged is news to no follower.
+		if req.probe && st.repeats(k, u) {
 			continue
 		}
 		if st.follow || req.awaitedBy(st) {
@@ -134,7 +140,7 @@ func (b *Binding) reevaluateFor(caller *astral.Identity) {
 		if sl == nil {
 			sl = b.slot(caller)
 		}
-		sl.reevaluate[name] = struct{}{}
+		sl.owe(name, false)
 	}
 	if sl != nil {
 		b.schedule(sl)
@@ -163,6 +169,7 @@ func (b *Binding) Close() {
 func (b *Binding) closeLocked() {
 	b.closed = true
 	close(b.done)
+	b.stopProbe()
 	b.failOutstanding()
 	b.releaseNames()
 	b.retractFromStreams()

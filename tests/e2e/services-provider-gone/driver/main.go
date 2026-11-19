@@ -6,6 +6,10 @@
 // The provider runs as a child process of the driver (this same binary, started
 // through os.Executable) so that it can be killed.
 //
+// drive then tells the liveness story (liveness.go): node2 retires a provider
+// that answers late or hangs, and the provider's keeper advertises again once
+// it answers.
+//
 //	driver drive  <session.json>   prints facts as JSON
 //	driver verify <session.json>   the same story with fresh identities
 //	driver provider                the child: serves the app named by SPG_* variables
@@ -18,6 +22,7 @@ import (
 	"os"
 	"os/exec"
 	"os/signal"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -38,7 +43,7 @@ func main() {
 		os.Exit(2)
 	}
 	facts := map[string]bool{}
-	err := story(os.Args[2], facts)
+	err := story(os.Args[2], facts, os.Args[1] == "drive")
 	if os.Args[1] == "drive" {
 		out, _ := json.Marshal(map[string]any{"services_provider_gone": facts})
 		fmt.Println(string(out))
@@ -52,7 +57,8 @@ func main() {
 // runProvider is the child: it serves the app whose endpoint, token and
 // identity SPG_ENDPOINT, SPG_TOKEN and SPG_IDENTITY name, on a handler bound at
 // SPG_HOST_IP, prints "ready" once the node holds its advertisement, and on
-// SIGTERM stops cleanly.
+// SIGTERM stops cleanly. SPG_SLOW_ASKS asks after the first are answered 12 s
+// late.
 func runProvider() int {
 	id, err := astral.ParseIdentity(os.Getenv("SPG_IDENTITY"))
 	if err != nil {
@@ -63,7 +69,8 @@ func runProvider() int {
 	ep := os.Getenv("SPG_ENDPOINT")
 	n := node{Endpoint: ep, Token: token, HostIP: os.Getenv("SPG_HOST_IP")}
 	a := &app{id: id, client: connect(ep, token), n: n, token: token}
-	e, err := startEcho(astral.NewContext(nil), a, service)
+	slow, _ := strconv.Atoi(os.Getenv("SPG_SLOW_ASKS"))
+	e, err := startEcho(astral.NewContext(nil), a, service, slow)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "provider:", err)
 		return 1
@@ -83,14 +90,15 @@ type child struct {
 }
 
 // startChild starts the provider process for a on node n and waits until it
-// reports ready.
-func startChild(a *app) (*child, error) {
+// reports ready. env adds variables of the child.
+func startChild(a *app, env ...string) (*child, error) {
 	exe, err := os.Executable()
 	if err != nil {
 		return nil, err
 	}
 	cmd := exec.Command(exe, "provider")
 	cmd.Env = append(os.Environ(), "SPG_ENDPOINT="+a.n.Endpoint, "SPG_HOST_IP="+a.n.HostIP, "SPG_TOKEN="+a.token, "SPG_IDENTITY="+a.id.String())
+	cmd.Env = append(cmd.Env, env...)
 	cmd.Stderr = os.Stderr
 	out, err := cmd.StdoutPipe()
 	if err != nil {
@@ -143,7 +151,9 @@ func (c *child) wait(d time.Duration) error {
 	}
 }
 
-func story(path string, facts map[string]bool) error {
+// story tells the stop, crash and restart story; with liveness it goes on with
+// the liveness story.
+func story(path string, facts map[string]bool, liveness bool) error {
 	nodes, err := loadNodes(path)
 	if err != nil {
 		return err
@@ -236,7 +246,13 @@ func story(path string, facts map[string]bool) error {
 		return fmt.Errorf("stopping the provider cleanly: %v", err)
 	}
 	ev, err = f.next()
-	return step(facts, "final_stop_removes_the_provider", removes(ev, err, prov.id), "follow event %+v, err %v; want the removal of %v offering %v", ev, err, prov.id, service)
+	if err := step(facts, "final_stop_removes_the_provider", removes(ev, err, prov.id), "follow event %+v, err %v; want the removal of %v offering %v", ev, err, prov.id, service); err != nil {
+		return err
+	}
+	if !liveness {
+		return nil
+	}
+	return livenessStory(f, prov, facts)
 }
 
 // goneFromSwarm records, under name, that a fresh one-shot swarm discovery of
