@@ -43,6 +43,7 @@ swarm-roster-sync
 relay-contract-forwarding
 relay-contract-reindex-after-expel
 expel-propagation
+expel-cross-traffic
 import-user-software-key
 introduce-node-setup
 introduce-node

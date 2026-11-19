@@ -99,6 +99,7 @@ swarm-roster-sync
 relay-contract-forwarding
 relay-contract-reindex-after-expel
 expel-propagation
+expel-cross-traffic
 expel-survives-restart
 swarm-member-restart
 link-self-heal

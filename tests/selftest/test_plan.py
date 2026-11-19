@@ -334,6 +334,7 @@ class TestShippedPlans(Invariants, unittest.TestCase):
              ("local", "services-consumer-restart"),
              ("local", "services-node-restart"),
              ("local", "services-swarm-membership"),
+             ("local", "expel-cross-traffic"),
              ("local", "expel-survives-restart"),
              ("local", "link-self-heal"), ("local", "swarm-member-restart"),
              ("vm", "tor-link"),
