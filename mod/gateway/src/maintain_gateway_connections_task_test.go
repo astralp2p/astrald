@@ -135,7 +135,7 @@ func TestNetworkAddressChangeWakesGatewayTask(t *testing.T) {
 	node := &identityNode{id: astral.GenerateIdentity()}
 	sched, ip := loadEventPath(t, ctx, node)
 
-	task := (&Module{}).NewMaintainGatewayConnectionsTask(astral.GenerateIdentity(), gateway.VisibilityPublic)
+	task := (&Module{}).NewMaintainGatewayConnectionsTask(astral.GenerateIdentity(), nil, gateway.VisibilityPublic)
 	idle := idleGatewayTask{MaintainGatewayConnectionsTask: task, started: make(chan struct{})}
 	if _, err := sched.Schedule(idle); err != nil {
 		t.Fatalf("schedule: %v", err)

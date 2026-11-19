@@ -2,6 +2,7 @@ package gateway
 
 import (
 	"errors"
+	"fmt"
 
 	"github.com/astralp2p/astral-go/api/exonet"
 	"github.com/astralp2p/astral-go/astral"
@@ -24,6 +25,10 @@ func (Loader) Load(node astral.Node, assets assets.Assets, log *log.Logger) (cor
 
 	if err := assets.LoadYAML(gateway.ModuleName, &mod.config); err != nil && !errors.Is(err, resources.ErrNotFound) {
 		return nil, err
+	}
+
+	if err := mod.config.validateGateways(); err != nil {
+		return nil, fmt.Errorf("%v.yaml: %w", gateway.ModuleName, err)
 	}
 
 	return mod, nil

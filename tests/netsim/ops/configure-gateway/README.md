@@ -2,9 +2,11 @@
 
 Makes one VM a gateway and points others at it.
 
-    vm:configure-gateway <client-vm>... --gateway <host>
+    vm:configure-gateway <client-vm>... --gateway <host> [--peer <host>]...
 
 Bare words are the harness's `--vm` clients; `--gateway` names the gateway VM.
+`--peer` names a node that only needs to reach the gateway, without
+registering with it.
 
 ## Why an op and not driver calls
 
@@ -12,12 +14,24 @@ Both halves are config, not ops, and neither is reachable over apphost:
 
 - A node is a gateway only with `gateway.enabled: true` — `canGateway` reads
   nothing else (`mod/gateway/src/module.go`).
-- A node registers with one only by listing it under `gateways`. The module
-  then schedules `MaintainGatewayConnectionsTask` and registers itself
-  (`module.go` `addPersistentGateway`), so registration is astrald's own doing
-  and a test waits for it rather than performing it.
+- A node registers with one only by listing it as an `{id, endpoints}` entry
+  under `gateways`. The module then stores the endpoints for the gateway,
+  schedules `MaintainGatewayConnectionsTask` and registers itself (`module.go`
+  `addPersistentGateway`), so registration is astrald's own doing and a test
+  waits for it rather than performing it.
 
 Both therefore need a file and a restart, which is a vmop's job.
+
+## Where a node learns the gateway's address
+
+A client's entry carries the gateway's link endpoint, `tcp:<10.77 address>:1791`,
+so the client reaches the gateway from its config alone and gets no
+`nodes.add_endpoint`. A `--peer` has no gateway entry, so the op adds the
+same endpoint to it with `nodes.add_endpoint`.
+
+`verify.py` checks the config path: each client's journal shows `bound to`,
+the first-attempt success, within 5 s of `starting to maintain connections
+to`, and the gateway's `gateway.node_list` lists the client.
 
 ## Why an explicit endpoint
 

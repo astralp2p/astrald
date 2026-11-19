@@ -6,11 +6,16 @@
 # --gateway names the gateway VM. --peer names a node that only needs to be
 # able to reach the gateway, without registering with it.
 #
+# A client's gateway.yaml carries the gateway's link endpoint, so a client
+# reaches the gateway from its config alone. A peer has no gateway entry and
+# gets the gateway's endpoint through nodes.add_endpoint (step 4).
+#
 # why an op rather than driver calls: both halves are config, not ops. A node
 #   becomes a gateway only with gateway.enabled true (mod/gateway/src/module.go
-#   canGateway), and a node registers with one only by listing it under
-#   `gateways` — the module then schedules MaintainGatewayConnectionsTask and
-#   registers itself (module.go addPersistentGateway). Neither is reachable
+#   canGateway), and a node registers with one only by listing it as an
+#   `{id, endpoints}` entry under `gateways` — the module then stores the
+#   endpoints, schedules MaintainGatewayConnectionsTask and registers itself
+#   (module.go addPersistentGateway). Neither is reachable
 #   over apphost, so both need a file and a restart.
 # why port 1795 and not 1791: the gateway opens its OWN listener on the port
 #   it is given, so naming astrald's tcp port collides — the tcp module then
@@ -118,7 +123,9 @@ gateway:
 YAML
 systemctl restart astrald"
 
-# 2) each client: name the gateway, be publicly visible in its list.
+# 2) each client: name the gateway and its link endpoint, be publicly visible
+# in its list. The endpoint is the gateway's LAN address and astrald's tcp
+# port, the address step 4 gives a peer.
 # why: $CLIENTS is a space-separated list -> word-splitting is intentional
 # shellcheck disable=SC2086
 for vm in $CLIENTS; do
@@ -127,7 +134,9 @@ mkdir -p /var/lib/astrald/config
 cat > /var/lib/astrald/config/gateway.yaml <<YAML
 visibility: public
 gateways:
-  - $GW_ID
+  - id: $GW_ID
+    endpoints:
+      - tcp:$GW_ADDR:1791
 YAML
 systemctl restart astrald"
   echo "configure-gateway: $vm now registers with $GW"
@@ -150,12 +159,12 @@ for vm in $GW $CLIENTS; do
     netsim ssh "$vm" -- "journalctl -u astrald --no-pager | tail -20" >&2 || true; exit 1; }
 done
 
-# 4) everyone who has to reach the gateway needs to know where it lives. A
-# lab node knows its swarm siblings from adoption and knows nothing else, so
-# without this a client's registration and a peer's relay dial both die as
-# `route not found` — measured, before this step existed.
+# 4) a peer has to know where the gateway lives too. A lab node knows its
+# swarm siblings from adoption and knows nothing else, so without this a
+# peer's relay dial dies as `route not found`. A client needs no row: its
+# gateway.yaml entry carries the endpoint.
 # shellcheck disable=SC2086
-for vm in $CLIENTS $PEERS; do
+for vm in $PEERS; do
   netsim ssh "$vm" -- "set -eu
     q=astral-query
     ip netns list 2>/dev/null | grep -qw priv && q='ip netns exec priv astral-query'

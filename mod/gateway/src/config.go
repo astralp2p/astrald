@@ -1,14 +1,13 @@
 package gateway
 
 import (
+	"fmt"
 	"time"
 
 	"github.com/astralp2p/astral-go/api/gateway"
 	"github.com/astralp2p/astral-go/astral"
 	exonetmod "github.com/astralp2p/astrald/mod/exonet"
 )
-
-const defaultGateway = "node1f3AwbE1gJAgAqEx98FMipokcaE9ZapIphzDUkAceE7Pmw8ghmFV19QKCATeC7uyoLszQA"
 
 type NetworkConfig struct {
 	Port     int    `yaml:"port"`
@@ -20,10 +19,17 @@ type GatewayConfig struct {
 	Networks map[string]*NetworkConfig `yaml:"networks,omitempty"`
 }
 
+// GatewayEntry names one gateway this node registers with.
+// Endpoints holds the gateway's own link endpoints as `network:address` strings, e.g. `tcp:203.0.113.7:1791`.
+type GatewayEntry struct {
+	ID        *astral.Identity `yaml:"id"`
+	Endpoints []string         `yaml:"endpoints,omitempty"`
+}
+
 type Config struct {
 	Gateway    GatewayConfig      `yaml:"gateway"`
 	Visibility gateway.Visibility `yaml:"visibility"`
-	Gateways   []*astral.Identity `yaml:"gateways"`
+	Gateways   []GatewayEntry     `yaml:"gateways"`
 
 	// LinkIdlePing and LinkPingTimeout time the keepalive of links over this
 	// transport (astral-docs topics/link-mux.md, Keepalive).
@@ -42,4 +48,20 @@ var defaultConfig = Config{
 // linkKeepalive returns the keepalive timing of links over gw conns.
 func (c Config) linkKeepalive() exonetmod.LinkKeepalive {
 	return exonetmod.LinkKeepalive{Idle: c.LinkIdlePing, Timeout: c.LinkPingTimeout}
+}
+
+// validateGateways checks that every gateways entry names a gateway, and no gateway twice.
+// why: the registration task and the registered flag are keyed by the gateway identity.
+func (c Config) validateGateways() error {
+	seen := map[string]bool{}
+	for i, entry := range c.Gateways {
+		if entry.ID.IsZero() {
+			return fmt.Errorf("gateways[%v]: id is missing", i)
+		}
+		if seen[entry.ID.String()] {
+			return fmt.Errorf("gateways[%v]: gateway %v is listed twice", i, entry.ID)
+		}
+		seen[entry.ID.String()] = true
+	}
+	return nil
 }
