@@ -98,6 +98,7 @@ indexing-fs-watch-feed
 swarm-roster-sync
 relay-contract-forwarding
 relay-contract-reindex-after-expel
+relay-contract-race
 expel-propagation
 expel-cross-traffic
 expel-survives-restart
