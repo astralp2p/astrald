@@ -118,7 +118,13 @@ func (mod *Module) runPull(ctx *astral.Context, target *astral.Identity) []*astr
 }
 
 // heldRelays returns the subjects of the active relay contracts target issued
-// that the index holds, this node excluded.
+// that the index holds, this node excluded; on a claimed node only current
+// members of the local swarm (admitsRelayer).
+// Spec: .ai/system/topics/app-routing.md, Resolving the host.
+//
+// why the member filter: a former member's relay contract stays indexed after
+// it leaves, and apphost's candidate filter alone leaves the relay list empty,
+// which sends routing here.
 func (mod *Module) heldRelays(ctx *astral.Context, target *astral.Identity) (relays []*astral.Identity) {
 	contracts, err := mod.Auth.SignedContracts().
 		WithIssuer(target).
@@ -130,7 +136,7 @@ func (mod *Module) heldRelays(ctx *astral.Context, target *astral.Identity) (rel
 	}
 
 	for _, sc := range contracts {
-		if !sc.Subject.IsEqual(mod.node.Identity()) {
+		if !sc.Subject.IsEqual(mod.node.Identity()) && mod.admitsRelayer(sc.Subject) {
 			relays = append(relays, sc.Subject)
 		}
 	}

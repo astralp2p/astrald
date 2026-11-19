@@ -2,6 +2,7 @@ package nodes
 
 import (
 	"iter"
+	"slices"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -16,17 +17,22 @@ import (
 )
 
 // pullUser is a user module whose siblings answer fetch, counting its calls.
+// Every identity is a swarm member except those in expelled.
 type pullUser struct {
 	usermod.Module
-	id      *astral.Identity
-	swarm   []*astral.Identity
-	fetches atomic.Int32
+	id       *astral.Identity
+	swarm    []*astral.Identity
+	expelled []*astral.Identity
+	fetches  atomic.Int32
 	// fetch yields what the siblings answer for issuer; nil yields nothing.
 	fetch func(ctx *astral.Context, issuer *astral.Identity, yield func(*astral.Identity, *auth.SignedContract) bool)
 }
 
 func (u *pullUser) Identity() *astral.Identity     { return u.id }
 func (u *pullUser) LocalSwarm() []*astral.Identity { return u.swarm }
+func (u *pullUser) IsSwarmMember(id *astral.Identity) bool {
+	return !slices.ContainsFunc(u.expelled, id.IsEqual)
+}
 func (u *pullUser) FetchRelayContracts(ctx *astral.Context, issuer *astral.Identity) iter.Seq2[*astral.Identity, *auth.SignedContract] {
 	u.fetches.Add(1)
 	return func(yield func(*astral.Identity, *auth.SignedContract) bool) {
@@ -387,4 +393,27 @@ func TestPullRelaysCallerCancelDoesNotCutTheAsk(t *testing.T) {
 	if _, missed := f.mod.pull.misses.Get(app.String()); missed {
 		t.Fatal("a cancelled caller recorded a miss")
 	}
+}
+
+// A claimed node takes no former member as a relay: a relay contract whose
+// subject was expelled, held in the index or answered by a sibling, yields no
+// relay and a miss, so the query fails as route not found.
+func TestPullRelaysSkipsAnExpelledSubject(t *testing.T) {
+	f := newPullFixture()
+	app, expelled := astral.GenerateIdentity(), astral.GenerateIdentity()
+	f.user.expelled = []*astral.Identity{expelled}
+	sc := relayContractOf(app, expelled)
+	f.index.index = append(f.index.index, sc)
+	f.user.fetch = answering(astral.GenerateIdentity(), sc)
+
+	if relays := f.mod.pullRelays(networkCtx(), app); relays != nil {
+		t.Fatalf("got relays %v; want none for an expelled subject", relays)
+	}
+	if _, missed := f.mod.pull.misses.Get(app.String()); !missed {
+		t.Fatal("an ask that left only an expelled subject recorded no miss")
+	}
+
+	member := astral.GenerateIdentity()
+	f.index.index = append(f.index.index, relayContractOf(app, member))
+	assertRelays(t, f.mod.heldRelays(networkCtx(), app), member)
 }
