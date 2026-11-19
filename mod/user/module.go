@@ -1,6 +1,7 @@
 package user
 
 import (
+	"iter"
 	"time"
 
 	"github.com/astralp2p/astral-go/api/auth"
@@ -41,6 +42,12 @@ type Module interface {
 	// verify, and it has not expired. A non-nil sender, the node that
 	// delivered it, must be a member too. It answers nil for any other kind.
 	AdmitRelayContract(sender *astral.Identity, sc *auth.SignedContract) error
+	// FetchRelayContracts asks every linked sibling at once for the relay
+	// contracts issuer issued, and yields each answered contract that passes
+	// AdmitRelayContract with the answering sibling as sender, with that
+	// sibling. It ends when every sibling has answered, ctx ends, or the
+	// consumer stops. It asks nothing outside the network zone.
+	FetchRelayContracts(ctx *astral.Context, issuer *astral.Identity) iter.Seq2[*astral.Identity, *auth.SignedContract]
 	NewMaintainLinkTask(target *astral.Identity) MaintainLinkTask
 	NewSyncNodesTask(remoteIdentity *astral.Identity) SyncNodesTask
 	// PushToLocalSwarm broadcasts obj to every local swarm member except the

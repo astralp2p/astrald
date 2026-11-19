@@ -3,6 +3,7 @@ package nodes
 import (
 	"errors"
 	nodesmod "github.com/astralp2p/astrald/mod/nodes"
+	"sync/atomic"
 	"time"
 
 	"github.com/astralp2p/astral-go/api/crypto"
@@ -52,6 +53,17 @@ type Module struct {
 	upgraders         sig.Map[string, *sig.Switch]
 
 	privateKey *crypto.PrivateKey
+
+	pull relayPull
+
+	// resolveRemote pulls endpoints from another node.
+	// why: a field, so tests answer a pull without a network.
+	resolveRemote func(ctx *astral.Context, resolver *astral.Identity, identity *astral.Identity) ([]*nodes.EndpointWithTTL, error)
+
+	// announceDelay is the wait between a local address change and its announcement.
+	announceDelay time.Duration
+	// announcePending is set while an announcement waits out announceDelay.
+	announcePending atomic.Bool
 }
 
 // Run schedules the endpoint-cleanup task and blocks until ctx is cancelled.

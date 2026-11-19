@@ -1,0 +1,124 @@
+package main
+
+import (
+	"bytes"
+	"encoding/hex"
+	"fmt"
+	"os"
+	"time"
+
+	"github.com/astralp2p/astral-go/api/auth"
+	"github.com/astralp2p/astral-go/api/crypto"
+	cryptoclient "github.com/astralp2p/astral-go/api/crypto/client"
+	objectsclient "github.com/astralp2p/astral-go/api/objects/client"
+	servicescli "github.com/astralp2p/astral-go/api/services/client"
+	userapi "github.com/astralp2p/astral-go/api/user"
+	userclient "github.com/astralp2p/astral-go/api/user/client"
+	"github.com/astralp2p/astral-go/astral"
+	"github.com/astralp2p/astrald/mod/secp256k1"
+)
+
+// expiryValidity is the validity of ssm_expiry's membership contract: the
+// join reaches the open follow within it.
+const expiryValidity = 90 * time.Second
+
+// expiryGrace bounds how long after the contract's expiry the open follow
+// still shows the member's offering.
+// note: node1 republishes its member set one second after the expiry.
+const expiryGrace = 15 * time.Second
+
+// expirySteps admits ssm_expiry to the swarm with a contract that expires in
+// expiryValidity, waits until node1's open follow shows its offering, and
+// checks that the follow drops the offering at the contract's expiry.
+func expirySteps(w *world, s session, watch *servicescli.Watcher, name string, facts map[string]bool) error {
+	exp := s.Nodes["ssm_expiry"]
+	expAdmin := connect(exp.Endpoint, exp.Token)
+	providerID, cl, err := w.app(expAdmin, exp, serveApps)
+	if err != nil {
+		return err
+	}
+	b, err := cl.AdvertiseOpen(w.ctx, []string{name}, true, (&evaluated{}).offer)
+	if err != nil {
+		return err
+	}
+	defer b.Close()
+
+	signed, err := shortContract(w, s)
+	if err != nil {
+		return fmt.Errorf("short contract: %w", err)
+	}
+	if err := userclient.New(nil, expAdmin).AcceptContract(w.ctx, signed); err != nil {
+		return fmt.Errorf("accept contract on ssm_expiry: %w", err)
+	}
+	// why a push from ssm_expiry: node1 indexes the contract and syncs its own
+	// contracts to the new member, as for a member that joined through adopt.
+	if err := objectsclient.New(w.node1, expAdmin).Push(w.ctx, signed); err != nil {
+		return fmt.Errorf("push contract to node1: %w", err)
+	}
+
+	expiresAt := signed.ExpiresAt.Time()
+	if err := step(facts, "short_member_reaches_open_follow", holdsWithin(watch, time.Until(expiresAt), providerID.String()+"/"+name)); err != nil {
+		return err
+	}
+	err = holdsWithin(watch, time.Until(expiresAt)+expiryGrace)
+	if err == nil && time.Now().Before(expiresAt) {
+		err = fmt.Errorf("the follow dropped the member %v before its contract expired", time.Until(expiresAt))
+	}
+	if err == nil {
+		fmt.Fprintf(os.Stderr, "the follow dropped the member %v after its contract expired\n", time.Since(expiresAt))
+	}
+	return step(facts, "expiry_removes_from_open_follow", err)
+}
+
+// shortContract builds ssm_expiry's membership contract, valid for
+// expiryValidity, signed by the User on node1 and by ssm_expiry's node key.
+//
+// why the node key from the node's files: every op that collects a node's
+// subject signature refuses a contract shorter than an hour
+// (user.MinimalContractLength), and a node signs nothing else with its key.
+func shortContract(w *world, s session) (*auth.SignedContract, error) {
+	userID, err := astral.ParseIdentity(s.Facts.UserID)
+	if err != nil {
+		return nil, err
+	}
+	expID, err := astral.ParseIdentity(s.Nodes["ssm_expiry"].Identity)
+	if err != nil {
+		return nil, err
+	}
+	key, err := expiryNodeKey()
+	if err != nil {
+		return nil, err
+	}
+	contract, err := userapi.NewNodeContract(userID, expID, false, expiryValidity)
+	if err != nil {
+		return nil, err
+	}
+	hash := contract.SignableHash()
+	issuerSig, err := cryptoclient.New(w.node1, connect(w.n1.Endpoint, s.Facts.UserToken)).SignHash(w.ctx, hash, nil, "")
+	if err != nil {
+		return nil, fmt.Errorf("sign as the user: %w", err)
+	}
+	subjectSig, err := secp256k1.SignASN1(key, hash)
+	if err != nil {
+		return nil, fmt.Errorf("sign as ssm_expiry: %w", err)
+	}
+	return &auth.SignedContract{Contract: contract, IssuerSig: issuerSig, SubjectSig: subjectSig}, nil
+}
+
+// expiryNodeKey decodes ssm_expiry's node_key, which the script passes in
+// EXPIRY_NODE_KEY as hex.
+func expiryNodeKey() (*crypto.PrivateKey, error) {
+	raw, err := hex.DecodeString(os.Getenv("EXPIRY_NODE_KEY"))
+	if err != nil || len(raw) == 0 {
+		return nil, fmt.Errorf("EXPIRY_NODE_KEY: %v", err)
+	}
+	obj, _, err := astral.Decode(bytes.NewReader(raw), astral.Canonical())
+	if err != nil {
+		return nil, err
+	}
+	key, ok := obj.(*crypto.PrivateKey)
+	if !ok {
+		return nil, astral.NewErrUnexpectedObject(obj)
+	}
+	return key, nil
+}

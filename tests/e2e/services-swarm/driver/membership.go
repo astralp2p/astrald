@@ -16,7 +16,8 @@ import (
 const membershipWait = 60 * time.Second
 
 // membership opens a swarm follow on node1, adopts the fresh node ssm_late,
-// then expels it, and prints which steps held as JSON facts.
+// then expels it, then admits ssm_expiry until its contract expires, and
+// prints which steps held as JSON facts.
 func membership(path string) error {
 	facts := map[string]bool{}
 	err := membershipSteps(path, facts)
@@ -30,10 +31,11 @@ func membershipSteps(path string, facts map[string]bool) error {
 	if err != nil {
 		return err
 	}
-	late, userToken, err := loadLate(path)
+	s, err := loadSession(path)
 	if err != nil {
 		return err
 	}
+	late := s.Nodes["ssm_late"]
 	lateID, err := astral.ParseIdentity(late.Identity)
 	if err != nil {
 		return err
@@ -67,7 +69,7 @@ func membershipSteps(path string, facts map[string]bool) error {
 		return err
 	}
 
-	users := userclient.New(w.node1, connect(w.n1.Endpoint, userToken))
+	users := userclient.New(w.node1, connect(w.n1.Endpoint, s.Facts.UserToken))
 	if _, err := users.Adopt(w.ctx, late.Identity); err != nil {
 		return fmt.Errorf("adopt: %w", err)
 	}
@@ -78,23 +80,27 @@ func membershipSteps(path string, facts map[string]bool) error {
 	if _, err := users.Expel(w.ctx, lateID); err != nil {
 		return fmt.Errorf("expel: %w", err)
 	}
-	return step(facts, "expulsion_removes_from_open_follow", holdsWithin(watch, membershipWait))
+	if err := step(facts, "expulsion_removes_from_open_follow", holdsWithin(watch, membershipWait)); err != nil {
+		return err
+	}
+	return expirySteps(w, s, watch, name, facts)
 }
 
-// loadLate reads the late node and the User's token from the session.
-func loadLate(path string) (node, string, error) {
+// session is the part of the session view the membership flow reads beyond
+// node1 and node2.
+type session struct {
+	Nodes map[string]node `json:"nodes"`
+	Facts struct {
+		UserToken string `json:"user_token"`
+		UserID    string `json:"user_id"`
+	} `json:"facts"`
+}
+
+func loadSession(path string) (session, error) {
+	var s session
 	raw, err := os.ReadFile(path)
 	if err != nil {
-		return node{}, "", err
+		return s, err
 	}
-	var s struct {
-		Nodes map[string]node `json:"nodes"`
-		Facts struct {
-			UserToken string `json:"user_token"`
-		} `json:"facts"`
-	}
-	if err := json.Unmarshal(raw, &s); err != nil {
-		return node{}, "", err
-	}
-	return s.Nodes["ssm_late"], s.Facts.UserToken, nil
+	return s, json.Unmarshal(raw, &s)
 }

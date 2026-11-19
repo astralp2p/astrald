@@ -50,6 +50,8 @@ app-call-local
 app-routing-two-apps
 app-op-surface
 app-call-remote
+relay-pull-on-miss
+relay-pull-absent
 app-ping-pong
 app-reject-code
 route-outcomes
@@ -75,6 +77,7 @@ app-preexisting-provider-sync
 manager-answers-invite
 app-node-restart-reconnect
 services-node-restart
+services-consumer-restart
 blueprint-survives-restart
 mcp-origin
 messaging-ops
