@@ -40,7 +40,7 @@ func (c *Coordinator) SetFilter(st *Stream, f *Visibility, notGranted *services.
 				st.hide(keyOf(b.provider, name))
 			case st.follow && old != nil && !old.Allows(name, open):
 				sl := b.slot(st.caller)
-				sl.reevaluate[name] = struct{}{}
+				sl.owe(name, false)
 				b.schedule(sl)
 			}
 		}
