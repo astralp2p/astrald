@@ -263,3 +263,26 @@ func TestAnEndedContextStopsTheRelayLoop(t *testing.T) {
 	}
 	assertAsked(t, f.asked, relays[:1])
 }
+
+// A query whose routing context ended before any route answers that end, not
+// a missing route or unavailable.
+func TestUnrelayedAnswersTheEndedContext(t *testing.T) {
+	canceled, cancel := astral.NewContext(nil).WithCancel()
+	cancel()
+	expired, cancelExpired := astral.NewContext(nil).WithTimeout(0)
+	defer cancelExpired()
+
+	for _, tc := range []struct {
+		ctx  *astral.Context
+		want error
+	}{
+		{canceled, context.Canceled},
+		{expired, context.DeadlineExceeded},
+	} {
+		// note: a Module without a DB fails the test if unrelayed reaches it.
+		_, err := (&Module{}).unrelayed(tc.ctx, astral.GenerateIdentity())
+		if !errors.Is(err, tc.want) {
+			t.Errorf("unrelayed err = %v, want %v", err, tc.want)
+		}
+	}
+}

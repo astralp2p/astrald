@@ -169,8 +169,9 @@ func TestRouteQueryClosedChannelAnswersUnavailable(t *testing.T) {
 }
 
 // A link that goes down while a query waits for its Response answers
-// unavailable at once, and a Response arriving after the teardown sends
-// nothing more on the session's routingResult.
+// unavailable at once. A Response arriving after the teardown finds no
+// session; TestTeardownAndResponseSettleARoutingSessionOnce covers a Response
+// that still finds it.
 func TestRouteQueryLinkDownWhileRoutingAnswersUnavailableOnce(t *testing.T) {
 	a, b := net.Pipe()
 	defer a.Close()
@@ -218,5 +219,98 @@ func TestRouteQueryLinkDownWhileRoutingAnswersUnavailableOnce(t *testing.T) {
 	case code := <-s.routingResult:
 		t.Fatalf("routingResult held a second result %v", code)
 	default:
+	}
+}
+
+// routingSession registers an outbound session that waits for its Response
+// on a mux linked to remoteID.
+func routingSession(t *testing.T) (*Mux, *session) {
+	t.Helper()
+	a, b := net.Pipe()
+	t.Cleanup(func() { a.Close(); b.Close() })
+	go io.Copy(io.Discard, b)
+
+	localID, remoteID := astral.GenerateIdentity(), astral.GenerateIdentity()
+	m := testMux(t, a, localID, remoteID)
+	s, ok := m.createSession(astral.NewNonce(), remoteID, nil, "test.op", true, 0)
+	if !ok {
+		t.Fatal("createSession failed")
+	}
+	return m, s
+}
+
+// drainResults answers every value s.routingResult receives within wait.
+func drainResults(s *session, wait time.Duration) []uint8 {
+	var got []uint8
+	timeout := time.After(wait)
+	for {
+		select {
+		case code := <-s.routingResult:
+			got = append(got, code)
+		case <-timeout:
+			return got
+		}
+	}
+}
+
+// A Response that settled a routing session leaves the teardown nothing to
+// send, so the caller never reads a second result for one query.
+func TestTeardownAfterAResponseSendsNothingMore(t *testing.T) {
+	for _, code := range []uint8{frames.CodeAccepted, astral.DefaultRejectCode, frames.CodeNoRoute} {
+		t.Run(fmt.Sprint(code), func(t *testing.T) {
+			m, s := routingSession(t)
+
+			m.handleResponse(&frames.Response{Nonce: s.Nonce, ErrCode: astral.Uint8(code)})
+			if got := <-s.routingResult; got != code {
+				t.Fatalf("routingResult = %v, want the Response code %v", got, code)
+			}
+
+			// the session is still registered: the teardown reaches it
+			m.closeAllSessions()
+
+			if got := drainResults(s, 50*time.Millisecond); len(got) != 0 {
+				t.Fatalf("the teardown sent %v after the Response settled the session", got)
+			}
+		})
+	}
+}
+
+// A Response and a teardown racing for one routing session settle it once:
+// routingResult holds exactly one value, and neither side blocks.
+func TestTeardownAndResponseSettleARoutingSessionOnce(t *testing.T) {
+	for i := 0; i < 1000; i++ {
+		m, s := routingSession(t)
+
+		start := make(chan struct{})
+		done := make(chan struct{}, 2)
+		go func() {
+			<-start
+			m.handleResponse(&frames.Response{Nonce: s.Nonce, ErrCode: astral.Uint8(astral.DefaultRejectCode)})
+			done <- struct{}{}
+		}()
+		go func() {
+			<-start
+			m.closeAllSessions()
+			done <- struct{}{}
+		}()
+		close(start)
+
+		// note: a second send blocks on the full buffer, so a double send
+		// fails here as a blocked side.
+		for range 2 {
+			select {
+			case <-done:
+			case <-time.After(time.Second):
+				t.Fatalf("round %d: a side blocked sending on routingResult", i)
+			}
+		}
+		var got []uint8
+		for len(s.routingResult) > 0 {
+			got = append(got, <-s.routingResult)
+		}
+
+		if len(got) != 1 {
+			t.Fatalf("round %d: routingResult received %v, want exactly one value", i, got)
+		}
 	}
 }

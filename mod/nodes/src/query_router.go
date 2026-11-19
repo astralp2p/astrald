@@ -50,7 +50,7 @@ func (mod *Module) RouteQuery(ctx *astral.Context, q *astral.InFlightQuery, w io
 	relays, _ := q.Extra.Get(nodes.ExtraRelayVia)
 	relayList, _ := relays.([]*astral.Identity)
 	if len(relayList) == 0 {
-		return mod.unrelayed(q.Target)
+		return mod.unrelayed(ctx, q.Target)
 	}
 
 	relayed := &relayedQuery{ctx: ctx, q: q, w: w, reach: func(relayID *astral.Identity) (astral.Router, error) {
@@ -60,13 +60,20 @@ func (mod *Module) RouteQuery(ctx *astral.Context, q *astral.InFlightQuery, w io
 	return relayed.route(relayList)
 }
 
-// unrelayed answers a query that no link and no relay reaches: unavailable
-// when the target is a node this node holds an endpoint for, since a later
-// attempt may link to it, and a missing route otherwise.
+// unrelayed answers a query that no link and no relay reaches: the caller's
+// cancel or deadline when the routing context ended, unavailable when the
+// target is a node this node holds an endpoint for, since a later attempt may
+// link to it, and a missing route otherwise.
+//
+// why the context first: a link retrieval that failed because the caller's
+// context ended answers that end, not the retrieval's failure.
 //
 // why not for an identity without endpoints: a typo in a node identity, or an
 // app this node holds no relay contract for, stays a missing route.
-func (mod *Module) unrelayed(target *astral.Identity) (io.WriteCloser, error) {
+func (mod *Module) unrelayed(ctx *astral.Context, target *astral.Identity) (io.WriteCloser, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	if mod.db.HasEndpoints(target) {
 		return nil, unavailable()
 	}
