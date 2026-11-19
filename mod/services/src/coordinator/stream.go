@@ -2,6 +2,7 @@ package coordinator
 
 import (
 	"bytes"
+	"slices"
 
 	"github.com/astralp2p/astral-go/api/services"
 	"github.com/astralp2p/astral-go/astral"
@@ -115,9 +116,15 @@ func (st *Stream) hide(k offeringKey) {
 	wake(st.wake)
 }
 
-// Contributions are the swarm members carrying this discovery, in request
+// Contributions lists the swarm members carrying this discovery, in request
 // order.
-func (st *Stream) Contributions() []*Contribution { return st.contributions }
+// why: membership changes replace the slice under the coordinator lock, so
+// callers get a copy taken under it.
+func (st *Stream) Contributions() []*Contribution {
+	st.c.mu.Lock()
+	defer st.c.mu.Unlock()
+	return slices.Clone(st.contributions)
+}
 
 // Done is closed when the stream closes.
 func (st *Stream) Done() <-chan struct{} { return st.done }

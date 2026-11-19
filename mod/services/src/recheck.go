@@ -234,17 +234,20 @@ func (mod *Module) runRechecks(ctx *astral.Context) {
 	}
 }
 
-// recheck applies id's current authority to its open follows and to its
-// advertise bindings.
+// recheck applies id's current authority to its open follows, to the follows
+// it carries to this node, and to its advertise bindings.
 func (mod *Module) recheck(ctx *astral.Context, id *astral.Identity) {
 	for _, od := range mod.authority.follows(id) {
 		if od.d.carrier != nil {
-			if !mod.carryAllowed(ctx, od.d) {
-				od.st.Close()
-			}
+			mod.recheckCarry(ctx, od)
 			continue
 		}
 		mod.recheckFollow(ctx, od)
+	}
+	// why: a carried follow is registered under its app, but the carrying
+	// node's own relay right and discovery permission also decide it.
+	for _, od := range mod.authority.carriedBy(id) {
+		mod.recheckCarry(ctx, od)
 	}
 	bindings := mod.authority.bindingsOf(id)
 	if len(bindings) == 0 {
@@ -256,6 +259,14 @@ func (mod *Module) recheck(ctx *astral.Context, id *astral.Identity) {
 	mod.log.Logv(1, "%v lost serve apps; closing its %v bindings", id, len(bindings))
 	for _, b := range bindings {
 		b.Close()
+	}
+}
+
+// recheckCarry closes a follow a swarm member carries to this node once the
+// member may no longer carry it.
+func (mod *Module) recheckCarry(ctx *astral.Context, od *openDiscovery) {
+	if !mod.carryAllowed(ctx, od.d) {
+		od.st.Close()
 	}
 }
 

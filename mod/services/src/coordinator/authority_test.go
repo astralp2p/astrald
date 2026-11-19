@@ -1,6 +1,7 @@
 package coordinator
 
 import (
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -155,9 +156,10 @@ func TestContributionHideRemovesWithCauseHidden(t *testing.T) {
 	e.invariants()
 }
 
-// A restarted contribution stops its carry and starts a new one without
-// retracting anything; an offering the member sends again stays shown, and
-// one it does not is removed at its next initial outcome.
+// A restarted contribution stops its carry and a fresh contribution starts a
+// new one without retracting anything; an offering the member sends again
+// stays shown, and one it does not is removed at the new carry's initial
+// outcome. The old carry's late views and initial outcome change nothing.
 func TestRestartContributionsKeepsOfferingsSentAgain(t *testing.T) {
 	e := newEnv(t)
 	m := astral.GenerateIdentity()
@@ -181,10 +183,18 @@ func TestRestartContributionsKeepsOfferingsSentAgain(t *testing.T) {
 	if n := len(carrier.carried); n != 2 {
 		t.Fatalf("%d carries started; want the first and the restart", n)
 	}
+	next := carrier.carried[1]
+	if list := st.Contributions(); len(list) != 1 || list[0] != next {
+		t.Fatal("the restarted carry does not feed the stream's contribution")
+	}
 	expectNoEvent(t, sink)
 
-	r.Update(remoteView(kept, "player", true), true, true)
+	r.Update(remoteView(astral.GenerateIdentity(), "player", true), true, true)
 	r.Initial(nil)
+	expectNoEvent(t, sink)
+
+	next.Update(remoteView(kept, "player", true), true, true)
+	next.Initial(nil)
 	var removed []*services.OfferingKey
 	for range 2 {
 		ev := nextEvent(t, sink)
@@ -197,4 +207,85 @@ func TestRestartContributionsKeepsOfferingsSentAgain(t *testing.T) {
 	}
 	expectNoEvent(t, sink)
 	e.invariants()
+}
+
+// gatedCarrier blocks the first Carry until release is closed and starts every
+// later one at once.
+type gatedCarrier struct {
+	*fakeCarrier
+	entered chan *Contribution
+	release chan struct{}
+	gated   atomic.Bool
+}
+
+func (g *gatedCarrier) Carry(r *Contribution) func() {
+	stop := g.fakeCarrier.Carry(r)
+	if g.gated.CompareAndSwap(false, true) {
+		g.entered <- r
+		<-g.release
+	}
+	return stop
+}
+
+// A restart while a joined member's carry is starting replaces that
+// contribution; the starting carry is stopped once it starts, so only the
+// restarted carry feeds the stream.
+func TestRestartContributionsBeforeTheCarryStarts(t *testing.T) {
+	e := newEnv(t)
+	carrier := &gatedCarrier{fakeCarrier: newCarrier(), entered: make(chan *Contribution), release: make(chan struct{})}
+	sink := newSink()
+	st := e.followSwarm(sink, carrier, "player")
+	defer st.Close()
+	expectEvent(t, sink, "boundary")
+
+	m := astral.GenerateIdentity()
+	joined := make(chan struct{})
+	go func() {
+		e.c.SetMembers([]*astral.Identity{m})
+		close(joined)
+	}()
+	r := <-carrier.entered
+
+	e.c.RestartContributions(st)
+	close(carrier.release)
+	<-joined
+
+	list := st.Contributions()
+	if len(list) != 1 || list[0] == r {
+		t.Fatal("the restart did not replace the starting contribution")
+	}
+	if n := carrier.stops(r); n != 1 {
+		t.Fatalf("the starting carry was stopped %d times; want once", n)
+	}
+	if n := carrier.stops(list[0]); n != 0 {
+		t.Fatalf("the restarted carry was stopped %d times; want none", n)
+	}
+	r.Update(remoteView(astral.GenerateIdentity(), "player", true), true, true)
+	expectNoEvent(t, sink)
+	list[0].Update(remoteView(astral.GenerateIdentity(), "player", true), true, true)
+	expectEvent(t, sink, "update")
+	e.invariants()
+}
+
+// Contributions copies the member list under the coordinator lock, so it may
+// run while membership changes replace it.
+func TestContributionsDuringMemberChanges(t *testing.T) {
+	e := newEnv(t)
+	st := e.followSwarm(newSink(), newCarrier(), "player")
+	defer st.Close()
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		for range 100 {
+			e.c.SetMembers([]*astral.Identity{astral.GenerateIdentity()})
+		}
+	}()
+	for {
+		select {
+		case <-done:
+			return
+		default:
+			_ = st.Contributions()
+		}
+	}
 }

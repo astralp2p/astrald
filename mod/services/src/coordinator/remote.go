@@ -15,7 +15,7 @@ type Contribution struct {
 	contributed map[offeringKey]bool   // offerings this member contributed, with the visibility tag each arrived with
 	stale       map[offeringKey]bool   // after a restart: contributed offerings the member has not sent again; nil is none
 	stop        func()                 // stops the carry; nil before it starts
-	ended       bool                   // the member left or the stream closed
+	ended       bool                   // the member left, the stream closed, or a restart replaced it
 }
 
 func newContribution(st *Stream, member *astral.Identity) *Contribution {

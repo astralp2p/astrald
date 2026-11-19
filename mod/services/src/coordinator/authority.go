@@ -93,33 +93,48 @@ func (r *Contribution) Hide(list []Offering) {
 	}
 }
 
-// RestartContributions stops the carry of every live contribution of st and
-// starts it again, so each member sends its offerings anew. An offering the
-// member sends again stays shown without a removal; one it does not send again
-// before its next initial outcome is removed.
+// RestartContributions replaces every live contribution of st with a fresh
+// one and starts its carry, so each member sends its offerings anew. An
+// offering the member sends again stays shown without a removal; one it does
+// not send again before the new carry's initial outcome is removed.
 func (c *Coordinator) RestartContributions(st *Stream) {
 	c.mu.Lock()
 	if st.closed {
 		c.mu.Unlock()
 		return
 	}
-	var live []*Contribution
-	for _, r := range st.contributions {
+	var restarted []*Contribution
+	for i, r := range st.contributions {
 		if r.ended {
 			continue
 		}
-		// why: a stopped carry returns without Lost, so the restart retracts
-		// nothing the member still offers.
-		if r.stop != nil {
-			r.stop()
-			r.stop = nil
-		}
-		r.stale = maps.Clone(r.contributed)
-		live = append(live, r)
+		next := r.replaceLocked()
+		st.contributions[i] = next
+		restarted = append(restarted, next)
 	}
 	c.mu.Unlock()
 
-	c.startCarries(st, live)
+	c.startCarries(st, restarted)
+}
+
+// replaceLocked ends r without retracting anything and returns the
+// contribution that takes over its offerings and unresolved initial work.
+// why: an ended contribution ignores every later call, so a view or an
+// initial outcome its old carry still delivers changes nothing; a carry of r
+// that has not started yet is stopped as soon as it starts.
+func (r *Contribution) replaceLocked() *Contribution {
+	next := newContribution(r.st, r.member)
+	next.contributed = r.contributed
+	next.stale = maps.Clone(r.contributed)
+	next.unresolved = r.unresolved
+	for _, o := range next.unresolved {
+		o.contribution = next
+	}
+	r.contributed = map[offeringKey]bool{}
+	r.unresolved = map[string]*evaluation{}
+	r.stale = nil
+	r.endLocked()
+	return next
 }
 
 // sweepStaleLocked removes the offerings a restarted member did not send

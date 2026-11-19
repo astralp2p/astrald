@@ -6,6 +6,7 @@ import (
 
 	"github.com/astralp2p/astral-go/api/auth"
 	"github.com/astralp2p/astral-go/api/events"
+	"github.com/astralp2p/astral-go/api/nodes"
 	"github.com/astralp2p/astral-go/api/services"
 	userapi "github.com/astralp2p/astral-go/api/user"
 	"github.com/astralp2p/astral-go/astral"
@@ -333,4 +334,23 @@ func TestMemberLeftClosesTheCarryItServes(t *testing.T) {
 	if d := time.Since(start); d > time.Second {
 		t.Fatalf("the carry closed %v after swarm_member_left; want within 1 s", d)
 	}
+}
+
+// A change recorded for the carrying node, not for the app, re-checks the
+// follows that node carries here: once it lost the relay right the member
+// closes the carry, and the carrying node's app sees the offering removed.
+func TestChangeForTheCarrierClosesItsCarry(t *testing.T) {
+	v := newRecheckSwarm(t)
+	nodeA := v.a.node.Identity()
+	_, player := advertise(t, v.b, "player", available)
+
+	c := open(t, v.a.OpDiscover, v.app, "services.discover?services=player&reach=swarm&follow=true", false)
+	offered, _ := collect(t, c)
+	if !equal(offered, "player") {
+		t.Fatalf("offered %v; want the member's player", offered)
+	}
+
+	v.auth.refuse(nodes.RelayForAction{}.ObjectType())
+	v.apps.grantsChanged(nodeA)
+	expectRemoved(t, c, player, services.CauseMemberLost)
 }
