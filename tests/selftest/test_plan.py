@@ -327,6 +327,7 @@ class TestShippedPlans(Invariants, unittest.TestCase):
              ("vm", "nat-punch"), ("vm", "nat-punch-double-translating"),
              ("vm", "nat-punch-translating"),
              ("local", "relay-contract-forwarding"),
+             ("local", "relay-contract-race"),
              ("local", "relay-contract-reindex-after-expel"),
              ("local", "relay-pull-on-miss"),
              ("local", "route-outcomes-dead-peer"),
