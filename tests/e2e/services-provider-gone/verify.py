@@ -1,6 +1,10 @@
 #!/usr/bin/env python3
 """Oracle: every step held, and the story holds again on its own.
 
+The liveness steps (a provider retired for late answers or a hang, then shown
+again after its keeper advertises again) take about 5 minutes, so the oracle
+checks them from the driver's facts and does not repeat them.
+
 The oracle repeats the whole story with fresh identities (`driver verify`):
 a consumer on node1 follows spg-echo with reach=swarm; a provider process on
 node2 is shown, stopped cleanly (removed), restarted (shown again), killed
@@ -19,7 +23,10 @@ STEPS = ["follow_starts_empty", "follow_shows_the_provider",
          "clean_stop_removes_the_provider", "clean_stop_leaves_no_provider",
          "restart_shows_the_provider_again",
          "crash_removes_the_provider", "crash_leaves_no_provider",
-         "restart_after_crash_shows_the_provider", "final_stop_removes_the_provider"]
+         "restart_after_crash_shows_the_provider", "final_stop_removes_the_provider",
+         "slow_provider_shown", "slow_provider_is_retired", "slow_provider_advertises_again",
+         "hung_provider_is_retired", "resumed_provider_advertises_again",
+         "liveness_stop_removes_the_provider"]
 
 facts = load()["facts"].get("services_provider_gone", {})
 missing = [s for s in STEPS if not facts.get(s)]

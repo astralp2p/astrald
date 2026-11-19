@@ -12,6 +12,7 @@ type Binding struct {
 	provider *astral.Identity
 	names    []string // sorted
 	open     bool     // advertised open; the private list can still hide it
+	native   bool     // answered in-process; never probed or ended for unanswered asks
 	t        Transport
 
 	sendQueue []*services.Ask
@@ -19,6 +20,8 @@ type Binding struct {
 	usedIDs   map[astral.Nonce]struct{} // every RequestID ever issued; never shrinks
 	inflight  map[astral.Nonce]*request
 	slots     map[string]*askSlot // by caller
+	probe     Timer               // the next probe of followed names; nil when none is armed
+	timeouts  int                 // consecutive asks retired unanswered
 	closed    bool
 	done      chan struct{}
 }
@@ -30,7 +33,7 @@ type askSlot struct {
 	caller     *astral.Identity
 	active     *request
 	waiting    map[string][]*evaluation // service → initial evaluations waiting for a fresh ask
-	reevaluate map[string]struct{}      // service → re-evaluation owed to followers
+	reevaluate map[string]bool          // service → re-evaluation owed to followers; true when only a probe owes it
 }
 
 // request is one ask sent to the provider and not yet answered.
@@ -39,14 +42,17 @@ type request struct {
 	slot        *askSlot
 	service     string
 	evaluations []*evaluation
+	probe       bool // only a probe owes the ask; an unchanged answer reaches no follower
 	timer       Timer
 }
 
 func newBinding(c *Coordinator, provider *astral.Identity, names []string, t Transport) *Binding {
+	_, native := t.(InProcess)
 	return &Binding{
 		c:        c,
 		provider: provider,
 		names:    names,
+		native:   native,
 		t:        t,
 		sendWake: make(chan struct{}, 1),
 		usedIDs:  map[astral.Nonce]struct{}{},
@@ -63,7 +69,7 @@ func (b *Binding) slot(caller *astral.Identity) *askSlot {
 	ck := callerKey(caller)
 	sl := b.slots[ck]
 	if sl == nil {
-		sl = &askSlot{binding: b, caller: caller, waiting: map[string][]*evaluation{}, reevaluate: map[string]struct{}{}}
+		sl = &askSlot{binding: b, caller: caller, waiting: map[string][]*evaluation{}, reevaluate: map[string]bool{}}
 		b.slots[ck] = sl
 	}
 	return sl
@@ -81,7 +87,7 @@ func (b *Binding) schedule(sl *askSlot) {
 		return
 	}
 
-	req := &request{id: b.newRequestID(), slot: sl, service: service}
+	req := &request{id: b.newRequestID(), slot: sl, service: service, probe: sl.reevaluate[service]}
 	for _, o := range sl.waiting[service] {
 		o.req = req
 		req.evaluations = append(req.evaluations, o)
@@ -95,6 +101,15 @@ func (b *Binding) schedule(sl *askSlot) {
 
 	b.sendQueue = append(b.sendQueue, &services.Ask{RequestID: req.id, CallerID: sl.caller, Service: astral.String8(service)})
 	wake(b.sendWake)
+}
+
+// owe queues a re-evaluation of service. A re-evaluation that anything other
+// than a probe owes stays owed to it when a probe joins.
+func (sl *askSlot) owe(service string, probe bool) {
+	if owed, ok := sl.reevaluate[service]; ok {
+		probe = probe && owed
+	}
+	sl.reevaluate[service] = probe
 }
 
 // nextName picks the service the slot asks about next.
@@ -139,19 +154,72 @@ func (b *Binding) removeRequest(req *request) {
 	req.slot.active = nil
 }
 
-// requestExpired fails the initial evaluations an unanswered ask carried.
+// requestExpired fails the initial evaluations an unanswered ask carried, and
+// ends a binding that reached the limit of consecutive retired asks.
 // note: a timer that fires after the ask was answered finds it gone and does
 // nothing.
+// note: a retired re-evaluation is not queued again; the next probe asks it.
 func (b *Binding) requestExpired(req *request) {
 	c := b.c
+	// why: the transport is closed outside the coordinator lock, so this
+	// function unlocks by hand instead of deferring.
 	c.mu.Lock()
-	defer c.mu.Unlock()
 	if b.inflight[req.id] != req {
+		c.mu.Unlock()
 		return
 	}
 	b.removeRequest(req)
 	failAll(req.evaluations)
+	b.timeouts++
+	if b.unresponsive() {
+		b.closeLocked()
+		c.mu.Unlock()
+		b.t.Close()
+		return
+	}
 	b.schedule(req.slot)
+	c.mu.Unlock()
+}
+
+// unresponsive reports whether the binding reached the limit of consecutive
+// retired asks. A native binding never does.
+func (b *Binding) unresponsive() bool {
+	limit := b.c.cfg.MaxAskTimeouts
+	return !b.native && limit > 0 && b.timeouts >= limit
+}
+
+// armProbe schedules the next probe of the binding's followed names, unless
+// one is armed, the binding is native or closed, or probing is off.
+func (b *Binding) armProbe() {
+	interval := b.c.cfg.ProbeInterval
+	if b.native || b.closed || interval <= 0 || b.probe != nil {
+		return
+	}
+	b.probe = b.c.cfg.Clock.AfterFunc(interval, b.probeTick)
+}
+
+// probeTick re-asks the binding about every name a follow stream requests, so
+// an unanswering provider accrues timeouts. It re-arms while followers remain.
+// note: a slot with an active ask keeps the probe owed until that ask ends.
+func (b *Binding) probeTick() {
+	c := b.c
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	b.probe = nil
+	if b.closed {
+		return
+	}
+	if c.reevaluateFollowersOf(b, true) {
+		b.armProbe()
+	}
+}
+
+// stopProbe cancels an armed probe.
+func (b *Binding) stopProbe() {
+	if b.probe != nil {
+		b.probe.Stop()
+		b.probe = nil
+	}
 }
 
 // sendLoop drains asks to the transport until the binding closes.

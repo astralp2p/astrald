@@ -19,7 +19,9 @@ type opAdvertiseArgs struct {
 // OpAdvertise binds the caller as the provider of a fixed set of services for
 // as long as the channel is open. After the ack the node sends services.ask and
 // the provider sends services.answer and services.change. Closing the channel,
-// or any other object from the provider, ends the binding.
+// or any other object from the provider, ends the binding. The node ends a
+// binding whose asks go unanswered and closes the channel, which returns
+// the op.
 //
 // Spec: .ai/system/protocols/services/ops/services.advertise.md
 func (mod *Module) OpAdvertise(ctx *astral.Context, q *routing.IncomingQuery, args opAdvertiseArgs) error {

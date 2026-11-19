@@ -36,13 +36,22 @@ var (
 type Config struct {
 	InitialBudget  time.Duration // how long an initial attempt waits for answers
 	RequestTimeout time.Duration // how long one ask waits for its answer
+	ProbeInterval  time.Duration // how often a followed binding is re-asked; 0 never probes
+	MaxAskTimeouts int           // consecutive retired asks that end a binding; 0 never ends one
 	Clock          Clock
 }
 
 // DefaultConfig holds the provisional timings.
 // note: provisional values; see the design link in the package doc.
+// Spec: .ai/system/protocols/services/ops/services.advertise.md#liveness
 func DefaultConfig() Config {
-	return Config{InitialBudget: 5 * time.Second, RequestTimeout: 10 * time.Second, Clock: SystemClock{}}
+	return Config{
+		InitialBudget:  5 * time.Second,
+		RequestTimeout: 10 * time.Second,
+		ProbeInterval:  60 * time.Second,
+		MaxAskTimeouts: 2,
+		Clock:          SystemClock{},
+	}
 }
 
 // Coordinator is the single synchronization point of the Services module.
@@ -96,6 +105,14 @@ type Transport interface {
 	Close()
 }
 
+// InProcess marks a Transport the node answers itself, such as a native
+// registration. Its binding is never probed and never ended for unanswered
+// asks.
+// why: an in-process Close is a no-op and nothing registers the binding again.
+type InProcess interface {
+	InProcess()
+}
+
 // Register claims every (provider, name) pair for a new binding, or none. An
 // open binding is visible to swarm callers without a discovery permit.
 func (c *Coordinator) Register(provider *astral.Identity, names []string, open bool, t Transport) (*Binding, error) {
@@ -119,16 +136,20 @@ func (c *Coordinator) Register(provider *astral.Identity, names []string, open b
 		}
 		c.byName[name][b] = struct{}{}
 	}
-	c.reevaluateForFollowers(b)
+	if c.reevaluateFollowersOf(b, false) {
+		b.armProbe()
+	}
 	c.mu.Unlock()
 
 	go b.sendLoop()
 	return b, nil
 }
 
-// reevaluateForFollowers asks a new binding to evaluate its names for every
-// follow stream that requests one of them.
-func (c *Coordinator) reevaluateForFollowers(b *Binding) {
+// reevaluateFollowersOf asks b to evaluate its names for every follow stream
+// that requests one of them, and reports whether any stream does. probe marks
+// the re-evaluations as owed only to a probe.
+func (c *Coordinator) reevaluateFollowersOf(b *Binding, probe bool) bool {
+	followed := false
 	for _, streams := range c.byCaller {
 		for st := range streams {
 			if !st.follow {
@@ -136,13 +157,15 @@ func (c *Coordinator) reevaluateForFollowers(b *Binding) {
 			}
 			for _, name := range b.names {
 				if st.requests(name) {
+					followed = true
 					sl := b.slot(st.caller)
-					sl.reevaluate[name] = struct{}{}
+					sl.owe(name, probe)
 					b.schedule(sl)
 				}
 			}
 		}
 	}
+	return followed
 }
 
 // Request describes one discovery stream.
@@ -186,6 +209,9 @@ func (c *Coordinator) discoverLocked(req Request) *Stream {
 	c.startBudget(at)
 	for _, sl := range touched {
 		sl.binding.schedule(sl)
+		if req.Follow {
+			sl.binding.armProbe()
+		}
 	}
 	if len(at.unresolved) == 0 {
 		at.finish()
