@@ -1,6 +1,7 @@
 package apphost
 
 import (
+	"slices"
 	"time"
 
 	apphostapi "github.com/astralp2p/astral-go/api/apphost"
@@ -37,20 +38,53 @@ func (mod *Module) grantAll(identity *astral.Identity, permits []*auth.Permit, e
 		local = append(local, &p)
 	}
 
-	return mod.db.AddGrants(identity, local, expiresAt)
+	if err := mod.db.AddGrants(identity, local, expiresAt); err != nil {
+		return err
+	}
+	mod.grantsChanged(identity)
+	return nil
 }
 
 // Revoke withdraws every grant identity holds for the action. It takes effect on
 // the next authorization; it does not undo what the identity did while it held
 // the grant.
 func (mod *Module) Revoke(identity *astral.Identity, action string) error {
-	return mod.db.DeleteGrant(identity, action)
+	if err := mod.db.DeleteGrant(identity, action); err != nil {
+		return err
+	}
+	mod.grantsChanged(identity)
+	return nil
 }
 
 // RevokeGrant withdraws the one grant with the ID that identity holds. An ID of
 // another identity's grant answers gorm.ErrRecordNotFound.
 func (mod *Module) RevokeGrant(identity *astral.Identity, id uint64) error {
-	return mod.db.DeleteGrantByID(identity, id)
+	if err := mod.db.DeleteGrantByID(identity, id); err != nil {
+		return err
+	}
+	mod.grantsChanged(identity)
+	return nil
+}
+
+// OnGrantsChanged registers fn to run after each recorded change of an
+// identity's grants.
+func (mod *Module) OnGrantsChanged(fn func(identity *astral.Identity)) {
+	mod.onGrantsChangedMu.Lock()
+	defer mod.onGrantsChangedMu.Unlock()
+	// why: a new slice, so a reader iterating the old one never sees it change.
+	mod.onGrantsChanged = append(slices.Clip(mod.onGrantsChanged), fn)
+}
+
+// grantsChanged runs every OnGrantsChanged callback for identity.
+// why: synchronous, so a change recorded by a returning call is already
+// announced; the callbacks only schedule work and never block.
+func (mod *Module) grantsChanged(identity *astral.Identity) {
+	mod.onGrantsChangedMu.Lock()
+	callbacks := mod.onGrantsChanged
+	mod.onGrantsChangedMu.Unlock()
+	for _, fn := range callbacks {
+		fn(identity)
+	}
 }
 
 // Grants returns every permit this node has granted identity, expired included.

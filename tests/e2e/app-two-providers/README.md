@@ -23,7 +23,17 @@ each, and each provider answers its own call alone.
      with `msg=hello near` for node1's provider and `msg=hello far` for
      node2's, and each call returns its own message (`each_provider_echoed`);
   6. each provider answered exactly one call: its own message, from the
-     consumer (`each_provider_answered_its_own_call`).
+     consumer (`each_provider_answered_its_own_call`);
+  7. a provider app on node1 and one on node2 advertise `echo-pair-private`
+     with `open: false`; a second consumer app on node1, with no permit, opens
+     a `services.discover` follow of it with `reach=swarm`, and its initial
+     attempt shows no provider and lists the service in
+     `services.not_granted` (`follow_starts_without_private_providers`);
+  8. node1's admin grants that consumer discovery of `echo-pair-private`;
+     within 2 s the same follow shows both private providers, without a
+     reopen (`grant_shows_both_without_reopen`). The grant re-checks the
+     open follow: node1 evaluates its own provider again and restarts the
+     carry to node2.
 - **oracle** `verify.py` — every step held, plus the whole story again with
   fresh identities (`driver verify`).
 

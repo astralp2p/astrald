@@ -2,6 +2,7 @@ package coordinator
 
 import (
 	"bytes"
+	"slices"
 
 	"github.com/astralp2p/astral-go/api/services"
 	"github.com/astralp2p/astral-go/astral"
@@ -14,6 +15,9 @@ type Sink interface {
 	// TaggedUpdate writes a view of a tagged stream.
 	TaggedUpdate(*services.TaggedUpdate) error
 	Removed(*services.Removed) error
+	// NotGranted writes the caller's current services.not_granted list after
+	// an authority change altered it.
+	NotGranted(*services.NotGranted) error
 	// Boundary ends the initial attempt: Incomplete when incomplete is not nil,
 	// then eos.
 	Boundary(incomplete *services.Incomplete) error
@@ -35,6 +39,7 @@ type Stream struct {
 	latest            map[offeringKey]*services.Update      // latest available view queued or written per offering
 	sendOrder         []offeringKey                         // send order of unsent keys
 	unsentRemovals    map[offeringKey]services.RemovalCause // removals not yet sent, with their cause
+	unsentNotGranted  *services.NotGranted                  // a not_granted list not yet sent; nil is none
 	inflight          *offeringKey                          // view handed to the writer
 	inflightAvailable bool                                  // the in-flight view offers the service
 	attempt           *attempt                              // nil once the boundary is sent
@@ -111,9 +116,15 @@ func (st *Stream) hide(k offeringKey) {
 	wake(st.wake)
 }
 
-// Contributions are the swarm members carrying this discovery, in request
+// Contributions lists the swarm members carrying this discovery, in request
 // order.
-func (st *Stream) Contributions() []*Contribution { return st.contributions }
+// why: membership changes replace the slice under the coordinator lock, so
+// callers get a copy taken under it.
+func (st *Stream) Contributions() []*Contribution {
+	st.c.mu.Lock()
+	defer st.c.mu.Unlock()
+	return slices.Clone(st.contributions)
+}
 
 // Done is closed when the stream closes.
 func (st *Stream) Done() <-chan struct{} { return st.done }

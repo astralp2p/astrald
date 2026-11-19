@@ -197,7 +197,25 @@ func (mod *Module) WithdrawContracts(issuer *astral.Identity, action astral.Obje
 	}
 
 	n, err := mod.db.withdrawContracts(issuer, action.ObjectType())
-	return int(n), err
+	if err != nil || n == 0 {
+		return int(n), err
+	}
+	mod.onWithdrawnMu.Lock()
+	callbacks := mod.onWithdrawn
+	mod.onWithdrawnMu.Unlock()
+	for _, fn := range callbacks {
+		fn(issuer)
+	}
+	return int(n), nil
+}
+
+// OnContractWithdrawn registers fn to run after each WithdrawContracts call
+// that took back a contract.
+func (mod *Module) OnContractWithdrawn(fn func(issuer *astral.Identity)) {
+	mod.onWithdrawnMu.Lock()
+	defer mod.onWithdrawnMu.Unlock()
+	// why: a new slice, so a reader iterating the old one never sees it change.
+	mod.onWithdrawn = append(slices.Clip(mod.onWithdrawn), fn)
 }
 
 func (mod *Module) SignedContracts() authmod.ContractQueryBuilder {

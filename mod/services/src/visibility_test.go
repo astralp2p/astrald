@@ -15,13 +15,72 @@ import (
 )
 
 // permitAuth grants every action except service discovery, which it grants to
-// the swarm's nodes and to the (actor, service, node) permits it holds.
+// the swarm's nodes and to the (actor, service, node) permits it holds, and
+// the action types it refuses. With block set, every Authorize waits for it to
+// close.
 type permitAuth struct {
 	authmod.Module
 	nodes []*astral.Identity
 
-	mu      sync.Mutex
-	permits map[string]bool
+	mu          sync.Mutex
+	permits     map[string]bool
+	refused     map[string]bool // action type → refused
+	block       chan struct{}
+	onWithdrawn []func(*astral.Identity)
+	onIndexed   []func(*auth.SignedContract)
+}
+
+func (a *permitAuth) revoke(actor *astral.Identity, service string, node *astral.Identity) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	delete(a.permits, permitKeyOf(actor, service, node))
+}
+
+func (a *permitAuth) refuse(actionType string) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if a.refused == nil {
+		a.refused = map[string]bool{}
+	}
+	a.refused[actionType] = true
+}
+
+func (a *permitAuth) setBlock(ch chan struct{}) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.block = ch
+}
+
+func (a *permitAuth) OnContractWithdrawn(fn func(*astral.Identity)) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.onWithdrawn = append(a.onWithdrawn, fn)
+}
+
+func (a *permitAuth) OnContractIndexed(fn func(*auth.SignedContract)) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.onIndexed = append(a.onIndexed, fn)
+}
+
+// withdrawn runs the callbacks as auth does after a withdrawal by issuer.
+func (a *permitAuth) withdrawn(issuer *astral.Identity) {
+	a.mu.Lock()
+	callbacks := slices.Clone(a.onWithdrawn)
+	a.mu.Unlock()
+	for _, fn := range callbacks {
+		fn(issuer)
+	}
+}
+
+// indexed runs the callbacks as auth does after indexing sc.
+func (a *permitAuth) indexed(sc *auth.SignedContract) {
+	a.mu.Lock()
+	callbacks := slices.Clone(a.onIndexed)
+	a.mu.Unlock()
+	for _, fn := range callbacks {
+		fn(sc)
+	}
 }
 
 func permitKeyOf(actor *astral.Identity, service string, node *astral.Identity) string {
@@ -35,6 +94,15 @@ func (a *permitAuth) grant(actor *astral.Identity, service string, node *astral.
 }
 
 func (a *permitAuth) Authorize(_ *astral.Context, action auth.ActionObject) bool {
+	a.mu.Lock()
+	block, refused := a.block, a.refused[action.ObjectType()]
+	a.mu.Unlock()
+	if block != nil {
+		<-block
+	}
+	if refused {
+		return false
+	}
 	d, ok := action.(*services.ServiceDiscoveryAction)
 	if !ok {
 		return true

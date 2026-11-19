@@ -79,6 +79,11 @@ type Module interface {
 	// or index reads it again. A copy on another node is untouched.
 	WithdrawContracts(issuer *astral.Identity, action astral.Object) (int, error)
 
+	// OnContractWithdrawn registers fn to run after each WithdrawContracts call
+	// that took back at least one contract, with the issuer it named. fn runs
+	// synchronously inside the call, once per call, and must not block.
+	OnContractWithdrawn(fn func(issuer *astral.Identity))
+
 	// SetAuthorizer persists an external authorizer assignment, replacing the
 	// one with the same action and actor, and applies it to the next
 	// authorization. A failure leaves both the tree and the registry unchanged.

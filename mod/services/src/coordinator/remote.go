@@ -11,23 +11,25 @@ import (
 type Contribution struct {
 	st          *Stream
 	member      *astral.Identity
-	unresolved  map[string]*evaluation   // initial evaluation per service, until the member's outcome
-	contributed map[offeringKey]struct{} // offerings this member contributed
-	stop        func()                   // stops the carry; nil before it starts
-	ended       bool                     // the member left or the stream closed
+	unresolved  map[string]*evaluation // initial evaluation per service, until the member's outcome
+	contributed map[offeringKey]bool   // offerings this member contributed, with the visibility tag each arrived with
+	stale       map[offeringKey]bool   // after a restart: contributed offerings the member has not sent again; nil is none
+	stop        func()                 // stops the carry; nil before it starts
+	ended       bool                   // the member left, the stream closed, or a restart replaced it
 }
 
 func newContribution(st *Stream, member *astral.Identity) *Contribution {
-	return &Contribution{st: st, member: member, unresolved: map[string]*evaluation{}, contributed: map[offeringKey]struct{}{}}
+	return &Contribution{st: st, member: member, unresolved: map[string]*evaluation{}, contributed: map[offeringKey]bool{}}
 }
 
 // Member is the swarm member this contribution comes from.
 func (r *Contribution) Member() *astral.Identity { return r.member }
 
-// Update applies one view from the member. A view the caller may not see,
-// as the node decided from the member's visibility tag and the caller's
-// permits, never reaches the caller and removes a view shown before.
-func (r *Contribution) Update(u *services.Update, visible bool) {
+// Update applies one view from the member, which tagged its provider open or
+// private. A view the caller may not see, as the node decided from that tag
+// and the caller's permits, never reaches the caller and removes a view shown
+// before.
+func (r *Contribution) Update(u *services.Update, open, visible bool) {
 	c := r.st.c
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -38,6 +40,7 @@ func (r *Contribution) Update(u *services.Update, visible bool) {
 		return
 	}
 	k := keyOf(u.ProviderID, string(u.Name))
+	delete(r.stale, k)
 	if !visible {
 		if _, ours := r.contributed[k]; ours {
 			delete(r.contributed, k)
@@ -45,7 +48,7 @@ func (r *Contribution) Update(u *services.Update, visible bool) {
 		}
 		return
 	}
-	r.contributed[k] = struct{}{}
+	r.contributed[k] = open
 	r.st.offer(k, u)
 }
 
@@ -66,6 +69,7 @@ func (r *Contribution) Remove(keys []*services.OfferingKey) {
 			continue
 		}
 		delete(r.contributed, k)
+		delete(r.stale, k)
 		// why: the cause names the hop this node saw, so the member's own
 		// cause is not forwarded.
 		r.st.retract(k, services.CauseMemberRemoved)
@@ -102,6 +106,7 @@ func (r *Contribution) Initial(incomplete []string) {
 			o.end()
 		}
 	}
+	r.sweepStaleLocked()
 }
 
 // Lost records that the member's contribution ended: unresolved initial work
@@ -129,7 +134,8 @@ func (r *Contribution) lostLocked(cause services.RemovalCause) {
 	for k := range r.contributed {
 		r.st.retract(k, cause)
 	}
-	r.contributed = map[offeringKey]struct{}{}
+	r.contributed = map[offeringKey]bool{}
+	r.stale = nil
 	wake(r.st.wake)
 }
 

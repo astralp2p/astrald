@@ -62,6 +62,10 @@ type Module struct {
 	// unset or any other mode selects refuse-all for grant requests.
 	// GetRegisterAppPolicy and GetGrantRequestPolicy read it on every decision.
 	policy policyConfig
+
+	// onGrantsChanged holds the OnGrantsChanged callbacks.
+	onGrantsChangedMu sync.Mutex
+	onGrantsChanged   []func(*astral.Identity)
 }
 
 func (mod *Module) Run(ctx *astral.Context) error {

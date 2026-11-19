@@ -78,10 +78,11 @@ func (t *fakeTransport) Send(a *services.Ask) error { t.asks <- a; return nil }
 func (t *fakeTransport) Close()                     { t.once.Do(func() { close(t.closed) }) }
 
 type event struct {
-	kind string // "update", "removed", "boundary"
+	kind string // "update", "removed", "not_granted", "boundary"
 	u    *services.Update
 	r    *services.Removed
 	inc  *services.Incomplete
+	ng   *services.NotGranted
 
 	tagged bool // written as a services.tagged_update
 	open   bool // with tagged: the tag
@@ -107,6 +108,9 @@ func (s *fakeSink) Update(u *services.Update) error   { return s.put(event{kind:
 func (s *fakeSink) Removed(r *services.Removed) error { return s.put(event{kind: "removed", r: r}) }
 func (s *fakeSink) TaggedUpdate(t *services.TaggedUpdate) error {
 	return s.put(event{kind: "update", u: t.Update, tagged: true, open: bool(t.Open)})
+}
+func (s *fakeSink) NotGranted(ng *services.NotGranted) error {
+	return s.put(event{kind: "not_granted", ng: ng})
 }
 func (s *fakeSink) Boundary(inc *services.Incomplete) error {
 	return s.put(event{kind: "boundary", inc: inc})

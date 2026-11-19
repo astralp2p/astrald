@@ -32,6 +32,7 @@ func (mod *Module) OpAdvertise(ctx *astral.Context, q *routing.IncomingQuery, ar
 		return ch.Send(astral.NewErrOriginNotAllowed(q.Origin()))
 	}
 
+	changes := mod.authority.changeCount()
 	// note: ServeApps authorizes advertising the caller itself, never another
 	// identity.
 	if !mod.Auth.Authorize(ctx, &auth.ServeAppsAction{Action: auth.NewAction(q.Caller())}) {
@@ -59,6 +60,13 @@ func (mod *Module) OpAdvertise(ctx *astral.Context, q *routing.IncomingQuery, ar
 		return ch.Send(astral.Err(err))
 	}
 	defer binding.Close()
+	mod.authority.addBinding(binding)
+	defer mod.authority.removeBinding(binding)
+	// why: a change scheduled between the check and registration found no
+	// binding to re-check.
+	if mod.authority.changeCount() != changes {
+		mod.authority.schedule(id)
+	}
 
 	err = ch.Send(&astral.Ack{})
 	close(transport.ready)
