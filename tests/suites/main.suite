@@ -80,6 +80,8 @@ expel-node
 basic-strategy-excess-link-pruning
 basic-strategy-stalled-endpoint-released
 basic-strategy-stalled-negotiation
+basic-strategy-dead-rows
+basic-strategy-gw-cycle
 link-session-migrate
 link-session-migrate-serving-side
 expel-during-transfer

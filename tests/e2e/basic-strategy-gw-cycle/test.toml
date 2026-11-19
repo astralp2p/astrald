@@ -1,0 +1,4 @@
+nodes   = ["node1"]
+after   = "bootstrap-user-software-key"
+timeout = 240
+facts   = ["gw_cycle"]
