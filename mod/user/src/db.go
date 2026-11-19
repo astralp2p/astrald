@@ -170,6 +170,7 @@ func (db *DB) ExpelledSubjects(issuer *astral.Identity) (subjects []*astral.Iden
 }
 
 // Expulsions rebuilds the signed bans issued by issuer from their stored columns.
+// A row whose signature does not decode is skipped.
 func (db *DB) Expulsions(issuer *astral.Identity) (list []*user.SignedExpulsion, err error) {
 	var rows []dbExpulsion
 	err = db.Where("issuer_id = ?", issuer).Find(&rows).Error
@@ -178,19 +179,40 @@ func (db *DB) Expulsions(issuer *astral.Identity) (list []*user.SignedExpulsion,
 	}
 
 	for _, row := range rows {
-		sig, decodeErr := astral.DecodeAs[*crypto.Signature](row.IssuerSig)
+		signed, decodeErr := row.signed()
 		if decodeErr != nil {
 			continue
 		}
-
-		list = append(list, &user.SignedExpulsion{
-			Expulsion: &user.Expulsion{
-				Issuer:     row.IssuerID,
-				Subject:    row.SubjectID,
-				ExpelledAt: astral.Time(row.ExpelledAt),
-			},
-			IssuerSig: sig,
-		})
+		list = append(list, signed)
 	}
 	return
+}
+
+// ExpulsionFor rebuilds the ban issuer issued on subject. It returns
+// gorm.ErrRecordNotFound when issuer has not banned subject.
+func (db *DB) ExpulsionFor(issuer, subject *astral.Identity) (*user.SignedExpulsion, error) {
+	var row dbExpulsion
+	err := db.Where("issuer_id = ? AND subject_id = ?", issuer, subject).First(&row).Error
+	if err != nil {
+		return nil, err
+	}
+
+	return row.signed()
+}
+
+// signed rebuilds the SignedExpulsion the row stores.
+func (row dbExpulsion) signed() (*user.SignedExpulsion, error) {
+	sig, err := astral.DecodeAs[*crypto.Signature](row.IssuerSig)
+	if err != nil {
+		return nil, err
+	}
+
+	return &user.SignedExpulsion{
+		Expulsion: &user.Expulsion{
+			Issuer:     row.IssuerID,
+			Subject:    row.SubjectID,
+			ExpelledAt: astral.Time(row.ExpelledAt),
+		},
+		IssuerSig: sig,
+	}, nil
 }

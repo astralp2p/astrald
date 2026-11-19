@@ -1,6 +1,8 @@
 package user
 
 import (
+	"time"
+
 	"github.com/astralp2p/astral-go/api/auth"
 	"github.com/astralp2p/astral-go/api/tree"
 	"github.com/astralp2p/astral-go/astral"
@@ -20,6 +22,8 @@ type Config struct {
 type FileConfig struct {
 	// Policies selects the admission policies the user module applies.
 	Policies Policies `yaml:"policies,omitempty"`
+	// ReconcileInterval is the period of the expulsion sweep; see runReconcile.
+	ReconcileInterval time.Duration `yaml:"reconcile_interval,omitempty"`
 }
 
 // Policies holds the config value of each user admission policy. A stored
@@ -36,4 +40,5 @@ var defaultFileConfig = FileConfig{
 		SwarmInvite:    policyconf.Setting{Mode: policyconf.RejectAll},
 		ContractAccept: policyconf.Setting{Mode: policyconf.RejectAll},
 	},
+	ReconcileInterval: defaultReconcileInterval,
 }

@@ -1,0 +1,28 @@
+nodes      = ["node1", "node2", "node3", "node4", "node5", "node6", "node7", "node8", "node9", "node10"]
+timeout    = 300
+after      = "adopt-node"
+destroys   = true
+facts      = ["bans", "link_events", "sweep"]
+
+# why: the sweep runs once an hour by default; a short period lets several
+# sweeps fall inside the test
+[config.node1.user]
+reconcile_interval = "10s"
+[config.node2.user]
+reconcile_interval = "10s"
+[config.node3.user]
+reconcile_interval = "10s"
+[config.node4.user]
+reconcile_interval = "10s"
+[config.node5.user]
+reconcile_interval = "10s"
+[config.node6.user]
+reconcile_interval = "10s"
+[config.node7.user]
+reconcile_interval = "10s"
+[config.node8.user]
+reconcile_interval = "10s"
+[config.node9.user]
+reconcile_interval = "10s"
+[config.node10.user]
+reconcile_interval = "10s"

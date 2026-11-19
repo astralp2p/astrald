@@ -2,6 +2,7 @@ package user
 
 import (
 	"bytes"
+	"errors"
 	"testing"
 	"time"
 
@@ -136,5 +137,33 @@ func TestExpelledSubjects(t *testing.T) {
 	}
 	if len(other) != 0 {
 		t.Errorf("expected no bans for unrelated issuer, got %d", len(other))
+	}
+}
+
+// TestExpulsionFor finds the ban on its (issuer, subject) pair alone.
+func TestExpulsionFor(t *testing.T) {
+	db := testDB(t)
+	issuer, subject := astral.GenerateIdentity(), astral.GenerateIdentity()
+	orig := sampleSigned(issuer, subject)
+	if err := db.StoreExpulsion(orig); err != nil {
+		t.Fatalf("store: %v", err)
+	}
+
+	got, err := db.ExpulsionFor(issuer, subject)
+	if err != nil {
+		t.Fatalf("ExpulsionFor: %v", err)
+	}
+	if !got.Issuer.IsEqual(issuer) || !got.Subject.IsEqual(subject) {
+		t.Fatalf("got the ban of %v on %v; want %v on %v", got.Issuer, got.Subject, issuer, subject)
+	}
+	if !bytes.Equal(got.SignableHash(), orig.SignableHash()) {
+		t.Fatal("the rebuilt ban does not verify against the stored signature")
+	}
+
+	if _, err := db.ExpulsionFor(issuer, astral.GenerateIdentity()); !errors.Is(err, gorm.ErrRecordNotFound) {
+		t.Fatalf("another subject: err %v; want gorm.ErrRecordNotFound", err)
+	}
+	if _, err := db.ExpulsionFor(astral.GenerateIdentity(), subject); !errors.Is(err, gorm.ErrRecordNotFound) {
+		t.Fatalf("another issuer: err %v; want gorm.ErrRecordNotFound", err)
 	}
 }

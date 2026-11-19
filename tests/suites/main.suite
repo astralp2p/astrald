@@ -102,6 +102,8 @@ relay-contract-race
 expel-propagation
 expel-cross-traffic
 expel-survives-restart
+expel-sweep-redelivers
+membership-resync-volume
 swarm-member-restart
 link-self-heal
 link-idle-keepalive

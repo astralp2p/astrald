@@ -17,9 +17,10 @@ import (
 var _ objects.Receiver = &Module{}
 
 // ReceiveObject handles pushed objects: indexes a signed node or relay-for contract,
-// stores and applies a signed expulsion, schedules sibling sync on a local LinkCreatedEvent,
-// contacts a peer of a local nearby PeerSeen, and wakes the link task of a sibling
-// named by a local EndpointsUpdatedEvent.
+// stores and applies a signed expulsion, syncs with the peer of a local
+// LinkCreatedEvent (a sibling sync with a member, the expulsions with a banned
+// subject), contacts a peer of a local nearby PeerSeen, and wakes the link task
+// of a sibling named by a local EndpointsUpdatedEvent.
 // Every object is checked before any effect; a rejected object is not accepted.
 func (mod *Module) ReceiveObject(drop objects.Drop) (err error) {
 	switch o := drop.Object().(type) {
@@ -41,8 +42,17 @@ func (mod *Module) ReceiveObject(drop objects.Drop) (err error) {
 
 		switch e := o.Data.(type) {
 		case *nodes.LinkCreatedEvent:
-			if e.LinkCount == 1 && slices.ContainsFunc(mod.LocalSwarm(), e.RemoteIdentity.IsEqual) {
-				mod.Scheduler.Schedule(mod.NewSyncNodesTask(e.RemoteIdentity))
+			// note: interim re-sync; see reconcile_task.go.
+			peer := e.RemoteIdentity
+			switch {
+			case mod.banOn(peer) != nil:
+				// why: a banned subject is not in LocalSwarm, and its own ban is the only
+				// thing it still needs from this node.
+				go mod.reconcileWith(mod.ctx, peer)
+			case slices.ContainsFunc(mod.LocalSwarm(), peer.IsEqual):
+				// why: every link, not only the first, so a member that gains a link while
+				// another one stays up still syncs.
+				mod.Scheduler.Schedule(mod.NewSyncNodesTask(peer))
 				drop.Accept(false)
 			}
 		case *nearby.PeerSeen:
