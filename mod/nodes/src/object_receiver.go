@@ -38,7 +38,9 @@ func (mod *Module) ReceiveObject(drop objects.Drop) error {
 
 		switch e := object.Data.(type) {
 		case *ip.EventNetworkAddressChanged:
-			mod.scheduleEndpointsAnnounce()
+			if changesAdvertisedAddress(e) {
+				mod.scheduleEndpointsAnnounce()
+			}
 		case *nodes.LinkPressureEvent:
 			mod.log.Log("link pressure detected on %v with %v", e.LinkID, e.RemoteIdentity)
 

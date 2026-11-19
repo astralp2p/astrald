@@ -189,10 +189,14 @@ func eventually(t *testing.T, what string, cond func() bool) {
 }
 
 func addressChanged(source *astral.Identity) *events.Event {
+	return addressChangedTo(source, "203.0.113.7")
+}
+
+func addressChangedTo(source *astral.Identity, added string) *events.Event {
 	return &events.Event{
 		ID:       astral.NewNonce(),
 		SourceID: source,
-		Data:     &ip.EventNetworkAddressChanged{Added: []ip.IP{tcpEndpoint("203.0.113.7").IP}},
+		Data:     &ip.EventNetworkAddressChanged{Added: []ip.IP{tcpEndpoint(added).IP}},
 	}
 }
 
@@ -205,17 +209,21 @@ func endpointsWithTTL(addrs ...string) (list []*nodes.EndpointWithTTL) {
 
 // TestAnnounceEndpointsDebounced (criterion 1): an address change of this node
 // pushes one EndpointsChangedMessage about this node to the siblings after the
-// wait; three changes within the wait push one; a forged event pushes none.
+// wait; three changes within the wait push one; a forged event and an IPv6
+// link-local change push none.
 func TestAnnounceEndpointsDebounced(t *testing.T) {
 	cases := []struct {
 		name    string
 		changes int
 		local   bool
+		added   string
 		pushes  int
 	}{
-		{"one change", 1, true, 1},
-		{"three changes within the wait", 3, true, 1},
-		{"a change event from another node", 1, false, 0},
+		{"one change", 1, true, "203.0.113.7", 1},
+		{"three changes within the wait", 3, true, "203.0.113.7", 1},
+		{"a change event from another node", 1, false, "203.0.113.7", 0},
+		{"an IPv6 link-local change", 1, true, "fe80::1", 0},
+		{"an IPv4 link-local change", 1, true, "169.254.10.1", 1},
 	}
 
 	for _, tc := range cases {
@@ -227,7 +235,7 @@ func TestAnnounceEndpointsDebounced(t *testing.T) {
 			}
 
 			for i := 0; i < tc.changes; i++ {
-				drop := &recordingDrop{sender: sender, object: addressChanged(f.self)}
+				drop := &recordingDrop{sender: sender, object: addressChangedTo(f.self, tc.added)}
 				if err := f.mod.ReceiveObject(drop); err != nil {
 					t.Fatalf("ReceiveObject: %v", err)
 				}

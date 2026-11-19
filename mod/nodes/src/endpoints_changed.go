@@ -1,9 +1,11 @@
 package nodes
 
 import (
+	"net"
 	"slices"
 	"time"
 
+	"github.com/astralp2p/astral-go/api/ip"
 	"github.com/astralp2p/astral-go/api/nodes"
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astrald/mod/objects"
@@ -18,6 +20,15 @@ const (
 	// endpointsForwardTimeout bounds one forward push, as user.PushToSiblings bounds its pushes.
 	endpointsForwardTimeout = 15 * time.Second
 )
+
+// changesAdvertisedAddress reports whether e adds or removes an address other
+// than an IPv6 link-local one.
+// why: mod/ip never advertises an IPv6 link-local address, and each container
+// start adds a veth fe80::, so such a change would only cost siblings a pull.
+func changesAdvertisedAddress(e *ip.EventNetworkAddressChanged) bool {
+	advertised := func(a ip.IP) bool { return !(net.IP(a).IsLinkLocalUnicast() && net.IP(a).To4() == nil) }
+	return slices.ContainsFunc(e.Added, advertised) || slices.ContainsFunc(e.Removed, advertised)
+}
 
 // scheduleEndpointsAnnounce starts the announcement wait unless one is running.
 // why: a change during the wait joins it instead of restarting it, so a flapping
