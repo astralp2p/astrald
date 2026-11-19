@@ -171,3 +171,25 @@ func TestIsRemote(t *testing.T) {
 		}
 	}
 }
+
+// TestRoutingStatus pins the HTTP status of each routing outcome: a dead next
+// hop is not "not found", and a policy block is not a server error.
+func TestRoutingStatus(t *testing.T) {
+	for _, tc := range []struct {
+		err  error
+		want int
+	}{
+		{astral.NewErrRouteNotFound(), http.StatusNotFound},
+		{astral.NewErrRejected(astral.CodeUnavailable), http.StatusBadGateway},
+		{astral.NewErrRejected(astral.CodeTimeout), http.StatusGatewayTimeout},
+		{context.DeadlineExceeded, http.StatusGatewayTimeout},
+		{astral.NewErrRejected(1), http.StatusMethodNotAllowed},
+		{astral.NewErrRejected(9), http.StatusMethodNotAllowed},
+		{astral.ErrTargetNotAllowed, http.StatusForbidden},
+		{context.Canceled, http.StatusInternalServerError},
+	} {
+		if got := routingStatus(tc.err); got != tc.want {
+			t.Errorf("routingStatus(%v) = %v, want %v", tc.err, got, tc.want)
+		}
+	}
+}

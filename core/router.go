@@ -1,6 +1,7 @@
 package core
 
 import (
+	"errors"
 	"io"
 	"time"
 
@@ -8,6 +9,7 @@ import (
 	"github.com/astralp2p/astral-go/lib/query"
 	"github.com/astralp2p/astral-go/lib/routing"
 	"github.com/astralp2p/astral-go/sig"
+	"github.com/astralp2p/astrald/mod/nodes/frames"
 )
 
 var _ astral.Router = &Router{}
@@ -22,7 +24,7 @@ type Router struct {
 	preprocessors sig.Set[QueryPreprocessor]
 }
 
-// QueryPreprocessor inspects and mutates each query before routing; returning an error or blocking rejects it.
+// QueryPreprocessor inspects and mutates each query before routing; returning an error blocks it.
 type QueryPreprocessor interface {
 	PreprocessQuery(*QueryModifier) error
 }
@@ -40,7 +42,7 @@ func (r *Router) AddQueryPreprocessor(f QueryPreprocessor) error {
 	return r.preprocessors.Add(f)
 }
 
-// RouteQuery defaults missing caller/target to this node, runs preprocessors (any block yields RouteNotFound), then routes and logs the outcome.
+// RouteQuery defaults missing caller/target to this node, runs preprocessors (a preprocessor error is returned as is), then routes and logs the outcome.
 func (r *Router) RouteQuery(ctx *astral.Context, q *astral.InFlightQuery, w io.WriteCloser) (target io.WriteCloser, err error) {
 	if q.Caller == nil {
 		q.Caller = r.node.identity
@@ -58,12 +60,9 @@ func (r *Router) RouteQuery(ctx *astral.Context, q *astral.InFlightQuery, w io.W
 		err = p.PreprocessQuery(qm)
 		if err != nil {
 			r.node.log.Logv(2, "%v query blocked by %v: %v", loggedQuery(q.Query), p, err)
-			return query.RouteNotFound()
-		}
-
-		// check if the query was blocked
-		if err := qm.blocked.Get(); err != nil {
-			return query.RouteNotFound()
+			// why the error as is: a policy block (astral.ErrTargetNotAllowed)
+			// is final, and the caller must not read it as a missing route.
+			return nil, err
 		}
 	}
 
@@ -76,6 +75,7 @@ func (r *Router) RouteQuery(ctx *astral.Context, q *astral.InFlightQuery, w io.W
 
 	var startedAt = time.Now()
 	target, err = r.routeQuery(ctx, q, w)
+	err = clampReservedCode(err)
 	var d = time.Since(startedAt).Round(1 * time.Microsecond)
 
 	// log routing results
@@ -111,4 +111,15 @@ func (r *Router) routeQuery(ctx *astral.Context, q *astral.InFlightQuery, src io
 	c.mu.Unlock()
 
 	return c.dst, nil
+}
+
+// clampReservedCode turns a target's own rejection with the link-private
+// "no route here" value into the generic refusal: that value is never a reject
+// code (astral-docs core-definitions/query.md).
+func clampReservedCode(err error) error {
+	var rejected *astral.ErrRejected
+	if errors.As(err, &rejected) && rejected.Code == frames.CodeNoRoute {
+		return astral.NewErrRejected(astral.DefaultRejectCode)
+	}
+	return err
 }

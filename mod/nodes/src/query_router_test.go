@@ -1,11 +1,13 @@
 package nodes
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io"
 	"testing"
 
+	"github.com/astralp2p/astral-go/api/objects"
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astral-go/lib/query"
 )
@@ -45,7 +47,7 @@ func (r *fakeRelay) RouteQuery(*astral.Context, *astral.InFlightQuery, io.WriteC
 }
 
 func (f *fakeRelays) route(relays []*astral.Identity) (io.WriteCloser, error) {
-	return (&relayedQuery{reach: f.reach}).route(relays)
+	return (&relayedQuery{ctx: astral.NewContext(nil), reach: f.reach}).route(relays)
 }
 
 func newRelays(n int) []*astral.Identity {
@@ -116,15 +118,15 @@ func TestAnAcceptingRelayWinsOverAnEarlierRejection(t *testing.T) {
 	assertAsked(t, f.asked, relays[:2])
 }
 
-// When no relay accepts, the first rejection answers with its own code, and
+// When no relay accepts, the first refusal answers with its own code, and
 // every relay was asked in order before it did.
-func TestTheFirstRejectionAnswersWhenNoRelayAccepts(t *testing.T) {
+func TestTheFirstRefusalAnswersWhenNoRelayAccepts(t *testing.T) {
 	relays := newRelays(4)
 	f := &fakeRelays{answers: map[*astral.Identity]error{
 		relays[0]: routeNotFound(),
 		relays[1]: rejectedWith(5),
 		relays[2]: errors.New("link closed"),
-		relays[3]: rejectedWith(7),
+		relays[3]: rejectedWith(9),
 	}}
 
 	_, err := f.route(relays)
@@ -133,12 +135,12 @@ func TestTheFirstRejectionAnswersWhenNoRelayAccepts(t *testing.T) {
 	assertAsked(t, f.asked, relays)
 }
 
-// A missing route is the answer only when no relay rejected.
-func TestNoRejectionAnswersAMissingRoute(t *testing.T) {
+// A missing route is the answer only when every relay answered no route here.
+func TestOnlyMissingRoutesAnswerAMissingRoute(t *testing.T) {
 	relays := newRelays(2)
 	f := &fakeRelays{answers: map[*astral.Identity]error{
 		relays[0]: routeNotFound(),
-		relays[1]: errors.New("link closed"),
+		relays[1]: routeNotFound(),
 	}}
 
 	_, err := f.route(relays)
@@ -150,44 +152,137 @@ func TestNoRejectionAnswersAMissingRoute(t *testing.T) {
 	assertRouteNotFound(t, err)
 }
 
-// A rejection with the generic code is a far node's missing route as well as
-// a refusal, so it counts as a missing route and never hides a later code.
-func TestTheGenericRejectionCountsAsAMissingRoute(t *testing.T) {
+// The generic code is a refusal: it outranks a missing route on either side
+// of it, and the first refusal wins over a later one.
+func TestTheGenericRejectionIsARefusal(t *testing.T) {
 	relays := newRelays(3)
 	f := &fakeRelays{answers: map[*astral.Identity]error{
-		relays[0]: rejectedWith(astral.DefaultRejectCode),
-		relays[1]: routeNotFound(),
+		relays[0]: routeNotFound(),
+		relays[1]: rejectedWith(astral.DefaultRejectCode),
+		relays[2]: rejectedWith(5),
 	}}
 
 	_, err := f.route(relays[:2])
-	assertRouteNotFound(t, err)
+	assertRejectedWith(t, err, astral.DefaultRejectCode)
 
-	f.answers[relays[2]] = rejectedWith(5)
 	f.asked = nil
-
 	_, err = f.route(relays)
-	assertRejectedWith(t, err, 5)
+	assertRejectedWith(t, err, astral.DefaultRejectCode)
 	assertAsked(t, f.asked, relays)
 }
 
-// A relay that is not reached, or that the caller's proof does not reach, is
-// never asked the query, and whatever failed answers a missing route: a proof
-// push the relay rejected is not the relay's rejection of the query.
-func TestAnUnreachedRelayNeverRejects(t *testing.T) {
-	relays := newRelays(4)
+// A relay that is not reached, or that the caller's proof does not get
+// through to, is never asked the query and answers unavailable: a later
+// attempt may reach it.
+func TestAnUnreachedRelayIsUnavailable(t *testing.T) {
+	relays := newRelays(3)
 	f := &fakeRelays{unreached: map[*astral.Identity]error{
 		relays[0]: fmt.Errorf("push failed: %w", rejectedWith(5)),
 		relays[1]: errors.New("link not produced"),
 		relays[2]: rejectedWith(9),
 	}}
 
-	_, err := f.route(relays[:3])
-	assertRouteNotFound(t, err)
+	_, err := f.route(relays)
+	assertRejectedWith(t, err, astral.CodeUnavailable)
 	assertAsked(t, f.asked, nil)
+}
 
-	f.answers = map[*astral.Identity]error{relays[3]: rejectedWith(7)}
+// A relay that receives the caller's proof and refuses it refuses the caller:
+// the answer is final, and it outranks an unreachable relay.
+func TestARefusedProofIsARefusal(t *testing.T) {
+	relays := newRelays(2)
+	f := &fakeRelays{unreached: map[*astral.Identity]error{
+		relays[0]: errors.New("link not produced"),
+		relays[1]: fmt.Errorf("push failed: %w", objects.ErrPushRejected),
+	}}
 
+	_, err := f.route(relays)
+	assertRejectedWith(t, err, astral.DefaultRejectCode)
+	assertAsked(t, f.asked, nil)
+}
+
+// Unavailable outranks a missing route; a refusal outranks unavailable,
+// whichever comes first.
+func TestUnavailableRanksBetweenARefusalAndAMissingRoute(t *testing.T) {
+	relays := newRelays(2)
+
+	// [reach error, no route] -> 7
+	f := &fakeRelays{
+		unreached: map[*astral.Identity]error{relays[0]: errors.New("link not produced")},
+		answers:   map[*astral.Identity]error{relays[1]: routeNotFound()},
+	}
+	_, err := f.route(relays)
+	assertRejectedWith(t, err, astral.CodeUnavailable)
+
+	// [no route, a relay answering 7] -> 7
+	f = &fakeRelays{answers: map[*astral.Identity]error{
+		relays[0]: routeNotFound(),
+		relays[1]: rejectedWith(astral.CodeUnavailable),
+	}}
 	_, err = f.route(relays)
-	assertRejectedWith(t, err, 7)
-	assertAsked(t, f.asked, relays[3:])
+	assertRejectedWith(t, err, astral.CodeUnavailable)
+
+	// [refused 1, reach error] -> 1
+	f = &fakeRelays{
+		answers:   map[*astral.Identity]error{relays[0]: rejectedWith(astral.DefaultRejectCode)},
+		unreached: map[*astral.Identity]error{relays[1]: errors.New("link not produced")},
+	}
+	_, err = f.route(relays)
+	assertRejectedWith(t, err, astral.DefaultRejectCode)
+
+	// [reach error, refused 1] -> 1
+	f = &fakeRelays{
+		unreached: map[*astral.Identity]error{relays[0]: errors.New("link not produced")},
+		answers:   map[*astral.Identity]error{relays[1]: rejectedWith(astral.DefaultRejectCode)},
+	}
+	_, err = f.route(relays)
+	assertRejectedWith(t, err, astral.DefaultRejectCode)
+}
+
+// The target listed as its own relay is skipped as a missing route, not as an
+// unavailable relay.
+func TestTheTargetAsItsOwnRelayIsAMissingRoute(t *testing.T) {
+	relays := newRelays(1)
+	f := &fakeRelays{unreached: map[*astral.Identity]error{relays[0]: errTargetIsRelay}}
+
+	_, err := f.route(relays)
+	assertRouteNotFound(t, err)
+}
+
+// A routing context that ends stops the loop with its own error.
+func TestAnEndedContextStopsTheRelayLoop(t *testing.T) {
+	relays := newRelays(2)
+	ctx, cancel := astral.NewContext(nil).WithCancel()
+	f := &fakeRelays{answers: map[*astral.Identity]error{relays[0]: routeNotFound()}}
+	cancel()
+
+	_, err := (&relayedQuery{ctx: ctx, reach: f.reach}).route(relays)
+
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("routing answered %v, want context.Canceled", err)
+	}
+	assertAsked(t, f.asked, relays[:1])
+}
+
+// A query whose routing context ended before any route answers that end, not
+// a missing route or unavailable.
+func TestUnrelayedAnswersTheEndedContext(t *testing.T) {
+	canceled, cancel := astral.NewContext(nil).WithCancel()
+	cancel()
+	expired, cancelExpired := astral.NewContext(nil).WithTimeout(0)
+	defer cancelExpired()
+
+	for _, tc := range []struct {
+		ctx  *astral.Context
+		want error
+	}{
+		{canceled, context.Canceled},
+		{expired, context.DeadlineExceeded},
+	} {
+		// note: a Module without a DB fails the test if unrelayed reaches it.
+		_, err := (&Module{}).unrelayed(tc.ctx, astral.GenerateIdentity())
+		if !errors.Is(err, tc.want) {
+			t.Errorf("unrelayed err = %v, want %v", err, tc.want)
+		}
+	}
 }

@@ -54,8 +54,18 @@ func (m *Mux) createSession(nonce astral.Nonce, remoteIdentity, sourceIdentity *
 	return session, true
 }
 
+// closeAllSessions closes every session of a link that went down. An outbound
+// session still waiting for its Response answers unavailable at once instead
+// of waiting out its routing deadline.
+//
+// why swapState: handleResponse settles a routing session with the same swap,
+// so a Response racing the teardown and the teardown never both send on
+// routingResult.
 func (m *Mux) closeAllSessions() {
 	for _, s := range m.sessions.Clone() {
+		if s.Outbound && s.swapState(stateRouting, stateClosed) {
+			s.routingResult <- astral.CodeUnavailable
+		}
 		s.Close()
 	}
 }

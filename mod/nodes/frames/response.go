@@ -15,6 +15,11 @@ const (
 	CodeRejected
 )
 
+// CodeNoRoute is the link-private answer "no route here": the receiving node
+// found no route for the query. It is never a reject code; see astral-docs
+// topics/link-mux.md, Response semantics.
+const CodeNoRoute = 255
+
 type Response struct {
 	Nonce   astral.Nonce
 	ErrCode astral.Uint8

@@ -1,0 +1,40 @@
+# route-outcomes
+
+An app on node1 queries targets that fail for different causes, and each query
+ends with the answer of its own cause, fast, and with the retry hint the
+cause calls for.
+
+- **env** node · **start** `two-nodes` · **saves** —
+- **driver** `script.py` — runs `driver/` (Go, this repository's astral-go).
+  node1 registers a caller app, and the driver waits until node2 holds its relay
+  contract (`apphost.hosts` on node2 names node1), so node2 admits relays for
+  it. The caller then queries, recording the outcome, the time node1 took to
+  answer the route request (the apphost session is connected and authenticated
+  before the clock starts) and `apphost.IsRetryable`:
+  - `unknown_identity`: a freshly generated identity no node knows;
+  - `no_such_op`: `node2:no.such.op` over the live link;
+  - `refused`: `node2:shell.shell`, which node2 refuses for the app;
+  - `filtered`: an unknown identity under the `linked` directory filter;
+  - `handler_gone`: a provider app on node2 advertises
+    `route-outcomes-echo` on its own session and serves `echo`; once a swarm
+    discovery from node1 lists it and a call is accepted (`provider_served`),
+    the provider's handler ends while its advertisement stays, and the
+    caller queries it again. Discovery still lists the provider afterwards.
+  - `relay_refused`: node2 takes back the caller's relay contract
+    (`apphost.withdraw_relay`), and the caller queries the provider again;
+    node2, the provider's host and the caller's relay, refuses the relay.
+- **oracle** `verify.py` — `unknown_identity`, `no_such_op` and `handler_gone`
+  read `route_not_found`, `refused` and `relay_refused` read rejection code 1,
+  and `filtered` reads `target_not_allowed`, each fast and not retryable.
+  Fast is under 500 ms: an idle node answers in under 15 ms, a loaded shared
+  world was measured at up to 170 ms, and the routing deadline is 60 s.
+
+`no_such_op` and `handler_gone` cross the link: node2 finds no route and
+answers the link's "no route here" value (`mod/nodes/src/mux.go`, `linkCode`),
+which node1 reads as a missing route. A refusal crosses as code 1, and
+node1's relay loop answers a relay's code 1 as the refusal it is
+(`mod/nodes/src/query_router.go`, `route`). `filtered`
+never leaves node1: `core.Router` returns the directory filter's
+`ErrTargetNotAllowed` as it is (`core/router.go`).
+
+Spec: astral-docs `core-definitions/query.md`, Routing outcomes.

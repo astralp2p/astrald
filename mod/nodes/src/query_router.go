@@ -6,6 +6,7 @@ import (
 	"io"
 	"time"
 
+	"github.com/astralp2p/astral-go/api/objects"
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astral-go/lib/query"
 	"github.com/astralp2p/astrald/mod/nodes"
@@ -35,7 +36,7 @@ func (mod *Module) RouteQuery(ctx *astral.Context, q *astral.InFlightQuery, w io
 	// todo: there is error printed out  when calling identity that we cannot link with (e.g. other'session node app)
 	select {
 	case <-ctx.Done():
-		return query.RouteNotFound()
+		return nil, ctx.Err()
 	case result := <-mod.linkPool.RetrieveLink(retrieveCtx, q.Target, WithStrategies(nodes.StrategyBasic, nodes.StrategyTor)):
 		if result.Err != nil {
 			mod.log.Error("retrieve link failed: %v", result.Err)
@@ -46,21 +47,37 @@ func (mod *Module) RouteQuery(ctx *astral.Context, q *astral.InFlightQuery, w io
 	}
 
 	// try relays
-	relayValue, ok := q.Extra.Get(nodes.ExtraRelayVia)
-	if !ok {
-		return query.RouteNotFound()
-	}
-
-	relays, ok := relayValue.([]*astral.Identity)
-	if !ok {
-		return query.RouteNotFound()
+	relays, _ := q.Extra.Get(nodes.ExtraRelayVia)
+	relayList, _ := relays.([]*astral.Identity)
+	if len(relayList) == 0 {
+		return mod.unrelayed(ctx, q.Target)
 	}
 
 	relayed := &relayedQuery{ctx: ctx, q: q, w: w, reach: func(relayID *astral.Identity) (astral.Router, error) {
 		return mod.reachRelay(ctx, retrieveCtx, q, relayID)
 	}}
 
-	return relayed.route(relays)
+	return relayed.route(relayList)
+}
+
+// unrelayed answers a query that no link and no relay reaches: the caller's
+// cancel or deadline when the routing context ended, unavailable when the
+// target is a node this node holds an endpoint for, since a later attempt may
+// link to it, and a missing route otherwise.
+//
+// why the context first: a link retrieval that failed because the caller's
+// context ended answers that end, not the retrieval's failure.
+//
+// why not for an identity without endpoints: a typo in a node identity, or an
+// app this node holds no relay contract for, stays a missing route.
+func (mod *Module) unrelayed(ctx *astral.Context, target *astral.Identity) (io.WriteCloser, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	if mod.db.HasEndpoints(target) {
+		return nil, unavailable()
+	}
+	return query.RouteNotFound()
 }
 
 // reachRelay returns a link to relayID for q, after pushing the caller's proof
@@ -68,7 +85,7 @@ func (mod *Module) RouteQuery(ctx *astral.Context, q *astral.InFlightQuery, w io
 func (mod *Module) reachRelay(ctx, retrieveCtx *astral.Context, q *astral.InFlightQuery, relayID *astral.Identity) (astral.Router, error) {
 	// never use the target as a relay to itself
 	if relayID.IsEqual(q.Target) {
-		return nil, errors.New("the target is not its own relay")
+		return nil, errTargetIsRelay
 	}
 
 	link := mod.linkPool.SelectLinkWith(relayID)
@@ -89,6 +106,9 @@ func (mod *Module) reachRelay(ctx, retrieveCtx *astral.Context, q *astral.InFlig
 	return link, nil
 }
 
+// errTargetIsRelay is reach's answer for a relay that is the target itself.
+var errTargetIsRelay = errors.New("the target is not its own relay")
+
 // relayedQuery is one query routed through the relays its Extra lists.
 type relayedQuery struct {
 	ctx   *astral.Context
@@ -97,51 +117,83 @@ type relayedQuery struct {
 	reach func(relayID *astral.Identity) (astral.Router, error)
 }
 
+// relayAnswers collects what the relays that did not accept answered.
+type relayAnswers struct {
+	refused     *astral.ErrRejected // the first refusal
+	unavailable bool                // a relay was unreachable or answered 7
+}
+
 // route asks each relay in order and answers the first that accepts. When none
-// accepts, it answers the first rejection that carries a code other than the
-// generic astral.DefaultRejectCode, and ErrRouteNotFound when no relay answered
-// one.
+// accepts, it answers the first refusal, else unavailable when a relay was
+// unavailable, else a missing route. See astral-docs topics/app-routing.md,
+// Resolving the host.
 //
-// why a rejection does not end the loop: it answers for one relay's path, and
-// a later relay may still accept.
+// why a refusal does not end the loop: it answers for one relay's path, and a
+// later relay may still accept.
 //
-// why a rejection outranks a missing route: its code tells the caller a refusal
-// from an absence, and a missing route tells nothing.
-//
-// why the generic code counts as a missing route: a node answers a query it
-// has no route for over a link with the generic code (Mux.handleInboundQuery),
-// so that code does not tell a refusal from an absence.
+// why a refusal outranks unavailable: a refusal is final, and a retry would
+// meet it again.
 func (r *relayedQuery) route(relays []*astral.Identity) (io.WriteCloser, error) {
-	var rejected *astral.ErrRejected
+	var answers relayAnswers
 
 	for _, relayID := range relays {
 		rw, err := r.ask(relayID)
 		if err == nil {
 			return rw, nil
 		}
-
-		var reject *astral.ErrRejected
-		if rejected == nil && errors.As(err, &reject) && reject.Code != astral.DefaultRejectCode {
-			rejected = reject
+		if r.ctx.Err() != nil {
+			return nil, r.ctx.Err()
 		}
+		answers.add(err)
 	}
 
-	if rejected != nil {
-		return nil, rejected
-	}
+	return answers.result()
+}
 
-	return query.RouteNotFound()
+// add records one relay's answer.
+func (a *relayAnswers) add(err error) {
+	var reject *astral.ErrRejected
+	switch {
+	case errors.Is(err, &astral.ErrRouteNotFound{}):
+	case errors.As(err, &reject) && reject.Code != astral.CodeUnavailable:
+		if a.refused == nil {
+			a.refused = reject
+		}
+	default:
+		a.unavailable = true
+	}
+}
+
+// result is the answer of a loop no relay accepted.
+func (a *relayAnswers) result() (io.WriteCloser, error) {
+	switch {
+	case a.refused != nil:
+		return nil, a.refused
+	case a.unavailable:
+		return nil, unavailable()
+	default:
+		return query.RouteNotFound()
+	}
 }
 
 // ask asks one relay the query.
 //
-// why a missing route whatever reach answered: a relay that reach did not
-// reach, or did not prove the caller to, was never asked the query, so no
-// rejection is its answer.
+// why a refused proof is a refusal: the relay received the caller's proof and
+// did not accept it (an expelled host, a caller it will not carry), and a
+// retry meets the same answer.
+//
+// why unavailable for any other reach failure: a relay that reach did not
+// reach, or could not deliver the proof to, was never asked the query, and a
+// later attempt may reach it.
 func (r *relayedQuery) ask(relayID *astral.Identity) (io.WriteCloser, error) {
 	relay, err := r.reach(relayID)
-	if err != nil {
+	switch {
+	case errors.Is(err, errTargetIsRelay):
 		return query.RouteNotFound()
+	case errors.Is(err, objects.ErrPushRejected):
+		return nil, astral.NewErrRejected(astral.DefaultRejectCode)
+	case err != nil:
+		return nil, unavailable()
 	}
 
 	return relay.RouteQuery(r.ctx, r.q, r.w)

@@ -1,0 +1,6 @@
+nodes      = ["node1", "node2"]
+timeout    = 300
+after      = "adopt-node"
+local_only = "freezes and kills node2's astrald process by its pid"
+stop       = ["node2"]
+facts      = ["dead_peer"]
