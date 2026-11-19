@@ -20,13 +20,14 @@ type WrappedConn struct {
 	*kcpgo.UDPSession
 	// udpConn is the socket Dial created for this session; nil for inbound
 	// sessions, whose socket belongs to the listener.
-	udpConn     *net.UDPConn
-	remote      exonet.Endpoint
-	local       exonet.Endpoint
-	outbound    bool
-	connected   atomic.Bool
-	dialTimeout time.Duration
-	keepalive   exonetmod.LinkKeepalive
+	udpConn  *net.UDPConn
+	remote   exonet.Endpoint
+	local    exonet.Endpoint
+	outbound bool
+	// answered turns true at the first successful Read, the first proof that
+	// the peer is alive.
+	answered  atomic.Bool
+	keepalive exonetmod.LinkKeepalive
 }
 
 // Outbound reports whether this connection was initiated locally.
@@ -50,33 +51,10 @@ func (c *WrappedConn) RemoteEndpoint() exonet.Endpoint {
 }
 
 // Read reads data from the KCP session.
-// Until the first successful I/O, a dial timeout is enforced.
+// The first successful Read clears the deadline WrapKCPConn set.
 func (c *WrappedConn) Read(p []byte) (int, error) {
-	if !c.connected.Load() {
-		_ = c.UDPSession.SetDeadline(time.Now().Add(c.dialTimeout))
-	}
-
 	n, err := c.UDPSession.Read(p)
-	if err == nil {
-		c.connected.Store(true)
-		// Clear deadline after first successful I/O
-		_ = c.UDPSession.SetDeadline(time.Time{})
-	}
-
-	return n, err
-}
-
-// Write writes data to the KCP session.
-// Until the first successful I/O, a dial timeout is enforced.
-func (c *WrappedConn) Write(p []byte) (int, error) {
-	if !c.connected.Load() {
-		_ = c.UDPSession.SetDeadline(time.Now().Add(c.dialTimeout))
-	}
-
-	n, err := c.UDPSession.Write(p)
-	if err == nil {
-		c.connected.Store(true)
-		// Clear deadline after first successful I/O
+	if err == nil && c.answered.CompareAndSwap(false, true) {
 		_ = c.UDPSession.SetDeadline(time.Time{})
 	}
 
@@ -95,7 +73,13 @@ func (c *WrappedConn) Close() error {
 	return err
 }
 
-// WrapKCPConn wraps a kcp-go UDPSession as an exonet.Conn.
+// WrapKCPConn wraps a kcp-go UDPSession as an exonet.Conn. Until the first
+// successful Read, a Read, or a Write that blocks, fails once dialTimeout has
+// passed since the wrap. A zero dialTimeout sets no deadline.
+//
+// why: kcp-go queues a Write with no peer behind the address, so only a Read
+// proves the peer is alive; without the deadline a handshake with a dead
+// address waits for the caller's context.
 func WrapKCPConn(
 	sess *kcpgo.UDPSession,
 	remote exonet.Endpoint,
@@ -103,11 +87,14 @@ func WrapKCPConn(
 	outbound bool,
 	dialTimeout time.Duration,
 ) *WrappedConn {
+	if dialTimeout > 0 {
+		_ = sess.SetDeadline(time.Now().Add(dialTimeout))
+	}
+
 	return &WrappedConn{
-		UDPSession:  sess,
-		remote:      remote,
-		local:       local,
-		outbound:    outbound,
-		dialTimeout: dialTimeout,
+		UDPSession: sess,
+		remote:     remote,
+		local:      local,
+		outbound:   outbound,
 	}
 }

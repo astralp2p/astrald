@@ -23,10 +23,10 @@ rows sit beside it.
 
 why the stranger bounds: a round that drops kcp rows answers at once (astrald
 `463a4fea`: 0.003 s), and a round that dials a kcp row with no bound of its
-own waits for the caller (30 s). A kcp dial is connectionless, and the kcp
-`dial_timeout` stops applying at the first successful write
-(`mod/kcp/src/conn.go`), so only basic's row budget ends the handshake
-(`mod/nodes/src/basic_link_strategy.go` `defaultRowBudgets`).
+own waits for the caller (30 s). A kcp dial is connectionless, so basic's
+row budget (`mod/nodes/src/basic_link_strategy.go` `defaultRowBudgets`, 5 s)
+and the kcp `dial_timeout` (`mod/kcp/src/config.go`, 5 s), which holds until
+the first frame the peer sends (`mod/kcp/src/conn.go`), end the handshake.
 
 why crowd measures: 10 dead rows fill basic's 8 workers, so the tcp row waits
 for a dead row's budget to end. Live, on a local world: beside 0.011 s,

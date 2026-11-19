@@ -86,6 +86,7 @@ basic-strategy-excess-link-pruning
 basic-strategy-stalled-endpoint-released
 basic-strategy-stalled-negotiation
 basic-strategy-dead-rows
+kcp-only-restart-relink
 basic-strategy-gw-cycle
 link-session-migrate
 link-session-migrate-serving-side
