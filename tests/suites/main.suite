@@ -108,3 +108,4 @@ concurrent-adoption
 app-node-restart-reconnect
 blueprint-survives-restart
 services-node-restart
+services-consumer-restart

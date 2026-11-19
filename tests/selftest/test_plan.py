@@ -329,6 +329,7 @@ class TestShippedPlans(Invariants, unittest.TestCase):
              ("local", "relay-pull-on-miss"),
              ("local", "route-outcomes-dead-peer"),
              ("local", "route-outcomes-expelled-host"),
+             ("local", "services-consumer-restart"),
              ("local", "services-node-restart"),
              ("local", "services-swarm-membership"),
              ("local", "expel-survives-restart"),
