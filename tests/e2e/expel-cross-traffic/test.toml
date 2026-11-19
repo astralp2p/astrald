@@ -1,0 +1,6 @@
+nodes    = ["node1", "node2", "node3"]
+timeout  = 300
+after    = "swarm-roster-sync"
+destroys = true
+host_listener = "serves the apps node1 and node3 dial: a pinger on each, a provider on node1"
+facts    = ["cross_traffic_expelled_id", "routing_probe", "cross_ban_log"]

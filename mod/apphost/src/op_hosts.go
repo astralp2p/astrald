@@ -18,6 +18,7 @@ type opHostsArgs struct {
 // An app with no known host, or a name that resolves to no app, gets EOS alone.
 // A host is the subject of an active relay-for contract the app issued, the same lookup
 // PreprocessQuery routes by (query_preprocessor.go), with this node included when it hosts the app.
+// On a claimed node only current swarm members are listed (isAppHost).
 // note: a sibling's app is known once its relay contract arrived: at the first link
 // to its host or to any other member that holds it, at the app's registration, or
 // when the app runs swarm discovery.
@@ -58,7 +59,7 @@ func (mod *Module) OpHosts(ctx *astral.Context, q *routing.IncomingQuery, args o
 	sent := map[string]bool{}
 	for _, contract := range contracts {
 		host := contract.Subject
-		if host.IsZero() || sent[host.String()] {
+		if host.IsZero() || sent[host.String()] || !mod.isAppHost(host) {
 			continue
 		}
 		sent[host.String()] = true

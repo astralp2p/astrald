@@ -14,7 +14,7 @@ import (
 
 // banModule builds a Module backed by an in-memory ban store, with issuer set as
 // the active contract's issuer so IssueMembership's expelled guard can run.
-func banModule(t *testing.T, issuer *astral.Identity) *Module {
+func banModule(t testing.TB, issuer *astral.Identity) *Module {
 	t.Helper()
 	mod := &Module{db: testDB(t)}
 	// seed the active-contract store directly; the tree.Value is unbound in tests,

@@ -216,6 +216,12 @@ func (m *Mux) handleQuery(f *frames.Query) {
 
 func (m *Mux) handleRelayQuery(relayQuery *frames.RelayQuery) error {
 	if !relayQuery.CallerID.IsEqual(m.RemoteIdentity()) {
+		if !m.mod.admitsRelayer(m.RemoteIdentity()) {
+			m.mod.log.Logv(1, "refused relay from %v for %v: not a swarm member", m.RemoteIdentity(), relayQuery.CallerID)
+			_ = m.ch.Send(&frames.Response{Nonce: relayQuery.Query.Nonce, ErrCode: frames.CodeRejected})
+			return nil
+		}
+
 		ctx := astral.NewContext(nil).WithIdentity(m.mod.node.Identity())
 		if !m.mod.Auth.Authorize(ctx, &nodes.RelayForAction{
 			Action: auth.NewAction(m.RemoteIdentity()),

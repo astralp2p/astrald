@@ -14,9 +14,12 @@ for step in ("node1_knows_the_provider", "node2_knows_the_caller", "expelled"):
 before = facts["before"]
 assert before["kind"] == "accepted", f"before: the call ended {before['kind']!r} ({before['error']!r})"
 
+# why route_not_found: a claimed node counts only current swarm members as
+# hosts of an app (astral-docs topics/app-routing.md, Resolving the host), so
+# node1 has no host left for the provider once node2 is expelled.
 after = facts["after"]
 got = f"{after['kind']} {after['code']}" if after["kind"] == "rejected" else after["kind"]
-assert got == "rejected 1", f"after: the call ended {got!r} ({after['error']!r}) in {after['millis']} ms; want 'rejected 1'"
+assert got == "route_not_found", f"after: the call ended {got!r} ({after['error']!r}) in {after['millis']} ms; want 'route_not_found'"
 assert after["retryable"] is False, "after: IsRetryable said true for an expelled host"
 
-print("oracle: after its host was expelled, the provider reads as refused (1) and not retryable")
+print("oracle: after its host was expelled, the provider reads as route not found and not retryable")
