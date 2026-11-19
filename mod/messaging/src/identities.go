@@ -54,7 +54,7 @@ func (mod *Module) CreateMailbox(ctx *astral.Context, alias string, duration ast
 	// why after the index row: a create that fails pushes no contract of a
 	// mailbox this node does not serve.
 	// note: the push is best-effort; a sibling that misses it gets the contract
-	// at its next first link.
+	// at its next first link or once a new link to it replaced a dead one.
 	if mod.User != nil {
 		mod.User.PushToSiblings(mod.ctx, relay)
 	}

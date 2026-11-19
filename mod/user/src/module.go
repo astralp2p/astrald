@@ -45,6 +45,9 @@ type Module struct {
 	// linkerMu makes the sibling linker's check, schedule and register one step; see runSiblingLinker.
 	linkerMu sync.Mutex
 
+	// syncGate runs one sync per sibling at a time after a partial link close.
+	syncGate syncGate
+
 	// dials limits the nearby contact attempts per node; see onPeerSeen.
 	dials *dialMap
 	// readPeerContract reads a nearby peer's contract; see contactPeer.

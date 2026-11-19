@@ -1,0 +1,28 @@
+nodes    = ["node1", "node2"]
+timeout  = 240
+after    = "adopt-node"
+destroys = true
+host_listener = "serves a TCP relay on the test host that node2 links to node1 through"
+facts    = ["reconnect_sync"]
+
+# why a long idle interval: only the probe a new link starts may close the
+# black-holed link; the keepalive would close it within N + T (tcp: 15 s +
+# 10 s by default) and node1's next link would count 1 and sync anyway.
+# why 600 s and not route-outcomes-dead-peer's 300 s: a value the shared world
+# does not set forks this test into a world of its own, so the short ping
+# timeout and node2's keys reach no other test.
+[config.node1.tcp]
+link_idle_ping    = "600s"
+link_ping_timeout = "3s"
+
+[config.node1.kcp]
+link_idle_ping    = "600s"
+link_ping_timeout = "3s"
+
+[config.node2.tcp]
+link_idle_ping    = "600s"
+link_ping_timeout = "3s"
+
+[config.node2.kcp]
+link_idle_ping    = "600s"
+link_ping_timeout = "3s"

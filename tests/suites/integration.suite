@@ -41,6 +41,7 @@ hold-purge
 hold-isolation
 swarm-roster-sync
 relay-contract-forwarding
+reconnect-sync-after-dead-link
 relay-contract-reindex-after-expel
 relay-contract-race
 expel-propagation

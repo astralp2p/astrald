@@ -19,8 +19,9 @@ var _ objects.Receiver = &Module{}
 // ReceiveObject handles pushed objects: indexes a signed node or relay-for contract,
 // stores and applies a signed expulsion, syncs with the peer of a local
 // LinkCreatedEvent (a sibling sync with a member, the expulsions with a banned
-// subject), contacts a peer of a local nearby PeerSeen, and wakes the link task
-// of a sibling named by a local EndpointsUpdatedEvent.
+// subject) and with a member a local LinkClosedEvent leaves links to, contacts
+// a peer of a local nearby PeerSeen, and wakes the link task of a sibling named
+// by a local EndpointsUpdatedEvent.
 // Every object is checked before any effect; a rejected object is not accepted.
 func (mod *Module) ReceiveObject(drop objects.Drop) (err error) {
 	switch o := drop.Object().(type) {
@@ -55,6 +56,10 @@ func (mod *Module) ReceiveObject(drop objects.Drop) (err error) {
 				mod.Scheduler.Schedule(mod.NewSyncNodesTask(peer))
 				drop.Accept(false)
 			}
+		case *nodes.LinkClosedEvent:
+			if mod.onPartialLinkClose(e) {
+				drop.Accept(false)
+			}
 		case *nearby.PeerSeen:
 			// why: contact queries the peer, which must not hold up the receivers.
 			go mod.onPeerSeen(e)
@@ -64,6 +69,35 @@ func (mod *Module) ReceiveObject(drop objects.Drop) (err error) {
 	}
 
 	return nil
+}
+
+// onPartialLinkClose syncs with a local swarm member when one of its links
+// closed and others remain, and reports whether it did.
+// why: the pool emits the event after it removed the closed link, so the sync
+// goes over a survivor; the sync the replacement's LinkCreatedEvent started may
+// have been routed into the dead link before it closed.
+func (mod *Module) onPartialLinkClose(e *nodes.LinkClosedEvent) bool {
+	if e.LinkCount == 0 || !slices.ContainsFunc(mod.LocalSwarm(), e.RemoteIdentity.IsEqual) {
+		return false
+	}
+
+	id := e.RemoteIdentity
+	mod.syncGate.Run(id, func() { mod.syncAndWait(id) })
+	return true
+}
+
+// syncAndWait schedules a SyncNodesTask with id and waits until it ends.
+func (mod *Module) syncAndWait(id *astral.Identity) {
+	task, err := mod.Scheduler.Schedule(mod.NewSyncNodesTask(id))
+	if err != nil {
+		mod.log.Error("scheduling a sync with %v failed: %v", id, err)
+		return
+	}
+
+	select {
+	case <-task.Done():
+	case <-mod.ctx.Done():
+	}
 }
 
 // receiveSignedContract indexes a pushed contract that passes checkPushedContract.
