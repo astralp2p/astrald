@@ -3,7 +3,7 @@
 A node advertises `gw:<gateway>:<itself>` only while its registration with
 the gateway is up.
 
-- **env** netsim · **start** `gateway-relay` · **saves** — · **mutates** true
+- **env** netsim · **start** `gateway-relink` · **saves** — · **mutates** true
 - **steps** `stop-astrald reflector`, then the driver.
 - **driver** `script.py` — poll node2's `nodes.resolve_endpoints localnode`
   until no gw row through the reflector is left.

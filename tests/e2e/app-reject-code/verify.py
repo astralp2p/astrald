@@ -24,4 +24,17 @@ for caller in ("local", "remote"):
     code = facts.get(f"{caller}_code")
     assert code == WANT, f"the caller on {where} read reject code {code}; want {WANT}"
 
-print("oracle: reject code 7 reached the caller on node2 and the caller on node1 unchanged")
+RESERVED_READS_AS = 1  # a provider's own 255 is the generic refusal
+
+for caller in ("local", "remote"):
+    where = "node2 (same node)" if caller == "local" else "node1 (across the link)"
+    err = facts.get(f"{caller}_reserved_error")
+    assert facts.get(f"{caller}_reserved_rejected") is True, (
+        f"the caller on {where} did not read a rejection for code 255; its query ended with {err!r}"
+    )
+    code = facts.get(f"{caller}_reserved_code")
+    assert code == RESERVED_READS_AS, (
+        f"the caller on {where} read reject code {code} for the provider's 255; want {RESERVED_READS_AS}"
+    )
+
+print("oracle: reject code 7 reached both callers unchanged; the provider's 255 reached both as 1")

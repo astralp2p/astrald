@@ -1,0 +1,10 @@
+nodes    = ["node1", "node2", "reflector"]
+after    = "gateway-relay"
+timeout  = 300
+# why: the driver closes the gw link that gateway-relay left; the link that
+# replaces it is node1's link task's
+destroys = true
+# why noop: the world is gateway-relay's VM world, and a test without ops
+# would also be listed for local and Docker worlds, which hold no gateway
+ops      = ["noop"]
+facts    = ["gateway_relink"]

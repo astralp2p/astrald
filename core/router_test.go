@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/astralp2p/astral-go/astral"
+	"github.com/astralp2p/astral-go/astral/log"
 	"github.com/astralp2p/astral-go/lib/routing"
 )
 
@@ -64,5 +65,50 @@ func TestRouteQueryFailureLeavesSrcClosable(t *testing.T) {
 	}
 	if _, ok := r.conns.Get(q.Nonce); ok {
 		t.Error("conn still registered after failed route")
+	}
+}
+
+// blockingPreprocessor blocks every query with err.
+type blockingPreprocessor struct{ err error }
+
+func (p *blockingPreprocessor) PreprocessQuery(*QueryModifier) error { return p.err }
+
+// TestRouteQueryReturnsThePreprocessorError pins that a preprocessor's block
+// reaches the caller as is: a directory filter's ErrTargetNotAllowed is a
+// policy answer, not a missing route, and no router is asked.
+func TestRouteQueryReturnsThePreprocessorError(t *testing.T) {
+	logger := log.New(nil)
+	logger.SetFilter(func(*log.Entry) bool { return false })
+	node := &Node{identity: astral.GenerateIdentity(), log: logger}
+	r := &Router{node: node, PriorityRouter: routing.NewPriorityRouter("test")}
+	kr := &keepingRouter{}
+	r.PriorityRouter.Add(kr, 0)
+	r.AddQueryPreprocessor(&blockingPreprocessor{err: astral.ErrTargetNotAllowed})
+
+	q := astral.Launch(astral.NewQuery(nil, nil, "test"))
+	_, err := r.RouteQuery(astral.NewContext(context.Background()), q, &closeCounter{})
+
+	if !errors.Is(err, astral.ErrTargetNotAllowed) {
+		t.Fatalf("RouteQuery err = %v, want %v", err, astral.ErrTargetNotAllowed)
+	}
+	if errors.Is(err, &astral.ErrRouteNotFound{}) {
+		t.Fatalf("RouteQuery err = %v reads as a missing route", err)
+	}
+	if kr.kept != nil {
+		t.Fatal("a router was asked a blocked query")
+	}
+}
+
+// TestRouteQueryClampsTheReservedCode pins that a target's own rejection with
+// the link-private 255 reaches the caller as the generic refusal.
+func TestRouteQueryClampsTheReservedCode(t *testing.T) {
+	for _, tc := range []struct{ code, want uint8 }{{255, 1}, {7, 7}, {9, 9}} {
+		var rejected *astral.ErrRejected
+		if !errors.As(clampReservedCode(astral.NewErrRejected(tc.code)), &rejected) || rejected.Code != tc.want {
+			t.Errorf("clampReservedCode(rejected %v) = %v, want rejected %v", tc.code, rejected, tc.want)
+		}
+	}
+	if err := clampReservedCode(nil); err != nil {
+		t.Errorf("clampReservedCode(nil) = %v, want nil", err)
 	}
 }

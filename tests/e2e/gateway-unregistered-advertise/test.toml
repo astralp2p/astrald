@@ -1,6 +1,6 @@
 nodes    = ["node2", "reflector"]
 timeout  = 600
-after    = "gateway-relay"
+after    = "gateway-relink"
 # why: the gateway stays stopped, and nothing starts it again.
 destroys = true
 ops      = ["stop-astrald reflector"]

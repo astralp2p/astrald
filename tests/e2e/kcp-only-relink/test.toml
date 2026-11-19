@@ -1,0 +1,9 @@
+nodes   = ["node1", "node2"]
+after   = "adopt-node"
+timeout = 300
+# why: tcp between the siblings is dropped for good, so only kcp over UDP
+# joins them; node2 restarts while the driver watches. script.py reads --in
+# from the restart line.
+ops     = ["block-tcp node1 node2",
+           "restart-astrald node2 --in 30"]
+facts   = ["kcp_relink"]

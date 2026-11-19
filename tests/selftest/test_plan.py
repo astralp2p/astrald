@@ -26,7 +26,7 @@ GOLDEN = Path(__file__).resolve().parent / "golden"
 # suite -> the driver its golden plan is drawn under
 SUITES = {"main": "script", "tor": "script", "nat": "script",
           "gateway": "script", "agent": "agent", "integration": "script",
-          "nearby": "script", "docker-agent": "agent"}
+          "nearby": "script", "docker-agent": "agent", "kcp": "script"}
 # suite -> the heavy world its agent plan is drawn in, where not a VM
 # why: docker-agent.suite holds operator flows a VM world cannot run (a
 # roster the lab lacks) or would open a world of its own for
@@ -314,16 +314,22 @@ class TestShippedPlans(Invariants, unittest.TestCase):
         self.assertEqual(
             [(w.kind, w.steps[-1].test) for w in worlds],
             [("local", "app-node-restart-reconnect"),
+             ("local", "basic-strategy-dead-rows"),
              ("local", "basic-strategy-excess-link-pruning"),
              ("local", "basic-strategy-stalled-endpoint-released"),
              ("local", "expel-authority"),
              ("local", "expel-during-transfer"), ("local", "expel-node"),
-             ("vm", "gateway-relay"), ("local", "hold-purge"),
-             ("local", "join-via-member"),
+             ("vm", "gateway-relink"), ("local", "hold-purge"),
+             ("local", "join-via-member"), ("vm", "kcp-only-relink"),
              ("local", "link-session-migrate"),
              ("local", "link-session-migrate-serving-side"),
              ("vm", "nat-punch"),
+             ("local", "relay-contract-forwarding"),
+             ("local", "relay-contract-reindex-after-expel"),
+             ("local", "route-outcomes-dead-peer"),
+             ("local", "route-outcomes-expelled-host"),
              ("local", "services-node-restart"),
+             ("local", "services-swarm-membership"),
              ("local", "expel-survives-restart"),
              ("local", "link-self-heal"), ("local", "swarm-member-restart"),
              ("vm", "tor-link"),

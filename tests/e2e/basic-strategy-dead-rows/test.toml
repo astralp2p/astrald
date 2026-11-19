@@ -1,0 +1,13 @@
+nodes    = ["node1", "node2"]
+after    = "adopt-node"
+# why: the dead rows stay in node1's book for 90 days, and no op removes one;
+# every later link round to node2 would dial them too
+destroys = true
+timeout  = 240
+facts    = ["dead_rows"]
+
+# why: node2 neither listens on kcp nor advertises a kcp row, so node2's tcp
+# row is its only live one and the network of each link names the row that
+# won; a live kcp row of node2 would race the tcp row
+[config.node2.kcp]
+listen = false

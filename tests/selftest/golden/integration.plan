@@ -7,12 +7,12 @@ w0 local:  smoke → claim-window → token-less-setup → signer-app
            → registration-lease → app-describe-provider → app-search-provider
            → objects-provider-revoke-lease → policy-delegate
            → app-index-provider → app-token-lifecycle
-           → claimed-node-keeps-owner → adopt-node → blueprints-two-node
-           → apphost-origin → sign-contract-guard → request-grant-scope
-           → swarm-authz-matrix → services-swarm → object-store
-           → app-call-remote → app-ping-pong → app-reject-code
-           → app-op-surface-remote → app-finder-read → app-searcher-swarm
-           → objects-provider-registration-authz
+           → claimed-node-keeps-owner → basic-strategy-gw-cycle → adopt-node
+           → blueprints-two-node → apphost-origin → sign-contract-guard
+           → request-grant-scope → swarm-authz-matrix → services-swarm
+           → object-store → app-call-remote → app-ping-pong → app-reject-code
+           → route-outcomes → app-op-surface-remote → app-finder-read
+           → app-searcher-swarm → objects-provider-registration-authz
            → objects-provider-read-robustness → app-query → app-discover-follow
            → app-discover-swarm → app-two-providers → app-blueprint-sync
            → services-app-call → services-provider-gone → mcp-peer
@@ -21,9 +21,10 @@ w0 local:  smoke → claim-window → token-less-setup → signer-app
            → stranger-disclosure → object-store-peer → read-remote-peer
            → read-swarm → discover-swarm → adopt-claimed-node-setup
            → adopt-claimed-node → expel-node
-           config admitter.apphost.policies = {"app_register": "reject_all"}
-           config admitter.user.policies = {"swarm_join": "reject_all", "swarm_invite": "accept_all"}
-           config invitee.user.policies = {"swarm_join": "accept_all", "swarm_invite": "reject_all"}
+           config acceptor.apphost.policies = {"app_register": "accept_all", "grant_request": "reject_all"}
+           config admitter.apphost.policies = {"app_register": "reject_all", "grant_request": "accept_all"}
+           config admitter.user.policies = {"swarm_join": "reject_all", "swarm_invite": "accept_all", "contract_accept": "accept_all"}
+           config invitee.user.policies = {"swarm_join": "accept_all", "swarm_invite": "reject_all", "contract_accept": "reject_all"}
            config mai-approve.apphost.gate = {}
            config mai-approve.apphost.policies = {}
            config mai-decline.apphost.gate = {}
@@ -40,34 +41,43 @@ w3 local:  bootstrap-user-software-key* → adopt-node* → swarm-roster-sync*
 w4 local:  bootstrap-user-software-key* → adopt-node* → swarm-roster-sync*
            → link-self-heal
 w5 local:  bootstrap-user-software-key* → adopt-node*
-           → app-node-restart-reconnect
-w6 local:  bootstrap-user-software-key* → adopt-node* → services-node-restart
+           → relay-contract-forwarding
+w6 local:  bootstrap-user-software-key* → adopt-node*
+           → relay-contract-reindex-after-expel
 w7 local:  bootstrap-user-software-key* → adopt-node*
-           → basic-strategy-stalled-endpoint-released
+           → route-outcomes-expelled-host
 w8 local:  bootstrap-user-software-key* → adopt-node*
+           → app-node-restart-reconnect
+w9 local:  bootstrap-user-software-key* → adopt-node* → services-node-restart
+w10 local: bootstrap-user-software-key* → adopt-node*
+           → basic-strategy-stalled-endpoint-released
+w11 local: bootstrap-user-software-key* → adopt-node*
            → basic-strategy-excess-link-pruning
-w9 local:  bootstrap-user-software-key* → adopt-node* → expel-authority
-w10 local: bootstrap-user-software-key* → adopt-node* → expel-during-transfer
-w11 local: bootstrap-user-software-key* → adopt-node* → join-via-member
-w12 local: bootstrap-user-software-key* → adopt-node* → two-swarms-side-by-side
-w13 local: bootstrap-user-software-key* → adopt-node* → link-session-migrate
-w14 local: bootstrap-user-software-key* → adopt-node*
+w12 local: bootstrap-user-software-key* → adopt-node* → expel-authority
+w13 local: bootstrap-user-software-key* → adopt-node* → expel-during-transfer
+w14 local: bootstrap-user-software-key* → adopt-node* → join-via-member
+w15 local: bootstrap-user-software-key* → adopt-node* → two-swarms-side-by-side
+w16 local: bootstrap-user-software-key* → adopt-node*
+           → basic-strategy-dead-rows
+           config node2.kcp.listen = false
+w17 local: bootstrap-user-software-key* → adopt-node* → link-session-migrate
+w18 local: bootstrap-user-software-key* → adopt-node*
            → link-session-migrate-serving-side
-w15 local: bootstrap-user-software-key* → fs-watch-restart-restore
-w16 local: bootstrap-user-software-key* → fs-index-restart-reconcile
-w17 local: bootstrap-user-software-key* → repo-removal-sticks
-w18 local: bootstrap-user-software-key* → indexing-fs-watch-feed
-w19 local: bootstrap-user-software-key* → hold-isolation
+w19 local: bootstrap-user-software-key* → fs-watch-restart-restore
+w20 local: bootstrap-user-software-key* → fs-index-restart-reconcile
+w21 local: bootstrap-user-software-key* → repo-removal-sticks
+w22 local: bootstrap-user-software-key* → indexing-fs-watch-feed
+w23 local: bootstrap-user-software-key* → hold-isolation
            config node1.objects.purge_floor = "0s"
-w20 local: bootstrap-user-software-key* → blueprint-survives-restart
-w21 local: bootstrap-user-software-key* → indexer-cursor
-w22 local: bootstrap-user-software-key* → basic-strategy-stalled-negotiation
-w23 local: bootstrap-user-op
-w24 local: import-user-software-key
-w25 local: introduce-node-setup → introduce-node
-w26 local: distribution-gate-setup
+w24 local: bootstrap-user-software-key* → blueprint-survives-restart
+w25 local: bootstrap-user-software-key* → indexer-cursor
+w26 local: bootstrap-user-software-key* → basic-strategy-stalled-negotiation
+w27 local: bootstrap-user-op
+w28 local: import-user-software-key
+w29 local: introduce-node-setup → introduce-node
+w30 local: distribution-gate-setup
            config node1.apphost.gate = {}
            config node1.apphost.policies = {}
-w27 local: bootstrap-passphrase
-w28 local: claim-race
-w29 local: concurrent-adoption
+w31 local: bootstrap-passphrase
+w32 local: claim-race
+w33 local: concurrent-adoption

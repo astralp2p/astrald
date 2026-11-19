@@ -1,6 +1,6 @@
-// Command driver runs a provider app on node2 whose op rejects every query
-// with code 7, and queries it from an app on node2 and from an app on node1,
-// each on its own client and token.
+// Command driver runs a provider app on node2 whose ops reject every query
+// with code 7 and with the reserved 255, and queries both from an app on node2
+// and from an app on node1, each on its own client and token.
 //
 //	driver <session.json>   prints facts as JSON
 package main
@@ -27,6 +27,10 @@ import (
 // code (1) nor one a node picks on its own, so a caller that reads it read the
 // provider's choice.
 const rejectCode = 7
+
+// reservedCode is the link-private "no route here" value; a provider that
+// rejects with it is read as the generic refusal (1).
+const reservedCode = 255
 
 type node struct {
 	Endpoint string `json:"endpoint"`
@@ -102,21 +106,27 @@ func run(path string) (map[string]any, error) {
 		if err != nil {
 			return facts, fmt.Errorf("registering the %s caller: %w", c.name, err)
 		}
-		err = refused(ctx, connect(c.n.Endpoint, string(app.Token)), provider.Identity, c.remote)
-		var rejected *astral.ErrRejected
-		facts[c.name+"_rejected"] = errors.As(err, &rejected)
-		if rejected != nil {
-			facts[c.name+"_code"] = rejected.Code
-		}
-		if err != nil {
-			facts[c.name+"_error"] = err.Error()
-		} else {
-			facts[c.name+"_error"] = "the query was accepted"
-		}
+		cli := connect(c.n.Endpoint, string(app.Token))
+		record(facts, c.name, refused(ctx, cli, provider.Identity, "reject_code_seven", c.remote))
+		record(facts, c.name+"_reserved", refused(ctx, cli, provider.Identity, "reject_code_reserved", c.remote))
 	}
 
 	fmt.Fprintln(os.Stderr, "ok: both callers' queries ended; the oracle reads the codes")
 	return facts, nil
+}
+
+// record stores how one query ended under the prefix name.
+func record(facts map[string]any, name string, err error) {
+	var rejected *astral.ErrRejected
+	facts[name+"_rejected"] = errors.As(err, &rejected)
+	if rejected != nil {
+		facts[name+"_code"] = rejected.Code
+	}
+	if err != nil {
+		facts[name+"_error"] = err.Error()
+	} else {
+		facts[name+"_error"] = "the query was accepted"
+	}
 }
 
 // Provider is the provider app's API.
@@ -125,6 +135,12 @@ type Provider struct{}
 // RejectCodeSeven rejects the query with code 7.
 func (*Provider) RejectCodeSeven(_ *astral.Context, q *routing.IncomingQuery) error {
 	return q.RejectWithCode(rejectCode)
+}
+
+// RejectCodeReserved rejects the query with 255, the link-private "no route
+// here" value, which no caller may read as a missing route.
+func (*Provider) RejectCodeReserved(_ *astral.Context, q *routing.IncomingQuery) error {
+	return q.RejectWithCode(reservedCode)
 }
 
 // serve runs the provider API as the app that token authenticates, through its
@@ -182,16 +198,16 @@ func waitHost(ctx *astral.Context, admin *astrald.Client, app *astral.Identity, 
 	return false
 }
 
-// refused queries app:reject_code_seven as the client's app and returns the
-// error the query ended with; nil means the node accepted it.
-func refused(ctx *astral.Context, caller *astrald.Client, app *astral.Identity, remote bool) error {
+// refused queries app:op as the client's app and returns the error the query
+// ended with; nil means the node accepted it.
+func refused(ctx *astral.Context, caller *astrald.Client, app *astral.Identity, op string, remote bool) error {
 	cctx := ctx
 	if remote {
 		cctx = ctx.IncludeZone(astral.ZoneNetwork)
 	}
 	cctx, cancel := cctx.WithTimeout(10 * time.Second)
 	defer cancel()
-	conn, err := caller.WithTarget(app).Query(cctx, "reject_code_seven", nil)
+	conn, err := caller.WithTarget(app).Query(cctx, op, nil)
 	if err == nil {
 		conn.Close()
 	}
