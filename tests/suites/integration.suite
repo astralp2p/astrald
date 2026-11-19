@@ -46,6 +46,7 @@ relay-contract-reindex-after-expel
 relay-contract-race
 expel-propagation
 expel-cross-traffic
+expel-offline-subject
 import-user-software-key
 introduce-node-setup
 introduce-node

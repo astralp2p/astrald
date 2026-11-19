@@ -103,6 +103,7 @@ relay-contract-reindex-after-expel
 relay-contract-race
 expel-propagation
 expel-cross-traffic
+expel-offline-subject
 expel-survives-restart
 expel-sweep-redelivers
 membership-resync-volume
