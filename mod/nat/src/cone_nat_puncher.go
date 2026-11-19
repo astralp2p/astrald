@@ -49,7 +49,7 @@ type conePuncher struct {
 
 // newConePuncher creates a cone NAT puncher that adopts the provided session.
 // Session must be exactly 16 bytes.
-func newConePuncher(session []byte, cb *ConePuncherCallbacks) (puncher nat.Puncher, err error) {
+func newConePuncher(session []byte, cb *ConePuncherCallbacks) (puncher *conePuncher, err error) {
 	if len(session) != 0 && len(session) != 16 {
 		return nil, fmt.Errorf("session must be 16 bytes")
 	}
@@ -95,6 +95,19 @@ func (p *conePuncher) Open() (int, error) {
 	p.conn = conn
 	p.localPort = lp
 	return lp, nil
+}
+
+// sendFromSocket writes payload to addr tries times from the open punch socket.
+func (p *conePuncher) sendFromSocket(payload []byte, addr *net.UDPAddr, tries int) error {
+	if p.conn == nil {
+		return errors.New("no UDP connection available")
+	}
+	for i := 0; i < tries; i++ {
+		if _, err := p.conn.WriteTo(payload, addr); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // Close releases any resources held by the puncher (open sockets).

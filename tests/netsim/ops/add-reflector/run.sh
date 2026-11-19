@@ -1,6 +1,11 @@
 #!/bin/sh
 # add-reflector: arm each NAT'd peer's nat module by reflecting its public endpoint.
-#   add-reflector [--reflector <host>] [--vm <peer>]...   (default: reflector; peers node1 node2)
+#   add-reflector [--reflector <host>] [--vm <peer>]... [--grant]
+#                                                   (default: reflector; peers node1 node2)
+#
+# --grant: the reflector grants each peer mod.auth.admin_network_action, so a peer may call
+#   nat.reflect_udp there (X06 Step 2). The reflector belongs to no swarm, so nothing else
+#   authorizes a peer on it.
 #
 # why: masquerade NAT hides a node's public address from itself; astrald learns it only
 #   when a directly-reachable peer observes the SNAT'd source and reflects it back
@@ -9,12 +14,13 @@
 # note: run AFTER enter-nat, so the reflected source is the peer's public alias, not private 192.168.99.2.
 set -eu
 
-REFL="reflector"; PEERS=""
+REFL="reflector"; PEERS=""; GRANT=0
 while [ $# -gt 0 ]; do
   case "$1" in
     --reflector) [ $# -ge 2 ] || { echo "need host after --reflector" >&2; exit 64; }; REFL=$2; shift 2 ;;
     --vm)        [ $# -ge 2 ] || { echo "need host after --vm" >&2; exit 64; }; PEERS="${PEERS:+$PEERS }$2"; shift 2 ;;
-    *) echo "usage: add-reflector [--reflector <host>] [--vm <peer>]..." >&2; exit 64 ;;
+    --grant)     GRANT=1; shift ;;
+    *) echo "usage: add-reflector [--reflector <host>] [--vm <peer>]... [--grant]" >&2; exit 64 ;;
   esac
 done
 [ -n "$PEERS" ] || PEERS="node1 node2"
@@ -63,4 +69,30 @@ for p in $PEERS; do
     ip netns exec priv astral-query nodes.new_link  -identity '$REFL_ID' -endpoint 'tcp:$REFL_PUB:1791' -out json 2>&1 | tail -3
   " || echo "add-reflector: WARNING new_link to reflector failed on $p (bring-up diagnoses)" >&2
 done
-echo "add-reflector: done (reflector=$REFL id=$REFL_ID pub=$REFL_PUB; peers: $PEERS)"
+# 3) --grant: the reflector grants each peer the network action, so it may call nat.reflect_udp
+# note: after step 2, so the reflector already knows each peer's identity (apphost.grant needs that)
+# note: the reflector runs astrald in the root netns; its local anonymous caller acts as the node
+if [ "$GRANT" = 1 ]; then
+  for p in $PEERS; do
+    # shellcheck disable=SC2029
+    pid=$(netsim ssh "$p" -- "ip netns exec priv astral-query apphost.whoami -out json 2>/dev/null" | python3 -c '
+import json,sys
+for ln in sys.stdin:
+    ln=ln.strip()
+    if not ln: continue
+    try: o=json.loads(ln)
+    except Exception: continue
+    v=o.get("Object")
+    if isinstance(v,str) and len(v)>=64: print(v); break
+    if isinstance(v,dict) and isinstance(v.get("Identity"),str): print(v["Identity"]); break')
+    [ -n "$pid" ] || { echo "add-reflector: could not read $p's identity" >&2; exit 1; }
+    req="{\"Type\":\"mod.apphost.grant_request\",\"Object\":{\"Identity\":\"$pid\",\"Duration\":0,\"Permits\":[{\"Action\":\"mod.auth.admin_network_action\"}]}}"
+    # shellcheck disable=SC2029
+    out=$(netsim ssh "$REFL" -- "echo '$req' | timeout 20 astral-query apphost.grant -in json -out json" 2>&1 || true)
+    case "$out" in
+      *'"ack"'*) echo "add-reflector: $REFL grants $p ($pid) mod.auth.admin_network_action" >&2 ;;
+      *) echo "add-reflector: granting $p on $REFL failed: $out" >&2; exit 1 ;;
+    esac
+  done
+fi
+echo "add-reflector: done (reflector=$REFL id=$REFL_ID pub=$REFL_PUB; peers: $PEERS; grant=$GRANT)"

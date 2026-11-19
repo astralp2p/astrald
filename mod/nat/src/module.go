@@ -54,6 +54,9 @@ type Module struct {
 
 	enabled  atomic.Bool
 	services servicesmod.Registration
+
+	// listenUDP binds a reflection's socket; nil binds UDP on :0.
+	listenUDP func() (net.PacketConn, error)
 }
 
 func (mod *Module) Run(ctx *astral.Context) error {
@@ -130,7 +133,7 @@ func (mod *Module) addHole(hole nat.Hole, active bool) {
 	}
 }
 
-func (mod *Module) newPuncher(session []byte) (nat.Puncher, error) {
+func (mod *Module) newPuncher(session []byte) (*conePuncher, error) {
 	cb := &ConePuncherCallbacks{
 		OnAttempt:       func(peer ip.IP, port int, _ []*net.UDPAddr) { mod.log.Log("punching → %v:%v", peer, port) },
 		OnProbeReceived: func(from *net.UDPAddr) { mod.log.Log("probe ← %v", from) },
