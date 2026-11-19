@@ -14,7 +14,9 @@ import (
 
 // RouteQuery routes a query to its target over a link, reusing an existing one or
 // retrieving a new one. On failure it falls back to relays listed in q.Extra, sending
-// caller proof first when the caller differs from the context identity. Network zone only.
+// caller proof first when the caller differs from the context identity. When q.Extra
+// lists no relay, it asks the linked siblings for the target's relay contracts once
+// (pullRelays). Network zone only.
 func (mod *Module) RouteQuery(ctx *astral.Context, q *astral.InFlightQuery, w io.WriteCloser) (rw io.WriteCloser, err error) {
 	// check if the context allows for network queries
 	if !ctx.Zone().Is(astral.ZoneNetwork) {
@@ -46,9 +48,10 @@ func (mod *Module) RouteQuery(ctx *astral.Context, q *astral.InFlightQuery, w io
 		return result.Link.RouteQuery(ctx, q, w)
 	}
 
-	// try relays
-	relays, _ := q.Extra.Get(nodes.ExtraRelayVia)
-	relayList, _ := relays.([]*astral.Identity)
+	relayList := queryRelays(q)
+	if len(relayList) == 0 {
+		relayList = mod.pullRelays(ctx, q.Target)
+	}
 	if len(relayList) == 0 {
 		return mod.unrelayed(ctx, q.Target)
 	}
@@ -78,6 +81,13 @@ func (mod *Module) unrelayed(ctx *astral.Context, target *astral.Identity) (io.W
 		return nil, unavailable()
 	}
 	return query.RouteNotFound()
+}
+
+// queryRelays returns the relays q.Extra lists.
+func queryRelays(q *astral.InFlightQuery) []*astral.Identity {
+	value, _ := q.Extra.Get(nodes.ExtraRelayVia)
+	relays, _ := value.([]*astral.Identity)
+	return relays
 }
 
 // reachRelay returns a link to relayID for q, after pushing the caller's proof

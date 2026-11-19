@@ -153,7 +153,7 @@ func (mod *Module) provisionApp(ctx *astral.Context, dec *apphostapi.AppRegister
 	// why after the token: a registration that fails leaves the swarm no
 	// contract of an app nobody holds a token for.
 	// note: the push is best-effort; a sibling that misses it gets the contract at its next first link.
-	if mod.User != nil {
+	if mod.User != nil && !mod.config.SkipSiblingPush {
 		mod.User.PushToSiblings(mod.ctx, signed)
 	}
 

@@ -21,6 +21,12 @@ type Config struct {
 
 	// Policies selects the admission policies apphost applies.
 	Policies Policies `yaml:"policies,omitempty"`
+
+	// SkipSiblingPush leaves out the push of a new app's relay contract to the
+	// linked siblings at apphost.register.
+	// why configurable: an E2E test (relay-pull-on-miss) drops the push, so a
+	// sibling obtains the contract only by the routing-time pull.
+	SkipSiblingPush bool `yaml:"skip_sibling_push,omitempty"`
 }
 
 // Gate lists the ops a session may call, IPC, WebSocket and HTTP alike. An
