@@ -12,7 +12,10 @@ route_not_found after, and keeps failing:
 - a process holding only the bind session is killed while the endpoint listens
   (bind cleanup on a dropped connection);
 - a handler with no bind session whose endpoint closes is removed by the failed
-  dial, and an endpoint that comes back at its address is not routed to again.
+  dial, and an endpoint that comes back at its address is not routed to again;
+- a handler bound through an AppRegistrar whose listener closes for 200 ms is
+  removed by the failed dial, which ends its bind session; the registrar
+  registers it again and a call reaches it within 5 s.
 
 A bystander app on node1 answers after every leg.
 """
@@ -26,7 +29,8 @@ from lib.sessionio import load
 ROOT = Path(__file__).resolve().parents[3]
 STEPS = ["clean_bind_close_unroutes", "clean_app_stop_unroutes",
          "crash_app_unroutes", "crash_bind_drop_unroutes",
-         "failed_dial_removes", "bystander_unaffected"]
+         "failed_dial_removes", "listener_restart_reregisters",
+         "bystander_unaffected"]
 
 facts = load()["facts"].get("app_handler_unroute", {})
 missing = [s for s in STEPS if not facts.get(s)]
