@@ -1,0 +1,8 @@
+# kcp.suite — siblings that reach each other over kcp alone.
+#
+# kcp-only-relink drops tcp between node1 and node2 and restarts node2, and
+# nothing puts tcp back, so it ends its world. It has a suite of its own
+# because each VM suite is one world's worth of VM time.
+bootstrap-user-software-key
+adopt-node
+kcp-only-relink

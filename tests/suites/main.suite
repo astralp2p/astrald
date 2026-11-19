@@ -66,6 +66,9 @@ app-discover-local
 app-ping-pong
 app-call-remote
 app-reject-code
+route-outcomes
+route-outcomes-dead-peer
+route-outcomes-expelled-host
 app-handler-unroute
 app-call-local
 app-routing-two-apps
@@ -80,6 +83,8 @@ expel-node
 basic-strategy-excess-link-pruning
 basic-strategy-stalled-endpoint-released
 basic-strategy-stalled-negotiation
+basic-strategy-dead-rows
+basic-strategy-gw-cycle
 link-session-migrate
 link-session-migrate-serving-side
 expel-during-transfer

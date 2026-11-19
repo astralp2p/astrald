@@ -27,10 +27,9 @@ from lib.sessionio import load
 NOT_ADMITTED = "the recipient does not take messages from you"
 
 # What a query node2 has no route for must read like on node1. node2 answers
-# its missing route over the link with the generic reject code 1, which a
-# refusal without a code of its own answers too, so node1's relay path reads
-# code 1 as a missing route. A rejection here means node1 took node2's missing
-# route for a refusal.
+# its missing route over the link with the link-private "no route here" value,
+# which node1 reads as a missing route. A rejection here means node1 took
+# node2's missing route for a refusal.
 MISSING_ROUTE = "RouteNotFound"
 
 

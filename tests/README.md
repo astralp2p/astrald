@@ -163,6 +163,7 @@ passes alone and fails in the shared run, a test before it changed its world.
 | `tor.suite` | two nodes meet on a LAN, one leaves it, Tor holds | VM (netsim) | ~37 min |
 | `nat.suite` | two nodes meet on a LAN, then hole-punch through NAT | VM (netsim) | not measured |
 | `gateway.suite` | a NAT'd node reaches its swarm through a gateway | VM (netsim) | not measured |
+| `kcp.suite` | two siblings joined by kcp alone; one restarts and relinks over kcp | VM (netsim) | not measured |
 | `nearby.suite` | an unowned node adopted by its nearby alias, two nodes of one User meeting in stealth, a Silent node, a sibling relinked when heard | VM (netsim) | ~75 min estimated (not measured) |
 | `agent.suite` | the flows an AI operator can drive (`--driver agent`) | VM (netsim), or Docker without netsim | not measured |
 | `docker-agent.suite` | the operator flows only a Docker world runs: a roster the VM lab lacks, or a world of their own (`--driver agent --docker`) | Docker | not measured |
@@ -180,7 +181,7 @@ driver, or `--docker` — run in Docker worlds instead (see World kinds).
 
 A host that runs no VM world (not Linux, or no `netsim` on PATH) refuses a
 run that needs one, whole and before anything is built, leased or written:
-the tor, nat, gateway and nearby suites, any test with `ops`, `--vm`,
+the tor, nat, gateway, kcp and nearby suites, any test with `ops`, `--vm`,
 `--save` and `--from`. The refusal names each test and its ops, or the flag:
 
     $ ./tests/run tor-link

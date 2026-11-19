@@ -4,23 +4,16 @@ import (
 	"slices"
 
 	"github.com/astralp2p/astral-go/astral"
-	"github.com/astralp2p/astral-go/sig"
 	"github.com/astralp2p/astrald/mod/nodes"
 )
 
 // QueryModifier is handed to preprocessors to inspect and mutate an in-flight query before routing.
 type QueryModifier struct {
-	query   *astral.InFlightQuery
-	blocked sig.Value[error]
+	query *astral.InFlightQuery
 }
 
 func (q *QueryModifier) Query() *astral.InFlightQuery {
 	return q.query
-}
-
-// Block marks the query as rejected; routing returns RouteNotFound. Only the first block takes effect.
-func (q *QueryModifier) Block(err error) {
-	q.blocked.Swap(nil, err)
 }
 
 func (q *QueryModifier) Attach(object astral.Object) {

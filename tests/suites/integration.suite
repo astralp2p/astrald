@@ -52,6 +52,8 @@ app-op-surface
 app-call-remote
 app-ping-pong
 app-reject-code
+route-outcomes
+route-outcomes-expelled-host
 app-op-surface-remote
 app-finder-read
 app-searcher-swarm
@@ -104,6 +106,8 @@ services-swarm-outcome-rules
 stranger-disclosure
 two-swarms-side-by-side
 basic-strategy-stalled-negotiation
+basic-strategy-dead-rows
+basic-strategy-gw-cycle
 link-session-migrate
 link-session-migrate-serving-side
 concurrent-adoption
