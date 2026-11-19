@@ -10,8 +10,8 @@ import tomllib
 from dataclasses import dataclass, field
 from pathlib import Path
 
-KEYS = {"nodes", "timeout", "restart", "stop", "after", "destroys", "ops",
-        "local_only", "host_listener", "facts", "config"}
+KEYS = {"nodes", "timeout", "restart", "restart_kill", "stop", "after",
+        "destroys", "ops", "local_only", "host_listener", "facts", "config"}
 MODULE = re.compile(r"[a-z][a-z0-9_]*")
 
 # (module, key) the harness owns: the ports a world leases, the token the
@@ -35,6 +35,9 @@ class Test:
     nodes: list
     timeout: int
     restart: list
+    # why the restart kills its nodes (SIGKILL) instead of stopping them
+    # (SIGINT); None: a graceful stop
+    restart_kill: str | None = None
     # nodes the world stops after the driver; no later test reaches them
     stop: list = field(default_factory=list)
     # the test whose world this one continues (None: a fresh world), whether
@@ -100,6 +103,10 @@ def _parse(mf: Path) -> Test:
     if stray:
         raise ValueError(f"{name}: restart names {stray}, which the roster "
                          f"{nodes} does not")
+    restart_kill = _reason(name, raw, "restart_kill")
+    if restart_kill and not restart:
+        raise ValueError(f"{name}: restart_kill without restart kills no "
+                         "node")
     stop = _strings(name, raw, "stop")
     stray = [n for n in stop if n not in nodes]
     if stray:
@@ -137,6 +144,11 @@ def _parse(mf: Path) -> Test:
                 # world owns the process, and a node it did not start reads
                 # to the runner as a dead one.
                 restart=restart,
+                # why a reason and not a flag: a graceful stop is what a
+                # node meets in the field, so a test that kills one says
+                # what the shutdown path would hide (services-node-restart:
+                # a stopping node retracts its own offerings first)
+                restart_kill=restart_kill,
                 # why after the driver: the driver leaves the state the
                 # stopped node took part in, and the tests after this one
                 # judge a world where that node is gone. A driver cannot

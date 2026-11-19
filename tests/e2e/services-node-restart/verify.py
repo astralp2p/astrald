@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """Oracle: after node2 restarts, the follow on node1 loses the provider and gets it back.
 
-The runner restarts node2 between driver and oracle (test.toml `restart`). The
+The runner restarts node2 between driver and oracle (test.toml `restart`), and
+kills it rather than stopping it (`restart_kill`). The
 provider app on node2 and the consumer app on node1 are the processes the driver
 started (lib/apps.py), still running; node1 was not restarted, so the consumer's
 follow is the one stream that spans the restart. Claims:
@@ -11,10 +12,10 @@ follow is the one stream that spans the restart. Claims:
 - the provider process is the same one and the consumer process is the same one,
   both alive, and the follow never ended;
 - the follow, in the events after the driver's last count, removed the provider's
-  offering when node2 went away (a Removed event naming it, with the cause of
-  the path that removed it: member_lost when node1 lost its carry to node2,
-  member_removed when node2 sent the removal itself) and then delivered the
-  same provider's offering available again, in that order;
+  offering when node2 went away (a Removed event naming it, with cause
+  member_lost: the runner kills node2, so node1's lost carry to it is the only
+  path that removes it) and then delivered the same provider's offering
+  available again, in that order;
 - the provider's own record agrees: the node completed another registration of
   its handler and acknowledged another advertise binding, and asked it to
   evaluate the offering for the consumer under that new attach;
@@ -122,14 +123,14 @@ try:
     back = returns(late, gone)
     gap = (late[back]["at"] - late[gone]["at"]) / 1000
     assert not state["err"], f"the follow ended: {state['err']}"
-    # why: node2's graceful stop races the end of node1's carry (member_lost)
-    # against node2's retraction of the provider's binding, which node1
-    # forwards as member_removed; both are the cause of the hop node1 saw.
+    # why member_lost alone: the runner kills node2 (restart_kill), so node2
+    # sends no services.removed of its own and only node1's lost carry to it
+    # removes the offering
     cause = late[gone].get("cause")
-    assert cause in ("member_lost", "member_removed"), (
+    assert cause == "member_lost", (
         f"the follow removed the provider's offering with cause {cause!r}, not "
-        f"member_lost (node1 lost its carry to node2) or member_removed (node2 "
-        f"removed it)")
+        f"member_lost: node2 was killed, so only node1's lost carry to it may "
+        f"remove the offering")
     assert late[back]["provider"] == facts["provider"], (
         f"the offering came back from {late[back]['provider']}, not from the "
         f"same provider {facts['provider']}")

@@ -60,6 +60,7 @@ host_listener = "serves an app node1 dials"  # it serves a listener on the test 
 #                                   # never in a VM world
 restart    = ["node1"]              # nodes restarted between driver and oracle (local or Docker worlds);
 #                                   # an app that must survive it: Long-lived apps
+restart_kill = "sends nothing as it goes"  # the restart kills its nodes (SIGKILL) instead of stopping them
 stop       = ["node1"]              # nodes stopped for good between driver and oracle (local or Docker worlds); implies destroys
 facts      = ["object_id"]          # the facts its driver writes
 timeout    = 180                    # the driver's and the oracle's budget, in seconds (default 120)
@@ -103,6 +104,12 @@ external_registration_sweep_interval = "1s"
   `restart` in a VM world or on an attached daemon. A test that ships
   `while_down.py` changes what the nodes find when they start: see
   [Changes while nodes are down](#changes-while-nodes-are-down).
+- **`restart_kill`** says why the restart kills its nodes (SIGKILL) instead
+  of stopping them (SIGINT): a killed node runs no shutdown path and sends
+  its peers nothing as it goes. It needs `restart`. A graceful stop is the
+  default because it is what a node meets in the field;
+  `services-node-restart` kills node2 so that node2 cannot retract its own
+  offerings before node1 loses the link to it.
 - **`stop`** stops the named nodes after the driver, in a local or Docker
   world, and leaves them stopped. A stopped node is not dead: the liveness
   check skips it, and the session view of the test's oracle and of every

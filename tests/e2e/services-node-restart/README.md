@@ -6,7 +6,7 @@ with the token it holds and advertises again, and the follow, which never
 ended, receives the same provider's offering available once more.
 
 - **after** `adopt-node` (node1 and node2 in one swarm) · **restart** `node2` ·
-  **destroys** (every restarting test does) · **host_listener** — both apps
+  **restart_kill** (node2 is killed, not stopped) · **destroys** (every restarting test does) · **host_listener** — both apps
   are processes on the test host; the provider binds at node2's `host_ip`.
 - **driver** `script.py` — builds `driver/` (Go, this repository's astral-go)
   and starts two long-lived apps with `lib/apps.py`:
@@ -26,15 +26,16 @@ ended, receives the same provider's offering available once more.
   and pids, node2's restart count and endpoint, the provider's attach and
   advertise counts and how many events the follow had. It then exits; both
   apps keep running.
-- **runner** — restarts node2 between driver and oracle. node1 is not
+- **runner** — kills node2 (SIGKILL) and starts it again between driver and
+  oracle. node1 is not
   restarted, so the follow's stream on node1 is one stream across the whole
   story. node2 comes back on its leased endpoint with its token table and
   grants read from the database.
 - **oracle** `verify.py` — node2 restarted once, node1 not, and node2 kept its
   endpoint; the provider and consumer processes are the same pids and alive.
   Within 90 s the follow's events after the driver's count hold a Removed
-  naming the provider's offering, with cause `member_lost` or
-  `member_removed` (below), and, after it, an update making the same
+  naming the provider's offering, with cause `member_lost` (below), and,
+  after it, an update making the same
   provider's offering available again; the follow did not end and holds the
   offering. The provider's own record shows another registration and another
   acknowledged advertise binding, and an ask to evaluate the offering for the
@@ -53,13 +54,14 @@ and the restart comes after the driver: a follow opened in the driver could
 not be read by the oracle. node1 is not restarted, so its follow is the one
 stream that sees the whole story.
 
-The removal reaches the follow by either of two paths, and the oracle accepts
-whichever comes first: node2's coordinator retracts the provider's binding when
-node2 shuts down (the runner stops a node gracefully) and sends a Removed over
-the open link, which node1 forwards with cause `member_removed`, or node1's
-`carry` (`mod/services/src/swarm.go`) calls `Lost` on the member when the
-stream to node2 ends, with cause `member_lost`. The cause is recorded in the
-oracle's log. The return is node1's `carry`
+The runner kills node2 rather than stopping it (`restart_kill`). A gracefully
+stopping node2 retracts the provider's binding and may send its own Removed over
+the open link before the link ends, which node1 forwards with cause
+`member_removed`; that race made the cause vary between runs. A killed node2
+sends nothing, so the removal reaches the follow by one path: node1's `carry`
+(`mod/services/src/swarm.go`) calls `Lost` on the member when the stream to
+node2 ends, with cause `member_lost`, which the oracle requires. The return is
+node1's `carry`
 asking node2 again on its next link or after a backoff, and node2's
 `Register` re-evaluating the new binding for the follows it already holds.
 
