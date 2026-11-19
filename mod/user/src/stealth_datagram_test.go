@@ -52,15 +52,15 @@ func (e *pushEther) Push(obj astral.Object) error {
 	return nil
 }
 
-// stealthDatagram returns the datagram that a node of user, with node key key,
-// broadcasts with a stored mode left unset: the user module composes the status,
-// the nearby module signs it, and the ether Envelope carries it.
-func stealthDatagram(t *testing.T, key *crypto.PrivateKey, userID *astral.Identity) []byte {
+// stealthDatagram returns the datagram that a node of user, with node key key and
+// transports, broadcasts with a stored mode left unset: the user module composes the
+// status, the nearby module signs it, and the ether Envelope carries it.
+func stealthDatagram(t *testing.T, key *crypto.PrivateKey, userID *astral.Identity, transports Transports) []byte {
 	t.Helper()
 
 	nodeID := secp256k1.Identity(secp256k1.PublicKey(key))
 	node := &identityNode{id: nodeID}
-	userMod := &Module{node: node, log: log.New(nodeID)}
+	userMod := &Module{node: node, log: log.New(nodeID), Transports: transports}
 	signed := &auth.SignedContract{Contract: &auth.Contract{Issuer: userID, Subject: nodeID}}
 	if err := userMod.config.ActiveContract.Set(nil, signed); err != nil {
 		t.Fatalf("seed active contract: %v", err)
@@ -115,7 +115,7 @@ func recoversKey(sig, hash []byte, want *astral.Identity) bool {
 func TestStealthDatagramHidesTheNodeAndTheUser(t *testing.T) {
 	nodeKey, userID := secp256k1.New(), secp256k1.Identity(secp256k1.PublicKey(secp256k1.New()))
 	nodeID := secp256k1.Identity(secp256k1.PublicKey(nodeKey))
-	data := stealthDatagram(t, nodeKey, userID)
+	data := stealthDatagram(t, nodeKey, userID, defaultTransports())
 
 	var env ether.Envelope
 	if _, err := env.ReadFrom(bytes.NewReader(data)); err != nil {
@@ -148,5 +148,46 @@ func TestStealthDatagramHidesTheNodeAndTheUser(t *testing.T) {
 	}
 	if !recoversKey(nearby.WrapProofSig(nodeID, proof.Nonce, proof.Sig), hash, nodeID) {
 		t.Error("the unwrapped signature does not recover the node key; the recovery check is void")
+	}
+}
+
+// TestStealthDatagramSealsTheListenPorts: a Stealth node on tcp 1800 sends a
+// StealthHint, its sealed ports and the StatusProof; the datagram does not hold
+// the plaintext ports, the ports open with the node and the hint's nonce, and
+// the proof signs them.
+func TestStealthDatagramSealsTheListenPorts(t *testing.T) {
+	nodeKey, userID := secp256k1.New(), secp256k1.Identity(secp256k1.PublicKey(secp256k1.New()))
+	nodeID := secp256k1.Identity(secp256k1.PublicKey(nodeKey))
+	data := stealthDatagram(t, nodeKey, userID, Transports{TCP: portModule(1800), KCP: portModule(1792)})
+
+	var env ether.Envelope
+	if _, err := env.ReadFrom(bytes.NewReader(data)); err != nil {
+		t.Fatalf("read envelope: %v", err)
+	}
+	objs := env.Object.(*nearby.StatusMessage).Attachments.Objects()
+	if len(objs) != 3 {
+		t.Fatalf("status holds %v objects; want a stealth_hint, sealed_ports and a status_proof", len(objs))
+	}
+	hint, okHint := objs[0].(*nearby.StealthHint)
+	sealed, okSealed := objs[1].(*nearby.SealedPorts)
+	if !okHint || !okSealed {
+		t.Fatalf("status holds %v, %v first; want a stealth_hint, then sealed_ports", objs[0].ObjectType(), objs[1].ObjectType())
+	}
+	if bytes.Contains(data, []byte{0x07, 0x08, 0x07, 0x00}) {
+		t.Error("the datagram holds the plaintext ports")
+	}
+
+	want := nearby.ListenPorts{TCP: 1800, KCP: 1792}
+	if ports, ok := sealed.Open(nodeID, hint.Nonce); !ok || *ports != want {
+		t.Fatalf("sealed ports open to %+v (%v); want %+v", ports, ok, want)
+	}
+
+	others, proof, _ := nearby.SplitProof(objs)
+	hash, err := nearby.ProofHash(others, proof.Nonce, proof.Timestamp)
+	if err != nil {
+		t.Fatalf("ProofHash: %v", err)
+	}
+	if !recoversKey(nearby.WrapProofSig(nodeID, proof.Nonce, proof.Sig), hash, nodeID) {
+		t.Error("the proof does not sign the sealed ports")
 	}
 }

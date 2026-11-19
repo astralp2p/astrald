@@ -42,6 +42,9 @@ var (
 type receivedStatus struct {
 	status  *nearby.StatusMessage
 	profile *nearby.PublicProfile // note: nil for a stealth status
+	hint    *nearby.StealthHint   // note: nil for a visible status
+	listen  *nearby.ListenPorts   // note: nil unless the status holds exactly one port object, this one
+	sealed  *nearby.SealedPorts   // note: nil unless the status holds exactly one port object, this one
 	others  []astral.Object       // note: every attachment but the proof
 	proof   *nearby.StatusProof
 }
@@ -86,12 +89,22 @@ func (mod *Module) acceptStatus(src ip.IP, status *nearby.StatusMessage) (err er
 	if err = mod.verify(r, id, now); err != nil {
 		return err
 	}
-	return mod.storeVerified(&entry{NodeID: id.node, UserID: id.user, IP: src, Via: id.via, Seen: now, Status: status})
+	return mod.storeVerified(&entry{
+		NodeID: id.node,
+		UserID: id.user,
+		IP:     src,
+		Via:    id.via,
+		Seen:   now,
+		Status: status,
+		Ports:  r.ports(id.node),
+	})
 }
 
 // checkShape splits a status into its parts. It refuses a status without exactly one
 // public profile or stealth hint, without one proof as its last attachment, or with a
-// signature length out of range.
+// signature length out of range. It keeps a port object only when the status holds one.
+//
+// why: more than one port object costs the status its ports, not the status itself.
 func checkShape(status *nearby.StatusMessage) (*receivedStatus, error) {
 	if status == nil || status.Attachments == nil {
 		return nil, errNoBundle
@@ -115,8 +128,34 @@ func checkShape(status *nearby.StatusMessage) (*receivedStatus, error) {
 	r := &receivedStatus{status: status, others: others, proof: proof}
 	if len(profiles) == 1 {
 		r.profile = profiles[0]
+	} else {
+		r.hint = hints[0]
+	}
+
+	listen := astral.SelectByType[*nearby.ListenPorts](others)
+	sealed := astral.SelectByType[*nearby.SealedPorts](others)
+	switch {
+	case len(listen) == 1 && len(sealed) == 0:
+		r.listen = listen[0]
+	case len(listen) == 0 && len(sealed) == 1:
+		r.sealed = sealed[0]
 	}
 	return r, nil
+}
+
+// ports returns the listen ports of a verified status of node: the ListenPorts of a
+// Visible status, or the SealedPorts of a Stealth status opened with node and the hint's
+// nonce. It returns nil for a status without ports, with a port object of the other
+// mode, or with SealedPorts that do not open.
+func (r *receivedStatus) ports(node *astral.Identity) *nearby.ListenPorts {
+	switch {
+	case r.profile != nil:
+		return r.listen
+	case r.sealed != nil:
+		p, _ := r.sealed.Open(node, r.hint.Nonce)
+		return p
+	}
+	return nil
 }
 
 // isFresh reports whether ts lies within statusTTL of now, on either side.

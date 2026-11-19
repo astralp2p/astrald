@@ -15,12 +15,14 @@ import (
 	"github.com/astralp2p/astrald/mod/crypto"
 	"github.com/astralp2p/astrald/mod/dir"
 	"github.com/astralp2p/astrald/mod/events"
+	kcpmod "github.com/astralp2p/astrald/mod/kcp"
 	"github.com/astralp2p/astrald/mod/nearby"
 	nodesmod "github.com/astralp2p/astrald/mod/nodes"
 	objectsmod "github.com/astralp2p/astrald/mod/objects"
 	"github.com/astralp2p/astrald/mod/scheduler"
 	shellmod "github.com/astralp2p/astrald/mod/shell"
 	sysmod "github.com/astralp2p/astrald/mod/sys"
+	tcpmod "github.com/astralp2p/astrald/mod/tcp"
 	"github.com/astralp2p/astrald/mod/tree"
 )
 
@@ -49,6 +51,18 @@ type OptionalDeps struct {
 	Bip137sig keyDeriver
 }
 
+// listenPorter is the part of the tcp and kcp modules the nearby status composer reads.
+type listenPorter interface {
+	ListenPort() int
+}
+
+// Transports holds the tcp and kcp modules. A node without one sends port 0 for it in
+// its nearby status.
+type Transports struct {
+	TCP listenPorter
+	KCP listenPorter
+}
+
 func (mod *Module) LoadDependencies(ctx *astral.Context) (err error) {
 	err = core.Inject(mod.node, &mod.Deps)
 	if err != nil {
@@ -58,6 +72,10 @@ func (mod *Module) LoadDependencies(ctx *astral.Context) (err error) {
 	// why optional: core.Inject fails on a missing module, and only
 	// user.bootstrap needs bip137sig.
 	_ = core.Inject(mod.node, &mod.OptionalDeps)
+
+	// why: one lookup per transport, since core.Inject stops at the first missing module.
+	mod.Transports.TCP, _ = core.Load[listenPorter](mod.node, tcpmod.ModuleName)
+	mod.Transports.KCP, _ = core.Load[listenPorter](mod.node, kcpmod.ModuleName)
 
 	// bind the config
 	err = tree.BindPath(ctx, &mod.config, mod.Tree.Root(), "/mod/user/config", true)

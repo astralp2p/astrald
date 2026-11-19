@@ -11,20 +11,12 @@ import (
 
 var _ nodesmod.EndpointResolver = &Module{}
 
-// The ports a nearby peer is dialed on: the tcp and kcp listen_port defaults.
-//
-// why: a status carries no endpoints, so nearby dials a peer at its datagram source IP
-// on these fixed well-known ports; a node listening on non-default ports, or several
-// nodes on one host, cannot be reached through nearby.
-// todo: nearby may carry a port list later, not every node uses these ports; in stealth
-// the list is encrypted under the node-derived key.
-const (
-	nearbyTCPPort astral.Uint16 = 1791
-	nearbyKCPPort astral.Uint16 = 1792
-)
-
 // ResolveEndpoints returns a tcp and a kcp endpoint at the source IP of each verified
-// cached status of nodeID, each valid for the rest of the entry's life.
+// cached status of nodeID, on the ports its status carried or the defaults 1791 and 1792,
+// each valid for the rest of the entry's life. A port of 0 gives no endpoint.
+//
+// note: one entry per IP, so a second node on the same host is not reached.
+// Spec: .ai/system/protocols/nearby/README.md
 func (mod *Module) ResolveEndpoints(ctx *astral.Context, nodeID *astral.Identity) (_ <-chan *nodes.EndpointWithTTL, err error) {
 	now := mod.now()
 
@@ -35,10 +27,13 @@ func (mod *Module) ResolveEndpoints(ctx *astral.Context, nodeID *astral.Identity
 		}
 
 		ttl := e.remaining(now)
-		list = append(list,
-			nodes.NewEndpointWithTTL(&tcp.Endpoint{IP: e.IP, Port: nearbyTCPPort}, ttl),
-			nodes.NewEndpointWithTTL(&kcp.Endpoint{IP: e.IP, Port: nearbyKCPPort}, ttl),
-		)
+		tcpPort, kcpPort := e.listenPorts()
+		if tcpPort != 0 {
+			list = append(list, nodes.NewEndpointWithTTL(&tcp.Endpoint{IP: e.IP, Port: tcpPort}, ttl))
+		}
+		if kcpPort != 0 {
+			list = append(list, nodes.NewEndpointWithTTL(&kcp.Endpoint{IP: e.IP, Port: kcpPort}, ttl))
+		}
 	}
 
 	return sig.ArrayToChan(list), nil

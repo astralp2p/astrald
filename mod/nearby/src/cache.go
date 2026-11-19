@@ -25,6 +25,7 @@ type entry struct {
 	Via    string // note: nearby.ViaHint or nearby.ViaProfile
 	Seen   time.Time
 	Status *nearby.StatusMessage // note: as received
+	Ports  *nearby.ListenPorts   // note: nil when the status carries no ports
 }
 
 // expired reports whether the entry is older than statusTTL at now.
@@ -35,6 +36,15 @@ func (e *entry) expired(now time.Time) bool {
 // remaining returns the life the entry has left at now.
 func (e *entry) remaining(now time.Time) time.Duration {
 	return e.Seen.Add(statusTTL).Sub(now)
+}
+
+// listenPorts returns the tcp and kcp ports the entry's node is dialed on: the ports its
+// status carried, else the defaults.
+func (e *entry) listenPorts() (tcp, kcp astral.Uint16) {
+	if e.Ports == nil {
+		return nearby.DefaultTCPPort, nearby.DefaultKCPPort
+	}
+	return e.Ports.TCP, e.Ports.KCP
 }
 
 // isNode reports whether the entry is the verified status of node.
