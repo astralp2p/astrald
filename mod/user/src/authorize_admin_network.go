@@ -21,6 +21,12 @@ import (
 // listener and the endpoint mapping on the peer, and the peer runs this rule.
 // note: a network link or an app registration is not membership. LocalSwarm
 // lists only subjects of the user's unexpelled swarm-membership contracts.
+// why not outsiders: the endpoints this node advertises, and the rows it holds
+// about other nodes, are private to the user's swarm, and nodes.resolve_endpoints
+// answers under this action.
+// note: a user-signed contract that delegates this action to an outsider admits
+// it to every network-admin op, not only to endpoint reads.
+// note: the outsider paths are in .ai/system/topics/node-exposure.md#endpoint-exchange.
 // note: a local caller carrying no identity also arrives as this node
 // (core/router.go), so that branch is no proof that a call is internal.
 // why a zero actor is refused first: the user identity is nil on an unclaimed
