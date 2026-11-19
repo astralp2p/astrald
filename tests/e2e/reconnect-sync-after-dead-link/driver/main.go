@@ -23,6 +23,9 @@ import (
 	"sync/atomic"
 	"time"
 
+	// why: nodes.LinkInfo carries its endpoints as typed objects (mod.tcp.endpoint,
+	// mod.kcp.endpoint, ...), and only the SDK's root package registers their blueprints.
+	_ "github.com/astralp2p/astral-go"
 	apphostcli "github.com/astralp2p/astral-go/api/apphost/client"
 	"github.com/astralp2p/astral-go/api/nodes"
 	nodescli "github.com/astralp2p/astral-go/api/nodes/client"

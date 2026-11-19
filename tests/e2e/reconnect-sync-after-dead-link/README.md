@@ -23,9 +23,13 @@ leaves the new link runs the sibling sync over it.
   - node2 links to node1 at node1's `lan_endpoint`. The driver records how long
     node1 keeps the relayed link in `nodes.links` after that, and how long
     until `apphost.hosts` on node2 names node1 for the app.
+  `script.py` records node1's log (`log.listen`) while `driver/` runs: the
+  close of a link to node2 on its ping timeout, and every sibling sync with
+  node2 that node1 starts.
 - **oracle** `verify.py` — every step held, node1 dropped the relayed link
-  within 10 s of the new link (the 3 s ping timeout plus slack), and
-  `apphost.hosts` on node2 still names node1 for the app.
+  within 10 s of the new link (the 3 s ping timeout plus slack), node1 started
+  a sibling sync with node2 at or after that close, and `apphost.hosts` on
+  node2 still names node1 for the app.
 
 The 600 s idle interval keeps the keepalive from closing the dead link on its
 own (tcp: 15 s + 10 s by default); otherwise node2's next link would count 1
@@ -39,6 +43,11 @@ pushes only the relay contracts node2 holds. The probe is
 `LinkPool.probeOlderLinks` (astrald `mod/nodes/src/link_pool.go`); the sync on
 a close that leaves links is `onPartialLinkClose` in
 `mod/user/src/object_receiver.go` and `mod/nodes/src/object_receiver.go`.
+
+The sync the new link starts (`LinkCreatedEvent`, every link) waits on the
+dead link and, once the probe closes it, also delivers the app over the new
+link. The app alone therefore proves the probe, not the sync on the close; the
+log check proves the sync on the close.
 
 The relay stands in for a path that vanished without a reset, as a phone's old
 Wi-Fi link does after the phone moves to mobile data. netsim `leave-lan`
