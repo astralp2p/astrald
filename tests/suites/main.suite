@@ -65,6 +65,7 @@ app-preexisting-provider-sync
 app-discover-local
 app-ping-pong
 app-call-remote
+relay-pull-absent
 app-reject-code
 route-outcomes
 route-outcomes-dead-peer
@@ -80,6 +81,7 @@ stranger-disclosure
 services-swarm-outcome-rules
 services-swarm-membership
 expel-node
+relay-pull-on-miss
 basic-strategy-excess-link-pruning
 basic-strategy-stalled-endpoint-released
 basic-strategy-stalled-negotiation

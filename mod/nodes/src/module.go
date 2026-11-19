@@ -48,6 +48,8 @@ type Module struct {
 	upgraders         sig.Map[string, *sig.Switch]
 
 	privateKey *crypto.PrivateKey
+
+	pull relayPull
 }
 
 // Run schedules the endpoint-cleanup task and blocks until ctx is cancelled.
