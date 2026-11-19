@@ -17,8 +17,12 @@ follow is the one stream that spans the restart. Claims:
   path that removes it) and then delivered the same provider's offering
   available again, in that order;
 - the provider's own record agrees: the node completed another registration of
-  its handler and acknowledged another advertise binding, and asked it to
-  evaluate the offering for the consumer under that new attach;
+  its handler, the advertise hook ran again with a binding open, and the node
+  asked the provider to evaluate the offering for the consumer after the
+  Removed and no later than the return. node2 was dead before the Removed, so
+  that ask comes from a new binding on the restarted node2. The ask may come
+  before the handler's new registration: the SDK's Provider re-advertises on
+  its own when the node ends its binding (services.advertise.md, Liveness);
 - a fresh app on node1 runs a one-shot swarm discovery and finds the same
   provider, with a complete outcome, and calls it by its identity and is
   answered `echo, <that caller>`.
@@ -138,12 +142,19 @@ try:
         f"the follow does not hold {key} now: {state['offerings']}")
 
     # the provider's own record: it registered and advertised again, and the
-    # node evaluated the offering for the consumer under that new attach. Its
+    # node evaluated the offering for the consumer on a new binding. Its
     # state file is written behind the app's answers, so the record is waited
     # for, briefly, and then judged.
+    # why the Removed's time, not the attach count: the SDK's Provider keeper
+    # re-advertises as soon as node2 is back, which can be before the
+    # registrar attaches the handler again; node2 was dead before node1 sent
+    # the Removed, so an ask the provider got later comes from a new binding.
+    # Both apps stamp the same host clock.
+    removed_at, back_at = late[gone]["at"], late[back]["at"]
+
     def asked_again(s):
         return [e for e in s.get("evaluations", [])
-                if e["attach"] > facts["attaches_before"] and e["caller"] == facts["consumer"]]
+                if e["caller"] == facts["consumer"] and removed_at < e["at"] <= back_at]
 
     try:
         final = provider.wait_state(
@@ -157,11 +168,13 @@ try:
         f"the node completed {final['attaches']} registrations of the provider's "
         f"handler, not another after the {facts['attaches_before']} before the restart")
     assert final["advertised"] > facts["advertised_before"], (
-        f"the node acknowledged {final['advertised']} advertise bindings, not "
-        f"another after the {facts['advertised_before']} before the restart")
+        f"the provider's advertise hook returned with a binding open "
+        f"{final['advertised']} times, not again after the "
+        f"{facts['advertised_before']} before the restart")
     assert asked_again(final), (
-        f"the node never asked the re-registered provider to evaluate the "
-        f"offering for the consumer {facts['consumer']}: {final['evaluations']}")
+        f"the node never asked the provider, after the Removed at {removed_at} "
+        f"and by the return at {back_at}, to evaluate the offering for the "
+        f"consumer {facts['consumer']}: {final['evaluations']}")
 
     # a fresh discovery and a call, apart from the follow
     code, found = run(["discover", str(WINDOW)], node1)
