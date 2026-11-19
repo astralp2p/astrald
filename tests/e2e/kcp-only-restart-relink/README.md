@@ -6,8 +6,9 @@ the link it held to node2's old process, and a dial to a kcp address with
 nothing behind it fails within seconds.
 
 - **after** `adopt-node` (node1 and node2 linked siblings) · **restart**
-  `node2` · **destroys** `true` — tcp dial and listen stay off in both
-  nodes' trees.
+  `node2`, killed (`restart_kill`), so node2 sends node1 nothing as it goes
+  and node1 finds the old link dead on its own · **destroys** `true` — tcp
+  dial and listen stay off in both nodes' trees.
 - **driver** `script.py` — each node learns the other's kcp rows (the kcp
   endpoints the other resolves for itself, and its kcp port at its
   `lan_endpoint` address); tcp dial and listen go off through the tree on
@@ -16,7 +17,7 @@ nothing behind it fails within seconds.
   User; both ends settle on kcp links alone. Then node1 dials node2 at
   `kcp:<node2's address>:919`, where nothing listens, with a 90 s budget,
   timed on the host's clock. It records the `kcp_restart_relink` fact.
-- **runner** — restarts node2 between driver and oracle.
+- **runner** — kills node2 and starts it again between driver and oracle.
 - **oracle** `verify.py` — before the restart the pair held kcp links
   alone; the dead dial answered an error, no link, within 10 s; tcp dial and
   listen still read false on both nodes; within 60 s node2 holds a kcp link
