@@ -1,0 +1,8 @@
+nodes    = ["node1", "node2"]
+after    = "adopt-node"
+restart  = ["node2"]
+# why: tcp dial and listen stay off in both nodes' trees, and every restarting
+# test destroys its world
+destroys = true
+timeout  = 240
+facts    = ["kcp_restart_relink"]

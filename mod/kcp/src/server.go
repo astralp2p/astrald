@@ -110,7 +110,9 @@ func (s *Server) Run(ctx *astral.Context) error {
 		remoteEndpoint, _ := kcpmod.ParseEndpoint(sess.RemoteAddr().String())
 		s.log.Info("accepted connection from %v", remoteEndpoint)
 
-		conn := WrapKCPConn(sess, remoteEndpoint, localEndpoint, false, 1*time.Minute)
+		// why: a stray packet from a dead peer's old session opens a session that
+		// never carries a readable frame; dial_timeout closes its handshake.
+		conn := WrapKCPConn(sess, remoteEndpoint, localEndpoint, false, s.config.DialTimeout)
 		conn.keepalive = s.config.linkKeepalive()
 		go func() {
 			shouldClose, err := s.onAccept(ctx, conn)

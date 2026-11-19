@@ -25,5 +25,6 @@ why it fails at astrald `463a4fea`: basic was registered for tcp only, and
 `BasicLinkStrategy.Signal` dropped every kcp row before a worker saw it, so
 node2's link task ended in `link not produced` and backed off.
 
-Not covered: node1 keeps the kcp link it held to node2's old process, since
-kcp has no idle keepalive that sees it die.
+Not covered: node1 dropping the kcp link it held to node2's old process.
+`kcp-only-restart-relink` (`main.suite`) judges it, with a dial to a dead kcp
+address.

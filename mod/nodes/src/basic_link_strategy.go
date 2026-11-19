@@ -17,7 +17,7 @@ import (
 var basicNetworks = []string{"tcp", "kcp", "gw"}
 
 // defaultRowBudgets bounds one row's dial and handshake per network; a network without an entry has no bound of its own.
-// why: a kcp dial succeeds at once over UDP, so a dead row fails only in the Noise handshake, which nothing else bounds.
+// why: a kcp dial succeeds at once over UDP, so a dead row fails only in the Noise handshake, which otherwise only the kcp dial_timeout bounds.
 // why: a gw dial routes a query to the gateway, which may start a nested dial round for the gateway itself.
 var defaultRowBudgets = map[string]time.Duration{
 	"kcp": 5 * time.Second,
