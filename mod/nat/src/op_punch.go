@@ -43,7 +43,7 @@ func (mod *Module) OpPunch(ctx *astral.Context, q *routing.IncomingQuery, args o
 	// why: the peer is asked as this node; NAT traversal runs between nodes, and
 	// mod.auth.admin_network_action above decides who starts it (decided 2026-11-06).
 	client := natclient.New(target, astrald.Default())
-	hole, err := client.NodePunch(ctx, target, localIP, puncher)
+	hole, err := client.NodePunch(ctx, target, localIP, puncher, mod.reflectorFor(ctx, puncher, target))
 	if err != nil {
 		mod.log.Error("NAT traversal failed with %v: %v", target, err)
 		puncher.Close()

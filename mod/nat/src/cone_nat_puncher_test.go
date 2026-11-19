@@ -257,7 +257,7 @@ func openScripted(t *testing.T, conn *scriptedConn) *conePuncher {
 	if err != nil {
 		t.Fatalf("newConePuncher: %v", err)
 	}
-	cp := p.(*conePuncher)
+	cp := p
 	cp.conn, cp.localPort = conn, 38826
 	return cp
 }

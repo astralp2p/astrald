@@ -24,6 +24,7 @@ func adminNetworkOps() []adminNetworkOp {
 		{"nat.node_punch", func(m *Module) any { return m.OpNodePunch }, ""},
 		{"nat.node_consume_hole", func(m *Module) any { return m.OpNodeConsumeHole }, "?pair=7c1a93b50f2e4d18"},
 		{"nat.set_enabled", func(m *Module) any { return m.OpSetEnabled }, "?arg=true"},
+		{"nat.reflect_udp", func(m *Module) any { return m.OpReflectUDP }, ""},
 	}
 }
 

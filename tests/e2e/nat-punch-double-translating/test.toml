@@ -1,0 +1,15 @@
+nodes   = ["node1", "node2"]
+timeout = 1200
+after   = "adopt-node"
+# why: entering a NAT netns rewrites the world in place and nothing puts it
+# back, so a sibling cannot continue adopt-node's world afterwards.
+destroys = true
+# why this order (as in nat-punch): configure-nat-tor restarts astrald, and
+# add-reflector arms the nat module through an in-memory reflected endpoint, so
+# it runs last. --grant lets both nodes call nat.reflect_udp on the reflector,
+# which belongs to no swarm.
+ops     = ["enable-tor node1 node2",
+           "enter-nat node1 node2 --translating",
+           "configure-nat-tor node1 node2",
+           "add-reflector node1 node2 --reflector reflector --grant"]
+facts   = ["punch", "nat_link_networks", "isolated", "echo"]
