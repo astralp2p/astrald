@@ -1,5 +1,5 @@
-nodes    = ["node1", "node2", "ssm_late"]
-timeout  = 300
+nodes    = ["node1", "node2", "ssm_late", "ssm_expiry"]
+timeout  = 420
 after    = "adopt-node"
 destroys = true
 facts    = ["services_swarm_membership"]

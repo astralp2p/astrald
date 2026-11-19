@@ -8,8 +8,10 @@ import (
 	"time"
 
 	"github.com/astralp2p/astral-go/api/auth"
+	"github.com/astralp2p/astral-go/api/events"
 	"github.com/astralp2p/astral-go/api/nodes"
 	"github.com/astralp2p/astral-go/api/services"
+	userapi "github.com/astralp2p/astral-go/api/user"
 	"github.com/astralp2p/astral-go/astral"
 	alog "github.com/astralp2p/astral-go/astral/log"
 	"github.com/astralp2p/astral-go/lib/query"
@@ -284,5 +286,50 @@ func TestAdvertiseRejectsTheNodeIdentity(t *testing.T) {
 	}
 	if got, want := w.refusal(t), auth.ErrNotPermitted.Error(); got != want {
 		t.Fatalf("advertise as the node: answered %q; want %q", got, want)
+	}
+}
+
+// countingNode routes like cuttableNode and counts the queries it routes.
+type countingNode struct {
+	*cuttableNode
+	routes atomic.Int32
+}
+
+func (n *countingNode) RouteQuery(ctx *astral.Context, q *astral.InFlightQuery, w io.WriteCloser) (io.WriteCloser, error) {
+	n.routes.Add(1)
+	return n.cuttableNode.RouteQuery(ctx, q, w)
+}
+
+// A member that leaves the swarm, as when its membership contract expires,
+// leaves an open swarm follow through this node's SwarmMemberLeft event: its
+// offerings are removed and its carry stops, so a cut stream is never retried.
+func TestSwarmMemberLeftEventEndsTheMembersCarry(t *testing.T) {
+	s := newSwarm()
+	node := &countingNode{cuttableNode: newCuttableNode(s.nodeA)}
+	s.a.node = node
+	advertise(t, s.a, "player", available)
+	_, remoteP := advertise(t, s.b, "player", available)
+
+	c := open(t, s.a.OpDiscover, astral.GenerateIdentity(), "services.discover?services=player&reach=swarm&follow=true", false)
+	expect[*services.Update](t, c)
+	expect[*services.Update](t, c)
+	expect[*astral.EOS](t, c)
+	node.waitEOS(t)
+
+	s.a.User.(*swarmUser).swarm = []*astral.Identity{s.nodeA.id}
+	left := &events.Event{Data: &userapi.SwarmMemberLeft{NodeID: s.b.node.Identity()}}
+	if err := s.a.ReceiveObject(&linkDrop{sender: s.nodeA.id, obj: left}); err != nil {
+		t.Fatal(err)
+	}
+	r := expect[*services.Removed](t, c)
+	if len(r.Offerings) != 1 || !r.Offerings[0].ProviderID.IsEqual(remoteP) {
+		t.Fatalf("removed %+v; want the departed member's provider only", r.Offerings)
+	}
+
+	routes := node.routes.Load()
+	node.cut()
+	time.Sleep(carryRetryFirst + carryRetryFirst/2)
+	if n := node.routes.Load(); n != routes {
+		t.Fatalf("%d queries to the departed member after it left; want none", n-routes)
 	}
 }

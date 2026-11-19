@@ -48,7 +48,7 @@ type Module struct {
 	dials *dialMap
 	// readPeerContract reads a nearby peer's contract; see contactPeer.
 	readPeerContract peerContractReader
-	// now is the clock of the nearby contact policy.
+	// now is the clock of the nearby contact policy and of the member expiry timer.
 	now func() time.Time
 }
 
@@ -67,6 +67,10 @@ func (mod *Module) Run(ctx *astral.Context) error {
 	}()
 
 	<-ctx.Done()
+
+	mod.swarm.mu.Lock()
+	defer mod.swarm.mu.Unlock()
+	mod.stopExpiry()
 
 	return nil
 }
