@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
-"""Driver: a swarm follow across a late join and an expulsion.
+"""Driver: a swarm follow across a late join, an expulsion and an expiry.
 
-The fresh node ssm_late is linked to node1 but not adopted. The Go program
-(services-swarm/driver, membership mode) opens the follow, adopts ssm_late
-as the User and expels it, and records which steps held.
+The fresh nodes ssm_late and ssm_expiry are linked to node1 but not adopted.
+The Go program (services-swarm/driver, membership mode) opens the follow,
+adopts ssm_late as the User and expels it, admits ssm_expiry with a contract
+that expires in 90 seconds, and records which steps held.
 
 why the flow is in Go: astral-py speaks the pre-v1 Services wire.
 """
@@ -16,6 +17,7 @@ from pathlib import Path
 
 import astral
 
+from lib import nodefs
 from lib.sessionio import load, write_facts
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -32,12 +34,18 @@ async def link(n1: dict, late: dict, user_token: str) -> None:
 
 
 doc = load()
-asyncio.run(link(doc["nodes"]["node1"], doc["nodes"]["ssm_late"], doc["facts"]["user_token"]))
+for name in ("ssm_late", "ssm_expiry"):
+    asyncio.run(link(doc["nodes"]["node1"], doc["nodes"][name], doc["facts"]["user_token"]))
+
+# why the node key: every op that collects a node's subject signature refuses
+# a contract shorter than an hour, so the driver signs as ssm_expiry itself.
+expiry_key = nodefs.read_bytes(doc["nodes"]["ssm_expiry"], "data/node_key").hex()
 
 proc = subprocess.run(
     ["go", "run", "./tests/e2e/services-swarm/driver", "membership", os.environ["ASTRAL_TESTS_SESSION"]],
     cwd=ROOT, capture_output=True, text=True,
-    env={**os.environ, "GOFLAGS": os.environ.get("GOFLAGS", "-buildvcs=false")},
+    env={**os.environ, "GOFLAGS": os.environ.get("GOFLAGS", "-buildvcs=false"),
+         "EXPIRY_NODE_KEY": expiry_key},
 )
 sys.stderr.write(proc.stderr)
 lines = [l for l in proc.stdout.splitlines() if l.startswith("{")]
@@ -45,4 +53,4 @@ if lines:
     write_facts(json.loads(lines[-1]))
 if proc.returncode != 0:
     sys.exit(f"driver: exit {proc.returncode}")
-print("driver: swarm follow tracked a late join and an expulsion")
+print("driver: swarm follow tracked a late join, an expulsion and an expiry")

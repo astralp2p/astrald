@@ -2,6 +2,7 @@ package user
 
 import (
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/astralp2p/astral-go/astral"
@@ -17,6 +18,7 @@ var _ user.Module = &Module{}
 type Module struct {
 	Deps
 	OptionalDeps
+	Transports
 	ctx    *astral.Context
 	config Config
 	file   FileConfig
@@ -44,12 +46,19 @@ type Module struct {
 	// linkerMu makes the sibling linker's check, schedule and register one step; see runSiblingLinker.
 	linkerMu sync.Mutex
 
+	// syncGate runs one sync per sibling at a time after a partial link close.
+	syncGate syncGate
+
 	// dials limits the nearby contact attempts per node; see onPeerSeen.
 	dials *dialMap
 	// readPeerContract reads a nearby peer's contract; see contactPeer.
 	readPeerContract peerContractReader
-	// now is the clock of the nearby contact policy.
+	// now is the clock of the nearby contact policy and of the member expiry timer.
 	now func() time.Time
+
+	// joinTarget is the node a running user.join is joining; nil while no join
+	// runs. See recognizeJoinTarget.
+	joinTarget atomic.Pointer[astral.Identity]
 }
 
 func (mod *Module) Run(ctx *astral.Context) error {
@@ -60,6 +69,7 @@ func (mod *Module) Run(ctx *astral.Context) error {
 	mod.onActiveContractChanged(<-activeContractFollow)
 	mod.recordSwarm()
 	close(mod.ready)
+	go mod.runReconcile(mod.ctx)
 	go func() {
 		for contract := range activeContractFollow {
 			mod.onActiveContractChanged(contract)
@@ -67,6 +77,10 @@ func (mod *Module) Run(ctx *astral.Context) error {
 	}()
 
 	<-ctx.Done()
+
+	mod.swarm.mu.Lock()
+	defer mod.swarm.mu.Unlock()
+	mod.stopExpiry()
 
 	return nil
 }

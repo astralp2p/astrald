@@ -145,8 +145,9 @@ def _restart(ex, t, art: Path, view) -> int:
     The script reads the oracle's view, its own driver's facts included,
     written before the stop: a node keeps its entry while it is down.
     """
+    kill = bool(t.restart_kill)
     if not t.while_down:
-        ex.restart(t.restart)
+        ex.restart(t.restart, kill=kill)
         return 0
     env = view("while_down")
     codes = []
@@ -154,7 +155,7 @@ def _restart(ex, t, art: Path, view) -> int:
     def while_down():
         codes.append(_run_step(sys.executable, t.dir / "while_down.py",
                                art / "while_down.log", env, t.timeout))
-    ex.restart(t.restart, while_down)
+    ex.restart(t.restart, while_down, kill=kill)
     if len(codes) != 1:
         raise WorldError(f"restart ran while_down.py {len(codes)} times")
     if codes[0] != 0:

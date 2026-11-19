@@ -32,6 +32,7 @@ func (mod *Module) OpNodeRoute(ctx *astral.Context, q *routing.IncomingQuery, ar
 			ReadWriteCloser: conn,
 			local:           gateway.NewEndpoint(q.Target(), q.Target()),
 			remote:          gateway.NewEndpoint(q.Caller(), q.Target()),
+			keepalive:       mod.config.linkKeepalive(),
 		}
 
 		actx, cancel := context.WithTimeout(context.Background(), acceptTimeout)

@@ -305,3 +305,55 @@ func waitUpgrade(mod *Module, remote *astral.Identity, window time.Duration) boo
 	}
 	return false
 }
+
+// TestReceivePartialLinkCloseRefreshesEndpoints covers the LinkClosedEvent
+// branch: a local event that leaves links to a sibling pulls its endpoints from
+// it; no links left, a node outside the swarm, or an event from another node
+// pull nothing.
+func TestReceivePartialLinkCloseRefreshesEndpoints(t *testing.T) {
+	cases := []struct {
+		name      string
+		member    bool
+		linkCount uint8
+		local     bool
+		pull      bool
+	}{
+		{"one link left to a sibling", true, 1, true, true},
+		{"no link left to a sibling", true, 0, true, false},
+		{"one link left to a non-member", false, 1, true, false},
+		{"from another node", true, 1, false, false},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			f := newExchangeFixture(t)
+			remote := f.stranger()
+			if tc.member {
+				remote = f.member(true)
+			}
+			sender := remote
+			if tc.local {
+				sender = f.self
+			}
+
+			event := &events.Event{
+				ID:       astral.NewNonce(),
+				SourceID: f.self,
+				Data:     &nodes.LinkClosedEvent{RemoteIdentity: remote, LinkCount: astral.Uint8(tc.linkCount)},
+			}
+			drop := &recordingDrop{sender: sender, object: event}
+			if err := f.mod.ReceiveObject(drop); err != nil {
+				t.Fatalf("ReceiveObject: %v", err)
+			}
+
+			if tc.pull {
+				f.requirePull(t, remote, remote)
+			} else {
+				f.requireNoPull(t)
+			}
+			if a := drop.accepted(); len(a) != 0 {
+				t.Fatalf("Accept calls %v; a link event is never accepted", a)
+			}
+		})
+	}
+}

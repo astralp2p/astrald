@@ -66,7 +66,9 @@ func (r *Contribution) Remove(keys []*services.OfferingKey) {
 			continue
 		}
 		delete(r.contributed, k)
-		r.st.retract(k)
+		// why: the cause names the hop this node saw, so the member's own
+		// cause is not forwarded.
+		r.st.retract(k, services.CauseMemberRemoved)
 	}
 	wake(r.st.wake)
 }
@@ -112,10 +114,12 @@ func (r *Contribution) Lost() {
 	if r.ended {
 		return
 	}
-	r.lostLocked()
+	r.lostLocked(services.CauseMemberLost)
 }
 
-func (r *Contribution) lostLocked() {
+// lostLocked fails the member's unresolved initial work and retracts every
+// offering it contributed with cause.
+func (r *Contribution) lostLocked(cause services.RemovalCause) {
 	for _, o := range r.evaluations() {
 		o.fail()
 	}
@@ -123,7 +127,7 @@ func (r *Contribution) lostLocked() {
 		return
 	}
 	for k := range r.contributed {
-		r.st.retract(k)
+		r.st.retract(k, cause)
 	}
 	r.contributed = map[offeringKey]struct{}{}
 	wake(r.st.wake)

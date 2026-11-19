@@ -1,0 +1,45 @@
+# reconnect-sync-after-dead-link
+
+A new link to a sibling makes a node ping its older links to that sibling
+once; a dead older link closes within its ping timeout, and the close that
+leaves the new link runs the sibling sync over it.
+
+- **after** `adopt-node` (node1 and node2 linked siblings) · **destroys**
+  `true` — node1 and node2 end with a link through a relay that drops every
+  byte closed, and node1 holds an app no other test expects.
+- **config** node1's and node2's tcp and kcp `link_idle_ping` 600 s and
+  `link_ping_timeout` 3 s.
+- **driver** `script.py` — runs `driver/` (Go, this repository's astral-go):
+  - a TCP relay on the test host at node2's `host_ip` forwards to node1's
+    `lan_endpoint`; node2 links to node1 through it (`nodes.new_link` with
+    the relay's endpoint), and node1 closes every other link to node2
+    (`nodes.close_link`), until both nodes hold the relayed link alone;
+  - the relay starts dropping every byte in both directions and keeps both
+    connections open, so each node holds a link that takes bytes and never
+    answers;
+  - an app registers on node1; its relay contract push to node2 goes into the
+    dead link, and 17 s later, past the push's 15 s bound, `apphost.hosts` on
+    node2 does not name node1 for the app;
+  - node2 links to node1 at node1's `lan_endpoint`. The driver records how long
+    node1 keeps the relayed link in `nodes.links` after that, and how long
+    until `apphost.hosts` on node2 names node1 for the app.
+- **oracle** `verify.py` — every step held, node1 dropped the relayed link
+  within 10 s of the new link (the 3 s ping timeout plus slack), and
+  `apphost.hosts` on node2 still names node1 for the app.
+
+The 600 s idle interval keeps the keepalive from closing the dead link on its
+own (tcp: 15 s + 10 s by default); otherwise node2's next link would count 1
+on node1 and the first-link sync would deliver the app anyway.
+
+Before the change, node2's direct link counted 2 on node1, so neither the
+user receiver (`SyncNodesTask`) nor the nodes receiver (`UpdateNodeEndpoints`)
+reacted, and nothing pinged the relayed link, which stayed pooled for the
+whole idle interval. node2 never learned the app: its own sync toward node1
+pushes only the relay contracts node2 holds. The probe is
+`LinkPool.probeOlderLinks` (astrald `mod/nodes/src/link_pool.go`); the sync on
+a close that leaves links is `onPartialLinkClose` in
+`mod/user/src/object_receiver.go` and `mod/nodes/src/object_receiver.go`.
+
+The relay stands in for a path that vanished without a reset, as a phone's old
+Wi-Fi link does after the phone moves to mobile data. netsim `leave-lan`
+(`tor.suite`) covers the same path over a real address change.

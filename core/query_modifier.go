@@ -12,6 +12,11 @@ type QueryModifier struct {
 	query *astral.InFlightQuery
 }
 
+// NewQueryModifier returns the modifier of q that the router hands to each preprocessor.
+func NewQueryModifier(q *astral.InFlightQuery) *QueryModifier {
+	return &QueryModifier{query: q}
+}
+
 func (q *QueryModifier) Query() *astral.InFlightQuery {
 	return q.query
 }

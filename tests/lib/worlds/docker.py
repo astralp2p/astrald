@@ -265,15 +265,16 @@ class DockerWorld(World):
         ) for name, n in self._nodes.items()
             if "identity" in n and name not in self._stopped}
 
-    def restart(self, names: list, while_down=None) -> None:
-        """Stop each named node's astrald, call `while_down()` when given,
-        and start it again on its state."""
+    def restart(self, names: list, while_down=None,
+                kill: bool = False) -> None:
+        """Stop each named node's astrald (SIGKILL it when `kill`), call
+        `while_down()` when given, and start it again on its state."""
         refuse_stopped("restart", names, self._stopped)
         # why every stop first: a node restarted while its siblings still run
         # can relearn what it lost from them, which hides state that a restart
         # of the whole swarm drops (expel-survives-restart); as LocalWorld
         for name in names:
-            self._stop_astrald(name)
+            self._stop_astrald(name, "KILL" if kill else "INT")
         # note: the container stays up, so lib/nodefs.py reaches the stopped
         # node's files from the hook
         if while_down:
@@ -470,10 +471,10 @@ class DockerWorld(World):
             _docker("cp", f"{copy}/.", f"{container}:{SKILL_DIR}")
         self.ssh(OPERATOR_NODE, f"chown -R tester:tester {SKILL_DIR}")
 
-    def _stop_astrald(self, name: str) -> None:
+    def _stop_astrald(self, name: str, sig: str = "INT") -> None:
         # why bounded: an astrald that ignores SIGINT is the world breaking,
         # and the step reads it as environment, not a hang
-        self.ssh(name, "pkill -INT -x astrald || true\n"
+        self.ssh(name, f"pkill -{sig} -x astrald || true\n"
                        "i=0; while pgrep -x astrald >/dev/null; do\n"
                        "  i=$((i+1)); [ $i -le 150 ] || "
                        "{ echo 'astrald did not stop' >&2; exit 1; }\n"

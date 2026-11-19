@@ -36,7 +36,9 @@ type Link struct {
 	checks      atomic.Int32
 	throughput  atomic.Uint64
 	outbound    bool
-	pingTimeout time.Duration
+	idlePing    time.Duration // N: probe after this long without a received frame
+	pingTimeout time.Duration // T: close when a probe gets no pong within this
+	lastRecv    atomic.Int64  // unix nanos of the last received frame that is not a peer's probe
 	wakeCh      chan struct{}
 	pressure    LinkPressureDetector
 }
@@ -84,6 +86,7 @@ func (s *Link) readLoop() {
 			err = recvErr
 			return
 		}
+		s.stampRecv(obj)
 		if handleErr := s.mux.Handle(obj); handleErr != nil {
 			err = handleErr
 			return
@@ -147,6 +150,7 @@ func (s *Link) RouteQuery(ctx *astral.Context, q *astral.InFlightQuery, w io.Wri
 
 // Ping sends one ping and blocks for the pong. Only one ping may be in flight; concurrent calls error.
 // The returned duration is measured from just before the frame is written, so it includes the local send.
+// The ping timeout covers the write too: a peer that stopped reading fails the ping within pingTimeout.
 func (s *Link) Ping() (time.Duration, error) {
 	p := &Ping{
 		nonce: astral.NewNonce(),
@@ -165,36 +169,41 @@ func (s *Link) Ping() (time.Duration, error) {
 	p.sentAt = time.Now()
 	s.ping = p
 	s.pingMu.Unlock()
+	defer s.clearPing(p)
 
-	err := s.Send(&frames.Ping{
-		Nonce: p.nonce,
-	})
-	if err != nil {
-		s.pingMu.Lock()
-		if s.ping == p {
-			s.ping = nil
+	timeout := time.NewTimer(s.pingTimeout)
+	defer timeout.Stop()
+
+	// why a goroutine: the link conn has no write deadline, and Send blocks on
+	// a peer that stopped reading. The timer runs from before the write.
+	// note: a write still blocked at the timeout returns once pingLoop closes
+	// the link, so the goroutine ends with it.
+	sent := make(chan error, 1)
+	go func() { sent <- s.Send(&frames.Ping{Nonce: p.nonce}) }()
+
+	for {
+		select {
+		case err := <-sent:
+			if err != nil {
+				return -1, err
+			}
+			sent = nil
+		case <-p.pong:
+			return time.Since(p.sentAt), nil
+		case <-timeout.C:
+			return -1, errors.New("ping timeout")
+		case <-s.done:
+			return -1, s.err.Get()
 		}
-		s.pingMu.Unlock()
-		return -1, err
 	}
+}
 
-	select {
-	case <-p.pong:
-		return time.Since(p.sentAt), nil
-	case <-time.After(s.pingTimeout):
-		s.pingMu.Lock()
-		if s.ping == p {
-			s.ping = nil
-		}
-		s.pingMu.Unlock()
-		return -1, errors.New("ping timeout")
-	case <-s.done:
-		s.pingMu.Lock()
-		if s.ping == p {
-			s.ping = nil
-		}
-		s.pingMu.Unlock()
-		return -1, s.err.Get()
+// clearPing drops p as the in-flight ping, unless a pong or a newer ping already replaced it.
+func (s *Link) clearPing(p *Ping) {
+	s.pingMu.Lock()
+	defer s.pingMu.Unlock()
+	if s.ping == p {
+		s.ping = nil
 	}
 }
 
@@ -234,19 +243,8 @@ func (s *Link) pingLoop() {
 	}
 
 	for {
-		if s.checks.Load() > 0 {
-			t.Reset(activeInterval)
-			select {
-			case <-s.done:
-				return
-			case <-t.C:
-			}
-		} else {
-			select {
-			case <-s.done:
-				return
-			case <-s.wakeCh:
-			}
+		if !s.waitProbe(t) {
+			return
 		}
 
 		if s.Err() != nil {
@@ -266,16 +264,19 @@ func (s *Link) pingLoop() {
 
 func newLink(mod *Module, conn astral.Conn, id astral.Nonce, outbound bool) *Link {
 	ch := channel.New(conn, channel.WithLockedWrites())
+	keepalive := keepaliveOf(conn)
 	link := &Link{
 		Channel:     ch,
 		id:          id,
 		conn:        conn,
 		createdAt:   time.Now(),
 		outbound:    outbound,
-		pingTimeout: defaultPingTimeout,
+		idlePing:    keepalive.Idle,
+		pingTimeout: keepalive.Timeout,
 		wakeCh:      make(chan struct{}, 1),
 		done:        make(chan struct{}),
 	}
+	link.lastRecv.Store(link.createdAt.UnixNano())
 
 	link.mux = newMux(
 		mod,

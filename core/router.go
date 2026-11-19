@@ -54,7 +54,7 @@ func (r *Router) RouteQuery(ctx *astral.Context, q *astral.InFlightQuery, w io.W
 	// copy query filters from the context
 	q.Extra.Replace("filters", ctx.Filters())
 
-	qm := &QueryModifier{query: q}
+	qm := NewQueryModifier(q)
 	// preprocess the query
 	for _, p := range r.preprocessors.Clone() {
 		err = p.PreprocessQuery(qm)

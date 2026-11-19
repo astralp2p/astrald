@@ -1,0 +1,14 @@
+nodes   = ["node1", "node2"]
+timeout = 300
+after   = "adopt-node"
+# why destroys: the config below holds for every test in the world, and a
+# destroyer listed after another one of adopt-node's (expel-node) forks into a
+# world of its own; tests/selftest/golden/main.plan shows that world
+destroys = true
+host_listener = "serves its greeter app on a test-host port that node2 dials"
+facts   = ["relay_pull_on_miss"]
+
+# why: node2's apphost.register pushes no relay contract to node1, so node1
+# obtains it only by the routing-time pull
+[config.node2.apphost]
+skip_sibling_push = true

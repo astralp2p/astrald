@@ -4,8 +4,10 @@ import (
 	"bytes"
 	"context"
 	"net"
+	"os"
 	"slices"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -63,7 +65,7 @@ func TestCandidatePorts(t *testing.T) {
 func TestPreparePunchTargets(t *testing.T) {
 	peer := ip.IP(net.ParseIP("203.0.113.5"))
 
-	addrs, allowed, err := preparePunchTargets(peer, 1791)
+	addrs, err := preparePunchTargets(peer, 1791)
 	if err != nil {
 		t.Fatalf("preparePunchTargets: %v", err)
 	}
@@ -77,18 +79,8 @@ func TestPreparePunchTargets(t *testing.T) {
 		}
 	}
 
-	tests := []struct {
-		addr string
-		want bool
-	}{
-		{"203.0.113.5:1781", true},
-		{"203.0.113.5:1801", true},
-		{"203.0.113.5:1780", false},
-	}
-	for _, tt := range tests {
-		if got := allowed.Contains(tt.addr); got != tt.want {
-			t.Errorf("allowed.Contains(%q) = %v; want %v", tt.addr, got, tt.want)
-		}
+	if first, last := addrs[0].Port, addrs[len(addrs)-1].Port; first != 1781 || last != 1801 {
+		t.Errorf("targets span %d..%d; want 1781..1801", first, last)
 	}
 }
 
@@ -172,5 +164,176 @@ func TestConePuncherHolePunchValidatesArgs(t *testing.T) {
 				t.Errorf("HolePunch(%v, %d) error = %v; want %q", tt.peer, tt.port, err, tt.wantErr)
 			}
 		})
+	}
+}
+
+// scriptedConn is a net.PacketConn that delivers a fixed list of datagrams,
+// then times out every read, and records every write.
+type scriptedConn struct {
+	mu       sync.Mutex
+	inbox    []packet
+	writes   []packet
+	deadline time.Time
+	closed   bool
+}
+
+func (c *scriptedConn) ReadFrom(b []byte) (int, net.Addr, error) {
+	c.mu.Lock()
+	if c.closed {
+		c.mu.Unlock()
+		return 0, nil, net.ErrClosed
+	}
+	if len(c.inbox) > 0 {
+		p := c.inbox[0]
+		c.inbox = c.inbox[1:]
+		c.mu.Unlock()
+		return copy(b, p.data), p.from, nil
+	}
+	wait := time.Until(c.deadline)
+	c.mu.Unlock()
+
+	time.Sleep(max(wait, time.Millisecond))
+	return 0, nil, os.ErrDeadlineExceeded
+}
+
+func (c *scriptedConn) WriteTo(b []byte, addr net.Addr) (int, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.writes = append(c.writes, packet{data: bytes.Clone(b), from: addr})
+	return len(b), nil
+}
+
+func (c *scriptedConn) Close() error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.closed = true
+	return nil
+}
+
+func (c *scriptedConn) LocalAddr() net.Addr {
+	return &net.UDPAddr{IP: net.IPv4zero, Port: 38826}
+}
+
+func (c *scriptedConn) SetDeadline(t time.Time) error { return c.SetReadDeadline(t) }
+
+func (c *scriptedConn) SetReadDeadline(t time.Time) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.deadline = t
+	return nil
+}
+
+func (c *scriptedConn) SetWriteDeadline(time.Time) error { return nil }
+
+// writesTo counts the datagrams written to addr, and how many carried session.
+func (c *scriptedConn) writesTo(addr string, session []byte) (all, withSession int) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	for _, w := range c.writes {
+		if w.from.String() != addr {
+			continue
+		}
+		all++
+		if bytes.Equal(w.data, session) {
+			withSession++
+		}
+	}
+	return
+}
+
+func udpAddr(t *testing.T, s string) *net.UDPAddr {
+	t.Helper()
+	a, err := net.ResolveUDPAddr("udp", s)
+	if err != nil {
+		t.Fatalf("resolve %q: %v", s, err)
+	}
+	return a
+}
+
+// openScripted returns a puncher whose socket is conn, as Open would leave it.
+func openScripted(t *testing.T, conn *scriptedConn) *conePuncher {
+	t.Helper()
+	p, err := newConePuncher(nil, &ConePuncherCallbacks{})
+	if err != nil {
+		t.Fatalf("newConePuncher: %v", err)
+	}
+	cp := p
+	cp.conn, cp.localPort = conn, 38826
+	return cp
+}
+
+// A NAT that translates ports delivers the peer's probe from a port nobody
+// announced: the peer announced 38826 and its probe arrives from 6635.
+func TestHolePunch_AcceptsTheSessionFromAnyPortOfThePeer(t *testing.T) {
+	conn := &scriptedConn{}
+	p := openScripted(t, conn)
+	conn.inbox = []packet{{data: p.Session(), from: udpAddr(t, "203.0.113.9:6635")}}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	res, err := p.HolePunch(ctx, ip.IP(net.ParseIP("203.0.113.9")), 38826)
+	if err != nil {
+		t.Fatalf("HolePunch: %v", err)
+	}
+	if res.RemotePort != 6635 || !net.IP(res.RemoteIP).Equal(net.ParseIP("203.0.113.9")) {
+		t.Errorf("result remote = %v:%d; want 203.0.113.9:6635", res.RemoteIP, res.RemotePort)
+	}
+	if res.LocalPort != 38826 {
+		t.Errorf("result local port = %d; want 38826", res.LocalPort)
+	}
+
+	all, withSession := conn.writesTo("203.0.113.9:6635", p.Session())
+	if all != packetsPerBurst || withSession != packetsPerBurst {
+		t.Errorf("wrote %d datagrams (%d with the session) to 203.0.113.9:6635; want %d session datagrams",
+			all, withSession, packetsPerBurst)
+	}
+}
+
+// The session from another IP, or a wrong session from the peer's IP, is not a
+// probe; after the first accepted probe nothing more is read or answered.
+func TestHolePunch_IgnoresForeignProbesAndAnswersOnce(t *testing.T) {
+	conn := &scriptedConn{}
+	p := openScripted(t, conn)
+	wrong := bytes.Repeat([]byte{0x5a}, 16)
+	conn.inbox = []packet{
+		{data: p.Session(), from: udpAddr(t, "198.51.100.77:6635")},
+		{data: wrong, from: udpAddr(t, "203.0.113.9:6000")},
+		{data: p.Session()[:8], from: udpAddr(t, "203.0.113.9:6001")},
+		{data: p.Session(), from: udpAddr(t, "203.0.113.9:6635")},
+		{data: p.Session(), from: udpAddr(t, "203.0.113.9:7000")},
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	res, err := p.HolePunch(ctx, ip.IP(net.ParseIP("203.0.113.9")), 38826)
+	if err != nil {
+		t.Fatalf("HolePunch: %v", err)
+	}
+	if res.RemotePort != 6635 {
+		t.Errorf("result remote port = %d; want 6635", res.RemotePort)
+	}
+
+	// why: give a stray second answer the time to show up before counting.
+	time.Sleep(3 * burstInterval)
+
+	for addr, want := range map[string]int{
+		"198.51.100.77:6635": 0,
+		"203.0.113.9:6000":   0,
+		"203.0.113.9:6001":   0,
+		"203.0.113.9:6635":   packetsPerBurst,
+		"203.0.113.9:7000":   0,
+	} {
+		if got, _ := conn.writesTo(addr, p.Session()); got != want {
+			t.Errorf("wrote %d datagrams to %s; want %d", got, addr, want)
+		}
+	}
+
+	conn.mu.Lock()
+	left := len(conn.inbox)
+	conn.mu.Unlock()
+	if left != 1 {
+		t.Errorf("%d datagrams left unread; want 1 (the probe after the accepted one)", left)
 	}
 }

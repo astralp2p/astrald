@@ -59,7 +59,11 @@ func (mod *Module) OpNodePunch(ctx *astral.Context, q *routing.IncomingQuery, ar
 	if err != nil {
 		return err
 	}
-	proto.LocalPort = astral.Uint16(localPort)
+	// note: a failed reflection leaves the local endpoint advertised; the
+	// any-port receive still lets a public initiator punch to it.
+	if err := proto.Announce(ctx, localPort, mod.reflectorFor(ctx, puncher, q.Caller())); err != nil {
+		mod.log.Logv(1, "reflection for the punch with %v failed: %v", q.Caller(), err)
+	}
 
 	if err = ch.Send(proto.AnswerSignal()); err != nil {
 		return err

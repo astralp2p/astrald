@@ -55,7 +55,7 @@ class FakeWorld(World):
     def ensure(self, test) -> None:
         pass
 
-    def restart(self, names: list) -> None:
+    def restart(self, names: list, kill: bool = False) -> None:
         self.restarts += 1
 
     def nodes(self) -> dict:

@@ -96,6 +96,7 @@ func (srv *Server) accept(ctx *astral.Context, l *listener, ctlClosed <-chan err
 		}
 
 		var conn = newConn(rawConn, &tor.Endpoint{}, false)
+		conn.keepalive = srv.config.linkKeepalive()
 		go func() {
 			err := srv.Nodes.EstablishInboundLink(ctx, conn)
 			if err != nil {

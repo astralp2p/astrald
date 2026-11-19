@@ -106,9 +106,11 @@ func story(path string, facts map[string]bool) error {
 	return step(facts, "follow_removes_the_provider", removes(ev, err, provider.id), "follow event %+v, err %v; want the removal of %v offering %v", ev, err, provider.id, service)
 }
 
-// removes reports whether ev removes exactly the provider's offering of service.
+// removes reports whether ev removes exactly the provider's offering of
+// service, with cause member_removed: the provider's binding ended on the
+// member, which sent the removal.
 func removes(ev servicescli.Event, err error, provider *astral.Identity) bool {
-	if err != nil || len(ev.Removed) != 1 {
+	if err != nil || len(ev.Removed) != 1 || ev.RemovedCause != services.CauseMemberRemoved {
 		return false
 	}
 	k := ev.Removed[0]

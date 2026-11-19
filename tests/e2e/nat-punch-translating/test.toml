@@ -1,0 +1,15 @@
+nodes   = ["node1", "node2"]
+timeout = 900
+after   = "adopt-node"
+# why: entering a NAT netns rewrites the world in place and nothing puts it
+# back, so a sibling cannot continue adopt-node's world afterwards.
+destroys = true
+# why this order: go-public restarts node2 so its nat module arms on its new
+# public alias, and add-reflector then links node1 to node2 over tcp, which
+# makes node2 reflect node1's public alias and arms node1's nat module. A
+# restart after that link would not undo node1's arming, but it would drop the
+# link the punch signals over.
+ops     = ["enter-nat node1 --translating",
+           "go-public node2",
+           "add-reflector node1 --reflector node2"]
+facts   = ["punch", "nat_link_networks", "isolated", "echo"]

@@ -83,7 +83,7 @@ func (s *Server) Run(ctx *astral.Context) error {
 			tc.SetKeepAlivePeriod(30 * time.Second)
 		}
 
-		conn := tcpmod.WrapConn(rawConn, false)
+		conn := tcpmod.WrapConn(rawConn, false, s.config.linkKeepalive())
 		go func() {
 			stopListener, err := s.onAccept(ctx, conn)
 			if err != nil {

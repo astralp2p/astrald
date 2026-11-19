@@ -4,6 +4,7 @@ import (
 	"slices"
 
 	"github.com/astralp2p/astral-go/api/events"
+	"github.com/astralp2p/astral-go/api/ip"
 	"github.com/astralp2p/astral-go/api/nodes"
 	"github.com/astralp2p/astral-go/api/tcp"
 	"github.com/astralp2p/astral-go/astral"
@@ -11,13 +12,21 @@ import (
 )
 
 // ReceiveObject dispatches an inbound object by type, accepting observed-endpoint
-// messages from linked peers and reacting to local link events with connectivity
-// upgrades and endpoint refreshes. Unhandled and rejected objects are ignored
-// without accepting the drop.
+// and endpoints-changed messages from linked peers, announcing local address
+// changes, and reacting to local link events with connectivity upgrades and
+// endpoint refreshes, on the first link to a sibling and on the close of one of
+// several links to it. Unhandled and rejected objects are ignored without
+// accepting the drop.
 func (mod *Module) ReceiveObject(drop objects.Drop) error {
 	switch object := drop.Object().(type) {
 	case *nodes.ObservedEndpointMessage:
 		err := mod.receiveObservedEndpointMessage(drop.SenderID(), object)
+		if err == nil {
+			return drop.Accept(false)
+		}
+
+	case *nodes.EndpointsChangedMessage:
+		err := mod.receiveEndpointsChanged(drop.SenderID(), object)
 		if err == nil {
 			return drop.Accept(false)
 		}
@@ -29,6 +38,10 @@ func (mod *Module) ReceiveObject(drop objects.Drop) error {
 		}
 
 		switch e := object.Data.(type) {
+		case *ip.EventNetworkAddressChanged:
+			if changesAdvertisedAddress(e) {
+				mod.scheduleEndpointsAnnounce()
+			}
 		case *nodes.LinkPressureEvent:
 			mod.log.Log("link pressure detected on %v with %v", e.LinkID, e.RemoteIdentity)
 
@@ -38,13 +51,14 @@ func (mod *Module) ReceiveObject(drop objects.Drop) error {
 				e.RemoteIdentity.IsEqual) {
 
 				go func() {
-					err := mod.UpdateNodeEndpoints(mod.ctx, e.RemoteIdentity, e.RemoteIdentity)
+					_, err := mod.UpdateNodeEndpoints(mod.ctx, e.RemoteIdentity, e.RemoteIdentity)
 					if err != nil {
 						mod.log.Error("updating node endpoints failed: %v", err)
 					}
 				}()
 			}
-
+		case *nodes.LinkClosedEvent:
+			mod.onPartialLinkClose(e)
 		}
 
 	}
@@ -69,4 +83,22 @@ func (mod *Module) receiveObservedEndpointMessage(source *astral.Identity, event
 	mod.AddObservedEndpoint(endpoint, endpoint.IP)
 
 	return nil
+}
+
+// onPartialLinkClose pulls the endpoints of a local swarm member when one of its
+// links closed and others remain.
+// why: the pool emits the event after it removed the closed link, so the pull
+// goes over a survivor; a dead link closed after its replacement arrived is the
+// reconnect the LinkCreatedEvent count missed.
+func (mod *Module) onPartialLinkClose(e *nodes.LinkClosedEvent) {
+	if e.LinkCount == 0 || !slices.ContainsFunc(mod.User.LocalSwarm(), e.RemoteIdentity.IsEqual) {
+		return
+	}
+
+	id := e.RemoteIdentity
+	mod.syncGate.Run(id, func() {
+		if _, err := mod.UpdateNodeEndpoints(mod.ctx, id, id); err != nil {
+			mod.log.Error("updating node endpoints after a link closed failed: %v", err)
+		}
+	})
 }

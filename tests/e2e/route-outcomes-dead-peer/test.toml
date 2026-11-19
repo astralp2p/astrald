@@ -4,3 +4,13 @@ after      = "adopt-node"
 local_only = "freezes and kills node2's astrald process by its pid"
 stop       = ["node2"]
 facts      = ["dead_peer"]
+
+# why: the frozen case needs a link that stays up past the 60 s routing
+# deadline; node1's keepalive would close it within tcp's N + T (25 s by
+# default) and the query would end as unavailable (link-dead-peer-keepalive
+# covers that). 300 s keeps the link up through both frozen and killed.
+[config.node1.tcp]
+link_idle_ping = "300s"
+
+[config.node1.kcp]
+link_idle_ping = "300s"

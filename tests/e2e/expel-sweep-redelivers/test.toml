@@ -1,0 +1,11 @@
+nodes      = ["node1", "node2"]
+timeout    = 120
+after      = "adopt-node"
+destroys   = true
+local_only = "deletes a stored ban from node2's database file to make node2 miss it"
+facts      = ["subject_id", "deleted_rows", "recovered_after", "links_before"]
+
+# why: the sweep runs once an hour by default; a short period lets one sweep
+# fall inside the test
+[config.node1.user]
+reconcile_interval = "5s"

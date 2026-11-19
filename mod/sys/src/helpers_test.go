@@ -3,6 +3,7 @@ package sys
 import (
 	"bytes"
 	"io"
+	"iter"
 	"sync"
 	"testing"
 	"time"
@@ -33,10 +34,14 @@ func (s *stubUser) Ready() <-chan struct{}                                      
 func (s *stubUser) Identity() *astral.Identity                                      { return s.id }
 func (s *stubUser) LocalSwarm() []*astral.Identity                                  { return nil }
 func (s *stubUser) AdmitRelayContract(*astral.Identity, *auth.SignedContract) error { return nil }
-func (s *stubUser) NewMaintainLinkTask(*astral.Identity) usermod.MaintainLinkTask   { return nil }
-func (s *stubUser) NewSyncNodesTask(*astral.Identity) usermod.SyncNodesTask         { return nil }
-func (s *stubUser) PushToLocalSwarm(*astral.Context, astral.Object)                 {}
-func (s *stubUser) PushToSiblings(*astral.Context, astral.Object)                   {}
+func (s *stubUser) FetchRelayContracts(*astral.Context, *astral.Identity) iter.Seq2[*astral.Identity, *auth.SignedContract] {
+	return func(func(*astral.Identity, *auth.SignedContract) bool) {}
+}
+func (s *stubUser) IsSwarmMember(*astral.Identity) bool                           { return false }
+func (s *stubUser) NewMaintainLinkTask(*astral.Identity) usermod.MaintainLinkTask { return nil }
+func (s *stubUser) NewSyncNodesTask(*astral.Identity) usermod.SyncNodesTask       { return nil }
+func (s *stubUser) PushToLocalSwarm(*astral.Context, astral.Object)               {}
+func (s *stubUser) PushToSiblings(*astral.Context, astral.Object)                 {}
 func (s *stubUser) Expel(*astral.Context, *astral.Identity) (*user.SignedExpulsion, error) {
 	return nil, nil
 }

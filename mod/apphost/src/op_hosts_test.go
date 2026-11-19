@@ -320,3 +320,30 @@ func TestHostsRefusesACallerWithoutSeeSwarm(t *testing.T) {
 		t.Fatalf("apphost.hosts read the index %d times for a caller without SeeSwarm; want none", n)
 	}
 }
+
+// TestHostsOnAClaimedNodeNamesOnlySwarmMembers: a former member's relay
+// contract stays indexed, and apphost.hosts on a claimed node leaves it out;
+// this node, a member of its own swarm, stays listed (A2G8).
+func TestHostsOnAClaimedNodeNamesOnlySwarmMembers(t *testing.T) {
+	self, a, b, app := astral.GenerateIdentity(), astral.GenerateIdentity(), astral.GenerateIdentity(), astral.GenerateIdentity()
+	mod, _ := hostsModule(self, relayContract(app, b), relayContract(app, a), relayContract(app, self))
+	mod.User = &memberUser{user: astral.GenerateIdentity(), members: []*astral.Identity{self, a}}
+
+	got := identities(t, askHosts(t, mod, app.String()))
+	if want := sortedStrings(self, a); !slices.Equal(got, want) {
+		t.Fatalf("apphost.hosts named %v; want the members %v", got, want)
+	}
+}
+
+// TestHostsOnAnUnclaimedNodeNamesEveryHost: a node without a claim has no
+// swarm, and apphost.hosts names every host as before.
+func TestHostsOnAnUnclaimedNodeNamesEveryHost(t *testing.T) {
+	self, a, b, app := astral.GenerateIdentity(), astral.GenerateIdentity(), astral.GenerateIdentity(), astral.GenerateIdentity()
+	mod, _ := hostsModule(self, relayContract(app, b), relayContract(app, a), relayContract(app, self))
+	mod.User = &memberUser{}
+
+	got := identities(t, askHosts(t, mod, app.String()))
+	if want := sortedStrings(self, a, b); !slices.Equal(got, want) {
+		t.Fatalf("apphost.hosts named %v; want every host %v", got, want)
+	}
+}

@@ -31,7 +31,14 @@ func (mod *Module) RouteQuery(ctx *astral.Context, q *astral.InFlightQuery, w io
 
 		case errors.Is(err, errEndpointUnavailable):
 			mod.log.Logv(3, "removing unresponsive query handler at %v", handler.Endpoint)
-			mod.ipcHandlers.Remove(handler)
+			// why: the app's bind session outlives the removed handler, so the
+			// app learns of the removal only when that session ends. Only the
+			// query that removed the handler ends it; a query that failed on a
+			// snapshot copy of an already removed handler would otherwise end
+			// the session the app bound after reconnecting.
+			if mod.ipcHandlers.Remove(handler) == nil {
+				mod.endBindSession(handler.Owner, handler.IPCToken)
+			}
 		}
 	}
 

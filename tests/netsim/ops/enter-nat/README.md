@@ -15,6 +15,17 @@ On each `--vm` (default `node1 node2`):
   the apphost unix socket stays in the shared mount namespace and `astral-query` still
   reaches it from the root namespace. astrald keeps its `-root` and identity.
 
+With **`--translating`** the NAT is a port-translating, endpoint-independent NAT with
+address-and-port-dependent filtering, the class of Starlink's NAT (X06):
+
+- the netns hands out local ports from `40000-40999` only, and an nft map sends UDP from local
+  port `40000+n` out from external port `20000+n` toward every destination (one mapping per
+  socket, never the local port itself; Linux's `snat ... random` would pick a port per flow,
+  which is a symmetric NAT);
+- there is no inbound DNAT: conntrack admits only replies to a flow the node opened, and new
+  inbound UDP to the alias is dropped at the VM's `input` (table `e2e_nat_filter`);
+- other traffic, TCP included, keeps the port-preserving SNAT.
+
 Moving astrald off the flat `10.77` address withdraws its direct LAN endpoint (astrald
 polls `InterfaceAddrs`; in the netns it sees only `192.168.99.2`), so the pair re-links
 over Tor — exactly the `leave-lan` dynamic.

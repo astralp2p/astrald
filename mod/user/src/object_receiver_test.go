@@ -22,6 +22,9 @@ import (
 // effectTimeout bounds the wait for an effect the receiver starts in a goroutine.
 const effectTimeout = 5 * time.Second
 
+// absenceWindow is how long a test watches for an asynchronous effect that must not happen.
+const absenceWindow = 200 * time.Millisecond
+
 // note: signatures here are markers, not cryptography. A signature is valid when
 // its data is validSigData; mod/auth and mod/crypto own the real verification.
 const validSigData = "valid"
@@ -161,9 +164,9 @@ func (n *recordingNodes) IsLinked(id *astral.Identity) bool {
 	return slicesContainsIdentity(n.linked, id)
 }
 
-func (n *recordingNodes) UpdateNodeEndpoints(_ *astral.Context, resolver, target *astral.Identity) error {
+func (n *recordingNodes) UpdateNodeEndpoints(_ *astral.Context, resolver, target *astral.Identity) (int, error) {
 	n.syncs <- endpointSync{resolver: resolver, target: target}
-	return nil
+	return 0, nil
 }
 
 func (n *recordingNodes) CloseLinks(id *astral.Identity) error {
@@ -622,6 +625,68 @@ func TestReceiveLinkCreatedEventRequiresLocalSender(t *testing.T) {
 			t.Fatalf("Accept calls %v; want one Accept(false)", a)
 		}
 	})
+}
+
+// TestReceivePartialLinkCloseSyncsSibling covers the LinkClosedEvent branch: a
+// local event that leaves links to a sibling schedules one sync with it; no
+// links left, a node outside the swarm, or an event from another node schedule
+// nothing.
+func TestReceivePartialLinkCloseSyncsSibling(t *testing.T) {
+	cases := []struct {
+		name      string
+		sibling   bool
+		linkCount uint8
+		local     bool
+		sync      bool
+	}{
+		{"one link left to a sibling", true, 1, true, true},
+		{"no link left to a sibling", true, 0, true, false},
+		{"one link left to a non-member", false, 1, true, false},
+		{"from another node", true, 1, false, false},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			f := newReceiverFixture(t, astral.GenerateIdentity())
+			remote := astral.GenerateIdentity()
+			if tc.sibling {
+				remote = f.addSibling()
+			}
+			sender := remote
+			if tc.local {
+				sender = f.nodeID
+			}
+
+			event := &events.Event{
+				ID:       astral.NewNonce(),
+				SourceID: f.nodeID,
+				Data:     &nodes.LinkClosedEvent{RemoteIdentity: remote, LinkCount: astral.Uint8(tc.linkCount)},
+			}
+			drop := &recordingDrop{sender: sender, object: event}
+			if err := f.mod.ReceiveObject(drop); err != nil {
+				t.Fatalf("ReceiveObject: %v", err)
+			}
+
+			if !tc.sync {
+				time.Sleep(absenceWindow)
+				f.requireNoEffect(t, drop)
+				return
+			}
+
+			select {
+			case task := <-f.scheduler.tasks:
+				sync, ok := task.(*SyncNodesTask)
+				if !ok || !sync.remoteIdentity.IsEqual(remote) {
+					t.Fatalf("scheduled %v; want a sync with the sibling", task)
+				}
+			case <-time.After(effectTimeout):
+				t.Fatal("a partial link close of a sibling scheduled no sync")
+			}
+			if a := drop.accepted(); len(a) != 1 || a[0] {
+				t.Fatalf("Accept calls %v; want one Accept(false)", a)
+			}
+		})
+	}
 }
 
 // scheduledSyncs returns the subjects of the SyncNodesTasks scheduled so far and

@@ -105,3 +105,25 @@ func TestRegistrationThatFailsPushesNothing(t *testing.T) {
 		t.Fatalf("a failed registration pushed %d objects to the siblings; want none", len(pushed))
 	}
 }
+
+// TestRegistrationSkipsThePushWhenConfigured: with skip_sibling_push set,
+// apphost.register issues the token and pushes nothing to the siblings.
+func TestRegistrationSkipsThePushWhenConfigured(t *testing.T) {
+	mod := serveAppsRegistrar(t)
+	mod.config.SkipSiblingPush = true
+	recorder := newPushRecorder()
+	mod.User = recorder
+	w := newRecordingWriter()
+
+	if err := register(t, mod, &apphost.RegisterRequest{}, w); err != nil {
+		t.Fatalf("apphost.register refused: %v", err)
+	}
+	awaitServeAppsClose(t, w)
+
+	if tokens := issuedTokens(t, mod); len(tokens) != 1 {
+		t.Fatalf("apphost.register issued %d tokens; want 1", len(tokens))
+	}
+	if pushed := recorder.drain(); len(pushed) != 0 {
+		t.Fatalf("apphost.register pushed %d objects with skip_sibling_push set; want none", len(pushed))
+	}
+}

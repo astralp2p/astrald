@@ -77,13 +77,6 @@ func run(path string) (map[string]bool, error) {
 	}
 	defer stop()
 
-	// note: node1 routes to the greeter through the greeter's relay contract,
-	// which apphost.register pushes to the siblings in the background.
-	facts["node1_knows_the_greeter"] = waitHost(ctx, admin1, greeter.Identity, n2.Identity)
-	if !facts["node1_knows_the_greeter"] {
-		return facts, fmt.Errorf("apphost.hosts on node1 never named node2 for the greeter %v", greeter.Identity)
-	}
-
 	// the visitor app on node1: another identity, token and client
 	visitor, err := apphostcli.New(nil, admin1).Register(ctx)
 	if err != nil {
@@ -96,6 +89,13 @@ func run(path string) (map[string]bool, error) {
 	facts["visitor_greeted_across_nodes"] = err == nil && reply == want
 	if !facts["visitor_greeted_across_nodes"] {
 		return facts, fmt.Errorf("the visitor on node1 called greeter:hello and got %q (err %v); want %q", reply, err, want)
+	}
+
+	// why after the call: node1 holds the greeter's relay contract once it
+	// routed the call, from the registration push or from its own pull.
+	facts["node1_knows_the_greeter"] = hostsName(ctx, admin1, greeter.Identity, n2.Identity)
+	if !facts["node1_knows_the_greeter"] {
+		return facts, fmt.Errorf("after the call, apphost.hosts on node1 does not name node2 for the greeter %v", greeter.Identity)
 	}
 
 	fmt.Fprintln(os.Stderr, "ok: the visitor on node1 called the greeter on node2 and was greeted as itself")
@@ -149,22 +149,14 @@ func serve(ctx *astral.Context, n node, token string) (func(), error) {
 	}
 }
 
-// waitHost polls apphost.hosts on the admin's node until it names host for
-// app, within 30 seconds.
-func waitHost(ctx *astral.Context, admin *astrald.Client, app *astral.Identity, host string) bool {
-	deadline := time.Now().Add(30 * time.Second)
-	for time.Now().Before(deadline) {
-		hosts, errp := apphostcli.New(nil, admin).Hosts(ctx, app.String())
-		found := false
-		for h := range hosts {
-			found = found || h.String() == host
-		}
-		if *errp == nil && found {
-			return true
-		}
-		time.Sleep(500 * time.Millisecond)
+// hostsName reports whether apphost.hosts on the admin's node names host for app.
+func hostsName(ctx *astral.Context, admin *astrald.Client, app *astral.Identity, host string) bool {
+	hosts, errp := apphostcli.New(nil, admin).Hosts(ctx, app.String())
+	found := false
+	for h := range hosts {
+		found = found || h.String() == host
 	}
-	return false
+	return *errp == nil && found
 }
 
 // hello queries app:hello as the client's app and returns the reply.

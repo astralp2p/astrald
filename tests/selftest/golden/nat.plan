@@ -1,1 +1,4 @@
 w0 vm: bootstrap-user-software-key → adopt-node → nat-punch
+w1 vm: bootstrap-user-software-key* → adopt-node* → nat-punch-translating
+w2 vm: bootstrap-user-software-key* → adopt-node*
+       → nat-punch-double-translating

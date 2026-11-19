@@ -41,8 +41,11 @@ hold-purge
 hold-isolation
 swarm-roster-sync
 relay-contract-forwarding
+reconnect-sync-after-dead-link
 relay-contract-reindex-after-expel
+relay-contract-race
 expel-propagation
+expel-cross-traffic
 import-user-software-key
 introduce-node-setup
 introduce-node
@@ -50,6 +53,8 @@ app-call-local
 app-routing-two-apps
 app-op-surface
 app-call-remote
+relay-pull-on-miss
+relay-pull-absent
 app-ping-pong
 app-reject-code
 route-outcomes
@@ -75,6 +80,7 @@ app-preexisting-provider-sync
 manager-answers-invite
 app-node-restart-reconnect
 services-node-restart
+services-consumer-restart
 blueprint-survives-restart
 mcp-origin
 messaging-ops
@@ -86,6 +92,7 @@ policy-delegate
 indexer-cursor
 swarm-member-restart
 expel-survives-restart
+membership-resync-volume
 adopt-claimed-node-setup
 distribution-gate-setup
 adopt-claimed-node
@@ -101,12 +108,14 @@ expel-authority
 expel-during-transfer
 join-via-member
 link-self-heal
+link-idle-keepalive
 services-advertise-identity
 services-swarm-outcome-rules
 stranger-disclosure
 two-swarms-side-by-side
 basic-strategy-stalled-negotiation
 basic-strategy-dead-rows
+kcp-only-restart-relink
 basic-strategy-gw-cycle
 link-session-migrate
 link-session-migrate-serving-side

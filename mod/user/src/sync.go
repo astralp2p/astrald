@@ -139,6 +139,7 @@ func (mod *Module) syncSiblings(ctx *astral.Context, with *astral.Identity) {
 
 // syncExpulsions pushes every ban issued by the active user to the remote node,
 // so a peer that was offline during an expel still learns the ban on next link.
+// The remote node's own ban is pushed too: it is the subject's trigger to leave the swarm.
 func (mod *Module) syncExpulsions(ctx *astral.Context, with *astral.Identity) {
 	ac := mod.ActiveContract()
 	if ac == nil {
@@ -152,10 +153,6 @@ func (mod *Module) syncExpulsions(ctx *astral.Context, with *astral.Identity) {
 	}
 
 	for _, signed := range expulsions {
-		if signed.Subject.IsEqual(with) {
-			continue
-		}
-
 		mod.Objects.Push(ctx, with, signed)
 	}
 }

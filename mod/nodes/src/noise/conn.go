@@ -8,6 +8,7 @@ import (
 )
 
 var _ exonetmod.Conn = &Conn{}
+var _ exonetmod.KeepaliveConn = &Conn{}
 
 // Conn is a net.SecureConn authenticated and ecrypted via the noise_xk protocol
 type Conn struct {
@@ -45,4 +46,12 @@ func (conn *Conn) LocalIdentity() *astral.Identity {
 
 func (conn *Conn) RemoteIdentity() *astral.Identity {
 	return astral.IdentityFromPubKey(conn.brontide.RemotePub())
+}
+
+// LinkKeepalive passes on the keepalive timing of the transport conn under the handshake; zero when it sets none.
+func (conn *Conn) LinkKeepalive() exonetmod.LinkKeepalive {
+	if c, ok := conn.conn.(exonetmod.KeepaliveConn); ok {
+		return c.LinkKeepalive()
+	}
+	return exonetmod.LinkKeepalive{}
 }

@@ -7,14 +7,14 @@ import (
 	"github.com/astralp2p/astral-go/astral"
 )
 
-// fakeCarrier records every carry it starts and whether it was stopped.
+// fakeCarrier records every carry it starts and how often it was stopped.
 type fakeCarrier struct {
 	mu      sync.Mutex
 	carried []*Contribution
-	stopped map[*Contribution]bool
+	stopped map[*Contribution]int
 }
 
-func newCarrier() *fakeCarrier { return &fakeCarrier{stopped: map[*Contribution]bool{}} }
+func newCarrier() *fakeCarrier { return &fakeCarrier{stopped: map[*Contribution]int{}} }
 
 func (f *fakeCarrier) Carry(r *Contribution) func() {
 	f.mu.Lock()
@@ -23,7 +23,7 @@ func (f *fakeCarrier) Carry(r *Contribution) func() {
 	return func() {
 		f.mu.Lock()
 		defer f.mu.Unlock()
-		f.stopped[r] = true
+		f.stopped[r]++
 	}
 }
 
@@ -40,6 +40,13 @@ func (f *fakeCarrier) carry(member *astral.Identity) *Contribution {
 }
 
 func (f *fakeCarrier) isStopped(r *Contribution) bool {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.stopped[r] > 0
+}
+
+// stops counts how often the carry of r was stopped.
+func (f *fakeCarrier) stops(r *Contribution) int {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	return f.stopped[r]

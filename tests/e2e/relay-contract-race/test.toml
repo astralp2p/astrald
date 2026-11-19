@@ -1,0 +1,23 @@
+nodes   = ["node1", "node2", "node3", "node4"]
+timeout = 300
+after   = "adopt-node"
+# why destroys: node3 and node4 join the swarm, and the config below holds for
+# every test in the world
+destroys = true
+host_listener = "serves its provider apps on test-host ports that every node dials"
+facts   = ["relay_contract_race"]
+
+# why: no apphost.register pushes a relay contract to the siblings, so a
+# consumer's node obtains a remote provider's contract only by the
+# routing-time pull; a dropped push is a strictly harder case than a slow one
+[config.node1.apphost]
+skip_sibling_push = true
+
+[config.node2.apphost]
+skip_sibling_push = true
+
+[config.node3.apphost]
+skip_sibling_push = true
+
+[config.node4.apphost]
+skip_sibling_push = true

@@ -121,3 +121,11 @@ class LocalNode:
         except subprocess.TimeoutExpired:
             self.proc.kill()
             self.proc.wait(timeout=5)
+
+    def kill(self) -> None:
+        """SIGKILL the daemon: it runs no shutdown path and sends its peers
+        nothing as it goes."""
+        if self.proc is None or self.proc.poll() is not None:
+            return
+        self.proc.kill()
+        self.proc.wait(timeout=5)

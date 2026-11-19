@@ -47,12 +47,13 @@ code = here / f"{phase}.exit"
 sys.exit(int(code.read_text()) if code.exists() else 0)
 '''
 
-# name -> (after, ships while_down.py, while_down.py's exit code)
+# name -> (after, ships while_down.py, while_down.py's exit code, kills)
 TREE = {
-    "base":       (None, False, 0),
-    "down":       ("base", True, 0),
-    "plain":      ("base", False, 0),
-    "down-fails": ("base", True, 1),
+    "base":       (None, False, 0, False),
+    "down":       ("base", True, 0, False),
+    "plain":      ("base", False, 0, False),
+    "down-fails": ("base", True, 1, False),
+    "killed":     ("base", True, 0, True),
 }
 
 
@@ -82,10 +83,11 @@ class ListeningWorld(World):
     def ensure(self, test) -> None:
         pass
 
-    def restart(self, names: list, while_down=None) -> None:
+    def restart(self, names: list, while_down=None,
+                kill: bool = False) -> None:
         port = self.sock.getsockname()[1]
         self.sock.close()
-        self._note("stop")
+        self._note("kill" if kill else "stop")
         if while_down:
             while_down()
         self.sock = _listen(port)
@@ -107,12 +109,14 @@ class ListeningWorld(World):
 
 
 def write_tree(root: Path) -> dict:
-    for name, (after, ships, code) in TREE.items():
+    for name, (after, ships, code, kills) in TREE.items():
         d = root / name
         d.mkdir(parents=True)
         lines = ['nodes = ["node1"]']
         if after:
             lines += [f'after = "{after}"', 'restart = ["node1"]']
+        if kills:
+            lines += ['restart_kill = "node1 must send nothing as it goes"']
         (d / "test.toml").write_text("\n".join(lines) + "\n")
         (d / "script.py").write_text(STEP)
         (d / "verify.py").write_text(STEP)
@@ -185,11 +189,20 @@ class TestWhileDown(unittest.TestCase):
         self.assertEqual(entry["status"], "pass")
         self.assertFalse((art / "while_down.log").exists())
 
+    def test_restart_kill_reaches_the_world_as_a_kill(self):
+        events, entry, _ = run("killed")
+        self.assertEqual(events, BASE + [
+            "kill",
+            'while_down refuses {"base": 1, "killed": 1}',
+            "start",
+            'verify answers {"base": 1, "killed": 1}'])
+        self.assertEqual(entry["status"], "pass")
+
     def test_a_world_that_never_calls_the_hook_is_no_pass(self):
         # why: a restart that skipped the script would judge a node whose
         # changes were never made
         class Skips(ListeningWorld):
-            def restart(self, names, while_down=None):
+            def restart(self, names, while_down=None, kill=False):
                 super().restart(names)
 
         with mock.patch(f"{__name__}.ListeningWorld", Skips):
@@ -204,6 +217,9 @@ class FakeNode:
 
     def stop(self):
         self.events.append(("stop", self.name))
+
+    def kill(self):
+        self.events.append(("kill", self.name))
 
     def start(self, keep):
         self.events.append(("start", self.name))
@@ -224,6 +240,16 @@ class TestLocalWorld(unittest.TestCase):
                                   ("hook",),
                                   ("start", "node1"), ("start", "node2")])
         self.assertEqual([n.restarts for n in w._nodes.values()], [1, 1])
+
+    def test_a_kill_restart_kills_every_node_and_never_stops_one(self):
+        tmp = Path(tempfile.mkdtemp())
+        w = LocalWorld(tmp / "w0", tmp / "astrald", PortSpan(20800, 2))
+        self.addCleanup(w.close, False)
+        events = []
+        w._nodes = {n: FakeNode(n, events) for n in ("node1", "node2")}
+        w.restart(["node1", "node2"], kill=True)
+        self.assertEqual(events, [("kill", "node1"), ("kill", "node2"),
+                                  ("start", "node1"), ("start", "node2")])
 
 
 if __name__ == "__main__":
