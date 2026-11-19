@@ -1,6 +1,7 @@
 package nodes
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -119,19 +120,19 @@ func (m *Mux) RouteQuery(ctx *astral.Context, q *astral.InFlightQuery, w io.Writ
 
 	if err := m.ch.Send(frame); err != nil {
 		conn.Close()
-		return nil, err
+		return nil, unavailable()
 	}
 
 	select {
 	case errCode := <-conn.routingResult:
-		if errCode != 0 {
-			// the peer refused; it may never send a Reset (relay refusal),
-			// so drop the session here without emitting one ourselves.
+		if errCode != frames.CodeAccepted {
+			// the peer did not accept; it may never send a Reset (relay
+			// refusal), so drop the session here without emitting one ourselves.
 			if writer, ok := conn.writer.(*muxSessionWriter); ok {
 				writer.PeerClose()
 			}
 			conn.Close()
-			return query.RejectWithCode(errCode)
+			return nil, routingError(errCode)
 		}
 
 		go func() {
@@ -143,7 +144,40 @@ func (m *Mux) RouteQuery(ctx *astral.Context, q *astral.InFlightQuery, w io.Writ
 
 	case <-ctx.Done():
 		conn.Close()
-		return query.RouteNotFound()
+		return nil, ctx.Err()
+	}
+}
+
+// unavailable is the error for a next hop that could not be reached.
+func unavailable() error {
+	return astral.NewErrRejected(astral.CodeUnavailable)
+}
+
+// routingError is the error a Response code other than CodeAccepted stands
+// for on the caller's side.
+func routingError(code uint8) error {
+	if code == frames.CodeNoRoute {
+		return astral.NewErrRouteNotFound()
+	}
+	return astral.NewErrRejected(code)
+}
+
+// linkCode is the Response code that answers a router error over the link.
+func linkCode(err error) uint8 {
+	var reject *astral.ErrRejected
+	switch {
+	case errors.As(err, &reject):
+		// why: a provider's own 255 would read as "no route here".
+		if reject.Code == frames.CodeNoRoute {
+			return frames.CodeRejected
+		}
+		return reject.Code
+	case errors.Is(err, &astral.ErrRouteNotFound{}):
+		return frames.CodeNoRoute
+	case errors.Is(err, context.DeadlineExceeded):
+		return astral.CodeTimeout
+	default:
+		return astral.CodeUnavailable
 	}
 }
 
@@ -220,7 +254,8 @@ func (m *Mux) handleInboundQuery(linkNonce astral.Nonce, caller, target, relayID
 		// why the response precedes the close: closing emits a Reset, and the
 		// peer handles frames in arrival order — a Reset first deletes the
 		// session the Response needs, and the verdict is dropped.
-		m.ch.Send(&frames.Response{Nonce: linkNonce, ErrCode: frames.CodeRejected})
+		// why unavailable: the node exists but cannot route yet.
+		m.ch.Send(&frames.Response{Nonce: linkNonce, ErrCode: astral.CodeUnavailable})
 		conn.Close()
 		return
 	}
@@ -235,16 +270,11 @@ func (m *Mux) handleInboundQuery(linkNonce astral.Nonce, caller, target, relayID
 	q.Extra.Set("origin", astral.OriginNetwork)
 	w, err := router.RouteQuery(ctx, q, conn)
 	if err != nil {
-		code := uint8(frames.CodeRejected)
-		var reject *astral.ErrRejected
-		if errors.As(err, &reject) {
-			code = reject.Code
-		}
 		// why the response precedes the close: see waitRouter above. This is
 		// the path every origin refusal on a linked node takes, and with the
 		// order reversed the caller waits out its own deadline and reads the
-		// refusal as route_not_found.
-		m.ch.Send(&frames.Response{Nonce: linkNonce, ErrCode: astral.Uint8(code)})
+		// refusal as a timeout.
+		m.ch.Send(&frames.Response{Nonce: linkNonce, ErrCode: astral.Uint8(linkCode(err))})
 		conn.Close()
 		return
 	}

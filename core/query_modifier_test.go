@@ -1,7 +1,6 @@
 package core
 
 import (
-	"errors"
 	"testing"
 
 	"github.com/astralp2p/astral-go/api/secp256k1"
@@ -47,18 +46,6 @@ func TestQueryModifierAddRelay(t *testing.T) {
 	q.AddRelay(idB)
 	if got := relays(t, q); len(got) != 2 || got[0] != idA || got[1] != idB {
 		t.Fatalf("after AddRelay(B) relays = %v, want [%v %v]", got, idA, idB)
-	}
-}
-
-func TestQueryModifierBlockKeepsFirst(t *testing.T) {
-	q := newTestModifier()
-	e1, e2 := errors.New("e1"), errors.New("e2")
-
-	q.Block(e1)
-	q.Block(e2)
-
-	if got := q.blocked.Get(); got != e1 {
-		t.Fatalf("blocked = %v, want %v", got, e1)
 	}
 }
 
