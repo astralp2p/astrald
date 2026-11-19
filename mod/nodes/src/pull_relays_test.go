@@ -361,9 +361,13 @@ func TestPullRelaysCallerCancelDoesNotCutTheAsk(t *testing.T) {
 	f := newPullFixture()
 	app, host := astral.GenerateIdentity(), astral.GenerateIdentity()
 	release := make(chan struct{})
-	f.user.fetch = func(_ *astral.Context, _ *astral.Identity, yield func(*astral.Identity, *auth.SignedContract) bool) {
-		<-release
-		yield(host, relayContractOf(app, host))
+	// the siblings answer once released, unless the ask's context ends first
+	f.user.fetch = func(ctx *astral.Context, _ *astral.Identity, yield func(*astral.Identity, *auth.SignedContract) bool) {
+		select {
+		case <-release:
+			yield(host, relayContractOf(app, host))
+		case <-ctx.Done():
+		}
 	}
 
 	ctx, cancel := networkCtx().WithCancel()
