@@ -24,6 +24,7 @@ func (Loader) Load(node astral.Node, assets assets.Assets, log *log.Logger) (cor
 		file:   defaultFileConfig,
 		dials:  newDialMap(),
 		now:    time.Now,
+		after:  time.After,
 	}
 	mod.readPeerContract = mod.readContract
 

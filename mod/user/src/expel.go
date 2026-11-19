@@ -48,9 +48,10 @@ func (mod *Module) Expel(ctx *astral.Context, nodeID *astral.Identity) (*user.Si
 
 	go mod.PushToLocalSwarm(mod.ctx, signed)
 	// why: PushToLocalSwarm skips the subject, so push the ban to the expelled node
-	// directly — its trigger to self-enforce via leaveSwarm. A missed push is repaired
-	// by the expulsion sync at its next link and by the sweep (reconcile_task.go).
-	go mod.Objects.Push(mod.ctx, nodeID, signed)
+	// directly — its trigger to self-enforce via leaveSwarm. The push is retried
+	// until the node answers; the expulsion sync at the node's next link with a
+	// holder of the ban and the sweep (reconcile_task.go) also deliver it.
+	go mod.pushUntilDelivered(mod.ctx, nodeID, signed)
 	// why: stop maintaining the link but do not force-close it — that would race the
 	// push above. On delivery the node tears itself down; until then the issuer's
 	// authorizers reject it.
@@ -111,6 +112,7 @@ func (mod *Module) applyExpulsion(id *astral.Identity) {
 // it, so without this the banned node keeps reconnecting to and syncing with peers
 // that now reject it. Clearing the contract is the only local signal of the ban.
 func (mod *Module) leaveSwarm() {
+	mod.log.Info("leaving the swarm: this node is expelled")
 	for _, sib := range mod.sibs.Values() {
 		mod.removeSibling(sib.ID)
 		if err := mod.Nodes.CloseLinks(sib.ID); err != nil {

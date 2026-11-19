@@ -55,6 +55,8 @@ type Module struct {
 	readPeerContract peerContractReader
 	// now is the clock of the nearby contact policy and of the member expiry timer.
 	now func() time.Time
+	// after is the clock of the ban push backoff; see pushUntilDelivered.
+	after func(time.Duration) <-chan time.Time
 
 	// joinTarget is the node a running user.join is joining; nil while no join
 	// runs. See recognizeJoinTarget.
