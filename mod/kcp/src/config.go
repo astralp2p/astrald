@@ -30,7 +30,10 @@ type Config struct {
 // through the tree survives a restart. An unset setting reads as on.
 func defaultConfig() Config {
 	return Config{
-		DialTimeout: time.Minute,
+		// why: DialTimeout bounds only the handshake, which takes milliseconds
+		// on a LAN and under a second on a punched NAT path; a dial to a dead
+		// address fails after it.
+		DialTimeout: 5 * time.Second,
 		ListenPort:  1792,
 
 		// why: a traversal that fails after the peer opened a listener never sends a

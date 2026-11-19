@@ -26,8 +26,7 @@ func TestLinkKeepaliveConfig(t *testing.T) {
 			if got := mod.config.linkKeepalive(); got != test.want {
 				t.Fatalf("linkKeepalive() = %v; want %v", got, test.want)
 			}
-			conn := WrapKCPConn(nil, nil, nil, true, time.Minute)
-			conn.keepalive = mod.config.linkKeepalive()
+			conn := &WrappedConn{keepalive: mod.config.linkKeepalive()}
 			var kc exonetmod.KeepaliveConn = conn
 			if got := kc.LinkKeepalive(); got != test.want {
 				t.Fatalf("conn LinkKeepalive() = %v; want %v", got, test.want)
