@@ -10,12 +10,19 @@ import (
 
 // Type check
 var _ exonetmod.Conn = &Conn{}
+var _ exonetmod.KeepaliveConn = &Conn{}
 
 // Conn represents a network connection over Tor
 type Conn struct {
 	net.Conn
 	remoteEndpoint *tor.Endpoint
 	outbound       bool
+	keepalive      exonetmod.LinkKeepalive
+}
+
+// LinkKeepalive returns the keepalive timing of links over this connection.
+func (conn *Conn) LinkKeepalive() exonetmod.LinkKeepalive {
+	return conn.keepalive
 }
 
 // LocalEndpoint returns an empty address, since there is no local endpoint in Tor
@@ -38,7 +45,7 @@ func (conn *Conn) Outbound() bool {
 }
 
 // newConn wraps a standard net.Conn into a astral's net.Conn with the addition of boundness
-func newConn(conn net.Conn, remoteEndpoint *tor.Endpoint, outbound bool) exonetmod.Conn {
+func newConn(conn net.Conn, remoteEndpoint *tor.Endpoint, outbound bool) *Conn {
 	return &Conn{
 		Conn:           conn,
 		remoteEndpoint: remoteEndpoint,

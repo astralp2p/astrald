@@ -9,6 +9,7 @@ import (
 )
 
 var _ exonetmod.Conn = Conn{}
+var _ exonetmod.KeepaliveConn = Conn{}
 
 // Conn is an exonet.Conn that wraps a net.Conn.
 type Conn struct {
@@ -16,13 +17,15 @@ type Conn struct {
 	outbound       bool
 	localEndpoint  *tcp.Endpoint
 	remoteEndpoint *tcp.Endpoint
+	keepalive      exonetmod.LinkKeepalive
 }
 
-// WrapConn returns an instance of Conn that wraps the given net.Conn.
-func WrapConn(conn net.Conn, outbound bool) *Conn {
+// WrapConn returns an instance of Conn that wraps the given net.Conn; keepalive times the links over it.
+func WrapConn(conn net.Conn, outbound bool, keepalive exonetmod.LinkKeepalive) *Conn {
 	c := &Conn{
-		Conn:     conn,
-		outbound: outbound,
+		Conn:      conn,
+		outbound:  outbound,
+		keepalive: keepalive,
 	}
 
 	c.localEndpoint, _ = tcp.ParseEndpoint(conn.LocalAddr().String())
@@ -41,4 +44,8 @@ func (conn Conn) RemoteEndpoint() exonet.Endpoint {
 
 func (conn Conn) Outbound() bool {
 	return conn.outbound
+}
+
+func (conn Conn) LinkKeepalive() exonetmod.LinkKeepalive {
+	return conn.keepalive
 }

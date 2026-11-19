@@ -2,6 +2,8 @@ package kcp
 
 import (
 	"time"
+
+	exonetmod "github.com/astralp2p/astrald/mod/exonet"
 )
 
 type Config struct {
@@ -15,6 +17,11 @@ type Config struct {
 	// EphemeralIdleTimeout closes an ephemeral listener that accepts no
 	// connection within it. Zero disables the timeout.
 	EphemeralIdleTimeout time.Duration `yaml:"ephemeral_idle_timeout,omitempty"`
+
+	// LinkIdlePing and LinkPingTimeout time the keepalive of links over this
+	// transport (astral-docs topics/link-mux.md, Keepalive).
+	LinkIdlePing    time.Duration `yaml:"link_idle_ping,omitempty"`
+	LinkPingTimeout time.Duration `yaml:"link_ping_timeout,omitempty"`
 }
 
 // defaultConfig returns the config a load starts from.
@@ -30,5 +37,13 @@ func defaultConfig() Config {
 		// connection, and nothing else reclaims the port. The window is wide enough
 		// that a slow but live traversal still arrives first.
 		EphemeralIdleTimeout: 15 * time.Minute,
+
+		LinkIdlePing:    15 * time.Second,
+		LinkPingTimeout: 10 * time.Second,
 	}
+}
+
+// linkKeepalive returns the keepalive timing of links over kcp conns.
+func (c Config) linkKeepalive() exonetmod.LinkKeepalive {
+	return exonetmod.LinkKeepalive{Idle: c.LinkIdlePing, Timeout: c.LinkPingTimeout}
 }
