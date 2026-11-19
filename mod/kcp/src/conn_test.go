@@ -171,11 +171,15 @@ func TestAcceptedPhantomSessionEndsWithinDialTimeout(t *testing.T) {
 	startRun(t, srv)
 	t.Cleanup(func() { srv.Close() })
 
-	stray, err := net.DialUDP("udp", nil, &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: listenPort})
+	// why: a packet sent before the listener binds draws an ICMP port
+	// unreachable, which a connected socket reports as ECONNREFUSED on its next
+	// write; an unconnected socket drops it, so the retry below can proceed.
+	stray, err := net.ListenUDP("udp", &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1)})
 	if err != nil {
-		t.Fatalf("dial stray socket: %v", err)
+		t.Fatalf("open stray socket: %v", err)
 	}
 	defer stray.Close()
+	listenAddr := &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: listenPort}
 
 	// note: kcp-go accepts a session for any packet of at least the 24-byte
 	// kcp header from a new address; a zeroed header carries no frame.
@@ -183,7 +187,7 @@ func TestAcceptedPhantomSessionEndsWithinDialTimeout(t *testing.T) {
 	// until a session is accepted.
 	deadline := time.After(3 * time.Second)
 	for {
-		if _, err := stray.Write(make([]byte, kcpgo.IKCP_OVERHEAD)); err != nil {
+		if _, err := stray.WriteToUDP(make([]byte, kcpgo.IKCP_OVERHEAD), listenAddr); err != nil {
 			t.Fatalf("send stray packet: %v", err)
 		}
 
