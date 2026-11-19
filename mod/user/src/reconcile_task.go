@@ -19,15 +19,19 @@ const reconcileTimeout = 30 * time.Second
 
 // runReconcile runs the expulsion sweep every reconcile interval until ctx ends.
 func (mod *Module) runReconcile(ctx *astral.Context) {
-	interval := mod.file.ReconcileInterval
-	if interval <= 0 {
-		interval = defaultReconcileInterval
-	}
-
-	ticker := time.NewTicker(interval)
+	ticker := time.NewTicker(mod.reconcileInterval())
 	defer ticker.Stop()
 
 	mod.reconcileOnTick(ctx, ticker.C)
+}
+
+// reconcileInterval returns the configured sweep period, or the default when
+// user.yaml sets a zero or negative one.
+func (mod *Module) reconcileInterval() time.Duration {
+	if mod.file.ReconcileInterval <= 0 {
+		return defaultReconcileInterval
+	}
+	return mod.file.ReconcileInterval
 }
 
 // reconcileOnTick runs one sweep per tick until ctx ends.

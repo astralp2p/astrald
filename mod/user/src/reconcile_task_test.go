@@ -245,3 +245,25 @@ func TestReconcileWithoutActiveContractPushesNothing(t *testing.T) {
 	f.mod.reconcileWith(astral.NewContext(nil), f.nodes.linked[0])
 	collectBanPushes(t, pusher, 0, 50*time.Millisecond)
 }
+
+// TestReconcileInterval_DefaultsToOneHour pins the 1 h default and the rule that a
+// zero or negative reconcile_interval selects it.
+func TestReconcileInterval_DefaultsToOneHour(t *testing.T) {
+	if defaultFileConfig.ReconcileInterval != time.Hour {
+		t.Fatalf("default reconcile_interval = %v, want 1h", defaultFileConfig.ReconcileInterval)
+	}
+
+	cases := []struct {
+		set, want time.Duration
+	}{
+		{0, time.Hour},
+		{-time.Minute, time.Hour},
+		{5 * time.Minute, 5 * time.Minute},
+	}
+	for _, c := range cases {
+		mod := &Module{file: FileConfig{ReconcileInterval: c.set}}
+		if got := mod.reconcileInterval(); got != c.want {
+			t.Errorf("reconcile_interval %v: got %v, want %v", c.set, got, c.want)
+		}
+	}
+}
