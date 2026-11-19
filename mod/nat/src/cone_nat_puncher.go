@@ -14,7 +14,6 @@ import (
 	"github.com/astralp2p/astral-go/api/ip"
 	"github.com/astralp2p/astral-go/api/nat"
 	"github.com/astralp2p/astral-go/astral"
-	"github.com/astralp2p/astral-go/sig"
 )
 
 // Ensure conePuncher implements the public Puncher interface from the root package.
@@ -137,7 +136,7 @@ func (p *conePuncher) HolePunch(
 	}
 
 	// Prepare candidate remote addresses around the peer's reported port.
-	remoteAddrs, allowed, err := preparePunchTargets(peer, peerPort)
+	remoteAddrs, err := preparePunchTargets(peer, peerPort)
 	if err != nil {
 		return nil, err
 	}
@@ -151,7 +150,7 @@ func (p *conePuncher) HolePunch(
 	defer cancel()
 
 	// Launch sender and receiver using the snapshot conn.
-	recvAddrCh := p.receive(ctx, conn, burstInterval, allowed)
+	recvAddrCh := p.receive(ctx, conn, burstInterval, net.IP(peer))
 	go p.sendBursts(ctx, conn, remoteAddrs, burstInterval)
 
 	// Wait for success or timeout/cancel.
@@ -167,8 +166,9 @@ func (p *conePuncher) HolePunch(
 	}
 }
 
-// receive listens for any incoming UDP probe matching our session and sends the sender address to the returned channel.
-func (p *conePuncher) receive(ctx context.Context, conn net.PacketConn, interval time.Duration, allowed *sig.Set[string]) <-chan *net.UDPAddr {
+// receive accepts the first datagram carrying the session from any UDP port of
+// peer, answers it with a burst to its source, and sends the source to the returned channel.
+func (p *conePuncher) receive(ctx context.Context, conn net.PacketConn, interval time.Duration, peer net.IP) <-chan *net.UDPAddr {
 	var out = make(chan *net.UDPAddr, 1)
 
 	go func() {
@@ -198,24 +198,23 @@ func (p *conePuncher) receive(ctx context.Context, conn net.PacketConn, interval
 			}
 
 			ua, ok := addr.(*net.UDPAddr)
-			if !ok {
+			// why: a NAT that translates ports sends from a port nobody announced;
+			// the 16-byte session, not the port, proves the sender.
+			if !ok || !ua.IP.Equal(peer) || n != len(p.session) || !bytes.Equal(buf[:n], p.session) {
 				continue
 			}
 
-			if !allowed.Contains(ua.String()) {
-				continue
+			// why: HolePunch returns on this probe and stops sendBursts; the peer
+			// still needs datagrams at its real mapped port to finish its own receive.
+			for i := 0; i < packetsPerBurst; i++ {
+				_, _ = conn.WriteTo(p.session, ua)
 			}
 
-			if n == len(p.session) && bytes.Equal(buf[:n], p.session) {
-				if p.callbacks.OnProbeReceived != nil {
-					p.callbacks.OnProbeReceived(ua)
-				}
-				select {
-				case out <- ua:
-				default:
-				}
-				return
+			if p.callbacks.OnProbeReceived != nil {
+				p.callbacks.OnProbeReceived(ua)
 			}
+			out <- ua
+			return
 		}
 	}()
 
@@ -269,9 +268,9 @@ func candidatePorts(center, spread int) (ports []int) {
 	return
 }
 
-// preparePunchTargets computes candidate ports, resolves remote addresses, and builds the allowed set.
-// Returns ports, remoteAddrs, allowed set, and error.
-func preparePunchTargets(peer ip.IP, peerPort int) ([]*net.UDPAddr, *sig.Set[string], error) {
+// preparePunchTargets resolves the addresses sendBursts probes: the peer's
+// announced port and portGuessRange ports on either side of it.
+func preparePunchTargets(peer ip.IP, peerPort int) ([]*net.UDPAddr, error) {
 	ports := candidatePorts(peerPort, portGuessRange)
 	var remoteAddrs []*net.UDPAddr
 	for _, rp := range ports {
@@ -283,16 +282,10 @@ func preparePunchTargets(peer ip.IP, peerPort int) ([]*net.UDPAddr, *sig.Set[str
 	}
 
 	if len(remoteAddrs) == 0 {
-		return nil, nil, errors.New("no remote addresses to probe")
+		return nil, errors.New("no remote addresses to probe")
 	}
 
-	// Build set of allowed remote endpoints for validation.
-	var allowed sig.Set[string]
-	for _, remoteAddr := range remoteAddrs {
-		allowed.Add(remoteAddr.String())
-	}
-
-	return remoteAddrs, &allowed, nil
+	return remoteAddrs, nil
 }
 
 // jitter returns a random duration between base and base+max

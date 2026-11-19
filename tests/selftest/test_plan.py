@@ -324,7 +324,7 @@ class TestShippedPlans(Invariants, unittest.TestCase):
              ("local", "link-dead-peer-keepalive"),
              ("local", "link-session-migrate"),
              ("local", "link-session-migrate-serving-side"),
-             ("vm", "nat-punch"),
+             ("vm", "nat-punch"), ("vm", "nat-punch-translating"),
              ("local", "relay-contract-forwarding"),
              ("local", "relay-contract-reindex-after-expel"),
              ("local", "relay-pull-on-miss"),

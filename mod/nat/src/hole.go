@@ -70,9 +70,11 @@ type pingEvent struct {
 
 // NewHole creates a new NAT hole with a bound UDP socket and applies the given options.
 func NewHole(hole nat.Hole, localID *astral.Identity, isPinger bool, opts ...HoleOption) (*Hole, error) {
+	// why: the external port differs from the local one behind a NAT that
+	// translates ports; rebinding the punch socket's local port keeps its mapping.
 	conn, err := net.ListenUDP("udp", &net.UDPAddr{
 		IP:   net.IPv4zero,
-		Port: hole.GetLocalAddr(localID).Port,
+		Port: hole.GetLocalBindPort(localID),
 	})
 	if err != nil {
 		return nil, err

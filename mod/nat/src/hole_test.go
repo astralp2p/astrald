@@ -172,3 +172,34 @@ func TestHole_LockCausesRemoteExpiration(t *testing.T) {
 	require.Equal(t, StateExpired, holeB.State())
 	require.Equal(t, StateLocked, holeA.State())
 }
+
+// freeUDPPort returns a UDP port nothing is bound to right now.
+func freeUDPPort(t *testing.T) int {
+	t.Helper()
+	c, err := net.ListenUDP("udp", &net.UDPAddr{IP: net.IPv4zero})
+	require.NoError(t, err)
+	port := c.LocalAddr().(*net.UDPAddr).Port
+	require.NoError(t, c.Close())
+	return port
+}
+
+// Behind a NAT that translates ports the hole's external port is not a local
+// one; NewHole binds the bind port the punch socket held.
+func TestNewHole_BindsTheBindPortNotTheExternalPort(t *testing.T) {
+	self, peer := astral.GenerateIdentity(), astral.GenerateIdentity()
+	bindPort, externalPort := freeUDPPort(t), freeUDPPort(t)
+
+	h, err := NewHole(nat.Hole{
+		ActiveIdentity:  self,
+		ActiveEndpoint:  nat.Endpoint{IP: ip.IP(net.ParseIP("212.105.131.237").To4()), Port: astral.Uint16(externalPort)},
+		ActiveBindPort:  astral.Uint16(bindPort),
+		PassiveIdentity: peer,
+		PassiveEndpoint: nat.Endpoint{IP: ip.IP(net.ParseIP("45.59.119.13").To4()), Port: 55001},
+		PassiveBindPort: 55001,
+	}, self, true)
+	require.NoError(t, err)
+	defer h.conn.Close()
+
+	require.Equal(t, bindPort, h.conn.LocalAddr().(*net.UDPAddr).Port)
+	require.Equal(t, "45.59.119.13:55001", h.GetRemoteAddr(self).String())
+}
