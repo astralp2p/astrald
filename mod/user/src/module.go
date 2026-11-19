@@ -18,6 +18,7 @@ var _ user.Module = &Module{}
 type Module struct {
 	Deps
 	OptionalDeps
+	Transports
 	ctx    *astral.Context
 	config Config
 	file   FileConfig

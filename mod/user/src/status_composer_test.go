@@ -47,15 +47,27 @@ func (c *recordingComposition) Attach(obj astral.Object) error {
 	return nil
 }
 
-// composerModule is a node in mode named kitchen, owned by userID unless userID is nil.
+// portModule is a tcp or kcp module listening on its value.
+type portModule int
+
+func (p portModule) ListenPort() int { return int(p) }
+
+// defaultTransports is a node's tcp and kcp on their default listen ports.
+func defaultTransports() Transports {
+	return Transports{TCP: portModule(1791), KCP: portModule(1792)}
+}
+
+// composerModule is a node in mode named kitchen, on the default listen ports, owned by
+// userID unless userID is nil.
 func composerModule(t *testing.T, userID *astral.Identity, mode nearby.Mode) *Module {
 	t.Helper()
 
 	nodeID := astral.GenerateIdentity()
 	mod := &Module{
-		Deps: Deps{Nearby: modeNearby{mode: mode}, Dir: aliasDir{alias: "kitchen"}},
-		node: &identityNode{id: nodeID},
-		log:  log.New(nodeID),
+		Deps:       Deps{Nearby: modeNearby{mode: mode}, Dir: aliasDir{alias: "kitchen"}},
+		Transports: defaultTransports(),
+		node:       &identityNode{id: nodeID},
+		log:        log.New(nodeID),
 	}
 	if userID != nil {
 		signed := &auth.SignedContract{Contract: &auth.Contract{Issuer: userID, Subject: nodeID}}
@@ -180,5 +192,59 @@ func TestComposeSilent(t *testing.T) {
 		if got := compose(composerModule(t, userID, nearby.ModeSilent)); len(got) != 0 {
 			t.Fatalf("owned %v: attached %v objects; want none", userID != nil, len(got))
 		}
+	}
+}
+
+// TestComposeVisibleListenPorts: a Visible node off the default listen ports
+// attaches its ports after the profile, a missing or out-of-range transport
+// reading 0; a node on both defaults attaches none (TestComposeVisible).
+func TestComposeVisibleListenPorts(t *testing.T) {
+	for _, tt := range []struct {
+		name       string
+		transports Transports
+		want       nearby.ListenPorts
+	}{
+		{"tcp 1800", Transports{TCP: portModule(1800), KCP: portModule(1792)}, nearby.ListenPorts{TCP: 1800, KCP: 1792}},
+		{"kcp 1801", Transports{TCP: portModule(1791), KCP: portModule(1801)}, nearby.ListenPorts{TCP: 1791, KCP: 1801}},
+		{"no kcp", Transports{TCP: portModule(1791)}, nearby.ListenPorts{TCP: 1791}},
+		{"tcp out of range", Transports{TCP: portModule(70000), KCP: portModule(1792)}, nearby.ListenPorts{KCP: 1792}},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			mod := composerModule(t, astral.GenerateIdentity(), nearby.ModeVisible)
+			mod.Transports = tt.transports
+			got := compose(mod)
+			if len(got) != 2 {
+				t.Fatalf("attached %v objects; want the profile and the ports", len(got))
+			}
+			ports, ok := got[1].(*nearby.ListenPorts)
+			if !ok || *ports != tt.want {
+				t.Fatalf("attached %v second; want ListenPorts %+v", got[1], tt.want)
+			}
+		})
+	}
+}
+
+// TestComposeStealthSealedPorts: a Stealth node off the default listen ports
+// attaches its ports after the hint, sealed under the node and the hint's nonce;
+// a node on both defaults attaches none (TestComposeStealth).
+func TestComposeStealthSealedPorts(t *testing.T) {
+	mod := composerModule(t, astral.GenerateIdentity(), nearby.ModeStealth)
+	mod.Transports = Transports{TCP: portModule(1800), KCP: portModule(1792)}
+
+	got := compose(mod)
+	if len(got) != 2 {
+		t.Fatalf("attached %v objects; want the hint and the sealed ports", len(got))
+	}
+	hint, ok := got[0].(*nearby.StealthHint)
+	if !ok {
+		t.Fatalf("attached %v first; want a stealth hint", got[0].ObjectType())
+	}
+	sealed, ok := got[1].(*nearby.SealedPorts)
+	if !ok {
+		t.Fatalf("attached %v second; want sealed ports", got[1].ObjectType())
+	}
+	want := nearby.ListenPorts{TCP: 1800, KCP: 1792}
+	if ports, ok := sealed.Open(mod.node.Identity(), hint.Nonce); !ok || *ports != want {
+		t.Fatalf("sealed ports open to %+v (%v); want %+v", ports, ok, want)
 	}
 }
