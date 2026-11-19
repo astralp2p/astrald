@@ -481,3 +481,61 @@ func TestMaintainLinkTaskLogsBrokenOnlyForAClosedLink(t *testing.T) {
 	cancel()
 	requireCanceled(t, done)
 }
+
+// TestEndpointsUpdatedEventWakesSiblingDuringBackoff (criterion 4): a local
+// EndpointsUpdatedEvent for an unlinked sibling ends its link task's backoff wait
+// at once; the same event from another node or for another node does not.
+func TestEndpointsUpdatedEventWakesSiblingDuringBackoff(t *testing.T) {
+	cases := []struct {
+		name  string
+		local bool
+		other bool
+		wakes bool
+	}{
+		{"local event for the sibling", true, false, true},
+		{"event from another node", false, false, false},
+		{"local event for another node", true, true, false},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			f := newLinkTaskFixture(failEvery, false)
+			f.mod.addSibling(f.target, func() {}, f.task.Wake)
+			done, cancel := f.run(t)
+
+			f.requireAttempt(t, 1, effectTimeout)
+			f.requireBackoff(t)
+
+			sender := f.mod.node.Identity()
+			if !tc.local {
+				sender = f.target
+			}
+			named := f.target
+			if tc.other {
+				named = astral.GenerateIdentity()
+			}
+
+			event := &events.Event{
+				ID:       astral.NewNonce(),
+				SourceID: f.mod.node.Identity(),
+				Data:     &nodes.EndpointsUpdatedEvent{Identity: named},
+			}
+			if err := f.mod.ReceiveObject(&recordingDrop{sender: sender, object: event}); err != nil {
+				t.Fatalf("ReceiveObject: %v", err)
+			}
+
+			if tc.wakes {
+				f.requireAttempt(t, 2, wakeDialBound)
+			} else {
+				select {
+				case n := <-f.scheduler.attempts:
+					t.Fatalf("link attempt %v started; want the backoff to hold", n)
+				case <-time.After(wakeDialBound):
+				}
+			}
+
+			cancel()
+			requireCanceled(t, done)
+		})
+	}
+}

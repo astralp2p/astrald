@@ -18,7 +18,8 @@ var _ objects.Receiver = &Module{}
 
 // ReceiveObject handles pushed objects: indexes a signed node or relay-for contract,
 // stores and applies a signed expulsion, schedules sibling sync on a local LinkCreatedEvent,
-// and contacts a peer of a local nearby PeerSeen.
+// contacts a peer of a local nearby PeerSeen, and wakes the link task of a sibling
+// named by a local EndpointsUpdatedEvent.
 // Every object is checked before any effect; a rejected object is not accepted.
 func (mod *Module) ReceiveObject(drop objects.Drop) (err error) {
 	switch o := drop.Object().(type) {
@@ -47,6 +48,8 @@ func (mod *Module) ReceiveObject(drop objects.Drop) (err error) {
 		case *nearby.PeerSeen:
 			// why: contact queries the peer, which must not hold up the receivers.
 			go mod.onPeerSeen(e)
+		case *nodes.EndpointsUpdatedEvent:
+			mod.wakeSibling(e.Identity)
 		}
 	}
 
@@ -84,7 +87,7 @@ func (mod *Module) receiveSignedContract(sender *astral.Identity, signed *auth.S
 	}
 
 	go func() {
-		err := mod.Nodes.UpdateNodeEndpoints(mod.ctx, sender, signed.Subject)
+		_, err := mod.Nodes.UpdateNodeEndpoints(mod.ctx, sender, signed.Subject)
 		if err != nil {
 			mod.log.Error("syncEndpoints: %v", err)
 		}
