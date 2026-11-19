@@ -332,3 +332,36 @@ func TestLinksUseTheirTransportsKeepalive(t *testing.T) {
 		t.Fatalf("a conn setting only the interval got %v; want %v/%v", got, fast, defaultPingTimeout)
 	}
 }
+
+// TestBusyLinkIsNeverProbed: over a whole link, a peer that sends a frame
+// every third of the idle interval receives no probe across the start jitter
+// and several intervals; once the peer falls silent, a probe reaches it.
+func TestBusyLinkIsNeverProbed(t *testing.T) {
+	const idle = 300 * time.Millisecond
+	link, remote := newKeepaliveLink(t, &Module{}, idle, time.Second)
+	peer := startProbePeer(t, remote, false)
+
+	busyUntil := time.Now().Add(pingJitter + 4*idle)
+	for time.Now().Before(busyUntil) {
+		if err := peer.ch.Send(&frames.Reset{Nonce: astral.NewNonce()}); err != nil {
+			t.Fatalf("send reset: %v", err)
+		}
+		time.Sleep(idle / 3)
+	}
+	if probes := peer.received(); len(probes) != 0 {
+		t.Fatalf("a peer sending a frame every %v received %v probe(s)", idle/3, len(probes))
+	}
+	if err := link.Err(); err != nil {
+		t.Fatalf("the busy link closed: %v", err)
+	}
+
+	// why: a probe after the silence shows the keepalive ran all along, so
+	// the zero above is the busy link's doing.
+	deadline := time.Now().Add(idle + 200*time.Millisecond)
+	for len(peer.received()) == 0 {
+		if time.Now().After(deadline) {
+			t.Fatalf("no probe within %v of the peer falling silent", idle+200*time.Millisecond)
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+}
