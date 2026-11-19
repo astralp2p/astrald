@@ -41,12 +41,14 @@ w2 docker:  bootstrap-user-software-key* → adopt-node* → swarm-roster-sync
 w3 docker:  bootstrap-user-software-key* → adopt-node* → swarm-roster-sync*
             → expel-cross-traffic
 w4 docker:  bootstrap-user-software-key* → adopt-node* → swarm-roster-sync*
-            → swarm-member-restart
+            → expel-offline-subject
 w5 docker:  bootstrap-user-software-key* → adopt-node* → swarm-roster-sync*
+            → swarm-member-restart
+w6 docker:  bootstrap-user-software-key* → adopt-node* → swarm-roster-sync*
             → link-self-heal
-w6 docker:  bootstrap-user-software-key* → adopt-node*
-            → relay-contract-forwarding
 w7 docker:  bootstrap-user-software-key* → adopt-node*
+            → relay-contract-forwarding
+w8 docker:  bootstrap-user-software-key* → adopt-node*
             → reconnect-sync-after-dead-link
             config node1.kcp.link_idle_ping = "600s"
             config node1.kcp.link_ping_timeout = "3s"
@@ -56,25 +58,25 @@ w7 docker:  bootstrap-user-software-key* → adopt-node*
             config node2.kcp.link_ping_timeout = "3s"
             config node2.tcp.link_idle_ping = "600s"
             config node2.tcp.link_ping_timeout = "3s"
-w8 docker:  bootstrap-user-software-key* → adopt-node*
+w9 docker:  bootstrap-user-software-key* → adopt-node*
             → relay-contract-reindex-after-expel
-w9 docker:  bootstrap-user-software-key* → adopt-node* → relay-contract-race
+w10 docker: bootstrap-user-software-key* → adopt-node* → relay-contract-race
             config node1.apphost.skip_sibling_push = true
             config node2.apphost.skip_sibling_push = true
             config node3.apphost.skip_sibling_push = true
             config node4.apphost.skip_sibling_push = true
-w10 docker: bootstrap-user-software-key* → adopt-node* → relay-pull-on-miss
+w11 docker: bootstrap-user-software-key* → adopt-node* → relay-pull-on-miss
             config node2.apphost.skip_sibling_push = true
-w11 docker: bootstrap-user-software-key* → adopt-node*
-            → route-outcomes-expelled-host
 w12 docker: bootstrap-user-software-key* → adopt-node*
+            → route-outcomes-expelled-host
+w13 docker: bootstrap-user-software-key* → adopt-node*
             → app-node-restart-reconnect
-w13 docker: bootstrap-user-software-key* → adopt-node* → services-node-restart
-w14 docker: bootstrap-user-software-key* → adopt-node*
-            → services-consumer-restart
+w14 docker: bootstrap-user-software-key* → adopt-node* → services-node-restart
 w15 docker: bootstrap-user-software-key* → adopt-node*
-            → basic-strategy-stalled-endpoint-released
+            → services-consumer-restart
 w16 docker: bootstrap-user-software-key* → adopt-node*
+            → basic-strategy-stalled-endpoint-released
+w17 docker: bootstrap-user-software-key* → adopt-node*
             → membership-resync-volume
             config node1.user.reconcile_interval = "10s"
             config node10.user.reconcile_interval = "10s"
@@ -86,12 +88,12 @@ w16 docker: bootstrap-user-software-key* → adopt-node*
             config node7.user.reconcile_interval = "10s"
             config node8.user.reconcile_interval = "10s"
             config node9.user.reconcile_interval = "10s"
-w17 docker: bootstrap-user-software-key* → adopt-node*
+w18 docker: bootstrap-user-software-key* → adopt-node*
             → basic-strategy-excess-link-pruning
-w18 docker: bootstrap-user-software-key* → adopt-node* → expel-authority
-w19 docker: bootstrap-user-software-key* → adopt-node* → expel-during-transfer
-w20 docker: bootstrap-user-software-key* → adopt-node* → join-via-member
-w21 docker: bootstrap-user-software-key* → adopt-node* → link-idle-keepalive
+w19 docker: bootstrap-user-software-key* → adopt-node* → expel-authority
+w20 docker: bootstrap-user-software-key* → adopt-node* → expel-during-transfer
+w21 docker: bootstrap-user-software-key* → adopt-node* → join-via-member
+w22 docker: bootstrap-user-software-key* → adopt-node* → link-idle-keepalive
             config node1.kcp.link_idle_ping = "2s"
             config node1.kcp.link_ping_timeout = "2s"
             config node1.nodes.log_pings = true
@@ -102,31 +104,31 @@ w21 docker: bootstrap-user-software-key* → adopt-node* → link-idle-keepalive
             config node2.nodes.log_pings = true
             config node2.tcp.link_idle_ping = "2s"
             config node2.tcp.link_ping_timeout = "2s"
-w22 docker: bootstrap-user-software-key* → adopt-node*
-            → two-swarms-side-by-side
 w23 docker: bootstrap-user-software-key* → adopt-node*
+            → two-swarms-side-by-side
+w24 docker: bootstrap-user-software-key* → adopt-node*
             → basic-strategy-dead-rows
             config node2.kcp.listen = false
-w24 docker: bootstrap-user-software-key* → adopt-node*
+w25 docker: bootstrap-user-software-key* → adopt-node*
             → kcp-only-restart-relink
-w25 docker: bootstrap-user-software-key* → adopt-node* → link-session-migrate
-w26 docker: bootstrap-user-software-key* → adopt-node*
+w26 docker: bootstrap-user-software-key* → adopt-node* → link-session-migrate
+w27 docker: bootstrap-user-software-key* → adopt-node*
             → link-session-migrate-serving-side
-w27 docker: bootstrap-user-software-key* → fs-watch-restart-restore
-w28 docker: bootstrap-user-software-key* → fs-index-restart-reconcile
-w29 docker: bootstrap-user-software-key* → repo-removal-sticks
-w30 docker: bootstrap-user-software-key* → indexing-fs-watch-feed
-w31 docker: bootstrap-user-software-key* → hold-isolation
+w28 docker: bootstrap-user-software-key* → fs-watch-restart-restore
+w29 docker: bootstrap-user-software-key* → fs-index-restart-reconcile
+w30 docker: bootstrap-user-software-key* → repo-removal-sticks
+w31 docker: bootstrap-user-software-key* → indexing-fs-watch-feed
+w32 docker: bootstrap-user-software-key* → hold-isolation
             config node1.objects.purge_floor = "0s"
-w32 docker: bootstrap-user-software-key* → blueprint-survives-restart
-w33 docker: bootstrap-user-software-key* → indexer-cursor
-w34 docker: bootstrap-user-software-key* → basic-strategy-stalled-negotiation
-w35 docker: bootstrap-user-op
-w36 docker: import-user-software-key
-w37 docker: introduce-node-setup → introduce-node
-w38 docker: distribution-gate-setup
+w33 docker: bootstrap-user-software-key* → blueprint-survives-restart
+w34 docker: bootstrap-user-software-key* → indexer-cursor
+w35 docker: bootstrap-user-software-key* → basic-strategy-stalled-negotiation
+w36 docker: bootstrap-user-op
+w37 docker: import-user-software-key
+w38 docker: introduce-node-setup → introduce-node
+w39 docker: distribution-gate-setup
             config node1.apphost.gate = {}
             config node1.apphost.policies = {}
-w39 docker: bootstrap-passphrase
-w40 docker: claim-race
-w41 docker: concurrent-adoption
+w40 docker: bootstrap-passphrase
+w41 docker: claim-race
+w42 docker: concurrent-adoption
