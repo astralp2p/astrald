@@ -102,6 +102,8 @@ expel-propagation
 expel-survives-restart
 swarm-member-restart
 link-self-heal
+link-idle-keepalive
+link-dead-peer-keepalive
 two-swarms-side-by-side
 join-via-member
 concurrent-adoption

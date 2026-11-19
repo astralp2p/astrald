@@ -104,6 +104,7 @@ expel-authority
 expel-during-transfer
 join-via-member
 link-self-heal
+link-idle-keepalive
 services-advertise-identity
 services-swarm-outcome-rules
 stranger-disclosure

@@ -29,5 +29,5 @@ func (mod *Module) Dial(ctx *astral.Context, endpoint exonet.Endpoint) (exonetmo
 		return nil, err
 	}
 
-	return tcp.WrapConn(tcpConn, true), nil
+	return tcp.WrapConn(tcpConn, true, mod.config.linkKeepalive()), nil
 }

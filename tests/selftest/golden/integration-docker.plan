@@ -62,29 +62,40 @@ w13 docker: bootstrap-user-software-key* → adopt-node*
 w14 docker: bootstrap-user-software-key* → adopt-node* → expel-authority
 w15 docker: bootstrap-user-software-key* → adopt-node* → expel-during-transfer
 w16 docker: bootstrap-user-software-key* → adopt-node* → join-via-member
-w17 docker: bootstrap-user-software-key* → adopt-node*
-            → two-swarms-side-by-side
+w17 docker: bootstrap-user-software-key* → adopt-node* → link-idle-keepalive
+            config node1.kcp.link_idle_ping = "2s"
+            config node1.kcp.link_ping_timeout = "2s"
+            config node1.nodes.log_pings = true
+            config node1.tcp.link_idle_ping = "2s"
+            config node1.tcp.link_ping_timeout = "2s"
+            config node2.kcp.link_idle_ping = "2s"
+            config node2.kcp.link_ping_timeout = "2s"
+            config node2.nodes.log_pings = true
+            config node2.tcp.link_idle_ping = "2s"
+            config node2.tcp.link_ping_timeout = "2s"
 w18 docker: bootstrap-user-software-key* → adopt-node*
+            → two-swarms-side-by-side
+w19 docker: bootstrap-user-software-key* → adopt-node*
             → basic-strategy-dead-rows
             config node2.kcp.listen = false
-w19 docker: bootstrap-user-software-key* → adopt-node* → link-session-migrate
-w20 docker: bootstrap-user-software-key* → adopt-node*
+w20 docker: bootstrap-user-software-key* → adopt-node* → link-session-migrate
+w21 docker: bootstrap-user-software-key* → adopt-node*
             → link-session-migrate-serving-side
-w21 docker: bootstrap-user-software-key* → fs-watch-restart-restore
-w22 docker: bootstrap-user-software-key* → fs-index-restart-reconcile
-w23 docker: bootstrap-user-software-key* → repo-removal-sticks
-w24 docker: bootstrap-user-software-key* → indexing-fs-watch-feed
-w25 docker: bootstrap-user-software-key* → hold-isolation
+w22 docker: bootstrap-user-software-key* → fs-watch-restart-restore
+w23 docker: bootstrap-user-software-key* → fs-index-restart-reconcile
+w24 docker: bootstrap-user-software-key* → repo-removal-sticks
+w25 docker: bootstrap-user-software-key* → indexing-fs-watch-feed
+w26 docker: bootstrap-user-software-key* → hold-isolation
             config node1.objects.purge_floor = "0s"
-w26 docker: bootstrap-user-software-key* → blueprint-survives-restart
-w27 docker: bootstrap-user-software-key* → indexer-cursor
-w28 docker: bootstrap-user-software-key* → basic-strategy-stalled-negotiation
-w29 docker: bootstrap-user-op
-w30 docker: import-user-software-key
-w31 docker: introduce-node-setup → introduce-node
-w32 docker: distribution-gate-setup
+w27 docker: bootstrap-user-software-key* → blueprint-survives-restart
+w28 docker: bootstrap-user-software-key* → indexer-cursor
+w29 docker: bootstrap-user-software-key* → basic-strategy-stalled-negotiation
+w30 docker: bootstrap-user-op
+w31 docker: import-user-software-key
+w32 docker: introduce-node-setup → introduce-node
+w33 docker: distribution-gate-setup
             config node1.apphost.gate = {}
             config node1.apphost.policies = {}
-w33 docker: bootstrap-passphrase
-w34 docker: claim-race
-w35 docker: concurrent-adoption
+w34 docker: bootstrap-passphrase
+w35 docker: claim-race
+w36 docker: concurrent-adoption

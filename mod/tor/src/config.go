@@ -1,6 +1,10 @@
 package tor
 
-import "time"
+import (
+	"time"
+
+	exonetmod "github.com/astralp2p/astrald/mod/exonet"
+)
 
 type Config struct {
 	Listen *bool `yaml:"listen,omitempty"`
@@ -14,6 +18,11 @@ type Config struct {
 	OnionTarget string        `yaml:"onion_target"`
 	DialTimeout time.Duration `yaml:"dial_timeout"`
 	ListenPort  int
+
+	// LinkIdlePing and LinkPingTimeout time the keepalive of links over this
+	// transport (astral-docs topics/link-mux.md, Keepalive).
+	LinkIdlePing    time.Duration `yaml:"link_idle_ping"`
+	LinkPingTimeout time.Duration `yaml:"link_ping_timeout"`
 }
 
 // defaultConfig returns the config a load starts from.
@@ -34,5 +43,15 @@ func defaultConfig() Config {
 		OnionTarget: "tcp:127.0.0.1:0",
 		DialTimeout: time.Minute,
 		ListenPort:  1791,
+
+		// why: a Tor circuit's round trip spikes to seconds, so a short timeout
+		// would close live links.
+		LinkIdlePing:    30 * time.Second,
+		LinkPingTimeout: 30 * time.Second,
 	}
+}
+
+// linkKeepalive returns the keepalive timing of links over tor conns.
+func (c Config) linkKeepalive() exonetmod.LinkKeepalive {
+	return exonetmod.LinkKeepalive{Idle: c.LinkIdlePing, Timeout: c.LinkPingTimeout}
 }

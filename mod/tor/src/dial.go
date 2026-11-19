@@ -53,7 +53,9 @@ func (mod *Module) Dial(ctx *astral.Context, endpoint exonet.Endpoint) (conn exo
 	// Wait for the first result
 	select {
 	case c := <-connCh:
-		return newConn(c, e, true), nil
+		conn := newConn(c, e, true)
+		conn.keepalive = mod.config.linkKeepalive()
+		return conn, nil
 	case err = <-errCh:
 		return nil, err
 	case <-ctx.Done():

@@ -22,7 +22,11 @@ import (
 const DefaultWorkerCount = 8
 const infoPrefix = "node1"
 const featureMux2 = "mux2"
-const defaultPingTimeout = time.Second * 30
+
+// why: these apply only to a link whose transport sets no keepalive of its own
+// (astral-docs topics/link-mux.md, Keepalive).
+const defaultIdlePing = 15 * time.Second
+const defaultPingTimeout = 10 * time.Second
 const activeInterval = 1 * time.Second
 const pingJitter = 1 * time.Second
 

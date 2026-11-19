@@ -4,7 +4,8 @@ A peer that keeps its link open and never answers costs a caller the routing
 deadline and reads as `timeout`; a link that goes down while a query waits on
 it answers `unavailable` (rejection code 7) at once.
 
-- **env** node · **start** `two-nodes` · **saves** — · **stops** node2
+- **env** node · **start** `two-nodes` · **saves** — · **stops** node2 ·
+  **config** node1's tcp and kcp `link_idle_ping` 300 s
 - **driver** `script.py` — runs `driver/` (Go, this repository's astral-go).
   node1 registers a caller app, and the driver waits until node2 holds its
   relay contract. The caller queries `node2:no.such.op`:
@@ -21,6 +22,12 @@ it answers `unavailable` (rejection code 7) at once.
 A frozen process stands in for a black-holed link: astrald on node1 sees a link
 that takes its bytes and never answers. Unlike a black hole, the peer's kernel
 still acknowledges the bytes, so TCP never gives up on its own.
+
+node1's link keepalive closes such a link within the transport's idle interval
+N plus its ping timeout T (tcp: 15 s + 10 s by default), and the query then
+ends as unavailable before the routing deadline. The test sets node1's N to
+300 s so the link stays up past the deadline and the `timeout` outcome shows;
+`link-dead-peer-keepalive` covers the keepalive closing the link.
 
 The test finds node2's process by the `-root` it runs with and signals it, so
 it runs in local worlds only. node2 stays dead; the manifest stops it.

@@ -56,6 +56,7 @@ func (mod *Module) Dial(ctx *astral.Context, endpoint exonet.Endpoint) (exonetmo
 		local:           gateway.NewEndpoint(mod.node.Identity(), mod.node.Identity()),
 		remote:          gwEndpoint,
 		outbound:        conn.Outbound(),
+		keepalive:       mod.config.linkKeepalive(),
 	}, nil
 }
 
@@ -74,5 +75,6 @@ func (mod *Module) route(ctx *astral.Context, gwEndpoint *gateway.Endpoint) (exo
 		local:           gateway.NewEndpoint(mod.node.Identity(), mod.node.Identity()),
 		remote:          gwEndpoint,
 		outbound:        true,
+		keepalive:       mod.config.linkKeepalive(),
 	}, nil
 }

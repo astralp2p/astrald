@@ -54,8 +54,9 @@ func (mod *Module) Dial(ctx *astral.Context, endpoint exonet.Endpoint) (
 		return nil, fmt.Errorf("kcp/dial: parsing local endpoint failed: %w", err)
 	}
 
-	conn := WrapKCPConn(kcpConn, remoteEndpoint, localEndpoint, true, mod.config.DialTimeout).(*WrappedConn)
+	conn := WrapKCPConn(kcpConn, remoteEndpoint, localEndpoint, true, mod.config.DialTimeout)
 	conn.udpConn = udpConn
+	conn.keepalive = mod.config.linkKeepalive()
 	return conn, nil
 }
 

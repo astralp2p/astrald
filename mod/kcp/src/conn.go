@@ -12,6 +12,7 @@ import (
 
 // Ensure *WrappedConn implements exonet.Conn
 var _ exonetmod.Conn = (*WrappedConn)(nil)
+var _ exonetmod.KeepaliveConn = (*WrappedConn)(nil)
 
 // WrappedConn wraps a KCP session and provides
 // connection-like semantics at the exonet layer.
@@ -25,11 +26,17 @@ type WrappedConn struct {
 	outbound    bool
 	connected   atomic.Bool
 	dialTimeout time.Duration
+	keepalive   exonetmod.LinkKeepalive
 }
 
 // Outbound reports whether this connection was initiated locally.
 func (c *WrappedConn) Outbound() bool {
 	return c.outbound
+}
+
+// LinkKeepalive returns the keepalive timing of links over this connection.
+func (c *WrappedConn) LinkKeepalive() exonetmod.LinkKeepalive {
+	return c.keepalive
 }
 
 // LocalEndpoint returns the local endpoint of the connection.
@@ -95,7 +102,7 @@ func WrapKCPConn(
 	local exonet.Endpoint,
 	outbound bool,
 	dialTimeout time.Duration,
-) exonetmod.Conn {
+) *WrappedConn {
 	return &WrappedConn{
 		UDPSession:  sess,
 		remote:      remote,

@@ -149,7 +149,7 @@ func (p *ConnPool) addIdleConn(conn exonet.Conn) {
 
 		select {
 		case <-idleConn.Ready():
-			gwConn := newGatewayConn(idleConn, gateway.NewEndpoint(p.node.Identity(), p.node.Identity()), gateway.NewEndpoint(p.gatewayID, p.node.Identity()))
+			gwConn := newGatewayConn(idleConn, gateway.NewEndpoint(p.node.Identity(), p.node.Identity()), gateway.NewEndpoint(p.gatewayID, p.node.Identity()), p.config.linkKeepalive())
 			err := p.Nodes.EstablishInboundLink(p.ctx, gwConn)
 			if err != nil {
 				idleConn.Close()
