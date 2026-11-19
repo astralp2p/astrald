@@ -172,7 +172,7 @@ type providerState struct {
 	Identity    string       `json:"identity"`
 	Pid         int          `json:"pid"`
 	Attaches    int          `json:"attaches"`    // registrations the node completed, the first and every reconnect
-	Advertised  int          `json:"advertised"`  // advertise bindings the node acknowledged
+	Advertised  int          `json:"advertised"`  // advertise hooks that returned with a binding open
 	Evaluations []evaluation `json:"evaluations"` // asks the node sent for the offering, in order
 	Disconnects []string     `json:"disconnects"` // errors the registrar reported, in order
 	Served      int          `json:"served"`      // queries answered
@@ -239,6 +239,9 @@ func provide() error {
 		st.update(func() { ps.Attaches++ })
 		return nil
 	})
+	// note: Serve opens no binding when one is open: the Provider's keeper
+	// re-advertises on its own when the node ends a binding, and may do so
+	// before the registrar attaches the handler again.
 	advertise := apps.WithRegistrationHook(func(hctx *astral.Context) error {
 		if err := offering.Serve(hctx, servicescli.New(nil, cli)); err != nil {
 			return err

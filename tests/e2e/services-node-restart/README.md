@@ -37,9 +37,10 @@ ended, receives the same provider's offering available once more.
   naming the provider's offering, with cause `member_lost` (below), and,
   after it, an update making the same
   provider's offering available again; the follow did not end and holds the
-  offering. The provider's own record shows another registration and another
-  acknowledged advertise binding, and an ask to evaluate the offering for the
-  consumer under the new attach. Then, apart from the follow, a fresh app on
+  offering. The provider's own record shows another registration, another run
+  of the advertise hook with a binding open, and an ask to evaluate the
+  offering for the consumer stamped after the Removed and no later than the
+  return. Then, apart from the follow, a fresh app on
   node1 runs a one-shot swarm discovery (`driver discover`) that finds the
   same provider alone with a complete outcome, and a fresh caller on node1
   calls the provider by its identity, retrying for 90 s, and is answered
@@ -64,6 +65,14 @@ node2 ends, with cause `member_lost`, which the oracle requires. The return is
 node1's `carry`
 asking node2 again on its next link or after a backoff, and node2's
 `Register` re-evaluating the new binding for the follows it already holds.
+
+The new binding may open before the handler's new registration. The SDK's
+`Provider` keeper re-advertises as soon as the node ends a binding
+([services.advertise.md, Liveness](../../../.ai/system/protocols/services/ops/services.advertise.md#liveness)),
+and the registrar attaches the handler on its own backoff; the hook's `Serve`
+then finds the binding open and opens none. The oracle therefore places the
+ask after the Removed, not after the new attach: node2 was dead before node1
+sent the Removed, so a later ask comes from a binding on the restarted node2.
 
 The oracle runs callers as programs (`driver call`, `driver discover`):
 astral-py speaks the pre-v1 Services wire.
