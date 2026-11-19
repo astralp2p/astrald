@@ -12,7 +12,7 @@ import (
 	"gorm.io/gorm"
 )
 
-func testDB(t *testing.T) *DB {
+func testDB(t testing.TB) *DB {
 	t.Helper()
 
 	gdb, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})

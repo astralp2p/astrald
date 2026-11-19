@@ -200,6 +200,22 @@ func (mod *Module) localSwarm() ([]*astral.Identity, error) {
 	return mod.activeNodes(ac.Issuer)
 }
 
+// IsSwarmMember reports whether id is a current member of the local swarm.
+//
+// why fail closed: a lookup fault must not read as membership.
+//
+// note: each call reads the auth index; BenchmarkIsSwarmMember measures it.
+func (mod *Module) IsSwarmMember(id *astral.Identity) bool {
+	if id.IsZero() {
+		return false
+	}
+	swarm, err := mod.localSwarm()
+	if err != nil {
+		return false
+	}
+	return slices.ContainsFunc(swarm, id.IsEqual)
+}
+
 // SwarmPeers returns the members of the local swarm other than this node.
 func (mod *Module) SwarmPeers() []*astral.Identity {
 	return slices.DeleteFunc(mod.LocalSwarm(), mod.node.Identity().IsEqual)

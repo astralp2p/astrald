@@ -75,12 +75,12 @@ func (r *eventRecorder) take() []astral.Object {
 	return d
 }
 
-func memberContract(t *testing.T, issuer, subject *astral.Identity) *auth.SignedContract {
+func memberContract(t testing.TB, issuer, subject *astral.Identity) *auth.SignedContract {
 	t.Helper()
 	return memberContractFor(t, issuer, subject, time.Hour)
 }
 
-func memberContractFor(t *testing.T, issuer, subject *astral.Identity, validity time.Duration) *auth.SignedContract {
+func memberContractFor(t testing.TB, issuer, subject *astral.Identity, validity time.Duration) *auth.SignedContract {
 	t.Helper()
 	c, err := user.NewNodeContract(issuer, subject, false, validity)
 	if err != nil {

@@ -48,6 +48,9 @@ type Module interface {
 	// sibling. It ends when every sibling has answered, ctx ends, or the
 	// consumer stops. It asks nothing outside the network zone.
 	FetchRelayContracts(ctx *astral.Context, issuer *astral.Identity) iter.Seq2[*astral.Identity, *auth.SignedContract]
+	// IsSwarmMember reports whether id is a current member of the local swarm.
+	// It reports false on an unclaimed node and when the swarm cannot be read.
+	IsSwarmMember(id *astral.Identity) bool
 	NewMaintainLinkTask(target *astral.Identity) MaintainLinkTask
 	NewSyncNodesTask(remoteIdentity *astral.Identity) SyncNodesTask
 	// PushToLocalSwarm broadcasts obj to every local swarm member except the

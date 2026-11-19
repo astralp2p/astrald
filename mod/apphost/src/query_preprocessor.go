@@ -12,7 +12,8 @@ var _ core.QueryPreprocessor = &Module{}
 // For queries from a locally-hosted app it attaches a relay-for contract so the
 // remote node can verify the app's identity. For queries targeting an app it
 // discovers the app's hosting nodes via relay-for contracts and registers them as
-// relay candidates on the modifier.
+// relay candidates on the modifier; on a claimed node only current swarm members
+// are candidates (isAppHost).
 // note: uses a local-only context (ZoneNetwork excluded) to avoid network calls during preprocessing.
 func (mod *Module) PreprocessQuery(qm *core.QueryModifier) error {
 	ctx := astral.NewContext(nil).WithIdentity(mod.node.Identity()).ExcludeZone(astral.ZoneNetwork)
@@ -34,7 +35,7 @@ func (mod *Module) PreprocessQuery(qm *core.QueryModifier) error {
 		Find(ctx)
 
 	for _, contract := range contracts {
-		if contract.Subject.IsEqual(mod.node.Identity()) {
+		if contract.Subject.IsEqual(mod.node.Identity()) || !mod.isAppHost(contract.Subject) {
 			continue
 		}
 		qm.AddRelay(contract.Subject)
