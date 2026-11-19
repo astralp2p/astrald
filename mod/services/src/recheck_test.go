@@ -295,6 +295,11 @@ func TestServeAppsRevokeClosesTheBinding(t *testing.T) {
 	expect[*astral.Ack](t, pc)
 
 	c := open(t, v.a.OpDiscover, v.app, "services.discover?services=player&follow=true", false)
+	// note: the app holds no discovery permit for player, so the stream
+	// starts with services.not_granted; the provider is open, so the app
+	// still sees it. The node enrolls the follow, and asks the provider,
+	// only after that object is read.
+	expectNotGranted(t, c, "player")
 	ask := expect[*services.Ask](t, pc)
 	if err := pc.ch.Send(&services.Answer{RequestID: ask.RequestID, Update: &services.Update{Available: true, Name: ask.Service}}); err != nil {
 		t.Fatal(err)
