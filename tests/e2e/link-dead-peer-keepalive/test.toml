@@ -1,0 +1,33 @@
+nodes    = ["node1", "node2"]
+after    = "link-idle-keepalive"
+# why: node2 is frozen and resumed; the planner requires every test in a
+# world after w0 to destroy anyway
+destroys = true
+timeout  = 240
+facts    = ["dead_peer_keepalive"]
+local_only = "freezes and resumes node2's astrald process by its pid"
+
+# why short timing: the keepalive runs many intervals within the test's
+# budget; the keys match link-idle-keepalive's, so both share one world.
+# why log_pings: a pong logs "ping with <peer>", the only trace of a probe.
+[config.node1.tcp]
+link_idle_ping    = "2s"
+link_ping_timeout = "2s"
+
+[config.node1.kcp]
+link_idle_ping    = "2s"
+link_ping_timeout = "2s"
+
+[config.node1.nodes]
+log_pings = true
+
+[config.node2.tcp]
+link_idle_ping    = "2s"
+link_ping_timeout = "2s"
+
+[config.node2.kcp]
+link_idle_ping    = "2s"
+link_ping_timeout = "2s"
+
+[config.node2.nodes]
+log_pings = true
