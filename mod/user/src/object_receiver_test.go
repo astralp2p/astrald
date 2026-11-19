@@ -161,9 +161,9 @@ func (n *recordingNodes) IsLinked(id *astral.Identity) bool {
 	return slicesContainsIdentity(n.linked, id)
 }
 
-func (n *recordingNodes) UpdateNodeEndpoints(_ *astral.Context, resolver, target *astral.Identity) error {
+func (n *recordingNodes) UpdateNodeEndpoints(_ *astral.Context, resolver, target *astral.Identity) (int, error) {
 	n.syncs <- endpointSync{resolver: resolver, target: target}
-	return nil
+	return 0, nil
 }
 
 func (n *recordingNodes) CloseLinks(id *astral.Identity) error {
