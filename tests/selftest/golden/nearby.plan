@@ -1,1 +1,2 @@
 w0 vm: nearby-adopt → nearby-stealth-meet → nearby-silent → nearby-relink
+w1 vm: nearby-adopt* → nearby-join
