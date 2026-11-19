@@ -53,14 +53,17 @@ async def drain(stream, t0: list) -> dict:
 
 
 async def ask(c, peer: str, t0: float) -> dict:
-    """A query to the frozen peer; how and when it ended, since the freeze."""
+    """A query to the frozen peer; how and when it ended, since the freeze, and its rejection code."""
+    kind = code = None
     try:
         got = await c.call("user.info", target=peer, timeout=QUERY)
         how = f"answered: {got!r}"
         ok = True
     except Exception as e:  # noqa: BLE001
-        how, ok = f"{type(e).__name__}: {e}", False
-    return {"ended_at": round(time.monotonic() - t0, 2), "how": how, "answered": ok}
+        kind, code = type(e).__name__, getattr(e, "code", None)
+        how, ok = f"{kind}: {e}", False
+    return {"ended_at": round(time.monotonic() - t0, 2), "how": how, "answered": ok,
+            "kind": kind, "code": code}
 
 
 async def wait_gone(c, peer: str, t0: float) -> float | None:

@@ -31,7 +31,9 @@ w0 local:  smoke → mcp-origin → claim-window → admission-policies
            config mai-decline.apphost.gate = {}
            config mai-decline.apphost.policies = {}
            config node1.apphost.gate = {"tokenless": ["apphost.register", "user.info", "user.derive_identity", "user.bootstrap", "user.join"], "states": {"fresh": ["*"], "unclaimed": ["*"]}}
+           config node1.kcp.link_idle_ping = "300s"
            config node1.objects.external_registration_sweep_interval = "1s"
+           config node1.tcp.link_idle_ping = "300s"
            config nomcp1.mcp.bind_mcp = ""
 w1 local:  bootstrap-user-software-key* → adopt-node*
            → route-outcomes-expelled-host

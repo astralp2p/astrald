@@ -8,14 +8,9 @@ link_idle_ping and link_ping_timeout (test.toml):
 - node1 lists no link to node2 within N + T + 2 s of the freeze;
 - node1 logged each link to node2 closed for `ping timeout`;
 - the `log.listen` stream node1 held open on node2 ended within N + T + 2 s;
-- the query sent to node2 at the freeze ended with an error, not an answer;
+- the query sent to node2 at the freeze ended as unavailable (`QueryRejected`
+  with code 7) within N + T + 2 s, not at the 60 s routing deadline;
 - once node2 resumed, both ends hold a link to each other within 60 s.
-
-todo: once astral-docs core-definitions/query.md Routing outcomes lands in
-astrald (ticket k8mv9KqtUy), a query waiting on a link that closes ends as
-unavailable at once; then the query must also end within N + T + 2 s. Until
-then it waits out its 60 s routing deadline, and the oracle prints when it
-ended.
 """
 import tomllib
 from pathlib import Path
@@ -62,9 +57,16 @@ assert ended is not None and ended <= limit, (
     f"the stream over the dead link ended {ended} s after the freeze "
     f"({fact['stream']['how']}); want within {limit} s")
 
-assert not fact["query"]["answered"], f"the frozen node2 answered a query: {fact['query']}"
+query = fact["query"]
+assert not query["answered"], f"the frozen node2 answered a query: {query}"
+assert (query["kind"], query["code"]) == ("QueryRejected", 7), (
+    f"the query over the dead link ended {query['how']!r}; want unavailable (rejected 7)")
+assert query["ended_at"] <= limit, (
+    f"the query over the dead link ended {query['ended_at']} s after the freeze; "
+    f"want within {limit} s")
 
 assert fact["relinked_after"] is not None, "node1 and node2 did not relink within 60 s of the resume"
 
 print(f"oracle: node1 closed {len(fact['before'])} link(s) to the frozen node2 "
-      f"{fact['gone_at']} s after the freeze; the stream over them ended at {ended} s")
+      f"{fact['gone_at']} s after the freeze; the stream over them ended at {ended} s "
+      f"and the query at {query['ended_at']} s")

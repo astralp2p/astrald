@@ -16,15 +16,15 @@ interval N plus its ping timeout T, and a stream over it ends with it.
   `dead_peer_keepalive` fact.
 - **oracle** `verify.py` — node1 lists no link to node2 within N + T + 2 s
   of the freeze; node1 logged each closed for `ping timeout`; the stream
-  ended within N + T + 2 s; the query ended with an error; the pair relinked
-  within 60 s of the resume.
+  ended within N + T + 2 s; the query ended as unavailable (rejected 7)
+  within N + T + 2 s; the pair relinked within 60 s of the resume.
 
 SIGSTOP keeps node2's sockets open, and its kernel still acknowledges what
 node1 sends, so TCP never fails on its own: only the keepalive probe finds
 the link dead.
 
-The query is not timed yet: until ticket k8mv9KqtUy (Routing outcomes)
-lands, a query waiting on a link that closes waits out its own 60 s routing
-deadline. The oracle prints when it ended.
+A query still waiting for its response when the link closes ends as
+unavailable at once, so the keepalive bounds it too.
 
-Spec: astral-docs `topics/link-mux.md`, Keepalive and Sessions.
+Spec: astral-docs `topics/link-mux.md`, Keepalive and Sessions;
+`core-definitions/query.md`, Routing outcomes.
