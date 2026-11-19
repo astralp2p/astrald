@@ -322,12 +322,14 @@ class TestShippedPlans(Invariants, unittest.TestCase):
              ("local", "expel-sweep-redelivers"),
              ("vm", "gateway-unregistered-advertise"), ("local", "hold-purge"),
              ("local", "join-via-member"), ("vm", "kcp-only-relink"),
+             ("local", "kcp-only-restart-relink"),
              ("local", "link-dead-peer-keepalive"),
              ("local", "link-session-migrate"),
              ("local", "link-session-migrate-serving-side"),
              ("local", "membership-resync-volume"),
              ("vm", "nat-punch"), ("vm", "nat-punch-double-translating"),
              ("vm", "nat-punch-translating"),
+             ("local", "reconnect-sync-after-dead-link"),
              ("local", "relay-contract-forwarding"),
              ("local", "relay-contract-race"),
              ("local", "relay-contract-reindex-after-expel"),
@@ -338,6 +340,7 @@ class TestShippedPlans(Invariants, unittest.TestCase):
              ("local", "services-node-restart"),
              ("local", "services-swarm-membership"),
              ("local", "expel-cross-traffic"),
+             ("local", "expel-offline-subject"),
              ("local", "expel-survives-restart"),
              ("local", "link-self-heal"), ("local", "swarm-member-restart"),
              ("vm", "tor-link"),
@@ -355,7 +358,8 @@ class TestShippedPlans(Invariants, unittest.TestCase):
              ("local", "concurrent-adoption"),
              ("local", "distribution-gate-setup"),
              ("local", "import-user-software-key"),
-             ("local", "introduce-node"), ("vm", "nearby-relink")])
+             ("local", "introduce-node"), ("vm", "nearby-join"),
+             ("vm", "nearby-relink")])
 
     def test_a_local_test_never_enters_a_vm_world(self):
         # why mcp-peer, app-query and services-app-call: each serves an app
