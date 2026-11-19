@@ -29,6 +29,9 @@ type Module struct {
 	// onIndexed holds the OnContractIndexed callbacks.
 	onIndexedMu sync.Mutex
 	onIndexed   []func(*apiauth.SignedContract)
+	// admitters holds the AddAdmitter callbacks.
+	admittersMu sync.Mutex
+	admitters   []func(*apiauth.SignedContract) error
 
 	// handlersMu serializes Add's read-modify-write of handlers against
 	// other Adds and against get, so no registration is lost.

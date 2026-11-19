@@ -94,6 +94,8 @@ hold-isolation
 indexer-cursor
 indexing-fs-watch-feed
 swarm-roster-sync
+relay-contract-forwarding
+relay-contract-reindex-after-expel
 expel-propagation
 expel-survives-restart
 swarm-member-restart

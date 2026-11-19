@@ -96,7 +96,7 @@ func (mod *Module) receiveSignedContract(sender *astral.Identity, signed *auth.S
 }
 
 // checkPushedContract accepts two kinds of contract: a node contract issued by the
-// current user, and a relay-for contract whose subject is the sending sibling.
+// current user, and a relay-for contract that passes AdmitRelayContract.
 // Both parties must have signed it and it must not be expired.
 // note: no Auth.Authorize call; a contract is checked by its parties and signatures.
 func (mod *Module) checkPushedContract(sender *astral.Identity, signed *auth.SignedContract) error {
@@ -109,7 +109,7 @@ func (mod *Module) checkPushedContract(sender *astral.Identity, signed *auth.Sig
 	case user.IsNodeContract(signed.Contract):
 		err = mod.checkNodeContract(signed)
 	case isRelayForContract(signed.Contract):
-		err = mod.checkRelayForContract(sender, signed)
+		err = mod.AdmitRelayContract(sender, signed)
 	default:
 		err = errors.New("neither a node contract nor a relay-for contract")
 	}
@@ -150,22 +150,9 @@ func (mod *Module) checkNodeContract(signed *auth.SignedContract) error {
 	return nil
 }
 
-// checkRelayForContract requires the sender to be the contract's subject and a member of the local swarm.
-// why: a node pushes its app's relay-for contract ahead of a query it relays for the app
-// (mod/nodes/src/query_router.go), and the receiving node authorizes that relay from its index.
-func (mod *Module) checkRelayForContract(sender *astral.Identity, signed *auth.SignedContract) error {
-	if !signed.Subject.IsEqual(sender) {
-		return errors.New("subject is not the sender")
-	}
-
-	if !slices.ContainsFunc(mod.LocalSwarm(), sender.IsEqual) {
-		return errors.New("sender is not a swarm member")
-	}
-
-	return nil
-}
-
 // isRelayForContract reports whether c carries permits and every permit is RelayForAction.
+// note: this is the shape one node delivers to another; the admission rule
+// covers every contract with a relay-for permit (grantsRelayFor).
 func isRelayForContract(c *auth.Contract) bool {
 	relayFor := nodes.RelayForAction{}.ObjectType()
 

@@ -41,18 +41,22 @@ w3 local:  bootstrap-user-software-key* → adopt-node* → swarm-roster-sync*
 w4 local:  bootstrap-user-software-key* → adopt-node* → swarm-roster-sync*
            → link-self-heal
 w5 local:  bootstrap-user-software-key* → adopt-node*
-           → route-outcomes-expelled-host
+           → relay-contract-forwarding
 w6 local:  bootstrap-user-software-key* → adopt-node*
-           → app-node-restart-reconnect
-w7 local:  bootstrap-user-software-key* → adopt-node* → services-node-restart
+           → relay-contract-reindex-after-expel
+w7 local:  bootstrap-user-software-key* → adopt-node*
+           → route-outcomes-expelled-host
 w8 local:  bootstrap-user-software-key* → adopt-node*
+           → app-node-restart-reconnect
+w9 local:  bootstrap-user-software-key* → adopt-node* → services-node-restart
+w10 local: bootstrap-user-software-key* → adopt-node*
            → basic-strategy-stalled-endpoint-released
-w9 local:  bootstrap-user-software-key* → adopt-node*
+w11 local: bootstrap-user-software-key* → adopt-node*
            → basic-strategy-excess-link-pruning
-w10 local: bootstrap-user-software-key* → adopt-node* → expel-authority
-w11 local: bootstrap-user-software-key* → adopt-node* → expel-during-transfer
-w12 local: bootstrap-user-software-key* → adopt-node* → join-via-member
-w13 local: bootstrap-user-software-key* → adopt-node* → link-idle-keepalive
+w12 local: bootstrap-user-software-key* → adopt-node* → expel-authority
+w13 local: bootstrap-user-software-key* → adopt-node* → expel-during-transfer
+w14 local: bootstrap-user-software-key* → adopt-node* → join-via-member
+w15 local: bootstrap-user-software-key* → adopt-node* → link-idle-keepalive
            config node1.kcp.link_idle_ping = "2s"
            config node1.kcp.link_ping_timeout = "2s"
            config node1.nodes.log_pings = true
@@ -63,28 +67,28 @@ w13 local: bootstrap-user-software-key* → adopt-node* → link-idle-keepalive
            config node2.nodes.log_pings = true
            config node2.tcp.link_idle_ping = "2s"
            config node2.tcp.link_ping_timeout = "2s"
-w14 local: bootstrap-user-software-key* → adopt-node* → two-swarms-side-by-side
-w15 local: bootstrap-user-software-key* → adopt-node*
+w16 local: bootstrap-user-software-key* → adopt-node* → two-swarms-side-by-side
+w17 local: bootstrap-user-software-key* → adopt-node*
            → basic-strategy-dead-rows
            config node2.kcp.listen = false
-w16 local: bootstrap-user-software-key* → adopt-node* → link-session-migrate
-w17 local: bootstrap-user-software-key* → adopt-node*
+w18 local: bootstrap-user-software-key* → adopt-node* → link-session-migrate
+w19 local: bootstrap-user-software-key* → adopt-node*
            → link-session-migrate-serving-side
-w18 local: bootstrap-user-software-key* → fs-watch-restart-restore
-w19 local: bootstrap-user-software-key* → fs-index-restart-reconcile
-w20 local: bootstrap-user-software-key* → repo-removal-sticks
-w21 local: bootstrap-user-software-key* → indexing-fs-watch-feed
-w22 local: bootstrap-user-software-key* → hold-isolation
+w20 local: bootstrap-user-software-key* → fs-watch-restart-restore
+w21 local: bootstrap-user-software-key* → fs-index-restart-reconcile
+w22 local: bootstrap-user-software-key* → repo-removal-sticks
+w23 local: bootstrap-user-software-key* → indexing-fs-watch-feed
+w24 local: bootstrap-user-software-key* → hold-isolation
            config node1.objects.purge_floor = "0s"
-w23 local: bootstrap-user-software-key* → blueprint-survives-restart
-w24 local: bootstrap-user-software-key* → indexer-cursor
-w25 local: bootstrap-user-software-key* → basic-strategy-stalled-negotiation
-w26 local: bootstrap-user-op
-w27 local: import-user-software-key
-w28 local: introduce-node-setup → introduce-node
-w29 local: distribution-gate-setup
+w25 local: bootstrap-user-software-key* → blueprint-survives-restart
+w26 local: bootstrap-user-software-key* → indexer-cursor
+w27 local: bootstrap-user-software-key* → basic-strategy-stalled-negotiation
+w28 local: bootstrap-user-op
+w29 local: import-user-software-key
+w30 local: introduce-node-setup → introduce-node
+w31 local: distribution-gate-setup
            config node1.apphost.gate = {}
            config node1.apphost.policies = {}
-w30 local: bootstrap-passphrase
-w31 local: claim-race
-w32 local: concurrent-adoption
+w32 local: bootstrap-passphrase
+w33 local: claim-race
+w34 local: concurrent-adoption

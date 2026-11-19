@@ -363,6 +363,41 @@ func TestRegisterRefusesASudoContractPermit(t *testing.T) {
 	}
 }
 
+// TestRegisterRefusesARelayForContractPermit: a decision whose contract permits
+// name mod.nodes.relay_for_action is declined before any write, since the relay
+// admission rule refuses a node->app relay-for contract.
+func TestRegisterRefusesARelayForContractPermit(t *testing.T) {
+	relayFor := nodes.RelayForAction{}.ObjectType()
+	for name, contractPermits := range map[string][]*auth.Permit{
+		"alone":         permits(relayFor),
+		"after another": permits("mod.user.see_swarm_action", relayFor),
+	} {
+		t.Run(name, func(t *testing.T) {
+			steps := &registerSteps{}
+			mod := delegatedRegistrar(t, steps, newDelegateNode(&apphost.AppRegisterDecision{
+				Allow:           true,
+				GrantPermits:    permits("mod.user.see_swarm_action"),
+				ContractPermits: contractPermits,
+			}))
+			w := newRecordingWriter()
+
+			if err := register(t, mod, &apphost.RegisterRequest{}, w); err != nil {
+				t.Fatalf("apphost.register rejected before the decision: %v", err)
+			}
+
+			if got, want := w.refusal(t), apphost.ErrRegistrationDeclined.Error(); got != want {
+				t.Fatalf("answered %q; want %q", got, want)
+			}
+			if got := steps.taken(); len(got) != 0 {
+				t.Fatalf("a refused registration took steps %q", got)
+			}
+			if n := grantRows(t, mod); n != 0 {
+				t.Fatalf("a refused registration wrote %d grants", n)
+			}
+		})
+	}
+}
+
 // TestRegisterUnderAcceptAllRefusesASudoContractPermit: accept_all copies the
 // asked-for contract permits into its decision, so an app asking for
 // mod.auth.sudo_action as a contract permit is declined.
