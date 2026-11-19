@@ -18,8 +18,8 @@ func (mod *Module) AuthorizeRelayFor(ctx *astral.Context, a *nodes.RelayForActio
 // why: a former member's relay contract stays indexed after it leaves, and the
 // contract chain alone would keep admitting it.
 //
-// why claimed is read from the user identity: a swarm lookup fault on a claimed
-// node refuses, and must not read as an unclaimed node.
+// why: claimed is read from the user identity, so a swarm lookup fault on a
+// claimed node refuses and never reads as an unclaimed node.
 func (mod *Module) admitsRelayer(relayer *astral.Identity) bool {
 	if mod.User == nil || mod.User.Identity() == nil {
 		return true

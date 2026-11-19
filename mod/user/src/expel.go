@@ -132,17 +132,26 @@ func (mod *Module) isExpelled(issuer, subject *astral.Identity) bool {
 // expelledSet returns the subjects banned by issuer, keyed by identity string for
 // O(1) membership filtering.
 func (mod *Module) expelledSet(issuer *astral.Identity) map[string]struct{} {
-	subjects, err := mod.db.ExpelledSubjects(issuer)
+	set, err := mod.readExpelledSet(issuer)
 	if err != nil {
 		mod.log.Errorv(1, "error reading expulsions: %v", err)
 		return nil
+	}
+	return set
+}
+
+// readExpelledSet is expelledSet with the error of the ban store read.
+func (mod *Module) readExpelledSet(issuer *astral.Identity) (map[string]struct{}, error) {
+	subjects, err := mod.db.ExpelledSubjects(issuer)
+	if err != nil {
+		return nil, err
 	}
 
 	set := make(map[string]struct{}, len(subjects))
 	for _, s := range subjects {
 		set[s.String()] = struct{}{}
 	}
-	return set
+	return set, nil
 }
 
 // verifyExpulsion checks that the issuer signature is present and valid.

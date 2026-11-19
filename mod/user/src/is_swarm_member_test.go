@@ -68,6 +68,41 @@ func TestIsSwarmMemberFailsClosed(t *testing.T) {
 	}
 }
 
+// TestIsSwarmMemberFailsClosedOnBanStoreFault: an unreadable ban store reads
+// as no membership, so an expelled node is never reported a member.
+func TestIsSwarmMemberFailsClosedOnBanStoreFault(t *testing.T) {
+	e := newMemberEnv(t)
+	e.mod.log = log.New(nil)
+	sibling, banned := astral.GenerateIdentity(), astral.GenerateIdentity()
+	e.query.found = []*auth.SignedContract{
+		memberContract(t, e.issuer, sibling),
+		memberContract(t, e.issuer, banned),
+	}
+	if err := e.mod.db.StoreExpulsion(sampleSigned(e.issuer, banned)); err != nil {
+		t.Fatalf("store expulsion: %v", err)
+	}
+	if e.mod.IsSwarmMember(banned) || !e.mod.IsSwarmMember(sibling) {
+		t.Fatal("membership is wrong while the ban store is readable")
+	}
+
+	sqlDB, err := e.mod.db.DB.DB()
+	if err != nil {
+		t.Fatalf("sql db: %v", err)
+	}
+	if err := sqlDB.Close(); err != nil {
+		t.Fatalf("close db: %v", err)
+	}
+
+	for name, id := range map[string]*astral.Identity{"an expelled node": banned, "a sibling": sibling} {
+		if e.mod.IsSwarmMember(id) {
+			t.Errorf("%s reported a member while the ban store cannot be read", name)
+		}
+	}
+	if swarm := e.mod.LocalSwarm(); len(swarm) != 0 {
+		t.Errorf("LocalSwarm = %v while the ban store cannot be read, want none", swarm)
+	}
+}
+
 // BenchmarkIsSwarmMember measures the per-frame cost of the inbound relay
 // check on a 10-node swarm with one ban, over an in-memory index.
 func BenchmarkIsSwarmMember(b *testing.B) {

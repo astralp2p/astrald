@@ -46,8 +46,8 @@ func (mod *Module) IsSwarmApp(ctx *astral.Context, app *astral.Identity) bool {
 // why: a former member's relay contract stays indexed after it leaves, and
 // the reach of an app is its host's swarm.
 //
-// why claimed is read from the user identity and not from an empty swarm: a
-// swarm lookup fault on a claimed node must not read as no filter.
+// why: claimed is read from the user identity and not from an empty swarm, so
+// a swarm lookup fault on a claimed node never reads as no filter.
 func (mod *Module) isAppHost(host *astral.Identity) bool {
 	if mod.User == nil || mod.User.Identity() == nil {
 		return true
