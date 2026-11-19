@@ -1,0 +1,6 @@
+nodes    = ["node1", "node2"]
+timeout  = 180
+after    = "adopt-node"
+destroys = true
+restart  = ["node1"]
+facts    = ["reindex_after_expel"]

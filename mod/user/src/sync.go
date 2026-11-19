@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/astralp2p/astral-go/api/auth"
 	"github.com/astralp2p/astral-go/api/nodes"
 	"github.com/astralp2p/astral-go/api/tree"
 	"github.com/astralp2p/astral-go/api/user"
@@ -159,13 +160,16 @@ func (mod *Module) syncExpulsions(ctx *astral.Context, with *astral.Identity) {
 	}
 }
 
-// syncAppContracts pushes the relay contracts of the apps this node hosts, so
-// the sibling can route a query addressed to such an app through this node.
+// syncAppContracts pushes the relay contracts of the apps the swarm's members
+// host, so the sibling can route a query addressed to such an app through its
+// host (astral-docs topics/app-routing.md, Reach).
+// why every member's: a new member learns the swarm's apps from its first link,
+// before it links to their hosts; syncSiblings ran first, so it knows each host.
+// why each push bounded: one stalled push must not hold the rest of the sync.
 // note: an app registered after the link came up reaches the sibling through
 // the push in apphost.register (mod/apphost/src/op_register.go).
 func (mod *Module) syncAppContracts(ctx *astral.Context, with *astral.Identity) {
 	contracts, err := mod.Auth.SignedContracts().
-		WithSubject(mod.node.Identity()).
 		WithAction(&nodes.RelayForAction{}).
 		Find(ctx)
 	if err != nil {
@@ -174,8 +178,28 @@ func (mod *Module) syncAppContracts(ctx *astral.Context, with *astral.Identity) 
 	}
 
 	for _, contract := range contracts {
-		mod.Objects.Push(ctx, with, contract)
+		if !mod.isForwardable(contract, with) {
+			continue
+		}
+
+		pctx, cancel := ctx.WithTimeout(siblingPushTimeout)
+		if err := mod.Objects.Push(pctx, with, contract); err != nil {
+			mod.log.Logv(1, "syncAppContracts: push to %v: %v", with, err)
+		}
+		cancel()
 	}
+}
+
+// isForwardable reports whether contract is a relay contract the sibling with
+// would admit from this node: one that passes AdmitRelayContract here, for an
+// app hosted by another node than with.
+// why skip with's own: with holds the contracts of the apps it hosts.
+func (mod *Module) isForwardable(contract *auth.SignedContract, with *astral.Identity) bool {
+	if contract.IsNil() || !isRelayForContract(contract.Contract) || contract.Subject.IsEqual(with) {
+		return false
+	}
+
+	return mod.AdmitRelayContract(nil, contract) == nil
 }
 
 func (mod *Module) pushActiveContract(ctx *astral.Context, remoteIdentity *astral.Identity) {

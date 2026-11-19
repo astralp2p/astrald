@@ -3,6 +3,7 @@ package user
 import (
 	"time"
 
+	"github.com/astralp2p/astral-go/api/auth"
 	"github.com/astralp2p/astral-go/api/policy"
 	"github.com/astralp2p/astral-go/api/user"
 	"github.com/astralp2p/astral-go/astral"
@@ -35,6 +36,11 @@ type Module interface {
 	// LocalSwarm returns the identities of swarm members reachable on this
 	// device, excluding remote-only members.
 	LocalSwarm() (list []*astral.Identity)
+	// AdmitRelayContract is the one admission rule of a relay-for contract:
+	// its subject is this node or a local swarm member, both signatures
+	// verify, and it has not expired. A non-nil sender, the node that
+	// delivered it, must be a member too. It answers nil for any other kind.
+	AdmitRelayContract(sender *astral.Identity, sc *auth.SignedContract) error
 	NewMaintainLinkTask(target *astral.Identity) MaintainLinkTask
 	NewSyncNodesTask(remoteIdentity *astral.Identity) SyncNodesTask
 	// PushToLocalSwarm broadcasts obj to every local swarm member except the

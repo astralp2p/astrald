@@ -1,0 +1,6 @@
+nodes    = ["node1", "node2", "node3"]
+timeout  = 300
+after    = "adopt-node"
+destroys = true
+host_listener = "serves its greeter app on a test-host port that node2 dials"
+facts    = ["relay_contract_forwarding"]
