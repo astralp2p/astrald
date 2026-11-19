@@ -19,9 +19,10 @@ type opHostsArgs struct {
 // A host is the subject of an active relay-for contract the app issued, the same lookup
 // PreprocessQuery routes by (query_preprocessor.go), with this node included when it hosts the app.
 // On a claimed node only current swarm members are listed (isAppHost).
-// note: a sibling's app is known once its relay contract arrived: at the first link
-// to its host or to any other member that holds it, at the app's registration, or
-// when the app runs swarm discovery.
+// note: a sibling's app is known once its relay contract arrived: at a new link to
+// its host or to any other member that holds it, when a link to one of them closes
+// while another remains, at the app's registration, or when the app runs swarm
+// discovery.
 func (mod *Module) OpHosts(ctx *astral.Context, q *routing.IncomingQuery, args opHostsArgs) error {
 	ch := channel.New(q.AcceptRaw(), channel.WithOutputFormat(args.Out))
 	defer ch.Close()

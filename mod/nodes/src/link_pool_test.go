@@ -137,3 +137,103 @@ func TestAddLinkCountsConcurrentLinksOnce(t *testing.T) {
 		t.Fatalf("LinkCreatedEvent counts %v; want %v", counts, want)
 	}
 }
+
+// probeFixture is a pool on a module that records its events.
+type probeFixture struct {
+	mod    *Module
+	events *recordingEvents
+}
+
+func newProbeFixture() *probeFixture {
+	localID := astral.GenerateIdentity()
+	events := &recordingEvents{}
+	mod := &Module{Deps: Deps{Events: events}, node: &identityNode{id: localID}, log: log.New(localID)}
+	mod.linkPool = NewLinkPool(mod)
+	return &probeFixture{mod: mod, events: events}
+}
+
+// addIdleLink adds a link to the shared pipe identity that never probes on its
+// own, with the ping timeout given, and starts its peer.
+func (f *probeFixture) addIdleLink(t *testing.T, timeout time.Duration, answer bool) (*Link, *probePeer) {
+	t.Helper()
+	link, remote := newKeepaliveLink(t, f.mod, time.Hour, timeout)
+	peer := startProbePeer(t, remote, answer)
+	if err := f.mod.linkPool.AddLink(link); err != nil {
+		t.Fatalf("AddLink: %v", err)
+	}
+	return link, peer
+}
+
+// closedEvents returns the LinkClosedEvents emitted so far.
+func (f *probeFixture) closedEvents() []*nodes.LinkClosedEvent {
+	var closed []*nodes.LinkClosedEvent
+	for _, e := range f.events.recorded() {
+		if c, ok := e.(*nodes.LinkClosedEvent); ok {
+			closed = append(closed, c)
+		}
+	}
+	return closed
+}
+
+// TestNewLinkClosesDeadOlderLink: a second link to a peer makes the pool ping
+// the first; a first link whose peer never answers closes within its ping
+// timeout plus 1 s, and the pool reports one link left.
+func TestNewLinkClosesDeadOlderLink(t *testing.T) {
+	const timeout = 300 * time.Millisecond
+	f := newProbeFixture()
+	old, oldPeer := f.addIdleLink(t, timeout, false)
+
+	// why: past the start jitter, the old link's loop waits for a probe trigger.
+	time.Sleep(pingJitter + 100*time.Millisecond)
+	if n := len(oldPeer.received()); n != 0 {
+		t.Fatalf("the only link to a peer sent %v probes before a second link arrived; want none", n)
+	}
+
+	start := time.Now()
+	replacement, _ := f.addIdleLink(t, time.Hour, true)
+
+	select {
+	case <-old.Done():
+	case <-time.After(timeout + time.Second):
+		t.Fatalf("the dead older link was still open %v after a new link arrived", timeout+time.Second)
+	}
+	if took := time.Since(start); took > timeout+time.Second {
+		t.Fatalf("the dead older link closed %v after the new link; want at most %v", took, timeout+time.Second)
+	}
+	if n := len(oldPeer.received()); n != 1 {
+		t.Fatalf("the older link sent %v probes; want one", n)
+	}
+
+	eventually(t, "a LinkClosedEvent for the dead link", func() bool { return len(f.closedEvents()) > 0 })
+	closed := f.closedEvents()
+	if len(closed) != 1 || closed[0].LinkCount != 1 {
+		t.Fatalf("LinkClosedEvents %v; want one with LinkCount 1", closed)
+	}
+	if err := replacement.Err(); err != nil {
+		t.Fatalf("the new link closed: %v", err)
+	}
+}
+
+// TestNewLinkKeepsHealthyOlderLink: a first link whose peer answers gets one
+// ping when a second link arrives, stays open, and no LinkClosedEvent follows.
+func TestNewLinkKeepsHealthyOlderLink(t *testing.T) {
+	const timeout = 300 * time.Millisecond
+	f := newProbeFixture()
+	old, oldPeer := f.addIdleLink(t, timeout, true)
+
+	time.Sleep(pingJitter + 100*time.Millisecond)
+	f.addIdleLink(t, time.Hour, true)
+
+	eventually(t, "a probe on the older link", func() bool { return len(oldPeer.received()) > 0 })
+	time.Sleep(timeout + absenceWindow)
+
+	if err := old.Err(); err != nil {
+		t.Fatalf("the healthy older link closed: %v", err)
+	}
+	if n := len(oldPeer.received()); n != 1 {
+		t.Fatalf("the older link sent %v probes; want one", n)
+	}
+	if closed := f.closedEvents(); len(closed) != 0 {
+		t.Fatalf("LinkClosedEvents %v; want none", closed)
+	}
+}

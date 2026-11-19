@@ -32,7 +32,7 @@ func NewLinkPool(mod *Module) *LinkPool {
 	}
 }
 
-// AddLink registers link, wires its mux router, emits a created event, and spawns a goroutine that removes it and closes its sessions when it dies.
+// AddLink registers link, wires its mux router, emits a created event, probes the older links to the same peer, and spawns a goroutine that removes it and closes its sessions when it dies.
 func (pool *LinkPool) AddLink(link *Link) error {
 	dir := "in"
 	netName := "unknown network"
@@ -74,6 +74,10 @@ func (pool *LinkPool) AddLink(link *Link) error {
 		LinkCount:      astral.Uint32(linkCount),
 	})
 
+	if linkCount > 1 {
+		pool.probeOlderLinks(link)
+	}
+
 	go func() {
 		<-link.Done()
 
@@ -96,6 +100,21 @@ func (pool *LinkPool) AddLink(link *Link) error {
 	go pool.mod.reflectLink(link)
 
 	return nil
+}
+
+// probeOlderLinks wakes the ping loop of every other pooled link to the remote
+// identity of link, so each sends one ping.
+// why: a new link to a peer that already has links often means the peer moved
+// and an older link is dead; the ping closes a dead one within its ping timeout,
+// and the LinkClosedEvent it leaves starts the reconnect sync over a survivor.
+// note: a healthy older link answers the ping and stays.
+func (pool *LinkPool) probeOlderLinks(link *Link) {
+	older := pool.links.Select(func(v *Link) bool {
+		return v != link && v.RemoteIdentity().IsEqual(link.RemoteIdentity())
+	})
+	for _, old := range older {
+		old.Wake()
+	}
 }
 
 // Close ends the pool lifetime and disconnects every peer.

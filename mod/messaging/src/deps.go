@@ -36,7 +36,7 @@ func (mod *Module) LoadDependencies(ctx *astral.Context) (err error) {
 	}
 
 	// optional: without the user module a new mailbox's relay contract reaches
-	// a sibling at its next first link alone.
+	// a sibling alone at its next first link or once a new link to it replaced a dead one.
 	core.Inject(mod.node, &mod.OptionalDeps)
 
 	mod.addAuthorizers()

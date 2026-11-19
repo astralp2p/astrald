@@ -64,6 +64,9 @@ type Module struct {
 	announceDelay time.Duration
 	// announcePending is set while an announcement waits out announceDelay.
 	announcePending atomic.Bool
+
+	// syncGate runs one endpoint pull per sibling at a time after a partial link close.
+	syncGate syncGate
 }
 
 // Run schedules the endpoint-cleanup task and blocks until ctx is cancelled.
