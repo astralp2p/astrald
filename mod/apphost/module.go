@@ -67,6 +67,12 @@ type Module interface {
 	// swarm, this node included: the issuer of an active relay-for contract
 	// whose subject is a swarm node. A node without a user has no swarm apps.
 	IsSwarmApp(ctx *astral.Context, app *astral.Identity) bool
+
+	// OnGrantsChanged registers fn to run after each recorded change of
+	// identity's grants: a grant written, a grant revoked by action, or one
+	// revoked by ID. fn runs synchronously inside the call that changed the
+	// grants, once per call, and must not block.
+	OnGrantsChanged(fn func(identity *astral.Identity))
 }
 
 var ErrMissingAppIdentity = errors.New("missing app identity")

@@ -115,7 +115,7 @@ func (mod *Module) carryOnce(ctx *astral.Context, c memberCarry) (bool, error) {
 			// why: a member that predates visibility ignores tagged and sends
 			// plain updates, which count as open.
 			open := ev.Open == nil || *ev.Open
-			r.Update(ev.Update, c.view.sees(ctx, string(ev.Update.Name), r.Member(), open))
+			c.view.offer(ctx, r, ev.Update, open)
 		case ev.Removed != nil:
 			r.Remove(ev.Removed)
 		case ev.Initial != nil:
@@ -147,7 +147,8 @@ func (mod *Module) pushRelayContract(ctx *astral.Context, app, member *astral.Id
 
 // ReceiveObject watches this node's link events, which restore lost swarm
 // contributions, and its swarm member events, which update the member set of
-// open swarm follows.
+// open swarm follows, close the follows a departed member carries here, and
+// re-check every open follow.
 func (mod *Module) ReceiveObject(drop objects.Drop) error {
 	e, ok := drop.Object().(*events.Event)
 	// why: link events report this node's own links; one sent by another node is forged.
@@ -157,10 +158,16 @@ func (mod *Module) ReceiveObject(drop objects.Drop) error {
 	switch data := e.Data.(type) {
 	case *nodes.LinkCreatedEvent:
 		mod.links.notify(data.RemoteIdentity)
-	case *user.SwarmMemberJoined, *user.SwarmMemberLeft:
+	case *user.SwarmMemberJoined:
 		// why: the current set, not the event's node, so events that arrive
 		// out of order still leave the latest set.
 		mod.refreshMembers()
+		// why: a join or a claim changes who is a swarm caller.
+		mod.authority.scheduleAll()
+	case *user.SwarmMemberLeft:
+		mod.refreshMembers()
+		mod.closeCarriesOf(data.NodeID)
+		mod.authority.scheduleAll()
 	}
 	return nil
 }

@@ -94,3 +94,39 @@ func TestWithdrawContractsTouchesOnlyTheAction(t *testing.T) {
 		t.Fatalf("contracts of the issuer = %v, %v; want the one test.action contract", len(found), err)
 	}
 }
+
+// TestWithdrawContractsRunsOnContractWithdrawn: a withdrawal that takes back a
+// contract runs every OnContractWithdrawn callback once with the issuer, after
+// the contract stopped authorizing; one that takes back nothing runs none.
+func TestWithdrawContractsRunsOnContractWithdrawn(t *testing.T) {
+	mod := testModule(t)
+	mod.Add(authmod.Func[*nodes.RelayForAction](func(_ *astral.Context, a *nodes.RelayForAction) bool {
+		return a.Actor().IsEqual(a.ForID)
+	}))
+	host, app := astral.GenerateIdentity(), astral.GenerateIdentity()
+	storeContract(t, mod, signedContract(app, host, time.Hour, relayPermit()))
+
+	var issuers []*astral.Identity
+	var acceptedInCallback []bool
+	mod.OnContractWithdrawn(func(issuer *astral.Identity) {
+		issuers = append(issuers, issuer)
+		acceptedInCallback = append(acceptedInCallback, relayAccepted(mod, host, app))
+	})
+
+	if n, err := mod.WithdrawContracts(app, &nodes.RelayForAction{}); err != nil || n != 1 {
+		t.Fatalf("WithdrawContracts = %v, %v; want 1, nil", n, err)
+	}
+	if len(issuers) != 1 || !issuers[0].IsEqual(app) {
+		t.Fatalf("callbacks ran with %v; want once with the issuer %v", issuers, app)
+	}
+	if acceptedInCallback[0] {
+		t.Fatal("the callback ran while the contract still authorized")
+	}
+
+	if n, err := mod.WithdrawContracts(app, &nodes.RelayForAction{}); err != nil || n != 0 {
+		t.Fatalf("second WithdrawContracts = %v, %v; want 0, nil", n, err)
+	}
+	if len(issuers) != 1 {
+		t.Fatalf("a withdrawal that took back nothing ran a callback")
+	}
+}

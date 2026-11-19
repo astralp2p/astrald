@@ -22,6 +22,11 @@ own identity, and nothing lets an app advertise as anyone else.
      only the honest provider.
   5. *no ServeApps*: an app whose `serve_apps` grant is revoked is refused with
      `not permitted`, and its service is not shown.
+  5b. *revoked while advertising*: an app on node2 advertises `sai-revoked`;
+     a swarm follow from node1 and a local follow on node2 show it. node2's
+     admin revokes the app's `serve_apps`: within 5 s node2's follow receives
+     `services.removed` with cause `binding_closed`, node1's with
+     `member_removed`, and the app's advertise channel closes.
   6. *over a link*: an app of node1 cannot advertise on node2 (the query is
      rejected on its way), and node1's own identity, which does reach the op, is
      told `origin not allowed: network`. Neither service is shown.

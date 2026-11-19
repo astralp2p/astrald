@@ -12,6 +12,7 @@ type outKind int
 const (
 	outNone outKind = iota
 	outRemoved
+	outNotGranted
 	outBoundary
 	outView
 )
@@ -25,6 +26,7 @@ type output struct {
 	removed    []offeringKey
 	cause      services.RemovalCause // with removed: the cause of every key
 	incomplete *services.Incomplete
+	notGranted *services.NotGranted
 }
 
 // Run writes the stream to sink until the stream closes, a one-shot sends its
@@ -64,12 +66,18 @@ func (st *Stream) Run(sink Sink) error {
 	}
 }
 
-// nextOutput picks what to send: removals of the lowest pending cause, then
-// the boundary once nothing it waits for is left, then views in first-unsent
-// order.
+// nextOutput picks what to send: removals of the lowest pending cause, then a
+// changed not_granted list, then the boundary once nothing it waits for is
+// left, then views in first-unsent order.
+// why: removals and the new list precede views, so a consumer never reads a
+// view the change it was told about would withhold.
 func (st *Stream) nextOutput() output {
 	if len(st.unsentRemovals) > 0 {
 		return st.nextRemoved()
+	}
+	if ng := st.unsentNotGranted; ng != nil {
+		st.unsentNotGranted = nil
+		return output{kind: outNotGranted, notGranted: ng}
 	}
 	if at := st.attempt; at != nil && at.resolved && len(at.unsentAtBoundary) == 0 {
 		return output{kind: outBoundary, incomplete: at.incomplete()}
@@ -126,6 +134,8 @@ func (out output) write(sink Sink) error {
 			r.Offerings = append(r.Offerings, &services.OfferingKey{ProviderID: id, Name: astral.String8(k.name)})
 		}
 		return sink.Removed(r)
+	case outNotGranted:
+		return sink.NotGranted(out.notGranted)
 	case outBoundary:
 		return sink.Boundary(out.incomplete)
 	default:

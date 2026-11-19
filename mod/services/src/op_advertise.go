@@ -59,6 +59,8 @@ func (mod *Module) OpAdvertise(ctx *astral.Context, q *routing.IncomingQuery, ar
 		return ch.Send(astral.Err(err))
 	}
 	defer binding.Close()
+	mod.authority.addBinding(binding)
+	defer mod.authority.removeBinding(binding)
 
 	err = ch.Send(&astral.Ack{})
 	close(transport.ready)

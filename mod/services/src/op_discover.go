@@ -52,6 +52,7 @@ func (mod *Module) OpDiscover(ctx *astral.Context, q *routing.IncomingQuery, arg
 	ch := q.Accept(channel.WithFormats(args.In, args.Out))
 	defer ch.Close()
 
+	changes := mod.authority.changeCount()
 	d, err := mod.admitDiscovery(ctx, q, args)
 	if err != nil {
 		return ch.Send(astral.Err(err))
@@ -68,10 +69,18 @@ func (mod *Module) OpDiscover(ctx *astral.Context, q *routing.IncomingQuery, arg
 		d.request.Carrier = mod.newCarrier(ctx, d)
 	}
 
-	// fixme: authorization is checked at admission only; a follow outlives a
-	// revoked or narrowed grant.
 	st := mod.coord.Discover(d.request)
 	defer st.Close()
+	if d.request.Follow {
+		od := &openDiscovery{d: d, st: st}
+		mod.authority.addOpen(od)
+		defer mod.authority.removeOpen(od)
+		// why: a change scheduled between admission and registration found
+		// no follow to re-check.
+		if mod.authority.changeCount() != changes {
+			mod.authority.schedule(d.request.Caller)
+		}
+	}
 
 	go closeWhenConsumerLeaves(ch, st)
 	go closeOnCancel(ctx, st)
@@ -103,11 +112,13 @@ func closeOnCancel(ctx *astral.Context, st *coordinator.Stream) {
 
 // discovery is an admitted request: the stream to enroll, the view that
 // filters swarm members' offerings for its caller, and the requested services
-// the caller is not granted.
+// the caller is not granted, as last sent. A discovery a swarm member carries
+// to this node has no view and records the carrying node.
 type discovery struct {
 	request    coordinator.Request
 	view       *callerView
 	notGranted []string
+	carrier    *astral.Identity
 }
 
 // admitDiscovery applies every admission rule before any work starts.
@@ -191,7 +202,7 @@ func (mod *Module) admitCarry(ctx *astral.Context, q *routing.IncomingQuery, arg
 	} else if err := mod.authorizeDiscovery(ctx, q.Caller(), names); err != nil {
 		return nil, err
 	}
-	return &discovery{request: req}, nil
+	return &discovery{request: req, carrier: q.Caller()}, nil
 }
 
 // authorizeDiscovery checks the actor may discover every named service on this
@@ -246,6 +257,8 @@ func (s *channelSink) Update(u *services.Update) error { return s.send(u) }
 func (s *channelSink) TaggedUpdate(u *services.TaggedUpdate) error { return s.send(u) }
 
 func (s *channelSink) Removed(r *services.Removed) error { return s.send(r) }
+
+func (s *channelSink) NotGranted(ng *services.NotGranted) error { return s.send(ng) }
 
 func (s *channelSink) Boundary(incomplete *services.Incomplete) error {
 	if incomplete != nil {

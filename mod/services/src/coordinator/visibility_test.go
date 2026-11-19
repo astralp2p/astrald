@@ -162,13 +162,13 @@ func TestHiddenMemberViewRemovesAShownOffering(t *testing.T) {
 	r := st.Contributions()[0]
 	p, q := astral.GenerateIdentity(), astral.GenerateIdentity()
 
-	r.Update(remoteView(q, "player", true), false)
-	r.Update(remoteView(p, "player", true), true)
+	r.Update(remoteView(q, "player", true), true, false)
+	r.Update(remoteView(p, "player", true), true, true)
 	expectEvent(t, sink, "update")
 	r.Initial(nil)
 	expectEvent(t, sink, "boundary")
 
-	r.Update(remoteView(p, "player", true), false)
+	r.Update(remoteView(p, "player", true), true, false)
 	if ev := expectEvent(t, sink, "removed"); len(ev.r.Offerings) != 1 || !ev.r.Offerings[0].ProviderID.IsEqual(p) {
 		t.Fatalf("removed %v; want p", ev.r.Offerings)
 	}
@@ -195,7 +195,7 @@ func TestAllServicesMemberOutcome(t *testing.T) {
 			st := e.c.Discover(Request{Caller: astral.GenerateIdentity(), All: true, Swarm: true})
 			go st.Run(sink)
 			r := st.Contributions()[0]
-			r.Update(remoteView(astral.GenerateIdentity(), "anything", true), true)
+			r.Update(remoteView(astral.GenerateIdentity(), "anything", true), true, true)
 			expectEvent(t, sink, "update")
 			tc.end(r)
 			ev := <-sink.events

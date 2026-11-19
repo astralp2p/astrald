@@ -23,7 +23,7 @@ func expectRemoved(t *testing.T, s *fakeSink, cause services.RemovalCause) *serv
 func showMember(t *testing.T, sink *fakeSink, r *Contribution, providers ...*astral.Identity) {
 	t.Helper()
 	for _, p := range providers {
-		r.Update(remoteView(p, "player", true), true)
+		r.Update(remoteView(p, "player", true), true, true)
 	}
 	r.Initial(nil)
 	for range providers {
@@ -191,7 +191,7 @@ func TestRemovalCausePerCallSite(t *testing.T) {
 			r.Remove([]*services.OfferingKey{{ProviderID: p, Name: "player"}})
 		}},
 		{"Contribution.Update hidden view", services.CauseHidden, false, func(e *env, st *Stream, r *Contribution, src *Binding, p *astral.Identity) {
-			r.Update(remoteView(p, "player", true), false)
+			r.Update(remoteView(p, "player", true), true, false)
 		}},
 		{"Binding.Close", services.CauseBindingClosed, true, func(e *env, st *Stream, r *Contribution, src *Binding, p *astral.Identity) {
 			src.Close()
@@ -221,7 +221,7 @@ func TestRemovalCausePerCallSite(t *testing.T) {
 			r := st.Contributions()[0]
 			p := astral.GenerateIdentity()
 			answer(t, src, expectAsk(t, tr), true)
-			r.Update(remoteView(p, "player", true), true)
+			r.Update(remoteView(p, "player", true), true, true)
 			r.Initial(nil)
 			expectEvent(t, sink, "update")
 			expectEvent(t, sink, "update")

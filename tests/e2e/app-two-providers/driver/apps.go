@@ -89,10 +89,10 @@ type echoApp struct {
 	calls []string
 }
 
-// startEcho serves a as an echo provider of service, through apps.ServeWith
-// with a's own client, and returns once the node holds the handler and the
-// advertisement.
-func startEcho(ctx *astral.Context, a *app, service string) (*echoApp, error) {
+// startEcho serves a as an echo provider of service, open or private, through
+// apps.ServeWith with a's own client, and returns once the node holds the
+// handler and the advertisement.
+func startEcho(ctx *astral.Context, a *app, service string, open bool) (*echoApp, error) {
 	e := &echoApp{app: a}
 	ops := routing.NewOpRouter()
 	op, err := routing.NewOp(e.echo)
@@ -108,6 +108,7 @@ func startEcho(ctx *astral.Context, a *app, service string) (*echoApp, error) {
 			return &services.Update{Available: true}, nil
 		},
 	})
+	p.SetOpen(open)
 	advertised := make(chan struct{})
 	var once sync.Once
 	advertise := func(hctx *astral.Context) error {

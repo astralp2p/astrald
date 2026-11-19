@@ -14,6 +14,9 @@ type Sink interface {
 	// TaggedUpdate writes a view of a tagged stream.
 	TaggedUpdate(*services.TaggedUpdate) error
 	Removed(*services.Removed) error
+	// NotGranted writes the caller's current services.not_granted list after
+	// an authority change altered it.
+	NotGranted(*services.NotGranted) error
 	// Boundary ends the initial attempt: Incomplete when incomplete is not nil,
 	// then eos.
 	Boundary(incomplete *services.Incomplete) error
@@ -35,6 +38,7 @@ type Stream struct {
 	latest            map[offeringKey]*services.Update      // latest available view queued or written per offering
 	sendOrder         []offeringKey                         // send order of unsent keys
 	unsentRemovals    map[offeringKey]services.RemovalCause // removals not yet sent, with their cause
+	unsentNotGranted  *services.NotGranted                  // a not_granted list not yet sent; nil is none
 	inflight          *offeringKey                          // view handed to the writer
 	inflightAvailable bool                                  // the in-flight view offers the service
 	attempt           *attempt                              // nil once the boundary is sent

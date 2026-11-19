@@ -29,6 +29,9 @@ type Module struct {
 	// onIndexed holds the OnContractIndexed callbacks.
 	onIndexedMu sync.Mutex
 	onIndexed   []func(*apiauth.SignedContract)
+	// onWithdrawn holds the OnContractWithdrawn callbacks.
+	onWithdrawnMu sync.Mutex
+	onWithdrawn   []func(*astral.Identity)
 	// admitters holds the AddAdmitter callbacks.
 	admittersMu sync.Mutex
 	admitters   []func(*apiauth.SignedContract) error

@@ -77,7 +77,7 @@ func TestSwarmMemberJoinsAnOpenFollow(t *testing.T) {
 		t.Fatal("the joined member is not carried to")
 	}
 	p := astral.GenerateIdentity()
-	rb.Update(remoteView(p, "player", true), true)
+	rb.Update(remoteView(p, "player", true), true, true)
 	if u := expectEvent(t, sink, "update").u; !u.ProviderID.IsEqual(p) {
 		t.Fatal("the joined member's offering did not reach the follow")
 	}
@@ -98,7 +98,7 @@ func TestSwarmMemberLeavesAnOpenFollow(t *testing.T) {
 	defer st.Close()
 	rb := carrier.carry(b)
 	p := astral.GenerateIdentity()
-	rb.Update(remoteView(p, "player", true), true)
+	rb.Update(remoteView(p, "player", true), true, true)
 	rb.Initial(nil)
 	expectEvent(t, sink, "update")
 	expectEvent(t, sink, "boundary")
@@ -111,7 +111,7 @@ func TestSwarmMemberLeavesAnOpenFollow(t *testing.T) {
 	if !carrier.isStopped(rb) {
 		t.Fatal("the departed member's carry was not stopped")
 	}
-	rb.Update(remoteView(p, "player", true), true)
+	rb.Update(remoteView(p, "player", true), true, true)
 	expectNoEvent(t, sink)
 	if len(st.Contributions()) != 0 {
 		t.Fatal("the departed member still contributes")

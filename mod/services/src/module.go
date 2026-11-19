@@ -27,6 +27,10 @@ type Module struct {
 	coord  *coordinator.Coordinator
 	links  linkWaiters
 
+	// authority holds the open follows and bindings that authority changes
+	// re-check.
+	authority authorityWatch
+
 	// membersMu makes reading the member set and handing it to the
 	// coordinator one step, so a stale read never replaces a newer set.
 	membersMu sync.Mutex
@@ -36,8 +40,9 @@ type Module struct {
 
 var _ services.Module = &Module{}
 
-// Run seeds the swarm member set, then applies every change of the private
-// list until ctx ends. Member changes arrive through ReceiveObject.
+// Run seeds the swarm member set, starts re-checking open follows and bindings
+// on authority changes, then applies every change of the private list until
+// ctx ends. Member changes arrive through ReceiveObject.
 func (mod *Module) Run(ctx *astral.Context) error {
 	select {
 	case <-mod.User.Ready():
@@ -45,6 +50,8 @@ func (mod *Module) Run(ctx *astral.Context) error {
 		return nil
 	}
 	mod.refreshMembers()
+	mod.watchAuthority()
+	go mod.runRechecks(ctx)
 	for list := range mod.visibility.Private.Follow(ctx) {
 		mod.coord.SetPrivate(list)
 	}

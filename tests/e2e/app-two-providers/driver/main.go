@@ -16,7 +16,10 @@ import (
 	"github.com/astralp2p/astral-go/astral"
 )
 
-const service = "echo-pair"
+const (
+	service        = "echo-pair"
+	privateService = "echo-pair-private" // advertised private, found only with a permit
+)
 
 func main() {
 	if len(os.Args) != 3 {
@@ -93,15 +96,22 @@ func story(path string, facts map[string]bool) error {
 		return err
 	}
 	own := near.answeredOnly(consumer.id, msgs[near.id.String()]) && far.answeredOnly(consumer.id, msgs[far.id.String()])
-	return step(facts, "each_provider_answered_its_own_call", own, "node1's provider answered %v, node2's %v; want one call each, from %v", near.answered(), far.answered(), consumer.id)
+	if err := step(facts, "each_provider_answered_its_own_call", own, "node1's provider answered %v, node2's %v; want one call each, from %v", near.answered(), far.answered(), consumer.id); err != nil {
+		return err
+	}
+	return grantAfterFollow(ctx, n1, n2, facts)
 }
 
 func startProvider(ctx *astral.Context, n node) (*echoApp, error) {
+	return startProviderOf(ctx, n, service, true)
+}
+
+func startProviderOf(ctx *astral.Context, n node, name string, open bool) (*echoApp, error) {
 	a, err := register(ctx, n, serveApps)
 	if err != nil {
 		return nil, err
 	}
-	return startEcho(ctx, a, service)
+	return startEcho(ctx, a, name, open)
 }
 
 func holdsBoth(list []*astral.Identity, a, b *astral.Identity) bool {

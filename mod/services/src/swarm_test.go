@@ -3,6 +3,7 @@ package services
 import (
 	"io"
 	"slices"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -53,22 +54,67 @@ func (n *swarmNode) RouteQuery(ctx *astral.Context, q *astral.InFlightQuery, w i
 
 type swarmUser struct {
 	user.Module
+	mu    sync.Mutex
 	swarm []*astral.Identity
 	user  *astral.Identity // nil: the node has no user
 }
 
-// swarmApps is an apphost module whose swarm apps are fixed.
+// swarmApps is an apphost module whose swarm apps a test sets, and which runs
+// the OnGrantsChanged callbacks when a test changes an app's grants.
 type swarmApps struct {
 	apphostmod.Module
-	apps []*astral.Identity
+	mu        sync.Mutex
+	apps      []*astral.Identity
+	onChanged []func(*astral.Identity)
 }
 
 func (a *swarmApps) IsSwarmApp(_ *astral.Context, app *astral.Identity) bool {
+	a.mu.Lock()
+	defer a.mu.Unlock()
 	return slices.ContainsFunc(a.apps, app.IsEqual)
 }
 
-func (u *swarmUser) LocalSwarm() []*astral.Identity { return u.swarm }
-func (u *swarmUser) Identity() *astral.Identity     { return u.user }
+func (a *swarmApps) setApps(apps ...*astral.Identity) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.apps = apps
+}
+
+func (a *swarmApps) OnGrantsChanged(fn func(*astral.Identity)) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.onChanged = append(a.onChanged, fn)
+}
+
+// grantsChanged runs the callbacks as apphost does after a grant write or
+// revoke for id.
+func (a *swarmApps) grantsChanged(id *astral.Identity) {
+	a.mu.Lock()
+	callbacks := slices.Clone(a.onChanged)
+	a.mu.Unlock()
+	for _, fn := range callbacks {
+		fn(id)
+	}
+}
+
+func (u *swarmUser) LocalSwarm() []*astral.Identity {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	return u.swarm
+}
+
+func (u *swarmUser) Identity() *astral.Identity {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	return u.user
+}
+
+// set replaces the swarm and the user.
+func (u *swarmUser) set(swarm []*astral.Identity, userID *astral.Identity) {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	u.swarm, u.user = swarm, userID
+}
 
 // Ready reports the user module ready at once.
 func (u *swarmUser) Ready() <-chan struct{} {
@@ -316,7 +362,7 @@ func TestSwarmMemberLeftEventEndsTheMembersCarry(t *testing.T) {
 	expect[*astral.EOS](t, c)
 	node.waitEOS(t)
 
-	s.a.User.(*swarmUser).swarm = []*astral.Identity{s.nodeA.id}
+	s.a.User.(*swarmUser).set([]*astral.Identity{s.nodeA.id}, nil)
 	left := &events.Event{Data: &userapi.SwarmMemberLeft{NodeID: s.b.node.Identity()}}
 	if err := s.a.ReceiveObject(&linkDrop{sender: s.nodeA.id, obj: left}); err != nil {
 		t.Fatal(err)

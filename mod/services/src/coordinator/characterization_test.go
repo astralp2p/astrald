@@ -220,6 +220,7 @@ func (failingSink) Update(*services.Update) error             { return errWrite 
 func (failingSink) Removed(*services.Removed) error           { return errWrite }
 func (failingSink) TaggedUpdate(*services.TaggedUpdate) error { return errWrite }
 func (failingSink) Boundary(*services.Incomplete) error       { return errWrite }
+func (failingSink) NotGranted(*services.NotGranted) error     { return errWrite }
 
 // A failed write closes the stream, Run returns the error, and the closed
 // follow leaves no demand on the provider.
@@ -290,7 +291,7 @@ func TestSwarmRemovalWithNilKeyOrOnAClosedStream(t *testing.T) {
 	st, _ := e.discoverSwarm(astral.GenerateIdentity(), true, sink, []*astral.Identity{astral.GenerateIdentity()}, "player")
 	r := st.Contributions()[0]
 	p := astral.GenerateIdentity()
-	r.Update(remoteView(p, "player", true), true)
+	r.Update(remoteView(p, "player", true), true, true)
 	r.Initial(nil)
 	expectEvent(t, sink, "update")
 	expectEvent(t, sink, "boundary")
