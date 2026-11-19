@@ -69,12 +69,8 @@ type echoApp struct {
 // advertisement.
 func startEcho(ctx *astral.Context, a *app, service string) (*echoApp, error) {
 	e := &echoApp{app: a}
-	ops := routing.NewOpRouter()
-	op, err := routing.NewOp(e.echo)
+	ops, err := e.ops()
 	if err != nil {
-		return nil, err
-	}
-	if err := ops.AddOp("echo", op); err != nil {
 		return nil, err
 	}
 
@@ -117,6 +113,19 @@ func startEcho(ctx *astral.Context, a *app, service string) (*echoApp, error) {
 		e.stop()
 		return nil, fmt.Errorf("serving %v: not advertised within %v", a.id, converge)
 	}
+}
+
+// ops returns the app's API: the echo op alone.
+func (e *echoApp) ops() (*routing.OpRouter, error) {
+	ops := routing.NewOpRouter()
+	op, err := routing.NewOp(e.echo)
+	if err != nil {
+		return nil, err
+	}
+	if err := ops.AddOp("echo", op); err != nil {
+		return nil, err
+	}
+	return ops, nil
 }
 
 type echoArgs struct {
