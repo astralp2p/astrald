@@ -57,23 +57,64 @@ type bindKey struct {
 	token astral.Nonce
 }
 
-// bindRegistry maps an owner's bound token to the live session that bound it.
+// bindRegistry maps an owner's bound token to the live session that bound it,
+// and records the tokens whose next session owes an end.
 //
 // why a mutex: a session drops its entry only while the entry still names
-// that session, and that check and the delete form one step.
+// that session, and a session that binds an owed token takes the owed end;
+// each check and its write form one step.
 type bindRegistry struct {
 	mu       sync.Mutex
 	sessions map[bindKey]*appBind
+	owed     map[bindKey]time.Time // owed end -> its expiry
 }
 
-func (r *bindRegistry) put(owner *astral.Identity, token astral.Nonce, s *appBind) {
+// put records that session s bound token for owner. It reports whether an end
+// was owed for that token at now; put takes that owed end.
+func (r *bindRegistry) put(owner *astral.Identity, token astral.Nonce, s *appBind, now time.Time) (owed bool) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
 	if r.sessions == nil {
 		r.sessions = map[bindKey]*appBind{}
 	}
-	r.sessions[bindKey{owner.String(), token}] = s
+	key := bindKey{owner.String(), token}
+	r.sessions[key] = s
+
+	r.pruneOwed(now)
+	if _, owed = r.owed[key]; owed {
+		delete(r.owed, key)
+	}
+	return owed
+}
+
+// owe records that the next session of owner that binds token before until
+// ends, unless a session of owner already holds token. It reports whether
+// the end was recorded.
+func (r *bindRegistry) owe(owner *astral.Identity, token astral.Nonce, now, until time.Time) bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	key := bindKey{owner.String(), token}
+	if r.sessions[key] != nil {
+		return false
+	}
+
+	r.pruneOwed(now)
+	if r.owed == nil {
+		r.owed = map[bindKey]time.Time{}
+	}
+	r.owed[key] = until
+	return true
+}
+
+// pruneOwed deletes the owed ends that expired at now. r.mu is held.
+func (r *bindRegistry) pruneOwed(now time.Time) {
+	for k, until := range r.owed {
+		if !until.After(now) {
+			delete(r.owed, k)
+		}
+	}
 }
 
 func (r *bindRegistry) find(owner *astral.Identity, token astral.Nonce) *appBind {
@@ -99,6 +140,9 @@ func (r *bindRegistry) drop(owner *astral.Identity, token astral.Nonce, s *appBi
 
 // endSpacer spaces the bind-session ends of each owner by sessionEndSpacing.
 // A nil now or afterFunc selects time.Now or time.AfterFunc.
+//
+// why a mutex: reserve reads an owner's booked time, prunes the passed ones
+// and books the next one as one step, which sig.Map does not offer.
 type endSpacer struct {
 	mu        sync.Mutex
 	next      map[string]time.Time // owner -> earliest time of its next end
@@ -111,11 +155,7 @@ func (e *endSpacer) reserve(owner *astral.Identity) time.Duration {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 
-	now := time.Now()
-	if e.now != nil {
-		now = e.now()
-	}
-
+	now := e.clock()
 	if e.next == nil {
 		e.next = map[string]time.Time{}
 	}
@@ -134,6 +174,14 @@ func (e *endSpacer) reserve(owner *astral.Identity) time.Duration {
 	return at.Sub(now)
 }
 
+// clock returns the current time.
+func (e *endSpacer) clock() time.Time {
+	if e.now != nil {
+		return e.now()
+	}
+	return time.Now()
+}
+
 // schedule runs fn after wait.
 func (e *endSpacer) schedule(wait time.Duration, fn func()) {
 	if e.afterFunc != nil {
@@ -143,22 +191,30 @@ func (e *endSpacer) schedule(wait time.Duration, fn func()) {
 	time.AfterFunc(wait, fn)
 }
 
-// bindToken records that session s bound token.
+// bindToken records that session s bound token. A session that binds a token
+// owing an end ends (endBindSession).
 //
 // why the immediate removal: a token that reaches an ended session missed the
 // session's cleanup, so its handlers are removed at once.
 func (mod *Module) bindToken(s *appBind, token astral.Nonce) {
 	s.mu.Lock()
-	defer s.mu.Unlock()
-
 	if s.ended {
+		s.mu.Unlock()
 		_ = mod.removeHandlersByToken(s.scope, token)
 		return
 	}
 
 	s.tokens = append(s.tokens, token)
+	owed := false
 	if s.scope.owner != nil {
-		mod.bindSessions.put(s.scope.owner, token, s)
+		owed = mod.bindSessions.put(s.scope.owner, token, s, mod.sessionEnds.clock())
+	}
+	s.mu.Unlock()
+
+	// note: endBindSession takes s.mu, so it runs after the unlock.
+	if owed {
+		mod.log.Logv(1, "bind session of %v bound a token whose handler failed", s.scope.owner)
+		mod.endBindSession(s.scope.owner, token)
 	}
 }
 
@@ -185,6 +241,14 @@ func (mod *Module) finishBind(s *appBind) {
 // owner are spaced by sessionEndSpacing; an end inside the window waits for
 // the window to pass.
 //
+// When no session of owner holds token, the end is owed to the next session
+// of owner that binds token within sessionEndSpacing.
+//
+// why the owed end: AppRegistrar registers a handler before its BindMsg
+// reaches the new session. A handler that fails in that gap has no session
+// to end, and without the owed end the new session stays up with the
+// handler gone.
+//
 // note: a handler registered by a token-less session records no owner and has
 // no session to end.
 func (mod *Module) endBindSession(owner *astral.Identity, token astral.Nonce) {
@@ -193,6 +257,15 @@ func (mod *Module) endBindSession(owner *astral.Identity, token astral.Nonce) {
 	}
 
 	s := mod.bindSessions.find(owner, token)
+	if s == nil {
+		now := mod.sessionEnds.clock()
+		if mod.bindSessions.owe(owner, token, now, now.Add(sessionEndSpacing)) {
+			mod.log.Logv(1, "the next bind session of %v owes an end after its handler failed", owner)
+			return
+		}
+		// note: a session bound the token between find and owe.
+		s = mod.bindSessions.find(owner, token)
+	}
 	if s == nil || !s.claimEnd() {
 		return
 	}

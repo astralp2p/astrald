@@ -317,3 +317,112 @@ func TestTokenBoundAfterTheEndIsRemoved(t *testing.T) {
 		t.Fatal("an ended session registered a late token")
 	}
 }
+
+// TestHandlerFailedBeforeItsBindMsgEndsTheNextSession: AppRegistrar registers
+// a handler before its BindMsg reaches the new session. A handler that fails
+// in that gap ends the session that binds its token next, after the owner's
+// spacing.
+func TestHandlerFailedBeforeItsBindMsgEndsTheNextSession(t *testing.T) {
+	mod, _ := ownershipModule(false)
+	clock := &spacerClock{now: time.Unix(1_000_000, 0)}
+	clock.install(mod)
+	app := astral.GenerateIdentity()
+	token := astral.NewNonce()
+
+	_, first := countedBind(mod, app, token)
+	if err := mod.ipcHandlers.Add(&IPCHandler{Identity: app, Owner: app, IPCToken: token, Endpoint: deadEndpoint(t)}); err != nil {
+		t.Fatalf("add handler: %v", err)
+	}
+	if err := routeTo(mod, app); err == nil {
+		t.Fatal("a query to a dead endpoint was routed")
+	}
+	if first.Load() != 1 {
+		t.Fatalf("the first failed dial ended the session %d times; want 1", first.Load())
+	}
+
+	// the app reconnected and registered again; its BindMsg has not arrived
+	if err := mod.ipcHandlers.Add(&IPCHandler{Identity: app, Owner: app, IPCToken: token, Endpoint: deadEndpoint(t)}); err != nil {
+		t.Fatalf("add handler: %v", err)
+	}
+	if err := routeTo(mod, app); err == nil {
+		t.Fatal("a query to a dead endpoint was routed")
+	}
+
+	_, second := countedBind(mod, app, token)
+	if want := []time.Duration{sessionEndSpacing}; second.Load() != 0 || !slices.Equal(clock.waits, want) {
+		t.Fatalf("the session that bound the failed token: ends %d, scheduled %v; want 0 ends and one end in %v",
+			second.Load(), clock.waits, sessionEndSpacing)
+	}
+
+	clock.now = clock.now.Add(sessionEndSpacing)
+	clock.fns[0]()
+	if second.Load() != 1 {
+		t.Fatalf("the owed end ran %d times; want 1", second.Load())
+	}
+}
+
+// TestOwedEndExpires: an owed end that no session takes within
+// sessionEndSpacing lapses.
+func TestOwedEndExpires(t *testing.T) {
+	mod, _ := ownershipModule(false)
+	clock := &spacerClock{now: time.Unix(1_000_000, 0)}
+	clock.install(mod)
+	app := astral.GenerateIdentity()
+	token := astral.NewNonce()
+
+	mod.endBindSession(app, token) // no session holds token
+	clock.now = clock.now.Add(sessionEndSpacing)
+
+	_, ends := countedBind(mod, app, token)
+	if ends.Load() != 0 || len(clock.fns) != 0 {
+		t.Fatalf("a lapsed owed end: ends %d, scheduled %d; want none", ends.Load(), len(clock.fns))
+	}
+}
+
+// TestStaleFailureKeepsTheNewSession: a query that routes from a snapshot
+// fails on a handler another query already removed; the session the app bound
+// after reconnecting stays.
+func TestStaleFailureKeepsTheNewSession(t *testing.T) {
+	mod, _ := ownershipModule(false)
+	clock := &spacerClock{now: time.Unix(1_000_000, 0)}
+	clock.install(mod)
+	app := astral.GenerateIdentity()
+	token := astral.NewNonce()
+
+	l, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen: %v", err)
+	}
+	defer l.Close()
+
+	stale := &IPCHandler{Identity: app, Owner: app, IPCToken: token, Endpoint: deadEndpoint(t)}
+	holder := &IPCHandler{Identity: app, Owner: app, IPCToken: token, Endpoint: "tcp:" + l.Addr().String()}
+	if err := mod.ipcHandlers.Add(holder, stale); err != nil {
+		t.Fatalf("add handlers: %v", err)
+	}
+
+	// holder answers with an error after another query removed stale, so the
+	// router reaches stale from its snapshot
+	go func() {
+		conn, err := l.Accept()
+		if err != nil {
+			return
+		}
+		defer conn.Close()
+		ch := channel.New(conn)
+		if _, err := ch.Receive(); err != nil {
+			return
+		}
+		_ = mod.ipcHandlers.Remove(stale)
+		_ = ch.Send(&apphost.ErrorMsg{Code: "busy"})
+	}()
+
+	_, ends := countedBind(mod, app, token)
+	if err := routeTo(mod, app); err == nil {
+		t.Fatal("the query was routed")
+	}
+
+	if ends.Load() != 0 || len(clock.fns) != 0 {
+		t.Fatalf("a failure on a removed handler: ends %d, scheduled %d; want none", ends.Load(), len(clock.fns))
+	}
+}
