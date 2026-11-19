@@ -54,10 +54,7 @@ func (mod *Module) AddAdmitter(fn func(*auth.SignedContract) error) {
 // why before storeContract: an admitter reads other modules, which read the
 // index in turn, so holding indexMu across it would invert the lock order.
 func (mod *Module) admit(sc *auth.SignedContract) error {
-	mod.admittersMu.Lock()
-	admitters := mod.admitters
-	mod.admittersMu.Unlock()
-
+	admitters := mod.currentAdmitters()
 	if len(admitters) == 0 {
 		return nil
 	}
@@ -74,6 +71,13 @@ func (mod *Module) admit(sc *auth.SignedContract) error {
 		}
 	}
 	return nil
+}
+
+// currentAdmitters returns the admitters registered so far.
+func (mod *Module) currentAdmitters() []func(*auth.SignedContract) error {
+	mod.admittersMu.Lock()
+	defer mod.admittersMu.Unlock()
+	return mod.admitters
 }
 
 // storeContract verifies and stores sc under indexMu, and reports whether sc
@@ -120,16 +124,19 @@ func (mod *Module) indexer(ctx *astral.Context) {
 		return
 	}
 
-	// deferred holds the snapshot's contracts an admitter refused.
+	// note: deferred holds the snapshot's contracts an admitter refused.
 	// why: the scan order is the repository's, so a relay contract can come
 	// before the node contract that makes its subject a member.
+	// note: live is set once the snapshot ends. A live contract an admitter
+	// refuses is not deferred, since nothing retries it after the snapshot.
 	var deferred []*auth.SignedContract
+	var live bool
 
 	for objectID := range ch {
 		// note: Scan in follow mode sends one nil between the snapshot and live updates.
 		if objectID == nil {
 			mod.retryDeferred(ctx, deferred)
-			deferred = nil
+			deferred, live = nil, true
 			continue
 		}
 
@@ -140,7 +147,7 @@ func (mod *Module) indexer(ctx *astral.Context) {
 			continue
 		}
 
-		if sc := mod.indexIfContract(ctx, repo, objectID); sc != nil {
+		if sc := mod.indexIfContract(ctx, repo, objectID); sc != nil && !live {
 			deferred = append(deferred, sc)
 		}
 	}

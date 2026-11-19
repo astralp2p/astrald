@@ -2,11 +2,13 @@ package apphost
 
 import (
 	"fmt"
+	"slices"
 	"time"
 
 	apphostapi "github.com/astralp2p/astral-go/api/apphost"
 	"github.com/astralp2p/astral-go/api/auth"
 	"github.com/astralp2p/astral-go/api/crypto"
+	"github.com/astralp2p/astral-go/api/nodes"
 	"github.com/astralp2p/astral-go/api/secp256k1"
 	vfsapi "github.com/astralp2p/astral-go/api/vfs"
 	"github.com/astralp2p/astral-go/astral"
@@ -95,21 +97,24 @@ func (mod *Module) OpRegister(ctx *astral.Context, query *routing.IncomingQuery,
 
 // validateRegisterDecision returns the first reason the node cannot apply dec
 // to an apphost.register: an invalid authorizer assignment, or a contract
-// permit for mod.auth.sudo_action.
+// permit for mod.auth.sudo_action or mod.nodes.relay_for_action.
 //
 // why sudo_action: the node signs every contract permit as issuer, and a
 // node-signed mod.auth.sudo_action lets the app act and sign as the node
 // (decided 2026-11-06).
+// why relay_for_action: the node→app contract names the app as subject, which
+// is no swarm member, so the relay admission rule refuses to index it
+// (astral-docs topics/app-routing.md, Reach); refusing here writes nothing.
 // why not in provisionApp: sys.register_manager shares it through ProvisionApp,
 // and the manager may hold any permit it asks for.
 func validateRegisterDecision(dec *apphostapi.AppRegisterDecision) error {
 	if err := dec.Validate(); err != nil {
 		return err
 	}
-	sudo := auth.SudoAction{}.ObjectType()
+	refused := []string{auth.SudoAction{}.ObjectType(), nodes.RelayForAction{}.ObjectType()}
 	for _, p := range dec.ContractPermits {
-		if p != nil && string(p.Action) == sudo {
-			return fmt.Errorf("app register decision: a contract permit names %v", sudo)
+		if p != nil && slices.Contains(refused, string(p.Action)) {
+			return fmt.Errorf("app register decision: a contract permit names %v", p.Action)
 		}
 	}
 	return nil

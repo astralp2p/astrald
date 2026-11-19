@@ -151,6 +151,8 @@ func (mod *Module) checkNodeContract(signed *auth.SignedContract) error {
 }
 
 // isRelayForContract reports whether c carries permits and every permit is RelayForAction.
+// note: this is the shape one node delivers to another; the admission rule
+// covers every contract with a relay-for permit (grantsRelayFor).
 func isRelayForContract(c *auth.Contract) bool {
 	relayFor := nodes.RelayForAction{}.ObjectType()
 

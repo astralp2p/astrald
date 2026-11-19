@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/astralp2p/astral-go/api/auth"
+	"github.com/astralp2p/astral-go/api/nodes"
 	"github.com/astralp2p/astral-go/astral"
 )
 
@@ -69,6 +70,12 @@ func TestAdmitRelayContract(t *testing.T) {
 			sc.ExpiresAt = astral.Time(time.Now().Add(-time.Minute))
 			return nil, sc
 		}, false},
+		{"relay-for beside another permit, subject outside the swarm", false, func(f *receiverFixture) (*astral.Identity, *auth.SignedContract) {
+			return nil, contractWith(astral.GenerateIdentity(), astral.GenerateIdentity(), nodes.RelayForAction{}.ObjectType(), "mod.objects.read_action")
+		}, false},
+		{"relay-for beside another permit, member subject", false, func(f *receiverFixture) (*astral.Identity, *auth.SignedContract) {
+			return nil, contractWith(astral.GenerateIdentity(), f.addSibling(), nodes.RelayForAction{}.ObjectType(), "mod.objects.read_action")
+		}, true},
 		{"contract without an issuer", false, func(f *receiverFixture) (*astral.Identity, *auth.SignedContract) {
 			return nil, relayForContract(nil, f.addSibling())
 		}, false},

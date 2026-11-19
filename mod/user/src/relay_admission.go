@@ -6,12 +6,14 @@ import (
 	"time"
 
 	"github.com/astralp2p/astral-go/api/auth"
+	"github.com/astralp2p/astral-go/api/nodes"
 	"github.com/astralp2p/astral-go/astral"
 )
 
 // AdmitRelayContract is the one rule for every path that indexes a relay-for
-// contract (astral-docs topics/app-routing.md, Reach). It answers nil for any
-// other contract: those keep their own rules.
+// contract (astral-docs topics/app-routing.md, Reach). A relay-for contract is
+// any contract with a relay-for permit, alone or beside other permits. It
+// answers nil for any other contract: those keep their own rules.
 //
 // A relay-for contract is admitted when its subject is this node or a member of
 // the local swarm, both signatures verify, and it has not expired. A non-nil
@@ -22,8 +24,10 @@ import (
 // of the others, so a new member learns the swarm's apps from its first link.
 // why the self clause: an unclaimed node has no swarm, yet indexes the relay
 // contracts of the apps it hosts.
+// why a relay-for permit beside others counts: routing finds hosts by the
+// relay-for permit alone (apphost PreprocessQuery), so such a contract routes too.
 func (mod *Module) AdmitRelayContract(sender *astral.Identity, sc *auth.SignedContract) error {
-	if sc.IsNil() || !isRelayForContract(sc.Contract) {
+	if sc.IsNil() || !grantsRelayFor(sc.Contract) {
 		return nil
 	}
 
@@ -51,4 +55,9 @@ func (mod *Module) AdmitRelayContract(sender *astral.Identity, sc *auth.SignedCo
 	}
 
 	return nil
+}
+
+// grantsRelayFor reports whether c carries a relay-for permit.
+func grantsRelayFor(c *auth.Contract) bool {
+	return c != nil && len(c.HasPermit(nodes.RelayForAction{}.ObjectType())) > 0
 }
