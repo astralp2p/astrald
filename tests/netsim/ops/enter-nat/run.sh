@@ -1,7 +1,12 @@
 #!/bin/sh
 # enter-nat: put a node's astrald behind its own symmetric true-masquerade NAT. Builds the
 # NAT only; it does NOT punch.
-#   enter-nat [--vm <host>]...      (default: node1 node2; one call NATs each peer)
+#   enter-nat [--vm <host>]... [--translating]   (default: node1 node2; one call NATs each peer)
+#
+# --translating: the NAT translates UDP ports, endpoint-independently, and filters inbound UDP by
+#   address and port (the Starlink class, X06): a UDP socket on local port 40000+n leaves from
+#   external port 20000+n toward every destination, and only replies to a flow the node opened
+#   come back in. There is no inbound DNAT in this mode.
 #
 # why: relocating astrald into netns priv severs its direct 10.77 LAN path, so the swarm
 #   link maintainer re-links the pair over Tor -- the node is now a genuine NAT'd peer.
@@ -17,11 +22,12 @@
 #   until the reflector reflects that endpoint back (add-reflector).
 set -eu
 
-VMS=""
+VMS=""; TRANSLATING=0
 while [ $# -gt 0 ]; do
   case "$1" in
     --vm) [ $# -ge 2 ] || { echo "need host after --vm" >&2; exit 64; }; VMS="${VMS:+$VMS }$2"; shift 2 ;;
-    *)    echo "usage: enter-nat [--vm <host>]..." >&2; exit 64 ;;
+    --translating) TRANSLATING=1; shift ;;
+    *)    echo "usage: enter-nat [--vm <host>]... [--translating]" >&2; exit 64 ;;
   esac
 done
 [ -n "$VMS" ] || VMS="node1 node2"
@@ -56,26 +62,54 @@ sysctl -wq net.ipv4.conf.all.rp_filter=2
 sysctl -wq net.netfilter.nf_conntrack_udp_timeout=60 2>/dev/null || true
 sysctl -wq net.netfilter.nf_conntrack_udp_timeout_stream=180 2>/dev/null || true
 
-# port-preserving SNAT to the public alias (idempotent: rebuild the nat table)
+# idempotent: rebuild the nat table, and drop the translating mode's filter table
 nft add table ip nat 2>/dev/null || true
 nft flush table ip nat
+nft delete table ip e2e_nat_filter 2>/dev/null || true
 nft add chain ip nat postrouting '{ type nat hook postrouting priority 100 ; }'
-nft add rule ip nat postrouting ip saddr 192.168.99.0/24 oifname "$lan" snat ip to "$pub"
 
-# Inbound DNAT of the public alias into the netns -- REQUIRED for the punch to complete.
-# The alias 198.51.100.<oct> is a LOCAL address on this box (NAT and endpoint are collapsed
-# onto one VM), so inbound punch packets are delivered to the local INPUT (no listener) and
-# never reach the netns puncher; the conntrack-reply reverse-SNAT that should forward them
-# fails under a source-port-realloc clash (the inbound-to-local-alias creates a conntrack
-# entry that collides with the outbound SNAT). DNAT the alias to the netns host (port
-# preserved) so the box acts as a real cone-NAT gateway -- inbound and outbound become one
-# conntrack flow, no clash. Confirmed live: with this rule the punch promotes to a kcp link
-# on BOTH peers; without it both punchers emit and packets reach each peer's lan0, but
-# inbound is never delivered to the netns and the punch times out ("context deadline
-# exceeded"). This makes the NAT a full-cone (endpoint-independent) NAT -- the permissive
-# punchable type; a restricted-cone/symmetric simulation would need a separate router VM.
-nft add chain ip nat prerouting '{ type nat hook prerouting priority -100 ; }'
-nft add rule ip nat prerouting iif "$lan" ip daddr "$pub" dnat to 192.168.99.2
+if [ "${TRANSLATING:-0}" = 1 ]; then
+  # why a fixed map and not `snat ... random`: Linux picks a random port per conntrack flow,
+  #   which maps one socket to a different port per destination -- a symmetric NAT, out of
+  #   scope for X06. The map keeps one external port per local port toward every destination
+  #   (endpoint-independent mapping), and still never the local port itself.
+  # note: the netns hands out local UDP and TCP ports from 40000-40999 only, so every socket
+  #   astrald binds on :0 falls inside the map.
+  ip netns exec priv sysctl -wq net.ipv4.ip_local_port_range="40000 40999"
+  elements=$(awk 'BEGIN { for (i = 0; i < 1000; i++) printf "%s%d : %d", (i ? ", " : ""), 40000 + i, 20000 + i }')
+  nft -f - <<NFT
+add map ip nat udp_eim { type inet_service : inet_service ; elements = { $elements } ; }
+add rule ip nat postrouting ip saddr 192.168.99.0/24 oifname "$lan" udp sport 40000-40999 snat ip to $pub : udp sport map @udp_eim
+add rule ip nat postrouting ip saddr 192.168.99.0/24 oifname "$lan" snat ip to $pub
+NFT
+  # why drop new inbound UDP to the alias: a port-restricted NAT admits only replies to a flow
+  #   the node opened. Conntrack de-NATs those replies in prerouting and forwards them to the
+  #   netns; anything else reaches this box's INPUT, and dropping it there keeps an unconfirmed
+  #   conntrack entry from clashing with a later outbound mapping.
+  nft -f - <<NFT
+add table ip e2e_nat_filter
+add chain ip e2e_nat_filter input { type filter hook input priority 0 ; }
+add rule ip e2e_nat_filter input iifname "$lan" ip daddr $pub meta l4proto udp ct state new drop
+NFT
+else
+  # port-preserving SNAT to the public alias
+  nft add rule ip nat postrouting ip saddr 192.168.99.0/24 oifname "$lan" snat ip to "$pub"
+
+  # Inbound DNAT of the public alias into the netns -- REQUIRED for the punch to complete.
+  # The alias 198.51.100.<oct> is a LOCAL address on this box (NAT and endpoint are collapsed
+  # onto one VM), so inbound punch packets are delivered to the local INPUT (no listener) and
+  # never reach the netns puncher; the conntrack-reply reverse-SNAT that should forward them
+  # fails under a source-port-realloc clash (the inbound-to-local-alias creates a conntrack
+  # entry that collides with the outbound SNAT). DNAT the alias to the netns host (port
+  # preserved) so the box acts as a real cone-NAT gateway -- inbound and outbound become one
+  # conntrack flow, no clash. Confirmed live: with this rule the punch promotes to a kcp link
+  # on BOTH peers; without it both punchers emit and packets reach each peer's lan0, but
+  # inbound is never delivered to the netns and the punch times out ("context deadline
+  # exceeded"). This makes the NAT a full-cone (endpoint-independent) NAT -- the permissive
+  # punchable type; a restricted-cone/symmetric simulation would need a separate router VM.
+  nft add chain ip nat prerouting '{ type nat hook prerouting priority -100 ; }'
+  nft add rule ip nat prerouting iif "$lan" ip daddr "$pub" dnat to 192.168.99.2
+fi
 
 # move astrald into the netns: join only the NET namespace (mount ns untouched, so the
 # apphost unix socket stays reachable from the root ns for astral-query).
@@ -104,7 +138,8 @@ fi
 
 # sanity: astrald must now be in the netns (its own 10.77 endpoint withdrawn) and see 192.168.99.2
 in_ns=$(ip netns identify "$(pgrep -x astrald | head -1)" 2>/dev/null || true)
-echo "enter-nat: $(hostname) astrald behind NAT (priv 192.168.99.2 -> public $pub via $lan; netns=${in_ns:-?})"
+mode=port-preserving; [ "${TRANSLATING:-0}" = 1 ] && mode="translating, udp 40000+n -> $pub:20000+n"
+echo "enter-nat: $(hostname) astrald behind NAT (priv 192.168.99.2 -> public $pub via $lan; $mode; netns=${in_ns:-?})"
 EOS
 )
 
@@ -113,6 +148,7 @@ EOS
 for vm in $VMS; do
   echo "enter-nat: putting $vm behind its NAT ..."
   # shellcheck disable=SC2029
-  netsim ssh "$vm" -- "$REMOTE_BODY"
+  netsim ssh "$vm" -- "TRANSLATING=$TRANSLATING
+$REMOTE_BODY"
 done
 echo "enter-nat: done ($VMS)"

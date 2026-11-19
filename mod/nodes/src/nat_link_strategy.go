@@ -7,6 +7,7 @@ import (
 
 	"github.com/astralp2p/astral-go/api/kcp"
 	kcpclient "github.com/astralp2p/astral-go/api/kcp/client"
+	"github.com/astralp2p/astral-go/api/nat"
 	natclient "github.com/astralp2p/astral-go/api/nat/client"
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astral-go/astral/log"
@@ -67,20 +68,9 @@ func (s *NATLinkStrategy) attempt(ctx *astral.Context) error {
 	}
 
 	s.log.Log("%v hole locked, setting up kcp", s.target)
-	local, remote := hole.ActiveEndpoint, hole.PassiveEndpoint
-	if hole.PassiveIdentity.IsEqual(selfID) {
-		local, remote = hole.PassiveEndpoint, hole.ActiveEndpoint
-	}
-
-	peerEndpoint := kcp.Endpoint{
-		IP:   remote.IP,
-		Port: remote.Port,
-	}
-
-	localEndpoint := kcp.Endpoint{
-		IP:   local.IP,
-		Port: local.Port,
-	}
+	ports := newHolePorts(hole, selfID)
+	peerEndpoint, peerBindPort := ports.peerEndpoint, ports.peerBindPort
+	localEndpoint, localBindPort := ports.localEndpoint, ports.localBindPort
 
 	kcpClient := kcpclient.New(selfID, astrald.Default())
 
@@ -100,7 +90,7 @@ func (s *NATLinkStrategy) attempt(ctx *astral.Context) error {
 			}
 		}
 		if remoteListener {
-			if err := kcpClient.WithTarget(s.target).CloseEphemeralListener(cleanupCtx, peerEndpoint.Port); err != nil {
+			if err := kcpClient.WithTarget(s.target).CloseEphemeralListener(cleanupCtx, peerBindPort); err != nil {
 				s.log.Logv(2, "cleanup remote ephemeral listener: %v", err)
 			}
 		}
@@ -118,19 +108,19 @@ func (s *NATLinkStrategy) attempt(ctx *astral.Context) error {
 	}()
 
 	// Set up the remote side: ephemeral listener + endpoint mapping
-	err = kcpClient.WithTarget(s.target).CreateEphemeralListener(ctx, peerEndpoint.Port)
+	err = kcpClient.WithTarget(s.target).CreateEphemeralListener(ctx, peerBindPort)
 	if err != nil {
 		return fmt.Errorf("remote create ephemeral listener: %w", err)
 	}
 	remoteListener = true
 
-	err = kcpClient.WithTarget(s.target).SetEndpointLocalPort(ctx, localEndpoint, peerEndpoint.Port, true)
+	err = kcpClient.WithTarget(s.target).SetEndpointLocalPort(ctx, localEndpoint, peerBindPort, true)
 	if err != nil {
 		return fmt.Errorf("remote set endpoint local port: %w", err)
 	}
 	remoteMapping = true
 
-	err = kcpClient.SetEndpointLocalPort(ctx, peerEndpoint, localEndpoint.Port, true)
+	err = kcpClient.SetEndpointLocalPort(ctx, peerEndpoint, localBindPort, true)
 	if err != nil {
 		return fmt.Errorf("set endpoint local port: %w", err)
 	}
@@ -175,6 +165,32 @@ func (s *NATLinkStrategy) attempt(ctx *astral.Context) error {
 	}
 
 	return nil
+}
+
+// holePorts is one side's view of a locked hole.
+//
+// note: an endpoint is the external address the other side observed; a bind
+// port is the local UDP port its owner binds. They differ behind a NAT that
+// translates ports. kcp binds bind ports and dials external endpoints.
+type holePorts struct {
+	localEndpoint kcp.Endpoint
+	localBindPort astral.Uint16
+	peerEndpoint  kcp.Endpoint
+	peerBindPort  astral.Uint16
+}
+
+func newHolePorts(hole *nat.Hole, self *astral.Identity) holePorts {
+	local, remote := hole.ActiveEndpoint, hole.PassiveEndpoint
+	if hole.PassiveIdentity.IsEqual(self) {
+		local, remote = hole.PassiveEndpoint, hole.ActiveEndpoint
+	}
+
+	return holePorts{
+		localEndpoint: kcp.Endpoint{IP: local.IP, Port: local.Port},
+		localBindPort: astral.Uint16(hole.GetLocalBindPort(self)),
+		peerEndpoint:  kcp.Endpoint{IP: remote.IP, Port: remote.Port},
+		peerBindPort:  astral.Uint16(hole.GetRemoteBindPort(self)),
+	}
 }
 
 func (s *NATLinkStrategy) signalDone() {

@@ -60,6 +60,7 @@ func (mod *Module) OpNodePunch(ctx *astral.Context, q *routing.IncomingQuery, ar
 		return err
 	}
 	proto.LocalPort = astral.Uint16(localPort)
+	proto.LocalBindPort = astral.Uint16(localPort)
 
 	if err = ch.Send(proto.AnswerSignal()); err != nil {
 		return err
