@@ -6,4 +6,4 @@ after   = "adopt-node"
 # nat-punch's enter-nat finds no LAN interface and exits.
 destroys = true
 ops     = ["enable-tor node1 node2", "leave-lan node2 --peer node1"]
-facts   = ["tor_link_networks"]
+facts   = ["tor_link_networks", "first_answer"]

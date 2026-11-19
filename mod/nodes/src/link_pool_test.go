@@ -6,6 +6,7 @@ import (
 	"io"
 	"net"
 	"slices"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -14,6 +15,7 @@ import (
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astral-go/astral/channel"
 	"github.com/astralp2p/astral-go/astral/log"
+	exonetmod "github.com/astralp2p/astrald/mod/exonet"
 )
 
 type pipeIdentityConn struct {
@@ -235,5 +237,99 @@ func TestNewLinkKeepsHealthyOlderLink(t *testing.T) {
 	}
 	if closed := f.closedEvents(); len(closed) != 0 {
 		t.Fatalf("LinkClosedEvents %v; want none", closed)
+	}
+}
+
+// peerConn is a pipe conn to the node remote, over a transport that sets the keepalive k.
+type peerConn struct {
+	keepaliveConn
+	remote *astral.Identity
+}
+
+func (c peerConn) RemoteIdentity() *astral.Identity { return c.remote }
+
+// newPeerLink starts a link to remote over a pipe whose transport sets idle and timeout.
+func newPeerLink(t *testing.T, mod *Module, remote *astral.Identity, idle, timeout time.Duration) (*Link, net.Conn) {
+	t.Helper()
+	local, far := net.Pipe()
+	t.Cleanup(func() { local.Close(); far.Close() })
+	k := exonetmod.LinkKeepalive{Idle: idle, Timeout: timeout}
+	conn := peerConn{keepaliveConn{pipeIdentityConn{local}, k}, remote}
+	return newLink(mod, conn, astral.NewNonce(), false), far
+}
+
+// closedWith returns the LinkClosedEvents the pool emitted for links to id.
+func closedWith(events *recordingEvents, id *astral.Identity) []*nodes.LinkClosedEvent {
+	var closed []*nodes.LinkClosedEvent
+	for _, e := range events.recorded() {
+		if c, ok := e.(*nodes.LinkClosedEvent); ok && c.RemoteIdentity.IsEqual(id) {
+			closed = append(closed, c)
+		}
+	}
+	return closed
+}
+
+// TestDeadLinkGivesWayToLiveOne: of two links to one peer, the older one's
+// peer stops reading. While the older link is pooled, SelectLinkWith returns
+// it. The keepalive closes it within the transport's idle interval plus ping
+// timeout, the pool emits LinkClosedEvent with one link left, and
+// SelectLinkWith then returns the newer link.
+// note: this is A1G2 option a; selection itself is unchanged
+// (https://wiki.satforge.dev/doc/a1g2-route-over-a-working-link-when-a-peer-has-a-dead-one-aVNtmu7SWl).
+// note: adding the newer link also wakes the older link's ping
+// (probeOlderLinks), which can close it within the ping timeout alone; the
+// bound of idle interval plus ping timeout covers both paths.
+func TestDeadLinkGivesWayToLiveOne(t *testing.T) {
+	const idle, timeout = 300 * time.Millisecond, 200 * time.Millisecond
+	localID, remoteID := astral.GenerateIdentity(), astral.GenerateIdentity()
+	events := &recordingEvents{}
+	mod := &Module{Deps: Deps{Events: events}, node: &identityNode{id: localID}, log: log.New(localID)}
+	mod.linkPool = NewLinkPool(mod)
+
+	// why no reader on the older link's far end: a peer gone from the network
+	// leaves the probe's write stuck, as data stuck in flight does in the field.
+	dead, _ := newPeerLink(t, mod, remoteID, idle, timeout)
+	live, liveFar := newPeerLink(t, mod, remoteID, idle, timeout)
+	startProbePeer(t, liveFar, true)
+
+	start := time.Now()
+	for _, l := range []*Link{dead, live} {
+		if err := mod.linkPool.AddLink(l); err != nil {
+			t.Fatalf("AddLink: %v", err)
+		}
+	}
+	if got := mod.linkPool.SelectLinkWith(remoteID); got != dead {
+		t.Fatal("SelectLinkWith did not return the older link while both were pooled")
+	}
+
+	select {
+	case <-dead.Done():
+	case <-time.After(effectTimeout):
+		t.Fatal("the link to a peer that stopped reading did not close")
+	}
+	if took, limit := time.Since(start), pingJitter+idle+timeout+200*time.Millisecond; took > limit {
+		t.Fatalf("the dead link closed after %v; want at most %v", took, limit)
+	}
+	if err := dead.Err(); err == nil || !strings.Contains(err.Error(), "ping timeout") {
+		t.Fatalf("the dead link closed with %v; want ping timeout", err)
+	}
+
+	deadline := time.Now().Add(effectTimeout)
+	for len(closedWith(events, remoteID)) == 0 {
+		if time.Now().After(deadline) {
+			t.Fatal("the pool emitted no LinkClosedEvent for the dead link")
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	closed := closedWith(events, remoteID)
+	if len(closed) != 1 || closed[0].LinkCount != 1 {
+		t.Fatalf("LinkClosedEvents for the peer: %v; want one with LinkCount 1", closed)
+	}
+
+	if got := mod.linkPool.SelectLinkWith(remoteID); got != live {
+		t.Fatal("SelectLinkWith did not return the live link after the dead one closed")
+	}
+	if err := live.Err(); err != nil {
+		t.Fatalf("the live link closed: %v", err)
 	}
 }
