@@ -16,6 +16,7 @@ import (
 	"github.com/astralp2p/astral-go/astral/channel"
 	"github.com/astralp2p/astral-go/astral/log"
 	exonetmod "github.com/astralp2p/astrald/mod/exonet"
+	nodesmod "github.com/astralp2p/astrald/mod/nodes"
 	"github.com/astralp2p/astrald/mod/nodes/frames"
 )
 
@@ -342,8 +343,8 @@ func TestDeadLinkGivesWayToLiveOne(t *testing.T) {
 	if took, limit := time.Since(start), pingJitter+idle+timeout+closeNoticeBound+200*time.Millisecond; took > limit {
 		t.Fatalf("the dead link closed after %v; want at most %v", took, limit)
 	}
-	if err := dead.Err(); err == nil || !strings.Contains(err.Error(), "ping timeout") {
-		t.Fatalf("the dead link closed with %v; want ping timeout", err)
+	if err := dead.Err(); !isStuckProbeCause(err) {
+		t.Fatalf("the dead link closed with %v; want ping timeout or %v", err, nodesmod.ErrWriteStalled)
 	}
 
 	deadline := time.Now().Add(effectTimeout)

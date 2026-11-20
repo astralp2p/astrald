@@ -87,8 +87,8 @@ func closeReasonOf(err error) frames.CloseReason {
 }
 
 // sendCloseNotice writes a close frame and waits for the write at most closeNoticeBound.
-// why a goroutine: the link conn has no write deadline, and Send blocks on a
-// peer that stopped reading or behind a writer stuck on the write lock.
+// why a goroutine: Send blocks on a peer that stopped reading or behind a
+// writer stuck on the write lock, up to the link's write watchdog (pingTimeout).
 // why Send: the write lock keeps the frame from interleaving with another frame.
 // note: a write still blocked at the bound returns once the caller closes the channel.
 func (s *Link) sendCloseNotice(reason frames.CloseReason) {
@@ -234,8 +234,8 @@ func (s *Link) beginPing() (*Ping, <-chan error) {
 	}
 	s.ping = p
 
-	// why a goroutine: the link conn has no write deadline, and Send blocks on
-	// a peer that stopped reading. The timer runs from before the write.
+	// why a goroutine: Send blocks on a peer that stopped reading, up to the
+	// link's write watchdog (pingTimeout). The timer runs from before the write.
 	// note: a write still blocked at the timeout returns once pingLoop closes
 	// the link, so the goroutine ends with it.
 	sent := make(chan error, 1)
@@ -304,9 +304,13 @@ func (s *Link) pingLoop() {
 }
 
 func newLink(mod *Module, conn astral.Conn, id astral.Nonce, outbound bool) *Link {
-	ch := channel.New(conn, channel.WithLockedWrites())
 	keepalive := keepaliveOf(networkOf(conn), conn)
-	link := &Link{
+	// why link.conn stays the raw conn: keepaliveOf, Network and the endpoints read the transport's conn by type assertion.
+	// note: the watchdog reads link only after a Write, and nothing writes before the loops below start.
+	var link *Link
+	watched := newWatchedConn(conn, keepalive.Timeout, func() { link.CloseWithError(nodesmod.ErrWriteStalled) })
+	ch := channel.New(watched, channel.WithLockedWrites())
+	link = &Link{
 		Channel:     ch,
 		id:          id,
 		conn:        conn,

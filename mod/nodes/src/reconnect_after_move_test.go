@@ -14,6 +14,7 @@ import (
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astral-go/astral/log"
 	exonetmod "github.com/astralp2p/astrald/mod/exonet"
+	nodesmod "github.com/astralp2p/astrald/mod/nodes"
 	kcpgo "github.com/xtaci/kcp-go/v5"
 )
 
@@ -151,8 +152,8 @@ func TestMovedPeerNewLinkDropsOldLinkAndRefreshesEndpoints(t *testing.T) {
 	case <-time.After(timeout + closeNoticeBound + time.Second):
 		t.Fatalf("the old link was still open %v after the new link", timeout+closeNoticeBound+time.Second)
 	}
-	if err := old.Err(); err == nil || !strings.Contains(err.Error(), "ping timeout") {
-		t.Fatalf("the old link closed with %v; want ping timeout", err)
+	if err := old.Err(); !isStuckProbeCause(err) {
+		t.Fatalf("the old link closed with %v; want ping timeout or %v", err, nodesmod.ErrWriteStalled)
 	}
 
 	if p := f.requirePull(t); p.via != live {

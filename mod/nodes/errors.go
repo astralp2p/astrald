@@ -23,6 +23,7 @@ var (
 	ErrBufferOverflow        = errors.New("buffer overflow")
 	ErrSessionAlreadyOnLink  = errors.New("session already on link")
 	ErrLinkDenied            = errors.New("link denied")
+	ErrWriteStalled          = errors.New("link write stalled")
 )
 
 // ErrPeerClosed is a link's cause of death when the peer announced its close
