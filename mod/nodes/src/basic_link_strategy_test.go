@@ -55,7 +55,7 @@ func (r *stubResolver) ResolveEndpoints(*astral.Context, *astral.Identity) (<-ch
 func newBasicTestStrategy(t *testing.T, dial func(*astral.Context, exonetapi.Endpoint) (exonet.Conn, error)) *BasicLinkStrategy {
 	t.Helper()
 	localKey, peerKey := newNegotiationKey(t), newNegotiationKey(t)
-	mod := &Module{privateKey: &crypto.PrivateKey{Key: localKey.Serialize()}}
+	mod := &Module{privateKey: &crypto.PrivateKey{Key: localKey.Serialize()}, ctx: astral.NewContext(context.Background())}
 	mod.Exonet = &stubExonet{dial: dial}
 	factory := &BasicLinkStrategyFactory{
 		mod:        mod,
@@ -195,9 +195,10 @@ func TestBasicSignalDialsTCPKCPAndGatewayRows(t *testing.T) {
 		nodes.NewEndpointWithTTL(&tor.Endpoint{}),
 	}})
 
-	s.Signal(astral.NewContext(context.Background()))
+	done, release := s.Join(astral.NewContext(context.Background()))
+	defer release()
 	select {
-	case <-s.Done():
+	case <-done:
 	case <-time.After(5 * time.Second):
 		t.Fatal("basic round did not finish")
 	}

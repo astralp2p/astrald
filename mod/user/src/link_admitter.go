@@ -13,22 +13,58 @@ import (
 // note: the nodes module calls it on every inbound handshake, so it reads only
 // memory.
 func (mod *Module) AdmitLink(remote *astral.Identity) error {
-	key := remote.String()
-	if !mod.banAnswers.Contains(key) {
+	if !mod.banAnswers.Contains(remote.String()) {
 		return nil
 	}
-
-	banned := mod.banned.Load()
-	if banned == nil {
-		return nil
-	}
-	if _, ok := (*banned)[key]; !ok {
+	if !mod.isBanned(remote) {
 		return nil
 	}
 	return user.ErrExpelled
 }
 
-// refreshBans loads the subjects the active user banned into the set AdmitLink
+// isBanned reports whether id is a subject the active user banned. It is the
+// veto the auth module runs at every level of a walk, AdmitLink's ban test and
+// OpIntroduce's refusal of a banned caller, so the three agree.
+//
+// It is false with no active contract, for the user, and for this node. why this
+// node: it stores its own ban before leaveSwarm clears the contract, and in
+// that window it must not refuse its own identity, which every local call is
+// promoted to; if the clear fails the window would never close.
+//
+// note: it reads the set refreshBans keeps, in memory. A set not loaded yet,
+// before Run loads it, is read here from the database. A set that cannot be
+// read leaves the identity unbanned, as AdmitLink does, and the next question
+// reads again.
+func (mod *Module) isBanned(id *astral.Identity) bool {
+	ac := mod.ActiveContract()
+	if ac == nil || id.IsEqual(ac.Issuer) || id.IsEqual(mod.node.Identity()) {
+		return false
+	}
+
+	banned := mod.banned.Load()
+	if banned == nil {
+		if banned = mod.loadBans(ac.Issuer); banned == nil {
+			return false
+		}
+	}
+	_, ok := (*banned)[id.String()]
+	return ok
+}
+
+// loadBans fills the ban set on its first use; nil if it cannot be read.
+// why CompareAndSwap: a refreshBans that ran meanwhile stored a set at least as
+// new as this read, so this one never replaces it.
+func (mod *Module) loadBans(issuer *astral.Identity) *map[string]struct{} {
+	read, err := mod.readExpelledSet(issuer)
+	if err != nil {
+		mod.log.Error("loading bans: %v", err)
+		return nil
+	}
+	mod.banned.CompareAndSwap(nil, &read)
+	return mod.banned.Load()
+}
+
+// refreshBans loads the subjects the active user banned into the set isBanned
 // reads; with no active contract the set is empty.
 // note: a failed read keeps the previous set.
 func (mod *Module) refreshBans() {
@@ -36,7 +72,7 @@ func (mod *Module) refreshBans() {
 	if ac := mod.ActiveContract(); ac != nil {
 		read, err := mod.readExpelledSet(ac.Issuer)
 		if err != nil {
-			mod.log.Error("loading bans for link admission: %v", err)
+			mod.log.Error("loading bans: %v", err)
 			return
 		}
 		set = read

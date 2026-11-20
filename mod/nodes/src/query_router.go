@@ -89,8 +89,8 @@ const (
 
 // retrieveLink retrieves a link to target with the strategies a query may use.
 //
-// why a field: tests replace it, so a retrieval that blocks or counts needs no
-// link strategy.
+// why Module.retrieve: tests set that field, so a retrieval that blocks or
+// counts needs no link strategy.
 func (mod *Module) retrieveLink(ctx *astral.Context, target *astral.Identity) <-chan LinkResult {
 	if mod.retrieve != nil {
 		return mod.retrieve(ctx, target)

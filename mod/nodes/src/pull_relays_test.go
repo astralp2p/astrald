@@ -58,9 +58,20 @@ type pullIndex struct {
 	index     []*auth.SignedContract
 	refused   map[*auth.SignedContract]bool
 	withdrawn map[*auth.SignedContract]bool
+	// stall makes IndexContract block until its context ends.
+	stall bool
+	// stallFind makes a Find that follows an IndexContract call block until its
+	// context ends.
+	stallFind bool
+	indexed   atomic.Bool
 }
 
-func (a *pullIndex) IndexContract(_ *astral.Context, sc *auth.SignedContract) error {
+func (a *pullIndex) IndexContract(ctx *astral.Context, sc *auth.SignedContract) error {
+	a.indexed.Store(true)
+	if a.stall {
+		<-ctx.Done()
+		return ctx.Err()
+	}
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	if a.refused[sc] {
@@ -92,7 +103,11 @@ func (q *pullQuery) WithIssuer(id *astral.Identity) authmod.ContractQueryBuilder
 
 func (q *pullQuery) WithAction(...astral.Object) authmod.ContractQueryBuilder { return q }
 
-func (q *pullQuery) Find(*astral.Context) (list []*auth.SignedContract, _ error) {
+func (q *pullQuery) Find(ctx *astral.Context) (list []*auth.SignedContract, _ error) {
+	if q.index.stallFind && q.index.indexed.Load() {
+		<-ctx.Done()
+		return nil, ctx.Err()
+	}
 	q.index.mu.Lock()
 	defer q.index.mu.Unlock()
 	for _, sc := range q.index.index {
@@ -146,6 +161,14 @@ func setPullBudgets(t *testing.T, wait, flight time.Duration) {
 	oldWait, oldFlight := pullWait, pullFlightTimeout
 	pullWait, pullFlightTimeout = wait, flight
 	t.Cleanup(func() { pullWait, pullFlightTimeout = oldWait, oldFlight })
+}
+
+// setPullIndexTimeout sets the index step budget for the test and restores it after.
+func setPullIndexTimeout(t *testing.T, d time.Duration) {
+	t.Helper()
+	old := pullIndexTimeout
+	pullIndexTimeout = d
+	t.Cleanup(func() { pullIndexTimeout = old })
 }
 
 // awaitFlightEnd waits until no flight runs for target and returns when it ended.
@@ -469,6 +492,85 @@ func TestPullRelaysLateAnswerIsIndexedAndReused(t *testing.T) {
 	assertRelays(t, f.mod.pullRelays(networkCtx(), app), host)
 	if n := f.user.fetches.Load(); n != 1 {
 		t.Fatalf("asked the siblings %d times; want 1 (the next pull reads the index)", n)
+	}
+}
+
+// A caller leaves at the wait while the flight runs on; a second caller then
+// joins the same flight, starts no ask, and gets the late contract.
+func TestPullRelaysCallerJoinsTheFlightAfterAnotherLeft(t *testing.T) {
+	f := newPullFixture(t)
+	setPullBudgets(t, 150*time.Millisecond, 2*time.Second)
+	app, host := astral.GenerateIdentity(), astral.GenerateIdentity()
+	release := make(chan struct{})
+	f.user.fetch = func(ctx *astral.Context, _ *astral.Identity, yield func(*astral.Identity, *auth.SignedContract) bool) {
+		select {
+		case <-release:
+			yield(host, relayContractOf(app, host))
+		case <-ctx.Done():
+		}
+	}
+
+	if relays := f.mod.pullRelays(networkCtx(), app); relays != nil {
+		t.Fatalf("the first caller got relays %v at the wait; want nil", relays)
+	}
+	if _, running := f.mod.pull.flights.Get(app.String()); !running {
+		t.Fatal("the flight ended with the first caller's wait")
+	}
+
+	second := make(chan []*astral.Identity, 1)
+	go func() { second <- f.mod.pullRelays(networkCtx(), app) }()
+	// why the pause: the second caller must be waiting on the flight, not past it.
+	time.Sleep(20 * time.Millisecond)
+	select {
+	case relays := <-second:
+		t.Fatalf("the second caller got %v before the contract arrived", relays)
+	default:
+	}
+	close(release)
+
+	select {
+	case relays := <-second:
+		assertRelays(t, relays, host)
+	case <-time.After(5 * time.Second):
+		t.Fatal("the second caller never got the late contract")
+	}
+	if n := f.user.fetches.Load(); n != 1 {
+		t.Fatalf("the callers asked the siblings %d times; want 1 (one shared flight)", n)
+	}
+	if f.missed(app) || f.mod.isPullGated(app) {
+		t.Fatal("a shared flight left a miss or a gate")
+	}
+}
+
+// A contract that arrives inside pullFlightTimeout is indexed and read back on
+// one tail context that ends pullIndexTimeout after the flight, so the flight
+// leaves pull.flights within pullFlightTimeout + pullIndexTimeout, and no
+// later. The stalled index and the stalled read-back make each step run to the
+// deadline, so two separate budgets would double the tail.
+func TestPullRelaysFlightLeavesWithinTheFlightAndIndexBudgets(t *testing.T) {
+	f := newPullFixture(t)
+	setPullBudgets(t, 50*time.Millisecond, 400*time.Millisecond)
+	setPullIndexTimeout(t, 300*time.Millisecond)
+	f.index.stall = true
+	f.index.stallFind = true
+	app, host := astral.GenerateIdentity(), astral.GenerateIdentity()
+	// the contract arrives just inside the flight
+	f.user.fetch = slowly(pullFlightTimeout-50*time.Millisecond, host, relayContractOf(app, host))
+
+	start := time.Now()
+	if relays := f.mod.pullRelays(networkCtx(), app); relays != nil {
+		t.Fatalf("got relays %v; want nil", relays)
+	}
+	ended := f.awaitFlightEnd(t, app).Sub(start)
+
+	if ended < pullFlightTimeout {
+		t.Fatalf("the flight ended after %v; want it to stay for the index step past %v", ended, pullFlightTimeout)
+	}
+	if limit := pullFlightTimeout + pullIndexTimeout + 150*time.Millisecond; ended > limit {
+		t.Fatalf("the flight ended after %v; want within %v + %v", ended, pullFlightTimeout, pullIndexTimeout)
+	}
+	if f.missed(app) {
+		t.Fatal("a flight whose index step failed recorded a miss")
 	}
 }
 

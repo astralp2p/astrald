@@ -2,7 +2,6 @@ package nodes
 
 import (
 	nodesmod "github.com/astralp2p/astrald/mod/nodes"
-	"sync"
 	"time"
 
 	"github.com/astralp2p/astral-go/api/nodes"
@@ -11,9 +10,10 @@ import (
 	"github.com/astralp2p/astral-go/sig"
 )
 
-// TorLinkStrategy tries to connect with retries. After quickTimeout it
-// signals Done but continues running in background on module context for up to
-// backgroundTimeout more. Useful for slow networks like Tor.
+// TorLinkStrategy tries to connect with retries. Its round runs a foreground
+// phase of up to quickTimeout, then signals Done and continues in background on
+// the module context for up to backgroundTimeout more. Useful for slow networks
+// like Tor.
 type TorLinkStrategy struct {
 	mod          *Module
 	log          *log.Logger
@@ -25,32 +25,23 @@ type TorLinkStrategy struct {
 	quickTimeout      time.Duration
 	backgroundTimeout time.Duration
 
-	mu   sync.Mutex
-	done chan struct{}
+	rounds roundKeeper
 }
 
 var _ nodesmod.LinkStrategy = &TorLinkStrategy{}
 
 func (s *TorLinkStrategy) Name() string { return nodesmod.StrategyTor }
 
-// Signal kicks off a connection attempt; idempotent while one is in flight.
-func (s *TorLinkStrategy) Signal(ctx *astral.Context) {
-	s.mu.Lock()
-	if s.done != nil {
-		s.mu.Unlock()
-		return
-	}
-	s.done = make(chan struct{})
-	s.mu.Unlock()
-
-	go s.attempt(ctx)
+// Join adds the caller to the running foreground phase, or starts a round whose
+// foreground phase runs on the module context with a quickTimeout budget.
+func (s *TorLinkStrategy) Join(ctx *astral.Context) (done <-chan struct{}, release func()) {
+	return s.rounds.join(ctx, s.mod.ctx, s.quickTimeout, s.attempt)
 }
 
-func (s *TorLinkStrategy) attempt(ctx *astral.Context) {
-	resolvedEndpoints, err := s.mod.ResolveEndpoints(ctx, s.target)
+func (s *TorLinkStrategy) attempt(r *linkRound) {
+	resolvedEndpoints, err := s.mod.ResolveEndpoints(r.ctx, s.target)
 	if err != nil {
 		s.log.Logv(2, "%v resolve failed: %v", s.target, err)
-		s.signalDone()
 		return
 	}
 
@@ -61,19 +52,15 @@ func (s *TorLinkStrategy) attempt(ctx *astral.Context) {
 	endpoints := sig.ChanToArray(filtered)
 	if len(endpoints) == 0 {
 		s.log.Logv(2, "no endpoints found to %v", s.target)
-		s.signalDone()
 		return
 	}
 
 	resultCh := make(chan *Link, 1)
 
-	// Foreground: quick retries only
-	workerCtx, workerCancel := ctx.WithTimeout(s.quickTimeout)
-	defer workerCancel()
-
+	// Foreground: quick retries only, on the round context
 	go func() {
 		defer close(resultCh)
-		if link := s.try(workerCtx, endpoints, s.quickRetries, false); link != nil {
+		if link := s.try(r.ctx, endpoints, s.quickRetries, false); link != nil {
 			resultCh <- link
 		}
 	}()
@@ -83,11 +70,13 @@ func (s *TorLinkStrategy) attempt(ctx *astral.Context) {
 		// why: a RetrieveLink that sees Done answers ErrLinkNotProduced unless
 		// the link already waits in its watcher.
 		s.deliverLink(link)
-		s.signalDone()
 		return
-	case <-workerCtx.Done():
-		s.signalDone()
-		if ctx.Err() != nil {
+	case <-r.ctx.Done():
+		// why: the background phase serves the callers still joined when the
+		// foreground phase ended; a round every caller left stops here.
+		abandoned := r.wasAbandoned()
+		r.finished()
+		if abandoned {
 			return
 		}
 	}
@@ -107,15 +96,6 @@ func (s *TorLinkStrategy) attempt(ctx *astral.Context) {
 	case link := <-bgResultCh:
 		s.deliverLink(link)
 	case <-bgCtx.Done():
-	}
-}
-
-func (s *TorLinkStrategy) signalDone() {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if s.done != nil {
-		close(s.done)
-		s.done = nil
 	}
 }
 
@@ -203,20 +183,6 @@ func (s *TorLinkStrategy) tryEndpoint(ctx *astral.Context, endpoint *nodes.Endpo
 
 	s.log.Log("%v linked via %v", s.target, endpoint)
 	return link
-}
-
-// Done closes once the quick (foreground) phase ends; background retries may
-// still be running. Returns an already-closed channel if Signal never ran.
-func (s *TorLinkStrategy) Done() <-chan struct{} {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	if s.done == nil {
-		ch := make(chan struct{})
-		close(ch)
-		return ch
-	}
-	return s.done
 }
 
 // Factory

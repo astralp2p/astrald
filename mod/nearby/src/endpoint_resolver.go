@@ -15,7 +15,9 @@ var _ nodesmod.EndpointResolver = &Module{}
 // cached status of nodeID, on the ports its status carried or the defaults 1791 and 1792,
 // each valid for the rest of the entry's life. A port of 0 gives no endpoint.
 //
-// note: one entry per IP, so a second node on the same host is not reached.
+// Nodes on one host broadcast from one IP and hold one entry each, keyed by IP and tcp port,
+// so each resolves to its own ports.
+//
 // Spec: .ai/system/protocols/nearby/README.md
 func (mod *Module) ResolveEndpoints(ctx *astral.Context, nodeID *astral.Identity) (_ <-chan *nodes.EndpointWithTTL, err error) {
 	now := mod.now()

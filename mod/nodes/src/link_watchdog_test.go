@@ -191,3 +191,85 @@ func TestWatchedConnKeepsKeepaliveAndNetwork(t *testing.T) {
 		t.Fatalf("link writes through %T; want a watchedConn over the transport's conn", link.Channel.Transport())
 	}
 }
+
+// stepClock is a clock a test moves by hand.
+type stepClock struct{ t time.Time }
+
+func (f *stepClock) now() time.Time { return f.t }
+
+// newClockedWatch returns a watchedConn on a fake clock that starts at a fixed
+// date far from the wall clock, so its decisions use only the fake clock, and
+// a counter of onStall calls. The timeout is long enough that the real timer
+// never fires within the test.
+func newClockedWatch(t *testing.T) (*watchedConn, *stepClock, *int) {
+	t.Helper()
+	clock := &stepClock{t: time.Date(2000, 1, 1, 0, 0, 0, 0, time.UTC)}
+	stalls := new(int)
+	c := &watchedConn{timeout: time.Hour, onStall: func() { *stalls++ }, now: clock.now}
+	c.base = c.now()
+	c.wdog = time.AfterFunc(c.timeout, c.check)
+	c.wdog.Stop()
+	t.Cleanup(func() { c.wdog.Stop() })
+	return c, clock, stalls
+}
+
+// The elapsed time of a Write is the distance of the clock from the offset the
+// Write stored, whatever the clock's absolute value.
+func TestWatchedConnElapsedUsesOffsetFromBase(t *testing.T) {
+	c, clock, _ := newClockedWatch(t)
+
+	since := c.offset() + 1
+	if since != 1 {
+		t.Fatalf("offset stored at base = %d; want 1 (0 means no Write in flight)", since)
+	}
+	if got := c.elapsed(since); got != 0 {
+		t.Fatalf("elapsed at start = %v; want 0", got)
+	}
+	clock.t = clock.t.Add(90 * time.Minute)
+	if got := c.elapsed(since); got != 90*time.Minute {
+		t.Fatalf("elapsed after 90 min = %v; want 90m", got)
+	}
+}
+
+// check re-arms for the rest of the timeout while the Write in flight is younger
+// than the timeout, and calls onStall once it is not.
+func TestWatchedConnCheckFollowsTheClock(t *testing.T) {
+	c, clock, stalls := newClockedWatch(t)
+
+	c.since.Store(c.offset() + 1)
+	clock.t = clock.t.Add(c.timeout - time.Minute)
+	c.check()
+	if *stalls != 0 {
+		t.Fatalf("onStall called %d times at timeout-1m; want 0", *stalls)
+	}
+	if !c.wdog.Stop() {
+		t.Fatal("watchdog is not re-armed after a check of a young Write")
+	}
+
+	clock.t = clock.t.Add(time.Minute)
+	c.check()
+	if *stalls != 1 {
+		t.Fatalf("onStall called %d times at timeout; want 1", *stalls)
+	}
+
+	c.since.Store(0)
+	c.check()
+	if *stalls != 1 {
+		t.Fatalf("onStall called %d times with no Write in flight; want still 1", *stalls)
+	}
+}
+
+// discardConn is a conn whose Write returns at once.
+type discardConn struct{ pipeIdentityConn }
+
+func (discardConn) Write(p []byte) (int, error) { return len(p), nil }
+
+// The Write path allocates nothing.
+func TestWatchedConnWriteDoesNotAllocate(t *testing.T) {
+	c := newWatchedConn(discardConn{}, time.Hour, func() {})
+	t.Cleanup(func() { c.wdog.Stop() })
+	p := []byte{1}
+	if allocs := testing.AllocsPerRun(1000, func() { c.Write(p) }); allocs != 0 {
+		t.Fatalf("Write allocates %v times; want 0", allocs)
+	}
+}

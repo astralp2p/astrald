@@ -6,11 +6,15 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"slices"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/astralp2p/astral-go/api/auth"
+	"github.com/astralp2p/astral-go/api/crypto"
+	"github.com/astralp2p/astral-go/api/events"
 	"github.com/astralp2p/astral-go/api/ip"
 	"github.com/astralp2p/astral-go/api/nearby"
 	"github.com/astralp2p/astral-go/api/nodes"
@@ -22,6 +26,7 @@ import (
 	"github.com/astralp2p/astrald/core"
 	_ "github.com/astralp2p/astrald/mod/all"
 	nearbysrc "github.com/astralp2p/astrald/mod/nearby/src"
+	"github.com/astralp2p/astrald/mod/objects"
 	"github.com/astralp2p/astrald/resources"
 )
 
@@ -52,6 +57,10 @@ var loopback = ip.IP(net.IPv4(127, 0, 0, 1).To4())
 type lanNode struct {
 	node *core.Node
 	port int // the tcp listen port
+	root string
+	key  *crypto.PrivateKey
+	tcp  string // note: extra tcp.yaml lines
+	stop func() // note: ends the node and waits for it; safe to call twice
 }
 
 func (n *lanNode) id() *astral.Identity { return n.node.Identity() }
@@ -63,6 +72,13 @@ func (n *lanNode) nearby() *nearbysrc.Module {
 // user returns a user client of this node that calls as caller.
 func (n *lanNode) user(caller *astral.Identity) *userClient.Client {
 	return userClient.New(n.id(), core.NewClientAs(n.node, caller))
+}
+
+// inSwarm reports whether n counts peer as a member of its local swarm, which is when its
+// link task for peer runs.
+func (n *lanNode) inSwarm(peer *astral.Identity) bool {
+	swarm := n.node.Modules().Find("user").(interface{ LocalSwarm() []*astral.Identity }).LocalSwarm()
+	return slices.ContainsFunc(swarm, peer.IsEqual)
 }
 
 func (n *lanNode) isLinked(peer *astral.Identity) bool {
@@ -247,6 +263,102 @@ func TestJoinFindsAStealthSwarmNodeOnTheLAN(t *testing.T) {
 	}
 }
 
+// peerSeenLog records the PeerSeen events a node emits, as the user module receives them.
+type peerSeenLog struct {
+	mu   sync.Mutex
+	seen []*nearby.PeerSeen
+}
+
+func (l *peerSeenLog) ReceiveObject(drop objects.Drop) error {
+	if e, ok := drop.Object().(*events.Event); ok {
+		if seen, ok := e.Data.(*nearby.PeerSeen); ok {
+			l.mu.Lock()
+			l.seen = append(l.seen, seen)
+			l.mu.Unlock()
+		}
+	}
+	return nil
+}
+
+// of returns the PeerSeen events recorded for node.
+func (l *peerSeenLog) of(node *astral.Identity) []*nearby.PeerSeen {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+
+	var list []*nearby.PeerSeen
+	for _, s := range l.seen {
+		if s.NodeID.IsEqual(node) {
+			list = append(list, s)
+		}
+	}
+	return list
+}
+
+// logPeersSeen records the PeerSeen events of n from now on.
+func (n *lanNode) logPeersSeen(t *testing.T) *peerSeenLog {
+	t.Helper()
+	log := &peerSeenLog{}
+	if err := n.node.Modules().Find("objects").(objects.Module).AddReceiver(log); err != nil {
+		t.Fatalf("add receiver: %v", err)
+	}
+	return log
+}
+
+// Ticket iKytI7lzu1 criterion 4: a node restarted on a new tcp port at the same IP resolves to
+// the new port from its next status, which emits one PeerSeen, and its sibling links to it
+// there. A second status of the restarted node emits none.
+//
+// note: the sibling's link task also retries on its own backoff, so the test cannot exclude
+// a retry that happens to follow the status; it proves the PeerSeen the user module wakes the
+// task on, the resolved port and the link. a never dials (tcp dial off), so only b's task can
+// link them again.
+func TestNodeRestartedOnANewPortIsResolvedAfterItsNextStatus(t *testing.T) {
+	a, b := runListenOnlyLanNode(t), runLanNode(t)
+	words := string(a.bootstrap(t, "").Mnemonic)
+	b.bootstrap(t, words)
+	seen := b.logPeersSeen(t)
+
+	oldPort := a.port
+	b.deliver(t, a)
+	waitFor(t, "b links to a", func() bool { return b.isLinked(a.id()) })
+	waitFor(t, "b emits PeerSeen for a", func() bool { return len(seen.of(a.id())) == 1 })
+	// note: a restart before b took a into its swarm would leave b without a link task for a.
+	waitFor(t, "a is in b's swarm", func() bool { return b.inSwarm(a.id()) })
+
+	a = restartLanNode(t, a)
+	if a.port == oldPort {
+		t.Fatalf("a restarted on port %v again", oldPort)
+	}
+	waitFor(t, "b's link to the old a closes", func() bool { return !b.isLinked(a.id()) })
+
+	// note: until a status arrives, nearby still resolves the port a listened on.
+	if got, want := endpoints(t, b.nearby(), a.id()), fmt.Sprintf("tcp:127.0.0.1:%d", oldPort); len(got) != 1 || got[0] != want {
+		t.Fatalf("before the status, b's nearby resolves %v for a; want [%v]", got, want)
+	}
+
+	delivered := time.Now()
+	b.deliver(t, a)
+	want := fmt.Sprintf("tcp:127.0.0.1:%d", a.port)
+	if got := endpoints(t, b.nearby(), a.id()); len(got) != 1 || got[0] != want {
+		t.Fatalf("after the status, b's nearby resolves %v for a; want [%v]", got, want)
+	}
+	waitFor(t, "b emits PeerSeen for the port change", func() bool { return len(seen.of(a.id())) == 2 })
+	waitFor(t, "b links to the restarted a", func() bool { return b.isLinked(a.id()) })
+	t.Logf("relinked %v after the status", time.Since(delivered))
+
+	// note: PeerSeen is emitted on its own goroutine, so an event the second status wrongly
+	// caused needs a moment to show.
+	b.deliver(t, a)
+	time.Sleep(300 * time.Millisecond)
+	if n := len(seen.of(a.id())); n != 2 {
+		t.Fatalf("b emitted %d PeerSeen for a after a second status on the same port; want 2 in all", n)
+	}
+	last := seen.of(a.id())[1]
+	if !bytes.Equal(last.SourceIP, loopback) {
+		t.Fatalf("the PeerSeen of the port change names %v; want %v", last.SourceIP, loopback)
+	}
+}
+
 // deliverEvery carries a fresh status of from to n every 100 ms until stop closes, as
 // periodic statuses and scan replies would.
 func deliverEvery(n, from *lanNode, stop <-chan struct{}) {
@@ -279,26 +391,61 @@ func contractOf(t *testing.T, n *lanNode) *auth.SignedContract {
 // runLanNode runs a fresh node with tcp on a free port. The node stops when the test ends.
 func runLanNode(t *testing.T) *lanNode {
 	t.Helper()
+	return runLanNodeWith(t, "")
+}
 
-	port := freePort(t)
+// runListenOnlyLanNode runs a fresh node whose tcp does not dial: it never links out, so every
+// link of it is dialed by its peer.
+func runListenOnlyLanNode(t *testing.T) *lanNode {
+	t.Helper()
+	return runLanNodeWith(t, "dial: false\n")
+}
+
+// runLanNodeWith runs a fresh node with tcp on a free port and the extra lines of tcp.yaml in
+// tcp.
+func runLanNodeWith(t *testing.T, tcp string) *lanNode {
+	t.Helper()
+
 	root := t.TempDir()
-	res := lanResources(t, root)
-
 	key := secp256k1.New()
 	var buf bytes.Buffer
 	if _, err := astral.Encode(&buf, key, astral.Canonical()); err != nil {
 		t.Fatalf("encode node key: %v", err)
 	}
+	res := lanResources(t, root)
 	if err := res.WriteData("node_key", buf.Bytes()); err != nil {
 		t.Fatalf("write node key: %v", err)
 	}
+
+	return startLanNode(t, root, key, freePort(t), tcp)
+}
+
+// restartLanNode stops n and runs its node again, with the same key and data, on a free port
+// other than its old one. The new node stops when the test ends.
+func restartLanNode(t *testing.T, n *lanNode) *lanNode {
+	t.Helper()
+
+	n.stop()
+	port := freePort(t)
+	for port == n.port {
+		port = freePort(t)
+	}
+	return startLanNode(t, n.root, n.key, port, n.tcp)
+}
+
+// startLanNode runs the node of key, whose config is in root and data in root/data, with tcp
+// on port and the extra lines of tcp.yaml in tcp.
+func startLanNode(t *testing.T, root string, key *crypto.PrivateKey, port int, tcp string) *lanNode {
+	t.Helper()
+
+	res := lanResources(t, root)
 
 	endpoint := fmt.Sprintf("memu:nearby-lan-%d", lanListeners.Add(1))
 	files := map[string]string{
 		"node.yaml":    "modules: [" + lanModules + "]\n",
 		"apphost.yaml": fmt.Sprintf("listen: [%q]\nbind_http: \"\"\n", endpoint),
 		"ether.yaml":   "listen: false\n",
-		"tcp.yaml":     fmt.Sprintf("listen_port: %d\n", port),
+		"tcp.yaml":     fmt.Sprintf("listen_port: %d\n", port) + tcp,
 		"user.yaml":    lanUserConfig,
 	}
 	for name, body := range files {
@@ -315,13 +462,17 @@ func runLanNode(t *testing.T) *lanNode {
 	ctx, cancel := astral.NewContext(nil).WithCancel()
 	done := make(chan error, 1)
 	go func() { done <- node.Run(ctx) }()
-	t.Cleanup(func() {
-		cancel()
-		<-done
-	})
+	var once sync.Once
+	stop := func() {
+		once.Do(func() {
+			cancel()
+			<-done
+		})
+	}
+	t.Cleanup(stop)
 
 	waitLanNode(t, ctx, endpoint, done)
-	return &lanNode{node: node, port: port}
+	return &lanNode{node: node, port: port, root: root, key: key, tcp: tcp, stop: stop}
 }
 
 // freePort returns a tcp port no listener holds now, never a default port.

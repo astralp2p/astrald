@@ -98,6 +98,9 @@ func (mod *Module) LoadDependencies(ctx *astral.Context) (err error) {
 	mod.Auth.AddAdmitter(func(sc *auth.SignedContract) error {
 		return mod.AdmitRelayContract(nil, sc)
 	})
+	// why: expulsion leaves the node's contracts in force, so the authorizers
+	// refuse a banned identity at every level of a walk instead.
+	mod.Auth.AddVeto(mod.isBanned)
 
 	mod.Auth.Add(authmod.Func[*nodes.RelayForAction](mod.AuthorizeRelayFor))
 	mod.Auth.Add(authmod.Func[*auth.SeeObjectsAction](mod.AuthorizeSeeObjects))

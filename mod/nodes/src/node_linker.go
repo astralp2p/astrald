@@ -25,21 +25,31 @@ func NewNodeLinker(mod *Module, target *astral.Identity) *NodeLinker {
 	return linker
 }
 
-// Activate signals the named strategies and returns a channel closed once all of them finish; an already-closed channel if none match.
-func (linker *NodeLinker) Activate(ctx *astral.Context, strategies []string) <-chan struct{} {
+// Activate joins the named strategies' rounds. It returns a channel closed once
+// all of them finish or ctx ends, an already-closed channel if none match, and
+// the caller's idempotent release of every round it joined.
+func (linker *NodeLinker) Activate(ctx *astral.Context, strategies []string) (done <-chan struct{}, release func()) {
 	var doneChannels []<-chan struct{}
+	var releases []func()
 	for _, strategy := range strategies {
 		if strategy, ok := linker.strategies.Get(strategy); ok {
-			strategy.Signal(ctx)
-			doneChannels = append(doneChannels, strategy.Done())
+			roundDone, leave := strategy.Join(ctx)
+			releases = append(releases, leave)
+			doneChannels = append(doneChannels, roundDone)
+		}
+	}
+
+	release = func() {
+		for _, r := range releases {
+			r()
 		}
 	}
 
 	if len(doneChannels) == 0 {
 		doneCh := make(chan struct{})
 		close(doneCh)
-		return doneCh
+		return doneCh, release
 	}
 
-	return sig.WaitAllDone(ctx, doneChannels...)
+	return sig.WaitAllDone(ctx, doneChannels...), release
 }

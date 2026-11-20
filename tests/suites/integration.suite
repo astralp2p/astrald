@@ -106,6 +106,7 @@ bootstrap-passphrase
 claim-race
 claimed-node-keeps-owner
 expel-authority
+expel-management-node
 expel-during-transfer
 join-via-member
 link-self-heal

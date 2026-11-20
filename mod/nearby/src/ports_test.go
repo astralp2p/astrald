@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"slices"
 	"testing"
+	"time"
 
 	"github.com/astralp2p/astral-go/api/kcp"
 	"github.com/astralp2p/astral-go/api/nearby"
@@ -109,6 +110,39 @@ func TestResolveEndpointsOnTheStatusPorts(t *testing.T) {
 				t.Fatalf("resolved %v; want %v", got, tt.want)
 			}
 		})
+	}
+}
+
+// After a node restarts on new ports at the same IP, resolve returns the source IP with the
+// new ports from the status that carries them, and the defaults once a status carries none.
+func TestResolveEndpointsFollowsAPortChange(t *testing.T) {
+	user := astral.GenerateIdentity()
+	h := newHarness(t, user)
+	p := newPeer(t)
+
+	steps := []struct {
+		name   string
+		ports  *nearby.ListenPorts
+		want   []string
+		events int // note: PeerSeen emitted so far
+	}{
+		{"first status", &nearby.ListenPorts{TCP: 1800, KCP: 1801}, []string{"tcp:1800", "kcp:1801"}, 1},
+		{"restarted on new ports", &nearby.ListenPorts{TCP: 1900, KCP: 1901}, []string{"tcp:1900", "kcp:1901"}, 2},
+		{"restarted on a new tcp port", &nearby.ListenPorts{TCP: 1950, KCP: 1901}, []string{"tcp:1950", "kcp:1901"}, 3},
+		{"restarted on the defaults", nil, []string{"tcp:1791", "kcp:1792"}, 4},
+	}
+
+	for _, step := range steps {
+		now := h.clock.advance(time.Minute)
+		if err := h.mod.acceptStatus(ipOf(peerIP), portsStatus(t, p, now, user, step.ports)); err != nil {
+			t.Fatalf("%s: acceptStatus: %v", step.name, err)
+		}
+		if got := endpointStrings(t, resolveEndpoints(t, h.mod, p.node)); !slices.Equal(got, step.want) {
+			t.Fatalf("%s: resolved %v; want %v", step.name, got, step.want)
+		}
+		if seen := h.events.peersSeen(t); len(seen) != step.events {
+			t.Fatalf("%s: emitted %d PeerSeen; want %d", step.name, len(seen), step.events)
+		}
 	}
 }
 

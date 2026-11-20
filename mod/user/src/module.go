@@ -67,7 +67,7 @@ type Module struct {
 	// runs. See recognizeJoinTarget.
 	joinTarget atomic.Pointer[astral.Identity]
 
-	// banned holds the subjects the active user banned; see AdmitLink.
+	// banned holds the subjects the active user banned; see isBanned.
 	banned atomic.Pointer[map[string]struct{}]
 	// banAnswers holds the banned subjects that answered their own ban pushed
 	// from this node; see AdmitLink.

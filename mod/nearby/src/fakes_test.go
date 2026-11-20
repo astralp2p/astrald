@@ -394,11 +394,29 @@ func (h *harness) setSilentListen(t *testing.T, v bool) {
 	}
 }
 
-// cached returns the entry stored for src, live or not.
+// cached returns the entry stored for src, live or not. It reports false when src holds no
+// entry or more than one; a test with several entries at one IP uses cachedAt.
 func (h *harness) cached(src string) (*entry, bool) {
 	h.mod.cache.mu.Lock()
 	defer h.mod.cache.mu.Unlock()
-	e, ok := h.mod.cache.entries[ipOf(src).String()]
+	var found *entry
+	for key, e := range h.mod.cache.entries {
+		if key.ip != ipOf(src).String() {
+			continue
+		}
+		if found != nil {
+			return nil, false
+		}
+		found = e
+	}
+	return found, found != nil
+}
+
+// cachedAt returns the entry stored under src and the tcp listen port, live or not.
+func (h *harness) cachedAt(src string, tcp astral.Uint16) (*entry, bool) {
+	h.mod.cache.mu.Lock()
+	defer h.mod.cache.mu.Unlock()
+	e, ok := h.mod.cache.entries[cacheKey{ip: ipOf(src).String(), port: tcp}]
 	return e, ok
 }
 

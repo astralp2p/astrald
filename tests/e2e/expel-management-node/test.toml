@@ -1,0 +1,6 @@
+nodes    = ["emn1", "emn2", "emn3"]
+timeout  = 180
+# why destroys, and no `after`: the test claims two nodes for one User it
+# generates, and bans one of them, and a ban cannot be lifted.
+destroys = true
+facts    = ["user_id", "controls", "refusals", "baseline", "banned_id", "member_id", "expelled"]
