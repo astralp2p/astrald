@@ -400,15 +400,22 @@ func TestSimultaneousDialsKeepOneLink(t *testing.T) {
 			ctx := astral.NewContext(context.Background())
 			rl := lower.mod.linkPool.RetrieveLink(ctx, higher.id, WithStrategies(nodesmod.StrategyBasic))
 			rh := higher.mod.linkPool.RetrieveLink(ctx, lower.id, WithStrategies(nodesmod.StrategyBasic))
-			results := []LinkResult{<-rl, <-rh}
+			atLower, atHigher := <-rl, <-rh
 			survivor := requireOneSharedLink(t, lower, higher)
-			for _, r := range results {
+			for _, r := range []LinkResult{atLower, atHigher} {
 				if r.Err != nil {
 					t.Fatalf("round %v: RetrieveLink: %v", i, r.Err)
 				}
-				if r.Link.id != survivor || r.Link.Err() != nil {
-					t.Fatalf("round %v: a caller got link %v (error %v); want the survivor %v", i, r.Link.id, r.Link.Err(), survivor)
-				}
+			}
+			if atLower.Link.id != survivor || atLower.Link.Err() != nil {
+				t.Fatalf("round %v: the lower identity's caller got link %v (error %v); want the survivor %v", i, atLower.Link.id, atLower.Link.Err(), survivor)
+			}
+			// note: the higher identity sees the lower identity's crossing dial
+			// only once it arrives; it waits about one round trip for it, so
+			// under load its caller may get its own link, which the peer then
+			// prunes. That link must not stay open beside the survivor.
+			if atHigher.Link.id != survivor && atHigher.Link.Err() == nil {
+				t.Fatalf("round %v: the higher identity's caller holds open link %v beside the survivor %v", i, atHigher.Link.id, survivor)
 			}
 		}
 	})

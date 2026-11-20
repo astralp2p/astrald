@@ -333,3 +333,147 @@ func TestDeadLinkGivesWayToLiveOne(t *testing.T) {
 		t.Fatalf("the live link closed: %v", err)
 	}
 }
+
+// cutConn is a peer's conn that stops carrying frames once cut closes: what
+// it reads is discarded and what it writes is lost, as for a peer that left
+// the network the link runs over.
+type cutConn struct {
+	net.Conn
+	cut chan struct{}
+}
+
+func (c *cutConn) Read(p []byte) (int, error) {
+	for {
+		n, err := c.Conn.Read(p)
+		select {
+		case <-c.cut:
+			if err != nil {
+				return 0, err
+			}
+		default:
+			return n, err
+		}
+	}
+}
+
+func (c *cutConn) Write(p []byte) (int, error) {
+	select {
+	case <-c.cut:
+		return len(p), nil
+	default:
+		return c.Conn.Write(p)
+	}
+}
+
+// addServedLink pools a link to remoteID over a transport that sets idle and
+// timeout; the far end is remoteID's mux, which accepts every query until the
+// returned channel is closed.
+func addServedLink(t *testing.T, mod *Module, remoteID *astral.Identity, idle, timeout time.Duration) (*Link, chan struct{}) {
+	t.Helper()
+	link, far := newPeerLink(t, mod, remoteID, idle, timeout)
+	cut := make(chan struct{})
+	peer := testMux(t, &cutConn{Conn: far, cut: cut}, remoteID, mod.node.Identity())
+	peer.SetRouter(&answeringRouter{reply: "ok", routed: make(chan *astral.InFlightQuery, 256)})
+	if err := mod.linkPool.AddLink(link); err != nil {
+		t.Fatalf("AddLink: %v", err)
+	}
+	return link, cut
+}
+
+// queryPeer routes one query to remoteID over the link the pool selects for
+// it, within limit, and returns that link and the routing result.
+func queryPeer(mod *Module, remoteID *astral.Identity, limit time.Duration) (*Link, error) {
+	link := mod.linkPool.SelectLinkWith(remoteID)
+	if link == nil {
+		return nil, errors.New("no link to the peer")
+	}
+	localID := mod.node.Identity()
+	ctx, cancel := astral.NewContext(nil).WithIdentity(localID).WithTimeout(limit)
+	defer cancel()
+	_, err := link.RouteQuery(ctx, outcomeQuery(localID, remoteID), nopWriteCloser{})
+	return link, err
+}
+
+// TestQueriesFailOverWithinIdlePlusTimeout: a peer moves network while
+// queries run to it. Its tcp link stops carrying frames; another link to it
+// is either a slower transport's link that was already up (the Tor case) or a
+// new link from its new address. Queries reach the peer again over the other
+// link no later than the tcp transport's idle interval plus ping timeout
+// after the move; a query pending on the dead link fails at its close, not at
+// its own deadline; the other link stays up.
+// note: A1G2 option a, the health check alone; selection is unchanged
+// (https://wiki.satforge.dev/doc/a1g2-route-over-a-working-link-when-a-peer-has-a-dead-one-aVNtmu7SWl).
+func TestQueriesFailOverWithinIdlePlusTimeout(t *testing.T) {
+	const tcpIdle, tcpTimeout = 300 * time.Millisecond, 200 * time.Millisecond
+	const torIdle, torTimeout = time.Second, time.Second
+	// why longer than the window: a pending query that waited for its own
+	// deadline would push the first answer past the bound.
+	const queryLimit = 3 * time.Second
+	const slack = 400 * time.Millisecond
+
+	for _, c := range []struct {
+		name     string
+		otherUp  bool // the other link is up before the move
+		idle, to time.Duration
+	}{
+		{"tor link up before the move", true, torIdle, torTimeout},
+		{"new tcp link after the move", false, tcpIdle, tcpTimeout},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			f := newProbeFixture()
+			remoteID := astral.GenerateIdentity()
+			old, cut := addServedLink(t, f.mod, remoteID, tcpIdle, tcpTimeout)
+			var other *Link
+			if c.otherUp {
+				other, _ = addServedLink(t, f.mod, remoteID, c.idle, c.to)
+			}
+
+			// why: past the start jitter, the tcp link probes on its idle schedule.
+			time.Sleep(pingJitter + 100*time.Millisecond)
+			if got, err := queryPeer(f.mod, remoteID, queryLimit); err != nil || got != old {
+				t.Fatalf("before the move the query answered %v over the tcp link %v; want success over it", err, got == old)
+			}
+
+			move := time.Now()
+			close(cut)
+			if !c.otherUp {
+				other, _ = addServedLink(t, f.mod, remoteID, c.idle, c.to)
+			}
+
+			var answered time.Time
+			for answered.IsZero() {
+				if time.Since(move) > effectTimeout {
+					t.Fatalf("no query reached the peer within %v of the move", effectTimeout)
+				}
+				got, err := queryPeer(f.mod, remoteID, queryLimit)
+				switch {
+				case err != nil:
+					time.Sleep(20 * time.Millisecond)
+				case got != other:
+					t.Fatal("a query succeeded over the dead tcp link")
+				default:
+					answered = time.Now()
+				}
+			}
+
+			window := answered.Sub(move)
+			if limit := tcpIdle + tcpTimeout + slack; window > limit {
+				t.Fatalf("queries failed for %v after the move; want at most %v", window, limit)
+			}
+			t.Logf("queries reached the peer again %v after the move", window)
+			if err := old.Err(); err == nil || !strings.Contains(err.Error(), "ping timeout") {
+				t.Fatalf("the dead tcp link closed with %v; want ping timeout", err)
+			}
+			if got := f.mod.linkPool.SelectLinkWith(remoteID); got != other {
+				t.Fatal("the pool still selects the dead tcp link")
+			}
+			if err := other.Err(); err != nil {
+				t.Fatalf("the other link closed: %v", err)
+			}
+			eventually(t, "a LinkClosedEvent for the dead link", func() bool { return len(f.closedEvents()) > 0 })
+			if closed := f.closedEvents(); len(closed) != 1 || closed[0].LinkCount != 1 {
+				t.Fatalf("LinkClosedEvents %v; want one with LinkCount 1", closed)
+			}
+		})
+	}
+}

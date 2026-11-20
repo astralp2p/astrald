@@ -1,9 +1,11 @@
 package nodes
 
 import (
+	"io"
 	"net"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -363,5 +365,95 @@ func TestBusyLinkIsNeverProbed(t *testing.T) {
 			t.Fatalf("no probe within %v of the peer falling silent", idle+200*time.Millisecond)
 		}
 		time.Sleep(10 * time.Millisecond)
+	}
+}
+
+// TestFrozenPeerFailsPendingQueryAtLinkClose: a peer frozen with a query
+// pending (its socket still takes writes, nothing comes back) gets its link
+// closed by the keepalive within the idle interval plus the ping timeout, and
+// the pending query fails then as unavailable, not at its own deadline.
+func TestFrozenPeerFailsPendingQueryAtLinkClose(t *testing.T) {
+	const idle, timeout = 300 * time.Millisecond, 200 * time.Millisecond
+	f := newProbeFixture()
+	localID, remoteID := f.mod.node.Identity(), astral.GenerateIdentity()
+	link, far := newPeerLink(t, f.mod, remoteID, idle, timeout)
+	go io.Copy(io.Discard, far)
+	if err := f.mod.linkPool.AddLink(link); err != nil {
+		t.Fatalf("AddLink: %v", err)
+	}
+
+	ctx, cancel := astral.NewContext(nil).WithIdentity(localID).WithTimeout(30 * time.Second)
+	defer cancel()
+	start := time.Now()
+	_, err := link.RouteQuery(ctx, outcomeQuery(localID, remoteID), nopWriteCloser{})
+	took := time.Since(start)
+
+	assertRejectedWith(t, err, astral.CodeUnavailable)
+	if limit := pingJitter + idle + timeout + 200*time.Millisecond; took > limit {
+		t.Fatalf("the pending query failed after %v; want at most %v, the link's close", took, limit)
+	}
+	t.Logf("the pending query failed as unavailable after %v", took)
+	if err := link.Err(); err == nil || !strings.Contains(err.Error(), "ping timeout") {
+		t.Fatalf("link closed with %v; want ping timeout", err)
+	}
+}
+
+// frameTap relays frames between two conns and counts the probes sent each way.
+type frameTap struct {
+	probes [2]atomic.Uint64
+}
+
+func (tap *frameTap) relay(from, to net.Conn, dir int) {
+	in, out := channel.New(from), channel.New(to)
+	for {
+		obj, err := in.Receive()
+		if err != nil {
+			to.Close()
+			return
+		}
+		if isProbe(obj) {
+			tap.probes[dir].Add(1)
+		}
+		if out.Send(obj) != nil {
+			from.Close()
+			return
+		}
+	}
+}
+
+// TestIdleLinkPairProbesOncePerNPerEnd: two linked ends that send nothing but
+// keepalive frames keep the link up across ten idle intervals, and each end
+// sends about one probe per interval, two per interval in all.
+func TestIdleLinkPairProbesOncePerNPerEnd(t *testing.T) {
+	const idle, timeout = 200 * time.Millisecond, 200 * time.Millisecond
+	// why sockets: a pipe has no buffer, and both ends answer probes from
+	// their read loops, so a pipe through the relay can deadlock.
+	aConn, aTap := tcpPair(t)
+	bTap, bConn := tcpPair(t)
+	tap := &frameTap{}
+	go tap.relay(aTap, bTap, 0)
+	go tap.relay(bTap, aTap, 1)
+	k := exonetmod.LinkKeepalive{Idle: idle, Timeout: timeout}
+	a := newLink(&Module{log: log.New(astral.Anyone)}, keepaliveConn{pipeIdentityConn{aConn}, k}, astral.NewNonce(), true)
+	b := newLink(&Module{log: log.New(astral.Anyone)}, keepaliveConn{pipeIdentityConn{bConn}, k}, astral.NewNonce(), false)
+	t.Cleanup(func() { a.Close(); b.Close() })
+
+	// why: past the start jitter both ends probe on their idle schedule.
+	time.Sleep(pingJitter + 2*idle)
+	before := [2]uint64{tap.probes[0].Load(), tap.probes[1].Load()}
+	const window = 10 * idle
+	time.Sleep(window)
+
+	for i, end := range []string{"a", "b"} {
+		n := tap.probes[i].Load() - before[i]
+		if want := uint64(window / idle); n+2 < want || n > want+1 {
+			t.Fatalf("end %v sent %v probes in %v; want about %v, one per %v", end, n, window, want, idle)
+		}
+		t.Logf("end %v sent %v probes in %v", end, n, window)
+	}
+	for _, l := range []*Link{a, b} {
+		if err := l.Err(); err != nil {
+			t.Fatalf("an idle healthy link closed: %v", err)
+		}
 	}
 }
