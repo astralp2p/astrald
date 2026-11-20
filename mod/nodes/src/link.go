@@ -6,6 +6,7 @@ import (
 	exonetmod "github.com/astralp2p/astrald/mod/exonet"
 	"io"
 	"math/rand"
+	"net"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -72,7 +73,16 @@ func (s *Link) CloseWithError(err error) error {
 	if _, first := s.err.Swap(nil, err); first {
 		s.sendCloseNotice(closeReasonOf(err))
 	}
-	return s.Channel.Close()
+	return closedOK(s.Channel.Close())
+}
+
+// closedOK drops the error of a close that found the transport already closed.
+// why: the read loop closes the transport when the peer closes first, and a link closed either way is closed for the caller (astral-docs protocols/nodes/ops/nodes.close_link.md: ack if the link was closed).
+func closedOK(err error) error {
+	if errors.Is(err, net.ErrClosed) || errors.Is(err, io.ErrClosedPipe) {
+		return nil
+	}
+	return err
 }
 
 // closeReasonOf maps a link's cause of death to the reason its close frame names.
