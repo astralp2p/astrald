@@ -457,3 +457,76 @@ func TestIdleLinkPairProbesOncePerNPerEnd(t *testing.T) {
 		}
 	}
 }
+
+// TestWakeReturnsProbeAtOnce: Wake on a link heard from just now, whose idle
+// interval is an hour, makes waitProbe report a due probe at once.
+func TestWakeReturnsProbeAtOnce(t *testing.T) {
+	s := newIdleLink(time.Hour, 0)
+	defer close(s.done)
+
+	s.Wake()
+	select {
+	case <-waitProbeAsync(s):
+	case <-time.After(100 * time.Millisecond):
+		t.Fatal("waitProbe did not return within 100 ms of a Wake on an idle link")
+	}
+}
+
+// TestWakeCoalesces: two Wakes before waitProbe runs give one due probe; the
+// next waitProbe then waits for the idle interval again.
+func TestWakeCoalesces(t *testing.T) {
+	const idle = time.Second
+	s := newIdleLink(idle, 0)
+	defer close(s.done)
+
+	s.Wake()
+	s.Wake()
+	select {
+	case <-waitProbeAsync(s):
+	case <-time.After(100 * time.Millisecond):
+		t.Fatal("waitProbe did not return within 100 ms of two Wakes")
+	}
+
+	due := waitProbeAsync(s)
+	select {
+	case <-due:
+		t.Fatal("the second waitProbe returned at once: two Wakes gave two due probes")
+	case <-time.After(idle / 2):
+	}
+	select {
+	case at := <-due:
+		if idleAt := time.Unix(0, s.lastRecv.Load()).Add(idle); at.Before(idleAt) {
+			t.Fatalf("the second waitProbe returned %v before the idle interval passed", idleAt.Sub(at))
+		}
+	case <-time.After(effectTimeout):
+		t.Fatal("the second waitProbe never returned after the idle interval passed")
+	}
+}
+
+// TestWaitProbeHoldsWhileFramesArrive: with no Wake, waitProbe stays blocked
+// while frames keep arriving inside the idle interval, and returns only once
+// the interval has passed since the last of them.
+func TestWaitProbeHoldsWhileFramesArrive(t *testing.T) {
+	const idle = 300 * time.Millisecond
+	s := newIdleLink(idle, 0)
+	defer close(s.done)
+	due := waitProbeAsync(s)
+
+	for i := 0; i < 10; i++ {
+		select {
+		case <-due:
+			t.Fatalf("waitProbe returned after %d frames, each less than the idle interval after the one before", i)
+		case <-time.After(idle / 3):
+			s.stampRecv(&frames.Reset{})
+		}
+	}
+
+	select {
+	case at := <-due:
+		if idleAt := time.Unix(0, s.lastRecv.Load()).Add(idle); at.Before(idleAt) {
+			t.Fatalf("waitProbe returned %v before the idle interval passed since the last frame", idleAt.Sub(at))
+		}
+	case <-time.After(effectTimeout):
+		t.Fatal("waitProbe never returned after the frames stopped")
+	}
+}
