@@ -39,6 +39,7 @@ why the log lines: only `MaintainLinkTask.Run`
 task woke on the `LinkClosedEvent`, not some other dialer. A task that
 started linked logs `established` on its first relink and nothing before it.
 
-Not asserted, only printed: link counts per cycle (a cross-dial can leave
-two), the heal time per cycle, which end logged the wake. Live, every cut
+Not asserted, only printed: link counts per cycle (a cross-dial of two
+strategy links settles on the one the lower identity dialed, astrald
+`mod/nodes/src/link_duplicates.go`), the heal time per cycle, which end logged the wake. Live, every cut
 healed in under 1 s.

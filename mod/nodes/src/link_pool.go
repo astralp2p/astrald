@@ -15,6 +15,8 @@ import (
 type linkWatcher struct {
 	match func(*Link, *string) bool
 	ch    chan *Link
+	// keeps marks a caller that asked for a new link; a strategy link it takes is never excess.
+	keeps bool
 }
 
 type LinkPool struct {
@@ -32,7 +34,7 @@ func NewLinkPool(mod *Module) *LinkPool {
 	}
 }
 
-// AddLink registers link, wires its mux router, emits a created event, probes the older links to the same peer, and spawns a goroutine that removes it and closes its sessions when it dies.
+// AddLink registers link, wires its mux router, emits a created event, closes the prunable links it outranks, probes the older links to the same peer, and spawns a goroutine that removes it and closes its sessions when it dies.
 func (pool *LinkPool) AddLink(link *Link) error {
 	dir := "in"
 	netName := "unknown network"
@@ -75,6 +77,7 @@ func (pool *LinkPool) AddLink(link *Link) error {
 	})
 
 	if linkCount > 1 {
+		go pool.closeOutranked(link)
 		pool.probeOlderLinks(link)
 	}
 
@@ -174,10 +177,11 @@ type LinkResult struct {
 	Err  error
 }
 
-func (pool *LinkPool) subscribe(match func(*Link, *string) bool) *linkWatcher {
+func (pool *LinkPool) subscribe(match func(*Link, *string) bool, keeps bool) *linkWatcher {
 	w := &linkWatcher{
 		match: match,
 		ch:    make(chan *Link, 1),
+		keeps: keeps,
 	}
 
 	pool.watchers.Add(w)
@@ -189,8 +193,18 @@ func (pool *LinkPool) unsubscribe(w *linkWatcher) {
 }
 
 func (pool *LinkPool) notifyLinkWatchers(s *Link, strategy *string) bool {
+	return pool.notifyWatchers(pool.watchers.Clone(), s, strategy)
+}
+
+// watchersKeeping returns the watchers whose keeps flag equals keeps.
+func (pool *LinkPool) watchersKeeping(keeps bool) []*linkWatcher {
+	return pool.watchers.Select(func(w *linkWatcher) bool { return w.keeps == keeps })
+}
+
+// notifyWatchers offers s to every watcher of ws that matches it and answers whether one took it.
+func (pool *LinkPool) notifyWatchers(ws []*linkWatcher, s *Link, strategy *string) bool {
 	used := false
-	for _, w := range pool.watchers.Clone() {
+	for _, w := range ws {
 		if !w.match(s, strategy) {
 			continue
 		}
@@ -261,7 +275,9 @@ func (pool *LinkPool) RetrieveLink(
 		strategyCtx, cancelStrategies := ctx.WithCancel()
 		defer cancelStrategies()
 
-		w := pool.subscribe(match)
+		// why: a forced or network-bound request asks for a link the pool's
+		// existing links do not satisfy, so its link is not a duplicate.
+		w := pool.subscribe(match, o.ForceNew || len(o.Networks) > 0)
 		defer pool.unsubscribe(w)
 
 		linker := pool.getOrCreateNodeLinker(target)

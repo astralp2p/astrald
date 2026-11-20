@@ -16,6 +16,9 @@ import (
 	"github.com/astralp2p/astrald/mod/nodes/frames"
 )
 
+// errPingInFlight refuses a ping while another ping on the same link waits for its pong.
+var errPingInFlight = errors.New("ping already in flight")
+
 type Ping struct {
 	nonce  astral.Nonce
 	sentAt time.Time
@@ -36,6 +39,7 @@ type Link struct {
 	checks      atomic.Int32
 	throughput  atomic.Uint64
 	outbound    bool
+	prunable    atomic.Bool   // a strategy link no caller asked for as new; a link that outranks it closes it
 	idlePing    time.Duration // N: probe after this long without a received frame
 	pingTimeout time.Duration // T: close when a probe gets no pong within this
 	lastRecv    atomic.Int64  // unix nanos of the last received frame that is not a peer's probe
@@ -160,7 +164,7 @@ func (s *Link) Ping() (time.Duration, error) {
 	s.pingMu.Lock()
 	if s.ping != nil {
 		s.pingMu.Unlock()
-		return -1, errors.New("ping already in flight")
+		return -1, errPingInFlight
 	}
 	// why: pong() reaches p through s.ping under pingMu, so the stamp must sit
 	// inside this critical section to be visible and race-free. Stamping after
