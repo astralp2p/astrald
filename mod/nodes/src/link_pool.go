@@ -182,28 +182,39 @@ func (pool *LinkPool) addCounted(link *Link) (int, error) {
 	})), nil
 }
 
-// SelectLinkWith returns a link to id, preferring a non-high-pressure link.
+// SelectLinkWith returns the best link to id: not suspect first, then not under high pressure, then the newest.
+// It returns a link whenever one to id is open, however suspect or loaded, and never calls Wake.
+// why no oldest-first: the oldest link is the one a moved peer left behind (A1G2, DL3).
 func (pool *LinkPool) SelectLinkWith(id *astral.Identity) *Link {
 	if pool.closed.Load() {
 		return nil
 	}
-	var fallback *Link
+	var best *Link
 
 	for _, link := range pool.links.Clone() {
 		if link.Err() != nil || !link.RemoteIdentity().IsEqual(id) {
 			continue
 		}
 
-		if !link.PressureHigh() {
-			return link
-		}
-
-		if fallback == nil {
-			fallback = link
+		if best == nil || betterLink(link, best) {
+			best = link
 		}
 	}
 
-	return fallback
+	return best
+}
+
+// betterLink reports whether a is preferred over b for a new query to their common peer.
+// The keys, outermost first: not suspect, not under high pressure, newest createdAt.
+// Equal links keep the earlier one in pool order.
+func betterLink(a, b *Link) bool {
+	if sa, sb := a.Suspect(), b.Suspect(); sa != sb {
+		return !sa
+	}
+	if pa, pb := a.PressureHigh(), b.PressureHigh(); pa != pb {
+		return !pa
+	}
+	return a.createdAt.After(b.createdAt)
 }
 
 type LinkResult struct {
