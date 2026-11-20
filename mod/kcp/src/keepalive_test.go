@@ -9,15 +9,18 @@ import (
 
 // TestLinkKeepaliveConfig pins that kcp.yaml's link_idle_ping and
 // link_ping_timeout time the links over kcp conns, each defaulting on its own.
+// A key set to zero or left empty takes the kcp default.
 func TestLinkKeepaliveConfig(t *testing.T) {
 	var tests = []struct {
 		name   string
 		config string
 		want   exonetmod.LinkKeepalive
 	}{
-		{"defaults", "", exonetmod.LinkKeepalive{Idle: 15 * time.Second, Timeout: 10 * time.Second}},
-		{"timeout only", "link_ping_timeout: 4s\n", exonetmod.LinkKeepalive{Idle: 15 * time.Second, Timeout: 4 * time.Second}},
+		{"defaults", "", exonetmod.LinkKeepalive{Idle: 10 * time.Second, Timeout: 10 * time.Second}},
+		{"timeout only", "link_ping_timeout: 4s\n", exonetmod.LinkKeepalive{Idle: 10 * time.Second, Timeout: 4 * time.Second}},
 		{"both", "link_idle_ping: 45s\nlink_ping_timeout: 20s\n", exonetmod.LinkKeepalive{Idle: 45 * time.Second, Timeout: 20 * time.Second}},
+		{"zero", "link_idle_ping: 0s\nlink_ping_timeout: 0s\n", exonetmod.LinkKeepalive{Idle: 10 * time.Second, Timeout: 10 * time.Second}},
+		{"empty", "link_idle_ping:\nlink_ping_timeout:\n", exonetmod.LinkKeepalive{Idle: 10 * time.Second, Timeout: 10 * time.Second}},
 	}
 
 	for _, test := range tests {
@@ -32,5 +35,17 @@ func TestLinkKeepaliveConfig(t *testing.T) {
 				t.Fatalf("conn LinkKeepalive() = %v; want %v", got, test.want)
 			}
 		})
+	}
+}
+
+// TestDefaultLinkIdlePing pins that a kcp link probes an idle peer within
+// 10 s, so a fresh UDP NAT mapping carries a frame before the NAT drops it.
+func TestDefaultLinkIdlePing(t *testing.T) {
+	const maxIdle = 10 * time.Second
+	if got := defaultConfig().LinkIdlePing; got > maxIdle {
+		t.Fatalf("default LinkIdlePing = %v; want at most %v", got, maxIdle)
+	}
+	if got := loadModule(t, "").config.linkKeepalive().Idle; got > maxIdle {
+		t.Fatalf("loaded keepalive Idle = %v; want at most %v", got, maxIdle)
 	}
 }

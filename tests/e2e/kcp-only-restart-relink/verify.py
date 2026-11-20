@@ -19,7 +19,7 @@ nodes answer now:
 - criterion 2: within DROP s of the oracle's start, node1 drops every link
   it held to node2's old process and every link node2 does not hold: a new
   link probes the older ones (mod/nodes/src/link_pool.go probeOlderLinks),
-  and the kcp keepalive closes an idle dead link after `link_idle_ping` 15 s
+  and the kcp keepalive closes an idle dead link after `link_idle_ping` 10 s
   plus `link_ping_timeout` 10 s (mod/kcp/src/config.go);
 - a query from node1 to node2 is answered, with no `nodes.close_link`.
 
@@ -47,7 +47,7 @@ from lib.sessionio import load
 WITHIN = 5.0
 DEAD = 10.0
 WAIT = 60.0
-DROP = 15.0 + 10.0 + 10.0
+DROP = 10.0 + 10.0 + 15.0
 POLL = 0.25
 TCP_SETTINGS = ("/mod/tcp/settings/dial", "/mod/tcp/settings/listen")
 ANSI = re.compile(r"\x1b\[[0-9;]*m")

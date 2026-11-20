@@ -41,12 +41,27 @@ func defaultConfig() Config {
 		// that a slow but live traversal still arrives first.
 		EphemeralIdleTimeout: 15 * time.Minute,
 
-		LinkIdlePing:    15 * time.Second,
+		// why: a kcp link rides a UDP NAT mapping. On common NATs a fresh
+		// mapping survives 15 s of silence but not 30 s, so the probe runs
+		// well inside 15 s (astral-docs topics/link-mux.md, Keepalive).
+		LinkIdlePing:    10 * time.Second,
 		LinkPingTimeout: 10 * time.Second,
 	}
 }
 
 // linkKeepalive returns the keepalive timing of links over kcp conns.
+//
+// why: a kcp.yaml key set to 0 or left empty overwrites the default with 0,
+// and mod/nodes fills a 0 with its generic 15 s, which outlives a fresh UDP
+// NAT mapping. A non-positive value takes the kcp default instead.
 func (c Config) linkKeepalive() exonetmod.LinkKeepalive {
-	return exonetmod.LinkKeepalive{Idle: c.LinkIdlePing, Timeout: c.LinkPingTimeout}
+	def := defaultConfig()
+	k := exonetmod.LinkKeepalive{Idle: c.LinkIdlePing, Timeout: c.LinkPingTimeout}
+	if k.Idle <= 0 {
+		k.Idle = def.LinkIdlePing
+	}
+	if k.Timeout <= 0 {
+		k.Timeout = def.LinkPingTimeout
+	}
+	return k
 }

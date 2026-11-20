@@ -23,7 +23,7 @@ nothing behind it fails within seconds.
   listen still read false on both nodes; within 60 s node2 holds a kcp link
   to node1, and node2's log shows it linked within 5 s of `starting to
   maintain link to <node1>`; within 35 s of the oracle's start (kcp
-  `link_idle_ping` 15 s plus `link_ping_timeout` 10 s, plus slack) node1
+  `link_idle_ping` 10 s plus `link_ping_timeout` 10 s, plus slack) node1
   lists none of its old links to node2 and no link node2 does not hold; a
   query from node1 to node2 as the User is answered, with no
   `nodes.close_link`. node2's link task dials both of node1's kcp rows at

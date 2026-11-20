@@ -16,7 +16,7 @@ it again without `nodes.close_link`.
   nothing and closes no link.
 - **oracle** `verify.py` — the restart took; before it node1 held links to
   node2, all kcp; node1 listed none of the stale links within 35 s of node2
-  going down (kcp `link_idle_ping` 15 s plus `link_ping_timeout` 10 s, plus
+  going down (kcp `link_idle_ping` 10 s plus `link_ping_timeout` 10 s, plus
   slack) and lists none now; a query from node1 to node2 as the User
   (`user.info`) is answered.
 
