@@ -50,6 +50,18 @@ func defaultConfig() Config {
 }
 
 // linkKeepalive returns the keepalive timing of links over kcp conns.
+//
+// why: a kcp.yaml key set to 0 or left empty overwrites the default with 0,
+// and mod/nodes fills a 0 with its generic 15 s, which outlives a fresh UDP
+// NAT mapping. A non-positive value takes the kcp default instead.
 func (c Config) linkKeepalive() exonetmod.LinkKeepalive {
-	return exonetmod.LinkKeepalive{Idle: c.LinkIdlePing, Timeout: c.LinkPingTimeout}
+	def := defaultConfig()
+	k := exonetmod.LinkKeepalive{Idle: c.LinkIdlePing, Timeout: c.LinkPingTimeout}
+	if k.Idle <= 0 {
+		k.Idle = def.LinkIdlePing
+	}
+	if k.Timeout <= 0 {
+		k.Timeout = def.LinkPingTimeout
+	}
+	return k
 }

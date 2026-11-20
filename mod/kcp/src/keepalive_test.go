@@ -9,6 +9,7 @@ import (
 
 // TestLinkKeepaliveConfig pins that kcp.yaml's link_idle_ping and
 // link_ping_timeout time the links over kcp conns, each defaulting on its own.
+// A key set to zero or left empty takes the kcp default.
 func TestLinkKeepaliveConfig(t *testing.T) {
 	var tests = []struct {
 		name   string
@@ -18,6 +19,8 @@ func TestLinkKeepaliveConfig(t *testing.T) {
 		{"defaults", "", exonetmod.LinkKeepalive{Idle: 10 * time.Second, Timeout: 10 * time.Second}},
 		{"timeout only", "link_ping_timeout: 4s\n", exonetmod.LinkKeepalive{Idle: 10 * time.Second, Timeout: 4 * time.Second}},
 		{"both", "link_idle_ping: 45s\nlink_ping_timeout: 20s\n", exonetmod.LinkKeepalive{Idle: 45 * time.Second, Timeout: 20 * time.Second}},
+		{"zero", "link_idle_ping: 0s\nlink_ping_timeout: 0s\n", exonetmod.LinkKeepalive{Idle: 10 * time.Second, Timeout: 10 * time.Second}},
+		{"empty", "link_idle_ping:\nlink_ping_timeout:\n", exonetmod.LinkKeepalive{Idle: 10 * time.Second, Timeout: 10 * time.Second}},
 	}
 
 	for _, test := range tests {
