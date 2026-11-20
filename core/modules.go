@@ -55,6 +55,12 @@ func (m *Modules) Run(ctx *astral.Context) error {
 	// Load enabled modules. Loaders should only return a new instance of the module and must not try
 	// to access other modules, as the order of loading is undefined.
 	loaded, err := m.loadEnabled()
+
+	// why: the log module registers the entry view in Load, and entries wait for
+	// it. Whatever the outcome (a failed load, a node without that module, a
+	// later panic) nothing registers it afterwards, so the early lines go out now.
+	m.log.Release()
+
 	if err != nil {
 		return err
 	}
