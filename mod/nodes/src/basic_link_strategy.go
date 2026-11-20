@@ -16,14 +16,6 @@ import (
 // basicNetworks are the networks whose rows the basic strategy dials.
 var basicNetworks = []string{"tcp", "kcp", "gw"}
 
-// defaultRowBudgets bounds one row's dial and handshake per network; a network without an entry has no bound of its own.
-// why: a kcp dial succeeds at once over UDP, so a dead row fails only in the Noise handshake, which otherwise only the kcp dial_timeout bounds.
-// why: a gw dial routes a query to the gateway, which may start a nested dial round for the gateway itself.
-var defaultRowBudgets = map[string]time.Duration{
-	"kcp": 5 * time.Second,
-	"gw":  20 * time.Second,
-}
-
 // BasicLinkStrategy dials all known endpoints of the target node in parallel
 // and uses the first successful connection to establish a link.
 type BasicLinkStrategy struct {
@@ -166,9 +158,9 @@ type BasicLinkStrategyFactory struct {
 
 var _ nodesmod.StrategyFactory = &BasicLinkStrategyFactory{}
 
-// newBasicLinkStrategyFactory returns the factory the module registers: basicNetworks with defaultRowBudgets.
+// newBasicLinkStrategyFactory returns the factory the module registers: basicNetworks with the row budgets of transportProfiles.
 func newBasicLinkStrategyFactory(mod *Module) *BasicLinkStrategyFactory {
-	return &BasicLinkStrategyFactory{mod: mod, networks: basicNetworks, rowBudgets: defaultRowBudgets}
+	return &BasicLinkStrategyFactory{mod: mod, networks: basicNetworks, rowBudgets: rowBudgetsOf(basicNetworks)}
 }
 
 func (f *BasicLinkStrategyFactory) Build(target *astral.Identity) nodesmod.LinkStrategy {

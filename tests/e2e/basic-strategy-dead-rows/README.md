@@ -24,7 +24,7 @@ rows sit beside it.
 why the stranger bounds: a round that drops kcp rows answers at once (astrald
 `463a4fea`: 0.003 s), and a round that dials a kcp row with no bound of its
 own waits for the caller (30 s). A kcp dial is connectionless, so basic's
-row budget (`mod/nodes/src/basic_link_strategy.go` `defaultRowBudgets`, 5 s)
+row budget (`mod/nodes/src/transport_profile.go` `transportProfiles`, 5 s)
 and the kcp `dial_timeout` (`mod/kcp/src/config.go`, 5 s), which holds until
 the first frame the peer sends (`mod/kcp/src/conn.go`), end the handshake.
 

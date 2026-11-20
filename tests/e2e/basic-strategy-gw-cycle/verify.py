@@ -7,8 +7,8 @@ clock). Each of the 2 rounds to T:
 - answered an error, no link: nothing in the chain exists;
 - after at least DIALED s: a round that never dials the gw row answers at
   once, while one that dials it waits in the nested rounds for A and B until
-  basic's 20 s gw budget ends them (mod/nodes/src/basic_link_strategy.go
-  defaultRowBudgets);
+  basic's 20 s gw budget ends them (mod/nodes/src/transport_profile.go
+  transportProfiles);
 - after at most BUDGET s, the caller's routing budget: a dial that loops or
   waits on itself runs into the driver's 90 s caller timeout instead.
 

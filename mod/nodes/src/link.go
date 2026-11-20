@@ -99,15 +99,7 @@ func (s *Link) Close() error {
 }
 
 func (s *Link) Network() string {
-	if c, ok := s.conn.(exonetmod.Conn); ok {
-		if e := c.RemoteEndpoint(); e != nil {
-			return e.Network()
-		}
-		if e := c.LocalEndpoint(); e != nil {
-			return e.Network()
-		}
-	}
-	return "unknown"
+	return networkOf(s.conn)
 }
 
 func (s *Link) LocalEndpoint() exonet.Endpoint {
@@ -271,7 +263,7 @@ func (s *Link) pingLoop() {
 
 func newLink(mod *Module, conn astral.Conn, id astral.Nonce, outbound bool) *Link {
 	ch := channel.New(conn, channel.WithLockedWrites())
-	keepalive := keepaliveOf(conn)
+	keepalive := keepaliveOf(networkOf(conn), conn)
 	link := &Link{
 		Channel:     ch,
 		id:          id,

@@ -11,7 +11,7 @@ minutes: the user module wakes the task when nearby reports the sibling.
   420 s later.
 - **attempts** each link attempt dials the peer's tcp and kcp rows; a kcp row
   gives up after the basic strategy's 5 s kcp budget
-  (`mod/nodes/src/basic_link_strategy.go` `defaultRowBudgets`), so a failed
+  (`mod/nodes/src/transport_profile.go` `transportProfiles`), so a failed
   attempt takes seconds and the backoff dominates the time between attempts.
 - **driver** `script.py`: records both nodes' link-task and nearby-contact log
   lines (`log.listen`), and polls `node1`'s nearby list and links every second

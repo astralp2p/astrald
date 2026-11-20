@@ -8,17 +8,18 @@ import (
 	"github.com/astralp2p/astrald/mod/nodes/frames"
 )
 
-// keepaliveOf returns the keepalive timing conn's transport sets, filling a value it leaves zero with the default.
-func keepaliveOf(conn any) exonetmod.LinkKeepalive {
+// keepaliveOf returns the keepalive timing conn's transport sets, filling a value it leaves zero from network's profile.
+func keepaliveOf(network string, conn any) exonetmod.LinkKeepalive {
 	var k exonetmod.LinkKeepalive
 	if c, ok := conn.(exonetmod.KeepaliveConn); ok {
 		k = c.LinkKeepalive()
 	}
+	profile := profileOf(network)
 	if k.Idle <= 0 {
-		k.Idle = defaultIdlePing
+		k.Idle = profile.IdlePing
 	}
 	if k.Timeout <= 0 {
-		k.Timeout = defaultPingTimeout
+		k.Timeout = profile.PingTimeout
 	}
 	return k
 }
