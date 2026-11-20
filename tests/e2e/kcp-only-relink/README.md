@@ -26,5 +26,6 @@ why it fails at astrald `463a4fea`: basic was registered for tcp only, and
 node2's link task ended in `link not produced` and backed off.
 
 Not covered: node1 dropping the kcp link it held to node2's old process.
-`kcp-only-restart-relink` (`main.suite`) judges it, with a dial to a dead kcp
-address.
+`kcp-restart-stale-link` (`kcp.suite`, after this test) judges it in a VM
+world, and `kcp-only-restart-relink` (`main.suite`) in a local one, with a
+dial to a dead kcp address.

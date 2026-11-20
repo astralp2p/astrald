@@ -1,0 +1,10 @@
+nodes   = ["node1", "node2"]
+# why: kcp-only-relink leaves node1 and node2 joined by kcp alone (tcp dropped
+# for good), which is the world this test restarts node2 in
+after   = "kcp-only-relink"
+timeout = 300
+# why --kill: node2 must send node1 nothing as it goes, so node1 finds its kcp
+# link to node2's old process dead on its own. script.py reads --in from the
+# restart line.
+ops     = ["restart-astrald node2 --in 30 --kill"]
+facts   = ["kcp_restart_stale"]
