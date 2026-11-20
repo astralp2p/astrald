@@ -3,6 +3,7 @@ package nodes
 import (
 	"errors"
 	nodesmod "github.com/astralp2p/astrald/mod/nodes"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -57,6 +58,8 @@ type Module struct {
 	strategyFactories sig.Map[string, nodesmod.StrategyFactory]
 	upgraders         sig.Map[string, *sig.Switch]
 
+	// mu guards privateKey, which the first link in either direction loads.
+	mu         sync.Mutex
 	privateKey *crypto.PrivateKey
 
 	pull relayPull
@@ -151,17 +154,26 @@ func (mod *Module) GetLinkNegotiator(ch *channel.Channel) *muxLinkNegotiator {
 	}
 }
 
-func (mod *Module) getPrivateKey() (_ *crypto.PrivateKey, err error) {
+// getPrivateKey returns the node's private key, loaded on the first call.
+//
+// why not mod.ctx: Run sets it, and a transport accepts links once it runs, so the
+// first inbound link can arrive before Run.
+func (mod *Module) getPrivateKey() (*crypto.PrivateKey, error) {
+	mod.mu.Lock()
+	defer mod.mu.Unlock()
+
 	if mod.privateKey != nil {
 		return mod.privateKey, nil
 	}
 
-	mod.privateKey, err = mod.Crypto.PrivateKey(mod.ctx, modsecp256k1.FromIdentity(mod.ctx.Identity()))
+	nodeID := mod.node.Identity()
+	key, err := mod.Crypto.PrivateKey(astral.NewContext(nil).WithIdentity(nodeID), modsecp256k1.FromIdentity(nodeID))
 	if err != nil {
 		return nil, err
 	}
 
-	return mod.privateKey, nil
+	mod.privateKey = key
+	return key, nil
 }
 
 // getLinkByID returns a link with the given local id or nil if not found.
