@@ -60,9 +60,14 @@ type pullIndex struct {
 	withdrawn map[*auth.SignedContract]bool
 	// stall makes IndexContract block until its context ends.
 	stall bool
+	// stallFind makes a Find that follows an IndexContract call block until its
+	// context ends.
+	stallFind bool
+	indexed   atomic.Bool
 }
 
 func (a *pullIndex) IndexContract(ctx *astral.Context, sc *auth.SignedContract) error {
+	a.indexed.Store(true)
 	if a.stall {
 		<-ctx.Done()
 		return ctx.Err()
@@ -98,7 +103,11 @@ func (q *pullQuery) WithIssuer(id *astral.Identity) authmod.ContractQueryBuilder
 
 func (q *pullQuery) WithAction(...astral.Object) authmod.ContractQueryBuilder { return q }
 
-func (q *pullQuery) Find(*astral.Context) (list []*auth.SignedContract, _ error) {
+func (q *pullQuery) Find(ctx *astral.Context) (list []*auth.SignedContract, _ error) {
+	if q.index.stallFind && q.index.indexed.Load() {
+		<-ctx.Done()
+		return nil, ctx.Err()
+	}
 	q.index.mu.Lock()
 	defer q.index.mu.Unlock()
 	for _, sc := range q.index.index {
@@ -533,15 +542,17 @@ func TestPullRelaysCallerJoinsTheFlightAfterAnotherLeft(t *testing.T) {
 	}
 }
 
-// A contract that arrives inside pullFlightTimeout is indexed on a fresh
-// pullIndexTimeout context, so the flight leaves pull.flights within
-// pullFlightTimeout + pullIndexTimeout, and no later. The stalled index makes
-// the step run to its full budget.
+// A contract that arrives inside pullFlightTimeout is indexed and read back on
+// one tail context that ends pullIndexTimeout after the flight, so the flight
+// leaves pull.flights within pullFlightTimeout + pullIndexTimeout, and no
+// later. The stalled index and the stalled read-back make each step run to the
+// deadline, so two separate budgets would double the tail.
 func TestPullRelaysFlightLeavesWithinTheFlightAndIndexBudgets(t *testing.T) {
 	f := newPullFixture(t)
 	setPullBudgets(t, 50*time.Millisecond, 400*time.Millisecond)
 	setPullIndexTimeout(t, 300*time.Millisecond)
 	f.index.stall = true
+	f.index.stallFind = true
 	app, host := astral.GenerateIdentity(), astral.GenerateIdentity()
 	// the contract arrives just inside the flight
 	f.user.fetch = slowly(pullFlightTimeout-50*time.Millisecond, host, relayContractOf(app, host))
@@ -555,7 +566,7 @@ func TestPullRelaysFlightLeavesWithinTheFlightAndIndexBudgets(t *testing.T) {
 	if ended < pullFlightTimeout {
 		t.Fatalf("the flight ended after %v; want it to stay for the index step past %v", ended, pullFlightTimeout)
 	}
-	if limit := pullFlightTimeout + pullIndexTimeout + 250*time.Millisecond; ended > limit {
+	if limit := pullFlightTimeout + pullIndexTimeout + 150*time.Millisecond; ended > limit {
 		t.Fatalf("the flight ended after %v; want within %v + %v", ended, pullFlightTimeout, pullIndexTimeout)
 	}
 	if f.missed(app) {
