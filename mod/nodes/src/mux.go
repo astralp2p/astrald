@@ -31,6 +31,9 @@ type Mux struct {
 	localIdentity  *astral.Identity
 	remoteIdentity *astral.Identity
 
+	// onSilentTimeout, when set, runs when a query's deadline passes with no Response; it must not block.
+	onSilentTimeout func()
+
 	sessions sig.Map[astral.Nonce, *session]
 
 	router     astral.Router
@@ -145,6 +148,12 @@ func (m *Mux) RouteQuery(ctx *astral.Context, q *astral.InFlightQuery, w io.Writ
 
 	case <-ctx.Done():
 		conn.Close()
+		// why only the deadline: a caller that cancels says nothing about the
+		// link, while a deadline with no Response is the earliest sign of a
+		// dead one.
+		if errors.Is(ctx.Err(), context.DeadlineExceeded) && m.onSilentTimeout != nil {
+			m.onSilentTimeout()
+		}
 		return nil, ctx.Err()
 	}
 }
