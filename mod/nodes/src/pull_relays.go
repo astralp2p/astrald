@@ -10,15 +10,28 @@ import (
 )
 
 const (
-	// pullTimeout bounds one ask of the linked siblings for a target's relay contracts.
-	pullTimeout = 1 * time.Second
-	// pullMissTTL is how long a target whose ask yielded no relay is not asked for again.
+	// pullMissTTL is how long a target whose complete ask yielded no relay is not asked for again.
 	pullMissTTL = 30 * time.Second
+	// pullIndexTimeout bounds one index write or read of a pulled contract.
+	pullIndexTimeout = 2 * time.Second
+)
+
+// The pull has two budgets, package variables so tests can shrink them.
+var (
+	// pullFlightTimeout bounds the detached ask of the linked siblings for a
+	// target's relay contracts. An answer that lands inside it is indexed even
+	// when the caller has left.
+	pullFlightTimeout = 10 * time.Second
+	// pullWait is how long a caller waits for the flight before it routes on.
+	pullWait = 3 * time.Second
 )
 
 // relayPull is the state of the routing-time pull of missing relay contracts:
 // the asks running, one per target, and the targets whose last ask yielded no
 // relay, until when they are not asked for again.
+// An ask records a miss only when it is complete: every asked sibling answered
+// without error before the flight ended. A budget that ran out or a failed ask
+// is not a "no".
 // Spec: .ai/system/topics/app-routing.md, Resolving the host.
 type relayPull struct {
 	flights sig.Map[string, *pullFlight]
@@ -41,6 +54,9 @@ type pullFlight struct {
 // excludes, so an ask never starts another ask; a recent miss fails fast.
 // why a detached context: the ask is shared, so one caller ending early must
 // not cut it short for the others or record a false miss.
+// why two budgets: the flight runs up to pullFlightTimeout so a slow sibling's
+// answer is still indexed; a caller waits at most pullWait and routes on, and
+// the next query finds the indexed relay.
 func (mod *Module) pullRelays(ctx *astral.Context, target *astral.Identity) []*astral.Identity {
 	if mod.isPullGated(target) {
 		return nil
@@ -50,7 +66,7 @@ func (mod *Module) pullRelays(ctx *astral.Context, target *astral.Identity) []*a
 	if running, started := mod.pull.flights.Set(target.String(), flight); !started {
 		flight = running
 	} else {
-		pctx, cancel := ctx.Detach().WithTimeout(pullTimeout)
+		pctx, cancel := ctx.Detach().WithTimeout(pullFlightTimeout)
 		go func() {
 			defer cancel()
 			flight.relays = mod.runPull(pctx, target)
@@ -59,9 +75,13 @@ func (mod *Module) pullRelays(ctx *astral.Context, target *astral.Identity) []*a
 		}()
 	}
 
+	wait := time.NewTimer(pullWait)
+	defer wait.Stop()
 	select {
 	case <-flight.done:
 		return flight.relays
+	case <-wait.C:
+		return nil
 	case <-ctx.Done():
 		return nil
 	}
@@ -88,28 +108,51 @@ func (mod *Module) isPullGated(target *astral.Identity) bool {
 	return false
 }
 
-// runPull runs one ask for target: it indexes the first contract a sibling
-// delivers that the index admits, and returns the relays the index then names.
-// An ask that leaves no relay records a miss.
+// runPull runs one ask for target: it returns at once the relays the index
+// already names, else indexes the first contract a sibling delivers that the
+// index admits, and returns the relays the index then names.
+// An ask that leaves no relay records a miss only when it is complete (every
+// asked sibling answered without error) and ctx has not ended; otherwise it
+// returns nil and records nothing.
+//
+// why a fresh context for the index: ctx is the flight budget, and a contract
+// delivered as it ends must still be indexed and read back.
 func (mod *Module) runPull(ctx *astral.Context, target *astral.Identity) []*astral.Identity {
+	if relays := mod.heldRelays(ctx, target); len(relays) > 0 {
+		return relays
+	}
+
 	mod.log.Logv(1, "asking linked siblings for the relay contracts of %v", target)
 
-	for sender, sc := range mod.User.FetchRelayContracts(ctx, target) {
-		if err := mod.Auth.IndexContract(ctx, sc); err != nil {
+	contracts, complete := mod.User.FetchRelayContractsReport(ctx, target)
+	for sender, sc := range contracts {
+		ictx, cancel := ctx.Detach().WithTimeout(pullIndexTimeout)
+		err := mod.Auth.IndexContract(ictx, sc)
+		if err != nil {
+			cancel()
 			mod.log.Logv(1, "indexing the relay contract of %v from %v: %v", target, sender, err)
 			continue
 		}
 
 		// why re-read the index: IndexContract answers nil for a contract the
 		// index already holds, a locally withdrawn one among them.
-		if relays := mod.heldRelays(ctx, target); len(relays) > 0 {
+		relays := mod.heldRelays(ictx, target)
+		cancel()
+		if len(relays) > 0 {
 			mod.log.Logv(1, "pulled the relay contract of %v from %v", target, sender)
 			return relays
 		}
 	}
 
-	if relays := mod.heldRelays(ctx, target); len(relays) > 0 {
+	rctx, cancel := ctx.Detach().WithTimeout(pullIndexTimeout)
+	defer cancel()
+	if relays := mod.heldRelays(rctx, target); len(relays) > 0 {
 		return relays
+	}
+
+	if ctx.Err() != nil || !complete() {
+		mod.log.Logv(1, "the ask for the relay contracts of %v ran out of time or failed; no miss recorded", target)
+		return nil
 	}
 
 	mod.pull.addMiss(target)

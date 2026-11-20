@@ -24,6 +24,8 @@ type pullUser struct {
 	swarm    []*astral.Identity
 	expelled []*astral.Identity
 	fetches  atomic.Int32
+	// incomplete makes the fetch report that not every sibling answered.
+	incomplete atomic.Bool
 	// fetch yields what the siblings answer for issuer; nil yields nothing.
 	fetch func(ctx *astral.Context, issuer *astral.Identity, yield func(*astral.Identity, *auth.SignedContract) bool)
 }
@@ -34,12 +36,17 @@ func (u *pullUser) IsSwarmMember(id *astral.Identity) bool {
 	return !slices.ContainsFunc(u.expelled, id.IsEqual)
 }
 func (u *pullUser) FetchRelayContracts(ctx *astral.Context, issuer *astral.Identity) iter.Seq2[*astral.Identity, *auth.SignedContract] {
+	seq, _ := u.FetchRelayContractsReport(ctx, issuer)
+	return seq
+}
+func (u *pullUser) FetchRelayContractsReport(ctx *astral.Context, issuer *astral.Identity) (iter.Seq2[*astral.Identity, *auth.SignedContract], func() bool) {
 	u.fetches.Add(1)
-	return func(yield func(*astral.Identity, *auth.SignedContract) bool) {
+	seq := func(yield func(*astral.Identity, *auth.SignedContract) bool) {
 		if u.fetch != nil {
 			u.fetch(ctx, issuer, yield)
 		}
 	}
+	return seq, func() bool { return !u.incomplete.Load() }
 }
 
 // pullIndex is an auth module holding an in-memory index of active contracts.
@@ -107,7 +114,8 @@ type pullFixture struct {
 	mu     sync.Mutex
 }
 
-func newPullFixture() *pullFixture {
+func newPullFixture(t *testing.T) *pullFixture {
+	setPullBudgets(t, testPullWait, testPullFlight)
 	f := &pullFixture{
 		nodeID: astral.GenerateIdentity(),
 		user:   &pullUser{id: astral.GenerateIdentity()},
@@ -121,6 +129,55 @@ func newPullFixture() *pullFixture {
 	}
 	f.mod.pull.now = f.clock
 	return f
+}
+
+// The budgets the fixtures run with: the caller waits testPullWait, the
+// flight lasts testPullFlight.
+const (
+	testPullWait   = 300 * time.Millisecond
+	testPullFlight = 1 * time.Second
+)
+
+// setPullBudgets sets the pull budgets for the test and restores them after.
+// note: the budgets are package variables, so tests that set them never run in parallel.
+func setPullBudgets(t *testing.T, wait, flight time.Duration) {
+	t.Helper()
+	oldWait, oldFlight := pullWait, pullFlightTimeout
+	pullWait, pullFlightTimeout = wait, flight
+	t.Cleanup(func() { pullWait, pullFlightTimeout = oldWait, oldFlight })
+}
+
+// awaitFlightEnd waits until no flight runs for target and returns when it ended.
+func (f *pullFixture) awaitFlightEnd(t *testing.T, target *astral.Identity) time.Time {
+	t.Helper()
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		if _, running := f.mod.pull.flights.Get(target.String()); !running {
+			return time.Now()
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("the flight never ended")
+		}
+		time.Sleep(time.Millisecond)
+	}
+}
+
+// missed reports whether the fixture holds a miss for target, expired or not.
+func (f *pullFixture) missed(target *astral.Identity) bool {
+	_, ok := f.mod.pull.misses.Get(target.String())
+	return ok
+}
+
+// slowly returns a fetch in which sender answers contracts after delay, unless
+// the ask's context ends first.
+func slowly(delay time.Duration, sender *astral.Identity, contracts ...*auth.SignedContract) func(*astral.Context, *astral.Identity, func(*astral.Identity, *auth.SignedContract) bool) {
+	return func(ctx *astral.Context, issuer *astral.Identity, yield func(*astral.Identity, *auth.SignedContract) bool) {
+		select {
+		case <-time.After(delay):
+			answering(sender, contracts...)(ctx, issuer, yield)
+		case <-ctx.Done():
+		}
+	}
 }
 
 func (f *pullFixture) clock() time.Time {
@@ -172,7 +229,7 @@ func assertRelays(t *testing.T, got []*astral.Identity, want ...*astral.Identity
 
 // A pulled contract that the index admits names its subject as the relay.
 func TestPullRelaysIndexesAndRoutesThroughTheSubject(t *testing.T) {
-	f := newPullFixture()
+	f := newPullFixture(t)
 	app, host := astral.GenerateIdentity(), astral.GenerateIdentity()
 	sc := relayContractOf(app, host)
 	f.user.fetch = answering(host, sc)
@@ -186,7 +243,7 @@ func TestPullRelaysIndexesAndRoutesThroughTheSubject(t *testing.T) {
 // The gate: no ask for this node, a local swarm member, the user, or a target
 // with a cached miss.
 func TestPullRelaysGate(t *testing.T) {
-	f := newPullFixture()
+	f := newPullFixture(t)
 	member := astral.GenerateIdentity()
 	f.user.swarm = []*astral.Identity{f.nodeID, member}
 
@@ -213,10 +270,13 @@ func TestPullRelaysGate(t *testing.T) {
 
 // The miss expires after pullMissTTL on the module's clock, and not before.
 func TestPullRelaysMissExpires(t *testing.T) {
-	f := newPullFixture()
+	f := newPullFixture(t)
 	absent := astral.GenerateIdentity()
 
 	f.mod.pullRelays(networkCtx(), absent)
+	if !f.mod.isPullGated(absent) {
+		t.Fatal("a complete empty ask left the target ungated")
+	}
 	f.advance(pullMissTTL - time.Second)
 	f.mod.pullRelays(networkCtx(), absent)
 	if n := f.user.fetches.Load(); n != 1 {
@@ -224,6 +284,9 @@ func TestPullRelaysMissExpires(t *testing.T) {
 	}
 
 	f.advance(time.Second)
+	if f.mod.isPullGated(absent) {
+		t.Fatal("the target is still gated once the miss expired")
+	}
 	f.mod.pullRelays(networkCtx(), absent)
 	if n := f.user.fetches.Load(); n != 2 {
 		t.Fatalf("asked %d times once the miss expired; want 2", n)
@@ -233,7 +296,7 @@ func TestPullRelaysMissExpires(t *testing.T) {
 // Concurrent misses for one target share one ask, and every one of them gets
 // its relays.
 func TestPullRelaysSingleFlight(t *testing.T) {
-	f := newPullFixture()
+	f := newPullFixture(t)
 	app, host := astral.GenerateIdentity(), astral.GenerateIdentity()
 	release := make(chan struct{})
 	f.user.fetch = func(_ *astral.Context, _ *astral.Identity, yield func(*astral.Identity, *auth.SignedContract) bool) {
@@ -273,7 +336,7 @@ func TestPullRelaysSingleFlight(t *testing.T) {
 // The ask's own queries target siblings; a miss for a sibling during an ask
 // starts no nested ask.
 func TestPullRelaysNoRecursion(t *testing.T) {
-	f := newPullFixture()
+	f := newPullFixture(t)
 	sibling := astral.GenerateIdentity()
 	f.user.swarm = []*astral.Identity{f.nodeID, sibling}
 	app := astral.GenerateIdentity()
@@ -297,7 +360,7 @@ func TestPullRelaysNoRecursion(t *testing.T) {
 func TestPullRelaysRefusedOrWithdrawnYieldsNoRelay(t *testing.T) {
 	for _, name := range []string{"refused", "withdrawn"} {
 		t.Run(name, func(t *testing.T) {
-			f := newPullFixture()
+			f := newPullFixture(t)
 			app, host := astral.GenerateIdentity(), astral.GenerateIdentity()
 			sc := relayContractOf(app, host)
 			if name == "refused" {
@@ -322,7 +385,7 @@ func TestPullRelaysRefusedOrWithdrawnYieldsNoRelay(t *testing.T) {
 // The ask stops at the first contract that gives a relay: a later answer is
 // never read.
 func TestPullRelaysStopsAtTheFirstRelay(t *testing.T) {
-	f := newPullFixture()
+	f := newPullFixture(t)
 	app, host, other := astral.GenerateIdentity(), astral.GenerateIdentity(), astral.GenerateIdentity()
 	f.user.fetch = answering(host, relayContractOf(app, host), relayContractOf(app, other))
 
@@ -332,11 +395,11 @@ func TestPullRelaysStopsAtTheFirstRelay(t *testing.T) {
 	}
 }
 
-// A silent sibling holds the ask no longer than pullTimeout: an answering
-// sibling's contract routes at once, and a target nobody answers fails within
-// the timeout.
+// A silent sibling holds the caller no longer than pullWait: an answering
+// sibling's contract routes at once, and a target a sibling never answers for
+// returns nil when the caller's wait ends, before the flight does.
 func TestPullRelaysBoundedBySilentSiblings(t *testing.T) {
-	f := newPullFixture()
+	f := newPullFixture(t)
 	app, host := astral.GenerateIdentity(), astral.GenerateIdentity()
 	sc := relayContractOf(app, host)
 	f.user.fetch = func(ctx *astral.Context, issuer *astral.Identity, yield func(*astral.Identity, *auth.SignedContract) bool) {
@@ -348,23 +411,153 @@ func TestPullRelaysBoundedBySilentSiblings(t *testing.T) {
 
 	start := time.Now()
 	assertRelays(t, f.mod.pullRelays(networkCtx(), app), host)
-	if d := time.Since(start); d > pullTimeout {
-		t.Fatalf("an answered ask took %v; want under %v", d, pullTimeout)
+	if d := time.Since(start); d > pullWait {
+		t.Fatalf("an answered ask took %v; want under %v", d, pullWait)
 	}
 
+	silent := astral.GenerateIdentity()
 	start = time.Now()
-	if relays := f.mod.pullRelays(networkCtx(), astral.GenerateIdentity()); relays != nil {
+	if relays := f.mod.pullRelays(networkCtx(), silent); relays != nil {
 		t.Fatalf("got relays %v for a target nobody answers", relays)
 	}
-	if d := time.Since(start); d < pullTimeout || d > pullTimeout+500*time.Millisecond {
-		t.Fatalf("an unanswered ask took %v; want about %v", d, pullTimeout)
+	if d := time.Since(start); d < pullWait || d > pullWait+(pullFlightTimeout-pullWait)/2 {
+		t.Fatalf("an unanswered ask held the caller %v; want about %v, under the flight %v", d, pullWait, pullFlightTimeout)
+	}
+}
+
+// The fetch answers before pullWait: the caller gets the relays and no miss is
+// recorded.
+func TestPullRelaysAnswerBeforeTheWaitRoutes(t *testing.T) {
+	f := newPullFixture(t)
+	setPullBudgets(t, 100*time.Millisecond, 400*time.Millisecond)
+	app, host := astral.GenerateIdentity(), astral.GenerateIdentity()
+	f.user.fetch = slowly(10*time.Millisecond, host, relayContractOf(app, host))
+
+	assertRelays(t, f.mod.pullRelays(networkCtx(), app), host)
+	if f.missed(app) || f.mod.isPullGated(app) {
+		t.Fatal("an answered ask recorded a miss")
+	}
+}
+
+// The fetch answers after pullWait and before pullFlightTimeout: the caller
+// gets nil when its wait ends, the flight still indexes the contract, no miss
+// is recorded, and the next pull returns the relay without asking again.
+func TestPullRelaysLateAnswerIsIndexedAndReused(t *testing.T) {
+	f := newPullFixture(t)
+	setPullBudgets(t, 100*time.Millisecond, 600*time.Millisecond)
+	app, host := astral.GenerateIdentity(), astral.GenerateIdentity()
+	sc := relayContractOf(app, host)
+	f.user.fetch = slowly(300*time.Millisecond, host, sc)
+
+	start := time.Now()
+	if relays := f.mod.pullRelays(networkCtx(), app); relays != nil {
+		t.Fatalf("got relays %v after the wait; want nil", relays)
+	}
+	if d := time.Since(start); d >= 300*time.Millisecond {
+		t.Fatalf("the caller waited %v; want it released at the wait %v", d, pullWait)
+	}
+
+	f.awaitFlightEnd(t, app)
+	if len(f.index.index) != 1 || f.index.index[0] != sc {
+		t.Fatalf("index holds %v; want the late contract", f.index.index)
+	}
+	if f.missed(app) || f.mod.isPullGated(app) {
+		t.Fatal("a late answer left a miss or a gate")
+	}
+
+	assertRelays(t, f.mod.pullRelays(networkCtx(), app), host)
+	if n := f.user.fetches.Load(); n != 1 {
+		t.Fatalf("asked the siblings %d times; want 1 (the next pull reads the index)", n)
+	}
+}
+
+// The fetch never answers: the flight ends at pullFlightTimeout, records no
+// miss, and leaves the target ungated, although the fetch reports complete.
+func TestPullRelaysBudgetExpiryRecordsNoMiss(t *testing.T) {
+	f := newPullFixture(t)
+	setPullBudgets(t, 50*time.Millisecond, 200*time.Millisecond)
+	app := astral.GenerateIdentity()
+	f.user.fetch = func(ctx *astral.Context, _ *astral.Identity, _ func(*astral.Identity, *auth.SignedContract) bool) {
+		<-ctx.Done()
+	}
+
+	start := time.Now()
+	if relays := f.mod.pullRelays(networkCtx(), app); relays != nil {
+		t.Fatalf("got relays %v; want nil", relays)
+	}
+	ended := f.awaitFlightEnd(t, app)
+	if d := ended.Sub(start); d < pullFlightTimeout {
+		t.Fatalf("the flight ended after %v; want it to run to %v", d, pullFlightTimeout)
+	}
+	if f.missed(app) || f.mod.isPullGated(app) {
+		t.Fatal("a flight that ran out of budget recorded a miss")
+	}
+}
+
+// An ask that is incomplete (a sibling's ask failed) and yields no contract
+// records no miss, so the next pull asks again.
+func TestPullRelaysIncompleteAskRecordsNoMiss(t *testing.T) {
+	f := newPullFixture(t)
+	app := astral.GenerateIdentity()
+	f.user.incomplete.Store(true)
+
+	if relays := f.mod.pullRelays(networkCtx(), app); relays != nil {
+		t.Fatalf("got relays %v; want nil", relays)
+	}
+	if f.missed(app) || f.mod.isPullGated(app) {
+		t.Fatal("an incomplete ask recorded a miss")
+	}
+	f.mod.pullRelays(networkCtx(), app)
+	if n := f.user.fetches.Load(); n != 2 {
+		t.Fatalf("asked the siblings %d times; want 2 (no miss gates the second)", n)
+	}
+}
+
+// A complete empty ask records a miss that gates the target until pullMissTTL
+// passes on the module's clock.
+func TestPullRelaysCompleteEmptyAskRecordsAMiss(t *testing.T) {
+	f := newPullFixture(t)
+	app := astral.GenerateIdentity()
+
+	if relays := f.mod.pullRelays(networkCtx(), app); relays != nil {
+		t.Fatalf("got relays %v; want nil", relays)
+	}
+	if !f.missed(app) || !f.mod.isPullGated(app) {
+		t.Fatal("a complete empty ask recorded no miss")
+	}
+	f.advance(pullMissTTL - time.Millisecond)
+	if !f.mod.isPullGated(app) {
+		t.Fatal("the miss expired before pullMissTTL")
+	}
+	f.advance(time.Millisecond)
+	if f.mod.isPullGated(app) {
+		t.Fatal("the miss outlived pullMissTTL")
+	}
+}
+
+// Two callers during one running flight share it: the fetch runs once and both
+// get the relays.
+func TestPullRelaysTwoCallersShareOneFlight(t *testing.T) {
+	f := newPullFixture(t)
+	app, host := astral.GenerateIdentity(), astral.GenerateIdentity()
+	f.user.fetch = slowly(100*time.Millisecond, host, relayContractOf(app, host))
+
+	results := make(chan []*astral.Identity, 2)
+	for range 2 {
+		go func() { results <- f.mod.pullRelays(networkCtx(), app) }()
+	}
+	for range 2 {
+		assertRelays(t, <-results, host)
+	}
+	if n := f.user.fetches.Load(); n != 1 {
+		t.Fatalf("two callers asked the siblings %d times; want 1", n)
 	}
 }
 
 // A caller whose context ends stops waiting, and the shared ask still records
 // its outcome for the next miss.
 func TestPullRelaysCallerCancelDoesNotCutTheAsk(t *testing.T) {
-	f := newPullFixture()
+	f := newPullFixture(t)
 	app, host := astral.GenerateIdentity(), astral.GenerateIdentity()
 	release := make(chan struct{})
 	// the siblings answer once released, unless the ask's context ends first
@@ -399,7 +592,7 @@ func TestPullRelaysCallerCancelDoesNotCutTheAsk(t *testing.T) {
 // subject was expelled, held in the index or answered by a sibling, yields no
 // relay and a miss, so the query fails as route not found.
 func TestPullRelaysSkipsAnExpelledSubject(t *testing.T) {
-	f := newPullFixture()
+	f := newPullFixture(t)
 	app, expelled := astral.GenerateIdentity(), astral.GenerateIdentity()
 	f.user.expelled = []*astral.Identity{expelled}
 	sc := relayContractOf(app, expelled)

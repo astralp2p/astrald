@@ -13,7 +13,7 @@ import (
 // missing route, never unavailable. A node identity this node holds an
 // endpoint for stays unavailable.
 func TestAnAppWithoutAContractAnywhereIsAMissingRoute(t *testing.T) {
-	f := newPullFixture()
+	f := newPullFixture(t)
 	f.mod.db = testEndpointDB(t)
 
 	app, node := astral.GenerateIdentity(), astral.GenerateIdentity()

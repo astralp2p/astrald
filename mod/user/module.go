@@ -48,6 +48,12 @@ type Module interface {
 	// sibling. It ends when every sibling has answered, ctx ends, or the
 	// consumer stops. It asks nothing outside the network zone.
 	FetchRelayContracts(ctx *astral.Context, issuer *astral.Identity) iter.Seq2[*astral.Identity, *auth.SignedContract]
+	// FetchRelayContractsReport is FetchRelayContracts with a completeness
+	// report. complete, read after the sequence has ended, is true only when
+	// every asked sibling answered without error before ctx ended and the
+	// consumer did not stop early; no linked sibling is complete (a real
+	// "no"). It is false when nothing was asked (outside the network zone).
+	FetchRelayContractsReport(ctx *astral.Context, issuer *astral.Identity) (seq iter.Seq2[*astral.Identity, *auth.SignedContract], complete func() bool)
 	// IsSwarmMember reports whether id is a current member of the local swarm.
 	// It reports false on an unclaimed node and when the swarm cannot be read.
 	IsSwarmMember(id *astral.Identity) bool
