@@ -24,6 +24,11 @@ type FileConfig struct {
 	Policies Policies `yaml:"policies,omitempty"`
 	// ReconcileInterval is the period of the expulsion sweep; see runReconcile.
 	ReconcileInterval time.Duration `yaml:"reconcile_interval,omitempty"`
+	// SiblingSyncInterval is the period of the sibling sync; zero selects the
+	// default and a negative value turns it off. See runPeriodicSiblingSync.
+	SiblingSyncInterval time.Duration `yaml:"sibling_sync_interval,omitempty"`
+	// SiblingSyncDisabled turns the sibling sync off.
+	SiblingSyncDisabled bool `yaml:"sibling_sync_disabled,omitempty"`
 }
 
 // Policies holds the config value of each user admission policy. A stored
@@ -40,5 +45,6 @@ var defaultFileConfig = FileConfig{
 		SwarmInvite:    policyconf.Setting{Mode: policyconf.RejectAll},
 		ContractAccept: policyconf.Setting{Mode: policyconf.RejectAll},
 	},
-	ReconcileInterval: defaultReconcileInterval,
+	ReconcileInterval:   defaultReconcileInterval,
+	SiblingSyncInterval: defaultSiblingSyncInterval,
 }

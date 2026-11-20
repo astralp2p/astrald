@@ -59,6 +59,12 @@ type Module interface {
 	// PushToSiblings sends obj to every linked sibling, each push on its own
 	// and bounded; delivery is best-effort.
 	PushToSiblings(ctx *astral.Context, obj astral.Object)
+	// PushToSiblingsRetry sends obj to every linked sibling like
+	// PushToSiblings, and sends it again, at most 3 times on a bounded
+	// backoff, to a sibling the push did not reach. A sibling's retries stop
+	// when it answers (accepts or refuses), leaves the linked siblings, or
+	// ctx ends.
+	PushToSiblingsRetry(ctx *astral.Context, obj astral.Object)
 	// Expel permanently bans nodeID from the swarm. Only the active contract's
 	// issuer may expel and the ban is irreversible.
 	Expel(ctx *astral.Context, nodeID *astral.Identity) (*user.SignedExpulsion, error)

@@ -78,6 +78,7 @@ func (mod *Module) Run(ctx *astral.Context) error {
 	mod.recordSwarm()
 	close(mod.ready)
 	go mod.runReconcile(mod.ctx)
+	go mod.runPeriodicSiblingSync(mod.ctx)
 	go func() {
 		for contract := range activeContractFollow {
 			mod.onActiveContractChanged(contract)
