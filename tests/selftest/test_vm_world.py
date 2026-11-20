@@ -843,6 +843,30 @@ class TestConfigPush(Lab):
         self.assertIn("\U0001F680", script)
         self.assertNotIn("\\ud83d", script)
 
+    def test_a_moved_listen_port_reaches_the_guest_and_the_view(self):
+        # why: a test may move a VM node's tcp and kcp ports
+        # (manifest.VM_PORT_KEYS); the guest gets the files, and the view's
+        # tcp_port and lan_endpoint name the port a peer must dial
+        fake = self.lab(stages=("null", LAB))
+        with contextlib.ExitStack() as stack:
+            for p in fake.patches():
+                stack.enter_context(p)
+            world = VmWorld(self.tmp / "w0", self.tmp / "astrald", "abc1234",
+                            config={"node2": {
+                                "tcp": {"listen_port": 1800},
+                                "kcp": {"listen_port": 1810}}})
+            world.ensure(SimpleNamespace(name="t", nodes=["node1", "node2"],
+                                         ops=[]))
+            view = world.nodes()
+        push = pushed_files(fake, "node2")[0]
+        self.assertEqual((push["tcp.yaml"], push["kcp.yaml"]),
+                         ({"listen_port": 1800}, {"listen_port": 1810}))
+        self.assertNotIn("tcp.yaml", pushed_files(fake, "node1")[0])
+        self.assertEqual(view["node2"]["tcp_port"], 1800)
+        self.assertRegex(view["node2"]["lan_endpoint"], r"^tcp:[0-9.]+:1800$")
+        self.assertEqual(view["node1"]["tcp_port"], vm.GUEST_TCP_PORT)
+        self.assertRegex(view["node1"]["lan_endpoint"], r"^tcp:[0-9.]+:1791$")
+
     def test_an_apphost_override_keeps_the_harness_listener_and_token(self):
         fake = self.lab(stages=("null", LAB))
         with contextlib.ExitStack() as stack:

@@ -27,6 +27,14 @@ HARNESS_KEYS = {("apphost", "listen"), ("apphost", "tokens"),
                 ("tcp", "listen_port"), ("ether", "udp_port"),
                 ("kcp", "listen_port"), ("auth", "external_authorizers")}
 
+# (module, key) of HARNESS_KEYS that a test with ops may set: the listen ports
+# of a node's transports.
+# why with ops alone: ops put a test in a VM world, and only a local world
+# leases these ports. A VM guest is a machine of its own, so its transports
+# listen on the defaults unless a test moves them, and the session view
+# follows the move (lib/worlds/vm.py). nearby's custom-port tests need it.
+VM_PORT_KEYS = {("tcp", "listen_port"), ("kcp", "listen_port")}
+
 
 @dataclass
 class Test:
@@ -171,7 +179,7 @@ def _parse(mf: Path) -> Test:
                 # why a file and not a key: like the driver and the oracle,
                 # it is a script the test ships
                 while_down=while_down,
-                config=_config(name, raw, nodes))
+                config=_config(name, raw, nodes, bool(ops)))
 
 
 def _strings(name: str, raw: dict, key: str) -> list:
@@ -183,8 +191,9 @@ def _strings(name: str, raw: dict, key: str) -> list:
     return list(value)
 
 
-def _config(name: str, raw: dict, nodes: list) -> dict:
-    """[config.<node>.<module>] tables: node -> module -> keys.
+def _config(name: str, raw: dict, nodes: list, vm: bool) -> dict:
+    """[config.<node>.<module>] tables: node -> module -> keys. `vm` says the
+    test runs ops, so only a VM world runs it.
 
     why the roster is checked: an override for a node the test never starts
     would change a node it shares with another test, behind that test's back.
@@ -205,12 +214,24 @@ def _config(name: str, raw: dict, nodes: list) -> dict:
                 raise ValueError(shape)
             for key, v in keys.items():
                 where = f"config.{node}.{module}.{key}"
+                if vm and (module, key) in VM_PORT_KEYS:
+                    _check_port(name, where, v)
+                    continue
                 if (module, key) in HARNESS_KEYS or (
                         (module, key) == ("mcp", "bind_mcp") and v != ""):
                     raise ValueError(f"{name}: {where} is the harness's to "
-                                     "set (mcp.bind_mcp may only be \"\")")
+                                     "set (mcp.bind_mcp may only be \"\"; "
+                                     "a test with ops may set tcp and kcp "
+                                     "listen_port)")
                 _check_value(name, where, v)
     return value
+
+
+def _check_port(name: str, where: str, v) -> None:
+    """A listen port a VM guest's transport can bind: 1 to 65535."""
+    if isinstance(v, bool) or not isinstance(v, int) or not 0 < v < 65536:
+        raise ValueError(f"{name}: {where} is {v!r}, not a port from 1 to "
+                         "65535")
 
 
 def _check_value(name: str, where: str, v) -> None:

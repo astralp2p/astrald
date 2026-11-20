@@ -187,9 +187,15 @@ class VmWorld(World):
             token=info.get("token", ""),
             identity=info.get("identity", ""),
             root=f"netsim:{self.sim}:{vm}",
-            tcp_port=GUEST_TCP_PORT,
-            lan_endpoint=f"tcp:{self._lan_ip(vm)}:{GUEST_TCP_PORT}",
+            tcp_port=self._tcp_port(vm),
+            lan_endpoint=f"tcp:{self._lan_ip(vm)}:{self._tcp_port(vm)}",
         ) for vm, info in self._nodes.items() if "port" in info}
+
+    def _tcp_port(self, vm: str) -> int:
+        """The tcp port vm's astrald listens on: the world's override for it
+        (manifest VM_PORT_KEYS), else the default."""
+        return self.config.get(vm, {}).get("tcp", {}).get(
+            "listen_port", GUEST_TCP_PORT)
 
     def dead(self) -> list:
         """The roster, if the simulation itself died. A verdict over a dead

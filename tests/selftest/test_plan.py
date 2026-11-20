@@ -359,7 +359,8 @@ class TestShippedPlans(Invariants, unittest.TestCase):
              ("local", "distribution-gate-setup"),
              ("local", "import-user-software-key"),
              ("local", "introduce-node"), ("vm", "nearby-join"),
-             ("vm", "nearby-relink")])
+             ("vm", "nearby-relink"), ("vm", "nearby-adopt-ports"),
+             ("vm", "nearby-stealth-meet-ports")])
 
     def test_a_local_test_never_enters_a_vm_world(self):
         # why mcp-peer, app-query and services-app-call: each serves an app
