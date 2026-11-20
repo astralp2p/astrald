@@ -11,7 +11,7 @@ import (
 	usermod "github.com/astralp2p/astrald/mod/user"
 )
 
-// pushRecorder is a user module that hands every object pushed to the linked siblings to pushed.
+// pushRecorder is a user module that hands every object pushed to the linked siblings with retry to pushed.
 // note: the embedded nil interface panics on any other method, which asserts that registration calls nothing else.
 type pushRecorder struct {
 	usermod.Module
@@ -22,7 +22,7 @@ func newPushRecorder() *pushRecorder {
 	return &pushRecorder{pushed: make(chan astral.Object, 4)}
 }
 
-func (r *pushRecorder) PushToSiblings(_ *astral.Context, obj astral.Object) {
+func (r *pushRecorder) PushToSiblingsRetry(_ *astral.Context, obj astral.Object) {
 	r.pushed <- obj
 }
 

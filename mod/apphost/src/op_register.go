@@ -152,10 +152,10 @@ func (mod *Module) provisionApp(ctx *astral.Context, dec *apphostapi.AppRegister
 	// in its index, and the first-link sync has already run for every linked sibling.
 	// why after the token: a registration that fails leaves the swarm no
 	// contract of an app nobody holds a token for.
-	// note: the push is best-effort; a sibling that misses it gets the contract at its
-	// next first link or once a new link to it replaced a dead one.
+	// note: the push retries a bounded number of times; a sibling that still misses
+	// it gets the contract at its next link or at the periodic sibling sync (mod/user).
 	if mod.User != nil && !mod.config.SkipSiblingPush {
-		mod.User.PushToSiblings(mod.ctx, signed)
+		mod.User.PushToSiblingsRetry(mod.ctx, signed)
 	}
 
 	tv := views.NewTimeView(&token.ExpiresAt)

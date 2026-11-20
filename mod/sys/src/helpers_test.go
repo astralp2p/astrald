@@ -42,6 +42,7 @@ func (s *stubUser) NewMaintainLinkTask(*astral.Identity) usermod.MaintainLinkTas
 func (s *stubUser) NewSyncNodesTask(*astral.Identity) usermod.SyncNodesTask       { return nil }
 func (s *stubUser) PushToLocalSwarm(*astral.Context, astral.Object)               {}
 func (s *stubUser) PushToSiblings(*astral.Context, astral.Object)                 {}
+func (s *stubUser) PushToSiblingsRetry(*astral.Context, astral.Object)            {}
 func (s *stubUser) Expel(*astral.Context, *astral.Identity) (*user.SignedExpulsion, error) {
 	return nil, nil
 }
