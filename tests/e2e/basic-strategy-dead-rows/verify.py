@@ -9,8 +9,8 @@ clock):
 - stranger: the round answered an error, no link, after at least DIALED s
   and at most KCP_LIMIT s. A round that never dials the kcp row answers at
   once; one that dials it and has no bound waits for the caller's timeout.
-  basic bounds a kcp row to 5 s (mod/nodes/src/basic_link_strategy.go
-  defaultRowBudgets);
+  basic bounds a kcp row to 5 s (mod/nodes/src/transport_profile.go
+  transportProfiles);
 - crowd: with 10 dead rows beside the live tcp row, the round still answered
   a tcp link, within CROWD_LIMIT s. The time is the measurement the ticket
   asks for, and the oracle prints it.

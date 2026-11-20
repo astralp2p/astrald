@@ -19,7 +19,7 @@ round for A dials `gw:B:A`, the round for B dials `gw:A:B`, and that query to
 A waits on A's round, which is still running: a link round ignores a second
 signal and the caller waits for the running round
 (`mod/nodes/src/basic_link_strategy.go` `Signal`). Only basic's 20 s gw row
-budget ends the wait (`defaultRowBudgets`).
+budget ends the wait (`transportProfiles`).
 
 why the bounds: a round that drops gw rows answers at once (astrald
 `463a4fea`: 0.004 s). Without the gw budget the round waits for the 60 s

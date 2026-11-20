@@ -3,7 +3,6 @@ package nodes
 import (
 	"fmt"
 	"sync"
-	"time"
 
 	"github.com/astralp2p/astral-go/api/kcp"
 	kcpclient "github.com/astralp2p/astral-go/api/kcp/client"
@@ -19,6 +18,7 @@ type NATLinkStrategy struct {
 	mod    *Module
 	log    *log.Logger
 	target *astral.Identity
+	clock  wakeClock // the wake loop's time source; nil is the real clock
 
 	mu   sync.Mutex
 	done chan struct{}
@@ -147,18 +147,11 @@ func (s *NATLinkStrategy) attempt(ctx *astral.Context) error {
 		cleanup()
 	}()
 
-	go func() {
-		ticker := time.NewTicker(5 * time.Second)
-		defer ticker.Stop()
-		for {
-			select {
-			case <-ticker.C:
-				link.Wake()
-			case <-link.Done():
-				return
-			}
-		}
-	}()
+	clock := s.clock
+	if clock == nil {
+		clock = realClock{}
+	}
+	go natWakeLoop(clock, natKeepalive, link.Wake, link.Done())
 
 	s.log.Log("%v linked via %v", s.target, peerEndpoint.Address())
 	s.mod.linkPool.offerStrategyLink(link, s.Name())

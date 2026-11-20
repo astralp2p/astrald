@@ -326,12 +326,12 @@ func TestLinksUseTheirTransportsKeepalive(t *testing.T) {
 	local, remote := net.Pipe()
 	defer local.Close()
 	defer remote.Close()
-	if got := keepaliveOf(pipeIdentityConn{local}); got.Idle != defaultIdlePing || got.Timeout != defaultPingTimeout {
-		t.Fatalf("a conn with no keepalive got %v; want %v/%v", got, defaultIdlePing, defaultPingTimeout)
+	if got := keepaliveOf("unknown", pipeIdentityConn{local}); got.Idle != fallbackProfile.IdlePing || got.Timeout != fallbackProfile.PingTimeout {
+		t.Fatalf("a conn with no keepalive got %v; want %v/%v", got, fallbackProfile.IdlePing, fallbackProfile.PingTimeout)
 	}
 	half := keepaliveConn{pipeIdentityConn{local}, exonetmod.LinkKeepalive{Idle: fast}}
-	if got := keepaliveOf(half); got.Idle != fast || got.Timeout != defaultPingTimeout {
-		t.Fatalf("a conn setting only the interval got %v; want %v/%v", got, fast, defaultPingTimeout)
+	if got := keepaliveOf("unknown", half); got.Idle != fast || got.Timeout != fallbackProfile.PingTimeout {
+		t.Fatalf("a conn setting only the interval got %v; want %v/%v", got, fast, fallbackProfile.PingTimeout)
 	}
 }
 

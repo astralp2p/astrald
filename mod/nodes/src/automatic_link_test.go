@@ -90,7 +90,7 @@ func stallDial(ctx *astral.Context) (exonet.Conn, error) {
 // budget, and the link reports network kcp.
 func TestAutomaticLinkingRelinksAKCPOnlyPeer(t *testing.T) {
 	peer := newLinkEnd(t)
-	restarted := newAutoLinkEnd(t, defaultRowBudgets)
+	restarted := newAutoLinkEnd(t, rowBudgetsOf(basicNetworks))
 	restarted.rows.set(peer.id, mustTCP(t, "192.0.2.2:1791"), mustKCP(t, "192.0.2.2:1792"))
 	restarted.exonet.dial = func(_ *astral.Context, ep exonetapi.Endpoint) (exonet.Conn, error) {
 		if ep.Network() != "kcp" {
@@ -103,8 +103,8 @@ func TestAutomaticLinkingRelinksAKCPOnlyPeer(t *testing.T) {
 	if task.Err != nil {
 		t.Fatalf("the automatic link task failed: %v", task.Err)
 	}
-	if took > defaultRowBudgets["kcp"] {
-		t.Fatalf("the kcp link came up after %v; want within %v", took, defaultRowBudgets["kcp"])
+	if took > transportProfiles["kcp"].RowBudget {
+		t.Fatalf("the kcp link came up after %v; want within %v", took, transportProfiles["kcp"].RowBudget)
 	}
 	if task.Info.Network != "kcp" {
 		t.Fatalf("the link reports network %v; want kcp", task.Info.Network)
@@ -120,7 +120,7 @@ func TestAutomaticLinkingRelinksAKCPOnlyPeer(t *testing.T) {
 // link back: it comes up over tcp in under 2 s.
 func TestAutomaticLinkingTakesLiveTCPBesideDeadKCPRow(t *testing.T) {
 	peer := newLinkEnd(t)
-	node := newAutoLinkEnd(t, defaultRowBudgets)
+	node := newAutoLinkEnd(t, rowBudgetsOf(basicNetworks))
 	node.rows.set(peer.id, mustKCP(t, "192.0.2.2:1792"), mustTCP(t, "192.0.2.2:1791"))
 	node.exonet.dial = func(_ *astral.Context, ep exonetapi.Endpoint) (exonet.Conn, error) {
 		if ep.Network() == "kcp" {
@@ -149,7 +149,7 @@ func TestAutomaticLinkingTakesLiveTCPBesideDeadKCPRow(t *testing.T) {
 // its use-gateway grant belong to mod/gateway.
 func TestAutomaticLinkingLinksAGatewayOnlyPeer(t *testing.T) {
 	peer := newLinkEnd(t)
-	node := newAutoLinkEnd(t, defaultRowBudgets)
+	node := newAutoLinkEnd(t, rowBudgetsOf(basicNetworks))
 	node.rows.set(peer.id, gateway.NewEndpoint(newTestIdentity(t), peer.id))
 	node.exonet.dial = func(_ *astral.Context, ep exonetapi.Endpoint) (exonet.Conn, error) {
 		if ep.Network() != "gw" {
@@ -173,7 +173,7 @@ func TestAutomaticLinkingLinksAGatewayOnlyPeer(t *testing.T) {
 // comes up over tcp, about 5 s after the round starts.
 func TestAutomaticLinkingMeasuresTenDeadRowsBesideTCP(t *testing.T) {
 	peer := newLinkEnd(t)
-	node := newAutoLinkEnd(t, defaultRowBudgets)
+	node := newAutoLinkEnd(t, rowBudgetsOf(basicNetworks))
 	var rows []exonetapi.Endpoint
 	for range 6 {
 		rows = append(rows, mustKCP(t, "192.0.2.3:1792"))
@@ -199,7 +199,7 @@ func TestAutomaticLinkingMeasuresTenDeadRowsBesideTCP(t *testing.T) {
 	if task.Info.Network != "tcp" {
 		t.Fatalf("the link reports network %v; want tcp", task.Info.Network)
 	}
-	if limit := defaultRowBudgets["kcp"] + time.Second; took > limit {
+	if limit := transportProfiles["kcp"].RowBudget + time.Second; took > limit {
 		t.Fatalf("the tcp link came up after %v; want within %v, the kcp budget", took, limit)
 	}
 	t.Logf("tcp link up after %v behind 10 dead rows", took)
