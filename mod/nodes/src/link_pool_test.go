@@ -308,6 +308,8 @@ func closedWith(events *recordingEvents, id *astral.Identity) []*nodes.LinkClose
 // note: adding the newer link also wakes the older link's ping
 // (probeOlderLinks), which can close it within the ping timeout alone; the
 // bound of idle interval plus ping timeout covers both paths.
+// note: the bound also includes closeNoticeBound, because the close frame's
+// write waits out its bound on a link whose far end never reads.
 func TestDeadLinkGivesWayToLiveOne(t *testing.T) {
 	const idle, timeout = 300 * time.Millisecond, 200 * time.Millisecond
 	localID, remoteID := astral.GenerateIdentity(), astral.GenerateIdentity()
@@ -336,7 +338,8 @@ func TestDeadLinkGivesWayToLiveOne(t *testing.T) {
 	case <-time.After(effectTimeout):
 		t.Fatal("the link to a peer that stopped reading did not close")
 	}
-	if took, limit := time.Since(start), pingJitter+idle+timeout+200*time.Millisecond; took > limit {
+	// why closeNoticeBound: the dead link's far end never reads, so the close frame's write waits out its bound.
+	if took, limit := time.Since(start), pingJitter+idle+timeout+closeNoticeBound+200*time.Millisecond; took > limit {
 		t.Fatalf("the dead link closed after %v; want at most %v", took, limit)
 	}
 	if err := dead.Err(); err == nil || !strings.Contains(err.Error(), "ping timeout") {
