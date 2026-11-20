@@ -26,6 +26,9 @@ func TestFrameBlueprintsRoundtrip(t *testing.T) {
 		{"data", &Data{Nonce: astral.NewNonce(), Payload: []byte("payload")}},
 		{"migrate", &Migrate{Nonce: astral.NewNonce()}},
 		{"reset", &Reset{Nonce: astral.NewNonce()}},
+		{"close closed", &Close{Reason: CloseClosed}},
+		{"close excess", &Close{Reason: CloseExcess}},
+		{"close shutdown", &Close{Reason: CloseShutdown}},
 	}
 
 	for _, tc := range tests {

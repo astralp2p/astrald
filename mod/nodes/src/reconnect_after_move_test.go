@@ -117,7 +117,7 @@ func (f *moveFixture) holds(addr string) bool {
 // TestMovedPeerNewLinkDropsOldLinkAndRefreshesEndpoints (AC6, netsim
 // leave-lan half, in process): the peer leaves the LAN, so its old link
 // black-holes, and links again from a new address. The old link closes within
-// its ping timeout plus 1 s of the new link (35 s in the field), and the
+// its ping timeout plus the close-notice bound plus 1 s of the new link (35 s in the field), and the
 // endpoint table holds the peer's new address within the ping timeout plus
 // 2 s (60 s in the field), pulled over the new link, with no close_link.
 func TestMovedPeerNewLinkDropsOldLinkAndRefreshesEndpoints(t *testing.T) {
@@ -145,10 +145,11 @@ func TestMovedPeerNewLinkDropsOldLinkAndRefreshesEndpoints(t *testing.T) {
 		t.Fatalf("AddLink: %v", err)
 	}
 
+	// why closeNoticeBound: the old link's far end never reads, so the close frame's write waits out its bound.
 	select {
 	case <-old.Done():
-	case <-time.After(timeout + time.Second):
-		t.Fatalf("the old link was still open %v after the new link", timeout+time.Second)
+	case <-time.After(timeout + closeNoticeBound + time.Second):
+		t.Fatalf("the old link was still open %v after the new link", timeout+closeNoticeBound+time.Second)
 	}
 	if err := old.Err(); err == nil || !strings.Contains(err.Error(), "ping timeout") {
 		t.Fatalf("the old link closed with %v; want ping timeout", err)

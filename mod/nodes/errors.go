@@ -1,6 +1,11 @@
 package nodes
 
-import "errors"
+import (
+	"errors"
+	"fmt"
+
+	"github.com/astralp2p/astrald/mod/nodes/frames"
+)
 
 var (
 	ErrInvalidEndpointFormat = errors.New("invalid endpoint format")
@@ -19,3 +24,13 @@ var (
 	ErrSessionAlreadyOnLink  = errors.New("session already on link")
 	ErrLinkDenied            = errors.New("link denied")
 )
+
+// ErrPeerClosed is a link's cause of death when the peer announced its close
+// with a close frame; Reason is the frame's reason.
+type ErrPeerClosed struct {
+	Reason frames.CloseReason
+}
+
+func (e *ErrPeerClosed) Error() string {
+	return fmt.Sprintf("peer closed the link (%s)", e.Reason)
+}

@@ -23,6 +23,7 @@ var FrameTypes = []string{
 	"nodes.frames.data",
 	"nodes.frames.migrate",
 	"nodes.frames.reset",
+	"nodes.frames.close",
 }
 
 var FrameTypeEncoder = astral.IndexedTypeEncoder(FrameTypes)
@@ -38,5 +39,6 @@ func init() {
 		&Data{},
 		&Migrate{},
 		&Reset{},
+		&Close{},
 	)
 }

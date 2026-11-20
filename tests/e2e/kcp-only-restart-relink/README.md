@@ -24,11 +24,14 @@ nothing behind it fails within seconds.
   to node1, and node2's log shows it linked within 5 s of `starting to
   maintain link to <node1>`; within 35 s of the oracle's start (kcp
   `link_idle_ping` 10 s plus `link_ping_timeout` 10 s, plus slack) node1
-  lists none of its old links to node2 and no link node2 does not hold; a
-  query from node1 to node2 as the User is answered, with no
+  lists none of its old links to node2 and no link node2 does not hold;
+  node1 lists a link to node2's new process that node2 does not hold for at
+  most 5 s; a query from node1 to node2 as the User is answered, with no
   `nodes.close_link`. node2's link task dials both of node1's kcp rows at
-  once, and node1 can hold the row node2 closes as excess half-open until
-  its keepalive closes it: a kcp close sends the peer nothing.
+  once and closes one as excess; a kcp close carries no end-of-stream, so
+  node2 sends a `nodes.frames.close` frame first and node1 closes that link
+  on receipt. The 35 s bound stays for the links to node2's old process,
+  which was killed and sent no frame.
 
 why each criterion fails without its fix:
 
@@ -36,6 +39,9 @@ why each criterion fails without its fix:
   so node2's link task ended in `link not produced` and backed off.
 - drop: before astrald PR #506 a kcp link had no idle probe, and node1 kept
   the link to node2's old process pooled as up.
+- excess row: before `nodes.frames.close` (ticket D15) a link close
+  sent the peer nothing, and node1 held the row node2 closed as excess until
+  its keepalive closed it, about 20 s.
 - dead dial: a kcp dial is connectionless, and before this change
   `WrappedConn` cleared `dial_timeout` at the first queued write
   (`mod/kcp/src/conn.go`), so the Noise handshake waited for the caller's

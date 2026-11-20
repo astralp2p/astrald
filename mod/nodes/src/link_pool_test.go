@@ -16,6 +16,7 @@ import (
 	"github.com/astralp2p/astral-go/astral/channel"
 	"github.com/astralp2p/astral-go/astral/log"
 	exonetmod "github.com/astralp2p/astrald/mod/exonet"
+	"github.com/astralp2p/astrald/mod/nodes/frames"
 )
 
 type pipeIdentityConn struct {
@@ -32,11 +33,37 @@ func testPipeLink(t *testing.T) (*Link, net.Conn) {
 	return newLink(&Module{}, pipeIdentityConn{local}, astral.NewNonce(), false), remote
 }
 
-func assertDisconnected(t *testing.T, link *Link, peer net.Conn) {
+// watchDisconnect reads peer until it ends and answers what the link sent: the reason of its close frame, then the read error.
+// why a reader from the start: net.Pipe is unbuffered, so the close frame reaches a peer that reads.
+func watchDisconnect(peer net.Conn) <-chan []any {
+	got := make(chan []any, 1)
+	go func() {
+		var seen []any
+		ch := channel.New(peer)
+		for {
+			obj, err := ch.Receive()
+			if err != nil {
+				got <- append(seen, err)
+				return
+			}
+			if c, ok := obj.(*frames.Close); ok {
+				seen = append(seen, c.Reason)
+			}
+		}
+	}()
+	return got
+}
+
+// assertDisconnected fails unless the peer got one close frame with reason, then EOF, and the link reader stopped.
+func assertDisconnected(t *testing.T, link *Link, peer <-chan []any, reason frames.CloseReason) {
 	t.Helper()
-	peer.SetReadDeadline(time.Now().Add(time.Second))
-	if _, err := peer.Read(make([]byte, 1)); !errors.Is(err, io.EOF) {
-		t.Fatalf("peer did not receive EOF: %v", err)
+	select {
+	case seen := <-peer:
+		if len(seen) != 2 || seen[0] != reason || !errors.Is(seen[1].(error), io.EOF) {
+			t.Fatalf("peer saw %v; want close reason %v, then EOF", seen, reason)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("peer was not disconnected")
 	}
 	select {
 	case <-link.Done():
@@ -48,10 +75,11 @@ func assertDisconnected(t *testing.T, link *Link, peer net.Conn) {
 func TestLinkPoolShutdownDisconnectsPeers(t *testing.T) {
 	pool := NewLinkPool(nil)
 	link, peer := testPipeLink(t)
+	disconnect := watchDisconnect(peer)
 	pool.links.Add(link)
 	pool.Close()
 	pool.Close()
-	assertDisconnected(t, link, peer)
+	assertDisconnected(t, link, disconnect, frames.CloseShutdown)
 	if pool.SelectLinkWith(astral.Anyone) != nil {
 		t.Fatal("stopped pool still reports an online peer")
 	}
@@ -64,10 +92,11 @@ func TestLinkPoolRejectsHandshakeCompletedAfterShutdown(t *testing.T) {
 	pool := NewLinkPool(nil)
 	pool.Close()
 	link, peer := testPipeLink(t)
+	disconnect := watchDisconnect(peer)
 	if err := pool.AddLink(link); !errors.Is(err, context.Canceled) {
 		t.Fatalf("late link accepted after shutdown: %v", err)
 	}
-	assertDisconnected(t, link, peer)
+	assertDisconnected(t, link, disconnect, frames.CloseShutdown)
 	if len(pool.links.Clone()) != 0 {
 		t.Fatal("late handshake left a link in the pool")
 	}
