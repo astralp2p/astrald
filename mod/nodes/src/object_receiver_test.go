@@ -158,6 +158,15 @@ func TestReceiveObservedEndpoint(t *testing.T) {
 		{"from this node", func(f *receiverFixture) *astral.Identity { return f.nodeID }, tcpEndpoint(publicIP), false},
 		{"from a zero sender", func(*receiverFixture) *astral.Identity { return nil }, tcpEndpoint(publicIP), false},
 		{"private endpoint from a linked peer", linkedPeer, tcpEndpoint("192.168.1.10"), false},
+		{"CGNAT endpoint from a linked peer", linkedPeer, tcpEndpoint("100.64.1.2"), false},
+		{"IPv4-mapped CGNAT endpoint from a linked peer", linkedPeer, tcpEndpoint("::ffff:100.64.1.2"), false},
+		{"464XLAT endpoint from a linked peer", linkedPeer, tcpEndpoint("192.0.0.8"), false},
+		{"benchmarking endpoint from a linked peer", linkedPeer, tcpEndpoint("198.18.0.1"), false},
+		{"reserved endpoint from a linked peer", linkedPeer, tcpEndpoint("240.0.0.1"), false},
+		{"this-network endpoint from a linked peer", linkedPeer, tcpEndpoint("0.0.0.1"), false},
+		{"discard-only IPv6 endpoint from a linked peer", linkedPeer, tcpEndpoint("100::1"), false},
+		{"TEST-NET-2 endpoint from a linked peer", linkedPeer, tcpEndpoint("198.51.100.1"), true},
+		{"carrier-reported public endpoint from a linked peer", linkedPeer, tcpEndpoint("31.61.247.94"), true},
 		{"non-TCP endpoint from a linked peer", linkedPeer, &kcp.Endpoint{IP: ip.IP(net.ParseIP(publicIP)), Port: 1791}, false},
 	}
 
