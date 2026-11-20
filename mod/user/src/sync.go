@@ -167,6 +167,9 @@ func (mod *Module) syncExpulsions(ctx *astral.Context, with *astral.Identity) {
 // why every member's: a new member learns the swarm's apps from its first link,
 // before it links to their hosts; syncSiblings ran first, so it knows each host.
 // why each push bounded: one stalled push must not hold the rest of the sync.
+// why a digest first: the sibling lists the relay contracts it holds
+// (user.relay_digest, bounded by relayDigestTimeout) and only the others are
+// pushed; the digest is a hint, and admission on the sibling is unchanged.
 // note: an app registered after the link came up reaches the sibling through
 // the push in apphost.register (mod/apphost/src/op_register.go).
 func (mod *Module) syncAppContracts(ctx *astral.Context, with *astral.Identity) {
@@ -178,8 +181,26 @@ func (mod *Module) syncAppContracts(ctx *astral.Context, with *astral.Identity) 
 		return
 	}
 
+	var forwardable []*auth.SignedContract
 	for _, contract := range contracts {
-		if !mod.isForwardable(contract, with) {
+		if mod.isForwardable(contract, with) {
+			forwardable = append(forwardable, contract)
+		}
+	}
+	if len(forwardable) == 0 {
+		return
+	}
+
+	// why no digest on failure: a digest that fails must never mean "push
+	// nothing"; the nil digest lists nothing, so every forwardable contract is
+	// pushed, as without a digest.
+	held, err := mod.fetchRelayDigest(ctx, with)
+	if err != nil {
+		mod.log.Logv(1, "syncAppContracts: relay digest of %v: %v; pushing every relay contract", with, err)
+	}
+
+	for _, contract := range forwardable {
+		if id, err := astral.ResolveObjectID(contract); err == nil && held.has(id) {
 			continue
 		}
 
