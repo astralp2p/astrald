@@ -252,10 +252,10 @@ func TestReleaseIsIdempotent(t *testing.T) {
 	a.gateDialTo(t, b)
 	s := (&BasicLinkStrategyFactory{mod: a.mod, networks: basicNetworks}).Build(b.id).(*BasicLinkStrategy)
 
-	release1 := s.Join(astral.NewContext(context.Background()))
+	_, release1 := s.Join(astral.NewContext(context.Background()))
 	ctx2, cancel2 := astral.NewContext(context.Background()).WithCancel()
 	defer cancel2()
-	release2 := s.Join(ctx2)
+	_, release2 := s.Join(ctx2)
 	defer release2()
 
 	s.rounds.mu.Lock()

@@ -195,9 +195,10 @@ func TestBasicSignalDialsTCPKCPAndGatewayRows(t *testing.T) {
 		nodes.NewEndpointWithTTL(&tor.Endpoint{}),
 	}})
 
-	defer s.Join(astral.NewContext(context.Background()))()
+	done, release := s.Join(astral.NewContext(context.Background()))
+	defer release()
 	select {
-	case <-s.Done():
+	case <-done:
 	case <-time.After(5 * time.Second):
 		t.Fatal("basic round did not finish")
 	}
