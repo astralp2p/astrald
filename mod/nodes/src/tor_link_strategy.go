@@ -34,7 +34,7 @@ func (s *TorLinkStrategy) Name() string { return nodesmod.StrategyTor }
 
 // Join adds the caller to the running foreground phase, or starts a round whose
 // foreground phase runs on the module context with a quickTimeout budget.
-func (s *TorLinkStrategy) Join(ctx *astral.Context) (release func()) {
+func (s *TorLinkStrategy) Join(ctx *astral.Context) (done <-chan struct{}, release func()) {
 	return s.rounds.join(ctx, s.mod.ctx, s.quickTimeout, s.attempt)
 }
 
@@ -183,12 +183,6 @@ func (s *TorLinkStrategy) tryEndpoint(ctx *astral.Context, endpoint *nodes.Endpo
 
 	s.log.Log("%v linked via %v", s.target, endpoint)
 	return link
-}
-
-// Done closes once the quick (foreground) phase ends; background retries may
-// still be running. Returns an already-closed channel if no round runs.
-func (s *TorLinkStrategy) Done() <-chan struct{} {
-	return s.rounds.done()
 }
 
 // Factory

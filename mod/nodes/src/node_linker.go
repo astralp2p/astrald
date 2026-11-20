@@ -33,8 +33,9 @@ func (linker *NodeLinker) Activate(ctx *astral.Context, strategies []string) (do
 	var releases []func()
 	for _, strategy := range strategies {
 		if strategy, ok := linker.strategies.Get(strategy); ok {
-			releases = append(releases, strategy.Join(ctx))
-			doneChannels = append(doneChannels, strategy.Done())
+			roundDone, leave := strategy.Join(ctx)
+			releases = append(releases, leave)
+			doneChannels = append(doneChannels, roundDone)
 		}
 	}
 

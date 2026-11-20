@@ -132,6 +132,7 @@ func newExchangeFixture(t *testing.T) *exchangeFixture {
 		node:          &identityNode{id: f.self},
 		log:           log.New(f.self),
 		ctx:           ctx,
+		cancel:        cancel,
 		db:            testEndpointDB(t),
 		announceDelay: testAnnounceDelay,
 	}

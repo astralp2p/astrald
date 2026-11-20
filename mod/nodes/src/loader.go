@@ -27,6 +27,9 @@ func (Loader) Load(node astral.Node, assets assets.Assets, log *log.Logger) (cor
 		siblingRefreshInterval: defaultSiblingRefreshInterval,
 	}
 
+	// why: before any transport or router can call in, so no path reads a nil mod.ctx.
+	mod.initContext(node.Identity())
+
 	if err := assets.LoadYAML(nodes.ModuleName, &mod.config); err != nil && !errors.Is(err, resources.ErrNotFound) {
 		return nil, err
 	}
