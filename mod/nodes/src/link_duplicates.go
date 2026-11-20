@@ -119,17 +119,33 @@ func (pool *LinkPool) settleStrategyLink(link *Link, checked map[*Link]bool) (su
 	return link, nil
 }
 
-// livePeerLinks returns the open links to the peer of link, other than link.
+// livePeerLinks returns the usable links to the peer of link, other than link.
+// note: a link with an excess close pending is left out, as it was once closed outright.
 func (pool *LinkPool) livePeerLinks(link *Link) []*Link {
 	return pool.links.Select(func(other *Link) bool {
-		return other != link && other.Err() == nil && other.RemoteIdentity().IsEqual(link.RemoteIdentity())
+		return other != link && other.usable() && other.RemoteIdentity().IsEqual(link.RemoteIdentity())
 	})
 }
 
-// closeExcess closes loser with ErrExcessLink in favor of survivor.
+// closeExcess closes loser with ErrExcessLink in favor of survivor. When loser holds
+// a migratable session, it first migrates its migratable sessions to survivor, in
+// the background, and closes loser after; loser stays out of selection and
+// settlement meanwhile.
+// why the background: settleStrategyLink calls it under the pool lock, and a
+// migration waits for the peer.
 func (pool *LinkPool) closeExcess(loser, survivor *Link) {
 	pool.mod.log.Logv(1, "link %v with %v is excess; %v survives", loser.id, loser.RemoteIdentity(), survivor.id)
-	loser.CloseWithError(nodesmod.ErrExcessLink)
+	if !loser.excess.CompareAndSwap(false, true) {
+		return
+	}
+	if !pool.mod.hasMigratable(loser) {
+		loser.CloseWithError(nodesmod.ErrExcessLink)
+		return
+	}
+	go func() {
+		pool.mod.moveSessions(loser.id, survivor)
+		loser.CloseWithError(nodesmod.ErrExcessLink)
+	}()
 }
 
 // awaitRivals holds link back until the rival attempts with its peer that rivals counts end, at most its ping timeout, and an at-risk link also for one round trip on it first; it reports whether the link proved live.
@@ -168,12 +184,18 @@ func (pool *LinkPool) findSurvivor(peer *astral.Identity, accept func(*Link) boo
 		if l.Err() != nil || !l.RemoteIdentity().IsEqual(peer) || (accept != nil && !accept(l)) {
 			continue
 		}
-		if best == nil || dialedByLower(l) && !dialedByLower(best) ||
-			dialedByLower(l) == dialedByLower(best) && l.createdAt.Before(best.createdAt) {
+		if best == nil || keptOver(l, best) {
 			best = l
 		}
 	}
 	return best
+}
+
+// keptOver reports whether the duplicate rule keeps link a over link b regardless of pool order:
+// the link the lower identity dialed, else the older link.
+func keptOver(a, b *Link) bool {
+	return dialedByLower(a) && !dialedByLower(b) ||
+		dialedByLower(a) == dialedByLower(b) && a.createdAt.Before(b.createdAt)
 }
 
 // heardRecently reports whether link received a frame from its peer since it was created and within its idle ping.

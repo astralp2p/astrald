@@ -73,6 +73,15 @@ type Module struct {
 	// why: a field, so tests block or count a retrieval without a link strategy.
 	retrieve func(ctx *astral.Context, target *astral.Identity) <-chan LinkResult
 
+	// migrate replaces migrateSessions where a link hands its sessions on before
+	// it closes (closeExcess, retireLink, the connectivity upgrade); nil is migrateSessions.
+	// why: a field, so tests observe a migration without a peer to run it with.
+	migrate func(oldLinkID astral.Nonce, newLink *Link)
+
+	// retireClock is the time source of retireLink; nil is the real clock.
+	// why: a field, so tests move retireLink past retireMax without waiting.
+	retireClock wakeClock
+
 	// resolveRemote pulls endpoints from another node.
 	// why: a field, so tests answer a pull without a network.
 	resolveRemote func(ctx *astral.Context, resolver *astral.Identity, identity *astral.Identity) ([]*nodes.EndpointWithTTL, error)
