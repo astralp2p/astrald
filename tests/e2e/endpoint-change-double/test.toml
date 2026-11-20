@@ -1,0 +1,9 @@
+nodes   = ["node1", "node2", "reflector"]
+after   = "endpoint-change-relink"
+# why: --in below, the two moves, the watch after the last (lib/addrmove.py record), and margin
+timeout = 240
+# why --gap 3.5: both changes fall within the 5 s announcement wait, and the
+# intermediate address stands longer than mod/ip's 3 s poll, so astrald sees
+# both. script.py reads --to, --in and --gap from this line.
+ops     = ["move-subnet node1 --to 10.79.0 --to 10.80.0 --gap 3.5 --in 30"]
+facts   = ["endpoint_change_double"]

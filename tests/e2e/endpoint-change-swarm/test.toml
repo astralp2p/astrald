@@ -1,0 +1,10 @@
+nodes   = ["node1", "node2", "reflector"]
+after   = "adopt-node"
+timeout = 300
+# why --translating: the NAT admits no inbound connection (no DNAT, new
+# inbound UDP dropped), so node2 dials every sibling and no sibling dials it.
+# A sibling that moves can then reach node2 only once node2 dials it, which
+# is what endpoint-change-relink judges. enter-nat restarts node2's astrald
+# in its netns, so node2 relinks to node1 from behind the NAT.
+ops     = ["enter-nat node2 --translating"]
+facts   = ["endpoint_change_swarm"]
