@@ -19,108 +19,97 @@ var basicNetworks = []string{"tcp", "kcp", "gw"}
 // BasicLinkStrategy dials all known endpoints of the target node in parallel
 // and uses the first successful connection to establish a link.
 type BasicLinkStrategy struct {
-	mod        *Module
-	networks   []string
-	rowBudgets map[string]time.Duration
-	target     *astral.Identity
+	mod         *Module
+	networks    []string
+	rowBudgets  map[string]time.Duration
+	roundBudget time.Duration // 0 is basicRoundBudget
+	target      *astral.Identity
 
-	mu         sync.Mutex
-	activeDone chan struct{}
+	rounds roundKeeper
 }
 
 var _ nodesmod.LinkStrategy = &BasicLinkStrategy{}
 
 func (s *BasicLinkStrategy) Name() string { return nodesmod.StrategyBasic }
 
-// Signal starts a dialing round in the background; concurrent calls while a round
-// is still active are ignored. The first successful link wins, the rest are closed;
-// the pool then settles the winner against the links it already holds.
-func (s *BasicLinkStrategy) Signal(ctx *astral.Context) {
-	s.mu.Lock()
-	if s.activeDone != nil {
-		s.mu.Unlock()
+// Join adds the caller to the running dialing round, or starts one on the module
+// context. The first successful link wins, the rest are closed; the pool then
+// settles the winner against the links it already holds.
+func (s *BasicLinkStrategy) Join(ctx *astral.Context) (release func()) {
+	budget := s.roundBudget
+	if budget <= 0 {
+		budget = basicRoundBudget
+	}
+	return s.rounds.join(ctx, s.mod.ctx, budget, s.run)
+}
+
+// run dials the target's rows on the round context and offers the first link to the pool.
+func (s *BasicLinkStrategy) run(r *linkRound) {
+	var wg sync.WaitGroup
+	var winner sig.Value[*Link]
+
+	wctx, cancel := r.ctx.WithCancel()
+	defer cancel()
+
+	resolved, err := s.mod.ResolveEndpoints(wctx, s.target)
+	if err != nil {
+		s.mod.log.Log("resolve endpoints failed: %v", err)
 		return
 	}
 
-	s.activeDone = make(chan struct{})
-	s.mu.Unlock()
+	endpoints := sig.FilterChan(resolved, func(e *nodes.EndpointWithTTL) bool {
+		return slices.Contains(s.networks, e.Network())
+	})
 
-	go func() {
-		defer func() {
-			s.mu.Lock()
-			close(s.activeDone)
-			s.activeDone = nil
-			s.mu.Unlock()
+	// todo: instead of spawning 8 goroutines per strategy, we could have worker pool which is shared across strategies
+	wg.Add(DefaultWorkerCount)
+	for i := 0; i < DefaultWorkerCount; i++ {
+		go func() {
+			defer wg.Done()
+			s.dialRows(wctx, cancel, endpoints, &winner)
 		}()
+	}
 
-		var wg sync.WaitGroup
-		var winner sig.Value[*Link]
+	wg.Wait()
 
-		wctx, cancel := ctx.WithCancel()
-		defer cancel()
+	link := winner.Get()
+	if link == nil {
+		return
+	}
 
-		resolved, err := s.mod.ResolveEndpoints(wctx, s.target)
-		if err != nil {
-			s.mod.log.Log("resolve endpoints failed: %v", err)
-			return
-		}
-
-		endpoints := sig.FilterChan(resolved, func(e *nodes.EndpointWithTTL) bool {
-			return slices.Contains(s.networks, e.Network())
-		})
-
-		// todo: instead of spawning 8 goroutines per strategy, we could have worker pool which is shared across strategies
-		wg.Add(DefaultWorkerCount)
-		for i := 0; i < DefaultWorkerCount; i++ {
-			go func() {
-				defer wg.Done()
-				for {
-					select {
-					case <-wctx.Done():
-						return
-					case re, ok := <-endpoints:
-						if !ok {
-							return
-						}
-
-						link := s.tryEndpoint(wctx, re)
-						if link != nil {
-							if _, ok := winner.Swap(nil, link); ok {
-								cancel()
-							} else {
-								link.CloseWithError(nodesmod.ErrExcessLink)
-							}
-
-							return
-						}
-					}
-				}
-			}()
-		}
-
-		wg.Wait()
-
-		link := winner.Get()
-		if link == nil {
-			return
-		}
-
-		s.mod.linkPool.offerStrategyLink(link, s.Name())
-	}()
+	s.mod.linkPool.offerStrategyLink(link, s.Name())
 }
 
-// Done returns a channel closed when the active round finishes; a closed channel
+// dialRows dials rows from endpoints until one links, endpoints closes or ctx ends.
+// The first link becomes the winner and cancels the other workers; a later link is excess.
+func (s *BasicLinkStrategy) dialRows(ctx *astral.Context, cancel context.CancelFunc, endpoints <-chan *nodes.EndpointWithTTL, winner *sig.Value[*Link]) {
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case re, ok := <-endpoints:
+			if !ok {
+				return
+			}
+
+			link := s.tryEndpoint(ctx, re)
+			if link != nil {
+				if _, ok := winner.Swap(nil, link); ok {
+					cancel()
+				} else {
+					link.CloseWithError(nodesmod.ErrExcessLink)
+				}
+
+				return
+			}
+		}
+	}
+}
+
+// Done returns a channel closed when the running round finishes; a closed channel
 // is returned immediately when no round is running.
 func (s *BasicLinkStrategy) Done() <-chan struct{} {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	if s.activeDone == nil {
-		ch := make(chan struct{})
-		close(ch)
-		return ch
-	}
-	return s.activeDone
+	return s.rounds.done()
 }
 
 // tryEndpoint dials one row and establishes a link over it, within the row's network budget; nil on any failure.
@@ -151,9 +140,10 @@ func (s *BasicLinkStrategy) tryEndpoint(ctx *astral.Context, endpoint *nodes.End
 // factory
 
 type BasicLinkStrategyFactory struct {
-	mod        *Module
-	networks   []string
-	rowBudgets map[string]time.Duration
+	mod         *Module
+	networks    []string
+	rowBudgets  map[string]time.Duration
+	roundBudget time.Duration // 0 is basicRoundBudget
 }
 
 var _ nodesmod.StrategyFactory = &BasicLinkStrategyFactory{}
@@ -165,9 +155,10 @@ func newBasicLinkStrategyFactory(mod *Module) *BasicLinkStrategyFactory {
 
 func (f *BasicLinkStrategyFactory) Build(target *astral.Identity) nodesmod.LinkStrategy {
 	return &BasicLinkStrategy{
-		mod:        f.mod,
-		networks:   f.networks,
-		rowBudgets: f.rowBudgets,
-		target:     target,
+		mod:         f.mod,
+		networks:    f.networks,
+		rowBudgets:  f.rowBudgets,
+		roundBudget: f.roundBudget,
+		target:      target,
 	}
 }

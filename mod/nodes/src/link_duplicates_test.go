@@ -232,7 +232,7 @@ func TestStrategyLinkWithoutWatcherStays(t *testing.T) {
 			}
 			from.stubDialTo(t, to)
 			s := (&BasicLinkStrategyFactory{mod: from.mod, networks: basicNetworks}).Build(to.id)
-			s.Signal(astral.NewContext(context.Background()))
+			defer s.Join(astral.NewContext(context.Background()))()
 			select {
 			case <-s.Done():
 			case <-time.After(settleTimeout):
@@ -515,7 +515,7 @@ func TestCallerReceivesSurvivorInCrossDial(t *testing.T) {
 	defer lower.mod.linkPool.unsubscribe(w)
 
 	s := (&BasicLinkStrategyFactory{mod: lower.mod, networks: basicNetworks}).Build(higher.id)
-	s.Signal(astral.NewContext(context.Background()))
+	defer s.Join(astral.NewContext(context.Background()))()
 	waitFor(t, "the lower identity's dial to start", func() bool {
 		select {
 		case <-lower.mod.dials.idle(higher.id):
@@ -543,7 +543,7 @@ func TestHigherCallerWaitsForPeerNegotiation(t *testing.T) {
 	defer higher.mod.linkPool.unsubscribe(w)
 
 	s := (&BasicLinkStrategyFactory{mod: lower.mod, networks: basicNetworks}).Build(higher.id)
-	s.Signal(astral.NewContext(context.Background()))
+	defer s.Join(astral.NewContext(context.Background()))()
 	waitFor(t, "the lower identity's link to negotiate at the higher identity", func() bool {
 		select {
 		case <-higher.mod.inboundNegotiations.idle(lower.id):
