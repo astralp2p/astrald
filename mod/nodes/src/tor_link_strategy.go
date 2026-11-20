@@ -80,8 +80,10 @@ func (s *TorLinkStrategy) attempt(ctx *astral.Context) {
 
 	select {
 	case link := <-resultCh:
-		s.signalDone()
+		// why: a RetrieveLink that sees Done answers ErrLinkNotProduced unless
+		// the link already waits in its watcher.
 		s.deliverLink(link)
+		s.signalDone()
 		return
 	case <-workerCtx.Done():
 		s.signalDone()
@@ -122,10 +124,7 @@ func (s *TorLinkStrategy) deliverLink(link *Link) {
 		return
 	}
 
-	name := s.Name()
-	if !s.mod.linkPool.notifyLinkWatchers(link, &name) {
-		link.CloseWithError(nodesmod.ErrExcessLink)
-	}
+	s.mod.linkPool.offerStrategyLink(link, s.Name())
 }
 
 func (s *TorLinkStrategy) try(
@@ -178,6 +177,8 @@ func (s *TorLinkStrategy) try(
 }
 
 func (s *TorLinkStrategy) tryEndpoint(ctx *astral.Context, endpoint *nodes.EndpointWithTTL) *Link {
+	defer s.mod.dials.begin(s.target)()
+
 	conn, err := s.mod.Exonet.Dial(ctx, endpoint.Endpoint)
 	if err != nil {
 		s.log.Logv(2, "%v dial %v: %v", s.target, endpoint, err)

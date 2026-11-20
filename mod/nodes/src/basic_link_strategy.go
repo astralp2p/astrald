@@ -41,7 +41,8 @@ var _ nodesmod.LinkStrategy = &BasicLinkStrategy{}
 func (s *BasicLinkStrategy) Name() string { return nodesmod.StrategyBasic }
 
 // Signal starts a dialing round in the background; concurrent calls while a round
-// is still active are ignored. The first successful link wins, the rest are closed.
+// is still active are ignored. The first successful link wins, the rest are closed;
+// the pool then settles the winner against the links it already holds.
 func (s *BasicLinkStrategy) Signal(ctx *astral.Context) {
 	s.mu.Lock()
 	if s.activeDone != nil {
@@ -112,10 +113,7 @@ func (s *BasicLinkStrategy) Signal(ctx *astral.Context) {
 			return
 		}
 
-		name := s.Name()
-		if !s.mod.linkPool.notifyLinkWatchers(link, &name) {
-			link.CloseWithError(nodesmod.ErrExcessLink)
-		}
+		s.mod.linkPool.offerStrategyLink(link, s.Name())
 	}()
 }
 
@@ -135,6 +133,8 @@ func (s *BasicLinkStrategy) Done() <-chan struct{} {
 
 // tryEndpoint dials one row and establishes a link over it, within the row's network budget; nil on any failure.
 func (s *BasicLinkStrategy) tryEndpoint(ctx *astral.Context, endpoint *nodes.EndpointWithTTL) *Link {
+	defer s.mod.dials.begin(s.target)()
+
 	if d, ok := s.rowBudgets[endpoint.Network()]; ok {
 		var cancel context.CancelFunc
 		ctx, cancel = ctx.WithTimeout(d)

@@ -49,6 +49,11 @@ type Module struct {
 
 	linkPool *LinkPool
 
+	// inboundNegotiations counts the inbound link negotiations past the handshake, per peer.
+	inboundNegotiations inFlight
+	// dials counts the strategy dials in progress, per target.
+	dials inFlight
+
 	strategyFactories sig.Map[string, nodesmod.StrategyFactory]
 	upgraders         sig.Map[string, *sig.Switch]
 

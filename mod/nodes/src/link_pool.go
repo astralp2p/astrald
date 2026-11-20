@@ -6,6 +6,7 @@ import (
 	"slices"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/astralp2p/astral-go/api/nodes"
 	"github.com/astralp2p/astral-go/astral"
@@ -15,6 +16,8 @@ import (
 type linkWatcher struct {
 	match func(*Link, *string) bool
 	ch    chan *Link
+	// keeps marks a caller that asked for a new link; a strategy link it takes is never excess.
+	keeps bool
 }
 
 type LinkPool struct {
@@ -32,7 +35,7 @@ func NewLinkPool(mod *Module) *LinkPool {
 	}
 }
 
-// AddLink registers link, wires its mux router, emits a created event, probes the older links to the same peer, and spawns a goroutine that removes it and closes its sessions when it dies.
+// AddLink registers link, wires its mux router, hands an inbound link or the survivor it settles on to the waiting callers, emits a created event, probes the older links to the same peer, and spawns a goroutine that removes it and closes its sessions when it dies.
 func (pool *LinkPool) AddLink(link *Link) error {
 	dir := "in"
 	netName := "unknown network"
@@ -64,7 +67,14 @@ func (pool *LinkPool) AddLink(link *Link) error {
 
 	pool.mod.log.Infov(1, "added %v-link with %v (%v)", dir, link.RemoteIdentity(), netName)
 
-	if !link.outbound {
+	switch {
+	case link.outbound:
+	case atRisk(link):
+		// note: a caller that subscribes later gets the survivor when its strategies finish.
+		if len(pool.watchersKeeping(false)) > 0 {
+			go pool.deliverAtRisk(link)
+		}
+	default:
 		pool.notifyLinkWatchers(link, nil)
 	}
 
@@ -174,10 +184,11 @@ type LinkResult struct {
 	Err  error
 }
 
-func (pool *LinkPool) subscribe(match func(*Link, *string) bool) *linkWatcher {
+func (pool *LinkPool) subscribe(match func(*Link, *string) bool, keeps bool) *linkWatcher {
 	w := &linkWatcher{
 		match: match,
 		ch:    make(chan *Link, 1),
+		keeps: keeps,
 	}
 
 	pool.watchers.Add(w)
@@ -189,8 +200,18 @@ func (pool *LinkPool) unsubscribe(w *linkWatcher) {
 }
 
 func (pool *LinkPool) notifyLinkWatchers(s *Link, strategy *string) bool {
+	return pool.notifyWatchers(pool.watchers.Clone(), s, strategy)
+}
+
+// watchersKeeping returns the watchers whose keeps flag equals keeps.
+func (pool *LinkPool) watchersKeeping(keeps bool) []*linkWatcher {
+	return pool.watchers.Select(func(w *linkWatcher) bool { return w.keeps == keeps })
+}
+
+// notifyWatchers offers s to every watcher of ws that matches it and answers whether one took it.
+func (pool *LinkPool) notifyWatchers(ws []*linkWatcher, s *Link, strategy *string) bool {
 	used := false
-	for _, w := range pool.watchers.Clone() {
+	for _, w := range ws {
 		if !w.match(s, strategy) {
 			continue
 		}
@@ -220,7 +241,7 @@ func (pool *LinkPool) getOrCreateNodeLinker(target *astral.Identity) *NodeLinker
 	return linker
 }
 
-// RetrieveLink returns a matching existing link immediately unless ForceNew is set; otherwise it activates linking strategies and delivers the first link that matches, ctx cancellation, or ErrLinkNotProduced.
+// RetrieveLink returns the surviving matching link immediately unless ForceNew is set; otherwise it activates linking strategies and delivers the first link that matches, the surviving match once the strategies finish, ctx cancellation, or ErrLinkNotProduced.
 func (pool *LinkPool) RetrieveLink(
 	ctx *astral.Context,
 	target *astral.Identity,
@@ -247,11 +268,14 @@ func (pool *LinkPool) RetrieveLink(
 	}
 
 	if !o.ForceNew {
-		links := pool.links.Select(func(s *Link) bool { return match(s, nil) })
-		if len(links) > 0 {
-			return sig.ArrayToChan([]LinkResult{{Link: links[0]}})
+		if s := pool.findSurvivor(target, func(s *Link) bool { return match(s, nil) }); s != nil {
+			return sig.ArrayToChan([]LinkResult{{Link: s}})
 		}
 	}
+
+	// why: a forced request falls back only to links created after it started.
+	since := time.Now()
+	fresh := func(s *Link) bool { return match(s, nil) && (!o.ForceNew || s.createdAt.After(since)) }
 
 	result := make(chan LinkResult, 1)
 
@@ -261,7 +285,9 @@ func (pool *LinkPool) RetrieveLink(
 		strategyCtx, cancelStrategies := ctx.WithCancel()
 		defer cancelStrategies()
 
-		w := pool.subscribe(match)
+		// why: a forced or network-bound request asks for a link the pool's
+		// existing links do not satisfy, so its link is not a duplicate.
+		w := pool.subscribe(match, o.ForceNew || len(o.Networks) > 0)
 		defer pool.unsubscribe(w)
 
 		linker := pool.getOrCreateNodeLinker(target)
@@ -273,6 +299,12 @@ func (pool *LinkPool) RetrieveLink(
 			case s := <-w.ch:
 				result <- LinkResult{Link: s}
 			default:
+				// why: a link held back for its rivals may settle as the
+				// strategies finish, before it reaches the watcher.
+				if s := pool.findSurvivor(target, fresh); s != nil {
+					result <- LinkResult{Link: s}
+					return
+				}
 				result <- LinkResult{Err: nodesmod.ErrLinkNotProduced}
 			}
 		case <-ctx.Done():
