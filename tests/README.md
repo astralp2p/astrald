@@ -136,7 +136,11 @@ external_registration_sweep_interval = "1s"
   - Keys the harness owns, like `apphost.tokens`, `apphost.bind_http` and
     the listeners' ports, are refused. `mcp.bind_mcp` may only be `""`,
     which turns MCP off: `messaging-ops` runs on
-    `[config.nomcp1.mcp] bind_mcp = ""`.
+    `[config.nomcp1.mcp] bind_mcp = ""`. A test with `ops` may set
+    `tcp.listen_port` and `kcp.listen_port` (1 to 65535): it runs only in a
+    VM world, where no lease holds them, and the node's `tcp_port` and
+    `lan_endpoint` follow the override. `nearby-adopt-ports` moves `node2`
+    to `tcp 1800`.
   - A world writes each module's config as JSON, which astrald's YAML
     loader reads; a file it cannot parse, or a key the module does not
     have, stops the node. A VM world pushes its files into each guest with
@@ -171,7 +175,7 @@ passes alone and fails in the shared run, a test before it changed its world.
 | `nat.suite` | two nodes meet on a LAN, then hole-punch through NAT | VM (netsim) | not measured |
 | `gateway.suite` | a NAT'd node reaches its swarm through a gateway | VM (netsim) | not measured |
 | `kcp.suite` | two siblings joined by kcp alone; one restarts and relinks over kcp | VM (netsim) | not measured |
-| `nearby.suite` | an unowned node adopted by its nearby alias, two nodes of one User meeting in stealth, a Silent node, a sibling relinked when heard | VM (netsim) | ~75 min estimated (not measured) |
+| `nearby.suite` | an unowned node adopted by its nearby alias, two nodes of one User meeting in stealth, a Silent node, a sibling relinked when heard, a fresh node joining by user.join, and adoption and a stealth meeting off the default listen ports | VM (netsim) | ~75 min estimated (not measured) |
 | `agent.suite` | the flows an AI operator can drive (`--driver agent`) | VM (netsim), or Docker without netsim | not measured |
 | `docker-agent.suite` | the operator flows only a Docker world runs: a roster the VM lab lacks, or a world of their own (`--driver agent --docker`) | Docker | not measured |
 | `integration.suite` | full-integration flows in throwaway containers (`--docker`) | Docker, or local without `--docker` | not measured |

@@ -288,6 +288,41 @@ class TestConfigKey(ManifestCase):
                     self.add("tuned", 'nodes = ["node1"]\n'
                              + body + "\n")
 
+    def test_a_test_with_ops_may_move_its_nodes_listen_ports(self):
+        # why: only a local world leases these ports; ops put a test in a VM
+        # world, whose guests listen on the defaults unless a test moves them
+        self.add("moved", """
+            nodes = ["node1", "node2"]
+            ops = ["noop"]
+            [config.node2.tcp]
+            listen_port = 1800
+            [config.node2.kcp]
+            listen_port = 1810
+        """)
+        self.assertEqual(self.all["moved"].config, {"node2": {
+            "tcp": {"listen_port": 1800}, "kcp": {"listen_port": 1810}}})
+
+    def test_listen_ports_need_ops_and_a_real_port(self):
+        for body, says in (
+                ("[config.node1.tcp]\nlisten_port = 1800", "harness's to set"),
+                ("[config.node1.kcp]\nlisten_port = 1810", "harness's to set"),
+                ('ops = ["noop"]\n[config.node1.tcp]\nlisten_port = 0',
+                 "not a port"),
+                ('ops = ["noop"]\n[config.node1.kcp]\nlisten_port = 65536',
+                 "not a port"),
+                ('ops = ["noop"]\n[config.node1.tcp]\nlisten_port = "1800"',
+                 "not a port"),
+                ('ops = ["noop"]\n[config.node1.tcp]\nlisten_port = true',
+                 "not a port"),
+                # the ether port and the apphost listener stay the harness's
+                ('ops = ["noop"]\n[config.node1.ether]\nudp_port = 9000',
+                 "harness's to set"),
+                ('ops = ["noop"]\n[config.node1.apphost]\ntokens = {}',
+                 "harness's to set")):
+            with self.subTest(body=body):
+                with self.assertRaisesRegex(ValueError, says):
+                    self.add("moved", 'nodes = ["node1"]\n' + body + "\n")
+
 
 if __name__ == "__main__":
     unittest.main()

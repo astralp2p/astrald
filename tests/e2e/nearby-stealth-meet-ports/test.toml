@@ -1,0 +1,25 @@
+nodes   = ["node1", "node2"]
+# why this long: two claims, a wait of up to 240 s for the link, and the reads
+# after it, see script.py
+timeout = 420
+# why noop: as nearby-adopt's, the op that keeps it in a VM world, where a LAN
+# carries nearby. Only a test with ops may move a node's listen ports
+# (lib/manifest.py VM_PORT_KEYS).
+ops     = ["noop"]
+facts   = ["nearby_ports_meet"]
+
+# why every port off its default: a dial to tcp 1791 or kcp 1792 reaches
+# nothing, so a link proves that each node dialed the ports the other sealed
+# in its stealth status. script.py and verify.py read the ports from these
+# tables.
+[config.node1.tcp]
+listen_port = 1800
+
+[config.node1.kcp]
+listen_port = 1810
+
+[config.node2.tcp]
+listen_port = 1801
+
+[config.node2.kcp]
+listen_port = 1811
