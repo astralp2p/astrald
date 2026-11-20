@@ -9,15 +9,17 @@ import (
 	"github.com/astralp2p/astral-go/astral"
 )
 
-// maxCacheEntries bounds the cache; a status from a new source IP is dropped while it is full.
+// maxCacheEntries bounds the cache; a status under a new key (source IP and tcp listen port)
+// is dropped while it is full.
 //
-// why: every source IP on the LAN can claim an entry, and forged source IPs are free.
+// why: every source IP on the LAN can claim an entry per port, and forged source IPs and ports are free.
 const maxCacheEntries = 512
 
 // expiryInterval is how often expired cache entries and nonces are removed.
 const expiryInterval = 30 * time.Second
 
-// entry is the cached status of one source IP. It is never changed once stored.
+// entry is the cached status of one node, or of one unrecognised stealth status, at one
+// source IP. It is never changed once stored.
 type entry struct {
 	NodeID *astral.Identity // note: the verified node; nil for an unrecognised stealth status
 	UserID *astral.Identity // note: nil when unknown
@@ -47,43 +49,80 @@ func (e *entry) listenPorts() (tcp, kcp astral.Uint16) {
 	return e.Ports.TCP, e.Ports.KCP
 }
 
+// cacheKey identifies a cache entry: the source IP of its status and the tcp listen port the
+// entry resolves to.
+//
+// why: nodes on one host share a source IP and listen on different ports, so the IP alone
+// would let each broadcast evict the other node's entry.
+// note: a status that announces tcp 0 (tcp off) keys on port 0, so two such nodes on one
+// host share a key.
+type cacheKey struct {
+	ip   string
+	port astral.Uint16
+}
+
+// keyOf returns the key of e: its source IP and its tcp listen port, 1791 when its status
+// carries no ports. An unrecognised stealth status carries none.
+func keyOf(e *entry) cacheKey {
+	tcp, _ := e.listenPorts()
+	return cacheKey{ip: e.IP.String(), port: tcp}
+}
+
 // isNode reports whether the entry is the verified status of node.
 func (e *entry) isNode(node *astral.Identity) bool {
 	return e.NodeID != nil && e.NodeID.IsEqual(node)
 }
 
-// peerCache holds one entry per source IP, at most maxCacheEntries.
+// peerCache holds one entry per cacheKey (source IP and tcp listen port), at most
+// maxCacheEntries.
 //
-// why: a mutex, not sig.Map: the cap check, the move of a node's entry to its new IP and
+// why: a mutex, not sig.Map: the cap check, the move of a node's entry to its new key and
 // the PeerSeen decision read and write several keys in one step.
 type peerCache struct {
 	mu      sync.Mutex
-	entries map[string]*entry
+	entries map[cacheKey]*entry
 }
 
-// hasRoom reports whether a status from ip can be stored.
+// hasRoom reports whether a status from ip can possibly be stored: the cache is below its
+// cap, or ip holds an entry. It is the receive path's cheap check before identification,
+// when the status's port is not known.
+//
+// why: the exact key is known only after identification, so the exact check is roomFor in
+// the store; a status that passes here and fails there costs one identification, and a
+// full cache turns a status from an IP without an entry away before any signature check.
 func (c *peerCache) hasRoom(ip string) bool {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	return c.roomFor(ip)
+	if len(c.entries) < maxCacheEntries {
+		return true
+	}
+	for key := range c.entries {
+		if key.ip == ip {
+			return true
+		}
+	}
+	return false
 }
 
-// roomFor reports whether ip holds an entry or the cache is below its cap; c.mu is held.
-func (c *peerCache) roomFor(ip string) bool {
-	_, ok := c.entries[ip]
+// roomFor reports whether key holds an entry or the cache is below its cap; c.mu is held.
+func (c *peerCache) roomFor(key cacheKey) bool {
+	_, ok := c.entries[key]
 	return ok || len(c.entries) < maxCacheEntries
 }
 
-// storeUnrecognised stores an unrecognised stealth status in place of its IP's entry. It
-// fails when the IP holds a live verified entry, or when the cache is full.
+// storeUnrecognised stores an unrecognised stealth status in place of the entry under its
+// key, the source IP and the default tcp port. It fails when that key holds a live verified
+// entry, or when the cache is full and the key is new.
 //
-// why: an unrecognised status passed no check, so it never displaces a verified peer.
+// why: an unrecognised status passed no check, so it never displaces a verified peer; a
+// verified node on another port at the same IP keeps its entry, and the status takes the
+// default-port key beside it.
 func (c *peerCache) storeUnrecognised(e *entry) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	key := e.IP.String()
+	key := keyOf(e)
 	if old, ok := c.entries[key]; ok && old.NodeID != nil && !old.expired(e.Seen) {
 		return errVerifiedHeld
 	}
@@ -102,16 +141,17 @@ func samePorts(a, b *entry) bool {
 	return atcp == btcp && akcp == bkcp
 }
 
-// storeVerified stores the verified status of e.NodeID in place of its IP's entry and
-// removes the node's entry at another IP. stored is false when the cache is full. isNew
-// is true unless a live entry of the node at the same IP, with the same user and the same
-// listen ports, was replaced: the node is new to the cache, moved to another IP, has a new
-// user, listens on other ports, or returns after its entry expired.
+// storeVerified stores the verified status of e.NodeID in place of the entry under its key
+// and removes the node's entry under any other key, so a node holds at most one entry.
+// stored is false when the cache is full and the key is new. isNew is true unless a live
+// entry of the node under the same key, with the same user and the same listen ports, was
+// replaced: the node is new to the cache, moved to another IP or tcp port, has a new user,
+// has another kcp port, or returns after its entry expired.
 func (c *peerCache) storeVerified(e *entry) (isNew, stored bool) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	key := e.IP.String()
+	key := keyOf(e)
 	known := false
 	for k, old := range c.entries {
 		switch {
@@ -119,10 +159,11 @@ func (c *peerCache) storeVerified(e *entry) (isNew, stored bool) {
 		case k == key:
 			// why: a node claimed while cached keeps its IP and its live entry; its new
 			// user is the news its peers of that user act on.
-			// why: a node restarted on other ports keeps its IP and its live entry; the
-			// ports resolve returns changed, and linking wakes at this status, not at the
-			// next link task tick. The ports compared are the effective ones, so a status
-			// without ports and one with 1791 and 1792 are not a change.
+			// why: a node restarted on another kcp port keeps its key and its live entry;
+			// the ports resolve returns changed, and linking wakes at this status, not at
+			// the next link task tick. A node on another tcp port has another key: its old
+			// entry is removed below and it is new. The ports compared are the effective
+			// ones, so a status without ports and one with 1791 and 1792 are not a change.
 			known = !old.expired(e.Seen) && old.UserID.IsEqual(e.UserID) && samePorts(old, e)
 		default:
 			delete(c.entries, k)
@@ -137,9 +178,9 @@ func (c *peerCache) storeVerified(e *entry) (isNew, stored bool) {
 }
 
 // put stores e under key; c.mu is held.
-func (c *peerCache) put(key string, e *entry) {
+func (c *peerCache) put(key cacheKey, e *entry) {
 	if c.entries == nil {
-		c.entries = make(map[string]*entry)
+		c.entries = make(map[cacheKey]*entry)
 	}
 	c.entries[key] = e
 }
