@@ -301,10 +301,11 @@ func closedWith(events *recordingEvents, id *astral.Identity) []*nodes.LinkClose
 
 // TestDeadLinkGivesWayToLiveOne: of two links to one peer, the older one's
 // peer stops reading. While the older link is pooled, SelectLinkWith returns
-// it. The keepalive closes it within the transport's idle interval plus ping
-// timeout, the pool emits LinkClosedEvent with one link left, and
-// SelectLinkWith then returns the newer link.
-// note: this is A1G2 option a; selection itself is unchanged
+// the newer link (newest first; DL3). The keepalive closes the older one within
+// the transport's idle interval plus ping timeout, the pool emits
+// LinkClosedEvent with one link left, and SelectLinkWith still returns the
+// newer link.
+// note: this is A1G2 option a; selection rules out the dead link only through its age and suspect state
 // (https://wiki.satforge.dev/doc/a1g2-route-over-a-working-link-when-a-peer-has-a-dead-one-aVNtmu7SWl).
 // note: adding the newer link also wakes the older link's ping
 // (probeOlderLinks), which can close it within the ping timeout alone; the
@@ -330,8 +331,8 @@ func TestDeadLinkGivesWayToLiveOne(t *testing.T) {
 			t.Fatalf("AddLink: %v", err)
 		}
 	}
-	if got := mod.linkPool.SelectLinkWith(remoteID); got != dead {
-		t.Fatal("SelectLinkWith did not return the older link while both were pooled")
+	if got := mod.linkPool.SelectLinkWith(remoteID); got != live {
+		t.Fatal("SelectLinkWith did not return the newer link while both were pooled")
 	}
 
 	select {
@@ -434,7 +435,9 @@ func queryPeer(mod *Module, remoteID *astral.Identity, limit time.Duration) (*Li
 // link no later than the tcp transport's idle interval plus ping timeout
 // after the move; a query pending on the dead link fails at its close, not at
 // its own deadline; the other link stays up.
-// note: A1G2 option a, the health check alone; selection is unchanged
+// note: A1G2 option a, the health check, with DL3 selection: the newest healthy link takes the query.
+// why the tor link is pooled first in its case: the tcp link is then the newest, as after a move that
+// added a tcp link to a peer that already had a tor link, so queries use it until it turns suspect.
 // (https://wiki.satforge.dev/doc/a1g2-route-over-a-working-link-when-a-peer-has-a-dead-one-aVNtmu7SWl).
 func TestQueriesFailOverWithinIdlePlusTimeout(t *testing.T) {
 	const tcpIdle, tcpTimeout = 300 * time.Millisecond, 200 * time.Millisecond
@@ -455,11 +458,11 @@ func TestQueriesFailOverWithinIdlePlusTimeout(t *testing.T) {
 		t.Run(c.name, func(t *testing.T) {
 			f := newProbeFixture()
 			remoteID := astral.GenerateIdentity()
-			old, cut := addServedLink(t, f.mod, remoteID, tcpIdle, tcpTimeout)
 			var other *Link
 			if c.otherUp {
 				other, _ = addServedLink(t, f.mod, remoteID, c.idle, c.to)
 			}
+			old, cut := addServedLink(t, f.mod, remoteID, tcpIdle, tcpTimeout)
 
 			// why: past the start jitter, the tcp link probes on its idle schedule.
 			time.Sleep(pingJitter + 100*time.Millisecond)
@@ -494,6 +497,11 @@ func TestQueriesFailOverWithinIdlePlusTimeout(t *testing.T) {
 				t.Fatalf("queries failed for %v after the move; want at most %v", window, limit)
 			}
 			t.Logf("queries reached the peer again %v after the move", window)
+			// why wait: the other link takes the first query at once when it is newer than the dead one, which then closes by its own keepalive.
+			select {
+			case <-old.Done():
+			case <-time.After(tcpIdle + tcpTimeout + slack - time.Since(move)):
+			}
 			if err := old.Err(); err == nil || !strings.Contains(err.Error(), "ping timeout") {
 				t.Fatalf("the dead tcp link closed with %v; want ping timeout", err)
 			}

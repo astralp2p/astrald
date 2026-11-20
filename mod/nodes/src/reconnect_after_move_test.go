@@ -146,6 +146,11 @@ func TestMovedPeerNewLinkDropsOldLinkAndRefreshesEndpoints(t *testing.T) {
 		t.Fatalf("AddLink: %v", err)
 	}
 
+	// why: the new link is the newest and healthy, so queries leave the black-holed link at once, before it closes.
+	if got := f.mod.linkPool.SelectLinkWith(f.peer); got != live {
+		t.Fatal("SelectLinkWith did not return the new link while the old link was still pooled")
+	}
+
 	// why closeNoticeBound: the old link's far end never reads, so the close frame's write waits out its bound.
 	select {
 	case <-old.Done():

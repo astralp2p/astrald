@@ -270,6 +270,15 @@ func (s *Link) pong(nonce astral.Nonce) (time.Duration, error) {
 	return d, nil
 }
 
+// Suspect reports whether the link may be dead: a ping waits for its pong, or a probe is due.
+// note: a link is suspect once its ping loop calls beginPing, not at Wake; a new link is not suspect, newLink stamps lastRecv.
+func (s *Link) Suspect() bool {
+	s.pingMu.Lock()
+	inFlight := s.ping != nil
+	s.pingMu.Unlock()
+	return inFlight || s.idleLeft() <= 0
+}
+
 // Wake triggers a ping on the next loop iteration.
 func (s *Link) Wake() {
 	select {
