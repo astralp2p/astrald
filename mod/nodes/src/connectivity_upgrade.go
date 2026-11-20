@@ -59,7 +59,8 @@ func (mod *Module) connectivityUpgrade(e *nodes.LinkPressureEvent) {
 		}
 
 		if targetLink != nil {
-			mod.migrateSessions(e.LinkID, targetLink)
+			mod.moveSessions(e.LinkID, targetLink)
+			mod.retireAfterUpgrade(e.LinkID, targetLink)
 		} else {
 			mod.log.Logv(2, "connectivity upgrade: no target link found, skipping migration for %v", e.RemoteIdentity)
 		}
@@ -69,6 +70,77 @@ func (mod *Module) connectivityUpgrade(e *nodes.LinkPressureEvent) {
 		case <-mod.ctx.Done():
 		}
 	})
+}
+
+// retireMax is the longest retireLink waits for the sessions of a link to close.
+// why 2 min: a session younger than minSessionAge (30 s) at the upgrade becomes migratable within it.
+// note: a session still open and not migratable at this bound is cut.
+const retireMax = 2 * time.Minute
+
+// retirePoll is the interval at which retireLink checks a retiring link for open sessions.
+const retirePoll = time.Second
+
+// retireAfterUpgrade starts retireLink on the link oldID in favor of target when target has the higher transport rank, and reports whether it started.
+// why only a higher rank: an upgrade to an equal or lower rank gains no speed, so both links stay (U3).
+func (mod *Module) retireAfterUpgrade(oldID astral.Nonce, target *Link) bool {
+	old := mod.getLinkByID(oldID)
+	if old == nil || old == target || rankOf(target.Network()) <= rankOf(old.Network()) {
+		return false
+	}
+	mod.log.Logv(1, "retiring %v link %v with %v after the upgrade to %v link %v",
+		old.Network(), old.id, old.RemoteIdentity(), target.Network(), target.id)
+	go mod.retireLink(old, target)
+	return true
+}
+
+// retireLink closes old with ErrLinkRetired once it holds no session or retireMax passed, whichever comes first.
+// Before the close it migrates to target the sessions that became migratable meanwhile.
+// It leaves old open when old or target closes first or the module stops.
+func (mod *Module) retireLink(old, target *Link) {
+	clock := mod.retireClock
+	if clock == nil {
+		clock = realClock{}
+	}
+	deadline := clock.Now().Add(retireMax)
+	for old.GetMux().sessions.Len() > 0 {
+		left := deadline.Sub(clock.Now())
+		if left <= 0 {
+			break
+		}
+		select {
+		case <-clock.After(min(retirePoll, left)):
+		case <-old.Done():
+			return
+		case <-target.Done():
+			return
+		case <-mod.ctx.Done():
+			return
+		}
+	}
+	if old.Err() != nil || target.Err() != nil {
+		return
+	}
+
+	mod.moveSessions(old.id, target)
+	mod.log.Log("retired %v link %v with %v; %v link %v carries its traffic",
+		old.Network(), old.id, old.RemoteIdentity(), target.Network(), target.id)
+	old.CloseWithError(nodesmod.ErrLinkRetired)
+}
+
+// moveSessions migrates the migratable sessions of the link oldLinkID to newLink through mod.migrate, else migrateSessions.
+func (mod *Module) moveSessions(oldLinkID astral.Nonce, newLink *Link) {
+	if mod.migrate != nil {
+		mod.migrate(oldLinkID, newLink)
+		return
+	}
+	mod.migrateSessions(oldLinkID, newLink)
+}
+
+// hasMigratable reports whether link holds an open session that canAutoMigrate accepts.
+func (mod *Module) hasMigratable(link *Link) bool {
+	return len(link.GetMux().sessions.Select(func(_ astral.Nonce, v *session) bool {
+		return v.IsOpen() && mod.canAutoMigrate(v)
+	})) > 0
 }
 
 const migrateSessionTimeout = 30 * time.Second

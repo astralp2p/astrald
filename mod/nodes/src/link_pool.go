@@ -182,25 +182,74 @@ func (pool *LinkPool) addCounted(link *Link) (int, error) {
 	})), nil
 }
 
-// SelectLinkWith returns the best link to id: not suspect first, then not under high pressure, then the newest.
-// It returns a link whenever one to id is open, however suspect or loaded, and never calls Wake.
+// SelectLinkWith returns the best link to id for a new query. It keeps the links of the top rank:
+// the highest transport rank among the links not under high pressure, else the highest rank of all.
+// Among those it prefers, outermost first: not suspect, not under high pressure, the newest.
+// It returns a link whenever one to id is usable, however suspect or loaded, and never calls Wake.
+// why rank first: a faster transport carries new queries once it is up; a lower rank
+// takes them only while every higher-ranked link is under high pressure (U3).
 // why no oldest-first: the oldest link is the one a moved peer left behind (A1G2, DL3).
 func (pool *LinkPool) SelectLinkWith(id *astral.Identity) *Link {
 	if pool.closed.Load() {
 		return nil
 	}
-	var best *Link
+	links := pool.links.Select(func(l *Link) bool {
+		return l.usable() && l.RemoteIdentity().IsEqual(id)
+	})
+	top := topRank(links)
 
-	for _, link := range pool.links.Clone() {
-		if link.Err() != nil || !link.RemoteIdentity().IsEqual(id) {
+	var best *Link
+	for _, link := range links {
+		if rankOf(link.Network()) != top {
 			continue
 		}
-
 		if best == nil || betterLink(link, best) {
 			best = link
 		}
 	}
 
+	return best
+}
+
+// topRank returns the highest transport rank among links not under high pressure, else the highest rank among links; -1 for none.
+func topRank(links []*Link) int {
+	top, calm := -1, -1
+	for _, l := range links {
+		r := rankOf(l.Network())
+		top = max(top, r)
+		if !l.PressureHigh() {
+			calm = max(calm, r)
+		}
+	}
+	if calm >= 0 {
+		return calm
+	}
+	return top
+}
+
+// bestLink returns the usable link to peer, among those accept takes (all when accept is nil),
+// with the highest transport rank, and of equal rank the one the duplicate rule keeps; nil when none.
+// note: at equal rank it returns what findSurvivor returns, so a caller of RetrieveLink gets the link both ends keep.
+func (pool *LinkPool) bestLink(peer *astral.Identity, accept func(*Link) bool) *Link {
+	var best *Link
+	for _, l := range pool.links.Clone() {
+		if !l.usable() || !l.RemoteIdentity().IsEqual(peer) || (accept != nil && !accept(l)) {
+			continue
+		}
+		if best == nil {
+			best = l
+			continue
+		}
+		if rl, rb := rankOf(l.Network()), rankOf(best.Network()); rl != rb {
+			if rl > rb {
+				best = l
+			}
+			continue
+		}
+		if keptOver(l, best) {
+			best = l
+		}
+	}
 	return best
 }
 
@@ -279,7 +328,7 @@ func (pool *LinkPool) getOrCreateNodeLinker(target *astral.Identity) *NodeLinker
 	return linker
 }
 
-// RetrieveLink answers ErrLinkDenied at once for a target an admitter refuses. It returns the surviving matching link immediately unless ForceNew is set; otherwise it activates linking strategies and delivers the first link that matches, the surviving match once the strategies finish, ctx cancellation, or ErrLinkNotProduced.
+// RetrieveLink answers ErrLinkDenied at once for a target an admitter refuses. Unless ForceNew is set it returns the best matching link (bestLink) immediately, without a dial; otherwise, or with no match, it activates linking strategies and delivers the first link that matches, the best match once the strategies finish, ctx cancellation, or ErrLinkNotProduced.
 func (pool *LinkPool) RetrieveLink(
 	ctx *astral.Context,
 	target *astral.Identity,
@@ -312,7 +361,7 @@ func (pool *LinkPool) RetrieveLink(
 	}
 
 	if !o.ForceNew {
-		if s := pool.findSurvivor(target, func(s *Link) bool { return match(s, nil) }); s != nil {
+		if s := pool.bestLink(target, func(s *Link) bool { return match(s, nil) }); s != nil {
 			return sig.ArrayToChan([]LinkResult{{Link: s}})
 		}
 	}
@@ -349,7 +398,7 @@ func (pool *LinkPool) RetrieveLink(
 			default:
 				// why: a link held back for its rivals may settle as the
 				// strategies finish, before it reaches the watcher.
-				if s := pool.findSurvivor(target, fresh); s != nil {
+				if s := pool.bestLink(target, fresh); s != nil {
 					result <- LinkResult{Link: s}
 					return
 				}

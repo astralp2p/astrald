@@ -38,6 +38,7 @@ type Link struct {
 	throughput  atomic.Uint64
 	outbound    bool
 	prunable    atomic.Bool   // a strategy link no caller asked for as new; a link that outranks it closes it
+	excess      atomic.Bool   // closeExcess chose it to close; set while its sessions migrate, before the close
 	idlePing    time.Duration // N: probe after this long without a received frame
 	pingTimeout time.Duration // T: close when a probe gets no pong within this
 	lastRecv    atomic.Int64  // unix nanos of the last received frame that is not a peer's probe
@@ -109,6 +110,11 @@ func (s *Link) sendCloseNotice(reason frames.CloseReason) {
 
 func (s *Link) Err() error {
 	return s.err.Get()
+}
+
+// usable reports whether the link takes new traffic: it is open and no excess close is pending on it.
+func (s *Link) usable() bool {
+	return s.Err() == nil && !s.excess.Load()
 }
 
 func (s *Link) Done() <-chan struct{} {
