@@ -13,7 +13,7 @@ import (
 
 // ReceiveObject dispatches an inbound object by type, accepting observed-endpoint
 // and endpoints-changed messages from linked peers, announcing local address
-// changes, and reacting to local link events with connectivity upgrades and
+// changes, waking the links bound to a removed address, and reacting to local link events with connectivity upgrades and
 // endpoint refreshes, on the first link to a sibling and on the close of one of
 // several links to it. Unhandled and rejected objects are ignored without
 // accepting the drop.
@@ -39,6 +39,9 @@ func (mod *Module) ReceiveObject(drop objects.Drop) error {
 
 		switch e := object.Data.(type) {
 		case *ip.EventNetworkAddressChanged:
+			// why: a link can be bound to an address that is never advertised, such as an IPv6 link-local one.
+			mod.scheduleLinkWake(e)
+
 			if changesAdvertisedAddress(e) {
 				mod.scheduleEndpointsAnnounce()
 			}

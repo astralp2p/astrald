@@ -10,6 +10,7 @@ import (
 	"github.com/astralp2p/astral-go/api/crypto"
 	"github.com/astralp2p/astral-go/api/exonet"
 	"github.com/astralp2p/astral-go/api/gateway"
+	"github.com/astralp2p/astral-go/api/ip"
 	"github.com/astralp2p/astral-go/api/nodes"
 	modsecp256k1 "github.com/astralp2p/astral-go/api/secp256k1"
 	"github.com/astralp2p/astral-go/astral"
@@ -72,6 +73,15 @@ type Module struct {
 	announcePending atomic.Bool
 	// lastAnnouncedHash is the fingerprint of the last announced endpoint set, nil before the first announcement.
 	lastAnnouncedHash atomic.Pointer[endpointsHash]
+
+	// linkWakeDelay is the wait between a local address change and the wake of the links bound to a removed address.
+	linkWakeDelay time.Duration
+	// wakeMu guards wakeIPs.
+	wakeMu sync.Mutex
+	// wakeIPs are the removed addresses that the next wake round covers.
+	wakeIPs []ip.IP
+	// wakePending is set while a wake round waits out linkWakeDelay.
+	wakePending atomic.Bool
 
 	// syncGate runs one endpoint pull per sibling at a time, after a partial link close and in the daily refresh.
 	syncGate syncGate

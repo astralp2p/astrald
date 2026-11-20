@@ -8,6 +8,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/astralp2p/astral-go/api/ip"
 	"github.com/astralp2p/astral-go/api/nodes"
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astral-go/sig"
@@ -132,6 +133,24 @@ func (pool *LinkPool) probeOlderLinks(link *Link) {
 	})
 	for _, old := range older {
 		old.Wake()
+	}
+}
+
+// WakeByLocalIP wakes the ping loop of every pooled link whose local endpoint
+// holds one of ips, so each sends one ping.
+// why: a link bound to an address that left the host is dead, and the ping
+// closes it within its ping timeout instead of after the idle interval too.
+// note: a link with no IP local endpoint, or a wildcard one as kcp reports, never
+// matches and keeps relying on its idle keepalive.
+func (pool *LinkPool) WakeByLocalIP(ips []ip.IP) {
+	if len(ips) == 0 {
+		return
+	}
+
+	for _, link := range pool.links.Select(func(v *Link) bool {
+		return localIPIn(v.LocalEndpoint(), ips)
+	}) {
+		link.Wake()
 	}
 }
 

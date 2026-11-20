@@ -22,6 +22,7 @@ func (Loader) Load(node astral.Node, assets assets.Assets, log *log.Logger) (cor
 		assets:        assets,
 		resolveRemote: resolveRemoteEndpoints,
 		announceDelay: endpointsAnnounceDelay,
+		linkWakeDelay: linkWakeDelay,
 
 		siblingRefreshInterval: defaultSiblingRefreshInterval,
 	}
