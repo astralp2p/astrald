@@ -323,7 +323,7 @@ class TestShippedPlans(Invariants, unittest.TestCase):
              ("local", "expel-during-transfer"), ("local", "expel-node"),
              ("local", "expel-sweep-redelivers"),
              ("vm", "gateway-unregistered-advertise"), ("local", "hold-purge"),
-             ("local", "join-via-member"), ("vm", "kcp-only-relink"),
+             ("local", "join-via-member"), ("vm", "kcp-restart-stale-link"),
              ("local", "kcp-only-restart-relink"),
              ("local", "link-dead-peer-keepalive"),
              ("local", "link-session-migrate"),
@@ -361,7 +361,8 @@ class TestShippedPlans(Invariants, unittest.TestCase):
              ("local", "distribution-gate-setup"),
              ("local", "import-user-software-key"),
              ("local", "introduce-node"), ("vm", "nearby-join"),
-             ("vm", "nearby-relink")])
+             ("vm", "nearby-relink"), ("vm", "nearby-adopt-ports"),
+             ("vm", "nearby-stealth-meet-ports")])
 
     def test_a_local_test_never_enters_a_vm_world(self):
         # why mcp-peer, app-query and services-app-call: each serves an app

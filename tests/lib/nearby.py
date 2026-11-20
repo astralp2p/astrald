@@ -18,6 +18,10 @@ PROFILE = "mod.nearby.public_profile"
 HINT = "mod.nearby.stealth_hint"
 PROOF = "mod.nearby.status_proof"
 FLAG = "mod.nearby.flag"
+# the listen ports of a node off tcp 1791 or kcp 1792: plain in a Visible
+# status, sealed under the node identity in a Stealth one
+LISTEN_PORTS = "mod.nearby.listen_ports"
+SEALED_PORTS = "mod.nearby.sealed_ports"
 MODE = "mod.nearby.mode"
 SILENT, VISIBLE, STEALTH = 0, 1, 2
 # the stored mode, in the node's tree (mod/nearby/src/deps.go modePath)
@@ -37,12 +41,13 @@ def identity(value) -> str | None:
 
 def summary(status: dict) -> dict:
     """A mod.nearby.status as facts: whom the node took it for, what it
-    carried, and its proof's nonce and timestamp, which a newer status of the
-    same node replaces."""
+    carried, the plain listen ports of a Visible one, and its proof's nonce
+    and timestamp, which a newer status of the same node replaces."""
     atts = [a for a in status.get("Attachments") or [] if isinstance(a, dict)]
     profile = next((a.get("Object") for a in atts if a.get("Type") == PROFILE), None)
     proof = next((a.get("Object") for a in atts if a.get("Type") == PROOF), None)
     proof = proof if isinstance(proof, dict) else {}
+    ports = next((a.get("Object") for a in atts if a.get("Type") == LISTEN_PORTS), None)
     return {
         "identity": identity(status.get("Identity")),
         "types": [a.get("Type") for a in atts],
@@ -52,6 +57,8 @@ def summary(status: dict) -> dict:
             "user": identity(profile.get("UserID")),
             "alias": profile.get("NodeAlias") or "",
         },
+        "ports": None if not isinstance(ports, dict) else {
+            "tcp": ports.get("TCP"), "kcp": ports.get("KCP")},
         "nonce": proof.get("Nonce"),
         "timestamp": proof.get("Timestamp"),
     }

@@ -1,1 +1,2 @@
 w0 vm: bootstrap-user-software-key → adopt-node → kcp-only-relink
+       → kcp-restart-stale-link

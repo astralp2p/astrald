@@ -1,16 +1,22 @@
 # nearby.suite — nearby on a simulated LAN: an unowned node listed and adopted
 # by its nearby alias, two nodes of one User meeting in stealth, a Silent node
 # sending nothing, a sibling relinked the moment it is heard again, and a
-# fresh node joining a Stealth node with user.join alone.
+# fresh node joining a Stealth node with user.join alone; and, off the default
+# listen ports, an unowned node adopted and two fresh Stealth nodes of one User
+# linking through the ports their statuses carry.
 #
 # Every test runs VM operations: nearby needs a LAN, and a local world has
 # none (ether skips loopback). The first four continue the one before, so they
 # are one chain in one simulation, and a failure skips the tests after it. The
 # order puts the long outage last. nearby-join claims the reflector, which
 # nearby-stealth-meet needs unowned, so it runs in a world of its own that
-# replays nearby-adopt.
+# replays nearby-adopt. The two -ports tests move nodes off tcp 1791 and kcp
+# 1792, a node config no other test shares, so each runs in a world of its
+# own.
 nearby-adopt
 nearby-stealth-meet
 nearby-silent
 nearby-relink
 nearby-join
+nearby-adopt-ports
+nearby-stealth-meet-ports

@@ -1,0 +1,17 @@
+nodes   = ["node1", "node2"]
+timeout = 240
+# why noop: as nearby-adopt's, the op that keeps it in a VM world, where a LAN
+# carries nearby. Only a test with ops may move a node's listen ports
+# (lib/manifest.py VM_PORT_KEYS).
+ops     = ["noop"]
+facts   = ["nearby_ports_adopt"]
+
+# why node2 off both defaults: with kcp left on 1792, a dial to nearby's
+# default kcp port could adopt node2 although node1 ignored the ports in its
+# status; with both moved, every link node1 dials proves the carried ports.
+# script.py and verify.py read the ports from these tables.
+[config.node2.tcp]
+listen_port = 1800
+
+[config.node2.kcp]
+listen_port = 1810

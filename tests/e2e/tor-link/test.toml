@@ -1,5 +1,7 @@
 nodes   = ["node1", "node2"]
-timeout = 600
+# why 780 s: the driver's first answer (300 s) and tor link (300 s) waits, plus
+# the endpoint-table watch past the new link (60 s and slack)
+timeout = 780
 after   = "adopt-node"
 # why: leave-lan flushes node2's LAN address and downs the NIC, and nothing
 # puts it back, so a sibling cannot continue adopt-node's world afterwards —

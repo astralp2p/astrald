@@ -1,2 +1,10 @@
 w0 vm: nearby-adopt → nearby-stealth-meet → nearby-silent → nearby-relink
 w1 vm: nearby-adopt* → nearby-join
+w2 vm: nearby-adopt-ports
+       config node2.kcp.listen_port = 1810
+       config node2.tcp.listen_port = 1800
+w3 vm: nearby-stealth-meet-ports
+       config node1.kcp.listen_port = 1810
+       config node1.tcp.listen_port = 1800
+       config node2.kcp.listen_port = 1811
+       config node2.tcp.listen_port = 1801
