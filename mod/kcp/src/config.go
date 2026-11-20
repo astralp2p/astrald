@@ -18,8 +18,12 @@ type Config struct {
 	// connection within it. Zero disables the timeout.
 	EphemeralIdleTimeout time.Duration `yaml:"ephemeral_idle_timeout,omitempty"`
 
-	// LinkIdlePing and LinkPingTimeout time the keepalive of links over this
-	// transport (astral-docs topics/link-mux.md, Keepalive).
+	// LinkIdlePing (N) and LinkPingTimeout (T) time the keepalive of links over
+	// this transport; a dead link closes within N + T of its last received frame.
+	// A non-positive value takes the kcp default below, which equals the kcp
+	// TransportProfile in mod/nodes (10 s, 10 s).
+	// Values and bounds per transport: astral-docs topics/link-mux.md, Keepalive,
+	// "Per-transport values".
 	LinkIdlePing    time.Duration `yaml:"link_idle_ping,omitempty"`
 	LinkPingTimeout time.Duration `yaml:"link_ping_timeout,omitempty"`
 }
@@ -52,8 +56,9 @@ func defaultConfig() Config {
 // linkKeepalive returns the keepalive timing of links over kcp conns.
 //
 // why: a kcp.yaml key set to 0 or left empty overwrites the default with 0,
-// and mod/nodes fills a 0 with its generic 15 s, which outlives a fresh UDP
-// NAT mapping. A non-positive value takes the kcp default instead.
+// and a 0 left to mod/nodes takes the kcp TransportProfile, which today equals
+// the kcp default but is a second copy of it. A non-positive value takes the
+// kcp default here instead, so the kcp pair does not depend on that copy.
 func (c Config) linkKeepalive() exonetmod.LinkKeepalive {
 	def := defaultConfig()
 	k := exonetmod.LinkKeepalive{Idle: c.LinkIdlePing, Timeout: c.LinkPingTimeout}

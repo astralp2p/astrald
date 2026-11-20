@@ -204,8 +204,9 @@ func (mod *Module) GetLinkNegotiator(ch *channel.Channel) *muxLinkNegotiator {
 
 // getPrivateKey returns the node's private key, loaded on the first call.
 //
-// why not mod.ctx: Run sets it, and a transport accepts links once it runs, so the
-// first inbound link can arrive before Run.
+// note: the key load takes a fresh context for the node identity and not mod.ctx.
+// mod.ctx is set in Load (initContext, astrald#557), so an inbound link that
+// arrives before Run reads a live mod.ctx either way.
 func (mod *Module) getPrivateKey() (*crypto.PrivateKey, error) {
 	mod.mu.Lock()
 	defer mod.mu.Unlock()

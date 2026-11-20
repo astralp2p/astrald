@@ -14,8 +14,11 @@ type Config struct {
 	DialTimeout time.Duration `yaml:"dial_timeout,omitempty"`
 	ListenPort  int           `yaml:"listen_port,omitempty"`
 
-	// LinkIdlePing and LinkPingTimeout time the keepalive of links over this
-	// transport (astral-docs topics/link-mux.md, Keepalive).
+	// LinkIdlePing (N) and LinkPingTimeout (T) time the keepalive of links over
+	// this transport; a dead link closes within N + T of its last received frame.
+	// A 0 leaves the value to the tcp TransportProfile in mod/nodes (15 s, 10 s).
+	// Values and bounds per transport: astral-docs topics/link-mux.md, Keepalive,
+	// "Per-transport values".
 	LinkIdlePing    time.Duration `yaml:"link_idle_ping,omitempty"`
 	LinkPingTimeout time.Duration `yaml:"link_ping_timeout,omitempty"`
 }

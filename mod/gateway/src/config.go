@@ -31,8 +31,11 @@ type Config struct {
 	Visibility gateway.Visibility `yaml:"visibility"`
 	Gateways   []GatewayEntry     `yaml:"gateways"`
 
-	// LinkIdlePing and LinkPingTimeout time the keepalive of links over this
-	// transport (astral-docs topics/link-mux.md, Keepalive).
+	// LinkIdlePing (N) and LinkPingTimeout (T) time the keepalive of links over
+	// this transport; a dead link closes within N + T of its last received frame.
+	// A 0 leaves the value to the gw TransportProfile in mod/nodes (15 s, 10 s).
+	// Values and bounds per transport: astral-docs topics/link-mux.md, Keepalive,
+	// "Per-transport values".
 	LinkIdlePing    time.Duration `yaml:"link_idle_ping,omitempty"`
 	LinkPingTimeout time.Duration `yaml:"link_ping_timeout,omitempty"`
 }
