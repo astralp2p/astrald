@@ -3,6 +3,7 @@ package user
 import (
 	"errors"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -158,6 +159,8 @@ type recordingNodes struct {
 	syncs  chan endpointSync
 	closed chan *astral.Identity
 	linked []*astral.Identity
+	// enforced counts the EnforceLinkPolicy calls.
+	enforced atomic.Int32
 }
 
 func (n *recordingNodes) IsLinked(id *astral.Identity) bool {
@@ -172,6 +175,11 @@ func (n *recordingNodes) UpdateNodeEndpoints(_ *astral.Context, resolver, target
 func (n *recordingNodes) CloseLinks(id *astral.Identity) error {
 	n.closed <- id
 	return nil
+}
+
+// EnforceLinkPolicy counts the enforcement passes.
+func (n *recordingNodes) EnforceLinkPolicy() {
+	n.enforced.Add(1)
 }
 
 // recordingScheduler records scheduled tasks and runs none.

@@ -54,6 +54,12 @@ type Module interface {
 	// CloseLinks closes all open links with the given identity.
 	CloseLinks(identity *astral.Identity) error
 
+	// AddLinkAdmitter registers a rule that every dial, inbound handshake and
+	// added link consults (astral-docs protocols/nodes/README.md, Link admission).
+	AddLinkAdmitter(LinkAdmitter)
+	// EnforceLinkPolicy closes every link whose peer an admitter now refuses.
+	EnforceLinkPolicy()
+
 	NewCreateLinkTask(target *astral.Identity, endpoint exonet.Endpoint) CreateLinkTask
 	NewEnsureLinkTask(target *astral.Identity, strategies []string, networks []string, forceNew bool) EnsureLinkTask
 	NewCleanupEndpointsTask() CleanupEndpointsTask
@@ -67,6 +73,13 @@ type Link interface {
 	RemoteIdentity() *astral.Identity
 	Close() error
 	Done() <-chan struct{}
+}
+
+// LinkAdmitter decides whether this node may hold a link with remote.
+// note: AdmitLink runs on every inbound handshake, so it never blocks.
+type LinkAdmitter interface {
+	// AdmitLink returns nil to admit a link with remote, or why it is refused.
+	AdmitLink(remote *astral.Identity) error
 }
 
 // EndpointResolver resolves the network endpoints at which an identity can be reached.

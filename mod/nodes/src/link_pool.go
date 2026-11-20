@@ -63,6 +63,14 @@ func (pool *LinkPool) AddLink(link *Link) error {
 		return context.Canceled
 	}
 
+	// why after the add: an EnforceLinkPolicy that runs after an admitter's
+	// change either finds this link in the pool or the change refuses it here.
+	if err := pool.mod.admit(link.RemoteIdentity()); err != nil {
+		pool.links.Remove(link)
+		link.CloseWithError(err)
+		return err
+	}
+
 	link.GetMux().SetRouter(pool.mod.node)
 
 	pool.mod.log.Infov(1, "added %v-link with %v (%v)", dir, link.RemoteIdentity(), netName)
@@ -241,7 +249,7 @@ func (pool *LinkPool) getOrCreateNodeLinker(target *astral.Identity) *NodeLinker
 	return linker
 }
 
-// RetrieveLink returns the surviving matching link immediately unless ForceNew is set; otherwise it activates linking strategies and delivers the first link that matches, the surviving match once the strategies finish, ctx cancellation, or ErrLinkNotProduced.
+// RetrieveLink answers ErrLinkDenied at once for a target an admitter refuses. It returns the surviving matching link immediately unless ForceNew is set; otherwise it activates linking strategies and delivers the first link that matches, the surviving match once the strategies finish, ctx cancellation, or ErrLinkNotProduced.
 func (pool *LinkPool) RetrieveLink(
 	ctx *astral.Context,
 	target *astral.Identity,
@@ -265,6 +273,12 @@ func (pool *LinkPool) RetrieveLink(
 			return slices.Contains(o.Networks, s.Network())
 		}
 		return true
+	}
+
+	// why before the pooled links: a refused peer gets no link, and its pooled
+	// links close when the refusal begins (EnforceLinkPolicy).
+	if err := pool.mod.admit(target); err != nil {
+		return sig.ArrayToChan([]LinkResult{{Err: err}})
 	}
 
 	if !o.ForceNew {

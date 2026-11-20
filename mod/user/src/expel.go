@@ -44,6 +44,7 @@ func (mod *Module) Expel(ctx *astral.Context, nodeID *astral.Identity) (*user.Si
 	if err != nil {
 		return nil, err
 	}
+	mod.refreshBans()
 	mod.publishSwarm()
 
 	go mod.PushToLocalSwarm(mod.ctx, signed)
@@ -51,7 +52,12 @@ func (mod *Module) Expel(ctx *astral.Context, nodeID *astral.Identity) (*user.Si
 	// directly — its trigger to self-enforce via leaveSwarm. The push is retried
 	// until the node answers; the expulsion sync at the node's next link with a
 	// holder of the ban and the sweep (reconcile_task.go) also deliver it.
-	go mod.pushUntilDelivered(mod.ctx, nodeID, signed)
+	// The node's answer closes the links with it (AdmitLink).
+	go func() {
+		if mod.pushUntilDelivered(mod.ctx, nodeID, signed) {
+			mod.onBanAnswered(nodeID)
+		}
+	}()
 	// why: stop maintaining the link but do not force-close it — that would race the
 	// push above. On delivery the node tears itself down; until then the issuer's
 	// authorizers reject it.
@@ -83,6 +89,7 @@ func (mod *Module) receiveExpulsion(signed *user.SignedExpulsion) error {
 		mod.log.Errorv(1, "storing expulsion failed: %v", err)
 		return objects.ErrPushRejected
 	}
+	mod.refreshBans()
 	mod.publishSwarm()
 
 	mod.applyExpulsion(signed.Subject)

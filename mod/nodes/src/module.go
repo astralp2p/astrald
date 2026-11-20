@@ -46,6 +46,9 @@ type Module struct {
 	dbResolver *DBEndpointResolver
 	resolvers  sig.Set[nodesmod.EndpointResolver]
 
+	// admitters are the link admission rules; see link_admission.go.
+	admitters sig.Set[nodesmod.LinkAdmitter]
+
 	observedEndpoints sig.Map[string, ObservedEndpoint] // key is IP string
 
 	linkPool *LinkPool

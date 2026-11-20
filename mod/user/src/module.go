@@ -61,6 +61,12 @@ type Module struct {
 	// joinTarget is the node a running user.join is joining; nil while no join
 	// runs. See recognizeJoinTarget.
 	joinTarget atomic.Pointer[astral.Identity]
+
+	// banned holds the subjects the active user banned; see AdmitLink.
+	banned atomic.Pointer[map[string]struct{}]
+	// banAnswers holds the banned subjects that answered their own ban pushed
+	// from this node; see AdmitLink.
+	banAnswers sig.Set[string]
 }
 
 func (mod *Module) Run(ctx *astral.Context) error {
