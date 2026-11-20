@@ -315,16 +315,20 @@ func (pool *LinkPool) RetrieveLink(
 	go func() {
 		defer close(result)
 
-		strategyCtx, cancelStrategies := ctx.WithCancel()
-		defer cancelStrategies()
-
 		// why: a forced or network-bound request asks for a link the pool's
 		// existing links do not satisfy, so its link is not a duplicate.
 		w := pool.subscribe(match, o.ForceNew || len(o.Networks) > 0)
 		defer pool.unsubscribe(w)
 
+		// note: callCtx ends when this call returns, which also ends Activate's wait.
+		callCtx, endCall := ctx.WithCancel()
+		defer endCall()
+
 		linker := pool.getOrCreateNodeLinker(target)
-		done := linker.Activate(strategyCtx, o.Strategies)
+		// why: a round outlives this caller while other callers hold it; release
+		// leaves it on every return.
+		done, release := linker.Activate(callCtx, o.Strategies)
+		defer release()
 
 		select {
 		case <-done:

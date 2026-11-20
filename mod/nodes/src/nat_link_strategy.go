@@ -2,7 +2,7 @@ package nodes
 
 import (
 	"fmt"
-	"sync"
+	"time"
 
 	"github.com/astralp2p/astral-go/api/kcp"
 	kcpclient "github.com/astralp2p/astral-go/api/kcp/client"
@@ -15,36 +15,38 @@ import (
 )
 
 type NATLinkStrategy struct {
-	mod    *Module
-	log    *log.Logger
-	target *astral.Identity
-	clock  wakeClock // the wake loop's time source; nil is the real clock
+	mod         *Module
+	log         *log.Logger
+	target      *astral.Identity
+	clock       wakeClock                   // the wake loop's time source; nil is the real clock
+	roundBudget time.Duration               // 0 is natRoundBudget
+	traverse    func(*astral.Context) error // test seam; nil is attempt
 
-	mu   sync.Mutex
-	done chan struct{}
+	rounds roundKeeper
 }
 
 var _ nodes.LinkStrategy = &NATLinkStrategy{}
 
 func (s *NATLinkStrategy) Name() string { return nodes.StrategyNAT }
 
-// Signal starts a NAT-traversal attempt in the background; a no-op if one is already running.
-func (s *NATLinkStrategy) Signal(ctx *astral.Context) {
-	s.mu.Lock()
-	if s.done != nil {
-		s.mu.Unlock()
-		return
+// Join adds the caller to the running NAT-traversal round, or starts one on the module context.
+func (s *NATLinkStrategy) Join(ctx *astral.Context) (release func()) {
+	budget := s.roundBudget
+	if budget <= 0 {
+		budget = natRoundBudget
 	}
-	s.done = make(chan struct{})
-	s.mu.Unlock()
+	return s.rounds.join(ctx, s.mod.ctx, budget, s.run)
+}
 
-	go func() {
-		defer s.signalDone()
-
-		if err := s.attempt(ctx); err != nil {
-			s.log.Logv(2, "%v %v", s.target, err)
-		}
-	}()
+// run traverses NAT to the target on the round context.
+func (s *NATLinkStrategy) run(r *linkRound) {
+	traverse := s.traverse
+	if traverse == nil {
+		traverse = s.attempt
+	}
+	if err := traverse(r.ctx); err != nil {
+		s.log.Logv(2, "%v %v", s.target, err)
+	}
 }
 
 func (s *NATLinkStrategy) attempt(ctx *astral.Context) error {
@@ -185,26 +187,9 @@ func newHolePorts(hole *nat.Hole, self *astral.Identity) holePorts {
 	}
 }
 
-func (s *NATLinkStrategy) signalDone() {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if s.done != nil {
-		close(s.done)
-		s.done = nil
-	}
-}
-
-// Done returns a channel closed when the current attempt finishes; already closed when no attempt is running.
+// Done returns a channel closed when the running round finishes; already closed when no round runs.
 func (s *NATLinkStrategy) Done() <-chan struct{} {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	if s.done == nil {
-		ch := make(chan struct{})
-		close(ch)
-		return ch
-	}
-	return s.done
+	return s.rounds.done()
 }
 
 // factory

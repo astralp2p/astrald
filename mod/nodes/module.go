@@ -87,11 +87,15 @@ type EndpointResolver interface {
 	ResolveEndpoints(*astral.Context, *astral.Identity) (<-chan *nodes.EndpointWithTTL, error)
 }
 
-// LinkStrategy drives one approach to establishing a link (e.g. direct, NAT, Tor);
-// Done closes once the strategy has finished, whether or not it produced a link.
+// LinkStrategy drives one approach to establishing a link (e.g. direct, NAT, Tor).
+// Join adds a caller to the strategy's running round, starting one when none runs,
+// and returns the caller's idempotent release. The round runs on a module-owned
+// context with a budget; the round is cancelled once every joined caller has
+// released, or when the budget ends. A caller also leaves when ctx ends.
+// Done closes once the round has finished, whether or not it produced a link.
 type LinkStrategy interface {
 	Name() string
-	Signal(ctx *astral.Context)
+	Join(ctx *astral.Context) (release func())
 	Done() <-chan struct{}
 }
 
