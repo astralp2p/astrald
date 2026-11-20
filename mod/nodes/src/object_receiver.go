@@ -47,6 +47,9 @@ func (mod *Module) ReceiveObject(drop objects.Drop) error {
 
 			go mod.connectivityUpgrade(e)
 		case *nodes.LinkCreatedEvent:
+			// why: a gateway registration is made over a link, so a link event can follow a change of the advertised set.
+			mod.scheduleEndpointsAnnounce()
+
 			if e.LinkCount == 1 && slices.ContainsFunc(mod.User.LocalSwarm(),
 				e.RemoteIdentity.IsEqual) {
 
@@ -58,6 +61,7 @@ func (mod *Module) ReceiveObject(drop objects.Drop) error {
 				}()
 			}
 		case *nodes.LinkClosedEvent:
+			mod.scheduleEndpointsAnnounce()
 			mod.onPartialLinkClose(e)
 		}
 

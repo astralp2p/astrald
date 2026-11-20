@@ -122,6 +122,8 @@ func newReceiverFixture(t *testing.T) *receiverFixture {
 		node: &identityNode{id: f.nodeID},
 		log:  log.New(f.nodeID),
 		ctx:  ctx,
+		// note: a link event schedules an announcement; the wait outlasts these tests, which never expect one.
+		announceDelay: time.Hour,
 	}
 	f.mod.linkPool = NewLinkPool(f.mod)
 

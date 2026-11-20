@@ -70,17 +70,22 @@ type Module struct {
 	announceDelay time.Duration
 	// announcePending is set while an announcement waits out announceDelay.
 	announcePending atomic.Bool
+	// lastAnnouncedHash is the fingerprint of the last announced endpoint set, nil before the first announcement.
+	lastAnnouncedHash atomic.Pointer[endpointsHash]
 
 	// syncGate runs one endpoint pull per sibling at a time after a partial link close.
 	syncGate syncGate
 }
 
-// Run schedules the endpoint-cleanup task and blocks until ctx is cancelled.
+// Run schedules the endpoint-cleanup task and the startup endpoint check, and
+// blocks until ctx is cancelled.
 func (mod *Module) Run(ctx *astral.Context) error {
 	defer mod.linkPool.Close()
 	mod.ctx = ctx.IncludeZone(astral.ZoneNetwork)
 	<-mod.Deps.Scheduler.Ready()
 	mod.Scheduler.Schedule(mod.NewCleanupEndpointsTask())
+	// why: a set that changed while the node was off is announced once after the settle wait.
+	mod.scheduleEndpointsAnnounce()
 
 	<-ctx.Done()
 	return nil

@@ -2,16 +2,20 @@ package nodes
 
 import (
 	"errors"
+	"fmt"
 	"path/filepath"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/astralp2p/astral-go/api/events"
+	"github.com/astralp2p/astral-go/api/gateway"
 	"github.com/astralp2p/astral-go/api/ip"
 	"github.com/astralp2p/astral-go/api/nodes"
+	"github.com/astralp2p/astral-go/api/tor"
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astral-go/astral/log"
+	"github.com/astralp2p/astral-go/sig"
 	objectsmod "github.com/astralp2p/astrald/mod/objects"
 	usermod "github.com/astralp2p/astrald/mod/user"
 	"github.com/glebarez/sqlite"
@@ -86,6 +90,26 @@ type exchangeFixture struct {
 	pulls   chan pull
 	// answer is what the fake remote resolver returns.
 	answer []*nodes.EndpointWithTTL
+	// own is the resolver that answers for this node's own endpoint set.
+	own *ownResolver
+}
+
+// ownResolver resolves a settable endpoint set.
+type ownResolver struct {
+	mu   sync.Mutex
+	rows []*nodes.EndpointWithTTL
+}
+
+func (r *ownResolver) set(rows ...*nodes.EndpointWithTTL) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.rows = rows
+}
+
+func (r *ownResolver) ResolveEndpoints(*astral.Context, *astral.Identity) (<-chan *nodes.EndpointWithTTL, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return sig.ArrayToChan(append([]*nodes.EndpointWithTTL(nil), r.rows...)), nil
 }
 
 func newExchangeFixture(t *testing.T) *exchangeFixture {
@@ -99,6 +123,7 @@ func newExchangeFixture(t *testing.T) *exchangeFixture {
 		objects: &pushObjects{},
 		events:  &recordingEvents{},
 		pulls:   make(chan pull, 16),
+		own:     &ownResolver{},
 	}
 	f.user = &swarmUser{swarm: []*astral.Identity{f.self}}
 
@@ -115,6 +140,7 @@ func newExchangeFixture(t *testing.T) *exchangeFixture {
 		return f.answer, nil
 	}
 	f.mod.linkPool = NewLinkPool(f.mod)
+	f.mod.resolvers.Add(f.own)
 
 	return f
 }
@@ -267,10 +293,192 @@ func TestAnnounceEndpointsAfterWaitStartsAnew(t *testing.T) {
 	f := newExchangeFixture(t)
 
 	for i := 1; i <= 2; i++ {
+		// note: the set must differ, because an announcement is gated by the fingerprint.
+		f.own.set(endpointsWithTTL(fmt.Sprintf("198.51.100.%d", i))...)
 		if err := f.mod.ReceiveObject(&recordingDrop{sender: f.self, object: addressChanged(f.self)}); err != nil {
 			t.Fatalf("ReceiveObject: %v", err)
 		}
 		eventually(t, "announcement", func() bool { return len(f.user.siblings.list()) == i })
+	}
+}
+
+// announced returns how many announcements this node pushed to its siblings.
+func (f *exchangeFixture) announced() int { return len(f.user.siblings.list()) }
+
+// baseline runs the first check, which announces once whatever the set holds,
+// and returns the set it announced.
+func (f *exchangeFixture) baseline(t *testing.T, rows ...*nodes.EndpointWithTTL) {
+	t.Helper()
+	f.own.set(rows...)
+	f.mod.scheduleEndpointsAnnounce()
+	eventually(t, "first announcement", func() bool { return f.announced() == 1 })
+	time.Sleep(absenceWindow)
+	if n := f.announced(); n != 1 {
+		t.Fatalf("pushed %v announcements for the first check; want 1", n)
+	}
+}
+
+// sendLocal delivers an event of this node to ReceiveObject.
+func (f *exchangeFixture) sendLocal(t *testing.T, data astral.Object) {
+	t.Helper()
+	event := &events.Event{ID: astral.NewNonce(), SourceID: f.self, Data: data}
+	if err := f.mod.ReceiveObject(&recordingDrop{sender: f.self, object: event}); err != nil {
+		t.Fatalf("ReceiveObject: %v", err)
+	}
+}
+
+// waitOut sleeps past the announcement wait.
+func waitOut() { time.Sleep(testAnnounceDelay + absenceWindow) }
+
+func gatewayRow(t *testing.T) *nodes.EndpointWithTTL {
+	t.Helper()
+	return nodes.NewEndpointWithTTL(gateway.NewEndpoint(newTestIdentity(t), astral.GenerateIdentity()), time.Hour)
+}
+
+// TestAnnounceOnGatewayAddedLinkCreated (criterion 1): a gateway row appears
+// without an event and the next link-created event pushes exactly one
+// announcement about this node after the wait.
+func TestAnnounceOnGatewayAddedLinkCreated(t *testing.T) {
+	f := newExchangeFixture(t)
+	f.baseline(t, endpointsWithTTL("198.51.100.1")...)
+
+	f.own.set(append(endpointsWithTTL("198.51.100.1"), gatewayRow(t))...)
+	f.sendLocal(t, &nodes.LinkCreatedEvent{RemoteIdentity: astral.GenerateIdentity(), LinkCount: 2})
+
+	if n := f.announced(); n != 1 {
+		t.Fatalf("pushed %v announcements before the wait ended; want none new", n)
+	}
+	eventually(t, "announcement", func() bool { return f.announced() == 2 })
+	time.Sleep(absenceWindow)
+
+	pushes := f.user.siblings.list()
+	if len(pushes) != 2 {
+		t.Fatalf("pushed %v announcements; want 2 (first check, gateway added)", len(pushes))
+	}
+	if m, ok := pushes[1].object.(*nodes.EndpointsChangedMessage); !ok || !m.Subject.IsEqual(f.self) {
+		t.Fatalf("pushed %v; want an EndpointsChangedMessage about this node", pushes[1].object)
+	}
+}
+
+// TestAnnounceOnGatewayRemovedLinkClosed (criterion 2): a gateway row
+// disappears and the next link-closed event pushes exactly one announcement.
+func TestAnnounceOnGatewayRemovedLinkClosed(t *testing.T) {
+	f := newExchangeFixture(t)
+	f.baseline(t, append(endpointsWithTTL("198.51.100.1"), gatewayRow(t))...)
+
+	f.own.set(endpointsWithTTL("198.51.100.1")...)
+	// note: a closed link to a node outside the swarm, with no link left, pulls nothing.
+	f.sendLocal(t, &nodes.LinkClosedEvent{RemoteIdentity: astral.GenerateIdentity(), LinkCount: 0})
+
+	eventually(t, "announcement", func() bool { return f.announced() == 2 })
+	time.Sleep(absenceWindow)
+	if n := f.announced(); n != 2 {
+		t.Fatalf("pushed %v announcements; want 2 (first check, gateway removed)", n)
+	}
+}
+
+// TestNoAnnounceWhenSetUnchanged (criterion 3): an address change event and
+// link events push nothing while the resolved set stays the same.
+func TestNoAnnounceWhenSetUnchanged(t *testing.T) {
+	f := newExchangeFixture(t)
+	f.baseline(t, endpointsWithTTL("198.51.100.1")...)
+
+	remote := astral.GenerateIdentity()
+	f.sendLocal(t, &ip.EventNetworkAddressChanged{Added: []ip.IP{tcpEndpoint("203.0.113.7").IP}})
+	f.sendLocal(t, &nodes.LinkCreatedEvent{RemoteIdentity: remote, LinkCount: 1})
+	f.sendLocal(t, &nodes.LinkClosedEvent{RemoteIdentity: remote, LinkCount: 0})
+	waitOut()
+
+	if n := f.announced(); n != 1 {
+		t.Fatalf("pushed %v announcements; want only the first check's", n)
+	}
+}
+
+// TestOwnEndpointsHashIgnoresOrderAndTTL (criterion 4): the same endpoints in
+// another order, with other TTLs or repeated, hash alike; another set does not.
+func TestOwnEndpointsHashIgnoresOrderAndTTL(t *testing.T) {
+	f := newExchangeFixture(t)
+	hash := func(rows ...*nodes.EndpointWithTTL) endpointsHash {
+		t.Helper()
+		f.own.set(rows...)
+		h, err := f.mod.ownEndpointsHash()
+		if err != nil {
+			t.Fatalf("ownEndpointsHash: %v", err)
+		}
+		return h
+	}
+
+	a, b := tcpEndpoint("198.51.100.1"), tcpEndpoint("198.51.100.2")
+
+	base := hash(nodes.NewEndpointWithTTL(a, time.Hour), nodes.NewEndpointWithTTL(b, time.Hour))
+	if got := hash(nodes.NewEndpointWithTTL(b, time.Hour), nodes.NewEndpointWithTTL(a, time.Hour)); got != base {
+		t.Fatal("reordered set changed the hash")
+	}
+	if got := hash(nodes.NewEndpointWithTTL(a, time.Minute), nodes.NewEndpointWithTTL(b)); got != base {
+		t.Fatal("changed TTLs changed the hash")
+	}
+	if got := hash(nodes.NewEndpointWithTTL(a), nodes.NewEndpointWithTTL(b), nodes.NewEndpointWithTTL(a)); got != base {
+		t.Fatal("a repeated endpoint changed the hash")
+	}
+	if got := hash(nodes.NewEndpointWithTTL(a)); got == base {
+		t.Fatal("a smaller set kept the hash")
+	}
+	if got := hash(nodes.NewEndpointWithTTL(a), nodes.NewEndpointWithTTL(b), gatewayRow(t)); got == base {
+		t.Fatal("a larger set kept the hash")
+	}
+}
+
+// TestAnnounceBurstOnePush (criterion 5): several events and a set change
+// inside one wait push exactly one announcement.
+func TestAnnounceBurstOnePush(t *testing.T) {
+	f := newExchangeFixture(t)
+	f.baseline(t, endpointsWithTTL("198.51.100.1")...)
+
+	remote := astral.GenerateIdentity()
+	f.sendLocal(t, &nodes.LinkCreatedEvent{RemoteIdentity: remote, LinkCount: 2})
+	f.own.set(append(endpointsWithTTL("198.51.100.1"), gatewayRow(t))...)
+	f.sendLocal(t, &nodes.LinkClosedEvent{RemoteIdentity: remote, LinkCount: 0})
+	f.sendLocal(t, &ip.EventNetworkAddressChanged{Added: []ip.IP{tcpEndpoint("203.0.113.7").IP}})
+	f.sendLocal(t, &nodes.LinkCreatedEvent{RemoteIdentity: remote, LinkCount: 2})
+	waitOut()
+
+	if n := f.announced(); n != 2 {
+		t.Fatalf("pushed %v announcements; want 2 (first check, one for the burst)", n)
+	}
+}
+
+// TestAnnounceCheckEntryPointOnionThenNoop (criterion 6): an onion endpoint
+// appears with no event; the entry point EP4 calls pushes once, and a second
+// call pushes nothing.
+func TestAnnounceCheckEntryPointOnionThenNoop(t *testing.T) {
+	f := newExchangeFixture(t)
+	f.baseline(t, endpointsWithTTL("198.51.100.1")...)
+
+	f.own.set(append(endpointsWithTTL("198.51.100.1"), nodes.NewEndpointWithTTL(&tor.Endpoint{Port: 80}, time.Hour))...)
+	f.mod.scheduleEndpointsAnnounce()
+	eventually(t, "announcement", func() bool { return f.announced() == 2 })
+	waitOut()
+	if n := f.announced(); n != 2 {
+		t.Fatalf("pushed %v announcements after the first call; want 2", n)
+	}
+
+	f.mod.scheduleEndpointsAnnounce()
+	waitOut()
+	if n := f.announced(); n != 2 {
+		t.Fatalf("pushed %v announcements after the second call; want 2", n)
+	}
+}
+
+// TestAnnounceFirstCheckAlwaysAnnounces: the first check after start announces
+// even when the set is empty, and a second check of the same set does not.
+func TestAnnounceFirstCheckAlwaysAnnounces(t *testing.T) {
+	f := newExchangeFixture(t)
+	f.baseline(t)
+
+	f.mod.scheduleEndpointsAnnounce()
+	waitOut()
+	if n := f.announced(); n != 1 {
+		t.Fatalf("pushed %v announcements; want 1", n)
 	}
 }
 
