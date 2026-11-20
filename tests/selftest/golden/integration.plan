@@ -128,4 +128,5 @@ w39 local: distribution-gate-setup
            config node1.apphost.policies = {}
 w40 local: bootstrap-passphrase
 w41 local: claim-race
-w42 local: concurrent-adoption
+w42 local: expel-management-node
+w43 local: concurrent-adoption

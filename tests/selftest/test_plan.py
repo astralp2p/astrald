@@ -359,6 +359,7 @@ class TestShippedPlans(Invariants, unittest.TestCase):
              ("local", "claim-race"),
              ("local", "concurrent-adoption"),
              ("local", "distribution-gate-setup"),
+             ("local", "expel-management-node"),
              ("local", "import-user-software-key"),
              ("local", "introduce-node"), ("vm", "nearby-join"),
              ("vm", "nearby-relink"), ("vm", "nearby-adopt-ports"),

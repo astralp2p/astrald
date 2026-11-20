@@ -137,4 +137,5 @@ w41 local: bootstrap-user-op
 w42 local: bootstrap-passphrase
 w43 local: claim-race
 w44 local: introduce-node-setup → introduce-node
-w45 local: concurrent-adoption
+w45 local: expel-management-node
+w46 local: concurrent-adoption
