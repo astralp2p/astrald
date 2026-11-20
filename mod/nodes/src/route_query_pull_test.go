@@ -51,7 +51,7 @@ func (r *hostRouter) received() []routedQuery {
 // endpoint DB without endpoints.
 func newRoutingFixture(t *testing.T) *pullFixture {
 	t.Helper()
-	f := newPullFixture()
+	f := newPullFixture(t)
 	f.mod.db = testEndpointDB(t)
 	f.mod.ctx = astral.NewContext(nil)
 	// note: the pool is never closed; its links are bare muxes whose pipes the test closes.
@@ -152,22 +152,50 @@ func TestRouteQueryAfterADroppedPushRoutesThroughTheHost(t *testing.T) {
 	assertRelays(t, f.mod.heldRelays(networkCtx(), app), host)
 }
 
-// A query to an app identity no sibling holds a contract for answers route not
-// found within 1.1 s, also when a sibling never answers; a second query within
-// 30 s answers the same without a second ask.
+// A query to an app identity every sibling answered none for answers route not
+// found within 1.1 s; a second query within 30 s answers the same without a
+// second ask.
 // Covers tyUYbuZqVI acceptance criterion 5 in process.
 func TestRouteQueryToAnAbsentAppFailsFastAndAsksOnce(t *testing.T) {
+	f := newRoutingFixture(t)
+	sibling := astral.GenerateIdentity()
+	f.user.swarm = []*astral.Identity{f.nodeID, sibling}
+	f.link(t, sibling, &hostRouter{})
+	absent := astral.GenerateIdentity()
+
+	r := f.routeFromNode(absent)
+	assertRouteNotFound(t, r.err)
+	if r.took >= 1100*time.Millisecond {
+		t.Fatalf("route not found took %v; want under 1.1 s", r.took)
+	}
+
+	f.advance(pullMissTTL - time.Millisecond)
+	r = f.routeFromNode(absent)
+	assertRouteNotFound(t, r.err)
+	if r.took >= pullWait {
+		t.Fatalf("the second query took %v; want it to fail without an ask", r.took)
+	}
+	if n := f.user.fetches.Load(); n != 1 {
+		t.Fatalf("asked the siblings %d times within 30 s; want 1", n)
+	}
+}
+
+// A query to an app identity whose ask is not a real no (a sibling stays
+// silent, or its ask failed) answers route not found within the caller's wait
+// and records no miss, so a later query asks again.
+func TestRouteQueryToAnAppWithoutAnAnswerRecordsNoMiss(t *testing.T) {
 	for _, tc := range []struct {
-		name  string
-		fetch func(*astral.Context, *astral.Identity, func(*astral.Identity, *auth.SignedContract) bool)
+		name       string
+		incomplete bool
+		fetch      func(*astral.Context, *astral.Identity, func(*astral.Identity, *auth.SignedContract) bool)
 	}{
-		{"siblings answer none", nil},
-		{"a sibling is silent", func(ctx *astral.Context, _ *astral.Identity, _ func(*astral.Identity, *auth.SignedContract) bool) {
+		{"a sibling is silent", false, func(ctx *astral.Context, _ *astral.Identity, _ func(*astral.Identity, *auth.SignedContract) bool) {
 			select {
 			case <-ctx.Done():
 			case <-time.After(effectTimeout):
 			}
 		}},
+		{"a sibling's ask failed", true, nil},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			f := newRoutingFixture(t)
@@ -175,22 +203,23 @@ func TestRouteQueryToAnAbsentAppFailsFastAndAsksOnce(t *testing.T) {
 			f.user.swarm = []*astral.Identity{f.nodeID, sibling}
 			f.link(t, sibling, &hostRouter{})
 			f.user.fetch = tc.fetch
+			f.user.incomplete.Store(tc.incomplete)
 			absent := astral.GenerateIdentity()
 
 			r := f.routeFromNode(absent)
 			assertRouteNotFound(t, r.err)
-			if r.took >= 1100*time.Millisecond {
-				t.Fatalf("route not found took %v; want under 1.1 s", r.took)
+			if r.took > pullFlightTimeout {
+				t.Fatalf("route not found took %v; want it within the flight budget %v", r.took, pullFlightTimeout)
 			}
 
-			f.advance(pullMissTTL - time.Millisecond)
+			f.awaitFlightEnd(t, absent)
+			if f.missed(absent) {
+				t.Fatal("an ask that was not a real no recorded a miss")
+			}
 			r = f.routeFromNode(absent)
 			assertRouteNotFound(t, r.err)
-			if r.took >= pullTimeout {
-				t.Fatalf("the second query took %v; want it to fail without an ask", r.took)
-			}
-			if n := f.user.fetches.Load(); n != 1 {
-				t.Fatalf("asked the siblings %d times within 30 s; want 1", n)
+			if n := f.user.fetches.Load(); n != 2 {
+				t.Fatalf("asked the siblings %d times; want 2 (no miss gates the second query)", n)
 			}
 		})
 	}

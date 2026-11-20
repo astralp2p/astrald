@@ -149,3 +149,94 @@ func TestFetchRelayContractsHonoursCtx(t *testing.T) {
 		t.Fatal("asked a sibling outside the network zone")
 	}
 }
+
+// drain runs the sequence to its end and reads the completeness report.
+func drain(f *receiverFixture, ctx *astral.Context, siblings []*astral.Identity, issuer *astral.Identity, ask askRelayFunc) (complete bool) {
+	seq, report := f.mod.fetchRelayContractsReport(ctx, siblings, issuer, ask)
+	for range seq {
+	}
+	return report()
+}
+
+// TestFetchRelayContractsReportsIncompleteOnAnError: with two siblings, one ask
+// returning an error and one returning nothing, the fetch reports incomplete;
+// with both returning nothing without error, it reports complete.
+func TestFetchRelayContractsReportsIncompleteOnAnError(t *testing.T) {
+	f := newReceiverFixture(t, astral.GenerateIdentity())
+	failing, quiet := f.addSibling(), f.addSibling()
+	app := astral.GenerateIdentity()
+
+	ask := func(_ *astral.Context, sibling, _ *astral.Identity) ([]*auth.SignedContract, error) {
+		if sibling.IsEqual(failing) {
+			return nil, errors.New("link closed")
+		}
+		return nil, nil
+	}
+	if drain(f, fetchCtx(), []*astral.Identity{failing, quiet}, app, ask) {
+		t.Error("a failed ask reported complete")
+	}
+
+	if !drain(f, fetchCtx(), []*astral.Identity{failing, quiet}, app, answers(nil)) {
+		t.Error("two clean empty answers reported incomplete")
+	}
+}
+
+// TestFetchRelayContractsReportsIncompleteWhenCtxEnds: a sibling that has not
+// answered when ctx ends leaves the fetch incomplete, although the other
+// sibling answered cleanly.
+func TestFetchRelayContractsReportsIncompleteWhenCtxEnds(t *testing.T) {
+	f := newReceiverFixture(t, astral.GenerateIdentity())
+	silent, quiet := f.addSibling(), f.addSibling()
+	app := astral.GenerateIdentity()
+
+	ask := func(ctx *astral.Context, sibling, _ *astral.Identity) ([]*auth.SignedContract, error) {
+		if sibling.IsEqual(silent) {
+			<-ctx.Done()
+			return nil, ctx.Err()
+		}
+		return nil, nil
+	}
+	ctx, cancel := fetchCtx().WithTimeout(100 * time.Millisecond)
+	defer cancel()
+	if drain(f, ctx, []*astral.Identity{silent, quiet}, app, ask) {
+		t.Error("a fetch cut off by ctx reported complete")
+	}
+
+	// an ask that ignores ctx and returns no error after it ended is not a clean answer
+	late := func(ctx *astral.Context, _, _ *astral.Identity) ([]*auth.SignedContract, error) {
+		<-ctx.Done()
+		return nil, nil
+	}
+	ctx, cancel = fetchCtx().WithTimeout(50 * time.Millisecond)
+	defer cancel()
+	if drain(f, ctx, []*astral.Identity{silent}, app, late) {
+		t.Error("an answer that came after ctx ended reported complete")
+	}
+}
+
+// TestFetchRelayContractsReportEdges: no linked sibling is a real no
+// (complete), a consumer that stops early and a run outside the network zone
+// are incomplete.
+func TestFetchRelayContractsReportEdges(t *testing.T) {
+	f := newReceiverFixture(t, astral.GenerateIdentity())
+	sib, host := f.addSibling(), f.addSibling()
+	app := astral.GenerateIdentity()
+
+	if !drain(f, fetchCtx(), nil, app, answers(nil)) {
+		t.Error("no sibling reported incomplete; want a real no")
+	}
+
+	seq, report := f.mod.fetchRelayContractsReport(fetchCtx(), []*astral.Identity{sib}, app,
+		answers(map[string][]*auth.SignedContract{sib.String(): {relayForContract(app, host), relayForContract(app, host)}}))
+	for range seq {
+		break
+	}
+	if report() {
+		t.Error("a consumer that stopped early reported complete")
+	}
+
+	local := astral.NewContext(nil).ExcludeZone(astral.ZoneNetwork)
+	if drain(f, local, []*astral.Identity{sib}, app, answers(nil)) {
+		t.Error("a run outside the network zone reported complete")
+	}
+}
