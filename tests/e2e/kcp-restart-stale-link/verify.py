@@ -10,7 +10,7 @@ here (fact `kcp_restart_stale`), and from what the nodes answer now:
 - node1 lists none of the links it held to node2's old process within DROP
   s of node2 going down. A new link probes the older ones
   (mod/nodes/src/link_pool.go probeOlderLinks), and the kcp keepalive closes
-  an idle dead link after `link_idle_ping` 15 s plus `link_ping_timeout`
+  an idle dead link after `link_idle_ping` 10 s plus `link_ping_timeout`
   10 s (mod/kcp/src/config.go);
 - node1 still lists none of them now;
 - a query from node1 to node2 as the User is answered. Neither the driver
@@ -31,7 +31,7 @@ import astral
 from lib import linkview
 from lib.sessionio import load
 
-DROP = 15.0 + 10.0 + 10.0
+DROP = 10.0 + 10.0 + 15.0
 QUERY = 30.0
 
 

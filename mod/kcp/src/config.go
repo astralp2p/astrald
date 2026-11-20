@@ -41,7 +41,10 @@ func defaultConfig() Config {
 		// that a slow but live traversal still arrives first.
 		EphemeralIdleTimeout: 15 * time.Minute,
 
-		LinkIdlePing:    15 * time.Second,
+		// why: a kcp link rides a UDP NAT mapping. On common NATs a fresh
+		// mapping survives 15 s of silence but not 30 s, so the probe runs
+		// well inside 15 s (astral-docs topics/link-mux.md, Keepalive).
+		LinkIdlePing:    10 * time.Second,
 		LinkPingTimeout: 10 * time.Second,
 	}
 }
