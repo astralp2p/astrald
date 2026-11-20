@@ -33,7 +33,6 @@ type Link struct {
 	done        chan struct{}
 	pingMu      sync.Mutex
 	ping        *Ping
-	checks      atomic.Int32
 	throughput  atomic.Uint64
 	outbound    bool
 	prunable    atomic.Bool   // a strategy link no caller asked for as new; a link that outranks it closes it
@@ -266,10 +265,6 @@ func (s *Link) pingLoop() {
 		if _, err := s.Ping(); err != nil {
 			s.CloseWithError(err)
 			return
-		}
-
-		if s.checks.Load() > 0 {
-			s.checks.Add(-1)
 		}
 	}
 }
