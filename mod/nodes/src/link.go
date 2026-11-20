@@ -331,6 +331,9 @@ func newLink(mod *Module, conn astral.Conn, id astral.Nonce, outbound bool) *Lin
 		link.onBytes,
 		link.pong,
 	)
+	// why a field and not a newMux parameter: the mux needs the link's Wake and
+	// the link its mux; set before the loops start, so nothing reads it early.
+	link.mux.onSilentTimeout = link.Wake
 
 	go link.readLoop()
 	go link.pingLoop()
