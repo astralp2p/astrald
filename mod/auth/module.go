@@ -66,6 +66,15 @@ type Module interface {
 	// index lock and never for a contract the index already holds.
 	AddAdmitter(fn func(*auth.SignedContract) error)
 
+	// AddVeto registers fn to run first at every level of an authorization
+	// walk, with the identity that level names: the caller at the first level,
+	// then each contract issuer the walk reaches. A true answer refuses the
+	// level: no handler, contract or external authority is asked for that
+	// identity, though the walk goes on to the caller's other contracts. It
+	// cuts an identity off whatever permits it still holds. fn runs often and
+	// must answer from memory.
+	AddVeto(fn func(actor *astral.Identity) bool)
+
 	// OnContractIndexed registers fn to run after each contract the index did
 	// not hold before is added to it. fn runs outside the index lock.
 	OnContractIndexed(fn func(*auth.SignedContract))
