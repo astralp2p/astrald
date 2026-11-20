@@ -6,6 +6,7 @@ import (
 	"errors"
 	"net"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -70,14 +71,40 @@ func newLinkPair(t *testing.T) (lower, higher *linkEnd) {
 	return a, b
 }
 
-// pipeTo returns the dialer's end of a pipe whose other end to accepts as an inbound link.
-func (to *linkEnd) pipeTo(t *testing.T) exonet.Conn {
+// tcpPair returns both ends of a loopback TCP connection.
+// why not net.Pipe: an unbuffered pipe deadlocks when both ends ping at once,
+// since each read loop blocks writing its pong; a socket buffers them.
+func tcpPair(t *testing.T) (net.Conn, net.Conn) {
 	t.Helper()
-	a, b := net.Pipe()
+	l, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen: %v", err)
+	}
+	defer l.Close()
+	accepted := make(chan net.Conn, 1)
+	go func() {
+		c, _ := l.Accept()
+		accepted <- c
+	}()
+	a, err := net.Dial("tcp", l.Addr().String())
+	if err != nil {
+		t.Fatalf("dial: %v", err)
+	}
+	b := <-accepted
+	if b == nil {
+		t.Fatal("accept failed")
+	}
 	t.Cleanup(func() {
 		_ = a.Close()
 		_ = b.Close()
 	})
+	return a, b
+}
+
+// pipeTo returns the dialer's end of a connection whose other end to accepts as an inbound link.
+func (to *linkEnd) pipeTo(t *testing.T) exonet.Conn {
+	t.Helper()
+	a, b := tcpPair(t)
 	go func() { _ = to.mod.EstablishInboundLink(context.Background(), &negotiationPipeConn{Conn: b}) }()
 	return &negotiationPipeConn{Conn: a, outbound: true}
 }
@@ -100,6 +127,21 @@ func (from *linkEnd) strategyLink(t *testing.T, to *linkEnd) *Link {
 	link := from.dial(t, to)
 	from.mod.linkPool.offerStrategyLink(link, nodesmod.StrategyBasic)
 	return link
+}
+
+// requireExcess fails unless one end closed the link with ErrExcessLink; copies are the link's objects at both ends.
+func requireExcess(t *testing.T, copies ...*Link) {
+	t.Helper()
+	for _, l := range copies {
+		if errors.Is(l.Err(), nodesmod.ErrExcessLink) {
+			return
+		}
+	}
+	errs := make([]error, len(copies))
+	for i, l := range copies {
+		errs[i] = l.Err()
+	}
+	t.Fatalf("losing link closed with %v; want %v at one end", errs, nodesmod.ErrExcessLink)
 }
 
 // find returns the pooled link with id, or nil.
@@ -221,29 +263,28 @@ func TestDuplicateStrategyLinkPrunedBySameRuleOnBothEnds(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			lower, higher := newLinkPair(t)
-			dial := func(byLower bool) *Link {
+			// dial returns the new link at the dialer and at the other end.
+			dial := func(byLower bool) [2]*Link {
+				from, to := higher, lower
 				if byLower {
-					return lower.strategyLink(t, higher)
+					from, to = lower, higher
 				}
-				return higher.strategyLink(t, lower)
+				link := from.dial(t, to)
+				remote := to.find(link.id)
+				from.mod.linkPool.offerStrategyLink(link, nodesmod.StrategyBasic)
+				return [2]*Link{link, remote}
 			}
 			first := dial(tc.first)
 			second := dial(tc.second)
 
-			want := second.id
+			kept, loser := second, first
 			if tc.keepFirst {
-				want = first.id
+				kept, loser = first, second
 			}
-			if got := requireOneSharedLink(t, lower, higher); got != want {
-				t.Fatalf("both ends kept link %v; want %v", got, want)
+			if got := requireOneSharedLink(t, lower, higher); got != kept[0].id {
+				t.Fatalf("both ends kept link %v; want %v", got, kept[0].id)
 			}
-			loser := first
-			if tc.keepFirst {
-				loser = second
-			}
-			if !errors.Is(loser.Err(), nodesmod.ErrExcessLink) {
-				t.Fatalf("losing link closed with %v; want %v", loser.Err(), nodesmod.ErrExcessLink)
-			}
+			requireExcess(t, loser[:]...)
 		})
 	}
 }
@@ -340,13 +381,12 @@ func TestSimultaneousDialsKeepOneLink(t *testing.T) {
 	t.Run("higher link settles first", func(t *testing.T) {
 		lower, higher := newLinkPair(t)
 		pruned := higher.strategyLink(t, lower)
+		prunedAtLower := lower.find(pruned.id)
 		kept := lower.strategyLink(t, higher)
 		if got := requireOneSharedLink(t, lower, higher); got != kept.id {
 			t.Fatalf("both ends kept %v; want the lower identity's link %v", got, kept.id)
 		}
-		if !errors.Is(pruned.Err(), nodesmod.ErrExcessLink) {
-			t.Fatalf("higher identity's link closed with %v; want %v", pruned.Err(), nodesmod.ErrExcessLink)
-		}
+		requireExcess(t, pruned, prunedAtLower)
 	})
 	t.Run("concurrent basic rounds", func(t *testing.T) {
 		for i := 0; i < 10; i++ {
@@ -360,12 +400,173 @@ func TestSimultaneousDialsKeepOneLink(t *testing.T) {
 			ctx := astral.NewContext(context.Background())
 			rl := lower.mod.linkPool.RetrieveLink(ctx, higher.id, WithStrategies(nodesmod.StrategyBasic))
 			rh := higher.mod.linkPool.RetrieveLink(ctx, lower.id, WithStrategies(nodesmod.StrategyBasic))
-			for _, r := range []LinkResult{<-rl, <-rh} {
+			results := []LinkResult{<-rl, <-rh}
+			survivor := requireOneSharedLink(t, lower, higher)
+			for _, r := range results {
 				if r.Err != nil {
 					t.Fatalf("round %v: RetrieveLink: %v", i, r.Err)
 				}
+				if r.Link.id != survivor || r.Link.Err() != nil {
+					t.Fatalf("round %v: a caller got link %v (error %v); want the survivor %v", i, r.Link.id, r.Link.Err(), survivor)
+				}
 			}
-			requireOneSharedLink(t, lower, higher)
 		}
 	})
+}
+
+// slowConn delays every write by delay nanoseconds, so a negotiation or ping over it stays in progress.
+type slowConn struct {
+	net.Conn
+	delay atomic.Int64
+}
+
+func newSlowConn(c net.Conn, d time.Duration) *slowConn {
+	s := &slowConn{Conn: c}
+	s.delay.Store(int64(d))
+	return s
+}
+
+func (c *slowConn) Write(p []byte) (int, error) {
+	time.Sleep(time.Duration(c.delay.Load()))
+	return c.Conn.Write(p)
+}
+
+// TestConfirmLiveJoinsKeepalivePing: the keepalive's ping, issued while a
+// liveness check's ping waits for its pong, joins that ping instead of
+// failing, so the keepalive never closes the healthy link for it.
+func TestConfirmLiveJoinsKeepalivePing(t *testing.T) {
+	lower, higher := newLinkPair(t)
+	a, b := tcpPair(t)
+	slow := newSlowConn(a, 0)
+	go func() { _ = higher.mod.EstablishInboundLink(context.Background(), &negotiationPipeConn{Conn: b}) }()
+	raw, err := lower.mod.EstablishOutboundLink(context.Background(), higher.id, &negotiationPipeConn{Conn: slow, outbound: true})
+	if err != nil {
+		t.Fatalf("EstablishOutboundLink: %v", err)
+	}
+	link := raw.(*Link)
+	slow.delay.Store(int64(200 * time.Millisecond))
+
+	live := make(chan bool, 1)
+	go func() { live <- confirmLive(link) }()
+	waitFor(t, "the liveness ping to be in flight", func() bool {
+		link.pingMu.Lock()
+		defer link.pingMu.Unlock()
+		return link.ping != nil
+	})
+
+	// note: this is the keepalive's call; pingLoop closes the link on its error.
+	if _, err := link.Ping(); err != nil {
+		t.Fatalf("a ping issued while another was in flight failed: %v", err)
+	}
+	if !<-live {
+		t.Fatal("confirmLive reported a healthy link dead")
+	}
+	if err := link.Err(); err != nil {
+		t.Fatalf("healthy link closed: %v", err)
+	}
+}
+
+// slowDialTo makes e's exonet dial peer over a connection whose writes from e take delay each.
+func (e *linkEnd) slowDialTo(t *testing.T, peer *linkEnd, delay time.Duration) {
+	t.Helper()
+	e.mod.Exonet = &stubExonet{dial: func(*astral.Context, exonetapi.Endpoint) (exonet.Conn, error) {
+		a, b := tcpPair(t)
+		go func() { _ = peer.mod.EstablishInboundLink(context.Background(), &negotiationPipeConn{Conn: b}) }()
+		return &negotiationPipeConn{Conn: newSlowConn(a, delay), outbound: true}, nil
+	}}
+	e.mod.resolvers.Add(&stubResolver{rows: []*nodes.EndpointWithTTL{nodes.NewEndpointWithTTL(mustTCP(t, "127.0.0.1:1791"))}})
+}
+
+// awaitWatcher returns the link w receives, failing the test after settleTimeout.
+func awaitWatcher(t *testing.T, w *linkWatcher) *Link {
+	t.Helper()
+	select {
+	case l := <-w.ch:
+		return l
+	case <-time.After(settleTimeout):
+		t.Fatal("the waiting caller got no link")
+		return nil
+	}
+}
+
+// requireCallerGotSurvivor fails unless got is the one live link both ends keep.
+func requireCallerGotSurvivor(t *testing.T, got *Link, a, b *linkEnd) {
+	t.Helper()
+	survivor := requireOneSharedLink(t, a, b)
+	if got.id != survivor || got.Err() != nil {
+		t.Fatalf("the waiting caller got link %v (error %v); want the survivor %v", got.id, got.Err(), survivor)
+	}
+}
+
+// TestCallerReceivesSurvivorInCrossDial: while the lower identity dials, the
+// higher identity's link arrives first; the lower identity's waiting caller
+// gets the lower identity's link, the one both ends keep.
+func TestCallerReceivesSurvivorInCrossDial(t *testing.T) {
+	lower, higher := newLinkPair(t)
+	lower.slowDialTo(t, higher, 50*time.Millisecond)
+	w := lower.mod.linkPool.subscribe(func(l *Link, _ *string) bool { return l.RemoteIdentity().IsEqual(higher.id) }, false)
+	defer lower.mod.linkPool.unsubscribe(w)
+
+	s := (&BasicLinkStrategyFactory{mod: lower.mod, networks: basicNetworks}).Build(higher.id)
+	s.Signal(astral.NewContext(context.Background()))
+	waitFor(t, "the lower identity's dial to start", func() bool {
+		select {
+		case <-lower.mod.dials.idle(higher.id):
+			return false
+		default:
+			return true
+		}
+	})
+	rival := higher.dial(t, lower)
+
+	got := awaitWatcher(t, w)
+	requireCallerGotSurvivor(t, got, lower, higher)
+	if got.id == rival.id {
+		t.Fatalf("the waiting caller got the higher identity's link %v; want the lower identity's", rival.id)
+	}
+}
+
+// TestHigherCallerWaitsForPeerNegotiation: the higher identity settles its own
+// link while the lower identity's link is still negotiating with it; its
+// waiting caller gets the lower identity's link, the one both ends keep.
+func TestHigherCallerWaitsForPeerNegotiation(t *testing.T) {
+	lower, higher := newLinkPair(t)
+	lower.slowDialTo(t, higher, 50*time.Millisecond)
+	w := higher.mod.linkPool.subscribe(func(l *Link, _ *string) bool { return l.RemoteIdentity().IsEqual(lower.id) }, false)
+	defer higher.mod.linkPool.unsubscribe(w)
+
+	s := (&BasicLinkStrategyFactory{mod: lower.mod, networks: basicNetworks}).Build(higher.id)
+	s.Signal(astral.NewContext(context.Background()))
+	waitFor(t, "the lower identity's link to negotiate at the higher identity", func() bool {
+		select {
+		case <-higher.mod.inboundNegotiations.idle(lower.id):
+			return false
+		default:
+			return true
+		}
+	})
+	own := higher.dial(t, lower)
+	higher.mod.linkPool.offerStrategyLink(own, nodesmod.StrategyBasic)
+
+	requireCallerGotSurvivor(t, awaitWatcher(t, w), lower, higher)
+}
+
+// TestForcedLinkFromLowerKeepsHigherLink: a link the lower identity forced
+// arrives at the higher identity, whose existing strategy link stays open.
+func TestForcedLinkFromLowerKeepsHigherLink(t *testing.T) {
+	lower, higher := newLinkPair(t)
+	old := higher.strategyLink(t, lower)
+	oldAtLower := lower.find(old.id)
+
+	w := lower.mod.linkPool.subscribe(func(*Link, *string) bool { return true }, true)
+	defer lower.mod.linkPool.unsubscribe(w)
+	forced := lower.strategyLink(t, higher)
+
+	time.Sleep(500 * time.Millisecond)
+	if old.Err() != nil || oldAtLower.Err() != nil || forced.Err() != nil {
+		t.Fatalf("existing link errors %v/%v, forced link error %v; want all open", old.Err(), oldAtLower.Err(), forced.Err())
+	}
+	if nh, nl := len(higher.liveIDs(lower)), len(lower.liveIDs(higher)); nh != 2 || nl != 2 {
+		t.Fatalf("higher holds %v live links, lower %v; want 2 each", nh, nl)
+	}
 }

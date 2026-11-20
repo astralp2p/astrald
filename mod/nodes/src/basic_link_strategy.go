@@ -133,6 +133,8 @@ func (s *BasicLinkStrategy) Done() <-chan struct{} {
 
 // tryEndpoint dials one row and establishes a link over it, within the row's network budget; nil on any failure.
 func (s *BasicLinkStrategy) tryEndpoint(ctx *astral.Context, endpoint *nodes.EndpointWithTTL) *Link {
+	defer s.mod.dials.begin(s.target)()
+
 	if d, ok := s.rowBudgets[endpoint.Network()]; ok {
 		var cancel context.CancelFunc
 		ctx, cancel = ctx.WithTimeout(d)

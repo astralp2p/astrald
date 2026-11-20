@@ -6,6 +6,7 @@ import (
 	"slices"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/astralp2p/astral-go/api/nodes"
 	"github.com/astralp2p/astral-go/astral"
@@ -34,7 +35,7 @@ func NewLinkPool(mod *Module) *LinkPool {
 	}
 }
 
-// AddLink registers link, wires its mux router, emits a created event, closes the prunable links it outranks, probes the older links to the same peer, and spawns a goroutine that removes it and closes its sessions when it dies.
+// AddLink registers link, wires its mux router, hands an inbound link or the survivor it settles on to the waiting callers, emits a created event, probes the older links to the same peer, and spawns a goroutine that removes it and closes its sessions when it dies.
 func (pool *LinkPool) AddLink(link *Link) error {
 	dir := "in"
 	netName := "unknown network"
@@ -66,7 +67,14 @@ func (pool *LinkPool) AddLink(link *Link) error {
 
 	pool.mod.log.Infov(1, "added %v-link with %v (%v)", dir, link.RemoteIdentity(), netName)
 
-	if !link.outbound {
+	switch {
+	case link.outbound:
+	case atRisk(link):
+		// note: a caller that subscribes later gets the survivor when its strategies finish.
+		if len(pool.watchersKeeping(false)) > 0 {
+			go pool.deliverAtRisk(link)
+		}
+	default:
 		pool.notifyLinkWatchers(link, nil)
 	}
 
@@ -77,7 +85,6 @@ func (pool *LinkPool) AddLink(link *Link) error {
 	})
 
 	if linkCount > 1 {
-		go pool.closeOutranked(link)
 		pool.probeOlderLinks(link)
 	}
 
@@ -234,7 +241,7 @@ func (pool *LinkPool) getOrCreateNodeLinker(target *astral.Identity) *NodeLinker
 	return linker
 }
 
-// RetrieveLink returns a matching existing link immediately unless ForceNew is set; otherwise it activates linking strategies and delivers the first link that matches, ctx cancellation, or ErrLinkNotProduced.
+// RetrieveLink returns the surviving matching link immediately unless ForceNew is set; otherwise it activates linking strategies and delivers the first link that matches, the surviving match once the strategies finish, ctx cancellation, or ErrLinkNotProduced.
 func (pool *LinkPool) RetrieveLink(
 	ctx *astral.Context,
 	target *astral.Identity,
@@ -261,11 +268,14 @@ func (pool *LinkPool) RetrieveLink(
 	}
 
 	if !o.ForceNew {
-		links := pool.links.Select(func(s *Link) bool { return match(s, nil) })
-		if len(links) > 0 {
-			return sig.ArrayToChan([]LinkResult{{Link: links[0]}})
+		if s := pool.findSurvivor(target, func(s *Link) bool { return match(s, nil) }); s != nil {
+			return sig.ArrayToChan([]LinkResult{{Link: s}})
 		}
 	}
+
+	// why: a forced request falls back only to links created after it started.
+	since := time.Now()
+	fresh := func(s *Link) bool { return match(s, nil) && (!o.ForceNew || s.createdAt.After(since)) }
 
 	result := make(chan LinkResult, 1)
 
@@ -289,6 +299,12 @@ func (pool *LinkPool) RetrieveLink(
 			case s := <-w.ch:
 				result <- LinkResult{Link: s}
 			default:
+				// why: a link held back for its rivals may settle as the
+				// strategies finish, before it reaches the watcher.
+				if s := pool.findSurvivor(target, fresh); s != nil {
+					result <- LinkResult{Link: s}
+					return
+				}
 				result <- LinkResult{Err: nodesmod.ErrLinkNotProduced}
 			}
 		case <-ctx.Done():

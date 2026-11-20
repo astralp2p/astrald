@@ -2,7 +2,6 @@ package nodes
 
 import (
 	"bytes"
-	"errors"
 	"time"
 
 	"github.com/astralp2p/astral-go/astral"
@@ -36,92 +35,145 @@ func dialedByLower(link *Link) bool {
 // dialed, the link already in the pool survives.
 // why: both ends compute the same survivor from the identities alone, with no
 // message exchange.
-// note: only the end that dialed a losing link closes it, and only a prunable
-// one; an inbound link is never closed by this rule.
 func outranks(a, b *Link) bool {
 	return dialedByLower(a) || !dialedByLower(b)
 }
 
-// offerStrategyLink settles a new outbound link a strategy produced.
-// A watcher that asked for a new link keeps it. Otherwise the link stays
-// unless a live link to the same peer outranks it, and then it closes with
-// ErrExcessLink and the waiting callers get the survivor.
+// atRisk reports whether a link the peer dials later can outrank link: link was dialed by the higher identity.
+func atRisk(link *Link) bool {
+	return !dialedByLower(link)
+}
+
+// offerStrategyLink settles a new outbound link a strategy produced and hands the survivor to the waiting callers.
+// A watcher that asked for a new link keeps it, and nothing is pruned for it.
+// Otherwise the link closes with ErrExcessLink when a live link to the same
+// peer outranks it, and else it closes, with ErrExcessLink, the links it outranks.
+// note: only this settlement prunes; a link arriving from the peer prunes
+// nothing, so a link the peer forced never closes a link here.
 func (pool *LinkPool) offerStrategyLink(link *Link, strategy string) {
+	if pool.notifyWatchers(pool.watchersKeeping(true), link, &strategy) {
+		return
+	}
+	// why the peer's negotiations: of two crossing dials, the first end to
+	// settle waits out the rival's negotiation or the other end sees its
+	// link, so both ends settle on one link.
+	if !pool.awaitRivals(link, &pool.mod.inboundNegotiations) {
+		return
+	}
+
 	checked := map[*Link]bool{}
 	for {
-		survivor, unchecked := pool.settleStrategyLink(link, &strategy, checked)
-		if unchecked != nil {
+		survivor, unchecked := pool.settleStrategyLink(link, checked)
+		switch {
+		case unchecked != nil:
 			checked[unchecked] = confirmLive(unchecked)
 			continue
-		}
-		if survivor == link {
+		case survivor == link:
 			pool.notifyWatchers(pool.watchersKeeping(false), link, &strategy)
-			return
+		case survivor != nil:
+			pool.notifyWatchers(pool.watchersKeeping(false), survivor, nil)
 		}
-		pool.mod.log.Logv(1, "link %v with %v is excess; %v survives", link.id, link.RemoteIdentity(), survivor.id)
-		link.CloseWithError(nodesmod.ErrExcessLink)
-		pool.notifyWatchers(pool.watchersKeeping(false), survivor, nil)
 		return
 	}
 }
 
-// settleStrategyLink decides, under the pool lock, which link to the peer of link survives.
-// It answers unchecked instead when the deciding link has not proven live and checked holds no verdict on it.
-func (pool *LinkPool) settleStrategyLink(link *Link, strategy *string, checked map[*Link]bool) (survivor, unchecked *Link) {
+// settleStrategyLink applies the duplicate rule to link under the pool lock and answers the survivor, nil when link is closed or refuted.
+// It answers unchecked instead when a link the decision rests on has not proven live and checked holds no verdict on it.
+// why under the lock: two links settled at once each see the other's outcome.
+func (pool *LinkPool) settleStrategyLink(link *Link, checked map[*Link]bool) (survivor, unchecked *Link) {
 	pool.mu.Lock()
 	defer pool.mu.Unlock()
 
-	if pool.notifyWatchers(pool.watchersKeeping(true), link, strategy) {
-		return link, nil
+	if link.Err() != nil {
+		return nil, nil
 	}
 
-	for _, other := range pool.links.Clone() {
-		if other == link || other.Err() != nil || !other.RemoteIdentity().IsEqual(link.RemoteIdentity()) {
-			continue
-		}
+	var losers []*Link
+	for _, other := range pool.livePeerLinks(link) {
 		if !outranks(other, link) {
+			losers = append(losers, other)
 			continue
 		}
 		live, known := checked[other]
 		switch {
 		case live || other.heardRecently():
+			pool.closeExcess(link, other)
 			return other, nil
 		case !known:
 			return nil, other
 		}
 	}
 
-	// why: a link that later outranks this one finds it prunable and closes it (closeOutranked).
-	link.prunable.Store(true)
+	if len(losers) > 0 {
+		live, known := checked[link]
+		switch {
+		case !known && !link.heardRecently():
+			return nil, link
+		case known && !live:
+			return nil, nil
+		}
+	}
+	for _, l := range losers {
+		pool.closeExcess(l, link)
+	}
 	return link, nil
 }
 
-// closeOutranked closes with ErrExcessLink every prunable link to the peer of link that link outranks, once link proves live.
-// why the proof: a peer that abandons its dial mid-negotiation leaves link
-// registered here for a moment; closing an older link for it would leave none.
-func (pool *LinkPool) closeOutranked(link *Link) {
-	if len(pool.findOutranked(link)) == 0 || !confirmLive(link) {
+// livePeerLinks returns the open links to the peer of link, other than link.
+func (pool *LinkPool) livePeerLinks(link *Link) []*Link {
+	return pool.links.Select(func(other *Link) bool {
+		return other != link && other.Err() == nil && other.RemoteIdentity().IsEqual(link.RemoteIdentity())
+	})
+}
+
+// closeExcess closes loser with ErrExcessLink in favor of survivor.
+func (pool *LinkPool) closeExcess(loser, survivor *Link) {
+	pool.mod.log.Logv(1, "link %v with %v is excess; %v survives", loser.id, loser.RemoteIdentity(), survivor.id)
+	loser.CloseWithError(nodesmod.ErrExcessLink)
+}
+
+// awaitRivals holds link back until the rival attempts with its peer that rivals counts end, at most its ping timeout, and an at-risk link also for one round trip on it first; it reports whether the link proved live.
+// why the round trip: a rival still connecting when link arrived shows up
+// in rivals within about one round trip.
+func (pool *LinkPool) awaitRivals(link *Link, rivals *inFlight) bool {
+	if atRisk(link) && !confirmLive(link) {
+		return false
+	}
+
+	t := time.NewTimer(link.pingTimeout)
+	defer t.Stop()
+	select {
+	case <-rivals.idle(link.RemoteIdentity()):
+	case <-t.C:
+	}
+	return true
+}
+
+// deliverAtRisk hands the waiting callers the survivor among the links to the peer of an at-risk inbound link, once its rivals settled.
+// why the own dials: a dial this node runs to the peer yields a link that
+// outranks link, and the callers waiting on that dial must get it.
+func (pool *LinkPool) deliverAtRisk(link *Link) {
+	if !pool.awaitRivals(link, &pool.mod.dials) {
 		return
 	}
-	for _, l := range pool.findOutranked(link) {
-		pool.mod.log.Logv(1, "link %v with %v is excess; %v survives", l.id, l.RemoteIdentity(), link.id)
-		l.CloseWithError(nodesmod.ErrExcessLink)
+	if s := pool.findSurvivor(link.RemoteIdentity(), nil); s != nil {
+		pool.notifyWatchers(pool.watchersKeeping(false), s, nil)
 	}
 }
 
-// findOutranked returns the prunable links to the peer of link that link outranks.
-// why under the pool lock: a strategy link settled concurrently is either
-// marked prunable before this scan or sees link in the pool.
-func (pool *LinkPool) findOutranked(link *Link) []*Link {
-	pool.mu.Lock()
-	defer pool.mu.Unlock()
-
-	return pool.links.Select(func(other *Link) bool {
-		return other != link &&
-			other.prunable.Load() &&
-			other.RemoteIdentity().IsEqual(link.RemoteIdentity()) &&
-			!outranks(other, link)
-	})
+// findSurvivor returns the open link to peer that the duplicate rule keeps among those accept takes (all when accept is nil), or nil.
+func (pool *LinkPool) findSurvivor(peer *astral.Identity, accept func(*Link) bool) *Link {
+	var best *Link
+	for _, l := range pool.links.Clone() {
+		if l.Err() != nil || !l.RemoteIdentity().IsEqual(peer) || (accept != nil && !accept(l)) {
+			continue
+		}
+		if best == nil || dialedByLower(l) && !dialedByLower(best) ||
+			dialedByLower(l) == dialedByLower(best) && l.createdAt.Before(best.createdAt) {
+			best = l
+		}
+	}
+	return best
 }
 
 // heardRecently reports whether link received a frame from its peer since it was created and within its idle ping.
@@ -130,23 +182,11 @@ func (s *Link) heardRecently() bool {
 }
 
 // confirmLive reports whether the peer of link proves the link live: it was heard recently or answers a ping.
-// note: while the keepalive's own ping is in flight, the answer waits for that ping's pong or timeout.
+// note: a ping already in flight, such as the keepalive's, is joined, not duplicated.
 func confirmLive(link *Link) bool {
 	if link.heardRecently() {
 		return true
 	}
-	start := time.Now()
 	_, err := link.Ping()
-	if !errors.Is(err, errPingInFlight) {
-		return err == nil
-	}
-
-	t := time.NewTimer(link.pingTimeout)
-	defer t.Stop()
-	select {
-	case <-link.Done():
-		return false
-	case <-t.C:
-		return link.Err() == nil && time.Unix(0, link.lastRecv.Load()).After(start)
-	}
+	return err == nil
 }

@@ -16,9 +16,6 @@ import (
 	"github.com/astralp2p/astrald/mod/nodes/frames"
 )
 
-// errPingInFlight refuses a ping while another ping on the same link waits for its pong.
-var errPingInFlight = errors.New("ping already in flight")
-
 type Ping struct {
 	nonce  astral.Nonce
 	sentAt time.Time
@@ -152,38 +149,20 @@ func (s *Link) RouteQuery(ctx *astral.Context, q *astral.InFlightQuery, w io.Wri
 	return s.mux.RouteQuery(ctx, q, w)
 }
 
-// Ping sends one ping and blocks for the pong. Only one ping may be in flight; concurrent calls error.
+// Ping sends one ping and blocks for the pong. A call while another ping waits
+// for its pong joins that ping and shares its outcome and deadline.
 // The returned duration is measured from just before the frame is written, so it includes the local send.
 // The ping timeout covers the write too: a peer that stopped reading fails the ping within pingTimeout.
+// why join: the keepalive closes a link on any Ping error, so a second caller
+// must never make the keepalive's own ping fail.
 func (s *Link) Ping() (time.Duration, error) {
-	p := &Ping{
-		nonce: astral.NewNonce(),
-		pong:  make(chan struct{}),
+	p, sent := s.beginPing()
+	if sent != nil {
+		defer s.clearPing(p)
 	}
 
-	s.pingMu.Lock()
-	if s.ping != nil {
-		s.pingMu.Unlock()
-		return -1, errPingInFlight
-	}
-	// why: pong() reaches p through s.ping under pingMu, so the stamp must sit
-	// inside this critical section to be visible and race-free. Stamping after
-	// the send loses the race outright: a pong handled first reads the zero time
-	// and reports an RTT of about 292 years.
-	p.sentAt = time.Now()
-	s.ping = p
-	s.pingMu.Unlock()
-	defer s.clearPing(p)
-
-	timeout := time.NewTimer(s.pingTimeout)
+	timeout := time.NewTimer(time.Until(p.sentAt.Add(s.pingTimeout)))
 	defer timeout.Stop()
-
-	// why a goroutine: the link conn has no write deadline, and Send blocks on
-	// a peer that stopped reading. The timer runs from before the write.
-	// note: a write still blocked at the timeout returns once pingLoop closes
-	// the link, so the goroutine ends with it.
-	sent := make(chan error, 1)
-	go func() { sent <- s.Send(&frames.Ping{Nonce: p.nonce}) }()
 
 	for {
 		select {
@@ -200,6 +179,35 @@ func (s *Link) Ping() (time.Duration, error) {
 			return -1, s.err.Get()
 		}
 	}
+}
+
+// beginPing returns the ping in flight with a nil channel, or publishes and sends a new ping and returns the channel its send result arrives on.
+func (s *Link) beginPing() (*Ping, <-chan error) {
+	s.pingMu.Lock()
+	defer s.pingMu.Unlock()
+
+	if s.ping != nil {
+		return s.ping, nil
+	}
+
+	// why: pong() reaches p through s.ping under pingMu, so the stamp must sit
+	// inside this critical section to be visible and race-free. Stamping after
+	// the send loses the race outright: a pong handled first reads the zero time
+	// and reports an RTT of about 292 years.
+	p := &Ping{
+		nonce:  astral.NewNonce(),
+		pong:   make(chan struct{}),
+		sentAt: time.Now(),
+	}
+	s.ping = p
+
+	// why a goroutine: the link conn has no write deadline, and Send blocks on
+	// a peer that stopped reading. The timer runs from before the write.
+	// note: a write still blocked at the timeout returns once pingLoop closes
+	// the link, so the goroutine ends with it.
+	sent := make(chan error, 1)
+	go func() { sent <- s.Send(&frames.Ping{Nonce: p.nonce}) }()
+	return p, sent
 }
 
 // clearPing drops p as the in-flight ping, unless a pong or a newer ping already replaced it.

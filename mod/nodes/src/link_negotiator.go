@@ -173,6 +173,9 @@ func (mod *Module) EstablishInboundLink(ctx context.Context, conn exonet.Conn) (
 	if err != nil {
 		return err
 	}
+	// why: a link the peer is still negotiating can outrank one this node
+	// settles meanwhile (link_duplicates.go awaitRivals).
+	defer mod.inboundNegotiations.begin(aconn.RemoteIdentity())()
 
 	ch := channel.New(aconn, channel.WithLockedWrites())
 	negotiator := mod.GetLinkNegotiator(ch)

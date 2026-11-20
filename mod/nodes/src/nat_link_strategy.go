@@ -48,6 +48,8 @@ func (s *NATLinkStrategy) Signal(ctx *astral.Context) {
 }
 
 func (s *NATLinkStrategy) attempt(ctx *astral.Context) error {
+	defer s.mod.dials.begin(s.target)()
+
 	selfID := s.mod.node.Identity()
 	ctx = ctx.IncludeZone(astral.ZoneNetwork)
 

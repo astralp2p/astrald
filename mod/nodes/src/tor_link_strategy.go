@@ -177,6 +177,8 @@ func (s *TorLinkStrategy) try(
 }
 
 func (s *TorLinkStrategy) tryEndpoint(ctx *astral.Context, endpoint *nodes.EndpointWithTTL) *Link {
+	defer s.mod.dials.begin(s.target)()
+
 	conn, err := s.mod.Exonet.Dial(ctx, endpoint.Endpoint)
 	if err != nil {
 		s.log.Logv(2, "%v dial %v: %v", s.target, endpoint, err)
