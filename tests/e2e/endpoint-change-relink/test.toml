@@ -1,0 +1,8 @@
+nodes   = ["node1", "node2", "reflector"]
+after   = "endpoint-change-swarm"
+# why: --in below, the watch after the move (lib/addrmove.py record), and margin
+timeout = 240
+# why --in 30: the driver has to be watching when node1 moves. script.py reads
+# --to and --in from this line.
+ops     = ["move-subnet node1 --to 10.78.0 --in 30"]
+facts   = ["endpoint_change_relink"]

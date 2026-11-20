@@ -1,0 +1,14 @@
+# endpoint.suite — a sibling that moves to a new subnet is found again: node2
+# behind NAT, node1 and the reflector in one swarm; node1 moves, and node2
+# learns its new address from the reflector's forward and links to it; then
+# node1 changes its address twice within 5 s, and the final address reaches
+# both siblings.
+#
+# endpoint-change-swarm moves node2 behind NAT and adopts the reflector, and
+# each move-subnet moves node1 for good, so the three end their world. It has
+# a suite of its own because each VM suite is one world's worth of VM time.
+bootstrap-user-software-key
+adopt-node
+endpoint-change-swarm
+endpoint-change-relink
+endpoint-change-double

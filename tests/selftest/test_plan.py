@@ -26,7 +26,8 @@ GOLDEN = Path(__file__).resolve().parent / "golden"
 # suite -> the driver its golden plan is drawn under
 SUITES = {"main": "script", "tor": "script", "nat": "script",
           "gateway": "script", "agent": "agent", "integration": "script",
-          "nearby": "script", "docker-agent": "agent", "kcp": "script"}
+          "nearby": "script", "docker-agent": "agent", "kcp": "script",
+          "endpoint": "script"}
 # suite -> the heavy world its agent plan is drawn in, where not a VM
 # why: docker-agent.suite holds operator flows a VM world cannot run (a
 # roster the lab lacks) or would open a world of its own for
@@ -317,6 +318,7 @@ class TestShippedPlans(Invariants, unittest.TestCase):
              ("local", "basic-strategy-dead-rows"),
              ("local", "basic-strategy-excess-link-pruning"),
              ("local", "basic-strategy-stalled-endpoint-released"),
+             ("vm", "endpoint-change-double"),
              ("local", "expel-authority"),
              ("local", "expel-during-transfer"), ("local", "expel-node"),
              ("local", "expel-sweep-redelivers"),
