@@ -73,17 +73,24 @@ type Module struct {
 	// lastAnnouncedHash is the fingerprint of the last announced endpoint set, nil before the first announcement.
 	lastAnnouncedHash atomic.Pointer[endpointsHash]
 
-	// syncGate runs one endpoint pull per sibling at a time after a partial link close.
+	// syncGate runs one endpoint pull per sibling at a time, after a partial link close and in the daily refresh.
 	syncGate syncGate
+
+	// siblingRefreshInterval is the period of RefreshSiblingEndpointsTask.
+	// why: a field, so tests shorten the 24 h period.
+	siblingRefreshInterval time.Duration
 }
 
-// Run schedules the endpoint-cleanup task and the startup endpoint check, and
-// blocks until ctx is cancelled.
+// Run schedules the endpoint-cleanup task, the sibling endpoint refresh and the
+// startup endpoint check, and blocks until ctx is cancelled.
 func (mod *Module) Run(ctx *astral.Context) error {
 	defer mod.linkPool.Close()
 	mod.ctx = ctx.IncludeZone(astral.ZoneNetwork)
 	<-mod.Deps.Scheduler.Ready()
 	mod.Scheduler.Schedule(mod.NewCleanupEndpointsTask())
+	// why: the first run comes after one jittered period, as the link-created pull covers the start.
+	delay, _ := mod.ctx.WithTimeout(jitter(mod.siblingRefreshInterval, siblingRefreshJitter))
+	mod.Scheduler.Schedule(mod.newRefreshSiblingEndpointsTask(), delay)
 	// why: a set that changed while the node was off is announced once after the settle wait.
 	mod.scheduleEndpointsAnnounce()
 
