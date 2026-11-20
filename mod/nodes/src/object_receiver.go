@@ -100,9 +100,5 @@ func (mod *Module) onPartialLinkClose(e *nodes.LinkClosedEvent) {
 	}
 
 	id := e.RemoteIdentity
-	mod.syncGate.Run(id, func() {
-		if _, err := mod.UpdateNodeEndpoints(mod.ctx, id, id); err != nil {
-			mod.log.Error("updating node endpoints after a link closed failed: %v", err)
-		}
-	})
+	mod.syncGate.Run(id, func() { mod.pullSiblingEndpoints(id) })
 }

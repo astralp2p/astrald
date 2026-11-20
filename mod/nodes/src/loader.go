@@ -22,6 +22,8 @@ func (Loader) Load(node astral.Node, assets assets.Assets, log *log.Logger) (cor
 		assets:        assets,
 		resolveRemote: resolveRemoteEndpoints,
 		announceDelay: endpointsAnnounceDelay,
+
+		siblingRefreshInterval: defaultSiblingRefreshInterval,
 	}
 
 	if err := assets.LoadYAML(nodes.ModuleName, &mod.config); err != nil && !errors.Is(err, resources.ErrNotFound) {
