@@ -130,7 +130,9 @@ func newSyncFixture(t *testing.T, ctx *astral.Context) *syncFixture {
 
 // TestSyncNodesTaskPushesTheContractFirst: a sync pushes this node's active
 // contract, then the bans, then the sibling contracts, and only then queries the
-// remote node as the user for the alias, pushes the app contracts and syncs assets.
+// remote node as the user for the alias, asks it for its relay digest, pushes the
+// app contracts and syncs assets. The step node answers the digest query with a
+// user.info, which is no digest, so the app contract is pushed.
 func TestSyncNodesTaskPushesTheContractFirst(t *testing.T) {
 	ctx, cancel := astral.NewContext(nil).WithTimeout(10 * time.Second)
 	defer cancel()
@@ -145,6 +147,7 @@ func TestSyncNodesTaskPushesTheContractFirst(t *testing.T) {
 		"push expulsion",
 		"push sibling contract",
 		"query " + user.OpInfo,
+		"query " + relayDigestOp,
 		"push app contract",
 		"query " + user.OpSyncAssets,
 	}

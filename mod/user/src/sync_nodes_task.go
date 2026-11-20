@@ -25,7 +25,7 @@ func (a *SyncNodesTask) String() string {
 
 // Run executes the sync sequence against the remote identity in network zone order:
 // active contract push, expulsion push, sibling contract push, alias pull, app
-// contract push, asset sync.
+// contract push (after a relay digest query), asset sync.
 // Errors from individual steps are logged but do not abort the remaining steps;
 // syncAssets errors are logged and swallowed — Run always returns nil.
 //

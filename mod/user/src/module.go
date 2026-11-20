@@ -58,6 +58,11 @@ type Module struct {
 	// after is the clock of the ban push backoff; see pushUntilDelivered.
 	after func(time.Duration) <-chan time.Time
 
+	// askDigest asks a sibling for its relay digest; nil selects askRelayDigest.
+	askDigest askDigestFunc
+	// digestTimeout bounds one digest query; zero selects relayDigestTimeout.
+	digestTimeout time.Duration
+
 	// joinTarget is the node a running user.join is joining; nil while no join
 	// runs. See recognizeJoinTarget.
 	joinTarget atomic.Pointer[astral.Identity]

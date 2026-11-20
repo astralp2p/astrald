@@ -257,6 +257,10 @@ func newReceiverFixture(t *testing.T, userID *astral.Identity) *receiverFixture 
 		node: &identityNode{id: f.nodeID},
 		log:  log.New(f.nodeID),
 		db:   db,
+		// note: no digest by default, so a sync pushes every forwardable contract.
+		askDigest: func(*astral.Context, *astral.Identity) (relayDigest, error) {
+			return nil, errors.New("no digest")
+		},
 	}
 
 	if userID != nil {
