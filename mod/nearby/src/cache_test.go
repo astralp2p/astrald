@@ -48,6 +48,92 @@ func TestPeerSeenOnANewUser(t *testing.T) {
 	}
 }
 
+// portsStatus returns the Visible status of p that carries ports, or none when ports is nil.
+func portsStatus(t *testing.T, p *peer, now time.Time, user *astral.Identity, ports *nearby.ListenPorts) *nearby.StatusMessage {
+	t.Helper()
+	profile := &nearby.PublicProfile{NodeID: p.node, UserID: user}
+	if ports == nil {
+		return p.status(t, now, false, profile)
+	}
+	return p.status(t, now, false, profile, ports)
+}
+
+// A verified status from a cached node at the same IP and with the same user emits exactly
+// one PeerSeen when its effective listen ports differ from the cached ones, and none when
+// they are equal. A status without ports has the effective ports 1791 and 1792.
+func TestPeerSeenOnAPortChange(t *testing.T) {
+	user := astral.GenerateIdentity()
+	h := newHarness(t, user)
+	p := newPeer(t)
+
+	steps := []struct {
+		name   string
+		ports  *nearby.ListenPorts
+		events int // note: PeerSeen emitted so far
+	}{
+		{"first seen, no ports", nil, 1},
+		{"refresh, no ports", nil, 1},
+		{"refresh, the default ports stated", &nearby.ListenPorts{TCP: 1791, KCP: 1792}, 1},
+		{"refresh, no ports again", nil, 1},
+		{"new ports", &nearby.ListenPorts{TCP: 1800, KCP: 1801}, 2},
+		{"refresh, the same ports", &nearby.ListenPorts{TCP: 1800, KCP: 1801}, 2},
+		{"new tcp port only", &nearby.ListenPorts{TCP: 1900, KCP: 1801}, 3},
+		{"new kcp port only", &nearby.ListenPorts{TCP: 1900, KCP: 1901}, 4},
+		{"kcp no longer listening", &nearby.ListenPorts{TCP: 1900}, 5},
+		{"back to the defaults, no ports", nil, 6},
+		{"refresh, no ports", nil, 6},
+	}
+
+	for _, step := range steps {
+		now := h.clock.advance(time.Minute)
+		if err := h.mod.acceptStatus(ipOf(peerIP), portsStatus(t, p, now, user, step.ports)); err != nil {
+			t.Fatalf("%s: acceptStatus: %v", step.name, err)
+		}
+
+		seen := h.events.peersSeen(t)
+		if len(seen) != step.events {
+			t.Fatalf("%s: emitted %d PeerSeen; want %d", step.name, len(seen), step.events)
+		}
+		if last := seen[len(seen)-1]; !last.NodeID.IsEqual(p.node) || !last.UserID.IsEqual(user) || !bytes.Equal(last.SourceIP, ipOf(peerIP)) {
+			t.Fatalf("%s: last PeerSeen names node %v, user %v, IP %v; want %v, %v, %v", step.name, last.NodeID, last.UserID, last.SourceIP, p.node, user, peerIP)
+		}
+		if e, ok := h.cached(peerIP); !ok || !e.Seen.Equal(now) || h.cacheLen() != 1 {
+			t.Fatalf("%s: cache holds %d entries, entry at %v %+v; want one, refreshed at %v", step.name, h.cacheLen(), peerIP, e, now)
+		}
+	}
+}
+
+// A Stealth node that restarts on a new port sends new sealed ports under the same user, and
+// that is one PeerSeen; the same sealed ports under a new hint nonce are none.
+func TestPeerSeenOnASealedPortChange(t *testing.T) {
+	user := astral.GenerateIdentity()
+	h := newHarness(t, user)
+	h.mod.recognizers.Add(userRecognizer(user))
+	p := newPeer(t)
+
+	steps := []struct {
+		name   string
+		ports  nearby.ListenPorts
+		events int
+	}{
+		{"first seen", nearby.ListenPorts{TCP: 1800, KCP: 1801}, 1},
+		{"refresh, the same ports, a new nonce", nearby.ListenPorts{TCP: 1800, KCP: 1801}, 1},
+		{"new ports", nearby.ListenPorts{TCP: 1900, KCP: 1801}, 2},
+	}
+
+	for _, step := range steps {
+		now := h.clock.advance(time.Minute)
+		hint := stealthHint(t, p.node, user)
+		status := p.status(t, now, true, hint, sealPorts(t, p.node, hint, step.ports))
+		if err := h.mod.acceptStatus(ipOf(peerIP), status); err != nil {
+			t.Fatalf("%s: acceptStatus: %v", step.name, err)
+		}
+		if seen := h.events.peersSeen(t); len(seen) != step.events {
+			t.Fatalf("%s: emitted %d PeerSeen; want %d", step.name, len(seen), step.events)
+		}
+	}
+}
+
 // PeerSeen is emitted when a node is new to the cache, when its IP changes, and when it
 // returns after its entry expired; not on a refresh from the same IP.
 func TestPeerSeenEmission(t *testing.T) {
