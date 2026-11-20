@@ -92,6 +92,7 @@ link-session-migrate
 link-session-migrate-serving-side
 expel-during-transfer
 expel-authority
+expel-management-node
 hold-purge
 hold-isolation
 indexer-cursor

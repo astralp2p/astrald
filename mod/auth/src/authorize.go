@@ -16,7 +16,8 @@ type nodeLocal interface{ NodeLocal() }
 // (the link closest to the actor needs none) and whose constraints pass, so
 // authority attenuates and its flow is bounded by every issuer on the path.
 // A handler the auth module marks NodeLocal answers for the caller alone, so no
-// chain ends at one.
+// chain ends at one. A veto (AddVeto) refuses an identity at every level it
+// names, before anything else is asked.
 func (mod *Module) Authorize(ctx *astral.Context, action auth.ActionObject) bool {
 	// why: the anonymous identity is not a party, so nothing grants it an action.
 	// note: a contract lookup for a zero subject drops its subject filter.
@@ -34,6 +35,18 @@ func (mod *Module) Authorize(ctx *astral.Context, action auth.ActionObject) bool
 func (mod *Module) authorize(ctx *astral.Context, action auth.ActionObject, hopsBelow int, visited map[string]struct{}) bool {
 	actionType := action.ObjectType()
 	actor := action.Actor()
+
+	// why first, at every level: a veto cuts an identity off whatever permits it
+	// holds, so no handler, contract or authority is asked about it. Running at
+	// each level denies a delegation chain through a vetoed issuer, and the
+	// subject of a contract the veto names; the caller's other contracts still
+	// get their turn.
+	if mod.vetoed(actor) {
+		if hopsBelow == 0 {
+			mod.log.Logv(1, "deny %v %v (vetoed)", actor, actionType)
+		}
+		return false
+	}
 
 	if mod.authorizeHandlers(ctx, action, hopsBelow) {
 		if hopsBelow == 0 {
