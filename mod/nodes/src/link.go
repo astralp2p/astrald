@@ -43,6 +43,7 @@ type Link struct {
 	lastRecv    atomic.Int64  // unix nanos of the last received frame that is not a peer's probe
 	wakeCh      chan struct{}
 	pressure    LinkPressureDetector
+	proofs      proofPushes // the caller proofs pushed over this link; see pushProofOnce
 }
 
 func (s *Link) GetMux() *Mux {

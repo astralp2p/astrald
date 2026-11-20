@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"sync"
 	"time"
 
 	"github.com/astralp2p/astral-go/api/objects"
@@ -43,6 +44,7 @@ func (mod *Module) RouteQuery(ctx *astral.Context, q *astral.InFlightQuery, w io
 	}
 
 	if link := mod.linkPool.SelectLinkWith(q.Target); link != nil {
+		mod.pushProofOnce(ctx, q, link)
 		return link.RouteQuery(ctx, q, w)
 	}
 
@@ -67,6 +69,7 @@ func (mod *Module) RouteQuery(ctx *astral.Context, q *astral.InFlightQuery, w io
 			break
 		}
 
+		mod.pushProofOnce(ctx, q, result.Link)
 		return result.Link.RouteQuery(ctx, q, w)
 	}
 
@@ -258,14 +261,136 @@ func (r *relayedQuery) ask(relayID *astral.Identity) (io.WriteCloser, error) {
 	return relay.RouteQuery(r.ctx, r.q, r.w)
 }
 
-func (mod *Module) sendCallerProof(ctx *astral.Context, q *astral.InFlightQuery, target *astral.Identity) error {
-	v, ok := q.Extra.Get(nodes.ExtraCallerProof)
-	if !ok {
-		return errors.New("missing caller proof")
+// callerProofPushTimeout bounds one push of a caller proof over a link to the
+// target.
+//
+// why a variable: tests shorten it.
+// why 5 s: the push sits on the query path, and the user module's 15 s sibling
+// push timeout is too long to hold a query for.
+var callerProofPushTimeout = 5 * time.Second
+
+// pushProofOnce pushes the caller's proof to the target before link, the link to
+// the target, takes q. It pushes once per link and contract: a success is
+// remembered on the link, a failure is not, and the query goes out either way.
+// It pushes nothing when the caller is this node or q carries no proof.
+//
+// why: the target admits a relayed query only when it holds the caller's relay
+// contract, and a contract that has not reached it yet (a new link whose
+// synchronisation still runs, a registration push that was lost) would
+// otherwise answer the app with a refusal.
+//
+// why a failure does not end the query: the target decides, and may hold the
+// contract already.
+func (mod *Module) pushProofOnce(ctx *astral.Context, q *astral.InFlightQuery, link *Link) {
+	if ctx.Identity().IsEqual(q.Caller) {
+		return
 	}
 
-	callerProof := v.(astral.Object)
-	if callerProof == nil {
+	proof, ok := callerProofOf(q)
+	if !ok {
+		return
+	}
+
+	id, err := astral.ResolveObjectID(proof)
+	if err != nil {
+		mod.log.Logv(1, "caller proof of %v has no object id: %v", q.Caller, err)
+		return
+	}
+
+	link.proofs.once(ctx.Done(), id.String(), func() error {
+		pushCtx, cancel := ctx.WithTimeout(callerProofPushTimeout)
+		defer cancel()
+		return mod.sendCallerProof(pushCtx, q, q.Target)
+	}, func(err error) {
+		mod.log.Logv(1, "caller proof push to %v failed: %v", q.Target, err)
+	})
+}
+
+// callerProofOf returns the caller's proof q carries.
+func callerProofOf(q *astral.InFlightQuery) (astral.Object, bool) {
+	v, ok := q.Extra.Get(nodes.ExtraCallerProof)
+	if !ok {
+		return nil, false
+	}
+	proof, ok := v.(astral.Object)
+	return proof, ok && proof != nil
+}
+
+// proofPushes remembers, for one link, the contracts pushed over it and the
+// pushes that run.
+type proofPushes struct {
+	mu     sync.Mutex
+	sent   map[string]struct{}
+	flying map[string]chan struct{}
+}
+
+// once runs push unless key was pushed over this link already, and remembers a
+// push that returned nil. A call that finds a push of key running waits for it
+// and does not push again, whatever it returned; failed reports a push's error.
+//
+// why one flight per key: queries that start together would each push the same
+// contract.
+func (p *proofPushes) once(cancel <-chan struct{}, key string, push func() error, failed func(error)) {
+	wait, run := p.begin(key)
+	if !run {
+		if wait != nil {
+			select {
+			case <-wait:
+			case <-cancel:
+			}
+		}
+		return
+	}
+
+	// why deferred: a push that panics must still release its waiters, and a
+	// panic is not a success.
+	succeeded := false
+	defer func() { p.end(key, succeeded) }()
+
+	if err := push(); err != nil {
+		failed(err)
+		return
+	}
+	succeeded = true
+}
+
+// begin claims the push of key. run is false when key was pushed already (wait
+// is nil) or a push of it runs (wait closes when it ends).
+func (p *proofPushes) begin(key string) (wait <-chan struct{}, run bool) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	if _, ok := p.sent[key]; ok {
+		return nil, false
+	}
+	if done, ok := p.flying[key]; ok {
+		return done, false
+	}
+	if p.flying == nil {
+		p.flying = map[string]chan struct{}{}
+	}
+	p.flying[key] = make(chan struct{})
+	return nil, true
+}
+
+// end ends the push of key and remembers it when it succeeded.
+func (p *proofPushes) end(key string, succeeded bool) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	if succeeded {
+		if p.sent == nil {
+			p.sent = map[string]struct{}{}
+		}
+		p.sent[key] = struct{}{}
+	}
+	close(p.flying[key])
+	delete(p.flying, key)
+}
+
+func (mod *Module) sendCallerProof(ctx *astral.Context, q *astral.InFlightQuery, target *astral.Identity) error {
+	callerProof, ok := callerProofOf(q)
+	if !ok {
 		return errors.New("missing caller proof")
 	}
 
