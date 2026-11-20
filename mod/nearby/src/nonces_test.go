@@ -115,7 +115,8 @@ func TestFullNonceMemoryKeepsTheRememberedNode(t *testing.T) {
 	if err := h.mod.acceptStatus(ipOf(peerIP), old); err != nil {
 		t.Fatalf("acceptStatus: %v", err)
 	}
-	// note: another node at the same IP takes the peer's entry.
+	// note: another node at the same IP, on the default port like the peer, takes the peer's
+	// entry: both statuses carry no ports, so they share the key (IP, 1791).
 	if err := h.mod.acceptStatus(ipOf(peerIP), newPeer(t).visible(t, h.clock.now(), nil, "")); err != nil {
 		t.Fatalf("acceptStatus: %v", err)
 	}
