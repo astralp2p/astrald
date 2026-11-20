@@ -264,8 +264,9 @@ func (mod *Module) storeUnrecognised(src ip.IP, status *nearby.StatusMessage, no
 }
 
 // storeVerified caches a verified status and emits PeerSeen when the node is new to the
-// cache, moved to another IP, has a new user, or returns after expiry; a Silent node with
-// silent_listen off emits nothing.
+// cache, moved to another IP, has a new user, listens on other ports, or returns after
+// expiry; a Silent node with silent_listen off emits nothing. The decision is
+// peerCache.storeVerified's.
 func (mod *Module) storeVerified(e *entry) error {
 	isNew, stored := mod.cache.storeVerified(e)
 	if !stored {

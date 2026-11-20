@@ -94,11 +94,19 @@ func (c *peerCache) storeUnrecognised(e *entry) error {
 	return nil
 }
 
+// samePorts reports whether a and b are dialed on the same tcp and kcp ports. A status
+// without ports and one that carries the defaults are the same.
+func samePorts(a, b *entry) bool {
+	atcp, akcp := a.listenPorts()
+	btcp, bkcp := b.listenPorts()
+	return atcp == btcp && akcp == bkcp
+}
+
 // storeVerified stores the verified status of e.NodeID in place of its IP's entry and
 // removes the node's entry at another IP. stored is false when the cache is full. isNew
-// is true unless a live entry of the node at the same IP and with the same user was
-// replaced: the node is new to the cache, moved to another IP, has a new user, or
-// returns after its entry expired.
+// is true unless a live entry of the node at the same IP, with the same user and the same
+// listen ports, was replaced: the node is new to the cache, moved to another IP, has a new
+// user, listens on other ports, or returns after its entry expired.
 func (c *peerCache) storeVerified(e *entry) (isNew, stored bool) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -111,7 +119,11 @@ func (c *peerCache) storeVerified(e *entry) (isNew, stored bool) {
 		case k == key:
 			// why: a node claimed while cached keeps its IP and its live entry; its new
 			// user is the news its peers of that user act on.
-			known = !old.expired(e.Seen) && old.UserID.IsEqual(e.UserID)
+			// why: a node restarted on other ports keeps its IP and its live entry; the
+			// ports resolve returns changed, and linking wakes at this status, not at the
+			// next link task tick. The ports compared are the effective ones, so a status
+			// without ports and one with 1791 and 1792 are not a change.
+			known = !old.expired(e.Seen) && old.UserID.IsEqual(e.UserID) && samePorts(old, e)
 		default:
 			delete(c.entries, k)
 		}
