@@ -12,11 +12,9 @@ import (
 const (
 	// pullMissTTL is how long a target whose complete ask yielded no relay is not asked for again.
 	pullMissTTL = 30 * time.Second
-	// pullIndexTimeout bounds one index write or read of a pulled contract.
-	pullIndexTimeout = 2 * time.Second
 )
 
-// The pull has two budgets, package variables so tests can shrink them.
+// The pull has three budgets, package variables so tests can shrink them.
 var (
 	// pullFlightTimeout bounds the detached ask of the linked siblings for a
 	// target's relay contracts. An answer that lands inside it is indexed even
@@ -24,6 +22,11 @@ var (
 	pullFlightTimeout = 10 * time.Second
 	// pullWait is how long a caller waits for the flight before it routes on.
 	pullWait = 3 * time.Second
+	// pullIndexTimeout bounds one index write or read of a pulled contract. Each
+	// step takes a fresh context from the module, not from the flight, so a
+	// contract that arrived inside pullFlightTimeout is still indexed after it
+	// ended: the flight stays registered up to pullIndexTimeout longer.
+	pullIndexTimeout = 2 * time.Second
 )
 
 // relayPull is the state of the routing-time pull of missing relay contracts:
