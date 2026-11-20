@@ -380,6 +380,12 @@ func (m *Mux) handleRead(f *frames.Read) {
 		m.ch.Send(&frames.Reset{Nonce: f.Nonce})
 		return
 	}
+	// why: a migrating writer already holds the new link's buffer, whose credit is
+	// the peer's advertised buffer (SessionMigrator.Resume); credit the peer returns
+	// for the old link's buffer would let the writer overflow the peer's new input buffer.
+	if session.getState() == stateMigrating {
+		return
+	}
 
 	writer, ok := session.writer.(*muxSessionWriter)
 	if ok {

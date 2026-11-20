@@ -9,11 +9,12 @@ the old link leaves the read whole.
   **destroys** `true` — the world ends with the adopt-node link closed, a
   second link in its place and a 32 MiB object on node2.
 - **driver** `script.py` — as the User on node1: stores a 32 MiB object on
-  node2, generated from a seed (`lib/blobgen.py`); opens a second link Lt to
-  node2 at node2's `lan_endpoint`; opens `objects.read` of the object on node2
-  and reads it with a paced reader (64 KiB reads, 8 ms apart, 15 s stall
-  timeout, a sha256 at every MiB). At 8 MiB it takes the stream's session
-  from node1's and node2's `nodes.sessions` (link Ls) and calls
+  node2, generated from a seed (`lib/blobgen.py`); opens `objects.read` of
+  the object on node2 on the one link node1 holds (Ls), with a paced reader
+  held before its first read (64 KiB reads, 8 ms apart, 15 s stall timeout, a
+  sha256 at every MiB); opens a second link Lt to node2 at node2's
+  `lan_endpoint`; then releases the reader. At 8 MiB it takes the stream's
+  session from node1's and node2's `nodes.sessions` (link Ls) and calls
   `nodes.migrate_session(session, Lt, start=true)` on node1. Right after the
   ack it records both nodes' session rows, node1's link byte counters, and
   the answer of a second migrate to Lt. After 2 MiB more it closes Ls on
@@ -33,6 +34,10 @@ the old link leaves the read whole.
 why a seed: the oracle judges the stream against bytes it made itself, and
 the hash in `object_id` proves those are the bytes node2 stored. The
 driver's per-MiB digests are the one input the oracle does not own.
+
+why the read before Lt: a new query rides the newest healthy link (astrald
+`mod/nodes/src/link_pool.go` `SelectLinkWith`), so a read opened after Lt
+would ride Lt itself.
 
 why both nodes' rows right after the ack: a session that is migrating is not
 listed (astrald `mod/nodes/src/op_sessions.go`), and by verify time the read

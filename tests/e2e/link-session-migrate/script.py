@@ -5,11 +5,12 @@ The world holds node1 and node2, adopted and linked (adopt-node). As the
 User on node1, the driver:
 
 1. stores a 32 MiB object on node2, generated from a seed (lib/blobgen.py);
-2. opens a second link to node2 at node2's lan_endpoint: CreateLinkTask adds
+2. opens objects.read of the object on node2, on the one link it holds (Ls),
+   with a paced reader (64 KiB reads, 8 ms apart, 15 s stall timeout, a
+   sha256 at every MiB) that holds before its first read;
+3. opens a second link to node2 at node2's lan_endpoint: CreateLinkTask adds
    a new link whatever node1 already holds (astrald
-   mod/nodes/src/create_link_task.go);
-3. opens objects.read of the object on node2 and reads it with a paced reader
-   (64 KiB reads, 8 ms apart, 15 s stall timeout, a sha256 at every MiB);
+   mod/nodes/src/create_link_task.go); then releases the reader;
 4. at 8 MiB, finds the stream's session in node1's nodes.sessions (link Ls)
    and node2's (the same id), and calls nodes.migrate_session(start=true)
    on node1 with the other link Lt;
@@ -59,19 +60,24 @@ async def main():
             return linkview.carrying(await linkview.sessions(c), object_id)
         print(f"driver: stored {SIZE} B on node2 as {object_id[:20]}…")
 
-        info = await cu.nodes.new_link(id2, endpoint=n2["lan_endpoint"],
-                                       strategies="basic", experimental=True,
-                                       timeout=60.0)
-        new_id = str(info.id)
-        facts["link_new_created"] = new_id
-        facts["link_new_seen"] = await linkview.wait_both(c1, c2, id1, id2, new_id)
-        print(f"driver: second link {new_id}, on both ends "
-              f"{facts['link_new_seen']}")
-
         mig: dict = {}
+        # why the read before Lt: a query rides the newest healthy link
+        # (astrald mod/nodes/src/link_pool.go SelectLinkWith), so a read
+        # opened after Lt would ride Lt itself
         async with cu.objects.open_read(object_id, target=id2) as stream:
             reader = blobgen.PacedReader(stream)
+            reader.hold()
             task = asyncio.create_task(reader.run())
+            info = await cu.nodes.new_link(id2, endpoint=n2["lan_endpoint"],
+                                           strategies="basic",
+                                           experimental=True, timeout=60.0)
+            new_id = str(info.id)
+            facts["link_new_created"] = new_id
+            facts["link_new_seen"] = await linkview.wait_both(c1, c2, id1, id2,
+                                                              new_id)
+            print(f"driver: second link {new_id}, on both ends "
+                  f"{facts['link_new_seen']}")
+            reader.release()
             reached = await reader.reached(MIGRATE_AT, 60.0)
             mig["offset"] = reader.total
             rows1 = await stream_rows(c1)
