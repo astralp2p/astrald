@@ -46,16 +46,13 @@ func (s *Link) idleLeft() time.Duration {
 	return time.Until(time.Unix(0, s.lastRecv.Load()).Add(s.idlePing))
 }
 
-// waitProbe blocks until a probe is due: the peer was silent for idlePing, an active check interval passed, or Wake was called.
+// waitProbe blocks until a probe is due: the peer was silent for idlePing, or Wake was called.
 // It returns false once the link is done.
 func (s *Link) waitProbe(t *time.Timer) bool {
 	for {
-		wait := activeInterval
-		if s.checks.Load() == 0 {
-			wait = s.idleLeft()
-			if wait <= 0 {
-				return true
-			}
+		wait := s.idleLeft()
+		if wait <= 0 {
+			return true
 		}
 
 		t.Reset(wait)
@@ -67,9 +64,6 @@ func (s *Link) waitProbe(t *time.Timer) bool {
 		case <-t.C:
 			// note: a frame received while the timer ran moves the deadline, so
 			// the loop re-arms instead of probing a link that is busy.
-			if s.checks.Load() > 0 || s.idleLeft() <= 0 {
-				return true
-			}
 		}
 	}
 }

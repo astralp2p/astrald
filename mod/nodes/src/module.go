@@ -28,7 +28,6 @@ const featureMux2 = "mux2"
 // (astral-docs topics/link-mux.md, Keepalive).
 const defaultIdlePing = 15 * time.Second
 const defaultPingTimeout = 10 * time.Second
-const activeInterval = 1 * time.Second
 const pingJitter = 1 * time.Second
 
 var _ nodesmod.Module = &Module{}
