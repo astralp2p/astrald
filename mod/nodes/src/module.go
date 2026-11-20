@@ -63,6 +63,11 @@ type Module struct {
 
 	pull relayPull
 
+	// retrieve replaces the link pool's retrieval of a link to a query's target
+	// or relay; nil is linkPool.RetrieveLink with the Basic and Tor strategies.
+	// why: a field, so tests block or count a retrieval without a link strategy.
+	retrieve func(ctx *astral.Context, target *astral.Identity) <-chan LinkResult
+
 	// resolveRemote pulls endpoints from another node.
 	// why: a field, so tests answer a pull without a network.
 	resolveRemote func(ctx *astral.Context, resolver *astral.Identity, identity *astral.Identity) ([]*nodes.EndpointWithTTL, error)
