@@ -39,9 +39,8 @@ func (c *mutedPacketConn) ReadFrom(p []byte) (int, net.Addr, error) {
 
 // kcpLinkPair is a link over a real KCP session on loopback UDP.
 type kcpLinkPair struct {
-	inbound  *Link            // the accepting end
-	outbound *Link            // the dialing end
-	dialer   *mutedPacketConn // the dialing end's UDP socket
+	inbound *Link            // the accepting end
+	dialer  *mutedPacketConn // the dialing end's UDP socket
 }
 
 // newKCPLinkPair dials a KCP listener on loopback, runs a link with
@@ -65,7 +64,7 @@ func newKCPLinkPair(t *testing.T, k exonetmod.LinkKeepalive) kcpLinkPair {
 	}
 
 	mod := &Module{log: log.New(astral.Anyone)}
-	// why effectTimeout: the kcp module wraps each session with its dial
+	// why: the kcp module wraps each session with its dial
 	// timeout; the first frame read clears it, as in production.
 	outConn := kcpsrc.WrapKCPConn(sess, nil, nil, true, effectTimeout)
 	outbound := newLink(mod, keepaliveConn{pipeIdentityConn{outConn}, k}, astral.NewNonce(), true)
@@ -86,7 +85,7 @@ func newKCPLinkPair(t *testing.T, k exonetmod.LinkKeepalive) kcpLinkPair {
 	if err := <-pinged; err != nil {
 		t.Fatalf("the dialer's first ping failed: %v", err)
 	}
-	return kcpLinkPair{inbound: inbound, outbound: outbound, dialer: dialer}
+	return kcpLinkPair{inbound: inbound, dialer: dialer}
 }
 
 // TestPassiveKCPLinkClosesOnSilentPeer: the accepting end of a KCP link whose
