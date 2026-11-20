@@ -491,3 +491,44 @@ func TestPushProofToAHostHoldingTheContractIsQuiet(t *testing.T) {
 		t.Fatalf("%d pushes; want 1", f.objects.count())
 	}
 }
+
+// A push that panics releases the calls that wait on it and is not remembered.
+func TestProofPushPanicReleasesWaitersAndIsNotCached(t *testing.T) {
+	var p proofPushes
+	entered := make(chan struct{})
+	release := make(chan struct{})
+
+	panicked := make(chan any, 1)
+	go func() {
+		defer func() { panicked <- recover() }()
+		p.once(nil, "k", func() error {
+			close(entered)
+			<-release
+			panic("push panics")
+		}, func(error) {})
+	}()
+	<-entered
+
+	waited := make(chan struct{})
+	go func() {
+		p.once(nil, "k", func() error { return errors.New("waiter must not push") }, func(error) {})
+		close(waited)
+	}()
+	time.Sleep(20 * time.Millisecond)
+	close(release)
+
+	if r := <-panicked; r == nil {
+		t.Fatal("the panic was swallowed")
+	}
+	select {
+	case <-waited:
+	case <-time.After(2 * time.Second):
+		t.Fatal("a waiter is still blocked after the push panicked")
+	}
+
+	pushed := false
+	p.once(nil, "k", func() error { pushed = true; return nil }, func(error) {})
+	if !pushed {
+		t.Fatal("a panicked push was remembered as sent")
+	}
+}

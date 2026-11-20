@@ -342,11 +342,16 @@ func (p *proofPushes) once(cancel <-chan struct{}, key string, push func() error
 		return
 	}
 
-	err := push()
-	p.end(key, err == nil)
-	if err != nil {
+	// why deferred: a push that panics must still release its waiters, and a
+	// panic is not a success.
+	succeeded := false
+	defer func() { p.end(key, succeeded) }()
+
+	if err := push(); err != nil {
 		failed(err)
+		return
 	}
+	succeeded = true
 }
 
 // begin claims the push of key. run is false when key was pushed already (wait
