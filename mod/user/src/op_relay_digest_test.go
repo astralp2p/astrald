@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/astralp2p/astral-go/api/auth"
+	"github.com/astralp2p/astral-go/api/nodes"
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astral-go/lib/query"
 	usermod "github.com/astralp2p/astrald/mod/user"
@@ -34,7 +35,8 @@ func objectIDOf(t *testing.T, sc *auth.SignedContract) astral.ObjectID {
 
 // TestRelayDigestAnswersTheIDsOfTheHeldRelayContracts: a member reads the object
 // ID of every relay-for contract the index holds, whoever issued it, hosts it or
-// would be pushed it, then eos; a contract with no relay-for permit stays out.
+// would be pushed it, then eos; a contract with no relay-for permit and one that
+// carries another permit beside relay_for stay out.
 func TestRelayDigestAnswersTheIDsOfTheHeldRelayContracts(t *testing.T) {
 	f := newReceiverFixture(t, astral.GenerateIdentity())
 	caller, host := f.addSibling(), f.addSibling()
@@ -48,6 +50,8 @@ func TestRelayDigestAnswersTheIDsOfTheHeldRelayContracts(t *testing.T) {
 		f.auth.seed(sc)
 	}
 	f.auth.seed(contractWith(astral.GenerateIdentity(), host, "mod.objects.read_action")) // no relay-for permit
+	f.auth.seed(contractWith(astral.GenerateIdentity(), host,
+		nodes.RelayForAction{}.ObjectType(), "mod.objects.read_action")) // another permit beside relay_for
 
 	objs := askRelayDigestOp(t, f, caller)
 	if len(objs) != len(held)+1 {
