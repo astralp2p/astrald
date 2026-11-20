@@ -499,8 +499,9 @@ func TestUnrecognisedStatusKeysOnTheDefaultPort(t *testing.T) {
 }
 
 // A full cache refuses a status under a new key, also at an IP that holds an entry, and
-// accepts a status under an existing key and a verified node's move to a new port, which
-// frees the key it leaves.
+// accepts a status under an existing key and a verified node's move to a new port at its
+// IP, which frees the key it leaves. A node's move to a new IP is refused before
+// identification, while its old entry stays.
 func TestCacheCapIsPerKey(t *testing.T) {
 	h := newHarness(t, nil)
 	unrecognised := newPeer(t).stealth(t, h.clock.now(), astral.GenerateIdentity())
@@ -547,6 +548,17 @@ func TestCacheCapIsPerKey(t *testing.T) {
 	}
 	if e, ok := h.cachedAt(capIP(7).String(), nearby.DefaultTCPPort); !ok || !e.isNode(replacer.node) || h.cacheLen() != maxCacheEntries {
 		t.Fatalf("entry at %v = %+v, %v, %d entries; want the replacing status and %d entries", capIP(7), e, ok, h.cacheLen(), maxCacheEntries)
+	}
+
+	// A node's move to an IP that holds no entry is refused before identification, and its
+	// old entry stays.
+	now = h.clock.advance(time.Minute)
+	err = h.mod.acceptStatus(capIP(maxCacheEntries), mover.visible(t, now, nil, ""))
+	if !errors.Is(err, errCacheFull) {
+		t.Fatalf("move to a new IP in a full cache: acceptStatus = %v; want %v", err, errCacheFull)
+	}
+	if e, ok := h.cachedAt(peerIP, nearby.DefaultTCPPort); !ok || !e.isNode(mover.node) || h.cacheLen() != maxCacheEntries {
+		t.Fatalf("entry at %v:1791 = %+v, %v, %d entries; want the mover's old entry and %d entries", peerIP, e, ok, h.cacheLen(), maxCacheEntries)
 	}
 
 	// A node's move to a new port takes the key it leaves, so it fits in a full cache.
