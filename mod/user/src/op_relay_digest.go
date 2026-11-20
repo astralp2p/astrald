@@ -26,9 +26,13 @@ type opRelayDigestArgs struct {
 //
 // why: no named action guards this op; a member asks it as itself before a
 // relay contract push (syncAppContracts), and swarm membership is the guard.
-// why no forwarding filter: the digest says what this node holds; the pusher
-// decides what to push (isForwardable), and a contract this node refused is
-// absent from its index, so it is pushed again.
+// why the every-permit filter and no forwarding filter: the digest lists the
+// relay contracts this node holds, the ones where every permit is for
+// relay_for (isRelayForContract, the rule of user.relay_contracts), whoever
+// issued or hosts them. A contract that carries another permit beside
+// relay_for is never listed, and isForwardable never pushes it. The digest
+// leaves the choice of what to push to the pusher (isForwardable). A contract
+// this node refused is absent from its index, so it is pushed again.
 func (mod *Module) OpRelayDigest(ctx *astral.Context, q *routing.IncomingQuery, args opRelayDigestArgs) error {
 	ch := q.Accept(channel.WithOutputFormat(args.Out))
 	defer ch.Close()
