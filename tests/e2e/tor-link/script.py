@@ -8,11 +8,33 @@ LAN path black-holes, and only node1's keepalive can close that link.
 
 1. Asks node2 for `user.info` from node1, at once and again after every
    failure, until node2 answers, while a watcher polls node1's links to node2
-   every second and records when the last tcp link left. The first answer is
-   the moment queries reach node2 again after the change; queries in the
-   keepalive's detection window may fail (A1G2 option a).
+   every second. The first answer is the moment queries reach node2 again
+   after the change; queries in the keepalive's detection window may fail
+   (A1G2 option a).
 2. Holds the swarm link over Tor: when node1 lists no tor link to node2 yet,
    kicks a tor link attempt off and watches the link table.
+3. Lets the watcher finish: node1's old links to node2 gone, and node1's
+   endpoint table refreshed with what node2 advertises, or ENDPOINTS_WAIT s
+   past the new link.
+
+The watcher records, in the `tcp` entry of `first_answer`:
+
+- when node1 last listed a tcp link to node2, and when it first listed none;
+- the old links: node1's non-tor links to node2 at the first poll, which ran
+  over the LAN; when node1 first listed none of them (`old_gone_at`);
+- the new link: when node1 first listed a link to node2 that is not an old
+  one (`new_at`), and its networks;
+- the endpoint table: from the new link on, node2's own endpoints
+  (`nodes.resolve_endpoints localnode` on node2) against node1's rows for
+  node2 (`nodes.resolve_endpoints <node2>` on node1), and when every row of
+  node2's was in node1's table, written after the new link (`at`).
+
+why a row's TTL says when node1 wrote it: node1 stores an endpoint with the
+TTL node2 resolves for it and answers the time left
+(mod/nodes/src/db_endpoint_resolver.go), and node2 answers the full TTL each
+time. A row of node1's whose time left is at least node2's TTL less the time
+since the new link was written after it, by a pull over the new link; the
+rows node1 held before (adoption's pull, leave-lan's seeded onion) are older.
 
 why this waits instead of trusting the call: astrald's Tor strategy signals
 done after its quick timeout and keeps trying in the background for up to six
@@ -32,13 +54,19 @@ import time
 
 import astral
 
+from lib import linkview
 from lib.sessionio import load, write_facts
 
-LINK_DEADLINE = 300.0     # inside the manifest's 600 s, outside astrald's 360 s
+LINK_DEADLINE = 300.0     # inside the manifest's 780 s, outside astrald's 360 s
 POLL = 5.0
 QUERY = 60.0              # one query: the routing cap of a query to a peer
 PAUSE = 0.5               # between a failed query and the next one
 WATCH = 1.0
+# why 60 s: ticket akchpFNjbO criterion 6, the endpoint table within 60 s of the new link
+ENDPOINTS_WAIT = 60.0
+# why: a poll lists the new link up to WATCH s after node1 made it, and a TTL counts whole seconds
+ENDPOINT_SLACK = 5.0
+NETWORKS = ("tcp", "kcp", "tor")
 
 
 async def networks_to(c, peer: str) -> list:
@@ -48,21 +76,85 @@ async def networks_to(c, peer: str) -> list:
                    if str(l.remote_identity) == peer})
 
 
-async def watch_tcp(c, peer: str, t0: float, seen: dict) -> None:
-    """Records in seen when node1 last listed a tcp link to peer and when it first listed none."""
+async def endpoint_ttls(c, name: str) -> dict:
+    """{`<network>:<address>`: TTL in s or None} of the tcp, kcp and tor endpoints c's node resolves for name."""
+    rows = {}
+    for e in await c.nodes.resolve_endpoints(name, experimental=True):
+        ep = e.endpoint
+        if callable(getattr(ep, "network", None)) and ep.network() in NETWORKS:
+            rows[f"{ep.network()}:{ep.address()}"] = e.ttl
+    return rows
+
+
+def stale_rows(own: dict, held: dict, since_new: float) -> list:
+    """The rows of node2's own that node1 lacks or wrote before the new link."""
+    out = []
+    for key, ttl in sorted(own.items()):
+        if key not in held:
+            out.append(f"{key} missing")
+        elif ttl is not None and (held[key] is None
+                                  or held[key] < ttl - since_new - ENDPOINT_SLACK):
+            out.append(f"{key} ttl {held[key]} s, want >= {ttl - since_new - ENDPOINT_SLACK:.0f} s")
+    return out
+
+
+def watch_links(rows: list, now: float, seen: dict) -> None:
+    """Records the tcp, old-link and new-link times from one poll of node1's links to node2."""
+    nets = sorted({r["network"] for r in rows})
+    ids = {r["id"] for r in rows}
+    if "old_ids" not in seen:
+        seen["at_start"] = nets
+        seen["old_ids"] = sorted(r["id"] for r in rows if r["network"] != "tor")
+    if "tcp" in nets:
+        seen["tcp_last_seen"] = now
+        seen.pop("tcp_gone_at", None)
+    else:
+        seen.setdefault("tcp_gone_at", now)
+    if ids & set(seen["old_ids"]):
+        seen.pop("old_gone_at", None)
+    else:
+        seen.setdefault("old_gone_at", now)
+    new = [r for r in rows if r["id"] not in seen["old_ids"]]
+    if new and seen.get("new_at") is None:
+        seen["new_at"] = now
+        seen["new_networks"] = sorted({r["network"] for r in new})
+
+
+async def watch_endpoints(c1, c2, peer: str, now: float, seen: dict) -> None:
+    """Records when node1's table first held node2's own rows, written after the new link."""
+    ep = seen.setdefault("endpoints", {"at": None})
+    if ep["at"] is not None:
+        return
+    own, held = await endpoint_ttls(c2, "localnode"), await endpoint_ttls(c1, peer)
+    stale = stale_rows(own, held, now - seen["new_at"])
+    ep.update({"own": own, "held": held, "stale": stale, "checked_at": now})
+    if own and not stale:
+        ep["at"] = now
+
+
+def watch_done(seen: dict, now: float) -> bool:
+    """Whether the watcher has seen all it waits for, or waited ENDPOINTS_WAIT s past the new link."""
+    new_at = seen.get("new_at")
+    if new_at is None:
+        return False
+    settled = (seen.get("old_gone_at") is not None
+               and (seen.get("endpoints") or {}).get("at") is not None)
+    return settled or now > new_at + ENDPOINTS_WAIT + ENDPOINT_SLACK
+
+
+async def watch(c1, c2, peer: str, t0: float, seen: dict) -> None:
+    """Polls node1's links to peer, and its endpoint table once a new link is up, every WATCH s."""
     while True:
-        try:
-            nets = await networks_to(c, peer)
-        except Exception:  # noqa: BLE001 — a missed poll is not an observation
-            nets = None
         now = round(time.monotonic() - t0, 2)
-        if nets is not None:
-            seen.setdefault("at_start", nets)
-            if "tcp" in nets:
-                seen["tcp_last_seen"] = now
-                seen.pop("tcp_gone_at", None)
-            else:
-                seen.setdefault("tcp_gone_at", now)
+        try:
+            watch_links(linkview.to(await linkview.links(c1), peer), now, seen)
+            if seen.get("new_at") is not None:
+                await watch_endpoints(c1, c2, peer, now, seen)
+        except Exception as e:  # noqa: BLE001 — a missed poll is not an observation
+            seen["poll_errors"] = seen.get("poll_errors", 0) + 1
+            seen["last_poll_error"] = f"{type(e).__name__}: {e}"
+        if watch_done(seen, now):
+            return
         await asyncio.sleep(WATCH)
 
 
@@ -110,27 +202,38 @@ async def hold_tor(c, peer: str) -> tuple:
     return networks, round(time.monotonic() - start, 2)
 
 
+async def finish(watcher: asyncio.Task) -> None:
+    """Waits for the watcher until it is done, or ENDPOINTS_WAIT plus slack more; then stops it."""
+    try:
+        await asyncio.wait_for(asyncio.shield(watcher), ENDPOINTS_WAIT + 2 * ENDPOINT_SLACK)
+    except asyncio.TimeoutError:
+        pass
+    watcher.cancel()
+
+
 async def main():
     doc = load()
     n1, n2 = doc["nodes"]["node1"], doc["nodes"]["node2"]
     peer = n2["identity"]
 
     async with await astral.connect(n1["endpoint"],
-                                    token=doc["facts"]["user_token"]) as c:
+                                    token=doc["facts"]["user_token"]) as c, \
+            await astral.connect(n1["endpoint"], token=n1["token"]) as c1, \
+            await astral.connect(n2["endpoint"], token=n2["token"]) as c2:
         t0 = time.monotonic()
         seen: dict = {}
-        watcher = asyncio.create_task(watch_tcp(c, peer, t0, seen))
+        watcher = asyncio.create_task(watch(c1, c2, peer, t0, seen))
         try:
             answer = await first_answer(c, peer, t0)
+            answer["tcp"] = seen
+            networks, waited = await hold_tor(c, peer)
         finally:
-            watcher.cancel()
-        answer["tcp"] = seen
-        networks, waited = await hold_tor(c, peer)
+            await finish(watcher)
 
     write_facts({"tor_link_networks": networks, "first_answer": answer})
     print(f"driver: node2 first answered {answer['after']} s after the driver "
           f"started, over {answer['networks']}, after "
-          f"{len(answer['failures'])} failed queries; tcp {seen}")
+          f"{len(answer['failures'])} failed queries; links {seen}")
     if "tor" not in networks:
         raise SystemExit(
             f"driver: no tor link to node2 after {waited:.0f}s; "
