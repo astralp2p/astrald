@@ -52,8 +52,9 @@ type pullFlight struct {
 //
 // why the gate: the ask's own queries target siblings, which the gate
 // excludes, so an ask never starts another ask; a recent miss fails fast.
-// why a detached context: the ask is shared, so one caller ending early must
-// not cut it short for the others or record a false miss.
+// why the module's context: the ask is shared, so one caller ending early must
+// not cut it short for the others or record a false miss; and it must not
+// outlive the module, so the flight and its index work derive from mod.ctx.
 // why two budgets: the flight runs up to pullFlightTimeout so a slow sibling's
 // answer is still indexed; a caller waits at most pullWait and routes on, and
 // the next query finds the indexed relay.
@@ -66,7 +67,7 @@ func (mod *Module) pullRelays(ctx *astral.Context, target *astral.Identity) []*a
 	if running, started := mod.pull.flights.Set(target.String(), flight); !started {
 		flight = running
 	} else {
-		pctx, cancel := ctx.Detach().WithTimeout(pullFlightTimeout)
+		pctx, cancel := mod.ctx.WithTimeout(pullFlightTimeout)
 		go func() {
 			defer cancel()
 			flight.relays = mod.runPull(pctx, target)
@@ -115,8 +116,9 @@ func (mod *Module) isPullGated(target *astral.Identity) bool {
 // asked sibling answered without error) and ctx has not ended; otherwise it
 // returns nil and records nothing.
 //
-// why a fresh context for the index: ctx is the flight budget, and a contract
-// delivered as it ends must still be indexed and read back.
+// why a separate context for the index: ctx is the flight budget, and a contract
+// delivered as it ends must still be indexed and read back; it derives from the
+// module's context, so a shutdown still cuts it.
 func (mod *Module) runPull(ctx *astral.Context, target *astral.Identity) []*astral.Identity {
 	if relays := mod.heldRelays(ctx, target); len(relays) > 0 {
 		return relays
@@ -126,7 +128,7 @@ func (mod *Module) runPull(ctx *astral.Context, target *astral.Identity) []*astr
 
 	contracts, complete := mod.User.FetchRelayContractsReport(ctx, target)
 	for sender, sc := range contracts {
-		ictx, cancel := ctx.Detach().WithTimeout(pullIndexTimeout)
+		ictx, cancel := mod.ctx.WithTimeout(pullIndexTimeout)
 		err := mod.Auth.IndexContract(ictx, sc)
 		if err != nil {
 			cancel()
@@ -144,7 +146,7 @@ func (mod *Module) runPull(ctx *astral.Context, target *astral.Identity) []*astr
 		}
 	}
 
-	rctx, cancel := ctx.Detach().WithTimeout(pullIndexTimeout)
+	rctx, cancel := mod.ctx.WithTimeout(pullIndexTimeout)
 	defer cancel()
 	if relays := mod.heldRelays(rctx, target); len(relays) > 0 {
 		return relays

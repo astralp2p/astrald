@@ -126,6 +126,7 @@ func newPullFixture(t *testing.T) *pullFixture {
 		Deps: Deps{User: f.user, Auth: f.index},
 		node: &identityNode{id: f.nodeID},
 		log:  log.New(f.nodeID),
+		ctx:  networkCtx(),
 	}
 	f.mod.pull.now = f.clock
 	return f
@@ -491,6 +492,38 @@ func TestPullRelaysBudgetExpiryRecordsNoMiss(t *testing.T) {
 	}
 	if f.missed(app) || f.mod.isPullGated(app) {
 		t.Fatal("a flight that ran out of budget recorded a miss")
+	}
+}
+
+// The module ending cuts a running flight: the fetch sees its context end, the
+// flight leaves promptly, and no miss is recorded although the fetch reports
+// complete.
+func TestPullRelaysModuleShutdownEndsTheFlight(t *testing.T) {
+	f := newPullFixture(t)
+	setPullBudgets(t, 50*time.Millisecond, 10*time.Second)
+	modCtx, stop := networkCtx().WithCancel()
+	defer stop()
+	f.mod.ctx = modCtx
+	app := astral.GenerateIdentity()
+	f.user.fetch = func(ctx *astral.Context, _ *astral.Identity, _ func(*astral.Identity, *auth.SignedContract) bool) {
+		<-ctx.Done()
+	}
+
+	if relays := f.mod.pullRelays(networkCtx(), app); relays != nil {
+		t.Fatalf("got relays %v; want nil", relays)
+	}
+	if _, running := f.mod.pull.flights.Get(app.String()); !running {
+		t.Fatal("the flight ended before the module did")
+	}
+
+	stopped := time.Now()
+	stop()
+	ended := f.awaitFlightEnd(t, app)
+	if d := ended.Sub(stopped); d > time.Second {
+		t.Fatalf("the flight outlived the module by %v; want it to end promptly", d)
+	}
+	if f.missed(app) || f.mod.isPullGated(app) {
+		t.Fatal("a flight cut by the module's shutdown recorded a miss")
 	}
 }
 
