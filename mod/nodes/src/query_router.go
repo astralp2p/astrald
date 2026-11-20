@@ -12,11 +12,25 @@ import (
 	"github.com/astralp2p/astrald/mod/nodes"
 )
 
-// RouteQuery routes a query to its target over a link, reusing an existing one or
-// retrieving a new one. On failure it falls back to relays listed in q.Extra, sending
-// caller proof first when the caller differs from the context identity. When q.Extra
-// lists no relay, it asks the linked siblings for the target's relay contracts once
-// (pullRelays). Network zone only.
+// RouteQuery routes a query to its target over a link, reusing an existing one,
+// else through the relays q.Extra lists, else over a retrieved link. Network
+// zone only.
+//
+// An existing link to the target wins. When q.Extra lists relays, the query goes
+// through them at once and never retrieves a link to the target; when none of
+// them accepts, the answer follows relayAnswers.result. When q.Extra lists no
+// relay, the target link is retrieved first, then the linked siblings are asked
+// for the target's relay contracts once (pullRelays), and the relays that finds
+// are tried. Caller proof is sent to a relay first when the caller differs from
+// the context identity.
+//
+// why relays first: an app identity has no endpoints of its own, and the
+// preprocessors name its relays from the index, so retrieval of a link to it
+// can only fail slowly (a stale endpoint, a dead onion).
+//
+// why no retrieval after the relays failed: the relays are the path the index
+// names, and a retrieval that cannot succeed for an app would only delay the
+// answer by up to retrieveTimeout. Operator decision, 2026-11-20.
 func (mod *Module) RouteQuery(ctx *astral.Context, q *astral.InFlightQuery, w io.WriteCloser) (rw io.WriteCloser, err error) {
 	// check if the context allows for network queries
 	if !ctx.Zone().Is(astral.ZoneNetwork) {
@@ -32,14 +46,18 @@ func (mod *Module) RouteQuery(ctx *astral.Context, q *astral.InFlightQuery, w io
 		return link.RouteQuery(ctx, q, w)
 	}
 
-	retrieveCtx, cancel := ctx.WithTimeout(120 * time.Second)
+	if relayList := queryRelays(q); len(relayList) > 0 {
+		return mod.routeRelayed(ctx, q, w, relayList)
+	}
+
+	retrieveCtx, cancel := ctx.WithTimeout(retrieveTimeout)
 	defer cancel()
 
 	// todo: there is error printed out  when calling identity that we cannot link with (e.g. other'session node app)
 	select {
 	case <-ctx.Done():
 		return nil, ctx.Err()
-	case result := <-mod.linkPool.RetrieveLink(retrieveCtx, q.Target, WithStrategies(nodes.StrategyBasic, nodes.StrategyTor)):
+	case result := <-mod.retrieveLink(retrieveCtx, q.Target):
 		// why: a refused peer is reached through no relay either.
 		if errors.Is(result.Err, nodes.ErrLinkDenied) {
 			return query.RouteNotFound()
@@ -52,19 +70,45 @@ func (mod *Module) RouteQuery(ctx *astral.Context, q *astral.InFlightQuery, w io
 		return result.Link.RouteQuery(ctx, q, w)
 	}
 
-	relayList := queryRelays(q)
-	if len(relayList) == 0 {
-		relayList = mod.pullRelays(ctx, q.Target)
-	}
+	relayList := mod.pullRelays(ctx, q.Target)
 	if len(relayList) == 0 {
 		return mod.unrelayed(ctx, q.Target)
 	}
 
+	return mod.routeRelayed(ctx, q, w, relayList)
+}
+
+const (
+	// retrieveTimeout bounds the retrieval of a link to the target.
+	retrieveTimeout = 120 * time.Second
+	// relayReachTimeout bounds the linking to the relays of one query, all of
+	// them together. It derives from the caller's context, so a shorter caller
+	// deadline wins.
+	relayReachTimeout = 120 * time.Second
+)
+
+// retrieveLink retrieves a link to target with the strategies a query may use.
+//
+// why a field: tests replace it, so a retrieval that blocks or counts needs no
+// link strategy.
+func (mod *Module) retrieveLink(ctx *astral.Context, target *astral.Identity) <-chan LinkResult {
+	if mod.retrieve != nil {
+		return mod.retrieve(ctx, target)
+	}
+	return mod.linkPool.RetrieveLink(ctx, target, WithStrategies(nodes.StrategyBasic, nodes.StrategyTor))
+}
+
+// routeRelayed routes q through relays in order. Linking to a relay gets its
+// own reach context, derived from the caller's.
+func (mod *Module) routeRelayed(ctx *astral.Context, q *astral.InFlightQuery, w io.WriteCloser, relays []*astral.Identity) (io.WriteCloser, error) {
+	reachCtx, cancel := ctx.WithTimeout(relayReachTimeout)
+	defer cancel()
+
 	relayed := &relayedQuery{ctx: ctx, q: q, w: w, reach: func(relayID *astral.Identity) (astral.Router, error) {
-		return mod.reachRelay(ctx, retrieveCtx, q, relayID)
+		return mod.reachRelay(ctx, reachCtx, q, relayID)
 	}}
 
-	return relayed.route(relayList)
+	return relayed.route(relays)
 }
 
 // unrelayed answers a query that no link and no relay reaches: the caller's
@@ -95,8 +139,9 @@ func queryRelays(q *astral.InFlightQuery) []*astral.Identity {
 }
 
 // reachRelay returns a link to relayID for q, after pushing the caller's proof
-// to it when the caller is not this node.
-func (mod *Module) reachRelay(ctx, retrieveCtx *astral.Context, q *astral.InFlightQuery, relayID *astral.Identity) (astral.Router, error) {
+// to it when the caller is not this node. ctx is the caller's context and
+// reachCtx bounds the retrieval of a link to the relay.
+func (mod *Module) reachRelay(ctx, reachCtx *astral.Context, q *astral.InFlightQuery, relayID *astral.Identity) (astral.Router, error) {
 	// never use the target as a relay to itself
 	if relayID.IsEqual(q.Target) {
 		return nil, errTargetIsRelay
@@ -104,7 +149,7 @@ func (mod *Module) reachRelay(ctx, retrieveCtx *astral.Context, q *astral.InFlig
 
 	link := mod.linkPool.SelectLinkWith(relayID)
 	if link == nil {
-		result := <-mod.linkPool.RetrieveLink(retrieveCtx, relayID, WithStrategies(nodes.StrategyBasic, nodes.StrategyTor))
+		result := <-mod.retrieveLink(reachCtx, relayID)
 		if result.Err != nil {
 			return nil, result.Err
 		}
