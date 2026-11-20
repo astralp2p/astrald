@@ -43,9 +43,12 @@ type roundKeeper struct {
 // run returns or run calls finished. A round whose context has ended takes no
 // new callers; join starts a new round instead.
 //
+// done is the done channel of the round the caller joined; it closes when that
+// round finishes, never when a later round does.
+//
 // The caller holds the round until it calls the returned release or caller
 // ends, whichever comes first. Release is idempotent.
-func (k *roundKeeper) join(caller, parent *astral.Context, budget time.Duration, run func(*linkRound)) (release func()) {
+func (k *roundKeeper) join(caller, parent *astral.Context, budget time.Duration, run func(*linkRound)) (done <-chan struct{}, release func()) {
 	r := k.enter(parent, budget, run)
 
 	var left atomic.Bool
@@ -59,7 +62,7 @@ func (k *roundKeeper) join(caller, parent *astral.Context, budget time.Duration,
 	// so a missed release cannot hold a round past its callers.
 	stop := context.AfterFunc(caller, leave)
 
-	return func() {
+	return r.done, func() {
 		stop()
 		leave()
 	}
@@ -83,20 +86,6 @@ func (k *roundKeeper) enter(parent *astral.Context, budget time.Duration, run fu
 	}
 	r.refs++
 	return r
-}
-
-// done returns the running round's done channel; an already-closed channel
-// when no round runs.
-func (k *roundKeeper) done() <-chan struct{} {
-	k.mu.Lock()
-	defer k.mu.Unlock()
-
-	if k.round == nil {
-		ch := make(chan struct{})
-		close(ch)
-		return ch
-	}
-	return k.round.done
 }
 
 // leave drops one caller; the last caller to leave cancels the round.

@@ -131,4 +131,5 @@ w39 docker: distribution-gate-setup
             config node1.apphost.policies = {}
 w40 docker: bootstrap-passphrase
 w41 docker: claim-race
-w42 docker: concurrent-adoption
+w42 docker: expel-management-node
+w43 docker: concurrent-adoption

@@ -1,6 +1,7 @@
 package nodes
 
 import (
+	"context"
 	"errors"
 	nodesmod "github.com/astralp2p/astrald/mod/nodes"
 	"sync"
@@ -36,7 +37,11 @@ type Module struct {
 	log    *log.Logger
 	assets resources.Resources
 	db     *DB
+	// ctx is the module context: network zone, node identity, cancelled when Run ends.
+	// why: set once by initContext in Load, before any transport or router calls in, and
+	// never reassigned, so a strategy that joins before Run reads a live, race-free context.
 	ctx    *astral.Context
+	cancel context.CancelFunc
 	router routing.OpRouter
 
 	dbResolver *DBEndpointResolver
@@ -96,11 +101,20 @@ type Module struct {
 	siblingRefreshInterval time.Duration
 }
 
+// initContext sets the module context for the node identity id. The context ends when
+// mod.cancel runs, which Run arranges when its own context ends.
+func (mod *Module) initContext(id *astral.Identity) {
+	mod.ctx, mod.cancel = astral.NewContext(nil).WithIdentity(id).IncludeZone(astral.ZoneNetwork).WithCancel()
+}
+
 // Run schedules the endpoint-cleanup task, the sibling endpoint refresh and the
 // startup endpoint check, and blocks until ctx is cancelled.
 func (mod *Module) Run(ctx *astral.Context) error {
 	defer mod.linkPool.Close()
-	mod.ctx = ctx.IncludeZone(astral.ZoneNetwork)
+	// why: mod.ctx ends with ctx, also while Run waits for the scheduler.
+	stop := context.AfterFunc(ctx, mod.cancel)
+	defer stop()
+	defer mod.cancel()
 	<-mod.Deps.Scheduler.Ready()
 	mod.Scheduler.Schedule(mod.NewCleanupEndpointsTask())
 	// why: the first run comes after one jittered period, as the link-created pull covers the start.

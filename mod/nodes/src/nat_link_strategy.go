@@ -30,7 +30,7 @@ var _ nodes.LinkStrategy = &NATLinkStrategy{}
 func (s *NATLinkStrategy) Name() string { return nodes.StrategyNAT }
 
 // Join adds the caller to the running NAT-traversal round, or starts one on the module context.
-func (s *NATLinkStrategy) Join(ctx *astral.Context) (release func()) {
+func (s *NATLinkStrategy) Join(ctx *astral.Context) (done <-chan struct{}, release func()) {
 	budget := s.roundBudget
 	if budget <= 0 {
 		budget = natRoundBudget
@@ -185,11 +185,6 @@ func newHolePorts(hole *nat.Hole, self *astral.Identity) holePorts {
 		peerEndpoint:  kcp.Endpoint{IP: remote.IP, Port: remote.Port},
 		peerBindPort:  astral.Uint16(hole.GetRemoteBindPort(self)),
 	}
-}
-
-// Done returns a channel closed when the running round finishes; already closed when no round runs.
-func (s *NATLinkStrategy) Done() <-chan struct{} {
-	return s.rounds.done()
 }
 
 // factory

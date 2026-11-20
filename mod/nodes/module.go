@@ -88,15 +88,15 @@ type EndpointResolver interface {
 }
 
 // LinkStrategy drives one approach to establishing a link (e.g. direct, NAT, Tor).
-// Join adds a caller to the strategy's running round, starting one when none runs,
-// and returns the caller's idempotent release. The round runs on a module-owned
-// context with a budget; the round is cancelled once every joined caller has
-// released, or when the budget ends. A caller also leaves when ctx ends.
-// Done closes once the round has finished, whether or not it produced a link.
+// Join adds a caller to the strategy's running round, starting one when none runs.
+// It returns the joined round's done channel and the caller's idempotent release.
+// The round runs on a module-owned context with a budget; the round is cancelled
+// once every joined caller has released, or when the budget ends. A caller also
+// leaves when ctx ends. done closes once the joined round has finished, whether
+// or not it produced a link; for Tor it closes when the foreground phase ends.
 type LinkStrategy interface {
 	Name() string
-	Join(ctx *astral.Context) (release func())
-	Done() <-chan struct{}
+	Join(ctx *astral.Context) (done <-chan struct{}, release func())
 }
 
 type StrategyFactory interface {

@@ -92,3 +92,56 @@ func TestSendFromSocket_SendsFromThePunchSocket(t *testing.T) {
 		t.Fatalf("wrote %d datagrams (%d with the token); want %d", all, withToken, reflectTries)
 	}
 }
+
+// TestPublicIPv4IgnoresNonGlobalRanges holds that a dialed link whose remote
+// address no peer can reach is not a reflector, while a documentation range is.
+func TestPublicIPv4IgnoresNonGlobalRanges(t *testing.T) {
+	id := astral.GenerateIdentity()
+
+	tests := []struct {
+		addr string
+		want string
+	}{
+		{"100.64.0.5:1791", ""},
+		{"100.127.255.255:1791", ""},
+		{"192.0.0.8:1791", ""},
+		{"198.18.0.1:1791", ""},
+		{"0.0.0.1:1791", ""},
+		{"240.0.0.1:1791", ""},
+		{"100.63.255.255:1791", "100.63.255.255"},
+		{"31.61.247.94:1791", "31.61.247.94"},
+		{"192.0.2.1:1791", "192.0.2.1"},
+		{"198.51.100.1:1791", "198.51.100.1"},
+		{"203.0.113.1:1791", "203.0.113.1"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.addr, func(t *testing.T) {
+			got := publicIPv4(link(t, id, tt.addr))
+			if tt.want == "" {
+				if got != nil {
+					t.Fatalf("publicIPv4(%s) = %v; want nil", tt.addr, got)
+				}
+				return
+			}
+			if got.String() != tt.want {
+				t.Fatalf("publicIPv4(%s) = %v; want %s", tt.addr, got, tt.want)
+			}
+		})
+	}
+}
+
+// TestPickReflectorSkipsCarrierInternalLink holds that a link to a CGNAT address
+// never becomes the reflector, even for the punch peer.
+func TestPickReflectorSkipsCarrierInternalLink(t *testing.T) {
+	peer, other := astral.GenerateIdentity(), astral.GenerateIdentity()
+
+	node, addr := pickReflector([]*nodes.LinkInfo{
+		link(t, peer, "100.64.0.5:1791"),
+		link(t, other, "45.59.119.20:1791"),
+	}, peer)
+
+	if node == nil || !node.IsEqual(other) || addr.String() != "45.59.119.20" {
+		t.Fatalf("picked %v at %v; want %v at 45.59.119.20", node, addr, other)
+	}
+}

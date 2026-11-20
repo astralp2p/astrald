@@ -35,7 +35,7 @@ func (s *BasicLinkStrategy) Name() string { return nodesmod.StrategyBasic }
 // Join adds the caller to the running dialing round, or starts one on the module
 // context. The first successful link wins, the rest are closed; the pool then
 // settles the winner against the links it already holds.
-func (s *BasicLinkStrategy) Join(ctx *astral.Context) (release func()) {
+func (s *BasicLinkStrategy) Join(ctx *astral.Context) (done <-chan struct{}, release func()) {
 	budget := s.roundBudget
 	if budget <= 0 {
 		budget = basicRoundBudget
@@ -104,12 +104,6 @@ func (s *BasicLinkStrategy) dialRows(ctx *astral.Context, cancel context.CancelF
 			}
 		}
 	}
-}
-
-// Done returns a channel closed when the running round finishes; a closed channel
-// is returned immediately when no round is running.
-func (s *BasicLinkStrategy) Done() <-chan struct{} {
-	return s.rounds.done()
 }
 
 // tryEndpoint dials one row and establishes a link over it, within the row's network budget; nil on any failure.

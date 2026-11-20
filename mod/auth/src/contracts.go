@@ -50,6 +50,28 @@ func (mod *Module) AddAdmitter(fn func(*auth.SignedContract) error) {
 	mod.admitters = append(slices.Clip(mod.admitters), fn)
 }
 
+// AddVeto registers fn to run first at every level of an authorization walk; true refuses the level.
+func (mod *Module) AddVeto(fn func(actor *astral.Identity) bool) {
+	mod.vetoesMu.Lock()
+	defer mod.vetoesMu.Unlock()
+	// why: a new slice, so a reader iterating the old one never sees it change.
+	mod.vetoes = append(slices.Clip(mod.vetoes), fn)
+}
+
+// vetoed reports whether any veto refuses actor.
+func (mod *Module) vetoed(actor *astral.Identity) bool {
+	mod.vetoesMu.Lock()
+	vetoes := mod.vetoes
+	mod.vetoesMu.Unlock()
+
+	for _, fn := range vetoes {
+		if fn(actor) {
+			return true
+		}
+	}
+	return false
+}
+
 // admit runs every admitter on sc and wraps the first refusal in ErrNotAdmitted.
 // why before storeContract: an admitter reads other modules, which read the
 // index in turn, so holding indexMu across it would invert the lock order.

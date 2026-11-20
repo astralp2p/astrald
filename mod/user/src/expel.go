@@ -15,8 +15,8 @@ import (
 // active contract's issuer) may expel, and the ban cannot be undone. The signed
 // ban is stored, pushed to the local swarm, and the node is disconnected.
 //
-// Expelling suppresses swarm membership only; it does not revoke the node's
-// underlying swarm-membership contract.
+// Expelling does not revoke the node's underlying swarm-membership contract;
+// the authorizers refuse the node whatever the contract permits (isBanned).
 func (mod *Module) Expel(ctx *astral.Context, nodeID *astral.Identity) (*user.SignedExpulsion, error) {
 	ac := mod.ActiveContract()
 	if ac == nil {
@@ -59,8 +59,8 @@ func (mod *Module) Expel(ctx *astral.Context, nodeID *astral.Identity) (*user.Si
 		}
 	}()
 	// why: stop maintaining the link but do not force-close it — that would race the
-	// push above. On delivery the node tears itself down; until then the issuer's
-	// authorizers reject it.
+	// push above. On delivery the node tears itself down; until then the authorizers
+	// refuse it (isBanned).
 	mod.removeSibling(nodeID)
 
 	mod.log.Info("expelled %v from swarm", nodeID)

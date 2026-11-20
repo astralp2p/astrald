@@ -35,6 +35,9 @@ type Module struct {
 	// admitters holds the AddAdmitter callbacks.
 	admittersMu sync.Mutex
 	admitters   []func(*apiauth.SignedContract) error
+	// vetoes holds the AddVeto callbacks.
+	vetoesMu sync.Mutex
+	vetoes   []func(*astral.Identity) bool
 
 	// handlersMu serializes Add's read-modify-write of handlers against
 	// other Adds and against get, so no registration is lost.
