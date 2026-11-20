@@ -31,9 +31,10 @@ func (mod *Module) AdmitLink(remote *astral.Identity) error {
 // that window it must not refuse its own identity, which every local call is
 // promoted to; if the clear fails the window would never close.
 //
-// note: it reads the set refreshBans keeps, so it holds no lock and reads no
-// database. A set not loaded yet is loaded here once. A set that cannot be read
-// leaves the identity unbanned, as AdmitLink does.
+// note: it reads the set refreshBans keeps, in memory. A set not loaded yet,
+// before Run loads it, is read here from the database. A set that cannot be
+// read leaves the identity unbanned, as AdmitLink does, and the next question
+// reads again.
 func (mod *Module) isBanned(id *astral.Identity) bool {
 	ac := mod.ActiveContract()
 	if ac == nil || id.IsEqual(ac.Issuer) || id.IsEqual(mod.node.Identity()) {
@@ -42,8 +43,7 @@ func (mod *Module) isBanned(id *astral.Identity) bool {
 
 	banned := mod.banned.Load()
 	if banned == nil {
-		mod.refreshBans()
-		if banned = mod.banned.Load(); banned == nil {
+		if banned = mod.loadBans(ac.Issuer); banned == nil {
 			return false
 		}
 	}
@@ -51,7 +51,20 @@ func (mod *Module) isBanned(id *astral.Identity) bool {
 	return ok
 }
 
-// refreshBans loads the subjects the active user banned into the set AdmitLink
+// loadBans fills the ban set on its first use; nil if it cannot be read.
+// why CompareAndSwap: a refreshBans that ran meanwhile stored a set at least as
+// new as this read, so this one never replaces it.
+func (mod *Module) loadBans(issuer *astral.Identity) *map[string]struct{} {
+	read, err := mod.readExpelledSet(issuer)
+	if err != nil {
+		mod.log.Error("loading bans: %v", err)
+		return nil
+	}
+	mod.banned.CompareAndSwap(nil, &read)
+	return mod.banned.Load()
+}
+
+// refreshBans loads the subjects the active user banned into the set isBanned
 // reads; with no active contract the set is empty.
 // note: a failed read keeps the previous set.
 func (mod *Module) refreshBans() {
@@ -59,7 +72,7 @@ func (mod *Module) refreshBans() {
 	if ac := mod.ActiveContract(); ac != nil {
 		read, err := mod.readExpelledSet(ac.Issuer)
 		if err != nil {
-			mod.log.Error("loading bans for link admission: %v", err)
+			mod.log.Error("loading bans: %v", err)
 			return
 		}
 		set = read
