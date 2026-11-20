@@ -1,8 +1,10 @@
 package nodes
 
 import (
+	"crypto/sha256"
 	"net"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/astralp2p/astral-go/api/ip"
@@ -30,7 +32,12 @@ func changesAdvertisedAddress(e *ip.EventNetworkAddressChanged) bool {
 	return slices.ContainsFunc(e.Added, advertised) || slices.ContainsFunc(e.Removed, advertised)
 }
 
+// endpointsHash fingerprints a set of endpoints; see ownEndpointsHash.
+type endpointsHash [sha256.Size]byte
+
 // scheduleEndpointsAnnounce starts the announcement wait unless one is running.
+// It is the entry point of every trigger: an advertised address change, a link
+// created or closed, the startup settle, and the daily sibling refresh of EP4.
 // why: a change during the wait joins it instead of restarting it, so a flapping
 // interface costs one announcement per wait and never postpones it, and the
 // receivers pull the address set as it stands after the wait.
@@ -40,10 +47,55 @@ func (mod *Module) scheduleEndpointsAnnounce() {
 	}
 
 	time.AfterFunc(mod.announceDelay, func() {
-		// note: cleared before the push, so a change during the push starts a new wait.
+		// note: cleared before the check, so a trigger during the push starts a new wait.
 		mod.announcePending.Store(false)
-		mod.announceEndpoints()
+		mod.announceIfEndpointsChanged()
 	})
+}
+
+// announceIfEndpointsChanged announces this node's endpoints to its siblings
+// when their fingerprint differs from the last announced one, and does nothing
+// otherwise. The first call after start always announces.
+// why: the fingerprint is taken after the wait, so a burst of triggers compares
+// the settled set, and a trigger that changed nothing costs the siblings no pull.
+// note: the fingerprint is stored before the push, and a push with no linked
+// sibling still consumes it. A sibling that links later pulls on its first link.
+func (mod *Module) announceIfEndpointsChanged() {
+	if mod.ctx.Err() != nil {
+		return
+	}
+
+	h, err := mod.ownEndpointsHash()
+	if err != nil {
+		mod.log.Error("fingerprinting own endpoints: %v", err)
+		return
+	}
+
+	// note: nil means nothing was announced yet, so no fingerprint equals it.
+	if prev := mod.lastAnnouncedHash.Swap(&h); prev != nil && *prev == h {
+		return
+	}
+
+	mod.announceEndpoints()
+}
+
+// ownEndpointsHash returns the SHA-256 of the sorted, deduplicated
+// "network:address" strings that ResolveEndpoints returns for this node's own
+// identity. TTLs and the order of arrival are ignored.
+func (mod *Module) ownEndpointsHash() (endpointsHash, error) {
+	ch, err := mod.ResolveEndpoints(mod.ctx, mod.node.Identity())
+	if err != nil {
+		return endpointsHash{}, err
+	}
+
+	var keys []string
+	for e := range ch {
+		keys = append(keys, e.Network()+":"+e.Address())
+	}
+	slices.Sort(keys)
+	keys = slices.Compact(keys)
+
+	return sha256.Sum256([]byte(strings.Join(keys, "\n"))), nil
 }
 
 // announceEndpoints pushes an EndpointsChangedMessage about this node to every linked sibling.
