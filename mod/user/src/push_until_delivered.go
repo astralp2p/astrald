@@ -24,28 +24,31 @@ const pushAttempts = 100
 
 // pushUntilDelivered pushes obj to target until target answers, waiting on the
 // backoff between pushes that fail to reach it. It stops at the first answer,
-// after pushAttempts pushes, or when ctx ends.
+// after pushAttempts pushes, or when ctx ends, and reports whether target
+// answered: accepted obj or refused it.
 // why a rejection stops it: target received obj and refused it; the same object
 // is refused again.
-func (mod *Module) pushUntilDelivered(ctx *astral.Context, target *astral.Identity, obj astral.Object) {
+func (mod *Module) pushUntilDelivered(ctx *astral.Context, target *astral.Identity, obj astral.Object) (answered bool) {
 	delay := pushRetryMin
 	for attempt := 1; ; attempt++ {
 		err := mod.pushOnce(ctx, target, obj)
 		switch {
-		case err == nil, ctx.Err() != nil:
-			return
+		case err == nil:
+			return true
+		case ctx.Err() != nil:
+			return false
 		case isPushRejected(err):
 			mod.log.Logv(1, "%v rejected the pushed %v", target, obj.ObjectType())
-			return
+			return true
 		case attempt >= pushAttempts:
 			mod.log.Logv(1, "gave up pushing %v to %v after %v attempts: %v", obj.ObjectType(), target, attempt, err)
-			return
+			return false
 		}
 
 		mod.log.Logv(1, "push %v to %v failed, retrying in %v: %v", obj.ObjectType(), target, delay, err)
 		select {
 		case <-ctx.Done():
-			return
+			return false
 		case <-mod.after(delay):
 		}
 		delay = min(delay*2, pushRetryMax)

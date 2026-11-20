@@ -17,4 +17,5 @@ var (
 	ErrBufferClosed          = errors.New("buffer closed")
 	ErrBufferOverflow        = errors.New("buffer overflow")
 	ErrSessionAlreadyOnLink  = errors.New("session already on link")
+	ErrLinkDenied            = errors.New("link denied")
 )

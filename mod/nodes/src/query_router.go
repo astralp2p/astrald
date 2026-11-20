@@ -40,6 +40,10 @@ func (mod *Module) RouteQuery(ctx *astral.Context, q *astral.InFlightQuery, w io
 	case <-ctx.Done():
 		return nil, ctx.Err()
 	case result := <-mod.linkPool.RetrieveLink(retrieveCtx, q.Target, WithStrategies(nodes.StrategyBasic, nodes.StrategyTor)):
+		// why: a refused peer is reached through no relay either.
+		if errors.Is(result.Err, nodes.ErrLinkDenied) {
+			return query.RouteNotFound()
+		}
 		if result.Err != nil {
 			mod.log.Error("retrieve link failed: %v", result.Err)
 			break

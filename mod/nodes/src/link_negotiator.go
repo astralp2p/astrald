@@ -156,7 +156,7 @@ func (mod *Module) EstablishOutboundLink(ctx context.Context, remoteID *astral.I
 	return link, nil
 }
 
-// EstablishInboundLink runs the inbound noise handshake and mux negotiation over conn, then registers the link; closes conn on any error.
+// EstablishInboundLink runs the inbound noise handshake, refuses a peer an admitter refuses, runs the mux negotiation over conn, then registers the link; closes conn on any error.
 func (mod *Module) EstablishInboundLink(ctx context.Context, conn exonet.Conn) (err error) {
 	defer func() {
 		if err != nil {
@@ -171,6 +171,12 @@ func (mod *Module) EstablishInboundLink(ctx context.Context, conn exonet.Conn) (
 
 	aconn, err := noise.HandshakeInbound(ctx, conn, secp256k1.PrivKeyFromBytes(privKey.Key))
 	if err != nil {
+		return err
+	}
+	// why here: the handshake is the first point that knows the peer, and a
+	// refusal before negotiation costs no mux setup.
+	if err = mod.admit(aconn.RemoteIdentity()); err != nil {
+		mod.log.Logv(1, "refused inbound link from %v: %v", aconn.RemoteIdentity(), err)
 		return err
 	}
 	// why: a link the peer is still negotiating can outrank one this node

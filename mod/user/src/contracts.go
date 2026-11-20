@@ -94,6 +94,7 @@ func (mod *Module) Identity() *astral.Identity {
 // or a stray write) is scrubbed so it never stays live.
 func (mod *Module) onActiveContractChanged(signed *auth.SignedContract) {
 	defer mod.publishSwarm()
+	defer mod.refreshBans()
 	if signed.IsNil() {
 		mod.log.Info("this node runs without a user")
 		// why linkerMu: a linker run that read the old swarm before the clear
