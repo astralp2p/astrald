@@ -15,6 +15,7 @@ import (
 	"github.com/astralp2p/astral-go/astral/channel"
 	"github.com/astralp2p/astral-go/lib/query"
 	"github.com/astralp2p/astral-go/sig"
+	nodesmod "github.com/astralp2p/astrald/mod/nodes"
 	"github.com/astralp2p/astrald/mod/nodes/frames"
 )
 
@@ -204,6 +205,9 @@ func (m *Mux) Handle(obj astral.Object) error {
 		m.handleRead(f)
 	case *frames.Migrate:
 		m.handleMigrate(f)
+	case *frames.Close:
+		// why an error: the read loop closes the link on it and keeps it as the link's cause of death.
+		return &nodesmod.ErrPeerClosed{Reason: f.Reason.Known()}
 	default:
 		return fmt.Errorf("unhandled frame type: %T", frame)
 	}

@@ -21,14 +21,22 @@ nodes answer now:
   link probes the older ones (mod/nodes/src/link_pool.go probeOlderLinks),
   and the kcp keepalive closes an idle dead link after `link_idle_ping` 10 s
   plus `link_ping_timeout` 10 s (mod/kcp/src/config.go);
+- criterion 2, excess rows: node1 drops a link to node2's new process that
+  node2 does not hold within EXCESS s of first listing it so: node2 closes
+  it with a `nodes.frames.close` frame (mod/nodes/src/link.go
+  CloseWithError), and node1 closes its end on receipt;
 - a query from node1 to node2 is answered, with no `nodes.close_link`.
 
 why links node2 does not hold: node2's link task dials every kcp row of
 node1 at once (mod/nodes/src/basic_link_strategy.go). node1 can complete the
-handshake of a row node2 then closes as excess, and a kcp close sends the
-peer nothing, so node1 holds that link half-open until its keepalive closes
-it. A query node1 routes over it is rejected as unavailable (code 7) when the
-link closes.
+handshake of a row node2 then closes as excess. A kcp close carries no
+end-of-stream, so only the close frame ends node1's end; without it node1
+holds that link half-open until its keepalive closes it, and a query node1
+routes over it is rejected as unavailable (code 7) when the link closes.
+
+why only links to node2's new process get EXCESS: node2's old process was
+killed and sent no close frame, so node1 finds those links dead through its
+keepalive alone, within DROP.
 
 why node2's log for criterion 1: the runner waits for node2 to answer before
 the oracle starts, and node2's link task starts at boot, so the oracle's own
@@ -48,6 +56,7 @@ WITHIN = 5.0
 DEAD = 10.0
 WAIT = 60.0
 DROP = 10.0 + 10.0 + 15.0
+EXCESS = 5.0
 POLL = 0.25
 TCP_SETTINGS = ("/mod/tcp/settings/dial", "/mod/tcp/settings/listen")
 ANSI = re.compile(r"\x1b\[[0-9;]*m")
@@ -81,6 +90,25 @@ def relink_took(node2: dict, names: set):
     return (seconds(linked) - seconds(start)) % 86400
 
 
+def track_excess(seen: dict, t: float, links1: list, links2: list, stale: set):
+    """Time how long node1 lists each link to node2's new process that node2
+    does not hold: from the first poll that shows it so to the first poll
+    without it in node1's list.
+
+    why reset when node2 lists it: a link node1 pools before node2 does is
+    not excess.
+    """
+    ids1, ids2 = {r["id"] for r in links1}, {r["id"] for r in links2}
+    orphans = seen["orphans"]
+    for i in ids1 - stale - ids2:
+        orphans.setdefault(i, t)
+    for i in list(orphans):
+        if i in ids2:
+            del orphans[i]
+        elif i not in ids1:
+            seen["excess"][i] = round(t - orphans.pop(i), 2)
+
+
 def dead_on_node1(links1: list, links2: list, stale: set) -> set:
     """The ids of node1's links to node2 that are stale or that node2 does
     not hold."""
@@ -92,11 +120,13 @@ async def watch(c1, c2, id1: str, id2: str, stale: set) -> dict:
     """Poll both ends until node2 holds a kcp link to node1 and node1 holds
     no dead link to node2, or WAIT s pass. Times in s since the start."""
     t0 = time.monotonic()
-    seen = {"relinked": None, "dropped": None, "links1": [], "links2": []}
+    seen = {"relinked": None, "dropped": None, "links1": [], "links2": [],
+            "orphans": {}, "excess": {}}
     while time.monotonic() - t0 < WAIT:
         t = round(time.monotonic() - t0, 2)
         seen["links1"] = linkview.to(await linkview.links(c1), id2)
         seen["links2"] = linkview.to(await linkview.links(c2), id1)
+        track_excess(seen, t, seen["links1"], seen["links2"], stale)
         if seen["relinked"] is None and any(r["network"] == "kcp" for r in seen["links2"]):
             seen["relinked"] = t
         # why reset on a dead link: a link node2 lists at one poll can close at
@@ -108,6 +138,10 @@ async def watch(c1, c2, id1: str, id2: str, stale: set) -> dict:
         if seen["relinked"] is not None and seen["dropped"] is not None:
             break
         await asyncio.sleep(POLL)
+    # why: a link node1 still lists at the end counts for as long as it was seen so
+    t = round(time.monotonic() - t0, 2)
+    for i, since in seen["orphans"].items():
+        seen["excess"][i] = round(t - since, 2)
     return seen
 
 
@@ -139,7 +173,7 @@ async def main():
             await astral.connect(n1["endpoint"], token=doc["facts"]["user_token"]) as cu:
         seen = await watch(c1, c2, id1, id2, stale)
         print(f"oracle: relinked {seen['relinked']} s, dropped {seen['dropped']} s; "
-              f"node1 {seen['links1']}; node2 {seen['links2']}")
+              f"excess rows {seen['excess']}; node1 {seen['links1']}; node2 {seen['links2']}")
 
         for c, who in ((c1, "node1"), (c2, "node2")):
             for path in TCP_SETTINGS:
@@ -157,6 +191,11 @@ async def main():
             f"node1 still lists a dead link to node2 (one to node2's old process, or one node2 "
             f"does not hold) {seen['dropped'] or WAIT} s after the oracle started, want within "
             f"{DROP} s: stale {sorted(stale)}, node1 {seen['links1']}, node2 {seen['links2']}")
+        slow = {i: d for i, d in seen["excess"].items() if d > EXCESS}
+        assert not slow, (
+            f"node1 listed a link to node2's new process that node2 does not hold for "
+            f"longer than {EXCESS} s (link id: seconds): {slow}; node2's close frame "
+            f"did not reach node1 or node1 did not close on it")
         assert all(r["network"] == "kcp" for r in seen["links1"] + seen["links2"]), (
             f"a non-kcp link joined the pair: node1 {seen['links1']}, node2 {seen['links2']}")
 

@@ -1,6 +1,7 @@
 package nodes
 
 import (
+	"context"
 	"errors"
 	exonetmod "github.com/astralp2p/astrald/mod/exonet"
 	"io"
@@ -13,6 +14,7 @@ import (
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astral-go/astral/channel"
 	"github.com/astralp2p/astral-go/sig"
+	nodesmod "github.com/astralp2p/astrald/mod/nodes"
 	"github.com/astralp2p/astrald/mod/nodes/frames"
 )
 
@@ -55,13 +57,53 @@ func (s *Link) RemoteIdentity() *astral.Identity {
 	return s.conn.RemoteIdentity()
 }
 
+// closeNoticeBound is the longest CloseWithError waits for its close frame to be written.
+const closeNoticeBound = time.Second
+
 // CloseWithError records err as the link's cause of death; only the first call's error is kept.
+// The first call tells the peer with a close frame before it closes the channel (astral-docs topics/link-mux.md, Close notice).
 func (s *Link) CloseWithError(err error) error {
 	if err == nil {
 		err = errors.New("link closed")
 	}
-	s.err.Swap(nil, err)
+	// note: a link whose read loop already ended holds an error, so a link the peer closed sends nothing back.
+	if _, first := s.err.Swap(nil, err); first {
+		s.sendCloseNotice(closeReasonOf(err))
+	}
 	return s.Channel.Close()
+}
+
+// closeReasonOf maps a link's cause of death to the reason its close frame names.
+// why context.Canceled: the link pool closes its links with it when the module stops.
+func closeReasonOf(err error) frames.CloseReason {
+	switch {
+	case errors.Is(err, nodesmod.ErrExcessLink):
+		return frames.CloseExcess
+	case errors.Is(err, context.Canceled):
+		return frames.CloseShutdown
+	default:
+		return frames.CloseClosed
+	}
+}
+
+// sendCloseNotice writes a close frame and waits for the write at most closeNoticeBound.
+// why a goroutine: the link conn has no write deadline, and Send blocks on a
+// peer that stopped reading or behind a writer stuck on the write lock.
+// why Send: the write lock keeps the frame from interleaving with another frame.
+// note: a write still blocked at the bound returns once the caller closes the channel.
+func (s *Link) sendCloseNotice(reason frames.CloseReason) {
+	sent := make(chan struct{})
+	go func() {
+		defer close(sent)
+		_ = s.Send(&frames.Close{Reason: reason})
+	}()
+
+	t := time.NewTimer(closeNoticeBound)
+	defer t.Stop()
+	select {
+	case <-sent:
+	case <-t.C:
+	}
 }
 
 func (s *Link) Err() error {
