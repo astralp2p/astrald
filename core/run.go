@@ -15,6 +15,11 @@ import (
 func (node *Node) Run(nctx context.Context) (err error) {
 	ctx, shutdown := astral.NewContext(nctx).WithIdentity(node.identity).WithCancel()
 
+	// why: a node that stops before any module registers the log entry view
+	// still prints the lines held for it, and the writer takes them before the
+	// process exits.
+	defer node.log.Close()
+
 	// Say hello
 	node.log.Log("astral node %v (%v) starting...",
 		node.identity,
