@@ -13,19 +13,42 @@ import (
 // note: the nodes module calls it on every inbound handshake, so it reads only
 // memory.
 func (mod *Module) AdmitLink(remote *astral.Identity) error {
-	key := remote.String()
-	if !mod.banAnswers.Contains(key) {
+	if !mod.banAnswers.Contains(remote.String()) {
 		return nil
+	}
+	if !mod.isBanned(remote) {
+		return nil
+	}
+	return user.ErrExpelled
+}
+
+// isBanned reports whether id is a subject the active user banned. It is the
+// veto the auth module runs at every level of a walk, AdmitLink's ban test and
+// OpIntroduce's refusal of a banned caller, so the three agree.
+//
+// It is false with no active contract, for the user, and for this node. why this
+// node: it stores its own ban before leaveSwarm clears the contract, and in
+// that window it must not refuse its own identity, which every local call is
+// promoted to; if the clear fails the window would never close.
+//
+// note: it reads the set refreshBans keeps, so it holds no lock and reads no
+// database. A set not loaded yet is loaded here once. A set that cannot be read
+// leaves the identity unbanned, as AdmitLink does.
+func (mod *Module) isBanned(id *astral.Identity) bool {
+	ac := mod.ActiveContract()
+	if ac == nil || id.IsEqual(ac.Issuer) || id.IsEqual(mod.node.Identity()) {
+		return false
 	}
 
 	banned := mod.banned.Load()
 	if banned == nil {
-		return nil
+		mod.refreshBans()
+		if banned = mod.banned.Load(); banned == nil {
+			return false
+		}
 	}
-	if _, ok := (*banned)[key]; !ok {
-		return nil
-	}
-	return user.ErrExpelled
+	_, ok := (*banned)[id.String()]
+	return ok
 }
 
 // refreshBans loads the subjects the active user banned into the set AdmitLink

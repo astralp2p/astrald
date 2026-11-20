@@ -60,12 +60,13 @@ func (mod *Module) OpIntroduce(ctx *astral.Context, q *routing.IncomingQuery, ar
 		return ch.Send(user.ErrIntroduceSelf)
 	}
 
-	// why the ban check: the authorizer chain walk ignores bans, so an expelled
-	// management node keeps AdminSwarm through delegation.
+	// why the ban check: the veto this module registers makes Authorize refuse a
+	// banned caller already; the op names the refusal itself so it does not rest
+	// on the auth module alone, and it asks the predicate the veto asks.
 	if !mod.Auth.Authorize(ctx, &user.AdminSwarmAction{
 		Action:  auth.NewAction(q.Caller()),
 		Subject: nodeID,
-	}) || mod.isExpelled(ac.Issuer, q.Caller()) {
+	}) || mod.isBanned(q.Caller()) {
 		return ch.Send(auth.ErrNotPermitted)
 	}
 
