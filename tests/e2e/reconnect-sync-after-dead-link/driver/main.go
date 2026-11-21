@@ -2,8 +2,8 @@
 // facts as one JSON line.
 //
 // node2 links to node1 through a TCP relay on the test host, and every other
-// link between them is closed. The relay then drops every byte while keeping
-// both connections open, so each node holds a link that takes bytes and never
+// link between them is closed. Once the relay has been quiet for a second, it
+// drops every byte while keeping both connections open, so each node holds a link that takes bytes and never
 // answers. An app registers on node1, and its relay contract push to node2
 // goes into the dead link. node2 then links to node1 directly. node1 must close
 // the relayed link within its ping timeout and push the app's relay contract to
@@ -42,6 +42,13 @@ const converge = 30 * time.Second
 // pushSettle outlasts the 15 s bound of a sibling push (astrald mod/user/src/sync.go,
 // siblingPushTimeout), so the registration's push has failed before node2 relinks.
 const pushSettle = 17 * time.Second
+
+// relayQuiet is how long the relay forwards nothing before it black-holes.
+// why: the syncs a new link starts (LinkCreated, partial close) are still in
+// flight when relayOnly returns; a caller-proof push over the link that times out
+// wakes its ping (mux.go onSilentTimeout), the 3 s ping timeout then closes the
+// link inside pushSettle, and node2 relinks directly and learns the app.
+const relayQuiet = time.Second
 
 type node struct {
 	Endpoint    string `json:"endpoint"`
@@ -103,6 +110,9 @@ func run(path string, facts map[string]any) error {
 	}
 	facts["only_the_relayed_link_left"] = true
 
+	if !relay.waitQuiet(relayQuiet, converge) {
+		return errors.New("relayed link never went quiet")
+	}
 	relay.blackhole()
 	app, err := registerUnreached(ctx, p)
 	if app != nil {
@@ -283,6 +293,8 @@ type relay struct {
 	ln     net.Listener
 	target string
 	dead   atomic.Bool
+	// lastByte is the unix nanoseconds of the last write that forwarded bytes.
+	lastByte atomic.Int64
 }
 
 // startRelay listens at host on a free port and forwards to target.
@@ -292,6 +304,7 @@ func startRelay(host, target string) (*relay, error) {
 		return nil, fmt.Errorf("relay listen at %v: %w", host, err)
 	}
 	r := &relay{ln: ln, target: target}
+	r.lastByte.Store(time.Now().UnixNano())
 	go r.serve()
 	return r, nil
 }
@@ -301,6 +314,18 @@ func (r *relay) Addr() string { return r.ln.Addr().String() }
 func (r *relay) Close() error { return r.ln.Close() }
 
 func (r *relay) blackhole() { r.dead.Store(true) }
+
+// waitQuiet reports whether the relay forwarded no byte for quiet within limit.
+func (r *relay) waitQuiet(quiet, limit time.Duration) bool {
+	deadline := time.Now().Add(limit)
+	for time.Now().Before(deadline) {
+		if time.Since(time.Unix(0, r.lastByte.Load())) >= quiet {
+			return true
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	return false
+}
 
 func (r *relay) serve() {
 	for {
@@ -337,6 +362,7 @@ func (r *relay) pipe(dst, src net.Conn) {
 				src.Close()
 				return
 			}
+			r.lastByte.Store(time.Now().UnixNano())
 		}
 		if err != nil {
 			if !errors.Is(err, io.EOF) {
