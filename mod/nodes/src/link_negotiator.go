@@ -186,12 +186,19 @@ func watchNegotiation(ctx context.Context, conn io.Closer) (finish func() (late 
 }
 
 // EstablishInboundLink runs the inbound noise handshake, refuses a peer an admitter refuses, runs the mux negotiation over conn, then registers the link; closes conn on any error.
+// The handshake and the negotiation together run within the row budget of conn's network (inboundBudget), when it has one.
 func (mod *Module) EstablishInboundLink(ctx context.Context, conn exonet.Conn) (err error) {
 	defer func() {
 		if err != nil {
 			conn.Close()
 		}
 	}()
+
+	if d := inboundBudget(conn); d > 0 {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, d)
+		defer cancel()
+	}
 
 	privKey, err := mod.getPrivateKey()
 	if err != nil {
@@ -214,10 +221,33 @@ func (mod *Module) EstablishInboundLink(ctx context.Context, conn exonet.Conn) (
 
 	ch := channel.New(aconn, channel.WithLockedWrites())
 	negotiator := mod.GetLinkNegotiator(ch)
+	// why: NegotiateInbound reads with no deadline; closing the conn when ctx ends
+	// releases a negotiation the dialer abandoned, as EstablishOutboundLink does.
+	stopWatch := context.AfterFunc(ctx, func() { aconn.Close() })
 	link, err := negotiator.NegotiateInbound()
+	if !stopWatch() {
+		err = errors.Join(ctx.Err(), err)
+	}
 	if err != nil {
 		return err
 	}
 	err = mod.linkPool.AddLink(link)
 	return err
+}
+
+// inboundBudget returns the row budget of the network conn arrived on, 0 for a network with none or a conn with no endpoint.
+// why the dialer's row budget: the dialer abandons the row at that budget, and a
+// kcp dialer that abandons it sends nothing, so the inbound side would wait
+// forever, and every settlement with that peer would wait out awaitRivals' bound.
+// note: the inbound side starts at accept, after the dialer's row began, so the
+// bound never ends a negotiation the dialer still runs.
+func inboundBudget(conn exonet.Conn) time.Duration {
+	ep := conn.LocalEndpoint()
+	if ep == nil {
+		ep = conn.RemoteEndpoint()
+	}
+	if ep == nil {
+		return 0
+	}
+	return profileOf(ep.Network()).RowBudget
 }

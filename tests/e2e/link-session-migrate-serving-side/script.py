@@ -4,9 +4,10 @@ serving node.
 
 The world holds node1 and node2, adopted and linked (adopt-node). As the
 User on node1, the driver stores a seeded 32 MiB object on node2
-(lib/blobgen.py), opens a second link to node2 at node2's lan_endpoint, and
-reads the object with a paced reader (64 KiB reads, 8 ms apart, 15 s stall
-timeout, a sha256 at every MiB).
+(lib/blobgen.py), opens a read of it on the one link node1 holds (Ls) with a
+paced reader held before its first read (64 KiB reads, 8 ms apart, 15 s
+stall timeout, a sha256 at every MiB), opens a second link to node2 at
+node2's lan_endpoint, and releases the reader.
 
 At 8 MiB the reader holds: the stream back-pressures to a standstill with
 the session still open. The driver records both nodes' session rows for the
@@ -54,20 +55,24 @@ async def main():
         async def stream_rows(c) -> list:
             return linkview.carrying(await linkview.sessions(c), object_id)
 
-        info = await cu.nodes.new_link(id2, endpoint=n2["lan_endpoint"],
-                                       strategies="basic", experimental=True,
-                                       timeout=60.0)
-        new_id = str(info.id)
-        facts["link_new_created"] = new_id
-        facts["link_new_seen"] = await linkview.wait_both(c1, c2, id1, id2,
-                                                          new_id)
-        print(f"driver: stored {object_id[:20]}… on node2; second link "
-              f"{new_id}, on both ends {facts['link_new_seen']}")
-
         mig: dict = {}
+        # why the read before Lt: a query rides the newest healthy link
+        # (astrald mod/nodes/src/link_pool.go SelectLinkWith), so a read
+        # opened after Lt would ride Lt itself
         async with cu.objects.open_read(object_id, target=id2) as stream:
             reader = blobgen.PacedReader(stream)
+            reader.hold()
             task = asyncio.create_task(reader.run())
+            info = await cu.nodes.new_link(id2, endpoint=n2["lan_endpoint"],
+                                           strategies="basic",
+                                           experimental=True, timeout=60.0)
+            new_id = str(info.id)
+            facts["link_new_created"] = new_id
+            facts["link_new_seen"] = await linkview.wait_both(c1, c2, id1, id2,
+                                                              new_id)
+            print(f"driver: stored {object_id[:20]}… on node2; second link "
+                  f"{new_id}, on both ends {facts['link_new_seen']}")
+            reader.release()
             mig["reached"] = await reader.reached(MIGRATE_AT, 60.0)
             reader.hold()
             await asyncio.sleep(HOLD)

@@ -580,3 +580,22 @@ func TestForcedLinkFromLowerKeepsHigherLink(t *testing.T) {
 		t.Fatalf("higher holds %v live links, lower %v; want 2 each", nh, nl)
 	}
 }
+
+// TestCrossDialSettlesWhileAbandonedNegotiationLingers: each end holds an inbound
+// negotiation its dialer abandoned, as a kcp row a tcp row beat; a cross-dial still
+// settles on the lower identity's link as soon as both links land, not at the ping timeout.
+func TestCrossDialSettlesWhileAbandonedNegotiationLingers(t *testing.T) {
+	lower, higher := newLinkPair(t)
+	defer higher.mod.inboundNegotiations.begin(lower.id)()
+	defer lower.mod.inboundNegotiations.begin(higher.id)()
+
+	own := higher.dial(t, lower)
+	go higher.mod.linkPool.offerStrategyLink(own, nodesmod.StrategyBasic)
+	rival := lower.dial(t, higher)
+	go lower.mod.linkPool.offerStrategyLink(rival, nodesmod.StrategyBasic)
+
+	if survivor := requireOneSharedLink(t, lower, higher); survivor != rival.id {
+		t.Fatalf("both ends kept %v; want the lower identity's link %v", survivor, rival.id)
+	}
+	requireExcess(t, own)
+}

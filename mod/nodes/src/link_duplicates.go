@@ -2,6 +2,7 @@ package nodes
 
 import (
 	"bytes"
+	"slices"
 	"time"
 
 	"github.com/astralp2p/astral-go/astral"
@@ -148,21 +149,44 @@ func (pool *LinkPool) closeExcess(loser, survivor *Link) {
 	}()
 }
 
-// awaitRivals holds link back until the rival attempts with its peer that rivals counts end, at most its ping timeout, and an at-risk link also for one round trip on it first; it reports whether the link proved live.
+// awaitRivals holds link back until the rival attempts with its peer that rivals counts end, a rival link lands, or its ping timeout passes, and an at-risk link also for one round trip on it first; it reports whether the link proved live.
 // why the round trip: a rival still connecting when link arrived shows up
 // in rivals within about one round trip.
+// why a landed rival ends the wait: a rival link runs the way the landed one
+// runs, so the duplicate rule ranks it against link as it ranks the landed one;
+// a later rival changes nothing at this end, and its own end settles it.
+// note: a kcp rival its dialer abandoned sends nothing, so rivals stays busy
+// until the inbound budget ends it (inboundBudget).
 func (pool *LinkPool) awaitRivals(link *Link, rivals *inFlight) bool {
 	if atRisk(link) && !confirmLive(link) {
 		return false
 	}
 
+	peer := link.RemoteIdentity()
 	t := time.NewTimer(link.pingTimeout)
 	defer t.Stop()
-	select {
-	case <-rivals.idle(link.RemoteIdentity()):
-	case <-t.C:
+	for {
+		// why before the check: an attempt ends after its link joins the pool, so
+		// a rival landing after the check closes ended.
+		ended, idle := rivals.ended(peer), rivals.idle(peer)
+		if pool.rivalLanded(link) {
+			return true
+		}
+		select {
+		case <-ended:
+		case <-idle:
+			return true
+		case <-t.C:
+			return true
+		}
 	}
-	return true
+}
+
+// rivalLanded reports whether the pool holds a usable link to the peer of link that runs the other way, the kind a rival attempt yields.
+func (pool *LinkPool) rivalLanded(link *Link) bool {
+	return slices.ContainsFunc(pool.livePeerLinks(link), func(l *Link) bool {
+		return l.outbound != link.outbound
+	})
 }
 
 // deliverAtRisk hands the waiting callers the survivor among the links to the peer of an at-risk inbound link, once its rivals settled.

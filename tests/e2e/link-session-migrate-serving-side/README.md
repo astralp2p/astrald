@@ -9,9 +9,11 @@ logical peer is the User, and the node across its link is the reader.
   **destroys** `true` — the world ends with a second link and a 32 MiB object
   on node2. It does not use `link-session-migrate`'s state.
 - **driver** `script.py` — as the User on node1: stores a seeded 32 MiB
-  object on node2 (`lib/blobgen.py`), opens a second link Lt to node2 at
-  node2's `lan_endpoint`, and reads the object with a paced reader. At 8 MiB
-  the reader holds, so the stream stands still with its session open. The
+  object on node2 (`lib/blobgen.py`), opens a read of it on the one link
+  node1 holds (Ls) with a paced reader held before its first read, opens a
+  second link Lt to node2 at node2's `lan_endpoint`, and releases the reader.
+  At 8 MiB the reader holds, so the stream stands still with its session
+  open. The
   driver records both nodes' rows of the session (link Ls), then calls
   `nodes.migrate_session(session, Lt, start=true)` on node2 with node2's own
   token, records the answer, its time and both nodes' rows again, releases
@@ -24,6 +26,10 @@ logical peer is the User, and the node across its link is the reader.
   ack and Ls after an error; the answer came within 45 s; within 10 s after
   the read no session of it is listed. Last, the contested claim: the
   migrate answered an ack.
+
+why the read before Lt: a new query rides the newest healthy link (astrald
+`mod/nodes/src/link_pool.go` `SelectLinkWith`), so a read opened after Lt
+would ride Lt itself.
 
 why the hold: a migrate started while node2 writes at full speed would test
 the race `link-session-migrate` covers. Held, node2's writer is blocked on
