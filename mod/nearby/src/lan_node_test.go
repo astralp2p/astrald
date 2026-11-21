@@ -81,6 +81,13 @@ func (n *lanNode) inSwarm(peer *astral.Identity) bool {
 	return slices.ContainsFunc(swarm, peer.IsEqual)
 }
 
+// stopLinkRetryTicks makes every link task of n wait its backoff forever, so only a wake relinks.
+func (n *lanNode) stopLinkRetryTicks() {
+	n.node.Modules().Find("user").(interface {
+		SetLinkRetryClock(func(time.Duration) <-chan time.Time)
+	}).SetLinkRetryClock(func(time.Duration) <-chan time.Time { return nil })
+}
+
 func (n *lanNode) isLinked(peer *astral.Identity) bool {
 	return n.node.Modules().Find("nodes").(interface{ IsLinked(*astral.Identity) bool }).IsLinked(peer)
 }
@@ -306,12 +313,10 @@ func (n *lanNode) logPeersSeen(t *testing.T) *peerSeenLog {
 
 // Ticket iKytI7lzu1 criterion 4: a node restarted on a new tcp port at the same IP resolves to
 // the new port from its next status, which emits one PeerSeen, and its sibling links to it
-// there. A second status of the restarted node emits none.
+// there without a link-task tick. A second status of the restarted node emits none.
 //
-// note: the sibling's link task also retries on its own backoff, so the test cannot exclude
-// a retry that happens to follow the status; it proves the PeerSeen the user module wakes the
-// task on, the resolved port and the link. a never dials (tcp dial off), so only b's task can
-// link them again.
+// note: the sibling's link-task backoff is stopped before the restart, so only a wake can
+// relink. a never dials (tcp dial off), so only b's task can link them again.
 func TestNodeRestartedOnANewPortIsResolvedAfterItsNextStatus(t *testing.T) {
 	a, b := runListenOnlyLanNode(t), runLanNode(t)
 	words := string(a.bootstrap(t, "").Mnemonic)
@@ -324,6 +329,9 @@ func TestNodeRestartedOnANewPortIsResolvedAfterItsNextStatus(t *testing.T) {
 	waitFor(t, "b emits PeerSeen for a", func() bool { return len(seen.of(a.id())) == 1 })
 	// note: a restart before b took a into its swarm would leave b without a link task for a.
 	waitFor(t, "a is in b's swarm", func() bool { return b.inSwarm(a.id()) })
+	// why: with b's link-task backoff stopped, a relink can come only from a wake, so the
+	// relink below proves the status woke linking, not a link-task tick.
+	b.stopLinkRetryTicks()
 
 	a = restartLanNode(t, a)
 	if a.port == oldPort {
@@ -334,6 +342,12 @@ func TestNodeRestartedOnANewPortIsResolvedAfterItsNextStatus(t *testing.T) {
 	// note: until a status arrives, nearby still resolves the port a listened on.
 	if got, want := endpoints(t, b.nearby(), a.id()), fmt.Sprintf("tcp:127.0.0.1:%d", oldPort); len(got) != 1 || got[0] != want {
 		t.Fatalf("before the status, b's nearby resolves %v for a; want [%v]", got, want)
+	}
+
+	// note: a tick would have relinked b within linkRetryMin (1 s) of the failed attempt.
+	time.Sleep(1500 * time.Millisecond)
+	if b.isLinked(a.id()) {
+		t.Fatal("b relinked to the restarted a before its status, with link-task ticks stopped")
 	}
 
 	delivered := time.Now()
