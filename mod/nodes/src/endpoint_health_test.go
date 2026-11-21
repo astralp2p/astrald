@@ -402,8 +402,9 @@ func TestCleanupKeepsHealthOfExpiredRowAndDropsStaleHealth(t *testing.T) {
 	}
 }
 
-// TestOrderDialRows: normal rows come first by descending score, then failing
-// and off-subnet rows by descending score; a recent success lifts an off-subnet
+// TestOrderDialRows: normal rows come first by descending score, then
+// off-subnet rows, then failing rows, each by descending score, so a failing
+// row never dials before a row that is not failing; a recent success lifts an off-subnet
 // row; equal rows keep their order and none is dropped.
 func TestOrderDialRows(t *testing.T) {
 	now := time.Now()
@@ -423,6 +424,8 @@ func TestOrderDialRows(t *testing.T) {
 		row("10.0.0.5:1", worked(0.4, time.Minute), true),
 		row("10.0.0.6:1", worked(0.2, 48*time.Hour), false),
 		row("10.0.0.7:1", nil, false),
+		// failing with a long, good history: its score tops the off-subnet row's
+		row("10.0.0.8:1", &dbEndpointHealth{FailStreak: failingStreak, LastOK: ago(48 * time.Hour), SuccessEWMA: 0.9}, true),
 	}
 	orderDialRows(rows, now)
 
@@ -430,7 +433,7 @@ func TestOrderDialRows(t *testing.T) {
 	for _, r := range rows {
 		got = append(got, r.endpoint.Address())
 	}
-	want := []string{"10.0.0.4:1", "10.0.0.3:1", "10.0.0.7:1", "10.0.0.5:1", "10.0.0.6:1", "10.0.0.1:1", "10.0.0.2:1"}
+	want := []string{"10.0.0.4:1", "10.0.0.3:1", "10.0.0.7:1", "10.0.0.5:1", "10.0.0.6:1", "10.0.0.1:1", "10.0.0.8:1", "10.0.0.2:1"}
 	if !slices.Equal(got, want) {
 		t.Fatalf("dial order %v; want %v", got, want)
 	}

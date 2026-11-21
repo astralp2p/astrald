@@ -75,7 +75,21 @@ const noDialHistory = "last_ok IS NULL AND last_fail IS NULL"
 
 // successBase is the SQL value the next success rate decays from: successPrior
 // for a row without dial history, else the stored rate.
-var successBase = "(CASE WHEN " + noDialHistory + " THEN ? ELSE success_ewma END)"
+// why: COALESCE keeps a row whose success_ewma is NULL, one stored before the
+// column existed, from staying NULL under the arithmetic.
+var successBase = "(CASE WHEN " + noDialHistory + " THEN ? ELSE COALESCE(success_ewma, ?) END)"
+
+// backfillDialColumns replaces a NULL success_ewma with successPrior and a NULL
+// latency_ewma with 0, on rows stored before the columns existed.
+// It is idempotent and runs after AutoMigrate.
+func (db *DB) backfillDialColumns() error {
+	return db.Model(&dbEndpointHealth{}).
+		Where("success_ewma IS NULL OR latency_ewma IS NULL").
+		Updates(map[string]any{
+			"success_ewma": gorm.Expr("COALESCE(success_ewma, ?)", successPrior),
+			"latency_ewma": gorm.Expr("COALESCE(latency_ewma, 0)"),
+		}).Error
+}
 
 // RecordDialSuccess records a successful dial of the endpoint of ref at at: it
 // sets LastOK, ends the failure streak and moves the success rate and the
@@ -92,10 +106,10 @@ func (db *DB) RecordDialSuccess(ref healthRef, at time.Time, latency time.Durati
 		DoUpdates: clause.Assignments(map[string]any{
 			"last_ok":      at,
 			"fail_streak":  0,
-			"success_ewma": gorm.Expr("? + ? * "+successBase, ewmaAlpha, 1-ewmaAlpha, successPrior),
+			"success_ewma": gorm.Expr("? + ? * "+successBase, ewmaAlpha, 1-ewmaAlpha, successPrior, successPrior),
 			// why: the first success seeds the latency, so a slow first dial is not halved by a zero.
-			"latency_ewma": gorm.Expr("CASE WHEN last_ok IS NULL THEN ? ELSE CAST(? * ? + ? * latency_ewma AS INTEGER) END",
-				int64(latency), ewmaAlpha, int64(latency), 1-ewmaAlpha),
+			"latency_ewma": gorm.Expr("CASE WHEN last_ok IS NULL THEN ? ELSE CAST(? * ? + ? * COALESCE(latency_ewma, ?) AS INTEGER) END",
+				int64(latency), ewmaAlpha, int64(latency), 1-ewmaAlpha, int64(latency)),
 			"updated_at": at,
 		}),
 	}).Create(row).Error
@@ -116,7 +130,7 @@ func (db *DB) RecordDialFailure(ref healthRef, at time.Time) error {
 		DoUpdates: clause.Assignments(map[string]any{
 			"last_fail":    at,
 			"fail_streak":  gorm.Expr("fail_streak + 1"),
-			"success_ewma": gorm.Expr("? * "+successBase, 1-ewmaAlpha, successPrior),
+			"success_ewma": gorm.Expr("? * "+successBase, 1-ewmaAlpha, successPrior, successPrior),
 			"updated_at":   at,
 		}),
 	}).Create(row).Error

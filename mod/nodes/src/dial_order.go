@@ -88,16 +88,29 @@ func (r *dialRow) shortBudget(now time.Time) bool {
 }
 
 // orderDialRows sorts rows into dial order at now: rows of the normal tier by
-// descending score, then failing and off-subnet rows by descending score.
+// descending score, then off-subnet rows, then failing rows, each by descending score.
 // The order of rows that compare equal is kept. No row is dropped.
+// why: a failing row sorts after every row that is not failing, so a high score
+// from a long history does not put a row that failed its last dials ahead of one that did not.
 // why: the score weighs the whole history of a row, so one lucky or unlucky dial does not reorder rows.
 func orderDialRows(rows []*dialRow, now time.Time) {
 	slices.SortStableFunc(rows, func(a, b *dialRow) int {
 		if ta, tb := a.tier(now), b.tier(now); ta != tb {
 			return cmp.Compare(ta, tb)
 		}
+		if fa, fb := a.failing(), b.failing(); fa != fb {
+			return cmp.Compare(boolInt(fa), boolInt(fb))
+		}
 		return cmp.Compare(b.score(), a.score())
 	})
+}
+
+// boolInt returns 1 for true and 0 for false.
+func boolInt(b bool) int {
+	if b {
+		return 1
+	}
+	return 0
 }
 
 // rowAnnotator turns resolved rows of one round into dial rows, from one
