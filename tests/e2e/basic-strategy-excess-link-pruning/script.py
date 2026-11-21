@@ -1,14 +1,16 @@
 #!/usr/bin/env python3
-"""Driver: three forced basic rounds to a node with five endpoints in the book.
+"""Driver: forced basic rounds to a node with five endpoints in the book.
 
 node2 already links node1 on its own TCP port P1 (adopt-node). The driver
 gives node2 three more listeners, L2, L3 and L4 (tcp.new_ephemeral_listener),
-and gives node1's book those three and D, a port nothing listens on. Each
-round is `nodes.new_link` as the User on node1 with no endpoint and
-`strategies=basic`: that schedules an EnsureLinkTask that forces a new link
-(astrald mod/nodes/src/op_new_link.go), and BasicLinkStrategy dials every
-endpoint of the book in parallel; the first link wins, and every later one
-is closed with ErrExcessLink (mod/nodes/src/basic_link_strategy.go Signal).
+and gives node1's book those three and D, a port nothing listens on. The driver
+runs at least MIN_ROUNDS rounds, then more until node1 logged an excess line,
+at most MAX_ROUNDS. Each round is `nodes.new_link` as the User on node1 with
+no endpoint and `strategies=basic`: that schedules an EnsureLinkTask that
+forces a new link (astrald mod/nodes/src/op_new_link.go), and
+BasicLinkStrategy dials every endpoint of the book in parallel; the first
+link wins, and every later one is closed with ErrExcessLink
+(mod/nodes/src/basic_link_strategy.go Signal).
 
 why no endpoint: new_link with one dials exactly it (CreateLinkTask), which
 is what adopt-node does, and the strategy never runs.
@@ -28,7 +30,12 @@ from lib import jsonops, linkview, ports
 from lib.nodelog import LogTap
 from lib.sessionio import load, write_facts
 
-ROUNDS = 3
+MIN_ROUNDS = 3
+# why: a loser is logged as excess only when it finishes negotiating and joins
+# the pool before the winner's cancel (basic_link_strategy.go dialRows,
+# link_negotiator.go errLateNegotiation), so a round may log none; about 70%
+# of rounds log none, and 0.7**20 ~ 8e-4 is a run that sees no line at all
+MAX_ROUNDS = 20
 ROUND_TIMEOUT = 30.0
 # why: a round ends when its strategy's activeDone closes, after the caller
 # already has its link (basic_link_strategy.go Signal); a round started
@@ -68,7 +75,7 @@ async def main():
     rounds = []
     async with LogTap(n1) as tap, \
             await astral.connect(n1["endpoint"], token=user_token) as cu:
-        for i in range(1, ROUNDS + 1):
+        for i in range(1, MAX_ROUNDS + 1):
             t0 = time.monotonic()
             try:
                 info = await cu.nodes.new_link(
@@ -83,7 +90,11 @@ async def main():
             rounds.append(r)
             print(f"driver: round {i}: {r}")
             await asyncio.sleep(GAP)
-        lines = excess_lines(tap, id2)
+            lines = excess_lines(tap, id2)
+            # why: a failed round fails the oracle already; more rounds would
+            # only wait out ROUND_TIMEOUT again
+            if "error" in r or (i >= MIN_ROUNDS and lines):
+                break
         tap_state = tap.state()
 
     print(f"driver: {len(lines)} excess-link line(s) on node1; tap {tap_state}")

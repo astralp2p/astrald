@@ -7,7 +7,7 @@ Independent reads, with each node's own token:
   D, so the round really had those endpoints to dial (and node2's own
   published ones besides);
 - once both nodes' link ids to each other stay put for 5 polls: node1's set
-  is the baseline plus exactly the three ids the rounds returned, so no loser
+  is the baseline plus exactly the ids the rounds returned, so no loser
   survived and no baseline link died; node2's set equals node1's; every new
   link is outbound on node1 and inbound on node2, with the identities
   swapped, on tcp.
@@ -16,7 +16,7 @@ Observed by the driver, judged here (fact `excess_prune`):
 
 - every round answered a link and no error: the refused endpoint D and the
   losers did not fail the round;
-- the three returned ids are distinct and none was in the baseline;
+- the returned ids (one per driver round, at least three) are distinct and none was in the baseline;
 - node1's log tap is whole and holds at least 1 line
   `closed out-link with <node2> (tcp): excess link`, the only trace of
   ErrExcessLink (a link's close reason reaches no op), and at most one per
@@ -31,8 +31,8 @@ import astral
 from lib import jsonops, linkview
 from lib.sessionio import load
 
-ROUNDS = 3
 SETTLE = 30.0
+MIN_ROUNDS = 3
 
 
 async def main():
@@ -45,13 +45,16 @@ async def main():
     print(f"oracle: {len(fact['log_lines'])} excess-link line(s); tap "
           f"{fact['tap']}")
 
+    # why the fact's count: the driver runs rounds until one excess line shows
+    # (script.py MAX_ROUNDS), so the number of rounds is its record
+    nrounds = len(rounds)
     errors = [r for r in rounds if "error" in r]
-    assert len(rounds) == ROUNDS and not errors, (
+    assert nrounds >= MIN_ROUNDS and not errors, (
         f"a forced basic round did not answer a link: {errors or rounds}; "
         "a loser or the refused endpoint failed the round")
     new = [r["id"] for r in rounds]
     base1, base2 = set(fact["baseline1"]), set(fact["baseline2"])
-    assert len(set(new)) == ROUNDS, f"the rounds returned repeated ids {new}"
+    assert len(set(new)) == nrounds, f"the rounds returned repeated ids {new}"
     assert not set(new) & base1, (
         f"a round returned a link node1 already held: {sorted(set(new) & base1)}"
         " (new_link without an endpoint must force a new link)")
@@ -79,10 +82,10 @@ async def main():
                                linkview.to(r2, id1))))
         (ids1, ids2, rows), settled = await linkview.settle(
             probe, timeout=SETTLE,
-            want=lambda v: len(v[0]) == len(base1) + ROUNDS)
+            want=lambda v: len(v[0]) == len(base1) + nrounds)
     rows = [json.loads(r) for r in rows]
     assert settled, (
-        f"node1's links to node2 did not settle at baseline + {ROUNDS} within "
+        f"node1's links to node2 did not settle at baseline + {nrounds} within "
         f"{SETTLE:.0f} s: node1 holds {ids1}, node2 holds {ids2}, baseline "
         f"{sorted(base1)}, returned {new} (a loser was left open)")
     assert set(ids1) == base1 | set(new), (
@@ -108,16 +111,16 @@ async def main():
     lines = fact["log_lines"]
     assert lines, (
         "node1 logged no `closed out-link with <node2> (tcp): excess link` "
-        f"in {ROUNDS} rounds: the basic strategy's pruning path never ran")
+        f"in {nrounds} rounds: the basic strategy's pruning path never ran")
     # why from the book: besides the five endpoints the driver named, node1
     # holds the ones node2 publishes for itself, one per interface of its
     # host, so the losers a round can have depend on the host. Each endpoint
     # yields at most one link a round, D none, and one link wins.
-    most = ROUNDS * (len(tcp) - 2)
+    most = nrounds * (len(tcp) - 2)
     assert len(lines) <= most, (
-        f"node1 closed {len(lines)} links as excess in {ROUNDS} rounds over "
+        f"node1 closed {len(lines)} links as excess in {nrounds} rounds over "
         f"{len(tcp)} tcp endpoints, one of them dead: at most {most}")
-    print(f"oracle: {ROUNDS} forced rounds each left one link {new}; "
+    print(f"oracle: {nrounds} forced rounds each left one link {new}; "
           f"{len(lines)} losers closed as excess; both ends agree")
 
 
