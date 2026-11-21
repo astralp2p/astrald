@@ -12,6 +12,9 @@ type dbEndpoint struct {
 	Address   string           `gorm:"primaryKey"`
 	CreatedAt time.Time
 	ExpiresAt *time.Time `gorm:"index"`
+	// Manual marks a row an operator added with nodes.add_endpoint.
+	// note: a pull never shortens a manual row; the subject need not list it.
+	Manual bool `gorm:"not null;default:false"`
 }
 
 func (dbEndpoint) TableName() string {

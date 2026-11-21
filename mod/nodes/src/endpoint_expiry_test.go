@@ -129,3 +129,71 @@ func TestDBResolverServesRemainingTTL(t *testing.T) {
 		t.Fatalf("served TTL %v; want the remaining 20 min", ttl)
 	}
 }
+
+// TestPullNeverShortensManualRow: a row an operator added with
+// nodes.add_endpoint keeps its expiry when a first-hand reply omits it or
+// lists it with a shorter TTL.
+func TestPullNeverShortensManualRow(t *testing.T) {
+	const mapped = "203.0.113.9:1791"
+	for _, tc := range []struct {
+		name   string
+		answer []*nodes.EndpointWithTTL
+	}{
+		{"omitted", []*nodes.EndpointWithTTL{nodes.NewEndpointWithTTL(tcpEndpoint("172.17.0.2"), ipmod.LocalEndpointTTL)}},
+		{"listed shorter", []*nodes.EndpointWithTTL{nodes.NewEndpointWithTTL(tcpEndpoint("203.0.113.9"), ipmod.LocalEndpointTTL)}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			f := newExchangeFixture(t)
+			m := astral.GenerateIdentity()
+			manual := time.Now().Add(90 * 24 * time.Hour).UTC()
+			if err := f.mod.db.AddManualEndpoint(m, "tcp", mapped, &manual); err != nil {
+				t.Fatalf("seed manual row: %v", err)
+			}
+			f.answer = tc.answer
+
+			if _, err := f.mod.UpdateNodeEndpoints(f.mod.ctx, m, m); err != nil {
+				t.Fatalf("UpdateNodeEndpoints: %v", err)
+			}
+
+			if got := expiryOf(t, f.mod.db, m, "tcp", mapped); !got.Equal(manual) {
+				t.Fatalf("manual row expires at %v; want %v unchanged", got, manual)
+			}
+		})
+	}
+}
+
+// TestSecondHandPullNeverShortensListedRow: a second-hand reply that lists a
+// row with less time left keeps the row's expiry; the same reply first-hand
+// sets it.
+func TestSecondHandPullNeverShortensListedRow(t *testing.T) {
+	for _, tc := range []struct {
+		name      string
+		firstHand bool
+	}{
+		{"second-hand", false},
+		{"first-hand", true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			f := newExchangeFixture(t)
+			b := astral.GenerateIdentity()
+			x, _, _ := seedShortenRows(t, f.mod.db, b)
+			f.answer = []*nodes.EndpointWithTTL{nodes.NewEndpointWithTTL(tcpEndpoint("192.168.1.20"), 10*time.Minute)}
+
+			resolver := astral.GenerateIdentity()
+			if tc.firstHand {
+				resolver = b
+			}
+			if _, err := f.mod.UpdateNodeEndpoints(f.mod.ctx, resolver, b); err != nil {
+				t.Fatalf("UpdateNodeEndpoints: %v", err)
+			}
+
+			got := expiryOf(t, f.mod.db, b, "tcp", "192.168.1.20:1791")
+			if !tc.firstHand && !got.Equal(x) {
+				t.Fatalf("second-hand reply moved X's expiry to %v; want %v unchanged", got, x)
+			}
+			if tc.firstHand && (got.After(time.Now().Add(10*time.Minute)) || time.Until(got) < 9*time.Minute) {
+				t.Fatalf("first-hand reply set X's expiry to %v; want about now+10m", got)
+			}
+		})
+	}
+}

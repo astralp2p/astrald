@@ -37,9 +37,9 @@ func (dbEndpointHealth) TableName() string {
 // healthKey lists the primary key columns of dbEndpointHealth.
 var healthKey = []clause.Column{{Name: "identity"}, {Name: "network"}, {Name: "address"}, {Name: "scope"}}
 
-// RecordDialSuccess records a successful dial of one endpoint at at: it sets
+// RecordDialSuccess records a successful dial of endpoint at at: it sets
 // LastOK and LastLatency, counts the success and ends the failure streak.
-func (db *DB) RecordDialSuccess(nodeID *astral.Identity, network, address string, at time.Time, latency time.Duration) error {
+func (db *DB) RecordDialSuccess(nodeID *astral.Identity, endpoint endpointKey, at time.Time, latency time.Duration) error {
 	return db.Clauses(clause.OnConflict{
 		Columns: healthKey,
 		DoUpdates: clause.Assignments(map[string]any{
@@ -51,8 +51,8 @@ func (db *DB) RecordDialSuccess(nodeID *astral.Identity, network, address string
 		}),
 	}).Create(&dbEndpointHealth{
 		Identity:    nodeID,
-		Network:     network,
-		Address:     address,
+		Network:     endpoint.network,
+		Address:     endpoint.address,
 		LastOK:      &at,
 		OKCount:     1,
 		LastLatency: latency,
@@ -60,9 +60,9 @@ func (db *DB) RecordDialSuccess(nodeID *astral.Identity, network, address string
 	}).Error
 }
 
-// RecordDialFailure records a failed dial of one endpoint at at: it sets
+// RecordDialFailure records a failed dial of endpoint at at: it sets
 // LastFail and extends the failure streak.
-func (db *DB) RecordDialFailure(nodeID *astral.Identity, network, address string, at time.Time) error {
+func (db *DB) RecordDialFailure(nodeID *astral.Identity, endpoint endpointKey, at time.Time) error {
 	return db.Clauses(clause.OnConflict{
 		Columns: healthKey,
 		DoUpdates: clause.Assignments(map[string]any{
@@ -72,8 +72,8 @@ func (db *DB) RecordDialFailure(nodeID *astral.Identity, network, address string
 		}),
 	}).Create(&dbEndpointHealth{
 		Identity:   nodeID,
-		Network:    network,
-		Address:    address,
+		Network:    endpoint.network,
+		Address:    endpoint.address,
 		LastFail:   &at,
 		FailStreak: 1,
 		UpdatedAt:  at,

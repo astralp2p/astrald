@@ -85,8 +85,9 @@ func resolveRemoteEndpoints(ctx *astral.Context, resolver *astral.Identity, iden
 
 // storeEndpoints stores endpoints of identity and returns how many of them had
 // no unexpired row before. A row that is only refreshed does not count.
-// A first-hand reply (authoritative) also shortens the rows identity no
-// longer lists; see shortenMissingEndpoints.
+// A first-hand reply (authoritative) sets the expiry of the rows it lists and
+// shortens the rows identity no longer lists; see shortenMissingEndpoints.
+// A second-hand reply never shortens a row; see StorePulledEndpoint.
 func (mod *Module) storeEndpoints(identity *astral.Identity, endpoints []*nodes.EndpointWithTTL, authoritative bool) (int, error) {
 	rows, err := mod.db.FindEndpoints(identity)
 	if err != nil {
@@ -100,13 +101,13 @@ func (mod *Module) storeEndpoints(identity *astral.Identity, endpoints []*nodes.
 
 	added := 0
 	for _, ep := range endpoints {
-		err = mod.AddEndpoint(identity, ep)
+		key := endpointKey{ep.Network(), ep.Address()}
+		err = mod.db.StorePulledEndpoint(identity, key, endpointExpiry(ep), authoritative)
 		if err != nil {
 			mod.log.Error("adding resolved endpoint failed %v: %v", ep, err)
 			continue
 		}
 
-		key := endpointKey{ep.Network(), ep.Address()}
 		if !known[key] {
 			known[key] = true
 			added++

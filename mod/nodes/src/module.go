@@ -148,13 +148,16 @@ func (mod *Module) Run(ctx *astral.Context) error {
 }
 
 func (mod *Module) AddEndpoint(nodeID *astral.Identity, endpoint *nodes.EndpointWithTTL) error {
-	var expiresAt *time.Time
-	if endpoint.TTL != nil {
-		t := time.Now().UTC().Add(time.Duration(*endpoint.TTL) * time.Second)
-		expiresAt = &t
-	}
+	return mod.db.AddEndpoint(nodeID, endpoint.Network(), endpoint.Address(), endpointExpiry(endpoint))
+}
 
-	return mod.db.AddEndpoint(nodeID, endpoint.Network(), endpoint.Address(), expiresAt)
+// endpointExpiry returns when endpoint's TTL ends, and nil when it has none.
+func endpointExpiry(endpoint *nodes.EndpointWithTTL) *time.Time {
+	if endpoint.TTL == nil {
+		return nil
+	}
+	t := time.Now().UTC().Add(time.Duration(*endpoint.TTL) * time.Second)
+	return &t
 }
 
 func (mod *Module) RemoveEndpoint(nodeID *astral.Identity, endpoint exonet.Endpoint) error {

@@ -44,6 +44,12 @@ type dialLog struct {
 
 // refuse records a dial and refuses it.
 func (l *dialLog) refuse(ctx *astral.Context, ep exonetapi.Endpoint) (exonet.Conn, error) {
+	l.note(ctx, ep)
+	return nil, errors.New("refused")
+}
+
+// note records the start of a dial of ep under ctx.
+func (l *dialLog) note(ctx *astral.Context, ep exonetapi.Endpoint) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	l.order = append(l.order, ep.Address())
@@ -53,7 +59,6 @@ func (l *dialLog) refuse(ctx *astral.Context, ep exonetapi.Endpoint) (exonet.Con
 	if d, ok := ctx.Deadline(); ok {
 		l.budgets[ep.Address()] = time.Until(d)
 	}
-	return nil, errors.New("refused")
 }
 
 func (l *dialLog) dialed() []string {
@@ -174,7 +179,7 @@ func TestTryEndpointCancelledDialLeavesHealth(t *testing.T) {
 	const addr = "198.51.100.1:1791"
 	at := time.Now().UTC()
 	for range 2 {
-		if err := s.mod.db.RecordDialFailure(s.target, "tcp", addr, at); err != nil {
+		if err := s.mod.db.RecordDialFailure(s.target, endpointKey{"tcp", addr}, at); err != nil {
 			t.Fatalf("seed failure: %v", err)
 		}
 	}
@@ -193,6 +198,70 @@ func TestTryEndpointCancelledDialLeavesHealth(t *testing.T) {
 	}
 }
 
+// TestBasicTimedOutRowRecordsFailure (criterion 5): a row whose dial only the
+// round budget ends, as a black-holed tcp row, counts as a failure in every
+// round, and the next round dials it after a row without history.
+func TestBasicTimedOutRowRecordsFailure(t *testing.T) {
+	const blackHole = "198.51.100.1:1791"
+	var dials dialLog
+	s := newHealthTestStrategy(t, func(ctx *astral.Context, ep exonetapi.Endpoint) (exonet.Conn, error) {
+		if ep.Address() != blackHole {
+			return dials.refuse(ctx, ep)
+		}
+		dials.note(ctx, ep)
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case <-time.After(effectTimeout):
+			return nil, errors.New("round budget did not end the dial")
+		}
+	})
+	s.roundBudget = 200 * time.Millisecond
+	resolver := &stubResolver{rows: tcpRows(t, blackHole)}
+	s.mod.resolvers.Add(resolver)
+
+	for range failingStreak {
+		runRound(t, s)
+	}
+	if h := healthOf(t, s.mod.db, s.target, blackHole); h == nil || h.FailStreak != failingStreak || h.LastFail == nil {
+		t.Fatalf("health of the timed-out row %+v; want FailStreak %v and LastFail set", h, failingStreak)
+	}
+
+	resolver.rows = tcpRows(t, blackHole, "198.51.100.2:1791")
+	runRound(t, s)
+
+	got := dials.dialed()[failingStreak:]
+	if len(got) != 2 || got[1] != blackHole {
+		t.Fatalf("dial order after %v timeouts %v; want %v dialed last of 2", failingStreak, got, blackHole)
+	}
+}
+
+// TestTryEndpointAfterRoundEndDialsNothing: a row taken after its round
+// budget ended is not dialed and leaves no health row.
+func TestTryEndpointAfterRoundEndDialsNothing(t *testing.T) {
+	var dials dialLog
+	s := newHealthTestStrategy(t, dials.refuse)
+	const addr = "198.51.100.1:1791"
+
+	round, cancel := astral.NewContext(context.Background()).WithTimeout(time.Millisecond)
+	defer cancel()
+	select {
+	case <-round.Done():
+	case <-time.After(effectTimeout):
+		t.Fatal("round budget did not end")
+	}
+
+	if link := s.tryEndpoint(round, &dialRow{endpoint: tcpRows(t, addr)[0]}); link != nil {
+		t.Fatal("a row of an ended round returned a link")
+	}
+	if got := dials.dialed(); len(got) != 0 {
+		t.Fatalf("dials %v after the round ended; want none", got)
+	}
+	if h := healthOf(t, s.mod.db, s.target, addr); h != nil {
+		t.Fatalf("health %+v after the round ended; want none", h)
+	}
+}
+
 // TestTryEndpointSuccessResetsFailStreak (criterion 5): a successful dial
 // resets FailStreak and sets LastOK and LastLatency; a handshake that reaches
 // another identity counts as a failure.
@@ -205,7 +274,7 @@ func TestTryEndpointSuccessResetsFailStreak(t *testing.T) {
 	}}
 	const addr = "127.0.0.1:1791"
 	for range failingStreak {
-		if err := dialer.mod.db.RecordDialFailure(peer.id, "tcp", addr, time.Now().UTC()); err != nil {
+		if err := dialer.mod.db.RecordDialFailure(peer.id, endpointKey{"tcp", addr}, time.Now().UTC()); err != nil {
 			t.Fatalf("seed failure: %v", err)
 		}
 	}
@@ -281,11 +350,11 @@ func TestCleanupKeepsHealthOfExpiredRowAndDropsStaleHealth(t *testing.T) {
 	if err := db.AddEndpoint(id, "tcp", "198.51.100.1:1791", &longExpired); err != nil {
 		t.Fatalf("seed row: %v", err)
 	}
-	if err := db.RecordDialSuccess(id, "tcp", "198.51.100.1:1791", time.Now().UTC(), time.Millisecond); err != nil {
+	if err := db.RecordDialSuccess(id, endpointKey{"tcp", "198.51.100.1:1791"}, time.Now().UTC(), time.Millisecond); err != nil {
 		t.Fatalf("seed health: %v", err)
 	}
 	stale := time.Now().Add(-endpointHealthRetention - time.Hour).UTC()
-	if err := db.RecordDialFailure(id, "tcp", "198.51.100.2:1791", stale); err != nil {
+	if err := db.RecordDialFailure(id, endpointKey{"tcp", "198.51.100.2:1791"}, stale); err != nil {
 		t.Fatalf("seed stale health: %v", err)
 	}
 

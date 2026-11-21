@@ -1,6 +1,8 @@
 package nodes
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"net"
 	"net/netip"
@@ -15,13 +17,19 @@ import (
 const endpointHealthRetention = 30 * 24 * time.Hour
 
 // dialLink dials endpoint, establishes a link to target over it and records
-// the outcome. A failure after round ended is not recorded, as another dial
-// won or the callers left; ctx is round or a context derived from it.
+// the outcome; ctx is round or a context derived from it. A dial that ends
+// because round is cancelled, as when another dial won or the callers left,
+// is not recorded. A dial that the round budget ends is a failure.
 // note: a handshake that reaches another identity is a failure.
 func (mod *Module) dialLink(round, ctx *astral.Context, target *astral.Identity, endpoint exonet.Endpoint) (*Link, error) {
+	// why: a row taken after its round ended is never dialed, so it has no outcome.
+	if err := round.Err(); err != nil {
+		return nil, err
+	}
+
 	start := time.Now()
 	link, err := mod.dialAndEstablish(ctx, target, endpoint)
-	if err == nil || round.Err() == nil {
+	if err == nil || !errors.Is(round.Err(), context.Canceled) {
 		mod.recordDial(target, endpoint, err, time.Since(start))
 	}
 	return link, err
@@ -51,11 +59,12 @@ func (mod *Module) recordDial(target *astral.Identity, endpoint exonet.Endpoint,
 	}
 
 	now := time.Now().UTC()
+	key := endpointKey{endpoint.Network(), endpoint.Address()}
 	var dbErr error
 	if err == nil {
-		dbErr = mod.db.RecordDialSuccess(target, endpoint.Network(), endpoint.Address(), now, latency)
+		dbErr = mod.db.RecordDialSuccess(target, key, now, latency)
 	} else {
-		dbErr = mod.db.RecordDialFailure(target, endpoint.Network(), endpoint.Address(), now)
+		dbErr = mod.db.RecordDialFailure(target, key, now)
 	}
 	if dbErr != nil {
 		mod.log.Logv(1, "recording dial of %v at %v: %v", target, endpoint, dbErr)

@@ -110,7 +110,7 @@ func (s *BasicLinkStrategy) dialRows(ctx *astral.Context, cancel context.CancelF
 }
 
 // tryEndpoint dials one row and establishes a link over it, within the row's budget; nil on any failure.
-// The outcome goes to the endpoint health table unless the round ended first.
+// The outcome goes to the endpoint health table unless the round is cancelled; see dialLink.
 func (s *BasicLinkStrategy) tryEndpoint(ctx *astral.Context, row *dialRow) *Link {
 	defer s.mod.dials.begin(s.target)()
 
