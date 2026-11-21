@@ -72,11 +72,11 @@ func waitWriters(t *testing.T, results <-chan error, n int, deadline time.Time) 
 	}
 }
 
-// TestWriteStallCloseNoticeGivesUp: the watchdog closes a link whose writer
-// holds the write lock mid-frame. The close notice queues behind that writer
-// on the write lock, gives up within closeNoticeBound, and the link closes;
-// the stuck writer and every writer queued behind it return.
-func TestWriteStallCloseNoticeGivesUp(t *testing.T) {
+// TestWriteStallClosesWithoutNotice: the watchdog closes a link whose writer
+// holds the write lock mid-frame. The link sends no close notice on a write
+// stall, so it closes at once; the stuck writer and every writer queued behind
+// it return within the ping timeout plus slack, without closeNoticeBound.
+func TestWriteStallClosesWithoutNotice(t *testing.T) {
 	link, remote := newStallLink(t, stallTimeout)
 
 	// why one byte: net.Pipe is unbuffered, so the writer holds the write lock
@@ -92,7 +92,7 @@ func TestWriteStallCloseNoticeGivesUp(t *testing.T) {
 	if err := waitErr(link, start.Add(stallTimeout+stallSlack)); !errors.Is(err, nodesmod.ErrWriteStalled) {
 		t.Fatalf("link error %v at %v after the stall; want %v within %v", err, time.Since(start), nodesmod.ErrWriteStalled, stallTimeout+stallSlack)
 	}
-	closeBy := start.Add(stallTimeout + closeNoticeBound + stallSlack)
+	closeBy := start.Add(stallTimeout + stallSlack)
 	waitDone(t, link, time.Until(closeBy), "link after the write stall")
 	select {
 	case err := <-stuck:
@@ -108,7 +108,7 @@ func TestWriteStallCloseNoticeGivesUp(t *testing.T) {
 // TestLinkClosesWhenWriteStalls: a peer that sends continuously but never
 // reads stalls the pong the link writes back. The link closes with
 // ErrWriteStalled within the ping timeout plus slack, and the writers blocked
-// behind the stalled write return.
+// behind the stalled write return within the same bound.
 func TestLinkClosesWhenWriteStalls(t *testing.T) {
 	link, remote := newStallLink(t, stallTimeout)
 	peer := channel.New(remote)
@@ -123,7 +123,7 @@ func TestLinkClosesWhenWriteStalls(t *testing.T) {
 	if err := waitErr(link, start.Add(stallTimeout+stallSlack)); !errors.Is(err, nodesmod.ErrWriteStalled) {
 		t.Fatalf("link error %v at %v; want %v within %v", err, time.Since(start), nodesmod.ErrWriteStalled, stallTimeout+stallSlack)
 	}
-	closeBy := start.Add(stallTimeout + closeNoticeBound + stallSlack)
+	closeBy := start.Add(stallTimeout + stallSlack)
 	waitDone(t, link, time.Until(closeBy), "link with a peer that never reads")
 	waitWriters(t, queued, 3, closeBy)
 }
