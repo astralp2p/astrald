@@ -105,31 +105,33 @@ w22 docker: bootstrap-user-software-key* → adopt-node* → link-idle-keepalive
             config node2.tcp.link_idle_ping = "2s"
             config node2.tcp.link_ping_timeout = "2s"
 w23 docker: bootstrap-user-software-key* → adopt-node*
-            → two-swarms-side-by-side
+            → services-swarm-membership
 w24 docker: bootstrap-user-software-key* → adopt-node*
+            → two-swarms-side-by-side
+w25 docker: bootstrap-user-software-key* → adopt-node*
             → basic-strategy-dead-rows
             config node2.kcp.listen = false
-w25 docker: bootstrap-user-software-key* → adopt-node*
+w26 docker: bootstrap-user-software-key* → adopt-node*
             → kcp-only-restart-relink
-w26 docker: bootstrap-user-software-key* → adopt-node* → link-session-migrate
-w27 docker: bootstrap-user-software-key* → adopt-node*
+w27 docker: bootstrap-user-software-key* → adopt-node* → link-session-migrate
+w28 docker: bootstrap-user-software-key* → adopt-node*
             → link-session-migrate-serving-side
-w28 docker: bootstrap-user-software-key* → fs-watch-restart-restore
-w29 docker: bootstrap-user-software-key* → fs-index-restart-reconcile
-w30 docker: bootstrap-user-software-key* → repo-removal-sticks
-w31 docker: bootstrap-user-software-key* → indexing-fs-watch-feed
-w32 docker: bootstrap-user-software-key* → hold-isolation
+w29 docker: bootstrap-user-software-key* → fs-watch-restart-restore
+w30 docker: bootstrap-user-software-key* → fs-index-restart-reconcile
+w31 docker: bootstrap-user-software-key* → repo-removal-sticks
+w32 docker: bootstrap-user-software-key* → indexing-fs-watch-feed
+w33 docker: bootstrap-user-software-key* → hold-isolation
             config node1.objects.purge_floor = "0s"
-w33 docker: bootstrap-user-software-key* → blueprint-survives-restart
-w34 docker: bootstrap-user-software-key* → indexer-cursor
-w35 docker: bootstrap-user-software-key* → basic-strategy-stalled-negotiation
-w36 docker: bootstrap-user-op
-w37 docker: import-user-software-key
-w38 docker: introduce-node-setup → introduce-node
-w39 docker: distribution-gate-setup
+w34 docker: bootstrap-user-software-key* → blueprint-survives-restart
+w35 docker: bootstrap-user-software-key* → indexer-cursor
+w36 docker: bootstrap-user-software-key* → basic-strategy-stalled-negotiation
+w37 docker: bootstrap-user-op
+w38 docker: import-user-software-key
+w39 docker: introduce-node-setup → introduce-node
+w40 docker: distribution-gate-setup
             config node1.apphost.gate = {}
             config node1.apphost.policies = {}
-w40 docker: bootstrap-passphrase
-w41 docker: claim-race
-w42 docker: expel-management-node
-w43 docker: concurrent-adoption
+w41 docker: bootstrap-passphrase
+w42 docker: claim-race
+w43 docker: expel-management-node
+w44 docker: concurrent-adoption
