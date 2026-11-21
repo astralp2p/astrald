@@ -9,10 +9,17 @@ Every check is the oracle's own read, never the driver's `probes`:
   its roster: the ban propagated to a sibling;
 - node3 is `unclaimed`, never `fresh` (astral-docs user-and-swarm.md, Losing
   the owner): it lost its contract and kept its manager;
-- node3's own gate now denies `objects.repositories`; node1 refuses node3 the
-  bait object, and refuses node3's `user.join` and the User's `user.adopt`
-  with "identity expelled from swarm" (astrald mod/user/src/contracts.go
-  IssueMembership);
+- node3's own gate now denies `objects.repositories`;
+- node1 refuses node3's links once node3 answered its ban (astral-docs
+  protocols/user/README.md, Link admission; protocols/nodes/README.md: the
+  refusal comes right after the Handshake). So node3 reaches node1 not at
+  all: its bait read is rejected with code 7 (unavailable), its `user.join`
+  fails to reach node1 (user.join.md: "an error_message if the swarm node
+  cannot be reached"), and node1 holds no link to node3. A join answered
+  "identity expelled from swarm" also passes (node1 restarted and forgot the
+  answered ban, which it keeps in memory only); a successful join never does;
+- node1 refuses the User's `user.adopt` of node3 with "identity expelled
+  from swarm" (astrald mod/user/src/contracts.go IssueMembership);
 - control: node2 is still a linked member and reads the same bait from node1.
 
 note: link state between node2 and node3 is NOT asserted. Suspected astrald
@@ -30,8 +37,7 @@ out-link to node3 at .819, which was still up 24 s later. node3, unclaimed,
 accepts it. Seen in 2 of 4 earlier live runs too (node2 re-linked ~5 ms after
 node3 tore its links down; the link survived 18 s). Asserting "no link"
 would make this test red about half the time, so it is reported instead.
-Note also that the probes below, the driver's and the oracle's, open fresh
-links from node3 to node1 themselves.
+Since link admission, node3's probes no longer open links to node1.
 """
 import asyncio
 import time
@@ -46,9 +52,9 @@ from lib.sessionio import load
 CONVERGE = 30.0
 POLL = 1.0
 EXPELLED = "identity expelled from swarm"
-# a refusal must be the node's answer, not a failure to reach it
-UNREACHED = (astral.errors.QueryTimeout, astral.errors.RouteNotFound,
-             astral.errors.TransportError, asyncio.TimeoutError)
+# why: node1 refuses node3's links after node3 answered its ban, so node3's
+# queries to node1 end as unavailable (astral-go astral/codes.go).
+UNAVAILABLE = 7
 
 
 async def until(probe, want):
@@ -164,12 +170,15 @@ async def main():
             "though node3 lost its contract")
 
         read = await refusal(c.objects.read(bait, target=id1))
-        assert read is not None and not isinstance(read, UNREACHED), (
-            f"node1 did not refuse node3 the bait: {read!r}")
+        assert (isinstance(read, astral.errors.QueryRejected)
+                and read.code == UNAVAILABLE), (
+            f"node3 still reaches node1 after answering its ban: {read!r}")
 
         join = await refusal(c.user.join(id1))
-        assert EXPELLED in str(join), (
-            f"node1 did not refuse node3's user.join as expelled: {join!r}")
+        assert join is not None and (
+            f"({UNAVAILABLE})" in str(join) or EXPELLED in str(join)), (
+            f"node3's user.join neither failed to reach node1 nor was "
+            f"refused as expelled: {join!r}")
 
     async with await astral.connect(n1["endpoint"], token=user_token) as c:
         readopt = await refusal(c.user.adopt(id3))
@@ -178,10 +187,21 @@ async def main():
         r1 = roster(await c.user.swarm_status())
         assert id3 not in r1, f"node3 is back in node1's roster {sorted(r1)}"
 
+        # why: the refusal above is a failure to reach node1, which node1
+        # being down would also give; node1's own links rule that out.
+        async def links_to_node3():
+            return sum(1 for l in await c.nodes.links(experimental=True)
+                       if str(l.remote_identity) == id3)
+        n13 = await until(links_to_node3, lambda n: n == 0)
+        assert n13 == 0, (
+            f"node1 holds {n13} link(s) to node3 {CONVERGE:.0f} s after "
+            "node3 answered its ban")
+
     print(f"oracle: User {user_id[:8]}… banned node3 {id3[:8]}…; node1 and "
           "node2 hold the ban and dropped it, node2 still linked; node3 is "
           "unclaimed, its gate denies objects.repositories, node1 refuses its "
-          f"read ({type(read).__name__}), its join and its re-adoption")
+          "links (read and join unavailable, no node1 link to node3) and its "
+          "re-adoption")
 
 
 asyncio.run(main())

@@ -18,9 +18,13 @@ itself.
     admits members; no User token needs minting): the same ban, node3 gone
     from its roster, within 30 s;
   - node3: `unclaimed`, never `fresh` (astral-docs `user-and-swarm.md`,
-    Losing the owner); its gate denies `objects.repositories`; node1
-    refuses it the bait and refuses its `user.join` with "identity expelled
-    from swarm";
+    Losing the owner); its gate denies `objects.repositories`;
+  - node1 refuses node3's links once node3 answered its ban (astral-docs
+    `protocols/user/README.md`, Link admission), so node3 reaches node1 not
+    at all: its bait read is rejected with code 7 (unavailable), its
+    `user.join` fails to reach node1 (`user.join.md`: an `error_message` if
+    the swarm node cannot be reached; "identity expelled from swarm" is
+    also accepted, never a success), and node1 holds no link to node3;
   - node1 refuses the User's re-adoption of node3 the same way
     (`mod/user/src/contracts.go`, `IssueMembership`);
   - control: node2 is still linked to node1 and reads the same bait.
@@ -53,8 +57,9 @@ and node2 still held that link 24 s later. Earlier live runs saw the same
 in 2 of 4 (a re-link ~5 ms after node3 tore its links down, alive 18 s).
 Asserting "no link" would make this test red about half the time.
 
-The probes themselves, the driver's and the oracle's, open fresh links from
-node3 to node1, so a link node3–node1 says nothing about the ban either.
+Since link admission, node3's probes no longer open links to node1: node1
+refuses them right after the Handshake, so the oracle asserts that node1
+holds no link to node3.
 
 ## Also observed: node3 briefly refuses its own token
 
