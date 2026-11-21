@@ -58,6 +58,9 @@ func (Loader) Load(node astral.Node, assets assets.Assets, log *log.Logger) (cor
 	if err != nil {
 		return nil, err
 	}
+	if err = mod.db.backfillDialColumns(); err != nil {
+		return nil, err
+	}
 
 	mod.router.AddStructPrefix(mod, "Op")
 

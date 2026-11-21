@@ -115,6 +115,8 @@ type Module struct {
 	fullRefreshDue atomic.Int64
 	// subnets lists this node's interface subnets; nil when the ip module is not loaded.
 	subnets subnetLister
+	// fingerprints names this node's network; nil when the ip module is not loaded.
+	fingerprints fingerprinter
 	// refreshClock is the time source of the refresh task; nil is the real clock.
 	// why: a field, so tests move the task past the full-refresh period without waiting.
 	refreshClock wakeClock

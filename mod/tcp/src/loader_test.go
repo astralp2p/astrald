@@ -16,6 +16,7 @@ func (noLocalIPs) LocalIPs() ([]ip.IP, error)          { return nil, nil }
 func (noLocalIPs) PublicIPCandidates() []ip.IP         { return nil }
 func (noLocalIPs) DefaultGateway() (ip.IP, error)      { return nil, nil }
 func (noLocalIPs) LocalSubnets() ([]*net.IPNet, error) { return nil, nil }
+func (noLocalIPs) NetworkFingerprint() string          { return "" }
 
 // Load keeps a valid configEndpoints entry and drops an entry ParseEndpoint
 // rejects, so no nil *tcp.Endpoint reaches PublicIPCandidates.

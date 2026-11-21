@@ -34,64 +34,89 @@ const (
 type dialTier int
 
 const (
-	tierRecentOK dialTier = iota // a success within recentDialOK
-	tierNeutral                  // no history, or no verdict either way
-	tierLast                     // a failure streak, or an off-subnet local row
+	tierNormal dialTier = iota // ordered by score
+	tierLast                   // a failure streak, or an off-subnet local row
 )
 
 // dialRow is one resolved row of a dial round with what this node knows of it.
 type dialRow struct {
 	endpoint *nodes.EndpointWithTTL
-	// health is nil when this node never dialed the row.
+	// health is the dial history of the row from the current network; nil when
+	// this node never dialed the row from there.
 	health *dbEndpointHealth
+	// seenDays is how many days the subject listed the row; 0 for none.
+	seenDays uint32
 	// offSubnet is set for a non-public tcp or kcp row outside every own subnet.
 	offSubnet bool
 	// done is called once the row's dial returns; nil when nothing waits for it.
 	done func()
 }
 
+// failing reports whether the row failed its last failingStreak dials.
+func (r *dialRow) failing() bool {
+	return r.health != nil && r.health.FailStreak >= failingStreak
+}
+
+// recentOK reports whether the row's dial succeeded within recentDialOK of now.
+func (r *dialRow) recentOK(now time.Time) bool {
+	return r.health != nil && r.health.LastOK != nil && now.Sub(*r.health.LastOK) < recentDialOK
+}
+
 // tier returns the dial tier of the row at now.
 // why a recent success outranks the address class: health is evidence, the
 // address class a guess, so a working VPN row is not dialed last.
 func (r *dialRow) tier(now time.Time) dialTier {
-	h := r.health
 	switch {
-	case h != nil && h.FailStreak >= failingStreak:
+	case r.failing():
 		return tierLast
-	case h != nil && h.LastOK != nil && now.Sub(*h.LastOK) < recentDialOK:
-		return tierRecentOK
+	case r.recentOK(now):
+		return tierNormal
 	case r.offSubnet:
 		return tierLast
 	}
-	return tierNeutral
+	return tierNormal
+}
+
+// score returns the dial score of the row; see dialScore.
+func (r *dialRow) score() float64 {
+	return dialScore(r.endpoint.Network(), r.health, r.seenDays)
 }
 
 // shortBudget reports whether the row dials under offSubnetRowBudget at now.
 func (r *dialRow) shortBudget(now time.Time) bool {
-	return r.offSubnet && r.tier(now) != tierRecentOK
+	return r.offSubnet && (r.failing() || !r.recentOK(now))
 }
 
-// orderDialRows sorts rows into dial order at now: rows with a recent success,
-// newest first; then rows without a verdict; then failing and off-subnet rows.
+// orderDialRows sorts rows into dial order at now: rows of the normal tier by
+// descending score, then off-subnet rows, then failing rows, each by descending score.
 // The order of rows that compare equal is kept. No row is dropped.
-// note: this is the one dial-order hook; a score (FDglQbfCIC) replaces the comparison here.
+// why: a failing row sorts after every row that is not failing, so a high score
+// from a long history does not put a row that failed its last dials ahead of one that did not.
+// why: the score weighs the whole history of a row, so one lucky or unlucky dial does not reorder rows.
 func orderDialRows(rows []*dialRow, now time.Time) {
 	slices.SortStableFunc(rows, func(a, b *dialRow) int {
-		ta, tb := a.tier(now), b.tier(now)
-		if ta != tb {
+		if ta, tb := a.tier(now), b.tier(now); ta != tb {
 			return cmp.Compare(ta, tb)
 		}
-		if ta == tierRecentOK {
-			return b.health.LastOK.Compare(*a.health.LastOK)
+		if fa, fb := a.failing(), b.failing(); fa != fb {
+			return cmp.Compare(boolInt(fa), boolInt(fb))
 		}
-		return 0
+		return cmp.Compare(b.score(), a.score())
 	})
+}
+
+// boolInt returns 1 for true and 0 for false.
+func boolInt(b bool) int {
+	if b {
+		return 1
+	}
+	return 0
 }
 
 // rowAnnotator turns resolved rows of one round into dial rows, from one
 // health query and one read of this node's subnets.
 type rowAnnotator struct {
-	health  map[endpointKey]*dbEndpointHealth
+	health  *healthSet
 	subnets []*net.IPNet
 	// known is false when this node's subnets are unknown; no row is then off-subnet.
 	known bool
@@ -103,9 +128,11 @@ func (s *BasicLinkStrategy) newRowAnnotator() *rowAnnotator {
 }
 
 func (a *rowAnnotator) annotate(e *nodes.EndpointWithTTL) *dialRow {
+	health, seenDays := a.health.of(e.Network(), e.Address())
 	return &dialRow{
 		endpoint:  e,
-		health:    a.health[endpointKey{e.Network(), e.Address()}],
+		health:    health,
+		seenDays:  seenDays,
 		offSubnet: a.known && isOffSubnet(e.Network(), e.Address(), a.subnets),
 	}
 }
