@@ -34,7 +34,7 @@ type session struct {
 	Query          string
 	createdAt      time.Time
 	routingResult  chan uint8
-	cond           *sync.Cond // guards paused, closed
+	cond           *sync.Cond // guards paused, closed, reader, writer
 	paused         bool
 	closed         bool
 	state          atomic.Int32
@@ -71,12 +71,13 @@ func (s *session) Read(p []byte) (int, error) {
 	for s.paused && !s.closed {
 		s.cond.Wait()
 	}
+	reader := s.reader
 	s.cond.L.Unlock()
 
-	if s.reader == nil {
+	if reader == nil {
 		return 0, io.EOF
 	}
-	n, err := s.reader.Read(p)
+	n, err := reader.Read(p)
 	s.bytes.Add(uint64(n))
 	return n, err
 }
@@ -86,13 +87,13 @@ func (s *session) Write(p []byte) (int, error) {
 	for s.paused && !s.closed {
 		s.cond.Wait()
 	}
-	closed := s.closed
+	closed, writer := s.closed, s.writer
 	s.cond.L.Unlock()
 
 	if closed {
 		return 0, nodes.ErrSessionClosed
 	}
-	n, err := s.writer.Write(p)
+	n, err := writer.Write(p)
 	s.bytes.Add(uint64(n))
 	return n, err
 }
@@ -110,6 +111,22 @@ func (s *session) Setup(reader io.ReadCloser, writer io.WriteCloser) error {
 	return nil
 }
 
+// getReader returns the reader Setup installed, or nil before Setup.
+// why the lock: Setup installs the reader while the link's read loop handles frames for the session.
+func (s *session) getReader() io.ReadCloser {
+	s.cond.L.Lock()
+	defer s.cond.L.Unlock()
+	return s.reader
+}
+
+// getWriter returns the writer Setup installed, or nil before Setup.
+// why the lock: Setup installs the writer while the link's read loop handles frames for the session.
+func (s *session) getWriter() io.WriteCloser {
+	s.cond.L.Lock()
+	defer s.cond.L.Unlock()
+	return s.writer
+}
+
 func (s *session) Open() {
 	s.cond.L.Lock()
 	defer s.cond.L.Unlock()
@@ -123,7 +140,7 @@ func (s *session) Close() error {
 		s.cond.L.Unlock()
 		return nil
 	}
-	onClose := s.onClose
+	onClose, reader, writer := s.onClose, s.reader, s.writer
 	s.state.Store(stateClosed)
 	s.closed = true
 	s.cond.Broadcast()
@@ -133,12 +150,12 @@ func (s *session) Close() error {
 		onClose()
 	}
 
-	if s.writer != nil {
-		s.writer.Close()
+	if writer != nil {
+		writer.Close()
 	}
 
-	if s.reader != nil {
-		s.reader.Close()
+	if reader != nil {
+		reader.Close()
 	}
 
 	return nil

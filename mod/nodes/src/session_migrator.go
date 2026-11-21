@@ -20,12 +20,12 @@ type SessionMigrator struct {
 }
 
 func (mod *Module) newSessionMigrator(session *session) (*SessionMigrator, error) {
-	reader, ok := session.reader.(*muxSessionReader)
+	reader, ok := session.getReader().(*muxSessionReader)
 	if !ok {
 		return nil, nodes.ErrMigrationNotSupported
 	}
 
-	writer, ok := session.writer.(*muxSessionWriter)
+	writer, ok := session.getWriter().(*muxSessionWriter)
 	if !ok {
 		return nil, nodes.ErrMigrationNotSupported
 	}

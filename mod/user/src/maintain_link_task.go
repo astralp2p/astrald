@@ -47,8 +47,23 @@ func (mod *Module) NewMaintainLinkTask(target *astral.
 		mod:    mod,
 		Target: target,
 		wake:   make(chan struct{}, 1),
-		after:  time.After,
+		after:  mod.linkRetryClock,
 	}
+}
+
+// SetLinkRetryClock makes after time the backoff of every MaintainLinkTask, running ones included.
+// A clock whose channel never fires leaves Wake, a link close and an address change as the only retries.
+// note: a test seam; an in-process node test reaches it through the module interface.
+func (mod *Module) SetLinkRetryClock(after func(time.Duration) <-chan time.Time) {
+	mod.linkRetryAfter.Store(&after)
+}
+
+// linkRetryClock waits d on the clock SetLinkRetryClock set, or on time.After.
+func (mod *Module) linkRetryClock(d time.Duration) <-chan time.Time {
+	if after := mod.linkRetryAfter.Load(); after != nil {
+		return (*after)(d)
+	}
+	return time.After(d)
 }
 
 func (a *MaintainLinkTask) String() string { return "nodes.maintain_link" }

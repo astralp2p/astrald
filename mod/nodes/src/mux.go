@@ -132,7 +132,7 @@ func (m *Mux) RouteQuery(ctx *astral.Context, q *astral.InFlightQuery, w io.Writ
 		if errCode != frames.CodeAccepted {
 			// the peer did not accept; it may never send a Reset (relay
 			// refusal), so drop the session here without emitting one ourselves.
-			if writer, ok := conn.writer.(*muxSessionWriter); ok {
+			if writer, ok := conn.getWriter().(*muxSessionWriter); ok {
 				writer.PeerClose()
 			}
 			conn.Close()
@@ -334,7 +334,7 @@ func (m *Mux) handleResponse(f *frames.Response) {
 		return
 	}
 
-	if writer, ok := conn.writer.(*muxSessionWriter); ok {
+	if writer, ok := conn.getWriter().(*muxSessionWriter); ok {
 		writer.Grow(int(f.Buffer))
 	}
 	conn.Open()
@@ -361,7 +361,7 @@ func (m *Mux) handleData(f *frames.Data) {
 		m.onBytes(len(f.Payload))
 	}
 
-	reader, ok := session.reader.(*muxSessionReader)
+	reader, ok := session.getReader().(*muxSessionReader)
 	if !ok {
 		m.mod.log.Errorv(1, "received data frame from %v on non-mux session", m.RemoteIdentity())
 		return
@@ -387,7 +387,7 @@ func (m *Mux) handleRead(f *frames.Read) {
 		return
 	}
 
-	writer, ok := session.writer.(*muxSessionWriter)
+	writer, ok := session.getWriter().(*muxSessionWriter)
 	if ok {
 		writer.Grow(int(f.Len))
 	}
@@ -399,7 +399,7 @@ func (m *Mux) handleReset(f *frames.Reset) {
 		return
 	}
 
-	if w, ok := session.writer.(*muxSessionWriter); ok {
+	if w, ok := session.getWriter().(*muxSessionWriter); ok {
 		w.PeerClose()
 	}
 
@@ -433,7 +433,7 @@ func (m *Mux) handleMigrate(f *frames.Migrate) {
 		return
 	}
 
-	reader, ok := sess.reader.(*muxSessionReader)
+	reader, ok := sess.getReader().(*muxSessionReader)
 	if !ok {
 		m.mod.log.Errorv(1, "received migrate frame on non-mux session")
 		return
