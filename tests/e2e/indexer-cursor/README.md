@@ -60,3 +60,8 @@ Enabling `local` indexes what the repository already holds, in snapshot
 order, in a background goroutine. The driver acks that backlog until the
 stream is silent for three seconds, so a, b, c and d are the newest changes
 and their store order is their version order.
+
+The probe does not trust silence. J drains its own indexer until d arrives,
+acking each change, and gives up only after ten seconds without one, so a node
+stall longer than the three-second idle window does not read as caught up. A
+drain with the idle window follows, to catch an unindex of c written late.

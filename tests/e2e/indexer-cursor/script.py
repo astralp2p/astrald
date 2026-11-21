@@ -35,7 +35,7 @@ from astral.object import Query
 
 from lib.sessionio import load, write_facts
 from lib.indexing import (INDEX, UNINDEX, Subscription, answer, change,
-                          drain, register_indexer)
+                          drain, drain_until, register_indexer)
 
 SERVE = "mod.auth.serve_objects_action"
 REPO = "local"
@@ -125,7 +125,11 @@ async def main():
         await u.objects.delete(REPO, ids["c"])
 
         probe_nonce = await register_indexer(j, PROBE)
-        seen = await drain(j, probe_nonce, IDLE)
+        # why: a stalled node can stay silent past IDLE before it sends d,
+        # so the probe waits for d itself; the drain after it only catches a
+        # late unindex of c
+        seen = await drain_until(j, probe_nonce, ids["d"], STEP)
+        seen += await drain(j, probe_nonce, IDLE)
         probe = {
             "changes": [c for c in seen if c.get("object") in ids.values()],
             "count": len(seen),
