@@ -156,9 +156,11 @@ type endpointSync struct {
 // the linked identities alone.
 type recordingNodes struct {
 	nodesmod.Module
-	syncs  chan endpointSync
-	closed chan *astral.Identity
-	linked []*astral.Identity
+	syncs chan endpointSync
+	// refreshes receives the subject of every RefreshMemberEndpoints call.
+	refreshes chan *astral.Identity
+	closed    chan *astral.Identity
+	linked    []*astral.Identity
 	// enforced counts the EnforceLinkPolicy calls.
 	enforced atomic.Int32
 }
@@ -170,6 +172,10 @@ func (n *recordingNodes) IsLinked(id *astral.Identity) bool {
 func (n *recordingNodes) UpdateNodeEndpoints(_ *astral.Context, resolver, target *astral.Identity) (int, error) {
 	n.syncs <- endpointSync{resolver: resolver, target: target}
 	return 0, nil
+}
+
+func (n *recordingNodes) RefreshMemberEndpoints(subject *astral.Identity) {
+	n.refreshes <- subject
 }
 
 func (n *recordingNodes) CloseLinks(id *astral.Identity) error {
@@ -233,10 +239,14 @@ func newReceiverFixture(t *testing.T, userID *astral.Identity) *receiverFixture 
 	t.Helper()
 
 	f := &receiverFixture{
-		nodeID:    astral.GenerateIdentity(),
-		userID:    userID,
-		auth:      &indexAuth{},
-		nodes:     &recordingNodes{syncs: make(chan endpointSync, 8), closed: make(chan *astral.Identity, 8)},
+		nodeID: astral.GenerateIdentity(),
+		userID: userID,
+		auth:   &indexAuth{},
+		nodes: &recordingNodes{
+			syncs:     make(chan endpointSync, 8),
+			refreshes: make(chan *astral.Identity, 8),
+			closed:    make(chan *astral.Identity, 8),
+		},
 		scheduler: &recordingScheduler{tasks: make(chan scheduler.Task, 8)},
 	}
 
@@ -293,6 +303,8 @@ func (f *receiverFixture) requireNoEffect(t *testing.T, drop *recordingDrop) {
 	select {
 	case s := <-f.nodes.syncs:
 		t.Errorf("synced endpoints of %v; want none", s.target)
+	case id := <-f.nodes.refreshes:
+		t.Errorf("refreshed endpoints of %v; want none", id)
 	case task := <-f.scheduler.tasks:
 		t.Errorf("scheduled %v; want nothing", task)
 	case id := <-f.nodes.closed:
@@ -478,6 +490,81 @@ func TestReceiveNodeContractAdmitsUnknownSubject(t *testing.T) {
 		}
 	case <-time.After(effectTimeout):
 		t.Fatal("the sibling linker scheduled nothing for the new subject")
+	}
+}
+
+// TestReceiveNodeContractFromSubjectRefreshesFirstHand (EP5 criterion 1, the
+// user half): a node contract pushed by its own subject, as user.introduce does
+// before the subject is a member, refreshes the subject's endpoints first-hand
+// once, through RefreshMemberEndpoints, which forwards the notice to the linked
+// siblings (mod/nodes TestRefreshMemberEndpointsForwardsToLinkedSiblings). The
+// contract starts no pull through the sender.
+func TestReceiveNodeContractFromSubjectRefreshesFirstHand(t *testing.T) {
+	userID := astral.GenerateIdentity()
+	f := newReceiverFixture(t, userID)
+
+	subject := astral.GenerateIdentity()
+	drop := &recordingDrop{sender: subject, object: nodeContract(userID, subject)}
+	if err := f.mod.ReceiveObject(drop); err != nil {
+		t.Fatalf("ReceiveObject: %v", err)
+	}
+
+	select {
+	case id := <-f.nodes.refreshes:
+		if !id.IsEqual(subject) {
+			t.Fatalf("refreshed endpoints of %v; want the subject %v", id, subject)
+		}
+	case <-time.After(effectTimeout):
+		t.Fatal("the subject's endpoints were never refreshed first-hand")
+	}
+
+	select {
+	case task := <-f.scheduler.tasks:
+		if link, ok := task.(*MaintainLinkTask); !ok || !link.Target.IsEqual(subject) {
+			t.Fatalf("scheduled %v; want a link maintained to the subject %v", task, subject)
+		}
+	case <-time.After(effectTimeout):
+		t.Fatal("the sibling linker scheduled nothing for the new subject")
+	}
+
+	time.Sleep(absenceWindow)
+	select {
+	case s := <-f.nodes.syncs:
+		t.Fatalf("synced endpoints of %v through %v; a pull from the subject is RefreshMemberEndpoints alone", s.target, s.resolver)
+	case id := <-f.nodes.refreshes:
+		t.Fatalf("refreshed endpoints of %v twice; want once", id)
+	default:
+	}
+}
+
+// TestReceiveNodeContractFromOtherSenderForwardsNothing (EP5 criterion 2): a
+// node contract pushed by a sender that is not its subject pulls the subject's
+// endpoints from the sender, as before, and refreshes nothing first-hand.
+func TestReceiveNodeContractFromOtherSenderForwardsNothing(t *testing.T) {
+	userID := astral.GenerateIdentity()
+	f := newReceiverFixture(t, userID)
+
+	sender := f.addSibling()
+	subject := astral.GenerateIdentity()
+	drop := &recordingDrop{sender: sender, object: nodeContract(userID, subject)}
+	if err := f.mod.ReceiveObject(drop); err != nil {
+		t.Fatalf("ReceiveObject: %v", err)
+	}
+
+	select {
+	case s := <-f.nodes.syncs:
+		if !s.resolver.IsEqual(sender) || !s.target.IsEqual(subject) {
+			t.Fatalf("synced endpoints of %v through %v; want %v through %v", s.target, s.resolver, subject, sender)
+		}
+	case <-time.After(effectTimeout):
+		t.Fatal("the subject's endpoints were never pulled from the sender")
+	}
+
+	time.Sleep(absenceWindow)
+	select {
+	case id := <-f.nodes.refreshes:
+		t.Fatalf("refreshed endpoints of %v first-hand; a sender that is not the subject forwards nothing", id)
+	default:
 	}
 }
 

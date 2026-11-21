@@ -131,15 +131,27 @@ func (mod *Module) receiveSignedContract(sender *astral.Identity, signed *auth.S
 	}
 
 	go func() {
-		_, err := mod.Nodes.UpdateNodeEndpoints(mod.ctx, sender, signed.Subject)
-		if err != nil {
-			mod.log.Error("syncEndpoints: %v", err)
-		}
-
+		mod.pullSubjectEndpoints(sender, signed.Subject)
 		mod.runSiblingLinker()
 	}()
 
 	return nil
+}
+
+// pullSubjectEndpoints pulls subject's endpoints after its node contract arrived from sender.
+// why: a pull from the subject itself is first-hand, so it is forwarded to the
+// other siblings, as user.introduce brings the link up before the contract and
+// the first-link pull skipped the subject.
+// A pull from any other sender is not forwarded.
+func (mod *Module) pullSubjectEndpoints(sender, subject *astral.Identity) {
+	if sender.IsEqual(subject) {
+		mod.Nodes.RefreshMemberEndpoints(subject)
+		return
+	}
+
+	if _, err := mod.Nodes.UpdateNodeEndpoints(mod.ctx, sender, subject); err != nil {
+		mod.log.Error("syncEndpoints: %v", err)
+	}
 }
 
 // checkPushedContract accepts two kinds of contract: a node contract issued by the

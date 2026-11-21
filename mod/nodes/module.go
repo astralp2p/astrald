@@ -46,6 +46,9 @@ type Module interface {
 	// UpdateNodeEndpoints pulls identity's endpoints from resolver, stores them,
 	// and returns how many of them were new.
 	UpdateNodeEndpoints(ctx *astral.Context, resolver *astral.Identity, identity *astral.Identity) (int, error)
+	// RefreshMemberEndpoints pulls subject's endpoints from subject itself and
+	// forwards the notice one hop to the other linked siblings.
+	RefreshMemberEndpoints(subject *astral.Identity)
 	ResolveEndpoints(*astral.Context, *astral.Identity) (<-chan *nodes.EndpointWithTTL, error)
 	AddResolver(resolver EndpointResolver)
 

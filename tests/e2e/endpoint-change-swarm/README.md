@@ -10,7 +10,7 @@ the `reflector` (C) on the LAN, every pair linked.
   behind a NAT with no inbound DNAT and new inbound UDP dropped, and restarts
   there; node2 relinks to node1 from behind it.
 - **driver** `script.py`: the reflector and node1 learn each other's LAN
-  endpoint and node2 learns the reflector's; as the User on node1 it links to
+  endpoint and node2 is given none; as the User on node1 it links to
   the reflector and adopts it; it names the three nodes on each node; then it
   polls the three nodes' links and swarms every second until the mesh stands
   or 180 s pass.
@@ -21,6 +21,9 @@ the `reflector` (C) on the LAN, every pair linked.
 The test judges the setup only. `endpoint-change-relink` and
 `endpoint-change-double` continue its world.
 
-The reflector's LAN endpoint is given to node2 by hand: how a new member's
-endpoints reach a member that cannot dial it is the A3G14 gap, which the
-endpoint-change ticket leaves open.
+node2 is given no endpoint of the reflector. The world has no gateway and no
+Tor on purpose: node2 behind its NAT cannot be dialed and cannot dial an
+endpoint it does not hold. The reflector's endpoint reaches node2 through the
+first-hand pull of the reflector's endpoints and the forwarded
+`EndpointsChangedMessage` (A3G14, EP5), so this test is that path's regression
+test: node2 links to the reflector within the driver's 180 s.

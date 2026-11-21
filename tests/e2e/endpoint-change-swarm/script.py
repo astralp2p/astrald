@@ -4,15 +4,16 @@
 enter-nat put node2 (A) behind a NAT that admits no inbound connection. The
 driver adopts the reflector (C) into node1's (B) swarm as the User, the way
 adopt-node adopts node2: each side learns the other's LAN endpoint, node1
-links to it, and the User adopts it. node2 learns the reflector's LAN
-endpoint too, so its link task for its new sibling has a row to dial. The
-driver then polls the three nodes every POLL s until node2 holds a link to
-node1 and to the reflector, node1 holds one to the reflector, and each
-node's swarm lists the other two, or WAIT s pass.
+links to it, and the User adopts it. node2 is given no endpoint of the
+reflector: the siblings that pull it first-hand forward the notice, so node2's
+link task for its new sibling has a row to dial. The driver then polls the
+three nodes every POLL s until node2 holds a link to node1 and to the
+reflector, node1 holds one to the reflector, and each node's swarm lists the
+other two, or WAIT s pass.
 
-why the reflector's endpoint on node2 is given: this test builds the world
-endpoint-change-relink starts from. How a new member's endpoints reach a
-member that cannot dial it is the A3G14 gap, which this ticket leaves open.
+why node2 is given no endpoint of the reflector: a new member's endpoints reach
+a member that cannot dial it through the first-hand pull and its forward
+(A3G14, EP5), and node2 reaching the reflector within WAIT is that path's test.
 
 The driver acts and judges nothing. It records the `endpoint_change_swarm`
 fact.
@@ -68,8 +69,8 @@ async def main():
     doc = load()
     n = doc["nodes"]
     ids = {name: n[name]["identity"] for name in ROLES}
-    # each side learns the other's LAN endpoint; node2 dials, so it learns the reflector's
-    seeds = (("reflector", "node1"), ("node1", "reflector"), ("node2", "reflector"))
+    # node1 and the reflector learn each other's LAN endpoint; node2 learns none by hand
+    seeds = (("reflector", "node1"), ("node1", "reflector"))
     for node, peer in seeds:
         async with await addrmove.connect(n[node]) as c:
             await c.nodes.add_endpoint(ids[peer], n[peer]["lan_endpoint"], experimental=True)
