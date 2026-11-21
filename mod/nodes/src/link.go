@@ -70,7 +70,8 @@ func (s *Link) CloseWithError(err error) error {
 		err = errors.New("link closed")
 	}
 	// note: a link whose read loop already ended holds an error, so a link the peer closed sends nothing back.
-	if _, first := s.err.Swap(nil, err); first {
+	// why not on a write stall: the frame would queue behind the stuck write, and every blocked writer would wait out closeNoticeBound (astral-docs topics/link-mux.md, Close notice, No frame).
+	if _, first := s.err.Swap(nil, err); first && !errors.Is(err, nodesmod.ErrWriteStalled) {
 		s.sendCloseNotice(closeReasonOf(err))
 	}
 	return closedOK(s.Channel.Close())
