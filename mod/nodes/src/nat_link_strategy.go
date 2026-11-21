@@ -131,17 +131,10 @@ func (s *NATLinkStrategy) attempt(ctx *astral.Context) error {
 	localMapping = true
 
 	s.log.Log("%v dialing %v", s.target, peerEndpoint.Address())
-	conn, err := s.mod.Exonet.Dial(ctx, &peerEndpoint)
+	link, err := s.mod.dialLink(ctx, ctx, s.target, &peerEndpoint)
 	if err != nil {
-		return fmt.Errorf("dial kcp: %w", err)
+		return fmt.Errorf("kcp: %w", err)
 	}
-
-	rawLink, err := s.mod.EstablishOutboundLink(ctx, s.target, conn)
-	if err != nil {
-		conn.Close()
-		return fmt.Errorf("establish link: %w", err)
-	}
-	link := rawLink.(*Link)
 	linked = true
 
 	go func() {

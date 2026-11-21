@@ -4,6 +4,7 @@ import (
 	"fmt"
 	nodesmod "github.com/astralp2p/astrald/mod/nodes"
 	"sync"
+	"time"
 
 	"github.com/astralp2p/astral-go/api/nodes"
 	nodescli "github.com/astralp2p/astral-go/api/nodes/client"
@@ -74,7 +75,7 @@ func (mod *Module) UpdateNodeEndpoints(ctx *astral.Context, resolver *astral.Ide
 		return 0, fmt.Errorf("resolve endpoints: %v", err)
 	}
 
-	return mod.storeEndpoints(identity, endpoints)
+	return mod.storeEndpoints(identity, endpoints, resolver.IsEqual(identity))
 }
 
 // resolveRemoteEndpoints calls nodes.resolve_endpoints on resolver for identity.
@@ -84,7 +85,9 @@ func resolveRemoteEndpoints(ctx *astral.Context, resolver *astral.Identity, iden
 
 // storeEndpoints stores endpoints of identity and returns how many of them had
 // no unexpired row before. A row that is only refreshed does not count.
-func (mod *Module) storeEndpoints(identity *astral.Identity, endpoints []*nodes.EndpointWithTTL) (int, error) {
+// A first-hand reply (authoritative) also shortens the rows identity no
+// longer lists; see shortenMissingEndpoints.
+func (mod *Module) storeEndpoints(identity *astral.Identity, endpoints []*nodes.EndpointWithTTL, authoritative bool) (int, error) {
 	rows, err := mod.db.FindEndpoints(identity)
 	if err != nil {
 		return 0, fmt.Errorf("find endpoints: %v", err)
@@ -110,7 +113,39 @@ func (mod *Module) storeEndpoints(identity *astral.Identity, endpoints []*nodes.
 		}
 	}
 
+	if authoritative {
+		mod.shortenMissingEndpoints(identity, endpoints)
+	}
+
 	return added, nil
+}
+
+// missingEndpointTTL is the most a row its subject stopped listing has left.
+// why: a reply raced with an address change can miss a good row, so the row
+// lapses within an hour instead of at once; the next first-hand pull renews it.
+const missingEndpointTTL = time.Hour
+
+// shortenMissingEndpoints caps at missingEndpointTTL the expiry of every row of
+// identity on a network endpoints lists whose address endpoints does not list.
+// An empty reply and the networks it does not list change nothing.
+// note: only the subject is authoritative; a second-hand reply never shortens.
+func (mod *Module) shortenMissingEndpoints(identity *astral.Identity, endpoints []*nodes.EndpointWithTTL) {
+	listed := map[string][]string{}
+	for _, ep := range endpoints {
+		listed[ep.Network()] = append(listed[ep.Network()], ep.Address())
+	}
+
+	until := time.Now().Add(missingEndpointTTL)
+	for network, addresses := range listed {
+		n, err := mod.db.ShortenEndpointExpiry(identity, network, addresses, until)
+		if err != nil {
+			mod.log.Error("shortening missing %v endpoints of %v: %v", network, identity, err)
+			continue
+		}
+		if n > 0 {
+			mod.log.Logv(1, "%v no longer lists %v %v endpoints, expiring them", identity, n, network)
+		}
+	}
 }
 
 // endpointKey names one endpoint row of an identity.

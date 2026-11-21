@@ -106,7 +106,7 @@ func tryWithin(t *testing.T, s *BasicLinkStrategy, row *nodes.EndpointWithTTL, l
 	ctx := astral.NewContext(context.Background())
 	done := make(chan *Link, 1)
 	start := time.Now()
-	go func() { done <- s.tryEndpoint(ctx, row) }()
+	go func() { done <- s.tryEndpoint(ctx, &dialRow{endpoint: row}) }()
 	select {
 	case link := <-done:
 		if link != nil {
@@ -169,8 +169,8 @@ func TestBasicTryEndpointBoundsOnlyBudgetedNetworks(t *testing.T) {
 		return nil, errors.New("refused")
 	})
 	ctx := astral.NewContext(context.Background())
-	s.tryEndpoint(ctx, nodes.NewEndpointWithTTL(mustTCP(t, "127.0.0.1:1791")))
-	s.tryEndpoint(ctx, nodes.NewEndpointWithTTL(mustKCP(t, "127.0.0.1:1792")))
+	s.tryEndpoint(ctx, &dialRow{endpoint: nodes.NewEndpointWithTTL(mustTCP(t, "127.0.0.1:1791"))})
+	s.tryEndpoint(ctx, &dialRow{endpoint: nodes.NewEndpointWithTTL(mustKCP(t, "127.0.0.1:1792"))})
 	want := map[string]bool{"tcp": false, "kcp": true}
 	for network, has := range want {
 		if deadlines[network] != has {

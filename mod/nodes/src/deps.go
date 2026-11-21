@@ -9,6 +9,7 @@ import (
 	"github.com/astralp2p/astrald/mod/dir"
 	"github.com/astralp2p/astrald/mod/events"
 	"github.com/astralp2p/astrald/mod/exonet"
+	ipmod "github.com/astralp2p/astrald/mod/ip"
 	"github.com/astralp2p/astrald/mod/objects"
 	"github.com/astralp2p/astrald/mod/scheduler"
 	"github.com/astralp2p/astrald/mod/user"
@@ -23,6 +24,7 @@ type Deps struct {
 	Objects   objects.Module
 	Scheduler scheduler.Module
 	Events    events.Module
+	IP        ipmod.Module
 }
 
 // LoadDependencies injects deps and registers the "linked" directory filter and

@@ -232,7 +232,7 @@ func natSwarm(t *testing.T) (a, b, c *swarmNode) {
 
 	b.setOwn("10.77.0.2")
 	for _, n := range []*swarmNode{a, c} {
-		if _, err := n.mod.storeEndpoints(b.id, endpointsWithTTL("10.77.0.2")); err != nil {
+		if _, err := n.mod.storeEndpoints(b.id, endpointsWithTTL("10.77.0.2"), false); err != nil {
 			t.Fatalf("storeEndpoints: %v", err)
 		}
 	}

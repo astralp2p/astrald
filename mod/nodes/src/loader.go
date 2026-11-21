@@ -25,6 +25,7 @@ func (Loader) Load(node astral.Node, assets assets.Assets, log *log.Logger) (cor
 		linkWakeDelay: linkWakeDelay,
 
 		siblingRefreshInterval: defaultSiblingRefreshInterval,
+		localRefreshInterval:   defaultLocalRefreshInterval,
 	}
 
 	// why: before any transport or router can call in, so no path reads a nil mod.ctx.
@@ -53,7 +54,7 @@ func (Loader) Load(node astral.Node, assets assets.Assets, log *log.Logger) (cor
 	mod.dbResolver = &DBEndpointResolver{mod: mod}
 	mod.resolvers.Add(mod.dbResolver)
 
-	err = mod.db.AutoMigrate(&dbEndpoint{})
+	err = mod.db.AutoMigrate(&dbEndpoint{}, &dbEndpointHealth{})
 	if err != nil {
 		return nil, err
 	}

@@ -1,6 +1,8 @@
 package nodes
 
 import (
+	"time"
+
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astrald/mod/nodes"
 	"github.com/astralp2p/astrald/mod/scheduler"
@@ -28,6 +30,15 @@ func (c CleanupEndpointsTask) Run(ctx *astral.Context) error {
 
 	if deleted > 0 {
 		c.mod.log.Log("cleaned up %v expired endpoints", deleted)
+	}
+
+	// note: a health row outlives its endpoint row; only its own age removes it.
+	stale, err := c.mod.db.DeleteStaleEndpointHealth(time.Now().Add(-endpointHealthRetention))
+	if err != nil {
+		return err
+	}
+	if stale > 0 {
+		c.mod.log.Logv(1, "cleaned up %v stale endpoint health rows", stale)
 	}
 
 	delay, _ := c.mod.ctx.WithTimeout(nodes.CleanupInterval)

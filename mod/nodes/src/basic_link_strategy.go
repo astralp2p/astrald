@@ -57,9 +57,9 @@ func (s *BasicLinkStrategy) run(r *linkRound) {
 		return
 	}
 
-	endpoints := sig.FilterChan(resolved, func(e *nodes.EndpointWithTTL) bool {
+	endpoints := s.planRows(wctx, sig.FilterChan(resolved, func(e *nodes.EndpointWithTTL) bool {
 		return slices.Contains(s.networks, e.Network())
-	})
+	}))
 
 	// todo: instead of spawning 8 goroutines per strategy, we could have worker pool which is shared across strategies
 	wg.Add(DefaultWorkerCount)
@@ -82,17 +82,20 @@ func (s *BasicLinkStrategy) run(r *linkRound) {
 
 // dialRows dials rows from endpoints until one links, endpoints closes or ctx ends.
 // The first link becomes the winner and cancels the other workers; a later link is excess.
-func (s *BasicLinkStrategy) dialRows(ctx *astral.Context, cancel context.CancelFunc, endpoints <-chan *nodes.EndpointWithTTL, winner *sig.Value[*Link]) {
+func (s *BasicLinkStrategy) dialRows(ctx *astral.Context, cancel context.CancelFunc, endpoints <-chan *dialRow, winner *sig.Value[*Link]) {
 	for {
 		select {
 		case <-ctx.Done():
 			return
-		case re, ok := <-endpoints:
+		case row, ok := <-endpoints:
 			if !ok {
 				return
 			}
 
-			link := s.tryEndpoint(ctx, re)
+			link := s.tryEndpoint(ctx, row)
+			if row.done != nil {
+				row.done()
+			}
 			if link != nil {
 				if _, ok := winner.Swap(nil, link); ok {
 					cancel()
@@ -106,29 +109,33 @@ func (s *BasicLinkStrategy) dialRows(ctx *astral.Context, cancel context.CancelF
 	}
 }
 
-// tryEndpoint dials one row and establishes a link over it, within the row's network budget; nil on any failure.
-func (s *BasicLinkStrategy) tryEndpoint(ctx *astral.Context, endpoint *nodes.EndpointWithTTL) *Link {
+// tryEndpoint dials one row and establishes a link over it, within the row's budget; nil on any failure.
+// The outcome goes to the endpoint health table unless the round ended first.
+func (s *BasicLinkStrategy) tryEndpoint(ctx *astral.Context, row *dialRow) *Link {
 	defer s.mod.dials.begin(s.target)()
 
-	if d, ok := s.rowBudgets[endpoint.Network()]; ok {
+	round := ctx
+	if d, ok := s.rowBudget(row); ok {
 		var cancel context.CancelFunc
 		ctx, cancel = ctx.WithTimeout(d)
 		defer cancel()
 	}
 
-	conn, err := s.mod.Exonet.Dial(ctx, endpoint.Endpoint)
+	link, err := s.mod.dialLink(round, ctx, s.target, row.endpoint.Endpoint)
 	if err != nil {
 		return nil
 	}
-
-	rawLink, err := s.mod.EstablishOutboundLink(ctx, s.target, conn)
-	if err != nil {
-		conn.Close()
-		return nil
-	}
-	link := rawLink.(*Link)
-
 	return link
+}
+
+// rowBudget returns the budget of one dial of row, and false when it has none:
+// the network's budget, cut to offSubnetRowBudget for an off-subnet local row.
+func (s *BasicLinkStrategy) rowBudget(row *dialRow) (time.Duration, bool) {
+	d, ok := s.rowBudgets[row.endpoint.Network()]
+	if row.shortBudget(time.Now()) && (!ok || d > offSubnetRowBudget) {
+		return offSubnetRowBudget, true
+	}
+	return d, ok
 }
 
 // factory

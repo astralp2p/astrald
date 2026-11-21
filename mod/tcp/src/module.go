@@ -3,9 +3,9 @@ package tcp
 import (
 	"context"
 	exonetmod "github.com/astralp2p/astrald/mod/exonet"
+	ipmod "github.com/astralp2p/astrald/mod/ip"
 	tcpmod "github.com/astralp2p/astrald/mod/tcp"
 	"sync"
-	"time"
 
 	"github.com/astralp2p/astral-go/api/exonet"
 	"github.com/astralp2p/astral-go/api/nodes"
@@ -89,11 +89,12 @@ func (mod *Module) endpoints() (list []*nodes.EndpointWithTTL) {
 		list = append(list, nodes.NewEndpointWithTTL(&tcp.Endpoint{
 			IP:   tip,
 			Port: astral.Uint16(mod.config.ListenPort),
-		}, 7*24*time.Hour))
+		}, ipmod.EndpointTTL(tip)))
 	}
 
+	// why: the operator configured these on purpose, whatever their address class.
 	for _, e := range mod.configEndpoints {
-		list = append(list, nodes.NewEndpointWithTTL(e, 7*24*time.Hour))
+		list = append(list, nodes.NewEndpointWithTTL(e, ipmod.PublicEndpointTTL))
 	}
 
 	return list

@@ -135,3 +135,26 @@ func TestJoinIPs(t *testing.T) {
 		t.Errorf("joinIPs = %q; want %q", got, want)
 	}
 }
+
+// TestLocalSubnets: LocalSubnets returns the address and mask of every
+// non-loopback interface address and skips addresses without a mask.
+func TestLocalSubnets(t *testing.T) {
+	stubInterfaceAddrs(t, []net.Addr{
+		cidr(t, "127.0.0.1/8"),
+		cidr(t, "192.168.1.2/24"),
+		cidr(t, "2001:db8::5/64"),
+		&net.IPAddr{IP: net.ParseIP("10.0.0.1")},
+	}, nil)
+
+	nets, err := (&Module{}).LocalSubnets()
+	if err != nil {
+		t.Fatalf("LocalSubnets: %v", err)
+	}
+	var got []string
+	for _, n := range nets {
+		got = append(got, n.String())
+	}
+	if want := []string{"192.168.1.2/24", "2001:db8::5/64"}; !slices.Equal(got, want) {
+		t.Fatalf("LocalSubnets = %v; want %v", got, want)
+	}
+}

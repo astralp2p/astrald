@@ -47,6 +47,19 @@ func (db *DB) DeleteExpiredEndpoints(grace time.Duration) (int64, error) {
 	return tx.RowsAffected, tx.Error
 }
 
+// ShortenEndpointExpiry moves the expiry of every row of nodeID on network
+// whose address is not in keep to until, unless the row expires earlier.
+// A row without an expiry gets until.
+func (db *DB) ShortenEndpointExpiry(nodeID *astral.Identity, network string, keep []string, until time.Time) (int64, error) {
+	until = until.UTC()
+	tx := db.Model(&dbEndpoint{}).
+		Where("identity = ? AND network = ?", nodeID, network).
+		Where("address NOT IN ?", keep).
+		Where("expires_at IS NULL OR expires_at > ?", until).
+		Update("expires_at", until)
+	return tx.RowsAffected, tx.Error
+}
+
 func (db *DB) HasEndpoints(nodeID *astral.Identity) (has bool) {
 	db.
 		Model(&dbEndpoint{}).

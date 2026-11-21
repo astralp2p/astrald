@@ -156,7 +156,7 @@ func testEndpointDB(t *testing.T) *DB {
 	}
 
 	db := &DB{gdb}
-	if err := db.AutoMigrate(&dbEndpoint{}); err != nil {
+	if err := db.AutoMigrate(&dbEndpoint{}, &dbEndpointHealth{}); err != nil {
 		t.Fatalf("migrate: %v", err)
 	}
 	return db
@@ -557,7 +557,7 @@ func TestReceiveEndpointsChangedNoNewRows(t *testing.T) {
 	mover := f.member(true)
 	other := f.member(true)
 	f.answer = endpointsWithTTL("198.51.100.1")
-	if _, err := f.mod.storeEndpoints(mover, f.answer); err != nil {
+	if _, err := f.mod.storeEndpoints(mover, f.answer, false); err != nil {
 		t.Fatalf("storeEndpoints: %v", err)
 	}
 
@@ -649,7 +649,7 @@ func TestStoreEndpointsCountsNewRows(t *testing.T) {
 	node := astral.GenerateIdentity()
 
 	live := endpointsWithTTL("198.51.100.1")
-	if n, err := f.mod.storeEndpoints(node, live); err != nil || n != 1 {
+	if n, err := f.mod.storeEndpoints(node, live, false); err != nil || n != 1 {
 		t.Fatalf("first store = %v, %v; want 1 new row", n, err)
 	}
 
@@ -659,12 +659,12 @@ func TestStoreEndpointsCountsNewRows(t *testing.T) {
 		t.Fatalf("AddEndpoint: %v", err)
 	}
 
-	n, err := f.mod.storeEndpoints(node, endpointsWithTTL("198.51.100.1", "198.51.100.2", "198.51.100.3"))
+	n, err := f.mod.storeEndpoints(node, endpointsWithTTL("198.51.100.1", "198.51.100.2", "198.51.100.3"), false)
 	if err != nil || n != 2 {
 		t.Fatalf("second store = %v, %v; want 2 new rows (one unknown, one expired)", n, err)
 	}
 
-	if n, err := f.mod.storeEndpoints(node, endpointsWithTTL("198.51.100.2", "198.51.100.2")); err != nil || n != 0 {
+	if n, err := f.mod.storeEndpoints(node, endpointsWithTTL("198.51.100.2", "198.51.100.2"), false); err != nil || n != 0 {
 		t.Fatalf("third store = %v, %v; want 0 new rows", n, err)
 	}
 }
