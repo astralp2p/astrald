@@ -3,6 +3,7 @@ package user
 import (
 	"errors"
 	"slices"
+	"sync"
 	"time"
 
 	"github.com/astralp2p/astral-go/api/auth"
@@ -131,20 +132,24 @@ func (mod *Module) receiveSignedContract(sender *astral.Identity, signed *auth.S
 	}
 
 	go func() {
-		mod.pullSubjectEndpoints(sender, signed.Subject)
+		mod.pullSubjectEndpoints(sender, signed, newMember)
 		mod.runSiblingLinker()
 	}()
 
 	return nil
 }
 
-// pullSubjectEndpoints pulls subject's endpoints after its node contract arrived from sender.
-// why: a pull from the subject itself is first-hand, so it is forwarded to the
-// other siblings, as user.introduce brings the link up before the contract and
-// the first-link pull skipped the subject.
-// A pull from any other sender is not forwarded.
-func (mod *Module) pullSubjectEndpoints(sender, subject *astral.Identity) {
-	if sender.IsEqual(subject) {
+// pullSubjectEndpoints pulls the endpoints of signed's subject after its node
+// contract arrived from sender.
+// why: a pull from the subject itself is first-hand, so for a new member it is
+// forwarded to the other siblings, as user.introduce brings the link up before
+// the contract and the first-link pull skipped the subject. The siblings get the
+// contract first, because they accept the notice only for a member they list.
+// A contract the node already held, or one from any other sender, is not forwarded.
+func (mod *Module) pullSubjectEndpoints(sender *astral.Identity, signed *auth.SignedContract, newMember bool) {
+	subject := signed.Subject
+	if newMember && sender.IsEqual(subject) {
+		mod.pushContractToSiblings(signed)
 		mod.Nodes.RefreshMemberEndpoints(subject)
 		return
 	}
@@ -152,6 +157,32 @@ func (mod *Module) pullSubjectEndpoints(sender, subject *astral.Identity) {
 	if _, err := mod.Nodes.UpdateNodeEndpoints(mod.ctx, sender, subject); err != nil {
 		mod.log.Error("syncEndpoints: %v", err)
 	}
+}
+
+// pushContractToSiblings pushes signed to every linked sibling except its subject
+// and returns when each push has ended, each bounded by siblingPushTimeout.
+// why: a sibling that holds no contract for the subject rejects the first-hand
+// notice, and nothing else gives it the contract before the notice.
+func (mod *Module) pushContractToSiblings(signed *auth.SignedContract) {
+	var wg sync.WaitGroup
+	for _, sib := range mod.getSiblings() {
+		if sib.IsEqual(signed.Subject) {
+			continue
+		}
+
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+
+			ctx, cancel := mod.ctx.WithTimeout(siblingPushTimeout)
+			defer cancel()
+
+			if err := mod.Objects.Push(ctx, sib, signed); err != nil {
+				mod.log.Logv(1, "push contract of %v to sibling %v: %v", signed.Subject, sib, err)
+			}
+		}()
+	}
+	wg.Wait()
 }
 
 // checkPushedContract accepts two kinds of contract: a node contract issued by the

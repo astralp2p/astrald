@@ -5,15 +5,17 @@ enter-nat put node2 (A) behind a NAT that admits no inbound connection. The
 driver adopts the reflector (C) into node1's (B) swarm as the User, the way
 adopt-node adopts node2: each side learns the other's LAN endpoint, node1
 links to it, and the User adopts it. node2 is given no endpoint of the
-reflector: the siblings that pull it first-hand forward the notice, so node2's
+reflector: node1 holds the row and node2 pulls it from node1, so node2's
 link task for its new sibling has a row to dial. The driver then polls the
 three nodes every POLL s until node2 holds a link to node1 and to the
 reflector, node1 holds one to the reflector, and each node's swarm lists the
 other two, or WAIT s pass.
 
 why node2 is given no endpoint of the reflector: a new member's endpoints reach
-a member that cannot dial it through the first-hand pull and its forward
-(A3G14, EP5), and node2 reaching the reflector within WAIT is that path's test.
+a member that cannot dial it by a pull from a sibling that holds them, and node2
+reaching the reflector within WAIT is the world check of that. node1 is seeded,
+so the world does not tell the contract-time pull from the forwarded notice; the
+unit tests of EP5 cover the forward.
 
 The driver acts and judges nothing. It records the `endpoint_change_swarm`
 fact.

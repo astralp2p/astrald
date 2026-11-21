@@ -2,6 +2,7 @@ package user
 
 import (
 	"errors"
+	"slices"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -17,6 +18,7 @@ import (
 	authmod "github.com/astralp2p/astrald/mod/auth"
 	cryptomod "github.com/astralp2p/astrald/mod/crypto"
 	nodesmod "github.com/astralp2p/astrald/mod/nodes"
+	objectsmod "github.com/astralp2p/astrald/mod/objects"
 	"github.com/astralp2p/astrald/mod/scheduler"
 )
 
@@ -534,6 +536,139 @@ func TestReceiveNodeContractFromSubjectRefreshesFirstHand(t *testing.T) {
 	case id := <-f.nodes.refreshes:
 		t.Fatalf("refreshed endpoints of %v twice; want once", id)
 	default:
+	}
+}
+
+// swarmPusher delivers a push to the receiver of the fixture that owns the target
+// node, as a push over a stable link does, and records every target.
+type swarmPusher struct {
+	objectsmod.Module
+	sender  *astral.Identity
+	members map[string]*receiverFixture
+
+	mu      sync.Mutex
+	targets []*astral.Identity
+}
+
+func (p *swarmPusher) Push(_ *astral.Context, target *astral.Identity, obj astral.Object) error {
+	p.mu.Lock()
+	p.targets = append(p.targets, target)
+	p.mu.Unlock()
+
+	member, ok := p.members[target.String()]
+	if !ok {
+		return nil
+	}
+	return member.mod.ReceiveObject(&recordingDrop{sender: p.sender, object: obj})
+}
+
+func (p *swarmPusher) pushed() []*astral.Identity {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return append([]*astral.Identity(nil), p.targets...)
+}
+
+// holdsContractFor reports whether f indexed a node contract for subject.
+func (f *receiverFixture) holdsContractFor(subject *astral.Identity) bool {
+	return slices.ContainsFunc(f.auth.received(), func(sc *auth.SignedContract) bool {
+		return sc.Subject.IsEqual(subject)
+	})
+}
+
+// TestReceiveNewMemberContractReachesSiblingsBeforeTheNotice (EP5, introduce
+// path): a new member's own contract is pushed to the linked siblings before
+// the first-hand notice is forwarded. A sibling accepts the notice only for a
+// member it lists (mod/nodes acceptsEndpointsChanged), and without this push it
+// holds no contract for the new member when the notice arrives. The new member
+// itself, which the notice never goes to, is not sent its own contract.
+func TestReceiveNewMemberContractReachesSiblingsBeforeTheNotice(t *testing.T) {
+	userID := astral.GenerateIdentity()
+	a := newReceiverFixture(t, userID)
+	b := newReceiverFixture(t, userID)
+	c := newReceiverFixture(t, userID)
+	subject := astral.GenerateIdentity()
+
+	a.auth.seed(nodeContract(userID, b.nodeID))
+	a.auth.seed(nodeContract(userID, c.nodeID))
+	a.nodes.linked = []*astral.Identity{b.nodeID, c.nodeID, subject}
+
+	pusher := &swarmPusher{
+		sender: a.nodeID,
+		members: map[string]*receiverFixture{
+			b.nodeID.String(): b,
+			c.nodeID.String(): c,
+		},
+	}
+	a.mod.Objects = pusher
+
+	drop := &recordingDrop{sender: subject, object: nodeContract(userID, subject)}
+	if err := a.mod.ReceiveObject(drop); err != nil {
+		t.Fatalf("ReceiveObject: %v", err)
+	}
+
+	select {
+	case id := <-a.nodes.refreshes:
+		if !id.IsEqual(subject) {
+			t.Fatalf("refreshed endpoints of %v; want the subject %v", id, subject)
+		}
+	case <-time.After(effectTimeout):
+		t.Fatal("the subject's endpoints were never refreshed first-hand")
+	}
+
+	// note: the refresh forwards the notice, so every sibling must hold the contract by now.
+	for name, sib := range map[string]*receiverFixture{"b": b, "c": c} {
+		if !sib.holdsContractFor(subject) {
+			t.Errorf("sibling %s holds no contract for the new member when the notice is forwarded; it would reject the notice", name)
+		}
+	}
+
+	for _, target := range pusher.pushed() {
+		if target.IsEqual(subject) {
+			t.Errorf("pushed the new member its own contract")
+		}
+	}
+	if n := len(pusher.pushed()); n != 2 {
+		t.Errorf("pushed the contract %d times; want once per linked sibling (2)", n)
+	}
+}
+
+// TestReceiveHeldNodeContractFromSubjectForwardsNothing (EP5, nit): a node
+// contract from its subject that the node already holds, as a link-time contract
+// push and the periodic sibling sync repeat, is not a join. It pulls the
+// subject's endpoints as before and neither pushes the contract to the siblings
+// nor forwards a notice.
+func TestReceiveHeldNodeContractFromSubjectForwardsNothing(t *testing.T) {
+	userID := astral.GenerateIdentity()
+	a := newReceiverFixture(t, userID)
+	sibling := a.addSibling()
+	subject := a.addSibling()
+	a.nodes.linked = []*astral.Identity{sibling, subject}
+
+	pusher := &swarmPusher{sender: a.nodeID, members: map[string]*receiverFixture{}}
+	a.mod.Objects = pusher
+
+	drop := &recordingDrop{sender: subject, object: nodeContract(userID, subject)}
+	if err := a.mod.ReceiveObject(drop); err != nil {
+		t.Fatalf("ReceiveObject: %v", err)
+	}
+
+	select {
+	case s := <-a.nodes.syncs:
+		if !s.resolver.IsEqual(subject) || !s.target.IsEqual(subject) {
+			t.Fatalf("synced endpoints of %v through %v; want the subject's through itself", s.target, s.resolver)
+		}
+	case <-time.After(effectTimeout):
+		t.Fatal("the subject's endpoints were never pulled")
+	}
+
+	time.Sleep(absenceWindow)
+	select {
+	case id := <-a.nodes.refreshes:
+		t.Fatalf("refreshed endpoints of %v first-hand; a held contract is not a join", id)
+	default:
+	}
+	if n := len(pusher.pushed()); n != 0 {
+		t.Fatalf("pushed %d objects to the siblings; want none", n)
 	}
 }
 

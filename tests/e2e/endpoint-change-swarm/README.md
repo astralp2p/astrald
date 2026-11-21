@@ -23,7 +23,10 @@ The test judges the setup only. `endpoint-change-relink` and
 
 node2 is given no endpoint of the reflector. The world has no gateway and no
 Tor on purpose: node2 behind its NAT cannot be dialed and cannot dial an
-endpoint it does not hold. The reflector's endpoint reaches node2 through the
-first-hand pull of the reflector's endpoints and the forwarded
-`EndpointsChangedMessage` (A3G14, EP5), so this test is that path's regression
-test: node2 links to the reflector within the driver's 180 s.
+endpoint it does not hold. The reflector's endpoint reaches node2 by a pull:
+the contract-time pull from node1, which holds the seeded row, or the notice
+node1 forwards after its first-hand pull of the reflector (A3G14, EP5). The
+world seeds node1, so it does not tell which of the two delivered the row; the
+unit tests in mod/user and mod/nodes are the regression tests of the forward,
+and this test is a world check that node2 reaches the reflector within the
+driver's 180 s with no hand-off.
