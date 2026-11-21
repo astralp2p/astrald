@@ -23,9 +23,14 @@ back in, and the two remaining members form the swarm again.
     contract stayed cleared) and not `fresh` (the ownership history and the
     manager stayed, `mod/sys/src/state.go`) — and its own gate denies
     `user.swarm_status`;
-  - node3's `user.join` to node1 and the User's `user.adopt` of node3 are
-    refused with "identity expelled from swarm"; afterwards neither roster has
-    node3 and node3 is still `unclaimed`.
+  - node3's `user.join` to node1 is refused with "identity expelled from
+    swarm" or ends unavailable (code 7): node1 keeps answered bans in memory
+    only, so after the restart it admits node3's link until node3 answers the
+    redelivered ban, then refuses node3's links, which can close the link the
+    join rides on. A successful join fails;
+  - the User's `user.adopt` of node3 is refused with "identity expelled from
+    swarm"; afterwards neither roster has node3 and node3 is still
+    `unclaimed`.
 
 Bans are stored in the user module's database (`dbExpulsion`), and
 `expel-propagation` already proves they reach node2 and node3; this test is
