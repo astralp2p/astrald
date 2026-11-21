@@ -113,6 +113,8 @@ type Module struct {
 	localRefreshInterval time.Duration
 	// fullRefreshDue is the Unix time in nanoseconds of the next refresh run that pulls every linked sibling; 0 is due.
 	fullRefreshDue atomic.Int64
+	// subnets lists this node's interface subnets; nil when the ip module is not loaded.
+	subnets subnetLister
 	// refreshClock is the time source of the refresh task; nil is the real clock.
 	// why: a field, so tests move the task past the full-refresh period without waiting.
 	refreshClock wakeClock

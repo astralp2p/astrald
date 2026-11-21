@@ -80,14 +80,18 @@ func (mod *Module) findEndpointHealth(target *astral.Identity) map[endpointKey]*
 	return out
 }
 
+// subnetLister lists the subnets of this node's interfaces (mod/ip).
+type subnetLister interface {
+	LocalSubnets() ([]*net.IPNet, error)
+}
+
 // ownSubnets returns the subnets of this node's interfaces, and false when
-// they are unknown.
-// note: unit fixtures run without the ip module.
+// they are unknown: without the ip module, or when listing them fails.
 func (mod *Module) ownSubnets() ([]*net.IPNet, bool) {
-	if mod.IP == nil {
+	if mod.subnets == nil {
 		return nil, false
 	}
-	nets, err := mod.IP.LocalSubnets()
+	nets, err := mod.subnets.LocalSubnets()
 	if err != nil {
 		return nil, false
 	}

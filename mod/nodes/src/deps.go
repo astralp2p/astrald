@@ -24,7 +24,6 @@ type Deps struct {
 	Objects   objects.Module
 	Scheduler scheduler.Module
 	Events    events.Module
-	IP        ipmod.Module
 }
 
 // LoadDependencies injects deps and registers the "linked" directory filter and
@@ -34,6 +33,10 @@ func (mod *Module) LoadDependencies(*astral.Context) (err error) {
 	if err != nil {
 		return
 	}
+
+	// why optional: a node without the ip module (no tcp or kcp) still links,
+	// and core.Inject fails on a missing module.
+	mod.subnets, _ = core.Load[subnetLister](mod.node, ipmod.ModuleName)
 
 	mod.Dir.SetFilter("linked", func(identity *astral.Identity) bool {
 		return mod.IsLinked(identity)

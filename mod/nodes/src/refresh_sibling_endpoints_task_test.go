@@ -387,6 +387,14 @@ func TestRefreshSiblingTask_RepeatsOnShortInterval(t *testing.T) {
 	f.requirePull(t, s, s)
 }
 
+// idle reports whether no sync for id runs.
+func (g *syncGate) idle(id *astral.Identity) bool {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	_, running := g.rerun[id.String()]
+	return !running
+}
+
 // advance moves the clock forward by d.
 func (c *fakeClock) advance(d time.Duration) {
 	c.mu.Lock()
@@ -447,6 +455,10 @@ func TestRefreshSiblingTask_KeepsLocalRowsAliveWhileLinked(t *testing.T) {
 		f.run(t)
 		f.requirePull(t, local, local)
 		f.requireNoPull(t)
+		eventually(t, "the pull to end", func() bool { return f.mod.syncGate.idle(local) })
+		if got := time.Until(expiryOf(t, f.mod.db, local, localRow.Network(), localRow.Address())); got < ipmod.LocalEndpointTTL-time.Minute {
+			t.Fatalf("local row expires in %v after a run; want renewed to about %v", got, ipmod.LocalEndpointTTL)
+		}
 
 		runs := scheduledTasks[*RefreshSiblingEndpointsTask](f.sched)
 		next := runs[len(runs)-1].delay
@@ -463,10 +475,11 @@ func TestRefreshSiblingTask_KeepsLocalRowsAliveWhileLinked(t *testing.T) {
 		t.Fatalf("the 24 h run pulled %v; want both linked siblings", got)
 	}
 
-	// note: the pull stores its answer after it is counted.
-	eventually(t, "renewal by the 24 h run", func() bool {
-		return time.Until(expiryOf(t, f.mod.db, local, localRow.Network(), localRow.Address())) > ipmod.LocalEndpointTTL-time.Minute
-	})
+	// note: a pull stores its answer after it is counted; an idle gate has stored it.
+	eventually(t, "the 24 h run's pulls to end", func() bool { return f.mod.syncGate.idle(local) && f.mod.syncGate.idle(public) })
+	if got := time.Until(expiryOf(t, f.mod.db, local, localRow.Network(), localRow.Address())); got < ipmod.LocalEndpointTTL-time.Minute {
+		t.Fatalf("local row expires in %v after the 24 h run; want about %v", got, ipmod.LocalEndpointTTL)
+	}
 	_ = f.mod.linkPool.links.Clear()
 	lapse := time.Now().Add(300 * time.Millisecond).UTC()
 	if err := f.mod.db.AddEndpoint(local, localRow.Network(), localRow.Address(), &lapse); err != nil {

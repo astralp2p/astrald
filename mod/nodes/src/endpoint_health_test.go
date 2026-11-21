@@ -15,16 +15,12 @@ import (
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astral-go/astral/log"
 	"github.com/astralp2p/astrald/mod/exonet"
-	ipmod "github.com/astralp2p/astrald/mod/ip"
 )
 
-// subnetsIP is an ip module that reports fixed interface subnets.
-type subnetsIP struct {
-	ipmod.Module
-	nets []*net.IPNet
-}
+// fixedSubnets reports fixed interface subnets.
+type fixedSubnets []*net.IPNet
 
-func (s subnetsIP) LocalSubnets() ([]*net.IPNet, error) { return s.nets, nil }
+func (s fixedSubnets) LocalSubnets() ([]*net.IPNet, error) { return s, nil }
 
 // parsingExonet is a stubExonet that parses tcp rows, so the database resolver serves them.
 type parsingExonet struct {
@@ -124,7 +120,7 @@ func TestBasicDialsOffSubnetRowLastWithShortBudget(t *testing.T) {
 	var dials dialLog
 	s := newHealthTestStrategy(t, dials.refuse)
 	_, lan, _ := net.ParseCIDR("192.168.1.0/24")
-	s.mod.IP = subnetsIP{nets: []*net.IPNet{lan}}
+	s.mod.subnets = fixedSubnets{lan}
 	s.mod.resolvers.Add(&stubResolver{rows: tcpRows(t, "10.20.0.5:1791", "192.168.1.20:1791", "198.51.100.7:1791")})
 
 	runRound(t, s)
