@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"time"
 
 	"github.com/astralp2p/astral-go/astral"
@@ -18,7 +19,13 @@ var (
 	ErrNoSupportedFeature         = errors.New("no supported link feature")
 	ErrUnsupportedSelectedFeature = errors.New("unsupported selected link feature")
 	ErrNegotiationRejected        = errors.New("link negotiation rejected")
+	errLateNegotiation            = errors.New("link negotiated after its context ended")
 )
+
+// negotiationGrace is how long an outbound negotiation runs on after its context ends.
+// why: the peer registers the link once it sends the link nonce; a negotiation cut
+// off there leaves the peer a link this node never closes with a close frame.
+const negotiationGrace = time.Second
 
 type muxLinkNegotiator struct {
 	mod *Module
@@ -141,11 +148,15 @@ func (mod *Module) EstablishOutboundLink(ctx context.Context, remoteID *astral.I
 
 	ch := channel.New(aconn, channel.WithLockedWrites())
 	negotiator := mod.GetLinkNegotiator(ch)
-	// why: NegotiateOutbound reads with no deadline; closing the conn when ctx ends
+	// why: NegotiateOutbound reads with no deadline; closing the conn after ctx ends
 	// releases a peer that stalls after the handshake, as HandshakeOutbound does before it.
-	stopWatch := context.AfterFunc(ctx, func() { aconn.Close() })
+	finish := watchNegotiation(ctx, aconn)
 	link, err := negotiator.NegotiateOutbound()
-	if !stopWatch() {
+	if finish() {
+		if err == nil {
+			// why: the peer holds the link it sent the nonce for; the close frame ends it there.
+			link.CloseWithError(errLateNegotiation)
+		}
 		err = errors.Join(ctx.Err(), err)
 	}
 	if err != nil {
@@ -155,6 +166,23 @@ func (mod *Module) EstablishOutboundLink(ctx context.Context, remoteID *astral.I
 		return nil, err
 	}
 	return link, nil
+}
+
+// watchNegotiation closes conn negotiationGrace after ctx ends, unless the returned finish runs first.
+// finish reports whether ctx ended before it ran.
+func watchNegotiation(ctx context.Context, conn io.Closer) (finish func() (late bool)) {
+	negotiated := make(chan struct{})
+	stopWatch := context.AfterFunc(ctx, func() {
+		select {
+		case <-negotiated:
+		case <-time.After(negotiationGrace):
+			conn.Close()
+		}
+	})
+	return func() bool {
+		close(negotiated)
+		return !stopWatch()
+	}
 }
 
 // EstablishInboundLink runs the inbound noise handshake, refuses a peer an admitter refuses, runs the mux negotiation over conn, then registers the link; closes conn on any error.
