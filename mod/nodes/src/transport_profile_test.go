@@ -101,9 +101,9 @@ func TestTryEndpointRowBudgetFromTable(t *testing.T) {
 	s.rowBudgets = rowBudgetsOf(basicNetworks)
 
 	ctx := astral.NewContext(context.Background())
-	s.tryEndpoint(ctx, nodes.NewEndpointWithTTL(mustTCP(t, "127.0.0.1:1791")))
-	s.tryEndpoint(ctx, nodes.NewEndpointWithTTL(mustKCP(t, "127.0.0.1:1792")))
-	s.tryEndpoint(ctx, nodes.NewEndpointWithTTL(gateway.NewEndpoint(newTestIdentity(t), s.target)))
+	s.tryEndpoint(ctx, &dialRow{endpoint: nodes.NewEndpointWithTTL(mustTCP(t, "127.0.0.1:1791"))})
+	s.tryEndpoint(ctx, &dialRow{endpoint: nodes.NewEndpointWithTTL(mustKCP(t, "127.0.0.1:1792"))})
+	s.tryEndpoint(ctx, &dialRow{endpoint: nodes.NewEndpointWithTTL(gateway.NewEndpoint(newTestIdentity(t), s.target))})
 
 	if bounded["tcp"] {
 		t.Fatalf("tcp dial ran under a deadline; want none")
@@ -282,7 +282,7 @@ func TestPressureDetectorOnlyForConfiguredProfiles(t *testing.T) {
 		"gw":  nodes.NewEndpointWithTTL(gateway.NewEndpoint(newTestIdentity(t), peer.id)),
 	}
 	for network, row := range rows {
-		l := basic.tryEndpoint(ctx, row)
+		l := basic.tryEndpoint(ctx, &dialRow{endpoint: row})
 		if l == nil {
 			t.Fatalf("%v tryEndpoint returned no link", network)
 		}

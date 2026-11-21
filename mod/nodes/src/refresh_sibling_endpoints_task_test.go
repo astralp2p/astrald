@@ -8,6 +8,7 @@ import (
 
 	"github.com/astralp2p/astral-go/api/nodes"
 	"github.com/astralp2p/astral-go/astral"
+	ipmod "github.com/astralp2p/astrald/mod/ip"
 	"github.com/astralp2p/astrald/mod/scheduler"
 )
 
@@ -86,6 +87,7 @@ func newRefreshFixture(t *testing.T, interval time.Duration) *refreshFixture {
 	f.sched = &fakeScheduler{ctx: f.mod.ctx}
 	f.mod.Deps.Scheduler = f.sched
 	f.mod.siblingRefreshInterval = interval
+	f.mod.localRefreshInterval = defaultLocalRefreshInterval
 	return f
 }
 
@@ -262,8 +264,9 @@ func TestJitter_Bounds(t *testing.T) {
 	}
 }
 
-// TestRefreshSiblingTask_ReschedulesOnce (criterion 5): a run schedules exactly
-// one next task with a delay of 24 h plus or minus 10%.
+// TestRefreshSiblingTask_ReschedulesOnce (criterion 5, as YTVsOej6bp changed
+// it): a run schedules exactly one next task with a delay of the 35 min local
+// refresh period plus or minus 10%.
 func TestRefreshSiblingTask_ReschedulesOnce(t *testing.T) {
 	f := newRefreshFixture(t, defaultSiblingRefreshInterval)
 	f.member(true)
@@ -275,8 +278,8 @@ func TestRefreshSiblingTask_ReschedulesOnce(t *testing.T) {
 		t.Fatalf("%v tasks scheduled; want 1", len(next))
 	}
 	// note: the delay is read a moment after it was set, so it is a little short.
-	if d := next[0].delay; d < 21*time.Hour+36*time.Minute-time.Minute || d > 26*time.Hour+24*time.Minute {
-		t.Fatalf("next run in %v; want 24h plus or minus 10%%", d)
+	if d := next[0].delay; d < 31*time.Minute || d > 38*time.Minute+30*time.Second {
+		t.Fatalf("next run in %v; want 35 min plus or minus 10%%", d)
 	}
 }
 
@@ -344,7 +347,8 @@ func TestRefreshSiblingTask_RequestsAnnounceCheck(t *testing.T) {
 }
 
 // TestRefreshSiblingTask_RunSchedulesFirstAfterInterval: Module.Run schedules
-// the task once with a delay of about the period, not at once.
+// the task once with a delay of about the local refresh period, not at once,
+// and the first run pulls no sibling without a local row.
 func TestRefreshSiblingTask_RunSchedulesFirstAfterInterval(t *testing.T) {
 	f := newRefreshFixture(t, defaultSiblingRefreshInterval)
 	f.member(true)
@@ -358,8 +362,13 @@ func TestRefreshSiblingTask_RunSchedulesFirstAfterInterval(t *testing.T) {
 	if len(first) != 1 {
 		t.Fatalf("%v refresh tasks scheduled; want 1", len(first))
 	}
-	if d := first[0].delay; d < 21*time.Hour {
-		t.Fatalf("first run in %v; want about 24h", d)
+	if d := first[0].delay; d < 31*time.Minute || d > 38*time.Minute+30*time.Second {
+		t.Fatalf("first run in %v; want about 35 min", d)
+	}
+	f.requireNoPull(t)
+
+	if err := first[0].task.Run(f.mod.ctx); err != nil {
+		t.Fatalf("Run: %v", err)
 	}
 	f.requireNoPull(t)
 }
@@ -368,6 +377,7 @@ func TestRefreshSiblingTask_RunSchedulesFirstAfterInterval(t *testing.T) {
 // period the task runs at least twice in a row and pulls the sibling each time.
 func TestRefreshSiblingTask_RepeatsOnShortInterval(t *testing.T) {
 	f := newRefreshFixture(t, 50*time.Millisecond)
+	f.mod.localRefreshInterval = 50 * time.Millisecond
 	f.sched.auto = true
 	s := f.member(true)
 
@@ -375,4 +385,110 @@ func TestRefreshSiblingTask_RepeatsOnShortInterval(t *testing.T) {
 
 	f.requirePull(t, s, s)
 	f.requirePull(t, s, s)
+}
+
+// idle reports whether no sync for id runs.
+func (g *syncGate) idle(id *astral.Identity) bool {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	_, running := g.rerun[id.String()]
+	return !running
+}
+
+// advance moves the clock forward by d.
+func (c *fakeClock) advance(d time.Duration) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.now = c.now.Add(d)
+}
+
+// pullsOf collects n pulls and returns the identities pulled, by string form.
+func (f *refreshFixture) pullsOf(t *testing.T, n int) map[string]bool {
+	t.Helper()
+	got := map[string]bool{}
+	for range n {
+		select {
+		case p := <-f.pulls:
+			if !p.resolver.IsEqual(p.identity) {
+				t.Fatalf("pulled endpoints of %v from %v; want first-hand", p.identity, p.resolver)
+			}
+			got[p.identity.String()] = true
+		case <-time.After(effectTimeout):
+			t.Fatalf("%v of %v pulls started", len(got), n)
+		}
+	}
+	return got
+}
+
+// TestRefreshSiblingTask_KeepsLocalRowsAliveWhileLinked (YTVsOej6bp criterion
+// 2): on a fake clock, a linked sibling with a local row is re-pulled on every
+// run, each run well inside LocalEndpointTTL of the last, and a sibling with
+// only public rows waits for the 24 h run. After the link closes no re-pull
+// happens and the local row expires.
+func TestRefreshSiblingTask_KeepsLocalRowsAliveWhileLinked(t *testing.T) {
+	f := newRefreshFixture(t, defaultSiblingRefreshInterval)
+	clock := &fakeClock{now: time.Now()}
+	f.mod.refreshClock = clock
+	local, public := f.member(true), f.member(true)
+	localRow, publicRow := tcpEndpoint("192.168.1.20"), tcpEndpoint("198.51.100.9")
+
+	f.mod.resolveRemote = func(_ *astral.Context, resolver, identity *astral.Identity) ([]*nodes.EndpointWithTTL, error) {
+		f.pulls <- pull{resolver: resolver, identity: identity}
+		if identity.IsEqual(local) {
+			return []*nodes.EndpointWithTTL{nodes.NewEndpointWithTTL(localRow, ipmod.LocalEndpointTTL)}, nil
+		}
+		return []*nodes.EndpointWithTTL{nodes.NewEndpointWithTTL(publicRow, ipmod.PublicEndpointTTL)}, nil
+	}
+	soon := time.Now().Add(ipmod.LocalEndpointTTL).UTC()
+	week := time.Now().Add(ipmod.PublicEndpointTTL).UTC()
+	if err := f.mod.db.AddEndpoint(local, localRow.Network(), localRow.Address(), &soon); err != nil {
+		t.Fatalf("seed local row: %v", err)
+	}
+	if err := f.mod.db.AddEndpoint(public, publicRow.Network(), publicRow.Address(), &week); err != nil {
+		t.Fatalf("seed public row: %v", err)
+	}
+	// note: as Module.Run does, so the first full run is a day away.
+	f.mod.deferFullRefresh(clock.Now())
+
+	var elapsed time.Duration
+	for elapsed < 2*ipmod.LocalEndpointTTL {
+		f.run(t)
+		f.requirePull(t, local, local)
+		f.requireNoPull(t)
+		eventually(t, "the pull to end", func() bool { return f.mod.syncGate.idle(local) })
+		if got := time.Until(expiryOf(t, f.mod.db, local, localRow.Network(), localRow.Address())); got < ipmod.LocalEndpointTTL-time.Minute {
+			t.Fatalf("local row expires in %v after a run; want renewed to about %v", got, ipmod.LocalEndpointTTL)
+		}
+
+		runs := scheduledTasks[*RefreshSiblingEndpointsTask](f.sched)
+		next := runs[len(runs)-1].delay
+		if next <= 0 || next >= ipmod.LocalEndpointTTL/2 {
+			t.Fatalf("next run in %v; want well inside %v", next, ipmod.LocalEndpointTTL)
+		}
+		clock.advance(next)
+		elapsed += next
+	}
+
+	clock.advance(defaultSiblingRefreshInterval)
+	f.run(t)
+	if got := f.pullsOf(t, 2); !got[local.String()] || !got[public.String()] {
+		t.Fatalf("the 24 h run pulled %v; want both linked siblings", got)
+	}
+
+	// note: a pull stores its answer after it is counted; an idle gate has stored it.
+	eventually(t, "the 24 h run's pulls to end", func() bool { return f.mod.syncGate.idle(local) && f.mod.syncGate.idle(public) })
+	if got := time.Until(expiryOf(t, f.mod.db, local, localRow.Network(), localRow.Address())); got < ipmod.LocalEndpointTTL-time.Minute {
+		t.Fatalf("local row expires in %v after the 24 h run; want about %v", got, ipmod.LocalEndpointTTL)
+	}
+	_ = f.mod.linkPool.links.Clear()
+	lapse := time.Now().Add(300 * time.Millisecond).UTC()
+	if err := f.mod.db.AddEndpoint(local, localRow.Network(), localRow.Address(), &lapse); err != nil {
+		t.Fatalf("seed lapsing row: %v", err)
+	}
+	clock.advance(30 * time.Minute)
+	f.run(t)
+	f.requireNoPull(t)
+	eventually(t, "local row expiry", func() bool {
+		return expiryOf(t, f.mod.db, local, localRow.Network(), localRow.Address()).IsZero()
+	})
 }

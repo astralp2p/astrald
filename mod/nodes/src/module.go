@@ -105,9 +105,19 @@ type Module struct {
 	// syncGate runs one endpoint pull per sibling at a time, after a partial link close and in the daily refresh.
 	syncGate syncGate
 
-	// siblingRefreshInterval is the period of RefreshSiblingEndpointsTask.
+	// siblingRefreshInterval is the period of the RefreshSiblingEndpointsTask run that pulls every linked sibling.
 	// why: a field, so tests shorten the 24 h period.
 	siblingRefreshInterval time.Duration
+	// localRefreshInterval is the period of RefreshSiblingEndpointsTask.
+	// why: a field, so tests shorten the 35 min period.
+	localRefreshInterval time.Duration
+	// fullRefreshDue is the Unix time in nanoseconds of the next refresh run that pulls every linked sibling; 0 is due.
+	fullRefreshDue atomic.Int64
+	// subnets lists this node's interface subnets; nil when the ip module is not loaded.
+	subnets subnetLister
+	// refreshClock is the time source of the refresh task; nil is the real clock.
+	// why: a field, so tests move the task past the full-refresh period without waiting.
+	refreshClock wakeClock
 }
 
 // initContext sets the module context for the node identity id. The context ends when
@@ -126,8 +136,9 @@ func (mod *Module) Run(ctx *astral.Context) error {
 	defer mod.cancel()
 	<-mod.Deps.Scheduler.Ready()
 	mod.Scheduler.Schedule(mod.NewCleanupEndpointsTask())
-	// why: the first run comes after one jittered period, as the link-created pull covers the start.
-	delay, _ := mod.ctx.WithTimeout(jitter(mod.siblingRefreshInterval, siblingRefreshJitter))
+	// why: the first full run comes after one jittered period, as the link-created pull covers the start.
+	mod.deferFullRefresh(mod.refreshNow())
+	delay, _ := mod.ctx.WithTimeout(jitter(mod.localRefreshInterval, siblingRefreshJitter))
 	mod.Scheduler.Schedule(mod.newRefreshSiblingEndpointsTask(), delay)
 	// why: a set that changed while the node was off is announced once after the settle wait.
 	mod.scheduleEndpointsAnnounce()
@@ -137,13 +148,16 @@ func (mod *Module) Run(ctx *astral.Context) error {
 }
 
 func (mod *Module) AddEndpoint(nodeID *astral.Identity, endpoint *nodes.EndpointWithTTL) error {
-	var expiresAt *time.Time
-	if endpoint.TTL != nil {
-		t := time.Now().UTC().Add(time.Duration(*endpoint.TTL) * time.Second)
-		expiresAt = &t
-	}
+	return mod.db.AddEndpoint(nodeID, endpoint.Network(), endpoint.Address(), endpointExpiry(endpoint))
+}
 
-	return mod.db.AddEndpoint(nodeID, endpoint.Network(), endpoint.Address(), expiresAt)
+// endpointExpiry returns when endpoint's TTL ends, and nil when it has none.
+func endpointExpiry(endpoint *nodes.EndpointWithTTL) *time.Time {
+	if endpoint.TTL == nil {
+		return nil
+	}
+	t := time.Now().UTC().Add(time.Duration(*endpoint.TTL) * time.Second)
+	return &t
 }
 
 func (mod *Module) RemoveEndpoint(nodeID *astral.Identity, endpoint exonet.Endpoint) error {

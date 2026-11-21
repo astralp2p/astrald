@@ -9,6 +9,7 @@ import (
 	"github.com/astralp2p/astrald/mod/dir"
 	"github.com/astralp2p/astrald/mod/events"
 	"github.com/astralp2p/astrald/mod/exonet"
+	ipmod "github.com/astralp2p/astrald/mod/ip"
 	"github.com/astralp2p/astrald/mod/objects"
 	"github.com/astralp2p/astrald/mod/scheduler"
 	"github.com/astralp2p/astrald/mod/user"
@@ -32,6 +33,10 @@ func (mod *Module) LoadDependencies(*astral.Context) (err error) {
 	if err != nil {
 		return
 	}
+
+	// why optional: a node without the ip module (no tcp or kcp) still links,
+	// and core.Inject fails on a missing module.
+	mod.subnets, _ = core.Load[subnetLister](mod.node, ipmod.ModuleName)
 
 	mod.Dir.SetFilter("linked", func(identity *astral.Identity) bool {
 		return mod.IsLinked(identity)

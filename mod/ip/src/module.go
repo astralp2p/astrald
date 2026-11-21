@@ -67,7 +67,27 @@ func (mod *Module) LocalIPs() ([]ip.IP, error) {
 	return out, nil
 }
 
+// LocalSubnets returns the subnet of every non-loopback interface address.
+func (mod *Module) LocalSubnets() ([]*net.IPNet, error) {
+	return interfaceNets(false)
+}
+
 func (mod *Module) localAddresses(includeLoopback bool) (out []ip.IP, err error) {
+	nets, err := interfaceNets(includeLoopback)
+	if err != nil {
+		return nil, err
+	}
+
+	for _, ipnet := range nets {
+		out = append(out, ip.IP(ipnet.IP))
+	}
+
+	return
+}
+
+// interfaceNets returns the address and mask of every interface address,
+// loopback ones only when includeLoopback is set.
+func interfaceNets(includeLoopback bool) (out []*net.IPNet, err error) {
 	ifaceAddrs, err := InterfaceAddrs()
 	if err != nil {
 		return nil, err
@@ -84,7 +104,7 @@ func (mod *Module) localAddresses(includeLoopback bool) (out []ip.IP, err error)
 			continue
 		}
 
-		out = append(out, ip.IP(ipnet.IP))
+		out = append(out, ipnet)
 	}
 
 	return

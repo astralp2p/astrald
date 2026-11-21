@@ -19,7 +19,7 @@ type opAddEndpointArgs struct {
 }
 
 // OpAddEndpoint parses "network:address" and registers it for the identity with a
-// fixed ~90-day TTL.
+// fixed ~90-day TTL. The row is manual, so a pull never shortens it.
 func (mod *Module) OpAddEndpoint(ctx *astral.Context, q *routing.IncomingQuery, args opAddEndpointArgs) (err error) {
 	ch := channel.New(q.AcceptRaw(), channel.WithFormats(args.In, args.Out))
 	defer ch.Close()
@@ -47,7 +47,8 @@ func (mod *Module) OpAddEndpoint(ctx *astral.Context, q *routing.IncomingQuery, 
 		return ch.Send(astral.Err(err))
 	}
 
-	err = mod.AddEndpoint(identity, nodes.NewEndpointWithTTL(parse, 3*30*24*time.Hour))
+	added := nodes.NewEndpointWithTTL(parse, 3*30*24*time.Hour)
+	err = mod.db.AddManualEndpoint(identity, added.Network(), added.Address(), endpointExpiry(added))
 	if err != nil {
 		return ch.Send(astral.Err(err))
 	}

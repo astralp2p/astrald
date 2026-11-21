@@ -1,8 +1,8 @@
 package kcp
 
 import (
+	ipmod "github.com/astralp2p/astrald/mod/ip"
 	nodesmod "github.com/astralp2p/astrald/mod/nodes"
-	"time"
 
 	"github.com/astralp2p/astral-go/api/kcp"
 	"github.com/astralp2p/astral-go/api/nodes"
@@ -35,7 +35,7 @@ func (mod *Module) endpoints() (list []*nodes.EndpointWithTTL) {
 			Port: astral.Uint16(mod.config.ListenPort),
 		}
 
-		list = append(list, nodes.NewEndpointWithTTL(e, 7*24*time.Hour))
+		list = append(list, nodes.NewEndpointWithTTL(e, ipmod.EndpointTTL(tip)))
 	}
 
 	return list
