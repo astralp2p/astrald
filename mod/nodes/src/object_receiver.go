@@ -56,12 +56,7 @@ func (mod *Module) ReceiveObject(drop objects.Drop) error {
 			if e.LinkCount == 1 && slices.ContainsFunc(mod.User.LocalSwarm(),
 				e.RemoteIdentity.IsEqual) {
 
-				go func() {
-					_, err := mod.UpdateNodeEndpoints(mod.ctx, e.RemoteIdentity, e.RemoteIdentity)
-					if err != nil {
-						mod.log.Error("updating node endpoints failed: %v", err)
-					}
-				}()
+				go mod.RefreshMemberEndpoints(e.RemoteIdentity)
 			}
 		case *nodes.LinkClosedEvent:
 			mod.scheduleEndpointsAnnounce()

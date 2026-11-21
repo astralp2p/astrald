@@ -160,6 +160,14 @@ func (mod *Module) pullChangedEndpoints(sender *astral.Identity, m *nodes.Endpoi
 	}
 }
 
+// RefreshMemberEndpoints pulls subject's endpoints from subject itself and
+// forwards the notice one hop to the other linked siblings, as a first-hand
+// EndpointsChangedMessage from subject does.
+// It blocks for the pull; the forward pushes run in the background.
+func (mod *Module) RefreshMemberEndpoints(subject *astral.Identity) {
+	mod.pullChangedEndpoints(subject, &nodes.EndpointsChangedMessage{Subject: subject})
+}
+
 // forwardEndpointsChanged pushes a first-hand m to every linked local swarm
 // member except m.Subject, its sender, each push on its own and bounded.
 func (mod *Module) forwardEndpointsChanged(m *nodes.EndpointsChangedMessage) {
