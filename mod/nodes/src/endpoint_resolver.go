@@ -87,7 +87,8 @@ func resolveRemoteEndpoints(ctx *astral.Context, resolver *astral.Identity, iden
 // no unexpired row before. A row that is only refreshed does not count.
 // A first-hand reply (authoritative) sets the expiry of the rows it lists and
 // shortens the rows identity no longer lists; see shortenMissingEndpoints.
-// A second-hand reply never shortens a row; see StorePulledEndpoint.
+// It also counts the day for each row it lists; see recordEndpointSeen.
+// A second-hand reply never shortens a row and counts no day; see StorePulledEndpoint.
 func (mod *Module) storeEndpoints(identity *astral.Identity, endpoints []*nodes.EndpointWithTTL, authoritative bool) (int, error) {
 	rows, err := mod.db.FindEndpoints(identity)
 	if err != nil {
@@ -108,6 +109,10 @@ func (mod *Module) storeEndpoints(identity *astral.Identity, endpoints []*nodes.
 			continue
 		}
 
+		if authoritative {
+			mod.recordEndpointSeen(identity, key)
+		}
+
 		if !known[key] {
 			known[key] = true
 			added++
@@ -119,6 +124,14 @@ func (mod *Module) storeEndpoints(identity *astral.Identity, endpoints []*nodes.
 	}
 
 	return added, nil
+}
+
+// recordEndpointSeen counts today as a day on which identity itself listed key.
+// note: it only ranks the endpoint; no expiry depends on it.
+func (mod *Module) recordEndpointSeen(identity *astral.Identity, key endpointKey) {
+	if err := mod.db.RecordEndpointSeen(identity, key, time.Now()); err != nil {
+		mod.log.Logv(1, "recording that %v lists %v %v: %v", identity, key.network, key.address, err)
+	}
 }
 
 // missingEndpointTTL is the most a row its subject stopped listing has left.

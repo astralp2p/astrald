@@ -5,6 +5,7 @@ import (
 	ipmod "github.com/astralp2p/astrald/mod/ip"
 	"net"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/astralp2p/astral-go/api/ip"
@@ -32,6 +33,9 @@ type Module struct {
 	router routing.OpRouter
 
 	providers sig.Set[ipmod.PublicIPCandidateProvider]
+
+	// fingerprint caches NetworkFingerprint; nil until first computed.
+	fingerprint atomic.Pointer[string]
 }
 
 func (mod *Module) Run(ctx *astral.Context) error {
@@ -135,6 +139,7 @@ func (mod *Module) watchAddresses(ctx context.Context) {
 			addrs = newAddrs
 
 			if len(removed) > 0 || len(added) > 0 {
+				mod.refreshFingerprint()
 				mod.log.Logv(1, "network addresses changed. added: %v; removed: %v",
 					joinIPs(added),
 					joinIPs(removed),

@@ -13,9 +13,11 @@ const ModuleName = "ip"
 // local interfaces (no IPv6 link-local, no container or VM bridge addresses),
 // while PublicIPCandidates returns the subset considered reachable from the internet.
 // LocalSubnets returns the subnet of every non-loopback interface address.
+// NetworkFingerprint returns a short hash of those subnets; it names the network this node is on.
 type Module interface {
 	LocalIPs() ([]ip.IP, error)
 	LocalSubnets() ([]*net.IPNet, error)
+	NetworkFingerprint() string
 	PublicIPCandidates() []ip.IP
 	DefaultGateway() (ip.IP, error)
 }

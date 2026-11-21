@@ -3,6 +3,7 @@ package nodes
 import (
 	"context"
 	"errors"
+	"math"
 	"net"
 	"slices"
 	"sync"
@@ -21,6 +22,27 @@ import (
 type fixedSubnets []*net.IPNet
 
 func (s fixedSubnets) LocalSubnets() ([]*net.IPNet, error) { return s, nil }
+
+// fixedFingerprint reports a fixed network fingerprint, which a test changes to move the node.
+type fixedFingerprint struct{ value string }
+
+func (f *fixedFingerprint) NetworkFingerprint() string { return f.value }
+
+// ref names the health row of a tcp endpoint of id under the global scope.
+func ref(id *astral.Identity, addr string) healthRef {
+	return healthRef{identity: id, endpoint: endpointKey{"tcp", addr}}
+}
+
+// ewmaOf returns the success rate after the dials in order, 1 for a success and 0 for a failure, from prior.
+func ewmaOf(prior float64, dials ...float64) float64 {
+	rate := prior
+	for _, d := range dials {
+		rate = ewmaAlpha*d + (1-ewmaAlpha)*rate
+	}
+	return rate
+}
+
+func approx(a, b float64) bool { return math.Abs(a-b) < 1e-9 }
 
 // parsingExonet is a stubExonet that parses tcp rows, so the database resolver serves them.
 type parsingExonet struct {
@@ -106,7 +128,13 @@ func tcpRows(t *testing.T, addrs ...string) (rows []*nodes.EndpointWithTTL) {
 // healthOf returns the global health row of target's tcp endpoint addr, or nil.
 func healthOf(t *testing.T, db *DB, target *astral.Identity, addr string) *dbEndpointHealth {
 	t.Helper()
-	rows, err := db.FindEndpointHealth(target)
+	return healthAt(t, db, target, addr, "")
+}
+
+// healthAt returns the health row of target's tcp endpoint addr under scope, or nil.
+func healthAt(t *testing.T, db *DB, target *astral.Identity, addr, scope string) *dbEndpointHealth {
+	t.Helper()
+	rows, err := db.FindEndpointHealth(target, scope)
 	if err != nil {
 		t.Fatalf("FindEndpointHealth: %v", err)
 	}
@@ -179,7 +207,7 @@ func TestTryEndpointCancelledDialLeavesHealth(t *testing.T) {
 	const addr = "198.51.100.1:1791"
 	at := time.Now().UTC()
 	for range 2 {
-		if err := s.mod.db.RecordDialFailure(s.target, endpointKey{"tcp", addr}, at); err != nil {
+		if err := s.mod.db.RecordDialFailure(ref(s.target, addr), at); err != nil {
 			t.Fatalf("seed failure: %v", err)
 		}
 	}
@@ -263,7 +291,7 @@ func TestTryEndpointAfterRoundEndDialsNothing(t *testing.T) {
 }
 
 // TestTryEndpointSuccessResetsFailStreak (criterion 5): a successful dial
-// resets FailStreak and sets LastOK and LastLatency; a handshake that reaches
+// resets FailStreak and sets LastOK and LatencyEWMA; a handshake that reaches
 // another identity counts as a failure.
 func TestTryEndpointSuccessResetsFailStreak(t *testing.T) {
 	peer := newLinkEnd(t)
@@ -274,7 +302,7 @@ func TestTryEndpointSuccessResetsFailStreak(t *testing.T) {
 	}}
 	const addr = "127.0.0.1:1791"
 	for range failingStreak {
-		if err := dialer.mod.db.RecordDialFailure(peer.id, endpointKey{"tcp", addr}, time.Now().UTC()); err != nil {
+		if err := dialer.mod.db.RecordDialFailure(ref(peer.id, addr), time.Now().UTC()); err != nil {
 			t.Fatalf("seed failure: %v", err)
 		}
 	}
@@ -288,8 +316,8 @@ func TestTryEndpointSuccessResetsFailStreak(t *testing.T) {
 	defer link.Close()
 
 	h := healthOf(t, dialer.mod.db, peer.id, addr)
-	if h == nil || h.FailStreak != 0 || h.LastOK == nil || h.LastLatency <= 0 || h.OKCount != 1 {
-		t.Fatalf("health after a success %+v; want FailStreak 0, LastOK, LastLatency and OKCount 1 set", h)
+	if h == nil || h.FailStreak != 0 || h.LastOK == nil || h.LatencyEWMA <= 0 || !approx(h.SuccessEWMA, ewmaOf(successPrior, 0, 0, 0, 1)) {
+		t.Fatalf("health after a success %+v; want FailStreak 0, LastOK and LatencyEWMA set and SuccessEWMA %v", h, ewmaOf(successPrior, 0, 0, 0, 1))
 	}
 
 	// note: the row budget ends a handshake the peer never answers; the round context stays live.
@@ -350,11 +378,11 @@ func TestCleanupKeepsHealthOfExpiredRowAndDropsStaleHealth(t *testing.T) {
 	if err := db.AddEndpoint(id, "tcp", "198.51.100.1:1791", &longExpired); err != nil {
 		t.Fatalf("seed row: %v", err)
 	}
-	if err := db.RecordDialSuccess(id, endpointKey{"tcp", "198.51.100.1:1791"}, time.Now().UTC(), time.Millisecond); err != nil {
+	if err := db.RecordDialSuccess(ref(id, "198.51.100.1:1791"), time.Now().UTC(), time.Millisecond); err != nil {
 		t.Fatalf("seed health: %v", err)
 	}
 	stale := time.Now().Add(-endpointHealthRetention - time.Hour).UTC()
-	if err := db.RecordDialFailure(id, endpointKey{"tcp", "198.51.100.2:1791"}, stale); err != nil {
+	if err := db.RecordDialFailure(ref(id, "198.51.100.2:1791"), stale); err != nil {
 		t.Fatalf("seed stale health: %v", err)
 	}
 
@@ -374,23 +402,26 @@ func TestCleanupKeepsHealthOfExpiredRowAndDropsStaleHealth(t *testing.T) {
 	}
 }
 
-// TestOrderDialRows: rows with a recent success come first, newest first, then
-// rows without a verdict, then failing and off-subnet rows; a recent success
-// lifts an off-subnet row; equal rows keep their order and none is dropped.
+// TestOrderDialRows: normal rows come first by descending score, then failing
+// and off-subnet rows by descending score; a recent success lifts an off-subnet
+// row; equal rows keep their order and none is dropped.
 func TestOrderDialRows(t *testing.T) {
 	now := time.Now()
 	ago := func(d time.Duration) *time.Time { at := now.Add(-d); return &at }
 	row := func(name string, h *dbEndpointHealth, offSubnet bool) *dialRow {
 		return &dialRow{endpoint: tcpRows(t, name)[0], health: h, offSubnet: offSubnet}
 	}
+	worked := func(rate float64, okAgo time.Duration) *dbEndpointHealth {
+		return &dbEndpointHealth{LastOK: ago(okAgo), SuccessEWMA: rate}
+	}
 
 	rows := []*dialRow{
 		row("10.0.0.1:1", nil, true),
-		row("10.0.0.2:1", &dbEndpointHealth{FailStreak: failingStreak}, false),
+		row("10.0.0.2:1", &dbEndpointHealth{FailStreak: failingStreak, LastFail: ago(time.Minute)}, false),
 		row("10.0.0.3:1", nil, false),
-		row("10.0.0.4:1", &dbEndpointHealth{LastOK: ago(time.Hour)}, false),
-		row("10.0.0.5:1", &dbEndpointHealth{LastOK: ago(time.Minute)}, true),
-		row("10.0.0.6:1", &dbEndpointHealth{LastOK: ago(48 * time.Hour), FailStreak: 1}, false),
+		row("10.0.0.4:1", worked(0.9, time.Hour), false),
+		row("10.0.0.5:1", worked(0.4, time.Minute), true),
+		row("10.0.0.6:1", worked(0.2, 48*time.Hour), false),
 		row("10.0.0.7:1", nil, false),
 	}
 	orderDialRows(rows, now)
@@ -399,7 +430,7 @@ func TestOrderDialRows(t *testing.T) {
 	for _, r := range rows {
 		got = append(got, r.endpoint.Address())
 	}
-	want := []string{"10.0.0.5:1", "10.0.0.4:1", "10.0.0.3:1", "10.0.0.6:1", "10.0.0.7:1", "10.0.0.1:1", "10.0.0.2:1"}
+	want := []string{"10.0.0.4:1", "10.0.0.3:1", "10.0.0.7:1", "10.0.0.5:1", "10.0.0.6:1", "10.0.0.1:1", "10.0.0.2:1"}
 	if !slices.Equal(got, want) {
 		t.Fatalf("dial order %v; want %v", got, want)
 	}

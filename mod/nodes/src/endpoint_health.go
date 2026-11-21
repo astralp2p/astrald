@@ -59,34 +59,95 @@ func (mod *Module) recordDial(target *astral.Identity, endpoint exonet.Endpoint,
 	}
 
 	now := time.Now().UTC()
-	key := endpointKey{endpoint.Network(), endpoint.Address()}
+	ref := healthRef{
+		identity: target,
+		endpoint: endpointKey{endpoint.Network(), endpoint.Address()},
+		scope:    scopeOf(endpoint.Network(), endpoint.Address(), mod.networkFingerprint()),
+	}
 	var dbErr error
 	if err == nil {
-		dbErr = mod.db.RecordDialSuccess(target, key, now, latency)
+		dbErr = mod.db.RecordDialSuccess(ref, now, latency)
 	} else {
-		dbErr = mod.db.RecordDialFailure(target, key, now)
+		dbErr = mod.db.RecordDialFailure(ref, now)
 	}
 	if dbErr != nil {
 		mod.log.Logv(1, "recording dial of %v at %v: %v", target, endpoint, dbErr)
 	}
 }
 
-// findEndpointHealth returns the global health rows of target by endpoint.
-func (mod *Module) findEndpointHealth(target *astral.Identity) map[endpointKey]*dbEndpointHealth {
-	out := map[endpointKey]*dbEndpointHealth{}
+// scopeOf returns the Scope under which the dial history of an endpoint is
+// kept: the dialer's network fingerprint for a non-public tcp or kcp endpoint,
+// whose reachability depends on where the dialer is, else "" (public, onion and
+// gateway endpoints reach the same from every network).
+// An unknown fingerprint ("") keeps every endpoint under "".
+func scopeOf(network, address, fingerprint string) string {
+	if isLocalEndpoint(network, address) {
+		return fingerprint
+	}
+	return ""
+}
+
+// healthSet is the health rows of one identity that matter on the current network.
+type healthSet struct {
+	fingerprint string
+	// global holds the rows under Scope "".
+	global map[endpointKey]*dbEndpointHealth
+	// local holds the rows under the current fingerprint.
+	local map[endpointKey]*dbEndpointHealth
+}
+
+// of returns the dial history of the endpoint from the current network, nil for
+// none, and the days its subject listed it.
+func (s *healthSet) of(network, address string) (dial *dbEndpointHealth, seenDays uint32) {
+	key := endpointKey{network, address}
+	if claim := s.global[key]; claim != nil {
+		seenDays = claim.SeenDays
+	}
+	if scopeOf(network, address, s.fingerprint) != "" {
+		return s.local[key], seenDays
+	}
+	return s.global[key], seenDays
+}
+
+// findEndpointHealth returns the health rows of target under Scope "" and the
+// current fingerprint, from one query.
+func (mod *Module) findEndpointHealth(target *astral.Identity) *healthSet {
+	set := &healthSet{
+		fingerprint: mod.networkFingerprint(),
+		global:      map[endpointKey]*dbEndpointHealth{},
+		local:       map[endpointKey]*dbEndpointHealth{},
+	}
 	if mod.db == nil {
-		return out
+		return set
 	}
 
-	rows, err := mod.db.FindEndpointHealth(target)
+	rows, err := mod.db.FindEndpointHealth(target, "", set.fingerprint)
 	if err != nil {
 		mod.log.Logv(1, "finding endpoint health of %v: %v", target, err)
-		return out
+		return set
 	}
 	for _, row := range rows {
-		out[endpointKey{row.Network, row.Address}] = row
+		if row.Scope == "" {
+			set.global[endpointKey{row.Network, row.Address}] = row
+		} else {
+			set.local[endpointKey{row.Network, row.Address}] = row
+		}
 	}
-	return out
+	return set
+}
+
+// fingerprinter names the network this node is on (mod/ip).
+type fingerprinter interface {
+	NetworkFingerprint() string
+}
+
+// networkFingerprint returns the fingerprint of this node's network, and ""
+// when it is unknown: without the ip module, or when listing the interfaces fails.
+func (mod *Module) networkFingerprint() string {
+	if mod.fingerprints == nil {
+		return ""
+	}
+	return mod.fingerprints.NetworkFingerprint()
 }
 
 // subnetLister lists the subnets of this node's interfaces (mod/ip).
