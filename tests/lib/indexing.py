@@ -110,6 +110,32 @@ async def drain(client, nonce: str, idle: float) -> list[dict]:
             await sub.ack(c)
 
 
+async def drain_until(client, nonce: str, want_id: str, step: float) -> list[dict]:
+    """Subscribe, acknowledge every change, and stop once the index change of
+    object `want_id` arrived, or once none has arrived for `step` seconds.
+    Answers the envelopes seen, each reduced by `change()`.
+
+    why not drain(): its silence is the only end signal, so a node that stalls
+    for longer than `idle` reads as caught up before the awaited change comes.
+    """
+    seen = []
+    async with Subscription(client, nonce) as sub:
+        while True:
+            try:
+                doc = await sub.next(step)
+            except TimeoutError:
+                return seen
+            if doc is None:
+                return seen
+            c = change(doc)
+            seen.append(c)
+            if c["type"] not in (INDEX, UNINDEX):
+                return seen
+            await sub.ack(c)
+            if c["type"] == INDEX and c["object"] == want_id:
+                return seen
+
+
 async def register_indexer(client, name: str) -> str:
     """The nonce `indexing.register_indexer` answers for `name`."""
     return await jsonops.value(
