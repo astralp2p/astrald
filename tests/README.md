@@ -195,8 +195,8 @@ driver, or `--docker` — run in Docker worlds instead (see World kinds).
 
 A host that runs no VM world (not Linux, or no `netsim` on PATH) refuses a
 run that needs one, whole and before anything is built, leased or written:
-the tor, nat, gateway, kcp, nearby and endpoint suites, any test with `ops`, `--vm`,
-`--save` and `--from`. The refusal names each test and its ops, or the flag:
+the tor, nat, gateway, kcp, nearby, endpoint and swarm-comms-netsim suites,
+any test with `ops`, `--vm`, `--save` and `--from`. The refusal names each test and its ops, or the flag:
 
     $ ./tests/run tor-link
     run: this host runs no VM world (netsim is not on PATH), and this selection needs one:
