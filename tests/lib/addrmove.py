@@ -130,6 +130,8 @@ async def follow(mover, clients: dict, final: str, clock, deadline: float) -> di
     """The mover's address changes until it holds final: each with its time, what
     it added and removed, and the links closed on each node for what it removed."""
     seen = await ask(local_ips(mover))
+    # why kept apart from seen: seen follows every change, and start is what the mover held first
+    start = seen
     changes = []
     while clock() < deadline:
         now = await ask(local_ips(mover))
@@ -140,10 +142,10 @@ async def follow(mover, clients: dict, final: str, clock, deadline: float) -> di
             changes.append({"t": clock(), "added": sorted(set(now) - set(seen)),
                             "removed": removed, "closed": closed})
             if final in now:
-                return {"start": seen, "changes": changes, "ips": now}
+                return {"start": start, "changes": changes, "ips": now}
         seen = now if now is not None else seen
         await asyncio.sleep(POLL)
-    return {"start": seen, "changes": changes, "ips": seen}
+    return {"start": start, "changes": changes, "ips": seen}
 
 
 async def watch(sibling, witness, mover_id: str, ip: str, clock, deadline: float,

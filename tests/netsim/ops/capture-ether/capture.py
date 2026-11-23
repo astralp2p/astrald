@@ -86,8 +86,10 @@ def main():
     done.write_text(json.dumps(record, indent=2) + "\n")
 
     envelope = {"Type": "string32", "Object": json.dumps(record)}
-    subprocess.run(["astral-query", "tree.set", "-path", f"/e2e/capture/{args.name}",
-                    "-in", "json", "-out", "json", "-eos"],
+    # why -eos first: astral-query's flags end at the query, and a trailing -eos is
+    # read as a query argument with no value, which it refuses (cmd/astral-query).
+    subprocess.run(["astral-query", "-eos", "tree.set", "-path", f"/e2e/capture/{args.name}",
+                    "-in", "json", "-out", "json"],
                    input=json.dumps(envelope) + "\n", text=True, check=True,
                    capture_output=True, timeout=30)
 

@@ -1,0 +1,135 @@
+#!/usr/bin/env python3
+"""Oracle: no bridge or link-local endpoint of node2 is advertised; its LAN and public endpoints are, with their TTLs.
+
+From the `advertised_clean` fact:
+
+- control: node2 holds the bridge address 172.17.0.1 and an fe80:: address
+  among its interface addresses, so both filters had something to drop;
+- neither node2's own rows nor node1's rows for node2, written after a
+  fresh link, hold an endpoint in 172.17.0.0/16 or fe80::/10. astral-docs
+  protocols/nodes/README.md, Announcing a change: "A node never advertises an
+  IPv6 link-local address". The spec is silent on container bridges; the code
+  drops the addresses of host-only interfaces (mod/ip/src/module.go LocalIPs,
+  mod/ip/src/advertisable.go);
+- both list node2's LAN tcp and kcp endpoints with a TTL of at most 2 h, and
+  the configured public endpoint with a TTL above 2 h (astral-docs
+  protocols/tcp/README.md, configEndpoints: 7 days for a configured entry, 2 h
+  for an interface endpoint on a non-public address). Exempt from the 2 h
+  class is node1's row for node2's LAN tcp endpoint: adopt-node wrote it with
+  nodes.add_endpoint, it starts at 90 days, and no pull moves its expiry
+  (astral-docs protocols/nodes/README.md, Withdrawn endpoints;
+  protocols/nodes/ops/nodes.resolve_endpoints.md). node1's kcp rows judge the
+  class there;
+- node1's rows were written by the pull over the new link, and node1 holds no
+  link with an end in either range;
+- node2 answers each of its own endpoints once: a node's own identity resolves
+  to its listener endpoints only (astral-docs
+  protocols/nodes/ops/nodes.resolve_endpoints.md, Returned objects).
+
+node1's rows are judged at the longest TTL per endpoint: nearby lists a
+peer's LAN endpoints a second time with at most 300 s, next to the stored
+rows (same op, Returned objects).
+"""
+import ipaddress
+
+from lib.sessionio import load
+
+PRIVATE_TTL = 7200
+PUBLIC = "tcp:203.0.113.5:40000"
+BRIDGE = ipaddress.ip_network("172.17.0.0/16")
+LINK_LOCAL = ipaddress.ip_network("fe80::/10")
+
+
+def ip_of(endpoint: str | None):
+    """The IP of a `<network>:<ip>:<port>` endpoint, or None for any other shape."""
+    if not endpoint:
+        return None
+    host = endpoint.split(":", 1)[-1].rsplit(":", 1)[0].strip("[]").split("%")[0]
+    try:
+        return ipaddress.ip_address(host)
+    except ValueError:
+        return None
+
+
+def banned(endpoint: str | None) -> bool:
+    ip = ip_of(endpoint)
+    return ip is not None and any(ip.version == n.version and ip in n
+                                  for n in (BRIDGE, LINK_LOCAL))
+
+
+def longest(stream: list) -> dict:
+    """{`<network>:<address>`: longest TTL in s, None for none} of a resolved stream."""
+    out = {}
+    for k, t in stream:
+        if k not in out or t is None or (out[k] is not None and t > out[k]):
+            out[k] = t
+    return out
+
+
+def check_own(stream: list, lan: str) -> None:
+    """Judges node2's own stream object by object: no key twice, then the rows."""
+    keys = [k for k, _ in stream]
+    twice = sorted({k for k in keys if keys.count(k) > 1})
+    assert not twice, (
+        f"node2 resolves its own endpoints {twice} more than once: {stream}; a node's own "
+        "identity resolves to its listener endpoints only")
+    check_rows("node2 for itself", longest(stream), lan)
+
+
+def check_control(f: dict) -> None:
+    addrs = f["local_addrs"]
+    assert "172.17.0.1" in addrs, (
+        f"node2 does not hold the bridge address 172.17.0.1 ({addrs}): add-bridge "
+        "left nothing for the filter to drop")
+    link_local = [a for a in addrs if ":" in a
+                  and ipaddress.ip_address(a.split("%")[0]) in LINK_LOCAL]
+    assert link_local, (
+        f"node2 holds no fe80:: address ({addrs}): the link-local filter is not exercised")
+
+
+def check_rows(who: str, rows: dict, lan: str, manual: frozenset = frozenset()) -> None:
+    """Judges who's rows for node2; a key in manual is an add_endpoint row, exempt from the TTL class."""
+    leaked = sorted(k for k in rows if banned(k))
+    assert not leaked, f"{who} lists node2 at a bridge or link-local endpoint: {leaked}"
+    lan_ip = ip_of(lan)
+    for network in ("tcp", "kcp"):
+        own = {k: t for k, t in rows.items()
+               if k.startswith(f"{network}:") and ip_of(k) == lan_ip}
+        assert own, f"{who} lists no {network} endpoint of node2 at its LAN address {lan_ip}: {rows}"
+        long = {k: t for k, t in own.items()
+                if k not in manual and (t is None or t > PRIVATE_TTL)}
+        assert not long, (
+            f"{who} lists node2's LAN endpoints {long} with a TTL above {PRIVATE_TTL} s; "
+            "a private address is advertised for 2 h")
+    assert PUBLIC in rows, f"{who} lists no {PUBLIC} for node2: {sorted(rows)}"
+    ttl = rows[PUBLIC]
+    assert ttl is None or ttl > PRIVATE_TTL, (
+        f"{who} lists {PUBLIC} with a TTL of {ttl} s; a configured entry is advertised for 7 days")
+
+
+def check_node1(f: dict) -> None:
+    r, held = f["relink"], f["node1"]
+    assert r["linked_at"] is not None, (
+        f"node1 did not link to node2 again within the driver's wait after closing "
+        f"{r['closed']}: {r['error']}")
+    assert held is not None and held["fresh"], (
+        f"node1's rows for node2 were not written by a pull over the new link "
+        f"(at {r['linked_at']} s): {held}")
+    # why: adopt-node's nodes.add_endpoint wrote node1's row for the LAN tcp endpoint
+    check_rows("node1", longest(held["rows"]), f["lan_endpoint"], frozenset({f["lan_endpoint"]}))
+    bad = [link for link in f["links"]
+           if banned(link["local_endpoint"]) or banned(link["remote_endpoint"])]
+    assert not bad, f"node1 holds a link to node2 on a bridge or link-local address: {bad}"
+
+
+def main():
+    f = load()["facts"]["advertised_clean"]
+    check_control(f)
+    check_own(f["own"], f["lan_endpoint"])
+    check_node1(f)
+    print(f"oracle: node2 holds {f['local_addrs']} and advertises {sorted(longest(f['own']))}; "
+          f"node1 holds {sorted(longest(f['node1']['rows']))} after relinking at "
+          f"{f['relink']['linked_at']} s; no bridge or link-local endpoint on either")
+
+
+main()

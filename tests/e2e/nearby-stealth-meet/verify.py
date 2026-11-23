@@ -6,9 +6,12 @@ alone, and neither node1 nor node2 listed it. Afterwards node1 and the
 reflector list each other linked and node2 and the reflector list each other.
 The contact ran through nearby: a node logged `introduced to nearby peer` for
 the other, and node1 and node2 each acted on a PeerSeen of the reflector,
-which they cached unowned before its claim: the user of a cached node changed. Both broadcast stealth: node1's and node2's entry of the reflector,
-and the reflector's entry of node1, carry a stealth hint and no public
-profile, and no node stores a mode other than stealth or none.
+which they cached unowned before its claim: the user of a cached node changed.
+Both broadcast stealth: node1's and node2's entry of the reflector carry a
+stealth hint and no public profile, and so does the reflector's entry of
+node1, which the reflector verifies at node1's next periodic status after the
+claim (astral-docs protocols/nearby/README.md, status processing step 4). No
+node stores a mode other than stealth or none.
 """
 import re
 
@@ -70,8 +73,13 @@ def check_user_change(f: dict, ids: dict) -> None:
 
 
 def check_stealth(f: dict) -> None:
+    assert f.get("recognised") is not None, (
+        "the reflector verified no status of node1 other than the one it held at the claim "
+        f"within the driver's wait (converged={f['converged']}); held: {f.get('reflector_held_node1')}")
     for name, s in f["entries"].items():
-        assert s is not None, f"{name}: no verified entry; the pair never recognised each other"
+        assert s is not None, (
+            f"{name}: no verified entry within the driver's wait; the pair never recognised "
+            f"each other (recognised={f.get('recognised')}, converged={f['converged']})")
         assert nearby.HINT in s["types"] and nearby.PROFILE not in s["types"], (
             f"{name}: the status carries {s['types']}; a stealth node sends a "
             "stealth hint and no public profile")

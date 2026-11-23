@@ -6,7 +6,8 @@ node2 on tcp 1801 and kcp 1811 (test.toml), so no transport of either
 listens on a default port. The driver claims node1 with generated words and
 node2 with the same words, each with user.bootstrap on a fresh node, so both
 broadcast Stealth and neither holds an endpoint or a contract of the other.
-While both nodes' logs are recorded, it polls both nodes' links until each
+While both nodes' logs are recorded, it records both nodes' links to each
+other just before node2's claim, then polls both nodes' links until each
 lists one link to the other under the same id, for up to WAIT seconds from
 node2's claim. It then records the nearby entries, the stored modes, the
 endpoints each node resolves for the other, and the links.
@@ -109,10 +110,13 @@ async def main():
 
     first = await bootstrap(n1, None)
     async with LogTap(n1) as t1, LogTap(n2) as t2:
-        second = await bootstrap(n2, first["Mnemonic"])
-        t0 = time.monotonic()
+        # why before node2's claim: the claim broadcasts node2's status at once and
+        # node1 links at once (astral-docs protocols/nearby/README.md, a mode change;
+        # protocols/user/README.md), so the pair may share a link before the claim returns
         before = {"node1": await links_to(n1, ids["node2"]),
                   "node2": await links_to(n2, ids["node1"])}
+        second = await bootstrap(n2, first["Mnemonic"])
+        t0 = time.monotonic()
         a, b, waited = await wait_link(n1, n2, ids, t0)
         seen = await observe(nodes, ids)
         taps = {"node1": t1, "node2": t2}

@@ -23,8 +23,12 @@ def main():
     assert f["fresh"] == "fresh" and f["unclaimed"] == "unclaimed", (
         f"the reflector went {f['fresh']} → {f['unclaimed']}; want fresh → unclaimed")
     assert f["endpoints_before"] == [], (
-        f"before the join the reflector resolved {f['endpoints_before']} for node1; "
-        "want none, so that only the join could find node1")
+        f"before the join the reflector resolved {f['endpoints_before']} for node1 after waiting "
+        f"{f['stale_wait_seconds']} s for a stale entry to end; want none, so that only the join "
+        "could find node1")
+    if f["endpoints_stale"]:
+        print(f"oracle: the reflector first resolved {f['endpoints_stale']} for node1 from an entry "
+              f"cached before node1's claim; it ended after {f['stale_wait_seconds']} s")
     assert f["node1_mode"] in (None, nearby.STEALTH), (
         f"node1 stores nearby mode {f['node1_mode']}; the test wants Stealth")
 
