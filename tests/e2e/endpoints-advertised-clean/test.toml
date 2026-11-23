@@ -1,0 +1,15 @@
+nodes    = ["node1", "node2"]
+after    = "adopt-node"
+# why 240 s: a 10 s settle, a relink of up to 60 s, a 30 s wait for node1's
+# rows, and the reads around them
+timeout  = 240
+# why destroys: add-bridge leaves docker0 on node2 for the rest of the world
+destroys = true
+ops      = ["add-bridge node2 --name docker0 --cidr 172.17.0.1/16"]
+facts    = ["advertised_clean"]
+
+# why: a manual public endpoint (astral-docs protocols/tcp/README.md, configEndpoints)
+# is advertised for 7 days, next to the 2 h interface rows; TEST-NET-3 so nothing
+# answers it
+[config.node2.tcp]
+configEndpoints = ["203.0.113.5:40000"]
