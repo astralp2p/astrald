@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -76,10 +77,10 @@ func (l *addrDials) waitDial(t *testing.T, addr string, limit time.Duration) {
 // A row stored while the round's first row hangs is dialed at once, and the hung dial keeps running.
 func TestBasicRoundDialsRowsAddedMidRound(t *testing.T) {
 	const stale, fresh = "10.77.0.11:1791", "10.78.0.11:1791"
-	log := newAddrDials()
+	dials := newAddrDials()
 	staleReturned := make(chan struct{})
 	s := newBasicTestStrategy(t, func(ctx *astral.Context, ep exonetapi.Endpoint) (exonet.Conn, error) {
-		log.record(ep.Address())
+		dials.record(ep.Address())
 		if ep.Address() == stale {
 			// note: a dial to a gone address, which only the round's end stops
 			<-ctx.Done()
@@ -94,18 +95,18 @@ func TestBasicRoundDialsRowsAddedMidRound(t *testing.T) {
 
 	done, release := s.Join(astral.NewContext(context.Background()))
 	defer release()
-	log.waitDial(t, stale, 5*time.Second)
+	dials.waitDial(t, stale, 5*time.Second)
 
 	resolver.set(nodes.NewEndpointWithTTL(mustTCP(t, stale)), nodes.NewEndpointWithTTL(mustTCP(t, fresh)))
 	s.EndpointsAdded()
-	log.waitDial(t, fresh, 2*time.Second)
+	dials.waitDial(t, fresh, 2*time.Second)
 
 	select {
 	case <-staleReturned:
 		t.Fatal("the stale dial returned before the round ended; want it kept running")
 	default:
 	}
-	if n := log.count(stale); n != 1 {
+	if n := dials.count(stale); n != 1 {
 		t.Fatalf("stale row dialed %v times; want once", n)
 	}
 
@@ -117,15 +118,27 @@ func TestBasicRoundDialsRowsAddedMidRound(t *testing.T) {
 	}
 }
 
-// A signal sent before a round starts makes no extra resolve once the round runs.
+// countingResolver yields fixed rows and counts the resolves.
+type countingResolver struct {
+	rows     []*nodes.EndpointWithTTL
+	resolves atomic.Int32
+}
+
+func (r *countingResolver) ResolveEndpoints(*astral.Context, *astral.Identity) (<-chan *nodes.EndpointWithTTL, error) {
+	r.resolves.Add(1)
+	return sig.ArrayToChan(r.rows), nil
+}
+
+// A signal sent before a round starts makes the round resolve no second time.
 func TestBasicRoundDropsSignalFromBeforeIt(t *testing.T) {
 	const row = "10.77.0.11:1791"
-	log := newAddrDials()
+	dials := newAddrDials()
 	s := newBasicTestStrategy(t, func(_ *astral.Context, ep exonetapi.Endpoint) (exonet.Conn, error) {
-		log.record(ep.Address())
+		dials.record(ep.Address())
 		return nil, errors.New("refused")
 	})
-	s.mod.resolvers.Add(&stubResolver{rows: []*nodes.EndpointWithTTL{nodes.NewEndpointWithTTL(mustTCP(t, row))}})
+	resolver := &countingResolver{rows: []*nodes.EndpointWithTTL{nodes.NewEndpointWithTTL(mustTCP(t, row))}}
+	s.mod.resolvers.Add(resolver)
 
 	s.EndpointsAdded()
 	done, release := s.Join(astral.NewContext(context.Background()))
@@ -135,7 +148,10 @@ func TestBasicRoundDropsSignalFromBeforeIt(t *testing.T) {
 	case <-time.After(5 * time.Second):
 		t.Fatal("basic round did not finish")
 	}
-	if n := log.count(row); n != 1 {
+	if n := resolver.resolves.Load(); n != 1 {
+		t.Fatalf("round resolved %v times; want once", n)
+	}
+	if n := dials.count(row); n != 1 {
 		t.Fatalf("row dialed %v times; want once", n)
 	}
 }

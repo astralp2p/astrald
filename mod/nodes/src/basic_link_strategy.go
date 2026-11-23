@@ -142,6 +142,8 @@ func (s *BasicLinkStrategy) dialPlanned(round *basicRound, rows <-chan *dialRow)
 // would wait for the next round, after every in-flight dial of a stale row returned: up to the
 // tcp dial_timeout. A woken node dials at once (astral-docs protocols/user/README.md).
 // why stop: a round whose first rows all returned ends, and the next round resolves afresh.
+// note: a signal after stop waits for the dials earlier signals started; the user module's
+// wake on the same pull then starts the next round.
 func (s *BasicLinkStrategy) dialAdded(round *basicRound, stop <-chan struct{}) {
 	var wg sync.WaitGroup
 	defer wg.Wait()
