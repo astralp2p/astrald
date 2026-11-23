@@ -55,8 +55,12 @@ func newConsumeFixture(t *testing.T) *consumeFixture {
 	}
 	aConn, bConn := NewMemPacketPair()
 	tick := WithPingInterval(50 * time.Millisecond)
+	// why: hole.go sends from an unconnected UDP socket (net.ListenUDP), whose send
+	// to a closed port succeeds, while the mem pair fails every send once the peer
+	// closes; without the bound the local hole expires after maxPingFails sends
+	// during the post-lock signaling, which the real socket never does.
 	f := &consumeFixture{
-		local:    NewHoleWithConn(shape, self, true, aConn, tick),
+		local:    NewHoleWithConn(shape, self, true, aConn, tick, WithMaxPingFails(1000)),
 		peerHole: NewHoleWithConn(shape, peer, false, bConn, tick, WithNoPingTimeout(consumePeerNoPing)),
 		peer:     peer,
 	}
