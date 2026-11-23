@@ -1,0 +1,41 @@
+# swarm-comms-netsim.suite — the swarm-comms flows that need a real network:
+# F5 (fallback paths: LAN, Tor, back to LAN), the VM form of F6 (a swarm that
+# forms by itself across a LAN, a second subnet and a container bridge), M7
+# (a peer that moves to a new subnet), M9 (Tor restarts under a running node)
+# and M10 (no bridge or link-local endpoint advertised), with tor-link,
+# nat-punch, gateway-relay and nearby-* (operator decision D11, 2026-11-20).
+# The companion of swarm-comms.suite.
+#
+# Every world is a VM world, one at a time: each destroyer below forks a world
+# that replays bootstrap-user-software-key and adopt-node, so this suite is
+# many VM worlds' worth of time. tor-link and nat-punch run in separate
+# worlds (tor-link's leave-lan downs node2's LAN interface, which nat-punch's
+# enter-nat needs); the planner forks the second destroyer.
+#
+# Green (D11): 3 runs or a recorded waiver.
+
+bootstrap-user-software-key
+adopt-node
+
+# F5 fallback paths
+swarm-fallback-paths
+tor-restart-onion               # M9
+tor-link
+nat-punch
+gateway-relay
+
+# M7 a peer moves
+endpoint-change-swarm
+endpoint-change-relink
+endpoint-change-double
+
+# F6 forms and finds
+swarm-forms-and-finds
+endpoints-advertised-clean      # M10
+nearby-adopt
+nearby-stealth-meet
+nearby-silent
+nearby-relink
+nearby-join
+nearby-adopt-ports
+nearby-stealth-meet-ports

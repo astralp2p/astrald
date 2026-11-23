@@ -1,0 +1,20 @@
+w0 vm:  bootstrap-user-software-key → adopt-node → swarm-fallback-paths
+w1 vm:  bootstrap-user-software-key* → adopt-node* → tor-restart-onion
+w2 vm:  bootstrap-user-software-key* → adopt-node* → tor-link
+w3 vm:  bootstrap-user-software-key* → adopt-node* → nat-punch
+w4 vm:  bootstrap-user-software-key* → adopt-node* → gateway-relay
+w5 vm:  bootstrap-user-software-key* → adopt-node* → endpoint-change-swarm
+        → endpoint-change-relink → endpoint-change-double
+w6 vm:  bootstrap-user-software-key* → adopt-node* → endpoints-advertised-clean
+        config node2.tcp.configEndpoints = ["203.0.113.5:40000"]
+w7 vm:  swarm-forms-and-finds
+w8 vm:  nearby-adopt → nearby-stealth-meet → nearby-silent → nearby-relink
+w9 vm:  nearby-adopt* → nearby-join
+w10 vm: nearby-adopt-ports
+        config node2.kcp.listen_port = 1810
+        config node2.tcp.listen_port = 1800
+w11 vm: nearby-stealth-meet-ports
+        config node1.kcp.listen_port = 1810
+        config node1.tcp.listen_port = 1800
+        config node2.kcp.listen_port = 1811
+        config node2.tcp.listen_port = 1801

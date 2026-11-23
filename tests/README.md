@@ -177,6 +177,8 @@ passes alone and fails in the shared run, a test before it changed its world.
 | `kcp.suite` | two siblings joined by kcp alone; one restarts and relinks over kcp, then is killed and its peer drops the stale link | VM (netsim) | not measured |
 | `endpoint.suite` | a sibling behind NAT finds a sibling that moved to a new subnet; an address changed twice within 5 s reaches both siblings | VM (netsim) | not measured |
 | `nearby.suite` | an unowned node adopted by its nearby alias, two nodes of one User meeting in stealth, a Silent node, a sibling relinked when heard, a fresh node joining by user.join, and adoption and a stealth meeting off the default listen ports | VM (netsim) | ~75 min estimated (not measured) |
+| `swarm-comms.suite` | apps and nodes of one swarm reach each other on the first attempt and stay reachable through restarts, joins, leaves, a freeze and an expel: flows F1-F4 and the local edge cases of the E2E tests exhibit | local (any host) | about 1-2 h estimated (not measured) |
+| `swarm-comms-netsim.suite` | the swarm-comms flows that need a real network: LAN, Tor and back to LAN, a swarm that forms by itself across subnets and a bridge, a peer that moves, Tor restarting under a node, no bridge or link-local endpoint advertised | VM (netsim) | about 4-8 h estimated (not measured) |
 | `agent.suite` | the flows an AI operator can drive (`--driver agent`) | VM (netsim), or Docker without netsim | not measured |
 | `docker-agent.suite` | the operator flows only a Docker world runs: a roster the VM lab lacks, or a world of their own (`--driver agent --docker`) | Docker | not measured |
 | `integration.suite` | full-integration flows in throwaway containers (`--docker`) | Docker, or local without `--docker` | not measured |
@@ -337,6 +339,12 @@ object-provider drivers: the session loader, app registration with
 ServeObjects permits, and apps that serve `objects.find`, `describe`,
 `search` and `read` with counting handlers in answer, claim or hang mode. Its
 `README.md` lists the calls.
+
+`e2e/internal/meshapp` is the long-lived mesh app of the swarm-comms tests:
+one `meshapp serve` per node serves `hello`, advertises one service, follows
+it with reach=swarm and calls every provider it reports. `lib/meshapps.py`
+starts the apps and reads what they recorded. `e2e/internal/meshapp/README.md`
+lists the commands, the state file and the call log.
 
 ## Long-lived apps
 

@@ -27,7 +27,8 @@ GOLDEN = Path(__file__).resolve().parent / "golden"
 SUITES = {"main": "script", "tor": "script", "nat": "script",
           "gateway": "script", "agent": "agent", "integration": "script",
           "nearby": "script", "docker-agent": "agent", "kcp": "script",
-          "endpoint": "script"}
+          "endpoint": "script", "swarm-comms": "script",
+          "swarm-comms-netsim": "script"}
 # suite -> the heavy world its agent plan is drawn in, where not a VM
 # why: docker-agent.suite holds operator flows a VM world cannot run (a
 # roster the lab lacks) or would open a world of its own for
@@ -314,11 +315,13 @@ class TestShippedPlans(Invariants, unittest.TestCase):
         worlds = plan(self.tests, sorted(self.tests))
         self.assertEqual(
             [(w.kind, w.steps[-1].test) for w in worlds],
-            [("local", "app-node-restart-reconnect"),
+            [("local", "app-contract-late-sibling"),
+             ("local", "app-node-restart-reconnect"),
              ("local", "basic-strategy-dead-rows"),
              ("local", "basic-strategy-excess-link-pruning"),
              ("local", "basic-strategy-stalled-endpoint-released"),
              ("vm", "endpoint-change-double"),
+             ("vm", "endpoints-advertised-clean"),
              ("local", "expel-authority"),
              ("local", "expel-during-transfer"), ("local", "expel-node"),
              ("local", "expel-sweep-redelivers"),
@@ -326,6 +329,7 @@ class TestShippedPlans(Invariants, unittest.TestCase):
              ("local", "join-via-member"), ("vm", "kcp-restart-stale-link"),
              ("local", "kcp-only-restart-relink"),
              ("local", "link-dead-peer-keepalive"),
+             ("local", "link-prefer-live"),
              ("local", "link-session-migrate"),
              ("local", "link-session-migrate-serving-side"),
              ("local", "membership-resync-volume"),
@@ -338,14 +342,21 @@ class TestShippedPlans(Invariants, unittest.TestCase):
              ("local", "relay-pull-on-miss"),
              ("local", "route-outcomes-dead-peer"),
              ("local", "route-outcomes-expelled-host"),
+             ("local", "services-carry-eos-retry"),
              ("local", "services-consumer-restart"),
+             ("local", "services-follow-member-leaves"),
              ("local", "services-node-restart"),
              ("local", "services-swarm-membership"),
+             ("vm", "swarm-fallback-paths"),
+             ("local", "swarm-apps-matrix-kcp"), ("local", "swarm-apps-talk"),
+             ("local", "swarm-survives-churn"),
+             ("local", "swarm-everyone-reaches-everyone"),
+             ("local", "swarm-expel-clean"),
              ("local", "expel-cross-traffic"),
              ("local", "expel-offline-subject"),
              ("local", "expel-survives-restart"),
              ("local", "link-self-heal"), ("local", "swarm-member-restart"),
-             ("vm", "tor-link"),
+             ("vm", "tor-link"), ("vm", "tor-restart-onion"),
              ("local", "two-swarms-side-by-side"),
              ("local", "basic-strategy-stalled-negotiation"),
              ("local", "blueprint-survives-restart"),
@@ -363,7 +374,8 @@ class TestShippedPlans(Invariants, unittest.TestCase):
              ("local", "import-user-software-key"),
              ("local", "introduce-node"), ("vm", "nearby-join"),
              ("vm", "nearby-relink"), ("vm", "nearby-adopt-ports"),
-             ("vm", "nearby-stealth-meet-ports")])
+             ("vm", "nearby-stealth-meet-ports"),
+             ("vm", "swarm-forms-and-finds")])
 
     def test_a_local_test_never_enters_a_vm_world(self):
         # why mcp-peer, app-query and services-app-call: each serves an app
