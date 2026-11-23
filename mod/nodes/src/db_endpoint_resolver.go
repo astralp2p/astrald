@@ -6,6 +6,7 @@ import (
 
 	"github.com/astralp2p/astral-go/api/nodes"
 	"github.com/astralp2p/astral-go/astral"
+	"github.com/astralp2p/astral-go/sig"
 )
 
 var _ nodesmod.EndpointResolver = &DBEndpointResolver{}
@@ -16,6 +17,13 @@ type DBEndpointResolver struct {
 
 // ResolveEndpoints is a nodes.EndpointResolver that fetches endpoints from the local database
 func (r *DBEndpointResolver) ResolveEndpoints(ctx *astral.Context, nodeID *astral.Identity) (<-chan *nodes.EndpointWithTTL, error) {
+	// why: the node's own identity resolves only to its listener endpoints, so a
+	// row stored about itself is never served; see astral-docs
+	// protocols/nodes/ops/nodes.resolve_endpoints.md, Returned objects.
+	if nodeID.IsEqual(r.mod.node.Identity()) {
+		return sig.ArrayToChan[*nodes.EndpointWithTTL](nil), nil
+	}
+
 	var ch = make(chan *nodes.EndpointWithTTL)
 
 	rows, err := r.mod.db.FindEndpoints(nodeID)

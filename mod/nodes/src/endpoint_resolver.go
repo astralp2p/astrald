@@ -69,7 +69,14 @@ func (mod *Module) runResolver(ctx *astral.Context, r nodesmod.EndpointResolver,
 // UpdateNodeEndpoints asks a remote resolver node for identity's endpoints,
 // stores them locally, and returns how many of them were new.
 // Per-endpoint store errors are logged, not returned.
+// A pull about the node's own identity queries nothing and stores nothing.
 func (mod *Module) UpdateNodeEndpoints(ctx *astral.Context, resolver *astral.Identity, identity *astral.Identity) (int, error) {
+	// why: a peer's reply about this node is a second-hand view of its listeners,
+	// which DBEndpointResolver never serves for the node's own identity.
+	if identity.IsEqual(mod.node.Identity()) {
+		return 0, nil
+	}
+
 	endpoints, err := mod.resolveRemote(ctx.IncludeZone(astral.ZoneNetwork), resolver, identity)
 	if err != nil {
 		return 0, fmt.Errorf("resolve endpoints: %v", err)

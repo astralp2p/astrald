@@ -26,6 +26,8 @@ type BasicLinkStrategy struct {
 	target      *astral.Identity
 
 	rounds roundKeeper
+	// added carries an EndpointsAdded signal to the running round; buffer 1.
+	added chan struct{}
 }
 
 var _ nodesmod.LinkStrategy = &BasicLinkStrategy{}
@@ -43,41 +45,130 @@ func (s *BasicLinkStrategy) Join(ctx *astral.Context) (done <-chan struct{}, rel
 	return s.rounds.join(ctx, s.mod.ctx, budget, s.run)
 }
 
-// run dials the target's rows on the round context and offers the first link to the pool.
-func (s *BasicLinkStrategy) run(r *linkRound) {
-	var wg sync.WaitGroup
-	var winner sig.Value[*Link]
+// basicRound is the dialing state the dials of one basic round share.
+type basicRound struct {
+	ctx    *astral.Context
+	cancel context.CancelFunc // note: ends every dial of the round once a link won
+	winner sig.Value[*Link]
+	// planned holds network:address of every row the round dialed or queued.
+	planned sig.Set[string]
+}
 
+// run dials the target's rows on the round context and offers the first link to the pool.
+// Rows that EndpointsAdded announces while the first rows dial join the round.
+func (s *BasicLinkStrategy) run(r *linkRound) {
 	wctx, cancel := r.ctx.WithCancel()
 	defer cancel()
+	round := &basicRound{ctx: wctx, cancel: cancel}
 
-	resolved, err := s.mod.ResolveEndpoints(wctx, s.target)
+	// why: a signal sent before this round names rows that the resolve below reads anyway.
+	s.drainAdded()
+
+	endpoints, err := s.resolveRows(round)
 	if err != nil {
 		s.mod.log.Log("resolve endpoints failed: %v", err)
 		return
 	}
 
-	endpoints := s.planRows(wctx, sig.FilterChan(resolved, func(e *nodes.EndpointWithTTL) bool {
-		return slices.Contains(s.networks, e.Network())
-	}))
+	firstDone := make(chan struct{})
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		s.dialAdded(round, firstDone)
+	}()
 
-	// todo: instead of spawning 8 goroutines per strategy, we could have worker pool which is shared across strategies
-	wg.Add(DefaultWorkerCount)
-	for i := 0; i < DefaultWorkerCount; i++ {
-		go func() {
-			defer wg.Done()
-			s.dialRows(wctx, cancel, endpoints, &winner)
-		}()
-	}
-
+	s.dialPlanned(round, endpoints)
+	close(firstDone)
 	wg.Wait()
 
-	link := winner.Get()
+	link := round.winner.Get()
 	if link == nil {
 		return
 	}
 
 	s.mod.linkPool.offerStrategyLink(link, s.Name())
+}
+
+// EndpointsAdded makes the running round, if any, dial the target's rows it has not planned yet.
+// A signal that finds an earlier one pending is absorbed by it.
+func (s *BasicLinkStrategy) EndpointsAdded() {
+	select {
+	case s.added <- struct{}{}:
+	default:
+	}
+}
+
+// drainAdded drops a pending EndpointsAdded signal.
+func (s *BasicLinkStrategy) drainAdded() {
+	select {
+	case <-s.added:
+	default:
+	}
+}
+
+// resolveRows resolves the target's rows and returns, in dial order, those of the
+// strategy's networks that the round has not planned, planning each.
+// why planned: a row resolved twice in one round, by two resolvers or by a re-resolve, is dialed once.
+func (s *BasicLinkStrategy) resolveRows(round *basicRound) (<-chan *dialRow, error) {
+	resolved, err := s.mod.ResolveEndpoints(round.ctx, s.target)
+	if err != nil {
+		return nil, err
+	}
+
+	return s.planRows(round.ctx, sig.FilterChan(resolved, func(e *nodes.EndpointWithTTL) bool {
+		return slices.Contains(s.networks, e.Network()) && round.planned.Add(e.Network()+":"+e.Address()) == nil
+	})), nil
+}
+
+// dialPlanned dials rows with DefaultWorkerCount workers and returns once every worker returned.
+func (s *BasicLinkStrategy) dialPlanned(round *basicRound, rows <-chan *dialRow) {
+	// todo: instead of spawning 8 goroutines per strategy, we could have worker pool which is shared across strategies
+	var wg sync.WaitGroup
+	wg.Add(DefaultWorkerCount)
+	for i := 0; i < DefaultWorkerCount; i++ {
+		go func() {
+			defer wg.Done()
+			s.dialRows(round.ctx, round.cancel, rows, &round.winner)
+		}()
+	}
+	wg.Wait()
+}
+
+// dialAdded dials, on every EndpointsAdded signal, the target's rows the round has not planned,
+// until stop closes or the round ends. It returns once those dials returned.
+//
+// why: the round resolves once as it starts, so a row an endpoints-changed pull stores later
+// would wait for the next round, after every in-flight dial of a stale row returned: up to the
+// tcp dial_timeout. A woken node dials at once (astral-docs protocols/user/README.md).
+// why stop: a round whose first rows all returned ends, and the next round resolves afresh.
+// note: a signal after stop waits for the dials earlier signals started; the user module's
+// wake on the same pull then starts the next round.
+func (s *BasicLinkStrategy) dialAdded(round *basicRound, stop <-chan struct{}) {
+	var wg sync.WaitGroup
+	defer wg.Wait()
+
+	for {
+		select {
+		case <-round.ctx.Done():
+			return
+		case <-stop:
+			return
+		case <-s.added:
+		}
+
+		rows, err := s.resolveRows(round)
+		if err != nil {
+			s.mod.log.Logv(1, "resolve added endpoints failed: %v", err)
+			continue
+		}
+
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			s.dialPlanned(round, rows)
+		}()
+	}
 }
 
 // dialRows dials rows from endpoints until one links, endpoints closes or ctx ends.
@@ -161,5 +252,6 @@ func (f *BasicLinkStrategyFactory) Build(target *astral.Identity) nodesmod.LinkS
 		rowBudgets:  f.rowBudgets,
 		roundBudget: f.roundBudget,
 		target:      target,
+		added:       make(chan struct{}, 1),
 	}
 }

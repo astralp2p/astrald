@@ -1,12 +1,16 @@
 #!/bin/sh
 # enter-nat: put a node's astrald behind its own symmetric true-masquerade NAT. Builds the
 # NAT only; it does NOT punch.
-#   enter-nat [--vm <host>]... [--translating]   (default: node1 node2; one call NATs each peer)
+#   enter-nat [--vm <host>]... [--translating] [--peer <host>]...
+#                                    (default: node1 node2; one call NATs each peer)
 #
 # --translating: the NAT translates UDP ports, endpoint-independently, and filters inbound UDP by
 #   address and port (the Starlink class, X06): a UDP socket on local port 40000+n leaves from
 #   external port 20000+n toward every destination, and only replies to a flow the node opened
 #   come back in. There is no inbound DNAT in this mode.
+#
+# --peer: a LAN VM that must answer the NAT'd node's outbound dials. Each peer routes each --vm's
+#   public alias 198.51.100.<oct>/32 over its LAN NIC. It gets no alias and no route to the /24.
 #
 # why: relocating astrald into netns priv severs its direct 10.77 LAN path, so the swarm
 #   link maintainer re-links the pair over Tor -- the node is now a genuine NAT'd peer.
@@ -22,12 +26,13 @@
 #   until the reflector reflects that endpoint back (add-reflector).
 set -eu
 
-VMS=""; TRANSLATING=0
+VMS=""; TRANSLATING=0; PEERS=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --vm) [ $# -ge 2 ] || { echo "need host after --vm" >&2; exit 64; }; VMS="${VMS:+$VMS }$2"; shift 2 ;;
     --translating) TRANSLATING=1; shift ;;
-    *)    echo "usage: enter-nat [--vm <host>]... [--translating]" >&2; exit 64 ;;
+    --peer) [ $# -ge 2 ] || { echo "need host after --peer" >&2; exit 64; }; PEERS="${PEERS:+$PEERS }$2"; shift 2 ;;
+    *)    echo "usage: enter-nat [--vm <host>]... [--translating] [--peer <host>]..." >&2; exit 64 ;;
   esac
 done
 [ -n "$VMS" ] || VMS="node1 node2"
@@ -150,5 +155,23 @@ for vm in $VMS; do
   # shellcheck disable=SC2029
   netsim ssh "$vm" -- "TRANSLATING=$TRANSLATING
 $REMOTE_BODY"
+  [ -n "$PEERS" ] || continue
+  # why: a LAN peer has no route to 198.51.100/24, so its replies to the NAT'd alias leave by its
+  #   default route, the user-mode NIC, and every dial from behind the NAT hangs (the failure
+  #   configure-gateway step 0 records for the gateway).
+  # why /32 and not the /24 or an alias: the /24 also answers NAT'd nodes the call does not name
+  #   for this peer, which gateway-relay needs unanswered (configure-gateway step 0b), and an
+  #   alias makes the peer a public IP candidate.
+  addr=$(netsim ssh "$vm" -- "ip -o -4 addr show | awk '\$4 ~ /^10\.77\./ {a=\$4; sub(/\/.*/,\"\",a); print a; exit}'")
+  [ -n "$addr" ] || { echo "enter-nat: no 10.77 address on $vm" >&2; exit 1; }
+  pub="198.51.100.${addr##*.}"
+  for peer in $PEERS; do
+    # note: a peer that holds a 198.51.100 alias already routes the /24 on-link
+    netsim ssh "$peer" -- "set -eu
+      lan=\$(ip -o -4 addr show | awk '\$4 ~ /^10\.77\./ {print \$2; exit}')
+      [ -n \"\$lan\" ] || { echo 'enter-nat: no 10.77 nic' >&2; exit 1; }
+      ip -o -4 addr show dev \$lan | grep -q ' 198\.51\.100\.' || ip route replace $pub/32 dev \$lan"
+    echo "enter-nat: $peer routes $vm's alias $pub over its LAN NIC"
+  done
 done
 echo "enter-nat: done ($VMS)"

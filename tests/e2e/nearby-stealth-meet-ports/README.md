@@ -11,12 +11,14 @@ node identity, and the sibling that recognises the node opens them.
   `[config.<node>.kcp]`), so a dial to a default port reaches nothing.
 - **driver** `script.py`: claims `node1` with `user.bootstrap` and generated
   words, and `node2` with `user.bootstrap` and the same words; both then
-  broadcast Stealth. While both logs are recorded, it polls both nodes' links
+  broadcast Stealth. While both logs are recorded, it records both nodes'
+  links to each other just before `node2`'s claim, then polls both nodes' links
   every 2 s, for up to 240 s from `node2`'s claim, until they share a link. It
   records each node's nearby entry of the other, the stored modes, the
   endpoints each resolves for the other, and the links with their endpoints.
 - **oracle** `verify.py`: one User claimed both; neither held a link to the
-  other at `node2`'s claim; they share a link within 200 s of that claim (two
+  other before `node2`'s claim (the claim broadcasts `node2`'s status at once,
+  so they may link before it returns); they share a link within 200 s of that claim (two
   status intervals of at most 95 s, and 10 s for the dial); every link a node
   dialed went to the other's LAN address on its carried `tcp` or `kcp` port; a
   node logged `introduced to nearby peer` or `sibling … is nearby at` for the

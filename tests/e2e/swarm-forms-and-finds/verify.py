@@ -5,10 +5,13 @@ From the `forms_and_finds` fact (times from node2's claim):
 
 - the reflector moved to its 10.78.0 address before the claims;
 - user.bootstrap claimed node1, node2 and the reflector for one User, and
-  node1 and node2 shared no link at node2's claim;
+  node1 and node2 shared no link just before node2's claim (an unowned node
+  is never contacted, astral-docs protocols/user/README.md);
 - node1 and node2 shared a link within LAN_WITHIN s of node2's claim, with
   no endpoint given (astral-docs protocols/nearby/README.md: a status every
-  85-95 s; nearby-stealth-meet-ports' bound of two statuses and a dial);
+  85-95 s; nearby-stealth-meet-ports' bound of two statuses and a dial), and
+  node1 or node2 logged its nearby contact with the other
+  (protocols/user/README.md, nearby contact);
 - the reflector's `user.introduce(node1)` answered `ack`; the reflector
   shared a link with node1 within NODE1_WITHIN s of the answer
   (protocols/user/ops/user.introduce.md: a 30 s push wait) and with node2
@@ -58,15 +61,24 @@ def check_claims(f: dict) -> None:
         f"the reflector never held {f['target']}: {f['moved']['addrs']}")
     users = set(f["claims"].values())
     assert len(users) == 1, f"user.bootstrap claimed the nodes for different Users: {f['claims']}"
-    assert f["before"] == [], f"node1 and node2 shared links {f['before']} at node2's claim"
+    assert f["before"] == [], f"node1 and node2 shared links {f['before']} before node2's claim"
 
 
-def check_lan(f: dict) -> None:
+def contacts(f: dict) -> list:
+    """[(role, identity)] of every nearby contact line a role's log holds."""
+    return sorted({(k, next(g for g in m.groups() if g)) for k, lines in f["log"].items()
+                   for e in lines if (m := CONTACT.search(e["text"]))})
+
+
+def check_lan(f: dict, ids: dict) -> None:
     at = f["lan"]["node1-node2"]
     assert at is not None, (
         f"node1 and node2 shared no link within the driver's wait; contact lines {f['log']}")
     assert at <= LAN_WITHIN, (
         f"node1 and node2 linked {at} s after node2's claim; want within {LAN_WITHIN} s")
+    met = contacts(f)
+    assert ("node1", ids["node2"]) in met or ("node2", ids["node1"]) in met, (
+        f"node1 and node2 linked with no nearby contact line naming the other: {met}")
     print(f"oracle: node1 and node2 linked through nearby {at} s after node2's claim")
 
 
@@ -113,13 +125,12 @@ def main():
     ids = {k: doc["nodes"][k]["identity"] for k in ROLES}
     f = doc["facts"]["forms_and_finds"]
     check_claims(f)
-    check_lan(f)
+    check_lan(f, ids)
     check_introduce(f, ids)
     check_clean(f)
     check_swarm(f, ids)
-    met = sorted({(k, next(g for g in m.groups() if g)) for k, lines in f["log"].items()
-                  for e in lines if (m := CONTACT.search(e["text"]))})
-    print(f"oracle: one swarm of three; no bridge or link-local endpoint; nearby contacts {met}")
+    print(f"oracle: one swarm of three; no bridge or link-local endpoint; "
+          f"nearby contacts {contacts(f)}")
 
 
 main()

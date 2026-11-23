@@ -53,3 +53,17 @@ func (linker *NodeLinker) Activate(ctx *astral.Context, strategies []string) (do
 
 	return sig.WaitAllDone(ctx, doneChannels...), release
 }
+
+// rowsListener is a strategy whose running round dials rows stored after the round started.
+type rowsListener interface {
+	EndpointsAdded()
+}
+
+// EndpointsAdded tells every strategy that dials rows mid-round that new rows of Target were stored.
+func (linker *NodeLinker) EndpointsAdded() {
+	for _, strategy := range linker.strategies.Clone() {
+		if l, ok := strategy.(rowsListener); ok {
+			l.EndpointsAdded()
+		}
+	}
+}

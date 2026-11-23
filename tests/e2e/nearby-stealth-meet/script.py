@@ -7,14 +7,29 @@ introduce-node claims `replacement`. The reflector then holds its own contract
 alone, and node1 and node2 hold none of it. While each node's log is
 recorded, the driver waits, with no scan, no endpoint, no alias and no
 introduction, until node1 and the reflector list each other linked and node2
-and the reflector list each other.
+and the reflector list each other (the meet), and then until the reflector
+lists node1 as verified from a status other than the one it held at the claim
+(the recognition). It records the views at the meet and the time of each.
 
 why no wait before the claim: node1 and node2 hold the reflector, unowned, as
-a verified visible node under its IP. When it comes back as the User's, its
-user changes, and nearby emits PeerSeen for a node whose user changed
-(mod/nearby/src/cache.go storeVerified), so both act on it. The reflector,
-once claimed, recognises node1 and node2 from their stealth hints. Contact can
-therefore start from either side, and the log records which.
+a verified visible node under its IP. The reflector's claim sends its stealth
+status at once (mod/user/src/contracts.go onActiveContractChanged), its user
+changes, and nearby emits PeerSeen for a node whose user changed
+(mod/nearby/src/cache.go storeVerified), so node1 and node2 recognise it and
+contact it at once.
+
+why the recognition comes later: node1's last status reached the reflector
+while it was unowned, so the reflector cached it unrecognised (astral-docs
+protocols/nearby/README.md, status processing step 4). The reflector verifies
+node1 only at node1's next periodic status, at most 95 s after the claim.
+
+why a status other than the one held at the claim: nearby-adopt claims node1
+seconds before this test, so the reflector may still hold node1's Visible,
+adoptable status from before that claim. That entry is verified and lives
+5 min (statusTTL), and it drops node1's later Stealth status while the
+reflector is unowned (astral-docs protocols/nearby/README.md, status
+processing step 7). Only node1's next status after the reflector's claim
+shows what node1 broadcasts as the User's node.
 """
 import asyncio
 import time
@@ -27,9 +42,9 @@ from lib.nodelog import LogTap
 from lib.sessionio import load, write_facts
 
 MANAGER = {"Type": "mod.sys.register_manager_request", "Object": {"Name": "manager"}}
-# why: after the claim the reflector recognises node1 and node2 at their next
-# status, at most 95 s away, then links, reads their contract and introduces
-# itself; the sync and the sibling links follow
+# why: node1 and node2 meet the claimed reflector at once through PeerSeen; the
+# reflector recognises node1 only at node1's next periodic status, at most 95 s
+# after the claim, plus guest stalls
 CONVERGE = 240.0
 POLL = 2.0
 # the user module's nearby contact lines (mod/user/src/peer_seen.go)
@@ -47,8 +62,12 @@ async def members(node: dict, token: str | None = None) -> dict | None:
 
 
 async def listing(node: dict) -> list:
-    async with await astral.connect(node["endpoint"], token=node["token"]) as c:
-        return await nearby.statuses(c)
+    """node's nearby entries; none when the call fails."""
+    try:
+        async with await astral.connect(node["endpoint"], token=node["token"]) as c:
+            return await nearby.statuses(c)
+    except (AstralError, jsonops.OpError):
+        return []
 
 
 async def claim(node: dict, words: str) -> dict:
@@ -68,6 +87,38 @@ def met(v: dict, ids: dict) -> bool:
             and n2 in v["reflector"])
 
 
+def fresh(entry: dict | None, held: dict | None) -> bool:
+    """Whether entry is a verified status other than held."""
+    return entry is not None and (held is None or entry["nonce"] != held["nonce"])
+
+
+async def converge(nodes: dict, ids: dict, held: dict | None) -> dict:
+    """The swarm views at the meet, the meet's time and the reflector's recognition of node1.
+
+    Polls every POLL s until the pair met and the reflector lists node1 as
+    verified from a status other than `held`, its entry of node1 at the claim,
+    or CONVERGE s pass. Times are in s from the first poll; a meet
+    that never came carries the last views and the time the wait ended.
+    """
+    t0 = time.monotonic()
+    clock = lambda: round(time.monotonic() - t0, 1)  # noqa: E731
+    out = {"after": None, "converged": None, "met": False, "recognised": None}
+    while True:
+        if not out["met"]:
+            views = {k: await members(nodes[k]) for k in ids}
+            if met(views, ids):
+                out.update(after=views, converged=clock(), met=True)
+        if out["met"] and fresh(nearby.of(await listing(nodes["reflector"]), ids["node1"]), held):
+            out["recognised"] = clock()
+            return out
+        if clock() >= CONVERGE:
+            break
+        await asyncio.sleep(POLL)
+    if not out["met"]:
+        out.update(after=views, converged=clock())
+    return out
+
+
 async def main():
     doc = load()
     nodes, user = doc["nodes"], doc["facts"]["nearby_user"]
@@ -77,17 +128,11 @@ async def main():
     before = {"node1": await members(n1), "node2": await members(n2)}
 
     async with LogTap(n1) as t1, LogTap(n2) as t2, LogTap(r) as tr:
+        held = nearby.of(await listing(r), ids["node1"])
         claimed = await claim(r, user["words"])
         before["reflector"] = await members(r)
 
-        t0 = time.monotonic()
-        while True:
-            views = {k: await members(nodes[k]) for k in ids}
-            if met(views, ids) or time.monotonic() - t0 >= CONVERGE:
-                break
-            await asyncio.sleep(POLL)
-        converged = round(time.monotonic() - t0, 1)
-
+        seen = await converge(nodes, ids, held)
         entries = {
             "node1_of_reflector": nearby.of(await listing(n1), ids["reflector"]),
             "node2_of_reflector": nearby.of(await listing(n2), ids["reflector"]),
@@ -101,13 +146,14 @@ async def main():
 
     write_facts({"nearby_stealth": {
         "user": user["identity"], "claimed": claimed["Identity"],
-        "before": before, "after": views, "converged": converged,
-        "met": met(views, ids), "entries": entries, "modes": modes,
+        "before": before, **seen, "entries": entries, "modes": modes,
+        "reflector_held_node1": held,
         "log": {k: t.find(*NEEDLES) for k, t in taps.items()},
         "taps": {k: t.state() for k, t in taps.items()},
     }})
     print(f"driver: reflector claimed for {claimed['Identity'][:16]}…; "
-          f"met={met(views, ids)} after {converged:.0f}s")
+          f"met={seen['met']} after {seen['converged']:.0f}s; "
+          f"reflector recognised node1 at {seen['recognised']}s")
 
 
 asyncio.run(main())

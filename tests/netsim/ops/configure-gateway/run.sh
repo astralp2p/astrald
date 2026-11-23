@@ -53,6 +53,25 @@ done
 [ -n "$GW" ] || { echo "configure-gateway: --gateway is required" >&2; exit 64; }
 [ -n "$CLIENTS" ] || { echo "configure-gateway: name at least one client VM" >&2; exit 64; }
 
+# wait_astrald <vm>: returns once astrald on vm answers apphost.whoami.
+# why apphost.whoami: apphost listens only after every module started, so an
+#   answer means the gateway's ops are registered.
+# why the netns dance: enter-nat moves astrald into netns priv, and apphost
+#   then listens on that netns's loopback — a root-ns astral-query reaches
+#   nothing. Ask where astrald actually is rather than assuming.
+wait_astrald() {
+  for _ in $(seq 1 60); do
+    if netsim ssh "$1" -- "set -eu
+        q=astral-query
+        ip netns list 2>/dev/null | grep -qw priv && q='ip netns exec priv astral-query'
+        systemctl is-active --quiet astrald && \$q apphost.whoami >/dev/null 2>&1"; then return 0; fi
+    sleep 2
+  done
+  echo "configure-gateway: astrald did not come back on $1" >&2
+  netsim ssh "$1" -- "journalctl -u astrald --no-pager | tail -20" >&2 || true
+  exit 1
+}
+
 eval "GW_ID=\${ASTRAL_ID_$GW:-}"
 [ -n "$GW_ID" ] || { echo "configure-gateway: ASTRAL_ID_$GW is not set — is $GW on the manifest roster?" >&2; exit 1; }
 
@@ -123,6 +142,12 @@ gateway:
 YAML
 systemctl restart astrald"
 
+# why wait before the clients restart: a client registers as soon as it
+#   starts, and a registration that reaches a gateway still starting is
+#   rejected, so the verify's first-attempt `bound to` fails (gateway-relay,
+#   netsim pass 2026-11-23, a guest stalled 13 s under host load).
+wait_astrald "$GW"
+
 # 2) each client: name the gateway and its link endpoint, be publicly visible
 # in its list. The endpoint is the gateway's LAN address and astrald's tcp
 # port, the address step 4 gives a peer.
@@ -142,22 +167,9 @@ systemctl restart astrald"
   echo "configure-gateway: $vm now registers with $GW"
 done
 
-# 3) wait for astrald to be back on every touched VM before handing over.
-# why the netns dance: enter-nat moves astrald into netns priv, and apphost
-# then listens on that netns's loopback — a root-ns astral-query reaches
-# nothing. Ask where astrald actually is rather than assuming.
-for vm in $GW $CLIENTS; do
-  ok=
-  for _ in $(seq 1 60); do
-    if netsim ssh "$vm" -- "set -eu
-        q=astral-query
-        ip netns list 2>/dev/null | grep -qw priv && q='ip netns exec priv astral-query'
-        systemctl is-active --quiet astrald && \$q apphost.whoami >/dev/null 2>&1"; then ok=1; break; fi
-    sleep 2
-  done
-  [ -n "$ok" ] || { echo "configure-gateway: astrald did not come back on $vm" >&2
-    netsim ssh "$vm" -- "journalctl -u astrald --no-pager | tail -20" >&2 || true; exit 1; }
-done
+# 3) wait for astrald to be back on every client before handing over.
+# shellcheck disable=SC2086
+for vm in $CLIENTS; do wait_astrald "$vm"; done
 
 # 4) a peer has to know where the gateway lives too. A lab node knows its
 # swarm siblings from adoption and knows nothing else, so without this a

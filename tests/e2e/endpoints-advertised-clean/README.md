@@ -20,7 +20,11 @@ is advertised with the public TTL.
   the LAN kcp rows are written after the new link, at most 30 s; reads
   node1's links to node2 with both ends. The LAN tcp row cannot date the
   pull: adopt-node wrote it on node1 with `nodes.add_endpoint`, and no pull
-  moves the expiry of such a row.
+  moves the expiry of such a row. The facts keep each
+  `nodes.resolve_endpoints` answer as the stream it was sent in. node1's rows
+  keep the longest TTL per endpoint, since nearby lists node2's LAN
+  endpoints a second time with at most 300 s, and the order of resolvers
+  never decides a key.
 - **oracle** `verify.py`:
   - control: node2 holds `172.17.0.1` and an `fe80::` address;
   - neither node2's own rows nor node1's rows for node2 hold an endpoint in
@@ -31,9 +35,21 @@ is advertised with the public TTL.
     row starts at 90 days and keeps its expiry, so node1's kcp rows judge
     the private class there;
   - node1's rows were written after the new link, and node1 holds no link
-    with an end in either range.
+    with an end in either range;
+  - node2's own answer is judged object by object and holds no endpoint
+    twice: a node's own identity resolves to its listener endpoints only.
 
-Sources: astral-docs `protocols/nodes/README.md`, Announcing a change ("A
+The test depends on the astrald fix on `bugfix/own-endpoints-listener-only`.
+Before it, node2 stores node1's view of node2 (pulled when node1 forwards
+node2's contract) and resolves those stored rows for itself next to its
+listener endpoints; node1's first-hand pull then stores nearby's 300 s copy
+of node2's LAN kcp endpoint, and the pull cannot be dated (run
+20261123T121930Z, w6).
+
+Sources: astral-docs `protocols/nodes/ops/nodes.resolve_endpoints.md`,
+Returned objects (a node's own identity resolves to its listener endpoints;
+nearby adds a peer's tcp and kcp endpoints with at most 300 s);
+`protocols/nodes/README.md`, Announcing a change ("A
 node never advertises an IPv6 link-local address"), Endpoint exchange in
 the local swarm (the pull on a first link) and Withdrawn endpoints ("No pull
 moves the expiry of a row that `nodes.add_endpoint` wrote earlier"); `protocols/tcp/README.md`,

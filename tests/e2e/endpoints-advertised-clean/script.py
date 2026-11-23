@@ -11,6 +11,8 @@ node2's endpoints from node2 (astral-docs protocols/nodes/README.md, Endpoint
 exchange in the local swarm). The driver polls node1's rows for node2 until
 they hold the public endpoint and node2's LAN kcp endpoints, written after
 the new link, or ROWS_WAIT s pass. Last it reads node1's links with both ends.
+The facts keep each answer as the stream nodes.resolve_endpoints sent, and a
+poll judges node1's longest TTL per endpoint.
 
 why the TTL dates a row: node1 stores an endpoint with the TTL node2 resolves
 for it and answers the time left (mod/nodes/src/db_endpoint_resolver.go), so
@@ -49,10 +51,29 @@ def text(e) -> str | None:
     return None if e is None else f"{e.network()}:{e.address()}"
 
 
-async def rows(c, identity: str) -> dict:
-    """{`<network>:<address>`: TTL in s or None} that c's node resolves for identity."""
-    return {text(e.endpoint): e.ttl
-            for e in await c.nodes.resolve_endpoints(identity, experimental=True)}
+async def rows(c, identity: str) -> list:
+    """[[`<network>:<address>`, TTL in s or None]] that c's node resolves for identity, in stream order.
+
+    why a list: nodes.resolve_endpoints streams each resolver's endpoints
+    unmerged, and nearby adds a peer's LAN tcp and kcp endpoints with at most
+    300 s next to the stored rows (astral-docs
+    protocols/nodes/ops/nodes.resolve_endpoints.md, Returned objects)
+    """
+    return [[text(e.endpoint), e.ttl]
+            for e in await c.nodes.resolve_endpoints(identity, experimental=True)]
+
+
+def longest(stream: list) -> dict:
+    """{`<network>:<address>`: longest TTL in s, None for none} of a rows() stream.
+
+    why the longest: the stored row outlives nearby's copy whenever the pull
+    wrote it, so the arrival order of resolvers never decides a key
+    """
+    out = {}
+    for k, t in stream:
+        if k not in out or t is None or (out[k] is not None and t > out[k]):
+            out[k] = t
+    return out
 
 
 async def links_to(c, peer: str) -> list:
@@ -105,14 +126,14 @@ def fresh(held: dict, own: dict, key: str, since: float) -> bool:
 
 
 async def held_rows(c, peer: str, own: dict, lan: str, linked_at: float, clock) -> dict:
-    """node1's rows for peer once they hold the public and the LAN kcp rows fresh, or at ROWS_WAIT."""
+    """node1's row stream for peer once its longest rows hold the public and the LAN kcp rows fresh, or at ROWS_WAIT."""
     keys = (PUBLIC, *lan_kcp(own, lan))
     while True:
-        held = await rows(c, peer)
+        stream = await rows(c, peer)
         since = clock() - linked_at
-        done = all(fresh(held, own, k, since) for k in keys)
+        done = all(fresh(longest(stream), own, k, since) for k in keys)
         if done or since >= ROWS_WAIT:
-            return {"rows": held, "fresh": done, "at": clock()}
+            return {"rows": stream, "fresh": done, "at": clock()}
         await asyncio.sleep(POLL)
 
 
@@ -131,14 +152,14 @@ async def main():
         linked = await relink(c1, peer, clock)
         held = None
         if linked["linked_at"] is not None:
-            held = await held_rows(c1, peer, own, lan, linked["linked_at"], clock)
+            held = await held_rows(c1, peer, longest(own), lan, linked["linked_at"], clock)
         links = await links_to(c1, peer)
 
     write_facts({"advertised_clean": {
         "lan_endpoint": lan, "local_addrs": addrs, "own": own,
         "relink": linked, "node1": held, "links": links}})
-    print(f"driver: node2 holds {addrs}; advertises {sorted(own)}; node1 relinked at "
-          f"{linked['linked_at']} s and holds {sorted((held or {}).get('rows', {}))}")
+    print(f"driver: node2 holds {addrs}; advertises {sorted(longest(own))}; node1 relinked at "
+          f"{linked['linked_at']} s and holds {sorted(longest((held or {}).get('rows', [])))}")
 
 
 asyncio.run(main())

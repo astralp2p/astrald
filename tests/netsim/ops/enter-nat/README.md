@@ -26,6 +26,14 @@ address-and-port-dependent filtering, the class of Starlink's NAT (X06):
   inbound UDP to the alias is dropped at the VM's `input` (table `e2e_nat_filter`);
 - other traffic, TCP included, keeps the port-preserving SNAT.
 
+With **`--peer <host>`** (repeatable) each named LAN VM routes each `--vm`'s public alias
+`198.51.100.<lan-octet>/32` over its LAN NIC, so it can answer the dials the NAT'd node makes
+to it. Without the route the peer's replies leave by its default route (the user-mode NIC) and
+every such dial hangs. The peer gets only the `/32`: no alias, so it gains no public IP
+candidate, and no route to the `/24`, so a NAT'd node the call does not name stays unanswered
+(`gateway-relay` relies on that, see `configure-gateway` step 0b). A peer that already holds a
+`198.51.100` alias routes the `/24` on-link and is left as it is.
+
 Moving astrald off the flat `10.77` address withdraws its direct LAN endpoint (astrald
 polls `InterfaceAddrs`; in the netns it sees only `192.168.99.2`), so the pair re-links
 over Tor — exactly the `leave-lan` dynamic.

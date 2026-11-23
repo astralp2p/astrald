@@ -16,8 +16,9 @@ dials a bridge or zone-less link-local address. Every roster agrees.
     the other's subnet over the one LAN segment.
 - **driver** `script.py`:
   1. waits until the reflector holds its 10.78.0 address;
-  2. claims node1 with `user.bootstrap` and generated words, then node2 and
-     the reflector with the same words; node2's claim starts the clock;
+  2. claims node1 with `user.bootstrap` and generated words, records the
+     links node1 and node2 share, then claims node2 and the reflector with
+     the same words; node2's claim starts the clock;
   3. polls links every 2 s, at most 240 s, until node1 and node2 share one;
   4. on the reflector, as the User: `nodes.add_endpoint(node1, <node1's LAN
      endpoint>)` and `user.introduce(node1)`; polls at most 90 s until the
@@ -29,10 +30,11 @@ dials a bridge or zone-less link-local address. Every roster agrees.
   Every node's log is tapped for the nearby contact lines.
 - **oracle** `verify.py`:
   - the reflector moved; one User claimed all three; node1 and node2 shared
-    no link at node2's claim;
+    no link before node2's claim (the claim broadcasts node2's status at
+    once, so they may link before it returns);
   - node1 and node2 linked within 200 s of node2's claim, with no endpoint
     given (two nearby status intervals of at most 95 s and 10 s for the
-    dial);
+    dial), and node1 or node2 logged its nearby contact with the other;
   - `user.introduce` answered `ack`; the reflector linked to node1 within
     30 s of the answer and to node2 within 60 s of it, with no endpoint of
     node2 given;

@@ -10,6 +10,8 @@
 # why a move is add-then-delete: astrald polls net.InterfaceAddrs() every 3 s (mod/ip), so the
 #   address set it sees is what changes; and the kernel flushes every route over a NIC that loses
 #   its last IPv4 address, so the new address goes on before the old one comes off.
+# why AccuracySec=1s: a transient timer keeps systemd's default AccuracySec of 1 min, so the
+#   move fires anywhere from --in to --in + 60 s, past the driver's watch (systemd.timer(5)).
 # why on-link routes: the lab is one flat 10.77 LAN segment with no router. Every other VM routes
 #   each new subnet over its LAN NIC, and <vm> routes the LAN (10.77) and the NAT aliases
 #   (198.51.100, enter-nat and go-public) over its own, so each side still reaches the other.
@@ -82,7 +84,8 @@ done
 
 systemctl stop e2e-move-subnet.timer 2>/dev/null || true
 systemctl reset-failed e2e-move-subnet.service e2e-move-subnet.timer 2>/dev/null || true
-systemd-run --quiet --unit=e2e-move-subnet --on-active="${in_s}s" /bin/sh "$script"
+systemd-run --quiet --unit=e2e-move-subnet --on-active="${in_s}s" \
+  --timer-property=AccuracySec=1s /bin/sh "$script"
 echo "move-subnet: $(hostname) holds $cidr on $lan_if; moves to $moves in ${in_s}s, ${gap}s apart" >&2
 EOS
 )

@@ -1,8 +1,8 @@
 nodes    = ["node1", "node2"]
 after    = "adopt-node"
-# why 900 s: the LAN returns about 480 s after the driver starts, and the
-# driver watches up to 230 s more for the tcp link and the tor link's retire
-timeout  = 900
+# why 720 s: the LAN returns about 480 s after the driver starts, and the
+# driver watches 60 s more, with room for the ops and the oracle
+timeout  = 720
 # why destroys: enable-tor writes tor.yaml and leaves Tor running on both nodes
 destroys = true
 # why this order: Tor comes up while the LAN link is live, so the onions publish

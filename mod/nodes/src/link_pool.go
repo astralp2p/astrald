@@ -313,6 +313,14 @@ func (pool *LinkPool) notifyWatchers(ws []*linkWatcher, s *Link, strategy *strin
 	return used
 }
 
+// endpointsAdded tells the linker of target, when one exists, that new rows of target were stored.
+// why no linker is created: without one no round toward target runs, and the next round resolves the rows.
+func (pool *LinkPool) endpointsAdded(target *astral.Identity) {
+	if linker, ok := pool.linkers.Get(target.String()); ok {
+		linker.EndpointsAdded()
+	}
+}
+
 func (pool *LinkPool) getOrCreateNodeLinker(target *astral.Identity) *NodeLinker {
 	key := target.String()
 

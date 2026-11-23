@@ -21,7 +21,14 @@ From the `advertised_clean` fact:
   protocols/nodes/ops/nodes.resolve_endpoints.md). node1's kcp rows judge the
   class there;
 - node1's rows were written by the pull over the new link, and node1 holds no
-  link with an end in either range.
+  link with an end in either range;
+- node2 answers each of its own endpoints once: a node's own identity resolves
+  to its listener endpoints only (astral-docs
+  protocols/nodes/ops/nodes.resolve_endpoints.md, Returned objects).
+
+node1's rows are judged at the longest TTL per endpoint: nearby lists a
+peer's LAN endpoints a second time with at most 300 s, next to the stored
+rows (same op, Returned objects).
 """
 import ipaddress
 
@@ -48,6 +55,25 @@ def banned(endpoint: str | None) -> bool:
     ip = ip_of(endpoint)
     return ip is not None and any(ip.version == n.version and ip in n
                                   for n in (BRIDGE, LINK_LOCAL))
+
+
+def longest(stream: list) -> dict:
+    """{`<network>:<address>`: longest TTL in s, None for none} of a resolved stream."""
+    out = {}
+    for k, t in stream:
+        if k not in out or t is None or (out[k] is not None and t > out[k]):
+            out[k] = t
+    return out
+
+
+def check_own(stream: list, lan: str) -> None:
+    """Judges node2's own stream object by object: no key twice, then the rows."""
+    keys = [k for k, _ in stream]
+    twice = sorted({k for k in keys if keys.count(k) > 1})
+    assert not twice, (
+        f"node2 resolves its own endpoints {twice} more than once: {stream}; a node's own "
+        "identity resolves to its listener endpoints only")
+    check_rows("node2 for itself", longest(stream), lan)
 
 
 def check_control(f: dict) -> None:
@@ -90,7 +116,7 @@ def check_node1(f: dict) -> None:
         f"node1's rows for node2 were not written by a pull over the new link "
         f"(at {r['linked_at']} s): {held}")
     # why: adopt-node's nodes.add_endpoint wrote node1's row for the LAN tcp endpoint
-    check_rows("node1", held["rows"], f["lan_endpoint"], frozenset({f["lan_endpoint"]}))
+    check_rows("node1", longest(held["rows"]), f["lan_endpoint"], frozenset({f["lan_endpoint"]}))
     bad = [link for link in f["links"]
            if banned(link["local_endpoint"]) or banned(link["remote_endpoint"])]
     assert not bad, f"node1 holds a link to node2 on a bridge or link-local address: {bad}"
@@ -99,10 +125,10 @@ def check_node1(f: dict) -> None:
 def main():
     f = load()["facts"]["advertised_clean"]
     check_control(f)
-    check_rows("node2 for itself", f["own"], f["lan_endpoint"])
+    check_own(f["own"], f["lan_endpoint"])
     check_node1(f)
-    print(f"oracle: node2 holds {f['local_addrs']} and advertises {sorted(f['own'])}; "
-          f"node1 holds {sorted(f['node1']['rows'])} after relinking at "
+    print(f"oracle: node2 holds {f['local_addrs']} and advertises {sorted(longest(f['own']))}; "
+          f"node1 holds {sorted(longest(f['node1']['rows']))} after relinking at "
           f"{f['relink']['linked_at']} s; no bridge or link-local endpoint on either")
 
 

@@ -1,5 +1,7 @@
 nodes   = ["node1", "reflector"]
-timeout = 240
+# why 420 s: up to 310 s waiting out a stale nearby entry of node1 (script.py
+# STALE_WAIT), then the 60 s join and the reads
+timeout = 420
 after   = "nearby-adopt"
 # why noop: as nearby-adopt's, the op that keeps it in a VM world. It also
 # makes the test a destroyer: it claims the reflector, which

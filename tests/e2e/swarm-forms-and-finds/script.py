@@ -7,7 +7,8 @@ subnet no other node holds, on the same segment.
 
 1. Waits until the reflector holds its 10.78.0 address.
 2. Claims node1 with `user.bootstrap` and generated words, then node2 and
-   the reflector with the same words (as nearby-stealth-meet-ports). node2's
+   the reflector with the same words (as nearby-stealth-meet-ports). Just
+   before node2's claim it records the links node1 and node2 share. node2's
    claim starts the clock.
 3. Polls node1's and node2's links every POLL s, at most LAN_WAIT s from
    node2's claim, until they share a link. Nothing gives either an endpoint.
@@ -171,10 +172,13 @@ async def form(nodes: dict) -> dict:
     """Steps 2 to 4: the claims, the nearby link, the introduction."""
     n1, n2, r = (nodes[k] for k in ROLES)
     first = await bootstrap(n1, None)
+    # why before node2's claim: the claim broadcasts node2's status at once and
+    # node1 links at once (astral-docs protocols/nearby/README.md, a mode change;
+    # protocols/user/README.md), so the pair may share a link before the claim returns
+    before = await shared(n1, n2)
     second = await bootstrap(n2, first["Mnemonic"])
     t0 = time.monotonic()
     clock = lambda: round(time.monotonic() - t0, 2)  # noqa: E731
-    before = await shared(n1, n2)
     third = await bootstrap(r, first["Mnemonic"])
     lan = await wait_shared([("node1", "node2")], nodes, clock, LAN_WAIT)
     intro = await introduce(r, n1, third["Token"], clock)
