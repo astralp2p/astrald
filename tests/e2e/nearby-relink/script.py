@@ -16,6 +16,11 @@ needs: `still trying to reconnect to X (attempt M)`, logged as attempt M+1
 starts, every fifth attempt; `sibling X is nearby at IP, linking now`, the
 wake; `link to X restored after N attempts`, the success.
 
+why a failed poll is recorded and skipped: the host can stall every guest for
+several seconds (20261123T205723Z: all three VMs logged nothing for 10 s), and
+one apphost connect then gets no greeting within its 5 s. A missed second
+changes nothing the oracle judges from the timeline.
+
 why the taps open first: the first anchor line falls about half a minute after
 the cut, once five quick attempts have failed, and a tap opened later would
 miss it.
@@ -27,6 +32,7 @@ import tomllib
 from pathlib import Path
 
 import astral
+from astral.errors import AstralError
 
 from lib import nearby
 from lib.nodelog import LogTap
@@ -71,8 +77,17 @@ async def main():
         first = await look(n1, n2["identity"])
         timeline.append({"t": 0.0, **first})
         back_at = None
+        missed = []     # {"t", "error"} of each poll that could not reach node1
         while True:
-            now = await look(n1, n2["identity"])
+            try:
+                now = await look(n1, n2["identity"])
+            except AstralError as e:
+                t = round(time.monotonic() - t0, 1)
+                missed.append({"t": t, "error": f"{type(e).__name__}: {e}"})
+                if t >= span + MARGIN:
+                    break
+                await asyncio.sleep(POLL)
+                continue
             t = round(time.monotonic() - t0, 1)
             last = timeline[-1]
             if (now["nonce"], now["links"]) != (last["nonce"], last["links"]):
@@ -91,7 +106,7 @@ async def main():
 
     write_facts({"nearby_relink": {
         "outage": span, "watched": round(time.monotonic() - t0, 1),
-        "first": first, "timeline": timeline, "back_at": back_at,
+        "first": first, "timeline": timeline, "back_at": back_at, "missed": missed,
         "log": log, "taps": taps,
     }})
     print(f"driver: node2 off the LAN for {span}s; node1 "
