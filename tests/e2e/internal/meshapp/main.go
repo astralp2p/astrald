@@ -2,7 +2,7 @@
 // serves hello, advertises a service, follows it with reach=swarm and calls
 // every provider the follow reports.
 //
-//	meshapp serve -service S [-period 1s] [-keep-removed] [-targets id,...]
+//	meshapp serve -service S [-period 1s] [-keep-removed] [-no-follow] [-targets id,...]
 //	              [-probe-nodes id,...] [-probe-op apphost.whoami] [-call-timeout 65s]
 //	meshapp call -target ID [-op hello] [-as-app] [-timeout 15s]
 //
@@ -112,6 +112,7 @@ func runServe(args []string) error {
 	fs.StringVar(&f.service, "service", "", "the service the app advertises and follows")
 	fs.DurationVar(&f.period, "period", time.Second, "the time between two calls to one peer; 0 makes one call")
 	fs.BoolVar(&f.keepRemoved, "keep-removed", false, "keep calling a provider the follow removed")
+	fs.BoolVar(&f.noFollow, "no-follow", false, "open no follow; call only -targets and -probe-nodes")
 	fs.StringVar(&targets, "targets", "", "app identities called as if reported")
 	fs.StringVar(&probes, "probe-nodes", "", "node identities queried with -probe-op")
 	fs.StringVar(&f.probeOp, "probe-op", "apphost.whoami", "the op of a node probe")

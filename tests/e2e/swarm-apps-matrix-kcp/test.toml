@@ -1,0 +1,23 @@
+nodes    = ["node1", "node2", "node3", "node4"]
+after    = "swarm-four-siblings"
+timeout  = 360
+# why destroys: tcp dial and listen go off on every node through the tree,
+# and the config below holds for every test in the world
+destroys = true
+host_listener = "serves the eight mesh apps on the test host, whose handlers every node dials"
+facts    = ["apps_matrix_kcp"]
+
+# why: as relay-contract-race, no apphost.register pushes a relay contract to
+# the siblings, so a consumer's node obtains each contract only by the
+# routing-time pull
+[config.node1.apphost]
+skip_sibling_push = true
+
+[config.node2.apphost]
+skip_sibling_push = true
+
+[config.node3.apphost]
+skip_sibling_push = true
+
+[config.node4.apphost]
+skip_sibling_push = true

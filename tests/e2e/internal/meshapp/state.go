@@ -73,6 +73,7 @@ type appState struct {
 	AdvertisedAt *float64              `json:"advertised_at"`
 	Attaches     int                   `json:"attaches"`
 	Disconnects  []string              `json:"disconnects"`
+	Follows      bool                  `json:"follows"`
 	FollowOpens  int                   `json:"follow_opens"`
 	Initial      *initialRecord        `json:"initial"`
 	FollowErr    string                `json:"follow_err"`

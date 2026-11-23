@@ -1,0 +1,7 @@
+nodes    = ["node1", "node2", "node3", "node4"]
+after    = "swarm-four-siblings"
+timeout  = 480
+# why destroys: the kcp phase turns tcp dial and listen off on every node through the tree
+destroys = true
+host_listener = "serves the four mesh apps on the test host, whose handlers every node dials"
+facts    = ["swarm_apps_talk"]
