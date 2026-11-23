@@ -3,7 +3,8 @@
 Each app registers on its node, serves `hello`, advertises the service, follows
 it with reach=swarm and calls every provider the follow reports
 (tests/e2e/internal/meshapp/README.md holds the state file and the call log).
-A driver starts them, the oracle reads what they recorded:
+With `follow=False` an app opens no follow and calls only its `targets` and
+`probe_nodes`. A driver starts them, the oracle reads what they recorded:
 
     from lib import meshapps
 
@@ -55,11 +56,13 @@ def _per_app(value, name: str) -> list:
 
 
 def serve_argv(service: str, *, period: float, keep_removed: bool,
-               targets=(), probe_nodes=()) -> list:
+               follow: bool = True, targets=(), probe_nodes=()) -> list:
     """The `meshapp serve` arguments, without the binary."""
     argv = ["serve", "-service", service, "-period", f"{period}s"]
     if keep_removed:
         argv.append("-keep-removed")
+    if not follow:
+        argv.append("-no-follow")
     if targets:
         argv += ["-targets", ",".join(targets)]
     if probe_nodes:
@@ -77,8 +80,8 @@ def node_env(node: dict, token: str | None = None) -> dict:
 
 
 def spawn(prefix: str, nodes: dict, names, *, service: str,
-          period: float = 1.0, keep_removed: bool = False, targets=(),
-          probe_nodes=None) -> dict:
+          period: float = 1.0, keep_removed: bool = False, follow: bool = True,
+          targets=(), probe_nodes=None) -> dict:
     """Start one app per node name, in one pass; {name: App}.
 
     `nodes` is the session view's nodes. `targets` and `probe_nodes` are
@@ -88,7 +91,7 @@ def spawn(prefix: str, nodes: dict, names, *, service: str,
     started = {}
     for name in names:
         argv = serve_argv(service, period=period, keep_removed=keep_removed,
-                          targets=_per_app(targets, name),
+                          follow=follow, targets=_per_app(targets, name),
                           probe_nodes=_per_app(probe_nodes, name))
         started[name] = apps.spawn(app_name(prefix, name), [exe, *argv],
                                    env=node_env(nodes[name]))
@@ -96,9 +99,11 @@ def spawn(prefix: str, nodes: dict, names, *, service: str,
 
 
 def ready(state: dict) -> bool:
-    """Registered, advertised, and the follow reached its boundary or ended."""
+    """Registered, advertised, and the follow reached its boundary or ended;
+    an app that opens no follow needs no boundary."""
     return bool(state.get("registered_at") and state.get("advertised_at")
-                and (state.get("follow_opens", 0) >= 1 or state.get("follow_err")))
+                and (state.get("follows") is False
+                     or state.get("follow_opens", 0) >= 1 or state.get("follow_err")))
 
 
 def wait_ready(prefix: str, names, timeout: float = 30) -> dict:

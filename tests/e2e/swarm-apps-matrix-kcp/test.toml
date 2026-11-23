@@ -4,7 +4,7 @@ timeout  = 360
 # why destroys: tcp dial and listen go off on every node through the tree,
 # and the config below holds for every test in the world
 destroys = true
-host_listener = "serves the four mesh apps on the test host, whose handlers every node dials"
+host_listener = "serves the eight mesh apps on the test host, whose handlers every node dials"
 facts    = ["apps_matrix_kcp"]
 
 # why: as relay-contract-race, no apphost.register pushes a relay contract to

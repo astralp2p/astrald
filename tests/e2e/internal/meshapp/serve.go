@@ -28,6 +28,7 @@ type serveFlags struct {
 	service     string
 	period      time.Duration
 	keepRemoved bool
+	noFollow    bool
 	targets     []*astral.Identity
 	probeNodes  []*astral.Identity
 	probeOp     string
@@ -64,7 +65,7 @@ func serve(f serveFlags) error {
 		return fmt.Errorf("node identity: %w", err)
 	}
 	rec := newRecorder(appState{Pid: os.Getpid(), App: app.ID.String(), Node: nodeID.String(),
-		Service: f.service, StartedAt: startedAt})
+		Service: f.service, StartedAt: startedAt, Follows: !f.noFollow})
 	log, err := openCallLog(e.statePath + ".calls.jsonl")
 	if err != nil {
 		return err
@@ -110,11 +111,13 @@ func (m *mesh) run(ctx *astral.Context, app *provider.App, f serveFlags) error {
 	var wg sync.WaitGroup
 	served := make(chan error, 1)
 	go func() { served <- m.serveHandler(ctx, app) }()
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		m.follow(ctx, &wg)
-	}()
+	if !f.noFollow {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			m.follow(ctx, &wg)
+		}()
+	}
 	now := unixSeconds(time.Now())
 	for _, id := range f.targets {
 		if m.rec.report(kindApp, id.String(), now, true) {
