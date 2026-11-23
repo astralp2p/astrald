@@ -1,0 +1,14 @@
+nodes    = ["node1", "node2"]
+after    = "adopt-node"
+# why 900 s: the LAN returns about 420 s after the driver starts, and the
+# driver watches up to 230 s more for the tcp link and the tor link's retire
+timeout  = 900
+# why destroys: enable-tor writes tor.yaml and leaves Tor running on both nodes
+destroys = true
+# why this order: Tor comes up while the LAN link is live, so the onions publish
+# and sync before the cut (as tor-link); restart-tor schedules its stop 240 s on;
+# lan-outage cuts now and restores node2's address after 420 s
+ops      = ["enable-tor node1 node2",
+            "restart-tor node2 --in 240 --down 20",
+            "lan-outage node2 --for 420"]
+facts    = ["fallback_paths"]

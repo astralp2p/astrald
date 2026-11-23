@@ -1,0 +1,10 @@
+nodes   = ["node1", "node2", "reflector"]
+# why 600 s: the reflector's move (30 s and the verifier), three claims, a
+# nearby link of up to 240 s, an introduction of up to 90 s, and the reads
+timeout = 600
+# why a root test: the three nodes must be fresh, unclaimed and unlinked
+# why --in 30: move-subnet's verifier checks the move is still pending, so
+# the move waits past the ops' end; the driver waits for it
+ops     = ["add-bridge node2 --name docker0 --cidr 172.17.0.1/16",
+           "move-subnet reflector --to 10.78.0 --in 30"]
+facts   = ["forms_and_finds"]

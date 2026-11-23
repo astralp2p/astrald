@@ -1,0 +1,9 @@
+nodes    = ["node1", "node2"]
+after    = "adopt-node"
+# why 600 s: Tor stops 60 s after the op, stays down 30 s, the onion returns
+# within the driver's 120 s, a tor link may take 240 s, and one query 30 s
+timeout  = 600
+# why destroys: enable-tor writes tor.yaml and leaves Tor running on both nodes
+destroys = true
+ops      = ["enable-tor node1 node2", "restart-tor node2 --in 60 --down 30"]
+facts    = ["tor_restart_onion"]
