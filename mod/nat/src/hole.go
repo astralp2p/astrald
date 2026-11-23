@@ -48,6 +48,8 @@ type Hole struct {
 	lockStart atomic.Int64 // unix nano
 	lastPing  atomic.Int64 // unix nano
 	pings     sig.Map[astral.Nonce, int64]
+	// peerLocked skips the pong drain: a locked peer answers no outstanding ping.
+	peerLocked atomic.Bool
 
 	// Channels (safe goroutine communication)
 	pingEvents chan pingEvent // receiver → runLoop
@@ -187,7 +189,7 @@ func (h *Hole) run(ctx context.Context) {
 		case StateInLocking:
 			h.expirePings()
 
-			if h.pings.Len() == 0 {
+			if h.pings.Len() == 0 || h.peerLocked.Load() {
 				h.finalizeLock()
 				return
 			}
@@ -287,6 +289,21 @@ func (h *Hole) BeginLock() bool {
 	}
 
 	h.lockStart.Store(time.Now().UnixNano())
+	h.wake()
+	return true
+}
+
+// BeginLockAfterPeer initiates locking of an idle hole whose peer has already
+// locked, returning success status. The lock completes without the pong drain.
+func (h *Hole) BeginLockAfterPeer() bool {
+	// why: the run loop reads peerLocked and lockStart once it sees
+	// StateInLocking, so both are stored before the state changes.
+	h.peerLocked.Store(true)
+	h.lockStart.Store(time.Now().UnixNano())
+	if !h.state.CompareAndSwap(int32(StateIdle), int32(StateInLocking)) {
+		return false
+	}
+
 	h.wake()
 	return true
 }

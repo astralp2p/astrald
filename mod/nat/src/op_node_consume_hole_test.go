@@ -16,10 +16,14 @@ import (
 )
 
 // peerHandshakeDelay outlasts consumePeerNoPing, the peer hole's no-ping timeout.
+// peerSignalingAfterLock spans several of the local hole's ping intervals.
+// lockAfterPeerWithin is well under defaultPingLifespan, the local hole's ping lifespan.
 const (
-	consumePeerNoPing   = 300 * time.Millisecond
-	peerHandshakeDelay  = 1 * time.Second
-	consumeAnswerWithin = 10 * time.Second
+	consumePeerNoPing      = 300 * time.Millisecond
+	peerHandshakeDelay     = 1 * time.Second
+	peerSignalingAfterLock = 200 * time.Millisecond
+	lockAfterPeerWithin    = 1 * time.Second
+	consumeAnswerWithin    = 10 * time.Second
 )
 
 // oneIdentityDir resolves every name to one identity.
@@ -52,7 +56,7 @@ func newConsumeFixture(t *testing.T) *consumeFixture {
 	aConn, bConn := NewMemPacketPair()
 	tick := WithPingInterval(50 * time.Millisecond)
 	f := &consumeFixture{
-		local:    NewHoleWithConn(shape, self, true, aConn, tick, WithPingLifespan(200*time.Millisecond)),
+		local:    NewHoleWithConn(shape, self, true, aConn, tick),
 		peerHole: NewHoleWithConn(shape, peer, false, bConn, tick, WithNoPingTimeout(consumePeerNoPing)),
 		peer:     peer,
 	}
@@ -108,18 +112,27 @@ func (f *consumeFixture) consume(t *testing.T) astral.Object {
 
 // TestOpNodeConsumeHole_InitiatorLocksAfterPeer holds that the initiator keeps
 // pinging while the peer's handshake is slower than the peer's no-ping timeout,
-// so the peer's hole survives until it locks and the consume completes.
+// so the peer's hole survives until it locks and the consume completes. The
+// initiator's lock then skips the drain of the pings it sent after the peer locked.
 func TestOpNodeConsumeHole_InitiatorLocksAfterPeer(t *testing.T) {
 	f := newConsumeFixture(t)
 	var localDuring HoleState
 	var peerExpired bool
+	var handshakeDone time.Time
 	f.mod.consumeRemote = func(ctx *astral.Context, _ *astral.Identity, _ astral.Nonce) error {
 		time.Sleep(peerHandshakeDelay)
 		localDuring, peerExpired = f.local.State(), f.peerHole.IsExpired()
-		return f.lockPeer(ctx)
+		if err := f.lockPeer(ctx); err != nil {
+			return err
+		}
+		// note: the locked, take and taken signals follow the peer's lock.
+		time.Sleep(peerSignalingAfterLock)
+		handshakeDone = time.Now()
+		return nil
 	}
 
 	answer := f.consume(t)
+	lockTook := time.Since(handshakeDone)
 
 	if localDuring != StateIdle {
 		t.Errorf("local hole state %v during the peer handshake; want StateIdle (%v)", localDuring, StateIdle)
@@ -132,6 +145,9 @@ func TestOpNodeConsumeHole_InitiatorLocksAfterPeer(t *testing.T) {
 	}
 	if !f.local.IsLocked() || !f.peerHole.IsLocked() {
 		t.Fatalf("local %v, peer %v; want both StateLocked (%v)", f.local.State(), f.peerHole.State(), StateLocked)
+	}
+	if lockTook > lockAfterPeerWithin {
+		t.Errorf("the local lock took %v after the peer handshake; want at most %v", lockTook, lockAfterPeerWithin)
 	}
 }
 

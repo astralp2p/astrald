@@ -84,7 +84,11 @@ func (mod *Module) OpNodeConsumeHole(ctx *astral.Context, q *routing.IncomingQue
 
 		// note: the hole can expire or leave StateIdle during the handshake; the
 		// peer's side is taken by then and nothing gives it back.
-		if !hole.BeginLock() {
+		// why: the peer's socket is closed once its handshake completes, so no pong
+		// answers an outstanding ping; draining them would hold the lock for up to
+		// the ping lifespan (5 s by default). Any pong the peer sent before it closed
+		// arrived during the locked/take/taken signaling round trips.
+		if !hole.BeginLockAfterPeer() {
 			return ch.Send(astral.Err(natmod.ErrHoleCantLock))
 		}
 
