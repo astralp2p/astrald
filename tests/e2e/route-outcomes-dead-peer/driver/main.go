@@ -1,6 +1,6 @@
-// Command driver freezes node2's astrald while an app on node1 queries it,
-// then kills it while another query waits on the link, and records how each
-// query ended and when.
+// Command driver waits until node1's traffic to node2 has settled, freezes
+// node2's astrald while an app on node1 queries it, then kills it while
+// another query waits on the link, and records how each query ended and when.
 //
 //	driver <session.json>   prints facts as JSON
 package main
@@ -22,6 +22,15 @@ import (
 	"github.com/astralp2p/astral-go/lib/apphost"
 	"github.com/astralp2p/astral-go/lib/astrald"
 )
+
+// settleQuiet is how long node1's log stays unchanged before the driver
+// treats the traffic to node2 as settled. It outlasts the 5 s wait that
+// precedes a node's endpoint announcement (astral-docs protocols/nodes,
+// Announcing a change) and the push that follows it.
+const settleQuiet = 7 * time.Second
+
+// settleLimit bounds the wait for node1's log to go quiet.
+const settleLimit = 60 * time.Second
 
 type node struct {
 	Endpoint string `json:"endpoint"`
@@ -89,6 +98,17 @@ func run(path string) (map[string]any, error) {
 	caller := connect(n1.Endpoint, string(app.Token))
 	facts["live"] = ask(ctx, caller, node2, "no.such.op")
 
+	// why: a push that node1 sends to a frozen node2 times out after 15 s, and
+	// the timeout wakes the link's ping, which closes the link 10 s later
+	// (astral-docs topics/link-mux.md, early probes) and ends the frozen query
+	// as unavailable. A fresh world still holds the pushes that follow
+	// node2's adoption and first link, so node2 freezes only after they end.
+	settled, err := waitLogQuiet(filepath.Join(n1.Root, "astrald.log"), settleQuiet, settleLimit)
+	if err != nil {
+		return facts, fmt.Errorf("node1's traffic to node2 never settled: %w", err)
+	}
+	facts["settled_millis"] = float64(settled.Microseconds()) / 1000
+
 	// a frozen node keeps its link open and never answers
 	if err := syscall.Kill(pid, syscall.SIGSTOP); err != nil {
 		return facts, fmt.Errorf("freezing node2 (pid %v): %w", pid, err)
@@ -106,6 +126,25 @@ func run(path string) (map[string]any, error) {
 	facts["killed"] = <-waiting
 	facts["answered_after_kill_millis"] = float64(time.Since(killedAt).Microseconds()) / 1000
 	return facts, nil
+}
+
+// waitLogQuiet waits until the log file at path has not changed for quiet,
+// within limit, and returns how long it waited.
+// note: node1 logs each push it routes to node2 and each link it adds, so a
+// quiet log means no post-link push is pending or in flight.
+func waitLogQuiet(path string, quiet, limit time.Duration) (time.Duration, error) {
+	start := time.Now()
+	for time.Since(start) < limit {
+		info, err := os.Stat(path)
+		if err != nil {
+			return 0, err
+		}
+		if time.Since(info.ModTime()) >= quiet {
+			return time.Since(start), nil
+		}
+		time.Sleep(250 * time.Millisecond)
+	}
+	return 0, fmt.Errorf("%v kept changing for %v", path, limit)
 }
 
 // findPid finds the astrald process that runs with root.
