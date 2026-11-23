@@ -116,13 +116,18 @@ class TestShipped(unittest.TestCase):
         prompted = {n for n, t in self.all.items() if t.prompt and not t.ops}
         self.assertEqual(sorted(prompted - listed), [])
 
-    def test_no_suite_lists_both_tor_link_and_nat_punch(self):
+    def test_no_planned_world_runs_both_tor_link_and_nat_punch(self):
         # why: tor-link's leave-lan downs node2's LAN interface, and nat-punch's
         # enter-nat then finds none to move behind NAT — the two cannot share
-        # one world, which substrate.suite asked them to
+        # one world, which substrate.suite asked them to. A suite may list
+        # both (swarm-comms-netsim.suite does): each destroys its world, so
+        # the planner forks the second one (lib/plan.py rule 4)
         for path in sorted((TESTS / "suites").glob("*.suite")):
-            with self.subTest(suite=path.name):
-                self.assertFalse({"tor-link", "nat-punch"} <= set(load(path)))
+            listed = load(path)
+            for w in plan(self.all, listed, listed):
+                with self.subTest(suite=path.name, world=w.name):
+                    self.assertFalse({"tor-link", "nat-punch"}
+                                     <= {s.test for s in w.steps})
 
     def test_every_fact_an_oracle_reads_is_declared(self):
         # why: `facts` is the contract the agent driver's prompt footer is

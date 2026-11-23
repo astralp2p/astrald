@@ -20,6 +20,7 @@ w0 docker:  smoke → claim-window → token-less-setup → signer-app
             → mcp-peer → messaging-two-node → adopt-refusals
             → app-origin-guards → services-advertise-identity
             → services-swarm-outcome-rules → stranger-disclosure
+            → node-query-sibling-app → sibling-query-live-link
             → object-store-peer → read-remote-peer → read-swarm
             → discover-swarm → adopt-claimed-node-setup → adopt-claimed-node
             → expel-node
@@ -116,22 +117,52 @@ w26 docker: bootstrap-user-software-key* → adopt-node*
 w27 docker: bootstrap-user-software-key* → adopt-node* → link-session-migrate
 w28 docker: bootstrap-user-software-key* → adopt-node*
             → link-session-migrate-serving-side
-w29 docker: bootstrap-user-software-key* → fs-watch-restart-restore
-w30 docker: bootstrap-user-software-key* → fs-index-restart-reconcile
-w31 docker: bootstrap-user-software-key* → repo-removal-sticks
-w32 docker: bootstrap-user-software-key* → indexing-fs-watch-feed
-w33 docker: bootstrap-user-software-key* → hold-isolation
+w29 docker: bootstrap-user-software-key* → adopt-node* → swarm-four-siblings
+            → swarm-apps-talk
+w30 docker: bootstrap-user-software-key* → adopt-node* → swarm-four-siblings*
+            → swarm-apps-matrix-kcp
+            config node1.apphost.skip_sibling_push = true
+            config node2.apphost.skip_sibling_push = true
+            config node3.apphost.skip_sibling_push = true
+            config node4.apphost.skip_sibling_push = true
+w31 docker: bootstrap-user-software-key* → adopt-node* → swarm-four-siblings*
+            → swarm-everyone-reaches-everyone
+w32 docker: bootstrap-user-software-key* → adopt-node* → swarm-four-siblings*
+            → swarm-churn-setup → swarm-churn-restart → swarm-churn-join
+            → swarm-churn-late-app → swarm-churn-leave
+w33 docker: bootstrap-user-software-key* → adopt-node* → swarm-four-siblings*
+            → swarm-expel-clean
+w34 docker: bootstrap-user-software-key* → adopt-node*
+            → app-contract-late-sibling
+w35 docker: bootstrap-user-software-key* → adopt-node* → link-prefer-live
+            config node1.kcp.link_idle_ping = "4s"
+            config node1.kcp.link_ping_timeout = "10s"
+            config node1.tcp.link_idle_ping = "4s"
+            config node1.tcp.link_ping_timeout = "10s"
+            config node2.kcp.link_idle_ping = "4s"
+            config node2.kcp.link_ping_timeout = "10s"
+            config node2.tcp.link_idle_ping = "4s"
+            config node2.tcp.link_ping_timeout = "10s"
+w36 docker: bootstrap-user-software-key* → adopt-node*
+            → services-carry-eos-retry
+w37 docker: bootstrap-user-software-key* → adopt-node*
+            → services-follow-member-leaves
+w38 docker: bootstrap-user-software-key* → fs-watch-restart-restore
+w39 docker: bootstrap-user-software-key* → fs-index-restart-reconcile
+w40 docker: bootstrap-user-software-key* → repo-removal-sticks
+w41 docker: bootstrap-user-software-key* → indexing-fs-watch-feed
+w42 docker: bootstrap-user-software-key* → hold-isolation
             config node1.objects.purge_floor = "0s"
-w34 docker: bootstrap-user-software-key* → blueprint-survives-restart
-w35 docker: bootstrap-user-software-key* → indexer-cursor
-w36 docker: bootstrap-user-software-key* → basic-strategy-stalled-negotiation
-w37 docker: bootstrap-user-op
-w38 docker: import-user-software-key
-w39 docker: introduce-node-setup → introduce-node
-w40 docker: distribution-gate-setup
+w43 docker: bootstrap-user-software-key* → blueprint-survives-restart
+w44 docker: bootstrap-user-software-key* → indexer-cursor
+w45 docker: bootstrap-user-software-key* → basic-strategy-stalled-negotiation
+w46 docker: bootstrap-user-op
+w47 docker: import-user-software-key
+w48 docker: introduce-node-setup → introduce-node
+w49 docker: distribution-gate-setup
             config node1.apphost.gate = {}
             config node1.apphost.policies = {}
-w41 docker: bootstrap-passphrase
-w42 docker: claim-race
-w43 docker: expel-management-node
-w44 docker: concurrent-adoption
+w50 docker: bootstrap-passphrase
+w51 docker: claim-race
+w52 docker: expel-management-node
+w53 docker: concurrent-adoption

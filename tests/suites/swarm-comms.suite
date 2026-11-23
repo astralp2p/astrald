@@ -1,0 +1,102 @@
+# swarm-comms.suite — apps and nodes of one swarm reach each other on the first
+# attempt, and stay reachable when the swarm changes and when a node is
+# expelled: flows F1-F4 and the local edge cases M1-M6, M8 and M11-M14 of the
+# E2E tests exhibit (https://wiki.satforge.dev/doc/e2e-tests-X3LHjItA2b), and
+# the existing tests each flow rests on.
+#
+# Companion: swarm-comms-netsim.suite holds F5, the VM form of F6, M7, M9, M10
+# and tor-link, nat-punch, gateway-relay and nearby-* (operator decision D11,
+# 2026-11-20). This suite needs no netsim: every world is local. The
+# companion needs netsim.
+#
+# Green (D11): 5 consecutive script runs and 1 agent run at a named astrald
+# commit; the companion 3 runs or a recorded waiver.
+#
+# The order is a preference among siblings; the planner computes the run order
+# from each test's `after`. `./tests/run --plan swarm-comms.suite` shows it.
+
+# prerequisites
+bootstrap-user-software-key
+adopt-node
+swarm-roster-sync
+swarm-four-siblings
+
+# F1 apps talk
+swarm-apps-talk
+swarm-apps-matrix-kcp           # M14
+relay-contract-race             # M1
+services-app-call
+app-discover-swarm
+services-swarm
+app-discover-follow
+app-two-providers
+services-swarm-outcome-rules
+services-advertise-identity
+relay-pull-on-miss
+relay-pull-absent
+relay-contract-forwarding
+messaging-two-node
+
+# F2 everyone reaches everyone
+swarm-everyone-reaches-everyone
+node-query-sibling-app          # M3
+sibling-query-live-link         # M4
+app-call-remote
+app-ping-pong
+swarm-authz-matrix
+two-swarms-side-by-side
+route-outcomes
+
+# F3 survives churn: the chain setup, restart, join, late app, leave, then
+# the freeze and the end state
+swarm-churn-setup
+swarm-churn-restart
+swarm-churn-join
+swarm-churn-late-app
+swarm-churn-leave
+swarm-survives-churn
+app-contract-late-sibling       # M2
+link-idle-keepalive
+link-dead-peer-keepalive        # M5
+link-prefer-live                # M6
+kcp-only-restart-relink         # M8
+services-carry-eos-retry        # M12
+services-follow-member-leaves   # M13
+route-outcomes-dead-peer
+reconnect-sync-after-dead-link
+link-self-heal
+link-session-migrate
+link-session-migrate-serving-side
+swarm-member-restart
+app-node-restart-reconnect
+app-preexisting-provider-sync
+services-node-restart
+services-provider-gone
+services-swarm-membership
+services-consumer-restart
+app-handler-unroute             # criterion 3: f9YkqOEMAD
+
+# F4 expel clean
+swarm-expel-clean
+expel-cross-traffic             # M11
+expel-node
+expel-propagation
+expel-survives-restart
+expel-offline-subject
+route-outcomes-expelled-host
+relay-contract-reindex-after-expel
+expel-sweep-redelivers
+membership-resync-volume
+
+# F6 forms and finds, local half (the VM form is in the companion)
+introduce-node-setup
+introduce-node
+join-via-member
+basic-strategy-dead-rows
+basic-strategy-excess-link-pruning
+basic-strategy-gw-cycle
+basic-strategy-stalled-endpoint-released
+basic-strategy-stalled-negotiation
+
+# criterion 3 only
+indexer-cursor                  # a6ocD3fY3s
