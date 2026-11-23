@@ -112,13 +112,31 @@ def wait_ready(prefix: str, names, timeout: float = 30) -> dict:
     return out
 
 
+def state_path(prefix: str, name: str) -> Path:
+    """The app's state file, `apps.App.state_path` by name.
+
+    why not apps.get: `stop` removes the app's registry entry, and the oracle
+    reads the app's last state and call log after it stopped the app.
+    """
+    return apps.apps_dir() / f"{app_name(prefix, name)}.state.json"
+
+
+def read_state(path) -> dict:
+    """The state file at path; {} when absent or caught mid-write."""
+    try:
+        return json.loads(Path(path).read_text())
+    except (OSError, ValueError):
+        return {}
+
+
 def states(prefix: str, names) -> dict:
-    """Every app's last written state; {} for one that wrote none."""
-    return {n: apps.get(app_name(prefix, n)).state() for n in names}
+    """Every app's last written state, running or stopped; {} for one that
+    wrote none."""
+    return {n: read_state(state_path(prefix, n)) for n in names}
 
 
 def calls_path(prefix: str, name: str) -> Path:
-    state = apps.get(app_name(prefix, name)).state_path
+    state = state_path(prefix, name)
     return state.with_name(state.name + ".calls.jsonl")
 
 
@@ -143,6 +161,7 @@ def calls(prefix: str, name: str) -> list:
 
 
 def stop(prefix: str, names) -> None:
+    """Stop the apps; `states` and `calls` still read what they wrote."""
     for name in names:
         apps.get(app_name(prefix, name)).stop()
 

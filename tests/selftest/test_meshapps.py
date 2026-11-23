@@ -1,10 +1,14 @@
-"""lib/meshapps.py and lib/kcponly.py: the pure functions, on synthetic states
-and call logs, with no daemon and no app process."""
+"""lib/meshapps.py and lib/kcponly.py: the pure functions and the state and
+call log readers, on synthetic states and call logs, with no daemon and no app
+process."""
+import json
+import os
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
-from lib import kcponly, meshapps
+from lib import apps, kcponly, meshapps
 
 NAMES = ["node1", "node2", "node3"]
 APP = {"node1": "02aa", "node2": "02bb", "node3": "02cc"}
@@ -134,6 +138,23 @@ class CallLogs(unittest.TestCase):
             path.write_text('{"t0": 1, "t1": 2, "to": "02bb", "outcome": "ok"}\n{"t0": 3, "t1"')
             self.assertEqual([e["t0"] for e in meshapps.read_calls(path)], [1])
             self.assertEqual(meshapps.read_calls(Path(d) / "absent"), [])
+
+
+class StoppedApp(unittest.TestCase):
+    """What a stopped app wrote: its registry entry is gone, its files stay."""
+
+    def test_states_and_calls_read_an_app_with_no_registry_entry(self):
+        with tempfile.TemporaryDirectory() as d, \
+                mock.patch.dict(os.environ, {apps.ENV_DIR: d}):
+            (Path(d) / "f3-node1.state.json").write_text(json.dumps({"app": "02aa"}))
+            (Path(d) / "f3-node1.state.json.calls.jsonl").write_text(
+                '{"t0": 1, "t1": 2, "to": "02bb", "outcome": "ok"}\n')
+            with self.assertRaises(apps.AppError):
+                apps.get("f3-node1")
+            self.assertEqual(meshapps.states("f3", ["node1", "node2"]),
+                             {"node1": {"app": "02aa"}, "node2": {}})
+            self.assertEqual([e["t1"] for e in meshapps.calls("f3", "node1")], [2])
+            self.assertEqual(meshapps.calls("f3", "node2"), [])
 
 
 class KcpOnly(unittest.TestCase):

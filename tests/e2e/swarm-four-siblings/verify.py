@@ -11,9 +11,10 @@ every roster lists the same four members.
   included (protocols/user/ops/user.swarm_status.md: one member per node of
   the swarm; topics/user-and-swarm.md:406-417 shows the new node among them;
   astrald mod/user/src/contracts.go:157-185 lists every membership contract
-  of the User, the node's own among them);
-- the oracle reads the links and rosters again live: the world it leaves to
-  F1-F4 and M14 holds them still.
+  of the User, the node's own among them), read live at the oracle and not
+  held to the 30 s mesh bound: no source bounds roster sync;
+- the oracle reads the links again live: the world it leaves to F1-F4 and
+  M14 holds them still.
 """
 import asyncio
 import time
@@ -65,10 +66,8 @@ async def main():
         "node4's endpoints to every member)")
     took = f["mesh_at"] - f["adopted_at"]
     assert took <= MESH, f"every pair linked {took:.1f} s after node4's adoption; want ≤ {MESH:.0f} s"
-    wrong = wrong_rosters(f.get("rosters") or {}, ids)
-    assert not wrong, (
-        f"rosters that are not the four siblings {sorted(ids.values())}: {wrong}; "
-        f"errors {f.get('roster_errors') or {}}")
+    # why the rosters are judged live only: no source bounds roster sync, and
+    # the driver stops polling at the mesh bound
 
     async with AsyncExitStack() as stack:
         clients = {n: await stack.enter_async_context(
@@ -83,7 +82,10 @@ async def main():
     assert not unlinked(now["links"], ids), (
         f"at the oracle, unlinked pairs {unlinked(now['links'], ids)}")
     assert not wrong_rosters(now["rosters"], ids), (
-        f"at the oracle, rosters that are not the four: {wrong_rosters(now['rosters'], ids)}")
+        f"at the oracle, rosters that are not the four siblings "
+        f"{sorted(ids.values())}: {wrong_rosters(now['rosters'], ids)}; at the "
+        f"driver's last poll {wrong_rosters(f.get('rosters') or {}, ids)}, errors "
+        f"{f.get('roster_errors') or {}}")
 
     print(f"oracle: every pair of the four siblings linked {took:.1f} s after node4's "
           "adoption; every roster lists the four")

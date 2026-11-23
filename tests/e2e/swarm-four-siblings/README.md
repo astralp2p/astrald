@@ -15,9 +15,10 @@ M14).
   `four_siblings` fact: `{adopted_node3_at, adopted_at, mesh_at, links,
   rosters, roster_errors}`.
 - **oracle** `verify.py` — every node lists a link to each of the other three
-  within 30 s of node4's adoption; every node's `user.swarm_status` lists
-  exactly the four identities, itself included; both hold again at the
-  oracle, read live.
+  within 30 s of node4's adoption, and again at the oracle, read live; every
+  node's `user.swarm_status`, read live at the oracle, lists exactly the four
+  identities, itself included. No source bounds roster sync, so the rosters
+  the driver recorded are diagnosis only.
 
 node2 was never told an endpoint of node3 or node4, and node3 and node4 were
 never told each other's. A link node2 holds to a new node, or node3 to node4,

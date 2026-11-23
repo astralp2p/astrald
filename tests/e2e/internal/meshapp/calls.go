@@ -191,9 +191,11 @@ func (m *mesh) callOnce(ctx *astral.Context, kind string, target *astral.Identit
 		err = fmt.Errorf("reply %q, want %q", reply, want)
 	}
 	c := newCallRecord(start, end, reply, err)
-	m.rec.finished(kind, id, c)
+	// why log first: a reader that sees the call in the state must find its
+	// line in the call log
 	m.log.append(logEntry{T0: c.Start, T1: c.End, To: id, Kind: kind,
 		Outcome: c.Outcome, Code: c.Code, Ms: c.Ms})
+	m.rec.finished(kind, id, c)
 }
 
 // sleepUntil waits until t; false when ctx ends first.
