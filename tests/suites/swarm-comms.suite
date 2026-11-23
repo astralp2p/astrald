@@ -12,6 +12,19 @@
 # Green (D11): 5 consecutive script runs and 1 agent run at a named astrald
 # commit; the companion 3 runs or a recorded waiver.
 #
+# Agent forms: none. No flow here ships a prompt.md, so `--driver agent`
+# drives none of them. The operator sits on node1 alone, and a node answers
+# apphost.register and apphost.register_handler to a local caller only
+# (astral-docs protocols/apphost/ops/), so no operator hosts an app on
+# another node:
+# - F1 swarm-apps-talk, F2 swarm-everyone-reaches-everyone, F4
+#   swarm-expel-clean, M1 relay-contract-race and M11 expel-cross-traffic
+#   judge the records of apps on every sibling;
+# - the F3 chain's oracles judge the f3 mesh apps' records on the test host,
+#   the harness performs its restarts, stop and freeze, and
+#   swarm-survives-churn is local_only, a world no operator runs in.
+# The "1 agent run" of Green has no flow of this suite to run.
+#
 # The order is a preference among siblings; the planner computes the run order
 # from each test's `after`. `./tests/run --plan swarm-comms.suite` shows it.
 

@@ -13,6 +13,16 @@
 # enter-nat needs); the planner forks the second destroyer.
 #
 # Green (D11): 3 runs or a recorded waiver.
+#
+# Agent forms: tor-link alone ships a prompt.md. The operator sits on node1
+# and holds no node token:
+# - F5 swarm-fallback-paths judges the queries node2 sends node1 and node2's
+#   log stream;
+# - F6 swarm-forms-and-finds claims node2 and the reflector with
+#   user.bootstrap, which a node answers to a local caller only;
+# - M7 endpoint-change-relink watches node1 from before its move, which
+#   move-subnet makes 30 s after the op, and closes on every node the links
+#   the move left dead.
 
 bootstrap-user-software-key
 adopt-node
