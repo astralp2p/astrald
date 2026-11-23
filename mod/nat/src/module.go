@@ -57,6 +57,10 @@ type Module struct {
 
 	// listenUDP binds a reflection's socket; nil binds UDP on :0.
 	listenUDP func() (net.PacketConn, error)
+
+	// consumeRemote runs a peer's side of nat.node_consume_hole; nil asks the
+	// peer through the node.
+	consumeRemote func(ctx *astral.Context, peer *astral.Identity, pair astral.Nonce) error
 }
 
 func (mod *Module) Run(ctx *astral.Context) error {
