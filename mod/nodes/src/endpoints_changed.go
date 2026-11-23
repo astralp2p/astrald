@@ -136,8 +136,9 @@ func (mod *Module) acceptsEndpointsChanged(sender, subject *astral.Identity) boo
 	return slices.ContainsFunc(swarm, sender.IsEqual) && slices.ContainsFunc(swarm, subject.IsEqual)
 }
 
-// pullChangedEndpoints pulls m.Subject's endpoints from sender, emits an
-// EndpointsUpdatedEvent when new rows arrived, and forwards a first-hand notice.
+// pullChangedEndpoints pulls m.Subject's endpoints from sender, makes a running dial
+// round toward m.Subject dial the new rows and emits an EndpointsUpdatedEvent when new
+// rows arrived, and forwards a first-hand notice.
 func (mod *Module) pullChangedEndpoints(sender *astral.Identity, m *nodes.EndpointsChangedMessage) {
 	ctx, cancel := mod.ctx.WithTimeout(endpointsPullTimeout)
 	added, err := mod.UpdateNodeEndpoints(ctx, sender, m.Subject)
@@ -148,6 +149,7 @@ func (mod *Module) pullChangedEndpoints(sender *astral.Identity, m *nodes.Endpoi
 		mod.log.Error("pulling endpoints of %v from %v: %v", m.Subject, sender, err)
 	case added > 0:
 		mod.log.Logv(1, "pulled %v new endpoints of %v from %v", added, m.Subject, sender)
+		mod.linkPool.endpointsAdded(m.Subject)
 		mod.Events.Emit(&nodes.EndpointsUpdatedEvent{Identity: m.Subject})
 	}
 
