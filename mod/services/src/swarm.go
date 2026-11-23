@@ -1,6 +1,7 @@
 package services
 
 import (
+	"slices"
 	"sync"
 	"time"
 
@@ -80,6 +81,11 @@ func (mod *Module) carry(ctx *astral.Context, c memberCarry) {
 			return
 		}
 		mod.log.Logv(2, "swarm discovery on %v ended: %v", r.Member(), err)
+		// why: a ban closes the link before the member's left event is handled;
+		// the current set drops a departed member with member_left and ends its carry.
+		if !slices.ContainsFunc(mod.refreshMembers(), r.Member().IsEqual) {
+			return
+		}
 		r.Lost()
 		if initial {
 			delay = carryRetryFirst
