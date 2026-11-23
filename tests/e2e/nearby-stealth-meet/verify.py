@@ -73,6 +73,9 @@ def check_user_change(f: dict, ids: dict) -> None:
 
 
 def check_stealth(f: dict) -> None:
+    assert f.get("recognised") is not None, (
+        "the reflector verified no status of node1 other than the one it held at the claim "
+        f"within the driver's wait (converged={f['converged']}); held: {f.get('reflector_held_node1')}")
     for name, s in f["entries"].items():
         assert s is not None, (
             f"{name}: no verified entry within the driver's wait; the pair never recognised "

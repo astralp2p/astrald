@@ -11,8 +11,9 @@ no introduction.
   manager, as `introduce-node` claims `replacement`. While every node's log is
   recorded, it waits until `node1` and the reflector list each other linked
   and `node2` and the reflector list each other, and then until the reflector
-  lists `node1` as verified (`node1`'s next periodic status, at most 95 s
-  after the claim), at most 240 s in all. It records the swarm views at the
+  lists `node1` as verified from a status other than the one it held at the
+  claim (`node1`'s next periodic status, at most 95 s after the claim), at
+  most 240 s in all. It records the swarm views at the
   meet and the time of the meet and of the recognition.
 - **oracle** `verify.py`: the claim is the User's; right after it the
   reflector listed itself alone and neither peer listed it; the pair met; a
@@ -27,3 +28,10 @@ oracle requires that each acted on it. The reflector cannot recognise `node1`
 that fast: `node1`'s last status reached it while it was unowned, so it holds
 that status unrecognised until `node1`'s next periodic status (astral-docs
 `protocols/nearby/README.md`, status processing step 4).
+
+The reflector may also hold `node1`'s Visible, adoptable status from before
+`nearby-adopt` claimed `node1` seconds earlier. That entry is verified, lives
+5 min, and makes the unowned reflector drop `node1`'s later Stealth status
+(status processing step 7). So the driver waits for a status whose nonce
+differs from the entry the reflector held at the claim, and the oracle fails
+when none came.
