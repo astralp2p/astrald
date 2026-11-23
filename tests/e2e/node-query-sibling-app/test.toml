@@ -1,0 +1,5 @@
+nodes   = ["node1", "node2"]
+after   = "adopt-node"
+timeout = 180
+host_listener = "serves a mesh app of node1 and one of node2 on test-host ports that their nodes dial"
+facts   = ["node_query_sibling_app"]

@@ -14,7 +14,7 @@ with `apps.build_go` and starts one process per app with `apps.spawn`.
 
 ## meshapp serve
 
-    meshapp serve -service S [-period 1s] [-keep-removed] [-targets id,...]
+    meshapp serve -service S [-period 1s] [-keep-removed] [-no-follow] [-targets id,...]
                   [-probe-nodes id,...] [-probe-op apphost.whoami] [-call-timeout 65s]
 
 * The environment names the node: `APP_NODE_ENDPOINT`, `APP_NODE_TOKEN` (the
@@ -30,6 +30,10 @@ with `apps.build_go` and starts one process per app with `apps.spawn`.
 * The app follows `S` with `reach=swarm` through astral-go's
   `FollowReconnecting`, which reopens the follow with backoff (1 s doubling to
   30 s).
+* `-no-follow` opens no follow. The app then calls only `-targets` and
+  `-probe-nodes`, and its node pushes the app's relay contract to no swarm
+  member for a follow (astral-docs `protocols/services/ops/services.discover.md`,
+  Discovery in an app's name).
 * Each provider the follow reports, other than the app itself, gets one caller.
   The caller calls `hello` at once, then once per `period` while the provider
   is listed, or while it is known with `-keep-removed`. A `period` of 0 makes
@@ -53,6 +57,7 @@ host clock.
 | `started_at` | the process start |
 | `registered_at`, `advertised_at` | the first handler attach, the first acknowledged advertise; `null` before |
 | `attaches`, `disconnects` | handler attaches, the first and every reconnect; the registrar's disconnect errors |
+| `follows` | `false` with `-no-follow`, `true` otherwise |
 | `follow_opens`, `initial` | follow boundaries reached; the last boundary `{t, complete, incomplete}` |
 | `follow_err`, `not_granted`, `fatal` | the follow's terminal error; services the follow may not see; why serving ended |
 | `served` | `{caller: n}`: `hello` answers per caller |

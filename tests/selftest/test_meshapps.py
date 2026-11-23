@@ -49,6 +49,12 @@ class Argv(unittest.TestCase):
             ["serve", "-service", "f2", "-period", "0s", "-keep-removed",
              "-targets", "02aa,02bb", "-probe-nodes", "03cc"])
 
+    def test_serve_argv_without_a_follow(self):
+        self.assertEqual(meshapps.serve_argv("m14", period=0, keep_removed=False,
+                                             follow=False, targets=["02aa"]),
+                         ["serve", "-service", "m14", "-period", "0s", "-no-follow",
+                          "-targets", "02aa"])
+
     def test_serve_argv_leaves_unset_flags_out(self):
         self.assertEqual(meshapps.serve_argv("f3", period=1.0, keep_removed=False),
                          ["serve", "-service", "f3", "-period", "1.0s"])
@@ -76,6 +82,12 @@ class Ready(unittest.TestCase):
         self.assertFalse(meshapps.ready({**base, "registered_at": None}))
         self.assertFalse(meshapps.ready({**base, "follow_opens": 0}))
         self.assertFalse(meshapps.ready({}))
+
+    def test_an_app_without_a_follow_needs_no_boundary(self):
+        st = {"registered_at": 1.0, "advertised_at": 1.5, "follows": False, "follow_opens": 0}
+        self.assertTrue(meshapps.ready(st))
+        self.assertFalse(meshapps.ready({**st, "follows": True}))
+        self.assertFalse(meshapps.ready({**st, "advertised_at": None}))
 
     def test_a_refused_follow_is_settled(self):
         # why: a stranger's follow may be refused before its boundary, and

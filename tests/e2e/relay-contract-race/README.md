@@ -42,5 +42,11 @@ node answers, and the node routes through it (astral-docs
 `topics/app-routing.md`, Resolving the host). Without the pull, every call
 fails with `route_not_found`.
 
-The ask lasts at most 1 s, so the call budget of 1.5 s holds the ask, the
-relayed call and the provider's answer.
+The ask runs as a detached flight of at most 10 s, and a call waits for it at
+most 3 s before it routes on without a candidate (astral-docs
+`topics/app-routing.md`, Resolving the host; `mod/nodes/src/pull_relays.go`
+`pullFlightTimeout`, `pullWait`). The flight ends as soon as the first
+answered contract is indexed, so on four linked siblings a pull, the relayed
+call and the provider's answer fit the call budget of 1.5 s. The budget is
+tighter than the 3 s wait: a call over it means the pull was slow, and the
+oracle fails it.

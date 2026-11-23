@@ -1,0 +1,7 @@
+nodes    = ["node1", "node2", "node3", "node4", "f2stranger"]
+after    = "swarm-four-siblings"
+timeout  = 300
+# why destroys: a node of a second User stays linked to node1
+destroys = true
+host_listener = "serves the mesh apps on the test host, whose handlers the nodes dial"
+facts    = ["everyone_reaches_everyone"]

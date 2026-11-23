@@ -1,0 +1,8 @@
+nodes    = ["node1", "node2"]
+after    = "adopt-node"
+timeout  = 240
+restart  = ["node2"]
+# why destroys: an app registered on node1 stays up and node2 restarted
+destroys = true
+host_listener = "keeps a provider app on the test host, registered on node1 while node2 is down, whose handler node1 dials"
+facts    = ["late_sibling"]
