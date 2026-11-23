@@ -1,0 +1,4 @@
+nodes   = ["node1", "node2"]
+after   = "adopt-node"
+timeout = 180
+facts   = ["sibling_query_live_link"]
