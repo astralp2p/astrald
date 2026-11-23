@@ -10,9 +10,10 @@ restart; the LAN returns and traffic moves back to a tcp link.
     their LAN link is live, so the onions sync before the cut (as tor-link);
   - `restart-tor node2 --in 240 --down 20`: Tor on node2 stops 240 s after
     the op and starts 20 s later; astrald runs throughout;
-  - `lan-outage node2 --for 420`: node2 leaves the LAN now, the links that
-    rode its address are closed on every VM, and the address returns 420 s
-    later.
+  - `lan-outage node2 --for 480`: node2 leaves the LAN now, the links that
+    rode its address are closed on every VM, and the address returns 480 s
+    later, about 220 s after Tor's start: a LAN back within phase B's 180 s
+    would carry the queries over tcp and leave Tor's recovery unjudged.
 - **driver** `script.py`:
   - gives each node the other's onion where it holds none, and records it
     (`seeded`): the cut follows the onions' publication by seconds;
@@ -32,8 +33,9 @@ restart; the LAN returns and traffic moves back to a tcp link.
     driver's start, with node1 holding only tor links to node2;
   - phase B (Tor restart): node2 resolves no tor row for itself from the
     down line until Tor's start; queries in both directions answer over a
-    tor link again within 180 s of Tor's start; node2's log tap stays whole,
-    so astrald did not restart;
+    tor link again within 180 s of Tor's start, and node2's address returned
+    no sooner than that bound ran out; node2's log tap stays whole, so
+    astrald did not restart;
   - phase C (LAN back): a tcp link is shared on both ends within 90 s of
     node2's address returning; every query in either direction started 1 s
     after that link answers; node1 lists no tor link to node2 within 130 s
@@ -52,7 +54,7 @@ commit `0da99afa`) and the rank of tcp (50) over tor (10) (astral-docs
 and on the retire; those bounds follow the code.
 
 Tor's start is the down line's time on the host's clock plus `--down`:
-restart-tor schedules the stop and the start in one call. The LAN events
+restart-tor's one unit stops Tor, sleeps `--down` s and starts it. The LAN events
 and the links happen on different guests, so every time is the host's.
 
 Apps are not judged: a VM world runs no host app, so the pair is judged with

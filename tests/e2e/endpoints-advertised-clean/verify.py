@@ -14,7 +14,12 @@ From the `advertised_clean` fact:
 - both list node2's LAN tcp and kcp endpoints with a TTL of at most 2 h, and
   the configured public endpoint with a TTL above 2 h (astral-docs
   protocols/tcp/README.md, configEndpoints: 7 days for a configured entry, 2 h
-  for an interface endpoint on a non-public address);
+  for an interface endpoint on a non-public address). Exempt from the 2 h
+  class is node1's row for node2's LAN tcp endpoint: adopt-node wrote it with
+  nodes.add_endpoint, it starts at 90 days, and no pull moves its expiry
+  (astral-docs protocols/nodes/README.md, Withdrawn endpoints;
+  protocols/nodes/ops/nodes.resolve_endpoints.md). node1's kcp rows judge the
+  class there;
 - node1's rows were written by the pull over the new link, and node1 holds no
   link with an end in either range.
 """
@@ -56,7 +61,8 @@ def check_control(f: dict) -> None:
         f"node2 holds no fe80:: address ({addrs}): the link-local filter is not exercised")
 
 
-def check_rows(who: str, rows: dict, lan: str) -> None:
+def check_rows(who: str, rows: dict, lan: str, manual: frozenset = frozenset()) -> None:
+    """Judges who's rows for node2; a key in manual is an add_endpoint row, exempt from the TTL class."""
     leaked = sorted(k for k in rows if banned(k))
     assert not leaked, f"{who} lists node2 at a bridge or link-local endpoint: {leaked}"
     lan_ip = ip_of(lan)
@@ -64,7 +70,8 @@ def check_rows(who: str, rows: dict, lan: str) -> None:
         own = {k: t for k, t in rows.items()
                if k.startswith(f"{network}:") and ip_of(k) == lan_ip}
         assert own, f"{who} lists no {network} endpoint of node2 at its LAN address {lan_ip}: {rows}"
-        long = {k: t for k, t in own.items() if t is None or t > PRIVATE_TTL}
+        long = {k: t for k, t in own.items()
+                if k not in manual and (t is None or t > PRIVATE_TTL)}
         assert not long, (
             f"{who} lists node2's LAN endpoints {long} with a TTL above {PRIVATE_TTL} s; "
             "a private address is advertised for 2 h")
@@ -82,7 +89,8 @@ def check_node1(f: dict) -> None:
     assert held is not None and held["fresh"], (
         f"node1's rows for node2 were not written by a pull over the new link "
         f"(at {r['linked_at']} s): {held}")
-    check_rows("node1", held["rows"], f["lan_endpoint"])
+    # why: adopt-node's nodes.add_endpoint wrote node1's row for the LAN tcp endpoint
+    check_rows("node1", held["rows"], f["lan_endpoint"], frozenset({f["lan_endpoint"]}))
     bad = [link for link in f["links"]
            if banned(link["local_endpoint"]) or banned(link["remote_endpoint"])]
     assert not bad, f"node1 holds a link to node2 on a bridge or link-local address: {bad}"

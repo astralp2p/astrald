@@ -9,13 +9,18 @@ endpoints node2 resolves for itself. node1 then closes its links to node2 and
 links again, so the new link is node1's only link to node2 and node1 pulls
 node2's endpoints from node2 (astral-docs protocols/nodes/README.md, Endpoint
 exchange in the local swarm). The driver polls node1's rows for node2 until
-they hold the public endpoint and node2's LAN tcp endpoint, written after the
-new link, or ROWS_WAIT s pass. Last it reads node1's links with both ends.
+they hold the public endpoint and node2's LAN kcp endpoints, written after
+the new link, or ROWS_WAIT s pass. Last it reads node1's links with both ends.
 
 why the TTL dates a row: node1 stores an endpoint with the TTL node2 resolves
 for it and answers the time left (mod/nodes/src/db_endpoint_resolver.go), so
 a row whose time left is at least node2's TTL less the time since the new
 link was written by the pull over it.
+
+why kcp and not tcp dates node1's LAN rows: adopt-node wrote node1's row for
+node2's LAN tcp endpoint with nodes.add_endpoint, and no pull moves the
+expiry of such a row (astral-docs protocols/nodes/README.md, Withdrawn
+endpoints), so its time left says nothing of the pull.
 
 The driver acts and judges nothing. It records the `advertised_clean` fact,
 times in seconds since the driver began, on the host's clock.
@@ -81,6 +86,16 @@ async def relink(c, peer: str, clock) -> dict:
             "linked_at": None, "new": [], "error": error}
 
 
+def ip_text(key: str) -> str:
+    """The IP of a `<network>:<ip>:<port>` key, as written."""
+    return key.split(":", 1)[-1].rsplit(":", 1)[0]
+
+
+def lan_kcp(own: dict, lan: str) -> list:
+    """node2's own kcp keys at the IP of its LAN tcp endpoint."""
+    return sorted(k for k in own if k.startswith("kcp:") and ip_text(k) == ip_text(lan))
+
+
 def fresh(held: dict, own: dict, key: str, since: float) -> bool:
     """Whether node1 holds key with a time left the pull after the new link wrote."""
     ttl, left = own.get(key), held.get(key)
@@ -90,11 +105,12 @@ def fresh(held: dict, own: dict, key: str, since: float) -> bool:
 
 
 async def held_rows(c, peer: str, own: dict, lan: str, linked_at: float, clock) -> dict:
-    """node1's rows for peer once they hold the public and the LAN tcp row fresh, or at ROWS_WAIT."""
+    """node1's rows for peer once they hold the public and the LAN kcp rows fresh, or at ROWS_WAIT."""
+    keys = (PUBLIC, *lan_kcp(own, lan))
     while True:
         held = await rows(c, peer)
         since = clock() - linked_at
-        done = all(fresh(held, own, k, since) for k in (PUBLIC, lan))
+        done = all(fresh(held, own, k, since) for k in keys)
         if done or since >= ROWS_WAIT:
             return {"rows": held, "fresh": done, "at": clock()}
         await asyncio.sleep(POLL)

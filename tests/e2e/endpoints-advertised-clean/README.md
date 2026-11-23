@@ -17,20 +17,26 @@ is advertised with the public TTL.
   `ip.local_addrs` and the endpoints node2 resolves for itself; node1 closes
   its links to node2 and links again, so it pulls node2's endpoints from
   node2 over its only link; polls node1's rows for node2 until the public and
-  the LAN tcp row are written after the new link, at most 30 s; reads
-  node1's links to node2 with both ends.
+  the LAN kcp rows are written after the new link, at most 30 s; reads
+  node1's links to node2 with both ends. The LAN tcp row cannot date the
+  pull: adopt-node wrote it on node1 with `nodes.add_endpoint`, and no pull
+  moves the expiry of such a row.
 - **oracle** `verify.py`:
   - control: node2 holds `172.17.0.1` and an `fe80::` address;
   - neither node2's own rows nor node1's rows for node2 hold an endpoint in
     `172.17.0.0/16` or `fe80::/10`;
   - both list node2's LAN tcp and kcp endpoints with a TTL of at most
-    7200 s, and `tcp:203.0.113.5:40000` with a TTL above 7200 s;
+    7200 s, and `tcp:203.0.113.5:40000` with a TTL above 7200 s; node1's
+    LAN tcp row is exempt from the 7200 s bound, since adopt-node's manual
+    row starts at 90 days and keeps its expiry, so node1's kcp rows judge
+    the private class there;
   - node1's rows were written after the new link, and node1 holds no link
     with an end in either range.
 
 Sources: astral-docs `protocols/nodes/README.md`, Announcing a change ("A
-node never advertises an IPv6 link-local address") and Endpoint exchange in
-the local swarm (the pull on a first link); `protocols/tcp/README.md`,
+node never advertises an IPv6 link-local address"), Endpoint exchange in
+the local swarm (the pull on a first link) and Withdrawn endpoints ("No pull
+moves the expiry of a row that `nodes.add_endpoint` wrote earlier"); `protocols/tcp/README.md`,
 configEndpoints (7 days for a configured entry, 2 h for an interface
 endpoint on a non-public address). The spec is silent on container bridges:
 the oracle follows `mod/ip/src/module.go` `LocalIPs` and

@@ -10,7 +10,9 @@ start; the driver started after lan-outage had cut node2 off the LAN):
 - phase B, Tor restarts on node2: node2 resolved no tor row for itself from
   the down line until Tor's start (`down_seen` + --down, less START_SLACK
   for the tap's delay); queries in both directions answered over a tor link
-  again within PHASE_B s of Tor's start; node2's log tap stayed whole, so
+  again within PHASE_B s of Tor's start, and node2's address returned no
+  sooner than PHASE_B s after it (else tcp carries the queries and Tor's
+  recovery is not judged); node2's log tap stayed whole, so
   astrald did not restart (a restart ends the stream, lib/nodelog.py);
 - phase C, LAN back: node1 and node2 share a tcp link within PHASE_C s of the
   driver seeing node2's address return; every query in either direction
@@ -74,6 +76,11 @@ def check_withdrawn(f: dict) -> float:
 
 def check_phase_b(f: dict) -> None:
     start = check_withdrawn(f)
+    back = f["lan_back_at"]
+    assert back is None or back >= start + PHASE_B, (
+        f"node2's address returned at {back} s, before phase B's {PHASE_B} s bound from "
+        f"Tor's start at {start} s ran out: tcp may carry the queries, so Tor's recovery "
+        "is not judged; lan-outage's --for leaves too little time")
     for d in DIRECTIONS:
         back = next((r for r in f["queries"][d] if r["outcome"] == "ok"
                      and r["ended_at"] > start and "tor" in (r.get("networks") or [])), None)

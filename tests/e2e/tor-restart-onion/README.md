@@ -26,8 +26,8 @@ sibling links to it over Tor.
   - node2's log tap stayed whole: astrald did not restart.
 
 Tor's start is the down line's time on the host's clock plus `--down`:
-restart-tor schedules the stop and the start in one call, and astrald logs
-the loss as Tor's control connection closes. The oracle allows 2 s for the
+restart-tor's one unit stops Tor, sleeps `--down` s and starts it, and
+astrald logs the loss as Tor's control connection closes. The oracle allows 2 s for the
 tap's delay.
 
 The query's route is not observable: node1 also holds its LAN link to node2,

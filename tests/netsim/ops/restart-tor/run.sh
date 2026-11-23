@@ -1,11 +1,15 @@
 #!/bin/sh
 # restart-tor: restart Tor on <vm> --in seconds from now, while the driver watches; with --down,
-#   stop Tor at --in and start it again --down seconds later.
+#   stop Tor at --in and start it again --down seconds after the stop.
 #   restart-tor [--vm <host>] [--in <seconds>] [--down <seconds>]   (default: node2, 30, 0)
 #
 # why scheduled in the guest: a vmop runs before the driver and ends, and the driver has to be
-#   watching when Tor goes down and comes back. Transient systemd timers on <vm> stop and start
-#   Tor, as restart-astrald schedules a restart.
+#   watching when Tor goes down and comes back. One transient systemd timer on <vm> stops Tor,
+#   waits --down s and starts it, as restart-astrald schedules a restart.
+# why one timer, with AccuracySec=1s: a transient timer keeps systemd's default AccuracySec of
+#   1 min, and two timers --down s apart can then fire together or out of order. One unit
+#   running stop, sleep, start holds Tor down for --down s from the stop's end, and the 1 s
+#   accuracy fires it --in s on (systemd-run(1), the AccuracySec example).
 # why Tor and not astrald: astrald's tor module owns its onion service through the control
 #   connection, and Tor drops the service with that connection (mod/tor/src/server.go). A Tor
 #   restart under a running astrald is what the onion's re-registration answers.
@@ -26,7 +30,6 @@ while [ $# -gt 0 ]; do
 done
 case "$IN" in ''|*[!0-9]*) echo "restart-tor: --in takes whole seconds, not '$IN'" >&2; exit 64 ;; esac
 case "$DOWN" in ''|*[!0-9]*) echo "restart-tor: --down takes whole seconds, not '$DOWN'" >&2; exit 64 ;; esac
-UP=$((IN + DOWN))
 
 REMOTE_BODY=$(cat <<'EOS'
 set -eu
@@ -35,26 +38,25 @@ units=tor.service
 if systemctl cat tor@default.service >/dev/null 2>&1; then
   units="tor@default.service tor.service"
 fi
-for u in e2e-tor-stop e2e-tor-start; do
-  systemctl stop "$u.timer" 2>/dev/null || true
-  systemctl reset-failed "$u.service" "$u.timer" 2>/dev/null || true
-done
-# shellcheck disable=SC2086
+systemctl stop e2e-tor-restart.timer e2e-tor-restart.service 2>/dev/null || true
+systemctl reset-failed e2e-tor-restart.service e2e-tor-restart.timer 2>/dev/null || true
 if [ "$down_s" = 0 ]; then
-  systemd-run --quiet --unit=e2e-tor-stop --on-active="${in_s}s" /bin/systemctl restart $units
+  action="/bin/systemctl restart $units"
   echo "restart-tor: $(hostname) restarts $units in ${in_s}s" >&2
 else
-  systemd-run --quiet --unit=e2e-tor-stop --on-active="${in_s}s" /bin/systemctl stop $units
-  systemd-run --quiet --unit=e2e-tor-start --on-active="${up_s}s" /bin/systemctl start $units
-  echo "restart-tor: $(hostname) stops $units in ${in_s}s and starts them in ${up_s}s" >&2
+  # note: ';', not '&&': Tor starts again even if the stop reports a failure
+  action="/bin/systemctl stop $units; /bin/sleep $down_s; /bin/systemctl start $units"
+  echo "restart-tor: $(hostname) stops $units in ${in_s}s and starts them ${down_s}s after the stop" >&2
 fi
+systemd-run --quiet --unit=e2e-tor-restart --on-active="${in_s}s" \
+  --timer-property=AccuracySec=1s /bin/sh -c "$action"
 EOS
 )
 # shellcheck disable=SC2029
-netsim ssh "$VM" -- "in_s='$IN'; down_s='$DOWN'; up_s='$UP'
+netsim ssh "$VM" -- "in_s='$IN'; down_s='$DOWN'
 $REMOTE_BODY"
 if [ "$DOWN" = 0 ]; then
   echo "restart-tor: Tor on $VM restarts in ${IN}s"
 else
-  echo "restart-tor: Tor on $VM stops in ${IN}s and starts again in ${UP}s"
+  echo "restart-tor: Tor on $VM stops in ${IN}s and starts again ${DOWN}s after the stop"
 fi

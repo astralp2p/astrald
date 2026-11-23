@@ -19,7 +19,7 @@ why the down line marks the stop: the onion service goes down with Tor's
 control connection, and astrald logs the loss as it withdraws the endpoint
 (mod/tor/src/server.go accept). Seen on the host's clock it is the time
 Tor stopped, late by at most one tap read; Tor starts --down s after the
-stop, since restart-tor schedules both timers in one call.
+stop, since restart-tor's one unit stops Tor, sleeps --down s and starts it.
 
 why a new_link attempt is retried and the link table read: a tor dial may
 answer before the link is up while the strategy keeps trying (tor-link's
