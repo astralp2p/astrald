@@ -1,0 +1,7 @@
+nodes    = ["node1", "node2", "node3", "node4"]
+after    = "swarm-four-siblings"
+timeout  = 300
+# why destroys: a ban cannot be lifted
+destroys = true
+host_listener = "serves the four mesh apps on the test host"
+facts    = ["expel_clean"]

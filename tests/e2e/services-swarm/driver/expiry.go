@@ -72,24 +72,30 @@ func expirySteps(w *world, s session, watch *servicescli.Watcher, name string, f
 
 // shortContract builds ssm_expiry's membership contract, valid for
 // expiryValidity, signed by the User on node1 and by ssm_expiry's node key.
-//
-// why the node key from the node's files: every op that collects a node's
-// subject signature refuses a contract shorter than an hour
-// (user.MinimalContractLength), and a node signs nothing else with its key.
 func shortContract(w *world, s session) (*auth.SignedContract, error) {
-	userID, err := astral.ParseIdentity(s.Facts.UserID)
-	if err != nil {
-		return nil, err
-	}
-	expID, err := astral.ParseIdentity(s.Nodes["ssm_expiry"].Identity)
-	if err != nil {
-		return nil, err
-	}
 	key, err := expiryNodeKey()
 	if err != nil {
 		return nil, err
 	}
-	contract, err := userapi.NewNodeContract(userID, expID, false, expiryValidity)
+	return signNodeContract(w, s, s.Nodes["ssm_expiry"].Identity, key, expiryValidity)
+}
+
+// signNodeContract builds subject's membership contract, valid for validity,
+// signed by the User on node1 and by key, the subject's node key.
+//
+// why the node key from the node's files: every op that collects a node's
+// subject signature refuses a contract shorter than an hour
+// (user.MinimalContractLength), and a node signs nothing else with its key.
+func signNodeContract(w *world, s session, subject string, key *crypto.PrivateKey, validity time.Duration) (*auth.SignedContract, error) {
+	userID, err := astral.ParseIdentity(s.Facts.UserID)
+	if err != nil {
+		return nil, err
+	}
+	subjectID, err := astral.ParseIdentity(subject)
+	if err != nil {
+		return nil, err
+	}
+	contract, err := userapi.NewNodeContract(userID, subjectID, false, validity)
 	if err != nil {
 		return nil, err
 	}
@@ -100,17 +106,21 @@ func shortContract(w *world, s session) (*auth.SignedContract, error) {
 	}
 	subjectSig, err := secp256k1.SignASN1(key, hash)
 	if err != nil {
-		return nil, fmt.Errorf("sign as ssm_expiry: %w", err)
+		return nil, fmt.Errorf("sign as %v: %w", subject, err)
 	}
 	return &auth.SignedContract{Contract: contract, IssuerSig: issuerSig, SubjectSig: subjectSig}, nil
 }
 
 // expiryNodeKey decodes ssm_expiry's node_key, which the script passes in
 // EXPIRY_NODE_KEY as hex.
-func expiryNodeKey() (*crypto.PrivateKey, error) {
-	raw, err := hex.DecodeString(os.Getenv("EXPIRY_NODE_KEY"))
+func expiryNodeKey() (*crypto.PrivateKey, error) { return nodeKeyFromEnv("EXPIRY_NODE_KEY") }
+
+// nodeKeyFromEnv decodes a node_key the script passes in the variable name
+// as hex.
+func nodeKeyFromEnv(name string) (*crypto.PrivateKey, error) {
+	raw, err := hex.DecodeString(os.Getenv(name))
 	if err != nil || len(raw) == 0 {
-		return nil, fmt.Errorf("EXPIRY_NODE_KEY: %v", err)
+		return nil, fmt.Errorf("%v: %v", name, err)
 	}
 	obj, _, err := astral.Decode(bytes.NewReader(raw), astral.Canonical())
 	if err != nil {

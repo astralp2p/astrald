@@ -20,10 +20,19 @@ tapped):
   query to node3's app fails, node3's app serves nothing, and node2 opens no
   link to node3 while it routes (A2G8; acceptance criterion 7, for one app on
   each node, since one app identity is hosted on one node: astral-docs
-  topics/app-routing.md, The contract an app signs).
-
-note: a link from node2 to node3 just after the ban is not judged here: the
-link admission ticket (LIPwsObl5m) closes it, and expel-propagation reports it.
+  topics/app-routing.md, The contract an app signs);
+- links: node1 logged node3's answer to its ban within the window, since the
+  expelling node pushes the ban to node3 until node3 answers (astral-docs
+  protocols/user/README.md:142-152; astrald mod/user/src/expel.go Expel,
+  pushUntilDelivered). On node1, and on node2 when it logged the answer,
+  from GRACE after the answer the node logs no new link with node3, and at
+  the end of the 30 s window it lists no link to node3 (the same section: a
+  node admits an expelled node's links until that node answers a push of its
+  own ban from this node; astrald mod/user/src/link_admitter.go
+  onBanAnswered closes them). node2 pushes the ban to node3 only on a new
+  link or in its hourly sweep (mod/user/src/sync.go syncExpulsions,
+  reconcile_task.go), so a node2 that logged no answer is judged on pushes
+  and discovery alone: the spec admits its links.
 """
 from lib.sessionio import load
 
@@ -32,6 +41,11 @@ from lib.sessionio import load
 GRACE = 1.0
 REACH = 5.0          # acceptance criterion 7: a member host answers within 5 s
 PUSH_REJECTED = "rejecting pushed contract from "
+# astrald mod/user/src/link_admitter.go onBanAnswered
+BAN_ANSWERED = " answered its ban, refusing its links"
+# astrald mod/nodes/src/link_pool.go: "added %v-link with %v (%v)", logged
+# once the link passed admission
+LINK_ADDED = ("added ", "-link with ")
 
 
 def first(entries: list, *needles: str) -> float | None:
@@ -94,6 +108,34 @@ def judge_log(log: dict, id1: str, id2: str, id3: str) -> None:
             f"{[(round(e['t'] - bans[node], 3), e['text'][:200]) for e in late]}")
 
 
+def judge_links(log: dict, id3: str) -> list:
+    """node1, and node2 when it logged node3's ban answer: from GRACE after
+    the answer, no new link with node3, and none listed at the window's end."""
+    judged = []
+    for node in ("node1", "node2"):
+        answered = first(log[node], id3 + BAN_ANSWERED)
+        # why node1 must answer: the expelling node pushes the ban to node3
+        # until node3 answers (protocols/user/README.md:142-152;
+        # mod/user/src/expel.go Expel, pushUntilDelivered, onBanAnswered)
+        assert answered is not None or node != "node1", (
+            "node1, the expelling node, logged no answer of node3 to its ban "
+            "within the window, so its links to node3 were never refused")
+        if answered is None:
+            continue
+        judged.append(node)
+        late = [e for e in log[node] if e["t"] >= answered + GRACE
+                and all(n in e["text"] for n in LINK_ADDED) and id3 in e["text"]]
+        assert not late, (
+            f"{node} added a link with the expelled node3 more than {GRACE} s "
+            f"after node3 answered its ban there: "
+            f"{[(round(e['t'] - answered, 3), e['text'][:200]) for e in late]}")
+        held = log["links_at_end"][node]
+        assert not held, (
+            f"{node} still listed link(s) {held} to the expelled node3 at the "
+            f"end of the window, after node3 answered its ban there")
+    return judged
+
+
 def judge_routing(routing: dict, id1: str, id3: str) -> None:
     ready, probe = routing["ready"], routing["probe"]
     assert id3 in ready["hosts_before_node3_app"], (
@@ -138,11 +180,14 @@ def main():
     print(f"oracle: probe {routing['probe']}")
     judge_routing(routing, id1, id3)
     judge_log(facts["cross_ban_log"], id1, id2, id3)
+    judged = judge_links(facts["cross_ban_log"], id3)
     p = routing["probe"]
     print(f"oracle: node2 reached node1's app in {p['app_node1_seconds']:.2f} s, "
           f"found no route to the expelled node's app "
           f"({p['app_node3_err']!r} after {p['app_node3_seconds']:.2f} s), and "
           "no node logged a discovery or a rejected relay push across the ban")
+    print(f"oracle: links judged on {judged} (node3 answered its ban "
+          "there); none relinked node3 after the answer, none held a link at the end")
 
 
 main()

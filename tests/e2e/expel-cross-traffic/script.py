@@ -10,12 +10,13 @@
    of both apps, then a ping of each. node2's links to node3 are listed
    before and after the probe.
 4. The flow holds until HOLD seconds after the expel, so a carry that kept
-   retrying a former member would show.
+   retrying a former member, or a link task that kept relinking it, would
+   show. At the end node1's and node2's links to node3 are listed.
 
 Every node's log is tapped across the flow. The entries that tell a push, a
-discovery, a relay or a link between node3 and the members are the
-`cross_ban_log` fact; the probe is the `routing_probe` fact. The oracle
-judges both.
+discovery, a relay, a link or a ban answer between node3 and the members, and
+the links at the end, are the `cross_ban_log` fact; the probe is the
+`routing_probe` fact. The oracle judges both.
 """
 import asyncio
 import json
@@ -32,13 +33,18 @@ from lib.sessionio import load, write_facts
 READY = 180.0      # how long the Go driver may take to set up
 CONVERGE = 30.0    # how long the ban may take to reach node2
 # why a hold: a swarm follow that kept its carry to a former member retries
-# it on a backoff from 1 s (mod/services/src/swarm.go carry), so the taps stay
-# open long enough after the ban for a few retries to show.
-HOLD = 12.0
-# the entries that tell a push, a discovery, a relay or a link, and the
-# moments the ban landed on each node
+# it on a backoff from 1 s (mod/services/src/swarm.go carry), and a link task
+# that kept a former sibling relinks it, so the taps stay open long enough
+# after the ban for a few retries to show.
+# why 30 s: the watch window of the E2E tests exhibit's M11 (no relink for
+# 30 s after an expel).
+HOLD = 30.0
+# the entries that tell a push, a discovery, a relay or a link, the moments
+# the ban landed on each node, and the moment node3 answered its ban there
+# (mod/user/src/link_admitter.go onBanAnswered)
 KEEP = ("services.discover", "rejecting pushed contract", "push relay contract",
-        "refused relay", "removing sibling", "expelled", "-link with")
+        "refused relay", "removing sibling", "expelled", "-link with",
+        "answered its ban")
 
 
 class Driver:
@@ -122,7 +128,9 @@ async def flow(doc: dict, driver: Driver) -> dict:
     routing["probe"] = await driver.probe()
     routing["links_after"] = await links_to(n2, id3)
     await asyncio.sleep(max(0.0, expelled_at + HOLD - time.monotonic()))
-    return {"cross_traffic_expelled_id": expelled, "routing_probe": routing}
+    links_at_end = {"node1": await links_to(n1, id3), "node2": await links_to(n2, id3)}
+    return {"cross_traffic_expelled_id": expelled, "routing_probe": routing,
+            "links_at_end": links_at_end}
 
 
 async def main():
@@ -135,6 +143,7 @@ async def main():
             taps = {n: await stack.enter_async_context(LogTap(nodes[n])) for n in ids}
             facts = await flow(doc, driver)
             facts["cross_ban_log"] = {
+                "links_at_end": facts.pop("links_at_end"),
                 "node1": kept(taps["node1"], [ids["node3"]]),
                 "node2": kept(taps["node2"], [ids["node3"]]),
                 "node3": kept(taps["node3"], [ids["node1"], ids["node2"]]),

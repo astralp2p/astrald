@@ -1,0 +1,9 @@
+nodes    = ["node1", "node2", "node3", "node4", "node5"]
+after    = "swarm-churn-join"
+timeout  = 300
+restart  = ["node2"]
+# why destroys: node2 restarts and a sixth app joins, and the chain's later
+# steps continue this world
+destroys = true
+host_listener = "spawns a late mesh app on node1 while node2 is down"
+facts    = ["churn_late_app"]

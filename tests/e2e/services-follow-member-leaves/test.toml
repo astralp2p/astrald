@@ -1,0 +1,6 @@
+nodes    = ["node1", "node2", "sfml_member"]
+after    = "adopt-node"
+timeout  = 420
+# why destroys: sfml_member joins the User's swarm, lapses, and joins again
+destroys = true
+facts    = ["follow_member_leaves"]

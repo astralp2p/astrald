@@ -1,0 +1,8 @@
+nodes      = ["node1", "node2", "node3", "node5"]
+after      = "swarm-churn-leave"
+timeout    = 420
+local_only = "freezes and resumes node3's astrald process by its pid (lib/nodeproc.py)"
+# why destroys: node3 is frozen and resumed under the chain's apps, which this test stops
+destroys   = true
+host_listener = "keeps the f3 mesh apps running and stops them at the end"
+facts      = ["survives_churn"]

@@ -1,0 +1,7 @@
+nodes    = ["node1", "node2", "node3", "node4", "node5"]
+after    = "swarm-churn-restart"
+timeout  = 240
+# why destroys: node5 joins the swarm, and the chain's later steps continue its world
+destroys = true
+host_listener = "spawns node5's mesh app on the test host"
+facts    = ["churn_join"]

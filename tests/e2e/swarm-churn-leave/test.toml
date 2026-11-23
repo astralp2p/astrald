@@ -1,0 +1,6 @@
+nodes    = ["node1", "node2", "node3", "node4", "node5"]
+after    = "swarm-churn-late-app"
+timeout  = 240
+stop     = ["node4"]
+host_listener = "keeps the f3 mesh apps running"
+facts    = ["churn_leave"]
