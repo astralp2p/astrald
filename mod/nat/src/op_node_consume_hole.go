@@ -71,16 +71,25 @@ func (mod *Module) OpNodeConsumeHole(ctx *astral.Context, q *routing.IncomingQue
 		opCtx, cancel := ctx.WithCancel()
 		defer cancel()
 
-		if !hole.BeginLock() {
-			return ch.Send(astral.Err(natmod.ErrHoleBusy))
+		// why: this node is the hole's only pinger, and locking silences its pings.
+		// The peer expires an Idle hole noPingTimeout after the last ping it heard,
+		// so a lock taken before the peer holds the signal lets signaling latency
+		// (a stalled peer or transport) expire the peer's hole. The hole stays Idle
+		// until the peer's handshake completes, in the order
+		// protocols/nat/ops/nat.node_consume_hole.md gives: open on the peer, then lock.
+		// A failed handshake leaves the hole Idle, so the defer returns it to the pool.
+		if err := mod.consumeRemoteHole(opCtx, target, holeNonce); err != nil {
+			return ch.Send(astral.Err(err))
 		}
 
-		// why: the peer is asked as this node; NAT traversal runs between nodes, and
-		// mod.auth.admin_network_action above decides who starts it (decided 2026-11-06).
-		natClient := natclient.New(target, astrald.Default())
-		err = natClient.NodeConsumeHole(opCtx, holeNonce, nil)
-		if err != nil {
-			return ch.Send(astral.Err(err))
+		// note: the hole can expire or leave StateIdle during the handshake; the
+		// peer's side is taken by then and nothing gives it back.
+		// why: the peer's socket is closed once its handshake completes, so no pong
+		// answers an outstanding ping; draining them would hold the lock for up to
+		// the ping lifespan (5 s by default). Any pong the peer sent before it closed
+		// arrived during the locked/take/taken signaling round trips.
+		if !hole.BeginLockAfterPeer() {
+			return ch.Send(astral.Err(natmod.ErrHoleCantLock))
 		}
 
 		if err := hole.WaitLocked(opCtx); err != nil {
@@ -134,4 +143,16 @@ func (mod *Module) OpNodeConsumeHole(ctx *astral.Context, q *routing.IncomingQue
 	}
 
 	return ch.Send(&hole.Hole)
+}
+
+// consumeRemoteHole opens nat.node_consume_hole for pair on peer and drives the
+// peer's lock-then-take handshake to its end.
+func (mod *Module) consumeRemoteHole(ctx *astral.Context, peer *astral.Identity, pair astral.Nonce) error {
+	if mod.consumeRemote != nil {
+		return mod.consumeRemote(ctx, peer, pair)
+	}
+
+	// why: the peer is asked as this node; NAT traversal runs between nodes, and
+	// mod.auth.admin_network_action in OpNodeConsumeHole decides who starts it (decided 2026-11-06).
+	return natclient.New(peer, astrald.Default()).NodeConsumeHole(ctx, pair, nil)
 }
