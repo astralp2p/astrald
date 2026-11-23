@@ -1,0 +1,8 @@
+nodes    = ["node1", "node2", "node3", "node4"]
+after    = "swarm-churn-setup"
+timeout  = 240
+restart  = ["node2"]
+# why destroys: node2 restarts, and the chain's later steps continue its world
+destroys = true
+host_listener = "keeps the f3 mesh apps running across node2's restart"
+facts    = ["churn_restart"]

@@ -1,0 +1,7 @@
+nodes    = ["node1", "node2"]
+after    = "adopt-node"
+timeout  = 240
+# why destroys: five extra links between node1 and node2 stay open
+destroys = true
+host_listener = "serves a provider app on node2 and a follower app on node1"
+facts    = ["carry_retry"]

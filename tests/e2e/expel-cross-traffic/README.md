@@ -14,8 +14,9 @@ follows that used those paths stay live through it.
   provider's offering and node2 names node3 as the host of node3's app, the
   User expels node3 on node1. Once node2 holds the ban, the Go program asks
   node2's `apphost.hosts` for both apps and pings both from node2; node2's
-  links to node3 are listed before and after. The flow holds 12 s after the
-  expel. Every node's log is tapped across the flow (`lib/nodelog.py`).
+  links to node3 are listed before and after. The flow holds 30 s after the
+  expel, and node1's and node2's links to node3 are listed at its end. Every
+  node's log is tapped across the flow (`lib/nodelog.py`).
 - **oracle** `verify.py` —
   - setup was live: node3's carry ran `services.discover` on node1, and
     node2's carry ran it on node3, before the ban;
@@ -26,18 +27,23 @@ follows that used those paths stay live through it.
   - node2's `apphost.hosts` names node1 for node1's app and no host for node3's
     app; node1's app answers node2 within 5 s; the query to node3's app fails,
     node3's app serves nothing, and node2 opens no new link to node3 while it
-    routes.
+    routes;
+  - on node1 and on node2, from 1 s after the node logged that node3 answered
+    its ban (`<id3> answered its ban, refusing its links`), the node logs no
+    `added …-link with <id3>`, and at the end of the 30 s window it lists no
+    link to node3. A node that logged no answer is judged on pushes and
+    discovery alone: a node admits an expelled node's links until that node
+    answers a push of its own ban from it (`.ai/system/protocols/user/README.md`,
+    link admission). A link node2 holds to node3 in the milliseconds before
+    the answer is therefore not a failure.
 
 Spec: `.ai/system/topics/app-routing.md` (Resolving the host, Authorizing the
-relay). Decision: A2G8 option b. Ticket:
-https://wiki.satforge.dev/doc/qHhjbojGwM
+relay), `.ai/system/protocols/user/README.md` (link admission). Decision: A2G8
+option b. Tickets: https://wiki.satforge.dev/doc/qHhjbojGwM,
+https://wiki.satforge.dev/doc/LIPwsObl5m
 
 ## What it does not judge
 
-- A link node2 holds to node3 just after the ban. node2 re-links within
-  milliseconds of node3 tearing its links down; refusing that link is the link
-  admission ticket's work (expel-propagation reports the link count). The
-  probe judges only links opened while node2 routes.
 - The inbound relay check (`mod/nodes` `admitsRelayer`). In this flow node3's
   caller proof push is refused first, so a relayed query from node3 never
   reaches a member; the unit tests in `mod/nodes/src` hold the check.
