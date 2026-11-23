@@ -29,9 +29,11 @@ exhibit (https://wiki.satforge.dev/doc/e2e-tests-X3LHjItA2b).
     ended before the ban landed there, and never showed it again;
   - from 1 s after the later of the ban and node4's ban answer on each
     member: no `services.discover` naming node4 and no rejected contract
-    pushed by node4; on a member that logged node4's answer, no `added …-link
-    with <id4>` after it and no link to node4 at the end; node4 logs no
-    `services.discover` naming a member from 1 s after its removal.
+    pushed by node4; node1, the expelling node, logged node4's answer, since
+    it pushes the ban to node4 until node4 answers; on node1, and on another
+    member that logged the answer, no `added …-link with <id4>` after it and
+    no link to node4 at the end; node4 logs no `services.discover` naming a
+    member from 1 s after its removal.
 
 Spec: `.ai/system/topics/app-routing.md` (Authorizing the relay, Failures),
 `.ai/system/protocols/services/types/services.removed.md`,

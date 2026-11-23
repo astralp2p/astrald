@@ -21,14 +21,18 @@ tapped):
   link to node3 while it routes (A2G8; acceptance criterion 7, for one app on
   each node, since one app identity is hosted on one node: astral-docs
   topics/app-routing.md, The contract an app signs);
-- links: on node1 and on node2, from GRACE after the node logged that node3
-  answered its ban, the node logs no new link with node3, and at the end of
-  the 30 s window it lists no link to node3 (astral-docs
-  protocols/user/README.md:142-152: a node admits an expelled node's links
-  until that node answers a push of its own ban from this node; astrald
-  mod/user/src/link_admitter.go onBanAnswered closes them). A node that
-  logged no answer is judged on pushes and discovery alone: the spec admits
-  its links.
+- links: node1 logged node3's answer to its ban within the window, since the
+  expelling node pushes the ban to node3 until node3 answers (astral-docs
+  protocols/user/README.md:142-152; astrald mod/user/src/expel.go Expel,
+  pushUntilDelivered). On node1, and on node2 when it logged the answer,
+  from GRACE after the answer the node logs no new link with node3, and at
+  the end of the 30 s window it lists no link to node3 (the same section: a
+  node admits an expelled node's links until that node answers a push of its
+  own ban from this node; astrald mod/user/src/link_admitter.go
+  onBanAnswered closes them). node2 pushes the ban to node3 only on a new
+  link or in its hourly sweep (mod/user/src/sync.go syncExpulsions,
+  reconcile_task.go), so a node2 that logged no answer is judged on pushes
+  and discovery alone: the spec admits its links.
 """
 from lib.sessionio import load
 
@@ -105,11 +109,17 @@ def judge_log(log: dict, id1: str, id2: str, id3: str) -> None:
 
 
 def judge_links(log: dict, id3: str) -> list:
-    """The members that logged node3's ban answer: from GRACE after it, no
-    new link with node3, and none listed at the window's end."""
+    """node1, and node2 when it logged node3's ban answer: from GRACE after
+    the answer, no new link with node3, and none listed at the window's end."""
     judged = []
     for node in ("node1", "node2"):
         answered = first(log[node], id3 + BAN_ANSWERED)
+        # why node1 must answer: the expelling node pushes the ban to node3
+        # until node3 answers (protocols/user/README.md:142-152;
+        # mod/user/src/expel.go Expel, pushUntilDelivered, onBanAnswered)
+        assert answered is not None or node != "node1", (
+            "node1, the expelling node, logged no answer of node3 to its ban "
+            "within the window, so its links to node3 were never refused")
         if answered is None:
             continue
         judged.append(node)
@@ -176,7 +186,7 @@ def main():
           f"found no route to the expelled node's app "
           f"({p['app_node3_err']!r} after {p['app_node3_seconds']:.2f} s), and "
           "no node logged a discovery or a rejected relay push across the ban")
-    print(f"oracle: links judged on {judged or 'no node'} (node3 answered its ban "
+    print(f"oracle: links judged on {judged} (node3 answered its ban "
           "there); none relinked node3 after the answer, none held a link at the end")
 
 

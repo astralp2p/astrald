@@ -25,11 +25,14 @@ From the `expel_clean` fact and the `f4` apps' state files and call logs
   a key retracted twice keeps its first cause);
 - logs, per member X, from t0(X) = max(ban on X, node4's ban answer on X) +
   GRACE to the window's end: no services.discover naming node4, no rejected
-  contract pushed by node4; and on a member that logged node4's ban answer,
-  no new link with node4 after the answer + GRACE and none listed at the end
-  (protocols/user/README.md:142-152, protocols/nodes/README.md Link admission;
-  plan conflict C3: links are admitted until the answer); node4 logs no
-  services.discover naming a member from its own removal + GRACE.
+  contract pushed by node4; node1, the expelling node, logged node4's ban
+  answer, since it pushes the ban to node4 until node4 answers
+  (mod/user/src/expel.go Expel); and on node1, and on another member that
+  logged the answer, no new link with node4 after the answer + GRACE and
+  none listed at the end (protocols/user/README.md:142-152,
+  protocols/nodes/README.md Link admission; plan conflict C3: links are
+  admitted until the answer); node4 logs no services.discover naming a
+  member from its own removal + GRACE.
 """
 from lib import meshapps
 from lib.sessionio import load
@@ -132,6 +135,12 @@ def judge_log(f: dict, ids: dict, ban: dict) -> list:
     logs, id4, judged = f["logs"], ids["node4"], []
     for x in MEMBERS:
         answer = first(logs[x], f["expel_at"] - 1.0, id4 + BAN_ANSWERED)
+        # why node1 must answer: the expelling node pushes the ban to node4
+        # until node4 answers (protocols/user/README.md:142-152;
+        # mod/user/src/expel.go Expel, pushUntilDelivered, onBanAnswered)
+        assert answer is not None or x != "node1", (
+            "node1, the expelling node, logged no answer of node4 to its ban "
+            "within the window, so its links to node4 were never refused")
         t0 = max(ban[x], answer or ban[x]) + GRACE
         late = [e for e in logs[x] if e["t"] >= t0 and id4 in e["text"]
                 and ("services.discover" in e["text"] or PUSH_REJECTED + id4 in e["text"])]
@@ -175,7 +184,7 @@ def main():
     print(f"oracle: ban landed {landed}")
     print(f"oracle: node1-node3 kept answering each other; node4's app cut off both ways; "
           f"follows removed node4 (s after the ban, cause) {follows}; links judged on "
-          f"{judged or 'no member'}")
+          f"{judged}")
 
 
 main()

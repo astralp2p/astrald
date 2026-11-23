@@ -28,14 +28,18 @@ follows that used those paths stay live through it.
     app; node1's app answers node2 within 5 s; the query to node3's app fails,
     node3's app serves nothing, and node2 opens no new link to node3 while it
     routes;
-  - on node1 and on node2, from 1 s after the node logged that node3 answered
-    its ban (`<id3> answered its ban, refusing its links`), the node logs no
-    `added …-link with <id3>`, and at the end of the 30 s window it lists no
-    link to node3. A node that logged no answer is judged on pushes and
-    discovery alone: a node admits an expelled node's links until that node
-    answers a push of its own ban from it (`.ai/system/protocols/user/README.md`,
-    link admission). A link node2 holds to node3 in the milliseconds before
-    the answer is therefore not a failure.
+  - node1 logged node3's answer to its ban (`<id3> answered its ban, refusing
+    its links`) within the window: the expelling node pushes the ban to node3
+    until node3 answers (`mod/user/src/expel.go` `Expel`);
+  - on node1, and on node2 when it logged the answer, from 1 s after the
+    answer the node logs no `added …-link with <id3>`, and at the end of the
+    30 s window it lists no link to node3. node2 pushes the ban to node3 only
+    on a new link or in its hourly sweep, so a node2 that logged no answer is
+    judged on pushes and discovery alone: a node admits an expelled node's
+    links until that node answers a push of its own ban from it
+    (`.ai/system/protocols/user/README.md`, link admission). A link node2
+    holds to node3 in the milliseconds before the answer is therefore not a
+    failure.
 
 Spec: `.ai/system/topics/app-routing.md` (Resolving the host, Authorizing the
 relay), `.ai/system/protocols/user/README.md` (link admission). Decision: A2G8

@@ -13,8 +13,11 @@ chain's recovery times are tabulated.
   N + T, 25 s), thaws it in `finally`, and waits up to 60 s until all 20
   pairs of the five apps answer since the thaw (`survives_churn`).
 - **oracle** `verify.py` —
-  - every call to node3's app in flight at the freeze ended `unavailable`
-    within 27 s (or `ok` within 1 s, an answer sent before the stop);
+  - every call to node3's app in flight during the first 15 s of the freeze
+    ended `unavailable` within 27 s of the freeze (or `ok` within 1 s, an
+    answer sent before the stop), and each caller made at least one: a link
+    closes no earlier than N + T after node3's last frame, so these calls
+    wait on the link when it closes;
   - no call to node3's app lasted over 62 s;
   - the 12 pairs without node3 answered every call during the freeze;
   - every pair answered within 60 s of the thaw, and each pair's last call
@@ -46,7 +49,8 @@ https://wiki.satforge.dev/doc/cyD4a6ojvQ
 The exhibit says calls to a frozen peer "fail promptly rather than hang". The
 spec bounds a call in flight at N + T, but a call started after the links
 closed may wait for the 60 s routing deadline and end `timeout`. The oracle
-holds in-flight calls to 27 s and every call to 62 s.
+holds every call in flight during the first 15 s of the freeze, before any
+link can close, to 27 s, and every call to 62 s.
 
 ## Recovery markers
 
