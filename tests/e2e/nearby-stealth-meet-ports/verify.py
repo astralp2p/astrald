@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Oracle: two freshly claimed Stealth nodes of one User, on tcp 1800 and 1801, link through nearby within two statuses.
 
-user.bootstrap claimed node1 and node2 for the same User, and at node2's
-claim neither held a link to the other. Within LINK_BOUND seconds of node2's
+user.bootstrap claimed node1 and node2 for the same User, and just before
+node2's claim neither held a link to the other. Within LINK_BOUND seconds of node2's
 claim both list one link to each other under the same id, and every link
 either dialed went to the other's LAN address on a port the other listens
 on, never 1791 or 1792. The contact ran through nearby: a node logged
@@ -52,7 +52,7 @@ def check_claims(f: dict, ids: dict) -> None:
         "the same words must give one User")
     for k, other in PAIRS:
         assert f["before"][k] == [], (
-            f"{k} held links to {other} at node2's claim: {f['before'][k]}")
+            f"{k} held links to {other} before node2's claim: {f['before'][k]}")
 
 
 def check_link(f: dict) -> None:
