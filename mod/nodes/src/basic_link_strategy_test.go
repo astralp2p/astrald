@@ -56,6 +56,8 @@ func newBasicTestStrategy(t *testing.T, dial func(*astral.Context, exonetapi.End
 	t.Helper()
 	localKey, peerKey := newNegotiationKey(t), newNegotiationKey(t)
 	mod := &Module{privateKey: &crypto.PrivateKey{Key: localKey.Serialize()}, ctx: astral.NewContext(context.Background())}
+	// note: the database resolver reads the node's identity to skip rows about itself.
+	mod.node = &identityNode{id: astral.IdentityFromPubKey(localKey.PubKey())}
 	mod.Exonet = &stubExonet{dial: dial}
 	factory := &BasicLinkStrategyFactory{
 		mod:        mod,
