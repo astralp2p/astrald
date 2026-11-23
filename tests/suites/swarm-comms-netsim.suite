@@ -14,8 +14,12 @@
 #
 # Green (D11): 3 runs or a recorded waiver.
 #
-# Agent forms: tor-link alone ships a prompt.md. The operator sits on node1
-# and holds no node token:
+# Agent forms: no F or M flow here ships a prompt.md. Three existing tests
+# do: bootstrap-user-software-key, adopt-node and tor-link. `--driver agent`
+# drives each of those named alone, e.g.
+# `./tests/run --driver agent --vm tor-link`, and refuses the whole suite.
+# The flows have no agent form because the operator sits on node1 and holds
+# no node token:
 # - F5 swarm-fallback-paths judges the queries node2 sends node1 and node2's
 #   log stream;
 # - F6 swarm-forms-and-finds claims node2 and the reflector with

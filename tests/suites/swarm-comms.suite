@@ -12,8 +12,13 @@
 # Green (D11): 5 consecutive script runs and 1 agent run at a named astrald
 # commit; the companion 3 runs or a recorded waiver.
 #
-# Agent forms: none. No flow here ships a prompt.md, so `--driver agent`
-# drives none of them. The operator sits on node1 alone, and a node answers
+# Agent forms: no F or M flow here ships a prompt.md. Five existing tests do:
+# bootstrap-user-software-key, adopt-node, swarm-roster-sync, expel-node and
+# expel-propagation (the last two are tests F4 rests on). `--driver agent`
+# drives each of those named alone, e.g.
+# `./tests/run --driver agent --docker expel-node`, and refuses the whole
+# suite (app-call-remote ships no prompt.md). The flows have no agent form
+# because the operator sits on node1 alone, and a node answers
 # apphost.register and apphost.register_handler to a local caller only
 # (astral-docs protocols/apphost/ops/), so no operator hosts an app on
 # another node:
@@ -23,7 +28,8 @@
 # - the F3 chain's oracles judge the f3 mesh apps' records on the test host,
 #   the harness performs its restarts, stop and freeze, and
 #   swarm-survives-churn is local_only, a world no operator runs in.
-# The "1 agent run" of Green has no flow of this suite to run.
+# The "1 agent run" of Green has to be met by those five tests or waived; no
+# flow of this suite can supply it.
 #
 # The order is a preference among siblings; the planner computes the run order
 # from each test's `after`. `./tests/run --plan swarm-comms.suite` shows it.
