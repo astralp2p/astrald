@@ -18,9 +18,10 @@ the links that rode its address.
    tor row for itself, and whether node2 holds its 10.77 address
    (`ip.local_addrs`). The first time the tap holds node2's
    `is down: tor control connection closed` line, the driver notes it.
-5. Ends when node1 and node2 share a tcp link after the LAN's return, node1
-   lists no tor link to node2, and TAIL s of queries ran after the tcp link;
-   or END_AFTER s after the LAN's return; or at DEADLINE.
+5. Ends END_AFTER s after the LAN's return, or at DEADLINE. It notes when
+   node1 and node2 first share a tcp link after the return and when node1
+   then lists no tor link to node2; the oracle reports both and judges
+   neither.
 
 The driver acts and judges nothing. It records the `fallback_paths` fact,
 times in seconds since the driver began, on the host's clock: the LAN and
@@ -46,10 +47,10 @@ QUERY_EVERY = 1.0
 QUERY_GUARD = 60.0
 WATCH = 1.0
 CALL = 5.0
-TAIL = 15.0
-# why 230 s: the oracle's 90 s for the tcp link and 130 s more for the tor
-# link's retire, and 10 s to see it
-END_AFTER = 230.0
+# why 60 s: the 5 s announce wait and one 20 s pull that node2's return
+# starts (astral-docs protocols/nodes/README.md, Announcing a change), with
+# room for the queries that follow them
+END_AFTER = 60.0
 DOWN_LINE = "is down: tor control connection closed"
 NEEDLES = ("onion service", "server error")
 
@@ -168,10 +169,8 @@ def mark(seen: dict, s: dict) -> None:
 
 
 def done(seen: dict, now: float) -> bool:
-    back, tcp = seen["lan_back_at"], seen["tcp_both_at"]
-    if back is not None and now >= back + END_AFTER:
-        return True
-    return tcp is not None and seen["tor_gone_at"] is not None and now >= tcp + TAIL
+    back = seen["lan_back_at"]
+    return back is not None and now >= back + END_AFTER
 
 
 async def watch(c1, c2, nodes: tuple, tap: LogTap, clock, seen: dict, deadline: float) -> None:

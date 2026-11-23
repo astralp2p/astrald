@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Oracle: two siblings reach each other over Tor when the LAN goes, again after Tor restarts, and over tcp when the LAN returns.
+"""Oracle: two siblings reach each other over Tor when the LAN goes, again after Tor restarts, and still when the LAN returns.
 
 From the `fallback_paths` fact (times on the host's clock, from the driver's
 start; the driver started after lan-outage had cut node2 off the LAN):
@@ -14,16 +14,16 @@ start; the driver started after lan-outage had cut node2 off the LAN):
   sooner than PHASE_B s after it (else tcp carries the queries and Tor's
   recovery is not judged); node2's log tap stayed whole, so
   astrald did not restart (a restart ends the stream, lib/nodelog.py);
-- phase C, LAN back: node1 and node2 share a tcp link within PHASE_C s of the
-  driver seeing node2's address return; every query in either direction
-  started RECOVERED s after that link answered; node1 listed no tor link to
-  node2 within RETIRE s of the tcp link;
+- phase C, LAN back: every query in either direction that started once the
+  driver saw node2's address return answered. A node dials a member it is
+  linked to on no address change (astral-docs protocols/user/README.md: the
+  wake dials a member the node is not linked to), and a connectivity upgrade
+  follows link pressure only (mod/nodes/src/connectivity_upgrade.go), so a
+  tcp link and the tor link's retire are reported, not judged;
 - no query outlived its QUERY s deadline by more than SLACK s.
 
 The spec is silent on the onion's withdrawal (mod/tor/src/server.go,
-endpoint_resolver.go, commit 8535c9cb) and on the retire of a lower-ranked
-link after an upgrade (mod/nodes/src/connectivity_upgrade.go, retireMax,
-commit 0da99afa); those bounds follow the code.
+endpoint_resolver.go, commit 8535c9cb); that bound follows the code.
 """
 from lib.sessionio import load
 
@@ -35,14 +35,6 @@ START_SLACK = 2.0
 # retryMax), tor's link_idle_ping + link_ping_timeout of 60 s (astral-docs
 # topics/link-mux.md, Keepalive, Per-transport values), and 60 s for a dial
 PHASE_B = 60.0 + 60.0 + 60.0
-# why 90 s: the 5 s announce wait and one 20 s pull (astral-docs
-# protocols/nodes/README.md, Announcing a change), the user module's wake on
-# an address change (AOcdNCbukM), and a dial
-PHASE_C = 90.0
-RECOVERED = 1.0
-# why 130 s: retireMax of 2 min (mod/nodes/src/connectivity_upgrade.go) and
-# 10 s; tcp ranks 50 over tor's 10 (astral-docs protocols/nodes/README.md)
-RETIRE = 130.0
 QUERY = 30.0
 SLACK = 2.0
 DIRECTIONS = ("node1_to_node2", "node2_to_node1")
@@ -96,21 +88,16 @@ def check_phase_b(f: dict) -> None:
 
 
 def check_phase_c(f: dict) -> None:
-    back, tcp, gone = f["lan_back_at"], f["tcp_both_at"], f["tor_gone_at"]
+    back = f["lan_back_at"]
     assert back is not None, "the driver never saw node2's 10.77 address return"
-    assert tcp is not None, f"node1 and node2 shared no tcp link after the LAN returned at {back} s"
-    assert tcp - back <= PHASE_C, (
-        f"node1 and node2 shared a tcp link {tcp - back:.1f} s after the LAN returned; "
-        f"want within {PHASE_C} s")
     for d in DIRECTIONS:
-        failed = [r for r in f["queries"][d]
-                  if r["sent_at"] >= tcp + RECOVERED and r["outcome"] != "ok"]
-        assert not failed, f"{d}: queries failed after the tcp link at {tcp} s: {failed[:5]}"
-    assert gone is not None, f"node1 still listed a tor link to node2 at the driver's end ({f['ended_at']} s)"
-    assert gone - tcp <= RETIRE, (
-        f"node1 dropped its tor link to node2 {gone - tcp:.1f} s after the tcp link; "
-        f"want within {RETIRE} s")
-    print(f"oracle: phase C: LAN back at {back} s, tcp link at {tcp} s, tor link gone at {gone} s")
+        after = [r for r in f["queries"][d] if r["sent_at"] >= back]
+        assert after, f"{d}: no query started after the LAN returned at {back} s"
+        failed = [r for r in after if r["outcome"] != "ok"]
+        assert not failed, f"{d}: queries failed after the LAN returned at {back} s: {failed[:5]}"
+        print(f"oracle: phase C: {d}: {len(after)} queries after the LAN's return at {back} s, all answered")
+    print(f"oracle: phase C (reported, not judged): tcp link at {f['tcp_both_at']} s, "
+          f"tor link gone at {f['tor_gone_at']} s")
 
 
 def check_deadlines(f: dict) -> None:
