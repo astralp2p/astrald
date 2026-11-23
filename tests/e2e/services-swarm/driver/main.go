@@ -3,6 +3,7 @@
 //	driver drive  <session.json>   the v1 and swarm scenarios; prints facts as JSON
 //	driver verify <session.json>   one independent swarm round trip
 //	driver membership <session.json>  a swarm follow across a late join and an expulsion; prints facts as JSON
+//	driver rejoin <session.json>      a swarm follow across a member's expiry and its rejoin; prints facts as JSON
 package main
 
 import (
@@ -43,11 +44,11 @@ type world struct {
 
 func main() {
 	if len(os.Args) != 3 {
-		fmt.Fprintln(os.Stderr, "usage: driver drive|verify|membership <session.json>")
+		fmt.Fprintln(os.Stderr, "usage: driver drive|verify|membership|rejoin <session.json>")
 		os.Exit(2)
 	}
-	if os.Args[1] == "membership" {
-		if err := membership(os.Args[2]); err != nil {
+	if flow, ok := map[string]func(string) error{"membership": membership, "rejoin": rejoin}[os.Args[1]]; ok {
+		if err := flow(os.Args[2]); err != nil {
 			fmt.Fprintln(os.Stderr, "FAIL:", err)
 			os.Exit(1)
 		}

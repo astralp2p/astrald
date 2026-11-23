@@ -1,0 +1,8 @@
+nodes    = ["node1", "node2", "node3", "node4"]
+after    = "swarm-four-siblings"
+timeout  = 240
+# why destroys: the f3 mesh apps it spawns run on through every later step of
+# the chain, and the chain's steps restart, add and stop nodes
+destroys = true
+host_listener = "keeps four mesh apps on the test host through every churn step"
+facts    = ["churn_setup"]

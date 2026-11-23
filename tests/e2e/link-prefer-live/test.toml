@@ -1,0 +1,26 @@
+nodes    = ["node1", "node2"]
+after    = "adopt-node"
+timeout  = 240
+destroys = true
+host_listener = "serves two TCP relays on the test host that node2 links to node1 through"
+facts    = ["prefer_live"]
+
+# why N 4 s and T 10 s: a link turns suspect 4 s after its last frame and
+# closes at 14 s, leaving a 10 s window in which only the live link may carry
+# a new query; values no other test sets, so the world forks and no other
+# test meets them
+[config.node1.tcp]
+link_idle_ping    = "4s"
+link_ping_timeout = "10s"
+
+[config.node2.tcp]
+link_idle_ping    = "4s"
+link_ping_timeout = "10s"
+
+[config.node1.kcp]
+link_idle_ping    = "4s"
+link_ping_timeout = "10s"
+
+[config.node2.kcp]
+link_idle_ping    = "4s"
+link_ping_timeout = "10s"
