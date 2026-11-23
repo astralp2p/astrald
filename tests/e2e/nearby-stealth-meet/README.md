@@ -10,7 +10,10 @@ no introduction.
 - **driver** `script.py`: claims the reflector with the User's words through a
   manager, as `introduce-node` claims `replacement`. While every node's log is
   recorded, it waits until `node1` and the reflector list each other linked
-  and `node2` and the reflector list each other.
+  and `node2` and the reflector list each other, and then until the reflector
+  lists `node1` as verified (`node1`'s next periodic status, at most 95 s
+  after the claim), at most 240 s in all. It records the swarm views at the
+  meet and the time of the meet and of the recognition.
 - **oracle** `verify.py`: the claim is the User's; right after it the
   reflector listed itself alone and neither peer listed it; the pair met; a
   node logged `introduced to nearby peer` for the other; `node1` and `node2`
@@ -20,4 +23,7 @@ no introduction.
 `node1` and `node2` hold the reflector, unowned, as a verified visible node
 under the same IP when it is claimed. nearby emits `PeerSeen` when the user of
 a cached node changes, so the claim alone reaches their user module, and the
-oracle requires that each acted on it.
+oracle requires that each acted on it. The reflector cannot recognise `node1`
+that fast: `node1`'s last status reached it while it was unowned, so it holds
+that status unrecognised until `node1`'s next periodic status (astral-docs
+`protocols/nearby/README.md`, status processing step 4).
