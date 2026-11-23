@@ -379,3 +379,37 @@ func TestSwarmMemberLeftEventEndsTheMembersCarry(t *testing.T) {
 		t.Fatalf("%d queries to the departed member after it left; want none", n-routes)
 	}
 }
+
+// A carry that ends once the member is out of the local swarm, as when a ban
+// closes the link before this node handles SwarmMemberLeft, removes the
+// member's offerings with member_left and does not retry the member.
+func TestSwarmCarryEndedByABanReportsMemberLeft(t *testing.T) {
+	s := newSwarm()
+	node := &countingNode{cuttableNode: newCuttableNode(s.nodeA)}
+	s.a.node = node
+	advertise(t, s.a, "player", available)
+	_, remoteP := advertise(t, s.b, "player", available)
+
+	c := open(t, s.a.OpDiscover, astral.GenerateIdentity(), "services.discover?services=player&reach=swarm&follow=true", false)
+	expect[*services.Update](t, c)
+	expect[*services.Update](t, c)
+	expect[*astral.EOS](t, c)
+	node.waitEOS(t)
+
+	s.a.User.(*swarmUser).set([]*astral.Identity{s.nodeA.id}, nil)
+	routes := node.routes.Load()
+	node.cut()
+	r := expect[*services.Removed](t, c)
+	if len(r.Offerings) != 1 || !r.Offerings[0].ProviderID.IsEqual(remoteP) {
+		t.Fatalf("removed %+v; want the expelled member's provider only", r.Offerings)
+	}
+	if got := services.RemovalCause(r.Cause); got != services.CauseMemberLeft {
+		t.Fatalf("removed with cause %v; want member_left", got)
+	}
+
+	s.a.links.notify(s.b.node.Identity())
+	time.Sleep(carryRetryFirst + carryRetryFirst/2)
+	if n := node.routes.Load(); n != routes {
+		t.Fatalf("%d queries to the expelled member after its carry ended; want none", n-routes)
+	}
+}
