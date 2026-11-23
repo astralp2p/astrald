@@ -6,9 +6,11 @@ the `reflector` (C) on the LAN, every pair linked.
 
 - **after** `adopt-node` (node1 and node2 linked siblings) · **roster**
   `node1`, `node2`, `reflector` · VM world.
-- **op** `enter-nat node2 --translating`: node2's astrald moves into a netns
-  behind a NAT with no inbound DNAT and new inbound UDP dropped, and restarts
-  there; node2 relinks to node1 from behind it.
+- **op** `enter-nat node2 --translating --peer node1 --peer reflector`:
+  node2's astrald moves into a netns behind a NAT with no inbound DNAT and new
+  inbound UDP dropped, and restarts there; node2 relinks to node1 from behind
+  it. node1 and the reflector route node2's NAT alias (`198.51.100.12/32`)
+  over the LAN, so they can answer the dials node2 makes; they get no alias.
 - **driver** `script.py`: the reflector and node1 learn each other's LAN
   endpoint and node2 is given none; as the User on node1 it links to
   the reflector and adopts it; it names the three nodes on each node; then it

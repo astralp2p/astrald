@@ -6,5 +6,8 @@ timeout = 300
 # A sibling that moves can then reach node2 only once node2 dials it, which
 # is what endpoint-change-relink judges. enter-nat restarts node2's astrald
 # in its netns, so node2 relinks to node1 from behind the NAT.
-ops     = ["enter-nat node2 --translating"]
+# why --peer node1 --peer reflector: node1 and the reflector need a route back
+# to node2's NAT alias to answer node2's outbound dials; without it every dial
+# from behind the NAT hangs (run 20261123T121930Z, w5).
+ops     = ["enter-nat node2 --translating --peer node1 --peer reflector"]
 facts   = ["endpoint_change_swarm"]
