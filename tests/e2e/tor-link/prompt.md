@@ -5,5 +5,6 @@ Then ask `{node2.alias}` for its user info (`user.info` with target
 `{node2.identity}`) from your node, again after every failure, until it
 answers. Record in `first_answer` how many seconds after you started the
 first query it answered (`after`), the networks your links to it ran over at
-that moment (`networks`), the failed queries before it (`failures`), and
-`tcp` as an empty object.
+that moment (`networks`), the failed queries before it (`failures`, a list
+with one entry per failed query; an empty list when none failed), and `tcp`
+as an empty object.

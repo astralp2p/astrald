@@ -52,11 +52,21 @@ async def networks_to(endpoint, token, peer):
                    if str(l.remote_identity) == peer})
 
 
+def failed_count(failures) -> int:
+    """How many queries failed before the first answer.
+
+    why: script.py records a list of the failures, while an operator under
+    `--driver agent` may record their count; the oracle asserts neither, so
+    it reports both forms rather than break on one.
+    """
+    return failures if isinstance(failures, int) else len(failures or [])
+
+
 def check_first_answer(answer: dict) -> None:
     limit = TCP_IDLE_PING + TCP_PING_TIMEOUT + QUERY + SLACK
     print(f"oracle: node2 first answered {answer['after']} s after the driver "
           f"started (limit {limit} s), over {answer['networks']}; "
-          f"{len(answer['failures'])} failed queries before: "
+          f"{failed_count(answer['failures'])} failed queries before: "
           f"{answer['failures']}")
     assert answer["after"] is not None, (
         f"node2 answered no query from node1 after leaving the LAN: "
