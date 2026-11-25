@@ -28,14 +28,23 @@ var (
 // word (e.g. privileged_member). Only the user key signs a PrivilegedMembership
 // (D2) and an Expulsion (D7).
 //
+// A PrivilegedMembership is signed only after a user action. On a Coldcard
+// the press is that action, so devicePress is set and a carrier signs the
+// moment a joiner asks. A software user key held on this node signs with no
+// action at all, so devicePress is clear and the membership waits for the
+// user to call user.confirm_join.
+//
 // note: nothing in the running node builds a userKeyCeremony until G7.
 type userKeyCeremony struct {
-	user     *astral.Identity
-	signer   entrySigner
-	state    nodesmod.SwarmState // nil: the ceremony signs memberships only
-	view     usermod.SwarmView   // nil: the ceremony signs memberships only
-	validity time.Duration
-	now      func() time.Time
+	user   *astral.Identity
+	signer entrySigner
+	// devicePress is set when signer asks the user for every signature (a
+	// Coldcard). The zero value is the safe one: wait for user.confirm_join.
+	devicePress bool
+	state       nodesmod.SwarmState // nil: the ceremony signs memberships only
+	view        usermod.SwarmView   // nil: the ceremony signs memberships only
+	validity    time.Duration
+	now         func() time.Time
 }
 
 func newUserKeyCeremony(userID *astral.Identity, signer entrySigner, state nodesmod.SwarmState, view usermod.SwarmView) *userKeyCeremony {
