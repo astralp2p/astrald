@@ -29,6 +29,103 @@ const (
 	DefaultContractValidity = 365 * 24 * time.Hour
 )
 
+// SwarmView reads what SwarmState's entries mean (mod/user). It reads the set
+// through nodes.SwarmState and does no other I/O. Every answer derives from
+// the entries stored at the time of the call, and every ID it takes or returns
+// is an entry ID (see nodes.SwarmState). Stored entries passed CheckSwarmEntry
+// on merge, so reads trust their signatures and that each answer's signer was
+// entitled to answer its request (user.MayAnswer); they apply what changes
+// after merge: Timeouts, expiry, Declines and expels. An expel beats
+// everything signed by or for the expelled identity.
+//
+// The root key is the user identity this node is claimed by; an unclaimed node
+// is its own root. Implementations read time from an injected clock that
+// defaults to time.Now, so tests and fakes agree on it.
+//
+// It is declared apart from Module: nothing implements it until G2 (reads) and
+// G3 (CheckSwarmEntry), and G7 embeds it into Module. A "carried out, or not
+// yet" view and the head-polling watcher stay inside mod/user; other modules
+// poll nodes.SwarmState.SwarmHead and call these methods.
+type SwarmView interface {
+	// RequestStatus returns the status of the request with entry ID req, in
+	// precedence order:
+	//   - user.RequestDeclined: a Decline names req, even after a contract
+	//     carried out an Approval of it; or the request was filed by, carried
+	//     by (JoinRequest.Carrier) or names (ContractRequest.Identity,
+	//     JoinRequest.Joiner) an expelled identity;
+	//   - user.RequestApproved: an Approval names req. An Approval counts
+	//     whenever it was given. An ExpelRequest is carried out by the root
+	//     key's user.SignedExpulsion naming its Subject, which counts as its
+	//     Approval;
+	//   - user.RequestExpired: the request's Timeout has passed;
+	//   - user.RequestPending: otherwise.
+	// An Approval or Decline signed by an expelled identity does not count.
+	// A req that names no stored request, including one held (EntryWait),
+	// answers user.RequestPending: a caller that needs to know first checks
+	// nodes.SwarmState.SwarmEntry, and a filer applies its own copy's Expired.
+	RequestStatus(req *astral.ObjectID) user.RequestStatus
+
+	// Expelled reports whether a stored user.SignedExpulsion names id as its
+	// Subject.
+	Expelled(id *astral.Identity) bool
+
+	// ApprovalsTouching returns the stored Approvals that node acts on: those
+	// of requests node filed (ContractRequest, ExpelRequest), carried in
+	// (JoinRequest.Carrier), or that name node (ContractRequest.Identity,
+	// JoinRequest.Joiner, ExpelRequest.Subject). It excludes Approvals signed
+	// by an expelled identity. It includes Approvals whose request is since
+	// declined, so callers check RequestStatus before acting. The order is not
+	// defined.
+	ApprovalsTouching(node *astral.Identity) []*user.SignedApproval
+
+	// CarriedOut returns the stored contracts whose ApprovalID is approval, in
+	// no defined order, whether or not they have expired or their parties are
+	// expelled. A host or carrier calls it before signing, so an Approval is
+	// carried out once, and monitoring uses it to show "approved, not yet
+	// carried out".
+	CarriedOut(approval *astral.ObjectID) []*auth.SignedContract
+
+	// Membership returns id's membership: a stored membership contract
+	// (user.ContractTier reports a tier) whose Subject is id, that has not
+	// expired, and whose link holds:
+	//   - signed by the root key, at any tier, with or without an ApprovalID;
+	//     a membership at user.TierPrivilegedMember holds only this way (D2);
+	//   - or signed by a JoinRequest's Carrier, carrying out (ApprovalID) an
+	//     Approval of that JoinRequest, which names id as Joiner at the same
+	//     tier and is not declined; the Approval's signer may answer it
+	//     (user.MayAnswer), which CheckSwarmEntry already ensured on merge.
+	// The issuer's signature is required; the subject's is optional and, when
+	// present, verified on merge. It returns false when none holds or id, or
+	// the contract's issuer, is expelled. When several hold, it returns the
+	// one that expires last.
+	Membership(id *astral.Identity) (*user.Membership, bool)
+
+	// CheckSwarmEntry decides whether obj may enter SwarmState. mod/nodes
+	// calls it before storing any entry that is not stored yet. Each entry
+	// kind has a gating identity whose tier, read from its stored membership
+	// contracts, decides:
+	//   - ContractRequest: FiledBy, any tier;
+	//   - JoinRequest: the Carrier, Trusted or Privileged; the Joiner only
+	//     signs it, and its Tier must be valid;
+	//   - ExpelRequest: FiledBy, Trusted or Privileged;
+	//   - Approval, Decline: the signer, whose tier must answer the request
+	//     named by RequestID (user.MayAnswer);
+	//   - contract: the Issuer, any tier; a membership at
+	//     user.TierPrivilegedMember is issued only by the root key (D2);
+	//   - Expulsion: only the root key (D7).
+	// The root key needs no membership and may write every kind. It returns:
+	//   - user.EntryDrop: obj is not an entry, a signature does not verify
+	//     (a contract's IssuerSig is required, its SubjectSig optional), a
+	//     request's Timeout is not valid, or the gating identity's tier may
+	//     not write it (D2, D5, D7, D10);
+	//   - user.EntryWait: the gating identity's membership, or the request
+	//     an Approval or Decline names, is not stored yet;
+	//   - user.EntryAccept: otherwise.
+	// An entry that was valid when it arrived stays valid; expels apply when
+	// entries are read, not here.
+	CheckSwarmEntry(obj astral.Object) user.EntryVerdict
+}
+
 type Module interface {
 	// Ready returns a channel that is closed once the module has applied the
 	// initial active contract and is fully initialized.
