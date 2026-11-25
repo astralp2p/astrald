@@ -16,7 +16,8 @@ import (
 )
 
 // Errors the answering ops send. Their text is part of the protocol
-// (astral-docs protocols/user/ops/swarm_requests.md and answer_request.md).
+// (astral-docs protocols/user/ops/user.swarm_requests.md and
+// user.answer_request.md).
 var (
 	// ErrUnknownRequest: the id names no stored request.
 	ErrUnknownRequest = astral.NewError("unknown request")
@@ -213,7 +214,9 @@ func (ops *SwarmAnswerOps) answer(ctx *astral.Context, caller *astral.Identity, 
 	if err != nil {
 		return nil, err
 	}
-	if err = ops.State.AddSwarmEntry(ctx, signed); err != nil {
+	// A held answer is signed and may still be stored after a later merge
+	// (nodes.ErrSwarmEntryHeld), so it is sent like a stored one.
+	if err = ops.State.AddSwarmEntry(ctx, signed); err != nil && !errors.Is(err, nodesmod.ErrSwarmEntryHeld) {
 		return nil, err
 	}
 	return signed, nil

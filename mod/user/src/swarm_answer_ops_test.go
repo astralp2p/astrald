@@ -3,6 +3,7 @@ package user
 import (
 	"bytes"
 	"errors"
+	"fmt"
 	"io"
 	"sync"
 	"testing"
@@ -14,22 +15,25 @@ import (
 	"github.com/astralp2p/astral-go/api/user"
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astral-go/astral/channel"
+	nodesmod "github.com/astralp2p/astrald/mod/nodes"
 	secp256k1sig "github.com/astralp2p/astrald/mod/secp256k1"
 )
 
-// fakeSwarmState is an in-memory nodes.SwarmState: entries keyed by entry ID.
-type fakeSwarmState struct {
+// answerSwarmState is an in-memory nodes.SwarmState: entries keyed by entry ID.
+// addErr, when set, is returned by AddSwarmEntry after it records the entry.
+type answerSwarmState struct {
 	mu      sync.Mutex
 	entries map[string]astral.Object
 	ids     map[string]*astral.ObjectID
 	added   []astral.Object
+	addErr  error
 }
 
-func newFakeSwarmState() *fakeSwarmState {
-	return &fakeSwarmState{entries: map[string]astral.Object{}, ids: map[string]*astral.ObjectID{}}
+func newAnswerSwarmState() *answerSwarmState {
+	return &answerSwarmState{entries: map[string]astral.Object{}, ids: map[string]*astral.ObjectID{}}
 }
 
-func (s *fakeSwarmState) store(t *testing.T, obj astral.Object) *astral.ObjectID {
+func (s *answerSwarmState) store(t *testing.T, obj astral.Object) *astral.ObjectID {
 	t.Helper()
 	id, err := astral.ResolveObjectID(obj)
 	if err != nil {
@@ -42,7 +46,7 @@ func (s *fakeSwarmState) store(t *testing.T, obj astral.Object) *astral.ObjectID
 	return id
 }
 
-func (s *fakeSwarmState) AddSwarmEntry(_ *astral.Context, obj astral.Object) error {
+func (s *answerSwarmState) AddSwarmEntry(_ *astral.Context, obj astral.Object) error {
 	id, err := astral.ResolveObjectID(obj)
 	if err != nil {
 		return err
@@ -52,10 +56,10 @@ func (s *fakeSwarmState) AddSwarmEntry(_ *astral.Context, obj astral.Object) err
 	s.entries[id.String()] = obj
 	s.ids[id.String()] = id
 	s.added = append(s.added, obj)
-	return nil
+	return s.addErr
 }
 
-func (s *fakeSwarmState) SwarmEntry(id *astral.ObjectID) (astral.Object, error) {
+func (s *answerSwarmState) SwarmEntry(id *astral.ObjectID) (astral.Object, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	obj, ok := s.entries[id.String()]
@@ -65,7 +69,7 @@ func (s *fakeSwarmState) SwarmEntry(id *astral.ObjectID) (astral.Object, error) 
 	return obj, nil
 }
 
-func (s *fakeSwarmState) SwarmEntries(kind user.EntryKind) ([]*astral.ObjectID, error) {
+func (s *answerSwarmState) SwarmEntries(kind user.EntryKind) ([]*astral.ObjectID, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	var ids []*astral.ObjectID
@@ -77,13 +81,13 @@ func (s *fakeSwarmState) SwarmEntries(kind user.EntryKind) ([]*astral.ObjectID, 
 	return ids, nil
 }
 
-func (s *fakeSwarmState) SwarmHead() uint64 {
+func (s *answerSwarmState) SwarmHead() uint64 {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return uint64(len(s.entries))
 }
 
-func (s *fakeSwarmState) written() []astral.Object {
+func (s *answerSwarmState) written() []astral.Object {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return append([]astral.Object(nil), s.added...)
@@ -116,7 +120,7 @@ func (v *fakeSwarmView) Membership(id *astral.Identity) (*user.Membership, bool)
 
 type answerFixture struct {
 	ops     *SwarmAnswerOps
-	state   *fakeSwarmState
+	state   *answerSwarmState
 	view    *fakeSwarmView
 	auth    *recordingAuth
 	nodeKey *crypto.PrivateKey
@@ -127,7 +131,7 @@ func newAnswerFixture(tier user.Tier) *answerFixture {
 	nodeKey := secp256k1.New()
 	node := secp256k1.Identity(secp256k1.PublicKey(nodeKey))
 	f := &answerFixture{
-		state:   newFakeSwarmState(),
+		state:   newAnswerSwarmState(),
 		view:    &fakeSwarmView{status: map[string]user.RequestStatus{}, tiers: map[string]user.Tier{}},
 		auth:    &recordingAuth{verdict: true},
 		nodeKey: nodeKey,
@@ -276,6 +280,22 @@ func TestAnswerRequestWritesSignedDecline(t *testing.T) {
 		t.Fatalf("decline names issuer %v and request %v", sd.Issuer, sd.RequestID)
 	}
 	f.assertSignedAndWritten(t, sd, sd.SignableHash(), sd.IssuerSig)
+}
+
+// A held answer (nodes.ErrSwarmEntryHeld) may still be stored, so it is sent;
+// any other write failure is sent as an error.
+func TestAnswerRequestSendsHeldAnswer(t *testing.T) {
+	f := newAnswerFixture(user.TierPrivilegedMember)
+	req := f.contractRequest(t, time.Now(), user.RequestPending)
+	f.state.addErr = fmt.Errorf("add: %w", nodesmod.ErrSwarmEntryHeld)
+	if _, ok := f.answer(t, req, "approve").(*user.SignedApproval); !ok {
+		t.Fatal("a held approval was not sent")
+	}
+
+	f.state.addErr = fmt.Errorf("add: %w", nodesmod.ErrSwarmEntryDropped)
+	if obj := f.answer(t, req, "approve"); obj.ObjectType() == (&user.SignedApproval{}).ObjectType() {
+		t.Fatal("a dropped approval was sent as written")
+	}
 }
 
 func (f *answerFixture) assertSignedAndWritten(t *testing.T, obj astral.Object, hash []byte, sig *crypto.Signature) {
