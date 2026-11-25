@@ -79,17 +79,14 @@ func (mod *Module) OpRegister(ctx *astral.Context, query *routing.IncomingQuery,
 // why no decision here: registration stays local and is never refused; only
 // the permits go through SwarmState (vision, 2026-11-25).
 //
-// why ServeApps and UseBlueprints first: a registered app is served from
-// this node and syncs the blueprints of its types (apps.WithBlueprintSync), so
-// every registration asks for hosting and for blueprints.
+// why the hosting permits first: a registered app is served from this node
+// and syncs the blueprints of its types (apps.WithBlueprintSync), so every
+// registration asks for them.
 func (mod *Module) fileRegisterPermits(ctx *astral.Context, app *astral.Identity, req *apphostapi.RegisterRequest) error {
 	if mod.contractRequests == nil {
 		return nil
 	}
-	permits := slices.Concat([]*auth.Permit{
-		{Action: astral.String8(auth.ServeAppsAction{}.ObjectType())},
-		{Action: astral.String8(auth.UseBlueprintsAction{}.ObjectType())},
-	}, req.GrantPermits, req.ContractPermits)
+	permits := slices.Concat(hostingPermits(), req.GrantPermits, req.ContractPermits)
 	_, err := mod.contractRequests.File(ctx, app, permits)
 	return err
 }
