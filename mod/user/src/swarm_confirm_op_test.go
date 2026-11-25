@@ -129,6 +129,46 @@ func TestConfirmJoinRefusesNonUser(t *testing.T) {
 	}
 }
 
+// Done: a query with the user as caller that is not local cannot confirm. A
+// member relaying as the user arrives with the user as caller and a network
+// origin.
+func TestConfirmJoinRefusesNonLocalOrigin(t *testing.T) {
+	f := newSoftwareKeyFixture()
+	req, reqID := f.request(t, user.TierPrivilegedMember)
+	if err := f.swarm.AddSwarmEntry(astral.NewContext(nil), req); err != nil {
+		t.Fatalf("store request: %v", err)
+	}
+	signatures := len(f.keys.texts)
+
+	for _, origin := range []string{astral.OriginNetwork, astral.OriginMCP} {
+		af := &answerFixture{ops: f.ops, caller: f.userID, origin: origin}
+		objs := af.run(t, f.ops.OpConfirmJoin, "user.confirm_join?id="+reqID.String())
+		if len(objs) != 1 {
+			t.Fatalf("%s: confirm_join sent %d objects; want 1", origin, len(objs))
+		}
+		got, ok := objs[0].(astral.Error)
+		if !ok || got.Error() != astral.NewErrOriginNotAllowed(origin).Error() {
+			t.Fatalf("%s origin confirmed: %v", origin, objs[0])
+		}
+	}
+	if n := f.swarm.count(user.EntryContracts); n != 0 {
+		t.Fatalf("contracts in SwarmState: %d, want 0", n)
+	}
+	if n := len(f.keys.texts); n != signatures {
+		t.Fatalf("signatures: %d, want %d", n, signatures)
+	}
+
+	// the same caller from a local origin confirms
+	af := &answerFixture{ops: f.ops, caller: f.userID, origin: astral.OriginLocal}
+	objs := af.run(t, f.ops.OpConfirmJoin, "user.confirm_join?id="+reqID.String())
+	if len(objs) != 1 {
+		t.Fatalf("local: confirm_join sent %d objects; want 1", len(objs))
+	}
+	if _, ok := objs[0].(*auth.SignedContract); !ok {
+		t.Fatalf("local origin: confirm_join sent %v; want a membership", objs[0])
+	}
+}
+
 // user.confirm_join refuses what is not an open privileged join, and a node
 // that cannot reach the user key.
 func TestConfirmJoinRefusals(t *testing.T) {

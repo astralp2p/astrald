@@ -125,6 +125,7 @@ type answerFixture struct {
 	auth    *recordingAuth
 	nodeKey *crypto.PrivateKey
 	caller  *astral.Identity
+	origin  string // the query's origin; empty is unset
 }
 
 func newAnswerFixture(tier user.Tier) *answerFixture {
@@ -174,7 +175,7 @@ func (f *answerFixture) joinRequest(t *testing.T, tier user.Tier) *astral.Object
 func (f *answerFixture) run(t *testing.T, fn any, queryString string) []astral.Object {
 	t.Helper()
 	w := newRecordingWriter()
-	if err := route(t, fn, f.caller, queryString, w); err != nil {
+	if err := routeFrom(t, fn, f.caller, f.origin, queryString, w); err != nil {
 		t.Fatalf("route: %v", err)
 	}
 	select {

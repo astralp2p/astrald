@@ -107,6 +107,12 @@ func (w *recordingWriter) refusal(t *testing.T) string {
 // op has resolved it.
 func route(t *testing.T, fn any, caller *astral.Identity, queryString string, w io.WriteCloser) error {
 	t.Helper()
+	return routeFrom(t, fn, caller, "", queryString, w)
+}
+
+// routeFrom is route with the query's origin set; an empty origin is unset.
+func routeFrom(t *testing.T, fn any, caller *astral.Identity, origin, queryString string, w io.WriteCloser) error {
+	t.Helper()
 
 	op, err := routing.NewOp(fn)
 	if err != nil {
@@ -116,7 +122,11 @@ func route(t *testing.T, fn any, caller *astral.Identity, queryString string, w 
 	ctx, cancel := astral.NewContext(nil).WithTimeout(10 * time.Second)
 	defer cancel()
 
-	_, err = op.RouteQuery(ctx, astral.Launch(query.New(caller, caller, queryString, nil)), w)
+	q := astral.Launch(query.New(caller, caller, queryString, nil))
+	if origin != "" {
+		q.Extra.Set("origin", origin)
+	}
+	_, err = op.RouteQuery(ctx, q, w)
 	return err
 }
 

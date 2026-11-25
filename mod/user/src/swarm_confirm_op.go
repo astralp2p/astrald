@@ -31,10 +31,12 @@ type opConfirmJoinArgs struct {
 // OpConfirmJoin is the user's confirmation of the privileged_member
 // JoinRequest whose entry ID is ID: the user key signs the joiner's
 // PrivilegedMembership, adds it to SwarmState and sends it. The carrier of the
-// join hands it to the joiner. Only the user identity may call it; the
-// request is found in user.swarm_requests.
+// join hands it to the joiner. Only the user identity may call it, and only
+// from a local origin on this node; the request is found in
+// user.swarm_requests.
 //
 // It refuses, writing nothing:
+//   - astral.ErrOriginNotAllowed when the query is not local;
 //   - ErrNoUserKey when this node cannot reach the user key;
 //   - auth.ErrNotPermitted when the caller is not the user;
 //   - ErrUnknownRequest when ID names no stored request;
@@ -46,6 +48,15 @@ type opConfirmJoinArgs struct {
 func (ops *SwarmAnswerOps) OpConfirmJoin(ctx *astral.Context, q *routing.IncomingQuery, args opConfirmJoinArgs) (err error) {
 	ch := q.Accept(channel.WithFormats(args.In, args.Out))
 	defer ch.Close()
+
+	// why local only: a member allowed to relay as the user reaches this node
+	// with the user as caller, so over the network the caller is no proof of
+	// the user's own action (D2).
+	switch q.Origin() {
+	case "", astral.OriginLocal:
+	default:
+		return ch.Send(astral.NewErrOriginNotAllowed(q.Origin()))
+	}
 
 	signed, err := ops.confirmJoin(ctx, q.Caller(), args.ID)
 	if err != nil {
@@ -62,8 +73,9 @@ func (ops *SwarmAnswerOps) OpConfirmJoin(ctx *astral.Context, q *routing.Incomin
 // the joiner's PrivilegedMembership.
 //
 // why caller and not Auth: the confirmation is the user's own action that a
-// software user key cannot take for itself, so no node, app or grant stands
-// in for the user identity.
+// software user key cannot take for itself, so no app or grant stands in for
+// the user identity. OpConfirmJoin admits only local origins, so a node
+// relaying as the user cannot either.
 func (ops *SwarmAnswerOps) confirmJoin(ctx *astral.Context, caller *astral.Identity, id *astral.ObjectID) (*auth.SignedContract, error) {
 	if ops.UserKey == nil {
 		return nil, ErrNoUserKey
