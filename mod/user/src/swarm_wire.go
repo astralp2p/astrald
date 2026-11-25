@@ -6,6 +6,7 @@ import (
 	"github.com/astralp2p/astral-go/api/secp256k1"
 	"github.com/astralp2p/astral-go/api/user"
 	"github.com/astralp2p/astral-go/astral"
+	cryptomod "github.com/astralp2p/astrald/mod/crypto"
 	usermod "github.com/astralp2p/astrald/mod/user"
 )
 
@@ -26,10 +27,22 @@ func (mod *Module) wireSwarm() {
 		State:   mod.Nodes,
 		View:    mod,
 		Auth:    mod.Auth,
-		Signer:  mod.Crypto.NodeSigner(),
+		Signer:  nodeSigner{mod.Crypto},
 		UserKey: mod.userKeyCeremony,
 		Root:    mod.rootKey,
 	}, "Op")
+}
+
+// nodeSigner signs with the node key, resolving the signer at each signature.
+//
+// why lazy: wireSwarm runs in LoadDependencies, while the crypto engines
+// still register; NodeSigner read then races with them and panics without one.
+type nodeSigner struct {
+	crypto interface{ NodeSigner() cryptomod.HashSigner }
+}
+
+func (s nodeSigner) SignHash(ctx *astral.Context, hash []byte) (*crypto.Signature, error) {
+	return s.crypto.NodeSigner().SignHash(ctx, hash)
 }
 
 // keepJoin keeps this node's JoinRequest in the tree, so a restart resumes
