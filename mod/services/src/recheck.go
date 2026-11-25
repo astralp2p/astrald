@@ -308,16 +308,13 @@ func (mod *Module) changedNotGranted(ctx *astral.Context, d *discovery) *service
 }
 
 // carryAllowed reports whether the node carrying d to this node may still do
-// so: it holds the relay right for the app, and either discovery of every
-// named service or, without names, membership of the local swarm.
+// so: it holds the relay right for the app and is a member of the local swarm
+// (see admitCarry).
 func (mod *Module) carryAllowed(ctx *astral.Context, d *discovery) bool {
 	if !mod.Auth.Authorize(ctx, &nodes.RelayForAction{Action: auth.NewAction(d.carrier), ForID: d.request.Caller}) {
 		return false
 	}
-	if d.request.All {
-		return slices.ContainsFunc(mod.swarmMembers(), d.carrier.IsEqual)
-	}
-	return mod.authorizeDiscovery(ctx, d.carrier, d.request.Names) == nil
+	return slices.ContainsFunc(mod.swarmMembers(), d.carrier.IsEqual)
 }
 
 // closeCarriesOf closes the follows a node carries to this node once it is no

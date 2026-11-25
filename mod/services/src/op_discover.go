@@ -173,7 +173,7 @@ func (mod *Module) admitDiscovery(ctx *astral.Context, q *routing.IncomingQuery,
 }
 
 // admitCarry admits a swarm member's query carrying an app's discovery: the
-// sending node must represent the app and may discover the services here. The
+// sending node must be a member of the local swarm and represent the app. The
 // stream is not filtered; the sending node filters for its caller.
 func (mod *Module) admitCarry(ctx *astral.Context, q *routing.IncomingQuery, args opDiscoverArgs, names []string) (*discovery, error) {
 	if q.Origin() != astral.OriginNetwork {
@@ -190,17 +190,17 @@ func (mod *Module) admitCarry(ctx *astral.Context, q *routing.IncomingQuery, arg
 		return nil, errRelayForRefused
 	}
 
+	// why membership and not the sending node's own discovery permit: a Member
+	// node holds no discovery of its own once the narrowed rules replace the
+	// any-member rule (G3), and what the app sees comes from the app's chain,
+	// which the sending node checks when it filters the tagged stream.
+	if !slices.ContainsFunc(mod.swarmMembers(), q.Caller().IsEqual) {
+		return nil, errRelayForRefused
+	}
 	req := coordinator.Request{Caller: app, Names: names, Follow: args.Follow, Tagged: args.Tagged}
 	if len(names) == 0 {
-		// why: without names there is no service to authorize; the sending
-		// node's swarm membership grants discovery of every service here.
-		if !slices.ContainsFunc(mod.swarmMembers(), q.Caller().IsEqual) {
-			return nil, errRelayForRefused
-		}
 		req.All = true
 		req.Names = mod.coord.Names()
-	} else if err := mod.authorizeDiscovery(ctx, q.Caller(), names); err != nil {
-		return nil, err
 	}
 	return &discovery{request: req, carrier: q.Caller()}, nil
 }
