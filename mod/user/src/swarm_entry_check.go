@@ -58,6 +58,9 @@ type entryGate struct {
 
 func anyTier(t user.Tier) bool { return t.IsValid() }
 
+// noTier gates what only the root key writes.
+func noTier(user.Tier) bool { return false }
+
 func trustedOrAbove(t user.Tier) bool {
 	return t == user.TierTrusted || t == user.TierPrivilegedMember
 }
@@ -68,12 +71,16 @@ func trustedOrAbove(t user.Tier) bool {
 //
 // note: Membership excludes an expelled identity, so an entry gated by one
 // waits instead of entering.
+//
+// why the root is read once: a claim can change it between two reads, and the
+// gate must be judged against the root it was built for.
 func (c *swarmEntryCheck) CheckSwarmEntry(obj astral.Object) user.EntryVerdict {
-	gate, verdict := c.gateOf(obj)
+	root := c.root()
+	gate, verdict := c.gateOf(obj, root)
 	if verdict != user.EntryAccept {
 		return verdict
 	}
-	if c.isRoot(gate.id) {
+	if isRoot(root, gate.id) {
 		return user.EntryAccept
 	}
 	m, ok := c.members.Membership(gate.id)
@@ -88,7 +95,7 @@ func (c *swarmEntryCheck) CheckSwarmEntry(obj astral.Object) user.EntryVerdict {
 
 // gateOf checks obj's signatures and Timeout and returns its gate. A verdict
 // other than EntryAccept is final.
-func (c *swarmEntryCheck) gateOf(obj astral.Object) (entryGate, user.EntryVerdict) {
+func (c *swarmEntryCheck) gateOf(obj astral.Object, root *astral.Identity) (entryGate, user.EntryVerdict) {
 	drop := func() (entryGate, user.EntryVerdict) { return entryGate{}, user.EntryDrop }
 
 	switch e := obj.(type) {
@@ -123,14 +130,14 @@ func (c *swarmEntryCheck) gateOf(obj astral.Object) (entryGate, user.EntryVerdic
 		return c.answerGate(e.Issuer, e.RequestID)
 
 	case *auth.SignedContract:
-		return c.contractGate(e)
+		return c.contractGate(e, root)
 
 	case *user.SignedExpulsion:
 		// why: only the user expels (D7).
-		if e.Expulsion == nil || !c.isRoot(e.Issuer) || !c.verify(e.Issuer, e.IssuerSig, e.Expulsion) {
+		if e.Expulsion == nil || !isRoot(root, e.Issuer) || !c.verify(e.Issuer, e.IssuerSig, e.Expulsion) {
 			return drop()
 		}
-		return entryGate{id: e.Issuer}, user.EntryAccept
+		return entryGate{e.Issuer, noTier}, user.EntryAccept
 	}
 	return drop()
 }
@@ -154,21 +161,20 @@ func (c *swarmEntryCheck) answerGate(signer *astral.Identity, req *astral.Object
 // contractGate gates a contract on its issuer, any tier. Its IssuerSig is
 // required and its SubjectSig optional; a PrivilegedMembership is issued only
 // by the root key (D2).
-func (c *swarmEntryCheck) contractGate(sc *auth.SignedContract) (entryGate, user.EntryVerdict) {
+func (c *swarmEntryCheck) contractGate(sc *auth.SignedContract, root *astral.Identity) (entryGate, user.EntryVerdict) {
 	if sc.IsNil() || !c.verify(sc.Issuer, sc.IssuerSig, sc.Contract) {
 		return entryGate{}, user.EntryDrop
 	}
 	if sc.SubjectSig != nil && !c.verify(sc.Subject, sc.SubjectSig, sc.Contract) {
 		return entryGate{}, user.EntryDrop
 	}
-	if tier, ok := user.ContractTier(sc.Contract); ok && tier == user.TierPrivilegedMember && !c.isRoot(sc.Issuer) {
+	if tier, ok := user.ContractTier(sc.Contract); ok && tier == user.TierPrivilegedMember && !isRoot(root, sc.Issuer) {
 		return entryGate{}, user.EntryDrop
 	}
 	return entryGate{sc.Issuer, anyTier}, user.EntryAccept
 }
 
-func (c *swarmEntryCheck) isRoot(id *astral.Identity) bool {
-	root := c.root()
+func isRoot(root, id *astral.Identity) bool {
 	return !root.IsZero() && id.IsEqual(root)
 }
 

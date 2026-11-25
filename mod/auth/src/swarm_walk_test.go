@@ -234,6 +234,10 @@ func TestSwarmWalkDeniesALinkThatDoesNotMatchItsRequest(t *testing.T) {
 // TestSwarmWalkDeniesAMemberApprover: a Member's Approval of a ContractRequest
 // is no link, and neither is a Trusted node's (D5) or a stranger's; the same
 // request approved by a Privileged node is.
+//
+// why each approver holds the action itself: the denial must come from the
+// approver's tier, not from a walk that re-enters at an approver with no
+// authority of its own.
 func TestSwarmWalkDeniesAMemberApprover(t *testing.T) {
 	ctx := astral.NewContext(nil)
 	for _, c := range []struct {
@@ -247,12 +251,20 @@ func TestSwarmWalkDeniesAMemberApprover(t *testing.T) {
 		{"stranger", func(w *swarmWorld) *astral.Identity { return astral.GenerateIdentity() }, false},
 	} {
 		w := newSwarmWorld(t)
+		approver := c.approver(w)
+		if !approver.IsEqual(w.laptop) {
+			seedContract(t, w.mod, w.laptop, approver, permit(1))
+		}
+		if !w.mod.Authorize(ctx, action(approver)) {
+			t.Fatalf("%s alone: want allow", c.name)
+		}
+
 		app := astral.GenerateIdentity()
 		req := w.swarm.add(t, &user.SignedContractRequest{
 			ContractRequest: user.NewContractRequest(w.pi, app, []*auth.Permit{permit(0)}),
 			FiledBySig:      dummySig(),
 		})
-		seedLinkedContract(t, w.mod, w.pi, app, w.answer(t, c.approver(w), req), permit(0))
+		seedLinkedContract(t, w.mod, w.pi, app, w.answer(t, approver, req), permit(0))
 
 		if got := w.mod.Authorize(ctx, action(app)); got != c.want {
 			t.Fatalf("%s as approver: got %v, want %v", c.name, got, c.want)
@@ -285,6 +297,41 @@ func TestSwarmWalkDeniesADeclinedOrExpelledLink(t *testing.T) {
 		cut(t, w)
 		if w.mod.Authorize(ctx, action(w.appA)) {
 			t.Fatalf("%s: want deny", name)
+		}
+	}
+}
+
+// lenientSwarm reports every request approved and keeps expelled members, so
+// only the walk's own expel check stands between an expel and the link.
+type lenientSwarm struct{ *fakeSwarm }
+
+func (l lenientSwarm) RequestStatus(*astral.ObjectID) user.RequestStatus { return user.RequestApproved }
+
+func (l lenientSwarm) Membership(id *astral.Identity) (*user.Membership, bool) {
+	m, ok := l.members[id.String()]
+	return m, ok
+}
+
+// TestSwarmLinkChecksExpelsItself: the link does not rely on RequestStatus or
+// Membership to cut an expelled issuer, subject or approver.
+func TestSwarmLinkChecksExpelsItself(t *testing.T) {
+	for name, party := range map[string]func(w *swarmWorld) *astral.Identity{
+		"issuer":   func(w *swarmWorld) *astral.Identity { return w.pi },
+		"subject":  func(w *swarmWorld) *astral.Identity { return w.appA },
+		"approver": func(w *swarmWorld) *astral.Identity { return w.laptop },
+	} {
+		w := newSwarmWorld(t)
+		walk := &swarmWalk{view: lenientSwarm{w.swarm}, state: w.swarm, root: func() *astral.Identity { return w.user }}
+		sc := &auth.SignedContract{
+			Contract:  &auth.Contract{Issuer: w.pi, Subject: w.appA, Permits: []*auth.Permit{permit(0)}, ApprovalID: w.approvalR1},
+			IssuerSig: dummySig(),
+		}
+		if next, ok := walk.approvalLink(sc); !ok || !next.IsEqual(w.laptop) {
+			t.Fatalf("%s: want the link to hold before the expel", name)
+		}
+		w.swarm.expel(party(w))
+		if _, ok := walk.approvalLink(sc); ok {
+			t.Fatalf("expelled %s: want no link", name)
 		}
 	}
 }

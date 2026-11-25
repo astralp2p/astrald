@@ -242,6 +242,30 @@ func TestCheckSwarmEntryContractsAndExpels(t *testing.T) {
 	})
 }
 
+// TestCheckSwarmEntryReadsTheRootOnce: a claim that changes the root key
+// while an Expulsion is checked does not split the check between two roots,
+// even when the old root key holds a membership under the new one.
+func TestCheckSwarmEntryReadsTheRootOnce(t *testing.T) {
+	f := newEntryFixture()
+	claimed := astral.GenerateIdentity()
+	f.set.setMember(claimed, f.root, user.TierPrivilegedMember)
+	reads := 0
+	f.check = newSwarmEntryCheck(f.set, f.set, keyVerifier{}, func() *astral.Identity {
+		reads++
+		if reads == 1 {
+			return f.root
+		}
+		return claimed
+	})
+
+	if got := f.check.CheckSwarmEntry(expulsion(f.root)); got != user.EntryAccept {
+		t.Fatalf("expulsion by the root read at the start: got %v, want accept", got)
+	}
+	if reads != 1 {
+		t.Fatalf("root read %d times, want 1", reads)
+	}
+}
+
 // TestCheckSwarmEntryUnclaimedNodeIsItsOwnRoot: before a claim the node's own
 // key writes every kind, and the root key is the user once claimed.
 func TestCheckSwarmEntryUnclaimedNodeIsItsOwnRoot(t *testing.T) {
