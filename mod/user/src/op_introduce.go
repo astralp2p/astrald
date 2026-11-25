@@ -56,7 +56,7 @@ func (mod *Module) OpIntroduce(ctx *astral.Context, q *routing.IncomingQuery, ar
 	if nodeID.IsZero() {
 		return ch.Send(astral.ErrZeroIdentity)
 	}
-	if nodeID.IsEqual(mod.node.Identity()) || nodeID.IsEqual(ac.Issuer) {
+	if nodeID.IsEqual(mod.node.Identity()) || nodeID.IsEqual(mod.Identity()) {
 		return ch.Send(user.ErrIntroduceSelf)
 	}
 
@@ -82,7 +82,7 @@ func (mod *Module) introduce(ctx *astral.Context, ac *auth.SignedContract, nodeI
 	if ac.ExpiresAt.Time().Before(time.Now()) {
 		return astral.Err(auth.ErrContractExpired)
 	}
-	if mod.isExpelled(ac.Issuer, nodeID) {
+	if mod.isExpelled(mod.Identity(), nodeID) {
 		return user.ErrExpelled
 	}
 

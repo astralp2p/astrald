@@ -200,7 +200,9 @@ func TestAcceptanceEvaluatorDecidesForRefusedCallers(t *testing.T) {
 	a := startAcceptanceNode(t)
 	a.claim()
 	owner := a.registerApp()
+	a.approve(owner)
 	caller := a.registerAppWith(&apphostapi.RegisterRequest{Evaluator: astral.NewBool(false)})
+	a.approve(caller)
 
 	if got, want := a.evaluatorOf(owner), "astral://"+owner.id.String()+":vfs.authorize"; got != want {
 		t.Fatalf("the registered app's evaluator is %q; want %q", got, want)
@@ -210,7 +212,7 @@ func TestAcceptanceEvaluatorDecidesForRefusedCallers(t *testing.T) {
 
 	e.answer.Store(int32(answerYes))
 	if !a.mayRead(caller, owner) || !a.mayWrite(caller, owner, "/by-caller") {
-		t.Fatal("a caller the evaluator allows was refused")
+		t.Fatalf("a caller the evaluator allows was refused (asked %v)", e.questions())
 	}
 	want := []string{"read " + owner.id.String(), "write " + owner.id.String()}
 	if got := e.questions(); fmt.Sprint(got) != fmt.Sprint(want) {

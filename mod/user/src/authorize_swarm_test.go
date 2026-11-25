@@ -158,13 +158,14 @@ func swarmModule(t *testing.T, authority authmod.Module, userID *astral.Identity
 // is expected to declare.
 //
 // wantSubj asserts the action names the node the call targeted. Every row that
-// sets it targets the same identity: user.adopt, user.expel, and user.sync_with
+// sets it targets the same identity: user.expel and user.sync_with
 // resolve their argument through resolvingDir, so each arrives at userID.
 type swarmOp struct {
 	name       string
 	op         func(*Module) any
 	args       string
 	admin      bool
+	expel      bool
 	wantSubj   bool
 	wantObject *astral.ObjectID
 }
@@ -178,8 +179,7 @@ func swarmOps(id *astral.ObjectID, nodeID *astral.Identity) []swarmOp {
 		{name: "user.swarm_status", op: func(m *Module) any { return m.OpSwarmStatus }},
 		{name: "user.list_expelled", op: func(m *Module) any { return m.OpListExpelled }},
 
-		{name: "user.adopt", op: func(m *Module) any { return m.OpAdopt }, args: "?identity=anything", admin: true, wantSubj: true},
-		{name: "user.expel", op: func(m *Module) any { return m.OpExpel }, args: "?identity=anything", admin: true, wantSubj: true},
+		{name: "user.expel", op: func(m *Module) any { return m.OpExpel }, args: "?identity=anything", admin: true, expel: true, wantSubj: true},
 		{name: "user.add_asset", op: func(m *Module) any { return m.OpAddAsset }, args: "?id=" + id.String(), admin: true, wantObject: id},
 		{name: "user.remove_asset", op: func(m *Module) any { return m.OpRemoveAsset }, args: "?id=" + id.String(), admin: true, wantObject: id},
 		{name: "user.sync_with", op: func(m *Module) any { return m.OpSyncWith }, args: "?identity=" + nodeID.String(), admin: true, wantSubj: true},
@@ -221,6 +221,17 @@ func TestSwarmOpsRefuseCallerWithoutPermits(t *testing.T) {
 			if !op.admin {
 				if _, ok := actions[0].(*user.SeeSwarmAction); !ok {
 					t.Fatalf("%s named %q; want %q", op.name, actions[0].ObjectType(), user.SeeSwarmAction{}.ObjectType())
+				}
+				return
+			}
+
+			if op.expel {
+				action, ok := actions[0].(*user.ExpelAction)
+				if !ok {
+					t.Fatalf("%s named %q; want %q", op.name, actions[0].ObjectType(), user.ExpelAction{}.ObjectType())
+				}
+				if !action.Subject.IsEqual(userID) {
+					t.Fatalf("%s declared subject %v; want the resolved target %v", op.name, action.Subject, userID)
 				}
 				return
 			}

@@ -6,7 +6,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/astralp2p/astral-go/api/auth"
 	"github.com/astralp2p/astral-go/api/messaging"
 	"github.com/astralp2p/astral-go/astral"
 )
@@ -40,8 +39,7 @@ func TestTheCreateMailboxOpMintsAServedMailbox(t *testing.T) {
 }
 
 // messaging.delete_mailbox takes everything a participant held on this node:
-// every token of its identity — the one issued and one reissued — its grants,
-// its alias and the mail it owns in both boxes, archived or not. The
+// every token of its identity — the one issued and one reissued — its alias and the mail it owns in both boxes, archived or not. The
 // correspondent keeps its own copies. Hosting is withdrawn here and the
 // hosting contract is not revoked.
 func TestTheDeleteMailboxOpWithdrawsTheParticipant(t *testing.T) {
@@ -49,7 +47,6 @@ func TestTheDeleteMailboxOpWithdrawsTheParticipant(t *testing.T) {
 	u, peer := hostedParticipant(t, mod), hostedParticipant(t, mod)
 	dir.aliases["scout"] = u
 	apphost.tokens["issued"], apphost.tokens["reissued"], apphost.tokens["peer's"] = u, u, peer
-	apphost.grants[u.String()] = []*auth.Permit{{Action: astral.String8(auth.ServeObjectsAction{}.ObjectType())}}
 	correspond(t, mod, u, peer)
 	peerHolds := countOwned(t, mod.db, peer)
 
@@ -58,9 +55,6 @@ func TestTheDeleteMailboxOpWithdrawsTheParticipant(t *testing.T) {
 
 	if len(apphost.tokens) != 1 || !apphost.tokens["peer's"].IsEqual(peer) {
 		t.Fatalf("tokens left %v, want only the correspondent's", apphost.tokens)
-	}
-	if n := len(apphost.grants[u.String()]); n != 0 {
-		t.Fatalf("the deleted identity still holds %v grants", n)
 	}
 	if _, ok := dir.aliases["scout"]; ok {
 		t.Fatal("the alias still names the deleted identity")

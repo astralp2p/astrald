@@ -121,10 +121,12 @@ async def main():
     r = out["register_manager"]
     assert r["refused"] and NOT_FRESH in r["detail"], (
         f"sys.register_manager on the claimed node: {r['detail']} — want {NOT_FRESH!r}")
+    # why answered: registration stays local and is never refused; an app's
+    # permits are a ContractRequest the user answers (SwarmState).
     r = out["register"]
-    assert r["refused"] and "registration declined" in r["detail"], (
+    assert not r["refused"], (
         f"apphost.register without a token on the claimed node: {r['detail']} — "
-        "want the app register policy's refusal")
+        "want a token")
     assert not out["spec"]["refused"], f".spec without a token: {out['spec']['detail']}"
     for op in ("user.bootstrap", "user.derive_identity", "user.join",
                "apphost.list_tokens", "shell.spec"):

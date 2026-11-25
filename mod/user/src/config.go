@@ -5,23 +5,28 @@ import (
 
 	"github.com/astralp2p/astral-go/api/auth"
 	"github.com/astralp2p/astral-go/api/tree"
+	"github.com/astralp2p/astral-go/api/user"
 	"github.com/astralp2p/astral-go/astral"
-	"github.com/astralp2p/astrald/lib/policyconf"
 )
 
 // Config is bound to the tree at /mod/user/config.
 //
 // Owned is set once a user contract activates and is never cleared by expiry
 // or expulsion; see WasOwned.
+//
+// User is the user identity, the root key, when it is not the active
+// contract's issuer: a node a carrier admitted holds a membership the carrier
+// signed. PendingJoin is the JoinRequest this node keeps until its join ends
+// (user.join), so a restart resumes the same request.
 type Config struct {
 	ActiveContract tree.Value[*auth.SignedContract]
 	Owned          tree.Value[*astral.Bool]
+	User           tree.Value[*astral.Identity]
+	PendingJoin    tree.Value[*user.SignedJoinRequest]
 }
 
 // FileConfig is read from user.yaml.
 type FileConfig struct {
-	// Policies selects the admission policies the user module applies.
-	Policies Policies `yaml:"policies,omitempty"`
 	// ReconcileInterval is the period of the expulsion sweep; see runReconcile.
 	ReconcileInterval time.Duration `yaml:"reconcile_interval,omitempty"`
 	// SiblingSyncInterval is the period of the sibling sync; zero selects the
@@ -31,20 +36,7 @@ type FileConfig struct {
 	SiblingSyncDisabled bool `yaml:"sibling_sync_disabled,omitempty"`
 }
 
-// Policies holds the config value of each user admission policy. A stored
-// delegate outranks the value; see GetSwarmJoinPolicy.
-type Policies struct {
-	SwarmJoin      policyconf.Setting `yaml:"swarm_join,omitempty"`
-	SwarmInvite    policyconf.Setting `yaml:"swarm_invite,omitempty"`
-	ContractAccept policyconf.Setting `yaml:"contract_accept,omitempty"`
-}
-
 var defaultFileConfig = FileConfig{
-	Policies: Policies{
-		SwarmJoin:      policyconf.Setting{Mode: policyconf.RejectAll},
-		SwarmInvite:    policyconf.Setting{Mode: policyconf.RejectAll},
-		ContractAccept: policyconf.Setting{Mode: policyconf.RejectAll},
-	},
 	ReconcileInterval:   defaultReconcileInterval,
 	SiblingSyncInterval: defaultSiblingSyncInterval,
 }

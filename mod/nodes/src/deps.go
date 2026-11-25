@@ -13,6 +13,7 @@ import (
 	"github.com/astralp2p/astrald/mod/objects"
 	"github.com/astralp2p/astrald/mod/scheduler"
 	"github.com/astralp2p/astrald/mod/user"
+	"github.com/astralp2p/astrald/mod/vfs"
 )
 
 type Deps struct {
@@ -24,6 +25,7 @@ type Deps struct {
 	Objects   objects.Module
 	Scheduler scheduler.Module
 	Events    events.Module
+	VFS       vfs.Module
 }
 
 // LoadDependencies injects deps and registers the "linked" directory filter and

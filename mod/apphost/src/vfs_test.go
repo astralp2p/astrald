@@ -10,7 +10,6 @@ import (
 	"github.com/astralp2p/astral-go/api/apphost"
 	"github.com/astralp2p/astral-go/api/auth"
 	"github.com/astralp2p/astral-go/api/user"
-	vfsapi "github.com/astralp2p/astral-go/api/vfs"
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astral-go/astral/log"
 	"github.com/astralp2p/astrald/core/assets"
@@ -266,7 +265,7 @@ func TestRegisterNamesTheEvaluatorForTheTokenIdentity(t *testing.T) {
 func TestProvisionAppCreatesNoVFS(t *testing.T) {
 	mod, gdb := realVFSRegistrar(t)
 
-	if _, err := mod.ProvisionApp(astral.NewContext(nil), nil, nil); err != nil {
+	if _, err := mod.ProvisionApp(astral.NewContext(nil), nil); err != nil {
 		t.Fatalf("ProvisionApp: %v", err)
 	}
 
@@ -288,86 +287,6 @@ func vfsPermit(action string, vfsIDs ...*astral.Identity) *auth.Permit {
 	}
 
 	return permit
-}
-
-// TestVFSGrantsAuthorizeTheGrantee: a node-local grant of each vfs action is accepted and
-// authorizes its grantee for what it lists, through the shim of the action.
-func TestVFSGrantsAuthorizeTheGrantee(t *testing.T) {
-	mod := testGrantModule(t)
-	app, target, other := astral.GenerateIdentity(), astral.GenerateIdentity(), astral.GenerateIdentity()
-
-	permits := []*auth.Permit{
-		vfsPermit(vfsapi.ReadAction{}.ObjectType(), target),
-		vfsPermit(vfsapi.WriteAction{}.ObjectType(), target),
-		vfsPermit(vfsapi.ManageAction{}.ObjectType()),
-	}
-	for _, p := range permits {
-		if err := validatePermits([]*auth.Permit{p}); err != nil {
-			t.Fatalf("permit %v refused: %v", p.Action, err)
-		}
-		if err := mod.Grant(app, p, nil); err != nil {
-			t.Fatalf("grant %v: %v", p.Action, err)
-		}
-	}
-
-	read := func(actor, vfsID *astral.Identity) bool {
-		return mod.AuthorizeVFSRead(nil, &vfsapi.ReadAction{Action: auth.NewAction(actor), VFSID: vfsID})
-	}
-	write := func(actor, vfsID *astral.Identity) bool {
-		return mod.AuthorizeVFSWrite(nil, &vfsapi.WriteAction{Action: auth.NewAction(actor), VFSID: vfsID})
-	}
-	manage := func(actor *astral.Identity) bool {
-		return mod.AuthorizeVFSManage(nil, &vfsapi.ManageAction{Action: auth.NewAction(actor)})
-	}
-
-	switch {
-	case !read(app, target):
-		t.Error("a read grant was refused to its grantee for a listed VFS")
-	case read(app, other):
-		t.Error("a read grant was honoured for a VFS it does not list")
-	case read(other, target):
-		t.Error("a read grant was honoured for another identity")
-	case !write(app, target):
-		t.Error("a write grant was refused to its grantee for a listed VFS")
-	case write(app, other):
-		t.Error("a write grant was honoured for a VFS it does not list")
-	case !manage(app):
-		t.Error("a manage grant was refused to its grantee")
-	case manage(other):
-		t.Error("a manage grant was honoured for another identity")
-	}
-}
-
-// TestVFSGrantWithoutConstraintsIsRefused: a read or write permit with no constraints is refused
-// when the grant is made, and one that was stored anyway authorizes nothing. A constrained manage
-// permit authorizes nothing.
-func TestVFSGrantWithoutConstraintsIsRefused(t *testing.T) {
-	mod := testGrantModule(t)
-	app, target := astral.GenerateIdentity(), astral.GenerateIdentity()
-
-	for _, action := range []string{vfsapi.ReadAction{}.ObjectType(), vfsapi.WriteAction{}.ObjectType()} {
-		permit := vfsPermit(action)
-		if err := validatePermits([]*auth.Permit{permit}); err == nil {
-			t.Errorf("an unconstrained %v permit was accepted", action)
-		}
-
-		if err := mod.Grant(app, permit, nil); err != nil {
-			t.Fatalf("store %v: %v", action, err)
-		}
-	}
-
-	if mod.AuthorizeVFSRead(nil, &vfsapi.ReadAction{Action: auth.NewAction(app), VFSID: target}) ||
-		mod.AuthorizeVFSWrite(nil, &vfsapi.WriteAction{Action: auth.NewAction(app), VFSID: target}) {
-		t.Error("a stored unconstrained read or write grant authorized")
-	}
-
-	constrained := vfsPermit(vfsapi.ManageAction{}.ObjectType(), target)
-	if err := mod.Grant(app, constrained, nil); err != nil {
-		t.Fatalf("store manage: %v", err)
-	}
-	if mod.AuthorizeVFSManage(nil, &vfsapi.ManageAction{Action: auth.NewAction(app)}) {
-		t.Error("a constrained manage grant authorized")
-	}
 }
 
 // vfsOps are the ops of the vfs module that the gate must refuse without a token.

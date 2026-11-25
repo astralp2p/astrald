@@ -27,7 +27,7 @@ func newActivePusher(self *astral.Identity) *activePusher {
 
 func (p *activePusher) Push(_ *astral.Context, target *astral.Identity, obj astral.Object) error {
 	sc, ok := obj.(*auth.SignedContract)
-	if !ok || !sc.Subject.IsEqual(p.self) || len(sc.HasPermit(user.SwarmMembershipAction{}.ObjectType())) == 0 {
+	if !ok || !sc.Subject.IsEqual(p.self) || len(sc.HasPermit(user.TierMember.Action())) == 0 {
 		return nil
 	}
 	p.pushed <- target.String()
@@ -92,6 +92,7 @@ func syncModule(t *testing.T, ctx *astral.Context, userID, nodeID *astral.Identi
 	if err := mod.config.ActiveContract.Set(nil, nodeContract(userID, nodeID)); err != nil {
 		t.Fatalf("seed active contract: %v", err)
 	}
+	useIndexSwarm(mod, userID, index)
 	return mod, app
 }
 

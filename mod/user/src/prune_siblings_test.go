@@ -173,6 +173,7 @@ func TestClearedContractDuringALinkerRunStopsEverySiblingTask(t *testing.T) {
 	e := newLinkerEnv(t, a, b)
 	q := &gatedQuery{memberQuery: e.query, entered: make(chan struct{}), open: make(chan struct{})}
 	e.mod.Auth = &gatedAuth{query: q}
+	useContractSwarm(e.mod, e.issuer, func() ([]*auth.SignedContract, error) { return q.Find(nil) })
 
 	linked := make(chan struct{})
 	go func() { e.mod.runSiblingLinker(); close(linked) }()

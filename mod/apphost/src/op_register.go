@@ -30,27 +30,17 @@ type opRegisterArgs struct {
 // The caller receives a ready-to-use guest identity without providing any pre-existing credentials.
 //
 // The op reads one mod.apphost.register_request after accept. Its Name is the
-// name the app gives itself, shown to a delegated policy and not verified by
-// the node. Its GrantPermits ask the node to record node-local grants:
-// revocable by deleting a row, and worthless off this node. Its
-// ContractPermits ask the node to record a signed node→app contract: portable
-// evidence another node verifies, durable until it expires. Both lists carry
-// their constraints. Asking is not receiving: the node's policy decides which
-// permits are written, and where. Its Vfs and Evaluator, both on when omitted,
-// ask for a VFS of the app and for the app to be the evaluator of that VFS;
-// the policy does not see them.
+// name the app gives itself and is not verified by the node. Its
+// GrantPermits and ContractPermits, with their constraints, are the permits
+// the app asks for: the node files one ContractRequest for both lists in
+// SwarmState, and signs the app's contract once an Approval answers it
+// (apphost.request_contract waits for that). Asking is not receiving. Its Vfs
+// and Evaluator, both on when omitted, ask for a VFS of the app and for the
+// app to be the evaluator of that VFS.
 //
-// why: no named action guards this op; the app register policy decides every
-// registration, and the bundled policy accepts every one until a delegate is
-// set (decided 2026-10-28).
+// why: no named action guards this op; registration stays local and issues
+// the identity and token at once (vision, 2026-11-25).
 func (mod *Module) OpRegister(ctx *astral.Context, query *routing.IncomingQuery, args opRegisterArgs) (err error) {
-	// why: read the registering web origin before accepting - EnRouteQueryExtras
-	// only resolves while the query is en route, and Accept removes that entry.
-	extras := mod.EnRouteQueryExtras(query.Nonce())
-	origin, _ := extras[apphost.ExtraOriginWeb].(string)
-
-	// why accept before deciding: a delegate may wait on a person, and a query
-	// still en route is bounded by the router's timeout.
 	conn := query.AcceptRaw()
 	ch := channel.New(conn, channel.WithFormats(args.In, args.Out))
 	defer ch.Close()
@@ -67,26 +57,13 @@ func (mod *Module) OpRegister(ctx *astral.Context, query *routing.IncomingQuery,
 
 	// why: an op runs on a context detached from the requester's, and only the
 	// conn tells a waiting decision that nobody waits for its answer.
-	policyCtx, stop := routing.UntilDisconnect(ctx, conn)
-	defer stop()
-
-	dec, err := mod.GetRegisterAppPolicy()(policyCtx, appRegisterRequest(req, origin))
-	switch {
-	case err != nil:
-		mod.log.Logv(1, "registration refused: %v", err)
-		return ch.Send(apphostapi.ErrRegistrationDeclined)
-	case !bool(dec.Allow):
-		mod.log.Logv(1, "registration from origin %v refused by policy", origin)
-		return ch.Send(apphostapi.ErrRegistrationDeclined)
-	}
-	if err = validateRegisterDecision(dec); err != nil {
-		mod.log.Logv(1, "registration refused: %v", err)
-		return ch.Send(apphostapi.ErrRegistrationDeclined)
-	}
-
-	token, err := mod.provisionApp(ctx, dec)
+	token, err := mod.provisionApp(ctx, nil)
 	if err != nil {
 		return ch.Send(astral.Err(err))
+	}
+
+	if err = mod.fileRegisterPermits(ctx, token.Identity, req); err != nil {
+		mod.log.Logv(1, "registration of %v: contract request: %v", token.Identity, err)
 	}
 
 	if err = mod.provisionAppVFS(req, token.Identity); err != nil {
@@ -95,51 +72,68 @@ func (mod *Module) OpRegister(ctx *astral.Context, query *routing.IncomingQuery,
 	return ch.Send(token)
 }
 
-// validateRegisterDecision returns the first reason the node cannot apply dec
-// to an apphost.register: an invalid authorizer assignment, or a contract
-// permit for mod.auth.sudo_action or mod.nodes.relay_for_action.
+// fileRegisterPermits files a ContractRequest for the permits a registration
+// asks, so the app holds them once an Approval is carried out. The app waits
+// for the outcome with apphost.request_contract and the same permits.
 //
-// why sudo_action: the node signs every contract permit as issuer, and a
-// node-signed mod.auth.sudo_action lets the app act and sign as the node
-// (decided 2026-11-06).
-// why relay_for_action: the node→app contract names the app as subject, which
-// is no swarm member, so the relay admission rule refuses to index it
-// (astral-docs topics/app-routing.md, Reach); refusing here writes nothing.
-// why not in provisionApp: sys.register_manager shares it through ProvisionApp,
-// and the manager may hold any permit it asks for.
-func validateRegisterDecision(dec *apphostapi.AppRegisterDecision) error {
-	if err := dec.Validate(); err != nil {
-		return err
+// why no decision here: registration stays local and is never refused; only
+// the permits go through SwarmState (vision, 2026-11-25).
+//
+// why ServeApps and UseBlueprints first: a registered app is served from
+// this node and syncs the blueprints of its types (apps.WithBlueprintSync), so
+// every registration asks for hosting and for blueprints.
+func (mod *Module) fileRegisterPermits(ctx *astral.Context, app *astral.Identity, req *apphostapi.RegisterRequest) error {
+	if mod.contractRequests == nil {
+		return nil
 	}
+	permits := slices.Concat([]*auth.Permit{
+		{Action: astral.String8(auth.ServeAppsAction{}.ObjectType())},
+		{Action: astral.String8(auth.UseBlueprintsAction{}.ObjectType())},
+	}, req.GrantPermits, req.ContractPermits)
+	_, err := mod.contractRequests.File(ctx, app, permits)
+	return err
+}
+
+// refuseRegisterPermits refuses the permits no app is ever approved for.
+//
+// why sudo_action: a contract permit for mod.auth.sudo_action lets the app act
+// and sign as its host (decided 2026-11-06).
+// why relay_for_action: the host→app contract names the app as subject, which
+// is no swarm member, so the relay admission rule refuses to index it
+// (astral-docs topics/app-routing.md, Reach).
+func refuseRegisterPermits(permits []*auth.Permit) error {
 	refused := []string{auth.SudoAction{}.ObjectType(), nodes.RelayForAction{}.ObjectType()}
-	for _, p := range dec.ContractPermits {
+	for _, p := range permits {
 		if p != nil && slices.Contains(refused, string(p.Action)) {
-			return fmt.Errorf("app register decision: a contract permit names %v", p.Action)
+			return fmt.Errorf("a registration names %v", p.Action)
 		}
 	}
 	return nil
 }
 
-// provisionApp creates an App identity: a key pair, a signed app contract and
-// the permits and authorizers dec lists. It returns the access token of the
-// new identity.
+// provisionApp creates an App identity: a key pair, a signed app contract
+// and, for sys.register_manager on a fresh node, a node→app contract holding
+// contractPermits. It returns the access token of the new identity.
 //
 // A write failure returns the error rather than a token, because a token for
-// an identity holding less than the policy allowed is a registration the app
+// an identity holding less than it asked for is a registration the app
 // cannot detect went wrong.
-func (mod *Module) provisionApp(ctx *astral.Context, dec *apphostapi.AppRegisterDecision) (*apphostapi.AccessToken, error) {
+func (mod *Module) provisionApp(ctx *astral.Context, contractPermits []*auth.Permit) (*apphostapi.AccessToken, error) {
 	key := secp256k1.New()
 	guestID := secp256k1.Identity(secp256k1.PublicKey(key))
 
-	// why: every app receives the relay contract, whatever the policy decided;
-	// the contract is part of registration (decided 2026-11-06).
+	// why: every app receives the relay contract; the contract is part of
+	// registration (decided 2026-11-06).
 	signed, err := mod.storeAppContract(ctx, key, guestID)
 	if err != nil {
 		return nil, err
 	}
 
-	if err = mod.writeAppAuthority(ctx, guestID, dec); err != nil {
-		return nil, err
+	if len(contractPermits) > 0 {
+		expiresAt := time.Now().UTC().Add(RegisterDuration)
+		if err = mod.storePermitContract(ctx, guestID, contractPermits, expiresAt); err != nil {
+			return nil, err
+		}
 	}
 
 	// generate an access token for the guest
@@ -195,40 +189,6 @@ func (mod *Module) storeAppContract(ctx *astral.Context, key *crypto.PrivateKey,
 	return signed, nil
 }
 
-// writeAppAuthority records the grant permits of dec on this node, renders its
-// contract permits as a node→app contract, and records its authorizer
-// assignments with guestID as actor.
-//
-// why both rails expire with the registration: an identity's authority ages
-// with the token that reaches it.
-// why the authorizers last, before the token: a token for an identity whose
-// authorizer is not in place is a registration the app cannot detect went
-// wrong.
-func (mod *Module) writeAppAuthority(ctx *astral.Context, guestID *astral.Identity, dec *apphostapi.AppRegisterDecision) error {
-	expiresAt := time.Now().UTC().Add(RegisterDuration)
-
-	for _, permit := range dec.GrantPermits {
-		if err := mod.Grant(guestID, permit, &expiresAt); err != nil {
-			return err
-		}
-	}
-
-	if len(dec.ContractPermits) > 0 {
-		if err := mod.storePermitContract(ctx, guestID, dec.ContractPermits, expiresAt); err != nil {
-			return err
-		}
-	}
-
-	for _, a := range dec.Authorizers {
-		assignment := *a
-		assignment.Actor = guestID
-		if err := mod.Auth.SetAuthorizer(ctx, &assignment); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
 // storePermitContract signs, indexes and stores a node→app contract carrying
 // permits, so the app's authority for those actions chains back through the
 // node.
@@ -268,19 +228,11 @@ func receiveRegisterRequest(ch *channel.Channel, queryString string) (*apphostap
 	if err := validatePermits(req.ContractPermits); err != nil {
 		return nil, err
 	}
+	if err := refuseRegisterPermits(slices.Concat(req.GrantPermits, req.ContractPermits)); err != nil {
+		return nil, err
+	}
 
 	return req, nil
-}
-
-// appRegisterRequest is the question the register policy decides for req,
-// with the origin the node read.
-func appRegisterRequest(req *apphostapi.RegisterRequest, origin string) *apphostapi.AppRegisterRequest {
-	return &apphostapi.AppRegisterRequest{
-		Origin:          astral.String8(origin),
-		Name:            req.Name,
-		GrantPermits:    registerGrantRequest(req.GrantPermits),
-		ContractPermits: req.ContractPermits,
-	}
 }
 
 // provisionAppVFS creates the VFS of a new app when req asks for one, and

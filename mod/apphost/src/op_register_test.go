@@ -3,6 +3,7 @@ package apphost
 import (
 	"errors"
 	"slices"
+	"strings"
 	"sync"
 	"testing"
 
@@ -10,7 +11,6 @@ import (
 	"github.com/astralp2p/astral-go/api/auth"
 	"github.com/astralp2p/astral-go/api/crypto"
 	"github.com/astralp2p/astral-go/api/nodes"
-	"github.com/astralp2p/astral-go/api/policy"
 	"github.com/astralp2p/astral-go/astral"
 	cryptomod "github.com/astralp2p/astrald/mod/crypto"
 	objectsmod "github.com/astralp2p/astrald/mod/objects"
@@ -170,24 +170,6 @@ func TestRegisterLeavesNoKeyWhenTheRelayContractFails(t *testing.T) {
 	}
 }
 
-// delegatedRegistrar is a registrar whose registration policy is delegated to
-// node, which answers one question.
-func delegatedRegistrar(t *testing.T, steps *registerSteps, node *delegateNode) *Module {
-	t.Helper()
-
-	mod := serveAppsRegistrar(t)
-	mod.node = node
-	mod.Auth = registerAuth{steps: steps}
-	mod.Crypto = registerKeys{steps: steps}
-	mod.Objects = registerStore{steps: steps}
-
-	d := &policy.Delegate{Identity: astral.GenerateIdentity(), Operation: "control.decide_app_register"}
-	if err := mod.policy.AppRegister.Set(astral.NewContext(nil), d); err != nil {
-		t.Fatalf("set delegate: %v", err)
-	}
-	return mod
-}
-
 func issuedTokens(t *testing.T, mod *Module) []dbAccessToken {
 	t.Helper()
 
@@ -198,210 +180,15 @@ func issuedTokens(t *testing.T, mod *Module) []dbAccessToken {
 	return tokens
 }
 
-// TestRegisterRefusedProvisionsNothing: the query is accepted before the
-// policy decides, so a refusal answers an error object; it mints no key and
-// issues no token.
-func TestRegisterRefusedProvisionsNothing(t *testing.T) {
-	steps := &registerSteps{}
-	mod := delegatedRegistrar(t, steps, refusingNode())
-	w := newRecordingWriter()
-
-	if err := register(t, mod, &apphost.RegisterRequest{}, w); err != nil {
-		t.Fatalf("a delegated registration was rejected before the decision: %v", err)
-	}
-	awaitServeAppsClose(t, w)
-
-	if w.written() == 0 {
-		t.Fatal("a refused registration answered nothing")
-	}
-	if got := steps.taken(); len(got) != 0 {
-		t.Fatalf("a refused registration took steps %q", got)
-	}
-	if tokens := issuedTokens(t, mod); len(tokens) != 0 {
-		t.Fatalf("a refused registration issued %d tokens", len(tokens))
-	}
-}
-
-// TestRegisterRecordsTheDecisionsAuthorizers: the assignments a delegate names
-// are recorded with the new identity as actor, after the key is in place and
-// before the token is issued; the delegate's own copy stays actor-less.
-func TestRegisterRecordsTheDecisionsAuthorizers(t *testing.T) {
-	steps := &registerSteps{}
-	named := &auth.AuthorizerAssignment{Action: "mod.auth.see_objects_action", Endpoint: "astral://control-plane:control.authorize"}
-	mod := delegatedRegistrar(t, steps, newDelegateNode(&apphost.AppRegisterDecision{
-		Allow:       true,
-		Authorizers: []*auth.AuthorizerAssignment{named},
-	}))
-	w := newRecordingWriter()
-
-	if err := register(t, mod, &apphost.RegisterRequest{}, w); err != nil {
-		t.Fatalf("apphost.register refused: %v", err)
-	}
-	awaitServeAppsClose(t, w)
-
-	tokens := issuedTokens(t, mod)
-	if len(tokens) != 1 {
-		t.Fatalf("issued %d tokens, want one", len(tokens))
-	}
-	assigned := steps.assignments()
-	if len(assigned) != 1 {
-		t.Fatalf("recorded %d assignments, want one", len(assigned))
-	}
-	if assigned[0].Action != named.Action || assigned[0].Endpoint != named.Endpoint {
-		t.Fatalf("recorded %+v, want the delegate's assignment", assigned[0])
-	}
-	if assigned[0].Actor == nil || !assigned[0].Actor.IsEqual(tokens[0].Identity) {
-		t.Fatalf("recorded actor %v, want the new identity %v", assigned[0].Actor, tokens[0].Identity)
-	}
-	if named.Actor != nil {
-		t.Fatal("the delegate's assignment was changed in place")
-	}
-	if want := []string{stepIndexRelay, stepStoreKey, stepIndexKey}; !slices.Equal(steps.taken(), want) {
-		t.Fatalf("apphost.register took steps %q; want %q", steps.taken(), want)
-	}
-}
-
-// TestRegisterIssuesNoTokenWhenAnAuthorizerFails: an assignment the auth
-// module cannot record fails the registration after the identity exists, and
-// no token is issued.
-func TestRegisterIssuesNoTokenWhenAnAuthorizerFails(t *testing.T) {
-	steps := &registerSteps{setErr: errors.New("endpoint names no transport")}
-	mod := delegatedRegistrar(t, steps, newDelegateNode(&apphost.AppRegisterDecision{
-		Allow:       true,
-		Authorizers: []*auth.AuthorizerAssignment{{Action: "mod.auth.see_objects_action", Endpoint: "ftp://nowhere"}},
-	}))
-	w := newRecordingWriter()
-
-	if err := register(t, mod, &apphost.RegisterRequest{}, w); err != nil {
-		t.Fatalf("apphost.register refused: %v", err)
-	}
-	awaitServeAppsClose(t, w)
-
-	if tokens := issuedTokens(t, mod); len(tokens) != 0 {
-		t.Fatalf("a failed assignment issued %d tokens", len(tokens))
-	}
-	if w.written() == 0 {
-		t.Fatal("a failed assignment answered nothing")
-	}
-}
-
-// TestRegisterRefusesADecisionNamingAnActor: the node names the actor, so a
-// delegate that names one has sent a decision the node cannot apply.
-func TestRegisterRefusesADecisionNamingAnActor(t *testing.T) {
-	steps := &registerSteps{}
-	mod := delegatedRegistrar(t, steps, newDelegateNode(&apphost.AppRegisterDecision{
-		Allow: true,
-		Authorizers: []*auth.AuthorizerAssignment{{
-			Action: "mod.auth.see_objects_action", Endpoint: "astral://control-plane:control.authorize", Actor: astral.GenerateIdentity(),
-		}},
-	}))
-	w := newRecordingWriter()
-
-	if err := register(t, mod, &apphost.RegisterRequest{}, w); err != nil {
-		t.Fatalf("apphost.register rejected before the decision: %v", err)
-	}
-	awaitServeAppsClose(t, w)
-
-	if got := steps.taken(); len(got) != 0 {
-		t.Fatalf("a refused registration took steps %q", got)
-	}
-	if tokens := issuedTokens(t, mod); len(tokens) != 0 {
-		t.Fatalf("a refused registration issued %d tokens", len(tokens))
-	}
-}
-
 // sudoPermit is an unconstrained mod.auth.sudo_action permit.
 func sudoPermit() *auth.Permit {
 	return &auth.Permit{Action: astral.String8(auth.SudoAction{}.ObjectType())}
 }
 
-// grantRows counts the node-local grants the registrar holds.
-func grantRows(t *testing.T, mod *Module) int64 {
-	t.Helper()
-
-	var n int64
-	if err := mod.db.Model(&dbGrant{}).Count(&n).Error; err != nil {
-		t.Fatalf("count grants: %v", err)
-	}
-	return n
-}
-
-// TestRegisterRefusesASudoContractPermit: a decision whose contract permits
-// name mod.auth.sudo_action is declined; the node mints no identity, signs no
-// contract, writes no grant and issues no token.
+// TestRegisterRefusesASudoContractPermit: no app is approved for
+// mod.auth.sudo_action, so a registration asking it is refused before any
+// key is minted.
 func TestRegisterRefusesASudoContractPermit(t *testing.T) {
-	for name, contractPermits := range map[string][]*auth.Permit{
-		"alone":         {sudoPermit()},
-		"after another": append(permits("mod.user.see_swarm_action"), sudoPermit()),
-	} {
-		t.Run(name, func(t *testing.T) {
-			steps := &registerSteps{}
-			mod := delegatedRegistrar(t, steps, newDelegateNode(&apphost.AppRegisterDecision{
-				Allow:           true,
-				GrantPermits:    permits("mod.user.see_swarm_action"),
-				ContractPermits: contractPermits,
-			}))
-			w := newRecordingWriter()
-
-			if err := register(t, mod, &apphost.RegisterRequest{}, w); err != nil {
-				t.Fatalf("apphost.register rejected before the decision: %v", err)
-			}
-
-			if got, want := w.refusal(t), apphost.ErrRegistrationDeclined.Error(); got != want {
-				t.Fatalf("answered %q; want %q", got, want)
-			}
-			if got := steps.taken(); len(got) != 0 {
-				t.Fatalf("a refused registration took steps %q", got)
-			}
-			if tokens := issuedTokens(t, mod); len(tokens) != 0 {
-				t.Fatalf("a refused registration issued %d tokens", len(tokens))
-			}
-			if n := grantRows(t, mod); n != 0 {
-				t.Fatalf("a refused registration wrote %d grants", n)
-			}
-		})
-	}
-}
-
-// TestRegisterRefusesARelayForContractPermit: a decision whose contract permits
-// name mod.nodes.relay_for_action is declined before any write, since the relay
-// admission rule refuses a node->app relay-for contract.
-func TestRegisterRefusesARelayForContractPermit(t *testing.T) {
-	relayFor := nodes.RelayForAction{}.ObjectType()
-	for name, contractPermits := range map[string][]*auth.Permit{
-		"alone":         permits(relayFor),
-		"after another": permits("mod.user.see_swarm_action", relayFor),
-	} {
-		t.Run(name, func(t *testing.T) {
-			steps := &registerSteps{}
-			mod := delegatedRegistrar(t, steps, newDelegateNode(&apphost.AppRegisterDecision{
-				Allow:           true,
-				GrantPermits:    permits("mod.user.see_swarm_action"),
-				ContractPermits: contractPermits,
-			}))
-			w := newRecordingWriter()
-
-			if err := register(t, mod, &apphost.RegisterRequest{}, w); err != nil {
-				t.Fatalf("apphost.register rejected before the decision: %v", err)
-			}
-
-			if got, want := w.refusal(t), apphost.ErrRegistrationDeclined.Error(); got != want {
-				t.Fatalf("answered %q; want %q", got, want)
-			}
-			if got := steps.taken(); len(got) != 0 {
-				t.Fatalf("a refused registration took steps %q", got)
-			}
-			if n := grantRows(t, mod); n != 0 {
-				t.Fatalf("a refused registration wrote %d grants", n)
-			}
-		})
-	}
-}
-
-// TestRegisterUnderAcceptAllRefusesASudoContractPermit: accept_all copies the
-// asked-for contract permits into its decision, so an app asking for
-// mod.auth.sudo_action as a contract permit is declined.
-func TestRegisterUnderAcceptAllRefusesASudoContractPermit(t *testing.T) {
 	steps := &registerSteps{}
 	mod := serveAppsRegistrar(t)
 	mod.Auth = registerAuth{steps: steps}
@@ -411,11 +198,11 @@ func TestRegisterUnderAcceptAllRefusesASudoContractPermit(t *testing.T) {
 
 	req := &apphost.RegisterRequest{ContractPermits: []*auth.Permit{sudoPermit()}}
 	if err := register(t, mod, req, w); err != nil {
-		t.Fatalf("apphost.register rejected before the decision: %v", err)
+		t.Fatalf("apphost.register rejected instead of answering: %v", err)
 	}
 
-	if got, want := w.refusal(t), apphost.ErrRegistrationDeclined.Error(); got != want {
-		t.Fatalf("answered %q; want %q", got, want)
+	if got := w.refusal(t); !strings.Contains(got, "mod.auth.sudo_action") {
+		t.Fatalf("answered %q; want the refusal naming the permit", got)
 	}
 	if got := steps.taken(); len(got) != 0 {
 		t.Fatalf("a refused registration took steps %q", got)
@@ -426,7 +213,7 @@ func TestRegisterUnderAcceptAllRefusesASudoContractPermit(t *testing.T) {
 }
 
 // TestProvisionAppSignsASudoContractPermit: sys.register_manager provisions the
-// manager through ProvisionApp, which asks no register policy, so a
+// manager through ProvisionApp, which files no request, so a
 // mod.auth.sudo_action contract permit is signed into its node->app contract.
 func TestProvisionAppSignsASudoContractPermit(t *testing.T) {
 	steps := &registerSteps{}
@@ -435,7 +222,7 @@ func TestProvisionAppSignsASudoContractPermit(t *testing.T) {
 	mod.Crypto = registerKeys{steps: steps}
 	mod.Objects = registerStore{steps: steps}
 
-	token, err := mod.ProvisionApp(astral.NewContext(nil), nil, []*auth.Permit{sudoPermit()})
+	token, err := mod.ProvisionApp(astral.NewContext(nil), []*auth.Permit{sudoPermit()})
 	if err != nil {
 		t.Fatalf("ProvisionApp: %v", err)
 	}

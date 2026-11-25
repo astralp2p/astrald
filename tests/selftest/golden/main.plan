@@ -1,36 +1,25 @@
-w0 local:  smoke → mcp-origin → claim-window → admission-policies
-           → token-less-setup → manager-setup → manager-answers-invite
+w0 local:  smoke → mcp-origin → claim-window → token-less-setup → manager-setup
            → signer-app → messaging-ops → app-preexisting-provider-sync
            → app-discover-local → app-handler-unroute → app-call-local
            → app-routing-two-apps → app-op-surface
            → bootstrap-user-software-key → claimed-node-keeps-owner
-           → app-token-lifecycle → policy-delegate → fs-watch → fs-index-live
+           → app-token-lifecycle → fs-watch → fs-index-live
            → registration-lease → app-index-provider → app-describe-provider
            → app-search-provider → objects-provider-revoke-lease
-           → basic-strategy-gw-cycle → adopt-node → adopt-refusals
-           → object-store → app-query → blueprints-two-node
-           → app-blueprint-sync → apphost-origin → app-origin-guards
-           → sign-contract-guard → messaging-two-node → mcp-peer
-           → services-swarm → services-app-call → services-advertise-identity
-           → app-searcher-swarm → app-finder-read → app-two-providers
-           → objects-provider-registration-authz
+           → basic-strategy-gw-cycle → adopt-node → object-store → app-query
+           → blueprints-two-node → app-blueprint-sync → apphost-origin
+           → app-origin-guards → sign-contract-guard → messaging-two-node
+           → mcp-peer → services-swarm → services-app-call
+           → services-advertise-identity → app-searcher-swarm → app-finder-read
+           → app-two-providers → objects-provider-registration-authz
            → objects-provider-read-robustness → services-provider-gone
            → app-discover-follow → app-discover-swarm → app-ping-pong
            → app-call-remote → relay-pull-absent → app-reject-code
-           → route-outcomes → app-op-surface-remote → request-grant-scope
-           → swarm-authz-matrix → stranger-disclosure
-           → services-swarm-outcome-rules → node-query-sibling-app
-           → sibling-query-live-link → object-store-peer → read-remote-peer
-           → read-swarm → discover-swarm → adopt-claimed-node-setup
-           → adopt-claimed-node → route-outcomes-dead-peer
-           config acceptor.apphost.policies = {"app_register": "accept_all", "grant_request": "reject_all"}
-           config admitter.apphost.policies = {"app_register": "reject_all", "grant_request": "accept_all"}
-           config admitter.user.policies = {"swarm_join": "reject_all", "swarm_invite": "accept_all", "contract_accept": "accept_all"}
-           config invitee.user.policies = {"swarm_join": "accept_all", "swarm_invite": "reject_all", "contract_accept": "reject_all"}
-           config mai-approve.apphost.gate = {}
-           config mai-approve.apphost.policies = {}
-           config mai-decline.apphost.gate = {}
-           config mai-decline.apphost.policies = {}
+           → route-outcomes → app-op-surface-remote → swarm-authz-matrix
+           → stranger-disclosure → services-swarm-outcome-rules
+           → node-query-sibling-app → sibling-query-live-link
+           → object-store-peer → read-remote-peer → read-swarm → discover-swarm
+           → route-outcomes-dead-peer
            config node1.apphost.gate = {"tokenless": ["apphost.register", "user.info", "user.derive_identity", "user.bootstrap", "user.join"], "states": {"fresh": ["*"], "unclaimed": ["*"]}}
            config node1.kcp.link_idle_ping = "300s"
            config node1.objects.external_registration_sweep_interval = "1s"
@@ -161,11 +150,9 @@ w46 local: bootstrap-user-software-key* → indexing-fs-watch-feed
 w47 local: bootstrap-user-software-key* → blueprint-survives-restart
 w48 local: distribution-gate-setup
            config node1.apphost.gate = {}
-           config node1.apphost.policies = {}
 w49 local: import-user-software-key
 w50 local: bootstrap-user-op
 w51 local: bootstrap-passphrase
 w52 local: claim-race
 w53 local: introduce-node-setup → introduce-node
 w54 local: expel-management-node
-w55 local: concurrent-adoption

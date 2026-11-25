@@ -31,7 +31,7 @@ func TestAuthorizeObjectAccessGrantsTheNodeOnUnclaimedNode(t *testing.T) {
 		t.Fatal("the node must store objects on an unclaimed node; provisioning stores the user key before a user exists")
 	}
 
-	if !mod.AuthorizeSeeObjects(nil, &auth.SeeObjectsAction{Action: auth.NewAction(nodeID)}) {
+	if !newChainRules(mod, nil).AuthorizeSeeObjects(nil, &auth.SeeObjectsAction{Action: auth.NewAction(nodeID)}) {
 		t.Fatal("the node must read back its own objects on an unclaimed node")
 	}
 
@@ -41,25 +41,20 @@ func TestAuthorizeObjectAccessGrantsTheNodeOnUnclaimedNode(t *testing.T) {
 		t.Fatal("a caller that is neither the node nor the user must not store")
 	}
 
-	if mod.AuthorizeSeeObjects(nil, &auth.SeeObjectsAction{Action: auth.NewAction(stranger)}) {
+	if newChainRules(mod, nil).AuthorizeSeeObjects(nil, &auth.SeeObjectsAction{Action: auth.NewAction(stranger)}) {
 		t.Fatal("a caller that is neither the node nor the user must not read")
 	}
 }
 
-// TestSeeObjectsGrantsUserNodeAndSwarm pins the default holders of SeeObjects on a
-// claimed node: the user identity, this node and a current swarm member. An
-// expelled member and a node of another user's swarm are refused.
-func TestSeeObjectsGrantsUserNodeAndSwarm(t *testing.T) {
+// TestSeeObjectsGrantsUserAndNodeOnly pins the default holders of SeeObjects on
+// a claimed node: the user identity and this node. A swarm member reads through
+// its contract chain, not this rule.
+func TestSeeObjectsGrantsUserAndNodeOnly(t *testing.T) {
 	mod, f := swarmFixture(t)
 
 	for _, c := range f.cases() {
-		// why: a node shows its objects to its swarm peers by default.
-		if c.actor == f.member {
-			c.want = true
-		}
-
 		a := &auth.SeeObjectsAction{Action: auth.NewAction(c.actor)}
-		if got := mod.AuthorizeSeeObjects(nil, a); got != c.want {
+		if got := newChainRules(mod, nil).AuthorizeSeeObjects(nil, a); got != c.want {
 			t.Errorf("%s: authorized %v; want %v", c.name, got, c.want)
 		}
 	}
@@ -89,7 +84,7 @@ func TestAuthorizeObjectAccessRefusesZeroActorOnUnclaimedNode(t *testing.T) {
 		"nil":  nil,
 		"zero": {},
 	} {
-		if mod.AuthorizeSeeObjects(nil, &auth.SeeObjectsAction{Action: auth.NewAction(actor)}) {
+		if newChainRules(mod, nil).AuthorizeSeeObjects(nil, &auth.SeeObjectsAction{Action: auth.NewAction(actor)}) {
 			t.Errorf("a %s actor reads objects on an unclaimed node", name)
 		}
 

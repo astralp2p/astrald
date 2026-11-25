@@ -79,25 +79,19 @@ func TestAdminNetworkGrantsThisNodeBeforeAUserExists(t *testing.T) {
 	}
 }
 
-// TestAdminNetworkGrantsThisNodeAndCurrentSwarmMembers pins the direct grant on
-// a claimed node: this node and the user's unexpelled member nodes, and nobody
-// else.
-//
-// note: the authorizer reads no link table. A linked peer is refused unless it
-// is in LocalSwarm, which "a node in another user's swarm" stands for here.
-func TestAdminNetworkGrantsThisNodeAndCurrentSwarmMembers(t *testing.T) {
+// TestAdminNetworkGrantsThisNodeAndTheUserOnly pins the direct grant on a
+// claimed node: this node and the user, and nobody else. A swarm member is
+// refused here; a Privileged one holds the action through the swarm root
+// handler (mod/auth).
+func TestAdminNetworkGrantsThisNodeAndTheUserOnly(t *testing.T) {
 	nodeID, userID := astral.GenerateIdentity(), astral.GenerateIdentity()
 	member, expelled := astral.GenerateIdentity(), astral.GenerateIdentity()
 	outsider := astral.GenerateIdentity()
 
 	mod := banModule(t, userID)
 	mod.node = &identityNode{id: nodeID}
-	mod.Deps.Auth = &adminNetworkContracts{contracts: []*auth.SignedContract{
-		adminNetworkMembership(userID, nodeID),
-		adminNetworkMembership(userID, member),
-		adminNetworkMembership(userID, expelled),
-		adminNetworkMembership(astral.GenerateIdentity(), outsider),
-	}}
+	state := useSwarm(t, mod, userID, nodeID, member, expelled)
+	addMembership(t, state, astral.GenerateIdentity(), outsider)
 	if err := mod.db.StoreExpulsion(sampleSigned(userID, expelled)); err != nil {
 		t.Fatalf("store expulsion: %v", err)
 	}
@@ -108,7 +102,7 @@ func TestAdminNetworkGrantsThisNodeAndCurrentSwarmMembers(t *testing.T) {
 		want  bool
 	}{
 		{"this node", nodeID, true},
-		{"a current swarm member", member, true},
+		{"a current swarm member", member, false},
 		{"an expelled member", expelled, false},
 		{"a node in another user's swarm", outsider, false},
 		{"a stranger", astral.GenerateIdentity(), false},

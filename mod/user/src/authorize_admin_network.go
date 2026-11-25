@@ -5,9 +5,9 @@ import (
 	"github.com/astralp2p/astral-go/astral"
 )
 
-// AuthorizeAdminNetwork grants network administration to the user identity, to
-// this node itself, and to every current node member of this node's swarm, and
-// to nobody else.
+// AuthorizeAdminNetwork grants network administration to the user identity and
+// to this node itself; a Privileged node holds it through the swarm root
+// handler (authmod.SwarmWalk).
 //
 // why the user: the six other node-wide actions grant it, and a user who adopts
 // and expels swarm members already reshapes the network more than these ops do.
@@ -17,10 +17,8 @@ import (
 // node (core/run.go).
 // why before swarm membership: a node links and punches before any user exists,
 // when LocalSwarm is empty and Identity() answers nil.
-// why the swarm's node members: the NAT link strategy creates the ephemeral
-// listener and the endpoint mapping on the peer, and the peer runs this rule.
-// note: a network link or an app registration is not membership. LocalSwarm
-// lists only subjects of the user's unexpelled swarm-membership contracts.
+// note: the NAT link strategy creates the ephemeral listener and the endpoint
+// mapping on the peer, which the peer allows a Privileged node alone.
 // why not outsiders: the endpoints this node advertises, and the rows it holds
 // about other nodes, are private to the user's swarm, and nodes.resolve_endpoints
 // answers under this action.
@@ -38,15 +36,7 @@ func (mod *Module) AuthorizeAdminNetwork(ctx *astral.Context, a *auth.AdminNetwo
 		return false
 	}
 
-	if actor.IsEqual(mod.Identity()) || actor.IsEqual(mod.node.Identity()) {
-		return true
-	}
-
-	for _, nodeID := range mod.LocalSwarm() {
-		if nodeID.IsEqual(actor) {
-			return true
-		}
-	}
-
-	return false
+	// why no swarm member: a Privileged node acts for the user through the
+	// swarm root handler, and no other tier administers this node.
+	return actor.IsEqual(mod.Identity()) || actor.IsEqual(mod.node.Identity())
 }

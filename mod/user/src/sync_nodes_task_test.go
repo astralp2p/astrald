@@ -113,7 +113,7 @@ func newSyncFixture(t *testing.T, ctx *astral.Context) *syncFixture {
 		return obj.ObjectType()
 	}
 	f.mod = &Module{
-		Deps: Deps{Auth: index, Objects: &stepPusher{steps: f.steps, kind: kind}, Tree: memTree{root: newMemNode()}},
+		Deps: Deps{Auth: index, Objects: &stepPusher{steps: f.steps, kind: kind}, Tree: memTree{root: newMemNode()}, Nodes: pullNoSwarm{}},
 		ctx:  ctx,
 		node: &stepNode{id: nodeID, steps: f.steps},
 		log:  log.New(nodeID),
@@ -122,6 +122,7 @@ func newSyncFixture(t *testing.T, ctx *astral.Context) *syncFixture {
 	if err := f.mod.config.ActiveContract.Set(nil, active); err != nil {
 		t.Fatalf("seed active contract: %v", err)
 	}
+	useIndexSwarm(f.mod, active.Issuer, index)
 	if err := f.mod.db.StoreExpulsion(sampleSigned(userID, astral.GenerateIdentity())); err != nil {
 		t.Fatalf("store expulsion: %v", err)
 	}
@@ -145,7 +146,7 @@ func TestSyncNodesTaskPushesTheContractFirst(t *testing.T) {
 	want := []string{
 		"push active contract",
 		"push expulsion",
-		"push sibling contract",
+
 		"query " + user.OpInfo,
 		"query " + relayDigestOp,
 		"push app contract",

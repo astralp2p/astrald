@@ -3,7 +3,6 @@ package apphost
 import (
 	"io"
 	"net"
-	"slices"
 	"testing"
 	"time"
 
@@ -15,7 +14,6 @@ import (
 	"github.com/astralp2p/astral-go/astral/log"
 	"github.com/astralp2p/astral-go/lib/query"
 	"github.com/astralp2p/astral-go/lib/routing"
-	"github.com/astralp2p/astrald/lib/policyconf"
 	authmod "github.com/astralp2p/astrald/mod/auth"
 	cryptomod "github.com/astralp2p/astrald/mod/crypto"
 	objectsmod "github.com/astralp2p/astrald/mod/objects"
@@ -190,68 +188,6 @@ func TestServeAppsRegisterHandlerInstallsForTheCaller(t *testing.T) {
 	}
 }
 
-// TestServeAppsGrantAuthorizesTheGrantee covers the apphost shim: a node-local
-// ServeApps grant authorizes its grantee and nobody else.
-func TestServeAppsGrantAuthorizesTheGrantee(t *testing.T) {
-	mod := testGrantModule(t)
-	app := astral.GenerateIdentity()
-
-	if err := mod.Grant(app, serveAppsPermit(), nil); err != nil {
-		t.Fatalf("grant: %v", err)
-	}
-
-	if !mod.AuthorizeServeApps(nil, serveAppsAction(app)) {
-		t.Fatal("a ServeApps grant was refused to its grantee")
-	}
-
-	if mod.AuthorizeServeApps(nil, serveAppsAction(astral.GenerateIdentity())) {
-		t.Fatal("an identity holding no ServeApps grant was allowed")
-	}
-}
-
-// TestServeAppsGrantRefusesAConstrainedPermit holds the action's bar: ServeApps
-// evaluates no constraint, so a narrowed grant must not be honoured in full.
-func TestServeAppsGrantRefusesAConstrainedPermit(t *testing.T) {
-	mod := testGrantModule(t)
-	app := astral.GenerateIdentity()
-
-	permit := serveAppsPermit()
-	permit.Constraints = astral.NewBundle()
-	if err := permit.Constraints.Append(astral.NewString8("contacts")); err != nil {
-		t.Fatalf("constrain: %v", err)
-	}
-
-	if err := mod.Grant(app, permit, nil); err != nil {
-		t.Fatalf("grant: %v", err)
-	}
-
-	if mod.AuthorizeServeApps(nil, serveAppsAction(app)) {
-		t.Fatal("a constrained ServeApps grant was honoured")
-	}
-}
-
-// TestRegisterGrantRequestLeadsWithTheDefaults covers what the register policy
-// is handed: ServeApps and UseBlueprints lead the grant request whether or not
-// the app asked for anything, and the app's own ask follows them unchanged.
-func TestRegisterGrantRequestLeadsWithTheDefaults(t *testing.T) {
-	defaults := []string{auth.ServeAppsAction{}.ObjectType(), auth.UseBlueprintsAction{}.ObjectType()}
-
-	for _, asked := range [][]string{nil, {"mod.user.see_swarm_action"}} {
-		requested := registerGrantRequest(permits(asked...))
-		want := append(append([]string{}, defaults...), asked...)
-
-		if got := actions(requested); !slices.Equal(got, want) {
-			t.Fatalf("asked %q: the policy is handed %v; want %v", asked, got, want)
-		}
-
-		for _, p := range requested[:len(defaults)] {
-			if p.Constraints != nil {
-				t.Fatalf("asked %q: the default %s permit carries constraints", asked, p.Action)
-			}
-		}
-	}
-}
-
 // registerService sends one register_service_msg for host from a guest
 // authenticated as guestID and returns the host's reply. A handler it installs
 // lives until the test ends.
@@ -407,9 +343,7 @@ func serveAppsRegistrar(t *testing.T) *Module {
 		t.Fatalf("migrate: %v", err)
 	}
 
-	// why accept_all: a registrar under the default reject_all writes nothing.
 	config := defaultConfig()
-	config.Policies.AppRegister = policyconf.Setting{Mode: policyconf.AcceptAll}
 
 	return &Module{
 		Deps:   Deps{Auth: serveAppsSigner{}, Crypto: serveAppsKeys{}, Objects: serveAppsStore{}, VFS: &recordingVFS{}},
@@ -417,34 +351,5 @@ func serveAppsRegistrar(t *testing.T) *Module {
 		node:   &serveAppsNode{id: astral.GenerateIdentity()},
 		log:    log.New(nil),
 		db:     db,
-	}
-}
-
-// TestServeAppsRegistrationWritesTheGrant is the operator's decision end to end:
-// under the accept_all register policy, an app that asks for nothing leaves
-// apphost.register holding ServeApps and UseBlueprints grants.
-func TestServeAppsRegistrationWritesTheGrant(t *testing.T) {
-	mod := serveAppsRegistrar(t)
-	w := newRecordingWriter()
-
-	if err := register(t, mod, &apphost.RegisterRequest{}, w); err != nil {
-		t.Fatalf("apphost.register refused: %v", err)
-	}
-	awaitServeAppsClose(t, w)
-
-	var tokens []dbAccessToken
-	if err := mod.db.Find(&tokens).Error; err != nil {
-		t.Fatalf("list tokens: %v", err)
-	}
-	if len(tokens) != 1 {
-		t.Fatalf("apphost.register issued %d tokens; want 1", len(tokens))
-	}
-
-	app := tokens[0].Identity
-	if !mod.AuthorizeServeApps(nil, serveAppsAction(app)) {
-		t.Fatalf("the app registered as %v holds no ServeApps grant", app)
-	}
-	if !mod.AuthorizeUseBlueprints(nil, useBlueprintsAction(app)) {
-		t.Fatalf("the app registered as %v holds no UseBlueprints grant", app)
 	}
 }

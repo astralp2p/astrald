@@ -78,3 +78,21 @@ func (s *swarmSnapshot) mayAnswer(signer *astral.Identity, req astral.Object, vi
 	m, ok := s.membership(signer, visiting)
 	return ok && user.MayAnswer(m.Tier, req)
 }
+
+// members returns every identity whose membership holds, in no defined order.
+func (v *swarmView) members() []*astral.Identity {
+	s := v.snapshot()
+	seen := map[string]bool{}
+	var ids []*astral.Identity
+	for _, c := range s.contracts {
+		m, ok := user.MembershipOf(c)
+		if !ok || seen[m.Subject.String()] {
+			continue
+		}
+		seen[m.Subject.String()] = true
+		if _, ok := s.membership(m.Subject, map[string]bool{}); ok {
+			ids = append(ids, m.Subject)
+		}
+	}
+	return ids
+}

@@ -38,6 +38,9 @@ const (
 // Module manages encrypted links between nodes: establishing them, resolving
 // peer endpoints, and tracking liveness.
 type Module interface {
+	SwarmState
+	// SyncSwarm pulls the SwarmState entries peer stores and this node lacks, through peer's exchange ops.
+	SyncSwarm(ctx *astral.Context, peer *astral.Identity) error
 	EstablishInboundLink(ctx context.Context, conn exonetmod.Conn) error
 	EstablishOutboundLink(ctx context.Context, remoteID *astral.Identity, conn exonetmod.Conn) (Link, error)
 
@@ -82,10 +85,8 @@ type Module interface {
 // user.Decline.RequestID, auth.Contract.ApprovalID and the IDs user.SwarmView
 // takes, so each resolves with SwarmEntry.
 //
-// It is declared apart from Module: nothing implements it until G1, and G7
-// embeds it into Module. Until then G1's implementation takes its
-// user.SwarmView through its constructor and stays unwired; G7 passes
-// mod/user once Module embeds SwarmView.
+// Module embeds it. The store takes the user module's user.SwarmView through
+// its constructor and calls CheckSwarmEntry on every merge.
 type SwarmState interface {
 	// AddSwarmEntry offers obj to the set, as a local write or a merge from a
 	// peer. obj must be an entry: user.EntryKindOf(obj) reports true. An

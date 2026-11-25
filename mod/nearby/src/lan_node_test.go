@@ -41,9 +41,8 @@ import (
 const lanModules = "apphost, auth, bip137sig, crypto, dir, ether, events, exonet, fs, ip, nearby, nodes, " +
 	"objects, scheduler, secp256k1, shell, sys, tcp, tree, user, vfs"
 
-// lanUserConfig is the user.yaml of every node, the admission policies of the E2E nodes
-// (tests/lib/nodeconfig.py E2E_USER).
-const lanUserConfig = "policies:\n  swarm_join: accept_all\n  swarm_invite: accept_all\n  contract_accept: accept_all\n"
+// lanUserConfig is the user.yaml of every node: the defaults.
+const lanUserConfig = "{}\n"
 
 // lanWait bounds each wait of these tests; a link over loopback forms in well under a second.
 const lanWait = 20 * time.Second
@@ -190,84 +189,6 @@ func TestSiblingsOnCustomPortsLinkFromOneStealthStatus(t *testing.T) {
 
 	took := waitFor(t, "b links to a", func() bool { return b.isLinked(a.id()) })
 	t.Logf("linked %v after the status", took)
-}
-
-// Ticket g6pAQZTYlY criterion 8: an unclaimed node, in the default Visible mode on a custom
-// tcp port, is adopted by its nearby alias without a typed address; the adopter dials the
-// port the status carries.
-func TestUnclaimedNodeOnACustomPortIsAdoptedThroughNearby(t *testing.T) {
-	owner, fresh := runLanNode(t), runLanNode(t)
-	userID := owner.bootstrap(t, "").Identity
-
-	s := owner.deliver(t, fresh)
-	profile, ok := attachment[*nearby.PublicProfile](s)
-	if !ok || profile.NodeAlias == "" {
-		t.Fatalf("the status of the unclaimed node holds no public profile with an alias")
-	}
-	lp, ok := attachment[*nearby.ListenPorts](s)
-	if !ok || int(lp.TCP) != fresh.port {
-		t.Fatalf("the Visible status carries %+v; want tcp %v", lp, fresh.port)
-	}
-
-	want := fmt.Sprintf("tcp:127.0.0.1:%d", fresh.port)
-	if got := owner.nodeEndpoints(t, fresh.id()); len(got) != 1 || got[0] != want {
-		t.Fatalf("the owner resolves %v for the unclaimed node; want [%v]", got, want)
-	}
-
-	ctx, cancel := astral.NewContext(nil).WithTimeout(lanWait)
-	defer cancel()
-	signed, err := owner.user(userID).Adopt(ctx, "."+string(profile.NodeAlias))
-	if err != nil {
-		t.Fatalf("user.adopt .%v: %v", profile.NodeAlias, err)
-	}
-	if !signed.Subject.IsEqual(fresh.id()) || !signed.Issuer.IsEqual(userID) {
-		t.Fatalf("adopt signed %v for %v; want %v for %v", signed.Issuer, signed.Subject, userID, fresh.id())
-	}
-	// note: the subject signature comes from user.accept_membership on the unclaimed node,
-	// which the owner reaches only at the endpoint nearby resolved.
-	if signed.SubjectSig == nil {
-		t.Fatal("the adopted node did not sign the contract")
-	}
-	waitFor(t, "the adopted node holds the user's contract", func() bool {
-		return contractOf(t, fresh).Issuer.IsEqual(userID)
-	})
-}
-
-// Ticket 98SVlhAVHt criterion 5: a fresh node runs user.join toward an owned Stealth node on
-// the same LAN, with default modes and no endpoint of it; the swarm node's statuses arrive
-// while the join waits, the join recognises them with the target's ID, and the reply is a
-// signed contract after which user.info names the user.
-func TestJoinFindsAStealthSwarmNodeOnTheLAN(t *testing.T) {
-	swarm, fresh := runLanNode(t), runLanNode(t)
-	userID := swarm.bootstrap(t, "").Identity
-
-	// note: a status before the join is cached by IP only and resolves nothing.
-	fresh.deliver(t, swarm)
-	if got := fresh.nodeEndpoints(t, swarm.id()); len(got) != 0 {
-		t.Fatalf("before the join, the fresh node resolves %v for the swarm node; want none", got)
-	}
-
-	stop := make(chan struct{})
-	done := make(chan struct{})
-	go func() {
-		defer close(done)
-		deliverEvery(fresh, swarm, stop)
-	}()
-	defer func() { close(stop); <-done }()
-
-	ctx, cancel := astral.NewContext(nil).WithTimeout(lanWait)
-	defer cancel()
-	signed, err := fresh.user(fresh.id()).Join(ctx, swarm.id().String())
-	if err != nil {
-		t.Fatalf("user.join %v: %v", swarm.id(), err)
-	}
-	if !signed.Issuer.IsEqual(userID) || !signed.Subject.IsEqual(fresh.id()) {
-		t.Fatalf("join signed %v for %v; want %v for %v", signed.Issuer, signed.Subject, userID, fresh.id())
-	}
-
-	if c := contractOf(t, fresh); !c.Issuer.IsEqual(userID) {
-		t.Fatalf("user.info names the user %v; want %v", c.Issuer, userID)
-	}
 }
 
 // peerSeenLog records the PeerSeen events a node emits, as the user module receives them.

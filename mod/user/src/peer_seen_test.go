@@ -117,6 +117,7 @@ func newContactFixture(t *testing.T) *contactFixture {
 	if err := f.mod.config.ActiveContract.Set(nil, nodeContract(f.userID, f.nodeID)); err != nil {
 		t.Fatalf("seed active contract: %v", err)
 	}
+	useIndexSwarm(f.mod, f.userID, f.auth)
 	return f
 }
 

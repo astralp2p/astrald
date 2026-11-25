@@ -60,9 +60,12 @@ type SwarmAnswerOps struct {
 	View   usermod.SwarmView
 	Auth   swarmAuthorizer
 	Signer crypto.HashSigner
-	// UserKey signs for user.confirm_join; nil: this node cannot reach the
-	// user key, and user.confirm_join refuses.
-	UserKey *userKeyCeremony
+	// UserKey returns the ceremony that signs for user.confirm_join; nil:
+	// this node cannot reach the user key, and user.confirm_join refuses.
+	UserKey func() *userKeyCeremony
+	// Root returns the root key, which answers every request with no
+	// membership of its own (an unclaimed node is its own root).
+	Root func() *astral.Identity
 }
 
 type opSwarmRequestsArgs struct {
@@ -202,8 +205,7 @@ func (ops *SwarmAnswerOps) answer(ctx *astral.Context, caller *astral.Identity, 
 		return nil, auth.ErrNotPermitted
 	}
 
-	membership, ok := ops.View.Membership(ops.Node)
-	if !ok || !user.MayAnswer(membership.Tier, req) {
+	if !ops.mayAnswer(req) {
 		return nil, ErrOutsideTier
 	}
 
@@ -227,6 +229,16 @@ func (ops *SwarmAnswerOps) answer(ctx *astral.Context, caller *astral.Identity, 
 		return nil, err
 	}
 	return signed, nil
+}
+
+// mayAnswer reports whether this node may answer req: as the root key, or by
+// the tier of its membership (user.MayAnswer).
+func (ops *SwarmAnswerOps) mayAnswer(req astral.Object) bool {
+	if ops.Root != nil && isRoot(ops.Root(), ops.Node) {
+		return true
+	}
+	membership, ok := ops.View.Membership(ops.Node)
+	return ok && user.MayAnswer(membership.Tier, req)
 }
 
 // sign signs this node's Approval or Decline of the request id.

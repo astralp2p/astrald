@@ -20,8 +20,6 @@ type swarmWalk struct {
 
 // SetSwarm makes Authorize read SwarmState (see authmod.SwarmWalk). A nil
 // view, state or root clears it, and Authorize behaves as without it.
-//
-// note: nothing calls it until G7 wires the swarm in.
 func (mod *Module) SetSwarm(view usermod.SwarmView, state nodesmod.SwarmState, root func() *astral.Identity) {
 	if view == nil || state == nil || root == nil {
 		mod.swarm.Store(nil)

@@ -13,6 +13,7 @@ import (
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astral-go/sig"
 	nodesmod "github.com/astralp2p/astrald/mod/nodes"
+	"github.com/astralp2p/astrald/mod/objects"
 	usermod "github.com/astralp2p/astrald/mod/user"
 	vfsmod "github.com/astralp2p/astrald/mod/vfs"
 )
@@ -160,7 +161,7 @@ func (s *swarmStore) loadKind(kind user.EntryKind) error {
 
 // readHead returns the count in the head file, or 0 when it cannot be read.
 func (s *swarmStore) readHead() uint64 {
-	data, err := s.files.ReadFile(s.ctx, s.owner, swarmHeadPath)
+	data, err := s.files.ReadFile(objects.WithHousekeeping(s.ctx), s.owner, swarmHeadPath)
 	if err != nil {
 		return 0
 	}
@@ -332,7 +333,9 @@ func (s *swarmStore) SwarmEntry(id *astral.ObjectID) (astral.Object, error) {
 		return nil, fmt.Errorf("swarm entry %v: %w", id, vfsapi.ErrNotFound)
 	}
 
-	data, err := s.files.ReadFile(s.ctx, s.owner, swarmEntryPath(kind, id))
+	// why housekeeping: readers poll the set, and a poll is this node's own bookkeeping, which leaves the
+	// entries' last-touched times as they were (VFS 6, §11 "objects: last touched").
+	data, err := s.files.ReadFile(objects.WithHousekeeping(s.ctx), s.owner, swarmEntryPath(kind, id))
 	if err != nil {
 		return nil, fmt.Errorf("read swarm entry %v: %w", id, err)
 	}

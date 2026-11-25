@@ -35,12 +35,6 @@ type Module struct {
 	// swarm is the member set publishSwarm last emitted events for.
 	swarm memberSet
 
-	// policy persists the admission delegates; an unset value selects the
-	// policies.* config value, whose code default is reject_all.
-	// GetSwarmJoinPolicy, GetSwarmInvitePolicy and GetContractAcceptPolicy read
-	// it on every decision.
-	policy policyConfig
-
 	// mu makes the claim check and the claim one transition; see claim.
 	mu sync.Mutex
 	// linkerMu makes the sibling linker's check, schedule and register one step; see runSiblingLinker.
@@ -70,6 +64,16 @@ type Module struct {
 	// runs. See recognizeJoinTarget.
 	joinTarget atomic.Pointer[astral.Identity]
 
+	// swarmView reads SwarmState; entryCheck decides what enters it.
+	swarmView  *swarmView
+	entryCheck *swarmEntryCheck
+	// carrier carries the JoinRequests that name this node (user.carry_join).
+	carrier *swarmCarrier
+	// joiner keeps this node's own JoinRequest while it joins (user.join).
+	joiner *swarmJoiner
+	// indexedEntries holds the SwarmState contracts already handed to the auth index.
+	indexedEntries sig.Map[astral.ObjectID, struct{}]
+
 	// banned holds the subjects the active user banned; see isBanned.
 	banned atomic.Pointer[map[string]struct{}]
 	// banAnswers holds the banned subjects that answered their own ban pushed
@@ -87,6 +91,7 @@ func (mod *Module) Run(ctx *astral.Context) error {
 	close(mod.ready)
 	go mod.runReconcile(mod.ctx)
 	go mod.runPeriodicSiblingSync(mod.ctx)
+	go mod.runSwarmWatcher(mod.ctx)
 	go func() {
 		for contract := range activeContractFollow {
 			mod.onActiveContractChanged(contract)

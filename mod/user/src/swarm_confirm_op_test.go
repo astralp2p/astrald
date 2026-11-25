@@ -30,7 +30,7 @@ func newSoftwareKeyFixture() *softwareKeyFixture {
 		View:    f.swarm,
 		Auth:    &recordingAuth{verdict: true},
 		Signer:  secp256k1sig.NewHashSignerASN1(f.keys.key(f.carrier)),
-		UserKey: f.ceremony,
+		UserKey: func() *userKeyCeremony { return f.ceremony },
 	}
 	return f
 }
@@ -210,7 +210,7 @@ func TestConfirmJoinRefusals(t *testing.T) {
 	f.clock.advance(2 * user.RequestTimeout)
 	refused(expiredID, ErrRequestClosed)
 
-	f.ops.UserKey = nil
+	f.ops.UserKey = func() *userKeyCeremony { return nil }
 	refused(expiredID, ErrNoUserKey)
 
 	if n := f.swarm.count(user.EntryContracts); n != 0 {

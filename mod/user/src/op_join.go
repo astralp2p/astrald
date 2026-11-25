@@ -1,16 +1,17 @@
 package user
 
 import (
+	"errors"
 	"time"
 
 	"github.com/astralp2p/astral-go/api/auth"
 	"github.com/astralp2p/astral-go/api/dir"
 	"github.com/astralp2p/astral-go/api/user"
-	userClient "github.com/astralp2p/astral-go/api/user/client"
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astral-go/astral/channel"
+	"github.com/astralp2p/astral-go/lib/query"
 	"github.com/astralp2p/astral-go/lib/routing"
-	"github.com/astralp2p/astrald/core"
+	usermod "github.com/astralp2p/astrald/mod/user"
 )
 
 // joinWait bounds the wait of user.join for a route to the swarm node.
@@ -24,14 +25,19 @@ const joinPoll = 250 * time.Millisecond
 
 type opJoinArgs struct {
 	Node string `query:"required"`
+	Tier string
 	In   string
 	Out  string
 }
 
-// OpJoin makes this unclaimed node request membership from Node, a node of a
-// swarm. The swarm node's join policy decides the request; on admission the
-// swarm node sends the contract to this node's user.accept_membership, which
-// activates it. The reply is the signed contract.
+// OpJoin makes this unclaimed node ask to join the swarm through Node, its
+// carrier: it signs a JoinRequest naming Node and Tier (member by default),
+// keeps it until the join ends, and sends it to Node's user.carry_join. The
+// carrier writes it into SwarmState and waits while this node stays
+// connected; on an Approval (or, for privileged_member, the user key's
+// ceremony) it hands over the membership, which this node activates. A
+// dropped connection keeps the request: the next user.join through the same
+// carrier resends the same request. The reply is the membership.
 // Spec: .ai/system/protocols/user/ops/user.join.md
 //
 // why the origin and caller gates of user.bootstrap: the op claims this node,
@@ -56,6 +62,14 @@ func (mod *Module) OpJoin(ctx *astral.Context, q *routing.IncomingQuery, args op
 		return ch.Send(auth.ErrNotPermitted)
 	}
 
+	tier := user.TierMember
+	if args.Tier != "" {
+		tier = user.Tier(args.Tier)
+	}
+	if !tier.IsValid() {
+		return ch.Send(astral.NewError("invalid tier"))
+	}
+
 	nodeID, err := mod.Dir.ResolveIdentity(args.Node)
 	if err != nil {
 		return ch.Send(dir.ErrUnknownIdentity)
@@ -77,13 +91,91 @@ func (mod *Module) OpJoin(ctx *astral.Context, q *routing.IncomingQuery, args op
 	defer mod.joinTarget.CompareAndSwap(nodeID, nil)
 	mod.findRoute(ctx, nodeID)
 
-	node := core.NewClientAs(mod.node, mod.node.Identity())
-	signed, err := userClient.New(nodeID, node).RequestMembership(ctx)
+	signed, err := mod.join(ctx, nodeID, tier)
 	if err != nil {
 		return ch.Send(astral.Err(err))
 	}
 
 	return ch.Send(signed)
+}
+
+// join runs this node's join through carrier and activates the membership it
+// hands over.
+func (mod *Module) join(ctx *astral.Context, carrier *astral.Identity, tier user.Tier) (*auth.SignedContract, error) {
+	req, err := mod.joiner.Request(ctx, carrier, tier)
+	if err != nil {
+		return nil, err
+	}
+
+	var root *astral.Identity
+	sc, err := mod.joiner.Join(ctx, req, func(ctx *astral.Context, req *user.SignedJoinRequest) (*auth.SignedContract, error) {
+		var sc *auth.SignedContract
+		sc, root, err = mod.carryJoinAt(ctx, req)
+		return sc, err
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	if err = mod.activateJoin(ctx, sc, root, carrier); err != nil {
+		return nil, err
+	}
+	return sc, nil
+}
+
+// carryJoinAt sends req to its carrier's user.carry_join and returns the
+// membership and the user identity the carrier answers.
+func (mod *Module) carryJoinAt(ctx *astral.Context, req *user.SignedJoinRequest) (*auth.SignedContract, *astral.Identity, error) {
+	ch, err := query.Route(ctx, mod.node, query.New(mod.node.Identity(), req.Carrier, usermod.ModuleName+".carry_join", nil))
+	if err != nil {
+		return nil, nil, err
+	}
+	defer ch.Close()
+
+	if err = ch.Send(req); err != nil {
+		return nil, nil, err
+	}
+
+	var sc *auth.SignedContract
+	var root *astral.Identity
+	err = ch.Switch(
+		func(msg *astral.ErrorMessage) error { return joinEndOf(msg) },
+		func(c *auth.SignedContract) error { sc = c; return nil },
+		func(id *astral.Identity) error { root = id; return channel.ErrBreak },
+		channel.FailOnEOF(),
+	)
+	switch {
+	case err != nil:
+		return nil, nil, err
+	case sc == nil || root.IsZero():
+		return nil, nil, errors.New("carrier answered no membership")
+	}
+	return sc, root, nil
+}
+
+// activateJoin stores root as this node's user, claims the node with sc, adds
+// sc to SwarmState and pulls the rest of SwarmState from carrier.
+//
+// why the user is stored before the claim: the claim makes the root key
+// mod.Identity(), and CheckSwarmEntry judges sc against it.
+func (mod *Module) activateJoin(ctx *astral.Context, sc *auth.SignedContract, root, carrier *astral.Identity) error {
+	if err := mod.validateActiveContract(sc); err != nil {
+		return err
+	}
+	if err := mod.config.User.Set(mod.ctx, root); err != nil {
+		return err
+	}
+	if err := mod.claim(ctx, sc); err != nil {
+		return err
+	}
+
+	// note: sc waits (nodes.ErrSwarmEntryHeld) until the pull brings its
+	// carrier's membership.
+	_ = mod.Nodes.AddSwarmEntry(ctx, sc)
+	if err := mod.Nodes.SyncSwarm(ctx, carrier); err != nil {
+		mod.log.Logv(1, "join: swarm state pull from %v: %v", carrier, err)
+	}
+	return nil
 }
 
 // findRoute gives user.join a route to nodeID on the local network. Unless the

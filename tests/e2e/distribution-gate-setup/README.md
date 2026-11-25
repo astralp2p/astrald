@@ -2,7 +2,7 @@
 
 Every other claim test runs under the harness's E2E gate, which opens a `fresh`
 node to every op and lets a session without a token claim. This test starts
-node1 under the gate and the app register policy a released astrald ships, and
+node1 under the gate a released astrald ships, and
 sets the node up as `node-setup.md` describes: a session with no token appoints
 the manager, and the manager, with its own token, claims the node for a User
 from pinned words. The gate's lists run end to end for the first time.
@@ -27,7 +27,8 @@ from pinned words. The gate's lists run end to end for the first time.
   manager and the contract `User → node1`; a second `user.bootstrap` answers
   `node already claimed` and changes nothing; with no token, `user.info`
   answers `claimed`, `sys.register_manager` answers `node is not fresh`,
-  `apphost.register` is declined by the app register policy, `.spec` answers,
+  `apphost.register` issues a token (registration is never refused; permits
+  are a ContractRequest), `.spec` answers,
   and `user.bootstrap`, `user.derive_identity`, `user.join`,
   `apphost.list_tokens` and `shell.spec` are denied; the node's own token now
   lists tokens, so the gate has opened to the `claimed` list.

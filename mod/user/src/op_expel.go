@@ -17,8 +17,9 @@ type opExpelArgs struct {
 
 // OpExpel permanently bans the named node from the swarm and returns the signed ban.
 // Requires an active contract; the caller must be authorized for
-// user.AdminSwarmAction (auth.ErrNotPermitted otherwise) - the user always is, other
-// identities via authorizers.
+// user.ExpelAction (auth.ErrNotPermitted otherwise). Only the user is: the swarm
+// root handler never answers an expel, so a Privileged node cannot (D7). The user
+// key signs the Expulsion, which enters SwarmState.
 func (mod *Module) OpExpel(ctx *astral.Context, q *routing.IncomingQuery, args opExpelArgs) (err error) {
 	ch := q.Accept(channel.WithFormats(args.In, args.Out))
 	defer ch.Close()
@@ -38,7 +39,7 @@ func (mod *Module) OpExpel(ctx *astral.Context, q *routing.IncomingQuery, args o
 		return ch.Send(astral.ErrZeroIdentity)
 	}
 
-	if !mod.Auth.Authorize(ctx, &user.AdminSwarmAction{
+	if !mod.Auth.Authorize(ctx, &user.ExpelAction{
 		Action:  auth.NewAction(q.Caller()),
 		Subject: nodeID,
 	}) {

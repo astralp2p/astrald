@@ -368,7 +368,6 @@ class TestShippedPlans(Invariants, unittest.TestCase):
              ("local", "bootstrap-passphrase"),
              ("local", "bootstrap-user-op"),
              ("local", "claim-race"),
-             ("local", "concurrent-adoption"),
              ("local", "distribution-gate-setup"),
              ("local", "expel-management-node"),
              ("local", "import-user-software-key"),

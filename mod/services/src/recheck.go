@@ -206,7 +206,6 @@ func removeFrom[T comparable](m map[string]map[T]struct{}, k string, v T) {
 
 // watchAuthority registers the change callbacks that schedule re-checks.
 func (mod *Module) watchAuthority() {
-	mod.Apphost.OnGrantsChanged(mod.authority.schedule)
 	// why: the withdrawn contracts' subjects are not reported, and withdrawals
 	// are rare operator actions, so every follow is re-checked.
 	mod.Auth.OnContractWithdrawn(func(*astral.Identity) { mod.authority.scheduleAll() })

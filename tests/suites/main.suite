@@ -6,10 +6,8 @@
 smoke
 mcp-origin
 claim-window
-admission-policies
 token-less-setup
 manager-setup
-manager-answers-invite
 distribution-gate-setup
 signer-app
 messaging-ops
@@ -20,9 +18,7 @@ bootstrap-user-op
 bootstrap-passphrase
 claim-race
 app-token-lifecycle
-policy-delegate
 adopt-node
-adopt-refusals
 introduce-node-setup
 introduce-node
 fs-watch
@@ -35,8 +31,6 @@ object-store-peer
 read-remote-peer
 read-swarm
 discover-swarm
-adopt-claimed-node-setup
-adopt-claimed-node
 app-query
 registration-lease
 blueprints-two-node
@@ -75,7 +69,6 @@ app-call-local
 app-routing-two-apps
 app-op-surface
 app-op-surface-remote
-request-grant-scope
 swarm-authz-matrix
 stranger-disclosure
 services-swarm-outcome-rules
@@ -114,7 +107,6 @@ link-idle-keepalive
 link-dead-peer-keepalive
 two-swarms-side-by-side
 join-via-member
-concurrent-adoption
 app-node-restart-reconnect
 blueprint-survives-restart
 services-node-restart

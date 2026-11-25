@@ -167,8 +167,7 @@ func (mod *Module) assignAlias(identity *astral.Identity, alias string) (string,
 	return alias, mod.Dir.SetAlias(identity, alias)
 }
 
-// deleteMailbox revokes every access token the identity holds, withdraws every
-// grant, unsets its alias and withdraws its mailbox, taking the mail it owns
+// deleteMailbox revokes every access token the identity holds, unsets its alias and withdraws its mailbox, taking the mail it owns
 // with it — both boxes, archived or not. A correspondent's own copy of the same
 // message is owned by the correspondent and stays. The signed relay and hosting
 // contracts stay indexed until they expire; apphost.withdraw_relay takes the relay
@@ -182,44 +181,9 @@ func (mod *Module) deleteMailbox(identity *astral.Identity) error {
 		return err
 	}
 
-	if err := mod.revokeGrants(identity); err != nil {
-		return err
-	}
-
 	if err := mod.Dir.SetAlias(identity, ""); err != nil {
 		return err
 	}
 
 	return mod.withdrawMailbox(identity)
-}
-
-// revokeGrants withdraws every node-local grant identity holds. A grant names
-// the identity and nothing else, so one left behind keeps authorizing whoever
-// presents the deleted participant's identity.
-//
-// why every permit and not the unexpired ones: Grants reports expired rows too,
-// and a row outlives the participant that held it. Deleting an expired grant
-// takes away nothing the node was still honoring.
-//
-// why a failure stops the deletion: the index row is the only record naming
-// the identity, so a run that removed the row and left a grant standing would
-// leave authority messaging.delete_mailbox can no longer reach. The kept row
-// makes the call repeatable.
-func (mod *Module) revokeGrants(identity *astral.Identity) error {
-	permits, err := mod.Apphost.Grants(identity)
-	if err != nil {
-		return err
-	}
-
-	for _, permit := range permits {
-		// note: a concurrent revoke takes the row between the listing and here.
-		// note: Revoke clears every row for the action, so a later permit for an
-		// action already cleared answers gorm.ErrRecordNotFound too.
-		err = mod.Apphost.Revoke(identity, string(permit.Action))
-		if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
-			return err
-		}
-	}
-
-	return nil
 }

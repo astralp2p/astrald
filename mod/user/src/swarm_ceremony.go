@@ -104,7 +104,8 @@ func (c *userKeyCeremony) Expel(ctx *astral.Context, reqID *astral.ObjectID) (*u
 	}
 
 	signed := &user.SignedExpulsion{Expulsion: expulsion, IssuerSig: sig}
-	if err = c.state.AddSwarmEntry(ctx, signed); err != nil {
+	// why held is no failure: the entry is signed and a later merge may store it.
+	if err = c.state.AddSwarmEntry(ctx, signed); err != nil && !errors.Is(err, nodesmod.ErrSwarmEntryHeld) {
 		return nil, err
 	}
 	return signed, nil
@@ -155,7 +156,8 @@ func (c *swarmCarrier) FileExpelRequest(ctx *astral.Context, subject *astral.Ide
 	}
 
 	signed := &user.SignedExpelRequest{ExpelRequest: req, FiledBySig: sig}
-	if err = c.state.AddSwarmEntry(ctx, signed); err != nil {
+	// why held is no failure: the entry is signed and a later merge may store it.
+	if err = c.state.AddSwarmEntry(ctx, signed); err != nil && !errors.Is(err, nodesmod.ErrSwarmEntryHeld) {
 		return nil, err
 	}
 	return signed, nil

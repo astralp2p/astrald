@@ -14,7 +14,6 @@ smoke
 claim-window
 token-less-setup
 signer-app
-admission-policies
 bootstrap-user-software-key
 bootstrap-user-op
 fs-watch
@@ -28,7 +27,6 @@ adopt-node
 blueprints-two-node
 apphost-origin
 sign-contract-guard
-request-grant-scope
 swarm-authz-matrix
 services-swarm
 object-store
@@ -78,7 +76,6 @@ app-blueprint-sync
 services-app-call
 services-provider-gone
 app-preexisting-provider-sync
-manager-answers-invite
 app-node-restart-reconnect
 services-node-restart
 services-consumer-restart
@@ -89,15 +86,11 @@ mcp-peer
 messaging-two-node
 basic-strategy-stalled-endpoint-released
 manager-setup
-policy-delegate
 indexer-cursor
 swarm-member-restart
 expel-survives-restart
 membership-resync-volume
-adopt-claimed-node-setup
 distribution-gate-setup
-adopt-claimed-node
-adopt-refusals
 app-index-provider
 app-origin-guards
 app-token-lifecycle
@@ -122,7 +115,6 @@ kcp-only-restart-relink
 basic-strategy-gw-cycle
 link-session-migrate
 link-session-migrate-serving-side
-concurrent-adoption
 swarm-four-siblings
 swarm-apps-talk
 swarm-apps-matrix-kcp

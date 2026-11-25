@@ -7,7 +7,7 @@ import (
 	"testing"
 
 	"github.com/astralp2p/astral-go/api/apphost"
-	"github.com/astralp2p/astral-go/api/policy"
+	"github.com/astralp2p/astral-go/api/auth"
 	sysapi "github.com/astralp2p/astral-go/api/sys"
 	"github.com/astralp2p/astral-go/api/user"
 	"github.com/astralp2p/astral-go/astral"
@@ -22,23 +22,19 @@ func registerManager(t *testing.T, mod *Module, req *sysapi.RegisterManagerReque
 	return routeSending(t, mod.OpRegisterManager, localQuery(sysapi.MethodRegisterManager), req)
 }
 
-// TestRegisterManagerAppoints: a fresh node provisions the manager, stores a
-// delegate naming the manager for each binding, clears every other delegate,
-// records the appointment and answers the manager's token.
+// TestRegisterManagerAppoints: a fresh node provisions the manager with both
+// permit lists in its contract, records the appointment and answers the
+// manager's token.
 func TestRegisterManagerAppoints(t *testing.T) {
-	mod, apps, u := freshModule()
+	mod, apps, _ := freshModule()
 	ctx := astral.NewContext(nil)
 
-	// a delegate a failed attempt left behind
-	leftover := &policy.Delegate{Identity: astral.GenerateIdentity(), Operation: "old.decide"}
-	apps.SetPolicyDelegate(ctx, sysapi.PolicyGrantRequest, leftover)
-
+	grant := &auth.Permit{Action: "mod.user.see_swarm_action"}
+	contract := &auth.Permit{Action: "mod.auth.see_objects_action"}
 	w := registerManager(t, mod, &sysapi.RegisterManagerRequest{
-		Name: "control-plane",
-		Policies: []*sysapi.PolicyBinding{
-			{Policy: sysapi.PolicyAppRegister, Operation: "cp.approve_app"},
-			{Policy: sysapi.PolicySwarmJoin, Operation: "cp.approve_join"},
-		},
+		Name:            "control-plane",
+		GrantPermits:    []*auth.Permit{grant},
+		ContractPermits: []*auth.Permit{contract},
 	})
 
 	token, ok := w.answer(t).(*apphost.AccessToken)
@@ -52,20 +48,8 @@ func TestRegisterManagerAppoints(t *testing.T) {
 	if got := mod.NodeState(ctx); got != user.StateUnclaimed {
 		t.Fatalf("state = %v; want unclaimed", got)
 	}
-
-	if d := apps.policies[sysapi.PolicyAppRegister]; d.IsZero() || !d.Identity.IsEqual(manager) || d.Operation != "cp.approve_app" {
-		t.Fatalf("app_register delegate = %+v; want the manager's cp.approve_app", d)
-	}
-	if d := apps.policies[sysapi.PolicyGrantRequest]; d != nil {
-		t.Fatal("grant_request kept the leftover delegate")
-	}
-	if j := u.policies[sysapi.PolicySwarmJoin]; j.IsZero() || !j.Identity.IsEqual(manager) || j.Operation != "cp.approve_join" {
-		t.Fatalf("swarm_join delegate = %+v; want the manager's cp.approve_join", j)
-	}
-	for _, name := range []string{sysapi.PolicySwarmInvite, sysapi.PolicyContractAccept} {
-		if d, set := u.policies[name]; !set || d != nil {
-			t.Fatalf("%v delegate = %+v, written %v; want cleared", name, d, set)
-		}
+	if len(apps.permits) != 2 || apps.permits[0].Action != grant.Action || apps.permits[1].Action != contract.Action {
+		t.Fatalf("the manager's contract holds %v; want both permit lists", apps.permits)
 	}
 }
 
@@ -136,41 +120,18 @@ func TestRegisterManagerAppointsOnce(t *testing.T) {
 	}
 }
 
-// TestRegisterManagerRefusesInvalidBindings: a refused request writes nothing.
-func TestRegisterManagerRefusesInvalidBindings(t *testing.T) {
-	for name, b := range map[string][]*sysapi.PolicyBinding{
-		"unknown policy": {{Policy: "approve_everything", Operation: "x.y"}},
-		"no operation":   {{Policy: sysapi.PolicyAppRegister}},
-		"bound twice": {
-			{Policy: sysapi.PolicyAppRegister, Operation: "x.a"},
-			{Policy: sysapi.PolicyAppRegister, Operation: "x.b"},
-		},
-		"timeout above the bound": {{Policy: sysapi.PolicyAppRegister, Operation: "x.y", Timeout: astral.Duration(2 * policy.MaxTimeout)}},
-	} {
-		mod, apps, _ := freshModule()
-		w := registerManager(t, mod, &sysapi.RegisterManagerRequest{Policies: b})
-		if got := w.refusal(t); got == "" {
-			t.Fatalf("%v: answered no refusal", name)
-		}
-		if !mod.Manager().IsZero() || apps.issued() != 0 {
-			t.Fatalf("%v: a refused request appointed or issued a token", name)
-		}
-	}
-}
-
-// TestRegisterManagerRefusesAUserPolicyWithoutTheUserModule: a node without
-// the user module refuses a user policy binding.
-func TestRegisterManagerRefusesAUserPolicyWithoutTheUserModule(t *testing.T) {
+// TestRegisterManagerRefusesPolicyBindings: the policies are requests in
+// SwarmState, so a request that binds one is refused and writes nothing.
+func TestRegisterManagerRefusesPolicyBindings(t *testing.T) {
 	mod, apps, _ := freshModule()
-	mod.User = nil
 	w := registerManager(t, mod, &sysapi.RegisterManagerRequest{Policies: []*sysapi.PolicyBinding{
-		{Policy: sysapi.PolicySwarmJoin, Operation: "x.y"},
+		{Policy: sysapi.PolicyAppRegister, Operation: "x.y"},
 	}})
-	if got := w.refusal(t); !strings.Contains(got, "user module is not loaded") {
-		t.Fatalf("refusal %q; want the user module refusal", got)
+	if got := w.refusal(t); got != errPoliciesRemoved.Error() {
+		t.Fatalf("refusal %q; want %q", got, errPoliciesRemoved)
 	}
-	if apps.issued() != 0 {
-		t.Fatal("a refused request issued a token")
+	if !mod.Manager().IsZero() || apps.issued() != 0 {
+		t.Fatal("a refused request appointed or issued a token")
 	}
 }
 

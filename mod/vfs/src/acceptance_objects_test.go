@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"net/http"
 	"slices"
+	"strconv"
 	"testing"
 	"time"
 
@@ -49,6 +50,10 @@ func (a *acceptanceNode) indexed(table, column string) []string {
 // expectPurged fails unless a purge answered exactly the ObjectIDs want.
 func expectPurged(t *testing.T, what string, got []string, want ...*astral.ObjectID) {
 	t.Helper()
+
+	// why: the node's SwarmState rewrites its head file on every entry, and the
+	// head counts it replaced are content nothing holds any more.
+	got = slices.DeleteFunc(slices.Clone(got), isStaleSwarmHead)
 
 	var ids []string
 	for _, id := range want {
@@ -330,4 +335,16 @@ func expectSameRows(t *testing.T, when string, got, before map[string]acceptance
 			t.Errorf("%v: %v is %+v; want %+v", when, id, got[id], row)
 		}
 	}
+}
+
+// isStaleSwarmHead reports whether id is the content of a SwarmState head
+// file: a decimal entry count.
+func isStaleSwarmHead(id string) bool {
+	for n := range 64 {
+		blob := astral.Blob(strconv.Itoa(n))
+		if head, err := astral.ResolveObjectID(&blob); err == nil && head.String() == id {
+			return true
+		}
+	}
+	return false
 }

@@ -267,54 +267,6 @@ func TestFindIdentityNamesTheIndexedParticipants(t *testing.T) {
 	}
 }
 
-// A deleted participant's identity holds no grant afterwards, and no other
-// identity loses one. The first half is what an external provider reads on
-// every call: ServeObjects is checked against the identity, not against a
-// participant row, so a grant the deletion left behind keeps the deleted
-// participant serving objects.
-func TestDeletingAnIdentityRevokesTheGrantsItHolds(t *testing.T) {
-	mod, apphost, _ := testIdentityModule(t)
-	identity := hostedParticipant(t, mod)
-	other := astral.GenerateIdentity()
-
-	// the second permit is the one apphost.register writes, so the deletion is
-	// measured against a grant the participant did not ask messaging for
-	// the third permit shares the first one's action with other constraints,
-	// as grants accumulate, so one revoke for the action has to clear both
-	roles := astral.NewBundle()
-	if err := roles.Append(astral.NewString8(string(auth.RoleDescriber))); err != nil {
-		t.Fatalf("constraints: %v", err)
-	}
-	apphost.grants[identity.String()] = []*auth.Permit{
-		{Action: astral.String8(auth.ServeObjectsAction{}.ObjectType())},
-		{Action: astral.String8(auth.ServeAppsAction{}.ObjectType())},
-		{Action: astral.String8(auth.ServeObjectsAction{}.ObjectType()), Constraints: roles},
-	}
-	apphost.grants[other.String()] = []*auth.Permit{
-		{Action: astral.String8(auth.ServeObjectsAction{}.ObjectType())},
-	}
-
-	if err := mod.deleteMailbox(identity); err != nil {
-		t.Fatalf("delete identity: %v", err)
-	}
-
-	grants, err := apphost.Grants(identity)
-	if err != nil {
-		t.Fatalf("grants: %v", err)
-	}
-	if len(grants) != 0 {
-		t.Fatalf("the deleted participant still holds %v grants, want none", len(grants))
-	}
-
-	grants, err = apphost.Grants(other)
-	if err != nil {
-		t.Fatalf("grants: %v", err)
-	}
-	if len(grants) != 1 {
-		t.Fatalf("another identity holds %v grants after the delete, want 1", len(grants))
-	}
-}
-
 // A grant the node no longer holds is not an error the deletion reports: the
 // listing and the revoke are two statements, and a revoke that lands between
 // them leaves the state the deletion wanted.
@@ -333,27 +285,6 @@ func TestDeletingAnIdentityToleratesAGrantAlreadyRevoked(t *testing.T) {
 
 	if _, err := mod.db.FindMailbox(identity); err == nil {
 		t.Fatal("index row still present after delete")
-	}
-}
-
-// A revoke that fails for any other reason stops the deletion and keeps the
-// row, so the operator can run messaging.delete_mailbox again. A run that
-// removed the row would leave the grant with no record naming who holds it.
-func TestAFailedRevokeKeepsTheIndexRow(t *testing.T) {
-	mod, apphost, _ := testIdentityModule(t)
-	identity := hostedParticipant(t, mod)
-
-	apphost.grants[identity.String()] = []*auth.Permit{
-		{Action: astral.String8(auth.ServeObjectsAction{}.ObjectType())},
-	}
-	apphost.revokeErr = errors.New("store is down")
-
-	if err := mod.deleteMailbox(identity); err == nil {
-		t.Fatal("the deletion answered no error on a failed revoke")
-	}
-
-	if _, err := mod.db.FindMailbox(identity); err != nil {
-		t.Fatalf("find the index row after the failed delete: %v", err)
 	}
 }
 

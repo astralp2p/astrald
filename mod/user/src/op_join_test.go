@@ -51,7 +51,10 @@ func (n *swarmNode) RouteQuery(ctx *astral.Context, q *astral.InFlightQuery, w i
 		return query.RouteNotFound()
 	}
 	op, err := routing.NewOp(func(_ *astral.Context, q *routing.IncomingQuery) error {
-		return q.Accept().Send(n.answer)
+		ch := q.Accept()
+		// why: the joiner sends its JoinRequest first, and waits on the send.
+		_, _ = ch.Receive()
+		return ch.Send(n.answer)
 	})
 	if err != nil {
 		return nil, err
@@ -140,7 +143,8 @@ func newJoinFixture(t *testing.T, answer astral.Object) *joinFixture {
 	f.routes = &joinNodes{target: f.swarmID}
 	start := time.Time{}
 	f.routes.routeAt.Store(&start)
-	f.node = &swarmNode{id: astral.GenerateIdentity(), answer: answer, routes: f.routes, routed: make(chan routedQuery, 1)}
+	keys := newJoinKeyring()
+	f.node = &swarmNode{id: keys.newKey(), answer: answer, routes: f.routes, routed: make(chan routedQuery, 1)}
 	f.mod = &Module{
 		Deps: Deps{Dir: &namedDir{names: map[string]*astral.Identity{
 			"swarm":  f.swarmID,
@@ -148,8 +152,9 @@ func newJoinFixture(t *testing.T, answer astral.Object) *joinFixture {
 			"self":   f.node.id,
 		}}, Apphost: &tokenIssuer{state: user.StateUnclaimed}, Sys: &tokenIssuer{state: user.StateUnclaimed},
 			Nodes: f.routes},
-		node: f.node,
-		log:  log.New(f.node.id),
+		node:   f.node,
+		log:    log.New(f.node.id),
+		joiner: newSwarmJoiner(f.node.id, keys, memJoinKeeper{}, nil),
 	}
 	f.nearby = &joinNearby{mod: f.mod, routes: f.routes, status: statusOf(t, stealthHint(t, f.swarmID, f.swarmUser))}
 	f.mod.Nearby = f.nearby
@@ -200,12 +205,11 @@ func routeJoin(t *testing.T, f *joinFixture, caller *astral.Identity, origin, qu
 	return w.objects(t), nil
 }
 
-// TestJoinRequestsMembershipAsTheNode: user.join sends user.request_membership
-// to the named node, as this node and with the Network zone, and answers the
-// contract the swarm node returns.
-func TestJoinRequestsMembershipAsTheNode(t *testing.T) {
-	signed := &auth.SignedContract{Contract: &auth.Contract{Issuer: astral.GenerateIdentity()}}
-	f := newJoinFixture(t, signed)
+// TestJoinCarriesTheRequestAsTheNode: user.join sends its JoinRequest to the
+// named node's user.carry_join, as this node and with the Network zone, and
+// answers the end of the join the carrier sends.
+func TestJoinCarriesTheRequestAsTheNode(t *testing.T) {
+	f := newJoinFixture(t, astral.Err(errJoinDeclined))
 
 	objs, err := routeJoin(t, f, f.node.id, astral.OriginLocal, "user.join?node=swarm")
 	if err != nil {
@@ -219,19 +223,18 @@ func TestJoinRequestsMembershipAsTheNode(t *testing.T) {
 	if !routed.query.Caller.IsEqual(f.node.id) {
 		t.Fatalf("request sent as %v; want the node %v", routed.query.Caller, f.node.id)
 	}
-	if op, _ := query.Parse(routed.query.QueryString.String()); op != user.OpRequestMembership {
-		t.Fatalf("request %q; want %v", routed.query.QueryString, user.OpRequestMembership)
+	if op, _ := query.Parse(routed.query.QueryString.String()); op != "user.carry_join" {
+		t.Fatalf("request %q; want user.carry_join", routed.query.QueryString)
 	}
 	if !routed.zone.Is(astral.ZoneNetwork) {
 		t.Fatalf("request routed in zone %v; want the Network zone", routed.zone)
 	}
 
-	if len(objs) != 1 {
-		t.Fatalf("the op answered %d objects (%v); want one contract", len(objs), objs)
+	if len(objs) != 1 || objs[0].ObjectType() != "error_message" {
+		t.Fatalf("the op answered %v; want the carrier's end of the join", objs)
 	}
-	got, ok := objs[0].(*auth.SignedContract)
-	if !ok || !got.Issuer.IsEqual(signed.Issuer) {
-		t.Fatalf("the op answered %v; want the swarm node's contract", objs[0])
+	if got := objs[0].(astral.Error).Error(); got != errJoinDeclined.Error() {
+		t.Fatalf("error %q; want %q", got, errJoinDeclined)
 	}
 }
 
@@ -319,8 +322,7 @@ func TestJoinRefusesAClaimedNode(t *testing.T) {
 // TestJoinAdmitsTheManager: the appointed manager asks with its App identity,
 // and the request still goes to the swarm node as this node.
 func TestJoinAdmitsTheManager(t *testing.T) {
-	signed := &auth.SignedContract{Contract: &auth.Contract{Issuer: astral.GenerateIdentity()}}
-	f := newJoinFixture(t, signed)
+	f := newJoinFixture(t, astral.Err(errJoinDeclined))
 	manager := astral.GenerateIdentity()
 	f.mod.Apphost = &tokenIssuer{state: user.StateUnclaimed, manager: manager}
 	f.mod.Sys = f.mod.Apphost.(*tokenIssuer)
@@ -333,11 +335,8 @@ func TestJoinAdmitsTheManager(t *testing.T) {
 	if !routed.query.Caller.IsEqual(f.node.id) {
 		t.Fatalf("request sent as %v; want the node %v", routed.query.Caller, f.node.id)
 	}
-	if len(objs) != 1 {
-		t.Fatalf("the op answered %v; want one contract", objs)
-	}
-	if _, ok := objs[0].(*auth.SignedContract); !ok {
-		t.Fatalf("the op answered %v; want the swarm node's contract", objs[0])
+	if len(objs) != 1 || objs[0].ObjectType() != "error_message" || objs[0].(astral.Error).Error() != errJoinDeclined.Error() {
+		t.Fatalf("the op answered %v; want the carrier's end of the join", objs)
 	}
 }
 
@@ -346,8 +345,7 @@ func TestJoinAdmitsTheManager(t *testing.T) {
 // hint is recognized; the request leaves once the swarm node resolves, 500 ms
 // after the scan, and the target is cleared on return.
 func TestJoinFindsTheSwarmNodeNearby(t *testing.T) {
-	signed := &auth.SignedContract{Contract: &auth.Contract{Issuer: astral.GenerateIdentity()}}
-	f := newJoinFixture(t, signed)
+	f := newJoinFixture(t, astral.Err(errJoinDeclined))
 	f.unroute(500 * time.Millisecond)
 
 	objs, err := routeJoin(t, f, f.node.id, "", "user.join?node=swarm")
@@ -366,11 +364,8 @@ func TestJoinFindsTheSwarmNodeNearby(t *testing.T) {
 	if at := f.routes.routeAt.Load(); at == nil || routed.at.Before(*at) {
 		t.Fatalf("request sent at %v, before the swarm node resolved at %v", routed.at, at)
 	}
-	if len(objs) != 1 {
-		t.Fatalf("the op answered %v; want one contract", objs)
-	}
-	if _, ok := objs[0].(*auth.SignedContract); !ok {
-		t.Fatalf("the op answered %v; want the swarm node's contract", objs[0])
+	if len(objs) != 1 || objs[0].ObjectType() != "error_message" || objs[0].(astral.Error).Error() != errJoinDeclined.Error() {
+		t.Fatalf("the op answered %v; want the carrier's end of the join", objs)
 	}
 	if target := f.mod.joinTarget.Load(); target != nil {
 		t.Fatalf("the join target is %v after the join; want none", target)
@@ -380,7 +375,7 @@ func TestJoinFindsTheSwarmNodeNearby(t *testing.T) {
 // TestJoinWithoutARouteFailsAfterTheWait: when no route appears, user.join
 // sends the request after joinWait and answers route not found.
 func TestJoinWithoutARouteFailsAfterTheWait(t *testing.T) {
-	f := newJoinFixture(t, &auth.SignedContract{})
+	f := newJoinFixture(t, astral.Err(errJoinDeclined))
 	f.unroute(-1)
 
 	start := time.Now()
@@ -407,7 +402,7 @@ func TestJoinWithoutARouteFailsAfterTheWait(t *testing.T) {
 // TestJoinWithARouteDoesNotScan: a swarm node that already resolves is joined
 // at once, with no scan.
 func TestJoinWithARouteDoesNotScan(t *testing.T) {
-	f := newJoinFixture(t, &auth.SignedContract{Contract: &auth.Contract{Issuer: astral.GenerateIdentity()}})
+	f := newJoinFixture(t, astral.Err(errJoinDeclined))
 
 	if _, err := routeJoin(t, f, f.node.id, "", "user.join?node=swarm"); err != nil {
 		t.Fatalf("route: %v", err)

@@ -119,7 +119,7 @@ func sudoOf(issuer, subject *astral.Identity) *auth.Contract {
 }
 
 func claimOf(issuer, subject *astral.Identity) *auth.Contract {
-	c, _ := user.NewNodeContract(issuer, subject, true, usermod.DefaultContractValidity)
+	c, _ := user.NewMembership(issuer, subject, user.TierPrivilegedMember, nil, usermod.DefaultContractValidity)
 	return c
 }
 
@@ -267,7 +267,7 @@ func TestAuthorizeContractNodeClaimExpiry(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			r := newGuardRig(t)
-			c, _ := user.NewNodeContract(r.userKey, r.node, true, tc.valid)
+			c, _ := user.NewMembership(r.userKey, r.node, user.TierPrivilegedMember, nil, tc.valid)
 			err := r.mod.authorizeContract(r.ctx, r.node, c)
 			if (err == nil) != tc.ok {
 				t.Fatalf("authorizeContract = %v; want ok=%v", err, tc.ok)
@@ -278,9 +278,9 @@ func TestAuthorizeContractNodeClaimExpiry(t *testing.T) {
 
 // TestAuthorizeContractNodeClaimShape: on an unclaimed node, the node's own
 // session is refused every contract that differs from the claim contract in
-// its parties or its permits. Each clause of IsNodeClaim and
-// isManagementNodeContract fails at least one row of this test or the one
-// above when it is removed.
+// its parties, its permits or its link. Each clause of IsNodeClaim and
+// isPrivilegedClaim fails at least one row of this test or the one above when
+// it is removed.
 func TestAuthorizeContractNodeClaimShape(t *testing.T) {
 	sudo := astral.String8(auth.SudoAction{}.ObjectType())
 
@@ -291,11 +291,12 @@ func TestAuthorizeContractNodeClaimShape(t *testing.T) {
 		{"naming another subject", func(r *guardRig, c *auth.Contract) { c.Subject = r.app }},
 		{"issued by the node", func(r *guardRig, c *auth.Contract) { c.Issuer = r.node }},
 		{"carrying a sudo permit", func(_ *guardRig, c *auth.Contract) { c.Permits = append(c.Permits, &auth.Permit{Action: sudo}) }},
-		{"a plain member contract", func(_ *guardRig, c *auth.Contract) { c.Permits = c.Permits[:1] }},
-		{"another action in place of a permit", func(_ *guardRig, c *auth.Contract) { c.Permits[2].Action = sudo }},
-		{"a wider delegation", func(_ *guardRig, c *auth.Contract) { c.Permits[1].Delegation = 2 }},
+		{"a member membership", func(_ *guardRig, c *auth.Contract) { c.Permits[0].Action = astral.String8(user.TierMember.Action()) }},
+		{"another action in place of the tier", func(_ *guardRig, c *auth.Contract) { c.Permits[0].Action = sudo }},
+		{"a delegation", func(_ *guardRig, c *auth.Contract) { c.Permits[0].Delegation = 1 }},
 		{"a constrained permit", func(_ *guardRig, c *auth.Contract) { c.Permits[0].Constraints = constrainedPermit(0).Constraints }},
-		{"a nil permit", func(_ *guardRig, c *auth.Contract) { c.Permits[2] = nil }},
+		{"a nil permit", func(_ *guardRig, c *auth.Contract) { c.Permits[0] = nil }},
+		{"a link to an Approval", func(_ *guardRig, c *auth.Contract) { c.ApprovalID = &astral.ObjectID{} }},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			r := newGuardRig(t)
