@@ -28,7 +28,7 @@ SUITES = {"main": "script", "tor": "script", "nat": "script",
           "gateway": "script", "agent": "agent", "integration": "script",
           "nearby": "script", "docker-agent": "agent", "kcp": "script",
           "endpoint": "script", "swarm-comms": "script",
-          "swarm-comms-netsim": "script"}
+          "swarm-comms-netsim": "script", "swarm-state": "script"}
 # suite -> the heavy world its agent plan is drawn in, where not a VM
 # why: docker-agent.suite holds operator flows a VM world cannot run (a
 # roster the lab lacks) or would open a world of its own for
@@ -356,6 +356,11 @@ class TestShippedPlans(Invariants, unittest.TestCase):
              ("local", "expel-offline-subject"),
              ("local", "expel-survives-restart"),
              ("local", "link-self-heal"), ("local", "swarm-member-restart"),
+             ("local", "swarm-state-join-resumed"),
+             ("local", "swarm-state-app-moves"),
+             ("local", "swarm-state-app-own-node"),
+             ("local", "swarm-state-conflicting-answers"),
+             ("local", "swarm-state-member-approval-dropped"),
              ("vm", "tor-link"), ("vm", "tor-restart-onion"),
              ("local", "two-swarms-side-by-side"),
              ("local", "basic-strategy-stalled-negotiation"),

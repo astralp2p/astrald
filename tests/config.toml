@@ -9,10 +9,10 @@ spans = 13              # spans from base: 13 concurrent runs, 20800-24699
 
 [astral_py]
 path = "~/work/astralp2p/astral-py/master"
-# The oldest astral-py commit these tests run against. 57460ab decodes
-# user.info's State and Manager, which the setup drivers read; a checkout
-# without it is refused before the first query.
-requires = "57460ab4ec928e72229c0941629606ad13dd4e2d"
+# The oldest astral-py commit these tests run against. cc1a27a decodes
+# mod.auth.contract's ApprovalID, which every contract astrald sends carries;
+# a checkout without it is refused before the first query.
+requires = "cc1a27a618e2938f3a4bbb6c1c4921ac810c3367"
 
 [build]
 package = "./cmd/astrald"

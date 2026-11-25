@@ -128,3 +128,15 @@ link-prefer-live
 services-carry-eos-retry
 services-follow-member-leaves
 swarm-expel-clean
+
+# swarm-state.suite: criterion 2 of Swarm State and User Authority
+swarm-state-member
+swarm-state-join-unanswered
+swarm-state-join-carrier-restart
+swarm-state-join-resumed
+swarm-state-app-on-member
+swarm-state-app-moves
+swarm-state-app-own-node
+swarm-state-conflicting-answers
+swarm-state-member-approval-dropped
+swarm-state-expel-cuts-chains

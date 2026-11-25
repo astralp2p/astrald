@@ -1,0 +1,6 @@
+nodes    = ["node1", "node2", "node3"]
+after    = "swarm-state-expel-cuts-chains"
+timeout  = 180
+# why destroys: the front app moves to node2
+destroys = true
+facts    = ["app_moves"]

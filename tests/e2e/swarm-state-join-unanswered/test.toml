@@ -1,0 +1,7 @@
+nodes    = ["node1", "node2", "node3"]
+after    = "adopt-node"
+timeout  = 120
+restart  = ["node3"]
+# why destroys: node3 holds a pending join through node1, and restarts
+destroys = true
+facts    = ["join_unanswered"]

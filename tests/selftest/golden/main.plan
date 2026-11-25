@@ -139,20 +139,32 @@ w38 local: bootstrap-user-software-key* → adopt-node*
            → services-carry-eos-retry
 w39 local: bootstrap-user-software-key* → adopt-node*
            → services-follow-member-leaves
-w40 local: bootstrap-user-software-key* → repo-removal-sticks
-w41 local: bootstrap-user-software-key* → fs-watch-restart-restore
-w42 local: bootstrap-user-software-key* → fs-index-restart-reconcile
-w43 local: bootstrap-user-software-key* → basic-strategy-stalled-negotiation
-w44 local: bootstrap-user-software-key* → hold-isolation
+w40 local: bootstrap-user-software-key* → adopt-node* → swarm-state-member
+           → swarm-state-app-on-member → swarm-state-expel-cuts-chains
+           → swarm-state-app-moves
+w41 local: bootstrap-user-software-key* → adopt-node* → swarm-state-member*
+           → swarm-state-app-own-node
+w42 local: bootstrap-user-software-key* → adopt-node* → swarm-state-member*
+           → swarm-state-conflicting-answers
+w43 local: bootstrap-user-software-key* → adopt-node* → swarm-state-member*
+           → swarm-state-member-approval-dropped
+w44 local: bootstrap-user-software-key* → adopt-node*
+           → swarm-state-join-unanswered → swarm-state-join-carrier-restart
+           → swarm-state-join-resumed
+w45 local: bootstrap-user-software-key* → repo-removal-sticks
+w46 local: bootstrap-user-software-key* → fs-watch-restart-restore
+w47 local: bootstrap-user-software-key* → fs-index-restart-reconcile
+w48 local: bootstrap-user-software-key* → basic-strategy-stalled-negotiation
+w49 local: bootstrap-user-software-key* → hold-isolation
            config node1.objects.purge_floor = "0s"
-w45 local: bootstrap-user-software-key* → indexer-cursor
-w46 local: bootstrap-user-software-key* → indexing-fs-watch-feed
-w47 local: bootstrap-user-software-key* → blueprint-survives-restart
-w48 local: distribution-gate-setup
+w50 local: bootstrap-user-software-key* → indexer-cursor
+w51 local: bootstrap-user-software-key* → indexing-fs-watch-feed
+w52 local: bootstrap-user-software-key* → blueprint-survives-restart
+w53 local: distribution-gate-setup
            config node1.apphost.gate = {}
-w49 local: import-user-software-key
-w50 local: bootstrap-user-op
-w51 local: bootstrap-passphrase
-w52 local: claim-race
-w53 local: introduce-node-setup → introduce-node
-w54 local: expel-management-node
+w54 local: import-user-software-key
+w55 local: bootstrap-user-op
+w56 local: bootstrap-passphrase
+w57 local: claim-race
+w58 local: introduce-node-setup → introduce-node
+w59 local: expel-management-node

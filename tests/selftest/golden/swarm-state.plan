@@ -1,0 +1,12 @@
+w0 local: bootstrap-user-software-key* → adopt-node* → swarm-state-member
+          → swarm-state-app-on-member → swarm-state-expel-cuts-chains
+          → swarm-state-app-moves
+w1 local: bootstrap-user-software-key* → adopt-node* → swarm-state-member*
+          → swarm-state-app-own-node
+w2 local: bootstrap-user-software-key* → adopt-node* → swarm-state-member*
+          → swarm-state-conflicting-answers
+w3 local: bootstrap-user-software-key* → adopt-node* → swarm-state-member*
+          → swarm-state-member-approval-dropped
+w4 local: bootstrap-user-software-key* → adopt-node*
+          → swarm-state-join-unanswered → swarm-state-join-carrier-restart
+          → swarm-state-join-resumed

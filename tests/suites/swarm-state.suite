@@ -1,0 +1,16 @@
+# swarm-state.suite — the parent's acceptance criterion 2 (Swarm State and
+# User Authority, https://wiki.satforge.dev/doc/implement-swarm-state-and-user-authority-jvbNEYdeXH):
+# one scenario per item 2.1-2.7, in local loopback worlds.
+#
+# The order is a preference among siblings; the planner computes the run
+# order from each test's `after`.
+swarm-state-member
+swarm-state-join-unanswered
+swarm-state-join-carrier-restart
+swarm-state-join-resumed
+swarm-state-app-on-member
+swarm-state-app-moves
+swarm-state-app-own-node
+swarm-state-conflicting-answers
+swarm-state-member-approval-dropped
+swarm-state-expel-cuts-chains

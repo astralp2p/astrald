@@ -1,0 +1,24 @@
+# swarm-state-app-own-node
+
+Criterion 2.4: an app reaching a service on its own node is allowed by its
+contract chain, and denied without it.
+
+- **after** `swarm-state-member` (node3 a Member) · **host_listener** — the
+  wallet stand-in serves on a test-host port node3 dials.
+- **driver** `script.py` — a wallet stand-in registers on node3, the User
+  approves it on node1, and it advertises `wallet` as private on node3. Two
+  apps, `front` and `other`, register on node3, each asking a
+  ServiceDiscovery permit for `wallet`. Once the User sees the wallet, each
+  app's local discovery (reach `local`: node3 alone) is recorded; the User
+  approves front's request and declines other's; the driver polls front's
+  local discovery until it shows the wallet (up to 60 s). Records
+  `app_own_node`.
+- **oracle** `verify.py` — neither app saw the wallet before an answer;
+  front sees it within 60 s and live at the oracle, and spends 50; node3
+  stores a contract it issued for front carrying an Approval of front's
+  request; other, declined, sees no wallet at the driver and at the oracle,
+  and its request reads declined.
+
+**Strictness.** With every discovery permit granted (`callerView.permitted`
+returning true) the oracle fails: "before_front: an app saw the wallet
+before any answer".

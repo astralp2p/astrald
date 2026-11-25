@@ -1,0 +1,6 @@
+nodes    = ["node1", "node2", "node3"]
+after    = "adopt-node"
+timeout  = 180
+# why destroys: node3 joins the swarm, so every later test in the world sees three members
+destroys = true
+facts    = ["member_join"]

@@ -136,20 +136,32 @@ w36 docker: bootstrap-user-software-key* → adopt-node*
             → services-carry-eos-retry
 w37 docker: bootstrap-user-software-key* → adopt-node*
             → services-follow-member-leaves
-w38 docker: bootstrap-user-software-key* → fs-watch-restart-restore
-w39 docker: bootstrap-user-software-key* → fs-index-restart-reconcile
-w40 docker: bootstrap-user-software-key* → repo-removal-sticks
-w41 docker: bootstrap-user-software-key* → indexing-fs-watch-feed
-w42 docker: bootstrap-user-software-key* → hold-isolation
+w38 docker: bootstrap-user-software-key* → adopt-node* → swarm-state-member
+            → swarm-state-app-on-member → swarm-state-expel-cuts-chains
+            → swarm-state-app-moves
+w39 docker: bootstrap-user-software-key* → adopt-node* → swarm-state-member*
+            → swarm-state-app-own-node
+w40 docker: bootstrap-user-software-key* → adopt-node* → swarm-state-member*
+            → swarm-state-conflicting-answers
+w41 docker: bootstrap-user-software-key* → adopt-node* → swarm-state-member*
+            → swarm-state-member-approval-dropped
+w42 docker: bootstrap-user-software-key* → adopt-node*
+            → swarm-state-join-unanswered → swarm-state-join-carrier-restart
+            → swarm-state-join-resumed
+w43 docker: bootstrap-user-software-key* → fs-watch-restart-restore
+w44 docker: bootstrap-user-software-key* → fs-index-restart-reconcile
+w45 docker: bootstrap-user-software-key* → repo-removal-sticks
+w46 docker: bootstrap-user-software-key* → indexing-fs-watch-feed
+w47 docker: bootstrap-user-software-key* → hold-isolation
             config node1.objects.purge_floor = "0s"
-w43 docker: bootstrap-user-software-key* → blueprint-survives-restart
-w44 docker: bootstrap-user-software-key* → indexer-cursor
-w45 docker: bootstrap-user-software-key* → basic-strategy-stalled-negotiation
-w46 docker: bootstrap-user-op
-w47 docker: import-user-software-key
-w48 docker: introduce-node-setup → introduce-node
-w49 docker: distribution-gate-setup
+w48 docker: bootstrap-user-software-key* → blueprint-survives-restart
+w49 docker: bootstrap-user-software-key* → indexer-cursor
+w50 docker: bootstrap-user-software-key* → basic-strategy-stalled-negotiation
+w51 docker: bootstrap-user-op
+w52 docker: import-user-software-key
+w53 docker: introduce-node-setup → introduce-node
+w54 docker: distribution-gate-setup
             config node1.apphost.gate = {}
-w50 docker: bootstrap-passphrase
-w51 docker: claim-race
-w52 docker: expel-management-node
+w55 docker: bootstrap-passphrase
+w56 docker: claim-race
+w57 docker: expel-management-node
