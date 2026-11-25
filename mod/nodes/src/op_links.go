@@ -4,7 +4,6 @@ import (
 	"slices"
 
 	"github.com/astralp2p/astral-go/api/auth"
-	"github.com/astralp2p/astral-go/api/nodes"
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astral-go/astral/channel"
 	"github.com/astralp2p/astral-go/lib/routing"
@@ -30,17 +29,7 @@ func (mod *Module) OpLinks(ctx *astral.Context, q *routing.IncomingQuery, args o
 	})
 
 	for _, s := range links {
-		err = ch.Send(&nodes.LinkInfo{
-			ID:              s.id,
-			LocalIdentity:   s.LocalIdentity(),
-			RemoteIdentity:  s.RemoteIdentity(),
-			LocalEndpoint:   knownEndpoint(s.LocalEndpoint()),
-			RemoteEndpoint:  knownEndpoint(s.RemoteEndpoint()),
-			Outbound:        astral.Bool(s.outbound),
-			Network:         astral.String8(s.Network()),
-			HighPressure:    astral.Bool(s.PressureHigh()),
-			BytesThroughput: astral.Uint64(s.Throughput()),
-		})
+		err = ch.Send(s.Info())
 		if err != nil {
 			return ch.Send(astral.NewError(err.Error()))
 		}

@@ -37,6 +37,8 @@ type Link struct {
 	pingMu      sync.Mutex
 	ping        *Ping
 	throughput  atomic.Uint64
+	srtt        atomic.Int64 // smoothed round trip of the pings in nanoseconds; 0 until the first pong
+	lastPong    atomic.Int64 // nanoseconds from createdAt to the last pong; 0 until the first pong
 	outbound    bool
 	prunable    atomic.Bool   // a strategy link no caller asked for as new; a link that outranks it closes it
 	excess      atomic.Bool   // closeExcess chose it to close; set while its sessions migrate, before the close
@@ -279,7 +281,9 @@ func (s *Link) pong(nonce astral.Nonce) (time.Duration, error) {
 	}
 	s.ping = nil
 	s.pingMu.Unlock()
-	d := time.Since(p.sentAt)
+	now := time.Now()
+	d := now.Sub(p.sentAt)
+	s.recordRTT(d, now)
 	close(p.pong)
 	if s.pressure != nil {
 		s.pressure.OnRTT(d, time.Now())

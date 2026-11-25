@@ -42,15 +42,7 @@ func (c *CreateLinkTask) Run(ctx *astral.Context) error {
 	}
 	link := rawLink.(*Link)
 
-	c.Info = &nodes.LinkInfo{
-		ID:             link.id,
-		LocalIdentity:  link.LocalIdentity(),
-		RemoteIdentity: link.RemoteIdentity(),
-		LocalEndpoint:  knownEndpoint(link.LocalEndpoint()),
-		RemoteEndpoint: knownEndpoint(link.RemoteEndpoint()),
-		Outbound:       astral.Bool(link.outbound),
-		Network:        astral.String8(link.Network()),
-	}
+	c.Info = link.Info()
 
 	return nil
 }
