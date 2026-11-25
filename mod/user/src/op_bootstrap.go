@@ -216,6 +216,26 @@ func (mod *Module) signClaim(ctx *astral.Context, caller *astral.Identity, key *
 	return signed, mod.validateActiveContract(signed)
 }
 
+// signPrivilegedClaim is the SwarmState path of signClaim: the user key, held
+// in memory, signs this node's PrivilegedMembership in the ceremony, and the
+// node signs as subject. The first node's membership carries no link.
+//
+// note: user.bootstrap calls signClaim until G7 switches it to this path.
+func (mod *Module) signPrivilegedClaim(ctx *astral.Context, key *crypto.PrivateKey) (*auth.SignedContract, error) {
+	userID := secp256k1.Identity(secp256k1.PublicKey(key))
+	ceremony := newUserKeyCeremony(userID, heldKeySigner{key: key}, nil, nil)
+
+	signed, err := ceremony.Membership(ctx, mod.node.Identity(), user.TierPrivilegedMember, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	if _, err = mod.Auth.SignSubject(ctx, signed); err != nil {
+		return nil, err
+	}
+	return signed, nil
+}
+
 // mayClaim reports whether caller may claim this node through user.bootstrap
 // or user.join: the node itself, or the manager.
 func (mod *Module) mayClaim(caller *astral.Identity) bool {
