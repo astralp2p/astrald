@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/astralp2p/astral-go/api/auth"
 	"github.com/astralp2p/astral-go/api/user"
 	"github.com/astralp2p/astral-go/astral"
 )
@@ -117,6 +118,149 @@ func TestSwarmViewMemberApproval(t *testing.T) {
 			})
 		}
 	})
+
+	// why: each row breaks one condition of the link rule against an
+	// Approval the Desktop gave to a Member-tier JoinRequest the Laptop
+	// carries; only the unbroken row holds.
+	t.Run("link", func(t *testing.T) {
+		for _, c := range []struct {
+			name string
+			link func(f *viewFixture, joiner *astral.Identity, a *astral.ObjectID) (*astral.Identity, *auth.SignedContract)
+			want bool
+		}{
+			{"the carrier signs the approved tier for the joiner", func(f *viewFixture, j *astral.Identity, a *astral.ObjectID) (*astral.Identity, *auth.SignedContract) {
+				return j, f.member(f.laptop, j, user.TierMember, a)
+			}, true},
+			{"a non-carrier signs", func(f *viewFixture, j *astral.Identity, a *astral.ObjectID) (*astral.Identity, *auth.SignedContract) {
+				return j, f.member(f.phone, j, user.TierMember, a)
+			}, false},
+			{"the carrier signs for another subject", func(f *viewFixture, j *astral.Identity, a *astral.ObjectID) (*astral.Identity, *auth.SignedContract) {
+				other := astral.GenerateIdentity()
+				return other, f.member(f.laptop, other, user.TierMember, a)
+			}, false},
+			{"the carrier signs a higher tier than approved", func(f *viewFixture, j *astral.Identity, a *astral.ObjectID) (*astral.Identity, *auth.SignedContract) {
+				return j, f.member(f.laptop, j, user.TierTrusted, a)
+			}, false},
+			{"the carrier signs without an Approval", func(f *viewFixture, j *astral.Identity, a *astral.ObjectID) (*astral.Identity, *auth.SignedContract) {
+				return j, f.member(f.laptop, j, user.TierMember, nil)
+			}, false},
+		} {
+			t.Run(c.name, func(t *testing.T) {
+				f := newViewFixture(t)
+				joiner := astral.GenerateIdentity()
+				r := f.add(f.joinRequest(joiner, f.laptop, user.TierMember, viewClock(10, 0)))
+				a := f.add(f.approval(f.desktop, r))
+				subject, m := c.link(f, joiner, a)
+				f.add(m)
+				f.wantMembership(subject, c.want)
+			})
+		}
+	})
+
+	// why: the Approval of a ContractRequest authorizes a contract, never a
+	// membership, even one its named identity would need.
+	t.Run("ContractRequest Approval", func(t *testing.T) {
+		f := newViewFixture(t)
+		r1 := f.add(f.contractRequest(f.laptop, f.appA, viewClock(10, 0)))
+		a := f.add(f.approval(f.desktop, r1))
+		f.wantStatus(r1, user.RequestApproved)
+		f.add(f.member(f.laptop, f.appA, user.TierMember, a))
+		f.wantMembership(f.appA, false)
+	})
+}
+
+// TestSwarmViewCarriedOutMatchesApproval: CarriedOut returns only the
+// contracts carrying out the given Approval, not those of another one.
+func TestSwarmViewCarriedOutMatchesApproval(t *testing.T) {
+	f := newViewFixture(t)
+	appB := astral.GenerateIdentity()
+	r1 := f.add(f.contractRequest(f.pi, f.appA, viewClock(10, 0)))
+	r2 := f.add(f.contractRequest(f.pi, appB, viewClock(10, 0)))
+	a1 := f.add(f.approval(f.laptop, r1))
+	a2 := f.add(f.approval(f.laptop, r2))
+	f.add(f.appContract(f.pi, f.appA, a1))
+	f.add(f.appContract(f.pi, appB, a2))
+	f.add(f.appContract(f.pi, appB, nil))
+	for _, c := range []struct {
+		approval *astral.ObjectID
+		subject  *astral.Identity
+	}{{a1, f.appA}, {a2, appB}} {
+		got := f.view.CarriedOut(c.approval)
+		if len(got) != 1 || !got[0].Subject.IsEqual(c.subject) || !got[0].ApprovalID.IsEqual(c.approval) {
+			t.Fatalf("CarriedOut = %d contracts, want only the one carrying out this Approval", len(got))
+		}
+	}
+}
+
+// TestSwarmViewExpelRequestTouchesSubject: an Approval of an ExpelRequest
+// touches its filer and its Subject, and no bystander.
+func TestSwarmViewExpelRequestTouchesSubject(t *testing.T) {
+	f := newViewFixture(t)
+	r := f.add(f.expelRequest(f.phone, f.pi, viewClock(10, 0)))
+	a := f.add(f.approval(f.laptop, r))
+	for _, c := range []struct {
+		name string
+		node *astral.Identity
+		want bool
+	}{
+		{"filer Phone", f.phone, true},
+		{"subject Pi", f.pi, true},
+		{"bystander Desktop", f.desktop, false},
+	} {
+		if got := hasViewApproval(f.view.ApprovalsTouching(c.node), a); got != c.want {
+			t.Errorf("%s: touched = %v, want %v", c.name, got, c.want)
+		}
+	}
+}
+
+// TestSwarmViewReadErrorKeepsHeldEntries: the set only grows, so a failed
+// read after the head grew answers from what an earlier read held as well;
+// an expel or a Decline is never undone by a read error.
+func TestSwarmViewReadErrorKeepsHeldEntries(t *testing.T) {
+	for _, c := range []struct {
+		name string
+		fail func(s *fakeSwarmState)
+	}{
+		{"listing the expels", func(s *fakeSwarmState) { s.failList = user.EntryExpels }},
+		{"reading an expel", func(s *fakeSwarmState) { s.failRead = user.EntryExpels }},
+		{"listing the declines", func(s *fakeSwarmState) { s.failList = user.EntryDeclines }},
+		{"reading a decline", func(s *fakeSwarmState) { s.failRead = user.EntryDeclines }},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			f := newViewFixture(t)
+			r := f.add(f.contractRequest(f.pi, f.appA, viewClock(10, 0)))
+			f.add(f.approval(f.laptop, r))
+			f.add(f.decline(f.desktop, r))
+			f.add(f.expulsion(f.user, f.phone))
+			f.wantMembership(f.phone, false)
+			f.wantStatus(r, user.RequestDeclined)
+
+			c.fail(f.state)
+			r2 := f.add(f.contractRequest(f.pi, f.appA, viewClock(10, 1)))
+			f.wantMembership(f.phone, false)
+			f.wantStatus(r, user.RequestDeclined)
+			// why: what the failed read did return is answered from too.
+			if !f.view.Expelled(f.phone) || f.view.RequestStatus(r2) != user.RequestPending {
+				t.Fatal("the failed read lost the held set")
+			}
+			f.add(f.approval(f.laptop, r2))
+			f.wantStatus(r2, user.RequestApproved)
+
+			// why: after a failed read the head is not taken as read, so
+			// the next call reads again with no new entry.
+			f.state.failList, f.state.failRead = "", ""
+			reads := f.state.reads
+			f.wantMembership(f.phone, false)
+			if f.state.reads == reads {
+				t.Fatal("the set was not read again after a failed read")
+			}
+			reads = f.state.reads
+			f.wantStatus(r, user.RequestDeclined)
+			if f.state.reads != reads {
+				t.Fatal("the set was read again after a good read with an unchanged head")
+			}
+		})
+	}
 }
 
 // TestSwarmViewExpelAfterApproval is "an expel beats everything signed by or

@@ -19,6 +19,10 @@ type fakeSwarmState struct {
 	mu      sync.Mutex
 	entries map[astral.ObjectID]astral.Object
 	reads   int
+
+	// failList fails SwarmEntries of that kind; failRead fails SwarmEntry
+	// of every entry of that kind. The empty kind fails nothing.
+	failList, failRead user.EntryKind
 }
 
 var _ nodesmod.SwarmState = &fakeSwarmState{}
@@ -50,6 +54,9 @@ func (f *fakeSwarmState) SwarmEntry(id *astral.ObjectID) (astral.Object, error) 
 	if !ok {
 		return nil, errors.New("not stored")
 	}
+	if k, _ := user.EntryKindOf(obj); f.failRead != "" && k == f.failRead {
+		return nil, errors.New("read failed")
+	}
 	return obj, nil
 }
 
@@ -60,6 +67,9 @@ func (f *fakeSwarmState) SwarmEntries(kind user.EntryKind) ([]*astral.ObjectID, 
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.reads++
+	if f.failList != "" && kind == f.failList {
+		return nil, errors.New("list failed")
+	}
 	var ids []*astral.ObjectID
 	for id, obj := range f.entries {
 		if k, _ := user.EntryKindOf(obj); k == kind {

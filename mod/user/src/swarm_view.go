@@ -76,8 +76,11 @@ func (v *swarmView) snapshot() *swarmSnapshot {
 	if v.set == nil || head != v.head {
 		set, err := readSwarmSet(v.state)
 		if err != nil {
-			// why: a failed read answers this call and is read again on the next.
-			return v.snapshotOf(set)
+			// why: the set only grows, so a failed read must not drop entries
+			// an earlier read held, or a transient error would undo an expel
+			// or a Decline. The head stays, so the next call reads again.
+			v.set = set.union(v.set)
+			return v.snapshotOf(v.set)
 		}
 		v.set, v.head = set, head
 	}
@@ -90,6 +93,8 @@ func (v *swarmView) snapshotOf(set *swarmSet) *swarmSnapshot {
 
 // swarmSet is one read of SwarmState, keyed by entry ID.
 type swarmSet struct {
+	entries map[astral.ObjectID]astral.Object
+
 	// requests holds *user.SignedContractRequest, *user.SignedJoinRequest and
 	// *user.SignedExpelRequest.
 	requests  map[astral.ObjectID]astral.Object
@@ -102,10 +107,7 @@ type swarmSet struct {
 // readSwarmSet reads every stored entry of state. On a read error it returns
 // what it read and the joined errors.
 func readSwarmSet(state nodesmod.SwarmState) (*swarmSet, error) {
-	set := &swarmSet{
-		requests:  map[astral.ObjectID]astral.Object{},
-		approvals: map[astral.ObjectID]*user.SignedApproval{},
-	}
+	set := newSwarmSet()
 	var errs []error
 	for _, kind := range user.EntryKinds {
 		ids, err := state.SwarmEntries(kind)
@@ -125,8 +127,42 @@ func readSwarmSet(state nodesmod.SwarmState) (*swarmSet, error) {
 	return set, errors.Join(errs...)
 }
 
-// add files obj under its kind; an object of no entry kind is ignored.
+func newSwarmSet() *swarmSet {
+	return &swarmSet{
+		entries:   map[astral.ObjectID]astral.Object{},
+		requests:  map[astral.ObjectID]astral.Object{},
+		approvals: map[astral.ObjectID]*user.SignedApproval{},
+	}
+}
+
+// union returns a new set holding the entries of set and of other; either
+// may be nil.
+func (set *swarmSet) union(other *swarmSet) *swarmSet {
+	out := newSwarmSet()
+	for _, s := range []*swarmSet{set, other} {
+		if s == nil {
+			continue
+		}
+		for id, obj := range s.entries {
+			out.add(&id, obj)
+		}
+	}
+	return out
+}
+
+// add files obj under its kind; an object of no entry kind, or an entry
+// already held, is ignored.
 func (set *swarmSet) add(id *astral.ObjectID, obj astral.Object) {
+	if id == nil {
+		return
+	}
+	if _, held := set.entries[*id]; held {
+		return
+	}
+	if _, ok := user.EntryKindOf(obj); !ok {
+		return
+	}
+	set.entries[*id] = obj
 	switch e := obj.(type) {
 	case *user.SignedContractRequest, *user.SignedJoinRequest, *user.SignedExpelRequest:
 		set.requests[*id] = e
