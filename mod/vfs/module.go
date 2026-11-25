@@ -29,4 +29,23 @@ type Module interface {
 	//
 	// The call is not an authorized query: it is for modules inside the node, such as apphost.
 	SetEvaluator(id *astral.Identity, endpoint string) error
+
+	// WriteFile creates or replaces the file at path in the VFS of an identity with content, creating the missing
+	// folders on the way, and returns the ObjectID of the content. The path is absolute, as in vfs.write. Content of
+	// zero bytes is refused and changes nothing. A VFS that does not exist is refused with vfsapi.ErrNoSuchVFS.
+	//
+	// The call is not an authorized query: it is for modules inside the node, such as nodes.
+	WriteFile(ctx *astral.Context, id *astral.Identity, path string, content []byte) (*astral.ObjectID, error)
+
+	// ReadFile returns the content of the file at path in the VFS of an identity, read from the local group as
+	// vfs.read does. A path with no entry answers vfsapi.ErrNotFound, and a folder vfsapi.ErrIsAFolder.
+	//
+	// The call is not an authorized query: it is for modules inside the node, such as nodes.
+	ReadFile(ctx *astral.Context, id *astral.Identity, path string) ([]byte, error)
+
+	// ListFolder returns the names of the entries of the folder at path in the VFS of an identity, in ascending
+	// byte order. A path with no entry answers vfsapi.ErrNotFound, and a file vfsapi.ErrNotAFolder.
+	//
+	// The call is not an authorized query: it is for modules inside the node, such as nodes.
+	ListFolder(id *astral.Identity, path string) ([]string, error)
 }
