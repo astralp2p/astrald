@@ -63,15 +63,7 @@ func (c *EnsureLinkTask) Run(ctx *astral.Context) (err error) {
 		}
 
 		s := result.Link
-		c.Info = &nodes.LinkInfo{
-			ID:             s.id,
-			LocalIdentity:  s.LocalIdentity(),
-			RemoteIdentity: s.RemoteIdentity(),
-			LocalEndpoint:  knownEndpoint(s.LocalEndpoint()),
-			RemoteEndpoint: knownEndpoint(s.RemoteEndpoint()),
-			Outbound:       astral.Bool(s.outbound),
-			Network:        astral.String8(s.Network()),
-		}
+		c.Info = s.Info()
 
 		return nil
 	}
