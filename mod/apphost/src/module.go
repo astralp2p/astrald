@@ -63,6 +63,12 @@ type Module struct {
 	// GetRegisterAppPolicy and GetGrantRequestPolicy read it on every decision.
 	policy policyConfig
 
+	// contractRequests files app ContractRequests and carries out their
+	// Approvals. It is nil until G7 builds it from nodes.SwarmState and
+	// user.SwarmView; apphost.request_contract answers
+	// ErrContractRequestsOff until then.
+	contractRequests *contractRequests
+
 	// onGrantsChanged holds the OnGrantsChanged callbacks.
 	onGrantsChangedMu sync.Mutex
 	onGrantsChanged   []func(*astral.Identity)

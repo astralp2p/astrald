@@ -79,3 +79,13 @@ var ErrMissingAppIdentity = errors.New("missing app identity")
 var ErrMissingObjectID = errors.New("missing object id")
 var ErrInvalidIdentity = errors.New("invalid identity")
 var ErrInvalidPermit = errors.New("invalid permit")
+
+// Errors apphost.request_contract answers. An app that gets
+// ErrContractDeclined or ErrContractRequestExpired files a new request by
+// calling the op again.
+var (
+	ErrContractDeclined           = errors.New("contract request declined")
+	ErrContractRequestExpired     = errors.New("contract request expired")
+	ErrContractRequestRateLimited = errors.New("too many contract requests")
+	ErrContractRequestsOff        = errors.New("contract requests not available")
+)
