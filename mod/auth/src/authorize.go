@@ -17,7 +17,8 @@ type nodeLocal interface{ NodeLocal() }
 // authority attenuates and its flow is bounded by every issuer on the path.
 // A handler the auth module marks NodeLocal answers for the caller alone, so no
 // chain ends at one. A veto (AddVeto) refuses an identity at every level it
-// names, before anything else is asked.
+// names, before anything else is asked. Once SetSwarm has run, the swarm's
+// root and its Approval links take part in the walk (authmod.SwarmWalk).
 func (mod *Module) Authorize(ctx *astral.Context, action auth.ActionObject) bool {
 	// why: the anonymous identity is not a party, so nothing grants it an action.
 	// note: a contract lookup for a zero subject drops its subject filter.
@@ -48,6 +49,15 @@ func (mod *Module) authorize(ctx *astral.Context, action auth.ActionObject, hops
 		return false
 	}
 
+	// why before the handlers: the user's authority answers every action but
+	// an expel, at any hop, so nothing below it needs asking.
+	if mod.swarmRoot(action) {
+		if hopsBelow == 0 {
+			mod.log.Logv(1, "allow %v %v (swarm root)", actor, actionType)
+		}
+		return true
+	}
+
 	if mod.authorizeHandlers(ctx, action, hopsBelow) {
 		if hopsBelow == 0 {
 			mod.log.Logv(1, "allow %v %v", actor, actionType)
@@ -64,7 +74,13 @@ func (mod *Module) authorize(ctx *astral.Context, action auth.ActionObject, hops
 	}
 
 	for _, sc := range contracts {
-		if _, seen := visited[sc.Issuer.String()]; seen {
+		// note: without a swarm, or for a contract with no ApprovalID, next is
+		// the issuer; an Approval link continues at the approver instead.
+		next, linked := mod.contractLink(sc)
+		if !linked {
+			continue
+		}
+		if _, seen := visited[next.String()]; seen {
 			continue
 		}
 
@@ -78,12 +94,12 @@ func (mod *Module) authorize(ctx *astral.Context, action auth.ActionObject, hops
 				continue
 			}
 
-			// re-enter as the issuer; restore the actor on the way out
-			visited[sc.Issuer.String()] = struct{}{}
-			action.SetActor(sc.Issuer)
+			// re-enter as the next link; restore the actor on the way out
+			visited[next.String()] = struct{}{}
+			action.SetActor(next)
 			allowed := mod.authorize(ctx, action, hopsBelow+1, visited)
 			action.SetActor(actor)
-			delete(visited, sc.Issuer.String())
+			delete(visited, next.String())
 
 			if allowed {
 				if hopsBelow == 0 {
