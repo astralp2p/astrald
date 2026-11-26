@@ -5,8 +5,11 @@ import (
 	"encoding/hex"
 	"errors"
 	"os"
+	"time"
 
+	"github.com/astralp2p/astral-go/api/auth"
 	"github.com/astralp2p/astral-go/api/crypto"
+	cryptoclient "github.com/astralp2p/astral-go/api/crypto/client"
 	"github.com/astralp2p/astral-go/api/user"
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astral-go/astral/channel"
@@ -92,4 +95,78 @@ func nodeKey() (*crypto.PrivateKey, error) {
 		return nil, errors.New("node_key holds no private key")
 	}
 	return key, nil
+}
+
+// offerEntry fetches the entry entryID from the node c reaches
+// (nodes.swarm_fetch) and offers it with nodes.swarm_push, as that node's
+// token, to every node of to. It reports, per node, "ack" or the error the
+// push answered.
+//
+// why: user.adopt and the contract push of objects.push are gone (G7), so a
+// node of one swarm meets an entry of another only as an offered entry, the
+// way a merge meets it.
+func offerEntry(ctx *astral.Context, c *astrald.Client, entryID string, to []string) (map[string]any, error) {
+	id, err := astral.ParseID(entryID)
+	if err != nil {
+		return nil, err
+	}
+	objs, err := fetchEntries(ctx, c, []*astral.ObjectID{id})
+	if err != nil {
+		return nil, err
+	}
+	if len(objs) != 1 {
+		return nil, errors.New("the node does not store the entry")
+	}
+	pushed := map[string]string{}
+	for _, target := range to {
+		tid, err := astral.ParseIdentity(target)
+		if err != nil {
+			return nil, err
+		}
+		pushed[target] = push(ctx, c.WithTarget(tid), objs[0])
+	}
+	return map[string]any{"pushed": pushed}, nil
+}
+
+// signMembership builds a membership of subject at tier from issuer, valid
+// for validity, with no Approval link, signs it as issuer through
+// crypto.sign_hash on the node c reaches (c's token must be issuer's, the
+// User's), and offers it with nodes.swarm_push to that node and to every node
+// of to. It reports the membership's entry ID and, per node, "ack" or the
+// error the push answered.
+//
+// why: user.adopt is gone (G7); the User's own signature on a new membership
+// is how the User would bring a node back, so a test of an expel offers one.
+func signMembership(ctx *astral.Context, c *astrald.Client, issuer, subject, tier string, validity time.Duration, to []string) (map[string]any, error) {
+	issuerID, err := astral.ParseIdentity(issuer)
+	if err != nil {
+		return nil, err
+	}
+	subjectID, err := astral.ParseIdentity(subject)
+	if err != nil {
+		return nil, err
+	}
+	contract, err := user.NewMembership(issuerID, subjectID, user.Tier(tier), nil, validity)
+	if err != nil {
+		return nil, err
+	}
+	sig, err := cryptoclient.New(nil, c).SignHash(ctx, contract.SignableHash(), nil, "")
+	if err != nil {
+		return nil, err
+	}
+	signed := &auth.SignedContract{Contract: contract, IssuerSig: sig}
+	id, err := astral.ResolveObjectID(signed)
+	if err != nil {
+		return nil, err
+	}
+
+	pushed := map[string]string{"local": push(ctx, c, signed)}
+	for _, target := range to {
+		tid, err := astral.ParseIdentity(target)
+		if err != nil {
+			return nil, err
+		}
+		pushed[target] = push(ctx, c.WithTarget(tid), signed)
+	}
+	return map[string]any{"membership_id": id.String(), "pushed": pushed}, nil
 }

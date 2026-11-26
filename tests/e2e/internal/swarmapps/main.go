@@ -16,6 +16,13 @@
 //	swarmapps approve  <endpoint> <node_token> <node_id> <request_id> [push_to...]
 //	                   signs with $SWARMAPPS_NODE_KEY (hex of data/node_key);
 //	                   {"approval_id", "pushed": {"local" or node: "ack" or error}} or {"error"}
+//	swarmapps offer    <endpoint> <node_token> <entry_id> <push_to...>
+//	                   offers a stored entry to other nodes with nodes.swarm_push;
+//	                   {"pushed": {node: "ack" or error}} or {"error"}
+//	swarmapps serve-probe <endpoint> <token>   {"register_handler", "advertise"}: "ok" or the error
+//	swarmapps membership <endpoint> <user_token> <user_id> <subject> <tier> <seconds> [push_to...]
+//	                   a membership signed by the User (crypto.sign_hash) and offered
+//	                   locally and to push_to; {"membership_id", "pushed"} or {"error"}
 //
 // `discovery` asks a ServiceDiscovery permit for the service `wallet`.
 package main
@@ -79,6 +86,13 @@ func main() {
 		emit(storeKey(ctx, c, rest[0], os.Stdin))
 	case "approve":
 		emit(signApproval(ctx, c, rest[0], rest[1], rest[2:]))
+	case "offer":
+		emit(offerEntry(ctx, c, rest[0], rest[1:]))
+	case "serve-probe":
+		emit(serveProbe(ctx, c))
+	case "membership":
+		secs, _ := strconv.Atoi(rest[3])
+		emit(signMembership(ctx, c, rest[0], rest[1], rest[2], time.Duration(secs)*time.Second, rest[4:]))
 	default:
 		fmt.Fprintln(os.Stderr, "unknown command", cmd)
 		os.Exit(2)
