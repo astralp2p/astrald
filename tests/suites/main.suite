@@ -75,7 +75,6 @@ app-call-local
 app-routing-two-apps
 app-op-surface
 app-op-surface-remote
-request-grant-scope
 swarm-authz-matrix
 stranger-disclosure
 services-swarm-outcome-rules

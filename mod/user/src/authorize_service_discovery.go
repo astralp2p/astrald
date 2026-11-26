@@ -20,8 +20,8 @@ import (
 // service.
 // why: a zero actor is refused first. The user identity is nil on an unclaimed
 // node, and Identity.IsEqual reports a zero identity equal to nil.
-// note: an app discovers a service through a node-local grant with a
-// DiscoveryScope (mod/apphost) or a signed contract carrying one.
+// note: an app discovers a service through a signed contract carrying a
+// DiscoveryScope.
 func (mod *Module) AuthorizeServiceDiscovery(ctx *astral.Context, a *services.ServiceDiscoveryAction) bool {
 	actor := a.Actor()
 	switch {

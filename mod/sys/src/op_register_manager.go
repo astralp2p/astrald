@@ -109,6 +109,8 @@ func (mod *Module) validateManagerRequest(req *sysapi.RegisterManagerRequest) er
 			return fmt.Errorf("policy %v: no operation named", name)
 		case b.Timeout < 0 || b.Timeout.Duration() > policy.MaxTimeout:
 			return fmt.Errorf("policy %v: timeout outside 0..%v", name, policy.MaxTimeout)
+		case name == sysapi.PolicyGrantRequest:
+			return fmt.Errorf("policy %v: removed", name)
 		case mod.User == nil && !isApphostPolicy(name):
 			return fmt.Errorf("policy %v: the user module is not loaded", name)
 		}
@@ -122,6 +124,10 @@ func (mod *Module) validateManagerRequest(req *sysapi.RegisterManagerRequest) er
 // bindings omit.
 func (mod *Module) bindManagerPolicies(ctx *astral.Context, manager *astral.Identity, bindings []*sysapi.PolicyBinding) error {
 	for _, name := range sysapi.PolicyNames {
+		// why: apphost keeps no grant_request policy; grants were removed.
+		if name == sysapi.PolicyGrantRequest {
+			continue
+		}
 		var d *policy.Delegate
 		for _, b := range bindings {
 			if b.Policy.String() == name {
@@ -154,5 +160,5 @@ func (mod *Module) setPolicyDelegate(ctx *astral.Context, name string, d *policy
 
 // isApphostPolicy reports whether apphost stores the delegate of name.
 func isApphostPolicy(name string) bool {
-	return name == sysapi.PolicyAppRegister || name == sysapi.PolicyGrantRequest
+	return name == sysapi.PolicyAppRegister
 }

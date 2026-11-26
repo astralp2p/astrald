@@ -3,13 +3,10 @@ package mobile
 import (
 	"errors"
 	"strings"
-	"time"
 
-	"github.com/astralp2p/astral-go/api/auth"
 	"github.com/astralp2p/astral-go/api/services"
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astrald/core"
-	apphostmod "github.com/astralp2p/astrald/mod/apphost"
 	servicesmod "github.com/astralp2p/astrald/mod/services"
 )
 
@@ -92,55 +89,10 @@ func (a nativeEvaluator) Evaluate(caller *astral.Identity, service string) *serv
 	return u
 }
 
-// GrantServiceDiscovery lets app, an identity in hex, discover names
-// (comma-separated) on every node of the swarm. It is a node-local grant added
-// beside earlier discovery grants of app and lasts until revoked. Granting the
-// same names again refreshes the one grant; a changed name list adds a grant and
-// the earlier one stays until revoked. The platform wrapper issues it for the
-// apps it runs, such as the contacts service, so they hold it without asking
-// through apphost.request_grant, which refuses unless a delegate approves or
-// the mode is accept_all.
+// GrantServiceDiscovery is kept for the platform wrappers that call it. It
+// writes nothing and answers an error: the node keeps no node-local grants, so
+// an app discovers a service only through a signed contract carrying a
+// DiscoveryScope.
 func (n *Node) GrantServiceDiscovery(app, names string) error {
-	n.mu.Lock()
-	cnode := n.cnode
-	n.mu.Unlock()
-
-	if cnode == nil || !n.running.Load() {
-		return errors.New("node not running")
-	}
-
-	id, err := astral.ParseIdentity(app)
-	if err != nil {
-		return err
-	}
-	list, err := services.ParseNames(names)
-	if err != nil {
-		return err
-	}
-	mod, err := core.Load[apphostmod.Module](cnode, apphostmod.ModuleName)
-	if err != nil {
-		return err
-	}
-	return grantDiscovery(mod, id, list)
-}
-
-// granter records node-local grants.
-type granter interface {
-	Grant(identity *astral.Identity, permit *auth.Permit, expiresAt *time.Time) error
-}
-
-func grantDiscovery(g granter, app *astral.Identity, names []string) error {
-	rule := &services.DiscoveryRule{}
-	for _, name := range names {
-		rule.Services = append(rule.Services, astral.String8(name))
-	}
-	scope := astral.NewBundle()
-	if err := scope.Append(&services.DiscoveryScope{Rules: []*services.DiscoveryRule{rule}}); err != nil {
-		return err
-	}
-	permit := &auth.Permit{
-		Action:      astral.String8(services.ServiceDiscoveryAction{}.ObjectType()),
-		Constraints: scope,
-	}
-	return g.Grant(app, permit, nil)
+	return errors.New("service discovery grants are removed")
 }

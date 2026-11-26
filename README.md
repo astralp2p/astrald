@@ -90,7 +90,7 @@ $ ASTRALD_APPHOST_TOKEN=h4d8s2w6y1b9t3n7 astral-query apphost.whoami -out json
 {"Type":"identity","Object":"02f40933..."}
 ```
 
-Each further action is a grant the user writes with [`apphost.grant`](https://github.com/astralp2p/astral-docs/blob/master/protocols/apphost/ops/apphost.grant.md). The agent never needs the user's token, the manager's token or the words. Apps register with [`apphost.register`](https://github.com/astralp2p/astral-docs/blob/master/protocols/apphost/ops/apphost.register.md) once the manager or the user sets the app register policy ([Node Policies](https://github.com/astralp2p/astral-docs/blob/master/topics/node-policies.md)).
+Each further action is a contract the user signs for the agent. The agent never needs the user's token, the manager's token or the words. Apps register with [`apphost.register`](https://github.com/astralp2p/astral-docs/blob/master/protocols/apphost/ops/apphost.register.md) once the manager or the user sets the app register policy ([Node Policies](https://github.com/astralp2p/astral-docs/blob/master/topics/node-policies.md)).
 
 Tokens work over any of the supported transports (native or [HTTP](https://github.com/astralp2p/astral-docs/blob/master/topics/http-transport.md)).
 

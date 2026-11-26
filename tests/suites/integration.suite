@@ -28,7 +28,6 @@ adopt-node
 blueprints-two-node
 apphost-origin
 sign-contract-guard
-request-grant-scope
 swarm-authz-matrix
 services-swarm
 object-store

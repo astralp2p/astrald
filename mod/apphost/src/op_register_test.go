@@ -139,12 +139,12 @@ func registerWith(t *testing.T, steps *registerSteps) *Module {
 
 // TestRegisterIndexesTheRelayContractBeforeTheKey: the key apphost.register
 // mints enters the store and the crypto index only once its relay contract to
-// the node is indexed.
+// the node is indexed. The contract of the hosting permits follows.
 func TestRegisterIndexesTheRelayContractBeforeTheKey(t *testing.T) {
 	steps := &registerSteps{}
 	registerWith(t, steps)
 
-	want := []string{stepIndexRelay, stepStoreKey, stepIndexKey}
+	want := []string{stepIndexRelay, stepStoreKey, stepIndexKey, stepSignPermit}
 	if got := steps.taken(); !slices.Equal(got, want) {
 		t.Fatalf("apphost.register took steps %q; want %q", got, want)
 	}
@@ -315,20 +315,9 @@ func sudoPermit() *auth.Permit {
 	return &auth.Permit{Action: astral.String8(auth.SudoAction{}.ObjectType())}
 }
 
-// grantRows counts the node-local grants the registrar holds.
-func grantRows(t *testing.T, mod *Module) int64 {
-	t.Helper()
-
-	var n int64
-	if err := mod.db.Model(&dbGrant{}).Count(&n).Error; err != nil {
-		t.Fatalf("count grants: %v", err)
-	}
-	return n
-}
-
 // TestRegisterRefusesASudoContractPermit: a decision whose contract permits
 // name mod.auth.sudo_action is declined; the node mints no identity, signs no
-// contract, writes no grant and issues no token.
+// contract and issues no token.
 func TestRegisterRefusesASudoContractPermit(t *testing.T) {
 	for name, contractPermits := range map[string][]*auth.Permit{
 		"alone":         {sudoPermit()},
@@ -355,9 +344,6 @@ func TestRegisterRefusesASudoContractPermit(t *testing.T) {
 			}
 			if tokens := issuedTokens(t, mod); len(tokens) != 0 {
 				t.Fatalf("a refused registration issued %d tokens", len(tokens))
-			}
-			if n := grantRows(t, mod); n != 0 {
-				t.Fatalf("a refused registration wrote %d grants", n)
 			}
 		})
 	}
@@ -391,10 +377,43 @@ func TestRegisterRefusesARelayForContractPermit(t *testing.T) {
 			if got := steps.taken(); len(got) != 0 {
 				t.Fatalf("a refused registration took steps %q", got)
 			}
-			if n := grantRows(t, mod); n != 0 {
-				t.Fatalf("a refused registration wrote %d grants", n)
-			}
 		})
+	}
+}
+
+// TestRegisterRefusesASudoGrantPermit: the node signs the grant permits of a
+// decision into the node->app contract too, so a decision whose grant permits
+// name mod.auth.sudo_action is declined before any write.
+func TestRegisterRefusesASudoGrantPermit(t *testing.T) {
+	steps := &registerSteps{}
+	mod := delegatedRegistrar(t, steps, newDelegateNode(&apphost.AppRegisterDecision{
+		Allow:        true,
+		GrantPermits: []*auth.Permit{sudoPermit()},
+	}))
+	w := newRecordingWriter()
+
+	if err := register(t, mod, &apphost.RegisterRequest{}, w); err != nil {
+		t.Fatalf("apphost.register rejected before the decision: %v", err)
+	}
+	if got, want := w.refusal(t), apphost.ErrRegistrationDeclined.Error(); got != want {
+		t.Fatalf("answered %q; want %q", got, want)
+	}
+	if got := steps.taken(); len(got) != 0 {
+		t.Fatalf("a refused registration took steps %q", got)
+	}
+}
+
+// TestUndelegableZeroesTheHopCount: a grant permit enters the node->app
+// contract with Delegation zero, and the permit the decision holds is left as
+// it was.
+func TestUndelegableZeroesTheHopCount(t *testing.T) {
+	asked := &auth.Permit{Action: "mod.user.see_swarm_action", Delegation: 2}
+	got := undelegable([]*auth.Permit{asked, nil})
+	if len(got) != 1 || got[0].Delegation != 0 || got[0].Action != asked.Action {
+		t.Fatalf("undelegable answered %+v; want one permit with Delegation 0", got)
+	}
+	if asked.Delegation != 2 {
+		t.Fatal("undelegable changed the decision's permit")
 	}
 }
 

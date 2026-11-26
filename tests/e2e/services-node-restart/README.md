@@ -85,5 +85,5 @@ Following the visibility rule of provider visibility for discovery: the
 service is advertised open and the consumer holds a discovery grant from
 node1's admin, so what the follow sees does not depend on the swarm-app rule. A
 caller without a permit would see nothing and read `services.not_granted`; this
-test does not assert that (`app-discover-local`, `request-grant-scope` and
+test does not assert that (`app-discover-local` and
 `services-swarm` do).

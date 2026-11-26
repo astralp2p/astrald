@@ -35,44 +35,20 @@ type Module interface {
 	// expired ones included. An identity holding none is not an error.
 	DeleteAccessTokens(identity *astral.Identity) error
 
-	// Grant adds a permit for identity on this node beside the grants it already
-	// holds; an identical permit refreshes its expiry. A nil expiresAt grants
-	// until revoked. The permit is recorded, not signed: it authorizes here and
-	// travels nowhere.
-	Grant(identity *astral.Identity, permit *auth.Permit, expiresAt *time.Time) error
-
-	// Revoke withdraws every grant identity holds for action, named by its
-	// object type.
-	Revoke(identity *astral.Identity, action string) error
-
-	// RevokeGrant withdraws one grant by its ID. An ID of another identity's
-	// grant is not found.
-	RevokeGrant(identity *astral.Identity, id uint64) error
-
-	// Grants returns every permit granted to identity, expired included.
-	Grants(identity *astral.Identity) ([]*auth.Permit, error)
-
 	// ProvisionApp mints an App identity as apphost.register does, without
-	// asking the app register policy: a key pair, a signed app contract
-	// holding contractPermits, node-local grants of grantPermits beside the
-	// grants every app holds, and an access token.
+	// asking the app register policy: a key pair, a signed app contract, a
+	// node→app contract holding the permits every app holds, grantPermits with
+	// Delegation zero, and contractPermits, and an access token.
 	ProvisionApp(ctx *astral.Context, grantPermits, contractPermits []*auth.Permit) (*apphost.AccessToken, error)
 
 	// SetPolicyDelegate stores d as the delegate of the named apphost policy
-	// (app_register or grant_request), or clears it when d is nil. Another
-	// name is an error.
+	// (app_register), or clears it when d is nil. Another name is an error.
 	SetPolicyDelegate(ctx *astral.Context, name string, d *policy.Delegate) error
 
 	// IsSwarmApp reports whether app is an app hosted on a node of the local
 	// swarm, this node included: the issuer of an active relay-for contract
 	// whose subject is a swarm node. A node without a user has no swarm apps.
 	IsSwarmApp(ctx *astral.Context, app *astral.Identity) bool
-
-	// OnGrantsChanged registers fn to run after each recorded change of
-	// identity's grants: a grant written, a grant revoked by action, or one
-	// revoked by ID. fn runs synchronously inside the call that changed the
-	// grants, once per call, and must not block.
-	OnGrantsChanged(fn func(identity *astral.Identity))
 }
 
 var ErrMissingAppIdentity = errors.New("missing app identity")

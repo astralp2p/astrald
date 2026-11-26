@@ -1,22 +1,20 @@
 #!/usr/bin/env python3
-"""Driver: each of the five admission policies refuses, and its control admits.
+"""Driver: each of the four admission policies refuses, and its control admits.
 
 The driver acts and judges nothing. On `admitter`, whose config rejects every
 swarm join and every app registration, it claims the node without a token,
 then asks it for a registration and a membership by config and through
 delegates that cannot decide; it adopts `invitee`, whose invite policy rejects,
 and `applicant`, whose policy accepts. On `acceptor` it claims step by step
-under a contract accept delegate that cannot decide, then without one, and
-asks for a grant under the reject_all config value and under a grant request
-delegate that cannot decide. On `invitee`, whose contract accept policy
+under a contract accept delegate that cannot decide, then without one. On
+`invitee`, whose contract accept policy
 rejects, it asks `user.accept_contract` by config.
 Every answer goes into the `admission` fact; the oracle judges.
 
 why the controls beside every refusal: a refusal and a broken op leave the
 caller holding the same nothing. A register answered on `applicant`, an
-adoption answered for `applicant`, a contract accepted once the delegate is
-cleared and a grant answered on `applicant` under the harness's accept_all
-show the op works in this world,
+adoption answered for `applicant` and a contract accepted once the delegate
+is cleared show the op works in this world,
 so the refusal is the policy's.
 
 why delegates that cannot decide: a delegate that answers the wrong object,
@@ -37,22 +35,14 @@ from lib.sessionio import load, write_facts
 # why the secp256k1 generator: a valid public key no node in any world holds,
 # so a delegate named by it resolves and is never reached.
 STRANGER = "0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798"
-# why two actions: the node records a permit it already holds as the same
-# grant, so a declined request for the action the control asks would leave
-# nothing to tell apart. The declined requests ask DENIED, the control SEE.
-SEE = "mod.auth.see_objects_action"
-DENIED = "mod.user.see_swarm_action"
 # why an answer that is not a decision: every node answers user.info, so the
 # delegate is reached and replies, and the reply is an Info, not the policy's
 # decision type.
 WRONG_OP = "user.info"
 # why bounds this small: every refusal here was answered in under 0.03 s live,
-# and a delegate is asked at most DELEGATE_TIMEOUT; a client's default is 60 s,
-# and request_grant's 610 s.
+# and a delegate is asked at most DELEGATE_TIMEOUT; a client's default is 60 s.
 DELEGATE_TIMEOUT = "3s"
 DEADLINE = 15
-GRANT_DELEGATE = "apphost.set_grant_request_policy?identity={}&operation={}&timeout={}&out=json"
-GRANT_CLEAR = "apphost.set_grant_request_policy?out=json"
 
 
 async def attempt(coro) -> dict:
@@ -153,8 +143,7 @@ async def claim_contract(c):
 
 
 async def acceptor_flow(acceptor, invitee, refusals, controls, facts):
-    """The contract accept policy by delegate, and the grant request policy by
-    config and by delegate."""
+    """The contract accept policy by delegate."""
     async with await connect(acceptor) as c:
         controls["set_contract_delegate"] = await attempt(c.user.set_contract_accept_policy(
             invitee["identity"], WRONG_OP, timeout=DELEGATE_TIMEOUT))
@@ -165,31 +154,7 @@ async def acceptor_flow(acceptor, invitee, refusals, controls, facts):
         controls["clear_contract_delegate"] = await attempt(c.user.set_contract_accept_policy())
         controls["accept_contract_cleared"] = await attempt(
             c.user.accept_contract(signed, timeout=DEADLINE))
-        user_token = (await c.apphost.create_token(uid)).token
     facts["acceptor_user"] = uid
-
-    async with await connect(acceptor, user_token) as u:
-        app = await u.apphost.register(name="admission-policies", timeout=DEADLINE)
-    facts["app"], facts["app_token"] = str(app.identity), app.token
-
-    async with await connect(acceptor, app.token) as a:
-        refusals["grant_config"] = await attempt(
-            a.apphost.request_grant([DENIED], timeout=DEADLINE))
-    async with await connect(acceptor, user_token) as u:
-        controls["set_grant_delegate"] = await attempt(jsonops.value(
-            u, GRANT_DELEGATE.format(invitee["identity"], WRONG_OP, DELEGATE_TIMEOUT),
-            timeout=DEADLINE))
-    async with await connect(acceptor, app.token) as a:
-        refusals["grant_delegate"] = await attempt(
-            a.apphost.request_grant([DENIED], timeout=DEADLINE))
-    # why actions and not a count: the registration itself grants the app
-    # serve_apps and use_blueprints, so only the requested action says whether
-    # the declined request wrote anything.
-    async with await connect(acceptor, user_token) as u:
-        facts["grants_after_reject"] = [g.permit.action for g in
-                                        await u.apphost.list_grants(app.identity)]
-        controls["clear_grant_delegate"] = await attempt(
-            jsonops.value(u, GRANT_CLEAR, timeout=DEADLINE))
 
 
 async def invitee_flow(invitee, refusals, facts):
@@ -199,15 +164,6 @@ async def invitee_flow(invitee, refusals, facts):
         refusals["accept_contract_config"] = await attempt(
             c.user.accept_contract(signed, timeout=DEADLINE))
         facts["invitee_after_contract"] = (await c.user.info()).state
-
-
-async def applicant_grant(applicant, controls):
-    """The grant request control: applicant runs the harness's accept_all."""
-    async with await connect(applicant) as c:
-        app = await c.apphost.register(name="admission-policies", timeout=DEADLINE)
-    async with await connect(applicant, app.token) as a:
-        controls["grant_accept_all"] = await attempt(
-            a.apphost.request_grant([SEE], timeout=DEADLINE))
 
 
 async def main():
@@ -224,7 +180,6 @@ async def main():
     await admitter_flow(admitter, applicant, invitee, refusals, controls, facts)
     await acceptor_flow(acceptor, invitee, refusals, controls, facts)
     await invitee_flow(invitee, refusals, facts)
-    await applicant_grant(applicant, controls)
 
     facts["refusals"], facts["controls"] = refusals, controls
     write_facts({"admission": facts})

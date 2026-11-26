@@ -80,8 +80,7 @@ E2E_GATE = {"tokenless": ["apphost.register", "user.info",
                           "user.derive_identity", "user.bootstrap",
                           "user.join"],
             "states": {"fresh": ["*"]}}
-E2E_APPHOST_POLICIES = {"app_register": "accept_all",
-                        "grant_request": "accept_all"}
+E2E_APPHOST_POLICIES = {"app_register": "accept_all"}
 E2E_USER = {"policies": {"swarm_join": "accept_all",
                          "swarm_invite": "accept_all",
                          "contract_accept": "accept_all"}}

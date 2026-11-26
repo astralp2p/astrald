@@ -6,8 +6,8 @@ Two kinds of judgement. The driver's record first: every refusal reads as the
 policy's own refusal text, and every control was answered, since a refusal
 beside a broken op proves nothing. Then what the nodes hold now, asked by the
 oracle itself with each node's own token: who claimed whom, the swarm's roster,
-the stored delegates, the grants. A refusal that still admitted would otherwise
-read as a pass. Where a refusal is cheap and changes nothing when it holds, the
+the stored delegates. A refusal that still admitted would otherwise read as a
+pass. Where a refusal is cheap and changes nothing when it holds, the
 oracle asks it again itself.
 """
 import asyncio
@@ -26,7 +26,6 @@ REGISTRATION = "registration declined"
 REQUEST = "request declined"
 INVITATION = "invitation declined"
 CONTRACT = "contract declined"
-GRANT = "grant declined"
 SELF_DELEGATE = "the node cannot be its own delegate"
 
 REFUSALS = {
@@ -39,17 +38,11 @@ REFUSALS = {
     "register_delegate": REGISTRATION,
     "accept_contract_delegate": CONTRACT,
     "accept_contract_config": CONTRACT,
-    "grant_config": GRANT,
-    "grant_delegate": GRANT,
 }
 CONTROLS = ("register_applicant", "set_join_wrong_object", "set_join_unreachable",
             "clear_join_delegate", "adopt_applicant", "set_register_delegate",
             "clear_register_delegate", "set_contract_delegate",
-            "clear_contract_delegate", "accept_contract_cleared", "set_grant_delegate",
-            "clear_grant_delegate", "grant_accept_all")
-# The control's action, and the action every declined request asks.
-SEE = "mod.auth.see_objects_action"
-DENIED = "mod.user.see_swarm_action"
+            "clear_contract_delegate", "accept_contract_cleared")
 DEADLINE = 15
 
 
@@ -87,8 +80,6 @@ def check_record(f: dict) -> None:
         f"acceptor read {f['acceptor_after_decline']} after its contract was declined")
     assert f["invitee_after_contract"] == "fresh", (
         f"invitee read {f['invitee_after_contract']} after its config declined a contract")
-    assert DENIED not in f["grants_after_reject"], (
-        f"the app held {DENIED} after its request was declined: {f['grants_after_reject']}")
 
 
 async def check_admitter(nodes: dict, f: dict) -> str:
@@ -132,7 +123,7 @@ async def check_admitter(nodes: dict, f: dict) -> str:
 
 
 async def check_acceptor(nodes: dict, f: dict, admitter_user: str) -> None:
-    """The contract acceptor accepted, and the grants it holds."""
+    """The contract acceptor accepted."""
     acceptor = nodes["acceptor"]
     async with await connect(acceptor) as c:
         info = await c.user.info()
@@ -140,25 +131,9 @@ async def check_acceptor(nodes: dict, f: dict, admitter_user: str) -> None:
             f"acceptor reads {info.state} for {info.user_id}; want claimed by "
             f"{f['acceptor_user']}")
         assert f["acceptor_user"] != admitter_user, "acceptor's User is admitter's"
-        for path in ("/mod/user/policy/contract_accept", "/mod/apphost/policy/grant_request"):
-            stored = await c.tree.get(path)
-            assert isinstance(stored, Nil), f"{path} holds {stored!r} after the clear"
-        before = await c.apphost.list_grants(f["app"])
-
-    async with await connect(acceptor, f["app_token"]) as a:
-        text = await refusal(a.apphost.request_grant([DENIED], timeout=DEADLINE))
-    # why again, by the oracle: the cleared delegate leaves the config's
-    # reject_all deciding.
-    assert text == GRANT, f"the app's request under the config's reject_all: {text!r}"
-
-    async with await connect(acceptor) as c:
-        after = await c.apphost.list_grants(f["app"])
-    held = [g.permit.action for g in before]
-    assert DENIED not in held, (
-        f"the app holds {DENIED}, though every request for it was declined: {held}")
-    assert [g.id for g in after] == [g.id for g in before], (
-        f"a declined request changed the app's grants: {held} -> "
-        f"{[g.permit.action for g in after]}")
+        path = "/mod/user/policy/contract_accept"
+        stored = await c.tree.get(path)
+        assert isinstance(stored, Nil), f"{path} holds {stored!r} after the clear"
 
 
 async def main():
@@ -169,8 +144,7 @@ async def main():
     await check_acceptor(nodes, f, user)
     print(f"oracle: {len(REFUSALS)} refusals read as their policy's, {len(CONTROLS)} "
           "controls answered; admitter's swarm holds applicant alone, invitee stays "
-          "fresh, acceptor claimed once its delegate was cleared, and the app holds "
-          "no grant it was declined")
+          "fresh, and acceptor claimed once its delegate was cleared")
 
 
 asyncio.run(main())

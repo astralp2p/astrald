@@ -38,26 +38,11 @@ func (mod *Module) OpSetAppRegisterPolicy(ctx *astral.Context, q *routing.Incomi
 	return mod.setPolicyDelegate(ctx, q, ch, args, &mod.policy.AppRegister)
 }
 
-// OpSetGrantRequestPolicy selects the delegate for apphost.request_grant and
-// answers Ack once the choice is persisted.
-//
-// why ConfigureNodeState: the policy is a tree value; see maySetPolicies.
-func (mod *Module) OpSetGrantRequestPolicy(ctx *astral.Context, q *routing.IncomingQuery, args opSetPolicyArgs) error {
-	ch := channel.New(q.AcceptRaw(), channel.WithFormats(args.In, args.Out))
-	defer ch.Close()
-
-	if !mod.maySetPolicies(ctx, q.Caller()) {
-		return ch.Send(auth.ErrNotPermitted)
-	}
-	return mod.setPolicyDelegate(ctx, q, ch, args, &mod.policy.GrantRequest)
-}
-
 // setPolicyDelegate writes the delegate args name into v, or clears v when
 // args name none, and answers Ack once it is persisted.
 //
-// why mode is refused: apphost.set_grant_request_policy took a mode before
-// the policies had config values; an old caller naming it must not clear the
-// delegate.
+// why mode is refused: a policy setter took a mode before the policies had
+// config values; an old caller naming it must not clear the delegate.
 func (mod *Module) setPolicyDelegate(ctx *astral.Context, q *routing.IncomingQuery, ch *channel.Channel, args opSetPolicyArgs, v *tree.Value[*policy.Delegate]) error {
 	if err := refuseRemovedArgs(q.QueryString(), "mode"); err != nil {
 		return ch.Send(astral.Err(err))

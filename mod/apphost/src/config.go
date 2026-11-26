@@ -49,8 +49,7 @@ type GateStates struct {
 // Policies holds the config value of each apphost admission policy. A stored
 // delegate outranks the value; see GetRegisterAppPolicy.
 type Policies struct {
-	AppRegister  policyconf.Setting `yaml:"app_register,omitempty"`
-	GrantRequest policyconf.Setting `yaml:"grant_request,omitempty"`
+	AppRegister policyconf.Setting `yaml:"app_register,omitempty"`
 }
 
 // defaultConfig returns the config a load starts from.
@@ -117,8 +116,7 @@ func defaultConfig() Config {
 			},
 		},
 		Policies: Policies{
-			AppRegister:  policyconf.Setting{Mode: policyconf.RejectAll},
-			GrantRequest: policyconf.Setting{Mode: policyconf.RejectAll},
+			AppRegister: policyconf.Setting{Mode: policyconf.RejectAll},
 		},
 	}
 }

@@ -9,8 +9,8 @@ w0 local:  smoke → claim-window → token-less-setup → signer-app
            → app-index-provider → app-token-lifecycle
            → claimed-node-keeps-owner → basic-strategy-gw-cycle → adopt-node
            → blueprints-two-node → apphost-origin → sign-contract-guard
-           → request-grant-scope → swarm-authz-matrix → services-swarm
-           → object-store → app-call-remote → relay-pull-absent → app-ping-pong
+           → swarm-authz-matrix → services-swarm → object-store
+           → app-call-remote → relay-pull-absent → app-ping-pong
            → app-reject-code → route-outcomes → app-op-surface-remote
            → app-finder-read → app-searcher-swarm
            → objects-provider-registration-authz
@@ -23,8 +23,8 @@ w0 local:  smoke → claim-window → token-less-setup → signer-app
            → sibling-query-live-link → object-store-peer → read-remote-peer
            → read-swarm → discover-swarm → adopt-claimed-node-setup
            → adopt-claimed-node → expel-node
-           config acceptor.apphost.policies = {"app_register": "accept_all", "grant_request": "reject_all"}
-           config admitter.apphost.policies = {"app_register": "reject_all", "grant_request": "accept_all"}
+           config acceptor.apphost.policies = {"app_register": "accept_all"}
+           config admitter.apphost.policies = {"app_register": "reject_all"}
            config admitter.user.policies = {"swarm_join": "reject_all", "swarm_invite": "accept_all", "contract_accept": "accept_all"}
            config invitee.user.policies = {"swarm_join": "accept_all", "swarm_invite": "reject_all", "contract_accept": "reject_all"}
            config mai-approve.apphost.gate = {}

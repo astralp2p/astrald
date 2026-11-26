@@ -31,12 +31,10 @@ type opRegisterArgs struct {
 //
 // The op reads one mod.apphost.register_request after accept. Its Name is the
 // name the app gives itself, shown to a delegated policy and not verified by
-// the node. Its GrantPermits ask the node to record node-local grants:
-// revocable by deleting a row, and worthless off this node. Its
-// ContractPermits ask the node to record a signed node→app contract: portable
-// evidence another node verifies, durable until it expires. Both lists carry
-// their constraints. Asking is not receiving: the node's policy decides which
-// permits are written, and where. Its Vfs and Evaluator, both on when omitted,
+// the node. Its GrantPermits and ContractPermits ask the node to record a
+// signed node→app contract: portable evidence another node verifies, durable
+// until it expires. Both lists carry their constraints. Asking is not
+// receiving: the node's policy decides which permits are written. Its Vfs and Evaluator, both on when omitted,
 // ask for a VFS of the app and for the app to be the evaluator of that VFS;
 // the policy does not see them.
 //
@@ -96,10 +94,10 @@ func (mod *Module) OpRegister(ctx *astral.Context, query *routing.IncomingQuery,
 }
 
 // validateRegisterDecision returns the first reason the node cannot apply dec
-// to an apphost.register: an invalid authorizer assignment, or a contract
-// permit for mod.auth.sudo_action or mod.nodes.relay_for_action.
+// to an apphost.register: an invalid authorizer assignment, or a grant or
+// contract permit for mod.auth.sudo_action or mod.nodes.relay_for_action.
 //
-// why sudo_action: the node signs every contract permit as issuer, and a
+// why sudo_action: the node signs every permit of the decision as issuer, and a
 // node-signed mod.auth.sudo_action lets the app act and sign as the node
 // (decided 2026-11-06).
 // why relay_for_action: the node→app contract names the app as subject, which
@@ -112,9 +110,9 @@ func validateRegisterDecision(dec *apphostapi.AppRegisterDecision) error {
 		return err
 	}
 	refused := []string{auth.SudoAction{}.ObjectType(), nodes.RelayForAction{}.ObjectType()}
-	for _, p := range dec.ContractPermits {
+	for _, p := range slices.Concat(dec.GrantPermits, dec.ContractPermits) {
 		if p != nil && slices.Contains(refused, string(p.Action)) {
-			return fmt.Errorf("app register decision: a contract permit names %v", p.Action)
+			return fmt.Errorf("app register decision: a permit names %v", p.Action)
 		}
 	}
 	return nil
@@ -195,26 +193,22 @@ func (mod *Module) storeAppContract(ctx *astral.Context, key *crypto.PrivateKey,
 	return signed, nil
 }
 
-// writeAppAuthority records the grant permits of dec on this node, renders its
-// contract permits as a node→app contract, and records its authorizer
-// assignments with guestID as actor.
+// writeAppAuthority renders the grant and contract permits of dec as one
+// node→app contract, and records its authorizer assignments with guestID as
+// actor.
 //
-// why both rails expire with the registration: an identity's authority ages
-// with the token that reaches it.
+// why the grant permits go into the contract: the node keeps no node-local
+// grants; an app's permits come from its contract chain.
+// why the contract expires with the registration: an identity's authority
+// ages with the token that reaches it.
 // why the authorizers last, before the token: a token for an identity whose
 // authorizer is not in place is a registration the app cannot detect went
 // wrong.
 func (mod *Module) writeAppAuthority(ctx *astral.Context, guestID *astral.Identity, dec *apphostapi.AppRegisterDecision) error {
 	expiresAt := time.Now().UTC().Add(RegisterDuration)
 
-	for _, permit := range dec.GrantPermits {
-		if err := mod.Grant(guestID, permit, &expiresAt); err != nil {
-			return err
-		}
-	}
-
-	if len(dec.ContractPermits) > 0 {
-		if err := mod.storePermitContract(ctx, guestID, dec.ContractPermits, expiresAt); err != nil {
+	if permits := slices.Concat(undelegable(dec.GrantPermits), dec.ContractPermits); len(permits) > 0 {
+		if err := mod.storePermitContract(ctx, guestID, permits, expiresAt); err != nil {
 			return err
 		}
 	}
@@ -227,6 +221,23 @@ func (mod *Module) writeAppAuthority(ctx *astral.Context, guestID *astral.Identi
 		}
 	}
 	return nil
+}
+
+// undelegable returns a copy of each permit with Delegation zero.
+//
+// why: a grant permit asks for authority the app holds and does not pass on,
+// so the contract carries it without the hop count the request wrote.
+func undelegable(permits []*auth.Permit) []*auth.Permit {
+	out := make([]*auth.Permit, 0, len(permits))
+	for _, permit := range permits {
+		if permit == nil {
+			continue
+		}
+		p := *permit
+		p.Delegation = 0
+		out = append(out, &p)
+	}
+	return out
 }
 
 // storePermitContract signs, indexes and stores a node→app contract carrying
@@ -278,7 +289,7 @@ func appRegisterRequest(req *apphostapi.RegisterRequest, origin string) *apphost
 	return &apphostapi.AppRegisterRequest{
 		Origin:          astral.String8(origin),
 		Name:            req.Name,
-		GrantPermits:    registerGrantRequest(req.GrantPermits),
+		GrantPermits:    withHostingPermits(req.GrantPermits),
 		ContractPermits: req.ContractPermits,
 	}
 }

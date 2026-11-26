@@ -11,18 +11,17 @@ import (
 // policyPath is where apphost persists its policy delegates.
 const policyPath = "/mod/apphost/policy"
 
-// policyConfig is bound to the tree at policyPath. An unset AppRegister or
-// GrantRequest selects the config value; see GetRegisterAppPolicy.
+// policyConfig is bound to the tree at policyPath. An unset AppRegister
+// selects the config value; see GetRegisterAppPolicy.
 //
-// note: a grant_request_mode value an earlier node stored under policyPath is
-// not bound and decides nothing.
+// note: a grant_request or grant_request_mode value an earlier node stored
+// under policyPath is not bound and decides nothing.
 //
 // why apart from Config: Config is read from apphost.yaml over
 // defaultConfig() and copied by value, and a tree.Value carries a mutex, so it
 // cannot ride a copied struct.
 type policyConfig struct {
-	AppRegister  tree.Value[*policy.Delegate]
-	GrantRequest tree.Value[*policy.Delegate]
+	AppRegister tree.Value[*policy.Delegate]
 }
 
 // GetRegisterAppPolicy returns the policy apphost.register applies: the
@@ -69,52 +68,6 @@ func (mod *Module) RegisterAppPolicyDelegated(d *policy.Delegate) apphostmod.Reg
 		// why: any other object is an answer this code cannot read, and an
 		// unreadable answer must not read as permission.
 		dec, ok := obj.(*apphost.AppRegisterDecision)
-		if !ok {
-			return nil, astral.NewErrUnexpectedObject(obj)
-		}
-		return dec, nil
-	}
-}
-
-// GetGrantRequestPolicy returns the policy apphost.request_grant applies: the
-// delegate the tree names; else the policies.grant_request config value, whose
-// code default is reject_all.
-//
-// why reject_all by default: on a node nobody configured, an app must not grant
-// itself authority, admin_manage_apps included; apphost.register refuses by
-// default too.
-func (mod *Module) GetGrantRequestPolicy() apphostmod.GrantRequestPolicy {
-	if d := mod.policy.GrantRequest.Get(); !d.IsZero() {
-		return mod.GrantRequestPolicyDelegated(d)
-	}
-
-	setting := mod.config.Policies.GrantRequest
-	switch {
-	case setting.Delegate != nil:
-		d, err := setting.ResolveDelegate(mod.Dir.ResolveIdentity)
-		if err != nil {
-			return func(*astral.Context, *apphost.GrantPolicyRequest) (*apphost.GrantDecision, error) {
-				return nil, err
-			}
-		}
-		return mod.GrantRequestPolicyDelegated(d)
-	case setting.Accepts():
-		return apphostmod.AcceptAllGrants
-	}
-	return apphostmod.RefuseAllGrants
-}
-
-// GrantRequestPolicyDelegated returns the policy that asks d. The policy holds
-// d, so a later change of delegate does not move a question already asked.
-func (mod *Module) GrantRequestPolicyDelegated(d *policy.Delegate) apphostmod.GrantRequestPolicy {
-	return func(ctx *astral.Context, req *apphost.GrantPolicyRequest) (*apphost.GrantDecision, error) {
-		obj, err := policy.Ask(ctx, mod.node, d, req)
-		if err != nil {
-			return nil, err
-		}
-		// why: any other object is an answer this code cannot read, and an
-		// unreadable answer must not read as permission.
-		dec, ok := obj.(*apphost.GrantDecision)
 		if !ok {
 			return nil, astral.NewErrUnexpectedObject(obj)
 		}

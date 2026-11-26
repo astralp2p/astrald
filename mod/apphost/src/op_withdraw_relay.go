@@ -19,10 +19,10 @@ type opWithdrawRelayArgs struct {
 // accepts a query relayed for the identity under that contract, and no longer
 // attaches it to the identity's outgoing queries.
 //
-// why: apphost.revoke withdraws grants only; the ten-year contract registration
-// issues would otherwise outlive a removed or misbehaving app.
+// why: the ten-year contract registration issues would otherwise outlive a
+// removed or misbehaving app.
 // note: the withdrawal is local. A copy on a sibling stays, and so do the
-// identity's access tokens and grants (apphost.delete_token, apphost.revoke).
+// identity's access tokens (apphost.delete_token).
 func (mod *Module) OpWithdrawRelay(ctx *astral.Context, q *routing.IncomingQuery, args opWithdrawRelayArgs) error {
 	ch := channel.New(q.AcceptRaw(), channel.WithOutputFormat(args.Out))
 	defer ch.Close()

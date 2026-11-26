@@ -29,10 +29,6 @@ func TestRegisterManagerAppoints(t *testing.T) {
 	mod, apps, u := freshModule()
 	ctx := astral.NewContext(nil)
 
-	// a delegate a failed attempt left behind
-	leftover := &policy.Delegate{Identity: astral.GenerateIdentity(), Operation: "old.decide"}
-	apps.SetPolicyDelegate(ctx, sysapi.PolicyGrantRequest, leftover)
-
 	w := registerManager(t, mod, &sysapi.RegisterManagerRequest{
 		Name: "control-plane",
 		Policies: []*sysapi.PolicyBinding{
@@ -55,9 +51,6 @@ func TestRegisterManagerAppoints(t *testing.T) {
 
 	if d := apps.policies[sysapi.PolicyAppRegister]; d.IsZero() || !d.Identity.IsEqual(manager) || d.Operation != "cp.approve_app" {
 		t.Fatalf("app_register delegate = %+v; want the manager's cp.approve_app", d)
-	}
-	if d := apps.policies[sysapi.PolicyGrantRequest]; d != nil {
-		t.Fatal("grant_request kept the leftover delegate")
 	}
 	if j := u.policies[sysapi.PolicySwarmJoin]; j.IsZero() || !j.Identity.IsEqual(manager) || j.Operation != "cp.approve_join" {
 		t.Fatalf("swarm_join delegate = %+v; want the manager's cp.approve_join", j)

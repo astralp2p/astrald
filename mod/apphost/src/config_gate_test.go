@@ -29,7 +29,6 @@ gate:
     claimed: ["*"]
 policies:
   app_register: reject_all
-  grant_request: reject_all
 `
 	var got Config
 	if err := yaml.UnmarshalStrict([]byte(distribution), &got); err != nil {
@@ -54,7 +53,6 @@ gate:
     fresh: ["*"]
 policies:
   app_register: accept_all
-  grant_request: accept_all
 `)
 	if err != nil {
 		t.Fatalf("load: %v", err)
@@ -66,11 +64,10 @@ policies:
 		!slices.Equal(cfg.Gate.States.Claimed, defaultConfig().Gate.States.Claimed) {
 		t.Fatalf("omitted keys lost their defaults: %+v", cfg.Gate.States)
 	}
-	if !cfg.Policies.AppRegister.Accepts() || !cfg.Policies.GrantRequest.Accepts() {
-		t.Fatal("policies.app_register or policies.grant_request: accept_all not applied")
+	if !cfg.Policies.AppRegister.Accepts() {
+		t.Fatal("policies.app_register: accept_all not applied")
 	}
-	if defaultConfig().Policies.AppRegister.Mode != policyconf.RejectAll ||
-		defaultConfig().Policies.GrantRequest.Mode != policyconf.RejectAll || len(defaultConfig().Gate.States.Fresh) != 3 {
+	if defaultConfig().Policies.AppRegister.Mode != policyconf.RejectAll || len(defaultConfig().Gate.States.Fresh) != 3 {
 		t.Fatal("loading changed the defaults")
 	}
 }

@@ -95,7 +95,7 @@ func (mod *Module) AuthorizeSeeObjects(ctx *astral.Context, a *auth.SeeObjectsAc
 //
 // why the swarm is not in the grant: the swarm held it for objects.push, which
 // asks no action (mod/objects/src/op_push.go). A sibling writes through a
-// node-local grant or a signed contract.
+// signed contract.
 //
 // why this node's own identity is granted: a local caller carrying no identity is
 // promoted to it (core/router.go), which is how the CLI and apphost reach these

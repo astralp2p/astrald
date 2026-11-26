@@ -52,31 +52,4 @@ func TestTheDefaultPolicyWritesWhatItIsHanded(t *testing.T) {
 	}
 }
 
-// The rails do not leak into one another: a permit asked for on one is never
-// written on the other, so an app cannot obtain a signature by asking for a
-// grant, nor a revocable row by asking for a contract.
-func TestTheDefaultPolicyKeepsTheRailsApart(t *testing.T) {
-	ctx := astral.NewContext(nil)
-
-	dec, _ := apphostmod.AcceptAll(ctx, &apphost.AppRegisterRequest{
-		GrantPermits: permits("mod.auth.serve_objects_action"),
-	})
-	if len(dec.ContractPermits) != 0 {
-		t.Fatalf("a grant request reached the contract rail: %v", actions(dec.ContractPermits))
-	}
-	if len(dec.GrantPermits) != 1 {
-		t.Fatalf("granted %v, want one permit", actions(dec.GrantPermits))
-	}
-
-	dec, _ = apphostmod.AcceptAll(ctx, &apphost.AppRegisterRequest{
-		ContractPermits: permits("mod.nodes.relay_for_action"),
-	})
-	if len(dec.GrantPermits) != 0 {
-		t.Fatalf("a contract request reached the grant rail: %v", actions(dec.GrantPermits))
-	}
-	if len(dec.ContractPermits) != 1 {
-		t.Fatalf("contracted %v, want one permit", actions(dec.ContractPermits))
-	}
-}
-
 var _ = astral.String8("")

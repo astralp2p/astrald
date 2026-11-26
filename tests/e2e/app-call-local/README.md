@@ -21,11 +21,12 @@ cannot serve.
   identities (`driver verify`).
 
 `apphost.register` asks for `mod.auth.serve_apps_action` on every registration
-(`mod/apphost/src/register_grant_request.go`), and the harness's
-`accept_all` register policy writes it. `apphost.register_handler` authorizes
-that action (`mod/apphost/src/op_register_handler.go`). A query from one app
-to another passes the apphost gate with no grant: the gate filters only
-queries that target the node (`mod/apphost/src/gate.go`).
+(`withHostingPermits`, `mod/apphost/src/provision_app.go`), and the harness's
+`accept_all` register policy signs it into the app's node→app contract.
+`apphost.register_handler` authorizes that action
+(`mod/apphost/src/op_register_handler.go`). A query from one app to another
+passes the apphost gate with no grant: the gate filters only queries that
+target the node (`mod/apphost/src/gate.go`).
 
 Each app runs on an `apps.AppRegistrar` built on its own client. The driver
 calls the greeter once its registration hook has run: the registrar reports

@@ -17,14 +17,14 @@ w0 local:  smoke → mcp-origin → claim-window → admission-policies
            → objects-provider-read-robustness → services-provider-gone
            → app-discover-follow → app-discover-swarm → app-ping-pong
            → app-call-remote → relay-pull-absent → app-reject-code
-           → route-outcomes → app-op-surface-remote → request-grant-scope
-           → swarm-authz-matrix → stranger-disclosure
-           → services-swarm-outcome-rules → node-query-sibling-app
-           → sibling-query-live-link → object-store-peer → read-remote-peer
-           → read-swarm → discover-swarm → adopt-claimed-node-setup
-           → adopt-claimed-node → route-outcomes-dead-peer
-           config acceptor.apphost.policies = {"app_register": "accept_all", "grant_request": "reject_all"}
-           config admitter.apphost.policies = {"app_register": "reject_all", "grant_request": "accept_all"}
+           → route-outcomes → app-op-surface-remote → swarm-authz-matrix
+           → stranger-disclosure → services-swarm-outcome-rules
+           → node-query-sibling-app → sibling-query-live-link
+           → object-store-peer → read-remote-peer → read-swarm → discover-swarm
+           → adopt-claimed-node-setup → adopt-claimed-node
+           → route-outcomes-dead-peer
+           config acceptor.apphost.policies = {"app_register": "accept_all"}
+           config admitter.apphost.policies = {"app_register": "reject_all"}
            config admitter.user.policies = {"swarm_join": "reject_all", "swarm_invite": "accept_all", "contract_accept": "accept_all"}
            config invitee.user.policies = {"swarm_join": "accept_all", "swarm_invite": "reject_all", "contract_accept": "reject_all"}
            config mai-approve.apphost.gate = {}

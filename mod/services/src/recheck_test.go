@@ -113,7 +113,7 @@ func TestRevokeMidFollowRetractsThePrivateOffering(t *testing.T) {
 	expect[*astral.EOS](t, c)
 
 	v.auth.revoke(v.app, "contacts", nodeA)
-	v.apps.grantsChanged(v.app)
+	v.auth.indexed(contractFor(v.app))
 	expectRemoved(t, c, private, services.CauseHidden)
 	expectNotGranted(t, c, "contacts")
 
@@ -143,7 +143,7 @@ func TestRevokeRetractsAMemberOfferingAndARestartKeepsItHidden(t *testing.T) {
 	node.waitEOS(t)
 
 	v.auth.revoke(v.app, "contacts", nodeB)
-	v.apps.grantsChanged(v.app)
+	v.auth.indexed(contractFor(v.app))
 	expectRemoved(t, c, private, services.CauseHidden)
 
 	node.cut()
@@ -167,13 +167,13 @@ func TestBlockedRecheckDoesNotDelayGrantChanges(t *testing.T) {
 	block := make(chan struct{})
 	v.auth.setBlock(block)
 	v.auth.revoke(v.app, "contacts", nodeA)
-	v.apps.grantsChanged(v.app)
+	v.auth.indexed(contractFor(v.app))
 	time.Sleep(100 * time.Millisecond) // the re-check now waits in Authorize
 
 	returned := make(chan struct{})
 	go func() {
 		for range 3 {
-			v.apps.grantsChanged(v.app)
+			v.auth.indexed(contractFor(v.app))
 		}
 		close(returned)
 	}()
@@ -202,7 +202,7 @@ func TestGrantMidFollowRevealsThePrivateProvider(t *testing.T) {
 	}
 
 	v.auth.grant(v.app, "contacts", nodeA)
-	v.apps.grantsChanged(v.app)
+	v.auth.indexed(contractFor(v.app))
 	expectNotGranted(t, c)
 	expectUpdateFrom(t, c, private)
 }
@@ -221,7 +221,7 @@ func TestGrantMidFollowDeliversAMemberPrivateOffering(t *testing.T) {
 	}
 
 	v.auth.grant(v.app, "contacts", nodeB)
-	v.apps.grantsChanged(v.app)
+	v.auth.indexed(contractFor(v.app))
 	// note: not granted on A still, so the list does not change.
 	expectUpdateFrom(t, c, private)
 }
@@ -308,7 +308,7 @@ func TestServeAppsRevokeClosesTheBinding(t *testing.T) {
 	expect[*astral.EOS](t, c)
 
 	v.auth.refuse(auth.ServeAppsAction{}.ObjectType())
-	v.apps.grantsChanged(provider)
+	v.auth.indexed(contractFor(provider))
 	expectRemoved(t, c, provider, services.CauseBindingClosed)
 	expectEnd(t, pc)
 }
@@ -356,6 +356,12 @@ func TestChangeForTheCarrierClosesItsCarry(t *testing.T) {
 	}
 
 	v.auth.refuse(nodes.RelayForAction{}.ObjectType())
-	v.apps.grantsChanged(nodeA)
+	v.auth.indexed(contractFor(nodeA))
 	expectRemoved(t, c, player, services.CauseMemberLost)
+}
+
+// contractFor is a contract naming id as its subject: the authority change
+// that schedules id's re-check.
+func contractFor(id *astral.Identity) *auth.SignedContract {
+	return &auth.SignedContract{Contract: &auth.Contract{Subject: id}}
 }

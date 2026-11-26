@@ -16,7 +16,7 @@ import (
 // why: a zero actor is refused first. The user identity is nil on an unclaimed
 // node, and Identity.IsEqual reports a zero identity equal to nil.
 // note: the describer, finder and searcher roles have no default holder. An app
-// reaches any role through a node-local grant (mod/apphost) or a signed contract.
+// reaches any role through a signed contract.
 func (mod *Module) AuthorizeServeObjects(ctx *astral.Context, a *auth.ServeObjectsAction) bool {
 	if a.Role != auth.RoleIndexer || a.Actor().IsZero() {
 		return false
