@@ -13,10 +13,10 @@ import (
 // five reads beside user.info, and those five were unauthorized entirely — so no
 // caller that could read before loses access here, and none gains any.
 //
-// why the whole swarm and not the user alone: a sibling syncing assets routes
-// user.sync_assets as the user (sync.go), and a local caller carrying no
-// identity is promoted to this node's identity (core/router.go), which is a
-// member. Narrowing to the issuer would break both.
+// why the whole swarm and not the user alone: a sibling's alias pull queries
+// user.info as that node (sync.go), and a local caller carrying no identity is
+// promoted to this node's identity (core/router.go), which is a member.
+// Narrowing to the issuer would break both.
 //
 // why members of every tier: Members may see requests (vision, 2026-11-24).
 func (mod *Module) AuthorizeSeeSwarm(ctx *astral.Context, a *user.SeeSwarmAction) bool {
@@ -35,8 +35,7 @@ func (mod *Module) AuthorizeSeeSwarm(ctx *astral.Context, a *user.SeeSwarmAction
 // and nobody else.
 //
 // why: the policy is AuthorizeAdopt's and AuthorizeExpel's, carried over
-// unchanged — the active contract's issuer alone. user.add_asset and
-// user.remove_asset had no authorization at all and tighten to it.
+// unchanged — the active contract's issuer alone.
 //
 // why narrower than SeeSwarm, which grants the whole local swarm: membership is
 // granted on request today, so granting the swarm here would let a node it

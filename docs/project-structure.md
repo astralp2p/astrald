@@ -71,7 +71,7 @@ Descriptions of modules with a protocol in [astral-docs](https://github.com/astr
 | tcp | TCP networking |
 | tor | Onion-service transport over Tor |
 | tree | Hierarchical key-value configuration store |
-| user | User identity, swarm membership, asset list |
+| user | User identity, swarm membership |
 
 ## Logic extensions
 
