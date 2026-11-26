@@ -13,7 +13,7 @@ type opDeleteAgentArgs struct {
 }
 
 // OpDeleteAgent removes an agent: deletes its messaging participant — every
-// token and grant, its alias and its mail — and its record. Identity takes an
+// access token, its alias and its mail — and its record. Identity takes an
 // identity or an alias.
 //
 // why the row is read without asking mod/messaging, as findAgent does: a row

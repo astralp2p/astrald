@@ -92,7 +92,7 @@ func answeredAck(objs []astral.Object) bool {
 }
 
 // A PrivilegedMembership the user key signed and this node countersigned
-// claims the node; no policy is asked (D2).
+// claims the node (D2).
 func TestAcceptContractClaimsWithAPrivilegedMembership(t *testing.T) {
 	f := newContractFixture()
 	signed, userID := signedClaim(t, f, user.TierPrivilegedMember, false)

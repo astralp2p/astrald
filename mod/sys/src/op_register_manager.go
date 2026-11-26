@@ -23,7 +23,7 @@ type opRegisterManagerArgs struct {
 // mod.sys.register_manager_request after accept. The manager holds a
 // node→manager contract of the request's GrantPermits and ContractPermits,
 // which the fresh node signs as its own root. A request that binds a policy
-// is refused: the five policies are requests in SwarmState, answered with
+// is refused: admission is a request in SwarmState, answered with
 // user.answer_request. The node writes the manager record last and answers the
 // access token.
 //
