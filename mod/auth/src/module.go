@@ -2,7 +2,6 @@ package auth
 
 import (
 	"sync"
-	"sync/atomic"
 
 	apiauth "github.com/astralp2p/astral-go/api/auth"
 	"github.com/astralp2p/astral-go/api/tree"
@@ -56,9 +55,6 @@ type Module struct {
 	// configured holds the assignments auth.yaml names, written to the tree on
 	// every start.
 	configured []*apiauth.AuthorizerAssignment
-
-	// swarm is what Authorize reads from SwarmState; nil until SetSwarm.
-	swarm atomic.Pointer[swarmWalk]
 }
 
 func (mod *Module) Router() astral.Router {

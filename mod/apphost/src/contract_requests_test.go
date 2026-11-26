@@ -86,7 +86,7 @@ type hostState struct {
 	now  func() time.Time
 }
 
-var _ usermod.SwarmState = &hostState{}
+var _ hostSwarmState = &hostState{}
 
 func (h *hostState) write(obj astral.Object) error {
 	if err := h.add(obj); err != nil && !errors.Is(err, usermod.ErrSwarmEntryHeld) {
@@ -107,26 +107,6 @@ func (h *hostState) FileContractRequest(ctx *astral.Context, app *astral.Identit
 }
 
 func (h *hostState) AddContract(_ *astral.Context, sc *auth.SignedContract) error { return h.write(sc) }
-
-func (h *hostState) FileJoinRequest(*astral.Context, *user.SignedJoinRequest) (*astral.ObjectID, error) {
-	return nil, errors.New("not used")
-}
-
-func (h *hostState) FileExpelRequest(*astral.Context, *astral.Identity) (*user.SignedExpelRequest, error) {
-	return nil, errors.New("not used")
-}
-
-func (h *hostState) Approve(*astral.Context, *astral.ObjectID) (*user.SignedApproval, error) {
-	return nil, errors.New("not used")
-}
-
-func (h *hostState) Decline(*astral.Context, *astral.ObjectID) (*user.SignedDecline, error) {
-	return nil, errors.New("not used")
-}
-
-func (h *hostState) AddExpulsion(*astral.Context, *user.SignedExpulsion) error {
-	return errors.New("not used")
-}
 
 // objects returns the stored entries of kind.
 func (s *fakeSwarmState) objects(kind user.EntryKind) []astral.Object {
@@ -149,7 +129,7 @@ type fakeSwarmView struct {
 	membership *user.Membership
 }
 
-var _ usermod.SwarmView = &fakeSwarmView{}
+var _ hostSwarmView = &fakeSwarmView{}
 
 func (v *fakeSwarmView) RequestStatus(req *astral.ObjectID) user.RequestStatus {
 	for _, obj := range v.state.objects(user.EntryDeclines) {
@@ -170,8 +150,6 @@ func (v *fakeSwarmView) RequestStatus(req *astral.ObjectID) user.RequestStatus {
 	return user.RequestPending
 }
 
-func (v *fakeSwarmView) Expelled(*astral.Identity) bool { return false }
-
 func (v *fakeSwarmView) ApprovalsTouching(*astral.Identity) (list []*user.SignedApproval) {
 	for _, obj := range v.state.objects(user.EntryApprovals) {
 		list = append(list, obj.(*user.SignedApproval))
@@ -191,8 +169,6 @@ func (v *fakeSwarmView) CarriedOut(approval *astral.ObjectID) (list []*auth.Sign
 func (v *fakeSwarmView) Membership(*astral.Identity) (*user.Membership, bool) {
 	return v.membership, v.membership != nil
 }
-
-func (v *fakeSwarmView) MayAnswer(*astral.Identity, *astral.ObjectID) bool { return true }
 
 // fakeSigner signs requests and contracts with a marker naming the signer.
 type fakeSigner struct{}

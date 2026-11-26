@@ -7,7 +7,6 @@ import (
 	"github.com/astralp2p/astral-go/api/auth"
 	"github.com/astralp2p/astral-go/api/crypto"
 	"github.com/astralp2p/astral-go/astral"
-	usermod "github.com/astralp2p/astrald/mod/user"
 )
 
 const (
@@ -27,36 +26,7 @@ type ContractQueryBuilder interface {
 	Find(*astral.Context) ([]*auth.SignedContract, error)
 }
 
-// SwarmWalk lets Authorize read SwarmState (G3). Until SetSwarm is called,
-// Authorize behaves exactly as without it. Once set, at every level of a walk:
-//   - root: after the veto, the walk allows the actor when it is the root key
-//     or holds a PrivilegedMembership the root key signed, and is not expelled,
-//     at any hop and for any action except user.ExpelAction and
-//     user.AdminSwarmAction (D7);
-//   - Approval link: a contract with an ApprovalID holds only when that
-//     Approval is stored, its request is approved, the request was filed (a
-//     ContractRequest) or carried in (a JoinRequest) by the contract's issuer,
-//     names its subject and covers its permits (a JoinRequest: at the tier the
-//     contract grants), the approver is the root key or its tier may answer
-//     that request (user.MayAnswer), and neither the issuer, the subject nor
-//     the approver is expelled or vetoed. The walk then continues as the
-//     approver instead of the issuer. A contract with no ApprovalID is followed
-//     to its issuer as before.
-//
-// root returns the root key: the user this node is claimed by, or the node
-// itself while unclaimed. Module embeds it; the user module calls SetSwarm
-// once in LoadDependencies.
-type SwarmWalk interface {
-	SetSwarm(view usermod.SwarmView, state SwarmEntryReader, root func() *astral.Identity)
-}
-
-// SwarmEntryReader is the part of usermod.SwarmState the walk reads.
-type SwarmEntryReader interface {
-	SwarmEntry(id *astral.ObjectID) (astral.Object, error)
-}
-
 type Module interface {
-	SwarmWalk
 	// Authorize checks whether the action is permitted.
 	Authorize(ctx *astral.Context, action auth.ActionObject) bool
 

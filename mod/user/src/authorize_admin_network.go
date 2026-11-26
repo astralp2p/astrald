@@ -7,7 +7,7 @@ import (
 
 // AuthorizeAdminNetwork grants network administration to the user identity and
 // to this node itself; a Privileged node holds it through the swarm root
-// handler (authmod.SwarmWalk).
+// of the auth walk.
 //
 // why the user: the six other node-wide actions grant it, and a user who adopts
 // and expels swarm members already reshapes the network more than these ops do.

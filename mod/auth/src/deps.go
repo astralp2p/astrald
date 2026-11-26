@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"github.com/astralp2p/astral-go/api/user"
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astrald/core"
 	"github.com/astralp2p/astrald/mod/crypto"
@@ -18,19 +19,51 @@ type Deps struct {
 
 // claimState is the part of the user module IsNodeClaim reads: whether the
 // node has a user yet.
-//
-// why declared here and not mod/user's Module: auth reads two of its methods
-// and depends on no more of the user module. core.Inject matches the "user"
-// module by field name and assignability, so the narrow interface injects as
-// well.
 type claimState interface {
 	Ready() <-chan struct{}
 	Identity() *astral.Identity
 }
 
-// OptionalDeps holds the user module. Without it the node counts as claimed.
+// swarmReader is the part of the user module's SwarmState and SwarmView
+// (mod/user) the walk reads. At every level of a walk:
+//   - root: after the veto, the walk allows the actor when it is the root key
+//     or holds a PrivilegedMembership the root key signed, and is not expelled,
+//     at any hop and for any action except user.ExpelAction and
+//     auth.SudoAction (swarmRoot);
+//   - Approval link: a contract with an ApprovalID holds only when that
+//     Approval is stored, its request is approved, the request was filed (a
+//     ContractRequest) or carried in (a JoinRequest) by the contract's issuer,
+//     names its subject and covers its permits (a JoinRequest: at the tier the
+//     contract grants), the approver is the root key or its tier may answer
+//     that request (user.MayAnswer), and neither the issuer, the subject nor
+//     the approver is expelled or vetoed. The walk then continues as the
+//     approver instead of the issuer. A contract with no ApprovalID is followed
+//     to its issuer as before.
+//
+// The root key is the user this node is claimed by, or this node while it is
+// unclaimed (rootKey).
+type swarmReader interface {
+	SwarmEntry(id *astral.ObjectID) (astral.Object, error)
+	RequestStatus(req *astral.ObjectID) user.RequestStatus
+	Expelled(id *astral.Identity) bool
+	Membership(id *astral.Identity) (*user.Membership, bool)
+	MayAnswer(signer *astral.Identity, req *astral.ObjectID) bool
+}
+
+// userModule is the part of the user module auth reads.
+//
+// why declared here and not mod/user's Module: auth depends on no more of the
+// user module than it reads. core.Inject matches the "user" module by field
+// name and assignability, so the narrow interface injects as well.
+type userModule interface {
+	claimState
+	swarmReader
+}
+
+// OptionalDeps holds the user module. Without it the node counts as claimed,
+// and the walk reads no swarm.
 type OptionalDeps struct {
-	User claimState
+	User userModule
 }
 
 func (mod *Module) LoadDependencies(ctx *astral.Context) (err error) {

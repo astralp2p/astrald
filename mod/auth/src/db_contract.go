@@ -19,7 +19,7 @@ type dbContract struct {
 	// no link.
 	//
 	// why a column: the walk rebuilds contracts from rows, and the Approval
-	// link it checks (SwarmWalk) reads this field.
+	// link it checks (swarmReader) reads this field.
 	ApprovalID *astral.ObjectID
 	// WithdrawnAt is set when the operator took the contract back on this node.
 	// why a mark and not a delete: the indexer and a sibling's push index a

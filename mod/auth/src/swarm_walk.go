@@ -5,27 +5,31 @@ import (
 	"github.com/astralp2p/astral-go/api/nodes"
 	"github.com/astralp2p/astral-go/api/user"
 	"github.com/astralp2p/astral-go/astral"
-	authmod "github.com/astralp2p/astrald/mod/auth"
 	usermod "github.com/astralp2p/astrald/mod/user"
 )
 
-var _ authmod.SwarmWalk = &Module{}
-
-// swarmWalk is what Authorize reads from SwarmState once SetSwarm has run.
+// swarmWalk is what Authorize reads from SwarmState (swarmReader).
 type swarmWalk struct {
-	view  usermod.SwarmView
-	state authmod.SwarmEntryReader
-	root  func() *astral.Identity
+	view swarmReader
+	root func() *astral.Identity
 }
 
-// SetSwarm makes Authorize read SwarmState (see authmod.SwarmWalk). A nil
-// view, state or root clears it, and Authorize behaves as without it.
-func (mod *Module) SetSwarm(view usermod.SwarmView, state authmod.SwarmEntryReader, root func() *astral.Identity) {
-	if view == nil || state == nil || root == nil {
-		mod.swarm.Store(nil)
-		return
+// swarm returns what the walk reads from SwarmState, and nil without the user
+// module: Authorize then behaves as without a swarm.
+func (mod *Module) swarm() *swarmWalk {
+	if mod.User == nil {
+		return nil
 	}
-	mod.swarm.Store(&swarmWalk{view: view, state: state, root: root})
+	return &swarmWalk{view: mod.User, root: mod.rootKey}
+}
+
+// rootKey returns the root key: the user this node is claimed by, or this node
+// while it is unclaimed.
+func (mod *Module) rootKey() *astral.Identity {
+	if id := mod.User.Identity(); !id.IsZero() {
+		return id
+	}
+	return mod.node.Identity()
 }
 
 // swarmRoot reports whether the action's actor holds the user's authority:
@@ -45,7 +49,7 @@ func (mod *Module) SetSwarm(view usermod.SwarmView, state authmod.SwarmEntryRead
 // A Privileged node relays only as the user (D6), not as another node or
 // another node's app.
 func (mod *Module) swarmRoot(action auth.ActionObject) bool {
-	s := mod.swarm.Load()
+	s := mod.swarm()
 	if s == nil {
 		return false
 	}
@@ -80,7 +84,7 @@ func (mod *Module) swarmRoot(action auth.ActionObject) bool {
 // ApprovalID, it is the issuer, as before; such a contract carries no user
 // authority from an issuer that is not the root (unlinkedUserAuthority).
 func (mod *Module) contractLink(sc *auth.SignedContract) (*astral.Identity, bool) {
-	s := mod.swarm.Load()
+	s := mod.swarm()
 	if s == nil || sc.ApprovalID == nil {
 		return sc.Issuer, true
 	}
@@ -112,7 +116,7 @@ func (mod *Module) contractLink(sc *auth.SignedContract) (*astral.Identity, bool
 // identity, and an app delegating its own permits names no user authority.
 // The root key's own contracts stay: the user signed them.
 func (mod *Module) unlinkedUserAuthority(sc *auth.SignedContract, action auth.ActionObject) bool {
-	s := mod.swarm.Load()
+	s := mod.swarm()
 	if s == nil || sc.ApprovalID != nil {
 		return false
 	}
@@ -133,7 +137,7 @@ func (mod *Module) unlinkedUserAuthority(sc *auth.SignedContract, action auth.Ac
 
 // approvalLink checks the Approval sc carries out and returns its signer.
 func (s *swarmWalk) approvalLink(sc *auth.SignedContract) (*astral.Identity, bool) {
-	obj, err := s.state.SwarmEntry(sc.ApprovalID)
+	obj, err := s.view.SwarmEntry(sc.ApprovalID)
 	if err != nil {
 		return nil, false
 	}
@@ -148,7 +152,7 @@ func (s *swarmWalk) approvalLink(sc *auth.SignedContract) (*astral.Identity, boo
 		return nil, false
 	}
 
-	req, err := s.state.SwarmEntry(approval.RequestID)
+	req, err := s.view.SwarmEntry(approval.RequestID)
 	if err != nil || !linksTo(req, sc) {
 		return nil, false
 	}

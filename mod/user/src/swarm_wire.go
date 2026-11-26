@@ -42,8 +42,9 @@ func (v lazyVerifier) Verify(key *crypto.PublicKey, sig *crypto.Signature, obj c
 }
 
 // wireSwarm builds the rest of SwarmState over the store Load built: the
-// SwarmView, which it hands to the auth walk; the typed writes; the feed and
-// publisher of its events; and the answering and carrying ops.
+// SwarmView, which the auth walk reads through its dependency on this module;
+// the typed writes; the feed and publisher of its events; and the answering
+// and carrying ops.
 func (mod *Module) wireSwarm() {
 	mod.swarmView = newSwarmView(mod, mod.rootKey, nil)
 	mod.writer = &swarmWriter{self: mod.node.Identity(), signer: mod.Crypto, view: mod, merge: mod.mergeSwarmEntry}
@@ -54,8 +55,6 @@ func (mod *Module) wireSwarm() {
 	// why: an entry this node merges is published at once, not at the feed's next poll.
 	mod.swarm.stored = func([]astral.Object) { mod.publisher.publish() }
 	mod.swarmFeed = newHeadFeed(mod, swarmPollInterval)
-
-	mod.Auth.SetSwarm(mod, mod, mod.rootKey)
 
 	mod.router.AddStructPrefix(&SwarmAnswerOps{
 		Node:    mod.node.Identity(),
@@ -185,11 +184,21 @@ func (mod *Module) swarmMembers() []*astral.Identity {
 	return mod.swarmView.members()
 }
 
+// RequestStatus reads the view (usermod.SwarmView); pending before
+// LoadDependencies built it.
+// why the guard: the auth walk reads this module from its own LoadDependencies on.
 func (mod *Module) RequestStatus(req *astral.ObjectID) user.RequestStatus {
+	if mod.swarmView == nil {
+		return user.RequestPending
+	}
 	return mod.swarmView.RequestStatus(req)
 }
 
+// Expelled reads the view (usermod.SwarmView); false before LoadDependencies built it.
 func (mod *Module) Expelled(id *astral.Identity) bool {
+	if mod.swarmView == nil {
+		return false
+	}
 	return mod.swarmView.Expelled(id)
 }
 

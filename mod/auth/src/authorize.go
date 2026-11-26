@@ -17,8 +17,8 @@ type nodeLocal interface{ NodeLocal() }
 // authority attenuates and its flow is bounded by every issuer on the path.
 // A handler the auth module marks NodeLocal answers for the caller alone, so no
 // chain ends at one. A veto (AddVeto) refuses an identity at every level it
-// names, before anything else is asked. Once SetSwarm has run, the swarm's
-// root and its Approval links take part in the walk (authmod.SwarmWalk).
+// names, before anything else is asked. With the user module, the swarm's
+// root and its Approval links take part in the walk (swarmReader).
 func (mod *Module) Authorize(ctx *astral.Context, action auth.ActionObject) bool {
 	// why: the anonymous identity is not a party, so nothing grants it an action.
 	// note: a contract lookup for a zero subject drops its subject filter.

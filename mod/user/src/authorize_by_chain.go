@@ -11,7 +11,7 @@ import (
 // chainRules holds the narrowed rules that replace the "any swarm member"
 // rules: a swarm member is no longer enough, and what a member or its app may
 // do comes from its contract chain (the swarm root and Approval links in the
-// auth walk, authmod.SwarmWalk).
+// auth walk, which reads them from this module).
 //
 // note: nothing registers them until G7 switches AuthorizeRelayFor,
 // AuthorizeServiceDiscovery and AuthorizeSeeObjects over to them.

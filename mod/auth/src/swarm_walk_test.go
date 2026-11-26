@@ -12,7 +12,7 @@ import (
 	authmod "github.com/astralp2p/astrald/mod/auth"
 )
 
-// fakeSwarm is a SwarmState and a SwarmView over an in-memory set of entries.
+// fakeSwarm is the swarm the walk reads (swarmReader) over an in-memory set of entries.
 // Its RequestStatus applies the G0 precedence: a Decline, or an expel of the
 // request's filer, carrier or subject, beats an Approval; answers by expelled
 // signers do not count.
@@ -158,8 +158,17 @@ func newSwarmWorld(t *testing.T) *swarmWorld {
 	w.approvalR1 = w.answer(t, w.laptop, w.r1)
 	seedLinkedContract(t, w.mod, w.pi, w.appA, w.approvalR1, permit(0))
 
-	w.mod.SetSwarm(w.swarm, w.swarm, func() *astral.Identity { return w.user })
+	useSwarm(w.mod, w.swarm, w.user, astral.GenerateIdentity())
 	return w
+}
+
+// useSwarm makes swarm the user module of mod on node, claimed by user, or
+// unclaimed when user is nil.
+func useSwarm(mod *Module, swarm *fakeSwarm, user, node *astral.Identity) {
+	c := readyClaim(user)
+	c.fakeSwarm = swarm
+	mod.User = c
+	mod.node = &identityNode{id: node}
 }
 
 // answer stores signer's Approval of req and returns its entry ID.
@@ -196,7 +205,7 @@ func TestSwarmWalkAllowsAnAppsChain(t *testing.T) {
 		t.Fatal("App A: want allow through its Approval-linked chain")
 	}
 
-	w.mod.SetSwarm(nil, nil, nil)
+	w.mod.User = nil
 	if w.mod.Authorize(ctx, action(w.appA)) {
 		t.Fatal("App A without the swarm: want deny, as on master")
 	}
@@ -229,7 +238,7 @@ func TestSwarmWalkDeniesALinkThatDoesNotMatchItsRequest(t *testing.T) {
 	// another Member signs App A a contract carrying out the Pi's request
 	other := testModule(t)
 	seedLinkedContract(t, other, w.member, w.appA, w.approvalR1, permit(0))
-	other.SetSwarm(w.swarm, w.swarm, func() *astral.Identity { return w.user })
+	useSwarm(other, w.swarm, w.user, astral.GenerateIdentity())
 	if other.Authorize(ctx, action(w.appA)) {
 		t.Fatal("issuer that did not file R1: want deny")
 	}
@@ -237,7 +246,7 @@ func TestSwarmWalkDeniesALinkThatDoesNotMatchItsRequest(t *testing.T) {
 	// the Pi signs more than R1 asked for
 	wider := testModule(t)
 	seedLinkedContract(t, wider, w.pi, w.appA, w.approvalR1, permit(3))
-	wider.SetSwarm(w.swarm, w.swarm, func() *astral.Identity { return w.user })
+	useSwarm(wider, w.swarm, w.user, astral.GenerateIdentity())
 	if wider.Authorize(ctx, action(w.appA)) {
 		t.Fatal("permits R1 does not cover: want deny")
 	}
@@ -333,7 +342,7 @@ func TestSwarmLinkChecksExpelsItself(t *testing.T) {
 		"approver": func(w *swarmWorld) *astral.Identity { return w.laptop },
 	} {
 		w := newSwarmWorld(t)
-		walk := &swarmWalk{view: lenientSwarm{w.swarm}, state: w.swarm, root: func() *astral.Identity { return w.user }}
+		walk := &swarmWalk{view: lenientSwarm{w.swarm}, root: func() *astral.Identity { return w.user }}
 		sc := &auth.SignedContract{
 			Contract:  &auth.Contract{Issuer: w.pi, Subject: w.appA, Permits: []*auth.Permit{permit(0)}, ApprovalID: w.approvalR1},
 			IssuerSig: dummySig(),
@@ -436,7 +445,7 @@ func TestSwarmRootRequiresTheRootKeysSignature(t *testing.T) {
 	}
 
 	node := astral.GenerateIdentity()
-	w.mod.SetSwarm(w.swarm, w.swarm, func() *astral.Identity { return node })
+	useSwarm(w.mod, w.swarm, nil, node)
 	if !w.mod.Authorize(ctx, action(node)) {
 		t.Fatal("unclaimed node as its own root: want allow")
 	}
