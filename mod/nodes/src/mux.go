@@ -345,7 +345,7 @@ func (m *Mux) handleResponse(f *frames.Response) {
 func (m *Mux) handleData(f *frames.Data) {
 	session, ok := m.sessions.Get(f.Nonce)
 	if !ok {
-		m.ch.Send(&frames.Reset{Nonce: f.Nonce})
+		m.sendFromReadLoop(&frames.Reset{Nonce: f.Nonce})
 		return
 	}
 
@@ -353,7 +353,7 @@ func (m *Mux) handleData(f *frames.Data) {
 	case stateOpen, stateMigrating:
 	default:
 		m.mod.log.Errorv(1, "received data frame from %v in state %v", m.RemoteIdentity(), session.getState())
-		m.ch.Send(&frames.Reset{Nonce: f.Nonce})
+		m.sendFromReadLoop(&frames.Reset{Nonce: f.Nonce})
 		return
 	}
 
@@ -377,7 +377,7 @@ func (m *Mux) handleData(f *frames.Data) {
 func (m *Mux) handleRead(f *frames.Read) {
 	session, ok := m.sessions.Get(f.Nonce)
 	if !ok {
-		m.ch.Send(&frames.Reset{Nonce: f.Nonce})
+		m.sendFromReadLoop(&frames.Reset{Nonce: f.Nonce})
 		return
 	}
 	// why: a migrating writer already holds the new link's buffer, whose credit is
@@ -417,10 +417,20 @@ func (m *Mux) handlePing(f *frames.Ping) {
 		return
 	}
 
-	m.ch.Send(&frames.Ping{
+	m.sendFromReadLoop(&frames.Ping{
 		Nonce: f.Nonce,
 		Pong:  true,
 	})
+}
+
+// sendFromReadLoop sends a frame the read loop answers with, without waiting for the write.
+//
+// why: a write blocks while the link's transport is full (a kcp window), and a
+// read loop blocked in it stops this node reading the link. A peer in the same
+// state never drains either, and the link stalls until the write watchdog
+// closes it. A Reset or a pong carries no order the read loop must keep.
+func (m *Mux) sendFromReadLoop(frame frames.Frame) {
+	go m.ch.Send(frame)
 }
 
 func (m *Mux) handleMigrate(f *frames.Migrate) {
