@@ -31,23 +31,27 @@ func (mod *Module) SetSwarm(view usermod.SwarmView, state nodesmod.SwarmState, r
 
 // swarmRoot reports whether the action's actor holds the user's authority:
 // it is the root key, or holds a PrivilegedMembership the root key signed, and
-// is not expelled. It answers at any hop, for every action but an expel.
+// is not expelled. It answers at any hop, for every action but an expel and a
+// sudo.
 //
 // why AdminSwarmAction is answered: user.expel asks ExpelAction since G7, and
 // the ops that ask AdminSwarmAction sign nothing with the user key; answering
 // requests is what a Privileged node, or an unclaimed node, does for the user.
 //
-// A Privileged node is no root for two more actions:
-//   - SudoAction as the root key: acting as the user key would let it confirm
-//     a Privileged join (D2), expel (D7) or sign with a software user key;
-//   - RelayForAction for anyone but the user: it relays as the user (D6), not
-//     as another node or another node's app.
+// The root answers no SudoAction: acting as another identity is signing and
+// querying with its key, and as the user key a Privileged node would confirm
+// a Privileged join (D2), expel (D7) or sign with a software user key. Sudo
+// stays what AuthorizeSudo and explicit contracts allow, as before G7.
+//
+// A Privileged node relays only as the user (D6), not as another node or
+// another node's app.
 func (mod *Module) swarmRoot(action auth.ActionObject) bool {
 	s := mod.swarm.Load()
 	if s == nil {
 		return false
 	}
-	if _, expel := action.(*user.ExpelAction); expel {
+	switch action.(type) {
+	case *user.ExpelAction, *auth.SudoAction:
 		return false
 	}
 
@@ -64,15 +68,8 @@ func (mod *Module) swarmRoot(action auth.ActionObject) bool {
 		return true
 	}
 
-	switch a := action.(type) {
-	case *auth.SudoAction:
-		if a.AsID.IsEqual(root) {
-			return false
-		}
-	case *nodes.RelayForAction:
-		if !a.ForID.IsEqual(root) {
-			return false
-		}
+	if a, ok := action.(*nodes.RelayForAction); ok && !a.ForID.IsEqual(root) {
+		return false
 	}
 
 	m, ok := s.view.Membership(actor)

@@ -380,8 +380,9 @@ func TestSwarmRootAllowsAtAnyHopButNeverAnExpel(t *testing.T) {
 	}
 }
 
-// TestSwarmRootNeitherActsAsTheUserKeyNorRelaysForOthers: a Privileged node
-// may not sudo as the root key (D2, D7) and relays only as the user (D6).
+// TestSwarmRootNeitherActsAsTheUserKeyNorRelaysForOthers: the root answers no
+// sudo, so a Privileged node acts as no other key (D2, D7), and it relays only
+// as the user (D6).
 func TestSwarmRootNeitherActsAsTheUserKeyNorRelaysForOthers(t *testing.T) {
 	ctx := astral.NewContext(nil)
 	w := newSwarmWorld(t)
@@ -396,11 +397,11 @@ func TestSwarmRootNeitherActsAsTheUserKeyNorRelaysForOthers(t *testing.T) {
 	if sudo(w.laptop, w.user) {
 		t.Fatal("privileged sudo as the user key: want deny")
 	}
-	if !sudo(w.laptop, w.appA) {
-		t.Fatal("privileged sudo as an app: want allow")
+	if sudo(w.laptop, w.appA) {
+		t.Fatal("privileged sudo as an app: want deny")
 	}
-	if !sudo(w.user, w.user) {
-		t.Fatal("the user key as itself: want allow")
+	if sudo(w.user, w.laptop) {
+		t.Fatal("the user key as a node: want deny (no root sudo)")
 	}
 	if !relay(w.laptop, w.user) {
 		t.Fatal("privileged relay for the user: want allow")
