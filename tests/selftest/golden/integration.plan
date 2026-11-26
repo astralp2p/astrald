@@ -4,8 +4,7 @@ w0 local:  smoke → claim-window → token-less-setup → signer-app
            → app-preexisting-provider-sync → mcp-origin → messaging-ops
            → manager-setup → bootstrap-user-software-key → fs-watch
            → fs-index-live → registration-lease → app-describe-provider
-           → app-search-provider → objects-provider-revoke-lease
-           → app-index-provider → app-token-lifecycle
+           → app-search-provider → app-index-provider → app-token-lifecycle
            → claimed-node-keeps-owner → basic-strategy-gw-cycle → adopt-node
            → blueprints-two-node → apphost-origin → sign-contract-guard
            → swarm-authz-matrix → services-swarm → object-store

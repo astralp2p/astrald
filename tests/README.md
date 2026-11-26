@@ -63,6 +63,7 @@ restart    = ["node1"]              # nodes restarted between driver and oracle 
 restart_kill = "sends nothing as it goes"  # the restart kills its nodes (SIGKILL) instead of stopping them
 stop       = ["node1"]              # nodes stopped for good between driver and oracle (local or Docker worlds); implies destroys
 facts      = ["object_id"]          # the facts its driver writes
+answers    = "it tests the User's answer"  # it answers SwarmState requests itself: no harness answerer
 timeout    = 180                    # the driver's and the oracle's budget, in seconds (default 120)
 # ops      = ["enable-tor node1"]   # VM operations (netsim/ops/) run before the driver; imply
 #                                   # destroys, and a test with ops is never local_only
@@ -118,6 +119,13 @@ external_registration_sweep_interval = "1s"
   test with `stop` never enters a VM world, like a test whose roster
   leaves the VM lab.
   `introduce-node-setup` stops the node that generated the User's words.
+- **`answers`** says why the test answers SwarmState requests itself. Without
+  it, the runner runs the harness answerer (`lib/answerer.py`) from the
+  test's driver to its oracle: it approves every pending ContractRequest and
+  JoinRequest with each node's own token, where the node's tier answers, as
+  the accepting admission policies did before. A driver whose app must hold
+  its permits waits for its contract (`tests/e2e/internal/contracts` in Go,
+  `swarmstate.await_app` in Python). The swarm-state tests set `answers`.
 - **`facts`** is a contract. An oracle may read only facts declared on its
   `after` chain (`selftest/test_shipped.py` checks), and the agent driver
   asks the operator for exactly these.
