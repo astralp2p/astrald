@@ -2,11 +2,11 @@
 """Oracle (criterion 2.7): expelling the Member node cuts every app chain
 through it.
 
-- before the expel, the front's discovery showed the wallet on node3, on
-  node2 and from node1: its chain held on every node;
+- before the expel, the front's discovery showed the wallet on node3 and on
+  node2, the wallet's node: its chain held;
 - node1 and node2 store the Expulsion of node3;
 - within 60 s of the expel, and again at the oracle (read live), the front's
-  discovery on node2 and from node1 shows no wallet;
+  discovery on node2 shows no wallet;
 - node1 and node2 still store the contract node3 issued for the front: the
   contract is there, and the expel of its issuer is what cuts the chain
   (astral-docs protocols/user/types/mod.user.request_status.md and the
@@ -29,15 +29,14 @@ async def main():
     assert all(f["expulsion_on"].values()), f"Expulsion stored: {f['expulsion_on']}"
     assert f["cut_after_s"] is not None, (
         f"60 s after the expel the front still saw the wallet: {f.get('after')}")
-    live = {"node2": ss.discover(n2, f["tokens"]["node2"], "local"),
-            "node1": ss.discover(n1, f["tokens"]["node1"], "swarm")}
+    live = {"node2": ss.discover(n2, f["tokens"]["node2"], "local")}
     assert not any(wallet in v for v in live.values()), (
         f"at the oracle, the front's chain through node3 still holds: {live}")
     for name, n in (("node1", n1), ("node2", n2)):
         issued = [c for c in ss.contracts_of(n, front) if c["Issuer"] == n3["identity"]
                   and c.get("ApprovalID")]
         assert issued, f"{name} no longer stores node3's contract for the front"
-    print(f"oracle: expelling node3 cut the front's chain on node1 and node2 "
+    print(f"oracle: expelling node3 cut the front's chain on node2 "
           f"({f['cut_after_s']:.1f} s); node3's contract is still stored")
 
 

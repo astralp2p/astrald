@@ -14,7 +14,7 @@ node2, the wallet's node, and a swarm discovery from node1.
 2. The User expels node3 on node1 (user.expel); the user key signs the
    Expulsion, which enters SwarmState.
 3. Once node1 and node2 store the Expulsion, the driver polls the front's
-   discoveries on node1 and node2 until neither shows the wallet (up to 60 s).
+   discovery on node2 until it shows no wallet (up to 60 s).
 
 Records `expel_cuts`: {front, wallet, before, expulsion_on, after, cut_after_s}.
 """
@@ -31,11 +31,14 @@ WAIT = 60.0
 
 
 def probes(n1: dict, n2: dict, n3: dict, tokens: dict) -> dict:
-    """The front's discoveries of the wallet: on node3 (its own node), on
-    node2 (local) and from node1 (swarm)."""
+    """The front's discoveries of the wallet: on node3 (its own node) and on
+    node2 (local, the wallet's node).
+
+    note: no swarm discovery from node1 since the G7 fix round: node1, a
+    Privileged node, relays as the user only, not for an app node3 hosts, so
+    node2 refuses node1's carry for the front with or without the chain."""
     return {"node3": ss.discover(n3, tokens["node3"], "swarm"),
-            "node2": ss.discover(n2, tokens["node2"], "local"),
-            "node1": ss.discover(n1, tokens["node1"], "swarm")}
+            "node2": ss.discover(n2, tokens["node2"], "local")}
 
 
 def expulsions(node: dict, subject: str) -> bool:
@@ -49,7 +52,7 @@ async def main():
     prior = doc["facts"]["app_on_member"]
     front, wallet = prior["front"]["identity"], prior["wallet"]["identity"]
     tokens = {"node3": prior["front"]["token"]}
-    for name, n in (("node1", n1), ("node2", n2)):
+    for name, n in (("node2", n2),):
         out = ss.app_tool("token", n["endpoint"], n["token"], front)
         assert "error" not in out, f"apphost.create_token on {name}: {out}"
         tokens[name] = out["token"]
@@ -69,13 +72,12 @@ async def main():
 
     f["cut_after_s"] = None
     while time.monotonic() < deadline:
-        f["after"] = {"node2": ss.discover(n2, tokens["node2"], "local"),
-                      "node1": ss.discover(n1, tokens["node1"], "swarm")}
+        f["after"] = {"node2": ss.discover(n2, tokens["node2"], "local")}
         if not any(wallet in v for v in f["after"].values()):
             f["cut_after_s"] = time.monotonic() - expelled_at
             break
         await asyncio.sleep(1)
-    f["tokens"] = {"node1": tokens["node1"], "node2": tokens["node2"]}
+    f["tokens"] = {"node2": tokens["node2"]}
     write_facts({"expel_cuts": f})
     print(f"driver: node3 expelled; the front's chain cut {f['cut_after_s']} s later")
 
