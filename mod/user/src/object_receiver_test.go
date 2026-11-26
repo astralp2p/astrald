@@ -168,15 +168,12 @@ type endpointSync struct {
 	target   *astral.Identity
 }
 
-// recordingNodes records endpoint syncs and closed links, and reports a link to
-// the linked identities alone.
+// recordingNodes records endpoint syncs, and reports a link to the linked
+// identities alone.
 type recordingNodes struct {
 	nodesmod.Module
-	syncs chan endpointSync
-	// refreshes receives the subject of every RefreshMemberEndpoints call.
-	refreshes chan *astral.Identity
-	closed    chan *astral.Identity
-	linked    []*astral.Identity
+	syncs  chan endpointSync
+	linked []*astral.Identity
 	// enforced counts the EnforceLinkPolicy calls.
 	enforced atomic.Int32
 }
@@ -188,15 +185,6 @@ func (n *recordingNodes) IsLinked(id *astral.Identity) bool {
 func (n *recordingNodes) UpdateNodeEndpoints(_ *astral.Context, resolver, target *astral.Identity) (int, error) {
 	n.syncs <- endpointSync{resolver: resolver, target: target}
 	return 0, nil
-}
-
-func (n *recordingNodes) RefreshMemberEndpoints(subject *astral.Identity) {
-	n.refreshes <- subject
-}
-
-func (n *recordingNodes) CloseLinks(id *astral.Identity) error {
-	n.closed <- id
-	return nil
 }
 
 // EnforceLinkPolicy counts the enforcement passes.
@@ -259,9 +247,7 @@ func newReceiverFixture(t *testing.T, userID *astral.Identity) *receiverFixture 
 		userID: userID,
 		auth:   &indexAuth{},
 		nodes: &recordingNodes{
-			syncs:     make(chan endpointSync, 8),
-			refreshes: make(chan *astral.Identity, 8),
-			closed:    make(chan *astral.Identity, 8),
+			syncs: make(chan endpointSync, 8),
 		},
 		scheduler: &recordingScheduler{tasks: make(chan scheduler.Task, 8)},
 	}
@@ -300,6 +286,47 @@ func newReceiverFixture(t *testing.T, userID *astral.Identity) *receiverFixture 
 	return f
 }
 
+// watchMember makes subject a member of f's swarm and records the member set,
+// so a ban on subject publishes its SwarmMemberLeft on the returned recorder;
+// mod/nodes closes a member's links on that event.
+func (f *receiverFixture) watchMember(t *testing.T, subject *astral.Identity) *eventRecorder {
+	t.Helper()
+	f.auth.seed(nodeContract(f.userID, subject))
+	events := &eventRecorder{}
+	f.mod.Events = events
+	f.mod.now = time.Now
+	f.mod.recordSwarm()
+	t.Cleanup(func() {
+		f.mod.memberSet.mu.Lock()
+		defer f.mod.memberSet.mu.Unlock()
+		f.mod.stopExpiry()
+	})
+	return events
+}
+
+// requireLeft waits for events to hold a SwarmMemberLeft naming subject, and
+// fails on any other event.
+func requireLeft(t *testing.T, events *eventRecorder, subject *astral.Identity) {
+	t.Helper()
+	deadline := time.Now().Add(effectTimeout)
+	for {
+		got := events.take()
+		for _, e := range got {
+			left, ok := e.(*user.SwarmMemberLeft)
+			if !ok || !left.NodeID.IsEqual(subject) {
+				t.Fatalf("published %v; want only %v left", e, subject)
+			}
+		}
+		if len(got) > 0 {
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("%v did not leave the published member set", subject)
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+}
+
 // addSibling indexes a node contract from the current user for a new node and returns the node.
 func (f *receiverFixture) addSibling() *astral.Identity {
 	sibling := astral.GenerateIdentity()
@@ -320,12 +347,8 @@ func (f *receiverFixture) requireNoEffect(t *testing.T, drop *recordingDrop) {
 	select {
 	case s := <-f.nodes.syncs:
 		t.Errorf("synced endpoints of %v; want none", s.target)
-	case id := <-f.nodes.refreshes:
-		t.Errorf("refreshed endpoints of %v; want none", id)
 	case task := <-f.scheduler.tasks:
 		t.Errorf("scheduled %v; want nothing", task)
-	case id := <-f.nodes.closed:
-		t.Errorf("closed links to %v; want none", id)
 	default:
 	}
 }
@@ -564,6 +587,7 @@ func TestReceiveExpulsion(t *testing.T) {
 		banned := astral.GenerateIdentity()
 		signed := sampleSigned(userID, banned)
 		signed.IssuerSig = validSig()
+		events := f.watchMember(t, banned)
 
 		drop := &recordingDrop{sender: astral.GenerateIdentity(), object: signed}
 		if err := f.mod.ReceiveObject(drop); err != nil {
@@ -578,14 +602,7 @@ func TestReceiveExpulsion(t *testing.T) {
 			t.Fatalf("Accept calls %v; want one Accept(true)", a)
 		}
 
-		select {
-		case id := <-f.nodes.closed:
-			if !id.IsEqual(banned) {
-				t.Fatalf("closed links to %v; want the banned node %v", id, banned)
-			}
-		default:
-			t.Fatal("links to the banned node were not closed")
-		}
+		requireLeft(t, events, banned)
 	})
 
 	t.Run("from another identity", func(t *testing.T) {

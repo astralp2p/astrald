@@ -14,15 +14,10 @@ import (
 	objectsmod "github.com/astralp2p/astrald/mod/objects"
 )
 
-// orderedNodes records CloseLinks and EnforceLinkPolicy calls on a shared log.
+// orderedNodes records EnforceLinkPolicy calls on a shared log.
 type orderedNodes struct {
 	nodesmod.Module
 	steps chan string
-}
-
-func (n *orderedNodes) CloseLinks(*astral.Identity) error {
-	n.steps <- "close"
-	return nil
 }
 
 func (n *orderedNodes) EnforceLinkPolicy() {
@@ -171,10 +166,10 @@ func TestExpelKeepsAdmittingASubjectThatNeverAnswers(t *testing.T) {
 }
 
 // TestMemberRefusesTheSubjectAfterItAnswersOnANewLink: a member that receives
-// a ban closes its links with the subject once, as before; the subject's next
-// link is admitted and carries the subject its ban, and the subject's answer
-// closes that link and refuses later ones. A push that does not reach the
-// subject leaves it admitted.
+// a ban publishes that the subject left, on which mod/nodes closes its links
+// with the subject once; the subject's next link is admitted and carries the
+// subject its ban, and the subject's answer closes that link and refuses
+// later ones. A push that does not reach the subject leaves it admitted.
 func TestMemberRefusesTheSubjectAfterItAnswersOnANewLink(t *testing.T) {
 	cases := []struct {
 		answer error
@@ -189,12 +184,14 @@ func TestMemberRefusesTheSubjectAfterItAnswersOnANewLink(t *testing.T) {
 		t.Run(fmt.Sprint(c.answer), func(t *testing.T) {
 			subject := astral.GenerateIdentity()
 			f, steps := orderedFixture(t, subject, c.answer)
+			events := f.watchMember(t, subject)
 
 			drop := &recordingDrop{sender: astral.GenerateIdentity(), object: sampleSignedValid(f.userID, subject)}
 			if err := f.mod.ReceiveObject(drop); err != nil {
 				t.Fatalf("ReceiveObject(ban): %v", err)
 			}
-			requireSteps(t, steps, "close")
+			requireLeft(t, events, subject)
+			requireSteps(t, steps)
 			requireAdmitted(t, f.mod, subject)
 
 			if err := f.mod.ReceiveObject(localLinkEvent(f, subject, 1)); err != nil {

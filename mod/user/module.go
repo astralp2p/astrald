@@ -115,6 +115,9 @@ type Module interface {
 	// LocalSwarm returns the identities of swarm members reachable on this
 	// device, excluding remote-only members.
 	LocalSwarm() (list []*astral.Identity)
+	// ReadLocalSwarm is LocalSwarm with the error of its read: a failed read
+	// returns the error and no members, where LocalSwarm returns none.
+	ReadLocalSwarm() ([]*astral.Identity, error)
 	// AdmitRelayContract is the one admission rule of a relay-for contract:
 	// its subject is this node or a local swarm member, both signatures
 	// verify, and it has not expired. A non-nil sender, the node that
@@ -135,7 +138,6 @@ type Module interface {
 	// IsSwarmMember reports whether id is a current member of the local swarm.
 	// It reports false on an unclaimed node and when the swarm cannot be read.
 	IsSwarmMember(id *astral.Identity) bool
-	NewMaintainLinkTask(target *astral.Identity) MaintainLinkTask
 	NewSyncNodesTask(remoteIdentity *astral.Identity) SyncNodesTask
 	// PushToLocalSwarm broadcasts obj to every local swarm member except the
 	// node itself using ctx; delivery is best-effort and failures are silently ignored.

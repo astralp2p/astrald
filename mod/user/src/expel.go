@@ -58,15 +58,14 @@ func (mod *Module) Expel(ctx *astral.Context, nodeID *astral.Identity) (*user.Si
 	// until the node answers; the expulsion sync at the node's next link with a
 	// holder of the ban and the sweep (reconcile_task.go) also deliver it.
 	// The node's answer closes the links with it (AdmitLink).
+	// note: the subject leaves LocalSwarm, so mod/nodes stops its link task and
+	// closes its links (SwarmMemberLeft); the push dials a new link, which
+	// AdmitLink admits until the subject answers.
 	go func() {
 		if mod.pushUntilDelivered(mod.ctx, nodeID, signed) {
 			mod.onBanAnswered(nodeID)
 		}
 	}()
-	// why: stop maintaining the link but do not force-close it — that would race the
-	// push above. On delivery the node tears itself down; until then the authorizers
-	// refuse it (isBanned).
-	mod.removeSibling(nodeID)
 
 	mod.log.Info("expelled %v from swarm", nodeID)
 	return signed, nil
@@ -102,35 +101,25 @@ func (mod *Module) receiveExpulsion(signed *user.SignedExpulsion) error {
 }
 
 // applyExpulsion enforces a stored ban on id. When id is the local node the ban
-// strips this node's own membership via leaveSwarm; otherwise it severs ties to the
-// banned peer. Membership filtering already prevents re-linking once the ban is stored.
+// strips this node's own membership via leaveSwarm. A banned peer leaves
+// LocalSwarm with the ban stored, so mod/nodes stops its link task and closes
+// its links (SwarmMemberLeft), and membership filtering prevents re-linking.
 func (mod *Module) applyExpulsion(id *astral.Identity) {
 	if id.IsEqual(mod.node.Identity()) {
 		mod.leaveSwarm()
-		return
-	}
-
-	// why: a link-maintenance task still running when its link closes redials it.
-	mod.removeSibling(id)
-	if err := mod.Nodes.CloseLinks(id); err != nil {
-		mod.log.Errorv(1, "closing links to expelled %v: %v", id, err)
 	}
 }
 
-// leaveSwarm strips this node's own membership after it is expelled from its swarm:
-// it cancels every sibling link-maintenance task, closes the links, and clears the
-// active contract.
-// why: expulsion does not revoke the contract, and MaintainLinkTask never re-checks
-// it, so without this the banned node keeps reconnecting to and syncing with peers
-// that now reject it. Clearing the contract is the only local signal of the ban.
+// leaveSwarm strips this node's own membership after it is expelled from its
+// swarm: it clears the active contract. Every member then leaves LocalSwarm,
+// so mod/nodes stops every member's link task and closes the links
+// (SwarmMemberLeft).
+// why: expulsion does not revoke the contract, and a member link task never
+// re-checks it, so without this the banned node keeps reconnecting to and
+// syncing with peers that now reject it. Clearing the contract is the only
+// local signal of the ban.
 func (mod *Module) leaveSwarm() {
 	mod.log.Info("leaving the swarm: this node is expelled")
-	for _, sib := range mod.sibs.Values() {
-		mod.removeSibling(sib.ID)
-		if err := mod.Nodes.CloseLinks(sib.ID); err != nil {
-			mod.log.Errorv(1, "closing link to former sibling %v: %v", sib.ID, err)
-		}
-	}
 
 	if err := mod.config.ActiveContract.Clear(mod.ctx); err != nil {
 		mod.log.Errorv(1, "clearing active contract after expulsion: %v", err)

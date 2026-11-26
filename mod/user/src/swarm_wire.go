@@ -136,7 +136,6 @@ func (mod *Module) onSwarmChanged() {
 
 	mod.refreshBans()
 	mod.publishSwarm()
-	mod.runSiblingLinker()
 }
 
 // receiveSwarmExpels stores and applies every Expulsion SwarmState holds that

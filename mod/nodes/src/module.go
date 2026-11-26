@@ -120,6 +120,12 @@ type Module struct {
 	// refreshClock is the time source of the refresh task; nil is the real clock.
 	// why: a field, so tests move the task past the full-refresh period without waiting.
 	refreshClock wakeClock
+
+	// memberLinks holds the link task of every swarm member; see member_links.go.
+	memberLinks memberLinks
+	// linkRetryAfter replaces time.After as the clock of every member link task backoff while set.
+	// note: a test seam, set through SetLinkRetryClock.
+	linkRetryAfter atomic.Pointer[func(time.Duration) <-chan time.Time]
 }
 
 // initContext sets the module context for the node identity id. The context ends when
@@ -129,7 +135,8 @@ func (mod *Module) initContext(id *astral.Identity) {
 }
 
 // Run schedules the endpoint-cleanup task, the sibling endpoint refresh and the
-// startup endpoint check, and blocks until ctx is cancelled.
+// startup endpoint check, starts the swarm members' link tasks, and blocks
+// until ctx is cancelled.
 func (mod *Module) Run(ctx *astral.Context) error {
 	defer mod.linkPool.Close()
 	// why: mod.ctx ends with ctx, also while Run waits for the scheduler.
@@ -144,6 +151,7 @@ func (mod *Module) Run(ctx *astral.Context) error {
 	mod.Scheduler.Schedule(mod.newRefreshSiblingEndpointsTask(), delay)
 	// why: a set that changed while the node was off is announced once after the settle wait.
 	mod.scheduleEndpointsAnnounce()
+	go mod.runMemberLinks(mod.ctx)
 
 	<-ctx.Done()
 	return nil

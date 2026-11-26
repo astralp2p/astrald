@@ -11,7 +11,7 @@ import (
 
 // The backoff between failed pushes in pushUntilDelivered: it starts at
 // pushRetryMin and doubles after every failure up to pushRetryMax, the link
-// backoff's bounds (maintain_link_task.go).
+// backoff's bounds (mod/nodes/src/member_link_task.go).
 const (
 	pushRetryMin = time.Second
 	pushRetryMax = 15 * time.Minute

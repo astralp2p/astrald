@@ -82,7 +82,7 @@ func (n *lanNode) inSwarm(peer *astral.Identity) bool {
 
 // stopLinkRetryTicks makes every link task of n wait its backoff forever, so only a wake relinks.
 func (n *lanNode) stopLinkRetryTicks() {
-	n.node.Modules().Find("user").(interface {
+	n.node.Modules().Find("nodes").(interface {
 		SetLinkRetryClock(func(time.Duration) <-chan time.Time)
 	}).SetLinkRetryClock(func(time.Duration) <-chan time.Time { return nil })
 }

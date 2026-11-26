@@ -10,9 +10,9 @@ import (
 
 // TestSwarmStateExpelIsStoredAndApplied: an Expulsion by the user that reaches
 // this node only through SwarmState is stored as a ban, as a pushed one is:
-// link admission refuses the subject once it answers, this node closes its
-// links with it, and a second change stores nothing again. An Expulsion by
-// another issuer is not stored.
+// link admission refuses the subject once it answers, the subject leaves the
+// published member set (mod/nodes then closes its links), and a second change
+// applies nothing again. An Expulsion by another issuer is not stored.
 func TestSwarmStateExpelIsStoredAndApplied(t *testing.T) {
 	userID := astral.GenerateIdentity()
 	f := newReceiverFixture(t, userID)
@@ -27,6 +27,7 @@ func TestSwarmStateExpelIsStoredAndApplied(t *testing.T) {
 		}
 	}
 	f.mod.swarm = n.store
+	events := f.watchMember(t, subject)
 
 	f.mod.receiveSwarmExpels()
 
@@ -36,19 +37,11 @@ func TestSwarmStateExpelIsStoredAndApplied(t *testing.T) {
 	if f.mod.banOn(stranger) != nil {
 		t.Fatal("an expel by another issuer was stored as a ban")
 	}
-	select {
-	case id := <-f.nodes.closed:
-		if !id.IsEqual(subject) {
-			t.Fatalf("closed links with %v; want the subject %v", id, subject)
-		}
-	case <-time.After(effectTimeout):
-		t.Fatal("the links with the expelled subject were not closed")
-	}
+	requireLeft(t, events, subject)
 
 	f.mod.receiveSwarmExpels()
-	select {
-	case id := <-f.nodes.closed:
-		t.Fatalf("a second change applied the expel again (closed %v)", id)
-	case <-time.After(quiet):
+	time.Sleep(quiet)
+	if got := events.take(); len(got) != 0 {
+		t.Fatalf("a second change published %v; want nothing", got)
 	}
 }

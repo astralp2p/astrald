@@ -21,8 +21,7 @@ var _ objects.Receiver = &Module{}
 // stores and applies a signed expulsion, syncs with the peer of a local
 // LinkCreatedEvent (the first link exchanges SwarmState with its peer; a sibling sync with a member,
 // the expulsions with a banned subject) and with a member a local LinkClosedEvent leaves links to, contacts
-// a peer of a local nearby PeerSeen, and wakes the link task of a sibling named
-// by a local EndpointsUpdatedEvent.
+// a peer of a local nearby PeerSeen.
 // Every object is checked before any effect; a rejected object is not accepted.
 func (mod *Module) ReceiveObject(drop objects.Drop) (err error) {
 	switch o := drop.Object().(type) {
@@ -69,8 +68,6 @@ func (mod *Module) ReceiveObject(drop objects.Drop) (err error) {
 		case *nearby.PeerSeen:
 			// why: contact queries the peer, which must not hold up the receivers.
 			go mod.onPeerSeen(e)
-		case *nodes.EndpointsUpdatedEvent:
-			mod.wakeSibling(e.Identity)
 		}
 	}
 
@@ -107,7 +104,7 @@ func (mod *Module) syncAndWait(id *astral.Identity) {
 }
 
 // receiveSignedContract indexes a pushed contract that passes checkPushedContract.
-// A node contract also syncs the subject's endpoints and runs the sibling linker.
+// A node contract also syncs the subject's endpoints and republishes the member set.
 // A node contract that admits a linked node to the local swarm also syncs with it.
 func (mod *Module) receiveSignedContract(sender *astral.Identity, signed *auth.SignedContract) error {
 	if err := mod.checkPushedContract(sender, signed); err != nil {
@@ -138,24 +135,27 @@ func (mod *Module) receiveSignedContract(sender *astral.Identity, signed *auth.S
 
 	go func() {
 		mod.pullSubjectEndpoints(sender, signed, newMember)
-		mod.runSiblingLinker()
+		// why after the pull: a member event makes mod/nodes pull from and
+		// forward for the new member, which the siblings accept only once they
+		// hold its contract.
+		mod.publishSwarm()
 	}()
 
 	return nil
 }
 
 // pullSubjectEndpoints pulls the endpoints of signed's subject after its node
-// contract arrived from sender.
-// why: a pull from the subject itself is first-hand, so for a new member it is
-// forwarded to the other siblings, as user.introduce brings the link up before
-// the contract and the first-link pull skipped the subject. The siblings get the
-// contract first, because they accept the notice only for a member they list.
+// contract arrived from sender. A new member that sent its own contract gets
+// the contract pushed to the siblings instead; mod/nodes pulls its endpoints
+// first-hand and forwards the notice when the member joins (SwarmMemberJoined).
+// why: user.introduce brings the link up before the contract, so the
+// first-link pull skipped the subject. The siblings get the contract first,
+// because they accept the notice only for a member they list.
 // A contract the node already held, or one from any other sender, is not forwarded.
 func (mod *Module) pullSubjectEndpoints(sender *astral.Identity, signed *auth.SignedContract, newMember bool) {
 	subject := signed.Subject
 	if newMember && sender.IsEqual(subject) {
 		mod.pushContractToSiblings(signed)
-		mod.Nodes.RefreshMemberEndpoints(subject)
 		return
 	}
 

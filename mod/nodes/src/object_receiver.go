@@ -5,8 +5,10 @@ import (
 
 	"github.com/astralp2p/astral-go/api/events"
 	"github.com/astralp2p/astral-go/api/ip"
+	"github.com/astralp2p/astral-go/api/nearby"
 	"github.com/astralp2p/astral-go/api/nodes"
 	"github.com/astralp2p/astral-go/api/tcp"
+	"github.com/astralp2p/astral-go/api/user"
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astrald/mod/objects"
 )
@@ -15,7 +17,9 @@ import (
 // and endpoints-changed messages from linked peers, announcing local address
 // changes, waking the links bound to a removed address, and reacting to local link events with connectivity upgrades and
 // endpoint refreshes, on the first link to a sibling and on the close of one of
-// several links to it. Unhandled and rejected objects are ignored without
+// several links to it. A local swarm member event reconciles the members' link
+// tasks; a local EndpointsUpdatedEvent, and a member seen nearby, wake the
+// member's link task. Unhandled and rejected objects are ignored without
 // accepting the drop.
 func (mod *Module) ReceiveObject(drop objects.Drop) error {
 	switch object := drop.Object().(type) {
@@ -61,6 +65,14 @@ func (mod *Module) ReceiveObject(drop objects.Drop) error {
 		case *nodes.LinkClosedEvent:
 			mod.scheduleEndpointsAnnounce()
 			mod.onPartialLinkClose(e)
+		case *user.SwarmMemberJoined, *user.SwarmMemberLeft:
+			// why: the reconcile reads the member set and closes links, which must not hold up the receivers.
+			go mod.reconcileMemberLinks()
+		case *nodes.EndpointsUpdatedEvent:
+			mod.wakeMemberLink(e.Identity)
+		case *nearby.PeerSeen:
+			// why: the sighting may reconcile the member set, which must not hold up the receivers.
+			go mod.onMemberSeen(e.NodeID)
 		}
 
 	}

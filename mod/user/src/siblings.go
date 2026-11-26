@@ -1,24 +1,12 @@
 package user
 
 import (
-	"context"
-
 	"github.com/astralp2p/astral-go/astral"
 )
 
-// Sibling is a link-maintenance entry for one swarm peer: the tracked node, the
-// Cancel that stops its background link-maintenance goroutine, and the Wake that
-// makes that goroutine link now.
-type Sibling struct {
-	ID     *astral.Identity
-	Cancel context.CancelFunc
-	Wake   func()
-}
-
 // getSiblings returns the swarm members this node currently holds a live link
 // with, excluding the local node. Membership comes from LocalSwarm (contract-
-// derived, expel-aware); liveness from Nodes.IsLinked. It is independent of the
-// sibs maintenance registry, so a stale or not-yet-linked entry never leaks through.
+// derived, expel-aware); liveness from Nodes.IsLinked.
 func (mod *Module) getSiblings() (list []*astral.Identity) {
 	self := mod.node.Identity()
 
@@ -30,49 +18,4 @@ func (mod *Module) getSiblings() (list []*astral.Identity) {
 	}
 
 	return
-}
-
-func (mod *Module) addSibling(id *astral.Identity, cancel context.CancelFunc, wake func()) {
-	mod.log.Log("adding sibling %v", id)
-	mod.sibs.Set(id.String(), Sibling{
-		ID:     id,
-		Cancel: cancel,
-		Wake:   wake,
-	})
-}
-
-// wakeSibling makes the link task of id link now. It reports false when id has
-// no link task.
-func (mod *Module) wakeSibling(id *astral.Identity) bool {
-	sib, ok := mod.sibs.Get(id.String())
-	if !ok {
-		return false
-	}
-
-	sib.Wake()
-	return true
-}
-
-// pruneSiblings stops the link task of every sibling that is not in members.
-func (mod *Module) pruneSiblings(members []*astral.Identity) {
-	keep := make(map[string]struct{}, len(members))
-	for _, m := range members {
-		keep[m.String()] = struct{}{}
-	}
-
-	for _, sib := range mod.sibs.Values() {
-		if _, ok := keep[sib.ID.String()]; !ok {
-			mod.removeSibling(sib.ID)
-		}
-	}
-}
-
-func (mod *Module) removeSibling(id *astral.Identity) {
-	sib, ok := mod.sibs.Delete(id.String())
-	if !ok {
-		return
-	}
-
-	mod.log.Log("removing sibling %v", id)
-	sib.Cancel()
 }

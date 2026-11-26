@@ -24,7 +24,9 @@ const expiryMargin = time.Second
 
 // publishSwarm recomputes LocalSwarm and emits one SwarmMemberJoined or
 // SwarmMemberLeft per node whose membership differs from the last published
-// set. It emits nothing before the first set is recorded.
+// set, and syncs with every member that joined while linked. It emits nothing
+// before the first set is recorded. mod/nodes maintains the members' links on
+// these events.
 func (mod *Module) publishSwarm() {
 	mod.memberSet.mu.Lock()
 	defer mod.memberSet.mu.Unlock()
@@ -35,6 +37,7 @@ func (mod *Module) publishSwarm() {
 	for k, id := range next {
 		if _, ok := mod.memberSet.members[k]; !ok {
 			mod.Events.Emit(&user.SwarmMemberJoined{NodeID: id})
+			mod.syncNewMember(id)
 		}
 	}
 	for k, id := range mod.memberSet.members {
@@ -44,6 +47,22 @@ func (mod *Module) publishSwarm() {
 	}
 	mod.memberSet.members = next
 	mod.armExpiry()
+}
+
+// syncNewMember schedules a sibling sync with node, a member that just
+// joined, when it is linked.
+//
+// why: the LinkCreatedEvent sync skips a node linked before it was a member,
+// as a joiner is with its carrier, and before G7 the pushed node contract
+// started that sync (receiveSignedContract); it carries the relay contracts of
+// the swarm's apps.
+func (mod *Module) syncNewMember(node *astral.Identity) {
+	if node.IsEqual(mod.node.Identity()) || !mod.Nodes.IsLinked(node) {
+		return
+	}
+	if _, err := mod.Scheduler.Schedule(mod.NewSyncNodesTask(node)); err != nil {
+		mod.log.Error("scheduling a sync with new member %v: %v", node, err)
+	}
 }
 
 // recordSwarm records the current member set as published, without events.

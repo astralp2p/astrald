@@ -130,11 +130,6 @@ func (mod *Module) onActiveContractChanged(signed *auth.SignedContract) {
 		if !mod.config.User.Get().IsZero() {
 			_ = mod.config.User.Clear(mod.ctx)
 		}
-		// why linkerMu: a linker run that read the old swarm before the clear
-		// would otherwise register tasks for former members after this prune.
-		mod.linkerMu.Lock()
-		mod.pruneSiblings(nil)
-		mod.linkerMu.Unlock()
 		return
 	}
 
@@ -167,7 +162,6 @@ func (mod *Module) onActiveContractChanged(signed *auth.SignedContract) {
 	}
 
 	mod.Nearby.Broadcast()
-	mod.runSiblingLinker()
 }
 
 // ActiveNodes returns all nodes with an active swarm-membership contract from the given
@@ -208,6 +202,11 @@ func (mod *Module) activeNodes(userID *astral.Identity) (nodes []*astral.Identit
 func (mod *Module) LocalSwarm() (list []*astral.Identity) {
 	list, _ = mod.localSwarm()
 	return
+}
+
+// ReadLocalSwarm is LocalSwarm with the error of its read (usermod.Module).
+func (mod *Module) ReadLocalSwarm() ([]*astral.Identity, error) {
+	return mod.localSwarm()
 }
 
 // localSwarm is LocalSwarm with the error of the contract query. Without an

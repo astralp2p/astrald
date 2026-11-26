@@ -10,7 +10,9 @@ import (
 	"github.com/astralp2p/astral-go/api/events"
 	"github.com/astralp2p/astral-go/api/user"
 	"github.com/astralp2p/astral-go/astral"
+	"github.com/astralp2p/astral-go/astral/log"
 	authmod "github.com/astralp2p/astrald/mod/auth"
+	"github.com/astralp2p/astrald/mod/scheduler"
 )
 
 // memberQuery returns the staged membership contracts that have not expired,
@@ -103,6 +105,7 @@ func newMemberEnv(t *testing.T) *memberEnv {
 	mod.Auth = &memberAuth{query: e.query}
 	useQuerySwarm(mod, issuer, e.query)
 	mod.Events = e.events
+	mod.Nodes = newLinkNodes()
 	mod.node = &identityNode{id: astral.GenerateIdentity()}
 	mod.now = time.Now
 	t.Cleanup(e.stopExpiry)
@@ -263,5 +266,42 @@ func TestUnclaimedArmsNothing(t *testing.T) {
 	mod.recordSwarm()
 	if mod.memberSet.expiry != nil {
 		t.Fatal("an unclaimed node armed the expiry timer")
+	}
+}
+
+// TestPublishSwarmSyncsWithANewLinkedMember: a member that joins while this
+// node is linked to it gets one sibling sync; an unlinked new member and a
+// member that stays get none.
+//
+// why: the LinkCreatedEvent sync skipped the member, which was not one yet
+// (a joiner and its carrier), and the sync carries the swarm's relay contracts
+// (relay-contract-forwarding).
+func TestPublishSwarmSyncsWithANewLinkedMember(t *testing.T) {
+	e := newMemberEnv(t)
+	nodes := newLinkNodes()
+	sched := &recordingScheduler{tasks: make(chan scheduler.Task, 8)}
+	e.mod.Nodes, e.mod.Scheduler = nodes, sched
+	e.mod.log = log.New(e.mod.node.Identity())
+
+	kept, linked, unlinked := astral.GenerateIdentity(), astral.GenerateIdentity(), astral.GenerateIdentity()
+	nodes.setLinked(kept, true)
+	nodes.setLinked(linked, true)
+	e.query.found = []*auth.SignedContract{memberContract(t, e.issuer, kept)}
+	e.mod.recordSwarm()
+
+	e.query.found = append(e.query.found, memberContract(t, e.issuer, linked), memberContract(t, e.issuer, unlinked))
+	e.mod.publishSwarm()
+
+	var synced []*astral.Identity
+	for len(sched.tasks) > 0 {
+		task := <-sched.tasks
+		sync, ok := task.(*SyncNodesTask)
+		if !ok {
+			t.Fatalf("scheduled %v; want only sibling syncs", task)
+		}
+		synced = append(synced, sync.remoteIdentity)
+	}
+	if len(synced) != 1 || !synced[0].IsEqual(linked) {
+		t.Fatalf("scheduled syncs with %v; want one with %v", synced, linked)
 	}
 }

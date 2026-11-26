@@ -20,8 +20,8 @@ const peerContractTimeout = 30 * time.Second
 // peerContractReader returns the active contract of peer (user.contract).
 type peerContractReader func(ctx *astral.Context, peer *astral.Identity) (*auth.SignedContract, error)
 
-// onPeerSeen contacts a node of the current user that nearby verified. It wakes
-// the link task of a swarm member that is not linked. It asks any other such
+// onPeerSeen contacts a node of the current user that nearby verified. A swarm
+// member is left to mod/nodes, which links it. It asks any other such
 // node for its contract and introduces this node when the contract passes
 // checkPeerContract, at most once per dialInterval per node. Other nodes are
 // ignored. Spec: .ai/system/protocols/user/README.md
@@ -43,26 +43,11 @@ func (mod *Module) onPeerSeen(e *nearby.PeerSeen) {
 	case mod.isExpelled(mod.Identity(), e.NodeID):
 		mod.log.Logv(2, "nearby peer %v is expelled", e.NodeID)
 	case slices.ContainsFunc(mod.LocalSwarm(), e.NodeID.IsEqual):
-		mod.wakeLinkTask(e)
+		mod.log.Logv(2, "nearby peer %v is a swarm member", e.NodeID)
 	case !mod.dials.reserve(e.NodeID, mod.now()):
 		mod.log.Logv(2, "nearby peer %v was contacted recently", e.NodeID)
 	default:
 		mod.contactPeer(ac, e)
-	}
-}
-
-// wakeLinkTask makes the link task of a swarm member seen nearby link now,
-// unless the member is linked.
-func (mod *Module) wakeLinkTask(e *nearby.PeerSeen) {
-	if mod.Nodes.IsLinked(e.NodeID) {
-		mod.log.Logv(2, "nearby peer %v is a linked sibling", e.NodeID)
-		return
-	}
-
-	mod.log.Log("sibling %v is nearby at %v, linking now", e.NodeID, e.SourceIP)
-	if !mod.wakeSibling(e.NodeID) {
-		// note: a member without a link task gets one, and a new task links at once.
-		mod.runSiblingLinker()
 	}
 }
 

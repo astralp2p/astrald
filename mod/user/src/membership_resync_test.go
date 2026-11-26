@@ -50,7 +50,7 @@ func holdsBan(f *receiverFixture, subject *astral.Identity) bool {
 // member that missed a ban keeps one link to the issuer up, so no
 // LinkCreatedEvent fires; the member does not hold the ban until the issuer's
 // sweep ticks once (the tick stands in for the 1 h ticker), and then holds it
-// and closes its links with the subject.
+// and publishes that the subject left, on which mod/nodes closes its links.
 func TestSweepRepairsAMemberThatMissedABanOverAStableLink(t *testing.T) {
 	userID := astral.GenerateIdentity()
 	issuer, member := newReceiverFixture(t, userID), newReceiverFixture(t, userID)
@@ -59,6 +59,7 @@ func TestSweepRepairsAMemberThatMissedABanOverAStableLink(t *testing.T) {
 	issuer.mod.Deps.Objects = &forwardPusher{sender: issuer.nodeID, member: member}
 
 	subject := astral.GenerateIdentity()
+	events := member.watchMember(t, subject)
 	if err := issuer.mod.db.StoreExpulsion(sampleSignedValid(userID, subject)); err != nil {
 		t.Fatalf("store ban: %v", err)
 	}
@@ -77,14 +78,7 @@ func TestSweepRepairsAMemberThatMissedABanOverAStableLink(t *testing.T) {
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
-	select {
-	case closed := <-member.nodes.closed:
-		if !closed.IsEqual(subject) {
-			t.Fatalf("the member closed links with %v; want the subject", closed)
-		}
-	case <-time.After(effectTimeout):
-		t.Fatal("the member did not close its links with the subject")
-	}
+	requireLeft(t, events, subject)
 }
 
 // volume sizes the swarm of the push volume test: 10 nodes, 5 bans.

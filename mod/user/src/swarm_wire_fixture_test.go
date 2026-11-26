@@ -106,12 +106,3 @@ func useContractSwarm(mod *Module, userID *astral.Identity, contracts func() ([]
 // pullNoSwarm is a nodes module with no behaviour: a SwarmState pull on a module whose store is closed does
 // nothing, and the tests that use it read the swarm from a SwarmView fixture.
 type pullNoSwarm struct{ nodesmod.Module }
-
-// LearnMemberEndpoints of the nodes fakes pulls nothing: no test that uses
-// them reads endpoints.
-func (n *linkedNodes) LearnMemberEndpoints(*astral.Identity)         {}
-func (n *recordingNodes) LearnMemberEndpoints(*astral.Identity)      {}
-func (n *linkNodes) LearnMemberEndpoints(*astral.Identity)           {}
-func (n *orderedNodes) LearnMemberEndpoints(*astral.Identity)        {}
-func (n *cancelCheckingNodes) LearnMemberEndpoints(*astral.Identity) {}
-func (n *joinNodes) LearnMemberEndpoints(*astral.Identity)           {}

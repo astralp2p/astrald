@@ -58,6 +58,9 @@ type swarmUser struct {
 
 func (u *swarmUser) LocalSwarm() []*astral.Identity { return u.swarm }
 
+// Ready never closes: no test that uses swarmUser runs the member links.
+func (u *swarmUser) Ready() <-chan struct{} { return nil }
+
 func (u *swarmUser) PushToSiblings(_ *astral.Context, obj astral.Object) {
 	u.siblings.add(push{object: obj})
 }

@@ -30,15 +30,11 @@ type Module struct {
 
 	ready chan struct{}
 
-	sibs sig.Map[string, Sibling]
-
 	// memberSet is the member set publishSwarm last emitted events for.
 	memberSet memberSet
 
 	// mu makes the claim check and the claim one transition; see claim.
 	mu sync.Mutex
-	// linkerMu makes the sibling linker's check, schedule and register one step; see runSiblingLinker.
-	linkerMu sync.Mutex
 
 	// syncGate runs one sync per sibling at a time after a partial link close.
 	syncGate syncGate
@@ -51,9 +47,6 @@ type Module struct {
 	now func() time.Time
 	// after is the clock of the ban push backoff; see pushUntilDelivered.
 	after func(time.Duration) <-chan time.Time
-	// linkRetryAfter replaces time.After as the clock of every MaintainLinkTask backoff while set.
-	// note: a test seam, set through SetLinkRetryClock.
-	linkRetryAfter atomic.Pointer[func(time.Duration) <-chan time.Time]
 
 	// askDigest asks a sibling for its relay digest; nil selects askRelayDigest.
 	askDigest askDigestFunc
@@ -140,65 +133,4 @@ func (mod *Module) Ready() <-chan struct{} {
 
 func (mod *Module) String() string {
 	return user.ModuleName
-}
-
-// runSiblingLinker starts a link task for every swarm member that has none,
-// runs onNewMember for it, and stops the link task of every sibling that is
-// no longer a swarm member.
-//
-// why linkerMu: PeerSeen events, pushed contracts and contract changes run the
-// linker at once, and two unserialized runs each start a task for one member.
-// why the early return: a failed contract query reads as an empty swarm, and
-// pruning on it would stop every sibling's link task.
-func (mod *Module) runSiblingLinker() {
-	mod.linkerMu.Lock()
-	defer mod.linkerMu.Unlock()
-
-	swarm, err := mod.localSwarm()
-	if err != nil {
-		return
-	}
-	mod.pruneSiblings(swarm)
-
-	for _, node := range swarm {
-		if node.IsEqual(mod.node.Identity()) {
-			continue
-		}
-
-		_, ok := mod.sibs.Get(node.String())
-		if ok {
-			continue
-		}
-
-		maintainLinkAction := mod.NewMaintainLinkTask(node)
-		scheduledAction, err := mod.Scheduler.Schedule(maintainLinkAction)
-		if err != nil {
-			mod.log.Error("error scheduling maintain link action: %v for node %v", err, node)
-			continue
-		}
-
-		mod.addSibling(node, scheduledAction.Cancel, maintainLinkAction.Wake)
-
-		mod.onNewMember(node)
-	}
-}
-
-// onNewMember reacts to a member the sibling linker lists for the first time:
-// mod/nodes learns its endpoints, and a linked member gets a sibling sync.
-//
-// why: a membership reaches this node only through SwarmState sync, which
-// brings no endpoints, so a new member's link task would have none to dial;
-// the pull's EndpointsUpdatedEvent wakes the task.
-// why the sync: the LinkCreatedEvent sync skips a node linked before it was a
-// member, as a joiner is with its carrier, and before G7 the pushed node
-// contract started that sync (receiveSignedContract); it carries the relay
-// contracts of the swarm's apps.
-func (mod *Module) onNewMember(node *astral.Identity) {
-	go mod.Nodes.LearnMemberEndpoints(node)
-
-	if mod.Nodes.IsLinked(node) {
-		if _, err := mod.Scheduler.Schedule(mod.NewSyncNodesTask(node)); err != nil {
-			mod.log.Error("scheduling a sync with new member %v: %v", node, err)
-		}
-	}
 }

@@ -13,6 +13,7 @@ import (
 	"github.com/astralp2p/astral-go/api/nearby"
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astral-go/astral/log"
+	nodesmod "github.com/astralp2p/astrald/mod/nodes"
 	"github.com/astralp2p/astrald/mod/scheduler"
 )
 
@@ -49,6 +50,30 @@ func (l *contactLog) list() []contactCall {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	return append([]contactCall(nil), l.calls...)
+}
+
+// linkNodes is a nodes module that reports the identities set linked as linked.
+type linkNodes struct {
+	nodesmod.Module
+
+	mu     sync.Mutex
+	linked map[string]bool
+}
+
+func newLinkNodes() *linkNodes {
+	return &linkNodes{linked: make(map[string]bool)}
+}
+
+func (n *linkNodes) setLinked(id *astral.Identity, linked bool) {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	n.linked[id.String()] = linked
+}
+
+func (n *linkNodes) IsLinked(id *astral.Identity) bool {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	return n.linked[id.String()]
 }
 
 // contactPeer is the exchange ops of target: it records every SwarmState push, and its pull does nothing.
@@ -200,7 +225,7 @@ func (f *contactFixture) requireRefused(t *testing.T) {
 }
 
 // TestPeerSeenIgnores: a node acts on no PeerSeen of a node that is not of its
-// user, of itself, of an expelled node or of a linked sibling, nor on any
+// user, of itself, of an expelled node or of a swarm member, nor on any
 // PeerSeen while it has no user.
 func TestPeerSeenIgnores(t *testing.T) {
 	cases := []struct {
@@ -226,10 +251,9 @@ func TestPeerSeenIgnores(t *testing.T) {
 			}
 			return f.seen(f.peerID, f.userID)
 		}},
-		{"linked sibling", func(t *testing.T, f *contactFixture) *nearby.PeerSeen {
+		{"swarm member", func(t *testing.T, f *contactFixture) *nearby.PeerSeen {
+			// note: mod/nodes links a member seen nearby.
 			f.addMember(f.peerID)
-			f.nodes.setLinked(f.peerID, true)
-			f.mod.addSibling(f.peerID, func() {}, func() { t.Error("woke the link task of a linked sibling") })
 			return f.seen(f.peerID, f.userID)
 		}},
 		{"no event", func(*testing.T, *contactFixture) *nearby.PeerSeen { return nil }},
@@ -240,44 +264,6 @@ func TestPeerSeenIgnores(t *testing.T) {
 			f.mod.onPeerSeen(tt.event(t, f))
 			f.requireNoContact(t, f.peerID)
 		})
-	}
-}
-
-// TestPeerSeenWakesAnUnlinkedSibling: a swarm member seen nearby that is not
-// linked wakes its link task; nothing is read or pushed.
-func TestPeerSeenWakesAnUnlinkedSibling(t *testing.T) {
-	f := newContactFixture(t)
-	f.addMember(f.peerID)
-	woken := 0
-	f.mod.addSibling(f.peerID, func() {}, func() { woken++ })
-
-	f.mod.onPeerSeen(f.seen(f.peerID, f.userID))
-
-	if woken != 1 {
-		t.Fatalf("woke the link task %v times; want once", woken)
-	}
-	f.requireNoContact(t, f.peerID)
-}
-
-// TestPeerSeenStartsALinkTask: a swarm member seen nearby without a link task
-// gets one.
-func TestPeerSeenStartsALinkTask(t *testing.T) {
-	f := newContactFixture(t)
-	f.addMember(f.peerID)
-
-	f.mod.onPeerSeen(f.seen(f.peerID, f.userID))
-
-	select {
-	case task := <-f.scheduler.tasks:
-		link, ok := task.(*MaintainLinkTask)
-		if !ok || !link.Target.IsEqual(f.peerID) {
-			t.Fatalf("scheduled %v; want a link task of the peer", task)
-		}
-	default:
-		t.Fatal("scheduled no link task")
-	}
-	if calls := f.calls.list(); len(calls) != 0 {
-		t.Fatalf("contact steps %v; want none", calls)
 	}
 }
 
@@ -507,81 +493,6 @@ func TestReceivePeerSeenEvent(t *testing.T) {
 	}
 }
 
-// TestSiblingSeenNearbyLinksDuringBackoff: a swarm member seen nearby while its
-// link task waits out a backoff is dialed within wakeDialBound of the event.
-func TestSiblingSeenNearbyLinksDuringBackoff(t *testing.T) {
-	lf := newLinkTaskFixture(failEvery, false)
-	f := newContactFixture(t)
-	f.mod.Nodes = lf.nodes
-	f.mod.Scheduler = lf.scheduler
-	lf.task.mod = f.mod
-	lf.task.Target = f.peerID
-	f.addMember(f.peerID)
-
-	done, cancel := lf.run(t)
-	lf.requireAttempt(t, 1, effectTimeout)
-	lf.requireBackoff(t)
-	f.mod.addSibling(f.peerID, cancel, lf.task.Wake)
-
-	f.mod.onPeerSeen(f.seen(f.peerID, f.userID))
-	lf.requireAttempt(t, 2, wakeDialBound)
-
-	cancel()
-	requireCanceled(t, done)
-	if calls := f.calls.list(); len(calls) != 0 {
-		t.Fatalf("contact steps %v; want none for a sibling", calls)
-	}
-}
-
-// keepScheduler records every scheduled task and keeps it scheduled without running it.
-type keepScheduler struct {
-	scheduler.Module
-	tasks chan scheduler.Task
-}
-
-func (s *keepScheduler) Schedule(task scheduler.Task, _ ...scheduler.Done) (scheduler.ScheduledTask, error) {
-	s.tasks <- task
-	return keptTask{}, nil
-}
-
-// keptTask is a scheduled task that never runs.
-type keptTask struct {
-	scheduler.ScheduledTask
-}
-
-func (keptTask) Cancel() {}
-
-// TestSiblingLinkerRegistersTheTaskWake: the link task the sibling linker
-// starts for a member is the one a PeerSeen of that member wakes.
-func TestSiblingLinkerRegistersTheTaskWake(t *testing.T) {
-	f := newContactFixture(t)
-	f.addMember(f.peerID)
-	sched := &keepScheduler{tasks: make(chan scheduler.Task, 4)}
-	f.mod.Scheduler = sched
-
-	f.mod.runSiblingLinker()
-	var link *MaintainLinkTask
-	select {
-	case task := <-sched.tasks:
-		link, _ = task.(*MaintainLinkTask)
-	default:
-	}
-	if link == nil || !link.Target.IsEqual(f.peerID) {
-		t.Fatal("the sibling linker started no link task for the member")
-	}
-
-	f.mod.onPeerSeen(f.seen(f.peerID, f.userID))
-
-	select {
-	case <-link.wake:
-	default:
-		t.Fatal("the PeerSeen did not wake the member's link task")
-	}
-	if !link.actionRequired.Load() {
-		t.Fatal("the woken link task needs no action; want a dial")
-	}
-}
-
 // TestPeerSeenWaitsForReady: a PeerSeen received before the module is ready
 // starts its contact once the module is ready.
 func TestPeerSeenWaitsForReady(t *testing.T) {
@@ -604,52 +515,5 @@ func TestPeerSeenWaitsForReady(t *testing.T) {
 	case <-f.calls.reads:
 	case <-time.After(effectTimeout):
 		t.Fatal("the PeerSeen started no contact once the module was ready")
-	}
-}
-
-// gateScheduler records every scheduled task on scheduled and holds each
-// Schedule call until release closes.
-type gateScheduler struct {
-	scheduler.Module
-	scheduled chan scheduler.Task
-	release   chan struct{}
-}
-
-func (s *gateScheduler) Schedule(task scheduler.Task, _ ...scheduler.Done) (scheduler.ScheduledTask, error) {
-	s.scheduled <- task
-	<-s.release
-	return keptTask{}, nil
-}
-
-// TestConcurrentPeerSeenStartsOneLinkTask: two PeerSeen events of a member
-// without a link task, handled at once, start one link task.
-func TestConcurrentPeerSeenStartsOneLinkTask(t *testing.T) {
-	f := newContactFixture(t)
-	f.addMember(f.peerID)
-	sched := &gateScheduler{scheduled: make(chan scheduler.Task, 4), release: make(chan struct{})}
-	f.mod.Scheduler = sched
-
-	first, second := make(chan struct{}), make(chan struct{})
-	go func() {
-		defer close(first)
-		f.mod.onPeerSeen(f.seen(f.peerID, f.userID))
-	}()
-	<-sched.scheduled
-	go func() {
-		defer close(second)
-		f.mod.onPeerSeen(f.seen(f.peerID, f.userID))
-	}()
-
-	select {
-	case task := <-sched.scheduled:
-		t.Errorf("scheduled %v while the first link task was being registered", task)
-	case <-time.After(100 * time.Millisecond):
-	}
-	close(sched.release)
-	<-first
-	<-second
-
-	if n := len(sched.scheduled); n != 0 {
-		t.Fatalf("scheduled %v more link tasks; want one in all", n)
 	}
 }
