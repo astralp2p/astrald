@@ -70,7 +70,7 @@ func (mod *Module) appointManager(ctx *astral.Context, req *sysapi.RegisterManag
 		return nil, sysapi.ErrNotFresh
 	}
 
-	// why both lists in the contract: no node-local grant exists any more.
+	// why both lists in the contract: the node to manager contract carries every permit.
 	token, err := mod.apps.ProvisionApp(ctx, slices.Concat(req.GrantPermits, req.ContractPermits))
 	if err != nil {
 		return nil, err

@@ -46,4 +46,4 @@ reports `Ready` as soon as it binds, before it attaches a handler, and a hook
 runs only after the attach (astral-go `lib/apps/registrar.go`).
 
 The provider's handlers end with the driver, as `apphost.bind` removes them
-when its session closes. The apps' identities, tokens and grants stay on node1.
+when its session closes. The apps' identities and tokens stay on node1.

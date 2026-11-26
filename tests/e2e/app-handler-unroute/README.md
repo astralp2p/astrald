@@ -51,5 +51,5 @@ endpoint listening tell the first from the second; `failed_dial_removes` guards
 the second on its own.
 
 The polling deadline for a removal is 5 s; on a quiet host the first call after
-the session ends already fails. The apps' identities, tokens and grants stay on
+the session ends already fails. The apps' identities and tokens stay on
 node1; their handlers end with the legs.

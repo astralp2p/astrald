@@ -207,7 +207,7 @@ func TestAuthorizeContractNodeClaimState(t *testing.T) {
 
 // TestAuthorizeContractNodeClaimIssuer: on an unclaimed node, the claim
 // contract passes whatever the issuer issued the node before: a relay contract
-// of an identity the node minted, or the node contract of a former user.
+// of an identity the node minted, or the claim contract of a former user.
 func TestAuthorizeContractNodeClaimIssuer(t *testing.T) {
 	relay := &auth.Permit{Action: astral.String8(nodes.RelayForAction{}.ObjectType())}
 	see := &auth.Permit{Action: astral.String8(auth.SeeObjectsAction{}.ObjectType())}

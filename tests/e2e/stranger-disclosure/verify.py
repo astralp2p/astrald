@@ -70,8 +70,8 @@ async def main():
         f"permits the stranger read: {contract['permits']}")
     assert contract["permits"], "node1's contract carries no permit to disclose"
     assert contract["expires_at"] == int(live.expires_at)
-    # why: user.contract.md "Disclosure" — the expiry, 365 days by default,
-    # shows when the User claimed or adopted the node
+    # why: user.contract.md "Disclosure" — the claim contract expires 365
+    # days after the claim, so its expiry shows when the User claimed the node
     # expires_at is nanoseconds since the epoch
     ttl = contract["expires_at"] / 1e9 - time.time()
     assert 300 * DAY < ttl < 400 * DAY, (

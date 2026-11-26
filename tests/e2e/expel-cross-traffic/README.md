@@ -10,7 +10,7 @@ follows that used those paths stay live through it.
 - **driver** `script.py` with the Go program `driver/` — the Go program serves
   a pinger app on node1 and one on node3, a provider of the service
   `expel-cross-traffic` on node1, and swarm follows of that service on node2
-  and node3 (each granted on its own node). Once both follows hold the
+  and node3 (each permitted on its own node). Once both follows hold the
   provider's offering and node2 names node3 as the host of node3's app, the
   User expels node3 on node1. Once node2 holds the ban, the Go program asks
   node2's `apphost.hosts` for both apps and pings both from node2; node2's

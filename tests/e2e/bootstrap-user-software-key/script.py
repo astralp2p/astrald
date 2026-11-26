@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Driver: create a software User key on node1 and activate its node contract.
+"""Driver: create a software User key on node1 and activate its claim contract.
 
 Deterministic port of the node-setup playbook (netsim drove this via an AI
 agent; here it is the exact op chain).
@@ -26,7 +26,7 @@ async def main():
         user_pub = await c.crypto.public_key(privkey)
         user_id = str(public_key_to_identity(user_pub))
 
-        # C. build, sign, and activate the node contract
+        # C. build, sign, and activate the claim contract
         contract = await c.user.new_node_contract(user=user_id)
         signed = await c.auth.sign_contract(contract)
         await c.user.accept_contract(signed)

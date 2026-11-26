@@ -3,7 +3,7 @@
 //
 //	follower <session.json>
 //
-// It registers an app on node3, grants it discovery of the service on node3,
+// It registers an app on node3, permits it discovery of the service on node3,
 // and follows the service with reach swarm, reopening the follow whenever the
 // stream ends (WithReconnect). It writes its state to the JSON file named by
 // ASTRAL_TESTS_APP_STATE: the app identity and how many follows reached their
@@ -108,7 +108,7 @@ func run(path string) error {
 	}
 }
 
-// follow registers an app on n, grants it discovery of service on n, and
+// follow registers an app on n, permits it discovery of service on n, and
 // follows service with reach swarm, reopening after every end.
 func follow(ctx *astral.Context, n provider.Node) (*servicescli.Watcher, *astral.Identity, error) {
 	admin := n.Admin()
@@ -123,7 +123,7 @@ func follow(ctx *astral.Context, n provider.Node) (*servicescli.Watcher, *astral
 	}
 	err = provider.Grant(ctx, app, &auth.Permit{Action: astral.String8(services.ServiceDiscoveryAction{}.ObjectType()), Constraints: scope})
 	if err != nil {
-		return nil, nil, fmt.Errorf("grant discovery on %v: %w", n.Identity, err)
+		return nil, nil, fmt.Errorf("permit discovery on %v: %w", n.Identity, err)
 	}
 	// why a short backoff: the follow reopens within 2 s of node3's restart,
 	// so a carry restarted on a node that still believes it is a member shows.

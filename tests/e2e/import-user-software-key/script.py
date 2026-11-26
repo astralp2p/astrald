@@ -34,7 +34,7 @@ async def main():
         user_pub = await c.crypto.public_key(privkey)
         user_id = str(public_key_to_identity(user_pub))
 
-        # C. build, sign, and activate the node contract
+        # C. build, sign, and activate the claim contract
         contract = await c.user.new_node_contract(user=user_id)
         signed = await c.auth.sign_contract(contract)
         await c.user.accept_contract(signed)

@@ -23,7 +23,7 @@ reaches it by its app identity.
   leased apphost port (`lib/worlds/local.py` `_restart` reuses the `LocalNode`
   and its ports), and a Docker world restarts astrald in the node's container
   behind the same published port (`lib/worlds/docker.py` `restart`), so node2
-  comes back on the endpoint the app dials, and its token table, grants and
+  comes back on the endpoint the app dials, and its token table and
   contracts are read from the database.
 - **oracle** `verify.py` — node2 restarted once, node1 not, and node2 kept its
   endpoint; the provider process is the same pid and alive (it reconnected, it

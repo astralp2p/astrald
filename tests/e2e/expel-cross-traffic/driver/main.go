@@ -182,7 +182,7 @@ func (w *world) advertise(n provider.Node) (*astral.Identity, error) {
 	return app.ID, nil
 }
 
-// follow opens a swarm follow of service as a fresh app on n, granted on n,
+// follow opens a swarm follow of service as a fresh app on n, permitted on n,
 // and waits until it holds want.
 func (w *world) follow(n provider.Node, want string) (*astral.Identity, error) {
 	admin := n.Admin()
@@ -197,7 +197,7 @@ func (w *world) follow(n provider.Node, want string) (*astral.Identity, error) {
 	}
 	err = provider.Grant(w.ctx, app, &auth.Permit{Action: astral.String8(services.ServiceDiscoveryAction{}.ObjectType()), Constraints: scope})
 	if err != nil {
-		return nil, fmt.Errorf("grant discovery on %v: %w", n.Identity, err)
+		return nil, fmt.Errorf("permit discovery on %v: %w", n.Identity, err)
 	}
 	watch, err := servicescli.New(nil, app.Client).WatchIn(w.ctx, services.ReachSwarm, []string{service})
 	if err != nil {

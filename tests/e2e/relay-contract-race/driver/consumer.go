@@ -23,7 +23,7 @@ type consumer struct {
 	stop   func()
 }
 
-// openConsumer registers a consumer app on the named node, grants it
+// openConsumer registers a consumer app on the named node, permits it
 // discovery of the service, and opens its swarm follow. It returns once the
 // follow's initial outcome arrived complete.
 func openConsumer(ctx *astral.Context, name string, n node) (*consumer, error) {

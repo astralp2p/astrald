@@ -7,7 +7,7 @@ provider's app identity, routed node1 → node2.
 - **driver** `script.py` — runs `driver/` (Go, this repository's astral-go) in
   `drive` mode: register a provider app on node2 that advertises `player` and
   serves a stand-in `player.state`; register a front-end app on node1 with a
-  `player` discovery grant; find the provider with `reach=swarm`; call it by
+  `player` discovery permit; find the provider with `reach=swarm`; call it by
   its app identity, with no relink, and check the provider saw the front-end
   as caller.
 - **oracle** `verify.py` — every step held, plus the same round trip with fresh

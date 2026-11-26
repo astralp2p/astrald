@@ -7,7 +7,7 @@ name and cannot make node1 carry a discovery to the swarm. Across the swarm,
 the member's unresolved services when it does not conclude inside the host's
 budget.
 
-- **env** node · **start** `adopt-node`'s world (node1, node2 adopted;
+- **env** node · **start** `adopt-node`'s world (node1, node2 in the User's swarm;
   `ssor_stranger` a fresh third node) · **saves** — (an observer: node1 and
   node2 each get one more link, from the stranger)
 - **driver** `script.py` — links the stranger to node1 and node2 (it dials), then runs `driver/` (Go, this repository's pinned astral-go) in

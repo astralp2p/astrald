@@ -42,4 +42,4 @@ runs only after the attach (astral-go `lib/apps/registrar.go`). No call is
 retried.
 
 The apps' handlers end with the driver, as `apphost.bind` removes them when
-its session closes. The apps' identities, tokens and grants stay on node1.
+its session closes. The apps' identities and tokens stay on node1.

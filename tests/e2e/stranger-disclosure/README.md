@@ -22,11 +22,11 @@ swarm's roster from either. A session with no link to node1 is not answered
 
 ## The documented exposure
 
-astral-docs `topics/node-exposure.md`, "Linked peers": a linked peer with no
-grant reaches `user.contract` and `dir.resolve`; "the contract names the
-user. Its permits show whether the node is a management node. Its expiry …
-shows when the user claimed or adopted the node." `protocols/user/ops/
-user.contract.md` repeats it under "Disclosure" and names the one guard: a
+astral-docs `topics/node-exposure.md`, "Linked peers": a linked peer that
+holds no contract reaches `user.contract` and `dir.resolve`; "the contract
+names the user. Its tier permit shows the node's tier. Its expiry shows when
+the membership ends; the claim contract expires 365 days after the claim."
+`protocols/user/ops/user.contract.md` repeats it under "Disclosure" and names the one guard: a
 caller with no direct link is answered `not permitted`, and a User token calls
 as the User, which holds no link. `protocols/dir/ops/dir.resolve.md` lists
 `localuser` among the names a resolver claims. The source agrees:
@@ -34,7 +34,7 @@ as the User, which holds no link. `protocols/dir/ops/dir.resolve.md` lists
 else, `mod/dir/src/op_resolve.go` has no guard, and
 `mod/user/src/identity_resolver.go` resolves `localuser` for any caller.
 
-This test asserts that exposure as it is, so a change that narrows it (a grant
+This test asserts that exposure as it is, so a change that narrows it (a contract
 required for `user.contract`) or widens it (an answer to an unlinked caller,
 more in the answer) fails here and is a decision to make, not a quiet drift.
 What it means for Stealth: nearby hides the User from the LAN, but the first

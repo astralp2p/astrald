@@ -79,7 +79,7 @@ func run(path string) (map[string]bool, error) {
 	}
 	defer stop()
 
-	// the front-end app on node1, granted player discovery on any node
+	// the front-end app on node1, permitted player discovery on any node
 	front, err := contracts.Register(ctx, admin1, n1.Endpoint)
 	if err != nil {
 		return facts, err
