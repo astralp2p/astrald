@@ -34,6 +34,19 @@ const expiryGrace = 15 * time.Second
 func expirySteps(w *world, s session, watch *servicescli.Watcher, name string, facts map[string]bool) error {
 	exp := s.Nodes["ssm_expiry"]
 	expAdmin := connect(exp.Endpoint, exp.Token)
+
+	signed, err := shortContract(w, s)
+	if err != nil {
+		return fmt.Errorf("short contract: %w", err)
+	}
+	// note: no push to node1 (G7): a pushed membership is refused, and the
+	// claim adds it to ssm_expiry's SwarmState, which node1 syncs.
+	if err := userclient.New(nil, expAdmin).AcceptContract(w.ctx, signed); err != nil {
+		return fmt.Errorf("accept contract on ssm_expiry: %w", err)
+	}
+
+	// why after the claim: an app's contract signed while ssm_expiry was
+	// unclaimed does not outlive the claim (a Non-goal of G7).
 	providerID, cl, err := w.app(expAdmin, exp, serveApps)
 	if err != nil {
 		return err
@@ -43,19 +56,6 @@ func expirySteps(w *world, s session, watch *servicescli.Watcher, name string, f
 		return err
 	}
 	defer b.Close()
-
-	signed, err := shortContract(w, s)
-	if err != nil {
-		return fmt.Errorf("short contract: %w", err)
-	}
-	if err := userclient.New(nil, expAdmin).AcceptContract(w.ctx, signed); err != nil {
-		return fmt.Errorf("accept contract on ssm_expiry: %w", err)
-	}
-	// why offers: node1 learns a membership only through SwarmState, as for a
-	// member that joined through a carrier.
-	if err := admitClaimed(w, expAdmin, exp.Identity, signed); err != nil {
-		return err
-	}
 
 	expiresAt := signed.ExpiresAt.Time()
 	if err := step(facts, "short_member_reaches_open_follow", holdsWithin(watch, time.Until(expiresAt), providerID.String()+"/"+name)); err != nil {
@@ -81,16 +81,12 @@ func shortContract(w *world, s session) (*auth.SignedContract, error) {
 	return signNodeContract(w, s, s.Nodes["ssm_expiry"].Identity, key, expiryValidity)
 }
 
-// signNodeContract builds subject's Privileged membership, valid for
-// validity, with no Approval link, signed by the User on node1 and by key,
-// the subject's node key.
+// signNodeContract builds subject's PrivilegedMembership, valid for validity,
+// signed by the User on node1 and by key, the subject's node key.
 //
 // why the node key from the node's files: every op that collects a node's
 // subject signature refuses a contract shorter than an hour
 // (user.MinimalContractLength), and a node signs nothing else with its key.
-// why Privileged: user.accept_contract activates only a Privileged membership
-// the user key signed (D2); a membership of a lower tier needs a carrier and
-// an Approval, and user.join signs none shorter than an hour.
 func signNodeContract(w *world, s session, subject string, key *crypto.PrivateKey, validity time.Duration) (*auth.SignedContract, error) {
 	userID, err := astral.ParseIdentity(s.Facts.UserID)
 	if err != nil {
@@ -100,6 +96,8 @@ func signNodeContract(w *world, s session, subject string, key *crypto.PrivateKe
 	if err != nil {
 		return nil, err
 	}
+	// why a PrivilegedMembership: since G7 the user key signs no other
+	// membership; a Member's is signed by its carrier for an Approval.
 	contract, err := userapi.NewMembership(userID, subjectID, userapi.TierPrivilegedMember, nil, validity)
 	if err != nil {
 		return nil, err
