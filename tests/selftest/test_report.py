@@ -37,10 +37,10 @@ class TestReport(unittest.TestCase):
         self.assertIn("20260811T000000Z/smoke/", text)
 
     def test_failure_heading_names_the_phase(self):
-        text = render(doc(entry("policy-delegate", "fail",
+        text = render(doc(entry("adopt-node", "fail",
                                 failure_kind="environment", phase="restart")),
                       "r")
-        self.assertIn("### policy-delegate — environment in restart", text)
+        self.assertIn("### adopt-node — environment in restart", text)
         same = render(doc(entry("smoke", "fail", failure_kind="verify",
                                 phase="verify")), "r")
         self.assertIn("### smoke — verify\n", same)

@@ -255,8 +255,8 @@ type acceptanceUsers interface {
 	SetActiveContract(*apiauth.SignedContract) error
 }
 
-// claim makes a new user the owner of the node, as user.claim does: the user's key is stored in local and indexed,
-// and the node contract signed by both is the active contract. It returns once the user module names the user.
+// claim makes a new user the owner of the node, as user.bootstrap does: the user's key is stored in local and indexed,
+// and the PrivilegedMembership signed by both is the active contract. It returns once the user module names the user.
 func (a *acceptanceNode) claim() *astral.Identity {
 	a.t.Helper()
 
@@ -268,14 +268,14 @@ func (a *acceptanceNode) claim() *astral.Identity {
 
 	contract, err := userapi.NewMembership(userID, a.nodeID(), userapi.TierPrivilegedMember, nil, 24*time.Hour)
 	if err != nil {
-		a.t.Fatalf("node contract: %v", err)
+		a.t.Fatalf("membership: %v", err)
 	}
 	signed := &apiauth.SignedContract{Contract: contract}
 	if err = a.auth().SignContract(a.ctx, signed); err != nil {
-		a.t.Fatalf("sign the node contract: %v", err)
+		a.t.Fatalf("sign the membership: %v", err)
 	}
 	if _, err = a.objects().Store(a.ctx, a.objects().WriteDefault(), signed); err != nil {
-		a.t.Fatalf("store the node contract: %v", err)
+		a.t.Fatalf("store the membership: %v", err)
 	}
 
 	users := a.node.Modules().Find("user").(acceptanceUsers)

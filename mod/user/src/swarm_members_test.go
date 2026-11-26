@@ -157,14 +157,14 @@ func TestPublishSwarmEmitsOneEventPerChange(t *testing.T) {
 	}
 }
 
-// A contract that is not a node contract never republishes the set.
-func TestIndexedNonNodeContractPublishesNothing(t *testing.T) {
+// A contract that is not a membership never republishes the set.
+func TestIndexedNonMembershipPublishesNothing(t *testing.T) {
 	e := newMemberEnv(t)
 	e.mod.recordSwarm()
 	e.query.found = []*auth.SignedContract{memberContract(t, e.issuer, astral.GenerateIdentity())}
 	e.mod.onContractIndexed(&auth.SignedContract{Contract: &auth.Contract{Issuer: e.issuer, Subject: astral.GenerateIdentity()}})
 	if got := e.events.take(); len(got) != 0 {
-		t.Fatalf("a non-node contract emitted %v", got)
+		t.Fatalf("a non-membership contract emitted %v", got)
 	}
 }
 

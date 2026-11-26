@@ -50,7 +50,7 @@ func (d *ExternalDescriber) renew(now time.Time, dur time.Duration) time.Time {
 // describer is removed and not queried.
 func (d *ExternalDescriber) DescribeObject(ctx *astral.Context, id *astral.ObjectID) (<-chan *objects.Descriptor, error) {
 	// why: a registration never outlives the authorization that permitted it, so a
-	// provider whose grant was revoked or has expired is removed on its next call.
+	// provider whose authorization (contract) ended or expired is removed on its next call.
 	// note: an external authority that cannot be reached refuses, so it removes a
 	// permitted provider too.
 	if !d.mod.Auth.Authorize(ctx, &auth.ServeObjectsAction{

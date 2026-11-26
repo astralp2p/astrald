@@ -171,8 +171,7 @@ func callThroughNode2(ctx *astral.Context, n2, n3 node, admin3 *astrald.Client, 
 // node3, and admits node3 through node1 as a Member.
 //
 // why node1 dials: a joiner reaches its carrier (user.join), and node3's
-// dialing is off, so node3's join runs over the link node1 opened; before G7
-// user.adopt ran on node1 and node1 dialed itself.
+// dialing is off, so node3's join runs over the link node1 opened.
 func adopt(ctx *astral.Context, s session, n1, n3 node) error {
 	admin1 := connect(n1.Endpoint, n1.Token)
 	if err := addEndpoint(ctx, admin1, n3); err != nil {
@@ -184,7 +183,7 @@ func adopt(ctx *astral.Context, s session, n1, n3 node) error {
 	if err := newLink(ctx, admin1, n3); err != nil {
 		return err
 	}
-	// note: user.adopt is gone (G7); node3 joins through node1 as a Member
+	// note: node3 joins through node1 as a Member
 	if _, err := joins.Admit(ctx, connect(n3.Endpoint, n3.Token), connect(n1.Endpoint, s.Facts.UserToken), n1.Identity, n3.Identity); err != nil {
 		return fmt.Errorf("adopting node3 on node1: %w", err)
 	}

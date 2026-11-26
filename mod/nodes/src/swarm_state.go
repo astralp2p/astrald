@@ -53,8 +53,6 @@ var (
 )
 
 // swarmStore is this node's copy of SwarmState: a grow-only set of entries in the VFS of the node's identity.
-//
-// note: nothing constructs it in the running node yet; G7 does, and embeds nodesmod.SwarmState into Module.
 type swarmStore struct {
 	files   swarmFiles
 	owner   *astral.Identity // the node identity, whose VFS holds the set

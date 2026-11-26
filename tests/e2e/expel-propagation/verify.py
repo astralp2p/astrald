@@ -19,8 +19,8 @@ Every check is the oracle's own read, never the driver's `probes`:
   "identity expelled from swarm" also passes (node1 restarted and forgot the
   answered ban, which it keeps in memory only); a successful join never does;
 - the User cannot bring node3 back: the oracle has the User sign node3 a new
-  Privileged membership on node1 and offers it to node1 and node2 (what
-  `user.adopt` did before G7), and for READMIT seconds neither node lists
+  Privileged membership on node1 and offers it to node1 and node2, and for
+  READMIT seconds neither node lists
   node3 in its roster: an expel beats everything signed for the expelled
   node (mod/user/src/swarm_view_membership.go);
 - control: node2 is still a linked member and reads the same bait from node1.

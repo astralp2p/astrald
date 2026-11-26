@@ -34,14 +34,13 @@ func (mod *Module) SetSwarm(view usermod.SwarmView, state nodesmod.SwarmState, r
 // is not expelled. It answers at any hop, for every action but an expel and a
 // sudo.
 //
-// why AdminSwarmAction is answered: user.expel asks ExpelAction since G7, and
-// the ops that ask AdminSwarmAction sign nothing with the user key; answering
+// why AdminSwarmAction is answered: user.expel asks ExpelAction, and the ops that ask AdminSwarmAction sign nothing with the user key; answering
 // requests is what a Privileged node, or an unclaimed node, does for the user.
 //
 // The root answers no SudoAction: acting as another identity is signing and
 // querying with its key, and as the user key a Privileged node would confirm
 // a Privileged join (D2), expel (D7) or sign with a software user key. Sudo
-// stays what AuthorizeSudo and explicit contracts allow, as before G7.
+// stays what AuthorizeSudo and explicit contracts allow.
 //
 // A Privileged node relays only as the user (D6), not as another node or
 // another node's app.

@@ -38,7 +38,7 @@ func TestAdmitRelayContract(t *testing.T) {
 			return nil, relayForContract(astral.GenerateIdentity(), f.nodeID)
 		}, true},
 		{"a contract of another kind passes through", false, func(f *receiverFixture) (*astral.Identity, *auth.SignedContract) {
-			return astral.GenerateIdentity(), nodeContract(astral.GenerateIdentity(), astral.GenerateIdentity())
+			return astral.GenerateIdentity(), membershipContract(astral.GenerateIdentity(), astral.GenerateIdentity())
 		}, true},
 		{"expelled subject on a local path", false, func(f *receiverFixture) (*astral.Identity, *auth.SignedContract) {
 			return nil, relayForContract(astral.GenerateIdentity(), f.expelSibling())

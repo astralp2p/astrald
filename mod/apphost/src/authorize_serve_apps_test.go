@@ -129,7 +129,7 @@ func TestServeAppsRefusesCallerWithoutPermits(t *testing.T) {
 
 // TestServeAppsKeepsTheNetworkOriginRefusal holds the refusal that predates
 // ServeApps: a network caller is rejected before any authorization is asked,
-// so no grant or contract lets a remote identity host on this node.
+// so no contract lets a remote identity host on this node.
 func TestServeAppsKeepsTheNetworkOriginRefusal(t *testing.T) {
 	caller := astral.GenerateIdentity()
 
@@ -320,8 +320,8 @@ type serveAppsNode struct {
 
 func (n *serveAppsNode) Identity() *astral.Identity { return n.id }
 
-// serveAppsRegistrar is a module that completes apphost.register: grants and
-// tokens live in an in-memory database, and signing and storing succeed.
+// serveAppsRegistrar is a module that completes apphost.register: tokens
+// live in an in-memory database, and signing and storing succeed.
 func serveAppsRegistrar(t *testing.T) *Module {
 	t.Helper()
 

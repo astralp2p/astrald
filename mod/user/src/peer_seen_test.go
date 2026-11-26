@@ -65,7 +65,7 @@ func (p *contactNodes) PushSwarmEntry(ctx *astral.Context, target *astral.Identi
 // contactFixture is node nodeID of user userID, holding its active contract,
 // whose fakes record every step of a nearby contact. peerID is a node of the
 // user that is no swarm member here yet. answer is what peerID answers
-// user.contract with, by default a valid node contract.
+// user.contract with, by default a valid membership.
 type contactFixture struct {
 	mod       *Module
 	nodeID    *astral.Identity
@@ -93,7 +93,7 @@ func newContactFixture(t *testing.T) *contactFixture {
 		now:       time.Now(),
 	}
 	f.answer = func(f *contactFixture) (*auth.SignedContract, error) {
-		return nodeContract(f.userID, f.peerID), nil
+		return membershipContract(f.userID, f.peerID), nil
 	}
 
 	// note: without the Network zone, so the contact steps show that they add it.
@@ -113,7 +113,7 @@ func newContactFixture(t *testing.T) *contactFixture {
 		now:              func() time.Time { return f.now },
 		readPeerContract: f.readContract,
 	}
-	if err := f.mod.config.ActiveContract.Set(nil, nodeContract(f.userID, f.nodeID)); err != nil {
+	if err := f.mod.config.ActiveContract.Set(nil, membershipContract(f.userID, f.nodeID)); err != nil {
 		t.Fatalf("seed active contract: %v", err)
 	}
 	useIndexSwarm(f.mod, f.userID, f.auth)
@@ -151,9 +151,9 @@ func (f *contactFixture) nextAttempt(node *astral.Identity) (time.Time, bool) {
 	return next, ok
 }
 
-// addMember indexes a node contract from the user for node, making node a swarm member.
+// addMember indexes a membership from the user for node, making node a swarm member.
 func (f *contactFixture) addMember(node *astral.Identity) {
-	f.auth.seed(nodeContract(f.userID, node))
+	f.auth.seed(membershipContract(f.userID, node))
 }
 
 // requireNoContact fails when anything was read, pushed, scheduled or held in the dial map.
@@ -342,26 +342,26 @@ func contractReads(f *contactFixture) (n int) {
 func badContractAnswers() map[string]func(f *contactFixture) (*auth.SignedContract, error) {
 	return map[string]func(f *contactFixture) (*auth.SignedContract, error){
 		"another issuer": func(f *contactFixture) (*auth.SignedContract, error) {
-			return nodeContract(astral.GenerateIdentity(), f.peerID), nil
+			return membershipContract(astral.GenerateIdentity(), f.peerID), nil
 		},
 		"another subject": func(f *contactFixture) (*auth.SignedContract, error) {
-			return nodeContract(f.userID, astral.GenerateIdentity()), nil
+			return membershipContract(f.userID, astral.GenerateIdentity()), nil
 		},
 		"relay-for contract": func(f *contactFixture) (*auth.SignedContract, error) {
 			return relayForContract(f.userID, f.peerID), nil
 		},
 		"forged issuer signature": func(f *contactFixture) (*auth.SignedContract, error) {
-			c := nodeContract(f.userID, f.peerID)
+			c := membershipContract(f.userID, f.peerID)
 			c.IssuerSig = forgedSig()
 			return c, nil
 		},
 		"forged subject signature": func(f *contactFixture) (*auth.SignedContract, error) {
-			c := nodeContract(f.userID, f.peerID)
+			c := membershipContract(f.userID, f.peerID)
 			c.SubjectSig = forgedSig()
 			return c, nil
 		},
 		"expired": func(f *contactFixture) (*auth.SignedContract, error) {
-			c := nodeContract(f.userID, f.peerID)
+			c := membershipContract(f.userID, f.peerID)
 			c.ExpiresAt = astral.Time(f.now.Add(-time.Second))
 			return c, nil
 		},
@@ -369,10 +369,10 @@ func badContractAnswers() map[string]func(f *contactFixture) (*auth.SignedContra
 			if err := f.mod.db.StoreExpulsion(sampleSigned(f.userID, f.peerID)); err != nil {
 				return nil, err
 			}
-			return nodeContract(f.userID, f.peerID), nil
+			return membershipContract(f.userID, f.peerID), nil
 		},
 		"empty permit": func(f *contactFixture) (*auth.SignedContract, error) {
-			c := nodeContract(f.userID, f.peerID)
+			c := membershipContract(f.userID, f.peerID)
 			c.Permits = append(c.Permits, nil)
 			return c, nil
 		},
@@ -449,7 +449,7 @@ func TestPeerSeenFullDialMap(t *testing.T) {
 	f := newContactFixture(t)
 	f.calls.reads = make(chan *astral.Identity, dialMapCap+1)
 	f.answer = func(f *contactFixture) (*auth.SignedContract, error) {
-		return nodeContract(astral.GenerateIdentity(), f.peerID), nil
+		return membershipContract(astral.GenerateIdentity(), f.peerID), nil
 	}
 	start := f.now
 	for range dialMapCap {
@@ -459,7 +459,9 @@ func TestPeerSeenFullDialMap(t *testing.T) {
 		t.Fatalf("the dial map holds %v nodes; want it full", n)
 	}
 
-	f.answer = func(f *contactFixture) (*auth.SignedContract, error) { return nodeContract(f.userID, f.peerID), nil }
+	f.answer = func(f *contactFixture) (*auth.SignedContract, error) {
+		return membershipContract(f.userID, f.peerID), nil
+	}
 	f.now = start.Add(dialIntervalAfterRefusal - time.Minute)
 	f.mod.onPeerSeen(f.seen(f.peerID, f.userID))
 

@@ -7,8 +7,8 @@
    `claimed`, then probes: read the bait from node1, join node1's swarm,
    and list its own repositories.
 4. The User tries to bring node3 back: it signs node3 a new Privileged
-   membership on node1 and offers it to node1 and node2 (what `user.adopt`
-   did before G7; `swarmstate.user_membership`).
+   membership on node1 and offers it to node1 and node2
+   (`swarmstate.user_membership`).
 
 The outcomes are recorded as the `probes` fact, for the report. The oracle
 judges by its own reads, never by these.

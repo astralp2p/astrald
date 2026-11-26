@@ -298,10 +298,10 @@ func newReceiverFixture(t *testing.T, userID *astral.Identity) *receiverFixture 
 	return f
 }
 
-// addSibling indexes a node contract from the current user for a new node and returns the node.
+// addSibling indexes a membership from the current user for a new node and returns the node.
 func (f *receiverFixture) addSibling() *astral.Identity {
 	sibling := astral.GenerateIdentity()
-	f.auth.seed(nodeContract(f.userID, sibling))
+	f.auth.seed(membershipContract(f.userID, sibling))
 	return sibling
 }
 
@@ -341,7 +341,7 @@ func contractWith(issuer, subject *astral.Identity, actions ...string) *auth.Sig
 	return &auth.SignedContract{Contract: contract, IssuerSig: validSig(), SubjectSig: validSig()}
 }
 
-func nodeContract(issuer, subject *astral.Identity) *auth.SignedContract {
+func membershipContract(issuer, subject *astral.Identity) *auth.SignedContract {
 	return contractWith(issuer, subject, user.TierMember.Action())
 }
 
@@ -359,10 +359,10 @@ func TestReceiveSignedContractRejects(t *testing.T) {
 		contract func(f *receiverFixture, sender *astral.Identity) *auth.SignedContract
 	}{
 		{"membership from the current user", false, func(f *receiverFixture, _ *astral.Identity) *auth.SignedContract {
-			return nodeContract(f.userID, astral.GenerateIdentity())
+			return membershipContract(f.userID, astral.GenerateIdentity())
 		}},
 		{"membership without a current user", true, func(f *receiverFixture, _ *astral.Identity) *auth.SignedContract {
-			return nodeContract(astral.GenerateIdentity(), astral.GenerateIdentity())
+			return membershipContract(astral.GenerateIdentity(), astral.GenerateIdentity())
 		}},
 		{"signed contract without a contract", false, func(f *receiverFixture, _ *astral.Identity) *auth.SignedContract {
 			return &auth.SignedContract{IssuerSig: validSig(), SubjectSig: validSig()}
@@ -401,7 +401,7 @@ func TestReceiveSignedContractRejects(t *testing.T) {
 
 			sender := astral.GenerateIdentity()
 			if userID != nil {
-				f.auth.seed(nodeContract(userID, sender))
+				f.auth.seed(membershipContract(userID, sender))
 			}
 
 			drop := &recordingDrop{sender: sender, object: tc.contract(f, sender)}

@@ -102,9 +102,9 @@ func nodeKey() (*crypto.PrivateKey, error) {
 // token, to every node of to. It reports, per node, "ack" or the error the
 // push answered.
 //
-// why: user.adopt and the contract push of objects.push are gone (G7), so a
-// node of one swarm meets an entry of another only as an offered entry, the
-// way a merge meets it.
+// why: a membership enters a node only as a SwarmState entry, so a node of
+// one swarm meets an entry of another only as an offered entry, the way a
+// merge meets it.
 func offerEntry(ctx *astral.Context, c *astrald.Client, entryID string, to []string) (map[string]any, error) {
 	id, err := astral.ParseID(entryID)
 	if err != nil {
@@ -135,8 +135,8 @@ func offerEntry(ctx *astral.Context, c *astrald.Client, entryID string, to []str
 // of to. It reports the membership's entry ID and, per node, "ack" or the
 // error the push answered.
 //
-// why: user.adopt is gone (G7); the User's own signature on a new membership
-// is how the User would bring a node back, so a test of an expel offers one.
+// why: the User's own signature on a new membership is how the User would
+// bring a node back without a JoinRequest, so a test of an expel offers one.
 func signMembership(ctx *astral.Context, c *astrald.Client, issuer, subject, tier string, validity time.Duration, to []string) (map[string]any, error) {
 	issuerID, err := astral.ParseIdentity(issuer)
 	if err != nil {

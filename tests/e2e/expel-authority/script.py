@@ -54,7 +54,7 @@ async def main():
     user_id, user_token = doc["facts"]["user_id"], doc["facts"]["user_token"]
 
     # node1 <-> ea-target only, as swarm-roster-sync does for its node3; the
-    # target joins through node1 as a Member (user.adopt is gone, G7)
+    # target joins through node1 as a Member
     await ss.admit(n1, user_token, t)
     async with await astral.connect(n1["endpoint"], token=user_token) as u:
         baseline = await view(u)

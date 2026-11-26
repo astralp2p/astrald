@@ -40,8 +40,6 @@ type entrySigner interface {
 // joiner its membership. It keeps nothing between connections: a joiner that
 // reconnects resends the same request and the carrier runs the same steps.
 // Spec: the "Resuming a join" flow of the SwarmState working paper.
-//
-// note: nothing in the running node builds a swarmCarrier until G7.
 type swarmCarrier struct {
 	self     *astral.Identity
 	state    nodesmod.SwarmState

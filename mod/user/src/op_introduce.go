@@ -81,8 +81,8 @@ func (mod *Module) OpIntroduce(ctx *astral.Context, q *routing.IncomingQuery, ar
 // introduce offers the active contract ac to nodeID's SwarmState, pulls
 // nodeID's SwarmState and schedules a sync with nodeID.
 //
-// why SwarmState and not objects.push: since G7 a membership enters another
-// node only as a SwarmState entry, which that node checks on merge; its object
+// why SwarmState and not objects.push: a membership enters another node only
+// as a SwarmState entry, which that node checks on merge; its object
 // receiver takes no membership.
 func (mod *Module) introduce(ctx *astral.Context, ac *auth.SignedContract, nodeID *astral.Identity) astral.Error {
 	if ac.ExpiresAt.Time().Before(time.Now()) {

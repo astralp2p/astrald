@@ -9,7 +9,7 @@ import (
 	"github.com/astralp2p/astral-go/astral/log"
 )
 
-// TestIsSwarmMember: a member with an active node contract is a member; an
+// TestIsSwarmMember: a node with an active membership is a member; an
 // expelled node, a stranger and the zero identity are not.
 func TestIsSwarmMember(t *testing.T) {
 	e := newMemberEnv(t)

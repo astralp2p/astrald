@@ -193,8 +193,8 @@ func (mod *Module) admitCarry(ctx *astral.Context, q *routing.IncomingQuery, arg
 	}
 
 	// why membership and not the sending node's own discovery permit: a Member
-	// node holds no discovery of its own once the narrowed rules replace the
-	// any-member rule (G3); what the app sees comes from the app's chain.
+	// node holds no discovery of its own; what the app sees comes from the
+	// app's chain.
 	if !slices.ContainsFunc(mod.swarmMembers(), q.Caller().IsEqual) {
 		return nil, errRelayForRefused
 	}

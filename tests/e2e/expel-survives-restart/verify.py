@@ -22,7 +22,7 @@ node itself believes) or on the User's token for node1:
   that carries the join (astral-docs protocols/user/README.md; Link admission
   in protocols/nodes/README.md). A join that succeeds fails the test. A new
   Privileged membership the User signs for node3 on node1 and offers to node1
-  and node2 (what `user.adopt` did before G7) brings node3 into no roster,
+  and node2 brings node3 into no roster,
   and node3 is still `unclaimed`.
 
 Exact sets throughout: a ban that came back short, a node3 that came back as a

@@ -172,7 +172,7 @@ done
 for vm in $CLIENTS; do wait_astrald "$vm"; done
 
 # 4) a peer has to know where the gateway lives too. A lab node knows its
-# swarm siblings from adoption and knows nothing else, so without this a
+# swarm siblings from joining and knows nothing else, so without this a
 # peer's relay dial dies as `route not found`. A client needs no row: its
 # gateway.yaml entry carries the endpoint.
 # shellcheck disable=SC2086

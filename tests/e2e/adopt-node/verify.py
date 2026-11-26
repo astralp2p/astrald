@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Oracle: symmetric swarm — port of netsim adopt-node/verify.py assertions.
+"""Oracle: symmetric swarm — port of the netsim verify.py assertions.
 
 Both-ends check: same User issued both contracts; each node counts the other
 among its linked siblings; node2 holds a live link back to node1.
@@ -7,8 +7,8 @@ among its linked siblings; node2 holds a live link back to node1.
 why membership rather than "the linked sibling": this asked for the FIRST
 linked member and compared it to the peer, which is only the same question in
 a world with exactly two nodes. The lab now also runs a reflector, and an
-operator told to adopt "the other astral node from the local network" quite
-reasonably adopted both — so the first linked sibling was the reflector and a
+operator told to join "the other astral node from the local network" quite
+reasonably joined both — so the first linked sibling was the reflector and a
 correct swarm read as a wrong one. What this test cares about is that node1
 and node2 ended up linked to each other, whoever else is around.
 """
@@ -21,8 +21,8 @@ from lib.sessionio import load
 
 
 # why a window rather than an instant: #348 syncs the full swarm roster to a
-# newly invited node, and that sync is asynchronous. Asking node2 the instant
-# adoption returns asks whether the roster is already there, which is a
+# newly joined node, and that sync is asynchronous. Asking node2 the instant
+# the join returns asks whether the roster is already there, which is a
 # different and much weaker question than whether it converges. The window is
 # short enough that a roster which never arrives still fails the test.
 CONVERGE = 30.0
@@ -63,7 +63,7 @@ async def main():
     # user.info and apphost.register only.
     async with await astral.connect(n2["endpoint"], token=n2["token"]) as c:
         i2 = await c.user.info()
-        assert str(i2.user_id) == user_id, "node2 adopted under a different User"
+        assert str(i2.user_id) == user_id, "node2 joined under a different User"
         sibs2 = await await_sibling(c, n1["identity"])
         assert n1["identity"] in sibs2, (
             f"node2 has no live link to node1 {n1['identity']}; "

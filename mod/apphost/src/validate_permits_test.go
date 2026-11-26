@@ -59,11 +59,11 @@ func TestValidatePermits(t *testing.T) {
 // TestRefuseRemovedArgs: a query naming a removed argument is refused with
 // unknown argument naming it; other arguments pass.
 func TestRefuseRemovedArgs(t *testing.T) {
-	err := refuseRemovedArgs("apphost.grant?out=json&action=x", "identity", "action")
+	err := refuseRemovedArgs("apphost.register?out=json&action=x", "identity", "action")
 	if !errors.Is(err, query.ErrUnknownArgument) || err.Error() != "unknown argument: action" {
 		t.Fatalf("answered %v; want unknown argument: action", err)
 	}
-	if err := refuseRemovedArgs("apphost.grant?in=json&out=json", "identity", "action"); err != nil {
+	if err := refuseRemovedArgs("apphost.register?in=json&out=json", "identity", "action"); err != nil {
 		t.Fatalf("refused a query without removed arguments: %v", err)
 	}
 }

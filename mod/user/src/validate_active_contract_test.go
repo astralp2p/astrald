@@ -21,23 +21,23 @@ func TestValidateActiveContract(t *testing.T) {
 		want     string
 	}{
 		{"valid membership", func() *auth.SignedContract {
-			return nodeContract(userID, nodeID)
+			return membershipContract(userID, nodeID)
 		}, func(err error) bool { return err == nil }, "nil"},
 
 		{"another subject", func() *auth.SignedContract {
-			return nodeContract(userID, astral.GenerateIdentity())
+			return membershipContract(userID, astral.GenerateIdentity())
 		}, func(err error) bool {
 			return err != nil && err.Error() == "local node is not the subject of the contract"
 		}, "local node is not the subject of the contract"},
 
 		{"self-issued", func() *auth.SignedContract {
-			return nodeContract(nodeID, nodeID)
+			return membershipContract(nodeID, nodeID)
 		}, func(err error) bool {
 			return err != nil && err.Error() == "local node is the issuer of the contract"
 		}, "local node is the issuer of the contract"},
 
 		{"expired", func() *auth.SignedContract {
-			sc := nodeContract(userID, nodeID)
+			sc := membershipContract(userID, nodeID)
 			sc.ExpiresAt = astral.Time(time.Now().Add(-time.Minute))
 			return sc
 		}, func(err error) bool { return errors.Is(err, auth.ErrContractExpired) }, auth.ErrContractExpired.Error()},
@@ -49,7 +49,7 @@ func TestValidateActiveContract(t *testing.T) {
 		}, "contract is not a membership"},
 
 		{"forged issuer signature", func() *auth.SignedContract {
-			sc := nodeContract(userID, nodeID)
+			sc := membershipContract(userID, nodeID)
 			sc.IssuerSig = forgedSig()
 			return sc
 		}, func(err error) bool {

@@ -28,7 +28,7 @@ async def adopt(doc: dict) -> float:
     """node1 and node5 meet, and the User adopts node5 on node1; the time of
     the adoption's answer."""
     n1, n5 = doc["nodes"]["node1"], doc["nodes"]["node5"]
-    # note: user.adopt is gone (G7); node5 joins through node1 as a Member
+    # note: node5 joins through node1 as a Member
     await ss.admit(n1, doc["facts"]["user_token"], n5)
     return time.time()
 

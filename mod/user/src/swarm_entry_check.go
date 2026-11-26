@@ -25,10 +25,8 @@ type signatureVerifier interface {
 }
 
 // swarmEntryCheck implements usermod.SwarmView's CheckSwarmEntry: which tier
-// may write which entry (D2, D5, D7, D10).
-//
-// note: nothing registers it until G7 composes it into the SwarmView that
-// mod/nodes calls on merge.
+// may write which entry (D2, D5, D7, D10). Module composes it into the
+// SwarmView that mod/nodes calls on merge (swarm_wire.go).
 type swarmEntryCheck struct {
 	entries  swarmEntryReader
 	members  membershipReader

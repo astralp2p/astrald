@@ -25,9 +25,9 @@ type opRequestContractArgs struct {
 // once when it has one.
 //
 // why not OpRequestContract: Load registers every Op-prefixed method, and
-// G7 registers this op when it builds contractRequests.
+// LoadDependencies registers this op beside contractRequests.
 // why the session and not q.Caller(): the request names the app that holds
-// the token, as apphost.request_grant does.
+// the token.
 func (mod *Module) requestContract(ctx *astral.Context, q *routing.IncomingQuery, args opRequestContractArgs) error {
 	// why before accepting: accepting drops the en-route entry naming the session.
 	requester := mod.sessionOwner(q)

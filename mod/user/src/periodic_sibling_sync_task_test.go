@@ -6,54 +6,53 @@ import (
 	"time"
 
 	"github.com/astralp2p/astral-go/api/auth"
-	"github.com/astralp2p/astral-go/api/user"
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astral-go/astral/log"
 	objectsmod "github.com/astralp2p/astrald/mod/objects"
 )
 
-// activePusher is an objects module that records every push of a swarm
-// membership contract issued to the node `self`, which is the active contract a
-// SyncNodesTask pushes first, and answers every push with success.
-type activePusher struct {
+// appPusher is an objects module that records every push of a relay-for
+// contract whose subject is the node `self`, the app contract a SyncNodesTask
+// pushes, and answers every push with success.
+type appPusher struct {
 	objectsmod.Module
 	self   *astral.Identity
 	pushed chan string
 }
 
-func newActivePusher(self *astral.Identity) *activePusher {
-	return &activePusher{self: self, pushed: make(chan string, 64)}
+func newAppPusher(self *astral.Identity) *appPusher {
+	return &appPusher{self: self, pushed: make(chan string, 64)}
 }
 
-func (p *activePusher) Push(_ *astral.Context, target *astral.Identity, obj astral.Object) error {
+func (p *appPusher) Push(_ *astral.Context, target *astral.Identity, obj astral.Object) error {
 	sc, ok := obj.(*auth.SignedContract)
-	if !ok || !sc.Subject.IsEqual(p.self) || len(sc.HasPermit(user.TierMember.Action())) == 0 {
+	if !ok || !sc.Subject.IsEqual(p.self) || !isRelayForContract(sc.Contract) {
 		return nil
 	}
 	p.pushed <- target.String()
 	return nil
 }
 
-// await returns the targets of the next n active contract pushes.
-func (p *activePusher) await(t *testing.T, n int) (targets []string) {
+// await returns the targets of the next n app contract pushes.
+func (p *appPusher) await(t *testing.T, n int) (targets []string) {
 	t.Helper()
 	for len(targets) < n {
 		select {
 		case target := <-p.pushed:
 			targets = append(targets, target)
 		case <-time.After(effectTimeout):
-			t.Fatalf("got %d active contract pushes %v; want %d", len(targets), targets, n)
+			t.Fatalf("got %d app contract pushes %v; want %d", len(targets), targets, n)
 		}
 	}
 	return targets
 }
 
-// requireNone fails on any further active contract push within quiet.
-func (p *activePusher) requireNone(t *testing.T) {
+// requireNone fails on any further app contract push within quiet.
+func (p *appPusher) requireNone(t *testing.T) {
 	t.Helper()
 	select {
 	case target := <-p.pushed:
-		t.Fatalf("pushed the active contract to %v; want no further sync", target)
+		t.Fatalf("pushed the app contract to %v; want no further sync", target)
 	case <-time.After(quiet):
 	}
 }
@@ -67,10 +66,10 @@ func syncModule(t *testing.T, ctx *astral.Context, userID, nodeID *astral.Identi
 	app = relayForContract(astral.GenerateIdentity(), nodeID)
 
 	index := &indexAuth{}
-	index.seed(nodeContract(userID, nodeID))
+	index.seed(membershipContract(userID, nodeID))
 	index.seed(app)
 	for _, sib := range linked {
-		index.seed(nodeContract(userID, sib))
+		index.seed(membershipContract(userID, sib))
 	}
 
 	db := testDB(t)
@@ -89,7 +88,7 @@ func syncModule(t *testing.T, ctx *astral.Context, userID, nodeID *astral.Identi
 		db:    db,
 		after: clock.after,
 	}
-	if err := mod.config.ActiveContract.Set(nil, nodeContract(userID, nodeID)); err != nil {
+	if err := mod.config.ActiveContract.Set(nil, membershipContract(userID, nodeID)); err != nil {
 		t.Fatalf("seed active contract: %v", err)
 	}
 	useIndexSwarm(mod, userID, index)
@@ -116,9 +115,9 @@ func TestPeriodicSiblingSync_RunsPerSiblingEachTick(t *testing.T) {
 	b, c, unlinked := astral.GenerateIdentity(), astral.GenerateIdentity(), astral.GenerateIdentity()
 	clock := newStepClock()
 	userID, nodeID := astral.GenerateIdentity(), astral.GenerateIdentity()
-	pusher := newActivePusher(nodeID)
+	pusher := newAppPusher(nodeID)
 	mod, _ := syncModule(t, ctx, userID, nodeID, pusher, clock, b, c)
-	mod.Deps.Auth.(*indexAuth).seed(nodeContract(userID, unlinked))
+	mod.Deps.Auth.(*indexAuth).seed(membershipContract(userID, unlinked))
 
 	done := runPeriodic(mod, ctx)
 
@@ -165,7 +164,7 @@ func TestPeriodicSiblingSync_ResendsARelayContractTheSiblingRefused(t *testing.T
 		t.Fatalf("B indexed %d contracts before its LocalSwarm listed A; want the relay contract refused", len(got))
 	}
 
-	b.auth.seed(nodeContract(userID, nodeID))
+	b.auth.seed(membershipContract(userID, nodeID))
 	done := runPeriodic(mod, ctx)
 	clock.wait(t)
 	if got := b.auth.received(); slices.Contains(got, app) {
@@ -199,7 +198,7 @@ func TestPeriodicSiblingSync_DisabledReturnsWithoutSync(t *testing.T) {
 			b := astral.GenerateIdentity()
 			clock := newStepClock()
 			userID, nodeID := astral.GenerateIdentity(), astral.GenerateIdentity()
-			pusher := newActivePusher(nodeID)
+			pusher := newAppPusher(nodeID)
 			mod, _ := syncModule(t, ctx, userID, nodeID, pusher, clock, b)
 			mod.file = file
 

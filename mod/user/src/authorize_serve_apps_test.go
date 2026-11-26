@@ -29,7 +29,7 @@ func TestServeAppsAllowsTheUserAndTheNode(t *testing.T) {
 
 // TestServeAppsRefusesEveryoneElse is the property the guard depends on: an
 // identity that is neither the user nor this node holds ServeApps only through
-// a grant or a contract, which this handler does not consult.
+// a contract, which this handler does not consult.
 func TestServeAppsRefusesEveryoneElse(t *testing.T) {
 	mod := claimedModule(t, astral.GenerateIdentity())
 	mod.node = &identityNode{id: astral.GenerateIdentity()}

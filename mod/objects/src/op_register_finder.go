@@ -26,7 +26,7 @@ func (mod *Module) OpRegisterFinder(ctx *astral.Context, q *routing.IncomingQuer
 	defer ch.Close()
 
 	// why: cheapest refusal first. A network caller is refused whatever it holds,
-	// and this costs no database work — Authorize below queries the grants and may
+	// and this costs no database work — Authorize below asks the handlers and may
 	// then walk the contract chain, and it logs an allow before this would have
 	// refused. It is not the authorization: a query routed locally by a tool
 	// carries no network origin whatever its caller.

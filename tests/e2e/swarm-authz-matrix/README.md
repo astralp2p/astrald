@@ -50,12 +50,11 @@ membership, carrying only its tier permit, does not give; AdminNetwork grants
 the User and node1, and a Privileged node through the swarm root
 (`authorize_admin_network.go`); StoreObjects, AdminObjects and AdminSwarm
 grant the User and node1 only, and the apphost setters refuse a network
-origin. Before G7 a sibling of any tier also read node1's objects and links.
+origin.
 
 The guarded probes are `tree.list`, `apphost.list_tokens`, `objects.store`,
 `tree.set`, `dir.set_alias`, `apphost.create_token`, `apphost.hold_object`,
-`user.expel`, `crypto.sign_text` and `objects.delete` (G7 removed the
-`user.adopt` and policy-setter probes with their ops).
+`user.expel`, `crypto.sign_text` and `objects.delete`.
 Every write names the stranger or the bait, so a guard that broke changes only
 what the oracle reads back.
 

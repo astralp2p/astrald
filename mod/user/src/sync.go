@@ -212,15 +212,6 @@ func (mod *Module) isForwardable(contract *auth.SignedContract, with *astral.Ide
 	return mod.AdmitRelayContract(nil, contract) == nil
 }
 
-func (mod *Module) pushActiveContract(ctx *astral.Context, remoteIdentity *astral.Identity) {
-	contract := mod.ActiveContract()
-	if contract == nil {
-		return
-	}
-
-	mod.Objects.Push(ctx, remoteIdentity, contract)
-}
-
 // siblingPushTimeout bounds one push to a linked sibling.
 const siblingPushTimeout = 15 * time.Second
 

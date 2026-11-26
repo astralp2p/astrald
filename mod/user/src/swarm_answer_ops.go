@@ -49,11 +49,8 @@ type swarmAuthorizer interface {
 // a pending Privileged JoinRequest (swarm_confirm_op.go).
 //
 // It reaches SwarmState only through nodes.SwarmState and reads what entries
-// mean only through user.SwarmView. Nothing registers it yet: G7 builds it
-// with mod.Nodes, the SwarmView implementation, mod.Auth,
-// mod.Crypto.NodeSigner() and, on a node that reaches the user key, the
-// userKeyCeremony its carrier uses, and adds it to the module's router with
-// AddStructPrefix(ops, "Op").
+// mean only through user.SwarmView. wireSwarm builds it and adds it to the
+// module's router with AddStructPrefix(ops, "Op").
 type SwarmAnswerOps struct {
 	Node   *astral.Identity
 	State  nodesmod.SwarmState

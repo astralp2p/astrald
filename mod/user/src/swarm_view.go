@@ -14,9 +14,7 @@ import (
 // swarmView implements the reading part of usermod.SwarmView over the entries
 // it reads through nodesmod.SwarmState. Every answer comes from a swarmSnapshot,
 // which is pure: the set as read, the root key and the time of the call.
-//
-// note: CheckSwarmEntry is G3's; G7 joins both into Module and wires the view
-// to Deps.Nodes. Nothing in the running node constructs a swarmView yet.
+// Module serves the SwarmView by joining it with swarmEntryCheck (swarm_wire.go).
 type swarmView struct {
 	state nodesmod.SwarmState
 	root  func() *astral.Identity

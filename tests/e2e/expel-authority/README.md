@@ -11,8 +11,8 @@ Who may call `user.expel`, what it refuses, and what a ban made twice does.
   minted for a fresh app identity on node1, node2's node token on node2, the
   User's identity on node2 (a token minted there; node2 holds no User key),
   and the User on node1 naming the User. Then `ea-target` is expelled twice:
-  by node1's node token (the management node: its contract carries the admin
-  permit with delegation, `NewNodeContract`), then by the User.
+  by node1's node token (the management node: it holds a PrivilegedMembership),
+  then by the User.
 - **oracle** `verify.py` —
   - the two non-User callers that hold no admin permit read `not permitted`
     (`AuthorizeAdminSwarm`, `authorizers.go`: the contract's issuer, or a

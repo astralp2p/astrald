@@ -95,8 +95,8 @@ func newSyncFixture(t *testing.T, ctx *astral.Context) *syncFixture {
 	t.Helper()
 
 	userID, nodeID := astral.GenerateIdentity(), astral.GenerateIdentity()
-	active := nodeContract(userID, nodeID)
-	sibling := nodeContract(userID, astral.GenerateIdentity())
+	active := membershipContract(userID, nodeID)
+	sibling := membershipContract(userID, astral.GenerateIdentity())
 	app := relayForContract(astral.GenerateIdentity(), nodeID)
 	names := map[astral.Object]string{active: "active contract", sibling: "sibling contract", app: "app contract"}
 
@@ -132,12 +132,11 @@ func newSyncFixture(t *testing.T, ctx *astral.Context) *syncFixture {
 	return f
 }
 
-// TestSyncNodesTaskPushesTheContractFirst: a sync pushes this node's active
-// contract, then the bans, then the sibling contracts, and only then queries the
-// remote node as the user for the alias, asks it for its relay digest, pushes the
+// TestSyncNodesTaskStepOrder: a sync pushes the bans, then pulls the swarm
+// state, and only then queries the remote node for the alias, asks it for its relay digest, pushes the
 // app contracts and syncs assets. The step node answers the digest query with a
 // user.info, which is no digest, so the app contract is pushed.
-func TestSyncNodesTaskPushesTheContractFirst(t *testing.T) {
+func TestSyncNodesTaskStepOrder(t *testing.T) {
 	ctx, cancel := astral.NewContext(nil).WithTimeout(10 * time.Second)
 	defer cancel()
 	f := newSyncFixture(t, ctx)
@@ -147,7 +146,6 @@ func TestSyncNodesTaskPushesTheContractFirst(t *testing.T) {
 	}
 
 	want := []string{
-		"push active contract",
 		"push expulsion",
 
 		"query " + user.OpInfo,

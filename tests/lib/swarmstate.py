@@ -293,9 +293,8 @@ def user_membership(node: dict, user_token: str, user_id: str, subject: str,
     """A membership of subject at tier that the User signs on node
     (crypto.sign_hash with user_token), with no Approval link, offered with
     nodes.swarm_push to node and to every node of push_to: {membership_id,
-    pushed: {"local" or node identity: "ack" or the error}}. Since G7 this is
-    the only way the User brings a node in without its JoinRequest, what
-    user.adopt did before."""
+    pushed: {"local" or node identity: "ack" or the error}}. This is the only
+    way the User brings a node in without its JoinRequest."""
     out = app_tool("membership", node["endpoint"], user_token, user_id, subject,
                    tier, validity, *[n["identity"] for n in push_to])
     assert "error" not in out, f"signing a membership for {subject}: {out['error']}"
@@ -334,7 +333,7 @@ def move_key(src: dict, dst: dict, identity: str) -> dict:
 async def admit(carrier: dict, user_token: str, joiner: dict, tier: str = "member",
                 timeout: float = 60.0) -> dict:
     """joiner joins the User's swarm through carrier at tier, the User
-    approving its JoinRequest on carrier: what user.adopt did before G7.
+    approving its JoinRequest on carrier.
     Both nodes learn each other's LAN endpoint first. Returns the membership
     envelope the join answered; an answer that is not one raises."""
     async with await astral.connect(carrier["endpoint"], token=carrier["token"]) as c:

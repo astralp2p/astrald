@@ -540,7 +540,7 @@ func TestClaimRefusesSecondClaim(t *testing.T) {
 		t.Fatalf("seed active contract: %v", err)
 	}
 
-	err = f.mod.claim(nil, nodeContract(astral.GenerateIdentity(), f.nodeID))
+	err = f.mod.claim(nil, membershipContract(astral.GenerateIdentity(), f.nodeID))
 	if !errors.Is(err, errClaimed) {
 		t.Fatalf("claim: %v; want errClaimed", err)
 	}

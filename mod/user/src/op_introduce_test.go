@@ -110,7 +110,7 @@ func newIntroduceFixture(t *testing.T) *introduceFixture {
 		log:  log.New(f.nodeID),
 		db:   testDB(t),
 	}
-	f.setActiveContract(t, nodeContract(f.userID, f.nodeID))
+	f.setActiveContract(t, membershipContract(f.userID, f.nodeID))
 
 	return f
 }
@@ -294,7 +294,7 @@ var introduceRefusals = []introduceRefusal{
 		f.expel(t, f.adminID)
 	}, auth.ErrNotPermitted},
 	{"expired active contract", "", nil, "peer", func(t *testing.T, f *introduceFixture) {
-		signed := nodeContract(f.userID, f.nodeID)
+		signed := membershipContract(f.userID, f.nodeID)
 		signed.ExpiresAt = astral.Time(time.Now().Add(-time.Minute))
 		f.setActiveContract(t, signed)
 	}, astral.Err(auth.ErrContractExpired)},

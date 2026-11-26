@@ -78,7 +78,7 @@ async def adopt(doc, n1, others):
         async with await astral.connect(n1["endpoint"], token=user_token) as c:
             await c.nodes.new_link(n["identity"], endpoint=n["lan_endpoint"],
                                    strategies="basic", experimental=True, timeout=60.0)
-        # note: user.adopt is gone (G7); n joins through node1 as a Member
+        # note: n joins through node1 as a Member
         await ss.admit(n1, user_token, n)
 
 

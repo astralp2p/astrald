@@ -2,7 +2,7 @@
 
 The lab every netsim run starts from: **node1 and node2, the User's swarm —
 plus `reflector`, a third full node that belongs to no swarm.** Three VMs,
-three astralds, two of them adopted.
+three astralds, two of them joined into the swarm.
 
 The name says all three because the third is not scenery. It runs the same
 astrald as the others, and what makes it useful is not that it is third but

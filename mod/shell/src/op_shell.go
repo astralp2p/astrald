@@ -17,7 +17,7 @@ type opShellArgs struct {
 func (mod *Module) OpShell(ctx *astral.Context, q *routing.IncomingQuery, args opShellArgs) (err error) {
 	// why: a session reaches every loaded module's op router, so admission is
 	// node-wide administration. The rule grants the user and this node and no
-	// sibling; another identity reaches it through a grant or a signed contract.
+	// sibling; another identity reaches it through a signed contract chain.
 	if !mod.Auth.Authorize(ctx, &shell.ShellAction{Action: auth.NewAction(q.Caller())}) {
 		return q.Reject()
 	}

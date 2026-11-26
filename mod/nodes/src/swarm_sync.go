@@ -19,8 +19,6 @@ import (
 //
 // A node pulls what it lacks (digest, then fetch of the missing IDs) and pushes each entry it stores to its peers.
 // Every entry goes through AddSwarmEntry on the receiving node, so a merge from a peer is checked like a local write.
-//
-// note: nothing registers these ops or starts a pull yet; G7 does both.
 const (
 	opSwarmDigest = "swarm_digest"
 	opSwarmFetch  = "swarm_fetch"

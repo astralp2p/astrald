@@ -73,7 +73,7 @@ func (ops *SwarmAnswerOps) OpConfirmJoin(ctx *astral.Context, q *routing.Incomin
 // the joiner's PrivilegedMembership.
 //
 // why caller and not Auth: the confirmation is the user's own action that a
-// software user key cannot take for itself, so no app or grant stands in for
+// software user key cannot take for itself, so no app or contract stands in for
 // the user identity. OpConfirmJoin admits only local origins, so a node
 // relaying as the user cannot either.
 func (ops *SwarmAnswerOps) confirmJoin(ctx *astral.Context, caller *astral.Identity, id *astral.ObjectID) (*auth.SignedContract, error) {

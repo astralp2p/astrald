@@ -44,9 +44,8 @@ node of the other swarm reads nothing of the swarm.
 - The crossing offers are the only observable of a node taking a foreign
   membership. SwarmState checks every offered entry on merge
   (`user.SwarmView.CheckSwarmEntry`): a membership whose issuer is neither the
-  node's user key nor a member of its swarm is dropped. Since G7 a membership
-  enters another node only this way (`user.adopt` and the contract push of
-  `objects.push` are gone). The answer and the node's SwarmState show the
+  node's user key nor a member of its swarm is dropped. A membership enters
+  another node only this way. The answer and the node's SwarmState show the
   decision. The controls show the push path answers what it should: their
   membership is already stored there, which `nodes.swarm_push` acknowledges,
   so a refusal means a decision.

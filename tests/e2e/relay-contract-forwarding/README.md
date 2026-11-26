@@ -40,7 +40,6 @@ watch of the SwarmHead) lists node2 as a member, and only that listing pulls
 node2's endpoints, so the driver waits for an endpoint before the call.
 
 node1 dials node3 because a joiner reaches its carrier (`user.join`) and
-node3's dialing is already off. Before G7, `user.adopt` ran on node1, and node1
-dialed node3 itself. node3 joins over the link node1 opened, and node1 runs the
+node3's dialing is already off. node3 joins over the link node1 opened, and node1 runs the
 sibling sync with node3 once it lists node3 as a member (`onNewMember`,
 `mod/user/src/module.go`).

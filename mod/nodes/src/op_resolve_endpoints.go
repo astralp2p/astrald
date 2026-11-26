@@ -63,7 +63,7 @@ func (mod *Module) OpResolveEndpoints(ctx *astral.Context, q *routing.IncomingQu
 // links to every other member, so a Member that could not pull a member's
 // endpoints would never link to another Member. The rows are private to the
 // swarm, so neither party may be an outsider.
-// why not AdminNetworkAction: a Member administers no node (G7); this reads
+// why not AdminNetworkAction: a Member administers no node; this reads
 // endpoint rows about members and grants no other network-admin op.
 func (mod *Module) mayReadMemberEndpoints(caller, target *astral.Identity) bool {
 	if !mod.isSwarmMember(caller) {

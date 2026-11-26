@@ -2,11 +2,9 @@
 
     python3 -m lib.answerer      # with ASTRAL_TESTS_SESSION set; runs until killed
 
-Since G7 an app holds its permits only once a ContractRequest for them is
-approved and its host signed the contract (astral-docs
-protocols/apphost/ops/apphost.request_contract.md). Before G7 the harness
-configured the five admission policies to accept; this is what replaces them.
-While a test runs, from its driver to its oracle, the runner runs this
+An app holds its permits only once a ContractRequest for them is approved
+and its host signed the contract (astral-docs
+protocols/apphost/ops/apphost.request_contract.md). While a test runs, from its driver to its oracle, the runner runs this
 answerer beside it, unless the test's manifest sets `answers` (the test
 answers SwarmState requests itself, as the swarm-state tests do).
 
@@ -14,8 +12,7 @@ While a driver waits for an answer (a file in `$ASTRAL_TESTS_WAITING`, which
 `swarmstate.waiting` and `tests/e2e/internal/contracts` write), every `POLL`
 seconds it lists each node's pending requests with that node's
 own token (`user.swarm_requests`) and approves every ContractRequest and
-JoinRequest (`user.answer_request`), as the accepting policies admitted apps
-and joins before. Only a node whose tier answers requests can: a
+JoinRequest (`user.answer_request`). Only a node whose tier answers requests can: a
 Privileged node, or an unclaimed node, which is its own root. A Member's
 request reaches a Privileged node through SwarmState, and is approved there.
 A privileged_member JoinRequest needs the user key (`user.confirm_join`), so

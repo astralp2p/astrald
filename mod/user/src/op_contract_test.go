@@ -47,7 +47,7 @@ func askContract(t *testing.T, mod *Module, caller *astral.Identity) []astral.Ob
 // node's active contract.
 func TestContractAnswersALinkedCaller(t *testing.T) {
 	nodeID, caller := astral.GenerateIdentity(), astral.GenerateIdentity()
-	active := nodeContract(astral.GenerateIdentity(), nodeID)
+	active := membershipContract(astral.GenerateIdentity(), nodeID)
 	mod := contractOpModule(t, nodeID, active, caller)
 
 	got, ok := askContract(t, mod, caller)[0].(*auth.SignedContract)
@@ -72,7 +72,7 @@ func TestContractAnswersALinkedCaller(t *testing.T) {
 // answered that there is none.
 func TestContractRefuses(t *testing.T) {
 	nodeID, caller := astral.GenerateIdentity(), astral.GenerateIdentity()
-	active := nodeContract(astral.GenerateIdentity(), nodeID)
+	active := membershipContract(astral.GenerateIdentity(), nodeID)
 
 	cases := []struct {
 		name string

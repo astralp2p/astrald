@@ -31,8 +31,7 @@ back in, and the two remaining members form the swarm again.
     `user.carry_join` stream over that link, which then ends with EOF. A
     successful join fails;
   - the User signs node3 a new Privileged membership on node1 and offers it to
-    node1 and node2 (`swarmstate.user_membership`; before G7 this probe was
-    `user.adopt`, which is gone); 10 s later neither roster has node3 and
+    node1 and node2 (`swarmstate.user_membership`); 10 s later neither roster has node3 and
     node3 is still `unclaimed`.
 
 Bans are stored in the user module's database (`dbExpulsion`), and

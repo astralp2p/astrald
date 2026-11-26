@@ -30,9 +30,8 @@ itself.
     new Privileged membership on node1 (`crypto.sign_hash`) and offers it to
     node1 and node2 with `nodes.swarm_push`, and for 10 s neither roster
     lists node3. An expel beats everything signed for the expelled node
-    (`mod/user/src/swarm_view_membership.go`). Before G7 this probe was the
-    User's `user.adopt`, which is gone; a membership the User signs is what
-    re-adoption is now;
+    (`mod/user/src/swarm_view_membership.go`). A membership the User signs
+    is how the User brings a node back;
   - control: node2 is still linked to node1 and reads the same bait.
 
 ## Suspected astrald defect: a sibling re-links to the banned node

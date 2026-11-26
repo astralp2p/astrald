@@ -558,7 +558,7 @@ func TestRequestContractOp(t *testing.T) {
 	}
 }
 
-// Without contract requests built (until G7), the op answers that they are off.
+// Without contract requests built (no user or nodes module), the op answers that they are off.
 func TestRequestContractOpOff(t *testing.T) {
 	mod := &Module{log: log.New(nil)}
 	app := astral.GenerateIdentity()

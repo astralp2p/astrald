@@ -90,7 +90,7 @@ async def main():
             await astral.connect(nodes["node1"]["endpoint"], token=doc["facts"]["user_token"]))
         await meet(clients["node1"], nodes["node1"], clients, nodes)
 
-        # note: user.adopt is gone (G7); each joins through node1 as a Member
+        # note: each joins through node1 as a Member
         await ss.admit(nodes["node1"], doc["facts"]["user_token"], nodes["node3"])
         facts["adopted_node3_at"] = time.time()
         await ss.admit(nodes["node1"], doc["facts"]["user_token"], nodes["node4"])

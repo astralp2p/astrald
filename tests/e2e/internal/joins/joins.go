@@ -1,6 +1,6 @@
-// Package joins admits a node into the User's swarm the way user.adopt did
-// before G7: the node joins through a carrier (user.join), and the User
-// approves its JoinRequest on the carrier (user.answer_request).
+// Package joins admits a node into the User's swarm: the node joins through a
+// carrier (user.join), and the User approves its JoinRequest on the carrier
+// (user.answer_request).
 package joins
 
 import (

@@ -33,8 +33,6 @@ var (
 // moment a joiner asks. A software user key held on this node signs with no
 // action at all, so devicePress is clear and the membership waits for the
 // user to call user.confirm_join.
-//
-// note: nothing in the running node builds a userKeyCeremony until G7.
 type userKeyCeremony struct {
 	user   *astral.Identity
 	signer entrySigner
@@ -143,7 +141,7 @@ func (c *userKeyCeremony) expelRequest(reqID *astral.ObjectID) (*user.SignedExpe
 // it to SwarmState. Only a Trusted or Privileged member files one (D10), the
 // tiers that carry JoinRequests.
 //
-// note: nothing in the running node calls it until G7.
+// note: no op in the running node calls it.
 func (c *swarmCarrier) FileExpelRequest(ctx *astral.Context, subject *astral.Identity) (*user.SignedExpelRequest, error) {
 	if !carriesJoins(c.view, c.self) {
 		return nil, errExpelFilerTier

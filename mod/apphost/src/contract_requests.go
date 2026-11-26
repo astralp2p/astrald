@@ -55,8 +55,7 @@ type contractSigner interface {
 // through nodes.SwarmState and reads what entries mean only through
 // user.SwarmView.
 //
-// Nothing constructs it in the running node yet: G7 builds it in
-// LoadDependencies, registers apphost.request_contract and starts Run.
+// LoadDependencies builds it when the user and nodes modules are present.
 type contractRequests struct {
 	node     *astral.Identity
 	state    nodesmod.SwarmState

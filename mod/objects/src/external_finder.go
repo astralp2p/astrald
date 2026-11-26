@@ -49,7 +49,7 @@ func (f *ExternalFinder) renew(now time.Time, dur time.Duration) time.Time {
 // and not queried.
 func (f *ExternalFinder) FindObject(ctx *astral.Context, id *astral.ObjectID) (<-chan *astral.Identity, error) {
 	// why: a registration never outlives the authorization that permitted it, so a
-	// provider whose grant was revoked or has expired is removed on its next call.
+	// provider whose authorization (contract) ended or expired is removed on its next call.
 	// note: an external authority that cannot be reached refuses, so it removes a
 	// permitted provider too.
 	if !f.mod.Auth.Authorize(ctx, &auth.ServeObjectsAction{

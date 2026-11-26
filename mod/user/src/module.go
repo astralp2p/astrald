@@ -169,9 +169,8 @@ func (mod *Module) runSiblingLinker() {
 // brings no endpoints, so a new member's link task would have none to dial;
 // the pull's EndpointsUpdatedEvent wakes the task.
 // why the sync: the LinkCreatedEvent sync skips a node linked before it was a
-// member, as a joiner is with its carrier, and before G7 the pushed node
-// contract started that sync (receiveSignedContract); it carries the relay
-// contracts of the swarm's apps.
+// member, as a joiner is with its carrier, and no other event starts it; it
+// carries the relay contracts of the swarm's apps.
 func (mod *Module) onNewMember(node *astral.Identity) {
 	go mod.Nodes.LearnMemberEndpoints(node)
 

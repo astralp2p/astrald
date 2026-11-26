@@ -54,7 +54,7 @@ func holdsBan(f *receiverFixture, subject *astral.Identity) bool {
 func TestSweepRepairsAMemberThatMissedABanOverAStableLink(t *testing.T) {
 	userID := astral.GenerateIdentity()
 	issuer, member := newReceiverFixture(t, userID), newReceiverFixture(t, userID)
-	issuer.auth.seed(nodeContract(userID, member.nodeID))
+	issuer.auth.seed(membershipContract(userID, member.nodeID))
 	issuer.nodes.linked = []*astral.Identity{member.nodeID}
 	issuer.mod.Deps.Objects = &forwardPusher{sender: issuer.nodeID, member: member}
 
