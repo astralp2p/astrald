@@ -97,7 +97,10 @@ def harness_configs(listen: list, token: str) -> dict:
                     # why: the value beside a token is the identity it
                     # authenticates as, and `localnode` is the node itself
                     "tokens": {token: "localnode"},
-                    "gate": copy.deepcopy(E2E_GATE)},
+                    "gate": copy.deepcopy(E2E_GATE),
+                    # why: a world registers far more apps on one node within
+                    # the hour than the 64 ContractRequests a device files
+                    "contract_requests_per_node": 100000},
     }
 
 

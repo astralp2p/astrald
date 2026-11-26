@@ -23,6 +23,13 @@ type Config struct {
 	// why configurable: an E2E test (relay-pull-on-miss) drops the push, so a
 	// sibling obtains the contract only by the routing-time pull.
 	SkipSiblingPush bool `yaml:"skip_sibling_push,omitempty"`
+
+	// ContractRequestsPerNode caps the ContractRequests this node files in a
+	// window of ContractRequestWindow, all apps together; zero is
+	// ContractRequestsPerNode.
+	// why configurable: an E2E world registers more apps on one node within
+	// the hour than a device does.
+	ContractRequestsPerNode int `yaml:"contract_requests_per_node,omitempty"`
 }
 
 // Gate lists the ops a session may call, IPC, WebSocket and HTTP alike. An

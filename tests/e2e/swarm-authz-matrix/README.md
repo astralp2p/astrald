@@ -1,5 +1,11 @@
 # swarm-authz-matrix — what a linked stranger and a sibling may do to node1
 
+**Since G7 the matrix has no sibling row.** node2 is a `privileged_member`,
+which acts for the User in every check but an expel (Swarm State and User
+Authority, D6), so the read-only row of the any-member rules G7 removed no
+longer exists. The oracle still reads the bait as node2. A row for a Member
+sibling is follow-up work for the legacy sweep (G8).
+
 A node the User does not own links to node1 and reaches only the ops every
 linked peer reaches. Its own User reaches nothing. A swarm sibling reaches the
 swarm's reads and none of node1's writes. node1 holds nothing any of them tried

@@ -151,7 +151,10 @@ async def main():
     matrix = {
         "stranger_node": await run_probes(s["endpoint"], s["token"], *args),
         "stranger_user": await run_probes(s["endpoint"], v_token, *args),
-        "sibling": await run_probes(n2["endpoint"], n2["token"], *args),
+        # note: no sibling row since G7: node2 is a privileged_member, which acts
+        # for the User in every check but an expel (vision, D6), so the
+        # any-member read-only row this matrix judged no longer exists; the
+        # oracle's own probe still reads the bait as node2
     }
 
     write_facts({"bait_id": bait, "matrix": matrix})

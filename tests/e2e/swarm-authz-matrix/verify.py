@@ -53,7 +53,6 @@ PROBES = CONTROLS | SWARM_READS | GUARDED
 ALLOWED = {
     "stranger_node": CONTROLS,
     "stranger_user": set(),
-    "sibling": CONTROLS | SWARM_READS,
 }
 
 # note: these three carry a body, and a refusal over a link loses its text:
@@ -114,7 +113,7 @@ def check_matrix(matrix: dict, ids: dict) -> None:
     # why the answers: a control that answered for another node, or a whoami
     # that names the wrong caller, would make every refusal above say nothing
     # about node1's view of this asker.
-    for asker, me in (("stranger_node", ids["stranger"]), ("sibling", ids["node2"])):
+    for asker, me in (("stranger_node", ids["stranger"]),):
         row = matrix[asker]
         assert row["apphost.whoami"]["answer"] == me, (
             f"{asker}: node1 sees it as {row['apphost.whoami']['answer']}, not {me}")
@@ -207,8 +206,7 @@ async def main():
         "the stranger is claimed by this swarm's User, not a stranger's")
 
     print(f"oracle: node1 answered the stranger {sorted(ALLOWED['stranger_node'])}, "
-          f"the stranger's User nothing, and the sibling "
-          f"{len(ALLOWED['sibling'])} probes; node1 holds nothing the "
+          f"the stranger's User nothing; node1 holds nothing the "
           f"{len(GUARDED)} guarded probes tried to write, {resets} resets "
           "judged by that state; the oracle's own probes agree")
 
