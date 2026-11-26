@@ -362,8 +362,9 @@ func TestSwarmRootAllowsAtAnyHopButNeverAnExpel(t *testing.T) {
 		if w.mod.Authorize(ctx, &user.ExpelAction{Action: auth.NewAction(actor), Subject: w.pi}) {
 			t.Fatalf("%s expel: want deny", name)
 		}
-		if w.mod.Authorize(ctx, &user.AdminSwarmAction{Action: auth.NewAction(actor)}) {
-			t.Fatalf("%s admin swarm: want deny", name)
+		// the user's authority answers requests and administers the swarm
+		if !w.mod.Authorize(ctx, &user.AdminSwarmAction{Action: auth.NewAction(actor)}) {
+			t.Fatalf("%s admin swarm: want allow", name)
 		}
 	}
 
