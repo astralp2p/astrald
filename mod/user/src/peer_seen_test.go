@@ -13,7 +13,6 @@ import (
 	"github.com/astralp2p/astral-go/api/nearby"
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astral-go/astral/log"
-	objectsmod "github.com/astralp2p/astrald/mod/objects"
 	"github.com/astralp2p/astrald/mod/scheduler"
 )
 
@@ -52,13 +51,13 @@ func (l *contactLog) list() []contactCall {
 	return append([]contactCall(nil), l.calls...)
 }
 
-// contactPusher is an objects module that records every push.
-type contactPusher struct {
-	objectsmod.Module
+// contactNodes is a nodes module that records every SwarmState push.
+type contactNodes struct {
+	*linkNodes
 	log *contactLog
 }
 
-func (p *contactPusher) Push(ctx *astral.Context, target *astral.Identity, obj astral.Object) error {
+func (p *contactNodes) PushSwarmEntry(ctx *astral.Context, target *astral.Identity, obj astral.Object) error {
 	p.log.add(contactCall{op: "push", peer: target, object: obj, zone: ctx.Zone()})
 	return nil
 }
@@ -104,7 +103,7 @@ func newContactFixture(t *testing.T) *contactFixture {
 	close(ready)
 
 	f.mod = &Module{
-		Deps:             Deps{Auth: f.auth, Nodes: f.nodes, Objects: &contactPusher{log: f.calls}, Scheduler: f.scheduler},
+		Deps:             Deps{Auth: f.auth, Nodes: &contactNodes{linkNodes: f.nodes, log: f.calls}, Scheduler: f.scheduler},
 		ctx:              ctx,
 		ready:            ready,
 		node:             &identityNode{id: f.nodeID},

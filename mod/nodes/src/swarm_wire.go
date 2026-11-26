@@ -94,6 +94,15 @@ func (mod *Module) SyncSwarm(ctx *astral.Context, peer *astral.Identity) error {
 	return err
 }
 
+// PushSwarmEntry offers obj to peer's SwarmState through peer's swarm_push (nodesmod.Module).
+func (mod *Module) PushSwarmEntry(ctx *astral.Context, peer *astral.Identity, obj astral.Object) error {
+	if peer.IsZero() || peer.IsEqual(mod.node.Identity()) {
+		return errors.New("swarm push needs another node")
+	}
+	p := &routerSwarmPeer{router: mod.node, caller: mod.node.Identity(), target: peer}
+	return p.SwarmPush(ctx.IncludeZone(astral.ZoneNetwork), obj)
+}
+
 // runSwarmSync pulls SwarmState from every linked swarm member every swarmPullInterval until ctx ends.
 func (mod *Module) runSwarmSync(ctx *astral.Context) {
 	ticker := time.NewTicker(swarmPullInterval)

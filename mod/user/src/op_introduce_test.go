@@ -14,7 +14,7 @@ import (
 	"github.com/astralp2p/astral-go/lib/query"
 	"github.com/astralp2p/astral-go/lib/routing"
 	authmod "github.com/astralp2p/astrald/mod/auth"
-	objectsmod "github.com/astralp2p/astrald/mod/objects"
+	nodesmod "github.com/astralp2p/astrald/mod/nodes"
 	"github.com/astralp2p/astrald/mod/scheduler"
 )
 
@@ -51,18 +51,21 @@ type introducePush struct {
 	deadline time.Time
 }
 
-// introducePusher is an objects module that records every push and answers err.
+// introducePusher is a nodes module that records every SwarmState push and
+// answers err; its pull does nothing.
 type introducePusher struct {
-	objectsmod.Module
+	nodesmod.Module
 	err    error
 	pushed chan introducePush
 }
 
-func (p *introducePusher) Push(ctx *astral.Context, target *astral.Identity, obj astral.Object) error {
+func (p *introducePusher) PushSwarmEntry(ctx *astral.Context, target *astral.Identity, obj astral.Object) error {
 	deadline, _ := ctx.Deadline()
 	p.pushed <- introducePush{target: target, object: obj, zone: ctx.Zone(), deadline: deadline}
 	return p.err
 }
+
+func (p *introducePusher) SyncSwarm(*astral.Context, *astral.Identity) error { return nil }
 
 // introduceFixture is node C, claimed by user U, that names node B "peer", U
 // "user", itself "self" and the zero identity "anyone". U alone holds
@@ -94,7 +97,7 @@ func newIntroduceFixture(t *testing.T) *introduceFixture {
 	f.mod = &Module{
 		Deps: Deps{
 			Auth:      f.auth,
-			Objects:   f.objects,
+			Nodes:     f.objects,
 			Scheduler: f.scheduler,
 			Dir: &namedDir{names: map[string]*astral.Identity{
 				"peer":   f.peerID,
