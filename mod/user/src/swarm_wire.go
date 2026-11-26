@@ -113,9 +113,47 @@ func (mod *Module) onSwarmChanged() {
 		mod.indexedEntries.Set(*id, struct{}{})
 	}
 
+	mod.receiveSwarmExpels()
+
 	mod.refreshBans()
 	mod.publishSwarm()
 	mod.runSiblingLinker()
+}
+
+// receiveSwarmExpels stores and applies every Expulsion SwarmState holds that
+// this node has not stored yet, as a pushed one is (receiveExpulsion).
+//
+// why: user.list_expelled, link admission and the ban veto read the stored
+// bans, and a node that learns an expel only through SwarmState (one
+// introduced or joined after it) would otherwise list none and admit the
+// banned node's links.
+func (mod *Module) receiveSwarmExpels() {
+	ids, err := mod.Nodes.SwarmEntries(user.EntryExpels)
+	if err != nil {
+		mod.log.Logv(1, "swarm state: list expels: %v", err)
+	}
+	for _, id := range ids {
+		if _, done := mod.indexedEntries.Get(*id); done {
+			continue
+		}
+		obj, err := mod.Nodes.SwarmEntry(id)
+		if err != nil {
+			continue
+		}
+		se, ok := obj.(*user.SignedExpulsion)
+		if !ok || se.IsNil() {
+			continue
+		}
+		// note: a refused one (no active contract yet, another issuer) is
+		// read again on the next change
+		if mod.banOn(se.Subject) == nil {
+			if err = mod.receiveExpulsion(se); err != nil {
+				mod.log.Logv(1, "swarm state: expel %v: %v", id, err)
+				continue
+			}
+		}
+		mod.indexedEntries.Set(*id, struct{}{})
+	}
 }
 
 // swarmMembers returns every identity whose membership holds in SwarmState;

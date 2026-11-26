@@ -21,9 +21,10 @@ type opIntroduceArgs struct {
 	Out      string
 }
 
-// OpIntroduce pushes this node's active contract to the named node, then syncs
-// with it. The named node indexes the contract, so this node joins its local
-// swarm; the sync carries the rest of the swarm. The reply is an ack.
+// OpIntroduce offers this node's active contract to the named node's
+// SwarmState, then syncs with it. The named node stores the membership, so
+// this node joins its local swarm; the sync carries the rest of the swarm. The
+// reply is an ack.
 // Requires an active contract; the caller must be authorized for
 // user.AdminSwarmAction over the named node and must not be expelled
 // (auth.ErrNotPermitted otherwise).
@@ -77,7 +78,12 @@ func (mod *Module) OpIntroduce(ctx *astral.Context, q *routing.IncomingQuery, ar
 	return ch.Send(&astral.Ack{})
 }
 
-// introduce pushes the active contract ac to nodeID and schedules a sync with nodeID.
+// introduce offers the active contract ac to nodeID's SwarmState, pulls
+// nodeID's SwarmState and schedules a sync with nodeID.
+//
+// why SwarmState and not objects.push: since G7 a membership enters another
+// node only as a SwarmState entry, which that node checks on merge; its object
+// receiver takes no membership.
 func (mod *Module) introduce(ctx *astral.Context, ac *auth.SignedContract, nodeID *astral.Identity) astral.Error {
 	if ac.ExpiresAt.Time().Before(time.Now()) {
 		return astral.Err(auth.ErrContractExpired)
@@ -91,8 +97,11 @@ func (mod *Module) introduce(ctx *astral.Context, ac *auth.SignedContract, nodeI
 	pctx, cancel := ctx.IncludeZone(astral.ZoneNetwork).WithTimeout(introducePushTimeout)
 	defer cancel()
 
-	if err := mod.Objects.Push(pctx, nodeID, ac); err != nil {
+	if err := mod.Nodes.PushSwarmEntry(pctx, nodeID, ac); err != nil {
 		return astral.Err(fmt.Errorf("push to %v: %w", nodeID, err))
+	}
+	if err := mod.Nodes.SyncSwarm(pctx, nodeID); err != nil {
+		mod.log.Logv(1, "introduce: swarm state pull from %v: %v", nodeID, err)
 	}
 
 	// why: the link sync (object_receiver.go) skips nodeID, since this node holds

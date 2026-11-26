@@ -93,6 +93,13 @@ async def answer(c, req_id: str, answer: str, **kw) -> dict:
     return docs[0]
 
 
+async def confirm_join(c, req_id: str, **kw) -> None:
+    """user.confirm_join as the User: the user key signs the Privileged
+    membership the JoinRequest req_id asks for. An error_message raises
+    jsonops.OpError."""
+    await jsonops.value(c, f"user.confirm_join?id={req_id}&out=json", **kw)
+
+
 async def status_of(c, req_id: str, **kw) -> str | None:
     """A request's status on a node, or None when the node does not hold it."""
     for r in await requests(c, all=True, **kw):
@@ -111,11 +118,18 @@ async def join(c, carrier: str, tier: str = "member", timeout: float = 60.0) -> 
 async def admit_member(joiner_c, user_c, carrier: str, joiner: str,
                        tier: str = "member", timeout: float = 60.0) -> tuple:
     """Run joiner's user.join through carrier while the user approves its
-    JoinRequest on the carrier. Returns (the join's envelopes, the request)."""
+    JoinRequest on the carrier, or, at privileged_member, confirms it with
+    user.confirm_join (the carrier must hold the user key). Returns (the
+    join's envelopes, the request)."""
     async def approve():
         # note: the harness answerer (lib/answerer.py) may approve it first
         r = await find(user_c, lambda r: r.type == JOIN and r.names(joiner)
                        and r.status in ("pending", "approved"), timeout=timeout)
+        if tier == "privileged_member":
+            # why: a Privileged membership is the user key's to sign, after the
+            # user's own action (user.confirm_join, D2); no Approval stands in
+            await confirm_join(user_c, r.id)
+            return r
         if r.status == "approved":
             return r
         try:
@@ -192,6 +206,15 @@ def spawn_wallet(name: str, node: dict, token: str):
     return app
 
 
+def serve_probe(node: dict, token: str) -> dict:
+    """The app token names tries apphost.register_handler and a private
+    services.advertise on node, the two acts ServeApps guards:
+    {register_handler, advertise}, each "ok" or the error the node answered."""
+    out = app_tool("serve-probe", node["endpoint"], token)
+    assert "error" not in out, f"serve-probe on {node['identity']}: {out['error']}"
+    return out
+
+
 def discover(node: dict, token: str, reach: str) -> list:
     """The providers of `wallet` one discovery shows the app token names."""
     out = app_tool("discover", node["endpoint"], token, reach)
@@ -252,6 +275,41 @@ def sign_approval(node: dict, req_id: str, push_to: list) -> dict:
                    env={"SWARMAPPS_NODE_KEY": nodefs.read_bytes(node, "data/node_key").hex()})
     assert "error" not in out, f"signing an Approval as {node['identity']}: {out['error']}"
     return out
+
+
+def offer(node: dict, entry_id: str, push_to: list) -> dict:
+    """Offer the entry entry_id that node stores to every node of push_to with
+    nodes.swarm_push, as node's own token: {node identity: "ack" or the
+    error the push answered}."""
+    out = app_tool("offer", node["endpoint"], node["token"], entry_id,
+                   *[n["identity"] for n in push_to])
+    assert "error" not in out, f"offering {entry_id} from {node['identity']}: {out['error']}"
+    return out["pushed"]
+
+
+def user_membership(node: dict, user_token: str, user_id: str, subject: str,
+                    tier: str = "privileged_member", validity: int = 3600,
+                    push_to: tuple = ()) -> dict:
+    """A membership of subject at tier that the User signs on node
+    (crypto.sign_hash with user_token), with no Approval link, offered with
+    nodes.swarm_push to node and to every node of push_to: {membership_id,
+    pushed: {"local" or node identity: "ack" or the error}}. Since G7 this is
+    the only way the User brings a node in without its JoinRequest, what
+    user.adopt did before."""
+    out = app_tool("membership", node["endpoint"], user_token, user_id, subject,
+                   tier, validity, *[n["identity"] for n in push_to])
+    assert "error" not in out, f"signing a membership for {subject}: {out['error']}"
+    return out
+
+
+def membership_id(node: dict, subject: str) -> str:
+    """The entry ID of a membership naming subject that node stores; the
+    first one when it stores several."""
+    for eid, e in entries(node).items():
+        if e["Type"] == "mod.auth.signed_contract" \
+                and e["Object"]["Contract"].get("Subject") == subject:
+            return eid
+    raise AssertionError(f"{node['identity']} stores no contract of {subject}")
 
 
 def move_key(src: dict, dst: dict, identity: str) -> dict:

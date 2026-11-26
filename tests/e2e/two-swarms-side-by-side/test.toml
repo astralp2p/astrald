@@ -5,4 +5,4 @@ nodes    = ["node1", "node2", "tssb1", "tssb2"]
 timeout  = 180
 after    = "adopt-node"
 destroys = true
-facts    = ["b_user_id", "b_user_token", "pushes"]
+facts    = ["b_user_id", "b_user_token", "pushes", "memberships"]

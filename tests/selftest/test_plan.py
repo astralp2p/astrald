@@ -347,6 +347,7 @@ class TestShippedPlans(Invariants, unittest.TestCase):
              ("local", "services-follow-member-leaves"),
              ("local", "services-node-restart"),
              ("local", "services-swarm-membership"),
+             ("local", "swarm-authz-matrix"),
              ("vm", "swarm-fallback-paths"),
              ("local", "swarm-apps-matrix-kcp"), ("local", "swarm-apps-talk"),
              ("local", "swarm-survives-churn"),

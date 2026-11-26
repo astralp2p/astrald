@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Oracle: an expelled management node is refused every swarm call on node1,
+"""Oracle: an expelled Privileged node is refused every swarm call on node1,
 and node1's roster and bans stay as the expulsion left them.
 
 Judged from the driver's record and the oracle's own reads:
@@ -8,10 +8,9 @@ Judged from the driver's record and the oracle's own reads:
   and it holds no ban;
 - the controls, made with a token for emn2's identity while emn2 was a member:
   `user.list_expelled` and `user.list_siblings` answered, and `user.expel`
-  naming the User read "cannot expel the swarm user", the refusal `Expel`
-  makes after the call was authorized. They show the token acts as emn2 and
-  that emn2's contract carries the permits, so the refusals below are the
-  ban's doing;
+  naming the User was refused "not permitted": only the user expels (D7). The
+  reads show the token acts as emn2 and that emn2's membership carries the
+  permits, so their refusals below are the ban's doing;
 - after the User expelled emn2: emn1's roster is emn1 and emn3, and its one
   ban names emn2;
 - the four calls made then, with the same token, are each refused "not
@@ -29,7 +28,6 @@ from lib.sessionio import load
 
 CALLS = ("list_expelled", "list_siblings", "expel_user")
 DENIED = "not permitted"
-USER_REFUSAL = "cannot expel the swarm user"
 
 
 async def refusal(coro) -> str:
@@ -60,9 +58,12 @@ async def main():
         assert ctl[name]["outcome"] == "answered", (
             f"control {name}: {ctl[name]['outcome']}: {ctl[name]['detail']}; emn2 "
             "was a member and should have been answered")
-    assert USER_REFUSAL in ctl["expel_user"]["detail"], (
-        f"control expel_user: {ctl['expel_user']['detail']!r}; wanted the refusal "
-        f"{USER_REFUSAL!r}, which an authorized caller meets")
+    # why refused: only the user expels (D7); a Privileged node never does
+    assert (ctl["expel_user"]["outcome"] == "refused"
+            and DENIED in ctl["expel_user"]["detail"]), (
+        f"control expel_user: {ctl['expel_user']['outcome']}: "
+        f"{ctl['expel_user']['detail']!r}; a Privileged node must not reach "
+        f"user.expel (D7), wanted {DENIED!r}")
 
     settled = f["expelled"]
     assert set(settled["roster"]) == {id1, id3} and settled["bans"] == [id2], (
@@ -99,7 +100,7 @@ async def main():
     assert roster == {id1, id3}, f"emn1's roster is {sorted(roster)}, not emn1 and emn3"
     assert bans == [id2], f"emn1 holds bans on {bans}, not on emn2 alone"
 
-    print("oracle: the expelled management node read each swarm call as "
+    print("oracle: the expelled Privileged node read each swarm call as "
           f"{DENIED!r} on emn1 after it was answered before the ban; emn1's "
           "roster and bans stayed as the expulsion left them")
 

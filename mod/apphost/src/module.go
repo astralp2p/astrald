@@ -92,7 +92,7 @@ func (mod *Module) Run(ctx *astral.Context) error {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			mod.contractRequests.Run(mod.ctx, 0, func(err error) {
+			mod.contractRequests.Run(mod.ctx, mod.config.ContractRequestPoll, func(err error) {
 				mod.log.Logv(1, "contract requests: %v", err)
 			})
 		}()

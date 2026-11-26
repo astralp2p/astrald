@@ -1,31 +1,35 @@
-# swarm-authz-matrix — what a linked stranger and a sibling may do to node1
+# swarm-authz-matrix — what a linked stranger and a Member sibling may do to node1
 
-**Since G7 the matrix has no sibling row.** node2 is a `privileged_member`,
+**Since G7 the sibling row is a Member's.** node2 is a `privileged_member`,
 which acts for the User in every check but an expel (Swarm State and User
-Authority, D6), so the read-only row of the any-member rules G7 removed no
-longer exists. The oracle still reads the bait as node2. A row for a Member
-sibling is follow-up work for the legacy sweep (G8).
+Authority, D6), so the any-member read row G7 removed is gone. A Member,
+`authz_member`, now holds the narrowed rules: it reads the roster
+(SeeSwarm admits every member) and nothing else. The oracle still reads the
+bait as node2.
 
 A node the User does not own links to node1 and reaches only the ops every
-linked peer reaches. Its own User reaches nothing. A swarm sibling reaches the
-swarm's reads and none of node1's writes. node1 holds nothing any of them tried
-to write.
+linked peer reaches. Its own User reaches nothing. A Member sibling reaches
+the swarm's roster reads and none of node1's objects, links or writes. node1
+holds nothing any of them tried to write.
 
-- **env** node · **start** `two-nodes` · **saves** — (an observer: node1 and
-  node2 end as adopt-node left them, plus one bait object)
+- **env** node · **start** `two-nodes` · **destroys** — `authz_member` joins
+  the User's swarm, and the tests sharing adopt-node's world compare exact
+  rosters, so this test runs in a world of its own
 - **driver** `script.py` — as the User, store a bait object on node1. Claim
   `stranger` for a second User with a token-less `user.bootstrap`, and link it
-  to node1 from the stranger's side. Send 24 probes to node1 over the link
-  (`target=node1`) as three askers: the stranger with its node token, the
-  stranger with its User's token, and node2 with its node token. Record each
-  outcome as `allowed`, `refused` or `reset`.
+  to node1 from the stranger's side. `authz_member` joins through node1 as a
+  Member, the User approving its JoinRequest (`swarmstate.admit`). Send 21
+  probes to node1 over the link (`target=node1`) as three askers: the
+  stranger with its node token, the stranger with its User's token, and the
+  Member with its node token. Record each outcome as `allowed`, `refused` or
+  `reset`.
 - **oracle** `verify.py` — each asker's allowed set is exactly the contract
   below, and every other probe reads as a refusal. node1's state, measured as
-  the User: the bait is present and hashes to its id; the roster is node1 and
-  node2; no expulsion exists; the alias `hijack`, the tree path and the
-  intruder object do not exist; no token names the stranger; no policy
-  delegate names it. Three probes of its own: the stranger is refused the bait,
-  node2 reads it, and node1 sees the stranger as itself.
+  the User: the bait is present and hashes to its id; the roster is node1,
+  node2 and the Member; no expulsion exists; the alias `hijack`, the tree path and the
+  intruder object do not exist; no token names the stranger. Probes of its
+  own: the stranger and the Member are refused the bait, node2 reads it, and
+  node1 sees the stranger and the Member as themselves.
 
 ## The contract
 
@@ -33,21 +37,25 @@ to write.
 |-------|---------------|
 | stranger, node token | `apphost.whoami`, `dir.resolve`, `shell.spec` |
 | stranger, its User's token | nothing, the three above included |
-| node2, node token | the three above, `user.info`, `user.swarm_status`, `user.list_siblings`, `objects.read`, `objects.contains`, `objects.load`, `objects.repositories`, `nodes.links` |
+| authz_member (a Member), node token | the three above, `user.info`, `user.swarm_status`, `user.list_siblings` |
 
 The stranger's row is astral-docs `topics/node-exposure.md`, "Linked peers": a
 peer with no grant reaches the listed ops and is refused everything else. The
 second row holds because node1 admits a relay only from a swarm node relaying
 for node1's own User (`AuthorizeRelayFor`), so the query is rejected before an
-op sees it. The sibling's row is `mod/user/src/authorizers.go`: SeeSwarm,
-SeeObjects and AdminNetwork grant the local swarm; StoreObjects, AdminObjects
-and AdminSwarm grant the User and node1 only, and the apphost and policy
-setters refuse a network origin.
+op sees it. The Member's row is the narrowed rules: SeeSwarm admits every
+member; SeeObjects grants the User and node1, and a member only through its
+contract chain (`mod/user/src/authorize_by_chain.go`), which a Member's
+membership, carrying only its tier permit, does not give; AdminNetwork grants
+the User and node1, and a Privileged node through the swarm root
+(`authorize_admin_network.go`); StoreObjects, AdminObjects and AdminSwarm
+grant the User and node1 only, and the apphost setters refuse a network
+origin. Before G7 a sibling of any tier also read node1's objects and links.
 
 The guarded probes are `tree.list`, `apphost.list_tokens`, `objects.store`,
 `tree.set`, `dir.set_alias`, `apphost.create_token`, `apphost.hold_object`,
-`user.adopt`, `user.expel`, `user.set_swarm_join_policy`,
-`apphost.set_app_register_policy`, `crypto.sign_text` and `objects.delete`.
+`user.expel`, `crypto.sign_text` and `objects.delete` (G7 removed the
+`user.adopt` and policy-setter probes with their ops).
 Every write names the stranger or the bait, so a guard that broke changes only
 what the oracle reads back.
 
@@ -78,10 +86,7 @@ like an astrald defect and is filed separately.
 
 The driver reports refusals; whether anything was written regardless is a
 separate claim, and the driver is the wrong party to make it. The oracle reads
-node1 as the User for every write a probe attempted. It checks the policy
-delegates for one naming the stranger rather than for none, because
-policy-delegate runs earlier in the shared world and may leave its own
-`app_register` delegate.
+node1 as the User for every write a probe attempted.
 
 ## Why the stranger stays linked
 

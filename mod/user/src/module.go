@@ -71,7 +71,8 @@ type Module struct {
 	carrier *swarmCarrier
 	// joiner keeps this node's own JoinRequest while it joins (user.join).
 	joiner *swarmJoiner
-	// indexedEntries holds the SwarmState contracts already handed to the auth index.
+	// indexedEntries holds the SwarmState contracts already handed to the auth
+	// index, and the SwarmState expels already stored as bans.
 	indexedEntries sig.Map[astral.ObjectID, struct{}]
 
 	// banned holds the subjects the active user banned; see isBanned.

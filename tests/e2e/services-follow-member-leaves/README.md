@@ -12,11 +12,12 @@ rejoins with a new contract. This is M13 of the E2E tests exhibit
   sfml_member to node1 and reads its node key (`lib/nodefs.py`). The Go
   program opens a follow of `sfml` on node1 (one stream, no reconnect),
   serves a provider of `sfml` on sfml_member, admits sfml_member with a
-  contract that expires in 60 s (accepted on the member, pushed to node1),
-  waits until the follow drops the member after the expiry, signs a second
-  contract (1 h), tries `user.accept_contract` with it on the member, pushes
-  it to node1, and waits until the follow shows the member again
-  (`follow_member_leaves`).
+  Privileged membership the User signs that expires in 60 s (accepted on the
+  member with `user.accept_contract`, offered to node1's SwarmState with
+  `nodes.swarm_push`), waits until the follow drops the member after the
+  expiry, signs a second membership (1 h), tries `user.accept_contract` with it
+  on the member, offers it to node1, and waits until the follow shows the
+  member again (`follow_member_leaves`).
 - **oracle** `verify.py` — the follow never ended; the offering left with
   cause `member_left`, after the expiry and within 15 s of it; it came back
   within 15 s of node1 accepting the second contract. The answer of
@@ -27,6 +28,16 @@ Spec: `.ai/system/protocols/services/ops/services.discover.md` (Following),
 https://wiki.satforge.dev/doc/6vnVgpjarA,
 https://wiki.satforge.dev/doc/0wW504QDxy,
 https://wiki.satforge.dev/doc/x4craXsVBd
+
+## Since G7
+
+The memberships are Privileged and signed by the user key: `user.accept_contract`
+activates only such a membership (D2), and a lower tier needs a carrier and an
+Approval, while `user.join` signs none shorter than an hour. node1 learns
+each membership only through SwarmState, so the driver offers it there with
+`nodes.swarm_push` instead of `objects.push`. The intent is unchanged: a
+follow tracks a member's expiry and its return. Renewal itself stays a
+Non-goal; the second membership is a new one.
 
 ## Spec note
 

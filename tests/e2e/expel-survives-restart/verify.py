@@ -20,9 +20,10 @@ node itself believes) or on the User's token for node1:
   memory only, so after the restart it admits node3's link, redelivers the ban,
   and refuses node3's links once node3 answers it, which can close the link
   that carries the join (astral-docs protocols/user/README.md; Link admission
-  in protocols/nodes/README.md). A join that succeeds fails the test. The
-  User's `user.adopt` of node3 is refused as expelled, and afterwards no
-  roster has node3 and node3 is still `unclaimed`.
+  in protocols/nodes/README.md). A join that succeeds fails the test. A new
+  Privileged membership the User signs for node3 on node1 and offers to node1
+  and node2 (what `user.adopt` did before G7) brings node3 into no roster,
+  and node3 is still `unclaimed`.
 
 Exact sets throughout: a ban that came back short, a node3 that came back as a
 member, or a roster with an extra node fails, not only an empty one.
@@ -32,17 +33,27 @@ import time
 
 import astral
 
+from lib import swarmstate as ss
 from lib.sessionio import load
 
 # why a window: every link died with its process; node1 and node2 re-link
 # through their maintain-link tasks (backoff from 1 s) once each has read its
 # stored contract.
 CONVERGE = 60.0
+# why: a membership offered to node1 is passed on to node2 within a merge, and
+# the swarm view republishes the roster on the next SwarmHead poll (3 s)
+READMIT = 10.0
 POLL = 1.0
 EXPELLED = "identity expelled from swarm"
 # why: node1 refuses node3's links once node3 answered the redelivered ban, so
 # a join can end as unavailable (astral-go astral/codes.go).
 UNAVAILABLE = 7
+# why: since G7 user.join sends its JoinRequest to node1's user.carry_join over
+# the link, and node1 closing that link under it ends the stream with EOF
+# (node1's log: "closed in-link ... link denied: identity expelled from swarm"
+# right after carry_join was routed). node1 answering the rosters below rules
+# out a node1 that went down.
+LINK_CLOSED = "unexpected EOF"
 
 
 def names(ids, by_id) -> str:
@@ -142,16 +153,17 @@ async def main():
 
         join = await refusal(c.user.join(id1))
         assert join is not None and (
-            f"({UNAVAILABLE})" in str(join) or EXPELLED in str(join)), (
+            f"({UNAVAILABLE})" in str(join) or EXPELLED in str(join)
+            or LINK_CLOSED in str(join)), (
             f"node3's user.join after the restart was neither refused as "
-            f"expelled nor ended unavailable by node1's link refusal: {join!r}")
+            f"expelled nor ended by node1's link refusal: {join!r}")
 
-    async with await astral.connect(nodes["node1"]["endpoint"],
-                                    token=user_token) as c:
-        readopt = await refusal(c.user.adopt(id3))
-        assert EXPELLED in str(readopt), (
-            f"node1 did not refuse to re-adopt node3 after the restart: "
-            f"{readopt!r}")
+    # the User signs node3 a new membership; the stored ban must still win
+    readopt = ss.user_membership(nodes["node1"], user_token, doc["facts"]["user_id"],
+                                 id3, push_to=(nodes["node2"],))
+    print(f"oracle: note: the User's new membership for node3 was answered "
+          f"{readopt['pushed']}")
+    await asyncio.sleep(READMIT)
 
     # --- after the attempts: nothing changed -------------------------------
     for name, token in (("node1", user_token), ("node2", nodes["node2"]["token"])):
@@ -170,8 +182,8 @@ async def main():
     print("oracle: all three nodes restarted once; node1 and node2 hold "
           "exactly the User's ban on node3, list exactly node1+node2 as "
           "roster and as linked siblings; node3 is unclaimed with no "
-          f"contract, node1 refuses its join ({type(join).__name__}) and its "
-          f"re-adoption ({EXPELLED!r})")
+          f"contract, node1 refuses its join ({type(join).__name__}), and a "
+          "new membership the User signed does not bring it back")
 
 
 asyncio.run(main())

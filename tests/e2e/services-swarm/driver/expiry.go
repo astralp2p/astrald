@@ -14,6 +14,8 @@ import (
 	userapi "github.com/astralp2p/astral-go/api/user"
 	userclient "github.com/astralp2p/astral-go/api/user/client"
 	"github.com/astralp2p/astral-go/astral"
+	"github.com/astralp2p/astral-go/astral/channel"
+	"github.com/astralp2p/astral-go/lib/astrald"
 	"github.com/astralp2p/astrald/mod/secp256k1"
 )
 
@@ -110,6 +112,46 @@ func signNodeContract(w *world, s session, subject string, key *crypto.PrivateKe
 		return nil, fmt.Errorf("sign as %v: %w", subject, err)
 	}
 	return &auth.SignedContract{Contract: contract, IssuerSig: issuerSig, SubjectSig: subjectSig}, nil
+}
+
+// admitClaimed makes the node subject, just claimed with a membership the
+// User signed, and node1 learn each other's membership: subject's is offered
+// to node1, node1's to subject, each with nodes.swarm_push.
+//
+// why both ways: node1 and subject linked while subject was unclaimed, so
+// subject, then its own root, dropped node1's membership on that first link,
+// and nodes exchange SwarmState only on a first link (mod/nodes
+// onSwarmLink). Without node1's membership subject counts no node1, refuses
+// node1's relay contracts and answers no discovery node1 carries for its
+// apps.
+func admitClaimed(w *world, subjectAdmin *astrald.Client, subject string, signed *auth.SignedContract) error {
+	if err := swarmPush(w.ctx, subjectAdmin.WithTarget(w.node1), signed); err != nil {
+		return fmt.Errorf("offer the membership to node1: %w", err)
+	}
+	// why subject asks: user.contract answers a caller linked to the node
+	// asked, as a nearby peer reads a node's contract
+	own, err := userclient.New(w.node1, subjectAdmin).Contract(w.ctx)
+	if err != nil {
+		return fmt.Errorf("node1's membership: %w", err)
+	}
+	if err := swarmPush(w.ctx, subjectAdmin, own); err != nil {
+		return fmt.Errorf("offer node1's membership to %v: %w", subject, err)
+	}
+	return nil
+}
+
+// swarmPush offers obj, a SwarmState entry, to the node c targets with
+// nodes.swarm_push.
+func swarmPush(ctx *astral.Context, c *astrald.Client, obj astral.Object) error {
+	ch, err := c.QueryChannel(ctx, "nodes.swarm_push", nil)
+	if err != nil {
+		return err
+	}
+	defer ch.Close()
+	if err = ch.Send(obj); err != nil {
+		return err
+	}
+	return ch.Switch(channel.ExpectAck, channel.PassErrors, channel.FailOnEOF())
 }
 
 // expiryNodeKey decodes ssm_expiry's node_key, which the script passes in

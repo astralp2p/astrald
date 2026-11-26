@@ -21,8 +21,12 @@ Since the G7 fix round there is no swarm discovery from node1: a
 Privileged node relays as the user only, so node2 refuses node1's carry of
 an app node3 hosts whatever its chain.
 
-**Strictness.** The expel cuts the chain twice: the request filed by an
-expelled node reads declined (`swarmSnapshot.declined`), and the Approval
-link refuses an expelled issuer (`swarmWalk.approvalLink`, `vetoed`). With
-only the second disabled the test passes; with both disabled the oracle
-fails: "60 s after the expel the front still saw the wallet".
+**Strictness.** The expel cuts the chain three times: the request filed by
+an expelled node reads declined (`swarmSnapshot.declined`); the Approval link
+refuses an expelled issuer, subject or approver (`swarmWalk.approvalLink`,
+its Expelled loop); and the walk asks the issuer's veto itself
+(`mod.vetoed(sc.Issuer)` in `swarmWalk`, mod/auth/src/swarm_walk.go), which
+the user module answers for an expelled node. Any one of them is enough: with
+the first two disabled the test still passes (run `20261126T033600Z`), and
+with all three disabled the oracle fails: "60 s after the expel the front
+still saw the wallet" (run `20261126T033657Z`).

@@ -76,7 +76,10 @@ func (mod *Module) syncAlias(ctx *astral.Context, nodeID *astral.Identity) (err 
 		return user.ErrNoActiveContract
 	}
 
-	var q = query.New(mod.Identity(), nodeID, user.OpInfo, nil)
+	// why as this node: a Member does not relay as the user (D5, D6), so a
+	// query as the user from a Member is refused before user.info runs; the
+	// peer's SeeSwarm admits this node as a member.
+	var q = query.New(mod.node.Identity(), nodeID, user.OpInfo, nil)
 	ch, err := query.Route(ctx, mod.node, q)
 	if err != nil {
 		return err

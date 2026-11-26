@@ -41,6 +41,9 @@ type Module interface {
 	SwarmState
 	// SyncSwarm pulls the SwarmState entries peer stores and this node lacks, through peer's exchange ops.
 	SyncSwarm(ctx *astral.Context, peer *astral.Identity) error
+	// PushSwarmEntry offers obj, a SwarmState entry, to peer through peer's
+	// swarm_push; peer checks it as any merge (SwarmState.AddSwarmEntry).
+	PushSwarmEntry(ctx *astral.Context, peer *astral.Identity, obj astral.Object) error
 	EstablishInboundLink(ctx context.Context, conn exonetmod.Conn) error
 	EstablishOutboundLink(ctx context.Context, remoteID *astral.Identity, conn exonetmod.Conn) (Link, error)
 
