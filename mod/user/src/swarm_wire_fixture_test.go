@@ -23,7 +23,7 @@ func useSwarm(t testing.TB, mod *Module, userID *astral.Identity, members ...*as
 	for _, m := range members {
 		addMembership(t, state, userID, m)
 	}
-	mod.swarmView = newSwarmView(state, func() *astral.Identity { return userID }, nil)
+	mod.swarmView.Store(newSwarmView(state, func() *astral.Identity { return userID }, nil))
 	return state
 }
 
@@ -100,7 +100,7 @@ func useIndexSwarm(mod *Module, userID *astral.Identity, a *indexAuth) {
 }
 
 func useContractSwarm(mod *Module, userID *astral.Identity, contracts func() ([]*auth.SignedContract, error)) {
-	mod.swarmView = newSwarmView(&contractState{contracts: contracts}, func() *astral.Identity { return userID }, nil)
+	mod.swarmView.Store(newSwarmView(&contractState{contracts: contracts}, func() *astral.Identity { return userID }, nil))
 }
 
 // pullNoSwarm is a nodes module with no behaviour: a SwarmState pull on a module whose store is closed does

@@ -71,8 +71,10 @@ type Module struct {
 	// note: a test seam; nil in the running node.
 	swarmDial func(target *astral.Identity) swarmPeer
 
-	// swarmView reads SwarmState.
-	swarmView *swarmView
+	// swarmView reads SwarmState; nil until LoadDependencies built it.
+	// why atomic: the auth walk reads this module from its own LoadDependencies on,
+	// which core runs at once with this module's.
+	swarmView atomic.Pointer[swarmView]
 	// carrier carries the JoinRequests that name this node (user.carry_join).
 	carrier *swarmCarrier
 	// joiner keeps this node's own JoinRequest while it joins (user.join).

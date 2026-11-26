@@ -46,12 +46,13 @@ func (v lazyVerifier) Verify(key *crypto.PublicKey, sig *crypto.Signature, obj c
 // the typed writes; the feed and publisher of its events; and the answering
 // and carrying ops.
 func (mod *Module) wireSwarm() {
-	mod.swarmView = newSwarmView(mod, mod.rootKey, nil)
+	view := newSwarmView(mod, mod.rootKey, nil)
+	mod.swarmView.Store(view)
 	mod.writer = &swarmWriter{self: mod.node.Identity(), signer: mod.Crypto, view: mod, merge: mod.mergeSwarmEntry}
 	mod.carrier = newSwarmCarrier(mod.node.Identity(), mod, mod, mod.Crypto)
 	mod.joiner = newSwarmJoiner(mod.node.Identity(), mod.Crypto, mod, mod.config.PendingJoin.Get())
 
-	mod.publisher = newSwarmPublisher(mod.swarmView.snapshot, func(e astral.Object) { mod.Events.Emit(e) })
+	mod.publisher = newSwarmPublisher(view.snapshot, func(e astral.Object) { mod.Events.Emit(e) })
 	// why: an entry this node merges is published at once, not at the feed's next poll.
 	mod.swarm.stored = func([]astral.Object) { mod.publisher.publish() }
 	mod.swarmFeed = newHeadFeed(mod, swarmPollInterval)
@@ -177,43 +178,56 @@ func (mod *Module) receiveSwarmExpels() {
 // swarmMembers returns every identity whose membership holds in SwarmState;
 // none before LoadDependencies built the view.
 func (mod *Module) swarmMembers() []*astral.Identity {
-	if mod.swarmView == nil {
+	view := mod.swarmView.Load()
+	if view == nil {
 		return nil
 	}
-	return mod.swarmView.members()
+	return view.members()
 }
 
 // RequestStatus reads the view (usermod.SwarmView); pending before
 // LoadDependencies built it.
-// why the guard: the auth walk reads this module from its own LoadDependencies on.
 func (mod *Module) RequestStatus(req *astral.ObjectID) user.RequestStatus {
-	if mod.swarmView == nil {
+	view := mod.swarmView.Load()
+	if view == nil {
 		return user.RequestPending
 	}
-	return mod.swarmView.RequestStatus(req)
+	return view.RequestStatus(req)
 }
 
 // Expelled reads the view (usermod.SwarmView); false before LoadDependencies built it.
 func (mod *Module) Expelled(id *astral.Identity) bool {
-	if mod.swarmView == nil {
+	view := mod.swarmView.Load()
+	if view == nil {
 		return false
 	}
-	return mod.swarmView.Expelled(id)
+	return view.Expelled(id)
 }
 
+// ApprovalsTouching reads the view (usermod.SwarmView); none before LoadDependencies built it.
 func (mod *Module) ApprovalsTouching(node *astral.Identity) []*user.SignedApproval {
-	return mod.swarmView.ApprovalsTouching(node)
+	view := mod.swarmView.Load()
+	if view == nil {
+		return nil
+	}
+	return view.ApprovalsTouching(node)
 }
 
+// CarriedOut reads the view (usermod.SwarmView); none before LoadDependencies built it.
 func (mod *Module) CarriedOut(approval *astral.ObjectID) []*auth.SignedContract {
-	return mod.swarmView.CarriedOut(approval)
+	view := mod.swarmView.Load()
+	if view == nil {
+		return nil
+	}
+	return view.CarriedOut(approval)
 }
 
 func (mod *Module) Membership(id *astral.Identity) (*user.Membership, bool) {
-	if mod.swarmView == nil {
+	view := mod.swarmView.Load()
+	if view == nil {
 		return nil, false
 	}
-	if m, ok := mod.swarmView.Membership(id); ok {
+	if m, ok := view.Membership(id); ok {
 		return m, true
 	}
 	return mod.ownMembership(id)
@@ -227,7 +241,7 @@ func (mod *Module) Membership(id *astral.Identity) (*user.Membership, bool) {
 // would be neither its own root nor a member: a token-less user.info right
 // after user.bootstrap was refused.
 func (mod *Module) ownMembership(id *astral.Identity) (*user.Membership, bool) {
-	if id.IsZero() || !id.IsEqual(mod.node.Identity()) || mod.swarmView.Expelled(id) {
+	if id.IsZero() || !id.IsEqual(mod.node.Identity()) || mod.Expelled(id) {
 		return nil, false
 	}
 	ac := mod.ActiveContract()
@@ -241,9 +255,10 @@ func (mod *Module) ownMembership(id *astral.Identity) (*user.Membership, bool) {
 // (usermod.SwarmView), reading signer's tier through Membership, so this
 // node's active contract counts until SwarmState holds it.
 func (mod *Module) MayAnswer(signer *astral.Identity, req *astral.ObjectID) bool {
-	if mod.swarmView == nil {
+	view := mod.swarmView.Load()
+	if view == nil {
 		return false
 	}
-	r, ok := mod.swarmView.snapshot().Request(req)
+	r, ok := view.snapshot().Request(req)
 	return ok && swarmset.MayAnswer(mod.rootKey(), signer, r.Obj, mod.Membership)
 }
