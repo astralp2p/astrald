@@ -116,7 +116,7 @@ func (mod *Module) receiveSignedContract(sender *astral.Identity, signed *auth.S
 	}
 
 	// note: "newMember", not "fresh": fresh names a node state.
-	newMember := user.IsNodeContract(signed.Contract) &&
+	newMember := isNodeContract(signed.Contract) &&
 		!signed.Subject.IsEqual(mod.node.Identity()) &&
 		!slices.ContainsFunc(mod.LocalSwarm(), signed.Subject.IsEqual)
 
@@ -126,7 +126,7 @@ func (mod *Module) receiveSignedContract(sender *astral.Identity, signed *auth.S
 		return objects.ErrPushRejected
 	}
 
-	if !user.IsNodeContract(signed.Contract) {
+	if !isNodeContract(signed.Contract) {
 		return nil
 	}
 
@@ -201,7 +201,7 @@ func (mod *Module) checkPushedContract(sender *astral.Identity, signed *auth.Sig
 
 	var err error
 	switch {
-	case user.IsNodeContract(signed.Contract):
+	case isNodeContract(signed.Contract):
 		err = mod.checkNodeContract(signed)
 	case isRelayForContract(signed.Contract):
 		err = mod.AdmitRelayContract(sender, signed)
@@ -254,4 +254,14 @@ func isRelayForContract(c *auth.Contract) bool {
 	return len(c.Permits) > 0 && !slices.ContainsFunc(c.Permits, func(p *auth.Permit) bool {
 		return p == nil || string(p.Action) != relayFor
 	})
+}
+
+// nodeContractAction is the permit of a pre-SwarmState node contract.
+// note: astral-go removed the type (G8); the name stays until the #598 sweep
+// replaces these checks.
+const nodeContractAction = "mod.user.swarm_membership_action"
+
+// isNodeContract reports whether c grants the pre-SwarmState node permit.
+func isNodeContract(c *auth.Contract) bool {
+	return len(c.HasPermit(nodeContractAction)) > 0
 }

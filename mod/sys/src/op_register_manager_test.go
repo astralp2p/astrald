@@ -125,7 +125,7 @@ func TestRegisterManagerAppointsOnce(t *testing.T) {
 func TestRegisterManagerRefusesPolicyBindings(t *testing.T) {
 	mod, apps, _ := freshModule()
 	w := registerManager(t, mod, &sysapi.RegisterManagerRequest{Policies: []*sysapi.PolicyBinding{
-		{Policy: sysapi.PolicyAppRegister, Operation: "x.y"},
+		{Policy: "app_register", Operation: "x.y"},
 	}})
 	if got := w.refusal(t); got != errPoliciesRemoved.Error() {
 		t.Fatalf("refusal %q; want %q", got, errPoliciesRemoved)
