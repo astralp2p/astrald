@@ -135,8 +135,17 @@ func (a *acceptanceNode) serveEvaluator(app *acceptanceApp) (*evaluatorApp, func
 	reg := apps.NewAppRegistrar(ctx, apps.WithClient(apphostapiclient.New(a.nodeID(), app.client)))
 	address := fmt.Sprintf("memu:vfs-evaluator-%d", acceptanceListeners.Add(1))
 
+	// why the hook: reg.Ready() closes once the bind is up, before the handler
+	// is registered, so a query sent on Ready alone can find no route.
+	registered := make(chan struct{})
+	var once sync.Once
+	hook := apps.WithRegistrationHook(func(*astral.Context) error {
+		once.Do(func() { close(registered) })
+		return nil
+	})
+
 	done := make(chan error, 1)
-	go func() { done <- apps.ServeWith(ctx, router, reg, apps.WithHandlerAddress(address)) }()
+	go func() { done <- apps.ServeWith(ctx, router, reg, apps.WithHandlerAddress(address), hook) }()
 
 	var stopped atomic.Bool
 	stop := func() {
@@ -148,7 +157,7 @@ func (a *acceptanceNode) serveEvaluator(app *acceptanceApp) (*evaluatorApp, func
 	a.t.Cleanup(stop)
 
 	select {
-	case <-reg.Ready():
+	case <-registered:
 	case err := <-done:
 		a.t.Fatalf("serve the evaluator: %v", err)
 	case <-time.After(acceptanceWait):
@@ -233,6 +242,7 @@ func TestAcceptanceEvaluatorIsNotAskedAboutTheOwnerOrTheUser(t *testing.T) {
 	a := startAcceptanceNode(t)
 	user := a.claim()
 	owner := a.registerApp()
+	a.approve(owner) // why: only an approved app serves its evaluator
 	caller := a.registerAppWith(&apphostapi.RegisterRequest{Evaluator: astral.NewBool(false)})
 
 	e, stop := a.serveEvaluator(owner)
@@ -262,6 +272,7 @@ func TestAcceptanceEvaluatorIsAskedAboutItsOwnVFSOnly(t *testing.T) {
 	a := startAcceptanceNode(t)
 	a.claim()
 	owner, other := a.registerApp(), a.registerApp()
+	a.approve(owner) // why: only an approved app serves its evaluator
 	caller := a.registerAppWith(&apphostapi.RegisterRequest{Evaluator: astral.NewBool(false)})
 
 	e, _ := a.serveEvaluator(owner)
