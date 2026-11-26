@@ -123,6 +123,9 @@ type Module struct {
 
 	// swarm is this node's copy of SwarmState, nil until Run opens it.
 	swarm atomic.Pointer[swarmStore]
+	// swarmLinkHook replaces onSwarmLink in exchangeSwarmWithLinked.
+	// note: a test seam; nil in the running node.
+	swarmLinkHook func(peer *astral.Identity)
 }
 
 // initContext sets the module context for the node identity id. The context ends when

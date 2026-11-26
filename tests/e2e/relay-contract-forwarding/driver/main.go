@@ -24,6 +24,7 @@ import (
 	"github.com/astralp2p/astrald/tests/e2e/internal/contracts"
 
 	apphostcli "github.com/astralp2p/astral-go/api/apphost/client"
+	"github.com/astralp2p/astral-go/api/nodes"
 	nodescli "github.com/astralp2p/astral-go/api/nodes/client"
 	"github.com/astralp2p/astral-go/api/tree"
 	"github.com/astralp2p/astral-go/astral"
@@ -154,18 +155,42 @@ func callThroughNode2(ctx *astral.Context, n3 node, admin3 *astrald.Client, gree
 	return nil
 }
 
-// adopt makes node1 and node3 know each other's endpoint and adopts node3 as
-// the User on node1.
+// adopt makes node1 and node3 know each other's endpoint, links node1 to
+// node3, and admits node3 through node1 as a Member.
+//
+// why node1 dials: a joiner reaches its carrier (user.join), and node3's
+// dialing is off, so node3's join runs over the link node1 opened; before G7
+// user.adopt ran on node1 and node1 dialed itself.
 func adopt(ctx *astral.Context, s session, n1, n3 node) error {
-	if err := addEndpoint(ctx, connect(n1.Endpoint, n1.Token), n3); err != nil {
+	admin1 := connect(n1.Endpoint, n1.Token)
+	if err := addEndpoint(ctx, admin1, n3); err != nil {
 		return err
 	}
 	if err := addEndpoint(ctx, connect(n3.Endpoint, n3.Token), n1); err != nil {
 		return err
 	}
+	if err := newLink(ctx, admin1, n3); err != nil {
+		return err
+	}
 	// note: user.adopt is gone (G7); node3 joins through node1 as a Member
 	if _, err := joins.Admit(ctx, connect(n3.Endpoint, n3.Token), connect(n1.Endpoint, s.Facts.UserToken), n1.Identity, n3.Identity); err != nil {
 		return fmt.Errorf("adopting node3 on node1: %w", err)
+	}
+	return nil
+}
+
+// newLink asks the admin's node to link to peer at its lan endpoint.
+func newLink(ctx *astral.Context, admin *astrald.Client, peer node) error {
+	lctx, cancel := ctx.WithTimeout(converge)
+	defer cancel()
+	ch, err := admin.QueryChannel(lctx, "nodes.new_link", query.Args{"identity": peer.Identity, "endpoint": peer.LanEndpoint})
+	if err != nil {
+		return fmt.Errorf("nodes.new_link %v: %w", peer.Identity, err)
+	}
+	defer ch.Close()
+	var info *nodes.LinkInfo
+	if err := ch.Switch(channel.Expect(&info), channel.PassErrors, channel.WithContext(lctx), channel.FailOnEOF()); err != nil {
+		return fmt.Errorf("nodes.new_link %v: %w", peer.Identity, err)
 	}
 	return nil
 }

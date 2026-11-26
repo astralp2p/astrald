@@ -123,3 +123,12 @@ func (n *recordingNodes) AddSwarmEntry(*astral.Context, astral.Object) error { r
 func (n *linkedNodes) AddSwarmEntry(*astral.Context, astral.Object) error    { return nil }
 func (n *linkNodes) AddSwarmEntry(*astral.Context, astral.Object) error      { return nil }
 func (pullNoSwarm) AddSwarmEntry(*astral.Context, astral.Object) error       { return nil }
+
+// LearnMemberEndpoints of the nodes fakes pulls nothing: no test that uses
+// them reads endpoints.
+func (n *linkedNodes) LearnMemberEndpoints(*astral.Identity)         {}
+func (n *recordingNodes) LearnMemberEndpoints(*astral.Identity)      {}
+func (n *linkNodes) LearnMemberEndpoints(*astral.Identity)           {}
+func (n *orderedNodes) LearnMemberEndpoints(*astral.Identity)        {}
+func (n *cancelCheckingNodes) LearnMemberEndpoints(*astral.Identity) {}
+func (n *joinNodes) LearnMemberEndpoints(*astral.Identity)           {}

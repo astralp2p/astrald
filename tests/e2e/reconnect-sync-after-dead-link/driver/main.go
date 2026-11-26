@@ -130,12 +130,23 @@ func run(path string, facts map[string]any) error {
 
 // registerUnreached registers an app on node1 while node2 is out of reach, and
 // checks that node2 has not learned it once the registration's push failed.
+//
+// why pushSettle counts from the registration and not from Register's return:
+// apphost.register pushes the relay contract at once, but Register returns only
+// once the host signed the app's contract for an Approval (G7), seconds later;
+// counted from the return, the check came after the push's 15 s bound and the
+// 3 s ping it wakes had closed the relayed link, and node2 had relinked.
 func registerUnreached(ctx *astral.Context, p pair) (*astral.Identity, error) {
+	start := time.Now()
 	app, err := contracts.Register(ctx, p.admin1, p.n1.Endpoint)
 	if err != nil {
 		return nil, fmt.Errorf("registering the app on node1: %w", err)
 	}
-	time.Sleep(pushSettle)
+	wait := time.Until(start.Add(pushSettle))
+	if wait <= 0 {
+		return app.Identity, fmt.Errorf("registering the app on node1 took %v, past pushSettle", time.Since(start))
+	}
+	time.Sleep(wait)
 	known, err := knowsHost(ctx, p.admin2, app.Identity, p.n1.Identity)
 	if err != nil {
 		return app.Identity, err

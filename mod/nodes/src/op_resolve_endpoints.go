@@ -1,6 +1,8 @@
 package nodes
 
 import (
+	"slices"
+
 	"github.com/astralp2p/astral-go/api/auth"
 	"github.com/astralp2p/astral-go/api/dir"
 	"github.com/astralp2p/astral-go/astral"
@@ -17,7 +19,10 @@ func (mod *Module) OpResolveEndpoints(ctx *astral.Context, q *routing.IncomingQu
 	ch := channel.New(q.AcceptRaw(), channel.WithOutputFormat(args.Out))
 	defer ch.Close()
 
-	if !mod.Auth.Authorize(ctx, &auth.AdminNetworkAction{Action: auth.NewAction(q.Caller())}) {
+	admin := mod.Auth.Authorize(ctx, &auth.AdminNetworkAction{Action: auth.NewAction(q.Caller())})
+	// why the member check before the lookup: an outsider learns nothing, not
+	// even whether the alias resolves.
+	if !admin && !mod.isSwarmMember(q.Caller()) {
 		return ch.Send(auth.ErrNotPermitted)
 	}
 
@@ -29,6 +34,9 @@ func (mod *Module) OpResolveEndpoints(ctx *astral.Context, q *routing.IncomingQu
 	}
 	if targetID.IsZero() {
 		return ch.Send(astral.ErrZeroIdentity)
+	}
+	if !admin && !mod.mayReadMemberEndpoints(q.Caller(), targetID) {
+		return ch.Send(auth.ErrNotPermitted)
 	}
 
 	endpoints, err := mod.ResolveEndpoints(ctx.WithIdentity(q.Caller()), targetID)
@@ -45,4 +53,31 @@ func (mod *Module) OpResolveEndpoints(ctx *astral.Context, q *routing.IncomingQu
 	}
 
 	return ch.Send(&astral.EOS{})
+}
+
+// mayReadMemberEndpoints reports whether caller, a caller without
+// AdminNetworkAction, may read target's endpoints: both are current members of
+// this node's local swarm, or target is this node.
+//
+// why: endpoints travel only through nodes.resolve_endpoints, and every member
+// links to every other member, so a Member that could not pull a member's
+// endpoints would never link to another Member. The rows are private to the
+// swarm, so neither party may be an outsider.
+// why not AdminNetworkAction: a Member administers no node (G7); this reads
+// endpoint rows about members and grants no other network-admin op.
+func (mod *Module) mayReadMemberEndpoints(caller, target *astral.Identity) bool {
+	if !mod.isSwarmMember(caller) {
+		return false
+	}
+	return target.IsEqual(mod.node.Identity()) || mod.isSwarmMember(target)
+}
+
+// isSwarmMember reports whether id is a current member of this node's local
+// swarm other than this node itself.
+// note: LocalSwarm leaves out expelled nodes.
+func (mod *Module) isSwarmMember(id *astral.Identity) bool {
+	if id.IsZero() || id.IsEqual(mod.node.Identity()) {
+		return false
+	}
+	return slices.ContainsFunc(mod.User.LocalSwarm(), id.IsEqual)
 }
