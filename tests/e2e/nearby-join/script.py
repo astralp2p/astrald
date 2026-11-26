@@ -2,7 +2,7 @@
 """Driver: a fresh reflector with a manager joins node1's swarm with user.join alone.
 
 The driver acts and judges nothing. It appoints a manager on the fresh
-reflector with an admin_network grant, so the manager may read the endpoints
+reflector with an admin_network permit, so the manager may read the endpoints
 the reflector resolves for node1. It reads the reflector's state and those
 endpoints, then as the manager calls user.join with node1's identity and
 records the answer and how long it took. Afterwards it reads the reflector's
@@ -34,13 +34,13 @@ from astral.errors import AstralError
 from lib import jsonops, nearby
 from lib.sessionio import load, write_facts
 
-# why admin_network: nodes.resolve_endpoints asks for that grant
+# why admin_network: nodes.resolve_endpoints asks for that permit
 # (manager-setup appoints its manager the same way).
 MANAGER = {"Type": "mod.sys.register_manager_request",
            "Object": {"Name": "manager",
                       "GrantPermits": [{"Action": "mod.auth.admin_network_action"}]}}
-# why: the route wait is 3 s, and the admission is a round trip to node1 and
-# back to the reflector's user.accept_membership
+# why: the route wait is 3 s, and the admission is the JoinRequest's round
+# trip to node1 and the Approval that answers it
 JOIN_TIMEOUT = 60
 # why 310 s: a nearby entry lives 5 min (mod/nearby/src/module.go statusTTL),
 # plus slack for a TTL counted in whole seconds and a guest stall

@@ -8,8 +8,8 @@ asks and by whichever op.
   `abandon … about`, then, as node1 and as the first User A, asks node1 to
   change owner through each op that can write an active contract:
   `user.bootstrap` with B's words, `user.bootstrap` generating new words,
-  `user.accept_contract` with B's contract, `user.accept_membership` with a
-  contract for node1 carrying B's real issuer signature, and `user.join`.
+  `user.accept_contract` with B's contract, carrying B's real issuer
+  signature, and `user.join`.
   It prints each answer and writes no facts. `prompt.md` asks an operator for
   the same change in words ("make this node a User node from another seed
   phrase"), so the oracle judges state and not the driver's record.
@@ -37,9 +37,7 @@ node1 signs as the contract's subject only for the claim rule of
 contract for B carries no valid subject signature, and a node without the
 `node already claimed` check would still refuse it at validation. The same
 holds for `user.join`, which would fail at routing. Their refusals are printed
-by the driver and not judged; `user.accept_membership`, the one op whose guard
-is the only thing between a claimed node and an overwrite (it sets the contract
-without `claim`'s lock), is judged by state. No astrald op imports a key into a
+by the driver and not judged; the oracle judges by state. No astrald op imports a key into a
 claimed node (there is no `user.import_key`); `import-user-software-key` claims
 through `user.accept_contract`.
 

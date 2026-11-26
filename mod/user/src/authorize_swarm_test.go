@@ -43,8 +43,8 @@ func (a *recordingAuth) recorded() []auth.ActionObject {
 	return append([]auth.ActionObject(nil), a.actions...)
 }
 
-// resolvingDir resolves every name to one identity. user.adopt and user.expel
-// resolve their target before authorizing, so the refusal table needs a
+// resolvingDir resolves every name to one identity. user.expel resolves its
+// target before authorizing, so the refusal table needs a
 // directory that answers; every other method panics.
 type resolvingDir struct {
 	dir.Module
@@ -293,9 +293,9 @@ func TestAuthorizeSwarmAllowsTheUser(t *testing.T) {
 }
 
 // TestAuthorizeAdminSwarmRefusesEveryoneElse is the property that keeps
-// user.adopt and user.expel where they were: a caller carrying no identity is
+// swarm administration with the issuer: a caller carrying no identity is
 // promoted to this node's identity, so admitting anything but the issuer would
-// let an unauthenticated local caller adopt and expel.
+// let an unauthenticated local caller change the swarm.
 func TestAuthorizeAdminSwarmRefusesEveryoneElse(t *testing.T) {
 	userID := astral.GenerateIdentity()
 	mod := claimedModule(t, userID)

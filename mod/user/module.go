@@ -19,11 +19,11 @@ const DBPrefix = "users__"
 const UserKeyPath = "m/1791'/0'/0'/0/0"
 
 const (
-	// MinimalContractLength is the shortest remaining validity of a node
-	// contract that user.accept_membership accepts.
+	// MinimalContractLength is the shortest remaining validity of a
+	// membership that a claim may carry.
 	MinimalContractLength = time.Hour
 
-	// DefaultContractValidity is the validity of a node contract that
+	// DefaultContractValidity is the validity of a membership that
 	// user.new_node_contract builds without a duration.
 	DefaultContractValidity = 365 * 24 * time.Hour
 )

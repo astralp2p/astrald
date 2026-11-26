@@ -2,7 +2,6 @@ package user
 
 import (
 	"errors"
-	"slices"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -18,7 +17,6 @@ import (
 	authmod "github.com/astralp2p/astrald/mod/auth"
 	cryptomod "github.com/astralp2p/astrald/mod/crypto"
 	nodesmod "github.com/astralp2p/astrald/mod/nodes"
-	objectsmod "github.com/astralp2p/astrald/mod/objects"
 	"github.com/astralp2p/astrald/mod/scheduler"
 )
 
@@ -360,44 +358,11 @@ func TestReceiveSignedContractRejects(t *testing.T) {
 		noUser   bool
 		contract func(f *receiverFixture, sender *astral.Identity) *auth.SignedContract
 	}{
-		{"node contract without a current user", true, func(f *receiverFixture, _ *astral.Identity) *auth.SignedContract {
+		{"membership from the current user", false, func(f *receiverFixture, _ *astral.Identity) *auth.SignedContract {
+			return nodeContract(f.userID, astral.GenerateIdentity())
+		}},
+		{"membership without a current user", true, func(f *receiverFixture, _ *astral.Identity) *auth.SignedContract {
 			return nodeContract(astral.GenerateIdentity(), astral.GenerateIdentity())
-		}},
-		{"node contract from another user", false, func(f *receiverFixture, _ *astral.Identity) *auth.SignedContract {
-			return nodeContract(astral.GenerateIdentity(), astral.GenerateIdentity())
-		}},
-		{"node contract issued by a sibling", false, func(f *receiverFixture, sender *astral.Identity) *auth.SignedContract {
-			return nodeContract(sender, astral.GenerateIdentity())
-		}},
-		{"node contract without the issuer signature", false, func(f *receiverFixture, _ *astral.Identity) *auth.SignedContract {
-			sc := nodeContract(f.userID, astral.GenerateIdentity())
-			sc.IssuerSig = nil
-			return sc
-		}},
-		{"node contract without the subject signature", false, func(f *receiverFixture, _ *astral.Identity) *auth.SignedContract {
-			sc := nodeContract(f.userID, astral.GenerateIdentity())
-			sc.SubjectSig = nil
-			return sc
-		}},
-		{"node contract with a forged signature", false, func(f *receiverFixture, _ *astral.Identity) *auth.SignedContract {
-			sc := nodeContract(f.userID, astral.GenerateIdentity())
-			sc.SubjectSig = forgedSig()
-			return sc
-		}},
-		{"expired node contract", false, func(f *receiverFixture, _ *astral.Identity) *auth.SignedContract {
-			sc := nodeContract(f.userID, astral.GenerateIdentity())
-			sc.ExpiresAt = astral.Time(time.Now().Add(-time.Minute))
-			return sc
-		}},
-		{"node contract for an expelled subject", false, func(f *receiverFixture, _ *astral.Identity) *auth.SignedContract {
-			subject := astral.GenerateIdentity()
-			if err := f.mod.db.StoreExpulsion(sampleSigned(f.userID, subject)); err != nil {
-				panic(err)
-			}
-			return nodeContract(f.userID, subject)
-		}},
-		{"node contract without a subject", false, func(f *receiverFixture, _ *astral.Identity) *auth.SignedContract {
-			return nodeContract(f.userID, nil)
 		}},
 		{"signed contract without a contract", false, func(f *receiverFixture, _ *astral.Identity) *auth.SignedContract {
 			return &auth.SignedContract{IssuerSig: validSig(), SubjectSig: validSig()}
@@ -463,42 +428,6 @@ func TestReceiveRelayForContractRequiresSiblingSender(t *testing.T) {
 	}
 
 	f.requireNoEffect(t, drop)
-}
-
-// swarmPusher delivers a push to the receiver of the fixture that owns the target
-// node, as a push over a stable link does, and records every target.
-type swarmPusher struct {
-	objectsmod.Module
-	sender  *astral.Identity
-	members map[string]*receiverFixture
-
-	mu      sync.Mutex
-	targets []*astral.Identity
-}
-
-func (p *swarmPusher) Push(_ *astral.Context, target *astral.Identity, obj astral.Object) error {
-	p.mu.Lock()
-	p.targets = append(p.targets, target)
-	p.mu.Unlock()
-
-	member, ok := p.members[target.String()]
-	if !ok {
-		return nil
-	}
-	return member.mod.ReceiveObject(&recordingDrop{sender: p.sender, object: obj})
-}
-
-func (p *swarmPusher) pushed() []*astral.Identity {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	return append([]*astral.Identity(nil), p.targets...)
-}
-
-// holdsContractFor reports whether f indexed a node contract for subject.
-func (f *receiverFixture) holdsContractFor(subject *astral.Identity) bool {
-	return slices.ContainsFunc(f.auth.received(), func(sc *auth.SignedContract) bool {
-		return sc.Subject.IsEqual(subject)
-	})
 }
 
 // TestReceiveRelayForContractFromSibling covers the valid relay-for contract: the
@@ -734,77 +663,5 @@ func (f *receiverFixture) scheduledSyncs() (subjects []*astral.Identity) {
 		default:
 			return
 		}
-	}
-}
-
-// skippedSync is a pushed node contract that schedules no sync. subject names
-// the contract's subject and reports whether it is linked; linkSender links the
-// sender; noUser leaves the receiver without a current user.
-type skippedSync struct {
-	name       string
-	noUser     bool
-	linkSender bool
-	subject    func(f *receiverFixture) (*astral.Identity, bool)
-	modify     func(sc *auth.SignedContract)
-}
-
-func linkedNewNode(*receiverFixture) (*astral.Identity, bool) { return astral.GenerateIdentity(), true }
-
-var skippedSyncs = []skippedSync{
-	{name: "an existing member", subject: func(f *receiverFixture) (*astral.Identity, bool) { return f.addSibling(), true }},
-	{name: "a node without a link", subject: func(*receiverFixture) (*astral.Identity, bool) { return astral.GenerateIdentity(), false }},
-	{name: "a node without a link from a linked sender", linkSender: true, subject: func(*receiverFixture) (*astral.Identity, bool) {
-		return astral.GenerateIdentity(), false
-	}},
-	{name: "this node", subject: func(f *receiverFixture) (*astral.Identity, bool) { return f.nodeID, true }},
-	{name: "an expelled node", subject: func(f *receiverFixture) (*astral.Identity, bool) {
-		subject := astral.GenerateIdentity()
-		if err := f.mod.db.StoreExpulsion(sampleSigned(f.userID, subject)); err != nil {
-			panic(err)
-		}
-		return subject, true
-	}},
-	{name: "an expired contract", subject: linkedNewNode, modify: func(sc *auth.SignedContract) {
-		sc.ExpiresAt = astral.Time(time.Now().Add(-time.Minute))
-	}},
-	{name: "a receiver without a current user", noUser: true, subject: linkedNewNode},
-}
-
-// TestReceiveNodeContractSkipsTheSync: a pushed node contract schedules no sync
-// for a node already in the swarm, a node without a link, or this node, and a
-// refused contract schedules none for a linked node.
-func TestReceiveNodeContractSkipsTheSync(t *testing.T) {
-	for _, tc := range skippedSyncs {
-		t.Run(tc.name, func(t *testing.T) {
-			userID := astral.GenerateIdentity()
-			var current *astral.Identity
-			if !tc.noUser {
-				current = userID
-			}
-			f := newReceiverFixture(t, current)
-
-			sender := astral.GenerateIdentity()
-			subject, linked := tc.subject(f)
-			if linked {
-				f.nodes.linked = append(f.nodes.linked, subject)
-			}
-			if tc.linkSender {
-				f.nodes.linked = append(f.nodes.linked, sender)
-			}
-
-			signed := nodeContract(userID, subject)
-			if tc.modify != nil {
-				tc.modify(signed)
-			}
-
-			drop := &recordingDrop{sender: sender, object: signed}
-			if err := f.mod.ReceiveObject(drop); err != nil {
-				t.Fatalf("ReceiveObject: %v", err)
-			}
-
-			if syncs := f.scheduledSyncs(); len(syncs) != 0 {
-				t.Fatalf("scheduled syncs with %v; want none", syncs)
-			}
-		})
 	}
 }

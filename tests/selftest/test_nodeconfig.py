@@ -39,7 +39,8 @@ class TestNodeConfig(unittest.TestCase):
         self.assertEqual(cfg["apphost"], {
             "listen": ["tcp:127.0.0.1:20800"],     # no socket-path collisions
             "bind_http": "", "tokens": {"sekrit": "localnode"},
-            "gate": E2E_GATE})
+            "gate": E2E_GATE, "contract_requests_per_node": 100000,
+            "contract_request_poll": "500ms"})
         self.assertNotIn("user", cfg)
         self.assertEqual(cfg["tcp"], {"listen_port": 20801})
         self.assertEqual(cfg["ether"], {"udp_port": 20802})

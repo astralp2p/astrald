@@ -3,7 +3,7 @@
 
 Observed by the driver, judged here (fact `endpoint_change_swarm`):
 
-- the User adopted the reflector: the contract's subject is the reflector;
+- the reflector joined through node1: the membership's subject is the reflector;
 - node2 (A) holds a link to node1 (B) and one to the reflector (C), and every
   link node2 holds is outbound: nothing dials a node behind this NAT;
 - node1 holds a link to the reflector;
@@ -19,12 +19,12 @@ def main():
     f = doc["facts"]["endpoint_change_swarm"]
     ids = {name: doc["nodes"][name]["identity"] for name in ("node1", "node2", "reflector")}
     snap = f["nodes"]
-    print(f"oracle: adopted {f['adopted']}; ready={f['ready']} after {f['waited']} s")
+    print(f"oracle: admitted {f['admitted']}; ready={f['ready']} after {f['waited']} s")
     for name, s in snap.items():
         print(f"oracle: {name} links {s['links']}; swarm {s['swarm']}")
 
-    assert f["adopted"].get("subject") == ids["reflector"], (
-        f"the User did not adopt the reflector: {f['adopted']}")
+    assert f["admitted"].get("subject") == ids["reflector"], (
+        f"the reflector was not admitted: {f['admitted']}")
 
     def links(a, b):
         return [r for r in snap[a]["links"] if r["remote"] == ids[b]]

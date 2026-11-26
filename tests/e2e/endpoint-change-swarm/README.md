@@ -13,10 +13,12 @@ the `reflector` (C) on the LAN, every pair linked.
   over the LAN, so they can answer the dials node2 makes; they get no alias.
 - **driver** `script.py`: the reflector and node1 learn each other's LAN
   endpoint and node2 is given none; as the User on node1 it links to
-  the reflector and adopts it; it names the three nodes on each node; then it
+  the reflector, and the reflector joins through node1 at
+  `privileged_member` (`user.join`), which the User confirms
+  (`user.confirm_join`); it names the three nodes on each node; then it
   polls the three nodes' links and swarms every second until the mesh stands
   or 180 s pass.
-- **oracle** `verify.py`: the User adopted the reflector; node2 holds a link
+- **oracle** `verify.py`: the join answered a membership naming the reflector; node2 holds a link
   to node1 and to the reflector, and every link node2 holds is outbound;
   node1 holds a link to the reflector; each node's swarm lists the other two.
 
@@ -26,8 +28,8 @@ The test judges the setup only. `endpoint-change-relink` and
 node2 is given no endpoint of the reflector. The world has no gateway and no
 Tor on purpose: node2 behind its NAT cannot be dialed and cannot dial an
 endpoint it does not hold. The reflector's endpoint reaches node2 by a pull:
-the contract-time pull from node1, which holds the seeded row, or the notice
-node1 forwards after its first-hand pull of the reflector (A3G14, EP5). The
+a pull from node1, which holds the seeded row, or the notice node1 forwards
+after its first-hand pull of the reflector (A3G14, EP5). The
 world seeds node1, so it does not tell which of the two delivered the row; the
 unit tests in mod/user and mod/nodes are the regression tests of the forward,
 and this test is a world check that node2 reaches the reflector within the

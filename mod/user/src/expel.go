@@ -157,8 +157,8 @@ func (mod *Module) banOn(subject *astral.Identity) *user.SignedExpulsion {
 }
 
 // isExpelled reports whether issuer has banned subject. Expulsion is irreversible,
-// so IssueMembership refuses a banned subject rather than minting a fresh contract
-// the membership filter would only hide post-hoc.
+// so a caller refuses a banned subject outright rather than relying on the
+// membership filter to hide it post-hoc.
 func (mod *Module) isExpelled(issuer, subject *astral.Identity) bool {
 	_, banned := mod.expelledSet(issuer)[subject.String()]
 	return banned

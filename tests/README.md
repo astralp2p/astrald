@@ -136,9 +136,9 @@ external_registration_sweep_interval = "1s"
 - **`[config.<node>.<module>]`** writes over the harness's own config for
   that module, key by key; a module the harness builds nothing for gets the
   table alone. A local world builds a config for every module
-  `lib/nodeconfig.py` names; a VM world builds apphost's and user's alone
-  (`harness_configs`: the listener, the token, the E2E gate and the accepting
-  policies, the same as a local node's), and a Docker world those two, mcp's
+  `lib/nodeconfig.py` names; a VM world builds apphost's alone
+  (`harness_configs`: the listener, the token and the E2E gate, the same as a
+  local node's), and a Docker world apphost's, mcp's
   (the server and the declared tools) and auth's (the authority at
   `authority_url`), so there every other module gets the table alone. The config follows the world,
   not the test: the planner merges the overrides of every test in a world,

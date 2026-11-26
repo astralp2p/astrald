@@ -29,7 +29,7 @@ func (mod *Module) OpNewNodeContract(ctx *astral.Context, query *routing.Incomin
 	defer ch.Close()
 
 	// why: no network caller needs the node to build a contract; a remote peer
-	// builds the same object client-side with user.NewNodeContract.
+	// builds the same object client-side with user.NewMembership.
 	if query.Origin() == astral.OriginNetwork {
 		return ch.Send(astral.NewErrOriginNotAllowed(query.Origin()))
 	}

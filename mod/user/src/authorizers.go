@@ -34,17 +34,15 @@ func (mod *Module) AuthorizeSeeSwarm(ctx *astral.Context, a *user.SeeSwarmAction
 // AuthorizeAdminSwarm allows the swarm's user to change what the swarm holds,
 // and nobody else.
 //
-// why: the policy is AuthorizeAdopt's and AuthorizeExpel's, carried over
-// unchanged — the active contract's issuer alone. user.add_asset and
+// why: the active contract's issuer alone. user.add_asset and
 // user.remove_asset had no authorization at all and tighten to it.
 //
-// why narrower than SeeSwarm, which grants the whole local swarm: membership is
-// granted on request today, so granting the swarm here would let a node it
-// admitted expel every other one.
+// why narrower than SeeSwarm, which grants the whole local swarm: granting the
+// swarm here would let any member change what every other one holds.
 //
 // why this node's own identity is not in the grant, unlike AuthorizeAdminObjects:
 // a local caller carrying no identity is promoted to it, so including it would
-// let any unauthenticated local caller adopt and expel. Managing the swarm from
+// let any unauthenticated local caller change the swarm. Managing the swarm from
 // the command line requires the user's identity, which is what it required
 // before this change.
 func (mod *Module) AuthorizeAdminSwarm(ctx *astral.Context, a *user.AdminSwarmAction) bool {
@@ -67,7 +65,7 @@ func (mod *Module) AuthorizeExpel(ctx *astral.Context, a *user.ExpelAction) bool
 //
 // why the swarm is not in the grant: the swarm held it for objects.push, which
 // asks no action (mod/objects/src/op_push.go). A sibling writes through a
-// node-local grant or a signed contract.
+// contract chain.
 //
 // why this node's own identity is granted: a local caller carrying no identity is
 // promoted to it (core/router.go), which is how the CLI and apphost reach these
@@ -81,14 +79,12 @@ func (mod *Module) AuthorizeStoreObjects(ctx *astral.Context, a *auth.StoreObjec
 // this node itself, and to nobody else.
 //
 // why: a sibling attaching a repository to a host directory is the defect this
-// action was added to close, and a swarm membership is granted on request today, so
-// granting the swarm here would leave that path open. This node's own identity is in
-// the grant because a session with the node's token acts as it, which is how
+// action was added to close, so granting the swarm here would leave that path
+// open to every member. This node's own identity is in the grant because a session with the node's token acts as it, which is how
 // the CLI reaches these ops; a token-less local caller is promoted to it too
 // (core/router.go), within apphost's gate.
 //
 // Widening this to siblings is a decision the node's operator makes, not a default.
-// Replacing the handler with a root rule and contract-issued grants is stage 2.
 func (mod *Module) AuthorizeAdminObjects(ctx *astral.Context, a *auth.AdminObjectsAction) bool {
 	return mod.authorizeUserOrNode(a.Actor())
 }

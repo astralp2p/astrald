@@ -55,8 +55,6 @@ func (mod *Module) OpRegister(ctx *astral.Context, query *routing.IncomingQuery,
 		return ch.Send(astral.Err(err))
 	}
 
-	// why: an op runs on a context detached from the requester's, and only the
-	// conn tells a waiting decision that nobody waits for its answer.
 	token, err := mod.provisionApp(ctx, nil)
 	if err != nil {
 		return ch.Send(astral.Err(err))
@@ -209,7 +207,7 @@ func (mod *Module) storePermitContract(ctx *astral.Context, guestID *astral.Iden
 
 // receiveRegisterRequest refuses a removed argument in queryString and reads
 // one mod.apphost.register_request from ch. A request with an invalid permit
-// is refused before any policy is asked.
+// is refused before anything is provisioned.
 func receiveRegisterRequest(ch *channel.Channel, queryString string) (*apphostapi.RegisterRequest, error) {
 	if err := refuseRemovedArgs(queryString, "name", "grant_permits", "contract_permits"); err != nil {
 		return nil, err

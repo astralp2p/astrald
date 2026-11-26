@@ -2,8 +2,8 @@
 """Driver: set up a node that runs the shipped default gate, the way
 node-setup.md describes, and probe the gate at each state.
 
-The driver acts and judges nothing. node1 starts under the apphost gate and
-policies a released astrald ships (test.toml clears the harness's). From a
+The driver acts and judges nothing. node1 starts under the apphost gate a
+released astrald ships (test.toml clears the harness's). From a
 session without a token the driver reads user.info, appoints the manager with
 sys.register_manager, and reads user.info again. As the manager it previews the
 User and claims the node with the same pinned words. At each state it records
@@ -27,7 +27,7 @@ from lib.sessionio import load, write_facts
 WORDS = " ".join(["abandon"] * 23 + ["art"])
 REGISTER_MANAGER = {"Type": "mod.sys.register_manager_request",
                     "Object": {"Name": "gate-setup", "GrantPermits": [],
-                               "ContractPermits": [], "Policies": []}}
+                               "ContractPermits": []}}
 # why a deadline: a query that is never routed hangs rather than answering, and
 # the client's default is 60 s.
 DEADLINE = 30

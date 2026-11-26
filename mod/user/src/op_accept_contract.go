@@ -13,14 +13,12 @@ type opAcceptContractArgs struct {
 	Out string
 }
 
-// OpAcceptContract activates a fully-signed node contract as the node's active
-// contract - the local-setup and cold-card counterpart of OpAcceptMembership,
-// which runs the signing handshake instead of taking a pre-signed contract.
+// OpAcceptContract activates a fully-signed membership as the node's active
+// contract, for local setup and the cold card.
 // Refuses with user.ErrAlreadyClaimed if the node already has an active contract. The contract is
-// validated (signatures, subject == node, not expired, grants membership),
-// then decided by the contract accept policy, before anything is stored or
-// activated; the active-contract store's follow indexes it for delegation
-// lookups.
+// validated (signatures, subject == node, not expired, grants membership)
+// before anything is stored or activated; the active-contract store's follow
+// indexes it for delegation lookups.
 //
 // why: no named action guards this op, by decision. Claimed, the refusal below refuses
 // every caller. Unclaimed, there is no active contract and so no permit any

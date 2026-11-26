@@ -4,21 +4,20 @@
 node1 belongs to the User bootstrap-user-software-key made. The driver derives
 a second User B from other BIP-39 words and, as node1 and then as the User,
 asks node1 to change owner: user.bootstrap with B's words, user.bootstrap
-generating new words, user.accept_contract with B's contract, user.accept_membership
-with B's issuer signature over a contract for node1, and user.join. It prints
+generating new words, user.accept_contract with B's contract, and user.join. It prints
 each answer and judges nothing: the oracle reads the node.
 
 why those ops: they are the ops that write an active contract (op_bootstrap.go,
-op_accept_contract.go, op_accept_membership.go, op_join.go), and each refuses
+op_accept_contract.go, op_join.go), and each refuses
 a claimed node before it reads its input. astrald has no op that imports a
 key into a claimed node; import-user-software-key claims through
 user.accept_contract, covered here.
 
-why B's signature is made here: user.accept_membership verifies the issuer's
-signature after its claimed check, so a contract B really signed is what a
-node that skipped the check would accept and activate. node1 holds no key of
-B, and its signing refuses B's contract, so the driver signs with B's key in
-memory (ECDSA below, no library).
+why B's signature is made here: user.accept_contract verifies the signatures
+after its claimed check, so a contract B really signed gets furthest on a
+node that skipped the check. node1 holds no key of B, and its signing refuses
+B's contract, so the driver signs with B's key in memory (ECDSA below, no
+library).
 
 why a call made again when reset: a claimed node answers and closes without
 reading the input, and a socket closed with that input unread resets the
@@ -32,7 +31,7 @@ import secrets
 import astral
 from astral.api.auth import SignedContract
 from astral.api.crypto import Signature, public_key_to_identity
-from astral.errors import AstralError, QueryTimeout, RemoteError
+from astral.errors import AstralError, RemoteError
 
 from lib.sessionio import load, write_facts
 
@@ -41,8 +40,6 @@ from lib.sessionio import load, write_facts
 RIVAL_WORDS = " ".join(["abandon"] * 11 + ["about"])
 PATH = "m/1791'/0'/0'/0/0"
 RESET_ATTEMPTS = 5
-# How long accept_membership is given to answer before the driver sends input.
-ANSWER_FIRST = 1.0
 # why a stranger for join: the op refuses a claimed node before it reads node.
 STRANGER = "0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798"
 
@@ -116,25 +113,6 @@ async def attempt(call) -> dict:
     return {"refused": True, "error": "reset", "text": reset}
 
 
-async def membership(c, contract, issuer_sig) -> None:
-    """user.accept_membership, reading its answer before sending its input.
-
-    why: the op answers a claimed node before it reads either object, and a
-    client that has sent both meets a reset in place of the answer on every
-    attempt (measured: five of five). An op that waits for input stays silent,
-    so the driver sends the contract and signature once ANSWER_FIRST passes.
-    """
-    async with c.stream("user.accept_membership") as s:
-        try:
-            await s.first(timeout=ANSWER_FIRST)
-            raise AstralError("user.accept_membership answered with no input")
-        except QueryTimeout:
-            pass
-        await s.send(contract)
-        await s.send(issuer_sig)
-        await s.first(timeout=15)
-
-
 async def rival(c) -> tuple[str, bytes]:
     """User B: its identity, and its key in memory only."""
     seed = await c.bip137sig.seed(RIVAL_WORDS)
@@ -154,8 +132,6 @@ async def probes(c, rival_id: str, secret: bytes) -> dict:
         "bootstrap_words": await attempt(lambda: c.user.bootstrap(RIVAL_WORDS)),
         "bootstrap_generate": await attempt(lambda: c.user.bootstrap(None)),
         "accept_contract": await attempt(lambda: c.user.accept_contract(signed)),
-        "accept_membership": await attempt(
-            lambda: membership(c, contract, issuer_sig)),
         "join": await attempt(lambda: c.user.join(STRANGER)),
     }
 

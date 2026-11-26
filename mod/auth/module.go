@@ -33,7 +33,7 @@ type ContractQueryBuilder interface {
 //   - root: after the veto, the walk allows the actor when it is the root key
 //     or holds a PrivilegedMembership the root key signed, and is not expelled,
 //     at any hop and for any action except user.ExpelAction and
-//     user.AdminSwarmAction (D7);
+//     auth.SudoAction (D7);
 //   - Approval link: a contract with an ApprovalID holds only when that
 //     Approval is stored, its request is approved, the request was filed (a
 //     ContractRequest) or carried in (a JoinRequest) by the contract's issuer,

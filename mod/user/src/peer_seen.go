@@ -127,6 +127,26 @@ func (mod *Module) checkPeerContract(peer *astral.Identity, signed *auth.SignedC
 	return nil
 }
 
+// checkNodeContract requires the current user as the issuer and a subject the user has not expelled.
+func (mod *Module) checkNodeContract(signed *auth.SignedContract) error {
+	ac := mod.ActiveContract()
+	if ac == nil {
+		return user.ErrNoActiveContract
+	}
+
+	if !signed.Issuer.IsEqual(mod.Identity()) {
+		return errors.New("issuer is not the current user")
+	}
+
+	// why: a peer the user has expelled is not contacted, even with a
+	// membership that has not expired yet.
+	if mod.isExpelled(mod.Identity(), signed.Subject) {
+		return user.ErrExpelled
+	}
+
+	return nil
+}
+
 // isMembership reports whether c carries exactly one tier permit.
 func isMembership(c *auth.Contract) bool {
 	_, ok := user.ContractTier(c)

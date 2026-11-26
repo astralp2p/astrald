@@ -15,8 +15,8 @@ type opDeleteMailboxArgs struct {
 	Out      string
 }
 
-// OpDeleteMailbox removes a participant: revokes every token and grant its
-// identity holds, unsets its alias and withdraws its mailbox from this node with
+// OpDeleteMailbox removes a participant: revokes every token its identity
+// holds, unsets its alias and withdraws its mailbox from this node with
 // the mail it owns. The hosting contract is not revoked. Identity takes an
 // identity or an alias.
 func (mod *Module) OpDeleteMailbox(ctx *astral.Context, q *routing.IncomingQuery, args opDeleteMailboxArgs) error {

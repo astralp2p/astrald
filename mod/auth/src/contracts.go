@@ -148,7 +148,7 @@ func (mod *Module) indexer(ctx *astral.Context) {
 
 	// note: deferred holds the snapshot's contracts an admitter refused.
 	// why: the scan order is the repository's, so a relay contract can come
-	// before the node contract that makes its subject a member.
+	// before the membership that makes its subject a member.
 	// note: live is set once the snapshot ends. A live contract an admitter
 	// refuses is not deferred, since nothing retries it after the snapshot.
 	var deferred []*auth.SignedContract

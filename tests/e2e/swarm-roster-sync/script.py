@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""Driver: node1's User adopts node3 into a swarm that already holds node2.
+"""Driver: node3 joins, through node1, a swarm that already holds node2.
 
 Only node1 and node3 learn each other's endpoint. node2 is never told where
 node3 accepts links, so a link node2 later holds to node3 can only come from
-the swarm itself: the roster sync that follows an adoption and the endpoints
-it carries.
+the swarm itself: the SwarmState sync that carries node3's membership and the
+endpoint pull that follows it.
 """
 import asyncio
 
@@ -27,10 +27,10 @@ async def main():
         await c.nodes.add_endpoint(n1["identity"], n1["lan_endpoint"],
                                    experimental=True)
 
-    # note: user.adopt is gone (G7); node3 joins through node1 as a Member
+    # node3 joins through node1 as a Member; the User approves its JoinRequest
     await ss.admit(n1, user_token, n3)
 
-    print("driver: node3 adopted by the User on node1; node2 told nothing")
+    print("driver: node3 joined through node1; node2 told nothing")
 
 
 asyncio.run(main())

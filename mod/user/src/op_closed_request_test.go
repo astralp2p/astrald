@@ -17,8 +17,8 @@ import (
 )
 
 // TestContractOpsAnswerARequesterClosedBeforeTheContract: user.accept_contract
-// and user.accept_membership whose caller closes before sending the contract
-// answer io.ErrUnexpectedEOF; neither op acts on a nil contract.
+// whose caller closes before sending the contract answers io.ErrUnexpectedEOF
+// and does not act on a nil contract.
 func TestContractOpsAnswerARequesterClosedBeforeTheContract(t *testing.T) {
 	ops := []struct {
 		name string

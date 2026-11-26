@@ -19,8 +19,8 @@ import (
 	usermod "github.com/astralp2p/astrald/mod/user"
 )
 
-// stubUser satisfies usermod.Module; Ready, Identity, WasOwned and
-// SetPolicyDelegate are exercised.
+// stubUser satisfies usermod.Module; Ready, Identity and WasOwned are
+// exercised.
 type stubUser struct {
 	// note: nil; sys reads no SwarmState.
 	usermod.SwarmView

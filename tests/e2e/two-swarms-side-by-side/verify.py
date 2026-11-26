@@ -19,7 +19,7 @@ and judges four things, collecting every failure before it exits:
    grants a member of the asked node's own swarm, not any linked node).
 4. No foreign contract: of the four contracts the driver offered, the two
    crossing the swarms were refused and the two inside a swarm were taken
-   (mod/user/src/object_receiver.go checkNodeContract).
+   (the SwarmState merge check, user.SwarmView.CheckSwarmEntry).
 """
 import asyncio
 import contextlib

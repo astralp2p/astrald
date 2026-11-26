@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""Oracle: adopting node3 on node1 reaches node2, and node3 learns the swarm.
+"""Oracle: node3's join through node1 reaches node2, and node3 learns the swarm.
 
 node2 was never told node3's endpoint, so each check below on node2 holds
-only if node1's roster sync carried node3's contract and endpoint to its
-sibling (astral-docs user-and-swarm.md "Swarm"; astrald
-mod/user/src/op_adopt.go PushToLocalSwarm + NewSyncNodesTask):
+only if the swarm carried node3's membership and endpoint to its sibling
+(astral-docs user-and-swarm.md "Swarm"; astrald SwarmState sync and
+mod/nodes/src/endpoints_changed.go LearnMemberEndpoints):
 
 - node2's swarm_status lists node3 as linked, and node2's nodes.links holds a
   link to node3;
@@ -19,8 +19,8 @@ import astral
 from lib.sessionio import load
 
 
-# why a window rather than an instant: the push and the sync that follow an
-# adoption are asynchronous (adopt-node's await_sibling waits the same way).
+# why a window rather than an instant: the sync and the endpoint pull that
+# follow a join are asynchronous (adopt-node's await_sibling waits the same way).
 # Live, node2 linked node3 within 0.5-1 s; 30 s still fails a roster that
 # never arrives.
 CONVERGE = 30.0

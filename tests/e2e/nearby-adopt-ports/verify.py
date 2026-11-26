@@ -1,16 +1,17 @@
 #!/usr/bin/env python3
-"""Oracle: node1 adopts the unowned node2, which listens on tcp 1800 and kcp 1810, through nearby alone.
+"""Oracle: node1 admits the unowned node2, which listens on tcp 1800 and kcp 1810, through nearby alone.
 
 node1's nearby.list carried a status of node2, newer than any before node1's
 scan: a public profile naming node2 and no user, the `adoptable` flag, a
 mod.nearby.listen_ports of tcp 1800 and kcp 1810 after the profile, and the
 status proof last, with no stealth hint and no sealed ports. `.<alias>`
 resolved on node1 to node2. The endpoints node1 found for node2 before the
-adoption are exactly tcp and kcp at node2's LAN address on those ports, none
-on 1791 or 1792. node1 held no link to node2 before the adoption; user.adopt
-answered a contract the User issued to node2, and right after it every link
-node1 holds to node2 is one node1 dialed at those endpoints. node2 holds the
-contract, and each node lists the other linked.
+admission are exactly tcp and kcp at node2's LAN address on those ports, none
+on 1791 or 1792. node1 held no link to node2 before it linked; right after,
+every link node1 holds to node2 is one node1 dialed at those endpoints.
+node2's user.join through node1, confirmed by the User, answered a membership
+the User issued to node2, node2 holds it, and each node lists the other
+linked.
 """
 import asyncio
 import time
@@ -23,7 +24,7 @@ from lib import nearby
 from lib.sessionio import load
 
 # why a window: the roster and the link back reach both nodes asynchronously
-# after the adoption (adopt-node's oracle waits the same way)
+# after the admission (adopt-node's oracle waits the same way)
 CONVERGE = 60.0
 POLL = 1.0
 CONFIG = tomllib.loads((Path(__file__).parent / "test.toml").read_text())["config"]
@@ -79,18 +80,18 @@ def check_resolution(f: dict, n2: dict) -> None:
         "alone: the ports node2's status carries, and nothing at 1791 or 1792")
 
 
-def check_adoption(f: dict, user_id: str, n2: dict) -> None:
-    a = f.get("adopted", {})
-    assert "error" not in a, f"user.adopt of `.{f['alias']}` failed: {a['error']}"
-    assert a.get("issuer") == user_id, f"the adoption contract's issuer is {a.get('issuer')}, not the User"
-    assert a.get("subject") == n2["identity"], f"the adoption contract names {a.get('subject')}, not node2"
+def check_admission(f: dict, user_id: str, n2: dict) -> None:
+    a = f.get("admitted", {})
+    assert "error" not in a, f"admitting `.{f['alias']}` failed: {a['error']}"
+    assert a.get("issuer") == user_id, f"the membership's issuer is {a.get('issuer')}, not the User"
+    assert a.get("subject") == n2["identity"], f"the membership names {a.get('subject')}, not node2"
 
 
 def check_dial(f: dict, n2: dict) -> None:
-    """Every link node1 holds to node2 right after the adoption is one node1 dialed at a carried port."""
-    assert f["links_before"] == [], f"node1 held links to node2 before the adoption: {f['links_before']}"
+    """Every link node1 holds to node2 right after node1 linked is one node1 dialed at a carried port."""
+    assert f["links_before"] == [], f"node1 held links to node2 before it linked: {f['links_before']}"
     links = f["links_after"]
-    assert links, "node1 held no link to node2 right after the adoption"
+    assert links, "node1 held no link to node2 right after it linked"
     ip = lan_ip(n2)
     want = {f"tcp:{ip}:{TCP}", f"kcp:{ip}:{KCP}"}
     for link in links:
@@ -120,7 +121,7 @@ async def main():
     check_listing(f, n2)
     check_ports(f)
     check_resolution(f, n2)
-    check_adoption(f, user["identity"], n2)
+    check_admission(f, user["identity"], n2)
     check_dial(f, n2)
 
     async with await astral.connect(n2["endpoint"], token=n2["token"]) as c:
@@ -130,7 +131,7 @@ async def main():
     assert await linked_to(n2, n2["token"], n1["identity"]), "node2 never listed node1 linked"
 
     print(f"oracle: node2 on tcp {TCP} and kcp {KCP} listed by node1 as `.{f['alias']}`, "
-          f"resolved and dialed through nearby ({', '.join(f['endpoints'])}), adopted, "
+          f"resolved and dialed through nearby ({', '.join(f['endpoints'])}), admitted, "
           "linked both ways")
 
 

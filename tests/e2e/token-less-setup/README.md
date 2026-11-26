@@ -29,9 +29,9 @@ the node, or joins a swarm from the new node; after the claim it reaches the
 
 The unit tests hold each op and the gate with stand-ins. This drives a real
 apphost session that presents no token through the gate to the ops, a real
-token minted by `user.bootstrap`, and a real `user.join`: the request over a
-link, the swarm node's join policy, and its `user.accept_membership` call back
-into the joining node.
+token minted by `user.bootstrap`, and a real `user.join`: the JoinRequest over a
+link to the swarm node, the Approval that answers it, and the membership the
+joining node receives and activates.
 
 ## Why its own nodes
 

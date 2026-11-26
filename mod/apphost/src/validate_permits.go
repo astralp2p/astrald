@@ -10,9 +10,8 @@ import (
 // validatePermits runs auth.ValidatePermit on every permit and returns the
 // first failure, which wraps auth.ErrInvalidPermit and names the action.
 //
-// why: an op calls it before any policy is asked or any row written, so a
-// permit that can never authorize is refused at once and never shown to a
-// delegate.
+// why: an op calls it before any row is written, so a permit that can never
+// authorize is refused at once.
 func validatePermits(permits []*auth.Permit) error {
 	for _, p := range permits {
 		if err := auth.ValidatePermit(p); err != nil {

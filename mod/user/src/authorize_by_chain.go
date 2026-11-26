@@ -13,8 +13,6 @@ import (
 // do comes from its contract chain (the swarm root and Approval links in the
 // auth walk, authmod.SwarmWalk).
 //
-// note: nothing registers them until G7 switches AuthorizeRelayFor,
-// AuthorizeServiceDiscovery and AuthorizeSeeObjects over to them.
 // note: AuthorizeStoreObjects already leaves the swarm out, so it has no
 // narrowed rule.
 type chainRules struct {

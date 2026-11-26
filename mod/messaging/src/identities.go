@@ -69,8 +69,8 @@ func (mod *Module) CreateMailbox(ctx *astral.Context, alias string, duration ast
 	}, nil
 }
 
-// DeleteMailbox removes a participant: revokes every token and grant its
-// identity holds, unsets its alias and withdraws its mailbox from this node,
+// DeleteMailbox removes a participant: revokes every token its identity
+// holds, unsets its alias and withdraws its mailbox from this node,
 // with the mail it owns. An identity whose mailbox the index does not name
 // answers messagingmod.ErrIdentityNotFound.
 func (mod *Module) DeleteMailbox(_ *astral.Context, identity *astral.Identity) error {

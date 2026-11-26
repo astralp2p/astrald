@@ -5,7 +5,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/astralp2p/astral-go/api/auth"
 	"github.com/astralp2p/astral-go/api/messaging"
 	"github.com/astralp2p/astral-go/astral"
 	apphostmod "github.com/astralp2p/astrald/mod/apphost"
@@ -17,10 +16,6 @@ import (
 type stubApphost struct {
 	apphostmod.Module
 	tokens map[string]*astral.Identity // issued tokens, keyed by token
-	grants map[string][]*auth.Permit   // node-local grants, keyed by identity
-
-	// revokeErr is what Revoke answers instead of withdrawing a grant.
-	revokeErr error
 
 	// createErr is what CreateAccessToken answers instead of issuing a token.
 	createErr error
@@ -41,33 +36,6 @@ func (s *stubApphost) DeleteAccessTokens(id *astral.Identity) error {
 			delete(s.tokens, token)
 		}
 	}
-	return nil
-}
-
-// Grants answers what apphost.Module.Grants answers: every permit the node
-// holds for the identity, expired ones included.
-func (s *stubApphost) Grants(id *astral.Identity) ([]*auth.Permit, error) {
-	return s.grants[id.String()], nil
-}
-
-// Revoke answers what apphost.Module.Revoke answers: every grant the identity
-// holds for the action goes.
-func (s *stubApphost) Revoke(id *astral.Identity, action string) error {
-	if s.revokeErr != nil {
-		return s.revokeErr
-	}
-
-	var kept []*auth.Permit
-	for _, permit := range s.grants[id.String()] {
-		if string(permit.Action) != action {
-			kept = append(kept, permit)
-		}
-	}
-
-	if len(kept) == len(s.grants[id.String()]) {
-		return gorm.ErrRecordNotFound
-	}
-	s.grants[id.String()] = kept
 	return nil
 }
 
@@ -130,7 +98,6 @@ func testIdentityModule(t *testing.T) (*Module, *stubApphost, *stubDir) {
 
 	apphost := &stubApphost{
 		tokens: map[string]*astral.Identity{},
-		grants: map[string][]*auth.Permit{},
 	}
 	dir := &stubDir{aliases: map[string]*astral.Identity{}}
 
@@ -264,27 +231,6 @@ func TestFindIdentityNamesTheIndexedParticipants(t *testing.T) {
 		if err := mod.FindIdentity(id); !errors.Is(err, messagingmod.ErrIdentityNotFound) {
 			t.Fatalf("find the %v identity: got %v, want %v", name, err, messagingmod.ErrIdentityNotFound)
 		}
-	}
-}
-
-// A grant the node no longer holds is not an error the deletion reports: the
-// listing and the revoke are two statements, and a revoke that lands between
-// them leaves the state the deletion wanted.
-func TestDeletingAnIdentityToleratesAGrantAlreadyRevoked(t *testing.T) {
-	mod, apphost, _ := testIdentityModule(t)
-	identity := hostedParticipant(t, mod)
-
-	apphost.grants[identity.String()] = []*auth.Permit{
-		{Action: astral.String8(auth.ServeObjectsAction{}.ObjectType())},
-	}
-	apphost.revokeErr = gorm.ErrRecordNotFound
-
-	if err := mod.deleteMailbox(identity); err != nil {
-		t.Fatalf("delete identity: %v", err)
-	}
-
-	if _, err := mod.db.FindMailbox(identity); err == nil {
-		t.Fatal("index row still present after delete")
 	}
 }
 

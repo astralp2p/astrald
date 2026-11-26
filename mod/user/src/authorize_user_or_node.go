@@ -10,7 +10,7 @@ import "github.com/astralp2p/astral-go/astral"
 // because a session with the node's token acts as it, which is how the CLI and
 // the step-by-step setup reach these ops; a token-less local caller is promoted
 // to it too (core/router.go), within apphost's gate. Any other
-// identity reaches them through a node-local grant or a signed contract.
+// identity reaches them through a contract chain.
 //
 // why: a zero actor is refused first. The user identity is nil on an unclaimed
 // node, and Identity.IsEqual reports a zero identity equal to nil.

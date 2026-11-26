@@ -43,10 +43,10 @@ Until a manager is appointed, any local program or browser page can appoint itse
 
 ### Appoint the manager
 
-The request takes on no policy, so app registrations, swarm joins and swarm invitations keep refusing. Without a token, or with the node's token when `apphost.yaml` sets one:
+Without a token, or with the node's token when `apphost.yaml` sets one:
 
 ```shellsession
-$ echo '{"Type":"mod.sys.register_manager_request","Object":{"Name":"cli-setup","GrantPermits":[],"ContractPermits":[],"Policies":[]}}' \
+$ echo '{"Type":"mod.sys.register_manager_request","Object":{"Name":"cli-setup","GrantPermits":[],"ContractPermits":[]}}' \
     | astral-query sys.register_manager -in json -out json
 {"Type":"apphost.access_token","Object":{"Identity":"03864ef0...","Token":"k7m2q5x9r3v4n8p1","ExpiresAt":"2036-05-25T12:00:00+02:00"}}
 $ export ASTRALD_APPHOST_TOKEN=k7m2q5x9r3v4n8p1
@@ -80,7 +80,7 @@ $ astral-query user.info -out json
 
 ## Access for apps and AI agents
 
-App registration refuses by default, so the user creates an agent's identity and token with `mcp.create_agent`, under the user's token:
+The user creates an agent's identity and token with `mcp.create_agent`, under the user's token:
 
 ```shellsession
 $ export ASTRALD_APPHOST_TOKEN=b9c2e1a3d4f5867a
@@ -90,7 +90,7 @@ $ ASTRALD_APPHOST_TOKEN=h4d8s2w6y1b9t3n7 astral-query apphost.whoami -out json
 {"Type":"identity","Object":"02f40933..."}
 ```
 
-Each further action is a grant the user writes with [`apphost.grant`](https://github.com/astralp2p/astral-docs/blob/master/protocols/apphost/ops/apphost.grant.md). The agent never needs the user's token, the manager's token or the words. Apps register with [`apphost.register`](https://github.com/astralp2p/astral-docs/blob/master/protocols/apphost/ops/apphost.register.md) once the manager or the user sets the app register policy ([Node Policies](https://github.com/astralp2p/astral-docs/blob/master/topics/node-policies.md)).
+The agent asks for each further action with [`apphost.request_contract`](https://github.com/astralp2p/astral-docs/blob/master/protocols/apphost/ops/apphost.request_contract.md), which files a contract request in the swarm; the user answers it with [`user.answer_request`](https://github.com/astralp2p/astral-docs/blob/master/protocols/user/ops/user.answer_request.md), and an approval brings the permits as a contract. The agent never needs the user's token, the manager's token or the words. Apps register with [`apphost.register`](https://github.com/astralp2p/astral-docs/blob/master/protocols/apphost/ops/apphost.register.md): registration is local and never refused, and the permits an app asks for go to the user as a contract request.
 
 Tokens work over any of the supported transports (native or [HTTP](https://github.com/astralp2p/astral-docs/blob/master/topics/http-transport.md)).
 

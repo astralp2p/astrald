@@ -8,8 +8,8 @@ import (
 	"gorm.io/gorm"
 )
 
-// deleteAgent deletes the agent's messaging participant — its tokens, grants,
-// alias and mail — and then its agent row.
+// deleteAgent deletes the agent's messaging participant — its tokens, alias
+// and mail — and then its agent row.
 //
 // why a participant already gone is not an error: messaging.delete_mailbox may
 // have removed it, or an earlier delete_agent may have stopped after it, and
@@ -59,7 +59,7 @@ func (mod *Module) findAgent(identity *astral.Identity) (*dbAgent, error) {
 // participant. A lookup that fails answers its error and no verdict.
 //
 // why such a row is no agent: messaging.delete_mailbox withdraws the
-// participant — its tokens, grants, alias and mail — and never writes this
+// participant — its tokens, alias and mail — and never writes this
 // module's row, so the row outlives the agent with a token that no longer
 // authenticates.
 func (mod *Module) isWithdrawn(row *dbAgent) (bool, error) {

@@ -118,7 +118,8 @@ func receiveWords(ch *channel.Channel, generate bool) ([]string, error) {
 //
 // why the key is stored before the claim: a repeat call with the same words
 // completes a claim that failed after the store, while a claimed node without
-// the user's key cannot sign user.adopt.
+// the user's key cannot sign the PrivilegedMemberships and Expulsions of the
+// ceremonies.
 func (mod *Module) bootstrap(ctx *astral.Context, caller *astral.Identity, words []string, passphrase string) (*astral.Identity, error) {
 	key, err := mod.deriveUserKey(words, passphrase)
 	if err != nil {

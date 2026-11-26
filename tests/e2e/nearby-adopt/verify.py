@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
-"""Oracle: node1 lists the unowned node2 from nearby, resolves its alias and address there, and adopts it.
+"""Oracle: node1 lists the unowned node2 from nearby, resolves its alias and address there, and admits it.
 
 node1's nearby.list carried a status of node2, newer than any before node1's
 scan: a public profile naming node2 and no user, the `adoptable` flag, and the
 status proof last, with no stealth hint. `.<alias>` resolved on node1 to node2,
-and every endpoint node1 found for node2 before the adoption sits at node2's
-LAN address, with tcp :1791 and kcp :1792 among them. user.adopt of
-`.<alias>` answered a contract the User issued to node2, node2 holds it, and
-each node lists the other linked.
+and every endpoint node1 found for node2 before the admission sits at node2's
+LAN address, with tcp :1791 and kcp :1792 among them. node2's user.join
+through node1, confirmed by the User, answered a membership the User issued
+to node2, node2 holds it, and each node lists the other linked.
 """
 import asyncio
 import time
@@ -18,7 +18,7 @@ from lib import nearby
 from lib.sessionio import load
 
 # why a window: the roster and the link back reach both nodes asynchronously
-# after the adoption (adopt-node's oracle waits the same way)
+# after the admission (adopt-node's oracle waits the same way)
 CONVERGE = 60.0
 POLL = 1.0
 
@@ -62,11 +62,11 @@ def check_resolution(f: dict, n2: dict) -> None:
         "(the test gives none, so something else did)")
 
 
-def check_adoption(f: dict, user_id: str, n2: dict) -> None:
-    a = f.get("adopted", {})
-    assert "error" not in a, f"user.adopt of `.{f['alias']}` failed: {a['error']}"
-    assert a.get("issuer") == user_id, f"the adoption contract's issuer is {a.get('issuer')}, not the User"
-    assert a.get("subject") == n2["identity"], f"the adoption contract names {a.get('subject')}, not node2"
+def check_admission(f: dict, user_id: str, n2: dict) -> None:
+    a = f.get("admitted", {})
+    assert "error" not in a, f"admitting `.{f['alias']}` failed: {a['error']}"
+    assert a.get("issuer") == user_id, f"the membership's issuer is {a.get('issuer')}, not the User"
+    assert a.get("subject") == n2["identity"], f"the membership names {a.get('subject')}, not node2"
 
 
 async def linked_to(node: dict, token: str, peer: str) -> bool:
@@ -89,7 +89,7 @@ async def main():
 
     check_listing(f, n2)
     check_resolution(f, n2)
-    check_adoption(f, user["identity"], n2)
+    check_admission(f, user["identity"], n2)
 
     async with await astral.connect(n2["endpoint"], token=n2["token"]) as c:
         info = await c.user.info()
@@ -98,7 +98,7 @@ async def main():
     assert await linked_to(n2, n2["token"], n1["identity"]), "node2 never listed node1 linked"
 
     print(f"oracle: node2 listed by node1 as `.{f['alias']}`, resolved and dialed "
-          f"through nearby ({', '.join(f['endpoints'])}), adopted, linked both ways")
+          f"through nearby ({', '.join(f['endpoints'])}), admitted, linked both ways")
 
 
 asyncio.run(main())

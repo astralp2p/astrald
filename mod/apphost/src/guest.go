@@ -191,7 +191,7 @@ func (guest *Guest) onRouteQueryMsg(ctx *astral.Context, msg *apphost.RouteQuery
 	inFlight := astral.Launch(q)
 
 	// Carry the browser Origin for queries arriving over the WebSocket endpoint
-	// so a delegated policy can weigh it.
+	// so the handler that answers the query can read it.
 	if guest.webOrigin != "" {
 		inFlight.Extra.Set(apphostmod.ExtraOriginWeb, guest.webOrigin)
 	}

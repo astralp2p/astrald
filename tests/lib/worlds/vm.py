@@ -527,7 +527,7 @@ mv {GUEST_RECORD}.new {GUEST_RECORD}""")
         """The module config files the push writes into a guest's config dir,
         by file name: the one place a world's config reaches a VM.
 
-        apphost and user are the harness's, as a local node's
+        apphost is the harness's, as a local node's
         (nodeconfig.harness_configs), with the world's overrides for this VM
         merged key by key; any other module the world overrides gets its table
         alone, since the lab writes no module config of its own.

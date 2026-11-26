@@ -54,8 +54,8 @@ func (srv *HTTPServer) handleWS(writer http.ResponseWriter, request *http.Reques
 	}()
 
 	guest := NewGuestFromChannel(srv.Module, ch, conn, mode)
-	// Record the web Origin (if any) so routed queries carry it to a delegated
-	// policy. Empty for non-browser WS clients.
+	// Record the web Origin (if any) so routed queries carry it to their
+	// handler. Empty for non-browser WS clients.
 	guest.webOrigin = request.Header.Get("Origin")
 	defer func() {
 		// If the guest donated its conn to a routing goroutine via AttachQueryMsg,
@@ -96,8 +96,7 @@ func (srv *HTTPServer) negotiateWS(writer http.ResponseWriter, request *http.Req
 	// Accept any Origin. The endpoint is already loopback-only at the network
 	// layer (isLoopback above); apphost does not filter by Origin. The Origin
 	// travels in each query's Extra under ExtraOriginWeb (see
-	// Guest.onRouteQueryMsg), so a delegated register or grant-request policy
-	// can weigh it.
+	// Guest.onRouteQueryMsg), so the handler that answers a query can read it.
 	c, err := websocket.Accept(writer, request, &websocket.AcceptOptions{
 		Subprotocols:       []string{SubprotocolBinary, SubprotocolJSON},
 		InsecureSkipVerify: true,

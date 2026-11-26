@@ -62,9 +62,8 @@ func TestOwnIdentityResolvesOnlyListeners(t *testing.T) {
 }
 
 // TestPullAboutSelfStoresNothing: a pull of the node's own endpoints from a
-// sibling, as pullSubjectEndpoints starts when the node's contract arrives
-// through that sibling, sends no query and stores no row; the same pull about
-// another identity stores the sibling's answer.
+// sibling sends no query and stores no row; the same pull about another
+// identity stores the sibling's answer.
 func TestPullAboutSelfStoresNothing(t *testing.T) {
 	f := newExchangeFixture(t)
 	sibling := f.member(true)

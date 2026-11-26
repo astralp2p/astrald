@@ -100,16 +100,16 @@ func isPrivilegedClaim(c *auth.Contract) bool {
 	return p.Constraints == nil || len(p.Constraints.Objects()) == 0
 }
 
-// hasClaimExpiry reports whether c expires later than the shortest validity
-// user.accept_membership accepts, and no later than the default validity of
-// user.new_node_contract plus claimExpirySlack.
+// hasClaimExpiry reports whether c expires later than MinimalContractLength,
+// and no later than the default validity of user.new_node_contract plus
+// claimExpirySlack.
 //
 // why the ceiling: the exception signs in the issuer's name without the
 // issuer's consent, so a claim signed through a misuse of it lapses no later
 // than setup's own claim would.
 //
-// why the floor: user.accept_membership refuses a node contract that expires
-// sooner, and the claim is held to the same bound.
+// why the floor: a node is never claimed with a membership that lapses within
+// MinimalContractLength.
 func hasClaimExpiry(c *auth.Contract, now time.Time) bool {
 	expiresAt := c.ExpiresAt.Time()
 	return expiresAt.After(now.Add(usermod.MinimalContractLength)) &&

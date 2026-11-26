@@ -9,7 +9,7 @@ import (
 // to this node itself; a Privileged node holds it through the swarm root
 // handler (authmod.SwarmWalk).
 //
-// why the user: the six other node-wide actions grant it, and a user who adopts
+// why the user: the six other node-wide actions grant it, and a user who admits
 // and expels swarm members already reshapes the network more than these ops do.
 // The end-to-end drivers dial links and punch holes under the user's token.
 // why this node: the NAT link strategy and session migration query this node's

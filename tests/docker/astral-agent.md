@@ -17,9 +17,11 @@ than guessing.
 * `user.info` answers without a token on every node and reports its `State`
   (`fresh`, `unclaimed`, `claimed`). Most other ops need a token, and on a
   fresh node many stay `denied` until the node is claimed.
-* Claiming a node and joining or adopting nodes into a swarm:
+* Claiming a node and joining nodes into a swarm:
   `astral-docs/topics/node-setup.md` and `astral-docs/topics/user-and-swarm.md`.
-* What a session may do without a token, the gate and the admission policies:
+* Joins and app permits are SwarmState requests the user answers:
+  `astral-docs/protocols/user/ops/user.answer_request.md`.
+* What a session may do without a token, the gate:
   `astral-docs/topics/node-policies.md`.
 * One file per operation: `astral-docs/protocols/<protocol>/ops/<op>.md`.
 * With a token, `.spec` lists every op the node really serves; the docs say

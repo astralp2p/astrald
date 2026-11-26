@@ -43,9 +43,8 @@ session, and the sequence the docs tell a person to follow reaches `claimed`.
 
 ## How the shipped gate is started
 
-`test.toml` overrides `apphost.gate` and `apphost.policies` with empty tables.
-The harness writes the E2E gate and `app_register: accept_all` under those keys,
-and an empty table replaces them with nothing. astrald loads a config over the
+`test.toml` overrides `apphost.gate` with an empty table. The harness writes
+the E2E gate under that key, and an empty table replaces it with nothing. astrald loads a config over the
 defaults in `mod/apphost/src/config.go` (`defaultConfig`), so the lists are the
 code's, not a copy in the test; `selftest/test_nodeconfig.py` holds the
 override's shape. The harness's token stays: the oracle and the readiness check
