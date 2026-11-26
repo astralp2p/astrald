@@ -47,8 +47,8 @@ func (mod *Module) OpUnregisterIndexer(ctx *astral.Context, q *routing.IncomingQ
 
 // mayUnregister reports whether the query's caller may delete idxer.
 //
-// why: the owner needs no permit, so an identity whose indexer grant is revoked
-// still deletes its own registration.
+// why: the owner needs no permit, so an identity whose permit lapsed (contract
+// expired or issuer expelled) still deletes its own registration.
 // why AdminObjects: deleting a registration destroys its cursors, and an op that
 // destroys object-domain state answers to AdminObjects.
 func (mod *Module) mayUnregister(ctx *astral.Context, q *routing.IncomingQuery, idxer *indexerHandle) bool {

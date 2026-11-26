@@ -20,11 +20,9 @@ swarm call refused.
   is `emn1` and `emn3` and its one ban names `emn2` after every call; the
   oracle repeats the calls itself.
 
-G7 rewrote this test. The "management contract" (admin and see permits with
-delegation 1) and its push with `objects.push` are gone: a bootstrapped node
-holds a Privileged membership, and memberships travel through SwarmState. The
-expel control changed with D7: before, a management node reached `user.expel`
-and met "cannot expel the swarm user"; now no node but the user reaches it.
+A bootstrapped node holds a Privileged membership, and memberships travel
+through SwarmState. Only the user reaches `user.expel` (D7), so the management
+node's expel reads `not permitted`.
 
 Why a local token and not `emn2`'s own link: the token is `emn2` as far as
 `emn1`'s authorizers can tell, and no ban answer from `emn2` can close a link

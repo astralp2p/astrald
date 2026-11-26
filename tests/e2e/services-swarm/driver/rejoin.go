@@ -106,7 +106,7 @@ func (r *rejoinRun) follow() (stop func(), err error) {
 	if err != nil {
 		return nil, err
 	}
-	if err := r.w.grant(app, []string{rejoinService}); err != nil {
+	if err := r.w.requestDiscovery(app, []string{rejoinService}); err != nil {
 		return nil, err
 	}
 	providerID, cl, err := r.w.app(r.memberAdmin, r.s.Nodes["sfml_member"], serveApps)
@@ -130,7 +130,7 @@ func (r *rejoinRun) follow() (stop func(), err error) {
 // admit makes sfml_member a member with a contract valid for rejoinFirst and
 // waits until the follow shows its offering.
 func (r *rejoinRun) admit() error {
-	signed, err := signNodeContract(r.w, r.s, r.s.Nodes["sfml_member"].Identity, r.key, rejoinFirst)
+	signed, err := signPrivilegedMembership(r.w, r.s, r.s.Nodes["sfml_member"].Identity, r.key, rejoinFirst)
 	if err != nil {
 		return fmt.Errorf("first contract: %w", err)
 	}
@@ -173,7 +173,7 @@ func (r *rejoinRun) leave() error {
 // topics/user-and-swarm.md, Losing the owner), and the op refuses a node
 // that holds one (mod/user/src/op_accept_contract.go).
 func (r *rejoinRun) rejoin() error {
-	signed, err := signNodeContract(r.w, r.s, r.s.Nodes["sfml_member"].Identity, r.key, rejoinSecond)
+	signed, err := signPrivilegedMembership(r.w, r.s, r.s.Nodes["sfml_member"].Identity, r.key, rejoinSecond)
 	if err != nil {
 		return fmt.Errorf("second contract: %w", err)
 	}

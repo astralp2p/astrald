@@ -36,6 +36,6 @@ indexer, which needs no permit from the owner, and the User turns indexing off
 for the repository and removes it. A cleanup step that fails fails the driver,
 with the prefix `cleanup:`.
 
-Revocation is not tested: grants are gone, and revocations are a Non-goal
-of Swarm State and User Authority (G7). The app holds its permit by a
+Revocation is not tested: revocation is a Non-goal of Swarm State and User
+Authority. The app holds its permit by a
 contract its host signs once the harness answerer approves its request.

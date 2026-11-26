@@ -1,7 +1,7 @@
 # services-swarm-membership
 
 An open `reach=swarm` follow on node1 tracks the swarm member set: a node
-adopted after the follow opened contributes its offering, and the offering is
+that joins after the follow opened contributes its offering, and the offering is
 removed when the node is expelled. A node admitted with a membership contract
 that expires after 90 seconds contributes its offering until the expiry, and
 the offering is removed within 15 seconds after it. The follow is never
@@ -22,14 +22,14 @@ reopened.
 Spec: `.ai/system/protocols/services/ops/services.discover.md`,
 `.ai/system/protocols/user/types/mod.user.swarm_member_left.md`.
 
-Changed in G7, for the removed model:
+Why the flow takes this shape:
 
 - The providers register after the join or the claim. An app's contract signed
   while its node was unclaimed does not outlive the claim, which is a Non-goal
   ("contracts signed before a claim").
-- `ssm_expiry`'s membership is a PrivilegedMembership. Since G7 the user key
-  signs no other membership: a carrier signs a Member's for an Approval.
-- The contract is no longer pushed to node1, because node1 refuses a pushed
+- `ssm_expiry`'s membership is a PrivilegedMembership. The user key signs no
+  other membership: a carrier signs a Member's for an Approval.
+- The contract is not pushed to node1, because node1 refuses a pushed
   membership. The claim adds it to `ssm_expiry`'s SwarmState. mod/nodes then
   exchanges SwarmState with each peer `ssm_expiry` is linked to
   (`exchangeSwarmWithLinked`, `mod/nodes/src/swarm_wire.go`).

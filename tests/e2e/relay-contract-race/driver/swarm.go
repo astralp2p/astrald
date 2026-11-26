@@ -54,9 +54,10 @@ func connect(ep, token string) *astrald.Client { return astrald.New(apphost.NewR
 
 func admin(n node) *astrald.Client { return connect(n.Endpoint, n.Token) }
 
-// joinSwarm adopts node3 and node4 as the User on node1, each after node1 and
-// the new node learn each other's endpoint. The adoption pushes tell node2 and
-// the other new node the rest.
+// joinSwarm has node3 and node4 join through node1 as Members, each after
+// node1 and the new node learn each other's endpoint. SwarmState sync brings
+// node2 and the other new node the membership, and each pulls the new node's
+// endpoints from a linked member.
 func joinSwarm(ctx *astral.Context, s *session) error {
 	n1 := s.Nodes["node1"]
 	for _, name := range []string{"node3", "node4"} {
@@ -70,7 +71,7 @@ func joinSwarm(ctx *astral.Context, s *session) error {
 		// note: the node joins through node1 as a Member
 		_, err := joins.Admit(ctx, admin(n), connect(n1.Endpoint, s.Facts.UserToken), n1.Identity, n.Identity)
 		if err != nil {
-			return fmt.Errorf("adopting %s on node1: %w", name, err)
+			return fmt.Errorf("joining %s through node1: %w", name, err)
 		}
 	}
 	return nil

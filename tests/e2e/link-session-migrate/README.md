@@ -5,7 +5,7 @@ live 32 MiB read onto a second link with no byte lost, duplicated or
 reordered; both nodes then report the session on the new link, and closing
 the old link leaves the read whole.
 
-- **after** `adopt-node` (node1 and node2 adopted siblings, one link) ·
+- **after** `adopt-node` (node1 and node2 joined siblings, one link) ·
   **destroys** `true` — the world ends with the adopt-node link closed, a
   second link in its place and a 32 MiB object on node2.
 - **driver** `script.py` — as the User on node1: stores a 32 MiB object on

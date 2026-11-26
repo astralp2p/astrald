@@ -70,9 +70,9 @@ async def main():
 
     async with await astral.connect(n3["endpoint"], token=n3["token"]) as c:
         i3 = await c.user.info()
-        # note: since G7 node3's membership is issued by its carrier, node1,
-        # carrying out the User's Approval; user.info answers that contract,
-        # so it names node1 and not the User (open finding on G7)
+        # note: node3's membership is issued by its carrier, node1, carrying out
+        # the User's Approval; user.info answers that contract, so it names
+        # node1 and not the User
         assert i3.state == "claimed" and str(i3.user_id) == id1, (
             f"node3 is {i3.state!r} under {i3.user_id!s}, not a member "
             f"through its carrier node1 {id1}")

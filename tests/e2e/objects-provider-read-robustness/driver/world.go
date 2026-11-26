@@ -28,8 +28,8 @@ type world struct {
 }
 
 // close stops every app.
-// note: nothing revokes the apps' ServeObjects any more: grants are gone, and
-// revocations are a Non-goal of Swarm State and User Authority (G7).
+// note: nothing revokes the apps' ServeObjects: revocation is a Non-goal of
+// Swarm State and User Authority.
 func (w *world) close() {
 	for _, stop := range w.stops {
 		stop()

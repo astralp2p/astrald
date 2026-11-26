@@ -11,8 +11,8 @@ each, and each provider answers its own call alone.
      ServeApps; each serves itself through `apps.ServeWith` with its own
      client, answers the `echo` op with the `msg` it receives, and
      advertises the `echo-pair` service;
-  2. the consumer app registers on node1, and node1's admin grants it
-     discovery of `echo-pair`;
+  2. the consumer app registers on node1 and requests a discovery permit
+     for `echo-pair`, approved by the harness answerer;
   3. the consumer runs a one-shot `services.discover` of `echo-pair` with
      `reach=swarm` and finds exactly the two providers, with a complete
      initial outcome (`consumer_found_both`);
@@ -29,9 +29,9 @@ each, and each provider answers its own call alone.
      a `services.discover` follow of it with `reach=swarm`, and its initial
      attempt shows no provider and lists the service in
      `services.not_granted` (`follow_starts_without_private_providers`);
-  8. node1's admin grants that consumer discovery of `echo-pair-private`;
-     within 2 s the same follow shows both private providers, without a
-     reopen (`grant_shows_both_without_reopen`). The grant re-checks the
+  8. that consumer requests a discovery permit for `echo-pair-private`,
+     approved by the harness answerer; within 2 s the same follow shows both private providers, without a
+     reopen (`permit_shows_both_without_reopen`). The new permit re-checks the
      open follow: node1 evaluates its own provider again and restarts the
      carry to node2.
 - **oracle** `verify.py` — every step held, plus the whole story again with

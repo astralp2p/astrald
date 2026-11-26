@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Oracle: node1 accepts a provider registration exactly where the grant
+"""Oracle: node1 accepts a provider registration exactly where the permit
 covers the role, and dials exactly the registrations it accepted.
 
 Four judgements.
@@ -8,15 +8,15 @@ In `drive` mode the driver records every reply and dial count and stops only
 on a wiring fault; the verdicts are the oracle's.
 
 1. The matrix. The oracle holds its own table of which (app, role) cells a
-   grant covers, and reads every reply the driver recorded against it: a 10 s
+   permit covers, and reads every reply the driver recorded against it: a 10 s
    lease for a covered cell, exactly `not permitted` for every other. An exact
    text, because a timeout or a lost route is also a failure and says nothing
-   about the grant check.
+   about the authorization check.
 
 2. The node token and the network. node1's own token is refused, with
    `not permitted` or the self-registration error; which one is recorded, not
-   pinned (the self branch runs after the grant check). node2's token over the
-   link is refused with exactly `origin not allowed: network`: without the
+   pinned (the self branch runs after the authorization check). node2's token
+   over the link is refused with exactly `origin not allowed: network`: without the
    origin guard node2 would read `not permitted`, so the text is what proves
    the guard fired first.
 
@@ -25,7 +25,7 @@ on a wiring fault; the verdicts are the oracle's.
    the control that gives the zeros their meaning.
 
 4. On its own. The oracle checks live, with astral-py, that an app minted
-   with no grant and node1's own token are both refused by
+   with no permit and node1's own token are both refused by
    `objects.register_finder`, then reruns the whole matrix with fresh apps
    (`driver verify`).
 """
@@ -49,7 +49,7 @@ ORIGIN_REFUSAL = "origin not allowed: network"
 LEASE = "lease 10s"
 
 ROLES = ("finder", "describer", "searcher")
-# The roles each app's grant covers: the oracle's own table, not the driver's.
+# The roles each app's permit covers: the oracle's own table, not the driver's.
 COVERED = {
     "all": {"finder", "describer", "searcher"},  # ServeObjects, unconstrained
     "d": {"describer"},
@@ -71,7 +71,7 @@ def judge_matrix(f: dict) -> None:
             got = f["cells"].get(cell)
             if got != want:
                 wrong.append(f"{cell}: {got!r}, want {want!r}")
-    assert not wrong, "register replies off the grant table:\n  " + "\n  ".join(wrong)
+    assert not wrong, "register replies off the permit table:\n  " + "\n  ".join(wrong)
 
 
 def judge_nodes(f: dict) -> str:
@@ -86,7 +86,7 @@ def judge_nodes(f: dict) -> str:
         assert got == f"error: {ORIGIN_REFUSAL}", (
             f"register_{role} with node2's token over the link answered "
             f"{got!r}; want exactly {ORIGIN_REFUSAL!r}, the origin guard's "
-            f"refusal before any grant check")
+            f"refusal before any authorization check")
     return ", ".join(sorted(seen))
 
 
@@ -116,7 +116,7 @@ async def judge_live(n1: dict, user_token: str) -> str:
     async with await astral.connect(n1["endpoint"], token=str(app.token)) as a:
         text = await refused(a.objects.register_finder(10, timeout=DEADLINE))
     assert text == NOT_PERMITTED, (
-        f"an app with no grant was refused with {text!r}; want {NOT_PERMITTED!r}")
+        f"an app with no permit was refused with {text!r}; want {NOT_PERMITTED!r}")
     async with await astral.connect(n1["endpoint"], token=n1["token"]) as n:
         text = await refused(n.objects.register_finder(10, timeout=DEADLINE))
     assert text in (NOT_PERMITTED, SELF_REFUSAL), (
@@ -143,7 +143,7 @@ def main():
     sys.stderr.write(proc.stderr)
     assert proc.returncode == 0, f"the matrix with fresh apps failed: exit {proc.returncode}"
 
-    print(f"oracle: 24 cells match the grant table, accepted cells dialed once "
+    print(f"oracle: 24 cells match the permit table, accepted cells dialed once "
           f"and no other; node1's token refused ({node_self}; live: {live_self!r}); "
           f"node2 over the link refused with {ORIGIN_REFUSAL!r}")
 

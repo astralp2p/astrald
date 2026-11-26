@@ -93,9 +93,9 @@ func run(path string) (map[string]bool, error) {
 		return facts, fmt.Errorf("the visitor called greeter:hello and got %q (err %v); want %q", reply, err, want)
 	}
 
-	// note: the stray app (serve_apps revoked) is gone: grants are, and
-	// revocations are a Non-goal of Swarm State and User Authority (G7). While
-	// the driver runs the harness answerer approves every app's request.
+	// note: no step revokes an app's serve_apps: revocation is a Non-goal of
+	// Swarm State and User Authority.
+	// While the driver runs the harness answerer approves every app's request.
 
 	fmt.Fprintln(os.Stderr, "ok: the visitor called the greeter on node1 and was greeted as itself")
 	return facts, nil

@@ -33,8 +33,8 @@ const (
 	holdBound = 20 * time.Second
 )
 
-// lease is every registration of the flow. The User revokes every grant at
-// the end, so node1 drops the registrations on its next fan-out.
+// lease is every registration of the flow. The registrations lapse with the
+// lease, so node1 drops them on its next fan-out after it ends.
 const lease = astral.Duration(60 * time.Second)
 
 func main() {

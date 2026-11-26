@@ -2,7 +2,7 @@
 """Driver: three apps hold four objects, then the User purges the repo.
 
 The User stores X, Y, Z and W, registers apps A and B with
-`mod.auth.store_objects_action` as a grant and app N with nothing, and then:
+`mod.auth.store_objects_action` as a permit and app N with nothing, and then:
 
 - A and B hold X; A unholds X. Only B's hold should remain.
 - A holds Y for EXPIRY. The hold should lapse before the purge.
@@ -74,7 +74,7 @@ async def main():
             "N": await u.apphost.register(name="hold-isolation-n"),
         }
 
-    # why: since G7 a permit is a contract the host signs once the harness
+    # why: a permit is a contract the host signs once the harness
     # answerer approves the registration's ContractRequest
     for k, actions in (("A", [STORE]), ("B", [STORE]), ("N", [])):
         await ss.await_app(endpoint, tokens[k].token, actions)

@@ -42,6 +42,5 @@ fresh latecomer and unchanged rosters. A Member join through node2 would be
 admitted on an Approval, since a Privileged carrier signs a Member's
 membership itself; that path is `swarm-state-member`'s.
 
-G7 rewrote this test: it used to ask for a plain node contract, which node2
-refused at the issuer signature (`sign as issuer`). The intent, that only the
-User's key brings in a node with the User's authority, is kept.
+The test holds that only the User's key brings in a node with the User's
+authority.

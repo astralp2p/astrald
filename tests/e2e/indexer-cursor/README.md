@@ -6,7 +6,7 @@ only the identity that registered an indexer consumes or deletes it.
 - **roster** node1 · **after** `bootstrap-user-software-key` · **restart**
   node1 · `destroys`
 - **driver** `script.py` — apps I and J get an unconstrained
-  `mod.auth.serve_objects_action` grant, which covers the indexer role. I
+  `mod.auth.serve_objects_action` permit, which covers the indexer role. I
   registers an indexer, and the User enables `local` with
   `indexing.enable_repo`. I drains the backlog, the User stores a, b and c,
   and I acks a, receives b, and closes without acking b. The User stores d

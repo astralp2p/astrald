@@ -68,8 +68,8 @@ async def main():
             assert info.state == "claimed", (
                 f"{name} is {info.state!r} after the restart, not claimed "
                 "(membership not restored from storage)")
-            # note: since G7 a Member's contract is issued by its carrier,
-            # node1, and user.info answers that contract (open finding on G7)
+            # note: a Member's contract is issued by its carrier, node1, and
+            # user.info answers that contract
             want = ids["node1"] if name == "node3" else user_id
             assert str(info.user_id) == want, (
                 f"{name} reports contract issuer {info.user_id!s}, not {want}")

@@ -7,8 +7,8 @@ calls it; the provider stops, and the follow removes it.
 - **env** node · **start** `two-nodes` · **saves** —
 - **driver** `script.py` — runs `driver/` (Go, this repository's pinned
   astral-go) in `drive` mode:
-  1. the consumer app registers on node1, node1's admin grants it discovery
-     of `echo-follow`, and the consumer opens a `services.discover` follow of
+  1. the consumer app registers on node1, requests a discovery permit for
+     `echo-follow`, and opens a `services.discover` follow of
      `echo-follow` with `reach=swarm`; the first event is a complete initial
      outcome with no offering (`follow_starts_empty`);
   2. the provider app registers on node2 with ServeApps and serves itself

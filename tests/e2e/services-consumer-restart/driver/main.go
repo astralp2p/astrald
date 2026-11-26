@@ -5,8 +5,8 @@
 //	                 reconnecting Watcher (astral-go servicescli.WithReconnect)
 //
 // Each reads the node it acts on from APP_NODE_ENDPOINT and APP_NODE_TOKEN (the
-// node's admin token: the apps register themselves and the consumer grants
-// itself discovery) and writes what it sees to the JSON file named by
+// node's admin token: the apps register themselves and the consumer requests
+// its own discovery permit) and writes what it sees to the JSON file named by
 // ASTRAL_TESTS_APP_STATE.
 package main
 
@@ -69,9 +69,10 @@ func register(ctx *astral.Context, permits ...*auth.Permit) (*astral.Identity, *
 	return token.Identity, connect(string(token.Token)), nil
 }
 
-// grantDiscovery lets app discover service, granted by the node's admin, so
-// what the follow sees does not depend on the swarm-app rule.
-func grantDiscovery(ctx *astral.Context, app *astrald.Client) error {
+// requestDiscovery has app request a discovery permit for service, approved by
+// the harness answerer, so what the follow sees does not depend on the
+// swarm-app rule.
+func requestDiscovery(ctx *astral.Context, app *astrald.Client) error {
 	cs := astral.NewBundle()
 	scope := &services.DiscoveryScope{Rules: []*services.DiscoveryRule{{Services: []astral.String8{service}}}}
 	if err := cs.Append(scope); err != nil {
@@ -183,7 +184,7 @@ type watcherState struct {
 	At        int64    `json:"at"`      // unix milliseconds of the last change
 }
 
-// watch registers a consumer app, grants it discovery, and follows the service
+// watch registers a consumer app, requests its discovery permit, and follows the service
 // with reach=swarm and the SDK's default reconnect backoff until signalled.
 func watch() error {
 	ctx := astral.NewContext(nil)
@@ -191,8 +192,8 @@ func watch() error {
 	if err != nil {
 		return err
 	}
-	if err := grantDiscovery(ctx, cli); err != nil {
-		return fmt.Errorf("granting discovery: %w", err)
+	if err := requestDiscovery(ctx, cli); err != nil {
+		return fmt.Errorf("requesting discovery: %w", err)
 	}
 	ws := &watcherState{Identity: id.String(), Pid: os.Getpid(), Offerings: []string{}}
 	st, err := newStateFile(ws)

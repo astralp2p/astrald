@@ -25,9 +25,9 @@ contract chain, and denied without it.
   other once declined are refused `apphost.register_handler` and a private
   `services.advertise` with `not permitted` (no ServeApps without an approved
   request), and front, approved, does both at the oracle as the control.
-  This replaces the revoke steps G7 removed from app-call-local and
+  This covers an app without ServeApps for app-call-local and
   services-advertise-identity: revocation is a Non-goal, and a pending or
-  declined request is how an app goes without ServeApps now.
+  declined request is how an app goes without ServeApps.
 
 **Strictness.** With every discovery permit granted (`callerView.permitted`
 returning true) the oracle fails: "before_front: an app saw the wallet

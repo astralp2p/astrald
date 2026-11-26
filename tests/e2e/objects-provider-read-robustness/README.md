@@ -51,8 +51,8 @@ A wiring fault fails the driver: F or H never asked for O1. Without them the
 flow says nothing about a bad candidate. node1 takes the first candidate to
 deliver a byte, and its own swarm finder names node2 a few milliseconds
 before F's claims of G arrive, so node2 usually wins with G never dialed for
-O1. Which comes first is a race no input settles: the driver used to reread O1
-until G was in play, and since G7 it lost all three rereads in every run. So
+O1. Which comes first is a race no input settles: a reread of O1 until G is in
+play lost all three rereads in every observed run. So
 read(O1) is judged by its answer alone, G's O1 dials are only reported
 (`g_read_o1`), and G as a silent candidate is judged by read(O2), where node1
 always dials it.

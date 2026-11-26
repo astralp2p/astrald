@@ -40,7 +40,7 @@ func (mod *Module) OpNewWatch(ctx *astral.Context, q *routing.IncomingQuery, arg
 	}
 
 	// why: reported over the channel rather than as a rejection — the caller holds a
-	// grant, so it gets the reason its path was refused
+	// permit, so it gets the reason its path was refused
 	path, err := validPath(args.Path)
 	if err != nil {
 		return ch.Send(astral.Err(err))

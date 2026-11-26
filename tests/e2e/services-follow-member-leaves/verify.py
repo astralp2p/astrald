@@ -15,9 +15,9 @@ From the `follow_member_leaves` fact:
   the expiry, mod/user/src/swarm_members.go:21-23);
 - the offering came back as an update within 15 s of node1 accepting the
   second contract (services.discover.md:170-172: a node that joins the swarm
-  becomes a contributing member; node1 indexes a pushed contract before it
-  acknowledges the push, mod/user/src/object_receiver.go
-  receiveSignedContract).
+  becomes a contributing member; node1 stores an entry offered by
+  swarm_push in SwarmState before it answers Ack,
+  mod/nodes/src/swarm_sync.go:187-211).
 
 `user.accept_contract` on the member is tried with the second contract and
 its answer is printed, not judged: a running node keeps an expired contract

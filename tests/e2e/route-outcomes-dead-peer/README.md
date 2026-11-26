@@ -10,7 +10,7 @@ it answers `unavailable` (rejection code 7) at once.
   node1 registers a caller app, and the driver waits until node2 holds its
   relay contract. The driver then waits until node1's log has stayed unchanged
   for 7 s (60 s at most, else it fails), so the pushes that follow node2's
-  adoption and first link are over before node2 freezes. The caller queries
+  join and first link are over before node2 freezes. The caller queries
   `node2:no.such.op`:
   - `live`: before anything happens, as a control (`route_not_found`);
   - `frozen`: after node2's astrald gets SIGSTOP. The kernel keeps the link's

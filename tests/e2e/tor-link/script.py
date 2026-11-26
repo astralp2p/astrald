@@ -34,7 +34,7 @@ TTL node2 resolves for it and answers the time left
 (mod/nodes/src/db_endpoint_resolver.go), and node2 answers the full TTL each
 time. A row of node1's whose time left is at least node2's TTL less the time
 since the new link was written after it, by a pull over the new link; the
-rows node1 held before (adoption's pull, leave-lan's seeded onion) are older.
+rows node1 held before (the join's pull, leave-lan's seeded onion) are older.
 
 why this waits instead of trusting the call: astrald's Tor strategy signals
 done after its quick timeout and keeps trying in the background for up to six

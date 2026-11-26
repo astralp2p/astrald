@@ -39,14 +39,15 @@ func expirySteps(w *world, s session, watch *servicescli.Watcher, name string, f
 	if err != nil {
 		return fmt.Errorf("short contract: %w", err)
 	}
-	// note: no push to node1 (G7): a pushed membership is refused, and the
-	// claim adds it to ssm_expiry's SwarmState, which node1 syncs.
+	// note: no push to node1: node1 refuses a pushed membership, and the claim
+	// adds it to ssm_expiry's SwarmState, which node1 syncs.
 	if err := userclient.New(nil, expAdmin).AcceptContract(w.ctx, signed); err != nil {
 		return fmt.Errorf("accept contract on ssm_expiry: %w", err)
 	}
 
 	// why after the claim: an app's contract signed while ssm_expiry was
-	// unclaimed does not outlive the claim (a Non-goal of G7).
+	// unclaimed does not outlive the claim (a Non-goal of Swarm State and User
+	// Authority).
 	providerID, cl, err := w.app(expAdmin, exp, serveApps)
 	if err != nil {
 		return err
@@ -78,16 +79,16 @@ func shortContract(w *world, s session) (*auth.SignedContract, error) {
 	if err != nil {
 		return nil, err
 	}
-	return signNodeContract(w, s, s.Nodes["ssm_expiry"].Identity, key, expiryValidity)
+	return signPrivilegedMembership(w, s, s.Nodes["ssm_expiry"].Identity, key, expiryValidity)
 }
 
-// signNodeContract builds subject's PrivilegedMembership, valid for validity,
+// signPrivilegedMembership builds subject's PrivilegedMembership, valid for validity,
 // signed by the User on node1 and by key, the subject's node key.
 //
 // why the node key from the node's files: every op that collects a node's
 // subject signature refuses a contract shorter than an hour
 // (user.MinimalContractLength), and a node signs nothing else with its key.
-func signNodeContract(w *world, s session, subject string, key *crypto.PrivateKey, validity time.Duration) (*auth.SignedContract, error) {
+func signPrivilegedMembership(w *world, s session, subject string, key *crypto.PrivateKey, validity time.Duration) (*auth.SignedContract, error) {
 	userID, err := astral.ParseIdentity(s.Facts.UserID)
 	if err != nil {
 		return nil, err
@@ -96,8 +97,8 @@ func signNodeContract(w *world, s session, subject string, key *crypto.PrivateKe
 	if err != nil {
 		return nil, err
 	}
-	// why a PrivilegedMembership: since G7 the user key signs no other
-	// membership; a Member's is signed by its carrier for an Approval.
+	// why a PrivilegedMembership: the user key signs no other membership; a
+	// Member's is signed by its carrier for an Approval.
 	contract, err := userapi.NewMembership(userID, subjectID, userapi.TierPrivilegedMember, nil, validity)
 	if err != nil {
 		return nil, err

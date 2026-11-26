@@ -3,7 +3,7 @@
 fsnotify events.
 
 The flow, as the User and one app I with an unconstrained
-`mod.auth.serve_objects_action` grant (it covers the indexer role):
+`mod.auth.serve_objects_action` permit (it covers the indexer role):
 
 1. Write seed.txt (c1) into W, then attach W with `fs.new_watch`, persisted,
    and wait until the repository contains c1.
@@ -176,7 +176,7 @@ async def main():
                                                      INDEX_DEADLINE)
         token = await u.apphost.register(name=f"{REPO}-i",
                                          grant_permits=[SERVE])
-    # why: since G7 a permit is a contract the host signs once the harness
+    # why: a permit is a contract the host signs once the harness
     # answerer approves the registration's ContractRequest
     await ss.await_app(endpoint, token.token, [SERVE])
     app = {"identity": str(token.identity), "token": token.token}

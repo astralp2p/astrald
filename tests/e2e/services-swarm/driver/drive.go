@@ -57,7 +57,7 @@ func scenarios(w *world, facts map[string]bool) error {
 		return err
 	}
 
-	if err := w.grant(app, []string{"player", "wallet"}, w.node1); err != nil {
+	if err := w.requestDiscovery(app, []string{"player", "wallet"}, w.node1); err != nil {
 		return err
 	}
 	r := oneShot(f.DiscoverIn(w.ctx, services.ReachSwarm, []string{"player"}, false))
@@ -71,7 +71,7 @@ func scenarios(w *world, facts map[string]bool) error {
 		return err
 	}
 
-	if err := w.grant(app, []string{"player", "wallet", "slow", "none"}); err != nil {
+	if err := w.requestDiscovery(app, []string{"player", "wallet", "slow", "none"}); err != nil {
 		return err
 	}
 	r = oneShot(f.DiscoverIn(w.ctx, services.ReachSwarm, []string{"player"}, false))

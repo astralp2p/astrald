@@ -130,8 +130,8 @@ not have to rediscover:
 - **`nodes.new_link` takes `identity`, not `id`.** A query missing a required
   argument is rejected by the decoder in microseconds, which reads exactly
   like a node refusing to link. Use the SDK binding.
-- **Nothing teaches a lab node where a non-adopted node lives.** A node knows
-  its swarm siblings from adoption and knows nothing else. A client's
+- **Nothing teaches a lab node where a non-member node lives.** A node knows
+  its swarm siblings from SwarmState and knows nothing else. A client's
   `gateways` entry carries the gateway's endpoint, so node2 registers from its
   config alone. node1 is a `--peer` with no entry, so it still needs an
   explicit `nodes.add_endpoint` for the gateway before it dials

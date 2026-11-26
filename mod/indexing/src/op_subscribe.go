@@ -31,8 +31,9 @@ func (mod *Module) OpSubscribe(ctx *astral.Context, q *routing.IncomingQuery, ar
 		return ch.Send(astral.NewErrOriginNotAllowed(q.Origin()))
 	}
 
-	// note: the permit is checked when a subscription starts. Revoking it refuses
-	// the next subscription and leaves a running one open.
+	// note: the permit is checked when a subscription starts. Once the permit
+	// lapses (contract expired or issuer expelled), the next subscription is
+	// refused and a running one stays open.
 	if !mod.Auth.Authorize(ctx, &auth.ServeObjectsAction{
 		Action: auth.NewAction(q.Caller()),
 		Role:   auth.RoleIndexer,

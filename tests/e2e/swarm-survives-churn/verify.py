@@ -25,7 +25,7 @@ the apps on node1, node2, node5 and the late app on node1):
 - every pair of the five apps answered within 60 s of the thaw (D11), and
   each pair's last call answered `ok`;
 - the chain's recovery table: each step's recovery from its event marker,
-  from the apps' call logs. The join (from the adoption) and the freeze
+  from the apps' call logs. The join (from the join's answer) and the freeze
   (from the thaw) are held to 60 s here; the restart and late-app steps have
   only their driver's end as a marker, before the harness's restart, so
   their rows are printed, and each step's own oracle held it to 60 s from
@@ -115,7 +115,7 @@ def table(states: dict, logs: dict, facts: dict) -> dict:
                if r["t"] >= leave["driver_end"]]
     return {"setup": round(setup["ready_at"] - setup["spawned_at"], 1),
             "restart (from the driver's end)": since(four, facts["churn_restart"]["driver_end"]),
-            "join": round(join["ready_at"] - join["adopted_at"], 1),
+            "join": round(join["ready_at"] - join["joined_at"], 1),
             "late app (from the driver's end)": since(ALL, facts["churn_late_app"]["driver_end"]),
             "leave (last removal of node4)": round(max(removed) - leave["driver_end"], 1) if removed else None,
             "freeze (from the thaw)": round(facts["survives_churn"]["recovered_at"]

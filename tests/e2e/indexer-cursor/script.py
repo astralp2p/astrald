@@ -9,7 +9,7 @@ an ack that names the delivered repository and version
 indexer subscribes; any other caller is answered `index not found`.
 
 The flow, as the User and two apps I and J, each registered with an
-unconstrained `mod.auth.serve_objects_action` grant, which covers the indexer
+unconstrained `mod.auth.serve_objects_action` permit, which covers the indexer
 role (`register_indexer` and `subscribe` both require it):
 
 1. I registers an indexer, and the User enables `local` with
@@ -109,7 +109,7 @@ async def main():
         tokens = {k: await u.apphost.register(name=f"indexer-cursor-{k.lower()}",
                                               grant_permits=[SERVE])
                   for k in "IJ"}
-    # why: since G7 a permit is a contract the host signs once the harness
+    # why: a permit is a contract the host signs once the harness
     # answerer approves the registration's ContractRequest
     for t in tokens.values():
         await ss.await_app(endpoint, t.token, [SERVE])

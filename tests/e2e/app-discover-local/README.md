@@ -9,8 +9,8 @@ calls it; an app without a discovery grant sees no offering.
   1. the provider app registers with ServeApps and serves itself through
      `apps.ServeWith` with its own client: it answers the `echo` op with the
      `msg` it receives and advertises the `echo-local` service;
-  2. the consumer app registers, and node1's admin grants it discovery of
-     `echo-local`;
+  2. the consumer app registers and requests a discovery permit for
+     `echo-local`, approved by the harness answerer;
   3. the consumer runs a one-shot `services.discover` of `echo-local` on
      node1 and finds the provider alone, with a complete initial outcome
      (`consumer_found_the_provider`);

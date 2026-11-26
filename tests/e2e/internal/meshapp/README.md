@@ -7,7 +7,7 @@ with `apps.build_go` and starts one process per app with `apps.spawn`.
 | file | holds |
 |------|-------|
 | `main.go` | the `serve` and `call` commands, their flags and environment |
-| `serve.go` | app registration with a discovery grant, the `hello` handler, the advertise hook |
+| `serve.go` | app registration with a discovery permit, the `hello` handler, the advertise hook |
 | `follow.go` | the `reach=swarm` follow and its events |
 | `calls.go` | the call loop per peer, one call, the outcome classes |
 | `state.go` | the state record, the state file writer, the call log |
@@ -21,7 +21,7 @@ with `apps.build_go` and starts one process per app with `apps.spawn`.
   node's admin token), `APP_HOST_IP` (the node's `host_ip`) and
   `ASTRAL_TESTS_APP_STATE` (the state file).
 * The app registers a fresh identity on its node with `ServeApps` and a
-  discovery grant for `S`.
+  discovery permit for `S`.
 * The app binds its handler at `tcp:<APP_HOST_IP>:0` through astral-go's
   `AppRegistrar`. The registrar re-registers the handler after a node restart.
 * The `hello` op answers `hello, <caller>` and counts each caller.

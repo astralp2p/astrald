@@ -9,7 +9,7 @@ node of the other swarm over that link with `nodes.swarm_push`, and the same
 membership to a node of its own swarm as a control. It records what each node
 answered; the oracle judges, and polls the live swarms itself.
 
-why an offered entry: since G7 a membership reaches another node only through
+why an offered entry: a membership reaches another node only through
 SwarmState, and nothing in a healthy node offers one swarm's entry to a node of
 another. The offer is the only way to make a node decide whether to take one;
 its answer and the node's SwarmState show the decision.

@@ -18,7 +18,7 @@ const ProbeService = "serve-probe"
 //
 // why: an app whose ContractRequest is pending or declined holds no
 // ServeApps, so the node refuses both (apphost op_register_handler.go,
-// services op_advertise.go); before G7 a revoked grant showed the same.
+// services op_advertise.go).
 func serveProbe(ctx *astral.Context, c *astrald.Client) (map[string]any, error) {
 	out := map[string]any{"register_handler": "ok", "advertise": "ok"}
 	if err := apphostcli.New(nil, c).RegisterHandler(ctx, "tcp:127.0.0.1:1", astral.NewNonce()); err != nil {

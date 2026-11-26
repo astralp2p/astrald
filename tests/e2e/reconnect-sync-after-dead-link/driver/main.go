@@ -133,9 +133,9 @@ func run(path string, facts map[string]any) error {
 //
 // why pushSettle counts from the registration and not from Register's return:
 // apphost.register pushes the relay contract at once, but Register returns only
-// once the host signed the app's contract for an Approval (G7), seconds later;
-// counted from the return, the check came after the push's 15 s bound and the
-// 3 s ping it wakes had closed the relayed link, and node2 had relinked.
+// once the host signed the app's contract for an Approval, seconds later;
+// counted from the return, the check comes after the push's 15 s bound and the
+// 3 s ping it wakes have closed the relayed link, and node2 has relinked.
 func registerUnreached(ctx *astral.Context, p pair) (*astral.Identity, error) {
 	start := time.Now()
 	app, err := contracts.Register(ctx, p.admin1, p.n1.Endpoint)

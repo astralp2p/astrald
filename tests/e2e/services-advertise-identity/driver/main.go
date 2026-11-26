@@ -39,14 +39,12 @@ const (
 	svcSpoofApp  = "sai-spoof-app"  // answered as another app
 	svcSpoofNode = "sai-spoof-node" // answered as the node
 	svcSpoofName = "sai-spoof-name" // answered as another service
-	svcNoGrant   = "sai-nogrant"    // advertised without ServeApps
-	svcRevoked   = "sai-revoked"    // advertised until ServeApps is revoked
 	svcLink      = "sai-link"       // advertised over a link
 	svcFresh     = "sai-fresh"      // listed beside a name that is taken
 	info         = "sai-info"
 )
 
-var allNames = []string{svcMain, svcRaw, svcSpoofApp, svcSpoofNode, svcSpoofName, svcNoGrant, svcRevoked, svcLink, svcFresh}
+var allNames = []string{svcMain, svcRaw, svcSpoofApp, svcSpoofNode, svcSpoofName, svcLink, svcFresh}
 
 func story(path string, facts map[string]bool) error {
 	nodes, err := loadNodes(path)
@@ -67,7 +65,7 @@ func story(path string, facts map[string]bool) error {
 	var bindings closer
 	defer bindings.closeAll()
 
-	// the consumers: one app on each node, each granted discovery of every name
+	// the consumers: one app on each node, each with a discovery permit for every name
 	c1, err := register(ctx, n1)
 	if err != nil {
 		return err
@@ -77,7 +75,7 @@ func story(path string, facts map[string]bool) error {
 		return err
 	}
 	for _, c := range []*app{c1, c2} {
-		if err := grantDiscovery(ctx, c, allNames...); err != nil {
+		if err := requestDiscovery(ctx, c, allNames...); err != nil {
 			return err
 		}
 	}
@@ -178,12 +176,11 @@ func story(path string, facts map[string]bool) error {
 		return err
 	}
 
-	// note: steps 5 and 5b, an app without ServeApps and one that loses it,
-	// are gone: grants are, and revocations are a Non-goal of Swarm State and
-	// User Authority (G7). While the driver runs the harness answerer
-	// approves every app's request.
+	// note: no step covers an app without ServeApps: the harness answerer
+	// approves every app's request while the driver runs, and revocation is a
+	// Non-goal of Swarm State and User Authority.
 
-	// 6. over a link nobody advertises on another node: an app of node1 is
+	// 5. over a link nobody advertises on another node: an app of node1 is
 	// turned away on its way, and node1 itself, which reaches the op, is told
 	// the op does not admit a network origin
 	a1, err := register(ctx, n1)
@@ -213,7 +210,7 @@ func story(path string, facts map[string]bool) error {
 		return err
 	}
 
-	// 7. a name in use is refused whole, and belongs to its provider alone
+	// 6. a name in use is refused whole, and belongs to its provider alone
 	_, err = advertise(ctx, p, []string{svcMain})
 	if err := step(facts, "taken_name_is_refused", isAdvertised(err), "advertising %v twice: err %v; want %q", svcMain, err, advertised); err != nil {
 		return err
@@ -249,7 +246,7 @@ func story(path string, facts map[string]bool) error {
 		return err
 	}
 
-	// 8. closing a binding takes its provider away, and only its own
+	// 7. closing a binding takes its provider away, and only its own
 	qb.close()
 	pb.close()
 	raw.close()

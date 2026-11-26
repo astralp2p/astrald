@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
 """Driver: the User bans node3 from a three-node swarm, and node3 tries back.
 
-1. The User stores a bait object on node1, readable by any member.
+1. The User stores a bait object on node1, which node2 reads through its
+   PrivilegedMembership chain (`AuthorizeSeeObjects`,
+   mod/user/src/authorize_by_chain.go).
 2. The User expels node3 on node1.
 3. node3, with its own token, waits until it no longer reads itself as
    `claimed`, then probes: read the bait from node1, join node1's swarm,
@@ -77,10 +79,10 @@ async def main():
         probes["own_repositories"] = await outcome(c.objects.repositories())
 
     try:
-        probes["readopt_node3"] = ss.user_membership(
+        probes["readmit_node3"] = ss.user_membership(
             n1, user_token, doc["facts"]["user_id"], id3, push_to=(doc["nodes"]["node2"],))
     except AssertionError as e:
-        probes["readopt_node3"] = {"error": str(e)}
+        probes["readmit_node3"] = {"error": str(e)}
 
     write_facts({"expelled_id": expelled, "bait_id": bait, "probes": probes})
     for k, v in probes.items():

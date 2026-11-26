@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Driver: measure the membership re-sync traffic of a 10-node swarm with 5 bans.
 
-1. The User adopts node3..node10 on node1, as adopt-node adopted node2, and
-   waits until every node lists ten members.
+1. node3..node10 join through node1 as Members, as node2 did in adopt-node,
+   and the driver waits until every node lists ten members.
 2. The User expels five fresh identities on node1 and waits until every node
    holds the five bans.
 3. Link events: node2 closes its links to node3 three times; after each close
@@ -12,8 +12,11 @@
    are counted per period.
 
 A link-event window also holds the sweeps that fall in it; its own share is
-5 ban pushes and 9 contract pushes per sync run (5 bans, the active contract
-and 8 sibling contracts).
+5 ban pushes per sync run (`syncExpulsions`, mod/user/src/sync.go:128-150).
+The sync pulls the members' memberships from SwarmState and pushes none
+(`syncSiblings`, mod/user/src/sync.go:117-126); a counted contract push is a
+relay contract the sibling's digest lacks (`syncAppContracts`,
+mod/user/src/sync.go:163).
 
 Counted lines (astrald log, verbosity 1): `syncing with` (one SyncNodesTask
 run), `received mod.user.signed_expulsion` and `received mod.auth.signed_contract`
@@ -68,7 +71,7 @@ async def until(probe, budget=CONVERGE):
     return False
 
 
-async def adopt(doc, n1, others):
+async def admit(doc, n1, others):
     user_token = doc["facts"]["user_token"]
     for n in others:
         async with await astral.connect(n1["endpoint"], token=n1["token"]) as c:
@@ -101,7 +104,7 @@ async def main():
     n1, n2, n3 = nodes[0], nodes[1], nodes[2]
     ids = {n["identity"] for n in nodes}
 
-    await adopt(doc, n1, nodes[2:])
+    await admit(doc, n1, nodes[2:])
 
     async def full_roster(c):
         members = await c.user.swarm_status()

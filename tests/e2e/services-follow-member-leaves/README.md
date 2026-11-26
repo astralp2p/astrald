@@ -29,7 +29,7 @@ https://wiki.satforge.dev/doc/6vnVgpjarA,
 https://wiki.satforge.dev/doc/0wW504QDxy,
 https://wiki.satforge.dev/doc/x4craXsVBd
 
-## Since G7
+## Why Privileged memberships
 
 The memberships are Privileged and signed by the user key: `user.accept_contract`
 activates only such a membership (D2), and a lower tier needs a carrier and an

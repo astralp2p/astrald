@@ -2,8 +2,8 @@
 """Oracle: every step held, and the story holds again on its own.
 
 The oracle repeats the whole story with fresh identities (`driver verify`):
-a consumer granted discovery of echo-local finds the provider on node1 and
-gets its own message echoed back, and an app without the grant sees no offering.
+a consumer with a discovery permit for echo-local finds the provider on node1 and
+gets its own message echoed back, and an app without the permit sees no offering.
 """
 import os
 import subprocess

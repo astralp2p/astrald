@@ -62,8 +62,8 @@ Wi-Fi link does after the phone moves to mobile data. netsim `leave-lan`
 (`tor.suite`) covers the same path over a real address change.
 
 The 17 s wait counts from the start of the registration. `apphost.register`
-pushes the relay contract at once, but since G7 the driver's registration
-returns only once node1 has signed the app's contract for an Approval, seconds
-later. Counted from that return, as before G7, the check came after the push's
-15 s bound and the 3 s ping it wakes had closed the relayed link, and node2 had
-relinked and learned the app without the probe.
+pushes the relay contract at once, and the driver's registration returns only
+once node1 has signed the app's contract for an Approval, seconds later.
+Counted from that return, the check comes after the push's 15 s bound and the
+3 s ping it wakes have closed the relayed link, and node2 has relinked and
+learned the app without the probe.

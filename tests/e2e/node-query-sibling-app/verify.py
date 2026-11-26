@@ -12,8 +12,9 @@ as the caller, and never hangs.
 - each app counted the remote node as a `hello` caller exactly 3 times.
 
 The 5 s bound is derived: the 3 s wait for a pull on a miss
-(topics/app-routing.md:69-70) plus one relayed round trip on loopback; the
-adoption pushed or synced each app's contract, so no pull is expected.
+(topics/app-routing.md:69-70) plus one relayed round trip on loopback;
+apphost.register pushed, or the sibling sync carried, each app's contract, so
+no pull is expected.
 """
 from lib.sessionio import load
 

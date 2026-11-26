@@ -133,8 +133,8 @@ func handlerGone(ctx *astral.Context, facts map[string]any, nodes map[string]nod
 	if err != nil {
 		return fmt.Errorf("the provider could not serve on node2: %w", err)
 	}
-	if err := grantDiscovery(ctx, caller); err != nil {
-		return fmt.Errorf("granting discovery: %w", err)
+	if err := requestDiscovery(ctx, caller); err != nil {
+		return fmt.Errorf("requesting discovery: %w", err)
 	}
 	facts["provider_listed"] = listed(ctx, caller, provider.Identity)
 	facts["node1_knows_the_provider"] = waitHost(ctx, admin1, provider.Identity, n2.Identity)
@@ -255,9 +255,9 @@ func serve(ctx *astral.Context, n node, token string) (func(), error) {
 	}
 }
 
-// grantDiscovery has the app that app names request discovery of the test's
+// requestDiscovery has the app that app names request discovery of the test's
 // service on any node, and waits for its contract.
-func grantDiscovery(ctx *astral.Context, app *astrald.Client) error {
+func requestDiscovery(ctx *astral.Context, app *astrald.Client) error {
 	cs := astral.NewBundle()
 	scope := &services.DiscoveryScope{Rules: []*services.DiscoveryRule{{Services: []astral.String8{service}}}}
 	if err := cs.Append(scope); err != nil {

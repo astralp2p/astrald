@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Driver: move a live 32 MiB read onto a second link, started on the reader.
 
-The world holds node1 and node2, adopted and linked (adopt-node). As the
+The world holds node1 and node2, joined and linked (adopt-node). As the
 User on node1, the driver:
 
 1. stores a 32 MiB object on node2, generated from a seed (lib/blobgen.py);

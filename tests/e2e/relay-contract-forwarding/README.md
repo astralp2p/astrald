@@ -1,7 +1,7 @@
 # relay-contract-forwarding
 
-A new member learns another member's app from the member that adopts it, with
-no link to the app's host, and then reaches the app through that host.
+A new member learns another member's app from the member it joins through,
+with no link to the app's host, and then reaches the app through that host.
 
 - **after** `adopt-node` (node1 and node2 in the User's swarm) ·
   **destroys** `true` — node3 joins the swarm, and node2 dials no one.
@@ -24,20 +24,20 @@ no link to the app's host, and then reaches the app through that host.
 - **oracle** `verify.py` — every step held, and `apphost.hosts` on node3 still
   names node2 alone for the greeter.
 
-Before the change, step 5 of the adopter's sync pushed only the relay
-contracts of the apps the adopter hosts, so node3 learned the greeter only
-from node2's own sync on a node2–node3 link. With no such link possible,
-`apphost.hosts` on node3 stays empty and the driver fails. The forwarding is in
-astrald `mod/user/src/sync.go` `syncAppContracts`; node3 admits the forwarded
-contract by `AdmitRelayContract` (`mod/user/src/relay_admission.go`), whose
-subject (node2) is a member and whose sender (node1) is a member too
+node1's sibling sync with node3 pushes the relay contract of every app node1
+holds, the ones it does not host included; without that forwarding node3
+learns the greeter only from node2's own sync on a node2–node3 link, and with
+no such link possible `apphost.hosts` on node3 stays empty and the driver
+fails. The forwarding is in astrald `mod/user/src/sync.go` `syncAppContracts`;
+node3 admits the forwarded contract by `AdmitRelayContract`
+(`mod/user/src/relay_admission.go`), whose subject (node2) is a member and whose sender (node1) is a member too
 (astral-docs `topics/app-routing.md`, Reach).
 
 The visitor's call needs a node3–node2 link, so it runs after node3 may dial
-again; by then node3 already holds the greeter's contract from node1. Under
-SwarmState node3 may hold that contract before its sibling linker (a 3 s
-watch of the SwarmHead) lists node2 as a member, and only that listing pulls
-node2's endpoints, so the driver waits for an endpoint before the call.
+again; by then node3 already holds the greeter's contract from node1. node3
+may hold that contract before its sibling linker (a 3 s watch of the
+SwarmHead) lists node2 as a member, and only that listing pulls node2's
+endpoints, so the driver waits for an endpoint before the call.
 
 node1 dials node3 because a joiner reaches its carrier (`user.join`) and
 node3's dialing is already off. node3 joins over the link node1 opened, and node1 runs the

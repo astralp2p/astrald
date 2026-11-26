@@ -253,8 +253,8 @@ func (mod *Module) WasOwned() bool {
 
 // recordOwnership sets the ownership history once.
 //
-// why at activation and not at claim: every route to an active contract,
-// adoption and an upgrade of a claimed node included, passes here.
+// why at activation and not at claim: every route to an active contract, a
+// join and an upgrade of a claimed node included, passes here.
 func (mod *Module) recordOwnership() {
 	if mod.WasOwned() {
 		return

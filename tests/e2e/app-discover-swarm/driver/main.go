@@ -1,6 +1,6 @@
 // Command driver tells one story across node1 and node2: a provider app on
 // node2 advertises the echo-swarm service and serves the echo op; a consumer
-// app on node1 granted discovery of echo-swarm finds the provider with
+// app on node1 with a discovery permit for echo-swarm finds the provider with
 // reach=swarm and calls it on node2.
 //
 //	driver drive  <session.json>   prints facts as JSON
@@ -58,12 +58,12 @@ func story(path string, facts map[string]bool) error {
 	}
 	defer provider.stop()
 
-	// the consumer: an app on node1 that node1's admin grants discovery of echo-swarm
+	// the consumer: an app on node1 with a discovery permit for echo-swarm
 	consumer, err := register(ctx, n1)
 	if err != nil {
 		return err
 	}
-	if err := grantDiscovery(ctx, consumer, service); err != nil {
+	if err := requestDiscovery(ctx, consumer, service); err != nil {
 		return err
 	}
 

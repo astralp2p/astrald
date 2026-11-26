@@ -1,6 +1,6 @@
 // Package provider is the shared Go helper of the object-provider e2e drivers:
 // the session loader, connect, app registration with ServeObjects permits,
-// role registration, grant and revoke, and apps that serve objects.find,
+// role registration, permit requests, and apps that serve objects.find,
 // objects.describe, objects.search and objects.read with counting handlers in
 // answer, claim or hang mode.
 //

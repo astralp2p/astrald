@@ -5,7 +5,7 @@ live 32 MiB read onto a second link with no byte lost, duplicated or
 reordered. On the serving node the session is relayed for the User: its
 logical peer is the User, and the node across its link is the reader.
 
-- **after** `adopt-node` (node1 and node2 adopted siblings, one link) ·
+- **after** `adopt-node` (node1 and node2 joined siblings, one link) ·
   **destroys** `true` — the world ends with a second link and a 32 MiB object
   on node2. It does not use `link-session-migrate`'s state.
 - **driver** `script.py` — as the User on node1: stores a seeded 32 MiB

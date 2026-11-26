@@ -188,9 +188,9 @@ async def main():
             f"refused as expelled: {join!r}")
 
     # the User signs node3 a new membership; the ban must still win
-    readopt = ss.user_membership(n1, user_token, user_id, id3, push_to=(n2,))
+    readmit = ss.user_membership(n1, user_token, user_id, id3, push_to=(n2,))
     print(f"oracle: note: the User's new membership for node3 was answered "
-          f"{readopt['pushed']}")
+          f"{readmit['pushed']}")
     async with await astral.connect(n2["endpoint"], token=n2["token"]) as c2, \
             await astral.connect(n1["endpoint"], token=user_token) as c:
         end = time.monotonic() + READMIT

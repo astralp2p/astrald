@@ -2,7 +2,7 @@
 """Oracle: a node that joins with its own app is reached, and reaches every
 member's app, within 60 s, on the first attempt.
 
-- all 20 pairs of the five apps answered within 60 s of node5's adoption
+- all 20 pairs of the five apps answered within 60 s of node5's join
   (D11), read again live from the apps' state files;
 - every first call to and from node5's app answered `ok`: a joined member
   contributes to the open follows (astral-docs
@@ -20,14 +20,14 @@ RECOVER = 60.0
 
 f = load()["facts"]["churn_join"]
 assert f["ready_at"] is not None, (
-    f"the 20 pairs did not answer within {RECOVER:.0f} s of node5's adoption; "
+    f"the 20 pairs did not answer within {RECOVER:.0f} s of node5's join; "
     f"missing {f['missing']}")
-took = f["ready_at"] - f["adopted_at"]
-assert took <= RECOVER, f"the 20 pairs answered {took:.1f} s after the adoption; want ≤ {RECOVER:.0f} s"
+took = f["ready_at"] - f["joined_at"]
+assert took <= RECOVER, f"the 20 pairs answered {took:.1f} s after the join; want ≤ {RECOVER:.0f} s"
 
 states = meshapps.states(PREFIX, NAMES)
-missing = meshapps.answering_since(states, NAMES, f["adopted_at"])
-assert not missing, f"pairs not answering since node5's adoption, read live: {missing}"
+missing = meshapps.answering_since(states, NAMES, f["joined_at"])
+assert not missing, f"pairs not answering since node5's join, read live: {missing}"
 firsts = meshapps.first_calls(states, NAMES)
 bad = {f"{c}->{p}": (call or {}).get("outcome") for (c, p), call in firsts.items()
        if "node5" in (c, p) and (call or {}).get("outcome") != "ok"}

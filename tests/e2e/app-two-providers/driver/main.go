@@ -1,6 +1,6 @@
 // Command driver tells one story across node1 and node2: two provider apps,
 // one on each node, advertise the echo-pair service and serve the echo op; a
-// consumer app on node1 granted discovery of echo-pair finds both with
+// consumer app on node1 with a discovery permit for echo-pair finds both with
 // reach=swarm and calls each, and each provider answers its own call alone.
 //
 //	driver drive  <session.json>   prints facts as JSON
@@ -58,12 +58,12 @@ func story(path string, facts map[string]bool) error {
 	}
 	defer far.stop()
 
-	// the consumer: an app on node1 that node1's admin grants discovery of echo-pair
+	// the consumer: an app on node1 with a discovery permit for echo-pair
 	consumer, err := register(ctx, n1)
 	if err != nil {
 		return err
 	}
-	if err := grantDiscovery(ctx, consumer, service); err != nil {
+	if err := requestDiscovery(ctx, consumer, service); err != nil {
 		return err
 	}
 
@@ -99,7 +99,7 @@ func story(path string, facts map[string]bool) error {
 	if err := step(facts, "each_provider_answered_its_own_call", own, "node1's provider answered %v, node2's %v; want one call each, from %v", near.answered(), far.answered(), consumer.id); err != nil {
 		return err
 	}
-	return grantAfterFollow(ctx, n1, n2, facts)
+	return permitAfterFollow(ctx, n1, n2, facts)
 }
 
 func startProvider(ctx *astral.Context, n node) (*echoApp, error) {

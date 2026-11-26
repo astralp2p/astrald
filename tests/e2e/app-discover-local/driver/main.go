@@ -1,6 +1,6 @@
 // Command driver tells one story on node1: a provider app advertises the
-// echo-local service and serves the echo op; a consumer app granted discovery
-// of echo-local finds the provider and calls it; an app without the grant is
+// echo-local service and serves the echo op; a consumer app with a discovery
+// permit for echo-local finds the provider and calls it; an app without the permit is
 // refused the discovery.
 //
 //	driver drive  <session.json>   prints facts as JSON
@@ -54,12 +54,12 @@ func story(path string, facts map[string]bool) error {
 	}
 	defer provider.stop()
 
-	// the consumer: an app on node1 the node's admin grants discovery of echo-local
+	// the consumer: an app on node1 with a discovery permit for echo-local
 	consumer, err := register(ctx, n1)
 	if err != nil {
 		return err
 	}
-	if err := grantDiscovery(ctx, consumer, service); err != nil {
+	if err := requestDiscovery(ctx, consumer, service); err != nil {
 		return err
 	}
 
@@ -77,7 +77,7 @@ func story(path string, facts map[string]bool) error {
 		return err
 	}
 
-	// a stranger: an app on node1 with no discovery grant. node1 has no swarm,
+	// a stranger: an app on node1 with no discovery permit. node1 has no swarm,
 	// so the stranger is no swarm caller and sees nothing, open providers
 	// included; the stream names the service it is not granted.
 	stranger, err := register(ctx, n1)
@@ -86,7 +86,7 @@ func story(path string, facts map[string]bool) error {
 	}
 	d = discoverOnce(ctx, stranger, services.ReachLocal, service)
 	filtered := d.complete() && len(d.providers) == 0 && len(d.notGranted) == 1 && d.notGranted[0] == service
-	if err := step(facts, "stranger_filtered", filtered, "discovery without a grant: providers %v, not granted %v, err %v; want nothing, %q not granted", d.providers, d.notGranted, d.err, service); err != nil {
+	if err := step(facts, "stranger_filtered", filtered, "discovery without a permit: providers %v, not granted %v, err %v; want nothing, %q not granted", d.providers, d.notGranted, d.err, service); err != nil {
 		return err
 	}
 	return nil

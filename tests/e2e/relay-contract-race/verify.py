@@ -19,7 +19,7 @@ from lib.sessionio import load
 
 ROOT = Path(__file__).resolve().parents[3]
 NAMES = ["node1", "node2", "node3", "node4"]
-STEPS = ["node3_and_node4_adopted", "four_nodes_linked_pairwise",
+STEPS = ["node3_and_node4_joined", "four_nodes_linked_pairwise",
          "follows_open_and_complete", "providers_advertised"]
 BUDGET_MS = 1500
 

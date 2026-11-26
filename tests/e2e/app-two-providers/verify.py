@@ -2,10 +2,10 @@
 """Oracle: every step held, and the story holds again on its own.
 
 The oracle repeats the whole story with fresh identities (`driver verify`):
-a consumer on node1 granted discovery of echo-pair finds a provider on node1
+a consumer on node1 with a discovery permit for echo-pair finds a provider on node1
 and a provider on node2 with reach=swarm, and each provider answers the one
 call made to it, and no other; an app without a permit following the private
-service sees both private providers within 2 s of a grant, without a reopen.
+service sees both private providers within 2 s of its permit, without a reopen.
 """
 import os
 import subprocess
@@ -17,7 +17,7 @@ from lib.sessionio import load
 ROOT = Path(__file__).resolve().parents[3]
 STEPS = ["consumer_found_both", "node1_knows_both_hosts", "each_provider_echoed",
          "each_provider_answered_its_own_call",
-         "follow_starts_without_private_providers", "grant_shows_both_without_reopen"]
+         "follow_starts_without_private_providers", "permit_shows_both_without_reopen"]
 
 facts = load()["facts"].get("app_two_providers", {})
 missing = [s for s in STEPS if not facts.get(s)]

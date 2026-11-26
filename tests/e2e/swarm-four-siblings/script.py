@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
-"""Driver: node1's User adopts node3, then node4, into the swarm of node1 and
-node2, and the driver waits until the swarm links every pair.
+"""Driver: node3, then node4, joins the swarm of node1 and node2 through
+node1, and the driver waits until the swarm links every pair.
 
 Only node1 learns node3's and node4's endpoints, and node3 and node4 learn
 only node1's. node2 learns nothing from the driver, and node3 and node4 learn
@@ -8,8 +8,8 @@ nothing of each other, so a link between node2 and a new node, or between
 node3 and node4, comes from the swarm alone.
 
 The driver polls each node's links and `user.swarm_status` every 0.5 s, up to
-30 s after node4's adoption. It judges nothing and records the
-`four_siblings` fact: {adopted_node3_at, adopted_at (node4's), mesh_at (the
+30 s after node4's join. It judges nothing and records the
+`four_siblings` fact: {joined_node3_at, joined_at (node4's), mesh_at (the
 first poll at which every node linked the other three, null when none did),
 links, rosters, roster_errors}, the last three as of the last poll.
 """
@@ -92,12 +92,12 @@ async def main():
 
         # note: each joins through node1 as a Member
         await ss.admit(nodes["node1"], doc["facts"]["user_token"], nodes["node3"])
-        facts["adopted_node3_at"] = time.time()
+        facts["joined_node3_at"] = time.time()
         await ss.admit(nodes["node1"], doc["facts"]["user_token"], nodes["node4"])
-        facts["adopted_at"] = time.time()
+        facts["joined_at"] = time.time()
 
         facts["mesh_at"] = None
-        deadline = facts["adopted_at"] + MESH
+        deadline = facts["joined_at"] + MESH
         while True:
             seen = await view(clients)
             if facts["mesh_at"] is None and meshed(seen["links"], ids):
@@ -109,10 +109,10 @@ async def main():
         facts.update(seen)
 
     write_facts({"four_siblings": facts})
-    took = (f"{facts['mesh_at'] - facts['adopted_at']:.1f} s"
+    took = (f"{facts['mesh_at'] - facts['joined_at']:.1f} s"
             if facts["mesh_at"] is not None else f"not within {MESH:.0f} s")
-    print(f"driver: node3 and node4 adopted on node1; every pair linked {took} "
-          "after node4's adoption")
+    print(f"driver: node3 and node4 joined through node1; every pair linked {took} "
+          "after node4's join")
 
 
 asyncio.run(main())

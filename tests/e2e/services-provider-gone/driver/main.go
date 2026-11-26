@@ -161,12 +161,12 @@ func story(path string, facts map[string]bool, liveness bool) error {
 	n1, n2 := nodes["node1"], nodes["node2"]
 	ctx := astral.NewContext(nil)
 
-	// the consumer: an app on node1 that node1's admin grants discovery of spg-echo
+	// the consumer: an app on node1 with a discovery permit for spg-echo
 	consumer, err := register(ctx, n1)
 	if err != nil {
 		return err
 	}
-	if err := grantDiscovery(ctx, consumer, service); err != nil {
+	if err := requestDiscovery(ctx, consumer, service); err != nil {
 		return err
 	}
 	f, err := follow(ctx, consumer, services.ReachSwarm, service)

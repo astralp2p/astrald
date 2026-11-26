@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Oracle: node3 learned node2's app from node1 alone, then reached it via node2.
 
-The driver switched dialing off on node2 and node3 before node1 adopted node3,
+The driver switched dialing off on node2 and node3 before node3 joined through node1,
 so node2 could never deliver its greeter's relay contract to node3 itself
 (astral-docs topics/app-routing.md, Reach; astrald mod/user/src/sync.go
 syncAppContracts). Every step must have held, and node3 still names node2 as
@@ -14,7 +14,7 @@ import astral
 from lib import jsonops
 from lib.sessionio import load
 
-STEPS = ["dialing_off_on_node2_and_node3", "node3_adopted_on_node1",
+STEPS = ["dialing_off_on_node2_and_node3", "node3_joined_through_node1",
          "node3_knows_the_greeter_on_node2",
          "node3_unlinked_from_node2_when_it_knew",
          "node3_knows_node2_endpoints",
@@ -36,7 +36,7 @@ async def main():
         f"{n2['identity']} alone: {docs}")
 
     print("oracle: node3 knew node2's greeter "
-          f"{facts['seconds_to_learn']:.1f} s after its adoption, with no link "
+          f"{facts['seconds_to_learn']:.1f} s after its join, with no link "
           "to node2, and its visitor was greeted through node2")
 
 

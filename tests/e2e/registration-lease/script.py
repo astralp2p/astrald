@@ -97,7 +97,7 @@ async def mint_describer(node, endpoint: str) -> dict:
         body={"Type": "mod.apphost.register_request",
               "Object": {"GrantPermits": [{"Action": SERVE_OBJECTS}]}})
     out = {k.lower(): v for k, v in token.items()}
-    # why: since G7 the permit is a contract the host signs once the harness
+    # why: the permit is a contract the host signs once the harness
     # answerer approves the registration's ContractRequest
     await ss.await_app(endpoint, out["token"], [SERVE_OBJECTS])
     return out

@@ -27,7 +27,7 @@ back in, and the two remaining members form the swarm again.
     swarm" or ends unavailable (code 7) or with an `unexpected EOF`: node1
     keeps answered bans in memory only, so after the restart it admits node3's
     link until node3 answers the redelivered ban, then refuses node3's links,
-    which can close the link the join rides on. Since G7 the join is a
+    which can close the link the join rides on. The join is a
     `user.carry_join` stream over that link, which then ends with EOF. A
     successful join fails;
   - the User signs node3 a new Privileged membership on node1 and offers it to

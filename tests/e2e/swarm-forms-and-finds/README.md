@@ -46,11 +46,12 @@ Sources: astral-docs `protocols/nearby/README.md` (a status every 85 to 95
 s); `topics/user-and-swarm.md`, Replacing a node (a node that shares no
 local network joins through `user.introduce` after one member endpoint is
 added); `protocols/user/ops/user.introduce.md` (30 s push wait);
-`protocols/nodes/README.md`, Endpoint exchange in the local swarm (the pull
-on a pushed contract, the first-hand notice, 20 s pulls) and Announcing a
-change ("A node never advertises an IPv6 link-local address"). The spec is
+`protocols/nodes/README.md`, Announcing a change ("A node never advertises an IPv6 link-local address"). The spec is
 silent on container bridges: the oracle follows `mod/ip/src/module.go`
-`LocalIPs` and `mod/ip/src/advertisable.go`.
+`LocalIPs` and `mod/ip/src/advertisable.go`. A new member learns another
+member's endpoints by a pull from a linked member once SwarmState sync lists
+it, each pull bounded to 20 s (astrald `mod/user/src/module.go:165-182`,
+`mod/nodes/src/endpoints_changed.go:173-217`).
 
 The wiki flow gives no node an endpoint by hand. The spec requires one
 member endpoint for a node that shares no local network, so the reflector

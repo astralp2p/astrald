@@ -7,7 +7,7 @@ own identity, and nothing lets an app advertise as anyone else.
 - **driver** `script.py` — runs `driver/` (Go, this repository's pinned
   astral-go) in `drive` mode. Every service name starts with `sai-`.
   1. *identity*: an app on node2 advertises `sai-main` with an info string. A
-     consumer app on node1 (granted discovery) finds it with `reach=swarm` as
+     consumer app on node1 (with a discovery permit) finds it with `reach=swarm` as
      one offering, provided by the app and not by a node, with the info intact;
      a consumer on node2 finds it with local reach; node1's local reach finds
      nothing; the provider evaluated the consumer app and not node1.
@@ -20,30 +20,23 @@ own identity, and nothing lets an app advertise as anyone else.
   4. *spoofed service*: a binding answers an ask for its own service with an
      offering named `sai-main`. The node ends it; discovery of both names shows
      only the honest provider.
-  5. *no ServeApps*: an app whose `serve_apps` grant is revoked is refused with
-     `not permitted`, and its service is not shown.
-  5b. *revoked while advertising*: an app on node2 advertises `sai-revoked`;
-     a swarm follow from node1 and a local follow on node2 show it. node2's
-     admin revokes the app's `serve_apps`: within 5 s node2's follow receives
-     `services.removed` with cause `binding_closed`, node1's with
-     `member_removed`, and the app's advertise channel closes.
-  6. *over a link*: an app of node1 cannot advertise on node2 (the query is
+  5. *over a link*: an app of node1 cannot advertise on node2 (the query is
      rejected on its way), and node1's own identity, which does reach the op, is
      told `origin not allowed: network`. Neither service is shown.
-  7. *taken names*: advertising `sai-main` a second time is refused with
+  6. *taken names*: advertising `sai-main` a second time is refused with
      `service already advertised by this provider`, and a set that lists a
      taken name beside a fresh one is refused whole. Another app, on node1,
      advertising `sai-main` is another provider: swarm discovery from node1
      shows both under their own identities, once each, while node2 shows its
      own alone.
-  8. *release*: with every binding closed, swarm discovery shows nothing.
+  7. *release*: with every binding closed, swarm discovery shows nothing.
 - **oracle** `verify.py` — every step held, plus the whole story again with
   fresh identities (`driver verify`).
 
 `services-swarm` covers discovery, follow and loss with providers it never
 checks for who they are; `services-app-call` and `app-discover-swarm` find a
 provider app and call it. None of them tries to advertise as someone else,
-without ServeApps, or over a link, or checks that a taken name is refused.
+or over a link, or checks that a taken name is refused.
 
 The provider identity is stamped by the node from the binding
 (`mod/services/src/coordinator/source_messages.go`, `Answer`); the SDK leaves

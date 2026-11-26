@@ -104,7 +104,7 @@ func run(path string) (map[string]any, error) {
 	// the timeout wakes the link's ping, which closes the link 10 s later
 	// (astral-docs topics/link-mux.md, early probes) and ends the frozen query
 	// as unavailable. A fresh world still holds the pushes that follow
-	// node2's adoption and first link, so node2 freezes only after they end.
+	// node2's join and first link, so node2 freezes only after they end.
 	settled, err := waitLogQuiet(filepath.Join(n1.Root, "astrald.log"), settleQuiet, settleLimit)
 	if err != nil {
 		return facts, fmt.Errorf("node1's traffic to node2 never settled: %w", err)

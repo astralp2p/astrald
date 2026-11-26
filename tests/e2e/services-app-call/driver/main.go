@@ -85,7 +85,7 @@ func run(path string) (map[string]bool, error) {
 		return facts, err
 	}
 	frontCli := connect(n1.Endpoint, string(front.Token))
-	if err := grantDiscovery(ctx, frontCli); err != nil {
+	if err := requestDiscovery(ctx, frontCli); err != nil {
 		return facts, err
 	}
 
@@ -178,9 +178,9 @@ func serveProvider(ctx *astral.Context, n2 node, token string) (func(), error) {
 	return cancel, nil
 }
 
-// grantDiscovery has the app that app names request discovery of player
+// requestDiscovery has the app that app names request discovery of player
 // on any node, and waits for its contract.
-func grantDiscovery(ctx *astral.Context, app *astrald.Client) error {
+func requestDiscovery(ctx *astral.Context, app *astrald.Client) error {
 	cs := astral.NewBundle()
 	scope := &services.DiscoveryScope{Rules: []*services.DiscoveryRule{{Services: []astral.String8{"player"}}}}
 	if err := cs.Append(scope); err != nil {

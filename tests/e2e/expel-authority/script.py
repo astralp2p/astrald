@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Driver: who may call `user.expel`, what it refuses, and a ban made twice.
 
-The driver acts and judges nothing. The User on node1 adopts a fresh node,
-`ea-target`, so there is a member to expel without touching node2. Then every
+The driver acts and judges nothing. A fresh node, `ea-target`, joins through
+node1 as a Member, so there is a member to expel without touching node2. Then every
 caller that must not expel it tries, and the driver records how each came
 back, with node1's roster and ban list read after each try:
 
@@ -81,7 +81,7 @@ async def main():
             r["after"] = await view(u)
             refusals[name] = r
 
-        # note: since G7 only the User expels (D7), so both bans are the User's
+        # note: only the User expels (D7), so both bans are the User's
         first = await u.user.expel(t["identity"])
         second = await u.user.expel(t["identity"])
 

@@ -1,11 +1,10 @@
 # swarm-authz-matrix — what a linked stranger and a Member sibling may do to node1
 
-**Since G7 the sibling row is a Member's.** node2 is a `privileged_member`,
-which acts for the User in every check but an expel (Swarm State and User
-Authority, D6), so the any-member read row G7 removed is gone. A Member,
-`authz_member`, now holds the narrowed rules: it reads the roster
-(SeeSwarm admits every member) and nothing else. The oracle still reads the
-bait as node2.
+**The sibling row is a Member's.** node2 is a `privileged_member`, which acts
+for the User in every check but an expel (Swarm State and User Authority, D6),
+so node2 is no sibling row. A Member, `authz_member`, holds the narrowed
+rules: it reads the roster (SeeSwarm admits every member) and nothing else.
+The oracle still reads the bait as node2.
 
 A node the User does not own links to node1 and reaches only the ops every
 linked peer reaches. Its own User reaches nothing. A Member sibling reaches

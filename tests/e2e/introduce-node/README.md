@@ -29,5 +29,5 @@ A node claimed with the User's words joins the User's swarm through
 `user.introduce` offers `replacement`'s Privileged membership to `member`'s
 SwarmState (`nodes.swarm_push`) and pulls `member`'s; `member` passes the
 stored entry on to its peers, so `sibling` lists `replacement` through
-SwarmState. Before G7 the op pushed the contract with `objects.push`, which
-the new push admission rejects.
+SwarmState. A membership pushed with `objects.push` is rejected by the push
+admission.

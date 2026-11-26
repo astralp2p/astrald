@@ -53,7 +53,7 @@ test, so such a node fails.
 ## Why the control calls matter
 
 A refusal and a missing operation leave the caller holding the same nothing.
-Each node op also refuses a caller without its permit, so alpha is granted
+Each node op also refuses a caller without its permit, so alpha holds
 `mod.shell.shell_action` and `mod.auth.admin_manage_apps_action`, and the driver
 records `mcp.list_agents` and `messaging.create_mailbox` answered to alpha over
 apphost, on the same node in the same run. The oracle checks them first. Only

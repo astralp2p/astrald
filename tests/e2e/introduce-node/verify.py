@@ -99,7 +99,7 @@ def check_answers(f: dict) -> None:
 def check_cross_info(f: dict, swarm: dict, nodes: dict) -> None:
     """user.info as the User across the link: from replacement, a Privileged
     node, of member, answered with member's own membership, which its carrier
-    `first` signed (a Member's membership is its carrier's, since G7); from
+    `first` signed (a Member's membership is its carrier's); from
     member, a Member, of replacement, refused, since a Member does not relay
     as the User (D5, D6; the node rejects the relay before an op runs)."""
     i = f["cross_info"]["replacement_of_member"]

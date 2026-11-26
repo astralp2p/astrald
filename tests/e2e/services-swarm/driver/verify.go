@@ -18,7 +18,7 @@ func verify(w *world) error {
 	if err != nil {
 		return err
 	}
-	if err := w.grant(app, []string{"oracle-check"}); err != nil {
+	if err := w.requestDiscovery(app, []string{"oracle-check"}); err != nil {
 		return err
 	}
 	seen := &evaluated{}

@@ -34,8 +34,7 @@ def probes(n1: dict, n2: dict, n3: dict, tokens: dict) -> dict:
     """The front's discoveries of the wallet: on node3 (its own node) and on
     node2 (local, the wallet's node).
 
-    note: no swarm discovery from node1 since the G7 fix round: node1, a
-    Privileged node, relays as the user only, not for an app node3 hosts, so
+    note: no swarm discovery from node1: node1, a Privileged node, relays as the user only, not for an app node3 hosts, so
     node2 refuses node1's carry for the front with or without the chain."""
     return {"node3": ss.discover(n3, tokens["node3"], "swarm"),
             "node2": ss.discover(n2, tokens["node2"], "local")}

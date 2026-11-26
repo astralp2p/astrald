@@ -39,8 +39,8 @@ type world struct {
 	n1, n2         node
 	node1, node2   *astral.Identity
 	admin1, admin2 *astrald.Client
-	// note: the client of each app w.app registered, by identity, so grant
-	// files its request as the app
+	// note: the client of each app w.app registered, by identity, so
+	// requestDiscovery files its request as the app
 	clients sync.Map
 }
 
@@ -109,9 +109,9 @@ func (w *world) app(admin *astrald.Client, n node, permits ...*auth.Permit) (*as
 	return tok.Identity, servicescli.New(nil, c), nil
 }
 
-// grant has app request discovery of names on nodes (any node when empty),
-// and waits for its contract.
-func (w *world) grant(app *astral.Identity, names []string, nodes ...*astral.Identity) error {
+// requestDiscovery has app request a discovery permit for names on nodes (any
+// node when empty), and waits for its contract.
+func (w *world) requestDiscovery(app *astral.Identity, names []string, nodes ...*astral.Identity) error {
 	rule := &services.DiscoveryRule{Nodes: nodes}
 	for _, n := range names {
 		rule.Services = append(rule.Services, astral.String8(n))

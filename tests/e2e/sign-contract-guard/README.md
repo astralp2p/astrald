@@ -66,10 +66,10 @@ key through `crypto.sign_text`; the oracle checks that it still cannot.
 
 `tree.set` on `/mod/user/config/active_contract` needs only
 `mod.auth.configure_node_state_action`. node1's token holds it, and so does an
-app registered with that grant permit.
+app whose ContractRequest for it is approved.
 Cleared, node1 reads as unclaimed and the claim exception opens. The User's
-node contract is indexed, and the exception still signs the User's claim: a
-former user re-claims its node. The stranger's claim is the control: it passes
+claim contract (a PrivilegedMembership) is indexed, and the exception still
+signs the User's claim: a former user re-claims its node. The stranger's claim is the control: it passes
 the guard and fails only at signing, so the exception was open.
 
 A cleared claim leaves node1 `unclaimed`, since it was owned, and the gate's

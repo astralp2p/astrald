@@ -9,7 +9,7 @@
 // with no retry: 12 ordered pairs, each routed by the consumer node's pull on
 // miss.
 //
-//	driver drive  <session.json>   adopts node3 and node4, then the story; prints facts
+//	driver drive  <session.json>   joins node3 and node4, then the story; prints facts
 //	driver verify <session.json>   the story again with fresh identities
 package main
 
@@ -88,7 +88,7 @@ func run(mode, path string, r *report) error {
 
 	if mode == "drive" {
 		err = joinSwarm(ctx, s)
-		if err := step(r, "node3_and_node4_adopted", err == nil, "%v", err); err != nil {
+		if err := step(r, "node3_and_node4_joined", err == nil, "%v", err); err != nil {
 			return err
 		}
 	}

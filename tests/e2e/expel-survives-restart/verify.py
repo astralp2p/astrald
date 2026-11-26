@@ -48,7 +48,7 @@ EXPELLED = "identity expelled from swarm"
 # why: node1 refuses node3's links once node3 answered the redelivered ban, so
 # a join can end as unavailable (astral-go astral/codes.go).
 UNAVAILABLE = 7
-# why: since G7 user.join sends its JoinRequest to node1's user.carry_join over
+# why: user.join sends its JoinRequest to node1's user.carry_join over
 # the link, and node1 closing that link under it ends the stream with EOF
 # (node1's log: "closed in-link ... link denied: identity expelled from swarm"
 # right after carry_join was routed). node1 answering the rosters below rules
@@ -159,10 +159,10 @@ async def main():
             f"expelled nor ended by node1's link refusal: {join!r}")
 
     # the User signs node3 a new membership; the stored ban must still win
-    readopt = ss.user_membership(nodes["node1"], user_token, doc["facts"]["user_id"],
+    readmit = ss.user_membership(nodes["node1"], user_token, doc["facts"]["user_id"],
                                  id3, push_to=(nodes["node2"],))
     print(f"oracle: note: the User's new membership for node3 was answered "
-          f"{readopt['pushed']}")
+          f"{readmit['pushed']}")
     await asyncio.sleep(READMIT)
 
     # --- after the attempts: nothing changed -------------------------------

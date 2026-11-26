@@ -6,8 +6,8 @@
 //	driver discover [s]        a fresh app runs a one-shot swarm discovery, retrying
 //
 // Each reads the node it acts on from APP_NODE_ENDPOINT and APP_NODE_TOKEN (the
-// node's admin token: the apps register themselves and the consumers grant
-// themselves discovery). provide binds its handler at APP_HOST_IP, the node's
+// node's admin token: the apps register themselves and the consumers request
+// their own discovery permits). provide binds its handler at APP_HOST_IP, the node's
 // host_ip. provide and follow write what they see to the JSON file
 // named by ASTRAL_TESTS_APP_STATE; call and discover print one JSON line.
 package main
@@ -87,10 +87,11 @@ func register(ctx *astral.Context, permits ...*auth.Permit) (*astral.Identity, *
 	return token.Identity, connect(string(token.Token)), nil
 }
 
-// grantDiscovery lets app discover service on any node, granted by the node's
-// admin: a caller with no permit sees nothing of a private offering and is not
-// refused, and the grant keeps the test off the swarm-app rule.
-func grantDiscovery(ctx *astral.Context, app *astrald.Client) error {
+// requestDiscovery has app request a discovery permit for service on any node,
+// approved by the harness answerer: a caller with no permit sees nothing of a
+// private offering and is not refused, and the permit keeps the test off the
+// swarm-app rule.
+func requestDiscovery(ctx *astral.Context, app *astrald.Client) error {
 	cs := astral.NewBundle()
 	scope := &services.DiscoveryScope{Rules: []*services.DiscoveryRule{{Services: []astral.String8{service}}}}
 	if err := cs.Append(scope); err != nil {
@@ -100,14 +101,14 @@ func grantDiscovery(ctx *astral.Context, app *astrald.Client) error {
 	return err
 }
 
-// registerConsumer is register plus the discovery grant.
+// registerConsumer is register plus the discovery permit.
 func registerConsumer(ctx *astral.Context) (*astral.Identity, *astrald.Client, error) {
 	id, cli, err := register(ctx)
 	if err != nil {
 		return nil, nil, err
 	}
-	if err := grantDiscovery(ctx, cli); err != nil {
-		return nil, nil, fmt.Errorf("granting discovery: %w", err)
+	if err := requestDiscovery(ctx, cli); err != nil {
+		return nil, nil, fmt.Errorf("requesting discovery: %w", err)
 	}
 	return id, cli, nil
 }
@@ -282,7 +283,7 @@ type event struct {
 	At       int64  `json:"at"`               // unix milliseconds
 }
 
-// follow registers a consumer app, grants it discovery, and follows the service
+// follow registers a consumer app, requests its discovery permit, and follows the service
 // with reach=swarm on its own node until signalled, recording every event.
 func follow() error {
 	ctx := astral.NewContext(nil)

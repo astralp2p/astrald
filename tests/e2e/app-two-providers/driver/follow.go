@@ -9,10 +9,10 @@ import (
 	"github.com/astralp2p/astral-go/astral"
 )
 
-// grantAfterFollow opens a swarm follow of privateService for an app without
-// a permit, then grants the permit: the open follow shows the private provider
+// permitAfterFollow opens a swarm follow of privateService for an app without
+// a permit, then has it request the permit: the open follow shows the private provider
 // on node1 and the one on node2 within 2 s, without a reopen.
-func grantAfterFollow(ctx *astral.Context, n1, n2 node, facts map[string]bool) error {
+func permitAfterFollow(ctx *astral.Context, n1, n2 node, facts map[string]bool) error {
 	hidNear, err := startProviderOf(ctx, n1, privateService, false)
 	if err != nil {
 		return err
@@ -37,17 +37,17 @@ func grantAfterFollow(ctx *astral.Context, n1, n2 node, facts map[string]bool) e
 	before := readInitial(events, 60*time.Second)
 	empty := before.initial && len(before.providers) == 0 && slices.Contains(before.notGranted, privateService)
 	if err := step(facts, "follow_starts_without_private_providers", empty,
-		"follow of %v before the grant: initial %v, providers %v, not granted %v; want no provider and %v not granted",
+		"follow of %v before the permit: initial %v, providers %v, not granted %v; want no provider and %v not granted",
 		privateService, before.initial, before.providers, before.notGranted, privateService); err != nil {
 		return err
 	}
 
-	if err := grantDiscovery(ctx, late, privateService); err != nil {
+	if err := requestDiscovery(ctx, late, privateService); err != nil {
 		return err
 	}
 	seen := awaitProviders(events, 2*time.Second, hidNear.id, hidFar.id)
-	return step(facts, "grant_shows_both_without_reopen", holdsBoth(seen, hidNear.id, hidFar.id),
-		"follow of %v after the grant showed %v within 2 s; want %v and %v", privateService, seen, hidNear.id, hidFar.id)
+	return step(facts, "permit_shows_both_without_reopen", holdsBoth(seen, hidNear.id, hidFar.id),
+		"follow of %v after the permit showed %v within 2 s; want %v and %v", privateService, seen, hidNear.id, hidFar.id)
 }
 
 // followStart is what a follow carried up to its initial outcome.

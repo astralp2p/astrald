@@ -15,10 +15,10 @@ From the `forms_and_finds` fact (times from node2's claim):
 - the reflector's `user.introduce(node1)` answered `ack`; the reflector
   shared a link with node1 within NODE1_WITHIN s of the answer
   (protocols/user/ops/user.introduce.md: a 30 s push wait) and with node2
-  within NODE2_WITHIN s of it, with no endpoint of node2 given
-  (protocols/nodes/README.md, Endpoint exchange in the local swarm: the
-  pull on a pushed contract and the first-hand notice, each pull bounded to
-  20 s). A reflector that met them through nearby before the introduction
+  within NODE2_WITHIN s of it, with no endpoint of node2 given (SwarmState
+  sync brings the reflector node2's membership, and the reflector pulls
+  node2's endpoints from a linked member, each pull bounded to 20 s: astrald
+  mod/user/src/module.go:165-182, mod/nodes/src/endpoints_changed.go:173-217). A reflector that met them through nearby before the introduction
   meets the bounds at once; the oracle says so;
 - no node lists a `172.17.0.0/16` or `fe80::/10` endpoint for any node,
   itself included, and no link has an end in either range

@@ -19,7 +19,7 @@ budget.
   3. both send node2 a discovery `for` the User, tagged, the form a hosting
      node sends when it carries a swarm discovery;
   4. the stranger asks node1 for `reach=swarm`;
-  5. an app on node1, granted discovery of the three names, discovers with
+  5. an app on node1, with a discovery permit for the three names, discovers with
      `reach=swarm`: `ssor-open` alone; `ssor-open` with `ssor-slow`;
      `ssor-open` with `ssor-gone`.
   Every binding closes before the driver ends.

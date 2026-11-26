@@ -1,7 +1,6 @@
 // Command driver runs a catalog app that serves objects.search for node1, and
 // searches node1 as the User: the app's result comes back with the app as its
-// source. Once the User revokes the app's searcher grant, the same search no
-// longer reaches the app.
+// source.
 //
 //	driver drive  <session.json>   prints facts as JSON
 //	driver verify <session.json>   the same story with a fresh app and word
@@ -122,8 +121,8 @@ func run(path string) (map[string]bool, error) {
 		return facts, fmt.Errorf("the app was asked %d times for %q; want once", cat.asked(), word)
 	}
 
-	// note: the revoke step is gone: grants are, and revocations are a Non-goal
-	// of Swarm State and User Authority (G7).
+	// note: no step revokes the app's permit: revocation is a Non-goal of
+	// Swarm State and User Authority.
 
 	fmt.Fprintln(os.Stderr, "ok: the User's objects.search on node1 returned the catalog app's result, sourced to the app")
 	return facts, nil

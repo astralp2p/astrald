@@ -70,7 +70,7 @@ async def build_swarm(first: dict, joiners: list) -> dict:
         claim = await jsonops.value(c, "user.bootstrap?generate=true&out=json")
     for j in joiners:
         await link(first, j)
-        # why waiting: since G7 a join waits for an Approval of its
+        # why waiting: a join waits for an Approval of its
         # JoinRequest, which the harness answerer gives while a driver waits
         with ss.waiting():
             async with await connect(j) as c:

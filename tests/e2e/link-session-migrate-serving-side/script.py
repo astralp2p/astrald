@@ -2,7 +2,7 @@
 """Driver: move a live 32 MiB read onto a second link, started on the
 serving node.
 
-The world holds node1 and node2, adopted and linked (adopt-node). As the
+The world holds node1 and node2, joined and linked (adopt-node). As the
 User on node1, the driver stores a seeded 32 MiB object on node2
 (lib/blobgen.py), opens a read of it on the one link node1 holds (Ls) with a
 paced reader held before its first read (64 KiB reads, 8 ms apart, 15 s

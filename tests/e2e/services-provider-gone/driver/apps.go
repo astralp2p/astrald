@@ -65,9 +65,9 @@ func register(ctx *astral.Context, n node, permits ...*auth.Permit) (*app, error
 	return &app{id: tok.Identity, client: connect(n.Endpoint, string(tok.Token)), n: n, token: string(tok.Token)}, nil
 }
 
-// grantDiscovery lets a discover the named service on any node, granted by
-// the admin of a's node.
-func grantDiscovery(ctx *astral.Context, a *app, service string) error {
+// requestDiscovery has a request a discovery permit for the named service on
+// any node, approved by the harness answerer.
+func requestDiscovery(ctx *astral.Context, a *app, service string) error {
 	cs := astral.NewBundle()
 	scope := &services.DiscoveryScope{Rules: []*services.DiscoveryRule{{Services: []astral.String8{astral.String8(service)}}}}
 	if err := cs.Append(scope); err != nil {

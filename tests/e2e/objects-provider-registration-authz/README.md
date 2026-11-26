@@ -1,7 +1,7 @@
 # objects-provider-registration-authz
 
 node1 lets an app register as a finder, describer or searcher only when the
-app is a local, non-node caller whose ServeObjects grant covers that role. A
+app is a local, non-node caller whose ServeObjects permit covers that role. A
 refused registrant is never dialed.
 
 - **roster** node1, node2 · **after** `adopt-node` · `host_listener`
@@ -21,7 +21,7 @@ refused registrant is never dialed.
      node1 at once, for a run-unique id and word, within 8 s of the first
      lease. The driver reads every app's counter for each op.
 - **oracle** `verify.py`:
-  - The cells covered by the grant answer a lease of exactly 10 s: `all` x3,
+  - The cells covered by the permit answer a lease of exactly 10 s: `all` x3,
     `d` describer, `f` finder, `s` searcher, `df` describer and finder. Every
     other cell answers exactly `not permitted`. The oracle holds its own
     table.
@@ -32,21 +32,21 @@ refused registrant is never dialed.
     on each op.
   - node1 dialed each accepted cell once and every other (app, role) pair
     never.
-  - Live, with astral-py: an app with no grant and node1's own token are both
+  - Live, with astral-py: an app with no permit and node1's own token are both
     refused by `objects.register_finder`.
   - `driver verify` reruns the whole matrix with fresh apps.
 
 ## Why these texts
 
-The three register ops refuse a network-origin caller before the grant check,
-and answer `not permitted` when the grant check fails
-(`mod/objects/src/op_register_finder.go`, and the describer and searcher
-twins). node2 holds no ServeObjects grant on node1, so without the origin
-guard its reply reads `not permitted`. The exact origin text is what proves the
+The three register ops refuse a network-origin caller before the
+authorization check, and answer `not permitted` when the authorization check
+fails (`mod/objects/src/op_register_finder.go`, and the describer and
+searcher twins). node2 holds no ServeObjects permit on node1, so without the
+origin guard its reply reads `not permitted`. The exact origin text is what proves the
 guard fired.
 
-The grant check runs before the node-identity check. node1's own token
-authenticates as node1, which holds no ServeObjects grant, so the observed
+The authorization check runs before the node-identity check. node1's own token
+authenticates as node1, which holds no ServeObjects permit, so the observed
 reply is `not permitted` and the self-registration branch is not reached. The
 oracle accepts either text.
 

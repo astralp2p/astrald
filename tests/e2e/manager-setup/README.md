@@ -35,7 +35,6 @@ apphost gate reads the state the two modules produce.
 ## Why the E2E gate
 
 The harness writes the E2E overrides (`tests/lib/nodeconfig.py`): `fresh`
-admits every op and the policies accept. The `unclaimed` list keeps its
-default, so the gate check on the manager's token query is the distribution's.
-The E2E `tokenless` list omits `sys.register_manager`, so the appointment
-runs with the node's token.
+admits every op. The `unclaimed` list keeps its default, so the gate check on
+the manager's token query is the distribution's. The E2E `tokenless` list
+omits `sys.register_manager`, so the appointment runs with the node's token.

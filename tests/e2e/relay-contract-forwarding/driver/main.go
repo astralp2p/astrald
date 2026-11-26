@@ -2,8 +2,8 @@
 // as one JSON line.
 //
 // A greeter app registers on node2 and node1 learns it. Dialing is switched
-// off on node2 and node3, so no link between them can form. The User adopts
-// node3 on node1, and node3 must name node2 as the greeter's host from the
+// off on node2 and node3, so no link between them can form. node3 joins
+// through node1 as a Member, and node3 must name node2 as the greeter's host from the
 // relay contract node1 forwards, with no link to node2. Then node3 may dial
 // again, and a visitor app on node3 calls the greeter through node2.
 //
@@ -102,8 +102,8 @@ func run(path string, facts map[string]any) error {
 		return fmt.Errorf("apphost.hosts on node1 never named node2 for the greeter %v", greeter.Identity)
 	}
 
-	// why both: node2 would dial node3 once node1 pushed node3's contract, and
-	// node3 would dial node2 once node1 synced node2's contract to it.
+	// why both: node2 would dial node3 once its sibling linker listed node3 as a
+	// member, and node3 would dial node2 once it listed node2.
 	for _, admin := range []*astrald.Client{admin2, admin3} {
 		if err := setDial(ctx, admin, false); err != nil {
 			return err
@@ -111,10 +111,10 @@ func run(path string, facts map[string]any) error {
 	}
 	facts["dialing_off_on_node2_and_node3"] = true
 
-	if err := adopt(ctx, s, n1, n3); err != nil {
+	if err := admit(ctx, s, n1, n3); err != nil {
 		return err
 	}
-	facts["node3_adopted_on_node1"] = true
+	facts["node3_joined_through_node1"] = true
 
 	start := time.Now()
 	facts["node3_knows_the_greeter_on_node2"] = waitHost(ctx, admin3, greeter.Identity, n2.Identity)
@@ -145,8 +145,7 @@ func callThroughNode2(ctx *astral.Context, n2, n3 node, admin3 *astrald.Client, 
 	// why wait: node3 may learn the greeter's contract through SwarmState
 	// before its sibling linker lists node2 as a member, and only that listing
 	// pulls node2's endpoints from node1 (LearnMemberEndpoints); a call before
-	// it has no row to dial, which a pre-G7 node3 never met, as it learned the
-	// greeter only from node1's sibling sync after the adoption.
+	// it has no row to dial.
 	start := time.Now()
 	facts["node3_knows_node2_endpoints"] = waitEndpoints(ctx, admin3, n2)
 	facts["seconds_to_node2_endpoints"] = time.Since(start).Seconds()
@@ -167,12 +166,12 @@ func callThroughNode2(ctx *astral.Context, n2, n3 node, admin3 *astrald.Client, 
 	return nil
 }
 
-// adopt makes node1 and node3 know each other's endpoint, links node1 to
+// admit makes node1 and node3 know each other's endpoint, links node1 to
 // node3, and admits node3 through node1 as a Member.
 //
 // why node1 dials: a joiner reaches its carrier (user.join), and node3's
 // dialing is off, so node3's join runs over the link node1 opened.
-func adopt(ctx *astral.Context, s session, n1, n3 node) error {
+func admit(ctx *astral.Context, s session, n1, n3 node) error {
 	admin1 := connect(n1.Endpoint, n1.Token)
 	if err := addEndpoint(ctx, admin1, n3); err != nil {
 		return err
@@ -185,7 +184,7 @@ func adopt(ctx *astral.Context, s session, n1, n3 node) error {
 	}
 	// note: node3 joins through node1 as a Member
 	if _, err := joins.Admit(ctx, connect(n3.Endpoint, n3.Token), connect(n1.Endpoint, s.Facts.UserToken), n1.Identity, n3.Identity); err != nil {
-		return fmt.Errorf("adopting node3 on node1: %w", err)
+		return fmt.Errorf("joining node3 through node1: %w", err)
 	}
 	return nil
 }

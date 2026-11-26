@@ -14,10 +14,10 @@ contract by the routing-time pull.
   `lib/nodelog.py`) and runs `driver/` (Go, this repository's astral-go) in
   `drive` mode:
   - node1 and node3, then node1 and node4, learn each other's endpoint, and
-    the User adopts node3 and node4 on node1;
+    node3 and node4 join through node1 as Members;
   - within 30 s, `nodes.links` on every node holds a link to each other node;
     2 s later, the first-link syncs have ended;
-  - on every node, a consumer app granted discovery of `relay-race` opens a
+  - on every node, a consumer app with a discovery permit for `relay-race` opens a
     `services.discover` follow with `reach=swarm`, whose initial outcome is
     complete;
   - on every node, one after another, a provider app registers, serves `echo`

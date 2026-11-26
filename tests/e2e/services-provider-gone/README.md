@@ -10,7 +10,7 @@ shows it again each time it comes back.
   driver (the same binary, started through `os.Executable()`), so it can be
   killed. It serves under one app identity that the driver registers on
   node2 and hands to each incarnation by token:
-  1. a consumer app on node1, holding a discovery grant for `spg-echo`, opens a
+  1. a consumer app on node1, holding a discovery permit for `spg-echo`, opens a
      `services.discover` follow with `reach=swarm`; the first event is a
      complete initial outcome with no offering (`follow_starts_empty`);
   2. the provider process starts; the follow shows its available offering of

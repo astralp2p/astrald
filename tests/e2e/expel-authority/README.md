@@ -4,9 +4,9 @@ Who may call `user.expel`, what it refuses, and what a ban made twice does.
 
 - **after** `adopt-node` (node1 the User's, node2 a member) ·
   **destroys** `true` — the test bans a node, and a ban cannot be lifted.
-- **roster** node1, node2 and `ea-target`, a fresh node the User adopts so
-  there is a member to expel and node2 stays in the swarm.
-- **driver** `script.py` — the User adopts `ea-target`, then four callers
+- **roster** node1, node2 and `ea-target`, a fresh node that joins through node1
+  so there is a member to expel and node2 stays in the swarm.
+- **driver** `script.py` — `ea-target` joins through node1, then four callers
   expel, each recorded with node1's roster and bans read after it: a token
   minted for a fresh app identity on node1, node2's node token on node2, the
   User's identity on node2 (a token minted there; node2 holds no User key),

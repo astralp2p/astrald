@@ -14,8 +14,8 @@ was down, with `Stale()` false, within 60 s.
   - `driver provide` on node2 (provider A): registers an app holding
     `ServeApps` and keeps one open advertise binding of the service
     `services-consumer-restart-echo`.
-  - `driver watch` on node1 (the consumer): registers an app, which node1's
-    admin grants discovery of the service, and follows it with `reach=swarm`
+  - `driver watch` on node1 (the consumer): registers an app, which requests a
+    discovery permit for the service, and follows it with `reach=swarm`
     through `WatchIn(..., WithReconnect(0, 0))` (1 s doubling to 30 s). The
     app's state file holds the Watcher's offerings, `Stale()`, the count of
     `Synced()` signals and of follow ends (Stale turning true), the first

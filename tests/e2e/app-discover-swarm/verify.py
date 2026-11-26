@@ -2,7 +2,7 @@
 """Oracle: every step held, and the story holds again on its own.
 
 The oracle repeats the whole story with fresh identities (`driver verify`):
-a consumer on node1 granted discovery of echo-swarm finds the provider on
+a consumer on node1 with a discovery permit for echo-swarm finds the provider on
 node2 with reach=swarm and gets its own message echoed back from node2.
 """
 import os

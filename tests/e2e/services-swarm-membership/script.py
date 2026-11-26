@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Driver: a swarm follow across a late join, an expulsion and an expiry.
 
-The fresh nodes ssm_late and ssm_expiry are linked to node1 but not adopted.
+The fresh nodes ssm_late and ssm_expiry are linked to node1 but not members.
 The Go program (services-swarm/driver, membership mode) opens the follow,
-adopts ssm_late as the User and expels it, admits ssm_expiry with a contract
+admits ssm_late through node1 and expels it, admits ssm_expiry with a contract
 that expires in 90 seconds, and records which steps held.
 
 why the flow is in Go: astral-py speaks the pre-v1 Services wire.

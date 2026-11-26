@@ -6,8 +6,8 @@ pushes of the expulsion sweep per period.
 
 - **after** `adopt-node` · **destroys** `true`: it expels identities.
 - **config** every node's `user.reconcile_interval` is `10s` (default 1 h).
-- **driver** `script.py`: the User adopts node3..node10 on node1 and expels
-  five fresh identities. node2 closes its links to node3 three times; the
+- **driver** `script.py`: node3..node10 join through node1 and the User
+  expels five fresh identities. node2 closes its links to node3 three times; the
   driver counts the log lines of all ten nodes per link event. Then a quiet
   window of three sweep periods is counted. Counted lines, verbosity 1:
   `syncing with` (one SyncNodesTask run, `mod/user/src/sync_nodes_task.go`),

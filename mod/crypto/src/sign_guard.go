@@ -18,8 +18,8 @@ import (
 // private key the node holds — the User's, the node's, any app's — signable by
 // anyone the node answers. A signature is not authority confined to this node's
 // runtime: it verifies on every node, for as long as the key lives, and it
-// survives any later fix, so a forged membership contract, app contract or
-// grant is genuine rather than merely accepted.
+// survives any later fix, so a forged membership contract or app contract is
+// genuine rather than merely accepted.
 //
 // why SudoAction and not a signing-specific action: an Identity is a secp256k1
 // public key, so signing under another party's key is that party acting, not a

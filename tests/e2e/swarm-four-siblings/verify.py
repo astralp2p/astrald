@@ -3,15 +3,17 @@
 every roster lists the same four members.
 
 - every node lists a link to each of the other three within 30 s of node4's
-  adoption (derived: a pushed membership contract makes the node pull the
-  subject's endpoints, and a first-hand pull forwards a notice one hop, each
-  pull bounded to 20 s, astral-docs protocols/nodes/README.md:54-90; the same
-  30 s bounds the mesh in tests/e2e/relay-contract-race/driver/main.go:32);
+  join (observed: node1 passes the membership entry on, each push bounded to
+  15 s, mod/nodes/src/swarm_state.go:319-352, and a node whose roster gains
+  the member pulls its endpoints from a linked member, each pull bounded to
+  20 s, mod/user/src/module.go:165-182 and
+  mod/nodes/src/endpoints_changed.go:173-217; the same 30 s bounds the mesh in
+  tests/e2e/relay-contract-race/driver/main.go:32);
 - every node's `user.swarm_status` lists exactly the four identities, itself
   included (protocols/user/ops/user.swarm_status.md: one member per node of
   the swarm; topics/user-and-swarm.md:406-417 shows the new node among them;
-  astrald mod/user/src/contracts.go:157-185 lists every membership contract
-  of the User, the node's own among them), read live at the oracle and not
+  astrald mod/user/src/contracts.go:181-206 lists every identity whose
+  membership holds in SwarmState, the node's own among them), read live at the oracle and not
   held to the 30 s mesh bound: no source bounds roster sync;
 - the oracle reads the links again live: the world it leaves to F1-F4 and
   M14 holds them still.
@@ -61,11 +63,11 @@ async def main():
     ids = {n: nodes[n]["identity"] for n in NAMES}
 
     assert f.get("mesh_at") is not None, (
-        f"not every pair linked within {MESH:.0f} s of node4's adoption; missing "
+        f"not every pair linked within {MESH:.0f} s of node4's join; missing "
         f"{unlinked(f.get('links') or {}, ids)} (the swarm did not carry node3's and "
         "node4's endpoints to every member)")
-    took = f["mesh_at"] - f["adopted_at"]
-    assert took <= MESH, f"every pair linked {took:.1f} s after node4's adoption; want ≤ {MESH:.0f} s"
+    took = f["mesh_at"] - f["joined_at"]
+    assert took <= MESH, f"every pair linked {took:.1f} s after node4's join; want ≤ {MESH:.0f} s"
     # why the rosters are judged live only: no source bounds roster sync, and
     # the driver stops polling at the mesh bound
 
@@ -88,7 +90,7 @@ async def main():
         f"{f.get('roster_errors') or {}}")
 
     print(f"oracle: every pair of the four siblings linked {took:.1f} s after node4's "
-          "adoption; every roster lists the four")
+          "join; every roster lists the four")
 
 
 asyncio.run(main())

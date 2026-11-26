@@ -9,8 +9,8 @@ An app on node1 finds a provider app on node2 through services discovery with
   1. the provider app registers on node2 with ServeApps and serves itself
      through `apps.ServeWith` with its own client: it answers the `echo` op
      with the `msg` it receives and advertises the `echo-swarm` service;
-  2. the consumer app registers on node1, and node1's admin grants it
-     discovery of `echo-swarm`;
+  2. the consumer app registers on node1 and requests a discovery permit
+     for `echo-swarm`, approved by the harness answerer;
   3. the consumer runs a one-shot `services.discover` of `echo-swarm` with
      `reach=swarm` and finds the provider alone, with a complete initial
      outcome (`consumer_found_the_provider`);

@@ -51,9 +51,9 @@ async def appoint(c) -> dict:
 async def serve_unclaimed(m, n, manager_id) -> dict:
     """Serve one op as the manager on the unclaimed node; query it as the node.
 
-    why: the manager answers the policies delegated to it only through a
-    handler, and registering one takes apphost.bind and
-    apphost.register_handler, which the unclaimed gate list must hold.
+    why: the manager serves ops only through a handler, and registering one
+    takes apphost.bind and apphost.register_handler, which the unclaimed gate
+    list must hold.
     """
     async def whoami(q):
         async with await q.accept() as stream:

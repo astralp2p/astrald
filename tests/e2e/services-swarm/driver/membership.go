@@ -17,7 +17,7 @@ import (
 // note: a carry to a new member retries on a capped backoff starting at 1s.
 const membershipWait = 60 * time.Second
 
-// membership opens a swarm follow on node1, adopts the fresh node ssm_late,
+// membership opens a swarm follow on node1, admits the fresh node ssm_late,
 // then expels it, then admits ssm_expiry until its contract expires, and
 // prints which steps held as JSON facts.
 func membership(path string) error {
@@ -48,7 +48,7 @@ func membershipSteps(path string, facts map[string]bool) error {
 	if err != nil {
 		return err
 	}
-	if err := w.grant(app, []string{name}); err != nil {
+	if err := w.requestDiscovery(app, []string{name}); err != nil {
 		return err
 	}
 	watch, err := f.WatchIn(w.ctx, services.ReachSwarm, []string{name})
@@ -67,8 +67,9 @@ func membershipSteps(path string, facts map[string]bool) error {
 	}
 
 	// why after the join: an app's contract signed while ssm_late was
-	// unclaimed does not outlive the claim (a Non-goal of G7), so the provider
-	// gets its contract through the swarm once ssm_late is a member.
+	// unclaimed does not outlive the claim (a Non-goal of Swarm State and User
+	// Authority), so the provider gets its contract through the swarm once
+	// ssm_late is a member.
 	providerID, cl, err := w.app(connect(late.Endpoint, late.Token), late, serveApps)
 	if err != nil {
 		return err

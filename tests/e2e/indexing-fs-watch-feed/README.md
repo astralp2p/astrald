@@ -10,7 +10,7 @@ is gone.
   node1 · **destroys** (it restarts node1 and leaves a persisted watch and an
   enabled index)
 - **driver** `script.py`, as the User and one app I with an unconstrained
-  `mod.auth.serve_objects_action` grant, every file of W written through
+  `mod.auth.serve_objects_action` permit, every file of W written through
   `lib/nodefs.py` under node1's root, so W lies on node1's machine in every
   world:
   1. writes `seed.txt` (c1) into W, attaches W with `fs.new_watch`

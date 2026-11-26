@@ -15,8 +15,8 @@ mod.messaging.receive_action of the recipient. The harness points both at an
 external authority on the node's own loopback port. This driver serves that
 authority: it admits alpha and beta to each other, and nothing else.
 
-The driver acts and judges nothing: it mints three agents over apphost, grants
-alpha the permits the node ops ask, calls the node-op tools as alpha over MCP,
+The driver acts and judges nothing: it mints three agents over apphost, has
+alpha request the permits the node ops ask, calls the node-op tools as alpha over MCP,
 records what two of the ops answer alpha over apphost, sends to an agent the
 authority does not admit, runs one exchange between the two agents it does,
 and records every question the authority was asked.
@@ -44,10 +44,10 @@ from lib.mcpclient import MCPClient, ToolError
 from lib.nodeconfig import NODE_OP_TOOLS
 from lib.sessionio import load, write_facts
 
-# why alpha is granted what the node ops ask: each op refuses a caller without
+# why alpha holds what the node ops ask: each op refuses a caller without
 # its permit, and a refusal that the permit alone explains says nothing about
 # the origin. Holding both, alpha is refused over MCP by the origin guard only.
-GRANTS = ["mod.shell.shell_action", "mod.auth.admin_manage_apps_action"]
+PERMITS = ["mod.shell.shell_action", "mod.auth.admin_manage_apps_action"]
 
 ASK = "alpha-asks-0xC0FFEE"
 ANSWER = "beta-answers-0xBEEF"
@@ -104,10 +104,10 @@ async def main():
 
     # the control is alpha itself over apphost: the same identity asking the
     # same ops of the same node, with only the origin differing from the refusal
-    # why alpha asks: grants are gone (G7); alpha files a ContractRequest for
-    # GRANTS, which the harness answerer approves, and node1 signs its contract
+    # why alpha asks: alpha files a ContractRequest for PERMITS, which the
+    # harness answerer approves, and node1 signs its contract
     async with await astral.connect(n1["endpoint"], token=alpha["token"]) as c:
-        await ss.request_contract(c, GRANTS)
+        await ss.request_contract(c, PERMITS)
     async with await astral.connect(n1["endpoint"], token=alpha["token"]) as c:
         control = _docs(await c.call_raw("mcp.list_agents?out=json"))
         minted = _docs(await c.call_raw(

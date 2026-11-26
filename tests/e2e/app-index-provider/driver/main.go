@@ -1,6 +1,5 @@
 // Command driver runs an indexer app for node1: the User stores a note in a
-// repository with indexing enabled, and the app is told about it. Once the User
-// revokes the app's indexer grant, the app can no longer subscribe.
+// repository with indexing enabled, and the app is told about it.
 //
 //	driver drive  <session.json>   prints facts as JSON
 //	driver verify <session.json>   the same story with a fresh app and repository
@@ -136,8 +135,8 @@ func run(path string) (facts map[string]bool, err error) {
 	}
 	closeSub()
 
-	// note: the revoke step is gone: grants are, and revocations are a Non-goal
-	// of Swarm State and User Authority (G7).
+	// note: no step revokes the app's permit: revocation is a Non-goal of
+	// Swarm State and User Authority.
 
 	fmt.Fprintln(os.Stderr, "ok: the indexer app was told about the note the User stored on node1")
 	return facts, nil

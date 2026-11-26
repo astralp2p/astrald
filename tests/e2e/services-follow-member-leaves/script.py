@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Driver: an open swarm follow across a member's expiry and its rejoin.
 
-The fresh node sfml_member is linked to node1 but not adopted. The Go program
+The fresh node sfml_member is linked to node1 but not a member. The Go program
 (services-swarm/driver, rejoin mode) opens a `reach=swarm` follow of the
 service `sfml` on node1, admits sfml_member with a membership contract that
 expires in 60 s while its provider advertises `sfml`, waits until the follow

@@ -31,8 +31,8 @@ func openConsumer(ctx *astral.Context, name string, n node) (*consumer, error) {
 	if err != nil {
 		return nil, fmt.Errorf("registering the consumer on %s: %w", name, err)
 	}
-	if err := grantDiscovery(ctx, a, service); err != nil {
-		return nil, fmt.Errorf("granting the consumer on %s discovery: %w", name, err)
+	if err := requestDiscovery(ctx, a, service); err != nil {
+		return nil, fmt.Errorf("requesting discovery for the consumer on %s: %w", name, err)
 	}
 	fctx, cancel := ctx.WithCancel()
 	events, err := servicescli.New(nil, a.client).DiscoverIn(fctx, services.ReachSwarm, []string{service}, true)

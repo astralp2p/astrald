@@ -17,8 +17,8 @@ Criterion 2.7: expelling the Member node cuts every app chain through it.
   node3's contract for the front, so the expel of its issuer is what cuts
   the chain.
 
-Since the G7 fix round there is no swarm discovery from node1: a
-Privileged node relays as the user only, so node2 refuses node1's carry of
+There is no swarm discovery from node1: a Privileged node relays as the user
+only, so node2 refuses node1's carry of
 an app node3 hosts whatever its chain.
 
 **Strictness.** The expel cuts the chain three times: the request filed by

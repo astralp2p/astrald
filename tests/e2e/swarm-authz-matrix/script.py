@@ -96,11 +96,7 @@ def answer_text(v) -> str:
 
 
 async def attempt(thunk) -> dict:
-    """Run one probe and record its outcome class and how it read.
-
-    why the deadline is wait_for and not the client's timeout: two setters take
-    `timeout=` as their delegate's timeout, not the query's.
-    """
+    """Run one probe and record its outcome class and how it read."""
     try:
         v = await asyncio.wait_for(thunk(), DEADLINE)
     except Exception as e:  # noqa: BLE001 — every failure is recorded, not raised

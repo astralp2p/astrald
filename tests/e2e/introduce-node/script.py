@@ -94,8 +94,8 @@ async def cross_info(member: dict, replacement: dict, user: str, user_token: str
         member_user = (await c.apphost.create_token(user)).token
     async with await connect(replacement, user_token) as u:
         of_member = await info_as_user(u, member["identity"])
-    # why a short window: the sync is done once the first answered, and since
-    # G7 a Member does not relay as the User (D5, D6), so this one is refused
+    # why a short window: the sync is done once the first answered, and a
+    # Member does not relay as the User (D5, D6), so this one is refused
     async with await connect(member, member_user) as u:
         of_replacement = await info_as_user(u, replacement["identity"], window=5.0)
     return {"replacement_of_member": of_member, "member_of_replacement": of_replacement}

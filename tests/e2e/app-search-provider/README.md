@@ -31,6 +31,6 @@ so the driver makes the app's client the process default and gives the User a
 client of its own. The object ID is never stored: a searcher answers with IDs,
 and `objects.search` without `repo` relays them as they are.
 
-Revocation is not tested: grants are gone, and revocations are a Non-goal
-of Swarm State and User Authority (G7). The app holds its permit by a
+Revocation is not tested: revocation is a Non-goal of Swarm State and User
+Authority. The app holds its permit by a
 contract its host signs once the harness answerer approves its request.

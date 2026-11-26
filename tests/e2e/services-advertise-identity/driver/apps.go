@@ -52,8 +52,8 @@ type app struct {
 	n      node
 }
 
-// register mints a fresh app identity on n through the node's admin token. The
-// node grants it ServeApps, as it does every app it registers.
+// register mints a fresh app identity on n through the node's admin token. Its
+// registration requests ServeApps, which the harness answerer approves.
 func register(ctx *astral.Context, n node) (*app, error) {
 	tok, err := contracts.Register(ctx, connect(n.Endpoint, n.Token), n.Endpoint)
 	if err != nil {
@@ -62,9 +62,9 @@ func register(ctx *astral.Context, n node) (*app, error) {
 	return &app{id: tok.Identity, client: connect(n.Endpoint, string(tok.Token)), n: n}, nil
 }
 
-// grantDiscovery lets a discover the named services on any node, granted by
-// the admin of a's node.
-func grantDiscovery(ctx *astral.Context, a *app, names ...string) error {
+// requestDiscovery has a request a discovery permit for the named services on
+// any node, approved by the harness answerer.
+func requestDiscovery(ctx *astral.Context, a *app, names ...string) error {
 	rule := &services.DiscoveryRule{}
 	for _, n := range names {
 		rule.Services = append(rule.Services, astral.String8(n))
