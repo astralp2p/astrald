@@ -14,7 +14,7 @@ import (
 //
 // why the swarm is not in the grant: swarm membership is granted on request, and
 // the tree holds every module's configuration. A sibling reaches these ops through
-// a signed contract.
+// a node-local grant or a signed contract.
 func (mod *Module) AuthorizeConfigureNodeState(ctx *astral.Context, a *auth.ConfigureNodeStateAction) bool {
 	return mod.authorizeUserOrNode(a.Actor())
 }

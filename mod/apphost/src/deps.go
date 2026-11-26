@@ -2,8 +2,8 @@ package apphost
 
 import (
 	"github.com/astralp2p/astral-go/astral"
+	"github.com/astralp2p/astral-go/lib/routing"
 	"github.com/astralp2p/astrald/core"
-	"github.com/astralp2p/astrald/mod/tree"
 )
 
 func (mod *Module) LoadDependencies(ctx *astral.Context) (err error) {
@@ -11,13 +11,22 @@ func (mod *Module) LoadDependencies(ctx *astral.Context) (err error) {
 		return
 	}
 
-	// why NoLocal: a failed save must fail the setter, not fall back to memory.
-	mod.policy.AppRegister.NoLocal = true
-	if err = tree.BindPath(ctx, &mod.policy, mod.Tree.Root(), policyPath, true); err != nil {
-		return
-	}
-
 	// optional — apphost can run without user module
 	core.Inject(mod.node, &mod.OptionalDeps)
-	return
+
+	// why: an app's permits come from contracts its host signs when an
+	// Approval in SwarmState answers the app's ContractRequest; without the
+	// user and nodes modules there is no SwarmState to file one in.
+	if mod.User != nil && mod.Nodes != nil {
+		mod.contractRequests = newContractRequests(mod.node.Identity(), mod.Nodes, mod.User, mod.Crypto, mod.Auth)
+		if n := mod.config.ContractRequestsPerNode; n > 0 {
+			mod.contractRequests.limiter = newRequestLimiter(ContractRequestWindow, ContractRequestsPerApp, n)
+		}
+	}
+
+	op, err := routing.NewOp(mod.requestContract)
+	if err != nil {
+		return err
+	}
+	return mod.router.AddOp("request_contract", op)
 }

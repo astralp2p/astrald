@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
-"""Oracle: a linked stranger reaches only the open ops on node1, a sibling only
-the swarm's reads, and node1 holds nothing either of them tried to write.
+"""Oracle: a linked stranger reaches only the open ops on node1, a Member
+sibling only the swarm's roster reads, and node1 holds nothing either of them
+tried to write.
 
 Three judgements. First the contract: for each asker, the set of probes node1
 answered is exactly the set astral-docs topics/node-exposure.md and
@@ -9,14 +10,15 @@ never as a timeout or a lost route.
 
 Then node1's state, measured by the oracle as the User and never taken from the
 driver. Every write a probe attempted is absent: the bait is still there and
-still the bait, the roster and the expulsion list are as adopt-node left them,
+still the bait, the roster is adopt-node's plus the Member, no expulsion exists,
 the alias, the tree path and the intruder object do not exist, no token names
-the stranger, and no policy delegate names it. This is the only verdict for the
+the stranger. This is the only verdict for the
 three body-carrying writes that come back as a reset (see RESET_OK).
 
-Last, three probes of the oracle's own, so a driver that probed nothing, or
-probed the wrong node, does not pass: the stranger is refused the bait, the
-sibling reads it, and node1 sees the stranger as the stranger.
+Last, probes of the oracle's own, so a driver that probed nothing, or probed
+the wrong node, does not pass: the stranger and the Member are refused the
+bait, the Privileged sibling node2 reads it, and node1 sees the stranger and
+the Member as themselves.
 """
 import asyncio
 
@@ -33,8 +35,6 @@ DEADLINE = 15
 INTRUDER = Query(query_string="swarm-authz-matrix intruder")
 TREE_PATH = "/swarm-authz-matrix"
 ALIAS = "hijack"
-POLICY_OP = "swarm_authz_matrix.decide"
-POLICIES = ("/mod/user/policy/swarm_join", "/mod/apphost/policy/app_register")
 
 CONTROLS = {"apphost.whoami", "dir.resolve", "shell.spec"}
 SWARM_READS = {"user.info", "user.swarm_status", "user.list_siblings",
@@ -42,22 +42,27 @@ SWARM_READS = {"user.info", "user.swarm_status", "user.list_siblings",
                "objects.repositories", "nodes.links"}
 GUARDED = {"tree.list", "apphost.list_tokens", "objects.store", "tree.set",
           "dir.set_alias", "apphost.create_token", "apphost.hold_object",
-          "user.adopt", "user.expel", "user.set_swarm_join_policy",
-          "apphost.set_app_register_policy", "crypto.sign_text",
-          "objects.delete"}
+          "user.expel", "crypto.sign_text", "objects.delete"}
 PROBES = CONTROLS | SWARM_READS | GUARDED
 
 # The contract under test: what node1 answers each asker over the link.
 # why the stranger's own User is granted nothing, the controls included: node1
 # admits a relay only from a swarm node relaying for node1's own User
 # (AuthorizeRelayFor), so it rejects the query before any op sees it.
-# why the sibling gets the swarm's reads and no write: SeeSwarm, SeeObjects and
-# AdminNetwork grant the local swarm; StoreObjects, AdminObjects, AdminSwarm
-# and the apphost and policy setters do not (mod/user/src/authorizers.go).
+# why no write for anyone: StoreObjects, AdminObjects, AdminSwarm and the
+# apphost setters grant the User and node1 only, and refuse a network origin.
+# why the Member gets the roster reads alone: SeeSwarm admits every member,
+# while SeeObjects grants the User and node1 and a member only through its
+# contract chain (chainRules.AuthorizeSeeObjects, mod/user/src/
+# authorize_by_chain.go), and a Member's membership carries only its tier
+# permit; AdminNetwork grants the User and node1, a Privileged node through the
+# swarm root, no Member (authorize_admin_network.go). Before G7 the any-member
+# rules gave a sibling every read in SWARM_READS.
+MEMBER_READS = {"user.info", "user.swarm_status", "user.list_siblings"}
 ALLOWED = {
     "stranger_node": CONTROLS,
     "stranger_user": set(),
-    "sibling": CONTROLS | SWARM_READS,
+    "member": CONTROLS | MEMBER_READS,
 }
 
 # note: these three carry a body, and a refusal over a link loses its text:
@@ -77,7 +82,8 @@ REFUSAL = {
     "stranger_node": ("not permitted", "origin not allowed: network",
                       "query rejected with code 1"),
     "stranger_user": ("query rejected with code 1",),
-    "sibling": ("not permitted", "origin not allowed: network"),
+    "member": ("not permitted", "origin not allowed: network",
+               "query rejected with code 1"),
 }
 # What a refusal must not read like — each means the call never got a verdict.
 NOT_A_REFUSAL = ("timeout", "timed out", "route_not_found", "routenotfound",
@@ -118,7 +124,7 @@ def check_matrix(matrix: dict, ids: dict) -> None:
     # why the answers: a control that answered for another node, or a whoami
     # that names the wrong caller, would make every refusal above say nothing
     # about node1's view of this asker.
-    for asker, me in (("stranger_node", ids["stranger"]), ("sibling", ids["node2"])):
+    for asker, me in (("stranger_node", ids["stranger"]), ("member", ids["authz_member"])):
         row = matrix[asker]
         assert row["apphost.whoami"]["answer"] == me, (
             f"{asker}: node1 sees it as {row['apphost.whoami']['answer']}, not {me}")
@@ -137,30 +143,14 @@ async def absent(coro, mark: str) -> str:
     raise AssertionError(f"exists: {v!r}")
 
 
-async def bound_path(u, path: str):
-    """The value at `path` or at `path` without /mod; `None` when neither binds.
-
-    why: astral-go tree.Query stays at the parent when another module creates
-    the same node first, so a module that loses that startup race binds
-    /user/... rather than /mod/user/... (sign-contract-guard's driver).
-    """
-    for candidate in (path, path.removeprefix("/mod")):
-        try:
-            return await u.tree.get(candidate)
-        except AstralError as e:
-            if "not found" not in str(e):
-                raise
-    return None
-
-
 async def check_state(u, bait: str, ids: dict) -> bytes:
     held = await u.objects.read(bait, repo="local")
     assert str(object_id_of_bytes(bytes(held))) == bait, (
         f"node1's copy of the bait {bait[:20]}… no longer hashes to it")
 
     roster = {str(m.identity) for m in await u.user.swarm_status()}
-    assert roster == {ids["node1"], ids["node2"]}, (
-        f"node1's roster is {sorted(roster)}, not node1 and node2 — "
+    assert roster == {ids["node1"], ids["node2"], ids["authz_member"]}, (
+        f"node1's roster is {sorted(roster)}, not node1, node2 and the Member — "
         f"stranger in it: {ids['stranger'] in roster}")
     expelled = await u.user.list_expelled()
     assert not expelled, f"node1 lists {len(expelled)} expulsion(s): {expelled}"
@@ -175,34 +165,25 @@ async def check_state(u, bait: str, ids: dict) -> bytes:
     named = [t for t in tokens if str(t.identity) == ids["stranger"]]
     assert not named, f"node1 holds {len(named)} token(s) for the stranger"
 
-    # why "names the stranger" and not "is unset": policy-delegate runs before
-    # adopt-node in the shared world and may leave its own app_register
-    # delegate, so unset is not the state this test found. The harm the probes
-    # attempted is a delegate naming the stranger's op.
-    for path in POLICIES:
-        d = await bound_path(u, path)
-        who = str(getattr(d, "identity", None))
-        op = str(getattr(d, "operation", ""))
-        assert who != ids["stranger"] and op != POLICY_OP, (
-            f"{path} delegates to {who}:{op} — a probe set node1's policy")
     return bytes(held)
 
 
 async def own_probes(nodes: dict, bait: str, held: bytes) -> str:
-    """The oracle's own three probes; answers who owns the stranger."""
+    """The oracle's own probes; answers who owns the stranger."""
     n1, n2, s = nodes["node1"], nodes["node2"], nodes["stranger"]
     t = {"target": n1["identity"]}
-    async with await astral.connect(s["endpoint"], token=s["token"]) as c:
-        who = await asyncio.wait_for(c.apphost.whoami(**t), DEADLINE)
-        assert str(who) == s["identity"], (
-            f"node1 sees the stranger as {who}, not {s['identity']}")
-        try:
-            got = await asyncio.wait_for(c.objects.read(bait, **t), DEADLINE)
-        except AstralError as e:
-            assert "query rejected" in str(e).lower() or "not permitted" in str(e), (
-                f"the stranger's read of the bait failed without a refusal: {e}")
-        else:
-            raise AssertionError(f"node1 served the bait to the stranger: {got!r}")
+    for who_name, asker in (("the stranger", s), ("the Member", nodes["authz_member"])):
+        async with await astral.connect(asker["endpoint"], token=asker["token"]) as c:
+            who = await asyncio.wait_for(c.apphost.whoami(**t), DEADLINE)
+            assert str(who) == asker["identity"], (
+                f"node1 sees {who_name} as {who}, not {asker['identity']}")
+            try:
+                got = await asyncio.wait_for(c.objects.read(bait, **t), DEADLINE)
+            except AstralError as e:
+                assert "query rejected" in str(e).lower() or "not permitted" in str(e), (
+                    f"{who_name}'s read of the bait failed without a refusal: {e}")
+            else:
+                raise AssertionError(f"node1 served the bait to {who_name}: {got!r}")
     async with await astral.connect(n2["endpoint"], token=n2["token"]) as c:
         got = await asyncio.wait_for(c.objects.read(bait, **t), DEADLINE)
         assert bytes(got) == held, (
@@ -221,7 +202,7 @@ async def own_probes(nodes: dict, bait: str, held: bytes) -> str:
 async def main():
     doc = load()
     nodes, facts = doc["nodes"], doc["facts"]
-    ids = {n: nodes[n]["identity"] for n in ("node1", "node2", "stranger")}
+    ids = {n: nodes[n]["identity"] for n in ("node1", "node2", "stranger", "authz_member")}
     bait = facts["bait_id"]
 
     check_matrix(facts["matrix"], ids)
@@ -237,8 +218,8 @@ async def main():
         "the stranger is claimed by this swarm's User, not a stranger's")
 
     print(f"oracle: node1 answered the stranger {sorted(ALLOWED['stranger_node'])}, "
-          f"the stranger's User nothing, and the sibling "
-          f"{len(ALLOWED['sibling'])} probes; node1 holds nothing the "
+          f"the stranger's User nothing, the Member {sorted(ALLOWED['member'])}; "
+          f"node1 holds nothing the "
           f"{len(GUARDED)} guarded probes tried to write, {resets} resets "
           "judged by that state; the oracle's own probes agree")
 

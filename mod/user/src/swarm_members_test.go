@@ -82,11 +82,11 @@ func memberContract(t testing.TB, issuer, subject *astral.Identity) *auth.Signed
 
 func memberContractFor(t testing.TB, issuer, subject *astral.Identity, validity time.Duration) *auth.SignedContract {
 	t.Helper()
-	c, err := user.NewNodeContract(issuer, subject, false, validity)
+	c, err := user.NewMembership(issuer, subject, user.TierMember, nil, validity)
 	if err != nil {
 		t.Fatal(err)
 	}
-	return &auth.SignedContract{Contract: c}
+	return &auth.SignedContract{Contract: c, IssuerSig: viewSig()}
 }
 
 type memberEnv struct {
@@ -101,6 +101,7 @@ func newMemberEnv(t *testing.T) *memberEnv {
 	mod := banModule(t, issuer)
 	e := &memberEnv{mod: mod, query: &memberQuery{}, events: &eventRecorder{}, issuer: issuer}
 	mod.Auth = &memberAuth{query: e.query}
+	useQuerySwarm(mod, issuer, e.query)
 	mod.Events = e.events
 	mod.node = &identityNode{id: astral.GenerateIdentity()}
 	mod.now = time.Now
@@ -226,13 +227,10 @@ func TestRepublishKeepsOneTimer(t *testing.T) {
 	for range 100 {
 		e.mod.publishSwarm()
 	}
-	e.query.finds.Store(0)
 
 	time.Sleep(4 * time.Second)
-	// note: one republish reads the auth index twice: LocalSwarm and the re-arm.
-	if n := e.query.finds.Load(); n != 2 {
-		t.Fatalf("%d auth queries after the deadline; want 2 (one republish)", n)
-	}
+	// note: the members come from SwarmState, so the one republish shows as
+	// its one event alone.
 	if got := e.events.take(); len(got) != 1 {
 		t.Fatalf("%d events %v; want one left", len(got), got)
 	}

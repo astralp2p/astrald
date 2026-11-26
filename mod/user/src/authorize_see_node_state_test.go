@@ -79,12 +79,8 @@ func swarmFixture(t *testing.T) (*Module, swarmIDs) {
 
 	mod := banModule(t, f.user)
 	mod.node = &identityNode{id: f.node}
-	mod.Deps.Auth = &adminNetworkContracts{contracts: []*auth.SignedContract{
-		adminNetworkMembership(f.user, f.node),
-		adminNetworkMembership(f.user, f.member),
-		adminNetworkMembership(f.user, f.expelled),
-		adminNetworkMembership(astral.GenerateIdentity(), f.outsider),
-	}}
+	state := useSwarm(t, mod, f.user, f.node, f.member, f.expelled)
+	addMembership(t, state, astral.GenerateIdentity(), f.outsider)
 	if err := mod.db.StoreExpulsion(sampleSigned(f.user, f.expelled)); err != nil {
 		t.Fatalf("store expulsion: %v", err)
 	}

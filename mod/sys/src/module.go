@@ -5,7 +5,6 @@ import (
 
 	"github.com/astralp2p/astral-go/api/apphost"
 	"github.com/astralp2p/astral-go/api/auth"
-	"github.com/astralp2p/astral-go/api/policy"
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astral-go/astral/log"
 	"github.com/astralp2p/astral-go/lib/routing"
@@ -29,12 +28,7 @@ type OptionalDeps struct {
 // appProvisioner mints an App identity: a key pair, a signed app contract
 // and an access token.
 type appProvisioner interface {
-	ProvisionApp(ctx *astral.Context, grantPermits, contractPermits []*auth.Permit) (*apphost.AccessToken, error)
-}
-
-// policyStore stores or clears the delegate of one named policy.
-type policyStore interface {
-	SetPolicyDelegate(ctx *astral.Context, name string, d *policy.Delegate) error
+	ProvisionApp(ctx *astral.Context, contractPermits []*auth.Permit) (*apphost.AccessToken, error)
 }
 
 type Module struct {
@@ -47,10 +41,6 @@ type Module struct {
 
 	// apps provisions the manager's App identity; Deps.Apphost in a node.
 	apps appProvisioner
-
-	// apphostPolicies stores the apphost policy delegates; Deps.Apphost in a
-	// node.
-	apphostPolicies policyStore
 
 	// appointment persists the manager sys.register_manager appointed.
 	appointment appointmentConfig

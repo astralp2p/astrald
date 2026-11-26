@@ -34,7 +34,7 @@ func (mod *Module) syncAssets(ctx *astral.Context, nodeID *astral.Identity) (err
 		args = opSyncAssetsArgs{Start: *height}
 	}
 
-	var q = query.New(ac.Issuer, nodeID, user.OpSyncAssets, args)
+	var q = query.New(mod.Identity(), nodeID, user.OpSyncAssets, args)
 	ch, err := query.Route(ctx, mod.node, q)
 	if err != nil {
 		return err
@@ -76,7 +76,10 @@ func (mod *Module) syncAlias(ctx *astral.Context, nodeID *astral.Identity) (err 
 		return user.ErrNoActiveContract
 	}
 
-	var q = query.New(ac.Issuer, nodeID, user.OpInfo, nil)
+	// why as this node: a Member does not relay as the user (D5, D6), so a
+	// query as the user from a Member is refused before user.info runs; the
+	// peer's SeeSwarm admits this node as a member.
+	var q = query.New(mod.node.Identity(), nodeID, user.OpInfo, nil)
 	ch, err := query.Route(ctx, mod.node, q)
 	if err != nil {
 		return err
@@ -102,8 +105,8 @@ func (mod *Module) syncAlias(ctx *astral.Context, nodeID *astral.Identity) (err 
 		return nil
 	}
 
-	if mod.Dir.DisplayName(ac.Issuer) == "" {
-		mod.Dir.SetAlias(ac.Issuer, string(info.UserAlias))
+	if mod.Dir.DisplayName(mod.Identity()) == "" {
+		mod.Dir.SetAlias(mod.Identity(), string(info.UserAlias))
 	}
 
 	mod.log.Info("syncAlias: updating %v alias %v", nodeID, info.NodeAlias)
@@ -111,30 +114,15 @@ func (mod *Module) syncAlias(ctx *astral.Context, nodeID *astral.Identity) (err 
 	return mod.Dir.SetAlias(nodeID, string(info.NodeAlias))
 }
 
+// syncSiblings pulls the SwarmState entries with holds and this node lacks:
+// the members' memberships, requests, answers and expels.
 func (mod *Module) syncSiblings(ctx *astral.Context, with *astral.Identity) {
-	ac := mod.ActiveContract()
-	if ac == nil {
+	if mod.ActiveContract() == nil {
 		return
 	}
-
-	contracts, err := mod.ActiveNodeContracts(ac.Issuer)
-	if err != nil {
-		mod.log.Error("syncSiblings: error getting active contracts: %v", err)
-		return
+	if err := mod.Nodes.SyncSwarm(ctx, with); err != nil {
+		mod.log.Logv(1, "syncSiblings: swarm state pull from %v: %v", with, err)
 	}
-
-	for _, contract := range contracts {
-		if contract.Subject.IsEqual(mod.node.Identity()) {
-			continue
-		}
-
-		if contract.Subject.IsEqual(with) {
-			continue
-		}
-
-		mod.Objects.Push(ctx, with, contract)
-	}
-
 }
 
 // syncExpulsions pushes every ban issued by the active user to the remote node,
@@ -147,7 +135,7 @@ func (mod *Module) syncExpulsions(ctx *astral.Context, with *astral.Identity) {
 		return
 	}
 
-	expulsions, err := mod.db.Expulsions(ac.Issuer)
+	expulsions, err := mod.db.Expulsions(mod.Identity())
 	if err != nil {
 		mod.log.Error("syncExpulsions: error getting expulsions: %v", err)
 		return

@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/astralp2p/astrald/tests/e2e/internal/contracts"
+
 	"encoding/json"
 	"os"
 
@@ -60,7 +62,7 @@ type app struct {
 
 // register mints a fresh app identity on n through the node's admin token.
 func register(ctx *astral.Context, n node, permits ...*auth.Permit) (*app, error) {
-	tok, err := apphostcli.New(nil, connect(n.Endpoint, n.Token)).Register(ctx, permits...)
+	tok, err := contracts.Register(ctx, connect(n.Endpoint, n.Token), n.Endpoint, permits...)
 	if err != nil {
 		return nil, err
 	}

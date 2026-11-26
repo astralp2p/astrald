@@ -39,9 +39,8 @@ func TestTheCreateMailboxOpMintsAServedMailbox(t *testing.T) {
 }
 
 // messaging.delete_mailbox takes everything a participant held on this node:
-// every token of its identity — the one issued and one reissued — its alias
-// and the mail it owns in both boxes, archived or not. The correspondent keeps
-// its own copies. Hosting is withdrawn here and the
+// every token of its identity — the one issued and one reissued — its alias and the mail it owns in both boxes, archived or not. The
+// correspondent keeps its own copies. Hosting is withdrawn here and the
 // hosting contract is not revoked.
 func TestTheDeleteMailboxOpWithdrawsTheParticipant(t *testing.T) {
 	mod, apphost, dir := testIdentityModule(t)

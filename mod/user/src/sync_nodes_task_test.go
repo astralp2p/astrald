@@ -56,6 +56,8 @@ type stepNode struct {
 	id      *astral.Identity
 	steps   *syncSteps
 	refusal astral.Error
+	// callers holds the caller of each query, by op
+	callers sync.Map
 }
 
 func (n *stepNode) Identity() *astral.Identity { return n.id }
@@ -63,6 +65,7 @@ func (n *stepNode) Identity() *astral.Identity { return n.id }
 func (n *stepNode) RouteQuery(_ *astral.Context, q *astral.InFlightQuery, w io.WriteCloser) (io.WriteCloser, error) {
 	op, _ := query.Parse(q.QueryString.String())
 	n.steps.add("query " + op)
+	n.callers.Store(op, q.Caller)
 
 	var answer astral.Object = &user.Info{}
 	switch {
@@ -113,7 +116,7 @@ func newSyncFixture(t *testing.T, ctx *astral.Context) *syncFixture {
 		return obj.ObjectType()
 	}
 	f.mod = &Module{
-		Deps: Deps{Auth: index, Objects: &stepPusher{steps: f.steps, kind: kind}, Tree: memTree{root: newMemNode()}},
+		Deps: Deps{Auth: index, Objects: &stepPusher{steps: f.steps, kind: kind}, Tree: memTree{root: newMemNode()}, Nodes: pullNoSwarm{}},
 		ctx:  ctx,
 		node: &stepNode{id: nodeID, steps: f.steps},
 		log:  log.New(nodeID),
@@ -122,6 +125,7 @@ func newSyncFixture(t *testing.T, ctx *astral.Context) *syncFixture {
 	if err := f.mod.config.ActiveContract.Set(nil, active); err != nil {
 		t.Fatalf("seed active contract: %v", err)
 	}
+	useIndexSwarm(f.mod, active.Issuer, index)
 	if err := f.mod.db.StoreExpulsion(sampleSigned(userID, astral.GenerateIdentity())); err != nil {
 		t.Fatalf("store expulsion: %v", err)
 	}
@@ -145,7 +149,7 @@ func TestSyncNodesTaskPushesTheContractFirst(t *testing.T) {
 	want := []string{
 		"push active contract",
 		"push expulsion",
-		"push sibling contract",
+
 		"query " + user.OpInfo,
 		"query " + relayDigestOp,
 		"push app contract",
@@ -167,5 +171,26 @@ func TestSyncAliasReportsARefusal(t *testing.T) {
 	err := f.mod.syncAlias(ctx, astral.GenerateIdentity())
 	if err == nil || err.Error() != "refused: "+auth.ErrNotPermitted.Error() || !errors.Is(err, auth.ErrNotPermitted) {
 		t.Fatalf("syncAlias answered %v; want the remote node's refusal", err)
+	}
+}
+
+// TestSyncAliasAsksAsTheNode: syncAlias asks the sibling's user.info as this
+// node, not as the user: a Member may not relay as the user (D5, D6), so a
+// query as the user from a Member never reaches the op.
+func TestSyncAliasAsksAsTheNode(t *testing.T) {
+	ctx, cancel := astral.NewContext(nil).WithTimeout(10 * time.Second)
+	defer cancel()
+	f := newSyncFixture(t, ctx)
+	node := f.mod.node.(*stepNode)
+
+	if err := f.mod.syncAlias(ctx, astral.GenerateIdentity()); err != nil {
+		t.Fatalf("syncAlias: %v", err)
+	}
+	got, ok := node.callers.Load(user.OpInfo)
+	if !ok {
+		t.Fatal("syncAlias asked no user.info")
+	}
+	if caller := got.(*astral.Identity); !caller.IsEqual(node.id) {
+		t.Fatalf("user.info asked as %v; want this node %v", caller, node.id)
 	}
 }

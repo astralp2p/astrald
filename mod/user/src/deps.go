@@ -84,13 +84,7 @@ func (mod *Module) LoadDependencies(ctx *astral.Context) (err error) {
 	}
 
 	// why NoLocal: a failed save must fail the setter, not fall back to memory.
-	mod.policy.SwarmJoin.NoLocal = true
-	mod.policy.SwarmInvite.NoLocal = true
-	mod.policy.ContractAccept.NoLocal = true
 	mod.config.Owned.NoLocal = true
-	if err = tree.BindPath(ctx, &mod.policy, mod.Tree.Root(), policyPath, true); err != nil {
-		return err
-	}
 
 	mod.Nodes.AddLinkAdmitter(mod)
 	mod.Auth.OnContractIndexed(mod.onContractIndexed)
@@ -102,14 +96,18 @@ func (mod *Module) LoadDependencies(ctx *astral.Context) (err error) {
 	// refuse a banned identity at every level of a walk instead.
 	mod.Auth.AddVeto(mod.isBanned)
 
-	mod.Auth.Add(authmod.Func[*nodes.RelayForAction](mod.AuthorizeRelayFor))
-	mod.Auth.Add(authmod.Func[*auth.SeeObjectsAction](mod.AuthorizeSeeObjects))
+	mod.wireSwarm()
+	chain := newChainRules(mod, mod)
+
+	mod.Auth.Add(authmod.Func[*nodes.RelayForAction](chain.AuthorizeRelayFor))
+	mod.Auth.Add(authmod.Func[*auth.SeeObjectsAction](chain.AuthorizeSeeObjects))
 	mod.Auth.Add(authmod.Func[*auth.StoreObjectsAction](mod.AuthorizeStoreObjects))
 	mod.Auth.Add(authmod.Func[*auth.AdminObjectsAction](mod.AuthorizeAdminObjects))
 	mod.Auth.Add(authmod.Func[*auth.ServeObjectsAction](mod.AuthorizeServeObjects))
-	mod.Auth.Add(authmod.Func[*services.ServiceDiscoveryAction](mod.AuthorizeServiceDiscovery))
+	mod.Auth.Add(authmod.Func[*services.ServiceDiscoveryAction](chain.AuthorizeServiceDiscovery))
 	mod.Auth.Add(authmod.Func[*user.SeeSwarmAction](mod.AuthorizeSeeSwarm))
 	mod.Auth.Add(authmod.Func[*user.AdminSwarmAction](mod.AuthorizeAdminSwarm))
+	mod.Auth.Add(authmod.Func[*user.ExpelAction](mod.AuthorizeExpel))
 	mod.Auth.Add(authmod.Func[*auth.AdminNetworkAction](mod.AuthorizeAdminNetwork))
 	mod.Auth.Add(authmod.Func[*auth.AdminManageAppsAction](mod.AuthorizeAdminManageApps))
 	mod.Auth.Add(authmod.Func[*auth.ConfigureNodeStateAction](mod.AuthorizeConfigureNodeState))

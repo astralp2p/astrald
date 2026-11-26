@@ -226,14 +226,14 @@ func (mod *Module) checkNodeContract(signed *auth.SignedContract) error {
 		return user.ErrNoActiveContract
 	}
 
-	if !signed.Issuer.IsEqual(ac.Issuer) {
+	if !signed.Issuer.IsEqual(mod.Identity()) {
 		return errors.New("issuer is not the current user")
 	}
 
 	// why: refuse to re-index a contract for a subject the user has expelled —
 	// mirrors the IssueMembership guard so a push cannot re-seat a banned node,
 	// with the expelledSet filter only hiding it.
-	if mod.isExpelled(ac.Issuer, signed.Subject) {
+	if mod.isExpelled(mod.Identity(), signed.Subject) {
 		return user.ErrExpelled
 	}
 

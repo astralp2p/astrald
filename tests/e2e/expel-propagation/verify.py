@@ -18,8 +18,11 @@ Every check is the oracle's own read, never the driver's `probes`:
   cannot be reached"), and node1 holds no link to node3. A join answered
   "identity expelled from swarm" also passes (node1 restarted and forgot the
   answered ban, which it keeps in memory only); a successful join never does;
-- node1 refuses the User's `user.adopt` of node3 with "identity expelled
-  from swarm" (astrald mod/user/src/contracts.go IssueMembership);
+- the User cannot bring node3 back: the oracle has the User sign node3 a new
+  Privileged membership on node1 and offers it to node1 and node2 (what
+  `user.adopt` did before G7), and for READMIT seconds neither node lists
+  node3 in its roster: an expel beats everything signed for the expelled
+  node (mod/user/src/swarm_view_membership.go);
 - control: node2 is still a linked member and reads the same bait from node1.
 
 note: link state between node2 and node3 is NOT asserted. Suspected astrald
@@ -44,6 +47,7 @@ import time
 
 import astral
 
+from lib import swarmstate as ss
 from lib.sessionio import load
 
 # why a window: the ban reaches node2 and node3 by an asynchronous push
@@ -55,6 +59,9 @@ EXPELLED = "identity expelled from swarm"
 # why: node1 refuses node3's links after node3 answered its ban, so node3's
 # queries to node1 end as unavailable (astral-go astral/codes.go).
 UNAVAILABLE = 7
+# why: a membership offered to node1 is passed on to node2 within a merge, and
+# the swarm view republishes the roster on the next SwarmHead poll (3 s)
+READMIT = 10.0
 
 
 async def until(probe, want):
@@ -180,12 +187,25 @@ async def main():
             f"node3's user.join neither failed to reach node1 nor was "
             f"refused as expelled: {join!r}")
 
-    async with await astral.connect(n1["endpoint"], token=user_token) as c:
-        readopt = await refusal(c.user.adopt(id3))
-        assert EXPELLED in str(readopt), (
-            f"node1 did not refuse to re-adopt node3: {readopt!r}")
-        r1 = roster(await c.user.swarm_status())
-        assert id3 not in r1, f"node3 is back in node1's roster {sorted(r1)}"
+    # the User signs node3 a new membership; the ban must still win
+    readopt = ss.user_membership(n1, user_token, user_id, id3, push_to=(n2,))
+    print(f"oracle: note: the User's new membership for node3 was answered "
+          f"{readopt['pushed']}")
+    async with await astral.connect(n2["endpoint"], token=n2["token"]) as c2, \
+            await astral.connect(n1["endpoint"], token=user_token) as c:
+        end = time.monotonic() + READMIT
+        while True:
+            r1 = roster(await c.user.swarm_status())
+            r2 = roster(await c2.user.swarm_status())
+            assert id3 not in r1, (
+                f"node3 is back in node1's roster {sorted(r1)} after the User "
+                "signed it a new membership")
+            assert id3 not in r2, (
+                f"node3 is back in node2's roster {sorted(r2)} after the User "
+                "signed it a new membership")
+            if time.monotonic() >= end:
+                break
+            await asyncio.sleep(POLL)
 
         # why: the refusal above is a failure to reach node1, which node1
         # being down would also give; node1's own links rule that out.
@@ -200,8 +220,8 @@ async def main():
     print(f"oracle: User {user_id[:8]}… banned node3 {id3[:8]}…; node1 and "
           "node2 hold the ban and dropped it, node2 still linked; node3 is "
           "unclaimed, its gate denies objects.repositories, node1 refuses its "
-          "links (read and join unavailable, no node1 link to node3) and its "
-          "re-adoption")
+          "links (read and join unavailable, no node1 link to node3), and a new "
+          "membership the User signed does not bring it back")
 
 
 asyncio.run(main())

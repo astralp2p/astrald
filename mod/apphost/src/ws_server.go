@@ -96,7 +96,8 @@ func (srv *HTTPServer) negotiateWS(writer http.ResponseWriter, request *http.Req
 	// Accept any Origin. The endpoint is already loopback-only at the network
 	// layer (isLoopback above); apphost does not filter by Origin. The Origin
 	// travels in each query's Extra under ExtraOriginWeb (see
-	// Guest.onRouteQueryMsg), so a delegated register policy can weigh it.
+	// Guest.onRouteQueryMsg), so a delegated register or grant-request policy
+	// can weigh it.
 	c, err := websocket.Accept(writer, request, &websocket.AcceptOptions{
 		Subprotocols:       []string{SubprotocolBinary, SubprotocolJSON},
 		InsecureSkipVerify: true,

@@ -29,10 +29,9 @@ type opAcceptContractArgs struct {
 // is the artifact: validateActiveContract requires a subject signature made by
 // this node's own key. Revisit when the claim window admits an identity.
 //
-// why a policy and not an action: admission is the node's own decision, as for
-// user.accept_membership. GetContractAcceptPolicy decides: the stored delegate;
-// else the policies.contract_accept config value, whose code default is
-// reject_all.
+// why no policy: the contract is a PrivilegedMembership the user key signed in
+// a ceremony (D2), and the subject signature the gate requires is made only
+// through auth.sign_contract, whose claim rule decides who may claim this node.
 func (mod *Module) OpAcceptContract(ctx *astral.Context, q *routing.IncomingQuery, args opAcceptContractArgs) (err error) {
 	conn := q.AcceptRaw()
 	ch := channel.New(conn, channel.WithFormats(args.In, args.Out))
@@ -51,24 +50,9 @@ func (mod *Module) OpAcceptContract(ctx *astral.Context, q *routing.IncomingQuer
 	}
 
 	// gate before any side-effect, so an invalid contract touches nothing
-	err = mod.validateActiveContract(signed)
+	err = mod.validateClaimContract(signed)
 	if err != nil {
 		return ch.Send(astral.Err(err))
-	}
-
-	// why the policy after validation: a delegate decides on a contract whose
-	// signatures are verified. The caller sends nothing more, and only the conn
-	// tells a waiting decision that nobody waits for its answer.
-	policyCtx, stop := routing.UntilDisconnect(ctx, conn)
-	defer stop()
-
-	dec, err := mod.GetContractAcceptPolicy()(policyCtx, &user.ContractAcceptRequest{Caller: q.Caller(), Contract: signed})
-	switch {
-	case err != nil:
-		mod.log.Logv(1, "contract from %v declined: %v", q.Caller(), err)
-		return ch.Send(user.ErrContractDeclined)
-	case !bool(dec.Allow):
-		return ch.Send(user.ErrContractDeclined)
 	}
 
 	err = mod.claim(ctx, signed)

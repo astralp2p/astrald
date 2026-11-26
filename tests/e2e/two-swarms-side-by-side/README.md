@@ -3,20 +3,22 @@
 Two Users' swarms coexist and stay apart. User A's swarm (node1, node2) and
 User B's swarm (tssb1, tssb2) stand side by side, node2 holds a live link to
 tssb1, and every node's sibling and roster lists stay exactly its own swarm's
-over a window. No contract issued by the other User is taken, and a linked node
-of the other swarm reads nothing of the swarm.
+over a window. No membership issued by the other User is taken, and a linked
+node of the other swarm reads nothing of the swarm.
 
 - **after** `adopt-node` (node1 and node2 in User A's swarm) · **destroys**
   `true` — see below. Roster: `node1`, `node2`, `tssb1`, `tssb2`; the `tssb`
   prefix is this test's own.
 - **driver** `script.py` — `tssb1` is claimed for User B by a token-less
-  `user.bootstrap`; B adopts `tssb2` (explicit endpoints, `new_link`,
-  `user.adopt`, as adopt-node does); node2 learns tssb1's address and links
-  to it. The driver then offers four contracts with `objects.push` from a
-  node's own token: node2's contract for A pushed to tssb1 and tssb2's
-  contract for B pushed to node2 (across), and the same two pushed to a node of
-  their own swarm, node2's from node1 to node2 and tssb2's from tssb1 to tssb2
-  (controls). It records each node's answer as a fact (`pushes`).
+  `user.bootstrap`; `tssb2` joins B's swarm through tssb1 as a
+  privileged_member, B confirming it with `user.confirm_join`, as adopt-node
+  does; node2 learns tssb1's address and links to it. The driver then offers
+  four memberships with `nodes.swarm_push` from a node's own token
+  (`swarmstate.offer`): node2's membership for A offered to tssb1 and tssb2's
+  for B offered to node2 (across), and the same two offered to a node of their
+  own swarm, node2's from node1 to node2 and tssb2's from tssb1 to tssb2
+  (controls). It records each answer (`pushes`) and the two entry IDs
+  (`memberships`) as facts.
 - **oracle** `verify.py` — reads every node as its own swarm's member (A's
   token on node1, B's on tssb1, node tokens on node2 and tssb2).
   1. Within 30 s each swarm is whole: `user.list_siblings` is the other node,
@@ -29,7 +31,8 @@ of the other swarm reads nothing of the swarm.
      `user.list_siblings` and `user.swarm_status` are each refused with
      `not permitted`; User B's token on tssb1 asking node2 is refused (`not
      permitted` or `query rejected`).
-  4. The two crossing pushes were refused, and the two controls were taken.
+  4. The two crossing offers were refused, and the two controls answered
+     `ack`; neither node2 nor tssb1 stores the other swarm's membership.
 
 ## What each check guards
 
@@ -38,12 +41,15 @@ of the other swarm reads nothing of the swarm.
   schedules no roster sync today (`ReceiveObject` syncs only a node already in
   the local swarm, mod/user/src/object_receiver.go), and a change that did
   would add a sibling some seconds after the link.
-- The crossing pushes are the only observable of a node taking a foreign
-  contract. `checkNodeContract` refuses a node contract whose issuer is not the
-  active contract's issuer (mod/user/src/object_receiver.go); an accepted B
-  contract changes no sibling list on node2, because `ActiveNodes` filters on
-  the active contract's issuer, so only the push answer shows it. The controls
-  show the push path accepts what it should, so a refusal means a decision.
+- The crossing offers are the only observable of a node taking a foreign
+  membership. SwarmState checks every offered entry on merge
+  (`user.SwarmView.CheckSwarmEntry`): a membership whose issuer is neither the
+  node's user key nor a member of its swarm is dropped. Since G7 a membership
+  enters another node only this way (`user.adopt` and the contract push of
+  `objects.push` are gone). The answer and the node's SwarmState show the
+  decision. The controls show the push path answers what it should: their
+  membership is already stored there, which `nodes.swarm_push` acknowledges,
+  so a refusal means a decision.
 - The cross-swarm reads are the SeeSwarm guard (`AuthorizeSeeSwarm`): it admits
   the swarm's User and the swarm's nodes, not any linked node.
 

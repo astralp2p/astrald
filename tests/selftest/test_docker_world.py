@@ -150,7 +150,7 @@ class TestStart(WorldCase):
         self.assertIn(token, script)
         self.assertIn('"tcp:0.0.0.0:8625"', script)
         self.assertIn("install -d -m 700 /var/lib/astrald/config", script)
-        for module in ("apphost", "user", "tor"):
+        for module in ("apphost", "tor"):
             self.assertIn(f"chmod 600 /var/lib/astrald/config/{module}.yaml",
                           script)
         self.assertIn('"bind_http": "x"', script)

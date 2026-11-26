@@ -4,6 +4,7 @@ import (
 	"sort"
 
 	"github.com/astralp2p/astral-go/api/services"
+	"github.com/astralp2p/astral-go/astral"
 )
 
 // Visibility decides which offerings reach a stream's caller. The node
@@ -47,6 +48,24 @@ func (c *Coordinator) Names() []string {
 	return names
 }
 
+// PrivateNamesOf lists the services provider advertises on this node whose
+// offering is private there, sorted.
+func (c *Coordinator) PrivateNamesOf(provider *astral.Identity) []string {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	var names []string
+	for name, bindings := range c.byName {
+		for b := range bindings {
+			if b.provider.IsEqual(provider) && !c.isOpen(b, name) {
+				names = append(names, name)
+				break
+			}
+		}
+	}
+	sort.Strings(names)
+	return names
+}
+
 // SetPrivate replaces the node's private list and applies the change to every
 // follow stream of an affected service.
 //
@@ -78,6 +97,12 @@ func (c *Coordinator) applyVisibilityChange(b *Binding, service string, open boo
 				continue
 			}
 			switch {
+			case st.tagged && st.filter != nil && !st.filter.Allows(service, open):
+				st.hide(k)
+			case st.tagged && st.follow && st.filter != nil && !st.filter.Allows(service, !open):
+				sl := b.slot(st.caller)
+				sl.owe(service, false)
+				b.schedule(sl)
 			case st.tagged:
 				if st.follow {
 					st.retag(k)

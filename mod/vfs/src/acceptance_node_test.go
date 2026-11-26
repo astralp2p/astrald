@@ -60,10 +60,11 @@ type acceptanceNode struct {
 	node     *core.Node
 	ctx      *astral.Context
 	stop     func()
-	endpoint string   // the apphost IPC endpoint
-	httpAddr string   // the apphost HTTP endpoint
-	db       *gorm.DB // a second connection to the node's database
-	vfsYAML  string   // the vfs.yaml the next run writes; empty writes none
+	endpoint string           // the apphost IPC endpoint
+	httpAddr string           // the apphost HTTP endpoint
+	db       *gorm.DB         // a second connection to the node's database
+	vfsYAML  string           // the vfs.yaml the next run writes; empty writes none
+	user     *astral.Identity // the user claim made owner, nil before
 }
 
 // startAcceptanceNode starts a node in a temporary root and returns once apphost answers and the group local
@@ -138,7 +139,7 @@ func (a *acceptanceNode) writeConfig() {
 
 	configs := map[string]string{
 		"node.yaml":    "modules: " + acceptanceModules + "\n",
-		"apphost.yaml": fmt.Sprintf("listen: [%q]\nbind_http: %q\npolicies:\n  app_register: accept_all\n", a.endpoint, a.httpAddr),
+		"apphost.yaml": fmt.Sprintf("listen: [%q]\nbind_http: %q\n", a.endpoint, a.httpAddr),
 		"objects.yaml": "purge_untouched: 0\n",
 	}
 	if a.vfsYAML != "" {
@@ -265,7 +266,7 @@ func (a *acceptanceNode) claim() *astral.Identity {
 		a.t.Fatalf("store the user key: %v", err)
 	}
 
-	contract, err := userapi.NewNodeContract(userID, a.nodeID(), false, 24*time.Hour)
+	contract, err := userapi.NewMembership(userID, a.nodeID(), userapi.TierPrivilegedMember, nil, 24*time.Hour)
 	if err != nil {
 		a.t.Fatalf("node contract: %v", err)
 	}
@@ -282,8 +283,35 @@ func (a *acceptanceNode) claim() *astral.Identity {
 		a.t.Fatalf("set the active contract: %v", err)
 	}
 	a.eventually("the user module names the user", func() bool { return userID.IsEqual(users.Identity()) })
+	a.user = userID
 
 	return userID
+}
+
+// approve answers, as the user of a claimed node, every pending ContractRequest naming app with an Approval, and
+// returns once the host carried one out: app may serve on this node.
+func (a *acceptanceNode) approve(app *acceptanceApp) {
+	a.t.Helper()
+
+	asUser := a.as(a.user)
+	a.eventually("the app's registration is approved", func() bool {
+		ch := a.mustChannel(asUser, "user.swarm_requests", nil)
+		var objs []astral.Object
+		if err := ch.Switch(channel.Collect(&objs), channel.BreakOnEOS, channel.FailOnEOF()); err != nil {
+			a.t.Fatalf("user.swarm_requests: %v", err)
+		}
+		for i := 0; i+2 < len(objs); i += 3 {
+			id, _ := objs[i].(*astral.ObjectID)
+			req, ok := objs[i+2].(*userapi.SignedContractRequest)
+			if id == nil || !ok || !req.Identity.IsEqual(app.id) {
+				continue
+			}
+			if _, err := a.call(asUser, "user.answer_request", query.Args{"id": id.String(), "answer": "approve"}); err != nil {
+				a.t.Fatalf("user.answer_request: %v", err)
+			}
+		}
+		return a.auth().Authorize(a.ctx, &apiauth.ServeAppsAction{Action: apiauth.NewAction(app.id)})
+	})
 }
 
 // eventually waits until cond holds.

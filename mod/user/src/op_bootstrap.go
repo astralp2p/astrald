@@ -13,7 +13,6 @@ import (
 	"github.com/astralp2p/astral-go/astral/channel"
 	"github.com/astralp2p/astral-go/lib/routing"
 	apphostmod "github.com/astralp2p/astrald/mod/apphost"
-	secp256k1sig "github.com/astralp2p/astrald/mod/secp256k1"
 	usermod "github.com/astralp2p/astrald/mod/user"
 )
 
@@ -126,7 +125,7 @@ func (mod *Module) bootstrap(ctx *astral.Context, caller *astral.Identity, words
 		return nil, err
 	}
 
-	signed, err := mod.signClaim(ctx, caller, &key)
+	signed, err := mod.signPrivilegedClaim(ctx, caller, &key)
 	if err != nil {
 		return nil, err
 	}
@@ -184,36 +183,36 @@ func (mod *Module) deriveUserKey(words []string, passphrase string) (crypto.Priv
 	return mod.Bip137sig.DeriveKey(seed, usermod.UserKeyPath)
 }
 
-// signClaim builds the claim contract from the identity of key to this node,
-// and signs it as the user with key in memory and as the node.
+// signPrivilegedClaim builds the claim: the user key, held in memory, signs
+// this node's PrivilegedMembership in the ceremony, and the node signs as
+// subject. The first node's membership carries no link. The user action is
+// the bootstrap itself: the user hands in the words.
 //
 // why IsNodeClaim: the claim rule of auth.sign_contract decides whether this
-// node may be claimed, and this op signs without passing through that op.
-func (mod *Module) signClaim(ctx *astral.Context, caller *astral.Identity, key *crypto.PrivateKey) (*auth.SignedContract, error) {
+// node may be claimed, and this op signs without passing through that op. The
+// probe is the contract user.new_node_contract writes, and is never signed.
+func (mod *Module) signPrivilegedClaim(ctx *astral.Context, caller *astral.Identity, key *crypto.PrivateKey) (*auth.SignedContract, error) {
 	userID := secp256k1.Identity(secp256k1.PublicKey(key))
 
-	contract, err := user.NewNodeContract(userID, mod.node.Identity(), true, usermod.DefaultContractValidity)
+	probe, err := user.NewMembership(userID, mod.node.Identity(), user.TierPrivilegedMember, nil, usermod.DefaultContractValidity)
 	if err != nil {
 		return nil, err
 	}
-
-	if !mod.Auth.IsNodeClaim(ctx, caller, contract) {
+	if !mod.Auth.IsNodeClaim(ctx, caller, probe) {
 		return nil, errClaimRefused
 	}
 
-	signed := &auth.SignedContract{Contract: contract}
+	ceremony := newUserKeyCeremony(userID, heldKeySigner{key: key}, nil, nil)
 
-	signed.IssuerSig, err = secp256k1sig.SignASN1(key, contract.SignableHash())
+	signed, err := ceremony.Membership(ctx, mod.node.Identity(), user.TierPrivilegedMember, nil)
 	if err != nil {
 		return nil, err
 	}
 
-	_, err = mod.Auth.SignSubject(ctx, signed)
-	if err != nil {
+	if _, err = mod.Auth.SignSubject(ctx, signed); err != nil {
 		return nil, err
 	}
-
-	return signed, mod.validateActiveContract(signed)
+	return signed, nil
 }
 
 // mayClaim reports whether caller may claim this node through user.bootstrap

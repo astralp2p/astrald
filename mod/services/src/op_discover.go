@@ -173,8 +173,10 @@ func (mod *Module) admitDiscovery(ctx *astral.Context, q *routing.IncomingQuery,
 }
 
 // admitCarry admits a swarm member's query carrying an app's discovery: the
-// sending node must represent the app and may discover the services here. The
-// stream is not filtered; the sending node filters for its caller.
+// sending node must be a member of the local swarm and represent the app.
+// This node filters the stream as the app (carryFilter): the carrying node
+// receives a private offering only when the app's own chain permits its
+// discovery here, and filters open ones for its caller itself.
 func (mod *Module) admitCarry(ctx *astral.Context, q *routing.IncomingQuery, args opDiscoverArgs, names []string) (*discovery, error) {
 	if q.Origin() != astral.OriginNetwork {
 		return nil, errForOverLink
@@ -190,19 +192,40 @@ func (mod *Module) admitCarry(ctx *astral.Context, q *routing.IncomingQuery, arg
 		return nil, errRelayForRefused
 	}
 
+	// why membership and not the sending node's own discovery permit: a Member
+	// node holds no discovery of its own once the narrowed rules replace the
+	// any-member rule (G3); what the app sees comes from the app's chain.
+	if !slices.ContainsFunc(mod.swarmMembers(), q.Caller().IsEqual) {
+		return nil, errRelayForRefused
+	}
 	req := coordinator.Request{Caller: app, Names: names, Follow: args.Follow, Tagged: args.Tagged}
 	if len(names) == 0 {
-		// why: without names there is no service to authorize; the sending
-		// node's swarm membership grants discovery of every service here.
-		if !slices.ContainsFunc(mod.swarmMembers(), q.Caller().IsEqual) {
-			return nil, errRelayForRefused
-		}
 		req.All = true
 		req.Names = mod.coord.Names()
-	} else if err := mod.authorizeDiscovery(ctx, q.Caller(), names); err != nil {
-		return nil, err
 	}
+	req.Filter = mod.carryFilter(ctx, app, req.Names)
 	return &discovery{request: req, carrier: q.Caller()}, nil
+}
+
+// carryFilter is the filter of a discovery carried for app: open offerings
+// pass, since the carrying node represents a swarm app, and a private one
+// only when app holds a discovery permit for it on this node, walked through
+// its own Approval-linked chain.
+//
+// why here and not on the carrying node: the carrying node would otherwise
+// receive every private offering, and any member, or a compromised one, could
+// carry for an app it registered itself (vision: discovery by chain instead of
+// any swarm member).
+func (mod *Module) carryFilter(ctx *astral.Context, app *astral.Identity, names []string) *coordinator.Visibility {
+	f := &coordinator.Visibility{SwarmCaller: true, Permitted: map[string]bool{}}
+	for _, name := range names {
+		f.Permitted[name] = mod.Auth.Authorize(ctx, &services.ServiceDiscoveryAction{
+			Action:  auth.NewAction(app),
+			Service: astral.String8(name),
+			NodeID:  mod.node.Identity(),
+		})
+	}
+	return f
 }
 
 // authorizeDiscovery checks the actor may discover every named service on this

@@ -44,7 +44,10 @@ func TestAdminNetworkRefusesCallerWithoutPermits(t *testing.T) {
 	for _, op := range adminNetworkOps(caller) {
 		t.Run(op.name, func(t *testing.T) {
 			authority := &recordingAuth{verdict: false}
-			mod := &Module{Deps: Deps{Auth: authority}}
+			// why a user and a node: nodes.resolve_endpoints also answers a
+			// swarm member, and this caller is none (op_resolve_endpoints.go).
+			mod := &Module{Deps: Deps{Auth: authority, User: &swarmUser{}},
+				node: &identityNode{id: astral.GenerateIdentity()}}
 			w := newRecordingWriter()
 
 			err := route(t, op.op(mod), caller, op.name+op.args, w)

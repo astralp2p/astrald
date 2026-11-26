@@ -59,11 +59,13 @@ type swarmUser struct {
 	user  *astral.Identity // nil: the node has no user
 }
 
-// swarmApps is an apphost module whose swarm apps a test sets.
+// swarmApps is an apphost module whose swarm apps a test sets, and which runs
+// the OnGrantsChanged callbacks when a test changes an app's grants.
 type swarmApps struct {
 	apphostmod.Module
-	mu   sync.Mutex
-	apps []*astral.Identity
+	mu        sync.Mutex
+	apps      []*astral.Identity
+	onChanged []func(*astral.Identity)
 }
 
 func (a *swarmApps) IsSwarmApp(_ *astral.Context, app *astral.Identity) bool {
@@ -76,6 +78,23 @@ func (a *swarmApps) setApps(apps ...*astral.Identity) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	a.apps = apps
+}
+
+func (a *swarmApps) OnGrantsChanged(fn func(*astral.Identity)) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.onChanged = append(a.onChanged, fn)
+}
+
+// grantsChanged runs the callbacks as apphost does after a grant write or
+// revoke for id.
+func (a *swarmApps) grantsChanged(id *astral.Identity) {
+	a.mu.Lock()
+	callbacks := slices.Clone(a.onChanged)
+	a.mu.Unlock()
+	for _, fn := range callbacks {
+		fn(id)
+	}
 }
 
 func (u *swarmUser) LocalSwarm() []*astral.Identity {

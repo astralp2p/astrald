@@ -10,8 +10,8 @@ import (
 	"sync"
 	"time"
 
-	apphostapi "github.com/astralp2p/astral-go/api/apphost"
-	apphostcli "github.com/astralp2p/astral-go/api/apphost/client"
+	"github.com/astralp2p/astrald/tests/e2e/internal/contracts"
+
 	"github.com/astralp2p/astral-go/api/auth"
 	"github.com/astralp2p/astral-go/api/services"
 	servicescli "github.com/astralp2p/astral-go/api/services/client"
@@ -55,15 +55,11 @@ type app struct {
 // register mints a fresh app identity on n through the node's admin token. The
 // node grants it ServeApps, as it does every app it registers.
 func register(ctx *astral.Context, n node) (*app, error) {
-	tok, err := apphostcli.New(nil, connect(n.Endpoint, n.Token)).Register(ctx)
+	tok, err := contracts.Register(ctx, connect(n.Endpoint, n.Token), n.Endpoint)
 	if err != nil {
 		return nil, err
 	}
 	return &app{id: tok.Identity, client: connect(n.Endpoint, string(tok.Token)), n: n}, nil
-}
-
-func revokeServeApps(ctx *astral.Context, a *app) error {
-	return apphostcli.New(nil, connect(a.n.Endpoint, a.n.Token)).RevokeAction(ctx, a.id, auth.ServeAppsAction{}.ObjectType())
 }
 
 // grantDiscovery lets a discover the named services on any node, granted by
@@ -77,10 +73,8 @@ func grantDiscovery(ctx *astral.Context, a *app, names ...string) error {
 	if err := cs.Append(&services.DiscoveryScope{Rules: []*services.DiscoveryRule{rule}}); err != nil {
 		return err
 	}
-	return apphostcli.New(nil, connect(a.n.Endpoint, a.n.Token)).Grant(ctx, &apphostapi.GrantRequest{
-		Identity: a.id,
-		Permits:  []*auth.Permit{{Action: astral.String8(services.ServiceDiscoveryAction{}.ObjectType()), Constraints: cs}},
-	})
+	_, err := contracts.Request(ctx, a.client, &auth.Permit{Action: astral.String8(services.ServiceDiscoveryAction{}.ObjectType()), Constraints: cs})
+	return err
 }
 
 // closer runs the closers it was given, once each, in reverse order.

@@ -10,7 +10,6 @@
 #
 # The order is a preference among siblings; the planner computes the run
 # order from each test's `after`.
-adopt-claimed-node
 swarm-roster-sync
 expel-propagation
 bootstrap-passphrase

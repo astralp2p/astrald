@@ -31,6 +31,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/astralp2p/astrald/tests/e2e/internal/contracts"
+
 	apphostcli "github.com/astralp2p/astral-go/api/apphost/client"
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astral-go/astral/channel"
@@ -99,7 +101,7 @@ func run(path string) (map[string]any, error) {
 	admin := connect(n1.Endpoint, n1.Token)
 
 	// the provider app: its own identity, token and client, serving the ops
-	provider, err := apphostcli.New(nil, admin).Register(ctx)
+	provider, err := contracts.Register(ctx, admin, n1.Endpoint)
 	if err != nil {
 		return facts, fmt.Errorf("registering the provider: %w", err)
 	}
@@ -111,7 +113,7 @@ func run(path string) (map[string]any, error) {
 	defer stop()
 
 	// the caller app: another identity, token and client on the same node
-	visitor, err := apphostcli.New(nil, admin).Register(ctx)
+	visitor, err := contracts.Register(ctx, admin, n1.Endpoint)
 	if err != nil {
 		return facts, fmt.Errorf("registering the caller: %w", err)
 	}

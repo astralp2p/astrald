@@ -30,7 +30,6 @@ descriptor or search result with the provider's own identity.
   4. The User runs `objects.describe` for O1 and `objects.search` for a
      unique word; L answers a labelled descriptor and a result for an object
      X, both claiming node2 as source.
-  5. The User revokes ServeObjects from F, H and L.
 - **oracle** `verify.py`:
   - Ground truth through astral-py: node2's `local` repository holds O1, and
     its bytes hash to O1; node1's `local` does not hold O1; neither node's
@@ -48,12 +47,15 @@ descriptor or search result with the provider's own identity.
   - `driver verify` reruns the flow with fresh apps and a fresh O1' that the
     oracle stores on node2.
 
-A wiring fault fails the driver: F or H never asked for O1, or G never dialed
-within 2 s of any of up to 3 reads of O1. Without them the flow says nothing
-about a bad candidate. node1 takes the first candidate to deliver a byte, and
-when it finds node2 itself before F's claims of G arrive, node2 wins with G
-never dialed; the driver then reads O1 again, and the read_o1 facts are those
-of the read that had G in play.
+A wiring fault fails the driver: F or H never asked for O1. Without them the
+flow says nothing about a bad candidate. node1 takes the first candidate to
+deliver a byte, and its own swarm finder names node2 a few milliseconds
+before F's claims of G arrive, so node2 usually wins with G never dialed for
+O1. Which comes first is a race no input settles: the driver used to reread O1
+until G was in play, and since G7 it lost all three rereads in every run. So
+read(O1) is judged by its answer alone, G's O1 dials are only reported
+(`g_read_o1`), and G as a silent candidate is judged by read(O2), where node1
+always dials it.
 
 ## Timers
 
@@ -74,6 +76,6 @@ of the read that had G in play.
 
 ## Lingering state
 
-Every registration is a 60 s lease. The apps exit with the driver, and the
-revoke in step 5 removes their grants, so node1 drops the registrations on
-its next fan-out at the latest.
+Every registration is a 60 s lease. The apps exit with the driver, so node1
+drops the registrations once their leases lapse. Nothing revokes the apps'
+ServeObjects: revocations are a Non-goal of Swarm State and User Authority.

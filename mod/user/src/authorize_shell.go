@@ -11,8 +11,8 @@ import (
 // why: the rule is authorizeUserOrNode's, shared by the node-wide actions that
 // grant no sibling by default. A shell session reaches every module's op
 // router, so admission is node-wide administration and a sibling gets it the
-// way any other identity does — through a signed contract, never through
-// membership alone.
+// way any other identity does — through a node-local grant or a signed
+// contract, never through membership alone.
 func (mod *Module) AuthorizeShell(ctx *astral.Context, a *shell.ShellAction) bool {
 	return mod.authorizeUserOrNode(a.Actor())
 }

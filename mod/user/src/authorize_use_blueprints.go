@@ -10,7 +10,7 @@ import (
 //
 // why the swarm is not in the grant: the action registers a blueprint, which
 // fixes a type's wire shape for every caller of this node. A sibling reaches
-// the blueprint ops through a signed contract.
+// the blueprint ops through a node-local grant or a signed contract.
 func (mod *Module) AuthorizeUseBlueprints(ctx *astral.Context, a *auth.UseBlueprintsAction) bool {
 	return mod.authorizeUserOrNode(a.Actor())
 }

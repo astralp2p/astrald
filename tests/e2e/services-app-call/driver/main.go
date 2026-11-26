@@ -13,8 +13,8 @@ import (
 	"os"
 	"time"
 
-	apphostapi "github.com/astralp2p/astral-go/api/apphost"
-	apphostcli "github.com/astralp2p/astral-go/api/apphost/client"
+	"github.com/astralp2p/astrald/tests/e2e/internal/contracts"
+
 	"github.com/astralp2p/astral-go/api/auth"
 	"github.com/astralp2p/astral-go/api/services"
 	servicescli "github.com/astralp2p/astral-go/api/services/client"
@@ -69,7 +69,7 @@ func run(path string) (map[string]bool, error) {
 	admin1 := connect(n1.Endpoint, n1.Token)
 
 	// the provider app on node2, serving one stand-in player op
-	provider, err := apphostcli.New(nil, connect(n2.Endpoint, n2.Token)).Register(ctx, &auth.Permit{Action: "mod.auth.serve_apps_action"})
+	provider, err := contracts.Register(ctx, connect(n2.Endpoint, n2.Token), n2.Endpoint, &auth.Permit{Action: "mod.auth.serve_apps_action"})
 	if err != nil {
 		return facts, err
 	}
@@ -80,14 +80,14 @@ func run(path string) (map[string]bool, error) {
 	defer stop()
 
 	// the front-end app on node1, granted player discovery on any node
-	front, err := apphostcli.New(nil, admin1).Register(ctx)
+	front, err := contracts.Register(ctx, admin1, n1.Endpoint)
 	if err != nil {
 		return facts, err
 	}
-	if err := grantDiscovery(ctx, admin1, front.Identity); err != nil {
+	frontCli := connect(n1.Endpoint, string(front.Token))
+	if err := grantDiscovery(ctx, frontCli); err != nil {
 		return facts, err
 	}
-	frontCli := connect(n1.Endpoint, string(front.Token))
 
 	found, err := discovered(ctx, frontCli, provider.Identity)
 	facts["discovered_on_node2"] = found
@@ -178,16 +178,16 @@ func serveProvider(ctx *astral.Context, n2 node, token string) (func(), error) {
 	return cancel, nil
 }
 
-func grantDiscovery(ctx *astral.Context, admin *astrald.Client, app *astral.Identity) error {
+// grantDiscovery has the app that app names request discovery of player
+// on any node, and waits for its contract.
+func grantDiscovery(ctx *astral.Context, app *astrald.Client) error {
 	cs := astral.NewBundle()
 	scope := &services.DiscoveryScope{Rules: []*services.DiscoveryRule{{Services: []astral.String8{"player"}}}}
 	if err := cs.Append(scope); err != nil {
 		return err
 	}
-	return apphostcli.New(nil, admin).Grant(ctx, &apphostapi.GrantRequest{
-		Identity: app,
-		Permits:  []*auth.Permit{{Action: astral.String8(services.ServiceDiscoveryAction{}.ObjectType()), Constraints: cs}},
-	})
+	_, err := contracts.Request(ctx, app, &auth.Permit{Action: astral.String8(services.ServiceDiscoveryAction{}.ObjectType()), Constraints: cs})
+	return err
 }
 
 // discovered waits until a swarm discovery from the front-end shows provider.

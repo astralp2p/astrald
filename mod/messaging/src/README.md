@@ -18,8 +18,8 @@ tools call the `messaging.Module` methods under the bearer's identity.
 * After the index row is written, the relay contract is pushed to every linked
   sibling, best-effort. A create that fails pushes nothing.
 * `mcp.create_agent` mints its agent through `CreateMailbox`.
-* `messaging.delete_mailbox` revokes every apphost token of the identity,
-  unsets its alias, and withdraws its mailbox.
+* `messaging.delete_mailbox` revokes every apphost token and grant of the
+  identity, unsets its alias, and withdraws its mailbox.
 * A withdrawal deletes the index row and every message the identity owns in one
   transaction. A correspondent's copy of a message stays.
 * A delivery or a send admitted before a withdrawal writes its row before the

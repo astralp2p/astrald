@@ -10,8 +10,8 @@ import (
 //
 // why: hosting is a place on the node, so the rule is authorizeUserOrNode's and
 // grants no sibling by default.
-// note: an app reaches ServeApps through the node→app contract
-// apphost.register signs for it (mod/apphost), or another signed contract.
+// note: an app reaches ServeApps through the node-local grant apphost.register
+// writes for it (mod/apphost), or through a signed contract.
 func (mod *Module) AuthorizeServeApps(ctx *astral.Context, a *auth.ServeAppsAction) bool {
 	return mod.authorizeUserOrNode(a.Actor())
 }

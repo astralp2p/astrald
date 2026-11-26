@@ -67,10 +67,11 @@ async def claim_replacement(replacement: dict, member: dict, words: str) -> dict
                                    {"Type": "string16", "Object": words})
 
 
-async def info_as_user(c, target: str) -> dict:
-    """user.info of target as the session's User, retried while the sync
-    that makes the two nodes siblings runs; the last answer or refusal."""
-    deadline = time.monotonic() + CONVERGE
+async def info_as_user(c, target: str, window: float = CONVERGE) -> dict:
+    """user.info of target as the session's User, retried for window while
+    the sync that makes the two nodes siblings runs; the last answer or
+    refusal."""
+    deadline = time.monotonic() + window
     while True:
         try:
             i = await c.user.info(target=target, timeout=DEADLINE)
@@ -93,8 +94,10 @@ async def cross_info(member: dict, replacement: dict, user: str, user_token: str
         member_user = (await c.apphost.create_token(user)).token
     async with await connect(replacement, user_token) as u:
         of_member = await info_as_user(u, member["identity"])
+    # why a short window: the sync is done once the first answered, and since
+    # G7 a Member does not relay as the User (D5, D6), so this one is refused
     async with await connect(member, member_user) as u:
-        of_replacement = await info_as_user(u, replacement["identity"])
+        of_replacement = await info_as_user(u, replacement["identity"], window=5.0)
     return {"replacement_of_member": of_member, "member_of_replacement": of_replacement}
 
 

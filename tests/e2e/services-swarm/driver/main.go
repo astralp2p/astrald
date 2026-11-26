@@ -17,14 +17,13 @@ import (
 	"sync/atomic"
 	"time"
 
-	apphostapi "github.com/astralp2p/astral-go/api/apphost"
-	apphostcli "github.com/astralp2p/astral-go/api/apphost/client"
 	"github.com/astralp2p/astral-go/api/auth"
 	"github.com/astralp2p/astral-go/api/services"
 	servicescli "github.com/astralp2p/astral-go/api/services/client"
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astral-go/lib/apphost"
 	"github.com/astralp2p/astral-go/lib/astrald"
+	"github.com/astralp2p/astrald/tests/e2e/internal/contracts"
 )
 
 var serveApps = &auth.Permit{Action: "mod.auth.serve_apps_action"}
@@ -40,6 +39,9 @@ type world struct {
 	n1, n2         node
 	node1, node2   *astral.Identity
 	admin1, admin2 *astrald.Client
+	// note: the client of each app w.app registered, by identity, so grant
+	// files its request as the app
+	clients sync.Map
 }
 
 func main() {
@@ -95,16 +97,20 @@ func load(path string) (*world, error) {
 
 func connect(ep, token string) *astrald.Client { return astrald.New(apphost.NewRouter(ep, token)) }
 
-// app registers a fresh app identity on a node and returns its services client.
+// app registers a fresh app identity on a node, waits for its contract, and
+// returns its services client.
 func (w *world) app(admin *astrald.Client, n node, permits ...*auth.Permit) (*astral.Identity, *servicescli.Client, error) {
-	tok, err := apphostcli.New(nil, admin).Register(w.ctx, permits...)
+	tok, err := contracts.Register(w.ctx, admin, n.Endpoint, permits...)
 	if err != nil {
 		return nil, nil, err
 	}
-	return tok.Identity, servicescli.New(nil, connect(n.Endpoint, string(tok.Token))), nil
+	c := connect(n.Endpoint, string(tok.Token))
+	w.clients.Store(tok.Identity.String(), c)
+	return tok.Identity, servicescli.New(nil, c), nil
 }
 
-// grant writes app's discovery scope on node1: names on nodes (any node when empty).
+// grant has app request discovery of names on nodes (any node when empty),
+// and waits for its contract.
 func (w *world) grant(app *astral.Identity, names []string, nodes ...*astral.Identity) error {
 	rule := &services.DiscoveryRule{Nodes: nodes}
 	for _, n := range names {
@@ -114,10 +120,13 @@ func (w *world) grant(app *astral.Identity, names []string, nodes ...*astral.Ide
 	if err := cs.Append(&services.DiscoveryScope{Rules: []*services.DiscoveryRule{rule}}); err != nil {
 		return err
 	}
-	return apphostcli.New(nil, w.admin1).Grant(w.ctx, &apphostapi.GrantRequest{
-		Identity: app,
-		Permits:  []*auth.Permit{{Action: astral.String8(services.ServiceDiscoveryAction{}.ObjectType()), Constraints: cs}},
-	})
+	c, ok := w.clients.Load(app.String())
+	if !ok {
+		return fmt.Errorf("no client of %v", app)
+	}
+	_, err := contracts.Request(w.ctx, c.(*astrald.Client),
+		&auth.Permit{Action: astral.String8(services.ServiceDiscoveryAction{}.ObjectType()), Constraints: cs})
+	return err
 }
 
 // evaluated records the callers a provider evaluated.

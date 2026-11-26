@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"github.com/astralp2p/astral-go/api/crypto"
-	objectsclient "github.com/astralp2p/astral-go/api/objects/client"
 	"github.com/astralp2p/astral-go/api/services"
 	servicescli "github.com/astralp2p/astral-go/api/services/client"
 	userclient "github.com/astralp2p/astral-go/api/user/client"
@@ -138,10 +137,10 @@ func (r *rejoinRun) admit() error {
 	if err := userclient.New(nil, r.memberAdmin).AcceptContract(r.w.ctx, signed); err != nil {
 		return fmt.Errorf("accept the first contract on sfml_member: %w", err)
 	}
-	// why a push from the member: node1 indexes the contract, as for a member
-	// that joined through adopt (the membership mode's expiry step).
-	if err := objectsclient.New(r.w.node1, r.memberAdmin).Push(r.w.ctx, signed); err != nil {
-		return fmt.Errorf("push the first contract to node1: %w", err)
+	// why offers: node1 learns a membership only through SwarmState (the
+	// membership mode's expiry step).
+	if err := admitClaimed(r.w, r.memberAdmin, r.s.Nodes["sfml_member"].Identity, signed); err != nil {
+		return err
 	}
 	r.f.ExpiresAt = unix(signed.ExpiresAt.Time())
 	if err := holdsWithin(r.watch, time.Until(signed.ExpiresAt.Time()), r.offering); err != nil {
@@ -182,8 +181,8 @@ func (r *rejoinRun) rejoin() error {
 	if err := userclient.New(nil, r.memberAdmin).AcceptContract(r.w.ctx, signed); err != nil {
 		r.f.AcceptSecond = err.Error()
 	}
-	if err := objectsclient.New(r.w.node1, r.memberAdmin).Push(r.w.ctx, signed); err != nil {
-		return fmt.Errorf("push the second contract to node1: %w", err)
+	if err := swarmPush(r.w.ctx, r.memberAdmin.WithTarget(r.w.node1), signed); err != nil {
+		return fmt.Errorf("offer the second membership to node1: %w", err)
 	}
 	r.f.PushedAt = unix(time.Now())
 	if err := holdsWithin(r.watch, rejoinWait, r.offering); err != nil {

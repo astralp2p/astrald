@@ -6,7 +6,8 @@ import (
 	"sync"
 	"time"
 
-	apphostapi "github.com/astralp2p/astral-go/api/apphost"
+	"github.com/astralp2p/astrald/tests/e2e/internal/contracts"
+
 	apphostcli "github.com/astralp2p/astral-go/api/apphost/client"
 	"github.com/astralp2p/astral-go/api/auth"
 	"github.com/astralp2p/astral-go/api/services"
@@ -33,7 +34,7 @@ type app struct {
 // note: skip_sibling_push holds on every node of this world, so the app's
 // relay contract stays on n.
 func register(ctx *astral.Context, n node, permits ...*auth.Permit) (*app, error) {
-	tok, err := apphostcli.New(nil, admin(n)).Register(ctx, permits...)
+	tok, err := contracts.Register(ctx, admin(n), n.Endpoint, permits...)
 	if err != nil {
 		return nil, err
 	}
@@ -48,10 +49,8 @@ func grantDiscovery(ctx *astral.Context, a *app, service string) error {
 	if err := cs.Append(scope); err != nil {
 		return err
 	}
-	return apphostcli.New(nil, admin(a.n)).Grant(ctx, &apphostapi.GrantRequest{
-		Identity: a.id,
-		Permits:  []*auth.Permit{{Action: astral.String8(services.ServiceDiscoveryAction{}.ObjectType()), Constraints: cs}},
-	})
+	_, err := contracts.Request(ctx, a.client, &auth.Permit{Action: astral.String8(services.ServiceDiscoveryAction{}.ObjectType()), Constraints: cs})
+	return err
 }
 
 // echoApp is a running provider app: it advertises one service and serves

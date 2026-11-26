@@ -58,8 +58,8 @@ func (mod *Module) authorizeParties(ctx *astral.Context, caller *astral.Identity
 
 // IsNodeClaim reports whether c is the contract that claims this unclaimed
 // node, asked for by the node's own session: issued by another identity to
-// this node, carrying exactly the management node permits, and expiring within
-// the validity setup gives it.
+// this node, a PrivilegedMembership with no link, and expiring within the
+// validity setup gives it.
 //
 // why the caller is the node: every setup caller arrives as the node, an
 // anonymous session rewritten by core.Router or the node's own token.
@@ -77,32 +77,27 @@ func (mod *Module) IsNodeClaim(ctx *astral.Context, caller *astral.Identity, c *
 	return caller.IsEqual(node) &&
 		c.Subject.IsEqual(node) &&
 		!c.Issuer.IsEqual(node) &&
-		isManagementNodeContract(c) &&
+		isPrivilegedClaim(c) &&
 		hasClaimExpiry(c, time.Now()) &&
 		mod.isUnclaimed(ctx)
 }
 
-// isManagementNodeContract reports whether c carries exactly the permits
-// user.new_node_contract writes for a management node: same order, action and
-// delegation, and no constraint.
+// isPrivilegedClaim reports whether c is the PrivilegedMembership
+// user.new_node_contract writes: exactly the privileged_member permit, with no
+// delegation, no constraint and no ApprovalID (the first node's membership
+// carries no link).
 //
 // why exact: any extra or wider permit, such as mod.auth.sudo_action, would be
 // signed in the issuer's name without the issuer's consent.
-func isManagementNodeContract(c *auth.Contract) bool {
-	want, err := user.NewNodeContract(c.Issuer, c.Subject, true, 0)
-	if err != nil || len(c.Permits) != len(want.Permits) {
+func isPrivilegedClaim(c *auth.Contract) bool {
+	if c.ApprovalID != nil || len(c.Permits) != 1 {
 		return false
 	}
-	for i, p := range c.Permits {
-		w := want.Permits[i]
-		if p == nil || p.Action != w.Action || p.Delegation != w.Delegation {
-			return false
-		}
-		if p.Constraints != nil && len(p.Constraints.Objects()) > 0 {
-			return false
-		}
+	p := c.Permits[0]
+	if p == nil || string(p.Action) != user.TierPrivilegedMember.Action() || p.Delegation != 0 {
+		return false
 	}
-	return true
+	return p.Constraints == nil || len(p.Constraints.Objects()) == 0
 }
 
 // hasClaimExpiry reports whether c expires later than the shortest validity

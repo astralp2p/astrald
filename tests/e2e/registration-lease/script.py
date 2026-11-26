@@ -39,6 +39,7 @@ from astral.types import Duration, ObjectID
 
 from lib import jsonops
 from lib.sessionio import load, write_facts
+from lib import swarmstate as ss
 
 # why short: the node clamps a request down, never up, so a small lease is
 # granted exactly as asked, and the lapse fits inside a test's budget.
@@ -85,7 +86,7 @@ def _docs(raw: bytes) -> list:
     return out
 
 
-async def mint_describer(node) -> dict:
+async def mint_describer(node, endpoint: str) -> dict:
     """A fresh identity holding serve_objects, which is what registering needs.
 
     why jsonops: the registration is one `mod.apphost.register_request` sent
@@ -95,7 +96,11 @@ async def mint_describer(node) -> dict:
         node, "apphost.register?in=json&out=json",
         body={"Type": "mod.apphost.register_request",
               "Object": {"GrantPermits": [{"Action": SERVE_OBJECTS}]}})
-    return {k.lower(): v for k, v in token.items()}
+    out = {k.lower(): v for k, v in token.items()}
+    # why: since G7 the permit is a contract the host signs once the harness
+    # answerer approves the registration's ContractRequest
+    await ss.await_app(endpoint, out["token"], [SERVE_OBJECTS])
+    return out
 
 
 async def timed_describe(client) -> float:
@@ -110,8 +115,8 @@ async def main():
     facts = {"lease_seconds": LEASE_SECONDS}
 
     async with await astral.connect(n1["endpoint"], token=n1["token"]) as node:
-        gone = await mint_describer(node)
-        kept = await mint_describer(node)
+        gone = await mint_describer(node, n1["endpoint"])
+        kept = await mint_describer(node, n1["endpoint"])
 
     facts["gone_identity"] = gone["identity"]
     facts["kept_identity"] = kept["identity"]

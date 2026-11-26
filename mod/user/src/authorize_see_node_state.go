@@ -13,7 +13,7 @@ import (
 //
 // why the swarm is not in the grant: the action covers the log stream, which
 // records every caller's activity, and no feature needs a sibling to read it. A
-// sibling reaches these ops through a signed contract.
+// sibling reaches these ops through a node-local grant or a signed contract.
 func (mod *Module) AuthorizeSeeNodeState(ctx *astral.Context, a *auth.SeeNodeStateAction) bool {
 	return mod.authorizeUserOrNode(a.Actor())
 }

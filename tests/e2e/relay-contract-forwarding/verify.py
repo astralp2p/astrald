@@ -17,6 +17,7 @@ from lib.sessionio import load
 STEPS = ["dialing_off_on_node2_and_node3", "node3_adopted_on_node1",
          "node3_knows_the_greeter_on_node2",
          "node3_unlinked_from_node2_when_it_knew",
+         "node3_knows_node2_endpoints",
          "visitor_on_node3_greeted_through_node2"]
 
 

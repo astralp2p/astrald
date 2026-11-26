@@ -138,7 +138,6 @@ func run(path string, f *facts) error {
 	if err != nil {
 		return err
 	}
-	defer revokeAll(ctx, user, providers)
 
 	firstLease, err := registerMatrix(ctx, providers, f)
 	if err != nil {

@@ -14,7 +14,6 @@ func (mod *Module) LoadDependencies(ctx *astral.Context) (err error) {
 		return
 	}
 	mod.apps = mod.Apphost
-	mod.apphostPolicies = mod.Apphost
 
 	// why NoLocal: an appointment that is not saved must fail, not survive in
 	// memory until a restart reopens fresh.

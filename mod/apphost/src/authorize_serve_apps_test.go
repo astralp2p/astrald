@@ -3,7 +3,6 @@ package apphost
 import (
 	"io"
 	"net"
-	"slices"
 	"testing"
 	"time"
 
@@ -15,7 +14,6 @@ import (
 	"github.com/astralp2p/astral-go/astral/log"
 	"github.com/astralp2p/astral-go/lib/query"
 	"github.com/astralp2p/astral-go/lib/routing"
-	"github.com/astralp2p/astrald/lib/policyconf"
 	authmod "github.com/astralp2p/astrald/mod/auth"
 	cryptomod "github.com/astralp2p/astrald/mod/crypto"
 	objectsmod "github.com/astralp2p/astrald/mod/objects"
@@ -41,6 +39,14 @@ func serveAppsOps() []serveAppsOp {
 			installed: func(m *Module) int { return len(m.ipcHandlers.Clone()) },
 		},
 	}
+}
+
+func serveAppsAction(actor *astral.Identity) *auth.ServeAppsAction {
+	return &auth.ServeAppsAction{Action: auth.NewAction(actor)}
+}
+
+func serveAppsPermit() *auth.Permit {
+	return &auth.Permit{Action: astral.String8(auth.ServeAppsAction{}.ObjectType())}
 }
 
 // routeServeAppsFromNetwork is route for a query that arrived over a link.
@@ -182,28 +188,6 @@ func TestServeAppsRegisterHandlerInstallsForTheCaller(t *testing.T) {
 	}
 }
 
-// TestHostingPermitsLeadTheRequest covers what the register policy is handed:
-// ServeApps and UseBlueprints lead the grant permits whether or not the app
-// asked for anything, and the app's own ask follows them unchanged.
-func TestHostingPermitsLeadTheRequest(t *testing.T) {
-	defaults := []string{auth.ServeAppsAction{}.ObjectType(), auth.UseBlueprintsAction{}.ObjectType()}
-
-	for _, asked := range [][]string{nil, {"mod.user.see_swarm_action"}} {
-		requested := withHostingPermits(permits(asked...))
-		want := append(append([]string{}, defaults...), asked...)
-
-		if got := actions(requested); !slices.Equal(got, want) {
-			t.Fatalf("asked %q: the policy is handed %v; want %v", asked, got, want)
-		}
-
-		for _, p := range requested[:len(defaults)] {
-			if p.Constraints != nil {
-				t.Fatalf("asked %q: the default %s permit carries constraints", asked, p.Action)
-			}
-		}
-	}
-}
-
 // registerService sends one register_service_msg for host from a guest
 // authenticated as guestID and returns the host's reply. A handler it installs
 // lives until the test ends.
@@ -336,8 +320,8 @@ type serveAppsNode struct {
 
 func (n *serveAppsNode) Identity() *astral.Identity { return n.id }
 
-// serveAppsRegistrar is a module that completes apphost.register: tokens
-// live in an in-memory database, and signing and storing succeed.
+// serveAppsRegistrar is a module that completes apphost.register: grants and
+// tokens live in an in-memory database, and signing and storing succeed.
 func serveAppsRegistrar(t *testing.T) *Module {
 	t.Helper()
 
@@ -359,9 +343,7 @@ func serveAppsRegistrar(t *testing.T) *Module {
 		t.Fatalf("migrate: %v", err)
 	}
 
-	// why accept_all: a registrar under the default reject_all writes nothing.
 	config := defaultConfig()
-	config.Policies.AppRegister = policyconf.Setting{Mode: policyconf.AcceptAll}
 
 	return &Module{
 		Deps:   Deps{Auth: serveAppsSigner{}, Crypto: serveAppsKeys{}, Objects: serveAppsStore{}, VFS: &recordingVFS{}},
@@ -369,84 +351,5 @@ func serveAppsRegistrar(t *testing.T) *Module {
 		node:   &serveAppsNode{id: astral.GenerateIdentity()},
 		log:    log.New(nil),
 		db:     db,
-	}
-}
-
-// permitSigner records every contract SignContract signs: the node→app
-// contract of a registration's permits.
-type permitSigner struct {
-	serveAppsSigner
-	signed chan *auth.Contract
-}
-
-func (s permitSigner) SignContract(_ *astral.Context, sc *auth.SignedContract) error {
-	s.signed <- sc.Contract
-	return nil
-}
-
-// TestServeAppsRegistrationSignsTheHostingPermits is the operator's decision
-// end to end: under the accept_all register policy, an app that asks for
-// nothing leaves apphost.register holding a node→app contract of ServeApps
-// and UseBlueprints.
-func TestServeAppsRegistrationSignsTheHostingPermits(t *testing.T) {
-	mod := serveAppsRegistrar(t)
-	signer := permitSigner{signed: make(chan *auth.Contract, 4)}
-	mod.Auth = signer
-	w := newRecordingWriter()
-
-	if err := register(t, mod, &apphost.RegisterRequest{}, w); err != nil {
-		t.Fatalf("apphost.register refused: %v", err)
-	}
-	awaitServeAppsClose(t, w)
-
-	var tokens []dbAccessToken
-	if err := mod.db.Find(&tokens).Error; err != nil {
-		t.Fatalf("list tokens: %v", err)
-	}
-	if len(tokens) != 1 {
-		t.Fatalf("apphost.register issued %d tokens; want 1", len(tokens))
-	}
-	if len(signer.signed) != 1 {
-		t.Fatalf("apphost.register signed %d permit contracts; want 1", len(signer.signed))
-	}
-
-	c := <-signer.signed
-	app := tokens[0].Identity
-	if !c.Issuer.IsEqual(mod.node.Identity()) || !c.Subject.IsEqual(app) {
-		t.Fatalf("the permit contract runs %v -> %v; want the node -> %v", c.Issuer, c.Subject, app)
-	}
-	want := []string{auth.ServeAppsAction{}.ObjectType(), auth.UseBlueprintsAction{}.ObjectType()}
-	if got := actions(c.Permits); !slices.Equal(got, want) {
-		t.Fatalf("the permit contract holds %v; want %v", got, want)
-	}
-}
-
-// TestProvisionAppSignsGrantPermitsUndelegable: sys.register_manager passes the
-// manager's grant permits through ProvisionApp, which signs them, as
-// apphost.register does, with Delegation zero, and its contract permits with
-// the Delegation they carry.
-func TestProvisionAppSignsGrantPermitsUndelegable(t *testing.T) {
-	mod := serveAppsRegistrar(t)
-	signer := permitSigner{signed: make(chan *auth.Contract, 4)}
-	mod.Auth = signer
-
-	grant := &auth.Permit{Action: "mod.user.see_swarm_action", Delegation: 2}
-	contract := &auth.Permit{Action: "mod.user.shell_action", Delegation: 2}
-	if _, err := mod.ProvisionApp(astral.NewContext(nil), []*auth.Permit{grant}, []*auth.Permit{contract}); err != nil {
-		t.Fatalf("ProvisionApp: %v", err)
-	}
-	if len(signer.signed) != 1 {
-		t.Fatalf("ProvisionApp signed %d permit contracts; want 1", len(signer.signed))
-	}
-	c := <-signer.signed
-	delegation := map[string]uint8{}
-	for _, p := range c.Permits {
-		delegation[string(p.Action)] = uint8(p.Delegation)
-	}
-	if d, ok := delegation[string(grant.Action)]; !ok || d != 0 {
-		t.Fatalf("the grant permit was signed with Delegation %d (present %v); want 0", d, ok)
-	}
-	if d := delegation[string(contract.Action)]; d != 2 {
-		t.Fatalf("the contract permit was signed with Delegation %d; want 2", d)
 	}
 }

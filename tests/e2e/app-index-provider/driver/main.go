@@ -13,7 +13,8 @@ import (
 	"os"
 	"time"
 
-	apphostcli "github.com/astralp2p/astral-go/api/apphost/client"
+	"github.com/astralp2p/astrald/tests/e2e/internal/contracts"
+
 	"github.com/astralp2p/astral-go/api/auth"
 	"github.com/astralp2p/astral-go/api/indexing"
 	indexingcli "github.com/astralp2p/astral-go/api/indexing/client"
@@ -94,7 +95,7 @@ func run(path string) (facts map[string]bool, err error) {
 	if err := roles.Append(astral.NewString8(string(auth.RoleIndexer))); err != nil {
 		return facts, err
 	}
-	app, err := apphostcli.New(nil, user).Register(ctx, &auth.Permit{Action: serveObjects, Constraints: roles})
+	app, err := contracts.Register(ctx, user, n1.Endpoint, &auth.Permit{Action: serveObjects, Constraints: roles})
 	if err != nil {
 		return facts, fmt.Errorf("registering the indexer app: %w", err)
 	}
@@ -135,15 +136,8 @@ func run(path string) (facts map[string]bool, err error) {
 	}
 	closeSub()
 
-	// 5. without the grant, the app can no longer subscribe
-	if err := apphostcli.New(nil, user).RevokeAction(ctx, app.Identity, serveObjects); err != nil {
-		return facts, fmt.Errorf("revoking the app's grant: %w", err)
-	}
-	refused, err := subscribeRefusal(ctx, idx, nonce)
-	facts["revoked_app_cannot_subscribe"] = errors.Is(refused, auth.ErrNotPermitted)
-	if !facts["revoked_app_cannot_subscribe"] {
-		return facts, fmt.Errorf("after the revoke, indexing.subscribe answered %v (err %v); want %v", refused, err, auth.ErrNotPermitted)
-	}
+	// note: the revoke step is gone: grants are, and revocations are a Non-goal
+	// of Swarm State and User Authority (G7).
 
 	fmt.Fprintln(os.Stderr, "ok: the indexer app was told about the note the User stored on node1")
 	return facts, nil

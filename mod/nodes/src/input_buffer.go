@@ -51,16 +51,31 @@ func (b *InputBuffer) Push(p []byte) error {
 }
 
 // Read never blocks: on an empty open buffer it returns *ErrBufferEmpty carrying a wake channel; on an empty closed buffer it returns io.EOF.
+//
+// why onRead runs after the unlock: onRead writes a credit frame on the link,
+// which blocks while the link's transport is full (a kcp window). Holding mu
+// across it blocked the link's read loop in Push, so this node stopped reading
+// the link; a peer in the same state never drained either, and both links
+// stalled until the write watchdog closed them.
 func (b *InputBuffer) Read(p []byte) (n int, err error) {
+	n, onRead, err := b.take(p)
+	if onRead != nil && n > 0 {
+		onRead(n)
+	}
+	return n, err
+}
+
+// take consumes from the front under mu and returns the onRead to call for n.
+func (b *InputBuffer) take(p []byte) (n int, onRead func(int), err error) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
 	if len(b.buf) == 0 {
 		if b.closed {
-			return 0, io.EOF
+			return 0, nil, io.EOF
 		}
 
-		return 0, &ErrBufferEmpty{ch: b.readyCh()}
+		return 0, nil, &ErrBufferEmpty{ch: b.readyCh()}
 	}
 
 	chunk := b.buf[0]
@@ -74,11 +89,8 @@ func (b *InputBuffer) Read(p []byte) (n int, err error) {
 		b.buf = b.buf[1:]
 	}
 
-	if b.onRead != nil {
-		b.onRead(n)
-	}
 	b.checkDone()
-	return
+	return n, b.onRead, nil
 }
 
 // Close signals no more pushes will arrive. Already-buffered data is still readable; EOF only after drained.

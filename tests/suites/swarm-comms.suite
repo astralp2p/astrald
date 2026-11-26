@@ -88,7 +88,6 @@ link-session-migrate
 link-session-migrate-serving-side
 swarm-member-restart
 app-node-restart-reconnect
-app-preexisting-provider-sync
 services-node-restart
 services-provider-gone
 services-swarm-membership

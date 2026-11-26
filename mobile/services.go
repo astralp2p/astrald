@@ -4,9 +4,11 @@ import (
 	"errors"
 	"strings"
 
+	"github.com/astralp2p/astral-go/api/auth"
 	"github.com/astralp2p/astral-go/api/services"
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astrald/core"
+	apphostmod "github.com/astralp2p/astrald/mod/apphost"
 	servicesmod "github.com/astralp2p/astrald/mod/services"
 )
 
@@ -89,10 +91,57 @@ func (a nativeEvaluator) Evaluate(caller *astral.Identity, service string) *serv
 	return u
 }
 
-// GrantServiceDiscovery is kept for the platform wrappers that call it. It
-// writes nothing and answers an error: the node keeps no node-local grants, so
-// an app discovers a service only through a signed contract carrying a
-// DiscoveryScope.
+// GrantServiceDiscovery asks for app, an identity in hex, to discover names
+// (comma-separated) on every node of the swarm: it files a ContractRequest in
+// SwarmState, and the node signs app's contract once a Privileged device
+// approves it. Asking again for the same names while the request is live files
+// nothing new. The platform wrapper asks it for the apps it runs, such as the
+// contacts service.
+//
+// note: the name is kept for the platform wrappers that call it; no grant is
+// written.
 func (n *Node) GrantServiceDiscovery(app, names string) error {
-	return errors.New("service discovery grants are removed")
+	n.mu.Lock()
+	cnode := n.cnode
+	n.mu.Unlock()
+
+	if cnode == nil || !n.running.Load() {
+		return errors.New("node not running")
+	}
+
+	id, err := astral.ParseIdentity(app)
+	if err != nil {
+		return err
+	}
+	list, err := services.ParseNames(names)
+	if err != nil {
+		return err
+	}
+	mod, err := core.Load[apphostmod.Module](cnode, apphostmod.ModuleName)
+	if err != nil {
+		return err
+	}
+	return grantDiscovery(mod, id, list)
+}
+
+// contractRequester files ContractRequests; apphost.Module is one.
+type contractRequester interface {
+	RequestContract(ctx *astral.Context, app *astral.Identity, permits []*auth.Permit) (*astral.ObjectID, error)
+}
+
+func grantDiscovery(g contractRequester, app *astral.Identity, names []string) error {
+	rule := &services.DiscoveryRule{}
+	for _, name := range names {
+		rule.Services = append(rule.Services, astral.String8(name))
+	}
+	scope := astral.NewBundle()
+	if err := scope.Append(&services.DiscoveryScope{Rules: []*services.DiscoveryRule{rule}}); err != nil {
+		return err
+	}
+	permit := &auth.Permit{
+		Action:      astral.String8(services.ServiceDiscoveryAction{}.ObjectType()),
+		Constraints: scope,
+	}
+	_, err := g.RequestContract(astral.NewContext(nil), app, []*auth.Permit{permit})
+	return err
 }

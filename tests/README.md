@@ -63,6 +63,7 @@ restart    = ["node1"]              # nodes restarted between driver and oracle 
 restart_kill = "sends nothing as it goes"  # the restart kills its nodes (SIGKILL) instead of stopping them
 stop       = ["node1"]              # nodes stopped for good between driver and oracle (local or Docker worlds); implies destroys
 facts      = ["object_id"]          # the facts its driver writes
+answers    = "it tests the User's answer"  # it answers SwarmState requests itself: no harness answerer
 timeout    = 180                    # the driver's and the oracle's budget, in seconds (default 120)
 # ops      = ["enable-tor node1"]   # VM operations (netsim/ops/) run before the driver; imply
 #                                   # destroys, and a test with ops is never local_only
@@ -118,6 +119,17 @@ external_registration_sweep_interval = "1s"
   test with `stop` never enters a VM world, like a test whose roster
   leaves the VM lab.
   `introduce-node-setup` stops the node that generated the User's words.
+- **`answers`** says why the test answers SwarmState requests itself. Without
+  it, the runner runs the harness answerer (`lib/answerer.py`) from the
+  test's driver to its oracle: while a driver waits for an answer, it
+  approves every pending ContractRequest and Member or Trusted JoinRequest
+  with each node's own token, where the node's tier answers, as the
+  accepting admission policies did before. A driver whose app must hold its
+  permits waits for its contract (`tests/e2e/internal/contracts` in Go,
+  `swarmstate.await_app` in Python), and a wait is a file in
+  `$ASTRAL_TESTS_WAITING` (`contracts.Waiting`, `swarmstate.waiting`): the
+  answerer queries no node otherwise, so a test that judges a quiet node log
+  sees none of its traffic. The swarm-state tests set `answers`.
 - **`facts`** is a contract. An oracle may read only facts declared on its
   `after` chain (`selftest/test_shipped.py` checks), and the agent driver
   asks the operator for exactly these.
@@ -178,6 +190,7 @@ passes alone and fails in the shared run, a test before it changed its world.
 | `endpoint.suite` | a sibling behind NAT finds a sibling that moved to a new subnet; an address changed twice within 5 s reaches both siblings | VM (netsim) | not measured |
 | `nearby.suite` | an unowned node adopted by its nearby alias, two nodes of one User meeting in stealth, a Silent node, a sibling relinked when heard, a fresh node joining by user.join, and adoption and a stealth meeting off the default listen ports | VM (netsim) | ~75 min estimated (not measured) |
 | `swarm-comms.suite` | apps and nodes of one swarm reach each other on the first attempt and stay reachable through restarts, joins, leaves, a freeze and an expel: flows F1-F4 and the local edge cases of the E2E tests exhibit | local (any host) | about 1-2 h estimated (not measured) |
+| `swarm-state.suite` | the acceptance criterion 2 of Swarm State and User Authority: a join resumed after restarts of the joiner and the carrier, an app on a Member node reaching a private service once the User approves, an app regaining access on a new device, an app's chain on its own node, conflicting answers ending in the Decline, a Member's Approval dropped on merge, and an expel cutting every app chain through the expelled node | local (any host) | about 3 min (measured on a Raspberry Pi 5) |
 | `swarm-comms-netsim.suite` | the swarm-comms flows that need a real network: LAN, Tor and back to LAN, a swarm that forms by itself across subnets and a bridge, a peer that moves, Tor restarting under a node, no bridge or link-local endpoint advertised | VM (netsim) | about 4-8 h estimated (not measured) |
 | `agent.suite` | the flows an AI operator can drive (`--driver agent`) | VM (netsim), or Docker without netsim | not measured |
 | `docker-agent.suite` | the operator flows only a Docker world runs: a roster the VM lab lacks, or a world of their own (`--driver agent --docker`) | Docker | not measured |

@@ -10,7 +10,6 @@ import (
 
 	"github.com/astralp2p/astral-go/api/apphost"
 	"github.com/astralp2p/astral-go/api/auth"
-	"github.com/astralp2p/astral-go/api/policy"
 	"github.com/astralp2p/astral-go/api/user"
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astral-go/astral/channel"
@@ -23,11 +22,13 @@ import (
 // stubUser satisfies usermod.Module; Ready, Identity, WasOwned and
 // SetPolicyDelegate are exercised.
 type stubUser struct {
-	mu       sync.Mutex
-	id       *astral.Identity
-	ready    chan struct{}
-	owned    bool
-	policies map[string]*policy.Delegate
+	// note: nil; sys reads no SwarmState.
+	usermod.SwarmView
+
+	mu    sync.Mutex
+	id    *astral.Identity
+	ready chan struct{}
+	owned bool
 }
 
 func (s *stubUser) Ready() <-chan struct{}                                          { return s.ready }
@@ -50,15 +51,6 @@ func (s *stubUser) Expel(*astral.Context, *astral.Identity) (*user.SignedExpulsi
 	return nil, nil
 }
 func (s *stubUser) WasOwned() bool { return s.owned }
-func (s *stubUser) SetPolicyDelegate(_ *astral.Context, name string, d *policy.Delegate) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if s.policies == nil {
-		s.policies = map[string]*policy.Delegate{}
-	}
-	s.policies[name] = d
-	return nil
-}
 
 func closedChan() chan struct{} {
 	c := make(chan struct{})
@@ -66,16 +58,19 @@ func closedChan() chan struct{} {
 	return c
 }
 
-// fakeApphost provisions App identities and stores the apphost policy
-// delegates in memory. A non-nil err fails ProvisionApp.
+// fakeApphost provisions App identities in memory and records the permits
+// of the last one. A non-nil err fails ProvisionApp.
 type fakeApphost struct {
-	mu       sync.Mutex
-	err      error
-	tokens   []*apphost.AccessToken
-	policies map[string]*policy.Delegate
+	mu      sync.Mutex
+	err     error
+	tokens  []*apphost.AccessToken
+	permits []*auth.Permit
 }
 
-func (f *fakeApphost) ProvisionApp(_ *astral.Context, _, _ []*auth.Permit) (*apphost.AccessToken, error) {
+func (f *fakeApphost) ProvisionApp(_ *astral.Context, permits []*auth.Permit) (*apphost.AccessToken, error) {
+	f.mu.Lock()
+	f.permits = permits
+	f.mu.Unlock()
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if f.err != nil {
@@ -84,16 +79,6 @@ func (f *fakeApphost) ProvisionApp(_ *astral.Context, _, _ []*auth.Permit) (*app
 	t := &apphost.AccessToken{Identity: astral.GenerateIdentity(), Token: astral.String8(astral.NewNonce().String())}
 	f.tokens = append(f.tokens, t)
 	return t, nil
-}
-
-func (f *fakeApphost) SetPolicyDelegate(_ *astral.Context, name string, d *policy.Delegate) error {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	if f.policies == nil {
-		f.policies = map[string]*policy.Delegate{}
-	}
-	f.policies[name] = d
-	return nil
 }
 
 func (f *fakeApphost) issued() int {
@@ -106,7 +91,7 @@ func (f *fakeApphost) issued() int {
 func freshModule() (*Module, *fakeApphost, *stubUser) {
 	apps := &fakeApphost{}
 	u := &stubUser{ready: closedChan()}
-	mod := &Module{log: log.New(nil), apps: apps, apphostPolicies: apps}
+	mod := &Module{log: log.New(nil), apps: apps}
 	mod.User = u
 	return mod, apps, u
 }

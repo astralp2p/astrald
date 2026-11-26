@@ -6,7 +6,7 @@ Judged from the driver's record and the oracle's own reads:
 
 - the baseline, read before any call: node1's roster is node1, node2 and
   ea-target, and it holds no ban;
-- the four refusals, each with its stable text: two callers that are not
+- the five refusals, each with its stable text: two callers that are not
   the User ("not permitted"), the User's identity on node2, which holds no
   key ("no signing scheme available"; Expel signs through crypto, so the
   "sign as issuer" prefix of the auth module does not appear), and the User
@@ -36,6 +36,8 @@ POLL = 1.0
 WANT = {
     "node1_app_token": "not permitted",
     "node2_node_token": "not permitted",
+    # a Privileged node does not expel (D7), its own node included
+    "node1_node_token": "not permitted",
     "user_without_key": "no signing scheme available",
     "user_names_user": "cannot expel the swarm user",
 }

@@ -1,17 +1,19 @@
 #!/usr/bin/env python3
-"""Driver: what a linked stranger and a swarm sibling may do to node1.
+"""Driver: what a linked stranger and a Member sibling may do to node1.
 
 The driver acts and judges nothing. As the User on node1 it stores a bait
 object. A third node, `stranger`, is claimed by a second User through a
-token-less bootstrap and links to node1. Three askers then send every probe to
-node1 over the link: the stranger with its node token, the stranger with its
-own User's token, and the sibling node2 with its node token. The driver records
-how each probe came back: allowed, refused, or reset.
+token-less bootstrap and links to node1. A fourth, `authz_member`, joins the
+User's swarm through node1 as a Member, the User approving its JoinRequest.
+Three askers then send every probe to node1 over the link: the stranger with
+its node token, the stranger with its own User's token, and the Member with
+its node token. The driver records how each probe came back: allowed, refused,
+or reset.
 
 why every probe names node1 as its target: the asker's node relays the query
 over its link, so node1 sees a network caller, which is the case
 astral-docs topics/node-exposure.md "Linked peers" describes.
-why harmful writes aim at the stranger: user.adopt and user.expel name the
+why harmful writes aim at the stranger: user.expel names the
 stranger, so a guard that broke would change only the stranger's standing,
 never node2's, and the oracle still sees it.
 why the stranger's links stay open: no test after this one in its world asserts
@@ -25,6 +27,7 @@ import astral
 from astral.errors import ProtocolError
 from astral.object import Query
 
+from lib import swarmstate as ss
 from lib.sessionio import load, write_facts
 
 # why a deadline: a query that is never routed hangs rather than answering, and
@@ -36,7 +39,6 @@ BAIT = Query(query_string="swarm-authz-matrix bait")
 INTRUDER = Query(query_string="swarm-authz-matrix intruder")
 TREE_PATH = "/swarm-authz-matrix"
 ALIAS = "hijack"
-POLICY_OP = "swarm_authz_matrix.decide"
 
 # note: a write that carries a body and is refused over a link does not read as
 # "not permitted". node1 answers the refusal and closes the stream before it
@@ -79,12 +81,7 @@ def probes(c, node1: str, bait: str, stranger: str) -> dict:
         "dir.set_alias": lambda: c.dir.set_alias(stranger, ALIAS, **t),
         "apphost.create_token": lambda: c.apphost.create_token(stranger, **t),
         "apphost.hold_object": lambda: c.apphost.hold_object(bait, **t),
-        "user.adopt": lambda: c.user.adopt(stranger, **t),
         "user.expel": lambda: c.user.expel(stranger, **t),
-        "user.set_swarm_join_policy": lambda: c.user.set_swarm_join_policy(
-            stranger, POLICY_OP, **t),
-        "apphost.set_app_register_policy": lambda: c.apphost.set_app_register_policy(
-            stranger, POLICY_OP, **t),
         "crypto.sign_text": lambda: c.crypto.sign_text("swarm-authz-matrix", **t),
         # last, so a broken guard leaves the reads above a bait to read
         "objects.delete": lambda: c.objects.delete("local", bait, **t),
@@ -141,6 +138,7 @@ async def main():
     doc = load()
     nodes, facts = doc["nodes"], doc["facts"]
     n1, n2, s = nodes["node1"], nodes["node2"], nodes["stranger"]
+    m = nodes["authz_member"]
 
     async with await astral.connect(n1["endpoint"], token=facts["user_token"]) as u:
         (bait,) = await u.objects.store(BAIT, repo="local")
@@ -152,12 +150,15 @@ async def main():
         v_token = str((await anon.user.bootstrap(None)).token)
 
     await link_stranger(n1, s)
+    # why a Member: node2 is a privileged_member, which acts for the User in
+    # every check but an expel (D6), so only a Member shows the narrowed rules
+    await ss.admit(n1, facts["user_token"], m)
 
     args = (n1["identity"], bait, s["identity"])
     matrix = {
         "stranger_node": await run_probes(s["endpoint"], s["token"], *args),
         "stranger_user": await run_probes(s["endpoint"], v_token, *args),
-        "sibling": await run_probes(n2["endpoint"], n2["token"], *args),
+        "member": await run_probes(m["endpoint"], m["token"], *args),
     }
 
     write_facts({"bait_id": bait, "matrix": matrix})

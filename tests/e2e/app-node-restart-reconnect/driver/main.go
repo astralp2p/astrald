@@ -21,6 +21,8 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/astralp2p/astrald/tests/e2e/internal/contracts"
+
 	apphostcli "github.com/astralp2p/astral-go/api/apphost/client"
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astral-go/astral/channel"
@@ -59,7 +61,7 @@ func node() *astrald.Client {
 
 // register mints an app identity on the node and returns a client of its token.
 func register(ctx *astral.Context) (*astral.Identity, *astrald.Client, error) {
-	token, err := apphostcli.New(nil, node()).Register(ctx)
+	token, err := contracts.Register(ctx, node(), os.Getenv("APP_NODE_ENDPOINT"))
 	if err != nil {
 		return nil, nil, fmt.Errorf("registering: %w", err)
 	}

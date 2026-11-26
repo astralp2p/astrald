@@ -88,12 +88,8 @@ func (mod *Module) nextMemberExpiry() (next time.Time) {
 	if ac == nil {
 		return
 	}
-	contracts, err := mod.ActiveNodeContracts(ac.Issuer)
-	if err != nil {
-		return
-	}
 	last := map[string]time.Time{}
-	for _, c := range contracts {
+	for _, c := range mod.memberContracts() {
 		if c.Subject.IsEqual(mod.node.Identity()) {
 			continue
 		}
@@ -109,12 +105,22 @@ func (mod *Module) nextMemberExpiry() (next time.Time) {
 	return
 }
 
-// onContractIndexed republishes the member set after a node contract enters
+// onContractIndexed republishes the member set after a membership enters
 // the auth index, on any path that indexes it.
 func (mod *Module) onContractIndexed(signed *auth.SignedContract) {
-	if user.IsNodeContract(signed.Contract) {
+	if _, ok := user.ContractTier(signed.Contract); ok {
 		mod.publishSwarm()
 	}
+}
+
+// memberContracts returns the membership that holds for each swarm member.
+func (mod *Module) memberContracts() (contracts []*auth.SignedContract) {
+	for _, id := range mod.swarmMembers() {
+		if m, ok := mod.Membership(id); ok {
+			contracts = append(contracts, m.SignedContract)
+		}
+	}
+	return contracts
 }
 
 func identitySet(list []*astral.Identity) map[string]*astral.Identity {

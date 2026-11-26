@@ -12,30 +12,25 @@ import (
 	"github.com/astralp2p/astral-go/astral/log"
 	"github.com/astralp2p/astral-go/lib/query"
 	"github.com/astralp2p/astral-go/lib/routing"
-	"github.com/astralp2p/astrald/lib/policyconf"
 	secp256k1sig "github.com/astralp2p/astrald/mod/secp256k1"
 )
 
-// newContractFixture is an unclaimed node whose queries the delegate answers
-// with answer; a nil answer leaves every question open.
-func newContractFixture(answer astral.Object) (*bootstrapFixture, *swarmDelegate) {
+// newContractFixture is an unclaimed node.
+func newContractFixture() *bootstrapFixture {
 	f := newBootstrapFixture()
-	node := newSwarmDelegate(answer)
-	node.id = f.nodeID
-	f.mod.node = node
 	f.mod.log = log.New(nil)
-	return f, node
+	return f
 }
 
-// signedClaim is a node contract from a fresh user to the fixture's node,
+// signedClaim is the fixture node's membership at tier from a fresh user,
 // signed by both. forgeSubject signs as subject with a key other than the
 // node's, which fails validation.
-func signedClaim(t *testing.T, f *bootstrapFixture, forgeSubject bool) (*auth.SignedContract, *astral.Identity) {
+func signedClaim(t *testing.T, f *bootstrapFixture, tier user.Tier, forgeSubject bool) (*auth.SignedContract, *astral.Identity) {
 	t.Helper()
 
 	userKey := secp256k1.New()
 	userID := secp256k1.Identity(secp256k1.PublicKey(userKey))
-	contract, err := user.NewNodeContract(userID, f.nodeID, true, 24*time.Hour)
+	contract, err := user.NewMembership(userID, f.nodeID, tier, nil, 24*time.Hour)
 	if err != nil {
 		t.Fatalf("contract: %v", err)
 	}
@@ -96,38 +91,11 @@ func answeredAck(objs []astral.Object) bool {
 	return ok
 }
 
-func answeredDeclined(objs []astral.Object) bool {
-	if len(objs) != 1 {
-		return false
-	}
-	e, ok := objs[0].(astral.Error)
-	return ok && e.Error() == user.ErrContractDeclined.Error()
-}
-
-// With no delegate set and no config value, the code default reject_all
-// declines a valid contract and leaves the node unclaimed.
-func TestAcceptContractCodeDefaultDeclines(t *testing.T) {
-	f, node := newContractFixture(nil)
-	signed, _ := signedClaim(t, f, false)
-
-	if objs := routeContract(t, f, astral.GenerateIdentity(), signed); !answeredDeclined(objs) {
-		t.Fatalf("the op answered %v, want contract declined", objs)
-	}
-	if f.mod.ActiveContract() != nil {
-		t.Fatal("a declined contract was activated")
-	}
-	select {
-	case <-node.got:
-		t.Fatal("the code default asked a delegate")
-	default:
-	}
-}
-
-// policies.contract_accept: accept_all claims the node with a valid contract.
-func TestAcceptContractAcceptAllClaims(t *testing.T) {
-	f, _ := newContractFixture(nil)
-	f.mod.file.Policies.ContractAccept = policyconf.Setting{Mode: policyconf.AcceptAll}
-	signed, userID := signedClaim(t, f, false)
+// A PrivilegedMembership the user key signed and this node countersigned
+// claims the node; no policy is asked (D2).
+func TestAcceptContractClaimsWithAPrivilegedMembership(t *testing.T) {
+	f := newContractFixture()
+	signed, userID := signedClaim(t, f, user.TierPrivilegedMember, false)
 
 	if objs := routeContract(t, f, astral.GenerateIdentity(), signed); !answeredAck(objs) {
 		t.Fatalf("the op answered %v, want ack", objs)
@@ -137,76 +105,28 @@ func TestAcceptContractAcceptAllClaims(t *testing.T) {
 	}
 }
 
-// A delegate that declines leaves the node unclaimed and nothing stored.
-func TestAcceptContractDelegateDeclines(t *testing.T) {
-	f, node := newContractFixture(&user.ContractAcceptDecision{Allow: false})
-	if err := f.mod.policy.ContractAccept.Set(astral.NewContext(nil), delegate()); err != nil {
-		t.Fatalf("seed: %v", err)
-	}
-	signed, _ := signedClaim(t, f, false)
+// A contract that fails validation, or a membership below Privileged, is
+// refused and nothing is claimed.
+func TestAcceptContractRefusesAnInvalidClaim(t *testing.T) {
+	for name, tc := range map[string]struct {
+		tier   user.Tier
+		forged bool
+	}{
+		"forged subject": {user.TierPrivilegedMember, true},
+		"member tier":    {user.TierMember, false},
+	} {
+		t.Run(name, func(t *testing.T) {
+			f := newContractFixture()
+			signed, _ := signedClaim(t, f, tc.tier, tc.forged)
 
-	if objs := routeContract(t, f, astral.GenerateIdentity(), signed); !answeredDeclined(objs) {
-		t.Fatalf("the op answered %v, want %q", objs, user.ErrContractDeclined)
-	}
-	if op := <-node.queried; op != "control.decide_swarm" {
-		t.Fatalf("asked %q, want the configured operation", op)
-	}
-	checkUnchanged(t, f)
-}
-
-// A delegate that approves sees the caller and the signed contract, and the
-// node is claimed.
-func TestAcceptContractDelegateApproves(t *testing.T) {
-	f, node := newContractFixture(&user.ContractAcceptDecision{Allow: true})
-	if err := f.mod.policy.ContractAccept.Set(astral.NewContext(nil), delegate()); err != nil {
-		t.Fatalf("seed: %v", err)
-	}
-	signed, userID := signedClaim(t, f, false)
-	caller := astral.GenerateIdentity()
-
-	if objs := routeContract(t, f, caller, signed); !answeredAck(objs) {
-		t.Fatalf("the op answered %v, want ack", objs)
-	}
-	req, ok := (<-node.got).(*user.ContractAcceptRequest)
-	if !ok || !req.Caller.IsEqual(caller) || !req.Contract.Issuer.IsEqual(userID) || req.Contract.SubjectSig == nil {
-		t.Fatal("the delegate did not receive the caller and the signed contract")
-	}
-	if ac := f.mod.ActiveContract(); ac == nil || !ac.Issuer.IsEqual(userID) {
-		t.Fatal("the approved contract was not activated")
-	}
-}
-
-// A contract that fails validation is refused before the delegate is asked.
-func TestAcceptContractValidatesBeforeThePolicy(t *testing.T) {
-	f, node := newContractFixture(&user.ContractAcceptDecision{Allow: true})
-	if err := f.mod.policy.ContractAccept.Set(astral.NewContext(nil), delegate()); err != nil {
-		t.Fatalf("seed: %v", err)
-	}
-	signed, _ := signedClaim(t, f, true)
-
-	objs := routeContract(t, f, astral.GenerateIdentity(), signed)
-	if len(objs) != 1 || answeredDeclined(objs) {
-		t.Fatalf("the op answered %v, want the validation error", objs)
-	}
-	if _, ok := objs[0].(astral.Error); !ok {
-		t.Fatalf("the op answered %v, want an error", objs[0])
-	}
-	select {
-	case op := <-node.queried:
-		t.Fatalf("an invalid contract reached the delegate (%q)", op)
-	default:
-	}
-	checkUnchanged(t, f)
-}
-
-// An answer of the wrong type is an error, never permission.
-func TestContractAcceptDelegateRefusesAnUnreadableAnswer(t *testing.T) {
-	mod := &Module{node: newSwarmDelegate(&user.SwarmInviteDecision{Allow: true}), log: log.New(nil)}
-
-	_, err := mod.ContractAcceptPolicyDelegated(delegate())(astral.NewContext(nil), &user.ContractAcceptRequest{
-		Caller: astral.GenerateIdentity(), Contract: &auth.SignedContract{Contract: &auth.Contract{}},
-	})
-	if err == nil {
-		t.Fatal("an invite decision was read as a contract accept decision")
+			objs := routeContract(t, f, astral.GenerateIdentity(), signed)
+			if len(objs) != 1 {
+				t.Fatalf("the op answered %v, want one error", objs)
+			}
+			if _, ok := objs[0].(astral.Error); !ok {
+				t.Fatalf("the op answered %v, want an error", objs[0])
+			}
+			checkUnchanged(t, f)
+		})
 	}
 }

@@ -29,6 +29,8 @@ func (mod *Module) addAuthorizers() {
 // why here: the auth module asks a handler before it reads a stored contract, and at every level of a contract
 // chain, so the evaluator is asked in that order without the auth module knowing about a VFS (operator decision,
 // 2026-11-13).
+// note: the grant handler and this handler register concurrently, so a node-local grant may be checked before or
+// after the evaluator; either order gives the same outcome.
 func (mod *Module) AuthorizeReadAction(ctx *astral.Context, a *vfsapi.ReadAction) bool {
 	return mod.isOwnerOrRoot(a.Actor(), a.VFSID) || mod.askEvaluator(ctx, a, a.VFSID)
 }

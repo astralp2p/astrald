@@ -1,15 +1,17 @@
 #!/usr/bin/env python3
-"""Driver: a management node of the User is expelled, and acts on node1 anyway.
+"""Driver: a Privileged node of the User is expelled, and acts on node1 anyway.
 
 emn1 and emn2 are claimed for one User, from the same new words, so each holds
-a management contract (`user.bootstrap`: admin and see permits, delegation 1).
-emn2 offers its contract to emn1, which indexes it, so emn1's swarm holds
-emn2 as a management node. emn3 is adopted by the User on emn1, a plain member.
+a Privileged membership the user key signed (`user.bootstrap`). emn2 offers
+its membership to emn1's SwarmState (`nodes.swarm_push`), so emn1's swarm
+holds emn2 as a Privileged node. emn3 joins through emn1 as a Member, the User
+approving its JoinRequest.
 
-Controls first: with a token minted on emn1 for emn2's identity, the call that
-the report names are allowed while emn2 is a member: `user.list_siblings`,
-`user.list_expelled`, and `user.expel` naming the User, which an authorized
-caller reads as "cannot expel the swarm user".
+Controls first: with a token minted on emn1 for emn2's identity, the reads
+that the report names are allowed while emn2 is a member:
+`user.list_siblings` and `user.list_expelled`. `user.expel` naming the User is
+refused even now: only the user expels (D7), and a Privileged membership does
+not cover it.
 
 Then the User on emn1 expels emn2, and the same three calls are made with the
 same token, plus `user.expel` naming emn3. The token is local to emn1, so no
@@ -27,6 +29,7 @@ import asyncio
 import astral
 from astral.api.bip137sig import mnemonic_local, new_entropy_local
 
+from lib import swarmstate as ss
 from lib.sessionio import load, write_facts
 
 DEADLINE = 20
@@ -88,19 +91,15 @@ async def main():
     user_id, user_token = str(boot1.identity), str(boot1.token)
     assert str(boot2.identity) == user_id, "the same words made two Users"
 
-    # emn1 <-> emn2: emn1 reads emn2's contract over the link, emn2 offers it
+    # emn1 <-> emn2: emn2 offers its own membership to emn1's SwarmState
     await link(n1, n2)
-    async with await astral.connect(n1["endpoint"], token=n1["token"]) as c:
-        contract = await c.user.contract(target=n2["identity"])
-    async with await astral.connect(n2["endpoint"], token=n2["token"]) as c:
-        (accepted,) = await asyncio.wait_for(
-            c.objects.push(contract, target=n1["identity"]), DEADLINE)
-    assert accepted, "emn1 refused emn2's contract"
+    pushed = ss.offer(n2, ss.membership_id(n2, n2["identity"]), [n1])
+    assert pushed[n1["identity"]] == "ack", f"emn1 refused emn2's membership: {pushed}"
 
-    await link(n1, n3)
+    await ss.admit(n1, user_token, n3)
     async with await astral.connect(n1["endpoint"], token=user_token) as u:
         assert await swarm_has(u, n2["identity"]), "emn2 never joined emn1's swarm"
-        await u.user.adopt(n3["identity"])
+        assert await swarm_has(u, n3["identity"]), "emn3 never joined emn1's swarm"
         baseline = await view(u)
 
         async with await astral.connect(n1["endpoint"], token=n1["token"]) as c:

@@ -6,7 +6,6 @@ import (
 
 	"github.com/astralp2p/astral-go/api/apphost"
 	"github.com/astralp2p/astral-go/api/auth"
-	"github.com/astralp2p/astral-go/api/policy"
 	"github.com/astralp2p/astral-go/astral"
 )
 
@@ -35,15 +34,16 @@ type Module interface {
 	// expired ones included. An identity holding none is not an error.
 	DeleteAccessTokens(identity *astral.Identity) error
 
-	// ProvisionApp mints an App identity as apphost.register does, without
-	// asking the app register policy: a key pair, a signed app contract, a
-	// node→app contract holding the permits every app holds, grantPermits with
-	// Delegation zero, and contractPermits, and an access token.
-	ProvisionApp(ctx *astral.Context, grantPermits, contractPermits []*auth.Permit) (*apphost.AccessToken, error)
+	// ProvisionApp mints an App identity as apphost.register does, holding a
+	// node→app contract of contractPermits: a key pair, a signed app contract,
+	// that contract and an access token.
+	ProvisionApp(ctx *astral.Context, contractPermits []*auth.Permit) (*apphost.AccessToken, error)
 
-	// SetPolicyDelegate stores d as the delegate of the named apphost policy
-	// (app_register), or clears it when d is nil. Another name is an error.
-	SetPolicyDelegate(ctx *astral.Context, name string, d *policy.Delegate) error
+	// RequestContract files a ContractRequest asking permits for app, as
+	// apphost.request_contract does, and returns its entry ID. The host signs
+	// the app's contract once an Approval answers it. It answers
+	// ErrContractRequestsOff on a node without SwarmState.
+	RequestContract(ctx *astral.Context, app *astral.Identity, permits []*auth.Permit) (*astral.ObjectID, error)
 
 	// IsSwarmApp reports whether app is an app hosted on a node of the local
 	// swarm, this node included: the issuer of an active relay-for contract
@@ -55,3 +55,13 @@ var ErrMissingAppIdentity = errors.New("missing app identity")
 var ErrMissingObjectID = errors.New("missing object id")
 var ErrInvalidIdentity = errors.New("invalid identity")
 var ErrInvalidPermit = errors.New("invalid permit")
+
+// Errors apphost.request_contract answers. An app that gets
+// ErrContractDeclined or ErrContractRequestExpired files a new request by
+// calling the op again.
+var (
+	ErrContractDeclined           = errors.New("contract request declined")
+	ErrContractRequestExpired     = errors.New("contract request expired")
+	ErrContractRequestRateLimited = errors.New("too many contract requests")
+	ErrContractRequestsOff        = errors.New("contract requests not available")
+)

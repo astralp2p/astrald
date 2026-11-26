@@ -15,8 +15,6 @@ repository, and node1 tells the app about it.
   4. The User stores a `String16` note in the repository with `objects.store`.
      The app's next change is `indexing.index` of the note in that repository,
      and the app acks it.
-  5. The User revokes the app's grant with `apphost.revoke`. The app's next
-     `indexing.subscribe` answers `not permitted`.
 - **oracle** `verify.py` — every step held, plus the same story with a fresh
   app and a fresh repository (`driver verify`).
 
@@ -27,8 +25,7 @@ each change to it. `indexing.enable_repo` starts following the repository's
 `Scan` (`mod/indexing/src/repos.go`), each object the scan reports becomes a
 change, and `indexing.subscribe` sends the indexer every change past its cursor
 (`mod/indexing/src/op_subscribe.go`). `indexing.subscribe` checks the indexer
-grant when a subscription starts, so the refusal comes on the subscription
-after the revoke.
+permit when a subscription starts.
 
 `indexer-cursor` covers the cursor across a restart and the owner check, in a
 world of its own. This test covers the plain flow, through the astral-go
@@ -38,3 +35,7 @@ The driver leaves the shared world as it found it: the app unregisters its
 indexer, which needs no permit from the owner, and the User turns indexing off
 for the repository and removes it. A cleanup step that fails fails the driver,
 with the prefix `cleanup:`.
+
+Revocation is not tested: grants are gone, and revocations are a Non-goal
+of Swarm State and User Authority (G7). The app holds its permit by a
+contract its host signs once the harness answerer approves its request.

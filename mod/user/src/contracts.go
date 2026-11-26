@@ -8,19 +8,29 @@ import (
 
 	"github.com/astralp2p/astral-go/api/auth"
 	"github.com/astralp2p/astral-go/api/user"
-	userClient "github.com/astralp2p/astral-go/api/user/client"
 	"github.com/astralp2p/astral-go/astral"
-	usermod "github.com/astralp2p/astrald/mod/user"
+	nodesmod "github.com/astralp2p/astrald/mod/nodes"
 )
 
 // validateActiveContract enforces the invariant of the active-contract slot:
-// both signatures valid, this node is the subject and not the issuer, not
-// expired, and it grants swarm membership. Source-independent - the same gate for local setup,
-// cold-card, and remote membership.
+// the issuer's signature is valid, and the subject's when present, this node
+// is the subject and not the issuer, not expired, and it is a membership (one
+// tier permit). Source-independent - the same gate for a bootstrap, a
+// Coldcard ceremony and a membership a carrier handed over.
+//
+// why the subject signature is optional: a carrier signs a joiner's
+// membership alone, as SwarmState admits it (user.SwarmView.Membership).
 func (mod *Module) validateActiveContract(signed *auth.SignedContract) error {
-	err := mod.Auth.VerifyContract(signed)
-	if err != nil {
+	if signed.IsNil() {
+		return errors.New("no contract")
+	}
+	if err := mod.Auth.VerifyIssuer(signed); err != nil {
 		return fmt.Errorf("verify: %w", err)
+	}
+	if signed.SubjectSig != nil {
+		if err := mod.Auth.VerifySubject(signed); err != nil {
+			return fmt.Errorf("verify: %w", err)
+		}
 	}
 	if !signed.Subject.IsEqual(mod.node.Identity()) {
 		return errors.New("local node is not the subject of the contract")
@@ -31,8 +41,24 @@ func (mod *Module) validateActiveContract(signed *auth.SignedContract) error {
 	if signed.ExpiresAt.Time().Before(time.Now()) {
 		return auth.ErrContractExpired
 	}
-	if !user.IsNodeContract(signed.Contract) {
-		return errors.New("contract does not grant swarm membership")
+	if _, ok := user.ContractTier(signed.Contract); !ok {
+		return errors.New("contract is not a membership")
+	}
+	return nil
+}
+
+// validateClaimContract is validateActiveContract for a contract the user key
+// signed for this node in a ceremony: a PrivilegedMembership carrying this
+// node's own subject signature.
+func (mod *Module) validateClaimContract(signed *auth.SignedContract) error {
+	if err := mod.validateActiveContract(signed); err != nil {
+		return err
+	}
+	if tier, _ := user.ContractTier(signed.Contract); tier != user.TierPrivilegedMember {
+		return errors.New("contract is not a privileged membership")
+	}
+	if signed.SubjectSig == nil {
+		return errors.New("contract lacks this node's signature")
 	}
 	return nil
 }
@@ -79,11 +105,16 @@ func (mod *Module) ActiveContract() *auth.SignedContract {
 	return mod.config.ActiveContract.Get()
 }
 
-// Identity returns the user identity (the issuer of the active contract), not the local node identity.
+// Identity returns the user identity, not the local node identity: the
+// stored user when a carrier signed this node's membership, otherwise the
+// issuer of the active contract. Nil when the node is unclaimed.
 func (mod *Module) Identity() *astral.Identity {
 	ac := mod.ActiveContract()
 	if ac == nil {
 		return nil
+	}
+	if u := mod.config.User.Get(); !u.IsZero() {
+		return u
 	}
 	return ac.Issuer
 }
@@ -97,6 +128,9 @@ func (mod *Module) onActiveContractChanged(signed *auth.SignedContract) {
 	defer mod.refreshBans()
 	if signed.IsNil() {
 		mod.log.Info("this node runs without a user")
+		if !mod.config.User.Get().IsZero() {
+			_ = mod.config.User.Clear(mod.ctx)
+		}
 		// why linkerMu: a linker run that read the old swarm before the clear
 		// would otherwise register tasks for former members after this prune.
 		mod.linkerMu.Lock()
@@ -127,29 +161,14 @@ func (mod *Module) onActiveContractChanged(signed *auth.SignedContract) {
 		mod.log.Error("error indexing active contract: %v", err)
 	}
 
+	// why: SwarmState holds every membership; a joiner's waits there until
+	// its carrier's chain arrives, and the store may open after this runs.
+	if err = mod.Nodes.AddSwarmEntry(mod.ctx, signed); err != nil && !errors.Is(err, nodesmod.ErrSwarmEntryHeld) {
+		mod.log.Logv(1, "active contract: swarm state: %v", err)
+	}
+
 	mod.Nearby.Broadcast()
 	mod.runSiblingLinker()
-}
-
-// ActiveNodeContracts returns all active swarm-membership contracts issued by userID,
-// excluding contracts whose subject has been expelled.
-func (mod *Module) ActiveNodeContracts(userID *astral.Identity) ([]*auth.SignedContract, error) {
-	contracts, err := mod.Auth.SignedContracts().WithIssuer(userID).WithAction(&user.SwarmMembershipAction{}).Find(mod.ctx)
-	if err != nil {
-		return nil, err
-	}
-
-	expelled := mod.expelledSet(userID)
-
-	filtered := make([]*auth.SignedContract, 0, len(contracts))
-	for _, c := range contracts {
-		if _, banned := expelled[c.Subject.String()]; banned {
-			continue
-		}
-		filtered = append(filtered, c)
-	}
-
-	return filtered, nil
 }
 
 // ActiveNodes returns all nodes with an active swarm-membership contract from the given
@@ -159,21 +178,15 @@ func (mod *Module) ActiveNodes(userID *astral.Identity) (nodes []*astral.Identit
 	return
 }
 
-// activeNodes is ActiveNodes with the error of the contract query or of the
-// ban store read.
+// activeNodes is ActiveNodes with the error of the ban store read. The
+// members are the identities whose membership holds in SwarmState, when
+// userID is this node's user; another user has no members here.
 //
 // why: an unreadable ban store returns no nodes and the error, and not the
 // unfiltered list, so an expelled node never reads as a member.
 func (mod *Module) activeNodes(userID *astral.Identity) (nodes []*astral.Identity, err error) {
-	contracts, err := mod.Auth.
-		SignedContracts().
-		WithIssuer(userID).
-		WithAction(&user.SwarmMembershipAction{}).
-		Find(mod.ctx)
-
-	if err != nil {
-		mod.log.Error("error getting active nodes: %v", err)
-		return nil, err
+	if userID.IsZero() || !userID.IsEqual(mod.Identity()) {
+		return nil, nil
 	}
 
 	expelled, err := mod.readExpelledSet(userID)
@@ -182,11 +195,11 @@ func (mod *Module) activeNodes(userID *astral.Identity) (nodes []*astral.Identit
 		return nil, err
 	}
 
-	for _, c := range contracts {
-		if _, banned := expelled[c.Subject.String()]; banned {
+	for _, id := range mod.swarmMembers() {
+		if _, banned := expelled[id.String()]; banned {
 			continue
 		}
-		nodes = append(nodes, c.Subject)
+		nodes = append(nodes, id)
 	}
 
 	return
@@ -206,7 +219,7 @@ func (mod *Module) localSwarm() ([]*astral.Identity, error) {
 		return nil, nil
 	}
 
-	return mod.activeNodes(ac.Issuer)
+	return mod.activeNodes(mod.Identity())
 }
 
 // IsSwarmMember reports whether id is a current member of the local swarm.
@@ -229,49 +242,6 @@ func (mod *Module) IsSwarmMember(id *astral.Identity) bool {
 // SwarmPeers returns the members of the local swarm other than this node.
 func (mod *Module) SwarmPeers() []*astral.Identity {
 	return slices.DeleteFunc(mod.LocalSwarm(), mod.node.Identity().IsEqual)
-}
-
-// IssueMembership mints a swarm-membership contract for nodeID, collects the remote node's subject signature, and verifies both before returning.
-// Requires an active contract; the user identity becomes the issuer.
-// Refuses nodeID with user.ErrExpelled if the issuer has banned it.
-func (mod *Module) IssueMembership(ctx *astral.Context, nodeID *astral.Identity) (signed *auth.SignedContract, err error) {
-	ac := mod.ActiveContract()
-	if ac == nil {
-		return nil, user.ErrNoActiveContract
-	}
-
-	// why: sole chokepoint for OpAdopt and OpRequestMembership — refusing here
-	// blocks re-admission of a banned node before any signing or network handshake,
-	// rather than letting the membership filter hide a freshly minted contract.
-	if mod.isExpelled(ac.Issuer, nodeID) {
-		return nil, user.ErrExpelled
-	}
-
-	// adopted and requesting nodes join as plain members without management permits
-	contract, err := user.NewNodeContract(ac.Issuer, nodeID, false, usermod.DefaultContractValidity)
-	if err != nil {
-		return nil, err
-	}
-
-	signed = &auth.SignedContract{Contract: contract}
-
-	issuerSig, err := mod.Auth.SignIssuer(ctx, signed)
-	if err != nil {
-		return nil, err
-	}
-
-	subjectSig, err := userClient.New(nodeID, nil).AcceptMembership(ctx, contract, issuerSig)
-	if err != nil {
-		return nil, err
-	}
-
-	signed.IssuerSig = issuerSig
-	signed.SubjectSig = subjectSig
-
-	if err = mod.Auth.VerifySubject(signed); err != nil {
-		return nil, fmt.Errorf("subject sig verification: %w", err)
-	}
-	return signed, nil
 }
 
 // WasOwned reports whether a user contract has been active on this node,

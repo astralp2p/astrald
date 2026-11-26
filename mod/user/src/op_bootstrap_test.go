@@ -56,10 +56,17 @@ func (a *claimAuth) SignSubject(_ *astral.Context, sc *auth.SignedContract) (*cr
 }
 
 func (a *claimAuth) VerifyContract(sc *auth.SignedContract) error {
-	err := secp256k1sig.VerifyASN1(secp256k1.FromIdentity(sc.Issuer), sc.SignableHash(), sc.IssuerSig)
-	if err != nil {
+	if err := a.VerifyIssuer(sc); err != nil {
 		return err
 	}
+	return a.VerifySubject(sc)
+}
+
+func (a *claimAuth) VerifyIssuer(sc *auth.SignedContract) error {
+	return secp256k1sig.VerifyASN1(secp256k1.FromIdentity(sc.Issuer), sc.SignableHash(), sc.IssuerSig)
+}
+
+func (a *claimAuth) VerifySubject(sc *auth.SignedContract) error {
 	return secp256k1sig.VerifyASN1(secp256k1.FromIdentity(sc.Subject), sc.SignableHash(), sc.SubjectSig)
 }
 

@@ -1,8 +1,10 @@
 package mobile
 
 import (
+	"bytes"
 	"testing"
 
+	"github.com/astralp2p/astral-go/api/auth"
 	"github.com/astralp2p/astral-go/api/services"
 	"github.com/astralp2p/astral-go/astral"
 	servicesmod "github.com/astralp2p/astrald/mod/services"
@@ -65,9 +67,70 @@ func TestRegisterServiceRejectsInvalidInput(t *testing.T) {
 	}
 }
 
-// GrantServiceDiscovery writes no grant and always answers an error.
-func TestGrantServiceDiscoveryIsRemoved(t *testing.T) {
+type grantRecorder struct {
+	identity *astral.Identity
+	permit   *auth.Permit
+	requests int
+}
+
+func (g *grantRecorder) RequestContract(_ *astral.Context, app *astral.Identity, permits []*auth.Permit) (*astral.ObjectID, error) {
+	g.requests++
+	g.identity = app
+	if len(permits) == 1 {
+		g.permit = permits[0]
+	}
+	return &astral.ObjectID{}, nil
+}
+
+// The request asks for the app to discover exactly the named services, on any
+// node.
+func TestGrantDiscoveryScopesTheNamedServices(t *testing.T) {
+	app, node := astral.GenerateIdentity(), astral.GenerateIdentity()
+	g := &grantRecorder{}
+	if err := grantDiscovery(g, app, []string{"contacts-backend"}); err != nil {
+		t.Fatal(err)
+	}
+	if !g.identity.IsEqual(app) || g.requests != 1 || g.permit == nil {
+		t.Fatalf("asked %v times for %v; want one request with one permit for the app", g.requests, g.identity)
+	}
+	allows := func(service string) bool {
+		return g.permit.Allows(&services.ServiceDiscoveryAction{
+			Action: auth.NewAction(app), Service: astral.String8(service), NodeID: node,
+		})
+	}
+	if !allows("contacts-backend") {
+		t.Fatal("the grant does not cover contacts-backend")
+	}
+	if allows("player") {
+		t.Fatal("the grant covers a service it does not name")
+	}
+}
+
+// The permit for the same names encodes to the same bytes every time, so the
+// host's request at every start finds the live request instead of filing one.
+func TestGrantDiscoveryIsDeterministic(t *testing.T) {
+	app := astral.GenerateIdentity()
+	var encoded [][]byte
+
+	for range 2 {
+		g := &grantRecorder{}
+		if err := grantDiscovery(g, app, []string{"contacts-backend", "player"}); err != nil {
+			t.Fatal(err)
+		}
+		var buf bytes.Buffer
+		if _, err := astral.Encode(&buf, g.permit); err != nil {
+			t.Fatalf("encode: %v", err)
+		}
+		encoded = append(encoded, buf.Bytes())
+	}
+
+	if !bytes.Equal(encoded[0], encoded[1]) {
+		t.Fatalf("two grants of the same names encode differently:\n%x\n%x", encoded[0], encoded[1])
+	}
+}
+
+func TestGrantServiceDiscoveryNeedsARunningNode(t *testing.T) {
 	if err := NewNode().GrantServiceDiscovery(astral.GenerateIdentity().String(), "contacts-backend"); err == nil {
-		t.Fatal("GrantServiceDiscovery answered no error")
+		t.Fatal("granted on a node that is not running")
 	}
 }

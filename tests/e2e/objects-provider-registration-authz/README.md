@@ -20,7 +20,6 @@ refused registrant is never dialed.
   5. The User runs `objects.find`, `objects.describe` and `objects.search` on
      node1 at once, for a run-unique id and word, within 8 s of the first
      lease. The driver reads every app's counter for each op.
-  6. The User revokes ServeObjects from every app that holds it.
 - **oracle** `verify.py`:
   - The cells covered by the grant answer a lease of exactly 10 s: `all` x3,
     `d` describer, `f` finder, `s` searcher, `df` describer and finder. Every
@@ -53,6 +52,6 @@ oracle accepts either text.
 
 ## Lingering state
 
-Every accepted lease is 10 s and the apps exit with the driver. The revoke in
-step 6 removes each app's grant, so node1 drops the registration on its next
-fan-out at the latest.
+Every accepted lease is 10 s and the apps exit with the driver, so node1
+drops the registration once its lease lapses. Nothing revokes the apps'
+ServeObjects: revocations are a Non-goal of Swarm State and User Authority.

@@ -36,11 +36,11 @@ func (mod *Module) onPeerSeen(e *nearby.PeerSeen) {
 	}
 
 	switch {
-	case e.UserID.IsZero() || !e.UserID.IsEqual(ac.Issuer):
+	case e.UserID.IsZero() || !e.UserID.IsEqual(mod.Identity()):
 		mod.log.Logv(2, "nearby peer %v is not a node of the user", e.NodeID)
 	case e.NodeID.IsZero() || e.NodeID.IsEqual(mod.node.Identity()):
 		mod.log.Logv(2, "nearby peer %v is this node", e.NodeID)
-	case mod.isExpelled(ac.Issuer, e.NodeID):
+	case mod.isExpelled(mod.Identity(), e.NodeID):
 		mod.log.Logv(2, "nearby peer %v is expelled", e.NodeID)
 	case slices.ContainsFunc(mod.LocalSwarm(), e.NodeID.IsEqual):
 		mod.wakeLinkTask(e)
@@ -100,17 +100,17 @@ func (mod *Module) readContract(ctx *astral.Context, peer *astral.Identity) (*au
 }
 
 // checkPeerContract checks the contract that peer answered user.contract with:
-// a node contract the current user issued to peer, both signatures valid, not
+// a membership the current user issued to peer, both signatures valid, not
 // expired at now, and peer not expelled.
 func (mod *Module) checkPeerContract(peer *astral.Identity, signed *auth.SignedContract, now time.Time) error {
 	switch {
 	case signed.IsNil() || signed.Issuer.IsZero() || signed.Subject.IsZero():
 		return errors.New("incomplete contract")
 	case slices.Contains(signed.Permits, nil):
-		// why: the answer comes from the network, and IsNodeContract reads every permit.
+		// why: the answer comes from the network, and ContractTier reads every permit.
 		return errors.New("contract holds an empty permit")
-	case !user.IsNodeContract(signed.Contract):
-		return errors.New("not a node contract")
+	case !isMembership(signed.Contract):
+		return errors.New("not a membership")
 	case !signed.Subject.IsEqual(peer):
 		return errors.New("subject is not the peer")
 	}
@@ -125,4 +125,10 @@ func (mod *Module) checkPeerContract(peer *astral.Identity, signed *auth.SignedC
 		return auth.ErrContractExpired
 	}
 	return nil
+}
+
+// isMembership reports whether c carries exactly one tier permit.
+func isMembership(c *auth.Contract) bool {
+	_, ok := user.ContractTier(c)
+	return ok
 }

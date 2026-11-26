@@ -170,6 +170,52 @@ func (mod *Module) RefreshMemberEndpoints(subject *astral.Identity) {
 	mod.pullChangedEndpoints(subject, &nodes.EndpointsChangedMessage{Subject: subject})
 }
 
+// LearnMemberEndpoints pulls the endpoints of subject, a member this node's
+// local swarm lists for the first time. A linked subject gets the first-hand
+// pull and forward of RefreshMemberEndpoints. Otherwise the node pulls from its
+// linked members, one at a time, until a pull stores a new row, and then
+// emits an EndpointsUpdatedEvent so that the link to subject dials.
+// It blocks for the pulls.
+//
+// why: a membership now reaches the members only through SwarmState sync,
+// which pulls nothing, while the first-link pull and the joiner's first
+// announcement come before the members list the joiner. Without this, a member
+// that has no link to the joiner never learns its endpoints.
+// why one resolver at a time: the first linked member that knows subject is
+// enough, so a swarm of n members costs one pull per new member in the usual
+// case and not n.
+func (mod *Module) LearnMemberEndpoints(subject *astral.Identity) {
+	self := mod.node.Identity()
+	if subject.IsZero() || subject.IsEqual(self) || mod.ctx.Err() != nil {
+		return
+	}
+	if mod.IsLinked(subject) {
+		mod.RefreshMemberEndpoints(subject)
+		return
+	}
+
+	for _, resolver := range mod.User.LocalSwarm() {
+		if resolver.IsEqual(self) || resolver.IsEqual(subject) || !mod.IsLinked(resolver) {
+			continue
+		}
+
+		ctx, cancel := mod.ctx.WithTimeout(endpointsPullTimeout)
+		added, err := mod.UpdateNodeEndpoints(ctx, resolver, subject)
+		cancel()
+
+		if err != nil {
+			mod.log.Logv(1, "pulling endpoints of new member %v from %v: %v", subject, resolver, err)
+			continue
+		}
+		if added > 0 {
+			mod.log.Logv(1, "pulled %v new endpoints of new member %v from %v", added, subject, resolver)
+			mod.linkPool.endpointsAdded(subject)
+			mod.Events.Emit(&nodes.EndpointsUpdatedEvent{Identity: subject})
+			return
+		}
+	}
+}
+
 // forwardEndpointsChanged pushes a first-hand m to every linked local swarm
 // member except m.Subject, its sender, each push on its own and bounded.
 func (mod *Module) forwardEndpointsChanged(m *nodes.EndpointsChangedMessage) {

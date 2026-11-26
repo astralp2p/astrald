@@ -265,13 +265,28 @@ func TestRegisterNamesTheEvaluatorForTheTokenIdentity(t *testing.T) {
 func TestProvisionAppCreatesNoVFS(t *testing.T) {
 	mod, gdb := realVFSRegistrar(t)
 
-	if _, err := mod.ProvisionApp(astral.NewContext(nil), nil, nil); err != nil {
+	if _, err := mod.ProvisionApp(astral.NewContext(nil), nil); err != nil {
 		t.Fatalf("ProvisionApp: %v", err)
 	}
 
 	if n := countVolumes(t, gdb); n != 0 {
 		t.Fatalf("ProvisionApp left %d VFSes; want none", n)
 	}
+}
+
+func vfsPermit(action string, vfsIDs ...*astral.Identity) *auth.Permit {
+	permit := &auth.Permit{Action: astral.String8(action)}
+
+	if len(vfsIDs) > 0 {
+		permit.Constraints = astral.NewBundle()
+		for _, id := range vfsIDs {
+			if err := permit.Constraints.Append(id); err != nil {
+				panic(err)
+			}
+		}
+	}
+
+	return permit
 }
 
 // vfsOps are the ops of the vfs module that the gate must refuse without a token.

@@ -1,0 +1,8 @@
+nodes    = ["node1", "node2", "node3"]
+after    = "swarm-state-member"
+timeout  = 240
+host_listener = "serves the wallet stand-in on a test-host port that node2 dials"
+# why destroys: it adds apps and their requests to the swarm, which a later test in the world would see
+destroys = true
+facts    = ["app_on_member"]
+answers  = "it answers SwarmState requests itself: the User's answer is what it tests"

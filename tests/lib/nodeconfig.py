@@ -72,24 +72,21 @@ PEER_TOOLS = {
 # most tests live, so an expired external registration would still be in memory
 # when the oracle looked. Only the removal and its log line are hurried — the
 # fan-out skips an expired registration whatever this is set to.
-# why the gate and policies: a fresh test node claims without a manager, and
-# every admission policy accepts, so tests reach `claimed` with no bootstrap
-# mode (the node bootstrap vision's E2E overrides). Omitted keys keep the code
-# defaults.
+# why the gate: a fresh test node claims without a manager, so tests reach
+# `claimed` with no bootstrap mode (the node bootstrap vision's E2E
+# overrides). Omitted keys keep the code defaults. No admission policy is
+# configured: joins and app permits are requests in SwarmState, which a test
+# answers as the user (user.answer_request, user.confirm_join).
 E2E_GATE = {"tokenless": ["apphost.register", "user.info",
                           "user.derive_identity", "user.bootstrap",
                           "user.join"],
             "states": {"fresh": ["*"]}}
-E2E_APPHOST_POLICIES = {"app_register": "accept_all"}
-E2E_USER = {"policies": {"swarm_join": "accept_all",
-                         "swarm_invite": "accept_all",
-                         "contract_accept": "accept_all"}}
 
 
 def harness_configs(listen: list, token: str) -> dict:
     """module -> the config every harness node starts with, local or VM:
-    apphost on every address in `listen` with `token` as the node's own, the
-    E2E gate and policies, and the user policies.
+    apphost on every address in `listen` with `token` as the node's own, and
+    the E2E gate.
 
     why one function: a local world and a VM world must start nodes the same
     way, or a test passing locally says nothing about the lab.
@@ -101,8 +98,13 @@ def harness_configs(listen: list, token: str) -> dict:
                     # authenticates as, and `localnode` is the node itself
                     "tokens": {token: "localnode"},
                     "gate": copy.deepcopy(E2E_GATE),
-                    "policies": dict(E2E_APPHOST_POLICIES)},
-        "user": copy.deepcopy(E2E_USER),
+                    # why: a world registers far more apps on one node within
+                    # the hour than the 64 ContractRequests a device files
+                    "contract_requests_per_node": 100000,
+                    # why: the host worker carries an Approval out on its next
+                    # poll, 5 s by default, and every app a driver registers
+                    # waits for one; the answerer polls every 0.5 s too
+                    "contract_request_poll": "500ms"},
     }
 
 

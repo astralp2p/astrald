@@ -17,6 +17,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/astralp2p/astrald/tests/e2e/internal/contracts"
+
 	apphostcli "github.com/astralp2p/astral-go/api/apphost/client"
 	"github.com/astralp2p/astral-go/api/auth"
 	authcli "github.com/astralp2p/astral-go/api/auth/client"
@@ -163,6 +165,7 @@ type world struct {
 	ctx        *astral.Context
 	endpoint   string
 	apps       *apphostcli.Client
+	admin      *astrald.Client
 	userKey    *crypto.PublicKey
 	nodeKey    *crypto.PublicKey
 	signer     *recordingSigner
@@ -172,7 +175,7 @@ type world struct {
 
 // appClient registers one app holding permits and returns its session and identity.
 func (w *world) appClient(permits ...*auth.Permit) (*astrald.Client, *astral.Identity, error) {
-	token, err := w.apps.Register(w.ctx, permits...)
+	token, err := contracts.Register(w.ctx, w.admin, w.endpoint, permits...)
 	if err != nil {
 		return nil, nil, fmt.Errorf("register: %w", err)
 	}
@@ -209,6 +212,7 @@ func run(path string, facts map[string]bool) (string, error) {
 		ctx:      ctx,
 		endpoint: n.Endpoint,
 		apps:     apphostcli.New(nil, admin),
+		admin:    admin,
 		userKey:  secp256k1.PublicKey(userPrivate),
 		nodeKey:  secp256k1.FromIdentity(nodeID),
 		signer:   &recordingSigner{key: userPrivate, forger: secp256k1.New()},

@@ -1,6 +1,7 @@
 package services
 
 import (
+	"slices"
 	"testing"
 	"time"
 
@@ -50,14 +51,15 @@ func expectQuiet(t *testing.T, p *peer) {
 	}
 }
 
-func expectRemoved(t *testing.T, p *peer, provider *astral.Identity, cause services.RemovalCause) {
+// expectRemoved expects provider's offering retracted for one of causes.
+func expectRemoved(t *testing.T, p *peer, provider *astral.Identity, causes ...services.RemovalCause) {
 	t.Helper()
 	r := expect[*services.Removed](t, p)
 	if len(r.Offerings) != 1 || !r.Offerings[0].ProviderID.IsEqual(provider) {
 		t.Fatalf("removed %+v; want %v only", r.Offerings, provider)
 	}
-	if got := services.RemovalCause(r.Cause); got != cause {
-		t.Fatalf("removal cause %v; want %v", got, cause)
+	if got := services.RemovalCause(r.Cause); !slices.Contains(causes, got) {
+		t.Fatalf("removal cause %v; want one of %v", got, causes)
 	}
 }
 
@@ -144,7 +146,9 @@ func TestRevokeRetractsAMemberOfferingAndARestartKeepsItHidden(t *testing.T) {
 
 	v.auth.revoke(v.app, "contacts", nodeB)
 	v.auth.indexed(contractFor(v.app))
-	expectRemoved(t, c, private, services.CauseHidden)
+	// why either cause: B filters the carried stream as the app (G7), so B's
+	// own re-check (services.removed) and A's re-check race to retract it.
+	expectRemoved(t, c, private, services.CauseHidden, services.CauseMemberRemoved)
 
 	node.cut()
 	node.waitEOS(t) // the restored carry reached the member's initial outcome
@@ -361,7 +365,7 @@ func TestChangeForTheCarrierClosesItsCarry(t *testing.T) {
 }
 
 // contractFor is a contract naming id as its subject: the authority change
-// that schedules id's re-check.
+// that schedules id's re-check, now that permits come from contracts.
 func contractFor(id *astral.Identity) *auth.SignedContract {
 	return &auth.SignedContract{Contract: &auth.Contract{Subject: id}}
 }
