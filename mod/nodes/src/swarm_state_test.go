@@ -1,6 +1,7 @@
 package nodes
 
 import (
+	"context"
 	"crypto/sha256"
 	"errors"
 	"slices"
@@ -192,6 +193,7 @@ func (n *stateNode) open(t *testing.T) {
 	if n.store != nil {
 		store.peers = n.store.peers
 	}
+	store.passOnWait = true
 	n.store, n.checker.state = store, store
 }
 
@@ -503,5 +505,48 @@ func TestSwarmHeldSetIsBounded(t *testing.T) {
 	}
 	if n.store.merge.held[0].id == first {
 		t.Fatal("the oldest held entry was kept")
+	}
+}
+
+// blackHolePeer is a peer whose push never answers: it returns only when the
+// push's context ends, and reports that end on ended.
+type blackHolePeer struct{ ended chan error }
+
+func (p blackHolePeer) SwarmPush(ctx *astral.Context, _ astral.Object) error {
+	<-ctx.Done()
+	p.ended <- ctx.Err()
+	return ctx.Err()
+}
+
+// TestSwarmPassOnDoesNotWaitForADeadPeer: an entry accepted while a peer's
+// push never answers is stored and AddSwarmEntry returns at once; the push
+// ends at its bound.
+//
+// why: passOn waited for every push, so a link that takes bytes and never
+// answers held up the writer (an answer op, a host signing an app's contract)
+// until the link closed (reconnect-sync-after-dead-link).
+func TestSwarmPassOnDoesNotWaitForADeadPeer(t *testing.T) {
+	a := newStateNode(t, newSwarmScript())
+	a.store.passOnWait = false
+	a.store.pushTimeout = 300 * time.Millisecond
+	dead := blackHolePeer{ended: make(chan error, 1)}
+	a.store.peers = func() []swarmPusher { return []swarmPusher{dead} }
+
+	start := time.Now()
+	mustAdd(t, a, fiveEntries(t)[0])
+	if took := time.Since(start); took > 150*time.Millisecond {
+		t.Fatalf("AddSwarmEntry took %v with a dead peer; want it not to wait for the push", took)
+	}
+	if a.store.SwarmHead() != 1 {
+		t.Fatalf("head = %v; want 1", a.store.SwarmHead())
+	}
+
+	select {
+	case err := <-dead.ended:
+		if !errors.Is(err, context.DeadlineExceeded) {
+			t.Fatalf("the push ended with %v; want its deadline", err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("the push to the dead peer never ended")
 	}
 }
