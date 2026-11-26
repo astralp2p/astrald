@@ -60,3 +60,10 @@ been quiet for 1 s before it black-holes.
 The relay stands in for a path that vanished without a reset, as a phone's old
 Wi-Fi link does after the phone moves to mobile data. netsim `leave-lan`
 (`tor.suite`) covers the same path over a real address change.
+
+The 17 s wait counts from the start of the registration. `apphost.register`
+pushes the relay contract at once, but since G7 the driver's registration
+returns only once node1 has signed the app's contract for an Approval, seconds
+later. Counted from that return, as before G7, the check came after the push's
+15 s bound and the 3 s ping it wakes had closed the relayed link, and node2 had
+relinked and learned the app without the probe.
