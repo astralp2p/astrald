@@ -4,6 +4,7 @@ import (
 	"errors"
 	"time"
 
+	"github.com/astralp2p/astral-go/api/auth"
 	"github.com/astralp2p/astral-go/api/user"
 	"github.com/astralp2p/astral-go/astral"
 	nodesmod "github.com/astralp2p/astrald/mod/nodes"
@@ -135,12 +136,55 @@ func (mod *Module) onSwarmLink(peer *astral.Identity) {
 }
 
 // AddSwarmEntry offers obj to this node's SwarmState (nodesmod.SwarmState).
+// When obj is this node's own membership and the store accepts it, the node
+// exchanges SwarmState with every peer it holds a link with.
 func (mod *Module) AddSwarmEntry(ctx *astral.Context, obj astral.Object) error {
 	store := mod.swarm.Load()
 	if store == nil {
 		return errSwarmStateNotOpen
 	}
-	return store.AddSwarmEntry(ctx, obj)
+	before := store.SwarmHead()
+	if err := store.AddSwarmEntry(ctx, obj); err != nil {
+		return err
+	}
+	if mod.isOwnMembership(obj) && store.SwarmHead() != before {
+		go mod.exchangeSwarmWithLinked()
+	}
+	return nil
+}
+
+// isOwnMembership reports whether obj is a membership whose subject is this node.
+func (mod *Module) isOwnMembership(obj astral.Object) bool {
+	sc, ok := obj.(*auth.SignedContract)
+	if !ok || sc.IsNil() || !sc.Subject.IsEqual(mod.node.Identity()) {
+		return false
+	}
+	_, ok = user.MembershipOf(sc)
+	return ok
+}
+
+// exchangeSwarmWithLinked runs the exchange of onSwarmLink with every peer
+// this node holds a link with, each peer once.
+//
+// why: a node claimed in a ceremony (user.accept_contract) while already
+// linked skipped that exchange on its links, which came up before it had a
+// user, and passOn reaches no one, as its local swarm then lists only itself.
+// Without this its peers never learn its membership, and it never learns
+// theirs.
+func (mod *Module) exchangeSwarmWithLinked() {
+	seen := map[string]bool{}
+	for _, link := range mod.linkPool.links.Clone() {
+		peer := link.RemoteIdentity()
+		if peer.IsZero() || seen[peer.String()] {
+			continue
+		}
+		seen[peer.String()] = true
+		if mod.swarmLinkHook != nil {
+			mod.swarmLinkHook(peer)
+			continue
+		}
+		mod.onSwarmLink(peer)
+	}
 }
 
 // SwarmEntry returns a stored entry (nodesmod.SwarmState).
