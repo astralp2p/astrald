@@ -138,9 +138,11 @@ func (a *acceptanceNode) serveEvaluator(app *acceptanceApp) (*evaluatorApp, func
 	// why the hook: reg.Ready() closes once the bind is up, before the handler
 	// is registered, so a query sent on Ready alone can find no route.
 	registered := make(chan struct{})
-	var once sync.Once
+	var closed atomic.Bool
 	hook := apps.WithRegistrationHook(func(*astral.Context) error {
-		once.Do(func() { close(registered) })
+		if closed.CompareAndSwap(false, true) {
+			close(registered)
+		}
 		return nil
 	})
 
@@ -151,7 +153,12 @@ func (a *acceptanceNode) serveEvaluator(app *acceptanceApp) (*evaluatorApp, func
 	stop := func() {
 		if stopped.CompareAndSwap(false, true) {
 			cancel()
-			<-done
+			// why bounded: a registrar whose handler the node refused never
+			// returns, and a failed test would hang the package.
+			select {
+			case <-done:
+			case <-time.After(acceptanceWait):
+			}
 		}
 	}
 	a.t.Cleanup(stop)
