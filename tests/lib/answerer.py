@@ -43,6 +43,10 @@ async def answer_node(node: dict, done: set) -> None:
             if r.type not in (ss.CONTRACT, ss.JOIN) or r.status != "pending" \
                     or r.id in done:
                 continue
+            # why: a privileged join is the user's own action (user.confirm_join,
+            # D2), and a driver that confirms one finds it pending
+            if r.type == ss.JOIN and r.obj.get("Tier") == "privileged_member":
+                continue
             try:
                 await ss.answer(c, r.id, "approve", timeout=10)
             except jsonops.OpError as e:
