@@ -70,6 +70,7 @@ async def main():
         callers = {
             "node1_app_token": (n1, app_token, t["identity"]),
             "node2_node_token": (n2, n2["token"], t["identity"]),
+            "node1_node_token": (n1, n1["token"], t["identity"]),
             "user_without_key": (n2, user_on_node2, t["identity"]),
             "user_names_user": (n1, user_token, user_id),
         }
@@ -80,8 +81,8 @@ async def main():
             r["after"] = await view(u)
             refusals[name] = r
 
-        async with await astral.connect(n1["endpoint"], token=n1["token"]) as c:
-            first = await c.user.expel(t["identity"])
+        # note: since G7 only the User expels (D7), so both bans are the User's
+        first = await u.user.expel(t["identity"])
         second = await u.user.expel(t["identity"])
 
     def ban(s):
