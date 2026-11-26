@@ -28,7 +28,7 @@ SUITES = {"main": "script", "tor": "script", "nat": "script",
           "gateway": "script", "agent": "agent", "integration": "script",
           "nearby": "script", "docker-agent": "agent", "kcp": "script",
           "endpoint": "script", "swarm-comms": "script",
-          "swarm-comms-netsim": "script"}
+          "swarm-comms-netsim": "script", "swarm-state": "script"}
 # suite -> the heavy world its agent plan is drawn in, where not a VM
 # why: docker-agent.suite holds operator flows a VM world cannot run (a
 # roster the lab lacks) or would open a world of its own for
@@ -347,6 +347,7 @@ class TestShippedPlans(Invariants, unittest.TestCase):
              ("local", "services-follow-member-leaves"),
              ("local", "services-node-restart"),
              ("local", "services-swarm-membership"),
+             ("local", "swarm-authz-matrix"),
              ("vm", "swarm-fallback-paths"),
              ("local", "swarm-apps-matrix-kcp"), ("local", "swarm-apps-talk"),
              ("local", "swarm-survives-churn"),
@@ -356,6 +357,11 @@ class TestShippedPlans(Invariants, unittest.TestCase):
              ("local", "expel-offline-subject"),
              ("local", "expel-survives-restart"),
              ("local", "link-self-heal"), ("local", "swarm-member-restart"),
+             ("local", "swarm-state-join-resumed"),
+             ("local", "swarm-state-app-moves"),
+             ("local", "swarm-state-app-own-node"),
+             ("local", "swarm-state-conflicting-answers"),
+             ("local", "swarm-state-member-approval-dropped"),
              ("vm", "tor-link"), ("vm", "tor-restart-onion"),
              ("local", "two-swarms-side-by-side"),
              ("local", "basic-strategy-stalled-negotiation"),
@@ -368,7 +374,6 @@ class TestShippedPlans(Invariants, unittest.TestCase):
              ("local", "bootstrap-passphrase"),
              ("local", "bootstrap-user-op"),
              ("local", "claim-race"),
-             ("local", "concurrent-adoption"),
              ("local", "distribution-gate-setup"),
              ("local", "expel-management-node"),
              ("local", "import-user-software-key"),

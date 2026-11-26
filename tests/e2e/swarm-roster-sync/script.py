@@ -11,6 +11,7 @@ import asyncio
 import astral
 
 from lib.sessionio import load
+from lib import swarmstate as ss
 
 
 async def main():
@@ -26,8 +27,8 @@ async def main():
         await c.nodes.add_endpoint(n1["identity"], n1["lan_endpoint"],
                                    experimental=True)
 
-    async with await astral.connect(n1["endpoint"], token=user_token) as c:
-        await c.user.adopt(n3["identity"])
+    # note: user.adopt is gone (G7); node3 joins through node1 as a Member
+    await ss.admit(n1, user_token, n3)
 
     print("driver: node3 adopted by the User on node1; node2 told nothing")
 

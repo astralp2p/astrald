@@ -41,7 +41,7 @@ func (mod *Module) OpInfo(ctx *astral.Context, q *routing.IncomingQuery, args op
 	}
 
 	info.NodeAlias = astral.String8(mod.Dir.DisplayName(ac.Subject))
-	info.UserAlias = astral.String8(mod.Dir.DisplayName(ac.Issuer))
+	info.UserAlias = astral.String8(mod.Dir.DisplayName(mod.Identity()))
 	info.ContractID, _ = astral.ResolveObjectID(ac)
 	info.Contract = ac
 	return ch.Send(info)

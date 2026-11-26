@@ -8,8 +8,8 @@ from pathlib import Path
 
 from lib import nodeconfig
 from lib.manifest import load_all
-from lib.nodeconfig import (AUTH_ACTIONS, E2E_APPHOST_POLICIES, E2E_GATE,
-                            E2E_USER, NODE_OP_TOOLS, PEER_ALIAS,
+from lib.nodeconfig import (AUTH_ACTIONS, E2E_GATE,
+                            NODE_OP_TOOLS, PEER_ALIAS,
                             PEER_TOOLS, NodePorts, PortsBusy, lease_ports,
                             module_configs, ports_for, render, serves_mcp)
 
@@ -39,8 +39,8 @@ class TestNodeConfig(unittest.TestCase):
         self.assertEqual(cfg["apphost"], {
             "listen": ["tcp:127.0.0.1:20800"],     # no socket-path collisions
             "bind_http": "", "tokens": {"sekrit": "localnode"},
-            "gate": E2E_GATE, "policies": E2E_APPHOST_POLICIES})
-        self.assertEqual(cfg["user"], E2E_USER)
+            "gate": E2E_GATE})
+        self.assertNotIn("user", cfg)
         self.assertEqual(cfg["tcp"], {"listen_port": 20801})
         self.assertEqual(cfg["ether"], {"udp_port": 20802})
         self.assertEqual(cfg["kcp"], {"listen_port": 20803})
@@ -135,16 +135,17 @@ class TestNodeConfig(unittest.TestCase):
         self.assertEqual(out, {"user": {"a": 1, "b": 3}, "new": {"c": 4}})
         self.assertEqual(base, {"user": {"a": 1, "b": 2}})
 
-    def test_an_empty_gate_and_policies_override_leaves_astrald_its_defaults(self):
-        # why: distribution-gate-setup starts a node under the gate and the app
-        # register policy a released astrald ships. An empty mapping replaces
+    def test_an_empty_gate_override_leaves_astrald_its_defaults(self):
+        # why: distribution-gate-setup starts a node under the gate a released
+        # astrald ships. An empty mapping replaces
         # the harness's keys, and astrald loads a config over its code defaults
         # (mod/apphost/src/config_gate_test.go holds the other half), so the
         # node's own lists stand; the harness's token is not part of the gate
         shipped = load_all(Path(nodeconfig.__file__).parent.parent / "e2e")
         override = shipped["distribution-gate-setup"].config["node1"]
         cfg = rendered(override)["apphost"]
-        self.assertEqual((cfg["gate"], cfg["policies"]), ({}, {}))
+        self.assertEqual(cfg["gate"], {})
+        self.assertNotIn("policies", cfg)
         self.assertEqual(cfg["tokens"], {"sekrit": "localnode"})
         self.assertEqual(rendered()["apphost"]["gate"], E2E_GATE)
 

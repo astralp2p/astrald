@@ -77,7 +77,7 @@ func (mod *Module) authorize(ctx *astral.Context, action auth.ActionObject, hops
 		// note: without a swarm, or for a contract with no ApprovalID, next is
 		// the issuer; an Approval link continues at the approver instead.
 		next, linked := mod.contractLink(sc)
-		if !linked {
+		if !linked || mod.unlinkedUserAuthority(sc, action) {
 			continue
 		}
 		if _, seen := visited[next.String()]; seen {

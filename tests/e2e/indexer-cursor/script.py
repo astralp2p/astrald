@@ -36,6 +36,7 @@ from astral.object import Query
 from lib.sessionio import load, write_facts
 from lib.indexing import (INDEX, UNINDEX, Subscription, answer, change,
                           drain, drain_until, register_indexer)
+from lib import swarmstate as ss
 
 SERVE = "mod.auth.serve_objects_action"
 REPO = "local"
@@ -108,6 +109,10 @@ async def main():
         tokens = {k: await u.apphost.register(name=f"indexer-cursor-{k.lower()}",
                                               grant_permits=[SERVE])
                   for k in "IJ"}
+    # why: since G7 a permit is a contract the host signs once the harness
+    # answerer approves the registration's ContractRequest
+    for t in tokens.values():
+        await ss.await_app(endpoint, t.token, [SERVE])
     apps = {k: {"identity": str(t.identity), "token": t.token}
             for k, t in tokens.items()}
 

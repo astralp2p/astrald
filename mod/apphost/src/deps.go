@@ -1,15 +1,9 @@
 package apphost
 
 import (
-	"github.com/astralp2p/astral-go/api/auth"
-	"github.com/astralp2p/astral-go/api/services"
-	"github.com/astralp2p/astral-go/api/shell"
-	"github.com/astralp2p/astral-go/api/user"
-	vfsapi "github.com/astralp2p/astral-go/api/vfs"
 	"github.com/astralp2p/astral-go/astral"
+	"github.com/astralp2p/astral-go/lib/routing"
 	"github.com/astralp2p/astrald/core"
-	authmod "github.com/astralp2p/astrald/mod/auth"
-	"github.com/astralp2p/astrald/mod/tree"
 )
 
 func (mod *Module) LoadDependencies(ctx *astral.Context) (err error) {
@@ -17,41 +11,22 @@ func (mod *Module) LoadDependencies(ctx *astral.Context) (err error) {
 		return
 	}
 
-	// why NoLocal: a failed save must fail the setter, not fall back to memory.
-	mod.policy.AppRegister.NoLocal = true
-	mod.policy.GrantRequest.NoLocal = true
-	if err = tree.BindPath(ctx, &mod.policy, mod.Tree.Root(), policyPath, true); err != nil {
-		return
-	}
-
 	// optional — apphost can run without user module
 	core.Inject(mod.node, &mod.OptionalDeps)
 
-	// why: one line per grantable action, because Func dispatches on the concrete
-	// action type. Each names a shim in authorizers.go over one generic lookup, so
-	// the list grows by a line and never by a decision. A wildcard authorizer
-	// would replace the list rather than each entry.
-	//
-	// why: every one is NodeLocal. Each answers from this node's grant rows, and a
-	// grant travels nowhere, so a contract chain must not reach one — otherwise a
-	// grant holder extends the grant a hop by issuing a contract for the action.
-	mod.Auth.Add(authmod.NodeLocal(authmod.Func[*auth.ServeObjectsAction](mod.AuthorizeServeObjects)))
-	mod.Auth.Add(authmod.NodeLocal(authmod.Func[*auth.SeeObjectsAction](mod.AuthorizeSeeObjects)))
-	mod.Auth.Add(authmod.NodeLocal(authmod.Func[*auth.StoreObjectsAction](mod.AuthorizeStoreObjects)))
-	mod.Auth.Add(authmod.NodeLocal(authmod.Func[*auth.UseBlueprintsAction](mod.AuthorizeUseBlueprints)))
-	mod.Auth.Add(authmod.NodeLocal(authmod.Func[*user.SeeSwarmAction](mod.AuthorizeSeeSwarm)))
-	mod.Auth.Add(authmod.NodeLocal(authmod.Func[*user.AdminSwarmAction](mod.AuthorizeAdminSwarm)))
-	mod.Auth.Add(authmod.NodeLocal(authmod.Func[*auth.AdminNetworkAction](mod.AuthorizeAdminNetwork)))
-	mod.Auth.Add(authmod.NodeLocal(authmod.Func[*auth.AdminManageAppsAction](mod.AuthorizeAdminManageApps)))
-	mod.Auth.Add(authmod.NodeLocal(authmod.Func[*auth.ConfigureNodeStateAction](mod.AuthorizeConfigureNodeState)))
-	mod.Auth.Add(authmod.NodeLocal(authmod.Func[*auth.ServeAppsAction](mod.AuthorizeServeApps)))
-	mod.Auth.Add(authmod.NodeLocal(authmod.Func[*auth.RegisterSignerAction](mod.AuthorizeRegisterSigner)))
-	mod.Auth.Add(authmod.NodeLocal(authmod.Func[*auth.SeeNodeStateAction](mod.AuthorizeSeeNodeState)))
-	mod.Auth.Add(authmod.NodeLocal(authmod.Func[*shell.ShellAction](mod.AuthorizeShell)))
-	mod.Auth.Add(authmod.NodeLocal(authmod.Func[*services.ServiceDiscoveryAction](mod.AuthorizeServiceDiscovery)))
-	mod.Auth.Add(authmod.NodeLocal(authmod.Func[*vfsapi.ReadAction](mod.AuthorizeVFSRead)))
-	mod.Auth.Add(authmod.NodeLocal(authmod.Func[*vfsapi.WriteAction](mod.AuthorizeVFSWrite)))
-	mod.Auth.Add(authmod.NodeLocal(authmod.Func[*vfsapi.ManageAction](mod.AuthorizeVFSManage)))
+	// why: an app's permits come from contracts its host signs when an
+	// Approval in SwarmState answers the app's ContractRequest; without the
+	// user and nodes modules there is no SwarmState to file one in.
+	if mod.User != nil && mod.Nodes != nil {
+		mod.contractRequests = newContractRequests(mod.node.Identity(), mod.Nodes, mod.User, mod.Crypto, mod.Auth)
+		if n := mod.config.ContractRequestsPerNode; n > 0 {
+			mod.contractRequests.limiter = newRequestLimiter(ContractRequestWindow, ContractRequestsPerApp, n)
+		}
+	}
 
-	return
+	op, err := routing.NewOp(mod.requestContract)
+	if err != nil {
+		return err
+	}
+	return mod.router.AddOp("request_contract", op)
 }

@@ -1,6 +1,6 @@
 // Command driver runs two apps on node1, each on its own client and token: a
 // greeter that serves hello, and a visitor that calls it by the greeter's app
-// identity. An app whose serve_apps grant is revoked cannot serve.
+// identity.
 //
 //	driver drive  <session.json>   prints facts as JSON
 //	driver verify <session.json>   the same story with fresh identities
@@ -15,9 +15,9 @@ import (
 	"sync/atomic"
 	"time"
 
-	apphostapi "github.com/astralp2p/astral-go/api/apphost"
+	"github.com/astralp2p/astrald/tests/e2e/internal/contracts"
+
 	apphostcli "github.com/astralp2p/astral-go/api/apphost/client"
-	"github.com/astralp2p/astral-go/api/auth"
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astral-go/astral/channel"
 	"github.com/astralp2p/astral-go/lib/apphost"
@@ -68,7 +68,7 @@ func run(path string) (map[string]bool, error) {
 	admin := connect(n1.Endpoint, n1.Token)
 
 	// the greeter app: its own identity, token and client, serving hello
-	greeter, err := apphostcli.New(nil, admin).Register(ctx)
+	greeter, err := contracts.Register(ctx, admin, n1.Endpoint)
 	if err != nil {
 		return facts, fmt.Errorf("registering the greeter: %w", err)
 	}
@@ -80,7 +80,7 @@ func run(path string) (map[string]bool, error) {
 	defer stop()
 
 	// the visitor app: another identity, token and client on the same node
-	visitor, err := apphostcli.New(nil, admin).Register(ctx)
+	visitor, err := contracts.Register(ctx, admin, n1.Endpoint)
 	if err != nil {
 		return facts, fmt.Errorf("registering the visitor: %w", err)
 	}
@@ -93,27 +93,9 @@ func run(path string) (map[string]bool, error) {
 		return facts, fmt.Errorf("the visitor called greeter:hello and got %q (err %v); want %q", reply, err, want)
 	}
 
-	// an app without serve_apps cannot serve, so a call to it reaches nobody
-	stray, err := apphostcli.New(nil, admin).Register(ctx)
-	if err != nil {
-		return facts, fmt.Errorf("registering the stray app: %w", err)
-	}
-	if err := apphostcli.New(nil, admin).RevokeAction(ctx, stray.Identity, auth.ServeAppsAction{}.ObjectType()); err != nil {
-		return facts, fmt.Errorf("revoking serve_apps from the stray app: %w", err)
-	}
-	stopStray, err := serve(ctx, n1, string(stray.Token))
-	if err == nil {
-		stopStray()
-	}
-	facts["stray_refused"] = err != nil && errors.Is(err, auth.ErrNotPermitted)
-	if !facts["stray_refused"] {
-		return facts, fmt.Errorf("the stray app without serve_apps served: err %v; want %v", err, auth.ErrNotPermitted)
-	}
-	_, err = hello(ctx, visitorCli, stray.Identity)
-	facts["stray_unreachable"] = err != nil && err.Error() == apphostapi.ErrCodeRouteNotFound
-	if !facts["stray_unreachable"] {
-		return facts, fmt.Errorf("calling the stray app returned err %v; want route not found", err)
-	}
+	// note: the stray app (serve_apps revoked) is gone: grants are, and
+	// revocations are a Non-goal of Swarm State and User Authority (G7). While
+	// the driver runs the harness answerer approves every app's request.
 
 	fmt.Fprintln(os.Stderr, "ok: the visitor called the greeter on node1 and was greeted as itself")
 	return facts, nil

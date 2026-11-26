@@ -14,6 +14,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/astralp2p/astrald/tests/e2e/internal/contracts"
+
 	apphostapi "github.com/astralp2p/astral-go/api/apphost"
 	apphostcli "github.com/astralp2p/astral-go/api/apphost/client"
 	"github.com/astralp2p/astral-go/api/auth"
@@ -84,7 +86,7 @@ func run(path string) (map[string]any, error) {
 	admin1, admin2 := connect(n1.Endpoint, n1.Token), connect(n2.Endpoint, n2.Token)
 
 	// the calling app on node1
-	app, err := apphostcli.New(nil, admin1).Register(ctx)
+	app, err := contracts.Register(ctx, admin1, n1.Endpoint)
 	if err != nil {
 		return facts, fmt.Errorf("registering the caller on node1: %w", err)
 	}
@@ -111,7 +113,7 @@ func run(path string) (map[string]any, error) {
 func handlerGone(ctx *astral.Context, facts map[string]any, nodes map[string]node, admin1 *astrald.Client, appID *astral.Identity, caller *astrald.Client, as asker) error {
 	n2 := nodes["node2"]
 	admin2 := connect(n2.Endpoint, n2.Token)
-	provider, err := apphostcli.New(nil, admin2).Register(ctx, &auth.Permit{Action: "mod.auth.serve_apps_action"})
+	provider, err := contracts.Register(ctx, admin2, n2.Endpoint, &auth.Permit{Action: "mod.auth.serve_apps_action"})
 	if err != nil {
 		return fmt.Errorf("registering the provider on node2: %w", err)
 	}
@@ -131,7 +133,7 @@ func handlerGone(ctx *astral.Context, facts map[string]any, nodes map[string]nod
 	if err != nil {
 		return fmt.Errorf("the provider could not serve on node2: %w", err)
 	}
-	if err := grantDiscovery(ctx, admin1, appID); err != nil {
+	if err := grantDiscovery(ctx, caller); err != nil {
 		return fmt.Errorf("granting discovery: %w", err)
 	}
 	facts["provider_listed"] = listed(ctx, caller, provider.Identity)
@@ -253,17 +255,16 @@ func serve(ctx *astral.Context, n node, token string) (func(), error) {
 	}
 }
 
-// grantDiscovery grants app discovery of the test's service on any node.
-func grantDiscovery(ctx *astral.Context, admin *astrald.Client, app *astral.Identity) error {
+// grantDiscovery has the app that app names request discovery of the test's
+// service on any node, and waits for its contract.
+func grantDiscovery(ctx *astral.Context, app *astrald.Client) error {
 	cs := astral.NewBundle()
 	scope := &services.DiscoveryScope{Rules: []*services.DiscoveryRule{{Services: []astral.String8{service}}}}
 	if err := cs.Append(scope); err != nil {
 		return err
 	}
-	return apphostcli.New(nil, admin).Grant(ctx, &apphostapi.GrantRequest{
-		Identity: app,
-		Permits:  []*auth.Permit{{Action: astral.String8(services.ServiceDiscoveryAction{}.ObjectType()), Constraints: cs}},
-	})
+	_, err := contracts.Request(ctx, app, &auth.Permit{Action: astral.String8(services.ServiceDiscoveryAction{}.ObjectType()), Constraints: cs})
+	return err
 }
 
 // listed reports whether a swarm discovery from the caller shows provider,

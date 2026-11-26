@@ -135,20 +135,36 @@ func (a *acceptanceNode) serveEvaluator(app *acceptanceApp) (*evaluatorApp, func
 	reg := apps.NewAppRegistrar(ctx, apps.WithClient(apphostapiclient.New(a.nodeID(), app.client)))
 	address := fmt.Sprintf("memu:vfs-evaluator-%d", acceptanceListeners.Add(1))
 
+	// why the hook: reg.Ready() closes once the bind is up, before the handler
+	// is registered, so a query sent on Ready alone can find no route.
+	registered := make(chan struct{})
+	var closed atomic.Bool
+	hook := apps.WithRegistrationHook(func(*astral.Context) error {
+		if closed.CompareAndSwap(false, true) {
+			close(registered)
+		}
+		return nil
+	})
+
 	done := make(chan error, 1)
-	go func() { done <- apps.ServeWith(ctx, router, reg, apps.WithHandlerAddress(address)) }()
+	go func() { done <- apps.ServeWith(ctx, router, reg, apps.WithHandlerAddress(address), hook) }()
 
 	var stopped atomic.Bool
 	stop := func() {
 		if stopped.CompareAndSwap(false, true) {
 			cancel()
-			<-done
+			// why bounded: a registrar whose handler the node refused never
+			// returns, and a failed test would hang the package.
+			select {
+			case <-done:
+			case <-time.After(acceptanceWait):
+			}
 		}
 	}
 	a.t.Cleanup(stop)
 
 	select {
-	case <-reg.Ready():
+	case <-registered:
 	case err := <-done:
 		a.t.Fatalf("serve the evaluator: %v", err)
 	case <-time.After(acceptanceWait):
@@ -200,7 +216,9 @@ func TestAcceptanceEvaluatorDecidesForRefusedCallers(t *testing.T) {
 	a := startAcceptanceNode(t)
 	a.claim()
 	owner := a.registerApp()
+	a.approve(owner)
 	caller := a.registerAppWith(&apphostapi.RegisterRequest{Evaluator: astral.NewBool(false)})
+	a.approve(caller)
 
 	if got, want := a.evaluatorOf(owner), "astral://"+owner.id.String()+":vfs.authorize"; got != want {
 		t.Fatalf("the registered app's evaluator is %q; want %q", got, want)
@@ -210,7 +228,7 @@ func TestAcceptanceEvaluatorDecidesForRefusedCallers(t *testing.T) {
 
 	e.answer.Store(int32(answerYes))
 	if !a.mayRead(caller, owner) || !a.mayWrite(caller, owner, "/by-caller") {
-		t.Fatal("a caller the evaluator allows was refused")
+		t.Fatalf("a caller the evaluator allows was refused (asked %v)", e.questions())
 	}
 	want := []string{"read " + owner.id.String(), "write " + owner.id.String()}
 	if got := e.questions(); fmt.Sprint(got) != fmt.Sprint(want) {
@@ -231,6 +249,7 @@ func TestAcceptanceEvaluatorIsNotAskedAboutTheOwnerOrTheUser(t *testing.T) {
 	a := startAcceptanceNode(t)
 	user := a.claim()
 	owner := a.registerApp()
+	a.approve(owner) // why: only an approved app serves its evaluator
 	caller := a.registerAppWith(&apphostapi.RegisterRequest{Evaluator: astral.NewBool(false)})
 
 	e, stop := a.serveEvaluator(owner)
@@ -260,6 +279,7 @@ func TestAcceptanceEvaluatorIsAskedAboutItsOwnVFSOnly(t *testing.T) {
 	a := startAcceptanceNode(t)
 	a.claim()
 	owner, other := a.registerApp(), a.registerApp()
+	a.approve(owner) // why: only an approved app serves its evaluator
 	caller := a.registerAppWith(&apphostapi.RegisterRequest{Evaluator: astral.NewBool(false)})
 
 	e, _ := a.serveEvaluator(owner)

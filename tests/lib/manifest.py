@@ -11,7 +11,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 KEYS = {"nodes", "timeout", "restart", "restart_kill", "stop", "after",
-        "destroys", "ops", "local_only", "host_listener", "facts", "config"}
+        "destroys", "ops", "local_only", "host_listener", "facts", "config",
+        "answers"}
 MODULE = re.compile(r"[a-z][a-z0-9_]*")
 
 # (module, key) the harness owns: the ports a world leases, the token the
@@ -59,6 +60,9 @@ class Test:
     # why a node dials a listener the test serves on the test host (at the
     # node's host_ip); a VM world gives its nodes no such address
     host_listener: str | None = None
+    # why the test answers SwarmState requests itself; None: the harness
+    # answerer (lib/answerer.py) approves its apps' ContractRequests
+    answers: str | None = None
     facts: list = field(default_factory=list)
     prompt: bool = False
     # whether it ships a while_down.py, which its restart runs between
@@ -172,6 +176,7 @@ def _parse(mf: Path) -> Test:
                 ops=ops,
                 local_only=local_only,
                 host_listener=host_listener,
+                answers=_reason(name, raw, "answers"),
                 facts=facts,
                 # why a file and not a key: a test an operator can drive is
                 # exactly one that tells it what to do

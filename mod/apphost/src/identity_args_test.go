@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/astralp2p/astral-go/api/apphost"
-	"github.com/astralp2p/astral-go/api/auth"
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astral-go/astral/channel"
 	"github.com/astralp2p/astral-go/lib/query"
@@ -35,37 +34,6 @@ func (d *namingDir) ResolveIdentity(name string) (*astral.Identity, error) {
 		return id, nil
 	}
 	return nil, errors.New("unknown identity: " + name)
-}
-
-// TestGrantOpRecordsNothingForAnUnusableIdentity: a grant_request with no
-// identity or the zero identity is answered with an error, and no grant is
-// written.
-func TestGrantOpRecordsNothingForAnUnusableIdentity(t *testing.T) {
-	action := auth.ServeObjectsAction{}.ObjectType()
-
-	for name, identity := range map[string]*astral.Identity{"absent": nil, "zero": {}} {
-		t.Run("identity "+name, func(t *testing.T) {
-			mod := testGrantModule(t)
-			mod.Auth = &recordingAuth{verdict: true}
-
-			w := newRecordingWriter()
-			req := &apphost.GrantRequest{Identity: identity, Permits: permits(action)}
-			if err := routeSending(t, mod.OpGrant, astral.GenerateIdentity(), "apphost.grant", req, w); err != nil {
-				t.Fatalf("apphost.grant rejected instead of answering: %v", err)
-			}
-			if got, want := readReply(t, w), "missing identity"; got != want {
-				t.Fatalf("answered %q; want %q", got, want)
-			}
-
-			var n int64
-			if err := mod.db.Model(&dbGrant{}).Count(&n).Error; err != nil {
-				t.Fatalf("count grants: %v", err)
-			}
-			if n != 0 {
-				t.Fatalf("the node holds %d grants; want 0", n)
-			}
-		})
-	}
 }
 
 // TestListTokensFiltersByIdentity: an omitted identity lists every token, a

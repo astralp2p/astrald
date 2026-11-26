@@ -5,6 +5,7 @@ import (
 
 	"github.com/astralp2p/astral-go/api/auth"
 	"github.com/astralp2p/astral-go/api/nodes"
+	"github.com/astralp2p/astral-go/api/services"
 	"github.com/astralp2p/astral-go/api/user"
 	"github.com/astralp2p/astral-go/astral"
 )
@@ -98,4 +99,8 @@ func TestChainSeeObjectsDropsTheSwarmMemberRule(t *testing.T) {
 			t.Errorf("%s: got %v, want %v", name, got, c.want)
 		}
 	}
+}
+
+func discoveryAction(actor *astral.Identity, service astral.String8) *services.ServiceDiscoveryAction {
+	return &services.ServiceDiscoveryAction{Action: auth.NewAction(actor), Service: service}
 }

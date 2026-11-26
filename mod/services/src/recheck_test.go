@@ -1,6 +1,7 @@
 package services
 
 import (
+	"slices"
 	"testing"
 	"time"
 
@@ -50,14 +51,15 @@ func expectQuiet(t *testing.T, p *peer) {
 	}
 }
 
-func expectRemoved(t *testing.T, p *peer, provider *astral.Identity, cause services.RemovalCause) {
+// expectRemoved expects provider's offering retracted for one of causes.
+func expectRemoved(t *testing.T, p *peer, provider *astral.Identity, causes ...services.RemovalCause) {
 	t.Helper()
 	r := expect[*services.Removed](t, p)
 	if len(r.Offerings) != 1 || !r.Offerings[0].ProviderID.IsEqual(provider) {
 		t.Fatalf("removed %+v; want %v only", r.Offerings, provider)
 	}
-	if got := services.RemovalCause(r.Cause); got != cause {
-		t.Fatalf("removal cause %v; want %v", got, cause)
+	if got := services.RemovalCause(r.Cause); !slices.Contains(causes, got) {
+		t.Fatalf("removal cause %v; want one of %v", got, causes)
 	}
 }
 
@@ -113,7 +115,7 @@ func TestRevokeMidFollowRetractsThePrivateOffering(t *testing.T) {
 	expect[*astral.EOS](t, c)
 
 	v.auth.revoke(v.app, "contacts", nodeA)
-	v.apps.grantsChanged(v.app)
+	v.auth.indexed(contractFor(v.app))
 	expectRemoved(t, c, private, services.CauseHidden)
 	expectNotGranted(t, c, "contacts")
 
@@ -143,8 +145,10 @@ func TestRevokeRetractsAMemberOfferingAndARestartKeepsItHidden(t *testing.T) {
 	node.waitEOS(t)
 
 	v.auth.revoke(v.app, "contacts", nodeB)
-	v.apps.grantsChanged(v.app)
-	expectRemoved(t, c, private, services.CauseHidden)
+	v.auth.indexed(contractFor(v.app))
+	// why either cause: B filters the carried stream as the app (G7), so B's
+	// own re-check (services.removed) and A's re-check race to retract it.
+	expectRemoved(t, c, private, services.CauseHidden, services.CauseMemberRemoved)
 
 	node.cut()
 	node.waitEOS(t) // the restored carry reached the member's initial outcome
@@ -167,13 +171,13 @@ func TestBlockedRecheckDoesNotDelayGrantChanges(t *testing.T) {
 	block := make(chan struct{})
 	v.auth.setBlock(block)
 	v.auth.revoke(v.app, "contacts", nodeA)
-	v.apps.grantsChanged(v.app)
+	v.auth.indexed(contractFor(v.app))
 	time.Sleep(100 * time.Millisecond) // the re-check now waits in Authorize
 
 	returned := make(chan struct{})
 	go func() {
 		for range 3 {
-			v.apps.grantsChanged(v.app)
+			v.auth.indexed(contractFor(v.app))
 		}
 		close(returned)
 	}()
@@ -202,7 +206,7 @@ func TestGrantMidFollowRevealsThePrivateProvider(t *testing.T) {
 	}
 
 	v.auth.grant(v.app, "contacts", nodeA)
-	v.apps.grantsChanged(v.app)
+	v.auth.indexed(contractFor(v.app))
 	expectNotGranted(t, c)
 	expectUpdateFrom(t, c, private)
 }
@@ -221,7 +225,7 @@ func TestGrantMidFollowDeliversAMemberPrivateOffering(t *testing.T) {
 	}
 
 	v.auth.grant(v.app, "contacts", nodeB)
-	v.apps.grantsChanged(v.app)
+	v.auth.indexed(contractFor(v.app))
 	// note: not granted on A still, so the list does not change.
 	expectUpdateFrom(t, c, private)
 }
@@ -308,7 +312,7 @@ func TestServeAppsRevokeClosesTheBinding(t *testing.T) {
 	expect[*astral.EOS](t, c)
 
 	v.auth.refuse(auth.ServeAppsAction{}.ObjectType())
-	v.apps.grantsChanged(provider)
+	v.auth.indexed(contractFor(provider))
 	expectRemoved(t, c, provider, services.CauseBindingClosed)
 	expectEnd(t, pc)
 }
@@ -356,6 +360,12 @@ func TestChangeForTheCarrierClosesItsCarry(t *testing.T) {
 	}
 
 	v.auth.refuse(nodes.RelayForAction{}.ObjectType())
-	v.apps.grantsChanged(nodeA)
+	v.auth.indexed(contractFor(nodeA))
 	expectRemoved(t, c, player, services.CauseMemberLost)
+}
+
+// contractFor is a contract naming id as its subject: the authority change
+// that schedules id's re-check, now that permits come from contracts.
+func contractFor(id *astral.Identity) *auth.SignedContract {
+	return &auth.SignedContract{Contract: &auth.Contract{Subject: id}}
 }

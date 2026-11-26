@@ -3,7 +3,6 @@ package mobile
 import (
 	"bytes"
 	"testing"
-	"time"
 
 	"github.com/astralp2p/astral-go/api/auth"
 	"github.com/astralp2p/astral-go/api/services"
@@ -71,24 +70,28 @@ func TestRegisterServiceRejectsInvalidInput(t *testing.T) {
 type grantRecorder struct {
 	identity *astral.Identity
 	permit   *auth.Permit
-	expires  *time.Time
+	requests int
 }
 
-func (g *grantRecorder) Grant(identity *astral.Identity, permit *auth.Permit, expiresAt *time.Time) error {
-	g.identity, g.permit, g.expires = identity, permit, expiresAt
-	return nil
+func (g *grantRecorder) RequestContract(_ *astral.Context, app *astral.Identity, permits []*auth.Permit) (*astral.ObjectID, error) {
+	g.requests++
+	g.identity = app
+	if len(permits) == 1 {
+		g.permit = permits[0]
+	}
+	return &astral.ObjectID{}, nil
 }
 
-// The grant lets the app discover exactly the named services, on any node,
-// until revoked.
+// The request asks for the app to discover exactly the named services, on any
+// node.
 func TestGrantDiscoveryScopesTheNamedServices(t *testing.T) {
 	app, node := astral.GenerateIdentity(), astral.GenerateIdentity()
 	g := &grantRecorder{}
 	if err := grantDiscovery(g, app, []string{"contacts-backend"}); err != nil {
 		t.Fatal(err)
 	}
-	if !g.identity.IsEqual(app) || g.expires != nil {
-		t.Fatalf("granted to %v until %v; want the app, unexpiring", g.identity, g.expires)
+	if !g.identity.IsEqual(app) || g.requests != 1 || g.permit == nil {
+		t.Fatalf("asked %v times for %v; want one request with one permit for the app", g.requests, g.identity)
 	}
 	allows := func(service string) bool {
 		return g.permit.Allows(&services.ServiceDiscoveryAction{
@@ -103,8 +106,8 @@ func TestGrantDiscoveryScopesTheNamedServices(t *testing.T) {
 	}
 }
 
-// The grant for the same names encodes to the same bytes every time, so the
-// host's grant at every start refreshes one row instead of adding one.
+// The permit for the same names encodes to the same bytes every time, so the
+// host's request at every start finds the live request instead of filing one.
 func TestGrantDiscoveryIsDeterministic(t *testing.T) {
 	app := astral.GenerateIdentity()
 	var encoded [][]byte

@@ -7,9 +7,9 @@ lists itself alone, though the same User claimed it. After it, `member`,
 `sibling` and `replacement` list each other in user.swarm_status, never the
 expelled `banned`, and list `first` unlinked; each lists the alias the others
 give themselves; and `replacement` holds the ban of `banned`. user.info as
-the User answers across the link both ways, each answer the contract of the
-node asked, signed by the User. The refusals read as the gate and the op
-answer them.
+the User relayed by `replacement`, a Privileged node, answers with `member`'s
+membership, signed by its carrier `first`; relayed by `member`, a Member, it
+is refused (D5, D6). The refusals read as the gate and the op answer them.
 """
 import asyncio
 import time
@@ -96,15 +96,24 @@ def check_answers(f: dict) -> None:
         f"a second user.introduce from the claimed node's token answered {p['again']}")
 
 
-def check_cross_info(f: dict, user: str, nodes: dict) -> None:
-    """user.info as the User answered across the link, from each node of the other."""
-    for key, asked in (("replacement_of_member", "member"), ("member_of_replacement", "replacement")):
-        i = f["cross_info"][key]
-        assert i["answered"], f"user.info as the User ({key}) was refused: {i['detail']}"
-        assert i["state"] == "claimed", f"user.info ({key}) answered state {i['state']!r}"
-        assert i["subject"] == nodes[asked]["identity"], (
-            f"user.info ({key}) answered the contract of {i['subject']}, not {asked}")
-        assert i["issuer"] == user, f"user.info ({key}) answered a contract {i['issuer']} signed"
+def check_cross_info(f: dict, swarm: dict, nodes: dict) -> None:
+    """user.info as the User across the link: from replacement, a Privileged
+    node, of member, answered with member's own membership, which its carrier
+    `first` signed (a Member's membership is its carrier's, since G7); from
+    member, a Member, of replacement, refused, since a Member does not relay
+    as the User (D5, D6; the node rejects the relay before an op runs)."""
+    i = f["cross_info"]["replacement_of_member"]
+    assert i["answered"], f"user.info as the User (replacement_of_member) was refused: {i['detail']}"
+    assert i["state"] == "claimed", f"user.info (replacement_of_member) answered state {i['state']!r}"
+    assert i["subject"] == nodes["member"]["identity"], (
+        f"user.info (replacement_of_member) answered the contract of {i['subject']}, not member")
+    assert i["issuer"] == swarm["first"], (
+        f"member's membership is signed by {i['issuer']}, not by its carrier first "
+        f"{swarm['first']}")
+    i = f["cross_info"]["member_of_replacement"]
+    assert not i["answered"] and "query rejected" in i["detail"], (
+        f"user.info as the User relayed by member, a Member, answered {i}; a Member "
+        "does not relay as the User")
 
 
 async def main():
@@ -114,13 +123,14 @@ async def main():
 
     check_before(f, swarm["user"], nodes)
     check_answers(f)
-    check_cross_info(f, swarm["user"], nodes)
+    check_cross_info(f, swarm, nodes)
     left = await converged(nodes, swarm["first"])
     assert not left, "the swarm did not converge after the introduction: " + "; ".join(left)
 
     print("oracle: with first stopped, replacement started alone; after user.introduce "
           "member, sibling and replacement list each other with matching aliases, list "
-          "first unlinked, hold the ban, and answer user.info as the User both ways")
+          "first unlinked, hold the ban; user.info as the User answers relayed by "
+          "replacement and is refused relayed by member, a Member")
 
 
 asyncio.run(main())

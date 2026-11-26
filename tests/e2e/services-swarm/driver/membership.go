@@ -6,6 +6,8 @@ import (
 	"os"
 	"time"
 
+	"github.com/astralp2p/astrald/tests/e2e/internal/joins"
+
 	"github.com/astralp2p/astral-go/api/services"
 	userclient "github.com/astralp2p/astral-go/api/user/client"
 	"github.com/astralp2p/astral-go/astral"
@@ -49,17 +51,6 @@ func membershipSteps(path string, facts map[string]bool) error {
 	if err := w.grant(app, []string{name}); err != nil {
 		return err
 	}
-	providerID, cl, err := w.app(connect(late.Endpoint, late.Token), late, serveApps)
-	if err != nil {
-		return err
-	}
-	provider := &evaluated{}
-	b, err := cl.AdvertiseOpen(w.ctx, []string{name}, true, provider.offer)
-	if err != nil {
-		return err
-	}
-	defer b.Close()
-
 	watch, err := f.WatchIn(w.ctx, services.ReachSwarm, []string{name})
 	if err != nil {
 		return err
@@ -70,9 +61,24 @@ func membershipSteps(path string, facts map[string]bool) error {
 	}
 
 	users := userclient.New(w.node1, connect(w.n1.Endpoint, s.Facts.UserToken))
-	if _, err := users.Adopt(w.ctx, late.Identity); err != nil {
-		return fmt.Errorf("adopt: %w", err)
+	// note: user.adopt is gone (G7); ssm_late joins through node1 as a Member
+	if _, err := joins.Admit(w.ctx, connect(late.Endpoint, late.Token), connect(w.n1.Endpoint, s.Facts.UserToken), w.n1.Identity, late.Identity); err != nil {
+		return fmt.Errorf("join: %w", err)
 	}
+
+	// why after the join: an app's contract signed while ssm_late was
+	// unclaimed does not outlive the claim (a Non-goal of G7), so the provider
+	// gets its contract through the swarm once ssm_late is a member.
+	providerID, cl, err := w.app(connect(late.Endpoint, late.Token), late, serveApps)
+	if err != nil {
+		return err
+	}
+	provider := &evaluated{}
+	b, err := cl.AdvertiseOpen(w.ctx, []string{name}, true, provider.offer)
+	if err != nil {
+		return err
+	}
+	defer b.Close()
 	if err := step(facts, "late_join_reaches_open_follow", holdsWithin(watch, membershipWait, providerID.String()+"/"+name)); err != nil {
 		return err
 	}

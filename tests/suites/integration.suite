@@ -14,7 +14,6 @@ smoke
 claim-window
 token-less-setup
 signer-app
-admission-policies
 bootstrap-user-software-key
 bootstrap-user-op
 fs-watch
@@ -28,7 +27,6 @@ adopt-node
 blueprints-two-node
 apphost-origin
 sign-contract-guard
-request-grant-scope
 swarm-authz-matrix
 services-swarm
 object-store
@@ -67,7 +65,6 @@ app-describe-provider
 app-search-provider
 objects-provider-registration-authz
 objects-provider-read-robustness
-objects-provider-revoke-lease
 app-discover-local
 app-handler-unroute
 app-query
@@ -77,8 +74,6 @@ app-two-providers
 app-blueprint-sync
 services-app-call
 services-provider-gone
-app-preexisting-provider-sync
-manager-answers-invite
 app-node-restart-reconnect
 services-node-restart
 services-consumer-restart
@@ -89,15 +84,11 @@ mcp-peer
 messaging-two-node
 basic-strategy-stalled-endpoint-released
 manager-setup
-policy-delegate
 indexer-cursor
 swarm-member-restart
 expel-survives-restart
 membership-resync-volume
-adopt-claimed-node-setup
 distribution-gate-setup
-adopt-claimed-node
-adopt-refusals
 app-index-provider
 app-origin-guards
 app-token-lifecycle
@@ -122,7 +113,6 @@ kcp-only-restart-relink
 basic-strategy-gw-cycle
 link-session-migrate
 link-session-migrate-serving-side
-concurrent-adoption
 swarm-four-siblings
 swarm-apps-talk
 swarm-apps-matrix-kcp
@@ -139,3 +129,15 @@ link-prefer-live
 services-carry-eos-retry
 services-follow-member-leaves
 swarm-expel-clean
+
+# swarm-state.suite: criterion 2 of Swarm State and User Authority
+swarm-state-member
+swarm-state-join-unanswered
+swarm-state-join-carrier-restart
+swarm-state-join-resumed
+swarm-state-app-on-member
+swarm-state-app-moves
+swarm-state-app-own-node
+swarm-state-conflicting-answers
+swarm-state-member-approval-dropped
+swarm-state-expel-cuts-chains

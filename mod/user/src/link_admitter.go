@@ -37,13 +37,13 @@ func (mod *Module) AdmitLink(remote *astral.Identity) error {
 // reads again.
 func (mod *Module) isBanned(id *astral.Identity) bool {
 	ac := mod.ActiveContract()
-	if ac == nil || id.IsEqual(ac.Issuer) || id.IsEqual(mod.node.Identity()) {
+	if ac == nil || id.IsEqual(mod.Identity()) || id.IsEqual(mod.node.Identity()) {
 		return false
 	}
 
 	banned := mod.banned.Load()
 	if banned == nil {
-		if banned = mod.loadBans(ac.Issuer); banned == nil {
+		if banned = mod.loadBans(mod.Identity()); banned == nil {
 			return false
 		}
 	}
@@ -70,7 +70,7 @@ func (mod *Module) loadBans(issuer *astral.Identity) *map[string]struct{} {
 func (mod *Module) refreshBans() {
 	set := map[string]struct{}{}
 	if ac := mod.ActiveContract(); ac != nil {
-		read, err := mod.readExpelledSet(ac.Issuer)
+		read, err := mod.readExpelledSet(mod.Identity())
 		if err != nil {
 			mod.log.Error("loading bans: %v", err)
 			return

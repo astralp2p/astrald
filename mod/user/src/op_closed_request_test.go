@@ -25,7 +25,6 @@ func TestContractOpsAnswerARequesterClosedBeforeTheContract(t *testing.T) {
 		op   func(*Module) any
 	}{
 		{"user.accept_contract", func(m *Module) any { return m.OpAcceptContract }},
-		{"user.accept_membership", func(m *Module) any { return m.OpAcceptMembership }},
 	}
 
 	for _, tt := range ops {

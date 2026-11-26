@@ -17,6 +17,7 @@ import astral
 from astral.errors import AstralError
 
 from lib import jsonops
+from lib import swarmstate as ss
 from lib.sessionio import load, write_facts
 
 ADMIN = "mod.auth.admin_manage_apps_action"
@@ -82,6 +83,9 @@ async def register_admin(c, endpoint: str) -> dict:
         c, "apphost.register?in=json&out=json",
         body={"Type": "mod.apphost.register_request",
               "Object": {"GrantPermits": [{"Action": ADMIN}]}})
+    # why: since G7 the asked permit is a contract the node signs once the
+    # harness answerer approves the registration's ContractRequest
+    await ss.await_app(endpoint, app["Token"], [ADMIN])
     async with await astral.connect(endpoint, token=app["Token"]) as a:
         tokens = await attempt(a.apphost.list_tokens())
         who = await a.apphost.whoami(caller=None)
@@ -98,8 +102,11 @@ async def link(n1: dict, n2: dict) -> None:
 async def join(joiner: dict, claimer: dict) -> dict:
     async with await astral.connect(joiner["endpoint"]) as c:      # anonymous
         before = await state(c)
-        joined = await attempt(jsonops.value(
-            c, f"user.join?node={claimer['identity']}&out=json", timeout=DEADLINE))
+        # why waiting: since G7 the join waits for an Approval of its
+        # JoinRequest, which the harness answerer gives while a driver waits
+        with ss.waiting():
+            joined = await attempt(jsonops.value(
+                c, f"user.join?node={claimer['identity']}&out=json", timeout=DEADLINE))
         after = await attempt(c.user.info())
         again_anon = await attempt(jsonops.value(
             c, f"user.join?node={claimer['identity']}&out=json", timeout=DEADLINE))

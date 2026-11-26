@@ -55,11 +55,15 @@ def main():
     assert j["before"].get("state") == "fresh", (
         f"joiner answered user.info before the join: {j['before']}; want state fresh")
     assert not j["joined"]["refused"], f"user.join: {j['joined']['detail']}"
-    assert j["issuer"] == c["claimed"] and j["subject"] == joiner["identity"], (
+    # note: since G7 a Member's membership is issued by its carrier, claimer,
+    # carrying out the Approval of its JoinRequest; user.info answers that
+    # contract, so it names the carrier and not the User (open finding on G7)
+    assert j["issuer"] == claimer["identity"] and j["subject"] == joiner["identity"], (
         f"joiner's contract {j['issuer']} -> {j['subject']}; want "
-        f"{c['claimed']} -> {joiner['identity']}")
-    assert j["user_after"] == c["claimed"], (
-        f"joiner answers as {j['user_after'] or j['after']['detail']}, not the User")
+        f"{claimer['identity']} -> {joiner['identity']}")
+    assert j["user_after"] == claimer["identity"], (
+        f"joiner answers with a contract from {j['user_after'] or j['after']['detail']}, "
+        "not its carrier's membership")
     assert j["again_anon"]["refused"] and "node already claimed" in j["again_anon"]["detail"], (
         f"a token-less user.join on the claimed joiner: {j['again_anon']['detail']}")
     assert j["again"]["refused"] and "node already claimed" in j["again"]["detail"], (

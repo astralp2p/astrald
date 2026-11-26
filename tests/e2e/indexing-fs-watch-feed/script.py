@@ -37,6 +37,7 @@ from lib import fsfixture, nodefs
 from lib.indexing import (INDEX, UNINDEX, Subscription, answer, change,
                           register_indexer)
 from lib.sessionio import load, write_facts
+from lib import swarmstate as ss
 
 SERVE = "mod.auth.serve_objects_action"
 REPO = "indexing-fs-watch-feed"
@@ -175,6 +176,9 @@ async def main():
                                                      INDEX_DEADLINE)
         token = await u.apphost.register(name=f"{REPO}-i",
                                          grant_permits=[SERVE])
+    # why: since G7 a permit is a contract the host signs once the harness
+    # answerer approves the registration's ContractRequest
+    await ss.await_app(endpoint, token.token, [SERVE])
     app = {"identity": str(token.identity), "token": token.token}
 
     async with await astral.connect(endpoint, token=app["token"]) as i, \

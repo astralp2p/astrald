@@ -1,4 +1,0 @@
-nodes   = ["node1", "node2"]
-timeout = 120
-after   = "adopt-node"
-facts   = ["roster_before", "contracts_before", "answers"]

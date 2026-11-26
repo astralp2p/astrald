@@ -30,6 +30,7 @@ from astral.errors import AstralError
 from astral.object import Query
 
 from lib.sessionio import load, write_facts
+from lib import swarmstate as ss
 
 STORE = "mod.auth.store_objects_action"
 
@@ -73,6 +74,10 @@ async def main():
             "N": await u.apphost.register(name="hold-isolation-n"),
         }
 
+    # why: since G7 a permit is a contract the host signs once the harness
+    # answerer approves the registration's ContractRequest
+    for k, actions in (("A", [STORE]), ("B", [STORE]), ("N", [])):
+        await ss.await_app(endpoint, tokens[k].token, actions)
     apps = {k: {"identity": str(t.identity), "token": t.token} for k, t in tokens.items()}
     lists = {}
 

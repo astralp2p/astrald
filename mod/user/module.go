@@ -5,7 +5,6 @@ import (
 	"time"
 
 	"github.com/astralp2p/astral-go/api/auth"
-	"github.com/astralp2p/astral-go/api/policy"
 	"github.com/astralp2p/astral-go/api/user"
 	"github.com/astralp2p/astral-go/astral"
 )
@@ -42,10 +41,9 @@ const (
 // is its own root. Implementations read time from an injected clock that
 // defaults to time.Now, so tests and fakes agree on it.
 //
-// It is declared apart from Module: nothing implements it until G2 (reads) and
-// G3 (CheckSwarmEntry), and G7 embeds it into Module. A "carried out, or not
-// yet" view and the head-polling watcher stay inside mod/user; other modules
-// poll nodes.SwarmState.SwarmHead and call these methods.
+// Module embeds it. A "carried out, or not yet" view and the head-polling
+// watcher stay inside mod/user; other modules poll nodes.SwarmState.SwarmHead
+// and call these methods.
 type SwarmView interface {
 	// RequestStatus returns the status of the request with entry ID req, in
 	// precedence order:
@@ -127,6 +125,7 @@ type SwarmView interface {
 }
 
 type Module interface {
+	SwarmView
 	// Ready returns a channel that is closed once the module has applied the
 	// initial active contract and is fully initialized.
 	Ready() <-chan struct{}
@@ -174,8 +173,4 @@ type Module interface {
 	// WasOwned reports whether a user contract has been active on this node,
 	// including one that has since expired or been expelled.
 	WasOwned() bool
-	// SetPolicyDelegate stores d as the delegate of the named user policy
-	// (swarm_join, swarm_invite or contract_accept), or clears it when d is
-	// nil. Another name is an error.
-	SetPolicyDelegate(ctx *astral.Context, name string, d *policy.Delegate) error
 }

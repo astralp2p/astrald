@@ -51,7 +51,7 @@ type swarmCarrier struct {
 	validity time.Duration    // of the memberships it signs
 	poll     time.Duration
 	now      func() time.Time
-	mu       sync.Mutex // serializes carrying out, so one Approval yields one contract
+	mu       *sync.Mutex // serializes carrying out, so one Approval yields one contract
 }
 
 func newSwarmCarrier(self *astral.Identity, state nodesmod.SwarmState, view usermod.SwarmView, signer entrySigner) *swarmCarrier {
@@ -63,7 +63,19 @@ func newSwarmCarrier(self *astral.Identity, state nodesmod.SwarmState, view user
 		validity: usermod.DefaultContractValidity,
 		poll:     defaultSwarmPoll,
 		now:      time.Now,
+		mu:       &sync.Mutex{},
 	}
+}
+
+// withCeremony returns this carrier with ceremony as the user key it reaches,
+// sharing its lock.
+//
+// why per carry: the user key is stored on, or removed from, this node while
+// it runs, so the ceremony is read when a join arrives.
+func (c *swarmCarrier) withCeremony(ceremony *userKeyCeremony) *swarmCarrier {
+	cc := *c
+	cc.ceremony = ceremony
+	return &cc
 }
 
 // Carry writes req into SwarmState, waits until it is answered and returns the

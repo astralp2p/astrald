@@ -19,7 +19,9 @@ type opNewNodeContractArgs struct {
 	Out      string
 }
 
-// OpNewNodeContract constructs and returns an unsigned node contract.
+// OpNewNodeContract constructs and returns an unsigned node contract: the
+// node's PrivilegedMembership from the user, with no link, which the user key
+// signs in a ceremony (D2).
 // Defaults to the module's own identity for user and the local node identity for node when omitted.
 // note: the contract is not signed or stored; the caller is responsible for the signing ceremony.
 func (mod *Module) OpNewNodeContract(ctx *astral.Context, query *routing.IncomingQuery, args opNewNodeContractArgs) (err error) {
@@ -72,8 +74,8 @@ func (mod *Module) OpNewNodeContract(ctx *astral.Context, query *routing.Incomin
 		}
 	}
 
-	// the setup ceremony provisions the user's primary node, which manages the swarm
-	contract, err := user.NewNodeContract(userID, nodeID, true, duration)
+	// the setup ceremony provisions a Privileged node, which acts for the user
+	contract, err := user.NewMembership(userID, nodeID, user.TierPrivilegedMember, nil, duration)
 	if err != nil {
 		return ch.Send(astral.Err(err))
 	}

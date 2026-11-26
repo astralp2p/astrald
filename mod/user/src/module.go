@@ -35,12 +35,6 @@ type Module struct {
 	// swarm is the member set publishSwarm last emitted events for.
 	swarm memberSet
 
-	// policy persists the admission delegates; an unset value selects the
-	// policies.* config value, whose code default is reject_all.
-	// GetSwarmJoinPolicy, GetSwarmInvitePolicy and GetContractAcceptPolicy read
-	// it on every decision.
-	policy policyConfig
-
 	// mu makes the claim check and the claim one transition; see claim.
 	mu sync.Mutex
 	// linkerMu makes the sibling linker's check, schedule and register one step; see runSiblingLinker.
@@ -70,6 +64,17 @@ type Module struct {
 	// runs. See recognizeJoinTarget.
 	joinTarget atomic.Pointer[astral.Identity]
 
+	// swarmView reads SwarmState; entryCheck decides what enters it.
+	swarmView  *swarmView
+	entryCheck *swarmEntryCheck
+	// carrier carries the JoinRequests that name this node (user.carry_join).
+	carrier *swarmCarrier
+	// joiner keeps this node's own JoinRequest while it joins (user.join).
+	joiner *swarmJoiner
+	// indexedEntries holds the SwarmState contracts already handed to the auth
+	// index, and the SwarmState expels already stored as bans.
+	indexedEntries sig.Map[astral.ObjectID, struct{}]
+
 	// banned holds the subjects the active user banned; see isBanned.
 	banned atomic.Pointer[map[string]struct{}]
 	// banAnswers holds the banned subjects that answered their own ban pushed
@@ -87,6 +92,7 @@ func (mod *Module) Run(ctx *astral.Context) error {
 	close(mod.ready)
 	go mod.runReconcile(mod.ctx)
 	go mod.runPeriodicSiblingSync(mod.ctx)
+	go mod.runSwarmWatcher(mod.ctx)
 	go func() {
 		for contract := range activeContractFollow {
 			mod.onActiveContractChanged(contract)
@@ -115,8 +121,9 @@ func (mod *Module) String() string {
 	return user.ModuleName
 }
 
-// runSiblingLinker starts a link task for every swarm member that has none and
-// stops the link task of every sibling that is no longer a swarm member.
+// runSiblingLinker starts a link task for every swarm member that has none,
+// runs onNewMember for it, and stops the link task of every sibling that is
+// no longer a swarm member.
 //
 // why linkerMu: PeerSeen events, pushed contracts and contract changes run the
 // linker at once, and two unserialized runs each start a task for one member.
@@ -150,5 +157,27 @@ func (mod *Module) runSiblingLinker() {
 		}
 
 		mod.addSibling(node, scheduledAction.Cancel, maintainLinkAction.Wake)
+
+		mod.onNewMember(node)
+	}
+}
+
+// onNewMember reacts to a member the sibling linker lists for the first time:
+// mod/nodes learns its endpoints, and a linked member gets a sibling sync.
+//
+// why: a membership reaches this node only through SwarmState sync, which
+// brings no endpoints, so a new member's link task would have none to dial;
+// the pull's EndpointsUpdatedEvent wakes the task.
+// why the sync: the LinkCreatedEvent sync skips a node linked before it was a
+// member, as a joiner is with its carrier, and before G7 the pushed node
+// contract started that sync (receiveSignedContract); it carries the relay
+// contracts of the swarm's apps.
+func (mod *Module) onNewMember(node *astral.Identity) {
+	go mod.Nodes.LearnMemberEndpoints(node)
+
+	if mod.Nodes.IsLinked(node) {
+		if _, err := mod.Scheduler.Schedule(mod.NewSyncNodesTask(node)); err != nil {
+			mod.log.Error("scheduling a sync with new member %v: %v", node, err)
+		}
 	}
 }

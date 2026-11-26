@@ -1,0 +1,7 @@
+nodes    = ["node1", "node2", "node3"]
+after    = "swarm-state-app-on-member"
+timeout  = 240
+# why destroys: node3 is expelled
+destroys = true
+facts    = ["expel_cuts"]
+answers  = "it answers SwarmState requests itself: the User's answer is what it tests"

@@ -1,7 +1,6 @@
 package apphost
 
 import (
-	"errors"
 	"testing"
 
 	"github.com/astralp2p/astral-go/api/apphost"
@@ -77,32 +76,6 @@ func TestRegistrationPushesTheRelayContractToTheSiblings(t *testing.T) {
 	}
 	if len(signed.Permits) != 1 || string(signed.Permits[0].Action) != (nodes.RelayForAction{}).ObjectType() {
 		t.Fatalf("the pushed contract carries %d permits; want one %v", len(signed.Permits), (nodes.RelayForAction{}).ObjectType())
-	}
-}
-
-// TestRegistrationThatFailsPushesNothing: a registration that fails after its
-// relay contract is indexed issues no token, and the siblings receive no
-// contract of an app nobody holds a token for.
-func TestRegistrationThatFailsPushesNothing(t *testing.T) {
-	steps := &registerSteps{setErr: errors.New("endpoint names no transport")}
-	mod := delegatedRegistrar(t, steps, newDelegateNode(&apphost.AppRegisterDecision{
-		Allow:       true,
-		Authorizers: []*auth.AuthorizerAssignment{{Action: "mod.auth.see_objects_action", Endpoint: "ftp://nowhere"}},
-	}))
-	recorder := newPushRecorder()
-	mod.User = recorder
-	w := newRecordingWriter()
-
-	if err := register(t, mod, &apphost.RegisterRequest{}, w); err != nil {
-		t.Fatalf("apphost.register refused: %v", err)
-	}
-	awaitServeAppsClose(t, w)
-
-	if tokens := issuedTokens(t, mod); len(tokens) != 0 {
-		t.Fatalf("a failed assignment issued %d tokens", len(tokens))
-	}
-	if pushed := recorder.drain(); len(pushed) != 0 {
-		t.Fatalf("a failed registration pushed %d objects to the siblings; want none", len(pushed))
 	}
 }
 

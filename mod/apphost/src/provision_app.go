@@ -1,33 +1,36 @@
 package apphost
 
 import (
-	"fmt"
-
 	apphostapi "github.com/astralp2p/astral-go/api/apphost"
 	"github.com/astralp2p/astral-go/api/auth"
-	"github.com/astralp2p/astral-go/api/policy"
-	sysapi "github.com/astralp2p/astral-go/api/sys"
 	"github.com/astralp2p/astral-go/astral"
+	apphostmod "github.com/astralp2p/astrald/mod/apphost"
 )
 
-// ProvisionApp mints an App identity without asking the app register policy;
-// see apphost.Module. sys.register_manager provisions the manager with it.
-func (mod *Module) ProvisionApp(ctx *astral.Context, grantPermits, contractPermits []*auth.Permit) (*apphostapi.AccessToken, error) {
-	return mod.provisionApp(ctx, &apphostapi.AppRegisterDecision{
-		Allow:           true,
-		GrantPermits:    registerGrantRequest(grantPermits),
-		ContractPermits: contractPermits,
-	})
+// ProvisionApp mints an App identity holding a node→app contract of
+// ServeApps, UseBlueprints and contractPermits; see apphost.Module.
+// sys.register_manager provisions the manager with it.
+//
+// why the two first: the manager is served from this node and syncs its
+// blueprints, as every registration asks (fileRegisterPermits).
+func (mod *Module) ProvisionApp(ctx *astral.Context, contractPermits []*auth.Permit) (*apphostapi.AccessToken, error) {
+	return mod.provisionApp(ctx, append(hostingPermits(), contractPermits...))
 }
 
-// SetPolicyDelegate stores d as the delegate of an apphost policy, or clears
-// it when d is nil; see apphost.Module.
-func (mod *Module) SetPolicyDelegate(ctx *astral.Context, name string, d *policy.Delegate) error {
-	switch name {
-	case sysapi.PolicyAppRegister:
-		return writePolicyDelegate(ctx, d, &mod.policy.AppRegister)
-	case sysapi.PolicyGrantRequest:
-		return writePolicyDelegate(ctx, d, &mod.policy.GrantRequest)
+// hostingPermits are the permits every app asks for: to be served from this
+// node and to sync its blueprints.
+func hostingPermits() []*auth.Permit {
+	return []*auth.Permit{
+		{Action: astral.String8(auth.ServeAppsAction{}.ObjectType())},
+		{Action: astral.String8(auth.UseBlueprintsAction{}.ObjectType())},
 	}
-	return fmt.Errorf("not an apphost policy: %v", name)
+}
+
+// RequestContract files a ContractRequest asking permits for app; see
+// apphost.Module.
+func (mod *Module) RequestContract(ctx *astral.Context, app *astral.Identity, permits []*auth.Permit) (*astral.ObjectID, error) {
+	if mod.contractRequests == nil {
+		return nil, apphostmod.ErrContractRequestsOff
+	}
+	return mod.contractRequests.File(ctx, app, permits)
 }

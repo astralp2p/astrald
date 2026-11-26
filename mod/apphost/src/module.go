@@ -13,6 +13,7 @@ import (
 	"github.com/astralp2p/astrald/mod/auth"
 	"github.com/astralp2p/astrald/mod/crypto"
 	"github.com/astralp2p/astrald/mod/dir"
+	"github.com/astralp2p/astrald/mod/nodes"
 	"github.com/astralp2p/astrald/mod/objects"
 	"github.com/astralp2p/astrald/mod/sys"
 	"github.com/astralp2p/astrald/mod/tree"
@@ -33,7 +34,8 @@ type Deps struct {
 }
 
 type OptionalDeps struct {
-	User user.Module
+	User  user.Module
+	Nodes nodes.Module
 }
 
 type Module struct {
@@ -55,23 +57,10 @@ type Module struct {
 	enRoute               sig.Map[astral.Nonce, *queryEnRoute]
 	pendingInboundQueries sig.Map[astral.Nonce, *pendingInboundQuery]
 
-	// policy persists the registration and grant request delegates and the
-	// grant request mode. An unset register delegate selects the
-	// policies.app_register config value. A grant request delegate selects the
-	// delegate mode; otherwise a mode of accept_all selects accept-all, and an
-	// unset or any other mode selects refuse-all for grant requests.
-	// GetRegisterAppPolicy and GetGrantRequestPolicy read it on every decision.
-	policy policyConfig
-
 	// contractRequests files app ContractRequests and carries out their
-	// Approvals. It is nil until G7 builds it from nodes.SwarmState and
-	// user.SwarmView; apphost.request_contract answers
-	// ErrContractRequestsOff until then.
+	// Approvals. It is nil on a node without the user module;
+	// apphost.request_contract answers ErrContractRequestsOff there.
 	contractRequests *contractRequests
-
-	// onGrantsChanged holds the OnGrantsChanged callbacks.
-	onGrantsChangedMu sync.Mutex
-	onGrantsChanged   []func(*astral.Identity)
 }
 
 func (mod *Module) Run(ctx *astral.Context) error {
@@ -97,6 +86,16 @@ func (mod *Module) Run(ctx *astral.Context) error {
 				mod.log.Error("[worker:%v] error: %v", i, err)
 			}
 		}(i)
+	}
+
+	if mod.contractRequests != nil {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			mod.contractRequests.Run(mod.ctx, mod.config.ContractRequestPoll, func(err error) {
+				mod.log.Logv(1, "contract requests: %v", err)
+			})
+		}()
 	}
 
 	// start the object server

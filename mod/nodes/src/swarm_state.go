@@ -7,12 +7,14 @@ import (
 	"strconv"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/astralp2p/astral-go/api/user"
 	vfsapi "github.com/astralp2p/astral-go/api/vfs"
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astral-go/sig"
 	nodesmod "github.com/astralp2p/astrald/mod/nodes"
+	"github.com/astralp2p/astrald/mod/objects"
 	usermod "github.com/astralp2p/astrald/mod/user"
 	vfsmod "github.com/astralp2p/astrald/mod/vfs"
 )
@@ -67,6 +69,11 @@ type swarmStore struct {
 
 	// peers returns where an accepted entry is passed on; nil passes nothing on.
 	peers func() []swarmPusher
+	// pushTimeout bounds one pass-on push; zero is swarmPushTimeout.
+	pushTimeout time.Duration
+	// passOnWait makes passOn return only once its pushes ended.
+	// note: a test seam, so a test of the merge reads the peers' copies at once.
+	passOnWait bool
 }
 
 // swarmMerge serializes merges and holds the entries that wait (user.EntryWait).
@@ -160,7 +167,7 @@ func (s *swarmStore) loadKind(kind user.EntryKind) error {
 
 // readHead returns the count in the head file, or 0 when it cannot be read.
 func (s *swarmStore) readHead() uint64 {
-	data, err := s.files.ReadFile(s.ctx, s.owner, swarmHeadPath)
+	data, err := s.files.ReadFile(objects.WithHousekeeping(s.ctx), s.owner, swarmHeadPath)
 	if err != nil {
 		return 0
 	}
@@ -306,18 +313,44 @@ func (s *swarmStore) isStored(id *astral.ObjectID) bool {
 	return ok
 }
 
-// passOn pushes each entry to every peer. A peer that refuses or fails is left to repair itself by a pull.
+// swarmPushTimeout bounds the push of one entry to one peer.
+// why: as user.PushToSiblings bounds a sibling push; a timed-out query also
+// wakes the link's ping, which closes a dead link.
+const swarmPushTimeout = 15 * time.Second
+
+// passOn pushes each entry to every peer, each peer in its own goroutine and
+// in the order of objs, each push bounded by swarmPushTimeout. It does not
+// wait for the pushes. A peer that refuses or fails is left to repair itself
+// by a pull.
 //
 // why: on the store's context, as passing on is this node's own work and not the work of whoever offered the entry.
+// why not waiting: a push into a link that takes bytes and never answers
+// blocked the writer, such as an answer op or a host signing an app's
+// contract, until that link closed.
 func (s *swarmStore) passOn(objs []astral.Object) {
 	if len(objs) == 0 || s.peers == nil {
 		return
 	}
 
+	timeout := s.pushTimeout
+	if timeout <= 0 {
+		timeout = swarmPushTimeout
+	}
+
+	var wg sync.WaitGroup
 	for _, peer := range s.peers() {
-		for _, obj := range objs {
-			_ = peer.SwarmPush(s.ctx, obj)
-		}
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for _, obj := range objs {
+				ctx, cancel := s.ctx.WithTimeout(timeout)
+				_ = peer.SwarmPush(ctx, obj)
+				cancel()
+			}
+		}()
+	}
+	if s.passOnWait {
+		wg.Wait()
 	}
 }
 
@@ -332,7 +365,9 @@ func (s *swarmStore) SwarmEntry(id *astral.ObjectID) (astral.Object, error) {
 		return nil, fmt.Errorf("swarm entry %v: %w", id, vfsapi.ErrNotFound)
 	}
 
-	data, err := s.files.ReadFile(s.ctx, s.owner, swarmEntryPath(kind, id))
+	// why housekeeping: readers poll the set, and a poll is this node's own bookkeeping, which leaves the
+	// entries' last-touched times as they were (VFS 6, §11 "objects: last touched").
+	data, err := s.files.ReadFile(objects.WithHousekeeping(s.ctx), s.owner, swarmEntryPath(kind, id))
 	if err != nil {
 		return nil, fmt.Errorf("read swarm entry %v: %w", id, err)
 	}

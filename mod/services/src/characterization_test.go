@@ -24,10 +24,11 @@ import (
 // Characterization tests: each pins today's behaviour of a path the readability
 // refactor reshapes.
 
-// A member refuses a carried discovery when the sending node may not discover
-// the service there; the host reports the service incomplete and the member's
-// provider is never asked.
-func TestSwarmMemberRefusesACarryItMayNotDiscover(t *testing.T) {
+// A member admits a carried discovery from another member that holds no
+// discovery of its own: what the app sees comes from the app's chain, which
+// the sending node checks when it filters (admitCarry). The member's provider
+// is asked.
+func TestSwarmMemberAdmitsACarryWithoutTheSendersOwnDiscovery(t *testing.T) {
 	s := newSwarm()
 	s.authB.refuse[services.ServiceDiscoveryAction{}.ObjectType()] = true
 	asked := make(chan struct{}, 1)
@@ -37,16 +38,12 @@ func TestSwarmMemberRefusesACarryItMayNotDiscover(t *testing.T) {
 	})
 
 	c := open(t, s.a.OpDiscover, astral.GenerateIdentity(), "services.discover?services=player&reach=swarm", false)
-	in := expect[*services.Incomplete](t, c)
-	if len(in.Services) != 1 || in.Services[0] != "player" {
-		t.Fatalf("incomplete %+v; want player", in.Services)
-	}
-	expect[*astral.EOS](t, c)
 	select {
 	case <-asked:
-		t.Fatal("a refused carry asked the member's provider")
-	case <-time.After(100 * time.Millisecond):
+	case <-time.After(5 * time.Second):
+		t.Fatal("the member's provider was never asked")
 	}
+	_ = c
 }
 
 // Ending the op's context closes a follow stream and its channel.

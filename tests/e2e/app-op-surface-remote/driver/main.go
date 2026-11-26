@@ -29,6 +29,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/astralp2p/astrald/tests/e2e/internal/contracts"
+
 	apphostcli "github.com/astralp2p/astral-go/api/apphost/client"
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astral-go/astral/channel"
@@ -90,7 +92,7 @@ func run(path string) (map[string]any, error) {
 	admin1, admin2 := connect(n1.Endpoint, n1.Token), connect(n2.Endpoint, n2.Token)
 
 	// the provider app on node2: its own identity, token and client
-	provider, err := apphostcli.New(nil, admin2).Register(ctx)
+	provider, err := contracts.Register(ctx, admin2, n2.Endpoint)
 	if err != nil {
 		return facts, fmt.Errorf("registering the provider on node2: %w", err)
 	}
@@ -110,7 +112,7 @@ func run(path string) (map[string]any, error) {
 	}
 
 	// the caller app on node1: another identity, token and client
-	caller, err := apphostcli.New(nil, admin1).Register(ctx)
+	caller, err := contracts.Register(ctx, admin1, n1.Endpoint)
 	if err != nil {
 		return facts, fmt.Errorf("registering the caller on node1: %w", err)
 	}

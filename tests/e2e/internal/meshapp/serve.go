@@ -84,22 +84,20 @@ func serve(f serveFlags) error {
 	return err
 }
 
-// registerApp mints the app on its node with a discovery grant for service.
+// registerApp mints the app on its node with a discovery permit for service,
+// and waits for the contract its registration requested.
 func registerApp(ctx *astral.Context, e env, service string) (*provider.App, error) {
 	n := provider.Node{Endpoint: e.endpoint, HostIP: e.hostIP}
 	admin := provider.Connect(e.endpoint, e.token)
-	app, err := provider.Register(ctx, admin, n, serveApps)
-	if err != nil {
-		return nil, err
-	}
 	scope := astral.NewBundle()
 	rule := &services.DiscoveryRule{Services: []astral.String8{astral.String8(service)}}
 	if err := scope.Append(&services.DiscoveryScope{Rules: []*services.DiscoveryRule{rule}}); err != nil {
 		return nil, err
 	}
 	discover := &auth.Permit{Action: astral.String8(services.ServiceDiscoveryAction{}.ObjectType()), Constraints: scope}
-	if err := provider.Grant(ctx, admin, app.ID, discover); err != nil {
-		return nil, fmt.Errorf("granting discovery of %v: %w", service, err)
+	app, err := provider.Register(ctx, admin, n, serveApps, discover)
+	if err != nil {
+		return nil, fmt.Errorf("registering with discovery of %v: %w", service, err)
 	}
 	return app, nil
 }

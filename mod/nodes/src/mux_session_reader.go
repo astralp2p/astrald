@@ -100,18 +100,32 @@ func (r *muxSessionReader) Advance() {
 }
 
 // Read blocks while paused or empty, transparently switching to the next buffer at EOF, so migration is invisible to the caller.
+//
+// why the buffer is read outside the lock: InputBuffer.Read writes a credit
+// frame on the link, which blocks while the link's transport is full. Holding
+// the lock across it blocked the link's read loop in Push, and two nodes in
+// that state stopped reading each other's link until the write watchdog
+// closed it.
 func (r *muxSessionReader) Read(p []byte) (n int, err error) {
 	for {
 		r.cond.L.Lock()
 		for r.paused {
 			r.cond.Wait()
 		}
-		n, err := r.buf.Read(p)
+		buf := r.buf
+		r.cond.L.Unlock()
+
+		n, err := buf.Read(p)
 		switch {
 		case err == nil:
-			r.cond.L.Unlock()
 			return n, nil
 		case err == io.EOF:
+			r.cond.L.Lock()
+			// note: Advance may have promoted the next buffer while buf drained.
+			if r.buf != buf {
+				r.cond.L.Unlock()
+				continue
+			}
 			if r.nextBuffer != nil {
 				r.buf = r.nextBuffer
 				r.nextBuffer = nil
@@ -124,12 +138,10 @@ func (r *muxSessionReader) Read(p []byte) (n int, err error) {
 		default:
 			var emptyErr *ErrBufferEmpty
 			if errors.As(err, &emptyErr) {
-				r.cond.L.Unlock()
 				<-emptyErr.Wait()
 				continue
 			}
 
-			r.cond.L.Unlock()
 			return n, err
 		}
 	}

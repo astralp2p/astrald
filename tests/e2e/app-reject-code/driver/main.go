@@ -14,6 +14,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/astralp2p/astrald/tests/e2e/internal/contracts"
+
 	apphostcli "github.com/astralp2p/astral-go/api/apphost/client"
 	"github.com/astralp2p/astral-go/api/auth"
 	"github.com/astralp2p/astral-go/astral"
@@ -72,7 +74,7 @@ func run(path string) (map[string]any, error) {
 	admin1, admin2 := connect(n1.Endpoint, n1.Token), connect(n2.Endpoint, n2.Token)
 
 	// the provider app on node2, with the explicit serve_apps permit
-	provider, err := apphostcli.New(nil, admin2).Register(ctx, &auth.Permit{Action: "mod.auth.serve_apps_action"})
+	provider, err := contracts.Register(ctx, admin2, n2.Endpoint, &auth.Permit{Action: "mod.auth.serve_apps_action"})
 	if err != nil {
 		return facts, fmt.Errorf("registering the provider on node2: %w", err)
 	}
@@ -102,7 +104,7 @@ func run(path string) (map[string]any, error) {
 		{"remote", admin1, n1, true},
 	}
 	for _, c := range callers {
-		app, err := apphostcli.New(nil, c.admin).Register(ctx)
+		app, err := contracts.Register(ctx, c.admin, c.n.Endpoint)
 		if err != nil {
 			return facts, fmt.Errorf("registering the %s caller: %w", c.name, err)
 		}

@@ -27,6 +27,7 @@ import time
 
 import astral
 
+from lib import swarmstate as ss
 from lib.sessionio import load
 
 CONVERGE = 30.0
@@ -166,17 +167,23 @@ async def main():
                     failures.append(f"{who} {op} across the bridge was refused as "
                                     f"{text!r}, not as {' or '.join(marks)}")
 
-    # 4. contracts the driver offered
+    # 4. memberships the driver offered (nodes.swarm_push): the other
+    # swarm's answer and its SwarmState
     pushes = facts["pushes"]
     for key in ("a_contract_to_b_node", "b_contract_to_a_node"):
-        if pushes.get(key) is not False:
-            failures.append(f"{key}: a node took a contract issued by the other "
-                            f"User (push answered {pushes.get(key)!r})")
+        if pushes.get(key) == "ack":
+            failures.append(f"{key}: a node took a membership issued by the "
+                            "other User (push answered ack)")
     for key in ("a_contract_to_a_node", "b_contract_to_b_node"):
-        if pushes.get(key) is not True:
-            failures.append(f"{key}: a node refused a contract of its own swarm "
-                            f"(push answered {pushes.get(key)!r}), so the "
-                            "refusals prove nothing")
+        if pushes.get(key) != "ack":
+            failures.append(f"{key}: a node refused a membership of its own "
+                            f"swarm (push answered {pushes.get(key)!r}), so "
+                            "the refusals prove nothing")
+    held = facts["memberships"]
+    for name, n, foreign in (("node2", n2, held["b"]), ("tssb1", b1, held["a"])):
+        if foreign in ss.entries(n):
+            failures.append(f"{name}'s SwarmState stores {foreign}, the other "
+                            "swarm's membership it was offered")
 
     if failures:
         raise SystemExit("oracle: " + "; ".join(failures))

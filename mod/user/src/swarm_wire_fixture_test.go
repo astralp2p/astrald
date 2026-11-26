@@ -1,0 +1,134 @@
+package user
+
+import (
+	"errors"
+	"sync/atomic"
+	"testing"
+	"time"
+
+	"github.com/astralp2p/astral-go/api/auth"
+	"github.com/astralp2p/astral-go/api/user"
+	"github.com/astralp2p/astral-go/astral"
+	nodesmod "github.com/astralp2p/astrald/mod/nodes"
+)
+
+// useSwarm gives mod a SwarmView over an in-memory SwarmState holding, for
+// each of members, a Member-tier membership userID signed, with userID as the
+// root key. It returns the state, so a test adds entries later.
+//
+// note: the view trusts stored entries, so the signatures are placeholders.
+func useSwarm(t testing.TB, mod *Module, userID *astral.Identity, members ...*astral.Identity) *fakeSwarmState {
+	t.Helper()
+	state := newFakeSwarmState()
+	for _, m := range members {
+		addMembership(t, state, userID, m)
+	}
+	mod.swarmView = newSwarmView(state, func() *astral.Identity { return userID }, nil)
+	return state
+}
+
+// addMembership stores subject's Member-tier membership, signed by issuer.
+func addMembership(t testing.TB, state *fakeSwarmState, issuer, subject *astral.Identity) *auth.SignedContract {
+	t.Helper()
+	c, err := user.NewMembership(issuer, subject, user.TierMember, nil, time.Hour)
+	if err != nil {
+		t.Fatalf("membership: %v", err)
+	}
+	sc := &auth.SignedContract{Contract: c, IssuerSig: viewSig()}
+	if err = state.AddSwarmEntry(nil, sc); err != nil {
+		t.Fatalf("store membership: %v", err)
+	}
+	return sc
+}
+
+// contractState is a SwarmState whose contracts are the ones contracts
+// answers, so a test that stages members in a fake auth index sees them as
+// SwarmState members. Its head moves on every read, so the view reads the
+// staged set each time.
+type contractState struct {
+	contracts func() ([]*auth.SignedContract, error)
+	head      atomic.Uint64
+}
+
+func (s *contractState) AddSwarmEntry(*astral.Context, astral.Object) error { return nil }
+
+func (s *contractState) SwarmEntry(id *astral.ObjectID) (astral.Object, error) {
+	found, _ := s.contracts()
+	for _, c := range found {
+		if cid, err := astral.ResolveObjectID(c); err == nil && cid.IsEqual(id) {
+			return c, nil
+		}
+	}
+	return nil, errors.New("no such entry")
+}
+
+func (s *contractState) SwarmEntries(kind user.EntryKind) ([]*astral.ObjectID, error) {
+	if kind != user.EntryContracts {
+		return nil, nil
+	}
+	found, err := s.contracts()
+	if err != nil {
+		return nil, err
+	}
+	var ids []*astral.ObjectID
+	for _, c := range found {
+		if id, err := astral.ResolveObjectID(c); err == nil {
+			ids = append(ids, id)
+		}
+	}
+	return ids, nil
+}
+
+func (s *contractState) SwarmHead() uint64 { return s.head.Add(1) }
+
+// useQuerySwarm gives mod a SwarmView over q's staged contracts, with userID
+// as the root key.
+func useQuerySwarm(mod *Module, userID *astral.Identity, q *memberQuery) {
+	useContractSwarm(mod, userID, func() ([]*auth.SignedContract, error) {
+		q.mu.Lock()
+		defer q.mu.Unlock()
+		return append([]*auth.SignedContract(nil), q.found...), q.err
+	})
+}
+
+// useIndexSwarm gives mod a SwarmView over the contracts a seeds, with userID
+// as the root key.
+func useIndexSwarm(mod *Module, userID *astral.Identity, a *indexAuth) {
+	useContractSwarm(mod, userID, func() ([]*auth.SignedContract, error) {
+		a.mu.Lock()
+		defer a.mu.Unlock()
+		return append([]*auth.SignedContract(nil), a.index...), nil
+	})
+}
+
+func useContractSwarm(mod *Module, userID *astral.Identity, contracts func() ([]*auth.SignedContract, error)) {
+	mod.swarmView = newSwarmView(&contractState{contracts: contracts}, func() *astral.Identity { return userID }, nil)
+}
+
+// SyncSwarm of the nodes fakes pulls nothing: the tests that use them read
+// the swarm from a SwarmView fixture.
+func (n *linkedNodes) SyncSwarm(*astral.Context, *astral.Identity) error    { return nil }
+func (n *recordingNodes) SyncSwarm(*astral.Context, *astral.Identity) error { return nil }
+func (n *linkNodes) SyncSwarm(*astral.Context, *astral.Identity) error      { return nil }
+
+// pullNoSwarm is a nodes module whose SwarmState pull does nothing.
+type pullNoSwarm struct{ nodesmod.Module }
+
+func (pullNoSwarm) SyncSwarm(*astral.Context, *astral.Identity) error { return nil }
+
+// AddSwarmEntry of the nodes fakes stores nothing: those tests read the swarm
+// from a SwarmView fixture.
+func (n *orderedNodes) AddSwarmEntry(*astral.Context, astral.Object) error   { return nil }
+func (n *recordingNodes) AddSwarmEntry(*astral.Context, astral.Object) error { return nil }
+func (n *linkedNodes) AddSwarmEntry(*astral.Context, astral.Object) error    { return nil }
+func (n *linkNodes) AddSwarmEntry(*astral.Context, astral.Object) error      { return nil }
+func (pullNoSwarm) AddSwarmEntry(*astral.Context, astral.Object) error       { return nil }
+
+// LearnMemberEndpoints of the nodes fakes pulls nothing: no test that uses
+// them reads endpoints.
+func (n *linkedNodes) LearnMemberEndpoints(*astral.Identity)         {}
+func (n *recordingNodes) LearnMemberEndpoints(*astral.Identity)      {}
+func (n *linkNodes) LearnMemberEndpoints(*astral.Identity)           {}
+func (n *orderedNodes) LearnMemberEndpoints(*astral.Identity)        {}
+func (n *cancelCheckingNodes) LearnMemberEndpoints(*astral.Identity) {}
+func (n *joinNodes) LearnMemberEndpoints(*astral.Identity)           {}

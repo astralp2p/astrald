@@ -257,6 +257,7 @@ func TestAcceptanceManagerReadWaitsAtMostOneQuestion(t *testing.T) {
 	manager := a.appointManager()
 	a.claim()
 	owner := a.registerApp()
+	a.approve(owner) // why: only an approved app serves its evaluator
 	a.mustWrite(owner.client, "/a.txt", []byte("evaluated"))
 
 	e, _ := a.serveEvaluator(owner)

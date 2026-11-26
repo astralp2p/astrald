@@ -304,11 +304,13 @@ func TestFollowWithoutNamesIsRefused(t *testing.T) {
 	expectEnd(t, c)
 }
 
-// A member asked with tagged sends each offering with its visibility.
+// A member asked with tagged sends each offering the app may see with its
+// visibility.
 func TestMemberTagsEachOffering(t *testing.T) {
 	v := newVisibilitySwarm()
 	advertise(t, v.b, "player", available)
 	advertise(t, v.b, "bitcoin-wallet&open=false", available)
+	v.auth.grant(v.app, "bitcoin-wallet", v.b.node.Identity())
 
 	q := "services.discover?services=bitcoin-wallet,player&tagged=true&for=" + v.app.String()
 	c := open(t, v.b.OpDiscover, v.a.node.Identity(), q, true)
@@ -323,11 +325,41 @@ func TestMemberTagsEachOffering(t *testing.T) {
 	}
 }
 
+// A carried discovery returns a private offering to the carrying node only
+// when the app's own chain permits it on the answering node: a member node
+// carrying for an app without a permit receives the open player and no
+// wallet.
+func TestCarriedDiscoveryWithholdsAPrivateOfferingTheAppMayNotSee(t *testing.T) {
+	v := newVisibilitySwarm()
+	advertise(t, v.b, "player", available)
+	advertise(t, v.b, "bitcoin-wallet&open=false", available)
+
+	q := "services.discover?services=bitcoin-wallet,player&tagged=true&for=" + v.app.String()
+	c := open(t, v.b.OpDiscover, v.a.node.Identity(), q, true)
+	if u := expect[*services.TaggedUpdate](t, c); string(u.Update.Name) != "player" {
+		t.Fatalf("carried %v; want only the open player", u.Update.Name)
+	}
+	expect[*astral.EOS](t, c)
+
+	// the same carry, once the app holds the permit, carries the wallet
+	v.auth.grant(v.app, "bitcoin-wallet", v.b.node.Identity())
+	c = open(t, v.b.OpDiscover, v.a.node.Identity(), q, true)
+	names := map[string]bool{}
+	for range 2 {
+		names[string(expect[*services.TaggedUpdate](t, c).Update.Name)] = true
+	}
+	expect[*astral.EOS](t, c)
+	if !names["bitcoin-wallet"] || !names["player"] {
+		t.Fatalf("carried %v; want the wallet and the player", names)
+	}
+}
+
 // A member that predates visibility ignores tagged and sends plain updates;
 // the host counts them as open.
 func TestUntaggedMemberCountsAsOpen(t *testing.T) {
 	v := newVisibilitySwarm()
 	advertise(t, v.b, "bitcoin-wallet&open=false", available)
+	v.auth.grant(v.app, "bitcoin-wallet", v.b.node.Identity())
 	type oldArgs struct {
 		Services string
 		Follow   bool
@@ -355,9 +387,29 @@ func TestUntaggedMemberCountsAsOpen(t *testing.T) {
 }
 
 // A member's tagged follow re-sends a shown offering with its new tag when
-// the member's private list changes, and the host then removes it from a
-// caller that may no longer see it.
+// the member's private list changes and the app may still see it.
 func TestPrivateListChangeOnAMemberRetagsItsFollow(t *testing.T) {
+	v := newVisibilitySwarm()
+	advertise(t, v.b, "player", available)
+	v.auth.grant(v.app, "player", v.b.node.Identity())
+
+	q := "services.discover?services=player&follow=true&tagged=true&for=" + v.app.String()
+	member := open(t, v.b.OpDiscover, v.a.node.Identity(), q, true)
+	if u := expect[*services.TaggedUpdate](t, member); !bool(u.Open) {
+		t.Fatal("the open player is tagged private")
+	}
+	expect[*astral.EOS](t, member)
+
+	v.b.coord.SetPrivate(&services.PrivateList{Entries: []*services.PrivateEntry{{Service: "player"}}})
+	if u := expect[*services.TaggedUpdate](t, member); bool(u.Open) {
+		t.Fatal("the listed player stays tagged open")
+	}
+}
+
+// A member's tagged follow withholds a shown offering once the member's
+// private list covers it and the app holds no permit for it there, and the
+// host then removes it from the app.
+func TestPrivateListChangeOnAMemberHidesItFromTheApp(t *testing.T) {
 	v := newVisibilitySwarm()
 	advertise(t, v.b, "player", available)
 
@@ -377,11 +429,15 @@ func TestPrivateListChangeOnAMemberRetagsItsFollow(t *testing.T) {
 	// note: the host's carry asked the same provider for the same caller, so
 	// the member's follow can first receive that answer, tagged before the change.
 	for i := 0; ; i++ {
-		if u := expect[*services.TaggedUpdate](t, member); !bool(u.Open) {
+		obj, err := recv(t, member)
+		if err != nil {
+			t.Fatalf("receive: %v", err)
+		}
+		if _, ok := obj.(*services.Removed); ok {
 			break
 		}
-		if i == 2 {
-			t.Fatal("the listed player stays tagged open")
+		if u, ok := obj.(*services.TaggedUpdate); !ok || !bool(u.Open) || i == 2 {
+			t.Fatalf("the member's follow received %s %v; want the player removed", obj.ObjectType(), obj)
 		}
 	}
 	if r := expect[*services.Removed](t, host); len(r.Offerings) != 1 {

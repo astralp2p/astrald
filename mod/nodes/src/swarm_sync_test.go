@@ -279,7 +279,8 @@ func TestSwarmWaitingEntryAdmitted(t *testing.T) {
 	}
 }
 
-// TestSwarmOpsRefuseUnadmittedCaller: the exchange ops serve no caller that admit refuses.
+// TestSwarmOpsRefuseUnadmittedCaller: the reading ops serve no caller that admit refuses; a push from any
+// identified caller is merged and checked like any other entry.
 func TestSwarmOpsRefuseUnadmittedCaller(t *testing.T) {
 	n, other := newStateNode(t, newSwarmScript()), newStateNode(t, newSwarmScript())
 	mustAdd(t, n, fiveEntries(t)[0])
@@ -288,8 +289,8 @@ func TestSwarmOpsRefuseUnadmittedCaller(t *testing.T) {
 	if _, err := peer.SwarmDigest(other.store.ctx); err == nil {
 		t.Fatal("digest served a refused caller")
 	}
-	if err := peer.SwarmPush(other.store.ctx, fiveEntries(t)[0]); err == nil || n.store.SwarmHead() != 1 {
-		t.Fatalf("push from a refused caller: err %v, head %v", err, n.store.SwarmHead())
+	if err := peer.SwarmPush(other.store.ctx, fiveEntries(t)[1]); err != nil || n.store.SwarmHead() != 2 {
+		t.Fatalf("push from an unadmitted caller: err %v, head %v; want it merged", err, n.store.SwarmHead())
 	}
 	if _, err := peer.SwarmDigest(astral.NewContext(nil).LimitZone(astral.ZoneDevice)); !errors.Is(err, astral.ErrZoneExcluded) {
 		t.Fatalf("digest without the network zone: err = %v, want ErrZoneExcluded", err)

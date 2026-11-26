@@ -16,6 +16,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/astralp2p/astrald/tests/e2e/internal/contracts"
+
 	apphostapi "github.com/astralp2p/astral-go/api/apphost"
 	apphostcli "github.com/astralp2p/astral-go/api/apphost/client"
 	"github.com/astralp2p/astral-go/astral"
@@ -119,7 +121,7 @@ func run(path string) (map[string]bool, error) {
 
 	// two apps, each with its own identity, token and client, serving the same op
 	alpha, bravo := &Who{name: "alpha"}, &Who{name: "bravo"}
-	alphaApp, err := apphostcli.New(nil, admin).Register(ctx)
+	alphaApp, err := contracts.Register(ctx, admin, n1.Endpoint)
 	if err != nil {
 		return facts, fmt.Errorf("registering alpha: %w", err)
 	}
@@ -128,7 +130,7 @@ func run(path string) (map[string]bool, error) {
 		return facts, fmt.Errorf("alpha could not serve: %w", err)
 	}
 	defer stopA()
-	bravoApp, err := apphostcli.New(nil, admin).Register(ctx)
+	bravoApp, err := contracts.Register(ctx, admin, n1.Endpoint)
 	if err != nil {
 		return facts, fmt.Errorf("registering bravo: %w", err)
 	}
@@ -140,12 +142,12 @@ func run(path string) (map[string]bool, error) {
 	facts["both_serve"] = true
 
 	// a visitor, and a third app that registers but never serves
-	visitor, err := apphostcli.New(nil, admin).Register(ctx)
+	visitor, err := contracts.Register(ctx, admin, n1.Endpoint)
 	if err != nil {
 		return facts, fmt.Errorf("registering the visitor: %w", err)
 	}
 	visitorCli := connect(n1.Endpoint, string(visitor.Token))
-	idle, err := apphostcli.New(nil, admin).Register(ctx)
+	idle, err := contracts.Register(ctx, admin, n1.Endpoint)
 	if err != nil {
 		return facts, fmt.Errorf("registering the idle app: %w", err)
 	}

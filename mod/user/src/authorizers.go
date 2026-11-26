@@ -1,10 +1,7 @@
 package user
 
 import (
-	"slices"
-
 	"github.com/astralp2p/astral-go/api/auth"
-	"github.com/astralp2p/astral-go/api/nodes"
 	"github.com/astralp2p/astral-go/api/user"
 	"github.com/astralp2p/astral-go/astral"
 )
@@ -20,20 +17,18 @@ import (
 // user.sync_assets as the user (sync.go), and a local caller carrying no
 // identity is promoted to this node's identity (core/router.go), which is a
 // member. Narrowing to the issuer would break both.
+//
+// why members of every tier: Members may see requests (vision, 2026-11-24).
 func (mod *Module) AuthorizeSeeSwarm(ctx *astral.Context, a *user.SeeSwarmAction) bool {
-	ac := mod.ActiveContract()
-	if ac == nil {
+	userID := mod.Identity()
+	if userID.IsZero() || a.Actor().IsZero() {
 		return false
 	}
-	if a.Actor().IsEqual(ac.Issuer) {
+	if a.Actor().IsEqual(userID) {
 		return true
 	}
-	for _, nodeID := range mod.LocalSwarm() {
-		if nodeID.IsEqual(a.Actor()) {
-			return true
-		}
-	}
-	return false
+	_, ok := mod.Membership(a.Actor())
+	return ok
 }
 
 // AuthorizeAdminSwarm allows the swarm's user to change what the swarm holds,
@@ -53,38 +48,15 @@ func (mod *Module) AuthorizeSeeSwarm(ctx *astral.Context, a *user.SeeSwarmAction
 // the command line requires the user's identity, which is what it required
 // before this change.
 func (mod *Module) AuthorizeAdminSwarm(ctx *astral.Context, a *user.AdminSwarmAction) bool {
-	ac := mod.ActiveContract()
-	return ac != nil && a.Actor().IsEqual(ac.Issuer)
+	userID := mod.Identity()
+	return !userID.IsZero() && a.Actor().IsEqual(userID)
 }
 
-// AuthorizeRelayFor allows a swarm node to relay queries on behalf of the local user.
-//
-// why: every swarm member relays with the user as caller; swarm members are
-// the user's own nodes (decided 2026-11-06).
-func (mod *Module) AuthorizeRelayFor(ctx *astral.Context, a *nodes.RelayForAction) bool {
-	if !a.ForID.IsEqual(mod.Identity()) {
-		return false
-	}
-	for _, nodeID := range mod.LocalSwarm() {
-		if nodeID.IsEqual(a.Actor()) {
-			return true
-		}
-	}
-	return false
-}
-
-// AuthorizeSeeObjects grants object reads to the user identity, to this node
-// itself, and to every member of the local swarm.
-//
-// why the swarm is in the grant: a node shows the objects in its repositories to
-// its swarm peers by default. A host authorizes its own caller, then asks its
-// peers as itself, and a peer trusts that decision (mod.auth.see_objects_action spec).
-//
-// why this node's own identity is granted: a local caller with no identity is
-// promoted to the node (core/router.go), so the node reads back on an unclaimed
-// node the objects it just stored there, before any user or swarm exists.
-func (mod *Module) AuthorizeSeeObjects(ctx *astral.Context, a *auth.SeeObjectsAction) bool {
-	return mod.authorizeUserOrNode(a.Actor()) || slices.ContainsFunc(mod.LocalSwarm(), a.Actor().IsEqual)
+// AuthorizeExpel allows the user, and nobody else, to expel (D7). The swarm
+// root handler never answers an expel, so a Privileged node cannot.
+func (mod *Module) AuthorizeExpel(ctx *astral.Context, a *user.ExpelAction) bool {
+	userID := mod.Identity()
+	return !userID.IsZero() && a.Actor().IsEqual(userID)
 }
 
 // AuthorizeStoreObjects grants object writes to the user identity and to this

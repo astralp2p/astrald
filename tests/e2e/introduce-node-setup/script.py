@@ -19,6 +19,7 @@ import time
 import astral
 
 from lib import jsonops
+from lib import swarmstate as ss
 from lib.sessionio import load, write_facts
 
 # why a deadline: a query that is never routed hangs rather than answering, and
@@ -69,8 +70,12 @@ async def build_swarm(first: dict, joiners: list) -> dict:
         claim = await jsonops.value(c, "user.bootstrap?generate=true&out=json")
     for j in joiners:
         await link(first, j)
-        async with await connect(j) as c:
-            await jsonops.value(c, f"user.join?node={first['identity']}&out=json", timeout=DEADLINE)
+        # why waiting: since G7 a join waits for an Approval of its
+        # JoinRequest, which the harness answerer gives while a driver waits
+        with ss.waiting():
+            async with await connect(j) as c:
+                await jsonops.value(c, f"user.join?node={first['identity']}&out=json",
+                                    timeout=DEADLINE)
     want = {first["identity"]} | {j["identity"] for j in joiners}
     if not want <= await converge(lambda: members(first), lambda m: want <= m):
         sys.exit("driver: the joined nodes never reached the first node's swarm")

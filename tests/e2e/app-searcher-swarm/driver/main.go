@@ -15,6 +15,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/astralp2p/astrald/tests/e2e/internal/contracts"
+
 	apphostcli "github.com/astralp2p/astral-go/api/apphost/client"
 	"github.com/astralp2p/astral-go/api/auth"
 	"github.com/astralp2p/astral-go/api/objects"
@@ -136,6 +138,9 @@ func startRecipes(ctx *astral.Context, apps2 *apphostcli.Client, n2 node) (*reci
 	token, err := apps2.Register(ctx, serveObjects)
 	if err != nil {
 		return nil, nil, fmt.Errorf("register the recipes app: %w", err)
+	}
+	if _, err = contracts.Await(ctx, connect(n2.Endpoint, string(token.Token)), serveObjects); err != nil {
+		return nil, nil, fmt.Errorf("the contract of %v: %w", token.Identity, err)
 	}
 	// why a fresh word per run: a match from anything but this app's recipe cannot share it.
 	word := "pancakes" + astral.NewNonce().String()

@@ -27,7 +27,7 @@ func (mod *Module) OpListExpelled(ctx *astral.Context, q *routing.IncomingQuery,
 		return ch.Send(auth.ErrNotPermitted)
 	}
 
-	expulsions, err := mod.db.Expulsions(ac.Issuer)
+	expulsions, err := mod.db.Expulsions(mod.Identity())
 	if err != nil {
 		return ch.Send(astral.NewError(err.Error()))
 	}

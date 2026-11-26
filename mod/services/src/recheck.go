@@ -206,7 +206,6 @@ func removeFrom[T comparable](m map[string]map[T]struct{}, k string, v T) {
 
 // watchAuthority registers the change callbacks that schedule re-checks.
 func (mod *Module) watchAuthority() {
-	mod.Apphost.OnGrantsChanged(mod.authority.schedule)
 	// why: the withdrawn contracts' subjects are not reported, and withdrawals
 	// are rare operator actions, so every follow is re-checked.
 	mod.Auth.OnContractWithdrawn(func(*astral.Identity) { mod.authority.scheduleAll() })
@@ -263,11 +262,14 @@ func (mod *Module) recheck(ctx *astral.Context, id *astral.Identity) {
 }
 
 // recheckCarry closes a follow a swarm member carries to this node once the
-// member may no longer carry it.
+// member may no longer carry it, and otherwise applies the app's current
+// permits to what the follow sees.
 func (mod *Module) recheckCarry(ctx *astral.Context, od *openDiscovery) {
 	if !mod.carryAllowed(ctx, od.d) {
 		od.st.Close()
+		return
 	}
+	mod.coord.SetFilter(od.st, mod.carryFilter(ctx, od.d.request.Caller, od.d.request.Names), nil)
 }
 
 // recheckFollow refreshes a local follow's view, then withholds what the caller
@@ -309,16 +311,13 @@ func (mod *Module) changedNotGranted(ctx *astral.Context, d *discovery) *service
 }
 
 // carryAllowed reports whether the node carrying d to this node may still do
-// so: it holds the relay right for the app, and either discovery of every
-// named service or, without names, membership of the local swarm.
+// so: it holds the relay right for the app and is a member of the local swarm
+// (see admitCarry).
 func (mod *Module) carryAllowed(ctx *astral.Context, d *discovery) bool {
 	if !mod.Auth.Authorize(ctx, &nodes.RelayForAction{Action: auth.NewAction(d.carrier), ForID: d.request.Caller}) {
 		return false
 	}
-	if d.request.All {
-		return slices.ContainsFunc(mod.swarmMembers(), d.carrier.IsEqual)
-	}
-	return mod.authorizeDiscovery(ctx, d.carrier, d.request.Names) == nil
+	return slices.ContainsFunc(mod.swarmMembers(), d.carrier.IsEqual)
 }
 
 // closeCarriesOf closes the follows a node carries to this node once it is no

@@ -27,6 +27,7 @@ import astral
 from astral.api.crypto import public_key_to_identity
 
 from lib.sessionio import load, write_facts
+from lib import swarmstate as ss
 
 DEADLINE = 20
 
@@ -52,13 +53,10 @@ async def main():
     n1, n2, t = (doc["nodes"][n] for n in ("node1", "node2", "ea-target"))
     user_id, user_token = doc["facts"]["user_id"], doc["facts"]["user_token"]
 
-    # node1 <-> ea-target only, as swarm-roster-sync does for its node3.
-    async with await astral.connect(n1["endpoint"], token=n1["token"]) as c:
-        await c.nodes.add_endpoint(t["identity"], t["lan_endpoint"], experimental=True)
-    async with await astral.connect(t["endpoint"], token=t["token"]) as c:
-        await c.nodes.add_endpoint(n1["identity"], n1["lan_endpoint"], experimental=True)
+    # node1 <-> ea-target only, as swarm-roster-sync does for its node3; the
+    # target joins through node1 as a Member (user.adopt is gone, G7)
+    await ss.admit(n1, user_token, t)
     async with await astral.connect(n1["endpoint"], token=user_token) as u:
-        await u.user.adopt(t["identity"])
         baseline = await view(u)
 
         # a fresh app identity, and a User token on node2 that holds no key
@@ -72,6 +70,7 @@ async def main():
         callers = {
             "node1_app_token": (n1, app_token, t["identity"]),
             "node2_node_token": (n2, n2["token"], t["identity"]),
+            "node1_node_token": (n1, n1["token"], t["identity"]),
             "user_without_key": (n2, user_on_node2, t["identity"]),
             "user_names_user": (n1, user_token, user_id),
         }
@@ -82,8 +81,8 @@ async def main():
             r["after"] = await view(u)
             refusals[name] = r
 
-        async with await astral.connect(n1["endpoint"], token=n1["token"]) as c:
-            first = await c.user.expel(t["identity"])
+        # note: since G7 only the User expels (D7), so both bans are the User's
+        first = await u.user.expel(t["identity"])
         second = await u.user.expel(t["identity"])
 
     def ban(s):

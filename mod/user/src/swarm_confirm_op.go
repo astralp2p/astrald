@@ -77,10 +77,14 @@ func (ops *SwarmAnswerOps) OpConfirmJoin(ctx *astral.Context, q *routing.Incomin
 // the user identity. OpConfirmJoin admits only local origins, so a node
 // relaying as the user cannot either.
 func (ops *SwarmAnswerOps) confirmJoin(ctx *astral.Context, caller *astral.Identity, id *astral.ObjectID) (*auth.SignedContract, error) {
-	if ops.UserKey == nil {
+	var uk *userKeyCeremony
+	if ops.UserKey != nil {
+		uk = ops.UserKey()
+	}
+	if uk == nil {
 		return nil, ErrNoUserKey
 	}
-	if !caller.IsEqual(ops.UserKey.user) {
+	if !caller.IsEqual(uk.user) {
 		return nil, auth.ErrNotPermitted
 	}
 
@@ -96,7 +100,7 @@ func (ops *SwarmAnswerOps) confirmJoin(ctx *astral.Context, caller *astral.Ident
 		return nil, ErrNotPrivilegedJoin
 	}
 
-	if sc := userKeyMembership(ops.View, ops.UserKey.user, req.Joiner); sc != nil {
+	if sc := userKeyMembership(ops.View, uk.user, req.Joiner); sc != nil {
 		return sc, nil
 	}
 
@@ -105,11 +109,11 @@ func (ops *SwarmAnswerOps) confirmJoin(ctx *astral.Context, caller *astral.Ident
 	default:
 		return nil, ErrRequestClosed
 	}
-	if req.Expired(ops.UserKey.now()) || ops.View.Expelled(req.Joiner) {
+	if req.Expired(uk.now()) || ops.View.Expelled(req.Joiner) {
 		return nil, ErrRequestClosed
 	}
 
-	sc, err := ops.UserKey.Membership(ctx, req.Joiner, user.TierPrivilegedMember, id)
+	sc, err := uk.Membership(ctx, req.Joiner, user.TierPrivilegedMember, id)
 	if err != nil {
 		return nil, err
 	}

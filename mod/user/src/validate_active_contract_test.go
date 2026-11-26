@@ -45,8 +45,8 @@ func TestValidateActiveContract(t *testing.T) {
 		{"no membership permit", func() *auth.SignedContract {
 			return contractWith(userID, nodeID, auth.SeeObjectsAction{}.ObjectType())
 		}, func(err error) bool {
-			return err != nil && err.Error() == "contract does not grant swarm membership"
-		}, "contract does not grant swarm membership"},
+			return err != nil && err.Error() == "contract is not a membership"
+		}, "contract is not a membership"},
 
 		{"forged issuer signature", func() *auth.SignedContract {
 			sc := nodeContract(userID, nodeID)

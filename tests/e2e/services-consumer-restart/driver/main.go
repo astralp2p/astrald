@@ -20,8 +20,8 @@ import (
 	"syscall"
 	"time"
 
-	apphostapi "github.com/astralp2p/astral-go/api/apphost"
-	apphostcli "github.com/astralp2p/astral-go/api/apphost/client"
+	"github.com/astralp2p/astrald/tests/e2e/internal/contracts"
+
 	"github.com/astralp2p/astral-go/api/auth"
 	"github.com/astralp2p/astral-go/api/services"
 	servicescli "github.com/astralp2p/astral-go/api/services/client"
@@ -62,7 +62,7 @@ func connect(token string) *astrald.Client {
 // register mints an app identity on the node, with permits, and returns it with
 // a client of its own token.
 func register(ctx *astral.Context, permits ...*auth.Permit) (*astral.Identity, *astrald.Client, error) {
-	token, err := apphostcli.New(nil, connect(os.Getenv("APP_NODE_TOKEN"))).Register(ctx, permits...)
+	token, err := contracts.Register(ctx, connect(os.Getenv("APP_NODE_TOKEN")), os.Getenv("APP_NODE_ENDPOINT"), permits...)
 	if err != nil {
 		return nil, nil, fmt.Errorf("registering: %w", err)
 	}
@@ -71,16 +71,14 @@ func register(ctx *astral.Context, permits ...*auth.Permit) (*astral.Identity, *
 
 // grantDiscovery lets app discover service, granted by the node's admin, so
 // what the follow sees does not depend on the swarm-app rule.
-func grantDiscovery(ctx *astral.Context, app *astral.Identity) error {
+func grantDiscovery(ctx *astral.Context, app *astrald.Client) error {
 	cs := astral.NewBundle()
 	scope := &services.DiscoveryScope{Rules: []*services.DiscoveryRule{{Services: []astral.String8{service}}}}
 	if err := cs.Append(scope); err != nil {
 		return err
 	}
-	return apphostcli.New(nil, connect(os.Getenv("APP_NODE_TOKEN"))).Grant(ctx, &apphostapi.GrantRequest{
-		Identity: app,
-		Permits:  []*auth.Permit{{Action: astral.String8(services.ServiceDiscoveryAction{}.ObjectType()), Constraints: cs}},
-	})
+	_, err := contracts.Request(ctx, app, &auth.Permit{Action: astral.String8(services.ServiceDiscoveryAction{}.ObjectType()), Constraints: cs})
+	return err
 }
 
 // stateFile rewrites its whole JSON file, by rename, after every update, on a
@@ -193,7 +191,7 @@ func watch() error {
 	if err != nil {
 		return err
 	}
-	if err := grantDiscovery(ctx, id); err != nil {
+	if err := grantDiscovery(ctx, cli); err != nil {
 		return fmt.Errorf("granting discovery: %w", err)
 	}
 	ws := &watcherState{Identity: id.String(), Pid: os.Getpid(), Offerings: []string{}}

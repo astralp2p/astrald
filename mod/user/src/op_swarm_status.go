@@ -29,7 +29,7 @@ func (mod *Module) OpSwarmStatus(ctx *astral.Context, q *routing.IncomingQuery, 
 		return ch.Send(auth.ErrNotPermitted)
 	}
 
-	for _, node := range mod.ActiveNodes(ac.Issuer) {
+	for _, node := range mod.ActiveNodes(mod.Identity()) {
 		alias, aliasErr := mod.Dir.GetAlias(node)
 		if aliasErr != nil {
 			mod.log.Error("error getting alias for node %v: %v", node, aliasErr)

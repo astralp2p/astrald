@@ -120,6 +120,12 @@ type Module struct {
 	// refreshClock is the time source of the refresh task; nil is the real clock.
 	// why: a field, so tests move the task past the full-refresh period without waiting.
 	refreshClock wakeClock
+
+	// swarm is this node's copy of SwarmState, nil until Run opens it.
+	swarm atomic.Pointer[swarmStore]
+	// swarmLinkHook replaces onSwarmLink in exchangeSwarmWithLinked.
+	// note: a test seam; nil in the running node.
+	swarmLinkHook func(peer *astral.Identity)
 }
 
 // initContext sets the module context for the node identity id. The context ends when
@@ -137,6 +143,11 @@ func (mod *Module) Run(ctx *astral.Context) error {
 	defer stop()
 	defer mod.cancel()
 	<-mod.Deps.Scheduler.Ready()
+	if err := mod.openSwarmState(); err != nil {
+		mod.log.Error("open swarm state: %v", err)
+	} else {
+		go mod.runSwarmSync(mod.ctx)
+	}
 	mod.Scheduler.Schedule(mod.NewCleanupEndpointsTask())
 	// why: the first full run comes after one jittered period, as the link-created pull covers the start.
 	mod.deferFullRefresh(mod.refreshNow())

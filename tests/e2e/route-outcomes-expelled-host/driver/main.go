@@ -14,6 +14,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/astralp2p/astrald/tests/e2e/internal/contracts"
+
 	apphostapi "github.com/astralp2p/astral-go/api/apphost"
 	apphostcli "github.com/astralp2p/astral-go/api/apphost/client"
 	"github.com/astralp2p/astral-go/api/auth"
@@ -66,8 +68,8 @@ func run(path string) (map[string]any, error) {
 		return facts, err
 	}
 	var s struct {
-		Nodes map[string]node  `json:"nodes"`
-		Facts map[string]any   `json:"facts"`
+		Nodes map[string]node `json:"nodes"`
+		Facts map[string]any  `json:"facts"`
 	}
 	if err := json.Unmarshal(raw, &s); err != nil {
 		return facts, err
@@ -77,7 +79,7 @@ func run(path string) (map[string]any, error) {
 	ctx := astral.NewContext(nil)
 	admin1, admin2 := connect(n1.Endpoint, n1.Token), connect(n2.Endpoint, n2.Token)
 
-	provider, err := apphostcli.New(nil, admin2).Register(ctx, &auth.Permit{Action: "mod.auth.serve_apps_action"})
+	provider, err := contracts.Register(ctx, admin2, n2.Endpoint, &auth.Permit{Action: "mod.auth.serve_apps_action"})
 	if err != nil {
 		return facts, fmt.Errorf("registering the provider on node2: %w", err)
 	}
@@ -87,7 +89,7 @@ func run(path string) (map[string]any, error) {
 	}
 	defer stop()
 
-	app, err := apphostcli.New(nil, admin1).Register(ctx)
+	app, err := contracts.Register(ctx, admin1, n1.Endpoint)
 	if err != nil {
 		return facts, fmt.Errorf("registering the caller on node1: %w", err)
 	}

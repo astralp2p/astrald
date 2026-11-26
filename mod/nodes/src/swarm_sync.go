@@ -77,6 +77,7 @@ func (s *swarmStore) addFetched(ctx *astral.Context, src swarmSource, ids []*ast
 		return fmt.Errorf("swarm fetch: %w", err)
 	}
 
+	var firstErr error
 	for _, obj := range objs {
 		id, err := astral.ResolveObjectID(obj)
 		// why: a peer answers only what was asked; anything else is ignored, not merged.
@@ -84,11 +85,15 @@ func (s *swarmStore) addFetched(ctx *astral.Context, src swarmSource, ids []*ast
 			continue
 		}
 
-		// note: held and dropped entries are normal outcomes of a merge, not failures of the pull.
-		_ = s.AddSwarmEntry(ctx, obj)
+		// note: held and dropped entries are normal outcomes of a merge, not failures of the pull; a store that
+		// fails is, and the pull reports the first one.
+		err = s.AddSwarmEntry(ctx, obj)
+		if err != nil && !errors.Is(err, nodesmod.ErrSwarmEntryHeld) && !errors.Is(err, nodesmod.ErrSwarmEntryDropped) && firstErr == nil {
+			firstErr = err
+		}
 	}
 
-	return nil
+	return firstErr
 }
 
 // swarmOpAdder is where addSwarmOps puts the ops: the nodes module's op router.
@@ -181,9 +186,14 @@ func (o *swarmOps) fetch(ctx *astral.Context, q *routing.IncomingQuery) error {
 	return ch.Send(&astral.EOS{})
 }
 
-// push answers swarm_push.
+// push answers swarm_push. Any identified caller may offer an entry.
+//
+// why not admit: two members that know nothing of each other cannot pull
+// until one holds the other's membership, so each offers its own first; an
+// offered entry passes CheckSwarmEntry like any merge, and what waits is held
+// in a bounded set.
 func (o *swarmOps) push(ctx *astral.Context, q *routing.IncomingQuery) error {
-	if !o.admit(q.Caller()) {
+	if q.Caller().IsZero() {
 		return q.Reject()
 	}
 

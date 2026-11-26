@@ -1,8 +1,9 @@
 package apphost
 
 import (
+	"time"
+
 	"github.com/astralp2p/astrald/lib/paths"
-	"github.com/astralp2p/astrald/lib/policyconf"
 )
 
 type Config struct {
@@ -19,14 +20,25 @@ type Config struct {
 	// Gate selects the ops a session may call by token presence and node state.
 	Gate Gate `yaml:"gate,omitempty"`
 
-	// Policies selects the admission policies apphost applies.
-	Policies Policies `yaml:"policies,omitempty"`
-
 	// SkipSiblingPush leaves out the push of a new app's relay contract to the
 	// linked siblings at apphost.register.
 	// why configurable: an E2E test (relay-pull-on-miss) drops the push, so a
 	// sibling obtains the contract only by the routing-time pull.
 	SkipSiblingPush bool `yaml:"skip_sibling_push,omitempty"`
+
+	// ContractRequestsPerNode caps the ContractRequests this node files in a
+	// window of ContractRequestWindow, all apps together; zero is
+	// ContractRequestsPerNode.
+	// why configurable: an E2E world registers more apps on one node within
+	// the hour than a device does.
+	ContractRequestsPerNode int `yaml:"contract_requests_per_node,omitempty"`
+
+	// ContractRequestPoll is how often the host worker reads SwarmState for
+	// the answers to this node's ContractRequests; zero is
+	// contractRequestPollEvery (5 s).
+	// why configurable: an E2E run waits for one answer per app it
+	// registers, and a 5 s poll adds up to most of the suite's time.
+	ContractRequestPoll time.Duration `yaml:"contract_request_poll,omitempty"`
 }
 
 // Gate lists the ops a session may call, IPC, WebSocket and HTTP alike. An
@@ -44,13 +56,6 @@ type GateStates struct {
 	Fresh     []string `yaml:"fresh,omitempty"`
 	Unclaimed []string `yaml:"unclaimed,omitempty"`
 	Claimed   []string `yaml:"claimed,omitempty"`
-}
-
-// Policies holds the config value of each apphost admission policy. A stored
-// delegate outranks the value; see GetRegisterAppPolicy.
-type Policies struct {
-	AppRegister  policyconf.Setting `yaml:"app_register,omitempty"`
-	GrantRequest policyconf.Setting `yaml:"grant_request,omitempty"`
 }
 
 // defaultConfig returns the config a load starts from.
@@ -75,15 +80,13 @@ func defaultConfig() Config {
 		Workers:  32,
 		// why so few: a fresh node only appoints a manager, and an unclaimed node
 		// only claims, registers apps and lets them serve; a claimed node leaves the
-		// decision to authorization and policies.
+		// decision to authorization.
 		//
 		// why .spec in every list: it lists the node's ops and changes nothing, so
 		// a client or agent discovers what it may call before it holds a token.
 		//
 		// why apphost.bind, apphost.register_handler and apphost.cancel before the
-		// claim: the manager answers the policies delegated to it, an invitation
-		// from the owner's other device among them, and an app answers only through
-		// a registered handler.
+		// claim: an app answers only through a registered handler.
 		//
 		// why nodes.resolve_endpoints before the claim: the manager shows the
 		// node's endpoints so that another device claims the node by address. The
@@ -115,10 +118,6 @@ func defaultConfig() Config {
 				},
 				Claimed: []string{gateAny},
 			},
-		},
-		Policies: Policies{
-			AppRegister:  policyconf.Setting{Mode: policyconf.RejectAll},
-			GrantRequest: policyconf.Setting{Mode: policyconf.RejectAll},
 		},
 	}
 }

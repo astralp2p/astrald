@@ -59,6 +59,7 @@ func TestAcceptanceEvaluatorThatNeverReadsIsRefusedInTime(t *testing.T) {
 	a := startAcceptanceNode(t)
 	a.claim()
 	owner := a.registerApp()
+	a.approve(owner)
 	caller := a.registerAppWith(&apphostapi.RegisterRequest{Evaluator: astral.NewBool(false)})
 
 	e, _ := a.serveEvaluator(owner)
@@ -82,6 +83,7 @@ func TestAcceptanceEvaluatorThatNeverAcksIsRefusedInTime(t *testing.T) {
 	a := startAcceptanceNode(t)
 	a.claim()
 	owner := a.registerApp()
+	a.approve(owner)
 	caller := a.registerAppWith(&apphostapi.RegisterRequest{Evaluator: astral.NewBool(false)})
 
 	held := a.serveSilentEndpoint(owner)
@@ -109,6 +111,7 @@ func TestAcceptanceOwnerReadsItsObjectPastAnotherEvaluator(t *testing.T) {
 			a := startAcceptanceNode(t)
 			a.claim()
 			attacker := a.registerApp()
+			a.approve(attacker)
 			victim := a.registerApp()
 			content := []byte("content two VFSes hold")
 
@@ -204,6 +207,7 @@ func TestAcceptanceSilentServiceEvaluatorIsRefusedInTime(t *testing.T) {
 	a := startAcceptanceNode(t)
 	a.claim()
 	owner := a.registerApp()
+	a.approve(owner)
 	caller := a.registerAppWith(&apphostapi.RegisterRequest{Evaluator: astral.NewBool(false)})
 	registerSilentService(t, a, owner)
 

@@ -20,7 +20,6 @@ import (
 	"slices"
 	"time"
 
-	apphostapi "github.com/astralp2p/astral-go/api/apphost"
 	apphostcli "github.com/astralp2p/astral-go/api/apphost/client"
 	"github.com/astralp2p/astral-go/api/auth"
 	"github.com/astralp2p/astral-go/api/services"
@@ -196,10 +195,7 @@ func (w *world) follow(n provider.Node, want string) (*astral.Identity, error) {
 	if err := scope.Append(&services.DiscoveryScope{Rules: []*services.DiscoveryRule{rule}}); err != nil {
 		return nil, err
 	}
-	err = apphostcli.New(nil, admin).Grant(w.ctx, &apphostapi.GrantRequest{
-		Identity: app.ID,
-		Permits:  []*auth.Permit{{Action: astral.String8(services.ServiceDiscoveryAction{}.ObjectType()), Constraints: scope}},
-	})
+	err = provider.Grant(w.ctx, app, &auth.Permit{Action: astral.String8(services.ServiceDiscoveryAction{}.ObjectType()), Constraints: scope})
 	if err != nil {
 		return nil, fmt.Errorf("grant discovery on %v: %w", n.Identity, err)
 	}

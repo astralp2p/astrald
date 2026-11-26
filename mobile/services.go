@@ -3,7 +3,6 @@ package mobile
 import (
 	"errors"
 	"strings"
-	"time"
 
 	"github.com/astralp2p/astral-go/api/auth"
 	"github.com/astralp2p/astral-go/api/services"
@@ -92,14 +91,15 @@ func (a nativeEvaluator) Evaluate(caller *astral.Identity, service string) *serv
 	return u
 }
 
-// GrantServiceDiscovery lets app, an identity in hex, discover names
-// (comma-separated) on every node of the swarm. It is a node-local grant added
-// beside earlier discovery grants of app and lasts until revoked. Granting the
-// same names again refreshes the one grant; a changed name list adds a grant and
-// the earlier one stays until revoked. The platform wrapper issues it for the
-// apps it runs, such as the contacts service, so they hold it without asking
-// through apphost.request_grant, which refuses unless a delegate approves or
-// the mode is accept_all.
+// GrantServiceDiscovery asks for app, an identity in hex, to discover names
+// (comma-separated) on every node of the swarm: it files a ContractRequest in
+// SwarmState, and the node signs app's contract once a Privileged device
+// approves it. Asking again for the same names while the request is live files
+// nothing new. The platform wrapper asks it for the apps it runs, such as the
+// contacts service.
+//
+// note: the name is kept for the platform wrappers that call it; no grant is
+// written.
 func (n *Node) GrantServiceDiscovery(app, names string) error {
 	n.mu.Lock()
 	cnode := n.cnode
@@ -124,12 +124,12 @@ func (n *Node) GrantServiceDiscovery(app, names string) error {
 	return grantDiscovery(mod, id, list)
 }
 
-// granter records node-local grants.
-type granter interface {
-	Grant(identity *astral.Identity, permit *auth.Permit, expiresAt *time.Time) error
+// contractRequester files ContractRequests; apphost.Module is one.
+type contractRequester interface {
+	RequestContract(ctx *astral.Context, app *astral.Identity, permits []*auth.Permit) (*astral.ObjectID, error)
 }
 
-func grantDiscovery(g granter, app *astral.Identity, names []string) error {
+func grantDiscovery(g contractRequester, app *astral.Identity, names []string) error {
 	rule := &services.DiscoveryRule{}
 	for _, name := range names {
 		rule.Services = append(rule.Services, astral.String8(name))
@@ -142,5 +142,6 @@ func grantDiscovery(g granter, app *astral.Identity, names []string) error {
 		Action:      astral.String8(services.ServiceDiscoveryAction{}.ObjectType()),
 		Constraints: scope,
 	}
-	return g.Grant(app, permit, nil)
+	_, err := g.RequestContract(astral.NewContext(nil), app, []*auth.Permit{permit})
+	return err
 }

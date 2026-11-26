@@ -7,6 +7,7 @@ import (
 	"github.com/astralp2p/astral-go/api/secp256k1"
 	"github.com/astralp2p/astral-go/api/user"
 	"github.com/astralp2p/astral-go/astral"
+	nodesmod "github.com/astralp2p/astrald/mod/nodes"
 	"github.com/astralp2p/astrald/mod/objects"
 	"gorm.io/gorm"
 )
@@ -23,17 +24,17 @@ func (mod *Module) Expel(ctx *astral.Context, nodeID *astral.Identity) (*user.Si
 		return nil, user.ErrNoActiveContract
 	}
 
-	if nodeID.IsEqual(ac.Issuer) {
+	if nodeID.IsEqual(mod.Identity()) {
 		return nil, errors.New("cannot expel the swarm user")
 	}
 
 	expulsion := &user.Expulsion{
-		Issuer:     ac.Issuer,
+		Issuer:     mod.Identity(),
 		Subject:    nodeID,
 		ExpelledAt: astral.Time(time.Now()),
 	}
 
-	sig, err := mod.Crypto.Sign(ctx, secp256k1.FromIdentity(ac.Issuer), expulsion)
+	sig, err := mod.Crypto.Sign(ctx, secp256k1.FromIdentity(mod.Identity()), expulsion)
 	if err != nil {
 		return nil, err
 	}
@@ -43,6 +44,11 @@ func (mod *Module) Expel(ctx *astral.Context, nodeID *astral.Identity) (*user.Si
 	err = mod.db.StoreExpulsion(signed)
 	if err != nil {
 		return nil, err
+	}
+	// why: SwarmState carries the expel to every member, and the view applies
+	// it to everything signed by or for the subject (G2).
+	if err = mod.Nodes.AddSwarmEntry(ctx, signed); err != nil && !errors.Is(err, nodesmod.ErrSwarmEntryHeld) {
+		mod.log.Error("expel %v: swarm state: %v", nodeID, err)
 	}
 	mod.refreshBans()
 	mod.publishSwarm()
@@ -76,7 +82,7 @@ func (mod *Module) receiveExpulsion(signed *user.SignedExpulsion) error {
 	}
 
 	ac := mod.ActiveContract()
-	if ac == nil || !signed.Issuer.IsEqual(ac.Issuer) {
+	if ac == nil || !signed.Issuer.IsEqual(mod.Identity()) {
 		return objects.ErrPushRejected
 	}
 
@@ -140,7 +146,7 @@ func (mod *Module) banOn(subject *astral.Identity) *user.SignedExpulsion {
 		return nil
 	}
 
-	ban, err := mod.db.ExpulsionFor(ac.Issuer, subject)
+	ban, err := mod.db.ExpulsionFor(mod.Identity(), subject)
 	if err != nil {
 		if !errors.Is(err, gorm.ErrRecordNotFound) {
 			mod.log.Errorv(1, "reading the ban on %v: %v", subject, err)

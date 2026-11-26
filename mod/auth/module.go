@@ -45,13 +45,14 @@ type ContractQueryBuilder interface {
 //     to its issuer as before.
 //
 // root returns the root key: the user this node is claimed by, or the node
-// itself while unclaimed. It is declared apart from Module: nothing calls
-// SetSwarm until G7 embeds this into Module and wires it.
+// itself while unclaimed. Module embeds it; the user module calls SetSwarm
+// once in LoadDependencies.
 type SwarmWalk interface {
 	SetSwarm(view usermod.SwarmView, state nodesmod.SwarmState, root func() *astral.Identity)
 }
 
 type Module interface {
+	SwarmWalk
 	// Authorize checks whether the action is permitted.
 	Authorize(ctx *astral.Context, action auth.ActionObject) bool
 
