@@ -100,7 +100,11 @@ def harness_configs(listen: list, token: str) -> dict:
                     "gate": copy.deepcopy(E2E_GATE),
                     # why: a world registers far more apps on one node within
                     # the hour than the 64 ContractRequests a device files
-                    "contract_requests_per_node": 100000},
+                    "contract_requests_per_node": 100000,
+                    # why: the host worker carries an Approval out on its next
+                    # poll, 5 s by default, and every app a driver registers
+                    # waits for one; the answerer polls every 0.5 s too
+                    "contract_request_poll": "500ms"},
     }
 
 

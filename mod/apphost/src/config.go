@@ -1,6 +1,8 @@
 package apphost
 
 import (
+	"time"
+
 	"github.com/astralp2p/astrald/lib/paths"
 )
 
@@ -30,6 +32,13 @@ type Config struct {
 	// why configurable: an E2E world registers more apps on one node within
 	// the hour than a device does.
 	ContractRequestsPerNode int `yaml:"contract_requests_per_node,omitempty"`
+
+	// ContractRequestPoll is how often the host worker reads SwarmState for
+	// the answers to this node's ContractRequests; zero is
+	// contractRequestPollEvery (5 s).
+	// why configurable: an E2E run waits for one answer per app it
+	// registers, and a 5 s poll adds up to most of the suite's time.
+	ContractRequestPoll time.Duration `yaml:"contract_request_poll,omitempty"`
 }
 
 // Gate lists the ops a session may call, IPC, WebSocket and HTTP alike. An
