@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
-"""Oracle: a member without the User key cannot bring a node in, and leaves
-nothing behind; the member that holds the key can, and the swarm agrees.
+"""Oracle: a member without the User key cannot bring a Privileged node in, and
+leaves no membership behind; the member that holds the key can, once the User
+confirms, and the swarm agrees.
 
 Two kinds of judgement. The driver's record first:
 
-- the join through node2 was refused with the `sign as issuer` prefix, the
-  text node2 gives when the issuer's key is not among its own (the contract
-  is the User's, and only a key holder can sign it);
+- the join through node2 was refused with the text a carrier gives when it
+  cannot reach the user key (mod/user/src/swarm_carrier.go
+  errUserKeyRequired): only the user key signs a Privileged membership (D2);
 - once the refusal had had time to leave debris, the latecomer was still
   `fresh`, and neither node1's nor node2's roster held the latecomer, only the
   two nodes there before;
@@ -26,9 +27,9 @@ import astral
 
 from lib.sessionio import load
 
-# The prefix every setup client matches for a missing issuer key
-# (mod/auth/src/signing.go SignIssuer); the rest names the key.
-ISSUER = "sign as issuer"
+# The end of a Privileged join through a carrier without the user key
+# (mod/user/src/swarm_carrier.go errUserKeyRequired, sent by user.carry_join).
+ISSUER = "a privileged membership needs the user key's signature"
 # why a window: node1's push to node2 and the roster sync that follow an
 # admission are asynchronous; node2 was never told where the latecomer is.
 CONVERGE = 30.0
@@ -56,9 +57,9 @@ def check_record(f: dict, ids: dict, by_id: dict, user_id: str) -> None:
     assert r2["refused"], (
         "node2 admitted the latecomer: a member without the User key signed "
         f"as the issuer ({r2['text']!r})")
-    assert r2["text"].startswith(ISSUER), (
+    assert ISSUER in r2["text"], (
         f"node2 refused the join with {r2['error']} {r2['text']!r}, not with "
-        f"the {ISSUER!r} prefix: the refusal is not the missing issuer key's")
+        f"{ISSUER!r}: the refusal is not the missing user key's")
 
     after = f["after_refusal"]
     assert after["latecomer_state"] == "fresh", (
@@ -72,7 +73,7 @@ def check_record(f: dict, ids: dict, by_id: dict, user_id: str) -> None:
 
     r1 = f["join_via_node1"]
     assert not r1["refused"], (
-        f"node1, which holds the User key, refused the latecomer: "
+        f"node1, which holds the User key, refused the confirmed latecomer: "
         f"{r1['error']} {r1['text']!r}")
     assert r1["issuer"] == user_id and r1["subject"] == ids["jvm-latecomer"], (
         f"the contract node1 issued names issuer {r1['issuer']} and subject "
@@ -116,7 +117,7 @@ async def main():
             f"{name}'s swarm_status marks {names(got['linked'], by_id)} "
             f"linked, not exactly {names(others, by_id)}")
 
-    print("oracle: join via node2 refused with 'sign as issuer', no debris; "
+    print("oracle: join via node2 refused for want of the user key, no debris; "
           "join via node1 admitted; all three nodes list exactly node1, "
           "node2 and the latecomer")
 

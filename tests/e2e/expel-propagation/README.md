@@ -9,8 +9,9 @@ itself.
 - **driver** `script.py` — the User stores a bait object on node1 and
   expels node3; node3, with its own token, waits until it no longer reads
   itself as `claimed`, then tries to read the bait from node1, to join
-  node1's swarm, and to list its own repositories; the User tries to adopt
-  node3 again. The outcomes are the `probes` fact, for the report only.
+  node1's swarm, and to list its own repositories; the User signs node3 a new
+  Privileged membership and offers it to node1 and node2. The outcomes are
+  the `probes` fact, for the report only.
 - **oracle** `verify.py`, by its own reads —
   - node1: `user.list_expelled` holds node3 issued by the User; the roster
     keeps node1 and node2 and drops node3; the bait is in node1's `local`;
@@ -25,8 +26,13 @@ itself.
     `user.join` fails to reach node1 (`user.join.md`: an `error_message` if
     the swarm node cannot be reached; "identity expelled from swarm" is
     also accepted, never a success), and node1 holds no link to node3;
-  - node1 refuses the User's re-adoption of node3 the same way
-    (`mod/user/src/contracts.go`, `IssueMembership`);
+  - the User cannot bring node3 back: the oracle has the User sign node3 a
+    new Privileged membership on node1 (`crypto.sign_hash`) and offers it to
+    node1 and node2 with `nodes.swarm_push`, and for 10 s neither roster
+    lists node3. An expel beats everything signed for the expelled node
+    (`mod/user/src/swarm_view_membership.go`). Before G7 this probe was the
+    User's `user.adopt`, which is gone; a membership the User signs is what
+    re-adoption is now;
   - control: node2 is still linked to node1 and reads the same bait.
 
 ## Suspected astrald defect: a sibling re-links to the banned node

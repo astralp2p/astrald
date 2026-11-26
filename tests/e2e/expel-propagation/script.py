@@ -6,7 +6,9 @@
 3. node3, with its own token, waits until it no longer reads itself as
    `claimed`, then probes: read the bait from node1, join node1's swarm,
    and list its own repositories.
-4. The User tries to adopt node3 again.
+4. The User tries to bring node3 back: it signs node3 a new Privileged
+   membership on node1 and offers it to node1 and node2 (what `user.adopt`
+   did before G7; `swarmstate.user_membership`).
 
 The outcomes are recorded as the `probes` fact, for the report. The oracle
 judges by its own reads, never by these.
@@ -17,6 +19,7 @@ import time
 import astral
 from astral.object import Query
 
+from lib import swarmstate as ss
 from lib.sessionio import load, write_facts
 
 LEAVE = 30.0       # how long node3 may take to read the ban that reaches it
@@ -73,8 +76,11 @@ async def main():
         probes["join_node1"] = await outcome(c.user.join(id1))
         probes["own_repositories"] = await outcome(c.objects.repositories())
 
-    async with await astral.connect(n1["endpoint"], token=user_token) as c:
-        probes["readopt_node3"] = await outcome(c.user.adopt(id3))
+    try:
+        probes["readopt_node3"] = ss.user_membership(
+            n1, user_token, doc["facts"]["user_id"], id3, push_to=(doc["nodes"]["node2"],))
+    except AssertionError as e:
+        probes["readopt_node3"] = {"error": str(e)}
 
     write_facts({"expelled_id": expelled, "bait_id": bait, "probes": probes})
     for k, v in probes.items():
