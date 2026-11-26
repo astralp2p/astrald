@@ -86,7 +86,7 @@ func run(path string, facts map[string]bool) error {
 	ctx := astral.NewContext(nil)
 	apps2 := apphostcli.New(nil, connect(n2.Endpoint, n2.Token))
 
-	if err := refuseWithoutGrant(ctx, apps2, n2.Endpoint, facts); err != nil {
+	if err := refuseWithoutPermit(ctx, apps2, n2.Endpoint, facts); err != nil {
 		return err
 	}
 
@@ -118,15 +118,15 @@ func run(path string, facts map[string]bool) error {
 	return nil
 }
 
-// refuseWithoutGrant checks that an app without serve_objects cannot become a searcher.
-func refuseWithoutGrant(ctx *astral.Context, apps2 *apphostcli.Client, endpoint string, facts map[string]bool) error {
+// refuseWithoutPermit checks that an app without serve_objects cannot become a searcher.
+func refuseWithoutPermit(ctx *astral.Context, apps2 *apphostcli.Client, endpoint string, facts map[string]bool) error {
 	plain, err := apps2.Register(ctx)
 	if err != nil {
 		return fmt.Errorf("register the plain app: %w", err)
 	}
 	_, err = objectscli.New(nil, connect(endpoint, string(plain.Token))).RegisterSearcher(ctx, lease)
-	facts["searcher_refused_without_grant"] = err != nil && err.Error() == auth.ErrNotPermitted.Error()
-	if !facts["searcher_refused_without_grant"] {
+	facts["searcher_refused_without_permit"] = err != nil && err.Error() == auth.ErrNotPermitted.Error()
+	if !facts["searcher_refused_without_permit"] {
 		return fmt.Errorf("objects.register_searcher for an app without serve_objects answered %v; want %v", err, auth.ErrNotPermitted)
 	}
 	return nil

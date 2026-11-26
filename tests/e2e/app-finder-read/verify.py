@@ -14,7 +14,7 @@ from lib.sessionio import load
 
 ROOT = Path(__file__).resolve().parents[3]
 STEPS = [
-    "finder_refused_without_grant",
+    "finder_refused_without_permit",
     "registered_as_finder",
     "find_names_the_app",
     "node2_read_the_note",

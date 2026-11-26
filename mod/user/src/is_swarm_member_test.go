@@ -104,12 +104,12 @@ func TestIsSwarmMemberFailsClosedOnBanStoreFault(t *testing.T) {
 }
 
 // BenchmarkIsSwarmMember measures the per-frame cost of the inbound relay
-// check on a 10-node swarm with one ban, over an in-memory index.
+// check on a 10-node swarm with one ban, read from a SwarmView.
 func BenchmarkIsSwarmMember(b *testing.B) {
 	issuer := astral.GenerateIdentity()
 	mod := banModule(b, issuer)
 	query := &memberQuery{}
-	mod.Auth = &memberAuth{query: query}
+	useQuerySwarm(mod, issuer, query)
 	var last *astral.Identity
 	for range 10 {
 		last = astral.GenerateIdentity()

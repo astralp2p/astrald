@@ -76,7 +76,7 @@ def check_resolution(f: dict, n2: dict) -> None:
     ip = lan_ip(n2)
     want = {f"tcp:{ip}:{TCP}", f"kcp:{ip}:{KCP}"}
     assert set(eps) == want, (
-        f"node1 found {eps} for node2 before the adoption; want nearby's {sorted(want)} "
+        f"node1 found {eps} for node2 before the join; want nearby's {sorted(want)} "
         "alone: the ports node2's status carries, and nothing at 1791 or 1792")
 
 

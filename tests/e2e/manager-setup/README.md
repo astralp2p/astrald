@@ -20,7 +20,7 @@ app registered later is no manager.
   appointment on the `claimed` node answered `node is not fresh`; the gate denied the
   manager's token query outside the `unclaimed` list; the manager's handler
   registered on the `unclaimed` node and answered the node's identity; the
-  manager, appointed with an `admin_network` grant, resolved the node's
+  manager, appointed with an `admin_network` permit, resolved the node's
   endpoints on the `unclaimed` node; the gate admitted the ordinary app's
   `nodes.resolve_endpoints` and the op answered `not permitted`; the ordinary app was not
   permitted to claim; the manager's claim answered a User and a token.

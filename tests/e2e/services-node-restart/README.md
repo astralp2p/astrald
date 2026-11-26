@@ -17,10 +17,10 @@ ended, receives the same provider's offering available once more.
     `services-node-restart-echo` (open) on every attach, and the app's state
     file records the attach count, the advertise count and every ask the node
     sent it to evaluate the offering.
-  - `driver follow` on node1: registers a consumer app, which node1's admin
-    grants discovery of the service, and follows it with `reach=swarm`. Every
-    event of the stream (an update, a Removed, the initial outcome, an error)
-    goes into the app's state file, in order, with the offerings it holds.
+  - `driver follow` on node1: registers a consumer app, files a discovery
+    permit request for the service, which the harness answerer approves, and
+    follows it with `reach=swarm`. Every event of the stream (an update, a
+    Removed, the initial outcome, an error) goes into the app's state file, in order, with the offerings it holds.
   The driver waits until the follow holds the provider, calls the provider once
   from a fresh app on node1 (`driver call`), and records the apps' identities
   and pids, node2's restart count and endpoint, the provider's attach and

@@ -18,7 +18,7 @@ type memberSet struct {
 	expiry *time.Timer
 }
 
-// expiryMargin delays the republish past the expiry, so the auth index,
+// expiryMargin delays the republish past the expiry, so the SwarmView,
 // which compares expires_at with the time of the read, already omits the member.
 const expiryMargin = time.Second
 

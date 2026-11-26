@@ -179,7 +179,7 @@ func subscribeRefusal(ctx *astral.Context, idx *indexingcli.Client, nonce astral
 }
 
 // note: the cleanup below leaves the shared world as it was. The owner
-// unregisters without a permit, so the revoke does not block it.
+// unregisters without a permit.
 
 func unregister(ctx *astral.Context, idx *indexingcli.Client, nonce astral.Nonce) error {
 	if err := idx.UnregisterIndexer(ctx, nonce); err != nil {

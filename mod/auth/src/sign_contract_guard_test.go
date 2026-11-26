@@ -249,8 +249,9 @@ func TestAuthorizeContractNodeClaimIssuer(t *testing.T) {
 }
 
 // TestAuthorizeContractNodeClaimExpiry: the claim contract passes while it
-// expires past the shortest validity user.accept_membership accepts and no
-// later than the default validity of user.new_node_contract, with the slack.
+// expires past MinimalContractLength, the shortest remaining validity a claim
+// may carry, and no later than the default validity of user.new_node_contract,
+// with the slack.
 func TestAuthorizeContractNodeClaimExpiry(t *testing.T) {
 	for _, tc := range []struct {
 		name  string

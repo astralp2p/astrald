@@ -101,10 +101,10 @@ func waitAsked(t *testing.T, asked <-chan struct{}) {
 	}
 }
 
-// A revoke mid-follow removes the private local offering with cause hidden,
+// A permit lost mid-follow removes the private local offering with cause hidden,
 // sends the new not_granted list, and filters a private provider registered
 // later.
-func TestRevokeMidFollowRetractsThePrivateOffering(t *testing.T) {
+func TestLostPermitMidFollowRetractsThePrivateOffering(t *testing.T) {
 	v := newRecheckSwarm(t)
 	nodeA := v.a.node.Identity()
 	_, private := advertise(t, v.a, "contacts&open=false", available)
@@ -114,7 +114,7 @@ func TestRevokeMidFollowRetractsThePrivateOffering(t *testing.T) {
 	expectUpdateFrom(t, c, private)
 	expect[*astral.EOS](t, c)
 
-	v.auth.revoke(v.app, "contacts", nodeA)
+	v.auth.dropPermit(v.app, "contacts", nodeA)
 	v.auth.indexed(contractFor(v.app))
 	expectRemoved(t, c, private, services.CauseHidden)
 	expectNotGranted(t, c, "contacts")
@@ -128,8 +128,8 @@ func TestRevokeMidFollowRetractsThePrivateOffering(t *testing.T) {
 }
 
 // A member's private offering shown through a permit is removed after the
-// revoke, and a carry restored after a lost stream does not show it again.
-func TestRevokeRetractsAMemberOfferingAndARestartKeepsItHidden(t *testing.T) {
+// permit ends, and a carry restored after a lost stream does not show it again.
+func TestLostPermitRetractsAMemberOfferingAndARestartKeepsItHidden(t *testing.T) {
 	v := newRecheckSwarm(t)
 	node := newCuttableNode(v.nodeA)
 	v.a.node = node
@@ -144,7 +144,7 @@ func TestRevokeRetractsAMemberOfferingAndARestartKeepsItHidden(t *testing.T) {
 	}
 	node.waitEOS(t)
 
-	v.auth.revoke(v.app, "contacts", nodeB)
+	v.auth.dropPermit(v.app, "contacts", nodeB)
 	v.auth.indexed(contractFor(v.app))
 	// why either cause: B filters the carried stream as the app (G7), so B's
 	// own re-check (services.removed) and A's re-check race to retract it.
@@ -170,7 +170,7 @@ func TestBlockedRecheckDoesNotDelayGrantChanges(t *testing.T) {
 
 	block := make(chan struct{})
 	v.auth.setBlock(block)
-	v.auth.revoke(v.app, "contacts", nodeA)
+	v.auth.dropPermit(v.app, "contacts", nodeA)
 	v.auth.indexed(contractFor(v.app))
 	time.Sleep(100 * time.Millisecond) // the re-check now waits in Authorize
 
@@ -284,15 +284,15 @@ func TestWithdrawnContractRetractsThePrivateOffering(t *testing.T) {
 	expectUpdateFrom(t, c, private)
 	expect[*astral.EOS](t, c)
 
-	v.auth.revoke(v.app, "contacts", nodeA)
+	v.auth.dropPermit(v.app, "contacts", nodeA)
 	v.auth.withdrawn(astral.GenerateIdentity())
 	expectRemoved(t, c, private, services.CauseHidden)
 	expectNotGranted(t, c, "contacts")
 }
 
-// A provider whose serve_apps was revoked loses its binding: followers get
+// A provider whose serve_apps permit ended loses its binding: followers get
 // services.removed with cause binding_closed and the advertise channel ends.
-func TestServeAppsRevokeClosesTheBinding(t *testing.T) {
+func TestLostServeAppsPermitClosesTheBinding(t *testing.T) {
 	v := newRecheckSwarm(t)
 	provider := astral.GenerateIdentity()
 	pc := open(t, v.a.OpAdvertise, provider, "services.advertise?services=player", false)

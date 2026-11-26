@@ -39,7 +39,7 @@ holds nothing any of them tried to write.
 | authz_member (a Member), node token | the three above, `user.info`, `user.swarm_status`, `user.list_siblings` |
 
 The stranger's row is astral-docs `topics/node-exposure.md`, "Linked peers": a
-peer with no grant reaches the listed ops and is refused everything else. The
+peer with no permit reaches the listed ops and is refused everything else. The
 second row holds because node1 admits a relay only from a swarm node relaying
 for node1's own User (`AuthorizeRelayFor`), so the query is rejected before an
 op sees it. The Member's row is the narrowed rules: SeeSwarm admits every
@@ -59,8 +59,8 @@ what the oracle reads back.
 
 ## Why the allowed set must be exact
 
-A grant beyond the contract is the defect this test exists to catch. A grant
-missing from it is a broken swarm, and it also makes the refusals say nothing:
+An allowance beyond the contract is the defect this test exists to catch. An
+allowance missing from it is a broken swarm, and it also makes the refusals say nothing:
 a node that answers nobody refuses every probe. The positive controls
 (`apphost.whoami` naming the asker, `dir.resolve` naming node1) show each
 probe reached node1 and that node1 saw the asker it was meant to see.

@@ -19,7 +19,7 @@ greeted as itself.
 every registration (`mod/apphost/src/op_register.go`); the harness answerer
 (`tests/lib/answerer.py`) approves it, and the node signs the app's contract. `apphost.register_handler` authorizes
 that action (`mod/apphost/src/op_register_handler.go`). A query from one app
-to another passes the apphost gate with no grant: the gate filters only
+to another passes the apphost gate with no permit: the gate filters only
 queries that target the node (`mod/apphost/src/gate.go`).
 
 Each app runs on an `apps.AppRegistrar` built on its own client. The driver

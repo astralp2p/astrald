@@ -34,8 +34,8 @@ func readUntilBoundary(t *testing.T, sink *fakeSink) []event {
 	}
 }
 
-// A revoke while a view waits unsent drops that view; a view already handed
-// to the writer is removed with cause hidden once written.
+// A filter that hides a view while it waits unsent drops that view; a view
+// already handed to the writer is removed with cause hidden once written.
 func TestSetFilterDropsAQueuedView(t *testing.T) {
 	e := newEnv(t)
 	a, ta := e.register("contacts")

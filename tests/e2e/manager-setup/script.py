@@ -22,7 +22,7 @@ from lib import jsonops
 from lib.sessionio import load, write_facts
 
 # why admin_network: the manager shows the node's endpoints before the claim,
-# and nodes.resolve_endpoints asks for that grant.
+# and nodes.resolve_endpoints asks for that permit.
 REQUEST = {"Type": "mod.sys.register_manager_request",
            "Object": {"Name": "manager",
                       "GrantPermits": [{"Action": "mod.auth.admin_network_action"}]}}

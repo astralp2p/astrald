@@ -14,7 +14,7 @@ from lib.sessionio import load
 
 ROOT = Path(__file__).resolve().parents[3]
 STEPS = [
-    "searcher_refused_without_grant",
+    "searcher_refused_without_permit",
     "registered_as_searcher",
     "node1_search_found_the_recipe",
     "result_names_the_app_as_source",

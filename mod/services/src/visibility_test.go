@@ -30,7 +30,8 @@ type permitAuth struct {
 	onIndexed   []func(*auth.SignedContract)
 }
 
-func (a *permitAuth) revoke(actor *astral.Identity, service string, node *astral.Identity) {
+// dropPermit ends the permit, as its expiry or a withdrawn contract does.
+func (a *permitAuth) dropPermit(actor *astral.Identity, service string, node *astral.Identity) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	delete(a.permits, permitKeyOf(actor, service, node))

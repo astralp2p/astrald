@@ -17,8 +17,9 @@ type opPushArgs struct {
 // per object indicating whether it was accepted.
 //
 // why: no named action guards this op; each receiver decides what it accepts from the sender.
-// A node joins another node's swarm list only through its membership contract, which
-// arrives here, so a gate on swarm membership refused the one object that admits the sender.
+// A receiver checks the object's signatures and, where it matters, the sender's standing:
+// a signed expulsion holds by the user's signature from any sender, so a gate on swarm
+// membership here would refuse a valid ban that a non-member carries.
 func (mod *Module) OpPush(ctx *astral.Context, q *routing.IncomingQuery, args opPushArgs) (err error) {
 	ch := channel.New(q.AcceptRaw(), channel.WithFormats(args.In, args.Out))
 	defer ch.Close()

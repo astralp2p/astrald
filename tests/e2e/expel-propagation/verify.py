@@ -118,7 +118,7 @@ async def main():
     assert b1.get(id3) == user_id, (
         f"node1 holds no ban on node3 issued by the User {user_id}: {b1}")
     assert held, f"node1's local repo does not hold the bait {bait}"
-    # why subset, not equality: in a VM world an operator may have adopted
+    # why subset, not equality: in a VM world an operator may have joined
     # the lab's reflector too; what matters is node3 out, node1/node2 in.
     assert {id1, id2} <= r1 and id3 not in r1, (
         f"node1's roster {sorted(r1)} is not node1+node2 without node3")

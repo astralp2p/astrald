@@ -7,7 +7,7 @@ ops     = ["noop"]
 facts   = ["nearby_ports_adopt"]
 
 # why node2 off both defaults: with kcp left on 1792, a dial to nearby's
-# default kcp port could adopt node2 although node1 ignored the ports in its
+# default kcp port could reach node2 for the join although node1 ignored the ports in its
 # status; with both moved, every link node1 dials proves the carried ports.
 # script.py and verify.py read the ports from these tables.
 [config.node2.tcp]

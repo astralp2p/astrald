@@ -10,7 +10,7 @@ gives the new node an endpoint, and nothing runs on the swarm node.
   world has none. The test claims the reflector, which `nearby-stealth-meet`
   needs unowned, so it runs in a world of its own.
 - **driver** `script.py`: appoints a manager on the reflector, with an
-  `admin_network` grant, and reads the reflector's state and the endpoints the
+  `admin_network` permit, and reads the reflector's state and the endpoints the
   reflector resolves for `node1`. When the reflector still holds a Visible
   entry of `node1` cached before `node1`'s claim, the driver waits until it
   ends, at most 310 s: the entry lives 5 min, resolves `node1`'s LAN endpoints
