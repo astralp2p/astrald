@@ -9,6 +9,7 @@ import (
 	"github.com/astralp2p/astral-go/api/nodes"
 	"github.com/astralp2p/astral-go/api/user"
 	"github.com/astralp2p/astral-go/astral"
+	authmod "github.com/astralp2p/astrald/mod/auth"
 )
 
 // fakeSwarm is a SwarmState and a SwarmView over an in-memory set of entries.
@@ -483,5 +484,89 @@ func TestContractIndexKeepsTheApprovalID(t *testing.T) {
 	got, err = mod.SignedContracts().WithSubject(plain).Find(ctx)
 	if err != nil || len(got) != 1 || got[0].ApprovalID != nil {
 		t.Fatalf("plain contract: want no ApprovalID, got %v (err %v)", got, err)
+	}
+}
+
+// TestSwarmLinkGrantsAJoinerItsTierOnly: a Trusted carrier signs its Member
+// joiner a membership with extra permits, carrying out a Privileged node's
+// Approval of the Member JoinRequest. The link does not hold, so the joiner
+// neither relays as the user, nor administers the swarm, nor takes any other
+// extra permit up to the approver; the exact membership still links.
+func TestSwarmLinkGrantsAJoinerItsTierOnly(t *testing.T) {
+	ctx := astral.NewContext(nil)
+	w := newSwarmWorld(t)
+	joiner := astral.GenerateIdentity()
+	join := w.swarm.add(t, &user.SignedJoinRequest{
+		JoinRequest: user.NewJoinRequest(joiner, w.phone, user.TierMember),
+		JoinerSig:   dummySig(),
+	})
+	approval := w.answer(t, w.laptop, join)
+	tier := &auth.Permit{Action: astral.String8(user.TierMember.Action())}
+	seedLinkedContract(t, w.mod, w.phone, joiner, approval, tier,
+		&auth.Permit{Action: astral.String8(nodes.RelayForAction{}.ObjectType())},
+		&auth.Permit{Action: astral.String8(user.AdminSwarmAction{}.ObjectType())},
+		permit(0))
+
+	if w.mod.Authorize(ctx, &nodes.RelayForAction{Action: auth.NewAction(joiner), ForID: w.user}) {
+		t.Fatal("member joiner relays as the user: want deny")
+	}
+	if w.mod.Authorize(ctx, &user.AdminSwarmAction{Action: auth.NewAction(joiner)}) {
+		t.Fatal("member joiner administers the swarm: want deny")
+	}
+	if w.mod.Authorize(ctx, action(joiner)) {
+		t.Fatal("member joiner takes an extra permit: want deny")
+	}
+
+	exact, err := user.NewMembership(w.phone, joiner, user.TierMember, approval, time.Hour)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := w.mod.contractLink(&auth.SignedContract{Contract: exact, IssuerSig: dummySig()}); !ok {
+		t.Fatal("the exact membership: want the link to hold")
+	}
+}
+
+// TestSwarmWalkCarriesNoUserAuthorityThroughAnUnlinkedContract: a Privileged
+// node signs a Member a contract with no ApprovalID. It carries no relay as
+// the user, no AdminSwarm, no sudo as the user and no expel, while its other
+// permits, an app's relay contract for itself and the user key's own contract
+// still carry.
+func TestSwarmWalkCarriesNoUserAuthorityThroughAnUnlinkedContract(t *testing.T) {
+	ctx := astral.NewContext(nil)
+	w := newSwarmWorld(t)
+	w.mod.Add(authmod.Func[*nodes.RelayForAction](func(_ *astral.Context, a *nodes.RelayForAction) bool {
+		return a.Actor().IsEqual(a.ForID)
+	}))
+	relayFor := &auth.Permit{Action: astral.String8(nodes.RelayForAction{}.ObjectType())}
+	adminSwarm := &auth.Permit{Action: astral.String8(user.AdminSwarmAction{}.ObjectType())}
+	seedContract(t, w.mod, w.laptop, w.pi, relayFor, adminSwarm,
+		&auth.Permit{Action: astral.String8(auth.SudoAction{}.ObjectType())},
+		&auth.Permit{Action: astral.String8(user.ExpelAction{}.ObjectType())},
+		permit(0))
+
+	if w.mod.Authorize(ctx, &nodes.RelayForAction{Action: auth.NewAction(w.pi), ForID: w.user}) {
+		t.Fatal("member relays as the user: want deny")
+	}
+	if w.mod.Authorize(ctx, &user.AdminSwarmAction{Action: auth.NewAction(w.pi)}) {
+		t.Fatal("member administers the swarm: want deny")
+	}
+	if w.mod.Authorize(ctx, &auth.SudoAction{Action: auth.NewAction(w.pi), AsID: w.user}) {
+		t.Fatal("member acts as the user key: want deny")
+	}
+	if w.mod.Authorize(ctx, &user.ExpelAction{Action: auth.NewAction(w.pi), Subject: w.member}) {
+		t.Fatal("member expels: want deny")
+	}
+	if !w.mod.Authorize(ctx, action(w.pi)) {
+		t.Fatal("member's other permit: want allow")
+	}
+
+	seedContract(t, w.mod, w.appA, w.pi, relayFor)
+	if !w.mod.Authorize(ctx, &nodes.RelayForAction{Action: auth.NewAction(w.pi), ForID: w.appA}) {
+		t.Fatal("member relays for an app by the app's own contract: want allow")
+	}
+
+	seedContract(t, w.mod, w.user, w.member, adminSwarm)
+	if !w.mod.Authorize(ctx, &user.AdminSwarmAction{Action: auth.NewAction(w.member)}) {
+		t.Fatal("the user key's own contract: want allow")
 	}
 }
