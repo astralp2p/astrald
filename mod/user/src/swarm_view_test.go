@@ -529,3 +529,34 @@ func TestSwarmViewRereadsOnlyOnHeadChange(t *testing.T) {
 	f.add(f.approval(f.laptop, r))
 	f.wantStatus(r, user.RequestApproved)
 }
+
+// TestSwarmViewMembershipHoldsOnlyTheTier: a carrier's membership carrying out
+// a JoinRequest's Approval holds only when its permits are the tier permit
+// alone; one with an extra permit, or a delegable tier permit, does not.
+func TestSwarmViewMembershipHoldsOnlyTheTier(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		edit  func(c *auth.Contract)
+		holds bool
+	}{
+		{"the tier alone", func(*auth.Contract) {}, true},
+		{"an extra relay_for", func(c *auth.Contract) {
+			c.Permits = append(c.Permits, &auth.Permit{Action: "mod.nodes.relay_for_action"})
+		}, false},
+		{"an extra admin_swarm", func(c *auth.Contract) {
+			c.Permits = append(c.Permits, &auth.Permit{Action: "mod.user.admin_swarm_action"})
+		}, false},
+		{"a delegable tier", func(c *auth.Contract) { c.Permits[0].Delegation = 1 }, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			f := newViewFixture(t)
+			joiner := astral.GenerateIdentity()
+			r := f.add(f.joinRequest(joiner, f.phone, user.TierMember, viewClock(10, 0)))
+			a := f.add(f.approval(f.laptop, r))
+			m := f.member(f.phone, joiner, user.TierMember, a)
+			tc.edit(m.Contract)
+			f.add(m)
+			f.wantMembership(joiner, tc.holds)
+		})
+	}
+}

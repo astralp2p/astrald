@@ -1,6 +1,7 @@
 package user
 
 import (
+	"github.com/astralp2p/astral-go/api/auth"
 	"github.com/astralp2p/astral-go/api/user"
 	"github.com/astralp2p/astral-go/astral"
 )
@@ -37,7 +38,7 @@ func (s *swarmSnapshot) membership(id *astral.Identity, visiting map[string]bool
 
 // linkHolds reports whether m's issuer may issue it: the root key, at any tier;
 // or the Carrier of a JoinRequest that names m's Subject as Joiner at m's tier,
-// whose counting Approval m carries out (ApprovalID), that is not declined, and
+// when m holds that tier's permit alone, whose counting Approval m carries out (ApprovalID), that is not declined, and
 // whose approver may answer it.
 func (s *swarmSnapshot) linkHolds(m *user.Membership, visiting map[string]bool) bool {
 	if s.isRoot(m.Issuer) {
@@ -57,6 +58,11 @@ func (s *swarmSnapshot) linkHolds(m *user.Membership, visiting map[string]bool) 
 	}
 	jr, ok := r.(*user.SignedJoinRequest)
 	if !ok || !jr.Joiner.IsEqual(m.Subject) || !jr.Carrier.IsEqual(m.Issuer) || jr.Tier != m.Tier {
+		return false
+	}
+	// why: user.ContractTier ignores permits that name no tier, so a carrier
+	// could sign a membership with more than the tier the join asked for.
+	if !tierOnly(m.SignedContract.Contract, m.Tier) {
 		return false
 	}
 	if s.requestStatus(a.RequestID) == user.RequestDeclined {
@@ -95,4 +101,17 @@ func (v *swarmView) members() []*astral.Identity {
 		}
 	}
 	return ids
+}
+
+// tierOnly reports whether c holds tier's permit and nothing else: one
+// non-delegable, unconstrained permit, as user.NewMembership builds it.
+//
+// note: mod/auth's walk applies the same rule to a JoinRequest link.
+func tierOnly(c *auth.Contract, tier user.Tier) bool {
+	if c == nil || len(c.Permits) != 1 || c.Permits[0] == nil {
+		return false
+	}
+	p := c.Permits[0]
+	return string(p.Action) == tier.Action() && p.Delegation == 0 &&
+		(p.Constraints == nil || len(p.Constraints.Objects()) == 0)
 }
