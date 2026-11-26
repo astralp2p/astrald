@@ -7,14 +7,15 @@ Member node3, is allowed by its contract chain, and denied without it.
    private on node3.
 2. Two apps register on node3, each asking a ServiceDiscovery permit for
    `wallet`: `front` and `other`. Once the User sees the wallet, each app's
-   local discovery (reach=local, node3 alone) is recorded, before any answer.
+   local discovery (reach=local, node3 alone) is recorded, and front tries
+   to spend 50, before any answer.
 3. The User approves front's request and declines other's, on node1. The
    driver polls front's local discovery until it shows the wallet (up to
-   60 s), then records other's, and front spends 50.
+   60 s), then records other's, front spends 50 and other tries to.
 
 Records `app_own_node`: {wallet, front, other, user_saw_s, before_front,
-before_other, front_request, other_request, front_seen_after_s, other_after,
-spend_50}.
+before_other, spend_before, front_request, other_request, front_seen_after_s,
+other_after, spend_50, other_spend}.
 """
 import asyncio
 
@@ -48,6 +49,7 @@ async def main():
         assert f["user_saw_s"] is not None, "the User never saw the wallet"
         f["before_front"] = ss.discover(n3, f["front"]["token"], "local")
         f["before_other"] = ss.discover(n3, f["other"]["token"], "local")
+        f["spend_before"] = ss.spend(n3, f["front"]["token"], wallet["identity"], 50)
 
         front_req = await pending_for(cu, f["front"]["identity"])
         other_req = await pending_for(cu, f["other"]["identity"])
@@ -59,6 +61,7 @@ async def main():
         n3, f["front"]["token"], "local", wallet["identity"], WAIT)
     f["other_after"] = ss.discover(n3, f["other"]["token"], "local")
     f["spend_50"] = ss.spend(n3, f["front"]["token"], wallet["identity"], 50)
+    f["other_spend"] = ss.spend(n3, f["other"]["token"], wallet["identity"], 50)
     write_facts({"app_own_node": f})
     print(f"driver: front saw the wallet on its own node {f['front_seen_after_s']} s "
           "after its Approval")

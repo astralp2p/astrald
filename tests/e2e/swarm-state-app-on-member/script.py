@@ -8,13 +8,14 @@ the wallet's own handler still refuses what is over its limit.
    the wallet (lib/apps, long-lived) advertises `wallet` as private.
 2. The front app registers on node3, asking a ServiceDiscovery permit for
    `wallet`. Once the User, on node1, sees the wallet in a swarm discovery,
-   the front's own swarm discovery is recorded, before any answer.
+   the front's own swarm discovery is recorded, and the front tries to
+   spend 50 by calling the wallet's identity directly, before any answer.
 3. The User approves the front's request on node1. The driver polls the
    front's swarm discovery until it shows the wallet (up to 60 s), then the
    front spends 50 (within the limit) and 500 (over it).
 
 Records `app_on_member`: {wallet, front, user_saw_s, request_id, approver, before,
-seen_after_s, spend_50, spend_500}.
+spend_before, seen_after_s, spend_50, spend_500}.
 """
 import asyncio
 
@@ -53,6 +54,7 @@ async def main():
             n1, doc["facts"]["user_token"], "swarm", wallet["identity"], WAIT)
         assert facts["user_saw_s"] is not None, "the User never saw the wallet"
         facts["before"] = ss.discover(n3, front["token"], "swarm")
+        facts["spend_before"] = ss.spend(n3, front["token"], wallet["identity"], 50)
 
         req = await approve_for(cu, front["identity"])
         facts["request_id"] = req.id

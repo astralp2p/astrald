@@ -6,6 +6,9 @@ its limits.
 - before the Approval, a swarm discovery by the front app shows no wallet
   (the wallet is private: only a caller holding a discovery permit sees it,
   astral-docs protocols/services/ops/services.discover.md, Visibility);
+- before the Approval, a direct call of the wallet by the front is refused
+  on node2 (Gate 1 for a query: services' query gate, which asks the
+  front's discovery permit for the wallet on node2 through its chain);
 - node1, a Privileged node, signed the Approval, and the request is approved
   on node1 and on node3;
 - within 60 s of the Approval the front's swarm discovery shows the wallet,
@@ -30,6 +33,8 @@ async def main():
 
     assert wallet not in f["before"], (
         f"the front saw the wallet before any Approval: {f['before']}")
+    assert "answer" not in f["spend_before"] and f["spend_before"].get("error"), (
+        f"the front spent before any Approval: {f['spend_before']}")
     assert f["seen_after_s"] is not None, (
         "the front's swarm discovery never showed the wallet within 60 s of the Approval")
     assert wallet in ss.discover(n3, f["front"]["token"], "swarm"), (

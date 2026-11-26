@@ -10,7 +10,9 @@ allowed by its contract chain, and denied without it.
 - node3 stores the contract that carries front's Approval out: issued by
   node3 for front, with an ApprovalID naming an Approval of front's request;
 - other, whose request the User declined, still sees no wallet, at the
-  driver and at the oracle, and node3 lists its request as declined.
+  driver and at the oracle, and node3 lists its request as declined;
+- a direct call of the wallet is refused for front before its Approval and
+  for other after its Decline (services' query gate).
 """
 import asyncio
 
@@ -32,6 +34,10 @@ async def main():
         "front's local discovery never showed the wallet within 60 s of its Approval")
     assert wallet in ss.discover(n3, f["front"]["token"], "local"), (
         "at the oracle, front's local discovery shows no wallet")
+    assert "answer" not in f["spend_before"] and f["spend_before"].get("error"), (
+        f"front spent before any answer: {f['spend_before']}")
+    assert "answer" not in f["other_spend"] and f["other_spend"].get("error"), (
+        f"the declined app spent: {f['other_spend']}")
     assert "answer" in f["spend_50"] and front in f["spend_50"]["answer"], (
         f"the wallet did not spend 50 for front: {f['spend_50']}")
 

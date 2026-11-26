@@ -4,6 +4,7 @@ import (
 	"sort"
 
 	"github.com/astralp2p/astral-go/api/services"
+	"github.com/astralp2p/astral-go/astral"
 )
 
 // Visibility decides which offerings reach a stream's caller. The node
@@ -42,6 +43,24 @@ func (c *Coordinator) Names() []string {
 	names := make([]string, 0, len(c.byName))
 	for name := range c.byName {
 		names = append(names, name)
+	}
+	sort.Strings(names)
+	return names
+}
+
+// PrivateNamesOf lists the services provider advertises on this node whose
+// offering is private there, sorted.
+func (c *Coordinator) PrivateNamesOf(provider *astral.Identity) []string {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	var names []string
+	for name, bindings := range c.byName {
+		for b := range bindings {
+			if b.provider.IsEqual(provider) && !c.isOpen(b, name) {
+				names = append(names, name)
+				break
+			}
+		}
 	}
 	sort.Strings(names)
 	return names
