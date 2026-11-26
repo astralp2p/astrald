@@ -1,4 +1,0 @@
-nodes      = ["ppsyncuser", "ppsyncjoiner"]
-timeout    = 300
-host_listener = "serves its provider app on a test-host port that the joiner dials"
-facts      = ["app_preexisting_provider_sync"]

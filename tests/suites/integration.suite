@@ -74,7 +74,6 @@ app-two-providers
 app-blueprint-sync
 services-app-call
 services-provider-gone
-app-preexisting-provider-sync
 app-node-restart-reconnect
 services-node-restart
 services-consumer-restart

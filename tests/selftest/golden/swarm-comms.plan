@@ -1,9 +1,9 @@
-w0 local:  app-preexisting-provider-sync → app-handler-unroute
-           → bootstrap-user-software-key → basic-strategy-gw-cycle → adopt-node
-           → services-app-call → app-discover-swarm → services-swarm
-           → app-discover-follow → app-two-providers
-           → services-swarm-outcome-rules → services-advertise-identity
-           → relay-pull-absent → messaging-two-node → node-query-sibling-app
+w0 local:  app-handler-unroute → bootstrap-user-software-key
+           → basic-strategy-gw-cycle → adopt-node → services-app-call
+           → app-discover-swarm → services-swarm → app-discover-follow
+           → app-two-providers → services-swarm-outcome-rules
+           → services-advertise-identity → relay-pull-absent
+           → messaging-two-node → node-query-sibling-app
            → sibling-query-live-link → app-call-remote → app-ping-pong
            → swarm-authz-matrix → route-outcomes → services-provider-gone
            → swarm-roster-sync → link-self-heal

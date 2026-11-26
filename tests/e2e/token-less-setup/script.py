@@ -17,6 +17,7 @@ import astral
 from astral.errors import AstralError
 
 from lib import jsonops
+from lib import swarmstate as ss
 from lib.sessionio import load, write_facts
 
 ADMIN = "mod.auth.admin_manage_apps_action"
@@ -82,6 +83,9 @@ async def register_admin(c, endpoint: str) -> dict:
         c, "apphost.register?in=json&out=json",
         body={"Type": "mod.apphost.register_request",
               "Object": {"GrantPermits": [{"Action": ADMIN}]}})
+    # why: since G7 the asked permit is a contract the node signs once the
+    # harness answerer approves the registration's ContractRequest
+    await ss.await_app(endpoint, app["Token"], [ADMIN])
     async with await astral.connect(endpoint, token=app["Token"]) as a:
         tokens = await attempt(a.apphost.list_tokens())
         who = await a.apphost.whoami(caller=None)

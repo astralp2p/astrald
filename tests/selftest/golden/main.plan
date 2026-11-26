@@ -1,17 +1,16 @@
 w0 local:  smoke → mcp-origin → claim-window → token-less-setup → manager-setup
-           → signer-app → messaging-ops → app-preexisting-provider-sync
-           → app-discover-local → app-handler-unroute → app-call-local
-           → app-routing-two-apps → app-op-surface
-           → bootstrap-user-software-key → claimed-node-keeps-owner
-           → app-token-lifecycle → fs-watch → fs-index-live
-           → registration-lease → app-index-provider → app-describe-provider
-           → app-search-provider → basic-strategy-gw-cycle → adopt-node
-           → object-store → app-query → blueprints-two-node
-           → app-blueprint-sync → apphost-origin → app-origin-guards
-           → sign-contract-guard → messaging-two-node → mcp-peer
-           → services-swarm → services-app-call → services-advertise-identity
-           → app-searcher-swarm → app-finder-read → app-two-providers
-           → objects-provider-registration-authz
+           → signer-app → messaging-ops → app-discover-local
+           → app-handler-unroute → app-call-local → app-routing-two-apps
+           → app-op-surface → bootstrap-user-software-key
+           → claimed-node-keeps-owner → app-token-lifecycle → fs-watch
+           → fs-index-live → registration-lease → app-index-provider
+           → app-describe-provider → app-search-provider
+           → basic-strategy-gw-cycle → adopt-node → object-store → app-query
+           → blueprints-two-node → app-blueprint-sync → apphost-origin
+           → app-origin-guards → sign-contract-guard → messaging-two-node
+           → mcp-peer → services-swarm → services-app-call
+           → services-advertise-identity → app-searcher-swarm → app-finder-read
+           → app-two-providers → objects-provider-registration-authz
            → objects-provider-read-robustness → services-provider-gone
            → app-discover-follow → app-discover-swarm → app-ping-pong
            → app-call-remote → relay-pull-absent → app-reject-code
