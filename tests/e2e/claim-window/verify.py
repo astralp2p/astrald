@@ -10,15 +10,11 @@ could be a closed window rather than a narrow one.
 from lib.sessionio import load
 
 FOREIGN = "cannot sign with another identity's key"
-NODE_KEY = "cannot sign with the node's key"
 
-# note: since G7 the claim is a PrivilegedMembership (user.new_node_contract),
-# and the guard lets node1's key sign as subject of that shape alone, so a near
-# miss of it is refused at the subject.
 GUARD = {
-    "claim issued by the node": f"authorize issuer: {NODE_KEY}",
-    "claim carrying a sudo permit": f"authorize subject: {NODE_KEY}",
-    "claim valid for a century": f"authorize subject: {NODE_KEY}",
+    "claim issued by the node": "authorize issuer: cannot sign with the node's key",
+    "claim carrying a sudo permit": f"authorize issuer: {FOREIGN}",
+    "claim valid for a century": f"authorize issuer: {FOREIGN}",
     "claim asked by an app as itself": f"authorize issuer: {FOREIGN}",
 }
 

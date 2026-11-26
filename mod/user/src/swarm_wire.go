@@ -1,6 +1,8 @@
 package user
 
 import (
+	"time"
+
 	"github.com/astralp2p/astral-go/api/auth"
 	"github.com/astralp2p/astral-go/api/crypto"
 	"github.com/astralp2p/astral-go/api/secp256k1"
@@ -145,7 +147,28 @@ func (mod *Module) Membership(id *astral.Identity) (*user.Membership, bool) {
 	if mod.swarmView == nil {
 		return nil, false
 	}
-	return mod.swarmView.Membership(id)
+	if m, ok := mod.swarmView.Membership(id); ok {
+		return m, true
+	}
+	return mod.ownMembership(id)
+}
+
+// ownMembership views this node's active contract as its membership, until
+// SwarmState holds it.
+//
+// why: a claim or a join makes the contract active before
+// onActiveContractChanged adds it to SwarmState, and in that window the node
+// would be neither its own root nor a member: a token-less user.info right
+// after user.bootstrap was refused.
+func (mod *Module) ownMembership(id *astral.Identity) (*user.Membership, bool) {
+	if id.IsZero() || !id.IsEqual(mod.node.Identity()) || mod.swarmView.Expelled(id) {
+		return nil, false
+	}
+	ac := mod.ActiveContract()
+	if ac == nil || !time.Now().Before(ac.ExpiresAt.Time()) {
+		return nil, false
+	}
+	return user.MembershipOf(ac)
 }
 
 func (mod *Module) CheckSwarmEntry(obj astral.Object) user.EntryVerdict {
