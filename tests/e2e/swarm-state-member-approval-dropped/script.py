@@ -4,7 +4,7 @@
 Two apps register on node3, which files a ContractRequest for each. Once
 node1 and node2 list both, the driver signs an Approval with each of two
 nodes' own keys (read from the node's data/node_key with lib/nodefs) and
-offers it with nodes.swarm_push to that node's SwarmState and to the other
+offers it with user.swarm_push to that node's SwarmState and to the other
 two nodes:
 
 - the Member node3 signs an Approval of the first app's request;
@@ -27,7 +27,7 @@ import astral
 from lib import swarmstate as ss
 from lib.sessionio import load, write_facts
 
-# why: one SwarmState pull interval (mod/nodes/src/swarm_wire.go, 15 s) and slack
+# why: one SwarmState pull interval (mod/user/src/swarm_state_wire.go, 15 s) and slack
 SPREAD = 20.0
 
 

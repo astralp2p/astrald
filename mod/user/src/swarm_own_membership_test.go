@@ -1,4 +1,4 @@
-package nodes
+package user
 
 import (
 	"sync"
@@ -19,8 +19,11 @@ func membershipOf(t *testing.T, issuer, subject *astral.Identity) *auth.SignedCo
 	if err != nil {
 		t.Fatalf("NewMembership: %v", err)
 	}
-	return &auth.SignedContract{Contract: c, IssuerSig: testSig()}
+	return &auth.SignedContract{Contract: c, IssuerSig: scriptedSig()}
 }
+
+// LinkedIdentities makes linkedNodes the nodes module of the exchange: it holds a link with each of n.linked.
+func (n *linkedNodes) LinkedIdentities() []*astral.Identity { return n.linked }
 
 // TestOwnMembershipExchangesSwarmStateWithLinkedPeers: the store accepting
 // this node's own membership runs the first-link exchange with every peer the
@@ -37,14 +40,10 @@ func TestOwnMembershipExchangesSwarmStateWithLinkedPeers(t *testing.T) {
 
 	ctx, cancel := astral.NewContext(nil).WithCancel()
 	t.Cleanup(cancel)
-	mod := &Module{node: &identityNode{id: self}, log: log.New(self), ctx: ctx}
-	mod.linkPool = NewLinkPool(mod)
-	mod.swarm.Store(n.store)
-
 	a, b := astral.GenerateIdentity(), astral.GenerateIdentity()
-	for _, id := range []*astral.Identity{a, a, b} {
-		mod.linkPool.links.Add(&Link{id: astral.NewNonce(), conn: &identityConn{remote: id}})
-	}
+	mod := &Module{node: &identityNode{id: self}, log: log.New(self), ctx: ctx}
+	mod.Nodes = &linkedNodes{linked: []*astral.Identity{a, b}}
+	mod.store.Store(n.store)
 
 	var mu sync.Mutex
 	got := map[string]int{}

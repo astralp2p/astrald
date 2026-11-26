@@ -58,9 +58,6 @@ func (mod *Module) ReceiveObject(drop objects.Drop) error {
 
 				go mod.RefreshMemberEndpoints(e.RemoteIdentity)
 			}
-			if e.LinkCount == 1 {
-				go mod.onSwarmLink(e.RemoteIdentity)
-			}
 		case *nodes.LinkClosedEvent:
 			mod.scheduleEndpointsAnnounce()
 			mod.onPartialLinkClose(e)

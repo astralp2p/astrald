@@ -8,7 +8,7 @@ import (
 	"github.com/astralp2p/astral-go/astral"
 )
 
-// swarmEntryReader is the part of nodes.SwarmState the entry check reads.
+// swarmEntryReader is the part of user.SwarmState the entry check reads.
 type swarmEntryReader interface {
 	SwarmEntry(id *astral.ObjectID) (astral.Object, error)
 }
@@ -28,7 +28,7 @@ type signatureVerifier interface {
 // may write which entry (D2, D5, D7, D10).
 //
 // note: nothing registers it until G7 composes it into the SwarmView that
-// mod/nodes calls on merge.
+// the SwarmState store calls on merge.
 type swarmEntryCheck struct {
 	entries  swarmEntryReader
 	members  membershipReader

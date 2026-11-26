@@ -11,7 +11,6 @@ import (
 	"github.com/astralp2p/astral-go/api/secp256k1"
 	"github.com/astralp2p/astral-go/api/user"
 	"github.com/astralp2p/astral-go/astral"
-	nodesmod "github.com/astralp2p/astrald/mod/nodes"
 	secp256k1sig "github.com/astralp2p/astrald/mod/secp256k1"
 	usermod "github.com/astralp2p/astrald/mod/user"
 )
@@ -36,7 +35,7 @@ func (c *joinClock) advance(d time.Duration) {
 	c.t = c.t.Add(d)
 }
 
-// joinSwarm is a fake of nodes.SwarmState and user.SwarmView over one
+// joinSwarm is a fake of user.SwarmState and user.SwarmView over one
 // in-memory entry set. It accepts every entry kind and derives answers the
 // way the SwarmView contract states them, with memberships set by the test.
 type joinSwarm struct {
@@ -47,7 +46,7 @@ type joinSwarm struct {
 	memberships map[string]*user.Membership
 }
 
-var _ nodesmod.SwarmState = &joinSwarm{}
+var _ usermod.SwarmState = &joinSwarm{}
 var _ usermod.SwarmView = &joinSwarm{}
 
 func newJoinSwarm(clock *joinClock) *joinSwarm {

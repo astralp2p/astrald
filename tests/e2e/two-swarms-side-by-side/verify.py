@@ -167,7 +167,7 @@ async def main():
                     failures.append(f"{who} {op} across the bridge was refused as "
                                     f"{text!r}, not as {' or '.join(marks)}")
 
-    # 4. memberships the driver offered (nodes.swarm_push): the other
+    # 4. memberships the driver offered (user.swarm_push): the other
     # swarm's answer and its SwarmState
     pushes = facts["pushes"]
     for key in ("a_contract_to_b_node", "b_contract_to_a_node"):

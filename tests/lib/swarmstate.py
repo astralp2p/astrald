@@ -2,7 +2,7 @@
 
 The tests of swarm-state.suite read a node's requests with
 `user.swarm_requests`, answer them with `user.answer_request` and read the
-entries a node stores with `nodes.swarm_digest` and `nodes.swarm_fetch`.
+entries a node stores with `user.swarm_digest` and `user.swarm_fetch`.
 astral-py has no client for these ops, so the first two go through
 `lib/jsonops` (raw JSON envelopes) and the exchange ops, and every app, through
 the Go tool `tests/e2e/internal/swarmapps`.
@@ -243,7 +243,7 @@ def entries(node: dict) -> dict:
     """Every entry node's SwarmState stores, read with the node's own token:
     {entry ID: its JSON envelope {Type, Object}}.
 
-    why the Go tool: nodes.swarm_digest and nodes.swarm_fetch speak only the
+    why the Go tool: user.swarm_digest and user.swarm_fetch speak only the
     binary encoding, which astral-py does not decode for these types."""
     out = app_tool("entries", node["endpoint"], node["token"])
     assert "error" not in out, f"SwarmState of {node['identity']}: {out['error']}"
@@ -267,7 +267,7 @@ def entry_on(node: dict, entry_id: str) -> dict | None:
 
 def sign_approval(node: dict, req_id: str, push_to: list) -> dict:
     """An Approval of req_id signed with node's own key (read from its
-    data/node_key with lib/nodefs) and offered with nodes.swarm_push to node
+    data/node_key with lib/nodefs) and offered with user.swarm_push to node
     and to every node of push_to: {approval_id, pushed}."""
     from lib import nodefs
     out = app_tool("approve", node["endpoint"], node["token"], node["identity"], req_id,
@@ -279,7 +279,7 @@ def sign_approval(node: dict, req_id: str, push_to: list) -> dict:
 
 def offer(node: dict, entry_id: str, push_to: list) -> dict:
     """Offer the entry entry_id that node stores to every node of push_to with
-    nodes.swarm_push, as node's own token: {node identity: "ack" or the
+    user.swarm_push, as node's own token: {node identity: "ack" or the
     error the push answered}."""
     out = app_tool("offer", node["endpoint"], node["token"], entry_id,
                    *[n["identity"] for n in push_to])
@@ -292,7 +292,7 @@ def user_membership(node: dict, user_token: str, user_id: str, subject: str,
                     push_to: tuple = ()) -> dict:
     """A membership of subject at tier that the User signs on node
     (crypto.sign_hash with user_token), with no Approval link, offered with
-    nodes.swarm_push to node and to every node of push_to: {membership_id,
+    user.swarm_push to node and to every node of push_to: {membership_id,
     pushed: {"local" or node identity: "ack" or the error}}. Since G7 this is
     the only way the User brings a node in without its JoinRequest, what
     user.adopt did before."""

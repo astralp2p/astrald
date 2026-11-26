@@ -9,17 +9,17 @@ import (
 	"github.com/astralp2p/astral-go/lib/astrald"
 )
 
-// fetchBatch is how many IDs one nodes.swarm_fetch asks; the op takes 256.
+// fetchBatch is how many IDs one user.swarm_fetch asks; the op takes 256.
 const fetchBatch = 256
 
 // listEntries reads every entry the node c reaches stores in SwarmState
-// (nodes.swarm_digest, then nodes.swarm_fetch) and returns each as the node's
+// (user.swarm_digest, then user.swarm_fetch) and returns each as the node's
 // JSON envelope {Type, Object}.
 //
 // why here and not in Python: the exchange ops speak only the binary
 // encoding, which astral-py does not decode for these types.
 func listEntries(ctx *astral.Context, c *astrald.Client) (map[string]any, error) {
-	ch, err := c.QueryChannel(ctx, "nodes.swarm_digest", nil)
+	ch, err := c.QueryChannel(ctx, "user.swarm_digest", nil)
 	if err != nil {
 		return nil, err
 	}
@@ -52,7 +52,7 @@ func listEntries(ctx *astral.Context, c *astrald.Client) (map[string]any, error)
 }
 
 func fetchEntries(ctx *astral.Context, c *astrald.Client, ids []*astral.ObjectID) ([]astral.Object, error) {
-	ch, err := c.QueryChannel(ctx, "nodes.swarm_fetch", nil)
+	ch, err := c.QueryChannel(ctx, "user.swarm_fetch", nil)
 	if err != nil {
 		return nil, err
 	}

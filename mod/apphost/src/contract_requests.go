@@ -15,7 +15,6 @@ import (
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astral-go/sig"
 	apphostmod "github.com/astralp2p/astrald/mod/apphost"
-	nodesmod "github.com/astralp2p/astrald/mod/nodes"
 	usermod "github.com/astralp2p/astrald/mod/user"
 )
 
@@ -52,14 +51,14 @@ type contractSigner interface {
 
 // contractRequests files the ContractRequests of the apps this node hosts and
 // carries out their Approvals (the host worker). It reaches SwarmState only
-// through nodes.SwarmState and reads what entries mean only through
+// through user.SwarmState and reads what entries mean only through
 // user.SwarmView.
 //
 // Nothing constructs it in the running node yet: G7 builds it in
 // LoadDependencies, registers apphost.request_contract and starts Run.
 type contractRequests struct {
 	node     *astral.Identity
-	state    nodesmod.SwarmState
+	state    usermod.SwarmState
 	view     usermod.SwarmView
 	requests requestSigner
 	signer   contractSigner
@@ -81,7 +80,7 @@ type contractRequests struct {
 	changed atomic.Pointer[chan struct{}]
 }
 
-func newContractRequests(node *astral.Identity, state nodesmod.SwarmState, view usermod.SwarmView,
+func newContractRequests(node *astral.Identity, state usermod.SwarmState, view usermod.SwarmView,
 	requests requestSigner, signer contractSigner) *contractRequests {
 	cr := &contractRequests{
 		node:     node,
@@ -146,7 +145,7 @@ func (cr *contractRequests) File(ctx *astral.Context, app *astral.Identity, perm
 
 	// why a held request counts as filed: SwarmState admits it once this
 	// node's membership arrives, and filing again would add a second one.
-	if err = cr.state.AddSwarmEntry(ctx, signed); err != nil && !errors.Is(err, nodesmod.ErrSwarmEntryHeld) {
+	if err = cr.state.AddSwarmEntry(ctx, signed); err != nil && !errors.Is(err, usermod.ErrSwarmEntryHeld) {
 		return nil, fmt.Errorf("add contract request: %w", err)
 	}
 
@@ -302,7 +301,7 @@ func (cr *contractRequests) carryOut(ctx *astral.Context, reqID, approvalID *ast
 	if err := cr.signer.SignContract(ctx, signed); err != nil {
 		return fmt.Errorf("sign contract for %v: %w", req.Identity, err)
 	}
-	if err := cr.state.AddSwarmEntry(ctx, signed); err != nil && !errors.Is(err, nodesmod.ErrSwarmEntryHeld) {
+	if err := cr.state.AddSwarmEntry(ctx, signed); err != nil && !errors.Is(err, usermod.ErrSwarmEntryHeld) {
 		return fmt.Errorf("add contract for %v: %w", req.Identity, err)
 	}
 

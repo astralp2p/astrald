@@ -17,7 +17,7 @@
 //	                   signs with $SWARMAPPS_NODE_KEY (hex of data/node_key);
 //	                   {"approval_id", "pushed": {"local" or node: "ack" or error}} or {"error"}
 //	swarmapps offer    <endpoint> <node_token> <entry_id> <push_to...>
-//	                   offers a stored entry to other nodes with nodes.swarm_push;
+//	                   offers a stored entry to other nodes with user.swarm_push;
 //	                   {"pushed": {node: "ack" or error}} or {"error"}
 //	swarmapps serve-probe <endpoint> <token>   {"register_handler", "advertise"}: "ok" or the error
 //	swarmapps membership <endpoint> <user_token> <user_id> <subject> <tier> <seconds> [push_to...]

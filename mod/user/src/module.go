@@ -64,6 +64,15 @@ type Module struct {
 	// runs. See recognizeJoinTarget.
 	joinTarget atomic.Pointer[astral.Identity]
 
+	// store is this node's copy of SwarmState, nil until Run opens it.
+	store atomic.Pointer[swarmStore]
+	// swarmLinkHook replaces onSwarmLink in exchangeSwarmWithLinked.
+	// note: a test seam; nil in the running node.
+	swarmLinkHook func(peer *astral.Identity)
+	// swarmDial replaces the query to a peer's exchange ops; nil selects routerSwarmPeer.
+	// note: a test seam; nil in the running node.
+	swarmDial func(target *astral.Identity) swarmPeer
+
 	// swarmView reads SwarmState; entryCheck decides what enters it.
 	swarmView  *swarmView
 	entryCheck *swarmEntryCheck
@@ -85,6 +94,12 @@ type Module struct {
 func (mod *Module) Run(ctx *astral.Context) error {
 	mod.ctx = ctx.IncludeZone(astral.ZoneNetwork)
 	<-mod.Scheduler.Ready()
+	// why: before the active contract applies, so the node's own membership is not added to a closed store.
+	if err := mod.openSwarmState(); err != nil {
+		mod.log.Error("open swarm state: %v", err)
+	} else {
+		go mod.runSwarmSync(mod.ctx)
+	}
 
 	activeContractFollow := mod.config.ActiveContract.Follow(ctx)
 	mod.onActiveContractChanged(<-activeContractFollow)

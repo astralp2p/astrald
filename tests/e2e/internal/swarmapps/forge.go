@@ -19,7 +19,7 @@ import (
 
 // signApproval signs an Approval of the request reqID as issuer, with the
 // node key $SWARMAPPS_NODE_KEY holds (the node's data/node_key, hex), and
-// offers it with nodes.swarm_push to the node c reaches and to every node of
+// offers it with user.swarm_push to the node c reaches and to every node of
 // to. It reports the Approval's entry ID and, per node, "ack" or the error
 // the push answered.
 //
@@ -63,9 +63,9 @@ func signApproval(ctx *astral.Context, c *astrald.Client, issuer, reqID string, 
 	return map[string]any{"approval_id": id.String(), "pushed": pushed}, nil
 }
 
-// push offers obj with nodes.swarm_push and returns "ack" or the error.
+// push offers obj with user.swarm_push and returns "ack" or the error.
 func push(ctx *astral.Context, c *astrald.Client, obj astral.Object) string {
-	ch, err := c.QueryChannel(ctx, "nodes.swarm_push", nil)
+	ch, err := c.QueryChannel(ctx, "user.swarm_push", nil)
 	if err != nil {
 		return err.Error()
 	}
@@ -98,7 +98,7 @@ func nodeKey() (*crypto.PrivateKey, error) {
 }
 
 // offerEntry fetches the entry entryID from the node c reaches
-// (nodes.swarm_fetch) and offers it with nodes.swarm_push, as that node's
+// (user.swarm_fetch) and offers it with user.swarm_push, as that node's
 // token, to every node of to. It reports, per node, "ack" or the error the
 // push answered.
 //
@@ -131,7 +131,7 @@ func offerEntry(ctx *astral.Context, c *astrald.Client, entryID string, to []str
 // signMembership builds a membership of subject at tier from issuer, valid
 // for validity, with no Approval link, signs it as issuer through
 // crypto.sign_hash on the node c reaches (c's token must be issuer's, the
-// User's), and offers it with nodes.swarm_push to that node and to every node
+// User's), and offers it with user.swarm_push to that node and to every node
 // of to. It reports the membership's entry ID and, per node, "ack" or the
 // error the push answered.
 //

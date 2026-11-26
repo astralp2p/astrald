@@ -11,7 +11,7 @@ import (
 
 // WriteFile creates or replaces the file at path in the VFS of id with content, as vfs.write does for a query.
 //
-// why: modules inside the node (nodes, for SwarmState) keep files in the node's own VFS without a query.
+// why: modules inside the node (user, for SwarmState) keep files in the node's own VFS without a query.
 func (mod *Module) WriteFile(ctx *astral.Context, id *astral.Identity, path string, content []byte) (*astral.ObjectID, error) {
 	vol, err := mod.db.findVolume(id)
 	if err != nil {

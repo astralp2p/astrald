@@ -13,7 +13,7 @@ node of the other swarm reads nothing of the swarm.
   `user.bootstrap`; `tssb2` joins B's swarm through tssb1 as a
   privileged_member, B confirming it with `user.confirm_join`, as adopt-node
   does; node2 learns tssb1's address and links to it. The driver then offers
-  four memberships with `nodes.swarm_push` from a node's own token
+  four memberships with `user.swarm_push` from a node's own token
   (`swarmstate.offer`): node2's membership for A offered to tssb1 and tssb2's
   for B offered to node2 (across), and the same two offered to a node of their
   own swarm, node2's from node1 to node2 and tssb2's from tssb1 to tssb2
@@ -48,7 +48,7 @@ node of the other swarm reads nothing of the swarm.
   enters another node only this way (`user.adopt` and the contract push of
   `objects.push` are gone). The answer and the node's SwarmState show the
   decision. The controls show the push path answers what it should: their
-  membership is already stored there, which `nodes.swarm_push` acknowledges,
+  membership is already stored there, which `user.swarm_push` acknowledges,
   so a refusal means a decision.
 - The cross-swarm reads are the SeeSwarm guard (`AuthorizeSeeSwarm`): it admits
   the swarm's User and the swarm's nodes, not any linked node.

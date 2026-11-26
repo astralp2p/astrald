@@ -169,10 +169,10 @@ func (mod *Module) activateJoin(ctx *astral.Context, sc *auth.SignedContract, ro
 		return err
 	}
 
-	// note: sc waits (nodes.ErrSwarmEntryHeld) until the pull brings its
+	// note: sc waits (user.ErrSwarmEntryHeld) until the pull brings its
 	// carrier's membership.
-	_ = mod.Nodes.AddSwarmEntry(ctx, sc)
-	if err := mod.Nodes.SyncSwarm(ctx, carrier); err != nil {
+	_ = mod.AddSwarmEntry(ctx, sc)
+	if err := mod.SyncSwarm(ctx, carrier); err != nil {
 		mod.log.Logv(1, "join: swarm state pull from %v: %v", carrier, err)
 	}
 	return nil

@@ -7,7 +7,6 @@ import (
 	"github.com/astralp2p/astral-go/api/auth"
 	"github.com/astralp2p/astral-go/api/crypto"
 	"github.com/astralp2p/astral-go/astral"
-	nodesmod "github.com/astralp2p/astrald/mod/nodes"
 	usermod "github.com/astralp2p/astrald/mod/user"
 )
 
@@ -48,7 +47,7 @@ type ContractQueryBuilder interface {
 // itself while unclaimed. Module embeds it; the user module calls SetSwarm
 // once in LoadDependencies.
 type SwarmWalk interface {
-	SetSwarm(view usermod.SwarmView, state nodesmod.SwarmState, root func() *astral.Identity)
+	SetSwarm(view usermod.SwarmView, state usermod.SwarmState, root func() *astral.Identity)
 }
 
 type Module interface {

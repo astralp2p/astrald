@@ -8,7 +8,7 @@ swarm call refused.
 - **roster** `emn1`, `emn2`, `emn3`. The driver makes one User from new words
   and claims `emn1` and `emn2` for it with `user.bootstrap`, so each holds a
   Privileged membership the user key signed. `emn2` offers its membership to
-  `emn1`'s SwarmState with `nodes.swarm_push`. `emn3` joins through `emn1` as a
+  `emn1`'s SwarmState with `user.swarm_push`. `emn3` joins through `emn1` as a
   Member, the User approving its JoinRequest (`swarmstate.admit`).
 - **driver** `script.py` — with a token `emn1` mints for `emn2`'s identity, the
   controls (`user.list_expelled`, `user.list_siblings`, `user.expel` naming the

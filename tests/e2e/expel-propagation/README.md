@@ -28,7 +28,7 @@ itself.
     also accepted, never a success), and node1 holds no link to node3;
   - the User cannot bring node3 back: the oracle has the User sign node3 a
     new Privileged membership on node1 (`crypto.sign_hash`) and offers it to
-    node1 and node2 with `nodes.swarm_push`, and for 10 s neither roster
+    node1 and node2 with `user.swarm_push`, and for 10 s neither roster
     lists node3. An expel beats everything signed for the expelled node
     (`mod/user/src/swarm_view_membership.go`). Before G7 this probe was the
     User's `user.adopt`, which is gone; a membership the User signs is what

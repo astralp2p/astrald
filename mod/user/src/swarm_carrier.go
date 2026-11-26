@@ -12,7 +12,6 @@ import (
 	"github.com/astralp2p/astral-go/api/secp256k1"
 	"github.com/astralp2p/astral-go/api/user"
 	"github.com/astralp2p/astral-go/astral"
-	nodesmod "github.com/astralp2p/astrald/mod/nodes"
 	usermod "github.com/astralp2p/astrald/mod/user"
 )
 
@@ -44,7 +43,7 @@ type entrySigner interface {
 // note: nothing in the running node builds a swarmCarrier until G7.
 type swarmCarrier struct {
 	self     *astral.Identity
-	state    nodesmod.SwarmState
+	state    usermod.SwarmState
 	view     usermod.SwarmView
 	signer   entrySigner
 	ceremony *userKeyCeremony // nil: this node cannot reach the user key
@@ -54,7 +53,7 @@ type swarmCarrier struct {
 	mu       *sync.Mutex // serializes carrying out, so one Approval yields one contract
 }
 
-func newSwarmCarrier(self *astral.Identity, state nodesmod.SwarmState, view usermod.SwarmView, signer entrySigner) *swarmCarrier {
+func newSwarmCarrier(self *astral.Identity, state usermod.SwarmState, view usermod.SwarmView, signer entrySigner) *swarmCarrier {
 	return &swarmCarrier{
 		self:     self,
 		state:    state,
@@ -143,7 +142,7 @@ func (c *swarmCarrier) write(ctx *astral.Context, req *user.SignedJoinRequest) (
 	// why: a held request is checked again after the next merge, and the wait
 	// ends at the request's own Timeout if it never enters.
 	err = c.state.AddSwarmEntry(ctx, req)
-	if err != nil && !errors.Is(err, nodesmod.ErrSwarmEntryHeld) {
+	if err != nil && !errors.Is(err, usermod.ErrSwarmEntryHeld) {
 		return nil, err
 	}
 	return reqID, nil
@@ -242,7 +241,7 @@ func (c *swarmCarrier) signMembership(ctx *astral.Context, req *user.SignedJoinR
 	}
 
 	sc := &auth.SignedContract{Contract: contract, IssuerSig: sig}
-	if err = c.state.AddSwarmEntry(ctx, sc); err != nil && !errors.Is(err, nodesmod.ErrSwarmEntryHeld) {
+	if err = c.state.AddSwarmEntry(ctx, sc); err != nil && !errors.Is(err, usermod.ErrSwarmEntryHeld) {
 		return nil, err
 	}
 	return sc, nil
@@ -285,7 +284,7 @@ func (c *swarmCarrier) carryPrivileged(ctx *astral.Context, req *user.SignedJoin
 	if err != nil {
 		return nil, err
 	}
-	if err = c.state.AddSwarmEntry(ctx, sc); err != nil && !errors.Is(err, nodesmod.ErrSwarmEntryHeld) {
+	if err = c.state.AddSwarmEntry(ctx, sc); err != nil && !errors.Is(err, usermod.ErrSwarmEntryHeld) {
 		return nil, err
 	}
 	return sc, nil

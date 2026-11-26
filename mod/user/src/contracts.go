@@ -3,13 +3,13 @@ package user
 import (
 	"errors"
 	"fmt"
+	usermod "github.com/astralp2p/astrald/mod/user"
 	"slices"
 	"time"
 
 	"github.com/astralp2p/astral-go/api/auth"
 	"github.com/astralp2p/astral-go/api/user"
 	"github.com/astralp2p/astral-go/astral"
-	nodesmod "github.com/astralp2p/astrald/mod/nodes"
 )
 
 // validateActiveContract enforces the invariant of the active-contract slot:
@@ -163,7 +163,7 @@ func (mod *Module) onActiveContractChanged(signed *auth.SignedContract) {
 
 	// why: SwarmState holds every membership; a joiner's waits there until
 	// its carrier's chain arrives, and the store may open after this runs.
-	if err = mod.Nodes.AddSwarmEntry(mod.ctx, signed); err != nil && !errors.Is(err, nodesmod.ErrSwarmEntryHeld) {
+	if err = mod.AddSwarmEntry(mod.ctx, signed); err != nil && !errors.Is(err, usermod.ErrSwarmEntryHeld) {
 		mod.log.Logv(1, "active contract: swarm state: %v", err)
 	}
 

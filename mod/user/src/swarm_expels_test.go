@@ -8,36 +8,6 @@ import (
 	"github.com/astralp2p/astral-go/astral"
 )
 
-// expelNodes is a nodes module whose SwarmState holds the given expels.
-type expelNodes struct {
-	*recordingNodes
-	expels []*user.SignedExpulsion
-}
-
-func (n *expelNodes) SwarmEntries(kind user.EntryKind) ([]*astral.ObjectID, error) {
-	if kind != user.EntryExpels {
-		return nil, nil
-	}
-	var ids []*astral.ObjectID
-	for _, se := range n.expels {
-		id, err := astral.ResolveObjectID(se)
-		if err != nil {
-			return nil, err
-		}
-		ids = append(ids, id)
-	}
-	return ids, nil
-}
-
-func (n *expelNodes) SwarmEntry(id *astral.ObjectID) (astral.Object, error) {
-	for _, se := range n.expels {
-		if got, _ := astral.ResolveObjectID(se); got.IsEqual(id) {
-			return se, nil
-		}
-	}
-	return nil, astral.NewError("no such entry")
-}
-
 // TestSwarmStateExpelIsStoredAndApplied: an Expulsion by the user that reaches
 // this node only through SwarmState is stored as a ban, as a pushed one is:
 // link admission refuses the subject once it answers, this node closes its
@@ -47,11 +17,16 @@ func TestSwarmStateExpelIsStoredAndApplied(t *testing.T) {
 	userID := astral.GenerateIdentity()
 	f := newReceiverFixture(t, userID)
 	subject, stranger := astral.GenerateIdentity(), astral.GenerateIdentity()
-	nodes := &expelNodes{recordingNodes: f.nodes, expels: []*user.SignedExpulsion{
+	n := newStateNode(t, newSwarmScript())
+	for _, se := range []*user.SignedExpulsion{
 		sampleSignedValid(userID, subject),
 		sampleSignedValid(astral.GenerateIdentity(), stranger),
-	}}
-	f.mod.Deps.Nodes = nodes
+	} {
+		if err := n.store.AddSwarmEntry(n.store.ctx, se); err != nil {
+			t.Fatalf("store expel: %v", err)
+		}
+	}
+	f.mod.store.Store(n.store)
 
 	f.mod.receiveSwarmExpels()
 

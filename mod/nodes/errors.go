@@ -27,15 +27,6 @@ var (
 	ErrLinkRetired           = errors.New("link retired")
 )
 
-// ErrSwarmEntryHeld is returned by SwarmState.AddSwarmEntry for an entry that
-// CheckSwarmEntry holds (EntryWait): it is not stored yet, and a later merge
-// may admit it.
-var ErrSwarmEntryHeld = errors.New("swarm entry held until what it needs arrives")
-
-// ErrSwarmEntryDropped is wrapped by the error SwarmState.AddSwarmEntry returns
-// for an entry CheckSwarmEntry drops (EntryDrop).
-var ErrSwarmEntryDropped = errors.New("swarm entry dropped")
-
 // ErrPeerClosed is a link's cause of death when the peer announced its close
 // with a close frame; Reason is the frame's reason.
 type ErrPeerClosed struct {

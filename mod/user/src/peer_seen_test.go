@@ -51,15 +51,21 @@ func (l *contactLog) list() []contactCall {
 	return append([]contactCall(nil), l.calls...)
 }
 
-// contactNodes is a nodes module that records every SwarmState push.
-type contactNodes struct {
-	*linkNodes
-	log *contactLog
+// contactPeer is the exchange ops of target: it records every SwarmState push, and its pull does nothing.
+type contactPeer struct {
+	log    *contactLog
+	target *astral.Identity
 }
 
-func (p *contactNodes) PushSwarmEntry(ctx *astral.Context, target *astral.Identity, obj astral.Object) error {
-	p.log.add(contactCall{op: "push", peer: target, object: obj, zone: ctx.Zone()})
+func (p *contactPeer) SwarmPush(ctx *astral.Context, obj astral.Object) error {
+	p.log.add(contactCall{op: "push", peer: p.target, object: obj, zone: ctx.Zone()})
 	return nil
+}
+
+func (p *contactPeer) SwarmDigest(*astral.Context) ([]*astral.ObjectID, error) { return nil, nil }
+
+func (p *contactPeer) SwarmFetch(*astral.Context, []*astral.ObjectID) ([]astral.Object, error) {
+	return nil, nil
 }
 
 // contactFixture is node nodeID of user userID, holding its active contract,
@@ -103,7 +109,7 @@ func newContactFixture(t *testing.T) *contactFixture {
 	close(ready)
 
 	f.mod = &Module{
-		Deps:             Deps{Auth: f.auth, Nodes: &contactNodes{linkNodes: f.nodes, log: f.calls}, Scheduler: f.scheduler},
+		Deps:             Deps{Auth: f.auth, Nodes: f.nodes, Scheduler: f.scheduler},
 		ctx:              ctx,
 		ready:            ready,
 		node:             &identityNode{id: f.nodeID},
@@ -112,6 +118,7 @@ func newContactFixture(t *testing.T) *contactFixture {
 		dials:            newDialMap(),
 		now:              func() time.Time { return f.now },
 		readPeerContract: f.readContract,
+		swarmDial:        func(target *astral.Identity) swarmPeer { return &contactPeer{log: f.calls, target: target} },
 	}
 	if err := f.mod.config.ActiveContract.Set(nil, nodeContract(f.userID, f.nodeID)); err != nil {
 		t.Fatalf("seed active contract: %v", err)

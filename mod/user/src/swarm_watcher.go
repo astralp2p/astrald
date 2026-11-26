@@ -8,7 +8,7 @@ import (
 // swarmPollInterval is how often a swarmWatcher reads SwarmHead.
 const swarmPollInterval = 3 * time.Second
 
-// swarmHeadReader is the part of nodesmod.SwarmState a swarmWatcher reads.
+// swarmHeadReader is the part of usermod.SwarmState a swarmWatcher reads.
 type swarmHeadReader interface {
 	SwarmHead() uint64
 }

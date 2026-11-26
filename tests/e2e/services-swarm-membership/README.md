@@ -30,6 +30,6 @@ Changed in G7, for the removed model:
 - `ssm_expiry`'s membership is a PrivilegedMembership. Since G7 the user key
   signs no other membership: a carrier signs a Member's for an Approval.
 - The contract is no longer pushed to node1, because node1 refuses a pushed
-  membership. The claim adds it to `ssm_expiry`'s SwarmState. mod/nodes then
+  membership. The claim adds it to `ssm_expiry`'s SwarmState. mod/user then
   exchanges SwarmState with each peer `ssm_expiry` is linked to
-  (`exchangeSwarmWithLinked`, `mod/nodes/src/swarm_wire.go`).
+  (`exchangeSwarmWithLinked`, `mod/user/src/swarm_state_wire.go`).

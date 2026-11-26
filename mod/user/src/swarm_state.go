@@ -1,4 +1,4 @@
-package nodes
+package user
 
 import (
 	"bytes"
@@ -13,7 +13,6 @@ import (
 	vfsapi "github.com/astralp2p/astral-go/api/vfs"
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astral-go/sig"
-	nodesmod "github.com/astralp2p/astrald/mod/nodes"
 	"github.com/astralp2p/astrald/mod/objects"
 	usermod "github.com/astralp2p/astrald/mod/user"
 	vfsmod "github.com/astralp2p/astrald/mod/vfs"
@@ -41,20 +40,20 @@ type swarmChecker interface {
 	CheckSwarmEntry(obj astral.Object) user.EntryVerdict
 }
 
-// swarmPusher receives the entries this node passes on.
-type swarmPusher interface {
+// swarmEntryPusher receives the entries this node passes on.
+type swarmEntryPusher interface {
 	SwarmPush(ctx *astral.Context, obj astral.Object) error
 }
 
 var (
-	_ nodesmod.SwarmState = &swarmStore{}
-	_ swarmFiles          = vfsmod.Module(nil)
-	_ swarmChecker        = usermod.SwarmView(nil)
+	_ usermod.SwarmState = &swarmStore{}
+	_ swarmFiles         = vfsmod.Module(nil)
+	_ swarmChecker       = usermod.SwarmView(nil)
 )
 
 // swarmStore is this node's copy of SwarmState: a grow-only set of entries in the VFS of the node's identity.
 //
-// note: nothing constructs it in the running node yet; G7 does, and embeds nodesmod.SwarmState into Module.
+// note: nothing constructs it in the running node yet; G7 does, and embeds usermod.SwarmState into Module.
 type swarmStore struct {
 	files   swarmFiles
 	owner   *astral.Identity // the node identity, whose VFS holds the set
@@ -68,7 +67,7 @@ type swarmStore struct {
 	merge swarmMerge
 
 	// peers returns where an accepted entry is passed on; nil passes nothing on.
-	peers func() []swarmPusher
+	peers func() []swarmEntryPusher
 	// pushTimeout bounds one pass-on push; zero is swarmPushTimeout.
 	pushTimeout time.Duration
 	// passOnWait makes passOn return only once its pushes ended.
@@ -185,7 +184,7 @@ func (s *swarmStore) writeHead() {
 	_, _ = s.files.WriteFile(s.ctx, s.owner, swarmHeadPath, []byte(strconv.FormatUint(s.head.Load(), 10)))
 }
 
-// AddSwarmEntry offers obj to the set (nodesmod.SwarmState). The entries it stores are passed on after the merge.
+// AddSwarmEntry offers obj to the set (usermod.SwarmState). The entries it stores are passed on after the merge.
 func (s *swarmStore) AddSwarmEntry(ctx *astral.Context, obj astral.Object) error {
 	e, err := newSwarmEntry(obj)
 	if err != nil {
@@ -223,13 +222,13 @@ func (s *swarmStore) mergeEntry(ctx *astral.Context, e *swarmEntry) ([]astral.Ob
 	case user.EntryWait:
 		s.hold(e)
 
-		return nil, nodesmod.ErrSwarmEntryHeld
+		return nil, usermod.ErrSwarmEntryHeld
 
 	default:
 		// note: a verdict other than the three is a drop.
 		s.unhold(&e.id)
 
-		return nil, fmt.Errorf("%w: %v", nodesmod.ErrSwarmEntryDropped, &e.id)
+		return nil, fmt.Errorf("%w: %v", usermod.ErrSwarmEntryDropped, &e.id)
 	}
 }
 
@@ -354,7 +353,7 @@ func (s *swarmStore) passOn(objs []astral.Object) {
 	}
 }
 
-// SwarmEntry returns a stored entry decoded as its signed type (nodesmod.SwarmState).
+// SwarmEntry returns a stored entry decoded as its signed type (usermod.SwarmState).
 func (s *swarmStore) SwarmEntry(id *astral.ObjectID) (astral.Object, error) {
 	if id == nil {
 		return nil, errors.New("nil entry ID")
@@ -380,7 +379,7 @@ func (s *swarmStore) SwarmEntry(id *astral.ObjectID) (astral.Object, error) {
 	return obj, nil
 }
 
-// SwarmEntries returns the IDs of the stored entries of kind (nodesmod.SwarmState).
+// SwarmEntries returns the IDs of the stored entries of kind (usermod.SwarmState).
 func (s *swarmStore) SwarmEntries(kind user.EntryKind) ([]*astral.ObjectID, error) {
 	if !kind.IsValid() {
 		return nil, fmt.Errorf("invalid entry kind %q", kind)
@@ -396,7 +395,7 @@ func (s *swarmStore) SwarmEntries(kind user.EntryKind) ([]*astral.ObjectID, erro
 	return ids, nil
 }
 
-// SwarmHead returns the number of stored entries (nodesmod.SwarmState).
+// SwarmHead returns the number of stored entries (usermod.SwarmState).
 func (s *swarmStore) SwarmHead() uint64 {
 	return s.head.Load()
 }

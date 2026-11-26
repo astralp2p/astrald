@@ -1,9 +1,10 @@
-package nodes
+package user
 
 import (
 	"context"
 	"crypto/sha256"
 	"errors"
+	usermod "github.com/astralp2p/astrald/mod/user"
 	"slices"
 	"strings"
 	"sync"
@@ -15,7 +16,6 @@ import (
 	"github.com/astralp2p/astral-go/api/user"
 	vfsapi "github.com/astralp2p/astral-go/api/vfs"
 	"github.com/astralp2p/astral-go/astral"
-	nodesmod "github.com/astralp2p/astrald/mod/nodes"
 )
 
 // memFiles is a fake of the VFS calls the swarm store makes: one map of paths to content per identity.
@@ -121,10 +121,10 @@ func newSwarmScript() *swarmScript {
 }
 
 // scriptedChecker is a fake of user.SwarmView.CheckSwarmEntry. It reads the node's set through
-// nodesmod.SwarmState, as mod/user does, and records every entry it is asked about.
+// usermod.SwarmState, as mod/user does, and records every entry it is asked about.
 type scriptedChecker struct {
 	script *swarmScript
-	state  nodesmod.SwarmState
+	state  usermod.SwarmState
 
 	mu    sync.Mutex
 	calls []astral.ObjectID
@@ -229,7 +229,7 @@ func (l *entryPushLog) count() int {
 // recordingPusher logs each entry before it reaches the peer.
 type recordingPusher struct {
 	log  *entryPushLog
-	next swarmPusher
+	next swarmEntryPusher
 }
 
 func (p recordingPusher) SwarmPush(ctx *astral.Context, obj astral.Object) error {
@@ -238,17 +238,17 @@ func (p recordingPusher) SwarmPush(ctx *astral.Context, obj astral.Object) error
 }
 
 // connect makes the store of n pass its entries on to each peer, through n's push log.
-func (n *stateNode) connect(peers ...swarmPusher) {
-	var list []swarmPusher
+func (n *stateNode) connect(peers ...swarmEntryPusher) {
+	var list []swarmEntryPusher
 	for _, p := range peers {
 		list = append(list, recordingPusher{log: n.pushed, next: p})
 	}
 
-	n.store.peers = func() []swarmPusher { return list }
+	n.store.peers = func() []swarmEntryPusher { return list }
 }
 
-// testSig is a signature placeholder: the scripted checker never verifies one.
-func testSig() *crypto.Signature {
+// scriptedSig is a signature placeholder: the scripted checker never verifies one.
+func scriptedSig() *crypto.Signature {
 	return &crypto.Signature{Scheme: "test", Data: astral.Bytes16{1, 2, 3}}
 }
 
@@ -271,11 +271,11 @@ func membershipEntry(t *testing.T, issuer, subject *astral.Identity) *auth.Signe
 		t.Fatalf("NewMembership: %v", err)
 	}
 
-	return &auth.SignedContract{Contract: c, IssuerSig: testSig()}
+	return &auth.SignedContract{Contract: c, IssuerSig: scriptedSig()}
 }
 
 func joinRequestEntry(joiner, carrier *astral.Identity) *user.SignedJoinRequest {
-	return &user.SignedJoinRequest{JoinRequest: user.NewJoinRequest(joiner, carrier, user.TierMember), JoinerSig: testSig()}
+	return &user.SignedJoinRequest{JoinRequest: user.NewJoinRequest(joiner, carrier, user.TierMember), JoinerSig: scriptedSig()}
 }
 
 func approvalEntry(t *testing.T, issuer *astral.Identity, request astral.Object) *user.SignedApproval {
@@ -283,7 +283,7 @@ func approvalEntry(t *testing.T, issuer *astral.Identity, request astral.Object)
 
 	id := entryID(t, request)
 
-	return &user.SignedApproval{Approval: user.NewApproval(issuer, &id), IssuerSig: testSig()}
+	return &user.SignedApproval{Approval: user.NewApproval(issuer, &id), IssuerSig: scriptedSig()}
 }
 
 func declineEntry(t *testing.T, issuer *astral.Identity, request astral.Object) *user.SignedDecline {
@@ -291,13 +291,13 @@ func declineEntry(t *testing.T, issuer *astral.Identity, request astral.Object) 
 
 	id := entryID(t, request)
 
-	return &user.SignedDecline{Decline: user.NewDecline(issuer, &id), IssuerSig: testSig()}
+	return &user.SignedDecline{Decline: user.NewDecline(issuer, &id), IssuerSig: scriptedSig()}
 }
 
 func expelEntry(issuer, subject *astral.Identity) *user.SignedExpulsion {
 	return &user.SignedExpulsion{
 		Expulsion: &user.Expulsion{Issuer: issuer, Subject: subject, ExpelledAt: astral.Now()},
-		IssuerSig: testSig(),
+		IssuerSig: scriptedSig(),
 	}
 }
 
@@ -495,7 +495,7 @@ func TestSwarmHeldSetIsBounded(t *testing.T) {
 		if i == 0 {
 			first = id
 		}
-		if err := n.store.AddSwarmEntry(n.store.ctx, obj); !errors.Is(err, nodesmod.ErrSwarmEntryHeld) {
+		if err := n.store.AddSwarmEntry(n.store.ctx, obj); !errors.Is(err, usermod.ErrSwarmEntryHeld) {
 			t.Fatalf("entry %v: err = %v, want ErrSwarmEntryHeld", i, err)
 		}
 	}
@@ -530,7 +530,7 @@ func TestSwarmPassOnDoesNotWaitForADeadPeer(t *testing.T) {
 	a.store.passOnWait = false
 	a.store.pushTimeout = 300 * time.Millisecond
 	dead := blackHolePeer{ended: make(chan error, 1)}
-	a.store.peers = func() []swarmPusher { return []swarmPusher{dead} }
+	a.store.peers = func() []swarmEntryPusher { return []swarmEntryPusher{dead} }
 
 	start := time.Now()
 	mustAdd(t, a, fiveEntries(t)[0])

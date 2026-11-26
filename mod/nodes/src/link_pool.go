@@ -211,6 +211,25 @@ func (pool *LinkPool) SelectLinkWith(id *astral.Identity) *Link {
 	return best
 }
 
+// linkedIdentities returns the remote identity of every usable link, each once.
+func (pool *LinkPool) linkedIdentities() (ids []*astral.Identity) {
+	if pool.closed.Load() {
+		return nil
+	}
+
+	seen := map[string]bool{}
+	for _, link := range pool.links.Clone() {
+		id := link.RemoteIdentity()
+		if !link.usable() || id.IsZero() || seen[id.String()] {
+			continue
+		}
+		seen[id.String()] = true
+		ids = append(ids, id)
+	}
+
+	return ids
+}
+
 // topRank returns the highest transport rank among links not under high pressure, else the highest rank among links; -1 for none.
 func topRank(links []*Link) int {
 	top, calm := -1, -1

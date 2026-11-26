@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	usermod "github.com/astralp2p/astrald/mod/user"
 	"io"
 	"sync"
 	"testing"
@@ -15,11 +16,10 @@ import (
 	"github.com/astralp2p/astral-go/api/user"
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astral-go/astral/channel"
-	nodesmod "github.com/astralp2p/astrald/mod/nodes"
 	secp256k1sig "github.com/astralp2p/astrald/mod/secp256k1"
 )
 
-// answerSwarmState is an in-memory nodes.SwarmState: entries keyed by entry ID.
+// answerSwarmState is an in-memory user.SwarmState: entries keyed by entry ID.
 // addErr, when set, is returned by AddSwarmEntry after it records the entry.
 type answerSwarmState struct {
 	mu      sync.Mutex
@@ -283,17 +283,17 @@ func TestAnswerRequestWritesSignedDecline(t *testing.T) {
 	f.assertSignedAndWritten(t, sd, sd.SignableHash(), sd.IssuerSig)
 }
 
-// A held answer (nodes.ErrSwarmEntryHeld) may still be stored, so it is sent;
+// A held answer (user.ErrSwarmEntryHeld) may still be stored, so it is sent;
 // any other write failure is sent as an error.
 func TestAnswerRequestSendsHeldAnswer(t *testing.T) {
 	f := newAnswerFixture(user.TierPrivilegedMember)
 	req := f.contractRequest(t, time.Now(), user.RequestPending)
-	f.state.addErr = fmt.Errorf("add: %w", nodesmod.ErrSwarmEntryHeld)
+	f.state.addErr = fmt.Errorf("add: %w", usermod.ErrSwarmEntryHeld)
 	if _, ok := f.answer(t, req, "approve").(*user.SignedApproval); !ok {
 		t.Fatal("a held approval was not sent")
 	}
 
-	f.state.addErr = fmt.Errorf("add: %w", nodesmod.ErrSwarmEntryDropped)
+	f.state.addErr = fmt.Errorf("add: %w", usermod.ErrSwarmEntryDropped)
 	if obj := f.answer(t, req, "approve"); obj.ObjectType() == (&user.SignedApproval{}).ObjectType() {
 		t.Fatal("a dropped approval was sent as written")
 	}

@@ -14,7 +14,7 @@ rejoins with a new contract. This is M13 of the E2E tests exhibit
   serves a provider of `sfml` on sfml_member, admits sfml_member with a
   Privileged membership the User signs that expires in 60 s (accepted on the
   member with `user.accept_contract`, offered to node1's SwarmState with
-  `nodes.swarm_push`), waits until the follow drops the member after the
+  `user.swarm_push`), waits until the follow drops the member after the
   expiry, signs a second membership (1 h), tries `user.accept_contract` with it
   on the member, offers it to node1, and waits until the follow shows the
   member again (`follow_member_leaves`).
@@ -35,7 +35,7 @@ The memberships are Privileged and signed by the user key: `user.accept_contract
 activates only such a membership (D2), and a lower tier needs a carrier and an
 Approval, while `user.join` signs none shorter than an hour. node1 learns
 each membership only through SwarmState, so the driver offers it there with
-`nodes.swarm_push` instead of `objects.push`. The intent is unchanged: a
+`user.swarm_push` instead of `objects.push`. The intent is unchanged: a
 follow tracks a member's expiry and its return. Renewal itself stays a
 Non-goal; the second membership is a new one.
 

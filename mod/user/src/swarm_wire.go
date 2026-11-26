@@ -14,19 +14,19 @@ import (
 
 var _ usermod.SwarmView = &Module{}
 
-// wireSwarm builds the SwarmView over the nodes module's SwarmState, hands it
+// wireSwarm builds the SwarmView over this module's SwarmState, hands it
 // to the auth walk, and adds the answering and carrying ops.
 func (mod *Module) wireSwarm() {
-	mod.swarmView = newSwarmView(mod.Nodes, mod.rootKey, nil)
-	mod.entryCheck = newSwarmEntryCheck(mod.Nodes, mod.swarmView, mod.Crypto, mod.rootKey)
-	mod.carrier = newSwarmCarrier(mod.node.Identity(), mod.Nodes, mod, mod.Crypto)
+	mod.swarmView = newSwarmView(mod, mod.rootKey, nil)
+	mod.entryCheck = newSwarmEntryCheck(mod, mod.swarmView, mod.Crypto, mod.rootKey)
+	mod.carrier = newSwarmCarrier(mod.node.Identity(), mod, mod, mod.Crypto)
 	mod.joiner = newSwarmJoiner(mod.node.Identity(), mod.Crypto, mod, mod.config.PendingJoin.Get())
 
-	mod.Auth.SetSwarm(mod, mod.Nodes, mod.rootKey)
+	mod.Auth.SetSwarm(mod, mod, mod.rootKey)
 
 	mod.router.AddStructPrefix(&SwarmAnswerOps{
 		Node:    mod.node.Identity(),
-		State:   mod.Nodes,
+		State:   mod,
 		View:    mod,
 		Auth:    mod.Auth,
 		Signer:  nodeSigner{mod.Crypto},
@@ -68,7 +68,7 @@ func (mod *Module) userKeyCeremony() *userKeyCeremony {
 	}
 	key := secp256k1.FromIdentity(userID)
 
-	ceremony := newUserKeyCeremony(userID, mod.Crypto, mod.Nodes, mod)
+	ceremony := newUserKeyCeremony(userID, mod.Crypto, mod, mod)
 	if _, err := mod.Crypto.NewHashSigner(key, crypto.SchemeASN1); err == nil {
 		return ceremony
 	}
@@ -81,7 +81,7 @@ func (mod *Module) userKeyCeremony() *userKeyCeremony {
 
 // runSwarmWatcher reacts to every change of SwarmState until ctx ends.
 func (mod *Module) runSwarmWatcher(ctx *astral.Context) {
-	_ = newSwarmWatcher(mod.Nodes, 0, func(uint64) { mod.onSwarmChanged() }).Run(ctx)
+	_ = newSwarmWatcher(mod, 0, func(uint64) { mod.onSwarmChanged() }).Run(ctx)
 }
 
 // onSwarmChanged indexes the contracts SwarmState gained, and re-reads the
@@ -91,7 +91,7 @@ func (mod *Module) runSwarmWatcher(ctx *astral.Context) {
 // contract a host signed for its app on another node authorizes it here only
 // once it is indexed.
 func (mod *Module) onSwarmChanged() {
-	ids, err := mod.Nodes.SwarmEntries(user.EntryContracts)
+	ids, err := mod.SwarmEntries(user.EntryContracts)
 	if err != nil {
 		mod.log.Logv(1, "swarm state: list contracts: %v", err)
 	}
@@ -99,7 +99,7 @@ func (mod *Module) onSwarmChanged() {
 		if _, done := mod.indexedEntries.Get(*id); done {
 			continue
 		}
-		obj, err := mod.Nodes.SwarmEntry(id)
+		obj, err := mod.SwarmEntry(id)
 		if err != nil {
 			continue
 		}
@@ -128,7 +128,7 @@ func (mod *Module) onSwarmChanged() {
 // introduced or joined after it) would otherwise list none and admit the
 // banned node's links.
 func (mod *Module) receiveSwarmExpels() {
-	ids, err := mod.Nodes.SwarmEntries(user.EntryExpels)
+	ids, err := mod.SwarmEntries(user.EntryExpels)
 	if err != nil {
 		mod.log.Logv(1, "swarm state: list expels: %v", err)
 	}
@@ -136,7 +136,7 @@ func (mod *Module) receiveSwarmExpels() {
 		if _, done := mod.indexedEntries.Get(*id); done {
 			continue
 		}
-		obj, err := mod.Nodes.SwarmEntry(id)
+		obj, err := mod.SwarmEntry(id)
 		if err != nil {
 			continue
 		}

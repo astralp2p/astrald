@@ -105,24 +105,9 @@ func useContractSwarm(mod *Module, userID *astral.Identity, contracts func() ([]
 	mod.swarmView = newSwarmView(&contractState{contracts: contracts}, func() *astral.Identity { return userID }, nil)
 }
 
-// SyncSwarm of the nodes fakes pulls nothing: the tests that use them read
-// the swarm from a SwarmView fixture.
-func (n *linkedNodes) SyncSwarm(*astral.Context, *astral.Identity) error    { return nil }
-func (n *recordingNodes) SyncSwarm(*astral.Context, *astral.Identity) error { return nil }
-func (n *linkNodes) SyncSwarm(*astral.Context, *astral.Identity) error      { return nil }
-
-// pullNoSwarm is a nodes module whose SwarmState pull does nothing.
+// pullNoSwarm is a nodes module with no behaviour: a SwarmState pull on a module whose store is closed does
+// nothing, and the tests that use it read the swarm from a SwarmView fixture.
 type pullNoSwarm struct{ nodesmod.Module }
-
-func (pullNoSwarm) SyncSwarm(*astral.Context, *astral.Identity) error { return nil }
-
-// AddSwarmEntry of the nodes fakes stores nothing: those tests read the swarm
-// from a SwarmView fixture.
-func (n *orderedNodes) AddSwarmEntry(*astral.Context, astral.Object) error   { return nil }
-func (n *recordingNodes) AddSwarmEntry(*astral.Context, astral.Object) error { return nil }
-func (n *linkedNodes) AddSwarmEntry(*astral.Context, astral.Object) error    { return nil }
-func (n *linkNodes) AddSwarmEntry(*astral.Context, astral.Object) error      { return nil }
-func (pullNoSwarm) AddSwarmEntry(*astral.Context, astral.Object) error       { return nil }
 
 // LearnMemberEndpoints of the nodes fakes pulls nothing: no test that uses
 // them reads endpoints.

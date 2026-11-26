@@ -1,15 +1,15 @@
-package nodes
+package user
 
 import (
 	"errors"
 	"fmt"
+	usermod "github.com/astralp2p/astrald/mod/user"
 	"slices"
 	"sync"
 	"testing"
 
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astral-go/lib/routing"
-	nodesmod "github.com/astralp2p/astrald/mod/nodes"
 )
 
 // localPeer reaches another test node's store by direct calls.
@@ -58,7 +58,7 @@ type swarmLink struct {
 
 type swarmPeerForTest interface {
 	swarmSource
-	swarmPusher
+	swarmEntryPusher
 }
 
 // swarmLinks are the two ways: direct calls, and the exchange ops over a router, as the network carries them.
@@ -79,7 +79,7 @@ func swarmRouter(t *testing.T, n *stateNode, admit func(*astral.Identity) bool) 
 	}
 
 	router := routing.NewScopeRouter(nil)
-	router.Add(nodesmod.ModuleName, ops)
+	router.Add(usermod.ModuleName, ops)
 
 	return router
 }
@@ -94,7 +94,7 @@ func newStateSwarm(t *testing.T, link swarmLink, script *swarmScript, count int)
 	}
 
 	for _, from := range nodes {
-		var peers []swarmPusher
+		var peers []swarmEntryPusher
 		for _, to := range nodes {
 			if to != from {
 				peers = append(peers, link.peer(t, from, to))
@@ -200,7 +200,7 @@ func TestSwarmDroppedEntryNeverStoredOrForwarded(t *testing.T) {
 			if _, err := nodes[0].store.pullSwarm(nodes[0].store.ctx, orderedSource{dropped, good}); err != nil {
 				t.Fatalf("pull: %v", err)
 			}
-			if err := nodes[1].store.AddSwarmEntry(nodes[1].store.ctx, dropped); !errors.Is(err, nodesmod.ErrSwarmEntryDropped) {
+			if err := nodes[1].store.AddSwarmEntry(nodes[1].store.ctx, dropped); !errors.Is(err, usermod.ErrSwarmEntryDropped) {
 				t.Fatalf("local add: err = %v, want ErrSwarmEntryDropped", err)
 			}
 			if err := link.peer(t, nodes[1], nodes[2]).SwarmPush(nodes[1].store.ctx, dropped); err == nil {
@@ -243,7 +243,7 @@ func TestSwarmWaitingEntryAdmitted(t *testing.T) {
 			script.needs[entryID(t, approval)] = entryID(t, request)
 
 			for _, obj := range []astral.Object{approval, request} {
-				if err := a.store.AddSwarmEntry(a.store.ctx, obj); !errors.Is(err, nodesmod.ErrSwarmEntryHeld) {
+				if err := a.store.AddSwarmEntry(a.store.ctx, obj); !errors.Is(err, usermod.ErrSwarmEntryHeld) {
 					t.Fatalf("%v: err = %v, want ErrSwarmEntryHeld", obj.ObjectType(), err)
 				}
 			}

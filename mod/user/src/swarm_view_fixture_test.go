@@ -2,6 +2,7 @@ package user
 
 import (
 	"errors"
+	usermod "github.com/astralp2p/astrald/mod/user"
 	"sync"
 	"testing"
 	"time"
@@ -10,10 +11,9 @@ import (
 	"github.com/astralp2p/astral-go/api/crypto"
 	"github.com/astralp2p/astral-go/api/user"
 	"github.com/astralp2p/astral-go/astral"
-	nodesmod "github.com/astralp2p/astrald/mod/nodes"
 )
 
-// fakeSwarmState is an in-memory nodesmod.SwarmState that stores every entry
+// fakeSwarmState is an in-memory usermod.SwarmState that stores every entry
 // it is given: the merge check is out of G2's scope.
 type fakeSwarmState struct {
 	mu      sync.Mutex
@@ -25,7 +25,7 @@ type fakeSwarmState struct {
 	failList, failRead user.EntryKind
 }
 
-var _ nodesmod.SwarmState = &fakeSwarmState{}
+var _ usermod.SwarmState = &fakeSwarmState{}
 
 func newFakeSwarmState() *fakeSwarmState {
 	return &fakeSwarmState{entries: map[astral.ObjectID]astral.Object{}}

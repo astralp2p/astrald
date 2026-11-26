@@ -5,7 +5,7 @@ adopt-node left User A's swarm: node1 and node2. This driver claims `tssb1`
 for a second User B with a token-less bootstrap, admits `tssb2` into B's swarm
 as a privileged_member through tssb1 (adopt-node's steps), and links node2 to
 `tssb1` from node2's side. Then it offers each swarm's node membership to a
-node of the other swarm over that link with `nodes.swarm_push`, and the same
+node of the other swarm over that link with `user.swarm_push`, and the same
 membership to a node of its own swarm as a control. It records what each node
 answered; the oracle judges, and polls the live swarms itself.
 
@@ -37,7 +37,7 @@ async def link(a: dict, b: dict) -> None:
 
 def push(pusher: dict, target: dict, entry_id: str) -> str:
     """The pusher's node offers its stored entry entry_id to the target with
-    nodes.swarm_push: "ack", or the error the target answered."""
+    user.swarm_push: "ack", or the error the target answered."""
     return ss.offer(pusher, entry_id, [target])[target["identity"]]
 
 

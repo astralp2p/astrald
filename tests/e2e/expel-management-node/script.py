@@ -3,7 +3,7 @@
 
 emn1 and emn2 are claimed for one User, from the same new words, so each holds
 a Privileged membership the user key signed (`user.bootstrap`). emn2 offers
-its membership to emn1's SwarmState (`nodes.swarm_push`), so emn1's swarm
+its membership to emn1's SwarmState (`user.swarm_push`), so emn1's swarm
 holds emn2 as a Privileged node. emn3 joins through emn1 as a Member, the User
 approving its JoinRequest.
 

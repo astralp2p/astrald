@@ -23,6 +23,7 @@ import (
 // SetPolicyDelegate are exercised.
 type stubUser struct {
 	// note: nil; sys reads no SwarmState.
+	usermod.SwarmState
 	usermod.SwarmView
 
 	mu    sync.Mutex

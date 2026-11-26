@@ -1,13 +1,14 @@
-package nodes
+package user
 
 import (
 	"errors"
+	"slices"
 	"time"
 
 	"github.com/astralp2p/astral-go/api/auth"
 	"github.com/astralp2p/astral-go/api/user"
 	"github.com/astralp2p/astral-go/astral"
-	nodesmod "github.com/astralp2p/astrald/mod/nodes"
+	usermod "github.com/astralp2p/astrald/mod/user"
 )
 
 // swarmPullInterval is how often this node pulls SwarmState from every linked swarm member.
@@ -19,15 +20,12 @@ const swarmPullInterval = 15 * time.Second
 // errSwarmStateNotOpen answers a SwarmState call made before Run opened the store.
 var errSwarmStateNotOpen = errors.New("swarm state is not open yet")
 
-var _ nodesmod.SwarmState = &Module{}
+var _ usermod.SwarmState = &Module{}
 
-// openSwarmState opens this node's copy of SwarmState in its own VFS, checked on merge by the user module's
+// openSwarmState opens this node's copy of SwarmState in its own VFS, checked on merge by the module's own
 // SwarmView, and adds the exchange ops to the module's router.
 func (mod *Module) openSwarmState() error {
-	if mod.VFS == nil || mod.User == nil {
-		return errors.New("swarm state needs the vfs and user modules")
-	}
-	store, err := newSwarmStore(mod.ctx, mod.VFS, mod.node.Identity(), mod.User)
+	store, err := newSwarmStore(mod.ctx, mod.VFS, mod.node.Identity(), mod)
 	if err != nil {
 		return err
 	}
@@ -37,7 +35,7 @@ func (mod *Module) openSwarmState() error {
 		return err
 	}
 
-	mod.swarm.Store(store)
+	mod.store.Store(store)
 	return nil
 }
 
@@ -51,25 +49,34 @@ func (mod *Module) admitsSwarmCaller(caller *astral.Identity) bool {
 		return false
 	case caller.IsEqual(mod.node.Identity()):
 		return true
-	case caller.IsEqual(mod.User.Identity()):
+	case caller.IsEqual(mod.Identity()):
 		return true
 	}
-	_, ok := mod.User.Membership(caller)
+	_, ok := mod.Membership(caller)
 	return ok
 }
 
+// swarmPeer returns target's exchange ops.
+func (mod *Module) swarmPeer(target *astral.Identity) swarmPeer {
+	if mod.swarmDial != nil {
+		return mod.swarmDial(target)
+	}
+	return &routerSwarmPeer{router: mod.node, caller: mod.node.Identity(), target: target}
+}
+
 // swarmPeers returns the linked swarm members an accepted entry is passed on to.
-func (mod *Module) swarmPeers() (peers []swarmPusher) {
+func (mod *Module) swarmPeers() (peers []swarmEntryPusher) {
 	for _, id := range mod.swarmMembersLinked() {
-		peers = append(peers, &routerSwarmPeer{router: mod.node, caller: mod.node.Identity(), target: id})
+		peers = append(peers, mod.swarmPeer(id))
 	}
 	return peers
 }
 
 // swarmMembersLinked returns the swarm members other than this node that have a link to it.
 func (mod *Module) swarmMembersLinked() (ids []*astral.Identity) {
-	for _, id := range mod.User.LocalSwarm() {
-		if id.IsEqual(mod.node.Identity()) || !mod.IsLinked(id) {
+	linked := mod.Nodes.LinkedIdentities()
+	for _, id := range mod.LocalSwarm() {
+		if id.IsEqual(mod.node.Identity()) || !slices.ContainsFunc(linked, id.IsEqual) {
 			continue
 		}
 		ids = append(ids, id)
@@ -79,7 +86,7 @@ func (mod *Module) swarmMembersLinked() (ids []*astral.Identity) {
 
 // SyncSwarm pulls the entries peer stores and this node lacks.
 func (mod *Module) SyncSwarm(ctx *astral.Context, peer *astral.Identity) error {
-	store := mod.swarm.Load()
+	store := mod.store.Load()
 	if store == nil {
 		return errSwarmStateNotOpen
 	}
@@ -87,7 +94,7 @@ func (mod *Module) SyncSwarm(ctx *astral.Context, peer *astral.Identity) error {
 		return errors.New("swarm sync needs another node")
 	}
 
-	src := &routerSwarmPeer{router: mod.node, caller: mod.node.Identity(), target: peer}
+	src := mod.swarmPeer(peer)
 	grown, err := store.pullSwarm(ctx.IncludeZone(astral.ZoneNetwork), src)
 	if grown > 0 {
 		mod.log.Logv(1, "swarm state: %v entries from %v", grown, peer)
@@ -95,13 +102,12 @@ func (mod *Module) SyncSwarm(ctx *astral.Context, peer *astral.Identity) error {
 	return err
 }
 
-// PushSwarmEntry offers obj to peer's SwarmState through peer's swarm_push (nodesmod.Module).
+// PushSwarmEntry offers obj to peer's SwarmState through peer's swarm_push.
 func (mod *Module) PushSwarmEntry(ctx *astral.Context, peer *astral.Identity, obj astral.Object) error {
 	if peer.IsZero() || peer.IsEqual(mod.node.Identity()) {
 		return errors.New("swarm push needs another node")
 	}
-	p := &routerSwarmPeer{router: mod.node, caller: mod.node.Identity(), target: peer}
-	return p.SwarmPush(ctx.IncludeZone(astral.ZoneNetwork), obj)
+	return mod.swarmPeer(peer).SwarmPush(ctx.IncludeZone(astral.ZoneNetwork), obj)
 }
 
 // runSwarmSync pulls SwarmState from every linked swarm member every swarmPullInterval until ctx ends.
@@ -129,13 +135,12 @@ func (mod *Module) runSwarmSync(ctx *astral.Context) {
 // why every peer of a claimed node: a peer this node does not know as a member yet may be one; its admit and
 // CheckSwarmEntry decide what passes.
 func (mod *Module) onSwarmLink(peer *astral.Identity) {
-	if mod.User == nil || mod.User.Identity() == nil {
+	if mod.Identity() == nil {
 		return
 	}
 	ctx := mod.ctx.IncludeZone(astral.ZoneNetwork)
-	if m, ok := mod.User.Membership(mod.node.Identity()); ok {
-		own := &routerSwarmPeer{router: mod.node, caller: mod.node.Identity(), target: peer}
-		if err := own.SwarmPush(ctx, m.SignedContract); err != nil {
+	if m, ok := mod.Membership(mod.node.Identity()); ok {
+		if err := mod.swarmPeer(peer).SwarmPush(ctx, m.SignedContract); err != nil {
 			mod.log.Logv(2, "swarm state: offer membership to %v: %v", peer, err)
 		}
 	}
@@ -144,11 +149,11 @@ func (mod *Module) onSwarmLink(peer *astral.Identity) {
 	}
 }
 
-// AddSwarmEntry offers obj to this node's SwarmState (nodesmod.SwarmState).
+// AddSwarmEntry offers obj to this node's SwarmState (usermod.SwarmState).
 // When obj is this node's own membership and the store accepts it, the node
 // exchanges SwarmState with every peer it holds a link with.
 func (mod *Module) AddSwarmEntry(ctx *astral.Context, obj astral.Object) error {
-	store := mod.swarm.Load()
+	store := mod.store.Load()
 	if store == nil {
 		return errSwarmStateNotOpen
 	}
@@ -181,13 +186,10 @@ func (mod *Module) isOwnMembership(obj astral.Object) bool {
 // Without this its peers never learn its membership, and it never learns
 // theirs.
 func (mod *Module) exchangeSwarmWithLinked() {
-	seen := map[string]bool{}
-	for _, link := range mod.linkPool.links.Clone() {
-		peer := link.RemoteIdentity()
-		if peer.IsZero() || seen[peer.String()] {
+	for _, peer := range mod.Nodes.LinkedIdentities() {
+		if peer.IsZero() {
 			continue
 		}
-		seen[peer.String()] = true
 		if mod.swarmLinkHook != nil {
 			mod.swarmLinkHook(peer)
 			continue
@@ -196,27 +198,27 @@ func (mod *Module) exchangeSwarmWithLinked() {
 	}
 }
 
-// SwarmEntry returns a stored entry (nodesmod.SwarmState).
+// SwarmEntry returns a stored entry (usermod.SwarmState).
 func (mod *Module) SwarmEntry(id *astral.ObjectID) (astral.Object, error) {
-	store := mod.swarm.Load()
+	store := mod.store.Load()
 	if store == nil {
 		return nil, errSwarmStateNotOpen
 	}
 	return store.SwarmEntry(id)
 }
 
-// SwarmEntries lists the stored entries of kind (nodesmod.SwarmState).
+// SwarmEntries lists the stored entries of kind (usermod.SwarmState).
 func (mod *Module) SwarmEntries(kind user.EntryKind) ([]*astral.ObjectID, error) {
-	store := mod.swarm.Load()
+	store := mod.store.Load()
 	if store == nil {
 		return nil, nil
 	}
 	return store.SwarmEntries(kind)
 }
 
-// SwarmHead returns the number of stored entries (nodesmod.SwarmState); 0 before the store is open.
+// SwarmHead returns the number of stored entries (usermod.SwarmState); 0 before the store is open.
 func (mod *Module) SwarmHead() uint64 {
-	store := mod.swarm.Load()
+	store := mod.store.Load()
 	if store == nil {
 		return 0
 	}

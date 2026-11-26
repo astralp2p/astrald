@@ -24,6 +24,7 @@ import (
 	sysmod "github.com/astralp2p/astrald/mod/sys"
 	tcpmod "github.com/astralp2p/astrald/mod/tcp"
 	"github.com/astralp2p/astrald/mod/tree"
+	vfsmod "github.com/astralp2p/astrald/mod/vfs"
 )
 
 type Deps struct {
@@ -39,6 +40,8 @@ type Deps struct {
 	Sys       sysmod.Module
 	Nearby    nearby.Module
 	Tree      tree.Module
+	// VFS holds this node's copy of SwarmState, in the node's own VFS.
+	VFS vfsmod.Module
 }
 
 // keyDeriver is the part of the bip137sig module user.bootstrap reads.

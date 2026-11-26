@@ -116,11 +116,11 @@ func signNodeContract(w *world, s session, subject string, key *crypto.PrivateKe
 
 // admitClaimed makes the node subject, just claimed with a membership the
 // User signed, and node1 learn each other's membership: subject's is offered
-// to node1, node1's to subject, each with nodes.swarm_push.
+// to node1, node1's to subject, each with user.swarm_push.
 //
 // why both ways: node1 and subject linked while subject was unclaimed, so
 // subject, then its own root, dropped node1's membership on that first link,
-// and nodes exchange SwarmState only on a first link (mod/nodes
+// and nodes exchange SwarmState only on a first link (mod/user
 // onSwarmLink). Without node1's membership subject counts no node1, refuses
 // node1's relay contracts and answers no discovery node1 carries for its
 // apps.
@@ -141,9 +141,9 @@ func admitClaimed(w *world, subjectAdmin *astrald.Client, subject string, signed
 }
 
 // swarmPush offers obj, a SwarmState entry, to the node c targets with
-// nodes.swarm_push.
+// user.swarm_push.
 func swarmPush(ctx *astral.Context, c *astrald.Client, obj astral.Object) error {
-	ch, err := c.QueryChannel(ctx, "nodes.swarm_push", nil)
+	ch, err := c.QueryChannel(ctx, "user.swarm_push", nil)
 	if err != nil {
 		return err
 	}

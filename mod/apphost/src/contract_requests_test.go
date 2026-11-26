@@ -17,11 +17,10 @@ import (
 	"github.com/astralp2p/astral-go/astral/log"
 	"github.com/astralp2p/astral-go/lib/routing"
 	apphostmod "github.com/astralp2p/astrald/mod/apphost"
-	nodesmod "github.com/astralp2p/astrald/mod/nodes"
 	usermod "github.com/astralp2p/astrald/mod/user"
 )
 
-// fakeSwarmState is an in-memory nodes.SwarmState shared by every node of a
+// fakeSwarmState is an in-memory user.SwarmState shared by every node of a
 // test swarm: what one node adds, every node reads.
 type fakeSwarmState struct {
 	mu      sync.Mutex
@@ -30,7 +29,7 @@ type fakeSwarmState struct {
 	hold    bool // AddSwarmEntry answers ErrSwarmEntryHeld and stores nothing
 }
 
-var _ nodesmod.SwarmState = &fakeSwarmState{}
+var _ usermod.SwarmState = &fakeSwarmState{}
 
 func newFakeSwarmState() *fakeSwarmState {
 	return &fakeSwarmState{entries: map[string]astral.Object{}, ids: map[user.EntryKind][]*astral.ObjectID{}}
@@ -39,7 +38,7 @@ func newFakeSwarmState() *fakeSwarmState {
 func (s *fakeSwarmState) AddSwarmEntry(_ *astral.Context, obj astral.Object) error {
 	kind, ok := user.EntryKindOf(obj)
 	if !ok {
-		return fmt.Errorf("%w: not an entry", nodesmod.ErrSwarmEntryDropped)
+		return fmt.Errorf("%w: not an entry", usermod.ErrSwarmEntryDropped)
 	}
 	id, err := astral.ResolveObjectID(obj)
 	if err != nil {
@@ -48,7 +47,7 @@ func (s *fakeSwarmState) AddSwarmEntry(_ *astral.Context, obj astral.Object) err
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.hold {
-		return nodesmod.ErrSwarmEntryHeld
+		return usermod.ErrSwarmEntryHeld
 	}
 	if _, dup := s.entries[id.String()]; dup {
 		return nil

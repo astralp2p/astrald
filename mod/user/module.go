@@ -29,9 +29,9 @@ const (
 )
 
 // SwarmView reads what SwarmState's entries mean (mod/user). It reads the set
-// through nodes.SwarmState and does no other I/O. Every answer derives from
+// through SwarmState and does no other I/O. Every answer derives from
 // the entries stored at the time of the call, and every ID it takes or returns
-// is an entry ID (see nodes.SwarmState). Stored entries passed CheckSwarmEntry
+// is an entry ID (see SwarmState). Stored entries passed CheckSwarmEntry
 // on merge, so reads trust their signatures and that each answer's signer was
 // entitled to answer its request (user.MayAnswer); they apply what changes
 // after merge: Timeouts, expiry, Declines and expels. An expel beats
@@ -42,7 +42,7 @@ const (
 // defaults to time.Now, so tests and fakes agree on it.
 //
 // Module embeds it. A "carried out, or not yet" view and the head-polling
-// watcher stay inside mod/user; other modules poll nodes.SwarmState.SwarmHead
+// watcher stay inside mod/user; other modules poll SwarmState.SwarmHead
 // and call these methods.
 type SwarmView interface {
 	// RequestStatus returns the status of the request with entry ID req, in
@@ -60,7 +60,7 @@ type SwarmView interface {
 	// An Approval or Decline signed by an expelled identity does not count.
 	// A req that names no stored request, including one held (EntryWait),
 	// answers user.RequestPending: a caller that needs to know first checks
-	// nodes.SwarmState.SwarmEntry, and a filer applies its own copy's Expired.
+	// SwarmState.SwarmEntry, and a filer applies its own copy's Expired.
 	RequestStatus(req *astral.ObjectID) user.RequestStatus
 
 	// Expelled reports whether a stored user.SignedExpulsion names id as its
@@ -98,7 +98,7 @@ type SwarmView interface {
 	// one that expires last.
 	Membership(id *astral.Identity) (*user.Membership, bool)
 
-	// CheckSwarmEntry decides whether obj may enter SwarmState. mod/nodes
+	// CheckSwarmEntry decides whether obj may enter SwarmState. The store
 	// calls it before storing any entry that is not stored yet. Each entry
 	// kind has a gating identity whose tier, read from its stored membership
 	// contracts, decides:
@@ -125,6 +125,7 @@ type SwarmView interface {
 }
 
 type Module interface {
+	SwarmState
 	SwarmView
 	// Ready returns a channel that is closed once the module has applied the
 	// initial active contract and is fully initialized.

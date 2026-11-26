@@ -6,7 +6,6 @@ import (
 	"github.com/astralp2p/astral-go/api/user"
 	"github.com/astralp2p/astral-go/astral"
 	authmod "github.com/astralp2p/astrald/mod/auth"
-	nodesmod "github.com/astralp2p/astrald/mod/nodes"
 	usermod "github.com/astralp2p/astrald/mod/user"
 )
 
@@ -15,13 +14,13 @@ var _ authmod.SwarmWalk = &Module{}
 // swarmWalk is what Authorize reads from SwarmState once SetSwarm has run.
 type swarmWalk struct {
 	view  usermod.SwarmView
-	state nodesmod.SwarmState
+	state usermod.SwarmState
 	root  func() *astral.Identity
 }
 
 // SetSwarm makes Authorize read SwarmState (see authmod.SwarmWalk). A nil
 // view, state or root clears it, and Authorize behaves as without it.
-func (mod *Module) SetSwarm(view usermod.SwarmView, state nodesmod.SwarmState, root func() *astral.Identity) {
+func (mod *Module) SetSwarm(view usermod.SwarmView, state usermod.SwarmState, root func() *astral.Identity) {
 	if view == nil || state == nil || root == nil {
 		mod.swarm.Store(nil)
 		return

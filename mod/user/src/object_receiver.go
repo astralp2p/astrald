@@ -19,8 +19,8 @@ var _ objects.Receiver = &Module{}
 
 // ReceiveObject handles pushed objects: indexes a signed node or relay-for contract,
 // stores and applies a signed expulsion, syncs with the peer of a local
-// LinkCreatedEvent (a sibling sync with a member, the expulsions with a banned
-// subject) and with a member a local LinkClosedEvent leaves links to, contacts
+// LinkCreatedEvent (the first link exchanges SwarmState with its peer; a sibling sync with a member,
+// the expulsions with a banned subject) and with a member a local LinkClosedEvent leaves links to, contacts
 // a peer of a local nearby PeerSeen, and wakes the link task of a sibling named
 // by a local EndpointsUpdatedEvent.
 // Every object is checked before any effect; a rejected object is not accepted.
@@ -46,6 +46,11 @@ func (mod *Module) ReceiveObject(drop objects.Drop) (err error) {
 		case *nodes.LinkCreatedEvent:
 			// note: interim re-sync; see reconcile_task.go.
 			peer := e.RemoteIdentity
+			// why: the exchange offers this node's membership and pulls, so it runs on the first link only;
+			// the peer may be a member this node does not know yet.
+			if e.LinkCount == 1 {
+				go mod.onSwarmLink(peer)
+			}
 			switch {
 			case mod.banOn(peer) != nil:
 				// why: a banned subject is not in LocalSwarm, and its own ban is the only

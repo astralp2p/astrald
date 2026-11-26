@@ -61,7 +61,7 @@ func (mod *Module) syncSiblings(ctx *astral.Context, with *astral.Identity) {
 	if mod.ActiveContract() == nil {
 		return
 	}
-	if err := mod.Nodes.SyncSwarm(ctx, with); err != nil {
+	if err := mod.SyncSwarm(ctx, with); err != nil {
 		mod.log.Logv(1, "syncSiblings: swarm state pull from %v: %v", with, err)
 	}
 }

@@ -9,7 +9,6 @@ import (
 	"github.com/astralp2p/astral-go/api/secp256k1"
 	"github.com/astralp2p/astral-go/api/user"
 	"github.com/astralp2p/astral-go/astral"
-	nodesmod "github.com/astralp2p/astrald/mod/nodes"
 	secp256k1sig "github.com/astralp2p/astrald/mod/secp256k1"
 	usermod "github.com/astralp2p/astrald/mod/user"
 )
@@ -41,13 +40,13 @@ type userKeyCeremony struct {
 	// devicePress is set when signer asks the user for every signature (a
 	// Coldcard). The zero value is the safe one: wait for user.confirm_join.
 	devicePress bool
-	state       nodesmod.SwarmState // nil: the ceremony signs memberships only
-	view        usermod.SwarmView   // nil: the ceremony signs memberships only
+	state       usermod.SwarmState // nil: the ceremony signs memberships only
+	view        usermod.SwarmView  // nil: the ceremony signs memberships only
 	validity    time.Duration
 	now         func() time.Time
 }
 
-func newUserKeyCeremony(userID *astral.Identity, signer entrySigner, state nodesmod.SwarmState, view usermod.SwarmView) *userKeyCeremony {
+func newUserKeyCeremony(userID *astral.Identity, signer entrySigner, state usermod.SwarmState, view usermod.SwarmView) *userKeyCeremony {
 	return &userKeyCeremony{
 		user:     userID,
 		signer:   signer,
@@ -105,7 +104,7 @@ func (c *userKeyCeremony) Expel(ctx *astral.Context, reqID *astral.ObjectID) (*u
 
 	signed := &user.SignedExpulsion{Expulsion: expulsion, IssuerSig: sig}
 	// why held is no failure: the entry is signed and a later merge may store it.
-	if err = c.state.AddSwarmEntry(ctx, signed); err != nil && !errors.Is(err, nodesmod.ErrSwarmEntryHeld) {
+	if err = c.state.AddSwarmEntry(ctx, signed); err != nil && !errors.Is(err, usermod.ErrSwarmEntryHeld) {
 		return nil, err
 	}
 	return signed, nil
@@ -157,7 +156,7 @@ func (c *swarmCarrier) FileExpelRequest(ctx *astral.Context, subject *astral.Ide
 
 	signed := &user.SignedExpelRequest{ExpelRequest: req, FiledBySig: sig}
 	// why held is no failure: the entry is signed and a later merge may store it.
-	if err = c.state.AddSwarmEntry(ctx, signed); err != nil && !errors.Is(err, nodesmod.ErrSwarmEntryHeld) {
+	if err = c.state.AddSwarmEntry(ctx, signed); err != nil && !errors.Is(err, usermod.ErrSwarmEntryHeld) {
 		return nil, err
 	}
 	return signed, nil

@@ -2,13 +2,13 @@ package user
 
 import (
 	"errors"
+	usermod "github.com/astralp2p/astrald/mod/user"
 
 	"github.com/astralp2p/astral-go/api/auth"
 	"github.com/astralp2p/astral-go/api/user"
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astral-go/astral/channel"
 	"github.com/astralp2p/astral-go/lib/routing"
-	nodesmod "github.com/astralp2p/astrald/mod/nodes"
 )
 
 // Errors user.confirm_join sends besides those of user.answer_request. Their
@@ -117,7 +117,7 @@ func (ops *SwarmAnswerOps) confirmJoin(ctx *astral.Context, caller *astral.Ident
 	if err != nil {
 		return nil, err
 	}
-	if err = ops.State.AddSwarmEntry(ctx, sc); err != nil && !errors.Is(err, nodesmod.ErrSwarmEntryHeld) {
+	if err = ops.State.AddSwarmEntry(ctx, sc); err != nil && !errors.Is(err, usermod.ErrSwarmEntryHeld) {
 		return nil, err
 	}
 	return sc, nil

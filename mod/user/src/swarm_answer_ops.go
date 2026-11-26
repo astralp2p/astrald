@@ -11,7 +11,6 @@ import (
 	"github.com/astralp2p/astral-go/astral/channel"
 	"github.com/astralp2p/astral-go/lib/routing"
 	"github.com/astralp2p/astrald/mod/crypto"
-	nodesmod "github.com/astralp2p/astrald/mod/nodes"
 	usermod "github.com/astralp2p/astrald/mod/user"
 )
 
@@ -48,7 +47,7 @@ type swarmAuthorizer interface {
 // It also serves user.confirm_join, through which the user has its key sign
 // a pending Privileged JoinRequest (swarm_confirm_op.go).
 //
-// It reaches SwarmState only through nodes.SwarmState and reads what entries
+// It reaches SwarmState only through user.SwarmState and reads what entries
 // mean only through user.SwarmView. Nothing registers it yet: G7 builds it
 // with mod.Nodes, the SwarmView implementation, mod.Auth,
 // mod.Crypto.NodeSigner() and, on a node that reaches the user key, the
@@ -56,7 +55,7 @@ type swarmAuthorizer interface {
 // AddStructPrefix(ops, "Op").
 type SwarmAnswerOps struct {
 	Node   *astral.Identity
-	State  nodesmod.SwarmState
+	State  usermod.SwarmState
 	View   usermod.SwarmView
 	Auth   swarmAuthorizer
 	Signer crypto.HashSigner
@@ -224,8 +223,8 @@ func (ops *SwarmAnswerOps) answer(ctx *astral.Context, caller *astral.Identity, 
 		return nil, err
 	}
 	// A held answer is signed and may still be stored after a later merge
-	// (nodes.ErrSwarmEntryHeld), so it is sent like a stored one.
-	if err = ops.State.AddSwarmEntry(ctx, signed); err != nil && !errors.Is(err, nodesmod.ErrSwarmEntryHeld) {
+	// (user.ErrSwarmEntryHeld), so it is sent like a stored one.
+	if err = ops.State.AddSwarmEntry(ctx, signed); err != nil && !errors.Is(err, usermod.ErrSwarmEntryHeld) {
 		return nil, err
 	}
 	return signed, nil

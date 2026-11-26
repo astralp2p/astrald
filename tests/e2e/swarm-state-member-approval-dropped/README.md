@@ -8,7 +8,7 @@ stored or forwarded on any node.
   list both requests, the driver signs an Approval of the first with node3's
   own key and one of the second with node2's own key (each node's
   `data/node_key`, read with `lib/nodefs`), and offers each with
-  `nodes.swarm_push` to the signer's node and the other two. It waits 20 s,
+  `user.swarm_push` to the signer's node and the other two. It waits 20 s,
   past one SwarmState pull (15 s). Records `member_approval`.
 - **oracle** `verify.py` — node2's Approval (the control, same route) is
   stored on all three and its request reads approved; node3's Approval is

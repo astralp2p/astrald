@@ -2,23 +2,23 @@ package user
 
 import (
 	"errors"
+	usermod "github.com/astralp2p/astrald/mod/user"
 	"sync"
 	"time"
 
 	"github.com/astralp2p/astral-go/api/auth"
 	"github.com/astralp2p/astral-go/api/user"
 	"github.com/astralp2p/astral-go/astral"
-	nodesmod "github.com/astralp2p/astrald/mod/nodes"
 )
 
 // swarmView implements the reading part of usermod.SwarmView over the entries
-// it reads through nodesmod.SwarmState. Every answer comes from a swarmSnapshot,
+// it reads through usermod.SwarmState. Every answer comes from a swarmSnapshot,
 // which is pure: the set as read, the root key and the time of the call.
 //
 // note: CheckSwarmEntry is G3's; G7 joins both into Module and wires the view
 // to Deps.Nodes. Nothing in the running node constructs a swarmView yet.
 type swarmView struct {
-	state nodesmod.SwarmState
+	state usermod.SwarmState
 	root  func() *astral.Identity
 	now   func() time.Time
 
@@ -30,7 +30,7 @@ type swarmView struct {
 // newSwarmView returns a view of state. root returns the root key: the user
 // this node is claimed by, or the node itself while unclaimed. A nil now
 // selects time.Now.
-func newSwarmView(state nodesmod.SwarmState, root func() *astral.Identity, now func() time.Time) *swarmView {
+func newSwarmView(state usermod.SwarmState, root func() *astral.Identity, now func() time.Time) *swarmView {
 	if now == nil {
 		now = time.Now
 	}
@@ -106,7 +106,7 @@ type swarmSet struct {
 
 // readSwarmSet reads every stored entry of state. On a read error it returns
 // what it read and the joined errors.
-func readSwarmSet(state nodesmod.SwarmState) (*swarmSet, error) {
+func readSwarmSet(state usermod.SwarmState) (*swarmSet, error) {
 	set := newSwarmSet()
 	var errs []error
 	for _, kind := range user.EntryKinds {

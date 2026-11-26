@@ -14,7 +14,6 @@ import (
 	"github.com/astralp2p/astral-go/lib/query"
 	"github.com/astralp2p/astral-go/lib/routing"
 	authmod "github.com/astralp2p/astrald/mod/auth"
-	nodesmod "github.com/astralp2p/astrald/mod/nodes"
 	"github.com/astralp2p/astrald/mod/scheduler"
 )
 
@@ -51,21 +50,34 @@ type introducePush struct {
 	deadline time.Time
 }
 
-// introducePusher is a nodes module that records every SwarmState push and
+// introducePusher is the exchange ops of every peer: it records every SwarmState push and
 // answers err; its pull does nothing.
 type introducePusher struct {
-	nodesmod.Module
 	err    error
 	pushed chan introducePush
 }
 
-func (p *introducePusher) PushSwarmEntry(ctx *astral.Context, target *astral.Identity, obj astral.Object) error {
-	deadline, _ := ctx.Deadline()
-	p.pushed <- introducePush{target: target, object: obj, zone: ctx.Zone(), deadline: deadline}
-	return p.err
+// dial returns the exchange ops of target (Module.swarmDial).
+func (p *introducePusher) dial(target *astral.Identity) swarmPeer {
+	return &introducePeer{pusher: p, target: target}
 }
 
-func (p *introducePusher) SyncSwarm(*astral.Context, *astral.Identity) error { return nil }
+type introducePeer struct {
+	pusher *introducePusher
+	target *astral.Identity
+}
+
+func (p *introducePeer) SwarmPush(ctx *astral.Context, obj astral.Object) error {
+	deadline, _ := ctx.Deadline()
+	p.pusher.pushed <- introducePush{target: p.target, object: obj, zone: ctx.Zone(), deadline: deadline}
+	return p.pusher.err
+}
+
+func (p *introducePeer) SwarmDigest(*astral.Context) ([]*astral.ObjectID, error) { return nil, nil }
+
+func (p *introducePeer) SwarmFetch(*astral.Context, []*astral.ObjectID) ([]astral.Object, error) {
+	return nil, nil
+}
 
 // introduceFixture is node C, claimed by user U, that names node B "peer", U
 // "user", itself "self" and the zero identity "anyone". U alone holds
@@ -97,7 +109,6 @@ func newIntroduceFixture(t *testing.T) *introduceFixture {
 	f.mod = &Module{
 		Deps: Deps{
 			Auth:      f.auth,
-			Nodes:     f.objects,
 			Scheduler: f.scheduler,
 			Dir: &namedDir{names: map[string]*astral.Identity{
 				"peer":   f.peerID,
@@ -106,9 +117,10 @@ func newIntroduceFixture(t *testing.T) *introduceFixture {
 				"anyone": astral.Anyone,
 			}},
 		},
-		node: &identityNode{id: f.nodeID},
-		log:  log.New(f.nodeID),
-		db:   testDB(t),
+		node:      &identityNode{id: f.nodeID},
+		log:       log.New(f.nodeID),
+		db:        testDB(t),
+		swarmDial: f.objects.dial,
 	}
 	f.setActiveContract(t, nodeContract(f.userID, f.nodeID))
 

@@ -1,17 +1,17 @@
-package nodes
+package user
 
 import (
 	"errors"
 	"fmt"
+	usermod "github.com/astralp2p/astrald/mod/user"
 
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astral-go/astral/channel"
 	"github.com/astralp2p/astral-go/lib/query"
 	"github.com/astralp2p/astral-go/lib/routing"
-	nodesmod "github.com/astralp2p/astrald/mod/nodes"
 )
 
-// The SwarmState exchange between two nodes, over queries to the nodes module:
+// The SwarmState exchange between two nodes, over queries to the user module:
 //
 //	swarm_digest  answers the ID of every stored entry, then EOS.
 //	swarm_fetch   receives entry IDs until EOS, answers each stored entry among them, then EOS.
@@ -20,7 +20,8 @@ import (
 // A node pulls what it lacks (digest, then fetch of the missing IDs) and pushes each entry it stores to its peers.
 // Every entry goes through AddSwarmEntry on the receiving node, so a merge from a peer is checked like a local write.
 //
-// note: nothing registers these ops or starts a pull yet; G7 does both.
+// Spec: the ops are named user.swarm_digest, user.swarm_fetch and user.swarm_push. They were nodes.swarm_*
+// while mod/nodes held SwarmState. The rename is one cutover with no alias for the old names (D11, new swarms only).
 const (
 	opSwarmDigest = "swarm_digest"
 	opSwarmFetch  = "swarm_fetch"
@@ -34,6 +35,12 @@ const (
 type swarmSource interface {
 	SwarmDigest(ctx *astral.Context) ([]*astral.ObjectID, error)
 	SwarmFetch(ctx *astral.Context, ids []*astral.ObjectID) ([]astral.Object, error)
+}
+
+// swarmPeer is another node's exchange ops: a pull reads it and a push writes it.
+type swarmPeer interface {
+	swarmSource
+	swarmEntryPusher
 }
 
 // pullSwarm fetches the entries src stores and this node lacks, and adds each one. It returns how much the head
@@ -88,7 +95,7 @@ func (s *swarmStore) addFetched(ctx *astral.Context, src swarmSource, ids []*ast
 		// note: held and dropped entries are normal outcomes of a merge, not failures of the pull; a store that
 		// fails is, and the pull reports the first one.
 		err = s.AddSwarmEntry(ctx, obj)
-		if err != nil && !errors.Is(err, nodesmod.ErrSwarmEntryHeld) && !errors.Is(err, nodesmod.ErrSwarmEntryDropped) && firstErr == nil {
+		if err != nil && !errors.Is(err, usermod.ErrSwarmEntryHeld) && !errors.Is(err, usermod.ErrSwarmEntryDropped) && firstErr == nil {
 			firstErr = err
 		}
 	}
@@ -96,13 +103,13 @@ func (s *swarmStore) addFetched(ctx *astral.Context, src swarmSource, ids []*ast
 	return firstErr
 }
 
-// swarmOpAdder is where addSwarmOps puts the ops: the nodes module's op router.
+// swarmOpAdder is where addSwarmOps puts the ops: the user module's op router.
 type swarmOpAdder interface {
 	AddOp(name string, op *routing.Op) error
 }
 
-// swarmOps answers the exchange ops for one store.
-type swarmOps struct {
+// swarmExchangeOps answers the exchange ops for one store.
+type swarmExchangeOps struct {
 	store *swarmStore
 	// admit decides which callers may read or write the set.
 	admit func(caller *astral.Identity) bool
@@ -110,7 +117,7 @@ type swarmOps struct {
 
 // addSwarmOps adds the exchange ops over store to router. admit decides which callers each op serves.
 func addSwarmOps(router swarmOpAdder, store *swarmStore, admit func(caller *astral.Identity) bool) error {
-	ops := &swarmOps{store: store, admit: admit}
+	ops := &swarmExchangeOps{store: store, admit: admit}
 
 	for name, fn := range map[string]any{
 		opSwarmDigest: ops.digest,
@@ -130,7 +137,7 @@ func addSwarmOps(router swarmOpAdder, store *swarmStore, admit func(caller *astr
 }
 
 // digest answers swarm_digest.
-func (o *swarmOps) digest(ctx *astral.Context, q *routing.IncomingQuery) error {
+func (o *swarmExchangeOps) digest(ctx *astral.Context, q *routing.IncomingQuery) error {
 	if !o.admit(q.Caller()) {
 		return q.Reject()
 	}
@@ -148,7 +155,7 @@ func (o *swarmOps) digest(ctx *astral.Context, q *routing.IncomingQuery) error {
 }
 
 // fetch answers swarm_fetch. An ID with no stored entry is skipped.
-func (o *swarmOps) fetch(ctx *astral.Context, q *routing.IncomingQuery) error {
+func (o *swarmExchangeOps) fetch(ctx *astral.Context, q *routing.IncomingQuery) error {
 	if !o.admit(q.Caller()) {
 		return q.Reject()
 	}
@@ -192,7 +199,7 @@ func (o *swarmOps) fetch(ctx *astral.Context, q *routing.IncomingQuery) error {
 // until one holds the other's membership, so each offers its own first; an
 // offered entry passes CheckSwarmEntry like any merge, and what waits is held
 // in a bounded set.
-func (o *swarmOps) push(ctx *astral.Context, q *routing.IncomingQuery) error {
+func (o *swarmExchangeOps) push(ctx *astral.Context, q *routing.IncomingQuery) error {
 	if q.Caller().IsZero() {
 		return q.Reject()
 	}
@@ -220,8 +227,8 @@ type routerSwarmPeer struct {
 }
 
 var (
-	_ swarmSource = &routerSwarmPeer{}
-	_ swarmPusher = &routerSwarmPeer{}
+	_ swarmSource      = &routerSwarmPeer{}
+	_ swarmEntryPusher = &routerSwarmPeer{}
 )
 
 // open queries one exchange op on the target.
@@ -230,7 +237,7 @@ func (p *routerSwarmPeer) open(ctx *astral.Context, op string) (*channel.Channel
 		return nil, astral.ErrZoneExcluded
 	}
 
-	return query.Route(ctx, p.router, query.New(p.caller, p.target, nodesmod.ModuleName+"."+op, nil))
+	return query.Route(ctx, p.router, query.New(p.caller, p.target, usermod.ModuleName+"."+op, nil))
 }
 
 // SwarmDigest asks the target for the IDs of its stored entries.
