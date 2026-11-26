@@ -17,7 +17,6 @@ import (
 	"github.com/astralp2p/astrald/mod/objects"
 	"github.com/astralp2p/astrald/mod/sys"
 	"github.com/astralp2p/astrald/mod/tree"
-	"github.com/astralp2p/astrald/mod/user"
 	"github.com/astralp2p/astrald/mod/vfs"
 )
 
@@ -34,8 +33,20 @@ type Deps struct {
 }
 
 type OptionalDeps struct {
-	User  user.Module
+	User  hostUser
 	Nodes nodes.Module
+}
+
+// hostUser is the part of the user module apphost uses: the swarm's
+// members, the push of app contracts to them, and the SwarmState the host
+// worker reads and writes.
+type hostUser interface {
+	hostSwarmState
+	hostSwarmView
+	Identity() *astral.Identity
+	LocalSwarm() []*astral.Identity
+	IsSwarmMember(id *astral.Identity) bool
+	PushToSiblingsRetry(ctx *astral.Context, obj astral.Object)
 }
 
 type Module struct {

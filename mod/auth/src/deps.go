@@ -8,6 +8,7 @@ import (
 	"github.com/astralp2p/astrald/mod/dir"
 	"github.com/astralp2p/astrald/mod/objects"
 	"github.com/astralp2p/astrald/mod/tree"
+	usermod "github.com/astralp2p/astrald/mod/user"
 )
 
 type Deps struct {
@@ -59,6 +60,11 @@ type userModule interface {
 	claimState
 	swarmReader
 }
+
+// why: LoadDependencies ignores the OptionalDeps injection error, so a user
+// module that stopped satisfying userModule would leave User nil and the walk
+// would read no swarm; this fails the build instead.
+var _ userModule = (usermod.Module)(nil)
 
 // OptionalDeps holds the user module. Without it the node counts as claimed,
 // and the walk reads no swarm.

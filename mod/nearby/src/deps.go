@@ -15,7 +15,6 @@ import (
 	"github.com/astralp2p/astrald/mod/nearby"
 	"github.com/astralp2p/astrald/mod/nodes"
 	treemod "github.com/astralp2p/astrald/mod/tree"
-	"github.com/astralp2p/astrald/mod/user"
 )
 
 var (
@@ -31,7 +30,13 @@ type Deps struct {
 	Events events.Module
 	Nodes  nodes.Module
 	Tree   treemod.Module
-	User   user.Module
+	User   currentUser
+}
+
+// currentUser is the part of the user module nearby reads.
+type currentUser interface {
+	Ready() <-chan struct{}
+	Identity() *astral.Identity
 }
 
 func (mod *Module) LoadDependencies(ctx *astral.Context) (err error) {
