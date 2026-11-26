@@ -12,7 +12,13 @@ allowed by its contract chain, and denied without it.
 - other, whose request the User declined, still sees no wallet, at the
   driver and at the oracle, and node3 lists its request as declined;
 - a direct call of the wallet is refused for front before its Approval and
-  for other after its Decline (services' query gate).
+  for other after its Decline (services' query gate);
+- an app holds ServeApps only once its request is approved: front, pending,
+  and other, declined, are each refused `apphost.register_handler` and a
+  private `services.advertise` with "not permitted" (apphost
+  op_register_handler.go, services op_advertise.go), at the driver and, for
+  other, again at the oracle; front, approved, does both at the oracle, so a
+  refusal is the missing permit's.
 """
 import asyncio
 
@@ -20,6 +26,21 @@ import astral
 
 from lib import swarmstate as ss
 from lib.sessionio import load
+
+# why exact: the services query gate refuses a query to a private service's
+# provider with the default reject code (mod/services/src/query_gate.go,
+# astral.DefaultRejectCode = 1); any other error (no route, a timeout, the
+# wallet's own refusal) is not that authorization refusal.
+GATE_REFUSAL = "query rejected (1)"
+DENIED = "not permitted"
+SERVE_ACTS = ("register_handler", "advertise")
+
+
+def refused_serving(probe: dict, who: str) -> None:
+    for act in SERVE_ACTS:
+        assert DENIED in probe[act], (
+            f"{who}: {act} answered {probe[act]!r}, not {DENIED!r}: an app without "
+            "an approved request served")
 
 
 async def main():
@@ -34,10 +55,12 @@ async def main():
         "front's local discovery never showed the wallet within 60 s of its Approval")
     assert wallet in ss.discover(n3, f["front"]["token"], "local"), (
         "at the oracle, front's local discovery shows no wallet")
-    assert "answer" not in f["spend_before"] and f["spend_before"].get("error"), (
-        f"front spent before any answer: {f['spend_before']}")
-    assert "answer" not in f["other_spend"] and f["other_spend"].get("error"), (
-        f"the declined app spent: {f['other_spend']}")
+    assert f["spend_before"].get("error") == GATE_REFUSAL, (
+        f"front spent before any answer, or was refused otherwise than by the services "
+        f"query gate ({GATE_REFUSAL!r}): {f['spend_before']}")
+    assert f["other_spend"].get("error") == GATE_REFUSAL, (
+        f"the declined app spent, or was refused otherwise than by the services "
+        f"query gate ({GATE_REFUSAL!r}): {f['other_spend']}")
     assert "answer" in f["spend_50"] and front in f["spend_50"]["answer"], (
         f"the wallet did not spend 50 for front: {f['spend_50']}")
 
@@ -56,8 +79,16 @@ async def main():
     async with await astral.connect(n3["endpoint"], token=n3["token"]) as c3:
         status = await ss.status_of(c3, f["other_request"])
     assert status == "declined", f"node3 lists the declined app's request as {status}"
+
+    refused_serving(f["serve_pending"], "front, pending, at the driver")
+    refused_serving(f["serve_declined"], "other, declined, at the driver")
+    refused_serving(ss.serve_probe(n3, f["other"]["token"]), "other, declined, at the oracle")
+    control = ss.serve_probe(n3, f["front"]["token"])
+    assert all(control[act] == "ok" for act in SERVE_ACTS), (
+        f"control: front, approved, could not serve or advertise: {control}")
     print(f"oracle: front reached the wallet on its own node by its chain "
-          f"({f['front_seen_after_s']:.1f} s); the declined app did not")
+          f"({f['front_seen_after_s']:.1f} s); the declined app did not; neither a "
+          "pending nor a declined app could serve or advertise")
 
 
 asyncio.run(main())

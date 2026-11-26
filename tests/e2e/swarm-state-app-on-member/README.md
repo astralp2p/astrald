@@ -24,7 +24,9 @@ approves on a Privileged node, and the wallet still decides its limits.
 the wallet's identity: services' query gate refuses a query to a provider of
 a private service unless the caller holds a discovery permit for it on that
 node, walked through its chain. Before the Approval the front's direct call
-is refused on node2.
+is refused on node2, and the oracle requires that refusal to be the gate's
+(`query rejected (1)`, the default reject code), so a call that fails for
+another reason (no route, a timeout) does not pass.
 
 **Strictness.** With every discovery permit granted (`callerView.permitted`
 returning true) the oracle fails: "the front saw the wallet before any

@@ -24,6 +24,12 @@ import astral
 from lib import swarmstate as ss
 from lib.sessionio import load
 
+# why exact: the services query gate refuses a query to a private service's
+# provider with the default reject code (mod/services/src/query_gate.go,
+# astral.DefaultRejectCode = 1); any other error (no route, a timeout, the
+# wallet's own refusal) is not that authorization refusal.
+GATE_REFUSAL = "query rejected (1)"
+
 
 async def main():
     doc = load()
@@ -33,8 +39,9 @@ async def main():
 
     assert wallet not in f["before"], (
         f"the front saw the wallet before any Approval: {f['before']}")
-    assert "answer" not in f["spend_before"] and f["spend_before"].get("error"), (
-        f"the front spent before any Approval: {f['spend_before']}")
+    assert f["spend_before"].get("error") == GATE_REFUSAL, (
+        f"the front spent before any Approval, or was refused otherwise than by the services "
+        f"query gate ({GATE_REFUSAL!r}): {f['spend_before']}")
     assert f["seen_after_s"] is not None, (
         "the front's swarm discovery never showed the wallet within 60 s of the Approval")
     assert wallet in ss.discover(n3, f["front"]["token"], "swarm"), (
