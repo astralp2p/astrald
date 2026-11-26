@@ -109,12 +109,14 @@ async def admit_member(joiner_c, user_c, carrier: str, joiner: str,
     """Run joiner's user.join through carrier while the user approves its
     JoinRequest on the carrier. Returns (the join's envelopes, the request)."""
     async def approve():
+        # note: the harness answerer (lib/answerer.py) may approve it first
         r = await find(user_c, lambda r: r.type == JOIN and r.names(joiner)
-                       and r.status == "pending", timeout=timeout)
+                       and r.status in ("pending", "approved"), timeout=timeout)
+        if r.status == "approved":
+            return r
         try:
             await answer(user_c, r.id, "approve")
         except jsonops.OpError:
-            # note: the harness answerer (lib/answerer.py) may approve it first
             if await status_of(user_c, r.id) != "approved":
                 raise
         return r

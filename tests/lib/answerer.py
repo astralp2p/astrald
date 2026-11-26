@@ -52,7 +52,7 @@ async def answer_node(node: dict, done: set) -> None:
                 continue
             done.add(r.id)
             print(f"{time.strftime('%H:%M:%S')} {node['identity'][:8]} approved "
-                  f"{r.id} for {r.obj.get('Identity')}", flush=True)
+                  f"{r.id} for {r.obj.get('Identity') or r.obj.get('Joiner')}", flush=True)
 
 
 async def main() -> None:

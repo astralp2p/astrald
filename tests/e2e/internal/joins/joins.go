@@ -37,15 +37,21 @@ func Admit(ctx *astral.Context, joiner, asUser *astrald.Client, carrierID, joine
 	ctx, cancel := ctx.IncludeZone(astral.ZoneNetwork).WithTimeout(Wait)
 	defer cancel()
 
+	// why the join decides: the harness answerer (tests/lib/answerer.py) may
+	// approve the request before approve finds it pending, so the approver
+	// stops once the join answered.
+	actx, stop := ctx.WithCancel()
+	defer stop()
 	approved := make(chan error, 1)
-	go func() { approved <- approve(ctx, asUser, joinerIdentity) }()
+	go func() { approved <- approve(actx, asUser, joinerIdentity) }()
 
 	membership, err := join(ctx, joiner, carrier)
 	if err != nil {
+		stop()
+		if aerr := <-approved; aerr != nil && actx.Err() == nil {
+			err = errors.Join(err, aerr)
+		}
 		return nil, fmt.Errorf("user.join through %v: %w", carrier, err)
-	}
-	if err = <-approved; err != nil {
-		return nil, err
 	}
 	return membership, nil
 }
