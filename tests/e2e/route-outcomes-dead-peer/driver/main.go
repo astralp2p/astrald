@@ -16,6 +16,8 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/astralp2p/astrald/tests/e2e/internal/contracts"
+
 	apphostapi "github.com/astralp2p/astral-go/api/apphost"
 	apphostcli "github.com/astralp2p/astral-go/api/apphost/client"
 	"github.com/astralp2p/astral-go/astral"
@@ -88,7 +90,7 @@ func run(path string) (map[string]any, error) {
 	ctx := astral.NewContext(nil)
 	admin1, admin2 := connect(n1.Endpoint, n1.Token), connect(n2.Endpoint, n2.Token)
 
-	app, err := apphostcli.New(nil, admin1).Register(ctx)
+	app, err := contracts.Register(ctx, admin1, n1.Endpoint)
 	if err != nil {
 		return facts, fmt.Errorf("registering the caller on node1: %w", err)
 	}

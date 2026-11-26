@@ -36,7 +36,6 @@ BAIT = Query(query_string="swarm-authz-matrix bait")
 INTRUDER = Query(query_string="swarm-authz-matrix intruder")
 TREE_PATH = "/swarm-authz-matrix"
 ALIAS = "hijack"
-POLICY_OP = "swarm_authz_matrix.decide"
 
 # note: a write that carries a body and is refused over a link does not read as
 # "not permitted". node1 answers the refusal and closes the stream before it
@@ -79,12 +78,7 @@ def probes(c, node1: str, bait: str, stranger: str) -> dict:
         "dir.set_alias": lambda: c.dir.set_alias(stranger, ALIAS, **t),
         "apphost.create_token": lambda: c.apphost.create_token(stranger, **t),
         "apphost.hold_object": lambda: c.apphost.hold_object(bait, **t),
-        "user.adopt": lambda: c.user.adopt(stranger, **t),
         "user.expel": lambda: c.user.expel(stranger, **t),
-        "user.set_swarm_join_policy": lambda: c.user.set_swarm_join_policy(
-            stranger, POLICY_OP, **t),
-        "apphost.set_app_register_policy": lambda: c.apphost.set_app_register_policy(
-            stranger, POLICY_OP, **t),
         "crypto.sign_text": lambda: c.crypto.sign_text("swarm-authz-matrix", **t),
         # last, so a broken guard leaves the reads above a bait to read
         "objects.delete": lambda: c.objects.delete("local", bait, **t),

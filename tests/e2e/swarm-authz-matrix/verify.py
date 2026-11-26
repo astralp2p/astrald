@@ -33,8 +33,6 @@ DEADLINE = 15
 INTRUDER = Query(query_string="swarm-authz-matrix intruder")
 TREE_PATH = "/swarm-authz-matrix"
 ALIAS = "hijack"
-POLICY_OP = "swarm_authz_matrix.decide"
-POLICIES = ("/mod/user/policy/swarm_join", "/mod/apphost/policy/app_register")
 
 CONTROLS = {"apphost.whoami", "dir.resolve", "shell.spec"}
 SWARM_READS = {"user.info", "user.swarm_status", "user.list_siblings",
@@ -42,9 +40,7 @@ SWARM_READS = {"user.info", "user.swarm_status", "user.list_siblings",
                "objects.repositories", "nodes.links"}
 GUARDED = {"tree.list", "apphost.list_tokens", "objects.store", "tree.set",
           "dir.set_alias", "apphost.create_token", "apphost.hold_object",
-          "user.adopt", "user.expel", "user.set_swarm_join_policy",
-          "apphost.set_app_register_policy", "crypto.sign_text",
-          "objects.delete"}
+          "user.expel", "crypto.sign_text", "objects.delete"}
 PROBES = CONTROLS | SWARM_READS | GUARDED
 
 # The contract under test: what node1 answers each asker over the link.
@@ -137,22 +133,6 @@ async def absent(coro, mark: str) -> str:
     raise AssertionError(f"exists: {v!r}")
 
 
-async def bound_path(u, path: str):
-    """The value at `path` or at `path` without /mod; `None` when neither binds.
-
-    why: astral-go tree.Query stays at the parent when another module creates
-    the same node first, so a module that loses that startup race binds
-    /user/... rather than /mod/user/... (sign-contract-guard's driver).
-    """
-    for candidate in (path, path.removeprefix("/mod")):
-        try:
-            return await u.tree.get(candidate)
-        except AstralError as e:
-            if "not found" not in str(e):
-                raise
-    return None
-
-
 async def check_state(u, bait: str, ids: dict) -> bytes:
     held = await u.objects.read(bait, repo="local")
     assert str(object_id_of_bytes(bytes(held))) == bait, (
@@ -175,16 +155,6 @@ async def check_state(u, bait: str, ids: dict) -> bytes:
     named = [t for t in tokens if str(t.identity) == ids["stranger"]]
     assert not named, f"node1 holds {len(named)} token(s) for the stranger"
 
-    # why "names the stranger" and not "is unset": policy-delegate runs before
-    # adopt-node in the shared world and may leave its own app_register
-    # delegate, so unset is not the state this test found. The harm the probes
-    # attempted is a delegate naming the stranger's op.
-    for path in POLICIES:
-        d = await bound_path(u, path)
-        who = str(getattr(d, "identity", None))
-        op = str(getattr(d, "operation", ""))
-        assert who != ids["stranger"] and op != POLICY_OP, (
-            f"{path} delegates to {who}:{op} — a probe set node1's policy")
     return bytes(held)
 
 

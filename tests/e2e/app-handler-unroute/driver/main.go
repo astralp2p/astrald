@@ -23,6 +23,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/astralp2p/astrald/tests/e2e/internal/contracts"
+
 	"github.com/astralp2p/astral-go/api/apphost"
 	apphostcli "github.com/astralp2p/astral-go/api/apphost/client"
 	"github.com/astralp2p/astral-go/astral"
@@ -168,7 +170,7 @@ func handlerAddress(hostIP string) string { return "tcp:" + net.JoinHostPort(hos
 
 // newApp registers an app identity on node1 and returns it with its token.
 func (w *world) newApp() (*apphost.AccessToken, error) {
-	return apphostcli.New(nil, w.admin).Register(w.ctx)
+	return contracts.Register(w.ctx, w.admin, w.n1.Endpoint)
 }
 
 func (w *world) reap() {

@@ -17,6 +17,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/astralp2p/astrald/tests/e2e/internal/contracts"
+
 	apphostcli "github.com/astralp2p/astral-go/api/apphost/client"
 	"github.com/astralp2p/astral-go/api/auth"
 	objectscli "github.com/astralp2p/astral-go/api/objects/client"
@@ -146,6 +148,9 @@ func startNotes(ctx *astral.Context, apps2 *apphostcli.Client, n2 node) (*notes,
 	token, err := apps2.Register(ctx, serveObjects)
 	if err != nil {
 		return nil, nil, fmt.Errorf("register the notes app: %w", err)
+	}
+	if _, err = contracts.Await(ctx, connect(n2.Endpoint, string(token.Token)), serveObjects); err != nil {
+		return nil, nil, fmt.Errorf("the contract of %v: %w", token.Identity, err)
 	}
 	n := &notes{app: token.Identity, text: []byte("a note the notes app alone holds, " + astral.NewNonce().String())}
 	if n.id, err = astral.Resolve(bytes.NewReader(n.text)); err != nil {

@@ -17,6 +17,7 @@ fields, without the signature: the JSON of a signed request nests them under
 the request's type name, e.g. `JoinRequest`).
 """
 import asyncio
+import json
 import time
 from dataclasses import dataclass
 
@@ -110,7 +111,12 @@ async def admit_member(joiner_c, user_c, carrier: str, joiner: str,
     async def approve():
         r = await find(user_c, lambda r: r.type == JOIN and r.names(joiner)
                        and r.status == "pending", timeout=timeout)
-        await answer(user_c, r.id, "approve")
+        try:
+            await answer(user_c, r.id, "approve")
+        except jsonops.OpError:
+            # note: the harness answerer (lib/answerer.py) may approve it first
+            if await status_of(user_c, r.id) != "approved":
+                raise
         return r
 
     return await asyncio.gather(join(joiner_c, carrier, tier, timeout), approve())
@@ -278,3 +284,45 @@ async def admit(carrier: dict, user_token: str, joiner: dict, tier: str = "membe
         raise AssertionError(f"{joiner['identity']} did not join through "
                              f"{carrier['identity']}: {joined}")
     return joined[0]
+
+
+async def request_contract(c, actions: list, timeout: float = 60.0) -> dict:
+    """apphost.request_contract as the app c's token names, for a permit of
+    each action: the envelope of the contract its host signs once the
+    request is approved (the harness answerer approves it while a test runs).
+    An answer that is not a contract raises jsonops.OpError."""
+    async with c.stream("apphost.request_contract?in=json&out=json", raw=True,
+                        timeout=timeout) as s:
+        for a in actions:
+            env = {"Type": "mod.auth.permit", "Object": {"Action": a}}
+            await s.send_bytes((json.dumps(env) + "\n").encode())
+        await s.send_bytes((json.dumps(jsonops.EOS) + "\n").encode())
+        buf = b""
+        while True:
+            chunk = await s.read_bytes(4096, timeout=timeout)
+            if not chunk:
+                break
+            buf += chunk
+            *lines, rest = buf.split(b"\n")
+            buf = rest
+            for line in lines:
+                if not line.strip():
+                    continue
+                doc = json.loads(line)
+                if doc["Type"] == "mod.auth.signed_contract":
+                    return doc
+                if doc["Type"] == "error_message":
+                    raise jsonops.OpError(doc["Object"])
+    raise jsonops.OpError("apphost.request_contract answered no contract")
+
+
+HOSTING = ("mod.auth.serve_apps_action", "mod.auth.use_blueprints_action")
+
+
+async def await_app(endpoint: str, token: str, actions=(), timeout: float = 60.0) -> dict:
+    """Wait, as the app token names on the node at endpoint, until its host
+    signed the contract its registration asked: the hosting permits and a
+    permit of each action (apphost.register asks them in that order). The
+    harness answerer approves the request while a test runs."""
+    async with await astral.connect(endpoint, token=token) as c:
+        return await request_contract(c, [*HOSTING, *actions], timeout=timeout)

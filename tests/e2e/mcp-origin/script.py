@@ -38,6 +38,7 @@ import json
 import astral
 
 from lib import jsonops
+from lib import swarmstate as ss
 from lib.authority import RECEIVE, SEND, Authority
 from lib.mcpclient import MCPClient, ToolError
 from lib.nodeconfig import NODE_OP_TOOLS
@@ -93,11 +94,6 @@ async def main():
         beta = await mint(c, "beta")
         gamma = await mint(c, "gamma")
 
-        await jsonops.value(
-            c, "apphost.grant?in=json&out=json",
-            body={"Type": "mod.apphost.grant_request",
-                  "Object": {"Identity": alpha["identity"],
-                             "Permits": [{"Action": a} for a in GRANTS]}})
 
         # mcp.agent is the op the dashboard reads per agent, and the record it
         # answers must not carry the agent's token.
@@ -108,6 +104,10 @@ async def main():
 
     # the control is alpha itself over apphost: the same identity asking the
     # same ops of the same node, with only the origin differing from the refusal
+    # why alpha asks: grants are gone (G7); alpha files a ContractRequest for
+    # GRANTS, which the harness answerer approves, and node1 signs its contract
+    async with await astral.connect(n1["endpoint"], token=alpha["token"]) as c:
+        await ss.request_contract(c, GRANTS)
     async with await astral.connect(n1["endpoint"], token=alpha["token"]) as c:
         control = _docs(await c.call_raw("mcp.list_agents?out=json"))
         minted = _docs(await c.call_raw(

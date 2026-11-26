@@ -6,6 +6,7 @@ package joins
 import (
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/astralp2p/astral-go/api/auth"
@@ -109,12 +110,18 @@ func pendingJoin(ctx *astral.Context, c *astrald.Client, joinerID *astral.Identi
 	return nil, nil
 }
 
+// answer approves the request id. A request already approved counts: the
+// harness answerer (tests/lib/answerer.py) may approve it first.
 func answer(ctx *astral.Context, c *astrald.Client, id *astral.ObjectID) error {
 	ch, err := c.QueryChannel(ctx, "user.answer_request", query.Args{"id": id.String(), "answer": "approve"})
 	if err != nil {
 		return err
 	}
 	defer ch.Close()
-	return ch.Switch(func(*user.SignedApproval) error { return channel.ErrBreak },
+	err = ch.Switch(func(*user.SignedApproval) error { return channel.ErrBreak },
 		channel.PassErrors, channel.FailOnEOF())
+	if err != nil && strings.Contains(err.Error(), "request is not open to this answer") {
+		return nil
+	}
+	return err
 }

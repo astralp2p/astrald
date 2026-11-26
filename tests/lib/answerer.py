@@ -11,12 +11,13 @@ answerer beside it, unless the test's manifest sets `answers` (the test
 answers SwarmState requests itself, as the swarm-state tests do).
 
 Every `POLL` seconds it lists each node's pending requests with that node's
-own token (`user.swarm_requests`) and approves every ContractRequest
-(`user.answer_request`). Only a node whose tier answers requests can: a
+own token (`user.swarm_requests`) and approves every ContractRequest and
+JoinRequest (`user.answer_request`), as the accepting policies admitted apps
+and joins before. Only a node whose tier answers requests can: a
 Privileged node, or an unclaimed node, which is its own root. A Member's
 request reaches a Privileged node through SwarmState, and is approved there.
-JoinRequests and ExpelRequests are left alone: a test that joins or expels
-answers for itself.
+A privileged_member JoinRequest needs the user key (`user.confirm_join`), so
+no node approves it, and ExpelRequests are left alone.
 
 It judges nothing: a refusal, a dead node or a node not yet up is skipped,
 and the next round tries again.
@@ -35,10 +36,12 @@ POLL = 0.5
 
 
 async def answer_node(node: dict, done: set) -> None:
-    """Approve every pending ContractRequest node lists, with its own token."""
+    """Approve every pending ContractRequest and JoinRequest node lists, with
+    its own token."""
     async with await astral.connect(node["endpoint"], token=node["token"]) as c:
         for r in await ss.requests(c, timeout=10):
-            if r.type != ss.CONTRACT or r.status != "pending" or r.id in done:
+            if r.type not in (ss.CONTRACT, ss.JOIN) or r.status != "pending" \
+                    or r.id in done:
                 continue
             try:
                 await ss.answer(c, r.id, "approve", timeout=10)
