@@ -10,7 +10,9 @@ While a test runs, from its driver to its oracle, the runner runs this
 answerer beside it, unless the test's manifest sets `answers` (the test
 answers SwarmState requests itself, as the swarm-state tests do).
 
-Every `POLL` seconds it lists each node's pending requests with that node's
+While a driver waits for an answer (a file in `$ASTRAL_TESTS_WAITING`, which
+`swarmstate.waiting` and `tests/e2e/internal/contracts` write), every `POLL`
+seconds it lists each node's pending requests with that node's
 own token (`user.swarm_requests`) and approves every ContractRequest and
 JoinRequest (`user.answer_request`), as the accepting policies admitted apps
 and joins before. Only a node whose tier answers requests can: a
@@ -23,8 +25,10 @@ It judges nothing: a refusal, a dead node or a node not yet up is skipped,
 and the next round tries again.
 """
 import asyncio
+import os
 import sys
 import time
+from pathlib import Path
 
 import astral
 
@@ -59,9 +63,24 @@ async def answer_node(node: dict, done: set) -> None:
                   f"{r.id} for {r.obj.get('Identity') or r.obj.get('Joiner')}", flush=True)
 
 
+def waiting() -> bool:
+    """Whether a driver waits for an answer: a file in $ASTRAL_TESTS_WAITING
+    (lib/swarmstate.waiting, tests/e2e/internal/contracts)."""
+    d = os.environ.get("ASTRAL_TESTS_WAITING")
+    try:
+        return d is None or any(Path(d).iterdir())
+    except OSError:
+        return False
+
+
 async def main() -> None:
     done: set = set()
     while True:
+        # why: a poll is a query each node logs, and some tests judge a
+        # quiet log, so the answerer asks only while a driver waits
+        if not waiting():
+            await asyncio.sleep(POLL / 2)
+            continue
         # why reread: the runner writes the view anew for each phase, and the
         # first one only once the test's world is ready
         try:

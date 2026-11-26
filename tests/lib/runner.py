@@ -92,6 +92,12 @@ def _answerer(t, art: Path, env: dict):
     if t.answers:
         yield
         return
+    # why a directory: the answerer polls the nodes only while a driver waits
+    # for an answer (a file here), so a test that judges a quiet node log
+    # finds no answerer traffic in it
+    waiting = art / "waiting"
+    waiting.mkdir(exist_ok=True)
+    env["ASTRAL_TESTS_WAITING"] = str(waiting)
     with (art / "answerer.log").open("wb") as log:
         p = subprocess.Popen([sys.executable, "-m", "lib.answerer"],
                              cwd=TESTS, stdout=log, stderr=subprocess.STDOUT,

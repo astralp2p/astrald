@@ -54,6 +54,7 @@ func Await(ctx *astral.Context, c *astrald.Client, asked ...*auth.Permit) (*auth
 // for exactly permits, and returns the contract its host signs once the
 // request is approved, waiting up to Wait.
 func Request(ctx *astral.Context, c *astrald.Client, permits ...*auth.Permit) (*auth.SignedContract, error) {
+	defer Waiting()()
 	wctx, cancel := ctx.WithTimeout(Wait)
 	defer cancel()
 	ch, err := c.QueryChannel(wctx, "apphost.request_contract", nil)

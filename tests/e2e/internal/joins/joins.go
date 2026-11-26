@@ -15,6 +15,7 @@ import (
 	"github.com/astralp2p/astral-go/astral/channel"
 	"github.com/astralp2p/astral-go/lib/astrald"
 	"github.com/astralp2p/astral-go/lib/query"
+	"github.com/astralp2p/astrald/tests/e2e/internal/contracts"
 )
 
 // Wait bounds an admission: the join, the answer and the carrier's signature.
@@ -36,6 +37,7 @@ func Admit(ctx *astral.Context, joiner, asUser *astrald.Client, carrierID, joine
 	}
 	ctx, cancel := ctx.IncludeZone(astral.ZoneNetwork).WithTimeout(Wait)
 	defer cancel()
+	defer contracts.Waiting()()
 
 	// why the join decides: the harness answerer (tests/lib/answerer.py) may
 	// approve the request before approve finds it pending, so the approver

@@ -17,8 +17,12 @@ fields, without the signature: the JSON of a signed request nests them under
 the request's type name, e.g. `JoinRequest`).
 """
 import asyncio
+import contextlib
 import json
+import os
 import time
+import uuid
+from pathlib import Path
 from dataclasses import dataclass
 
 import astral
@@ -121,7 +125,8 @@ async def admit_member(joiner_c, user_c, carrier: str, joiner: str,
                 raise
         return r
 
-    return await asyncio.gather(join(joiner_c, carrier, tier, timeout), approve())
+    with waiting():
+        return await asyncio.gather(join(joiner_c, carrier, tier, timeout), approve())
 
 
 # The app side: tests/e2e/internal/swarmapps, a Go tool built once per world.
@@ -288,11 +293,32 @@ async def admit(carrier: dict, user_token: str, joiner: dict, tier: str = "membe
     return joined[0]
 
 
+@contextlib.contextmanager
+def waiting():
+    """Tell the harness answerer (lib/answerer.py) a driver waits for an
+    answer, for as long as the block runs: a file in $ASTRAL_TESTS_WAITING."""
+    d = os.environ.get("ASTRAL_TESTS_WAITING")
+    if not d:
+        yield
+        return
+    f = Path(d) / f"py-{os.getpid()}-{uuid.uuid4().hex}"
+    f.touch()
+    try:
+        yield
+    finally:
+        f.unlink(missing_ok=True)
+
+
 async def request_contract(c, actions: list, timeout: float = 60.0) -> dict:
     """apphost.request_contract as the app c's token names, for a permit of
     each action: the envelope of the contract its host signs once the
     request is approved (the harness answerer approves it while a test runs).
     An answer that is not a contract raises jsonops.OpError."""
+    with waiting():
+        return await _request_contract(c, actions, timeout)
+
+
+async def _request_contract(c, actions: list, timeout: float) -> dict:
     async with c.stream("apphost.request_contract?in=json&out=json", raw=True,
                         timeout=timeout) as s:
         for a in actions:

@@ -121,11 +121,15 @@ external_registration_sweep_interval = "1s"
   `introduce-node-setup` stops the node that generated the User's words.
 - **`answers`** says why the test answers SwarmState requests itself. Without
   it, the runner runs the harness answerer (`lib/answerer.py`) from the
-  test's driver to its oracle: it approves every pending ContractRequest and
-  JoinRequest with each node's own token, where the node's tier answers, as
-  the accepting admission policies did before. A driver whose app must hold
-  its permits waits for its contract (`tests/e2e/internal/contracts` in Go,
-  `swarmstate.await_app` in Python). The swarm-state tests set `answers`.
+  test's driver to its oracle: while a driver waits for an answer, it
+  approves every pending ContractRequest and Member or Trusted JoinRequest
+  with each node's own token, where the node's tier answers, as the
+  accepting admission policies did before. A driver whose app must hold its
+  permits waits for its contract (`tests/e2e/internal/contracts` in Go,
+  `swarmstate.await_app` in Python), and a wait is a file in
+  `$ASTRAL_TESTS_WAITING` (`contracts.Waiting`, `swarmstate.waiting`): the
+  answerer queries no node otherwise, so a test that judges a quiet node log
+  sees none of its traffic. The swarm-state tests set `answers`.
 - **`facts`** is a contract. An oracle may read only facts declared on its
   `after` chain (`selftest/test_shipped.py` checks), and the agent driver
   asks the operator for exactly these.
