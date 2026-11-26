@@ -120,8 +120,9 @@ func (mod *Module) String() string {
 	return user.ModuleName
 }
 
-// runSiblingLinker starts a link task for every swarm member that has none and
-// stops the link task of every sibling that is no longer a swarm member.
+// runSiblingLinker starts a link task for every swarm member that has none,
+// has mod/nodes learn that member's endpoints, and stops the link task of
+// every sibling that is no longer a swarm member.
 //
 // why linkerMu: PeerSeen events, pushed contracts and contract changes run the
 // linker at once, and two unserialized runs each start a task for one member.
@@ -155,5 +156,10 @@ func (mod *Module) runSiblingLinker() {
 		}
 
 		mod.addSibling(node, scheduledAction.Cancel, maintainLinkAction.Wake)
+
+		// why: a membership reaches this node only through SwarmState sync,
+		// which brings no endpoints, so a new member's link task would have
+		// none to dial; the pull's EndpointsUpdatedEvent wakes the task.
+		go mod.Nodes.LearnMemberEndpoints(node)
 	}
 }
