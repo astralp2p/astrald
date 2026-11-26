@@ -262,11 +262,14 @@ func (mod *Module) recheck(ctx *astral.Context, id *astral.Identity) {
 }
 
 // recheckCarry closes a follow a swarm member carries to this node once the
-// member may no longer carry it.
+// member may no longer carry it, and otherwise applies the app's current
+// permits to what the follow sees.
 func (mod *Module) recheckCarry(ctx *astral.Context, od *openDiscovery) {
 	if !mod.carryAllowed(ctx, od.d) {
 		od.st.Close()
+		return
 	}
+	mod.coord.SetFilter(od.st, mod.carryFilter(ctx, od.d.request.Caller, od.d.request.Names), nil)
 }
 
 // recheckFollow refreshes a local follow's view, then withholds what the caller

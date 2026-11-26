@@ -78,6 +78,12 @@ func (c *Coordinator) applyVisibilityChange(b *Binding, service string, open boo
 				continue
 			}
 			switch {
+			case st.tagged && st.filter != nil && !st.filter.Allows(service, open):
+				st.hide(k)
+			case st.tagged && st.follow && st.filter != nil && !st.filter.Allows(service, !open):
+				sl := b.slot(st.caller)
+				sl.owe(service, false)
+				b.schedule(sl)
 			case st.tagged:
 				if st.follow {
 					st.retag(k)
