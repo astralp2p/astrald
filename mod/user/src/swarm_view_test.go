@@ -560,3 +560,20 @@ func TestSwarmViewMembershipHoldsOnlyTheTier(t *testing.T) {
 		})
 	}
 }
+
+// TestRootKeyIsTheUserOrTheUnclaimedNode: the root key is the node itself
+// while it is unclaimed, and the user once claimed.
+func TestRootKeyIsTheUserOrTheUnclaimedNode(t *testing.T) {
+	nodeID := astral.GenerateIdentity()
+	mod := &Module{node: &identityNode{id: nodeID}}
+	if !mod.rootKey().IsEqual(nodeID) {
+		t.Fatal("unclaimed: want the node as root key")
+	}
+
+	userID := astral.GenerateIdentity()
+	claimed := claimedModule(t, userID)
+	claimed.node = &identityNode{id: nodeID}
+	if !claimed.rootKey().IsEqual(userID) {
+		t.Fatal("claimed: want the user as root key")
+	}
+}

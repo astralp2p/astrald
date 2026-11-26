@@ -14,13 +14,13 @@ var _ authmod.SwarmWalk = &Module{}
 // swarmWalk is what Authorize reads from SwarmState once SetSwarm has run.
 type swarmWalk struct {
 	view  usermod.SwarmView
-	state usermod.SwarmState
+	state authmod.SwarmEntryReader
 	root  func() *astral.Identity
 }
 
 // SetSwarm makes Authorize read SwarmState (see authmod.SwarmWalk). A nil
 // view, state or root clears it, and Authorize behaves as without it.
-func (mod *Module) SetSwarm(view usermod.SwarmView, state usermod.SwarmState, root func() *astral.Identity) {
+func (mod *Module) SetSwarm(view usermod.SwarmView, state authmod.SwarmEntryReader, root func() *astral.Identity) {
 	if view == nil || state == nil || root == nil {
 		mod.swarm.Store(nil)
 		return
@@ -72,7 +72,7 @@ func (mod *Module) swarmRoot(action auth.ActionObject) bool {
 	}
 
 	m, ok := s.view.Membership(actor)
-	return ok && m.Tier == user.TierPrivilegedMember && m.Issuer.IsEqual(root)
+	return ok && usermod.PrivilegedBy(m, root)
 }
 
 // contractLink returns the identity the walk continues as above sc, and false
@@ -159,7 +159,7 @@ func (s *swarmWalk) approvalLink(sc *auth.SignedContract) (*astral.Identity, boo
 		}
 	}
 
-	if !s.mayApprove(approval.Issuer, req) {
+	if !s.view.MayAnswer(approval.Issuer, approval.RequestID) {
 		return nil, false
 	}
 	return approval.Issuer, true
@@ -183,32 +183,11 @@ func linksTo(req astral.Object, sc *auth.SignedContract) bool {
 		if r.IsNil() || !r.Carrier.IsEqual(sc.Issuer) || !r.Joiner.IsEqual(sc.Subject) {
 			return false
 		}
-		return tierOnly(sc.Contract, r.Tier)
+		// why: user.ContractTier ignores permits that name no tier, so a
+		// carrier could add RelayFor or AdminSwarm to a membership it signs and
+		// the walk would take them up to the approver, whose authority the root
+		// answers (D5, D6).
+		return user.TierOnly(sc.Contract, r.Tier)
 	}
 	return false
-}
-
-// tierOnly reports whether c holds tier's permit and nothing else: one
-// non-delegable, unconstrained permit, as user.NewMembership builds it.
-//
-// why: user.ContractTier ignores permits that name no tier, so a carrier could
-// add RelayFor or AdminSwarm to a membership it signs and the walk would take
-// them up to the approver, whose authority the root answers (D5, D6).
-func tierOnly(c *auth.Contract, tier user.Tier) bool {
-	if c == nil || len(c.Permits) != 1 || c.Permits[0] == nil {
-		return false
-	}
-	p := c.Permits[0]
-	return string(p.Action) == tier.Action() && p.Delegation == 0 &&
-		(p.Constraints == nil || len(p.Constraints.Objects()) == 0)
-}
-
-// mayApprove reports whether approver's Approval counts for req: the root key's
-// always does, any other approver's only when its tier may answer req.
-func (s *swarmWalk) mayApprove(approver *astral.Identity, req astral.Object) bool {
-	if root := s.root(); !root.IsZero() && approver.IsEqual(root) {
-		return true
-	}
-	m, ok := s.view.Membership(approver)
-	return ok && user.MayAnswer(m.Tier, req)
 }

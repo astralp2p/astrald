@@ -32,8 +32,8 @@ type Module struct {
 
 	sibs sig.Map[string, Sibling]
 
-	// swarm is the member set publishSwarm last emitted events for.
-	swarm memberSet
+	// memberSet is the member set publishSwarm last emitted events for.
+	memberSet memberSet
 
 	// mu makes the claim check and the claim one transition; see claim.
 	mu sync.Mutex
@@ -64,8 +64,13 @@ type Module struct {
 	// runs. See recognizeJoinTarget.
 	joinTarget atomic.Pointer[astral.Identity]
 
-	// store is this node's copy of SwarmState, nil until Run opens it.
-	store atomic.Pointer[swarmStore]
+	// swarm is this node's copy of SwarmState; Load builds it and Run opens it.
+	swarm *swarmStore
+	// writer makes SwarmState's typed writes.
+	writer *swarmWriter
+	// publisher emits SwarmState's events; swarmFeed reports its changes.
+	publisher *swarmPublisher
+	swarmFeed SwarmFeed
 	// swarmLinkHook replaces onSwarmLink in exchangeSwarmWithLinked.
 	// note: a test seam; nil in the running node.
 	swarmLinkHook func(peer *astral.Identity)
@@ -73,9 +78,8 @@ type Module struct {
 	// note: a test seam; nil in the running node.
 	swarmDial func(target *astral.Identity) swarmPeer
 
-	// swarmView reads SwarmState; entryCheck decides what enters it.
-	swarmView  *swarmView
-	entryCheck *swarmEntryCheck
+	// swarmView reads SwarmState.
+	swarmView *swarmView
 	// carrier carries the JoinRequests that name this node (user.carry_join).
 	carrier *swarmCarrier
 	// joiner keeps this node's own JoinRequest while it joins (user.join).
@@ -104,10 +108,12 @@ func (mod *Module) Run(ctx *astral.Context) error {
 	activeContractFollow := mod.config.ActiveContract.Follow(ctx)
 	mod.onActiveContractChanged(<-activeContractFollow)
 	mod.recordSwarm()
+	// why: nothing is emitted for what is already stored; consumers read the view once in their Run.
+	mod.publisher.record()
 	close(mod.ready)
 	go mod.runReconcile(mod.ctx)
 	go mod.runPeriodicSiblingSync(mod.ctx)
-	go mod.runSwarmWatcher(mod.ctx)
+	go mod.runSwarmFeed(mod.ctx)
 	go func() {
 		for contract := range activeContractFollow {
 			mod.onActiveContractChanged(contract)
@@ -116,8 +122,8 @@ func (mod *Module) Run(ctx *astral.Context) error {
 
 	<-ctx.Done()
 
-	mod.swarm.mu.Lock()
-	defer mod.swarm.mu.Unlock()
+	mod.memberSet.mu.Lock()
+	defer mod.memberSet.mu.Unlock()
 	mod.stopExpiry()
 
 	return nil

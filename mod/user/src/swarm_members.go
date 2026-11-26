@@ -26,31 +26,31 @@ const expiryMargin = time.Second
 // SwarmMemberLeft per node whose membership differs from the last published
 // set. It emits nothing before the first set is recorded.
 func (mod *Module) publishSwarm() {
-	mod.swarm.mu.Lock()
-	defer mod.swarm.mu.Unlock()
-	if mod.swarm.members == nil {
+	mod.memberSet.mu.Lock()
+	defer mod.memberSet.mu.Unlock()
+	if mod.memberSet.members == nil {
 		return
 	}
 	next := identitySet(mod.LocalSwarm())
 	for k, id := range next {
-		if _, ok := mod.swarm.members[k]; !ok {
+		if _, ok := mod.memberSet.members[k]; !ok {
 			mod.Events.Emit(&user.SwarmMemberJoined{NodeID: id})
 		}
 	}
-	for k, id := range mod.swarm.members {
+	for k, id := range mod.memberSet.members {
 		if _, ok := next[k]; !ok {
 			mod.Events.Emit(&user.SwarmMemberLeft{NodeID: id})
 		}
 	}
-	mod.swarm.members = next
+	mod.memberSet.members = next
 	mod.armExpiry()
 }
 
 // recordSwarm records the current member set as published, without events.
 func (mod *Module) recordSwarm() {
-	mod.swarm.mu.Lock()
-	defer mod.swarm.mu.Unlock()
-	mod.swarm.members = identitySet(mod.LocalSwarm())
+	mod.memberSet.mu.Lock()
+	defer mod.memberSet.mu.Unlock()
+	mod.memberSet.members = identitySet(mod.LocalSwarm())
 	mod.armExpiry()
 }
 
@@ -65,14 +65,14 @@ func (mod *Module) armExpiry() {
 	if next.IsZero() {
 		return
 	}
-	mod.swarm.expiry = time.AfterFunc(next.Sub(mod.now())+expiryMargin, mod.publishSwarm)
+	mod.memberSet.expiry = time.AfterFunc(next.Sub(mod.now())+expiryMargin, mod.publishSwarm)
 }
 
 // stopExpiry stops the expiry timer. The caller holds swarm.mu.
 func (mod *Module) stopExpiry() {
-	if mod.swarm.expiry != nil {
-		mod.swarm.expiry.Stop()
-		mod.swarm.expiry = nil
+	if mod.memberSet.expiry != nil {
+		mod.memberSet.expiry.Stop()
+		mod.memberSet.expiry = nil
 	}
 }
 

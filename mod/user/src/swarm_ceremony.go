@@ -40,13 +40,19 @@ type userKeyCeremony struct {
 	// devicePress is set when signer asks the user for every signature (a
 	// Coldcard). The zero value is the safe one: wait for user.confirm_join.
 	devicePress bool
-	state       usermod.SwarmState // nil: the ceremony signs memberships only
-	view        usermod.SwarmView  // nil: the ceremony signs memberships only
+	state       ceremonyState     // nil: the ceremony signs memberships only
+	view        usermod.SwarmView // nil: the ceremony signs memberships only
 	validity    time.Duration
 	now         func() time.Time
 }
 
-func newUserKeyCeremony(userID *astral.Identity, signer entrySigner, state usermod.SwarmState, view usermod.SwarmView) *userKeyCeremony {
+// ceremonyState is the part of usermod.SwarmState an expel ceremony uses.
+type ceremonyState interface {
+	SwarmEntry(id *astral.ObjectID) (astral.Object, error)
+	AddExpulsion(ctx *astral.Context, e *user.SignedExpulsion) error
+}
+
+func newUserKeyCeremony(userID *astral.Identity, signer entrySigner, state ceremonyState, view usermod.SwarmView) *userKeyCeremony {
 	return &userKeyCeremony{
 		user:     userID,
 		signer:   signer,
@@ -103,8 +109,7 @@ func (c *userKeyCeremony) Expel(ctx *astral.Context, reqID *astral.ObjectID) (*u
 	}
 
 	signed := &user.SignedExpulsion{Expulsion: expulsion, IssuerSig: sig}
-	// why held is no failure: the entry is signed and a later merge may store it.
-	if err = c.state.AddSwarmEntry(ctx, signed); err != nil && !errors.Is(err, usermod.ErrSwarmEntryHeld) {
+	if err = c.state.AddExpulsion(ctx, signed); err != nil {
 		return nil, err
 	}
 	return signed, nil
@@ -136,30 +141,6 @@ func (c *userKeyCeremony) expelRequest(reqID *astral.ObjectID) (*user.SignedExpe
 		return nil, errExpelExpired
 	}
 	return req, nil
-}
-
-// FileExpelRequest signs, as this node, an ExpelRequest for subject and adds
-// it to SwarmState. Only a Trusted or Privileged member files one (D10), the
-// tiers that carry JoinRequests.
-//
-// note: nothing in the running node calls it until G7.
-func (c *swarmCarrier) FileExpelRequest(ctx *astral.Context, subject *astral.Identity) (*user.SignedExpelRequest, error) {
-	if !carriesJoins(c.view, c.self) {
-		return nil, errExpelFilerTier
-	}
-
-	req := user.NewExpelRequest(c.self, subject)
-	sig, err := c.signer.Sign(ctx, secp256k1.FromIdentity(c.self), req)
-	if err != nil {
-		return nil, err
-	}
-
-	signed := &user.SignedExpelRequest{ExpelRequest: req, FiledBySig: sig}
-	// why held is no failure: the entry is signed and a later merge may store it.
-	if err = c.state.AddSwarmEntry(ctx, signed); err != nil && !errors.Is(err, usermod.ErrSwarmEntryHeld) {
-		return nil, err
-	}
-	return signed, nil
 }
 
 // heldKeySigner signs as the one private key it holds, in memory. It is the

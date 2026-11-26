@@ -12,6 +12,19 @@ import (
 
 // chainFixture: a claimed node whose swarm holds a Privileged, a Trusted and a
 // Member node, and a Privileged membership another key signed.
+// fakeMembers is a membershipReader over set memberships.
+type fakeMembers map[string]*user.Membership
+
+func (f fakeMembers) Membership(id *astral.Identity) (*user.Membership, bool) {
+	m, ok := f[id.String()]
+	return m, ok
+}
+
+func (f fakeMembers) setMember(issuer, subject *astral.Identity, tier user.Tier) {
+	c := &auth.Contract{Issuer: issuer, Subject: subject, Permits: []*auth.Permit{{Action: astral.String8(tier.Action())}}}
+	f[subject.String()] = &user.Membership{SignedContract: &auth.SignedContract{Contract: c, IssuerSig: viewSig()}, Tier: tier}
+}
+
 type chainFixture struct {
 	rules                                          *chainRules
 	user, node, privileged, trusted, member, rogue *astral.Identity
@@ -23,7 +36,7 @@ func newChainFixture(t *testing.T) *chainFixture {
 		privileged: astral.GenerateIdentity(), trusted: astral.GenerateIdentity(),
 		member: astral.GenerateIdentity(), rogue: astral.GenerateIdentity(),
 	}
-	set := &fakeSwarmSet{members: map[string]*user.Membership{}}
+	set := fakeMembers{}
 	set.setMember(f.user, f.privileged, user.TierPrivilegedMember)
 	set.setMember(f.user, f.trusted, user.TierTrusted)
 	set.setMember(f.privileged, f.member, user.TierMember)

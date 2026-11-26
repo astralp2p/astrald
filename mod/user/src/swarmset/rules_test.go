@@ -1,4 +1,4 @@
-package user
+package swarmset
 
 import (
 	"bytes"
@@ -28,20 +28,18 @@ func sigBy(id *astral.Identity) *crypto.Signature {
 	return &crypto.Signature{Scheme: "test", Data: secp256k1.FromIdentity(id).Key}
 }
 
-// fakeSwarmSet is a SwarmState's stored entries and a SwarmView's memberships.
+// fakeSwarmSet is a Reader over stored entries and set memberships.
 type fakeSwarmSet struct {
 	entries map[string]astral.Object
 	members map[string]*user.Membership
 }
 
-func (f *fakeSwarmSet) SwarmEntry(id *astral.ObjectID) (astral.Object, error) {
-	if obj, ok := f.entries[id.String()]; ok {
-		return obj, nil
-	}
-	return nil, errors.New("not stored")
+func (f *fakeSwarmSet) Entry(id *astral.ObjectID) (astral.Object, bool) {
+	obj, ok := f.entries[id.String()]
+	return obj, ok
 }
 
-func (f *fakeSwarmSet) Membership(id *astral.Identity) (*user.Membership, bool) {
+func (f *fakeSwarmSet) Membership(_, id *astral.Identity) (*user.Membership, bool) {
 	m, ok := f.members[id.String()]
 	return m, ok
 }
@@ -65,7 +63,7 @@ func (f *fakeSwarmSet) setMember(issuer, subject *astral.Identity, tier user.Tie
 // stranger with no stored membership.
 type entryFixture struct {
 	set                                    *fakeSwarmSet
-	check                                  *swarmEntryCheck
+	check                                  *Rules
 	root, privileged, trusted, member, out *astral.Identity
 }
 
@@ -78,7 +76,7 @@ func newEntryFixture() *entryFixture {
 	f.set.setMember(f.root, f.privileged, user.TierPrivilegedMember)
 	f.set.setMember(f.root, f.trusted, user.TierTrusted)
 	f.set.setMember(f.privileged, f.member, user.TierMember)
-	f.check = newSwarmEntryCheck(f.set, f.set, keyVerifier{}, func() *astral.Identity { return f.root })
+	f.check = NewRules(keyVerifier{}, func() *astral.Identity { return f.root })
 	return f
 }
 
@@ -128,7 +126,7 @@ type entryCase struct {
 func runEntryCases(t *testing.T, f *entryFixture, cases []entryCase) {
 	t.Helper()
 	for _, c := range cases {
-		if got := f.check.CheckSwarmEntry(c.obj); got != c.want {
+		if got := f.check.Check(c.obj, f.set); got != c.want {
 			t.Errorf("%s: got %v, want %v", c.name, got, c.want)
 		}
 	}
@@ -250,7 +248,7 @@ func TestCheckSwarmEntryReadsTheRootOnce(t *testing.T) {
 	claimed := astral.GenerateIdentity()
 	f.set.setMember(claimed, f.root, user.TierPrivilegedMember)
 	reads := 0
-	f.check = newSwarmEntryCheck(f.set, f.set, keyVerifier{}, func() *astral.Identity {
+	f.check = NewRules(keyVerifier{}, func() *astral.Identity {
 		reads++
 		if reads == 1 {
 			return f.root
@@ -258,7 +256,7 @@ func TestCheckSwarmEntryReadsTheRootOnce(t *testing.T) {
 		return claimed
 	})
 
-	if got := f.check.CheckSwarmEntry(expulsion(f.root)); got != user.EntryAccept {
+	if got := f.check.Check(expulsion(f.root), f.set); got != user.EntryAccept {
 		t.Fatalf("expulsion by the root read at the start: got %v, want accept", got)
 	}
 	if reads != 1 {
@@ -267,25 +265,13 @@ func TestCheckSwarmEntryReadsTheRootOnce(t *testing.T) {
 }
 
 // TestCheckSwarmEntryUnclaimedNodeIsItsOwnRoot: before a claim the node's own
-// key writes every kind, and the root key is the user once claimed.
+// key, as the root key, writes every kind.
 func TestCheckSwarmEntryUnclaimedNodeIsItsOwnRoot(t *testing.T) {
 	nodeID := astral.GenerateIdentity()
-	mod := &Module{node: &identityNode{id: nodeID}}
-	if !mod.rootKey().IsEqual(nodeID) {
-		t.Fatal("unclaimed: want the node as root key")
-	}
-
 	f := newEntryFixture()
-	f.check = newSwarmEntryCheck(f.set, f.set, keyVerifier{}, mod.rootKey)
+	f.check = NewRules(keyVerifier{}, func() *astral.Identity { return nodeID })
 	runEntryCases(t, f, []entryCase{
 		{"expulsion by the unclaimed node", expulsion(nodeID), user.EntryAccept},
 		{"privileged membership by the unclaimed node", contract(nodeID, astral.GenerateIdentity(), user.TierPrivilegedMember.Action()), user.EntryAccept},
 	})
-
-	userID := astral.GenerateIdentity()
-	claimed := claimedModule(t, userID)
-	claimed.node = &identityNode{id: nodeID}
-	if !claimed.rootKey().IsEqual(userID) {
-		t.Fatal("claimed: want the user as root key")
-	}
 }

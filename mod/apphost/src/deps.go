@@ -18,7 +18,7 @@ func (mod *Module) LoadDependencies(ctx *astral.Context) (err error) {
 	// Approval in SwarmState answers the app's ContractRequest; without the
 	// user module there is no SwarmState to file one in.
 	if mod.User != nil {
-		mod.contractRequests = newContractRequests(mod.node.Identity(), mod.User, mod.User, mod.Crypto, mod.Auth)
+		mod.contractRequests = newContractRequests(mod.node.Identity(), mod.User, mod.User, mod.Auth)
 		if n := mod.config.ContractRequestsPerNode; n > 0 {
 			mod.contractRequests.limiter = newRequestLimiter(ContractRequestWindow, ContractRequestsPerApp, n)
 		}

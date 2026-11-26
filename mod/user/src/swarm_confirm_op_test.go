@@ -8,7 +8,6 @@ import (
 	"github.com/astralp2p/astral-go/api/auth"
 	"github.com/astralp2p/astral-go/api/user"
 	"github.com/astralp2p/astral-go/astral"
-	secp256k1sig "github.com/astralp2p/astrald/mod/secp256k1"
 )
 
 // softwareKeyFixture is a carrier fixture whose user key is a software key
@@ -26,10 +25,9 @@ func newSoftwareKeyFixture() *softwareKeyFixture {
 	f.ceremony.now = f.clock.now
 	f.ops = &SwarmAnswerOps{
 		Node:    f.carrier,
-		State:   f.swarm,
+		State:   writeState{swarmReader: f.swarm, swarmWriter: f.newWriter()},
 		View:    f.swarm,
 		Auth:    &recordingAuth{verdict: true},
-		Signer:  secp256k1sig.NewHashSignerASN1(f.keys.key(f.carrier)),
 		UserKey: func() *userKeyCeremony { return f.ceremony },
 	}
 	return f
@@ -110,7 +108,7 @@ func TestPrivilegedJoinWaitsForUserConfirmation(t *testing.T) {
 func TestConfirmJoinRefusesNonUser(t *testing.T) {
 	f := newSoftwareKeyFixture()
 	req, reqID := f.request(t, user.TierPrivilegedMember)
-	if err := f.swarm.AddSwarmEntry(astral.NewContext(nil), req); err != nil {
+	if err := f.swarm.merge(astral.NewContext(nil), req); err != nil {
 		t.Fatalf("store request: %v", err)
 	}
 
@@ -135,7 +133,7 @@ func TestConfirmJoinRefusesNonUser(t *testing.T) {
 func TestConfirmJoinRefusesNonLocalOrigin(t *testing.T) {
 	f := newSoftwareKeyFixture()
 	req, reqID := f.request(t, user.TierPrivilegedMember)
-	if err := f.swarm.AddSwarmEntry(astral.NewContext(nil), req); err != nil {
+	if err := f.swarm.merge(astral.NewContext(nil), req); err != nil {
 		t.Fatalf("store request: %v", err)
 	}
 	signatures := len(f.keys.texts)
@@ -174,7 +172,7 @@ func TestConfirmJoinRefusesNonLocalOrigin(t *testing.T) {
 func TestConfirmJoinRefusals(t *testing.T) {
 	f := newSoftwareKeyFixture()
 	store := func(req *user.SignedJoinRequest) *astral.ObjectID {
-		if err := f.swarm.AddSwarmEntry(astral.NewContext(nil), req); err != nil {
+		if err := f.swarm.merge(astral.NewContext(nil), req); err != nil {
 			t.Fatalf("store request: %v", err)
 		}
 		id, _ := astral.ResolveObjectID(req)

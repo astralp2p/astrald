@@ -17,6 +17,7 @@ import (
 // request's filer, carrier or subject, beats an Approval; answers by expelled
 // signers do not count.
 type fakeSwarm struct {
+	root     *astral.Identity // the root key MayAnswer reads
 	entries  map[string]astral.Object
 	expelled map[string]bool
 	members  map[string]*user.Membership
@@ -48,10 +49,6 @@ func (f *fakeSwarm) setMember(issuer, subject *astral.Identity, tier user.Tier) 
 func (f *fakeSwarm) expel(id *astral.Identity) { f.expelled[id.String()] = true }
 
 // SwarmState
-
-func (f *fakeSwarm) AddSwarmEntry(_ *astral.Context, obj astral.Object) error {
-	return errors.New("not used")
-}
 
 func (f *fakeSwarm) SwarmEntry(id *astral.ObjectID) (astral.Object, error) {
 	if obj, ok := f.entries[id.String()]; ok {
@@ -113,7 +110,19 @@ func (f *fakeSwarm) Membership(id *astral.Identity) (*user.Membership, bool) {
 	return m, true
 }
 
-func (f *fakeSwarm) CheckSwarmEntry(astral.Object) user.EntryVerdict { return user.EntryAccept }
+// MayAnswer applies the answer rule: the root answers every request, any
+// other signer by its tier.
+func (f *fakeSwarm) MayAnswer(signer *astral.Identity, req *astral.ObjectID) bool {
+	obj, ok := f.entries[req.String()]
+	if !ok {
+		return false
+	}
+	if !f.root.IsZero() && signer.IsEqual(f.root) {
+		return true
+	}
+	m, ok := f.Membership(signer)
+	return ok && user.MayAnswer(m.Tier, obj)
+}
 
 // swarmWorld is the chain of the vision: the user signs the Laptop's
 // PrivilegedMembership, the Pi (Member) files R1 for App A, the Laptop
@@ -136,6 +145,7 @@ func newSwarmWorld(t *testing.T) *swarmWorld {
 		pi: astral.GenerateIdentity(), member: astral.GenerateIdentity(),
 		appA: astral.GenerateIdentity(), appB: astral.GenerateIdentity(),
 	}
+	w.swarm.root = w.user
 	w.swarm.setMember(w.user, w.laptop, user.TierPrivilegedMember)
 	w.swarm.setMember(w.user, w.phone, user.TierTrusted)
 	w.swarm.setMember(w.laptop, w.pi, user.TierMember)

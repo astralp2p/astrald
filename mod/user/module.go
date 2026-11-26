@@ -31,8 +31,8 @@ const (
 // SwarmView reads what SwarmState's entries mean (mod/user). It reads the set
 // through SwarmState and does no other I/O. Every answer derives from
 // the entries stored at the time of the call, and every ID it takes or returns
-// is an entry ID (see SwarmState). Stored entries passed CheckSwarmEntry
-// on merge, so reads trust their signatures and that each answer's signer was
+// is an entry ID (see SwarmState). Stored entries passed the entry check
+// (see SwarmState), so reads trust their signatures and that each answer's signer was
 // entitled to answer its request (user.MayAnswer); they apply what changes
 // after merge: Timeouts, expiry, Declines and expels. An expel beats
 // everything signed by or for the expelled identity.
@@ -41,9 +41,9 @@ const (
 // is its own root. Implementations read time from an injected clock that
 // defaults to time.Now, so tests and fakes agree on it.
 //
-// Module embeds it. A "carried out, or not yet" view and the head-polling
-// watcher stay inside mod/user; other modules poll SwarmState.SwarmHead
-// and call these methods.
+// Module embeds it. A "carried out, or not yet" view and the change feed stay
+// inside mod/user; other modules poll SwarmState.SwarmHead or react to the
+// SwarmState events (astral-go api/user), and call these methods.
 type SwarmView interface {
 	// RequestStatus returns the status of the request with entry ID req, in
 	// precedence order:
@@ -91,37 +91,18 @@ type SwarmView interface {
 	//   - or signed by a JoinRequest's Carrier, carrying out (ApprovalID) an
 	//     Approval of that JoinRequest, which names id as Joiner at the same
 	//     tier and is not declined; the Approval's signer may answer it
-	//     (user.MayAnswer), which CheckSwarmEntry already ensured on merge.
+	//     (user.MayAnswer), which the entry check already ensured on merge.
 	// The issuer's signature is required; the subject's is optional and, when
 	// present, verified on merge. It returns false when none holds or id, or
 	// the contract's issuer, is expelled. When several hold, it returns the
 	// one that expires last.
 	Membership(id *astral.Identity) (*user.Membership, bool)
 
-	// CheckSwarmEntry decides whether obj may enter SwarmState. The store
-	// calls it before storing any entry that is not stored yet. Each entry
-	// kind has a gating identity whose tier, read from its stored membership
-	// contracts, decides:
-	//   - ContractRequest: FiledBy, any tier;
-	//   - JoinRequest: the Carrier, Trusted or Privileged; the Joiner only
-	//     signs it, and its Tier must be valid;
-	//   - ExpelRequest: FiledBy, Trusted or Privileged;
-	//   - Approval, Decline: the signer, whose tier must answer the request
-	//     named by RequestID (user.MayAnswer);
-	//   - contract: the Issuer, any tier; a membership at
-	//     user.TierPrivilegedMember is issued only by the root key (D2);
-	//   - Expulsion: only the root key (D7).
-	// The root key needs no membership and may write every kind. It returns:
-	//   - user.EntryDrop: obj is not an entry, a signature does not verify
-	//     (a contract's IssuerSig is required, its SubjectSig optional), a
-	//     request's Timeout is not valid, or the gating identity's tier may
-	//     not write it (D2, D5, D7, D10);
-	//   - user.EntryWait: the gating identity's membership, or the request
-	//     an Approval or Decline names, is not stored yet;
-	//   - user.EntryAccept: otherwise.
-	// An entry that was valid when it arrived stays valid; expels apply when
-	// entries are read, not here.
-	CheckSwarmEntry(obj astral.Object) user.EntryVerdict
+	// MayAnswer reports whether signer may answer the stored request with
+	// entry ID req: the root key answers every request, any other signer by
+	// the tier of its own membership (user.MayAnswer). It reports false for a
+	// req that names no stored request.
+	MayAnswer(signer *astral.Identity, req *astral.ObjectID) bool
 }
 
 type Module interface {

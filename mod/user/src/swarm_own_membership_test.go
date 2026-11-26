@@ -43,7 +43,7 @@ func TestOwnMembershipExchangesSwarmStateWithLinkedPeers(t *testing.T) {
 	a, b := astral.GenerateIdentity(), astral.GenerateIdentity()
 	mod := &Module{node: &identityNode{id: self}, log: log.New(self), ctx: ctx}
 	mod.Nodes = &linkedNodes{linked: []*astral.Identity{a, b}}
-	mod.store.Store(n.store)
+	mod.swarm = n.store
 
 	var mu sync.Mutex
 	got := map[string]int{}
@@ -64,7 +64,7 @@ func TestOwnMembershipExchangesSwarmStateWithLinkedPeers(t *testing.T) {
 		return out
 	}
 
-	if err := mod.AddSwarmEntry(ctx, membershipOf(t, issuer, astral.GenerateIdentity())); err != nil {
+	if err := mod.mergeSwarmEntry(ctx, membershipOf(t, issuer, astral.GenerateIdentity())); err != nil {
 		t.Fatalf("add another node's membership: %v", err)
 	}
 	if ex := exchanged(); len(ex) != 0 {
@@ -72,14 +72,14 @@ func TestOwnMembershipExchangesSwarmStateWithLinkedPeers(t *testing.T) {
 	}
 
 	own := membershipOf(t, issuer, self)
-	if err := mod.AddSwarmEntry(ctx, own); err != nil {
+	if err := mod.mergeSwarmEntry(ctx, own); err != nil {
 		t.Fatalf("add own membership: %v", err)
 	}
 	if ex := exchanged(); len(ex) != 2 || ex[a.String()] != 1 || ex[b.String()] != 1 {
 		t.Fatalf("own membership exchanged %v; want each of %v and %v once", ex, a, b)
 	}
 
-	if err := mod.AddSwarmEntry(ctx, own); err != nil {
+	if err := mod.mergeSwarmEntry(ctx, own); err != nil {
 		t.Fatalf("add own membership again: %v", err)
 	}
 	if ex := exchanged(); len(ex) != 0 {

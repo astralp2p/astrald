@@ -35,7 +35,7 @@ func addMembership(t testing.TB, state *fakeSwarmState, issuer, subject *astral.
 		t.Fatalf("membership: %v", err)
 	}
 	sc := &auth.SignedContract{Contract: c, IssuerSig: viewSig()}
-	if err = state.AddSwarmEntry(nil, sc); err != nil {
+	if err = state.merge(nil, sc); err != nil {
 		t.Fatalf("store membership: %v", err)
 	}
 	return sc
@@ -49,8 +49,6 @@ type contractState struct {
 	contracts func() ([]*auth.SignedContract, error)
 	head      atomic.Uint64
 }
-
-func (s *contractState) AddSwarmEntry(*astral.Context, astral.Object) error { return nil }
 
 func (s *contractState) SwarmEntry(id *astral.ObjectID) (astral.Object, error) {
 	found, _ := s.contracts()

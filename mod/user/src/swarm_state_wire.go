@@ -17,26 +17,23 @@ import (
 // pull is what makes every copy converge.
 const swarmPullInterval = 15 * time.Second
 
-// errSwarmStateNotOpen answers a SwarmState call made before Run opened the store.
-var errSwarmStateNotOpen = errors.New("swarm state is not open yet")
-
 var _ usermod.SwarmState = &Module{}
 
-// openSwarmState opens this node's copy of SwarmState in its own VFS, checked on merge by the module's own
-// SwarmView, and adds the exchange ops to the module's router.
+// openSwarmState opens this node's copy of SwarmState in its own VFS, which checks every stored entry again, and
+// adds the exchange ops to the module's router.
 func (mod *Module) openSwarmState() error {
-	store, err := newSwarmStore(mod.ctx, mod.VFS, mod.node.Identity(), mod)
-	if err != nil {
+	if err := mod.swarm.open(mod.ctx, mod.VFS, mod.node.Identity()); err != nil {
 		return err
 	}
-	store.peers = mod.swarmPeers
+	return addSwarmOps(&mod.router, mod.swarm, mod.admitsSwarmCaller)
+}
 
-	if err = addSwarmOps(&mod.router, store, mod.admitsSwarmCaller); err != nil {
-		return err
+// openStore returns the store once it is open, or nil.
+func (mod *Module) openStore() *swarmStore {
+	if mod.swarm == nil || !mod.swarm.set.IsOpen() {
+		return nil
 	}
-
-	mod.store.Store(store)
-	return nil
+	return mod.swarm
 }
 
 // admitsSwarmCaller decides who may read and write this node's SwarmState over the exchange ops: this node, the
@@ -86,7 +83,7 @@ func (mod *Module) swarmMembersLinked() (ids []*astral.Identity) {
 
 // SyncSwarm pulls the entries peer stores and this node lacks.
 func (mod *Module) SyncSwarm(ctx *astral.Context, peer *astral.Identity) error {
-	store := mod.store.Load()
+	store := mod.openStore()
 	if store == nil {
 		return errSwarmStateNotOpen
 	}
@@ -133,7 +130,7 @@ func (mod *Module) runSwarmSync(ctx *astral.Context) {
 // peer its own membership, so the peer admits its pull, then pulls what the peer stores.
 //
 // why every peer of a claimed node: a peer this node does not know as a member yet may be one; its admit and
-// CheckSwarmEntry decide what passes.
+// the entry check decide what passes.
 func (mod *Module) onSwarmLink(peer *astral.Identity) {
 	if mod.Identity() == nil {
 		return
@@ -149,16 +146,17 @@ func (mod *Module) onSwarmLink(peer *astral.Identity) {
 	}
 }
 
-// AddSwarmEntry offers obj to this node's SwarmState (usermod.SwarmState).
-// When obj is this node's own membership and the store accepts it, the node
-// exchanges SwarmState with every peer it holds a link with.
-func (mod *Module) AddSwarmEntry(ctx *astral.Context, obj astral.Object) error {
-	store := mod.store.Load()
+// mergeSwarmEntry offers obj to this node's SwarmState: the one merge every
+// typed write ends in. When obj is this node's own membership and the store
+// accepts it, the node exchanges SwarmState with every peer it holds a link
+// with.
+func (mod *Module) mergeSwarmEntry(ctx *astral.Context, obj astral.Object) error {
+	store := mod.openStore()
 	if store == nil {
 		return errSwarmStateNotOpen
 	}
 	before := store.SwarmHead()
-	if err := store.AddSwarmEntry(ctx, obj); err != nil {
+	if err := store.merge(ctx, obj); err != nil {
 		return err
 	}
 	if mod.isOwnMembership(obj) && store.SwarmHead() != before {
@@ -200,16 +198,16 @@ func (mod *Module) exchangeSwarmWithLinked() {
 
 // SwarmEntry returns a stored entry (usermod.SwarmState).
 func (mod *Module) SwarmEntry(id *astral.ObjectID) (astral.Object, error) {
-	store := mod.store.Load()
+	store := mod.openStore()
 	if store == nil {
 		return nil, errSwarmStateNotOpen
 	}
 	return store.SwarmEntry(id)
 }
 
-// SwarmEntries lists the stored entries of kind (usermod.SwarmState).
+// SwarmEntries lists the stored entries of kind (usermod.SwarmState); none before the store is open.
 func (mod *Module) SwarmEntries(kind user.EntryKind) ([]*astral.ObjectID, error) {
-	store := mod.store.Load()
+	store := mod.openStore()
 	if store == nil {
 		return nil, nil
 	}
@@ -218,7 +216,7 @@ func (mod *Module) SwarmEntries(kind user.EntryKind) ([]*astral.ObjectID, error)
 
 // SwarmHead returns the number of stored entries (usermod.SwarmState); 0 before the store is open.
 func (mod *Module) SwarmHead() uint64 {
-	store := mod.store.Load()
+	store := mod.openStore()
 	if store == nil {
 		return 0
 	}

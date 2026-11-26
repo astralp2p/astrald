@@ -35,6 +35,11 @@ func newCarrierFixture(carrierTier user.Tier) *carrierFixture {
 	return f
 }
 
+// newWriter returns the carrier node's typed writes over the fixture's swarm.
+func (f *carrierFixture) newWriter() *swarmWriter {
+	return &swarmWriter{self: f.carrier, signer: f.keys, view: f.swarm, merge: f.swarm.merge}
+}
+
 // newCarrier returns a fresh carrier, as after a restart: it remembers nothing.
 func (f *carrierFixture) newCarrier() *swarmCarrier {
 	c := newSwarmCarrier(f.carrier, f.swarm, f.swarm, f.keys)
@@ -220,7 +225,7 @@ func TestJoinMemberCarrierRefused(t *testing.T) {
 		if n := f.swarm.count(user.EntryRequests); n != 0 {
 			t.Fatalf("carrier at tier %q stored %d requests", tier, n)
 		}
-		if _, err := f.newCarrier().FileExpelRequest(astral.NewContext(nil), f.joiner.self); !errors.Is(err, errExpelFilerTier) {
+		if _, err := f.newWriter().FileExpelRequest(astral.NewContext(nil), f.joiner.self); !errors.Is(err, errExpelFilerTier) {
 			t.Fatalf("carrier at tier %q filed an expel request: %v", tier, err)
 		}
 	}

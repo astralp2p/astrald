@@ -2,7 +2,6 @@ package user
 
 import (
 	"errors"
-	usermod "github.com/astralp2p/astrald/mod/user"
 	"time"
 
 	"github.com/astralp2p/astral-go/api/secp256k1"
@@ -47,7 +46,7 @@ func (mod *Module) Expel(ctx *astral.Context, nodeID *astral.Identity) (*user.Si
 	}
 	// why: SwarmState carries the expel to every member, and the view applies
 	// it to everything signed by or for the subject (G2).
-	if err = mod.AddSwarmEntry(ctx, signed); err != nil && !errors.Is(err, usermod.ErrSwarmEntryHeld) {
+	if err = mod.AddExpulsion(ctx, signed); err != nil {
 		mod.log.Error("expel %v: swarm state: %v", nodeID, err)
 	}
 	mod.refreshBans()

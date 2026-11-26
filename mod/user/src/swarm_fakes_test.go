@@ -46,8 +46,11 @@ type joinSwarm struct {
 	memberships map[string]*user.Membership
 }
 
-var _ usermod.SwarmState = &joinSwarm{}
-var _ usermod.SwarmView = &joinSwarm{}
+var (
+	_ carrierState      = &joinSwarm{}
+	_ ceremonyState     = &joinSwarm{}
+	_ usermod.SwarmView = &joinSwarm{}
+)
 
 func newJoinSwarm(clock *joinClock) *joinSwarm {
 	return &joinSwarm{clock: clock, entries: map[string]astral.Object{}, memberships: map[string]*user.Membership{}}
@@ -61,7 +64,7 @@ func (s *joinSwarm) setTier(issuer, id *astral.Identity, tier user.Tier) {
 	s.memberships[id.String()] = &user.Membership{SignedContract: &auth.SignedContract{Contract: contract}, Tier: tier}
 }
 
-func (s *joinSwarm) AddSwarmEntry(_ *astral.Context, obj astral.Object) error {
+func (s *joinSwarm) merge(_ *astral.Context, obj astral.Object) error {
 	if _, ok := user.EntryKindOf(obj); !ok {
 		return errors.New("not a swarm entry")
 	}
@@ -76,6 +79,24 @@ func (s *joinSwarm) AddSwarmEntry(_ *astral.Context, obj astral.Object) error {
 		s.order = append(s.order, id.String())
 	}
 	return nil
+}
+
+// FileJoinRequest, AddContract and AddExpulsion are the typed writes the
+// carrier and the ceremony make; each merges its entry.
+func (s *joinSwarm) FileJoinRequest(ctx *astral.Context, req *user.SignedJoinRequest) (*astral.ObjectID, error) {
+	id, err := astral.ResolveObjectID(req)
+	if err != nil {
+		return nil, err
+	}
+	return id, s.merge(ctx, req)
+}
+
+func (s *joinSwarm) AddContract(ctx *astral.Context, sc *auth.SignedContract) error {
+	return s.merge(ctx, sc)
+}
+
+func (s *joinSwarm) AddExpulsion(ctx *astral.Context, e *user.SignedExpulsion) error {
+	return s.merge(ctx, e)
 }
 
 func (s *joinSwarm) SwarmEntry(id *astral.ObjectID) (astral.Object, error) {
@@ -209,7 +230,18 @@ func (s *joinSwarm) Membership(id *astral.Identity) (*user.Membership, bool) {
 	return nil, false
 }
 
-func (s *joinSwarm) CheckSwarmEntry(astral.Object) user.EntryVerdict { return user.EntryAccept }
+func (s *joinSwarm) MayAnswer(signer *astral.Identity, req *astral.ObjectID) bool {
+	m, ok := s.Membership(signer)
+	obj := s.entryOf(req)
+	return ok && obj != nil && user.MayAnswer(m.Tier, obj)
+}
+
+// writeState is a SwarmState over a fake store: the store's reads and the
+// typed writes of a real swarmWriter, whose merge is the store's.
+type writeState struct {
+	swarmReader
+	*swarmWriter
+}
 
 // joinKeyring signs as the keys it holds and records the text of every object it
 // signed, as a Coldcard would show it.
@@ -276,7 +308,7 @@ func answerJoin(t *testing.T, s *joinSwarm, keys *joinKeyring, issuer *astral.Id
 		}
 		obj = &user.SignedApproval{Approval: a, IssuerSig: sig}
 	}
-	if err := s.AddSwarmEntry(nil, obj); err != nil {
+	if err := s.merge(nil, obj); err != nil {
 		t.Fatalf("add answer: %v", err)
 	}
 	id, _ := astral.ResolveObjectID(obj)

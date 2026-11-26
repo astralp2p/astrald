@@ -4,8 +4,8 @@ import (
 	"github.com/astralp2p/astral-go/api/auth"
 	"github.com/astralp2p/astral-go/api/nodes"
 	"github.com/astralp2p/astral-go/api/services"
-	"github.com/astralp2p/astral-go/api/user"
 	"github.com/astralp2p/astral-go/astral"
+	usermod "github.com/astralp2p/astrald/mod/user"
 )
 
 // chainRules holds the narrowed rules that replace the "any swarm member"
@@ -36,7 +36,7 @@ func (r *chainRules) AuthorizeRelayFor(ctx *astral.Context, a *nodes.RelayForAct
 		return false
 	}
 	m, ok := r.members.Membership(a.Actor())
-	return ok && m.Tier == user.TierPrivilegedMember && m.Issuer.IsEqual(userID)
+	return ok && usermod.PrivilegedBy(m, userID)
 }
 
 // AuthorizeServiceDiscovery allows the user identity to discover every service

@@ -26,16 +26,15 @@ type fakeSwarmState struct {
 	mu      sync.Mutex
 	entries map[string]astral.Object
 	ids     map[user.EntryKind][]*astral.ObjectID
-	hold    bool // AddSwarmEntry answers ErrSwarmEntryHeld and stores nothing
+	hold    bool // add holds every entry: it answers ErrSwarmEntryHeld and stores nothing
 }
-
-var _ usermod.SwarmState = &fakeSwarmState{}
 
 func newFakeSwarmState() *fakeSwarmState {
 	return &fakeSwarmState{entries: map[string]astral.Object{}, ids: map[user.EntryKind][]*astral.ObjectID{}}
 }
 
-func (s *fakeSwarmState) AddSwarmEntry(_ *astral.Context, obj astral.Object) error {
+// add merges obj as SwarmState's one merge does.
+func (s *fakeSwarmState) add(obj astral.Object) error {
 	kind, ok := user.EntryKindOf(obj)
 	if !ok {
 		return fmt.Errorf("%w: not an entry", usermod.ErrSwarmEntryDropped)
@@ -77,6 +76,56 @@ func (s *fakeSwarmState) SwarmHead() uint64 {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return uint64(len(s.entries))
+}
+
+// hostState is one host's SwarmState over the shared fakeSwarmState: its
+// typed writes sign as that host, and a held entry counts as written.
+type hostState struct {
+	*fakeSwarmState
+	node *astral.Identity
+	now  func() time.Time
+}
+
+var _ usermod.SwarmState = &hostState{}
+
+func (h *hostState) write(obj astral.Object) error {
+	if err := h.add(obj); err != nil && !errors.Is(err, usermod.ErrSwarmEntryHeld) {
+		return err
+	}
+	return nil
+}
+
+func (h *hostState) FileContractRequest(ctx *astral.Context, app *astral.Identity, permits []*auth.Permit) (*user.SignedContractRequest, error) {
+	filedAt := astral.Time(h.now())
+	req := &user.ContractRequest{FiledBy: h.node, Identity: app, Permits: permits, FiledAt: filedAt, Timeout: user.RequestDeadline(filedAt)}
+	sig, err := fakeSigner{}.Sign(ctx, nil, req)
+	if err != nil {
+		return nil, err
+	}
+	signed := &user.SignedContractRequest{ContractRequest: req, FiledBySig: sig}
+	return signed, h.write(signed)
+}
+
+func (h *hostState) AddContract(_ *astral.Context, sc *auth.SignedContract) error { return h.write(sc) }
+
+func (h *hostState) FileJoinRequest(*astral.Context, *user.SignedJoinRequest) (*astral.ObjectID, error) {
+	return nil, errors.New("not used")
+}
+
+func (h *hostState) FileExpelRequest(*astral.Context, *astral.Identity) (*user.SignedExpelRequest, error) {
+	return nil, errors.New("not used")
+}
+
+func (h *hostState) Approve(*astral.Context, *astral.ObjectID) (*user.SignedApproval, error) {
+	return nil, errors.New("not used")
+}
+
+func (h *hostState) Decline(*astral.Context, *astral.ObjectID) (*user.SignedDecline, error) {
+	return nil, errors.New("not used")
+}
+
+func (h *hostState) AddExpulsion(*astral.Context, *user.SignedExpulsion) error {
+	return errors.New("not used")
 }
 
 // objects returns the stored entries of kind.
@@ -143,7 +192,7 @@ func (v *fakeSwarmView) Membership(*astral.Identity) (*user.Membership, bool) {
 	return v.membership, v.membership != nil
 }
 
-func (v *fakeSwarmView) CheckSwarmEntry(astral.Object) user.EntryVerdict { return user.EntryAccept }
+func (v *fakeSwarmView) MayAnswer(*astral.Identity, *astral.ObjectID) bool { return true }
 
 // fakeSigner signs requests and contracts with a marker naming the signer.
 type fakeSigner struct{}
@@ -186,7 +235,8 @@ func (s *testSwarm) advance(d time.Duration) {
 
 // host returns the contract requests of a new node in s.
 func (s *testSwarm) host() *contractRequests {
-	cr := newContractRequests(astral.GenerateIdentity(), s.state, s.view, fakeSigner{}, fakeSigner{})
+	node := astral.GenerateIdentity()
+	cr := newContractRequests(node, &hostState{fakeSwarmState: s.state, node: node, now: s.now}, s.view, fakeSigner{})
 	cr.now = s.now
 	return cr
 }
@@ -201,7 +251,7 @@ func (s *testSwarm) answer(t *testing.T, req *astral.ObjectID, approve bool) *as
 	if approve {
 		entry = &user.SignedApproval{Approval: user.NewApproval(issuer, req), IssuerSig: sig}
 	}
-	if err := s.state.AddSwarmEntry(astral.NewContext(nil), entry); err != nil {
+	if err := s.state.add(entry); err != nil {
 		t.Fatalf("add answer: %v", err)
 	}
 	if !approve {

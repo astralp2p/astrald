@@ -110,8 +110,8 @@ func newMemberEnv(t *testing.T) *memberEnv {
 }
 
 func (e *memberEnv) stopExpiry() {
-	e.mod.swarm.mu.Lock()
-	defer e.mod.swarm.mu.Unlock()
+	e.mod.memberSet.mu.Lock()
+	defer e.mod.memberSet.mu.Unlock()
 	e.mod.stopExpiry()
 }
 
@@ -247,7 +247,7 @@ func TestOwnExpiryArmsNothing(t *testing.T) {
 	}
 	e.query.stage(own)
 	e.mod.recordSwarm()
-	if e.mod.swarm.expiry != nil {
+	if e.mod.memberSet.expiry != nil {
 		t.Fatal("this node's own contract armed the expiry timer")
 	}
 }
@@ -261,7 +261,7 @@ func TestUnclaimedArmsNothing(t *testing.T) {
 	mod.Auth = &memberAuth{query: q}
 	mod.Events = &eventRecorder{}
 	mod.recordSwarm()
-	if mod.swarm.expiry != nil {
+	if mod.memberSet.expiry != nil {
 		t.Fatal("an unclaimed node armed the expiry timer")
 	}
 }

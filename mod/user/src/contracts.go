@@ -3,7 +3,6 @@ package user
 import (
 	"errors"
 	"fmt"
-	usermod "github.com/astralp2p/astrald/mod/user"
 	"slices"
 	"time"
 
@@ -163,7 +162,7 @@ func (mod *Module) onActiveContractChanged(signed *auth.SignedContract) {
 
 	// why: SwarmState holds every membership; a joiner's waits there until
 	// its carrier's chain arrives, and the store may open after this runs.
-	if err = mod.AddSwarmEntry(mod.ctx, signed); err != nil && !errors.Is(err, usermod.ErrSwarmEntryHeld) {
+	if err = mod.AddContract(mod.ctx, signed); err != nil {
 		mod.log.Logv(1, "active contract: swarm state: %v", err)
 	}
 

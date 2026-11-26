@@ -10,8 +10,8 @@ import (
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astral-go/astral/channel"
 	"github.com/astralp2p/astral-go/lib/routing"
-	"github.com/astralp2p/astrald/mod/crypto"
 	usermod "github.com/astralp2p/astrald/mod/user"
+	"github.com/astralp2p/astrald/mod/user/src/swarmset"
 )
 
 // Errors the answering ops send. Their text is part of the protocol
@@ -35,6 +35,15 @@ const (
 	answerDecline = "decline"
 )
 
+// answerState is the part of usermod.SwarmState the answering ops use.
+type answerState interface {
+	SwarmEntry(id *astral.ObjectID) (astral.Object, error)
+	SwarmEntries(kind user.EntryKind) ([]*astral.ObjectID, error)
+	Approve(ctx *astral.Context, request *astral.ObjectID) (*user.SignedApproval, error)
+	Decline(ctx *astral.Context, request *astral.ObjectID) (*user.SignedDecline, error)
+	AddContract(ctx *astral.Context, sc *auth.SignedContract) error
+}
+
 // swarmAuthorizer is the part of the auth module the answering ops use.
 type swarmAuthorizer interface {
 	Authorize(ctx *astral.Context, action auth.ActionObject) bool
@@ -47,24 +56,17 @@ type swarmAuthorizer interface {
 // It also serves user.confirm_join, through which the user has its key sign
 // a pending Privileged JoinRequest (swarm_confirm_op.go).
 //
-// It reaches SwarmState only through user.SwarmState and reads what entries
-// mean only through user.SwarmView. Nothing registers it yet: G7 builds it
-// with mod.Nodes, the SwarmView implementation, mod.Auth,
-// mod.Crypto.NodeSigner() and, on a node that reaches the user key, the
-// userKeyCeremony its carrier uses, and adds it to the module's router with
-// AddStructPrefix(ops, "Op").
+// It writes SwarmState only through its typed writes, which sign as this
+// node, and reads what entries mean only through user.SwarmView. wireSwarm
+// adds it to the module's router with AddStructPrefix(ops, "Op").
 type SwarmAnswerOps struct {
-	Node   *astral.Identity
-	State  usermod.SwarmState
-	View   usermod.SwarmView
-	Auth   swarmAuthorizer
-	Signer crypto.HashSigner
+	Node  *astral.Identity
+	State answerState
+	View  usermod.SwarmView
+	Auth  swarmAuthorizer
 	// UserKey returns the ceremony that signs for user.confirm_join; nil:
 	// this node cannot reach the user key, and user.confirm_join refuses.
 	UserKey func() *userKeyCeremony
-	// Root returns the root key, which answers every request with no
-	// membership of its own (an unclaimed node is its own root).
-	Root func() *astral.Identity
 }
 
 type opSwarmRequestsArgs struct {
@@ -130,11 +132,11 @@ func (ops *SwarmAnswerOps) listRequests(all bool) ([]listedRequest, error) {
 			// set, so a failed read is an I/O error; the rest still list.
 			continue
 		}
-		filedAt, ok := requestFiledAt(obj)
+		r, ok := swarmset.ParseRequest(obj)
 		if !ok {
 			continue
 		}
-		list = append(list, listedRequest{id: id, status: status, req: obj, filedAt: filedAt})
+		list = append(list, listedRequest{id: id, status: status, req: obj, filedAt: r.FiledAt.Time()})
 	}
 
 	sort.SliceStable(list, func(i, j int) bool {
@@ -189,22 +191,23 @@ func (ops *SwarmAnswerOps) answer(ctx *astral.Context, caller *astral.Identity, 
 		return nil, ErrInvalidAnswer
 	}
 
-	req, err := ops.State.SwarmEntry(id)
+	obj, err := ops.State.SwarmEntry(id)
 	if err != nil {
 		return nil, ErrUnknownRequest
 	}
-	if kind, ok := user.EntryKindOf(req); !ok || kind != user.EntryRequests {
+	req, ok := swarmset.ParseRequest(obj)
+	if !ok {
 		return nil, ErrUnknownRequest
 	}
 
 	if !ops.Auth.Authorize(ctx, &user.AdminSwarmAction{
 		Action:  auth.NewAction(caller),
-		Subject: requestSubject(req),
+		Subject: req.Subject,
 	}) {
 		return nil, auth.ErrNotPermitted
 	}
 
-	if !ops.mayAnswer(req) {
+	if !ops.View.MayAnswer(ops.Node, id) {
 		return nil, ErrOutsideTier
 	}
 
@@ -218,81 +221,19 @@ func (ops *SwarmAnswerOps) answer(ctx *astral.Context, caller *astral.Identity, 
 		return nil, ErrRequestClosed
 	}
 
-	signed, err := ops.sign(ctx, id, answer)
-	if err != nil {
-		return nil, err
-	}
-	// A held answer is signed and may still be stored after a later merge
-	// (user.ErrSwarmEntryHeld), so it is sent like a stored one.
-	if err = ops.State.AddSwarmEntry(ctx, signed); err != nil && !errors.Is(err, usermod.ErrSwarmEntryHeld) {
-		return nil, err
-	}
-	return signed, nil
-}
-
-// mayAnswer reports whether this node may answer req: as the root key, or by
-// the tier of its membership (user.MayAnswer).
-func (ops *SwarmAnswerOps) mayAnswer(req astral.Object) bool {
-	if ops.Root != nil && isRoot(ops.Root(), ops.Node) {
-		return true
-	}
-	membership, ok := ops.View.Membership(ops.Node)
-	return ok && user.MayAnswer(membership.Tier, req)
-}
-
-// sign signs this node's Approval or Decline of the request id.
-func (ops *SwarmAnswerOps) sign(ctx *astral.Context, id *astral.ObjectID, answer string) (astral.Object, error) {
-	if answer == answerApprove {
-		body := user.NewApproval(ops.Node, id)
-		sig, err := ops.Signer.SignHash(ctx, body.SignableHash())
+	// note: a held answer is signed and may still be stored after a later
+	// merge, so the typed write counts it as written, and it is sent like a
+	// stored one.
+	if answer == answerDecline {
+		d, err := ops.State.Decline(ctx, id)
 		if err != nil {
 			return nil, err
 		}
-		return &user.SignedApproval{Approval: body, IssuerSig: sig}, nil
+		return d, nil
 	}
-	body := user.NewDecline(ops.Node, id)
-	sig, err := ops.Signer.SignHash(ctx, body.SignableHash())
+	a, err := ops.State.Approve(ctx, id)
 	if err != nil {
 		return nil, err
 	}
-	return &user.SignedDecline{Decline: body, IssuerSig: sig}, nil
-}
-
-// requestFiledAt returns when a stored signed request was filed.
-func requestFiledAt(obj astral.Object) (time.Time, bool) {
-	switch r := obj.(type) {
-	case *user.SignedContractRequest:
-		if !r.IsNil() {
-			return r.FiledAt.Time(), true
-		}
-	case *user.SignedJoinRequest:
-		if !r.IsNil() {
-			return r.FiledAt.Time(), true
-		}
-	case *user.SignedExpelRequest:
-		if !r.IsNil() {
-			return r.FiledAt.Time(), true
-		}
-	}
-	return time.Time{}, false
-}
-
-// requestSubject returns the identity a request names: the ContractRequest's
-// Identity, the JoinRequest's Joiner, or the ExpelRequest's Subject.
-func requestSubject(obj astral.Object) *astral.Identity {
-	switch r := obj.(type) {
-	case *user.SignedContractRequest:
-		if !r.IsNil() {
-			return r.Identity
-		}
-	case *user.SignedJoinRequest:
-		if !r.IsNil() {
-			return r.Joiner
-		}
-	case *user.SignedExpelRequest:
-		if !r.IsNil() {
-			return r.Subject
-		}
-	}
-	return nil
+	return a, nil
 }

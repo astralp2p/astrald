@@ -18,7 +18,7 @@ import (
 //	swarm_push    receives one entry and answers Ack when it is stored or was already, or the error.
 //
 // A node pulls what it lacks (digest, then fetch of the missing IDs) and pushes each entry it stores to its peers.
-// Every entry goes through AddSwarmEntry on the receiving node, so a merge from a peer is checked like a local write.
+// Every entry goes through the store's merge on the receiving node, so a merge from a peer is checked like a local write.
 //
 // Spec: the ops are named user.swarm_digest, user.swarm_fetch and user.swarm_push. They were nodes.swarm_*
 // while mod/nodes held SwarmState. The rename is one cutover with no alias for the old names (D11, new swarms only).
@@ -94,7 +94,7 @@ func (s *swarmStore) addFetched(ctx *astral.Context, src swarmSource, ids []*ast
 
 		// note: held and dropped entries are normal outcomes of a merge, not failures of the pull; a store that
 		// fails is, and the pull reports the first one.
-		err = s.AddSwarmEntry(ctx, obj)
+		err = s.merge(ctx, obj)
 		if err != nil && !errors.Is(err, usermod.ErrSwarmEntryHeld) && !errors.Is(err, usermod.ErrSwarmEntryDropped) && firstErr == nil {
 			firstErr = err
 		}
@@ -197,7 +197,7 @@ func (o *swarmExchangeOps) fetch(ctx *astral.Context, q *routing.IncomingQuery) 
 //
 // why not admit: two members that know nothing of each other cannot pull
 // until one holds the other's membership, so each offers its own first; an
-// offered entry passes CheckSwarmEntry like any merge, and what waits is held
+// offered entry passes the entry check like any merge, and what waits is held
 // in a bounded set.
 func (o *swarmExchangeOps) push(ctx *astral.Context, q *routing.IncomingQuery) error {
 	if q.Caller().IsZero() {
@@ -212,7 +212,7 @@ func (o *swarmExchangeOps) push(ctx *astral.Context, q *routing.IncomingQuery) e
 		return err
 	}
 
-	if err = o.store.AddSwarmEntry(ctx, obj); err != nil {
+	if err = o.store.merge(ctx, obj); err != nil {
 		return ch.Send(astral.Err(err))
 	}
 

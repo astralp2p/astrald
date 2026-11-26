@@ -30,7 +30,7 @@ func (p localPeer) SwarmFetch(_ *astral.Context, ids []*astral.ObjectID) (objs [
 }
 
 func (p localPeer) SwarmPush(ctx *astral.Context, obj astral.Object) error {
-	return p.n.store.AddSwarmEntry(ctx, obj)
+	return p.n.store.merge(ctx, obj)
 }
 
 // orderedSource answers a fixed list of entries in a fixed order, whatever a node stores.
@@ -200,7 +200,7 @@ func TestSwarmDroppedEntryNeverStoredOrForwarded(t *testing.T) {
 			if _, err := nodes[0].store.pullSwarm(nodes[0].store.ctx, orderedSource{dropped, good}); err != nil {
 				t.Fatalf("pull: %v", err)
 			}
-			if err := nodes[1].store.AddSwarmEntry(nodes[1].store.ctx, dropped); !errors.Is(err, usermod.ErrSwarmEntryDropped) {
+			if err := nodes[1].store.merge(nodes[1].store.ctx, dropped); !errors.Is(err, usermod.ErrSwarmEntryDropped) {
 				t.Fatalf("local add: err = %v, want ErrSwarmEntryDropped", err)
 			}
 			if err := link.peer(t, nodes[1], nodes[2]).SwarmPush(nodes[1].store.ctx, dropped); err == nil {
@@ -243,7 +243,7 @@ func TestSwarmWaitingEntryAdmitted(t *testing.T) {
 			script.needs[entryID(t, approval)] = entryID(t, request)
 
 			for _, obj := range []astral.Object{approval, request} {
-				if err := a.store.AddSwarmEntry(a.store.ctx, obj); !errors.Is(err, usermod.ErrSwarmEntryHeld) {
+				if err := a.store.merge(a.store.ctx, obj); !errors.Is(err, usermod.ErrSwarmEntryHeld) {
 					t.Fatalf("%v: err = %v, want ErrSwarmEntryHeld", obj.ObjectType(), err)
 				}
 			}
@@ -316,7 +316,7 @@ func TestSwarmConcurrentMergesConverge(t *testing.T) {
 				go func() {
 					defer wg.Done()
 					for _, obj := range es {
-						_ = n.store.AddSwarmEntry(n.store.ctx, obj)
+						_ = n.store.merge(n.store.ctx, obj)
 					}
 				}()
 			}

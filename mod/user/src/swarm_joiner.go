@@ -138,7 +138,7 @@ func (j *swarmJoiner) Join(ctx *astral.Context, req *user.SignedJoinRequest, car
 // checkMembership checks that sc admits this node at the requested tier.
 //
 // note: signatures and the approval link are checked when sc enters
-// SwarmState (CheckSwarmEntry) and when it is read (SwarmView.Membership).
+// SwarmState (the entry check) and when it is read (SwarmView.Membership).
 func (j *swarmJoiner) checkMembership(req *user.SignedJoinRequest, sc *auth.SignedContract) error {
 	m, ok := user.MembershipOf(sc)
 	switch {

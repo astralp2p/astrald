@@ -34,6 +34,7 @@ func (Loader) Load(node astral.Node, assets assets.Assets, log *log.Logger) (cor
 
 	mod.ctx = astral.NewContext(nil).WithIdentity(node.Identity())
 
+	mod.swarm = mod.newModuleSwarmStore()
 	mod.router.AddStructPrefix(mod, "Op")
 
 	mod.db = &DB{DB: assets.Database(), mod: mod}

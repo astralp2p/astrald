@@ -22,11 +22,11 @@ func TestSwarmStateExpelIsStoredAndApplied(t *testing.T) {
 		sampleSignedValid(userID, subject),
 		sampleSignedValid(astral.GenerateIdentity(), stranger),
 	} {
-		if err := n.store.AddSwarmEntry(n.store.ctx, se); err != nil {
+		if err := n.store.merge(n.store.ctx, se); err != nil {
 			t.Fatalf("store expel: %v", err)
 		}
 	}
-	f.mod.store.Store(n.store)
+	f.mod.swarm = n.store
 
 	f.mod.receiveSwarmExpels()
 

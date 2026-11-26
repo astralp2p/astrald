@@ -157,7 +157,7 @@ func (mod *Module) carryJoinAt(ctx *astral.Context, req *user.SignedJoinRequest)
 // sc to SwarmState and pulls the rest of SwarmState from carrier.
 //
 // why the user is stored before the claim: the claim makes the root key
-// mod.Identity(), and CheckSwarmEntry judges sc against it.
+// mod.Identity(), and the entry check judges sc against it.
 func (mod *Module) activateJoin(ctx *astral.Context, sc *auth.SignedContract, root, carrier *astral.Identity) error {
 	if err := mod.validateActiveContract(sc); err != nil {
 		return err
@@ -169,9 +169,8 @@ func (mod *Module) activateJoin(ctx *astral.Context, sc *auth.SignedContract, ro
 		return err
 	}
 
-	// note: sc waits (user.ErrSwarmEntryHeld) until the pull brings its
-	// carrier's membership.
-	_ = mod.AddSwarmEntry(ctx, sc)
+	// note: sc is held until the pull brings its carrier's membership.
+	_ = mod.AddContract(ctx, sc)
 	if err := mod.SyncSwarm(ctx, carrier); err != nil {
 		mod.log.Logv(1, "join: swarm state pull from %v: %v", carrier, err)
 	}

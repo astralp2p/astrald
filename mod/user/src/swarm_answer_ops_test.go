@@ -19,8 +19,8 @@ import (
 	secp256k1sig "github.com/astralp2p/astrald/mod/secp256k1"
 )
 
-// answerSwarmState is an in-memory user.SwarmState: entries keyed by entry ID.
-// addErr, when set, is returned by AddSwarmEntry after it records the entry.
+// answerSwarmState is an in-memory SwarmState store: entries keyed by entry
+// ID. addErr, when set, is returned by merge after it records the entry.
 type answerSwarmState struct {
 	mu      sync.Mutex
 	entries map[string]astral.Object
@@ -46,7 +46,8 @@ func (s *answerSwarmState) store(t *testing.T, obj astral.Object) *astral.Object
 	return id
 }
 
-func (s *answerSwarmState) AddSwarmEntry(_ *astral.Context, obj astral.Object) error {
+// merge is the store's merge, for the typed writes of a swarmWriter.
+func (s *answerSwarmState) merge(_ *astral.Context, obj astral.Object) error {
 	id, err := astral.ResolveObjectID(obj)
 	if err != nil {
 		return err
@@ -93,11 +94,12 @@ func (s *answerSwarmState) written() []astral.Object {
 	return append([]astral.Object(nil), s.added...)
 }
 
-// fakeSwarmView answers statuses and tiers from maps; every other method
-// returns nothing.
+// fakeSwarmView answers statuses and tiers from maps, and MayAnswer by the
+// tier over the requests state stores; every other method returns nothing.
 type fakeSwarmView struct {
 	status map[string]user.RequestStatus
 	tiers  map[string]user.Tier
+	state  *answerSwarmState
 }
 
 func (v *fakeSwarmView) RequestStatus(req *astral.ObjectID) user.RequestStatus {
@@ -109,7 +111,11 @@ func (v *fakeSwarmView) RequestStatus(req *astral.ObjectID) user.RequestStatus {
 func (v *fakeSwarmView) Expelled(*astral.Identity) bool                            { return false }
 func (v *fakeSwarmView) ApprovalsTouching(*astral.Identity) []*user.SignedApproval { return nil }
 func (v *fakeSwarmView) CarriedOut(*astral.ObjectID) []*auth.SignedContract        { return nil }
-func (v *fakeSwarmView) CheckSwarmEntry(astral.Object) user.EntryVerdict           { return user.EntryAccept }
+func (v *fakeSwarmView) MayAnswer(signer *astral.Identity, req *astral.ObjectID) bool {
+	obj, err := v.state.SwarmEntry(req)
+	m, ok := v.Membership(signer)
+	return err == nil && ok && user.MayAnswer(m.Tier, obj)
+}
 func (v *fakeSwarmView) Membership(id *astral.Identity) (*user.Membership, bool) {
 	tier, ok := v.tiers[id.String()]
 	if !ok {
@@ -131,9 +137,10 @@ type answerFixture struct {
 func newAnswerFixture(tier user.Tier) *answerFixture {
 	nodeKey := secp256k1.New()
 	node := secp256k1.Identity(secp256k1.PublicKey(nodeKey))
+	state := newAnswerSwarmState()
 	f := &answerFixture{
-		state:   newAnswerSwarmState(),
-		view:    &fakeSwarmView{status: map[string]user.RequestStatus{}, tiers: map[string]user.Tier{}},
+		state:   state,
+		view:    &fakeSwarmView{status: map[string]user.RequestStatus{}, tiers: map[string]user.Tier{}, state: state},
 		auth:    &recordingAuth{verdict: true},
 		nodeKey: nodeKey,
 		caller:  astral.GenerateIdentity(),
@@ -141,12 +148,12 @@ func newAnswerFixture(tier user.Tier) *answerFixture {
 	if tier != "" {
 		f.view.tiers[node.String()] = tier
 	}
+	writer := &swarmWriter{self: node, signer: heldKeySigner{key: nodeKey}, view: f.view, merge: state.merge}
 	f.ops = &SwarmAnswerOps{
-		Node:   node,
-		State:  f.state,
-		View:   f.view,
-		Auth:   f.auth,
-		Signer: secp256k1sig.NewHashSignerASN1(nodeKey),
+		Node:  node,
+		State: writeState{swarmReader: state, swarmWriter: writer},
+		View:  f.view,
+		Auth:  f.auth,
 	}
 	return f
 }

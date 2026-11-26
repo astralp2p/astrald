@@ -47,7 +47,12 @@ type ContractQueryBuilder interface {
 // itself while unclaimed. Module embeds it; the user module calls SetSwarm
 // once in LoadDependencies.
 type SwarmWalk interface {
-	SetSwarm(view usermod.SwarmView, state usermod.SwarmState, root func() *astral.Identity)
+	SetSwarm(view usermod.SwarmView, state SwarmEntryReader, root func() *astral.Identity)
+}
+
+// SwarmEntryReader is the part of usermod.SwarmState the walk reads.
+type SwarmEntryReader interface {
+	SwarmEntry(id *astral.ObjectID) (astral.Object, error)
 }
 
 type Module interface {

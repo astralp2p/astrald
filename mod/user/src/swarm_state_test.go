@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/sha256"
 	"errors"
-	usermod "github.com/astralp2p/astrald/mod/user"
 	"slices"
 	"strings"
 	"sync"
@@ -16,6 +15,7 @@ import (
 	"github.com/astralp2p/astral-go/api/user"
 	vfsapi "github.com/astralp2p/astral-go/api/vfs"
 	"github.com/astralp2p/astral-go/astral"
+	"github.com/astralp2p/astrald/mod/user/src/swarmset"
 )
 
 // memFiles is a fake of the VFS calls the swarm store makes: one map of paths to content per identity.
@@ -120,17 +120,16 @@ func newSwarmScript() *swarmScript {
 	return &swarmScript{drops: map[astral.ObjectID]bool{}, needs: map[astral.ObjectID]astral.ObjectID{}}
 }
 
-// scriptedChecker is a fake of user.SwarmView.CheckSwarmEntry. It reads the node's set through
-// usermod.SwarmState, as mod/user does, and records every entry it is asked about.
+// scriptedChecker is a fake of the entry check. It reads the node's set through the Reader the set hands it,
+// and records every entry it is asked about.
 type scriptedChecker struct {
 	script *swarmScript
-	state  usermod.SwarmState
 
 	mu    sync.Mutex
 	calls []astral.ObjectID
 }
 
-func (c *scriptedChecker) CheckSwarmEntry(obj astral.Object) user.EntryVerdict {
+func (c *scriptedChecker) Check(obj astral.Object, r swarmset.Reader) user.EntryVerdict {
 	id, err := astral.ResolveObjectID(obj)
 	if err != nil {
 		return user.EntryDrop
@@ -145,7 +144,7 @@ func (c *scriptedChecker) CheckSwarmEntry(obj astral.Object) user.EntryVerdict {
 	}
 
 	if need, ok := c.script.needs[*id]; ok {
-		if _, err := c.state.SwarmEntry(&need); err != nil {
+		if _, ok := r.Entry(&need); !ok {
 			return user.EntryWait
 		}
 	}
@@ -185,16 +184,16 @@ func (n *stateNode) open(t *testing.T) {
 
 	ctx := astral.NewContext(nil).WithIdentity(n.id).IncludeZone(astral.ZoneNetwork)
 
-	store, err := newSwarmStore(ctx, n.files, n.id, n.checker)
-	if err != nil {
-		t.Fatalf("newSwarmStore: %v", err)
+	store := newSwarmStore(n.checker, nil)
+	if err := store.open(ctx, n.files, n.id); err != nil {
+		t.Fatalf("open: %v", err)
 	}
 
 	if n.store != nil {
 		store.peers = n.store.peers
 	}
 	store.passOnWait = true
-	n.store, n.checker.state = store, store
+	n.store = store
 }
 
 // entryPushLog records the entries a store passes on.
@@ -333,8 +332,8 @@ func storedIDs(t *testing.T, s *swarmStore) []string {
 func mustAdd(t *testing.T, n *stateNode, obj astral.Object) {
 	t.Helper()
 
-	if err := n.store.AddSwarmEntry(n.store.ctx, obj); err != nil {
-		t.Fatalf("AddSwarmEntry(%v): %v", obj.ObjectType(), err)
+	if err := n.store.merge(n.store.ctx, obj); err != nil {
+		t.Fatalf("merge(%v): %v", obj.ObjectType(), err)
 	}
 }
 
@@ -372,11 +371,11 @@ func TestSwarmStoreLayoutAndRead(t *testing.T) {
 	if _, err := n.store.SwarmEntries("bogus"); err == nil {
 		t.Fatal("SwarmEntries accepted an invalid kind")
 	}
-	if err := n.store.AddSwarmEntry(n.store.ctx, astral.NewString8("x")); err == nil {
-		t.Fatal("AddSwarmEntry accepted a non-entry")
+	if err := n.store.merge(n.store.ctx, astral.NewString8("x")); err == nil {
+		t.Fatal("merge accepted a non-entry")
 	}
-	if err := n.store.AddSwarmEntry(n.store.ctx, &user.SignedApproval{}); err == nil {
-		t.Fatal("AddSwarmEntry accepted an empty entry")
+	if err := n.store.merge(n.store.ctx, &user.SignedApproval{}); err == nil {
+		t.Fatal("merge accepted an empty entry")
 	}
 }
 
@@ -397,11 +396,11 @@ func TestSwarmDuplicateIsNoOp(t *testing.T) {
 	}
 
 	for range 2 {
-		if err := a.store.AddSwarmEntry(a.store.ctx, obj); err != nil {
+		if err := a.store.merge(a.store.ctx, obj); err != nil {
 			t.Fatalf("duplicate: %v", err)
 		}
 	}
-	if err := b.store.AddSwarmEntry(b.store.ctx, obj); err != nil {
+	if err := b.store.merge(b.store.ctx, obj); err != nil {
 		t.Fatalf("duplicate on b: %v", err)
 	}
 
@@ -443,7 +442,7 @@ func TestSwarmHeadChangesExactlyWhenEntriesArrive(t *testing.T) {
 		{"admits the request and both held answers", req, 4},
 	}
 	for _, step := range steps {
-		_ = n.store.AddSwarmEntry(n.store.ctx, step.obj)
+		_ = n.store.merge(n.store.ctx, step.obj)
 		if got := n.store.SwarmHead(); got != step.want {
 			t.Fatalf("%v: head = %v, want %v", step.name, got, step.want)
 		}
@@ -481,33 +480,6 @@ func TestSwarmReopenRecountsHead(t *testing.T) {
 	}
 }
 
-// TestSwarmHeldSetIsBounded: past swarmHeldLimit, the oldest held entry is dropped first.
-func TestSwarmHeldSetIsBounded(t *testing.T) {
-	script := newSwarmScript()
-	n := newStateNode(t, script)
-	never := astral.ObjectID{Size: 1}
-
-	var first astral.ObjectID
-	for i := range swarmHeldLimit + 1 {
-		obj := joinRequestEntry(astral.GenerateIdentity(), n.id)
-		id := entryID(t, obj)
-		script.needs[id] = never
-		if i == 0 {
-			first = id
-		}
-		if err := n.store.AddSwarmEntry(n.store.ctx, obj); !errors.Is(err, usermod.ErrSwarmEntryHeld) {
-			t.Fatalf("entry %v: err = %v, want ErrSwarmEntryHeld", i, err)
-		}
-	}
-
-	if len(n.store.merge.held) != swarmHeldLimit {
-		t.Fatalf("held = %v, want %v", len(n.store.merge.held), swarmHeldLimit)
-	}
-	if n.store.merge.held[0].id == first {
-		t.Fatal("the oldest held entry was kept")
-	}
-}
-
 // blackHolePeer is a peer whose push never answers: it returns only when the
 // push's context ends, and reports that end on ended.
 type blackHolePeer struct{ ended chan error }
@@ -519,7 +491,7 @@ func (p blackHolePeer) SwarmPush(ctx *astral.Context, _ astral.Object) error {
 }
 
 // TestSwarmPassOnDoesNotWaitForADeadPeer: an entry accepted while a peer's
-// push never answers is stored and AddSwarmEntry returns at once; the push
+// push never answers is stored and merge returns at once; the push
 // ends at its bound.
 //
 // why: passOn waited for every push, so a link that takes bytes and never
@@ -535,7 +507,7 @@ func TestSwarmPassOnDoesNotWaitForADeadPeer(t *testing.T) {
 	start := time.Now()
 	mustAdd(t, a, fiveEntries(t)[0])
 	if took := time.Since(start); took > 150*time.Millisecond {
-		t.Fatalf("AddSwarmEntry took %v with a dead peer; want it not to wait for the push", took)
+		t.Fatalf("merge took %v with a dead peer; want it not to wait for the push", took)
 	}
 	if a.store.SwarmHead() != 1 {
 		t.Fatalf("head = %v; want 1", a.store.SwarmHead())

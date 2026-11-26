@@ -43,7 +43,7 @@ type entrySigner interface {
 // note: nothing in the running node builds a swarmCarrier until G7.
 type swarmCarrier struct {
 	self     *astral.Identity
-	state    usermod.SwarmState
+	state    carrierState
 	view     usermod.SwarmView
 	signer   entrySigner
 	ceremony *userKeyCeremony // nil: this node cannot reach the user key
@@ -53,7 +53,14 @@ type swarmCarrier struct {
 	mu       *sync.Mutex // serializes carrying out, so one Approval yields one contract
 }
 
-func newSwarmCarrier(self *astral.Identity, state usermod.SwarmState, view usermod.SwarmView, signer entrySigner) *swarmCarrier {
+// carrierState is the part of usermod.SwarmState a carrier uses.
+type carrierState interface {
+	SwarmHead() uint64
+	FileJoinRequest(ctx *astral.Context, req *user.SignedJoinRequest) (*astral.ObjectID, error)
+	AddContract(ctx *astral.Context, sc *auth.SignedContract) error
+}
+
+func newSwarmCarrier(self *astral.Identity, state carrierState, view usermod.SwarmView, signer entrySigner) *swarmCarrier {
 	return &swarmCarrier{
 		self:     self,
 		state:    state,
@@ -126,26 +133,18 @@ func (c *swarmCarrier) admit(req *user.SignedJoinRequest) error {
 
 // carriesJoins reports whether id is a member that may carry JoinRequests and
 // file ExpelRequests: Trusted or Privileged.
-func carriesJoins(view usermod.SwarmView, id *astral.Identity) bool {
+func carriesJoins(view membershipReader, id *astral.Identity) bool {
 	m, ok := view.Membership(id)
 	return ok && (m.Tier == user.TierTrusted || m.Tier == user.TierPrivilegedMember)
 }
 
-// write adds req to SwarmState and returns its entry ID. A resent request is
+// write files req in SwarmState and returns its entry ID. A resent request is
 // already stored, which is a no-op.
+//
+// why a held request is no failure: it is checked again after the next merge,
+// and the wait ends at the request's own Timeout if it never enters.
 func (c *swarmCarrier) write(ctx *astral.Context, req *user.SignedJoinRequest) (*astral.ObjectID, error) {
-	reqID, err := astral.ResolveObjectID(req)
-	if err != nil {
-		return nil, err
-	}
-
-	// why: a held request is checked again after the next merge, and the wait
-	// ends at the request's own Timeout if it never enters.
-	err = c.state.AddSwarmEntry(ctx, req)
-	if err != nil && !errors.Is(err, usermod.ErrSwarmEntryHeld) {
-		return nil, err
-	}
-	return reqID, nil
+	return c.state.FileJoinRequest(ctx, req)
 }
 
 // awaitAnswer polls SwarmState's head until req is no longer pending, and
@@ -241,7 +240,7 @@ func (c *swarmCarrier) signMembership(ctx *astral.Context, req *user.SignedJoinR
 	}
 
 	sc := &auth.SignedContract{Contract: contract, IssuerSig: sig}
-	if err = c.state.AddSwarmEntry(ctx, sc); err != nil && !errors.Is(err, usermod.ErrSwarmEntryHeld) {
+	if err = c.state.AddContract(ctx, sc); err != nil {
 		return nil, err
 	}
 	return sc, nil
@@ -284,7 +283,7 @@ func (c *swarmCarrier) carryPrivileged(ctx *astral.Context, req *user.SignedJoin
 	if err != nil {
 		return nil, err
 	}
-	if err = c.state.AddSwarmEntry(ctx, sc); err != nil && !errors.Is(err, usermod.ErrSwarmEntryHeld) {
+	if err = c.state.AddContract(ctx, sc); err != nil {
 		return nil, err
 	}
 	return sc, nil
@@ -323,9 +322,8 @@ func (c *swarmCarrier) awaitConfirmation(ctx *astral.Context, req *user.SignedJo
 
 // userKeyMembership returns subject's PrivilegedMembership signed by the user
 // key userID, or nil.
-func userKeyMembership(view usermod.SwarmView, userID, subject *astral.Identity) *auth.SignedContract {
-	m, ok := view.Membership(subject)
-	if ok && m.Tier == user.TierPrivilegedMember && m.Issuer.IsEqual(userID) {
+func userKeyMembership(view membershipReader, userID, subject *astral.Identity) *auth.SignedContract {
+	if m, ok := view.Membership(subject); ok && usermod.PrivilegedBy(m, userID) {
 		return m.SignedContract
 	}
 	return nil

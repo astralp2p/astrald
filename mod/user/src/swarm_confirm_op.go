@@ -2,7 +2,6 @@ package user
 
 import (
 	"errors"
-	usermod "github.com/astralp2p/astrald/mod/user"
 
 	"github.com/astralp2p/astral-go/api/auth"
 	"github.com/astralp2p/astral-go/api/user"
@@ -117,7 +116,7 @@ func (ops *SwarmAnswerOps) confirmJoin(ctx *astral.Context, caller *astral.Ident
 	if err != nil {
 		return nil, err
 	}
-	if err = ops.State.AddSwarmEntry(ctx, sc); err != nil && !errors.Is(err, usermod.ErrSwarmEntryHeld) {
+	if err = ops.State.AddContract(ctx, sc); err != nil {
 		return nil, err
 	}
 	return sc, nil

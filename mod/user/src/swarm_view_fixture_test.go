@@ -2,7 +2,6 @@ package user
 
 import (
 	"errors"
-	usermod "github.com/astralp2p/astrald/mod/user"
 	"sync"
 	"testing"
 	"time"
@@ -25,13 +24,13 @@ type fakeSwarmState struct {
 	failList, failRead user.EntryKind
 }
 
-var _ usermod.SwarmState = &fakeSwarmState{}
+var _ swarmReader = &fakeSwarmState{}
 
 func newFakeSwarmState() *fakeSwarmState {
 	return &fakeSwarmState{entries: map[astral.ObjectID]astral.Object{}}
 }
 
-func (f *fakeSwarmState) AddSwarmEntry(_ *astral.Context, obj astral.Object) error {
+func (f *fakeSwarmState) merge(_ *astral.Context, obj astral.Object) error {
 	if _, ok := user.EntryKindOf(obj); !ok {
 		return errors.New("not an entry")
 	}
@@ -122,7 +121,7 @@ func newViewFixture(t *testing.T) *viewFixture {
 // add stores obj and returns its entry ID.
 func (f *viewFixture) add(obj astral.Object) *astral.ObjectID {
 	f.t.Helper()
-	if err := f.state.AddSwarmEntry(nil, obj); err != nil {
+	if err := f.state.merge(nil, obj); err != nil {
 		f.t.Fatalf("add %T: %v", obj, err)
 	}
 	id, err := astral.ResolveObjectID(obj)

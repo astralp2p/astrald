@@ -9,8 +9,6 @@ import (
 	"time"
 
 	"github.com/astralp2p/astral-go/api/auth"
-	"github.com/astralp2p/astral-go/api/crypto"
-	"github.com/astralp2p/astral-go/api/secp256k1"
 	"github.com/astralp2p/astral-go/api/user"
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astral-go/sig"
@@ -38,11 +36,6 @@ const (
 // at most. It never outlives the host's own membership.
 const AppContractDuration = RegisterDuration
 
-// requestSigner signs a request as the node; crypto.Module satisfies it.
-type requestSigner interface {
-	Sign(ctx *astral.Context, key *crypto.PublicKey, obj crypto.SignableTextObject) (*crypto.Signature, error)
-}
-
 // contractSigner signs a contract as its issuer and, when it holds the key,
 // its subject; auth.Module satisfies it.
 type contractSigner interface {
@@ -50,20 +43,19 @@ type contractSigner interface {
 }
 
 // contractRequests files the ContractRequests of the apps this node hosts and
-// carries out their Approvals (the host worker). It reaches SwarmState only
-// through user.SwarmState and reads what entries mean only through
-// user.SwarmView.
+// carries out their Approvals (the host worker). It writes SwarmState only
+// through the typed writes of user.SwarmState, which sign the request as this
+// node, and reads what entries mean only through user.SwarmView.
 //
 // Nothing constructs it in the running node yet: G7 builds it in
 // LoadDependencies, registers apphost.request_contract and starts Run.
 type contractRequests struct {
-	node     *astral.Identity
-	state    usermod.SwarmState
-	view     usermod.SwarmView
-	requests requestSigner
-	signer   contractSigner
-	now      func() time.Time
-	limiter  *requestLimiter
+	node    *astral.Identity
+	state   usermod.SwarmState
+	view    usermod.SwarmView
+	signer  contractSigner
+	now     func() time.Time
+	limiter *requestLimiter
 
 	// mu makes finding a live request and filing a new one one step, so two
 	// calls of one app never file two requests.
@@ -81,15 +73,14 @@ type contractRequests struct {
 }
 
 func newContractRequests(node *astral.Identity, state usermod.SwarmState, view usermod.SwarmView,
-	requests requestSigner, signer contractSigner) *contractRequests {
+	signer contractSigner) *contractRequests {
 	cr := &contractRequests{
-		node:     node,
-		state:    state,
-		view:     view,
-		requests: requests,
-		signer:   signer,
-		now:      time.Now,
-		limiter:  newRequestLimiter(ContractRequestWindow, ContractRequestsPerApp, ContractRequestsPerNode),
+		node:    node,
+		state:   state,
+		view:    view,
+		signer:  signer,
+		now:     time.Now,
+		limiter: newRequestLimiter(ContractRequestWindow, ContractRequestsPerApp, ContractRequestsPerNode),
 	}
 	changed := make(chan struct{})
 	cr.changed.Store(&changed)
@@ -98,8 +89,9 @@ func newContractRequests(node *astral.Identity, state usermod.SwarmState, view u
 
 // File returns the entry ID of the ContractRequest that asks permits for app.
 // A live request this node filed for app with the same permits (pending and
-// unexpired, or approved) is returned as is; otherwise File signs a new
-// request, with the default one-hour Timeout, and adds it to SwarmState. A
+// unexpired, or approved) is returned as is; otherwise File files a new
+// request in SwarmState, signed by this node, with the default one-hour
+// Timeout. A
 // new request counts against the rate limits; a refused one is
 // ErrContractRequestRateLimited.
 func (cr *contractRequests) File(ctx *astral.Context, app *astral.Identity, permits []*auth.Permit) (*astral.ObjectID, error) {
@@ -120,33 +112,19 @@ func (cr *contractRequests) File(ctx *astral.Context, app *astral.Identity, perm
 		return id, nil
 	}
 
-	now := cr.now()
-	if !cr.limiter.allow(app, now) {
+	if !cr.limiter.allow(app, cr.now()) {
 		return nil, apphostmod.ErrContractRequestRateLimited
 	}
 
-	filedAt := astral.Time(now)
-	req := &user.ContractRequest{
-		FiledBy:  cr.node,
-		Identity: app,
-		Permits:  permits,
-		FiledAt:  filedAt,
-		Timeout:  user.RequestDeadline(filedAt),
-	}
-	signature, err := cr.requests.Sign(ctx, secp256k1.FromIdentity(cr.node), req)
+	// note: a held request counts as filed: SwarmState admits it once this
+	// node's membership arrives, and filing again would add a second one.
+	signed, err := cr.state.FileContractRequest(ctx, app, permits)
 	if err != nil {
-		return nil, fmt.Errorf("sign contract request: %w", err)
+		return nil, fmt.Errorf("file contract request: %w", err)
 	}
-	signed := &user.SignedContractRequest{ContractRequest: req, FiledBySig: signature}
 	id, err := astral.ResolveObjectID(signed)
 	if err != nil {
 		return nil, err
-	}
-
-	// why a held request counts as filed: SwarmState admits it once this
-	// node's membership arrives, and filing again would add a second one.
-	if err = cr.state.AddSwarmEntry(ctx, signed); err != nil && !errors.Is(err, usermod.ErrSwarmEntryHeld) {
-		return nil, fmt.Errorf("add contract request: %w", err)
 	}
 
 	cr.filed.Replace(id.String(), signed)
@@ -301,7 +279,7 @@ func (cr *contractRequests) carryOut(ctx *astral.Context, reqID, approvalID *ast
 	if err := cr.signer.SignContract(ctx, signed); err != nil {
 		return fmt.Errorf("sign contract for %v: %w", req.Identity, err)
 	}
-	if err := cr.state.AddSwarmEntry(ctx, signed); err != nil && !errors.Is(err, usermod.ErrSwarmEntryHeld) {
+	if err := cr.state.AddContract(ctx, signed); err != nil {
 		return fmt.Errorf("add contract for %v: %w", req.Identity, err)
 	}
 

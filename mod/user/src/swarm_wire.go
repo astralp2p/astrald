@@ -8,19 +8,52 @@ import (
 	"github.com/astralp2p/astral-go/api/secp256k1"
 	"github.com/astralp2p/astral-go/api/user"
 	"github.com/astralp2p/astral-go/astral"
-	cryptomod "github.com/astralp2p/astrald/mod/crypto"
 	usermod "github.com/astralp2p/astrald/mod/user"
+	"github.com/astralp2p/astrald/mod/user/src/swarmset"
 )
 
 var _ usermod.SwarmView = &Module{}
 
-// wireSwarm builds the SwarmView over this module's SwarmState, hands it
-// to the auth walk, and adds the answering and carrying ops.
+// rootKey returns the root key: the user this node is claimed by, or this node
+// while it is unclaimed.
+func (mod *Module) rootKey() *astral.Identity {
+	if id := mod.Identity(); !id.IsZero() {
+		return id
+	}
+	return mod.node.Identity()
+}
+
+// newModuleSwarmStore returns this module's closed store, checked on every
+// merge by the entry rules. Load builds it; Run opens it.
+func (mod *Module) newModuleSwarmStore() *swarmStore {
+	store := newSwarmStore(swarmset.NewRules(lazyVerifier{mod}, mod.rootKey), func(f string, v ...any) { mod.log.Logv(1, f, v...) })
+	store.peers = mod.swarmPeers
+	return store
+}
+
+// lazyVerifier verifies with the crypto module, resolved at each check.
+//
+// why lazy: Load builds the store before LoadDependencies injects the crypto
+// module.
+type lazyVerifier struct{ mod *Module }
+
+func (v lazyVerifier) Verify(key *crypto.PublicKey, sig *crypto.Signature, obj crypto.SignableTextObject) error {
+	return v.mod.Crypto.Verify(key, sig, obj)
+}
+
+// wireSwarm builds the rest of SwarmState over the store Load built: the
+// SwarmView, which it hands to the auth walk; the typed writes; the feed and
+// publisher of its events; and the answering and carrying ops.
 func (mod *Module) wireSwarm() {
 	mod.swarmView = newSwarmView(mod, mod.rootKey, nil)
-	mod.entryCheck = newSwarmEntryCheck(mod, mod.swarmView, mod.Crypto, mod.rootKey)
+	mod.writer = &swarmWriter{self: mod.node.Identity(), signer: mod.Crypto, view: mod, merge: mod.mergeSwarmEntry}
 	mod.carrier = newSwarmCarrier(mod.node.Identity(), mod, mod, mod.Crypto)
 	mod.joiner = newSwarmJoiner(mod.node.Identity(), mod.Crypto, mod, mod.config.PendingJoin.Get())
+
+	mod.publisher = newSwarmPublisher(mod.swarmView.snapshot, func(e astral.Object) { mod.Events.Emit(e) })
+	// why: an entry this node merges is published at once, not at the feed's next poll.
+	mod.swarm.stored = func([]astral.Object) { mod.publisher.publish() }
+	mod.swarmFeed = newHeadFeed(mod, swarmPollInterval)
 
 	mod.Auth.SetSwarm(mod, mod, mod.rootKey)
 
@@ -29,22 +62,8 @@ func (mod *Module) wireSwarm() {
 		State:   mod,
 		View:    mod,
 		Auth:    mod.Auth,
-		Signer:  nodeSigner{mod.Crypto},
 		UserKey: mod.userKeyCeremony,
-		Root:    mod.rootKey,
 	}, "Op")
-}
-
-// nodeSigner signs with the node key, resolving the signer at each signature.
-//
-// why lazy: wireSwarm runs in LoadDependencies, while the crypto engines
-// still register; NodeSigner read then races with them and panics without one.
-type nodeSigner struct {
-	crypto interface{ NodeSigner() cryptomod.HashSigner }
-}
-
-func (s nodeSigner) SignHash(ctx *astral.Context, hash []byte) (*crypto.Signature, error) {
-	return s.crypto.NodeSigner().SignHash(ctx, hash)
 }
 
 // keepJoin keeps this node's JoinRequest in the tree, so a restart resumes
@@ -79,9 +98,10 @@ func (mod *Module) userKeyCeremony() *userKeyCeremony {
 	return nil
 }
 
-// runSwarmWatcher reacts to every change of SwarmState until ctx ends.
-func (mod *Module) runSwarmWatcher(ctx *astral.Context) {
-	_ = newSwarmWatcher(mod, 0, func(uint64) { mod.onSwarmChanged() }).Run(ctx)
+// runSwarmFeed reacts to every change of SwarmState the feed reports, and
+// publishes its events, until ctx ends.
+func (mod *Module) runSwarmFeed(ctx *astral.Context) {
+	mod.publisher.follow(ctx, mod.swarmFeed, mod.onSwarmChanged)
 }
 
 // onSwarmChanged indexes the contracts SwarmState gained, and re-reads the
@@ -209,6 +229,13 @@ func (mod *Module) ownMembership(id *astral.Identity) (*user.Membership, bool) {
 	return user.MembershipOf(ac)
 }
 
-func (mod *Module) CheckSwarmEntry(obj astral.Object) user.EntryVerdict {
-	return mod.entryCheck.CheckSwarmEntry(obj)
+// MayAnswer reports whether signer may answer the stored request req
+// (usermod.SwarmView), reading signer's tier through Membership, so this
+// node's active contract counts until SwarmState holds it.
+func (mod *Module) MayAnswer(signer *astral.Identity, req *astral.ObjectID) bool {
+	if mod.swarmView == nil {
+		return false
+	}
+	r, ok := mod.swarmView.snapshot().Request(req)
+	return ok && swarmset.MayAnswer(mod.rootKey(), signer, r.Obj, mod.Membership)
 }

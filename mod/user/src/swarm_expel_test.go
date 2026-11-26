@@ -35,7 +35,7 @@ func TestExpelNeedsRequestAndUserKey(t *testing.T) {
 	}
 
 	// a Trusted node files; a ceremony without the user key signs nothing
-	req, err := f.newCarrier().FileExpelRequest(ctx, subject)
+	req, err := f.newWriter().FileExpelRequest(ctx, subject)
 	if err != nil {
 		t.Fatalf("file: %v", err)
 	}
@@ -72,7 +72,7 @@ func TestExpelRefusesEndedRequest(t *testing.T) {
 	ceremony := newUserKeyCeremony(f.userID, f.keys, f.swarm, f.swarm)
 	ceremony.now = f.clock.now
 
-	declined, err := f.newCarrier().FileExpelRequest(ctx, f.keys.newKey())
+	declined, err := f.newWriter().FileExpelRequest(ctx, f.keys.newKey())
 	if err != nil {
 		t.Fatalf("file: %v", err)
 	}
@@ -102,7 +102,7 @@ func signedExpelRequest(t *testing.T, f *carrierFixture, filedBy, subject *astra
 
 func addSwarmEntryT(t *testing.T, f *carrierFixture, obj astral.Object) *astral.ObjectID {
 	t.Helper()
-	if err := f.swarm.AddSwarmEntry(nil, obj); err != nil {
+	if err := f.swarm.merge(nil, obj); err != nil {
 		t.Fatalf("add: %v", err)
 	}
 	id, _ := astral.ResolveObjectID(obj)
