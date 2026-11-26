@@ -1,4 +1,7 @@
-nodes   = ["node1", "node2", "stranger"]
+nodes   = ["node1", "node2", "stranger", "authz_member"]
 timeout = 240
 after   = "adopt-node"
+# why destroys: authz_member joins the User's swarm as a Member, and the tests
+# that share adopt-node's world compare exact rosters
+destroys = true
 facts   = ["bait_id", "matrix"]
