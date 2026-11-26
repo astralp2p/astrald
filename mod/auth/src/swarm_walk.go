@@ -2,6 +2,7 @@ package auth
 
 import (
 	"github.com/astralp2p/astral-go/api/auth"
+	"github.com/astralp2p/astral-go/api/nodes"
 	"github.com/astralp2p/astral-go/api/user"
 	"github.com/astralp2p/astral-go/astral"
 	authmod "github.com/astralp2p/astrald/mod/auth"
@@ -32,9 +33,15 @@ func (mod *Module) SetSwarm(view usermod.SwarmView, state nodesmod.SwarmState, r
 // it is the root key, or holds a PrivilegedMembership the root key signed, and
 // is not expelled. It answers at any hop, for every action but an expel.
 //
-// why AdminSwarmAction too: it is the action user.expel asks today, and a
+// why AdminSwarmAction too: it is the action user.expel asked before G7, and a
 // node holding the user key would sign an Expulsion for any caller it allows
 // (D7: only the user expels).
+//
+// A Privileged node is no root for two more actions:
+//   - SudoAction as the root key: acting as the user key would let it confirm
+//     a Privileged join (D2), expel (D7) or sign with a software user key;
+//   - RelayForAction for anyone but the user: it relays as the user (D6), not
+//     as another node or another node's app.
 func (mod *Module) swarmRoot(action auth.ActionObject) bool {
 	s := mod.swarm.Load()
 	if s == nil {
@@ -56,6 +63,17 @@ func (mod *Module) swarmRoot(action auth.ActionObject) bool {
 	}
 	if actor.IsEqual(root) {
 		return true
+	}
+
+	switch a := action.(type) {
+	case *auth.SudoAction:
+		if a.AsID.IsEqual(root) {
+			return false
+		}
+	case *nodes.RelayForAction:
+		if !a.ForID.IsEqual(root) {
+			return false
+		}
 	}
 
 	m, ok := s.view.Membership(actor)

@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/astralp2p/astral-go/api/auth"
+	"github.com/astralp2p/astral-go/api/nodes"
 	"github.com/astralp2p/astral-go/api/user"
 	"github.com/astralp2p/astral-go/astral"
 )
@@ -375,6 +376,38 @@ func TestSwarmRootAllowsAtAnyHopButNeverAnExpel(t *testing.T) {
 	w.swarm.expel(w.laptop)
 	if w.mod.Authorize(ctx, action(w.laptop)) || w.mod.Authorize(ctx, action(leaf)) {
 		t.Fatal("expelled laptop and its chain: want deny")
+	}
+}
+
+// TestSwarmRootNeitherActsAsTheUserKeyNorRelaysForOthers: a Privileged node
+// may not sudo as the root key (D2, D7) and relays only as the user (D6).
+func TestSwarmRootNeitherActsAsTheUserKeyNorRelaysForOthers(t *testing.T) {
+	ctx := astral.NewContext(nil)
+	w := newSwarmWorld(t)
+
+	sudo := func(actor, as *astral.Identity) bool {
+		return w.mod.Authorize(ctx, &auth.SudoAction{Action: auth.NewAction(actor), AsID: as})
+	}
+	relay := func(actor, forID *astral.Identity) bool {
+		return w.mod.Authorize(ctx, &nodes.RelayForAction{Action: auth.NewAction(actor), ForID: forID})
+	}
+
+	if sudo(w.laptop, w.user) {
+		t.Fatal("privileged sudo as the user key: want deny")
+	}
+	if !sudo(w.laptop, w.appA) {
+		t.Fatal("privileged sudo as an app: want allow")
+	}
+	if !sudo(w.user, w.user) {
+		t.Fatal("the user key as itself: want allow")
+	}
+	if !relay(w.laptop, w.user) {
+		t.Fatal("privileged relay for the user: want allow")
+	}
+	for name, forID := range map[string]*astral.Identity{"member node": w.pi, "another node's app": w.appA} {
+		if relay(w.laptop, forID) {
+			t.Fatalf("privileged relay for %s: want deny", name)
+		}
 	}
 }
 
