@@ -132,14 +132,26 @@ func run(path string, facts map[string]any) error {
 		return errors.New("node3 holds a link to node2, so node2 may have delivered the contract itself")
 	}
 
-	return callThroughNode2(ctx, n3, admin3, greeter.Identity, facts)
+	return callThroughNode2(ctx, n2, n3, admin3, greeter.Identity, facts)
 }
 
 // callThroughNode2 lets node3 dial again and calls the greeter from a visitor
 // app on node3, which node3 routes through node2.
-func callThroughNode2(ctx *astral.Context, n3 node, admin3 *astrald.Client, greeter *astral.Identity, facts map[string]any) error {
+func callThroughNode2(ctx *astral.Context, n2, n3 node, admin3 *astrald.Client, greeter *astral.Identity, facts map[string]any) error {
 	if err := setDial(ctx, admin3, true); err != nil {
 		return err
+	}
+
+	// why wait: node3 may learn the greeter's contract through SwarmState
+	// before its sibling linker lists node2 as a member, and only that listing
+	// pulls node2's endpoints from node1 (LearnMemberEndpoints); a call before
+	// it has no row to dial, which a pre-G7 node3 never met, as it learned the
+	// greeter only from node1's sibling sync after the adoption.
+	start := time.Now()
+	facts["node3_knows_node2_endpoints"] = waitEndpoints(ctx, admin3, n2)
+	facts["seconds_to_node2_endpoints"] = time.Since(start).Seconds()
+	if !facts["node3_knows_node2_endpoints"].(bool) {
+		return fmt.Errorf("node3 never learned an endpoint of node2 within %v", converge)
 	}
 
 	visitor, err := contracts.Register(ctx, admin3, n3.Endpoint)
@@ -289,6 +301,24 @@ func serve(ctx *astral.Context, n node, token string) (func(), error) {
 		cancel()
 		return nil, errors.New("the app's handler was not attached in time")
 	}
+}
+
+// waitEndpoints polls nodes.resolve_endpoints on the admin's node until it
+// names an endpoint of peer.
+func waitEndpoints(ctx *astral.Context, admin *astrald.Client, peer node) bool {
+	id, err := astral.ParseIdentity(peer.Identity)
+	if err != nil {
+		return false
+	}
+	deadline := time.Now().Add(converge)
+	for time.Now().Before(deadline) {
+		eps, err := nodescli.New(nil, admin).ResolveEndpoints(ctx, id)
+		if err == nil && len(eps) > 0 {
+			return true
+		}
+		time.Sleep(250 * time.Millisecond)
+	}
+	return false
 }
 
 // waitHost polls apphost.hosts on the admin's node until it names host for app.

@@ -15,7 +15,10 @@ no link to the app's host, and then reaches the app through that host.
     User approves;
   - within 30 s, `apphost.hosts` on node3 names node2 for the greeter, while
     `nodes.links` on node3 holds no link to node2;
-  - node3 may dial again, and a visitor app on node3 calls `greeter:hello`;
+  - node3 may dial again; within 30 s `nodes.resolve_endpoints` on node3
+    names an endpoint of node2, which node3 pulls from node1 once its sibling
+    linker lists node2 as a member (`LearnMemberEndpoints`);
+  - a visitor app on node3 calls `greeter:hello`;
     node3 routes the call through node2, and the greeter answers
     `hello, <visitor>`.
 - **oracle** `verify.py` — every step held, and `apphost.hosts` on node3 still
@@ -31,7 +34,10 @@ subject (node2) is a member and whose sender (node1) is a member too
 (astral-docs `topics/app-routing.md`, Reach).
 
 The visitor's call needs a node3–node2 link, so it runs after node3 may dial
-again; by then node3 already holds the greeter's contract from node1.
+again; by then node3 already holds the greeter's contract from node1. Under
+SwarmState node3 may hold that contract before its sibling linker (a 3 s
+watch of the SwarmHead) lists node2 as a member, and only that listing pulls
+node2's endpoints, so the driver waits for an endpoint before the call.
 
 node1 dials node3 because a joiner reaches its carrier (`user.join`) and
 node3's dialing is already off. Before G7, `user.adopt` ran on node1, and node1
