@@ -23,6 +23,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/astralp2p/astrald/tests/e2e/internal/contracts"
+
 	// why: nodes.LinkInfo carries its endpoints as typed objects (mod.tcp.endpoint,
 	// mod.kcp.endpoint, ...), and only the SDK's root package registers their blueprints.
 	_ "github.com/astralp2p/astral-go"
@@ -129,7 +131,7 @@ func run(path string, facts map[string]any) error {
 // registerUnreached registers an app on node1 while node2 is out of reach, and
 // checks that node2 has not learned it once the registration's push failed.
 func registerUnreached(ctx *astral.Context, p pair) (*astral.Identity, error) {
-	app, err := apphostcli.New(nil, p.admin1).Register(ctx)
+	app, err := contracts.Register(ctx, p.admin1, p.n1.Endpoint)
 	if err != nil {
 		return nil, fmt.Errorf("registering the app on node1: %w", err)
 	}

@@ -21,6 +21,7 @@ import astral
 
 from lib import linkview
 from lib.sessionio import load, write_facts
+from lib import swarmstate as ss
 
 NAMES = ["node1", "node2", "node3", "node4"]
 POLL = 0.5
@@ -89,9 +90,10 @@ async def main():
             await astral.connect(nodes["node1"]["endpoint"], token=doc["facts"]["user_token"]))
         await meet(clients["node1"], nodes["node1"], clients, nodes)
 
-        await cu.user.adopt(ids["node3"])
+        # note: user.adopt is gone (G7); each joins through node1 as a Member
+        await ss.admit(nodes["node1"], doc["facts"]["user_token"], nodes["node3"])
         facts["adopted_node3_at"] = time.time()
-        await cu.user.adopt(ids["node4"])
+        await ss.admit(nodes["node1"], doc["facts"]["user_token"], nodes["node4"])
         facts["adopted_at"] = time.time()
 
         facts["mesh_at"] = None

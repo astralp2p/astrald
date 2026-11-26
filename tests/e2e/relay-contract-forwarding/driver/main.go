@@ -19,10 +19,13 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/astralp2p/astrald/tests/e2e/internal/joins"
+
+	"github.com/astralp2p/astrald/tests/e2e/internal/contracts"
+
 	apphostcli "github.com/astralp2p/astral-go/api/apphost/client"
 	nodescli "github.com/astralp2p/astral-go/api/nodes/client"
 	"github.com/astralp2p/astral-go/api/tree"
-	usercli "github.com/astralp2p/astral-go/api/user/client"
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astral-go/astral/channel"
 	"github.com/astralp2p/astral-go/lib/apphost"
@@ -84,7 +87,7 @@ func run(path string, facts map[string]any) error {
 	admin1, admin2, admin3 := connect(n1.Endpoint, n1.Token), connect(n2.Endpoint, n2.Token), connect(n3.Endpoint, n3.Token)
 
 	// the greeter app on node2, known to node1 through apphost.register's push
-	greeter, err := apphostcli.New(nil, admin2).Register(ctx)
+	greeter, err := contracts.Register(ctx, admin2, n2.Endpoint)
 	if err != nil {
 		return fmt.Errorf("registering the greeter on node2: %w", err)
 	}
@@ -138,7 +141,7 @@ func callThroughNode2(ctx *astral.Context, n3 node, admin3 *astrald.Client, gree
 		return err
 	}
 
-	visitor, err := apphostcli.New(nil, admin3).Register(ctx)
+	visitor, err := contracts.Register(ctx, admin3, n3.Endpoint)
 	if err != nil {
 		return fmt.Errorf("registering the visitor on node3: %w", err)
 	}
@@ -160,9 +163,8 @@ func adopt(ctx *astral.Context, s session, n1, n3 node) error {
 	if err := addEndpoint(ctx, connect(n3.Endpoint, n3.Token), n1); err != nil {
 		return err
 	}
-	actx, cancel := ctx.IncludeZone(astral.ZoneNetwork).WithTimeout(60 * time.Second)
-	defer cancel()
-	if _, err := usercli.New(nil, connect(n1.Endpoint, s.Facts.UserToken)).Adopt(actx, n3.Identity); err != nil {
+	// note: user.adopt is gone (G7); node3 joins through node1 as a Member
+	if _, err := joins.Admit(ctx, connect(n3.Endpoint, n3.Token), connect(n1.Endpoint, s.Facts.UserToken), n1.Identity, n3.Identity); err != nil {
 		return fmt.Errorf("adopting node3 on node1: %w", err)
 	}
 	return nil

@@ -5,3 +5,4 @@ restart  = ["node3"]
 # why destroys: node3 holds a pending join through node1, and restarts
 destroys = true
 facts    = ["join_unanswered"]
+answers  = "it answers SwarmState requests itself: the User's answer is what it tests"

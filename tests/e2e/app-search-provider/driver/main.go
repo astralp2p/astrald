@@ -15,6 +15,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/astralp2p/astrald/tests/e2e/internal/contracts"
+
 	apphostcli "github.com/astralp2p/astral-go/api/apphost/client"
 	"github.com/astralp2p/astral-go/api/auth"
 	"github.com/astralp2p/astral-go/api/objects"
@@ -88,7 +90,7 @@ func run(path string) (map[string]bool, error) {
 	if err := roles.Append(astral.NewString8(string(auth.RoleSearcher))); err != nil {
 		return facts, err
 	}
-	app, err := apphostcli.New(nil, user).Register(ctx, &auth.Permit{Action: serveObjects, Constraints: roles})
+	app, err := contracts.Register(ctx, user, n1.Endpoint, &auth.Permit{Action: serveObjects, Constraints: roles})
 	if err != nil {
 		return facts, fmt.Errorf("registering the catalog app: %w", err)
 	}
@@ -120,21 +122,8 @@ func run(path string) (map[string]bool, error) {
 		return facts, fmt.Errorf("the app was asked %d times for %q; want once", cat.asked(), word)
 	}
 
-	// 4. without the grant, the node no longer asks the app
-	// note: the node checks the grant on every fan-out and drops a searcher that
-	// lost it, so this also leaves no searcher registered for later tests.
-	if err := apphostcli.New(nil, user).RevokeAction(ctx, app.Identity, serveObjects); err != nil {
-		return facts, fmt.Errorf("revoking the app's grant: %w", err)
-	}
-	results, err = search(ctx, user, word)
-	if err != nil {
-		return facts, fmt.Errorf("objects.search after the revoke: %w", err)
-	}
-	facts["revoked_app_is_not_asked"] = len(results) == 0 && cat.asked() == 1
-	if !facts["revoked_app_is_not_asked"] {
-		return facts, fmt.Errorf("after the revoke, objects.search answered %v and the app was asked %d times; want nothing and once",
-			describe(results), cat.asked())
-	}
+	// note: the revoke step is gone: grants are, and revocations are a Non-goal
+	// of Swarm State and User Authority (G7).
 
 	fmt.Fprintln(os.Stderr, "ok: the User's objects.search on node1 returned the catalog app's result, sourced to the app")
 	return facts, nil

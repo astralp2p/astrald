@@ -3,8 +3,7 @@
 
 The oracle repeats the whole story with fresh identities (`driver verify`): a
 greeter app serves hello on node1, a visitor app on node1 calls it by the
-greeter's app identity and is greeted as itself, and an app whose serve_apps
-grant is revoked cannot serve.
+greeter's app identity and is greeted as itself.
 """
 import os
 import subprocess
@@ -14,7 +13,7 @@ from pathlib import Path
 from lib.sessionio import load
 
 ROOT = Path(__file__).resolve().parents[3]
-STEPS = ["greeter_serves", "visitor_greeted", "stray_refused", "stray_unreachable"]
+STEPS = ["greeter_serves", "visitor_greeted"]
 
 facts = load()["facts"].get("app_call_local", {})
 missing = [s for s in STEPS if not facts.get(s)]

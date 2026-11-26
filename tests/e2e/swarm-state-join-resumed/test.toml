@@ -4,3 +4,4 @@ timeout  = 180
 # why destroys: node3 joins the swarm
 destroys = true
 facts    = ["join_resumed"]
+answers  = "it answers SwarmState requests itself: the User's answer is what it tests"

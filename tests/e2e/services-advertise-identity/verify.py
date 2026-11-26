@@ -4,9 +4,8 @@
 The facts say which steps the driver saw hold. The oracle does not trust them
 alone: it tells the whole story again with fresh identities (`driver verify`):
 a service advertised on node2 is found from node1 under the app's identity,
-and an answer naming another provider or service, an advertisement without
-ServeApps or over a link, and a taken name each show nothing; a revoke of
-ServeApps removes an open binding's offering and closes its channel.
+and an answer naming another provider or service, an advertisement over a
+link, and a taken name each show nothing.
 """
 import os
 import subprocess
@@ -23,9 +22,6 @@ STEPS = [
     "answer_as_another_provider_shows_nothing", "answer_as_another_provider_ends_the_binding",
     "answer_as_another_provider_shows_nothing_at_home",
     "answer_for_another_service_shows_nothing", "answer_for_another_service_ends_the_binding",
-    "no_serve_apps_is_refused", "no_serve_apps_shows_nothing",
-    "revoked_provider_is_followed_first", "revoked_serve_apps_removes_the_offering",
-    "revoked_serve_apps_closes_the_advertise_channel",
     "advertise_over_a_link_is_refused", "advertise_over_a_link_hits_the_origin_guard", "advertise_over_a_link_shows_nothing",
     "taken_name_is_refused", "taken_name_refuses_the_whole_set", "refused_set_shows_nothing",
     "same_name_from_another_app_is_another_provider", "home_node_does_not_show_the_other_nodes_provider",

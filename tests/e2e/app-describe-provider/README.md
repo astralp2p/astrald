@@ -14,8 +14,6 @@ describe a note, and the app's label comes back with the app as its source.
      with a `String16` label.
   3. The User runs `objects.describe` for the note on node1. The answer is the
      label alone, its `SourceID` is the app, and the app was asked once.
-  4. The User revokes the app's grant with `apphost.revoke`. The same describe
-     answers nothing, and the app is not asked again.
 - **oracle** `verify.py` — every step held, plus the same story with a fresh
   app and a fresh note (`driver verify`).
 
@@ -26,9 +24,7 @@ lease (`mod/objects/src/external_registration.go`). `objects.describe` fans the
 request out to every registered describer, and an external describer queries
 `objects.describe` on the app's identity and stamps each descriptor with that
 identity (`mod/objects/src/external_describer.go`). The node rechecks the
-describer grant on every fan-out and drops a describer that no longer holds it,
-so the revoke in step 4 also leaves no describer registered in the shared
-world.
+describer permit on every fan-out and drops a describer that no longer holds it.
 
 `registration-lease` covers the lease of a describer registration, with
 registrants that serve nothing. This test covers an app that serves the
@@ -38,3 +34,7 @@ descriptor the User receives.
 client, so the driver makes the app's client the process default and gives the
 User a client of its own. The note is never stored: `objects.describe` asks the
 describers whether or not node1 holds the object.
+
+Revocation is not tested: grants are gone, and revocations are a Non-goal
+of Swarm State and User Authority (G7). The app holds its permit by a
+contract its host signs once the harness answerer approves its request.

@@ -4,3 +4,4 @@ timeout  = 180
 # why destroys: the front app moves to node2
 destroys = true
 facts    = ["app_moves"]
+answers  = "it answers SwarmState requests itself: the User's answer is what it tests"

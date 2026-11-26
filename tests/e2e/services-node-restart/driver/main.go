@@ -26,7 +26,8 @@ import (
 	"syscall"
 	"time"
 
-	apphostapi "github.com/astralp2p/astral-go/api/apphost"
+	"github.com/astralp2p/astrald/tests/e2e/internal/contracts"
+
 	apphostcli "github.com/astralp2p/astral-go/api/apphost/client"
 	"github.com/astralp2p/astral-go/api/auth"
 	"github.com/astralp2p/astral-go/api/services"
@@ -79,7 +80,7 @@ func connect(token string) *astrald.Client {
 // register mints an app identity on the node, with permits, and returns it with
 // a client of its own token.
 func register(ctx *astral.Context, permits ...*auth.Permit) (*astral.Identity, *astrald.Client, error) {
-	token, err := apphostcli.New(nil, connect(os.Getenv("APP_NODE_TOKEN"))).Register(ctx, permits...)
+	token, err := contracts.Register(ctx, connect(os.Getenv("APP_NODE_TOKEN")), os.Getenv("APP_NODE_ENDPOINT"), permits...)
 	if err != nil {
 		return nil, nil, fmt.Errorf("registering: %w", err)
 	}
@@ -89,16 +90,14 @@ func register(ctx *astral.Context, permits ...*auth.Permit) (*astral.Identity, *
 // grantDiscovery lets app discover service on any node, granted by the node's
 // admin: a caller with no permit sees nothing of a private offering and is not
 // refused, and the grant keeps the test off the swarm-app rule.
-func grantDiscovery(ctx *astral.Context, app *astral.Identity) error {
+func grantDiscovery(ctx *astral.Context, app *astrald.Client) error {
 	cs := astral.NewBundle()
 	scope := &services.DiscoveryScope{Rules: []*services.DiscoveryRule{{Services: []astral.String8{service}}}}
 	if err := cs.Append(scope); err != nil {
 		return err
 	}
-	return apphostcli.New(nil, connect(os.Getenv("APP_NODE_TOKEN"))).Grant(ctx, &apphostapi.GrantRequest{
-		Identity: app,
-		Permits:  []*auth.Permit{{Action: astral.String8(services.ServiceDiscoveryAction{}.ObjectType()), Constraints: cs}},
-	})
+	_, err := contracts.Request(ctx, app, &auth.Permit{Action: astral.String8(services.ServiceDiscoveryAction{}.ObjectType()), Constraints: cs})
+	return err
 }
 
 // registerConsumer is register plus the discovery grant.
@@ -107,7 +106,7 @@ func registerConsumer(ctx *astral.Context) (*astral.Identity, *astrald.Client, e
 	if err != nil {
 		return nil, nil, err
 	}
-	if err := grantDiscovery(ctx, id); err != nil {
+	if err := grantDiscovery(ctx, cli); err != nil {
 		return nil, nil, fmt.Errorf("granting discovery: %w", err)
 	}
 	return id, cli, nil

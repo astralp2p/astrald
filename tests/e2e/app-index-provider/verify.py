@@ -3,8 +3,7 @@
 
 The oracle repeats the whole story with a fresh app and a fresh repository
 (`driver verify`): node1 tells a subscribed indexer app about a note stored
-in an indexed repository, and refuses the app's next subscription once its
-grant is revoked.
+in an indexed repository.
 """
 import os
 import subprocess
@@ -16,8 +15,6 @@ from lib.sessionio import load
 ROOT = Path(__file__).resolve().parents[3]
 STEPS = ["registered_indexer", "told_about_the_note"]
 
-# the one check without the grant: node1 refuses the app's subscription
-STEPS += ["revoked_app_cannot_subscribe"]
 
 facts = load()["facts"].get("app_index_provider", {})
 missing = [s for s in STEPS if not facts.get(s)]

@@ -19,6 +19,7 @@ import astral
 from astral.api.crypto import public_key_to_identity
 
 from lib.sessionio import load, write_facts
+from lib import swarmstate as ss
 
 ROOT = Path(__file__).resolve().parents[3]
 DRIVER = "./tests/e2e/app-preexisting-provider-sync/driver"
@@ -58,7 +59,8 @@ async def adopt(home: dict, joiner: dict, user_token: str) -> None:
     async with await astral.connect(home["endpoint"], token=user_token) as c:
         await c.nodes.new_link(joiner["identity"], endpoint=joiner["lan_endpoint"],
                                strategies="basic", experimental=True, timeout=60.0)
-        await c.user.adopt(joiner["identity"])
+    # note: user.adopt is gone (G7); the joiner joins through home as a Member
+    await ss.admit(home, user_token, joiner)
 
 
 async def state_of(n: dict) -> str:

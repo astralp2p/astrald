@@ -20,6 +20,8 @@ import asyncio
 import time
 from dataclasses import dataclass
 
+import astral
+
 from lib import jsonops
 
 JOIN = "mod.user.signed_join_request"
@@ -256,3 +258,23 @@ def move_key(src: dict, dst: dict, identity: str) -> dict:
                    stdin="\n".join(blobs) + "\n")
     assert "error" not in out, f"moving {identity}'s key: {out['error']}"
     return out
+
+
+async def admit(carrier: dict, user_token: str, joiner: dict, tier: str = "member",
+                timeout: float = 60.0) -> dict:
+    """joiner joins the User's swarm through carrier at tier, the User
+    approving its JoinRequest on carrier: what user.adopt did before G7.
+    Both nodes learn each other's LAN endpoint first. Returns the membership
+    envelope the join answered; an answer that is not one raises."""
+    async with await astral.connect(carrier["endpoint"], token=carrier["token"]) as c:
+        await c.nodes.add_endpoint(joiner["identity"], joiner["lan_endpoint"], experimental=True)
+    async with await astral.connect(joiner["endpoint"], token=joiner["token"]) as c:
+        await c.nodes.add_endpoint(carrier["identity"], carrier["lan_endpoint"], experimental=True)
+    async with await astral.connect(joiner["endpoint"], token=joiner["token"]) as jc, \
+            await astral.connect(carrier["endpoint"], token=user_token) as uc:
+        joined, _ = await admit_member(jc, uc, carrier["identity"], joiner["identity"],
+                                       tier, timeout)
+    if not joined or joined[0]["Type"] != "mod.auth.signed_contract":
+        raise AssertionError(f"{joiner['identity']} did not join through "
+                             f"{carrier['identity']}: {joined}")
+    return joined[0]

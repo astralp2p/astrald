@@ -7,8 +7,9 @@ import (
 	"slices"
 	"time"
 
+	"github.com/astralp2p/astrald/tests/e2e/internal/joins"
+
 	nodescli "github.com/astralp2p/astral-go/api/nodes/client"
-	usercli "github.com/astralp2p/astral-go/api/user/client"
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astral-go/astral/channel"
 	"github.com/astralp2p/astral-go/lib/apphost"
@@ -66,9 +67,8 @@ func joinSwarm(ctx *astral.Context, s *session) error {
 		if err := addEndpoint(ctx, admin(n), n1); err != nil {
 			return err
 		}
-		actx, cancel := ctx.IncludeZone(astral.ZoneNetwork).WithTimeout(60 * time.Second)
-		_, err := usercli.New(nil, connect(n1.Endpoint, s.Facts.UserToken)).Adopt(actx, n.Identity)
-		cancel()
+		// note: user.adopt is gone (G7); the node joins through node1 as a Member
+		_, err := joins.Admit(ctx, admin(n), connect(n1.Endpoint, s.Facts.UserToken), n1.Identity, n.Identity)
 		if err != nil {
 			return fmt.Errorf("adopting %s on node1: %w", name, err)
 		}

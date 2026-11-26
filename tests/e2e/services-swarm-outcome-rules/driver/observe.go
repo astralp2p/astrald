@@ -34,15 +34,16 @@ type observation struct {
 // before it returns, so the next run can advertise the same names.
 func observe(w *world) (*observation, error) {
 	ctx := astral.NewContext(nil)
-	consumer, f, err := app(w.admin1, w.n1)
+	discoverPermit, err := discoveryOf(open, slow, gone)
+	if err != nil {
+		return nil, err
+	}
+	consumer, f, err := app(w.admin1, w.n1, discoverPermit)
 	if err != nil {
 		return nil, err
 	}
 	provider, c2, err := app(w.admin2, w.n2, serveApps)
 	if err != nil {
-		return nil, err
-	}
-	if err := w.grantDiscovery(consumer, open, slow, gone); err != nil {
 		return nil, err
 	}
 

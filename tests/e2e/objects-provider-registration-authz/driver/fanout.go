@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"os"
 	"sort"
 	"sync"
 	"time"
@@ -96,28 +95,4 @@ func checkDials(providers map[string]*provider.Provider, current probe, f *facts
 	}
 	sort.Strings(bad)
 	return f.checks.Check("dials", len(bad) == 0, "node1's fan-out dialed otherwise than the accepted cells once each: %v", bad)
-}
-
-// revokeAll revokes ServeObjects from every app the matrix granted it, so no
-// app stays a registered provider in the world after the driver.
-func revokeAll(ctx *astral.Context, user *astrald.Client, providers map[string]*provider.Provider) {
-	for _, c := range matrix {
-		p, ok := providers[c.name]
-		if !ok || !grantsServeObjects(c) {
-			continue
-		}
-		if err := provider.Revoke(ctx, user, p.App.ID, provider.ServeObjects); err != nil {
-			fmt.Fprintf(os.Stderr, "revoke ServeObjects of app %s: %v\n", c.name, err)
-		}
-	}
-}
-
-func grantsServeObjects(c cellApp) bool {
-	permits, _ := c.permits()
-	for _, p := range permits {
-		if string(p.Action) == provider.ServeObjects {
-			return true
-		}
-	}
-	return false
 }

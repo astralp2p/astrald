@@ -18,6 +18,8 @@ import (
 	"sync"
 	"syscall"
 
+	"github.com/astralp2p/astrald/tests/e2e/internal/contracts"
+
 	apphostcli "github.com/astralp2p/astral-go/api/apphost/client"
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astral-go/lib/apphost"
@@ -70,7 +72,7 @@ func serve() error {
 	endpoint := os.Getenv("APP_NODE_ENDPOINT")
 	admin := astrald.New(apphost.NewRouter(endpoint, os.Getenv("APP_NODE_TOKEN")))
 	ctx := astral.NewContext(nil)
-	token, err := apphostcli.New(nil, admin).Register(ctx)
+	token, err := contracts.Register(ctx, admin, endpoint)
 	if err != nil {
 		return fmt.Errorf("registering: %w", err)
 	}

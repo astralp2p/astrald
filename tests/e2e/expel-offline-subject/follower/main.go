@@ -22,8 +22,6 @@ import (
 	"syscall"
 	"time"
 
-	apphostapi "github.com/astralp2p/astral-go/api/apphost"
-	apphostcli "github.com/astralp2p/astral-go/api/apphost/client"
 	"github.com/astralp2p/astral-go/api/auth"
 	"github.com/astralp2p/astral-go/api/services"
 	servicescli "github.com/astralp2p/astral-go/api/services/client"
@@ -123,10 +121,7 @@ func follow(ctx *astral.Context, n provider.Node) (*servicescli.Watcher, *astral
 	if err := scope.Append(&services.DiscoveryScope{Rules: []*services.DiscoveryRule{rule}}); err != nil {
 		return nil, nil, err
 	}
-	err = apphostcli.New(nil, admin).Grant(ctx, &apphostapi.GrantRequest{
-		Identity: app.ID,
-		Permits:  []*auth.Permit{{Action: astral.String8(services.ServiceDiscoveryAction{}.ObjectType()), Constraints: scope}},
-	})
+	err = provider.Grant(ctx, app, &auth.Permit{Action: astral.String8(services.ServiceDiscoveryAction{}.ObjectType()), Constraints: scope})
 	if err != nil {
 		return nil, nil, fmt.Errorf("grant discovery on %v: %w", n.Identity, err)
 	}

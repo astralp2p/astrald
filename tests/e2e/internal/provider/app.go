@@ -3,13 +3,12 @@ package provider
 import (
 	"fmt"
 
-	apphostapi "github.com/astralp2p/astral-go/api/apphost"
-	apphostcli "github.com/astralp2p/astral-go/api/apphost/client"
 	"github.com/astralp2p/astral-go/api/auth"
 	"github.com/astralp2p/astral-go/api/objects"
 	objectscli "github.com/astralp2p/astral-go/api/objects/client"
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astral-go/lib/astrald"
+	"github.com/astralp2p/astrald/tests/e2e/internal/contracts"
 )
 
 // ServeObjects is the action every object-provider registration answers to.
@@ -51,12 +50,13 @@ type App struct {
 }
 
 // Register mints a fresh app on node n through registrar, a client that may
-// register apps there (the User or the node), and grants it permits. The node
-// adds ServeApps and UseBlueprints to every registration.
+// register apps there (the User or the node), and waits until its host signed
+// the contract its registration requested (contracts.Await). The node adds
+// ServeApps and UseBlueprints to every registration.
 func Register(ctx *astral.Context, registrar *astrald.Client, n Node, permits ...*auth.Permit) (*App, error) {
-	tok, err := apphostcli.New(nil, registrar).Register(ctx, permits...)
+	tok, err := contracts.Register(ctx, registrar, n.Endpoint, permits...)
 	if err != nil {
-		return nil, fmt.Errorf("apphost.register: %w", err)
+		return nil, err
 	}
 	return &App{
 		ID:       tok.Identity,
@@ -86,13 +86,9 @@ func RegisterRole(ctx *astral.Context, cli *objectscli.Client, role astral.Strin
 	return nil, fmt.Errorf("no register op for role %q", role)
 }
 
-// Grant gives id permits on the node of admin, a client that may manage apps
-// there.
-func Grant(ctx *astral.Context, admin *astrald.Client, id *astral.Identity, permits ...*auth.Permit) error {
-	return apphostcli.New(nil, admin).Grant(ctx, &apphostapi.GrantRequest{Identity: id, Permits: permits})
-}
-
-// Revoke removes every grant of action from id on the node of admin.
-func Revoke(ctx *astral.Context, admin *astrald.Client, id *astral.Identity, action string) error {
-	return apphostcli.New(nil, admin).RevokeAction(ctx, id, action)
+// Grant has the app a's host sign it a contract for permits: a fresh
+// ContractRequest, approved by the harness answerer (contracts.Request).
+func Grant(ctx *astral.Context, a *App, permits ...*auth.Permit) error {
+	_, err := contracts.Request(ctx, a.Client, permits...)
+	return err
 }

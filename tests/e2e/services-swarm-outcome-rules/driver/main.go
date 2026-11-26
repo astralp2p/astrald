@@ -14,8 +14,8 @@ import (
 	"sort"
 	"time"
 
-	apphostapi "github.com/astralp2p/astral-go/api/apphost"
-	apphostcli "github.com/astralp2p/astral-go/api/apphost/client"
+	"github.com/astralp2p/astrald/tests/e2e/internal/contracts"
+
 	"github.com/astralp2p/astral-go/api/auth"
 	"github.com/astralp2p/astral-go/api/services"
 	servicescli "github.com/astralp2p/astral-go/api/services/client"
@@ -106,7 +106,7 @@ func connect(n node) *astrald.Client { return astrald.New(apphost.NewRouter(n.En
 // client on n.
 func app(admin *astrald.Client, n node, permits ...*auth.Permit) (*astral.Identity, *servicescli.Client, error) {
 	ctx := astral.NewContext(nil)
-	tok, err := apphostcli.New(nil, admin).Register(ctx, permits...)
+	tok, err := contracts.Register(ctx, admin, n.Endpoint, permits...)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -117,20 +117,17 @@ func apphostClient(endpoint, token string) *astrald.Client {
 	return astrald.New(apphost.NewRouter(endpoint, token))
 }
 
-// grantDiscovery lets app discover names on any node, on node1.
-func (w *world) grantDiscovery(app *astral.Identity, names ...string) error {
+// discoveryOf is a permit to discover names on any node.
+func discoveryOf(names ...string) (*auth.Permit, error) {
 	rule := &services.DiscoveryRule{}
 	for _, n := range names {
 		rule.Services = append(rule.Services, astral.String8(n))
 	}
 	cs := astral.NewBundle()
 	if err := cs.Append(&services.DiscoveryScope{Rules: []*services.DiscoveryRule{rule}}); err != nil {
-		return err
+		return nil, err
 	}
-	return apphostcli.New(nil, w.admin1).Grant(astral.NewContext(nil), &apphostapi.GrantRequest{
-		Identity: app,
-		Permits:  []*auth.Permit{{Action: astral.String8(services.ServiceDiscoveryAction{}.ObjectType()), Constraints: cs}},
-	})
+	return &auth.Permit{Action: astral.String8(services.ServiceDiscoveryAction{}.ObjectType()), Constraints: cs}, nil
 }
 
 // outcome is one discovery read to its end: what arrived, in a form the

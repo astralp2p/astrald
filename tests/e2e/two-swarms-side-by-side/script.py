@@ -19,6 +19,7 @@ import asyncio
 import astral
 
 from lib.sessionio import load, write_facts
+from lib import swarmstate as ss
 
 DEADLINE = 30.0
 
@@ -53,8 +54,10 @@ async def main():
     b_id, b_token = str(boot.identity), str(boot.token)
 
     await link(b1, b2)
-    async with await astral.connect(b1["endpoint"], token=b_token) as c:
-        b2_contract = await c.user.adopt(b2["identity"])
+    # note: user.adopt is gone (G7); tssb2 joins B's swarm through tssb1
+    await ss.admit(b1, b_token, b2)
+    async with await astral.connect(b1["endpoint"], token=b1["token"]) as c:
+        b2_contract = await c.user.contract(target=b2["identity"])
 
     # the one link between the swarms, dialled by node2
     await link(n2, b1)

@@ -15,6 +15,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/astralp2p/astrald/tests/e2e/internal/contracts"
+
 	apphostcli "github.com/astralp2p/astral-go/api/apphost/client"
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astral-go/astral/channel"
@@ -110,7 +112,7 @@ func run(path string) (map[string]bool, error) {
 // startPlayer registers a player app on n through the admin and serves ping
 // on a client of the player's own token.
 func startPlayer(ctx *astral.Context, admin *astrald.Client, n node) (player, func(), error) {
-	token, err := apphostcli.New(nil, admin).Register(ctx)
+	token, err := contracts.Register(ctx, admin, n.Endpoint)
 	if err != nil {
 		return player{}, nil, fmt.Errorf("registering: %w", err)
 	}

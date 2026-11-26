@@ -4,3 +4,4 @@ timeout  = 180
 # why destroys: node3 joins the swarm, so every later test in the world sees three members
 destroys = true
 facts    = ["member_join"]
+answers  = "it answers SwarmState requests itself: the User's answer is what it tests"

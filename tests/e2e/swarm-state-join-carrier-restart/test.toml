@@ -5,3 +5,4 @@ restart  = ["node1"]
 # why destroys: node1, the carrier, restarts
 destroys = true
 facts    = ["join_resent"]
+answers  = "it answers SwarmState requests itself: the User's answer is what it tests"

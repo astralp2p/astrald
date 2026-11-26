@@ -4,3 +4,4 @@ timeout  = 180
 # why destroys: it adds apps and their requests to the swarm, which a later test in the world would see
 destroys = true
 facts    = ["member_approval"]
+answers  = "it answers SwarmState requests itself: the User's answer is what it tests"

@@ -1,14 +1,14 @@
 # tests/e2e/internal/provider
 
 The shared Go helper of the object-provider drivers:
-`objects-provider-registration-authz`, `objects-provider-read-robustness` and
-`objects-provider-revoke-lease`. It is not a test: it has no `test.toml`, so
+`objects-provider-registration-authz` and `objects-provider-read-robustness`.
+It is not a test: it has no `test.toml`, so
 the planner never loads it.
 
 | file | holds |
 |------|-------|
 | `session.go` | `Load` of the session view, `Node` (with its `HostIP`), `UserToken`, `Connect` |
-| `app.go` | `Register` of an app on a `Node` with permits, `ServeObjectsPermit`, `StoreObjectsPermit`, `RegisterAs`/`RegisterRole` by role, `Grant`, `Revoke` |
+| `app.go` | `Register` of an app on a `Node` with permits, waiting for its contract (`tests/e2e/internal/contracts`), `ServeObjectsPermit`, `StoreObjectsPermit`, `RegisterAs`/`RegisterRole` by role, `Grant` (a fresh ContractRequest) |
 | `provider.go` | `Provider`: an app that serves the objects ops with counting handlers, and `Serve` through `apps.ServeWith` with the app's own client, on a handler bound at the node's `host_ip` |
 | `ops.go` | the `objects.find`, `objects.describe`, `objects.search` and `objects.read` handlers |
 | `calls.go` | `FindAll`, `DescribeAll`, `SearchAll`, `ReadAll` as a caller, and `Emit` of the facts line |

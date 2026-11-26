@@ -17,6 +17,7 @@ import astral
 
 from lib import meshapps
 from lib.sessionio import load, write_facts
+from lib import swarmstate as ss
 
 NAMES = ["node1", "node2", "node3", "node4", "node5"]
 PREFIX = "f3"
@@ -27,12 +28,8 @@ async def adopt(doc: dict) -> float:
     """node1 and node5 meet, and the User adopts node5 on node1; the time of
     the adoption's answer."""
     n1, n5 = doc["nodes"]["node1"], doc["nodes"]["node5"]
-    async with await astral.connect(n1["endpoint"], token=n1["token"]) as c:
-        await c.nodes.add_endpoint(n5["identity"], n5["lan_endpoint"], experimental=True)
-    async with await astral.connect(n5["endpoint"], token=n5["token"]) as c:
-        await c.nodes.add_endpoint(n1["identity"], n1["lan_endpoint"], experimental=True)
-    async with await astral.connect(n1["endpoint"], token=doc["facts"]["user_token"]) as cu:
-        await cu.user.adopt(n5["identity"])
+    # note: user.adopt is gone (G7); node5 joins through node1 as a Member
+    await ss.admit(n1, doc["facts"]["user_token"], n5)
     return time.time()
 
 

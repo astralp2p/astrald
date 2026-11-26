@@ -3,6 +3,7 @@
 The runner owns run state: each world's record, every test's facts, and the
 session view each driver and oracle reads. A world owns machines only.
 """
+import contextlib
 import json
 import os
 import platform
@@ -77,6 +78,33 @@ def _run_step(py: str, script: Path, log: Path, env: dict, timeout: int) -> int:
         except subprocess.TimeoutExpired:
             f.write(b"\n[runner] step timed out\n")
             return 124
+
+
+@contextlib.contextmanager
+def _answerer(t, art: Path, env: dict):
+    """Run the harness answerer (lib/answerer.py) while the test runs, from
+    its driver to its oracle, unless the test answers SwarmState requests
+    itself (`answers`).
+
+    why the oracle too: many oracles tell the story again with fresh apps,
+    and an app a restart registers again files its request after the
+    driver."""
+    if t.answers:
+        yield
+        return
+    with (art / "answerer.log").open("wb") as log:
+        p = subprocess.Popen([sys.executable, "-m", "lib.answerer"],
+                             cwd=TESTS, stdout=log, stderr=subprocess.STDOUT,
+                             env=env)
+        try:
+            yield
+        finally:
+            p.terminate()
+            try:
+                p.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                p.kill()
+                p.wait()
 
 
 def _perform(ex, t, drive, art: Path, view) -> tuple:
@@ -714,7 +742,8 @@ class _Run:
             def drive(env):
                 return _run_step(sys.executable, t.dir / "script.py",
                                  art / "driver.log", env, t.timeout)
-        status, fk, phase = _perform(ex, t, drive, art, view)
+        with _answerer(t, art, env):
+            status, fk, phase = _perform(ex, t, drive, art, view)
         died = ex.dead()
         if died and fk != "environment":
             # why: a dead daemon voids any verdict, even a nominal pass
