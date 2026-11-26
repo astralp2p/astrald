@@ -30,7 +30,7 @@ ended, receives the same provider's offering available once more.
   oracle. node1 is not
   restarted, so the follow's stream on node1 is one stream across the whole
   story. node2 comes back on its leased endpoint with its token table and
-  grants read from the database.
+  contracts read from the database.
 - **oracle** `verify.py` — node2 restarted once, node1 not, and node2 kept its
   endpoint; the provider and consumer processes are the same pids and alive.
   Within 90 s the follow's events after the driver's count hold a Removed
@@ -82,8 +82,7 @@ running node, and from `app-node-restart-reconnect`, which proves a caller
 reaches the reconnected provider but never discovers it.
 
 Following the visibility rule of provider visibility for discovery: the
-service is advertised open and the consumer holds a discovery grant from
+service is advertised open and the consumer holds a discovery permit from
 node1's admin, so what the follow sees does not depend on the swarm-app rule. A
 caller without a permit would see nothing and read `services.not_granted`; this
-test does not assert that (`app-discover-local`, `request-grant-scope` and
-`services-swarm` do).
+test does not assert that (`app-discover-local` and `services-swarm` do).
