@@ -237,9 +237,12 @@ func TestJoinPrivilegedNeedsUserKey(t *testing.T) {
 		t.Fatalf("carry without the user key: %v, want %v", err, errUserKeyRequired)
 	}
 
-	// a ceremony that cannot reach the user key signs nothing
+	// a ceremony that cannot reach the user key signs nothing; a Coldcard's
+	// press is the user action, so these ceremonies sign without
+	// user.confirm_join
 	c := f.newCarrier()
 	c.ceremony = newUserKeyCeremony(astral.GenerateIdentity(), f.keys, f.swarm, f.swarm)
+	c.ceremony.devicePress = true
 	if _, err := c.Carry(astral.NewContext(nil), req); err == nil {
 		t.Fatal("ceremony signed without the user key")
 	}
@@ -249,6 +252,7 @@ func TestJoinPrivilegedNeedsUserKey(t *testing.T) {
 
 	// the user key signs, and its text shows the tier
 	c.ceremony = newUserKeyCeremony(f.userID, f.keys, f.swarm, f.swarm)
+	c.ceremony.devicePress = true
 	sc, err := c.Carry(astral.NewContext(nil), req)
 	if err != nil {
 		t.Fatalf("carry with the user key: %v", err)
@@ -283,7 +287,7 @@ func TestBootstrapSignsPrivilegedMembership(t *testing.T) {
 	key := newJoinKeyring()
 	userID := key.newKey()
 
-	sc, err := f.mod.signPrivilegedClaim(astral.NewContext(nil), key.key(userID))
+	sc, err := f.mod.signPrivilegedClaim(astral.NewContext(nil), f.nodeID, key.key(userID))
 	if err != nil {
 		t.Fatalf("sign: %v", err)
 	}

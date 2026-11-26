@@ -45,10 +45,14 @@ type swarmAuthorizer interface {
 // the requests in SwarmState with their status, and answers one with an
 // Approval or a Decline signed by this node, only within this node's tier.
 //
+// It also serves user.confirm_join, through which the user has its key sign
+// a pending Privileged JoinRequest (swarm_confirm_op.go).
+//
 // It reaches SwarmState only through nodes.SwarmState and reads what entries
 // mean only through user.SwarmView. Nothing registers it yet: G7 builds it
-// with mod.Nodes, the SwarmView implementation, mod.Auth and
-// mod.Crypto.NodeSigner(), and adds it to the module's router with
+// with mod.Nodes, the SwarmView implementation, mod.Auth,
+// mod.Crypto.NodeSigner() and, on a node that reaches the user key, the
+// userKeyCeremony its carrier uses, and adds it to the module's router with
 // AddStructPrefix(ops, "Op").
 type SwarmAnswerOps struct {
 	Node   *astral.Identity
@@ -56,6 +60,9 @@ type SwarmAnswerOps struct {
 	View   usermod.SwarmView
 	Auth   swarmAuthorizer
 	Signer crypto.HashSigner
+	// UserKey signs for user.confirm_join; nil: this node cannot reach the
+	// user key, and user.confirm_join refuses.
+	UserKey *userKeyCeremony
 }
 
 type opSwarmRequestsArgs struct {

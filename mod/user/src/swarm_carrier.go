@@ -247,10 +247,15 @@ func (c *swarmCarrier) membershipValidity() time.Duration {
 }
 
 // carryPrivileged ends a Privileged-tier join: the user key signs the
-// membership in a ceremony, and no Approval stands in for it (D2).
+// membership in a ceremony, and no Approval stands in for it (D2). The user
+// key signs only after a user action: a Coldcard press, or, with a software
+// user key, the user's user.confirm_join, which this carrier waits for.
 func (c *swarmCarrier) carryPrivileged(ctx *astral.Context, req *user.SignedJoinRequest, reqID *astral.ObjectID) (*auth.SignedContract, error) {
 	if c.ceremony == nil {
 		return nil, errUserKeyRequired
+	}
+	if !c.ceremony.devicePress {
+		return c.awaitConfirmation(ctx, req, reqID)
 	}
 
 	switch {
@@ -260,8 +265,8 @@ func (c *swarmCarrier) carryPrivileged(ctx *astral.Context, req *user.SignedJoin
 		return nil, errJoinExpired
 	}
 
-	if m, ok := c.view.Membership(req.Joiner); ok && m.Tier == user.TierPrivilegedMember && m.Issuer.IsEqual(c.ceremony.user) {
-		return m.SignedContract, nil
+	if sc := userKeyMembership(c.view, c.ceremony.user, req.Joiner); sc != nil {
+		return sc, nil
 	}
 
 	sc, err := c.ceremony.Membership(ctx, req.Joiner, user.TierPrivilegedMember, reqID)
@@ -272,4 +277,45 @@ func (c *swarmCarrier) carryPrivileged(ctx *astral.Context, req *user.SignedJoin
 		return nil, err
 	}
 	return sc, nil
+}
+
+// awaitConfirmation polls SwarmState's head until the user, through
+// user.confirm_join, has stored the joiner's PrivilegedMembership, and returns
+// it. A Decline or the request's Timeout ends the wait first; an ended ctx
+// pauses it, as in awaitAnswer.
+func (c *swarmCarrier) awaitConfirmation(ctx *astral.Context, req *user.SignedJoinRequest, reqID *astral.ObjectID) (*auth.SignedContract, error) {
+	ticker := time.NewTicker(c.poll)
+	defer ticker.Stop()
+
+	var head uint64
+	for first := true; ; first = false {
+		if h := c.state.SwarmHead(); first || h != head {
+			head = h
+			if c.view.RequestStatus(reqID) == user.RequestDeclined {
+				return nil, errJoinDeclined
+			}
+			if sc := userKeyMembership(c.view, c.ceremony.user, req.Joiner); sc != nil {
+				return sc, nil
+			}
+		}
+		if req.Expired(c.now()) {
+			return nil, errJoinExpired
+		}
+
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case <-ticker.C:
+		}
+	}
+}
+
+// userKeyMembership returns subject's PrivilegedMembership signed by the user
+// key userID, or nil.
+func userKeyMembership(view usermod.SwarmView, userID, subject *astral.Identity) *auth.SignedContract {
+	m, ok := view.Membership(subject)
+	if ok && m.Tier == user.TierPrivilegedMember && m.Issuer.IsEqual(userID) {
+		return m.SignedContract
+	}
+	return nil
 }
