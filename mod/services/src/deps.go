@@ -9,6 +9,7 @@ import (
 	authmod "github.com/astralp2p/astrald/mod/auth"
 	"github.com/astralp2p/astrald/mod/objects"
 	"github.com/astralp2p/astrald/mod/tree"
+	"github.com/astralp2p/astrald/mod/user"
 )
 
 type Deps struct {
@@ -16,15 +17,7 @@ type Deps struct {
 	Auth    authmod.Module
 	Objects objects.Module
 	Tree    tree.Module
-	User    memberReader
-}
-
-// memberReader is the part of the user module services reads: the user and the
-// members of its local swarm.
-type memberReader interface {
-	Ready() <-chan struct{}
-	Identity() *astral.Identity
-	LocalSwarm() []*astral.Identity
+	User    user.Module
 }
 
 // visibilityPath is the tree node holding the services settings.

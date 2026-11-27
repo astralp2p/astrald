@@ -12,6 +12,7 @@ import (
 	authmod "github.com/astralp2p/astrald/mod/auth"
 	"github.com/astralp2p/astrald/mod/sys"
 	"github.com/astralp2p/astrald/mod/tree"
+	usermod "github.com/astralp2p/astrald/mod/user"
 )
 
 type Deps struct {
@@ -21,15 +22,7 @@ type Deps struct {
 }
 
 type OptionalDeps struct {
-	User ownerUser
-}
-
-// ownerUser is the part of the user module sys reads: the current user and
-// whether one ever owned this node.
-type ownerUser interface {
-	Ready() <-chan struct{}
-	Identity() *astral.Identity
-	WasOwned() bool
+	User usermod.Module
 }
 
 // appProvisioner mints an App identity: a key pair, a signed app contract

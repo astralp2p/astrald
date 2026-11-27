@@ -8,6 +8,7 @@ import (
 	"github.com/astralp2p/astrald/mod/crypto"
 	"github.com/astralp2p/astrald/mod/dir"
 	"github.com/astralp2p/astrald/mod/objects"
+	"github.com/astralp2p/astrald/mod/user"
 )
 
 type Deps struct {
@@ -20,12 +21,7 @@ type Deps struct {
 
 // OptionalDeps are the modules messaging runs without.
 type OptionalDeps struct {
-	User siblingPusher
-}
-
-// siblingPusher is the part of the user module messaging uses.
-type siblingPusher interface {
-	PushToSiblings(ctx *astral.Context, obj astral.Object)
+	User user.Module
 }
 
 func (mod *Module) LoadDependencies(ctx *astral.Context) (err error) {

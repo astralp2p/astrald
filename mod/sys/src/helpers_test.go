@@ -53,7 +53,8 @@ func (s *stubUser) PushToSiblingsRetry(*astral.Context, astral.Object)      {}
 func (s *stubUser) Expel(*astral.Context, *astral.Identity) (*user.SignedExpulsion, error) {
 	return nil, nil
 }
-func (s *stubUser) WasOwned() bool { return s.owned }
+func (s *stubUser) IsBanned(*astral.Identity) bool { return false }
+func (s *stubUser) WasOwned() bool                 { return s.owned }
 
 func closedChan() chan struct{} {
 	c := make(chan struct{})

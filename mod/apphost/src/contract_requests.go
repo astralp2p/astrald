@@ -15,6 +15,7 @@ import (
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astral-go/sig"
 	apphostmod "github.com/astralp2p/astrald/mod/apphost"
+	usermod "github.com/astralp2p/astrald/mod/user"
 )
 
 // Rate limits of apphost.request_contract, counted over
@@ -51,25 +52,6 @@ type requestVerifier interface {
 	Verify(key *crypto.PublicKey, sig *crypto.Signature, obj crypto.SignableTextObject) error
 }
 
-// hostSwarmState is the part of the user module's SwarmState (mod/user) the
-// host worker writes and reads.
-type hostSwarmState interface {
-	FileContractRequest(ctx *astral.Context, app *astral.Identity, permits []*auth.Permit) (*user.SignedContractRequest, error)
-	AddContract(ctx *astral.Context, sc *auth.SignedContract) error
-	SwarmEntry(id *astral.ObjectID) (astral.Object, error)
-	SwarmEntries(kind user.EntryKind) ([]*astral.ObjectID, error)
-	SwarmHead() uint64
-}
-
-// hostSwarmView is the part of the user module's SwarmView (mod/user) the
-// host worker reads.
-type hostSwarmView interface {
-	RequestStatus(req *astral.ObjectID) user.RequestStatus
-	ContractsOf(req *astral.ObjectID) []*auth.SignedContract
-	Membership(id *astral.Identity) (*user.Membership, bool)
-	MayAnswer(signer *astral.Identity, req *astral.ObjectID) bool
-}
-
 // contractRequests files the ContractRequests of the apps this node hosts,
 // co-signs an approver's offer for each, and signs the app's contract (the
 // host worker). The grant is two contracts: the approver's to this node,
@@ -79,8 +61,8 @@ type hostSwarmView interface {
 // this node, and reads what entries mean only through user.SwarmView.
 type contractRequests struct {
 	node    *astral.Identity
-	state   hostSwarmState
-	view    hostSwarmView
+	state   usermod.SwarmState
+	view    usermod.SwarmView
 	signer  contractSigner
 	now     func() time.Time
 	limiter *requestLimiter
@@ -109,7 +91,7 @@ type contractRequests struct {
 	changed atomic.Pointer[chan struct{}]
 }
 
-func newContractRequests(node *astral.Identity, state hostSwarmState, view hostSwarmView,
+func newContractRequests(node *astral.Identity, state usermod.SwarmState, view usermod.SwarmView,
 	signer contractSigner) *contractRequests {
 	cr := &contractRequests{
 		node:    node,

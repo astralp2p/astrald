@@ -23,10 +23,11 @@ import (
 // fakeSwarmState is an in-memory user.SwarmState shared by every node of a
 // test swarm: what one node adds, every node reads.
 type fakeSwarmState struct {
-	mu      sync.Mutex
-	entries map[string]astral.Object
-	ids     map[user.EntryKind][]*astral.ObjectID
-	hold    bool // add holds every entry: it answers ErrSwarmEntryHeld and stores nothing
+	usermod.SwarmState // the methods below are the ones the host worker calls
+	mu                 sync.Mutex
+	entries            map[string]astral.Object
+	ids                map[user.EntryKind][]*astral.ObjectID
+	hold               bool // add holds every entry: it answers ErrSwarmEntryHeld and stores nothing
 }
 
 func newFakeSwarmState() *fakeSwarmState {
@@ -86,8 +87,6 @@ type hostState struct {
 	now  func() time.Time
 }
 
-var _ hostSwarmState = &hostState{}
-
 func (h *hostState) write(obj astral.Object) error {
 	if err := h.add(obj); err != nil && !errors.Is(err, usermod.ErrSwarmEntryHeld) {
 		return err
@@ -124,13 +123,12 @@ func (s *fakeSwarmState) objects(kind user.EntryKind) []astral.Object {
 // only its issuer signed, given to the request's filer. Every issuer may
 // answer except those in refused.
 type fakeSwarmView struct {
-	state      *fakeSwarmState
-	now        func() time.Time
-	membership *user.Membership
-	refused    map[string]bool
+	usermod.SwarmView // the methods below are the ones the host worker calls
+	state             *fakeSwarmState
+	now               func() time.Time
+	membership        *user.Membership
+	refused           map[string]bool
 }
-
-var _ hostSwarmView = &fakeSwarmView{}
 
 func (v *fakeSwarmView) RequestStatus(req *astral.ObjectID) user.RequestStatus {
 	for _, c := range v.ContractsOf(req) {

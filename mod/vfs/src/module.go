@@ -10,6 +10,7 @@ import (
 	"github.com/astralp2p/astral-go/sig"
 	"github.com/astralp2p/astrald/mod/auth"
 	"github.com/astralp2p/astrald/mod/objects"
+	"github.com/astralp2p/astrald/mod/user"
 	vfsmod "github.com/astralp2p/astrald/mod/vfs"
 )
 
@@ -21,12 +22,7 @@ type Deps struct {
 }
 
 type OptionalDeps struct {
-	User currentUser
-}
-
-// currentUser is the part of the user module vfs reads.
-type currentUser interface {
-	Identity() *astral.Identity
+	User user.Module
 }
 
 type Module struct {
