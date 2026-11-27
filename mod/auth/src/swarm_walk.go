@@ -8,7 +8,7 @@ import (
 	usermod "github.com/astralp2p/astrald/mod/user"
 )
 
-// swarmWalk is what Authorize reads from SwarmState (swarmReader).
+// swarmWalk is what Authorize reads from the swarm view (swarmReader).
 type swarmWalk struct {
 	view swarmReader
 	root func() *astral.Identity
@@ -79,45 +79,23 @@ func (mod *Module) swarmRoot(action auth.ActionObject) bool {
 	return ok && usermod.PrivilegedBy(m, root)
 }
 
-// contractLink returns the identity the walk continues as above sc, and false
-// when the link does not hold. Without a swarm, and for a contract with no
-// ApprovalID, it is the issuer, as before; such a contract carries no user
-// authority from an issuer that is not the root (unlinkedUserAuthority).
-func (mod *Module) contractLink(sc *auth.SignedContract) (*astral.Identity, bool) {
-	s := mod.swarm()
-	if s == nil || sc.ApprovalID == nil {
-		return sc.Issuer, true
-	}
-
-	approver, ok := s.approvalLink(sc)
-	if !ok {
-		return nil, false
-	}
-
-	// why: the walk skips the issuer's level, so its veto is asked here.
-	if mod.vetoed(sc.Issuer) {
-		return nil, false
-	}
-	return approver, true
-}
-
-// unlinkedUserAuthority reports whether sc is a contract with no ApprovalID,
-// from an issuer that is not the root key, and action is the user's authority:
-// a relay as the user, AdminSwarm, a sudo as the user, or an expel. The walk
-// does not follow such a contract for such an action.
+// userPowerFromNonRoot reports whether sc is a contract whose issuer is not
+// the root key and action is one of the user's four powers: an expel,
+// AdminSwarm, a relay as the user, or a sudo as the user. The walk does not
+// follow such a contract for such an action: only a contract the root key
+// issued grants one of them.
+// Spec: .ai/system/protocols/auth/README.md#authority-in-a-swarm
 //
-// why: an unlinked contract continues the walk at its issuer, so a Privileged
-// node, which the root answers for, could otherwise sign a Member a contract
-// to relay as the user or administer the swarm (D5, D6), with no Approval and
-// so with no record any other node checks.
+// why every non-root contract: swarmRoot answers for a Privileged member at
+// any hop, so a contract it issues would otherwise pass AdminSwarm or a relay
+// as the user on to its subject (D5, D6). The member still uses them itself,
+// as the actor.
 //
-// why unlinked contracts stay for every other action: an app's relay contract
-// (apphost.NewAppContract) names the app itself as ForID, its issuer's own
-// identity, and an app delegating its own permits names no user authority.
-// The root key's own contracts stay: the user signed them.
-func (mod *Module) unlinkedUserAuthority(sc *auth.SignedContract, action auth.ActionObject) bool {
+// why an app's own relay contract stays: it names the app itself as ForID,
+// its issuer's own identity, not the user.
+func (mod *Module) userPowerFromNonRoot(sc *auth.SignedContract, action auth.ActionObject) bool {
 	s := mod.swarm()
-	if s == nil || sc.ApprovalID != nil {
+	if s == nil {
 		return false
 	}
 	root := s.root()
@@ -131,67 +109,6 @@ func (mod *Module) unlinkedUserAuthority(sc *auth.SignedContract, action auth.Ac
 		return a.ForID.IsEqual(root)
 	case *auth.SudoAction:
 		return a.AsID.IsEqual(root)
-	}
-	return false
-}
-
-// approvalLink checks the Approval sc carries out and returns its signer.
-func (s *swarmWalk) approvalLink(sc *auth.SignedContract) (*astral.Identity, bool) {
-	obj, err := s.view.SwarmEntry(sc.ApprovalID)
-	if err != nil {
-		return nil, false
-	}
-	approval, ok := obj.(*user.SignedApproval)
-	if !ok || approval.IsNil() || approval.RequestID == nil || approval.Issuer.IsZero() {
-		return nil, false
-	}
-
-	// why the status and not only the Approval: a Decline beats it, as does an
-	// expel of the request's filer, carrier or subject.
-	if s.view.RequestStatus(approval.RequestID) != user.RequestApproved {
-		return nil, false
-	}
-
-	req, err := s.view.SwarmEntry(approval.RequestID)
-	if err != nil || !linksTo(req, sc) {
-		return nil, false
-	}
-
-	for _, id := range []*astral.Identity{sc.Issuer, sc.Subject, approval.Issuer} {
-		if s.view.Expelled(id) {
-			return nil, false
-		}
-	}
-
-	if !s.view.MayAnswer(approval.Issuer, approval.RequestID) {
-		return nil, false
-	}
-	return approval.Issuer, true
-}
-
-// linksTo reports whether req is a request sc may carry out: a ContractRequest
-// its issuer filed for its subject that covers its permits, or a JoinRequest
-// its issuer carried in for its subject when sc grants that tier's permit
-// alone.
-//
-// why the subject is checked: an Approval answers one identity's request, so a
-// host cannot reuse it for another app.
-func linksTo(req astral.Object, sc *auth.SignedContract) bool {
-	switch r := req.(type) {
-	case *user.SignedContractRequest:
-		return !r.IsNil() &&
-			r.FiledBy.IsEqual(sc.Issuer) &&
-			r.Identity.IsEqual(sc.Subject) &&
-			r.Covers(sc.Contract)
-	case *user.SignedJoinRequest:
-		if r.IsNil() || !r.Carrier.IsEqual(sc.Issuer) || !r.Joiner.IsEqual(sc.Subject) {
-			return false
-		}
-		// why: user.ContractTier ignores permits that name no tier, so a
-		// carrier could add RelayFor or AdminSwarm to a membership it signs and
-		// the walk would take them up to the approver, whose authority the root
-		// answers (D5, D6).
-		return user.TierOnly(sc.Contract, r.Tier)
 	}
 	return false
 }

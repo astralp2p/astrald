@@ -25,30 +25,26 @@ type claimState interface {
 	Identity() *astral.Identity
 }
 
-// swarmReader is the part of the user module's SwarmState and SwarmView
-// (mod/user) the walk reads. At every level of a walk:
+// swarmReader is the part of the user module's SwarmView (mod/user) the walk
+// reads. The walk follows each contract to its issuer, and the auth index
+// holds only contracts with both signatures valid. At every level of a walk:
 //   - root: after the veto, the walk allows the actor when it is the root key
 //     or holds a PrivilegedMembership the root key signed, and is not expelled,
 //     at any hop and for any action except user.ExpelAction and
 //     auth.SudoAction (swarmRoot);
-//   - Approval link: a contract with an ApprovalID holds only when that
-//     Approval is stored, its request is approved, the request was filed (a
-//     ContractRequest) or carried in (a JoinRequest) by the contract's issuer,
-//     names its subject and covers its permits (a JoinRequest: at the tier the
-//     contract grants), the approver is the root key or its tier may answer
-//     that request (user.MayAnswer), and neither the issuer, the subject nor
-//     the approver is expelled or vetoed. The walk then continues as the
-//     approver instead of the issuer. A contract with no ApprovalID is followed
-//     to its issuer as before.
+//   - user powers: a contract whose issuer is not the root key is not followed
+//     for user.ExpelAction, user.AdminSwarmAction, a nodes.RelayForAction for
+//     the root key or an auth.SudoAction as the root key
+//     (userPowerFromNonRoot). A Privileged member uses AdminSwarm and relays as
+//     the user itself, as the actor, and passes neither on.
 //
+// The walk reads no SwarmState entry: a contract's RequestID adds no authority.
 // The root key is the user this node is claimed by, or this node while it is
 // unclaimed (rootKey).
+// Spec: .ai/system/protocols/auth/README.md#authority-in-a-swarm
 type swarmReader interface {
-	SwarmEntry(id *astral.ObjectID) (astral.Object, error)
-	RequestStatus(req *astral.ObjectID) user.RequestStatus
 	Expelled(id *astral.Identity) bool
 	Membership(id *astral.Identity) (*user.Membership, bool)
-	MayAnswer(signer *astral.Identity, req *astral.ObjectID) bool
 }
 
 // userModule is the part of the user module auth reads.

@@ -1,106 +1,42 @@
 package auth
 
 import (
+	"bytes"
 	"errors"
 	"testing"
 	"time"
 
 	"github.com/astralp2p/astral-go/api/auth"
+	"github.com/astralp2p/astral-go/api/crypto"
 	"github.com/astralp2p/astral-go/api/nodes"
+	"github.com/astralp2p/astral-go/api/secp256k1"
 	"github.com/astralp2p/astral-go/api/user"
 	"github.com/astralp2p/astral-go/astral"
 	authmod "github.com/astralp2p/astrald/mod/auth"
+	cryptomod "github.com/astralp2p/astrald/mod/crypto"
 )
 
-// fakeSwarm is the swarm the walk reads (swarmReader) over an in-memory set of entries.
-// Its RequestStatus applies the G0 precedence: a Decline, or an expel of the
-// request's filer, carrier or subject, beats an Approval; answers by expelled
-// signers do not count.
+// fakeSwarm is the swarm the walk reads (swarmReader): the root key, the
+// memberships it holds and the expelled identities.
 type fakeSwarm struct {
-	root     *astral.Identity // the root key MayAnswer reads
-	entries  map[string]astral.Object
+	root     *astral.Identity
 	expelled map[string]bool
 	members  map[string]*user.Membership
 }
 
 func newFakeSwarm() *fakeSwarm {
-	return &fakeSwarm{
-		entries:  map[string]astral.Object{},
-		expelled: map[string]bool{},
-		members:  map[string]*user.Membership{},
-	}
-}
-
-func (f *fakeSwarm) add(t *testing.T, obj astral.Object) *astral.ObjectID {
-	t.Helper()
-	id, err := astral.ResolveObjectID(obj)
-	if err != nil {
-		t.Fatalf("resolve entry id: %v", err)
-	}
-	f.entries[id.String()] = obj
-	return id
+	return &fakeSwarm{expelled: map[string]bool{}, members: map[string]*user.Membership{}}
 }
 
 func (f *fakeSwarm) setMember(issuer, subject *astral.Identity, tier user.Tier) {
 	c := &auth.Contract{Issuer: issuer, Subject: subject, Permits: []*auth.Permit{{Action: astral.String8(tier.Action())}}}
-	f.members[subject.String()] = &user.Membership{SignedContract: &auth.SignedContract{Contract: c, IssuerSig: dummySig()}, Tier: tier}
+	sc := &auth.SignedContract{Contract: c, IssuerSig: dummySig(), SubjectSig: dummySig()}
+	f.members[subject.String()] = &user.Membership{SignedContract: sc, Tier: tier}
 }
 
 func (f *fakeSwarm) expel(id *astral.Identity) { f.expelled[id.String()] = true }
 
-// SwarmState
-
-func (f *fakeSwarm) SwarmEntry(id *astral.ObjectID) (astral.Object, error) {
-	if obj, ok := f.entries[id.String()]; ok {
-		return obj, nil
-	}
-	return nil, errors.New("not stored")
-}
-
-func (f *fakeSwarm) SwarmEntries(user.EntryKind) ([]*astral.ObjectID, error) { return nil, nil }
-func (f *fakeSwarm) SwarmHead() uint64                                       { return uint64(len(f.entries)) }
-
-// SwarmView
-
-func (f *fakeSwarm) RequestStatus(req *astral.ObjectID) user.RequestStatus {
-	obj := f.entries[req.String()]
-	var parties []*astral.Identity
-	switch r := obj.(type) {
-	case *user.SignedContractRequest:
-		parties = []*astral.Identity{r.FiledBy, r.Identity}
-	case *user.SignedJoinRequest:
-		parties = []*astral.Identity{r.Carrier, r.Joiner}
-	}
-	for _, p := range parties {
-		if f.Expelled(p) {
-			return user.RequestDeclined
-		}
-	}
-
-	approved := false
-	for _, e := range f.entries {
-		switch a := e.(type) {
-		case *user.SignedDecline:
-			if a.RequestID.IsEqual(req) && !f.Expelled(a.Issuer) {
-				return user.RequestDeclined
-			}
-		case *user.SignedApproval:
-			if a.RequestID.IsEqual(req) && !f.Expelled(a.Issuer) {
-				approved = true
-			}
-		}
-	}
-	if approved {
-		return user.RequestApproved
-	}
-	return user.RequestPending
-}
-
 func (f *fakeSwarm) Expelled(id *astral.Identity) bool { return f.expelled[id.String()] }
-
-func (f *fakeSwarm) ApprovalsTouching(*astral.Identity) []*user.SignedApproval { return nil }
-
-func (f *fakeSwarm) CarriedOut(*astral.ObjectID) []*auth.SignedContract { return nil }
 
 func (f *fakeSwarm) Membership(id *astral.Identity) (*user.Membership, bool) {
 	m, ok := f.members[id.String()]
@@ -110,30 +46,16 @@ func (f *fakeSwarm) Membership(id *astral.Identity) (*user.Membership, bool) {
 	return m, true
 }
 
-// MayAnswer applies the answer rule: the root answers every request, any
-// other signer by its tier.
-func (f *fakeSwarm) MayAnswer(signer *astral.Identity, req *astral.ObjectID) bool {
-	obj, ok := f.entries[req.String()]
-	if !ok {
-		return false
-	}
-	if !f.root.IsZero() && signer.IsEqual(f.root) {
-		return true
-	}
-	m, ok := f.Membership(signer)
-	return ok && user.MayAnswer(m.Tier, obj)
-}
-
-// swarmWorld is the chain of the vision: the user signs the Laptop's
-// PrivilegedMembership, the Pi (Member) files R1 for App A, the Laptop
-// approves R1, and the Pi signs Pi → App A carrying out that Approval.
+// swarmWorld is the app grant of the two-signature model: the user signs the
+// Laptop's PrivilegedMembership, the Laptop issues the Pi (Member) the
+// requested permit with Delegation 1, and the Pi issues it to App A. The user
+// module's veto of expelled identities (isBanned) is modelled on the fake.
 type swarmWorld struct {
 	mod                 *Module
 	swarm               *fakeSwarm
 	user, laptop, phone *astral.Identity
 	pi, member, appA    *astral.Identity
 	appB                *astral.Identity
-	r1, approvalR1      *astral.ObjectID
 }
 
 func newSwarmWorld(t *testing.T) *swarmWorld {
@@ -151,14 +73,11 @@ func newSwarmWorld(t *testing.T) *swarmWorld {
 	w.swarm.setMember(w.laptop, w.pi, user.TierMember)
 	w.swarm.setMember(w.laptop, w.member, user.TierMember)
 
-	w.r1 = w.swarm.add(t, &user.SignedContractRequest{
-		ContractRequest: user.NewContractRequest(w.pi, w.appA, []*auth.Permit{permit(0)}),
-		FiledBySig:      dummySig(),
-	})
-	w.approvalR1 = w.answer(t, w.laptop, w.r1)
-	seedLinkedContract(t, w.mod, w.pi, w.appA, w.approvalR1, permit(0))
+	seedContract(t, w.mod, w.laptop, w.pi, permit(1))
+	seedContract(t, w.mod, w.pi, w.appA, permit(0))
 
 	useSwarm(w.mod, w.swarm, w.user, astral.GenerateIdentity())
+	w.mod.AddVeto(w.swarm.Expelled)
 	return w
 }
 
@@ -171,10 +90,126 @@ func useSwarm(mod *Module, swarm *fakeSwarm, user, node *astral.Identity) {
 	mod.node = &identityNode{id: node}
 }
 
-// answer stores signer's Approval of req and returns its entry ID.
-func (w *swarmWorld) answer(t *testing.T, signer *astral.Identity, req *astral.ObjectID) *astral.ObjectID {
-	t.Helper()
-	return w.swarm.add(t, &user.SignedApproval{Approval: user.NewApproval(signer, req), IssuerSig: dummySig()})
+// TestSwarmWalkAllowsAnAppsChain: App A ◄ Pi ◄ Laptop ◄ user. Without the
+// swarm the same index allows nothing: no handler allows the Laptop.
+func TestSwarmWalkAllowsAnAppsChain(t *testing.T) {
+	w := newSwarmWorld(t)
+	ctx := astral.NewContext(nil)
+
+	if !w.mod.Authorize(ctx, action(w.appA)) {
+		t.Fatal("App A: want allow through Pi and Laptop")
+	}
+
+	w.mod.User = nil
+	if w.mod.Authorize(ctx, action(w.appA)) {
+		t.Fatal("App A without the swarm: want deny")
+	}
+}
+
+// TestSwarmWalkContinuesOnlyAtTheIssuer: a contract's link to its request
+// adds no authority. A Member that holds nothing issues App B the permit with
+// a RequestID; the walk continues at that Member, not at any approver, and
+// denies. An issuer granted no Delegation cannot pass the permit on either.
+//
+// note: ported from the Approval-link tests (a reused, mismatched or
+// Member-signed Approval); the walk reads no Approval since the
+// two-signature model, so who may answer a request is the merge check's.
+func TestSwarmWalkContinuesOnlyAtTheIssuer(t *testing.T) {
+	ctx := astral.NewContext(nil)
+	w := newSwarmWorld(t)
+	requestID, err := astral.ResolveObjectID(&astral.Ack{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	seedLinkedContract(t, w.mod, w.member, w.appB, requestID, permit(0))
+	if w.mod.Authorize(ctx, action(w.appB)) {
+		t.Fatal("contract from a Member that holds nothing: want deny")
+	}
+
+	shallow := newSwarmWorld(t)
+	other := astral.GenerateIdentity()
+	seedContract(t, shallow.mod, shallow.laptop, shallow.member, permit(0))
+	seedContract(t, shallow.mod, shallow.member, other, permit(0))
+	if !shallow.mod.Authorize(ctx, action(shallow.member)) {
+		t.Fatal("the Member's own permit: want allow")
+	}
+	if shallow.mod.Authorize(ctx, action(other)) {
+		t.Fatal("a permit passed on without Delegation: want deny")
+	}
+}
+
+// TestSwarmWalkStopsAtAnExpelledParty: expelling, or vetoing, the host, the
+// app or the approver cuts a chain that held before.
+//
+// note: a Decline no longer cuts it: a Decline only closes its request, and a
+// contract both parties signed keeps its authority (PR 4 decision Q1).
+func TestSwarmWalkStopsAtAnExpelledParty(t *testing.T) {
+	ctx := astral.NewContext(nil)
+	for name, cut := range map[string]func(w *swarmWorld){
+		"expelled host":     func(w *swarmWorld) { w.swarm.expel(w.pi) },
+		"expelled app":      func(w *swarmWorld) { w.swarm.expel(w.appA) },
+		"expelled approver": func(w *swarmWorld) { w.swarm.expel(w.laptop) },
+		"vetoed host": func(w *swarmWorld) {
+			w.mod.AddVeto(func(id *astral.Identity) bool { return id.IsEqual(w.pi) })
+		},
+	} {
+		w := newSwarmWorld(t)
+		if !w.mod.Authorize(ctx, action(w.appA)) {
+			t.Fatalf("%s: want allow before the cut", name)
+		}
+		cut(w)
+		if w.mod.Authorize(ctx, action(w.appA)) {
+			t.Fatalf("%s: want deny", name)
+		}
+	}
+}
+
+// keyCrypto verifies a signature whose data is the signer's public key, as
+// the swarm entry check's tests do; every other crypto method panics.
+type keyCrypto struct{ cryptomod.Module }
+
+func (keyCrypto) Verify(key *crypto.PublicKey, sig *crypto.Signature, _ crypto.SignableTextObject) error {
+	if sig == nil || !bytes.Equal(sig.Data, key.Key) {
+		return errors.New("bad signature")
+	}
+	return nil
+}
+
+func keySig(id *astral.Identity) *crypto.Signature {
+	return &crypto.Signature{Scheme: "test", Data: secp256k1.FromIdentity(id).Key}
+}
+
+// TestSwarmWalkNeedsTheSubjectsSignature: a contract its subject did not
+// sign, or signed with a wrong key, is not indexed and grants nothing; the
+// same contract signed by both parties does.
+func TestSwarmWalkNeedsTheSubjectsSignature(t *testing.T) {
+	ctx := astral.NewContext(nil)
+	for name, c := range map[string]struct {
+		subjectSig func(w *swarmWorld) *crypto.Signature
+		want       bool
+	}{
+		"no subject signature":    {func(*swarmWorld) *crypto.Signature { return nil }, false},
+		"wrong subject signature": {func(w *swarmWorld) *crypto.Signature { return keySig(w.laptop) }, false},
+		"both signatures":         {func(w *swarmWorld) *crypto.Signature { return keySig(w.appB) }, true},
+	} {
+		w := newSwarmWorld(t)
+		w.mod.Crypto = keyCrypto{}
+		sc := &auth.SignedContract{
+			Contract: &auth.Contract{
+				Issuer: w.laptop, Subject: w.appB, Permits: []*auth.Permit{permit(0)},
+				ExpiresAt: astral.Time(time.Now().Add(time.Hour)),
+			},
+			IssuerSig:  keySig(w.laptop),
+			SubjectSig: c.subjectSig(w),
+		}
+		err := w.mod.IndexContract(ctx, sc)
+		if (err == nil) != c.want {
+			t.Fatalf("%s: IndexContract err = %v, want indexed %v", name, err, c.want)
+		}
+		if got := w.mod.Authorize(ctx, action(w.appB)); got != c.want {
+			t.Fatalf("%s: Authorize = %v, want %v", name, got, c.want)
+		}
+	}
 }
 
 func seedLinkedContract(t *testing.T, mod *Module, issuer, subject *astral.Identity, approvalID *astral.ObjectID, permits ...*auth.Permit) {
@@ -192,168 +227,6 @@ func seedLinkedContract(t *testing.T, mod *Module, issuer, subject *astral.Ident
 	}
 	if err := mod.db.storeSignedContract(sc); err != nil {
 		t.Fatalf("store contract: %v", err)
-	}
-}
-
-// TestSwarmWalkAllowsAnAppsChain: App A ◄ Pi ◄ Approval R1 ◄ Laptop ◄ user.
-// Without the swarm the same index allows nothing: no handler allows the Pi.
-func TestSwarmWalkAllowsAnAppsChain(t *testing.T) {
-	w := newSwarmWorld(t)
-	ctx := astral.NewContext(nil)
-
-	if !w.mod.Authorize(ctx, action(w.appA)) {
-		t.Fatal("App A: want allow through its Approval-linked chain")
-	}
-
-	w.mod.User = nil
-	if w.mod.Authorize(ctx, action(w.appA)) {
-		t.Fatal("App A without the swarm: want deny, as on master")
-	}
-}
-
-// TestSwarmWalkDeniesAReusedApproval: the Pi signs App B a contract carrying
-// out App A's Approval. R1 names App A, so App B's link does not hold.
-func TestSwarmWalkDeniesAReusedApproval(t *testing.T) {
-	w := newSwarmWorld(t)
-	ctx := astral.NewContext(nil)
-	seedLinkedContract(t, w.mod, w.pi, w.appB, w.approvalR1, permit(0))
-
-	if w.mod.Authorize(ctx, action(w.appB)) {
-		t.Fatal("App B reusing App A's Approval: want deny")
-	}
-	if !w.mod.Authorize(ctx, action(w.appA)) {
-		t.Fatal("App A: want allow")
-	}
-}
-
-// TestSwarmWalkDeniesALinkThatDoesNotMatchItsRequest: the link holds only for
-// the request's filer and the permits it asked for.
-func TestSwarmWalkDeniesALinkThatDoesNotMatchItsRequest(t *testing.T) {
-	ctx := astral.NewContext(nil)
-
-	w := newSwarmWorld(t)
-	if !w.mod.Authorize(ctx, action(w.appA)) {
-		t.Fatal("the Pi's own link: want allow")
-	}
-	// another Member signs App A a contract carrying out the Pi's request
-	other := testModule(t)
-	seedLinkedContract(t, other, w.member, w.appA, w.approvalR1, permit(0))
-	useSwarm(other, w.swarm, w.user, astral.GenerateIdentity())
-	if other.Authorize(ctx, action(w.appA)) {
-		t.Fatal("issuer that did not file R1: want deny")
-	}
-
-	// the Pi signs more than R1 asked for
-	wider := testModule(t)
-	seedLinkedContract(t, wider, w.pi, w.appA, w.approvalR1, permit(3))
-	useSwarm(wider, w.swarm, w.user, astral.GenerateIdentity())
-	if wider.Authorize(ctx, action(w.appA)) {
-		t.Fatal("permits R1 does not cover: want deny")
-	}
-}
-
-// TestSwarmWalkDeniesAMemberApprover: a Member's Approval of a ContractRequest
-// is no link, and neither is a Trusted node's (D5) or a stranger's; the same
-// request approved by a Privileged node is.
-//
-// why each approver holds the action itself: the denial must come from the
-// approver's tier, not from a walk that re-enters at an approver with no
-// authority of its own.
-func TestSwarmWalkDeniesAMemberApprover(t *testing.T) {
-	ctx := astral.NewContext(nil)
-	for _, c := range []struct {
-		name     string
-		approver func(w *swarmWorld) *astral.Identity
-		want     bool
-	}{
-		{"privileged", func(w *swarmWorld) *astral.Identity { return w.laptop }, true},
-		{"member", func(w *swarmWorld) *astral.Identity { return w.member }, false},
-		{"trusted", func(w *swarmWorld) *astral.Identity { return w.phone }, false},
-		{"stranger", func(w *swarmWorld) *astral.Identity { return astral.GenerateIdentity() }, false},
-	} {
-		w := newSwarmWorld(t)
-		approver := c.approver(w)
-		if !approver.IsEqual(w.laptop) {
-			seedContract(t, w.mod, w.laptop, approver, permit(1))
-		}
-		if !w.mod.Authorize(ctx, action(approver)) {
-			t.Fatalf("%s alone: want allow", c.name)
-		}
-
-		app := astral.GenerateIdentity()
-		req := w.swarm.add(t, &user.SignedContractRequest{
-			ContractRequest: user.NewContractRequest(w.pi, app, []*auth.Permit{permit(0)}),
-			FiledBySig:      dummySig(),
-		})
-		seedLinkedContract(t, w.mod, w.pi, app, w.answer(t, approver, req), permit(0))
-
-		if got := w.mod.Authorize(ctx, action(app)); got != c.want {
-			t.Fatalf("%s as approver: got %v, want %v", c.name, got, c.want)
-		}
-	}
-}
-
-// TestSwarmWalkDeniesADeclinedOrExpelledLink: a Decline beats the Approval,
-// and an expel of the issuer, the subject or the approver, or a veto of the
-// issuer, cuts a chain that held before.
-func TestSwarmWalkDeniesADeclinedOrExpelledLink(t *testing.T) {
-	ctx := astral.NewContext(nil)
-	for name, cut := range map[string]func(t *testing.T, w *swarmWorld){
-		"declined": func(t *testing.T, w *swarmWorld) {
-			desktop := astral.GenerateIdentity()
-			w.swarm.setMember(w.user, desktop, user.TierPrivilegedMember)
-			w.swarm.add(t, &user.SignedDecline{Decline: user.NewDecline(desktop, w.r1), IssuerSig: dummySig()})
-		},
-		"expelled issuer":   func(_ *testing.T, w *swarmWorld) { w.swarm.expel(w.pi) },
-		"expelled subject":  func(_ *testing.T, w *swarmWorld) { w.swarm.expel(w.appA) },
-		"expelled approver": func(_ *testing.T, w *swarmWorld) { w.swarm.expel(w.laptop) },
-		"vetoed issuer": func(_ *testing.T, w *swarmWorld) {
-			w.mod.AddVeto(func(id *astral.Identity) bool { return id.IsEqual(w.pi) })
-		},
-	} {
-		w := newSwarmWorld(t)
-		if !w.mod.Authorize(ctx, action(w.appA)) {
-			t.Fatalf("%s: want allow before the cut", name)
-		}
-		cut(t, w)
-		if w.mod.Authorize(ctx, action(w.appA)) {
-			t.Fatalf("%s: want deny", name)
-		}
-	}
-}
-
-// lenientSwarm reports every request approved and keeps expelled members, so
-// only the walk's own expel check stands between an expel and the link.
-type lenientSwarm struct{ *fakeSwarm }
-
-func (l lenientSwarm) RequestStatus(*astral.ObjectID) user.RequestStatus { return user.RequestApproved }
-
-func (l lenientSwarm) Membership(id *astral.Identity) (*user.Membership, bool) {
-	m, ok := l.members[id.String()]
-	return m, ok
-}
-
-// TestSwarmLinkChecksExpelsItself: the link does not rely on RequestStatus or
-// Membership to cut an expelled issuer, subject or approver.
-func TestSwarmLinkChecksExpelsItself(t *testing.T) {
-	for name, party := range map[string]func(w *swarmWorld) *astral.Identity{
-		"issuer":   func(w *swarmWorld) *astral.Identity { return w.pi },
-		"subject":  func(w *swarmWorld) *astral.Identity { return w.appA },
-		"approver": func(w *swarmWorld) *astral.Identity { return w.laptop },
-	} {
-		w := newSwarmWorld(t)
-		walk := &swarmWalk{view: lenientSwarm{w.swarm}, root: func() *astral.Identity { return w.user }}
-		sc := &auth.SignedContract{
-			Contract:  &auth.Contract{Issuer: w.pi, Subject: w.appA, Permits: []*auth.Permit{permit(0)}, ApprovalID: w.approvalR1},
-			IssuerSig: dummySig(),
-		}
-		if next, ok := walk.approvalLink(sc); !ok || !next.IsEqual(w.laptop) {
-			t.Fatalf("%s: want the link to hold before the expel", name)
-		}
-		w.swarm.expel(party(w))
-		if _, ok := walk.approvalLink(sc); ok {
-			t.Fatalf("expelled %s: want no link", name)
-		}
 	}
 }
 
@@ -389,7 +262,7 @@ func TestSwarmRootAllowsAtAnyHopButNeverAnExpel(t *testing.T) {
 	}
 
 	// a Member, a Trusted node and an expelled Privileged node are not roots
-	for name, actor := range map[string]*astral.Identity{"member": w.pi, "trusted": w.phone} {
+	for name, actor := range map[string]*astral.Identity{"member": w.member, "trusted": w.phone} {
 		if w.mod.Authorize(ctx, action(actor)) {
 			t.Fatalf("%s: want deny", name)
 		}
@@ -454,35 +327,6 @@ func TestSwarmRootRequiresTheRootKeysSignature(t *testing.T) {
 	}
 }
 
-// TestSwarmLinkCountsATrustedApprovalOfAMemberJoin: a membership the carrier
-// signs links to a Trusted node's Approval of a Member-tier JoinRequest, but
-// not to a Member's, and not at another tier.
-func TestSwarmLinkCountsATrustedApprovalOfAMemberJoin(t *testing.T) {
-	w := newSwarmWorld(t)
-	joiner := astral.GenerateIdentity()
-	join := w.swarm.add(t, &user.SignedJoinRequest{
-		JoinRequest: user.NewJoinRequest(joiner, w.phone, user.TierMember),
-		JoinerSig:   dummySig(),
-	})
-	membership := func(approver *astral.Identity, tier user.Tier) *auth.SignedContract {
-		c, err := user.NewMembership(w.phone, joiner, tier, w.answer(t, approver, join), time.Hour)
-		if err != nil {
-			t.Fatalf("membership: %v", err)
-		}
-		return &auth.SignedContract{Contract: c, IssuerSig: dummySig()}
-	}
-
-	if next, ok := w.mod.contractLink(membership(w.phone, user.TierMember)); !ok || !next.IsEqual(w.phone) {
-		t.Fatal("trusted approver of a member join: want the link to hold")
-	}
-	if _, ok := w.mod.contractLink(membership(w.member, user.TierMember)); ok {
-		t.Fatal("member approver of a join: want no link")
-	}
-	if _, ok := w.mod.contractLink(membership(w.laptop, user.TierTrusted)); ok {
-		t.Fatal("membership at another tier than the join asked: want no link")
-	}
-}
-
 // TestContractIndexKeepsTheApprovalID: the walk rebuilds contracts from the
 // index, so a link survives it and a contract with none stays unlinked.
 func TestContractIndexKeepsTheApprovalID(t *testing.T) {
@@ -506,22 +350,16 @@ func TestContractIndexKeepsTheApprovalID(t *testing.T) {
 	}
 }
 
-// TestSwarmLinkGrantsAJoinerItsTierOnly: a Trusted carrier signs its Member
-// joiner a membership with extra permits, carrying out a Privileged node's
-// Approval of the Member JoinRequest. The link does not hold, so the joiner
-// neither relays as the user, nor administers the swarm, nor takes any other
-// extra permit up to the approver; the exact membership still links.
-func TestSwarmLinkGrantsAJoinerItsTierOnly(t *testing.T) {
+// TestSwarmWalkGivesAJoinerNoPermitItsCarrierLacks: a Trusted carrier signs
+// its Member joiner a membership with extra permits. The walk continues at
+// the carrier, which holds none of them, so the joiner neither relays as the
+// user, nor administers the swarm, nor takes any other extra permit.
+func TestSwarmWalkGivesAJoinerNoPermitItsCarrierLacks(t *testing.T) {
 	ctx := astral.NewContext(nil)
 	w := newSwarmWorld(t)
 	joiner := astral.GenerateIdentity()
-	join := w.swarm.add(t, &user.SignedJoinRequest{
-		JoinRequest: user.NewJoinRequest(joiner, w.phone, user.TierMember),
-		JoinerSig:   dummySig(),
-	})
-	approval := w.answer(t, w.laptop, join)
 	tier := &auth.Permit{Action: astral.String8(user.TierMember.Action())}
-	seedLinkedContract(t, w.mod, w.phone, joiner, approval, tier,
+	seedContract(t, w.mod, w.phone, joiner, tier,
 		&auth.Permit{Action: astral.String8(nodes.RelayForAction{}.ObjectType())},
 		&auth.Permit{Action: astral.String8(user.AdminSwarmAction{}.ObjectType())},
 		permit(0))
@@ -535,22 +373,15 @@ func TestSwarmLinkGrantsAJoinerItsTierOnly(t *testing.T) {
 	if w.mod.Authorize(ctx, action(joiner)) {
 		t.Fatal("member joiner takes an extra permit: want deny")
 	}
-
-	exact, err := user.NewMembership(w.phone, joiner, user.TierMember, approval, time.Hour)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, ok := w.mod.contractLink(&auth.SignedContract{Contract: exact, IssuerSig: dummySig()}); !ok {
-		t.Fatal("the exact membership: want the link to hold")
-	}
 }
 
-// TestSwarmWalkCarriesNoUserAuthorityThroughAnUnlinkedContract: a Privileged
-// node signs a Member a contract with no ApprovalID. It carries no relay as
-// the user, no AdminSwarm, no sudo as the user and no expel, while its other
-// permits, an app's relay contract for itself and the user key's own contract
-// still carry.
-func TestSwarmWalkCarriesNoUserAuthorityThroughAnUnlinkedContract(t *testing.T) {
+// TestSwarmWalkGrantsUserPowersOnlyFromTheRoot: a Privileged node signs a
+// Member a contract with the four user powers, and the Member passes relaying
+// as the user on to an app. Neither carries relaying as the user, AdminSwarm,
+// sudo as the user or an expel, while the Privileged node itself still relays
+// as the user and administers the swarm, the Member's other permits, an app's
+// relay contract for itself and the user key's own contract still carry.
+func TestSwarmWalkGrantsUserPowersOnlyFromTheRoot(t *testing.T) {
 	ctx := astral.NewContext(nil)
 	w := newSwarmWorld(t)
 	w.mod.Add(authmod.Func[*nodes.RelayForAction](func(_ *astral.Context, a *nodes.RelayForAction) bool {
@@ -558,13 +389,16 @@ func TestSwarmWalkCarriesNoUserAuthorityThroughAnUnlinkedContract(t *testing.T) 
 	}))
 	relayFor := &auth.Permit{Action: astral.String8(nodes.RelayForAction{}.ObjectType())}
 	adminSwarm := &auth.Permit{Action: astral.String8(user.AdminSwarmAction{}.ObjectType())}
-	seedContract(t, w.mod, w.laptop, w.pi, relayFor, adminSwarm,
+	seedContract(t, w.mod, w.laptop, w.pi,
+		&auth.Permit{Action: relayFor.Action, Delegation: 1}, adminSwarm,
 		&auth.Permit{Action: astral.String8(auth.SudoAction{}.ObjectType())},
-		&auth.Permit{Action: astral.String8(user.ExpelAction{}.ObjectType())},
-		permit(0))
+		&auth.Permit{Action: astral.String8(user.ExpelAction{}.ObjectType())})
+	seedContract(t, w.mod, w.pi, w.appB, relayFor)
 
-	if w.mod.Authorize(ctx, &nodes.RelayForAction{Action: auth.NewAction(w.pi), ForID: w.user}) {
-		t.Fatal("member relays as the user: want deny")
+	for name, actor := range map[string]*astral.Identity{"member": w.pi, "the member's app": w.appB} {
+		if w.mod.Authorize(ctx, &nodes.RelayForAction{Action: auth.NewAction(actor), ForID: w.user}) {
+			t.Fatalf("%s relays as the user: want deny", name)
+		}
 	}
 	if w.mod.Authorize(ctx, &user.AdminSwarmAction{Action: auth.NewAction(w.pi)}) {
 		t.Fatal("member administers the swarm: want deny")
@@ -577,6 +411,13 @@ func TestSwarmWalkCarriesNoUserAuthorityThroughAnUnlinkedContract(t *testing.T) 
 	}
 	if !w.mod.Authorize(ctx, action(w.pi)) {
 		t.Fatal("member's other permit: want allow")
+	}
+
+	if !w.mod.Authorize(ctx, &nodes.RelayForAction{Action: auth.NewAction(w.laptop), ForID: w.user}) {
+		t.Fatal("privileged node relays as the user itself: want allow")
+	}
+	if !w.mod.Authorize(ctx, &user.AdminSwarmAction{Action: auth.NewAction(w.laptop)}) {
+		t.Fatal("privileged node administers the swarm itself: want allow")
 	}
 
 	seedContract(t, w.mod, w.appA, w.pi, relayFor)

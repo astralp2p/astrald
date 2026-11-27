@@ -18,7 +18,8 @@ type nodeLocal interface{ NodeLocal() }
 // A handler the auth module marks NodeLocal answers for the caller alone, so no
 // chain ends at one. A veto (AddVeto) refuses an identity at every level it
 // names, before anything else is asked. With the user module, the swarm's
-// root and its Approval links take part in the walk (swarmReader).
+// root takes part in the walk, and only a contract the root issued grants one
+// of the user's powers (swarmReader).
 func (mod *Module) Authorize(ctx *astral.Context, action auth.ActionObject) bool {
 	// why: the anonymous identity is not a party, so nothing grants it an action.
 	// note: a contract lookup for a zero subject drops its subject filter.
@@ -74,10 +75,11 @@ func (mod *Module) authorize(ctx *astral.Context, action auth.ActionObject, hops
 	}
 
 	for _, sc := range contracts {
-		// note: without a swarm, or for a contract with no ApprovalID, next is
-		// the issuer; an Approval link continues at the approver instead.
-		next, linked := mod.contractLink(sc)
-		if !linked || mod.unlinkedUserAuthority(sc, action) {
+		// why the issuer: a contract's authority is its two signatures, so the
+		// walk continues at the identity that signed it as issuer, never at a
+		// node that answered its request.
+		next := sc.Issuer
+		if mod.userPowerFromNonRoot(sc, action) {
 			continue
 		}
 		if _, seen := visited[next.String()]; seen {
