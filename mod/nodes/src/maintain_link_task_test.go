@@ -1,4 +1,4 @@
-package user
+package nodes
 
 import (
 	"context"
@@ -16,7 +16,6 @@ import (
 	"github.com/astralp2p/astral-go/api/nodes"
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astral-go/astral/log"
-	nodesmod "github.com/astralp2p/astrald/mod/nodes"
 	"github.com/astralp2p/astrald/mod/scheduler"
 )
 
@@ -25,41 +24,6 @@ const wakeDialBound = time.Second
 
 // errDialFailed is the outcome of a failed link attempt.
 var errDialFailed = errors.New("dial failed")
-
-// linkNodes is a nodes module that reports the identities set linked as linked
-// and hands out ensure-link tasks for dialScheduler to finish.
-type linkNodes struct {
-	nodesmod.Module
-
-	mu     sync.Mutex
-	linked map[string]bool
-}
-
-func newLinkNodes() *linkNodes {
-	return &linkNodes{linked: make(map[string]bool)}
-}
-
-func (n *linkNodes) setLinked(id *astral.Identity, linked bool) {
-	n.mu.Lock()
-	defer n.mu.Unlock()
-	n.linked[id.String()] = linked
-}
-
-func (n *linkNodes) IsLinked(id *astral.Identity) bool {
-	n.mu.Lock()
-	defer n.mu.Unlock()
-	return n.linked[id.String()]
-}
-
-func (n *linkNodes) NewEnsureLinkTask(target *astral.Identity, _, _ []string, _ bool) nodesmod.EnsureLinkTask {
-	return &ensureLinkStub{target: target}
-}
-
-// ensureLinkStub is the ensure-link task dialScheduler finishes.
-type ensureLinkStub struct {
-	nodesmod.EnsureLinkTask
-	target *astral.Identity
-}
 
 // dialScheduler finishes every scheduled task at once with the error outcome
 // returns for that attempt, and reports each attempt number on attempts.
@@ -77,7 +41,7 @@ func newDialScheduler(outcome func(attempt int) error) *dialScheduler {
 }
 
 func (s *dialScheduler) Schedule(task scheduler.Task, _ ...scheduler.Done) (scheduler.ScheduledTask, error) {
-	if _, ok := task.(*ensureLinkStub); !ok {
+	if _, ok := task.(*EnsureLinkTask); !ok {
 		return nil, errors.New("dialScheduler runs ensure-link tasks only")
 	}
 
@@ -124,13 +88,12 @@ func (c *backoffClock) after(d time.Duration) <-chan time.Time {
 	return ch
 }
 
-// linkTaskFixture is a MaintainLinkTask for target on a module with fake nodes,
+// linkTaskFixture is a MaintainLinkTask for target on a module with a link pool,
 // a fake scheduler and a fake backoff clock.
 type linkTaskFixture struct {
 	mod       *Module
 	target    *astral.Identity
 	task      *MaintainLinkTask
-	nodes     *linkNodes
 	scheduler *dialScheduler
 	clock     *backoffClock
 }
@@ -138,19 +101,30 @@ type linkTaskFixture struct {
 func newLinkTaskFixture(outcome func(int) error, fire bool) *linkTaskFixture {
 	f := &linkTaskFixture{
 		target:    astral.GenerateIdentity(),
-		nodes:     newLinkNodes(),
 		scheduler: newDialScheduler(outcome),
 		clock:     &backoffClock{delays: make(chan time.Duration, 64), fire: fire},
 	}
 	nodeID := astral.GenerateIdentity()
 	f.mod = &Module{
-		Deps: Deps{Nodes: f.nodes, Scheduler: f.scheduler},
+		Deps: Deps{Scheduler: f.scheduler},
 		node: &identityNode{id: nodeID},
 		log:  log.New(nodeID),
 	}
+	f.mod.linkPool = NewLinkPool(f.mod)
 	f.task = f.mod.NewMaintainLinkTask(f.target).(*MaintainLinkTask)
 	f.task.after = f.clock.after
 	return f
+}
+
+// setLinked adds a link to the target to the pool, or removes every link.
+func (f *linkTaskFixture) setLinked(linked bool) {
+	if !linked {
+		for _, l := range f.mod.linkPool.links.Clone() {
+			f.mod.linkPool.links.Remove(l)
+		}
+		return
+	}
+	f.mod.linkPool.links.Add(&Link{id: astral.NewNonce(), conn: &identityConn{remote: f.target}})
 }
 
 // run starts the task and returns its result channel and the cancel of its context.
@@ -315,7 +289,7 @@ func TestMaintainLinkTaskActsOnAWakeDuringAnAttempt(t *testing.T) {
 // idle task idle.
 func TestMaintainLinkTaskIgnoresWakesOfALinkedTarget(t *testing.T) {
 	f := newLinkTaskFixture(func(int) error { return nil }, false)
-	f.nodes.setLinked(f.target, true)
+	f.setLinked(true)
 
 	f.task.Wake()
 	f.task.ReceiveEvent(&events.Event{Data: &nodes.LinkClosedEvent{RemoteIdentity: astral.GenerateIdentity(), LinkCount: 0}})
@@ -383,7 +357,7 @@ func TestMaintainLinkTaskWakesOnAddressChange(t *testing.T) {
 // the target is linked leaves the idle task idle.
 func TestMaintainLinkTaskIgnoresAddressChangeWhileLinked(t *testing.T) {
 	f := newLinkTaskFixture(func(int) error { return nil }, false)
-	f.nodes.setLinked(f.target, true)
+	f.setLinked(true)
 
 	f.task.ReceiveEvent(addrAdded("192.168.1.10"))
 
@@ -455,7 +429,7 @@ func TestMaintainLinkTaskLogsBrokenOnlyForAClosedLink(t *testing.T) {
 		if n == 1 {
 			f.task.Wake()
 		}
-		f.nodes.setLinked(f.target, true)
+		f.setLinked(true)
 		return nil
 	}, false)
 	lines := &logLines{}
@@ -471,7 +445,7 @@ func TestMaintainLinkTaskLogsBrokenOnlyForAClosedLink(t *testing.T) {
 		t.Fatalf("%v \"is broken\" lines while the link stands; want 0", n)
 	}
 
-	f.nodes.setLinked(f.target, false)
+	f.setLinked(false)
 	f.task.ReceiveEvent(&events.Event{Data: &nodes.LinkClosedEvent{RemoteIdentity: f.target, LinkCount: 0}})
 	f.requireAttempt(t, 3, wakeDialBound)
 	if n := lines.count("is broken, trying to reconnect"); n != 1 {
@@ -480,62 +454,4 @@ func TestMaintainLinkTaskLogsBrokenOnlyForAClosedLink(t *testing.T) {
 
 	cancel()
 	requireCanceled(t, done)
-}
-
-// TestEndpointsUpdatedEventWakesSiblingDuringBackoff (criterion 4): a local
-// EndpointsUpdatedEvent for an unlinked sibling ends its link task's backoff wait
-// at once; the same event from another node or for another node does not.
-func TestEndpointsUpdatedEventWakesSiblingDuringBackoff(t *testing.T) {
-	cases := []struct {
-		name  string
-		local bool
-		other bool
-		wakes bool
-	}{
-		{"local event for the sibling", true, false, true},
-		{"event from another node", false, false, false},
-		{"local event for another node", true, true, false},
-	}
-
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			f := newLinkTaskFixture(failEvery, false)
-			f.mod.addSibling(f.target, func() {}, f.task.Wake)
-			done, cancel := f.run(t)
-
-			f.requireAttempt(t, 1, effectTimeout)
-			f.requireBackoff(t)
-
-			sender := f.mod.node.Identity()
-			if !tc.local {
-				sender = f.target
-			}
-			named := f.target
-			if tc.other {
-				named = astral.GenerateIdentity()
-			}
-
-			event := &events.Event{
-				ID:       astral.NewNonce(),
-				SourceID: f.mod.node.Identity(),
-				Data:     &nodes.EndpointsUpdatedEvent{Identity: named},
-			}
-			if err := f.mod.ReceiveObject(&recordingDrop{sender: sender, object: event}); err != nil {
-				t.Fatalf("ReceiveObject: %v", err)
-			}
-
-			if tc.wakes {
-				f.requireAttempt(t, 2, wakeDialBound)
-			} else {
-				select {
-				case n := <-f.scheduler.attempts:
-					t.Fatalf("link attempt %v started; want the backoff to hold", n)
-				case <-time.After(wakeDialBound):
-				}
-			}
-
-			cancel()
-			requireCanceled(t, done)
-		})
-	}
 }

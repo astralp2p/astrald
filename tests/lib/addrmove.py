@@ -15,7 +15,7 @@ why the driver closes the dead links: withdrawing an address disturbs no
 established connection, so every link that rode it stays pooled until each
 end's keepalive closes it (astral-docs topics/link-mux.md, Keepalive), and a
 link task's wake does nothing while its target counts as linked
-(mod/user/src/maintain_link_task.go Wake). The endpoint-change announcement
+(mod/nodes/src/maintain_link_task.go Wake). The endpoint-change announcement
 leaves dead links to the keepalive, as its ticket states, so the driver closes
 them as soon as it sees the move, as lan-outage does for an address that left.
 
@@ -172,7 +172,7 @@ async def watch(sibling, witness, mover_id: str, ip: str, clock, deadline: float
 
 
 # the lines the oracles read: the announcement chain (mod/nodes/src/endpoints_changed.go),
-# mod/ip's change line, and the link-task lines (mod/user/src/maintain_link_task.go)
+# mod/ip's change line, and the link-task lines (mod/nodes/src/maintain_link_task.go)
 NEEDLES = ("new endpoints of", "announcing changed endpoints", "forwarding endpoints change",
            "pulling endpoints of", "network addresses changed", "established",
            "restored after", "is broken", "trying to reconnect")

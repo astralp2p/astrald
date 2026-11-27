@@ -57,9 +57,6 @@ type Module struct {
 	now func() time.Time
 	// after is the clock of the ban push backoff; see pushUntilDelivered.
 	after func(time.Duration) <-chan time.Time
-	// linkRetryAfter replaces time.After as the clock of every MaintainLinkTask backoff while set.
-	// note: a test seam, set through SetLinkRetryClock.
-	linkRetryAfter atomic.Pointer[func(time.Duration) <-chan time.Time]
 
 	// askDigest asks a sibling for its relay digest; nil selects askRelayDigest.
 	askDigest askDigestFunc
@@ -142,7 +139,7 @@ func (mod *Module) runSiblingLinker() {
 			continue
 		}
 
-		maintainLinkAction := mod.NewMaintainLinkTask(node)
+		maintainLinkAction := mod.Nodes.NewMaintainLinkTask(node)
 		scheduledAction, err := mod.Scheduler.Schedule(maintainLinkAction)
 		if err != nil {
 			mod.log.Error("error scheduling maintain link action: %v for node %v", err, node)

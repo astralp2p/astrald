@@ -190,6 +190,10 @@ func (n *recordingNodes) EnforceLinkPolicy() {
 	n.enforced.Add(1)
 }
 
+func (n *recordingNodes) NewMaintainLinkTask(target *astral.Identity) nodesmod.MaintainLinkTask {
+	return newLinkTask(target)
+}
+
 // recordingScheduler records scheduled tasks and runs none.
 type recordingScheduler struct {
 	scheduler.Module
@@ -486,7 +490,7 @@ func TestReceiveNodeContractAdmitsUnknownSubject(t *testing.T) {
 
 	select {
 	case task := <-f.scheduler.tasks:
-		link, ok := task.(*MaintainLinkTask)
+		link, ok := task.(*linkTask)
 		if !ok || !link.Target.IsEqual(subject) {
 			t.Fatalf("scheduled %v; want a link maintained to the subject %v", task, subject)
 		}
@@ -522,7 +526,7 @@ func TestReceiveNodeContractFromSubjectRefreshesFirstHand(t *testing.T) {
 
 	select {
 	case task := <-f.scheduler.tasks:
-		if link, ok := task.(*MaintainLinkTask); !ok || !link.Target.IsEqual(subject) {
+		if link, ok := task.(*linkTask); !ok || !link.Target.IsEqual(subject) {
 			t.Fatalf("scheduled %v; want a link maintained to the subject %v", task, subject)
 		}
 	case <-time.After(effectTimeout):
@@ -1036,6 +1040,61 @@ func TestReceiveNodeContractSkipsTheSync(t *testing.T) {
 
 			if syncs := f.scheduledSyncs(); len(syncs) != 0 {
 				t.Fatalf("scheduled syncs with %v; want none", syncs)
+			}
+		})
+	}
+}
+
+// TestEndpointsUpdatedEventWakesSiblingDuringBackoff (criterion 4): a local
+// EndpointsUpdatedEvent for a sibling wakes its link task at once; the same
+// event from another node or for another node does not.
+// note: that a woken task ends its backoff wait and dials is mod/nodes
+// TestMaintainLinkTaskWakeDuringBackoff.
+func TestEndpointsUpdatedEventWakesSiblingDuringBackoff(t *testing.T) {
+	cases := []struct {
+		name  string
+		local bool
+		other bool
+		wakes bool
+	}{
+		{"local event for the sibling", true, false, true},
+		{"event from another node", false, false, false},
+		{"local event for another node", true, true, false},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			f := newReceiverFixture(t, astral.GenerateIdentity())
+			target := astral.GenerateIdentity()
+			task := newLinkTask(target)
+			f.mod.addSibling(target, func() {}, task.Wake)
+
+			sender := f.mod.node.Identity()
+			if !tc.local {
+				sender = target
+			}
+			named := target
+			if tc.other {
+				named = astral.GenerateIdentity()
+			}
+
+			event := &events.Event{
+				ID:       astral.NewNonce(),
+				SourceID: f.mod.node.Identity(),
+				Data:     &nodes.EndpointsUpdatedEvent{Identity: named},
+			}
+			if err := f.mod.ReceiveObject(&recordingDrop{sender: sender, object: event}); err != nil {
+				t.Fatalf("ReceiveObject: %v", err)
+			}
+
+			if tc.wakes {
+				requireWoken(t, task, wakeBound)
+				return
+			}
+			select {
+			case <-task.woken:
+				t.Fatal("the link task was woken; want the backoff to hold")
+			case <-time.After(wakeBound):
 			}
 		})
 	}

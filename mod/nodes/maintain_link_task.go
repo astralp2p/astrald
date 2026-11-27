@@ -1,4 +1,4 @@
-package user
+package nodes
 
 import "github.com/astralp2p/astrald/mod/scheduler"
 

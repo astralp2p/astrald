@@ -13,9 +13,74 @@ import (
 	"github.com/astralp2p/astral-go/api/nearby"
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astral-go/astral/log"
+	nodesmod "github.com/astralp2p/astrald/mod/nodes"
 	objectsmod "github.com/astralp2p/astrald/mod/objects"
 	"github.com/astralp2p/astrald/mod/scheduler"
 )
+
+// wakeBound is how soon a sighting must wake a sibling's link task.
+const wakeBound = time.Second
+
+// linkNodes is a nodes module that reports the identities set linked as linked
+// and hands out link tasks that record their wakes.
+type linkNodes struct {
+	nodesmod.Module
+
+	mu     sync.Mutex
+	linked map[string]bool
+}
+
+func newLinkNodes() *linkNodes {
+	return &linkNodes{linked: make(map[string]bool)}
+}
+
+func (n *linkNodes) setLinked(id *astral.Identity, linked bool) {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	n.linked[id.String()] = linked
+}
+
+func (n *linkNodes) IsLinked(id *astral.Identity) bool {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	return n.linked[id.String()]
+}
+
+func (n *linkNodes) NewMaintainLinkTask(target *astral.Identity) nodesmod.MaintainLinkTask {
+	return newLinkTask(target)
+}
+
+// linkTask is the link task the fake nodes modules hand out: it records its
+// target and each Wake, and its Run returns at once.
+type linkTask struct {
+	Target *astral.Identity
+	woken  chan struct{}
+}
+
+func newLinkTask(target *astral.Identity) *linkTask {
+	return &linkTask{Target: target, woken: make(chan struct{}, 8)}
+}
+
+func (t *linkTask) String() string { return "nodes.maintain_link" }
+
+func (t *linkTask) Run(*astral.Context) error { return nil }
+
+func (t *linkTask) Wake() {
+	select {
+	case t.woken <- struct{}{}:
+	default:
+	}
+}
+
+// requireWoken waits up to bound for a Wake of task.
+func requireWoken(t *testing.T, task *linkTask, bound time.Duration) {
+	t.Helper()
+	select {
+	case <-task.woken:
+	case <-time.After(bound):
+		t.Fatalf("the link task of %v was not woken within %v", task.Target, bound)
+	}
+}
 
 // contactCall is one step of a nearby contact: a contract read or a push.
 type contactCall struct {
@@ -262,7 +327,7 @@ func TestPeerSeenStartsALinkTask(t *testing.T) {
 
 	select {
 	case task := <-f.scheduler.tasks:
-		link, ok := task.(*MaintainLinkTask)
+		link, ok := task.(*linkTask)
 		if !ok || !link.Target.IsEqual(f.peerID) {
 			t.Fatalf("scheduled %v; want a link task of the peer", task)
 		}
@@ -501,26 +566,17 @@ func TestReceivePeerSeenEvent(t *testing.T) {
 }
 
 // TestSiblingSeenNearbyLinksDuringBackoff: a swarm member seen nearby while its
-// link task waits out a backoff is dialed within wakeDialBound of the event.
+// link task waits out a backoff wakes that task within wakeBound of the event.
+// note: that a woken task dials at once is mod/nodes TestMaintainLinkTaskWakeDuringBackoff.
 func TestSiblingSeenNearbyLinksDuringBackoff(t *testing.T) {
-	lf := newLinkTaskFixture(failEvery, false)
 	f := newContactFixture(t)
-	f.mod.Nodes = lf.nodes
-	f.mod.Scheduler = lf.scheduler
-	lf.task.mod = f.mod
-	lf.task.Target = f.peerID
 	f.addMember(f.peerID)
-
-	done, cancel := lf.run(t)
-	lf.requireAttempt(t, 1, effectTimeout)
-	lf.requireBackoff(t)
-	f.mod.addSibling(f.peerID, cancel, lf.task.Wake)
+	task := newLinkTask(f.peerID)
+	f.mod.addSibling(f.peerID, func() {}, task.Wake)
 
 	f.mod.onPeerSeen(f.seen(f.peerID, f.userID))
-	lf.requireAttempt(t, 2, wakeDialBound)
+	requireWoken(t, task, wakeBound)
 
-	cancel()
-	requireCanceled(t, done)
 	if calls := f.calls.list(); len(calls) != 0 {
 		t.Fatalf("contact steps %v; want none for a sibling", calls)
 	}
@@ -553,10 +609,10 @@ func TestSiblingLinkerRegistersTheTaskWake(t *testing.T) {
 	f.mod.Scheduler = sched
 
 	f.mod.runSiblingLinker()
-	var link *MaintainLinkTask
+	var link *linkTask
 	select {
 	case task := <-sched.tasks:
-		link, _ = task.(*MaintainLinkTask)
+		link, _ = task.(*linkTask)
 	default:
 	}
 	if link == nil || !link.Target.IsEqual(f.peerID) {
@@ -566,12 +622,9 @@ func TestSiblingLinkerRegistersTheTaskWake(t *testing.T) {
 	f.mod.onPeerSeen(f.seen(f.peerID, f.userID))
 
 	select {
-	case <-link.wake:
+	case <-link.woken:
 	default:
 		t.Fatal("the PeerSeen did not wake the member's link task")
-	}
-	if !link.actionRequired.Load() {
-		t.Fatal("the woken link task needs no action; want a dial")
 	}
 }
 

@@ -23,7 +23,7 @@ type linkTaskScheduler struct {
 }
 
 func (s *linkTaskScheduler) Schedule(task scheduler.Task, _ ...scheduler.Done) (scheduler.ScheduledTask, error) {
-	link, ok := task.(*MaintainLinkTask)
+	link, ok := task.(*linkTask)
 	if !ok {
 		return nil, errors.New("linkTaskScheduler runs link tasks only")
 	}
@@ -62,6 +62,7 @@ func newLinkerEnv(t *testing.T, members ...*astral.Identity) *linkerEnv {
 	e.mod.node = &identityNode{id: nodeID}
 	e.mod.log = log.New(nodeID)
 	e.mod.Scheduler = e.sched
+	e.mod.Nodes = newLinkNodes()
 	e.setSwarm(t, append(members, nodeID)...)
 	return e
 }

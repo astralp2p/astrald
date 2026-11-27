@@ -58,6 +58,9 @@ type Module struct {
 	inboundNegotiations inFlight
 	// dials counts the strategy dials in progress, per target.
 	dials inFlight
+	// linkRetryAfter replaces time.After as the clock of every MaintainLinkTask backoff while set.
+	// note: a test seam, set through SetLinkRetryClock.
+	linkRetryAfter atomic.Pointer[func(time.Duration) <-chan time.Time]
 
 	strategyFactories sig.Map[string, nodesmod.StrategyFactory]
 	upgraders         sig.Map[string, *sig.Switch]

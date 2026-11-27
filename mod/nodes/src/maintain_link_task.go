@@ -1,4 +1,4 @@
-package user
+package nodes
 
 import (
 	nodesmod "github.com/astralp2p/astrald/mod/nodes"
@@ -11,12 +11,11 @@ import (
 	"github.com/astralp2p/astral-go/api/nodes"
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astrald/mod/scheduler"
-	"github.com/astralp2p/astrald/mod/user"
 )
 
 var _ scheduler.EventReceiver = &MaintainLinkTask{}
 var _ scheduler.Task = &MaintainLinkTask{}
-var _ user.MaintainLinkTask = &MaintainLinkTask{}
+var _ nodesmod.MaintainLinkTask = &MaintainLinkTask{}
 
 // The backoff between failed link attempts: it starts at linkRetryMin, doubles
 // after every failure up to linkRetryMax, and starts over after a success.
@@ -42,7 +41,7 @@ type MaintainLinkTask struct {
 }
 
 func (mod *Module) NewMaintainLinkTask(target *astral.
-	Identity) user.MaintainLinkTask {
+	Identity) nodesmod.MaintainLinkTask {
 	return &MaintainLinkTask{
 		mod:    mod,
 		Target: target,
@@ -73,7 +72,7 @@ func (a *MaintainLinkTask) Run(ctx *astral.Context) error {
 
 	delay := linkRetryMin
 	count := -1
-	a.actionRequired.Store(!a.mod.Nodes.IsLinked(a.Target))
+	a.actionRequired.Store(!a.mod.IsLinked(a.Target))
 	for {
 		if err := a.waitForAction(ctx); err != nil {
 			return err
@@ -88,13 +87,13 @@ func (a *MaintainLinkTask) Run(ctx *astral.Context) error {
 		switch {
 		// why: a Wake during the previous, successful attempt also lands here with
 		// count == 0; the link then stands and is not broken.
-		case count == 0 && !a.mod.Nodes.IsLinked(a.Target):
+		case count == 0 && !a.mod.IsLinked(a.Target):
 			a.mod.log.Log("link to %v is broken, trying to reconnect", a.Target)
 		case count > 0 && count%5 == 0:
 			a.mod.log.Log("still trying to reconnect to %v (attempt %v)", a.Target, count)
 		}
 
-		task := a.mod.Nodes.NewEnsureLinkTask(a.Target, []string{nodesmod.StrategyBasic, nodesmod.StrategyTor}, nil, false)
+		task := a.mod.NewEnsureLinkTask(a.Target, []string{nodesmod.StrategyBasic, nodesmod.StrategyTor}, nil, false)
 		scheduled, err := a.mod.Scheduler.Schedule(task)
 		if err != nil {
 			return err
@@ -157,7 +156,7 @@ func (a *MaintainLinkTask) backoff(ctx *astral.Context, delay time.Duration) err
 // Wake makes the task link to Target now when Target is not linked, also
 // while the task waits out its backoff.
 func (a *MaintainLinkTask) Wake() {
-	if a.mod.Nodes.IsLinked(a.Target) {
+	if a.mod.IsLinked(a.Target) {
 		return
 	}
 
@@ -173,7 +172,7 @@ func (a *MaintainLinkTask) Wake() {
 func (a *MaintainLinkTask) ReceiveEvent(e *events.Event) {
 	switch typed := e.Data.(type) {
 	case *ip.EventNetworkAddressChanged:
-		if !addsRoutableAddress(typed) || a.mod.Nodes.IsLinked(a.Target) {
+		if !addsRoutableAddress(typed) || a.mod.IsLinked(a.Target) {
 			return
 		}
 		a.resetBackoff.Store(true)

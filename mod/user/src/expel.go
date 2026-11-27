@@ -115,7 +115,7 @@ func (mod *Module) applyExpulsion(id *astral.Identity) {
 // leaveSwarm strips this node's own membership after it is expelled from its swarm:
 // it cancels every sibling link-maintenance task, closes the links, and clears the
 // active contract.
-// why: expulsion does not revoke the contract, and MaintainLinkTask never re-checks
+// why: expulsion does not revoke the contract, and mod/nodes' MaintainLinkTask never re-checks
 // it, so without this the banned node keeps reconnecting to and syncing with peers
 // that now reject it. Clearing the contract is the only local signal of the ban.
 func (mod *Module) leaveSwarm() {
