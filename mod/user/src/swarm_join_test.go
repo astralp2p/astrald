@@ -50,7 +50,6 @@ func newCarrierFixture(t testing.TB, carrierTier user.Tier) *carrierFixture {
 	f.userID = f.keys.newKey()
 	f.carrier = f.keys.newKey()
 	f.swarm = newStoreModule(t, f.carrier, f.userID, f.keys, f.clock.now, acceptAll)
-	f.swarm.writer = f.newWriter()
 	f.swarm.swarmState.stored = func([]astral.Object) {
 		select {
 		case f.stored <- struct{}{}:
@@ -64,11 +63,6 @@ func newCarrierFixture(t testing.TB, carrierTier user.Tier) *carrierFixture {
 	f.joiner = newSwarmJoiner(astral.NewContext(nil), f.keys.newKey(), f.keys, &tree.Value[*user.SignedJoinRequest]{})
 	f.joiner.now = f.clock.now
 	return f
-}
-
-// newWriter returns the carrier node's typed writes over the fixture's swarm.
-func (f *carrierFixture) newWriter() *swarmWriter {
-	return &swarmWriter{self: f.carrier, signer: f.keys, view: f.swarm, merge: f.swarm.swarmState.merge}
 }
 
 // newCarrier returns a fresh carrier, as after a restart: it remembers nothing.
@@ -352,7 +346,7 @@ func TestJoinMemberCarrierRefused(t *testing.T) {
 			if n := f.count(user.EntryRequests); n != 0 {
 				t.Fatalf("carrier stored %d requests", n)
 			}
-			if _, err := f.newWriter().FileExpelRequest(astral.NewContext(nil), f.joiner.self); !errors.Is(err, errExpelFilerTier) {
+			if _, err := f.swarm.FileExpelRequest(astral.NewContext(nil), f.joiner.self); !errors.Is(err, errExpelFilerTier) {
 				t.Fatalf("carrier filed an expel request: %v", err)
 			}
 		})

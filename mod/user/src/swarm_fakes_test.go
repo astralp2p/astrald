@@ -80,7 +80,7 @@ func realRules(root func() *astral.Identity) swarmset.Checker {
 }
 
 // newStoreModule returns the module of node, claimed by root, over a real open store whose entry check is
-// checker(mod.rootKey), and a real view on now. It makes no typed writes: a test sets mod.writer.
+// checker(mod.rootKey), and a real view on now.
 func newStoreModule(t testing.TB, node, root *astral.Identity, keys *joinKeyring, now func() time.Time, checker func(func() *astral.Identity) swarmset.Checker) *Module {
 	t.Helper()
 

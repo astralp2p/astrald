@@ -19,11 +19,10 @@ func (mod *Module) rootKey() *astral.Identity {
 
 // wireSwarm builds the rest of SwarmState over the store and view Load built: the
 // entry rules, which verify with the crypto module LoadDependencies just
-// injected; the typed writes; the feed and publisher of its events; the
+// injected; the feed and publisher of its events; the
 // carrier and the joiner.
 func (mod *Module) wireSwarm() {
 	mod.entryRules.SetVerifier(mod.Crypto)
-	mod.writer = &swarmWriter{self: mod.node.Identity(), signer: mod.Crypto, view: mod, entry: mod.SwarmEntry, merge: mod.mergeSwarmEntry}
 	mod.carrier = newSwarmCarrier(mod.node.Identity(), mod, mod.Crypto, &mod.joinConfirmations)
 	mod.joiner = newSwarmJoiner(mod.ctx, mod.node.Identity(), mod.Crypto, &mod.config.PendingJoin)
 

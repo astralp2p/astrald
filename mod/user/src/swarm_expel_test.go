@@ -35,7 +35,7 @@ func TestExpelNeedsRequestAndUserKey(t *testing.T) {
 	}
 
 	// a Trusted node files; a ceremony without the user key signs nothing
-	req, err := f.newWriter().FileExpelRequest(ctx, subject)
+	req, err := f.swarm.FileExpelRequest(ctx, subject)
 	if err != nil {
 		t.Fatalf("file: %v", err)
 	}
@@ -72,7 +72,7 @@ func TestExpelRefusesEndedRequest(t *testing.T) {
 	ceremony := newUserKeyCeremony(f.userID, f.keys, f.swarm)
 	ceremony.now = f.clock.now
 
-	declined, err := f.newWriter().FileExpelRequest(ctx, f.keys.newKey())
+	declined, err := f.swarm.FileExpelRequest(ctx, f.keys.newKey())
 	if err != nil {
 		t.Fatalf("file: %v", err)
 	}

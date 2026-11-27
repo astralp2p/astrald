@@ -63,8 +63,6 @@ type Module struct {
 	swarmState *swarmStore
 	// entryRules is the entry check of swarmState; LoadDependencies gives it the crypto module.
 	entryRules *swarmset.Rules
-	// writer makes SwarmState's typed writes.
-	writer *swarmWriter
 	// publisher emits SwarmState's events; swarmFeed reports its changes.
 	publisher *swarmPublisher
 	swarmFeed SwarmFeed

@@ -70,7 +70,6 @@ func newAnswerFixture(t *testing.T, tier user.Tier) *answerFixture {
 	})
 	f.crypto = f.mod.Crypto.(*keyringCrypto)
 	f.mod.Auth = f.auth
-	f.mod.writer = &swarmWriter{self: f.nodeID, signer: keys, view: f.mod, entry: f.mod.SwarmEntry, merge: f.mod.swarmState.merge}
 	f.mod.carrier = newSwarmCarrier(f.nodeID, f.mod, keys, &f.mod.joinConfirmations)
 	f.mod.swarmState.stored = func(objs []astral.Object) {
 		f.mu.Lock()
@@ -204,16 +203,7 @@ func runOp(t *testing.T, fn any, caller *astral.Identity, origin, queryString st
 
 func (f *answerFixture) answer(t *testing.T, id *astral.ObjectID, answer string) astral.Object {
 	t.Helper()
-	return f.answerAs(t, id, answer, "")
-}
-
-// answerAs calls user.answer_request with the as argument; empty omits it.
-func (f *answerFixture) answerAs(t *testing.T, id *astral.ObjectID, answer, as string) astral.Object {
-	t.Helper()
 	q := "user.answer_request?id=" + id.String() + "&answer=" + answer
-	if as != "" {
-		q += "&as=" + as
-	}
 	objs := runOp(t, f.mod.OpAnswerRequest, f.caller, f.origin, q)
 	if len(objs) != 1 {
 		t.Fatalf("answer_request sent %d objects; want 1", len(objs))
@@ -428,10 +418,10 @@ func TestAnswerRequestAnotherIssuerMayOfferAfterThisNode(t *testing.T) {
 		t.Fatal("the first offer was not sent")
 	}
 
-	f.caller = f.userID
-	sc, ok := f.answerAs(t, req, "approve", "user").(*auth.SignedContract)
-	if !ok || !sc.Issuer.IsEqual(f.userID) {
-		t.Fatalf("the user key's offer after this node's: %v; want one from the user key", sc)
+	stored, _ := f.mod.SwarmEntry(req)
+	f.seed(t, f.answerContract(stored.(*user.SignedContractRequest).ContractRequest, f.other, req, false))
+	if n := len(f.mod.ContractsOf(req)); n != 2 {
+		t.Fatalf("the request holds %d offers; want this node's and the other issuer's", n)
 	}
 }
 
@@ -451,47 +441,27 @@ func TestAnswerRequestTrustedDeclinesMemberJoin(t *testing.T) {
 	}
 }
 
-// With as=user the user key signs the answer: only for a local query by the
-// user, on a node that reaches the user key. Its offer is not capped by a
-// membership.
-func TestAnswerRequestAsTheUser(t *testing.T) {
-	f := newAnswerFixture(t, "")
-	req := f.contractRequest(t, time.Now(), user.RequestPending)
-	f.caller = f.userID
-	sc, ok := f.answerAs(t, req, "approve", "user").(*auth.SignedContract)
-	if !ok || !sc.Issuer.IsEqual(f.userID) || sc.SubjectSig != nil {
-		t.Fatalf("answered %v; want an offer the user key issued", sc)
-	}
-	if d := time.Until(sc.ExpiresAt.Time()); d < offerValidity-time.Minute {
-		t.Fatalf("the user key's offer expires in %v; want 3650 days", d)
-	}
-	f.assertSignedAndWrittenBy(t, f.keys.key(f.userID), sc, sc.SignableHash(), sc.IssuerSig)
-
+// The node signs every answer, whoever asks: a caller that is the user, or a query from the network, gets an
+// offer this node issued, and the user key signs nothing here. Its offer is capped by this node's membership.
+func TestAnswerRequestAlwaysSignsAsThisNode(t *testing.T) {
 	for _, c := range []struct {
 		name   string
-		as     string
 		origin string
 		caller func(f *answerFixture) *astral.Identity
-		noKey  bool
-		want   error
 	}{
-		{"an unknown as", "owner", "", func(f *answerFixture) *astral.Identity { return f.userID }, false, errInvalidAnswer},
-		{"over the network", "user", astral.OriginNetwork, func(f *answerFixture) *astral.Identity { return f.userID }, false, astral.NewErrOriginNotAllowed(astral.OriginNetwork)},
-		{"without the user key", "user", "", func(f *answerFixture) *astral.Identity { return f.userID }, true, errNoUserKey},
-		{"by another caller", "user", "", func(*answerFixture) *astral.Identity { return astral.GenerateIdentity() }, false, auth.ErrNotPermitted},
+		{"by the user", "", func(f *answerFixture) *astral.Identity { return f.userID }},
+		{"by the user over the network", astral.OriginNetwork, func(f *answerFixture) *astral.Identity { return f.userID }},
+		{"by another caller", "", func(f *answerFixture) *astral.Identity { return f.caller }},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			f := newAnswerFixture(t, user.TierPrivilegedMember)
 			req := f.contractRequest(t, time.Now(), user.RequestPending)
 			f.caller, f.origin = c.caller(f), c.origin
-			f.crypto.hidden = c.noKey
-			got := f.answerAs(t, req, "approve", c.as)
-			if e, ok := got.(astral.Error); !ok || e.Error() != c.want.Error() {
-				t.Fatalf("answered %v; want %v", got, c.want)
+			sc, ok := f.answer(t, req, "approve").(*auth.SignedContract)
+			if !ok || !sc.Issuer.IsEqual(f.nodeID) || sc.SubjectSig != nil {
+				t.Fatalf("answered %v; want an offer this node issued", sc)
 			}
-			if n := len(f.wrote()); n != 0 {
-				t.Fatalf("wrote %d entries; want none", n)
-			}
+			f.assertSignedAndWrittenBy(t, f.keys.key(f.nodeID), sc, sc.SignableHash(), sc.IssuerSig)
 		})
 	}
 }
