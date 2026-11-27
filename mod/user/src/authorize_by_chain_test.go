@@ -73,6 +73,32 @@ func TestChainRelayForIsPrivilegedOnly(t *testing.T) {
 	}
 }
 
+// TestChainAdminSwarmAsPrivilegedIsPrivilegedOnly: only a node holding a
+// Privileged membership the user signed administers the swarm by this rule.
+func TestChainAdminSwarmAsPrivilegedIsPrivilegedOnly(t *testing.T) {
+	f := newChainFixture(t)
+	for name, c := range map[string]struct {
+		actor *astral.Identity
+		want  bool
+	}{
+		"privileged": {f.privileged, true},
+		"trusted":    {f.trusted, false},
+		"member":     {f.member, false},
+		"privileged membership not signed by the user": {f.rogue, false},
+		"this node":  {f.node, false},
+		"zero actor": {&astral.Identity{}, false},
+	} {
+		if got := f.rules.AuthorizeAdminSwarmAsPrivileged(nil, &user.AdminSwarmAction{Action: auth.NewAction(c.actor)}); got != c.want {
+			t.Errorf("%s: got %v, want %v", name, got, c.want)
+		}
+	}
+
+	unclaimed := newChainRules(&Module{}, fakeMembers{})
+	if unclaimed.AuthorizeAdminSwarmAsPrivileged(nil, &user.AdminSwarmAction{Action: auth.NewAction(f.privileged)}) {
+		t.Error("unclaimed node: want deny")
+	}
+}
+
 // TestChainServiceDiscoveryDropsTheSwarmMemberRule: the user discovers; a swarm
 // member of any tier, and this node, discover only through a contract chain.
 func TestChainServiceDiscoveryDropsTheSwarmMemberRule(t *testing.T) {

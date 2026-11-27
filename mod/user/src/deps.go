@@ -110,6 +110,7 @@ func (mod *Module) LoadDependencies(ctx *astral.Context) (err error) {
 	mod.Auth.Add(authmod.Func[*services.ServiceDiscoveryAction](chain.AuthorizeServiceDiscovery))
 	mod.Auth.Add(authmod.Func[*user.SeeSwarmAction](mod.AuthorizeSeeSwarm))
 	mod.Auth.Add(authmod.Func[*user.AdminSwarmAction](mod.AuthorizeAdminSwarm))
+	mod.Auth.Add(authmod.NodeLocal(authmod.Func[*user.AdminSwarmAction](chain.AuthorizeAdminSwarmAsPrivileged)))
 	mod.Auth.Add(authmod.Func[*user.ExpelAction](mod.AuthorizeExpel))
 	mod.Auth.Add(authmod.Func[*auth.AdminNetworkAction](mod.AuthorizeAdminNetwork))
 	mod.Auth.Add(authmod.Func[*auth.AdminManageAppsAction](mod.AuthorizeAdminManageApps))

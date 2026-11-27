@@ -6,8 +6,7 @@ import (
 )
 
 // AuthorizeAdminNetwork grants network administration to the user identity and
-// to this node itself; a Privileged node holds it through the swarm root
-// of the auth walk.
+// to this node itself, and to nobody else.
 //
 // why the user: the six other node-wide actions grant it, and a user who adopts
 // and expels swarm members already reshapes the network more than these ops do.
@@ -18,7 +17,8 @@ import (
 // why before swarm membership: a node links and punches before any user exists,
 // when LocalSwarm is empty and Identity() answers nil.
 // note: the NAT link strategy creates the ephemeral listener and the endpoint
-// mapping on the peer, which the peer allows a Privileged node alone.
+// mapping on the peer, which the peer allows only an identity this rule or a
+// contract the user signs allows.
 // why not outsiders: the endpoints this node advertises, and the rows it holds
 // about other nodes, are private to the user's swarm, and nodes.resolve_endpoints
 // answers under this action.
@@ -36,7 +36,7 @@ func (mod *Module) AuthorizeAdminNetwork(ctx *astral.Context, a *auth.AdminNetwo
 		return false
 	}
 
-	// why no swarm member: a Privileged node acts for the user through the
-	// swarm root handler, and no other tier administers this node.
+	// why no swarm member: membership of any tier administers no node; a
+	// member reaches these ops through a contract the user signs.
 	return actor.IsEqual(mod.Identity()) || actor.IsEqual(mod.node.Identity())
 }

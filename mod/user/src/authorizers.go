@@ -31,11 +31,11 @@ func (mod *Module) AuthorizeSeeSwarm(ctx *astral.Context, a *user.SeeSwarmAction
 	return ok
 }
 
-// AuthorizeAdminSwarm allows the swarm's user to change what the swarm holds,
-// and nobody else.
+// AuthorizeAdminSwarm allows the swarm's user to change what the swarm holds.
+// A contract the user signs delegates it through the auth walk.
 //
-// why: the policy is AuthorizeAdopt's and AuthorizeExpel's, carried over
-// unchanged — the active contract's issuer alone.
+// note: a Privileged node administers the swarm itself through
+// AuthorizeAdminSwarmAsPrivileged, which passes nothing on.
 //
 // why narrower than SeeSwarm, which grants the whole local swarm: membership is
 // granted on request today, so granting the swarm here would let a node it
@@ -51,8 +51,8 @@ func (mod *Module) AuthorizeAdminSwarm(ctx *astral.Context, a *user.AdminSwarmAc
 	return !userID.IsZero() && a.Actor().IsEqual(userID)
 }
 
-// AuthorizeExpel allows the user, and nobody else, to expel (D7). The swarm
-// root handler never answers an expel, so a Privileged node cannot.
+// AuthorizeExpel allows the user to expel (D7). A contract the user signs
+// delegates it through the auth walk; no membership grants it.
 func (mod *Module) AuthorizeExpel(ctx *astral.Context, a *user.ExpelAction) bool {
 	userID := mod.Identity()
 	return !userID.IsZero() && a.Actor().IsEqual(userID)

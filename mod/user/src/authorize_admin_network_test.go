@@ -81,8 +81,7 @@ func TestAdminNetworkGrantsThisNodeBeforeAUserExists(t *testing.T) {
 
 // TestAdminNetworkGrantsThisNodeAndTheUserOnly pins the direct grant on a
 // claimed node: this node and the user, and nobody else. A swarm member is
-// refused here; a Privileged one holds the action through the swarm root
-// handler (mod/auth).
+// refused here.
 func TestAdminNetworkGrantsThisNodeAndTheUserOnly(t *testing.T) {
 	nodeID, userID := astral.GenerateIdentity(), astral.GenerateIdentity()
 	member, expelled := astral.GenerateIdentity(), astral.GenerateIdentity()
