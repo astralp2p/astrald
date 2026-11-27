@@ -1,10 +1,13 @@
 package user
 
 import (
+	"errors"
 	"slices"
 	"time"
 
+	objectsapi "github.com/astralp2p/astral-go/api/objects"
 	"github.com/astralp2p/astral-go/astral"
+	"github.com/astralp2p/astrald/mod/objects"
 )
 
 // siblingPushBackoff lists the waits before the retries of a push that failed
@@ -57,4 +60,19 @@ func (mod *Module) pushToSiblingRetry(ctx *astral.Context, sib *astral.Identity,
 			return
 		}
 	}
+}
+
+// pushOnce pushes obj to target, bounded by siblingPushTimeout.
+func (mod *Module) pushOnce(ctx *astral.Context, target *astral.Identity, obj astral.Object) error {
+	pctx, cancel := ctx.WithTimeout(siblingPushTimeout)
+	defer cancel()
+
+	return mod.Objects.Push(pctx, target, obj)
+}
+
+// isPushRejected reports whether err is a receiver's refusal of a pushed object.
+// why both: the objects client reports a remote refusal with the wire error, and
+// a push to this node itself returns the local receiver's error.
+func isPushRejected(err error) bool {
+	return errors.Is(err, objectsapi.ErrPushRejected) || errors.Is(err, objects.ErrPushRejected)
 }

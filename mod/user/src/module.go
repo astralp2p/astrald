@@ -55,7 +55,7 @@ type Module struct {
 	readPeerContract peerContractReader
 	// now is the clock of the nearby contact policy and of the member expiry timer.
 	now func() time.Time
-	// after is the clock of the ban push backoff; see pushUntilDelivered.
+	// after is the clock of the sibling push backoff and the periodic sibling sync.
 	after func(time.Duration) <-chan time.Time
 	// linkRetryAfter replaces time.After as the clock of every MaintainLinkTask backoff while set.
 	// note: a test seam, set through SetLinkRetryClock.

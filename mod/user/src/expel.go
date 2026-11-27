@@ -49,15 +49,11 @@ func (mod *Module) Expel(ctx *astral.Context, nodeID *astral.Identity) (*user.Si
 
 	go mod.PushToLocalSwarm(mod.ctx, signed)
 	// why: PushToLocalSwarm skips the subject, so push the ban to the expelled node
-	// directly — its trigger to self-enforce via leaveSwarm. The push is retried
-	// until the node answers; the expulsion sync at the node's next link with a
-	// holder of the ban and the sweep (reconcile_task.go) also deliver it.
-	// The node's answer closes the links with it (AdmitLink).
-	go func() {
-		if mod.pushUntilDelivered(mod.ctx, nodeID, signed) {
-			mod.onBanAnswered(nodeID)
-		}
-	}()
+	// directly — its trigger to self-enforce via leaveSwarm. The node's answer
+	// closes the links with it (AdmitLink).
+	// why no retry: the expulsion sync at the node's next link with a holder of
+	// the ban and the sweep (reconcile_task.go) deliver it later.
+	go mod.pushBan(nodeID, signed)
 	// why: stop maintaining the link but do not force-close it — that would race the
 	// push above. On delivery the node tears itself down; until then the authorizers
 	// refuse it (isBanned).
@@ -65,6 +61,18 @@ func (mod *Module) Expel(ctx *astral.Context, nodeID *astral.Identity) (*user.Si
 
 	mod.log.Info("expelled %v from swarm", nodeID)
 	return signed, nil
+}
+
+// pushBan pushes the ban to its subject once, and closes the links with the
+// subject when it answers: accepted the ban or refused it.
+func (mod *Module) pushBan(subject *astral.Identity, signed *user.SignedExpulsion) {
+	err := mod.pushOnce(mod.ctx, subject, signed)
+	if err != nil && !isPushRejected(err) {
+		mod.log.Logv(1, "push ban to %v: %v", subject, err)
+		return
+	}
+
+	mod.onBanAnswered(subject)
 }
 
 // receiveExpulsion handles an inbound signed ban. It is accepted only when issued

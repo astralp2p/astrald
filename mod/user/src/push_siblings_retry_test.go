@@ -1,6 +1,7 @@
 package user
 
 import (
+	"errors"
 	"sync"
 	"testing"
 	"time"
@@ -9,6 +10,117 @@ import (
 	"github.com/astralp2p/astral-go/astral"
 	objectsmod "github.com/astralp2p/astrald/mod/objects"
 )
+
+// testPushBuffer sizes the channels of the push fakes: more than any test pushes.
+const testPushBuffer = 16
+
+var errUnreachable = errors.New("route not found")
+
+// scriptedPusher is an objects module that answers the pushes to target with
+// results in order, and with nil after the last one. It records the deadline
+// of each push to target and ignores pushes to any other node.
+type scriptedPusher struct {
+	objectsmod.Module
+	target *astral.Identity
+	pushed chan time.Time
+
+	mu      sync.Mutex
+	results []error
+}
+
+func newScriptedPusher(target *astral.Identity, results ...error) *scriptedPusher {
+	return &scriptedPusher{target: target, pushed: make(chan time.Time, testPushBuffer), results: results}
+}
+
+func (p *scriptedPusher) Push(ctx *astral.Context, target *astral.Identity, _ astral.Object) error {
+	if !target.IsEqual(p.target) {
+		return nil
+	}
+	deadline, _ := ctx.Deadline()
+	p.pushed <- deadline
+
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if len(p.results) == 0 {
+		return nil
+	}
+	err := p.results[0]
+	p.results = p.results[1:]
+	return err
+}
+
+// stepClock is a backoff clock the test advances: each wait is recorded, and
+// it ends when the test calls step.
+type stepClock struct {
+	waits chan time.Duration
+	fire  chan time.Time
+}
+
+func newStepClock() *stepClock {
+	return &stepClock{waits: make(chan time.Duration, testPushBuffer), fire: make(chan time.Time)}
+}
+
+func (c *stepClock) after(d time.Duration) <-chan time.Time {
+	c.waits <- d
+	return c.fire
+}
+
+// wait returns the next wait the pusher started.
+func (c *stepClock) wait(t *testing.T) time.Duration {
+	t.Helper()
+	select {
+	case d := <-c.waits:
+		return d
+	case <-time.After(effectTimeout):
+		t.Fatal("the pusher started no wait")
+		return 0
+	}
+}
+
+// step ends the current wait.
+func (c *stepClock) step(t *testing.T) {
+	t.Helper()
+	select {
+	case c.fire <- time.Time{}:
+	case <-time.After(effectTimeout):
+		t.Fatal("the pusher is not waiting")
+	}
+}
+
+// requirePush waits for one push to the pusher's target and checks it is bounded.
+func requirePush(t *testing.T, p *scriptedPusher) {
+	t.Helper()
+	select {
+	case deadline := <-p.pushed:
+		if deadline.IsZero() {
+			t.Fatal("the push has no deadline")
+		}
+	case <-time.After(effectTimeout):
+		t.Fatal("nothing was pushed to the target")
+	}
+}
+
+// requireQuiet fails on any further push or wait within quiet.
+func requireQuiet(t *testing.T, p *scriptedPusher, c *stepClock) {
+	t.Helper()
+	select {
+	case <-p.pushed:
+		t.Fatal("pushed again; want no further push")
+	case d := <-c.waits:
+		t.Fatalf("started a wait of %v; want none", d)
+	case <-time.After(quiet):
+	}
+}
+
+// requireDone waits for done to close.
+func requireDone(t *testing.T, done <-chan struct{}) {
+	t.Helper()
+	select {
+	case <-done:
+	case <-time.After(effectTimeout):
+		t.Fatal("the call did not return")
+	}
+}
 
 // objectPusher is a scriptedPusher that also records the object of each push.
 type objectPusher struct {

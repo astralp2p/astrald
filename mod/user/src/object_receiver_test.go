@@ -25,6 +25,9 @@ import (
 // effectTimeout bounds the wait for an effect the receiver starts in a goroutine.
 const effectTimeout = 5 * time.Second
 
+// quiet is how long a test waits to see that nothing more happens.
+const quiet = 200 * time.Millisecond
+
 // absenceWindow is how long a test watches for an asynchronous effect that must not happen.
 const absenceWindow = 200 * time.Millisecond
 
