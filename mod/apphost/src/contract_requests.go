@@ -225,6 +225,10 @@ func (cr *contractRequests) ownRequest(id *astral.ObjectID) *user.SignedContract
 // filed: for each approved request not carried out yet, it signs the app's
 // contract and adds it to SwarmState. It then wakes every Wait.
 //
+// fixme: the app's contract grants nothing yet: the walk continues at this
+// node, which holds no contract from the approver until it co-signs an
+// approver's offer (astral-docs protocols/user/README.md#app-grants).
+//
 // The contract names exactly the identity and permits of the approved request
 // and carries the request's entry ID as its RequestID. A request another node filed is that
 // node's to carry out, even when it names an app hosted here: an app moved
