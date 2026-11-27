@@ -4,9 +4,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/astralp2p/astral-go/api/auth"
+	"github.com/astralp2p/astral-go/api/user"
 	"github.com/astralp2p/astral-go/astral"
-	"github.com/astralp2p/astral-go/astral/log"
 	nodesmod "github.com/astralp2p/astrald/mod/nodes"
 	objectsmod "github.com/astralp2p/astrald/mod/objects"
 )
@@ -46,16 +45,10 @@ func pushFixture(t *testing.T, members, linked []*astral.Identity) *Module {
 
 	userID, nodeID := astral.GenerateIdentity(), astral.GenerateIdentity()
 
-	contracts := []*auth.SignedContract{adminNetworkMembership(userID, nodeID)}
-	for _, m := range members {
-		contracts = append(contracts, memberContract(t, userID, m))
+	mod := newStoreModule(t, nodeID, userID, nil, time.Now, realRules)
+	for _, id := range append([]*astral.Identity{nodeID}, members...) {
+		storeMembership(t, mod, userID, id, user.TierMember, time.Now().Add(time.Hour))
 	}
-
-	mod := banModule(t, userID)
-	mod.node = &identityNode{id: nodeID}
-	mod.log = log.New(nodeID)
-	mod.Deps.Auth = &adminNetworkContracts{contracts: contracts}
-	useContractSwarm(t, mod, userID, func() ([]*auth.SignedContract, error) { return contracts, nil })
 	mod.Deps.Nodes = &linkedNodes{linked: linked}
 
 	return mod

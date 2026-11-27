@@ -2,7 +2,6 @@ package user
 
 import (
 	"sync"
-	"sync/atomic"
 	"testing"
 	"time"
 
@@ -10,7 +9,6 @@ import (
 	"github.com/astralp2p/astral-go/api/crypto"
 	"github.com/astralp2p/astral-go/api/user"
 	"github.com/astralp2p/astral-go/astral"
-	nodesmod "github.com/astralp2p/astrald/mod/nodes"
 	usermod "github.com/astralp2p/astrald/mod/user"
 )
 
@@ -215,92 +213,6 @@ func addMembership(t testing.TB, state *storeState, issuer, subject *astral.Iden
 	return sc
 }
 
-// contractState is a SwarmState whose contracts are the ones contracts
-// answers, so a test that stages members in a fake auth index sees them as
-// SwarmState members. Its head moves on every read, so the view reads the
-// staged set each time.
-type contractState struct {
-	usermod.SwarmState
-	contracts func() ([]*auth.SignedContract, error)
-	head      atomic.Uint64
-	// store holds the Expulsions: the module's own store, as its AddExpulsion writes them there.
-	store *swarmStore
-}
-
-func (s *contractState) SwarmEntry(id *astral.ObjectID) (astral.Object, error) {
-	found, _ := s.contracts()
-	for _, c := range found {
-		if cid, err := astral.ResolveObjectID(c); err == nil && cid.IsEqual(id) {
-			return c, nil
-		}
-	}
-	return s.store.set.Entry(id)
-}
-
-func (s *contractState) SwarmEntries(kind user.EntryKind) ([]*astral.ObjectID, error) {
-	if kind == user.EntryExpels {
-		return s.store.set.Entries(kind)
-	}
-	if kind != user.EntryContracts {
-		return nil, nil
-	}
-	found, err := s.contracts()
-	if err != nil {
-		return nil, err
-	}
-	var ids []*astral.ObjectID
-	for _, c := range found {
-		if id, err := astral.ResolveObjectID(c); err == nil {
-			ids = append(ids, id)
-		}
-	}
-	return ids, nil
-}
-
-func (s *contractState) SwarmHead() uint64 { return s.head.Add(1) }
-
-// useQuerySwarm gives mod a SwarmView over q's staged contracts, with userID
-// as the root key.
-func useQuerySwarm(t testing.TB, mod *Module, userID *astral.Identity, q *memberQuery) {
-	useContractSwarm(t, mod, userID, func() ([]*auth.SignedContract, error) {
-		q.mu.Lock()
-		defer q.mu.Unlock()
-		return append([]*auth.SignedContract(nil), q.found...), q.err
-	})
-}
-
-// useIndexSwarm gives mod a SwarmView over the contracts a seeds, with userID
-// as the root key.
-func useIndexSwarm(t testing.TB, mod *Module, userID *astral.Identity, a *indexAuth) {
-	useContractSwarm(t, mod, userID, func() ([]*auth.SignedContract, error) {
-		a.mu.Lock()
-		defer a.mu.Unlock()
-		return append([]*auth.SignedContract(nil), a.index...), nil
-	})
-}
-
-// useContractSwarm gives mod a SwarmView over the contracts the function answers, with userID as the root key,
-// and a real store for the Expulsions the view reads. A test whose module writes Expulsions itself shares the
-// store with mod.swarmState (useStore).
-func useContractSwarm(t testing.TB, mod *Module, userID *astral.Identity, contracts func() ([]*auth.SignedContract, error)) {
-	t.Helper()
-	store := newSwarmStore(realRules(func() *astral.Identity { return userID }))
-	ctx := astral.NewContext(nil).WithIdentity(astral.GenerateIdentity()).IncludeZone(astral.ZoneNetwork)
-	if _, err := store.open(ctx, newMemFiles(), astral.GenerateIdentity()); err != nil {
-		t.Fatalf("open: %v", err)
-	}
-	mod.swarmView = newSwarmView(&contractState{contracts: contracts, store: store}, func() *astral.Identity { return userID }, time.Now)
-}
-
-// pullNoSwarm is a nodes module with no behaviour: a SwarmState pull on a module whose store is closed does
-// nothing, and the tests that use it read the swarm from a SwarmView fixture.
-type pullNoSwarm struct{ nodesmod.Module }
-
-// useStore makes the store behind mod's contract view the one mod's own writes go to.
-func useStore(mod *Module) {
-	mod.swarmState = mod.swarmView.state.(*contractState).store
-}
-
 // banNode stores the Expulsion issuer signed on subject where mod's view reads it: in the in-memory state
 // a test gave it, or in its real store.
 func banNode(t testing.TB, mod *Module, issuer, subject *astral.Identity) {
@@ -315,8 +227,6 @@ func storeBan(mod *Module, signed *user.SignedExpulsion) error {
 	switch state := mod.swarmView.state.(type) {
 	case *storeState:
 		return state.merge(nil, signed)
-	case *contractState:
-		return state.store.merge(state.store.ctx, signed)
 	default:
 		return mod.swarmState.merge(mod.swarmState.ctx, signed)
 	}

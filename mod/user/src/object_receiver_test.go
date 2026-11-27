@@ -215,6 +215,7 @@ func (d *recordingDrop) accepted() []bool {
 
 // receiverFixture is a user module whose dependencies record every effect of ReceiveObject.
 type receiverFixture struct {
+	t         *testing.T
 	mod       *Module
 	nodeID    *astral.Identity
 	userID    *astral.Identity
@@ -228,6 +229,7 @@ func newReceiverFixture(t *testing.T, userID *astral.Identity) *receiverFixture 
 	t.Helper()
 
 	f := &receiverFixture{
+		t:         t,
 		nodeID:    astral.GenerateIdentity(),
 		userID:    userID,
 		auth:      &indexAuth{},
@@ -263,8 +265,7 @@ func newReceiverFixture(t *testing.T, userID *astral.Identity) *receiverFixture 
 		if err != nil {
 			t.Fatalf("seed active contract: %v", err)
 		}
-		useIndexSwarm(t, f.mod, userID, f.auth)
-		useStore(f.mod)
+		openStore(t, f.mod, time.Now, realRules)
 	}
 
 	return f
@@ -319,10 +320,15 @@ func requireLeft(t *testing.T, events *eventRecorder, left ...*astral.Identity) 
 	}
 }
 
-// addSibling indexes a node contract from the current user for a new node and returns the node.
+// admit stores a membership of node from the current user in the swarm.
+func (f *receiverFixture) admit(node *astral.Identity) {
+	storeMembership(f.t, f.mod, f.userID, node, user.TierMember, time.Now().Add(time.Hour))
+}
+
+// addSibling admits a new node to the swarm and returns the node.
 func (f *receiverFixture) addSibling() *astral.Identity {
 	sibling := astral.GenerateIdentity()
-	f.auth.seed(nodeContract(f.userID, sibling))
+	f.admit(sibling)
 	return sibling
 }
 
@@ -405,7 +411,7 @@ func TestReceiveSignedContractRejects(t *testing.T) {
 			f := newReceiverFixture(t, userID)
 
 			sender := astral.GenerateIdentity()
-			f.auth.seed(nodeContract(userID, sender))
+			f.admit(sender)
 
 			drop := &recordingDrop{sender: sender, object: tc.contract(f, sender)}
 			if err := f.mod.ReceiveObject(drop); err != nil {

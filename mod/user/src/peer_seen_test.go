@@ -11,6 +11,7 @@ import (
 	"github.com/astralp2p/astral-go/api/events"
 	"github.com/astralp2p/astral-go/api/ip"
 	"github.com/astralp2p/astral-go/api/nearby"
+	"github.com/astralp2p/astral-go/api/user"
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astral-go/astral/log"
 	nodesmod "github.com/astralp2p/astrald/mod/nodes"
@@ -81,6 +82,7 @@ func (n *linkNodes) IsLinked(id *astral.Identity) bool {
 // user that is no swarm member here yet. answer is what peerID answers
 // user.contract with, by default a valid node contract.
 type contactFixture struct {
+	t         *testing.T
 	mod       *Module
 	nodeID    *astral.Identity
 	userID    *astral.Identity
@@ -97,6 +99,7 @@ func newContactFixture(t *testing.T) *contactFixture {
 	t.Helper()
 
 	f := &contactFixture{
+		t:         t,
 		nodeID:    astral.GenerateIdentity(),
 		userID:    astral.GenerateIdentity(),
 		peerID:    astral.GenerateIdentity(),
@@ -130,7 +133,7 @@ func newContactFixture(t *testing.T) *contactFixture {
 	if err := f.mod.config.ActiveContract.Set(nil, nodeContract(f.userID, f.nodeID)); err != nil {
 		t.Fatalf("seed active contract: %v", err)
 	}
-	useIndexSwarm(t, f.mod, f.userID, f.auth)
+	openStore(t, f.mod, time.Now, realRules)
 	return f
 }
 
@@ -172,9 +175,9 @@ func (f *contactFixture) nextAttempt(node *astral.Identity) (time.Time, bool) {
 	return next, ok
 }
 
-// addMember indexes a node contract from the user for node, making node a swarm member.
+// addMember stores a membership of node from the user, making node a swarm member.
 func (f *contactFixture) addMember(node *astral.Identity) {
-	f.auth.seed(nodeContract(f.userID, node))
+	storeMembership(f.t, f.mod, f.userID, node, user.TierMember, time.Now().Add(time.Hour))
 }
 
 // requireNoContact fails when anything was read, pushed, scheduled or held in the dial map.

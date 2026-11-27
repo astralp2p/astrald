@@ -67,7 +67,7 @@ func TestRelayDigestClientReadsTheHandlersDigest(t *testing.T) {
 	userID := astral.GenerateIdentity()
 	receiver := newReceiverFixture(t, userID)
 	asker := astral.GenerateIdentity()
-	receiver.auth.seed(nodeContract(userID, asker))
+	receiver.admit(asker)
 
 	a, b := relayForContract(astral.GenerateIdentity(), asker), relayForContract(astral.GenerateIdentity(), astral.GenerateIdentity())
 	receiver.auth.seed(a)

@@ -92,14 +92,11 @@ func newSyncFixture(t *testing.T, ctx *astral.Context) *syncFixture {
 
 	userID, nodeID := astral.GenerateIdentity(), astral.GenerateIdentity()
 	active := nodeContract(userID, nodeID)
-	sibling := nodeContract(userID, astral.GenerateIdentity())
 	app := relayForContract(astral.GenerateIdentity(), nodeID)
-	names := map[astral.Object]string{active: "active contract", sibling: "sibling contract", app: "app contract"}
+	names := map[astral.Object]string{active: "active contract", app: "app contract"}
 
 	index := &indexAuth{}
-	for _, sc := range []*auth.SignedContract{active, sibling, app} {
-		index.seed(sc)
-	}
+	index.seed(app)
 
 	f := &syncFixture{steps: &syncSteps{}}
 	kind := func(obj astral.Object) string {
@@ -112,7 +109,7 @@ func newSyncFixture(t *testing.T, ctx *astral.Context) *syncFixture {
 		return obj.ObjectType()
 	}
 	f.mod = &Module{
-		Deps: Deps{Auth: index, Objects: &stepPusher{steps: f.steps, kind: kind}, Nodes: pullNoSwarm{}},
+		Deps: Deps{Auth: index, Objects: &stepPusher{steps: f.steps, kind: kind}},
 		ctx:  ctx,
 		node: &stepNode{id: nodeID, steps: f.steps},
 		log:  log.New(nodeID),
@@ -121,16 +118,19 @@ func newSyncFixture(t *testing.T, ctx *astral.Context) *syncFixture {
 	if err := f.mod.config.ActiveContract.Set(nil, active); err != nil {
 		t.Fatalf("seed active contract: %v", err)
 	}
-	useIndexSwarm(t, f.mod, active.Issuer, index)
+	openStore(t, f.mod, time.Now, realRules)
+	for _, id := range []*astral.Identity{nodeID, astral.GenerateIdentity()} {
+		storeMembership(t, f.mod, userID, id, user.TierMember, time.Now().Add(time.Hour))
+	}
 	banNode(t, f.mod, userID, astral.GenerateIdentity())
 	return f
 }
 
 // TestSyncNodesTaskPushesTheContractFirst: a sync pushes this node's active
-// contract, then the bans, then the sibling contracts, and only then queries the
+// contract, then the bans, then pulls the swarm digest, and only then queries the
 // remote node for the alias, asks it for its relay digest and pushes the
-// app contracts. The step node answers the digest query with a
-// user.info, which is no digest, so the app contract is pushed.
+// app contracts. The step node answers the digest queries with a
+// user.info, which is no digest, so the pull ends and the app contract is pushed.
 func TestSyncNodesTaskPushesTheContractFirst(t *testing.T) {
 	ctx, cancel := astral.NewContext(nil).WithTimeout(10 * time.Second)
 	defer cancel()
@@ -143,7 +143,7 @@ func TestSyncNodesTaskPushesTheContractFirst(t *testing.T) {
 	want := []string{
 		"push active contract",
 		"push expulsion",
-
+		"query user." + opSwarmDigest,
 		"query " + user.OpInfo,
 		"query " + relayDigestOp,
 		"push app contract",

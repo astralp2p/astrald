@@ -192,10 +192,10 @@ func (mod *Module) LocalSwarm() []*astral.Identity {
 
 // IsSwarmMember reports whether id is a current member of the local swarm.
 //
-// why: a fault in the contract lookup reports no member (fail closed); a
-// lookup fault must not read as membership.
+// why: a swarm that cannot be read lists no member (fail closed); a read
+// fault must not read as membership.
 //
-// note: each call reads the auth index; BenchmarkIsSwarmMember measures it.
+// note: each call reads the swarm view; BenchmarkIsSwarmMember measures it.
 func (mod *Module) IsSwarmMember(id *astral.Identity) bool {
 	if id.IsZero() {
 		return false

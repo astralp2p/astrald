@@ -241,8 +241,8 @@ func TestSyncAppContractsPushesAContractTheReceiverRefusedEarlier(t *testing.T) 
 	pusher.mod.Deps.Objects = pushes
 	pusher.mod.askDigest = nil // the real client
 	pusher.mod.node = &opNode{id: pusher.nodeID, op: handlerOf(t, receiver)}
-	receiver.auth.seed(nodeContract(userID, pusher.nodeID))
-	pusher.auth.seed(nodeContract(userID, receiver.nodeID))
+	receiver.admit(pusher.nodeID)
+	pusher.admit(receiver.nodeID)
 
 	host := pusher.addSibling()
 	held, refused := relayForContract(astral.GenerateIdentity(), host), relayForContract(astral.GenerateIdentity(), host)

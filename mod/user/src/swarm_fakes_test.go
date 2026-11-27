@@ -90,14 +90,23 @@ func newStoreModule(t testing.TB, node, root *astral.Identity, keys *joinKeyring
 	mod.now = now
 	mod.Crypto = &keyringCrypto{keys: keys}
 
+	openStore(t, mod, now, checker)
+
+	return mod
+}
+
+// openStore gives mod, whose node is set, a real open store whose entry check is checker(mod.rootKey), and a real
+// view of it on now.
+func openStore(t testing.TB, mod *Module, now func() time.Time, checker func(func() *astral.Identity) swarmset.Checker) {
+	t.Helper()
+
+	node := mod.node.Identity()
 	mod.swarmState = newSwarmStore(checker(mod.rootKey))
 	ctx := astral.NewContext(nil).WithIdentity(node).IncludeZone(astral.ZoneNetwork)
 	if _, err := mod.swarmState.open(ctx, newMemFiles(), node); err != nil {
 		t.Fatalf("open: %v", err)
 	}
 	mod.swarmView = newSwarmView(mod, mod.rootKey, now)
-
-	return mod
 }
 
 // storeMembership stores subject's membership at tier, issued by issuer and valid until expires, in mod's store.

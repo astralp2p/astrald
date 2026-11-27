@@ -1,12 +1,11 @@
 package user
 
 import (
-	"errors"
 	"testing"
+	"time"
 
-	"github.com/astralp2p/astral-go/api/auth"
+	"github.com/astralp2p/astral-go/api/user"
 	"github.com/astralp2p/astral-go/astral"
-	"github.com/astralp2p/astral-go/astral/log"
 )
 
 // TestIsSwarmMember: a member with an active node contract is a member; an
@@ -14,10 +13,8 @@ import (
 func TestIsSwarmMember(t *testing.T) {
 	e := newMemberEnv(t)
 	self, sibling, banned, stranger := astral.GenerateIdentity(), astral.GenerateIdentity(), astral.GenerateIdentity(), astral.GenerateIdentity()
-	e.query.found = []*auth.SignedContract{
-		memberContract(t, e.issuer, self),
-		memberContract(t, e.issuer, sibling),
-		memberContract(t, e.issuer, banned),
+	for _, id := range []*astral.Identity{self, sibling, banned} {
+		e.add(t, id, time.Hour)
 	}
 	banNode(t, e.mod, e.issuer, banned)
 
@@ -42,41 +39,40 @@ func TestIsSwarmMember(t *testing.T) {
 // TestIsSwarmMemberOnAnUnclaimedNode: a node without an active contract has no
 // swarm, so no identity is a member.
 func TestIsSwarmMemberOnAnUnclaimedNode(t *testing.T) {
-	sibling := astral.GenerateIdentity()
-	mod := &Module{Deps: Deps{Auth: &memberAuth{query: &memberQuery{found: []*auth.SignedContract{
-		memberContract(t, astral.GenerateIdentity(), sibling),
-	}}}}}
+	node, sibling := astral.GenerateIdentity(), astral.GenerateIdentity()
+	mod := newStoreModule(t, node, nil, nil, time.Now, realRules)
+	storeMembership(t, mod, node, sibling, user.TierMember, time.Now().Add(time.Hour))
 
 	if mod.IsSwarmMember(sibling) {
 		t.Fatal("an unclaimed node reports a member")
 	}
 }
 
-// TestIsSwarmMemberFailsClosed: a contract lookup fault reads as no
-// membership, even for an identity the index named before.
+// TestIsSwarmMemberFailsClosed: a swarm that cannot be read reports no member.
+//
+// note: a store that is not open lists no entry; it never held one, because a
+// store cannot be closed again to fault a read.
 func TestIsSwarmMemberFailsClosed(t *testing.T) {
-	e := newMemberEnv(t)
-	e.mod.log = log.New(nil)
-	sibling := astral.GenerateIdentity()
-	e.query.found = []*auth.SignedContract{memberContract(t, e.issuer, sibling)}
-	e.query.err = errors.New("index unavailable")
+	issuer := astral.GenerateIdentity()
+	mod := claimedModule(t, issuer)
+	mod.node = &identityNode{id: astral.GenerateIdentity()}
+	mod.swarmState = newSwarmStore(realRules(mod.rootKey))
+	mod.swarmView = newSwarmView(mod, mod.rootKey, time.Now)
 
-	if e.mod.IsSwarmMember(sibling) {
-		t.Fatal("IsSwarmMember reported a member while the contract lookup failed")
+	if mod.IsSwarmMember(issuer) || mod.IsSwarmMember(mod.node.Identity()) {
+		t.Fatal("IsSwarmMember reported a member of a store that is not open")
 	}
 }
 
 // BenchmarkIsSwarmMember measures the per-frame cost of the inbound relay
-// check on a 10-node swarm with one ban, over an in-memory index.
+// check on a 10-node swarm with one ban, over a real store.
 func BenchmarkIsSwarmMember(b *testing.B) {
 	issuer := astral.GenerateIdentity()
-	mod := banModule(b, issuer)
-	query := &memberQuery{}
-	mod.Auth = &memberAuth{query: query}
+	mod := newStoreModule(b, astral.GenerateIdentity(), issuer, nil, time.Now, realRules)
 	var last *astral.Identity
 	for range 10 {
 		last = astral.GenerateIdentity()
-		query.found = append(query.found, memberContract(b, issuer, last))
+		storeMembership(b, mod, issuer, last, user.TierMember, time.Now().Add(time.Hour))
 	}
 	banNode(b, mod, issuer, astral.GenerateIdentity())
 

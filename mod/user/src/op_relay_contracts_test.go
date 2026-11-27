@@ -98,7 +98,7 @@ func TestRelayContractsNoneIsEOS(t *testing.T) {
 func TestRelayContractsRefusesNonMembers(t *testing.T) {
 	userID := astral.GenerateIdentity()
 	f := newReceiverFixture(t, userID)
-	f.auth.seed(nodeContract(userID, f.nodeID))
+	f.admit(f.nodeID)
 	app := astral.GenerateIdentity()
 	f.auth.seed(relayForContract(app, f.addSibling()))
 

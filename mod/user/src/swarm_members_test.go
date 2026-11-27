@@ -2,7 +2,6 @@ package user
 
 import (
 	"sync"
-	"sync/atomic"
 	"testing"
 	"time"
 
@@ -10,48 +9,7 @@ import (
 	"github.com/astralp2p/astral-go/api/events"
 	"github.com/astralp2p/astral-go/api/user"
 	"github.com/astralp2p/astral-go/astral"
-	authmod "github.com/astralp2p/astrald/mod/auth"
 )
-
-// memberQuery returns the staged membership contracts that have not expired,
-// or err, for any filter, as the auth index does.
-type memberQuery struct {
-	mu    sync.Mutex
-	found []*auth.SignedContract
-	err   error
-	finds atomic.Uint64
-}
-
-func (q *memberQuery) WithIssuer(*astral.Identity) authmod.ContractQueryBuilder  { return q }
-func (q *memberQuery) WithSubject(*astral.Identity) authmod.ContractQueryBuilder { return q }
-func (q *memberQuery) WithAction(...astral.Object) authmod.ContractQueryBuilder  { return q }
-
-func (q *memberQuery) Find(*astral.Context) ([]*auth.SignedContract, error) {
-	q.mu.Lock()
-	defer q.mu.Unlock()
-	q.finds.Add(1)
-	var active []*auth.SignedContract
-	for _, c := range q.found {
-		if c.ExpiresAt.Time().After(time.Now()) {
-			active = append(active, c)
-		}
-	}
-	return active, q.err
-}
-
-// stage replaces the staged contracts.
-func (q *memberQuery) stage(found ...*auth.SignedContract) {
-	q.mu.Lock()
-	defer q.mu.Unlock()
-	q.found = found
-}
-
-type memberAuth struct {
-	authmod.Module
-	query *memberQuery
-}
-
-func (a *memberAuth) SignedContracts() authmod.ContractQueryBuilder { return a.query }
 
 // eventRecorder records every emitted event's data.
 type eventRecorder struct {
@@ -89,23 +47,19 @@ func memberContractFor(t testing.TB, issuer, subject *astral.Identity, validity 
 	return &auth.SignedContract{Contract: c, IssuerSig: viewSig(), SubjectSig: viewSig()}
 }
 
+// memberEnv is a claimed node over a real store, whose memberships issuer signs.
 type memberEnv struct {
 	mod    *Module
-	query  *memberQuery
 	events *eventRecorder
 	issuer *astral.Identity
 }
 
 func newMemberEnv(t *testing.T) *memberEnv {
 	issuer := astral.GenerateIdentity()
-	mod := banModule(t, issuer)
-	e := &memberEnv{mod: mod, query: &memberQuery{}, events: &eventRecorder{}, issuer: issuer}
-	mod.Auth = &memberAuth{query: e.query}
-	useQuerySwarm(t, mod, issuer, e.query)
+	mod := newStoreModule(t, astral.GenerateIdentity(), issuer, nil, time.Now, realRules)
+	e := &memberEnv{mod: mod, events: &eventRecorder{}, issuer: issuer}
 	mod.Events = e.events
 	mod.Nodes = newLinkNodes()
-	mod.node = &identityNode{id: astral.GenerateIdentity()}
-	mod.now = time.Now
 	t.Cleanup(e.stopExpiry)
 	return e
 }
@@ -116,20 +70,27 @@ func (e *memberEnv) stopExpiry() {
 	e.mod.stopExpiry()
 }
 
+// add stores a membership of subject valid for validity and returns it.
+func (e *memberEnv) add(t *testing.T, subject *astral.Identity, validity time.Duration) *auth.SignedContract {
+	t.Helper()
+	sc := memberContractFor(t, e.issuer, subject, validity)
+	mergeEntry(t, e.mod, sc)
+	return sc
+}
+
 // One event per membership change, through the indexing hook and through an
 // expulsion; none when the member set is unchanged.
 func TestPublishSwarmEmitsOneEventPerChange(t *testing.T) {
 	e := newMemberEnv(t)
 	a := astral.GenerateIdentity()
-	e.query.found = []*auth.SignedContract{memberContract(t, e.issuer, a)}
+	e.add(t, a, time.Hour)
 	e.mod.recordSwarm()
 	if got := e.events.take(); len(got) != 0 {
 		t.Fatalf("recording the first set emitted %v", got)
 	}
 
 	b := astral.GenerateIdentity()
-	cb := memberContract(t, e.issuer, b)
-	e.query.found = append(e.query.found, cb)
+	cb := e.add(t, b, time.Hour)
 	e.mod.onContractIndexed(cb)
 	got := e.events.take()
 	if len(got) != 1 {
@@ -160,7 +121,7 @@ func TestPublishSwarmEmitsOneEventPerChange(t *testing.T) {
 func TestIndexedNonNodeContractPublishesNothing(t *testing.T) {
 	e := newMemberEnv(t)
 	e.mod.recordSwarm()
-	e.query.found = []*auth.SignedContract{memberContract(t, e.issuer, astral.GenerateIdentity())}
+	e.add(t, astral.GenerateIdentity(), time.Hour)
 	e.mod.onContractIndexed(&auth.SignedContract{Contract: &auth.Contract{Issuer: e.issuer, Subject: astral.GenerateIdentity()}})
 	if got := e.events.take(); len(got) != 0 {
 		t.Fatalf("a non-node contract emitted %v", got)
@@ -170,7 +131,7 @@ func TestIndexedNonNodeContractPublishesNothing(t *testing.T) {
 // Before Run records the first set, nothing is published.
 func TestPublishSwarmBeforeRecordEmitsNothing(t *testing.T) {
 	e := newMemberEnv(t)
-	e.query.found = []*auth.SignedContract{memberContract(t, e.issuer, astral.GenerateIdentity())}
+	e.add(t, astral.GenerateIdentity(), time.Hour)
 	e.mod.publishSwarm()
 	if got := e.events.take(); len(got) != 0 {
 		t.Fatalf("publishing before Run emitted %v", got)
@@ -183,7 +144,8 @@ func TestExpiryEmitsOneMemberLeft(t *testing.T) {
 	t.Parallel()
 	e := newMemberEnv(t)
 	a, b := astral.GenerateIdentity(), astral.GenerateIdentity()
-	e.query.stage(memberContract(t, e.issuer, a), memberContractFor(t, e.issuer, b, 2*time.Second))
+	e.add(t, a, time.Hour)
+	e.add(t, b, 2*time.Second)
 	e.mod.recordSwarm()
 
 	time.Sleep(4 * time.Second)
@@ -202,16 +164,25 @@ func TestExpiryUsesLatestContractPerSubject(t *testing.T) {
 	t.Parallel()
 	e := newMemberEnv(t)
 	b := astral.GenerateIdentity()
-	e.query.stage(memberContractFor(t, e.issuer, b, 2*time.Second), memberContract(t, e.issuer, b))
+	e.add(t, b, 2*time.Second)
+	e.add(t, b, time.Hour)
 	e.mod.recordSwarm()
-	e.query.finds.Store(0)
+	e.mod.swarm.mu.Lock()
+	armed := e.mod.swarm.expiry
+	e.mod.swarm.mu.Unlock()
+	if armed == nil {
+		t.Fatal("recording a set with expiring members armed no timer")
+	}
 
 	time.Sleep(3500 * time.Millisecond)
 	if got := e.events.take(); len(got) != 0 {
 		t.Fatalf("the earlier contract's expiry emitted %v", got)
 	}
-	if n := e.query.finds.Load(); n != 0 {
-		t.Fatalf("a republish ran at the earlier expiry (%d auth queries)", n)
+	// note: every republish re-arms the one stored timer, so the same timer means none ran.
+	e.mod.swarm.mu.Lock()
+	defer e.mod.swarm.mu.Unlock()
+	if e.mod.swarm.expiry != armed {
+		t.Fatal("a republish ran at the earlier expiry")
 	}
 }
 
@@ -221,7 +192,8 @@ func TestRepublishKeepsOneTimer(t *testing.T) {
 	t.Parallel()
 	e := newMemberEnv(t)
 	a, b := astral.GenerateIdentity(), astral.GenerateIdentity()
-	e.query.stage(memberContract(t, e.issuer, a), memberContractFor(t, e.issuer, b, 2*time.Second))
+	e.add(t, a, time.Hour)
+	e.add(t, b, 2*time.Second)
 	e.mod.recordSwarm()
 	for range 100 {
 		e.mod.publishSwarm()
@@ -235,30 +207,30 @@ func TestRepublishKeepsOneTimer(t *testing.T) {
 	}
 }
 
-// The expiry of this node's own contract arms no republish.
+// The expiry of this node's own contract arms no republish: a member's does.
 func TestOwnExpiryArmsNothing(t *testing.T) {
 	e := newMemberEnv(t)
-	own := memberContractFor(t, e.issuer, e.mod.node.Identity(), 2*time.Second)
-	member := memberContract(t, e.issuer, astral.GenerateIdentity())
-	e.query.stage(own, member)
+	e.add(t, e.mod.node.Identity(), 2*time.Second)
+	member := e.add(t, astral.GenerateIdentity(), time.Hour)
 	if got, want := e.mod.nextMemberExpiry(), member.ExpiresAt.Time(); !got.Equal(want) {
 		t.Fatalf("next expiry %v; want the member's %v", got, want)
 	}
-	e.query.stage(own)
-	e.mod.recordSwarm()
-	if e.mod.swarm.expiry != nil {
+
+	// note: a store never forgets a membership, so the swarm of this node alone is built apart.
+	own := newMemberEnv(t)
+	own.add(t, own.mod.node.Identity(), 2*time.Second)
+	own.mod.recordSwarm()
+	if own.mod.swarm.expiry != nil {
 		t.Fatal("this node's own contract armed the expiry timer")
 	}
 }
 
 // An unclaimed node arms no expiry timer.
 func TestUnclaimedArmsNothing(t *testing.T) {
-	q := &memberQuery{}
-	issuer := astral.GenerateIdentity()
-	q.stage(memberContractFor(t, issuer, astral.GenerateIdentity(), 2*time.Second))
-	mod := &Module{db: testDB(t), node: &identityNode{id: astral.GenerateIdentity()}, now: time.Now}
-	mod.Auth = &memberAuth{query: q}
+	node := astral.GenerateIdentity()
+	mod := newStoreModule(t, node, nil, nil, time.Now, realRules)
 	mod.Events = &eventRecorder{}
+	storeMembership(t, mod, node, astral.GenerateIdentity(), user.TierMember, time.Now().Add(2*time.Second))
 	mod.recordSwarm()
 	if mod.swarm.expiry != nil {
 		t.Fatal("an unclaimed node armed the expiry timer")

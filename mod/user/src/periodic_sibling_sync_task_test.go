@@ -66,11 +66,7 @@ func syncModule(t *testing.T, ctx *astral.Context, userID, nodeID *astral.Identi
 	app = relayForContract(astral.GenerateIdentity(), nodeID)
 
 	index := &indexAuth{}
-	index.seed(nodeContract(userID, nodeID))
 	index.seed(app)
-	for _, sib := range linked {
-		index.seed(nodeContract(userID, sib))
-	}
 
 	db := testDB(t)
 	// note: an sqlite :memory: database is per connection; one connection keeps the goroutines of the siblings' syncs on the same database.
@@ -91,7 +87,10 @@ func syncModule(t *testing.T, ctx *astral.Context, userID, nodeID *astral.Identi
 	if err := mod.config.ActiveContract.Set(nil, nodeContract(userID, nodeID)); err != nil {
 		t.Fatalf("seed active contract: %v", err)
 	}
-	useIndexSwarm(t, mod, userID, index)
+	openStore(t, mod, time.Now, realRules)
+	for _, id := range append([]*astral.Identity{nodeID}, linked...) {
+		storeMembership(t, mod, userID, id, user.TierMember, time.Now().Add(time.Hour))
+	}
 	return mod, app
 }
 
@@ -128,7 +127,7 @@ func TestPeriodicSiblingSync_RunsPerSiblingEachTick(t *testing.T) {
 	userID, nodeID := astral.GenerateIdentity(), astral.GenerateIdentity()
 	pusher := newActivePusher(nodeID)
 	mod, _ := syncModule(t, ctx, userID, nodeID, pusher, b, c)
-	mod.Deps.Auth.(*indexAuth).seed(nodeContract(userID, unlinked))
+	storeMembership(t, mod, userID, unlinked, user.TierMember, time.Now().Add(time.Hour))
 
 	done := runPeriodic(mod, ctx)
 	pusher.requireNone(t)
@@ -168,7 +167,7 @@ func TestPeriodicSiblingSync_ResendsARelayContractTheSiblingRefused(t *testing.T
 		t.Fatalf("B indexed %d contracts before its LocalSwarm listed A; want the relay contract refused", len(got))
 	}
 
-	b.auth.seed(nodeContract(userID, nodeID))
+	b.admit(nodeID)
 	done := runPeriodic(mod, ctx)
 
 	deadline := time.After(effectTimeout)
