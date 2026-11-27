@@ -32,7 +32,7 @@ type Verifier interface {
 //   - user.EntryDrop: obj is not an entry, a signature does not verify, a request's Timeout is not valid, the
 //     gating identity's tier may not write it, or a contract or offer fails its request's rules;
 //   - user.EntryWait: the gating identity's membership, or the request an answer, contract or offer names, is
-//     not stored yet;
+//     not stored yet; an offer waits only for its request;
 //   - user.EntryAccept: otherwise.
 //
 // An entry that was valid when it arrived stays valid; expels apply when entries are read, except that an
@@ -215,7 +215,8 @@ func (c *Rules) contractGate(sc *auth.SignedContract, root *astral.Identity, r R
 // stored ContractRequest whose FiledBy is its subject, its permits follow the offer depth rule
 // (user.ContractRequest.CoversOffer), its issuer may answer the request and is not expelled, the request has no
 // counting Decline, and no other offer of the same issuer for the request is stored with another unsigned body.
-// It waits for the request. An offer never counts (Snapshot.ContractCounts).
+// It waits for the request and is dropped when any other check fails, the issuer's membership included. An offer
+// never counts (Snapshot.ContractCounts).
 //
 // why one offer per issuer: of two offers from one issuer, the first stored is kept and the second dropped, so
 // an issuer cannot widen or renew its answer.
@@ -231,6 +232,11 @@ func offerGate(sc *auth.SignedContract, root *astral.Identity, r Reader) (entryG
 	case s.Expelled(sc.Issuer), s.declinedRequest(sc.RequestID):
 		return entryGate{}, user.EntryDrop
 	case s.offeredOtherwise(sc):
+		return entryGate{}, user.EntryDrop
+	}
+	// why: an offer waits only for its request (Spec: .ai/system/protocols/user/README.md#two-signatures); an
+	// issuer with no stored membership may not answer it, so the tier gate must not hold it.
+	if _, ok := r.Membership(root, sc.Issuer); !ok && !IsRoot(root, sc.Issuer) {
 		return entryGate{}, user.EntryDrop
 	}
 	return entryGate{sc.Issuer, func(t user.Tier) bool { return user.MayAnswer(t, req) }}, user.EntryAccept

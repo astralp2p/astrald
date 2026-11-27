@@ -372,7 +372,7 @@ func TestCheckSwarmEntryOffers(t *testing.T) {
 		{"offer by the root key", offer(f.root, req, reqID), user.EntryAccept},
 		{"offer by a trusted node", offer(f.trusted, req, reqID), user.EntryDrop},
 		{"offer by a member", offer(f.member, req, reqID), user.EntryDrop},
-		{"offer by a stranger", offer(f.out, req, reqID), user.EntryWait},
+		{"offer by a stranger", offer(f.out, req, reqID), user.EntryDrop},
 		{"offer by an expelled node", offer(expelledIssuer, req, reqID), user.EntryDrop},
 		{"offer before its request", offer(f.privileged, unstored, unstoredID), user.EntryWait},
 		{"offer naming no request", offer(f.privileged, req, nil), user.EntryDrop},
