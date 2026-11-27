@@ -56,10 +56,8 @@ func (mod *Module) runMemberLinks(ctx *astral.Context) {
 // the links to that member are closed. The links of every linked node the
 // user banned since the last reconcile are closed too, member or not.
 //
-// why a re-read: a member event is a signal to look, not a fact to apply, so
-// events that arrive out of order still end in the latest set.
-// why the early return: a failed read is no empty swarm, and stopping on it
-// would close the link to every member.
+// why: a member event is a signal to look, not a fact to apply, so events that
+// arrive out of order still end in the latest set.
 func (mod *Module) reconcileMemberLinks() {
 	closing := identitySet(mod.applyMemberSet())
 	for k, id := range identitySet(mod.findNewBans()) {
@@ -123,7 +121,7 @@ func (mod *Module) applyMemberSet() (left []*astral.Identity) {
 		}
 		delete(ml.tasks, key)
 		mod.log.Log("removing sibling %v", link.target)
-		// why before the close: a task still running when its link closes redials it.
+		// why: a task still running when its link closes redials it, so it is cancelled first.
 		link.cancel()
 		left = append(left, link.target)
 	}
@@ -143,7 +141,7 @@ func (mod *Module) startMemberLink(member *astral.Identity) {
 	task := mod.NewMaintainLinkTask(member)
 	scheduled, err := mod.Scheduler.Schedule(task)
 	if err != nil {
-		mod.log.Error("error scheduling maintain link action: %v for node %v", err, member)
+		mod.log.Error("member link task: schedule link task for %v: %v", member, err)
 		return
 	}
 
