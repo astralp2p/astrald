@@ -19,6 +19,8 @@ type storeState struct {
 	node  *stateNode
 	mu    sync.Mutex
 	lists int
+	// err, when set, fails every listing of an entry kind.
+	err error
 }
 
 func newStoreState(t testing.TB) *storeState {
@@ -37,11 +39,22 @@ func (s *storeState) SwarmEntry(id *astral.ObjectID) (astral.Object, error) {
 func (s *storeState) SwarmEntries(kind user.EntryKind) ([]*astral.ObjectID, error) {
 	s.mu.Lock()
 	s.lists++
+	err := s.err
 	s.mu.Unlock()
+	if err != nil {
+		return nil, err
+	}
 	return s.node.store.set.Entries(kind)
 }
 
 func (s *storeState) SwarmHead() uint64 { return s.node.store.set.Head() }
+
+// fail makes the listings of entry kinds fail with err until it is nil.
+func (s *storeState) fail(err error) {
+	s.mu.Lock()
+	s.err = err
+	s.mu.Unlock()
+}
 
 // reads returns how many times the view listed an entry kind.
 func (s *storeState) reads() int {

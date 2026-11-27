@@ -2,6 +2,7 @@ package user
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"testing"
 	"time"
@@ -476,6 +477,29 @@ func TestSwarmViewRereadsOnlyOnHeadChange(t *testing.T) {
 	}
 	f.add(f.decline(f.laptop, r))
 	f.wantStatus(r, user.RequestDeclined)
+}
+
+// TestSwarmViewKeepsTheLastSetOnAReadError: a read of the swarm that fails
+// after the head grew leaves the last set read in place, so the members stay
+// listed (mod/nodes keeps its member links on it) and the next call reads again.
+func TestSwarmViewKeepsTheLastSetOnAReadError(t *testing.T) {
+	f := newViewFixture(t)
+	members := f.view.snapshot().Members()
+	if len(members) != 4 {
+		t.Fatalf("Members = %d, want 4", len(members))
+	}
+
+	f.state.fail(errors.New("read failed"))
+	f.add(f.expulsion(f.user, f.phone))
+	if got := f.view.snapshot().Members(); len(got) != len(members) {
+		t.Fatalf("Members = %d after a failed read, want the last %d", len(got), len(members))
+	}
+
+	f.state.fail(nil)
+	f.wantMembership(f.phone, false)
+	if got := f.view.snapshot().Members(); len(got) != len(members)-1 {
+		t.Fatalf("Members = %d after the read recovered, want %d", len(got), len(members)-1)
+	}
 }
 
 // TestSwarmViewMembershipHoldsOnlyTheTier: a carrier's membership answering a
