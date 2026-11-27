@@ -49,8 +49,7 @@ func (mod *Module) Expel(ctx *astral.Context, nodeID *astral.Identity) (*user.Si
 	if err = mod.AddExpulsion(ctx, signed); err != nil {
 		mod.log.Error("expel %v: swarm state: %v", nodeID, err)
 	}
-	mod.refreshBans()
-	mod.publishSwarm()
+	mod.publishBan(nodeID)
 
 	go mod.PushToLocalSwarm(mod.ctx, signed)
 	// why: PushToLocalSwarm skips the subject, so push the ban to the expelled node
@@ -58,9 +57,9 @@ func (mod *Module) Expel(ctx *astral.Context, nodeID *astral.Identity) (*user.Si
 	// until the node answers; the expulsion sync at the node's next link with a
 	// holder of the ban and the sweep (reconcile_task.go) also deliver it.
 	// The node's answer closes the links with it (AdmitLink).
-	// note: the subject leaves LocalSwarm, so mod/nodes stops its link task and
-	// closes its links (SwarmMemberLeft); the push dials a new link, which
-	// AdmitLink admits until the subject answers.
+	// note: mod/nodes closes the subject's links on the SwarmMemberLeft that
+	// publishBan emits; the push dials a new link, which AdmitLink admits
+	// until the subject answers.
 	go func() {
 		if mod.pushUntilDelivered(mod.ctx, nodeID, signed) {
 			mod.onBanAnswered(nodeID)
@@ -93,17 +92,16 @@ func (mod *Module) receiveExpulsion(signed *user.SignedExpulsion) error {
 		mod.log.Errorv(1, "storing expulsion failed: %v", err)
 		return objects.ErrPushRejected
 	}
-	mod.refreshBans()
-	mod.publishSwarm()
+	mod.publishBan(signed.Subject)
 
 	mod.applyExpulsion(signed.Subject)
 	return nil
 }
 
 // applyExpulsion enforces a stored ban on id. When id is the local node the ban
-// strips this node's own membership via leaveSwarm. A banned peer leaves
-// LocalSwarm with the ban stored, so mod/nodes stops its link task and closes
-// its links (SwarmMemberLeft), and membership filtering prevents re-linking.
+// strips this node's own membership via leaveSwarm. The links of a banned
+// peer are closed by mod/nodes on the SwarmMemberLeft that publishBan
+// emitted, and membership filtering prevents re-linking.
 func (mod *Module) applyExpulsion(id *astral.Identity) {
 	if id.IsEqual(mod.node.Identity()) {
 		mod.leaveSwarm()

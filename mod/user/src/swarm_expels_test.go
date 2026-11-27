@@ -10,9 +10,9 @@ import (
 
 // TestSwarmStateExpelIsStoredAndApplied: an Expulsion by the user that reaches
 // this node only through SwarmState is stored as a ban, as a pushed one is:
-// link admission refuses the subject once it answers, the subject leaves the
-// published member set (mod/nodes then closes its links), and a second change
-// applies nothing again. An Expulsion by another issuer is not stored.
+// link admission refuses the subject once it answers, the subject, no member
+// here, is published as left (mod/nodes then closes its links), and a second
+// change applies nothing again. An Expulsion by another issuer is not stored.
 func TestSwarmStateExpelIsStoredAndApplied(t *testing.T) {
 	userID := astral.GenerateIdentity()
 	f := newReceiverFixture(t, userID)
@@ -27,7 +27,7 @@ func TestSwarmStateExpelIsStoredAndApplied(t *testing.T) {
 		}
 	}
 	f.mod.swarm = n.store
-	events := f.watchMember(t, subject)
+	events := f.watchSwarm(t)
 
 	f.mod.receiveSwarmExpels()
 

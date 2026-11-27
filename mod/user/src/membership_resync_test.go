@@ -50,7 +50,8 @@ func holdsBan(f *receiverFixture, subject *astral.Identity) bool {
 // member that missed a ban keeps one link to the issuer up, so no
 // LinkCreatedEvent fires; the member does not hold the ban until the issuer's
 // sweep ticks once (the tick stands in for the 1 h ticker), and then holds it
-// and publishes that the subject left, on which mod/nodes closes its links.
+// and publishes that the subject, no member there, left, on which mod/nodes
+// closes its links.
 func TestSweepRepairsAMemberThatMissedABanOverAStableLink(t *testing.T) {
 	userID := astral.GenerateIdentity()
 	issuer, member := newReceiverFixture(t, userID), newReceiverFixture(t, userID)
@@ -59,7 +60,7 @@ func TestSweepRepairsAMemberThatMissedABanOverAStableLink(t *testing.T) {
 	issuer.mod.Deps.Objects = &forwardPusher{sender: issuer.nodeID, member: member}
 
 	subject := astral.GenerateIdentity()
-	events := member.watchMember(t, subject)
+	events := member.watchSwarm(t)
 	if err := issuer.mod.db.StoreExpulsion(sampleSignedValid(userID, subject)); err != nil {
 		t.Fatalf("store ban: %v", err)
 	}

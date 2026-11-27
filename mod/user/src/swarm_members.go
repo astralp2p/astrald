@@ -49,6 +49,30 @@ func (mod *Module) publishSwarm() {
 	mod.armExpiry()
 }
 
+// publishBan makes a stored ban on subject take effect: it reloads the ban
+// set, republishes the member set, and emits SwarmMemberLeft for subject
+// when subject was not in the published set. Like publishSwarm, it emits
+// nothing before the first set is recorded. mod/nodes closes the links of a
+// banned node on a member event, and on its first read.
+//
+// why a non-member: a banned node can be linked to this node without being in
+// its member set (its membership has not reached SwarmState here, or it
+// linked through user.introduce), and its links close as a member's do.
+// why SwarmMemberLeft: api/user has no local event for a ban; nodes reads the
+// bans (IsBanned) and does not trust the node the event names.
+func (mod *Module) publishBan(subject *astral.Identity) {
+	mod.refreshBans()
+	mod.memberSet.mu.Lock()
+	recorded := mod.memberSet.members != nil
+	_, listed := mod.memberSet.members[subject.String()]
+	mod.memberSet.mu.Unlock()
+
+	mod.publishSwarm()
+	if recorded && !listed {
+		mod.Events.Emit(&user.SwarmMemberLeft{NodeID: subject})
+	}
+}
+
 // syncNewMember schedules a sibling sync with node, a member that just
 // joined, when it is linked.
 //

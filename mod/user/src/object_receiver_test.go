@@ -286,12 +286,11 @@ func newReceiverFixture(t *testing.T, userID *astral.Identity) *receiverFixture 
 	return f
 }
 
-// watchMember makes subject a member of f's swarm and records the member set,
-// so a ban on subject publishes its SwarmMemberLeft on the returned recorder;
-// mod/nodes closes a member's links on that event.
-func (f *receiverFixture) watchMember(t *testing.T, subject *astral.Identity) *eventRecorder {
+// watchSwarm records f's member set as published and records the events f
+// emits on the returned recorder. A ban's SwarmMemberLeft lands there;
+// mod/nodes closes the banned node's links on that event.
+func (f *receiverFixture) watchSwarm(t *testing.T) *eventRecorder {
 	t.Helper()
-	f.auth.seed(nodeContract(f.userID, subject))
 	events := &eventRecorder{}
 	f.mod.Events = events
 	f.mod.now = time.Now
@@ -304,24 +303,25 @@ func (f *receiverFixture) watchMember(t *testing.T, subject *astral.Identity) *e
 	return events
 }
 
-// requireLeft waits for events to hold a SwarmMemberLeft naming subject, and
-// fails on any other event.
-func requireLeft(t *testing.T, events *eventRecorder, subject *astral.Identity) {
+// requireLeft waits for events to hold a SwarmMemberLeft naming each of ids,
+// and fails on any other event.
+func requireLeft(t *testing.T, events *eventRecorder, ids ...*astral.Identity) {
 	t.Helper()
+	want := map[string]bool{}
+	for _, id := range ids {
+		want[id.String()] = true
+	}
 	deadline := time.Now().Add(effectTimeout)
-	for {
-		got := events.take()
-		for _, e := range got {
+	for len(want) > 0 {
+		for _, e := range events.take() {
 			left, ok := e.(*user.SwarmMemberLeft)
-			if !ok || !left.NodeID.IsEqual(subject) {
-				t.Fatalf("published %v; want only %v left", e, subject)
+			if !ok || !want[left.NodeID.String()] {
+				t.Fatalf("published %v; want only %v left, each once", e, ids)
 			}
-		}
-		if len(got) > 0 {
-			return
+			delete(want, left.NodeID.String())
 		}
 		if time.Now().After(deadline) {
-			t.Fatalf("%v did not leave the published member set", subject)
+			t.Fatalf("%v did not leave the published member set", ids)
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
@@ -587,7 +587,9 @@ func TestReceiveExpulsion(t *testing.T) {
 		banned := astral.GenerateIdentity()
 		signed := sampleSigned(userID, banned)
 		signed.IssuerSig = validSig()
-		events := f.watchMember(t, banned)
+		// note: banned is no member here, as a node linked through
+		// user.introduce or whose membership has not reached SwarmState.
+		events := f.watchSwarm(t)
 
 		drop := &recordingDrop{sender: astral.GenerateIdentity(), object: signed}
 		if err := f.mod.ReceiveObject(drop); err != nil {

@@ -166,10 +166,11 @@ func TestExpelKeepsAdmittingASubjectThatNeverAnswers(t *testing.T) {
 }
 
 // TestMemberRefusesTheSubjectAfterItAnswersOnANewLink: a member that receives
-// a ban publishes that the subject left, on which mod/nodes closes its links
-// with the subject once; the subject's next link is admitted and carries the
-// subject its ban, and the subject's answer closes that link and refuses
-// later ones. A push that does not reach the subject leaves it admitted.
+// a ban on a subject that is no member here publishes that the subject left,
+// on which mod/nodes closes its links with the subject once; the subject's
+// next link is admitted and carries the subject its ban, and the subject's
+// answer closes that link and refuses later ones. A push that does not reach
+// the subject leaves it admitted.
 func TestMemberRefusesTheSubjectAfterItAnswersOnANewLink(t *testing.T) {
 	cases := []struct {
 		answer error
@@ -184,7 +185,7 @@ func TestMemberRefusesTheSubjectAfterItAnswersOnANewLink(t *testing.T) {
 		t.Run(fmt.Sprint(c.answer), func(t *testing.T) {
 			subject := astral.GenerateIdentity()
 			f, steps := orderedFixture(t, subject, c.answer)
-			events := f.watchMember(t, subject)
+			events := f.watchSwarm(t)
 
 			drop := &recordingDrop{sender: astral.GenerateIdentity(), object: sampleSignedValid(f.userID, subject)}
 			if err := f.mod.ReceiveObject(drop); err != nil {
