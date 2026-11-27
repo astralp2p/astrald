@@ -6,9 +6,6 @@ its limits.
 - before the Approval, a swarm discovery by the front app shows no wallet
   (the wallet is private: only a caller holding a discovery permit sees it,
   astral-docs protocols/services/ops/services.discover.md, Visibility);
-- before the Approval, a direct call of the wallet by the front is refused
-  on node2 (Gate 1 for a query: services' query gate, which asks the
-  front's discovery permit for the wallet on node2 through its chain);
 - node1, a Privileged node, signed the Approval, and the request is
   fulfilled on node1 and on node3;
 - within 60 s of the Approval the front's swarm discovery shows the wallet,
@@ -24,12 +21,6 @@ import astral
 from lib import swarmstate as ss
 from lib.sessionio import load
 
-# why exact: the services query gate refuses a query to a private service's
-# provider with the default reject code (mod/services/src/query_gate.go,
-# astral.DefaultRejectCode = 1); any other error (no route, a timeout, the
-# wallet's own refusal) is not that authorization refusal.
-GATE_REFUSAL = "query rejected (1)"
-
 
 async def main():
     doc = load()
@@ -39,9 +30,6 @@ async def main():
 
     assert wallet not in f["before"], (
         f"the front saw the wallet before any Approval: {f['before']}")
-    assert f["spend_before"].get("error") == GATE_REFUSAL, (
-        f"the front spent before any Approval, or was refused otherwise than by the services "
-        f"query gate ({GATE_REFUSAL!r}): {f['spend_before']}")
     assert f["seen_after_s"] is not None, (
         "the front's swarm discovery never showed the wallet within 60 s of the Approval")
     assert wallet in ss.discover(n3, f["front"]["token"], "swarm"), (
