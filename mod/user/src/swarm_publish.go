@@ -30,6 +30,7 @@ type swarmPublisher struct {
 	snapshot func() *swarmset.Snapshot
 	emit     func(astral.Object)
 
+	// mu guards status and counted; publish and record hold it while they diff.
 	mu sync.Mutex
 	// status holds the last published status of every request; nil before record.
 	status map[astral.ObjectID]user.RequestStatus

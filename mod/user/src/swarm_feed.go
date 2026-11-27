@@ -25,8 +25,9 @@ type SwarmChange struct{ IDs []*astral.ObjectID }
 // saw. The set only grows, so an unchanged head means nothing new, and a
 // changed one means entries arrived.
 //
-// todo: a feed over vfs.watch on swarmstate/ once it lands (VFS takes over
-// from tree); only the line in wireSwarm that picks the feed changes.
+// note: polling the head stands in until a feed over vfs.watch on swarmstate/
+// lands (VFS takes over from tree); only the line in wireSwarm that picks the
+// feed changes.
 type headFeed struct {
 	head     func() uint64
 	interval time.Duration

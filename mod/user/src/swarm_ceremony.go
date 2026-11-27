@@ -20,6 +20,7 @@ var (
 	errExpelDeclined   = errors.New("expel request declined")
 	errExpelExpired    = errors.New("expel request expired")
 	errAlreadyExpelled = errors.New("subject is already expelled")
+	errExpelUserKey    = errors.New("the user key is not expelled")
 )
 
 // userKeyCeremony is where the user key signs: the software key held on this
@@ -42,6 +43,7 @@ type userKeyCeremony struct {
 	now         func() time.Time
 }
 
+// newUserKeyCeremony returns the ceremony in which userID signs through signer, as mod's swarm holds it.
 func newUserKeyCeremony(userID *astral.Identity, signer cryptomod.Module, mod usermod.Module) *userKeyCeremony {
 	return &userKeyCeremony{user: userID, signer: signer, mod: mod, now: time.Now}
 }
@@ -53,7 +55,7 @@ func newUserKeyCeremony(userID *astral.Identity, signer cryptomod.Module, mod us
 // ceremony's validity, so a resent request gets the same body; one answering
 // no request expires after the validity.
 func (c *userKeyCeremony) Membership(ctx *astral.Context, subject *astral.Identity, tier user.Tier, req *user.SignedJoinRequest) (*auth.SignedContract, error) {
-	// why no cap at the issuer: the user key holds no membership.
+	// why: the contract is not capped at the issuer, because the user key holds no membership.
 	var contract *auth.Contract
 	var err error
 	if req.IsNil() {
@@ -115,13 +117,13 @@ func (c *userKeyCeremony) expelRequest(reqID *astral.ObjectID) (*user.SignedExpe
 		return nil, errNoExpelRequest
 	}
 
-	// why the user key as filer: the root key may write every kind of entry.
+	// why: the user key may be the filer, because the root key may write every kind of entry.
 	filer, ok := c.mod.Membership(req.FiledBy)
 	switch {
 	case !req.FiledBy.IsEqual(c.user) && !(ok && swarmset.TrustedOrAbove(filer.Tier)):
 		return nil, errExpelFilerTier
 	case req.Subject.IsEqual(c.user):
-		return nil, errors.New("the user key is not expelled")
+		return nil, errExpelUserKey
 	case c.mod.Expelled(req.Subject):
 		return nil, errAlreadyExpelled
 	case c.mod.RequestStatus(reqID) == user.RequestDeclined:

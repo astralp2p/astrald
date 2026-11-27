@@ -12,6 +12,16 @@ import (
 	cryptomod "github.com/astralp2p/astrald/mod/crypto"
 )
 
+// The faults of a membership a carrier hands over.
+var (
+	errHandedNoMembership    = errors.New("carrier handed over no membership")
+	errHandedOtherSubject    = errors.New("carrier handed over another node's membership")
+	errHandedOtherTier       = errors.New("carrier handed over a membership at another tier")
+	errHandedOtherRequest    = errors.New("carrier handed over a membership for another request")
+	errHandedOtherIssuer     = errors.New("carrier handed over a membership another node issued")
+	errHandedOtherMembership = errors.New("carrier confirmed another membership than this node signed")
+)
+
 // swarmJoiner is the node that asks to join. It keeps one signed JoinRequest,
 // in pending, until it has joined, been declined, or seen it expire, and
 // resends that same object, with the same entry ID, on every reconnect.
@@ -146,15 +156,15 @@ func (j *swarmJoiner) checkMembership(req *user.SignedJoinRequest, sc *auth.Sign
 	m, ok := user.MembershipOf(sc)
 	switch {
 	case !ok || sc.IssuerSig == nil:
-		return errors.New("carrier handed over no membership")
+		return errHandedNoMembership
 	case !m.Subject.IsEqual(j.self):
-		return errors.New("carrier handed over another node's membership")
+		return errHandedOtherSubject
 	case m.Tier != req.Tier || !user.TierOnly(sc.Contract, req.Tier):
-		return errors.New("carrier handed over a membership at another tier")
+		return errHandedOtherTier
 	case !reqID.IsEqual(sc.RequestID):
-		return errors.New("carrier handed over a membership for another request")
+		return errHandedOtherRequest
 	case req.Tier != user.TierPrivilegedMember && !sc.Issuer.IsEqual(req.Carrier):
-		return errors.New("carrier handed over a membership another node issued")
+		return errHandedOtherIssuer
 	case !j.now().Before(sc.ExpiresAt.Time()):
 		return auth.ErrContractExpired
 	}
@@ -165,7 +175,7 @@ func (j *swarmJoiner) checkMembership(req *user.SignedJoinRequest, sc *auth.Sign
 // one this node signed, with both signatures.
 func (j *swarmJoiner) checkConfirmed(req *user.SignedJoinRequest, signed, sc *auth.SignedContract) error {
 	if signed.IsNil() || sc.IsNil() || sc.SubjectSig == nil || !sameBody(signed.Contract, sc.Contract) {
-		return errors.New("carrier confirmed another membership than this node signed")
+		return errHandedOtherMembership
 	}
 	return j.checkMembership(req, sc)
 }

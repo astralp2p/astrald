@@ -26,6 +26,7 @@ type swarmView struct {
 	root  func() *astral.Identity
 	now   func() time.Time
 
+	// mu guards head and set; snapshot holds it while it reads the state.
 	mu   sync.Mutex
 	head uint64
 	set  *swarmset.Index

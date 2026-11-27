@@ -34,6 +34,12 @@ const (
 	errFiledLater        joinEnd = "join request is filed later than this node's time"
 )
 
+// The faults of a join request this node refuses to carry.
+var (
+	errRequestUnsigned = errors.New("join request is not signed")
+	errRequestTier     = errors.New("join request names an invalid tier")
+)
+
 // closesRequest reports whether the joiner drops its request on e: the join is
 // over for good. Any other end, or a dropped connection, keeps the request for
 // the next join.
@@ -73,6 +79,8 @@ type swarmCarrier struct {
 	mu sync.Mutex
 }
 
+// newSwarmCarrier returns the carrier of self: it issues memberships signed by signer and reads and writes
+// SwarmState through mod.
 func newSwarmCarrier(self *astral.Identity, mod usermod.Module, signer cryptomod.Module) *swarmCarrier {
 	return &swarmCarrier{
 		self:      self,
@@ -127,11 +135,11 @@ func (c *swarmCarrier) Carry(ctx *astral.Context, req *user.SignedJoinRequest, c
 func (c *swarmCarrier) admit(req *user.SignedJoinRequest) error {
 	switch {
 	case req.IsNil() || req.JoinerSig == nil:
-		return errors.New("join request is not signed")
+		return errRequestUnsigned
 	case !req.Carrier.IsEqual(c.self):
 		return errNotJoinCarrier
 	case !req.Tier.IsValid():
-		return errors.New("join request names an invalid tier")
+		return errRequestTier
 	case req.FiledAt.Time().After(c.now()):
 		return errFiledLater
 	}
@@ -150,8 +158,8 @@ func (c *swarmCarrier) admit(req *user.SignedJoinRequest) error {
 // its Timeout. A fulfilled request stays open to its joiner while that joiner
 // is not expelled, so a resent request gets its stored membership.
 //
-// why the joiner first: a fulfilled request is never declined, and an expelled
-// joiner must not activate a membership that grants nothing.
+// why: the joiner is checked first, because a fulfilled request is never declined
+// and an expelled joiner must not activate a membership that grants nothing.
 func (c *swarmCarrier) open(req *user.SignedJoinRequest, reqID *astral.ObjectID) error {
 	if c.mod.Expelled(req.Joiner) {
 		return errJoinDeclined

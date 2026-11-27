@@ -329,16 +329,18 @@ func TestAnswerRequestWritesSignedDecline(t *testing.T) {
 		"approved expel request":   func(f *answerFixture) *astral.ObjectID { return f.expelRequest(t, user.RequestApproved) },
 		"offered contract request": func(f *answerFixture) *astral.ObjectID { return f.contractRequest(t, time.Now(), user.RequestOffered) },
 	} {
-		f := newAnswerFixture(t, user.TierPrivilegedMember)
-		id := req(f)
-		sd, ok := f.answer(t, id, "decline").(*user.SignedDecline)
-		if !ok {
-			t.Fatalf("%s: answer_request did not send a signed decline", name)
-		}
-		if !sd.Issuer.IsEqual(f.nodeID) || !sd.RequestID.IsEqual(id) {
-			t.Fatalf("%s: decline names issuer %v and request %v", name, sd.Issuer, sd.RequestID)
-		}
-		f.assertSignedAndWrittenBy(t, f.keys.key(f.nodeID), sd, sd.SignableHash(), sd.IssuerSig)
+		t.Run(name, func(t *testing.T) {
+			f := newAnswerFixture(t, user.TierPrivilegedMember)
+			id := req(f)
+			sd, ok := f.answer(t, id, "decline").(*user.SignedDecline)
+			if !ok {
+				t.Fatal("answer_request did not send a signed decline")
+			}
+			if !sd.Issuer.IsEqual(f.nodeID) || !sd.RequestID.IsEqual(id) {
+				t.Fatalf("decline names issuer %v and request %v", sd.Issuer, sd.RequestID)
+			}
+			f.assertSignedAndWrittenBy(t, f.keys.key(f.nodeID), sd, sd.SignableHash(), sd.IssuerSig)
+		})
 	}
 }
 
@@ -403,12 +405,12 @@ func TestAnswerRequestRefusesOutsideTier(t *testing.T) {
 		{"unknown request", user.TierPrivilegedMember, func(*answerFixture) *astral.ObjectID { return testObjectID() }, "approve", errUnknownRequest},
 		{"invalid answer", user.TierPrivilegedMember, func(f *answerFixture) *astral.ObjectID { return f.contractRequest(t, time.Now(), user.RequestPending) }, "maybe", errInvalidAnswer},
 	}
-	for _, c := range cases {
-		t.Run(c.name, func(t *testing.T) {
-			f := newAnswerFixture(t, c.tier)
-			got := f.answer(t, c.req(f), c.answer)
-			if e, ok := got.(astral.Error); !ok || e.Error() != c.want.Error() {
-				t.Fatalf("answered %v; want %v", got, c.want)
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			f := newAnswerFixture(t, tc.tier)
+			got := f.answer(t, tc.req(f), tc.answer)
+			if e, ok := got.(astral.Error); !ok || e.Error() != tc.want.Error() {
+				t.Fatalf("answered %v; want %v", got, tc.want)
 			}
 			if n := len(f.wrote()); n != 0 {
 				t.Fatalf("wrote %d entries; want none", n)

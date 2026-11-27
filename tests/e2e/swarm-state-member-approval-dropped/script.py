@@ -27,7 +27,7 @@ import astral
 from lib import swarmstate as ss
 from lib.sessionio import load, write_facts
 
-# why: one SwarmState pull interval (mod/user/src/swarm_state_wire.go, 15 s) and slack
+# why: one SwarmState pull interval (mod/user/src/swarm_exchange.go, 15 s) and slack
 SPREAD = 20.0
 
 

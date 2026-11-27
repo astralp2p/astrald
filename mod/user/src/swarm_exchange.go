@@ -8,7 +8,6 @@ import (
 	"github.com/astralp2p/astral-go/api/auth"
 	"github.com/astralp2p/astral-go/api/user"
 	"github.com/astralp2p/astral-go/astral"
-	usermod "github.com/astralp2p/astrald/mod/user"
 	"github.com/astralp2p/astrald/mod/user/src/swarmset"
 )
 
@@ -17,8 +16,6 @@ import (
 // why: a push is best-effort and an admit refused before a membership arrived is not retried, so the periodic
 // pull is what makes every copy converge.
 const swarmPullInterval = 15 * time.Second
-
-var _ usermod.SwarmState = &Module{}
 
 // openSwarmState opens this node's copy of SwarmState in its own VFS, which checks every stored entry again.
 func (mod *Module) openSwarmState() error {
@@ -43,7 +40,7 @@ func (mod *Module) openStore() *swarmStore {
 // admitsSwarmCaller decides who may read and write this node's SwarmState over the exchange ops: this node, the
 // root key, and every identity holding a membership.
 //
-// why members of every tier: a Member syncs SwarmState (vision, 2026-11-24).
+// why: a Member of any tier syncs SwarmState (vision, 2026-11-24).
 func (mod *Module) admitsSwarmCaller(caller *astral.Identity) bool {
 	switch {
 	case caller.IsZero():
@@ -122,8 +119,8 @@ func (mod *Module) runSwarmSync(ctx *astral.Context) {
 // onSwarmLink exchanges SwarmState with a peer on its first link, when this node is claimed: it offers the
 // peer its own membership, so the peer admits its pull, then pulls what the peer stores.
 //
-// why every peer of a claimed node: a peer this node does not know as a member yet may be one; its admit and
-// the entry check decide what passes.
+// why: every peer of a claimed node is tried, because a peer this node does not know as a member yet may be one;
+// its admit and the entry check decide what passes.
 func (mod *Module) onSwarmLink(peer *astral.Identity) {
 	if mod.Identity() == nil {
 		return
@@ -153,7 +150,7 @@ func (mod *Module) mergeSwarmEntry(ctx *astral.Context, obj astral.Object) error
 		return err
 	}
 	if mod.isOwnMembership(obj) && store.set.Head() != before {
-		go mod.exchangeSwarmWithLinked()
+		go mod.exchangeSwarmWithLinked(mod.ctx)
 	}
 	return nil
 }
@@ -169,15 +166,18 @@ func (mod *Module) isOwnMembership(obj astral.Object) bool {
 }
 
 // exchangeSwarmWithLinked runs the exchange of onSwarmLink with every peer
-// this node holds a link with, each peer once.
+// this node holds a link with, each peer once, until ctx ends.
 //
 // why: a node claimed in a ceremony (user.accept_contract) while already
 // linked skipped that exchange on its links, which came up before it had a
 // user, and passOn reaches no one, as its local swarm then lists only itself.
 // Without this its peers never learn its membership, and it never learns
 // theirs.
-func (mod *Module) exchangeSwarmWithLinked() {
+func (mod *Module) exchangeSwarmWithLinked(ctx *astral.Context) {
 	for _, peer := range mod.Nodes.LinkedIdentities() {
+		if ctx.Err() != nil {
+			return
+		}
 		if peer.IsZero() {
 			continue
 		}

@@ -3,11 +3,11 @@ package user
 import (
 	"errors"
 	"fmt"
-	usermod "github.com/astralp2p/astrald/mod/user"
 
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astral-go/astral/channel"
 	"github.com/astralp2p/astral-go/lib/query"
+	usermod "github.com/astralp2p/astrald/mod/user"
 )
 
 // The SwarmState exchange between two nodes, over queries to the user module, served by OpSwarmDigest,

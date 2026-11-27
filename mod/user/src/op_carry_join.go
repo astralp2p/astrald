@@ -23,8 +23,8 @@ type opCarryJoinArgs struct {
 // connection only pauses the join.
 // Spec: .ai/system/protocols/user/ops/user.carry_join.md
 //
-// why no named action: the caller is the unclaimed joiner, which holds
-// nothing; the carrier's tier decides what it signs.
+// why: no named action guards this op; the caller is the unclaimed joiner,
+// which holds nothing, and the carrier's tier decides what it signs.
 func (mod *Module) OpCarryJoin(ctx *astral.Context, q *routing.IncomingQuery, args opCarryJoinArgs) error {
 	conn := q.AcceptRaw()
 	ch := channel.New(conn, channel.WithFormats(args.In, args.Out))

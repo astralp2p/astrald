@@ -2,6 +2,7 @@ package user
 
 import (
 	"errors"
+	"fmt"
 	"io"
 	"net"
 	"strings"
@@ -339,19 +340,21 @@ func assertJoinEnded(t *testing.T, f *carrierFixture) {
 // Done: a Member carrier is refused.
 func TestJoinMemberCarrierRefused(t *testing.T) {
 	for _, tier := range []user.Tier{user.TierMember, ""} {
-		f := newCarrierFixture(t, tier)
-		req, _ := f.request(t, user.TierMember)
+		t.Run(fmt.Sprintf("carrier at tier %q", tier), func(t *testing.T) {
+			f := newCarrierFixture(t, tier)
+			req, _ := f.request(t, user.TierMember)
 
-		_, err := f.joiner.Join(astral.NewContext(nil), req, f.carry(f.newCarrier()))
-		if !errors.Is(err, errCarrierTier) {
-			t.Fatalf("carrier at tier %q: %v, want %v", tier, err, errCarrierTier)
-		}
-		if n := f.count(user.EntryRequests); n != 0 {
-			t.Fatalf("carrier at tier %q stored %d requests", tier, n)
-		}
-		if _, err := f.newWriter().FileExpelRequest(astral.NewContext(nil), f.joiner.self); !errors.Is(err, errExpelFilerTier) {
-			t.Fatalf("carrier at tier %q filed an expel request: %v", tier, err)
-		}
+			_, err := f.joiner.Join(astral.NewContext(nil), req, f.carry(f.newCarrier()))
+			if !errors.Is(err, errCarrierTier) {
+				t.Fatalf("join: %v, want %v", err, errCarrierTier)
+			}
+			if n := f.count(user.EntryRequests); n != 0 {
+				t.Fatalf("carrier stored %d requests", n)
+			}
+			if _, err := f.newWriter().FileExpelRequest(astral.NewContext(nil), f.joiner.self); !errors.Is(err, errExpelFilerTier) {
+				t.Fatalf("carrier filed an expel request: %v", err)
+			}
+		})
 	}
 }
 
@@ -359,7 +362,7 @@ func TestJoinMemberCarrierRefused(t *testing.T) {
 // Member, Privileged issues Member and Trusted. A request for a higher tier
 // ends the join, and nothing is stored or signed for it.
 func TestJoinCarrierIssuesOnlyTheTiersItsTierMay(t *testing.T) {
-	for _, c := range []struct {
+	for _, tc := range []struct {
 		carrier, asked user.Tier
 		want           error
 	}{
@@ -368,24 +371,26 @@ func TestJoinCarrierIssuesOnlyTheTiersItsTierMay(t *testing.T) {
 		{user.TierPrivilegedMember, user.TierTrusted, nil},
 		{user.TierPrivilegedMember, user.TierMember, nil},
 	} {
-		f := newCarrierFixture(t, c.carrier)
-		req, _ := f.request(t, c.asked)
-		signatures := len(f.keys.texts)
+		t.Run(fmt.Sprintf("%s carrier, %s asked", tc.carrier, tc.asked), func(t *testing.T) {
+			f := newCarrierFixture(t, tc.carrier)
+			req, _ := f.request(t, tc.asked)
+			signatures := len(f.keys.texts)
 
-		sc, err := f.joiner.Join(astral.NewContext(nil), req, f.carry(f.newCarrier()))
-		if !errors.Is(err, c.want) {
-			t.Fatalf("%s carrier, %s asked: %v, want %v", c.carrier, c.asked, err, c.want)
-		}
-		if c.want != nil {
-			if n := f.count(user.EntryRequests) + f.count(user.EntryContracts); n != 0 || len(f.keys.texts) != signatures {
-				t.Fatalf("%s carrier, %s asked: stored %d entries and signed %d", c.carrier, c.asked, n, len(f.keys.texts)-signatures)
+			sc, err := f.joiner.Join(astral.NewContext(nil), req, f.carry(f.newCarrier()))
+			if !errors.Is(err, tc.want) {
+				t.Fatalf("join: %v, want %v", err, tc.want)
 			}
-			assertJoinEnded(t, f)
-			continue
-		}
-		if m, ok := user.MembershipOf(sc); !ok || m.Tier != c.asked {
-			t.Fatalf("%s carrier, %s asked: membership %v", c.carrier, c.asked, sc)
-		}
+			if tc.want != nil {
+				if n := f.count(user.EntryRequests) + f.count(user.EntryContracts); n != 0 || len(f.keys.texts) != signatures {
+					t.Fatalf("stored %d entries and signed %d", n, len(f.keys.texts)-signatures)
+				}
+				assertJoinEnded(t, f)
+				return
+			}
+			if m, ok := user.MembershipOf(sc); !ok || m.Tier != tc.asked {
+				t.Fatalf("membership %v", sc)
+			}
+		})
 	}
 }
 
@@ -404,21 +409,23 @@ func TestJoinNeedsTheJoinersSignature(t *testing.T) {
 			return &auth.SignedContract{Contract: &c, IssuerSig: sc.IssuerSig, SubjectSig: sc.SubjectSig}
 		},
 	} {
-		f := newCarrierFixture(t, user.TierPrivilegedMember)
-		req, _ := f.request(t, user.TierMember)
-		_, err := f.newCarrier().Carry(astral.NewContext(nil), req, nil, func(ctx *astral.Context, half *auth.SignedContract) (*auth.SignedContract, error) {
-			signed, err := f.joiner.cosign(ctx, req, half)
-			if err != nil {
-				return nil, err
+		t.Run(name, func(t *testing.T) {
+			f := newCarrierFixture(t, user.TierPrivilegedMember)
+			req, _ := f.request(t, user.TierMember)
+			_, err := f.newCarrier().Carry(astral.NewContext(nil), req, nil, func(ctx *astral.Context, half *auth.SignedContract) (*auth.SignedContract, error) {
+				signed, err := f.joiner.cosign(ctx, req, half)
+				if err != nil {
+					return nil, err
+				}
+				return tamper(signed), nil
+			})
+			if !errors.Is(err, errNotSignedByJoiner) {
+				t.Fatalf("carry: %v, want %v", err, errNotSignedByJoiner)
 			}
-			return tamper(signed), nil
+			if n := f.count(user.EntryContracts); n != 0 {
+				t.Fatalf("contracts in SwarmState: %d, want 0", n)
+			}
 		})
-		if !errors.Is(err, errNotSignedByJoiner) {
-			t.Fatalf("%s: %v, want %v", name, err, errNotSignedByJoiner)
-		}
-		if n := f.count(user.EntryContracts); n != 0 {
-			t.Fatalf("%s: contracts in SwarmState: %d, want 0", name, n)
-		}
 	}
 }
 
@@ -428,7 +435,7 @@ func TestJoinerSignsOnlyWhatItAskedFor(t *testing.T) {
 	req, reqID := f.request(t, user.TierMember)
 	other := astral.GenerateIdentity()
 	otherID, _ := astral.ResolveObjectID(&astral.Ack{})
-	for name, c := range map[string]struct {
+	for name, tc := range map[string]struct {
 		issuer, subject *astral.Identity
 		tier            user.Tier
 		req             *astral.ObjectID
@@ -438,14 +445,16 @@ func TestJoinerSignsOnlyWhatItAskedFor(t *testing.T) {
 		"another request": {f.carrier, f.joiner.self, user.TierMember, otherID},
 		"another issuer":  {other, f.joiner.self, user.TierMember, reqID},
 	} {
-		contract, err := user.NewMembership(c.issuer, c.subject, c.tier, c.req, time.Hour)
-		if err != nil {
-			t.Fatal(err)
-		}
-		half := &auth.SignedContract{Contract: contract, IssuerSig: testSig()}
-		if _, err = f.joiner.cosign(astral.NewContext(nil), req, half); err == nil {
-			t.Fatalf("%s: the joiner signed", name)
-		}
+		t.Run(name, func(t *testing.T) {
+			contract, err := user.NewMembership(tc.issuer, tc.subject, tc.tier, tc.req, time.Hour)
+			if err != nil {
+				t.Fatal(err)
+			}
+			half := &auth.SignedContract{Contract: contract, IssuerSig: testSig()}
+			if _, err = f.joiner.cosign(astral.NewContext(nil), req, half); err == nil {
+				t.Fatal("the joiner signed")
+			}
+		})
 	}
 }
 

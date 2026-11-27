@@ -6,10 +6,7 @@ import (
 	"github.com/astralp2p/astral-go/api/secp256k1"
 	"github.com/astralp2p/astral-go/api/user"
 	"github.com/astralp2p/astral-go/astral"
-	usermod "github.com/astralp2p/astrald/mod/user"
 )
-
-var _ usermod.SwarmView = &Module{}
 
 // rootKey returns the root key: the user this node is claimed by, or this node
 // while it is unclaimed.
@@ -68,7 +65,7 @@ func (mod *Module) runSwarmFeed(ctx *astral.Context) {
 // emitSwarmEvent emits e. A contract that counts is also indexed into the auth
 // index.
 //
-// why index: the auth walk finds a caller's contracts in the auth index, so a
+// why: the auth walk finds a caller's contracts in the auth index, so a
 // contract a host signed for its app on another node authorizes it here only
 // once it is indexed.
 func (mod *Module) emitSwarmEvent(e astral.Object) {
@@ -85,43 +82,6 @@ func (mod *Module) emitSwarmEvent(e astral.Object) {
 	if sc, ok := obj.(*auth.SignedContract); ok {
 		if err = mod.Auth.IndexContract(mod.ctx, sc); err != nil {
 			mod.log.Logv(1, "swarm state: index contract %v: %v", added.ContractID, err)
-		}
-	}
-}
-
-// onSwarmChanged applies what SwarmState gained: its expels, and the swarm's members.
-func (mod *Module) onSwarmChanged() {
-	mod.receiveSwarmExpels()
-
-	mod.refreshBans()
-	mod.publishSwarm()
-}
-
-// receiveSwarmExpels stores and applies every Expulsion SwarmState holds that
-// this node has not stored yet, as a pushed one is (receiveExpulsion).
-//
-// why: user.list_expelled, link admission and the ban veto read the stored
-// bans, and a node that learns an expel only through SwarmState (one
-// introduced or joined after it) would otherwise list none and admit the
-// banned node's links.
-func (mod *Module) receiveSwarmExpels() {
-	ids, err := mod.SwarmEntries(user.EntryExpels)
-	if err != nil {
-		mod.log.Logv(1, "swarm state: list expels: %v", err)
-	}
-	for _, id := range ids {
-		obj, err := mod.SwarmEntry(id)
-		if err != nil {
-			continue
-		}
-		se, ok := obj.(*user.SignedExpulsion)
-		if !ok || se.IsNil() || mod.banOn(se.Subject) != nil {
-			continue
-		}
-		// note: a refused one (no active contract yet, another issuer) is
-		// read again on the next change
-		if err = mod.receiveExpulsion(se); err != nil {
-			mod.log.Logv(1, "swarm state: expel %v: %v", id, err)
 		}
 	}
 }

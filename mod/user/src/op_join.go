@@ -23,6 +23,9 @@ const joinWait = 3 * time.Second
 // joinPoll is how often user.join checks for a route during joinWait.
 const joinPoll = 250 * time.Millisecond
 
+// errNoCarrierMembership is the end of a join whose carrier answered no membership.
+var errNoCarrierMembership = errors.New("carrier answered no membership")
+
 type opJoinArgs struct {
 	Node string `query:"required"`
 	Tier string
@@ -41,10 +44,9 @@ type opJoinArgs struct {
 // resends the same request. The reply is the membership.
 // Spec: .ai/system/protocols/user/ops/user.join.md
 //
-// why the origin and caller gates of user.bootstrap: the op claims this node,
-// so it admits the same queries; see mayClaim.
-// why: no named action guards this op; only the node itself or the manager may
-// claim an unclaimed node (mayClaim).
+// why: no named action guards this op. It claims this node, so it admits the
+// queries user.bootstrap admits: only the node itself or the manager may claim
+// an unclaimed node (mayClaim).
 func (mod *Module) OpJoin(ctx *astral.Context, q *routing.IncomingQuery, args opJoinArgs) error {
 	ch := q.Accept(channel.WithFormats(args.In, args.Out))
 	defer ch.Close()
@@ -156,7 +158,7 @@ func joinSession(ctx *astral.Context, ch *channel.Channel, req *user.SignedJoinR
 	case err != nil:
 		return nil, nil, err
 	case sc == nil || root.IsZero():
-		return nil, nil, errors.New("carrier answered no membership")
+		return nil, nil, errNoCarrierMembership
 	}
 	return sc, root, nil
 }
@@ -164,8 +166,8 @@ func joinSession(ctx *astral.Context, ch *channel.Channel, req *user.SignedJoinR
 // activateJoin stores root as this node's user, claims the node with sc, adds
 // sc to SwarmState and pulls the rest of SwarmState from carrier.
 //
-// why the user is stored before the claim: the claim makes the root key
-// mod.Identity(), and the entry check judges sc against it.
+// why: the user is stored before the claim, because the claim makes the root key
+// mod.Identity() and the entry check judges sc against it.
 func (mod *Module) activateJoin(ctx *astral.Context, sc *auth.SignedContract, root, carrier *astral.Identity) error {
 	if err := mod.validateActiveContract(sc); err != nil {
 		return err

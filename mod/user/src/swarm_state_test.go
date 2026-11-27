@@ -452,10 +452,11 @@ func TestSwarmHeadChangesExactlyWhenEntriesArrive(t *testing.T) {
 		{"wait again", decline, 1},
 		{"admits the request and both held answers", req, 4},
 	}
-	for _, step := range steps {
-		_ = n.store.merge(n.store.ctx, step.obj)
-		if got := n.store.set.Head(); got != step.want {
-			t.Fatalf("%v: head = %v, want %v", step.name, got, step.want)
+	// note: the steps run in order on one node; each starts from the head the one before left.
+	for _, tc := range steps {
+		_ = n.store.merge(n.store.ctx, tc.obj)
+		if got := n.store.set.Head(); got != tc.want {
+			t.Fatalf("%v: head = %v, want %v", tc.name, got, tc.want)
 		}
 	}
 

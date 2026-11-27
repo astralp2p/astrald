@@ -32,4 +32,4 @@ Changed in G7, for the removed model:
 - The contract is no longer pushed to node1, because node1 refuses a pushed
   membership. The claim adds it to `ssm_expiry`'s SwarmState. mod/user then
   exchanges SwarmState with each peer `ssm_expiry` is linked to
-  (`exchangeSwarmWithLinked`, `mod/user/src/swarm_state_wire.go`).
+  (`exchangeSwarmWithLinked`, `mod/user/src/swarm_exchange.go`).

@@ -15,6 +15,8 @@ import (
 )
 
 var _ user.Module = &Module{}
+var _ user.SwarmState = &Module{}
+var _ user.SwarmView = &Module{}
 
 type Module struct {
 	Deps

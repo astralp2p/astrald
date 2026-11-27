@@ -89,9 +89,9 @@ func (mod *Module) recordSwarm() {
 
 // armExpiry replaces the expiry timer with one that republishes the set at the
 // earliest member expiry, and arms none when no member contract expires.
-// The caller holds swarm.mu.
+// The caller holds memberSet.mu.
 //
-// why one stored timer: every publish re-arms, and unstopped timers would pile up.
+// why: one timer is stored, because every publish re-arms and unstopped timers would pile up.
 func (mod *Module) armExpiry() {
 	mod.stopExpiry()
 	next := mod.nextMemberExpiry()
@@ -101,7 +101,7 @@ func (mod *Module) armExpiry() {
 	mod.swarm.expiry = time.AfterFunc(next.Sub(mod.now())+expiryMargin, mod.publishSwarm)
 }
 
-// stopExpiry stops the expiry timer. The caller holds swarm.mu.
+// stopExpiry stops the expiry timer. The caller holds memberSet.mu.
 func (mod *Module) stopExpiry() {
 	if mod.swarm.expiry != nil {
 		mod.swarm.expiry.Stop()
@@ -112,9 +112,9 @@ func (mod *Module) stopExpiry() {
 // nextMemberExpiry returns the earliest time at which a member other than this
 // node leaves the swarm by expiry, or the zero time when none does.
 //
-// why the latest contract per subject: a member with an overlapping renewal
-// stays in the swarm until its last contract expires.
-// why not this node: a lapse of its own membership belongs to the active
+// why: the latest contract per subject counts, because a member with an
+// overlapping renewal stays in the swarm until its last contract expires; this
+// node is left out, because a lapse of its own membership belongs to the active
 // contract's lifecycle, not to a member change.
 func (mod *Module) nextMemberExpiry() (next time.Time) {
 	ac := mod.ActiveContract()

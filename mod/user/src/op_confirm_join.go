@@ -17,8 +17,8 @@ import (
 var (
 	// errNoUserKey: this node cannot reach the user key.
 	errNoUserKey = astral.NewError("no user key on this node")
-	// errNotPrivilegedJoin: the id names a stored request that is not a
-	// privileged_member JoinRequest.
+	// errNotPrivilegedJoin is sent when the id names a stored request that is
+	// not a privileged_member JoinRequest.
 	errNotPrivilegedJoin = astral.NewError("not a privileged join request")
 )
 

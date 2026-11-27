@@ -3,7 +3,6 @@ package user
 import (
 	"errors"
 	"fmt"
-	usermod "github.com/astralp2p/astrald/mod/user"
 	"slices"
 	"sync"
 	"testing"
@@ -12,6 +11,7 @@ import (
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astral-go/astral/channel"
 	"github.com/astralp2p/astral-go/lib/routing"
+	usermod "github.com/astralp2p/astrald/mod/user"
 )
 
 // swarmRouter routes user.<op> queries to the exchange ops of a module over the store of n, as the node router

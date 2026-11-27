@@ -88,10 +88,9 @@ const swarmPushTimeout = 15 * time.Second
 // wait for the pushes. A peer that refuses or fails is left to repair itself
 // by a pull.
 //
-// why: on the store's context, as passing on is this node's own work and not the work of whoever offered the entry.
-// why not waiting: a push into a link that takes bytes and never answers
-// blocked the writer, such as an answer op or a host signing an app's
-// contract, until that link closed.
+// why: it runs on the store's context, as passing on is this node's own work and not the work of whoever offered
+// the entry, and it does not wait, because a push into a link that takes bytes and never answers blocked the
+// writer, such as an answer op or a host signing an app's contract, until that link closed.
 func (s *swarmStore) passOn(objs []astral.Object) {
 	if len(objs) == 0 || s.peers == nil {
 		return

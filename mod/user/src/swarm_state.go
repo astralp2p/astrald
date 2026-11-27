@@ -59,6 +59,7 @@ func (w *swarmWriter) sign(ctx *astral.Context, body crypto.SignableTextObject) 
 	return w.signer.Sign(ctx, secp256k1.FromIdentity(w.self), body)
 }
 
+// FileContractRequest signs and adds the ContractRequest that asks for permits for app, filed by this signer.
 func (w *swarmWriter) FileContractRequest(ctx *astral.Context, app *astral.Identity, permits []*auth.Permit) (*user.SignedContractRequest, error) {
 	if app.IsZero() || len(permits) == 0 {
 		return nil, errors.New("a contract request names an app and permits")
@@ -72,6 +73,7 @@ func (w *swarmWriter) FileContractRequest(ctx *astral.Context, app *astral.Ident
 	return signed, w.add(ctx, signed)
 }
 
+// FileJoinRequest adds req, a JoinRequest this node carries; only a Trusted or Privileged member carries one.
 func (w *swarmWriter) FileJoinRequest(ctx *astral.Context, req *user.SignedJoinRequest) (*astral.ObjectID, error) {
 	m, ok := w.view.Membership(w.self)
 	if req.IsNil() || !req.Carrier.IsEqual(w.self) || !ok || !swarmset.TrustedOrAbove(m.Tier) {
@@ -84,6 +86,7 @@ func (w *swarmWriter) FileJoinRequest(ctx *astral.Context, req *user.SignedJoinR
 	return id, w.add(ctx, req)
 }
 
+// FileExpelRequest signs and adds an ExpelRequest of subject; only a Trusted or Privileged member files one.
 func (w *swarmWriter) FileExpelRequest(ctx *astral.Context, subject *astral.Identity) (*user.SignedExpelRequest, error) {
 	if m, ok := w.view.Membership(w.self); !ok || !swarmset.TrustedOrAbove(m.Tier) {
 		return nil, fmt.Errorf("%w: %w", usermod.ErrNotAllowed, errExpelFilerTier)
@@ -97,6 +100,8 @@ func (w *swarmWriter) FileExpelRequest(ctx *astral.Context, subject *astral.Iden
 	return signed, w.add(ctx, signed)
 }
 
+// Approve answers the open request with entry ID request with a yes: an offer for a ContractRequest and an
+// Approval for an ExpelRequest. It returns the entry it added.
 func (w *swarmWriter) Approve(ctx *astral.Context, request *astral.ObjectID) (astral.Object, error) {
 	if !w.view.MayAnswer(w.self, request) {
 		return nil, usermod.ErrNotAllowed
@@ -105,7 +110,7 @@ func (w *swarmWriter) Approve(ctx *astral.Context, request *astral.ObjectID) (as
 	if err != nil {
 		return nil, err
 	}
-	// why the status: only an open request takes an answer; a join has no Approval, its carrier signs the membership.
+	// why: only an open request takes an answer; a join has no Approval, its carrier signs the membership.
 	status := w.view.RequestStatus(request)
 	switch req := obj.(type) {
 	case *user.SignedContractRequest:
@@ -174,11 +179,12 @@ func (w *swarmWriter) offerExpiry() time.Time {
 	return expires
 }
 
+// Decline signs and adds a Decline of the open request with entry ID request.
 func (w *swarmWriter) Decline(ctx *astral.Context, request *astral.ObjectID) (*user.SignedDecline, error) {
 	if !w.view.MayAnswer(w.self, request) {
 		return nil, usermod.ErrNotAllowed
 	}
-	// why the status: nobody answers a fulfilled, expired or declined request.
+	// why: nobody answers a fulfilled, expired or declined request.
 	if status := w.view.RequestStatus(request); status != user.RequestPending && status != user.RequestOffered && status != user.RequestApproved {
 		return nil, usermod.ErrNotAllowed
 	}
@@ -191,6 +197,7 @@ func (w *swarmWriter) Decline(ctx *astral.Context, request *astral.ObjectID) (*u
 	return signed, w.add(ctx, signed)
 }
 
+// AddContract adds sc, a contract signed elsewhere, to SwarmState.
 func (w *swarmWriter) AddContract(ctx *astral.Context, sc *auth.SignedContract) error {
 	if sc.IsNil() {
 		return errors.New("empty contract")
@@ -198,6 +205,7 @@ func (w *swarmWriter) AddContract(ctx *astral.Context, sc *auth.SignedContract) 
 	return w.add(ctx, sc)
 }
 
+// AddExpulsion adds e, an Expulsion signed elsewhere, to SwarmState.
 func (w *swarmWriter) AddExpulsion(ctx *astral.Context, e *user.SignedExpulsion) error {
 	if e.IsNil() {
 		return errors.New("empty expulsion")
@@ -207,6 +215,7 @@ func (w *swarmWriter) AddExpulsion(ctx *astral.Context, e *user.SignedExpulsion)
 
 // The typed writes of usermod.SwarmState; each refuses before wireSwarm built the writer.
 
+// FileContractRequest files a ContractRequest for app (usermod.SwarmState).
 func (mod *Module) FileContractRequest(ctx *astral.Context, app *astral.Identity, permits []*auth.Permit) (*user.SignedContractRequest, error) {
 	if mod.writer == nil {
 		return nil, swarmset.ErrNotOpen
@@ -214,6 +223,7 @@ func (mod *Module) FileContractRequest(ctx *astral.Context, app *astral.Identity
 	return mod.writer.FileContractRequest(ctx, app, permits)
 }
 
+// FileJoinRequest files req and returns its entry ID (usermod.SwarmState).
 func (mod *Module) FileJoinRequest(ctx *astral.Context, req *user.SignedJoinRequest) (*astral.ObjectID, error) {
 	if mod.writer == nil {
 		return nil, swarmset.ErrNotOpen
@@ -221,6 +231,7 @@ func (mod *Module) FileJoinRequest(ctx *astral.Context, req *user.SignedJoinRequ
 	return mod.writer.FileJoinRequest(ctx, req)
 }
 
+// FileExpelRequest files an ExpelRequest of subject (usermod.SwarmState).
 func (mod *Module) FileExpelRequest(ctx *astral.Context, subject *astral.Identity) (*user.SignedExpelRequest, error) {
 	if mod.writer == nil {
 		return nil, swarmset.ErrNotOpen
@@ -228,6 +239,7 @@ func (mod *Module) FileExpelRequest(ctx *astral.Context, subject *astral.Identit
 	return mod.writer.FileExpelRequest(ctx, subject)
 }
 
+// Approve answers a request with a yes (usermod.SwarmState).
 func (mod *Module) Approve(ctx *astral.Context, request *astral.ObjectID) (astral.Object, error) {
 	if mod.writer == nil {
 		return nil, swarmset.ErrNotOpen
@@ -235,6 +247,7 @@ func (mod *Module) Approve(ctx *astral.Context, request *astral.ObjectID) (astra
 	return mod.writer.Approve(ctx, request)
 }
 
+// Decline declines a request (usermod.SwarmState).
 func (mod *Module) Decline(ctx *astral.Context, request *astral.ObjectID) (*user.SignedDecline, error) {
 	if mod.writer == nil {
 		return nil, swarmset.ErrNotOpen
@@ -242,6 +255,7 @@ func (mod *Module) Decline(ctx *astral.Context, request *astral.ObjectID) (*user
 	return mod.writer.Decline(ctx, request)
 }
 
+// AddContract adds a signed contract (usermod.SwarmState).
 func (mod *Module) AddContract(ctx *astral.Context, sc *auth.SignedContract) error {
 	if mod.writer == nil {
 		return swarmset.ErrNotOpen
@@ -249,6 +263,7 @@ func (mod *Module) AddContract(ctx *astral.Context, sc *auth.SignedContract) err
 	return mod.writer.AddContract(ctx, sc)
 }
 
+// AddExpulsion adds a signed Expulsion (usermod.SwarmState).
 func (mod *Module) AddExpulsion(ctx *astral.Context, e *user.SignedExpulsion) error {
 	if mod.writer == nil {
 		return swarmset.ErrNotOpen

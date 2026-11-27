@@ -16,17 +16,17 @@ import (
 // (astral-docs protocols/user/ops/user.swarm_requests.md and
 // user.answer_request.md).
 var (
-	// errUnknownRequest: the id names no stored request.
+	// errUnknownRequest is sent when the id names no stored request.
 	errUnknownRequest = astral.NewError("unknown request")
-	// errOutsideTier: this node has no membership, or its tier may not answer
-	// that request (user.MayAnswer).
+	// errOutsideTier is sent when this node has no membership, or its tier may
+	// not answer that request (user.MayAnswer).
 	errOutsideTier = astral.NewError("outside this node's tier")
-	// errRequestClosed: the request's status admits no such answer, the
-	// signer has offered for the request already, or the answer approves a
-	// JoinRequest.
+	// errRequestClosed is sent when the request's status admits no such
+	// answer, the signer has offered for the request already, or the answer
+	// approves a JoinRequest.
 	errRequestClosed = astral.NewError("request is not open to this answer")
-	// errInvalidAnswer: the answer argument is neither approve nor decline, or
-	// the as argument is neither node nor user.
+	// errInvalidAnswer is sent when the answer argument is neither approve nor
+	// decline, or the as argument is neither node nor user.
 	errInvalidAnswer = astral.NewError("invalid answer")
 )
 
