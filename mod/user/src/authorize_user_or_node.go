@@ -12,15 +12,13 @@ import "github.com/astralp2p/astral-go/astral"
 // grants them to an app through the auth walk. A claimed node's own identity
 // holds none of them through this rule.
 //
+// why rootKey: the swarm's entry rules answer the same identity through
+// rootKey (swarm_wire.go), so the handlers and the entry rules cannot disagree
+// on who the user is.
 // note: Identity reads the stored active contract, which LoadDependencies
 // binds before it registers any handler.
-// note: rootKey (swarm_wire.go) answers the same identity for the swarm's
-// entry rules.
 func (mod *Module) userOrSelf() *astral.Identity {
-	if id := mod.Identity(); !id.IsZero() {
-		return id
-	}
-	return mod.node.Identity()
+	return mod.rootKey()
 }
 
 // authorizeUserOrNode allows the user (userOrSelf) and this node's own
