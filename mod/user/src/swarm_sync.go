@@ -46,7 +46,7 @@ type swarmPeer interface {
 // pullSwarm fetches the entries src stores and this node lacks, and adds each one. It returns how much the head
 // grew. Entries that wait are held; entries that are dropped are not stored.
 func (s *swarmStore) pullSwarm(ctx *astral.Context, src swarmSource) (uint64, error) {
-	before := s.SwarmHead()
+	before := s.set.Head()
 
 	digest, err := src.SwarmDigest(ctx)
 	if err != nil {
@@ -55,7 +55,7 @@ func (s *swarmStore) pullSwarm(ctx *astral.Context, src swarmSource) (uint64, er
 
 	var missing []*astral.ObjectID
 	for _, id := range digest {
-		if id != nil && !s.isStored(id) {
+		if id != nil && !s.set.Has(id) {
 			missing = append(missing, id)
 		}
 	}
@@ -65,11 +65,11 @@ func (s *swarmStore) pullSwarm(ctx *astral.Context, src swarmSource) (uint64, er
 		missing = missing[len(batch):]
 
 		if err = s.addFetched(ctx, src, batch); err != nil {
-			return s.SwarmHead() - before, err
+			return s.set.Head() - before, err
 		}
 	}
 
-	return s.SwarmHead() - before, nil
+	return s.set.Head() - before, nil
 }
 
 // addFetched fetches one batch of IDs and adds the entries src answers among them.
@@ -145,7 +145,7 @@ func (o *swarmExchangeOps) digest(ctx *astral.Context, q *routing.IncomingQuery)
 	ch := q.Accept()
 	defer ch.Close()
 
-	for _, id := range o.store.swarmDigest() {
+	for _, id := range o.store.set.Digest() {
 		if err := ch.Send(id); err != nil {
 			return err
 		}
@@ -181,7 +181,7 @@ func (o *swarmExchangeOps) fetch(ctx *astral.Context, q *routing.IncomingQuery) 
 	}
 
 	for _, id := range ids {
-		obj, err := o.store.SwarmEntry(id)
+		obj, err := o.store.set.Entry(id)
 		if err != nil {
 			continue
 		}

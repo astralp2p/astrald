@@ -76,23 +76,6 @@ func (n *linkNodes) IsLinked(id *astral.Identity) bool {
 	return n.linked[id.String()]
 }
 
-// contactPeer is the exchange ops of target: it records every SwarmState push, and its pull does nothing.
-type contactPeer struct {
-	log    *contactLog
-	target *astral.Identity
-}
-
-func (p *contactPeer) SwarmPush(ctx *astral.Context, obj astral.Object) error {
-	p.log.add(contactCall{op: "push", peer: p.target, object: obj, zone: ctx.Zone()})
-	return nil
-}
-
-func (p *contactPeer) SwarmDigest(*astral.Context) ([]*astral.ObjectID, error) { return nil, nil }
-
-func (p *contactPeer) SwarmFetch(*astral.Context, []*astral.ObjectID) ([]astral.Object, error) {
-	return nil, nil
-}
-
 // contactFixture is node nodeID of user userID, holding its active contract,
 // whose fakes record every step of a nearby contact. peerID is a node of the
 // user that is no swarm member here yet. answer is what peerID answers
@@ -137,19 +120,25 @@ func newContactFixture(t *testing.T) *contactFixture {
 		Deps:             Deps{Auth: f.auth, Nodes: f.nodes, Scheduler: f.scheduler},
 		ctx:              ctx,
 		ready:            ready,
-		node:             &identityNode{id: f.nodeID},
+		node:             f.peerNode(),
 		log:              log.New(f.nodeID),
 		db:               singleConnDB(t),
 		dials:            newDialMap(),
 		now:              func() time.Time { return f.now },
 		readPeerContract: f.readContract,
-		swarmDial:        func(target *astral.Identity) swarmPeer { return &contactPeer{log: f.calls, target: target} },
 	}
 	if err := f.mod.config.ActiveContract.Set(nil, nodeContract(f.userID, f.nodeID)); err != nil {
 		t.Fatalf("seed active contract: %v", err)
 	}
 	useIndexSwarm(f.mod, f.userID, f.auth)
 	return f
+}
+
+// peerNode is the node's router: it records every SwarmState push of a nearby contact.
+func (f *contactFixture) peerNode() *swarmPeerNode {
+	return &swarmPeerNode{identityNode: identityNode{id: f.nodeID}, onPush: func(p swarmPush) {
+		f.calls.add(contactCall{op: "push", peer: p.target, object: p.object, zone: p.zone})
+	}}
 }
 
 // singleConnDB is testDB on one connection, so goroutines share its :memory: database.
@@ -284,7 +273,7 @@ func TestPeerSeenAsksFirstThenIntroduces(t *testing.T) {
 			t.Fatalf("%v to %v in zone %v; want the peer in the Network zone", c.op, c.peer, c.zone)
 		}
 	}
-	if calls[1].object != f.mod.ActiveContract() {
+	if !sameObject(calls[1].object, f.mod.ActiveContract()) {
 		t.Fatalf("pushed %v; want the active contract", calls[1].object)
 	}
 

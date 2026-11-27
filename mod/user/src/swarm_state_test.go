@@ -1,9 +1,7 @@
 package user
 
 import (
-	"context"
 	"crypto/sha256"
-	"errors"
 	"slices"
 	"strings"
 	"sync"
@@ -168,7 +166,7 @@ type stateNode struct {
 	pushed  *entryPushLog // what the store passed on
 }
 
-func newStateNode(t *testing.T, script *swarmScript) *stateNode {
+func newStateNode(t testing.TB, script *swarmScript) *stateNode {
 	t.Helper()
 
 	n := &stateNode{id: astral.GenerateIdentity(), files: newMemFiles(), pushed: &entryPushLog{}}
@@ -179,7 +177,7 @@ func newStateNode(t *testing.T, script *swarmScript) *stateNode {
 }
 
 // open opens the node's store over its VFS, as a restart does.
-func (n *stateNode) open(t *testing.T) {
+func (n *stateNode) open(t testing.TB) {
 	t.Helper()
 
 	ctx := astral.NewContext(nil).WithIdentity(n.id).IncludeZone(astral.ZoneNetwork)
@@ -192,7 +190,6 @@ func (n *stateNode) open(t *testing.T) {
 	if n.store != nil {
 		store.peers = n.store.peers
 	}
-	store.passOnWait = true
 	n.store = store
 }
 
@@ -316,7 +313,7 @@ func storedIDs(t *testing.T, s *swarmStore) []string {
 
 	var ids []string
 	for _, kind := range user.EntryKinds {
-		list, err := s.SwarmEntries(kind)
+		list, err := s.set.Entries(kind)
 		if err != nil {
 			t.Fatalf("SwarmEntries(%v): %v", kind, err)
 		}
@@ -327,6 +324,19 @@ func storedIDs(t *testing.T, s *swarmStore) []string {
 	slices.Sort(ids)
 
 	return ids
+}
+
+// awaitHead waits until n's head is want: a stored entry is passed on in the background.
+func awaitHead(t *testing.T, n *stateNode, want uint64) {
+	t.Helper()
+
+	deadline := time.Now().Add(5 * time.Second)
+	for n.store.set.Head() != want {
+		if time.Now().After(deadline) {
+			t.Fatalf("head = %v; want %v", n.store.set.Head(), want)
+		}
+		time.Sleep(time.Millisecond)
+	}
 }
 
 func mustAdd(t *testing.T, n *stateNode, obj astral.Object) {
@@ -351,7 +361,7 @@ func TestSwarmStoreLayoutAndRead(t *testing.T) {
 			t.Fatalf("%v: no file at swarmstate/%v/%v", obj.ObjectType(), kind, &id)
 		}
 
-		got, err := n.store.SwarmEntry(&id)
+		got, err := n.store.set.Entry(&id)
 		if err != nil {
 			t.Fatalf("SwarmEntry(%v): %v", obj.ObjectType(), err)
 		}
@@ -359,7 +369,7 @@ func TestSwarmStoreLayoutAndRead(t *testing.T) {
 			t.Fatalf("SwarmEntry = %v %v, want %v %v", got.ObjectType(), entryID(t, got), obj.ObjectType(), id)
 		}
 
-		ids, _ := n.store.SwarmEntries(kind)
+		ids, _ := n.store.set.Entries(kind)
 		if len(ids) != 1 || *ids[0] != id {
 			t.Fatalf("SwarmEntries(%v) = %v, want [%v]", kind, ids, id)
 		}
@@ -368,7 +378,7 @@ func TestSwarmStoreLayoutAndRead(t *testing.T) {
 	if head, ok := n.files.read(n.id, "/swarmhead"); !ok || string(head) != "5" {
 		t.Fatalf("head file = %q, %v; want 5", head, ok)
 	}
-	if _, err := n.store.SwarmEntries("bogus"); err == nil {
+	if _, err := n.store.set.Entries("bogus"); err == nil {
 		t.Fatal("SwarmEntries accepted an invalid kind")
 	}
 	if err := n.store.merge(n.store.ctx, astral.NewString8("x")); err == nil {
@@ -389,10 +399,11 @@ func TestSwarmDuplicateIsNoOp(t *testing.T) {
 
 	obj := fiveEntries(t)[0]
 	mustAdd(t, a, obj)
+	awaitHead(t, b, 1)
 
-	checksA, writesA, pushesA, head := a.checker.callCount(), a.files.writeCount(), a.pushed.count(), a.store.SwarmHead()
-	if b.store.SwarmHead() != 1 || head != 1 {
-		t.Fatalf("heads = %v, %v; want 1, 1", head, b.store.SwarmHead())
+	checksA, writesA, pushesA, head := a.checker.callCount(), a.files.writeCount(), a.pushed.count(), a.store.set.Head()
+	if b.store.set.Head() != 1 || head != 1 {
+		t.Fatalf("heads = %v, %v; want 1, 1", head, b.store.set.Head())
 	}
 
 	for range 2 {
@@ -411,8 +422,8 @@ func TestSwarmDuplicateIsNoOp(t *testing.T) {
 		t.Fatalf("a duplicate was written: %v writes, want %v", a.files.writeCount(), writesA)
 	case a.pushed.count() != pushesA:
 		t.Fatalf("a duplicate was passed on: %v pushes, want %v", a.pushed.count(), pushesA)
-	case a.store.SwarmHead() != 1 || b.store.SwarmHead() != 1:
-		t.Fatalf("heads = %v, %v after duplicates; want 1, 1", a.store.SwarmHead(), b.store.SwarmHead())
+	case a.store.set.Head() != 1 || b.store.set.Head() != 1:
+		t.Fatalf("heads = %v, %v after duplicates; want 1, 1", a.store.set.Head(), b.store.set.Head())
 	}
 }
 
@@ -443,23 +454,23 @@ func TestSwarmHeadChangesExactlyWhenEntriesArrive(t *testing.T) {
 	}
 	for _, step := range steps {
 		_ = n.store.merge(n.store.ctx, step.obj)
-		if got := n.store.SwarmHead(); got != step.want {
+		if got := n.store.set.Head(); got != step.want {
 			t.Fatalf("%v: head = %v, want %v", step.name, got, step.want)
 		}
 	}
 
 	src := newStateNode(t, script)
 	mustAdd(t, src, member)
-	if added, err := n.store.pullSwarm(n.store.ctx, localPeer{src}); err != nil || added != 0 || n.store.SwarmHead() != 4 {
-		t.Fatalf("pull with nothing new: added %v, %v, head %v; want 0, nil, 4", added, err, n.store.SwarmHead())
+	if added, err := n.store.pullSwarm(n.store.ctx, localPeer{src}); err != nil || added != 0 || n.store.set.Head() != 4 {
+		t.Fatalf("pull with nothing new: added %v, %v, head %v; want 0, nil, 4", added, err, n.store.set.Head())
 	}
 
 	n.open(t)
-	if got := n.store.SwarmHead(); got != 4 {
+	if got := n.store.set.Head(); got != 4 {
 		t.Fatalf("head after reopen = %v, want 4", got)
 	}
-	if len(n.store.swarmDigest()) != 4 {
-		t.Fatalf("digest has %v IDs, want the 4 entries only", len(n.store.swarmDigest()))
+	if len(n.store.set.Digest()) != 4 {
+		t.Fatalf("digest has %v IDs, want the 4 entries only", len(n.store.set.Digest()))
 	}
 }
 
@@ -475,33 +486,36 @@ func TestSwarmReopenRecountsHead(t *testing.T) {
 	}
 
 	n.open(t)
-	if head, _ := n.files.read(n.id, "/swarmhead"); n.store.SwarmHead() != 3 || string(head) != "3" {
-		t.Fatalf("head = %v, file %q; want 3", n.store.SwarmHead(), head)
+	if head, _ := n.files.read(n.id, "/swarmhead"); n.store.set.Head() != 3 || string(head) != "3" {
+		t.Fatalf("head = %v, file %q; want 3", n.store.set.Head(), head)
 	}
 }
 
-// blackHolePeer is a peer whose push never answers: it returns only when the
-// push's context ends, and reports that end on ended.
-type blackHolePeer struct{ ended chan error }
+// blackHolePeer is a peer whose push never answers: it reports the deadline of each push on pushed and returns
+// only once release is closed.
+type blackHolePeer struct {
+	pushed  chan time.Time
+	release chan struct{}
+}
 
 func (p blackHolePeer) SwarmPush(ctx *astral.Context, _ astral.Object) error {
-	<-ctx.Done()
-	p.ended <- ctx.Err()
+	deadline, _ := ctx.Deadline()
+	p.pushed <- deadline
+	<-p.release
 	return ctx.Err()
 }
 
 // TestSwarmPassOnDoesNotWaitForADeadPeer: an entry accepted while a peer's
-// push never answers is stored and merge returns at once; the push
-// ends at its bound.
+// push never answers is stored and merge returns at once; the push is bound by
+// swarmPushTimeout.
 //
 // why: passOn waited for every push, so a link that takes bytes and never
 // answers held up the writer (an answer op, a host signing an app's contract)
 // until the link closed (reconnect-sync-after-dead-link).
 func TestSwarmPassOnDoesNotWaitForADeadPeer(t *testing.T) {
 	a := newStateNode(t, newSwarmScript())
-	a.store.passOnWait = false
-	a.store.pushTimeout = 300 * time.Millisecond
-	dead := blackHolePeer{ended: make(chan error, 1)}
+	dead := blackHolePeer{pushed: make(chan time.Time, 1), release: make(chan struct{})}
+	t.Cleanup(func() { close(dead.release) })
 	a.store.peers = func() []swarmEntryPusher { return []swarmEntryPusher{dead} }
 
 	start := time.Now()
@@ -509,16 +523,16 @@ func TestSwarmPassOnDoesNotWaitForADeadPeer(t *testing.T) {
 	if took := time.Since(start); took > 150*time.Millisecond {
 		t.Fatalf("merge took %v with a dead peer; want it not to wait for the push", took)
 	}
-	if a.store.SwarmHead() != 1 {
-		t.Fatalf("head = %v; want 1", a.store.SwarmHead())
+	if a.store.set.Head() != 1 {
+		t.Fatalf("head = %v; want 1", a.store.set.Head())
 	}
 
 	select {
-	case err := <-dead.ended:
-		if !errors.Is(err, context.DeadlineExceeded) {
-			t.Fatalf("the push ended with %v; want its deadline", err)
+	case deadline := <-dead.pushed:
+		if left := time.Until(deadline); left <= 0 || left > swarmPushTimeout {
+			t.Fatalf("the push ends in %v; want it bound by %v", left, swarmPushTimeout)
 		}
 	case <-time.After(5 * time.Second):
-		t.Fatal("the push to the dead peer never ended")
+		t.Fatal("the entry was never pushed to the dead peer")
 	}
 }

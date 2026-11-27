@@ -36,7 +36,7 @@ func TestSwarmViewDeclineClosesOnlyTheRequest(t *testing.T) {
 			f.now = viewClock(10, 6)
 			f.wantStatus(r1, user.RequestOffered)
 		}
-		f.add(complete(offer))
+		f.add(&auth.SignedContract{Contract: offer.Contract, IssuerSig: offer.IssuerSig, SubjectSig: viewSig()})
 		contract := f.appContract(f.pi, f.appA, r1)
 		f.add(contract)
 		f.add(decline)
@@ -120,58 +120,6 @@ func TestSwarmViewContractsOfMatchesRequest(t *testing.T) {
 		if len(got) != 1 || !got[0].Subject.IsEqual(c.subject) || !got[0].RequestID.IsEqual(c.req) {
 			t.Fatalf("ContractsOf = %d contracts, want only the one naming this request", len(got))
 		}
-	}
-}
-
-// TestSwarmViewReadErrorKeepsHeldEntries: the set only grows, so a failed
-// read after the head grew answers from what an earlier read held as well;
-// an expel or a Decline is never undone by a read error.
-func TestSwarmViewReadErrorKeepsHeldEntries(t *testing.T) {
-	for _, c := range []struct {
-		name string
-		fail func(s *fakeSwarmState)
-	}{
-		{"listing the expels", func(s *fakeSwarmState) { s.failList = user.EntryExpels }},
-		{"reading an expel", func(s *fakeSwarmState) { s.failRead = user.EntryExpels }},
-		{"listing the declines", func(s *fakeSwarmState) { s.failList = user.EntryDeclines }},
-		{"reading a decline", func(s *fakeSwarmState) { s.failRead = user.EntryDeclines }},
-	} {
-		t.Run(c.name, func(t *testing.T) {
-			f := newViewFixture(t)
-			robj := f.contractRequest(f.pi, f.appA, viewClock(10, 0))
-			r := f.add(robj)
-			f.add(f.offer(f.laptop, robj, r))
-			f.add(f.decline(f.desktop, r))
-			f.add(f.expulsion(f.user, f.phone))
-			f.wantMembership(f.phone, false)
-			f.wantStatus(r, user.RequestDeclined)
-
-			c.fail(f.state)
-			r2obj := f.contractRequest(f.pi, f.appA, viewClock(10, 1))
-			r2 := f.add(r2obj)
-			f.wantMembership(f.phone, false)
-			f.wantStatus(r, user.RequestDeclined)
-			// why: what the failed read did return is answered from too.
-			if !f.view.Expelled(f.phone) || f.view.RequestStatus(r2) != user.RequestPending {
-				t.Fatal("the failed read lost the held set")
-			}
-			f.add(f.offer(f.laptop, r2obj, r2))
-			f.wantStatus(r2, user.RequestOffered)
-
-			// why: after a failed read the head is not taken as read, so
-			// the next call reads again with no new entry.
-			f.state.failList, f.state.failRead = "", ""
-			reads := f.state.reads
-			f.wantMembership(f.phone, false)
-			if f.state.reads == reads {
-				t.Fatal("the set was not read again after a failed read")
-			}
-			reads = f.state.reads
-			f.wantStatus(r, user.RequestDeclined)
-			if f.state.reads != reads {
-				t.Fatal("the set was read again after a good read with an unchanged head")
-			}
-		})
 	}
 }
 
@@ -510,9 +458,9 @@ func TestSwarmViewRereadsOnlyOnHeadChange(t *testing.T) {
 	f := newViewFixture(t)
 	r := f.add(f.contractRequest(f.pi, f.appA, viewClock(10, 0)))
 	f.wantStatus(r, user.RequestPending)
-	reads := f.state.reads
+	reads := f.state.reads()
 	f.wantStatus(r, user.RequestPending)
-	if f.state.reads != reads {
+	if f.state.reads() != reads {
 		t.Fatal("the set was read again with an unchanged head")
 	}
 	f.add(f.decline(f.laptop, r))

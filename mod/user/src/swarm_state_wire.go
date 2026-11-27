@@ -9,6 +9,7 @@ import (
 	"github.com/astralp2p/astral-go/api/user"
 	"github.com/astralp2p/astral-go/astral"
 	usermod "github.com/astralp2p/astrald/mod/user"
+	"github.com/astralp2p/astrald/mod/user/src/swarmset"
 )
 
 // swarmPullInterval is how often this node pulls SwarmState from every linked swarm member.
@@ -54,10 +55,7 @@ func (mod *Module) admitsSwarmCaller(caller *astral.Identity) bool {
 }
 
 // swarmPeer returns target's exchange ops.
-func (mod *Module) swarmPeer(target *astral.Identity) swarmPeer {
-	if mod.swarmDial != nil {
-		return mod.swarmDial(target)
-	}
+func (mod *Module) swarmPeer(target *astral.Identity) *routerSwarmPeer {
 	return &routerSwarmPeer{router: mod.node, caller: mod.node.Identity(), target: target}
 }
 
@@ -85,7 +83,7 @@ func (mod *Module) swarmMembersLinked() (ids []*astral.Identity) {
 func (mod *Module) SyncSwarm(ctx *astral.Context, peer *astral.Identity) error {
 	store := mod.openStore()
 	if store == nil {
-		return errSwarmStateNotOpen
+		return swarmset.ErrNotOpen
 	}
 	if peer.IsZero() || peer.IsEqual(mod.node.Identity()) {
 		return errors.New("swarm sync needs another node")
@@ -97,14 +95,6 @@ func (mod *Module) SyncSwarm(ctx *astral.Context, peer *astral.Identity) error {
 		mod.log.Logv(1, "swarm state: %v entries from %v", grown, peer)
 	}
 	return err
-}
-
-// PushSwarmEntry offers obj to peer's SwarmState through peer's swarm_push.
-func (mod *Module) PushSwarmEntry(ctx *astral.Context, peer *astral.Identity, obj astral.Object) error {
-	if peer.IsZero() || peer.IsEqual(mod.node.Identity()) {
-		return errors.New("swarm push needs another node")
-	}
-	return mod.swarmPeer(peer).SwarmPush(ctx.IncludeZone(astral.ZoneNetwork), obj)
 }
 
 // runSwarmSync pulls SwarmState from every linked swarm member every swarmPullInterval until ctx ends.
@@ -153,13 +143,13 @@ func (mod *Module) onSwarmLink(peer *astral.Identity) {
 func (mod *Module) mergeSwarmEntry(ctx *astral.Context, obj astral.Object) error {
 	store := mod.openStore()
 	if store == nil {
-		return errSwarmStateNotOpen
+		return swarmset.ErrNotOpen
 	}
-	before := store.SwarmHead()
+	before := store.set.Head()
 	if err := store.merge(ctx, obj); err != nil {
 		return err
 	}
-	if mod.isOwnMembership(obj) && store.SwarmHead() != before {
+	if mod.isOwnMembership(obj) && store.set.Head() != before {
 		go mod.exchangeSwarmWithLinked()
 	}
 	return nil
@@ -188,10 +178,6 @@ func (mod *Module) exchangeSwarmWithLinked() {
 		if peer.IsZero() {
 			continue
 		}
-		if mod.swarmLinkHook != nil {
-			mod.swarmLinkHook(peer)
-			continue
-		}
 		mod.onSwarmLink(peer)
 	}
 }
@@ -200,9 +186,9 @@ func (mod *Module) exchangeSwarmWithLinked() {
 func (mod *Module) SwarmEntry(id *astral.ObjectID) (astral.Object, error) {
 	store := mod.openStore()
 	if store == nil {
-		return nil, errSwarmStateNotOpen
+		return nil, swarmset.ErrNotOpen
 	}
-	return store.SwarmEntry(id)
+	return store.set.Entry(id)
 }
 
 // SwarmEntries lists the stored entries of kind (usermod.SwarmState); none before the store is open.
@@ -211,7 +197,7 @@ func (mod *Module) SwarmEntries(kind user.EntryKind) ([]*astral.ObjectID, error)
 	if store == nil {
 		return nil, nil
 	}
-	return store.SwarmEntries(kind)
+	return store.set.Entries(kind)
 }
 
 // SwarmHead returns the number of stored entries (usermod.SwarmState); 0 before the store is open.
@@ -220,5 +206,5 @@ func (mod *Module) SwarmHead() uint64 {
 	if store == nil {
 		return 0
 	}
-	return store.SwarmHead()
+	return store.set.Head()
 }

@@ -51,8 +51,8 @@ func (l *pushLog) list() []push {
 }
 
 // swarmUser is a user module with a local swarm that records PushToSiblings calls.
-// The member link tests change the swarm through set, ban nodes through ban, and
-// make the swarm read fail through fail; ready is nil, so Ready never closes, until a test sets it.
+// The member link tests change the swarm through set and ban nodes through ban;
+// ready is nil, so Ready never closes, until a test sets it.
 type swarmUser struct {
 	usermod.Module
 	swarm    []*astral.Identity
@@ -61,7 +61,6 @@ type swarmUser struct {
 
 	mu     sync.Mutex
 	banned []*astral.Identity
-	err    error
 }
 
 func (u *swarmUser) set(members ...*astral.Identity) {
@@ -76,24 +75,10 @@ func (u *swarmUser) ban(id *astral.Identity) {
 	u.banned = append(u.banned, id)
 }
 
-func (u *swarmUser) fail(err error) {
-	u.mu.Lock()
-	defer u.mu.Unlock()
-	u.err = err
-}
-
 func (u *swarmUser) LocalSwarm() []*astral.Identity {
-	list, _ := u.ReadLocalSwarm()
-	return list
-}
-
-func (u *swarmUser) ReadLocalSwarm() ([]*astral.Identity, error) {
 	u.mu.Lock()
 	defer u.mu.Unlock()
-	if u.err != nil {
-		return nil, u.err
-	}
-	return slices.Clone(u.swarm), nil
+	return slices.Clone(u.swarm)
 }
 
 func (u *swarmUser) IsSwarmMember(id *astral.Identity) bool {

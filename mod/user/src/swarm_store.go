@@ -2,7 +2,6 @@ package user
 
 import (
 	"fmt"
-	"sync"
 	"time"
 
 	"github.com/astralp2p/astral-go/api/user"
@@ -12,9 +11,6 @@ import (
 	"github.com/astralp2p/astrald/mod/user/src/swarmset"
 	vfsmod "github.com/astralp2p/astrald/mod/vfs"
 )
-
-// errSwarmStateNotOpen answers a SwarmState call made before Run opened the store.
-var errSwarmStateNotOpen = swarmset.ErrNotOpen
 
 // swarmEntryPusher receives the entries this node passes on.
 type swarmEntryPusher interface {
@@ -31,11 +27,6 @@ type swarmStore struct {
 
 	// peers returns where a stored entry is passed on; nil passes nothing on.
 	peers func() []swarmEntryPusher
-	// pushTimeout bounds one pass-on push; zero is swarmPushTimeout.
-	pushTimeout time.Duration
-	// passOnWait makes passOn return only once its pushes ended.
-	// note: a test seam, so a test of the merge reads the peers' copies at once.
-	passOnWait bool
 	// stored runs after every merge that stored entries, outside the merge lock; nil does nothing.
 	stored func(objs []astral.Object)
 }
@@ -105,48 +96,13 @@ func (s *swarmStore) passOn(objs []astral.Object) {
 		return
 	}
 
-	timeout := s.pushTimeout
-	if timeout <= 0 {
-		timeout = swarmPushTimeout
-	}
-
-	var wg sync.WaitGroup
 	for _, peer := range s.peers() {
-		wg.Add(1)
 		go func() {
-			defer wg.Done()
 			for _, obj := range objs {
-				ctx, cancel := s.ctx.WithTimeout(timeout)
+				ctx, cancel := s.ctx.WithTimeout(swarmPushTimeout)
 				_ = peer.SwarmPush(ctx, obj)
 				cancel()
 			}
 		}()
 	}
-	if s.passOnWait {
-		wg.Wait()
-	}
-}
-
-// SwarmEntry returns a stored entry decoded as its signed type.
-func (s *swarmStore) SwarmEntry(id *astral.ObjectID) (astral.Object, error) {
-	return s.set.Entry(id)
-}
-
-// SwarmEntries returns the IDs of the stored entries of kind.
-func (s *swarmStore) SwarmEntries(kind user.EntryKind) ([]*astral.ObjectID, error) {
-	return s.set.Entries(kind)
-}
-
-// SwarmHead returns the number of stored entries.
-func (s *swarmStore) SwarmHead() uint64 {
-	return s.set.Head()
-}
-
-// swarmDigest returns the IDs of every stored entry, of every kind.
-func (s *swarmStore) swarmDigest() []*astral.ObjectID {
-	return s.set.Digest()
-}
-
-func (s *swarmStore) isStored(id *astral.ObjectID) bool {
-	return s.set.Has(id)
 }

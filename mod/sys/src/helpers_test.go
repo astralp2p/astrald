@@ -42,9 +42,6 @@ func (s *stubUser) FetchRelayContracts(*astral.Context, *astral.Identity) iter.S
 func (s *stubUser) FetchRelayContractsReport(*astral.Context, *astral.Identity) (iter.Seq2[*astral.Identity, *auth.SignedContract], func() bool) {
 	return func(func(*astral.Identity, *auth.SignedContract) bool) {}, func() bool { return true }
 }
-func (s *stubUser) ReadLocalSwarm() ([]*astral.Identity, error) {
-	return nil, nil
-}
 func (s *stubUser) IsSwarmMember(*astral.Identity) bool                     { return false }
 func (s *stubUser) NewSyncNodesTask(*astral.Identity) usermod.SyncNodesTask { return nil }
 func (s *stubUser) PushToLocalSwarm(*astral.Context, astral.Object)         {}

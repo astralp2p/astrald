@@ -62,12 +62,6 @@ type Module struct {
 	// publisher emits SwarmState's events; swarmFeed reports its changes.
 	publisher *swarmPublisher
 	swarmFeed SwarmFeed
-	// swarmLinkHook replaces onSwarmLink in exchangeSwarmWithLinked.
-	// note: a test seam; nil in the running node.
-	swarmLinkHook func(peer *astral.Identity)
-	// swarmDial replaces the query to a peer's exchange ops; nil selects routerSwarmPeer.
-	// note: a test seam; nil in the running node.
-	swarmDial func(target *astral.Identity) swarmPeer
 
 	// swarmView reads SwarmState; nil until LoadDependencies built it.
 	// why atomic: the auth walk reads this module from its own LoadDependencies on,

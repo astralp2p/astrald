@@ -26,11 +26,6 @@ const (
 	// DefaultContractValidity is the validity of a node contract that
 	// user.new_node_contract builds without a duration.
 	DefaultContractValidity = 365 * 24 * time.Hour
-
-	// OfferValidity is how long an offer that answers a ContractRequest
-	// holds at most: 3650 days after signing.
-	// Spec: .ai/system/protocols/user/README.md#app-grants
-	OfferValidity = 3650 * 24 * time.Hour
 )
 
 // SwarmView reads what SwarmState's entries mean (mod/user). It reads the set
@@ -118,9 +113,6 @@ type Module interface {
 	// LocalSwarm returns the identities of swarm members reachable on this
 	// device, excluding remote-only members.
 	LocalSwarm() (list []*astral.Identity)
-	// ReadLocalSwarm is LocalSwarm with the error of its read: a failed read
-	// returns the error and no members, where LocalSwarm returns none.
-	ReadLocalSwarm() ([]*astral.Identity, error)
 	// AdmitRelayContract is the one admission rule of a relay-for contract:
 	// its subject is this node or a local swarm member, both signatures
 	// verify, and it has not expired. A non-nil sender, the node that

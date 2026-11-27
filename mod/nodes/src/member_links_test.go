@@ -403,19 +403,6 @@ func TestMemberEventsEndInTheLatestSet(t *testing.T) {
 	f.requireNoClose(t)
 }
 
-// TestMemberLinksKeepTasksWhenTheSwarmReadFails: a failed read of the member
-// set stops no link task and closes no link.
-func TestMemberLinksKeepTasksWhenTheSwarmReadFails(t *testing.T) {
-	a := astral.GenerateIdentity()
-	f := newMemberLinksFixture(t, a)
-	f.requireRunning(t, a)
-
-	f.user.fail(errors.New("read failed"))
-	f.receive(t, &user.SwarmMemberLeft{NodeID: a})
-	f.requireRunning(t, a)
-	f.requireNoClose(t)
-}
-
 // TestMemberLinksWaitForTheUserModule: a member event before the user module
 // is ready starts no link task.
 func TestMemberLinksWaitForTheUserModule(t *testing.T) {

@@ -10,6 +10,7 @@ import (
 	"github.com/astralp2p/astral-go/api/user"
 	"github.com/astralp2p/astral-go/astral"
 	nodesmod "github.com/astralp2p/astrald/mod/nodes"
+	usermod "github.com/astralp2p/astrald/mod/user"
 )
 
 // useSwarm gives mod a SwarmView over an in-memory SwarmState holding, for
@@ -17,18 +18,18 @@ import (
 // root key. It returns the state, so a test adds entries later.
 //
 // note: the view trusts stored entries, so the signatures are placeholders.
-func useSwarm(t testing.TB, mod *Module, userID *astral.Identity, members ...*astral.Identity) *fakeSwarmState {
+func useSwarm(t testing.TB, mod *Module, userID *astral.Identity, members ...*astral.Identity) *storeState {
 	t.Helper()
-	state := newFakeSwarmState()
+	state := newStoreState(t)
 	for _, m := range members {
 		addMembership(t, state, userID, m)
 	}
-	mod.swarmView.Store(newSwarmView(state, func() *astral.Identity { return userID }, nil))
+	mod.swarmView.Store(newSwarmView(state, func() *astral.Identity { return userID }, time.Now))
 	return state
 }
 
 // addMembership stores subject's Member-tier membership, signed by issuer.
-func addMembership(t testing.TB, state *fakeSwarmState, issuer, subject *astral.Identity) *auth.SignedContract {
+func addMembership(t testing.TB, state *storeState, issuer, subject *astral.Identity) *auth.SignedContract {
 	t.Helper()
 	c, err := user.NewMembership(issuer, subject, user.TierMember, nil, time.Hour)
 	if err != nil {
@@ -46,6 +47,7 @@ func addMembership(t testing.TB, state *fakeSwarmState, issuer, subject *astral.
 // SwarmState members. Its head moves on every read, so the view reads the
 // staged set each time.
 type contractState struct {
+	usermod.SwarmState
 	contracts func() ([]*auth.SignedContract, error)
 	head      atomic.Uint64
 }
@@ -100,7 +102,7 @@ func useIndexSwarm(mod *Module, userID *astral.Identity, a *indexAuth) {
 }
 
 func useContractSwarm(mod *Module, userID *astral.Identity, contracts func() ([]*auth.SignedContract, error)) {
-	mod.swarmView.Store(newSwarmView(&contractState{contracts: contracts}, func() *astral.Identity { return userID }, nil))
+	mod.swarmView.Store(newSwarmView(&contractState{contracts: contracts}, func() *astral.Identity { return userID }, time.Now))
 }
 
 // pullNoSwarm is a nodes module with no behaviour: a SwarmState pull on a module whose store is closed does

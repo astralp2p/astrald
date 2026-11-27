@@ -7,6 +7,7 @@ import (
 	"slices"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astral-go/lib/routing"
@@ -16,12 +17,12 @@ import (
 type localPeer struct{ n *stateNode }
 
 func (p localPeer) SwarmDigest(*astral.Context) ([]*astral.ObjectID, error) {
-	return p.n.store.swarmDigest(), nil
+	return p.n.store.set.Digest(), nil
 }
 
 func (p localPeer) SwarmFetch(_ *astral.Context, ids []*astral.ObjectID) (objs []astral.Object, err error) {
 	for _, id := range ids {
-		if obj, err := p.n.store.SwarmEntry(id); err == nil {
+		if obj, err := p.n.store.set.Entry(id); err == nil {
 			objs = append(objs, obj)
 		}
 	}
@@ -133,16 +134,29 @@ func idStrings(objs ...astral.Object) []string {
 	return slices.Compact(ids)
 }
 
-// requireSet fails unless every node stores exactly want and counts it in its head.
+// requireSet fails unless every node stores exactly want and counts it in its head. It waits for the entries a
+// store passes on in the background.
 func requireSet(t *testing.T, nodes []*stateNode, want []string) {
 	t.Helper()
+
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		settled := true
+		for _, n := range nodes {
+			settled = settled && slices.Equal(storedIDs(t, n.store), want)
+		}
+		if settled {
+			break
+		}
+		time.Sleep(time.Millisecond)
+	}
 
 	for i, n := range nodes {
 		if got := storedIDs(t, n.store); !slices.Equal(got, want) {
 			t.Fatalf("node %v stores %v entries, want %v:\n got %v\nwant %v", i, len(got), len(want), got, want)
 		}
-		if n.store.SwarmHead() != uint64(len(want)) {
-			t.Fatalf("node %v head = %v, want %v", i, n.store.SwarmHead(), len(want))
+		if n.store.set.Head() != uint64(len(want)) {
+			t.Fatalf("node %v head = %v, want %v", i, n.store.set.Head(), len(want))
 		}
 	}
 }
@@ -210,13 +224,13 @@ func TestSwarmDroppedEntryNeverStoredOrForwarded(t *testing.T) {
 
 			requireSet(t, nodes, idStrings(good))
 			for i, n := range nodes {
-				if _, err := n.store.SwarmEntry(&droppedID); err == nil {
+				if _, err := n.store.set.Entry(&droppedID); err == nil {
 					t.Fatalf("node %v reads the dropped entry", i)
 				}
 				if n.pushed.has(droppedID) {
 					t.Fatalf("node %v passed the dropped entry on", i)
 				}
-				if slices.ContainsFunc(n.store.swarmDigest(), func(id *astral.ObjectID) bool { return *id == droppedID }) {
+				if slices.ContainsFunc(n.store.set.Digest(), func(id *astral.ObjectID) bool { return *id == droppedID }) {
 					t.Fatalf("node %v lists the dropped entry in its digest", i)
 				}
 			}
@@ -289,8 +303,8 @@ func TestSwarmOpsRefuseUnadmittedCaller(t *testing.T) {
 	if _, err := peer.SwarmDigest(other.store.ctx); err == nil {
 		t.Fatal("digest served a refused caller")
 	}
-	if err := peer.SwarmPush(other.store.ctx, fiveEntries(t)[1]); err != nil || n.store.SwarmHead() != 2 {
-		t.Fatalf("push from an unadmitted caller: err %v, head %v; want it merged", err, n.store.SwarmHead())
+	if err := peer.SwarmPush(other.store.ctx, fiveEntries(t)[1]); err != nil || n.store.set.Head() != 2 {
+		t.Fatalf("push from an unadmitted caller: err %v, head %v; want it merged", err, n.store.set.Head())
 	}
 	if _, err := peer.SwarmDigest(astral.NewContext(nil).LimitZone(astral.ZoneDevice)); !errors.Is(err, astral.ErrZoneExcluded) {
 		t.Fatalf("digest without the network zone: err = %v, want ErrZoneExcluded", err)

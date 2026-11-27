@@ -97,7 +97,7 @@ func (mod *Module) introduce(ctx *astral.Context, ac *auth.SignedContract, nodeI
 	pctx, cancel := ctx.IncludeZone(astral.ZoneNetwork).WithTimeout(introducePushTimeout)
 	defer cancel()
 
-	if err := mod.PushSwarmEntry(pctx, nodeID, ac); err != nil {
+	if err := mod.swarmPeer(nodeID).SwarmPush(pctx, ac); err != nil {
 		return astral.Err(fmt.Errorf("push to %v: %w", nodeID, err))
 	}
 	if err := mod.SyncSwarm(pctx, nodeID); err != nil {

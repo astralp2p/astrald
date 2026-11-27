@@ -261,7 +261,7 @@ func (s *testSwarm) request(t *testing.T, req *astral.ObjectID) *user.SignedCont
 }
 
 // offerBody returns issuer's unsigned offer for req: every requested permit
-// at one more Delegation, to the filer, expiring after usermod.OfferValidity.
+// at one more Delegation, to the filer, expiring 3650 days after signing.
 func (s *testSwarm) offerBody(t *testing.T, issuer *astral.Identity, req *astral.ObjectID) *auth.SignedContract {
 	t.Helper()
 	r := s.request(t, req)
@@ -273,7 +273,7 @@ func (s *testSwarm) offerBody(t *testing.T, issuer *astral.Identity, req *astral
 	}
 	return &auth.SignedContract{Contract: &auth.Contract{
 		Issuer: issuer, Subject: r.FiledBy, Permits: permits, RequestID: req,
-		ExpiresAt: astral.Time(s.now().Add(usermod.OfferValidity)),
+		ExpiresAt: astral.Time(s.now().Add(3650 * 24 * time.Hour)),
 	}}
 }
 

@@ -86,20 +86,6 @@ func NewIndex() *Index {
 	}
 }
 
-// Union returns a new index holding the entries of x and of other; either may be nil.
-func (x *Index) Union(other *Index) *Index {
-	out := NewIndex()
-	for _, s := range []*Index{x, other} {
-		if s == nil {
-			continue
-		}
-		for id, obj := range s.entries {
-			out.Add(&id, obj)
-		}
-	}
-	return out
-}
-
 // Add files obj under its kind. An object of no entry kind, a nil entry and an entry already held are ignored.
 func (x *Index) Add(id *astral.ObjectID, obj astral.Object) {
 	if id == nil {

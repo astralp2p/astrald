@@ -12,7 +12,12 @@ import (
 	"github.com/astralp2p/astral-go/api/user"
 	"github.com/astralp2p/astral-go/astral"
 	usermod "github.com/astralp2p/astrald/mod/user"
+	"github.com/astralp2p/astrald/mod/user/src/swarmset"
 )
+
+// offerValidity is how long an offer that answers a ContractRequest holds at most: 3650 days after signing.
+// Spec: .ai/system/protocols/user/README.md#app-grants
+const offerValidity = 3650 * 24 * time.Hour
 
 // writerView is the part of usermod.SwarmView the typed writes check before they sign.
 type writerView interface {
@@ -30,8 +35,6 @@ type swarmWriter struct {
 	entry func(id *astral.ObjectID) (astral.Object, error)
 	// merge is the store's merge (Module.mergeSwarmEntry in the running node).
 	merge func(ctx *astral.Context, obj astral.Object) error
-	// now is the clock of an offer's expiry; nil selects time.Now.
-	now func() time.Time
 }
 
 // as returns w signing as id with signer: the user key's writes (user.answer_request with as=user).
@@ -148,16 +151,12 @@ func (w *swarmWriter) offer(ctx *astral.Context, reqID *astral.ObjectID, req *us
 	return signed, w.add(ctx, signed)
 }
 
-// offerExpiry returns when an offer signed now expires: after usermod.OfferValidity, or when this signer's
+// offerExpiry returns when an offer signed now expires: after offerValidity, or when this signer's
 // membership expires, if earlier. The user key holds no membership.
 //
 // why: a contract never outlives its issuer's own authority.
 func (w *swarmWriter) offerExpiry() time.Time {
-	now := time.Now
-	if w.now != nil {
-		now = w.now
-	}
-	expires := now().Add(usermod.OfferValidity)
+	expires := time.Now().Add(offerValidity)
 	if m, ok := w.view.Membership(w.self); ok && m.SignedContract != nil && m.Contract != nil {
 		if t := m.ExpiresAt.Time(); t.Before(expires) {
 			expires = t
@@ -197,49 +196,49 @@ func (w *swarmWriter) AddExpulsion(ctx *astral.Context, e *user.SignedExpulsion)
 
 func (mod *Module) FileContractRequest(ctx *astral.Context, app *astral.Identity, permits []*auth.Permit) (*user.SignedContractRequest, error) {
 	if mod.writer == nil {
-		return nil, errSwarmStateNotOpen
+		return nil, swarmset.ErrNotOpen
 	}
 	return mod.writer.FileContractRequest(ctx, app, permits)
 }
 
 func (mod *Module) FileJoinRequest(ctx *astral.Context, req *user.SignedJoinRequest) (*astral.ObjectID, error) {
 	if mod.writer == nil {
-		return nil, errSwarmStateNotOpen
+		return nil, swarmset.ErrNotOpen
 	}
 	return mod.writer.FileJoinRequest(ctx, req)
 }
 
 func (mod *Module) FileExpelRequest(ctx *astral.Context, subject *astral.Identity) (*user.SignedExpelRequest, error) {
 	if mod.writer == nil {
-		return nil, errSwarmStateNotOpen
+		return nil, swarmset.ErrNotOpen
 	}
 	return mod.writer.FileExpelRequest(ctx, subject)
 }
 
 func (mod *Module) Approve(ctx *astral.Context, request *astral.ObjectID) (astral.Object, error) {
 	if mod.writer == nil {
-		return nil, errSwarmStateNotOpen
+		return nil, swarmset.ErrNotOpen
 	}
 	return mod.writer.Approve(ctx, request)
 }
 
 func (mod *Module) Decline(ctx *astral.Context, request *astral.ObjectID) (*user.SignedDecline, error) {
 	if mod.writer == nil {
-		return nil, errSwarmStateNotOpen
+		return nil, swarmset.ErrNotOpen
 	}
 	return mod.writer.Decline(ctx, request)
 }
 
 func (mod *Module) AddContract(ctx *astral.Context, sc *auth.SignedContract) error {
 	if mod.writer == nil {
-		return errSwarmStateNotOpen
+		return swarmset.ErrNotOpen
 	}
 	return mod.writer.AddContract(ctx, sc)
 }
 
 func (mod *Module) AddExpulsion(ctx *astral.Context, e *user.SignedExpulsion) error {
 	if mod.writer == nil {
-		return errSwarmStateNotOpen
+		return swarmset.ErrNotOpen
 	}
 	return mod.writer.AddExpulsion(ctx, e)
 }

@@ -174,7 +174,7 @@ func newAnswerFixture(tier user.Tier) *answerFixture {
 	ceremony := newUserKeyCeremony(f.user(), heldKeySigner{key: userKey}, nil, nil)
 	f.ops = &SwarmAnswerOps{
 		Node:    node,
-		State:   writeState{swarmReader: state, swarmWriter: writer},
+		State:   writeState{entryReader: state, swarmWriter: writer},
 		View:    f.view,
 		Auth:    f.auth,
 		UserKey: func() *userKeyCeremony { return ceremony },
@@ -327,7 +327,7 @@ func TestAnswerRequestWritesAnOffer(t *testing.T) {
 		t.Fatal("the offer carries a subject signature")
 	case !cr.CoversOffer(sc.Contract) || len(sc.Permits) != len(cr.Permits):
 		t.Fatalf("offer permits %v; want every requested permit one hop deeper", sc.Permits)
-	case sc.ExpiresAt.Time().After(time.Now().Add(usermod.OfferValidity)):
+	case sc.ExpiresAt.Time().After(time.Now().Add(offerValidity)):
 		t.Fatalf("offer expires %v; want within 3650 days", sc.ExpiresAt)
 	}
 	f.assertSignedAndWritten(t, sc, sc.SignableHash(), sc.IssuerSig)
@@ -527,7 +527,7 @@ func TestAnswerRequestAsTheUser(t *testing.T) {
 	if !ok || !sc.Issuer.IsEqual(f.user()) || sc.SubjectSig != nil {
 		t.Fatalf("answered %v; want an offer the user key issued", sc)
 	}
-	if d := time.Until(sc.ExpiresAt.Time()); d < usermod.OfferValidity-time.Minute {
+	if d := time.Until(sc.ExpiresAt.Time()); d < offerValidity-time.Minute {
 		t.Fatalf("the user key's offer expires in %v; want 3650 days", d)
 	}
 	f.assertSignedAndWrittenBy(t, f.userKey, sc, sc.SignableHash(), sc.IssuerSig)

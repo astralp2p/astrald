@@ -204,24 +204,12 @@ func (mod *Module) activeNodes(userID *astral.Identity) (nodes []*astral.Identit
 
 // LocalSwarm returns a list of node identities with an active swarm-membership contract with the current user
 func (mod *Module) LocalSwarm() (list []*astral.Identity) {
-	list, _ = mod.localSwarm()
-	return
-}
-
-// ReadLocalSwarm is LocalSwarm with the error of its read (usermod.Module).
-func (mod *Module) ReadLocalSwarm() ([]*astral.Identity, error) {
-	return mod.localSwarm()
-}
-
-// localSwarm is LocalSwarm with the error of the contract query. Without an
-// active contract the swarm is empty and the error is nil.
-func (mod *Module) localSwarm() ([]*astral.Identity, error) {
-	ac := mod.ActiveContract()
-	if ac == nil {
-		return nil, nil
+	if mod.ActiveContract() == nil {
+		return nil
 	}
 
-	return mod.activeNodes(mod.Identity())
+	list, _ = mod.activeNodes(mod.Identity())
+	return
 }
 
 // IsSwarmMember reports whether id is a current member of the local swarm.
@@ -234,11 +222,7 @@ func (mod *Module) IsSwarmMember(id *astral.Identity) bool {
 	if id.IsZero() {
 		return false
 	}
-	swarm, err := mod.localSwarm()
-	if err != nil {
-		return false
-	}
-	return slices.ContainsFunc(swarm, id.IsEqual)
+	return slices.ContainsFunc(mod.LocalSwarm(), id.IsEqual)
 }
 
 // SwarmPeers returns the members of the local swarm other than this node.

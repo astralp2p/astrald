@@ -41,17 +41,23 @@ func TestOwnMembershipExchangesSwarmStateWithLinkedPeers(t *testing.T) {
 	ctx, cancel := astral.NewContext(nil).WithCancel()
 	t.Cleanup(cancel)
 	a, b := astral.GenerateIdentity(), astral.GenerateIdentity()
-	mod := &Module{node: &identityNode{id: self}, log: log.New(self), ctx: ctx}
-	mod.Nodes = &linkedNodes{linked: []*astral.Identity{a, b}}
-	mod.swarm = n.store
 
+	// note: the exchange offers this node's membership to each peer, which the peer's router sees as a push.
 	var mu sync.Mutex
 	got := map[string]int{}
-	mod.swarmLinkHook = func(peer *astral.Identity) {
+	node := &swarmPeerNode{identityNode: identityNode{id: self}, onPush: func(p swarmPush) {
 		mu.Lock()
 		defer mu.Unlock()
-		got[peer.String()]++
+		got[p.target.String()]++
+	}}
+	mod := &Module{node: node, log: log.New(self), ctx: ctx, now: time.Now}
+	mod.Nodes = &linkedNodes{linked: []*astral.Identity{a, b}}
+	mod.swarm = n.store
+	own := membershipOf(t, issuer, self)
+	if err := mod.config.ActiveContract.Set(nil, own); err != nil {
+		t.Fatalf("seed active contract: %v", err)
 	}
+	mod.swarmView.Store(newSwarmView(mod, mod.rootKey, mod.now))
 	exchanged := func() map[string]int {
 		time.Sleep(200 * time.Millisecond)
 		mu.Lock()
@@ -71,7 +77,6 @@ func TestOwnMembershipExchangesSwarmStateWithLinkedPeers(t *testing.T) {
 		t.Fatalf("another node's membership exchanged with %v; want none", ex)
 	}
 
-	own := membershipOf(t, issuer, self)
 	if err := mod.mergeSwarmEntry(ctx, own); err != nil {
 		t.Fatalf("add own membership: %v", err)
 	}

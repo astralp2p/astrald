@@ -21,11 +21,6 @@ type SwarmFeed interface {
 // nil means the reader re-reads the set.
 type SwarmChange struct{ IDs []*astral.ObjectID }
 
-// swarmHeadReader is the part of usermod.SwarmState the head feed reads.
-type swarmHeadReader interface {
-	SwarmHead() uint64
-}
-
 // headFeed reports a change each time SwarmHead differs from the last head it
 // saw. The set only grows, so an unchanged head means nothing new, and a
 // changed one means entries arrived.
@@ -33,20 +28,11 @@ type swarmHeadReader interface {
 // todo: a feed over vfs.watch on swarmstate/ once it lands (VFS takes over
 // from tree); only the line in wireSwarm that picks the feed changes.
 type headFeed struct {
-	state    swarmHeadReader
+	head     func() uint64
 	interval time.Duration
 }
 
 var _ SwarmFeed = &headFeed{}
-
-// newHeadFeed returns a feed over state's head; a non-positive interval
-// selects swarmPollInterval.
-func newHeadFeed(state swarmHeadReader, interval time.Duration) *headFeed {
-	if interval <= 0 {
-		interval = swarmPollInterval
-	}
-	return &headFeed{state: state, interval: interval}
-}
 
 // Follow polls until ctx ends. Its first poll runs at once, so a non-empty set
 // is reported on start. A change carries no IDs.
@@ -59,7 +45,7 @@ func (f *headFeed) Follow(ctx *astral.Context) <-chan SwarmChange {
 
 		var last uint64
 		for {
-			if head := f.state.SwarmHead(); head != last {
+			if head := f.head(); head != last {
 				last = head
 				select {
 				case changes <- SwarmChange{}:

@@ -52,7 +52,7 @@ type SwarmState interface {
 	//   - A ContractRequest: an offer, a *auth.SignedContract only this node
 	//     signed, from this node to the request's FiledBy, with every
 	//     requested permit at one more Delegation, the request as its
-	//     RequestID, expiring after OfferValidity or with this node's
+	//     RequestID, expiring 3650 days after signing or with this node's
 	//     membership, if earlier. The filer completes it.
 	//   - An ExpelRequest: a *user.SignedApproval.
 	//   - A JoinRequest: none; its carrier signs the membership, and Approve

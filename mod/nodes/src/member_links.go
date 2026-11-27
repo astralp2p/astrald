@@ -109,12 +109,7 @@ func (mod *Module) applyMemberSet() (left []*astral.Identity) {
 		return nil
 	}
 
-	members, err := mod.User.ReadLocalSwarm()
-	if err != nil {
-		mod.log.Errorv(1, "reading the swarm's members: %v", err)
-		return nil
-	}
-
+	members := mod.User.LocalSwarm()
 	keep := make(map[string]*astral.Identity, len(members))
 	for _, m := range members {
 		if !m.IsZero() && !m.IsEqual(mod.node.Identity()) {

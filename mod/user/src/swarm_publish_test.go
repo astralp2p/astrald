@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/astralp2p/astral-go/api/auth"
 	"github.com/astralp2p/astral-go/api/user"
 	"github.com/astralp2p/astral-go/astral"
 )
@@ -52,7 +53,7 @@ func eventLine(e astral.Object) string {
 
 func newTestPublisher(f *viewFixture) (*swarmPublisher, *publishLog) {
 	log := &publishLog{}
-	return newSwarmPublisher(f.view.snapshot, log.emit), log
+	return &swarmPublisher{snapshot: f.view.snapshot, emit: log.emit}, log
 }
 
 func wantEvents(t *testing.T, log *publishLog, want ...string) {
@@ -156,7 +157,7 @@ func TestSwarmPublisherOffersAndContracts(t *testing.T) {
 	p.publish()
 	wantEvents(t, log, "filed "+r.String(), "offer "+o.String()+" for "+r.String())
 
-	done := f.add(complete(offer))
+	done := f.add(&auth.SignedContract{Contract: offer.Contract, IssuerSig: offer.IssuerSig, SubjectSig: viewSig()})
 	p.publish()
 	wantEvents(t, log, "contract "+done.String())
 
@@ -236,9 +237,9 @@ func awaitEvents(t *testing.T, log *publishLog, want ...string) {
 func TestSwarmMergePublishesAtOnce(t *testing.T) {
 	n := newStateNode(t, newSwarmScript())
 	root := astral.GenerateIdentity()
-	view := newSwarmView(n.store, func() *astral.Identity { return root }, nil)
+	view := newSwarmView(&storeState{node: n}, func() *astral.Identity { return root }, time.Now)
 	log := &publishLog{}
-	p := newSwarmPublisher(view.snapshot, log.emit)
+	p := &swarmPublisher{snapshot: view.snapshot, emit: log.emit}
 	p.record()
 	n.store.stored = func([]astral.Object) { p.publish() }
 

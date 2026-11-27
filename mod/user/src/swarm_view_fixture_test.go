@@ -1,7 +1,6 @@
 package user
 
 import (
-	"errors"
 	"sync"
 	"testing"
 	"time"
@@ -10,85 +9,52 @@ import (
 	"github.com/astralp2p/astral-go/api/crypto"
 	"github.com/astralp2p/astral-go/api/user"
 	"github.com/astralp2p/astral-go/astral"
+	usermod "github.com/astralp2p/astrald/mod/user"
 )
 
-// fakeSwarmState is an in-memory usermod.SwarmState that stores every entry
-// it is given: the merge check is out of G2's scope.
-type fakeSwarmState struct {
-	mu      sync.Mutex
-	entries map[astral.ObjectID]astral.Object
-	reads   int
-
-	// failList fails SwarmEntries of that kind; failRead fails SwarmEntry
-	// of every entry of that kind. The empty kind fails nothing.
-	failList, failRead user.EntryKind
+// storeState is the reading part of usermod.SwarmState over the real store of one test node, whose scripted
+// checker accepts every entry: the entry check is out of the view's scope. It counts the reads of the entry lists.
+type storeState struct {
+	usermod.SwarmState
+	node  *stateNode
+	mu    sync.Mutex
+	lists int
 }
 
-var _ swarmReader = &fakeSwarmState{}
-
-func newFakeSwarmState() *fakeSwarmState {
-	return &fakeSwarmState{entries: map[astral.ObjectID]astral.Object{}}
+func newStoreState(t testing.TB) *storeState {
+	return &storeState{node: newStateNode(t, newSwarmScript())}
 }
 
-func (f *fakeSwarmState) merge(_ *astral.Context, obj astral.Object) error {
-	if _, ok := user.EntryKindOf(obj); !ok {
-		return errors.New("not an entry")
-	}
-	id, err := astral.ResolveObjectID(obj)
-	if err != nil {
-		return err
-	}
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	if _, ok := f.entries[*id]; !ok {
-		f.entries[*id] = obj
-	}
-	return nil
+// merge stores obj in the node's store.
+func (s *storeState) merge(_ *astral.Context, obj astral.Object) error {
+	return s.node.store.merge(s.node.store.ctx, obj)
 }
 
-func (f *fakeSwarmState) SwarmEntry(id *astral.ObjectID) (astral.Object, error) {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	obj, ok := f.entries[*id]
-	if !ok {
-		return nil, errors.New("not stored")
-	}
-	if k, _ := user.EntryKindOf(obj); f.failRead != "" && k == f.failRead {
-		return nil, errors.New("read failed")
-	}
-	return obj, nil
+func (s *storeState) SwarmEntry(id *astral.ObjectID) (astral.Object, error) {
+	return s.node.store.set.Entry(id)
 }
 
-func (f *fakeSwarmState) SwarmEntries(kind user.EntryKind) ([]*astral.ObjectID, error) {
-	if !kind.IsValid() {
-		return nil, errors.New("invalid kind")
-	}
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	f.reads++
-	if f.failList != "" && kind == f.failList {
-		return nil, errors.New("list failed")
-	}
-	var ids []*astral.ObjectID
-	for id, obj := range f.entries {
-		if k, _ := user.EntryKindOf(obj); k == kind {
-			ids = append(ids, &id)
-		}
-	}
-	return ids, nil
+func (s *storeState) SwarmEntries(kind user.EntryKind) ([]*astral.ObjectID, error) {
+	s.mu.Lock()
+	s.lists++
+	s.mu.Unlock()
+	return s.node.store.set.Entries(kind)
 }
 
-func (f *fakeSwarmState) SwarmHead() uint64 {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	return uint64(len(f.entries))
+func (s *storeState) SwarmHead() uint64 { return s.node.store.set.Head() }
+
+// reads returns how many times the view listed an entry kind.
+func (s *storeState) reads() int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.lists
 }
 
 // viewFixture is a swarm on a fixed clock: the user key (root), a Privileged
 // Laptop and Desktop, a Trusted Phone, a Member Pi and App A hosted on the Pi.
 type viewFixture struct {
 	t     *testing.T
-	state *fakeSwarmState
+	state *storeState
 	view  *swarmView
 	now   time.Time
 
@@ -105,7 +71,7 @@ func viewClock(hh, mm int) time.Time {
 func newViewFixture(t *testing.T) *viewFixture {
 	t.Helper()
 	f := &viewFixture{
-		t: t, state: newFakeSwarmState(), now: viewAt10,
+		t: t, state: newStoreState(t), now: viewAt10,
 		user: astral.GenerateIdentity(), laptop: astral.GenerateIdentity(),
 		desktop: astral.GenerateIdentity(), phone: astral.GenerateIdentity(),
 		pi: astral.GenerateIdentity(), appA: astral.GenerateIdentity(),
@@ -202,11 +168,6 @@ func (f *viewFixture) offer(issuer *astral.Identity, req *user.SignedContractReq
 		ExpiresAt: astral.Time(viewAt10.Add(24 * time.Hour)),
 	}
 	return &auth.SignedContract{Contract: c, IssuerSig: viewSig()}
-}
-
-// complete returns sc with its subject's signature added.
-func complete(sc *auth.SignedContract) *auth.SignedContract {
-	return &auth.SignedContract{Contract: sc.Contract, IssuerSig: sc.IssuerSig, SubjectSig: viewSig()}
 }
 
 func (f *viewFixture) wantStatus(req *astral.ObjectID, want user.RequestStatus) {

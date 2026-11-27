@@ -42,43 +42,6 @@ func (a *swarmAdmins) recorded() []auth.ActionObject {
 	return append([]auth.ActionObject(nil), a.asked...)
 }
 
-// introducePush is one push the op made.
-type introducePush struct {
-	target   *astral.Identity
-	object   astral.Object
-	zone     astral.Zone
-	deadline time.Time
-}
-
-// introducePusher is the exchange ops of every peer: it records every SwarmState push and
-// answers err; its pull does nothing.
-type introducePusher struct {
-	err    error
-	pushed chan introducePush
-}
-
-// dial returns the exchange ops of target (Module.swarmDial).
-func (p *introducePusher) dial(target *astral.Identity) swarmPeer {
-	return &introducePeer{pusher: p, target: target}
-}
-
-type introducePeer struct {
-	pusher *introducePusher
-	target *astral.Identity
-}
-
-func (p *introducePeer) SwarmPush(ctx *astral.Context, obj astral.Object) error {
-	deadline, _ := ctx.Deadline()
-	p.pusher.pushed <- introducePush{target: p.target, object: obj, zone: ctx.Zone(), deadline: deadline}
-	return p.pusher.err
-}
-
-func (p *introducePeer) SwarmDigest(*astral.Context) ([]*astral.ObjectID, error) { return nil, nil }
-
-func (p *introducePeer) SwarmFetch(*astral.Context, []*astral.ObjectID) ([]astral.Object, error) {
-	return nil, nil
-}
-
 // introduceFixture is node C, claimed by user U, that names node B "peer", U
 // "user", itself "self" and the zero identity "anyone". U alone holds
 // user.AdminSwarmAction; adminID is another identity a case can grant it to.
@@ -89,7 +52,8 @@ type introduceFixture struct {
 	peerID    *astral.Identity
 	adminID   *astral.Identity
 	auth      *swarmAdmins
-	objects   *introducePusher
+	objects   *swarmPeerNode
+	pushed    chan swarmPush
 	scheduler *recordingScheduler
 }
 
@@ -103,7 +67,9 @@ func newIntroduceFixture(t *testing.T) *introduceFixture {
 		adminID: astral.GenerateIdentity(),
 	}
 	f.auth = &swarmAdmins{admins: []*astral.Identity{f.userID}}
-	f.objects = &introducePusher{pushed: make(chan introducePush, 1)}
+	pushed := make(chan swarmPush, 1)
+	f.objects = &swarmPeerNode{identityNode: identityNode{id: f.nodeID}, onPush: func(p swarmPush) { pushed <- p }}
+	f.pushed = pushed
 	f.scheduler = &recordingScheduler{tasks: make(chan scheduler.Task, 1)}
 
 	f.mod = &Module{
@@ -117,10 +83,9 @@ func newIntroduceFixture(t *testing.T) *introduceFixture {
 				"anyone": astral.Anyone,
 			}},
 		},
-		node:      &identityNode{id: f.nodeID},
-		log:       log.New(f.nodeID),
-		db:        testDB(t),
-		swarmDial: f.objects.dial,
+		node: f.objects,
+		log:  log.New(f.nodeID),
+		db:   testDB(t),
 	}
 	f.setActiveContract(t, nodeContract(f.userID, f.nodeID))
 
@@ -190,16 +155,16 @@ func requirePushed(t *testing.T, f *introduceFixture) {
 	t.Helper()
 
 	// note: the op has returned, so a push it made is already recorded.
-	var push introducePush
+	var push swarmPush
 	select {
-	case push = <-f.objects.pushed:
+	case push = <-f.pushed:
 	default:
 		t.Fatal("nothing was pushed")
 	}
 	if !push.target.IsEqual(f.peerID) {
 		t.Fatalf("pushed to %v; want the named node %v", push.target, f.peerID)
 	}
-	if push.object != f.mod.ActiveContract() {
+	if !sameObject(push.object, f.mod.ActiveContract()) {
 		t.Fatalf("pushed %v; want the active contract", push.object)
 	}
 	if !push.zone.Is(astral.ZoneNetwork) {
@@ -335,7 +300,7 @@ func TestIntroduceRejects(t *testing.T) {
 			}
 
 			select {
-			case push := <-f.objects.pushed:
+			case push := <-f.pushed:
 				t.Fatalf("pushed to %v; a refused query pushes nothing", push.target)
 			case task := <-f.scheduler.tasks:
 				t.Fatalf("scheduled %v; a refused query schedules nothing", task)
@@ -350,7 +315,7 @@ func TestIntroduceRejects(t *testing.T) {
 // scheduled.
 func TestIntroduceAnswersAFailedPush(t *testing.T) {
 	f := newIntroduceFixture(t)
-	f.objects.err = errors.New("rejected")
+	f.objects.err = astral.Err(errors.New("rejected"))
 
 	objs := routeIntroduce(t, f, introduceQuery{caller: f.userID, node: "peer"})
 
@@ -359,7 +324,7 @@ func TestIntroduceAnswersAFailedPush(t *testing.T) {
 		t.Fatalf("the op answered %v; want %q", objs, want)
 	}
 	select {
-	case push := <-f.objects.pushed:
+	case push := <-f.pushed:
 		if !push.target.IsEqual(f.peerID) {
 			t.Fatalf("pushed to %v; want the named node", push.target)
 		}

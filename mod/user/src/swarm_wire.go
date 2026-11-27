@@ -46,17 +46,17 @@ func (v lazyVerifier) Verify(key *crypto.PublicKey, sig *crypto.Signature, obj c
 // the typed writes; the feed and publisher of its events; and the answering
 // and carrying ops.
 func (mod *Module) wireSwarm() {
-	view := newSwarmView(mod, mod.rootKey, nil)
+	view := newSwarmView(mod, mod.rootKey, mod.now)
 	mod.swarmView.Store(view)
 	mod.writer = &swarmWriter{self: mod.node.Identity(), signer: mod.Crypto, view: mod, entry: mod.SwarmEntry, merge: mod.mergeSwarmEntry}
 	mod.carrier = newSwarmCarrier(mod.node.Identity(), mod, mod, mod.Crypto)
 	mod.carrier.ceremony = mod.userKeyCeremony
 	mod.joiner = newSwarmJoiner(mod.node.Identity(), mod.Crypto, mod, mod.config.PendingJoin.Get())
 
-	mod.publisher = newSwarmPublisher(view.snapshot, func(e astral.Object) { mod.Events.Emit(e) })
+	mod.publisher = &swarmPublisher{snapshot: view.snapshot, emit: func(e astral.Object) { mod.Events.Emit(e) }}
 	// why: an entry this node merges is published at once, not at the feed's next poll.
 	mod.swarm.stored = func([]astral.Object) { mod.publisher.publish() }
-	mod.swarmFeed = newHeadFeed(mod, swarmPollInterval)
+	mod.swarmFeed = &headFeed{head: mod.SwarmHead, interval: swarmPollInterval}
 
 	mod.router.AddStructPrefix(&SwarmAnswerOps{
 		Node:      mod.node.Identity(),
@@ -191,7 +191,7 @@ func (mod *Module) swarmMembers() []*astral.Identity {
 	if view == nil {
 		return nil
 	}
-	return view.members()
+	return view.snapshot().Members()
 }
 
 // RequestStatus reads the view (usermod.SwarmView); pending before

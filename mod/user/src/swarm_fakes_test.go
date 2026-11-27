@@ -230,8 +230,14 @@ func (s *joinSwarm) MayAnswer(signer *astral.Identity, req *astral.ObjectID) boo
 // writeState is a SwarmState over a fake store: the store's reads and the
 // typed writes of a real swarmWriter, whose merge is the store's.
 type writeState struct {
-	swarmReader
+	entryReader
 	*swarmWriter
+}
+
+// entryReader is the reading part of usermod.SwarmState the answering ops use.
+type entryReader interface {
+	SwarmEntry(id *astral.ObjectID) (astral.Object, error)
+	SwarmEntries(kind user.EntryKind) ([]*astral.ObjectID, error)
 }
 
 // joinKeyring signs as the keys it holds and records the text of every object it

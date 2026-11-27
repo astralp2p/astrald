@@ -26,7 +26,7 @@ func newSoftwareKeyFixture() *softwareKeyFixture {
 	f.ceremony.now = f.clock.now
 	f.ops = &SwarmAnswerOps{
 		Node:    f.carrier,
-		State:   writeState{swarmReader: f.swarm, swarmWriter: f.newWriter()},
+		State:   writeState{entryReader: f.swarm, swarmWriter: f.newWriter()},
 		View:    f.swarm,
 		Auth:    &recordingAuth{verdict: true},
 		UserKey: func() *userKeyCeremony { return f.ceremony },

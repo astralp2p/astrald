@@ -38,16 +38,12 @@ type swarmPublisher struct {
 	counted map[astral.ObjectID]bool
 }
 
-func newSwarmPublisher(snapshot func() *swarmset.Snapshot, emit func(astral.Object)) *swarmPublisher {
-	return &swarmPublisher{snapshot: snapshot, emit: emit}
-}
-
 // record takes the current verdicts as published, without events.
 func (p *swarmPublisher) record() {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	p.status, p.counted = map[astral.ObjectID]user.RequestStatus{}, map[astral.ObjectID]bool{}
-	p.diff(p.snapshot(), func(astral.Object) {})
+	p.diff(p.snapshot())
 }
 
 // publish emits one event per verdict that changed since the last publish. It
@@ -58,23 +54,25 @@ func (p *swarmPublisher) publish() {
 	if p.status == nil {
 		return
 	}
-	p.diff(p.snapshot(), p.emit)
+	for _, e := range p.diff(p.snapshot()) {
+		p.emit(e)
+	}
 }
 
-// diff passes emit the events from the published verdicts to those of s, and
+// diff returns the events from the published verdicts to those of s, and
 // takes those of s as published. The caller holds mu.
-func (p *swarmPublisher) diff(s *swarmset.Snapshot, emit func(astral.Object)) {
+func (p *swarmPublisher) diff(s *swarmset.Snapshot) (events []astral.Object) {
 	for _, id := range s.RequestIDs() {
 		status := s.RequestStatus(id)
 		prev, seen := p.status[*id]
 		p.status[*id] = status
 		if !seen {
 			r, _ := s.Request(id)
-			emit(&user.SwarmRequestFiled{RequestID: id, Kind: r.Kind})
+			events = append(events, &user.SwarmRequestFiled{RequestID: id, Kind: r.Kind})
 		}
 		if status != prev && (seen || status != user.RequestPending) {
 			if e := statusEvent(s, id, status); e != nil {
-				emit(e)
+				events = append(events, e)
 			}
 		}
 	}
@@ -84,14 +82,15 @@ func (p *swarmPublisher) diff(s *swarmset.Snapshot, emit func(astral.Object)) {
 		}
 		switch {
 		case swarmset.IsOffer(sc) && s.OfferValid(sc):
-			emit(&user.SwarmOfferAdded{OfferID: &id, RequestID: sc.RequestID, Issuer: sc.Issuer, Subject: sc.Subject})
+			events = append(events, &user.SwarmOfferAdded{OfferID: &id, RequestID: sc.RequestID, Issuer: sc.Issuer, Subject: sc.Subject})
 		case s.ContractCounts(sc):
-			emit(&user.SwarmContractAdded{ContractID: &id, Issuer: sc.Issuer, Subject: sc.Subject, RequestID: sc.RequestID})
+			events = append(events, &user.SwarmContractAdded{ContractID: &id, Issuer: sc.Issuer, Subject: sc.Subject, RequestID: sc.RequestID})
 		default:
 			continue
 		}
 		p.counted[id] = true
 	}
+	return events
 }
 
 // statusEvent returns the event of req's status, nil for pending.

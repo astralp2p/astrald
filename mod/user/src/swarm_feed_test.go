@@ -8,18 +8,14 @@ import (
 	"github.com/astralp2p/astral-go/astral"
 )
 
-type fakeHead struct{ head atomic.Uint64 }
-
-func (h *fakeHead) SwarmHead() uint64 { return h.head.Load() }
-
 // TestHeadFeedReportsHeadChanges: the head feed reports a non-empty set at
 // start and each grown head once, nothing while the head stays put, and
 // closes its channel when ctx ends.
 func TestHeadFeedReportsHeadChanges(t *testing.T) {
-	state := &fakeHead{}
-	state.head.Store(2)
+	var head atomic.Uint64
+	head.Store(2)
 	ctx, cancel := astral.NewContext(nil).WithCancel()
-	changes := newHeadFeed(state, time.Millisecond).Follow(ctx)
+	changes := (&headFeed{head: head.Load, interval: time.Millisecond}).Follow(ctx)
 
 	want := func() {
 		t.Helper()
@@ -38,7 +34,7 @@ func TestHeadFeedReportsHeadChanges(t *testing.T) {
 		t.Fatal("a change reported with an unchanged head")
 	case <-time.After(20 * time.Millisecond):
 	}
-	state.head.Store(5)
+	head.Store(5)
 	want()
 
 	cancel()
