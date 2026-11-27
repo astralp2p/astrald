@@ -72,10 +72,6 @@ func (mod *Module) runSwarmFeed(ctx *astral.Context) {
 
 // emitSwarmEvent emits e. A contract that counts is also indexed into the auth
 // index.
-//
-// why: the auth walk finds a caller's contracts in the auth index, so a
-// contract a host signed for its app on another node authorizes it here only
-// once it is indexed.
 func (mod *Module) emitSwarmEvent(e astral.Object) {
 	mod.Events.Emit(e)
 
@@ -88,8 +84,32 @@ func (mod *Module) emitSwarmEvent(e astral.Object) {
 		return
 	}
 	if sc, ok := obj.(*auth.SignedContract); ok {
-		if err = mod.Auth.IndexContract(mod.ctx, sc); err != nil {
-			mod.log.Logv(1, "swarm state: index contract %v: %v", added.ContractID, err)
+		mod.indexSwarmContract(added.ContractID, sc)
+	}
+}
+
+// indexRecordedContracts indexes every contract SwarmState counts, which the
+// publisher's record emits no SwarmContractAdded for.
+//
+// why: the auth walk finds a caller's contracts in the auth index, and a
+// contract merged before record is counted by no event, so it is never
+// indexed otherwise. Indexing a contract again is a no-op.
+func (mod *Module) indexRecordedContracts() {
+	s := mod.snapshot()
+	for id, sc := range s.Contracts() {
+		if s.ContractCounts(sc) {
+			mod.indexSwarmContract(&id, sc)
 		}
+	}
+}
+
+// indexSwarmContract indexes sc, the counted contract with entry ID id, into the auth index.
+//
+// why: the auth walk finds a caller's contracts in the auth index, so a
+// contract a host signed for its app on another node authorizes it here only
+// once it is indexed.
+func (mod *Module) indexSwarmContract(id *astral.ObjectID, sc *auth.SignedContract) {
+	if err := mod.Auth.IndexContract(mod.ctx, sc); err != nil {
+		mod.log.Logv(1, "swarm state: index contract %v: %v", id, err)
 	}
 }

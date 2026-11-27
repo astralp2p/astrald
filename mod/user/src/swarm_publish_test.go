@@ -251,3 +251,23 @@ func TestSwarmMergePublishesAtOnce(t *testing.T) {
 	id := entryID(t, req)
 	wantEvents(t, log, "filed "+id.String())
 }
+
+// TestIndexRecordedContractsIndexesWhatRecordCounts: a contract merged before
+// record is counted by no SwarmContractAdded, yet reaches the auth index.
+func TestIndexRecordedContractsIndexesWhatRecordCounts(t *testing.T) {
+	userID, node, peer := astral.GenerateIdentity(), astral.GenerateIdentity(), astral.GenerateIdentity()
+	index := &indexAuth{}
+	mod := &Module{Deps: Deps{Auth: index}}
+	state := useSwarm(t, mod, userID, node)
+	addMembership(t, state, userID, peer)
+
+	p := &swarmPublisher{snapshot: mod.snapshot, emit: func(astral.Object) {
+		t.Error("record emitted an event")
+	}}
+	p.record()
+	mod.indexRecordedContracts()
+
+	if got := index.received(); !slices.ContainsFunc(got, func(sc *auth.SignedContract) bool { return sc.Subject.IsEqual(peer) }) {
+		t.Fatalf("indexed %d contracts, none for the contract merged before record", len(got))
+	}
+}

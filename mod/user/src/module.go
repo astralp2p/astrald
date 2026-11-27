@@ -96,8 +96,9 @@ func (mod *Module) Run(ctx *astral.Context) error {
 	activeContractFollow := mod.config.ActiveContract.Follow(ctx)
 	mod.onActiveContractChanged(<-activeContractFollow)
 	mod.recordSwarm()
-	// why: nothing is emitted for what is already stored; consumers read the view once in their Run.
+	// why: nothing is emitted for what is already stored; consumers read the view once in their Run. The auth index is the exception: no event indexes a contract counted before record.
 	mod.publisher.record()
+	mod.indexRecordedContracts()
 	close(mod.ready)
 	go mod.runReconcile(mod.ctx)
 	go mod.runPeriodicSiblingSync(mod.ctx)
