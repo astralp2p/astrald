@@ -12,7 +12,6 @@ import (
 	"strconv"
 	"sync"
 	"sync/atomic"
-	"time"
 
 	"github.com/astralp2p/astral-go/api/user"
 	vfsapi "github.com/astralp2p/astral-go/api/vfs"
@@ -32,10 +31,6 @@ type Config struct {
 	Checker Checker
 	// HeldLimit is the most entries held at once; zero selects DefaultHeldLimit.
 	HeldLimit int
-	// Now is the clock the Checker's Reader reads; nil selects time.Now.
-	Now func() time.Time
-	// Log reports the stored entries Open leaves out; nil discards.
-	Log func(format string, v ...any)
 }
 
 // Set is one node's copy of SwarmState: a grow-only set of entries, each stored at EntryPath in the VFS of the
@@ -63,12 +58,6 @@ type Set struct {
 func New(cfg Config) *Set {
 	if cfg.HeldLimit <= 0 {
 		cfg.HeldLimit = DefaultHeldLimit
-	}
-	if cfg.Now == nil {
-		cfg.Now = time.Now
-	}
-	if cfg.Log == nil {
-		cfg.Log = func(string, ...any) {}
 	}
 	return &Set{cfg: cfg, index: NewIndex()}
 }

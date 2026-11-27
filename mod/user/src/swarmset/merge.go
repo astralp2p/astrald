@@ -43,7 +43,7 @@ func (s *Set) Add(ctx *astral.Context, obj astral.Object) (Added, error) {
 		return Added{Verdict: user.EntryAccept}, nil
 	}
 
-	switch v := s.cfg.Checker.Check(e.obj, s.reader(s.cfg.Now())); v {
+	switch v := s.cfg.Checker.Check(e.obj, s.reader(time.Now())); v {
 	case user.EntryAccept:
 		if err := s.store(ctx, e); err != nil {
 			return Added{}, err
@@ -68,7 +68,7 @@ func (s *Set) admitHeld(ctx *astral.Context) (admitted []astral.Object) {
 		progress = false
 
 		for _, e := range append([]*entry(nil), s.held...) {
-			switch s.cfg.Checker.Check(e.obj, s.reader(s.cfg.Now())) {
+			switch s.cfg.Checker.Check(e.obj, s.reader(time.Now())) {
 			case user.EntryWait:
 				continue
 			case user.EntryAccept:
@@ -151,10 +151,6 @@ type indexReader struct {
 
 func (r indexReader) Entry(id *astral.ObjectID) (astral.Object, bool) {
 	return r.index.Entry(id)
-}
-
-func (r indexReader) Membership(root, id *astral.Identity) (*user.Membership, bool) {
-	return r.Snapshot(root).Membership(id)
 }
 
 func (r indexReader) Snapshot(root *astral.Identity) *Snapshot {

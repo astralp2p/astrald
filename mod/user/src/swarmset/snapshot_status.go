@@ -107,12 +107,6 @@ func (s *Snapshot) offeredOtherwise(sc *auth.SignedContract) bool {
 	return false
 }
 
-// declinedRequest reports whether the stored request req is declined (declined), whatever else answers it.
-func (s *Snapshot) declinedRequest(req *astral.ObjectID) bool {
-	r, ok := s.Request(req)
-	return ok && s.declined(req, r)
-}
-
 // fulfilled reports whether a stored contract with both signatures names req as its RequestID and is given to
 // the identity r names or to r's filer: a membership for a JoinRequest's Joiner, the host's contract to the app
 // of a ContractRequest, or an approver's contract to its filer. An ExpelRequest is never fulfilled. Nothing that

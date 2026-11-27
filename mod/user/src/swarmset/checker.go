@@ -18,8 +18,6 @@ type Checker interface {
 type Reader interface {
 	// Entry returns the stored entry with entry ID id.
 	Entry(id *astral.ObjectID) (astral.Object, bool)
-	// Membership returns id's membership with root as the root key (Snapshot.Membership).
-	Membership(root, id *astral.Identity) (*user.Membership, bool)
 	// Snapshot returns the stored entries as read now, with root as the root key: what an offer's check reads
 	// besides the request it names (expels, Declines, the request's contracts).
 	Snapshot(root *astral.Identity) *Snapshot

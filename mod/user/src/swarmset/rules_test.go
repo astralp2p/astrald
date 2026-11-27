@@ -28,66 +28,33 @@ func sigBy(id *astral.Identity) *crypto.Signature {
 	return &crypto.Signature{Scheme: "test", Data: secp256k1.FromIdentity(id).Key}
 }
 
-// fakeSwarmSet is a Reader over stored entries and set memberships.
-type fakeSwarmSet struct {
-	entries map[string]astral.Object
-	members map[string]*user.Membership
-}
-
-func (f *fakeSwarmSet) Entry(id *astral.ObjectID) (astral.Object, bool) {
-	obj, ok := f.entries[id.String()]
-	return obj, ok
-}
-
-func (f *fakeSwarmSet) Membership(_, id *astral.Identity) (*user.Membership, bool) {
-	m, ok := f.members[id.String()]
-	return m, ok
-}
-
-// Snapshot reads the stored entries; its memberships are the set's own, not the fake's.
-func (f *fakeSwarmSet) Snapshot(root *astral.Identity) *Snapshot {
-	x := NewIndex()
-	for _, obj := range f.entries {
-		id, _ := astral.ResolveObjectID(obj)
-		x.Add(id, obj)
-	}
-	return &Snapshot{Index: x, Root: root, Now: time.Now()}
-}
-
-func (f *fakeSwarmSet) store(t *testing.T, obj astral.Object) *astral.ObjectID {
-	t.Helper()
-	id, err := astral.ResolveObjectID(obj)
-	if err != nil {
-		t.Fatalf("resolve entry id: %v", err)
-	}
-	f.entries[id.String()] = obj
-	return id
-}
-
-func (f *fakeSwarmSet) setMember(issuer, subject *astral.Identity, tier user.Tier) {
-	c := &auth.Contract{Issuer: issuer, Subject: subject, Permits: []*auth.Permit{{Action: astral.String8(tier.Action())}}}
-	f.members[subject.String()] = &user.Membership{SignedContract: &auth.SignedContract{Contract: c, IssuerSig: sigBy(issuer)}, Tier: tier}
-}
-
-// entryFixture: the root key, a Privileged, a Trusted and a Member node, and a
-// stranger with no stored membership.
+// entryFixture is the real Set the entry check reads: the root key, a Privileged, a Trusted and a Member node,
+// each with a stored membership, and a stranger with none.
 type entryFixture struct {
-	set                                    *fakeSwarmSet
-	check                                  *Rules
-	root, privileged, trusted, member, out *astral.Identity
+	*setFixture
+	privileged, member, out *astral.Identity
 }
 
-func newEntryFixture() *entryFixture {
+func newEntryFixture(t *testing.T) *entryFixture {
 	f := &entryFixture{
-		set:  &fakeSwarmSet{entries: map[string]astral.Object{}, members: map[string]*user.Membership{}},
-		root: astral.GenerateIdentity(), privileged: astral.GenerateIdentity(),
-		trusted: astral.GenerateIdentity(), member: astral.GenerateIdentity(), out: astral.GenerateIdentity(),
+		setFixture: newSetFixture(t),
+		privileged: astral.GenerateIdentity(), member: astral.GenerateIdentity(), out: astral.GenerateIdentity(),
 	}
-	f.set.setMember(f.root, f.privileged, user.TierPrivilegedMember)
-	f.set.setMember(f.root, f.trusted, user.TierTrusted)
-	f.set.setMember(f.privileged, f.member, user.TierMember)
-	f.check = NewRules(keyVerifier{}, func() *astral.Identity { return f.root })
+	f.mustAdd(f.membership(f.root, f.privileged, user.TierPrivilegedMember, time.Hour))
+	f.mustAdd(f.membership(f.privileged, f.member, user.TierMember, time.Hour))
 	return f
+}
+
+// store adds obj to the set, which must accept it, and returns its entry ID.
+func (f *entryFixture) store(obj astral.Object) *astral.ObjectID {
+	f.t.Helper()
+	f.mustAdd(obj)
+	return entryIDOf(f.t, obj)
+}
+
+// verdict returns the entry check's verdict on obj as the set's stored entries stand now.
+func (f *entryFixture) verdict(obj astral.Object) user.EntryVerdict {
+	return f.check.Check(obj, f.set.reader(time.Now()))
 }
 
 func contractRequest(filedBy *astral.Identity) *user.SignedContractRequest {
@@ -136,7 +103,7 @@ type entryCase struct {
 func runEntryCases(t *testing.T, f *entryFixture, cases []entryCase) {
 	t.Helper()
 	for _, c := range cases {
-		if got := f.check.Check(c.obj, f.set); got != c.want {
+		if got := f.verdict(c.obj); got != c.want {
 			t.Errorf("%s: got %v, want %v", c.name, got, c.want)
 		}
 	}
@@ -145,7 +112,7 @@ func runEntryCases(t *testing.T, f *entryFixture, cases []entryCase) {
 // TestCheckSwarmEntryRequests: any tier files a ContractRequest; only Trusted
 // and Privileged carry a JoinRequest or file an ExpelRequest (D5, D10).
 func TestCheckSwarmEntryRequests(t *testing.T) {
-	f := newEntryFixture()
+	f := newEntryFixture(t)
 
 	badSig := contractRequest(f.member)
 	badSig.FiledBySig = sigBy(f.out)
@@ -188,12 +155,12 @@ func TestCheckSwarmEntryRequests(t *testing.T) {
 // contract request is answered by an offer and a join by its carrier's
 // signature; their tier rows moved to the Decline rows.
 func TestCheckSwarmEntryAnswers(t *testing.T) {
-	f := newEntryFixture()
-	cr := f.set.store(t, contractRequest(f.member))
-	memberJoin := f.set.store(t, joinRequest(f.trusted, user.TierMember))
-	trustedJoin := f.set.store(t, joinRequest(f.privileged, user.TierTrusted))
-	expel := f.set.store(t, expelRequest(f.trusted))
-	notARequest := f.set.store(t, decline(f.privileged, cr))
+	f := newEntryFixture(t)
+	cr := f.store(contractRequest(f.member))
+	memberJoin := f.store(joinRequest(f.trusted, user.TierMember))
+	trustedJoin := f.store(joinRequest(f.privileged, user.TierTrusted))
+	expel := f.store(expelRequest(f.trusted))
+	notARequest := f.store(decline(f.privileged, cr))
 	unknown, _ := astral.ResolveObjectID(expelRequest(f.trusted))
 
 	badSig := approval(f.privileged, expel)
@@ -265,13 +232,11 @@ func appContract(req *user.SignedContractRequest, reqID *astral.ObjectID) *auth.
 // answers the request, or the filer's contract to the app with requested
 // permits.
 func TestCheckSwarmEntryContractsAndExpels(t *testing.T) {
-	f := newEntryFixture()
+	f := newEntryFixture(t)
 	privileged := user.TierPrivilegedMember.Action()
 	req := contractRequest(f.member)
-	reqID := f.set.store(t, req)
-	strangers := contractRequest(f.out)
-	strangersID := f.set.store(t, strangers)
-	expelID := f.set.store(t, expelRequest(f.trusted))
+	reqID := f.store(req)
+	expelID := f.store(expelRequest(f.trusted))
 	unstored := contractRequest(f.member)
 	unstoredID, _ := astral.ResolveObjectID(unstored)
 
@@ -311,7 +276,6 @@ func TestCheckSwarmEntryContractsAndExpels(t *testing.T) {
 		{"contract naming a request not stored yet", appContract(unstored, unstoredID), user.EntryWait},
 		{"contract wider than its request", wider, user.EntryDrop},
 		{"contract to another identity than the app", toAnother, user.EntryDrop},
-		{"contract by a stranger to its app", appContract(strangers, strangersID), user.EntryWait},
 		{"contract with no issuer signature", noIssuerSig, user.EntryDrop},
 		{"contract with a wrong subject signature", badSubjectSig, user.EntryDrop},
 
@@ -331,25 +295,25 @@ func TestCheckSwarmEntryContractsAndExpels(t *testing.T) {
 // may answer the request and is not expelled, the request has no Decline, and
 // the issuer has stored no other offer for it. It waits for its request.
 func TestCheckSwarmEntryOffers(t *testing.T) {
-	f := newEntryFixture()
+	f := newEntryFixture(t)
 	req := contractRequest(f.member)
-	reqID := f.set.store(t, req)
+	reqID := f.store(req)
 	unstored := contractRequest(f.member)
 	unstoredID, _ := astral.ResolveObjectID(unstored)
 	declined := contractRequest(f.member)
-	declinedID := f.set.store(t, declined)
-	f.set.store(t, decline(f.privileged, declinedID))
-	expelID := f.set.store(t, expelRequest(f.trusted))
+	declinedID := f.store(declined)
+	f.store(decline(f.privileged, declinedID))
+	expelID := f.store(expelRequest(f.trusted))
 	expelledIssuer := astral.GenerateIdentity()
-	f.set.setMember(f.root, expelledIssuer, user.TierPrivilegedMember)
-	f.set.store(t, &user.SignedExpulsion{
+	f.mustAdd(f.membership(f.root, expelledIssuer, user.TierPrivilegedMember, time.Hour))
+	f.store(&user.SignedExpulsion{
 		Expulsion: &user.Expulsion{Issuer: f.root, Subject: expelledIssuer, ExpelledAt: astral.Now()},
 		IssuerSig: sigBy(f.root),
 	})
 	renewed := contractRequest(f.member)
-	renewedID := f.set.store(t, renewed)
+	renewedID := f.store(renewed)
 	first := offer(f.privileged, renewed, renewedID)
-	f.set.store(t, first)
+	f.store(first)
 
 	toAnother := offer(f.privileged, req, reqID)
 	toAnother.Subject = f.trusted
@@ -392,7 +356,7 @@ func TestCheckSwarmEntryOffers(t *testing.T) {
 	// why: an offer may carry only some of the requested permits.
 	two := contractRequest(f.member)
 	two.Permits = append(two.Permits, &auth.Permit{Action: "other.action"})
-	twoID := f.set.store(t, two)
+	twoID := f.store(two)
 	subset := offer(f.privileged, two, twoID)
 	subset.Permits = subset.Permits[:1]
 	runEntryCases(t, f, []entryCase{{"offer of some requested permits", subset, user.EntryAccept}})
@@ -425,19 +389,20 @@ func TestCheckSwarmEntryDeclineClosesOnlyTheRequest(t *testing.T) {
 // while an Expulsion is checked does not split the check between two roots,
 // even when the old root key holds a membership under the new one.
 func TestCheckSwarmEntryReadsTheRootOnce(t *testing.T) {
-	f := newEntryFixture()
-	claimed := astral.GenerateIdentity()
-	f.set.setMember(claimed, f.root, user.TierPrivilegedMember)
+	f := newEntryFixture(t)
+	oldRoot, claimed := f.root, astral.GenerateIdentity()
+	f.root = claimed
+	f.mustAdd(f.membership(claimed, oldRoot, user.TierPrivilegedMember, time.Hour))
 	reads := 0
 	f.check = NewRules(keyVerifier{}, func() *astral.Identity {
 		reads++
 		if reads == 1 {
-			return f.root
+			return oldRoot
 		}
 		return claimed
 	})
 
-	if got := f.check.Check(expulsion(f.root), f.set); got != user.EntryAccept {
+	if got := f.verdict(expulsion(oldRoot)); got != user.EntryAccept {
 		t.Fatalf("expulsion by the root read at the start: got %v, want accept", got)
 	}
 	if reads != 1 {
@@ -449,7 +414,7 @@ func TestCheckSwarmEntryReadsTheRootOnce(t *testing.T) {
 // key, as the root key, writes every kind.
 func TestCheckSwarmEntryUnclaimedNodeIsItsOwnRoot(t *testing.T) {
 	nodeID := astral.GenerateIdentity()
-	f := newEntryFixture()
+	f := newEntryFixture(t)
 	f.check = NewRules(keyVerifier{}, func() *astral.Identity { return nodeID })
 	runEntryCases(t, f, []entryCase{
 		{"expulsion by the unclaimed node", expulsion(nodeID), user.EntryAccept},

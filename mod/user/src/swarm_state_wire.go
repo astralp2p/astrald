@@ -23,8 +23,12 @@ var _ usermod.SwarmState = &Module{}
 // openSwarmState opens this node's copy of SwarmState in its own VFS, which checks every stored entry again, and
 // adds the exchange ops to the module's router.
 func (mod *Module) openSwarmState() error {
-	if err := mod.swarm.open(mod.ctx, mod.VFS, mod.node.Identity()); err != nil {
+	leftOut, err := mod.swarm.open(mod.ctx, mod.VFS, mod.node.Identity())
+	if err != nil {
 		return err
+	}
+	for _, line := range leftOut {
+		mod.log.Logv(1, "swarm state: %v", line)
 	}
 	return addSwarmOps(&mod.router, mod.swarm, mod.admitsSwarmCaller)
 }

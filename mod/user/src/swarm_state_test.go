@@ -182,8 +182,8 @@ func (n *stateNode) open(t testing.TB) {
 
 	ctx := astral.NewContext(nil).WithIdentity(n.id).IncludeZone(astral.ZoneNetwork)
 
-	store := newSwarmStore(n.checker, nil)
-	if err := store.open(ctx, n.files, n.id); err != nil {
+	store := newSwarmStore(n.checker)
+	if _, err := store.open(ctx, n.files, n.id); err != nil {
 		t.Fatalf("open: %v", err)
 	}
 

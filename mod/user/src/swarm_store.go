@@ -31,13 +31,14 @@ type swarmStore struct {
 	stored func(objs []astral.Object)
 }
 
-// newSwarmStore returns a closed store whose merges run checker. log reports what open leaves out; nil discards.
-func newSwarmStore(checker swarmset.Checker, log func(format string, v ...any)) *swarmStore {
-	return &swarmStore{set: swarmset.New(swarmset.Config{Checker: checker, Log: log})}
+// newSwarmStore returns a closed store whose merges run checker.
+func newSwarmStore(checker swarmset.Checker) *swarmStore {
+	return &swarmStore{set: swarmset.New(swarmset.Config{Checker: checker})}
 }
 
-// open opens the set in the VFS of owner and checks every stored entry again (swarmset.Set.Open).
-func (s *swarmStore) open(ctx *astral.Context, files swarmset.Files, owner *astral.Identity) error {
+// open opens the set in the VFS of owner and checks every stored entry again (swarmset.Set.Open). It returns one
+// line for each stored entry left out.
+func (s *swarmStore) open(ctx *astral.Context, files swarmset.Files, owner *astral.Identity) ([]string, error) {
 	s.ctx = ctx
 	return s.set.Open(ctx, housekeepingFiles{files}, owner)
 }

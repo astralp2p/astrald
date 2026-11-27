@@ -65,16 +65,6 @@ func (r Request) isExpel() bool {
 	return ok
 }
 
-// touches reports whether node filed, carried in or is named by the request.
-func (r Request) touches(node *astral.Identity) bool {
-	for _, id := range []*astral.Identity{r.Filer, r.Carrier, r.Subject} {
-		if !id.IsZero() && id.IsEqual(node) {
-			return true
-		}
-	}
-	return false
-}
-
 // NewIndex returns an empty index.
 func NewIndex() *Index {
 	return &Index{

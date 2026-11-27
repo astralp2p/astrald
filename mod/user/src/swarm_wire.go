@@ -26,7 +26,7 @@ func (mod *Module) rootKey() *astral.Identity {
 // newModuleSwarmStore returns this module's closed store, checked on every
 // merge by the entry rules. Load builds it; Run opens it.
 func (mod *Module) newModuleSwarmStore() *swarmStore {
-	store := newSwarmStore(swarmset.NewRules(lazyVerifier{mod}, mod.rootKey), func(f string, v ...any) { mod.log.Logv(1, f, v...) })
+	store := newSwarmStore(swarmset.NewRules(lazyVerifier{mod}, mod.rootKey))
 	store.peers = mod.swarmPeers
 	return store
 }

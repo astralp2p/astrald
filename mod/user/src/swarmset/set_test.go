@@ -112,13 +112,15 @@ type setFixture struct {
 	root    *astral.Identity
 	trusted *astral.Identity
 	set     *Set
-	now     time.Time
-	logged  []string
+	check   *Rules
+	// leftOut is what the last Open left out.
+	leftOut []string
 }
 
 func newSetFixture(t *testing.T) *setFixture {
 	f := &setFixture{t: t, files: newMemFiles(), owner: astral.GenerateIdentity(),
-		root: astral.GenerateIdentity(), trusted: astral.GenerateIdentity(), now: time.Now()}
+		root: astral.GenerateIdentity(), trusted: astral.GenerateIdentity()}
+	f.check = NewRules(keyVerifier{}, func() *astral.Identity { return f.root })
 	f.open()
 	f.mustAdd(f.membership(f.root, f.trusted, user.TierTrusted, time.Hour))
 	return f
@@ -127,14 +129,12 @@ func newSetFixture(t *testing.T) *setFixture {
 // open opens a new Set over the fixture's files, as a restart does.
 func (f *setFixture) open() {
 	f.t.Helper()
-	f.set = New(Config{
-		Checker: NewRules(keyVerifier{}, func() *astral.Identity { return f.root }),
-		Now:     func() time.Time { return f.now },
-		Log:     func(format string, v ...any) { f.logged = append(f.logged, format) },
-	})
-	if err := f.set.Open(astral.NewContext(nil), f.files, f.owner); err != nil {
+	f.set = New(Config{Checker: f.check})
+	leftOut, err := f.set.Open(astral.NewContext(nil), f.files, f.owner)
+	if err != nil {
 		f.t.Fatalf("open: %v", err)
 	}
+	f.leftOut = leftOut
 }
 
 func (f *setFixture) membership(issuer, subject *astral.Identity, tier user.Tier, d time.Duration) *auth.SignedContract {
@@ -161,8 +161,8 @@ func (f *setFixture) stored(obj astral.Object) bool {
 // TestOpenChecksEveryStoredEntry (criterion 4): entries placed directly in
 // the VFS enter the set at Open only when they pass the entry check: a bad
 // signature, a content ID that is not its file name, an entry in another
-// kind's folder and an undecodable file are left out and logged; a good
-// entry, and one that waits for a stored entry, are indexed.
+// kind's folder and an undecodable file are left out and reported; a good
+// entry, and one that waits for a stored entry, are indexed. Open returns a line for each entry left out.
 func TestOpenChecksEveryStoredEntry(t *testing.T) {
 	f := newSetFixture(t)
 
@@ -198,8 +198,8 @@ func TestOpenChecksEveryStoredEntry(t *testing.T) {
 	if got := f.set.Head(); got != 3 {
 		t.Fatalf("head = %v; want the membership, the request and its decline", got)
 	}
-	if len(f.logged) != 4 {
-		t.Fatalf("logged %v; want the four left out", f.logged)
+	if len(f.leftOut) != 4 {
+		t.Fatalf("left out %v; want the four left out", f.leftOut)
 	}
 	if head, _ := f.files.ReadFile(nil, f.owner, HeadPath); string(head) != "3" {
 		t.Fatalf("head file %q; want 3", head)
@@ -212,7 +212,8 @@ func TestOpenChecksEveryStoredEntry(t *testing.T) {
 func TestOpenKeepsEntriesWhoseGateLapsed(t *testing.T) {
 	f := newSetFixture(t)
 	member := astral.GenerateIdentity()
-	f.mustAdd(f.membership(f.root, member, user.TierMember, time.Minute))
+	const lifetime = 300 * time.Millisecond
+	f.mustAdd(f.membership(f.root, member, user.TierMember, lifetime))
 	req := contractRequest(member)
 	f.mustAdd(req)
 	f.mustAdd(&user.SignedExpulsion{
@@ -220,7 +221,7 @@ func TestOpenKeepsEntriesWhoseGateLapsed(t *testing.T) {
 		IssuerSig: sigBy(f.root),
 	})
 
-	f.now = f.now.Add(time.Hour)
+	time.Sleep(lifetime)
 	late := contractRequest(member)
 	if added, _ := f.set.Add(astral.NewContext(nil), late); added.Verdict != user.EntryWait {
 		t.Fatalf("a lapsed member's new request: %v; want wait", added.Verdict)
