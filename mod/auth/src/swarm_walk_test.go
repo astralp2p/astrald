@@ -243,8 +243,8 @@ func TestSwarmWalkGivesAJoinerNoPermitItsCarrierLacks(t *testing.T) {
 
 // userPowerWorld registers the user power handlers as mod/user does: expel and
 // AdminSwarm for the user, AdminSwarm NodeLocal for the Privileged Laptop, and
-// the module's own sudo rule. Relaying registers as mod/nodes and mod/user do:
-// an identity relays for itself, and the Laptop, NodeLocal, for the user.
+// the module's own sudo rule. Relaying registers as mod/nodes does: an identity
+// relays for itself.
 func userPowerWorld(t *testing.T) *swarmWorld {
 	t.Helper()
 	w := newSwarmWorld(t)
@@ -261,15 +261,13 @@ func userPowerWorld(t *testing.T) *swarmWorld {
 	w.mod.Add(authmod.Func[*nodes.RelayForAction](func(_ *astral.Context, a *nodes.RelayForAction) bool {
 		return a.Actor().IsEqual(a.ForID)
 	}))
-	w.mod.Add(authmod.NodeLocal(authmod.Func[*nodes.RelayForAction](func(_ *astral.Context, a *nodes.RelayForAction) bool {
-		return a.ForID.IsEqual(w.user) && a.Actor().IsEqual(w.laptop)
-	})))
 	return w
 }
 
-// TestRelayAsTheUserDelegatesOnlyFromTheUser: the Privileged Laptop relays as
-// the user itself, and a Member holding the Laptop's relay contract does not
-// (D6). The same permit in a contract the user signs carries.
+// TestRelayAsTheUserDelegatesOnlyFromTheUser: the user relays as itself, and
+// a node relays as the user only through a relay contract the user key signs.
+// The Laptop holding the user's PrivilegedMembership without one does not, and
+// a Member holding the Laptop's relay contract does not either.
 func TestRelayAsTheUserDelegatesOnlyFromTheUser(t *testing.T) {
 	ctx := astral.NewContext(nil)
 	w := userPowerWorld(t)
@@ -283,8 +281,9 @@ func TestRelayAsTheUserDelegatesOnlyFromTheUser(t *testing.T) {
 	if !relay(w.user) {
 		t.Fatal("the user: want allow")
 	}
-	if !relay(w.laptop) {
-		t.Fatal("privileged node relays as the user itself: want allow")
+	seedContract(t, w.mod, w.user, w.laptop, &auth.Permit{Action: astral.String8(user.TierPrivilegedMember.Action())})
+	if relay(w.laptop) {
+		t.Fatal("privileged node without the user's relay contract: want deny")
 	}
 
 	seedContract(t, w.mod, w.laptop, w.pi, relayPermit(1))
@@ -293,6 +292,14 @@ func TestRelayAsTheUserDelegatesOnlyFromTheUser(t *testing.T) {
 		if relay(actor) {
 			t.Fatalf("%s: want deny", name)
 		}
+	}
+
+	seedContract(t, w.mod, w.user, w.laptop, relayPermit(0))
+	if !relay(w.laptop) {
+		t.Fatal("privileged node with the user's relay contract: want allow")
+	}
+	if relay(w.pi) {
+		t.Fatal("member with the contract of a node the user granted no Delegation: want deny")
 	}
 
 	seedContract(t, w.mod, w.user, w.member, relayPermit(1))

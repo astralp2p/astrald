@@ -5,7 +5,6 @@ import (
 	"github.com/astralp2p/astral-go/api/bip137sig"
 	cryptoapi "github.com/astralp2p/astral-go/api/crypto"
 	"github.com/astralp2p/astral-go/api/messaging"
-	"github.com/astralp2p/astral-go/api/nodes"
 	"github.com/astralp2p/astral-go/api/services"
 	"github.com/astralp2p/astral-go/api/shell"
 	"github.com/astralp2p/astral-go/api/user"
@@ -103,9 +102,6 @@ func (mod *Module) LoadDependencies(ctx *astral.Context) (err error) {
 	mod.wireSwarm()
 	chain := newChainRules(mod, mod)
 
-	// why NodeLocal: a Privileged node relays as the user itself, but no
-	// contract it signs passes that on (D6).
-	mod.Auth.Add(authmod.NodeLocal(authmod.Func[*nodes.RelayForAction](chain.AuthorizeRelayFor)))
 	mod.Auth.Add(authmod.Func[*auth.SeeObjectsAction](chain.AuthorizeSeeObjects))
 	mod.Auth.Add(authmod.Func[*auth.StoreObjectsAction](mod.AuthorizeStoreObjects))
 	mod.Auth.Add(authmod.Func[*auth.AdminObjectsAction](mod.AuthorizeAdminObjects))

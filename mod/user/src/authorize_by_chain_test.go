@@ -4,7 +4,6 @@ import (
 	"testing"
 
 	"github.com/astralp2p/astral-go/api/auth"
-	"github.com/astralp2p/astral-go/api/nodes"
 	"github.com/astralp2p/astral-go/api/services"
 	"github.com/astralp2p/astral-go/api/user"
 	"github.com/astralp2p/astral-go/astral"
@@ -46,31 +45,6 @@ func newChainFixture(t *testing.T) *chainFixture {
 	mod.node = &identityNode{id: f.node}
 	f.rules = newChainRules(mod, set)
 	return f
-}
-
-// TestChainRelayForIsPrivilegedOnly: only a root-signed Privileged node relays
-// as the user; a Member or Trusted node no longer does (D5, D6).
-func TestChainRelayForIsPrivilegedOnly(t *testing.T) {
-	f := newChainFixture(t)
-	relay := func(actor, forID *astral.Identity) *nodes.RelayForAction {
-		return &nodes.RelayForAction{Action: auth.NewAction(actor), ForID: forID}
-	}
-	for _, c := range []struct {
-		name string
-		a    *nodes.RelayForAction
-		want bool
-	}{
-		{"privileged, for the user", relay(f.privileged, f.user), true},
-		{"privileged, for another identity", relay(f.privileged, astral.GenerateIdentity()), false},
-		{"trusted", relay(f.trusted, f.user), false},
-		{"member", relay(f.member, f.user), false},
-		{"privileged membership not signed by the user", relay(f.rogue, f.user), false},
-		{"zero actor", relay(&astral.Identity{}, f.user), false},
-	} {
-		if got := f.rules.AuthorizeRelayFor(nil, c.a); got != c.want {
-			t.Errorf("%s: got %v, want %v", c.name, got, c.want)
-		}
-	}
 }
 
 // TestChainAdminSwarmAsPrivilegedIsPrivilegedOnly: only a node holding a

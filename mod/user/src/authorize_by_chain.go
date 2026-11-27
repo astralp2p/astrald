@@ -2,7 +2,6 @@ package user
 
 import (
 	"github.com/astralp2p/astral-go/api/auth"
-	"github.com/astralp2p/astral-go/api/nodes"
 	"github.com/astralp2p/astral-go/api/services"
 	"github.com/astralp2p/astral-go/api/user"
 	"github.com/astralp2p/astral-go/astral"
@@ -21,25 +20,6 @@ type chainRules struct {
 
 func newChainRules(mod *Module, members membershipReader) *chainRules {
 	return &chainRules{mod: mod, members: members}
-}
-
-// AuthorizeRelayFor allows a node holding a PrivilegedMembership the user
-// signed to relay queries on behalf of the user itself. deps.go registers it
-// NodeLocal.
-//
-// why: a Member or Trusted node does not relay as the user (D5, D6).
-// note: the user relays as itself through the nodes module's rule, which
-// contracts the user signs delegate.
-// why Identity and not userOrSelf: the rule answers for a PrivilegedMembership
-// a claimed user signed. An unclaimed node relays as itself through the nodes
-// module's rule.
-func (r *chainRules) AuthorizeRelayFor(ctx *astral.Context, a *nodes.RelayForAction) bool {
-	userID := r.mod.Identity()
-	if a.Actor().IsZero() || userID.IsZero() || !a.ForID.IsEqual(userID) {
-		return false
-	}
-	m, ok := r.members.Membership(a.Actor())
-	return ok && usermod.PrivilegedBy(m, userID)
 }
 
 // AuthorizeAdminSwarmAsPrivileged allows a node holding a PrivilegedMembership
