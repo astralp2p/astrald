@@ -11,7 +11,7 @@ func serveObjectsAction(actor *astral.Identity, role astral.String8) *auth.Serve
 	return &auth.ServeObjectsAction{Action: auth.NewAction(actor), Role: role}
 }
 
-// TestServeObjectsAllowsTheUserToIndex covers the one default holder: the user,
+// TestServeObjectsAllowsTheUserToIndex covers the one default holder, the user,
 // for the indexer role.
 func TestServeObjectsAllowsTheUserToIndex(t *testing.T) {
 	userID := astral.GenerateIdentity()
@@ -23,16 +23,16 @@ func TestServeObjectsAllowsTheUserToIndex(t *testing.T) {
 	}
 }
 
-// TestServeObjectsRefusesTheUserOtherRoles keeps the default to indexing: the
-// user holds no query role without a grant or a contract.
-func TestServeObjectsRefusesTheUserOtherRoles(t *testing.T) {
+// TestServeObjectsAllowsTheUserEveryRole: the user holds the describer,
+// finder, searcher and indexer roles by default.
+func TestServeObjectsAllowsTheUserEveryRole(t *testing.T) {
 	userID := astral.GenerateIdentity()
 	mod := claimedModule(t, userID)
 	mod.node = &identityNode{id: astral.GenerateIdentity()}
 
-	for _, role := range []astral.String8{auth.RoleDescriber, auth.RoleFinder, auth.RoleSearcher, ""} {
-		if mod.AuthorizeServeObjects(nil, serveObjectsAction(userID, role)) {
-			t.Fatalf("the user must not hold role %q by default", role)
+	for _, role := range []astral.String8{auth.RoleDescriber, auth.RoleFinder, auth.RoleSearcher, auth.RoleIndexer} {
+		if !mod.AuthorizeServeObjects(nil, serveObjectsAction(userID, role)) {
+			t.Fatalf("the user must hold role %q by default", role)
 		}
 	}
 }

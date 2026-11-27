@@ -4,6 +4,7 @@ import (
 	"github.com/astralp2p/astral-go/api/auth"
 	"github.com/astralp2p/astral-go/api/bip137sig"
 	cryptoapi "github.com/astralp2p/astral-go/api/crypto"
+	"github.com/astralp2p/astral-go/api/messaging"
 	"github.com/astralp2p/astral-go/api/nodes"
 	"github.com/astralp2p/astral-go/api/services"
 	"github.com/astralp2p/astral-go/api/shell"
@@ -121,6 +122,10 @@ func (mod *Module) LoadDependencies(ctx *astral.Context) (err error) {
 	mod.Auth.Add(authmod.Func[*auth.SeeNodeStateAction](mod.AuthorizeSeeNodeState))
 	mod.Auth.Add(authmod.Func[*auth.UseBlueprintsAction](mod.AuthorizeUseBlueprints))
 	mod.Auth.Add(authmod.Func[*shell.ShellAction](mod.AuthorizeShell))
+	mod.Auth.Add(authmod.Func[*auth.RegisterSignerAction](mod.AuthorizeRegisterSigner))
+	mod.Auth.Add(authmod.Func[*messaging.SendAction](mod.AuthorizeSend))
+	mod.Auth.Add(authmod.Func[*messaging.ReceiveAction](mod.AuthorizeReceive))
+	mod.Auth.Add(authmod.Func[*messaging.ReadMailboxAction](mod.AuthorizeReadMailbox))
 
 	// why: localuser as a name, to match localuser as a filter
 	err = mod.Dir.AddResolver(mod)
