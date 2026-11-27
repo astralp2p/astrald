@@ -58,7 +58,10 @@ func (r *signRule) Sign(*astral.Context, *crypto.PublicKey, crypto.SignableTextO
 }
 
 // claimStub is the user module: its claim state alone.
+//
+// note: the embedded nil interface panics on any other method.
 type claimStub struct {
+	usermod.Module
 	ready chan struct{}
 	user  *astral.Identity
 }
