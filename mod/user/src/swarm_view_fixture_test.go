@@ -222,12 +222,3 @@ func (f *viewFixture) wantMembership(id *astral.Identity, want bool) {
 		f.t.Fatalf("Membership = %v, want %v", got, want)
 	}
 }
-
-func hasViewApproval(list []*user.SignedApproval, id *astral.ObjectID) bool {
-	for _, a := range list {
-		if aid, _ := astral.ResolveObjectID(a); aid != nil && aid.IsEqual(id) {
-			return true
-		}
-	}
-	return false
-}

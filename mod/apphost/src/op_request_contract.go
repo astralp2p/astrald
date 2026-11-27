@@ -19,7 +19,7 @@ type opRequestContractArgs struct {
 // objects until EOS, files a ContractRequest asking them for the calling
 // session's identity (see contractRequests.File), and sends the request's
 // entry ID. It then waits while the caller stays connected and sends the
-// contract that carries out the request's Approval, or the error of a
+// contract it signs once it co-signed an offer for the request, or the error of a
 // Decline or an expiry. A caller that disconnects calls again with the same
 // permits: the live request is not filed twice, and its outcome is sent at
 // once when it has one.

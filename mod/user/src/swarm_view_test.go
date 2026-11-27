@@ -67,28 +67,6 @@ func TestSwarmViewDeclineKeepsASignedMembership(t *testing.T) {
 	f.wantMembership(sensor, true)
 }
 
-// TestSwarmViewMemberApproval: an Approval of a request a Member filed touches
-// that Member, which acts on it.
-func TestSwarmViewMemberApproval(t *testing.T) {
-	f := newViewFixture(t)
-	r1 := f.add(f.contractRequest(f.pi, f.appA, viewClock(10, 0)))
-	a := f.add(f.approval(f.laptop, r1))
-	for _, c := range []struct {
-		name string
-		node *astral.Identity
-		want bool
-	}{
-		{"filer Pi", f.pi, true},
-		{"named App A", f.appA, true},
-		{"approver Laptop", f.laptop, false},
-		{"bystander Phone", f.phone, false},
-	} {
-		if got := hasViewApproval(f.view.ApprovalsTouching(c.node), a); got != c.want {
-			t.Errorf("%s: touched = %v, want %v", c.name, got, c.want)
-		}
-	}
-}
-
 // TestSwarmViewIssuerTierBoundsTheMembership: a membership holds only when its
 // issuer may issue its tier (swarmset.MayIssue): the user key any tier, a
 // Privileged member Member and Trusted, a Trusted member Member, a Member none.
@@ -141,27 +119,6 @@ func TestSwarmViewContractsOfMatchesRequest(t *testing.T) {
 		got := f.view.ContractsOf(c.req)
 		if len(got) != 1 || !got[0].Subject.IsEqual(c.subject) || !got[0].RequestID.IsEqual(c.req) {
 			t.Fatalf("ContractsOf = %d contracts, want only the one naming this request", len(got))
-		}
-	}
-}
-
-// TestSwarmViewExpelRequestTouchesSubject: an Approval of an ExpelRequest
-// touches its filer and its Subject, and no bystander.
-func TestSwarmViewExpelRequestTouchesSubject(t *testing.T) {
-	f := newViewFixture(t)
-	r := f.add(f.expelRequest(f.phone, f.pi, viewClock(10, 0)))
-	a := f.add(f.approval(f.laptop, r))
-	for _, c := range []struct {
-		name string
-		node *astral.Identity
-		want bool
-	}{
-		{"filer Phone", f.phone, true},
-		{"subject Pi", f.pi, true},
-		{"bystander Desktop", f.desktop, false},
-	} {
-		if got := hasViewApproval(f.view.ApprovalsTouching(c.node), a); got != c.want {
-			t.Errorf("%s: touched = %v, want %v", c.name, got, c.want)
 		}
 	}
 }
@@ -253,7 +210,7 @@ func TestSwarmViewExpelCutsAMembership(t *testing.T) {
 }
 
 // TestSwarmViewExpelRequestCarriedOut: an ExpelRequest is approved by the root
-// key's Expulsion of its Subject, which never counts as "not yet carried out".
+// key's Expulsion of its Subject.
 func TestSwarmViewExpelRequestCarriedOut(t *testing.T) {
 	f := newViewFixture(t)
 	r := f.add(f.expelRequest(f.phone, f.pi, viewClock(10, 0)))
@@ -262,9 +219,6 @@ func TestSwarmViewExpelRequestCarriedOut(t *testing.T) {
 	f.wantStatus(r, user.RequestPending)
 	f.add(f.expulsion(f.user, f.pi))
 	f.wantStatus(r, user.RequestApproved)
-	if f.view.ApprovedNotCarriedOut(r) {
-		t.Fatal("an expel is reported as not yet carried out")
-	}
 	f.wantMembership(f.pi, false)
 }
 

@@ -120,13 +120,14 @@ func (s *fakeSwarmState) objects(kind user.EntryKind) []astral.Object {
 }
 
 // fakeSwarmView is a user.SwarmView over a fakeSwarmState: fulfilled beats
-// declined beats approved beats expired beats pending. ApprovalsTouching returns every
-// stored Approval, wider than the real view, so the host worker must pick its
-// own requests itself.
+// declined beats expired beats offered beats pending. An offer is a contract
+// only its issuer signed, given to the request's filer. Every issuer may
+// answer except those in refused.
 type fakeSwarmView struct {
 	state      *fakeSwarmState
 	now        func() time.Time
 	membership *user.Membership
+	refused    map[string]bool
 }
 
 var _ hostSwarmView = &fakeSwarmView{}
@@ -142,24 +143,20 @@ func (v *fakeSwarmView) RequestStatus(req *astral.ObjectID) user.RequestStatus {
 			return user.RequestDeclined
 		}
 	}
-	for _, obj := range v.state.objects(user.EntryApprovals) {
-		if obj.(*user.SignedApproval).RequestID.IsEqual(req) {
-			return user.RequestApproved
-		}
+	obj, err := v.state.SwarmEntry(req)
+	r, ok := obj.(*user.SignedContractRequest)
+	if err != nil || !ok {
+		return user.RequestPending
 	}
-	if obj, err := v.state.SwarmEntry(req); err == nil {
-		if r, ok := obj.(*user.SignedContractRequest); ok && r.Expired(v.now()) {
-			return user.RequestExpired
+	if r.Expired(v.now()) {
+		return user.RequestExpired
+	}
+	for _, c := range v.ContractsOf(req) {
+		if c.SubjectSig == nil && c.Subject.IsEqual(r.FiledBy) {
+			return user.RequestOffered
 		}
 	}
 	return user.RequestPending
-}
-
-func (v *fakeSwarmView) ApprovalsTouching(*astral.Identity) (list []*user.SignedApproval) {
-	for _, obj := range v.state.objects(user.EntryApprovals) {
-		list = append(list, obj.(*user.SignedApproval))
-	}
-	return list
 }
 
 func (v *fakeSwarmView) ContractsOf(req *astral.ObjectID) (list []*auth.SignedContract) {
@@ -175,7 +172,12 @@ func (v *fakeSwarmView) Membership(*astral.Identity) (*user.Membership, bool) {
 	return v.membership, v.membership != nil
 }
 
-// fakeSigner signs requests and contracts with a marker naming the signer.
+func (v *fakeSwarmView) MayAnswer(signer *astral.Identity, _ *astral.ObjectID) bool {
+	return !v.refused[signer.String()]
+}
+
+// fakeSigner signs requests and contracts with a marker: a request's
+// signature holds its signable hash, a contract's the signer's identity.
 type fakeSigner struct{}
 
 func (fakeSigner) Sign(_ *astral.Context, _ *crypto.PublicKey, obj crypto.SignableTextObject) (*crypto.Signature, error) {
@@ -183,22 +185,44 @@ func (fakeSigner) Sign(_ *astral.Context, _ *crypto.PublicKey, obj crypto.Signab
 }
 
 func (fakeSigner) SignContract(_ *astral.Context, c *auth.SignedContract) error {
-	c.IssuerSig = &crypto.Signature{Scheme: "test", Data: astral.Bytes16(c.Issuer.String())}
-	c.SubjectSig = &crypto.Signature{Scheme: "test", Data: astral.Bytes16(c.Subject.String())}
+	c.IssuerSig = markSig(c.Issuer)
+	c.SubjectSig = markSig(c.Subject)
 	return nil
 }
 
-// testSwarm is a shared SwarmState, its view and a clock every node reads.
+func (fakeSigner) SignSubject(_ *astral.Context, c *auth.SignedContract) (*crypto.Signature, error) {
+	if c.SubjectSig != nil {
+		return nil, auth.ErrAlreadySigned
+	}
+	c.SubjectSig = markSig(c.Subject)
+	return c.SubjectSig, nil
+}
+
+// Verify accepts a signature that holds obj's signable hash, as fakeSigner.Sign makes it.
+func (fakeSigner) Verify(_ *crypto.PublicKey, sig *crypto.Signature, obj crypto.SignableTextObject) error {
+	if sig == nil || !bytes.Equal(sig.Data, obj.SignableHash()) {
+		return errors.New("bad signature")
+	}
+	return nil
+}
+
+func markSig(id *astral.Identity) *crypto.Signature {
+	return &crypto.Signature{Scheme: "test", Data: astral.Bytes16(id.String())}
+}
+
+// testSwarm is a shared SwarmState, its view, its root key and a clock every
+// node reads.
 type testSwarm struct {
 	state *fakeSwarmState
 	view  *fakeSwarmView
+	root  *astral.Identity
 	mu    sync.Mutex
 	clock time.Time
 }
 
 func newTestSwarm() *testSwarm {
-	s := &testSwarm{state: newFakeSwarmState(), clock: time.Date(2026, 11, 25, 10, 0, 0, 0, time.UTC)}
-	s.view = &fakeSwarmView{state: s.state, now: s.now}
+	s := &testSwarm{state: newFakeSwarmState(), root: astral.GenerateIdentity(), clock: time.Date(2026, 11, 25, 10, 0, 0, 0, time.UTC)}
+	s.view = &fakeSwarmView{state: s.state, now: s.now, refused: map[string]bool{}}
 	return s
 }
 
@@ -216,39 +240,103 @@ func (s *testSwarm) advance(d time.Duration) {
 
 // host returns the contract requests of a new node in s.
 func (s *testSwarm) host() *contractRequests {
-	node := astral.GenerateIdentity()
+	return s.hostAs(astral.GenerateIdentity())
+}
+
+// hostAs returns the contract requests of node in s, as after a restart.
+func (s *testSwarm) hostAs(node *astral.Identity) *contractRequests {
 	cr := newContractRequests(node, &hostState{fakeSwarmState: s.state, node: node, now: s.now}, s.view, fakeSigner{})
 	cr.now = s.now
+	cr.verifier = fakeSigner{}
+	cr.root = func() *astral.Identity { return s.root }
 	return cr
 }
 
-// answer adds a Privileged node's Approval (approve) or Decline of req and
-// returns the Approval's entry ID, or nil for a Decline.
+// request returns the stored ContractRequest req.
+func (s *testSwarm) request(t *testing.T, req *astral.ObjectID) *user.SignedContractRequest {
+	t.Helper()
+	obj, err := s.state.SwarmEntry(req)
+	if err != nil {
+		t.Fatalf("request %v: %v", req, err)
+	}
+	return obj.(*user.SignedContractRequest)
+}
+
+// offerBody returns issuer's unsigned offer for req: every requested permit
+// at one more Delegation, to the filer, expiring after usermod.OfferValidity.
+func (s *testSwarm) offerBody(t *testing.T, issuer *astral.Identity, req *astral.ObjectID) *auth.SignedContract {
+	t.Helper()
+	r := s.request(t, req)
+	var permits []*auth.Permit
+	for _, p := range r.Permits {
+		deeper := *p
+		deeper.Delegation++
+		permits = append(permits, &deeper)
+	}
+	return &auth.SignedContract{Contract: &auth.Contract{
+		Issuer: issuer, Subject: r.FiledBy, Permits: permits, RequestID: req,
+		ExpiresAt: astral.Time(s.now().Add(usermod.OfferValidity)),
+	}}
+}
+
+// publish signs sc as its issuer only, adds it and returns its entry ID.
+func (s *testSwarm) publish(t *testing.T, sc *auth.SignedContract) *astral.ObjectID {
+	t.Helper()
+	sc.IssuerSig = markSig(sc.Issuer)
+	if err := s.state.add(sc); err != nil {
+		t.Fatalf("add offer: %v", err)
+	}
+	id, err := astral.ResolveObjectID(sc)
+	if err != nil {
+		t.Fatalf("offer id: %v", err)
+	}
+	return id
+}
+
+// offer publishes issuer's offer for req and returns its entry ID.
+func (s *testSwarm) offer(t *testing.T, issuer *astral.Identity, req *astral.ObjectID) *astral.ObjectID {
+	t.Helper()
+	return s.publish(t, s.offerBody(t, issuer, req))
+}
+
+// answer adds a Privileged node's offer (approve) or Decline of req and
+// returns the offer's entry ID, or nil for a Decline.
 func (s *testSwarm) answer(t *testing.T, req *astral.ObjectID, approve bool) *astral.ObjectID {
 	t.Helper()
 	issuer := astral.GenerateIdentity()
-	sig := &crypto.Signature{Scheme: "test", Data: astral.Bytes16(issuer.String())}
-	var entry astral.Object = &user.SignedDecline{Decline: user.NewDecline(issuer, req), IssuerSig: sig}
 	if approve {
-		entry = &user.SignedApproval{Approval: user.NewApproval(issuer, req), IssuerSig: sig}
+		return s.offer(t, issuer, req)
 	}
-	if err := s.state.add(entry); err != nil {
-		t.Fatalf("add answer: %v", err)
+	if err := s.state.add(&user.SignedDecline{Decline: user.NewDecline(issuer, req), IssuerSig: markSig(issuer)}); err != nil {
+		t.Fatalf("add decline: %v", err)
 	}
-	if !approve {
-		return nil
-	}
-	id, err := astral.ResolveObjectID(entry)
-	if err != nil {
-		t.Fatalf("approval id: %v", err)
-	}
-	return id
+	return nil
 }
 
 // contracts returns the contracts stored in s.
 func (s *testSwarm) contracts() (list []*auth.SignedContract) {
 	for _, obj := range s.state.objects(user.EntryContracts) {
 		list = append(list, obj.(*auth.SignedContract))
+	}
+	return list
+}
+
+// signedBy returns the stored contracts both parties signed whose issuer is issuer.
+func (s *testSwarm) signedBy(issuer *astral.Identity) (list []*auth.SignedContract) {
+	for _, c := range s.contracts() {
+		if c.SubjectSig != nil && c.Issuer.IsEqual(issuer) {
+			list = append(list, c)
+		}
+	}
+	return list
+}
+
+// cosigned returns the stored offers to host that host co-signed.
+func (s *testSwarm) cosigned(host *astral.Identity) (list []*auth.SignedContract) {
+	for _, c := range s.contracts() {
+		if c.SubjectSig != nil && c.Subject.IsEqual(host) && !c.Issuer.IsEqual(host) {
+			list = append(list, c)
+		}
 	}
 	return list
 }
@@ -289,8 +377,7 @@ func TestContractRequestIsFiledOnce(t *testing.T) {
 	again := mustFile(t, host, app, asked)
 	reordered := mustFile(t, host, app, []*auth.Permit{asked[1], asked[0]})
 
-	restarted := swarm.host()
-	restarted.node = host.node
+	restarted := swarm.hostAs(host.node)
 	afterRestart := mustFile(t, restarted, app, asked)
 
 	for name, id := range map[string]*astral.ObjectID{"again": again, "reordered": reordered, "after a restart": afterRestart} {
@@ -333,9 +420,18 @@ func TestHeldContractRequestIsFiledOnce(t *testing.T) {
 	}
 }
 
-// Done: a contract is signed only for the identity the approved request
-// names, carrying the request's entry ID as its RequestID, and only once.
-func TestApprovedRequestSignsContractForNamedIdentity(t *testing.T) {
+// Done (criterion 14): an app grant is two contracts. The host co-signs the
+// approver's offer, which makes the approver's contract to the host with the
+// requested permits one Delegation deeper, and signs its own contract to the
+// identity the request names with the requested permits, the request's entry
+// ID as its RequestID, expiring no later than the approver's. Each is signed
+// once.
+//
+// note: ported from TestApprovedRequestSignsContractForNamedIdentity; a
+// contract request is answered by an offer since the two-signature model.
+// That expelling the host then denies the app is the auth walk's
+// (mod/auth TestSwarmWalkStopsAtAnExpelledParty, "expelled host").
+func TestOfferedRequestMakesTheTwoContractGrant(t *testing.T) {
 	swarm := newTestSwarm()
 	host := swarm.host()
 	app := astral.GenerateIdentity()
@@ -343,34 +439,57 @@ func TestApprovedRequestSignsContractForNamedIdentity(t *testing.T) {
 
 	mustPoll(t, host)
 	if n := len(swarm.contracts()); n != 0 {
-		t.Fatalf("signed %v contracts before an Approval", n)
+		t.Fatalf("signed %v contracts before an offer", n)
 	}
 
-	swarm.answer(t, reqID, true)
+	approver := astral.GenerateIdentity()
+	swarm.offer(t, approver, reqID)
 	mustPoll(t, host)
 	mustPoll(t, host)
 
-	contracts := swarm.contracts()
-	if len(contracts) != 1 {
-		t.Fatalf("SwarmState holds %v contracts; want 1", len(contracts))
+	granted, mine := swarm.signedBy(approver), swarm.signedBy(host.node)
+	if len(granted) != 1 || len(mine) != 1 || len(swarm.contracts()) != 3 {
+		t.Fatalf("contracts %v; want the offer, its completed form and the app's contract", swarm.contracts())
 	}
-	c := contracts[0]
+	g, c := granted[0], mine[0]
 	switch {
-	case !c.Issuer.IsEqual(host.node):
-		t.Errorf("issuer %v; want the host", c.Issuer)
+	case !g.Subject.IsEqual(host.node) || g.Permits[0].Delegation != 1 || !g.RequestID.IsEqual(reqID):
+		t.Errorf("approver's contract to %v at delegation %v for %v; want to the host at 1 for the request", g.Subject, g.Permits[0].Delegation, g.RequestID)
 	case !c.Subject.IsEqual(app):
 		t.Errorf("subject %v; want the app the request names", c.Subject)
 	case !c.RequestID.IsEqual(reqID):
 		t.Errorf("RequestID %v; want %v", c.RequestID, reqID)
 	case !samePermits(&user.ContractRequest{Permits: c.Permits}, &user.ContractRequest{Permits: walletPermits()}):
 		t.Errorf("permits %v; want the requested ones", c.Permits)
-	case c.IssuerSig == nil:
-		t.Error("contract is not signed")
+	case c.ExpiresAt.Time().After(g.ExpiresAt.Time()):
+		t.Errorf("app contract expires %v, after the approver's %v", c.ExpiresAt, g.ExpiresAt)
 	}
 
 	got, err := host.Outcome(reqID)
 	if err != nil || got != c {
 		t.Fatalf("outcome %v, %v; want the signed contract", got, err)
+	}
+}
+
+// A host restarted after co-signing signs the app's contract from the stored
+// co-signed contract, and co-signs no second offer.
+func TestRestartedHostSignsTheAppContractOnce(t *testing.T) {
+	swarm := newTestSwarm()
+	host := swarm.host()
+	app := astral.GenerateIdentity()
+	reqID := mustFile(t, host, app, walletPermits())
+	offer := swarm.offerBody(t, astral.GenerateIdentity(), reqID)
+	swarm.publish(t, offer)
+	done := &auth.SignedContract{Contract: offer.Contract, IssuerSig: offer.IssuerSig, SubjectSig: markSig(host.node)}
+	if err := swarm.state.add(done); err != nil {
+		t.Fatal(err)
+	}
+	swarm.offer(t, astral.GenerateIdentity(), reqID)
+
+	restarted := swarm.hostAs(host.node)
+	mustPoll(t, restarted)
+	if n, m := len(swarm.cosigned(host.node)), len(swarm.signedBy(host.node)); n != 1 || m != 1 {
+		t.Fatalf("%v co-signed offers and %v app contracts; want 1 and 1", n, m)
 	}
 }
 
@@ -387,14 +506,30 @@ func TestAppContractExpiresWithHostMembership(t *testing.T) {
 	swarm.answer(t, reqID, true)
 	mustPoll(t, host)
 
-	if c := swarm.contracts(); len(c) != 1 || !c[0].ExpiresAt.Time().Equal(ends) {
+	if c := swarm.signedBy(host.node); len(c) != 1 || !c[0].ExpiresAt.Time().Equal(ends) {
 		t.Fatalf("contracts %v; want one expiring with the membership at %v", c, ends)
 	}
 }
 
-// Done: another app cannot reuse that Approval. App B's request stays
+// The app's contract never outlives the approver's contract to the host.
+func TestAppContractExpiresWithTheOffer(t *testing.T) {
+	swarm := newTestSwarm()
+	host := swarm.host()
+	reqID := mustFile(t, host, astral.GenerateIdentity(), walletPermits())
+	offer := swarm.offerBody(t, astral.GenerateIdentity(), reqID)
+	ends := swarm.now().Add(72 * time.Hour)
+	offer.ExpiresAt = astral.Time(ends)
+	swarm.publish(t, offer)
+	mustPoll(t, host)
+
+	if c := swarm.signedBy(host.node); len(c) != 1 || !c[0].ExpiresAt.Time().Equal(ends) {
+		t.Fatalf("contracts %v; want one expiring with the offer at %v", c, ends)
+	}
+}
+
+// Done: another app cannot reuse that offer. App B's request stays
 // pending, B gets no contract, and A's contract names A alone.
-func TestAnotherAppCannotReuseApproval(t *testing.T) {
+func TestAnotherAppCannotReuseAnOffer(t *testing.T) {
 	swarm := newTestSwarm()
 	host := swarm.host()
 	appA, appB := astral.GenerateIdentity(), astral.GenerateIdentity()
@@ -407,7 +542,7 @@ func TestAnotherAppCannotReuseApproval(t *testing.T) {
 	swarm.answer(t, reqA, true)
 	mustPoll(t, host)
 
-	contracts := swarm.contracts()
+	contracts := swarm.signedBy(host.node)
 	if len(contracts) != 1 || !contracts[0].Subject.IsEqual(appA) || !contracts[0].RequestID.IsEqual(reqA) {
 		t.Fatalf("contracts %v; want only app A's, naming A's request", contracts)
 	}
@@ -423,8 +558,8 @@ func TestAnotherAppCannotReuseApproval(t *testing.T) {
 }
 
 // Done: an app moved to another node files a fresh request there. The new
-// host does not carry out the old host's Approval, and signs once its own
-// request is approved.
+// host does not co-sign an offer for the old host's request, and signs once
+// its own request is offered.
 func TestMovedAppFilesFreshRequest(t *testing.T) {
 	swarm := newTestSwarm()
 	oldHost, newHost := swarm.host(), swarm.host()
@@ -444,15 +579,170 @@ func TestMovedAppFilesFreshRequest(t *testing.T) {
 	}
 
 	mustPoll(t, newHost)
-	if n := len(swarm.contracts()); n != 1 {
-		t.Fatalf("the new host signed on the old host's Approval: %v contracts", n)
+	if n := len(swarm.signedBy(newHost.node)) + len(swarm.cosigned(newHost.node)); n != 0 {
+		t.Fatalf("the new host signed on the old host's offer: %v contracts", n)
 	}
 
 	swarm.answer(t, newReq, true)
 	mustPoll(t, newHost)
 	c, err := newHost.Outcome(newReq)
 	if err != nil || c == nil || !c.Issuer.IsEqual(newHost.node) || !c.RequestID.IsEqual(newReq) {
-		t.Fatalf("new host outcome %v, %v; want its own contract on its own Approval", c, err)
+		t.Fatalf("new host outcome %v, %v; want its own contract on its own offer", c, err)
+	}
+}
+
+// Criterion 15: the host co-signs at most one offer per request. Of several
+// that qualify it takes the root key's, then the one that expires last, then
+// the one with the lowest entry ID; a second approver's offer that arrives
+// after it co-signed stays unused.
+func TestHostCoSignsOneOfferPerRequest(t *testing.T) {
+	later := func(s *testSwarm, sc *auth.SignedContract) { sc.ExpiresAt = astral.Time(s.now().Add(time.Hour)) }
+	for _, c := range []struct {
+		name string
+		// mine, theirs: the offer the host should take, and the other one
+		mine, theirs func(s *testSwarm, sc *auth.SignedContract)
+		rootMine     bool
+	}{
+		{"the root key's first", later, func(*testSwarm, *auth.SignedContract) {}, true},
+		{"then the later expiry", func(*testSwarm, *auth.SignedContract) {}, later, false},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			swarm := newTestSwarm()
+			host := swarm.host()
+			reqID := mustFile(t, host, astral.GenerateIdentity(), walletPermits())
+			mineIssuer := astral.GenerateIdentity()
+			if c.rootMine {
+				mineIssuer = swarm.root
+			}
+			mine, theirs := swarm.offerBody(t, mineIssuer, reqID), swarm.offerBody(t, astral.GenerateIdentity(), reqID)
+			c.mine(swarm, mine)
+			c.theirs(swarm, theirs)
+			swarm.publish(t, theirs)
+			swarm.publish(t, mine)
+			mustPoll(t, host)
+			swarm.offer(t, astral.GenerateIdentity(), reqID)
+			mustPoll(t, host)
+
+			got := swarm.cosigned(host.node)
+			if len(got) != 1 || !got[0].Issuer.IsEqual(mineIssuer) {
+				t.Fatalf("co-signed %v; want only the offer of %v", got, mineIssuer)
+			}
+			if n := len(swarm.signedBy(host.node)); n != 1 {
+				t.Fatalf("signed %v app contracts; want 1", n)
+			}
+		})
+	}
+
+	swarm := newTestSwarm()
+	host := swarm.host()
+	reqID := mustFile(t, host, astral.GenerateIdentity(), walletPermits())
+	a, b := swarm.offer(t, astral.GenerateIdentity(), reqID), swarm.offer(t, astral.GenerateIdentity(), reqID)
+	lowest := a
+	if b.String() < a.String() {
+		lowest = b
+	}
+	obj, _ := swarm.state.SwarmEntry(lowest)
+	mustPoll(t, host)
+	if got := swarm.cosigned(host.node); len(got) != 1 || !got[0].Issuer.IsEqual(obj.(*auth.SignedContract).Issuer) {
+		t.Fatalf("co-signed %v; want the offer with the lowest entry ID", got)
+	}
+}
+
+// Criteria 15, 18: the host co-signs only an offer for its own live request:
+// none for a stale offer (its request expired, declined or superseded by a
+// later request with the same permits, or the offer itself expired), nor for
+// an offer wider than the request, given to another node, of a request
+// another node filed, from an issuer that may not answer it, or of a request
+// in SwarmState that this node did not sign.
+func TestHostRefusesStaleAndForeignOffers(t *testing.T) {
+	for _, c := range []struct {
+		name  string
+		setup func(t *testing.T, s *testSwarm, host *contractRequests) *astral.ObjectID
+	}{
+		{"an expired request", func(t *testing.T, s *testSwarm, host *contractRequests) *astral.ObjectID {
+			req := mustFile(t, host, astral.GenerateIdentity(), walletPermits())
+			s.offer(t, astral.GenerateIdentity(), req)
+			s.advance(user.RequestTimeout + time.Second)
+			return req
+		}},
+		{"a declined request", func(t *testing.T, s *testSwarm, host *contractRequests) *astral.ObjectID {
+			req := mustFile(t, host, astral.GenerateIdentity(), walletPermits())
+			s.offer(t, astral.GenerateIdentity(), req)
+			s.answer(t, req, false)
+			return req
+		}},
+		{"a superseded request", func(t *testing.T, s *testSwarm, host *contractRequests) *astral.ObjectID {
+			app := astral.GenerateIdentity()
+			req := mustFile(t, host, app, walletPermits())
+			s.offer(t, astral.GenerateIdentity(), req)
+			s.advance(time.Minute)
+			if _, err := host.state.FileContractRequest(astral.NewContext(nil), app, walletPermits()); err != nil {
+				t.Fatal(err)
+			}
+			return req
+		}},
+		{"an expired offer", func(t *testing.T, s *testSwarm, host *contractRequests) *astral.ObjectID {
+			req := mustFile(t, host, astral.GenerateIdentity(), walletPermits())
+			offer := s.offerBody(t, astral.GenerateIdentity(), req)
+			offer.ExpiresAt = astral.Time(s.now())
+			s.publish(t, offer)
+			return req
+		}},
+		{"a wider offer", func(t *testing.T, s *testSwarm, host *contractRequests) *astral.ObjectID {
+			req := mustFile(t, host, astral.GenerateIdentity(), walletPermits())
+			offer := s.offerBody(t, astral.GenerateIdentity(), req)
+			offer.Permits = append(offer.Permits, &auth.Permit{Action: "mod.auth.see_objects_action", Delegation: 1})
+			s.publish(t, offer)
+			return req
+		}},
+		{"an offer at the requested depth", func(t *testing.T, s *testSwarm, host *contractRequests) *astral.ObjectID {
+			req := mustFile(t, host, astral.GenerateIdentity(), walletPermits())
+			offer := s.offerBody(t, astral.GenerateIdentity(), req)
+			offer.Permits[0].Delegation = 0
+			s.publish(t, offer)
+			return req
+		}},
+		{"an offer to another node", func(t *testing.T, s *testSwarm, host *contractRequests) *astral.ObjectID {
+			req := mustFile(t, host, astral.GenerateIdentity(), walletPermits())
+			offer := s.offerBody(t, astral.GenerateIdentity(), req)
+			offer.Subject = astral.GenerateIdentity()
+			s.publish(t, offer)
+			return req
+		}},
+		{"another node's request", func(t *testing.T, s *testSwarm, host *contractRequests) *astral.ObjectID {
+			req := mustFile(t, s.host(), astral.GenerateIdentity(), walletPermits())
+			offer := s.offerBody(t, astral.GenerateIdentity(), req)
+			offer.Subject = host.node
+			s.publish(t, offer)
+			return nil
+		}},
+		{"an issuer that may not answer", func(t *testing.T, s *testSwarm, host *contractRequests) *astral.ObjectID {
+			req := mustFile(t, host, astral.GenerateIdentity(), walletPermits())
+			issuer := astral.GenerateIdentity()
+			s.view.refused[issuer.String()] = true
+			s.offer(t, issuer, req)
+			return req
+		}},
+		{"a request this node did not sign", func(t *testing.T, s *testSwarm, host *contractRequests) *astral.ObjectID {
+			body := user.NewContractRequest(host.node, astral.GenerateIdentity(), walletPermits())
+			forged := &user.SignedContractRequest{ContractRequest: body, FiledBySig: markSig(host.node)}
+			if err := s.state.add(forged); err != nil {
+				t.Fatal(err)
+			}
+			req, _ := astral.ResolveObjectID(forged)
+			s.offer(t, astral.GenerateIdentity(), req)
+			return nil
+		}},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			swarm := newTestSwarm()
+			host := swarm.host()
+			c.setup(t, swarm, host)
+			mustPoll(t, host)
+			if n, m := len(swarm.cosigned(host.node)), len(swarm.signedBy(host.node)); n != 0 || m != 0 {
+				t.Fatalf("co-signed %v offers and signed %v app contracts; want none", n, m)
+			}
+		})
 	}
 }
 
@@ -510,6 +800,7 @@ func TestDeclineAndExpiryReachTheApp(t *testing.T) {
 	swarm.answer(t, signed, true)
 	mustPoll(t, host)
 	swarm.answer(t, signed, false)
+	mustPoll(t, host)
 	if c, err := host.Outcome(signed); c == nil || err != nil {
 		t.Fatalf("outcome after a late Decline %v, %v; want the signed contract", c, err)
 	}
@@ -530,7 +821,7 @@ func TestDeclineAndExpiryReachTheApp(t *testing.T) {
 	}
 }
 
-// Wait returns once a poll carries out the Approval.
+// Wait returns once a poll co-signs the offer and signs the app's contract.
 func TestWaitWakesOnPoll(t *testing.T) {
 	swarm := newTestSwarm()
 	host := swarm.host()
@@ -555,7 +846,7 @@ func TestWaitWakesOnPoll(t *testing.T) {
 }
 
 // apphost.request_contract files for the session's app, sends the request ID,
-// then the contract once the Approval is carried out.
+// then the contract once the host co-signed an offer and signed it.
 func TestRequestContractOp(t *testing.T) {
 	swarm := newTestSwarm()
 	mod := &Module{log: log.New(nil), contractRequests: swarm.host()}
@@ -647,9 +938,11 @@ func receiveAll(t *testing.T, w *recordingWriter) (list []astral.Object) {
 	}
 }
 
-// An Approval of a request declined before the host polls is not carried
-// out: a Decline wins.
-func TestDeclinedApprovalIsNotCarriedOut(t *testing.T) {
+// Criterion 18: an offer for a request declined before the host polls is not
+// co-signed: a Decline closes the request.
+//
+// note: ported from TestDeclinedApprovalIsNotCarriedOut.
+func TestDeclinedOfferIsNotCoSigned(t *testing.T) {
 	swarm := newTestSwarm()
 	host := swarm.host()
 	reqID := mustFile(t, host, astral.GenerateIdentity(), walletPermits())
@@ -657,7 +950,10 @@ func TestDeclinedApprovalIsNotCarriedOut(t *testing.T) {
 	swarm.answer(t, reqID, false)
 
 	mustPoll(t, host)
-	if n := len(swarm.contracts()); n != 0 {
-		t.Fatalf("signed %v contracts for a declined request", n)
+	if n := len(swarm.contracts()); n != 1 {
+		t.Fatalf("SwarmState holds %v contracts for a declined request; want the offer alone", n)
+	}
+	if _, err := host.Outcome(reqID); !errors.Is(err, apphostmod.ErrContractDeclined) {
+		t.Fatalf("outcome %v; want declined", err)
 	}
 }

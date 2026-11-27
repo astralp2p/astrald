@@ -33,7 +33,7 @@ type opRegisterArgs struct {
 // name the app gives itself and is not verified by the node. Its
 // GrantPermits and ContractPermits, with their constraints, are the permits
 // the app asks for: the node files one ContractRequest for both lists in
-// SwarmState, and signs the app's contract once an Approval answers it
+// SwarmState, and signs the app's contract once it co-signed an offer for it
 // (apphost.request_contract waits for that). Asking is not receiving. Its Vfs
 // and Evaluator, both on when omitted, ask for a VFS of the app and for the
 // app to be the evaluator of that VFS.
@@ -73,7 +73,7 @@ func (mod *Module) OpRegister(ctx *astral.Context, query *routing.IncomingQuery,
 }
 
 // fileRegisterPermits files a ContractRequest for the permits a registration
-// asks, so the app holds them once an Approval is carried out. The app waits
+// asks, so the app holds them once the host co-signed an offer for it. The app waits
 // for the outcome with apphost.request_contract and the same permits.
 //
 // why no decision here: registration stays local and is never refused; only

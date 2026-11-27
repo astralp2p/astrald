@@ -68,8 +68,8 @@ type Module struct {
 	enRoute               sig.Map[astral.Nonce, *queryEnRoute]
 	pendingInboundQueries sig.Map[astral.Nonce, *pendingInboundQuery]
 
-	// contractRequests files app ContractRequests and carries out their
-	// Approvals. It is nil on a node without the user module;
+	// contractRequests files app ContractRequests, co-signs an offer for
+	// each and signs the app's contract. It is nil on a node without the user module;
 	// apphost.request_contract answers ErrContractRequestsOff there.
 	contractRequests *contractRequests
 }

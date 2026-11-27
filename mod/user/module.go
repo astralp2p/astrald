@@ -79,15 +79,6 @@ type SwarmView interface {
 	// Subject.
 	Expelled(id *astral.Identity) bool
 
-	// ApprovalsTouching returns the stored Approvals that node acts on: those
-	// of requests node filed (ContractRequest, ExpelRequest), carried in
-	// (JoinRequest.Carrier), or that name node (ContractRequest.Identity,
-	// JoinRequest.Joiner, ExpelRequest.Subject). It excludes Approvals signed
-	// by an expelled identity. It includes Approvals whose request is since
-	// declined, so callers check RequestStatus before acting. The order is not
-	// defined.
-	ApprovalsTouching(node *astral.Identity) []*user.SignedApproval
-
 	// ContractsOf returns the stored contracts whose RequestID is req, in no
 	// defined order, whatever their signatures, expiry or the expels of their
 	// parties: offers, their completed forms and the contracts that carry the

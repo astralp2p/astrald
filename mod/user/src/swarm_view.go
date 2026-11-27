@@ -56,10 +56,6 @@ func (v *swarmView) Expelled(id *astral.Identity) bool {
 	return v.snapshot().Expelled(id)
 }
 
-func (v *swarmView) ApprovalsTouching(node *astral.Identity) []*user.SignedApproval {
-	return v.snapshot().ApprovalsTouching(node)
-}
-
 func (v *swarmView) ContractsOf(req *astral.ObjectID) []*auth.SignedContract {
 	return v.snapshot().ContractsOf(req)
 }
@@ -70,13 +66,6 @@ func (v *swarmView) Membership(id *astral.Identity) (*user.Membership, bool) {
 
 func (v *swarmView) MayAnswer(signer *astral.Identity, req *astral.ObjectID) bool {
 	return v.snapshot().MayAnswer(signer, req)
-}
-
-// ApprovedNotCarriedOut reports whether req is approved by an Approval while
-// no contract fulfils it yet: the touched node has not polled since, or is
-// offline. Monitoring shows it as "approved, not yet carried out".
-func (v *swarmView) ApprovedNotCarriedOut(req *astral.ObjectID) bool {
-	return v.snapshot().ApprovedNotCarriedOut(req)
 }
 
 // members returns every identity whose membership holds, in no defined order.

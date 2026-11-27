@@ -194,20 +194,6 @@ func (s *joinSwarm) Expelled(id *astral.Identity) bool {
 	return false
 }
 
-func (s *joinSwarm) ApprovalsTouching(node *astral.Identity) []*user.SignedApproval {
-	var list []*user.SignedApproval
-	for _, obj := range s.all() {
-		a, ok := obj.(*user.SignedApproval)
-		if !ok {
-			continue
-		}
-		if r, ok := s.entryOf(a.RequestID).(*user.SignedJoinRequest); ok && (r.Carrier.IsEqual(node) || r.Joiner.IsEqual(node)) {
-			list = append(list, a)
-		}
-	}
-	return list
-}
-
 func (s *joinSwarm) ContractsOf(req *astral.ObjectID) []*auth.SignedContract {
 	var list []*auth.SignedContract
 	for _, obj := range s.all() {

@@ -9,6 +9,8 @@ import (
 	"time"
 
 	"github.com/astralp2p/astral-go/api/auth"
+	"github.com/astralp2p/astral-go/api/crypto"
+	"github.com/astralp2p/astral-go/api/secp256k1"
 	"github.com/astralp2p/astral-go/api/user"
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astral-go/sig"
@@ -32,13 +34,21 @@ const (
 )
 
 // AppContractDuration is how long a contract the host signs for its app holds
-// at most. It never outlives the host's own membership.
+// at most. It never outlives the approver's contract to the host, nor the
+// host's own membership.
 const AppContractDuration = RegisterDuration
 
 // contractSigner signs a contract as its issuer and, when it holds the key,
-// its subject; auth.Module satisfies it.
+// its subject (SignContract), or as its subject alone (SignSubject);
+// auth.Module satisfies it.
 type contractSigner interface {
 	SignContract(ctx *astral.Context, contract *auth.SignedContract) error
+	SignSubject(ctx *astral.Context, contract *auth.SignedContract) (*crypto.Signature, error)
+}
+
+// requestVerifier verifies a signature; crypto.Module satisfies it.
+type requestVerifier interface {
+	Verify(key *crypto.PublicKey, sig *crypto.Signature, obj crypto.SignableTextObject) error
 }
 
 // hostSwarmState is the part of the user module's SwarmState (mod/user) the
@@ -55,18 +65,18 @@ type hostSwarmState interface {
 // host worker reads.
 type hostSwarmView interface {
 	RequestStatus(req *astral.ObjectID) user.RequestStatus
-	ApprovalsTouching(node *astral.Identity) []*user.SignedApproval
 	ContractsOf(req *astral.ObjectID) []*auth.SignedContract
 	Membership(id *astral.Identity) (*user.Membership, bool)
+	MayAnswer(signer *astral.Identity, req *astral.ObjectID) bool
 }
 
-// contractRequests files the ContractRequests of the apps this node hosts and
-// carries out their Approvals (the host worker). It writes SwarmState only
-// through the typed writes of user.SwarmState, which sign the request as this
-// node, and reads what entries mean only through user.SwarmView.
-//
-// Nothing constructs it in the running node yet: G7 builds it in
-// LoadDependencies, registers apphost.request_contract and starts Run.
+// contractRequests files the ContractRequests of the apps this node hosts,
+// co-signs an approver's offer for each, and signs the app's contract (the
+// host worker). The grant is two contracts: the approver's to this node,
+// with one more Delegation, and this node's to the app
+// (astral-docs protocols/user/README.md#app-grants). It writes SwarmState
+// only through the typed writes of user.SwarmState, which sign the request as
+// this node, and reads what entries mean only through user.SwarmView.
 type contractRequests struct {
 	node    *astral.Identity
 	state   hostSwarmState
@@ -74,6 +84,11 @@ type contractRequests struct {
 	signer  contractSigner
 	now     func() time.Time
 	limiter *requestLimiter
+	// verifier checks this node's own signature on a request read from
+	// SwarmState; nil: only the requests this process filed are its own.
+	verifier requestVerifier
+	// root returns the root key, whose offer is preferred; nil prefers none.
+	root func() *astral.Identity
 
 	// mu makes finding a live request and filing a new one one step, so two
 	// calls of one app never file two requests.
@@ -82,9 +97,13 @@ type contractRequests struct {
 	// filed holds the requests this process filed, by entry ID, so a request
 	// SwarmState holds (ErrSwarmEntryHeld) is still found and waited on.
 	filed sig.Map[string, *user.SignedContractRequest]
-	// signed holds the contracts this process signed, by the entry ID of the
-	// request they carry out, so an Approval is carried out once even before
-	// SwarmState stores the contract.
+	// cosigned holds the offers this process co-signed, by the entry ID of
+	// their request, so a request gets one co-signed offer even before
+	// SwarmState stores it.
+	cosigned sig.Map[string, *auth.SignedContract]
+	// signed holds the app contracts this process signed, by the entry ID of
+	// the request they carry out, so each is signed once even before
+	// SwarmState stores it.
 	signed sig.Map[string, *auth.SignedContract]
 	// changed is closed and replaced after every poll; Wait sleeps on it.
 	changed atomic.Pointer[chan struct{}]
@@ -106,12 +125,11 @@ func newContractRequests(node *astral.Identity, state hostSwarmState, view hostS
 }
 
 // File returns the entry ID of the ContractRequest that asks permits for app.
-// A live request this node filed for app with the same permits (pending and
-// unexpired, or approved) is returned as is; otherwise File files a new
-// request in SwarmState, signed by this node, with the default one-hour
-// Timeout. A
-// new request counts against the rate limits; a refused one is
-// ErrContractRequestRateLimited.
+// A live request this node filed for app with the same permits (pending or
+// offered and unexpired, or fulfilled) is returned as is; otherwise File
+// files a new request in SwarmState, signed by this node, with the default
+// one-hour Timeout. A new request counts against the rate limits; a refused
+// one is ErrContractRequestRateLimited.
 func (cr *contractRequests) File(ctx *astral.Context, app *astral.Identity, permits []*auth.Permit) (*astral.ObjectID, error) {
 	switch {
 	case app.IsZero():
@@ -162,9 +180,9 @@ func (cr *contractRequests) findLive(app *astral.Identity, permits []*auth.Permi
 			continue
 		}
 		switch cr.view.RequestStatus(c.id) {
-		case user.RequestApproved, user.RequestFulfilled:
+		case user.RequestFulfilled:
 			return c.id
-		case user.RequestPending:
+		case user.RequestPending, user.RequestOffered:
 			if !r.Expired(cr.now()) {
 				return c.id
 			}
@@ -203,117 +221,213 @@ func (cr *contractRequests) ownRequests() []ownRequest {
 	return list
 }
 
-// ownRequest returns the ContractRequest with entry ID id if this node filed
-// it, or nil.
+// ownRequest returns the ContractRequest with entry ID id if it is in this
+// node's own records, or nil: this process filed it, or SwarmState holds it
+// with this node as FiledBy and this node's signature, which this node
+// verifies itself.
+//
+// why verify here: this node co-signs only what it asked for, and its
+// consent is its own signature on the request, not SwarmState's merge check.
 func (cr *contractRequests) ownRequest(id *astral.ObjectID) *user.SignedContractRequest {
 	if req, ok := cr.filed.Get(id.String()); ok {
 		return req
 	}
 
 	obj, err := cr.state.SwarmEntry(id)
-	if err != nil {
+	if err != nil || cr.verifier == nil {
 		return nil
 	}
 	req, ok := obj.(*user.SignedContractRequest)
-	if !ok || req.ContractRequest == nil || !req.FiledBy.IsEqual(cr.node) || req.Identity.IsZero() {
+	if !ok || req.IsNil() || !req.FiledBy.IsEqual(cr.node) || req.Identity.IsZero() || req.FiledBySig == nil {
+		return nil
+	}
+	if cr.verifier.Verify(secp256k1.FromIdentity(cr.node), req.FiledBySig, req.ContractRequest) != nil {
 		return nil
 	}
 	return req
 }
 
-// Poll carries out, once each, the Approvals of ContractRequests this node
-// filed: for each approved request not carried out yet, it signs the app's
-// contract and adds it to SwarmState. It then wakes every Wait.
+// Poll carries out the requests this node filed. For each one it co-signs at
+// most one approver's offer (cosign), which completes the approver's
+// contract to this node, and then signs, once, the app's contract from that
+// contract (carryOut), adding both to SwarmState. It then wakes every Wait.
 //
-// fixme: the app's contract grants nothing yet: the walk continues at this
-// node, which holds no contract from the approver until it co-signs an
-// approver's offer (astral-docs protocols/user/README.md#app-grants).
-//
-// The contract names exactly the identity and permits of the approved request
-// and carries the request's entry ID as its RequestID. A request another node filed is that
-// node's to carry out, even when it names an app hosted here: an app moved
-// here files its own request.
+// A request another node filed is that node's to carry out, even when it
+// names an app hosted here: an app moved here files its own request.
 func (cr *contractRequests) Poll(ctx *astral.Context) error {
 	defer cr.notify()
 
 	var errs []error
-	for _, a := range cr.approvalsByRequest() {
-		req := cr.ownRequest(a.request)
-		if req == nil {
-			continue
-		}
-		if cr.view.RequestStatus(a.request) != user.RequestApproved {
-			continue
-		}
-		if cr.carriedOut(a.request, req) != nil {
-			continue
-		}
-		if err := cr.carryOut(ctx, a.request, req); err != nil {
+	all := cr.ownRequests()
+	for _, own := range all {
+		if err := cr.pollRequest(ctx, own, all); err != nil {
 			errs = append(errs, err)
 		}
 	}
 	return errors.Join(errs...)
 }
 
-type requestApproval struct {
-	request  *astral.ObjectID
-	approval *astral.ObjectID
+// pollRequest co-signs an offer for own when none is co-signed yet, and signs
+// the app's contract from the co-signed one when it is not signed yet. all
+// are this node's own requests.
+func (cr *contractRequests) pollRequest(ctx *astral.Context, own ownRequest, all []ownRequest) error {
+	if cr.carriedOut(own.id, own.req) != nil {
+		return nil
+	}
+	granted := cr.granted(own.id, own.req)
+	if granted == nil {
+		offer := cr.pickOffer(own, all)
+		if offer == nil {
+			return nil
+		}
+		var err error
+		if granted, err = cr.cosign(ctx, own.id, offer); err != nil {
+			return err
+		}
+	}
+	return cr.carryOut(ctx, own, granted)
 }
 
-// approvalsByRequest returns one Approval per request among those that touch
-// this node: the one with the lowest entry ID, so every poll picks the same
-// one when several nodes approved a request.
-func (cr *contractRequests) approvalsByRequest() []requestApproval {
-	byRequest := map[string]requestApproval{}
-	for _, a := range cr.view.ApprovalsTouching(cr.node) {
-		if a == nil || a.Approval == nil || a.RequestID.IsZero() {
+// pickOffer returns the offer this node co-signs for own, or nil. The request
+// must be open (openToOffers, against all of this node's requests); an offer qualifies when only its issuer signed
+// it, it is given to this node, its permits follow the offer depth rule
+// (user.ContractRequest.CoversOffer), it has not expired, and its issuer may
+// answer the request. Of several it takes the root key's, then the one that
+// expires last, then the one with the lowest entry ID.
+// Spec: .ai/system/protocols/user/README.md#app-grants
+func (cr *contractRequests) pickOffer(own ownRequest, all []ownRequest) *auth.SignedContract {
+	if !cr.openToOffers(own, all) {
+		return nil
+	}
+	var best *auth.SignedContract
+	var bestID string
+	for _, c := range cr.view.ContractsOf(own.id) {
+		if c.IsNil() || c.IssuerSig == nil || c.SubjectSig != nil || !c.Subject.IsEqual(cr.node) ||
+			!c.RequestID.IsEqual(own.id) || !own.req.CoversOffer(c.Contract) ||
+			!cr.now().Before(c.ExpiresAt.Time()) || !cr.view.MayAnswer(c.Issuer, own.id) {
 			continue
 		}
-		aid, err := astral.ResolveObjectID(a)
+		id, err := astral.ResolveObjectID(c)
 		if err != nil {
 			continue
 		}
-		key := a.RequestID.String()
-		if prev, ok := byRequest[key]; ok && prev.approval.String() <= aid.String() {
-			continue
+		if best == nil || cr.prefers(c, id.String(), best, bestID) {
+			best, bestID = c, id.String()
 		}
-		byRequest[key] = requestApproval{request: a.RequestID, approval: aid}
 	}
-
-	list := make([]requestApproval, 0, len(byRequest))
-	for _, a := range byRequest {
-		list = append(list, a)
-	}
-	return list
+	return best
 }
 
-// carryOut signs the contract of an approved request and adds it to
-// SwarmState.
-func (cr *contractRequests) carryOut(ctx *astral.Context, reqID *astral.ObjectID, req *user.SignedContractRequest) error {
+// prefers reports whether offer a, with entry ID aID, comes before offer b:
+// the root key's first, then the later expiry, then the lower entry ID.
+func (cr *contractRequests) prefers(a *auth.SignedContract, aID string, b *auth.SignedContract, bID string) bool {
+	var root *astral.Identity
+	if cr.root != nil {
+		root = cr.root()
+	}
+	if ra, rb := !root.IsZero() && a.Issuer.IsEqual(root), !root.IsZero() && b.Issuer.IsEqual(root); ra != rb {
+		return ra
+	}
+	if ta, tb := a.ExpiresAt.Time(), b.ExpiresAt.Time(); !ta.Equal(tb) {
+		return ta.After(tb)
+	}
+	return aID < bID
+}
+
+// openToOffers reports whether this node still co-signs an offer for own: the
+// request is pending or offered, its own copy has not expired, and no later
+// request among all, this node's own, for the same identity with the same set
+// of permits supersedes it.
+func (cr *contractRequests) openToOffers(own ownRequest, all []ownRequest) bool {
+	switch cr.view.RequestStatus(own.id) {
+	case user.RequestPending, user.RequestOffered:
+	default:
+		return false
+	}
+	if own.req.Expired(cr.now()) {
+		return false
+	}
+	for _, other := range all {
+		r := other.req.ContractRequest
+		if r.Identity.IsEqual(own.req.Identity) && samePermits(r, own.req.ContractRequest) &&
+			r.FiledAt.Time().After(own.req.FiledAt.Time()) {
+			return false
+		}
+	}
+	return true
+}
+
+// cosign adds this node's signature to offer, which completes the approver's
+// contract to this node for the request reqID, and adds it to SwarmState.
+//
+// why no other decision: this node's consent is the request it signed, and
+// the approver's decision is its signature.
+func (cr *contractRequests) cosign(ctx *astral.Context, reqID *astral.ObjectID, offer *auth.SignedContract) (*auth.SignedContract, error) {
+	done := &auth.SignedContract{Contract: offer.Contract, IssuerSig: offer.IssuerSig}
+	if _, err := cr.signer.SignSubject(ctx, done); err != nil {
+		return nil, fmt.Errorf("co-sign the offer of %v: %w", offer.Issuer, err)
+	}
+	if err := cr.state.AddContract(ctx, done); err != nil {
+		return nil, fmt.Errorf("add the contract from %v: %w", offer.Issuer, err)
+	}
+	cr.cosigned.Replace(reqID.String(), done)
+	return done, nil
+}
+
+// granted returns the approver's contract to this node for the request reqID
+// that this node co-signed, or nil.
+func (cr *contractRequests) granted(reqID *astral.ObjectID, req *user.SignedContractRequest) *auth.SignedContract {
+	if c, ok := cr.cosigned.Get(reqID.String()); ok {
+		return c
+	}
+	for _, c := range cr.view.ContractsOf(reqID) {
+		if !c.IsNil() && c.IssuerSig != nil && c.SubjectSig != nil && c.Subject.IsEqual(cr.node) &&
+			req.CoversOffer(c.Contract) {
+			return c
+		}
+	}
+	return nil
+}
+
+// carryOut signs the app's contract from granted, the approver's contract to
+// this node, and adds it to SwarmState. It passes the permits on only to the
+// app the request names: each offered permit one Delegation lower, which is
+// the requested permit.
+func (cr *contractRequests) carryOut(ctx *astral.Context, own ownRequest, granted *auth.SignedContract) error {
+	permits := make([]*auth.Permit, 0, len(granted.Permits))
+	for _, p := range granted.Permits {
+		onward := *p
+		onward.Delegation--
+		permits = append(permits, &onward)
+	}
 	signed := &auth.SignedContract{Contract: &auth.Contract{
 		Issuer:    cr.node,
-		Subject:   req.Identity,
-		Permits:   req.Permits,
-		ExpiresAt: astral.Time(cr.contractExpiry()),
-		RequestID: reqID,
+		Subject:   own.req.Identity,
+		Permits:   permits,
+		ExpiresAt: astral.Time(cr.contractExpiry(granted.ExpiresAt.Time())),
+		RequestID: own.id,
 	}}
 	if err := cr.signer.SignContract(ctx, signed); err != nil {
-		return fmt.Errorf("sign contract for %v: %w", req.Identity, err)
+		return fmt.Errorf("sign contract for %v: %w", own.req.Identity, err)
 	}
 	if err := cr.state.AddContract(ctx, signed); err != nil {
-		return fmt.Errorf("add contract for %v: %w", req.Identity, err)
+		return fmt.Errorf("add contract for %v: %w", own.req.Identity, err)
 	}
 
-	cr.signed.Replace(reqID.String(), signed)
+	cr.signed.Replace(own.id.String(), signed)
 	return nil
 }
 
 // contractExpiry returns when an app contract signed now expires: after
-// AppContractDuration, or when this node's membership expires, if earlier.
+// AppContractDuration, at granted, the expiry of the approver's contract to
+// this node, or when this node's membership expires, whichever is earliest.
 //
 // why: a link never outlives its parent.
-func (cr *contractRequests) contractExpiry() time.Time {
+func (cr *contractRequests) contractExpiry(granted time.Time) time.Time {
 	expiresAt := cr.now().Add(AppContractDuration)
+	if granted.Before(expiresAt) {
+		expiresAt = granted
+	}
 	if m, ok := cr.view.Membership(cr.node); ok && m.SignedContract != nil && m.Contract != nil {
 		if t := m.ExpiresAt.Time(); t.Before(expiresAt) {
 			expiresAt = t
@@ -329,7 +443,7 @@ func (cr *contractRequests) carriedOut(reqID *astral.ObjectID, req *user.SignedC
 		return c
 	}
 	for _, c := range cr.view.ContractsOf(reqID) {
-		if c != nil && c.Contract != nil && c.Issuer.IsEqual(cr.node) &&
+		if c != nil && c.Contract != nil && c.SubjectSig != nil && c.Issuer.IsEqual(cr.node) &&
 			c.Subject.IsEqual(req.Identity) && req.Covers(c.Contract) {
 			return c
 		}
@@ -339,10 +453,10 @@ func (cr *contractRequests) carriedOut(reqID *astral.ObjectID, req *user.SignedC
 
 // Outcome returns the result of the request with entry ID reqID this node
 // filed: the contract carrying it out, ErrContractDeclined, or
-// ErrContractRequestExpired. Both are nil while the request is pending, or
-// approved but not carried out yet.
+// ErrContractRequestExpired. Both are nil while the request is pending or
+// offered, or fulfilled before the app's contract is signed.
 //
-// why a signed contract wins over a Decline: a Decline only closes its
+// why a fulfilled request wins over a Decline: a Decline only closes its
 // request, and a contract both parties signed keeps its authority (PR 4
 // decision Q1).
 func (cr *contractRequests) Outcome(reqID *astral.ObjectID) (*auth.SignedContract, error) {
@@ -350,11 +464,14 @@ func (cr *contractRequests) Outcome(reqID *astral.ObjectID) (*auth.SignedContrac
 	if req == nil {
 		return nil, fmt.Errorf("no contract request %v filed by this node", reqID)
 	}
+	if c := cr.carriedOut(reqID, req); c != nil {
+		return c, nil
+	}
 	switch cr.view.RequestStatus(reqID) {
+	case user.RequestFulfilled:
+		return nil, nil
 	case user.RequestDeclined:
 		return nil, apphostmod.ErrContractDeclined
-	case user.RequestApproved, user.RequestFulfilled:
-		return cr.carriedOut(reqID, req), nil
 	case user.RequestExpired:
 		return nil, apphostmod.ErrContractRequestExpired
 	}
@@ -393,7 +510,7 @@ func (cr *contractRequests) notify() {
 }
 
 // Run is the host worker: it polls SwarmState's head every interval, polls
-// for Approvals when the head moved, and wakes every Wait on each tick, so a
+// for offers when the head moved, and wakes every Wait on each tick, so a
 // request that expires reaches its app without a new entry. It returns when
 // ctx ends.
 //

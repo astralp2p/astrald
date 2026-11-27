@@ -212,15 +212,6 @@ func (mod *Module) Expelled(id *astral.Identity) bool {
 	return view.Expelled(id)
 }
 
-// ApprovalsTouching reads the view (usermod.SwarmView); none before LoadDependencies built it.
-func (mod *Module) ApprovalsTouching(node *astral.Identity) []*user.SignedApproval {
-	view := mod.swarmView.Load()
-	if view == nil {
-		return nil
-	}
-	return view.ApprovalsTouching(node)
-}
-
 // ContractsOf reads the view (usermod.SwarmView); none before LoadDependencies built it.
 func (mod *Module) ContractsOf(req *astral.ObjectID) []*auth.SignedContract {
 	view := mod.swarmView.Load()

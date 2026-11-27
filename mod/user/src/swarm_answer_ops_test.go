@@ -111,8 +111,7 @@ func (v *fakeSwarmView) RequestStatus(req *astral.ObjectID) user.RequestStatus {
 	}
 	return user.RequestPending
 }
-func (v *fakeSwarmView) Expelled(*astral.Identity) bool                            { return false }
-func (v *fakeSwarmView) ApprovalsTouching(*astral.Identity) []*user.SignedApproval { return nil }
+func (v *fakeSwarmView) Expelled(*astral.Identity) bool { return false }
 func (v *fakeSwarmView) ContractsOf(req *astral.ObjectID) (list []*auth.SignedContract) {
 	ids, _ := v.state.SwarmEntries(user.EntryContracts)
 	for _, id := range ids {

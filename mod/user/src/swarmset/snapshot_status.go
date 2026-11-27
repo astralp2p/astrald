@@ -188,24 +188,6 @@ func (s *Snapshot) ApprovalOf(req *astral.ObjectID) *astral.ObjectID {
 	return s.expulsionOf(r)
 }
 
-// ApprovalsTouching returns the counting Approvals of stored requests that node filed, carried in or that name
-// it, including since-declined ones.
-func (s *Snapshot) ApprovalsTouching(node *astral.Identity) []*user.SignedApproval {
-	if node.IsZero() {
-		return nil
-	}
-	var list []*user.SignedApproval
-	for _, a := range s.approvals {
-		if !s.counts(a.Issuer) {
-			continue
-		}
-		if r, ok := s.Request(a.RequestID); ok && r.touches(node) {
-			list = append(list, a)
-		}
-	}
-	return list
-}
-
 // ContractsOf returns the stored contracts whose RequestID is req, in any signature, expiry or expel state.
 func (s *Snapshot) ContractsOf(req *astral.ObjectID) []*auth.SignedContract {
 	if req == nil {
@@ -218,10 +200,4 @@ func (s *Snapshot) ContractsOf(req *astral.ObjectID) []*auth.SignedContract {
 		}
 	}
 	return list
-}
-
-// ApprovedNotCarriedOut reports whether req is approved by an Approval while no contract fulfils it. An
-// ExpelRequest is carried out by its Expulsion, which is no Approval, so it never reports true.
-func (s *Snapshot) ApprovedNotCarriedOut(req *astral.ObjectID) bool {
-	return s.RequestStatus(req) == user.RequestApproved && len(s.approvalsOf(req)) > 0
 }

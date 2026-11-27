@@ -14,11 +14,13 @@ func (mod *Module) LoadDependencies(ctx *astral.Context) (err error) {
 	// optional — apphost can run without user module
 	core.Inject(mod.node, &mod.OptionalDeps)
 
-	// why: an app's permits come from contracts its host signs when an
-	// Approval in SwarmState answers the app's ContractRequest; without the
-	// user module there is no SwarmState to file one in.
+	// why: an app's permits come from the approver's offer its host co-signs
+	// and the contract its host then signs for it; without the user module
+	// there is no SwarmState to file a ContractRequest in.
 	if mod.User != nil {
 		mod.contractRequests = newContractRequests(mod.node.Identity(), mod.User, mod.User, mod.Auth)
+		mod.contractRequests.verifier = mod.Crypto
+		mod.contractRequests.root = mod.User.Identity
 		if n := mod.config.ContractRequestsPerNode; n > 0 {
 			mod.contractRequests.limiter = newRequestLimiter(ContractRequestWindow, ContractRequestsPerApp, n)
 		}

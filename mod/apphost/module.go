@@ -41,7 +41,7 @@ type Module interface {
 
 	// RequestContract files a ContractRequest asking permits for app, as
 	// apphost.request_contract does, and returns its entry ID. The host signs
-	// the app's contract once an Approval answers it. It answers
+	// the app's contract once it co-signed an offer for it. It answers
 	// ErrContractRequestsOff on a node without SwarmState.
 	RequestContract(ctx *astral.Context, app *astral.Identity, permits []*auth.Permit) (*astral.ObjectID, error)
 
