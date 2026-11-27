@@ -128,13 +128,15 @@ func (s *linkTaskScheduler) scheduled(id *astral.Identity) int {
 
 // memberLinksFixture is a nodes module on nodeID whose swarm members user
 // scripts, whose scheduler records the member link tasks, whose link closes
-// are recorded on closed, each with whether no task of that node still ran.
+// are recorded on closed, each with whether no task of that node still ran,
+// and whose endpoint learning is recorded on learned.
 type memberLinksFixture struct {
-	mod    *Module
-	nodeID *astral.Identity
-	user   *memberUser
-	sched  *linkTaskScheduler
-	closed chan closedLinks
+	mod     *Module
+	nodeID  *astral.Identity
+	user    *memberUser
+	sched   *linkTaskScheduler
+	closed  chan closedLinks
+	learned chan *astral.Identity
 }
 
 type closedLinks struct {
@@ -148,10 +150,11 @@ func newMemberLinksFixture(t *testing.T, members ...*astral.Identity) *memberLin
 	t.Cleanup(cancel)
 
 	f := &memberLinksFixture{
-		nodeID: astral.GenerateIdentity(),
-		user:   &memberUser{ready: make(chan struct{})},
-		sched:  &linkTaskScheduler{tasks: map[string][]*cancelTask{}},
-		closed: make(chan closedLinks, 16),
+		nodeID:  astral.GenerateIdentity(),
+		user:    &memberUser{ready: make(chan struct{})},
+		sched:   &linkTaskScheduler{tasks: map[string][]*cancelTask{}},
+		closed:  make(chan closedLinks, 16),
+		learned: make(chan *astral.Identity, 16),
 	}
 	close(f.user.ready)
 	f.user.set(append(members, f.nodeID)...)
@@ -169,6 +172,7 @@ func newMemberLinksFixture(t *testing.T, members ...*astral.Identity) *memberLin
 		f.closed <- closedLinks{id: id, stopped: len(tasks) == 0 || tasks[len(tasks)-1].cancelled.Load()}
 		return nil
 	}
+	f.mod.memberLinks.learn = func(id *astral.Identity) { f.learned <- id }
 
 	f.mod.runMemberLinks(ctx)
 	return f
@@ -228,6 +232,33 @@ func (f *memberLinksFixture) link(id *astral.Identity) {
 	f.mod.linkPool.links.Add(&Link{id: astral.NewNonce(), conn: &identityConn{remote: id}})
 }
 
+// requireLearned waits for the endpoints of exactly ids to be learned, each
+// once, and fails on any other learning within absenceWindow.
+func (f *memberLinksFixture) requireLearned(t *testing.T, ids ...*astral.Identity) {
+	t.Helper()
+	want := map[string]bool{}
+	for _, id := range ids {
+		want[id.String()] = true
+	}
+	deadline := time.After(effectTimeout)
+	for len(want) > 0 {
+		select {
+		case id := <-f.learned:
+			if !want[id.String()] {
+				t.Fatalf("learned the endpoints of %v; want %v, each once", id, ids)
+			}
+			delete(want, id.String())
+		case <-deadline:
+			t.Fatalf("the endpoints of %v were not learned", ids)
+		}
+	}
+	select {
+	case id := <-f.learned:
+		t.Fatalf("learned the endpoints of %v; want only %v, each once", id, ids)
+	case <-time.After(absenceWindow):
+	}
+}
+
 // requireNoClose fails if any member's links close within absenceWindow.
 func (f *memberLinksFixture) requireNoClose(t *testing.T) {
 	t.Helper()
@@ -281,6 +312,42 @@ func TestSwarmMemberLeftClosesTheMembersLinks(t *testing.T) {
 	f.receive(t, &user.SwarmMemberLeft{NodeID: b})
 	f.requireClosed(t, b)
 	f.requireRunning(t, a)
+	f.requireNoClose(t)
+}
+
+// TestNewMemberLinkLearnsTheMembersEndpoints: the reconcile that starts a
+// member's link task asks mod/nodes to learn that member's endpoints, once,
+// and never this node's own; a reconcile that starts no task learns nothing.
+//
+// why: a membership reaches a node only through SwarmState sync, which
+// carries no endpoints, so without the pull two Members joined through one
+// carrier never learn each other's endpoints and never link
+// (swarm-four-siblings).
+func TestNewMemberLinkLearnsTheMembersEndpoints(t *testing.T) {
+	a, b := astral.GenerateIdentity(), astral.GenerateIdentity()
+	f := newMemberLinksFixture(t, a)
+	f.requireLearned(t, a)
+
+	f.user.set(f.nodeID, a, b)
+	f.receive(t, &user.SwarmMemberJoined{NodeID: b})
+	f.requireLearned(t, b)
+
+	f.receive(t, &user.SwarmMemberJoined{NodeID: b})
+	f.requireLearned(t)
+}
+
+// TestEmptiedMemberSetStopsEveryMemberLink: a member set that reads empty,
+// as after the active contract is cleared or when this node holds its own
+// ban, stops the link task of every member and closes their links.
+func TestEmptiedMemberSetStopsEveryMemberLink(t *testing.T) {
+	a, b := astral.GenerateIdentity(), astral.GenerateIdentity()
+	f := newMemberLinksFixture(t, a, b)
+	f.requireRunning(t, a, b)
+
+	f.user.set()
+	f.receive(t, &user.SwarmMemberLeft{NodeID: f.nodeID})
+	f.requireClosed(t, a, b)
+	f.requireRunning(t)
 	f.requireNoClose(t)
 }
 

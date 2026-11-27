@@ -26,6 +26,9 @@ type memberLinks struct {
 	// close replaces CloseLinks for the links of a member that left.
 	// note: a test seam; nil in the running node.
 	close func(*astral.Identity) error
+	// learn replaces LearnMemberEndpoints for a new member.
+	// note: a test seam; nil in the running node.
+	learn func(*astral.Identity)
 }
 
 // memberLink is the running link task of one member and the cancel that stops it.
@@ -163,7 +166,11 @@ func (mod *Module) startMemberLink(member *astral.Identity) {
 	mod.log.Log("adding sibling %v", member)
 	mod.memberLinks.tasks[member.String()] = memberLink{task: task, cancel: scheduled.Cancel}
 
-	go mod.LearnMemberEndpoints(member)
+	learn := mod.LearnMemberEndpoints
+	if mod.memberLinks.learn != nil {
+		learn = mod.memberLinks.learn
+	}
+	go learn(member)
 }
 
 // wakeMemberLink makes the link task of id link now. It reports false when id

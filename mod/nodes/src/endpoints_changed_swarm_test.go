@@ -245,7 +245,7 @@ func natSwarm(t *testing.T) (a, b, c *swarmNode) {
 // EndpointsUpdatedEvent for B, within the announcement wait plus 1 s. No row
 // reaches A other than by that pull.
 // note: the EndpointsUpdatedEvent wakes A's link task for B at once
-// (mod/user TestEndpointsUpdatedEventWakesSiblingDuringBackoff), and the woken
+// (TestEndpointsUpdatedEventWakesSiblingDuringBackoff), and the woken
 // task dials the rows A now holds.
 func TestEndpointsChangeReachesNodeBehindNAT(t *testing.T) {
 	a, b, c := natSwarm(t)
