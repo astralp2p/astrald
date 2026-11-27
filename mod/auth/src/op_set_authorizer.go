@@ -2,8 +2,6 @@ package auth
 
 import (
 	"github.com/astralp2p/astral-go/api/auth"
-	"github.com/astralp2p/astral-go/api/nodes"
-	"github.com/astralp2p/astral-go/api/user"
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astral-go/astral/channel"
 	"github.com/astralp2p/astral-go/lib/routing"
@@ -29,24 +27,25 @@ type opSetAuthorizerArgs struct {
 // action type and, optionally, one actor. It answers Ack once the assignment is
 // persisted and applies to the next authorization.
 //
-// It admits only a local origin (astral.ErrOriginNotAllowed otherwise), and an
-// assignment for a SudoAction, an ExpelAction or a RelayForAction only from the
-// user (auth.ErrNotPermitted otherwise).
+// It admits only a local origin (astral.ErrOriginNotAllowed otherwise).
 //
 // why AdminManageApps: an assignment decides what an app may do on this node,
 // which is the administration of app authority that action covers.
 //
-// why the origin: the swarm root answers AdminManageApps for a Privileged node
-// at any hop, so a networked query would let another node install an authority
-// on this one.
+// why the origin: every AdminManageApps op that mints authority is local-only
+// (apphost.create_token refuses a network origin), and a relayed query arrives
+// with a network origin and the relayed caller.
 //
-// why the user for those three: the swarm root never answers a sudo or an
-// expel, and relays only as the user (D2, D6, D7). An authority for one of them
-// would answer what the root does not, so only the user installs one.
+// why no further check for an assignment for a user power: a local holder of
+// AdminManageApps mints tokens that authenticate as any identity, the user
+// included (apphost.create_token), so an authority it installs grants it
+// nothing it lacks.
 func (mod *Module) OpSetAuthorizer(ctx *astral.Context, q *routing.IncomingQuery, args opSetAuthorizerArgs) error {
 	ch := channel.New(q.AcceptRaw(), channel.WithFormats(args.In, args.Out))
 	defer ch.Close()
 
+	// why: the origin is admitted by name rather than refused by name, so an
+	// origin added later is refused until it is judged.
 	switch q.Origin() {
 	case "", astral.OriginLocal:
 	default:
@@ -54,10 +53,6 @@ func (mod *Module) OpSetAuthorizer(ctx *astral.Context, q *routing.IncomingQuery
 	}
 
 	if !mod.Authorize(ctx, &auth.AdminManageAppsAction{Action: auth.NewAction(q.Caller())}) {
-		return ch.Send(auth.ErrNotPermitted)
-	}
-
-	if userOnlyAuthorizer(args.Action) && !mod.isUser(q.Caller()) {
 		return ch.Send(auth.ErrNotPermitted)
 	}
 
@@ -83,24 +78,4 @@ func (mod *Module) OpSetAuthorizer(ctx *astral.Context, q *routing.IncomingQuery
 	mod.log.Logv(1, "authorizer for %v %v set to %v", args.Action, a.Actor, args.Endpoint)
 
 	return ch.Send(&astral.Ack{})
-}
-
-// userOnlyAuthorizer reports whether an authority for action answers what the
-// swarm root never does, so that only the user may install one.
-func userOnlyAuthorizer(action string) bool {
-	switch action {
-	case auth.SudoAction{}.ObjectType(), user.ExpelAction{}.ObjectType(), nodes.RelayForAction{}.ObjectType():
-		return true
-	}
-	return false
-}
-
-// isUser reports whether id is this node's user. Without the user module, or
-// on an unclaimed node, nobody is.
-func (mod *Module) isUser(id *astral.Identity) bool {
-	if mod.User == nil {
-		return false
-	}
-	userID := mod.User.Identity()
-	return !userID.IsZero() && id.IsEqual(userID)
 }

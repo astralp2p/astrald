@@ -17,9 +17,11 @@ type nodeLocal interface{ NodeLocal() }
 // authority attenuates and its flow is bounded by every issuer on the path.
 // A handler the auth module marks NodeLocal answers for the caller alone, so no
 // chain ends at one. A veto (AddVeto) refuses an identity at every level it
-// names, before anything else is asked. With the user module, the swarm's
-// root takes part in the walk, and only a contract the root issued grants one
-// of the user's powers (swarmReader).
+// names, before anything else is asked.
+//
+// note: the walk holds no identity above the others. The user's powers, and
+// what a Privileged node may do, are what their handlers allow.
+// Spec: .ai/system/protocols/auth/README.md#authority-in-a-swarm
 func (mod *Module) Authorize(ctx *astral.Context, action auth.ActionObject) bool {
 	// why: the anonymous identity is not a party, so nothing grants it an action.
 	// note: a contract lookup for a zero subject drops its subject filter.
@@ -50,15 +52,6 @@ func (mod *Module) authorize(ctx *astral.Context, action auth.ActionObject, hops
 		return false
 	}
 
-	// why before the handlers: the user's authority answers every action but
-	// an expel, at any hop, so nothing below it needs asking.
-	if mod.swarmRoot(action) {
-		if hopsBelow == 0 {
-			mod.log.Logv(1, "allow %v %v (swarm root)", actor, actionType)
-		}
-		return true
-	}
-
 	if mod.authorizeHandlers(ctx, action, hopsBelow) {
 		if hopsBelow == 0 {
 			mod.log.Logv(1, "allow %v %v", actor, actionType)
@@ -79,9 +72,6 @@ func (mod *Module) authorize(ctx *astral.Context, action auth.ActionObject, hops
 		// walk continues at the identity that signed it as issuer, never at a
 		// node that answered its request.
 		next := sc.Issuer
-		if mod.userPowerFromNonRoot(sc, action) {
-			continue
-		}
 		if _, seen := visited[next.String()]; seen {
 			continue
 		}

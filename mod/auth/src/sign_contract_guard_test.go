@@ -57,9 +57,8 @@ func (r *signRule) Sign(*astral.Context, *crypto.PublicKey, crypto.SignableTextO
 	return dummySig(), nil
 }
 
-// claimStub is the user module: its claim state, and the swarm the walk reads.
+// claimStub is the user module: its claim state alone.
 type claimStub struct {
-	*fakeSwarm
 	ready chan struct{}
 	user  *astral.Identity
 }
@@ -68,7 +67,7 @@ func (s *claimStub) Ready() <-chan struct{}     { return s.ready }
 func (s *claimStub) Identity() *astral.Identity { return s.user }
 
 func readyClaim(user *astral.Identity) *claimStub {
-	s := &claimStub{fakeSwarm: newFakeSwarm(), ready: make(chan struct{}), user: user}
+	s := &claimStub{ready: make(chan struct{}), user: user}
 	close(s.ready)
 	return s
 }
@@ -188,7 +187,7 @@ func TestAuthorizeContractNodeClaimState(t *testing.T) {
 			return r.node
 		}, false},
 		{"before the user module is ready", func(t *testing.T, r *guardRig) *astral.Identity {
-			r.mod.User = &claimStub{fakeSwarm: newFakeSwarm(), ready: make(chan struct{})}
+			r.mod.User = &claimStub{ready: make(chan struct{})}
 			var cancel func()
 			r.ctx, cancel = r.ctx.WithTimeout(50 * time.Millisecond)
 			t.Cleanup(cancel)

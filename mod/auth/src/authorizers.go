@@ -7,6 +7,9 @@ import (
 
 // AuthorizeSudo allows an identity to act as itself.
 //
+// note: acting as the user is therefore the user's alone. A contract the user
+// signs delegates it through the walk; no membership grants it.
+//
 // why the zero target is refused before the self test: Identity.IsEqual answers
 // true when both sides are zero, and Dir.ResolveIdentity maps the empty name and
 // "anyone" to the zero identity. An actor that arrives zero would otherwise pass

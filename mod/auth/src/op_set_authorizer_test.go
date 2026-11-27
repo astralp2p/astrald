@@ -43,8 +43,9 @@ func setAuthorizer(t *testing.T, mod *Module, caller *astral.Identity, origin an
 	return obj
 }
 
-// TestSetAuthorizerAdmitsALocalOriginOnly: a networked query is refused before
-// anything is asked, even from the user; a local one is admitted.
+// TestSetAuthorizerAdmitsALocalOriginOnly: a networked or MCP query is refused
+// before anything is asked, even from a holder of AdminManageApps, and installs
+// no authority; a local one is admitted.
 func TestSetAuthorizerAdmitsALocalOriginOnly(t *testing.T) {
 	for _, tc := range []struct {
 		origin  any
@@ -56,7 +57,7 @@ func TestSetAuthorizerAdmitsALocalOriginOnly(t *testing.T) {
 		{astral.OriginMCP, true},
 	} {
 		r := newSetAuthorizerRig(t)
-		got := setAuthorizer(t, r.mod, r.user, tc.origin, "test.action")
+		got := setAuthorizer(t, r.mod, r.holder, tc.origin, "test.action")
 		want := "ack"
 		if tc.refused {
 			want = astral.NewErrOriginNotAllowed(fmt.Sprint(tc.origin)).Error()
@@ -64,50 +65,51 @@ func TestSetAuthorizerAdmitsALocalOriginOnly(t *testing.T) {
 		if answer(got) != want {
 			t.Fatalf("origin %v: answered %v; want %q", tc.origin, got, want)
 		}
+		if _, ok := r.mod.external.Get("test.action"); ok == tc.refused {
+			t.Fatalf("origin %v: authority installed %v; want %v", tc.origin, ok, !tc.refused)
+		}
 	}
 }
 
-// TestSetAuthorizerLeavesUserAuthorityToTheUser: a caller holding
-// AdminManageApps that is not the user installs no authority for a sudo, an
-// expel or a relay; the user does, and the caller still installs one for any
-// other action.
-func TestSetAuthorizerLeavesUserAuthorityToTheUser(t *testing.T) {
+// TestSetAuthorizerAsksAdminManageAppsAlone: a local holder of AdminManageApps
+// installs an authority for any action, a user power included; a caller
+// without it installs none.
+func TestSetAuthorizerAsksAdminManageAppsAlone(t *testing.T) {
 	for _, action := range []string{
-		auth.SudoAction{}.ObjectType(), user.ExpelAction{}.ObjectType(), nodes.RelayForAction{}.ObjectType(),
+		auth.SeeObjectsAction{}.ObjectType(), auth.SudoAction{}.ObjectType(),
+		user.ExpelAction{}.ObjectType(), nodes.RelayForAction{}.ObjectType(),
 	} {
 		r := newSetAuthorizerRig(t)
-		if got := setAuthorizer(t, r.mod, r.privileged, nil, action); answer(got) != auth.ErrNotPermitted.Error() {
-			t.Fatalf("%s by a node: answered %v; want %v", action, got, auth.ErrNotPermitted)
+		if got := setAuthorizer(t, r.mod, r.holder, nil, action); answer(got) != "ack" {
+			t.Fatalf("%s by the holder: answered %v; want ack", action, got)
+		}
+		if _, ok := r.mod.external.Get(action); !ok {
+			t.Fatalf("%s by the holder: no authority installed", action)
+		}
+
+		r = newSetAuthorizerRig(t)
+		if got := setAuthorizer(t, r.mod, astral.GenerateIdentity(), nil, action); answer(got) != auth.ErrNotPermitted.Error() {
+			t.Fatalf("%s by an outsider: answered %v; want %v", action, got, auth.ErrNotPermitted)
 		}
 		if _, ok := r.mod.external.Get(action); ok {
-			t.Fatalf("%s by a node: the authority was installed", action)
+			t.Fatalf("%s by an outsider: the authority was installed", action)
 		}
-		if got := setAuthorizer(t, r.mod, r.user, nil, action); answer(got) != "ack" {
-			t.Fatalf("%s by the user: answered %v; want ack", action, got)
-		}
-	}
-
-	r := newSetAuthorizerRig(t)
-	if got := setAuthorizer(t, r.mod, r.privileged, nil, auth.SeeObjectsAction{}.ObjectType()); answer(got) != "ack" {
-		t.Fatalf("see_objects by a node: answered %v; want ack", got)
 	}
 }
 
 type setAuthorizerRig struct {
-	mod              *Module
-	user, privileged *astral.Identity
+	mod    *Module
+	holder *astral.Identity
 }
 
-// newSetAuthorizerRig is a claimed node where the user and a Privileged node
-// both hold AdminManageApps.
+// newSetAuthorizerRig is a node where holder alone holds AdminManageApps.
 func newSetAuthorizerRig(t *testing.T) *setAuthorizerRig {
 	t.Helper()
-	r := &setAuthorizerRig{user: astral.GenerateIdentity(), privileged: astral.GenerateIdentity()}
+	r := &setAuthorizerRig{holder: astral.GenerateIdentity()}
 	r.mod = boundModule(t, &leafNode{}, nil)
 	r.mod.node = &identityNode{id: astral.GenerateIdentity()}
-	r.mod.User = readyClaim(r.user)
 	r.mod.Add(authmod.Func[*auth.AdminManageAppsAction](func(_ *astral.Context, a *auth.AdminManageAppsAction) bool {
-		return a.Actor().IsEqual(r.user) || a.Actor().IsEqual(r.privileged)
+		return a.Actor().IsEqual(r.holder)
 	}))
 	return r
 }
