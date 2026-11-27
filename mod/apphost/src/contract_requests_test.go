@@ -119,8 +119,8 @@ func (s *fakeSwarmState) objects(kind user.EntryKind) []astral.Object {
 	return list
 }
 
-// fakeSwarmView is a user.SwarmView over a fakeSwarmState: declined beats
-// approved beats expired beats pending. ApprovalsTouching returns every
+// fakeSwarmView is a user.SwarmView over a fakeSwarmState: fulfilled beats
+// declined beats approved beats expired beats pending. ApprovalsTouching returns every
 // stored Approval, wider than the real view, so the host worker must pick its
 // own requests itself.
 type fakeSwarmView struct {
@@ -132,6 +132,11 @@ type fakeSwarmView struct {
 var _ hostSwarmView = &fakeSwarmView{}
 
 func (v *fakeSwarmView) RequestStatus(req *astral.ObjectID) user.RequestStatus {
+	for _, c := range v.ContractsOf(req) {
+		if c.IssuerSig != nil && c.SubjectSig != nil {
+			return user.RequestFulfilled
+		}
+	}
 	for _, obj := range v.state.objects(user.EntryDeclines) {
 		if obj.(*user.SignedDecline).RequestID.IsEqual(req) {
 			return user.RequestDeclined
@@ -157,9 +162,9 @@ func (v *fakeSwarmView) ApprovalsTouching(*astral.Identity) (list []*user.Signed
 	return list
 }
 
-func (v *fakeSwarmView) CarriedOut(approval *astral.ObjectID) (list []*auth.SignedContract) {
+func (v *fakeSwarmView) ContractsOf(req *astral.ObjectID) (list []*auth.SignedContract) {
 	for _, obj := range v.state.objects(user.EntryContracts) {
-		if c := obj.(*auth.SignedContract); c.ApprovalID.IsEqual(approval) {
+		if c := obj.(*auth.SignedContract); c.RequestID != nil && c.RequestID.IsEqual(req) {
 			list = append(list, c)
 		}
 	}
@@ -329,7 +334,7 @@ func TestHeldContractRequestIsFiledOnce(t *testing.T) {
 }
 
 // Done: a contract is signed only for the identity the approved request
-// names, carrying its ApprovalID, and only once.
+// names, carrying the request's entry ID as its RequestID, and only once.
 func TestApprovedRequestSignsContractForNamedIdentity(t *testing.T) {
 	swarm := newTestSwarm()
 	host := swarm.host()
@@ -341,7 +346,7 @@ func TestApprovedRequestSignsContractForNamedIdentity(t *testing.T) {
 		t.Fatalf("signed %v contracts before an Approval", n)
 	}
 
-	approvalID := swarm.answer(t, reqID, true)
+	swarm.answer(t, reqID, true)
 	mustPoll(t, host)
 	mustPoll(t, host)
 
@@ -355,8 +360,8 @@ func TestApprovedRequestSignsContractForNamedIdentity(t *testing.T) {
 		t.Errorf("issuer %v; want the host", c.Issuer)
 	case !c.Subject.IsEqual(app):
 		t.Errorf("subject %v; want the app the request names", c.Subject)
-	case !c.ApprovalID.IsEqual(approvalID):
-		t.Errorf("ApprovalID %v; want %v", c.ApprovalID, approvalID)
+	case !c.RequestID.IsEqual(reqID):
+		t.Errorf("RequestID %v; want %v", c.RequestID, reqID)
 	case !samePermits(&user.ContractRequest{Permits: c.Permits}, &user.ContractRequest{Permits: walletPermits()}):
 		t.Errorf("permits %v; want the requested ones", c.Permits)
 	case c.IssuerSig == nil:
@@ -399,12 +404,12 @@ func TestAnotherAppCannotReuseApproval(t *testing.T) {
 		t.Fatal("app B got app A's request")
 	}
 
-	approvalA := swarm.answer(t, reqA, true)
+	swarm.answer(t, reqA, true)
 	mustPoll(t, host)
 
 	contracts := swarm.contracts()
-	if len(contracts) != 1 || !contracts[0].Subject.IsEqual(appA) || !contracts[0].ApprovalID.IsEqual(approvalA) {
-		t.Fatalf("contracts %v; want only app A's, carrying A's Approval", contracts)
+	if len(contracts) != 1 || !contracts[0].Subject.IsEqual(appA) || !contracts[0].RequestID.IsEqual(reqA) {
+		t.Fatalf("contracts %v; want only app A's, naming A's request", contracts)
 	}
 	if c, err := host.Outcome(reqB); c != nil || err != nil {
 		t.Fatalf("app B's outcome %v, %v; want pending", c, err)
@@ -443,10 +448,10 @@ func TestMovedAppFilesFreshRequest(t *testing.T) {
 		t.Fatalf("the new host signed on the old host's Approval: %v contracts", n)
 	}
 
-	newApproval := swarm.answer(t, newReq, true)
+	swarm.answer(t, newReq, true)
 	mustPoll(t, newHost)
 	c, err := newHost.Outcome(newReq)
-	if err != nil || c == nil || !c.Issuer.IsEqual(newHost.node) || !c.ApprovalID.IsEqual(newApproval) {
+	if err != nil || c == nil || !c.Issuer.IsEqual(newHost.node) || !c.RequestID.IsEqual(newReq) {
 		t.Fatalf("new host outcome %v, %v; want its own contract on its own Approval", c, err)
 	}
 }
@@ -488,8 +493,9 @@ func TestContractRequestsAreRateLimited(t *testing.T) {
 	}
 }
 
-// A Decline, even after the contract, and an expiry reach the waiting app,
-// and the app then files a fresh request.
+// A Decline and an expiry reach the waiting app, and the app then files a
+// fresh request. A Decline after the contract leaves the contract: it only
+// closes the request (PR 4 decision Q1).
 func TestDeclineAndExpiryReachTheApp(t *testing.T) {
 	swarm := newTestSwarm()
 	host := swarm.host()
@@ -497,9 +503,16 @@ func TestDeclineAndExpiryReachTheApp(t *testing.T) {
 
 	declinedApp := astral.GenerateIdentity()
 	declined := mustFile(t, host, declinedApp, walletPermits())
-	swarm.answer(t, declined, true)
-	mustPoll(t, host)
 	swarm.answer(t, declined, false)
+	mustPoll(t, host)
+
+	signed := mustFile(t, host, astral.GenerateIdentity(), walletPermits())
+	swarm.answer(t, signed, true)
+	mustPoll(t, host)
+	swarm.answer(t, signed, false)
+	if c, err := host.Outcome(signed); c == nil || err != nil {
+		t.Fatalf("outcome after a late Decline %v, %v; want the signed contract", c, err)
+	}
 
 	expiring := mustFile(t, host, astral.GenerateIdentity(), walletPermits())
 	swarm.advance(user.RequestTimeout + time.Second)

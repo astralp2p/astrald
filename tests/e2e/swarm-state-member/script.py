@@ -9,7 +9,8 @@ membership and hands it over; node3 activates it. node2 and node3 then learn
 each other's endpoint, so every pair of the three can link: the scenarios
 after this one test authority, not how the swarm meshes.
 
-Records the `member_join` fact: {request_id, approval_id, membership}.
+Records the `member_join` fact: {request_id, status, membership_request,
+membership}.
 """
 import asyncio
 
@@ -47,7 +48,7 @@ async def main():
     await meet(n2, n3)
     membership = joined[0]["Object"]["Contract"]
     write_facts({"member_join": {"request_id": req.id, "status": approved.status,
-                                 "approval_id": membership.get("ApprovalID"),
+                                 "membership_request": membership.get("RequestID"),
                                  "membership": membership}})
     print(f"driver: node3 joined through node1 as member (request {req.id})")
 

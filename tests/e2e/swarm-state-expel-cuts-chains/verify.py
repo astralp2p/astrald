@@ -9,8 +9,8 @@ through it.
   discovery on node2 shows no wallet;
 - node1 and node2 still store the contract node3 issued for the front: the
   contract is there, and the expel of its issuer is what cuts the chain
-  (astral-docs protocols/user/types/mod.user.request_status.md and the
-  Approval link: an expel of the issuer, subject or approver vetoes it).
+  (astral-docs protocols/auth/README.md, Authority in a swarm: a walk
+  stops at an expelled party).
 """
 import asyncio
 
@@ -34,7 +34,7 @@ async def main():
         f"at the oracle, the front's chain through node3 still holds: {live}")
     for name, n in (("node1", n1), ("node2", n2)):
         issued = [c for c in ss.contracts_of(n, front) if c["Issuer"] == n3["identity"]
-                  and c.get("ApprovalID")]
+                  and c.get("RequestID")]
         assert issued, f"{name} no longer stores node3's contract for the front"
     print(f"oracle: expelling node3 cut the front's chain on node2 "
           f"({f['cut_after_s']:.1f} s); node3's contract is still stored")

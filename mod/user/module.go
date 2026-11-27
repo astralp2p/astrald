@@ -47,10 +47,14 @@ const (
 type SwarmView interface {
 	// RequestStatus returns the status of the request with entry ID req, in
 	// precedence order:
-	//   - user.RequestDeclined: a Decline names req, even after a contract
-	//     carried out an Approval of it; or the request was filed by, carried
-	//     by (JoinRequest.Carrier) or names (ContractRequest.Identity,
-	//     JoinRequest.Joiner) an expelled identity;
+	//   - user.RequestFulfilled: a stored contract with both signatures names
+	//     req as its RequestID and is given to the identity the request names
+	//     (ContractRequest.Identity, JoinRequest.Joiner) or to its filer
+	//     (ContractRequest.FiledBy). An ExpelRequest is never fulfilled;
+	//   - user.RequestDeclined: a Decline names req; or the request was filed
+	//     by, carried by (JoinRequest.Carrier) or names
+	//     (ContractRequest.Identity, JoinRequest.Joiner) an expelled identity.
+	//     A Decline closes the request and takes back no contract;
 	//   - user.RequestApproved: an Approval names req. An Approval counts
 	//     whenever it was given. An ExpelRequest is carried out by the root
 	//     key's user.SignedExpulsion naming its Subject, which counts as its
@@ -76,26 +80,25 @@ type SwarmView interface {
 	// defined.
 	ApprovalsTouching(node *astral.Identity) []*user.SignedApproval
 
-	// CarriedOut returns the stored contracts whose ApprovalID is approval, in
-	// no defined order, whether or not they have expired or their parties are
-	// expelled. A host or carrier calls it before signing, so an Approval is
-	// carried out once, and monitoring uses it to show "approved, not yet
-	// carried out".
-	CarriedOut(approval *astral.ObjectID) []*auth.SignedContract
+	// ContractsOf returns the stored contracts whose RequestID is req, in no
+	// defined order, whatever their signatures, expiry or the expels of their
+	// parties. A host or carrier calls it before signing, so a request is
+	// carried out once.
+	ContractsOf(req *astral.ObjectID) []*auth.SignedContract
 
 	// Membership returns id's membership: a stored membership contract
 	// (user.ContractTier reports a tier) whose Subject is id, that has not
-	// expired, and whose link holds:
-	//   - signed by the root key, at any tier, with or without an ApprovalID;
-	//     a membership at user.TierPrivilegedMember holds only this way (D2);
-	//   - or signed by a JoinRequest's Carrier, carrying out (ApprovalID) an
-	//     Approval of that JoinRequest, which names id as Joiner at the same
-	//     tier and is not declined; the Approval's signer may answer it
-	//     (user.MayAnswer), which the entry check already ensured on merge.
-	// The issuer's signature is required; the subject's is optional and, when
-	// present, verified on merge. It returns false when none holds or id, or
-	// the contract's issuer, is expelled. When several hold, it returns the
-	// one that expires last.
+	// expired, holds its tier's permit alone (user.TierOnly), and whose issuer
+	// may issue its tier:
+	//   - the root key, at any tier; a membership at
+	//     user.TierPrivilegedMember holds only this way (D2);
+	//   - or a member whose own membership holds and whose tier issues that
+	//     tier: Privileged issues Member and Trusted, Trusted issues Member.
+	// Its RequestID adds nothing. The issuer's signature is required; the
+	// subject's is optional and, when present, verified on merge. It returns
+	// false when none holds or id, or the contract's issuer, is expelled. When
+	// several hold, it returns the one of the highest tier, and among those
+	// the one that expires last.
 	Membership(id *astral.Identity) (*user.Membership, bool)
 
 	// MayAnswer reports whether signer may answer the stored request with

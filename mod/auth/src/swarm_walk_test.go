@@ -212,15 +212,15 @@ func TestSwarmWalkNeedsTheSubjectsSignature(t *testing.T) {
 	}
 }
 
-func seedLinkedContract(t *testing.T, mod *Module, issuer, subject *astral.Identity, approvalID *astral.ObjectID, permits ...*auth.Permit) {
+func seedLinkedContract(t *testing.T, mod *Module, issuer, subject *astral.Identity, requestID *astral.ObjectID, permits ...*auth.Permit) {
 	t.Helper()
 	sc := &auth.SignedContract{
 		Contract: &auth.Contract{
-			Issuer:     issuer,
-			Subject:    subject,
-			Permits:    permits,
-			ExpiresAt:  astral.Time(time.Now().Add(time.Hour)),
-			ApprovalID: approvalID,
+			Issuer:    issuer,
+			Subject:   subject,
+			Permits:   permits,
+			ExpiresAt: astral.Time(time.Now().Add(time.Hour)),
+			RequestID: requestID,
 		},
 		IssuerSig:  dummySig(),
 		SubjectSig: dummySig(),
@@ -327,26 +327,27 @@ func TestSwarmRootRequiresTheRootKeysSignature(t *testing.T) {
 	}
 }
 
-// TestContractIndexKeepsTheApprovalID: the walk rebuilds contracts from the
-// index, so a link survives it and a contract with none stays unlinked.
-func TestContractIndexKeepsTheApprovalID(t *testing.T) {
+// TestContractIndexKeepsTheRequestID: the index rebuilds contracts from its
+// rows, so a contract's RequestID, part of its signed body, survives it, and
+// a contract with none stays without one.
+func TestContractIndexKeepsTheRequestID(t *testing.T) {
 	ctx := astral.NewContext(nil)
 	mod := testModule(t)
 	issuer, linked, plain := astral.GenerateIdentity(), astral.GenerateIdentity(), astral.GenerateIdentity()
-	approvalID, err := astral.ResolveObjectID(&astral.Ack{})
+	requestID, err := astral.ResolveObjectID(&astral.Ack{})
 	if err != nil {
 		t.Fatal(err)
 	}
-	seedLinkedContract(t, mod, issuer, linked, approvalID, permit(0))
+	seedLinkedContract(t, mod, issuer, linked, requestID, permit(0))
 	seedContract(t, mod, issuer, plain, permit(0))
 
 	got, err := mod.SignedContracts().WithSubject(linked).Find(ctx)
-	if err != nil || len(got) != 1 || !got[0].ApprovalID.IsEqual(approvalID) {
-		t.Fatalf("linked contract: want ApprovalID %v, got %v (err %v)", approvalID, got, err)
+	if err != nil || len(got) != 1 || !got[0].RequestID.IsEqual(requestID) {
+		t.Fatalf("linked contract: want RequestID %v, got %v (err %v)", requestID, got, err)
 	}
 	got, err = mod.SignedContracts().WithSubject(plain).Find(ctx)
-	if err != nil || len(got) != 1 || got[0].ApprovalID != nil {
-		t.Fatalf("plain contract: want no ApprovalID, got %v (err %v)", got, err)
+	if err != nil || len(got) != 1 || got[0].RequestID != nil {
+		t.Fatalf("plain contract: want no RequestID, got %v (err %v)", got, err)
 	}
 }
 

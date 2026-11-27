@@ -7,8 +7,8 @@ allowed by its contract chain, and denied without it.
 - after the User approves front's request, front's local discovery shows the
   wallet within 60 s, and still does at the oracle (read live), and the
   wallet spends 50 for front;
-- node3 stores the contract that carries front's Approval out: issued by
-  node3 for front, with an ApprovalID naming an Approval of front's request;
+- node3 stores the contract that carries front's request out: issued by
+  node3 for front, naming that request as its RequestID;
 - other, whose request the User declined, still sees no wallet, at the
   driver and at the oracle, and node3 lists its request as declined;
 - a direct call of the wallet is refused for front before its Approval and
@@ -69,9 +69,8 @@ async def main():
               if e["Type"] == "mod.auth.signed_contract"
               and e["Object"]["Contract"].get("Subject") == front
               and e["Object"]["Contract"].get("Issuer") == n3["identity"]
-              and (entries.get(e["Object"]["Contract"].get("ApprovalID") or "") or {})
-              .get("Object", {}).get("Approval", {}).get("RequestID") == f["front_request"]]
-    assert linked, "node3 stores no contract for front carrying an Approval of its request"
+              and e["Object"]["Contract"].get("RequestID") == f["front_request"]]
+    assert linked, "node3 stores no contract for front naming its request"
 
     assert wallet not in f["other_after"], "the declined app saw the wallet"
     assert wallet not in ss.discover(n3, f["other"]["token"], "local"), (

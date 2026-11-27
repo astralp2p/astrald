@@ -56,7 +56,7 @@ type hostSwarmState interface {
 type hostSwarmView interface {
 	RequestStatus(req *astral.ObjectID) user.RequestStatus
 	ApprovalsTouching(node *astral.Identity) []*user.SignedApproval
-	CarriedOut(approval *astral.ObjectID) []*auth.SignedContract
+	ContractsOf(req *astral.ObjectID) []*auth.SignedContract
 	Membership(id *astral.Identity) (*user.Membership, bool)
 }
 
@@ -162,7 +162,7 @@ func (cr *contractRequests) findLive(app *astral.Identity, permits []*auth.Permi
 			continue
 		}
 		switch cr.view.RequestStatus(c.id) {
-		case user.RequestApproved:
+		case user.RequestApproved, user.RequestFulfilled:
 			return c.id
 		case user.RequestPending:
 			if !r.Expired(cr.now()) {
@@ -226,8 +226,7 @@ func (cr *contractRequests) ownRequest(id *astral.ObjectID) *user.SignedContract
 // contract and adds it to SwarmState. It then wakes every Wait.
 //
 // The contract names exactly the identity and permits of the approved request
-// and carries the entry ID of the Approval, so one app's Approval never
-// becomes another app's contract. A request another node filed is that
+// and carries the request's entry ID as its RequestID. A request another node filed is that
 // node's to carry out, even when it names an app hosted here: an app moved
 // here files its own request.
 func (cr *contractRequests) Poll(ctx *astral.Context) error {
@@ -245,7 +244,7 @@ func (cr *contractRequests) Poll(ctx *astral.Context) error {
 		if cr.carriedOut(a.request, req) != nil {
 			continue
 		}
-		if err := cr.carryOut(ctx, a.request, a.approval, req); err != nil {
+		if err := cr.carryOut(ctx, a.request, req); err != nil {
 			errs = append(errs, err)
 		}
 	}
@@ -286,13 +285,13 @@ func (cr *contractRequests) approvalsByRequest() []requestApproval {
 
 // carryOut signs the contract of an approved request and adds it to
 // SwarmState.
-func (cr *contractRequests) carryOut(ctx *astral.Context, reqID, approvalID *astral.ObjectID, req *user.SignedContractRequest) error {
+func (cr *contractRequests) carryOut(ctx *astral.Context, reqID *astral.ObjectID, req *user.SignedContractRequest) error {
 	signed := &auth.SignedContract{Contract: &auth.Contract{
-		Issuer:     cr.node,
-		Subject:    req.Identity,
-		Permits:    req.Permits,
-		ExpiresAt:  astral.Time(cr.contractExpiry()),
-		ApprovalID: approvalID,
+		Issuer:    cr.node,
+		Subject:   req.Identity,
+		Permits:   req.Permits,
+		ExpiresAt: astral.Time(cr.contractExpiry()),
+		RequestID: reqID,
 	}}
 	if err := cr.signer.SignContract(ctx, signed); err != nil {
 		return fmt.Errorf("sign contract for %v: %w", req.Identity, err)
@@ -320,25 +319,15 @@ func (cr *contractRequests) contractExpiry() time.Time {
 }
 
 // carriedOut returns the contract this node signed for the request with entry
-// ID reqID, carrying out one of its Approvals, or nil.
+// ID reqID, or nil.
 func (cr *contractRequests) carriedOut(reqID *astral.ObjectID, req *user.SignedContractRequest) *auth.SignedContract {
 	if c, ok := cr.signed.Get(reqID.String()); ok {
 		return c
 	}
-
-	for _, a := range cr.view.ApprovalsTouching(cr.node) {
-		if a == nil || a.Approval == nil || !a.RequestID.IsEqual(reqID) {
-			continue
-		}
-		aid, err := astral.ResolveObjectID(a)
-		if err != nil {
-			continue
-		}
-		for _, c := range cr.view.CarriedOut(aid) {
-			if c != nil && c.Contract != nil && c.Issuer.IsEqual(cr.node) &&
-				c.Subject.IsEqual(req.Identity) && req.Covers(c.Contract) {
-				return c
-			}
+	for _, c := range cr.view.ContractsOf(reqID) {
+		if c != nil && c.Contract != nil && c.Issuer.IsEqual(cr.node) &&
+			c.Subject.IsEqual(req.Identity) && req.Covers(c.Contract) {
+			return c
 		}
 	}
 	return nil
@@ -349,8 +338,9 @@ func (cr *contractRequests) carriedOut(reqID *astral.ObjectID, req *user.SignedC
 // ErrContractRequestExpired. Both are nil while the request is pending, or
 // approved but not carried out yet.
 //
-// why a Decline wins over a signed contract: it is the swarm's verdict, and
-// the chain check fails from then on (decided 2026-11-25).
+// why a signed contract wins over a Decline: a Decline only closes its
+// request, and a contract both parties signed keeps its authority (PR 4
+// decision Q1).
 func (cr *contractRequests) Outcome(reqID *astral.ObjectID) (*auth.SignedContract, error) {
 	req := cr.ownRequest(reqID)
 	if req == nil {
@@ -359,7 +349,7 @@ func (cr *contractRequests) Outcome(reqID *astral.ObjectID) (*auth.SignedContrac
 	switch cr.view.RequestStatus(reqID) {
 	case user.RequestDeclined:
 		return nil, apphostmod.ErrContractDeclined
-	case user.RequestApproved:
+	case user.RequestApproved, user.RequestFulfilled:
 		return cr.carriedOut(reqID, req), nil
 	case user.RequestExpired:
 		return nil, apphostmod.ErrContractRequestExpired

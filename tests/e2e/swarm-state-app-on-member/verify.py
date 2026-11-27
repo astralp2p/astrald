@@ -9,12 +9,12 @@ its limits.
 - before the Approval, a direct call of the wallet by the front is refused
   on node2 (Gate 1 for a query: services' query gate, which asks the
   front's discovery permit for the wallet on node2 through its chain);
-- node1, a Privileged node, signed the Approval, and the request is approved
-  on node1 and on node3;
+- node1, a Privileged node, signed the Approval, and the request is
+  fulfilled on node1 and on node3;
 - within 60 s of the Approval the front's swarm discovery shows the wallet,
   and it still does at the oracle (read live);
-- node3 holds the contract that carries the Approval out: issued by node3
-  for the front, with that Approval's ID;
+- node3 holds the contract that carries the request out: issued by node3
+  for the front, naming the request as its RequestID;
 - the wallet spends 50 for the front and refuses 500 with its own error.
 """
 import asyncio
@@ -49,19 +49,14 @@ async def main():
 
     async with await astral.connect(n1["endpoint"], token=doc["facts"]["user_token"]) as cu:
         status = await ss.status_of(cu, f["request_id"])
-    assert status == "approved", f"node1 lists the front's request as {status}"
+    assert status == "fulfilled", f"node1 lists the front's request as {status}"
     async with await astral.connect(n3["endpoint"], token=n3["token"]) as c3:
         status = await ss.status_of(c3, f["request_id"])
     contracts = ss.contracts_of(n3, front)
-    assert status == "approved", f"node3 lists the front's request as {status}"
-    approvals = [c for c in contracts if c.get("ApprovalID")]
-    assert any(c["Issuer"] == n3["identity"] for c in approvals), (
-        f"node3 holds no contract it issued for the front with an ApprovalID: {contracts}")
-    approval_id = approvals[0]["ApprovalID"]
-    approval = ss.entry_on(n1, approval_id)
-    assert approval and approval["Approval"]["Issuer"] == f["approver"] and \
-        approval["Approval"]["RequestID"] == f["request_id"], (
-        f"the contract's Approval {approval_id} is not node1's of {f['request_id']}: {approval}")
+    assert status == "fulfilled", f"node3 lists the front's request as {status}"
+    linked = [c for c in contracts if c.get("RequestID") == f["request_id"]]
+    assert any(c["Issuer"] == n3["identity"] for c in linked), (
+        f"node3 holds no contract it issued for the front naming its request: {contracts}")
 
     assert "answer" in f["spend_50"] and front in f["spend_50"]["answer"], (
         f"the wallet did not spend 50 for the front: {f['spend_50']}")

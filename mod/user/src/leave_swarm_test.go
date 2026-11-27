@@ -48,7 +48,7 @@ func TestExpelledNodeLeavesItsSwarmWhenTheClearFails(t *testing.T) {
 		t.Fatalf("ReceiveObject(own ban): %v", err)
 	}
 
-	requireLeft(t, events, a, b, f.nodeID)
+	requireBanned(t, events, f.nodeID, a, b, f.nodeID)
 	if f.mod.ActiveContract() == nil {
 		t.Fatal("the active contract was cleared; want the clear to fail")
 	}

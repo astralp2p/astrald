@@ -10,12 +10,13 @@ import (
 	"github.com/astralp2p/astral-go/astral"
 )
 
-// TestSwarmViewDeclineBeatsLaterApproval is the working paper's "a Decline
-// always wins": the offline Desktop declines R1 at 10:01, the Laptop approves
-// it at 10:05 and the Pi signs App A's contract at 10:06. Once both answers
-// have synced (11:00), R1 is declined on every node, in either merge order,
-// although its contract stays stored.
-func TestSwarmViewDeclineBeatsLaterApproval(t *testing.T) {
+// TestSwarmViewDeclineClosesOnlyTheRequest: the offline Desktop declines R1
+// at 10:01, the Laptop approves it at 10:05 and the Pi signs App A's contract
+// at 10:06. A Decline closes the request but takes back no contract both
+// parties signed (PR 4 decision Q1), so once both answers have synced R1 is
+// fulfilled on every node, in either merge order; without the contract it is
+// declined.
+func TestSwarmViewDeclineClosesOnlyTheRequest(t *testing.T) {
 	for _, declineFirst := range []bool{true, false} {
 		f := newViewFixture(t)
 		r1 := f.add(f.contractRequest(f.pi, f.appA, viewClock(10, 0)))
@@ -26,168 +27,122 @@ func TestSwarmViewDeclineBeatsLaterApproval(t *testing.T) {
 		if declineFirst {
 			f.add(decline)
 			approvalID = f.add(approval)
+			f.wantStatus(r1, user.RequestDeclined)
 		} else {
 			approvalID = f.add(approval)
 			f.now = viewClock(10, 6)
 			f.wantStatus(r1, user.RequestApproved)
-			f.add(f.appContract(f.pi, f.appA, approvalID))
-			f.add(decline)
 		}
+		contract := f.appContract(f.pi, f.appA, r1)
+		f.add(contract)
+		f.add(decline)
 
 		f.now = viewClock(11, 0)
-		f.wantStatus(r1, user.RequestDeclined)
-		if declineFirst {
-			f.add(f.appContract(f.pi, f.appA, approvalID))
+		f.wantStatus(r1, user.RequestFulfilled)
+		if !f.view.snapshot().ContractCounts(contract) {
+			t.Fatal("the contract signed by both stopped counting after the Decline")
 		}
-		f.wantStatus(r1, user.RequestDeclined)
-		if n := len(f.view.CarriedOut(approvalID)); n != 1 {
-			t.Fatalf("CarriedOut = %d contracts, want the 10:06 contract", n)
+		if n := len(f.view.ContractsOf(r1)); n != 1 {
+			t.Fatalf("ContractsOf = %d contracts, want the 10:06 contract", n)
 		}
-		// why: the Pi still sees the Approval and checks RequestStatus first.
 		if !hasViewApproval(f.view.ApprovalsTouching(f.pi), approvalID) {
-			t.Fatal("ApprovalsTouching(Pi) misses the since-declined Approval")
+			t.Fatal("ApprovalsTouching(Pi) misses the Approval")
 		}
 		if f.view.ApprovedNotCarriedOut(r1) {
-			t.Fatal("a declined request reported as approved, not yet carried out")
+			t.Fatal("a fulfilled request reported as approved, not yet carried out")
 		}
 	}
 }
 
-// TestSwarmViewDeclinedJoinCutsMembership applies the same rule to a join: a
-// Decline after the carrier signed the membership makes that membership fail.
-func TestSwarmViewDeclinedJoinCutsMembership(t *testing.T) {
+// TestSwarmViewDeclineKeepsASignedMembership applies the same rule to a join:
+// a Decline after the carrier and the joiner signed the membership leaves it
+// holding.
+func TestSwarmViewDeclineKeepsASignedMembership(t *testing.T) {
 	f := newViewFixture(t)
 	sensor := astral.GenerateIdentity()
 	r := f.add(f.joinRequest(sensor, f.phone, user.TierMember, viewClock(10, 0)))
-	a := f.add(f.approval(f.laptop, r))
-	f.add(f.member(f.phone, sensor, user.TierMember, a))
+	f.add(f.member(f.phone, sensor, user.TierMember, r))
 	f.wantMembership(sensor, true)
 
 	f.add(f.decline(f.desktop, r))
-	f.wantStatus(r, user.RequestDeclined)
-	f.wantMembership(sensor, false)
+	f.wantStatus(r, user.RequestFulfilled)
+	f.wantMembership(sensor, true)
 }
 
-// TestSwarmViewMemberApproval covers both sides of a Member and an Approval in
-// the working paper: an Approval of a request a Member filed touches that
-// Member, which acts on it; an Approval a Member signed carries no authority,
-// so a membership resting on it does not hold.
+// TestSwarmViewMemberApproval: an Approval of a request a Member filed touches
+// that Member, which acts on it.
 func TestSwarmViewMemberApproval(t *testing.T) {
-	t.Run("touches the Member that filed it", func(t *testing.T) {
-		f := newViewFixture(t)
-		r1 := f.add(f.contractRequest(f.pi, f.appA, viewClock(10, 0)))
-		a := f.add(f.approval(f.laptop, r1))
-		for _, c := range []struct {
-			name string
-			node *astral.Identity
-			want bool
-		}{
-			{"filer Pi", f.pi, true},
-			{"named App A", f.appA, true},
-			{"approver Laptop", f.laptop, false},
-			{"bystander Phone", f.phone, false},
-		} {
-			if got := hasViewApproval(f.view.ApprovalsTouching(c.node), a); got != c.want {
-				t.Errorf("%s: touched = %v, want %v", c.name, got, c.want)
-			}
+	f := newViewFixture(t)
+	r1 := f.add(f.contractRequest(f.pi, f.appA, viewClock(10, 0)))
+	a := f.add(f.approval(f.laptop, r1))
+	for _, c := range []struct {
+		name string
+		node *astral.Identity
+		want bool
+	}{
+		{"filer Pi", f.pi, true},
+		{"named App A", f.appA, true},
+		{"approver Laptop", f.laptop, false},
+		{"bystander Phone", f.phone, false},
+	} {
+		if got := hasViewApproval(f.view.ApprovalsTouching(c.node), a); got != c.want {
+			t.Errorf("%s: touched = %v, want %v", c.name, got, c.want)
 		}
-	})
-
-	t.Run("approver tier", func(t *testing.T) {
-		for _, c := range []struct {
-			name     string
-			approver func(f *viewFixture) *astral.Identity
-			tier     user.Tier
-			want     bool
-		}{
-			{"Member approves Member join", func(f *viewFixture) *astral.Identity { return f.pi }, user.TierMember, false},
-			{"Trusted approves Member join", func(f *viewFixture) *astral.Identity { return f.phone }, user.TierMember, true},
-			{"Privileged approves Member join", func(f *viewFixture) *astral.Identity { return f.laptop }, user.TierMember, true},
-			{"user key approves Member join", func(f *viewFixture) *astral.Identity { return f.user }, user.TierMember, true},
-			{"Trusted approves Trusted join", func(f *viewFixture) *astral.Identity { return f.phone }, user.TierTrusted, false},
-			{"Privileged approves Trusted join", func(f *viewFixture) *astral.Identity { return f.laptop }, user.TierTrusted, true},
-			{"carrier signs a Privileged membership", func(f *viewFixture) *astral.Identity { return f.user }, user.TierPrivilegedMember, false},
-		} {
-			t.Run(c.name, func(t *testing.T) {
-				f := newViewFixture(t)
-				joiner := astral.GenerateIdentity()
-				r := f.add(f.joinRequest(joiner, f.laptop, c.tier, viewClock(10, 0)))
-				a := f.add(f.approval(c.approver(f), r))
-				f.add(f.member(f.laptop, joiner, c.tier, a))
-				f.wantMembership(joiner, c.want)
-			})
-		}
-	})
-
-	// why: each row breaks one condition of the link rule against an
-	// Approval the Desktop gave to a Member-tier JoinRequest the Laptop
-	// carries; only the unbroken row holds.
-	t.Run("link", func(t *testing.T) {
-		for _, c := range []struct {
-			name string
-			link func(f *viewFixture, joiner *astral.Identity, a *astral.ObjectID) (*astral.Identity, *auth.SignedContract)
-			want bool
-		}{
-			{"the carrier signs the approved tier for the joiner", func(f *viewFixture, j *astral.Identity, a *astral.ObjectID) (*astral.Identity, *auth.SignedContract) {
-				return j, f.member(f.laptop, j, user.TierMember, a)
-			}, true},
-			{"a non-carrier signs", func(f *viewFixture, j *astral.Identity, a *astral.ObjectID) (*astral.Identity, *auth.SignedContract) {
-				return j, f.member(f.phone, j, user.TierMember, a)
-			}, false},
-			{"the carrier signs for another subject", func(f *viewFixture, j *astral.Identity, a *astral.ObjectID) (*astral.Identity, *auth.SignedContract) {
-				other := astral.GenerateIdentity()
-				return other, f.member(f.laptop, other, user.TierMember, a)
-			}, false},
-			{"the carrier signs a higher tier than approved", func(f *viewFixture, j *astral.Identity, a *astral.ObjectID) (*astral.Identity, *auth.SignedContract) {
-				return j, f.member(f.laptop, j, user.TierTrusted, a)
-			}, false},
-			{"the carrier signs without an Approval", func(f *viewFixture, j *astral.Identity, a *astral.ObjectID) (*astral.Identity, *auth.SignedContract) {
-				return j, f.member(f.laptop, j, user.TierMember, nil)
-			}, false},
-		} {
-			t.Run(c.name, func(t *testing.T) {
-				f := newViewFixture(t)
-				joiner := astral.GenerateIdentity()
-				r := f.add(f.joinRequest(joiner, f.laptop, user.TierMember, viewClock(10, 0)))
-				a := f.add(f.approval(f.desktop, r))
-				subject, m := c.link(f, joiner, a)
-				f.add(m)
-				f.wantMembership(subject, c.want)
-			})
-		}
-	})
-
-	// why: the Approval of a ContractRequest authorizes a contract, never a
-	// membership, even one its named identity would need.
-	t.Run("ContractRequest Approval", func(t *testing.T) {
-		f := newViewFixture(t)
-		r1 := f.add(f.contractRequest(f.laptop, f.appA, viewClock(10, 0)))
-		a := f.add(f.approval(f.desktop, r1))
-		f.wantStatus(r1, user.RequestApproved)
-		f.add(f.member(f.laptop, f.appA, user.TierMember, a))
-		f.wantMembership(f.appA, false)
-	})
+	}
 }
 
-// TestSwarmViewCarriedOutMatchesApproval: CarriedOut returns only the
-// contracts carrying out the given Approval, not those of another one.
-func TestSwarmViewCarriedOutMatchesApproval(t *testing.T) {
+// TestSwarmViewIssuerTierBoundsTheMembership: a membership holds only when its
+// issuer may issue its tier (swarmset.MayIssue): the user key any tier, a
+// Privileged member Member and Trusted, a Trusted member Member, a Member none.
+// Its RequestID and any Approval add nothing.
+//
+// note: ported from the Approval-link rows ("approver tier", "link",
+// "ContractRequest Approval"); a membership rests on no Approval since the
+// two-signature model, so the rows now vary the issuer.
+func TestSwarmViewIssuerTierBoundsTheMembership(t *testing.T) {
+	for _, c := range []struct {
+		name   string
+		issuer func(f *viewFixture) *astral.Identity
+		tier   user.Tier
+		want   bool
+	}{
+		{"Member issues Member", func(f *viewFixture) *astral.Identity { return f.pi }, user.TierMember, false},
+		{"Trusted issues Member", func(f *viewFixture) *astral.Identity { return f.phone }, user.TierMember, true},
+		{"Trusted issues Trusted", func(f *viewFixture) *astral.Identity { return f.phone }, user.TierTrusted, false},
+		{"Privileged issues Member", func(f *viewFixture) *astral.Identity { return f.laptop }, user.TierMember, true},
+		{"Privileged issues Trusted", func(f *viewFixture) *astral.Identity { return f.laptop }, user.TierTrusted, true},
+		{"Privileged issues Privileged", func(f *viewFixture) *astral.Identity { return f.laptop }, user.TierPrivilegedMember, false},
+		{"user key issues Privileged", func(f *viewFixture) *astral.Identity { return f.user }, user.TierPrivilegedMember, true},
+		{"stranger issues Member", func(*viewFixture) *astral.Identity { return astral.GenerateIdentity() }, user.TierMember, false},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			f := newViewFixture(t)
+			joiner := astral.GenerateIdentity()
+			r := f.add(f.joinRequest(joiner, f.laptop, c.tier, viewClock(10, 0)))
+			f.add(f.approval(f.user, r))
+			f.add(f.member(c.issuer(f), joiner, c.tier, r))
+			f.wantMembership(joiner, c.want)
+		})
+	}
+}
+
+// TestSwarmViewContractsOfMatchesRequest: ContractsOf returns only the
+// contracts that name the given request, not those of another one.
+func TestSwarmViewContractsOfMatchesRequest(t *testing.T) {
 	f := newViewFixture(t)
 	appB := astral.GenerateIdentity()
 	r1 := f.add(f.contractRequest(f.pi, f.appA, viewClock(10, 0)))
 	r2 := f.add(f.contractRequest(f.pi, appB, viewClock(10, 0)))
-	a1 := f.add(f.approval(f.laptop, r1))
-	a2 := f.add(f.approval(f.laptop, r2))
-	f.add(f.appContract(f.pi, f.appA, a1))
-	f.add(f.appContract(f.pi, appB, a2))
+	f.add(f.appContract(f.pi, f.appA, r1))
+	f.add(f.appContract(f.pi, appB, r2))
 	f.add(f.appContract(f.pi, appB, nil))
 	for _, c := range []struct {
-		approval *astral.ObjectID
-		subject  *astral.Identity
-	}{{a1, f.appA}, {a2, appB}} {
-		got := f.view.CarriedOut(c.approval)
-		if len(got) != 1 || !got[0].Subject.IsEqual(c.subject) || !got[0].ApprovalID.IsEqual(c.approval) {
-			t.Fatalf("CarriedOut = %d contracts, want only the one carrying out this Approval", len(got))
+		req     *astral.ObjectID
+		subject *astral.Identity
+	}{{r1, f.appA}, {r2, appB}} {
+		got := f.view.ContractsOf(c.req)
+		if len(got) != 1 || !got[0].Subject.IsEqual(c.subject) || !got[0].RequestID.IsEqual(c.req) {
+			t.Fatalf("ContractsOf = %d contracts, want only the one naming this request", len(got))
 		}
 	}
 }
@@ -263,46 +218,36 @@ func TestSwarmViewReadErrorKeepsHeldEntries(t *testing.T) {
 	}
 }
 
-// TestSwarmViewExpelAfterApproval is "an expel beats everything signed by or
-// for the expelled node": the Laptop approves the sensor's join, the Phone
-// carries it out, and then the user key expels one of them.
-func TestSwarmViewExpelAfterApproval(t *testing.T) {
+// TestSwarmViewExpelCutsAMembership is "an expel beats everything signed by or
+// for the expelled node": the Phone signs the sensor's membership, and then
+// the user key expels one of them. The request stays fulfilled.
+func TestSwarmViewExpelCutsAMembership(t *testing.T) {
 	for _, c := range []struct {
 		name       string
 		expel      func(f *viewFixture, sensor *astral.Identity) *astral.Identity
-		wantStatus user.RequestStatus
 		wantMember bool
-		wantTouch  bool
 	}{
-		{"nobody", func(f *viewFixture, s *astral.Identity) *astral.Identity { return nil }, user.RequestApproved, true, true},
-		{"the joiner", func(f *viewFixture, s *astral.Identity) *astral.Identity { return s }, user.RequestDeclined, false, true},
-		{"the carrier", func(f *viewFixture, s *astral.Identity) *astral.Identity { return f.phone }, user.RequestDeclined, false, true},
-		{"the approver", func(f *viewFixture, s *astral.Identity) *astral.Identity { return f.laptop }, user.RequestPending, false, false},
-		{"a bystander", func(f *viewFixture, s *astral.Identity) *astral.Identity { return f.pi }, user.RequestApproved, true, true},
+		{"nobody", func(f *viewFixture, s *astral.Identity) *astral.Identity { return nil }, true},
+		{"the joiner", func(f *viewFixture, s *astral.Identity) *astral.Identity { return s }, false},
+		{"the carrier", func(f *viewFixture, s *astral.Identity) *astral.Identity { return f.phone }, false},
+		{"a bystander", func(f *viewFixture, s *astral.Identity) *astral.Identity { return f.pi }, true},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			f := newViewFixture(t)
 			sensor := astral.GenerateIdentity()
 			r := f.add(f.joinRequest(sensor, f.phone, user.TierMember, viewClock(10, 0)))
-			a := f.add(f.approval(f.laptop, r))
-			f.add(f.member(f.phone, sensor, user.TierMember, a))
+			f.add(f.member(f.phone, sensor, user.TierMember, r))
 			f.wantMembership(sensor, true)
 
 			f.now = viewClock(10, 30)
-			expelled := c.expel(f, sensor)
-			if expelled != nil {
+			if expelled := c.expel(f, sensor); expelled != nil {
 				f.add(f.expulsion(f.user, expelled))
 				if !f.view.Expelled(expelled) {
 					t.Fatal("Expelled = false after the Expulsion")
 				}
 			}
-			f.wantStatus(r, c.wantStatus)
+			f.wantStatus(r, user.RequestFulfilled)
 			f.wantMembership(sensor, c.wantMember)
-			// note: only the approver's expel removes its Approval; the
-			// carrier then reads the declined status before acting.
-			if got := hasViewApproval(f.view.ApprovalsTouching(f.phone), a); got != c.wantTouch {
-				t.Fatalf("ApprovalsTouching(carrier) has the Approval = %v, want %v", got, c.wantTouch)
-			}
 		})
 	}
 }
@@ -324,17 +269,14 @@ func TestSwarmViewExpelRequestCarriedOut(t *testing.T) {
 }
 
 // TestSwarmViewResumedJoinRequest is "Resuming a join": the Pi signs R5 naming
-// the Laptop as carrier at 10:00, the connection drops, the Desktop approves at
-// 10:30, and the Pi resends the same object at 10:40 and again at 10:50.
+// the Laptop as carrier at 10:00, the connection drops, and the Pi resends the
+// same object at 10:40 and, after the membership was stored, at 10:50.
 func TestSwarmViewResumedJoinRequest(t *testing.T) {
 	f := newViewFixture(t)
 	sensor := astral.GenerateIdentity()
 	r5obj := f.joinRequest(sensor, f.laptop, user.TierMember, viewClock(10, 0))
 	r5 := f.add(r5obj)
 	f.wantStatus(r5, user.RequestPending)
-
-	f.now = viewClock(10, 30)
-	a := f.add(f.approval(f.desktop, r5))
 	head := f.state.SwarmHead()
 
 	f.now = viewClock(10, 40)
@@ -342,26 +284,21 @@ func TestSwarmViewResumedJoinRequest(t *testing.T) {
 	if id := f.add(resent); !id.IsEqual(r5) || f.state.SwarmHead() != head {
 		t.Fatal("the resent JoinRequest is a new entry")
 	}
-	f.wantStatus(r5, user.RequestApproved)
-	if len(f.view.CarriedOut(a)) != 0 || !f.view.ApprovedNotCarriedOut(r5) {
-		t.Fatal("want approved, not yet carried out")
-	}
-	if !hasViewApproval(f.view.ApprovalsTouching(f.laptop), a) {
-		t.Fatal("ApprovalsTouching(carrier) misses the Approval given while apart")
+	f.wantStatus(r5, user.RequestPending)
+	if len(f.view.ContractsOf(r5)) != 0 {
+		t.Fatal("want no membership yet")
 	}
 
-	f.add(f.member(f.laptop, sensor, user.TierMember, a))
+	f.add(f.member(f.laptop, sensor, user.TierMember, r5))
 	f.wantMembership(sensor, true)
-	if f.view.ApprovedNotCarriedOut(r5) {
-		t.Fatal("still not carried out after the membership was stored")
-	}
+	f.wantStatus(r5, user.RequestFulfilled)
 
 	// why: the carrier remembers nothing between connections; the stored
 	// membership is what it hands over on the next resume.
 	f.now = viewClock(10, 50)
 	f.add(resendJoin(t, r5obj))
-	if got := f.view.CarriedOut(a); len(got) != 1 || !got[0].Subject.IsEqual(sensor) {
-		t.Fatalf("CarriedOut on the second resume = %d contracts, want the membership", len(got))
+	if got := f.view.ContractsOf(r5); len(got) != 1 || !got[0].Subject.IsEqual(sensor) {
+		t.Fatalf("ContractsOf on the second resume = %d contracts, want the membership", len(got))
 	}
 }
 
@@ -394,10 +331,10 @@ func resendJoin(t *testing.T, obj *user.SignedJoinRequest) *user.SignedJoinReque
 	return out
 }
 
-// TestSwarmViewStatusPrecedence: declined > approved > expired > pending, with
-// answers from expelled signers ignored.
+// TestSwarmViewStatusPrecedence: fulfilled > declined > approved > expired >
+// pending, with answers from expelled signers ignored.
 func TestSwarmViewStatusPrecedence(t *testing.T) {
-	type answers struct{ decline, approve, late, expelAnswerer bool }
+	type answers struct{ fulfil, decline, approve, late, expelAnswerer bool }
 	for _, c := range []struct {
 		answers
 		want user.RequestStatus
@@ -413,9 +350,14 @@ func TestSwarmViewStatusPrecedence(t *testing.T) {
 		{answers{approve: true, expelAnswerer: true}, user.RequestPending},
 		{answers{decline: true, expelAnswerer: true}, user.RequestPending},
 		{answers{decline: true, approve: true, late: true, expelAnswerer: true}, user.RequestExpired},
+		{answers{fulfil: true}, user.RequestFulfilled},
+		{answers{fulfil: true, decline: true, approve: true, late: true}, user.RequestFulfilled},
 	} {
 		f := newViewFixture(t)
 		r := f.add(f.contractRequest(f.pi, f.appA, viewClock(10, 0)))
+		if c.fulfil {
+			f.add(f.appContract(f.pi, f.appA, r))
+		}
 		if c.decline {
 			f.add(f.decline(f.desktop, r))
 		}
@@ -433,6 +375,22 @@ func TestSwarmViewStatusPrecedence(t *testing.T) {
 			t.Errorf("%+v: RequestStatus = %v, want %v", c.answers, got, c.want)
 		}
 	}
+}
+
+// TestSwarmViewFulfilledNeedsBothSignaturesAndAParty: a contract that names
+// a request fulfils it only with both signatures, and only when it is given
+// to the identity the request names or to its filer.
+func TestSwarmViewFulfilledNeedsBothSignaturesAndAParty(t *testing.T) {
+	f := newViewFixture(t)
+	r := f.add(f.contractRequest(f.pi, f.appA, viewClock(10, 0)))
+	half := f.appContract(f.pi, f.appA, r)
+	half.SubjectSig = nil
+	f.add(half)
+	f.add(f.appContract(f.pi, f.phone, r))
+	f.wantStatus(r, user.RequestPending)
+
+	f.add(f.appContract(f.laptop, f.pi, r))
+	f.wantStatus(r, user.RequestFulfilled)
 }
 
 // TestSwarmViewStatusParties: a request filed by, carried by or naming an
@@ -497,22 +455,48 @@ func TestSwarmViewExpiryBoundary(t *testing.T) {
 }
 
 // TestSwarmViewMembershipValidity: Membership skips expired and unsigned
-// contracts and picks the one that expires last.
+// contracts.
 func TestSwarmViewMembershipValidity(t *testing.T) {
 	f := newViewFixture(t)
 	node := astral.GenerateIdentity()
 	f.add(f.memberUntil(f.user, node, user.TierMember, nil, viewClock(11, 0)))
-	f.add(f.memberUntil(f.user, node, user.TierTrusted, nil, viewClock(12, 0)))
 	unsigned := f.memberUntil(f.user, node, user.TierPrivilegedMember, nil, viewClock(13, 0))
 	unsigned.IssuerSig = nil
 	f.add(unsigned)
 
 	f.now = viewClock(10, 30)
-	if m, ok := f.view.Membership(node); !ok || m.Tier != user.TierTrusted {
-		t.Fatalf("Membership = %v, want the trusted one expiring last", m)
+	if m, ok := f.view.Membership(node); !ok || m.Tier != user.TierMember {
+		t.Fatalf("Membership = %v, want the signed member one", m)
 	}
-	f.now = viewClock(12, 0)
+	f.now = viewClock(11, 0)
 	f.wantMembership(node, false)
+}
+
+// TestSwarmViewMembershipPicksTheHighestTierFirst: of a node's memberships the
+// view reads the highest tier, and among those the one that expires last, so
+// a lower tier that expires later does not hide a higher one.
+func TestSwarmViewMembershipPicksTheHighestTierFirst(t *testing.T) {
+	f := newViewFixture(t)
+	node := astral.GenerateIdentity()
+	f.add(f.memberUntil(f.user, node, user.TierMember, nil, viewClock(14, 0)))
+	f.add(f.memberUntil(f.laptop, node, user.TierTrusted, nil, viewClock(11, 0)))
+	f.add(f.memberUntil(f.user, node, user.TierTrusted, nil, viewClock(12, 0)))
+
+	for _, c := range []struct {
+		at      time.Time
+		tier    user.Tier
+		expires time.Time
+	}{
+		{viewClock(10, 30), user.TierTrusted, viewClock(12, 0)},
+		{viewClock(11, 30), user.TierTrusted, viewClock(12, 0)},
+		{viewClock(12, 30), user.TierMember, viewClock(14, 0)},
+	} {
+		f.now = c.at
+		m, ok := f.view.Membership(node)
+		if !ok || m.Tier != c.tier || !m.ExpiresAt.Time().Equal(c.expires) {
+			t.Fatalf("at %v: Membership = %v, want %v until %v", c.at.Format("15:04"), m, c.tier, c.expires.Format("15:04"))
+		}
+	}
 }
 
 // TestSwarmViewRereadsOnlyOnHeadChange: the view reads the set again only when
@@ -530,8 +514,8 @@ func TestSwarmViewRereadsOnlyOnHeadChange(t *testing.T) {
 	f.wantStatus(r, user.RequestApproved)
 }
 
-// TestSwarmViewMembershipHoldsOnlyTheTier: a carrier's membership carrying out
-// a JoinRequest's Approval holds only when its permits are the tier permit
+// TestSwarmViewMembershipHoldsOnlyTheTier: a carrier's membership answering a
+// JoinRequest holds only when its permits are the tier permit
 // alone; one with an extra permit, or a delegable tier permit, does not.
 func TestSwarmViewMembershipHoldsOnlyTheTier(t *testing.T) {
 	for _, tc := range []struct {
@@ -552,8 +536,7 @@ func TestSwarmViewMembershipHoldsOnlyTheTier(t *testing.T) {
 			f := newViewFixture(t)
 			joiner := astral.GenerateIdentity()
 			r := f.add(f.joinRequest(joiner, f.phone, user.TierMember, viewClock(10, 0)))
-			a := f.add(f.approval(f.laptop, r))
-			m := f.member(f.phone, joiner, user.TierMember, a)
+			m := f.member(f.phone, joiner, user.TierMember, r)
 			tc.edit(m.Contract)
 			f.add(m)
 			f.wantMembership(joiner, tc.holds)

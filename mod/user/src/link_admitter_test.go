@@ -191,7 +191,7 @@ func TestMemberRefusesTheSubjectAfterItAnswersOnANewLink(t *testing.T) {
 			if err := f.mod.ReceiveObject(drop); err != nil {
 				t.Fatalf("ReceiveObject(ban): %v", err)
 			}
-			requireLeft(t, events, subject)
+			requireBanned(t, events, subject)
 			requireSteps(t, steps)
 			requireAdmitted(t, f.mod, subject)
 

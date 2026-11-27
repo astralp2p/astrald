@@ -287,7 +287,7 @@ func newReceiverFixture(t *testing.T, userID *astral.Identity) *receiverFixture 
 }
 
 // watchSwarm records f's member set as published and records the events f
-// emits on the returned recorder. A ban's SwarmMemberLeft lands there;
+// emits on the returned recorder. A ban's SwarmNodeBanned lands there;
 // mod/nodes closes the banned node's links on that event.
 func (f *receiverFixture) watchSwarm(t *testing.T) *eventRecorder {
 	t.Helper()
@@ -303,25 +303,31 @@ func (f *receiverFixture) watchSwarm(t *testing.T) *eventRecorder {
 	return events
 }
 
-// requireLeft waits for events to hold a SwarmMemberLeft naming each of ids,
-// and fails on any other event.
-func requireLeft(t *testing.T, events *eventRecorder, ids ...*astral.Identity) {
+// requireBanned waits for events to hold one SwarmNodeBanned naming banned
+// and one SwarmMemberLeft naming each of left, and fails on any other event.
+func requireBanned(t *testing.T, events *eventRecorder, banned *astral.Identity, left ...*astral.Identity) {
 	t.Helper()
-	want := map[string]bool{}
-	for _, id := range ids {
-		want[id.String()] = true
+	want := map[string]bool{"banned " + banned.String(): true}
+	for _, id := range left {
+		want["left "+id.String()] = true
 	}
 	deadline := time.Now().Add(effectTimeout)
 	for len(want) > 0 {
 		for _, e := range events.take() {
-			left, ok := e.(*user.SwarmMemberLeft)
-			if !ok || !want[left.NodeID.String()] {
-				t.Fatalf("published %v; want only %v left, each once", e, ids)
+			var key string
+			switch e := e.(type) {
+			case *user.SwarmNodeBanned:
+				key = "banned " + e.NodeID.String()
+			case *user.SwarmMemberLeft:
+				key = "left " + e.NodeID.String()
 			}
-			delete(want, left.NodeID.String())
+			if !want[key] {
+				t.Fatalf("published %v; want only the ban of %v and %v left, each once", e, banned, left)
+			}
+			delete(want, key)
 		}
 		if time.Now().After(deadline) {
-			t.Fatalf("%v did not leave the published member set", ids)
+			t.Fatalf("events still missing: %v", want)
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
@@ -604,7 +610,7 @@ func TestReceiveExpulsion(t *testing.T) {
 			t.Fatalf("Accept calls %v; want one Accept(true)", a)
 		}
 
-		requireLeft(t, events, banned)
+		requireBanned(t, events, banned)
 	})
 
 	t.Run("from another identity", func(t *testing.T) {

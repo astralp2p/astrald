@@ -66,19 +66,19 @@ func (q *contractQuery) Find(ctx *astral.Context) ([]*auth.SignedContract, error
 			return nil, fmt.Errorf("decode subject signature: %w", err)
 		}
 
-		// why: a NULL column scans into a zero ObjectID, and a zero link is no link.
-		approvalID := row.ApprovalID
-		if approvalID != nil && approvalID.IsZero() {
-			approvalID = nil
+		// why: a NULL column scans into a zero ObjectID, and a zero RequestID names no request.
+		requestID := row.RequestID
+		if requestID != nil && requestID.IsZero() {
+			requestID = nil
 		}
 
 		result = append(result, &auth.SignedContract{
 			Contract: &auth.Contract{
-				Issuer:     row.IssuerID,
-				Subject:    row.SubjectID,
-				ExpiresAt:  astral.Time(row.ExpiresAt),
-				Permits:    permits,
-				ApprovalID: approvalID,
+				Issuer:    row.IssuerID,
+				Subject:   row.SubjectID,
+				ExpiresAt: astral.Time(row.ExpiresAt),
+				Permits:   permits,
+				RequestID: requestID,
 			},
 			IssuerSig:  issuerSig,
 			SubjectSig: subjectSig,

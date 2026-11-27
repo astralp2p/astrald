@@ -15,7 +15,7 @@ import (
 // An entry ID is astral.ResolveObjectID of the signed entry exactly as stored
 // (e.g. *user.SignedApproval, signatures included), never of its unsigned
 // body. Every reference uses it: user.Approval.RequestID,
-// user.Decline.RequestID, auth.Contract.ApprovalID and the IDs SwarmView
+// user.Decline.RequestID, auth.Contract.RequestID and the IDs SwarmView
 // takes, so each resolves with SwarmEntry.
 //
 // Every write ends in the one merge, which runs the entry check: signatures,
@@ -56,7 +56,7 @@ type SwarmState interface {
 	Decline(ctx *astral.Context, request *astral.ObjectID) (*user.SignedDecline, error)
 
 	// AddContract adds sc, a contract its issuer signed: a membership, or a
-	// contract carrying out an Approval.
+	// contract that carries out a request it names as its RequestID.
 	AddContract(ctx *astral.Context, sc *auth.SignedContract) error
 
 	// AddExpulsion adds e, an Expulsion the user key signed (D7).

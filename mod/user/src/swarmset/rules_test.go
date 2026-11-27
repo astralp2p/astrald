@@ -205,8 +205,9 @@ func TestCheckSwarmEntryAnswers(t *testing.T) {
 	})
 }
 
-// TestCheckSwarmEntryContractsAndExpels: any member issues a contract, only
-// the root key a PrivilegedMembership (D2) and an Expulsion (D7).
+// TestCheckSwarmEntryContractsAndExpels: any member issues a contract, a
+// membership only at a tier its own tier issues (MayIssue), and only the root
+// key a PrivilegedMembership (D2) and an Expulsion (D7).
 func TestCheckSwarmEntryContractsAndExpels(t *testing.T) {
 	f := newEntryFixture()
 	privileged := user.TierPrivilegedMember.Action()
@@ -223,6 +224,10 @@ func TestCheckSwarmEntryContractsAndExpels(t *testing.T) {
 	runEntryCases(t, f, []entryCase{
 		{"app contract by a member", contract(f.member, astral.GenerateIdentity(), "test.action"), user.EntryAccept},
 		{"member membership by a trusted carrier", contract(f.trusted, astral.GenerateIdentity(), user.TierMember.Action()), user.EntryAccept},
+		{"trusted membership by a trusted carrier", contract(f.trusted, astral.GenerateIdentity(), user.TierTrusted.Action()), user.EntryDrop},
+		{"trusted membership by a privileged carrier", contract(f.privileged, astral.GenerateIdentity(), user.TierTrusted.Action()), user.EntryAccept},
+		{"member membership by a member", contract(f.member, astral.GenerateIdentity(), user.TierMember.Action()), user.EntryDrop},
+		{"member membership by a stranger", contract(f.out, astral.GenerateIdentity(), user.TierMember.Action()), user.EntryWait},
 		{"contract by a stranger", contract(f.out, astral.GenerateIdentity(), "test.action"), user.EntryWait},
 		{"privileged membership by a privileged node", contract(f.privileged, astral.GenerateIdentity(), privileged), user.EntryDrop},
 		{"privileged membership by the root key", contract(f.root, astral.GenerateIdentity(), privileged), user.EntryAccept},

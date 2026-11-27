@@ -166,29 +166,30 @@ func (f *viewFixture) expulsion(issuer, subject *astral.Identity) *user.SignedEx
 	return &user.SignedExpulsion{Expulsion: e, IssuerSig: viewSig()}
 }
 
-// member returns a membership valid for a year from 10:00.
-func (f *viewFixture) member(issuer, subject *astral.Identity, tier user.Tier, approval *astral.ObjectID) *auth.SignedContract {
-	return f.memberUntil(issuer, subject, tier, approval, viewAt10.Add(365*24*time.Hour))
+// member returns a membership valid for a year from 10:00, signed by both
+// parties, that names req as its RequestID.
+func (f *viewFixture) member(issuer, subject *astral.Identity, tier user.Tier, req *astral.ObjectID) *auth.SignedContract {
+	return f.memberUntil(issuer, subject, tier, req, viewAt10.Add(365*24*time.Hour))
 }
 
-func (f *viewFixture) memberUntil(issuer, subject *astral.Identity, tier user.Tier, approval *astral.ObjectID, expires time.Time) *auth.SignedContract {
+func (f *viewFixture) memberUntil(issuer, subject *astral.Identity, tier user.Tier, req *astral.ObjectID, expires time.Time) *auth.SignedContract {
 	f.t.Helper()
-	c, err := user.NewMembership(issuer, subject, tier, approval, time.Hour)
+	c, err := user.NewMembershipUntil(issuer, subject, tier, req, astral.Time(expires))
 	if err != nil {
 		f.t.Fatal(err)
 	}
-	c.ExpiresAt = astral.Time(expires)
-	return &auth.SignedContract{Contract: c, IssuerSig: viewSig()}
+	return &auth.SignedContract{Contract: c, IssuerSig: viewSig(), SubjectSig: viewSig()}
 }
 
-// appContract returns the host's contract to its app carrying out approval.
-func (f *viewFixture) appContract(host, app *astral.Identity, approval *astral.ObjectID) *auth.SignedContract {
+// appContract returns the host's contract to its app, signed by both, that
+// carries out req.
+func (f *viewFixture) appContract(host, app *astral.Identity, req *astral.ObjectID) *auth.SignedContract {
 	c := &auth.Contract{
-		Issuer: host, Subject: app, ApprovalID: approval,
+		Issuer: host, Subject: app, RequestID: req,
 		Permits:   []*auth.Permit{{Action: "mod.services.discover_action"}},
 		ExpiresAt: astral.Time(viewAt10.Add(24 * time.Hour)),
 	}
-	return &auth.SignedContract{Contract: c, IssuerSig: viewSig()}
+	return &auth.SignedContract{Contract: c, IssuerSig: viewSig(), SubjectSig: viewSig()}
 }
 
 func (f *viewFixture) wantStatus(req *astral.ObjectID, want user.RequestStatus) {

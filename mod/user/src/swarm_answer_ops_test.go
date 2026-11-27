@@ -110,7 +110,7 @@ func (v *fakeSwarmView) RequestStatus(req *astral.ObjectID) user.RequestStatus {
 }
 func (v *fakeSwarmView) Expelled(*astral.Identity) bool                            { return false }
 func (v *fakeSwarmView) ApprovalsTouching(*astral.Identity) []*user.SignedApproval { return nil }
-func (v *fakeSwarmView) CarriedOut(*astral.ObjectID) []*auth.SignedContract        { return nil }
+func (v *fakeSwarmView) ContractsOf(*astral.ObjectID) []*auth.SignedContract       { return nil }
 func (v *fakeSwarmView) MayAnswer(signer *astral.Identity, req *astral.ObjectID) bool {
 	obj, err := v.state.SwarmEntry(req)
 	m, ok := v.Membership(signer)

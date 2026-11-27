@@ -5,9 +5,9 @@ back through a re-issued contract.
 - on arrival at node2, before any new request, the front sees no wallet: its
   old chain through the expelled node3 no longer holds;
 - the request the front filed on node2 is a fresh one: another entry ID than
-  its request on node3, filed by node2 for the front, approved;
+  its request on node3, filed by node2 for the front, fulfilled;
 - apphost.request_contract returned the contract node2 signed for the front,
-  carrying the Approval of that fresh request (astral-docs
+  naming that fresh request as its RequestID (astral-docs
   protocols/apphost/ops/apphost.request_contract.md);
 - within 60 s the front's local discovery on node2 shows the wallet, and
   still does at the oracle (read live); the wallet spends 50 for the front.
@@ -35,14 +35,13 @@ async def main():
         f"the fresh request is not node2's for the front: {body}")
     async with await astral.connect(n1["endpoint"], token=doc["facts"]["user_token"]) as cu:
         status = await ss.status_of(cu, f["request_id"])
-    assert status == "approved", f"the fresh request is {status}"
+    assert status == "fulfilled", f"the fresh request is {status}"
 
     c = f["contract"]
     assert c and c["issuer"] == n2["identity"] and c["subject"] == front, (
         f"apphost.request_contract answered {f['request_answer']}")
-    approval = ss.entry_on(n2, c.get("approval_id", ""))
-    assert approval and approval["Approval"]["RequestID"] == f["request_id"], (
-        f"the re-issued contract carries {c.get('approval_id')}, not an Approval of the fresh request")
+    assert c.get("request_id") == f["request_id"], (
+        f"the re-issued contract names {c.get('request_id')}, not the fresh request")
 
     assert f["seen_after_s"] is not None, "the front never saw the wallet again within 60 s"
     assert wallet in ss.discover(n2, f["token"], "local"), (

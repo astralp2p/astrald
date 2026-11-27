@@ -84,13 +84,13 @@ func (mod *Module) IsNodeClaim(ctx *astral.Context, caller *astral.Identity, c *
 
 // isPrivilegedClaim reports whether c is the PrivilegedMembership
 // user.new_node_contract writes: exactly the privileged_member permit, with no
-// delegation, no constraint and no ApprovalID (the first node's membership
-// carries no link).
+// delegation, no constraint and no RequestID (the first node's membership
+// answers no request).
 //
 // why exact: any extra or wider permit, such as mod.auth.sudo_action, would be
 // signed in the issuer's name without the issuer's consent.
 func isPrivilegedClaim(c *auth.Contract) bool {
-	if c.ApprovalID != nil || len(c.Permits) != 1 {
+	if c.RequestID != nil || len(c.Permits) != 1 {
 		return false
 	}
 	p := c.Permits[0]

@@ -14,6 +14,8 @@ import (
 type memberSet struct {
 	mu      sync.Mutex
 	members map[string]*astral.Identity
+	// banned holds the nodes publishBan emitted SwarmNodeBanned for.
+	banned map[string]bool
 	// expiry republishes the set at the earliest member expiry; nil when none is armed.
 	expiry *time.Timer
 }
@@ -50,26 +52,29 @@ func (mod *Module) publishSwarm() {
 }
 
 // publishBan makes a stored ban on subject take effect: it reloads the ban
-// set, republishes the member set, and emits SwarmMemberLeft for subject
-// when subject was not in the published set. Like publishSwarm, it emits
-// nothing before the first set is recorded. mod/nodes closes the links of a
-// banned node on a member event, and on its first read.
+// set, republishes the member set, and emits SwarmNodeBanned for subject once.
+// Like publishSwarm, it emits nothing before the first set is recorded.
+// mod/nodes closes the links of a banned node on SwarmNodeBanned and on a
+// member event, and on its first read.
 //
-// why a non-member: a banned node can be linked to this node without being in
-// its member set (its membership has not reached SwarmState here, or it
-// linked through user.introduce), and its links close as a member's do.
-// why SwarmMemberLeft: api/user has no local event for a ban; nodes reads the
-// bans (IsBanned) and does not trust the node the event names.
+// why for a non-member too: a banned node can be linked to this node without
+// being in its member set (its membership has not reached SwarmState here, or
+// it linked through user.introduce), and its links close as a member's do.
+// Spec: .ai/system/protocols/user/types/mod.user.swarm_node_banned.md
 func (mod *Module) publishBan(subject *astral.Identity) {
 	mod.refreshBans()
+	mod.publishSwarm()
+
 	mod.memberSet.mu.Lock()
 	recorded := mod.memberSet.members != nil
-	_, listed := mod.memberSet.members[subject.String()]
+	first := recorded && !mod.memberSet.banned[subject.String()]
+	if first {
+		mod.memberSet.banned[subject.String()] = true
+	}
 	mod.memberSet.mu.Unlock()
 
-	mod.publishSwarm()
-	if recorded && !listed {
-		mod.Events.Emit(&user.SwarmMemberLeft{NodeID: subject})
+	if first {
+		mod.Events.Emit(&user.SwarmNodeBanned{NodeID: subject})
 	}
 }
 
@@ -94,6 +99,9 @@ func (mod *Module) recordSwarm() {
 	mod.memberSet.mu.Lock()
 	defer mod.memberSet.mu.Unlock()
 	mod.memberSet.members = identitySet(mod.LocalSwarm())
+	if mod.memberSet.banned == nil {
+		mod.memberSet.banned = map[string]bool{}
+	}
 	mod.armExpiry()
 }
 

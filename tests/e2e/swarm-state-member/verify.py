@@ -2,7 +2,8 @@
 """Oracle: node3 is a Member of the User's swarm, admitted by an Approval.
 
 - node3's membership names node3, is issued by node1 (its carrier) and
-  carries an ApprovalID (astral-docs protocols/user/ops/user.join.md);
+  names node3's JoinRequest as its RequestID (astral-docs
+  protocols/user/ops/user.join.md);
 - node3's active contract is that membership (user.info), and node3 sees
   the swarm's requests as a member (user.swarm_requests asks SeeSwarm);
 - node1 lists node3's JoinRequest as approved (user.swarm_requests).
@@ -22,7 +23,8 @@ async def main():
     m = f["membership"]
     assert m.get("Subject") == n3["identity"], f"membership names {m.get('Subject')}, not node3"
     assert m.get("Issuer") == n1["identity"], f"membership issued by {m.get('Issuer')}, not node1"
-    assert f.get("approval_id"), "node3's membership carries no ApprovalID"
+    assert f.get("membership_request") == f["request_id"], (
+        f"node3's membership names {f.get('membership_request')}, not its JoinRequest {f['request_id']}")
 
     async with await astral.connect(n3["endpoint"], token=n3["token"]) as c3:
         info = await c3.user.info()

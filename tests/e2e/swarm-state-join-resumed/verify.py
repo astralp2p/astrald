@@ -6,7 +6,7 @@ either side, within the JoinRequest's hour.
 - the request the User approved is the one node3 filed in step 1, before
   both restarts, and the approval came before its Timeout;
 - user.join answered node3's membership: issued by node1, the carrier, for
-  node3 at tier member, carrying an ApprovalID;
+  node3 at tier member, naming that request as its RequestID;
 - node1 lists the request approved; node3's active contract is that
   membership, and node3 sees the swarm's requests as a member
   (user.swarm_requests asks SeeSwarm): it is admitted.
@@ -42,7 +42,7 @@ async def main():
         f"membership {c['Issuer']} -> {c['Subject']}; want node1 -> node3")
     assert [p["Action"] for p in c["Permits"]] == ["mod.user.member_action"], (
         f"membership permits {c['Permits']}; want the member tier")
-    assert c.get("ApprovalID"), "the membership carries no ApprovalID"
+    assert c.get("RequestID") == first, f"the membership names {c.get('RequestID')}, not {first}"
 
     async with await astral.connect(n1["endpoint"], token=doc["facts"]["user_token"]) as cu:
         status = await ss.status_of(cu, first)

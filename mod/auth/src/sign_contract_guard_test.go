@@ -297,7 +297,7 @@ func TestAuthorizeContractNodeClaimShape(t *testing.T) {
 		{"a delegation", func(_ *guardRig, c *auth.Contract) { c.Permits[0].Delegation = 1 }},
 		{"a constrained permit", func(_ *guardRig, c *auth.Contract) { c.Permits[0].Constraints = constrainedPermit(0).Constraints }},
 		{"a nil permit", func(_ *guardRig, c *auth.Contract) { c.Permits[0] = nil }},
-		{"a link to an Approval", func(_ *guardRig, c *auth.Contract) { c.ApprovalID = &astral.ObjectID{} }},
+		{"a link to a request", func(_ *guardRig, c *auth.Contract) { c.RequestID = &astral.ObjectID{} }},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			r := newGuardRig(t)

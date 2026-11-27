@@ -27,12 +27,17 @@ func (s *Snapshot) RequestIDs() []*astral.ObjectID {
 	return ids
 }
 
-// RequestStatus returns the status of req: declined > approved > expired > pending. An unknown req is pending.
+// RequestStatus returns the status of req: fulfilled > declined > approved > expired > pending. An unknown req
+// is pending.
+//
+// todo: user.RequestOffered once offers answer ContractRequests, and approved for an ExpelRequest only.
 func (s *Snapshot) RequestStatus(req *astral.ObjectID) user.RequestStatus {
 	r, ok := s.Request(req)
 	switch {
 	case !ok:
 		return user.RequestPending
+	case s.fulfilled(req, r):
+		return user.RequestFulfilled
 	case s.declined(req, r):
 		return user.RequestDeclined
 	case len(s.approvalsOf(req)) > 0 || s.expulsionOf(r) != nil:
@@ -45,8 +50,27 @@ func (s *Snapshot) RequestStatus(req *astral.ObjectID) user.RequestStatus {
 	return user.RequestPending
 }
 
+// fulfilled reports whether a stored contract with both signatures names req as its RequestID and is given to
+// the identity r names or to r's filer: a membership for a JoinRequest's Joiner, the host's contract to the app
+// of a ContractRequest, or an approver's contract to its filer. An ExpelRequest is never fulfilled. Nothing that
+// follows changes it.
+//
+// why the parties: a contract's issuer chooses its RequestID, so a contract to a bystander fulfils nothing.
+func (s *Snapshot) fulfilled(req *astral.ObjectID, r Request) bool {
+	if r.isExpel() {
+		return false
+	}
+	for _, c := range s.ContractsOf(req) {
+		if c.IssuerSig != nil && c.SubjectSig != nil &&
+			(c.Subject.IsEqual(r.Subject) || (!r.Filer.IsZero() && c.Subject.IsEqual(r.Filer))) {
+			return true
+		}
+	}
+	return false
+}
+
 // declined reports whether a counting Decline names req, or the request was filed by, carried by or names an
-// expelled identity. A Decline wins even after a contract carried out an Approval of req.
+// expelled identity. A Decline closes the request; it takes back no contract (fulfilled comes first).
 //
 // why not an ExpelRequest's Subject: expelling it carries the request out.
 func (s *Snapshot) declined(req *astral.ObjectID, r Request) bool {
@@ -119,32 +143,22 @@ func (s *Snapshot) ApprovalsTouching(node *astral.Identity) []*user.SignedApprov
 	return list
 }
 
-// CarriedOut returns the stored contracts whose ApprovalID is approval, in any expiry or expel state.
-func (s *Snapshot) CarriedOut(approval *astral.ObjectID) []*auth.SignedContract {
-	if approval == nil {
+// ContractsOf returns the stored contracts whose RequestID is req, in any signature, expiry or expel state.
+func (s *Snapshot) ContractsOf(req *astral.ObjectID) []*auth.SignedContract {
+	if req == nil {
 		return nil
 	}
 	var list []*auth.SignedContract
 	for _, c := range s.contracts {
-		if c.ApprovalID != nil && c.ApprovalID.IsEqual(approval) {
+		if c.RequestID != nil && c.RequestID.IsEqual(req) {
 			list = append(list, c)
 		}
 	}
 	return list
 }
 
-// ApprovedNotCarriedOut reports whether req is approved by an Approval while no contract carries out any of its
-// counting Approvals. An ExpelRequest is carried out by its Expulsion, which is no Approval, so it never reports
-// true.
+// ApprovedNotCarriedOut reports whether req is approved by an Approval while no contract fulfils it. An
+// ExpelRequest is carried out by its Expulsion, which is no Approval, so it never reports true.
 func (s *Snapshot) ApprovedNotCarriedOut(req *astral.ObjectID) bool {
-	if s.RequestStatus(req) != user.RequestApproved {
-		return false
-	}
-	ids := s.approvalsOf(req)
-	for _, id := range ids {
-		if len(s.CarriedOut(id)) > 0 {
-			return false
-		}
-	}
-	return len(ids) > 0
+	return s.RequestStatus(req) == user.RequestApproved && len(s.approvalsOf(req)) > 0
 }

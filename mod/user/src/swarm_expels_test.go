@@ -37,11 +37,31 @@ func TestSwarmStateExpelIsStoredAndApplied(t *testing.T) {
 	if f.mod.banOn(stranger) != nil {
 		t.Fatal("an expel by another issuer was stored as a ban")
 	}
-	requireLeft(t, events, subject)
+	requireBanned(t, events, subject)
 
 	f.mod.receiveSwarmExpels()
 	time.Sleep(quiet)
 	if got := events.take(); len(got) != 0 {
 		t.Fatalf("a second change published %v; want nothing", got)
+	}
+}
+
+// TestPublishBanEmitsOncePerNode: a ban that takes effect again, as when it
+// is pushed after it was read from SwarmState, emits no second
+// SwarmNodeBanned.
+func TestPublishBanEmitsOncePerNode(t *testing.T) {
+	userID := astral.GenerateIdentity()
+	f := newReceiverFixture(t, userID)
+	subject := astral.GenerateIdentity()
+	events := f.watchSwarm(t)
+
+	f.mod.publishBan(subject)
+	f.mod.publishBan(subject)
+	got := events.take()
+	if len(got) != 1 {
+		t.Fatalf("published %v; want one SwarmNodeBanned", got)
+	}
+	if e, ok := got[0].(*user.SwarmNodeBanned); !ok || !e.NodeID.IsEqual(subject) {
+		t.Fatalf("published %v; want the ban of %v", got[0], subject)
 	}
 }

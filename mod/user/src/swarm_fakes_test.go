@@ -142,6 +142,11 @@ func (s *joinSwarm) count(kind user.EntryKind) int {
 }
 
 func (s *joinSwarm) RequestStatus(req *astral.ObjectID) user.RequestStatus {
+	for _, sc := range s.ContractsOf(req) {
+		if sc.IssuerSig != nil && sc.SubjectSig != nil {
+			return user.RequestFulfilled
+		}
+	}
 	status := user.RequestPending
 	for _, obj := range s.all() {
 		switch e := obj.(type) {
@@ -203,10 +208,10 @@ func (s *joinSwarm) ApprovalsTouching(node *astral.Identity) []*user.SignedAppro
 	return list
 }
 
-func (s *joinSwarm) CarriedOut(approval *astral.ObjectID) []*auth.SignedContract {
+func (s *joinSwarm) ContractsOf(req *astral.ObjectID) []*auth.SignedContract {
 	var list []*auth.SignedContract
 	for _, obj := range s.all() {
-		if sc, ok := obj.(*auth.SignedContract); ok && sc.ApprovalID.IsEqual(approval) {
+		if sc, ok := obj.(*auth.SignedContract); ok && sc.RequestID != nil && sc.RequestID.IsEqual(req) {
 			list = append(list, sc)
 		}
 	}

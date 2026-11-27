@@ -57,7 +57,7 @@ func (mod *Module) Expel(ctx *astral.Context, nodeID *astral.Identity) (*user.Si
 	// until the node answers; the expulsion sync at the node's next link with a
 	// holder of the ban and the sweep (reconcile_task.go) also deliver it.
 	// The node's answer closes the links with it (AdmitLink).
-	// note: mod/nodes closes the subject's links on the SwarmMemberLeft that
+	// note: mod/nodes closes the subject's links on the SwarmNodeBanned that
 	// publishBan emits; the push dials a new link, which AdmitLink admits
 	// until the subject answers.
 	go func() {
@@ -100,7 +100,7 @@ func (mod *Module) receiveExpulsion(signed *user.SignedExpulsion) error {
 
 // applyExpulsion enforces a stored ban on id. When id is the local node the ban
 // strips this node's own membership via leaveSwarm. The links of a banned
-// peer are closed by mod/nodes on the SwarmMemberLeft that publishBan
+// peer are closed by mod/nodes on the SwarmNodeBanned that publishBan
 // emitted, and membership filtering prevents re-linking.
 func (mod *Module) applyExpulsion(id *astral.Identity) {
 	if id.IsEqual(mod.node.Identity()) {

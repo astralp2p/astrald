@@ -213,13 +213,13 @@ func (mod *Module) ApprovalsTouching(node *astral.Identity) []*user.SignedApprov
 	return view.ApprovalsTouching(node)
 }
 
-// CarriedOut reads the view (usermod.SwarmView); none before LoadDependencies built it.
-func (mod *Module) CarriedOut(approval *astral.ObjectID) []*auth.SignedContract {
+// ContractsOf reads the view (usermod.SwarmView); none before LoadDependencies built it.
+func (mod *Module) ContractsOf(req *astral.ObjectID) []*auth.SignedContract {
 	view := mod.swarmView.Load()
 	if view == nil {
 		return nil
 	}
-	return view.CarriedOut(approval)
+	return view.ContractsOf(req)
 }
 
 func (mod *Module) Membership(id *astral.Identity) (*user.Membership, bool) {

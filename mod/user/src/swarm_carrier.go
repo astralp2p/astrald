@@ -2,8 +2,6 @@ package user
 
 import (
 	"errors"
-	"slices"
-	"strings"
 	"sync"
 	"time"
 
@@ -103,7 +101,7 @@ func (c *swarmCarrier) Carry(ctx *astral.Context, req *user.SignedJoinRequest) (
 	}
 
 	switch c.awaitAnswer(ctx, req, reqID) {
-	case user.RequestApproved:
+	case user.RequestApproved, user.RequestFulfilled:
 		return c.carryOut(ctx, req, reqID)
 	case user.RequestDeclined:
 		return nil, errJoinDeclined
@@ -177,48 +175,22 @@ func (c *swarmCarrier) awaitAnswer(ctx *astral.Context, req *user.SignedJoinRequ
 	}
 }
 
-// carryOut hands over the membership that carries out an Approval of req,
-// and signs one when none exists yet.
+// carryOut hands over the membership this carrier signed for req, and signs
+// one when none is stored yet.
 func (c *swarmCarrier) carryOut(ctx *astral.Context, req *user.SignedJoinRequest, reqID *astral.ObjectID) (*auth.SignedContract, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	approvals := c.approvalsOf(reqID)
-	if len(approvals) == 0 {
-		return nil, errors.New("join request approved, but its approval is not readable")
+	if sc := c.carriedOut(reqID, req.Joiner); sc != nil {
+		return sc, nil
 	}
-
-	for _, approvalID := range approvals {
-		if sc := c.carriedOut(approvalID, req.Joiner); sc != nil {
-			return sc, nil
-		}
-	}
-
-	return c.signMembership(ctx, req, approvals[0])
-}
-
-// approvalsOf returns the entry IDs of the stored Approvals of reqID, in a
-// fixed order, so every run of a resumed join picks the same one.
-func (c *swarmCarrier) approvalsOf(reqID *astral.ObjectID) []*astral.ObjectID {
-	var ids []*astral.ObjectID
-	for _, a := range c.view.ApprovalsTouching(c.self) {
-		if a.IsNil() || !a.RequestID.IsEqual(reqID) {
-			continue
-		}
-		id, err := astral.ResolveObjectID(a)
-		if err != nil {
-			continue
-		}
-		ids = append(ids, id)
-	}
-	slices.SortFunc(ids, func(a, b *astral.ObjectID) int { return strings.Compare(a.String(), b.String()) })
-	return ids
+	return c.signMembership(ctx, req, reqID)
 }
 
 // carriedOut returns the membership this carrier already signed for joiner
-// carrying out approvalID, or nil.
-func (c *swarmCarrier) carriedOut(approvalID *astral.ObjectID, joiner *astral.Identity) *auth.SignedContract {
-	for _, sc := range c.view.CarriedOut(approvalID) {
+// answering reqID, or nil.
+func (c *swarmCarrier) carriedOut(reqID *astral.ObjectID, joiner *astral.Identity) *auth.SignedContract {
+	for _, sc := range c.view.ContractsOf(reqID) {
 		if !sc.IsNil() && sc.Issuer.IsEqual(c.self) && sc.Subject.IsEqual(joiner) {
 			return sc
 		}
@@ -227,9 +199,9 @@ func (c *swarmCarrier) carriedOut(approvalID *astral.ObjectID, joiner *astral.Id
 }
 
 // signMembership signs the joiner's membership at the requested tier,
-// carrying out approvalID, stores it in SwarmState and returns it.
-func (c *swarmCarrier) signMembership(ctx *astral.Context, req *user.SignedJoinRequest, approvalID *astral.ObjectID) (*auth.SignedContract, error) {
-	contract, err := user.NewMembership(c.self, req.Joiner, req.Tier, approvalID, c.membershipValidity())
+// answering reqID, stores it in SwarmState and returns it.
+func (c *swarmCarrier) signMembership(ctx *astral.Context, req *user.SignedJoinRequest, reqID *astral.ObjectID) (*auth.SignedContract, error) {
+	contract, err := user.NewMembership(c.self, req.Joiner, req.Tier, reqID, c.membershipValidity())
 	if err != nil {
 		return nil, err
 	}

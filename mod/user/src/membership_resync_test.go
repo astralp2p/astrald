@@ -79,7 +79,7 @@ func TestSweepRepairsAMemberThatMissedABanOverAStableLink(t *testing.T) {
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
-	requireLeft(t, events, subject)
+	requireBanned(t, events, subject)
 }
 
 // volume sizes the swarm of the push volume test: 10 nodes, 5 bans.

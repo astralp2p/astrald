@@ -15,9 +15,10 @@ import (
 // member set. It emits:
 //   - SwarmRequestFiled once when a request first appears;
 //   - SwarmRequestApproved, SwarmRequestDeclined or SwarmRequestExpired each
-//     time a request's status becomes that status;
-//   - SwarmContractAdded once when a contract first counts
-//     (swarmset.Snapshot.ContractCounts).
+//     time a request's status becomes that status; user.RequestFulfilled has
+//     no event of its own, its contract's SwarmContractAdded tells it;
+//   - SwarmContractAdded once when a contract first counts, signed by both
+//     parties (swarmset.Snapshot.ContractCounts).
 //
 // Nothing is emitted before record: what is stored at startup is published
 // by no event.
@@ -77,7 +78,7 @@ func (p *swarmPublisher) diff(s *swarmset.Snapshot, emit func(astral.Object)) {
 			continue
 		}
 		p.counted[id] = true
-		emit(&user.SwarmContractAdded{ContractID: &id, Issuer: sc.Issuer, Subject: sc.Subject, ApprovalID: sc.ApprovalID})
+		emit(&user.SwarmContractAdded{ContractID: &id, Issuer: sc.Issuer, Subject: sc.Subject, RequestID: sc.RequestID})
 	}
 }
 

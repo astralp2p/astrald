@@ -19,7 +19,8 @@ type Verifier interface {
 //   - JoinRequest: the Carrier, Trusted or Privileged; the Joiner only signs it, and its Tier must be valid;
 //   - ExpelRequest: FiledBy, Trusted or Privileged;
 //   - Approval, Decline: the signer, whose tier must answer the request named by RequestID (user.MayAnswer);
-//   - contract: the Issuer, any tier; a membership at user.TierPrivilegedMember is issued only by the root key (D2);
+//   - contract: the Issuer, any tier; a membership: the Issuer, whose tier must issue the membership's tier
+//     (MayIssue), so a membership at user.TierPrivilegedMember is issued only by the root key (D2);
 //   - Expulsion: only the root key (D7).
 //
 // The root key needs no membership and may write every kind. Check returns:
@@ -148,8 +149,9 @@ func answerGate(signer *astral.Identity, req *astral.ObjectID, r Reader) (entryG
 	return entryGate{signer, func(t user.Tier) bool { return user.MayAnswer(t, obj) }}, user.EntryAccept
 }
 
-// contractGate gates a contract on its issuer, any tier. Its IssuerSig is required and its SubjectSig optional;
-// a PrivilegedMembership is issued only by the root key (D2).
+// contractGate gates a contract on its issuer: any tier, and for a membership a tier that issues the
+// membership's tier (MayIssue). Its IssuerSig is required and its SubjectSig optional; a PrivilegedMembership
+// is issued only by the root key (D2).
 func (c *Rules) contractGate(sc *auth.SignedContract, root *astral.Identity) (entryGate, user.EntryVerdict) {
 	if sc.IsNil() || !c.verify(sc.Issuer, sc.IssuerSig, sc.Contract) {
 		return entryGate{}, user.EntryDrop
@@ -157,10 +159,14 @@ func (c *Rules) contractGate(sc *auth.SignedContract, root *astral.Identity) (en
 	if sc.SubjectSig != nil && !c.verify(sc.Subject, sc.SubjectSig, sc.Contract) {
 		return entryGate{}, user.EntryDrop
 	}
-	if tier, ok := user.ContractTier(sc.Contract); ok && tier == user.TierPrivilegedMember && !IsRoot(root, sc.Issuer) {
+	tier, ok := user.ContractTier(sc.Contract)
+	if !ok {
+		return entryGate{sc.Issuer, anyTier}, user.EntryAccept
+	}
+	if tier == user.TierPrivilegedMember && !IsRoot(root, sc.Issuer) {
 		return entryGate{}, user.EntryDrop
 	}
-	return entryGate{sc.Issuer, anyTier}, user.EntryAccept
+	return entryGate{sc.Issuer, func(issuer user.Tier) bool { return MayIssue(issuer, tier) }}, user.EntryAccept
 }
 
 // verify reports whether sig is signer's valid signature of body.

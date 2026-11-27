@@ -93,7 +93,7 @@ func TestJoinCompletesOnApproval(t *testing.T) {
 	req, reqID := f.request(t, user.TierMember)
 
 	done := f.startJoin(t, astral.NewContext(nil), req, f.newCarrier())
-	approvalID := answerJoin(t, f.swarm, f.keys, f.carrier, reqID, false)
+	answerJoin(t, f.swarm, f.keys, f.carrier, reqID, false)
 
 	r := receiveJoin(t, done)
 	if r.err != nil {
@@ -105,12 +105,12 @@ func TestJoinCompletesOnApproval(t *testing.T) {
 		t.Fatalf("membership tier: %v %v", ok, m)
 	case !r.sc.Issuer.IsEqual(f.carrier) || !r.sc.Subject.IsEqual(f.joiner.self):
 		t.Fatalf("membership parties: %v -> %v", r.sc.Issuer, r.sc.Subject)
-	case !r.sc.ApprovalID.IsEqual(approvalID):
-		t.Fatalf("membership links %v, want the Approval %v", r.sc.ApprovalID, approvalID)
+	case !r.sc.RequestID.IsEqual(reqID):
+		t.Fatalf("membership names %v, want the request %v", r.sc.RequestID, reqID)
 	}
 	verifySignedBy(t, f.carrier, r.sc.Contract, r.sc.IssuerSig)
-	if got := f.swarm.CarriedOut(approvalID); len(got) != 1 {
-		t.Fatalf("contracts carrying out the Approval in SwarmState: %d, want 1", len(got))
+	if got := f.swarm.ContractsOf(reqID); len(got) != 1 {
+		t.Fatalf("contracts answering the request in SwarmState: %d, want 1", len(got))
 	}
 	if !f.joiner.kept.IsNil() {
 		t.Fatal("joiner still keeps its request after joining")
@@ -135,7 +135,7 @@ func TestJoinResumesAfterCarrierRestart(t *testing.T) {
 
 	// a yes arrives while they are apart, within the hour
 	f.clock.advance(50 * time.Minute)
-	approvalID := answerJoin(t, f.swarm, f.keys, f.userID, reqID, false)
+	answerJoin(t, f.swarm, f.keys, f.userID, reqID, false)
 
 	again, againID := f.request(t, user.TierMember)
 	if again != req || !againID.IsEqual(reqID) {
@@ -145,8 +145,8 @@ func TestJoinResumesAfterCarrierRestart(t *testing.T) {
 	if r.err != nil {
 		t.Fatalf("resumed join: %v", r.err)
 	}
-	if !r.sc.ApprovalID.IsEqual(approvalID) {
-		t.Fatalf("membership links %v, want %v", r.sc.ApprovalID, approvalID)
+	if !r.sc.RequestID.IsEqual(reqID) {
+		t.Fatalf("membership names %v, want %v", r.sc.RequestID, reqID)
 	}
 
 	// another restart after carrying out hands over the same membership
@@ -280,8 +280,8 @@ func assertUserKeyMembership(t *testing.T, sc *auth.SignedContract, userID, subj
 		t.Fatalf("membership tier: %v", ok)
 	case !sc.Issuer.IsEqual(userID) || !sc.Subject.IsEqual(subject):
 		t.Fatalf("membership parties: %v -> %v", sc.Issuer, sc.Subject)
-	case sc.ApprovalID != nil:
-		t.Fatalf("user-key membership links %v, want none", sc.ApprovalID)
+	case sc.RequestID != nil:
+		t.Fatalf("user-key membership names %v, want none", sc.RequestID)
 	}
 }
 

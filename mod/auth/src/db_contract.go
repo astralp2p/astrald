@@ -15,12 +15,12 @@ type dbContract struct {
 	SubjectSig []byte
 	StartsAt   time.Time
 	ExpiresAt  time.Time
-	// ApprovalID is the contract's Contract.ApprovalID, nil when it carries
-	// no link.
+	// RequestID is the contract's Contract.RequestID, nil when it answers no
+	// stored request.
 	//
-	// why a column: the walk rebuilds contracts from rows, and the Approval
-	// link it checks (swarmReader) reads this field.
-	ApprovalID *astral.ObjectID
+	// why a column: the index rebuilds contracts from rows, and the field is
+	// part of the body both signatures commit to.
+	RequestID *astral.ObjectID
 	// WithdrawnAt is set when the operator took the contract back on this node.
 	// why a mark and not a delete: the indexer and a sibling's push index a
 	// contract again, and the row is what makes IndexContract skip it.

@@ -351,11 +351,12 @@ func TestEmptiedMemberSetStopsEveryMemberLink(t *testing.T) {
 	f.requireNoClose(t)
 }
 
-// TestBannedLinkedNodeLinksCloseOnAMemberEvent: on a member event, the links
-// of a linked node the user banned close, though it is no member here and has
-// no link task; the links of an unbanned non-member stay, and a later event
-// closes the banned node's links no second time.
-func TestBannedLinkedNodeLinksCloseOnAMemberEvent(t *testing.T) {
+// TestBannedLinkedNodeLinksCloseOnSwarmNodeBanned: on a SwarmNodeBanned, the
+// links of a linked node the user banned close, though it is no member here
+// and has no link task; the links of an unbanned non-member stay, though the
+// event names it, since the handler reads the bans (IsBanned); and a later
+// member event closes the banned node's links no second time.
+func TestBannedLinkedNodeLinksCloseOnSwarmNodeBanned(t *testing.T) {
 	a, banned, stranger := astral.GenerateIdentity(), astral.GenerateIdentity(), astral.GenerateIdentity()
 	f := newMemberLinksFixture(t, a)
 	f.requireRunning(t, a)
@@ -363,7 +364,7 @@ func TestBannedLinkedNodeLinksCloseOnAMemberEvent(t *testing.T) {
 	f.link(stranger)
 
 	f.user.ban(banned)
-	f.receive(t, &user.SwarmMemberLeft{NodeID: banned})
+	f.receive(t, &user.SwarmNodeBanned{NodeID: stranger})
 	f.requireClosed(t, banned)
 	f.requireRunning(t, a)
 	f.requireNoClose(t)

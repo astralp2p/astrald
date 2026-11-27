@@ -106,7 +106,7 @@ func (db *DB) storeSignedContract(sc *auth.SignedContract) error {
 		IssuerSig:  issuerSig,
 		SubjectSig: subjectSig,
 		ExpiresAt:  sc.ExpiresAt.Time(),
-		ApprovalID: sc.ApprovalID,
+		RequestID:  sc.RequestID,
 	}
 	return db.Transaction(func(tx *gorm.DB) error {
 		err := tx.Clauses(clause.OnConflict{
@@ -117,7 +117,7 @@ func (db *DB) storeSignedContract(sc *auth.SignedContract) error {
 				"issuer_sig",
 				"subject_sig",
 				"expires_at",
-				"approval_id",
+				"request_id",
 			}),
 		}).Create(row).Error
 		if err != nil {

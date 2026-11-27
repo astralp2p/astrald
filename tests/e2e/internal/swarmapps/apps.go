@@ -104,8 +104,8 @@ func request(ctx *astral.Context, c *astrald.Client, wait time.Duration, discove
 
 func contractFacts(sc *auth.SignedContract) map[string]any {
 	f := map[string]any{"issuer": sc.Issuer.String(), "subject": sc.Subject.String()}
-	if sc.ApprovalID != nil {
-		f["approval_id"] = sc.ApprovalID.String()
+	if sc.RequestID != nil {
+		f["request_id"] = sc.RequestID.String()
 	}
 	return f
 }

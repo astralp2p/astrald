@@ -81,7 +81,7 @@ func TestSwarmPublisherEmitsOncePerVerdictChange(t *testing.T) {
 	p.publish()
 	wantEvents(t, log, "approved "+r.String()+" by "+a.String())
 
-	c := f.add(f.appContract(f.pi, f.appA, a))
+	c := f.add(f.appContract(f.pi, f.appA, nil))
 	p.publish()
 	p.publish()
 	wantEvents(t, log, "contract "+c.String())
@@ -97,9 +97,10 @@ func TestSwarmPublisherEmitsOncePerVerdictChange(t *testing.T) {
 	wantEvents(t, log, "expired "+old.String())
 }
 
-// TestSwarmPublisherSkipsVerdictsThatDoNotCount (criterion 5, PR 2): no event
-// fires for an Approval whose approver is expelled, nor for one a Decline
-// overrides, nor for a contract carrying out such an Approval.
+// TestSwarmPublisherSkipsVerdictsThatDoNotCount (criterion 5): no event fires
+// for an Approval whose approver is expelled, nor for one a Decline
+// overrides, nor for a contract its subject did not sign or whose issuer is
+// expelled.
 func TestSwarmPublisherSkipsVerdictsThatDoNotCount(t *testing.T) {
 	f := newViewFixture(t)
 	f.add(f.expulsion(f.user, f.desktop))
@@ -107,15 +108,17 @@ func TestSwarmPublisherSkipsVerdictsThatDoNotCount(t *testing.T) {
 	p.record()
 
 	byExpelled := f.add(f.contractRequest(f.pi, f.appA, viewClock(10, 0)))
-	expelledApproval := f.add(f.approval(f.desktop, byExpelled))
-	f.add(f.appContract(f.pi, f.appA, expelledApproval))
+	f.add(f.approval(f.desktop, byExpelled))
+	f.add(f.appContract(f.desktop, f.appA, nil))
 	p.publish()
 	wantEvents(t, log, "filed "+byExpelled.String())
 
 	overridden := f.add(f.contractRequest(f.pi, f.appA, viewClock(10, 1)))
-	approval := f.add(f.approval(f.laptop, overridden))
+	f.add(f.approval(f.laptop, overridden))
 	f.add(f.decline(f.phone, overridden))
-	f.add(f.appContract(f.pi, f.appA, approval))
+	half := f.appContract(f.pi, f.appA, overridden)
+	half.SubjectSig = nil
+	f.add(half)
 	p.publish()
 	wantEvents(t, log, "filed "+overridden.String(), "declined "+overridden.String())
 }
