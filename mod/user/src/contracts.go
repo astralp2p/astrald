@@ -173,10 +173,14 @@ func (mod *Module) ActiveNodes(userID *astral.Identity) (nodes []*astral.Identit
 
 // activeNodes is ActiveNodes with the error of the ban store read. The
 // members are the identities whose membership holds in SwarmState, when
-// userID is this node's user; another user has no members here.
+// userID is this node's user; another user has no members here. A node that
+// holds its own ban has no members.
 //
 // why: an unreadable ban store returns no nodes and the error, and not the
 // unfiltered list, so an expelled node never reads as a member.
+// why its own ban: an expelled node leaves its swarm even when leaveSwarm
+// fails to clear the active contract, so mod/nodes stops every member's link
+// task and closes the links (SwarmMemberLeft).
 func (mod *Module) activeNodes(userID *astral.Identity) (nodes []*astral.Identity, err error) {
 	if userID.IsZero() || !userID.IsEqual(mod.Identity()) {
 		return nil, nil
@@ -186,6 +190,9 @@ func (mod *Module) activeNodes(userID *astral.Identity) (nodes []*astral.Identit
 	if err != nil {
 		mod.log.Error("error reading expulsions: %v", err)
 		return nil, err
+	}
+	if _, self := expelled[mod.node.Identity().String()]; self {
+		return nil, nil
 	}
 
 	for _, id := range mod.swarmMembers() {
