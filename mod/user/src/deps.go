@@ -102,7 +102,9 @@ func (mod *Module) LoadDependencies(ctx *astral.Context) (err error) {
 	mod.wireSwarm()
 	chain := newChainRules(mod, mod)
 
-	mod.Auth.Add(authmod.Func[*nodes.RelayForAction](chain.AuthorizeRelayFor))
+	// why NodeLocal: a Privileged node relays as the user itself, but no
+	// contract it signs passes that on (D6).
+	mod.Auth.Add(authmod.NodeLocal(authmod.Func[*nodes.RelayForAction](chain.AuthorizeRelayFor)))
 	mod.Auth.Add(authmod.Func[*auth.SeeObjectsAction](chain.AuthorizeSeeObjects))
 	mod.Auth.Add(authmod.Func[*auth.StoreObjectsAction](mod.AuthorizeStoreObjects))
 	mod.Auth.Add(authmod.Func[*auth.AdminObjectsAction](mod.AuthorizeAdminObjects))

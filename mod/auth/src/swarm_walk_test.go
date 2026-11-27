@@ -243,7 +243,8 @@ func TestSwarmWalkGivesAJoinerNoPermitItsCarrierLacks(t *testing.T) {
 
 // userPowerWorld registers the user power handlers as mod/user does: expel and
 // AdminSwarm for the user, AdminSwarm NodeLocal for the Privileged Laptop, and
-// the module's own sudo rule.
+// the module's own sudo rule. Relaying registers as mod/nodes and mod/user do:
+// an identity relays for itself, and the Laptop, NodeLocal, for the user.
 func userPowerWorld(t *testing.T) *swarmWorld {
 	t.Helper()
 	w := newSwarmWorld(t)
@@ -257,7 +258,50 @@ func userPowerWorld(t *testing.T) *swarmWorld {
 	w.mod.Add(authmod.NodeLocal(authmod.Func[*user.AdminSwarmAction](func(_ *astral.Context, a *user.AdminSwarmAction) bool {
 		return a.Actor().IsEqual(w.laptop)
 	})))
+	w.mod.Add(authmod.Func[*nodes.RelayForAction](func(_ *astral.Context, a *nodes.RelayForAction) bool {
+		return a.Actor().IsEqual(a.ForID)
+	}))
+	w.mod.Add(authmod.NodeLocal(authmod.Func[*nodes.RelayForAction](func(_ *astral.Context, a *nodes.RelayForAction) bool {
+		return a.ForID.IsEqual(w.user) && a.Actor().IsEqual(w.laptop)
+	})))
 	return w
+}
+
+// TestRelayAsTheUserDelegatesOnlyFromTheUser: the Privileged Laptop relays as
+// the user itself, and a Member holding the Laptop's relay contract does not
+// (D6). The same permit in a contract the user signs carries.
+func TestRelayAsTheUserDelegatesOnlyFromTheUser(t *testing.T) {
+	ctx := astral.NewContext(nil)
+	w := userPowerWorld(t)
+	relay := func(actor *astral.Identity) bool {
+		return w.mod.Authorize(ctx, &nodes.RelayForAction{Action: auth.NewAction(actor), ForID: w.user})
+	}
+	relayPermit := func(delegation uint8) *auth.Permit {
+		return &auth.Permit{Action: astral.String8(nodes.RelayForAction{}.ObjectType()), Delegation: astral.Uint8(delegation)}
+	}
+
+	if !relay(w.user) {
+		t.Fatal("the user: want allow")
+	}
+	if !relay(w.laptop) {
+		t.Fatal("privileged node relays as the user itself: want allow")
+	}
+
+	seedContract(t, w.mod, w.laptop, w.pi, relayPermit(1))
+	seedContract(t, w.mod, w.pi, w.appA, relayPermit(0))
+	for name, actor := range map[string]*astral.Identity{"member with the privileged node's contract": w.pi, "two hops": w.appA} {
+		if relay(actor) {
+			t.Fatalf("%s: want deny", name)
+		}
+	}
+
+	seedContract(t, w.mod, w.user, w.member, relayPermit(1))
+	seedContract(t, w.mod, w.member, w.appB, relayPermit(0))
+	for name, actor := range map[string]*astral.Identity{"the user's subject": w.member, "two hops": w.appB} {
+		if !relay(actor) {
+			t.Fatalf("%s: want allow through the user's contract", name)
+		}
+	}
 }
 
 // TestUserPowersDelegateOnlyFromTheirHandlers: a Privileged node administers
