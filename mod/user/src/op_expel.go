@@ -18,12 +18,22 @@ type opExpelArgs struct {
 // OpExpel permanently bans the named node from the swarm and returns the signed ban.
 // Requires an active contract; the caller must be authorized for
 // user.ExpelAction (auth.ErrNotPermitted otherwise). AuthorizeExpel allows the
-// user, and a contract the user signs delegates it; no membership grants it, so
-// a Privileged node cannot (D7). The user key signs the Expulsion, which enters
-// SwarmState.
+// user, and a contract the user signs delegates it; no membership grants it. The
+// user key signs the Expulsion, which enters SwarmState.
+//
+// It admits only a local origin (astral.ErrOriginNotAllowed otherwise): a
+// Privileged node may relay as the user (D6), so a networked query with the
+// user as caller is no proof of the user's own action, and a node holding a
+// software user key would sign the Expulsion for it (D7).
 func (mod *Module) OpExpel(ctx *astral.Context, q *routing.IncomingQuery, args opExpelArgs) (err error) {
 	ch := q.Accept(channel.WithFormats(args.In, args.Out))
 	defer ch.Close()
+
+	switch q.Origin() {
+	case "", astral.OriginLocal:
+	default:
+		return ch.Send(astral.NewErrOriginNotAllowed(q.Origin()))
+	}
 
 	if mod.ActiveContract() == nil {
 		return ch.Send(user.ErrNoActiveContract)
