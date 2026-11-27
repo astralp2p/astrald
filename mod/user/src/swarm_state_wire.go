@@ -20,25 +20,24 @@ const swarmPullInterval = 15 * time.Second
 
 var _ usermod.SwarmState = &Module{}
 
-// openSwarmState opens this node's copy of SwarmState in its own VFS, which checks every stored entry again, and
-// adds the exchange ops to the module's router.
+// openSwarmState opens this node's copy of SwarmState in its own VFS, which checks every stored entry again.
 func (mod *Module) openSwarmState() error {
-	leftOut, err := mod.swarm.open(mod.ctx, mod.VFS, mod.node.Identity())
+	leftOut, err := mod.swarmState.open(mod.ctx, mod.VFS, mod.node.Identity())
 	if err != nil {
 		return err
 	}
 	for _, line := range leftOut {
 		mod.log.Logv(1, "swarm state: %v", line)
 	}
-	return addSwarmOps(&mod.router, mod.swarm, mod.admitsSwarmCaller)
+	return nil
 }
 
 // openStore returns the store once it is open, or nil.
 func (mod *Module) openStore() *swarmStore {
-	if mod.swarm == nil || !mod.swarm.set.IsOpen() {
+	if mod.swarmState == nil || !mod.swarmState.set.IsOpen() {
 		return nil
 	}
-	return mod.swarm
+	return mod.swarmState
 }
 
 // admitsSwarmCaller decides who may read and write this node's SwarmState over the exchange ops: this node, the

@@ -12,42 +12,33 @@ import (
 
 // softwareKeyFixture is a carrier fixture whose user key is a software key
 // held on the carrier: a ceremony with no device press, the carrier using it,
-// and the ops serving user.confirm_join with it.
+// and the carrier's module serving user.confirm_join with it.
 type softwareKeyFixture struct {
 	*carrierFixture
-	ceremony  *userKeyCeremony
-	ops       *SwarmAnswerOps
-	confirmed *joinConfirmations
+	crypto *keyringCrypto
 }
 
-func newSoftwareKeyFixture() *softwareKeyFixture {
-	f := &softwareKeyFixture{carrierFixture: newCarrierFixture(user.TierPrivilegedMember)}
-	f.ceremony = newUserKeyCeremony(f.userID, f.keys, f.swarm, f.swarm)
-	f.ceremony.now = f.clock.now
-	f.ops = &SwarmAnswerOps{
-		Node:    f.carrier,
-		State:   writeState{entryReader: f.swarm, swarmWriter: f.newWriter()},
-		View:    f.swarm,
-		Auth:    &recordingAuth{verdict: true},
-		UserKey: func() *userKeyCeremony { return f.ceremony },
-	}
-	f.confirmed = &joinConfirmations{}
-	f.ops.Confirmed = f.confirmed
+func newSoftwareKeyFixture(t *testing.T) *softwareKeyFixture {
+	f := &softwareKeyFixture{carrierFixture: newCarrierFixture(t, user.TierPrivilegedMember)}
+	f.crypto = f.swarm.Crypto.(*keyringCrypto)
+	f.swarm.Auth = &recordingAuth{verdict: true}
+	f.swarm.carrier = f.newCarrier()
 	return f
 }
 
+// carrierWithKey returns a carrier that signs with the user key and keeps what the module's
+// user.confirm_join signed.
 func (f *softwareKeyFixture) carrierWithKey() *swarmCarrier {
 	c := f.newCarrier()
-	c.ceremony = func() *userKeyCeremony { return f.ceremony }
-	c.confirmed = f.confirmed
+	c.ceremony = f.swarm.userKeyCeremony
+	c.confirmed = f.swarm.carrier.confirmed
 	return c
 }
 
 // confirm calls user.confirm_join on id as caller and returns what it sent.
 func (f *softwareKeyFixture) confirm(t *testing.T, caller *astral.Identity, id *astral.ObjectID) astral.Object {
 	t.Helper()
-	af := &answerFixture{ops: f.ops, caller: caller}
-	objs := af.run(t, f.ops.OpConfirmJoin, "user.confirm_join?id="+id.String())
+	objs := runOp(t, f.swarm.OpConfirmJoin, caller, "", "user.confirm_join?id="+id.String())
 	if len(objs) != 1 {
 		t.Fatalf("confirm_join sent %d objects; want 1", len(objs))
 	}
@@ -59,7 +50,7 @@ func (f *softwareKeyFixture) confirm(t *testing.T, caller *astral.Identity, id *
 // adds nothing to SwarmState, the carrier hands it to the joiner, and the
 // joiner co-signs it in the carrier session.
 func TestPrivilegedJoinWaitsForUserConfirmation(t *testing.T) {
-	f := newSoftwareKeyFixture()
+	f := newSoftwareKeyFixture(t)
 	req, reqID := f.request(t, user.TierPrivilegedMember)
 
 	done := f.startJoin(t, astral.NewContext(nil), req, f.carrierWithKey())
@@ -71,7 +62,7 @@ func TestPrivilegedJoinWaitsForUserConfirmation(t *testing.T) {
 		t.Fatalf("join ended before the user confirmed: %v", r.err)
 	default:
 	}
-	if n := f.swarm.count(user.EntryContracts); n != 0 {
+	if n := f.count(user.EntryContracts); n != 0 {
 		t.Fatalf("contracts in SwarmState before confirmation: %d, want 0", n)
 	}
 	if n := len(f.keys.texts); n != 1 {
@@ -79,8 +70,7 @@ func TestPrivilegedJoinWaitsForUserConfirmation(t *testing.T) {
 	}
 
 	// the request is listed for the user to confirm
-	af := &answerFixture{ops: f.ops, caller: f.userID}
-	listed := af.run(t, f.ops.OpSwarmRequests, "user.swarm_requests")
+	listed := runOp(t, f.swarm.OpSwarmRequests, f.userID, "", "user.swarm_requests")
 	if len(listed) != 4 || !listed[0].(*astral.ObjectID).IsEqual(reqID) {
 		t.Fatalf("swarm_requests sent %v; want the privileged request", listed)
 	}
@@ -108,16 +98,16 @@ func TestPrivilegedJoinWaitsForUserConfirmation(t *testing.T) {
 	if _, ok = f.confirm(t, f.userID, reqID).(*auth.SignedContract); !ok {
 		t.Fatal("a repeated confirmation failed")
 	}
-	if n := f.swarm.count(user.EntryContracts); n != 1 {
+	if n := f.count(user.EntryContracts); n != 1 {
 		t.Fatalf("contracts in SwarmState: %d, want 1", n)
 	}
 }
 
 // Done: a caller other than the user cannot confirm, whatever its grants.
 func TestConfirmJoinRefusesNonUser(t *testing.T) {
-	f := newSoftwareKeyFixture()
+	f := newSoftwareKeyFixture(t)
 	req, reqID := f.request(t, user.TierPrivilegedMember)
-	if err := f.swarm.merge(astral.NewContext(nil), req); err != nil {
+	if err := f.swarm.swarmState.merge(astral.NewContext(nil), req); err != nil {
 		t.Fatalf("store request: %v", err)
 	}
 
@@ -131,7 +121,7 @@ func TestConfirmJoinRefusesNonUser(t *testing.T) {
 			t.Fatalf("%s confirmed: %v", name, got)
 		}
 	}
-	if n := f.swarm.count(user.EntryContracts); n != 0 {
+	if n := f.count(user.EntryContracts); n != 0 {
 		t.Fatalf("contracts in SwarmState: %d, want 0", n)
 	}
 }
@@ -140,16 +130,15 @@ func TestConfirmJoinRefusesNonUser(t *testing.T) {
 // member relaying as the user arrives with the user as caller and a network
 // origin.
 func TestConfirmJoinRefusesNonLocalOrigin(t *testing.T) {
-	f := newSoftwareKeyFixture()
+	f := newSoftwareKeyFixture(t)
 	req, reqID := f.request(t, user.TierPrivilegedMember)
-	if err := f.swarm.merge(astral.NewContext(nil), req); err != nil {
+	if err := f.swarm.swarmState.merge(astral.NewContext(nil), req); err != nil {
 		t.Fatalf("store request: %v", err)
 	}
 	signatures := len(f.keys.texts)
 
 	for _, origin := range []string{astral.OriginNetwork, astral.OriginMCP} {
-		af := &answerFixture{ops: f.ops, caller: f.userID, origin: origin}
-		objs := af.run(t, f.ops.OpConfirmJoin, "user.confirm_join?id="+reqID.String())
+		objs := runOp(t, f.swarm.OpConfirmJoin, f.userID, origin, "user.confirm_join?id="+reqID.String())
 		if len(objs) != 1 {
 			t.Fatalf("%s: confirm_join sent %d objects; want 1", origin, len(objs))
 		}
@@ -158,7 +147,7 @@ func TestConfirmJoinRefusesNonLocalOrigin(t *testing.T) {
 			t.Fatalf("%s origin confirmed: %v", origin, objs[0])
 		}
 	}
-	if n := f.swarm.count(user.EntryContracts); n != 0 {
+	if n := f.count(user.EntryContracts); n != 0 {
 		t.Fatalf("contracts in SwarmState: %d, want 0", n)
 	}
 	if n := len(f.keys.texts); n != signatures {
@@ -166,8 +155,7 @@ func TestConfirmJoinRefusesNonLocalOrigin(t *testing.T) {
 	}
 
 	// the same caller from a local origin confirms
-	af := &answerFixture{ops: f.ops, caller: f.userID, origin: astral.OriginLocal}
-	objs := af.run(t, f.ops.OpConfirmJoin, "user.confirm_join?id="+reqID.String())
+	objs := runOp(t, f.swarm.OpConfirmJoin, f.userID, astral.OriginLocal, "user.confirm_join?id="+reqID.String())
 	if len(objs) != 1 {
 		t.Fatalf("local: confirm_join sent %d objects; want 1", len(objs))
 	}
@@ -179,9 +167,9 @@ func TestConfirmJoinRefusesNonLocalOrigin(t *testing.T) {
 // user.confirm_join refuses what is not an open privileged join, and a node
 // that cannot reach the user key.
 func TestConfirmJoinRefusals(t *testing.T) {
-	f := newSoftwareKeyFixture()
+	f := newSoftwareKeyFixture(t)
 	store := func(req *user.SignedJoinRequest) *astral.ObjectID {
-		if err := f.swarm.merge(astral.NewContext(nil), req); err != nil {
+		if err := f.swarm.swarmState.merge(astral.NewContext(nil), req); err != nil {
 			t.Fatalf("store request: %v", err)
 		}
 		id, _ := astral.ResolveObjectID(req)
@@ -199,28 +187,28 @@ func TestConfirmJoinRefusals(t *testing.T) {
 		JoinRequest: user.NewJoinRequest(astral.GenerateIdentity(), astral.GenerateIdentity(), user.TierPrivilegedMember),
 		JoinerSig:   testSig(),
 	})
-	refused(unstored, ErrUnknownRequest)
+	refused(unstored, errUnknownRequest)
 
 	member, _ := f.request(t, user.TierMember)
-	refused(store(member), ErrNotPrivilegedJoin)
+	refused(store(member), errNotPrivilegedJoin)
 
 	f.joiner.kept = nil
 	declined, declinedID := f.request(t, user.TierPrivilegedMember)
 	store(declined)
 	answerJoin(t, f.swarm, f.keys, f.userID, declinedID, true)
-	refused(declinedID, ErrRequestClosed)
+	refused(declinedID, errRequestClosed)
 
 	f.joiner.kept = nil
 	f.clock.advance(time.Minute)
 	expired, expiredID := f.request(t, user.TierPrivilegedMember)
 	store(expired)
 	f.clock.advance(2 * user.RequestTimeout)
-	refused(expiredID, ErrRequestClosed)
+	refused(expiredID, errRequestClosed)
 
-	f.ops.UserKey = func() *userKeyCeremony { return nil }
-	refused(expiredID, ErrNoUserKey)
+	f.crypto.hidden = true
+	refused(expiredID, errNoUserKey)
 
-	if n := f.swarm.count(user.EntryContracts); n != 0 {
+	if n := f.count(user.EntryContracts); n != 0 {
 		t.Fatalf("contracts in SwarmState: %d, want 0", n)
 	}
 }

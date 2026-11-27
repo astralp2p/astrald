@@ -15,11 +15,11 @@ import (
 // text is part of the protocol (astral-docs
 // protocols/user/ops/user.confirm_join.md).
 var (
-	// ErrNoUserKey: this node cannot reach the user key.
-	ErrNoUserKey = astral.NewError("no user key on this node")
-	// ErrNotPrivilegedJoin: the id names a stored request that is not a
+	// errNoUserKey: this node cannot reach the user key.
+	errNoUserKey = astral.NewError("no user key on this node")
+	// errNotPrivilegedJoin: the id names a stored request that is not a
 	// privileged_member JoinRequest.
-	ErrNotPrivilegedJoin = astral.NewError("not a privileged join request")
+	errNotPrivilegedJoin = astral.NewError("not a privileged join request")
 )
 
 type opConfirmJoinArgs struct {
@@ -39,16 +39,19 @@ type opConfirmJoinArgs struct {
 //
 // It refuses, writing nothing:
 //   - astral.ErrOriginNotAllowed when the query is not local;
-//   - ErrNoUserKey when this node cannot reach the user key;
+//   - errNoUserKey when this node cannot reach the user key;
 //   - auth.ErrNotPermitted when the caller is not the user;
-//   - ErrUnknownRequest when ID names no stored request;
-//   - ErrNotPrivilegedJoin when the request is not a privileged join;
-//   - ErrRequestClosed when the request is declined or expired, or its
+//   - errUnknownRequest when ID names no stored request;
+//   - errNotPrivilegedJoin when the request is not a privileged join;
+//   - errRequestClosed when the request is declined or expired, or its
 //     joiner is expelled.
 //
 // A second confirmation sends the membership the first one signed, or the
 // one stored once the joiner co-signed it.
-func (ops *SwarmAnswerOps) OpConfirmJoin(ctx *astral.Context, q *routing.IncomingQuery, args opConfirmJoinArgs) (err error) {
+//
+// why: no named action guards this op; the caller must be the user identity
+// itself, which no grant stands in for (confirmJoin).
+func (mod *Module) OpConfirmJoin(ctx *astral.Context, q *routing.IncomingQuery, args opConfirmJoinArgs) (err error) {
 	ch := q.Accept(channel.WithFormats(args.In, args.Out))
 	defer ch.Close()
 
@@ -61,7 +64,7 @@ func (ops *SwarmAnswerOps) OpConfirmJoin(ctx *astral.Context, q *routing.Incomin
 		return ch.Send(astral.NewErrOriginNotAllowed(q.Origin()))
 	}
 
-	signed, err := ops.confirmJoin(ctx, q.Caller(), args.ID)
+	signed, err := mod.confirmJoin(ctx, q.Caller(), args.ID)
 	if err != nil {
 		var aerr astral.Error
 		if errors.As(err, &aerr) {
@@ -79,53 +82,47 @@ func (ops *SwarmAnswerOps) OpConfirmJoin(ctx *astral.Context, q *routing.Incomin
 // software user key cannot take for itself, so no app or grant stands in for
 // the user identity. OpConfirmJoin admits only local origins, so a node
 // relaying as the user cannot either.
-func (ops *SwarmAnswerOps) confirmJoin(ctx *astral.Context, caller *astral.Identity, id *astral.ObjectID) (*auth.SignedContract, error) {
-	var uk *userKeyCeremony
-	if ops.UserKey != nil {
-		uk = ops.UserKey()
-	}
+func (mod *Module) confirmJoin(ctx *astral.Context, caller *astral.Identity, id *astral.ObjectID) (*auth.SignedContract, error) {
+	uk := mod.userKeyCeremony()
 	if uk == nil {
-		return nil, ErrNoUserKey
+		return nil, errNoUserKey
 	}
 	if !caller.IsEqual(uk.user) {
 		return nil, auth.ErrNotPermitted
 	}
 
-	obj, err := ops.State.SwarmEntry(id)
+	obj, err := mod.SwarmEntry(id)
 	if err != nil {
-		return nil, ErrUnknownRequest
+		return nil, errUnknownRequest
 	}
 	if kind, ok := user.EntryKindOf(obj); !ok || kind != user.EntryRequests {
-		return nil, ErrUnknownRequest
+		return nil, errUnknownRequest
 	}
 	req, ok := obj.(*user.SignedJoinRequest)
 	if !ok || req.IsNil() || req.Tier != user.TierPrivilegedMember {
-		return nil, ErrNotPrivilegedJoin
+		return nil, errNotPrivilegedJoin
 	}
 
-	if sc := ops.Confirmed.get(id); sc != nil {
+	if sc := mod.carrier.confirmed.get(id); sc != nil {
 		return sc, nil
 	}
-	if sc := storedPrivileged(ops.View, uk.user, id, req.Joiner); sc != nil {
+	if sc := storedPrivileged(mod, uk.user, id, req.Joiner); sc != nil {
 		return sc, nil
 	}
 
-	switch ops.View.RequestStatus(id) {
+	switch mod.RequestStatus(id) {
 	case user.RequestDeclined, user.RequestExpired:
-		return nil, ErrRequestClosed
+		return nil, errRequestClosed
 	}
-	if req.Expired(uk.now()) || ops.View.Expelled(req.Joiner) {
-		return nil, ErrRequestClosed
+	if req.Expired(uk.now()) || mod.Expelled(req.Joiner) {
+		return nil, errRequestClosed
 	}
 
 	sc, err := uk.Membership(ctx, req.Joiner, user.TierPrivilegedMember, req)
 	if err != nil {
 		return nil, err
 	}
-	if ops.Confirmed == nil {
-		return sc, nil
-	}
-	return ops.Confirmed.keep(id, sc), nil
+	return mod.carrier.confirmed.keep(id, sc), nil
 }
 
 // storedPrivileged returns the PrivilegedMembership the user key userID issued

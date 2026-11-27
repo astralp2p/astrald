@@ -17,24 +17,42 @@ import (
 )
 
 // carrierFixture is a swarm with a user key, a carrier at a tier and a joiner,
-// all reading one clock.
+// all reading one clock. The swarm is the carrier's module over a real store
+// and view.
 type carrierFixture struct {
 	clock   *joinClock
-	swarm   *joinSwarm
+	swarm   *Module
 	keys    *joinKeyring
 	userID  *astral.Identity
 	carrier *astral.Identity
 	joiner  *swarmJoiner
+	// stored is signalled after each merge that stored entries.
+	stored chan struct{}
+	// base is what the swarm held before the test: the carrier's membership.
+	base map[user.EntryKind]int
 }
 
-func newCarrierFixture(carrierTier user.Tier) *carrierFixture {
-	f := &carrierFixture{clock: newJoinClock(), keys: newJoinKeyring()}
-	f.swarm = newJoinSwarm(f.clock)
+// count returns how many entries of kind the test stored.
+func (f *carrierFixture) count(kind user.EntryKind) int {
+	return countEntries(f.swarm, kind) - f.base[kind]
+}
+
+func newCarrierFixture(t testing.TB, carrierTier user.Tier) *carrierFixture {
+	f := &carrierFixture{clock: newJoinClock(), keys: newJoinKeyring(), stored: make(chan struct{}, 1)}
 	f.userID = f.keys.newKey()
 	f.carrier = f.keys.newKey()
-	if carrierTier != "" {
-		f.swarm.setTier(f.userID, f.carrier, carrierTier)
+	f.swarm = newStoreModule(t, f.carrier, f.userID, f.keys, f.clock.now, acceptAll)
+	f.swarm.writer = f.newWriter()
+	f.swarm.swarmState.stored = func([]astral.Object) {
+		select {
+		case f.stored <- struct{}{}:
+		default:
+		}
 	}
+	if carrierTier != "" {
+		storeMembership(t, f.swarm, f.userID, f.carrier, carrierTier, f.clock.now().Add(24*time.Hour))
+	}
+	f.base = map[user.EntryKind]int{user.EntryContracts: countEntries(f.swarm, user.EntryContracts)}
 	f.joiner = newSwarmJoiner(f.keys.newKey(), f.keys, memJoinKeeper{}, nil)
 	f.joiner.now = f.clock.now
 	return f
@@ -42,7 +60,7 @@ func newCarrierFixture(carrierTier user.Tier) *carrierFixture {
 
 // newWriter returns the carrier node's typed writes over the fixture's swarm.
 func (f *carrierFixture) newWriter() *swarmWriter {
-	return &swarmWriter{self: f.carrier, signer: f.keys, view: f.swarm, merge: f.swarm.merge}
+	return &swarmWriter{self: f.carrier, signer: f.keys, view: f.swarm, merge: f.swarm.swarmState.merge}
 }
 
 // newCarrier returns a fresh carrier, as after a restart: it remembers nothing.
@@ -67,7 +85,13 @@ func (f *carrierFixture) startJoin(t *testing.T, ctx *astral.Context, req *user.
 		sc, err := f.joiner.Join(ctx, req, c.Carry)
 		done <- joinResult{sc, err}
 	}()
-	awaitSwarmEntries(t, f.swarm, user.EntryRequests, 1)
+	for f.count(user.EntryRequests) < 1 {
+		select {
+		case <-f.stored:
+		case <-time.After(5 * time.Second):
+			t.Fatal("the request was not stored")
+		}
+	}
 	return done
 }
 
@@ -103,7 +127,7 @@ func (f *carrierFixture) cosignAs(req *user.SignedJoinRequest) joinCosign {
 // in SwarmState: the carrier signs as issuer, the joiner as subject, and the
 // carrier stores it with both signatures.
 func TestJoinSignsTheMembershipInTheCarrierSession(t *testing.T) {
-	f := newCarrierFixture(user.TierPrivilegedMember)
+	f := newCarrierFixture(t, user.TierPrivilegedMember)
 	req, reqID := f.request(t, user.TierMember)
 
 	r := receiveJoin(t, f.startJoin(t, astral.NewContext(nil), req, f.newCarrier()))
@@ -138,7 +162,7 @@ func TestJoinSignsTheMembershipInTheCarrierSession(t *testing.T) {
 // request and the carrier answers a membership with the same body; a resend
 // after the membership was stored hands over the stored one.
 func TestJoinResumesAfterADroppedSession(t *testing.T) {
-	f := newCarrierFixture(user.TierTrusted)
+	f := newCarrierFixture(t, user.TierTrusted)
 	req, reqID := f.request(t, user.TierMember)
 
 	// the session drops after the carrier answered
@@ -156,7 +180,7 @@ func TestJoinResumesAfterADroppedSession(t *testing.T) {
 	if f.joiner.kept != req {
 		t.Fatal("joiner dropped its request when the session dropped")
 	}
-	if n := f.swarm.count(user.EntryContracts); n != 0 {
+	if n := f.count(user.EntryContracts); n != 0 {
 		t.Fatalf("contracts in SwarmState after the drop: %d, want 0", n)
 	}
 
@@ -178,10 +202,10 @@ func TestJoinResumesAfterADroppedSession(t *testing.T) {
 	if err != nil || sc != r.sc {
 		t.Fatalf("carry after storing: %v, same contract %v", err, sc == r.sc)
 	}
-	if n := f.swarm.count(user.EntryRequests); n != 1 {
+	if n := f.count(user.EntryRequests); n != 1 {
 		t.Fatalf("requests in SwarmState: %d, want 1", n)
 	}
-	if n := f.swarm.count(user.EntryContracts); n != 1 {
+	if n := f.count(user.EntryContracts); n != 1 {
 		t.Fatalf("contracts in SwarmState: %d, want 1", n)
 	}
 }
@@ -190,7 +214,7 @@ func TestJoinResumesAfterADroppedSession(t *testing.T) {
 // membership: both have it co-signed before either stores it, and the second
 // to store hands over the first one's.
 func TestJoinConcurrentSessionsStoreOneMembership(t *testing.T) {
-	f := newCarrierFixture(user.TierTrusted)
+	f := newCarrierFixture(t, user.TierTrusted)
 	req, reqID := f.request(t, user.TierMember)
 	c := f.newCarrier()
 
@@ -226,7 +250,7 @@ func TestJoinConcurrentSessionsStoreOneMembership(t *testing.T) {
 // Done: an expelled joiner's join ends, before and after its membership was
 // stored: the carrier signs nothing for it and hands over nothing.
 func TestJoinEndsForAnExpelledJoiner(t *testing.T) {
-	f := newCarrierFixture(user.TierTrusted)
+	f := newCarrierFixture(t, user.TierTrusted)
 	req, _ := f.request(t, user.TierMember)
 	if r := receiveJoin(t, f.startJoin(t, astral.NewContext(nil), req, f.newCarrier())); r.err != nil {
 		t.Fatalf("join: %v", r.err)
@@ -237,7 +261,7 @@ func TestJoinEndsForAnExpelledJoiner(t *testing.T) {
 	if err != nil {
 		t.Fatalf("sign expulsion: %v", err)
 	}
-	if err = f.swarm.merge(nil, &user.SignedExpulsion{Expulsion: expulsion, IssuerSig: sig}); err != nil {
+	if err = f.swarm.swarmState.merge(nil, &user.SignedExpulsion{Expulsion: expulsion, IssuerSig: sig}); err != nil {
 		t.Fatalf("add expulsion: %v", err)
 	}
 
@@ -250,14 +274,14 @@ func TestJoinEndsForAnExpelledJoiner(t *testing.T) {
 	if _, err = f.joiner.Join(astral.NewContext(nil), again, f.newCarrier().Carry); !errors.Is(err, errJoinDeclined) {
 		t.Fatalf("join of a new request: %v, want %v", err, errJoinDeclined)
 	}
-	if n := f.swarm.count(user.EntryContracts); n != 1 {
+	if n := f.count(user.EntryContracts); n != 1 {
 		t.Fatalf("contracts in SwarmState: %d, want the one stored before the expel", n)
 	}
 }
 
 // Done: a Decline ends the join, and the carrier signs nothing for it.
 func TestJoinEndsOnDecline(t *testing.T) {
-	f := newCarrierFixture(user.TierPrivilegedMember)
+	f := newCarrierFixture(t, user.TierPrivilegedMember)
 	req, reqID := f.request(t, user.TierMember)
 	answerJoin(t, f.swarm, f.keys, f.userID, reqID, true)
 
@@ -270,7 +294,7 @@ func TestJoinEndsOnDecline(t *testing.T) {
 
 // Done: the timeout ends the join, at the joiner and at the carrier.
 func TestJoinEndsOnTimeout(t *testing.T) {
-	f := newCarrierFixture(user.TierPrivilegedMember)
+	f := newCarrierFixture(t, user.TierPrivilegedMember)
 	req, _ := f.request(t, user.TierMember)
 	f.clock.advance(user.RequestTimeout + time.Second)
 
@@ -291,7 +315,7 @@ func TestJoinEndsOnTimeout(t *testing.T) {
 
 func assertJoinEnded(t *testing.T, f *carrierFixture) {
 	t.Helper()
-	if n := f.swarm.count(user.EntryContracts); n != 0 {
+	if n := f.count(user.EntryContracts); n != 0 {
 		t.Fatalf("contracts in SwarmState: %d, want 0", n)
 	}
 	if !f.joiner.kept.IsNil() {
@@ -302,14 +326,14 @@ func assertJoinEnded(t *testing.T, f *carrierFixture) {
 // Done: a Member carrier is refused.
 func TestJoinMemberCarrierRefused(t *testing.T) {
 	for _, tier := range []user.Tier{user.TierMember, ""} {
-		f := newCarrierFixture(tier)
+		f := newCarrierFixture(t, tier)
 		req, _ := f.request(t, user.TierMember)
 
 		_, err := f.joiner.Join(astral.NewContext(nil), req, f.newCarrier().Carry)
 		if !errors.Is(err, errCarrierTier) {
 			t.Fatalf("carrier at tier %q: %v, want %v", tier, err, errCarrierTier)
 		}
-		if n := f.swarm.count(user.EntryRequests); n != 0 {
+		if n := f.count(user.EntryRequests); n != 0 {
 			t.Fatalf("carrier at tier %q stored %d requests", tier, n)
 		}
 		if _, err := f.newWriter().FileExpelRequest(astral.NewContext(nil), f.joiner.self); !errors.Is(err, errExpelFilerTier) {
@@ -331,7 +355,7 @@ func TestJoinCarrierIssuesOnlyTheTiersItsTierMay(t *testing.T) {
 		{user.TierPrivilegedMember, user.TierTrusted, nil},
 		{user.TierPrivilegedMember, user.TierMember, nil},
 	} {
-		f := newCarrierFixture(c.carrier)
+		f := newCarrierFixture(t, c.carrier)
 		req, _ := f.request(t, c.asked)
 		signatures := len(f.keys.texts)
 
@@ -340,7 +364,7 @@ func TestJoinCarrierIssuesOnlyTheTiersItsTierMay(t *testing.T) {
 			t.Fatalf("%s carrier, %s asked: %v, want %v", c.carrier, c.asked, err, c.want)
 		}
 		if c.want != nil {
-			if n := f.swarm.count(user.EntryRequests) + f.swarm.count(user.EntryContracts); n != 0 || len(f.keys.texts) != signatures {
+			if n := f.count(user.EntryRequests) + f.count(user.EntryContracts); n != 0 || len(f.keys.texts) != signatures {
 				t.Fatalf("%s carrier, %s asked: stored %d entries and signed %d", c.carrier, c.asked, n, len(f.keys.texts)-signatures)
 			}
 			assertJoinEnded(t, f)
@@ -367,7 +391,7 @@ func TestJoinNeedsTheJoinersSignature(t *testing.T) {
 			return &auth.SignedContract{Contract: &c, IssuerSig: sc.IssuerSig, SubjectSig: sc.SubjectSig}
 		},
 	} {
-		f := newCarrierFixture(user.TierPrivilegedMember)
+		f := newCarrierFixture(t, user.TierPrivilegedMember)
 		req, _ := f.request(t, user.TierMember)
 		_, err := f.newCarrier().Carry(astral.NewContext(nil), req, func(ctx *astral.Context, half *auth.SignedContract) (*auth.SignedContract, error) {
 			signed, err := f.joiner.cosign(ctx, req, half)
@@ -379,7 +403,7 @@ func TestJoinNeedsTheJoinersSignature(t *testing.T) {
 		if !errors.Is(err, errNotSignedByJoiner) {
 			t.Fatalf("%s: %v, want %v", name, err, errNotSignedByJoiner)
 		}
-		if n := f.swarm.count(user.EntryContracts); n != 0 {
+		if n := f.count(user.EntryContracts); n != 0 {
 			t.Fatalf("%s: contracts in SwarmState: %d, want 0", name, n)
 		}
 	}
@@ -387,7 +411,7 @@ func TestJoinNeedsTheJoinersSignature(t *testing.T) {
 
 // Done: the joiner co-signs only the membership its request asked for.
 func TestJoinerSignsOnlyWhatItAskedFor(t *testing.T) {
-	f := newCarrierFixture(user.TierPrivilegedMember)
+	f := newCarrierFixture(t, user.TierPrivilegedMember)
 	req, reqID := f.request(t, user.TierMember)
 	other := astral.GenerateIdentity()
 	otherID, _ := astral.ResolveObjectID(&astral.Ack{})
@@ -414,7 +438,7 @@ func TestJoinerSignsOnlyWhatItAskedFor(t *testing.T) {
 
 // Done: a request filed later than the carrier's time is refused.
 func TestJoinRefusesARequestFiledLater(t *testing.T) {
-	f := newCarrierFixture(user.TierPrivilegedMember)
+	f := newCarrierFixture(t, user.TierPrivilegedMember)
 	req, _ := f.request(t, user.TierMember)
 	c := f.newCarrier()
 	c.now = func() time.Time { return f.clock.now().Add(-time.Minute) }
@@ -425,7 +449,7 @@ func TestJoinRefusesARequestFiledLater(t *testing.T) {
 
 // Done: a Privileged join needs the user key's signature.
 func TestJoinPrivilegedNeedsUserKey(t *testing.T) {
-	f := newCarrierFixture(user.TierPrivilegedMember)
+	f := newCarrierFixture(t, user.TierPrivilegedMember)
 	req, reqID := f.request(t, user.TierPrivilegedMember)
 	answerJoin(t, f.swarm, f.keys, f.carrier, reqID, false)
 
@@ -444,7 +468,7 @@ func TestJoinPrivilegedNeedsUserKey(t *testing.T) {
 	if _, err := c.Carry(astral.NewContext(nil), req, f.cosignAs(req)); err == nil {
 		t.Fatal("ceremony signed without the user key")
 	}
-	if n := f.swarm.count(user.EntryContracts); n != 0 {
+	if n := f.count(user.EntryContracts); n != 0 {
 		t.Fatalf("contracts in SwarmState: %d, want 0", n)
 	}
 
@@ -502,7 +526,7 @@ func TestBootstrapSignsPrivilegedMembership(t *testing.T) {
 // An invite is a JoinRequest the carrier pre-fills; the joiner signs it
 // unchanged and joins through it.
 func TestJoinThroughInvite(t *testing.T) {
-	f := newCarrierFixture(user.TierTrusted)
+	f := newCarrierFixture(t, user.TierTrusted)
 	invite := newInvite(f.carrier, f.joiner.self, user.TierMember, f.clock.now())
 
 	req, err := f.joiner.Accept(astral.NewContext(nil), invite)
@@ -526,7 +550,7 @@ func TestJoinThroughInvite(t *testing.T) {
 // request, the membership its issuer signed, the membership the joiner signed,
 // and the stored membership with the user identity.
 func TestCarrierSessionOverTheWire(t *testing.T) {
-	f := newCarrierFixture(user.TierTrusted)
+	f := newCarrierFixture(t, user.TierTrusted)
 	req, reqID := f.request(t, user.TierMember)
 	joinerEnd, carrierEnd := net.Pipe()
 	defer joinerEnd.Close()
@@ -563,7 +587,7 @@ func TestCarrierSessionOverTheWire(t *testing.T) {
 // Done: a carrier that ends the join answers its end, which the joiner reads
 // as that end.
 func TestCarrierSessionSendsTheEnd(t *testing.T) {
-	f := newCarrierFixture(user.TierTrusted)
+	f := newCarrierFixture(t, user.TierTrusted)
 	req, _ := f.request(t, user.TierTrusted)
 	joinerEnd, carrierEnd := net.Pipe()
 	defer joinerEnd.Close()

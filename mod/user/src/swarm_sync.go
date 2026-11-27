@@ -8,10 +8,10 @@ import (
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astral-go/astral/channel"
 	"github.com/astralp2p/astral-go/lib/query"
-	"github.com/astralp2p/astral-go/lib/routing"
 )
 
-// The SwarmState exchange between two nodes, over queries to the user module:
+// The SwarmState exchange between two nodes, over queries to the user module, served by OpSwarmDigest,
+// OpSwarmFetch and OpSwarmPush:
 //
 //	swarm_digest  answers the ID of every stored entry, then EOS.
 //	swarm_fetch   receives entry IDs until EOS, answers each stored entry among them, then EOS.
@@ -31,21 +31,9 @@ const (
 	swarmFetchBatch = 256
 )
 
-// swarmSource is a peer's copy of SwarmState as a pull reads it.
-type swarmSource interface {
-	SwarmDigest(ctx *astral.Context) ([]*astral.ObjectID, error)
-	SwarmFetch(ctx *astral.Context, ids []*astral.ObjectID) ([]astral.Object, error)
-}
-
-// swarmPeer is another node's exchange ops: a pull reads it and a push writes it.
-type swarmPeer interface {
-	swarmSource
-	swarmEntryPusher
-}
-
 // pullSwarm fetches the entries src stores and this node lacks, and adds each one. It returns how much the head
 // grew. Entries that wait are held; entries that are dropped are not stored.
-func (s *swarmStore) pullSwarm(ctx *astral.Context, src swarmSource) (uint64, error) {
+func (s *swarmStore) pullSwarm(ctx *astral.Context, src *routerSwarmPeer) (uint64, error) {
 	before := s.set.Head()
 
 	digest, err := src.SwarmDigest(ctx)
@@ -73,7 +61,7 @@ func (s *swarmStore) pullSwarm(ctx *astral.Context, src swarmSource) (uint64, er
 }
 
 // addFetched fetches one batch of IDs and adds the entries src answers among them.
-func (s *swarmStore) addFetched(ctx *astral.Context, src swarmSource, ids []*astral.ObjectID) error {
+func (s *swarmStore) addFetched(ctx *astral.Context, src *routerSwarmPeer, ids []*astral.ObjectID) error {
 	want := make(map[astral.ObjectID]bool, len(ids))
 	for _, id := range ids {
 		want[*id] = true
@@ -103,122 +91,6 @@ func (s *swarmStore) addFetched(ctx *astral.Context, src swarmSource, ids []*ast
 	return firstErr
 }
 
-// swarmOpAdder is where addSwarmOps puts the ops: the user module's op router.
-type swarmOpAdder interface {
-	AddOp(name string, op *routing.Op) error
-}
-
-// swarmExchangeOps answers the exchange ops for one store.
-type swarmExchangeOps struct {
-	store *swarmStore
-	// admit decides which callers may read or write the set.
-	admit func(caller *astral.Identity) bool
-}
-
-// addSwarmOps adds the exchange ops over store to router. admit decides which callers each op serves.
-func addSwarmOps(router swarmOpAdder, store *swarmStore, admit func(caller *astral.Identity) bool) error {
-	ops := &swarmExchangeOps{store: store, admit: admit}
-
-	for name, fn := range map[string]any{
-		opSwarmDigest: ops.digest,
-		opSwarmFetch:  ops.fetch,
-		opSwarmPush:   ops.push,
-	} {
-		op, err := routing.NewOp(fn)
-		if err != nil {
-			return err
-		}
-		if err = router.AddOp(name, op); err != nil {
-			return fmt.Errorf("add %v: %w", name, err)
-		}
-	}
-
-	return nil
-}
-
-// digest answers swarm_digest.
-func (o *swarmExchangeOps) digest(ctx *astral.Context, q *routing.IncomingQuery) error {
-	if !o.admit(q.Caller()) {
-		return q.Reject()
-	}
-
-	ch := q.Accept()
-	defer ch.Close()
-
-	for _, id := range o.store.set.Digest() {
-		if err := ch.Send(id); err != nil {
-			return err
-		}
-	}
-
-	return ch.Send(&astral.EOS{})
-}
-
-// fetch answers swarm_fetch. An ID with no stored entry is skipped.
-func (o *swarmExchangeOps) fetch(ctx *astral.Context, q *routing.IncomingQuery) error {
-	if !o.admit(q.Caller()) {
-		return q.Reject()
-	}
-
-	ch := q.Accept()
-	defer ch.Close()
-
-	var ids []*astral.ObjectID
-	err := ch.Switch(
-		func(id *astral.ObjectID) error {
-			if len(ids) == swarmFetchBatch {
-				return errors.New("too many IDs")
-			}
-			ids = append(ids, id)
-			return nil
-		},
-		channel.BreakOnEOS,
-		channel.FailOnEOF(),
-		channel.WithContext(ctx),
-	)
-	if err != nil {
-		return ch.Send(astral.Err(err))
-	}
-
-	for _, id := range ids {
-		obj, err := o.store.set.Entry(id)
-		if err != nil {
-			continue
-		}
-		if err = ch.Send(obj); err != nil {
-			return err
-		}
-	}
-
-	return ch.Send(&astral.EOS{})
-}
-
-// push answers swarm_push. Any identified caller may offer an entry.
-//
-// why not admit: two members that know nothing of each other cannot pull
-// until one holds the other's membership, so each offers its own first; an
-// offered entry passes the entry check like any merge, and what waits is held
-// in a bounded set.
-func (o *swarmExchangeOps) push(ctx *astral.Context, q *routing.IncomingQuery) error {
-	if q.Caller().IsZero() {
-		return q.Reject()
-	}
-
-	ch := q.Accept()
-	defer ch.Close()
-
-	obj, err := ch.Receive()
-	if err != nil {
-		return err
-	}
-
-	if err = o.store.merge(ctx, obj); err != nil {
-		return ch.Send(astral.Err(err))
-	}
-
-	return ch.Send(&astral.Ack{})
-}
-
 // routerSwarmPeer reaches another node's exchange ops through a router: the node's router in the running node.
 type routerSwarmPeer struct {
 	router astral.Router
@@ -226,10 +98,7 @@ type routerSwarmPeer struct {
 	target *astral.Identity
 }
 
-var (
-	_ swarmSource      = &routerSwarmPeer{}
-	_ swarmEntryPusher = &routerSwarmPeer{}
-)
+var _ swarmEntryPusher = &routerSwarmPeer{}
 
 // open queries one exchange op on the target.
 func (p *routerSwarmPeer) open(ctx *astral.Context, op string) (*channel.Channel, error) {

@@ -21,6 +21,7 @@ const offerValidity = 3650 * 24 * time.Hour
 
 // writerView is the part of usermod.SwarmView the typed writes check before they sign.
 type writerView interface {
+	RequestStatus(req *astral.ObjectID) user.RequestStatus
 	Membership(id *astral.Identity) (*user.Membership, bool)
 	MayAnswer(signer *astral.Identity, req *astral.ObjectID) bool
 }
@@ -102,11 +103,17 @@ func (w *swarmWriter) Approve(ctx *astral.Context, request *astral.ObjectID) (as
 	if err != nil {
 		return nil, err
 	}
+	// why the status: only an open request takes an answer; a join has no Approval, its carrier signs the membership.
+	status := w.view.RequestStatus(request)
 	switch req := obj.(type) {
 	case *user.SignedContractRequest:
-		return w.offer(ctx, request, req)
+		if status == user.RequestPending || status == user.RequestOffered {
+			return w.offer(ctx, request, req)
+		}
 	case *user.SignedExpelRequest:
-		return w.approval(ctx, request)
+		if status == user.RequestPending {
+			return w.approval(ctx, request)
+		}
 	}
 	return nil, usermod.ErrNotAllowed
 }
@@ -167,6 +174,10 @@ func (w *swarmWriter) offerExpiry() time.Time {
 
 func (w *swarmWriter) Decline(ctx *astral.Context, request *astral.ObjectID) (*user.SignedDecline, error) {
 	if !w.view.MayAnswer(w.self, request) {
+		return nil, usermod.ErrNotAllowed
+	}
+	// why the status: nobody answers a fulfilled, expired or declined request.
+	if status := w.view.RequestStatus(request); status != user.RequestPending && status != user.RequestOffered && status != user.RequestApproved {
 		return nil, usermod.ErrNotAllowed
 	}
 	body := user.NewDecline(w.self, request)

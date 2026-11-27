@@ -14,10 +14,10 @@ import (
 // Done: an expel needs an ExpelRequest from a Trusted or Privileged member and
 // the user key's Expulsion.
 func TestExpelNeedsRequestAndUserKey(t *testing.T) {
-	f := newCarrierFixture(user.TierTrusted)
+	f := newCarrierFixture(t, user.TierTrusted)
 	ctx := astral.NewContext(nil)
 	subject := f.keys.newKey()
-	f.swarm.setTier(f.userID, subject, user.TierMember)
+	storeMembership(t, f.swarm, f.userID, subject, user.TierMember, f.clock.now().Add(24*time.Hour))
 	ceremony := newUserKeyCeremony(f.userID, f.keys, f.swarm, f.swarm)
 	ceremony.now = f.clock.now
 
@@ -29,7 +29,7 @@ func TestExpelNeedsRequestAndUserKey(t *testing.T) {
 
 	// a request filed by a Member is refused
 	memberReq := signedExpelRequest(t, f, subject, f.carrier)
-	memberReqID := addSwarmEntryT(t, f, memberReq)
+	memberReqID := mergeEntry(t, f.swarm, memberReq)
 	if _, err := ceremony.Expel(ctx, memberReqID); !errors.Is(err, errExpelFilerTier) {
 		t.Fatalf("expel on a Member's request: %v, want %v", err, errExpelFilerTier)
 	}
@@ -67,7 +67,7 @@ func TestExpelNeedsRequestAndUserKey(t *testing.T) {
 
 // An expired or declined ExpelRequest is not carried out.
 func TestExpelRefusesEndedRequest(t *testing.T) {
-	f := newCarrierFixture(user.TierPrivilegedMember)
+	f := newCarrierFixture(t, user.TierPrivilegedMember)
 	ctx := astral.NewContext(nil)
 	ceremony := newUserKeyCeremony(f.userID, f.keys, f.swarm, f.swarm)
 	ceremony.now = f.clock.now
@@ -83,7 +83,7 @@ func TestExpelRefusesEndedRequest(t *testing.T) {
 	}
 
 	expired := signedExpelRequest(t, f, f.carrier, f.keys.newKey())
-	expiredID := addSwarmEntryT(t, f, expired)
+	expiredID := mergeEntry(t, f.swarm, expired)
 	ceremony.now = func() time.Time { return f.clock.now().Add(2 * user.RequestTimeout) }
 	if _, err = ceremony.Expel(ctx, expiredID); !errors.Is(err, errExpelExpired) {
 		t.Fatalf("expel on an expired request: %v, want %v", err, errExpelExpired)
@@ -98,13 +98,4 @@ func signedExpelRequest(t *testing.T, f *carrierFixture, filedBy, subject *astra
 		t.Fatalf("sign: %v", err)
 	}
 	return &user.SignedExpelRequest{ExpelRequest: req, FiledBySig: sig}
-}
-
-func addSwarmEntryT(t *testing.T, f *carrierFixture, obj astral.Object) *astral.ObjectID {
-	t.Helper()
-	if err := f.swarm.merge(nil, obj); err != nil {
-		t.Fatalf("add: %v", err)
-	}
-	id, _ := astral.ResolveObjectID(obj)
-	return id
 }

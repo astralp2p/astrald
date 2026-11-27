@@ -26,28 +26,26 @@ const expiryMargin = time.Second
 
 // publishSwarm recomputes LocalSwarm and emits one SwarmMemberJoined or
 // SwarmMemberLeft per node whose membership differs from the last published
-// set, and syncs with every member that joined while linked. It emits nothing
-// before the first set is recorded. mod/nodes maintains the members' links on
+// set. It emits nothing before the first set is recorded. mod/nodes maintains the members' links on
 // these events.
 func (mod *Module) publishSwarm() {
-	mod.memberSet.mu.Lock()
-	defer mod.memberSet.mu.Unlock()
-	if mod.memberSet.members == nil {
+	mod.swarm.mu.Lock()
+	defer mod.swarm.mu.Unlock()
+	if mod.swarm.members == nil {
 		return
 	}
 	next := identitySet(mod.LocalSwarm())
 	for k, id := range next {
-		if _, ok := mod.memberSet.members[k]; !ok {
+		if _, ok := mod.swarm.members[k]; !ok {
 			mod.Events.Emit(&user.SwarmMemberJoined{NodeID: id})
-			mod.syncNewMember(id)
 		}
 	}
-	for k, id := range mod.memberSet.members {
+	for k, id := range mod.swarm.members {
 		if _, ok := next[k]; !ok {
 			mod.Events.Emit(&user.SwarmMemberLeft{NodeID: id})
 		}
 	}
-	mod.memberSet.members = next
+	mod.swarm.members = next
 	mod.armExpiry()
 }
 
@@ -65,42 +63,26 @@ func (mod *Module) publishBan(subject *astral.Identity) {
 	mod.refreshBans()
 	mod.publishSwarm()
 
-	mod.memberSet.mu.Lock()
-	recorded := mod.memberSet.members != nil
-	first := recorded && !mod.memberSet.banned[subject.String()]
+	mod.swarm.mu.Lock()
+	recorded := mod.swarm.members != nil
+	first := recorded && !mod.swarm.banned[subject.String()]
 	if first {
-		mod.memberSet.banned[subject.String()] = true
+		mod.swarm.banned[subject.String()] = true
 	}
-	mod.memberSet.mu.Unlock()
+	mod.swarm.mu.Unlock()
 
 	if first {
 		mod.Events.Emit(&user.SwarmNodeBanned{NodeID: subject})
 	}
 }
 
-// syncNewMember schedules a sibling sync with node, a member that just
-// joined, when it is linked.
-//
-// why: the LinkCreatedEvent sync skips a node linked before it was a member,
-// as a joiner is with its carrier, and before G7 the pushed node contract
-// started that sync (receiveSignedContract); it carries the relay contracts of
-// the swarm's apps.
-func (mod *Module) syncNewMember(node *astral.Identity) {
-	if node.IsEqual(mod.node.Identity()) || !mod.Nodes.IsLinked(node) {
-		return
-	}
-	if _, err := mod.Scheduler.Schedule(mod.NewSyncNodesTask(node)); err != nil {
-		mod.log.Error("scheduling a sync with new member %v: %v", node, err)
-	}
-}
-
 // recordSwarm records the current member set as published, without events.
 func (mod *Module) recordSwarm() {
-	mod.memberSet.mu.Lock()
-	defer mod.memberSet.mu.Unlock()
-	mod.memberSet.members = identitySet(mod.LocalSwarm())
-	if mod.memberSet.banned == nil {
-		mod.memberSet.banned = map[string]bool{}
+	mod.swarm.mu.Lock()
+	defer mod.swarm.mu.Unlock()
+	mod.swarm.members = identitySet(mod.LocalSwarm())
+	if mod.swarm.banned == nil {
+		mod.swarm.banned = map[string]bool{}
 	}
 	mod.armExpiry()
 }
@@ -116,14 +98,14 @@ func (mod *Module) armExpiry() {
 	if next.IsZero() {
 		return
 	}
-	mod.memberSet.expiry = time.AfterFunc(next.Sub(mod.now())+expiryMargin, mod.publishSwarm)
+	mod.swarm.expiry = time.AfterFunc(next.Sub(mod.now())+expiryMargin, mod.publishSwarm)
 }
 
 // stopExpiry stops the expiry timer. The caller holds swarm.mu.
 func (mod *Module) stopExpiry() {
-	if mod.memberSet.expiry != nil {
-		mod.memberSet.expiry.Stop()
-		mod.memberSet.expiry = nil
+	if mod.swarm.expiry != nil {
+		mod.swarm.expiry.Stop()
+		mod.swarm.expiry = nil
 	}
 }
 
@@ -140,12 +122,13 @@ func (mod *Module) nextMemberExpiry() (next time.Time) {
 		return
 	}
 	last := map[string]time.Time{}
-	for _, c := range mod.memberContracts() {
-		if c.Subject.IsEqual(mod.node.Identity()) {
+	for _, id := range mod.snapshot().Members() {
+		m, ok := mod.Membership(id)
+		if !ok || id.IsEqual(mod.node.Identity()) {
 			continue
 		}
-		if t := c.ExpiresAt.Time(); t.After(last[c.Subject.String()]) {
-			last[c.Subject.String()] = t
+		if t := m.SignedContract.ExpiresAt.Time(); t.After(last[id.String()]) {
+			last[id.String()] = t
 		}
 	}
 	for _, t := range last {
@@ -162,16 +145,6 @@ func (mod *Module) onContractIndexed(signed *auth.SignedContract) {
 	if _, ok := user.ContractTier(signed.Contract); ok {
 		mod.publishSwarm()
 	}
-}
-
-// memberContracts returns the membership that holds for each swarm member.
-func (mod *Module) memberContracts() (contracts []*auth.SignedContract) {
-	for _, id := range mod.swarmMembers() {
-		if m, ok := mod.Membership(id); ok {
-			contracts = append(contracts, m.SignedContract)
-		}
-	}
-	return contracts
 }
 
 func identitySet(list []*astral.Identity) map[string]*astral.Identity {

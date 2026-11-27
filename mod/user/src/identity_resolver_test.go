@@ -12,7 +12,7 @@ import (
 // claimedModule builds a Module whose active contract names issuer as the user.
 // A nil issuer leaves the module unclaimed. The tree.Value is unbound in tests,
 // so Set updates its local cache and ActiveContract() reads it back.
-func claimedModule(t *testing.T, issuer *astral.Identity) *Module {
+func claimedModule(t testing.TB, issuer *astral.Identity) *Module {
 	t.Helper()
 
 	mod := &Module{}

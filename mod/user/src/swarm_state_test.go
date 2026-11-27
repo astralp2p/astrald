@@ -394,8 +394,8 @@ func TestSwarmStoreLayoutAndRead(t *testing.T) {
 func TestSwarmDuplicateIsNoOp(t *testing.T) {
 	script := newSwarmScript()
 	a, b := newStateNode(t, script), newStateNode(t, script)
-	a.connect(localPeer{b})
-	b.connect(localPeer{a})
+	a.connect(swarmPeerOf(t, a, b))
+	b.connect(swarmPeerOf(t, b, a))
 
 	obj := fiveEntries(t)[0]
 	mustAdd(t, a, obj)
@@ -461,7 +461,7 @@ func TestSwarmHeadChangesExactlyWhenEntriesArrive(t *testing.T) {
 
 	src := newStateNode(t, script)
 	mustAdd(t, src, member)
-	if added, err := n.store.pullSwarm(n.store.ctx, localPeer{src}); err != nil || added != 0 || n.store.set.Head() != 4 {
+	if added, err := n.store.pullSwarm(n.store.ctx, swarmPeerOf(t, n, src)); err != nil || added != 0 || n.store.set.Head() != 4 {
 		t.Fatalf("pull with nothing new: added %v, %v, head %v; want 0, nil, 4", added, err, n.store.set.Head())
 	}
 

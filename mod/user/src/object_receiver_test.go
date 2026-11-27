@@ -296,8 +296,8 @@ func (f *receiverFixture) watchSwarm(t *testing.T) *eventRecorder {
 	f.mod.now = time.Now
 	f.mod.recordSwarm()
 	t.Cleanup(func() {
-		f.mod.memberSet.mu.Lock()
-		defer f.mod.memberSet.mu.Unlock()
+		f.mod.swarm.mu.Lock()
+		defer f.mod.swarm.mu.Unlock()
 		f.mod.stopExpiry()
 	})
 	return events

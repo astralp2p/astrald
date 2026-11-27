@@ -11,8 +11,10 @@ import (
 	"github.com/astralp2p/astral-go/api/secp256k1"
 	"github.com/astralp2p/astral-go/api/user"
 	"github.com/astralp2p/astral-go/astral"
+	"github.com/astralp2p/astral-go/astral/log"
+	cryptomod "github.com/astralp2p/astrald/mod/crypto"
 	secp256k1sig "github.com/astralp2p/astrald/mod/secp256k1"
-	usermod "github.com/astralp2p/astrald/mod/user"
+	"github.com/astralp2p/astrald/mod/user/src/swarmset"
 )
 
 // joinClock is the one clock a test's joiner, carrier and swarm read.
@@ -35,209 +37,98 @@ func (c *joinClock) advance(d time.Duration) {
 	c.t = c.t.Add(d)
 }
 
-// joinSwarm is a fake of user.SwarmState and user.SwarmView over one
-// in-memory entry set. It accepts every entry kind and derives answers the
-// way the SwarmView contract states them, with memberships set by the test.
-type joinSwarm struct {
-	mu          sync.Mutex
-	clock       *joinClock
-	entries     map[string]astral.Object
-	order       []string
-	memberships map[string]*user.Membership
-}
+// acceptSigs verifies every signature: the entry check tests below judge tiers and requests, and sign with
+// placeholders.
+type acceptSigs struct{}
 
-var (
-	_ carrierState      = &joinSwarm{}
-	_ ceremonyState     = &joinSwarm{}
-	_ usermod.SwarmView = &joinSwarm{}
-)
-
-func newJoinSwarm(clock *joinClock) *joinSwarm {
-	return &joinSwarm{clock: clock, entries: map[string]astral.Object{}, memberships: map[string]*user.Membership{}}
-}
-
-// setTier gives id a membership at tier, issued by issuer.
-func (s *joinSwarm) setTier(issuer, id *astral.Identity, tier user.Tier) {
-	contract, _ := user.NewMembership(issuer, id, tier, nil, 24*time.Hour)
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.memberships[id.String()] = &user.Membership{SignedContract: &auth.SignedContract{Contract: contract}, Tier: tier}
-}
-
-func (s *joinSwarm) merge(_ *astral.Context, obj astral.Object) error {
-	if _, ok := user.EntryKindOf(obj); !ok {
-		return errors.New("not a swarm entry")
-	}
-	id, err := astral.ResolveObjectID(obj)
-	if err != nil {
-		return err
-	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if _, ok := s.entries[id.String()]; !ok {
-		s.entries[id.String()] = obj
-		s.order = append(s.order, id.String())
-	}
+func (acceptSigs) Verify(*crypto.PublicKey, *crypto.Signature, crypto.SignableTextObject) error {
 	return nil
 }
 
-// FileJoinRequest, AddContract and AddExpulsion are the typed writes the
-// carrier and the ceremony make; each merges its entry.
-func (s *joinSwarm) FileJoinRequest(ctx *astral.Context, req *user.SignedJoinRequest) (*astral.ObjectID, error) {
-	id, err := astral.ResolveObjectID(req)
+// keyringCrypto is the crypto module of a test node that holds the keys of keys. hidden makes it hold none, as a
+// node that reaches no user key.
+type keyringCrypto struct {
+	cryptomod.Module
+	keys   *joinKeyring
+	hidden bool
+}
+
+func (c *keyringCrypto) Sign(ctx *astral.Context, key *crypto.PublicKey, obj crypto.SignableTextObject) (*crypto.Signature, error) {
+	return c.keys.Sign(ctx, key, obj)
+}
+
+func (c *keyringCrypto) NewHashSigner(key *crypto.PublicKey, _ string) (cryptomod.HashSigner, error) {
+	if c.hidden || c.keys.key(secp256k1.Identity(key)) == nil {
+		return nil, errors.New("key not held")
+	}
+	return nil, nil
+}
+
+func (c *keyringCrypto) NewTextSigner(*crypto.PublicKey, string) (cryptomod.TextSigner, error) {
+	return nil, errors.New("no text signer")
+}
+
+// acceptAll is the entry check of a store that accepts every entry: the view over it is the real one, and the
+// entry check is out of the scope of the test.
+func acceptAll(func() *astral.Identity) swarmset.Checker {
+	return &scriptedChecker{script: newSwarmScript()}
+}
+
+// realRules is the entry check of the running node, with every signature accepted.
+func realRules(root func() *astral.Identity) swarmset.Checker {
+	return swarmset.NewRules(acceptSigs{}, root)
+}
+
+// newStoreModule returns the module of node, claimed by root, over a real open store whose entry check is
+// checker(mod.rootKey), and a real view on now. It makes no typed writes: a test sets mod.writer.
+func newStoreModule(t testing.TB, node, root *astral.Identity, keys *joinKeyring, now func() time.Time, checker func(func() *astral.Identity) swarmset.Checker) *Module {
+	t.Helper()
+
+	mod := claimedModule(t, root)
+	mod.node = &identityNode{id: node}
+	mod.log = log.New(node)
+	mod.now = now
+	mod.Crypto = &keyringCrypto{keys: keys}
+
+	mod.swarmState = newSwarmStore(checker(mod.rootKey))
+	ctx := astral.NewContext(nil).WithIdentity(node).IncludeZone(astral.ZoneNetwork)
+	if _, err := mod.swarmState.open(ctx, newMemFiles(), node); err != nil {
+		t.Fatalf("open: %v", err)
+	}
+	mod.swarmView = newSwarmView(mod, mod.rootKey, now)
+
+	return mod
+}
+
+// storeMembership stores subject's membership at tier, issued by issuer and valid until expires, in mod's store.
+func storeMembership(t testing.TB, mod *Module, issuer, subject *astral.Identity, tier user.Tier, expires time.Time) {
+	t.Helper()
+
+	c, err := user.NewMembershipUntil(issuer, subject, tier, nil, astral.Time(expires))
 	if err != nil {
-		return nil, err
+		t.Fatalf("membership: %v", err)
 	}
-	return id, s.merge(ctx, req)
+	mergeEntry(t, mod, &auth.SignedContract{Contract: c, IssuerSig: viewSig(), SubjectSig: viewSig()})
 }
 
-func (s *joinSwarm) AddContract(ctx *astral.Context, sc *auth.SignedContract) error {
-	return s.merge(ctx, sc)
-}
+// mergeEntry merges obj into mod's store and returns its entry ID.
+func mergeEntry(t testing.TB, mod *Module, obj astral.Object) *astral.ObjectID {
+	t.Helper()
 
-func (s *joinSwarm) AddExpulsion(ctx *astral.Context, e *user.SignedExpulsion) error {
-	return s.merge(ctx, e)
-}
-
-func (s *joinSwarm) SwarmEntry(id *astral.ObjectID) (astral.Object, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	obj, ok := s.entries[id.String()]
-	if !ok {
-		return nil, errors.New("not stored")
+	if err := mod.swarmState.merge(mod.swarmState.ctx, obj); err != nil {
+		t.Fatalf("merge %T: %v", obj, err)
 	}
-	return obj, nil
-}
-
-func (s *joinSwarm) SwarmEntries(kind user.EntryKind) ([]*astral.ObjectID, error) {
-	var ids []*astral.ObjectID
-	for _, obj := range s.all() {
-		if k, _ := user.EntryKindOf(obj); k == kind {
-			id, _ := astral.ResolveObjectID(obj)
-			ids = append(ids, id)
-		}
+	id, err := astral.ResolveObjectID(obj)
+	if err != nil {
+		t.Fatal(err)
 	}
-	return ids, nil
+	return id
 }
 
-func (s *joinSwarm) SwarmHead() uint64 {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return uint64(len(s.entries))
-}
-
-func (s *joinSwarm) all() []astral.Object {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	objs := make([]astral.Object, 0, len(s.order))
-	for _, id := range s.order {
-		objs = append(objs, s.entries[id])
-	}
-	return objs
-}
-
-func (s *joinSwarm) count(kind user.EntryKind) int {
-	ids, _ := s.SwarmEntries(kind)
+// countEntries returns how many entries of kind mod's store holds.
+func countEntries(mod *Module, kind user.EntryKind) int {
+	ids, _ := mod.SwarmEntries(kind)
 	return len(ids)
-}
-
-func (s *joinSwarm) RequestStatus(req *astral.ObjectID) user.RequestStatus {
-	for _, sc := range s.ContractsOf(req) {
-		if sc.IssuerSig != nil && sc.SubjectSig != nil {
-			return user.RequestFulfilled
-		}
-	}
-	status := user.RequestPending
-	for _, obj := range s.all() {
-		switch e := obj.(type) {
-		case *user.SignedDecline:
-			if e.RequestID.IsEqual(req) {
-				return user.RequestDeclined
-			}
-		case *user.SignedApproval:
-			if e.RequestID.IsEqual(req) {
-				status = user.RequestApproved
-			}
-		case *user.SignedExpulsion:
-			if r, ok := s.entryOf(req).(*user.SignedExpelRequest); ok && r.Subject.IsEqual(e.Subject) {
-				status = user.RequestApproved
-			}
-		}
-	}
-	if status == user.RequestPending && fakeRequestExpired(s.entryOf(req), s.clock.now()) {
-		return user.RequestExpired
-	}
-	return status
-}
-
-func fakeRequestExpired(obj astral.Object, now time.Time) bool {
-	switch r := obj.(type) {
-	case *user.SignedJoinRequest:
-		return r.Expired(now)
-	case *user.SignedExpelRequest:
-		return r.Expired(now)
-	}
-	return false
-}
-
-func (s *joinSwarm) entryOf(id *astral.ObjectID) astral.Object {
-	obj, _ := s.SwarmEntry(id)
-	return obj
-}
-
-func (s *joinSwarm) Expelled(id *astral.Identity) bool {
-	for _, obj := range s.all() {
-		if e, ok := obj.(*user.SignedExpulsion); ok && e.Subject.IsEqual(id) {
-			return true
-		}
-	}
-	return false
-}
-
-func (s *joinSwarm) ContractsOf(req *astral.ObjectID) []*auth.SignedContract {
-	var list []*auth.SignedContract
-	for _, obj := range s.all() {
-		if sc, ok := obj.(*auth.SignedContract); ok && sc.RequestID != nil && sc.RequestID.IsEqual(req) {
-			list = append(list, sc)
-		}
-	}
-	return list
-}
-
-func (s *joinSwarm) Membership(id *astral.Identity) (*user.Membership, bool) {
-	s.mu.Lock()
-	m, ok := s.memberships[id.String()]
-	s.mu.Unlock()
-	if ok {
-		return m, true
-	}
-	for _, obj := range s.all() {
-		if sc, ok := obj.(*auth.SignedContract); ok && sc.Subject.IsEqual(id) {
-			if m, ok := user.MembershipOf(sc); ok {
-				return m, true
-			}
-		}
-	}
-	return nil, false
-}
-
-func (s *joinSwarm) MayAnswer(signer *astral.Identity, req *astral.ObjectID) bool {
-	m, ok := s.Membership(signer)
-	obj := s.entryOf(req)
-	return ok && obj != nil && user.MayAnswer(m.Tier, obj)
-}
-
-// writeState is a SwarmState over a fake store: the store's reads and the
-// typed writes of a real swarmWriter, whose merge is the store's.
-type writeState struct {
-	entryReader
-	*swarmWriter
-}
-
-// entryReader is the reading part of usermod.SwarmState the answering ops use.
-type entryReader interface {
-	SwarmEntry(id *astral.ObjectID) (astral.Object, error)
-	SwarmEntries(kind user.EntryKind) ([]*astral.ObjectID, error)
 }
 
 // joinKeyring signs as the keys it holds and records the text of every object it
@@ -287,7 +178,7 @@ func verifySignedBy(t *testing.T, id *astral.Identity, obj crypto.SignableObject
 
 // answer adds an Approval (or a Decline when decline is set) of reqID signed
 // by issuer, and returns its entry ID.
-func answerJoin(t *testing.T, s *joinSwarm, keys *joinKeyring, issuer *astral.Identity, reqID *astral.ObjectID, decline bool) *astral.ObjectID {
+func answerJoin(t *testing.T, mod *Module, keys *joinKeyring, issuer *astral.Identity, reqID *astral.ObjectID, decline bool) *astral.ObjectID {
 	t.Helper()
 	var obj astral.Object
 	if decline {
@@ -305,21 +196,5 @@ func answerJoin(t *testing.T, s *joinSwarm, keys *joinKeyring, issuer *astral.Id
 		}
 		obj = &user.SignedApproval{Approval: a, IssuerSig: sig}
 	}
-	if err := s.merge(nil, obj); err != nil {
-		t.Fatalf("add answer: %v", err)
-	}
-	id, _ := astral.ResolveObjectID(obj)
-	return id
-}
-
-// awaitSwarmEntries waits until s holds n entries of kind.
-func awaitSwarmEntries(t *testing.T, s *joinSwarm, kind user.EntryKind, n int) {
-	t.Helper()
-	deadline := time.Now().Add(5 * time.Second)
-	for s.count(kind) < n {
-		if time.Now().After(deadline) {
-			t.Fatalf("timed out waiting for %d %v", n, kind)
-		}
-		time.Sleep(time.Millisecond)
-	}
+	return mergeEntry(t, mod, obj)
 }

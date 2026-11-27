@@ -26,7 +26,7 @@ func TestSwarmStateExpelIsStoredAndApplied(t *testing.T) {
 			t.Fatalf("store expel: %v", err)
 		}
 	}
-	f.mod.swarm = n.store
+	f.mod.swarmState = n.store
 	events := f.watchSwarm(t)
 
 	f.mod.receiveSwarmExpels()

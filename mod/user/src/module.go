@@ -11,6 +11,7 @@ import (
 	"github.com/astralp2p/astral-go/sig"
 	"github.com/astralp2p/astrald/core/assets"
 	"github.com/astralp2p/astrald/mod/user"
+	"github.com/astralp2p/astrald/mod/user/src/swarmset"
 )
 
 var _ user.Module = &Module{}
@@ -30,8 +31,8 @@ type Module struct {
 
 	ready chan struct{}
 
-	// memberSet is the member set publishSwarm last emitted events for.
-	memberSet memberSet
+	// swarm is the member set publishSwarm last emitted events for.
+	swarm memberSet
 
 	// mu makes the claim check and the claim one transition; see claim.
 	mu sync.Mutex
@@ -55,25 +56,22 @@ type Module struct {
 	// runs. See recognizeJoinTarget.
 	joinTarget atomic.Pointer[astral.Identity]
 
-	// swarm is this node's copy of SwarmState; Load builds it and Run opens it.
-	swarm *swarmStore
+	// swarmState is this node's copy of SwarmState; LoadDependencies builds it and Run opens it.
+	swarmState *swarmStore
+	// entryRules is the entry check of swarmState; LoadDependencies gives it the crypto module.
+	entryRules *swarmset.Rules
 	// writer makes SwarmState's typed writes.
 	writer *swarmWriter
 	// publisher emits SwarmState's events; swarmFeed reports its changes.
 	publisher *swarmPublisher
 	swarmFeed SwarmFeed
 
-	// swarmView reads SwarmState; nil until LoadDependencies built it.
-	// why atomic: the auth walk reads this module from its own LoadDependencies on,
-	// which core runs at once with this module's.
-	swarmView atomic.Pointer[swarmView]
+	// swarmView reads SwarmState and answers usermod.SwarmView for the module; Load builds it.
+	*swarmView
 	// carrier carries the JoinRequests that name this node (user.carry_join).
 	carrier *swarmCarrier
 	// joiner keeps this node's own JoinRequest while it joins (user.join).
 	joiner *swarmJoiner
-	// indexedEntries holds the SwarmState contracts already handed to the auth
-	// index, and the SwarmState expels already stored as bans.
-	indexedEntries sig.Map[astral.ObjectID, struct{}]
 
 	// banned holds the subjects the active user banned; see isBanned.
 	banned atomic.Pointer[map[string]struct{}]
@@ -109,8 +107,8 @@ func (mod *Module) Run(ctx *astral.Context) error {
 
 	<-ctx.Done()
 
-	mod.memberSet.mu.Lock()
-	defer mod.memberSet.mu.Unlock()
+	mod.swarm.mu.Lock()
+	defer mod.swarm.mu.Unlock()
 	mod.stopExpiry()
 
 	return nil

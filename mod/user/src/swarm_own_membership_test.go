@@ -52,12 +52,12 @@ func TestOwnMembershipExchangesSwarmStateWithLinkedPeers(t *testing.T) {
 	}}
 	mod := &Module{node: node, log: log.New(self), ctx: ctx, now: time.Now}
 	mod.Nodes = &linkedNodes{linked: []*astral.Identity{a, b}}
-	mod.swarm = n.store
+	mod.swarmState = n.store
 	own := membershipOf(t, issuer, self)
 	if err := mod.config.ActiveContract.Set(nil, own); err != nil {
 		t.Fatalf("seed active contract: %v", err)
 	}
-	mod.swarmView.Store(newSwarmView(mod, mod.rootKey, mod.now))
+	mod.swarmView = newSwarmView(mod, mod.rootKey, mod.now)
 	exchanged := func() map[string]int {
 		time.Sleep(200 * time.Millisecond)
 		mu.Lock()

@@ -9,6 +9,7 @@ import (
 	"github.com/astralp2p/astrald/core"
 	"github.com/astralp2p/astrald/core/assets"
 	"github.com/astralp2p/astrald/mod/user"
+	"github.com/astralp2p/astrald/mod/user/src/swarmset"
 	"github.com/astralp2p/astrald/resources"
 )
 
@@ -33,7 +34,10 @@ func (Loader) Load(node astral.Node, assets assets.Assets, log *log.Logger) (cor
 
 	mod.ctx = astral.NewContext(nil).WithIdentity(node.Identity())
 
-	mod.swarm = mod.newModuleSwarmStore()
+	mod.swarmView = newSwarmView(mod, mod.rootKey, mod.now)
+	mod.entryRules = swarmset.NewRules(nil, mod.rootKey)
+	mod.swarmState = newSwarmStore(mod.entryRules)
+	mod.swarmState.peers = mod.swarmPeers
 	mod.router.AddStructPrefix(mod, "Op")
 
 	mod.db = &DB{DB: assets.Database(), mod: mod}

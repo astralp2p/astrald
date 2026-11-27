@@ -68,7 +68,18 @@ func (mod *Module) SetActiveContract(signed *auth.SignedContract) error {
 		return err
 	}
 
-	return mod.config.ActiveContract.Set(mod.ctx, signed)
+	if err = mod.config.ActiveContract.Set(mod.ctx, signed); err != nil {
+		return err
+	}
+
+	// why here and not only in onActiveContractChanged: SwarmState holds this
+	// node's membership by the time the claim or join returns, so the node is a
+	// member for the caller's next query (a token-less user.info after
+	// user.bootstrap). A refusal is not this call's: onActiveContractChanged adds
+	// it again, as it does on a node that has not opened its SwarmState yet, and
+	// logs it.
+	_ = mod.AddContract(mod.ctx, signed)
+	return nil
 }
 
 // errClaimed answers a claim that another claim has preceded.
@@ -192,7 +203,7 @@ func (mod *Module) activeNodes(userID *astral.Identity) (nodes []*astral.Identit
 		return nil, nil
 	}
 
-	for _, id := range mod.swarmMembers() {
+	for _, id := range mod.snapshot().Members() {
 		if _, banned := expelled[id.String()]; banned {
 			continue
 		}

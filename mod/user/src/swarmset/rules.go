@@ -51,6 +51,10 @@ func NewRules(verifier Verifier, root func() *astral.Identity) *Rules {
 	return &Rules{verifier: verifier, root: root}
 }
 
+// SetVerifier sets the verifier of signatures, for a check built before the crypto module is injected. It
+// must run before the first Check.
+func (c *Rules) SetVerifier(verifier Verifier) { c.verifier = verifier }
+
 // Check decides whether obj may enter the set. Signatures and Timeouts are checked first, then the gating
 // identity's tier (tierGate); the root key writes every kind.
 //
