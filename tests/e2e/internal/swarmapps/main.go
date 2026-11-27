@@ -14,8 +14,9 @@
 //	swarmapps store-key <endpoint> <token> <identity> < hex objects, one per line
 //	                   {"key_object"} or {"error"}: identity's key among them, stored there
 //	swarmapps approve  <endpoint> <node_token> <node_id> <request_id> [push_to...]
-//	                   signs with $SWARMAPPS_NODE_KEY (hex of data/node_key);
-//	                   {"approval_id", "pushed": {"local" or node: "ack" or error}} or {"error"}
+//	                   signs the yes with $SWARMAPPS_NODE_KEY (hex of data/node_key):
+//	                   an offer for a contract request, an Approval otherwise;
+//	                   {"answer_id", "pushed": {"local" or node: "ack" or error}} or {"error"}
 //	swarmapps offer    <endpoint> <node_token> <entry_id> <push_to...>
 //	                   offers a stored entry to other nodes with user.swarm_push;
 //	                   {"pushed": {node: "ack" or error}} or {"error"}
@@ -85,7 +86,7 @@ func main() {
 	case "store-key":
 		emit(storeKey(ctx, c, rest[0], os.Stdin))
 	case "approve":
-		emit(signApproval(ctx, c, rest[0], rest[1], rest[2:]))
+		emit(signAnswer(ctx, c, rest[0], rest[1], rest[2:]))
 	case "offer":
 		emit(offerEntry(ctx, c, rest[0], rest[1:]))
 	case "serve-probe":

@@ -17,17 +17,19 @@ import (
 	secp256k1sig "github.com/astralp2p/astrald/mod/secp256k1"
 )
 
-// signApproval signs an Approval of the request reqID as issuer, with the
-// node key $SWARMAPPS_NODE_KEY holds (the node's data/node_key, hex), and
-// offers it with user.swarm_push to the node c reaches and to every node of
-// to. It reports the Approval's entry ID and, per node, "ack" or the error
-// the push answered.
+// signAnswer signs the yes to the request reqID that the node c reaches
+// stores, as issuer, with the node key $SWARMAPPS_NODE_KEY holds (the node's
+// data/node_key, hex): an offer for a ContractRequest, a contract from issuer
+// to the filer with every requested permit at one more Delegation, signed by
+// issuer only; an Approval for any other request. It offers the answer with
+// user.swarm_push to that node and to every node of to, and reports the
+// answer's entry ID and, per node, "ack" or the error the push answered.
 //
 // why the node's key file and not the node: crypto.sign_hash refuses the node
 // key, and user.answer_request refuses an answer outside the node's tier and
-// writes nothing, so a Member's Approval reaches SwarmState only as an
-// offered entry, the way a merge meets it.
-func signApproval(ctx *astral.Context, c *astrald.Client, issuer, reqID string, to []string) (map[string]any, error) {
+// writes nothing, so a Member's answer reaches SwarmState only as an offered
+// entry, the way a merge meets it.
+func signAnswer(ctx *astral.Context, c *astrald.Client, issuer, reqID string, to []string) (map[string]any, error) {
 	signer, err := astral.ParseIdentity(issuer)
 	if err != nil {
 		return nil, err
@@ -40,13 +42,17 @@ func signApproval(ctx *astral.Context, c *astrald.Client, issuer, reqID string, 
 	if err != nil {
 		return nil, err
 	}
-	body := user.NewApproval(signer, rid)
-	sig, err := secp256k1sig.SignASN1(key, body.SignableHash())
+	objs, err := fetchEntries(ctx, c, []*astral.ObjectID{rid})
 	if err != nil {
 		return nil, err
 	}
-
-	signed := &user.SignedApproval{Approval: body, IssuerSig: sig}
+	if len(objs) != 1 {
+		return nil, errors.New("the node does not store the request")
+	}
+	signed, err := answerOf(objs[0], signer, rid, key)
+	if err != nil {
+		return nil, err
+	}
 	id, err := astral.ResolveObjectID(signed)
 	if err != nil {
 		return nil, err
@@ -60,7 +66,36 @@ func signApproval(ctx *astral.Context, c *astrald.Client, issuer, reqID string, 
 		}
 		pushed[target] = push(ctx, c.WithTarget(tid), signed)
 	}
-	return map[string]any{"approval_id": id.String(), "pushed": pushed}, nil
+	return map[string]any{"answer_id": id.String(), "pushed": pushed}, nil
+}
+
+// answerOf returns the yes to req, the request with entry ID rid, signed by
+// signer with key: an offer for a ContractRequest, an Approval otherwise.
+func answerOf(req astral.Object, signer *astral.Identity, rid *astral.ObjectID, key *crypto.PrivateKey) (astral.Object, error) {
+	cr, ok := req.(*user.SignedContractRequest)
+	if !ok {
+		body := user.NewApproval(signer, rid)
+		sig, err := secp256k1sig.SignASN1(key, body.SignableHash())
+		if err != nil {
+			return nil, err
+		}
+		return &user.SignedApproval{Approval: body, IssuerSig: sig}, nil
+	}
+	var permits []*auth.Permit
+	for _, p := range cr.Permits {
+		deeper := *p
+		deeper.Delegation++
+		permits = append(permits, &deeper)
+	}
+	body := &auth.Contract{
+		Issuer: signer, Subject: cr.FiledBy, Permits: permits, RequestID: rid,
+		ExpiresAt: astral.Time(time.Now().Add(time.Hour)),
+	}
+	sig, err := secp256k1sig.SignASN1(key, body.SignableHash())
+	if err != nil {
+		return nil, err
+	}
+	return &auth.SignedContract{Contract: body, IssuerSig: sig}, nil
 }
 
 // push offers obj with user.swarm_push and returns "ack" or the error.

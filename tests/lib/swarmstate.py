@@ -8,11 +8,12 @@ astral-py has no client for these ops, so the first two go through
 the Go tool `tests/e2e/internal/swarmapps`.
 
     reqs = await swarmstate.requests(c, all=True)   # [Request, ...]
-    await swarmstate.answer(cu, req.id, "approve")  # the signed Approval
+    await swarmstate.answer(cu, req.id, "approve")  # the signed offer or Approval
     ids = swarmstate.entries(node)                  # {entry ID: envelope}
 
-A Request carries `id` (the entry ID), `status` (pending, approved, declined,
-expired), `type` (the signed request's type) and `obj` (the request's own
+A Request carries `id` (the entry ID), `status` (pending, offered,
+fulfilled, approved, declined, expired; only an expel request is approved),
+`type` (the signed request's type) and `obj` (the request's own
 fields, without the signature: the JSON of a signed request nests them under
 the request's type name, e.g. `JoinRequest`).
 """
@@ -50,7 +51,7 @@ class Request:
 
 async def requests(c, all: bool = False, **kw) -> list:
     """The requests a node's SwarmState holds, oldest filed first; with `all`,
-    every status, else the pending ones only."""
+    every status, else the open ones only (pending or offered)."""
     qs = "user.swarm_requests?out=json" + ("&all=true" if all else "")
     docs = await jsonops.stream(c, qs, **kw)
     # why triples: the op sends a request's entry ID, its status and the
@@ -82,8 +83,10 @@ async def find(c, pred, timeout: float = 30.0, all: bool = True, poll: float = 0
 
 
 async def answer(c, req_id: str, answer: str, **kw) -> dict:
-    """user.answer_request: the signed Approval or Decline, as a JSON
-    envelope. An error_message raises jsonops.OpError."""
+    """user.answer_request: the signed answer, as a JSON envelope: for
+    `approve` an offer (a mod.auth.signed_contract) of a contract request or
+    an Approval of an expel request, for `decline` a Decline. An
+    error_message raises jsonops.OpError."""
     docs = await jsonops.call(c, f"user.answer_request?id={req_id}&answer={answer}&out=json",
                               **kw)
     if not docs:
@@ -257,15 +260,16 @@ def entry_on(node: dict, entry_id: str) -> dict | None:
     return e["Object"] if e else None
 
 
-def sign_approval(node: dict, req_id: str, push_to: list) -> dict:
-    """An Approval of req_id signed with node's own key (read from its
-    data/node_key with lib/nodefs) and offered with user.swarm_push to node
-    and to every node of push_to: {approval_id, pushed}."""
+def sign_answer(node: dict, req_id: str, push_to: list) -> dict:
+    """The yes to req_id signed with node's own key (read from its
+    data/node_key with lib/nodefs): an offer for a contract request, an
+    Approval otherwise; offered with user.swarm_push to node and to every node
+    of push_to: {answer_id, pushed}."""
     from lib import nodefs
     out = app_tool("approve", node["endpoint"], node["token"], node["identity"], req_id,
                    *[n["identity"] for n in push_to],
                    env={"SWARMAPPS_NODE_KEY": nodefs.read_bytes(node, "data/node_key").hex()})
-    assert "error" not in out, f"signing an Approval as {node['identity']}: {out['error']}"
+    assert "error" not in out, f"signing an answer as {node['identity']}: {out['error']}"
     return out
 
 
@@ -362,8 +366,9 @@ def waiting():
 
 async def request_contract(c, actions: list, timeout: float = 60.0) -> dict:
     """apphost.request_contract as the app c's token names, for a permit of
-    each action: the envelope of the contract its host signs once the
-    request is approved (the harness answerer approves it while a test runs).
+    each action: the envelope of the contract its host signs once it
+    co-signed an offer for the request (the harness answerer approves it
+    while a test runs).
     An answer that is not a contract raises jsonops.OpError."""
     with waiting():
         return await _request_contract(c, actions, timeout)
