@@ -61,14 +61,14 @@ func (mod *Module) isOwnerOrRoot(actor, vfsID *astral.Identity) bool {
 //
 // A replaced directory is in no row and is refused.
 //
-// The action must name one complete ObjectID. Size 0 is refused.
+// The action must name one complete ObjectID. A partial ID is refused.
 // The Repo field is ignored. A database error refuses. A refusal is the same for an unknown ObjectID and for an
 // ObjectID of another VFS.
 //
 // note: objects.describe and objects.find ask without an ObjectID (VFS 6, section 6), so this handler refuses them.
 func (mod *Module) AuthorizeSeeObjects(ctx *astral.Context, a *apiauth.SeeObjectsAction) bool {
 	id := a.ObjectID
-	if id == nil || id.Size == 0 {
+	if id.IsPartial() {
 		return false
 	}
 

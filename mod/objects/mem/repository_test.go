@@ -357,6 +357,9 @@ func TestZeroByteCommitIsStored(t *testing.T) {
 	var repo = New("test", 1024)
 	var ctx = astral.NewContext(nil)
 	var id = store(t, repo, nil)
+	if !id.IsEmpty() {
+		t.Fatalf("a zero-byte commit answered %v, want astral.EmptyID", id)
+	}
 
 	if n := len(repo.objects.Clone()); n != 1 {
 		t.Fatalf("stored %v objects, want 1", n)

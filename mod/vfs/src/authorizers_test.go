@@ -393,12 +393,22 @@ func TestSeeObjectsRefusesAPartialObjectID(t *testing.T) {
 	}
 }
 
-func TestSeeObjectsRefusesTheEmptyObject(t *testing.T) {
+func TestSeeObjectsTreatsTheEmptyObjectAsAFullID(t *testing.T) {
 	f := newSeeFixture(t)
 	empty := contentID("")
 
 	if f.see(f.vfs, &empty) {
-		t.Fatal("the ObjectID of empty content is allowed")
+		t.Fatal("the empty object is allowed while no file holds it")
+	}
+
+	vol := mustVolume(t, f.mod, f.vfs)
+	insertEntry(t, f.mod, &dbEntry{VFS: f.vfs, ParentID: vol.RootID, Name: "empty", ObjectID: &empty, ModTime: testModTime})
+
+	switch {
+	case !f.see(f.vfs, &empty):
+		t.Fatal("the VFS identity is refused its own empty file")
+	case f.see(f.other, &empty):
+		t.Fatal("the identity of another VFS sees the empty file")
 	}
 }
 

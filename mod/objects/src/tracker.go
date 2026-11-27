@@ -124,7 +124,7 @@ func (t *tracker) flush() error {
 // resolveFullID returns the full ID of the object a partial objectID names in repo.
 // why: a row is keyed by the full ID, and only the repository knows which object a partial ID names.
 func resolveFullID(ctx *astral.Context, repo objectsmod.Repository, objectID *astral.ObjectID) (*astral.ObjectID, error) {
-	if objectID.Size != 0 {
+	if !objectID.IsPartial() {
 		return objectID, nil
 	}
 

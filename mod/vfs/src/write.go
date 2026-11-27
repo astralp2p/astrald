@@ -85,7 +85,7 @@ func receiveContent(ctx *astral.Context, ch *channel.Channel, w objectsapi.Write
 			return err
 		},
 		func(*objectsapi.CommitMsg) (err error) {
-			if id, err = commitContent(w, size); err != nil {
+			if id, err = w.Commit(); err != nil {
 				return err
 			}
 
@@ -95,18 +95,6 @@ func receiveContent(ctx *astral.Context, ch *channel.Channel, w objectsapi.Write
 	)
 
 	return id, err
-}
-
-// commitContent commits the content and returns its ObjectID. Content of zero bytes answers errEmptyFile and
-// commits nothing.
-//
-// why: a VFS holds no empty file, so a path never names the empty object (operator decision 2026-11-13).
-func commitContent(w objectsapi.Writer, size uint64) (*astral.ObjectID, error) {
-	if size == 0 {
-		return nil, errEmptyFile
-	}
-
-	return w.Commit()
 }
 
 // recordFile records the committed content at the path in one change: missing parents are created, a file there

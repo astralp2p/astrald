@@ -76,8 +76,8 @@ func (repo *Repository) findObject(objectID *astral.ObjectID) (*storedObject, er
 		data: data,
 	}
 
-	// why: Size 0 marks a partial ID, which carries no size to compare.
-	if objectID.Size != 0 && objectID.Size != object.id.Size {
+	// why: a partial ID carries no size to compare.
+	if !objectID.IsPartial() && objectID.Size != object.id.Size {
 		return nil, objectsmod.ErrNotFound
 	}
 

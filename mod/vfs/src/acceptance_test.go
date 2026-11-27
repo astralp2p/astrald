@@ -263,33 +263,44 @@ func TestAcceptanceTokenlessSessionReachesNoOperation(t *testing.T) {
 	}
 }
 
-// TestAcceptanceEmptyFile (acceptance criterion 6): a write of zero bytes answers empty file and changes nothing.
-// No entry and no missing parent folder is created, and a file already at the path keeps its ObjectID and
-// modification time.
+// TestAcceptanceEmptyFile (acceptance criterion 6): a write of zero bytes stores an empty file. vfs.stat answers a
+// file of astral.EmptyID, vfs.read answers no bytes, and the file is there after the node restarts.
 func TestAcceptanceEmptyFile(t *testing.T) {
 	a := startAcceptanceNode(t)
 	a.claim()
 	app := a.registerApp()
-	emptyFile := astral.NewError("empty file")
 
-	answer, err := a.write(app.client, query.Args{"path": "/new/empty"}, nil)
-	expectError(t, "vfs.write of zero bytes", answer, err, emptyFile)
-	for _, path := range []string{"/new/empty", "/new"} {
-		answer, err = a.call(app.client, "vfs.stat", query.Args{"path": path})
-		expectError(t, "vfs.stat of "+path, answer, err, vfsapi.ErrNotFound)
+	written := a.mustWrite(app.client, "/new/empty", nil)
+	if written.ID != astral.EmptyID || written.IsFolder() {
+		t.Fatalf("vfs.write of zero bytes answered %v; want a file of %v", written.ID, astral.EmptyID)
 	}
 
-	before := a.mustWrite(app.client, "/kept", []byte("content"))
-	answer, err = a.write(app.client, query.Args{"path": "/kept"}, nil)
-	expectError(t, "vfs.write of zero bytes over a file", answer, err, emptyFile)
-
-	answer, err = a.call(app.client, "vfs.stat", query.Args{"path": "/kept"})
-	after, ok := answer.(*vfsapi.Entry)
-	if err != nil || !ok {
-		t.Fatalf("vfs.stat of /kept answered %#v, %v; want an entry", answer, err)
+	a.mustWrite(app.client, "/kept", []byte("content"))
+	if replaced := a.mustWrite(app.client, "/kept", nil); replaced.ID != astral.EmptyID {
+		t.Fatalf("vfs.write of zero bytes over a file answered %v; want %v", replaced.ID, astral.EmptyID)
 	}
-	if after.ID != before.ID || !after.ModTime.Time().Equal(before.ModTime.Time()) {
-		t.Errorf("/kept is %v at %v after the empty write; want %v at %v", after.ID, after.ModTime, before.ID, before.ModTime)
+
+	expectEmptyFile(t, a, app.client, "/new/empty")
+	a.restart()
+
+	// note: the app's session ends with the node, so the reads after the restart run as the app inside the node.
+	expectEmptyFile(t, a, a.as(app.id), "/new/empty")
+	expectEmptyFile(t, a, a.as(app.id), "/kept")
+}
+
+// expectEmptyFile checks that vfs.stat answers a file of astral.EmptyID at path and vfs.read answers no bytes.
+func expectEmptyFile(t *testing.T, a *acceptanceNode, c *astrald.Client, path string) {
+	t.Helper()
+
+	answer, err := a.call(c, "vfs.stat", query.Args{"path": path})
+	entry, ok := answer.(*vfsapi.Entry)
+	if err != nil || !ok || entry.ID != astral.EmptyID || entry.IsFolder() {
+		t.Fatalf("vfs.stat of %v answered %#v, %v; want a file of %v", path, answer, err, astral.EmptyID)
+	}
+
+	content, err := a.readRaw(c, "vfs.read", query.Args{"path": path})
+	if err != nil || len(content) != 0 {
+		t.Fatalf("vfs.read of %v answered %q, %v; want no bytes", path, content, err)
 	}
 }
 

@@ -520,6 +520,9 @@ func TestZeroByteCommitIsStored(t *testing.T) {
 	repo := NewRepository(nil, "test", t.TempDir())
 	ctx := astral.NewContext(nil)
 	id := store(t, repo, nil)
+	if !id.IsEmpty() {
+		t.Fatalf("a zero-byte commit answered %v, want astral.EmptyID", id)
+	}
 
 	checkRead(t, repo, id, nil)
 	if ok, err := repo.Contains(ctx, id); !ok || err != nil {

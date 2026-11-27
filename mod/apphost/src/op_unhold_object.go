@@ -48,7 +48,7 @@ func (mod *Module) unholdOne(caller *astral.Identity, id *astral.ObjectID) astra
 		return astral.Err(apphost.ErrMissingObjectID)
 	}
 
-	if id.Size == 0 {
+	if id.IsPartial() {
 		return astral.Err(astral.ErrPartialObjectID)
 	}
 

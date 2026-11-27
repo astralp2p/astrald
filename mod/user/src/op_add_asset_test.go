@@ -1,7 +1,6 @@
 package user
 
 import (
-	"crypto/sha256"
 	"errors"
 	"testing"
 
@@ -76,12 +75,10 @@ func TestRemoveAssetRefusesPartialID(t *testing.T) {
 	}
 }
 
-// TestAssetMethodsRefuseSizeZeroIDs pins the error both ops reject with. The empty
-// object's full ID has Size 0 and is refused like a partial ID.
+// TestAssetMethodsRefuseSizeZeroIDs pins the error both ops reject a partial ID with.
 func TestAssetMethodsRefuseSizeZeroIDs(t *testing.T) {
 	ids := map[string]*astral.ObjectID{
-		"partial ID":   {Hash: testObjectID().Hash},
-		"empty object": {Hash: sha256.Sum256(nil)},
+		"partial ID": {Hash: testObjectID().Hash},
 	}
 
 	for name, id := range ids {
@@ -98,5 +95,20 @@ func TestAssetMethodsRefuseSizeZeroIDs(t *testing.T) {
 				t.Fatal("a refused ID is an asset")
 			}
 		})
+	}
+}
+
+// TestAssetMethodsAcceptTheEmptyID: the empty object's ID has Size 0 but is a full ID.
+func TestAssetMethodsAcceptTheEmptyID(t *testing.T) {
+	mod, _ := assetModule(t)
+
+	if err := mod.AddAsset(&astral.EmptyID); err != nil {
+		t.Fatalf("AddAsset(EmptyID): %v", err)
+	}
+	if !mod.AssetsContain(&astral.EmptyID) {
+		t.Fatal("the empty ID is not an asset after AddAsset")
+	}
+	if err := mod.RemoveAsset(&astral.EmptyID); err != nil {
+		t.Fatalf("RemoveAsset(EmptyID): %v", err)
 	}
 }
