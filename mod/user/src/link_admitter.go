@@ -32,9 +32,17 @@ func (mod *Module) AdmitLink(remote *astral.Identity) error {
 // clears the contract, and in that window it must not refuse its own
 // identity, which every local call is promoted to; if the clear fails the
 // window would never close.
+//
+// It is true for every other identity while SwarmState is not open: the view
+// is empty then, so it cannot tell who is banned, and the auth module keeps
+// contracts across a restart. why: a failed open would otherwise leave the veto
+// off for the node's whole lifetime.
 func (mod *Module) IsBanned(id *astral.Identity) bool {
 	if mod.ActiveContract() == nil || id.IsEqual(mod.Identity()) || id.IsEqual(mod.node.Identity()) {
 		return false
+	}
+	if mod.openStore() == nil {
+		return true
 	}
 	return mod.Expelled(id)
 }

@@ -69,3 +69,23 @@ func TestIsBannedIsFalseWithoutAnActiveContract(t *testing.T) {
 		t.Error("no active contract: want not banned")
 	}
 }
+
+// TestIsBannedFailsClosedWhileSwarmStateIsNotOpen: until SwarmState opens, its
+// view is empty and cannot name a ban, so every identity but the user and this
+// node reads as banned; the veto stays on when the open fails.
+func TestIsBannedFailsClosedWhileSwarmStateIsNotOpen(t *testing.T) {
+	issuer := astral.GenerateIdentity()
+	stranger := astral.GenerateIdentity()
+	mod := bannedModule(t, issuer)
+	mod.swarmState = newSwarmStore(nil)
+
+	if !mod.IsBanned(stranger) {
+		t.Error("store not open: want a stranger banned")
+	}
+	if mod.IsBanned(issuer) {
+		t.Error("store not open: want the user admitted")
+	}
+	if mod.IsBanned(mod.node.Identity()) {
+		t.Error("store not open: want this node admitted")
+	}
+}

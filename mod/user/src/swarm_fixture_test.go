@@ -196,6 +196,10 @@ func useSwarm(t testing.TB, mod *Module, userID *astral.Identity, members ...*as
 		addMembership(t, state, userID, m)
 	}
 	mod.swarmView = newSwarmView(state, func() *astral.Identity { return userID }, time.Now)
+	// why: IsBanned fails closed unless the module's store is open.
+	if mod.swarmState == nil {
+		mod.swarmState = state.node.store
+	}
 	return state
 }
 
