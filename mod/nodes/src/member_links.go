@@ -2,7 +2,6 @@ package nodes
 
 import (
 	"context"
-	"slices"
 	"sync"
 
 	"github.com/astralp2p/astral-go/astral"
@@ -49,14 +48,15 @@ func (mod *Module) runMemberLinks(ctx *astral.Context) {
 // reconcileMemberLinks re-reads the swarm's member set and makes the link
 // tasks match it: a member other than this node without a task gets one, and
 // mod/nodes refreshes its endpoints; a task whose member left is stopped, and
-// the links to that member are closed. The links of every linked node the
-// user banned are closed too, member or not.
+// the links to that member are closed, unless the user banned it. It never
+// closes the links of a banned node otherwise.
 //
 // why: a member event is a signal to look, not a fact to apply, so events that
 // arrive out of order still end in the latest set.
-// why every linked node: a banned node can be linked without being a member
-// here (its membership has not reached SwarmState, or it linked through
-// user.introduce), so it has no link task to stop.
+// why not a banned node's links: until the banned node answers its ban, the
+// links carry the ban to it (Expel's push, the redelivery at a new link, the
+// sweep), and the spec admits them until then. They close when it answers
+// (onBanAnswered, EnforceLinkPolicy) or at the sweep.
 func (mod *Module) reconcileMemberLinks() {
 	for _, id := range mod.applyMemberSet() {
 		if err := mod.CloseLinks(id); err != nil {
@@ -67,7 +67,7 @@ func (mod *Module) reconcileMemberLinks() {
 
 // applyMemberSet starts and stops link tasks against the current member set,
 // and returns the nodes whose links to close: the members whose tasks it
-// stopped and the linked nodes the user banned.
+// stopped, except the banned ones, whose links wait for the ban answer.
 func (mod *Module) applyMemberSet() (closing []*astral.Identity) {
 	ml := &mod.memberLinks
 	ml.mu.Lock()
@@ -92,7 +92,9 @@ func (mod *Module) applyMemberSet() (closing []*astral.Identity) {
 		mod.log.Log("removing sibling %v", link.target)
 		// why: a task still running when its link closes redials it, so it is cancelled first.
 		link.cancel()
-		closing = append(closing, link.target)
+		if !mod.User.IsBanned(link.target) {
+			closing = append(closing, link.target)
+		}
 	}
 
 	for key, m := range keep {
@@ -102,11 +104,6 @@ func (mod *Module) applyMemberSet() (closing []*astral.Identity) {
 		mod.startMemberLink(m)
 	}
 
-	for _, id := range mod.LinkedIdentities() {
-		if mod.User.IsBanned(id) && !slices.ContainsFunc(closing, id.IsEqual) {
-			closing = append(closing, id)
-		}
-	}
 	return closing
 }
 

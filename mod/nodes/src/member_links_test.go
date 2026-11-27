@@ -322,11 +322,12 @@ func TestEmptiedMemberSetStopsEveryMemberLink(t *testing.T) {
 	f.requireNoClose(t)
 }
 
-// TestBannedLinkedNodeLinksCloseOnReconcile: a member event re-reads the bans
-// (IsBanned), and the links of a linked node the user banned close, though it
-// is no member here and has no link task; the links of an unbanned non-member
-// stay, and so does the link task of a member.
-func TestBannedLinkedNodeLinksCloseOnReconcile(t *testing.T) {
+// TestReconcileKeepsAnUnansweredBannedNodesLinksOpen: a member event re-reads
+// the member set, and the links of a linked node the user banned stay open,
+// though it is no member here: they carry its ban to it until it answers. The
+// links of an unbanned non-member stay too, and so does the link task of a
+// member.
+func TestReconcileKeepsAnUnansweredBannedNodesLinksOpen(t *testing.T) {
 	a, banned, stranger := astral.GenerateIdentity(), astral.GenerateIdentity(), astral.GenerateIdentity()
 	f := newMemberLinksFixture(t, a)
 	f.requireRunning(t, a)
@@ -335,7 +336,7 @@ func TestBannedLinkedNodeLinksCloseOnReconcile(t *testing.T) {
 
 	f.user.ban(banned)
 	f.receive(t, &user.SwarmMemberLeft{NodeID: banned})
-	f.requireClosed(t, banned)
+	f.receive(t, &user.SwarmMemberJoined{NodeID: a})
 	f.requireRunning(t, a)
 	f.requireNoClose(t)
 	if n := f.sched.scheduled(banned); n != 0 {
@@ -343,10 +344,10 @@ func TestBannedLinkedNodeLinksCloseOnReconcile(t *testing.T) {
 	}
 }
 
-// TestBannedMemberLinksClose: a banned member leaves the member set; its link
-// task stops and its links close, and a link it opens later closes at the next
-// reconcile, as the bans are read again.
-func TestBannedMemberLinksClose(t *testing.T) {
+// TestBannedMemberLeavingStopsItsTaskAndKeepsItsLinks: a banned member leaves
+// the member set; its link task stops, so nothing redials it, and its links
+// stay open until it answers its ban.
+func TestBannedMemberLeavingStopsItsTaskAndKeepsItsLinks(t *testing.T) {
 	a, b := astral.GenerateIdentity(), astral.GenerateIdentity()
 	f := newMemberLinksFixture(t, a, b)
 	f.requireRunning(t, a, b)
@@ -354,14 +355,8 @@ func TestBannedMemberLinksClose(t *testing.T) {
 	f.user.ban(b)
 	f.user.set(f.nodeID, a)
 	f.receive(t, &user.SwarmMemberLeft{NodeID: b})
-	f.requireClosed(t, b)
 	f.requireRunning(t, a)
 	f.requireNoClose(t)
-
-	f.link(t, b)
-	f.receive(t, &user.SwarmMemberJoined{NodeID: a})
-	f.requireClosed(t, b)
-	f.requireRunning(t, a)
 }
 
 // TestMemberEventsEndInTheLatestSet: the link tasks follow the member set
