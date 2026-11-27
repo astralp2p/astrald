@@ -39,8 +39,8 @@ waits for the user key to sign the membership after the User's own action.
 node2 cannot reach the user key, so it ends the join at once, and no
 membership is signed, stored or handed over: the oracle holds "no debris" to a
 fresh latecomer and unchanged rosters. A Member join through node2 would be
-admitted on an Approval, since a Privileged carrier signs a Member's
-membership itself; that path is `swarm-state-member`'s.
+admitted with no answer, since a Privileged carrier signs a Member's
+membership itself in the carrier session; that path is `swarm-state-member`'s.
 
 G7 rewrote this test: it used to ask for a plain node contract, which node2
 refused at the issuer signature (`sign as issuer`). The intent, that only the

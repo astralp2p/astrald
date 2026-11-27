@@ -4,7 +4,8 @@
 The driver acts and judges nothing. As the User on node1 it stores a bait
 object. A third node, `stranger`, is claimed by a second User through a
 token-less bootstrap and links to node1. A fourth, `authz_member`, joins the
-User's swarm through node1 as a Member, the User approving its JoinRequest.
+User's swarm through node1 as a Member, node1 signing its membership in the
+carrier session.
 Three askers then send every probe to node1 over the link: the stranger with
 its node token, the stranger with its own User's token, and the Member with
 its node token. The driver records how each probe came back: allowed, refused,

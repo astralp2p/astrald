@@ -4,8 +4,8 @@
 emn1 and emn2 are claimed for one User, from the same new words, so each holds
 a Privileged membership the user key signed (`user.bootstrap`). emn2 offers
 its membership to emn1's SwarmState (`user.swarm_push`), so emn1's swarm
-holds emn2 as a Privileged node. emn3 joins through emn1 as a Member, the User
-approving its JoinRequest.
+holds emn2 as a Privileged node. emn3 joins through emn1 as a Member, emn1
+signing its membership in the carrier session.
 
 Controls first: with a token minted on emn1 for emn2's identity, the reads
 that the report names are allowed while emn2 is a member:

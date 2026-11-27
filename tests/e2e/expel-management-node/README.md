@@ -9,7 +9,8 @@ swarm call refused.
   and claims `emn1` and `emn2` for it with `user.bootstrap`, so each holds a
   Privileged membership the user key signed. `emn2` offers its membership to
   `emn1`'s SwarmState with `user.swarm_push`. `emn3` joins through `emn1` as a
-  Member, the User approving its JoinRequest (`swarmstate.admit`).
+  Member, `emn1` signing its membership in the carrier session
+  (`swarmstate.admit`).
 - **driver** `script.py` — with a token `emn1` mints for `emn2`'s identity, the
   controls (`user.list_expelled`, `user.list_siblings`, `user.expel` naming the
   User); then the User on `emn1` expels `emn2`; then the same three calls and

@@ -6,8 +6,9 @@ carrier restarts.
 - **after** `swarm-state-join-unanswered` · **restart** `node1` (the
   carrier) · **destroys** `true`.
 - **driver** `script.py` — node3, restarted by step 1, runs `user.join`
-  through node1 again and gives up after 10 s with nobody answering. Records
-  `join_resent`: node3's JoinRequests node1 lists after the resend.
+  through node1 again at tier `privileged_member` and gives up after 10 s
+  with the User confirming nothing. Records `join_resent`: node3's
+  JoinRequests node1 lists after the resend.
 - **oracle** `verify.py` — after the resend node1 listed exactly one
   JoinRequest of node3, the one step 1 recorded, pending (the joiner kept it
   across its restart and resent the same object); after node1's restart it

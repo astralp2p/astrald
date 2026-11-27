@@ -55,9 +55,9 @@ def main():
     assert j["before"].get("state") == "fresh", (
         f"joiner answered user.info before the join: {j['before']}; want state fresh")
     assert not j["joined"]["refused"], f"user.join: {j['joined']['detail']}"
-    # note: since G7 a Member's membership is issued by its carrier, claimer,
-    # carrying out the Approval of its JoinRequest; user.info answers that
-    # contract, so it names the carrier and not the User (open finding on G7)
+    # note: a Member's membership is issued by its carrier, claimer, in the
+    # carrier session; user.info answers that contract, so it names the
+    # carrier and not the User (open finding on G7)
     assert j["issuer"] == claimer["identity"] and j["subject"] == joiner["identity"], (
         f"joiner's contract {j['issuer']} -> {j['subject']}; want "
         f"{claimer['identity']} -> {joiner['identity']}")

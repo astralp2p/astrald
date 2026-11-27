@@ -3,10 +3,14 @@
 answers.
 
 node1 and node3 learn each other's endpoint. node3 runs user.join through
-node1 (tier member) and gives up after 10 s with nobody answering: the
-connection drops, which only pauses the join (astral-docs
-protocols/user/ops/user.carry_join.md). The world then restarts node3, the
-joiner.
+node1 (tier privileged_member) and gives up after 10 s with the User
+confirming nothing: the connection drops, which only pauses the join
+(astral-docs protocols/user/ops/user.carry_join.md). The world then restarts
+node3, the joiner.
+
+why privileged_member: a carrier signs a member or trusted membership at once
+in the carrier session; only the user key's membership waits for the User,
+and node1, which holds the software user key, waits for user.confirm_join.
 
 Records `join_unanswered`: {request_id, filed_at, answered} — the JoinRequest
 node1 stores, and what user.join answered before the driver gave up.
@@ -19,8 +23,9 @@ import astral
 from lib import swarmstate as ss
 from lib.sessionio import load, write_facts
 
-# why: long enough for the carrier to store the request; nobody answers it
+# why: long enough for the carrier to store the request; the User confirms nothing
 ASK = 10.0
+TIER = "privileged_member"
 
 
 async def main():
@@ -34,7 +39,7 @@ async def main():
     answered = None
     async with await astral.connect(n3["endpoint"], token=n3["token"]) as c3:
         try:
-            answered = await asyncio.wait_for(ss.join(c3, n1["identity"]), ASK)
+            answered = await asyncio.wait_for(ss.join(c3, n1["identity"], tier=TIER), ASK)
         except (asyncio.TimeoutError, TimeoutError):
             pass
     async with await astral.connect(n1["endpoint"], token=doc["facts"]["user_token"]) as cu:

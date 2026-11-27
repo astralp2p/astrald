@@ -330,9 +330,10 @@ def move_key(src: dict, dst: dict, identity: str) -> dict:
 
 async def admit(carrier: dict, user_token: str, joiner: dict, tier: str = "member",
                 timeout: float = 60.0) -> dict:
-    """joiner joins the User's swarm through carrier at tier, the User
-    approving its JoinRequest on carrier: what user.adopt did before G7.
-    Both nodes learn each other's LAN endpoint first. Returns the membership
+    """joiner joins the User's swarm through carrier at tier (admit_member):
+    the carrier signs a member or trusted membership in the carrier session,
+    and at privileged_member the User confirms it on carrier. Both nodes learn
+    each other's LAN endpoint first. Returns the membership
     envelope the join answered; an answer that is not one raises."""
     async with await astral.connect(carrier["endpoint"], token=carrier["token"]) as c:
         await c.nodes.add_endpoint(joiner["identity"], joiner["lan_endpoint"], experimental=True)

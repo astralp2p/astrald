@@ -102,8 +102,9 @@ async def link(n1: dict, n2: dict) -> None:
 async def join(joiner: dict, claimer: dict) -> dict:
     async with await astral.connect(joiner["endpoint"]) as c:      # anonymous
         before = await state(c)
-        # why waiting: since G7 the join waits for an Approval of its
-        # JoinRequest, which the harness answerer gives while a driver waits
+        # note: a member join needs no answer, since the carrier signs its
+        # membership in the carrier session; waiting() only tells the harness
+        # answerer a driver waits
         with ss.waiting():
             joined = await attempt(jsonops.value(
                 c, f"user.join?node={claimer['identity']}&out=json", timeout=DEADLINE))

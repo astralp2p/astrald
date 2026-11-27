@@ -13,7 +13,8 @@ whatever node2 later knows of the latecomer came from the swarm.
 
 why privileged_member: only the user key signs a Privileged membership (D2),
 so it is the join a carrier without that key cannot end; a Member join through
-node2 needs only an Approval, and node2, a Privileged carrier, ends it.
+node2 needs no answer, since node2, a Privileged carrier, signs it in the
+carrier session.
 
 why the pause after the refusal: a refused join that still left a membership
 would spread it through SwarmState asynchronously, so the snapshot is taken

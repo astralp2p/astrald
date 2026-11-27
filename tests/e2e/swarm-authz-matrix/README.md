@@ -18,7 +18,8 @@ holds nothing any of them tried to write.
 - **driver** `script.py` — as the User, store a bait object on node1. Claim
   `stranger` for a second User with a token-less `user.bootstrap`, and link it
   to node1 from the stranger's side. `authz_member` joins through node1 as a
-  Member, the User approving its JoinRequest (`swarmstate.admit`). Send 21
+  Member, node1 signing its membership in the carrier session
+  (`swarmstate.admit`). Send 21
   probes to node1 over the link (`target=node1`) as three askers: the
   stranger with its node token, the stranger with its User's token, and the
   Member with its node token. Record each outcome as `allowed`, `refused` or
