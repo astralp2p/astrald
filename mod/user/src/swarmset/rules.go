@@ -60,8 +60,8 @@ func (c *Rules) SetVerifier(verifier Verifier) { c.verifier = verifier }
 //
 // note: Membership excludes an expelled identity, so an entry gated by one waits instead of entering.
 //
-// why the root is read once: a claim can change it between two reads, and the gate must be judged against the
-// root it was built for.
+// why: the root is read once, because a claim can change it between two reads and the gate must be judged
+// against the root it was built for.
 func (c *Rules) Check(obj astral.Object, r Reader) user.EntryVerdict {
 	root := c.root()
 
@@ -170,8 +170,8 @@ func requestOf(id *astral.ObjectID, r Reader) (Request, user.EntryVerdict) {
 //     the request; or the filer's contract to the identity the request names, whose permits are requested ones
 //     (user.ContractRequest.Covers).
 //
-// why so narrow: SwarmState only grows and every member syncs it, so a contract enters only for a reason the
-// swarm can check.
+// why: a contract enters only for a reason the swarm can check, because SwarmState only grows and every member
+// syncs it.
 func (c *Rules) contractGate(sc *auth.SignedContract, root *astral.Identity, r Reader) user.EntryVerdict {
 	if sc.IsNil() || !c.verify(sc.Issuer, sc.IssuerSig, sc.Contract) {
 		return user.EntryDrop

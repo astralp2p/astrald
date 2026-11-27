@@ -17,7 +17,7 @@ func TestParseRequestReadsEachKindOnce(t *testing.T) {
 	jr := joinRequest(filer, user.TierMember)
 	er := expelRequest(filer)
 
-	for _, c := range []struct {
+	for _, tc := range []struct {
 		obj                     astral.Object
 		filer, carrier, subject *astral.Identity
 		expel                   bool
@@ -26,10 +26,10 @@ func TestParseRequestReadsEachKindOnce(t *testing.T) {
 		{jr, nil, filer, jr.Joiner, false},
 		{er, filer, nil, er.Subject, true},
 	} {
-		r, ok := ParseRequest(c.obj)
-		if !ok || !r.Filer.IsEqual(c.filer) || !r.Carrier.IsEqual(c.carrier) || !r.Subject.IsEqual(c.subject) ||
-			r.isExpel() != c.expel || string(r.Kind) != c.obj.ObjectType() {
-			t.Fatalf("ParseRequest(%v) = %+v, %v", c.obj.ObjectType(), r, ok)
+		r, ok := ParseRequest(tc.obj)
+		if !ok || !r.Filer.IsEqual(tc.filer) || !r.Carrier.IsEqual(tc.carrier) || !r.Subject.IsEqual(tc.subject) ||
+			r.isExpel() != tc.expel || string(r.Kind) != tc.obj.ObjectType() {
+			t.Fatalf("ParseRequest(%v) = %+v, %v", tc.obj.ObjectType(), r, ok)
 		}
 	}
 	for _, obj := range []astral.Object{&user.SignedContractRequest{}, &user.SignedApproval{}, &astral.Ack{}} {

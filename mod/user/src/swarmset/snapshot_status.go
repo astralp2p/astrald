@@ -112,7 +112,8 @@ func (s *Snapshot) offeredOtherwise(sc *auth.SignedContract) bool {
 // of a ContractRequest, or an approver's contract to its filer. An ExpelRequest is never fulfilled. Nothing that
 // follows changes it.
 //
-// why the parties: a contract's issuer chooses its RequestID, so a contract to a bystander fulfils nothing.
+// why: the parties are checked, because a contract's issuer chooses its RequestID and a contract to a bystander
+// fulfils nothing.
 func (s *Snapshot) fulfilled(req *astral.ObjectID, r Request) bool {
 	if r.isExpel() {
 		return false
@@ -129,7 +130,7 @@ func (s *Snapshot) fulfilled(req *astral.ObjectID, r Request) bool {
 // declined reports whether a counting Decline names req, or the request was filed by, carried by or names an
 // expelled identity. A Decline closes the request; it takes back no contract (fulfilled comes first).
 //
-// why not an ExpelRequest's Subject: expelling it carries the request out.
+// why: an ExpelRequest's Subject is left out, because expelling it carries the request out.
 func (s *Snapshot) declined(req *astral.ObjectID, r Request) bool {
 	if s.Expelled(r.Filer) || s.Expelled(r.Carrier) || (!r.isExpel() && s.Expelled(r.Subject)) {
 		return true

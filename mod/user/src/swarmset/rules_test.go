@@ -94,21 +94,6 @@ func expulsion(issuer *astral.Identity) *user.SignedExpulsion {
 	return &user.SignedExpulsion{Expulsion: e, IssuerSig: sigBy(issuer)}
 }
 
-type entryCase struct {
-	name string
-	obj  astral.Object
-	want user.EntryVerdict
-}
-
-func runEntryCases(t *testing.T, f *entryFixture, cases []entryCase) {
-	t.Helper()
-	for _, c := range cases {
-		if got := f.verdict(c.obj); got != c.want {
-			t.Errorf("%s: got %v, want %v", c.name, got, c.want)
-		}
-	}
-}
-
 // TestCheckSwarmEntryRequests: any tier files a ContractRequest; only Trusted
 // and Privileged carry a JoinRequest or file an ExpelRequest (D5, D10).
 func TestCheckSwarmEntryRequests(t *testing.T) {
@@ -122,7 +107,11 @@ func TestCheckSwarmEntryRequests(t *testing.T) {
 	badJoiner := joinRequest(f.trusted, user.TierMember)
 	badJoiner.JoinerSig = sigBy(f.trusted)
 
-	runEntryCases(t, f, []entryCase{
+	for _, tc := range []struct {
+		name string
+		obj  astral.Object
+		want user.EntryVerdict
+	}{
 		{"contract request by a member", contractRequest(f.member), user.EntryAccept},
 		{"contract request by a trusted node", contractRequest(f.trusted), user.EntryAccept},
 		{"contract request by a privileged node", contractRequest(f.privileged), user.EntryAccept},
@@ -143,7 +132,13 @@ func TestCheckSwarmEntryRequests(t *testing.T) {
 		{"expel request by a trusted node", expelRequest(f.trusted), user.EntryAccept},
 		{"expel request by a privileged node", expelRequest(f.privileged), user.EntryAccept},
 		{"expel request by a stranger", expelRequest(f.out), user.EntryWait},
-	})
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := f.verdict(tc.obj); got != tc.want {
+				t.Fatalf("got %v, want %v", got, tc.want)
+			}
+		})
+	}
 }
 
 // TestCheckSwarmEntryAnswers: an Approval enters only for an ExpelRequest, a
@@ -166,7 +161,11 @@ func TestCheckSwarmEntryAnswers(t *testing.T) {
 	badSig := approval(f.privileged, expel)
 	badSig.IssuerSig = sigBy(f.member)
 
-	runEntryCases(t, f, []entryCase{
+	for _, tc := range []struct {
+		name string
+		obj  astral.Object
+		want user.EntryVerdict
+	}{
 		{"approval of an expel request by a privileged node", approval(f.privileged, expel), user.EntryAccept},
 		{"approval of an expel request by the root key", approval(f.root, expel), user.EntryAccept},
 		{"approval of an expel request by a trusted node", approval(f.trusted, expel), user.EntryDrop},
@@ -189,7 +188,13 @@ func TestCheckSwarmEntryAnswers(t *testing.T) {
 		{"decline of a member join by a member", decline(f.member, memberJoin), user.EntryDrop},
 		{"decline by a stranger", decline(f.out, cr), user.EntryWait},
 		{"decline of an entry that is no request", decline(f.privileged, notARequest), user.EntryDrop},
-	})
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := f.verdict(tc.obj); got != tc.want {
+				t.Fatalf("got %v, want %v", got, tc.want)
+			}
+		})
+	}
 }
 
 // offer returns issuer's offer, signed by issuer only, that answers the stored
@@ -256,7 +261,11 @@ func TestCheckSwarmEntryContractsAndExpels(t *testing.T) {
 	badExpulsionSig := expulsion(f.root)
 	badExpulsionSig.IssuerSig = sigBy(f.privileged)
 
-	runEntryCases(t, f, []entryCase{
+	for _, tc := range []struct {
+		name string
+		obj  astral.Object
+		want user.EntryVerdict
+	}{
 		{"member membership by a trusted carrier", contract(f.trusted, astral.GenerateIdentity(), user.TierMember.Action()), user.EntryAccept},
 		{"trusted membership by a trusted carrier", contract(f.trusted, astral.GenerateIdentity(), user.TierTrusted.Action()), user.EntryDrop},
 		{"trusted membership by a privileged carrier", contract(f.privileged, astral.GenerateIdentity(), user.TierTrusted.Action()), user.EntryAccept},
@@ -286,7 +295,13 @@ func TestCheckSwarmEntryContractsAndExpels(t *testing.T) {
 
 		{"not an entry", &astral.Ack{}, user.EntryDrop},
 		{"unsigned request body", contractRequest(f.member).ContractRequest, user.EntryDrop},
-	})
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := f.verdict(tc.obj); got != tc.want {
+				t.Fatalf("got %v, want %v", got, tc.want)
+			}
+		})
+	}
 }
 
 // TestCheckSwarmEntryOffers (criteria 15, 18): an offer, a contract only its
@@ -331,7 +346,11 @@ func TestCheckSwarmEntryOffers(t *testing.T) {
 	badSig := offer(f.privileged, req, reqID)
 	badSig.IssuerSig = sigBy(f.member)
 
-	runEntryCases(t, f, []entryCase{
+	for _, tc := range []struct {
+		name string
+		obj  astral.Object
+		want user.EntryVerdict
+	}{
 		{"offer by a privileged node", offer(f.privileged, req, reqID), user.EntryAccept},
 		{"offer by the root key", offer(f.root, req, reqID), user.EntryAccept},
 		{"offer by a trusted node", offer(f.trusted, req, reqID), user.EntryDrop},
@@ -351,7 +370,13 @@ func TestCheckSwarmEntryOffers(t *testing.T) {
 		{"a second offer from one issuer", second, user.EntryDrop},
 		{"a second issuer's offer", offer(f.root, renewed, renewedID), user.EntryAccept},
 		{"offer, wrong signer", badSig, user.EntryDrop},
-	})
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := f.verdict(tc.obj); got != tc.want {
+				t.Fatalf("got %v, want %v", got, tc.want)
+			}
+		})
+	}
 
 	// why: an offer may carry only some of the requested permits.
 	two := contractRequest(f.member)
@@ -359,7 +384,19 @@ func TestCheckSwarmEntryOffers(t *testing.T) {
 	twoID := f.store(two)
 	subset := offer(f.privileged, two, twoID)
 	subset.Permits = subset.Permits[:1]
-	runEntryCases(t, f, []entryCase{{"offer of some requested permits", subset, user.EntryAccept}})
+	for _, tc := range []struct {
+		name string
+		obj  astral.Object
+		want user.EntryVerdict
+	}{
+		{"offer of some requested permits", subset, user.EntryAccept},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := f.verdict(tc.obj); got != tc.want {
+				t.Fatalf("got %v, want %v", got, tc.want)
+			}
+		})
+	}
 }
 
 // TestCheckSwarmEntryDeclineClosesOnlyTheRequest (criterion 18): once a
@@ -416,8 +453,18 @@ func TestCheckSwarmEntryUnclaimedNodeIsItsOwnRoot(t *testing.T) {
 	nodeID := astral.GenerateIdentity()
 	f := newEntryFixture(t)
 	f.check = NewRules(keyVerifier{}, func() *astral.Identity { return nodeID })
-	runEntryCases(t, f, []entryCase{
+	for _, tc := range []struct {
+		name string
+		obj  astral.Object
+		want user.EntryVerdict
+	}{
 		{"expulsion by the unclaimed node", expulsion(nodeID), user.EntryAccept},
 		{"privileged membership by the unclaimed node", contract(nodeID, astral.GenerateIdentity(), user.TierPrivilegedMember.Action()), user.EntryAccept},
-	})
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := f.verdict(tc.obj); got != tc.want {
+				t.Fatalf("got %v, want %v", got, tc.want)
+			}
+		})
+	}
 }

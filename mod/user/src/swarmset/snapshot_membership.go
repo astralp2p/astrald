@@ -11,8 +11,8 @@ import (
 // Membership returns id's membership that holds now (holds): of several, the highest tier, then the one that
 // expires last. It returns false when id is expelled.
 //
-// why the highest tier first: a node that joined again through another carrier holds several memberships, and
-// a lower one that expires later must not hide its tier.
+// why: the highest tier comes first, because a node that joined again through another carrier holds several
+// memberships and a lower one that expires later must not hide its tier.
 func (s *Snapshot) Membership(id *astral.Identity) (*user.Membership, bool) {
 	return s.membership(id, map[string]bool{})
 }
@@ -80,7 +80,8 @@ func (s *Snapshot) issues(issuer *astral.Identity, tier user.Tier, visiting map[
 // PrivilegedMembership (D2).
 // Spec: .ai/system/protocols/user/README.md#memberships
 //
-// why a table and not the chain: tier permits are not delegable, so no contract chain says who may issue one.
+// why: the rule is a table and not the contract chain, because tier permits are not delegable and no chain says
+// who may issue one.
 func MayIssue(issuer, tier user.Tier) bool {
 	switch issuer {
 	case user.TierPrivilegedMember:
