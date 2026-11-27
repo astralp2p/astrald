@@ -22,6 +22,11 @@ func (mod *Module) AdmitLink(remote *astral.Identity) error {
 	return user.ErrExpelled
 }
 
+// IsBanned reports whether id is a node the active user banned (usermod.Module).
+func (mod *Module) IsBanned(id *astral.Identity) bool {
+	return mod.isBanned(id)
+}
+
 // isBanned reports whether id is a subject the active user banned. It is the
 // veto the auth module runs at every level of a walk, AdmitLink's ban test and
 // OpIntroduce's refusal of a banned caller, so the three agree.

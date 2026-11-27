@@ -20,15 +20,28 @@ import (
 	usermod "github.com/astralp2p/astrald/mod/user"
 )
 
-// memberUser is a user module whose member set the test scripts; a set
-// error makes every read fail.
+// memberUser is a user module whose member set and bans the test scripts; a
+// set error makes every member read fail.
 type memberUser struct {
 	usermod.Module
 	ready chan struct{}
 
 	mu      sync.Mutex
 	members []*astral.Identity
+	banned  []*astral.Identity
 	err     error
+}
+
+func (u *memberUser) ban(id *astral.Identity) {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	u.banned = append(u.banned, id)
+}
+
+func (u *memberUser) IsBanned(id *astral.Identity) bool {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	return slices.ContainsFunc(u.banned, id.IsEqual)
 }
 
 func (u *memberUser) set(members ...*astral.Identity) {
@@ -114,9 +127,8 @@ func (s *linkTaskScheduler) scheduled(id *astral.Identity) int {
 }
 
 // memberLinksFixture is a nodes module on nodeID whose swarm members user
-// scripts, whose scheduler records the member link tasks, and whose link
-// closes are recorded on closed, each with whether that member's task was
-// already cancelled.
+// scripts, whose scheduler records the member link tasks, whose link closes
+// are recorded on closed, each with whether no task of that node still ran.
 type memberLinksFixture struct {
 	mod    *Module
 	nodeID *astral.Identity
@@ -126,8 +138,8 @@ type memberLinksFixture struct {
 }
 
 type closedLinks struct {
-	id        *astral.Identity
-	cancelled bool
+	id      *astral.Identity
+	stopped bool
 }
 
 func newMemberLinksFixture(t *testing.T, members ...*astral.Identity) *memberLinksFixture {
@@ -154,7 +166,7 @@ func newMemberLinksFixture(t *testing.T, members ...*astral.Identity) *memberLin
 		f.sched.mu.Lock()
 		tasks := f.sched.tasks[id.String()]
 		f.sched.mu.Unlock()
-		f.closed <- closedLinks{id: id, cancelled: len(tasks) > 0 && tasks[len(tasks)-1].cancelled.Load()}
+		f.closed <- closedLinks{id: id, stopped: len(tasks) == 0 || tasks[len(tasks)-1].cancelled.Load()}
 		return nil
 	}
 
@@ -187,20 +199,33 @@ func (f *memberLinksFixture) requireRunning(t *testing.T, ids ...*astral.Identit
 	}
 }
 
-// requireClosed waits for the links of id to close after its task was cancelled.
-func (f *memberLinksFixture) requireClosed(t *testing.T, id *astral.Identity) {
+// requireClosed waits for the links of exactly ids to close, each once, in
+// any order, and each with no link task of its node still running.
+func (f *memberLinksFixture) requireClosed(t *testing.T, ids ...*astral.Identity) {
 	t.Helper()
-	select {
-	case c := <-f.closed:
-		if !c.id.IsEqual(id) {
-			t.Fatalf("closed the links of %v; want %v", c.id, id)
-		}
-		if !c.cancelled {
-			t.Fatalf("closed the links of %v before its link task was cancelled", id)
-		}
-	case <-time.After(effectTimeout):
-		t.Fatalf("the links of %v were not closed", id)
+	want := map[string]bool{}
+	for _, id := range ids {
+		want[id.String()] = true
 	}
+	for len(want) > 0 {
+		select {
+		case c := <-f.closed:
+			if !want[c.id.String()] {
+				t.Fatalf("closed the links of %v; want %v, each once", c.id, ids)
+			}
+			if !c.stopped {
+				t.Fatalf("closed the links of %v before its link task was cancelled", c.id)
+			}
+			delete(want, c.id.String())
+		case <-time.After(effectTimeout):
+			t.Fatalf("the links of %v were not closed", ids)
+		}
+	}
+}
+
+// link adds a link to id to the pool.
+func (f *memberLinksFixture) link(id *astral.Identity) {
+	f.mod.linkPool.links.Add(&Link{id: astral.NewNonce(), conn: &identityConn{remote: id}})
 }
 
 // requireNoClose fails if any member's links close within absenceWindow.
@@ -252,6 +277,48 @@ func TestSwarmMemberLeftClosesTheMembersLinks(t *testing.T) {
 	f := newMemberLinksFixture(t, a, b)
 	f.requireRunning(t, a, b)
 
+	f.user.set(f.nodeID, a)
+	f.receive(t, &user.SwarmMemberLeft{NodeID: b})
+	f.requireClosed(t, b)
+	f.requireRunning(t, a)
+	f.requireNoClose(t)
+}
+
+// TestBannedLinkedNodeLinksCloseOnAMemberEvent: on a member event, the links
+// of a linked node the user banned close, though it is no member here and has
+// no link task; the links of an unbanned non-member stay, and a later event
+// closes the banned node's links no second time.
+func TestBannedLinkedNodeLinksCloseOnAMemberEvent(t *testing.T) {
+	a, banned, stranger := astral.GenerateIdentity(), astral.GenerateIdentity(), astral.GenerateIdentity()
+	f := newMemberLinksFixture(t, a)
+	f.requireRunning(t, a)
+	f.link(banned)
+	f.link(stranger)
+
+	f.user.ban(banned)
+	f.receive(t, &user.SwarmMemberLeft{NodeID: banned})
+	f.requireClosed(t, banned)
+	f.requireRunning(t, a)
+	f.requireNoClose(t)
+
+	f.receive(t, &user.SwarmMemberJoined{NodeID: a})
+	f.requireRunning(t, a)
+	f.requireNoClose(t)
+	if n := f.sched.scheduled(banned); n != 0 {
+		t.Fatalf("scheduled %v link tasks for the banned node; want 0", n)
+	}
+}
+
+// TestBannedMemberLinksCloseOnce: a banned member leaves the member set; its
+// link task stops and its links close once, though it is both a former
+// member and a banned node.
+func TestBannedMemberLinksCloseOnce(t *testing.T) {
+	a, b := astral.GenerateIdentity(), astral.GenerateIdentity()
+	f := newMemberLinksFixture(t, a, b)
+	f.requireRunning(t, a, b)
+	f.link(b)
+
+	f.user.ban(b)
 	f.user.set(f.nodeID, a)
 	f.receive(t, &user.SwarmMemberLeft{NodeID: b})
 	f.requireClosed(t, b)

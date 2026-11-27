@@ -26,6 +26,8 @@ type swarmMembers interface {
 	// ReadLocalSwarm is LocalSwarm with the error of its read.
 	ReadLocalSwarm() ([]*astral.Identity, error)
 	IsSwarmMember(id *astral.Identity) bool
+	// IsBanned reports whether id is a node the active user banned.
+	IsBanned(id *astral.Identity) bool
 }
 
 // siblingRelay is the part of the user module that reaches the swarm's
