@@ -11,7 +11,7 @@ while, or well after node2's return was due.
 
 why the log: what is under test is a link task cutting its backoff short when
 nearby hears the sibling, and only the node's log tells a woken attempt from
-one whose backoff ran out (mod/user/src/maintain_link_task.go). The lines it
+one whose backoff ran out (mod/nodes/src/maintain_link_task.go). The lines it
 needs: `still trying to reconnect to X (attempt M)`, logged as attempt M+1
 starts, every fifth attempt; `sibling X is nearby at IP, linking now`, the
 wake; `link to X restored after N attempts`, the success.

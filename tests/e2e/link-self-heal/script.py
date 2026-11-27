@@ -4,7 +4,7 @@
 The world holds node1, node2 and node3 in one swarm, each linked to the other
 two (swarm-roster-sync). Each node runs a MaintainLinkTask per sibling
 (astrald mod/user/src/module.go runSiblingLinker), which a LinkClosedEvent
-with no link left wakes (mod/user/src/maintain_link_task.go ReceiveEvent).
+with no link left wakes (mod/nodes/src/maintain_link_task.go ReceiveEvent).
 
 Five cycles, each on one pair A-B, closed on C:
 node1-node2 on node1, node1-node2 on node2, node1-node2 on node1,

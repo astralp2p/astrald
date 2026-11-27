@@ -22,3 +22,12 @@ type CreateLinkTask interface {
 type CleanupEndpointsTask interface {
 	scheduler.Task
 }
+
+// MaintainLinkTask keeps an active link to a remote peer alive; restarts the
+// link when it drops.
+type MaintainLinkTask interface {
+	scheduler.Task
+	// Wake makes the task link to its peer now when the peer is not linked,
+	// also while the task waits out its backoff.
+	Wake()
+}

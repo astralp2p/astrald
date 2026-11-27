@@ -50,10 +50,6 @@ type Module interface {
 	// RefreshMemberEndpoints pulls subject's endpoints from subject itself and
 	// forwards the notice one hop to the other linked siblings.
 	RefreshMemberEndpoints(subject *astral.Identity)
-	// LearnMemberEndpoints pulls the endpoints of subject, a member the local
-	// swarm lists for the first time: first-hand when linked, otherwise from
-	// the linked members until one has new rows. It blocks for the pulls.
-	LearnMemberEndpoints(subject *astral.Identity)
 	ResolveEndpoints(*astral.Context, *astral.Identity) (<-chan *nodes.EndpointWithTTL, error)
 	AddResolver(resolver EndpointResolver)
 
@@ -74,6 +70,7 @@ type Module interface {
 	NewCreateLinkTask(target *astral.Identity, endpoint exonet.Endpoint) CreateLinkTask
 	NewEnsureLinkTask(target *astral.Identity, strategies []string, networks []string, forceNew bool) EnsureLinkTask
 	NewCleanupEndpointsTask() CleanupEndpointsTask
+	NewMaintainLinkTask(target *astral.Identity) MaintainLinkTask
 }
 
 // Link is an encrypted communication channel between two identities that is capable of routing queries

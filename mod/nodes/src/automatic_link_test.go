@@ -63,7 +63,7 @@ func newAutoLinkEnd(t *testing.T, budgets map[string]time.Duration) *autoLinkEnd
 	return end
 }
 
-// ensureLink runs the task a member link task schedules (ensureMemberLink):
+// ensureLink runs the task MaintainLinkTask schedules (maintain_link_task.go):
 // strategies basic and tor, any network, no new link forced. It returns the task and how long it ran.
 func (end *autoLinkEnd) ensureLink(target *astral.Identity, limit time.Duration) (*EnsureLinkTask, time.Duration) {
 	task := end.mod.NewEnsureLinkTask(target, []string{nodesmod.StrategyBasic, nodesmod.StrategyTor}, nil, false).(*EnsureLinkTask)

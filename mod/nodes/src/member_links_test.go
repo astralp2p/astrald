@@ -2,6 +2,8 @@ package nodes
 
 import (
 	"errors"
+	"io"
+	"maps"
 	"net"
 	"slices"
 	"sort"
@@ -13,68 +15,12 @@ import (
 	"github.com/astralp2p/astral-go/api/events"
 	"github.com/astralp2p/astral-go/api/ip"
 	"github.com/astralp2p/astral-go/api/nearby"
+	"github.com/astralp2p/astral-go/api/nodes"
 	"github.com/astralp2p/astral-go/api/user"
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astral-go/astral/log"
 	"github.com/astralp2p/astrald/mod/scheduler"
-	usermod "github.com/astralp2p/astrald/mod/user"
 )
-
-// memberUser is a user module whose member set and bans the test scripts; a
-// set error makes every member read fail.
-type memberUser struct {
-	usermod.Module
-	ready chan struct{}
-
-	mu      sync.Mutex
-	members []*astral.Identity
-	banned  []*astral.Identity
-	err     error
-}
-
-func (u *memberUser) ban(id *astral.Identity) {
-	u.mu.Lock()
-	defer u.mu.Unlock()
-	u.banned = append(u.banned, id)
-}
-
-func (u *memberUser) IsBanned(id *astral.Identity) bool {
-	u.mu.Lock()
-	defer u.mu.Unlock()
-	return slices.ContainsFunc(u.banned, id.IsEqual)
-}
-
-func (u *memberUser) set(members ...*astral.Identity) {
-	u.mu.Lock()
-	defer u.mu.Unlock()
-	u.members = members
-}
-
-func (u *memberUser) fail(err error) {
-	u.mu.Lock()
-	defer u.mu.Unlock()
-	u.err = err
-}
-
-func (u *memberUser) Ready() <-chan struct{} { return u.ready }
-
-func (u *memberUser) ReadLocalSwarm() ([]*astral.Identity, error) {
-	u.mu.Lock()
-	defer u.mu.Unlock()
-	if u.err != nil {
-		return nil, u.err
-	}
-	return slices.Clone(u.members), nil
-}
-
-func (u *memberUser) LocalSwarm() []*astral.Identity {
-	list, _ := u.ReadLocalSwarm()
-	return list
-}
-
-func (u *memberUser) IsSwarmMember(id *astral.Identity) bool {
-	return slices.ContainsFunc(u.LocalSwarm(), id.IsEqual)
-}
 
 // cancelTask is a scheduled task that records its cancel.
 type cancelTask struct {
@@ -94,14 +40,14 @@ type linkTaskScheduler struct {
 }
 
 func (s *linkTaskScheduler) Schedule(task scheduler.Task, _ ...scheduler.Done) (scheduler.ScheduledTask, error) {
-	link, ok := task.(*memberLinkTask)
+	link, ok := task.(*MaintainLinkTask)
 	if !ok {
 		return nil, errors.New("linkTaskScheduler runs member link tasks only")
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	t := &cancelTask{}
-	s.tasks[link.target.String()] = append(s.tasks[link.target.String()], t)
+	s.tasks[link.Target.String()] = append(s.tasks[link.Target.String()], t)
 	return t, nil
 }
 
@@ -127,21 +73,20 @@ func (s *linkTaskScheduler) scheduled(id *astral.Identity) int {
 }
 
 // memberLinksFixture is a nodes module on nodeID whose swarm members user
-// scripts, whose scheduler records the member link tasks, whose link closes
-// are recorded on closed, each with whether no task of that node still ran,
-// and whose endpoint learning is recorded on learned.
+// scripts, whose scheduler records the member link tasks, and whose pool holds
+// a real link to every member and every node a test links.
 type memberLinksFixture struct {
-	mod     *Module
-	nodeID  *astral.Identity
-	user    *memberUser
-	sched   *linkTaskScheduler
-	closed  chan closedLinks
-	learned chan *astral.Identity
-}
+	mod    *Module
+	nodeID *astral.Identity
+	user   *swarmUser
+	sched  *linkTaskScheduler
+	// pulls receives the resolver and the identity of every endpoints pull.
+	pulls chan pull
 
-type closedLinks struct {
-	id      *astral.Identity
-	stopped bool
+	mu    sync.Mutex
+	links map[*Link]*astral.Identity
+	// checked holds the links requireClosed saw close.
+	checked map[*Link]bool
 }
 
 func newMemberLinksFixture(t *testing.T, members ...*astral.Identity) *memberLinksFixture {
@@ -151,28 +96,29 @@ func newMemberLinksFixture(t *testing.T, members ...*astral.Identity) *memberLin
 
 	f := &memberLinksFixture{
 		nodeID:  astral.GenerateIdentity(),
-		user:    &memberUser{ready: make(chan struct{})},
+		user:    &swarmUser{ready: make(chan struct{})},
 		sched:   &linkTaskScheduler{tasks: map[string][]*cancelTask{}},
-		closed:  make(chan closedLinks, 16),
-		learned: make(chan *astral.Identity, 16),
+		pulls:   make(chan pull, 16),
+		links:   map[*Link]*astral.Identity{},
+		checked: map[*Link]bool{},
 	}
 	close(f.user.ready)
 	f.user.set(append(members, f.nodeID)...)
 	f.mod = &Module{
-		Deps: Deps{User: f.user, Scheduler: f.sched, Events: &recordingEvents{}},
+		Deps: Deps{User: f.user, Scheduler: f.sched, Events: &recordingEvents{}, Objects: &pushObjects{}},
 		node: &identityNode{id: f.nodeID},
 		log:  log.New(f.nodeID),
 		ctx:  ctx,
 	}
 	f.mod.linkPool = NewLinkPool(f.mod)
-	f.mod.memberLinks.close = func(id *astral.Identity) error {
-		f.sched.mu.Lock()
-		tasks := f.sched.tasks[id.String()]
-		f.sched.mu.Unlock()
-		f.closed <- closedLinks{id: id, stopped: len(tasks) == 0 || tasks[len(tasks)-1].cancelled.Load()}
-		return nil
+	// why: the pull of a new member's endpoints ends in a failed pull; no test reads a row it stores.
+	f.mod.resolveRemote = func(_ *astral.Context, resolver, identity *astral.Identity) ([]*nodes.EndpointWithTTL, error) {
+		f.pulls <- pull{resolver: resolver, identity: identity}
+		return nil, errors.New("no resolver in the test")
 	}
-	f.mod.memberLinks.learn = func(id *astral.Identity) { f.learned <- id }
+	for _, m := range members {
+		f.link(t, m)
+	}
 
 	f.mod.runMemberLinks(ctx)
 	return f
@@ -203,38 +149,74 @@ func (f *memberLinksFixture) requireRunning(t *testing.T, ids ...*astral.Identit
 	}
 }
 
-// requireClosed waits for the links of exactly ids to close, each once, in
-// any order, and each with no link task of its node still running.
+// requireClosed waits for the links of exactly ids to close, and for no other
+// link to close within absenceWindow. A link must close after the link task of
+// its node was cancelled.
 func (f *memberLinksFixture) requireClosed(t *testing.T, ids ...*astral.Identity) {
 	t.Helper()
-	want := map[string]bool{}
 	for _, id := range ids {
-		want[id.String()] = true
-	}
-	for len(want) > 0 {
-		select {
-		case c := <-f.closed:
-			if !want[c.id.String()] {
-				t.Fatalf("closed the links of %v; want %v, each once", c.id, ids)
+		for link, remote := range f.snapshot() {
+			if !remote.IsEqual(id) || f.checked[link] {
+				continue
 			}
-			if !c.stopped {
-				t.Fatalf("closed the links of %v before its link task was cancelled", c.id)
+			select {
+			case <-link.Done():
+			case <-time.After(effectTimeout):
+				t.Fatalf("the links of %v were not closed", id)
 			}
-			delete(want, c.id.String())
-		case <-time.After(effectTimeout):
-			t.Fatalf("the links of %v were not closed", ids)
+			f.checked[link] = true
+			f.sched.mu.Lock()
+			tasks := f.sched.tasks[id.String()]
+			stopped := len(tasks) == 0 || tasks[len(tasks)-1].cancelled.Load()
+			f.sched.mu.Unlock()
+			if !stopped {
+				t.Fatalf("closed the links of %v before its link task was cancelled", id)
+			}
 		}
 	}
 }
 
-// link adds a link to id to the pool.
-func (f *memberLinksFixture) link(id *astral.Identity) {
-	f.mod.linkPool.links.Add(&Link{id: astral.NewNonce(), conn: &identityConn{remote: id}})
+// link adds a link to id to the pool, which closes like a real link, and
+// returns it.
+func (f *memberLinksFixture) link(t *testing.T, id *astral.Identity) *Link {
+	t.Helper()
+	link, far := newPeerLink(t, &Module{}, id, time.Minute, time.Minute)
+	// why: the link's close notice is written to the pipe and waits for a reader.
+	go io.Copy(io.Discard, far)
+	t.Cleanup(func() { link.Close() })
+	f.mod.linkPool.links.Add(link)
+
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.links[link] = id
+	return link
 }
 
-// requireLearned waits for the endpoints of exactly ids to be learned, each
-// once, and fails on any other learning within absenceWindow.
-func (f *memberLinksFixture) requireLearned(t *testing.T, ids ...*astral.Identity) {
+func (f *memberLinksFixture) snapshot() map[*Link]*astral.Identity {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return maps.Clone(f.links)
+}
+
+// requireNoClose fails if a link that no requireClosed saw close is closed
+// within absenceWindow.
+func (f *memberLinksFixture) requireNoClose(t *testing.T) {
+	t.Helper()
+	time.Sleep(absenceWindow)
+	for link, id := range f.snapshot() {
+		select {
+		case <-link.Done():
+			if !f.checked[link] {
+				t.Fatalf("closed a link of %v; want no close", id)
+			}
+		default:
+		}
+	}
+}
+
+// requirePulled waits for the endpoints of exactly ids to be pulled from
+// themselves, each once, and fails on any other pull within absenceWindow.
+func (f *memberLinksFixture) requirePulled(t *testing.T, ids ...*astral.Identity) {
 	t.Helper()
 	want := map[string]bool{}
 	for _, id := range ids {
@@ -243,28 +225,18 @@ func (f *memberLinksFixture) requireLearned(t *testing.T, ids ...*astral.Identit
 	deadline := time.After(effectTimeout)
 	for len(want) > 0 {
 		select {
-		case id := <-f.learned:
-			if !want[id.String()] {
-				t.Fatalf("learned the endpoints of %v; want %v, each once", id, ids)
+		case p := <-f.pulls:
+			if !want[p.identity.String()] || !p.resolver.IsEqual(p.identity) {
+				t.Fatalf("pulled the endpoints of %v from %v; want of %v from themselves, each once", p.identity, p.resolver, ids)
 			}
-			delete(want, id.String())
+			delete(want, p.identity.String())
 		case <-deadline:
-			t.Fatalf("the endpoints of %v were not learned", ids)
+			t.Fatalf("the endpoints of %v were not pulled", ids)
 		}
 	}
 	select {
-	case id := <-f.learned:
-		t.Fatalf("learned the endpoints of %v; want only %v, each once", id, ids)
-	case <-time.After(absenceWindow):
-	}
-}
-
-// requireNoClose fails if any member's links close within absenceWindow.
-func (f *memberLinksFixture) requireNoClose(t *testing.T) {
-	t.Helper()
-	select {
-	case c := <-f.closed:
-		t.Fatalf("closed the links of %v; want no close", c.id)
+	case p := <-f.pulls:
+		t.Fatalf("pulled the endpoints of %v; want only %v, each once", p.identity, ids)
 	case <-time.After(absenceWindow):
 	}
 }
@@ -315,25 +287,24 @@ func TestSwarmMemberLeftClosesTheMembersLinks(t *testing.T) {
 	f.requireNoClose(t)
 }
 
-// TestNewMemberLinkLearnsTheMembersEndpoints: the reconcile that starts a
-// member's link task asks mod/nodes to learn that member's endpoints, once,
-// and never this node's own; a reconcile that starts no task learns nothing.
+// TestNewMemberLinkRefreshesTheMembersEndpoints: the reconcile that starts a
+// member's link task pulls that member's endpoints from the member, once, and
+// never this node's own; a reconcile that starts no task pulls nothing.
 //
 // why: a membership reaches a node only through SwarmState sync, which
-// carries no endpoints, so without the pull two Members joined through one
-// carrier never learn each other's endpoints and never link
-// (swarm-four-siblings).
-func TestNewMemberLinkLearnsTheMembersEndpoints(t *testing.T) {
+// carries no endpoints (Decisions 2026-11-24), so the new member's task has
+// none to dial until the pull.
+func TestNewMemberLinkRefreshesTheMembersEndpoints(t *testing.T) {
 	a, b := astral.GenerateIdentity(), astral.GenerateIdentity()
 	f := newMemberLinksFixture(t, a)
-	f.requireLearned(t, a)
+	f.requirePulled(t, a)
 
 	f.user.set(f.nodeID, a, b)
 	f.receive(t, &user.SwarmMemberJoined{NodeID: b})
-	f.requireLearned(t, b)
+	f.requirePulled(t, b)
 
 	f.receive(t, &user.SwarmMemberJoined{NodeID: b})
-	f.requireLearned(t)
+	f.requirePulled(t)
 }
 
 // TestEmptiedMemberSetStopsEveryMemberLink: a member set that reads empty,
@@ -360,8 +331,8 @@ func TestBannedLinkedNodeLinksCloseOnSwarmNodeBanned(t *testing.T) {
 	a, banned, stranger := astral.GenerateIdentity(), astral.GenerateIdentity(), astral.GenerateIdentity()
 	f := newMemberLinksFixture(t, a)
 	f.requireRunning(t, a)
-	f.link(banned)
-	f.link(stranger)
+	f.link(t, banned)
+	f.link(t, stranger)
 
 	f.user.ban(banned)
 	f.receive(t, &user.SwarmNodeBanned{NodeID: stranger})
@@ -369,6 +340,8 @@ func TestBannedLinkedNodeLinksCloseOnSwarmNodeBanned(t *testing.T) {
 	f.requireRunning(t, a)
 	f.requireNoClose(t)
 
+	// the banned node links again; the next member event closes it no second time
+	f.link(t, banned)
 	f.receive(t, &user.SwarmMemberJoined{NodeID: a})
 	f.requireRunning(t, a)
 	f.requireNoClose(t)
@@ -384,13 +357,17 @@ func TestBannedMemberLinksCloseOnce(t *testing.T) {
 	a, b := astral.GenerateIdentity(), astral.GenerateIdentity()
 	f := newMemberLinksFixture(t, a, b)
 	f.requireRunning(t, a, b)
-	f.link(b)
 
 	f.user.ban(b)
 	f.user.set(f.nodeID, a)
 	f.receive(t, &user.SwarmMemberLeft{NodeID: b})
 	f.requireClosed(t, b)
 	f.requireRunning(t, a)
+	f.requireNoClose(t)
+
+	// a new link of the banned node survives the next reconcile
+	f.link(t, b)
+	f.receive(t, &user.SwarmMemberJoined{NodeID: a})
 	f.requireNoClose(t)
 }
 
@@ -444,7 +421,7 @@ func TestMemberLinksKeepTasksWhenTheSwarmReadFails(t *testing.T) {
 func TestMemberLinksWaitForTheUserModule(t *testing.T) {
 	a := astral.GenerateIdentity()
 	nodeID := astral.GenerateIdentity()
-	u := &memberUser{ready: make(chan struct{})}
+	u := &swarmUser{ready: make(chan struct{})}
 	u.set(nodeID, a)
 	sched := &linkTaskScheduler{tasks: map[string][]*cancelTask{}}
 	mod := &Module{Deps: Deps{User: u, Scheduler: sched}, node: &identityNode{id: nodeID}, log: log.New(nodeID)}
@@ -477,7 +454,7 @@ func TestPeerSeenStartsAMissingLinkTask(t *testing.T) {
 // out its backoff dials at once.
 func TestPeerSeenWakesAnUnlinkedMember(t *testing.T) {
 	f := newLinkTaskFixture(failEvery, false)
-	f.mod.Deps.User = &memberUser{members: []*astral.Identity{f.target}}
+	f.mod.Deps.User = &swarmUser{swarm: []*astral.Identity{f.target}}
 	f.mod.linkPool = NewLinkPool(f.mod)
 	done, cancel := f.run(t)
 

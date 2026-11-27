@@ -35,7 +35,7 @@ dial on demand (astrald `mod/nodes/src/query_router.go` `RouteQuery`) and
 would heal a pair whose maintain task is dead.
 
 why the log lines: only `MaintainLinkTask.Run`
-(`mod/user/src/maintain_link_task.go`) logs them, so one per cycle shows the
+(`mod/nodes/src/maintain_link_task.go`) logs them, so one per cycle shows the
 task woke on the `LinkClosedEvent`, not some other dialer. A task that
 started linked logs `established` on its first relink and nothing before it.
 

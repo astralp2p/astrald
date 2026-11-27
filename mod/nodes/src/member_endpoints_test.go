@@ -2,7 +2,6 @@ package nodes
 
 import (
 	"bytes"
-	"errors"
 	"testing"
 	"time"
 
@@ -109,66 +108,4 @@ func TestResolveEndpointsRefusesOutsidersAndNonMemberTargets(t *testing.T) {
 	t.Run("member about an outsider", func(t *testing.T) {
 		requireRefused(t, e.answer(t, member, outsider))
 	})
-}
-
-// TestLearnMemberEndpointsPullsFromLinkedMembersUntilNewRows: a new member the
-// node holds no link with is pulled from the linked members, one at a time,
-// until one stores a new row; the node then emits an EndpointsUpdatedEvent.
-func TestLearnMemberEndpointsPullsFromLinkedMembersUntilNewRows(t *testing.T) {
-	f := newExchangeFixture(t)
-	first := f.member(true)
-	second := f.member(true)
-	f.member(false)
-	subject := f.member(false)
-
-	var calls []*astral.Identity
-	f.mod.resolveRemote = func(_ *astral.Context, resolver, identity *astral.Identity) ([]*nodes.EndpointWithTTL, error) {
-		if !identity.IsEqual(subject) {
-			t.Errorf("pulled endpoints of %v; want of %v", identity, subject)
-		}
-		calls = append(calls, resolver)
-		if len(calls) == 1 {
-			return nil, errors.New("not permitted")
-		}
-		return endpointsWithTTL("198.51.100.9"), nil
-	}
-
-	f.mod.LearnMemberEndpoints(subject)
-
-	if len(calls) != 2 {
-		t.Fatalf("made %d pulls; want 2 (a refusal, then a pull with new rows)", len(calls))
-	}
-	if !(calls[0].IsEqual(first) && calls[1].IsEqual(second)) && !(calls[0].IsEqual(second) && calls[1].IsEqual(first)) {
-		t.Fatalf("pulled from %v; want the two linked members", calls)
-	}
-	emitted := f.events.recorded()
-	if len(emitted) != 1 {
-		t.Fatalf("emitted %v events; want one EndpointsUpdatedEvent", len(emitted))
-	}
-	if e, ok := emitted[0].(*nodes.EndpointsUpdatedEvent); !ok || !e.Identity.IsEqual(subject) {
-		t.Fatalf("emitted %v; want an EndpointsUpdatedEvent for %v", emitted[0], subject)
-	}
-}
-
-// TestLearnMemberEndpointsOfALinkedMemberIsFirstHand: a new member the node is
-// linked to is pulled from itself, and the notice goes to the other linked
-// members, as on a first link.
-func TestLearnMemberEndpointsOfALinkedMemberIsFirstHand(t *testing.T) {
-	f := newExchangeFixture(t)
-	subject := f.member(true)
-	sibling := f.member(true)
-
-	f.mod.LearnMemberEndpoints(subject)
-
-	f.requirePull(t, subject, subject)
-	eventually(t, "forward", func() bool { return len(f.objects.pushes.list()) > 0 })
-	time.Sleep(absenceWindow)
-
-	forwards := f.objects.pushes.list()
-	if len(forwards) != 1 || !forwards[0].target.IsEqual(sibling) {
-		t.Fatalf("forwards %v; want the notice to %v alone", forwards, sibling)
-	}
-	if m, ok := forwards[0].object.(*nodes.EndpointsChangedMessage); !ok || !m.Subject.IsEqual(subject) {
-		t.Fatalf("forwarded %v; want the notice of %v", forwards[0].object, subject)
-	}
 }

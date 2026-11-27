@@ -144,7 +144,7 @@ func callThroughNode2(ctx *astral.Context, n2, n3 node, admin3 *astrald.Client, 
 
 	// why wait: node3 may learn the greeter's contract through SwarmState
 	// before its sibling linker lists node2 as a member, and only that listing
-	// pulls node2's endpoints from node1 (LearnMemberEndpoints); a call before
+	// pulls node2's endpoints from node1 (RefreshMemberEndpoints); a call before
 	// it has no row to dial, which a pre-G7 node3 never met, as it learned the
 	// greeter only from node1's sibling sync after the adoption.
 	start := time.Now()

@@ -25,46 +25,37 @@ const wakeDialBound = time.Second
 // errDialFailed is the outcome of a failed link attempt.
 var errDialFailed = errors.New("dial failed")
 
-// fakeLinker reports the identities set linked as linked, and finishes every
-// link attempt at once with the error outcome returns for it, reporting each
-// attempt number on attempts.
-type fakeLinker struct {
+// dialScheduler finishes every scheduled task at once with the error outcome
+// returns for that attempt, and reports each attempt number on attempts.
+type dialScheduler struct {
+	scheduler.Module
 	attempts chan int
 	outcome  func(attempt int) error
 
-	mu     sync.Mutex
-	linked map[string]bool
-	count  int
+	mu    sync.Mutex
+	count int
 }
 
-func newFakeLinker(outcome func(attempt int) error) *fakeLinker {
-	return &fakeLinker{attempts: make(chan int, 64), outcome: outcome, linked: map[string]bool{}}
+func newDialScheduler(outcome func(attempt int) error) *dialScheduler {
+	return &dialScheduler{attempts: make(chan int, 64), outcome: outcome}
 }
 
-func (l *fakeLinker) setLinked(id *astral.Identity, linked bool) {
-	l.mu.Lock()
-	defer l.mu.Unlock()
-	l.linked[id.String()] = linked
-}
+func (s *dialScheduler) Schedule(task scheduler.Task, _ ...scheduler.Done) (scheduler.ScheduledTask, error) {
+	if _, ok := task.(*EnsureLinkTask); !ok {
+		return nil, errors.New("dialScheduler runs ensure-link tasks only")
+	}
 
-func (l *fakeLinker) IsLinked(id *astral.Identity) bool {
-	l.mu.Lock()
-	defer l.mu.Unlock()
-	return l.linked[id.String()]
-}
-
-func (l *fakeLinker) ensureMemberLink(*astral.Identity) (scheduler.ScheduledTask, error) {
-	n := l.nextAttempt()
-	l.attempts <- n
-	return finishedTask{err: l.outcome(n)}, nil
+	n := s.nextAttempt()
+	s.attempts <- n
+	return finishedTask{err: s.outcome(n)}, nil
 }
 
 // nextAttempt counts one more attempt and returns its number.
-func (l *fakeLinker) nextAttempt() int {
-	l.mu.Lock()
-	defer l.mu.Unlock()
-	l.count++
-	return l.count
+func (s *dialScheduler) nextAttempt() int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.count++
+	return s.count
 }
 
 // finishedTask is a scheduled task that is done with err.
@@ -97,29 +88,42 @@ func (c *backoffClock) after(d time.Duration) <-chan time.Time {
 	return ch
 }
 
-// linkTaskFixture is a memberLinkTask for target over a fake linker and a
-// fake backoff clock, registered as the member link of target on mod.
+// linkTaskFixture is a MaintainLinkTask for target on a module with a fake
+// scheduler and a fake backoff clock, registered as the member link of target.
 type linkTaskFixture struct {
-	mod    *Module
-	target *astral.Identity
-	task   *memberLinkTask
-	nodes  *fakeLinker
-	clock  *backoffClock
-	log    *log.Logger
+	mod       *Module
+	target    *astral.Identity
+	task      *MaintainLinkTask
+	scheduler *dialScheduler
+	clock     *backoffClock
+	log       *log.Logger
 }
 
 func newLinkTaskFixture(outcome func(int) error, fire bool) *linkTaskFixture {
 	nodeID := astral.GenerateIdentity()
 	f := &linkTaskFixture{
-		target: astral.GenerateIdentity(),
-		nodes:  newFakeLinker(outcome),
-		clock:  &backoffClock{delays: make(chan time.Duration, 64), fire: fire},
-		log:    log.New(nodeID),
+		target:    astral.GenerateIdentity(),
+		scheduler: newDialScheduler(outcome),
+		clock:     &backoffClock{delays: make(chan time.Duration, 64), fire: fire},
+		log:       log.New(nodeID),
 	}
-	f.mod = &Module{node: &identityNode{id: nodeID}, log: f.log}
-	f.task = newMemberLinkTask(f.target, f.nodes, f.log, f.clock.after)
-	f.mod.memberLinks.tasks = map[string]memberLink{f.target.String(): {task: f.task, cancel: func() {}}}
+	f.mod = &Module{Deps: Deps{Scheduler: f.scheduler}, node: &identityNode{id: nodeID}, log: f.log}
+	f.mod.linkPool = NewLinkPool(f.mod)
+	f.task = f.mod.NewMaintainLinkTask(f.target).(*MaintainLinkTask)
+	f.task.after = f.clock.after
+	f.mod.memberLinks.tasks = map[string]memberLink{f.target.String(): {target: f.target, task: f.task, cancel: func() {}}}
 	return f
+}
+
+// setLinked adds a link to the target to the pool, or removes it.
+func (f *linkTaskFixture) setLinked(linked bool) {
+	if !linked {
+		for _, l := range f.mod.linkPool.links.Clone() {
+			f.mod.linkPool.links.Remove(l)
+		}
+		return
+	}
+	f.mod.linkPool.links.Add(&Link{id: astral.NewNonce(), conn: &identityConn{remote: f.target}})
 }
 
 // run starts the task and returns its result channel and the cancel of its context.
@@ -138,7 +142,7 @@ func (f *linkTaskFixture) run(t *testing.T) (<-chan error, context.CancelFunc) {
 func (f *linkTaskFixture) requireAttempt(t *testing.T, n int, bound time.Duration) {
 	t.Helper()
 	select {
-	case got := <-f.nodes.attempts:
+	case got := <-f.scheduler.attempts:
 		if got != n {
 			t.Fatalf("link attempt %v; want attempt %v", got, n)
 		}
@@ -161,9 +165,9 @@ func (f *linkTaskFixture) requireBackoff(t *testing.T) time.Duration {
 
 func failEvery(int) error { return errDialFailed }
 
-// TestMemberLinkTaskWakeDuringBackoff: a Wake during a 15-minute-class backoff
+// TestMaintainLinkTaskWakeDuringBackoff: a Wake during a 15-minute-class backoff
 // wait makes the task dial at once; the fake clock never ends the wait.
-func TestMemberLinkTaskWakeDuringBackoff(t *testing.T) {
+func TestMaintainLinkTaskWakeDuringBackoff(t *testing.T) {
 	f := newLinkTaskFixture(failEvery, false)
 	done, cancel := f.run(t)
 
@@ -182,9 +186,9 @@ func TestMemberLinkTaskWakeDuringBackoff(t *testing.T) {
 	requireCanceled(t, done)
 }
 
-// TestMemberLinkTaskCancelDuringBackoff: cancelling the task's context during a
+// TestMaintainLinkTaskCancelDuringBackoff: cancelling the task's context during a
 // backoff wait ends the task with the context's error.
-func TestMemberLinkTaskCancelDuringBackoff(t *testing.T) {
+func TestMaintainLinkTaskCancelDuringBackoff(t *testing.T) {
 	f := newLinkTaskFixture(failEvery, false)
 	done, cancel := f.run(t)
 
@@ -207,10 +211,10 @@ func requireCanceled(t *testing.T, done <-chan error) {
 	}
 }
 
-// TestMemberLinkTaskBackoffDoublesAndResets: the delay doubles from 1 s after
+// TestMaintainLinkTaskBackoffDoublesAndResets: the delay doubles from 1 s after
 // every failure up to 15 min, and a success starts it over. A LinkClosedEvent
 // for the target's last link wakes the idle task.
-func TestMemberLinkTaskBackoffDoublesAndResets(t *testing.T) {
+func TestMaintainLinkTaskBackoffDoublesAndResets(t *testing.T) {
 	const failures = 12
 	// note: the attempt after the reset backoff succeeds, so the loop idles before the cancel.
 	f := newLinkTaskFixture(func(n int) error {
@@ -250,10 +254,10 @@ func TestMemberLinkTaskBackoffDoublesAndResets(t *testing.T) {
 	requireCanceled(t, done)
 }
 
-// TestMemberLinkTaskActsOnAWakeDuringAnAttempt: a LinkClosedEvent or a Wake
+// TestMaintainLinkTaskActsOnAWakeDuringAnAttempt: a LinkClosedEvent or a Wake
 // that comes while an attempt runs, which then succeeds, makes the task dial
 // once more.
-func TestMemberLinkTaskActsOnAWakeDuringAnAttempt(t *testing.T) {
+func TestMaintainLinkTaskActsOnAWakeDuringAnAttempt(t *testing.T) {
 	closed := func(f *linkTaskFixture) {
 		f.task.ReceiveEvent(&events.Event{Data: &nodes.LinkClosedEvent{RemoteIdentity: f.target, LinkCount: 0}})
 	}
@@ -279,12 +283,12 @@ func TestMemberLinkTaskActsOnAWakeDuringAnAttempt(t *testing.T) {
 	}
 }
 
-// TestMemberLinkTaskIgnoresWakesOfALinkedTarget: a Wake while the target is
+// TestMaintainLinkTaskIgnoresWakesOfALinkedTarget: a Wake while the target is
 // linked, a LinkClosedEvent of another node and a partial disconnect leave the
 // idle task idle.
-func TestMemberLinkTaskIgnoresWakesOfALinkedTarget(t *testing.T) {
+func TestMaintainLinkTaskIgnoresWakesOfALinkedTarget(t *testing.T) {
 	f := newLinkTaskFixture(func(int) error { return nil }, false)
-	f.nodes.setLinked(f.target, true)
+	f.setLinked(true)
 
 	f.task.Wake()
 	f.task.ReceiveEvent(&events.Event{Data: &nodes.LinkClosedEvent{RemoteIdentity: astral.GenerateIdentity(), LinkCount: 0}})
@@ -300,10 +304,10 @@ func TestMemberLinkTaskIgnoresWakesOfALinkedTarget(t *testing.T) {
 	}
 }
 
-// TestMemberLinkTaskDoesNotDialAfterCancel: a task whose context is already
+// TestMaintainLinkTaskDoesNotDialAfterCancel: a task whose context is already
 // cancelled when the link needs work returns without dialing, so a link close
 // racing the cancel of an member that left cannot redial it.
-func TestMemberLinkTaskDoesNotDialAfterCancel(t *testing.T) {
+func TestMaintainLinkTaskDoesNotDialAfterCancel(t *testing.T) {
 	f := newLinkTaskFixture(failEvery, false)
 	f.task.Wake()
 
@@ -313,7 +317,7 @@ func TestMemberLinkTaskDoesNotDialAfterCancel(t *testing.T) {
 	if err := f.task.Run(ctx); !errors.Is(err, context.Canceled) {
 		t.Fatalf("Run returned %v; want %v", err, context.Canceled)
 	}
-	if n := f.nodes.nextAttempt() - 1; n != 0 {
+	if n := f.scheduler.nextAttempt() - 1; n != 0 {
 		t.Fatalf("the cancelled task dialed %v times; want 0", n)
 	}
 }
@@ -323,10 +327,10 @@ func addrAdded(addr string) *events.Event {
 	return &events.Event{Data: &ip.EventNetworkAddressChanged{Added: []ip.IP{ip.IP(net.ParseIP(addr))}}}
 }
 
-// TestMemberLinkTaskWakesOnAddressChange: an ip.EventNetworkAddressChanged
+// TestMaintainLinkTaskWakesOnAddressChange: an ip.EventNetworkAddressChanged
 // that adds a routable address during a backoff wait makes the unlinked task dial at once and restarts the
 // backoff from linkRetryMin; the fake clock never ends the wait.
-func TestMemberLinkTaskWakesOnAddressChange(t *testing.T) {
+func TestMaintainLinkTaskWakesOnAddressChange(t *testing.T) {
 	f := newLinkTaskFixture(failEvery, false)
 	done, cancel := f.run(t)
 
@@ -348,21 +352,21 @@ func TestMemberLinkTaskWakesOnAddressChange(t *testing.T) {
 	requireCanceled(t, done)
 }
 
-// TestMemberLinkTaskIgnoresAddressChangeWhileLinked: an address change while
+// TestMaintainLinkTaskIgnoresAddressChangeWhileLinked: an address change while
 // the target is linked leaves the idle task idle.
-func TestMemberLinkTaskIgnoresAddressChangeWhileLinked(t *testing.T) {
+func TestMaintainLinkTaskIgnoresAddressChangeWhileLinked(t *testing.T) {
 	f := newLinkTaskFixture(func(int) error { return nil }, false)
-	f.nodes.setLinked(f.target, true)
+	f.setLinked(true)
 
 	f.task.ReceiveEvent(addrAdded("192.168.1.10"))
 
 	f.requireIdle(t)
 }
 
-// TestMemberLinkTaskIgnoresAddressChangesThatAddNoRoutableAddress: removing
+// TestMaintainLinkTaskIgnoresAddressChangesThatAddNoRoutableAddress: removing
 // an address or adding only a link-local one neither wakes the unlinked task
 // nor restarts its backoff.
-func TestMemberLinkTaskIgnoresAddressChangesThatAddNoRoutableAddress(t *testing.T) {
+func TestMaintainLinkTaskIgnoresAddressChangesThatAddNoRoutableAddress(t *testing.T) {
 	f := newLinkTaskFixture(failEvery, false)
 
 	f.task.ReceiveEvent(&events.Event{Data: &ip.EventNetworkAddressChanged{
@@ -415,16 +419,16 @@ func (l *logLines) count(text string) int {
 	return n
 }
 
-// TestMemberLinkTaskLogsBrokenOnlyForAClosedLink: a Wake during the first,
+// TestMaintainLinkTaskLogsBrokenOnlyForAClosedLink: a Wake during the first,
 // successful dial makes the task dial once more without logging the standing
 // link as broken; a link that then closes is logged as broken and redialed.
-func TestMemberLinkTaskLogsBrokenOnlyForAClosedLink(t *testing.T) {
+func TestMaintainLinkTaskLogsBrokenOnlyForAClosedLink(t *testing.T) {
 	var f *linkTaskFixture
 	f = newLinkTaskFixture(func(n int) error {
 		if n == 1 {
 			f.task.Wake()
 		}
-		f.nodes.setLinked(f.target, true)
+		f.setLinked(true)
 		return nil
 	}, false)
 	lines := &logLines{}
@@ -440,7 +444,7 @@ func TestMemberLinkTaskLogsBrokenOnlyForAClosedLink(t *testing.T) {
 		t.Fatalf("%v \"is broken\" lines while the link stands; want 0", n)
 	}
 
-	f.nodes.setLinked(f.target, false)
+	f.setLinked(false)
 	f.task.ReceiveEvent(&events.Event{Data: &nodes.LinkClosedEvent{RemoteIdentity: f.target, LinkCount: 0}})
 	f.requireAttempt(t, 3, wakeDialBound)
 	if n := lines.count("is broken, trying to reconnect"); n != 1 {
@@ -496,7 +500,7 @@ func TestEndpointsUpdatedEventWakesSiblingDuringBackoff(t *testing.T) {
 				f.requireAttempt(t, 2, wakeDialBound)
 			} else {
 				select {
-				case n := <-f.nodes.attempts:
+				case n := <-f.scheduler.attempts:
 					t.Fatalf("link attempt %v started; want the backoff to hold", n)
 				case <-time.After(wakeDialBound):
 				}

@@ -9,7 +9,7 @@ linking now`) and, within WITHIN seconds of it on its own clock, `link to X
 restored after N attempts`, with:
 
 - a real backoff: the wait after N failures, min(2^(N-1), 900) s, is at least
-  MIN_BACKOFF s (mod/user/src/maintain_link_task.go linkRetryMin/Max);
+  MIN_BACKOFF s (mod/nodes/src/maintain_link_task.go linkRetryMin/Max);
 - no natural retry: the success came before the earliest time the backoff
   alone allows for attempt N+1, counted from an anchor line `still trying to
   reconnect to X (attempt M)`, logged as attempt M+1 starts, M < N: the sum of

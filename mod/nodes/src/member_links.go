@@ -5,6 +5,7 @@ import (
 	"sync"
 
 	"github.com/astralp2p/astral-go/astral"
+	nodesmod "github.com/astralp2p/astrald/mod/nodes"
 )
 
 // memberLinks holds one link task for every swarm member other than this
@@ -23,17 +24,12 @@ type memberLinks struct {
 	// why once: AdmitLink admits a banned node's later links until it answers
 	// the push of its ban, and those links carry the ban to it.
 	banned map[string]struct{}
-	// close replaces CloseLinks for the links of a member that left.
-	// note: a test seam; nil in the running node.
-	close func(*astral.Identity) error
-	// learn replaces LearnMemberEndpoints for a new member.
-	// note: a test seam; nil in the running node.
-	learn func(*astral.Identity)
 }
 
 // memberLink is the running link task of one member and the cancel that stops it.
 type memberLink struct {
-	task   *memberLinkTask
+	target *astral.Identity
+	task   nodesmod.MaintainLinkTask
 	cancel context.CancelFunc
 }
 
@@ -56,7 +52,7 @@ func (mod *Module) runMemberLinks(ctx *astral.Context) {
 
 // reconcileMemberLinks re-reads the swarm's member set and makes the link
 // tasks match it: a member other than this node without a task gets one, and
-// mod/nodes learns its endpoints; a task whose member left is stopped, and
+// mod/nodes refreshes its endpoints; a task whose member left is stopped, and
 // the links to that member are closed. The links of every linked node the
 // user banned since the last reconcile are closed too, member or not.
 //
@@ -70,7 +66,7 @@ func (mod *Module) reconcileMemberLinks() {
 		closing[k] = id
 	}
 	for _, id := range closing {
-		if err := mod.closeMemberLinks(id); err != nil {
+		if err := mod.CloseLinks(id); err != nil {
 			mod.log.Errorv(1, "closing links to %v: %v", id, err)
 		}
 	}
@@ -131,10 +127,10 @@ func (mod *Module) applyMemberSet() (left []*astral.Identity) {
 			continue
 		}
 		delete(ml.tasks, key)
-		mod.log.Log("removing sibling %v", link.task.target)
+		mod.log.Log("removing sibling %v", link.target)
 		// why before the close: a task still running when its link closes redials it.
 		link.cancel()
-		left = append(left, link.task.target)
+		left = append(left, link.target)
 	}
 
 	for key, m := range keep {
@@ -147,13 +143,9 @@ func (mod *Module) applyMemberSet() (left []*astral.Identity) {
 }
 
 // startMemberLink schedules the link task of a member that has none and
-// registers it. The caller holds memberLinks.mu.
-//
-// why the endpoints: a membership reaches this node only through SwarmState
-// sync, which brings no endpoints, so a new member's task would have none to
-// dial; the pull's EndpointsUpdatedEvent wakes the task.
+// registers it, and refreshes the member's endpoints. The caller holds memberLinks.mu.
 func (mod *Module) startMemberLink(member *astral.Identity) {
-	task := newMemberLinkTask(member, mod, mod.log, mod.linkRetryClock)
+	task := mod.NewMaintainLinkTask(member)
 	scheduled, err := mod.Scheduler.Schedule(task)
 	if err != nil {
 		mod.log.Error("error scheduling maintain link action: %v for node %v", err, member)
@@ -164,13 +156,9 @@ func (mod *Module) startMemberLink(member *astral.Identity) {
 		mod.memberLinks.tasks = map[string]memberLink{}
 	}
 	mod.log.Log("adding sibling %v", member)
-	mod.memberLinks.tasks[member.String()] = memberLink{task: task, cancel: scheduled.Cancel}
+	mod.memberLinks.tasks[member.String()] = memberLink{target: member, task: task, cancel: scheduled.Cancel}
 
-	learn := mod.LearnMemberEndpoints
-	if mod.memberLinks.learn != nil {
-		learn = mod.memberLinks.learn
-	}
-	go learn(member)
+	go mod.RefreshMemberEndpoints(member)
 }
 
 // wakeMemberLink makes the link task of id link now. It reports false when id
@@ -199,14 +187,6 @@ func (mod *Module) onMemberSeen(id *astral.Identity) {
 	if !mod.wakeMemberLink(id) {
 		mod.reconcileMemberLinks()
 	}
-}
-
-// closeMemberLinks closes every link to id, a member that left or a banned node.
-func (mod *Module) closeMemberLinks(id *astral.Identity) error {
-	if mod.memberLinks.close != nil {
-		return mod.memberLinks.close(id)
-	}
-	return mod.CloseLinks(id)
 }
 
 func identitySet(list []*astral.Identity) map[string]*astral.Identity {

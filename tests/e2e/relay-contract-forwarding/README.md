@@ -17,7 +17,7 @@ no link to the app's host, and then reaches the app through that host.
     `nodes.links` on node3 holds no link to node2;
   - node3 may dial again; within 30 s `nodes.resolve_endpoints` on node3
     names an endpoint of node2, which node3 pulls from node1 once its sibling
-    linker lists node2 as a member (`LearnMemberEndpoints`);
+    linker lists node2 as a member;
   - a visitor app on node3 calls `greeter:hello`;
     node3 routes the call through node2, and the greeter answers
     `hello, <visitor>`.

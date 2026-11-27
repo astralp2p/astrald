@@ -9,13 +9,13 @@ import (
 	"github.com/astralp2p/astral-go/api/ip"
 	"github.com/astralp2p/astral-go/api/nodes"
 	"github.com/astralp2p/astral-go/astral"
-	"github.com/astralp2p/astral-go/astral/log"
 	nodesmod "github.com/astralp2p/astrald/mod/nodes"
 	"github.com/astralp2p/astrald/mod/scheduler"
 )
 
-var _ scheduler.EventReceiver = &memberLinkTask{}
-var _ scheduler.Task = &memberLinkTask{}
+var _ scheduler.EventReceiver = &MaintainLinkTask{}
+var _ scheduler.Task = &MaintainLinkTask{}
+var _ nodesmod.MaintainLinkTask = &MaintainLinkTask{}
 
 // The backoff between failed link attempts: it starts at linkRetryMin, doubles
 // after every failure up to linkRetryMax, and starts over after a success.
@@ -24,23 +24,15 @@ const (
 	linkRetryMax = 15 * time.Minute
 )
 
-// memberLinker is what a memberLinkTask asks of the nodes module.
-type memberLinker interface {
-	IsLinked(target *astral.Identity) bool
-	// ensureMemberLink schedules one attempt to link target.
-	ensureMemberLink(target *astral.Identity) (scheduler.ScheduledTask, error)
-}
-
-// memberLinkTask keeps a link to one swarm member, target, until its context
+// MaintainLinkTask keeps a link to one swarm member, Target, until its context
 // ends, and relinks when the link drops.
 // triggers:
-// - nodes.LinkClosedEvent (the last link to target closed)
-// - Wake (target was seen nearby, or its endpoints were updated)
+// - nodes.LinkClosedEvent (the last link to Target closed)
+// - Wake (Target was seen nearby, or its endpoints were updated)
 // - ip.EventNetworkAddressChanged that adds a routable address (also restarts the backoff)
-type memberLinkTask struct {
-	target         *astral.Identity
-	linker         memberLinker
-	log            *log.Logger
+type MaintainLinkTask struct {
+	mod            *Module
+	Target         *astral.Identity
 	wake           chan struct{}
 	actionRequired atomic.Bool
 	// resetBackoff makes the next attempt start the backoff over from linkRetryMin.
@@ -49,22 +41,16 @@ type memberLinkTask struct {
 	after func(time.Duration) <-chan time.Time
 }
 
-func newMemberLinkTask(target *astral.Identity, linker memberLinker, l *log.Logger, after func(time.Duration) <-chan time.Time) *memberLinkTask {
-	return &memberLinkTask{
-		target: target,
-		linker: linker,
-		log:    l,
+func (mod *Module) NewMaintainLinkTask(target *astral.Identity) nodesmod.MaintainLinkTask {
+	return &MaintainLinkTask{
+		mod:    mod,
+		Target: target,
 		wake:   make(chan struct{}, 1),
-		after:  after,
+		after:  mod.linkRetryClock,
 	}
 }
 
-// ensureMemberLink schedules one attempt to link target over the Basic and Tor strategies.
-func (mod *Module) ensureMemberLink(target *astral.Identity) (scheduler.ScheduledTask, error) {
-	return mod.Scheduler.Schedule(mod.NewEnsureLinkTask(target, []string{nodesmod.StrategyBasic, nodesmod.StrategyTor}, nil, false))
-}
-
-// SetLinkRetryClock makes after time the backoff of every member link task, running ones included.
+// SetLinkRetryClock makes after time the backoff of every MaintainLinkTask, running ones included.
 // A clock whose channel never fires leaves Wake, a link close and an address change as the only retries.
 // note: a test seam; an in-process node test reaches it through the module.
 func (mod *Module) SetLinkRetryClock(after func(time.Duration) <-chan time.Time) {
@@ -79,14 +65,14 @@ func (mod *Module) linkRetryClock(d time.Duration) <-chan time.Time {
 	return time.After(d)
 }
 
-func (a *memberLinkTask) String() string { return "nodes.maintain_link" }
+func (a *MaintainLinkTask) String() string { return "nodes.maintain_link" }
 
-func (a *memberLinkTask) Run(ctx *astral.Context) error {
-	a.log.Log("starting to maintain link to %v", a.target)
+func (a *MaintainLinkTask) Run(ctx *astral.Context) error {
+	a.mod.log.Log("starting to maintain link to %v", a.Target)
 
 	delay := linkRetryMin
 	count := -1
-	a.actionRequired.Store(!a.linker.IsLinked(a.target))
+	a.actionRequired.Store(!a.mod.IsLinked(a.Target))
 	for {
 		if err := a.waitForAction(ctx); err != nil {
 			return err
@@ -101,13 +87,14 @@ func (a *memberLinkTask) Run(ctx *astral.Context) error {
 		switch {
 		// why: a Wake during the previous, successful attempt also lands here with
 		// count == 0; the link then stands and is not broken.
-		case count == 0 && !a.linker.IsLinked(a.target):
-			a.log.Log("link to %v is broken, trying to reconnect", a.target)
+		case count == 0 && !a.mod.IsLinked(a.Target):
+			a.mod.log.Log("link to %v is broken, trying to reconnect", a.Target)
 		case count > 0 && count%5 == 0:
-			a.log.Log("still trying to reconnect to %v (attempt %v)", a.target, count)
+			a.mod.log.Log("still trying to reconnect to %v (attempt %v)", a.Target, count)
 		}
 
-		scheduled, err := a.linker.ensureMemberLink(a.target)
+		task := a.mod.NewEnsureLinkTask(a.Target, []string{nodesmod.StrategyBasic, nodesmod.StrategyTor}, nil, false)
+		scheduled, err := a.mod.Scheduler.Schedule(task)
 		if err != nil {
 			return err
 		}
@@ -125,9 +112,9 @@ func (a *memberLinkTask) Run(ctx *astral.Context) error {
 
 		delay = linkRetryMin
 		if count > 0 {
-			a.log.Log("link to %v restored after %v attempts", a.target, count)
+			a.mod.log.Log("link to %v restored after %v attempts", a.Target, count)
 		} else if count < 0 {
-			a.log.Log("link to %v established", a.target)
+			a.mod.log.Log("link to %v established", a.Target)
 		}
 
 		count = 0
@@ -137,7 +124,7 @@ func (a *memberLinkTask) Run(ctx *astral.Context) error {
 // waitForAction returns once the link needs work, or with the error of ctx.
 // why: ctx is checked first because a link close or Wake racing the cancel sets
 // actionRequired and fills wake, and either would otherwise start one more dial.
-func (a *memberLinkTask) waitForAction(ctx *astral.Context) error {
+func (a *MaintainLinkTask) waitForAction(ctx *astral.Context) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
@@ -155,7 +142,7 @@ func (a *memberLinkTask) waitForAction(ctx *astral.Context) error {
 //
 // why not sig.Retry: waking a pending sig.Retry wait and then calling Reset
 // leaves the Retry running, so the next wait never ends (astral-go sig/retry.go).
-func (a *memberLinkTask) backoff(ctx *astral.Context, delay time.Duration) error {
+func (a *MaintainLinkTask) backoff(ctx *astral.Context, delay time.Duration) error {
 	select {
 	case <-ctx.Done():
 		return ctx.Err()
@@ -167,8 +154,8 @@ func (a *memberLinkTask) backoff(ctx *astral.Context, delay time.Duration) error
 
 // Wake makes the task link to target now when target is not linked, also
 // while the task waits out its backoff.
-func (a *memberLinkTask) Wake() {
-	if a.linker.IsLinked(a.target) {
+func (a *MaintainLinkTask) Wake() {
+	if a.mod.IsLinked(a.Target) {
 		return
 	}
 
@@ -181,10 +168,10 @@ func (a *memberLinkTask) Wake() {
 // A local address change wakes an unlinked task and restarts its backoff, so a
 // node that regains network dials without waiting out a backoff of up to
 // linkRetryMax.
-func (a *memberLinkTask) ReceiveEvent(e *events.Event) {
+func (a *MaintainLinkTask) ReceiveEvent(e *events.Event) {
 	switch typed := e.Data.(type) {
 	case *ip.EventNetworkAddressChanged:
-		if !addsRoutableAddress(typed) || a.linker.IsLinked(a.target) {
+		if !addsRoutableAddress(typed) || a.mod.IsLinked(a.Target) {
 			return
 		}
 		a.resetBackoff.Store(true)
@@ -192,7 +179,7 @@ func (a *memberLinkTask) ReceiveEvent(e *events.Event) {
 		a.signal()
 
 	case *nodes.LinkClosedEvent:
-		if !typed.RemoteIdentity.IsEqual(a.target) || typed.LinkCount != 0 {
+		if !typed.RemoteIdentity.IsEqual(a.Target) || typed.LinkCount != 0 {
 			return
 		}
 
@@ -212,7 +199,7 @@ func addsRoutableAddress(e *ip.EventNetworkAddressChanged) bool {
 }
 
 // signal wakes the loop; a wake already pending absorbs it.
-func (a *memberLinkTask) signal() {
+func (a *MaintainLinkTask) signal() {
 	select {
 	case a.wake <- struct{}{}:
 	default:
