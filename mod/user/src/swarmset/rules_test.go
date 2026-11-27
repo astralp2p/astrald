@@ -398,6 +398,29 @@ func TestCheckSwarmEntryOffers(t *testing.T) {
 	runEntryCases(t, f, []entryCase{{"offer of some requested permits", subset, user.EntryAccept}})
 }
 
+// TestCheckSwarmEntryDeclineClosesOnlyTheRequest (criterion 18): once a
+// Decline names a request, the merge check drops every new offer for it, from
+// any issuer, while the completed form of an offer stored before the Decline
+// and the host's contract to its app, both signed by both parties, still
+// enter.
+func TestCheckSwarmEntryDeclineClosesOnlyTheRequest(t *testing.T) {
+	f := newEntryFixture()
+	req := contractRequest(f.member)
+	reqID := f.set.store(t, req)
+	stored := offer(f.privileged, req, reqID)
+	f.set.store(t, stored)
+	f.set.store(t, decline(f.trusted, reqID))
+	other := astral.GenerateIdentity()
+	f.set.setMember(f.root, other, user.TierPrivilegedMember)
+
+	runEntryCases(t, f, []entryCase{
+		{"a new offer by the root key", offer(f.root, req, reqID), user.EntryDrop},
+		{"a new offer by another privileged node", offer(other, req, reqID), user.EntryDrop},
+		{"the completed form of the stored offer", completed(stored), user.EntryAccept},
+		{"the host's contract to its app", appContract(req, reqID), user.EntryAccept},
+	})
+}
+
 // TestCheckSwarmEntryReadsTheRootOnce: a claim that changes the root key
 // while an Expulsion is checked does not split the check between two roots,
 // even when the old root key holds a membership under the new one.

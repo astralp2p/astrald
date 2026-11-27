@@ -957,3 +957,30 @@ func TestDeclinedOfferIsNotCoSigned(t *testing.T) {
 		t.Fatalf("outcome %v; want declined", err)
 	}
 }
+
+// Criterion 18: a Decline that reaches the host after it co-signed an offer
+// takes nothing back. The host, restarted before it signed the app's
+// contract, signs it from the co-signed contract, which both parties signed,
+// and co-signs no other offer.
+func TestHostCarriesOutAContractCoSignedBeforeADecline(t *testing.T) {
+	swarm := newTestSwarm()
+	host := swarm.host()
+	reqID := mustFile(t, host, astral.GenerateIdentity(), walletPermits())
+	offer := swarm.offerBody(t, astral.GenerateIdentity(), reqID)
+	swarm.publish(t, offer)
+	done := &auth.SignedContract{Contract: offer.Contract, IssuerSig: offer.IssuerSig, SubjectSig: markSig(host.node)}
+	if err := swarm.state.add(done); err != nil {
+		t.Fatal(err)
+	}
+	swarm.answer(t, reqID, false)
+	swarm.offer(t, astral.GenerateIdentity(), reqID)
+
+	restarted := swarm.hostAs(host.node)
+	mustPoll(t, restarted)
+	if n, m := len(swarm.cosigned(host.node)), len(swarm.signedBy(host.node)); n != 1 || m != 1 {
+		t.Fatalf("%v co-signed offers and %v app contracts; want 1 and 1", n, m)
+	}
+	if c, err := restarted.Outcome(reqID); c == nil || err != nil {
+		t.Fatalf("outcome %v, %v; want the signed contract", c, err)
+	}
+}
