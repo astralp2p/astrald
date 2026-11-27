@@ -36,7 +36,7 @@ func entryObjectID(entry os.DirEntry) *astral.ObjectID {
 // A full ID is returned as a copy, unchecked, because it names its file directly.
 // A partial ID resolves through the hash index under mu.
 func (repo *Repository) findObject(ctx *astral.Context, objectID *astral.ObjectID) (*astral.ObjectID, error) {
-	if objectID.Size != 0 {
+	if !objectID.IsPartial() {
 		var id = *objectID
 		return &id, nil
 	}

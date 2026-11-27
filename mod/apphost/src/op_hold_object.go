@@ -53,7 +53,7 @@ func (mod *Module) holdOne(caller *astral.Identity, id *astral.ObjectID, duratio
 		return astral.Err(apphost.ErrMissingObjectID)
 	}
 
-	if id.Size == 0 {
+	if id.IsPartial() {
 		return astral.Err(astral.ErrPartialObjectID)
 	}
 

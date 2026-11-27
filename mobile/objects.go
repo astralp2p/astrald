@@ -48,7 +48,7 @@ func (n *Node) OpenObject(objectID string, offset int64) (*ObjectReader, error) 
 	case err == nil:
 		// why: a partial ID carries no size, so the player's length comes from the object the reader opened.
 		return &ObjectReader{r: r, size: int64(r.ID().Size)}, nil
-	case id.Size == 0:
+	case id.IsPartial():
 		// why: a stream from a swarm member names no object, so a partial ID would leave the size unknown.
 		return nil, err
 	}

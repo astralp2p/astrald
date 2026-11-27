@@ -196,7 +196,7 @@ func (repo *Repository) Read(ctx *astral.Context, objectID *astral.ObjectID, off
 	if err != nil {
 		// why: only a partial ID resolves through the index, so only its miss can leave a stale entry.
 		// why: a full-ID miss takes no lock, so it never waits behind a partial lookup's directory listing.
-		if objectID.Size == 0 {
+		if objectID.IsPartial() {
 			repo.evict(resolved)
 		}
 		return nil, err
@@ -239,7 +239,7 @@ func (repo *Repository) openObject(objectID *astral.ObjectID) (*os.File, error) 
 // Contains reports whether the repository holds the object.
 // A full ID checks its file alone; a partial ID resolves through the hash index.
 func (repo *Repository) Contains(ctx *astral.Context, objectID *astral.ObjectID) (bool, error) {
-	if objectID.Size == 0 {
+	if objectID.IsPartial() {
 		return repo.containsPartial(ctx, objectID)
 	}
 
@@ -301,7 +301,7 @@ func (repo *Repository) Delete(ctx *astral.Context, objectID *astral.ObjectID) e
 	defer repo.mu.Unlock()
 
 	var resolved = objectID
-	if objectID.Size == 0 {
+	if objectID.IsPartial() {
 		found, err := repo.findPartialLocked(ctx, objectID.Hash)
 		if err != nil {
 			return err

@@ -477,3 +477,30 @@ func TestWatchDeleteIsUnsupported(t *testing.T) {
 		t.Errorf("the file is gone after Delete: %v", err)
 	}
 }
+
+// TestWatchEmptyFileIsAnObject: an empty native file is indexed under astral.EmptyID and read and contained by that
+// full ID, with no special case.
+func TestWatchEmptyFileIsAnObject(t *testing.T) {
+	root := t.TempDir()
+	repo := testWatchRepository(t, root)
+	ctx := astral.NewContext(nil)
+
+	id := indexFile(t, repo, filepath.Join(root, "empty"), nil)
+	if !id.IsEmpty() {
+		t.Fatalf("an empty file resolved to %v, want astral.EmptyID", id)
+	}
+
+	if ok, err := repo.Contains(ctx, &astral.EmptyID); !ok || err != nil {
+		t.Errorf("Contains(EmptyID) = %v, %v, want true, nil", ok, err)
+	}
+
+	r, err := repo.Read(ctx, &astral.EmptyID, 0, 0)
+	if err != nil {
+		t.Fatalf("Read(EmptyID): %v", err)
+	}
+	defer r.Close()
+
+	if data, err := io.ReadAll(r); err != nil || len(data) != 0 {
+		t.Errorf("Read(EmptyID) = %q, %v, want no bytes", data, err)
+	}
+}

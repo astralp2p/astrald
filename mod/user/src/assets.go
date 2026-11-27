@@ -7,8 +7,7 @@ import (
 // AddAsset adds an object to user's assets
 func (mod *Module) AddAsset(objectID *astral.ObjectID) (err error) {
 	// why: purge asks holders about full IDs, so an asset keyed by a partial ID never protects its object.
-	// note: the full ID of the empty object has Size 0, so it is refused as well.
-	if objectID.Size == 0 {
+	if objectID.IsPartial() {
 		return astral.ErrPartialObjectID
 	}
 
@@ -21,7 +20,7 @@ func (mod *Module) AddAsset(objectID *astral.ObjectID) (err error) {
 
 // RemoveAsset removes an object from user's assets
 func (mod *Module) RemoveAsset(objectID *astral.ObjectID) (err error) {
-	if objectID.Size == 0 {
+	if objectID.IsPartial() {
 		return astral.ErrPartialObjectID
 	}
 

@@ -89,7 +89,7 @@ var _ objectsmod.Repository = &WatchRepository{}
 // Contains checks the database index rather than the filesystem directly.
 // A partial ID also checks the file of each candidate row.
 func (repo *WatchRepository) Contains(ctx *astral.Context, objectID *astral.ObjectID) (bool, error) {
-	if objectID.Size != 0 {
+	if !objectID.IsPartial() {
 		return repo.mod.db.ObjectExists(repo.root, objectID)
 	}
 
@@ -107,7 +107,7 @@ func (repo *WatchRepository) Contains(ctx *astral.Context, objectID *astral.Obje
 // findObject returns the full ID of the indexed object objectID names.
 // A full ID is returned as a copy; Read checks its rows.
 func (repo *WatchRepository) findObject(ctx *astral.Context, objectID *astral.ObjectID) (*astral.ObjectID, error) {
-	if objectID.Size != 0 {
+	if !objectID.IsPartial() {
 		var id = *objectID
 		return &id, nil
 	}

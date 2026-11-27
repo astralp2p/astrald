@@ -2,7 +2,6 @@ package apphost
 
 import (
 	"bytes"
-	"crypto/sha256"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -189,11 +188,8 @@ func TestUnholdObjectRefusesPartialID(t *testing.T) {
 }
 
 // TestHoldAndUnholdOneRefuseSizeZeroIDs covers the per-ID step that both the single
-// and the batch mode run. The zero ID keeps its missing-ID error. The empty object's
-// full ID has Size 0 and is refused like a partial ID.
+// and the batch mode run. The zero ID keeps its missing-ID error. A partial ID is refused.
 func TestHoldAndUnholdOneRefuseSizeZeroIDs(t *testing.T) {
-	empty := &astral.ObjectID{Hash: sha256.Sum256(nil)}
-
 	cases := []struct {
 		name string
 		id   *astral.ObjectID
@@ -201,7 +197,6 @@ func TestHoldAndUnholdOneRefuseSizeZeroIDs(t *testing.T) {
 	}{
 		{name: "zero ID", id: &astral.ObjectID{}, want: apphost.ErrMissingObjectID},
 		{name: "partial ID", id: &astral.ObjectID{Hash: heldFullID().Hash}, want: astral.ErrPartialObjectID},
-		{name: "empty object", id: empty, want: astral.ErrPartialObjectID},
 	}
 
 	for _, c := range cases {
@@ -214,4 +209,21 @@ func TestHoldAndUnholdOneRefuseSizeZeroIDs(t *testing.T) {
 			checkHoldCount(t, mod, app, 0)
 		})
 	}
+}
+
+// TestHoldOneAcceptsTheEmptyID: the empty object's ID has Size 0 but is a full ID, so it is
+// held like any other object.
+func TestHoldOneAcceptsTheEmptyID(t *testing.T) {
+	mod := holdModule(t)
+	app := astral.GenerateIdentity()
+
+	if reply := mod.holdOne(app, &astral.EmptyID, nil); reply.ObjectType() != (&astral.Ack{}).ObjectType() {
+		t.Fatalf("hold the empty ID: reply %v; want ack", reply)
+	}
+	checkHoldCount(t, mod, app, 1)
+
+	if reply := mod.unholdOne(app, &astral.EmptyID); reply.ObjectType() != (&astral.Ack{}).ObjectType() {
+		t.Fatalf("unhold the empty ID: reply %v; want ack", reply)
+	}
+	checkHoldCount(t, mod, app, 0)
 }

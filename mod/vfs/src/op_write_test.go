@@ -176,24 +176,24 @@ func TestWriteRefusesWhenNoInodesLeft(t *testing.T) {
 	changeTestEntry(t, changeTestWrite(t, mod, vol, "/x/y", "y"))
 }
 
-func TestWriteOfZeroBytesChangesNothing(t *testing.T) {
+func TestWriteOfZeroBytesStoresAnEmptyFile(t *testing.T) {
 	mod, vol, repo := changeTestModule(t)
 
-	changeTestErr(t, changeTestWrite(t, mod, vol, "/new/empty", ""), errEmptyFile)
-	for _, path := range []string{"/new/empty", "/new"} {
-		if row := changeTestFind(t, mod, vol, path); row != nil {
-			t.Errorf("an entry at %v after an empty write", path)
-		}
+	entry := changeTestEntry(t, changeTestWrite(t, mod, vol, "/new/empty", ""))
+	if entry.ID != astral.EmptyID || entry.IsFolder() {
+		t.Errorf("an empty write answered %v; want a file of %v", entry.ID, astral.EmptyID)
 	}
-	if _, committed, discarded := repo.counts(); committed != 0 || discarded != 1 {
-		t.Errorf("committed %d, discarded %d; want 0 and 1", committed, discarded)
+	if row := changeTestMustFind(t, mod, vol, "/new"); !row.isFolder() {
+		t.Errorf("the missing parent /new is not a folder")
+	}
+	if _, committed, _ := repo.counts(); committed != 1 {
+		t.Errorf("committed %d; want 1", committed)
 	}
 
 	changeTestEntry(t, changeTestWrite(t, mod, vol, "/kept", "content"))
-	before := *changeTestMustFind(t, mod, vol, "/kept")
-	changeTestErr(t, changeTestWrite(t, mod, vol, "/kept", ""), errEmptyFile)
-	if after := changeTestMustFind(t, mod, vol, "/kept"); *after.ObjectID != *before.ObjectID || after.ModTime != before.ModTime {
-		t.Errorf("/kept is %v at %v after the empty write; want %v at %v", after.ObjectID, after.ModTime, before.ObjectID, before.ModTime)
+	replaced := changeTestEntry(t, changeTestWrite(t, mod, vol, "/kept", ""))
+	if after := changeTestMustFind(t, mod, vol, "/kept"); *after.ObjectID != astral.EmptyID || replaced.ID != astral.EmptyID {
+		t.Errorf("/kept is %v after an empty write; want %v", after.ObjectID, astral.EmptyID)
 	}
 }
 
