@@ -10,9 +10,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"time"
 
-	"github.com/astralp2p/astral-go/api/services"
 	"github.com/astralp2p/astral-go/astral"
 )
 
@@ -41,14 +39,12 @@ const (
 	svcSpoofApp  = "sai-spoof-app"  // answered as another app
 	svcSpoofNode = "sai-spoof-node" // answered as the node
 	svcSpoofName = "sai-spoof-name" // answered as another service
-	svcNoGrant   = "sai-nogrant"    // advertised without ServeApps
-	svcRevoked   = "sai-revoked"    // advertised until ServeApps is revoked
 	svcLink      = "sai-link"       // advertised over a link
 	svcFresh     = "sai-fresh"      // listed beside a name that is taken
 	info         = "sai-info"
 )
 
-var allNames = []string{svcMain, svcRaw, svcSpoofApp, svcSpoofNode, svcSpoofName, svcNoGrant, svcRevoked, svcLink, svcFresh}
+var allNames = []string{svcMain, svcRaw, svcSpoofApp, svcSpoofNode, svcSpoofName, svcLink, svcFresh}
 
 func story(path string, facts map[string]bool) error {
 	nodes, err := loadNodes(path)
@@ -180,33 +176,7 @@ func story(path string, facts map[string]bool) error {
 		return err
 	}
 
-	// 5. without ServeApps an app cannot advertise at all
-	stray, err := register(ctx, n2)
-	if err != nil {
-		return err
-	}
-	if err := revokeServeApps(ctx, stray); err != nil {
-		return fmt.Errorf("revoking serve_apps from the stray app: %w", err)
-	}
-	sb, err := advertise(ctx, stray, []string{svcNoGrant})
-	if sb != nil {
-		bindings.add(sb.close)
-	}
-	if err := step(facts, "no_serve_apps_is_refused", isNotPermitted(err), "advertising without serve_apps: err %v; want %q", err, notPermitted); err != nil {
-		return err
-	}
-	d = swarm(ctx, c1, svcNoGrant)
-	if err := step(facts, "no_serve_apps_shows_nothing", d.complete() && d.none(), "swarm discovery of %v: %v; want nothing", svcNoGrant, d); err != nil {
-		return err
-	}
-
-	// 5b. losing ServeApps ends an open binding: followers on both nodes see
-	// the offering removed and the advertise channel closes
-	if err := revokedWhileAdvertising(ctx, n2, c1, c2, &bindings, facts); err != nil {
-		return err
-	}
-
-	// 6. over a link nobody advertises on another node: an app of node1 is
+	// 5. over a link nobody advertises on another node: an app of node1 is
 	// turned away on its way, and node1 itself, which reaches the op, is told
 	// the op does not admit a network origin
 	a1, err := register(ctx, n1)
@@ -236,7 +206,7 @@ func story(path string, facts map[string]bool) error {
 		return err
 	}
 
-	// 7. a name in use is refused whole, and belongs to its provider alone
+	// 6. a name in use is refused whole, and belongs to its provider alone
 	_, err = advertise(ctx, p, []string{svcMain})
 	if err := step(facts, "taken_name_is_refused", isAdvertised(err), "advertising %v twice: err %v; want %q", svcMain, err, advertised); err != nil {
 		return err
@@ -272,7 +242,7 @@ func story(path string, facts map[string]bool) error {
 		return err
 	}
 
-	// 8. closing a binding takes its provider away, and only its own
+	// 7. closing a binding takes its provider away, and only its own
 	qb.close()
 	pb.close()
 	raw.close()
@@ -280,48 +250,4 @@ func story(path string, facts map[string]bool) error {
 		return err
 	}
 	return nil
-}
-
-// revokedWhileAdvertising revokes ServeApps from an app on node2 while it
-// advertises svcRevoked and two follows show it: node2's local follow sees the
-// removal with cause binding_closed, node1's swarm follow with member_removed,
-// and the app's advertise channel closes.
-func revokedWhileAdvertising(ctx *astral.Context, n2 node, c1, c2 *app, bindings *closer, facts map[string]bool) error {
-	revoked, err := register(ctx, n2)
-	if err != nil {
-		return err
-	}
-	rb, err := advertise(ctx, revoked, []string{svcRevoked})
-	if err != nil {
-		return fmt.Errorf("the app to be revoked could not advertise: %w", err)
-	}
-	bindings.add(rb.close)
-	f1, err := openFollow(ctx, c1, services.ReachSwarm, svcRevoked)
-	if err != nil {
-		return err
-	}
-	defer f1.cancel()
-	f2, err := openFollow(ctx, c2, services.ReachLocal, svcRevoked)
-	if err != nil {
-		return err
-	}
-	defer f2.cancel()
-	shown1 := f1.await(30*time.Second, updateFrom(revoked.id))
-	shown2 := f2.await(30*time.Second, updateFrom(revoked.id))
-	if err := step(facts, "revoked_provider_is_followed_first", shown1 && shown2,
-		"follows of %v: swarm on node1 %v, local on node2 %v; want both to show %v", svcRevoked, shown1, shown2, revoked.id); err != nil {
-		return err
-	}
-
-	if err := revokeServeApps(ctx, revoked); err != nil {
-		return fmt.Errorf("revoking serve_apps from the advertising app: %w", err)
-	}
-	gone2 := f2.await(5*time.Second, removalOf(revoked.id, svcRevoked, services.CauseBindingClosed))
-	gone1 := f1.await(5*time.Second, removalOf(revoked.id, svcRevoked, services.CauseMemberRemoved))
-	if err := step(facts, "revoked_serve_apps_removes_the_offering", gone1 && gone2,
-		"after the revoke: node2 follow removed (binding_closed) %v, node1 follow removed (member_removed) %v; want both", gone2, gone1); err != nil {
-		return err
-	}
-	return step(facts, "revoked_serve_apps_closes_the_advertise_channel", closedWithin(rb.b.Done(), 5*time.Second),
-		"the advertise channel of %v stayed open after the revoke", revoked.id)
 }

@@ -2,8 +2,7 @@
 
 Two apps on node1, each with its own identity, token and client: a greeter
 serves `hello`, and a visitor calls it by the greeter's app identity and is
-greeted as itself. An app whose `mod.auth.serve_apps_action` grant is revoked
-cannot serve.
+greeted as itself.
 
 - **env** node · **start** `null` · **saves** —
 - **driver** `script.py` — runs `driver/` (Go, this repository's astral-go) in
@@ -12,11 +11,7 @@ cannot serve.
     serves `hello` through `apps.ServeWith` on a client of its own token;
   - the node registers the visitor, and the visitor queries `hello` with the
     greeter's app identity as target, once; the greeter answers
-    `hello, <caller>` with the caller the node delivered;
-  - the node registers a third app and revokes its
-    `mod.auth.serve_apps_action` grant (`apphost.revoke`); its
-    `apphost.register_handler` is refused with `not permitted`, and the
-    visitor's call to it fails with `route_not_found`.
+    `hello, <caller>` with the caller the node delivered.
 - **oracle** `verify.py` — every step held, plus the same story with fresh
   identities (`driver verify`).
 

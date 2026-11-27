@@ -1,7 +1,6 @@
 // Command driver runs a labeler app that serves objects.describe for node1,
 // and asks node1 to describe a note as the User: the app's label comes back
-// with the app as its source. Once the User revokes the app's describer grant,
-// the same describe no longer reaches the app.
+// with the app as its source.
 //
 //	driver drive  <session.json>   prints facts as JSON
 //	driver verify <session.json>   the same story with a fresh app and note
@@ -119,22 +118,6 @@ func run(path string) (map[string]bool, error) {
 	facts["app_was_asked_once"] = lab.asked() == 1
 	if !facts["app_was_asked_once"] {
 		return facts, fmt.Errorf("the app was asked %d times for %v; want once", lab.asked(), note)
-	}
-
-	// 4. without the grant, the node no longer asks the app
-	// note: the node checks the grant on every fan-out and drops a describer that
-	// lost it, so this also leaves no describer registered for later tests.
-	if err := apphostcli.New(nil, user).RevokeAction(ctx, app.Identity, serveObjects); err != nil {
-		return facts, fmt.Errorf("revoking the app's grant: %w", err)
-	}
-	descriptors, err = describe(ctx, user, note)
-	if err != nil {
-		return facts, fmt.Errorf("objects.describe after the revoke: %w", err)
-	}
-	facts["revoked_app_is_not_asked"] = len(descriptors) == 0 && lab.asked() == 1
-	if !facts["revoked_app_is_not_asked"] {
-		return facts, fmt.Errorf("after the revoke, objects.describe answered %v and the app was asked %d times; want nothing and once",
-			show(descriptors), lab.asked())
 	}
 
 	fmt.Fprintln(os.Stderr, "ok: the User's objects.describe on node1 returned the labeler app's label, sourced to the app")

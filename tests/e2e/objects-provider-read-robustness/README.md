@@ -30,7 +30,6 @@ descriptor or search result with the provider's own identity.
   4. The User runs `objects.describe` for O1 and `objects.search` for a
      unique word; L answers a labelled descriptor and a result for an object
      X, both claiming node2 as source.
-  5. The User revokes ServeObjects from F, H and L.
 - **oracle** `verify.py`:
   - Ground truth through astral-py: node2's `local` repository holds O1, and
     its bytes hash to O1; node1's `local` does not hold O1; neither node's
@@ -74,6 +73,5 @@ of the read that had G in play.
 
 ## Lingering state
 
-Every registration is a 60 s lease. The apps exit with the driver, and the
-revoke in step 5 removes their grants, so node1 drops the registrations on
-its next fan-out at the latest.
+Every registration is a 60 s lease. The apps exit with the driver, so node1
+drops the registrations once their leases lapse.

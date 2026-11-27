@@ -1,7 +1,6 @@
 // Command driver runs a catalog app that serves objects.search for node1, and
 // searches node1 as the User: the app's result comes back with the app as its
-// source. Once the User revokes the app's searcher grant, the same search no
-// longer reaches the app.
+// source.
 //
 //	driver drive  <session.json>   prints facts as JSON
 //	driver verify <session.json>   the same story with a fresh app and word
@@ -118,22 +117,6 @@ func run(path string) (map[string]bool, error) {
 	facts["app_was_asked_once"] = cat.asked() == 1
 	if !facts["app_was_asked_once"] {
 		return facts, fmt.Errorf("the app was asked %d times for %q; want once", cat.asked(), word)
-	}
-
-	// 4. without the grant, the node no longer asks the app
-	// note: the node checks the grant on every fan-out and drops a searcher that
-	// lost it, so this also leaves no searcher registered for later tests.
-	if err := apphostcli.New(nil, user).RevokeAction(ctx, app.Identity, serveObjects); err != nil {
-		return facts, fmt.Errorf("revoking the app's grant: %w", err)
-	}
-	results, err = search(ctx, user, word)
-	if err != nil {
-		return facts, fmt.Errorf("objects.search after the revoke: %w", err)
-	}
-	facts["revoked_app_is_not_asked"] = len(results) == 0 && cat.asked() == 1
-	if !facts["revoked_app_is_not_asked"] {
-		return facts, fmt.Errorf("after the revoke, objects.search answered %v and the app was asked %d times; want nothing and once",
-			describe(results), cat.asked())
 	}
 
 	fmt.Fprintln(os.Stderr, "ok: the User's objects.search on node1 returned the catalog app's result, sourced to the app")

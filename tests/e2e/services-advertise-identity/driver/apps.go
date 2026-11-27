@@ -62,10 +62,6 @@ func register(ctx *astral.Context, n node) (*app, error) {
 	return &app{id: tok.Identity, client: connect(n.Endpoint, string(tok.Token)), n: n}, nil
 }
 
-func revokeServeApps(ctx *astral.Context, a *app) error {
-	return apphostcli.New(nil, connect(a.n.Endpoint, a.n.Token)).RevokeAction(ctx, a.id, auth.ServeAppsAction{}.ObjectType())
-}
-
 // grantDiscovery lets a discover the named services on any node, granted by
 // the admin of a's node.
 func grantDiscovery(ctx *astral.Context, a *app, names ...string) error {
@@ -108,7 +104,6 @@ func (c *closer) closeAll() {
 // binding is an open advertisement made through the SDK. Every service it
 // offers is available and carries info; it remembers who it evaluated.
 type binding struct {
-	b     *servicescli.Binding
 	close func()
 
 	mu   sync.Mutex
@@ -135,7 +130,6 @@ func advertiseOn(ctx *astral.Context, a *app, target *astral.Identity, names []s
 	if err != nil {
 		return nil, err
 	}
-	bd.b = b
 	bd.close = sync.OnceFunc(func() { _ = b.Close() })
 	return bd, nil
 }
@@ -328,12 +322,8 @@ func waitNone(ctx *astral.Context, a *app, names ...string) bool {
 	}
 }
 
-var (
-	notPermitted = auth.ErrNotPermitted.Error()
-	advertised   = services.ErrAdvertised.Error()
-)
+var advertised = services.ErrAdvertised.Error()
 
-func isNotPermitted(err error) bool { return err != nil && err.Error() == notPermitted }
 func isAdvertised(err error) bool {
 	return err != nil && (errors.Is(err, services.ErrAdvertised) || err.Error() == advertised)
 }

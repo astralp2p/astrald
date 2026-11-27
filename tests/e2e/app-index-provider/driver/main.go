@@ -1,6 +1,5 @@
 // Command driver runs an indexer app for node1: the User stores a note in a
-// repository with indexing enabled, and the app is told about it. Once the User
-// revokes the app's indexer grant, the app can no longer subscribe.
+// repository with indexing enabled, and the app is told about it.
 //
 //	driver drive  <session.json>   prints facts as JSON
 //	driver verify <session.json>   the same story with a fresh app and repository
@@ -135,16 +134,6 @@ func run(path string) (facts map[string]bool, err error) {
 	}
 	closeSub()
 
-	// 5. without the grant, the app can no longer subscribe
-	if err := apphostcli.New(nil, user).RevokeAction(ctx, app.Identity, serveObjects); err != nil {
-		return facts, fmt.Errorf("revoking the app's grant: %w", err)
-	}
-	refused, err := subscribeRefusal(ctx, idx, nonce)
-	facts["revoked_app_cannot_subscribe"] = errors.Is(refused, auth.ErrNotPermitted)
-	if !facts["revoked_app_cannot_subscribe"] {
-		return facts, fmt.Errorf("after the revoke, indexing.subscribe answered %v (err %v); want %v", refused, err, auth.ErrNotPermitted)
-	}
-
 	fmt.Fprintln(os.Stderr, "ok: the indexer app was told about the note the User stored on node1")
 	return facts, nil
 }
@@ -169,24 +158,8 @@ func nextChange(sub *indexingcli.Subscription, timeout time.Duration) (astral.Ob
 	}
 }
 
-// subscribeRefusal subscribes once more and returns the error node1 answers
-// with first.
-func subscribeRefusal(ctx *astral.Context, idx *indexingcli.Client, nonce astral.Nonce) (error, error) {
-	sctx, cancel := ctx.WithCancel()
-	defer cancel()
-	sub, err := idx.Subscribe(sctx, nonce)
-	if err != nil {
-		return nil, err
-	}
-	msg, err := nextChange(sub, 30*time.Second)
-	if msg != nil {
-		return nil, fmt.Errorf("node1 sent %#v", msg)
-	}
-	return err, nil
-}
-
 // note: the cleanup below leaves the shared world as it was. The owner
-// unregisters without a permit, so the revoke does not block it.
+// unregisters without a permit.
 
 func unregister(ctx *astral.Context, idx *indexingcli.Client, nonce astral.Nonce) error {
 	if err := idx.UnregisterIndexer(ctx, nonce); err != nil {

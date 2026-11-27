@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"os"
 
 	"github.com/astralp2p/astral-go/api/auth"
 	objectscli "github.com/astralp2p/astral-go/api/objects/client"
@@ -28,17 +27,8 @@ type world struct {
 	stops []func()
 }
 
-// close stops every app and revokes ServeObjects from every app holding it,
-// so nothing stays registered in the world.
+// close stops every app.
 func (w *world) close() {
-	for _, p := range []*provider.Provider{w.f, w.h, w.l} {
-		if p == nil {
-			continue
-		}
-		if err := provider.Revoke(w.ctx, w.user, p.App.ID, provider.ServeObjects); err != nil {
-			fmt.Fprintf(os.Stderr, "revoke ServeObjects of %v: %v\n", p.App.ID, err)
-		}
-	}
 	for _, stop := range w.stops {
 		stop()
 	}
