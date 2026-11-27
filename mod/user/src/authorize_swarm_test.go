@@ -274,17 +274,25 @@ func TestAuthorizeAdminSwarmRefusesEveryoneElse(t *testing.T) {
 	}
 }
 
-// TestAuthorizeSwarmRefusesOnUnclaimedNode holds the precondition both handlers
-// share: with no active contract there is no swarm, so there is nobody to allow.
-func TestAuthorizeSwarmRefusesOnUnclaimedNode(t *testing.T) {
-	mod := &Module{Deps: Deps{Auth: &recordingAuth{}}}
-	actor := astral.GenerateIdentity()
+// TestAuthorizeSwarmOnUnclaimedNode: with no active contract the node acts as
+// the user (userOrSelf), so the node sees and administers the swarm, and a
+// stranger does neither.
+func TestAuthorizeSwarmOnUnclaimedNode(t *testing.T) {
+	nodeID := astral.GenerateIdentity()
+	mod := &Module{node: &identityNode{id: nodeID}, Deps: Deps{Auth: &recordingAuth{}}}
 
-	if mod.AuthorizeSeeSwarm(nil, &user.SeeSwarmAction{Action: auth.NewAction(actor)}) {
-		t.Fatal("an unclaimed node has no swarm to see")
+	if !mod.AuthorizeSeeSwarm(nil, &user.SeeSwarmAction{Action: auth.NewAction(nodeID)}) {
+		t.Fatal("an unclaimed node acts as the user and must see its swarm")
+	}
+	if !mod.AuthorizeAdminSwarm(nil, &user.AdminSwarmAction{Action: auth.NewAction(nodeID)}) {
+		t.Fatal("an unclaimed node acts as the user and must administer its swarm")
 	}
 
-	if mod.AuthorizeAdminSwarm(nil, &user.AdminSwarmAction{Action: auth.NewAction(actor)}) {
-		t.Fatal("an unclaimed node has no swarm to administer")
+	stranger := astral.GenerateIdentity()
+	if mod.AuthorizeSeeSwarm(nil, &user.SeeSwarmAction{Action: auth.NewAction(stranger)}) {
+		t.Fatal("a stranger must not see an unclaimed node's swarm")
+	}
+	if mod.AuthorizeAdminSwarm(nil, &user.AdminSwarmAction{Action: auth.NewAction(stranger)}) {
+		t.Fatal("a stranger must not administer an unclaimed node's swarm")
 	}
 }

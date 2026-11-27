@@ -30,6 +30,9 @@ func newChainRules(mod *Module, members membershipReader) *chainRules {
 // why: a Member or Trusted node does not relay as the user (D5, D6).
 // note: the user relays as itself through the nodes module's rule, which
 // contracts the user signs delegate.
+// why Identity and not userOrSelf: the rule answers for a PrivilegedMembership
+// a claimed user signed. An unclaimed node relays as itself through the nodes
+// module's rule.
 func (r *chainRules) AuthorizeRelayFor(ctx *astral.Context, a *nodes.RelayForAction) bool {
 	userID := r.mod.Identity()
 	if a.Actor().IsZero() || userID.IsZero() || !a.ForID.IsEqual(userID) {
@@ -47,6 +50,9 @@ func (r *chainRules) AuthorizeRelayFor(ctx *astral.Context, a *nodes.RelayForAct
 // contract it signs passes that on (D5).
 // note: the user's own rule, which contracts the user signs delegate, is
 // AuthorizeAdminSwarm.
+// why Identity and not userOrSelf: the rule answers for a PrivilegedMembership
+// a claimed user signed. An unclaimed node administers its swarm through
+// AuthorizeAdminSwarm.
 func (r *chainRules) AuthorizeAdminSwarmAsPrivileged(ctx *astral.Context, a *user.AdminSwarmAction) bool {
 	userID := r.mod.Identity()
 	if a.Actor().IsZero() || userID.IsZero() {
@@ -56,16 +62,16 @@ func (r *chainRules) AuthorizeAdminSwarmAsPrivileged(ctx *astral.Context, a *use
 	return ok && usermod.PrivilegedBy(m, userID)
 }
 
-// AuthorizeServiceDiscovery allows the user identity to discover every service
-// and refuses every other identity; a member or its app discovers through its
-// contract chain.
+// AuthorizeServiceDiscovery allows the user (userOrSelf) to discover every
+// service and refuses every other identity; a member or its app discovers
+// through its contract chain.
 //
-// why this node's own identity is not in the rule: as in
-// AuthorizeServiceDiscovery, a local caller carrying no identity is promoted
-// to it (core/router.go).
+// why a claimed node's own identity is not in the rule: as in
+// AuthorizeServeObjects, a local caller carrying no identity is promoted to it
+// (core/router.go). An unclaimed node is the user (userOrSelf).
 func (r *chainRules) AuthorizeServiceDiscovery(ctx *astral.Context, a *services.ServiceDiscoveryAction) bool {
 	actor := a.Actor()
-	return !actor.IsZero() && actor.IsEqual(r.mod.Identity())
+	return !actor.IsZero() && actor.IsEqual(r.mod.userOrSelf())
 }
 
 // AuthorizeSeeObjects grants object reads to the user identity and to this

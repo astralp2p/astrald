@@ -5,8 +5,8 @@ import (
 	"github.com/astralp2p/astral-go/astral"
 )
 
-// AuthorizeAdminNetwork grants network administration to the user identity and
-// to this node itself, and to nobody else.
+// AuthorizeAdminNetwork grants network administration to the user (userOrSelf)
+// and to this node itself, and to nobody else.
 //
 // why the user: the six other node-wide actions grant it, and a user who adopts
 // and expels swarm members already reshapes the network more than these ops do.
@@ -27,8 +27,8 @@ import (
 // note: the outsider paths are in .ai/system/topics/node-exposure.md#endpoint-exchange.
 // note: a local caller carrying no identity also arrives as this node
 // (core/router.go), so that branch is no proof that a call is internal.
-// why a zero actor is refused first: the user identity is nil on an unclaimed
-// node, and Identity.IsEqual reports a zero identity equal to nil.
+// why a zero actor is refused first: Identity.IsEqual reports a zero identity
+// equal to nil.
 func (mod *Module) AuthorizeAdminNetwork(ctx *astral.Context, a *auth.AdminNetworkAction) bool {
 	actor := a.Actor()
 
@@ -38,5 +38,5 @@ func (mod *Module) AuthorizeAdminNetwork(ctx *astral.Context, a *auth.AdminNetwo
 
 	// why no swarm member: membership of any tier administers no node; a
 	// member reaches these ops through a contract the user signs.
-	return actor.IsEqual(mod.Identity()) || actor.IsEqual(mod.node.Identity())
+	return actor.IsEqual(mod.userOrSelf()) || actor.IsEqual(mod.node.Identity())
 }

@@ -57,15 +57,19 @@ func TestServeObjectsRefusesEveryoneElseToIndex(t *testing.T) {
 	}
 }
 
-// TestServeObjectsRefusesIndexingOnUnclaimedNode covers a node with no user:
-// nobody holds the indexer role by default, the node included.
-func TestServeObjectsRefusesIndexingOnUnclaimedNode(t *testing.T) {
+// TestServeObjectsAllowsTheUnclaimedNodeToIndex covers a node with no user:
+// the node acts as the user (userOrSelf), so it holds the indexer role, and a
+// stranger and a zero actor do not.
+func TestServeObjectsAllowsTheUnclaimedNodeToIndex(t *testing.T) {
 	nodeID := astral.GenerateIdentity()
 	mod := &Module{node: &identityNode{id: nodeID}}
 
+	if !mod.AuthorizeServeObjects(nil, serveObjectsAction(nodeID, auth.RoleIndexer)) {
+		t.Fatal("an unclaimed node acts as the user and must register an indexer")
+	}
 	for name, actor := range map[string]*astral.Identity{
-		"this node": nodeID,
-		"zero":      {},
+		"stranger": astral.GenerateIdentity(),
+		"zero":     {},
 	} {
 		if mod.AuthorizeServeObjects(nil, serveObjectsAction(actor, auth.RoleIndexer)) {
 			t.Fatalf("%s must not register an indexer on an unclaimed node", name)

@@ -6,8 +6,8 @@ import (
 	"github.com/astralp2p/astral-go/astral"
 )
 
-// AuthorizeSeeSwarm allows the swarm's user and current swarm members to read
-// the swarm's state.
+// AuthorizeSeeSwarm allows the user (userOrSelf) and current swarm members to
+// read the swarm's state.
 //
 // why: the policy is AuthorizeInfo's, carried over unchanged. SeeSwarm covers
 // five reads beside user.info, and those five were unauthorized entirely — so no
@@ -20,19 +20,18 @@ import (
 //
 // why members of every tier: Members may see requests (vision, 2026-11-24).
 func (mod *Module) AuthorizeSeeSwarm(ctx *astral.Context, a *user.SeeSwarmAction) bool {
-	userID := mod.Identity()
-	if userID.IsZero() || a.Actor().IsZero() {
+	if a.Actor().IsZero() {
 		return false
 	}
-	if a.Actor().IsEqual(userID) {
+	if a.Actor().IsEqual(mod.userOrSelf()) {
 		return true
 	}
 	_, ok := mod.Membership(a.Actor())
 	return ok
 }
 
-// AuthorizeAdminSwarm allows the swarm's user to change what the swarm holds.
-// A contract the user signs delegates it through the auth walk.
+// AuthorizeAdminSwarm allows the user (userOrSelf) to change what the swarm
+// holds. A contract the user signs delegates it through the auth walk.
 //
 // note: a Privileged node administers the swarm itself through
 // AuthorizeAdminSwarmAsPrivileged, which passes nothing on.
@@ -41,21 +40,20 @@ func (mod *Module) AuthorizeSeeSwarm(ctx *astral.Context, a *user.SeeSwarmAction
 // granted on request today, so granting the swarm here would let a node it
 // admitted expel every other one.
 //
-// why this node's own identity is not in the grant, unlike AuthorizeAdminObjects:
-// a local caller carrying no identity is promoted to it, so including it would
-// let any unauthenticated local caller adopt and expel. Managing the swarm from
-// the command line requires the user's identity, which is what it required
-// before this change.
+// why a claimed node's own identity is not in the grant, unlike
+// AuthorizeAdminObjects: a local caller carrying no identity is promoted to it,
+// so including it would let any unauthenticated local caller adopt and expel.
+// Managing the swarm from the command line requires the user's identity.
+// note: an unclaimed node is the user (userOrSelf), so there the promoted local
+// caller holds the action.
 func (mod *Module) AuthorizeAdminSwarm(ctx *astral.Context, a *user.AdminSwarmAction) bool {
-	userID := mod.Identity()
-	return !userID.IsZero() && a.Actor().IsEqual(userID)
+	return !a.Actor().IsZero() && a.Actor().IsEqual(mod.userOrSelf())
 }
 
-// AuthorizeExpel allows the user to expel (D7). A contract the user signs
-// delegates it through the auth walk; no membership grants it.
+// AuthorizeExpel allows the user (userOrSelf) to expel (D7). A contract the
+// user signs delegates it through the auth walk; no membership grants it.
 func (mod *Module) AuthorizeExpel(ctx *astral.Context, a *user.ExpelAction) bool {
-	userID := mod.Identity()
-	return !userID.IsZero() && a.Actor().IsEqual(userID)
+	return !a.Actor().IsZero() && a.Actor().IsEqual(mod.userOrSelf())
 }
 
 // AuthorizeStoreObjects grants object writes to the user identity and to this

@@ -2,8 +2,29 @@ package user
 
 import "github.com/astralp2p/astral-go/astral"
 
-// authorizeUserOrNode allows the user identity and this node's own identity, and
-// nobody else.
+// userOrSelf answers the identity that holds the user's powers on this node:
+// the user identity once the node is claimed, and this node's own identity
+// while it is unclaimed.
+//
+// why: an unclaimed node acts as the user (operator decision, 2026-11-27).
+// Every handler that names the user names it through userOrSelf, so an
+// unclaimed node holds the user's powers for itself, and a contract it signs
+// grants them to an app through the auth walk. A claimed node's own identity
+// holds none of them through this rule.
+//
+// note: Identity reads the stored active contract, which LoadDependencies
+// binds before it registers any handler.
+// note: rootKey (swarm_wire.go) answers the same identity for the swarm's
+// entry rules.
+func (mod *Module) userOrSelf() *astral.Identity {
+	if id := mod.Identity(); !id.IsZero() {
+		return id
+	}
+	return mod.node.Identity()
+}
+
+// authorizeUserOrNode allows the user (userOrSelf) and this node's own
+// identity, and nobody else.
 //
 // why: the rule AuthorizeAdminObjects applies, shared by the node-wide actions
 // that grant no sibling by default. This node's own identity is in the rule
@@ -12,11 +33,11 @@ import "github.com/astralp2p/astral-go/astral"
 // to it too (core/router.go), within apphost's gate. Any other
 // identity reaches them through a node-local grant or a signed contract.
 //
-// why: a zero actor is refused first. The user identity is nil on an unclaimed
-// node, and Identity.IsEqual reports a zero identity equal to nil.
+// why: a zero actor is refused first. Identity.IsEqual reports a zero identity
+// equal to nil.
 func (mod *Module) authorizeUserOrNode(actor *astral.Identity) bool {
 	if actor.IsZero() {
 		return false
 	}
-	return actor.IsEqual(mod.Identity()) || actor.IsEqual(mod.node.Identity())
+	return actor.IsEqual(mod.userOrSelf()) || actor.IsEqual(mod.node.Identity())
 }
