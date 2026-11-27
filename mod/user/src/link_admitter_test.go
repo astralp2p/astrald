@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/astralp2p/astral-go/api/crypto"
 	objectsapi "github.com/astralp2p/astral-go/api/objects"
 	"github.com/astralp2p/astral-go/api/user"
 	"github.com/astralp2p/astral-go/astral"
@@ -13,6 +14,13 @@ import (
 	nodesmod "github.com/astralp2p/astrald/mod/nodes"
 	objectsmod "github.com/astralp2p/astrald/mod/objects"
 )
+
+// signingCrypto signs with the marker signature the fixtures accept.
+type signingCrypto struct{ markerCrypto }
+
+func (signingCrypto) Sign(*astral.Context, *crypto.PublicKey, crypto.SignableTextObject) (*crypto.Signature, error) {
+	return validSig(), nil
+}
 
 // orderedNodes records EnforceLinkPolicy calls on a shared log.
 type orderedNodes struct {
@@ -53,10 +61,9 @@ func (p *orderedPusher) Push(_ *astral.Context, target *astral.Identity, obj ast
 func orderedFixture(t *testing.T, subject *astral.Identity, results ...error) (*receiverFixture, chan string) {
 	t.Helper()
 	f := newReceiverFixture(t, astral.GenerateIdentity())
-	steps := make(chan string, 2*pushAttempts)
+	steps := make(chan string, 64)
 	f.mod.Deps.Nodes = &orderedNodes{steps: steps}
 	f.mod.Deps.Objects = &orderedPusher{subject: subject, steps: steps, results: results}
-	f.mod.after = func(time.Duration) <-chan time.Time { return time.After(0) }
 	return f, steps
 }
 
@@ -123,46 +130,38 @@ func TestAdmitLinkRefusesOnlyBannedSubjectsThatAnswered(t *testing.T) {
 	requireAdmitted(t, f.mod, banned)
 }
 
-// TestExpelClosesTheSubjectsLinksAfterItAnswers: on the issuer, Expel admits
-// the subject's links while the push of its ban fails, and enforces the link
-// policy only after the subject answered the push; from then on the subject
-// is refused.
+// TestExpelClosesTheSubjectsLinksAfterItAnswers: on the issuer, Expel pushes
+// the ban to the subject once and enforces the link policy only after the
+// subject answered the push, and from then on the subject is refused. A
+// subject that no push reaches stays admitted, so a later link can still carry
+// its ban.
 func TestExpelClosesTheSubjectsLinksAfterItAnswers(t *testing.T) {
-	for _, answer := range []error{nil, objectsapi.ErrPushRejected} {
-		t.Run(fmt.Sprint(answer), func(t *testing.T) {
+	cases := []struct {
+		answer error
+		steps  []string
+		refuse bool
+	}{
+		{nil, []string{"push", "enforce"}, true},
+		{objectsapi.ErrPushRejected, []string{"push", "enforce"}, true},
+		{errUnreachable, []string{"push"}, false},
+	}
+	for _, c := range cases {
+		t.Run(fmt.Sprint(c.answer), func(t *testing.T) {
 			subject := astral.GenerateIdentity()
-			f, steps := orderedFixture(t, subject, errUnreachable, answer)
+			f, steps := orderedFixture(t, subject, c.answer)
 			f.mod.Deps.Crypto = signingCrypto{}
 
 			if _, err := f.mod.Expel(astral.NewContext(nil), subject); err != nil {
 				t.Fatalf("Expel: %v", err)
 			}
-			requireSteps(t, steps, "push", "push", "enforce")
-			requireRefused(t, f.mod, subject)
+			requireSteps(t, steps, c.steps...)
+			if c.refuse {
+				requireRefused(t, f.mod, subject)
+			} else {
+				requireAdmitted(t, f.mod, subject)
+			}
 		})
 	}
-}
-
-// TestExpelKeepsAdmittingASubjectThatNeverAnswers: a subject that no push
-// reaches stays admitted, so a later link can still carry its ban.
-func TestExpelKeepsAdmittingASubjectThatNeverAnswers(t *testing.T) {
-	subject := astral.GenerateIdentity()
-	results := make([]error, pushAttempts)
-	for i := range results {
-		results[i] = errUnreachable
-	}
-	f, steps := orderedFixture(t, subject, results...)
-	f.mod.Deps.Crypto = signingCrypto{}
-	if _, err := f.mod.Expel(astral.NewContext(nil), subject); err != nil {
-		t.Fatalf("Expel: %v", err)
-	}
-
-	want := make([]string, pushAttempts)
-	for i := range want {
-		want[i] = "push"
-	}
-	requireSteps(t, steps, want...)
-	requireAdmitted(t, f.mod, subject)
 }
 
 // TestMemberRefusesTheSubjectAfterItAnswersOnANewLink: a member that receives

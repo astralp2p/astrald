@@ -59,9 +59,8 @@ func (p *activePusher) requireNone(t *testing.T) {
 }
 
 // syncModule builds node nodeID of user userID, with the linked siblings and
-// the app contract it hosts, whose objects module is objects and whose clock is
-// clock.
-func syncModule(t *testing.T, ctx *astral.Context, userID, nodeID *astral.Identity, objects objectsmod.Module, clock *stepClock, linked ...*astral.Identity) (mod *Module, app *auth.SignedContract) {
+// the app contract it hosts, whose objects module is objects.
+func syncModule(t *testing.T, ctx *astral.Context, userID, nodeID *astral.Identity, objects objectsmod.Module, linked ...*astral.Identity) (mod *Module, app *auth.SignedContract) {
 	t.Helper()
 
 	app = relayForContract(astral.GenerateIdentity(), nodeID)
@@ -82,12 +81,12 @@ func syncModule(t *testing.T, ctx *astral.Context, userID, nodeID *astral.Identi
 	sqlDB.SetMaxOpenConns(1)
 
 	mod = &Module{
-		Deps:  Deps{Auth: index, Objects: objects, Nodes: &linkedNodes{linked: linked}},
-		ctx:   ctx,
-		node:  &stepNode{id: nodeID, steps: &syncSteps{}},
-		log:   log.New(nodeID),
-		db:    db,
-		after: clock.after,
+		Deps: Deps{Auth: index, Objects: objects, Nodes: &linkedNodes{linked: linked}},
+		ctx:  ctx,
+		node: &stepNode{id: nodeID, steps: &syncSteps{}},
+		log:  log.New(nodeID),
+		db:   db,
+		file: FileConfig{SiblingSyncInterval: testSyncInterval},
 	}
 	if err := mod.config.ActiveContract.Set(nil, nodeContract(userID, nodeID)); err != nil {
 		t.Fatalf("seed active contract: %v", err)
@@ -106,30 +105,35 @@ func runPeriodic(mod *Module, ctx *astral.Context) <-chan struct{} {
 	return done
 }
 
+func requireDone(t *testing.T, done <-chan struct{}) {
+	t.Helper()
+	select {
+	case <-done:
+	case <-time.After(effectTimeout):
+		t.Fatal("the periodic sibling sync did not return")
+	}
+}
+
+// testSyncInterval is the sibling sync period of the tests: longer than quiet,
+// so a test can see that nothing syncs before the first tick.
+const testSyncInterval = 300 * time.Millisecond
+
 // TestPeriodicSiblingSync_RunsPerSiblingEachTick: nothing syncs before the
 // first tick; each tick runs one SyncNodesTask against every linked sibling and
-// none against a member without a link; the wait before a tick is the interval
-// plus at most 10 % jitter.
+// none against a member without a link.
 func TestPeriodicSiblingSync_RunsPerSiblingEachTick(t *testing.T) {
 	ctx, cancel := astral.NewContext(nil).WithCancel()
 	defer cancel()
 	b, c, unlinked := astral.GenerateIdentity(), astral.GenerateIdentity(), astral.GenerateIdentity()
-	clock := newStepClock()
 	userID, nodeID := astral.GenerateIdentity(), astral.GenerateIdentity()
 	pusher := newActivePusher(nodeID)
-	mod, _ := syncModule(t, ctx, userID, nodeID, pusher, clock, b, c)
+	mod, _ := syncModule(t, ctx, userID, nodeID, pusher, b, c)
 	mod.Deps.Auth.(*indexAuth).seed(nodeContract(userID, unlinked))
 
 	done := runPeriodic(mod, ctx)
+	pusher.requireNone(t)
 
 	for tick := 1; tick <= 3; tick++ {
-		wait := clock.wait(t)
-		if wait < 6*time.Hour || wait > 6*time.Hour+36*time.Minute {
-			t.Fatalf("tick %d waited %v; want 6 h plus at most 10 %%", tick, wait)
-		}
-		pusher.requireNone(t)
-
-		clock.step(t)
 		got := pusher.await(t, 2)
 		slices.Sort(got)
 		want := []string{b.String(), c.String()}
@@ -151,11 +155,10 @@ func TestPeriodicSiblingSync_ResendsARelayContractTheSiblingRefused(t *testing.T
 	defer cancel()
 	userID := astral.GenerateIdentity()
 	b := newReceiverFixture(t, userID)
-	clock := newStepClock()
 
 	nodeID := astral.GenerateIdentity()
 	bridge := &bridgePusher{sender: nodeID, peer: b.nodeID, to: b.mod}
-	mod, app := syncModule(t, ctx, userID, nodeID, bridge, clock, b.nodeID)
+	mod, app := syncModule(t, ctx, userID, nodeID, bridge, b.nodeID)
 
 	// note: a receiver reports a refusal by leaving the push unindexed, not by an error.
 	if err := bridge.Push(ctx, b.nodeID, app); err != nil {
@@ -167,11 +170,6 @@ func TestPeriodicSiblingSync_ResendsARelayContractTheSiblingRefused(t *testing.T
 
 	b.auth.seed(nodeContract(userID, nodeID))
 	done := runPeriodic(mod, ctx)
-	clock.wait(t)
-	if got := b.auth.received(); slices.Contains(got, app) {
-		t.Fatal("B holds the relay contract before the tick")
-	}
-	clock.step(t)
 
 	deadline := time.After(effectTimeout)
 	for !slices.Contains(b.auth.received(), app) {
@@ -187,30 +185,29 @@ func TestPeriodicSiblingSync_ResendsARelayContractTheSiblingRefused(t *testing.T
 }
 
 // TestPeriodicSiblingSync_DisabledReturnsWithoutSync: a negative interval or the
-// disable flag makes the task return at once, with no wait and no sync.
+// disable flag makes the task return at once, with no sync.
 func TestPeriodicSiblingSync_DisabledReturnsWithoutSync(t *testing.T) {
 	for name, file := range map[string]FileConfig{
 		"negative interval": {SiblingSyncInterval: -time.Second},
-		"disable flag":      {SiblingSyncInterval: time.Hour, SiblingSyncDisabled: true},
+		"disable flag":      {SiblingSyncInterval: testSyncInterval, SiblingSyncDisabled: true},
 	} {
 		t.Run(name, func(t *testing.T) {
 			ctx, cancel := astral.NewContext(nil).WithCancel()
 			defer cancel()
 			b := astral.GenerateIdentity()
-			clock := newStepClock()
 			userID, nodeID := astral.GenerateIdentity(), astral.GenerateIdentity()
 			pusher := newActivePusher(nodeID)
-			mod, _ := syncModule(t, ctx, userID, nodeID, pusher, clock, b)
+			mod, _ := syncModule(t, ctx, userID, nodeID, pusher, b)
 			mod.file = file
 
 			requireDone(t, runPeriodic(mod, ctx))
 
+			// two intervals: a sync that was not disabled would have started
 			select {
-			case d := <-clock.waits:
-				t.Fatalf("started a wait of %v; want none", d)
-			default:
+			case target := <-pusher.pushed:
+				t.Fatalf("pushed the active contract to %v; want no sync", target)
+			case <-time.After(2 * testSyncInterval):
 			}
-			pusher.requireNone(t)
 		})
 	}
 }
@@ -223,22 +220,18 @@ func TestPeriodicSiblingSync_SkipsASiblingWhoseSyncRuns(t *testing.T) {
 	defer cancel()
 	sib := astral.GenerateIdentity()
 	mod := pushFixture(t, []*astral.Identity{sib}, []*astral.Identity{sib})
-	clock := newStepClock()
-	mod.after = clock.after
 
-	started := make(chan *astral.Identity, 8)
+	started := make(chan *astral.Identity, 64)
 	release := make(chan struct{})
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
-		mod.periodicSiblingSync(ctx, time.Hour, func(_ *astral.Context, id *astral.Identity) {
+		mod.periodicSiblingSync(ctx, 20*time.Millisecond, func(_ *astral.Context, id *astral.Identity) {
 			started <- id
 			<-release
 		})
 	}()
 
-	clock.wait(t)
-	clock.step(t)
 	select {
 	case id := <-started:
 		if !id.IsEqual(sib) {
@@ -248,27 +241,21 @@ func TestPeriodicSiblingSync_SkipsASiblingWhoseSyncRuns(t *testing.T) {
 		t.Fatal("the first tick started no sync")
 	}
 
-	clock.wait(t)
-	clock.step(t)
+	// quiet spans about ten more ticks
 	select {
 	case id := <-started:
-		t.Fatalf("the next tick started a second sync with %v while the first runs", id)
+		t.Fatalf("a later tick started a second sync with %v while the first runs", id)
 	case <-time.After(quiet):
 	}
 
 	close(release)
-	for range 200 {
-		clock.wait(t)
-		clock.step(t)
-		select {
-		case <-started:
-			cancel()
-			<-done
-			return
-		case <-time.After(20 * time.Millisecond):
-		}
+	select {
+	case <-started:
+	case <-time.After(effectTimeout):
+		t.Fatal("the sibling is never synced again after its run finished")
 	}
-	t.Fatal("the sibling is never synced again after its run finished")
+	cancel()
+	<-done
 }
 
 // TestSiblingSyncInterval_DefaultsToSixHours pins the 6 h default, the rule that

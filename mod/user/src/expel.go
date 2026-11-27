@@ -53,15 +53,15 @@ func (mod *Module) Expel(ctx *astral.Context, nodeID *astral.Identity) (*user.Si
 
 	go mod.PushToLocalSwarm(mod.ctx, signed)
 	// why: PushToLocalSwarm skips the subject, so push the ban to the expelled node
-	// directly — its trigger to self-enforce via leaveSwarm. The push is retried
-	// until the node answers; the expulsion sync at the node's next link with a
-	// holder of the ban and the sweep (reconcile_task.go) also deliver it.
+	// directly — its trigger to self-enforce via leaveSwarm. A push the node
+	// does not answer is not retried: the expulsion sync at the node's next link
+	// with a holder of the ban and the sweep (reconcile_task.go) deliver it.
 	// The node's answer closes the links with it (AdmitLink).
 	// note: mod/nodes closes the subject's links on the SwarmNodeBanned that
 	// publishBan emits; the push dials a new link, which AdmitLink admits
 	// until the subject answers.
 	go func() {
-		if mod.pushUntilDelivered(mod.ctx, nodeID, signed) {
+		if isBanAnswer(mod.pushOnce(mod.ctx, nodeID, signed)) {
 			mod.onBanAnswered(nodeID)
 		}
 	}()

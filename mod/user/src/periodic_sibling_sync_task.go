@@ -50,7 +50,7 @@ func jitteredSiblingSyncDelay(interval time.Duration) time.Duration {
 	return interval + time.Duration(rand.Float64()*siblingSyncJitter*float64(interval))
 }
 
-// periodicSiblingSync waits one jittered interval on the module clock, then
+// periodicSiblingSync waits one jittered interval, then
 // starts run for every linked sibling whose previous run has finished, and
 // repeats until ctx ends.
 // why a skip and not syncGate: a gate queues a rerun behind the running sync;
@@ -64,7 +64,7 @@ func (mod *Module) periodicSiblingSync(ctx *astral.Context, interval time.Durati
 		select {
 		case <-ctx.Done():
 			return
-		case <-mod.after(jitteredSiblingSyncDelay(interval)):
+		case <-time.After(jitteredSiblingSyncDelay(interval)):
 		}
 
 		for _, sib := range mod.getSiblings() {

@@ -45,8 +45,6 @@ type Module struct {
 	readPeerContract peerContractReader
 	// now is the clock of the nearby contact policy and of the member expiry timer.
 	now func() time.Time
-	// after is the clock of the ban push backoff; see pushUntilDelivered.
-	after func(time.Duration) <-chan time.Time
 
 	// askDigest asks a sibling for its relay digest; nil selects askRelayDigest.
 	askDigest askDigestFunc

@@ -137,7 +137,7 @@ def judge_log(f: dict, ids: dict, ban: dict) -> list:
         answer = first(logs[x], f["expel_at"] - 1.0, id4 + BAN_ANSWERED)
         # why node1 must answer: the expelling node pushes the ban to node4
         # until node4 answers (protocols/user/README.md:142-152;
-        # mod/user/src/expel.go Expel, pushUntilDelivered, onBanAnswered)
+        # mod/user/src/expel.go Expel, onBanAnswered)
         assert answer is not None or x != "node1", (
             "node1, the expelling node, logged no answer of node4 to its ban "
             "within the window, so its links to node4 were never refused")

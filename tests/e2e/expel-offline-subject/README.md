@@ -14,8 +14,8 @@ node1 or node2 after the leave.
   swarm follow carries to every member. The driver taps node1's and node2's
   logs until each logged a `services.discover` with node3.
 - **while_down** `while_down.py` — with node3 stopped, the User expels node3 on
-  node1. node1's direct push of the ban to node3 fails and is retried
-  (`mod/user/src/push_until_delivered.go`); node2 receives the ban from the
+  node1. node1's direct push of the ban to node3 fails and is not retried
+  (`mod/user/src/expel.go` Expel); node2 receives the ban from the
   push to the local swarm, and the script waits until node2 lists it.
 - **oracle** `verify.py` —
   - setup was live: node1 and node2 each logged a `services.discover` with

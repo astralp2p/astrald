@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """While node3 is stopped: the User expels node3 on node1.
 
-node1's direct push of the ban to node3 fails, since node3 is down, and node1
-keeps retrying it (mod/user/src/push_until_delivered.go). The push to the
+node1's direct push of the ban to node3 fails, since node3 is down, and is not
+retried (mod/user/src/expel.go Expel). The push to the
 local swarm gives node2 the ban; the script waits until node2 lists it, so
 node2 holds the ban before node3 comes back.
 """

@@ -24,7 +24,7 @@ tapped):
 - links: node1 logged node3's answer to its ban within the window, since the
   expelling node pushes the ban to node3 until node3 answers (astral-docs
   protocols/user/README.md:142-152; astrald mod/user/src/expel.go Expel,
-  pushUntilDelivered). On node1, and on node2 when it logged the answer,
+  onBanAnswered). On node1, and on node2 when it logged the answer,
   from GRACE after the answer the node logs no new link with node3, and at
   the end of the 30 s window it lists no link to node3 (the same section: a
   node admits an expelled node's links until that node answers a push of its
@@ -116,7 +116,7 @@ def judge_links(log: dict, id3: str) -> list:
         answered = first(log[node], id3 + BAN_ANSWERED)
         # why node1 must answer: the expelling node pushes the ban to node3
         # until node3 answers (protocols/user/README.md:142-152;
-        # mod/user/src/expel.go Expel, pushUntilDelivered, onBanAnswered)
+        # mod/user/src/expel.go Expel, onBanAnswered)
         assert answered is not None or node != "node1", (
             "node1, the expelling node, logged no answer of node3 to its ban "
             "within the window, so its links to node3 were never refused")
