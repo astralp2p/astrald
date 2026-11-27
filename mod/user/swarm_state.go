@@ -90,7 +90,8 @@ type SwarmState interface {
 }
 
 // PrivilegedBy reports whether m is a PrivilegedMembership the root key root
-// issued: the one check that a node acts for the user (D2).
+// issued. A Privileged member administers the swarm locally; it relays as the
+// user only through a relay contract the user key signs (D2).
 func PrivilegedBy(m *user.Membership, root *astral.Identity) bool {
 	return m != nil && !root.IsZero() && m.Tier == user.TierPrivilegedMember && m.Issuer.IsEqual(root)
 }

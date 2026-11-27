@@ -245,9 +245,9 @@ func (m *Mux) handleRelayQuery(relayQuery *frames.RelayQuery) error {
 		}
 	}
 
-	// why: an admitted relay delivers the query as its relayed caller; a swarm
-	// member relays as the user, because swarm members are the user's own nodes
-	// (user AuthorizeRelayFor, decided 2026-11-06).
+	// why: an admitted relay delivers the query as its relayed caller. No
+	// membership lets a node relay as the user; only a relay contract the user
+	// key signs does.
 	m.handleInboundQuery(
 		relayQuery.Query.Nonce,
 		relayQuery.CallerID,

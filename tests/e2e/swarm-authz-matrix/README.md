@@ -48,7 +48,7 @@ op sees it. The Member's row is the narrowed rules: SeeSwarm admits every
 member; SeeObjects grants the User and node1, and a member only through its
 contract chain (`mod/user/src/authorize_by_chain.go`), which a Member's
 membership, carrying only its tier permit, does not give; AdminNetwork grants
-the User and node1, and a Privileged node through the swarm root
+the User and node1 only, and no member of any tier
 (`authorize_admin_network.go`); StoreObjects, AdminObjects and AdminSwarm
 grant the User and node1 only, and the apphost setters refuse a network
 origin. Before G7 a sibling of any tier also read node1's objects and links.

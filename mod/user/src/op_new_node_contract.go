@@ -74,7 +74,9 @@ func (mod *Module) OpNewNodeContract(ctx *astral.Context, query *routing.Incomin
 		}
 	}
 
-	// the setup ceremony provisions a Privileged node, which acts for the user
+	// the setup ceremony provisions a Privileged node, which administers the
+	// swarm locally; it relays as the user only through a user-signed relay
+	// contract
 	contract, err := user.NewMembership(userID, nodeID, user.TierPrivilegedMember, nil, duration)
 	if err != nil {
 		return ch.Send(astral.Err(err))

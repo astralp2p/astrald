@@ -55,8 +55,8 @@ PROBES = CONTROLS | SWARM_READS | GUARDED
 # while SeeObjects grants the User and node1 and a member only through its
 # contract chain (chainRules.AuthorizeSeeObjects, mod/user/src/
 # authorize_by_chain.go), and a Member's membership carries only its tier
-# permit; AdminNetwork grants the User and node1, a Privileged node through the
-# swarm root, no Member (authorize_admin_network.go). Before G7 the any-member
+# permit; AdminNetwork grants the User and node1 only, no member of any tier
+# (authorize_admin_network.go). Before G7 the any-member
 # rules gave a sibling every read in SWARM_READS.
 MEMBER_READS = {"user.info", "user.swarm_status", "user.list_siblings"}
 ALLOWED = {
