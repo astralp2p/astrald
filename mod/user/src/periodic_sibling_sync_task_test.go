@@ -82,7 +82,7 @@ func syncModule(t *testing.T, ctx *astral.Context, userID, nodeID *astral.Identi
 	sqlDB.SetMaxOpenConns(1)
 
 	mod = &Module{
-		Deps:  Deps{Auth: index, Objects: objects, Nodes: &linkedNodes{linked: linked}, Tree: memTree{root: newMemNode()}},
+		Deps:  Deps{Auth: index, Objects: objects, Nodes: &linkedNodes{linked: linked}},
 		ctx:   ctx,
 		node:  &stepNode{id: nodeID, steps: &syncSteps{}},
 		log:   log.New(nodeID),

@@ -103,7 +103,7 @@ A module provides an object-system capability in a file named after the method i
 |------|--------|----------------|
 | `object_describer.go` | `DescribeObject` | fs, nodes |
 | `object_finder.go` | `FindObject` | nodes, user |
-| `object_holder.go` | `HoldObject` (`objects.Holder`) | apphost, auth, crypto, user |
+| `object_holder.go` | `HoldObject` (`objects.Holder`) | apphost, auth, crypto |
 | `object_receiver.go` | `ReceiveObject` (`objects.Receiver`) | nat, nearby, nodes, scheduler, user |
 | `object_searcher.go` | `SearchObject` | fs |
 

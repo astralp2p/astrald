@@ -74,7 +74,7 @@ func TestAdoptionSyncLetsTheJoinerRouteToAMembersAppWithoutLinkingIt(t *testing.
 	}
 	bridge := &bridgePusher{sender: adopterID, peer: joiner.nodeID, to: joiner.mod}
 	adopter := &Module{
-		Deps: Deps{Auth: adopterIndex, Objects: bridge, Tree: memTree{root: newMemNode()}},
+		Deps: Deps{Auth: adopterIndex, Objects: bridge},
 		ctx:  ctx,
 		node: &stepNode{id: adopterID, steps: &syncSteps{}},
 		log:  log.New(adopterID),

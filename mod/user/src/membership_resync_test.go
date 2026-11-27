@@ -206,7 +206,7 @@ func syncRunPushes(t *testing.T) []int {
 		return obj.ObjectType()
 	}
 	mod := &Module{
-		Deps: Deps{Auth: index, Objects: &stepPusher{steps: steps, kind: kind}, Tree: memTree{root: newMemNode()}},
+		Deps: Deps{Auth: index, Objects: &stepPusher{steps: steps, kind: kind}},
 		ctx:  ctx,
 		node: &stepNode{id: nodeID, steps: steps},
 		log:  log.New(nodeID),

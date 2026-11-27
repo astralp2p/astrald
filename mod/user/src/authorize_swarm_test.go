@@ -120,16 +120,6 @@ func route(t *testing.T, fn any, caller *astral.Identity, queryString string, w 
 	return err
 }
 
-// testObjectID is a well-formed id; no op in the refusal table gets far enough to
-// look it up.
-func testObjectID() *astral.ObjectID {
-	id := &astral.ObjectID{Size: 40}
-	for i := range id.Hash {
-		id.Hash[i] = byte(i)
-	}
-	return id
-}
-
 // swarmModule is claimedModule with the two dependencies the swarm ops reach
 // before they authorize. Every other field stays the zero value, so an op that
 // got past its authorization check panics on a nil field — "performs no work" is
@@ -148,31 +138,25 @@ func swarmModule(t *testing.T, authority authmod.Module, userID *astral.Identity
 // is expected to declare.
 //
 // wantSubj asserts the action names the node the call targeted. Every row that
-// sets it targets the same identity: user.adopt, user.expel, and user.sync_with
-// resolve their argument through resolvingDir, so each arrives at userID.
+// sets it targets the same identity: user.adopt and user.expel resolve their
+// argument through resolvingDir, so each arrives at userID.
 type swarmOp struct {
-	name       string
-	op         func(*Module) any
-	args       string
-	admin      bool
-	wantSubj   bool
-	wantObject *astral.ObjectID
+	name     string
+	op       func(*Module) any
+	args     string
+	admin    bool
+	wantSubj bool
 }
 
-func swarmOps(id *astral.ObjectID, nodeID *astral.Identity) []swarmOp {
+func swarmOps() []swarmOp {
 	return []swarmOp{
 		{name: "user.info", op: func(m *Module) any { return m.OpInfo }},
-		{name: "user.assets", op: func(m *Module) any { return m.OpAssets }},
-		{name: "user.sync_assets", op: func(m *Module) any { return m.OpSyncAssets }},
 		{name: "user.list_siblings", op: func(m *Module) any { return m.OpListSiblings }},
 		{name: "user.swarm_status", op: func(m *Module) any { return m.OpSwarmStatus }},
 		{name: "user.list_expelled", op: func(m *Module) any { return m.OpListExpelled }},
 
 		{name: "user.adopt", op: func(m *Module) any { return m.OpAdopt }, args: "?identity=anything", admin: true, wantSubj: true},
 		{name: "user.expel", op: func(m *Module) any { return m.OpExpel }, args: "?identity=anything", admin: true, wantSubj: true},
-		{name: "user.add_asset", op: func(m *Module) any { return m.OpAddAsset }, args: "?id=" + id.String(), admin: true, wantObject: id},
-		{name: "user.remove_asset", op: func(m *Module) any { return m.OpRemoveAsset }, args: "?id=" + id.String(), admin: true, wantObject: id},
-		{name: "user.sync_with", op: func(m *Module) any { return m.OpSyncWith }, args: "?identity=" + nodeID.String(), admin: true, wantSubj: true},
 	}
 }
 
@@ -180,11 +164,10 @@ func swarmOps(id *astral.ObjectID, nodeID *astral.Identity) []swarmOp {
 // swarm actions: every op in the module must ask before it acts, name the right
 // action, and reject when the answer is no.
 func TestSwarmOpsRefuseCallerWithoutPermits(t *testing.T) {
-	id := testObjectID()
 	userID := astral.GenerateIdentity()
 	caller := astral.GenerateIdentity()
 
-	for _, op := range swarmOps(id, userID) {
+	for _, op := range swarmOps() {
 		t.Run(op.name, func(t *testing.T) {
 			authority := &recordingAuth{verdict: false}
 			mod := swarmModule(t, authority, userID)
@@ -224,11 +207,8 @@ func TestSwarmOpsRefuseCallerWithoutPermits(t *testing.T) {
 				t.Fatalf("%s declared subject %v; want the resolved target %v", op.name, action.Subject, userID)
 			}
 
-			switch {
-			case (action.ObjectID == nil) != (op.wantObject == nil):
-				t.Fatalf("%s declared object %v; want %v", op.name, action.ObjectID, op.wantObject)
-			case action.ObjectID != nil && !action.ObjectID.IsEqual(op.wantObject):
-				t.Fatalf("%s declared object %v; want %v", op.name, action.ObjectID, op.wantObject)
+			if action.ObjectID != nil {
+				t.Fatalf("%s declared object %v; want none", op.name, action.ObjectID)
 			}
 		})
 	}
@@ -276,24 +256,5 @@ func TestAuthorizeSwarmRefusesOnUnclaimedNode(t *testing.T) {
 
 	if mod.AuthorizeAdminSwarm(nil, &user.AdminSwarmAction{Action: auth.NewAction(actor)}) {
 		t.Fatal("an unclaimed node has no swarm to administer")
-	}
-}
-
-// TestSyncWithRefusesTheZeroIdentity: a name resolving to the zero identity is
-// answered astral.ErrZeroIdentity before any authorization call.
-func TestSyncWithRefusesTheZeroIdentity(t *testing.T) {
-	authority := &recordingAuth{verdict: true}
-	mod := swarmModule(t, authority, astral.GenerateIdentity())
-	mod.Dir = &resolvingDir{id: &astral.Identity{}}
-
-	w := newRecordingWriter()
-	if err := route(t, mod.OpSyncWith, astral.GenerateIdentity(), "user.sync_with?identity=anyone", w); err != nil {
-		t.Fatalf("route: %v", err)
-	}
-	if got, want := w.refusal(t), astral.ErrZeroIdentity.Error(); got != want {
-		t.Fatalf("user.sync_with answered %q for the zero identity; want %q", got, want)
-	}
-	if n := len(authority.recorded()); n != 0 {
-		t.Fatalf("user.sync_with made %d authorization calls; want none", n)
 	}
 }

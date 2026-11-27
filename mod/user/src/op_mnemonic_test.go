@@ -19,7 +19,7 @@ func memDB() *DB {
 		panic(err)
 	}
 	db := &DB{DB: gdb}
-	if err := db.AutoMigrate(&dbAsset{}, &dbExpulsion{}, &dbMnemonic{}); err != nil {
+	if err := db.AutoMigrate(&dbExpulsion{}, &dbMnemonic{}); err != nil {
 		panic(err)
 	}
 	return db

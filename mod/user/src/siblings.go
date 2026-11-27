@@ -3,7 +3,6 @@ package user
 import (
 	"context"
 
-	"github.com/astralp2p/astral-go/api/user"
 	"github.com/astralp2p/astral-go/astral"
 )
 
@@ -14,18 +13,6 @@ type Sibling struct {
 	ID     *astral.Identity
 	Cancel context.CancelFunc
 	Wake   func()
-}
-
-func (mod *Module) notifySiblings(event string) {
-	ac := mod.ActiveContract()
-	if ac == nil {
-		return
-	}
-
-	for _, sib := range mod.getSiblings() {
-		sib := sib
-		go mod.Objects.Push(mod.ctx, sib, &user.Notification{Event: astral.String8(event)})
-	}
 }
 
 // getSiblings returns the swarm members this node currently holds a live link

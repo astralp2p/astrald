@@ -49,8 +49,8 @@ func (p *stepPusher) Push(_ *astral.Context, _ *astral.Identity, obj astral.Obje
 }
 
 // stepNode is the local node; it records each query it routes as a step named by
-// the op and answers user.info with an empty info and user.sync_assets with a
-// height. A non-nil refusal answers every query instead.
+// the op and answers every query with an empty user.info. A non-nil refusal
+// answers every query instead.
 type stepNode struct {
 	astral.Node
 	id      *astral.Identity
@@ -65,12 +65,8 @@ func (n *stepNode) RouteQuery(_ *astral.Context, q *astral.InFlightQuery, w io.W
 	n.steps.add("query " + op)
 
 	var answer astral.Object = &user.Info{}
-	switch {
-	case n.refusal != nil:
+	if n.refusal != nil {
 		answer = n.refusal
-	case op == user.OpSyncAssets:
-		height := astral.Uint64(1)
-		answer = &height
 	}
 
 	return query.Accept(q, w, func(conn astral.Conn) {
@@ -113,7 +109,7 @@ func newSyncFixture(t *testing.T, ctx *astral.Context) *syncFixture {
 		return obj.ObjectType()
 	}
 	f.mod = &Module{
-		Deps: Deps{Auth: index, Objects: &stepPusher{steps: f.steps, kind: kind}, Tree: memTree{root: newMemNode()}},
+		Deps: Deps{Auth: index, Objects: &stepPusher{steps: f.steps, kind: kind}},
 		ctx:  ctx,
 		node: &stepNode{id: nodeID, steps: f.steps},
 		log:  log.New(nodeID),
@@ -130,8 +126,8 @@ func newSyncFixture(t *testing.T, ctx *astral.Context) *syncFixture {
 
 // TestSyncNodesTaskPushesTheContractFirst: a sync pushes this node's active
 // contract, then the bans, then the sibling contracts, and only then queries the
-// remote node as the user for the alias, asks it for its relay digest, pushes the
-// app contracts and syncs assets. The step node answers the digest query with a
+// remote node as the user for the alias, asks it for its relay digest and pushes
+// the app contracts. The step node answers the digest query with a
 // user.info, which is no digest, so the app contract is pushed.
 func TestSyncNodesTaskPushesTheContractFirst(t *testing.T) {
 	ctx, cancel := astral.NewContext(nil).WithTimeout(10 * time.Second)
@@ -149,7 +145,6 @@ func TestSyncNodesTaskPushesTheContractFirst(t *testing.T) {
 		"query " + user.OpInfo,
 		"query " + relayDigestOp,
 		"push app contract",
-		"query " + user.OpSyncAssets,
 	}
 	if got := f.steps.list(); !slices.Equal(got, want) {
 		t.Fatalf("sync steps %q; want %q", got, want)
