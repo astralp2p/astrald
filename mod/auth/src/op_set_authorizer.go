@@ -32,9 +32,9 @@ type opSetAuthorizerArgs struct {
 // why AdminManageApps: an assignment decides what an app may do on this node,
 // which is the administration of app authority that action covers.
 //
-// why the origin: every AdminManageApps op that mints authority is local-only
-// (apphost.create_token refuses a network origin), and a relayed query arrives
-// with a network origin and the relayed caller.
+// why the origin: a networked AdminManageApps holder cannot mint tokens
+// (apphost.create_token refuses a network origin), so installing an authority
+// would widen what it may do.
 //
 // why no further check for an assignment for a user power: a local holder of
 // AdminManageApps mints tokens that authenticate as any identity, the user
