@@ -71,7 +71,7 @@ func newAnswerFixture(t *testing.T, tier user.Tier) *answerFixture {
 	f.crypto = f.mod.Crypto.(*keyringCrypto)
 	f.mod.Auth = f.auth
 	f.mod.writer = &swarmWriter{self: f.nodeID, signer: keys, view: f.mod, entry: f.mod.SwarmEntry, merge: f.mod.swarmState.merge}
-	f.mod.carrier = newSwarmCarrier(f.nodeID, f.mod, keys)
+	f.mod.carrier = newSwarmCarrier(f.nodeID, f.mod, keys, &f.mod.joinConfirmations)
 	f.mod.swarmState.stored = func(objs []astral.Object) {
 		f.mu.Lock()
 		defer f.mu.Unlock()
@@ -419,21 +419,13 @@ func TestAnswerRequestRefusesOutsideTier(t *testing.T) {
 	}
 }
 
-// An issuer offers at most once per request: the merge check drops a second
-// offer of this node with another body, while another issuer may still offer
-// for the offered request.
-//
-// note: offers capped by one membership expire together and have one body, so
-// they are one entry; this node's membership here outlasts the offer validity.
-func TestAnswerRequestOffersOncePerIssuer(t *testing.T) {
+// Another issuer may still offer for a request this node has offered for.
+func TestAnswerRequestAnotherIssuerMayOfferAfterThisNode(t *testing.T) {
 	f := newAnswerFixture(t, user.TierPrivilegedMember)
 	storeMembership(t, f.mod, f.userID, f.nodeID, user.TierPrivilegedMember, time.Now().Add(2*offerValidity))
 	req := f.contractRequest(t, time.Now(), user.RequestPending)
 	if _, ok := f.answer(t, req, "approve").(*auth.SignedContract); !ok {
 		t.Fatal("the first offer was not sent")
-	}
-	if got := f.answer(t, req, "approve"); got.(astral.Error).Error() != errRequestClosed.Error() {
-		t.Fatalf("a second offer from this node: %v; want %v", got, errRequestClosed)
 	}
 
 	f.caller = f.userID

@@ -18,6 +18,7 @@ import (
 	"github.com/astralp2p/astral-go/astral/channel"
 	"github.com/astralp2p/astral-go/lib/query"
 	"github.com/astralp2p/astral-go/lib/routing"
+	"github.com/astralp2p/astral-go/sig"
 	usermod "github.com/astralp2p/astrald/mod/user"
 )
 
@@ -72,7 +73,7 @@ func (f *carrierFixture) newWriter() *swarmWriter {
 
 // newCarrier returns a fresh carrier, as after a restart: it remembers nothing.
 func (f *carrierFixture) newCarrier() *swarmCarrier {
-	c := newSwarmCarrier(f.carrier, f.swarm, f.keys)
+	c := newSwarmCarrier(f.carrier, f.swarm, f.keys, &sig.Map[string, *auth.SignedContract]{})
 	c.now = f.clock.now
 	return c
 }
@@ -540,29 +541,6 @@ func TestBootstrapSignsPrivilegedMembership(t *testing.T) {
 	assertUserKeyMembership(t, sc, userID, f.nodeID, nil)
 	if err = f.auth.VerifyContract(sc); err != nil {
 		t.Fatalf("verify: %v", err)
-	}
-}
-
-// An invite is a JoinRequest the carrier pre-fills; the joiner signs it
-// unchanged and joins through it.
-func TestJoinThroughInvite(t *testing.T) {
-	f := newCarrierFixture(t, user.TierTrusted)
-	invite := newInvite(f.carrier, f.joiner.self, user.TierMember, f.clock.now())
-
-	req, err := f.joiner.Accept(astral.NewContext(nil), invite)
-	if err != nil {
-		t.Fatalf("accept: %v", err)
-	}
-	if req.JoinRequest != invite {
-		t.Fatal("joiner changed the invite")
-	}
-	if r := receiveJoin(t, f.startJoin(t, astral.NewContext(nil), req, f.newCarrier())); r.err != nil {
-		t.Fatalf("join: %v", r.err)
-	}
-
-	other := newInvite(f.carrier, astral.GenerateIdentity(), user.TierMember, f.clock.now())
-	if _, err = f.joiner.Accept(astral.NewContext(nil), other); err == nil {
-		t.Fatal("joiner accepted another node's invite")
 	}
 }
 

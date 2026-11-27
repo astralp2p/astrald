@@ -56,33 +56,6 @@ func (j *swarmJoiner) Request(ctx *astral.Context, carrier *astral.Identity, tie
 	})
 }
 
-// newInvite returns the pre-filled JoinRequest by which carrier invites
-// joiner at tier. The joiner signs it unchanged (Accept).
-func newInvite(carrier, joiner *astral.Identity, tier user.Tier, now time.Time) *user.JoinRequest {
-	filed := astral.Time(now)
-	return &user.JoinRequest{
-		Joiner:  joiner,
-		Carrier: carrier,
-		Tier:    tier,
-		FiledAt: filed,
-		Timeout: user.RequestDeadline(filed),
-	}
-}
-
-// Accept signs and keeps an invite, a JoinRequest the carrier pre-filled for
-// this node.
-func (j *swarmJoiner) Accept(ctx *astral.Context, invite *user.JoinRequest) (*user.SignedJoinRequest, error) {
-	switch {
-	case invite == nil || !invite.Joiner.IsEqual(j.self):
-		return nil, errors.New("invite names another joiner")
-	case !invite.Tier.IsValid():
-		return nil, errors.New("invite names an invalid tier")
-	case !invite.ValidTimeout() || invite.Expired(j.now()):
-		return nil, errJoinExpired
-	}
-	return j.sign(ctx, invite)
-}
-
 // sign signs req as this node and keeps it in pending.
 func (j *swarmJoiner) sign(ctx *astral.Context, req *user.JoinRequest) (*user.SignedJoinRequest, error) {
 	sig, err := j.signer.Sign(ctx, secp256k1.FromIdentity(j.self), req)

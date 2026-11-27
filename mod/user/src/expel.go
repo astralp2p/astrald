@@ -101,9 +101,8 @@ func (mod *Module) receiveExpulsion(signed *user.SignedExpulsion) error {
 }
 
 // leaveSwarm strips this node's own membership after it is expelled from its
-// swarm: it clears the active contract. The stored ban already emptied
-// LocalSwarm (activeNodes), so mod/nodes stops every member's link task and
-// closes the links (SwarmMemberLeft) whether or not the clear succeeds.
+// swarm: it clears the active contract, so mod/nodes stops every member's link
+// task and closes the links (SwarmMemberLeft).
 // why: expulsion does not revoke the contract, and a member link task never
 // re-checks it, so without this the banned node keeps reconnecting to and
 // syncing with peers that now reject it. Clearing the contract is the only

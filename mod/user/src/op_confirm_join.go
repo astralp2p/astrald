@@ -103,7 +103,7 @@ func (mod *Module) confirmJoin(ctx *astral.Context, caller *astral.Identity, id 
 		return nil, errNotPrivilegedJoin
 	}
 
-	if sc := mod.carrier.confirmed.get(id); sc != nil {
+	if sc, ok := mod.joinConfirmations.Get(id.String()); ok {
 		return sc, nil
 	}
 	if sc := storedPrivileged(mod, uk.user, id, req.Joiner); sc != nil {
@@ -122,7 +122,9 @@ func (mod *Module) confirmJoin(ctx *astral.Context, caller *astral.Identity, id 
 	if err != nil {
 		return nil, err
 	}
-	return mod.carrier.confirmed.keep(id, sc), nil
+	// note: a confirmation kept meanwhile wins, so every caller hands over the same body.
+	sc, _ = mod.joinConfirmations.Set(id.String(), sc)
+	return sc, nil
 }
 
 // storedPrivileged returns the PrivilegedMembership the user key userID issued

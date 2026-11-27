@@ -66,8 +66,7 @@ type opAnswerRequestArgs struct {
 //   - errOutsideTier when this node has no membership or its tier may not
 //     answer the request (user.MayAnswer);
 //   - errRequestClosed when the request's status admits no such answer
-//     (swarmWriter.Approve and Decline) or the merge check drops the answer,
-//     as it does a second offer of the same issuer.
+//     (swarmWriter.Approve and Decline) or the merge check drops the answer.
 func (mod *Module) OpAnswerRequest(ctx *astral.Context, q *routing.IncomingQuery, args opAnswerRequestArgs) (err error) {
 	ch := q.Accept(channel.WithFormats(args.In, args.Out))
 	defer ch.Close()

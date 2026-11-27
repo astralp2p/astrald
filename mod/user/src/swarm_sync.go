@@ -48,47 +48,30 @@ func (s *swarmStore) pullSwarm(ctx *astral.Context, src *routerSwarmPeer) (uint6
 		}
 	}
 
+	// note: held and dropped entries are normal outcomes of a merge, not failures of the pull; a store that
+	// fails is, and the pull reports the first one.
+	var firstErr error
 	for len(missing) > 0 {
 		batch := missing[:min(len(missing), swarmFetchBatch)]
 		missing = missing[len(batch):]
 
-		if err = s.addFetched(ctx, src, batch); err != nil {
-			return s.set.Head() - before, err
+		objs, err := src.SwarmFetch(ctx, batch)
+		if err != nil {
+			return s.set.Head() - before, fmt.Errorf("swarm fetch: %w", err)
+		}
+
+		for _, obj := range objs {
+			err = s.merge(ctx, obj)
+			if err != nil && !errors.Is(err, usermod.ErrSwarmEntryHeld) && !errors.Is(err, usermod.ErrSwarmEntryDropped) && firstErr == nil {
+				firstErr = err
+			}
+		}
+		if firstErr != nil {
+			break
 		}
 	}
 
-	return s.set.Head() - before, nil
-}
-
-// addFetched fetches one batch of IDs and adds the entries src answers among them.
-func (s *swarmStore) addFetched(ctx *astral.Context, src *routerSwarmPeer, ids []*astral.ObjectID) error {
-	want := make(map[astral.ObjectID]bool, len(ids))
-	for _, id := range ids {
-		want[*id] = true
-	}
-
-	objs, err := src.SwarmFetch(ctx, ids)
-	if err != nil {
-		return fmt.Errorf("swarm fetch: %w", err)
-	}
-
-	var firstErr error
-	for _, obj := range objs {
-		id, err := astral.ResolveObjectID(obj)
-		// why: a peer answers only what was asked; anything else is ignored, not merged.
-		if err != nil || !want[*id] {
-			continue
-		}
-
-		// note: held and dropped entries are normal outcomes of a merge, not failures of the pull; a store that
-		// fails is, and the pull reports the first one.
-		err = s.merge(ctx, obj)
-		if err != nil && !errors.Is(err, usermod.ErrSwarmEntryHeld) && !errors.Is(err, usermod.ErrSwarmEntryDropped) && firstErr == nil {
-			firstErr = err
-		}
-	}
-
-	return firstErr
+	return s.set.Head() - before, firstErr
 }
 
 // routerSwarmPeer reaches another node's exchange ops through a router: the node's router in the running node.

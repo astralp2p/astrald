@@ -73,20 +73,21 @@ type swarmCarrier struct {
 	self      *astral.Identity
 	mod       usermod.Module
 	signer    cryptomod.Module
-	confirmed *joinConfirmations // what user.confirm_join signed on this node
+	confirmed *sig.Map[string, *auth.SignedContract] // Module.joinConfirmations: what user.confirm_join signed
 	now       func() time.Time
 	// mu makes the check for a stored membership and its store one step.
 	mu sync.Mutex
 }
 
 // newSwarmCarrier returns the carrier of self: it issues memberships signed by signer and reads and writes
-// SwarmState through mod.
-func newSwarmCarrier(self *astral.Identity, mod usermod.Module, signer cryptomod.Module) *swarmCarrier {
+// SwarmState through mod. confirmed is where user.confirm_join keeps the memberships it signed, by the entry ID
+// of their JoinRequest.
+func newSwarmCarrier(self *astral.Identity, mod usermod.Module, signer cryptomod.Module, confirmed *sig.Map[string, *auth.SignedContract]) *swarmCarrier {
 	return &swarmCarrier{
 		self:      self,
 		mod:       mod,
 		signer:    signer,
-		confirmed: &joinConfirmations{},
+		confirmed: confirmed,
 		now:       time.Now,
 	}
 }
@@ -279,7 +280,7 @@ func (c *swarmCarrier) awaitConfirmation(ctx *astral.Context, req *user.SignedJo
 
 	var head uint64
 	for first := true; ; first = false {
-		if sc := c.confirmed.get(reqID); sc != nil {
+		if sc, ok := c.confirmed.Get(reqID.String()); ok {
 			return sc, nil
 		}
 		if h := c.mod.SwarmHead(); first || h != head {
@@ -298,26 +299,4 @@ func (c *swarmCarrier) awaitConfirmation(ctx *astral.Context, req *user.SignedJo
 		case <-ticker.C:
 		}
 	}
-}
-
-// joinConfirmations holds the PrivilegedMemberships the user signed with
-// user.confirm_join on this node, by the entry ID of their JoinRequest, until
-// the carrier hands one to its joiner. It lives in memory: after a restart the
-// user confirms again, and the body is the same.
-type joinConfirmations struct {
-	m sig.Map[string, *auth.SignedContract]
-}
-
-func (j *joinConfirmations) get(reqID *astral.ObjectID) *auth.SignedContract {
-	if j == nil {
-		return nil
-	}
-	sc, _ := j.m.Get(reqID.String())
-	return sc
-}
-
-// keep stores sc for reqID unless one is kept already, and returns the one kept.
-func (j *joinConfirmations) keep(reqID *astral.ObjectID, sc *auth.SignedContract) *auth.SignedContract {
-	kept, _ := j.m.Set(reqID.String(), sc)
-	return kept
 }

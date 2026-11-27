@@ -89,24 +89,6 @@ func (s *Snapshot) liveOffer(sc *auth.SignedContract, r Request) bool {
 		s.Now.Before(sc.ExpiresAt.Time())
 }
 
-// offeredOtherwise reports whether a stored contract from sc's issuer to sc's subject, half-signed or completed,
-// names sc's request with another unsigned body: the issuer has offered for the request already.
-func (s *Snapshot) offeredOtherwise(sc *auth.SignedContract) bool {
-	body, err := astral.ResolveObjectID(sc.Contract)
-	if err != nil {
-		return true
-	}
-	for _, c := range s.ContractsOf(sc.RequestID) {
-		if !c.Issuer.IsEqual(sc.Issuer) || !c.Subject.IsEqual(sc.Subject) {
-			continue
-		}
-		if other, err := astral.ResolveObjectID(c.Contract); err != nil || !other.IsEqual(body) {
-			return true
-		}
-	}
-	return false
-}
-
 // fulfilled reports whether a stored contract with both signatures names req as its RequestID and is given to
 // the identity r names or to r's filer: a membership for a JoinRequest's Joiner, the host's contract to the app
 // of a ContractRequest, or an approver's contract to its filer. An ExpelRequest is never fulfilled. Nothing that

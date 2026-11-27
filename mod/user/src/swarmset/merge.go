@@ -22,7 +22,7 @@ type Added struct {
 // entry check:
 //   - user.EntryAccept: obj is stored, Head grows by one, and the held entries are checked again;
 //   - user.EntryWait: obj is held unstored and checked again after the next merge. The held set is bounded by
-//     Config.HeldLimit; when full, the oldest held entry is dropped first;
+//     heldLimit; when full, the oldest held entry is dropped first;
 //   - user.EntryDrop: obj is not stored. A verdict other than the three is a drop.
 //
 // It returns an error for a non-entry, before Open and when the store fails.
@@ -97,7 +97,7 @@ func (s *Set) hold(e *entry) {
 	}
 
 	s.held = append(s.held, e)
-	if len(s.held) > s.cfg.HeldLimit {
+	if len(s.held) > heldLimit {
 		s.held = s.held[1:]
 	}
 }

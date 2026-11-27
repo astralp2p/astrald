@@ -237,10 +237,9 @@ func TestOpenKeepsEntriesWhoseGateLapsed(t *testing.T) {
 // first.
 func TestHeldSetIsBounded(t *testing.T) {
 	f := newSetFixture(t)
-	f.set.cfg.HeldLimit = 3
 
 	var first *astral.ObjectID
-	for i := range 4 {
+	for i := range heldLimit + 1 {
 		req := contractRequest(astral.GenerateIdentity())
 		if i == 0 {
 			first = entryIDOf(t, req)
@@ -249,8 +248,8 @@ func TestHeldSetIsBounded(t *testing.T) {
 			t.Fatalf("entry %v: %v, %v; want held", i, added.Verdict, err)
 		}
 	}
-	if len(f.set.held) != 3 {
-		t.Fatalf("held = %v; want 3", len(f.set.held))
+	if len(f.set.held) != heldLimit {
+		t.Fatalf("held = %v; want %v", len(f.set.held), heldLimit)
 	}
 	if f.set.held[0].id == *first {
 		t.Fatal("the oldest held entry was kept")

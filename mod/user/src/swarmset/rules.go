@@ -206,12 +206,8 @@ func (c *Rules) contractGate(sc *auth.SignedContract, root *astral.Identity, r R
 // offerGate gates an offer, a contract only its issuer signed. It is stored only when its RequestID names a
 // stored ContractRequest whose FiledBy is its subject, its permits follow the offer depth rule
 // (user.ContractRequest.CoversOffer), its issuer may answer the request and is not expelled, the request has no
-// counting Decline, and no other offer of the same issuer for the request is stored with another unsigned body.
-// It waits for the request and is dropped when any other check fails, the issuer's membership included. An offer
-// never counts (Snapshot.ContractCounts).
-//
-// why one offer per issuer: of two offers from one issuer, the first stored is kept and the second dropped, so
-// an issuer cannot widen or renew its answer.
+// counting Decline. It waits for the request and is dropped when any other check fails, the issuer's membership
+// included. An offer never counts (Snapshot.ContractCounts).
 func offerGate(sc *auth.SignedContract, root *astral.Identity, r Reader) user.EntryVerdict {
 	req, verdict := contractRequestOf(sc, r)
 	if verdict != user.EntryAccept {
@@ -223,8 +219,6 @@ func offerGate(sc *auth.SignedContract, root *astral.Identity, r Reader) user.En
 	case !sc.Subject.IsEqual(req.FiledBy), !req.CoversOffer(sc.Contract):
 		return user.EntryDrop
 	case s.Expelled(sc.Issuer), s.declined(sc.RequestID, stored):
-		return user.EntryDrop
-	case s.offeredOtherwise(sc):
 		return user.EntryDrop
 	}
 	// why: an offer waits only for its request (Spec: .ai/system/protocols/user/README.md#two-signatures); an

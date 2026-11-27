@@ -30,7 +30,7 @@ func newSoftwareKeyFixture(t *testing.T) *softwareKeyFixture {
 // carrierWithKey returns a carrier that keeps what the module's user.confirm_join signed.
 func (f *softwareKeyFixture) carrierWithKey() *swarmCarrier {
 	c := f.newCarrier()
-	c.confirmed = f.swarm.carrier.confirmed
+	c.confirmed = &f.swarm.joinConfirmations
 	return c
 }
 

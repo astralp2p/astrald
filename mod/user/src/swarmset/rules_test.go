@@ -341,8 +341,6 @@ func TestCheckSwarmEntryOffers(t *testing.T) {
 	repeated := offer(f.privileged, req, reqID)
 	repeated.Permits = append(repeated.Permits, repeated.Permits[0])
 	ofExpel := offer(f.privileged, req, expelID)
-	second := offer(f.privileged, renewed, renewedID)
-	second.ExpiresAt = astral.Time(time.Now().Add(2 * time.Hour))
 	badSig := offer(f.privileged, req, reqID)
 	badSig.IssuerSig = sigBy(f.member)
 
@@ -367,7 +365,6 @@ func TestCheckSwarmEntryOffers(t *testing.T) {
 		{"offer repeating a permit", repeated, user.EntryDrop},
 		{"offer for a declined request", offer(f.privileged, declined, declinedID), user.EntryDrop},
 		{"the same offer again", first, user.EntryAccept},
-		{"a second offer from one issuer", second, user.EntryDrop},
 		{"a second issuer's offer", offer(f.root, renewed, renewedID), user.EntryAccept},
 		{"offer, wrong signer", badSig, user.EntryDrop},
 	} {

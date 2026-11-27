@@ -5,6 +5,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/astralp2p/astral-go/api/auth"
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astral-go/astral/log"
 	"github.com/astralp2p/astral-go/lib/routing"
@@ -70,6 +71,10 @@ type Module struct {
 
 	// swarmView reads SwarmState and answers usermod.SwarmView for the module; Load builds it.
 	*swarmView
+	// joinConfirmations holds the PrivilegedMemberships the user signed with user.confirm_join on this node, by the
+	// entry ID of their JoinRequest, until the carrier hands one to its joiner. It lives in memory: after a restart
+	// the user confirms again, and the body is the same.
+	joinConfirmations sig.Map[string, *auth.SignedContract]
 	// carrier carries the JoinRequests that name this node (user.carry_join).
 	carrier *swarmCarrier
 	// joiner keeps this node's own JoinRequest while it joins (user.join).

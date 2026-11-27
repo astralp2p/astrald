@@ -19,8 +19,8 @@ import (
 	"github.com/astralp2p/astral-go/sig"
 )
 
-// DefaultHeldLimit is the most entries held (user.EntryWait) at once when Config sets none.
-const DefaultHeldLimit = 1024
+// heldLimit is the most entries held (user.EntryWait) at once.
+const heldLimit = 1024
 
 // ErrNotOpen answers a call that needs the stored entries before Open.
 var ErrNotOpen = errors.New("swarm state is not open yet")
@@ -29,8 +29,6 @@ var ErrNotOpen = errors.New("swarm state is not open yet")
 type Config struct {
 	// Checker is the entry check every entry passes before it is stored.
 	Checker Checker
-	// HeldLimit is the most entries held at once; zero selects DefaultHeldLimit.
-	HeldLimit int
 }
 
 // Set is one node's copy of SwarmState: a grow-only set of entries, each stored at EntryPath in the VFS of the
@@ -56,9 +54,6 @@ type Set struct {
 
 // New returns a closed set; Open opens it.
 func New(cfg Config) *Set {
-	if cfg.HeldLimit <= 0 {
-		cfg.HeldLimit = DefaultHeldLimit
-	}
 	return &Set{cfg: cfg, index: NewIndex()}
 }
 

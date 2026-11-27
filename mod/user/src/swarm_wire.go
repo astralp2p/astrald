@@ -24,7 +24,7 @@ func (mod *Module) rootKey() *astral.Identity {
 func (mod *Module) wireSwarm() {
 	mod.entryRules.SetVerifier(mod.Crypto)
 	mod.writer = &swarmWriter{self: mod.node.Identity(), signer: mod.Crypto, view: mod, entry: mod.SwarmEntry, merge: mod.mergeSwarmEntry}
-	mod.carrier = newSwarmCarrier(mod.node.Identity(), mod, mod.Crypto)
+	mod.carrier = newSwarmCarrier(mod.node.Identity(), mod, mod.Crypto, &mod.joinConfirmations)
 	mod.joiner = newSwarmJoiner(mod.ctx, mod.node.Identity(), mod.Crypto, &mod.config.PendingJoin)
 
 	mod.publisher = &swarmPublisher{snapshot: mod.snapshot, emit: mod.emitSwarmEvent}
