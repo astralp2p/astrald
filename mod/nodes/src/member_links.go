@@ -4,6 +4,7 @@ import (
 	"context"
 	"sync"
 
+	"github.com/astralp2p/astral-go/api/nodes"
 	"github.com/astralp2p/astral-go/astral"
 	nodesmod "github.com/astralp2p/astrald/mod/nodes"
 )
@@ -108,7 +109,13 @@ func (mod *Module) applyMemberSet() (closing []*astral.Identity) {
 }
 
 // startMemberLink schedules the link task of a member that has none and
-// registers it, and refreshes the member's endpoints. The caller holds memberLinks.mu.
+// registers it, and learns the member's endpoints. The caller holds memberLinks.mu.
+//
+// why the endpoints: a membership reaches this node only through SwarmState
+// sync, which brings no endpoints, so a new member's task would have none to
+// dial. A linked member is pulled from itself. Otherwise the linked members
+// are pulled one at a time until a pull stores a new row, which then wakes the
+// task through the EndpointsUpdatedEvent.
 func (mod *Module) startMemberLink(member *astral.Identity) {
 	task := mod.NewMaintainLinkTask(member)
 	scheduled, err := mod.Scheduler.Schedule(task)
@@ -123,7 +130,33 @@ func (mod *Module) startMemberLink(member *astral.Identity) {
 	mod.log.Log("adding sibling %v", member)
 	mod.memberLinks.tasks[member.String()] = memberLink{target: member, task: task, cancel: scheduled.Cancel}
 
-	go mod.RefreshMemberEndpoints(member)
+	go func() {
+		self := mod.node.Identity()
+		if mod.IsLinked(member) {
+			mod.RefreshMemberEndpoints(member)
+			return
+		}
+
+		for _, resolver := range mod.User.LocalSwarm() {
+			if resolver.IsEqual(self) || resolver.IsEqual(member) || !mod.IsLinked(resolver) {
+				continue
+			}
+
+			ctx, cancel := mod.ctx.WithTimeout(endpointsPullTimeout)
+			added, err := mod.UpdateNodeEndpoints(ctx, resolver, member)
+			cancel()
+			if err != nil {
+				mod.log.Logv(1, "pulling endpoints of new member %v from %v: %v", member, resolver, err)
+				continue
+			}
+			if added > 0 {
+				mod.log.Logv(1, "pulled %v new endpoints of new member %v from %v", added, member, resolver)
+				mod.linkPool.endpointsAdded(member)
+				mod.Events.Emit(&nodes.EndpointsUpdatedEvent{Identity: member})
+				return
+			}
+		}
+	}()
 }
 
 // wakeMemberLink makes the link task of id link now. It reports false when id

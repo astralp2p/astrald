@@ -78,6 +78,7 @@ func (s *linkTaskScheduler) scheduled(id *astral.Identity) int {
 type memberLinksFixture struct {
 	mod    *Module
 	nodeID *astral.Identity
+	events *recordingEvents
 	user   *swarmUser
 	sched  *linkTaskScheduler
 	// pulls receives the resolver and the identity of every endpoints pull.
@@ -96,6 +97,7 @@ func newMemberLinksFixture(t *testing.T, members ...*astral.Identity) *memberLin
 
 	f := &memberLinksFixture{
 		nodeID:  astral.GenerateIdentity(),
+		events:  &recordingEvents{},
 		user:    &swarmUser{ready: make(chan struct{})},
 		sched:   &linkTaskScheduler{tasks: map[string][]*cancelTask{}},
 		pulls:   make(chan pull, 16),
@@ -105,10 +107,11 @@ func newMemberLinksFixture(t *testing.T, members ...*astral.Identity) *memberLin
 	close(f.user.ready)
 	f.user.set(append(members, f.nodeID)...)
 	f.mod = &Module{
-		Deps: Deps{User: f.user, Scheduler: f.sched, Events: &recordingEvents{}, Objects: &pushObjects{}},
+		Deps: Deps{User: f.user, Scheduler: f.sched, Events: f.events, Objects: &pushObjects{}},
 		node: &identityNode{id: f.nodeID},
 		log:  log.New(f.nodeID),
 		ctx:  ctx,
+		db:   testEndpointDB(t),
 	}
 	f.mod.linkPool = NewLinkPool(f.mod)
 	// why: the pull of a new member's endpoints ends in a failed pull; no test reads a row it stores.
@@ -300,10 +303,53 @@ func TestNewMemberLinkRefreshesTheMembersEndpoints(t *testing.T) {
 	f.requirePulled(t, a)
 
 	f.user.set(f.nodeID, a, b)
+	f.link(t, b)
 	f.receive(t, &user.SwarmMemberJoined{NodeID: b})
 	f.requirePulled(t, b)
 
 	f.receive(t, &user.SwarmMemberJoined{NodeID: b})
+	f.requirePulled(t)
+}
+
+// TestNewMemberWithoutALinkLearnsEndpointsFromLinkedMembers: a new member this
+// node holds no link with is pulled from the linked members, one at a time,
+// until a pull stores a new row; the row is stored, an EndpointsUpdatedEvent
+// names the member, and the later linked members are not asked.
+func TestNewMemberWithoutALinkLearnsEndpointsFromLinkedMembers(t *testing.T) {
+	a, c, d, b := astral.GenerateIdentity(), astral.GenerateIdentity(), astral.GenerateIdentity(), astral.GenerateIdentity()
+	f := newMemberLinksFixture(t, a, c, d)
+	f.requirePulled(t, a, c, d)
+
+	f.mod.resolveRemote = func(_ *astral.Context, resolver, identity *astral.Identity) ([]*nodes.EndpointWithTTL, error) {
+		f.pulls <- pull{resolver: resolver, identity: identity}
+		if resolver.IsEqual(a) {
+			return nil, errors.New("not permitted")
+		}
+		return endpointsWithTTL("198.51.100.9"), nil
+	}
+
+	f.user.set(f.nodeID, a, c, d, b)
+	f.receive(t, &user.SwarmMemberJoined{NodeID: b})
+
+	for _, resolver := range []*astral.Identity{a, c} {
+		select {
+		case p := <-f.pulls:
+			if !p.resolver.IsEqual(resolver) || !p.identity.IsEqual(b) {
+				t.Fatalf("pulled the endpoints of %v from %v; want of %v from %v", p.identity, p.resolver, b, resolver)
+			}
+		case <-time.After(effectTimeout):
+			t.Fatalf("the endpoints of %v were not pulled from %v", b, resolver)
+		}
+	}
+	eventually(t, "the EndpointsUpdatedEvent", func() bool { return len(f.events.recorded()) > 0 })
+
+	emitted := f.events.recorded()
+	if e, ok := emitted[0].(*nodes.EndpointsUpdatedEvent); !ok || len(emitted) != 1 || !e.Identity.IsEqual(b) {
+		t.Fatalf("emitted %v; want one EndpointsUpdatedEvent for %v", emitted, b)
+	}
+	if rows, err := f.mod.db.FindEndpoints(b); err != nil || len(rows) != 1 {
+		t.Fatalf("stored %v rows for %v, error %v; want 1", len(rows), b, err)
+	}
 	f.requirePulled(t)
 }
 
