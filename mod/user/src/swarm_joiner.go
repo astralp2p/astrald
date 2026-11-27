@@ -2,52 +2,36 @@ package user
 
 import (
 	"errors"
-	"sync"
 	"time"
 
 	"github.com/astralp2p/astral-go/api/auth"
 	"github.com/astralp2p/astral-go/api/secp256k1"
+	"github.com/astralp2p/astral-go/api/tree"
 	"github.com/astralp2p/astral-go/api/user"
 	"github.com/astralp2p/astral-go/astral"
+	cryptomod "github.com/astralp2p/astrald/mod/crypto"
 )
 
-// joinKeeper keeps the joiner's signed JoinRequest across restarts. nil
-// clears it.
-type joinKeeper interface {
-	keepJoin(req *user.SignedJoinRequest) error
-}
-
-// joinCarry is the connection to the carrier a JoinRequest names: it sends the
-// request, has cosign sign the membership the carrier answers, and returns the
-// membership the carrier confirms with both signatures, or the end of the
-// join.
-type joinCarry func(ctx *astral.Context, req *user.SignedJoinRequest, cosign joinCosign) (*auth.SignedContract, error)
-
-// swarmJoiner is the node that asks to join. It keeps one signed JoinRequest
-// until it has joined, been declined, or seen it expire, and resends that same
-// object, with the same entry ID, on every reconnect.
+// swarmJoiner is the node that asks to join. It keeps one signed JoinRequest,
+// in pending, until it has joined, been declined, or seen it expire, and
+// resends that same object, with the same entry ID, on every reconnect.
 type swarmJoiner struct {
 	self   *astral.Identity
-	signer entrySigner
-	keeper joinKeeper
-	now    func() time.Time
-	mu     sync.Mutex
-	kept   *user.SignedJoinRequest
+	signer cryptomod.Module
+	// pending is config.PendingJoin: the request survives a restart.
+	pending *tree.Value[*user.SignedJoinRequest]
+	ctx     *astral.Context // of the writes to pending
+	now     func() time.Time
 }
 
-// newSwarmJoiner returns a joiner that resumes kept, the request its keeper
-// restored, or nil.
-func newSwarmJoiner(self *astral.Identity, signer entrySigner, keeper joinKeeper, kept *user.SignedJoinRequest) *swarmJoiner {
-	return &swarmJoiner{self: self, signer: signer, keeper: keeper, now: time.Now, kept: kept}
+func newSwarmJoiner(ctx *astral.Context, self *astral.Identity, signer cryptomod.Module, pending *tree.Value[*user.SignedJoinRequest]) *swarmJoiner {
+	return &swarmJoiner{self: self, signer: signer, pending: pending, ctx: ctx, now: time.Now}
 }
 
 // Request returns the kept request when it names carrier and tier and has not
 // expired, and otherwise signs and keeps a new one.
 func (j *swarmJoiner) Request(ctx *astral.Context, carrier *astral.Identity, tier user.Tier) (*user.SignedJoinRequest, error) {
-	j.mu.Lock()
-	kept := j.kept
-	j.mu.Unlock()
-
+	kept := j.pending.Get()
 	if !kept.IsNil() && kept.Carrier.IsEqual(carrier) && kept.Tier == tier && !kept.Expired(j.now()) {
 		return kept, nil
 	}
@@ -89,7 +73,7 @@ func (j *swarmJoiner) Accept(ctx *astral.Context, invite *user.JoinRequest) (*us
 	return j.sign(ctx, invite)
 }
 
-// sign signs req as this node and keeps it.
+// sign signs req as this node and keeps it in pending.
 func (j *swarmJoiner) sign(ctx *astral.Context, req *user.JoinRequest) (*user.SignedJoinRequest, error) {
 	sig, err := j.signer.Sign(ctx, secp256k1.FromIdentity(j.self), req)
 	if err != nil {
@@ -97,18 +81,7 @@ func (j *swarmJoiner) sign(ctx *astral.Context, req *user.JoinRequest) (*user.Si
 	}
 
 	signed := &user.SignedJoinRequest{JoinRequest: req, JoinerSig: sig}
-	return signed, j.keep(signed)
-}
-
-func (j *swarmJoiner) keep(req *user.SignedJoinRequest) error {
-	j.mu.Lock()
-	defer j.mu.Unlock()
-
-	if err := j.keeper.keepJoin(req); err != nil {
-		return err
-	}
-	j.kept = req
-	return nil
+	return signed, j.pending.Set(j.ctx, signed)
 }
 
 // Join sends req to its carrier through carry, co-signs the membership the
@@ -116,9 +89,13 @@ func (j *swarmJoiner) keep(req *user.SignedJoinRequest) error {
 // membership, a Decline, an expiry or a carrier that refuses the request or
 // its tier ends the join and drops req; any other error keeps req for the
 // next Join.
-func (j *swarmJoiner) Join(ctx *astral.Context, req *user.SignedJoinRequest, carry joinCarry) (*auth.SignedContract, error) {
+//
+// carry is the connection to the carrier req names: it sends req, has cosign
+// sign the membership the carrier answers, and returns the membership the
+// carrier confirms with both signatures, or the end of the join.
+func (j *swarmJoiner) Join(ctx *astral.Context, req *user.SignedJoinRequest, carry func(ctx *astral.Context, req *user.SignedJoinRequest, cosign joinCosign) (*auth.SignedContract, error)) (*auth.SignedContract, error) {
 	if req.Expired(j.now()) {
-		return nil, errors.Join(errJoinExpired, j.keep(nil))
+		return nil, errors.Join(errJoinExpired, j.pending.Clear(j.ctx))
 	}
 
 	var signed *auth.SignedContract
@@ -128,17 +105,16 @@ func (j *swarmJoiner) Join(ctx *astral.Context, req *user.SignedJoinRequest, car
 		return sc, err
 	}
 
+	var end joinEnd
 	sc, err := carry(ctx, req, cosign)
 	switch {
 	case err == nil:
 		if err = j.checkConfirmed(req, signed, sc); err != nil {
 			return nil, err
 		}
-		return sc, j.keep(nil)
-	case errors.Is(err, errJoinDeclined), errors.Is(err, errJoinExpired),
-		errors.Is(err, errNotJoinCarrier), errors.Is(err, errCarrierTier),
-		errors.Is(err, errTierAboveIssuer):
-		return nil, errors.Join(err, j.keep(nil))
+		return sc, j.pending.Clear(j.ctx)
+	case errors.As(err, &end) && end.closesRequest():
+		return nil, errors.Join(err, j.pending.Clear(j.ctx))
 	}
 	return nil, err
 }
@@ -193,9 +169,3 @@ func (j *swarmJoiner) checkConfirmed(req *user.SignedJoinRequest, signed, sc *au
 	}
 	return j.checkMembership(req, sc)
 }
-
-// memJoinKeeper keeps the request in memory only, for a joiner that does not
-// survive a restart.
-type memJoinKeeper struct{}
-
-func (memJoinKeeper) keepJoin(*user.SignedJoinRequest) error { return nil }

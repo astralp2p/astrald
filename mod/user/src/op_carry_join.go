@@ -1,8 +1,6 @@
 package user
 
 import (
-	"errors"
-
 	"github.com/astralp2p/astral-go/api/auth"
 	"github.com/astralp2p/astral-go/api/user"
 	"github.com/astralp2p/astral-go/astral"
@@ -49,28 +47,9 @@ func (mod *Module) OpCarryJoin(ctx *astral.Context, q *routing.IncomingQuery, ar
 	waitCtx, stop := routing.UntilDisconnect(ctx.IncludeZone(astral.ZoneNetwork), conn)
 	defer stop()
 
-	return carrySession(waitCtx, ch, mod.carrier, req, mod.Identity())
-}
-
-// carrySession is the carrier's side of a carrier session over ch, after the
-// joiner's request req was read: it runs the carrier's steps with the joiner
-// (swarmCarrier.Carry), then confirms the stored membership and the user
-// identity root, or sends the end of the join.
-func carrySession(ctx *astral.Context, ch *channel.Channel, c *swarmCarrier, req *user.SignedJoinRequest, root *astral.Identity) error {
-	sc, err := c.Carry(ctx, req, sessionCosign(ch))
-	if err != nil {
-		return ch.Send(astral.Err(err))
-	}
-	if err = ch.Send(sc); err != nil {
-		return err
-	}
-	return ch.Send(root)
-}
-
-// sessionCosign is the joiner's side of the carrier session over ch: it sends
-// the membership its issuer signed and reads it back signed by the joiner.
-func sessionCosign(ch *channel.Channel) joinCosign {
-	return func(_ *astral.Context, half *auth.SignedContract) (*auth.SignedContract, error) {
+	// the joiner's side of the session: it gets the membership its issuer
+	// signed and answers it signed by the joiner.
+	cosign := func(_ *astral.Context, half *auth.SignedContract) (*auth.SignedContract, error) {
 		if err := ch.Send(half); err != nil {
 			return nil, err
 		}
@@ -80,17 +59,16 @@ func sessionCosign(ch *channel.Channel) joinCosign {
 		}
 		return signed, nil
 	}
-}
 
-// joinEnds are the ends of a join a carrier sends, by their wire text.
-var joinEnds = []error{errJoinDeclined, errJoinExpired, errNotJoinCarrier, errCarrierTier, errTierAboveIssuer, errUserKeyRequired, errNotSignedByJoiner}
-
-// joinEndOf returns the end of a join msg names, or msg itself.
-func joinEndOf(msg *astral.ErrorMessage) error {
-	for _, end := range joinEnds {
-		if msg.Error() == end.Error() {
-			return end
-		}
+	sc, err := mod.carrier.Carry(waitCtx, req, mod.userKeyCeremony(), cosign)
+	if err != nil {
+		return ch.Send(astral.Err(err))
 	}
-	return errors.New(msg.Error())
+	if err = ch.Send(sc); err != nil {
+		return err
+	}
+	return ch.Send(mod.Identity())
 }
+
+// joinEndOf returns the end of a join msg names: the end of the same text.
+func joinEndOf(msg *astral.ErrorMessage) error { return joinEnd(msg.Error()) }

@@ -22,9 +22,9 @@ type opIntroduceArgs struct {
 }
 
 // OpIntroduce offers this node's active contract to the named node's
-// SwarmState, then syncs with it. The named node stores the membership, so
-// this node joins its local swarm; the sync carries the rest of the swarm. The
-// reply is an ack.
+// SwarmState, then schedules a sync with it. The named node stores the
+// membership, so this node joins its local swarm; the rest of the swarm
+// follows on the sync and the link-up exchange. The reply is an ack.
 // Requires an active contract; the caller must be authorized for
 // user.AdminSwarmAction over the named node and must not be expelled
 // (auth.ErrNotPermitted otherwise).
@@ -78,8 +78,8 @@ func (mod *Module) OpIntroduce(ctx *astral.Context, q *routing.IncomingQuery, ar
 	return ch.Send(&astral.Ack{})
 }
 
-// introduce offers the active contract ac to nodeID's SwarmState, pulls
-// nodeID's SwarmState and schedules a sync with nodeID.
+// introduce offers the active contract ac to nodeID's SwarmState and
+// schedules a sync with nodeID.
 //
 // why SwarmState and not objects.push: since G7 a membership enters another
 // node only as a SwarmState entry, which that node checks on merge; its object
@@ -99,9 +99,6 @@ func (mod *Module) introduce(ctx *astral.Context, ac *auth.SignedContract, nodeI
 
 	if err := mod.swarmPeer(nodeID).SwarmPush(pctx, ac); err != nil {
 		return astral.Err(fmt.Errorf("push to %v: %w", nodeID, err))
-	}
-	if err := mod.SyncSwarm(pctx, nodeID); err != nil {
-		mod.log.Logv(1, "introduce: swarm state pull from %v: %v", nodeID, err)
 	}
 
 	// why: the link sync (object_receiver.go) skips nodeID, since this node holds

@@ -14,6 +14,7 @@ import (
 	"github.com/astralp2p/astral-go/api/nearby"
 	"github.com/astralp2p/astral-go/api/nodes"
 	"github.com/astralp2p/astral-go/api/tcp"
+	"github.com/astralp2p/astral-go/api/tree"
 	"github.com/astralp2p/astral-go/api/user"
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astral-go/astral/log"
@@ -154,7 +155,7 @@ func newJoinFixture(t *testing.T, answer astral.Object) *joinFixture {
 			Nodes: f.routes},
 		node:   f.node,
 		log:    log.New(f.node.id),
-		joiner: newSwarmJoiner(f.node.id, keys, memJoinKeeper{}, nil),
+		joiner: newSwarmJoiner(astral.NewContext(nil), f.node.id, keys, &tree.Value[*user.SignedJoinRequest]{}),
 	}
 	f.nearby = &joinNearby{mod: f.mod, routes: f.routes, status: statusOf(t, stealthHint(t, f.swarmID, f.swarmUser))}
 	f.mod.Nearby = f.nearby

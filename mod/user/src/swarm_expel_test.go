@@ -18,7 +18,7 @@ func TestExpelNeedsRequestAndUserKey(t *testing.T) {
 	ctx := astral.NewContext(nil)
 	subject := f.keys.newKey()
 	storeMembership(t, f.swarm, f.userID, subject, user.TierMember, f.clock.now().Add(24*time.Hour))
-	ceremony := newUserKeyCeremony(f.userID, f.keys, f.swarm, f.swarm)
+	ceremony := newUserKeyCeremony(f.userID, f.keys, f.swarm)
 	ceremony.now = f.clock.now
 
 	// no request, no expel
@@ -40,7 +40,7 @@ func TestExpelNeedsRequestAndUserKey(t *testing.T) {
 		t.Fatalf("file: %v", err)
 	}
 	reqID, _ := astral.ResolveObjectID(req)
-	noKey := newUserKeyCeremony(astral.GenerateIdentity(), f.keys, f.swarm, f.swarm)
+	noKey := newUserKeyCeremony(astral.GenerateIdentity(), f.keys, f.swarm)
 	if _, err = noKey.Expel(ctx, reqID); err == nil {
 		t.Fatal("expelled without the user key")
 	}
@@ -69,7 +69,7 @@ func TestExpelNeedsRequestAndUserKey(t *testing.T) {
 func TestExpelRefusesEndedRequest(t *testing.T) {
 	f := newCarrierFixture(t, user.TierPrivilegedMember)
 	ctx := astral.NewContext(nil)
-	ceremony := newUserKeyCeremony(f.userID, f.keys, f.swarm, f.swarm)
+	ceremony := newUserKeyCeremony(f.userID, f.keys, f.swarm)
 	ceremony.now = f.clock.now
 
 	declined, err := f.newWriter().FileExpelRequest(ctx, f.keys.newKey())

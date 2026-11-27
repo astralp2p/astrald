@@ -23,14 +23,13 @@ func newSoftwareKeyFixture(t *testing.T) *softwareKeyFixture {
 	f.crypto = f.swarm.Crypto.(*keyringCrypto)
 	f.swarm.Auth = &recordingAuth{verdict: true}
 	f.swarm.carrier = f.newCarrier()
+	f.ceremony = f.swarm.userKeyCeremony()
 	return f
 }
 
-// carrierWithKey returns a carrier that signs with the user key and keeps what the module's
-// user.confirm_join signed.
+// carrierWithKey returns a carrier that keeps what the module's user.confirm_join signed.
 func (f *softwareKeyFixture) carrierWithKey() *swarmCarrier {
 	c := f.newCarrier()
-	c.ceremony = f.swarm.userKeyCeremony
 	c.confirmed = f.swarm.carrier.confirmed
 	return c
 }
@@ -192,13 +191,13 @@ func TestConfirmJoinRefusals(t *testing.T) {
 	member, _ := f.request(t, user.TierMember)
 	refused(store(member), errNotPrivilegedJoin)
 
-	f.joiner.kept = nil
+	f.joiner.pending.Clear(nil)
 	declined, declinedID := f.request(t, user.TierPrivilegedMember)
 	store(declined)
 	answerJoin(t, f.swarm, f.keys, f.userID, declinedID, true)
 	refused(declinedID, errRequestClosed)
 
-	f.joiner.kept = nil
+	f.joiner.pending.Clear(nil)
 	f.clock.advance(time.Minute)
 	expired, expiredID := f.request(t, user.TierPrivilegedMember)
 	store(expired)

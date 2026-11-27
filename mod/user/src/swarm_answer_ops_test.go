@@ -71,7 +71,7 @@ func newAnswerFixture(t *testing.T, tier user.Tier) *answerFixture {
 	f.crypto = f.mod.Crypto.(*keyringCrypto)
 	f.mod.Auth = f.auth
 	f.mod.writer = &swarmWriter{self: f.nodeID, signer: keys, view: f.mod, entry: f.mod.SwarmEntry, merge: f.mod.swarmState.merge}
-	f.mod.carrier = newSwarmCarrier(f.nodeID, f.mod, f.mod, keys)
+	f.mod.carrier = newSwarmCarrier(f.nodeID, f.mod, keys)
 	f.mod.swarmState.stored = func(objs []astral.Object) {
 		f.mu.Lock()
 		defer f.mu.Unlock()

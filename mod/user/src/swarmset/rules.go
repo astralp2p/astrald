@@ -76,13 +76,13 @@ func (c *Rules) Check(obj astral.Object, r Reader) user.EntryVerdict {
 		if e.IsNil() || !e.ValidTimeout() || !e.Tier.IsValid() || !c.verify(e.Joiner, e.JoinerSig, e.JoinRequest) {
 			return user.EntryDrop
 		}
-		return tierGate(r, root, e.Carrier, trustedOrAbove)
+		return tierGate(r, root, e.Carrier, TrustedOrAbove)
 
 	case *user.SignedExpelRequest:
 		if e.IsNil() || !e.ValidTimeout() || !c.verify(e.FiledBy, e.FiledBySig, e.ExpelRequest) {
 			return user.EntryDrop
 		}
-		return tierGate(r, root, e.FiledBy, trustedOrAbove)
+		return tierGate(r, root, e.FiledBy, TrustedOrAbove)
 
 	case *user.SignedApproval:
 		if e.IsNil() || !c.verify(e.Issuer, e.IssuerSig, e.Approval) {
@@ -138,7 +138,8 @@ func tierGate(r Reader, root, id *astral.Identity, allows func(user.Tier) bool) 
 	return user.EntryAccept
 }
 
-func trustedOrAbove(t user.Tier) bool {
+// TrustedOrAbove reports whether t may carry joins and file expel requests: Trusted or Privileged.
+func TrustedOrAbove(t user.Tier) bool {
 	return t == user.TierTrusted || t == user.TierPrivilegedMember
 }
 

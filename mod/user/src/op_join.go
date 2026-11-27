@@ -92,47 +92,34 @@ func (mod *Module) OpJoin(ctx *astral.Context, q *routing.IncomingQuery, args op
 	defer mod.joinTarget.CompareAndSwap(nodeID, nil)
 	mod.findRoute(ctx, nodeID)
 
-	signed, err := mod.join(ctx, nodeID, tier)
+	req, err := mod.joiner.Request(ctx, nodeID, tier)
 	if err != nil {
 		return ch.Send(astral.Err(err))
 	}
 
-	return ch.Send(signed)
-}
-
-// join runs this node's join through carrier and activates the membership it
-// hands over.
-func (mod *Module) join(ctx *astral.Context, carrier *astral.Identity, tier user.Tier) (*auth.SignedContract, error) {
-	req, err := mod.joiner.Request(ctx, carrier, tier)
-	if err != nil {
-		return nil, err
-	}
-
+	// the carrier session: send req to the carrier's user.carry_join and run the
+	// joiner's side of it (joinSession).
 	var root *astral.Identity
-	sc, err := mod.joiner.Join(ctx, req, func(ctx *astral.Context, req *user.SignedJoinRequest, cosign joinCosign) (*auth.SignedContract, error) {
-		var sc *auth.SignedContract
-		sc, root, err = mod.carryJoinAt(ctx, req, cosign)
+	signed, err := mod.joiner.Join(ctx, req, func(ctx *astral.Context, req *user.SignedJoinRequest, cosign joinCosign) (*auth.SignedContract, error) {
+		carrier, err := query.Route(ctx, mod.node, query.New(mod.node.Identity(), req.Carrier, usermod.ModuleName+".carry_join", nil))
+		if err != nil {
+			return nil, err
+		}
+		defer carrier.Close()
+
+		sc, id, err := joinSession(ctx, carrier, req, cosign)
+		root = id
 		return sc, err
 	})
 	if err != nil {
-		return nil, err
+		return ch.Send(astral.Err(err))
 	}
 
-	if err = mod.activateJoin(ctx, sc, root, carrier); err != nil {
-		return nil, err
+	if err = mod.activateJoin(ctx, signed, root, nodeID); err != nil {
+		return ch.Send(astral.Err(err))
 	}
-	return sc, nil
-}
 
-// carryJoinAt sends req to its carrier's user.carry_join and runs the
-// joiner's side of the carrier session (joinSession).
-func (mod *Module) carryJoinAt(ctx *astral.Context, req *user.SignedJoinRequest, cosign joinCosign) (*auth.SignedContract, *astral.Identity, error) {
-	ch, err := query.Route(ctx, mod.node, query.New(mod.node.Identity(), req.Carrier, usermod.ModuleName+".carry_join", nil))
-	if err != nil {
-		return nil, nil, err
-	}
-	defer ch.Close()
-	return joinSession(ctx, ch, req, cosign)
+	return ch.Send(signed)
 }
 
 // joinSession is the joiner's side of a carrier session over ch: it sends
@@ -149,7 +136,7 @@ func joinSession(ctx *astral.Context, ch *channel.Channel, req *user.SignedJoinR
 	var root *astral.Identity
 	cosigned := false
 	err := ch.Switch(
-		func(msg *astral.ErrorMessage) error { return joinEndOf(msg) },
+		joinEndOf,
 		func(c *auth.SignedContract) error {
 			if cosigned {
 				sc = c

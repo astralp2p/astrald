@@ -6,38 +6,49 @@ import (
 	"time"
 
 	"github.com/astralp2p/astral-go/api/auth"
-	"github.com/astralp2p/astral-go/api/crypto"
 	"github.com/astralp2p/astral-go/api/secp256k1"
 	"github.com/astralp2p/astral-go/api/user"
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astral-go/sig"
+	cryptomod "github.com/astralp2p/astrald/mod/crypto"
 	usermod "github.com/astralp2p/astrald/mod/user"
 	"github.com/astralp2p/astrald/mod/user/src/swarmset"
 )
 
-// The ends of a join a carrier reports to its joiner. Their text is part of
-// the protocol (astral-docs protocols/user/ops/user.carry_join.md).
-var (
-	errJoinDeclined      = errors.New("join request declined")
-	errJoinExpired       = errors.New("join request expired")
-	errNotJoinCarrier    = errors.New("join request names another carrier")
-	errCarrierTier       = errors.New("only a trusted or privileged member carries a join request")
-	errTierAboveIssuer   = errors.New("tier above what this node may issue")
-	errUserKeyRequired   = errors.New("a privileged membership needs the user key's signature")
-	errNotSignedByJoiner = errors.New("membership is not signed by the joiner")
-	errFiledLater        = errors.New("join request is filed later than this node's time")
+// joinEnd is an end of a join a carrier reports to its joiner. Its text is the
+// wire text, part of the protocol (astral-docs protocols/user/ops/user.carry_join.md),
+// so the joiner reads a received message back as the end of the same text
+// (joinEndOf).
+type joinEnd string
+
+func (e joinEnd) Error() string { return string(e) }
+
+const (
+	errJoinDeclined      joinEnd = "join request declined"
+	errJoinExpired       joinEnd = "join request expired"
+	errNotJoinCarrier    joinEnd = "join request names another carrier"
+	errCarrierTier       joinEnd = "only a trusted or privileged member carries a join request"
+	errTierAboveIssuer   joinEnd = "tier above what this node may issue"
+	errUserKeyRequired   joinEnd = "a privileged membership needs the user key's signature"
+	errNotSignedByJoiner joinEnd = "membership is not signed by the joiner"
+	errFiledLater        joinEnd = "join request is filed later than this node's time"
 )
 
-// defaultSwarmPoll is how often a carrier reads SwarmState's head while it
-// waits for the user's confirmation.
-// todo: switch to vfs.watch when it lands.
-const defaultSwarmPoll = 2 * time.Second
-
-// entrySigner signs a SwarmState entry as key. crypto.Module.Sign is one: it
-// signs the hash with a held key, or the BIP-137 text on a Coldcard.
-type entrySigner interface {
-	Sign(ctx *astral.Context, key *crypto.PublicKey, obj crypto.SignableTextObject) (*crypto.Signature, error)
+// closesRequest reports whether the joiner drops its request on e: the join is
+// over for good. Any other end, or a dropped connection, keeps the request for
+// the next join.
+func (e joinEnd) closesRequest() bool {
+	switch e {
+	case errJoinDeclined, errJoinExpired, errNotJoinCarrier, errCarrierTier, errTierAboveIssuer:
+		return true
+	}
+	return false
 }
+
+// confirmPoll is how often a carrier reads SwarmState's head while it waits
+// for the user's confirmation.
+// note: the Feed owns the switch to a watch; see swarm_feed.go.
+const confirmPoll = 2 * time.Second
 
 // joinCosign is the joiner's side of a carrier session: it takes the
 // membership its issuer signed and returns it signed by the joiner as
@@ -53,58 +64,41 @@ type joinCosign func(ctx *astral.Context, half *auth.SignedContract) (*auth.Sign
 // membership stores one; every other session hands over that one.
 // Spec: .ai/system/protocols/user/README.md#joins
 type swarmCarrier struct {
-	self   *astral.Identity
-	state  carrierState
-	view   usermod.SwarmView
-	signer entrySigner
-	// ceremony returns where the user key signs on this node, read once per
-	// carry; nil, or a nil result: this node cannot reach the user key.
-	//
-	// why per carry: the user key is stored on, or removed from, this node
-	// while it runs.
-	ceremony  func() *userKeyCeremony
+	self      *astral.Identity
+	mod       usermod.Module
+	signer    cryptomod.Module
 	confirmed *joinConfirmations // what user.confirm_join signed on this node
-	validity  time.Duration      // of the memberships it signs
-	poll      time.Duration
 	now       func() time.Time
 	// mu makes the check for a stored membership and its store one step.
 	mu sync.Mutex
 }
 
-// carrierState is the part of usermod.SwarmState a carrier uses.
-type carrierState interface {
-	SwarmHead() uint64
-	FileJoinRequest(ctx *astral.Context, req *user.SignedJoinRequest) (*astral.ObjectID, error)
-	AddContract(ctx *astral.Context, sc *auth.SignedContract) error
-}
-
-func newSwarmCarrier(self *astral.Identity, state carrierState, view usermod.SwarmView, signer entrySigner) *swarmCarrier {
+func newSwarmCarrier(self *astral.Identity, mod usermod.Module, signer cryptomod.Module) *swarmCarrier {
 	return &swarmCarrier{
 		self:      self,
-		state:     state,
-		view:      view,
+		mod:       mod,
 		signer:    signer,
 		confirmed: &joinConfirmations{},
-		validity:  usermod.DefaultContractValidity,
-		poll:      defaultSwarmPoll,
 		now:       time.Now,
 	}
 }
 
 // Carry writes req into SwarmState and runs the carrier session: it has the
 // membership signed by its issuer, has the joiner co-sign it through cosign,
-// stores it with both signatures and returns it. A Decline, the request's
+// stores it with both signatures and returns it. ceremony is where the user
+// key signs on this node, for a privileged_member membership; nil: this node
+// cannot reach the user key (errUserKeyRequired). A Decline, the request's
 // Timeout or an expelled joiner ends the join with errJoinDeclined or
 // errJoinExpired, and no membership is signed for it. An ended ctx (a dropped
 // connection) only pauses it: the joiner resends req. The membership cosign
 // returns must carry the body this node had signed, with the joiner's
 // signature (errNotSignedByJoiner).
-func (c *swarmCarrier) Carry(ctx *astral.Context, req *user.SignedJoinRequest, cosign joinCosign) (*auth.SignedContract, error) {
+func (c *swarmCarrier) Carry(ctx *astral.Context, req *user.SignedJoinRequest, ceremony *userKeyCeremony, cosign joinCosign) (*auth.SignedContract, error) {
 	if err := c.admit(req); err != nil {
 		return nil, err
 	}
 
-	reqID, err := c.state.FileJoinRequest(ctx, req)
+	reqID, err := c.mod.FileJoinRequest(ctx, req)
 	if err != nil {
 		return nil, err
 	}
@@ -112,7 +106,7 @@ func (c *swarmCarrier) Carry(ctx *astral.Context, req *user.SignedJoinRequest, c
 		return nil, err
 	}
 
-	half, err := c.issue(ctx, req, reqID)
+	half, err := c.issue(ctx, req, reqID, ceremony)
 	if err != nil {
 		return nil, err
 	}
@@ -142,21 +136,14 @@ func (c *swarmCarrier) admit(req *user.SignedJoinRequest) error {
 		return errFiledLater
 	}
 
-	m, ok := c.view.Membership(c.self)
-	if !ok || (m.Tier != user.TierTrusted && m.Tier != user.TierPrivilegedMember) {
+	m, ok := c.mod.Membership(c.self)
+	if !ok || !swarmset.TrustedOrAbove(m.Tier) {
 		return errCarrierTier
 	}
 	if req.Tier != user.TierPrivilegedMember && !swarmset.MayIssue(m.Tier, req.Tier) {
 		return errTierAboveIssuer
 	}
 	return nil
-}
-
-// carriesJoins reports whether id is a member that may carry JoinRequests and
-// file ExpelRequests: Trusted or Privileged.
-func carriesJoins(view membershipReader, id *astral.Identity) bool {
-	m, ok := view.Membership(id)
-	return ok && (m.Tier == user.TierTrusted || m.Tier == user.TierPrivilegedMember)
 }
 
 // open refuses a request that is closed: its joiner expelled, declined, or past
@@ -166,10 +153,10 @@ func carriesJoins(view membershipReader, id *astral.Identity) bool {
 // why the joiner first: a fulfilled request is never declined, and an expelled
 // joiner must not activate a membership that grants nothing.
 func (c *swarmCarrier) open(req *user.SignedJoinRequest, reqID *astral.ObjectID) error {
-	if c.view.Expelled(req.Joiner) {
+	if c.mod.Expelled(req.Joiner) {
 		return errJoinDeclined
 	}
-	switch c.view.RequestStatus(reqID) {
+	switch c.mod.RequestStatus(reqID) {
 	case user.RequestFulfilled:
 		return nil
 	case user.RequestDeclined:
@@ -182,16 +169,24 @@ func (c *swarmCarrier) open(req *user.SignedJoinRequest, reqID *astral.ObjectID)
 }
 
 // issue returns the joiner's membership signed by its issuer alone: the one
-// already stored for req, or a new one this node signs, or, at tier
-// privileged_member, the user key's.
-func (c *swarmCarrier) issue(ctx *astral.Context, req *user.SignedJoinRequest, reqID *astral.ObjectID) (*auth.SignedContract, error) {
+// already stored for req, or a new one this node signs. At tier
+// privileged_member the user key issues it, in a ceremony (D2): it signs only
+// after a user action, a Coldcard press, or, with a software user key, the
+// user's user.confirm_join, which this carrier waits for.
+func (c *swarmCarrier) issue(ctx *astral.Context, req *user.SignedJoinRequest, reqID *astral.ObjectID, ceremony *userKeyCeremony) (*auth.SignedContract, error) {
 	if stored := c.stored(req, reqID); stored != nil {
 		return &auth.SignedContract{Contract: stored.Contract, IssuerSig: stored.IssuerSig}, nil
 	}
-	if req.Tier == user.TierPrivilegedMember {
-		return c.carryPrivileged(ctx, req, reqID)
+	if req.Tier != user.TierPrivilegedMember {
+		return c.signMembership(ctx, req, reqID)
 	}
-	return c.signMembership(ctx, req, reqID)
+	if ceremony == nil {
+		return nil, errUserKeyRequired
+	}
+	if ceremony.devicePress {
+		return ceremony.Membership(ctx, req.Joiner, user.TierPrivilegedMember, req)
+	}
+	return c.awaitConfirmation(ctx, req, reqID)
 }
 
 // stored returns the membership with both signatures stored for reqID that
@@ -201,7 +196,7 @@ func (c *swarmCarrier) issue(ctx *astral.Context, req *user.SignedJoinRequest, r
 // gets that membership again, with no second signature of the user key and no
 // second entry: a signature differs on every signing.
 func (c *swarmCarrier) stored(req *user.SignedJoinRequest, reqID *astral.ObjectID) *auth.SignedContract {
-	for _, sc := range c.view.ContractsOf(reqID) {
+	for _, sc := range c.mod.ContractsOf(reqID) {
 		if sc.IsNil() || sc.SubjectSig == nil || !sc.Subject.IsEqual(req.Joiner) {
 			continue
 		}
@@ -214,14 +209,14 @@ func (c *swarmCarrier) stored(req *user.SignedJoinRequest, reqID *astral.ObjectI
 
 // signMembership signs the joiner's membership at the requested tier as this
 // node, naming reqID as its RequestID. It expires at the request's FiledAt
-// plus the carrier's validity, or with this node's own membership, if
+// plus the default contract validity, or with this node's own membership, if
 // earlier, so a resent request gets the same body.
 func (c *swarmCarrier) signMembership(ctx *astral.Context, req *user.SignedJoinRequest, reqID *astral.ObjectID) (*auth.SignedContract, error) {
 	var bound astral.Time
-	if m, ok := c.view.Membership(c.self); ok {
+	if m, ok := c.mod.Membership(c.self); ok {
 		bound = m.ExpiresAt
 	}
-	expires := user.JoinMembershipExpiry(req.JoinRequest, c.validity, bound)
+	expires := user.JoinMembershipExpiry(req.JoinRequest, usermod.DefaultContractValidity, bound)
 	contract, err := user.NewMembershipUntil(c.self, req.Joiner, req.Tier, reqID, expires)
 	if err != nil {
 		return nil, err
@@ -248,7 +243,7 @@ func (c *swarmCarrier) store(ctx *astral.Context, req *user.SignedJoinRequest, r
 	if stored := c.stored(req, reqID); stored != nil {
 		return stored, nil
 	}
-	if err := c.state.AddContract(ctx, sc); err != nil {
+	if err := c.mod.AddContract(ctx, sc); err != nil {
 		if errors.Is(err, usermod.ErrSwarmEntryDropped) {
 			return nil, errNotSignedByJoiner
 		}
@@ -267,29 +262,11 @@ func sameBody(a, b *auth.Contract) bool {
 	return err == nil && ida.IsEqual(idb)
 }
 
-// carryPrivileged has the user key sign a Privileged-tier membership in a
-// ceremony (D2). The user key signs only after a user action: a Coldcard
-// press, or, with a software user key, the user's user.confirm_join, which
-// this carrier waits for.
-func (c *swarmCarrier) carryPrivileged(ctx *astral.Context, req *user.SignedJoinRequest, reqID *astral.ObjectID) (*auth.SignedContract, error) {
-	var uk *userKeyCeremony
-	if c.ceremony != nil {
-		uk = c.ceremony()
-	}
-	if uk == nil {
-		return nil, errUserKeyRequired
-	}
-	if uk.devicePress {
-		return uk.Membership(ctx, req.Joiner, user.TierPrivilegedMember, req)
-	}
-	return c.awaitConfirmation(ctx, req, reqID)
-}
-
 // awaitConfirmation polls until the user, through user.confirm_join, has
 // signed the joiner's PrivilegedMembership, and returns it. A Decline or the
 // request's Timeout ends the wait first; an ended ctx pauses it.
 func (c *swarmCarrier) awaitConfirmation(ctx *astral.Context, req *user.SignedJoinRequest, reqID *astral.ObjectID) (*auth.SignedContract, error) {
-	ticker := time.NewTicker(c.poll)
+	ticker := time.NewTicker(confirmPoll)
 	defer ticker.Stop()
 
 	var head uint64
@@ -297,9 +274,9 @@ func (c *swarmCarrier) awaitConfirmation(ctx *astral.Context, req *user.SignedJo
 		if sc := c.confirmed.get(reqID); sc != nil {
 			return sc, nil
 		}
-		if h := c.state.SwarmHead(); first || h != head {
+		if h := c.mod.SwarmHead(); first || h != head {
 			head = h
-			if c.view.RequestStatus(reqID) == user.RequestDeclined {
+			if c.mod.RequestStatus(reqID) == user.RequestDeclined {
 				return nil, errJoinDeclined
 			}
 		}

@@ -27,23 +27,13 @@ func (mod *Module) rootKey() *astral.Identity {
 func (mod *Module) wireSwarm() {
 	mod.entryRules.SetVerifier(mod.Crypto)
 	mod.writer = &swarmWriter{self: mod.node.Identity(), signer: mod.Crypto, view: mod, entry: mod.SwarmEntry, merge: mod.mergeSwarmEntry}
-	mod.carrier = newSwarmCarrier(mod.node.Identity(), mod, mod, mod.Crypto)
-	mod.carrier.ceremony = mod.userKeyCeremony
-	mod.joiner = newSwarmJoiner(mod.node.Identity(), mod.Crypto, mod, mod.config.PendingJoin.Get())
+	mod.carrier = newSwarmCarrier(mod.node.Identity(), mod, mod.Crypto)
+	mod.joiner = newSwarmJoiner(mod.ctx, mod.node.Identity(), mod.Crypto, &mod.config.PendingJoin)
 
 	mod.publisher = &swarmPublisher{snapshot: mod.snapshot, emit: mod.emitSwarmEvent}
 	// why: an entry this node merges is published at once, not at the feed's next poll.
 	mod.swarmState.stored = func([]astral.Object) { mod.publisher.publish() }
 	mod.swarmFeed = &headFeed{head: mod.SwarmHead, interval: swarmPollInterval}
-}
-
-// keepJoin keeps this node's JoinRequest in the tree, so a restart resumes
-// it; nil clears it.
-func (mod *Module) keepJoin(req *user.SignedJoinRequest) error {
-	if req == nil {
-		return mod.config.PendingJoin.Clear(mod.ctx)
-	}
-	return mod.config.PendingJoin.Set(mod.ctx, req)
 }
 
 // userKeyCeremony returns the ceremony in which the user key signs on this
@@ -58,7 +48,7 @@ func (mod *Module) userKeyCeremony() *userKeyCeremony {
 	}
 	key := secp256k1.FromIdentity(userID)
 
-	ceremony := newUserKeyCeremony(userID, mod.Crypto, mod, mod)
+	ceremony := newUserKeyCeremony(userID, mod.Crypto, mod)
 	if _, err := mod.Crypto.NewHashSigner(key, crypto.SchemeASN1); err == nil {
 		return ceremony
 	}

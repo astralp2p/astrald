@@ -11,6 +11,7 @@ import (
 	"github.com/astralp2p/astral-go/api/secp256k1"
 	"github.com/astralp2p/astral-go/api/user"
 	"github.com/astralp2p/astral-go/astral"
+	cryptomod "github.com/astralp2p/astrald/mod/crypto"
 	usermod "github.com/astralp2p/astrald/mod/user"
 	"github.com/astralp2p/astrald/mod/user/src/swarmset"
 )
@@ -30,7 +31,7 @@ type writerView interface {
 // what this node signs with its key, and ends in merge, the one merge of the store.
 type swarmWriter struct {
 	self   *astral.Identity
-	signer entrySigner
+	signer cryptomod.Module
 	view   writerView
 	// entry reads a stored entry (usermod.SwarmState.SwarmEntry): the request Approve answers.
 	entry func(id *astral.ObjectID) (astral.Object, error)
@@ -39,7 +40,7 @@ type swarmWriter struct {
 }
 
 // as returns w signing as id with signer: the user key's writes (user.answer_request with as=user).
-func (w *swarmWriter) as(id *astral.Identity, signer entrySigner) *swarmWriter {
+func (w *swarmWriter) as(id *astral.Identity, signer cryptomod.Module) *swarmWriter {
 	c := *w
 	c.self, c.signer = id, signer
 	return &c
@@ -72,7 +73,8 @@ func (w *swarmWriter) FileContractRequest(ctx *astral.Context, app *astral.Ident
 }
 
 func (w *swarmWriter) FileJoinRequest(ctx *astral.Context, req *user.SignedJoinRequest) (*astral.ObjectID, error) {
-	if req.IsNil() || !req.Carrier.IsEqual(w.self) || !carriesJoins(w.view, w.self) {
+	m, ok := w.view.Membership(w.self)
+	if req.IsNil() || !req.Carrier.IsEqual(w.self) || !ok || !swarmset.TrustedOrAbove(m.Tier) {
 		return nil, usermod.ErrNotAllowed
 	}
 	id, err := astral.ResolveObjectID(req)
@@ -83,7 +85,7 @@ func (w *swarmWriter) FileJoinRequest(ctx *astral.Context, req *user.SignedJoinR
 }
 
 func (w *swarmWriter) FileExpelRequest(ctx *astral.Context, subject *astral.Identity) (*user.SignedExpelRequest, error) {
-	if !carriesJoins(w.view, w.self) {
+	if m, ok := w.view.Membership(w.self); !ok || !swarmset.TrustedOrAbove(m.Tier) {
 		return nil, fmt.Errorf("%w: %w", usermod.ErrNotAllowed, errExpelFilerTier)
 	}
 	req := user.NewExpelRequest(w.self, subject)

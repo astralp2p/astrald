@@ -13,6 +13,7 @@ import (
 	"github.com/astralp2p/astral-go/astral/channel"
 	"github.com/astralp2p/astral-go/lib/routing"
 	apphostmod "github.com/astralp2p/astrald/mod/apphost"
+	secp256k1sig "github.com/astralp2p/astrald/mod/secp256k1"
 	usermod "github.com/astralp2p/astrald/mod/user"
 )
 
@@ -184,31 +185,29 @@ func (mod *Module) deriveUserKey(words []string, passphrase string) (crypto.Priv
 }
 
 // signPrivilegedClaim builds the claim: the user key, held in memory, signs
-// this node's PrivilegedMembership in the ceremony, and the node signs as
-// subject. The first node's membership carries no link. The user action is
-// the bootstrap itself: the user hands in the words.
+// this node's PrivilegedMembership, and the node signs as subject. The first
+// node's membership carries no link. The user action is the bootstrap itself:
+// the user hands in the words.
 //
 // why IsNodeClaim: the claim rule of auth.sign_contract decides whether this
-// node may be claimed, and this op signs without passing through that op. The
-// probe is the contract user.new_node_contract writes, and is never signed.
+// node may be claimed, and this op signs without passing through that op.
 func (mod *Module) signPrivilegedClaim(ctx *astral.Context, caller *astral.Identity, key *crypto.PrivateKey) (*auth.SignedContract, error) {
 	userID := secp256k1.Identity(secp256k1.PublicKey(key))
 
-	probe, err := user.NewMembership(userID, mod.node.Identity(), user.TierPrivilegedMember, nil, usermod.DefaultContractValidity)
+	contract, err := user.NewMembership(userID, mod.node.Identity(), user.TierPrivilegedMember, nil, usermod.DefaultContractValidity)
 	if err != nil {
 		return nil, err
 	}
-	if !mod.Auth.IsNodeClaim(ctx, caller, probe) {
+	if !mod.Auth.IsNodeClaim(ctx, caller, contract) {
 		return nil, errClaimRefused
 	}
 
-	ceremony := newUserKeyCeremony(userID, heldKeySigner{key: key}, nil, nil)
-
-	signed, err := ceremony.Membership(ctx, mod.node.Identity(), user.TierPrivilegedMember, nil)
+	sig, err := secp256k1sig.SignASN1(key, contract.SignableHash())
 	if err != nil {
 		return nil, err
 	}
 
+	signed := &auth.SignedContract{Contract: contract, IssuerSig: sig}
 	if _, err = mod.Auth.SignSubject(ctx, signed); err != nil {
 		return nil, err
 	}

@@ -134,9 +134,10 @@ func countEntries(mod *Module, kind user.EntryKind) int {
 // joinKeyring signs as the keys it holds and records the text of every object it
 // signed, as a Coldcard would show it.
 type joinKeyring struct {
-	mu    sync.Mutex
-	keys  map[string]*crypto.PrivateKey
-	texts []string
+	cryptomod.Module // nil: only Sign is used
+	mu               sync.Mutex
+	keys             map[string]*crypto.PrivateKey
+	texts            []string
 }
 
 func newJoinKeyring() *joinKeyring { return &joinKeyring{keys: map[string]*crypto.PrivateKey{}} }
