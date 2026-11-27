@@ -94,18 +94,10 @@ func (mod *Module) receiveExpulsion(signed *user.SignedExpulsion) error {
 	}
 	mod.publishBan(signed.Subject)
 
-	mod.applyExpulsion(signed.Subject)
-	return nil
-}
-
-// applyExpulsion enforces a stored ban on id. When id is the local node the ban
-// strips this node's own membership via leaveSwarm. The links of a banned
-// peer are closed by mod/nodes on the SwarmNodeBanned that publishBan
-// emitted, and membership filtering prevents re-linking.
-func (mod *Module) applyExpulsion(id *astral.Identity) {
-	if id.IsEqual(mod.node.Identity()) {
+	if signed.Subject.IsEqual(mod.node.Identity()) {
 		mod.leaveSwarm()
 	}
+	return nil
 }
 
 // leaveSwarm strips this node's own membership after it is expelled from its

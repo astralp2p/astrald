@@ -94,13 +94,15 @@ func (mod *Module) checkPeerContract(peer *astral.Identity, signed *auth.SignedC
 	case slices.Contains(signed.Permits, nil):
 		// why: the answer comes from the network, and ContractTier reads every permit.
 		return errors.New("contract holds an empty permit")
-	case !isMembership(signed.Contract):
+	}
+	if _, ok := user.ContractTier(signed.Contract); !ok {
 		return errors.New("not a membership")
-	case !signed.Subject.IsEqual(peer):
+	}
+	if !signed.Subject.IsEqual(peer) {
 		return errors.New("subject is not the peer")
 	}
 
-	if err := mod.checkNodeContract(signed); err != nil {
+	if err := mod.checkMembership(signed); err != nil {
 		return err
 	}
 	if err := mod.Auth.VerifyContract(signed); err != nil {
@@ -112,8 +114,22 @@ func (mod *Module) checkPeerContract(peer *astral.Identity, signed *auth.SignedC
 	return nil
 }
 
-// isMembership reports whether c carries exactly one tier permit.
-func isMembership(c *auth.Contract) bool {
-	_, ok := user.ContractTier(c)
-	return ok
+// checkMembership requires the current user as the issuer and a subject the user has not expelled.
+// why: the subject need not be a swarm member yet, because this contract is what admits it.
+func (mod *Module) checkMembership(signed *auth.SignedContract) error {
+	if mod.ActiveContract() == nil {
+		return user.ErrNoActiveContract
+	}
+
+	if !signed.Issuer.IsEqual(mod.Identity()) {
+		return errors.New("issuer is not the current user")
+	}
+
+	// why: refuse a contract for a subject the user has expelled, mirroring the
+	// IssueMembership guard, with the expelledSet filter only hiding it.
+	if mod.isExpelled(mod.Identity(), signed.Subject) {
+		return user.ErrExpelled
+	}
+
+	return nil
 }

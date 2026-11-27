@@ -55,17 +55,6 @@ func (mod *Module) syncAlias(ctx *astral.Context, nodeID *astral.Identity) (err 
 	return mod.Dir.SetAlias(nodeID, string(info.NodeAlias))
 }
 
-// syncSiblings pulls the SwarmState entries with holds and this node lacks:
-// the members' memberships, requests, answers and expels.
-func (mod *Module) syncSiblings(ctx *astral.Context, with *astral.Identity) {
-	if mod.ActiveContract() == nil {
-		return
-	}
-	if err := mod.SyncSwarm(ctx, with); err != nil {
-		mod.log.Logv(1, "syncSiblings: swarm state pull from %v: %v", with, err)
-	}
-}
-
 // syncExpulsions pushes every ban issued by the active user to the remote node,
 // so a peer that was offline during an expel still learns the ban on next link.
 // The remote node's own ban is pushed too: it is the subject's trigger to leave the swarm,
@@ -94,7 +83,7 @@ func (mod *Module) syncExpulsions(ctx *astral.Context, with *astral.Identity) {
 // host, so the sibling can route a query addressed to such an app through its
 // host (astral-docs topics/app-routing.md, Reach).
 // why every member's: a new member learns the swarm's apps from its first link,
-// before it links to their hosts; syncSiblings ran first, so it knows each host.
+// before it links to their hosts; SyncSwarm ran first, so it knows each host.
 // why each push bounded: one stalled push must not hold the rest of the sync.
 // why a digest first: the sibling lists the relay contracts it holds
 // (user.relay_digest, bounded by relayDigestTimeout) and only the others are

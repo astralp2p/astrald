@@ -26,7 +26,7 @@ Every check is the oracle's own read, never the driver's `probes`:
 - control: node2 is still a linked member and reads the same bait from node1.
 
 note: link state between node2 and node3 is NOT asserted. Suspected astrald
-defect: applyExpulsion (mod/user/src/expel.go:90-100) should sever ties to
+defect: receiveExpulsion (mod/user/src/expel.go) should sever ties to
 the banned peer, but node2 can end up holding a link to node3 that nothing
 ever closes. Likely cause: node3 drops its links first (leaveSwarm,
 :108-119), node2's maintain_link schedules an ensure-link task

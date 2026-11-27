@@ -42,7 +42,9 @@ func (a *SyncNodesTask) Run(ctx *astral.Context) error {
 
 	a.mod.pushActiveContract(ctx, remoteIdentity)
 	a.mod.syncExpulsions(ctx, remoteIdentity)
-	a.mod.syncSiblings(ctx, remoteIdentity)
+	if err := a.mod.SyncSwarm(ctx, remoteIdentity); err != nil {
+		a.mod.log.Logv(1, "swarm state pull from %v: %v", remoteIdentity, err)
+	}
 
 	err := a.mod.syncAlias(ctx, remoteIdentity)
 	if err != nil {

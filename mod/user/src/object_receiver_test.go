@@ -2,7 +2,6 @@ package user
 
 import (
 	"errors"
-	"slices"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -18,7 +17,6 @@ import (
 	authmod "github.com/astralp2p/astrald/mod/auth"
 	cryptomod "github.com/astralp2p/astrald/mod/crypto"
 	nodesmod "github.com/astralp2p/astrald/mod/nodes"
-	objectsmod "github.com/astralp2p/astrald/mod/objects"
 	"github.com/astralp2p/astrald/mod/scheduler"
 )
 
@@ -162,17 +160,9 @@ func (markerCrypto) Verify(_ *crypto.PublicKey, sig *crypto.Signature, _ crypto.
 	return nil
 }
 
-// endpointSync is a call to UpdateNodeEndpoints.
-type endpointSync struct {
-	resolver *astral.Identity
-	target   *astral.Identity
-}
-
-// recordingNodes records endpoint syncs, and reports a link to the linked
-// identities alone.
+// recordingNodes reports a link to the linked identities alone.
 type recordingNodes struct {
 	nodesmod.Module
-	syncs  chan endpointSync
 	linked []*astral.Identity
 	// enforced counts the EnforceLinkPolicy calls.
 	enforced atomic.Int32
@@ -180,11 +170,6 @@ type recordingNodes struct {
 
 func (n *recordingNodes) IsLinked(id *astral.Identity) bool {
 	return slicesContainsIdentity(n.linked, id)
-}
-
-func (n *recordingNodes) UpdateNodeEndpoints(_ *astral.Context, resolver, target *astral.Identity) (int, error) {
-	n.syncs <- endpointSync{resolver: resolver, target: target}
-	return 0, nil
 }
 
 // EnforceLinkPolicy counts the enforcement passes.
@@ -243,12 +228,10 @@ func newReceiverFixture(t *testing.T, userID *astral.Identity) *receiverFixture 
 	t.Helper()
 
 	f := &receiverFixture{
-		nodeID: astral.GenerateIdentity(),
-		userID: userID,
-		auth:   &indexAuth{},
-		nodes: &recordingNodes{
-			syncs: make(chan endpointSync, 8),
-		},
+		nodeID:    astral.GenerateIdentity(),
+		userID:    userID,
+		auth:      &indexAuth{},
+		nodes:     &recordingNodes{},
 		scheduler: &recordingScheduler{tasks: make(chan scheduler.Task, 8)},
 	}
 
@@ -351,8 +334,6 @@ func (f *receiverFixture) requireNoEffect(t *testing.T, drop *recordingDrop) {
 		t.Errorf("accepted the drop %v; want no Accept call", a)
 	}
 	select {
-	case s := <-f.nodes.syncs:
-		t.Errorf("synced endpoints of %v; want none", s.target)
 	case task := <-f.scheduler.tasks:
 		t.Errorf("scheduled %v; want nothing", task)
 	default:
@@ -382,73 +363,33 @@ func relayForContract(issuer, subject *astral.Identity) *auth.SignedContract {
 
 // TestReceiveSignedContractRejects covers every refused contract: each is pushed by
 // a swarm sibling, which the replaced rule admitted for any contract, and each
-// must leave no index entry, no persistence, no endpoint sync and no sibling link.
+// must leave no index entry, no persistence and no scheduled sync.
 func TestReceiveSignedContractRejects(t *testing.T) {
 	cases := []struct {
 		name     string
-		noUser   bool
 		contract func(f *receiverFixture, sender *astral.Identity) *auth.SignedContract
 	}{
-		{"node contract without a current user", true, func(f *receiverFixture, _ *astral.Identity) *auth.SignedContract {
-			return nodeContract(astral.GenerateIdentity(), astral.GenerateIdentity())
-		}},
-		{"node contract from another user", false, func(f *receiverFixture, _ *astral.Identity) *auth.SignedContract {
-			return nodeContract(astral.GenerateIdentity(), astral.GenerateIdentity())
-		}},
-		{"node contract issued by a sibling", false, func(f *receiverFixture, sender *astral.Identity) *auth.SignedContract {
-			return nodeContract(sender, astral.GenerateIdentity())
-		}},
-		{"node contract without the issuer signature", false, func(f *receiverFixture, _ *astral.Identity) *auth.SignedContract {
-			sc := nodeContract(f.userID, astral.GenerateIdentity())
-			sc.IssuerSig = nil
-			return sc
-		}},
-		{"node contract without the subject signature", false, func(f *receiverFixture, _ *astral.Identity) *auth.SignedContract {
-			sc := nodeContract(f.userID, astral.GenerateIdentity())
-			sc.SubjectSig = nil
-			return sc
-		}},
-		{"node contract with a forged signature", false, func(f *receiverFixture, _ *astral.Identity) *auth.SignedContract {
-			sc := nodeContract(f.userID, astral.GenerateIdentity())
-			sc.SubjectSig = forgedSig()
-			return sc
-		}},
-		{"expired node contract", false, func(f *receiverFixture, _ *astral.Identity) *auth.SignedContract {
-			sc := nodeContract(f.userID, astral.GenerateIdentity())
-			sc.ExpiresAt = astral.Time(time.Now().Add(-time.Minute))
-			return sc
-		}},
-		{"node contract for an expelled subject", false, func(f *receiverFixture, _ *astral.Identity) *auth.SignedContract {
-			subject := astral.GenerateIdentity()
-			if err := f.mod.db.StoreExpulsion(sampleSigned(f.userID, subject)); err != nil {
-				panic(err)
-			}
-			return nodeContract(f.userID, subject)
-		}},
-		{"node contract without a subject", false, func(f *receiverFixture, _ *astral.Identity) *auth.SignedContract {
-			return nodeContract(f.userID, nil)
-		}},
-		{"signed contract without a contract", false, func(f *receiverFixture, _ *astral.Identity) *auth.SignedContract {
+		{"signed contract without a contract", func(f *receiverFixture, _ *astral.Identity) *auth.SignedContract {
 			return &auth.SignedContract{IssuerSig: validSig(), SubjectSig: validSig()}
 		}},
-		{"contract from the user granting another action", false, func(f *receiverFixture, _ *astral.Identity) *auth.SignedContract {
+		{"contract from the user granting another action", func(f *receiverFixture, _ *astral.Identity) *auth.SignedContract {
 			return contractWith(f.userID, astral.GenerateIdentity(), auth.SeeObjectsAction{}.ObjectType())
 		}},
-		{"relay-for contract with another permit", false, func(f *receiverFixture, sender *astral.Identity) *auth.SignedContract {
+		{"relay-for contract with another permit", func(f *receiverFixture, sender *astral.Identity) *auth.SignedContract {
 			return contractWith(astral.GenerateIdentity(), sender, nodes.RelayForAction{}.ObjectType(), auth.SeeObjectsAction{}.ObjectType())
 		}},
-		{"relay-for contract for a subject outside the swarm", false, func(f *receiverFixture, _ *astral.Identity) *auth.SignedContract {
+		{"relay-for contract for a subject outside the swarm", func(f *receiverFixture, _ *astral.Identity) *auth.SignedContract {
 			return relayForContract(astral.GenerateIdentity(), astral.GenerateIdentity())
 		}},
-		{"relay-for contract for an expelled subject", false, func(f *receiverFixture, _ *astral.Identity) *auth.SignedContract {
+		{"relay-for contract for an expelled subject", func(f *receiverFixture, _ *astral.Identity) *auth.SignedContract {
 			return relayForContract(astral.GenerateIdentity(), f.expelSibling())
 		}},
-		{"relay-for contract with a forged signature", false, func(f *receiverFixture, sender *astral.Identity) *auth.SignedContract {
+		{"relay-for contract with a forged signature", func(f *receiverFixture, sender *astral.Identity) *auth.SignedContract {
 			sc := relayForContract(astral.GenerateIdentity(), sender)
 			sc.IssuerSig = forgedSig()
 			return sc
 		}},
-		{"expired relay-for contract", false, func(f *receiverFixture, sender *astral.Identity) *auth.SignedContract {
+		{"expired relay-for contract", func(f *receiverFixture, sender *astral.Identity) *auth.SignedContract {
 			sc := relayForContract(astral.GenerateIdentity(), sender)
 			sc.ExpiresAt = astral.Time(time.Now().Add(-time.Minute))
 			return sc
@@ -457,16 +398,11 @@ func TestReceiveSignedContractRejects(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			var userID *astral.Identity
-			if !tc.noUser {
-				userID = astral.GenerateIdentity()
-			}
+			userID := astral.GenerateIdentity()
 			f := newReceiverFixture(t, userID)
 
 			sender := astral.GenerateIdentity()
-			if userID != nil {
-				f.auth.seed(nodeContract(userID, sender))
-			}
+			f.auth.seed(nodeContract(userID, sender))
 
 			drop := &recordingDrop{sender: sender, object: tc.contract(f, sender)}
 			if err := f.mod.ReceiveObject(drop); err != nil {
@@ -494,42 +430,6 @@ func TestReceiveRelayForContractRequiresSiblingSender(t *testing.T) {
 	f.requireNoEffect(t, drop)
 }
 
-// swarmPusher delivers a push to the receiver of the fixture that owns the target
-// node, as a push over a stable link does, and records every target.
-type swarmPusher struct {
-	objectsmod.Module
-	sender  *astral.Identity
-	members map[string]*receiverFixture
-
-	mu      sync.Mutex
-	targets []*astral.Identity
-}
-
-func (p *swarmPusher) Push(_ *astral.Context, target *astral.Identity, obj astral.Object) error {
-	p.mu.Lock()
-	p.targets = append(p.targets, target)
-	p.mu.Unlock()
-
-	member, ok := p.members[target.String()]
-	if !ok {
-		return nil
-	}
-	return member.mod.ReceiveObject(&recordingDrop{sender: p.sender, object: obj})
-}
-
-func (p *swarmPusher) pushed() []*astral.Identity {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	return append([]*astral.Identity(nil), p.targets...)
-}
-
-// holdsContractFor reports whether f indexed a node contract for subject.
-func (f *receiverFixture) holdsContractFor(subject *astral.Identity) bool {
-	return slices.ContainsFunc(f.auth.received(), func(sc *auth.SignedContract) bool {
-		return sc.Subject.IsEqual(subject)
-	})
-}
-
 // TestReceiveRelayForContractFromSibling covers the valid relay-for contract: the
 // caller proof a sibling pushes for an app it hosts is indexed and saved, and
 // starts no endpoint sync and no sibling link.
@@ -553,8 +453,6 @@ func TestReceiveRelayForContractFromSibling(t *testing.T) {
 	}
 
 	select {
-	case s := <-f.nodes.syncs:
-		t.Fatalf("synced endpoints of %v; a relay-for contract admits no node", s.target)
 	case task := <-f.scheduler.tasks:
 		t.Fatalf("scheduled %v; a relay-for contract admits no node", task)
 	default:
@@ -759,77 +657,5 @@ func (f *receiverFixture) scheduledSyncs() (subjects []*astral.Identity) {
 		default:
 			return
 		}
-	}
-}
-
-// skippedSync is a pushed node contract that schedules no sync. subject names
-// the contract's subject and reports whether it is linked; linkSender links the
-// sender; noUser leaves the receiver without a current user.
-type skippedSync struct {
-	name       string
-	noUser     bool
-	linkSender bool
-	subject    func(f *receiverFixture) (*astral.Identity, bool)
-	modify     func(sc *auth.SignedContract)
-}
-
-func linkedNewNode(*receiverFixture) (*astral.Identity, bool) { return astral.GenerateIdentity(), true }
-
-var skippedSyncs = []skippedSync{
-	{name: "an existing member", subject: func(f *receiverFixture) (*astral.Identity, bool) { return f.addSibling(), true }},
-	{name: "a node without a link", subject: func(*receiverFixture) (*astral.Identity, bool) { return astral.GenerateIdentity(), false }},
-	{name: "a node without a link from a linked sender", linkSender: true, subject: func(*receiverFixture) (*astral.Identity, bool) {
-		return astral.GenerateIdentity(), false
-	}},
-	{name: "this node", subject: func(f *receiverFixture) (*astral.Identity, bool) { return f.nodeID, true }},
-	{name: "an expelled node", subject: func(f *receiverFixture) (*astral.Identity, bool) {
-		subject := astral.GenerateIdentity()
-		if err := f.mod.db.StoreExpulsion(sampleSigned(f.userID, subject)); err != nil {
-			panic(err)
-		}
-		return subject, true
-	}},
-	{name: "an expired contract", subject: linkedNewNode, modify: func(sc *auth.SignedContract) {
-		sc.ExpiresAt = astral.Time(time.Now().Add(-time.Minute))
-	}},
-	{name: "a receiver without a current user", noUser: true, subject: linkedNewNode},
-}
-
-// TestReceiveNodeContractSkipsTheSync: a pushed node contract schedules no sync
-// for a node already in the swarm, a node without a link, or this node, and a
-// refused contract schedules none for a linked node.
-func TestReceiveNodeContractSkipsTheSync(t *testing.T) {
-	for _, tc := range skippedSyncs {
-		t.Run(tc.name, func(t *testing.T) {
-			userID := astral.GenerateIdentity()
-			var current *astral.Identity
-			if !tc.noUser {
-				current = userID
-			}
-			f := newReceiverFixture(t, current)
-
-			sender := astral.GenerateIdentity()
-			subject, linked := tc.subject(f)
-			if linked {
-				f.nodes.linked = append(f.nodes.linked, subject)
-			}
-			if tc.linkSender {
-				f.nodes.linked = append(f.nodes.linked, sender)
-			}
-
-			signed := nodeContract(userID, subject)
-			if tc.modify != nil {
-				tc.modify(signed)
-			}
-
-			drop := &recordingDrop{sender: sender, object: signed}
-			if err := f.mod.ReceiveObject(drop); err != nil {
-				t.Fatalf("ReceiveObject: %v", err)
-			}
-
-			if syncs := f.scheduledSyncs(); len(syncs) != 0 {
-				t.Fatalf("scheduled syncs with %v; want none", syncs)
-			}
-		})
 	}
 }

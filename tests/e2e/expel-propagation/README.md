@@ -39,14 +39,14 @@ itself.
 
 Link state between node2 and node3 is reported (`note: node2 holds N
 link(s) to expelled node3` in `verify.log`), never asserted.
-`applyExpulsion` (`mod/user/src/expel.go:90-100`) is meant to sever ties to
+`receiveExpulsion` (`mod/user/src/expel.go`) is meant to sever ties to
 a banned peer, yet node2 can end up holding a link to node3 that nothing
 closes again. The likely cause: node3 receives its ban first and drops its
 links (`leaveSwarm`, `:108-119`); node2's `maintain_link` for node3 sees the
 link close and schedules an ensure-link task
 (`maintain_link_task.go:65`); `Scheduler.Schedule` takes no context, so the
 cancel in `removeSibling` does not stop that task, and it links after
-`applyExpulsion`'s `CloseLinks`. node3, now unclaimed, accepts the link.
+`receiveExpulsion`'s `CloseLinks`. node3, now unclaimed, accepts the link.
 
 Reproduction: `./tests/run expel-propagation --keep`, then node2's
 `nodes.links`. In run `20261105T013725Z`, node2's astrald log (aliases
