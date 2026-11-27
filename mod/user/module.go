@@ -26,6 +26,11 @@ const (
 	// DefaultContractValidity is the validity of a node contract that
 	// user.new_node_contract builds without a duration.
 	DefaultContractValidity = 365 * 24 * time.Hour
+
+	// OfferValidity is how long an offer that answers a ContractRequest
+	// holds at most: 3650 days after signing.
+	// Spec: .ai/system/protocols/user/README.md#app-grants
+	OfferValidity = 3650 * 24 * time.Hour
 )
 
 // SwarmView reads what SwarmState's entries mean (mod/user). It reads the set
@@ -55,16 +60,19 @@ type SwarmView interface {
 	//     by, carried by (JoinRequest.Carrier) or names
 	//     (ContractRequest.Identity, JoinRequest.Joiner) an expelled identity.
 	//     A Decline closes the request and takes back no contract;
-	//   - user.RequestApproved: an Approval names req. An Approval counts
-	//     whenever it was given. An ExpelRequest is carried out by the root
-	//     key's user.SignedExpulsion naming its Subject, which counts as its
-	//     Approval;
+	//   - user.RequestApproved: req is an ExpelRequest and an Approval names
+	//     it, or the root key's user.SignedExpulsion names its Subject. An
+	//     Approval counts whenever it was given. Only an ExpelRequest is
+	//     approved;
 	//   - user.RequestExpired: the request's Timeout has passed;
+	//   - user.RequestOffered: an offer names req: a contract only its issuer
+	//     signed, given to the request's filer, that has not expired;
 	//   - user.RequestPending: otherwise.
-	// An Approval or Decline signed by an expelled identity does not count.
-	// A req that names no stored request, including one held (EntryWait),
-	// answers user.RequestPending: a caller that needs to know first checks
-	// SwarmState.SwarmEntry, and a filer applies its own copy's Expired.
+	// An Approval, Decline or offer signed by an expelled identity does not
+	// count. A req that names no stored request, including one held
+	// (EntryWait), answers user.RequestPending: a caller that needs to know
+	// first checks SwarmState.SwarmEntry, and a filer applies its own copy's
+	// Expired.
 	RequestStatus(req *astral.ObjectID) user.RequestStatus
 
 	// Expelled reports whether a stored user.SignedExpulsion names id as its
@@ -82,7 +90,8 @@ type SwarmView interface {
 
 	// ContractsOf returns the stored contracts whose RequestID is req, in no
 	// defined order, whatever their signatures, expiry or the expels of their
-	// parties. A host or carrier calls it before signing, so a request is
+	// parties: offers, their completed forms and the contracts that carry the
+	// request out. A host or carrier calls it before signing, so a request is
 	// carried out once.
 	ContractsOf(req *astral.ObjectID) []*auth.SignedContract
 
@@ -94,8 +103,8 @@ type SwarmView interface {
 	//     user.TierPrivilegedMember holds only this way (D2);
 	//   - or a member whose own membership holds and whose tier issues that
 	//     tier: Privileged issues Member and Trusted, Trusted issues Member.
-	// Its RequestID adds nothing. The issuer's signature is required; the
-	// subject's is optional and, when present, verified on merge. It returns
+	// Its RequestID adds nothing. Both the issuer's and the subject's
+	// signatures are required. It returns
 	// false when none holds or id, or the contract's issuer, is expelled. When
 	// several hold, it returns the one of the highest tier, and among those
 	// the one that expires last.

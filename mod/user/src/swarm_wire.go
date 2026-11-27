@@ -48,7 +48,7 @@ func (v lazyVerifier) Verify(key *crypto.PublicKey, sig *crypto.Signature, obj c
 func (mod *Module) wireSwarm() {
 	view := newSwarmView(mod, mod.rootKey, nil)
 	mod.swarmView.Store(view)
-	mod.writer = &swarmWriter{self: mod.node.Identity(), signer: mod.Crypto, view: mod, merge: mod.mergeSwarmEntry}
+	mod.writer = &swarmWriter{self: mod.node.Identity(), signer: mod.Crypto, view: mod, entry: mod.SwarmEntry, merge: mod.mergeSwarmEntry}
 	mod.carrier = newSwarmCarrier(mod.node.Identity(), mod, mod, mod.Crypto)
 	mod.joiner = newSwarmJoiner(mod.node.Identity(), mod.Crypto, mod, mod.config.PendingJoin.Get())
 
@@ -64,6 +64,7 @@ func (mod *Module) wireSwarm() {
 		Auth:      mod.Auth,
 		UserKey:   mod.userKeyCeremony,
 		Confirmed: mod.carrier.confirmed,
+		AsUser:    func(uk *userKeyCeremony) answerer { return mod.writer.as(uk.user, uk.signer) },
 	}, "Op")
 }
 
@@ -126,6 +127,12 @@ func (mod *Module) onSwarmChanged() {
 		}
 		sc, ok := obj.(*auth.SignedContract)
 		if !ok {
+			continue
+		}
+		// why: an offer grants nothing, and auth indexes only contracts both
+		// parties signed; its completed form is another entry.
+		if swarmset.IsOffer(sc) {
+			mod.indexedEntries.Set(*id, struct{}{})
 			continue
 		}
 		if err = mod.Auth.IndexContract(mod.ctx, sc); err != nil {

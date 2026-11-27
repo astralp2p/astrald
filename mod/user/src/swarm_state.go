@@ -3,6 +3,8 @@ package user
 import (
 	"errors"
 	"fmt"
+	"math"
+	"time"
 
 	"github.com/astralp2p/astral-go/api/auth"
 	"github.com/astralp2p/astral-go/api/crypto"
@@ -24,8 +26,19 @@ type swarmWriter struct {
 	self   *astral.Identity
 	signer entrySigner
 	view   writerView
+	// entry reads a stored entry (usermod.SwarmState.SwarmEntry): the request Approve answers.
+	entry func(id *astral.ObjectID) (astral.Object, error)
 	// merge is the store's merge (Module.mergeSwarmEntry in the running node).
 	merge func(ctx *astral.Context, obj astral.Object) error
+	// now is the clock of an offer's expiry; nil selects time.Now.
+	now func() time.Time
+}
+
+// as returns w signing as id with signer: the user key's writes (user.answer_request with as=user).
+func (w *swarmWriter) as(id *astral.Identity, signer entrySigner) *swarmWriter {
+	c := *w
+	c.self, c.signer = id, signer
+	return &c
 }
 
 // add merges obj. A held entry counts as written: it is signed, and a later merge stores it.
@@ -78,10 +91,25 @@ func (w *swarmWriter) FileExpelRequest(ctx *astral.Context, subject *astral.Iden
 	return signed, w.add(ctx, signed)
 }
 
-func (w *swarmWriter) Approve(ctx *astral.Context, request *astral.ObjectID) (*user.SignedApproval, error) {
+func (w *swarmWriter) Approve(ctx *astral.Context, request *astral.ObjectID) (astral.Object, error) {
 	if !w.view.MayAnswer(w.self, request) {
 		return nil, usermod.ErrNotAllowed
 	}
+	obj, err := w.entry(request)
+	if err != nil {
+		return nil, err
+	}
+	switch req := obj.(type) {
+	case *user.SignedContractRequest:
+		return w.offer(ctx, request, req)
+	case *user.SignedExpelRequest:
+		return w.approval(ctx, request)
+	}
+	return nil, usermod.ErrNotAllowed
+}
+
+// approval signs and adds an Approval of the ExpelRequest with entry ID request.
+func (w *swarmWriter) approval(ctx *astral.Context, request *astral.ObjectID) (*user.SignedApproval, error) {
 	body := user.NewApproval(w.self, request)
 	sig, err := w.sign(ctx, body)
 	if err != nil {
@@ -89,6 +117,53 @@ func (w *swarmWriter) Approve(ctx *astral.Context, request *astral.ObjectID) (*u
 	}
 	signed := &user.SignedApproval{Approval: body, IssuerSig: sig}
 	return signed, w.add(ctx, signed)
+}
+
+// offer signs, as issuer only, the offer that answers the ContractRequest req with entry ID reqID: a contract
+// from this signer to req's filer with every requested permit at one more Delegation, naming reqID, and adds
+// it. The filer completes it.
+// Spec: .ai/system/protocols/user/README.md#app-grants
+func (w *swarmWriter) offer(ctx *astral.Context, reqID *astral.ObjectID, req *user.SignedContractRequest) (*auth.SignedContract, error) {
+	permits := make([]*auth.Permit, 0, len(req.Permits))
+	for _, p := range req.Permits {
+		if p == nil || p.Delegation == math.MaxUint8 {
+			return nil, fmt.Errorf("approve %v: a requested permit cannot be delegated further", reqID)
+		}
+		deeper := *p
+		deeper.Delegation++
+		permits = append(permits, &deeper)
+	}
+	contract := &auth.Contract{
+		Issuer:    w.self,
+		Subject:   req.FiledBy,
+		Permits:   permits,
+		ExpiresAt: astral.Time(w.offerExpiry()),
+		RequestID: reqID,
+	}
+	sig, err := w.sign(ctx, contract)
+	if err != nil {
+		return nil, err
+	}
+	signed := &auth.SignedContract{Contract: contract, IssuerSig: sig}
+	return signed, w.add(ctx, signed)
+}
+
+// offerExpiry returns when an offer signed now expires: after usermod.OfferValidity, or when this signer's
+// membership expires, if earlier. The user key holds no membership.
+//
+// why: a contract never outlives its issuer's own authority.
+func (w *swarmWriter) offerExpiry() time.Time {
+	now := time.Now
+	if w.now != nil {
+		now = w.now
+	}
+	expires := now().Add(usermod.OfferValidity)
+	if m, ok := w.view.Membership(w.self); ok && m.SignedContract != nil && m.Contract != nil {
+		if t := m.ExpiresAt.Time(); t.Before(expires) {
+			expires = t
+		}
+	}
+	return expires
 }
 
 func (w *swarmWriter) Decline(ctx *astral.Context, request *astral.ObjectID) (*user.SignedDecline, error) {
@@ -141,7 +216,7 @@ func (mod *Module) FileExpelRequest(ctx *astral.Context, subject *astral.Identit
 	return mod.writer.FileExpelRequest(ctx, subject)
 }
 
-func (mod *Module) Approve(ctx *astral.Context, request *astral.ObjectID) (*user.SignedApproval, error) {
+func (mod *Module) Approve(ctx *astral.Context, request *astral.ObjectID) (astral.Object, error) {
 	if mod.writer == nil {
 		return nil, errSwarmStateNotOpen
 	}

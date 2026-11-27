@@ -7,7 +7,7 @@ import (
 )
 
 // SwarmState is this node's copy of the swarm's grow-only set of signed
-// entries: requests, Approvals, Declines, contracts and expels. mod/user
+// entries: requests, Approvals, Declines, contracts, offers and expels. mod/user
 // stores it under swarmstate/<kind>/<entry ID> in the node's own VFS and syncs
 // it between nodes; a merge is a union, and nothing is ever overwritten or
 // deleted. What an entry means is decided by SwarmView.
@@ -46,17 +46,27 @@ type SwarmState interface {
 	// files one (D10).
 	FileExpelRequest(ctx *astral.Context, subject *astral.Identity) (*user.SignedExpelRequest, error)
 
-	// Approve signs, with this node's key, an Approval of the stored request
-	// with entry ID request, and adds it. This node must be the root key or
-	// hold a tier that may answer the request (SwarmView.MayAnswer).
-	Approve(ctx *astral.Context, request *astral.ObjectID) (*user.SignedApproval, error)
+	// Approve signs, with this node's key, the yes to the stored request with
+	// entry ID request, adds it and returns it. This node must be the root key
+	// or hold a tier that may answer the request (SwarmView.MayAnswer).
+	//   - A ContractRequest: an offer, a *auth.SignedContract only this node
+	//     signed, from this node to the request's FiledBy, with every
+	//     requested permit at one more Delegation, the request as its
+	//     RequestID, expiring after OfferValidity or with this node's
+	//     membership, if earlier. The filer completes it.
+	//   - An ExpelRequest: a *user.SignedApproval.
+	//   - A JoinRequest: none; its carrier signs the membership, and Approve
+	//     returns ErrNotAllowed.
+	Approve(ctx *astral.Context, request *astral.ObjectID) (astral.Object, error)
 
 	// Decline signs, with this node's key, a Decline of the stored request
 	// with entry ID request, and adds it, under the rule of Approve.
 	Decline(ctx *astral.Context, request *astral.ObjectID) (*user.SignedDecline, error)
 
-	// AddContract adds sc, a contract its issuer signed: a membership, or a
-	// contract that carries out a request it names as its RequestID.
+	// AddContract adds sc: a membership both parties signed, a contract the
+	// root key issued, or a contract that names a ContractRequest as its
+	// RequestID: the approver's contract to the filer, completed from its
+	// offer, or the filer's contract to the identity the request names.
 	AddContract(ctx *astral.Context, sc *auth.SignedContract) error
 
 	// AddExpulsion adds e, an Expulsion the user key signed (D7).

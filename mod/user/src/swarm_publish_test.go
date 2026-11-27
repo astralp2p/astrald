@@ -44,6 +44,8 @@ func eventLine(e astral.Object) string {
 		return "expired " + e.RequestID.String()
 	case *user.SwarmContractAdded:
 		return "contract " + e.ContractID.String()
+	case *user.SwarmOfferAdded:
+		return "offer " + e.OfferID.String() + " for " + e.RequestID.String()
 	}
 	return fmt.Sprintf("unexpected %v", e.ObjectType())
 }
@@ -63,6 +65,9 @@ func wantEvents(t *testing.T, log *publishLog, want ...string) {
 // TestSwarmPublisherEmitsOncePerVerdictChange (criterion 5): each event fires
 // once per verdict change and never again for an unchanged view; nothing is
 // emitted for what was stored before record.
+//
+// note: the Approval row moved to an ExpelRequest, and a ContractRequest gets
+// an offer, since only an expel request is approved.
 func TestSwarmPublisherEmitsOncePerVerdictChange(t *testing.T) {
 	f := newViewFixture(t)
 	old := f.add(f.contractRequest(f.pi, f.appA, viewClock(10, 0)))
@@ -71,15 +76,22 @@ func TestSwarmPublisherEmitsOncePerVerdictChange(t *testing.T) {
 	p.record()
 	wantEvents(t, log)
 
-	r := f.add(f.contractRequest(f.pi, f.appA, viewClock(10, 1)))
+	robj := f.contractRequest(f.pi, f.appA, viewClock(10, 1))
+	r := f.add(robj)
 	p.publish()
 	p.publish()
 	wantEvents(t, log, "filed "+r.String())
 
-	a := f.add(f.approval(f.laptop, r))
+	o := f.add(f.offer(f.laptop, robj, r))
 	p.publish()
 	p.publish()
-	wantEvents(t, log, "approved "+r.String()+" by "+a.String())
+	wantEvents(t, log, "offer "+o.String()+" for "+r.String())
+
+	e := f.add(f.expelRequest(f.phone, f.appA, viewClock(10, 1)))
+	a := f.add(f.approval(f.laptop, e))
+	p.publish()
+	p.publish()
+	wantEvents(t, log, "filed "+e.String(), "approved "+e.String()+" by "+a.String())
 
 	c := f.add(f.appContract(f.pi, f.appA, nil))
 	p.publish()
@@ -107,13 +119,13 @@ func TestSwarmPublisherSkipsVerdictsThatDoNotCount(t *testing.T) {
 	p, log := newTestPublisher(f)
 	p.record()
 
-	byExpelled := f.add(f.contractRequest(f.pi, f.appA, viewClock(10, 0)))
+	byExpelled := f.add(f.expelRequest(f.phone, f.appA, viewClock(10, 0)))
 	f.add(f.approval(f.desktop, byExpelled))
 	f.add(f.appContract(f.desktop, f.appA, nil))
 	p.publish()
 	wantEvents(t, log, "filed "+byExpelled.String())
 
-	overridden := f.add(f.contractRequest(f.pi, f.appA, viewClock(10, 1)))
+	overridden := f.add(f.expelRequest(f.phone, f.pi, viewClock(10, 1)))
 	f.add(f.approval(f.laptop, overridden))
 	f.add(f.decline(f.phone, overridden))
 	half := f.appContract(f.pi, f.appA, overridden)
@@ -121,6 +133,48 @@ func TestSwarmPublisherSkipsVerdictsThatDoNotCount(t *testing.T) {
 	f.add(half)
 	p.publish()
 	wantEvents(t, log, "filed "+overridden.String(), "declined "+overridden.String())
+}
+
+// TestSwarmPublisherOffersAndContracts (criterion 5, PR 4): SwarmOfferAdded
+// fires once per valid offer, and never for an offer whose issuer is expelled
+// or whose request is declined or expired; SwarmContractAdded fires for the
+// completed contract and never for the half-signed offer; an Approval of a
+// ContractRequest emits nothing, as only an expel request is approved.
+func TestSwarmPublisherOffersAndContracts(t *testing.T) {
+	f := newViewFixture(t)
+	f.add(f.expulsion(f.user, f.desktop))
+	p, log := newTestPublisher(f)
+	p.record()
+
+	robj := f.contractRequest(f.pi, f.appA, viewClock(10, 0))
+	r := f.add(robj)
+	f.add(f.approval(f.laptop, r))
+	f.add(f.offer(f.desktop, robj, r))
+	offer := f.offer(f.laptop, robj, r)
+	o := f.add(offer)
+	p.publish()
+	p.publish()
+	wantEvents(t, log, "filed "+r.String(), "offer "+o.String()+" for "+r.String())
+
+	done := f.add(complete(offer))
+	p.publish()
+	wantEvents(t, log, "contract "+done.String())
+
+	declined := f.contractRequest(f.pi, f.appA, viewClock(10, 2))
+	d := f.add(declined)
+	f.add(f.decline(f.laptop, d))
+	f.add(f.offer(f.laptop, declined, d))
+	p.publish()
+	wantEvents(t, log, "filed "+d.String(), "declined "+d.String())
+
+	late := f.contractRequest(f.pi, f.appA, viewClock(10, 3))
+	l := f.add(late)
+	p.publish()
+	wantEvents(t, log, "filed "+l.String())
+	f.now = viewClock(11, 4)
+	f.add(f.offer(f.laptop, late, l))
+	p.publish()
+	wantEvents(t, log, "expired "+l.String())
 }
 
 // scriptedFeed is a SwarmFeed whose changes a test sends.

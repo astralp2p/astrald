@@ -170,10 +170,10 @@ func TestOpenChecksEveryStoredEntry(t *testing.T) {
 	badSig := contractRequest(f.trusted)
 	badSig.FiledBySig = sigBy(f.root)
 	renamed := contractRequest(f.trusted)
-	answer := approval(f.root, entryIDOf(t, good))
+	answer := decline(f.root, entryIDOf(t, good))
 	misfiled := contractRequest(f.trusted)
 
-	f.files.put(t, f.owner, EntryPath(user.EntryApprovals, entryIDOf(t, answer)), encodeEntry(t, answer))
+	f.files.put(t, f.owner, EntryPath(user.EntryDeclines, entryIDOf(t, answer)), encodeEntry(t, answer))
 	f.files.put(t, f.owner, EntryPath(user.EntryRequests, entryIDOf(t, good)), encodeEntry(t, good))
 	f.files.put(t, f.owner, EntryPath(user.EntryRequests, entryIDOf(t, badSig)), encodeEntry(t, badSig))
 	f.files.put(t, f.owner, EntryPath(user.EntryRequests, entryIDOf(t, renamed)), encodeEntry(t, good))
@@ -196,7 +196,7 @@ func TestOpenChecksEveryStoredEntry(t *testing.T) {
 		t.Fatal("an undecodable file is indexed after Open")
 	}
 	if got := f.set.Head(); got != 3 {
-		t.Fatalf("head = %v; want the membership, the request and its approval", got)
+		t.Fatalf("head = %v; want the membership, the request and its decline", got)
 	}
 	if len(f.logged) != 4 {
 		t.Fatalf("logged %v; want the four left out", f.logged)
@@ -261,7 +261,7 @@ func TestHeldSetIsBounded(t *testing.T) {
 func TestAddAdmitsHeldEntries(t *testing.T) {
 	f := newSetFixture(t)
 	req := contractRequest(f.trusted)
-	answer := approval(f.root, entryIDOf(t, req))
+	answer := decline(f.root, entryIDOf(t, req))
 
 	added, err := f.set.Add(astral.NewContext(nil), answer)
 	if err != nil || added.Verdict != user.EntryWait || f.stored(answer) {

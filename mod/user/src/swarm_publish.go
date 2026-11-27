@@ -15,10 +15,14 @@ import (
 // member set. It emits:
 //   - SwarmRequestFiled once when a request first appears;
 //   - SwarmRequestApproved, SwarmRequestDeclined or SwarmRequestExpired each
-//     time a request's status becomes that status; user.RequestFulfilled has
-//     no event of its own, its contract's SwarmContractAdded tells it;
+//     time a request's status becomes that status; only an ExpelRequest is
+//     approved; user.RequestFulfilled and user.RequestOffered have no event
+//     of their own, SwarmContractAdded and SwarmOfferAdded tell them;
+//   - SwarmOfferAdded once when an offer is first valid
+//     (swarmset.Snapshot.OfferValid): never for an offer whose issuer is
+//     expelled or whose request is declined, expired or fulfilled;
 //   - SwarmContractAdded once when a contract first counts, signed by both
-//     parties (swarmset.Snapshot.ContractCounts).
+//     parties (swarmset.Snapshot.ContractCounts); never for an offer.
 //
 // Nothing is emitted before record: what is stored at startup is published
 // by no event.
@@ -29,7 +33,8 @@ type swarmPublisher struct {
 	mu sync.Mutex
 	// status holds the last published status of every request; nil before record.
 	status map[astral.ObjectID]user.RequestStatus
-	// counted holds the contracts SwarmContractAdded was emitted for, or recorded.
+	// counted holds the contracts SwarmContractAdded or SwarmOfferAdded was
+	// emitted for, or recorded.
 	counted map[astral.ObjectID]bool
 }
 
@@ -74,11 +79,18 @@ func (p *swarmPublisher) diff(s *swarmset.Snapshot, emit func(astral.Object)) {
 		}
 	}
 	for id, sc := range s.Contracts() {
-		if p.counted[id] || !s.ContractCounts(sc) {
+		if p.counted[id] {
+			continue
+		}
+		switch {
+		case swarmset.IsOffer(sc) && s.OfferValid(sc):
+			emit(&user.SwarmOfferAdded{OfferID: &id, RequestID: sc.RequestID, Issuer: sc.Issuer, Subject: sc.Subject})
+		case s.ContractCounts(sc):
+			emit(&user.SwarmContractAdded{ContractID: &id, Issuer: sc.Issuer, Subject: sc.Subject, RequestID: sc.RequestID})
+		default:
 			continue
 		}
 		p.counted[id] = true
-		emit(&user.SwarmContractAdded{ContractID: &id, Issuer: sc.Issuer, Subject: sc.Subject, RequestID: sc.RequestID})
 	}
 }
 
@@ -96,12 +108,13 @@ func statusEvent(s *swarmset.Snapshot, req *astral.ObjectID, status user.Request
 }
 
 // untilNextTimeout returns how long, on the view's clock, until the earliest
-// pending request expires, past expiryMargin; an hour when none is pending.
+// open request (pending or offered) expires, past expiryMargin; an hour when
+// none is open.
 func (p *swarmPublisher) untilNextTimeout() time.Duration {
 	s := p.snapshot()
 	var next time.Time
 	for _, id := range s.RequestIDs() {
-		if s.RequestStatus(id) != user.RequestPending {
+		if st := s.RequestStatus(id); st != user.RequestPending && st != user.RequestOffered {
 			continue
 		}
 		r, _ := s.Request(id)

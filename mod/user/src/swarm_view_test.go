@@ -11,28 +11,32 @@ import (
 )
 
 // TestSwarmViewDeclineClosesOnlyTheRequest: the offline Desktop declines R1
-// at 10:01, the Laptop approves it at 10:05 and the Pi signs App A's contract
-// at 10:06. A Decline closes the request but takes back no contract both
-// parties signed (PR 4 decision Q1), so once both answers have synced R1 is
-// fulfilled on every node, in either merge order; without the contract it is
-// declined.
+// at 10:01, the Laptop offers for it at 10:05, and the Pi co-signs the offer
+// and signs App A's contract at 10:06. A Decline closes the request but takes
+// back no contract both parties signed (PR 4 decision Q1), so once both
+// answers have synced R1 is fulfilled on every node, in either merge order;
+// without the contract it is declined.
+//
+// note: ported from the Approval at 10:05; a contract request is answered by
+// an offer since the two-signature model.
 func TestSwarmViewDeclineClosesOnlyTheRequest(t *testing.T) {
 	for _, declineFirst := range []bool{true, false} {
 		f := newViewFixture(t)
-		r1 := f.add(f.contractRequest(f.pi, f.appA, viewClock(10, 0)))
+		r1obj := f.contractRequest(f.pi, f.appA, viewClock(10, 0))
+		r1 := f.add(r1obj)
 		decline := f.decline(f.desktop, r1)
-		approval := f.approval(f.laptop, r1)
+		offer := f.offer(f.laptop, r1obj, r1)
 
-		var approvalID *astral.ObjectID
 		if declineFirst {
 			f.add(decline)
-			approvalID = f.add(approval)
+			f.add(offer)
 			f.wantStatus(r1, user.RequestDeclined)
 		} else {
-			approvalID = f.add(approval)
+			f.add(offer)
 			f.now = viewClock(10, 6)
-			f.wantStatus(r1, user.RequestApproved)
+			f.wantStatus(r1, user.RequestOffered)
 		}
+		f.add(complete(offer))
 		contract := f.appContract(f.pi, f.appA, r1)
 		f.add(contract)
 		f.add(decline)
@@ -42,14 +46,8 @@ func TestSwarmViewDeclineClosesOnlyTheRequest(t *testing.T) {
 		if !f.view.snapshot().ContractCounts(contract) {
 			t.Fatal("the contract signed by both stopped counting after the Decline")
 		}
-		if n := len(f.view.ContractsOf(r1)); n != 1 {
-			t.Fatalf("ContractsOf = %d contracts, want the 10:06 contract", n)
-		}
-		if !hasViewApproval(f.view.ApprovalsTouching(f.pi), approvalID) {
-			t.Fatal("ApprovalsTouching(Pi) misses the Approval")
-		}
-		if f.view.ApprovedNotCarriedOut(r1) {
-			t.Fatal("a fulfilled request reported as approved, not yet carried out")
+		if n := len(f.view.ContractsOf(r1)); n != 3 {
+			t.Fatalf("ContractsOf = %d contracts, want the offer, its completed form and the app's contract", n)
 		}
 	}
 }
@@ -183,23 +181,25 @@ func TestSwarmViewReadErrorKeepsHeldEntries(t *testing.T) {
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			f := newViewFixture(t)
-			r := f.add(f.contractRequest(f.pi, f.appA, viewClock(10, 0)))
-			f.add(f.approval(f.laptop, r))
+			robj := f.contractRequest(f.pi, f.appA, viewClock(10, 0))
+			r := f.add(robj)
+			f.add(f.offer(f.laptop, robj, r))
 			f.add(f.decline(f.desktop, r))
 			f.add(f.expulsion(f.user, f.phone))
 			f.wantMembership(f.phone, false)
 			f.wantStatus(r, user.RequestDeclined)
 
 			c.fail(f.state)
-			r2 := f.add(f.contractRequest(f.pi, f.appA, viewClock(10, 1)))
+			r2obj := f.contractRequest(f.pi, f.appA, viewClock(10, 1))
+			r2 := f.add(r2obj)
 			f.wantMembership(f.phone, false)
 			f.wantStatus(r, user.RequestDeclined)
 			// why: what the failed read did return is answered from too.
 			if !f.view.Expelled(f.phone) || f.view.RequestStatus(r2) != user.RequestPending {
 				t.Fatal("the failed read lost the held set")
 			}
-			f.add(f.approval(f.laptop, r2))
-			f.wantStatus(r2, user.RequestApproved)
+			f.add(f.offer(f.laptop, r2obj, r2))
+			f.wantStatus(r2, user.RequestOffered)
 
 			// why: after a failed read the head is not taken as read, so
 			// the next call reads again with no new entry.
@@ -332,54 +332,105 @@ func resendJoin(t *testing.T, obj *user.SignedJoinRequest) *user.SignedJoinReque
 }
 
 // TestSwarmViewStatusPrecedence: fulfilled > declined > approved > expired >
-// pending, with answers from expelled signers ignored.
+// offered > pending, with answers from expelled signers ignored. Only an
+// ExpelRequest is approved; a ContractRequest is offered.
+//
+// note: the rows that approved a ContractRequest now offer for it; the
+// approved rows moved to an ExpelRequest.
 func TestSwarmViewStatusPrecedence(t *testing.T) {
 	type answers struct{ fulfil, decline, approve, late, expelAnswerer bool }
 	for _, c := range []struct {
 		answers
-		want user.RequestStatus
+		want, wantExpel user.RequestStatus
 	}{
-		{answers{}, user.RequestPending},
-		{answers{late: true}, user.RequestExpired},
-		{answers{approve: true}, user.RequestApproved},
-		{answers{approve: true, late: true}, user.RequestApproved},
-		{answers{decline: true}, user.RequestDeclined},
-		{answers{decline: true, late: true}, user.RequestDeclined},
-		{answers{decline: true, approve: true}, user.RequestDeclined},
-		{answers{decline: true, approve: true, late: true}, user.RequestDeclined},
-		{answers{approve: true, expelAnswerer: true}, user.RequestPending},
-		{answers{decline: true, expelAnswerer: true}, user.RequestPending},
-		{answers{decline: true, approve: true, late: true, expelAnswerer: true}, user.RequestExpired},
-		{answers{fulfil: true}, user.RequestFulfilled},
-		{answers{fulfil: true, decline: true, approve: true, late: true}, user.RequestFulfilled},
+		{answers{}, user.RequestPending, user.RequestPending},
+		{answers{late: true}, user.RequestExpired, user.RequestExpired},
+		{answers{approve: true}, user.RequestOffered, user.RequestApproved},
+		{answers{approve: true, late: true}, user.RequestExpired, user.RequestApproved},
+		{answers{decline: true}, user.RequestDeclined, user.RequestDeclined},
+		{answers{decline: true, late: true}, user.RequestDeclined, user.RequestDeclined},
+		{answers{decline: true, approve: true}, user.RequestDeclined, user.RequestDeclined},
+		{answers{decline: true, approve: true, late: true}, user.RequestDeclined, user.RequestDeclined},
+		{answers{approve: true, expelAnswerer: true}, user.RequestPending, user.RequestPending},
+		{answers{decline: true, expelAnswerer: true}, user.RequestPending, user.RequestPending},
+		{answers{decline: true, approve: true, late: true, expelAnswerer: true}, user.RequestExpired, user.RequestExpired},
+		{answers{fulfil: true}, user.RequestFulfilled, ""},
+		{answers{fulfil: true, decline: true, approve: true, late: true}, user.RequestFulfilled, ""},
 	} {
-		f := newViewFixture(t)
-		r := f.add(f.contractRequest(f.pi, f.appA, viewClock(10, 0)))
-		if c.fulfil {
-			f.add(f.appContract(f.pi, f.appA, r))
-		}
-		if c.decline {
-			f.add(f.decline(f.desktop, r))
-		}
-		if c.approve {
-			f.add(f.approval(f.desktop, r))
-		}
-		if c.expelAnswerer {
-			f.add(f.expulsion(f.user, f.desktop))
-		}
-		f.now = viewClock(10, 30)
-		if c.late {
-			f.now = viewClock(12, 0)
-		}
-		if got := f.view.RequestStatus(r); got != c.want {
-			t.Errorf("%+v: RequestStatus = %v, want %v", c.answers, got, c.want)
+		for _, expel := range []bool{false, true} {
+			want := c.want
+			if expel {
+				if want = c.wantExpel; want == "" {
+					continue // why: an ExpelRequest is never fulfilled
+				}
+			}
+			if got := precedenceStatus(t, c.answers, expel); got != want {
+				t.Errorf("%+v, expel request %v: RequestStatus = %v, want %v", c.answers, expel, got, want)
+			}
 		}
 	}
 }
 
+// precedenceStatus answers a ContractRequest, or an ExpelRequest, as a says and
+// returns its status.
+func precedenceStatus(t *testing.T, a struct{ fulfil, decline, approve, late, expelAnswerer bool }, expel bool) user.RequestStatus {
+	f := newViewFixture(t)
+	cr := f.contractRequest(f.pi, f.appA, viewClock(10, 0))
+	var r *astral.ObjectID
+	if expel {
+		r = f.add(f.expelRequest(f.phone, f.appA, viewClock(10, 0)))
+	} else {
+		r = f.add(cr)
+	}
+	if a.fulfil {
+		f.add(f.appContract(f.pi, f.appA, r))
+	}
+	if a.decline {
+		f.add(f.decline(f.desktop, r))
+	}
+	switch {
+	case a.approve && expel:
+		f.add(f.approval(f.desktop, r))
+	case a.approve:
+		f.add(f.offer(f.desktop, cr, r))
+	}
+	if a.expelAnswerer {
+		f.add(f.expulsion(f.user, f.desktop))
+	}
+	f.now = viewClock(10, 30)
+	if a.late {
+		f.now = viewClock(12, 0)
+	}
+	return f.view.RequestStatus(r)
+}
+
+// TestSwarmViewOfferedNeedsALiveOffer: a request is offered only while an
+// offer from a non-expelled issuer that has not expired names it; an Approval
+// of a ContractRequest is no answer.
+func TestSwarmViewOfferedNeedsALiveOffer(t *testing.T) {
+	f := newViewFixture(t)
+	robj := f.contractRequest(f.pi, f.appA, viewClock(10, 0))
+	r := f.add(robj)
+	f.add(f.approval(f.laptop, r))
+	f.wantStatus(r, user.RequestPending)
+
+	short := f.offer(f.desktop, robj, r)
+	short.ExpiresAt = astral.Time(viewClock(10, 20))
+	f.add(short)
+	f.wantStatus(r, user.RequestOffered)
+	f.now = viewClock(10, 20)
+	f.wantStatus(r, user.RequestPending)
+
+	f.add(f.offer(f.laptop, robj, r))
+	f.wantStatus(r, user.RequestOffered)
+	f.add(f.expulsion(f.user, f.laptop))
+	f.wantStatus(r, user.RequestPending)
+}
+
 // TestSwarmViewFulfilledNeedsBothSignaturesAndAParty: a contract that names
 // a request fulfils it only with both signatures, and only when it is given
-// to the identity the request names or to its filer.
+// to the identity the request names or to its filer. A half-signed contract to
+// the app is not an offer, so the request stays pending.
 func TestSwarmViewFulfilledNeedsBothSignaturesAndAParty(t *testing.T) {
 	f := newViewFixture(t)
 	r := f.add(f.contractRequest(f.pi, f.appA, viewClock(10, 0)))
@@ -510,8 +561,8 @@ func TestSwarmViewRereadsOnlyOnHeadChange(t *testing.T) {
 	if f.state.reads != reads {
 		t.Fatal("the set was read again with an unchanged head")
 	}
-	f.add(f.approval(f.laptop, r))
-	f.wantStatus(r, user.RequestApproved)
+	f.add(f.decline(f.laptop, r))
+	f.wantStatus(r, user.RequestDeclined)
 }
 
 // TestSwarmViewMembershipHoldsOnlyTheTier: a carrier's membership answering a

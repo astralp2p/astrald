@@ -192,6 +192,23 @@ func (f *viewFixture) appContract(host, app *astral.Identity, req *astral.Object
 	return &auth.SignedContract{Contract: c, IssuerSig: viewSig(), SubjectSig: viewSig()}
 }
 
+// offer returns issuer's offer, signed by issuer only, answering req, the
+// ContractRequest with entry ID reqID that f.contractRequest builds: its
+// permit at Delegation 1 to the filer, valid for a day from 10:00.
+func (f *viewFixture) offer(issuer *astral.Identity, req *user.SignedContractRequest, reqID *astral.ObjectID) *auth.SignedContract {
+	c := &auth.Contract{
+		Issuer: issuer, Subject: req.FiledBy, RequestID: reqID,
+		Permits:   []*auth.Permit{{Action: "mod.services.discover_action", Delegation: 1}},
+		ExpiresAt: astral.Time(viewAt10.Add(24 * time.Hour)),
+	}
+	return &auth.SignedContract{Contract: c, IssuerSig: viewSig()}
+}
+
+// complete returns sc with its subject's signature added.
+func complete(sc *auth.SignedContract) *auth.SignedContract {
+	return &auth.SignedContract{Contract: sc.Contract, IssuerSig: sc.IssuerSig, SubjectSig: viewSig()}
+}
+
 func (f *viewFixture) wantStatus(req *astral.ObjectID, want user.RequestStatus) {
 	f.t.Helper()
 	if got := f.view.RequestStatus(req); got != want {

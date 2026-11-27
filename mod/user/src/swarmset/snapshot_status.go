@@ -27,10 +27,9 @@ func (s *Snapshot) RequestIDs() []*astral.ObjectID {
 	return ids
 }
 
-// RequestStatus returns the status of req: fulfilled > declined > approved > expired > pending. An unknown req
-// is pending.
-//
-// todo: user.RequestOffered once offers answer ContractRequests, and approved for an ExpelRequest only.
+// RequestStatus returns the status of req: fulfilled > declined > approved > expired > offered > pending. Only
+// an ExpelRequest is approved. An unknown req is pending.
+// Spec: .ai/system/protocols/user/types/mod.user.request_status.md
 func (s *Snapshot) RequestStatus(req *astral.ObjectID) user.RequestStatus {
 	r, ok := s.Request(req)
 	switch {
@@ -40,14 +39,78 @@ func (s *Snapshot) RequestStatus(req *astral.ObjectID) user.RequestStatus {
 		return user.RequestFulfilled
 	case s.declined(req, r):
 		return user.RequestDeclined
-	case len(s.approvalsOf(req)) > 0 || s.expulsionOf(r) != nil:
+	case r.isExpel() && (len(s.approvalsOf(req)) > 0 || s.expulsionOf(r) != nil):
 		return user.RequestApproved
 	case s.Now.After(r.Timeout.Time()):
 		// why: the same boundary as the request bodies' Expired: at the Timeout itself the request is still
 		// answerable.
 		return user.RequestExpired
+	case len(s.OffersOf(req)) > 0:
+		return user.RequestOffered
 	}
 	return user.RequestPending
+}
+
+// IsOffer reports whether sc is an offer: a contract only its issuer signed. An offer never counts.
+func IsOffer(sc *auth.SignedContract) bool {
+	return !sc.IsNil() && sc.IssuerSig != nil && sc.SubjectSig == nil
+}
+
+// OffersOf returns the stored offers of req that are live now (liveOffer). It does not read req's status. The
+// order is not defined.
+func (s *Snapshot) OffersOf(req *astral.ObjectID) []*auth.SignedContract {
+	r, ok := s.Request(req)
+	if !ok {
+		return nil
+	}
+	var list []*auth.SignedContract
+	for _, c := range s.ContractsOf(req) {
+		if s.liveOffer(c, r) {
+			list = append(list, c)
+		}
+	}
+	return list
+}
+
+// OfferValid reports whether the stored offer sc is valid now: it is live (liveOffer), and its request is open to
+// it, neither fulfilled, declined nor expired.
+func (s *Snapshot) OfferValid(sc *auth.SignedContract) bool {
+	if sc.IsNil() {
+		return false
+	}
+	r, ok := s.Request(sc.RequestID)
+	return ok && s.liveOffer(sc, r) && s.RequestStatus(sc.RequestID) == user.RequestOffered
+}
+
+// liveOffer reports whether sc is an offer for the request r: only its issuer signed it, it is given to r's
+// filer, its issuer is not expelled, and it has not expired.
+func (s *Snapshot) liveOffer(sc *auth.SignedContract, r Request) bool {
+	return IsOffer(sc) && !r.Filer.IsZero() && sc.Subject.IsEqual(r.Filer) && s.counts(sc.Issuer) &&
+		s.Now.Before(sc.ExpiresAt.Time())
+}
+
+// offeredOtherwise reports whether a stored contract from sc's issuer to sc's subject, half-signed or completed,
+// names sc's request with another unsigned body: the issuer has offered for the request already.
+func (s *Snapshot) offeredOtherwise(sc *auth.SignedContract) bool {
+	body, err := astral.ResolveObjectID(sc.Contract)
+	if err != nil {
+		return true
+	}
+	for _, c := range s.ContractsOf(sc.RequestID) {
+		if !c.Issuer.IsEqual(sc.Issuer) || !c.Subject.IsEqual(sc.Subject) {
+			continue
+		}
+		if other, err := astral.ResolveObjectID(c.Contract); err != nil || !other.IsEqual(body) {
+			return true
+		}
+	}
+	return false
+}
+
+// declinedRequest reports whether the stored request req is declined (declined), whatever else answers it.
+func (s *Snapshot) declinedRequest(req *astral.ObjectID) bool {
+	r, ok := s.Request(req)
+	return ok && s.declined(req, r)
 }
 
 // fulfilled reports whether a stored contract with both signatures names req as its RequestID and is given to

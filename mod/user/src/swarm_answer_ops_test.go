@@ -94,12 +94,15 @@ func (s *answerSwarmState) written() []astral.Object {
 	return append([]astral.Object(nil), s.added...)
 }
 
-// fakeSwarmView answers statuses and tiers from maps, and MayAnswer by the
-// tier over the requests state stores; every other method returns nothing.
+// fakeSwarmView answers statuses and tiers from maps, MayAnswer by the tier
+// over the requests state stores (the root key answers every one), and
+// ContractsOf from the contracts state stores; every other method returns
+// nothing.
 type fakeSwarmView struct {
 	status map[string]user.RequestStatus
 	tiers  map[string]user.Tier
 	state  *answerSwarmState
+	root   *astral.Identity
 }
 
 func (v *fakeSwarmView) RequestStatus(req *astral.ObjectID) user.RequestStatus {
@@ -110,9 +113,21 @@ func (v *fakeSwarmView) RequestStatus(req *astral.ObjectID) user.RequestStatus {
 }
 func (v *fakeSwarmView) Expelled(*astral.Identity) bool                            { return false }
 func (v *fakeSwarmView) ApprovalsTouching(*astral.Identity) []*user.SignedApproval { return nil }
-func (v *fakeSwarmView) ContractsOf(*astral.ObjectID) []*auth.SignedContract       { return nil }
+func (v *fakeSwarmView) ContractsOf(req *astral.ObjectID) (list []*auth.SignedContract) {
+	ids, _ := v.state.SwarmEntries(user.EntryContracts)
+	for _, id := range ids {
+		obj, _ := v.state.SwarmEntry(id)
+		if sc, ok := obj.(*auth.SignedContract); ok && sc.RequestID.IsEqual(req) {
+			list = append(list, sc)
+		}
+	}
+	return list
+}
 func (v *fakeSwarmView) MayAnswer(signer *astral.Identity, req *astral.ObjectID) bool {
 	obj, err := v.state.SwarmEntry(req)
+	if err == nil && !v.root.IsZero() && signer.IsEqual(v.root) {
+		return true
+	}
 	m, ok := v.Membership(signer)
 	return err == nil && ok && user.MayAnswer(m.Tier, obj)
 }
@@ -130,12 +145,18 @@ type answerFixture struct {
 	view    *fakeSwarmView
 	auth    *recordingAuth
 	nodeKey *crypto.PrivateKey
+	userKey *crypto.PrivateKey
 	caller  *astral.Identity
 	origin  string // the query's origin; empty is unset
 }
 
+// user is the identity of the fixture's user key.
+func (f *answerFixture) user() *astral.Identity {
+	return secp256k1.Identity(secp256k1.PublicKey(f.userKey))
+}
+
 func newAnswerFixture(tier user.Tier) *answerFixture {
-	nodeKey := secp256k1.New()
+	nodeKey, userKey := secp256k1.New(), secp256k1.New()
 	node := secp256k1.Identity(secp256k1.PublicKey(nodeKey))
 	state := newAnswerSwarmState()
 	f := &answerFixture{
@@ -143,17 +164,22 @@ func newAnswerFixture(tier user.Tier) *answerFixture {
 		view:    &fakeSwarmView{status: map[string]user.RequestStatus{}, tiers: map[string]user.Tier{}, state: state},
 		auth:    &recordingAuth{verdict: true},
 		nodeKey: nodeKey,
+		userKey: userKey,
 		caller:  astral.GenerateIdentity(),
 	}
+	f.view.root = f.user()
 	if tier != "" {
 		f.view.tiers[node.String()] = tier
 	}
-	writer := &swarmWriter{self: node, signer: heldKeySigner{key: nodeKey}, view: f.view, merge: state.merge}
+	writer := &swarmWriter{self: node, signer: heldKeySigner{key: nodeKey}, view: f.view, entry: state.SwarmEntry, merge: state.merge}
+	ceremony := newUserKeyCeremony(f.user(), heldKeySigner{key: userKey}, nil, nil)
 	f.ops = &SwarmAnswerOps{
-		Node:  node,
-		State: writeState{swarmReader: state, swarmWriter: writer},
-		View:  f.view,
-		Auth:  f.auth,
+		Node:    node,
+		State:   writeState{swarmReader: state, swarmWriter: writer},
+		View:    f.view,
+		Auth:    f.auth,
+		UserKey: func() *userKeyCeremony { return ceremony },
+		AsUser:  func(uk *userKeyCeremony) answerer { return writer.as(uk.user, uk.signer) },
 	}
 	return f
 }
@@ -164,10 +190,18 @@ func testSig() *crypto.Signature {
 
 func (f *answerFixture) contractRequest(t *testing.T, filedAt time.Time, status user.RequestStatus) *astral.ObjectID {
 	t.Helper()
-	body := user.NewContractRequest(astral.GenerateIdentity(), astral.GenerateIdentity(), nil)
+	body := user.NewContractRequest(astral.GenerateIdentity(), astral.GenerateIdentity(), []*auth.Permit{{Action: "mod.services.discover_action"}})
 	body.FiledAt = astral.Time(filedAt)
 	body.Timeout = astral.Time(filedAt.Add(time.Hour))
 	id := f.state.store(t, &user.SignedContractRequest{ContractRequest: body, FiledBySig: testSig()})
+	f.view.status[id.String()] = status
+	return id
+}
+
+func (f *answerFixture) expelRequest(t *testing.T, status user.RequestStatus) *astral.ObjectID {
+	t.Helper()
+	body := user.NewExpelRequest(astral.GenerateIdentity(), astral.GenerateIdentity())
+	id := f.state.store(t, &user.SignedExpelRequest{ExpelRequest: body, FiledBySig: testSig()})
 	f.view.status[id.String()] = status
 	return id
 }
@@ -210,29 +244,40 @@ func (f *answerFixture) run(t *testing.T, fn any, queryString string) []astral.O
 
 func (f *answerFixture) answer(t *testing.T, id *astral.ObjectID, answer string) astral.Object {
 	t.Helper()
-	objs := f.run(t, f.ops.OpAnswerRequest, "user.answer_request?id="+id.String()+"&answer="+answer)
+	return f.answerAs(t, id, answer, "")
+}
+
+// answerAs calls user.answer_request with the as argument; empty omits it.
+func (f *answerFixture) answerAs(t *testing.T, id *astral.ObjectID, answer, as string) astral.Object {
+	t.Helper()
+	q := "user.answer_request?id=" + id.String() + "&answer=" + answer
+	if as != "" {
+		q += "&as=" + as
+	}
+	objs := f.run(t, f.ops.OpAnswerRequest, q)
 	if len(objs) != 1 {
 		t.Fatalf("answer_request sent %d objects; want 1", len(objs))
 	}
 	return objs[0]
 }
 
-// Done: list shows pending requests with their status.
+// Done: list shows the open requests, pending or offered, with their status.
 func TestSwarmRequestsListsPendingWithStatus(t *testing.T) {
 	f := newAnswerFixture(user.TierPrivilegedMember)
 	base := time.Now().Add(-30 * time.Minute)
 	later := f.contractRequest(t, base.Add(2*time.Minute), user.RequestPending)
 	earlier := f.contractRequest(t, base, user.RequestPending)
-	approved := f.contractRequest(t, base.Add(time.Minute), user.RequestApproved)
+	offered := f.contractRequest(t, base.Add(time.Minute), user.RequestOffered)
+	fulfilled := f.contractRequest(t, base.Add(3*time.Minute), user.RequestFulfilled)
 	expired := f.contractRequest(t, base.Add(-2*time.Hour), user.RequestExpired)
 
 	objs := f.run(t, f.ops.OpSwarmRequests, "user.swarm_requests")
-	assertListed(t, objs, []*astral.ObjectID{earlier, later},
-		[]user.RequestStatus{user.RequestPending, user.RequestPending})
+	assertListed(t, objs, []*astral.ObjectID{earlier, offered, later},
+		[]user.RequestStatus{user.RequestPending, user.RequestOffered, user.RequestPending})
 
 	objs = f.run(t, f.ops.OpSwarmRequests, "user.swarm_requests?all=true")
-	assertListed(t, objs, []*astral.ObjectID{expired, earlier, approved, later},
-		[]user.RequestStatus{user.RequestExpired, user.RequestPending, user.RequestApproved, user.RequestPending})
+	assertListed(t, objs, []*astral.ObjectID{expired, earlier, offered, later, fulfilled},
+		[]user.RequestStatus{user.RequestExpired, user.RequestPending, user.RequestOffered, user.RequestPending, user.RequestFulfilled})
 }
 
 func assertListed(t *testing.T, objs []astral.Object, ids []*astral.ObjectID, statuses []user.RequestStatus) {
@@ -259,10 +304,71 @@ func assertListed(t *testing.T, objs []astral.Object, ids []*astral.ObjectID, st
 	}
 }
 
-// Done: answer writes an Approval signed by this node.
-func TestAnswerRequestWritesSignedApproval(t *testing.T) {
+// Done: approving a contract request writes an offer signed by this node
+// only: from this node to the filer, every requested permit at one more
+// Delegation, the request as its RequestID, expiring with this node's
+// membership when that is earlier than 3650 days.
+//
+// note: ported from TestAnswerRequestWritesSignedApproval; a contract
+// request is answered by an offer since the two-signature model.
+func TestAnswerRequestWritesAnOffer(t *testing.T) {
 	f := newAnswerFixture(user.TierPrivilegedMember)
 	req := f.contractRequest(t, time.Now(), user.RequestPending)
+	obj, _ := f.state.SwarmEntry(req)
+	cr := obj.(*user.SignedContractRequest)
+
+	sc, ok := f.answer(t, req, "approve").(*auth.SignedContract)
+	if !ok {
+		t.Fatal("answer_request did not send an offer")
+	}
+	switch {
+	case !sc.Issuer.IsEqual(f.ops.Node), !sc.Subject.IsEqual(cr.FiledBy), !sc.RequestID.IsEqual(req):
+		t.Fatalf("offer from %v to %v for %v; want from this node to the filer for the request", sc.Issuer, sc.Subject, sc.RequestID)
+	case sc.SubjectSig != nil:
+		t.Fatal("the offer carries a subject signature")
+	case !cr.CoversOffer(sc.Contract) || len(sc.Permits) != len(cr.Permits):
+		t.Fatalf("offer permits %v; want every requested permit one hop deeper", sc.Permits)
+	case sc.ExpiresAt.Time().After(time.Now().Add(usermod.OfferValidity)):
+		t.Fatalf("offer expires %v; want within 3650 days", sc.ExpiresAt)
+	}
+	f.assertSignedAndWritten(t, sc, sc.SignableHash(), sc.IssuerSig)
+}
+
+// The offer expires with the issuer's membership when that ends first.
+func TestAnswerRequestOfferEndsWithTheMembership(t *testing.T) {
+	f := newAnswerFixture("")
+	ends := time.Now().Add(48 * time.Hour).Truncate(time.Second)
+	f.ops.View = &membershipView{fakeSwarmView: f.view, until: ends}
+	f.ops.State.(writeState).swarmWriter.view = f.ops.View.(writerView)
+	req := f.contractRequest(t, time.Now(), user.RequestPending)
+
+	sc, ok := f.answer(t, req, "approve").(*auth.SignedContract)
+	if !ok || !sc.ExpiresAt.Time().Equal(ends) {
+		t.Fatalf("answered %v; want an offer expiring with the membership at %v", sc, ends)
+	}
+}
+
+// membershipView is a fakeSwarmView whose every membership is Privileged
+// until until.
+type membershipView struct {
+	*fakeSwarmView
+	until time.Time
+}
+
+func (v *membershipView) Membership(id *astral.Identity) (*user.Membership, bool) {
+	c := &auth.Contract{Issuer: v.root, Subject: id, ExpiresAt: astral.Time(v.until)}
+	return &user.Membership{SignedContract: &auth.SignedContract{Contract: c}, Tier: user.TierPrivilegedMember}, true
+}
+
+func (v *membershipView) MayAnswer(signer *astral.Identity, req *astral.ObjectID) bool {
+	obj, err := v.state.SwarmEntry(req)
+	return err == nil && user.MayAnswer(user.TierPrivilegedMember, obj)
+}
+
+// Done: approving an expel request writes an Approval signed by this node.
+func TestAnswerRequestApprovesAnExpelRequest(t *testing.T) {
+	f := newAnswerFixture(user.TierPrivilegedMember)
+	req := f.expelRequest(t, user.RequestPending)
 
 	sa, ok := f.answer(t, req, "approve").(*user.SignedApproval)
 	if !ok {
@@ -275,19 +381,23 @@ func TestAnswerRequestWritesSignedApproval(t *testing.T) {
 }
 
 // Done: answer writes a Decline signed by this node, also against an approved
-// request.
+// expel request and an offered contract request.
 func TestAnswerRequestWritesSignedDecline(t *testing.T) {
-	f := newAnswerFixture(user.TierPrivilegedMember)
-	req := f.contractRequest(t, time.Now(), user.RequestApproved)
-
-	sd, ok := f.answer(t, req, "decline").(*user.SignedDecline)
-	if !ok {
-		t.Fatal("answer_request did not send a signed decline")
+	for name, req := range map[string]func(f *answerFixture) *astral.ObjectID{
+		"approved expel request":   func(f *answerFixture) *astral.ObjectID { return f.expelRequest(t, user.RequestApproved) },
+		"offered contract request": func(f *answerFixture) *astral.ObjectID { return f.contractRequest(t, time.Now(), user.RequestOffered) },
+	} {
+		f := newAnswerFixture(user.TierPrivilegedMember)
+		id := req(f)
+		sd, ok := f.answer(t, id, "decline").(*user.SignedDecline)
+		if !ok {
+			t.Fatalf("%s: answer_request did not send a signed decline", name)
+		}
+		if !sd.Issuer.IsEqual(f.ops.Node) || !sd.RequestID.IsEqual(id) {
+			t.Fatalf("%s: decline names issuer %v and request %v", name, sd.Issuer, sd.RequestID)
+		}
+		f.assertSignedAndWritten(t, sd, sd.SignableHash(), sd.IssuerSig)
 	}
-	if !sd.Issuer.IsEqual(f.ops.Node) || !sd.RequestID.IsEqual(req) {
-		t.Fatalf("decline names issuer %v and request %v", sd.Issuer, sd.RequestID)
-	}
-	f.assertSignedAndWritten(t, sd, sd.SignableHash(), sd.IssuerSig)
 }
 
 // A held answer (user.ErrSwarmEntryHeld) may still be stored, so it is sent;
@@ -296,20 +406,27 @@ func TestAnswerRequestSendsHeldAnswer(t *testing.T) {
 	f := newAnswerFixture(user.TierPrivilegedMember)
 	req := f.contractRequest(t, time.Now(), user.RequestPending)
 	f.state.addErr = fmt.Errorf("add: %w", usermod.ErrSwarmEntryHeld)
-	if _, ok := f.answer(t, req, "approve").(*user.SignedApproval); !ok {
-		t.Fatal("a held approval was not sent")
+	if _, ok := f.answer(t, req, "approve").(*auth.SignedContract); !ok {
+		t.Fatal("a held offer was not sent")
 	}
 
+	f = newAnswerFixture(user.TierPrivilegedMember)
+	req = f.contractRequest(t, time.Now(), user.RequestPending)
 	f.state.addErr = fmt.Errorf("add: %w", usermod.ErrSwarmEntryDropped)
-	if obj := f.answer(t, req, "approve"); obj.ObjectType() == (&user.SignedApproval{}).ObjectType() {
-		t.Fatal("a dropped approval was sent as written")
+	if obj := f.answer(t, req, "approve"); obj.ObjectType() == (&auth.SignedContract{}).ObjectType() {
+		t.Fatal("a dropped offer was sent as written")
 	}
 }
 
 func (f *answerFixture) assertSignedAndWritten(t *testing.T, obj astral.Object, hash []byte, sig *crypto.Signature) {
 	t.Helper()
-	if err := secp256k1sig.VerifyASN1(secp256k1.PublicKey(f.nodeKey), hash, sig); err != nil {
-		t.Fatalf("answer is not signed by this node: %v", err)
+	f.assertSignedAndWrittenBy(t, f.nodeKey, obj, hash, sig)
+}
+
+func (f *answerFixture) assertSignedAndWrittenBy(t *testing.T, key *crypto.PrivateKey, obj astral.Object, hash []byte, sig *crypto.Signature) {
+	t.Helper()
+	if err := secp256k1sig.VerifyASN1(secp256k1.PublicKey(key), hash, sig); err != nil {
+		t.Fatalf("answer is not signed by the expected key: %v", err)
 	}
 	written := f.state.written()
 	if len(written) != 1 {
@@ -331,14 +448,22 @@ func TestAnswerRequestRefusesOutsideTier(t *testing.T) {
 		answer string
 		want   error
 	}{
-		{"member approves a join", user.TierMember, func(f *answerFixture) *astral.ObjectID { return f.joinRequest(t, user.TierMember) }, "approve", ErrOutsideTier},
+		{"member declines a join", user.TierMember, func(f *answerFixture) *astral.ObjectID { return f.joinRequest(t, user.TierMember) }, "decline", ErrOutsideTier},
 		{"member declines a contract request", user.TierMember, func(f *answerFixture) *astral.ObjectID { return f.contractRequest(t, time.Now(), user.RequestPending) }, "decline", ErrOutsideTier},
 		{"trusted approves a contract request", user.TierTrusted, func(f *answerFixture) *astral.ObjectID { return f.contractRequest(t, time.Now(), user.RequestPending) }, "approve", ErrOutsideTier},
-		{"trusted approves a trusted join", user.TierTrusted, func(f *answerFixture) *astral.ObjectID { return f.joinRequest(t, user.TierTrusted) }, "approve", ErrOutsideTier},
+		{"trusted declines a trusted join", user.TierTrusted, func(f *answerFixture) *astral.ObjectID { return f.joinRequest(t, user.TierTrusted) }, "decline", ErrOutsideTier},
 		{"no membership", "", func(f *answerFixture) *astral.ObjectID { return f.contractRequest(t, time.Now(), user.RequestPending) }, "approve", ErrOutsideTier},
-		{"approve an approved request", user.TierPrivilegedMember, func(f *answerFixture) *astral.ObjectID { return f.contractRequest(t, time.Now(), user.RequestApproved) }, "approve", ErrRequestClosed},
+		{"approve an approved expel request", user.TierPrivilegedMember, func(f *answerFixture) *astral.ObjectID { return f.expelRequest(t, user.RequestApproved) }, "approve", ErrRequestClosed},
+		{"approve an offered expel request", user.TierPrivilegedMember, func(f *answerFixture) *astral.ObjectID { return f.expelRequest(t, user.RequestOffered) }, "approve", ErrRequestClosed},
+		{"approve a fulfilled contract request", user.TierPrivilegedMember, func(f *answerFixture) *astral.ObjectID {
+			return f.contractRequest(t, time.Now(), user.RequestFulfilled)
+		}, "approve", ErrRequestClosed},
+		{"decline a fulfilled contract request", user.TierPrivilegedMember, func(f *answerFixture) *astral.ObjectID {
+			return f.contractRequest(t, time.Now(), user.RequestFulfilled)
+		}, "decline", ErrRequestClosed},
 		{"decline an expired request", user.TierPrivilegedMember, func(f *answerFixture) *astral.ObjectID { return f.contractRequest(t, time.Now(), user.RequestExpired) }, "decline", ErrRequestClosed},
 		{"approve a declined request", user.TierPrivilegedMember, func(f *answerFixture) *astral.ObjectID { return f.contractRequest(t, time.Now(), user.RequestDeclined) }, "approve", ErrRequestClosed},
+		{"approve a join", user.TierPrivilegedMember, func(f *answerFixture) *astral.ObjectID { return f.joinRequest(t, user.TierMember) }, "approve", ErrRequestClosed},
 		{"unknown request", user.TierPrivilegedMember, func(*answerFixture) *astral.ObjectID { return testObjectID() }, "approve", ErrUnknownRequest},
 		{"invalid answer", user.TierPrivilegedMember, func(f *answerFixture) *astral.ObjectID { return f.contractRequest(t, time.Now(), user.RequestPending) }, "maybe", ErrInvalidAnswer},
 	}
@@ -356,12 +481,86 @@ func TestAnswerRequestRefusesOutsideTier(t *testing.T) {
 	}
 }
 
-// A Trusted node answers a Member-tier JoinRequest (D5).
-func TestAnswerRequestTrustedApprovesMemberJoin(t *testing.T) {
+// An issuer offers at most once per request: a second approve by this node is
+// refused, while another issuer may still offer for the offered request.
+func TestAnswerRequestOffersOncePerIssuer(t *testing.T) {
+	f := newAnswerFixture(user.TierPrivilegedMember)
+	req := f.contractRequest(t, time.Now(), user.RequestPending)
+	if _, ok := f.answer(t, req, "approve").(*auth.SignedContract); !ok {
+		t.Fatal("the first offer was not sent")
+	}
+	f.view.status[req.String()] = user.RequestOffered
+	if got := f.answer(t, req, "approve"); got.(astral.Error).Error() != ErrRequestClosed.Error() {
+		t.Fatalf("a second offer from this node: %v; want %v", got, ErrRequestClosed)
+	}
+
+	f.caller = f.user()
+	sc, ok := f.answerAs(t, req, "approve", "user").(*auth.SignedContract)
+	if !ok || !sc.Issuer.IsEqual(f.user()) {
+		t.Fatalf("the user key's offer after this node's: %v; want one from the user key", sc)
+	}
+}
+
+// A Trusted node declines a Member-tier JoinRequest (D5), and approves none:
+// its carrier signs the membership.
+//
+// note: ported from TestAnswerRequestTrustedApprovesMemberJoin; a join has
+// no Approval since the two-signature model.
+func TestAnswerRequestTrustedDeclinesMemberJoin(t *testing.T) {
 	f := newAnswerFixture(user.TierTrusted)
 	req := f.joinRequest(t, user.TierMember)
-	if _, ok := f.answer(t, req, "approve").(*user.SignedApproval); !ok {
-		t.Fatal("a trusted node did not approve a member join")
+	if _, ok := f.answer(t, req, "decline").(*user.SignedDecline); !ok {
+		t.Fatal("a trusted node did not decline a member join")
+	}
+	if got := f.answer(t, req, "approve"); got.(astral.Error).Error() != ErrRequestClosed.Error() {
+		t.Fatalf("a trusted node approving a join: %v; want %v", got, ErrRequestClosed)
+	}
+}
+
+// With as=user the user key signs the answer: only for a local query by the
+// user, on a node that reaches the user key. Its offer is not capped by a
+// membership.
+func TestAnswerRequestAsTheUser(t *testing.T) {
+	f := newAnswerFixture("")
+	req := f.contractRequest(t, time.Now(), user.RequestPending)
+	f.caller = f.user()
+	sc, ok := f.answerAs(t, req, "approve", "user").(*auth.SignedContract)
+	if !ok || !sc.Issuer.IsEqual(f.user()) || sc.SubjectSig != nil {
+		t.Fatalf("answered %v; want an offer the user key issued", sc)
+	}
+	if d := time.Until(sc.ExpiresAt.Time()); d < usermod.OfferValidity-time.Minute {
+		t.Fatalf("the user key's offer expires in %v; want 3650 days", d)
+	}
+	f.assertSignedAndWrittenBy(t, f.userKey, sc, sc.SignableHash(), sc.IssuerSig)
+
+	for _, c := range []struct {
+		name   string
+		as     string
+		origin string
+		caller func(f *answerFixture) *astral.Identity
+		noKey  bool
+		want   error
+	}{
+		{"an unknown as", "owner", "", (*answerFixture).user, false, ErrInvalidAnswer},
+		{"over the network", "user", astral.OriginNetwork, (*answerFixture).user, false, astral.NewErrOriginNotAllowed(astral.OriginNetwork)},
+		{"without the user key", "user", "", (*answerFixture).user, true, ErrNoUserKey},
+		{"by another caller", "user", "", func(*answerFixture) *astral.Identity { return astral.GenerateIdentity() }, false, auth.ErrNotPermitted},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			f := newAnswerFixture(user.TierPrivilegedMember)
+			req := f.contractRequest(t, time.Now(), user.RequestPending)
+			f.caller, f.origin = c.caller(f), c.origin
+			if c.noKey {
+				f.ops.UserKey = func() *userKeyCeremony { return nil }
+			}
+			got := f.answerAs(t, req, "approve", c.as)
+			if e, ok := got.(astral.Error); !ok || e.Error() != c.want.Error() {
+				t.Fatalf("answered %v; want %v", got, c.want)
+			}
+			if n := len(f.state.written()); n != 0 {
+				t.Fatalf("wrote %d entries; want none", n)
+			}
+		})
 	}
 }
 

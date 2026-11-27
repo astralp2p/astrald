@@ -154,5 +154,9 @@ func (r indexReader) Entry(id *astral.ObjectID) (astral.Object, bool) {
 }
 
 func (r indexReader) Membership(root, id *astral.Identity) (*user.Membership, bool) {
-	return (&Snapshot{Index: r.index, Root: root, Now: r.now}).Membership(id)
+	return r.Snapshot(root).Membership(id)
+}
+
+func (r indexReader) Snapshot(root *astral.Identity) *Snapshot {
+	return &Snapshot{Index: r.index, Root: root, Now: r.now}
 }
