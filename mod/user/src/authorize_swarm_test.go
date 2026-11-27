@@ -222,24 +222,32 @@ func TestSwarmOpsRefuseCallerWithoutPermits(t *testing.T) {
 	}
 }
 
-// TestExpelRefusesNonLocalOrigin: a Privileged node relaying as the user
-// reaches user.expel with the user as caller and a network origin; the op
-// refuses before it asks anything or signs.
-func TestExpelRefusesNonLocalOrigin(t *testing.T) {
+// TestExpelAsksTheExpelQuestionFromAnyOrigin: a query from a network or MCP
+// origin reaches the one ExpelAction question with its caller, and the
+// refusal is that question's answer.
+func TestExpelAsksTheExpelQuestionFromAnyOrigin(t *testing.T) {
 	userID := astral.GenerateIdentity()
 	for _, origin := range []string{astral.OriginNetwork, astral.OriginMCP} {
-		authority := &recordingAuth{verdict: true}
+		authority := &recordingAuth{verdict: false}
 		mod := swarmModule(t, authority, userID)
 		w := newRecordingWriter()
 
 		if err := routeFrom(t, mod.OpExpel, userID, origin, "user.expel?identity=anything", w); err != nil {
 			t.Fatalf("%s: route: %v", origin, err)
 		}
-		if got, want := w.refusal(t), astral.NewErrOriginNotAllowed(origin).Error(); got != want {
+		if got, want := w.refusal(t), auth.ErrNotPermitted.Error(); got != want {
 			t.Fatalf("%s: answered %q; want %q", origin, got, want)
 		}
-		if n := len(authority.recorded()); n != 0 {
-			t.Fatalf("%s: %d authorization calls; want none", origin, n)
+		actions := authority.recorded()
+		if len(actions) != 1 {
+			t.Fatalf("%s: %d authorization calls; want exactly 1", origin, len(actions))
+		}
+		action, ok := actions[0].(*user.ExpelAction)
+		if !ok {
+			t.Fatalf("%s: asked %q; want %q", origin, actions[0].ObjectType(), user.ExpelAction{}.ObjectType())
+		}
+		if !action.Actor().IsEqual(userID) || !action.Subject.IsEqual(userID) {
+			t.Fatalf("%s: asked for actor %v, subject %v; want the caller and the resolved target %v", origin, action.Actor(), action.Subject, userID)
 		}
 	}
 }
