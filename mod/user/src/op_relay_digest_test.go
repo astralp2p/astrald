@@ -103,7 +103,7 @@ func TestRelayDigestRefusesNonMembers(t *testing.T) {
 
 	for name, caller := range map[string]*astral.Identity{
 		"outside the swarm": astral.GenerateIdentity(),
-		"expelled":          f.expelSibling(),
+		"expelled":          f.expelSibling(t),
 		"the user":          userID,
 		"this node":         f.nodeID,
 	} {

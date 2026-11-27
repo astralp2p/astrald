@@ -55,6 +55,15 @@ func (mod *Module) userKeyCeremony() *userKeyCeremony {
 	return nil
 }
 
+// onSwarmChanged applies what SwarmState gained: this node's own expel, and the swarm's members.
+func (mod *Module) onSwarmChanged() {
+	// why: a node that learns its own expel only through SwarmState leaves the swarm as one that is pushed it does.
+	if mod.ActiveContract() != nil && mod.Expelled(mod.node.Identity()) {
+		mod.leaveSwarm()
+	}
+	mod.publishSwarm()
+}
+
 // runSwarmFeed reacts to every change of SwarmState the feed reports, and
 // publishes its events, until ctx ends.
 func (mod *Module) runSwarmFeed(ctx *astral.Context) {

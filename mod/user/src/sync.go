@@ -65,13 +65,7 @@ func (mod *Module) syncExpulsions(ctx *astral.Context, with *astral.Identity) {
 		return
 	}
 
-	expulsions, err := mod.db.Expulsions(mod.Identity())
-	if err != nil {
-		mod.log.Error("syncExpulsions: error getting expulsions: %v", err)
-		return
-	}
-
-	for _, signed := range expulsions {
+	for _, signed := range mod.snapshot().Expulsions() {
 		err := mod.Objects.Push(ctx, with, signed)
 		if signed.Subject.IsEqual(with) && isBanAnswer(err) {
 			mod.onBanAnswered(with)

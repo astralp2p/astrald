@@ -47,7 +47,7 @@ func TestSyncAppContractsForwardsEveryMembersRelayContracts(t *testing.T) {
 		own,
 		members,
 		relayForContract(astral.GenerateIdentity(), receiver),
-		relayForContract(astral.GenerateIdentity(), f.expelSibling()),
+		relayForContract(astral.GenerateIdentity(), f.expelSibling(t)),
 		relayForContract(astral.GenerateIdentity(), astral.GenerateIdentity()),
 		contractWith(astral.GenerateIdentity(), member, nodes.RelayForAction{}.ObjectType(), auth.SeeObjectsAction{}.ObjectType()),
 	} {

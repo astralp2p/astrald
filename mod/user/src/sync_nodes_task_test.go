@@ -121,10 +121,8 @@ func newSyncFixture(t *testing.T, ctx *astral.Context) *syncFixture {
 	if err := f.mod.config.ActiveContract.Set(nil, active); err != nil {
 		t.Fatalf("seed active contract: %v", err)
 	}
-	useIndexSwarm(f.mod, active.Issuer, index)
-	if err := f.mod.db.StoreExpulsion(sampleSigned(userID, astral.GenerateIdentity())); err != nil {
-		t.Fatalf("store expulsion: %v", err)
-	}
+	useIndexSwarm(t, f.mod, active.Issuer, index)
+	banNode(t, f.mod, userID, astral.GenerateIdentity())
 	return f
 }
 

@@ -41,10 +41,10 @@ func TestAdmitRelayContract(t *testing.T) {
 			return astral.GenerateIdentity(), nodeContract(astral.GenerateIdentity(), astral.GenerateIdentity())
 		}, true},
 		{"expelled subject on a local path", false, func(f *receiverFixture) (*astral.Identity, *auth.SignedContract) {
-			return nil, relayForContract(astral.GenerateIdentity(), f.expelSibling())
+			return nil, relayForContract(astral.GenerateIdentity(), f.expelSibling(t))
 		}, false},
 		{"expelled subject forwarded by a member", false, func(f *receiverFixture) (*astral.Identity, *auth.SignedContract) {
-			return f.addSibling(), relayForContract(astral.GenerateIdentity(), f.expelSibling())
+			return f.addSibling(), relayForContract(astral.GenerateIdentity(), f.expelSibling(t))
 		}, false},
 		{"member subject delivered by a node outside the swarm", false, func(f *receiverFixture) (*astral.Identity, *auth.SignedContract) {
 			return astral.GenerateIdentity(), relayForContract(astral.GenerateIdentity(), f.addSibling())
@@ -114,10 +114,8 @@ func TestAdmitRelayContractExpiredIsErrContractExpired(t *testing.T) {
 }
 
 // expelSibling makes a node a member, then expels it, and returns the node.
-func (f *receiverFixture) expelSibling() *astral.Identity {
+func (f *receiverFixture) expelSibling(t testing.TB) *astral.Identity {
 	node := f.addSibling()
-	if err := f.mod.db.StoreExpulsion(sampleSigned(f.userID, node)); err != nil {
-		panic(err)
-	}
+	banNode(t, f.mod, f.userID, node)
 	return node
 }

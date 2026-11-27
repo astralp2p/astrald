@@ -65,7 +65,7 @@ func (mod *Module) ReceiveObject(drop objects.Drop) error {
 		case *nodes.LinkClosedEvent:
 			mod.scheduleEndpointsAnnounce()
 			mod.onPartialLinkClose(e)
-		case *user.SwarmMemberJoined, *user.SwarmMemberLeft, *user.SwarmNodeBanned:
+		case *user.SwarmMemberJoined, *user.SwarmMemberLeft:
 			// why: the reconcile reads the member set and the bans (IsBanned) and closes links, which must not
 			// hold up the receivers.
 			go mod.reconcileMemberLinks()

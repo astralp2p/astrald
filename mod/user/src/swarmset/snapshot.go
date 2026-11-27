@@ -157,6 +157,16 @@ func (s *Snapshot) Expelled(id *astral.Identity) bool {
 	return false
 }
 
+// Expulsions returns every stored Expulsion the root key signed, in no defined order.
+func (s *Snapshot) Expulsions() (list []*user.SignedExpulsion) {
+	for _, e := range s.expels {
+		if IsRoot(s.Root, e.Issuer) {
+			list = append(list, e)
+		}
+	}
+	return list
+}
+
 // counts reports whether an answer or contract signed by signer counts: an expel beats everything signed by the
 // expelled identity.
 func (s *Snapshot) counts(signer *astral.Identity) bool {

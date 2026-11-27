@@ -44,7 +44,7 @@ func TestRelayContractsAnswersOnlyDeliverableContractsOfTheIssuer(t *testing.T) 
 	for _, sc := range []*auth.SignedContract{
 		relayForContract(astral.GenerateIdentity(), host),                                       // another issuer
 		relayForContract(app, astral.GenerateIdentity()),                                        // subject outside the swarm
-		relayForContract(app, f.expelSibling()),                                                 // expelled subject
+		relayForContract(app, f.expelSibling(t)),                                                // expelled subject
 		relayForContract(app, caller),                                                           // the caller's own
 		contractWith(app, host, nodes.RelayForAction{}.ObjectType(), "mod.objects.read_action"), // another permit beside
 		contractWith(app, host, "mod.objects.read_action"),                                      // no relay-for permit
@@ -104,7 +104,7 @@ func TestRelayContractsRefusesNonMembers(t *testing.T) {
 
 	for name, caller := range map[string]*astral.Identity{
 		"outside the swarm": astral.GenerateIdentity(),
-		"expelled":          f.expelSibling(),
+		"expelled":          f.expelSibling(t),
 		"the user":          userID,
 		"this node":         f.nodeID,
 	} {

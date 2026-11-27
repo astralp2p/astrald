@@ -60,13 +60,8 @@ func (mod *Module) reconcileTargets() []*astral.Identity {
 		return targets
 	}
 
-	subjects, err := mod.db.ExpelledSubjects(mod.Identity())
-	if err != nil {
-		mod.log.Errorv(1, "reading expelled subjects: %v", err)
-		return targets
-	}
-
-	for _, subject := range subjects {
+	for _, signed := range mod.snapshot().Expulsions() {
+		subject := signed.Subject
 		if subject.IsEqual(mod.node.Identity()) || !mod.Nodes.IsLinked(subject) {
 			continue
 		}

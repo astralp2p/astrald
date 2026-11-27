@@ -40,7 +40,7 @@ func (mod *Module) onPeerSeen(e *nearby.PeerSeen) {
 		mod.log.Logv(2, "nearby peer %v is not a node of the user", e.NodeID)
 	case e.NodeID.IsZero() || e.NodeID.IsEqual(mod.node.Identity()):
 		mod.log.Logv(2, "nearby peer %v is this node", e.NodeID)
-	case mod.isExpelled(mod.Identity(), e.NodeID):
+	case mod.Expelled(e.NodeID):
 		mod.log.Logv(2, "nearby peer %v is expelled", e.NodeID)
 	case slices.ContainsFunc(mod.LocalSwarm(), e.NodeID.IsEqual):
 		mod.log.Logv(2, "nearby peer %v is a swarm member", e.NodeID)
@@ -125,9 +125,9 @@ func (mod *Module) checkMembership(signed *auth.SignedContract) error {
 		return errors.New("issuer is not the current user")
 	}
 
-	// why: refuse a contract for a subject the user has expelled, mirroring the
-	// IssueMembership guard, with the expelledSet filter only hiding it.
-	if mod.isExpelled(mod.Identity(), signed.Subject) {
+	// why: refuse a contract for a subject the user has expelled; the member
+	// filter would only hide it.
+	if mod.Expelled(signed.Subject) {
 		return user.ErrExpelled
 	}
 

@@ -101,7 +101,7 @@ func newMemberEnv(t *testing.T) *memberEnv {
 	mod := banModule(t, issuer)
 	e := &memberEnv{mod: mod, query: &memberQuery{}, events: &eventRecorder{}, issuer: issuer}
 	mod.Auth = &memberAuth{query: e.query}
-	useQuerySwarm(mod, issuer, e.query)
+	useQuerySwarm(t, mod, issuer, e.query)
 	mod.Events = e.events
 	mod.Nodes = newLinkNodes()
 	mod.node = &identityNode{id: astral.GenerateIdentity()}
@@ -145,9 +145,7 @@ func TestPublishSwarmEmitsOneEventPerChange(t *testing.T) {
 		t.Fatalf("an unchanged set emitted %v", got)
 	}
 
-	if err := e.mod.db.StoreExpulsion(sampleSigned(e.issuer, b)); err != nil {
-		t.Fatal(err)
-	}
+	banNode(t, e.mod, e.issuer, b)
 	e.mod.publishSwarm()
 	got = e.events.take()
 	if len(got) != 1 {

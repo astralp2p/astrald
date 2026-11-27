@@ -130,7 +130,7 @@ func newContactFixture(t *testing.T) *contactFixture {
 	if err := f.mod.config.ActiveContract.Set(nil, nodeContract(f.userID, f.nodeID)); err != nil {
 		t.Fatalf("seed active contract: %v", err)
 	}
-	useIndexSwarm(f.mod, f.userID, f.auth)
+	useIndexSwarm(t, f.mod, f.userID, f.auth)
 	return f
 }
 
@@ -235,9 +235,7 @@ func TestPeerSeenIgnores(t *testing.T) {
 		{"this node", func(_ *testing.T, f *contactFixture) *nearby.PeerSeen { return f.seen(f.nodeID, f.userID) }},
 		{"zero node", func(_ *testing.T, f *contactFixture) *nearby.PeerSeen { return f.seen(&astral.Identity{}, f.userID) }},
 		{"expelled node", func(t *testing.T, f *contactFixture) *nearby.PeerSeen {
-			if err := f.mod.db.StoreExpulsion(sampleSigned(f.userID, f.peerID)); err != nil {
-				t.Fatalf("store expulsion: %v", err)
-			}
+			banNode(t, f.mod, f.userID, f.peerID)
 			return f.seen(f.peerID, f.userID)
 		}},
 		{"swarm member", func(t *testing.T, f *contactFixture) *nearby.PeerSeen {
@@ -321,7 +319,7 @@ func contractReads(f *contactFixture) (n int) {
 }
 
 // badContractAnswers are the answers to user.contract that fail the check.
-func badContractAnswers() map[string]func(f *contactFixture) (*auth.SignedContract, error) {
+func badContractAnswers(t testing.TB) map[string]func(f *contactFixture) (*auth.SignedContract, error) {
 	return map[string]func(f *contactFixture) (*auth.SignedContract, error){
 		"another issuer": func(f *contactFixture) (*auth.SignedContract, error) {
 			return nodeContract(astral.GenerateIdentity(), f.peerID), nil
@@ -348,9 +346,7 @@ func badContractAnswers() map[string]func(f *contactFixture) (*auth.SignedContra
 			return c, nil
 		},
 		"subject expelled meanwhile": func(f *contactFixture) (*auth.SignedContract, error) {
-			if err := f.mod.db.StoreExpulsion(sampleSigned(f.userID, f.peerID)); err != nil {
-				return nil, err
-			}
+			banNode(t, f.mod, f.userID, f.peerID)
 			return nodeContract(f.userID, f.peerID), nil
 		},
 		"empty permit": func(f *contactFixture) (*auth.SignedContract, error) {
@@ -366,7 +362,7 @@ func badContractAnswers() map[string]func(f *contactFixture) (*auth.SignedContra
 // answer, pushes nothing of this node's own and holds off the next attempt for
 // dialIntervalAfterRefusal.
 func TestPeerSeenRefusesABadContract(t *testing.T) {
-	for name, answer := range badContractAnswers() {
+	for name, answer := range badContractAnswers(t) {
 		t.Run(name, func(t *testing.T) {
 			f := newContactFixture(t)
 			f.answer = answer
@@ -388,7 +384,7 @@ func TestPeerSeenRefusesABadContract(t *testing.T) {
 // dialIntervalAfterRefusal has passed.
 func TestPeerSeenRetriesAfterARefusal(t *testing.T) {
 	f := newContactFixture(t)
-	f.answer = badContractAnswers()["another issuer"]
+	f.answer = badContractAnswers(t)["another issuer"]
 	start := f.now
 
 	f.mod.onPeerSeen(f.seen(f.peerID, f.userID))

@@ -16,74 +16,32 @@ func (mod *Module) AdmitLink(remote *astral.Identity) error {
 	if !mod.banAnswers.Contains(remote.String()) {
 		return nil
 	}
-	if !mod.isBanned(remote) {
+	if !mod.IsBanned(remote) {
 		return nil
 	}
 	return user.ErrExpelled
 }
 
-// IsBanned reports whether id is a node the active user banned (usermod.Module).
-func (mod *Module) IsBanned(id *astral.Identity) bool {
-	return mod.isBanned(id)
-}
-
-// isBanned reports whether id is a subject the active user banned. It is the
-// veto the auth module runs at every level of a walk, AdmitLink's ban test and
-// OpIntroduce's refusal of a banned caller, so the three agree.
+// IsBanned reports whether id is a node the active user banned: an Expulsion
+// the user key signed names it (Expelled). It is the veto the auth module runs
+// at every level of a walk, AdmitLink's ban test, OpIntroduce's refusal of a
+// banned caller and mod/nodes' test of the links to close, so they agree.
 //
 // It is false with no active contract, for the user, and for this node. why this
-// node: it stores its own ban before leaveSwarm clears the contract, and in
-// that window it must not refuse its own identity, which every local call is
-// promoted to; if the clear fails the window would never close.
-//
-// note: it reads the set refreshBans keeps, in memory. A set not loaded yet,
-// before Run loads it, is read here from the database. A set that cannot be
-// read leaves the identity unbanned, as AdmitLink does, and the next question
-// reads again.
-func (mod *Module) isBanned(id *astral.Identity) bool {
-	ac := mod.ActiveContract()
-	if ac == nil || id.IsEqual(mod.Identity()) || id.IsEqual(mod.node.Identity()) {
+// node: a node expelled from its swarm stores its own ban before leaveSwarm
+// clears the contract, and in that window it must not refuse its own
+// identity, which every local call is promoted to; if the clear fails the
+// window would never close.
+func (mod *Module) IsBanned(id *astral.Identity) bool {
+	if mod.ActiveContract() == nil || id.IsEqual(mod.Identity()) || id.IsEqual(mod.node.Identity()) {
 		return false
 	}
-
-	banned := mod.banned.Load()
-	if banned == nil {
-		if banned = mod.loadBans(mod.Identity()); banned == nil {
-			return false
-		}
-	}
-	_, ok := (*banned)[id.String()]
-	return ok
+	return mod.Expelled(id)
 }
 
-// loadBans fills the ban set on its first use; nil if it cannot be read.
-// why CompareAndSwap: a refreshBans that ran meanwhile stored a set at least as
-// new as this read, so this one never replaces it.
-func (mod *Module) loadBans(issuer *astral.Identity) *map[string]struct{} {
-	read, err := mod.readExpelledSet(issuer)
-	if err != nil {
-		mod.log.Error("loading bans: %v", err)
-		return nil
-	}
-	mod.banned.CompareAndSwap(nil, &read)
-	return mod.banned.Load()
-}
-
-// refreshBans loads the subjects the active user banned into the set isBanned
-// reads; with no active contract the set is empty.
-// note: a failed read keeps the previous set.
-func (mod *Module) refreshBans() {
-	set := map[string]struct{}{}
-	if ac := mod.ActiveContract(); ac != nil {
-		read, err := mod.readExpelledSet(mod.Identity())
-		if err != nil {
-			mod.log.Error("loading bans: %v", err)
-			return
-		}
-		set = read
-	}
-	mod.banned.Store(&set)
-}
+// isBanned is the name deps.go registers as the auth veto.
+// note: remove it with the deps.go change that registers mod.IsBanned.
+func (mod *Module) isBanned(id *astral.Identity) bool { return mod.IsBanned(id) }
 
 // onBanAnswered records that subject answered the push of its own ban and
 // closes this node's links with it.

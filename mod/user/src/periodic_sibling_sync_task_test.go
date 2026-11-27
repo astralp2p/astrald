@@ -91,7 +91,7 @@ func syncModule(t *testing.T, ctx *astral.Context, userID, nodeID *astral.Identi
 	if err := mod.config.ActiveContract.Set(nil, nodeContract(userID, nodeID)); err != nil {
 		t.Fatalf("seed active contract: %v", err)
 	}
-	useIndexSwarm(mod, userID, index)
+	useIndexSwarm(t, mod, userID, index)
 	return mod, app
 }
 

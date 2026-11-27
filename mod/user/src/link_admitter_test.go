@@ -10,7 +10,6 @@ import (
 	objectsapi "github.com/astralp2p/astral-go/api/objects"
 	"github.com/astralp2p/astral-go/api/user"
 	"github.com/astralp2p/astral-go/astral"
-	"github.com/astralp2p/astral-go/astral/log"
 	nodesmod "github.com/astralp2p/astrald/mod/nodes"
 	objectsmod "github.com/astralp2p/astrald/mod/objects"
 )
@@ -109,7 +108,6 @@ func requireRefused(t *testing.T, mod *Module, id *astral.Identity) {
 func TestAdmitLinkRefusesOnlyBannedSubjectsThatAnswered(t *testing.T) {
 	f := newReceiverFixture(t, astral.GenerateIdentity())
 	banned, other := f.ban(t), astral.GenerateIdentity()
-	f.mod.refreshBans()
 
 	requireAdmitted(t, f.mod, banned)
 	requireAdmitted(t, f.mod, other)
@@ -126,7 +124,6 @@ func TestAdmitLinkRefusesOnlyBannedSubjectsThatAnswered(t *testing.T) {
 	if err := f.mod.config.ActiveContract.Clear(nil); err != nil {
 		t.Fatalf("clear active contract: %v", err)
 	}
-	f.mod.refreshBans()
 	requireAdmitted(t, f.mod, banned)
 }
 
@@ -165,8 +162,7 @@ func TestExpelClosesTheSubjectsLinksAfterItAnswers(t *testing.T) {
 }
 
 // TestMemberRefusesTheSubjectAfterItAnswersOnANewLink: a member that receives
-// a ban on a subject that is no member here publishes that the subject left,
-// on which mod/nodes closes its links with the subject once; the subject's
+// a ban on a subject that is no member here changes no member set; the subject's
 // next link is admitted and carries the subject its ban, and the subject's
 // answer closes that link and refuses later ones. A push that does not reach
 // the subject leaves it admitted.
@@ -190,7 +186,7 @@ func TestMemberRefusesTheSubjectAfterItAnswersOnANewLink(t *testing.T) {
 			if err := f.mod.ReceiveObject(drop); err != nil {
 				t.Fatalf("ReceiveObject(ban): %v", err)
 			}
-			requireBanned(t, events, subject)
+			requireLeft(t, events)
 			requireSteps(t, steps)
 			requireAdmitted(t, f.mod, subject)
 
@@ -217,17 +213,16 @@ func sampleSignedValid(issuer, subject *astral.Identity) *user.SignedExpulsion {
 // BenchmarkAdmitLink: AdmitLink over 1000 answered bans reads memory only; the
 // module has no database, so any database access panics.
 func BenchmarkAdmitLink(b *testing.B) {
-	id := astral.GenerateIdentity()
-	mod := &Module{node: &identityNode{id: id}, log: log.New(id)}
-	set := map[string]struct{}{}
+	issuer := astral.GenerateIdentity()
+	mod := bannedModule(b, issuer)
+	mod.db = nil
 	var subjects []*astral.Identity
 	for range 1000 {
 		s := astral.GenerateIdentity()
-		set[s.String()] = struct{}{}
+		banNode(b, mod, issuer, s)
 		_ = mod.banAnswers.Add(s.String())
 		subjects = append(subjects, s)
 	}
-	mod.banned.Store(&set)
 	stranger := astral.GenerateIdentity()
 
 	b.ResetTimer()

@@ -249,7 +249,7 @@ func newReceiverFixture(t *testing.T, userID *astral.Identity) *receiverFixture 
 	f.mod = &Module{
 		Deps: Deps{Auth: f.auth, Crypto: markerCrypto{}, Nodes: f.nodes, Scheduler: f.scheduler},
 		ctx:  ctx,
-		node: &identityNode{id: f.nodeID},
+		node: &routelessNode{identityNode{id: f.nodeID}},
 		log:  log.New(f.nodeID),
 		db:   db,
 		// note: no digest by default, so a sync pushes every forwardable contract.
@@ -263,15 +263,16 @@ func newReceiverFixture(t *testing.T, userID *astral.Identity) *receiverFixture 
 		if err != nil {
 			t.Fatalf("seed active contract: %v", err)
 		}
-		useIndexSwarm(f.mod, userID, f.auth)
+		useIndexSwarm(t, f.mod, userID, f.auth)
+		useStore(f.mod)
 	}
 
 	return f
 }
 
 // watchSwarm records f's member set as published and records the events f
-// emits on the returned recorder. A ban's SwarmNodeBanned lands there;
-// mod/nodes closes the banned node's links on that event.
+// emits on the returned recorder. A ban of a member lands there as its
+// SwarmMemberLeft; mod/nodes closes the member's links on that event.
 func (f *receiverFixture) watchSwarm(t *testing.T) *eventRecorder {
 	t.Helper()
 	events := &eventRecorder{}
@@ -286,28 +287,30 @@ func (f *receiverFixture) watchSwarm(t *testing.T) *eventRecorder {
 	return events
 }
 
-// requireBanned waits for events to hold one SwarmNodeBanned naming banned
-// and one SwarmMemberLeft naming each of left, and fails on any other event.
-func requireBanned(t *testing.T, events *eventRecorder, banned *astral.Identity, left ...*astral.Identity) {
+// requireLeft waits for events to hold one SwarmMemberLeft naming each of left,
+// and fails on any other event. With none named it requires a quiet period:
+// the ban of a node that is no member changes no member set, so it publishes nothing.
+func requireLeft(t *testing.T, events *eventRecorder, left ...*astral.Identity) {
 	t.Helper()
-	want := map[string]bool{"banned " + banned.String(): true}
+	if len(left) == 0 {
+		time.Sleep(quiet)
+		if got := events.take(); len(got) != 0 {
+			t.Fatalf("published %v; want nothing", got)
+		}
+		return
+	}
+	want := map[string]bool{}
 	for _, id := range left {
-		want["left "+id.String()] = true
+		want[id.String()] = true
 	}
 	deadline := time.Now().Add(effectTimeout)
 	for len(want) > 0 {
 		for _, e := range events.take() {
-			var key string
-			switch e := e.(type) {
-			case *user.SwarmNodeBanned:
-				key = "banned " + e.NodeID.String()
-			case *user.SwarmMemberLeft:
-				key = "left " + e.NodeID.String()
+			l, ok := e.(*user.SwarmMemberLeft)
+			if !ok || !want[l.NodeID.String()] {
+				t.Fatalf("published %v; want only %v left, each once", e, left)
 			}
-			if !want[key] {
-				t.Fatalf("published %v; want only the ban of %v and %v left, each once", e, banned, left)
-			}
-			delete(want, key)
+			delete(want, l.NodeID.String())
 		}
 		if time.Now().After(deadline) {
 			t.Fatalf("events still missing: %v", want)
@@ -382,7 +385,7 @@ func TestReceiveSignedContractRejects(t *testing.T) {
 			return relayForContract(astral.GenerateIdentity(), astral.GenerateIdentity())
 		}},
 		{"relay-for contract for an expelled subject", func(f *receiverFixture, _ *astral.Identity) *auth.SignedContract {
-			return relayForContract(astral.GenerateIdentity(), f.expelSibling())
+			return relayForContract(astral.GenerateIdentity(), f.expelSibling(t))
 		}},
 		{"relay-for contract with a forged signature", func(f *receiverFixture, sender *astral.Identity) *auth.SignedContract {
 			sc := relayForContract(astral.GenerateIdentity(), sender)
@@ -500,7 +503,7 @@ func TestReceiveExpulsion(t *testing.T) {
 			t.Fatalf("ReceiveObject: %v", err)
 		}
 
-		if !f.mod.isExpelled(userID, banned) {
+		if !f.mod.Expelled(banned) {
 			t.Fatal("the ban was not stored")
 		}
 
@@ -508,7 +511,25 @@ func TestReceiveExpulsion(t *testing.T) {
 			t.Fatalf("Accept calls %v; want one Accept(true)", a)
 		}
 
-		requireBanned(t, events, banned)
+		requireLeft(t, events)
+	})
+
+	t.Run("of a member", func(t *testing.T) {
+		userID := astral.GenerateIdentity()
+		f := newReceiverFixture(t, userID)
+
+		member := f.addSibling()
+		events := f.watchSwarm(t)
+
+		drop := &recordingDrop{sender: astral.GenerateIdentity(), object: sampleSignedValid(userID, member)}
+		if err := f.mod.ReceiveObject(drop); err != nil {
+			t.Fatalf("ReceiveObject: %v", err)
+		}
+
+		if !f.mod.IsBanned(member) || f.mod.IsSwarmMember(member) {
+			t.Fatal("the banned member is still in the swarm")
+		}
+		requireLeft(t, events, member)
 	})
 
 	t.Run("from another identity", func(t *testing.T) {
@@ -524,7 +545,7 @@ func TestReceiveExpulsion(t *testing.T) {
 			t.Fatalf("ReceiveObject: %v", err)
 		}
 
-		if f.mod.isExpelled(userID, banned) || f.mod.isExpelled(signed.Issuer, banned) {
+		if f.mod.Expelled(banned) {
 			t.Fatal("a ban from another identity was stored")
 		}
 

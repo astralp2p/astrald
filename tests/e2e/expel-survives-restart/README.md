@@ -35,7 +35,7 @@ back in, and the two remaining members form the swarm again.
     `user.adopt`, which is gone); 10 s later neither roster has node3 and
     node3 is still `unclaimed`.
 
-Bans are stored in the user module's database (`dbExpulsion`), and
+Bans are stored in SwarmState, the user module's grow-only entry set, and
 `expel-propagation` already proves they reach node2 and node3; this test is
 the part that a restart could lose: a ban read only from memory, an active
 contract that returns, or a roster that re-admits the banned node.

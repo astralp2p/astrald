@@ -7,11 +7,12 @@ import (
 	"github.com/astralp2p/astral-go/astral"
 )
 
-// banModule builds a Module backed by an in-memory ban store, with issuer set as
+// banModule builds a Module over an in-memory SwarmState, with issuer set as
 // the active contract's issuer.
 func banModule(t testing.TB, issuer *astral.Identity) *Module {
 	t.Helper()
 	mod := &Module{db: testDB(t)}
+	mod.db.mod = mod
 	// seed the active-contract store directly; the tree.Value is unbound in tests,
 	// so Set updates its local cache and ActiveContract() reads it back.
 	err := mod.config.ActiveContract.Set(nil, &auth.SignedContract{Contract: &auth.Contract{Issuer: issuer}})
@@ -22,26 +23,20 @@ func banModule(t testing.TB, issuer *astral.Identity) *Module {
 	return mod
 }
 
-// TestModule_isExpelled covers the guard's decision: a subject reads as expelled
-// only for the issuer that banned it.
-func TestModule_isExpelled(t *testing.T) {
+// TestExpelledReadsTheStoredBans covers the guard's decision: a subject reads as
+// expelled once an Expulsion names it.
+func TestExpelledReadsTheStoredBans(t *testing.T) {
 	issuer := astral.GenerateIdentity()
 	banned := astral.GenerateIdentity()
 	allowed := astral.GenerateIdentity()
 
 	mod := banModule(t, issuer)
-	if err := mod.db.StoreExpulsion(sampleSigned(issuer, banned)); err != nil {
-		t.Fatalf("store: %v", err)
-	}
+	banNode(t, mod, issuer, banned)
 
-	if !mod.isExpelled(issuer, banned) {
+	if !mod.Expelled(banned) {
 		t.Error("banned subject not reported as expelled")
 	}
-	if mod.isExpelled(issuer, allowed) {
+	if mod.Expelled(allowed) {
 		t.Error("un-banned subject reported as expelled")
-	}
-	// a ban is scoped to its issuer; another issuer's swarm is unaffected
-	if mod.isExpelled(astral.GenerateIdentity(), banned) {
-		t.Error("ban leaked across issuers")
 	}
 }

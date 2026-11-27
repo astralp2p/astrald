@@ -88,6 +88,7 @@ func newIntroduceFixture(t *testing.T) *introduceFixture {
 		db:   testDB(t),
 	}
 	f.setActiveContract(t, nodeContract(f.userID, f.nodeID))
+	useSwarm(t, f.mod, f.userID)
 
 	return f
 }
@@ -101,9 +102,7 @@ func (f *introduceFixture) setActiveContract(t *testing.T, signed *auth.SignedCo
 
 func (f *introduceFixture) expel(t *testing.T, subject *astral.Identity) {
 	t.Helper()
-	if err := f.mod.db.StoreExpulsion(sampleSigned(f.userID, subject)); err != nil {
-		t.Fatalf("store expulsion: %v", err)
-	}
+	banNode(t, f.mod, f.userID, subject)
 }
 
 // introduceQuery is one user.introduce query: its caller, its origin, and the

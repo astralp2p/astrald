@@ -32,7 +32,7 @@ Why a local token and not `emn2`'s own link: the token is `emn2` as far as
 under the calls. A direct call from `emn2` would race that answer.
 
 Without the ban the two reads are allowed: SeeSwarm admits every member, and
-a Privileged membership acts for the user. The user module registers `isBanned` as a veto the auth
+a Privileged membership acts for the user. The user module registers `IsBanned` as a veto the auth
 module asks at every level of a walk (`mod/auth/src/authorize.go`), so the
 contract and any chain through an expelled issuer give nothing.
 

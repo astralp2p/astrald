@@ -132,7 +132,6 @@ func (mod *Module) Identity() *astral.Identity {
 // or a stray write) is scrubbed so it never stays live.
 func (mod *Module) onActiveContractChanged(signed *auth.SignedContract) {
 	defer mod.publishSwarm()
-	defer mod.refreshBans()
 	if signed.IsNil() {
 		mod.log.Info("this node runs without a user")
 		if !mod.config.User.Get().IsZero() {
@@ -173,53 +172,28 @@ func (mod *Module) onActiveContractChanged(signed *auth.SignedContract) {
 }
 
 // ActiveNodes returns all nodes with an active swarm-membership contract from the given
-// user, excluding expelled subjects.
-func (mod *Module) ActiveNodes(userID *astral.Identity) (nodes []*astral.Identity) {
-	nodes, _ = mod.activeNodes(userID)
-	return
-}
-
-// activeNodes is ActiveNodes with the error of the ban store read. The
-// members are the identities whose membership holds in SwarmState, when
-// userID is this node's user; another user has no members here.
-//
-// why: an unreadable ban store returns no nodes and the error, and not the
-// unfiltered list, so an expelled node never reads as a member.
-func (mod *Module) activeNodes(userID *astral.Identity) (nodes []*astral.Identity, err error) {
+// user, excluding expelled subjects. The members are the identities whose
+// membership holds in SwarmState (an expelled identity holds none), when userID
+// is this node's user; another user has no members here.
+func (mod *Module) ActiveNodes(userID *astral.Identity) []*astral.Identity {
 	if userID.IsZero() || !userID.IsEqual(mod.Identity()) {
-		return nil, nil
+		return nil
 	}
-
-	expelled, err := mod.readExpelledSet(userID)
-	if err != nil {
-		mod.log.Error("error reading expulsions: %v", err)
-		return nil, err
-	}
-
-	for _, id := range mod.snapshot().Members() {
-		if _, banned := expelled[id.String()]; banned {
-			continue
-		}
-		nodes = append(nodes, id)
-	}
-
-	return
+	return mod.snapshot().Members()
 }
 
 // LocalSwarm returns a list of node identities with an active swarm-membership contract with the current user
-func (mod *Module) LocalSwarm() (list []*astral.Identity) {
+func (mod *Module) LocalSwarm() []*astral.Identity {
 	if mod.ActiveContract() == nil {
 		return nil
 	}
-
-	list, _ = mod.activeNodes(mod.Identity())
-	return
+	return mod.ActiveNodes(mod.Identity())
 }
 
 // IsSwarmMember reports whether id is a current member of the local swarm.
 //
-// why: a fault in the contract lookup or the ban store read reports no
-// member (fail closed); a lookup fault must not read as membership.
+// why: a fault in the contract lookup reports no member (fail closed); a
+// lookup fault must not read as membership.
 //
 // note: each call reads the auth index; BenchmarkIsSwarmMember measures it.
 func (mod *Module) IsSwarmMember(id *astral.Identity) bool {

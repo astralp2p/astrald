@@ -43,9 +43,7 @@ func (f *receiverFixture) withBanPusher() *banPusher {
 func (f *receiverFixture) ban(t *testing.T) *astral.Identity {
 	t.Helper()
 	subject := astral.GenerateIdentity()
-	if err := f.mod.db.StoreExpulsion(sampleSigned(f.userID, subject)); err != nil {
-		t.Fatalf("store ban: %v", err)
-	}
+	banNode(t, f.mod, f.userID, subject)
 	return subject
 }
 

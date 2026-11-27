@@ -50,7 +50,7 @@ func (mod *Module) ReceiveObject(drop objects.Drop) (err error) {
 				go mod.onSwarmLink(peer)
 			}
 			switch {
-			case mod.banOn(peer) != nil:
+			case mod.IsBanned(peer):
 				// why: a banned subject is not in LocalSwarm, and its own ban is the only
 				// thing it still needs from this node.
 				go mod.reconcileWith(mod.ctx, peer)

@@ -78,8 +78,6 @@ type Module struct {
 	// joiner keeps this node's own JoinRequest while it joins (user.join).
 	joiner *swarmJoiner
 
-	// banned holds the subjects the active user banned; see isBanned.
-	banned atomic.Pointer[map[string]struct{}]
 	// banAnswers holds the banned subjects that answered their own ban pushed
 	// from this node; see AdmitLink.
 	banAnswers sig.Set[string]

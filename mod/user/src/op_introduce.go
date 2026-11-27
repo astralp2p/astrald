@@ -67,7 +67,7 @@ func (mod *Module) OpIntroduce(ctx *astral.Context, q *routing.IncomingQuery, ar
 	if !mod.Auth.Authorize(ctx, &user.AdminSwarmAction{
 		Action:  auth.NewAction(q.Caller()),
 		Subject: nodeID,
-	}) || mod.isBanned(q.Caller()) {
+	}) || mod.IsBanned(q.Caller()) {
 		return ch.Send(auth.ErrNotPermitted)
 	}
 
@@ -88,7 +88,7 @@ func (mod *Module) introduce(ctx *astral.Context, ac *auth.SignedContract, nodeI
 	if ac.ExpiresAt.Time().Before(time.Now()) {
 		return astral.Err(auth.ErrContractExpired)
 	}
-	if mod.isExpelled(mod.Identity(), nodeID) {
+	if mod.Expelled(nodeID) {
 		return user.ErrExpelled
 	}
 

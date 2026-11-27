@@ -8,15 +8,14 @@ import (
 	"github.com/astralp2p/astral-go/api/user"
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astrald/mod/objects"
-	"gorm.io/gorm"
 )
 
 // Expel permanently bans nodeID from the active swarm. Only the swarm's user (the
 // active contract's issuer) may expel, and the ban cannot be undone. The signed
-// ban is stored, pushed to the local swarm, and the node is disconnected.
+// ban is added to SwarmState, pushed to the local swarm, and the node is disconnected.
 //
 // Expelling does not revoke the node's underlying swarm-membership contract;
-// the authorizers refuse the node whatever the contract permits (isBanned).
+// the authorizers refuse the node whatever the contract permits (IsBanned).
 func (mod *Module) Expel(ctx *astral.Context, nodeID *astral.Identity) (*user.SignedExpulsion, error) {
 	ac := mod.ActiveContract()
 	if ac == nil {
@@ -40,16 +39,13 @@ func (mod *Module) Expel(ctx *astral.Context, nodeID *astral.Identity) (*user.Si
 
 	signed := &user.SignedExpulsion{Expulsion: expulsion, IssuerSig: sig}
 
-	err = mod.db.StoreExpulsion(signed)
-	if err != nil {
+	// why: SwarmState carries the expel to every member, and the view applies
+	// it to everything signed by or for the subject (G2). It is the only store
+	// of bans: list_expelled, link admission and the ban veto read it.
+	if err = mod.AddExpulsion(ctx, signed); err != nil {
 		return nil, err
 	}
-	// why: SwarmState carries the expel to every member, and the view applies
-	// it to everything signed by or for the subject (G2).
-	if err = mod.AddExpulsion(ctx, signed); err != nil {
-		mod.log.Error("expel %v: swarm state: %v", nodeID, err)
-	}
-	mod.publishBan(nodeID)
+	mod.publishSwarm()
 
 	go mod.PushToLocalSwarm(mod.ctx, signed)
 	// why: PushToLocalSwarm skips the subject, so push the ban to the expelled node
@@ -57,8 +53,8 @@ func (mod *Module) Expel(ctx *astral.Context, nodeID *astral.Identity) (*user.Si
 	// does not answer is not retried: the expulsion sync at the node's next link
 	// with a holder of the ban and the sweep (reconcile_task.go) deliver it.
 	// The node's answer closes the links with it (AdmitLink).
-	// note: mod/nodes closes the subject's links on the SwarmNodeBanned that
-	// publishBan emits; the push dials a new link, which AdmitLink admits
+	// note: mod/nodes closes the subject's links when the member set changes
+	// (SwarmMemberLeft); the push dials a new link, which AdmitLink admits
 	// until the subject answers.
 	go func() {
 		if isBanAnswer(mod.pushOnce(mod.ctx, nodeID, signed)) {
@@ -71,8 +67,8 @@ func (mod *Module) Expel(ctx *astral.Context, nodeID *astral.Identity) (*user.Si
 }
 
 // receiveExpulsion handles an inbound signed ban. It is accepted only when issued
-// by the active swarm user and carrying a valid issuer signature, then stored and
-// enforced by disconnecting the subject.
+// by the active swarm user and carrying a valid issuer signature (SwarmState
+// checks it), then added to SwarmState and enforced by disconnecting the subject.
 func (mod *Module) receiveExpulsion(signed *user.SignedExpulsion) error {
 	if signed.IsNil() {
 		return objects.ErrPushRejected
@@ -83,16 +79,11 @@ func (mod *Module) receiveExpulsion(signed *user.SignedExpulsion) error {
 		return objects.ErrPushRejected
 	}
 
-	if err := mod.verifyExpulsion(signed); err != nil {
+	if err := mod.AddExpulsion(mod.ctx, signed); err != nil {
 		mod.log.Errorv(1, "invalid expulsion: %v", err)
 		return objects.ErrPushRejected
 	}
-
-	if err := mod.db.StoreExpulsion(signed); err != nil {
-		mod.log.Errorv(1, "storing expulsion failed: %v", err)
-		return objects.ErrPushRejected
-	}
-	mod.publishBan(signed.Subject)
+	mod.publishSwarm()
 
 	if signed.Subject.IsEqual(mod.node.Identity()) {
 		mod.leaveSwarm()
@@ -113,64 +104,4 @@ func (mod *Module) leaveSwarm() {
 	if err := mod.config.ActiveContract.Clear(mod.ctx); err != nil {
 		mod.log.Errorv(1, "clearing active contract after expulsion: %v", err)
 	}
-}
-
-// banOn returns the ban the active contract's issuer issued on subject, or nil
-// when there is no active contract or no such ban.
-func (mod *Module) banOn(subject *astral.Identity) *user.SignedExpulsion {
-	ac := mod.ActiveContract()
-	if ac == nil {
-		return nil
-	}
-
-	ban, err := mod.db.ExpulsionFor(mod.Identity(), subject)
-	if err != nil {
-		if !errors.Is(err, gorm.ErrRecordNotFound) {
-			mod.log.Errorv(1, "reading the ban on %v: %v", subject, err)
-		}
-		return nil
-	}
-	return ban
-}
-
-// isExpelled reports whether issuer has banned subject. Expulsion is irreversible,
-// so IssueMembership refuses a banned subject rather than minting a fresh contract
-// the membership filter would only hide post-hoc.
-func (mod *Module) isExpelled(issuer, subject *astral.Identity) bool {
-	_, banned := mod.expelledSet(issuer)[subject.String()]
-	return banned
-}
-
-// expelledSet returns the subjects banned by issuer, keyed by identity string for
-// O(1) membership filtering.
-func (mod *Module) expelledSet(issuer *astral.Identity) map[string]struct{} {
-	set, err := mod.readExpelledSet(issuer)
-	if err != nil {
-		mod.log.Errorv(1, "error reading expulsions: %v", err)
-		return nil
-	}
-	return set
-}
-
-// readExpelledSet is expelledSet with the error of the ban store read.
-func (mod *Module) readExpelledSet(issuer *astral.Identity) (map[string]struct{}, error) {
-	subjects, err := mod.db.ExpelledSubjects(issuer)
-	if err != nil {
-		return nil, err
-	}
-
-	set := make(map[string]struct{}, len(subjects))
-	for _, s := range subjects {
-		set[s.String()] = struct{}{}
-	}
-	return set, nil
-}
-
-// verifyExpulsion checks that the issuer signature is present and valid.
-func (mod *Module) verifyExpulsion(signed *user.SignedExpulsion) error {
-	if signed.IssuerSig == nil {
-		return errors.New("missing issuer signature")
-	}
-
-	return mod.Crypto.Verify(secp256k1.FromIdentity(signed.Issuer), signed.IssuerSig, signed.Expulsion)
 }

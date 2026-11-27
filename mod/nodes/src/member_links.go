@@ -2,6 +2,7 @@ package nodes
 
 import (
 	"context"
+	"slices"
 	"sync"
 
 	"github.com/astralp2p/astral-go/astral"
@@ -19,11 +20,6 @@ type memberLinks struct {
 	// nothing before it.
 	started bool
 	tasks   map[string]memberLink
-	// banned holds the banned nodes whose links were closed, so a ban closes
-	// a node's links once.
-	// why once: AdmitLink admits a banned node's later links until it answers
-	// the push of its ban, and those links carry the ban to it.
-	banned map[string]struct{}
 }
 
 // memberLink is the running link task of one member and the cancel that stops it.
@@ -54,52 +50,25 @@ func (mod *Module) runMemberLinks(ctx *astral.Context) {
 // tasks match it: a member other than this node without a task gets one, and
 // mod/nodes refreshes its endpoints; a task whose member left is stopped, and
 // the links to that member are closed. The links of every linked node the
-// user banned since the last reconcile are closed too, member or not.
+// user banned are closed too, member or not.
 //
 // why: a member event is a signal to look, not a fact to apply, so events that
 // arrive out of order still end in the latest set.
+// why every linked node: a banned node can be linked without being a member
+// here (its membership has not reached SwarmState, or it linked through
+// user.introduce), so it has no link task to stop.
 func (mod *Module) reconcileMemberLinks() {
-	closing := identitySet(mod.applyMemberSet())
-	for k, id := range identitySet(mod.findNewBans()) {
-		closing[k] = id
-	}
-	for _, id := range closing {
+	for _, id := range mod.applyMemberSet() {
 		if err := mod.CloseLinks(id); err != nil {
 			mod.log.Errorv(1, "closing links to %v: %v", id, err)
 		}
 	}
 }
 
-// findNewBans returns the linked nodes the user banned whose links no
-// reconcile closed yet, and records them as closed.
-//
-// why every linked node: a banned node can be linked without being a member
-// here (its membership has not reached SwarmState, or it linked through
-// user.introduce), so it has no link task to stop.
-func (mod *Module) findNewBans() (banned []*astral.Identity) {
-	ml := &mod.memberLinks
-	ml.mu.Lock()
-	defer ml.mu.Unlock()
-	if !ml.started {
-		return nil
-	}
-
-	for _, id := range mod.LinkedIdentities() {
-		if _, done := ml.banned[id.String()]; done || !mod.User.IsBanned(id) {
-			continue
-		}
-		if ml.banned == nil {
-			ml.banned = map[string]struct{}{}
-		}
-		ml.banned[id.String()] = struct{}{}
-		banned = append(banned, id)
-	}
-	return banned
-}
-
 // applyMemberSet starts and stops link tasks against the current member set,
-// and returns the members whose tasks it stopped.
-func (mod *Module) applyMemberSet() (left []*astral.Identity) {
+// and returns the nodes whose links to close: the members whose tasks it
+// stopped and the linked nodes the user banned.
+func (mod *Module) applyMemberSet() (closing []*astral.Identity) {
 	ml := &mod.memberLinks
 	ml.mu.Lock()
 	defer ml.mu.Unlock()
@@ -123,7 +92,7 @@ func (mod *Module) applyMemberSet() (left []*astral.Identity) {
 		mod.log.Log("removing sibling %v", link.target)
 		// why: a task still running when its link closes redials it, so it is cancelled first.
 		link.cancel()
-		left = append(left, link.target)
+		closing = append(closing, link.target)
 	}
 
 	for key, m := range keep {
@@ -132,7 +101,13 @@ func (mod *Module) applyMemberSet() (left []*astral.Identity) {
 		}
 		mod.startMemberLink(m)
 	}
-	return left
+
+	for _, id := range mod.LinkedIdentities() {
+		if mod.User.IsBanned(id) && !slices.ContainsFunc(closing, id.IsEqual) {
+			closing = append(closing, id)
+		}
+	}
+	return closing
 }
 
 // startMemberLink schedules the link task of a member that has none and
@@ -180,12 +155,4 @@ func (mod *Module) onMemberSeen(id *astral.Identity) {
 	if !mod.wakeMemberLink(id) {
 		mod.reconcileMemberLinks()
 	}
-}
-
-func identitySet(list []*astral.Identity) map[string]*astral.Identity {
-	set := make(map[string]*astral.Identity, len(list))
-	for _, id := range list {
-		set[id.String()] = id
-	}
-	return set
 }

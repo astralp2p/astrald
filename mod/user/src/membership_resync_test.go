@@ -42,8 +42,7 @@ func runTicks(t *testing.T, f *receiverFixture) chan<- time.Time {
 
 // holdsBan reports whether f stored the user's ban on subject.
 func holdsBan(f *receiverFixture, subject *astral.Identity) bool {
-	_, err := f.mod.db.ExpulsionFor(f.userID, subject)
-	return err == nil
+	return f.mod.Expelled(subject)
 }
 
 // TestSweepRepairsAMemberThatMissedABanOverAStableLink (eZAbta4YIt AC4): a
@@ -61,9 +60,7 @@ func TestSweepRepairsAMemberThatMissedABanOverAStableLink(t *testing.T) {
 
 	subject := astral.GenerateIdentity()
 	events := member.watchSwarm(t)
-	if err := issuer.mod.db.StoreExpulsion(sampleSignedValid(userID, subject)); err != nil {
-		t.Fatalf("store ban: %v", err)
-	}
+	banNode(t, issuer.mod, userID, subject)
 
 	tick := runTicks(t, issuer)
 	time.Sleep(quiet)
@@ -79,7 +76,7 @@ func TestSweepRepairsAMemberThatMissedABanOverAStableLink(t *testing.T) {
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
-	requireBanned(t, events, subject)
+	requireLeft(t, events)
 }
 
 // volume sizes the swarm of the push volume test: 10 nodes, 5 bans.

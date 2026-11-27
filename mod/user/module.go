@@ -133,8 +133,9 @@ type Module interface {
 	// IsSwarmMember reports whether id is a current member of the local swarm.
 	// It reports false on an unclaimed node and when the swarm cannot be read.
 	IsSwarmMember(id *astral.Identity) bool
-	// IsBanned reports whether id is a node the active user banned. It reports
-	// false with no active contract, for the user and for this node.
+	// IsBanned reports whether id is a node the active user banned: a stored
+	// Expulsion names it (Expelled). It reports false with no active contract,
+	// for the user and for this node.
 	IsBanned(id *astral.Identity) bool
 	NewSyncNodesTask(remoteIdentity *astral.Identity) SyncNodesTask
 	// PushToLocalSwarm broadcasts obj to every local swarm member except the

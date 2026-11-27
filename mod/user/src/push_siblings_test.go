@@ -55,7 +55,7 @@ func pushFixture(t *testing.T, members, linked []*astral.Identity) *Module {
 	mod.node = &identityNode{id: nodeID}
 	mod.log = log.New(nodeID)
 	mod.Deps.Auth = &adminNetworkContracts{contracts: contracts}
-	useContractSwarm(mod, userID, func() ([]*auth.SignedContract, error) { return contracts, nil })
+	useContractSwarm(t, mod, userID, func() ([]*auth.SignedContract, error) { return contracts, nil })
 	mod.Deps.Nodes = &linkedNodes{linked: linked}
 
 	return mod

@@ -1,67 +1,58 @@
 package user
 
 import (
+	"errors"
 	"testing"
-	"time"
 
-	"github.com/astralp2p/astral-go/api/user"
 	"github.com/astralp2p/astral-go/astral"
+	usermod "github.com/astralp2p/astrald/mod/user"
 )
 
-// TestSwarmStateExpelIsStoredAndApplied: an Expulsion by the user that reaches
-// this node only through SwarmState is stored as a ban, as a pushed one is:
-// link admission refuses the subject once it answers, the subject, no member
-// here, is published as left (mod/nodes then closes its links), and a second
-// change applies nothing again. An Expulsion by another issuer is not stored.
-func TestSwarmStateExpelIsStoredAndApplied(t *testing.T) {
+// TestSwarmStateExpelIsApplied: an Expulsion by the user that reaches this
+// node only through SwarmState bans its subject (IsBanned, which link
+// admission and the ban veto read), and the member it names is published as
+// left (mod/nodes then closes its links), once. An Expulsion by another issuer
+// is not stored.
+func TestSwarmStateExpelIsApplied(t *testing.T) {
 	userID := astral.GenerateIdentity()
 	f := newReceiverFixture(t, userID)
-	subject, stranger := astral.GenerateIdentity(), astral.GenerateIdentity()
-	n := newStateNode(t, newSwarmScript())
-	for _, se := range []*user.SignedExpulsion{
-		sampleSignedValid(userID, subject),
-		sampleSignedValid(astral.GenerateIdentity(), stranger),
-	} {
-		if err := n.store.merge(n.store.ctx, se); err != nil {
-			t.Fatalf("store expel: %v", err)
-		}
-	}
-	f.mod.swarmState = n.store
+	subject, stranger := f.addSibling(), astral.GenerateIdentity()
 	events := f.watchSwarm(t)
 
-	f.mod.receiveSwarmExpels()
+	banNode(t, f.mod, userID, subject)
+	err := f.mod.swarmState.merge(f.mod.swarmState.ctx, sampleSignedValid(astral.GenerateIdentity(), stranger))
+	if !errors.Is(err, usermod.ErrSwarmEntryDropped) {
+		t.Fatalf("an expel by another issuer: %v; want it dropped", err)
+	}
 
-	if f.mod.banOn(subject) == nil {
-		t.Fatal("the user's expel in SwarmState was not stored as a ban")
+	f.mod.onSwarmChanged()
+	if !f.mod.IsBanned(subject) {
+		t.Fatal("the user's expel in SwarmState did not ban its subject")
 	}
-	if f.mod.banOn(stranger) != nil {
-		t.Fatal("an expel by another issuer was stored as a ban")
+	if f.mod.IsBanned(stranger) {
+		t.Fatal("an expel by another issuer banned its subject")
 	}
-	requireBanned(t, events, subject)
+	requireLeft(t, events, subject)
 
-	f.mod.receiveSwarmExpels()
-	time.Sleep(quiet)
-	if got := events.take(); len(got) != 0 {
-		t.Fatalf("a second change published %v; want nothing", got)
-	}
+	f.mod.onSwarmChanged()
+	requireLeft(t, events)
 }
 
-// TestPublishBanEmitsOncePerNode: a ban that takes effect again, as when it
-// is pushed after it was read from SwarmState, emits no second
-// SwarmNodeBanned.
-func TestPublishBanEmitsOncePerNode(t *testing.T) {
+// TestSwarmStateExpelOfThisNodeLeavesTheSwarm: an Expulsion of this node that
+// reaches it only through SwarmState clears its active contract, as a pushed
+// one does.
+func TestSwarmStateExpelOfThisNodeLeavesTheSwarm(t *testing.T) {
 	userID := astral.GenerateIdentity()
 	f := newReceiverFixture(t, userID)
-	subject := astral.GenerateIdentity()
-	events := f.watchSwarm(t)
 
-	f.mod.publishBan(subject)
-	f.mod.publishBan(subject)
-	got := events.take()
-	if len(got) != 1 {
-		t.Fatalf("published %v; want one SwarmNodeBanned", got)
+	f.mod.onSwarmChanged()
+	if f.mod.ActiveContract() == nil {
+		t.Fatal("left the swarm with no expel of this node")
 	}
-	if e, ok := got[0].(*user.SwarmNodeBanned); !ok || !e.NodeID.IsEqual(subject) {
-		t.Fatalf("published %v; want the ban of %v", got[0], subject)
+
+	banNode(t, f.mod, userID, f.nodeID)
+	f.mod.onSwarmChanged()
+	if f.mod.ActiveContract() != nil {
+		t.Fatal("still in the swarm after its expel arrived in SwarmState")
 	}
 }
