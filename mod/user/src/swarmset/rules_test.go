@@ -405,21 +405,31 @@ func TestCheckSwarmEntryOffers(t *testing.T) {
 // and the host's contract to its app, both signed by both parties, still
 // enter.
 func TestCheckSwarmEntryDeclineClosesOnlyTheRequest(t *testing.T) {
-	f := newEntryFixture()
+	f := newEntryFixture(t)
 	req := contractRequest(f.member)
-	reqID := f.set.store(t, req)
+	reqID := f.store(req)
 	stored := offer(f.privileged, req, reqID)
-	f.set.store(t, stored)
-	f.set.store(t, decline(f.trusted, reqID))
+	f.store(stored)
+	f.store(decline(f.privileged, reqID)) // a trusted node may not decline a contract request
 	other := astral.GenerateIdentity()
-	f.set.setMember(f.root, other, user.TierPrivilegedMember)
+	f.mustAdd(f.membership(f.root, other, user.TierPrivilegedMember, time.Hour))
 
-	runEntryCases(t, f, []entryCase{
+	for _, tc := range []struct {
+		name string
+		obj  astral.Object
+		want user.EntryVerdict
+	}{
 		{"a new offer by the root key", offer(f.root, req, reqID), user.EntryDrop},
 		{"a new offer by another privileged node", offer(other, req, reqID), user.EntryDrop},
 		{"the completed form of the stored offer", completed(stored), user.EntryAccept},
 		{"the host's contract to its app", appContract(req, reqID), user.EntryAccept},
-	})
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := f.verdict(tc.obj); got != tc.want {
+				t.Fatalf("got %v, want %v", got, tc.want)
+			}
+		})
+	}
 }
 
 // TestCheckSwarmEntryReadsTheRootOnce: a claim that changes the root key

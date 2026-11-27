@@ -287,7 +287,8 @@ func TestAuthorizeAdminSwarmRefusesEveryoneElse(t *testing.T) {
 // stranger does neither.
 func TestAuthorizeSwarmOnUnclaimedNode(t *testing.T) {
 	nodeID := astral.GenerateIdentity()
-	mod := &Module{node: &identityNode{id: nodeID}, Deps: Deps{Auth: &recordingAuth{}}}
+	mod := newStoreModule(t, nodeID, nil, nil, time.Now, realRules)
+	mod.Auth = &recordingAuth{}
 
 	if !mod.AuthorizeSeeSwarm(nil, &user.SeeSwarmAction{Action: auth.NewAction(nodeID)}) {
 		t.Fatal("an unclaimed node acts as the user and must see its swarm")
