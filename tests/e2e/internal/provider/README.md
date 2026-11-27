@@ -1,9 +1,8 @@
 # tests/e2e/internal/provider
 
 The shared Go helper of the object-provider drivers:
-`objects-provider-registration-authz`, `objects-provider-read-robustness` and
-`objects-provider-revoke-lease`. It is not a test: it has no `test.toml`, so
-the planner never loads it.
+`objects-provider-registration-authz` and `objects-provider-read-robustness`.
+It is not a test: it has no `test.toml`, so the planner never loads it.
 
 | file | holds |
 |------|-------|
