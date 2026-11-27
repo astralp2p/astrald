@@ -24,8 +24,8 @@ type Verifier interface {
 //   - Expulsion: only the root key (D7).
 //
 // The root key needs no membership and may write every kind. Check returns:
-//   - user.EntryDrop: obj is not an entry, a signature does not verify (a contract's IssuerSig is required, its
-//     SubjectSig optional), a request's Timeout is not valid, or the gating identity's tier may not write it;
+//   - user.EntryDrop: obj is not an entry, a signature does not verify (a contract's IssuerSig and SubjectSig are
+//     both required), a request's Timeout is not valid, or the gating identity's tier may not write it;
 //   - user.EntryWait: the gating identity's membership, or the request an Approval or Decline names, is not
 //     stored yet;
 //   - user.EntryAccept: otherwise.
@@ -150,13 +150,13 @@ func answerGate(signer *astral.Identity, req *astral.ObjectID, r Reader) (entryG
 }
 
 // contractGate gates a contract on its issuer: any tier, and for a membership a tier that issues the
-// membership's tier (MayIssue). Its IssuerSig is required and its SubjectSig optional; a PrivilegedMembership
-// is issued only by the root key (D2).
+// membership's tier (MayIssue). Both its IssuerSig and its SubjectSig are required, since a contract only its
+// issuer signed grants nothing; a PrivilegedMembership is issued only by the root key (D2).
+//
+// todo: store an offer, a contract only its issuer signed that answers a stored ContractRequest (astral-docs
+// protocols/user/README.md#two-signatures).
 func (c *Rules) contractGate(sc *auth.SignedContract, root *astral.Identity) (entryGate, user.EntryVerdict) {
-	if sc.IsNil() || !c.verify(sc.Issuer, sc.IssuerSig, sc.Contract) {
-		return entryGate{}, user.EntryDrop
-	}
-	if sc.SubjectSig != nil && !c.verify(sc.Subject, sc.SubjectSig, sc.Contract) {
+	if sc.IsNil() || !c.verify(sc.Issuer, sc.IssuerSig, sc.Contract) || !c.verify(sc.Subject, sc.SubjectSig, sc.Contract) {
 		return entryGate{}, user.EntryDrop
 	}
 	tier, ok := user.ContractTier(sc.Contract)

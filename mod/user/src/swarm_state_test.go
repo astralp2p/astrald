@@ -270,7 +270,7 @@ func membershipEntry(t *testing.T, issuer, subject *astral.Identity) *auth.Signe
 		t.Fatalf("NewMembership: %v", err)
 	}
 
-	return &auth.SignedContract{Contract: c, IssuerSig: scriptedSig()}
+	return &auth.SignedContract{Contract: c, IssuerSig: scriptedSig(), SubjectSig: scriptedSig()}
 }
 
 func joinRequestEntry(joiner, carrier *astral.Identity) *user.SignedJoinRequest {

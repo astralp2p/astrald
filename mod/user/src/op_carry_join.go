@@ -15,17 +15,18 @@ type opCarryJoinArgs struct {
 	Out string
 }
 
-// OpCarryJoin carries the caller's JoinRequest into SwarmState. It reads one
-// mod.user.signed_join_request, which must name the caller as Joiner and this
-// node as Carrier, and runs the carrier's steps while the caller stays
-// connected (swarmCarrier.Carry). On an Approval it sends the joiner's
-// membership, then the user identity the membership derives from. A Decline,
-// the request's Timeout, or a refusal sends an error whose text names the end
-// (joinEndOf); a dropped connection only pauses the join.
+// OpCarryJoin carries the caller's JoinRequest into SwarmState and signs its
+// membership with the caller in this session (swarmCarrier.Carry). It reads
+// one mod.user.signed_join_request, which must name the caller as Joiner and
+// this node as Carrier, sends the membership its issuer signed, reads it back
+// signed by the joiner, stores it, and sends it with both signatures, then the
+// user identity the membership derives from. A Decline, the request's Timeout,
+// or a refusal sends an error whose text names the end (joinEndOf); a dropped
+// connection only pauses the join.
 // Spec: .ai/system/protocols/user/ops/user.carry_join.md
 //
 // why no named action: the caller is the unclaimed joiner, which holds
-// nothing; the carrier's tier and the answer in SwarmState decide.
+// nothing; the carrier's tier decides what it signs.
 func (mod *Module) OpCarryJoin(ctx *astral.Context, q *routing.IncomingQuery, args opCarryJoinArgs) error {
 	conn := q.AcceptRaw()
 	ch := channel.New(conn, channel.WithFormats(args.In, args.Out))
@@ -48,18 +49,41 @@ func (mod *Module) OpCarryJoin(ctx *astral.Context, q *routing.IncomingQuery, ar
 	waitCtx, stop := routing.UntilDisconnect(ctx.IncludeZone(astral.ZoneNetwork), conn)
 	defer stop()
 
-	sc, err := mod.carrier.withCeremony(mod.userKeyCeremony()).Carry(waitCtx, req)
+	return carrySession(waitCtx, ch, mod.carrier.withCeremony(mod.userKeyCeremony()), req, mod.Identity())
+}
+
+// carrySession is the carrier's side of a carrier session over ch, after the
+// joiner's request req was read: it runs the carrier's steps with the joiner
+// (swarmCarrier.Carry), then confirms the stored membership and the user
+// identity root, or sends the end of the join.
+func carrySession(ctx *astral.Context, ch *channel.Channel, c *swarmCarrier, req *user.SignedJoinRequest, root *astral.Identity) error {
+	sc, err := c.Carry(ctx, req, sessionCosign(ch))
 	if err != nil {
 		return ch.Send(astral.Err(err))
 	}
 	if err = ch.Send(sc); err != nil {
 		return err
 	}
-	return ch.Send(mod.Identity())
+	return ch.Send(root)
+}
+
+// sessionCosign is the joiner's side of the carrier session over ch: it sends
+// the membership its issuer signed and reads it back signed by the joiner.
+func sessionCosign(ch *channel.Channel) joinCosign {
+	return func(_ *astral.Context, half *auth.SignedContract) (*auth.SignedContract, error) {
+		if err := ch.Send(half); err != nil {
+			return nil, err
+		}
+		var signed *auth.SignedContract
+		if err := ch.Switch(channel.Expect(&signed), channel.FailOnEOF()); err != nil {
+			return nil, errNotSignedByJoiner
+		}
+		return signed, nil
+	}
 }
 
 // joinEnds are the ends of a join a carrier sends, by their wire text.
-var joinEnds = []error{errJoinDeclined, errJoinExpired, errNotJoinCarrier, errCarrierTier, errUserKeyRequired}
+var joinEnds = []error{errJoinDeclined, errJoinExpired, errNotJoinCarrier, errCarrierTier, errTierAboveIssuer, errUserKeyRequired, errNotSignedByJoiner}
 
 // joinEndOf returns the end of a join msg names, or msg itself.
 func joinEndOf(msg *astral.ErrorMessage) error {

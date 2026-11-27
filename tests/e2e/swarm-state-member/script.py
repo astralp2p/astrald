@@ -2,10 +2,9 @@
 """Driver: node3 joins the swarm of node1 and node2 as a Member.
 
 node3 and node1 learn each other's endpoint. node3 asks to join through node1,
-its carrier, with a member JoinRequest (user.join). The User, on node1, finds
-the request in user.swarm_requests and approves it (user.answer_request), so
-node1, a Privileged node, signs the Approval. node1 then signs node3's
-membership and hands it over; node3 activates it. node2 and node3 then learn
+its carrier, with a member JoinRequest (user.join). node1, a Privileged node,
+signs node3's membership in the carrier session with no answer in SwarmState;
+node3 co-signs it, node1 stores it and confirms it, and node3 activates it. node2 and node3 then learn
 each other's endpoint, so every pair of the three can link: the scenarios
 after this one test authority, not how the swarm meshes.
 

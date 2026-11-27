@@ -560,3 +560,33 @@ func TestRootKeyIsTheUserOrTheUnclaimedNode(t *testing.T) {
 		t.Fatal("claimed: want the user as root key")
 	}
 }
+
+// TestSwarmViewMembershipNeedsTheSubjectsSignature: a membership only its
+// issuer signed makes no one a member and counts as no contract, at any tier
+// and from any issuer, the root key included; the same membership signed by
+// both does.
+func TestSwarmViewMembershipNeedsTheSubjectsSignature(t *testing.T) {
+	for _, c := range []struct {
+		name   string
+		issuer func(f *viewFixture) *astral.Identity
+		tier   user.Tier
+	}{
+		{"the user key's privileged membership", func(f *viewFixture) *astral.Identity { return f.user }, user.TierPrivilegedMember},
+		{"a carrier's member membership", func(f *viewFixture) *astral.Identity { return f.phone }, user.TierMember},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			f := newViewFixture(t)
+			node := astral.GenerateIdentity()
+			half := f.member(c.issuer(f), node, c.tier, nil)
+			half.SubjectSig = nil
+			f.add(half)
+			f.wantMembership(node, false)
+			if f.view.snapshot().ContractCounts(half) {
+				t.Fatal("a membership only its issuer signed counts")
+			}
+
+			f.add(f.member(c.issuer(f), node, c.tier, nil))
+			f.wantMembership(node, true)
+		})
+	}
+}

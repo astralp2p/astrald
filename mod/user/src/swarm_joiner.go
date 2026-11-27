@@ -18,9 +18,10 @@ type joinKeeper interface {
 }
 
 // joinCarry is the connection to the carrier a JoinRequest names: it sends the
-// request and returns the membership the carrier hands over, or the end of
-// the join.
-type joinCarry func(ctx *astral.Context, req *user.SignedJoinRequest) (*auth.SignedContract, error)
+// request, has cosign sign the membership the carrier answers, and returns the
+// membership the carrier confirms with both signatures, or the end of the
+// join.
+type joinCarry func(ctx *astral.Context, req *user.SignedJoinRequest, cosign joinCosign) (*auth.SignedContract, error)
 
 // swarmJoiner is the node that asks to join. It keeps one signed JoinRequest
 // until it has joined, been declined, or seen it expire, and resends that same
@@ -112,44 +113,87 @@ func (j *swarmJoiner) keep(req *user.SignedJoinRequest) error {
 	return nil
 }
 
-// Join sends req to its carrier through carry and returns the membership the
-// carrier hands over. A membership, a Decline, an expiry or a carrier that
-// refuses the request ends the join and drops req; any other error keeps req
-// for the next Join.
+// Join sends req to its carrier through carry, co-signs the membership the
+// carrier answers, and returns the membership the carrier confirms. A
+// membership, a Decline, an expiry or a carrier that refuses the request or
+// its tier ends the join and drops req; any other error keeps req for the
+// next Join.
 func (j *swarmJoiner) Join(ctx *astral.Context, req *user.SignedJoinRequest, carry joinCarry) (*auth.SignedContract, error) {
 	if req.Expired(j.now()) {
 		return nil, errors.Join(errJoinExpired, j.keep(nil))
 	}
 
-	sc, err := carry(ctx, req)
+	var signed *auth.SignedContract
+	cosign := func(ctx *astral.Context, half *auth.SignedContract) (*auth.SignedContract, error) {
+		sc, err := j.cosign(ctx, req, half)
+		signed = sc
+		return sc, err
+	}
+
+	sc, err := carry(ctx, req, cosign)
 	switch {
 	case err == nil:
-		if err = j.checkMembership(req, sc); err != nil {
+		if err = j.checkConfirmed(req, signed, sc); err != nil {
 			return nil, err
 		}
 		return sc, j.keep(nil)
 	case errors.Is(err, errJoinDeclined), errors.Is(err, errJoinExpired),
-		errors.Is(err, errNotJoinCarrier), errors.Is(err, errCarrierTier):
+		errors.Is(err, errNotJoinCarrier), errors.Is(err, errCarrierTier),
+		errors.Is(err, errTierAboveIssuer):
 		return nil, errors.Join(err, j.keep(nil))
 	}
 	return nil, err
 }
 
-// checkMembership checks that sc admits this node at the requested tier.
+// cosign checks half, the membership the carrier answered, against req, and
+// signs it as this node, the subject.
+func (j *swarmJoiner) cosign(ctx *astral.Context, req *user.SignedJoinRequest, half *auth.SignedContract) (*auth.SignedContract, error) {
+	if err := j.checkMembership(req, half); err != nil {
+		return nil, err
+	}
+	sig, err := j.signer.Sign(ctx, secp256k1.FromIdentity(j.self), half.Contract)
+	if err != nil {
+		return nil, err
+	}
+	return &auth.SignedContract{Contract: half.Contract, IssuerSig: half.IssuerSig, SubjectSig: sig}, nil
+}
+
+// checkMembership checks that sc admits this node at the requested tier
+// alone, answers req, is issued by req's carrier (the user key at
+// privileged_member) and has not expired.
 //
-// note: signatures and the approval link are checked when sc enters
+// note: the signatures and the issuer's tier are checked when sc enters
 // SwarmState (the entry check) and when it is read (SwarmView.Membership).
 func (j *swarmJoiner) checkMembership(req *user.SignedJoinRequest, sc *auth.SignedContract) error {
+	reqID, err := astral.ResolveObjectID(req)
+	if err != nil {
+		return err
+	}
 	m, ok := user.MembershipOf(sc)
 	switch {
-	case !ok:
+	case !ok || sc.IssuerSig == nil:
 		return errors.New("carrier handed over no membership")
 	case !m.Subject.IsEqual(j.self):
 		return errors.New("carrier handed over another node's membership")
-	case m.Tier != req.Tier:
+	case m.Tier != req.Tier || !user.TierOnly(sc.Contract, req.Tier):
 		return errors.New("carrier handed over a membership at another tier")
+	case !reqID.IsEqual(sc.RequestID):
+		return errors.New("carrier handed over a membership for another request")
+	case req.Tier != user.TierPrivilegedMember && !sc.Issuer.IsEqual(req.Carrier):
+		return errors.New("carrier handed over a membership another node issued")
+	case !j.now().Before(sc.ExpiresAt.Time()):
+		return auth.ErrContractExpired
 	}
 	return nil
+}
+
+// checkConfirmed checks that sc, the membership the carrier confirmed, is the
+// one this node signed, with both signatures.
+func (j *swarmJoiner) checkConfirmed(req *user.SignedJoinRequest, signed, sc *auth.SignedContract) error {
+	if signed.IsNil() || sc.IsNil() || sc.SubjectSig == nil || !sameBody(signed.Contract, sc.Contract) {
+		return errors.New("carrier confirmed another membership than this node signed")
+	}
+	return j.checkMembership(req, sc)
 }
 
 // memJoinKeeper keeps the request in memory only, for a joiner that does not

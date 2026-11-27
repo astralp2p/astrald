@@ -12,24 +12,19 @@ import (
 )
 
 // validateActiveContract enforces the invariant of the active-contract slot:
-// the issuer's signature is valid, and the subject's when present, this node
-// is the subject and not the issuer, not expired, and it is a membership (one
-// tier permit). Source-independent - the same gate for a bootstrap, a
-// Coldcard ceremony and a membership a carrier handed over.
+// the issuer's and the subject's signatures are valid, this node is the
+// subject and not the issuer, not expired, and it is a membership (one tier
+// permit). Source-independent - the same gate for a bootstrap, a Coldcard
+// ceremony and a membership a carrier handed over.
 //
-// why the subject signature is optional: a carrier signs a joiner's
-// membership alone, as SwarmState admits it (user.SwarmView.Membership).
+// why both signatures: a membership without the subject's grants nothing
+// (user.SwarmView.Membership).
 func (mod *Module) validateActiveContract(signed *auth.SignedContract) error {
 	if signed.IsNil() {
 		return errors.New("no contract")
 	}
-	if err := mod.Auth.VerifyIssuer(signed); err != nil {
+	if err := mod.Auth.VerifyContract(signed); err != nil {
 		return fmt.Errorf("verify: %w", err)
-	}
-	if signed.SubjectSig != nil {
-		if err := mod.Auth.VerifySubject(signed); err != nil {
-			return fmt.Errorf("verify: %w", err)
-		}
 	}
 	if !signed.Subject.IsEqual(mod.node.Identity()) {
 		return errors.New("local node is not the subject of the contract")
@@ -47,17 +42,19 @@ func (mod *Module) validateActiveContract(signed *auth.SignedContract) error {
 }
 
 // validateClaimContract is validateActiveContract for a contract the user key
-// signed for this node in a ceremony: a PrivilegedMembership carrying this
-// node's own subject signature.
+// signed for this node in a ceremony: a PrivilegedMembership.
+//
+// why the subject signature first: user.accept_contract names its absence
+// (astral-docs protocols/user/ops/user.accept_contract.md).
 func (mod *Module) validateClaimContract(signed *auth.SignedContract) error {
+	if !signed.IsNil() && signed.SubjectSig == nil {
+		return errors.New("contract lacks this node's signature")
+	}
 	if err := mod.validateActiveContract(signed); err != nil {
 		return err
 	}
 	if tier, _ := user.ContractTier(signed.Contract); tier != user.TierPrivilegedMember {
 		return errors.New("contract is not a privileged membership")
-	}
-	if signed.SubjectSig == nil {
-		return errors.New("contract lacks this node's signature")
 	}
 	return nil
 }

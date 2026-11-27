@@ -143,7 +143,7 @@ func (f *setFixture) membership(issuer, subject *astral.Identity, tier user.Tier
 	if err != nil {
 		f.t.Fatal(err)
 	}
-	return &auth.SignedContract{Contract: c, IssuerSig: sigBy(issuer)}
+	return &auth.SignedContract{Contract: c, IssuerSig: sigBy(issuer), SubjectSig: sigBy(subject)}
 }
 
 func (f *setFixture) mustAdd(obj astral.Object) {

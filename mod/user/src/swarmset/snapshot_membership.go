@@ -47,14 +47,14 @@ func outranks(m, other *user.Membership) bool {
 	return m.ExpiresAt.Time().After(other.ExpiresAt.Time())
 }
 
-// holds reports whether the stored membership m counts now: its issuer signed it, it has not expired, its
-// issuer is not expelled, it holds its tier's permit alone (user.TierOnly), and its issuer may issue its tier
-// (issues).
+// holds reports whether the stored membership m counts now: both its issuer and its subject signed it, it has
+// not expired, its issuer is not expelled, it holds its tier's permit alone (user.TierOnly), and its issuer may
+// issue its tier (issues).
 //
-// note: the entry check verified the signatures on merge, so here only their presence is read.
+// note: the entry check verified both signatures on merge, so here only their presence is read.
 func (s *Snapshot) holds(m *user.Membership, visiting map[string]bool) bool {
 	switch {
-	case m.IssuerSig == nil:
+	case m.IssuerSig == nil || m.SubjectSig == nil:
 		return false
 	case !s.Now.Before(m.ExpiresAt.Time()) || !s.counts(m.Issuer):
 		return false

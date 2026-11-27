@@ -19,7 +19,7 @@ func membershipOf(t *testing.T, issuer, subject *astral.Identity) *auth.SignedCo
 	if err != nil {
 		t.Fatalf("NewMembership: %v", err)
 	}
-	return &auth.SignedContract{Contract: c, IssuerSig: scriptedSig()}
+	return &auth.SignedContract{Contract: c, IssuerSig: scriptedSig(), SubjectSig: scriptedSig()}
 }
 
 // LinkedIdentities makes linkedNodes the nodes module of the exchange: it holds a link with each of n.linked.

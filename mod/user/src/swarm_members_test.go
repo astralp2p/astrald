@@ -88,7 +88,7 @@ func memberContractFor(t testing.TB, issuer, subject *astral.Identity, validity 
 	if err != nil {
 		t.Fatal(err)
 	}
-	return &auth.SignedContract{Contract: c, IssuerSig: viewSig()}
+	return &auth.SignedContract{Contract: c, IssuerSig: viewSig(), SubjectSig: viewSig()}
 }
 
 type memberEnv struct {

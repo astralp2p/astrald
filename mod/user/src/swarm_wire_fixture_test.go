@@ -34,7 +34,7 @@ func addMembership(t testing.TB, state *fakeSwarmState, issuer, subject *astral.
 	if err != nil {
 		t.Fatalf("membership: %v", err)
 	}
-	sc := &auth.SignedContract{Contract: c, IssuerSig: viewSig()}
+	sc := &auth.SignedContract{Contract: c, IssuerSig: viewSig(), SubjectSig: viewSig()}
 	if err = state.merge(nil, sc); err != nil {
 		t.Fatalf("store membership: %v", err)
 	}

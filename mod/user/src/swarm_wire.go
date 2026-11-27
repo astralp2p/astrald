@@ -58,11 +58,12 @@ func (mod *Module) wireSwarm() {
 	mod.swarmFeed = newHeadFeed(mod, swarmPollInterval)
 
 	mod.router.AddStructPrefix(&SwarmAnswerOps{
-		Node:    mod.node.Identity(),
-		State:   mod,
-		View:    mod,
-		Auth:    mod.Auth,
-		UserKey: mod.userKeyCeremony,
+		Node:      mod.node.Identity(),
+		State:     mod,
+		View:      mod,
+		Auth:      mod.Auth,
+		UserKey:   mod.userKeyCeremony,
+		Confirmed: mod.carrier.confirmed,
 	}, "Op")
 }
 

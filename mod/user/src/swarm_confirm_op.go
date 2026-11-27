@@ -8,6 +8,7 @@ import (
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astral-go/astral/channel"
 	"github.com/astralp2p/astral-go/lib/routing"
+	usermod "github.com/astralp2p/astrald/mod/user"
 )
 
 // Errors user.confirm_join sends besides those of user.answer_request. Their
@@ -29,10 +30,12 @@ type opConfirmJoinArgs struct {
 
 // OpConfirmJoin is the user's confirmation of the privileged_member
 // JoinRequest whose entry ID is ID: the user key signs the joiner's
-// PrivilegedMembership, adds it to SwarmState and sends it. The carrier of the
-// join hands it to the joiner. Only the user identity may call it, and only
-// from a local origin on this node; the request is found in
-// user.swarm_requests.
+// PrivilegedMembership as issuer and sends it. It adds nothing to SwarmState:
+// the carrier of the join hands it to the joiner, who co-signs it in the
+// carrier session, and the carrier stores it with both signatures. Only the
+// user identity may call it, and only from a local origin on this node; the
+// request is found in user.swarm_requests.
+// Spec: .ai/system/protocols/user/ops/user.confirm_join.md
 //
 // It refuses, writing nothing:
 //   - astral.ErrOriginNotAllowed when the query is not local;
@@ -43,7 +46,8 @@ type opConfirmJoinArgs struct {
 //   - ErrRequestClosed when the request is declined or expired, or its
 //     joiner is expelled.
 //
-// A second confirmation sends the membership the first one stored.
+// A second confirmation sends the membership the first one signed, or the
+// one stored once the joiner co-signed it.
 func (ops *SwarmAnswerOps) OpConfirmJoin(ctx *astral.Context, q *routing.IncomingQuery, args opConfirmJoinArgs) (err error) {
 	ch := q.Accept(channel.WithFormats(args.In, args.Out))
 	defer ch.Close()
@@ -99,25 +103,39 @@ func (ops *SwarmAnswerOps) confirmJoin(ctx *astral.Context, caller *astral.Ident
 		return nil, ErrNotPrivilegedJoin
 	}
 
-	if sc := userKeyMembership(ops.View, uk.user, req.Joiner); sc != nil {
+	if sc := ops.Confirmed.get(id); sc != nil {
+		return sc, nil
+	}
+	if sc := storedPrivileged(ops.View, uk.user, id, req.Joiner); sc != nil {
 		return sc, nil
 	}
 
 	switch ops.View.RequestStatus(id) {
-	case user.RequestPending, user.RequestApproved:
-	default:
+	case user.RequestDeclined, user.RequestExpired:
 		return nil, ErrRequestClosed
 	}
 	if req.Expired(uk.now()) || ops.View.Expelled(req.Joiner) {
 		return nil, ErrRequestClosed
 	}
 
-	sc, err := uk.Membership(ctx, req.Joiner, user.TierPrivilegedMember, id)
+	sc, err := uk.Membership(ctx, req.Joiner, user.TierPrivilegedMember, req)
 	if err != nil {
 		return nil, err
 	}
-	if err = ops.State.AddContract(ctx, sc); err != nil {
-		return nil, err
+	if ops.Confirmed == nil {
+		return sc, nil
 	}
-	return sc, nil
+	return ops.Confirmed.keep(id, sc), nil
+}
+
+// storedPrivileged returns the PrivilegedMembership the user key userID issued
+// to joiner for the JoinRequest reqID and the joiner co-signed, or nil.
+func storedPrivileged(view usermod.SwarmView, userID *astral.Identity, reqID *astral.ObjectID, joiner *astral.Identity) *auth.SignedContract {
+	for _, sc := range view.ContractsOf(reqID) {
+		if !sc.IsNil() && sc.SubjectSig != nil && sc.Issuer.IsEqual(userID) && sc.Subject.IsEqual(joiner) &&
+			user.TierOnly(sc.Contract, user.TierPrivilegedMember) {
+			return sc
+		}
+	}
+	return nil
 }

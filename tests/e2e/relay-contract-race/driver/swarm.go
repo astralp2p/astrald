@@ -68,7 +68,7 @@ func joinSwarm(ctx *astral.Context, s *session) error {
 			return err
 		}
 		// note: user.adopt is gone (G7); the node joins through node1 as a Member
-		_, err := joins.Admit(ctx, admin(n), connect(n1.Endpoint, s.Facts.UserToken), n1.Identity, n.Identity)
+		_, err := joins.Admit(ctx, admin(n), n1.Identity)
 		if err != nil {
 			return fmt.Errorf("adopting %s on node1: %w", name, err)
 		}

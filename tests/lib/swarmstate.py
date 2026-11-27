@@ -117,30 +117,22 @@ async def join(c, carrier: str, tier: str = "member", timeout: float = 60.0) -> 
 
 async def admit_member(joiner_c, user_c, carrier: str, joiner: str,
                        tier: str = "member", timeout: float = 60.0) -> tuple:
-    """Run joiner's user.join through carrier while the user approves its
-    JoinRequest on the carrier, or, at privileged_member, confirms it with
+    """Run joiner's user.join through carrier. At member and trusted the
+    carrier signs the membership with the joiner in the carrier session, and
+    no answer is needed; at privileged_member the user confirms it with
     user.confirm_join (the carrier must hold the user key). Returns (the
     join's envelopes, the request)."""
-    async def approve():
-        # note: the harness answerer (lib/answerer.py) may approve it first
+    async def confirm():
         r = await find(user_c, lambda r: r.type == JOIN and r.names(joiner)
-                       and r.status in ("pending", "approved"), timeout=timeout)
-        if tier == "privileged_member":
+                       and r.status in ("pending", "fulfilled"), timeout=timeout)
+        if tier == "privileged_member" and r.status == "pending":
             # why: a Privileged membership is the user key's to sign, after the
             # user's own action (user.confirm_join, D2); no Approval stands in
             await confirm_join(user_c, r.id)
-            return r
-        if r.status == "approved":
-            return r
-        try:
-            await answer(user_c, r.id, "approve")
-        except jsonops.OpError:
-            if await status_of(user_c, r.id) != "approved":
-                raise
         return r
 
     with waiting():
-        return await asyncio.gather(join(joiner_c, carrier, tier, timeout), approve())
+        return await asyncio.gather(join(joiner_c, carrier, tier, timeout), confirm())
 
 
 # The app side: tests/e2e/internal/swarmapps, a Go tool built once per world.
@@ -291,11 +283,12 @@ def user_membership(node: dict, user_token: str, user_id: str, subject: str,
                     tier: str = "privileged_member", validity: int = 3600,
                     push_to: tuple = ()) -> dict:
     """A membership of subject at tier that the User signs on node
-    (crypto.sign_hash with user_token), with no Approval link, offered with
-    user.swarm_push to node and to every node of push_to: {membership_id,
-    pushed: {"local" or node identity: "ack" or the error}}. Since G7 this is
-    the only way the User brings a node in without its JoinRequest, what
-    user.adopt did before."""
+    (crypto.sign_hash with user_token) as issuer only, naming no request,
+    offered with user.swarm_push to node and to every node of push_to:
+    {membership_id, pushed: {"local" or node identity: "ack" or the error}}.
+    Since PR 4 a membership counts only with the subject's signature too, so
+    the merge check drops this one whatever the subject's bans: a probe that
+    the User cannot bring a node back this way."""
     out = app_tool("membership", node["endpoint"], user_token, user_id, subject,
                    tier, validity, *[n["identity"] for n in push_to])
     assert "error" not in out, f"signing a membership for {subject}: {out['error']}"

@@ -33,11 +33,12 @@ type opJoinArgs struct {
 // OpJoin makes this unclaimed node ask to join the swarm through Node, its
 // carrier: it signs a JoinRequest naming Node and Tier (member by default),
 // keeps it until the join ends, and sends it to Node's user.carry_join. The
-// carrier writes it into SwarmState and waits while this node stays
-// connected; on an Approval (or, for privileged_member, the user key's
-// ceremony) it hands over the membership, which this node activates. A
-// dropped connection keeps the request: the next user.join through the same
-// carrier resends the same request. The reply is the membership.
+// carrier writes it into SwarmState and, while this node stays connected,
+// answers the membership its issuer signed: the carrier, or for
+// privileged_member the user key in a ceremony. This node co-signs it, and
+// activates it once the carrier confirms it stored the contract. A dropped
+// connection keeps the request: the next user.join through the same carrier
+// resends the same request. The reply is the membership.
 // Spec: .ai/system/protocols/user/ops/user.join.md
 //
 // why the origin and caller gates of user.bootstrap: the op claims this node,
@@ -108,9 +109,9 @@ func (mod *Module) join(ctx *astral.Context, carrier *astral.Identity, tier user
 	}
 
 	var root *astral.Identity
-	sc, err := mod.joiner.Join(ctx, req, func(ctx *astral.Context, req *user.SignedJoinRequest) (*auth.SignedContract, error) {
+	sc, err := mod.joiner.Join(ctx, req, func(ctx *astral.Context, req *user.SignedJoinRequest, cosign joinCosign) (*auth.SignedContract, error) {
 		var sc *auth.SignedContract
-		sc, root, err = mod.carryJoinAt(ctx, req)
+		sc, root, err = mod.carryJoinAt(ctx, req, cosign)
 		return sc, err
 	})
 	if err != nil {
@@ -123,24 +124,44 @@ func (mod *Module) join(ctx *astral.Context, carrier *astral.Identity, tier user
 	return sc, nil
 }
 
-// carryJoinAt sends req to its carrier's user.carry_join and returns the
-// membership and the user identity the carrier answers.
-func (mod *Module) carryJoinAt(ctx *astral.Context, req *user.SignedJoinRequest) (*auth.SignedContract, *astral.Identity, error) {
+// carryJoinAt sends req to its carrier's user.carry_join and runs the
+// joiner's side of the carrier session (joinSession).
+func (mod *Module) carryJoinAt(ctx *astral.Context, req *user.SignedJoinRequest, cosign joinCosign) (*auth.SignedContract, *astral.Identity, error) {
 	ch, err := query.Route(ctx, mod.node, query.New(mod.node.Identity(), req.Carrier, usermod.ModuleName+".carry_join", nil))
 	if err != nil {
 		return nil, nil, err
 	}
 	defer ch.Close()
+	return joinSession(ctx, ch, req, cosign)
+}
 
-	if err = ch.Send(req); err != nil {
+// joinSession is the joiner's side of a carrier session over ch: it sends
+// req, sends back the membership the carrier answers signed by cosign, and
+// returns the membership the carrier confirms with both signatures and the
+// user identity it answers. An error_message ends the join (joinEndOf).
+// Spec: .ai/system/protocols/user/ops/user.carry_join.md
+func joinSession(ctx *astral.Context, ch *channel.Channel, req *user.SignedJoinRequest, cosign joinCosign) (*auth.SignedContract, *astral.Identity, error) {
+	if err := ch.Send(req); err != nil {
 		return nil, nil, err
 	}
 
 	var sc *auth.SignedContract
 	var root *astral.Identity
-	err = ch.Switch(
+	cosigned := false
+	err := ch.Switch(
 		func(msg *astral.ErrorMessage) error { return joinEndOf(msg) },
-		func(c *auth.SignedContract) error { sc = c; return nil },
+		func(c *auth.SignedContract) error {
+			if cosigned {
+				sc = c
+				return nil
+			}
+			signed, err := cosign(ctx, c)
+			if err != nil {
+				return err
+			}
+			cosigned = true
+			return ch.Send(signed)
+		},
 		func(id *astral.Identity) error { root = id; return channel.ErrBreak },
 		channel.FailOnEOF(),
 	)

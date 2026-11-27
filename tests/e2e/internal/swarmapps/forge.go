@@ -129,7 +129,7 @@ func offerEntry(ctx *astral.Context, c *astrald.Client, entryID string, to []str
 }
 
 // signMembership builds a membership of subject at tier from issuer, valid
-// for validity, with no Approval link, signs it as issuer through
+// for validity, naming no request, signs it as issuer only through
 // crypto.sign_hash on the node c reaches (c's token must be issuer's, the
 // User's), and offers it with user.swarm_push to that node and to every node
 // of to. It reports the membership's entry ID and, per node, "ack" or the
@@ -137,6 +137,8 @@ func offerEntry(ctx *astral.Context, c *astrald.Client, entryID string, to []str
 //
 // why: user.adopt is gone (G7); the User's own signature on a new membership
 // is how the User would bring a node back, so a test of an expel offers one.
+// note: the subject does not sign it, so since PR 4 the merge check drops it
+// whether or not the subject is expelled.
 func signMembership(ctx *astral.Context, c *astrald.Client, issuer, subject, tier string, validity time.Duration, to []string) (map[string]any, error) {
 	issuerID, err := astral.ParseIdentity(issuer)
 	if err != nil {

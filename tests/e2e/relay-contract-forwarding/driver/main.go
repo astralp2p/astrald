@@ -185,7 +185,7 @@ func adopt(ctx *astral.Context, s session, n1, n3 node) error {
 		return err
 	}
 	// note: user.adopt is gone (G7); node3 joins through node1 as a Member
-	if _, err := joins.Admit(ctx, connect(n3.Endpoint, n3.Token), connect(n1.Endpoint, s.Facts.UserToken), n1.Identity, n3.Identity); err != nil {
+	if _, err := joins.Admit(ctx, connect(n3.Endpoint, n3.Token), n1.Identity); err != nil {
 		return fmt.Errorf("adopting node3 on node1: %w", err)
 	}
 	return nil

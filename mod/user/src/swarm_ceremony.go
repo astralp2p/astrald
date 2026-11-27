@@ -63,21 +63,14 @@ func newUserKeyCeremony(userID *astral.Identity, signer entrySigner, state cerem
 	}
 }
 
-// userKeyMembershipLink returns the ApprovalID of a membership the user key
-// signs in a ceremony, for the JoinRequest joinReq (nil for the first node).
-//
-// why nil: provisional option (c) of the parent ticket's open question on what
-// later Privileged memberships link to, taken by intern0 on 2026-11-25 under
-// the operator's instruction to continue; every user-key membership carries no
-// link. Another answer changes this function alone.
-func userKeyMembershipLink(joinReq *astral.ObjectID) *astral.ObjectID {
-	return nil
-}
-
-// Membership signs subject's membership at tier with the user key. joinReq is
-// the JoinRequest it answers, nil at bootstrap.
-func (c *userKeyCeremony) Membership(ctx *astral.Context, subject *astral.Identity, tier user.Tier, joinReq *astral.ObjectID) (*auth.SignedContract, error) {
-	contract, err := user.NewMembership(c.user, subject, tier, userKeyMembershipLink(joinReq), c.validity)
+// Membership signs subject's membership at tier with the user key, as its
+// issuer only: the subject co-signs it. req is the JoinRequest it answers,
+// in the carrier session, and nil at bootstrap. A membership answering req
+// names req's entry ID as its RequestID and expires at req's FiledAt plus the
+// ceremony's validity, so a resent request gets the same body; one answering
+// no request expires after the validity.
+func (c *userKeyCeremony) Membership(ctx *astral.Context, subject *astral.Identity, tier user.Tier, req *user.SignedJoinRequest) (*auth.SignedContract, error) {
+	contract, err := c.newMembership(subject, tier, req)
 	if err != nil {
 		return nil, err
 	}
@@ -87,6 +80,21 @@ func (c *userKeyCeremony) Membership(ctx *astral.Context, subject *astral.Identi
 		return nil, err
 	}
 	return &auth.SignedContract{Contract: contract, IssuerSig: sig}, nil
+}
+
+// newMembership builds the body Membership signs.
+//
+// why no cap at the issuer: the user key holds no membership.
+func (c *userKeyCeremony) newMembership(subject *astral.Identity, tier user.Tier, req *user.SignedJoinRequest) (*auth.Contract, error) {
+	if req.IsNil() {
+		return user.NewMembership(c.user, subject, tier, nil, c.validity)
+	}
+	reqID, err := astral.ResolveObjectID(req)
+	if err != nil {
+		return nil, err
+	}
+	expires := user.JoinMembershipExpiry(req.JoinRequest, c.validity, astral.Time{})
+	return user.NewMembershipUntil(c.user, subject, tier, reqID, expires)
 }
 
 // Expel signs, as the user key, the Expulsion that carries out the stored

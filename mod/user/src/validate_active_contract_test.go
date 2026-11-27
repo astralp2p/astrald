@@ -48,6 +48,22 @@ func TestValidateActiveContract(t *testing.T) {
 			return err != nil && err.Error() == "contract is not a membership"
 		}, "contract is not a membership"},
 
+		{"no subject signature", func() *auth.SignedContract {
+			sc := nodeContract(userID, nodeID)
+			sc.SubjectSig = nil
+			return sc
+		}, func(err error) bool {
+			return err != nil && strings.HasPrefix(err.Error(), "verify:")
+		}, "an error prefixed verify:"},
+
+		{"forged subject signature", func() *auth.SignedContract {
+			sc := nodeContract(userID, nodeID)
+			sc.SubjectSig = forgedSig()
+			return sc
+		}, func(err error) bool {
+			return err != nil && strings.HasPrefix(err.Error(), "verify:")
+		}, "an error prefixed verify:"},
+
 		{"forged issuer signature", func() *auth.SignedContract {
 			sc := nodeContract(userID, nodeID)
 			sc.IssuerSig = forgedSig()

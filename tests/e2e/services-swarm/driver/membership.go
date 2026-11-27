@@ -62,7 +62,7 @@ func membershipSteps(path string, facts map[string]bool) error {
 
 	users := userclient.New(w.node1, connect(w.n1.Endpoint, s.Facts.UserToken))
 	// note: user.adopt is gone (G7); ssm_late joins through node1 as a Member
-	if _, err := joins.Admit(w.ctx, connect(late.Endpoint, late.Token), connect(w.n1.Endpoint, s.Facts.UserToken), w.n1.Identity, late.Identity); err != nil {
+	if _, err := joins.Admit(w.ctx, connect(late.Endpoint, late.Token), w.n1.Identity); err != nil {
 		return fmt.Errorf("join: %w", err)
 	}
 

@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
-"""Oracle: node3 is a Member of the User's swarm, admitted by an Approval.
+"""Oracle: node3 is a Member of the User's swarm, admitted in the carrier
+session.
 
 - node3's membership names node3, is issued by node1 (its carrier) and
   names node3's JoinRequest as its RequestID (astral-docs
   protocols/user/ops/user.join.md);
 - node3's active contract is that membership (user.info), and node3 sees
   the swarm's requests as a member (user.swarm_requests asks SeeSwarm);
-- node1 lists node3's JoinRequest as approved (user.swarm_requests).
+- node1 lists node3's JoinRequest as fulfilled (user.swarm_requests).
 """
 import asyncio
 
@@ -38,7 +39,7 @@ async def main():
         await ss.requests(c3)
     async with await astral.connect(n1["endpoint"], token=doc["facts"]["user_token"]) as c:
         status = await ss.status_of(c, f["request_id"])
-    assert status == "approved", f"node1 lists node3's JoinRequest as {status}"
+    assert status == "fulfilled", f"node1 lists node3's JoinRequest as {status}"
     print("oracle: node3 is a Member, admitted by node1's Approval")
 
 

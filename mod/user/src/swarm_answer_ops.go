@@ -67,6 +67,9 @@ type SwarmAnswerOps struct {
 	// UserKey returns the ceremony that signs for user.confirm_join; nil:
 	// this node cannot reach the user key, and user.confirm_join refuses.
 	UserKey func() *userKeyCeremony
+	// Confirmed keeps what user.confirm_join signed for the carrier of the
+	// join (swarmCarrier.awaitConfirmation).
+	Confirmed *joinConfirmations
 }
 
 type opSwarmRequestsArgs struct {

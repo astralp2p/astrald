@@ -15,8 +15,9 @@ import (
 // and the ops serving user.confirm_join with it.
 type softwareKeyFixture struct {
 	*carrierFixture
-	ceremony *userKeyCeremony
-	ops      *SwarmAnswerOps
+	ceremony  *userKeyCeremony
+	ops       *SwarmAnswerOps
+	confirmed *joinConfirmations
 }
 
 func newSoftwareKeyFixture() *softwareKeyFixture {
@@ -30,12 +31,15 @@ func newSoftwareKeyFixture() *softwareKeyFixture {
 		Auth:    &recordingAuth{verdict: true},
 		UserKey: func() *userKeyCeremony { return f.ceremony },
 	}
+	f.confirmed = &joinConfirmations{}
+	f.ops.Confirmed = f.confirmed
 	return f
 }
 
 func (f *softwareKeyFixture) carrierWithKey() *swarmCarrier {
 	c := f.newCarrier()
 	c.ceremony = f.ceremony
+	c.confirmed = f.confirmed
 	return c
 }
 
@@ -51,8 +55,9 @@ func (f *softwareKeyFixture) confirm(t *testing.T, caller *astral.Identity, id *
 }
 
 // Done: with a software user key, a privileged JoinRequest alone yields no
-// PrivilegedMembership; the user's user.confirm_join does, and the carrier
-// hands it to the joiner.
+// PrivilegedMembership; the user's user.confirm_join signs it as issuer and
+// adds nothing to SwarmState, the carrier hands it to the joiner, and the
+// joiner co-signs it in the carrier session.
 func TestPrivilegedJoinWaitsForUserConfirmation(t *testing.T) {
 	f := newSoftwareKeyFixture()
 	req, reqID := f.request(t, user.TierPrivilegedMember)
@@ -84,16 +89,20 @@ func TestPrivilegedJoinWaitsForUserConfirmation(t *testing.T) {
 	if !ok {
 		t.Fatal("confirm_join sent no membership")
 	}
-	assertUserKeyMembership(t, sc, f.userID, req.Joiner)
+	assertUserKeyMembership(t, sc, f.userID, req.Joiner, reqID)
 	verifySignedBy(t, f.userID, sc.Contract, sc.IssuerSig)
+	if sc.SubjectSig != nil {
+		t.Fatal("confirm_join sent a membership the joiner signed")
+	}
 
 	r := receiveJoin(t, done)
 	if r.err != nil {
 		t.Fatalf("join: %v", r.err)
 	}
-	if !r.sc.Contract.Issuer.IsEqual(f.userID) || !r.sc.Subject.IsEqual(req.Joiner) {
+	if !r.sc.Contract.Issuer.IsEqual(f.userID) || !r.sc.Subject.IsEqual(req.Joiner) || !sameBody(sc.Contract, r.sc.Contract) {
 		t.Fatalf("joiner got %v -> %v", r.sc.Issuer, r.sc.Subject)
 	}
+	verifySignedBy(t, req.Joiner, r.sc.Contract, r.sc.SubjectSig)
 
 	// a repeated confirmation signs nothing new
 	if _, ok = f.confirm(t, f.userID, reqID).(*auth.SignedContract); !ok {

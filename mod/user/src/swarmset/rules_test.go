@@ -109,7 +109,7 @@ func contract(issuer, subject *astral.Identity, action string) *auth.SignedContr
 		Permits:   []*auth.Permit{{Action: astral.String8(action)}},
 		ExpiresAt: astral.Time(time.Now().Add(time.Hour)),
 	}
-	return &auth.SignedContract{Contract: c, IssuerSig: sigBy(issuer)}
+	return &auth.SignedContract{Contract: c, IssuerSig: sigBy(issuer), SubjectSig: sigBy(subject)}
 }
 
 func expulsion(issuer *astral.Identity) *user.SignedExpulsion {
@@ -214,8 +214,10 @@ func TestCheckSwarmEntryContractsAndExpels(t *testing.T) {
 
 	noIssuerSig := contract(f.member, astral.GenerateIdentity(), "test.action")
 	noIssuerSig.IssuerSig = nil
-	withSubjectSig := contract(f.member, f.trusted, "test.action")
-	withSubjectSig.SubjectSig = sigBy(f.trusted)
+	noSubjectSig := contract(f.member, f.trusted, "test.action")
+	noSubjectSig.SubjectSig = nil
+	halfMembership := contract(f.trusted, astral.GenerateIdentity(), user.TierMember.Action())
+	halfMembership.SubjectSig = nil
 	badSubjectSig := contract(f.member, f.trusted, "test.action")
 	badSubjectSig.SubjectSig = sigBy(f.member)
 	badExpulsionSig := expulsion(f.root)
@@ -232,7 +234,8 @@ func TestCheckSwarmEntryContractsAndExpels(t *testing.T) {
 		{"privileged membership by a privileged node", contract(f.privileged, astral.GenerateIdentity(), privileged), user.EntryDrop},
 		{"privileged membership by the root key", contract(f.root, astral.GenerateIdentity(), privileged), user.EntryAccept},
 		{"contract with no issuer signature", noIssuerSig, user.EntryDrop},
-		{"contract with a valid subject signature", withSubjectSig, user.EntryAccept},
+		{"contract with no subject signature", noSubjectSig, user.EntryDrop},
+		{"membership with no subject signature", halfMembership, user.EntryDrop},
 		{"contract with a wrong subject signature", badSubjectSig, user.EntryDrop},
 
 		{"expulsion by the root key", expulsion(f.root), user.EntryAccept},

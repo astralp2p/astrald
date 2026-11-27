@@ -22,7 +22,7 @@ func (f fakeMembers) Membership(id *astral.Identity) (*user.Membership, bool) {
 
 func (f fakeMembers) setMember(issuer, subject *astral.Identity, tier user.Tier) {
 	c := &auth.Contract{Issuer: issuer, Subject: subject, Permits: []*auth.Permit{{Action: astral.String8(tier.Action())}}}
-	f[subject.String()] = &user.Membership{SignedContract: &auth.SignedContract{Contract: c, IssuerSig: viewSig()}, Tier: tier}
+	f[subject.String()] = &user.Membership{SignedContract: &auth.SignedContract{Contract: c, IssuerSig: viewSig(), SubjectSig: viewSig()}, Tier: tier}
 }
 
 type chainFixture struct {
