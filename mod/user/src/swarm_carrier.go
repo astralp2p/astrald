@@ -2,6 +2,7 @@ package user
 
 import (
 	"errors"
+	"sync"
 	"time"
 
 	"github.com/astralp2p/astral-go/api/auth"
@@ -48,18 +49,26 @@ type joinCosign func(ctx *astral.Context, half *auth.SignedContract) (*auth.Sign
 // signs, the joiner co-signs, and the carrier stores the contract with both
 // signatures. It keeps nothing between connections: a joiner that reconnects
 // resends the same request and the carrier answers a membership with the same
-// body.
+// body. Of the sessions that carry one JoinRequest, only the first to store a
+// membership stores one; every other session hands over that one.
 // Spec: .ai/system/protocols/user/README.md#joins
 type swarmCarrier struct {
-	self      *astral.Identity
-	state     carrierState
-	view      usermod.SwarmView
-	signer    entrySigner
-	ceremony  *userKeyCeremony   // nil: this node cannot reach the user key
+	self   *astral.Identity
+	state  carrierState
+	view   usermod.SwarmView
+	signer entrySigner
+	// ceremony returns where the user key signs on this node, read once per
+	// carry; nil, or a nil result: this node cannot reach the user key.
+	//
+	// why per carry: the user key is stored on, or removed from, this node
+	// while it runs.
+	ceremony  func() *userKeyCeremony
 	confirmed *joinConfirmations // what user.confirm_join signed on this node
 	validity  time.Duration      // of the memberships it signs
 	poll      time.Duration
 	now       func() time.Time
+	// mu makes the check for a stored membership and its store one step.
+	mu sync.Mutex
 }
 
 // carrierState is the part of usermod.SwarmState a carrier uses.
@@ -82,22 +91,14 @@ func newSwarmCarrier(self *astral.Identity, state carrierState, view usermod.Swa
 	}
 }
 
-// withCeremony returns this carrier with ceremony as the user key it reaches.
-//
-// why per carry: the user key is stored on, or removed from, this node while
-// it runs, so the ceremony is read when a join arrives.
-func (c *swarmCarrier) withCeremony(ceremony *userKeyCeremony) *swarmCarrier {
-	cc := *c
-	cc.ceremony = ceremony
-	return &cc
-}
-
 // Carry writes req into SwarmState and runs the carrier session: it has the
 // membership signed by its issuer, has the joiner co-sign it through cosign,
 // stores it with both signatures and returns it. A Decline, the request's
 // Timeout or an expelled joiner ends the join with errJoinDeclined or
 // errJoinExpired, and no membership is signed for it. An ended ctx (a dropped
-// connection) only pauses it: the joiner resends req.
+// connection) only pauses it: the joiner resends req. The membership cosign
+// returns must carry the body this node had signed, with the joiner's
+// signature (errNotSignedByJoiner).
 func (c *swarmCarrier) Carry(ctx *astral.Context, req *user.SignedJoinRequest, cosign joinCosign) (*auth.SignedContract, error) {
 	if err := c.admit(req); err != nil {
 		return nil, err
@@ -111,8 +112,7 @@ func (c *swarmCarrier) Carry(ctx *astral.Context, req *user.SignedJoinRequest, c
 		return nil, err
 	}
 
-	stored := c.stored(req, reqID)
-	half, err := c.issue(ctx, req, reqID, stored)
+	half, err := c.issue(ctx, req, reqID)
 	if err != nil {
 		return nil, err
 	}
@@ -120,7 +120,10 @@ func (c *swarmCarrier) Carry(ctx *astral.Context, req *user.SignedJoinRequest, c
 	if err != nil {
 		return nil, err
 	}
-	return c.complete(ctx, half, signed, stored)
+	if signed.IsNil() || signed.SubjectSig == nil || !sameBody(half.Contract, signed.Contract) {
+		return nil, errNotSignedByJoiner
+	}
+	return c.store(ctx, req, reqID, &auth.SignedContract{Contract: half.Contract, IssuerSig: half.IssuerSig, SubjectSig: signed.SubjectSig})
 }
 
 // admit refuses a request this node may not carry: one not signed, naming
@@ -156,10 +159,16 @@ func carriesJoins(view membershipReader, id *astral.Identity) bool {
 	return ok && (m.Tier == user.TierTrusted || m.Tier == user.TierPrivilegedMember)
 }
 
-// open refuses a request that is closed: declined, which covers an expelled
-// joiner, or past its Timeout. A fulfilled request stays open, so a resent
-// request gets its stored membership.
+// open refuses a request that is closed: its joiner expelled, declined, or past
+// its Timeout. A fulfilled request stays open to its joiner while that joiner
+// is not expelled, so a resent request gets its stored membership.
+//
+// why the joiner first: a fulfilled request is never declined, and an expelled
+// joiner must not activate a membership that grants nothing.
 func (c *swarmCarrier) open(req *user.SignedJoinRequest, reqID *astral.ObjectID) error {
+	if c.view.Expelled(req.Joiner) {
+		return errJoinDeclined
+	}
 	switch c.view.RequestStatus(reqID) {
 	case user.RequestFulfilled:
 		return nil
@@ -172,11 +181,11 @@ func (c *swarmCarrier) open(req *user.SignedJoinRequest, reqID *astral.ObjectID)
 	return nil
 }
 
-// issue returns the joiner's membership signed by its issuer alone: stored,
-// the one already stored for req, or a new one this node signs, or, at tier
+// issue returns the joiner's membership signed by its issuer alone: the one
+// already stored for req, or a new one this node signs, or, at tier
 // privileged_member, the user key's.
-func (c *swarmCarrier) issue(ctx *astral.Context, req *user.SignedJoinRequest, reqID *astral.ObjectID, stored *auth.SignedContract) (*auth.SignedContract, error) {
-	if stored != nil {
+func (c *swarmCarrier) issue(ctx *astral.Context, req *user.SignedJoinRequest, reqID *astral.ObjectID) (*auth.SignedContract, error) {
+	if stored := c.stored(req, reqID); stored != nil {
 		return &auth.SignedContract{Contract: stored.Contract, IssuerSig: stored.IssuerSig}, nil
 	}
 	if req.Tier == user.TierPrivilegedMember {
@@ -225,18 +234,20 @@ func (c *swarmCarrier) signMembership(ctx *astral.Context, req *user.SignedJoinR
 	return &auth.SignedContract{Contract: contract, IssuerSig: sig}, nil
 }
 
-// complete stores the membership with the issuer's signature from half and
-// the subject's from signed, which must carry the body of half, and returns
-// it; the merge check verifies both signatures. A membership stored before
-// is returned as stored.
-func (c *swarmCarrier) complete(ctx *astral.Context, half, signed, stored *auth.SignedContract) (*auth.SignedContract, error) {
-	if signed.IsNil() || signed.SubjectSig == nil || !sameBody(half.Contract, signed.Contract) {
-		return nil, errNotSignedByJoiner
-	}
-	if stored != nil {
+// store adds sc, the joiner's membership with both signatures, to SwarmState
+// and returns it; the merge check verifies both signatures. When a membership
+// for req is stored already, by an earlier session or one running alongside,
+// it returns that one and adds nothing.
+//
+// why: SwarmState keys an entry by its signatures, and a signature differs on
+// every signing, so two sessions of one JoinRequest would store two entries.
+func (c *swarmCarrier) store(ctx *astral.Context, req *user.SignedJoinRequest, reqID *astral.ObjectID, sc *auth.SignedContract) (*auth.SignedContract, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	if stored := c.stored(req, reqID); stored != nil {
 		return stored, nil
 	}
-	sc := &auth.SignedContract{Contract: half.Contract, IssuerSig: half.IssuerSig, SubjectSig: signed.SubjectSig}
 	if err := c.state.AddContract(ctx, sc); err != nil {
 		if errors.Is(err, usermod.ErrSwarmEntryDropped) {
 			return nil, errNotSignedByJoiner
@@ -261,11 +272,15 @@ func sameBody(a, b *auth.Contract) bool {
 // press, or, with a software user key, the user's user.confirm_join, which
 // this carrier waits for.
 func (c *swarmCarrier) carryPrivileged(ctx *astral.Context, req *user.SignedJoinRequest, reqID *astral.ObjectID) (*auth.SignedContract, error) {
-	if c.ceremony == nil {
+	var uk *userKeyCeremony
+	if c.ceremony != nil {
+		uk = c.ceremony()
+	}
+	if uk == nil {
 		return nil, errUserKeyRequired
 	}
-	if c.ceremony.devicePress {
-		return c.ceremony.Membership(ctx, req.Joiner, user.TierPrivilegedMember, req)
+	if uk.devicePress {
+		return uk.Membership(ctx, req.Joiner, user.TierPrivilegedMember, req)
 	}
 	return c.awaitConfirmation(ctx, req, reqID)
 }

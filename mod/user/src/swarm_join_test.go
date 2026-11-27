@@ -4,10 +4,12 @@ import (
 	"errors"
 	"net"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/astralp2p/astral-go/api/auth"
+	"github.com/astralp2p/astral-go/api/secp256k1"
 	"github.com/astralp2p/astral-go/api/user"
 	"github.com/astralp2p/astral-go/astral"
 	"github.com/astralp2p/astral-go/astral/channel"
@@ -181,6 +183,75 @@ func TestJoinResumesAfterADroppedSession(t *testing.T) {
 	}
 	if n := f.swarm.count(user.EntryContracts); n != 1 {
 		t.Fatalf("contracts in SwarmState: %d, want 1", n)
+	}
+}
+
+// Done: two sessions that carry one JoinRequest at once store one
+// membership: both have it co-signed before either stores it, and the second
+// to store hands over the first one's.
+func TestJoinConcurrentSessionsStoreOneMembership(t *testing.T) {
+	f := newCarrierFixture(user.TierTrusted)
+	req, reqID := f.request(t, user.TierMember)
+	c := f.newCarrier()
+
+	var signing sync.WaitGroup
+	signing.Add(2)
+	cosign := func(ctx *astral.Context, half *auth.SignedContract) (*auth.SignedContract, error) {
+		signed, err := f.joiner.cosign(ctx, req, half)
+		signing.Done()
+		signing.Wait()
+		return signed, err
+	}
+	results := make(chan joinResult, 2)
+	for range 2 {
+		go func() {
+			sc, err := c.Carry(astral.NewContext(nil), req, cosign)
+			results <- joinResult{sc, err}
+		}()
+	}
+	a, b := receiveJoin(t, results), receiveJoin(t, results)
+	if a.err != nil || b.err != nil {
+		t.Fatalf("carry: %v, %v", a.err, b.err)
+	}
+	idA, _ := astral.ResolveObjectID(a.sc)
+	idB, _ := astral.ResolveObjectID(b.sc)
+	if !idA.IsEqual(idB) {
+		t.Fatal("the two sessions handed over two memberships")
+	}
+	if got := f.swarm.ContractsOf(reqID); len(got) != 1 {
+		t.Fatalf("contracts answering the request in SwarmState: %d, want 1", len(got))
+	}
+}
+
+// Done: an expelled joiner's join ends, before and after its membership was
+// stored: the carrier signs nothing for it and hands over nothing.
+func TestJoinEndsForAnExpelledJoiner(t *testing.T) {
+	f := newCarrierFixture(user.TierTrusted)
+	req, _ := f.request(t, user.TierMember)
+	if r := receiveJoin(t, f.startJoin(t, astral.NewContext(nil), req, f.newCarrier())); r.err != nil {
+		t.Fatalf("join: %v", r.err)
+	}
+
+	expulsion := &user.Expulsion{Issuer: f.userID, Subject: f.joiner.self, ExpelledAt: astral.Time(f.clock.now())}
+	sig, err := f.keys.Sign(nil, secp256k1.FromIdentity(f.userID), expulsion)
+	if err != nil {
+		t.Fatalf("sign expulsion: %v", err)
+	}
+	if err = f.swarm.merge(nil, &user.SignedExpulsion{Expulsion: expulsion, IssuerSig: sig}); err != nil {
+		t.Fatalf("add expulsion: %v", err)
+	}
+
+	// the request it joined through, resent
+	if _, err = f.newCarrier().Carry(astral.NewContext(nil), req, f.cosignAs(req)); !errors.Is(err, errJoinDeclined) {
+		t.Fatalf("carry of the fulfilled request: %v, want %v", err, errJoinDeclined)
+	}
+	// a new request
+	again, _ := f.request(t, user.TierMember)
+	if _, err = f.joiner.Join(astral.NewContext(nil), again, f.newCarrier().Carry); !errors.Is(err, errJoinDeclined) {
+		t.Fatalf("join of a new request: %v, want %v", err, errJoinDeclined)
+	}
+	if n := f.swarm.count(user.EntryContracts); n != 1 {
+		t.Fatalf("contracts in SwarmState: %d, want the one stored before the expel", n)
 	}
 }
 
@@ -367,8 +438,9 @@ func TestJoinPrivilegedNeedsUserKey(t *testing.T) {
 	// press is the user action, so these ceremonies sign without
 	// user.confirm_join
 	c := f.newCarrier()
-	c.ceremony = newUserKeyCeremony(astral.GenerateIdentity(), f.keys, f.swarm, f.swarm)
-	c.ceremony.devicePress = true
+	unreached := newUserKeyCeremony(astral.GenerateIdentity(), f.keys, f.swarm, f.swarm)
+	unreached.devicePress = true
+	c.ceremony = func() *userKeyCeremony { return unreached }
 	if _, err := c.Carry(astral.NewContext(nil), req, f.cosignAs(req)); err == nil {
 		t.Fatal("ceremony signed without the user key")
 	}
@@ -377,8 +449,9 @@ func TestJoinPrivilegedNeedsUserKey(t *testing.T) {
 	}
 
 	// the user key signs, the joiner co-signs, and the text shows the tier
-	c.ceremony = newUserKeyCeremony(f.userID, f.keys, f.swarm, f.swarm)
-	c.ceremony.devicePress = true
+	held := newUserKeyCeremony(f.userID, f.keys, f.swarm, f.swarm)
+	held.devicePress = true
+	c.ceremony = func() *userKeyCeremony { return held }
 	sc, err := c.Carry(astral.NewContext(nil), req, f.cosignAs(req))
 	if err != nil {
 		t.Fatalf("carry with the user key: %v", err)

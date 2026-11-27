@@ -50,6 +50,7 @@ func (mod *Module) wireSwarm() {
 	mod.swarmView.Store(view)
 	mod.writer = &swarmWriter{self: mod.node.Identity(), signer: mod.Crypto, view: mod, entry: mod.SwarmEntry, merge: mod.mergeSwarmEntry}
 	mod.carrier = newSwarmCarrier(mod.node.Identity(), mod, mod, mod.Crypto)
+	mod.carrier.ceremony = mod.userKeyCeremony
 	mod.joiner = newSwarmJoiner(mod.node.Identity(), mod.Crypto, mod, mod.config.PendingJoin.Get())
 
 	mod.publisher = newSwarmPublisher(view.snapshot, func(e astral.Object) { mod.Events.Emit(e) })

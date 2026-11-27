@@ -38,7 +38,7 @@ func newSoftwareKeyFixture() *softwareKeyFixture {
 
 func (f *softwareKeyFixture) carrierWithKey() *swarmCarrier {
 	c := f.newCarrier()
-	c.ceremony = f.ceremony
+	c.ceremony = func() *userKeyCeremony { return f.ceremony }
 	c.confirmed = f.confirmed
 	return c
 }

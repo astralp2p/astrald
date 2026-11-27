@@ -26,8 +26,6 @@ type joinCarry func(ctx *astral.Context, req *user.SignedJoinRequest, cosign joi
 // swarmJoiner is the node that asks to join. It keeps one signed JoinRequest
 // until it has joined, been declined, or seen it expire, and resends that same
 // object, with the same entry ID, on every reconnect.
-//
-// note: nothing in the running node builds a swarmJoiner until G7.
 type swarmJoiner struct {
 	self   *astral.Identity
 	signer entrySigner

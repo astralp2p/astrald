@@ -49,7 +49,7 @@ func (mod *Module) OpCarryJoin(ctx *astral.Context, q *routing.IncomingQuery, ar
 	waitCtx, stop := routing.UntilDisconnect(ctx.IncludeZone(astral.ZoneNetwork), conn)
 	defer stop()
 
-	return carrySession(waitCtx, ch, mod.carrier.withCeremony(mod.userKeyCeremony()), req, mod.Identity())
+	return carrySession(waitCtx, ch, mod.carrier, req, mod.Identity())
 }
 
 // carrySession is the carrier's side of a carrier session over ch, after the

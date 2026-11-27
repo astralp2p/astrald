@@ -32,8 +32,6 @@ var (
 // moment a joiner asks. A software user key held on this node signs with no
 // action at all, so devicePress is clear and the membership waits for the
 // user to call user.confirm_join.
-//
-// note: nothing in the running node builds a userKeyCeremony until G7.
 type userKeyCeremony struct {
 	user   *astral.Identity
 	signer entrySigner
